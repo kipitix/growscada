@@ -21,3 +21,6 @@ jobs:
 
       - name: Run tests
         run: go test ./... -v
+
+      - name: Build server
+        run: go build -o bin/server cmd/server/main.go
