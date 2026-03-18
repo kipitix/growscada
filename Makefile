@@ -5,3 +5,6 @@ build:
 run: build
 	chromium http://localhost:8080 &
 	cd bin/growscada_combined && ./growscada_combined
+
+start_db:
+	cd tools/debug_db && docker compose up -d
