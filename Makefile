@@ -3,7 +3,7 @@ build:
 	go build -o bin/growscada_combined/growscada_combined cmd/combined/main.go
 
 run: build
-	chromium http://localhost:8080 &
+	chromium --incognito http://localhost:8080 &
 	cd bin/growscada_combined && ./growscada_combined
 
 start_db:
