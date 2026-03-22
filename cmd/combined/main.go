@@ -10,7 +10,9 @@ import (
 
 func main() {
 	app.Route("/", func() app.Composer {
-		return &root.Root{}
+		r := &root.Root{}
+		r.SetMode(root.ModeOperation)
+		return r
 	})
 
 	app.RunWhenOnBrowser()

@@ -1,66 +1,40 @@
 package tag
 
-import (
-	"errors"
-
-	"github.com/google/uuid"
-	"gitverse.ru/kipitix/growscada/internal/domain/history"
-	"gitverse.ru/kipitix/growscada/internal/domain/value"
-)
-
 type Tag interface {
-	ID() uuid.UUID
-	Name() string
-	CurrentValue() value.Value
-	UpdateValue(value any, quality value.Quality) error
+	ID() TagID
+	Name() TagName
+	Type() TagType
+	Quality() TagQuality
 }
 
 type tag struct {
-	entity  tagEntity        // Встроенная сущность
-	current value.Value      // Текущее значение
-	history *history.History // История значений
-	version int              // Для оптимистичной блокировки
+	id      TagID
+	name    TagName
+	theType TagType
+	quality TagQuality
 }
 
 var _ Tag = (*tag)(nil)
 
-func NewTag(entity tagEntity, historyCapacity int) *tag {
+func NewTag(id TagID, name TagName) Tag {
 	return &tag{
-		entity:  entity,
-		history: history.NewHistory(historyCapacity),
-		version: 1,
+		id:   id,
+		name: name,
 	}
 }
 
-// Методы агрегата
-func (t *tag) UpdateValue(newValue any, quality value.Quality) error {
-	if !t.entity.isValidValue(newValue) {
-		return errors.New("invalid value type")
-	}
-
-	newVal := value.NewValue(newValue, quality)
-	if t.shouldUpdate(newVal) {
-		t.current = newVal
-		t.history.Add(newVal)
-		t.version++
-	}
-	return nil
+func (t tag) ID() TagID {
+	return t.id
 }
 
-func (t *tag) shouldUpdate(newVal value.Value) bool {
-	// Логика deadband и проверки качества
-	return true
+func (t tag) Name() TagName {
+	return t.name
 }
 
-// Геттеры
-func (t *tag) ID() uuid.UUID {
-	return t.entity.id
+func (t tag) Type() TagType {
+	return t.theType
 }
 
-func (t *tag) Name() string {
-	return t.entity.name
-}
-
-func (t *tag) CurrentValue() value.Value {
-	return t.current
+func (t tag) Quality() TagQuality {
+	return t.quality
 }

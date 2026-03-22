@@ -62,3 +62,7 @@ func (r *Root) radioOption(label string, mode Mode) app.UI {
 		app.Text(label),
 	)
 }
+
+func (r *Root) SetMode(mode Mode) {
+	r.currentMode = mode
+}
