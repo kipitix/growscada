@@ -1,55 +1,50 @@
 package tag
 
-// go-enum tool
-// ENUM(Bad, Uncertain, Good, Simulated)
-type TagQualityEnum int
+import (
+	"fmt"
+	"strings"
+)
 
-// TagQuality is a value object for tag quality
-type TagQuality interface {
-	Quality() TagQualityEnum
-	Equals(other TagQuality) bool
-	String() string
+// TagQuality is an enum for tag quality
+// TagQuality is value object for tag quality
+type TagQuality int
 
-	IsBad() bool
-	IsUncertain() bool
-	IsGood() bool
-	IsSimulated() bool
+// Tag quality enum values
+const (
+	TagQualityUnknown TagQuality = iota
+	TagQualityBad
+	TagQualityUncertain
+	TagQualityGood
+	TagQualitySimulated
+)
+
+// String returns the string representation of the tag quality enum
+func (tq TagQuality) String() string {
+	switch tq {
+	case TagQualityBad:
+		return "Bad"
+	case TagQualityUncertain:
+		return "Uncertain"
+	case TagQualityGood:
+		return "Good"
+	case TagQualitySimulated:
+		return "Simulated"
+	default:
+		panic(fmt.Errorf("unknown tag quality enum: %d", tq))
+	}
 }
 
-type tagQuality struct {
-	quality TagQualityEnum
-}
-
-var _ TagQuality = (*tagQuality)(nil)
-
-func NewTagQuality(quality TagQualityEnum) TagQuality {
-	return &tagQuality{quality: quality}
-}
-
-func (tq tagQuality) Quality() TagQualityEnum {
-	return tq.quality
-}
-
-func (tq tagQuality) Equals(other TagQuality) bool {
-	return tq.quality == other.Quality()
-}
-
-func (tq tagQuality) String() string {
-	return tq.quality.String()
-}
-
-func (tq tagQuality) IsBad() bool {
-	return tq.quality == TagQualityEnumBad
-}
-
-func (tq tagQuality) IsUncertain() bool {
-	return tq.quality == TagQualityEnumUncertain
-}
-
-func (tq tagQuality) IsGood() bool {
-	return tq.quality == TagQualityEnumGood
-}
-
-func (tq tagQuality) IsSimulated() bool {
-	return tq.quality == TagQualityEnumSimulated
+func TagQualityFromString(aString string) (TagQuality, error) {
+	switch strings.ToLower(aString) {
+	case "bad":
+		return TagQualityBad, nil
+	case "uncertain":
+		return TagQualityUncertain, nil
+	case "good":
+		return TagQualityGood, nil
+	case "simulated":
+		return TagQualitySimulated, nil
+	default:
+		return TagQualityUnknown, fmt.Errorf("invalid tag quality: %s", aString)
+	}
 }

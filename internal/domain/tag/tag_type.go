@@ -1,55 +1,55 @@
 package tag
 
-// go-enum tool
-// ENUM(Boolean,Integer,Float,String)
-type TagTypeEnum int
+import (
+	"fmt"
+	"strings"
+)
 
-// TagType is a value object for tag type
-type TagType interface {
-	Type() TagTypeEnum
-	Equals(other TagType) bool
-	String() string
+// TagType is an enum for tag type
+// TagType is value object for tag type
+type TagType int
 
-	IsBoolean() bool
-	IsInteger() bool
-	IsFloat() bool
-	IsString() bool
+// const for TagType
+const (
+	TagTypeUnknown TagType = iota
+	TagTypeBoolean
+	TagTypeInteger
+	// TagTypeFloat
+	// TagTypeString
+	// TagTypeBytes
+)
+
+// String returns the string representation of the TagType enum
+func (tt TagType) String() string {
+	switch tt {
+	case TagTypeBoolean:
+		return "Boolean"
+	case TagTypeInteger:
+		return "Integer"
+	default:
+		panic(fmt.Errorf("unknown tag type enum: %d", tt))
+	}
 }
 
-type tagType struct {
-	tagType TagTypeEnum
+// TagTypeFromString creates a new TagType value object from a string
+func TagTypeFromString(aString string) (TagType, error) {
+	switch strings.ToLower(aString) {
+	case "boolean":
+		return TagTypeBoolean, nil
+	case "integer":
+		return TagTypeInteger, nil
+	default:
+		return TagTypeUnknown, fmt.Errorf("invalid tag type: %s", aString)
+	}
 }
 
-var _ TagType = (*tagType)(nil)
-
-func NewTagType(aTagType TagTypeEnum) TagType {
-	return &tagType{tagType: aTagType}
-}
-
-func (t tagType) Type() TagTypeEnum {
-	return t.tagType
-}
-
-func (t tagType) Equals(other TagType) bool {
-	return t.tagType == other.Type()
-}
-
-func (t tagType) String() string {
-	return t.tagType.String()
-}
-
-func (t tagType) IsBoolean() bool {
-	return t.tagType == TagTypeEnumBoolean
-}
-
-func (t tagType) IsInteger() bool {
-	return t.tagType == TagTypeEnumInteger
-}
-
-func (t tagType) IsFloat() bool {
-	return t.tagType == TagTypeEnumFloat
-}
-
-func (t tagType) IsString() bool {
-	return t.tagType == TagTypeEnumString
+func (tt TagType) IsValidValue(aValue TagValue) bool {
+	switch aValue.(type) {
+	case bool:
+		return tt == TagTypeBoolean
+	case int:
+		return tt == TagTypeInteger
+	default:
+		return false
+	}
 }

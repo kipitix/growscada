@@ -1,40 +1,115 @@
 package tag
 
+import "fmt"
+
+// Tag is an entity that represents a tag in the system
+// Tag is the aggregate root of the tag aggregate
 type Tag interface {
 	ID() TagID
-	Name() TagName
-	Type() TagType
-	Quality() TagQuality
+	Name() string
+
+	UpdateValue(TagValue, TagQuality) error
+
+	IsTypeBoolean() bool
+	IsTypeInteger() bool
+
+	IsQualityBad() bool
+	IsQualityUncertain() bool
+	IsQualityGood() bool
+	IsQualitySimulated() bool
+
+	ValueAsBoolean() (bool, error)
+	ValueAsInteger() (int, error)
 }
 
-type tag struct {
+type tagImpl struct {
 	id      TagID
-	name    TagName
+	name    string
 	theType TagType
+	value   TagValue
 	quality TagQuality
 }
 
-var _ Tag = (*tag)(nil)
+var _ Tag = (*tagImpl)(nil)
 
-func NewTag(id TagID, name TagName) Tag {
-	return &tag{
-		id:   id,
-		name: name,
+func NewTag(anID TagID, aName string, aType TagType) Tag {
+	return &tagImpl{
+		id:      anID,
+		name:    aName,
+		theType: aType,
+		value:   nil,
+		quality: TagQualityBad,
 	}
 }
 
-func (t tag) ID() TagID {
+func (t tagImpl) ID() TagID {
 	return t.id
 }
 
-func (t tag) Name() TagName {
+func (t tagImpl) Name() string {
 	return t.name
 }
 
-func (t tag) Type() TagType {
-	return t.theType
+func (t *tagImpl) UpdateValue(aValue TagValue, aQuality TagQuality) error {
+	if !t.theType.IsValidValue(aValue) {
+		return fmt.Errorf("invalid value type: expected %s, got %T", t.theType, aValue)
+	}
+	if aQuality == TagQualityUnknown {
+		return fmt.Errorf("invalid quality: %s", aQuality)
+	}
+	t.value = aValue
+	t.quality = aQuality
+	return nil
 }
 
-func (t tag) Quality() TagQuality {
-	return t.quality
+func (t tagImpl) IsTypeBoolean() bool {
+	return t.theType == TagTypeBoolean
+}
+
+func (t tagImpl) IsTypeInteger() bool {
+	return t.theType == TagTypeInteger
+}
+
+func (t tagImpl) IsQualityBad() bool {
+	return t.quality == TagQualityBad
+}
+
+func (t tagImpl) IsQualityUncertain() bool {
+	return t.quality == TagQualityUncertain
+}
+
+func (t tagImpl) IsQualityGood() bool {
+	return t.quality == TagQualityGood || t.quality == TagQualitySimulated
+}
+
+func (t tagImpl) IsQualitySimulated() bool {
+	return t.quality == TagQualitySimulated
+}
+
+func (t tagImpl) ValueAsBoolean() (bool, error) {
+	if !t.IsTypeBoolean() {
+		return false, fmt.Errorf("tag is not of type boolean")
+	}
+	if t.value == nil {
+		return false, fmt.Errorf("tag value is nil")
+	}
+	boolValue, ok := t.value.(bool)
+	if !ok {
+		return false, fmt.Errorf("tag value is not a boolean")
+	}
+	return boolValue, nil
+}
+
+func (t tagImpl) ValueAsInteger() (int, error) {
+	if !t.IsTypeInteger() {
+		return 0, fmt.Errorf("tag is not of type integer")
+	}
+	if t.value == nil {
+		return 0, fmt.Errorf("tag value is nil")
+	}
+	intValue, ok := t.value.(int)
+	if !ok {
+		return 0, fmt.Errorf("tag value is not an integer")
+	}
+	return intValue, nil
 }
