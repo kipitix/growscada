@@ -20,6 +20,9 @@ type Tag interface {
 
 	ValueAsBoolean() (bool, error)
 	ValueAsInteger() (int, error)
+
+	Version() int
+	IncrementVersion()
 }
 
 type tagImpl struct {
@@ -28,6 +31,7 @@ type tagImpl struct {
 	theType TagType
 	value   TagValue
 	quality TagQuality
+	version int
 }
 
 var _ Tag = (*tagImpl)(nil)
@@ -39,6 +43,7 @@ func NewTag(anID TagID, aName string, aType TagType) Tag {
 		theType: aType,
 		value:   nil,
 		quality: TagQualityBad,
+		version: 0,
 	}
 }
 
@@ -112,4 +117,12 @@ func (t tagImpl) ValueAsInteger() (int, error) {
 		return 0, fmt.Errorf("tag value is not an integer")
 	}
 	return intValue, nil
+}
+
+func (t tagImpl) Version() int {
+	return t.version
+}
+
+func (t *tagImpl) IncrementVersion() {
+	t.version++
 }

@@ -4,14 +4,4 @@
 
 Теперь на Go!
 
-## Полезные инструменты и библиотеки, используемые в процессе разработки
-
-### Сервер
-
-### Клиент
-
-### Тестирование
-
-[Инструмент для тестирования API, но с сохранением всего в файлах](https://www.usebruno.com)
-
-[Инструмент запуска контейнеров в процессе Unit-тестов](https://testcontainers.com/?language=go)
+![GrowSCADA Welcome](./docs/root_readme_images/growscada_welcome.jpg)

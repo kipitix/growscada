@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
-	"gitverse.ru/kipitix/growscada/internal/application/client/root"
+	"gitverse.ru/kipitix/growscada/internal/interface/ui/root"
 )
 
 func main() {

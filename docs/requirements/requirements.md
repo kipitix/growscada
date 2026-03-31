@@ -16,11 +16,25 @@
 - Работа в браузере (в основных браузерах: Chromium, Firefox и т.д.)
 - Несколько режимов работы (редактирование библиотеки, редактирование проекта, работа оператора, воспроизведение событий)
 - Аутентификация/авторизация через внешние системы
+- Нужно сразу закладывать тёмную тему (сейчас это уже стандарт)
 
 ## Особенности реализации
 
 ### Библиотеки и инструменты Go
 
+[Пример структуры проекта на DDD](https://github.com/patrickkdev/go-ddd-blueprint)
+
 [PWA UI на Go](https://go-app.dev)
 
-[Генерация перечислений](https://github.com/abice/go-enum)
+[Генерация перечислений](https://github.com/dmarkham/enumer)
+
+[Инструмент запуска контейнеров в процессе Unit-тестов](https://testcontainers.com/?language=go)
+
+### Полезные программы
+
+[VSCode](https://code.visualstudio.com)
+
+[DBeaver](https://dbeaver.io)
+
+[Bruno](https://www.usebruno.com)
+

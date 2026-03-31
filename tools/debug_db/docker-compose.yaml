@@ -3,12 +3,45 @@ services:
     image: postgres:18 # Specifies the PostgreSQL image and version
     restart: always # Ensures the container restarts automatically
     environment:
-      POSTGRES_DB: growscada # Sets the default database name
-      POSTGRES_USER: growscada # Sets the default username
-      POSTGRES_PASSWORD: growscada # Sets the password for the user
+      POSTGRES_DB: ${DB_NAME} # Sets the default database name
+      POSTGRES_USER: ${DB_USER} # Sets the default username
+      POSTGRES_PASSWORD: ${DB_PASSWORD} # Sets the password for the user
     ports:
       - "5432:5432" # Maps host port 5432 to container port 5432
     volumes:
-      - growscada_data:/var/lib/postgresql/data # Mounts a named volume for persistent data storage
+      - growscada_data:/var/lib/postgresql # Mounts a named volume for persistent data storage
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U growscada -d growscada"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  db_migrations:
+    image: kukymbr/goose-docker:3.27.0 # Official goose Docker image
+    depends_on:
+      db:
+        condition: service_healthy # Waits for database to be healthy
+    volumes:
+      - ../../internal/infrastructure/persistence/postgres/migrations:/migrations # Mount your migrations folder to /migrations
+    environment:
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: "postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?sslmode=disable"
+    command: >
+      sh -c "goose -dir /migrations up && echo 'Migrations completed successfully'"
+    restart: "no" # Runs once and exits
+  db_test_data:
+    image: kukymbr/goose-docker:3.27.0 # Official goose Docker image
+    depends_on:
+      db_migrations:
+        condition: service_completed_successfully # Waits for database to be healthy
+    volumes:
+      - ../../internal/infrastructure/persistence/postgres/test_data:/migrations # Mount your migrations folder to /migrations
+    environment:
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: "postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?sslmode=disable"
+    command: >
+      sh -c "goose -dir /migrations up && echo 'Migrations completed successfully'"
+    restart: "no" # Runs once and exits
+
 volumes:
   growscada_data: # Defines the named volume
