@@ -2,8 +2,6 @@ package tag
 
 import "fmt"
 
-// Tag is an entity that represents a tag in the system
-// Tag is the aggregate root of the tag aggregate
 type Tag interface {
 	ID() TagID
 	Name() string

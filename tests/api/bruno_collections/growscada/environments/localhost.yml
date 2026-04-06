@@ -1,0 +1,5 @@
+name: localhost
+variables:
+  - name: API_SERVER
+    value: |
+      localhost:9090

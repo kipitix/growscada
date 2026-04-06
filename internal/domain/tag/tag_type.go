@@ -1,8 +1,5 @@
 package tag
 
-// TagType is an enum for tag type
-// TagType is value object for tag type
-//
 //go:generate enumer -type=TagType -trimprefix=TagType -json
 type TagType int
 
@@ -16,7 +13,7 @@ const (
 	// TagTypeBytes
 )
 
-// IsValidValue checks if the given value is valid for the tag type
+// Проверка значения на соответствие типу тега
 func (tt TagType) IsValidValue(aValue TagValue) bool {
 	switch aValue.(type) {
 	case bool:

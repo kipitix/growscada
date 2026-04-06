@@ -1,28 +1,81 @@
 package main
 
 import (
-	"log"
+	"context"
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
+	"gitverse.ru/kipitix/gracedown"
+	"gitverse.ru/kipitix/growscada/internal/application"
+	"gitverse.ru/kipitix/growscada/internal/interface/restapi"
 	"gitverse.ru/kipitix/growscada/internal/interface/ui/root"
 )
 
 func main() {
+	// Настройка запуска сервера для раздачи клиентской части (PWA)
 	app.Route("/", func() app.Composer {
 		r := &root.Root{}
 		r.SetMode(root.ModeOperation)
 		return r
 	})
 
+	// Специальный вызов фреймворка go-app для запуска PWA
 	app.RunWhenOnBrowser()
 
-	http.Handle("/", &app.Handler{
-		Name:        "GrowSCADA",
-		Description: "SCADA to Go",
+	// Создаём менеджер корректного завершения работы
+	gracedownManager := gracedown.NewManager()
+
+	// Сервер для раздачи клиента PWA
+	pwaServer := &http.Server{
+		Addr: ":8080",
+		Handler: &app.Handler{
+			Name:        "GrowSCADA",
+			Description: "SCADA to Go",
+		},
+	}
+
+	// Регистрируем обработчик завершения работы PWA сервера
+	gracedownManager.RegisterInterface("PWA HTTP Server", 15*time.Second, func(ctx context.Context) error {
+		return pwaServer.Shutdown(ctx)
 	})
 
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		log.Fatal(err)
+	// Запуск PWA сервера в отдельной рутине
+	go func() {
+		fmt.Println("🚀 PWA Server starting on :8080")
+		if err := pwaServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			fmt.Printf("❌ PWA Server error: %v\n", err)
+		}
+	}()
+
+	// API сервер
+	// Создаем сервисы
+	tagService := application.NewTagService()
+	// Создаем роутер
+	apiRouter := restapi.NewRouter(tagService)
+
+	// Запуск HTTP сервера для раздачи API
+	apiServer := &http.Server{
+		Addr:    ":9090",
+		Handler: apiRouter.ServeMux(),
 	}
+
+	// Регистрируем обработчик завершения работы API сервера
+	gracedownManager.RegisterInterface("API HTTP Server", 15*time.Second, func(ctx context.Context) error {
+		return apiServer.Shutdown(ctx)
+	})
+
+	// Запуск API сервера в отдельной рутине
+	go func() {
+		fmt.Println("🚀 API Server starting on :9090")
+		if err := apiServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			fmt.Printf("❌ API Server error: %v\n", err)
+		}
+	}()
+
+	// Ожидание сигнала завершения работы
+	gracedownManager.WaitForSignal()
+
+	fmt.Println("Server stopped")
 }
