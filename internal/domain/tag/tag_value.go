@@ -1,7 +1,9 @@
 package tag
 
+// TagValue - тип для значения тега, может содержать любое значение (any)
 type TagValue any
 
+// Комментарии для будущих реализаций value object для значения тега
 // tagValue is a value object for tag value
 // type tagValue interface {
 // 	Value() TagValue
@@ -23,7 +25,7 @@ type TagValue any
 // 	return &tagValueImpl{value: value, valueType: valueType}
 // }
 
-// // Type returns the type of the tag value
+// // Value returns the value of the tag
 // func (t tagValueImpl) Value() TagValue {
 // 	return t.value
 // }

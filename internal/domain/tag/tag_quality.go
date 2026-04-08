@@ -1,15 +1,18 @@
 package tag
 
-// TagQuality is an enum for tag quality
-// TagQuality is value object for tag quality
+// TagQuality - перечисление для качества тега
+// Представляет собой value object для оценки достоверности значения тега
 //
 //go:generate enumer -type=TagQuality -trimprefix=TagQuality -json
 type TagQuality int
 
-// Tag quality enum values
+// Значения перечисления качества тега
+// TagQualityBad - плохое качество (недоступен, ошибка)
+// TagQualityUncertain - неопределенное качество
+// TagQualityGood - хорошее качество (нормальное значение)
+// TagQualitySimulated - симулированное качество (значение задано вручную)
 const (
-	TagQualityUnknown TagQuality = iota
-	TagQualityBad
+	TagQualityBad TagQuality = iota
 	TagQualityUncertain
 	TagQualityGood
 	TagQualitySimulated

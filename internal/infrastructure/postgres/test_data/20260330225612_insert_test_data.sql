@@ -1,9 +1,9 @@
 -- +goose Up
 -- +goose StatementBegin
 -- Add test data for tags table
--- type: Boolean | Integer
--- quality: Unknown | Bad | Uncertain | Good | Simulated
-INSERT INTO tags (id, name, type, value, quality, version) VALUES
+-- kind: Boolean | Integer
+-- quality: Bad | Uncertain | Good | Simulated
+INSERT INTO tags (id, name, kind, value, quality, version) VALUES
     ('6ba7b810-9dad-11d1-80b4-00c04fd430c8', 'is_active', 'Boolean', 'true', 'Good', 1),
     ('6ba7b811-9dad-11d1-80b4-00c04fd430c8', 'max_connections', 'Integer', '100', 'Good', 1),
     ('6ba7b812-9dad-11d1-80b4-00c04fd430c8', 'is_debug', 'Boolean', 'false', 'Bad', 1),

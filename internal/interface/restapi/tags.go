@@ -1,15 +1,11 @@
 package restapi
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"gitverse.ru/kipitix/growscada/internal/application"
 )
-
-// import (
-// 	"encoding/json"
-// 	"net/http"
-// )
 
 // TagsHandlers отвечает за обработку HTTP запросов, связанных с тегами.
 // Он зависит от абстракции прикладного слоя.
@@ -17,15 +13,38 @@ type TagsHandlers struct {
 	service application.TagService
 }
 
+// NewTagsHandler создает новый обработчик для тегов
+// Принимает сервис тегов и возвращает указатель на TagsHandlers
 func NewTagsHandler(s application.TagService) *TagsHandlers {
 	return &TagsHandlers{service: s}
 }
 
-func (h *TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
+// GetTags обрабатывает GET запрос для получения списка тегов
+// В текущей реализации просто возвращает статус 200 OK, логика находится в разработке
+func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
+	tagList, err := h.service.TagList(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	jsonData, err := json.Marshal(tagList)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if _, err := w.Write(jsonData); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	w.WriteHeader(http.StatusOK)
 }
 
-// // GetTag обрабатывает GET /tags/{name}
+// Закомментированные функции для примера будущей реализации
+// GetTag обрабатывает GET /tags/{name}
 // func (h *TagHandler) GetTag(w http.ResponseWriter, r *http.Request) {
 // 	// В реальном проекте здесь нужно вытащить name из path params
 // 	// Для примера берем из query ?name=...

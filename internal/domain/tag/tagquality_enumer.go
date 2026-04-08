@@ -8,11 +8,11 @@ import (
 	"strings"
 )
 
-const _TagQualityName = "UnknownBadUncertainGoodSimulated"
+const _TagQualityName = "BadUncertainGoodSimulated"
 
-var _TagQualityIndex = [...]uint8{0, 7, 10, 19, 23, 32}
+var _TagQualityIndex = [...]uint8{0, 3, 12, 16, 25}
 
-const _TagQualityLowerName = "unknownbaduncertaingoodsimulated"
+const _TagQualityLowerName = "baduncertaingoodsimulated"
 
 func (i TagQuality) String() string {
 	if i < 0 || i >= TagQuality(len(_TagQualityIndex)-1) {
@@ -25,34 +25,30 @@ func (i TagQuality) String() string {
 // Re-run the stringer command to generate them again.
 func _TagQualityNoOp() {
 	var x [1]struct{}
-	_ = x[TagQualityUnknown-(0)]
-	_ = x[TagQualityBad-(1)]
-	_ = x[TagQualityUncertain-(2)]
-	_ = x[TagQualityGood-(3)]
-	_ = x[TagQualitySimulated-(4)]
+	_ = x[TagQualityBad-(0)]
+	_ = x[TagQualityUncertain-(1)]
+	_ = x[TagQualityGood-(2)]
+	_ = x[TagQualitySimulated-(3)]
 }
 
-var _TagQualityValues = []TagQuality{TagQualityUnknown, TagQualityBad, TagQualityUncertain, TagQualityGood, TagQualitySimulated}
+var _TagQualityValues = []TagQuality{TagQualityBad, TagQualityUncertain, TagQualityGood, TagQualitySimulated}
 
 var _TagQualityNameToValueMap = map[string]TagQuality{
-	_TagQualityName[0:7]:        TagQualityUnknown,
-	_TagQualityLowerName[0:7]:   TagQualityUnknown,
-	_TagQualityName[7:10]:       TagQualityBad,
-	_TagQualityLowerName[7:10]:  TagQualityBad,
-	_TagQualityName[10:19]:      TagQualityUncertain,
-	_TagQualityLowerName[10:19]: TagQualityUncertain,
-	_TagQualityName[19:23]:      TagQualityGood,
-	_TagQualityLowerName[19:23]: TagQualityGood,
-	_TagQualityName[23:32]:      TagQualitySimulated,
-	_TagQualityLowerName[23:32]: TagQualitySimulated,
+	_TagQualityName[0:3]:        TagQualityBad,
+	_TagQualityLowerName[0:3]:   TagQualityBad,
+	_TagQualityName[3:12]:       TagQualityUncertain,
+	_TagQualityLowerName[3:12]:  TagQualityUncertain,
+	_TagQualityName[12:16]:      TagQualityGood,
+	_TagQualityLowerName[12:16]: TagQualityGood,
+	_TagQualityName[16:25]:      TagQualitySimulated,
+	_TagQualityLowerName[16:25]: TagQualitySimulated,
 }
 
 var _TagQualityNames = []string{
-	_TagQualityName[0:7],
-	_TagQualityName[7:10],
-	_TagQualityName[10:19],
-	_TagQualityName[19:23],
-	_TagQualityName[23:32],
+	_TagQualityName[0:3],
+	_TagQualityName[3:12],
+	_TagQualityName[12:16],
+	_TagQualityName[16:25],
 }
 
 // TagQualityString retrieves an enum value from the enum constants string name.

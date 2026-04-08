@@ -8,21 +8,31 @@ import (
 	"gitverse.ru/kipitix/growscada/internal/domain/tag"
 )
 
+// TagRepositoryPostgres реализация интерфейса TagRepository для работы с PostgreSQL
+// Содержит подключение к базе данных
 type TagRepositoryPostgres struct {
 	db *sql.DB
 }
 
+// Убеждаемся, что TagRepositoryPostgres реализует интерфейс tag.TagRepository
 var _ tag.TagRepository = (*TagRepositoryPostgres)(nil)
 
+// NewTagRepositoryPostgres создает новый экземпляр репозитория тегов для PostgreSQL
+// Принимает подключение к базе данных и возвращает указатель на TagRepositoryPostgres
 func NewTagRepositoryPostgres(db *sql.DB) *TagRepositoryPostgres {
 	return &TagRepositoryPostgres{db: db}
 }
 
-func (r *TagRepositoryPostgres) NextID() tag.TagID {
+// NextID генерирует новый уникальный идентификатор тега
+// Использует uuid.New() для генерации UUID и преобразует его в TagID
+func (r TagRepositoryPostgres) NextID() tag.TagID {
 	return tag.TagID(uuid.New())
 }
 
-func (r *TagRepositoryPostgres) Save(ctx context.Context, tag tag.Tag) error {
+// Save сохраняет тег в базе данных
+// Временно возвращает nil, так как реализация находится в процессе разработки
+// В будущем будет реализована логика сохранения с проверкой версий (оптимистичная блокировка)
+func (r TagRepositoryPostgres) Save(ctx context.Context, tag tag.Tag) error {
 	return nil
 
 	/*
@@ -75,12 +85,16 @@ func (r *TagRepositoryPostgres) Save(ctx context.Context, tag tag.Tag) error {
 	*/
 }
 
-func (r *TagRepositoryPostgres) TagOfID(ctx context.Context, id tag.TagID) (tag.Tag, error) {
+// FindByID получает тег из базы данных по его идентификатору
+// Временно возвращает nil, nil, так как реализация находится в процессе разработки
+// В будущем будет реализована логика выборки тега из таблицы базы данных
+func (r TagRepositoryPostgres) FindByID(ctx context.Context, id tag.TagID) (tag.Tag, error) {
 	return nil, nil
 	/*
 	   query := `SELECT id, status, total_cents, version, updated_at FROM orders WHERE id = $1`
 
 	   row := r.db.QueryRowContext(ctx, query, id)
+
 
 	   var order domain.Order
 	   var statusStr string
@@ -96,4 +110,16 @@ func (r *TagRepositoryPostgres) TagOfID(ctx context.Context, id tag.TagID) (tag.
 	   order.status = domain.Status(statusStr)
 	   return &order, nil
 	*/
+}
+
+func (r TagRepositoryPostgres) FindAll(ctx context.Context) ([]tag.Tag, error) {
+	query := `SELECT id, name, kind, value, quality FROM tags`
+
+	row := r.db.QueryRowContext(ctx, query)
+
+	if row.Err() != nil {
+		return nil, row.Err()
+	}
+
+	return nil, nil
 }
