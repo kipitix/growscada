@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	"github.com/google/uuid"
 	"gitverse.ru/kipitix/growscada/internal/domain/tag"
@@ -19,8 +20,8 @@ var _ tag.TagRepository = (*TagRepositoryPostgres)(nil)
 
 // NewTagRepositoryPostgres создает новый экземпляр репозитория тегов для PostgreSQL
 // Принимает подключение к базе данных и возвращает указатель на TagRepositoryPostgres
-func NewTagRepositoryPostgres(db *sql.DB) *TagRepositoryPostgres {
-	return &TagRepositoryPostgres{db: db}
+func NewTagRepositoryPostgres(aDb *sql.DB) *TagRepositoryPostgres {
+	return &TagRepositoryPostgres{db: aDb}
 }
 
 // NextID генерирует новый уникальный идентификатор тега
@@ -113,13 +114,56 @@ func (r TagRepositoryPostgres) FindByID(ctx context.Context, id tag.TagID) (tag.
 }
 
 func (r TagRepositoryPostgres) FindAll(ctx context.Context) ([]tag.Tag, error) {
-	query := `SELECT id, name, kind, value, quality FROM tags`
-
-	row := r.db.QueryRowContext(ctx, query)
-
-	if row.Err() != nil {
-		return nil, row.Err()
+	// SQL для выборки всех тегов
+	query := `SELECT id, name, kind, value, quality, version FROM tags`
+	// Запрос и обработка результатов
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("error querying tags: %w", err)
 	}
-
-	return nil, nil
+	// Закрываем rows в конце
+	defer rows.Close()
+	// Инициализация слайса для хранения тегов
+	var tags []tag.Tag
+	// Проход по строкам
+	for rows.Next() {
+		var (
+			uuid    uuid.UUID
+			name    string
+			kind    string
+			value   string
+			quality string
+			version int
+		)
+		// Сканирование строки
+		err := rows.Scan(uuid, name, kind, value, quality, version)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning tag: %w", err)
+		}
+		// Создание нового VO TagID
+		newID := tag.NewTagID(tag.WithUUID(uuid))
+		// Создание нового VO TagKind
+		newKind, err := tag.TagKindString(kind)
+		if err != nil {
+			return nil, fmt.Errorf("cannot create tag kind: %w")
+		}
+		// Создание нового VO TagQuality
+		newQuality, err := tag.TagQualityString(quality)
+		if err != nil {
+			return nil, fmt.Errorf("cannot create tag quality: %w")
+		}
+		// Создание нового Aggregate Tag
+		newTag, err := tag.NewTag(newID, name, newKind, value, newQuality, version)
+		if err != nil {
+			return nil, fmt.Errorf("cannot create tag: %w")
+		}
+		// Добавление тега в слайс
+		tags = append(tags, newTag)
+	}
+	// Проверка на ошибки после цикла
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over tags: %w", err)
+	}
+	// Возвращение слайса тегов
+	return tags, nil
 }

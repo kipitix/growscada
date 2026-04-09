@@ -37,15 +37,22 @@ var _ Tag = (*tagImpl)(nil)
 // NewTag создает новый тег с заданным идентификатором, именем и типом
 // Устанавливает начальное значение nil и качество TagQualityBad
 // version инициализируется значением 0
-func NewTag(anID TagID, aName string, aType TagKind) Tag {
-	return &tagImpl{
+func NewTag(anID TagID, aName string, aKind TagKind, aValue TagValue, aQuality TagQuality, aVersion int) (Tag, error) {
+	newTag := &tagImpl{
 		id:      anID,
 		name:    aName,
-		kind:    aType,
+		kind:    aKind,
 		value:   nil,
 		quality: TagQualityBad,
-		version: 0,
+		version: aVersion,
 	}
+
+	err := newTag.UpdateValue(aValue, aQuality)
+	if err != nil {
+		return nil, fmt.Errorf("cannot update tag value: %w", err)
+	}
+
+	return newTag, nil
 }
 
 // ID возвращает идентификатор тега

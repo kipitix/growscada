@@ -22,7 +22,7 @@ func NewTagsHandler(s application.TagService) *TagsHandlers {
 // GetTags обрабатывает GET запрос для получения списка тегов
 // В текущей реализации просто возвращает статус 200 OK, логика находится в разработке
 func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
-	tagList, err := h.service.TagList(r.Context())
+	tagList, err := h.service.FindAllTags(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

@@ -22,7 +22,7 @@ services:
       db:
         condition: service_healthy # Waits for database to be healthy
     volumes:
-      - ../../internal/infrastructure/persistence/postgres/migrations:/migrations # Mount your migrations folder to /migrations
+      - ../../internal/infrastructure/postgres/migrations:/migrations # Mount your migrations folder to /migrations
     environment:
       GOOSE_DRIVER: postgres
       GOOSE_DBSTRING: "postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?sslmode=disable"
@@ -35,7 +35,7 @@ services:
       db_migrations:
         condition: service_completed_successfully # Waits for database to be healthy
     volumes:
-      - ../../internal/infrastructure/persistence/postgres/test_data:/migrations # Mount your migrations folder to /migrations
+      - ../../internal/infrastructure/postgres/test_data:/migrations # Mount your migrations folder to /migrations
     environment:
       GOOSE_DRIVER: postgres
       GOOSE_DBSTRING: "postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?sslmode=disable"

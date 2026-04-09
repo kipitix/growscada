@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"time"
@@ -9,8 +10,15 @@ import (
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 	"gitverse.ru/kipitix/gracedown"
 	"gitverse.ru/kipitix/growscada/internal/application"
+	"gitverse.ru/kipitix/growscada/internal/infrastructure/postgres/repositories"
 	"gitverse.ru/kipitix/growscada/internal/interface/restapi"
 	"gitverse.ru/kipitix/growscada/internal/interface/ui/root"
+
+	_ "github.com/lib/pq"
+)
+
+const (
+	databaseDSN = "postgres://growscada:growscada@localhost:5432/growscada?sslmode=disable"
 )
 
 func main() {
@@ -50,8 +58,14 @@ func main() {
 	}()
 
 	// API сервер
+	// Создаём подключение в БД
+	sqlDB, err := sql.Open("postgres", databaseDSN)
+	if err != nil {
+		fmt.Printf("❌ Database connection error: %v\n", err)
+	}
+	tarRepository := repositories.NewTagRepositoryPostgres(sqlDB)
 	// Создаем сервисы
-	tagService := application.NewTagService()
+	tagService := application.NewTagService(tarRepository)
 	// Создаем роутер
 	apiRouter := restapi.NewRouter(tagService)
 

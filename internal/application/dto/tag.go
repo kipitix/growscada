@@ -1,16 +1,19 @@
 package dto
 
-import "gitverse.ru/kipitix/growscada/internal/domain/tag"
+import (
+	"github.com/google/uuid"
+	"gitverse.ru/kipitix/growscada/internal/domain/tag"
+)
 
 // Tag - структура данных для передачи информации о теге через API
 // Содержит основные атрибуты тега в формате, удобном для JSON-сериализации
 type Tag struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Kind    string `json:"kind"`
-	Value   string `json:"value"`
-	Quality string `json:"quality"`
-	Version int    `json:"version"`
+	ID      uuid.UUID `json:"id"`
+	Name    string    `json:"name"`
+	Kind    string    `json:"kind"`
+	Value   string    `json:"value"`
+	Quality string    `json:"quality"`
+	Version int       `json:"version"`
 }
 
 // TagList - структура для передачи списка тегов
@@ -22,7 +25,7 @@ type TagList struct {
 // NewTag создает DTO-объект Tag на основе доменного агрегата tag.Tag
 func NewTag(aTag tag.Tag) Tag {
 	return Tag{
-		ID:      aTag.ID().String(),
+		ID:      aTag.ID().UUID(),
 		Name:    aTag.Name(),
 		Kind:    aTag.Kind().String(),
 		Value:   aTag.ValueAsString(),
