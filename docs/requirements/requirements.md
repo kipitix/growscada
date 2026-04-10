@@ -26,7 +26,7 @@
 
 [PWA UI на Go](https://go-app.dev)
 
-[Генерация перечислений](https://github.com/dmarkham/enumer)
+[~~Генерация перечислений~~ Оказалось проще написать руками](https://github.com/dmarkham/enumer)
 
 [Инструмент запуска контейнеров в процессе Unit-тестов](https://testcontainers.com/?language=go)
 
@@ -37,4 +37,3 @@
 [DBeaver](https://dbeaver.io)
 
 [Bruno](https://www.usebruno.com)
-

@@ -1,16 +1,18 @@
 package tag
 
+import "fmt"
+
 // Tag - интерфейс, представляющий тег
 // Тег - это базовая сущность системы, содержащая идентификатор, имя, тип, значение и качество
 type Tag interface {
 	ID() TagID
-	Name() string
+	Name() TagName
 	Kind() TagKind
 	Value() TagValue
 	Quality() TagQuality
 	Version() int
 
-	UpdateValue(TagValue, TagQuality) error
+	UpdateValue(any, TagQuality) error
 	IncrementVersion()
 }
 
@@ -18,7 +20,7 @@ type Tag interface {
 type tagImpl struct {
 	id TagID
 	// TODO: make VO TagName
-	name    string
+	name    TagName
 	kind    TagKind
 	value   TagValue
 	quality TagQuality
@@ -31,7 +33,7 @@ var _ Tag = (*tagImpl)(nil)
 // NewTag создает новый тег с заданным идентификатором, именем и типом
 // Устанавливает начальное значение nil и качество TagQualityBad
 // version инициализируется значением 0
-func NewTag(anID TagID, aName string, aKind TagKind, aValue TagValue, aQuality TagQuality, aVersion int) (Tag, error) {
+func NewTag(anID TagID, aName TagName, aKind TagKind, aValue TagValue, aQuality TagQuality, aVersion int) (Tag, error) {
 	newTag := &tagImpl{
 		id:      anID,
 		name:    aName,
@@ -50,7 +52,7 @@ func (t tagImpl) ID() TagID {
 }
 
 // Name возвращает имя тега
-func (t tagImpl) Name() string {
+func (t tagImpl) Name() TagName {
 	return t.name
 }
 
@@ -74,14 +76,13 @@ func (t tagImpl) Version() int {
 }
 
 // UpdateValue обновляет значение и качество тега
-func (t *tagImpl) UpdateValue(aValue TagValue, aQuality TagQuality) error {
-	// if !t.kind.IsValidValue(aValue) {
-	// 	t.value = nil
-	// 	t.quality = TagQualityBad
-	// 	return fmt.Errorf("invalid value type: expected %s, got %T", t.kind, aValue)
-	// }
-	// t.value = aValue
-	// t.quality = aQuality
+func (t *tagImpl) UpdateValue(aValue any, aQuality TagQuality) error {
+	t.quality = aQuality
+	newValue, err := NewTagValue(aValue, t.kind)
+	if err != nil {
+		return fmt.Errorf("cannot update tag value: %w", err)
+	}
+	t.value = newValue
 	return nil
 }
 

@@ -26,7 +26,7 @@ type TagList struct {
 func NewTag(aTag tag.Tag) Tag {
 	return Tag{
 		ID:      aTag.ID().UUID(),
-		Name:    aTag.Name(),
+		Name:    aTag.Name().String(),
 		Kind:    aTag.Kind().String(),
 		Value:   aTag.Value().String(),
 		Quality: aTag.Quality().String(),

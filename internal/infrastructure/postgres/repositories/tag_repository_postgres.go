@@ -142,6 +142,11 @@ func (r TagRepositoryPostgres) FindAll(ctx context.Context) ([]tag.Tag, error) {
 		}
 		// Создание нового VO TagID
 		newID := tag.NewTagID(tag.TagIDWithUUID(uuid))
+		// Создание нового VO TagName
+		newName, err := tag.NewTagName(name)
+		if err != nil {
+			return nil, fmt.Errorf("cannot create tag name: %w", err)
+		}
 		// Создание нового VO TagKind
 		newKind, err := tag.NewTagKind(kind)
 		if err != nil {
@@ -158,7 +163,7 @@ func (r TagRepositoryPostgres) FindAll(ctx context.Context) ([]tag.Tag, error) {
 			return nil, fmt.Errorf("cannot create tag quality: %w", err)
 		}
 		// Создание нового Aggregate Tag
-		newTag, err := tag.NewTag(newID, name, newKind, newValue, newQuality, version)
+		newTag, err := tag.NewTag(newID, newName, newKind, newValue, newQuality, version)
 		if err != nil {
 			return nil, fmt.Errorf("cannot create tag: %w", err)
 		}
