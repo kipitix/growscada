@@ -136,26 +136,31 @@ func (r TagRepositoryPostgres) FindAll(ctx context.Context) ([]tag.Tag, error) {
 			version int
 		)
 		// Сканирование строки
-		err := rows.Scan(uuid, name, kind, value, quality, version)
+		err := rows.Scan(&uuid, &name, &kind, &value, &quality, &version)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning tag: %w", err)
 		}
 		// Создание нового VO TagID
-		newID := tag.NewTagID(tag.WithUUID(uuid))
+		newID := tag.NewTagID(tag.TagIDWithUUID(uuid))
 		// Создание нового VO TagKind
-		newKind, err := tag.TagKindString(kind)
+		newKind, err := tag.NewTagKind(kind)
 		if err != nil {
-			return nil, fmt.Errorf("cannot create tag kind: %w")
+			return nil, fmt.Errorf("cannot create tag kind: %w", err)
+		}
+		// Создание нового VO TagValue
+		newValue, err := tag.NewTagValue(value, newKind)
+		if err != nil {
+			return nil, fmt.Errorf("cannot create tag value: %w", err)
 		}
 		// Создание нового VO TagQuality
-		newQuality, err := tag.TagQualityString(quality)
+		newQuality, err := tag.NewTagQuality(quality)
 		if err != nil {
-			return nil, fmt.Errorf("cannot create tag quality: %w")
+			return nil, fmt.Errorf("cannot create tag quality: %w", err)
 		}
 		// Создание нового Aggregate Tag
-		newTag, err := tag.NewTag(newID, name, newKind, value, newQuality, version)
+		newTag, err := tag.NewTag(newID, name, newKind, newValue, newQuality, version)
 		if err != nil {
-			return nil, fmt.Errorf("cannot create tag: %w")
+			return nil, fmt.Errorf("cannot create tag: %w", err)
 		}
 		// Добавление тега в слайс
 		tags = append(tags, newTag)

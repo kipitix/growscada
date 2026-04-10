@@ -28,7 +28,7 @@ func NewTag(aTag tag.Tag) Tag {
 		ID:      aTag.ID().UUID(),
 		Name:    aTag.Name(),
 		Kind:    aTag.Kind().String(),
-		Value:   aTag.ValueAsString(),
+		Value:   aTag.Value().String(),
 		Quality: aTag.Quality().String(),
 		Version: aTag.Version(),
 	}

@@ -1,22 +1,16 @@
 package tag
 
-import "fmt"
-
 // Tag - интерфейс, представляющий тег
 // Тег - это базовая сущность системы, содержащая идентификатор, имя, тип, значение и качество
 type Tag interface {
 	ID() TagID
 	Name() string
 	Kind() TagKind
+	Value() TagValue
 	Quality() TagQuality
+	Version() int
 
 	UpdateValue(TagValue, TagQuality) error
-
-	ValueAsBoolean() (bool, error)
-	ValueAsInteger() (int, error)
-	ValueAsString() string
-
-	Version() int
 	IncrementVersion()
 }
 
@@ -42,14 +36,9 @@ func NewTag(anID TagID, aName string, aKind TagKind, aValue TagValue, aQuality T
 		id:      anID,
 		name:    aName,
 		kind:    aKind,
-		value:   nil,
-		quality: TagQualityBad,
+		value:   aValue,
+		quality: aQuality,
 		version: aVersion,
-	}
-
-	err := newTag.UpdateValue(aValue, aQuality)
-	if err != nil {
-		return nil, fmt.Errorf("cannot update tag value: %w", err)
 	}
 
 	return newTag, nil
@@ -70,60 +59,30 @@ func (t tagImpl) Kind() TagKind {
 	return t.kind
 }
 
+func (t tagImpl) Value() TagValue {
+	return t.value
+}
+
 // Quality возвращает качество тега
 func (t tagImpl) Quality() TagQuality {
 	return t.quality
 }
 
-// UpdateValue обновляет значение и качество тега
-func (t *tagImpl) UpdateValue(aValue TagValue, aQuality TagQuality) error {
-	if !t.kind.IsValidValue(aValue) {
-		t.value = nil
-		t.quality = TagQualityBad
-		return fmt.Errorf("invalid value type: expected %s, got %T", t.kind, aValue)
-	}
-	t.value = aValue
-	t.quality = aQuality
-	return nil
-}
-
-// ValueAsBoolean возвращает значение тега как булево, если тип тега позволяет
-func (t tagImpl) ValueAsBoolean() (bool, error) {
-	if t.Kind() != TagKindBoolean {
-		return false, fmt.Errorf("tag is not of type boolean")
-	}
-	if t.value == nil {
-		return false, fmt.Errorf("tag value is nil")
-	}
-	boolValue, ok := t.value.(bool)
-	if !ok {
-		return false, fmt.Errorf("tag value is not a boolean")
-	}
-	return boolValue, nil
-}
-
-// ValueAsInteger возвращает значение тега как целое число, если тип тега позволяет
-func (t tagImpl) ValueAsInteger() (int, error) {
-	if t.Kind() != TagKindInteger {
-		return 0, fmt.Errorf("tag is not of type integer")
-	}
-	if t.value == nil {
-		return 0, fmt.Errorf("tag value is nil")
-	}
-	intValue, ok := t.value.(int)
-	if !ok {
-		return 0, fmt.Errorf("tag value is not an integer")
-	}
-	return intValue, nil
-}
-
-func (t tagImpl) ValueAsString() string {
-	return fmt.Sprintf("%v", t.value)
-}
-
 // Version возвращает текущую версию тега
 func (t tagImpl) Version() int {
 	return t.version
+}
+
+// UpdateValue обновляет значение и качество тега
+func (t *tagImpl) UpdateValue(aValue TagValue, aQuality TagQuality) error {
+	// if !t.kind.IsValidValue(aValue) {
+	// 	t.value = nil
+	// 	t.quality = TagQualityBad
+	// 	return fmt.Errorf("invalid value type: expected %s, got %T", t.kind, aValue)
+	// }
+	// t.value = aValue
+	// t.quality = aQuality
+	return nil
 }
 
 // IncrementVersion увеличивает версию тега на единицу

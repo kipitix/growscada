@@ -1,34 +1,55 @@
 package tag
 
-// TagKind - перечисление типов тегов
-// Определяет возможные типы значений, которые может содержать тег
-//
-//go:generate enumer -type=TagKind -trimprefix=TagKind -json
+import (
+	"fmt"
+)
+
+// TagKind - перечисление для типа тега
+// Value Object
 type TagKind int
 
-// Константы для TagKind
-// TagKindBoolean - булев тип (true/false)
-// TagKindInteger - целочисленный тип
-// TagKindFloat - вещественный тип (закомментировано)
-// TagKindString - строковый тип (закомментировано)
-// TagKindBytes - байтовый массив (закомментировано)
+// Константы для каждого типа тега
+// TagKindString - строковый тип тега
+// TagKindBoolean - логический тип тега
+// TagKindInteger - целочисленный тип тега
 const (
-	TagKindBoolean TagKind = iota
+	TagKindString TagKind = iota
+	TagKindBoolean
 	TagKindInteger
+	// TDOO: Добавить остальные типы
 	// TagKindFloat
-	// TagKindString
 	// TagKindBytes
 )
 
-// IsValidValue проверяет, соответствует ли значение указанному типу тега
-// Возвращает true, если значение может быть присвоено тегу данного типа
-func (tt TagKind) IsValidValue(aValue TagValue) bool {
-	switch aValue.(type) {
-	case bool:
-		return tt == TagKindBoolean
-	case int:
-		return tt == TagKindInteger
+// NewTagKind парсит строку в enum
+func NewTagKind(s string) (TagKind, error) {
+	switch s {
+	case "String":
+		return TagKindString, nil
+	case "Boolean":
+		return TagKindBoolean, nil
+	case "Integer":
+		return TagKindInteger, nil
 	default:
-		return false
+		return -1, fmt.Errorf("unknown tag kind: %s", s)
 	}
+}
+
+// String возвращает строковое представление типа тега
+func (e TagKind) String() string {
+	switch e {
+	case TagKindString:
+		return "String"
+	case TagKindBoolean:
+		return "Boolean"
+	case TagKindInteger:
+		return "Integer"
+	default:
+		return "Unknown"
+	}
+}
+
+// IsValid проверяет, является ли значение допустимым для типа тега
+func (t TagKind) IsValid() bool {
+	return t >= TagKindString && t <= TagKindInteger
 }

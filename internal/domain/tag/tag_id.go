@@ -6,7 +6,7 @@ import "github.com/google/uuid"
 // Представляет собой value object для уникальной идентификации тегов
 type TagID uuid.UUID
 
-// UUID преобразует TagID в строковое представление UUID
+// UUID преобразует TagID в представление UUID
 func (id TagID) UUID() uuid.UUID {
 	return uuid.UUID(id)
 }
@@ -41,9 +41,9 @@ type tagIDConfig struct {
 	existingUUID *uuid.UUID
 }
 
-// WithUUID позволяет указать существующий UUID для создания TagID
+// TagIDWithUUID позволяет указать существующий UUID для создания TagID
 // Используется, когда нужно создать TagID из уже существующего UUID
-func WithUUID(id uuid.UUID) TagIDOption {
+func TagIDWithUUID(id uuid.UUID) TagIDOption {
 	return func(cfg *tagIDConfig) {
 		cfg.existingUUID = &id
 	}
