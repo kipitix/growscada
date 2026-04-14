@@ -10,7 +10,7 @@ import (
 
 // TagService - интерфейс сервиса для работы с тегами
 type TagService interface {
-	FindAllTags(context.Context) (dto.TagList, error)
+	FindAllTags(context.Context) (dto.FindAllTagsResponse, error)
 }
 
 // tagServiceImpl - структура реализации сервиса тегов
@@ -29,11 +29,54 @@ func NewTagService(aTagRepository tag.TagRepository) TagService {
 }
 
 // FindAllTags возвращает список всех тегов
-func (t tagServiceImpl) FindAllTags(ctx context.Context) (dto.TagList, error) {
+func (t tagServiceImpl) FindAllTags(ctx context.Context) (dto.FindAllTagsResponse, error) {
 	tags, err := t.tagRepository.FindAll(ctx)
 	if err != nil {
-		return dto.TagList{}, fmt.Errorf("error on find tags in repository: %w", err)
+		return dto.FindAllTagsResponse{}, fmt.Errorf("error on find tags in repository: %w", err)
 	}
 
-	return dto.NewTagList(tags), nil
+	return dto.NewFindAllTagsResponse(tags), nil
+}
+
+// FindTagByID возвращает тег по его идентификатору
+// TODO: Реализовать метод
+func (t tagServiceImpl) FindTagByID(ctx context.Context, id int) (dto.Tag, error) {
+	return dto.Tag{}, nil
+}
+
+// CreateTag создает новый тег
+func (t tagServiceImpl) CreateTag(ctx context.Context, newTagData dto.CreateTagRequest) (dto.CreateTagResponse, error) {
+	newTagID := t.tagRepository.NextID()
+
+	newTagName, err := tag.NewTagName(newTagData.Name)
+	if err != nil {
+		return dto.CreateTagResponse{}, fmt.Errorf("cannot create tag because of name: %w", err)
+	}
+
+	newTagKind, err := tag.NewTagKind(newTagData.Kind)
+	if err != nil {
+		return dto.CreateTagResponse{}, fmt.Errorf("cannot create tag because of kind: %w", err)
+	}
+
+	newTagValue, err := tag.NewTagValue(newTagData.Value, newTagKind)
+	if err != nil {
+		return dto.CreateTagResponse{}, fmt.Errorf("cannot create tag because of value: %w", err)
+	}
+
+	newTagQuality, err := tag.NewTagQuality(newTagData.Quality)
+	if err != nil {
+		return dto.CreateTagResponse{}, fmt.Errorf("cannot create tag because of quality: %w", err)
+	}
+
+	newTag, err := tag.NewTag(newTagID, newTagName, newTagKind, newTagValue, newTagQuality, 1)
+	if err != nil {
+		return dto.CreateTagResponse{}, fmt.Errorf("cannot create tag: %w", err)
+	}
+
+	err = t.tagRepository.Save(ctx, newTag)
+	if err != nil {
+		return dto.CreateTagResponse{}, fmt.Errorf("cannot save tag: %w", err)
+	}
+
+	return dto.CreateTagResponse{ID: newTagID.UUID()}, nil
 }

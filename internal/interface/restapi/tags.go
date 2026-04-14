@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"gitverse.ru/kipitix/growscada/internal/application"
+	"gitverse.ru/kipitix/growscada/internal/application/dto"
 )
 
 // TagsHandlers отвечает за обработку HTTP запросов, связанных с тегами.
@@ -19,8 +20,7 @@ func NewTagsHandler(s application.TagService) *TagsHandlers {
 	return &TagsHandlers{service: s}
 }
 
-// GetTags обрабатывает GET запрос для получения списка тегов
-// В текущей реализации просто возвращает статус 200 OK, логика находится в разработке
+// GetTags обрабатывает GET /tags запрос для получения списка тегов
 func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
 	tagList, err := h.service.FindAllTags(r.Context())
 	if err != nil {
@@ -43,44 +43,42 @@ func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// Закомментированные функции для примера будущей реализации
-// GetTag обрабатывает GET /tags/{name}
-// func (h *TagHandler) GetTag(w http.ResponseWriter, r *http.Request) {
-// 	// В реальном проекте здесь нужно вытащить name из path params
-// 	// Для примера берем из query ?name=...
-// 	name := r.URL.Query().Get("name")
-// 	if name == "" {
-// 		http.Error(w, "name parameter is required", http.StatusBadRequest)
-// 		return
-// 	}
+// GetTagsByID обрабатывает GET /tags/{id}
+func (h TagsHandlers) GetTagsByID(w http.ResponseWriter, r *http.Request) {
+	// TODO: реализация
+	w.WriteHeader(http.StatusNotAcceptable)
+}
 
-// 	t, err := h.service.GetTag(r.Context(), name)
-// 	if err != nil {
-// 		// Простая обработка ошибок, в продакшене нужен логгер
-// 		http.Error(w, err.Error(), http.StatusInternalServerError)
-// 		return
-// 	}
+// PostTags обрабатывает POST /tags для создания нового тега
+func (h TagsHandlers) PostTags(w http.ResponseWriter, r *http.Request) {
+	var req dto.CreateTagRequest
 
-// 	w.Header().Set("Content-Type", "application/json")
-// 	json.NewEncoder(w).Encode(t)
-// }
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		resp := NewBadRequest(err.Error(), r.URL.Path)
+		sendJSONResponse(w, http.StatusBadRequest, resp)
+		return
+	}
 
-// // WriteTag обрабатывает POST /tags/write
-// func (h *TagHandler) WriteTag(w http.ResponseWriter, r *http.Request) {
-// 	var req struct {
-// 		Name  string  `json:"name"`
-// 		Value float64 `json:"value"`
-// 	}
+	// h.service.CreateTag(req)
 
-// 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-// 		http.Error(w, "invalid json", http.StatusBadRequest)
-// 		return
-// 	}
+	// Валидация (можно использовать валидатор, например go-playground/validator)
+	// if err := validateCreateTag(req); err != nil {
+	// 	sendJSONError(w, "Validation failed", http.StatusBadRequest, err.Error())
+	// 	return
+	// }
 
-// 	if err := h.service.WriteTag(r.Context(), req.Name, req.Value); err != nil {
-// 		http.Error(w, err.Error(), http.StatusInternalServerError)
-// 		return
-// 	}
+	// Создание тега через сервис
+	// createdTag, err := h.tagService.CreateTag(r.Context(), req.Name, req.Kind, req.Value, req.Quality)
+	// if err != nil {
+	// 	sendJSONError(w, "Failed to create tag", http.StatusInternalServerError, err.Error())
+	// 	return
+	// }
 
-// 	w.WriteHeader(http.StatusOK)
-// }
+	// // Формирование ответа
+	// response := dto.TagResponse{
+	// 	Tag: dto.NewTag(*createdTag),
+	// }
+
+	// sendJSONResponse(w, http.StatusCreated, response)
+
+}

@@ -1,6 +1,7 @@
 package restapi
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"gitverse.ru/kipitix/growscada/internal/application"
@@ -27,6 +28,14 @@ func NewRouter(tagService application.TagService) *APIRouter {
 
 	// Регистрируем обработчики
 	router.serveMux.HandleFunc("GET /api/v1/tags", router.tagsHandlers.GetTags)
+	router.serveMux.HandleFunc("POST /api/v1/tags", router.tagsHandlers.PostTags)
 
 	return router
+}
+
+// Вспомогательная функция для отправки JSON ответа
+func sendJSONResponse(w http.ResponseWriter, status int, data any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(data)
 }

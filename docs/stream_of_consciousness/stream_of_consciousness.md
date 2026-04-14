@@ -47,38 +47,122 @@
 Если структура реализует несколько интерфейсов и её можно внедрить в несколько мест, то правило рабочее, но, это тоже может оказаться усложнение.
 Для данного проекта буду придерживаться следующего подхода - писать интерфейс для Value Objects и Entities и возвращать его из фабричных методов.
 
-Например VO TagID:
+Например VO TagValue:
 
 ```go
-type TagID interface {
-	ID() uuid.UUID
-	Equals(other TagID) bool
+package tag
+
+import "fmt"
+
+// TagValue представляет значение тега
+// Value Object
+type TagValue interface {
+	Value() any
 	String() string
 }
 
-type tagID struct {
-	id uuid.UUID
+// NewTagValue создает значение тега
+func NewTagValue(aValue any, aKind TagKind) (TagValue, error) {
+	switch aKind {
+	case TagKindString:
+		return NewTagValueString(aValue)
+	case TagKindBoolean:
+		return NewTagValueBoolean(aValue)
+	case TagKindInteger:
+		return NewTagValueInteger(aValue)
+	default:
+		return nil, fmt.Errorf("unknown tag kind: %v", aKind)
+	}
 }
 
-var _ TagID = (*tagID)(nil)
-
-func NewTagID(uuid uuid.UUID) TagID {
-	return &tagID{id: uuid}
-}
-
-func (t tagID) ID() uuid.UUID {
-	return t.id
-}
-
-func (t tagID) Equals(other TagID) bool {
-	return t.id == other.ID()
-}
-
-func (t tagID) String() string {
-	return t.id.String()
-}
 ```
 
 В интерфейсе достаточно органично смотрится метод `Equals`, который принимает для сравнения другой TagID как интерфейс.
 
 Также нужно обратить внимание на то, что методы использую value receivers, т.к. методы VO не должны менять его состояния.
+
+### Репозитории, оптимистичный параллелизм и транзакции
+
+В методе Save я решил одновременно использовать подход оптимистичного параллелизма и транзакций.
+
+При оптимистичной блокировке оба запроса НЕ должны успешно выполниться. Это нормально, что второй запрос получает ошибку. Оптимистичная блокировка предполагает, что конфликты случаются редко, и приложение должно их обрабатывать (например, повторять операцию).
+
+```go
+// Ситуация: два пользователя одновременно обновляют один и тот же существующий тег
+// Тег существует: ID=123, version=1, value="100"
+
+// Goroutine A (обновляет value="200")
+// Goroutine B (обновляет value="300")
+
+// БЕЗ ТРАНЗАКЦИИ:
+// A: SELECT version FROM tags WHERE id=123 → version=1
+// B: SELECT version FROM tags WHERE id=123 → version=1
+// A: UPDATE ... SET value="200", version=2 WHERE id=123 AND version=1 → успех (1 row)
+// B: UPDATE ... SET value="300", version=2 WHERE id=123 AND version=1 → успех (0 rows - ошибка)
+// Результат: B получил ErrOptimisticLock - ЭТО НОРМАЛЬНО!
+
+// С ТРАНЗАКЦИЕЙ (READ COMMITTED) - без FOR UPDATE:
+// A: BEGIN
+// B: BEGIN
+// A: SELECT version FROM tags WHERE id=123 → version=1
+// B: SELECT version FROM tags WHERE id=123 → version=1 (ещё не видит изменения A)
+// A: UPDATE ... SET value="200", version=2 WHERE id=123 AND version=1 → успех
+// A: COMMIT
+// B: UPDATE ... SET value="300", version=2 WHERE id=123 AND version=1 → 0 rows (версия уже 2)
+// B: ROLLBACK (или COMMIT не делается)
+// Результат: B получил ErrOptimisticLock - ТО ЖЕ САМОЕ!
+```
+
+Транзакция нужна не для борьбы с конкурентными обновлениями, а для другой проблемы:
+
+```go
+// Проблема: пользователь создаёт тег и сразу хочет его прочитать
+
+// Goroutine A (создаёт тег)
+// Goroutine B (читает тег)
+
+// БЕЗ ТРАНЗАКЦИИ:
+// A: SELECT EXISTS... → false
+// B: SELECT * FROM tags WHERE id=123 → nil (ещё нет)
+// A: INSERT INTO tags... → успех
+// B: SELECT * FROM tags WHERE id=123 → тег уже есть
+// Результат: B мог получить "тег не найден", хотя он уже создаётся
+
+// С ТРАНЗАКЦИЕЙ (READ COMMITTED):
+// A: BEGIN
+// A: SELECT EXISTS... → false
+// A: INSERT INTO tags... → успех (но другие транзакции не видят)
+// B: SELECT * FROM tags WHERE id=123 → nil (транзакция A ещё не закоммичена)
+// A: COMMIT
+// B: SELECT * FROM tags WHERE id=123 → тег есть
+// Результат: консистентность - B видит либо отсутствие, либо полное наличие
+```
+
+```go
+// Проблема: гонка при создании тега с одним ID
+
+// Goroutine A                           // Goroutine B
+checkA: SELECT EXISTS... → false
+                                        checkB: SELECT EXISTS... → false
+insertA: INSERT... → успех
+                                        insertB: INSERT... → ОШИБКА duplicate key
+
+// БЕЗ ТРАНЗАКЦИИ:
+// Ошибка duplicate key - это НЕ оптимистичная блокировка, а нарушение constraints
+// Приложение получит sql.ErrNoRows? Нет, получит ошибку уникальности
+// Нужно различать: ErrOptimisticLock vs ErrDuplicateKey
+
+// С ТРАНЗАКЦИЕЙ и FOR UPDATE:
+// A: BEGIN
+// B: BEGIN
+// A: SELECT ... FOR UPDATE → блокирует "гипотетическую" строку
+// B: SELECT ... FOR UPDATE → ждёт
+// A: INSERT... → успех
+// A: COMMIT
+// B: после COMMIT, SELECT видит, что строка существует, идёт на UPDATE
+// Результат: B не получает duplicate key, а корректно обновляет
+```
+
+В принципе, даже без транзакции оптимистичный параллелизм защитит данные от искажения, но в коде мы не сможем отличить ErrOptimisticLock vs ErrDuplicateKey.
+
+Для большей корректности и предсказуемости введена транзакция.

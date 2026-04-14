@@ -34,8 +34,8 @@ CREATE TRIGGER update_tags_updated_at
     EXECUTE FUNCTION update_updated_at_column();
 -- Add check constraints for enums
 ALTER TABLE tags
-    ADD CONSTRAINT chk_tags_kind CHECK (kind IN ('Boolean', 'Integer')),
-    ADD CONSTRAINT chk_tags_quality CHECK (quality IN ('Bad', 'Uncertain', 'Good', 'Simulated'));
+    ADD CONSTRAINT chk_tags_kind CHECK (kind IN ('string', 'boolean', 'integer')),
+    ADD CONSTRAINT chk_tags_quality CHECK (quality IN ('bad', 'uncertain', 'good', 'simulated'));
 -- +goose StatementEnd
 
 -- +goose Down

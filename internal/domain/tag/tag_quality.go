@@ -23,13 +23,13 @@ const (
 // NewTagQuality парсит строку в enum
 func NewTagQuality(s string) (TagQuality, error) {
 	switch s {
-	case "Bad":
+	case "bad":
 		return TagQualityBad, nil
-	case "Uncertain":
+	case "uncertain":
 		return TagQualityUncertain, nil
-	case "Good":
+	case "good":
 		return TagQualityGood, nil
-	case "Simulated":
+	case "simulated":
 		return TagQualitySimulated, nil
 	default:
 		return -1, fmt.Errorf("unknown tag quality enum: %s", s)
@@ -40,15 +40,15 @@ func NewTagQuality(s string) (TagQuality, error) {
 func (e TagQuality) String() string {
 	switch e {
 	case TagQualityBad:
-		return "Bad"
+		return "bad"
 	case TagQualityUncertain:
-		return "Uncertain"
+		return "uncertain"
 	case TagQualityGood:
-		return "Good"
+		return "good"
 	case TagQualitySimulated:
-		return "Simulated"
+		return "simulated"
 	default:
-		return "Unknown"
+		return "unknown"
 	}
 }
 

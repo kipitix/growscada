@@ -16,10 +16,50 @@ type Tag struct {
 	Version int       `json:"version"`
 }
 
-// TagList - структура для передачи списка тегов
+// FindTagByIDResponse - структура для ответа с одним тегом
+type FindTagByIDResponse struct {
+	Tag Tag `json:"tag"`
+}
+
+// FindAllTagsResponse - структура для передачи списка тегов
 // Используется для возврата коллекции тегов в API-ответах
-type TagList struct {
+type FindAllTagsResponse struct {
 	Tags []Tag `json:"tags"`
+}
+
+// CreateTagRequest - структура для запроса на создание тега
+type CreateTagRequest struct {
+	Name    string `json:"name"`
+	Kind    string `json:"kind"`
+	Value   string `json:"value"`
+	Quality string `json:"quality"`
+}
+
+// CreateTagResponse - структура для ответа на создание тега
+type CreateTagResponse struct {
+	ID uuid.UUID `json:"id"`
+}
+
+// UpdateTagRequest - структура для запроса на обновление тега
+type UpdateTagRequest struct {
+	ID      uuid.UUID `json:"id"`
+	Value   string    `json:"value"`
+	Quality string    `json:"quality"`
+}
+
+// UpdateTagResponse - структура для ответа на обновление тега
+type UpdateTagResponse struct {
+	Version int `json:"version"`
+}
+
+// DeleteTagRequest - структура для запроса на удаление тега
+type DeleteTagRequest struct {
+	ID uuid.UUID `json:"id"`
+}
+
+// DeleteTagResponse - структура для ответа на удаление тега
+type DeleteTagResponse struct {
+	Tag Tag `json:"tag"`
 }
 
 // NewTag создает DTO-объект Tag на основе доменного агрегата tag.Tag
@@ -34,13 +74,13 @@ func NewTag(aTag tag.Tag) Tag {
 	}
 }
 
-// NewTagList создает DTO-объект TagList на основе списка доменных агрегатов tag.Tag
-func NewTagList(aTagList []tag.Tag) TagList {
+// NewFindAllTagsResponse создает DTO-объект TagList на основе списка доменных агрегатов tag.Tag
+func NewFindAllTagsResponse(aTagList []tag.Tag) FindAllTagsResponse {
 	tags := make([]Tag, len(aTagList))
 	for i, t := range aTagList {
 		tags[i] = NewTag(t)
 	}
-	return TagList{
+	return FindAllTagsResponse{
 		Tags: tags,
 	}
 }

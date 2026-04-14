@@ -24,11 +24,11 @@ const (
 // NewTagKind парсит строку в enum
 func NewTagKind(s string) (TagKind, error) {
 	switch s {
-	case "String":
+	case "string":
 		return TagKindString, nil
-	case "Boolean":
+	case "boolean":
 		return TagKindBoolean, nil
-	case "Integer":
+	case "integer":
 		return TagKindInteger, nil
 	default:
 		return -1, fmt.Errorf("unknown tag kind: %s", s)
@@ -39,13 +39,13 @@ func NewTagKind(s string) (TagKind, error) {
 func (e TagKind) String() string {
 	switch e {
 	case TagKindString:
-		return "String"
+		return "string"
 	case TagKindBoolean:
-		return "Boolean"
+		return "boolean"
 	case TagKindInteger:
-		return "Integer"
+		return "integer"
 	default:
-		return "Unknown"
+		return "unknown"
 	}
 }
 
