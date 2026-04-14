@@ -11,6 +11,8 @@ import (
 // TagService - интерфейс сервиса для работы с тегами
 type TagService interface {
 	FindAllTags(context.Context) (dto.FindAllTagsResponse, error)
+	FindTagByID(context.Context, int) (dto.Tag, error)
+	CreateTag(context.Context, dto.CreateTagRequest) (dto.CreateTagResponse, error)
 }
 
 // tagServiceImpl - структура реализации сервиса тегов
@@ -68,7 +70,7 @@ func (t tagServiceImpl) CreateTag(ctx context.Context, newTagData dto.CreateTagR
 		return dto.CreateTagResponse{}, fmt.Errorf("cannot create tag because of quality: %w", err)
 	}
 
-	newTag, err := tag.NewTag(newTagID, newTagName, newTagKind, newTagValue, newTagQuality, 1)
+	newTag, err := tag.NewTag(newTagID, newTagName, newTagKind, newTagValue, newTagQuality, tag.TagVersionInitial)
 	if err != nil {
 		return dto.CreateTagResponse{}, fmt.Errorf("cannot create tag: %w", err)
 	}

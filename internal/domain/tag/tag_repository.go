@@ -2,12 +2,7 @@ package tag
 
 import (
 	"context"
-	"errors"
 )
-
-// ErrTagUpdateOptimisticLock ошибка, возникающая при конфликте версий при обновлении тега
-// Используется для реализации оптимистичной блокировки при конкурентном доступе
-var ErrTagUpdateOptimisticLock = errors.New("tag update optimistic lock")
 
 // TagRepository - интерфейс репозитория для хранения и управления тегами
 // Определяет операции для получения следующего идентификатора,

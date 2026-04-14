@@ -51,34 +51,19 @@ func (h TagsHandlers) GetTagsByID(w http.ResponseWriter, r *http.Request) {
 
 // PostTags обрабатывает POST /tags для создания нового тега
 func (h TagsHandlers) PostTags(w http.ResponseWriter, r *http.Request) {
-	var req dto.CreateTagRequest
+	var request dto.CreateTagRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		resp := NewBadRequest(err.Error(), r.URL.Path)
-		sendJSONResponse(w, http.StatusBadRequest, resp)
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		errorResponse := NewBadRequest(err.Error(), r.URL.Path)
+		sendJSONResponse(w, http.StatusBadRequest, errorResponse)
 		return
 	}
 
-	// h.service.CreateTag(req)
+	response, err := h.service.CreateTag(r.Context(), request)
+	if err != nil {
+		errorResponse := NewInternalError(err.Error(), r.URL.Path)
+		sendJSONResponse(w, http.StatusInternalServerError, errorResponse)
+	}
 
-	// Валидация (можно использовать валидатор, например go-playground/validator)
-	// if err := validateCreateTag(req); err != nil {
-	// 	sendJSONError(w, "Validation failed", http.StatusBadRequest, err.Error())
-	// 	return
-	// }
-
-	// Создание тега через сервис
-	// createdTag, err := h.tagService.CreateTag(r.Context(), req.Name, req.Kind, req.Value, req.Quality)
-	// if err != nil {
-	// 	sendJSONError(w, "Failed to create tag", http.StatusInternalServerError, err.Error())
-	// 	return
-	// }
-
-	// // Формирование ответа
-	// response := dto.TagResponse{
-	// 	Tag: dto.NewTag(*createdTag),
-	// }
-
-	// sendJSONResponse(w, http.StatusCreated, response)
-
+	sendJSONResponse(w, http.StatusCreated, response)
 }

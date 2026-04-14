@@ -31,59 +31,53 @@ func (r TagRepositoryPostgres) NextID() tag.TagID {
 }
 
 // Save сохраняет тег в базе данных
-// Временно возвращает nil, так как реализация находится в процессе разработки
-// В будущем будет реализована логика сохранения с проверкой версий (оптимистичная блокировка)
-func (r TagRepositoryPostgres) Save(ctx context.Context, tag tag.Tag) error {
-	return nil
+// Реализована логика сохранения с проверкой версий (оптимистичная блокировка)
+func (r TagRepositoryPostgres) Save(ctx context.Context, aTag tag.Tag) error {
+	// Если тег новый, то вставляем его в базу данных
+	if aTag.Version() == tag.TagVersionInitial {
+		// SQL для вставки нового тега
+		sqlResult, err := r.db.ExecContext(ctx,
+			`INSERT INTO tags (id, name, kind, value, quality, version)
+			VALUES ($1, $2, $3, $4, $5, $6)`,
+			aTag.ID().UUID(), aTag.Name().String(), aTag.Kind().String(), aTag.Value().String(), aTag.Quality().String(), aTag.Version(),
+		)
+		// Обработка ошибки
+		if err != nil {
+			return fmt.Errorf("cannot insert new tag: %w", err)
+		}
+		// Проверка количества измененных строк
+		if rowsAffected, _ := sqlResult.RowsAffected(); rowsAffected != 1 {
+			return fmt.Errorf("expected 1 row affected on insert, got %d", rowsAffected)
+		}
 
-	/*
-	   // SQL для обновления с проверкой версии
-	   // Мы увеличиваем version на 1 в БД, но только если текущий version совпадает с тем, что в агрегате
-	   query := `
+		return nil
+	}
 
-	   	UPDATE orders
-	   	SET status = $1, total_cents = $2, updated_at = $3, version = version + 1
-	   	WHERE id = $4 AND version = $5
+	// Если тег уже существует, то обновляем его в базе данных
+	if aTag.Version() > tag.TagVersionInitial {
+		// SQL для обновления тега
+		sqlResult, err := r.db.ExecContext(ctx,
+			`UPDATE tags
+			 SET name = $1, kind = $2, value = $3, quality = $4, version = $5, version = version + 1
+			 WHERE id = $6 AND version = $7`,
+			aTag.Name().String(), aTag.Kind().String(), aTag.Value().String(), aTag.Quality().String(), aTag.Version(), aTag.ID().UUID(), aTag.Version(),
+		)
+		// Обработка ошибки
+		if err != nil {
+			return fmt.Errorf("cannot update tag: %w", err)
+		}
+		// Проверка количества измененных строк
+		if rowsAffected, _ := sqlResult.RowsAffected(); rowsAffected != 1 {
+			return fmt.Errorf("expected 1 row affected on update, got %d", rowsAffected)
+		}
+		// Увеличиваем версию тега
+		aTag.IncrementVersion()
 
-	   `
+		return nil
+	}
 
-	   res, err := r.db.ExecContext(ctx, query,
-
-	   	order.Status(),
-	   	order.totalCents, // в реальном коде нужен геттер или доступ к полю
-	   	order.updatedAt,
-	   	order.ID(),
-	   	order.Version(), // Ожидаемая версия
-
-	   )
-
-	   	if err != nil {
-	   		return err
-	   	}
-
-	   rowsAffected, err := res.RowsAffected()
-
-	   	if err != nil {
-	   		return err
-	   	}
-
-	   // Если ни одна строка не обновлена, значит версия в БД уже изменилась
-
-	   	if rowsAffected == 0 {
-	   		return domain.ErrOptimisticLock
-	   	}
-
-	   // После успешного сохранения локальную версию агрегата можно обновить,
-	   // если БД возвращает новую версию (через RETURNING),
-	   // или просто инкрементировать локально, так как мы знаем, что успех = +1.
-	   // Для строгости лучше прочитать новую версию из БД, но для примера:
-	   // order.version++ (не рекомендуется делать внутри репо, лучше вернуть обновленный агрегат или сделать отдельный запрос)
-
-	   // В идеале запрос должен быть: ... RETURNING version
-	   // И тогда мы обновим поле order.version новым значением.
-
-	   return nil
-	*/
+	// Если версия тега меньше нуля, то возвращаем ошибку
+	return fmt.Errorf("undefined behavior with version %d", aTag.Version())
 }
 
 // FindByID получает тег из базы данных по его идентификатору

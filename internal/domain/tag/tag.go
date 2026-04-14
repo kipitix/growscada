@@ -2,6 +2,10 @@ package tag
 
 import "fmt"
 
+const (
+	TagVersionInitial = 0
+)
+
 // Tag - интерфейс, представляющий тег
 // Тег - это базовая сущность системы, содержащая идентификатор, имя, тип, значение и качество
 type Tag interface {

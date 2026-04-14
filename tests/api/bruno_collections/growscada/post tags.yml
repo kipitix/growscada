@@ -1,0 +1,24 @@
+info:
+  name: post tags
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v1/tags
+  body:
+    type: json
+    data: |-
+      {
+        "name": "test",
+        "kind": "string",
+        "value": "test",
+        "quality": "good"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
