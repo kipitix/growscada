@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"gitverse.ru/kipitix/growscada/internal/domain/tag"
+	"github.com/kipitix/growscada/internal/domain/tag"
 )
 
 // TagRepositoryPostgres implements the TagRepository interface for PostgreSQL.

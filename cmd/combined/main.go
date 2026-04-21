@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
-	"gitverse.ru/kipitix/gracedown"
-	"gitverse.ru/kipitix/growscada/internal/application"
-	"gitverse.ru/kipitix/growscada/internal/infrastructure/postgres/repositories"
-	"gitverse.ru/kipitix/growscada/internal/interface/restapi"
-	"gitverse.ru/kipitix/growscada/internal/interface/ui/root"
+	"github.com/kipitix/gracedown"
+	"github.com/kipitix/growscada/internal/application"
+	"github.com/kipitix/growscada/internal/infrastructure/postgres/repositories"
+	"github.com/kipitix/growscada/internal/interface/restapi"
+	"github.com/kipitix/growscada/internal/interface/ui/root"
 
 	_ "github.com/lib/pq"
 )

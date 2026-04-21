@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"gitverse.ru/kipitix/growscada/internal/application/dto"
-	"gitverse.ru/kipitix/growscada/internal/domain/tag"
+	"github.com/kipitix/growscada/internal/application/dto"
+	"github.com/kipitix/growscada/internal/domain/tag"
 )
 
 // TagService - service interface for working with tags

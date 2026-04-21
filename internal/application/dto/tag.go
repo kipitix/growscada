@@ -2,7 +2,7 @@ package dto
 
 import (
 	"github.com/google/uuid"
-	"gitverse.ru/kipitix/growscada/internal/domain/tag"
+	"github.com/kipitix/growscada/internal/domain/tag"
 )
 
 // Tag - data structure for transferring tag information through the API.

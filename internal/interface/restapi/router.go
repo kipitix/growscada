@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"gitverse.ru/kipitix/growscada/internal/application"
+	"github.com/kipitix/growscada/internal/application"
 )
 
 type APIRouter struct {

@@ -2,10 +2,10 @@ package root
 
 import (
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
-	"gitverse.ru/kipitix/growscada/internal/interface/ui/history"
-	"gitverse.ru/kipitix/growscada/internal/interface/ui/library"
-	"gitverse.ru/kipitix/growscada/internal/interface/ui/operation"
-	"gitverse.ru/kipitix/growscada/internal/interface/ui/project"
+	"github.com/kipitix/growscada/internal/interface/ui/history"
+	"github.com/kipitix/growscada/internal/interface/ui/library"
+	"github.com/kipitix/growscada/internal/interface/ui/operation"
+	"github.com/kipitix/growscada/internal/interface/ui/project"
 )
 
 type Mode string

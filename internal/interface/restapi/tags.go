@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"gitverse.ru/kipitix/growscada/internal/application"
-	"gitverse.ru/kipitix/growscada/internal/application/dto"
+	"github.com/kipitix/growscada/internal/application"
+	"github.com/kipitix/growscada/internal/application/dto"
 )
 
 // TagsHandlers handles HTTP requests related to tags.
