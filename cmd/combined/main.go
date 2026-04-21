@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
@@ -15,6 +16,11 @@ import (
 	"gitverse.ru/kipitix/growscada/internal/interface/ui/root"
 
 	_ "github.com/lib/pq"
+)
+
+const (
+	ExitSuccess = 0
+	ExitFailure = 1
 )
 
 const (
@@ -62,10 +68,17 @@ func main() {
 	sqlDB, err := sql.Open("postgres", databaseDSN)
 	if err != nil {
 		fmt.Printf("❌ Database connection error: %v\n", err)
+		os.Exit(ExitFailure)
 	}
-	tarRepository := repositories.NewTagRepositoryPostgres(sqlDB)
+	err = sqlDB.Ping()
+	if err != nil {
+		fmt.Printf("❌ Database ping error: %v\n", err)
+		os.Exit(ExitFailure)
+	}
+
+	tagRepository := repositories.NewTagRepositoryPostgres(sqlDB)
 	// Создаем сервисы
-	tagService := application.NewTagService(tarRepository)
+	tagService := application.NewTagService(tagRepository)
 	// Создаем роутер
 	apiRouter := restapi.NewRouter(tagService)
 
@@ -89,7 +102,13 @@ func main() {
 	}()
 
 	// Ожидание сигнала завершения работы
-	gracedownManager.WaitForSignal()
+	err = gracedownManager.WaitForSignal()
+	if err != nil {
+		fmt.Printf("❌ Error on graceful shutdown: %v\n", err)
+		os.Exit(ExitFailure)
+	}
 
-	fmt.Println("Server stopped")
+	fmt.Println("😎 Server stopped gracefully")
+
+	os.Exit(ExitSuccess)
 }
