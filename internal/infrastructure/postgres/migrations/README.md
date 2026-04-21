@@ -1,12 +1,12 @@
-# Порядок действий
+# Instructions
 
-## Создание миграции
+## Creating a Migration
 
 ```shell
 goose create init_tag sql
 ```
 
-## Применение всех миграций
+## Applying All Migrations
 
 ```shell
 export GOOSE_DRIVER=postgres
@@ -14,6 +14,6 @@ export GOOSE_DBSTRING="user=growscada password=growscada host=localhost dbname=g
 goose up
 ```
 
-## При отладке
+## During Debugging
 
-Миграции применяются к базе при запуске через отладочный `docker-compose.yaml`.
+Migrations are applied to the database when starting via the debug `docker-compose.yaml`.

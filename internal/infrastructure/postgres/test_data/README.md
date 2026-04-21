@@ -1,3 +1,3 @@
-# Тестовые данные для тестов и отладки
+# Test Data for Tests and Debugging
 
-Эта директория содержит миграции, которые будут добавлять тестовые данные для отладки и тестов.
+This directory contains migrations that will add test data for debugging and testing.

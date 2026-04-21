@@ -8,19 +8,19 @@ import (
 	"gitverse.ru/kipitix/growscada/internal/application/dto"
 )
 
-// TagsHandlers отвечает за обработку HTTP запросов, связанных с тегами.
-// Он зависит от абстракции прикладного слоя.
+// TagsHandlers handles HTTP requests related to tags.
+// It depends on the application layer abstraction.
 type TagsHandlers struct {
 	service application.TagService
 }
 
-// NewTagsHandler создает новый обработчик для тегов
-// Принимает сервис тегов и возвращает указатель на TagsHandlers
+// NewTagsHandler creates a new handler for tags.
+// Accepts a tag service and returns a pointer to TagsHandlers.
 func NewTagsHandler(s application.TagService) *TagsHandlers {
 	return &TagsHandlers{service: s}
 }
 
-// GetTags обрабатывает GET /tags запрос для получения списка тегов
+// GetTags handles GET /tags request to retrieve the list of tags
 func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
 	tagList, err := h.service.FindAllTags(r.Context())
 	if err != nil {
@@ -43,13 +43,13 @@ func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// GetTagsByID обрабатывает GET /tags/{id}
+// GetTagsByID handles GET /tags/{id}
 func (h TagsHandlers) GetTagsByID(w http.ResponseWriter, r *http.Request) {
-	// TODO: реализация
+	// TODO: implement
 	w.WriteHeader(http.StatusNotAcceptable)
 }
 
-// PostTags обрабатывает POST /tags для создания нового тега
+// PostTags handles POST /tags for creating a new tag
 func (h TagsHandlers) PostTags(w http.ResponseWriter, r *http.Request) {
 	var request dto.CreateTagRequest
 

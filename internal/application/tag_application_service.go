@@ -8,29 +8,29 @@ import (
 	"gitverse.ru/kipitix/growscada/internal/domain/tag"
 )
 
-// TagService - интерфейс сервиса для работы с тегами
+// TagService - service interface for working with tags
 type TagService interface {
 	FindAllTags(context.Context) (dto.FindAllTagsResponse, error)
 	FindTagByID(context.Context, int) (dto.Tag, error)
 	CreateTag(context.Context, dto.CreateTagRequest) (dto.CreateTagResponse, error)
 }
 
-// tagServiceImpl - структура реализации сервиса тегов
+// tagServiceImpl - tag service implementation
 type tagServiceImpl struct {
 	tagRepository tag.TagRepository
 }
 
 var _ TagService = (*tagServiceImpl)(nil)
 
-// NewTagService создает и возвращает новый экземпляр сервиса тегов
-// Возвращает реализацию интерфейса TagService
+// NewTagService creates and returns a new tag service instance.
+// Returns a TagService interface implementation.
 func NewTagService(aTagRepository tag.TagRepository) TagService {
 	return &tagServiceImpl{
 		tagRepository: aTagRepository,
 	}
 }
 
-// FindAllTags возвращает список всех тегов
+// FindAllTags returns a list of all tags
 func (t tagServiceImpl) FindAllTags(ctx context.Context) (dto.FindAllTagsResponse, error) {
 	tags, err := t.tagRepository.FindAll(ctx)
 	if err != nil {
@@ -40,13 +40,13 @@ func (t tagServiceImpl) FindAllTags(ctx context.Context) (dto.FindAllTagsRespons
 	return dto.NewFindAllTagsResponse(tags), nil
 }
 
-// FindTagByID возвращает тег по его идентификатору
-// TODO: Реализовать метод
+// FindTagByID returns a tag by its identifier
+// TODO: implement
 func (t tagServiceImpl) FindTagByID(ctx context.Context, id int) (dto.Tag, error) {
 	return dto.Tag{}, nil
 }
 
-// CreateTag создает новый тег
+// CreateTag creates a new tag
 func (t tagServiceImpl) CreateTag(ctx context.Context, newTagData dto.CreateTagRequest) (dto.CreateTagResponse, error) {
 	newTagID := t.tagRepository.NextID()
 

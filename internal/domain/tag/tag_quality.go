@@ -4,15 +4,15 @@ import (
 	"fmt"
 )
 
-// TagQuality - перечисление для качества тега
+// TagQuality - enumeration for tag quality.
 // Value Object
 type TagQuality int
 
-// Значения перечисления качества тега
-// TagQualityBad - плохое качество (недоступен, ошибка)
-// TagQualityUncertain - неопределенное качество
-// TagQualityGood - хорошее качество (нормальное значение)
-// TagQualitySimulated - симулированное качество (значение задано вручную)
+// Tag quality enumeration values.
+// TagQualityBad - bad quality (unavailable, error).
+// TagQualityUncertain - uncertain quality.
+// TagQualityGood - good quality (normal value).
+// TagQualitySimulated - simulated quality (value set manually).
 const (
 	TagQualityBad TagQuality = iota
 	TagQualityUncertain
@@ -20,7 +20,7 @@ const (
 	TagQualitySimulated
 )
 
-// NewTagQuality парсит строку в enum
+// NewTagQuality parses a string into the enum
 func NewTagQuality(s string) (TagQuality, error) {
 	switch s {
 	case "bad":
@@ -36,7 +36,7 @@ func NewTagQuality(s string) (TagQuality, error) {
 	}
 }
 
-// String возвращает строковое представление enum
+// String returns the string representation of the enum
 func (e TagQuality) String() string {
 	switch e {
 	case TagQualityBad:
@@ -52,7 +52,7 @@ func (e TagQuality) String() string {
 	}
 }
 
-// IsValid проверяет, является ли значение валидным
+// IsValid checks whether the value is valid
 func (e TagQuality) IsValid() bool {
 	return e >= TagQualityBad && e <= TagQualitySimulated
 }

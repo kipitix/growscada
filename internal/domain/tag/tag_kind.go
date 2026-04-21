@@ -4,24 +4,24 @@ import (
 	"fmt"
 )
 
-// TagKind - перечисление для типа тега
+// TagKind - enumeration for tag type.
 // Value Object
 type TagKind int
 
-// Константы для каждого типа тега
-// TagKindString - строковый тип тега
-// TagKindBoolean - логический тип тега
-// TagKindInteger - целочисленный тип тега
+// Constants for each tag type.
+// TagKindString - string tag type.
+// TagKindBoolean - boolean tag type.
+// TagKindInteger - integer tag type.
 const (
 	TagKindString TagKind = iota
 	TagKindBoolean
 	TagKindInteger
-	// TDOO: Добавить остальные типы
+	// TODO: add remaining types
 	// TagKindFloat
 	// TagKindBytes
 )
 
-// NewTagKind парсит строку в enum
+// NewTagKind parses a string into the enum
 func NewTagKind(s string) (TagKind, error) {
 	switch s {
 	case "string":
@@ -35,7 +35,7 @@ func NewTagKind(s string) (TagKind, error) {
 	}
 }
 
-// String возвращает строковое представление типа тега
+// String returns the string representation of the tag type
 func (e TagKind) String() string {
 	switch e {
 	case TagKindString:
@@ -49,7 +49,7 @@ func (e TagKind) String() string {
 	}
 }
 
-// IsValid проверяет, является ли значение допустимым для типа тега
+// IsValid checks whether the value is valid for the tag type
 func (t TagKind) IsValid() bool {
 	return t >= TagKindString && t <= TagKindInteger
 }

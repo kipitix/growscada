@@ -6,8 +6,8 @@ const (
 	TagVersionInitial = 0
 )
 
-// Tag - интерфейс, представляющий тег
-// Тег - это базовая сущность системы, содержащая идентификатор, имя, тип, значение и качество
+// Tag - interface representing a tag.
+// A tag is the fundamental system entity containing an identifier, name, type, value, and quality.
 type Tag interface {
 	ID() TagID
 	Name() TagName
@@ -20,7 +20,7 @@ type Tag interface {
 	IncrementVersion()
 }
 
-// tagImpl - структура реализации тега
+// tagImpl - tag implementation struct
 type tagImpl struct {
 	id TagID
 	// TODO: make VO TagName
@@ -34,9 +34,9 @@ type tagImpl struct {
 
 var _ Tag = (*tagImpl)(nil)
 
-// NewTag создает новый тег с заданным идентификатором, именем и типом
-// Устанавливает начальное значение nil и качество TagQualityBad
-// version инициализируется значением 0
+// NewTag creates a new tag with the given identifier, name, and type.
+// Sets the initial value to nil and quality to TagQualityBad.
+// version is initialized to 0.
 func NewTag(anID TagID, aName TagName, aKind TagKind, aValue TagValue, aQuality TagQuality, aVersion int) (Tag, error) {
 	newTag := &tagImpl{
 		id:      anID,
@@ -50,17 +50,17 @@ func NewTag(anID TagID, aName TagName, aKind TagKind, aValue TagValue, aQuality 
 	return newTag, nil
 }
 
-// ID возвращает идентификатор тега
+// ID returns the tag identifier
 func (t tagImpl) ID() TagID {
 	return t.id
 }
 
-// Name возвращает имя тега
+// Name returns the tag name
 func (t tagImpl) Name() TagName {
 	return t.name
 }
 
-// Kind возвращает тип тега
+// Kind returns the tag type
 func (t tagImpl) Kind() TagKind {
 	return t.kind
 }
@@ -69,17 +69,17 @@ func (t tagImpl) Value() TagValue {
 	return t.value
 }
 
-// Quality возвращает качество тега
+// Quality returns the tag quality
 func (t tagImpl) Quality() TagQuality {
 	return t.quality
 }
 
-// Version возвращает текущую версию тега
+// Version returns the current tag version
 func (t tagImpl) Version() int {
 	return t.version
 }
 
-// UpdateValue обновляет значение и качество тега
+// UpdateValue updates the tag's value and quality
 func (t *tagImpl) UpdateValue(aValue any, aQuality TagQuality) error {
 	t.quality = aQuality
 	newValue, err := NewTagValue(aValue, t.kind)
@@ -90,7 +90,7 @@ func (t *tagImpl) UpdateValue(aValue any, aQuality TagQuality) error {
 	return nil
 }
 
-// IncrementVersion увеличивает версию тега на единицу
+// IncrementVersion increments the tag version by one
 func (t *tagImpl) IncrementVersion() {
 	t.version++
 }

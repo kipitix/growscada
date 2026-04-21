@@ -5,8 +5,8 @@ import (
 	"gitverse.ru/kipitix/growscada/internal/domain/tag"
 )
 
-// Tag - структура данных для передачи информации о теге через API
-// Содержит основные атрибуты тега в формате, удобном для JSON-сериализации
+// Tag - data structure for transferring tag information through the API.
+// Contains the main tag attributes in a JSON-friendly format.
 type Tag struct {
 	ID      uuid.UUID `json:"id"`
 	Name    string    `json:"name"`
@@ -16,18 +16,18 @@ type Tag struct {
 	Version int       `json:"version"`
 }
 
-// FindTagByIDResponse - структура для ответа с одним тегом
+// FindTagByIDResponse - response structure for a single tag
 type FindTagByIDResponse struct {
 	Tag Tag `json:"tag"`
 }
 
-// FindAllTagsResponse - структура для передачи списка тегов
-// Используется для возврата коллекции тегов в API-ответах
+// FindAllTagsResponse - structure for transferring a list of tags.
+// Used for returning a collection of tags in API responses.
 type FindAllTagsResponse struct {
 	Tags []Tag `json:"tags"`
 }
 
-// CreateTagRequest - структура для запроса на создание тега
+// CreateTagRequest - request structure for creating a tag
 type CreateTagRequest struct {
 	Name    string `json:"name"`
 	Kind    string `json:"kind"`
@@ -35,34 +35,34 @@ type CreateTagRequest struct {
 	Quality string `json:"quality"`
 }
 
-// CreateTagResponse - структура для ответа на создание тега
+// CreateTagResponse - response structure for creating a tag
 type CreateTagResponse struct {
 	ID uuid.UUID `json:"id"`
 }
 
-// UpdateTagRequest - структура для запроса на обновление тега
+// UpdateTagRequest - request structure for updating a tag
 type UpdateTagRequest struct {
 	ID      uuid.UUID `json:"id"`
 	Value   string    `json:"value"`
 	Quality string    `json:"quality"`
 }
 
-// UpdateTagResponse - структура для ответа на обновление тега
+// UpdateTagResponse - response structure for updating a tag
 type UpdateTagResponse struct {
 	Version int `json:"version"`
 }
 
-// DeleteTagRequest - структура для запроса на удаление тега
+// DeleteTagRequest - request structure for deleting a tag
 type DeleteTagRequest struct {
 	ID uuid.UUID `json:"id"`
 }
 
-// DeleteTagResponse - структура для ответа на удаление тега
+// DeleteTagResponse - response structure for deleting a tag
 type DeleteTagResponse struct {
 	Tag Tag `json:"tag"`
 }
 
-// NewTag создает DTO-объект Tag на основе доменного агрегата tag.Tag
+// NewTag creates a Tag DTO from the tag.Tag domain aggregate
 func NewTag(aTag tag.Tag) Tag {
 	return Tag{
 		ID:      aTag.ID().UUID(),
@@ -74,7 +74,7 @@ func NewTag(aTag tag.Tag) Tag {
 	}
 }
 
-// NewFindAllTagsResponse создает DTO-объект TagList на основе списка доменных агрегатов tag.Tag
+// NewFindAllTagsResponse creates a FindAllTagsResponse DTO from a list of tag.Tag domain aggregates
 func NewFindAllTagsResponse(aTagList []tag.Tag) FindAllTagsResponse {
 	tags := make([]Tag, len(aTagList))
 	for i, t := range aTagList {

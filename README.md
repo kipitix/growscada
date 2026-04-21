@@ -1,7 +1,7 @@
 # Grow SCADA
 
-Ещё одна SCADA.
+Yet another SCADA.
 
-Теперь на Go!
+Now in Go!
 
 ![GrowSCADA Welcome](./docs/root_readme_images/growscada_welcome.jpg)

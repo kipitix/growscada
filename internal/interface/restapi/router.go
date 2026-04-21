@@ -17,23 +17,23 @@ func (r APIRouter) ServeMux() *http.ServeMux {
 }
 
 func NewRouter(tagService application.TagService) *APIRouter {
-	// Создаем роутер - контейнер для обработчиков
+	// Create router — container for handlers
 	router := &APIRouter{}
 
-	// Создаем mux и регистрируем обработчики
+	// Create mux and register handlers
 	router.serveMux = http.NewServeMux()
 
-	// Создаем обработчики - обертки над сервисами
+	// Create handlers — wrappers over services
 	router.tagsHandlers = NewTagsHandler(tagService)
 
-	// Регистрируем обработчики
+	// Register handlers
 	router.serveMux.HandleFunc("GET /api/v1/tags", router.tagsHandlers.GetTags)
 	router.serveMux.HandleFunc("POST /api/v1/tags", router.tagsHandlers.PostTags)
 
 	return router
 }
 
-// Вспомогательная функция для отправки JSON ответа
+// Helper function for sending a JSON response
 func sendJSONResponse(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

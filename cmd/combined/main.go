@@ -28,20 +28,20 @@ const (
 )
 
 func main() {
-	// Настройка запуска сервера для раздачи клиентской части (PWA)
+	// Server setup for serving the client-side app (PWA)
 	app.Route("/", func() app.Composer {
 		r := &root.Root{}
 		r.SetMode(root.ModeOperation)
 		return r
 	})
 
-	// Специальный вызов фреймворка go-app для запуска PWA
+	// Required go-app framework call to initialize the PWA
 	app.RunWhenOnBrowser()
 
-	// Создаём менеджер корректного завершения работы
+	// Create a graceful shutdown manager
 	gracedownManager := gracedown.NewManager()
 
-	// Сервер для раздачи клиента PWA
+	// Server for serving the PWA client
 	pwaServer := &http.Server{
 		Addr: ":8080",
 		Handler: &app.Handler{
@@ -50,12 +50,12 @@ func main() {
 		},
 	}
 
-	// Регистрируем обработчик завершения работы PWA сервера
+	// Register the PWA server shutdown handler
 	gracedownManager.RegisterInterface("PWA HTTP Server", 15*time.Second, func(ctx context.Context) error {
 		return pwaServer.Shutdown(ctx)
 	})
 
-	// Запуск PWA сервера в отдельной рутине
+	// Start the PWA server in a separate goroutine
 	go func() {
 		fmt.Println("🚀 PWA Server starting on :8080")
 		if err := pwaServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -63,8 +63,8 @@ func main() {
 		}
 	}()
 
-	// API сервер
-	// Создаём подключение в БД
+	// API server
+	// Create database connection
 	sqlDB, err := sql.Open("postgres", databaseDSN)
 	if err != nil {
 		fmt.Printf("❌ Database connection error: %v\n", err)
@@ -77,23 +77,23 @@ func main() {
 	}
 
 	tagRepository := repositories.NewTagRepositoryPostgres(sqlDB)
-	// Создаем сервисы
+	// Create services
 	tagService := application.NewTagService(tagRepository)
-	// Создаем роутер
+	// Create router
 	apiRouter := restapi.NewRouter(tagService)
 
-	// Запуск HTTP сервера для раздачи API
+	// Start HTTP server for API
 	apiServer := &http.Server{
 		Addr:    ":9090",
 		Handler: apiRouter.ServeMux(),
 	}
 
-	// Регистрируем обработчик завершения работы API сервера
+	// Register the API server shutdown handler
 	gracedownManager.RegisterInterface("API HTTP Server", 15*time.Second, func(ctx context.Context) error {
 		return apiServer.Shutdown(ctx)
 	})
 
-	// Запуск API сервера в отдельной рутине
+	// Start the API server in a separate goroutine
 	go func() {
 		fmt.Println("🚀 API Server starting on :9090")
 		if err := apiServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -101,7 +101,7 @@ func main() {
 		}
 	}()
 
-	// Ожидание сигнала завершения работы
+	// Wait for shutdown signal
 	err = gracedownManager.WaitForSignal()
 	if err != nil {
 		fmt.Printf("❌ Error on graceful shutdown: %v\n", err)

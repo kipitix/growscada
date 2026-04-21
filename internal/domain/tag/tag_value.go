@@ -2,14 +2,14 @@ package tag
 
 import "fmt"
 
-// TagValue представляет значение тега
+// TagValue represents the value of a tag.
 // Value Object
 type TagValue interface {
 	Value() any
 	String() string
 }
 
-// NewTagValue создает значение тега
+// NewTagValue creates a tag value
 func NewTagValue(aValue any, aKind TagKind) (TagValue, error) {
 	switch aKind {
 	case TagKindString:

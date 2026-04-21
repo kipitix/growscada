@@ -4,22 +4,22 @@ import (
 	"context"
 )
 
-// TagRepository - интерфейс репозитория для хранения и управления тегами
-// Определяет операции для получения следующего идентификатора,
-// сохранения тега и получения тега по его идентификатору
+// TagRepository - repository interface for storing and managing tags.
+// Defines operations for getting the next identifier,
+// saving a tag, and retrieving a tag by its identifier.
 type TagRepository interface {
-	// NextID возвращает новый уникальный идентификатор для тега
+	// NextID returns a new unique identifier for a tag
 	NextID() TagID
 
-	// Save сохраняет тег в хранилище
-	// При успешном сохранении возвращает nil, при ошибке - соответствующую ошибку
+	// Save stores a tag in the repository.
+	// Returns nil on success, or an error on failure.
 	Save(context.Context, Tag) error
 
-	// FindByID возвращает тег по его идентификатору
-	// При успешном поиске возвращает тег и nil, при отсутствии тега или ошибке - nil и соответствующую ошибку
+	// FindByID returns a tag by its identifier.
+	// Returns the tag and nil on success, or nil and an error if not found or on failure.
 	FindByID(context.Context, TagID) (Tag, error)
 
-	// FindAll возвращает все теги
-	// При успешном поиске возвращает слайс тегов и nil, при ошибке - пустой слайс и соответствующую ошибку
+	// FindAll returns all tags.
+	// Returns a slice of tags and nil on success, or an empty slice and an error on failure.
 	FindAll(context.Context) ([]Tag, error)
 }

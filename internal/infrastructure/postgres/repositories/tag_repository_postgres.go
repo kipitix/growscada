@@ -9,43 +9,43 @@ import (
 	"gitverse.ru/kipitix/growscada/internal/domain/tag"
 )
 
-// TagRepositoryPostgres реализация интерфейса TagRepository для работы с PostgreSQL
-// Содержит подключение к базе данных
+// TagRepositoryPostgres implements the TagRepository interface for PostgreSQL.
+// Holds a database connection.
 type TagRepositoryPostgres struct {
 	db *sql.DB
 }
 
-// Убеждаемся, что TagRepositoryPostgres реализует интерфейс tag.TagRepository
+// Verify that TagRepositoryPostgres implements tag.TagRepository
 var _ tag.TagRepository = (*TagRepositoryPostgres)(nil)
 
-// NewTagRepositoryPostgres создает новый экземпляр репозитория тегов для PostgreSQL
-// Принимает подключение к базе данных и возвращает указатель на TagRepositoryPostgres
+// NewTagRepositoryPostgres creates a new PostgreSQL tag repository instance.
+// Accepts a database connection and returns a pointer to TagRepositoryPostgres.
 func NewTagRepositoryPostgres(aDb *sql.DB) *TagRepositoryPostgres {
 	return &TagRepositoryPostgres{db: aDb}
 }
 
-// NextID генерирует новый уникальный идентификатор тега
-// Использует uuid.New() для генерации UUID и преобразует его в TagID
+// NextID generates a new unique tag identifier.
+// Uses uuid.New() to generate a UUID and converts it to TagID.
 func (r TagRepositoryPostgres) NextID() tag.TagID {
 	return tag.TagID(uuid.New())
 }
 
-// Save сохраняет тег в базе данных
-// Реализована логика сохранения с проверкой версий (оптимистичная блокировка)
+// Save stores a tag in the database.
+// Implements save logic with version checking (optimistic locking).
 func (r TagRepositoryPostgres) Save(ctx context.Context, aTag tag.Tag) error {
-	// Если тег новый, то вставляем его в базу данных
+	// If the tag is new, insert it into the database
 	if aTag.Version() == tag.TagVersionInitial {
-		// SQL для вставки нового тега
+		// SQL for inserting a new tag
 		sqlResult, err := r.db.ExecContext(ctx,
 			`INSERT INTO tags (id, name, kind, value, quality, version)
 			VALUES ($1, $2, $3, $4, $5, $6)`,
 			aTag.ID().UUID(), aTag.Name().String(), aTag.Kind().String(), aTag.Value().String(), aTag.Quality().String(), aTag.Version(),
 		)
-		// Обработка ошибки
+		// Handle error
 		if err != nil {
 			return fmt.Errorf("cannot insert new tag: %w", err)
 		}
-		// Проверка количества измененных строк
+		// Check the number of affected rows
 		if rowsAffected, _ := sqlResult.RowsAffected(); rowsAffected != 1 {
 			return fmt.Errorf("expected 1 row affected on insert, got %d", rowsAffected)
 		}
@@ -53,36 +53,36 @@ func (r TagRepositoryPostgres) Save(ctx context.Context, aTag tag.Tag) error {
 		return nil
 	}
 
-	// Если тег уже существует, то обновляем его в базе данных
+	// If the tag already exists, update it in the database
 	if aTag.Version() > tag.TagVersionInitial {
-		// SQL для обновления тега
+		// SQL for updating the tag
 		sqlResult, err := r.db.ExecContext(ctx,
 			`UPDATE tags
 			 SET name = $1, kind = $2, value = $3, quality = $4, version = $5, version = version + 1
 			 WHERE id = $6 AND version = $7`,
 			aTag.Name().String(), aTag.Kind().String(), aTag.Value().String(), aTag.Quality().String(), aTag.Version(), aTag.ID().UUID(), aTag.Version(),
 		)
-		// Обработка ошибки
+		// Handle error
 		if err != nil {
 			return fmt.Errorf("cannot update tag: %w", err)
 		}
-		// Проверка количества измененных строк
+		// Check the number of affected rows
 		if rowsAffected, _ := sqlResult.RowsAffected(); rowsAffected != 1 {
 			return fmt.Errorf("expected 1 row affected on update, got %d", rowsAffected)
 		}
-		// Увеличиваем версию тега
+		// Increment the tag version
 		aTag.IncrementVersion()
 
 		return nil
 	}
 
-	// Если версия тега меньше нуля, то возвращаем ошибку
+	// If the tag version is negative, return an error
 	return fmt.Errorf("undefined behavior with version %d", aTag.Version())
 }
 
-// FindByID получает тег из базы данных по его идентификатору
-// Временно возвращает nil, nil, так как реализация находится в процессе разработки
-// В будущем будет реализована логика выборки тега из таблицы базы данных
+// FindByID retrieves a tag from the database by its identifier.
+// Temporarily returns nil, nil — implementation in progress.
+// Will implement tag retrieval from the database table in the future.
 func (r TagRepositoryPostgres) FindByID(ctx context.Context, id tag.TagID) (tag.Tag, error) {
 	return nil, nil
 	/*
@@ -108,18 +108,18 @@ func (r TagRepositoryPostgres) FindByID(ctx context.Context, id tag.TagID) (tag.
 }
 
 func (r TagRepositoryPostgres) FindAll(ctx context.Context) ([]tag.Tag, error) {
-	// SQL для выборки всех тегов
+	// SQL for selecting all tags
 	query := `SELECT id, name, kind, value, quality, version FROM tags`
-	// Запрос и обработка результатов
+	// Execute query and process results
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("error querying tags: %w", err)
 	}
-	// Закрываем rows в конце
+	// Close rows when done
 	defer rows.Close()
-	// Инициализация слайса для хранения тегов
+	// Initialize slice for storing tags
 	var tags []tag.Tag
-	// Проход по строкам
+	// Iterate over rows
 	for rows.Next() {
 		var (
 			uuid    uuid.UUID
@@ -129,45 +129,45 @@ func (r TagRepositoryPostgres) FindAll(ctx context.Context) ([]tag.Tag, error) {
 			quality string
 			version int
 		)
-		// Сканирование строки
+		// Scan row
 		err := rows.Scan(&uuid, &name, &kind, &value, &quality, &version)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning tag: %w", err)
 		}
-		// Создание нового VO TagID
+		// Create new TagID value object
 		newID := tag.NewTagID(tag.TagIDWithUUID(uuid))
-		// Создание нового VO TagName
+		// Create new TagName value object
 		newName, err := tag.NewTagName(name)
 		if err != nil {
 			return nil, fmt.Errorf("cannot create tag name: %w", err)
 		}
-		// Создание нового VO TagKind
+		// Create new TagKind value object
 		newKind, err := tag.NewTagKind(kind)
 		if err != nil {
 			return nil, fmt.Errorf("cannot create tag kind: %w", err)
 		}
-		// Создание нового VO TagValue
+		// Create new TagValue value object
 		newValue, err := tag.NewTagValue(value, newKind)
 		if err != nil {
 			return nil, fmt.Errorf("cannot create tag value: %w", err)
 		}
-		// Создание нового VO TagQuality
+		// Create new TagQuality value object
 		newQuality, err := tag.NewTagQuality(quality)
 		if err != nil {
 			return nil, fmt.Errorf("cannot create tag quality: %w", err)
 		}
-		// Создание нового Aggregate Tag
+		// Create new Tag aggregate
 		newTag, err := tag.NewTag(newID, newName, newKind, newValue, newQuality, version)
 		if err != nil {
 			return nil, fmt.Errorf("cannot create tag: %w", err)
 		}
-		// Добавление тега в слайс
+		// Append tag to slice
 		tags = append(tags, newTag)
 	}
-	// Проверка на ошибки после цикла
+	// Check for errors after iteration
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating over tags: %w", err)
 	}
-	// Возвращение слайса тегов
+	// Return tags slice
 	return tags, nil
 }
