@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -81,30 +82,50 @@ func (r TagRepositoryPostgres) Save(ctx context.Context, aTag tag.Tag) error {
 }
 
 // FindByID retrieves a tag from the database by its identifier.
-// Temporarily returns nil, nil — implementation in progress.
-// Will implement tag retrieval from the database table in the future.
 func (r TagRepositoryPostgres) FindByID(ctx context.Context, id tag.TagID) (tag.Tag, error) {
-	return nil, nil
-	/*
-	   query := `SELECT id, status, total_cents, version, updated_at FROM orders WHERE id = $1`
+	query := `SELECT id, name, kind, value, quality, version FROM tags WHERE id = $1`
 
-	   row := r.db.QueryRowContext(ctx, query, id)
+	var (
+		tagUUID uuid.UUID
+		name    string
+		kind    string
+		value   string
+		quality string
+		version int
+	)
 
+	row := r.db.QueryRowContext(ctx, query, id.UUID())
+	err := row.Scan(&tagUUID, &name, &kind, &value, &quality, &version)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, tag.ErrTagNotFound
+		}
+		return nil, fmt.Errorf("error scanning tag: %w", err)
+	}
 
-	   var order domain.Order
-	   var statusStr string
-	   err := row.Scan(&order.id, &statusStr, &order.totalCents, &order.version, &order.updatedAt)
+	newID := tag.NewTagID(tag.TagIDWithUUID(tagUUID))
 
-	   	if err != nil {
-	   		if errors.Is(err, sql.ErrNoRows) {
-	   			return nil, domain.ErrOrderNotFound
-	   		}
-	   		return nil, err
-	   	}
+	newName, err := tag.NewTagName(name)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create tag name: %w", err)
+	}
 
-	   order.status = domain.Status(statusStr)
-	   return &order, nil
-	*/
+	newKind, err := tag.NewTagKind(kind)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create tag kind: %w", err)
+	}
+
+	newValue, err := tag.NewTagValue(value, newKind)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create tag value: %w", err)
+	}
+
+	newQuality, err := tag.NewTagQuality(quality)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create tag quality: %w", err)
+	}
+
+	return tag.NewTag(newID, newName, newKind, newValue, newQuality, version)
 }
 
 func (r TagRepositoryPostgres) FindAll(ctx context.Context) ([]tag.Tag, error) {

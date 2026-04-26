@@ -36,29 +36,7 @@ func main() {
 	// Create a graceful shutdown manager
 	gracedownManager := gracedown.NewManager()
 
-	// Server for serving the PWA client
-	pwaServer := &http.Server{
-		Addr: ":8080",
-		Handler: &app.Handler{
-			Name:        "GrowSCADA",
-			Description: "SCADA to Go",
-		},
-	}
-
-	// Register the PWA server shutdown handler
-	gracedownManager.RegisterInterface("PWA HTTP Server", 15*time.Second, func(ctx context.Context) error {
-		return pwaServer.Shutdown(ctx)
-	})
-
-	// Start the PWA server in a separate goroutine
-	go func() {
-		fmt.Println("🚀 PWA Server starting on :8080")
-		if err := pwaServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			fmt.Printf("❌ PWA Server error: %v\n", err)
-		}
-	}()
-
-	// API server
+	// INFRASTRUCTURE COMPONENTS
 	// Create database connection
 	sqlDB, err := sql.Open("postgres", databaseDSN)
 	if err != nil {
@@ -70,13 +48,21 @@ func main() {
 		fmt.Printf("❌ Database ping error: %v\n", err)
 		emergencyExit(gracedownManager, gracedown.ExitIOErr)
 	}
+	// Add hook to shutdown database connection
+	gracedownManager.RegisterInfrastructure("Database", 15*time.Second, func(ctx context.Context) error {
+		if sqlDB != nil {
+			return sqlDB.Close()
+		}
+		return nil
+	})
 
+	// INTERFACE COMPONENTS
+	// API server
 	tagRepository := repositories.NewTagRepositoryPostgres(sqlDB)
 	// Create services
 	tagService := application.NewTagService(tagRepository)
 	// Create router
 	apiRouter := restapi.NewRouter(tagService)
-
 	// Start HTTP server for API
 	apiServer := &http.Server{
 		Addr:    ":9090",
@@ -93,6 +79,26 @@ func main() {
 		fmt.Println("🚀 API Server starting on :9090")
 		if err := apiServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			fmt.Printf("❌ API Server error: %v\n", err)
+		}
+	}()
+
+	// Server for serving the PWA client
+	pwaServer := &http.Server{
+		Addr: ":8080",
+		Handler: &app.Handler{
+			Name:        "GrowSCADA",
+			Description: "SCADA to Go",
+		},
+	}
+	// Register the PWA server shutdown handler
+	gracedownManager.RegisterInterface("PWA HTTP Server", 15*time.Second, func(ctx context.Context) error {
+		return pwaServer.Shutdown(ctx)
+	})
+	// Start the PWA server in a separate goroutine
+	go func() {
+		fmt.Println("🚀 PWA Server starting on :8080")
+		if err := pwaServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			fmt.Printf("❌ PWA Server error: %v\n", err)
 		}
 	}()
 
