@@ -28,6 +28,7 @@ func NewRouter(tagService application.TagService) *APIRouter {
 
 	// Register handlers
 	router.serveMux.HandleFunc("GET /api/v1/tags", router.tagsHandlers.GetTags)
+	router.serveMux.HandleFunc("GET /api/v1/tags/{id}", router.tagsHandlers.GetTagsByID)
 	router.serveMux.HandleFunc("POST /api/v1/tags", router.tagsHandlers.PostTags)
 
 	return router

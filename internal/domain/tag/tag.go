@@ -1,15 +1,12 @@
 package tag
 
 import (
-	"errors"
 	"fmt"
 )
 
 const (
 	TagVersionInitial = 0
 )
-
-var ErrTagNotFound = errors.New("tag not found")
 
 // Tag - interface representing a tag.
 // A tag is the fundamental system entity containing an identifier, name, type, value, and quality.

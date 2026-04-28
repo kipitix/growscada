@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/kipitix/growscada/internal/application/dto"
 	"github.com/kipitix/growscada/internal/domain/tag"
 )
@@ -12,7 +11,7 @@ import (
 // TagService - service interface for working with tags
 type TagService interface {
 	FindAllTags(context.Context) (dto.FindAllTagsResponse, error)
-	FindTagByID(context.Context, uuid.UUID) (dto.Tag, error)
+	FindTagByID(context.Context, tag.TagID) (dto.Tag, error)
 	CreateTag(context.Context, dto.CreateTagRequest) (dto.CreateTagResponse, error)
 }
 
@@ -42,9 +41,7 @@ func (t tagServiceImpl) FindAllTags(ctx context.Context) (dto.FindAllTagsRespons
 }
 
 // FindTagByID returns a tag by its identifier
-func (t tagServiceImpl) FindTagByID(ctx context.Context, id uuid.UUID) (dto.Tag, error) {
-	tagID := tag.NewTagID(tag.TagIDWithUUID(id))
-
+func (t tagServiceImpl) FindTagByID(ctx context.Context, tagID tag.TagID) (dto.Tag, error) {
 	foundTag, err := t.tagRepository.FindByID(ctx, tagID)
 	if err != nil {
 		return dto.Tag{}, fmt.Errorf("error on find tag by id in repository: %w", err)

@@ -6,6 +6,7 @@ import (
 
 	"github.com/kipitix/growscada/internal/application"
 	"github.com/kipitix/growscada/internal/application/dto"
+	"github.com/kipitix/growscada/internal/domain/tag"
 )
 
 // TagsHandlers handles HTTP requests related to tags.
@@ -24,19 +25,22 @@ func NewTagsHandler(s application.TagService) *TagsHandlers {
 func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
 	tagList, err := h.service.FindAllTags(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		errorResponse := NewInternalError(err.Error(), r.URL.Path)
+		sendJSONResponse(w, http.StatusInternalServerError, errorResponse)
 		return
 	}
 
 	jsonData, err := json.Marshal(tagList)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		errorResponse := NewInternalError(err.Error(), r.URL.Path)
+		sendJSONResponse(w, http.StatusInternalServerError, errorResponse)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if _, err := w.Write(jsonData); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		errorResponse := NewInternalError(err.Error(), r.URL.Path)
+		sendJSONResponse(w, http.StatusInternalServerError, errorResponse)
 		return
 	}
 
@@ -45,8 +49,42 @@ func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
 
 // GetTagsByID handles GET /tags/{id}
 func (h TagsHandlers) GetTagsByID(w http.ResponseWriter, r *http.Request) {
-	// TODO: implement
-	w.WriteHeader(http.StatusNotAcceptable)
+	tagIDString := r.PathValue("id")
+	tagID, err := tag.ParseTagID(tagIDString)
+	if err != nil {
+		errorResponse := NewBadRequest(err.Error(), r.URL.Path)
+		sendJSONResponse(w, http.StatusBadRequest, errorResponse)
+		return
+	}
+
+	foundTag, err := h.service.FindTagByID(r.Context(), tagID)
+	if err != nil {
+		if err == tag.ErrTagNotFound {
+			errorResponse := NewNotFound(err.Error(), tagIDString, r.URL.Path)
+			sendJSONResponse(w, http.StatusNotFound, errorResponse)
+			return
+		} else {
+			errorResponse := NewInternalError(err.Error(), r.URL.Path)
+			sendJSONResponse(w, http.StatusInternalServerError, errorResponse)
+			return
+		}
+	}
+
+	jsonData, err := json.Marshal(foundTag)
+	if err != nil {
+		errorResponse := NewInternalError(err.Error(), r.URL.Path)
+		sendJSONResponse(w, http.StatusInternalServerError, errorResponse)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if _, err := w.Write(jsonData); err != nil {
+		errorResponse := NewInternalError(err.Error(), r.URL.Path)
+		sendJSONResponse(w, http.StatusInternalServerError, errorResponse)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 // PostTags handles POST /tags for creating a new tag
