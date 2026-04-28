@@ -1,6 +1,8 @@
 package tag
 
-import "fmt"
+import (
+	"fmt"
+)
 
 const (
 	TagVersionInitial = 0

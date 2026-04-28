@@ -11,7 +11,7 @@ import (
 // TagService - service interface for working with tags
 type TagService interface {
 	FindAllTags(context.Context) (dto.FindAllTagsResponse, error)
-	FindTagByID(context.Context, int) (dto.Tag, error)
+	FindTagByID(context.Context, tag.TagID) (dto.Tag, error)
 	CreateTag(context.Context, dto.CreateTagRequest) (dto.CreateTagResponse, error)
 }
 
@@ -41,9 +41,13 @@ func (t tagServiceImpl) FindAllTags(ctx context.Context) (dto.FindAllTagsRespons
 }
 
 // FindTagByID returns a tag by its identifier
-// TODO: implement
-func (t tagServiceImpl) FindTagByID(ctx context.Context, id int) (dto.Tag, error) {
-	return dto.Tag{}, nil
+func (t tagServiceImpl) FindTagByID(ctx context.Context, tagID tag.TagID) (dto.Tag, error) {
+	foundTag, err := t.tagRepository.FindByID(ctx, tagID)
+	if err != nil {
+		return dto.Tag{}, fmt.Errorf("error on find tag by id in repository: %w", err)
+	}
+
+	return dto.NewTag(foundTag), nil
 }
 
 // CreateTag creates a new tag

@@ -2,7 +2,10 @@ package tag
 
 import (
 	"context"
+	"errors"
 )
+
+var ErrTagNotFound = errors.New("tag not found")
 
 // TagRepository - repository interface for storing and managing tags.
 // Defines operations for getting the next identifier,

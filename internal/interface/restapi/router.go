@@ -28,6 +28,7 @@ func NewRouter(tagService application.TagService) *APIRouter {
 
 	// Register handlers
 	router.serveMux.HandleFunc("GET /api/v1/tags", router.tagsHandlers.GetTags)
+	router.serveMux.HandleFunc("GET /api/v1/tags/{id}", router.tagsHandlers.GetTagsByID)
 	router.serveMux.HandleFunc("POST /api/v1/tags", router.tagsHandlers.PostTags)
 
 	return router
@@ -35,7 +36,12 @@ func NewRouter(tagService application.TagService) *APIRouter {
 
 // Helper function for sending a JSON response
 func sendJSONResponse(w http.ResponseWriter, status int, data any) {
+	body, err := json.Marshal(data)
+	if err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	w.Write(body) //nolint:errcheck
 }

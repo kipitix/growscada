@@ -8,19 +8,14 @@ import (
 	"os"
 	"time"
 
-	"github.com/maxence-charriere/go-app/v10/pkg/app"
 	"github.com/kipitix/gracedown"
 	"github.com/kipitix/growscada/internal/application"
 	"github.com/kipitix/growscada/internal/infrastructure/postgres/repositories"
 	"github.com/kipitix/growscada/internal/interface/restapi"
 	"github.com/kipitix/growscada/internal/interface/ui/root"
+	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
 	_ "github.com/lib/pq"
-)
-
-const (
-	ExitSuccess = 0
-	ExitFailure = 1
 )
 
 const (
@@ -41,47 +36,35 @@ func main() {
 	// Create a graceful shutdown manager
 	gracedownManager := gracedown.NewManager()
 
-	// Server for serving the PWA client
-	pwaServer := &http.Server{
-		Addr: ":8080",
-		Handler: &app.Handler{
-			Name:        "GrowSCADA",
-			Description: "SCADA to Go",
-		},
-	}
-
-	// Register the PWA server shutdown handler
-	gracedownManager.RegisterInterface("PWA HTTP Server", 15*time.Second, func(ctx context.Context) error {
-		return pwaServer.Shutdown(ctx)
-	})
-
-	// Start the PWA server in a separate goroutine
-	go func() {
-		fmt.Println("🚀 PWA Server starting on :8080")
-		if err := pwaServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			fmt.Printf("❌ PWA Server error: %v\n", err)
-		}
-	}()
-
-	// API server
+	// INFRASTRUCTURE COMPONENTS
 	// Create database connection
 	sqlDB, err := sql.Open("postgres", databaseDSN)
+	// Add hook to shutdown database connection
+	gracedownManager.RegisterInfrastructure("Database", 15*time.Second, func(ctx context.Context) error {
+		if sqlDB != nil {
+			return sqlDB.Close()
+		}
+		return nil
+	})
+	// Check DB open error
 	if err != nil {
 		fmt.Printf("❌ Database connection error: %v\n", err)
-		os.Exit(ExitFailure)
+		emergencyExit(gracedownManager, gracedown.ExitIOErr)
 	}
+	// Check DB connection
 	err = sqlDB.Ping()
 	if err != nil {
 		fmt.Printf("❌ Database ping error: %v\n", err)
-		os.Exit(ExitFailure)
+		emergencyExit(gracedownManager, gracedown.ExitIOErr)
 	}
 
+	// INTERFACE COMPONENTS
+	// API server
 	tagRepository := repositories.NewTagRepositoryPostgres(sqlDB)
 	// Create services
 	tagService := application.NewTagService(tagRepository)
 	// Create router
 	apiRouter := restapi.NewRouter(tagService)
-
 	// Start HTTP server for API
 	apiServer := &http.Server{
 		Addr:    ":9090",
@@ -101,14 +84,42 @@ func main() {
 		}
 	}()
 
+	// Server for serving the PWA client
+	pwaServer := &http.Server{
+		Addr: ":8080",
+		Handler: &app.Handler{
+			Name:        "GrowSCADA",
+			Description: "SCADA to Go",
+		},
+	}
+	// Register the PWA server shutdown handler
+	gracedownManager.RegisterInterface("PWA HTTP Server", 15*time.Second, func(ctx context.Context) error {
+		return pwaServer.Shutdown(ctx)
+	})
+	// Start the PWA server in a separate goroutine
+	go func() {
+		fmt.Println("🚀 PWA Server starting on :8080")
+		if err := pwaServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			fmt.Printf("❌ PWA Server error: %v\n", err)
+		}
+	}()
+
 	// Wait for shutdown signal
-	err = gracedownManager.WaitForSignal()
+	err = gracedownManager.WaitForSignalAndShutdown()
 	if err != nil {
 		fmt.Printf("❌ Error on graceful shutdown: %v\n", err)
-		os.Exit(ExitFailure)
+		os.Exit(gracedown.ExitFailure)
 	}
 
 	fmt.Println("😎 Server stopped gracefully")
 
-	os.Exit(ExitSuccess)
+	os.Exit(gracedown.ExitSuccess)
+}
+
+// emergencyExit shuts down all registered components and exits with the given code.
+func emergencyExit(manager *gracedown.Manager, exitCode int) {
+	if shutdownErr := manager.EmergencyShutdown(); shutdownErr != nil {
+		fmt.Printf("❌ Emergency shutdown error: %v\n", shutdownErr)
+	}
+	os.Exit(exitCode)
 }
