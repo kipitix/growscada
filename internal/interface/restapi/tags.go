@@ -26,24 +26,10 @@ func NewTagsHandler(s application.TagService) *TagsHandlers {
 func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
 	tagList, err := h.service.FindAllTags(r.Context())
 	if err != nil {
-		errorResponse := NewInternalError(err.Error(), r.URL.Path)
-		sendJSONResponse(w, http.StatusInternalServerError, errorResponse)
+		sendJSONResponse(w, http.StatusInternalServerError, NewInternalError(err.Error(), r.URL.Path))
 		return
 	}
-
-	jsonData, err := json.Marshal(tagList)
-	if err != nil {
-		errorResponse := NewInternalError(err.Error(), r.URL.Path)
-		sendJSONResponse(w, http.StatusInternalServerError, errorResponse)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if _, err := w.Write(jsonData); err != nil {
-		errorResponse := NewInternalError(err.Error(), r.URL.Path)
-		sendJSONResponse(w, http.StatusInternalServerError, errorResponse)
-		return
-	}
+	sendJSONResponse(w, http.StatusOK, tagList)
 }
 
 // GetTagsByID handles GET /tags/{id}
@@ -58,30 +44,19 @@ func (h TagsHandlers) GetTagsByID(w http.ResponseWriter, r *http.Request) {
 
 	foundTag, err := h.service.FindTagByID(r.Context(), tagID)
 	if err != nil {
+		// Specific error when not found
 		if errors.Is(err, tag.ErrTagNotFound) {
 			errorResponse := NewNotFound(err.Error(), tagIDString, r.URL.Path)
 			sendJSONResponse(w, http.StatusNotFound, errorResponse)
 			return
-		} else {
-			errorResponse := NewInternalError(err.Error(), r.URL.Path)
-			sendJSONResponse(w, http.StatusInternalServerError, errorResponse)
-			return
 		}
-	}
-
-	jsonData, err := json.Marshal(foundTag)
-	if err != nil {
+		// Generic error
 		errorResponse := NewInternalError(err.Error(), r.URL.Path)
 		sendJSONResponse(w, http.StatusInternalServerError, errorResponse)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if _, err := w.Write(jsonData); err != nil {
-		errorResponse := NewInternalError(err.Error(), r.URL.Path)
-		sendJSONResponse(w, http.StatusInternalServerError, errorResponse)
-		return
-	}
+	sendJSONResponse(w, http.StatusOK, foundTag)
 }
 
 // PostTags handles POST /tags for creating a new tag
@@ -96,8 +71,8 @@ func (h TagsHandlers) PostTags(w http.ResponseWriter, r *http.Request) {
 
 	response, err := h.service.CreateTag(r.Context(), request)
 	if err != nil {
-		errorResponse := NewInternalError(err.Error(), r.URL.Path)
-		sendJSONResponse(w, http.StatusInternalServerError, errorResponse)
+		sendJSONResponse(w, http.StatusInternalServerError, NewInternalError(err.Error(), r.URL.Path))
+		return
 	}
 
 	sendJSONResponse(w, http.StatusCreated, response)
