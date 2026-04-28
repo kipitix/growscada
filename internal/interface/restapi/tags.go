@@ -2,6 +2,7 @@ package restapi
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/kipitix/growscada/internal/application"
@@ -43,8 +44,6 @@ func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
 		sendJSONResponse(w, http.StatusInternalServerError, errorResponse)
 		return
 	}
-
-	w.WriteHeader(http.StatusOK)
 }
 
 // GetTagsByID handles GET /tags/{id}
@@ -59,7 +58,7 @@ func (h TagsHandlers) GetTagsByID(w http.ResponseWriter, r *http.Request) {
 
 	foundTag, err := h.service.FindTagByID(r.Context(), tagID)
 	if err != nil {
-		if err == tag.ErrTagNotFound {
+		if errors.Is(err, tag.ErrTagNotFound) {
 			errorResponse := NewNotFound(err.Error(), tagIDString, r.URL.Path)
 			sendJSONResponse(w, http.StatusNotFound, errorResponse)
 			return
@@ -83,8 +82,6 @@ func (h TagsHandlers) GetTagsByID(w http.ResponseWriter, r *http.Request) {
 		sendJSONResponse(w, http.StatusInternalServerError, errorResponse)
 		return
 	}
-
-	w.WriteHeader(http.StatusOK)
 }
 
 // PostTags handles POST /tags for creating a new tag

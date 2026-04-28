@@ -39,15 +39,6 @@ func main() {
 	// INFRASTRUCTURE COMPONENTS
 	// Create database connection
 	sqlDB, err := sql.Open("postgres", databaseDSN)
-	if err != nil {
-		fmt.Printf("❌ Database connection error: %v\n", err)
-		emergencyExit(gracedownManager, gracedown.ExitIOErr)
-	}
-	err = sqlDB.Ping()
-	if err != nil {
-		fmt.Printf("❌ Database ping error: %v\n", err)
-		emergencyExit(gracedownManager, gracedown.ExitIOErr)
-	}
 	// Add hook to shutdown database connection
 	gracedownManager.RegisterInfrastructure("Database", 15*time.Second, func(ctx context.Context) error {
 		if sqlDB != nil {
@@ -55,6 +46,17 @@ func main() {
 		}
 		return nil
 	})
+	// Check DB open error
+	if err != nil {
+		fmt.Printf("❌ Database connection error: %v\n", err)
+		emergencyExit(gracedownManager, gracedown.ExitIOErr)
+	}
+	// Check DB connection
+	err = sqlDB.Ping()
+	if err != nil {
+		fmt.Printf("❌ Database ping error: %v\n", err)
+		emergencyExit(gracedownManager, gracedown.ExitIOErr)
+	}
 
 	// INTERFACE COMPONENTS
 	// API server
