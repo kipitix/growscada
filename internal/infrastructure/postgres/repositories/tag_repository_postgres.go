@@ -10,37 +10,37 @@ import (
 	"github.com/kipitix/growscada/internal/domain/tag"
 )
 
-// TagRepositoryPostgres implements the TagRepository interface for PostgreSQL.
+// tagRepositoryPostgresImpl implements the TagRepository interface for PostgreSQL.
 // Holds a database connection.
-type TagRepositoryPostgres struct {
+type tagRepositoryPostgresImpl struct {
 	db *sql.DB
 }
 
 // Verify that TagRepositoryPostgres implements tag.TagRepository
-var _ tag.TagRepository = (*TagRepositoryPostgres)(nil)
+var _ tag.TagRepository = (*tagRepositoryPostgresImpl)(nil)
 
 // NewTagRepositoryPostgres creates a new PostgreSQL tag repository instance.
 // Accepts a database connection and returns a pointer to TagRepositoryPostgres.
-func NewTagRepositoryPostgres(aDb *sql.DB) *TagRepositoryPostgres {
-	return &TagRepositoryPostgres{db: aDb}
+func NewTagRepositoryPostgres(aDb *sql.DB) tag.TagRepository {
+	return &tagRepositoryPostgresImpl{db: aDb}
 }
 
 // NextID generates a new unique tag identifier.
 // Uses uuid.New() to generate a UUID and converts it to TagID.
-func (r TagRepositoryPostgres) NextID() tag.TagID {
+func (r tagRepositoryPostgresImpl) NextID() tag.TagID {
 	return tag.TagID(uuid.New())
 }
 
 // Save stores a tag in the database.
 // Implements save logic with version checking (optimistic locking).
-func (r TagRepositoryPostgres) Save(ctx context.Context, aTag tag.Tag) error {
+func (r tagRepositoryPostgresImpl) Save(ctx context.Context, aTag tag.Tag) error {
 	// If the tag is new, insert it into the database
 	if aTag.Version() == tag.TagVersionInitial {
 		// SQL for inserting a new tag
 		sqlResult, err := r.db.ExecContext(ctx,
 			`INSERT INTO tags (id, name, kind, value, quality, version)
-			VALUES ($1, $2, $3, $4, $5, $6)`,
-			aTag.ID().UUID(), aTag.Name().String(), aTag.Kind().String(), aTag.Value().String(), aTag.Quality().String(), aTag.Version(),
+			VALUES ($1, $2, $3, $4, $5, 1)`, // version is set to 1 !!!
+			aTag.ID().UUID(), aTag.Name().String(), aTag.Kind().String(), aTag.Value().String(), aTag.Quality().String(),
 		)
 		// Handle error
 		if err != nil {
@@ -51,6 +51,9 @@ func (r TagRepositoryPostgres) Save(ctx context.Context, aTag tag.Tag) error {
 			return fmt.Errorf("expected 1 row affected on insert, got %d", rowsAffected)
 		}
 
+		// Increment the tag version
+		aTag.IncrementVersion()
+
 		return nil
 	}
 
@@ -59,9 +62,9 @@ func (r TagRepositoryPostgres) Save(ctx context.Context, aTag tag.Tag) error {
 		// SQL for updating the tag
 		sqlResult, err := r.db.ExecContext(ctx,
 			`UPDATE tags
-			 SET name = $1, kind = $2, value = $3, quality = $4, version = $5, version = version + 1
-			 WHERE id = $6 AND version = $7`,
-			aTag.Name().String(), aTag.Kind().String(), aTag.Value().String(), aTag.Quality().String(), aTag.Version(), aTag.ID().UUID(), aTag.Version(),
+			 SET name = $1, kind = $2, value = $3, quality = $4, version = version + 1
+			 WHERE id = $5 AND version = $6`,
+			aTag.Name().String(), aTag.Kind().String(), aTag.Value().String(), aTag.Quality().String(), aTag.ID().UUID(), aTag.Version(),
 		)
 		// Handle error
 		if err != nil {
@@ -82,7 +85,7 @@ func (r TagRepositoryPostgres) Save(ctx context.Context, aTag tag.Tag) error {
 }
 
 // FindByID retrieves a tag from the database by its identifier.
-func (r TagRepositoryPostgres) FindByID(ctx context.Context, id tag.TagID) (tag.Tag, error) {
+func (r tagRepositoryPostgresImpl) FindByID(ctx context.Context, id tag.TagID) (tag.Tag, error) {
 	query := `SELECT id, name, kind, value, quality, version FROM tags WHERE id = $1`
 
 	var (
@@ -128,7 +131,7 @@ func (r TagRepositoryPostgres) FindByID(ctx context.Context, id tag.TagID) (tag.
 	return tag.NewTag(newID, newName, newKind, newValue, newQuality, version)
 }
 
-func (r TagRepositoryPostgres) FindAll(ctx context.Context) ([]tag.Tag, error) {
+func (r tagRepositoryPostgresImpl) FindAll(ctx context.Context) ([]tag.Tag, error) {
 	// SQL for selecting all tags
 	query := `SELECT id, name, kind, value, quality, version FROM tags`
 	// Execute query and process results
