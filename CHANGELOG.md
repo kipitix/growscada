@@ -1,5 +1,22 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.4] - 2026-04-30
+
+### Added
+
+- Интеграционные тесты для инфраструктурного репозитория `tag` (`internal/infrastructure/postgres/repositories/tag_repository_postgres_test.go`) — 8 тестов:
+  - `TestNextID_ReturnsUniqueIDs` — генерирует уникальные идентификаторы
+  - `TestSave_NewTag_InsertsSuccessfully` — INSERT новой записи без ошибок
+  - `TestSave_DuplicateID_ReturnsError` — повторный INSERT с тем же ID возвращает ошибку
+  - `TestSave_ExistingTag_UpdatesSuccessfully` — UPDATE существующей записи, проверка новых значений
+  - `TestSave_StaleVersion_ReturnsError` — оптимистичная блокировка: UPDATE с несовпадающей версией возвращает ошибку
+  - `TestFindByID_ExistingTag_ReturnsTag` — возвращает тег с корректными полями
+  - `TestFindByID_NotFound_ReturnsErrTagNotFound` — возвращает `ErrTagNotFound` при отсутствии записи
+  - `TestFindAll_EmptyDB_ReturnsEmptySlice` — возвращает пустой срез при пустой таблице
+  - `TestFindAll_MultipleTags_ReturnsAll` — возвращает все сохранённые теги
+- Зависимость `github.com/pressly/goose/v3 v3.27.1` — применение SQL-миграций в тестовом окружении
+- Тесты используют `testcontainers-go/modules/postgres`: контейнер поднимается в `TestMain`, миграции из `internal/infrastructure/postgres/migrations/` применяются через goose
+
 ## [0.0.3] - 2026-04-30
 
 ### Added
