@@ -277,3 +277,79 @@ func TestFindAll_MultipleTags_ReturnsAll(t *testing.T) {
 		t.Errorf("expected 2 tags, got %d", len(allTags))
 	}
 }
+
+// --- Delete ---
+
+func TestDelete_ExistingTag_ReturnsNil(t *testing.T) {
+	cleanTags(t)
+	repo := repositories.NewTagRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	newTag := makeTag(t, "valve", repo)
+	if err := repo.Save(ctx, newTag); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	err := repo.Delete(ctx, newTag.ID())
+
+	if err != nil {
+		t.Fatalf("Delete returned unexpected error: %v", err)
+	}
+}
+
+func TestDelete_ExistingTag_TagIsRemovedFromDB(t *testing.T) {
+	cleanTags(t)
+	repo := repositories.NewTagRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	newTag := makeTag(t, "pump", repo)
+	if err := repo.Save(ctx, newTag); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+	if err := repo.Delete(ctx, newTag.ID()); err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	_, err := repo.FindByID(ctx, newTag.ID())
+
+	if !errors.Is(err, tag.ErrTagNotFound) {
+		t.Errorf("expected ErrTagNotFound after delete, got %v", err)
+	}
+}
+
+func TestDelete_ExistingTag_OtherTagsAreUnaffected(t *testing.T) {
+	cleanTags(t)
+	repo := repositories.NewTagRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	tag1 := makeTag(t, "temperature", repo)
+	tag2 := makeTag(t, "pressure", repo)
+	if err := repo.Save(ctx, tag1); err != nil {
+		t.Fatalf("Save tag1 failed: %v", err)
+	}
+	if err := repo.Save(ctx, tag2); err != nil {
+		t.Fatalf("Save tag2 failed: %v", err)
+	}
+
+	if err := repo.Delete(ctx, tag1.ID()); err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	_, err := repo.FindByID(ctx, tag2.ID())
+	if err != nil {
+		t.Errorf("tag2 should still exist after deleting tag1, got error: %v", err)
+	}
+}
+
+func TestDelete_NotFound_ReturnsErrTagNotFound(t *testing.T) {
+	cleanTags(t)
+	repo := repositories.NewTagRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	nonExistentID := repo.NextID()
+	err := repo.Delete(ctx, nonExistentID)
+
+	if !errors.Is(err, tag.ErrTagNotFound) {
+		t.Errorf("expected ErrTagNotFound, got %v", err)
+	}
+}

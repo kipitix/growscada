@@ -304,3 +304,233 @@ func TestPostTags_InvalidKind_Returns500WithProblemDetails(t *testing.T) {
 		t.Errorf("problem type: expected %q, got %q", restapi.TypeInternalError, prob.Type)
 	}
 }
+
+// --- DELETE /api/v1/tags/{id} ---
+
+func TestDeleteTagByID_ExistingTag_Returns200WithDeletedTag(t *testing.T) {
+	cleanTags(t)
+	created := createTagViaService(t, "pump", "boolean", "false", "good")
+	router := newRouter()
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/tags/"+created.ID.String(), nil)
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status: expected 200, got %d\nbody: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp dto.DeleteTagResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Tag.ID != created.ID {
+		t.Errorf("deleted tag ID: expected %s, got %s", created.ID, resp.Tag.ID)
+	}
+	if resp.Tag.Name != "pump" {
+		t.Errorf("deleted tag Name: expected 'pump', got %q", resp.Tag.Name)
+	}
+}
+
+func TestDeleteTagByID_ExistingTag_TagIsRemovedFromDB(t *testing.T) {
+	cleanTags(t)
+	created := createTagViaService(t, "valve", "boolean", "true", "good")
+	router := newRouter()
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/tags/"+created.ID.String(), nil)
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: expected 200, got %d", rec.Code)
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/tags/"+created.ID.String(), nil)
+	getRec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(getRec, getReq)
+
+	if getRec.Code != http.StatusNotFound {
+		t.Errorf("after delete GET: expected 404, got %d", getRec.Code)
+	}
+}
+
+func TestDeleteTagByID_NotFound_Returns404WithProblemDetails(t *testing.T) {
+	cleanTags(t)
+	router := newRouter()
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/tags/"+uuid.New().String(), nil)
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status: expected 404, got %d", rec.Code)
+	}
+
+	var prob restapi.ProblemDetails
+	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
+		t.Fatalf("decode problem: %v", err)
+	}
+	if prob.Status != http.StatusNotFound {
+		t.Errorf("problem status: expected 404, got %d", prob.Status)
+	}
+	if prob.Type != restapi.TypeNotFound {
+		t.Errorf("problem type: expected %q, got %q", restapi.TypeNotFound, prob.Type)
+	}
+}
+
+func TestDeleteTagByID_InvalidUUID_Returns400WithProblemDetails(t *testing.T) {
+	router := newRouter()
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/tags/not-a-uuid", nil)
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status: expected 400, got %d", rec.Code)
+	}
+
+	var prob restapi.ProblemDetails
+	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
+		t.Fatalf("decode problem: %v", err)
+	}
+	if prob.Status != http.StatusBadRequest {
+		t.Errorf("problem status: expected 400, got %d", prob.Status)
+	}
+	if prob.Type != restapi.TypeBadRequest {
+		t.Errorf("problem type: expected %q, got %q", restapi.TypeBadRequest, prob.Type)
+	}
+}
+
+// --- PATCH /api/v1/tags/{id}/value ---
+
+func TestPatchTagValue_ValidUpdate_Returns200WithVersion(t *testing.T) {
+	cleanTags(t)
+	created := createTagViaService(t, "temperature", "integer", "10", "bad")
+	router := newRouter()
+
+	body, _ := json.Marshal(map[string]string{"value": "99", "quality": "good"})
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/tags/"+created.ID.String()+"/value", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status: expected 200, got %d\nbody: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp dto.UpdateTagResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Version != 2 {
+		t.Errorf("Version: expected 2, got %d", resp.Version)
+	}
+}
+
+func TestPatchTagValue_ValidUpdate_ValueAndQualityAreUpdated(t *testing.T) {
+	cleanTags(t)
+	created := createTagViaService(t, "humidity", "integer", "0", "bad")
+	router := newRouter()
+
+	body, _ := json.Marshal(map[string]string{"value": "75", "quality": "good"})
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/tags/"+created.ID.String()+"/value", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: expected 200, got %d", rec.Code)
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/tags/"+created.ID.String(), nil)
+	getRec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(getRec, getReq)
+
+	var tag dto.Tag
+	if err := json.NewDecoder(getRec.Body).Decode(&tag); err != nil {
+		t.Fatalf("decode tag: %v", err)
+	}
+	if tag.Value != "75" {
+		t.Errorf("Value: expected '75', got %q", tag.Value)
+	}
+	if tag.Quality != "good" {
+		t.Errorf("Quality: expected 'good', got %q", tag.Quality)
+	}
+}
+
+func TestPatchTagValue_NotFound_Returns404WithProblemDetails(t *testing.T) {
+	cleanTags(t)
+	router := newRouter()
+
+	body, _ := json.Marshal(map[string]string{"value": "1", "quality": "good"})
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/tags/"+uuid.New().String()+"/value", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status: expected 404, got %d", rec.Code)
+	}
+
+	var prob restapi.ProblemDetails
+	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
+		t.Fatalf("decode problem: %v", err)
+	}
+	if prob.Status != http.StatusNotFound {
+		t.Errorf("problem status: expected 404, got %d", prob.Status)
+	}
+	if prob.Type != restapi.TypeNotFound {
+		t.Errorf("problem type: expected %q, got %q", restapi.TypeNotFound, prob.Type)
+	}
+}
+
+func TestPatchTagValue_InvalidUUID_Returns400WithProblemDetails(t *testing.T) {
+	router := newRouter()
+
+	body, _ := json.Marshal(map[string]string{"value": "1", "quality": "good"})
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/tags/not-a-uuid/value", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status: expected 400, got %d", rec.Code)
+	}
+
+	var prob restapi.ProblemDetails
+	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
+		t.Fatalf("decode problem: %v", err)
+	}
+	if prob.Status != http.StatusBadRequest {
+		t.Errorf("problem status: expected 400, got %d", prob.Status)
+	}
+	if prob.Type != restapi.TypeBadRequest {
+		t.Errorf("problem type: expected %q, got %q", restapi.TypeBadRequest, prob.Type)
+	}
+}
+
+func TestPatchTagValue_InvalidJSON_Returns400WithProblemDetails(t *testing.T) {
+	cleanTags(t)
+	created := createTagViaService(t, "sensor", "integer", "0", "good")
+	router := newRouter()
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/tags/"+created.ID.String()+"/value", bytes.NewBufferString("not json"))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status: expected 400, got %d", rec.Code)
+	}
+
+	var prob restapi.ProblemDetails
+	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
+		t.Fatalf("decode problem: %v", err)
+	}
+	if prob.Status != http.StatusBadRequest {
+		t.Errorf("problem status: expected 400, got %d", prob.Status)
+	}
+	if prob.Type != restapi.TypeBadRequest {
+		t.Errorf("problem type: expected %q, got %q", restapi.TypeBadRequest, prob.Type)
+	}
+}
