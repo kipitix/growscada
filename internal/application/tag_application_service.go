@@ -117,8 +117,8 @@ func (t tagServiceImpl) SetTagValueByID(ctx context.Context, request dto.UpdateT
 		return dto.UpdateTagResponse{}, fmt.Errorf("cannot parse quality: %w", err)
 	}
 
-	if err = foundTag.UpdateValue(request.Value, newQuality); err != nil {
-		return dto.UpdateTagResponse{}, fmt.Errorf("cannot update tag value: %w", err)
+	if err = foundTag.SetValue(request.Value, newQuality); err != nil {
+		return dto.UpdateTagResponse{}, fmt.Errorf("cannot set tag value: %w", err)
 	}
 
 	if err = t.tagRepository.Save(ctx, foundTag); err != nil {

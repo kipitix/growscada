@@ -156,8 +156,8 @@ func TestSave_ExistingTag_UpdatesSuccessfully(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindByID failed: %v", err)
 	}
-	if err := found.UpdateValue(99, tag.TagQualitySimulated); err != nil {
-		t.Fatalf("UpdateValue failed: %v", err)
+	if err := found.SetValue(99, tag.TagQualitySimulated); err != nil {
+		t.Fatalf("SetValue failed: %v", err)
 	}
 	if err := repo.Save(ctx, found); err != nil {
 		t.Fatalf("update Save failed: %v", err)

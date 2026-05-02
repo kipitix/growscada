@@ -18,7 +18,7 @@ type Tag interface {
 	Quality() TagQuality
 	Version() int
 
-	UpdateValue(any, TagQuality) error
+	SetValue(any, TagQuality) error
 	IncrementVersion()
 }
 
@@ -80,8 +80,8 @@ func (t tagImpl) Version() int {
 	return t.version
 }
 
-// UpdateValue updates the tag's value and quality
-func (t *tagImpl) UpdateValue(aValue any, aQuality TagQuality) error {
+// SetValue updates the tag's value and quality
+func (t *tagImpl) SetValue(aValue any, aQuality TagQuality) error {
 	t.quality = aQuality
 	newValue, err := t.kind.NewTagValue(aValue)
 	if err != nil {

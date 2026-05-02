@@ -74,10 +74,10 @@ func TestTag_IncrementVersion(t *testing.T) {
 	}
 }
 
-func TestTag_UpdateValue_Success(t *testing.T) {
+func TestTag_SetValue_Success(t *testing.T) {
 	tag := makeTestTag(t)
 
-	err := tag.UpdateValue(99, TagQualityGood)
+	err := tag.SetValue(99, TagQualityGood)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -89,10 +89,10 @@ func TestTag_UpdateValue_Success(t *testing.T) {
 	}
 }
 
-func TestTag_UpdateValue_ChangesQuality(t *testing.T) {
+func TestTag_SetValue_ChangesQuality(t *testing.T) {
 	tag := makeTestTag(t)
 
-	err := tag.UpdateValue(0, TagQualityBad)
+	err := tag.SetValue(0, TagQualityBad)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -101,24 +101,24 @@ func TestTag_UpdateValue_ChangesQuality(t *testing.T) {
 	}
 }
 
-func TestTag_UpdateValue_InvalidInput_ReturnsError(t *testing.T) {
+func TestTag_SetValue_InvalidInput_ReturnsError(t *testing.T) {
 	tag := makeTestTag(t) // TagKindInteger
 
 	// float64 is unsupported by the integer value constructor
-	err := tag.UpdateValue(3.14, TagQualityGood)
+	err := tag.SetValue(3.14, TagQualityGood)
 	if err == nil {
 		t.Error("expected error for unsupported value type, got nil")
 	}
 }
 
-func TestTag_UpdateValue_InvalidInput_DoesNotChangeQuality(t *testing.T) {
+func TestTag_SetValue_InvalidInput_DoesNotChangeQuality(t *testing.T) {
 	tag := makeTestTag(t)
 	originalQuality := tag.Quality()
 
 	// Intentionally pass a bad value to trigger an error.
 	// Quality is set before value construction, so it will change on error —
 	// this test documents the current behaviour.
-	_ = tag.UpdateValue(3.14, TagQualityBad)
+	_ = tag.SetValue(3.14, TagQualityBad)
 
 	// After an error the quality reflects what was passed, not the original.
 	// If the implementation changes to roll back on error, update this test.
