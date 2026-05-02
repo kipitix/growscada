@@ -13,6 +13,8 @@ type TagService interface {
 	FindAllTags(context.Context) (dto.FindAllTagsResponse, error)
 	FindTagByID(context.Context, tag.TagID) (dto.Tag, error)
 	CreateTag(context.Context, dto.CreateTagRequest) (dto.CreateTagResponse, error)
+	DeleteTag(context.Context, tag.TagID) (dto.DeleteTagResponse, error)
+	SetTagValueByID(context.Context, dto.UpdateTagRequest) (dto.UpdateTagResponse, error)
 }
 
 // tagServiceImpl - tag service implementation
@@ -85,4 +87,43 @@ func (t tagServiceImpl) CreateTag(ctx context.Context, newTagData dto.CreateTagR
 	}
 
 	return dto.CreateTagResponse{ID: newTagID.UUID()}, nil
+}
+
+// DeleteTag deletes a tag by its identifier and returns the deleted tag
+func (t tagServiceImpl) DeleteTag(ctx context.Context, tagID tag.TagID) (dto.DeleteTagResponse, error) {
+	foundTag, err := t.tagRepository.FindByID(ctx, tagID)
+	if err != nil {
+		return dto.DeleteTagResponse{}, fmt.Errorf("error on find tag by id in repository: %w", err)
+	}
+
+	if err = t.tagRepository.Delete(ctx, tagID); err != nil {
+		return dto.DeleteTagResponse{}, fmt.Errorf("cannot delete tag: %w", err)
+	}
+
+	return dto.DeleteTagResponse{Tag: dto.NewTag(foundTag)}, nil
+}
+
+// SetTagValue updates the value and quality of an existing tag
+func (t tagServiceImpl) SetTagValueByID(ctx context.Context, request dto.UpdateTagRequest) (dto.UpdateTagResponse, error) {
+	tagID := tag.NewTagID(tag.TagIDWithUUID(request.ID))
+
+	foundTag, err := t.tagRepository.FindByID(ctx, tagID)
+	if err != nil {
+		return dto.UpdateTagResponse{}, fmt.Errorf("error on find tag by id in repository: %w", err)
+	}
+
+	newQuality, err := tag.NewTagQuality(request.Quality)
+	if err != nil {
+		return dto.UpdateTagResponse{}, fmt.Errorf("cannot parse quality: %w", err)
+	}
+
+	if err = foundTag.UpdateValue(request.Value, newQuality); err != nil {
+		return dto.UpdateTagResponse{}, fmt.Errorf("cannot update tag value: %w", err)
+	}
+
+	if err = t.tagRepository.Save(ctx, foundTag); err != nil {
+		return dto.UpdateTagResponse{}, fmt.Errorf("cannot save tag: %w", err)
+	}
+
+	return dto.UpdateTagResponse{Version: foundTag.Version()}, nil
 }

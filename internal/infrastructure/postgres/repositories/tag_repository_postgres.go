@@ -131,6 +131,19 @@ func (r tagRepositoryPostgresImpl) FindByID(ctx context.Context, id tag.TagID) (
 	return tag.NewTag(newID, newName, newKind, newValue, newQuality, version)
 }
 
+// Delete removes a tag from the database by its identifier.
+func (r tagRepositoryPostgresImpl) Delete(ctx context.Context, id tag.TagID) error {
+	sqlResult, err := r.db.ExecContext(ctx, `DELETE FROM tags WHERE id = $1`, id.UUID())
+	if err != nil {
+		return fmt.Errorf("cannot delete tag: %w", err)
+	}
+	rowsAffected, _ := sqlResult.RowsAffected()
+	if rowsAffected == 0 {
+		return tag.ErrTagNotFound
+	}
+	return nil
+}
+
 func (r tagRepositoryPostgresImpl) FindAll(ctx context.Context) ([]tag.Tag, error) {
 	// SQL for selecting all tags
 	query := `SELECT id, name, kind, value, quality, version FROM tags`
