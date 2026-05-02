@@ -1,0 +1,22 @@
+info:
+  name: patch tag value
+  type: http
+  seq: 5
+
+http:
+  method: PATCH
+  url: http://{{API_SERVER}}/api/v1/tags/{{TAG_ID}}/value
+  body:
+    type: json
+    data: |-
+      {
+        "value": "42",
+        "quality": "good"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
