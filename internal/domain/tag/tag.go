@@ -24,8 +24,7 @@ type Tag interface {
 
 // tagImpl - tag implementation struct
 type tagImpl struct {
-	id TagID
-	// TODO: make VO TagName
+	id      TagID
 	name    TagName
 	kind    TagKind
 	value   TagValue
@@ -84,7 +83,7 @@ func (t tagImpl) Version() int {
 // UpdateValue updates the tag's value and quality
 func (t *tagImpl) UpdateValue(aValue any, aQuality TagQuality) error {
 	t.quality = aQuality
-	newValue, err := NewTagValue(aValue, t.kind)
+	newValue, err := t.kind.NewTagValue(aValue)
 	if err != nil {
 		return fmt.Errorf("cannot update tag value: %w", err)
 	}

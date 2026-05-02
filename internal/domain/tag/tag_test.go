@@ -7,7 +7,7 @@ func makeTestTag(t *testing.T) Tag {
 	id := NewTagID()
 	name, _ := NewTagName("temperature")
 	kind := TagKindInteger
-	value, _ := NewTagValue(0, kind)
+	value, _ := kind.NewTagValue(0)
 	quality := TagQualityGood
 	tag, err := NewTag(id, name, kind, value, quality, TagVersionInitial)
 	if err != nil {
@@ -20,7 +20,7 @@ func TestNewTag_FieldsAreSet(t *testing.T) {
 	id := NewTagID()
 	name, _ := NewTagName("pressure")
 	kind := TagKindString
-	value, _ := NewTagValue("100", kind)
+	value, _ := kind.NewTagValue("100")
 	quality := TagQualityGood
 	version := 3
 

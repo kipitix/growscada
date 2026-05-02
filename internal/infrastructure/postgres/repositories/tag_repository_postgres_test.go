@@ -88,7 +88,7 @@ func makeTag(t *testing.T, name string, repo tag.TagRepository) tag.Tag {
 		t.Fatalf("NewTagName(%q): %v", name, err)
 	}
 	kind := tag.TagKindInteger
-	value, err := tag.NewTagValue(0, kind)
+	value, err := kind.NewTagValue(0)
 	if err != nil {
 		t.Fatalf("NewTagValue: %v", err)
 	}

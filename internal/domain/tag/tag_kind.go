@@ -53,3 +53,17 @@ func (e TagKind) String() string {
 func (t TagKind) IsValid() bool {
 	return t >= TagKindString && t <= TagKindInteger
 }
+
+// NewTagValue creates a new tag value
+func (t TagKind) NewTagValue(aValue any) (TagValue, error) {
+	switch t {
+	case TagKindString:
+		return NewTagValueString(aValue)
+	case TagKindBoolean:
+		return NewTagValueBoolean(aValue)
+	case TagKindInteger:
+		return NewTagValueInteger(aValue)
+	default:
+		return nil, fmt.Errorf("unknown tag kind: %v", t)
+	}
+}

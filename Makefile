@@ -1,10 +1,9 @@
 install_tools:
 	go install github.com/pressly/goose/v3/cmd/goose@latest
-	go install github.com/dmarkham/enumer@latest
 
 build:
-	GOARCH=wasm GOOS=js go build -o bin/growscada_combined/web/app.wasm cmd/combined/main.go
-	go build -o bin/growscada_combined/growscada_combined cmd/combined/main.go
+	GOARCH=wasm GOOS=js go build -o bin/growscada_combined/web/app.wasm cmd/combined_server/main.go
+	go build -o bin/growscada_combined/growscada_combined cmd/combined_server/main.go
 
 run: build
 	chromium --incognito http://localhost:8080 &

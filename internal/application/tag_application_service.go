@@ -64,7 +64,7 @@ func (t tagServiceImpl) CreateTag(ctx context.Context, newTagData dto.CreateTagR
 		return dto.CreateTagResponse{}, fmt.Errorf("cannot create tag because of kind: %w", err)
 	}
 
-	newTagValue, err := tag.NewTagValue(newTagData.Value, newTagKind)
+	newTagValue, err := newTagKind.NewTagValue(newTagData.Value)
 	if err != nil {
 		return dto.CreateTagResponse{}, fmt.Errorf("cannot create tag because of value: %w", err)
 	}

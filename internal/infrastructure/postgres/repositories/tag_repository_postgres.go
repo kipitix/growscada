@@ -118,7 +118,7 @@ func (r tagRepositoryPostgresImpl) FindByID(ctx context.Context, id tag.TagID) (
 		return nil, fmt.Errorf("cannot create tag kind: %w", err)
 	}
 
-	newValue, err := tag.NewTagValue(value, newKind)
+	newValue, err := newKind.NewTagValue(value)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create tag value: %w", err)
 	}
@@ -171,7 +171,7 @@ func (r tagRepositoryPostgresImpl) FindAll(ctx context.Context) ([]tag.Tag, erro
 			return nil, fmt.Errorf("cannot create tag kind: %w", err)
 		}
 		// Create new TagValue value object
-		newValue, err := tag.NewTagValue(value, newKind)
+		newValue, err := newKind.NewTagValue(value)
 		if err != nil {
 			return nil, fmt.Errorf("cannot create tag value: %w", err)
 		}
