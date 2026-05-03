@@ -116,11 +116,20 @@ func TestTag_SetValue_InvalidInput_DoesNotChangeQuality(t *testing.T) {
 	originalQuality := tag.Quality()
 
 	// Intentionally pass a bad value to trigger an error.
-	// Quality is set before value construction, so it will change on error —
-	// this test documents the current behaviour.
-	_ = tag.SetValue(3.14, TagQualityBad)
+	// Function makeTestTag makes tag with TagKindInteger.
+	// 3.14 is not a valid integer.
+	err := tag.SetValue(3.14, TagQualityBad)
+	if err == nil {
+		t.Error("expected error for unsupported value type, got nil")
+	}
 
-	// After an error the quality reflects what was passed, not the original.
-	// If the implementation changes to roll back on error, update this test.
-	_ = originalQuality
+	// Verify quality remains unchanged.
+	if tag.Quality() != originalQuality {
+		t.Errorf("expected quality %v, got %v", originalQuality, tag.Quality())
+	}
+
+	// Verify value remains unchanged.
+	if tag.Value().Value() != 0 {
+		t.Errorf("expected value 0, got %v", tag.Value().Value())
+	}
 }
