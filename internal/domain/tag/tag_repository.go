@@ -22,6 +22,10 @@ type TagRepository interface {
 	// Returns the tag and nil on success, or nil and an error if not found or on failure.
 	FindByID(context.Context, TagID) (Tag, error)
 
+	// DeleteByID removes a tag by its identifier and returns it.
+	// Returns the deleted tag and nil on success, ErrTagNotFound if the tag does not exist, or an error on failure.
+	DeleteByID(context.Context, TagID) (Tag, error)
+
 	// FindAll returns all tags.
 	// Returns a slice of tags and nil on success, or an empty slice and an error on failure.
 	FindAll(context.Context) ([]Tag, error)

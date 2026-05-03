@@ -7,7 +7,7 @@ func makeTestTag(t *testing.T) Tag {
 	id := NewTagID()
 	name, _ := NewTagName("temperature")
 	kind := TagKindInteger
-	value, _ := NewTagValue(0, kind)
+	value, _ := kind.NewTagValue(0)
 	quality := TagQualityGood
 	tag, err := NewTag(id, name, kind, value, quality, TagVersionInitial)
 	if err != nil {
@@ -20,7 +20,7 @@ func TestNewTag_FieldsAreSet(t *testing.T) {
 	id := NewTagID()
 	name, _ := NewTagName("pressure")
 	kind := TagKindString
-	value, _ := NewTagValue("100", kind)
+	value, _ := kind.NewTagValue("100")
 	quality := TagQualityGood
 	version := 3
 
@@ -74,10 +74,10 @@ func TestTag_IncrementVersion(t *testing.T) {
 	}
 }
 
-func TestTag_UpdateValue_Success(t *testing.T) {
+func TestTag_SetValue_Success(t *testing.T) {
 	tag := makeTestTag(t)
 
-	err := tag.UpdateValue(99, TagQualityGood)
+	err := tag.SetValue(99, TagQualityGood)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -89,10 +89,10 @@ func TestTag_UpdateValue_Success(t *testing.T) {
 	}
 }
 
-func TestTag_UpdateValue_ChangesQuality(t *testing.T) {
+func TestTag_SetValue_ChangesQuality(t *testing.T) {
 	tag := makeTestTag(t)
 
-	err := tag.UpdateValue(0, TagQualityBad)
+	err := tag.SetValue(0, TagQualityBad)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -101,26 +101,35 @@ func TestTag_UpdateValue_ChangesQuality(t *testing.T) {
 	}
 }
 
-func TestTag_UpdateValue_InvalidInput_ReturnsError(t *testing.T) {
+func TestTag_SetValue_InvalidInput_ReturnsError(t *testing.T) {
 	tag := makeTestTag(t) // TagKindInteger
 
 	// float64 is unsupported by the integer value constructor
-	err := tag.UpdateValue(3.14, TagQualityGood)
+	err := tag.SetValue(3.14, TagQualityGood)
 	if err == nil {
 		t.Error("expected error for unsupported value type, got nil")
 	}
 }
 
-func TestTag_UpdateValue_InvalidInput_DoesNotChangeQuality(t *testing.T) {
+func TestTag_SetValue_InvalidInput_DoesNotChangeQuality(t *testing.T) {
 	tag := makeTestTag(t)
 	originalQuality := tag.Quality()
 
 	// Intentionally pass a bad value to trigger an error.
-	// Quality is set before value construction, so it will change on error —
-	// this test documents the current behaviour.
-	_ = tag.UpdateValue(3.14, TagQualityBad)
+	// Function makeTestTag makes tag with TagKindInteger.
+	// 3.14 is not a valid integer.
+	err := tag.SetValue(3.14, TagQualityBad)
+	if err == nil {
+		t.Error("expected error for unsupported value type, got nil")
+	}
 
-	// After an error the quality reflects what was passed, not the original.
-	// If the implementation changes to roll back on error, update this test.
-	_ = originalQuality
+	// Verify quality remains unchanged.
+	if tag.Quality() != originalQuality {
+		t.Errorf("expected quality %v, got %v", originalQuality, tag.Quality())
+	}
+
+	// Verify value remains unchanged.
+	if tag.Value().Value() != 0 {
+		t.Errorf("expected value 0, got %v", tag.Value().Value())
+	}
 }

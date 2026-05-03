@@ -266,3 +266,163 @@ func TestFindTagByID_NotFound_ReturnsWrappedErrTagNotFound(t *testing.T) {
 		t.Errorf("expected wrapped ErrTagNotFound, got: %v", err)
 	}
 }
+
+// --- DeleteTagByID ---
+
+func TestDeleteTag_ExistingTag_ReturnsDeletedTag(t *testing.T) {
+	cleanTags(t)
+	svc := newService()
+	ctx := context.Background()
+
+	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "sensor", Kind: "integer", Value: "10", Quality: "good"})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+
+	tagID := tag.NewTagID(tag.TagIDWithUUID(created.ID))
+	resp, err := svc.DeleteTagByID(ctx, tagID)
+
+	if err != nil {
+		t.Fatalf("DeleteTagByID returned unexpected error: %v", err)
+	}
+	if resp.Tag.ID != created.ID {
+		t.Errorf("deleted tag ID: expected %s, got %s", created.ID, resp.Tag.ID)
+	}
+	if resp.Tag.Name != "sensor" {
+		t.Errorf("deleted tag Name: expected 'sensor', got %q", resp.Tag.Name)
+	}
+}
+
+func TestDeleteTag_ExistingTag_TagIsRemovedFromDB(t *testing.T) {
+	cleanTags(t)
+	svc := newService()
+	ctx := context.Background()
+
+	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "valve", Kind: "boolean", Value: "true", Quality: "good"})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+
+	tagID := tag.NewTagID(tag.TagIDWithUUID(created.ID))
+	if _, err = svc.DeleteTagByID(ctx, tagID); err != nil {
+		t.Fatalf("DeleteTagByID: %v", err)
+	}
+
+	_, err = svc.FindTagByID(ctx, tagID)
+	if !errors.Is(err, tag.ErrTagNotFound) {
+		t.Errorf("expected ErrTagNotFound after delete, got: %v", err)
+	}
+}
+
+func TestDeleteTag_NotFound_ReturnsWrappedErrTagNotFound(t *testing.T) {
+	cleanTags(t)
+	svc := newService()
+	ctx := context.Background()
+
+	_, err := svc.DeleteTagByID(ctx, tag.NewTagID())
+
+	if err == nil {
+		t.Fatal("expected error for non-existent tag, got nil")
+	}
+	if !errors.Is(err, tag.ErrTagNotFound) {
+		t.Errorf("expected wrapped ErrTagNotFound, got: %v", err)
+	}
+}
+
+// --- SetTagValueByID ---
+
+func TestSetTagValueByID_ValidUpdate_ReturnsIncrementedVersion(t *testing.T) {
+	cleanTags(t)
+	svc := newService()
+	ctx := context.Background()
+
+	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "pressure", Kind: "integer", Value: "100", Quality: "good"})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+
+	resp, err := svc.SetTagValueByID(ctx, dto.UpdateTagRequest{ID: created.ID, Value: "200", Quality: "good"})
+
+	if err != nil {
+		t.Fatalf("SetTagValueByID returned unexpected error: %v", err)
+	}
+	if resp.Version != 2 {
+		t.Errorf("Version: expected 2, got %d", resp.Version)
+	}
+}
+
+func TestSetTagValueByID_ValidUpdate_ValueAndQualityAreUpdated(t *testing.T) {
+	cleanTags(t)
+	svc := newService()
+	ctx := context.Background()
+
+	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "flow", Kind: "integer", Value: "0", Quality: "bad"})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+
+	tagID := tag.NewTagID(tag.TagIDWithUUID(created.ID))
+	if _, err = svc.SetTagValueByID(ctx, dto.UpdateTagRequest{ID: created.ID, Value: "42", Quality: "good"}); err != nil {
+		t.Fatalf("SetTagValueByID: %v", err)
+	}
+
+	found, err := svc.FindTagByID(ctx, tagID)
+	if err != nil {
+		t.Fatalf("FindTagByID: %v", err)
+	}
+	if found.Value != "42" {
+		t.Errorf("Value: expected '42', got %q", found.Value)
+	}
+	if found.Quality != "good" {
+		t.Errorf("Quality: expected 'good', got %q", found.Quality)
+	}
+}
+
+func TestSetTagValueByID_NotFound_ReturnsWrappedErrTagNotFound(t *testing.T) {
+	cleanTags(t)
+	svc := newService()
+	ctx := context.Background()
+
+	_, err := svc.SetTagValueByID(ctx, dto.UpdateTagRequest{ID: uuid.New(), Value: "1", Quality: "good"})
+
+	if err == nil {
+		t.Fatal("expected error for non-existent tag, got nil")
+	}
+	if !errors.Is(err, tag.ErrTagNotFound) {
+		t.Errorf("expected wrapped ErrTagNotFound, got: %v", err)
+	}
+}
+
+func TestSetTagValueByID_InvalidQuality_ReturnsError(t *testing.T) {
+	cleanTags(t)
+	svc := newService()
+	ctx := context.Background()
+
+	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "temp", Kind: "integer", Value: "10", Quality: "good"})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+
+	_, err = svc.SetTagValueByID(ctx, dto.UpdateTagRequest{ID: created.ID, Value: "20", Quality: "unknown"})
+
+	if err == nil {
+		t.Error("expected error for invalid quality, got nil")
+	}
+}
+
+func TestSetTagValueByID_InvalidValueForKind_ReturnsError(t *testing.T) {
+	cleanTags(t)
+	svc := newService()
+	ctx := context.Background()
+
+	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "counter", Kind: "integer", Value: "0", Quality: "good"})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+
+	_, err = svc.SetTagValueByID(ctx, dto.UpdateTagRequest{ID: created.ID, Value: "not-a-number", Quality: "good"})
+
+	if err == nil {
+		t.Error("expected error for value incompatible with kind, got nil")
+	}
+}

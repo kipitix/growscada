@@ -59,6 +59,57 @@ func (h TagsHandlers) GetTagsByID(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusOK, foundTag)
 }
 
+// DeleteTagByID handles DELETE /tags/{id} for removing a tag
+func (h TagsHandlers) DeleteTagByID(w http.ResponseWriter, r *http.Request) {
+	tagIDString := r.PathValue("id")
+	tagID, err := tag.ParseTagID(tagIDString)
+	if err != nil {
+		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
+		return
+	}
+
+	response, err := h.service.DeleteTagByID(r.Context(), tagID)
+	if err != nil {
+		if errors.Is(err, tag.ErrTagNotFound) {
+			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), tagIDString, r.URL.Path))
+			return
+		}
+		sendJSONResponse(w, http.StatusInternalServerError, NewInternalError(err.Error(), r.URL.Path))
+		return
+	}
+
+	sendJSONResponse(w, http.StatusOK, response)
+}
+
+// PatchTagValue handles PATCH /tags/{id}/value for setting tag value and quality
+func (h TagsHandlers) PatchTagValue(w http.ResponseWriter, r *http.Request) {
+	tagIDString := r.PathValue("id")
+	tagID, err := tag.ParseTagID(tagIDString)
+	if err != nil {
+		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
+		return
+	}
+
+	var request dto.UpdateTagRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
+		return
+	}
+	request.ID = tagID.UUID()
+
+	response, err := h.service.SetTagValueByID(r.Context(), request)
+	if err != nil {
+		if errors.Is(err, tag.ErrTagNotFound) {
+			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), tagIDString, r.URL.Path))
+			return
+		}
+		sendJSONResponse(w, http.StatusInternalServerError, NewInternalError(err.Error(), r.URL.Path))
+		return
+	}
+
+	sendJSONResponse(w, http.StatusOK, response)
+}
+
 // PostTags handles POST /tags for creating a new tag
 func (h TagsHandlers) PostTags(w http.ResponseWriter, r *http.Request) {
 	var request dto.CreateTagRequest

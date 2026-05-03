@@ -5,7 +5,8 @@ import (
 )
 
 const (
-	TagVersionInitial = 0
+	TagVersionInitial   = 0
+	TagVersionCommitted = 1
 )
 
 // Tag - interface representing a tag.
@@ -18,14 +19,13 @@ type Tag interface {
 	Quality() TagQuality
 	Version() int
 
-	UpdateValue(any, TagQuality) error
+	SetValue(any, TagQuality) error
 	IncrementVersion()
 }
 
 // tagImpl - tag implementation struct
 type tagImpl struct {
-	id TagID
-	// TODO: make VO TagName
+	id      TagID
 	name    TagName
 	kind    TagKind
 	value   TagValue
@@ -81,14 +81,15 @@ func (t tagImpl) Version() int {
 	return t.version
 }
 
-// UpdateValue updates the tag's value and quality
-func (t *tagImpl) UpdateValue(aValue any, aQuality TagQuality) error {
-	t.quality = aQuality
-	newValue, err := NewTagValue(aValue, t.kind)
+// SetValue updates the tag's value and quality
+func (t *tagImpl) SetValue(aValue any, aQuality TagQuality) error {
+	newValue, err := t.kind.NewTagValue(aValue)
 	if err != nil {
 		return fmt.Errorf("cannot update tag value: %w", err)
 	}
+	// Set value and quality simultaneously
 	t.value = newValue
+	t.quality = aQuality
 	return nil
 }
 

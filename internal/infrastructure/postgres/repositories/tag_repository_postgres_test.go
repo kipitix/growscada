@@ -88,7 +88,7 @@ func makeTag(t *testing.T, name string, repo tag.TagRepository) tag.Tag {
 		t.Fatalf("NewTagName(%q): %v", name, err)
 	}
 	kind := tag.TagKindInteger
-	value, err := tag.NewTagValue(0, kind)
+	value, err := kind.NewTagValue(0)
 	if err != nil {
 		t.Fatalf("NewTagValue: %v", err)
 	}
@@ -156,8 +156,8 @@ func TestSave_ExistingTag_UpdatesSuccessfully(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindByID failed: %v", err)
 	}
-	if err := found.UpdateValue(99, tag.TagQualitySimulated); err != nil {
-		t.Fatalf("UpdateValue failed: %v", err)
+	if err := found.SetValue(99, tag.TagQualitySimulated); err != nil {
+		t.Fatalf("SetValue failed: %v", err)
 	}
 	if err := repo.Save(ctx, found); err != nil {
 		t.Fatalf("update Save failed: %v", err)
@@ -275,5 +275,106 @@ func TestFindAll_MultipleTags_ReturnsAll(t *testing.T) {
 	}
 	if len(allTags) != 2 {
 		t.Errorf("expected 2 tags, got %d", len(allTags))
+	}
+}
+
+// --- Delete ---
+
+func TestDeleteByID_ExistingTag_ReturnsDeletedTag(t *testing.T) {
+	cleanTags(t)
+	repo := repositories.NewTagRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	newTag := makeTag(t, "valve", repo)
+	if err := repo.Save(ctx, newTag); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	deleted, err := repo.DeleteByID(ctx, newTag.ID())
+
+	if err != nil {
+		t.Fatalf("DeleteByID returned unexpected error: %v", err)
+	}
+	if deleted.ID() != newTag.ID() {
+		t.Errorf("ID: expected %v, got %v", newTag.ID(), deleted.ID())
+	}
+	if deleted.Name() != newTag.Name() {
+		t.Errorf("Name: expected %v, got %v", newTag.Name(), deleted.Name())
+	}
+	if deleted.Kind() != newTag.Kind() {
+		t.Errorf("Kind: expected %v, got %v", newTag.Kind(), deleted.Kind())
+	}
+	if deleted.Value().String() != "0" {
+		t.Errorf("Value: expected '0', got %q", deleted.Value().String())
+	}
+	if deleted.Quality() != tag.TagQualityGood {
+		t.Errorf("Quality: expected good, got %v", deleted.Quality())
+	}
+	if deleted.Version() != 1 {
+		t.Errorf("Version: expected 1, got %d", deleted.Version())
+	}
+}
+
+func TestDeleteByID_ExistingTag_TagIsRemovedFromDB(t *testing.T) {
+	cleanTags(t)
+	repo := repositories.NewTagRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	newTag := makeTag(t, "pump", repo)
+	if err := repo.Save(ctx, newTag); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+	deleted, err := repo.DeleteByID(ctx, newTag.ID())
+	if err != nil {
+		t.Fatalf("DeleteByID failed: %v", err)
+	}
+	if deleted.ID() != newTag.ID() {
+		t.Errorf("ID: expected %v, got %v", newTag.ID(), deleted.ID())
+	}
+	if deleted.Name() != newTag.Name() {
+		t.Errorf("Name: expected %v, got %v", newTag.Name(), deleted.Name())
+	}
+
+	_, err = repo.FindByID(ctx, newTag.ID())
+
+	if !errors.Is(err, tag.ErrTagNotFound) {
+		t.Errorf("expected ErrTagNotFound after delete, got %v", err)
+	}
+}
+
+func TestDeleteByID_ExistingTag_OtherTagsAreUnaffected(t *testing.T) {
+	cleanTags(t)
+	repo := repositories.NewTagRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	tag1 := makeTag(t, "temperature", repo)
+	tag2 := makeTag(t, "pressure", repo)
+	if err := repo.Save(ctx, tag1); err != nil {
+		t.Fatalf("Save tag1 failed: %v", err)
+	}
+	if err := repo.Save(ctx, tag2); err != nil {
+		t.Fatalf("Save tag2 failed: %v", err)
+	}
+
+	if _, err := repo.DeleteByID(ctx, tag1.ID()); err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	_, err := repo.FindByID(ctx, tag2.ID())
+	if err != nil {
+		t.Errorf("tag2 should still exist after deleting tag1, got error: %v", err)
+	}
+}
+
+func TestDeleteByID_NotFound_ReturnsErrTagNotFound(t *testing.T) {
+	cleanTags(t)
+	repo := repositories.NewTagRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	nonExistentID := repo.NextID()
+	_, err := repo.DeleteByID(ctx, nonExistentID)
+
+	if !errors.Is(err, tag.ErrTagNotFound) {
+		t.Errorf("expected ErrTagNotFound, got %v", err)
 	}
 }

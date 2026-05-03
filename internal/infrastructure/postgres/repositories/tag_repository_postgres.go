@@ -39,15 +39,20 @@ func (r tagRepositoryPostgresImpl) Save(ctx context.Context, aTag tag.Tag) error
 		// SQL for inserting a new tag
 		sqlResult, err := r.db.ExecContext(ctx,
 			`INSERT INTO tags (id, name, kind, value, quality, version)
-			VALUES ($1, $2, $3, $4, $5, 1)`, // version is set to 1 !!!
-			aTag.ID().UUID(), aTag.Name().String(), aTag.Kind().String(), aTag.Value().String(), aTag.Quality().String(),
+			VALUES ($1, $2, $3, $4, $5, $6)`,
+			aTag.ID().UUID(), aTag.Name().String(), aTag.Kind().String(), aTag.Value().String(), aTag.Quality().String(), tag.TagVersionCommitted,
 		)
 		// Handle error
 		if err != nil {
 			return fmt.Errorf("cannot insert new tag: %w", err)
 		}
 		// Check the number of affected rows
-		if rowsAffected, _ := sqlResult.RowsAffected(); rowsAffected != 1 {
+		// RowsAffected error is always nil for postgres
+		rowsAffected, err := sqlResult.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("cannot get rows affected on insert: %w", err)
+		}
+		if rowsAffected != 1 {
 			return fmt.Errorf("expected 1 row affected on insert, got %d", rowsAffected)
 		}
 
@@ -71,7 +76,12 @@ func (r tagRepositoryPostgresImpl) Save(ctx context.Context, aTag tag.Tag) error
 			return fmt.Errorf("cannot update tag: %w", err)
 		}
 		// Check the number of affected rows
-		if rowsAffected, _ := sqlResult.RowsAffected(); rowsAffected != 1 {
+		// RowsAffected error is always nil for postgres
+		rowsAffected, err := sqlResult.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("cannot get rows affected on update: %w", err)
+		}
+		if rowsAffected != 1 {
 			return fmt.Errorf("expected 1 row affected on update, got %d", rowsAffected)
 		}
 		// Increment the tag version
@@ -118,7 +128,7 @@ func (r tagRepositoryPostgresImpl) FindByID(ctx context.Context, id tag.TagID) (
 		return nil, fmt.Errorf("cannot create tag kind: %w", err)
 	}
 
-	newValue, err := tag.NewTagValue(value, newKind)
+	newValue, err := newKind.NewTagValue(value)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create tag value: %w", err)
 	}
@@ -131,6 +141,54 @@ func (r tagRepositoryPostgresImpl) FindByID(ctx context.Context, id tag.TagID) (
 	return tag.NewTag(newID, newName, newKind, newValue, newQuality, version)
 }
 
+// DeleteByID removes a tag from the database by its identifier and returns it.
+func (r tagRepositoryPostgresImpl) DeleteByID(ctx context.Context, id tag.TagID) (tag.Tag, error) {
+	query := `DELETE FROM tags WHERE id = $1 RETURNING id, name, kind, value, quality, version`
+
+	var (
+		tagUUID uuid.UUID
+		name    string
+		kind    string
+		value   string
+		quality string
+		version int
+	)
+
+	row := r.db.QueryRowContext(ctx, query, id.UUID())
+	err := row.Scan(&tagUUID, &name, &kind, &value, &quality, &version)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, tag.ErrTagNotFound
+		}
+		return nil, fmt.Errorf("cannot delete tag: %w", err)
+	}
+
+	newID := tag.NewTagID(tag.TagIDWithUUID(tagUUID))
+
+	newName, err := tag.NewTagName(name)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create tag name: %w", err)
+	}
+
+	newKind, err := tag.NewTagKind(kind)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create tag kind: %w", err)
+	}
+
+	newValue, err := newKind.NewTagValue(value)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create tag value: %w", err)
+	}
+
+	newQuality, err := tag.NewTagQuality(quality)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create tag quality: %w", err)
+	}
+
+	return tag.NewTag(newID, newName, newKind, newValue, newQuality, version)
+}
+
+// FindAll retrieves all tags from the database.
 func (r tagRepositoryPostgresImpl) FindAll(ctx context.Context) ([]tag.Tag, error) {
 	// SQL for selecting all tags
 	query := `SELECT id, name, kind, value, quality, version FROM tags`
@@ -171,7 +229,7 @@ func (r tagRepositoryPostgresImpl) FindAll(ctx context.Context) ([]tag.Tag, erro
 			return nil, fmt.Errorf("cannot create tag kind: %w", err)
 		}
 		// Create new TagValue value object
-		newValue, err := tag.NewTagValue(value, newKind)
+		newValue, err := newKind.NewTagValue(value)
 		if err != nil {
 			return nil, fmt.Errorf("cannot create tag value: %w", err)
 		}

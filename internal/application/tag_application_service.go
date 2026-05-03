@@ -13,6 +13,8 @@ type TagService interface {
 	FindAllTags(context.Context) (dto.FindAllTagsResponse, error)
 	FindTagByID(context.Context, tag.TagID) (dto.Tag, error)
 	CreateTag(context.Context, dto.CreateTagRequest) (dto.CreateTagResponse, error)
+	DeleteTagByID(context.Context, tag.TagID) (dto.DeleteTagResponse, error)
+	SetTagValueByID(context.Context, dto.UpdateTagRequest) (dto.UpdateTagResponse, error)
 }
 
 // tagServiceImpl - tag service implementation
@@ -64,7 +66,7 @@ func (t tagServiceImpl) CreateTag(ctx context.Context, newTagData dto.CreateTagR
 		return dto.CreateTagResponse{}, fmt.Errorf("cannot create tag because of kind: %w", err)
 	}
 
-	newTagValue, err := tag.NewTagValue(newTagData.Value, newTagKind)
+	newTagValue, err := newTagKind.NewTagValue(newTagData.Value)
 	if err != nil {
 		return dto.CreateTagResponse{}, fmt.Errorf("cannot create tag because of value: %w", err)
 	}
@@ -85,4 +87,39 @@ func (t tagServiceImpl) CreateTag(ctx context.Context, newTagData dto.CreateTagR
 	}
 
 	return dto.CreateTagResponse{ID: newTagID.UUID()}, nil
+}
+
+// DeleteTagByID deletes a tag by its identifier and returns the deleted tag
+func (t tagServiceImpl) DeleteTagByID(ctx context.Context, tagID tag.TagID) (dto.DeleteTagResponse, error) {
+	deletedTag, err := t.tagRepository.DeleteByID(ctx, tagID)
+	if err != nil {
+		return dto.DeleteTagResponse{}, fmt.Errorf("cannot delete tag: %w", err)
+	}
+
+	return dto.DeleteTagResponse{Tag: dto.NewTag(deletedTag)}, nil
+}
+
+// SetTagValue updates the value and quality of an existing tag
+func (t tagServiceImpl) SetTagValueByID(ctx context.Context, request dto.UpdateTagRequest) (dto.UpdateTagResponse, error) {
+	tagID := tag.NewTagID(tag.TagIDWithUUID(request.ID))
+
+	foundTag, err := t.tagRepository.FindByID(ctx, tagID)
+	if err != nil {
+		return dto.UpdateTagResponse{}, fmt.Errorf("error on find tag by id in repository: %w", err)
+	}
+
+	newQuality, err := tag.NewTagQuality(request.Quality)
+	if err != nil {
+		return dto.UpdateTagResponse{}, fmt.Errorf("cannot parse quality: %w", err)
+	}
+
+	if err = foundTag.SetValue(request.Value, newQuality); err != nil {
+		return dto.UpdateTagResponse{}, fmt.Errorf("cannot set tag value: %w", err)
+	}
+
+	if err = t.tagRepository.Save(ctx, foundTag); err != nil {
+		return dto.UpdateTagResponse{}, fmt.Errorf("cannot save tag: %w", err)
+	}
+
+	return dto.UpdateTagResponse{Version: foundTag.Version()}, nil
 }
