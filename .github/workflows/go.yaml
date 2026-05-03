@@ -26,4 +26,4 @@ jobs:
         run: go test ./... -v
 
       - name: Build
-        run: go build -o /dev/null ./cmd/combined/
+        run: go build -o /dev/null ./cmd/combined_server/
