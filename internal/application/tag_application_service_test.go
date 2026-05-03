@@ -267,7 +267,7 @@ func TestFindTagByID_NotFound_ReturnsWrappedErrTagNotFound(t *testing.T) {
 	}
 }
 
-// --- DeleteTag ---
+// --- DeleteTagByID ---
 
 func TestDeleteTag_ExistingTag_ReturnsDeletedTag(t *testing.T) {
 	cleanTags(t)
@@ -280,10 +280,10 @@ func TestDeleteTag_ExistingTag_ReturnsDeletedTag(t *testing.T) {
 	}
 
 	tagID := tag.NewTagID(tag.TagIDWithUUID(created.ID))
-	resp, err := svc.DeleteTag(ctx, tagID)
+	resp, err := svc.DeleteTagByID(ctx, tagID)
 
 	if err != nil {
-		t.Fatalf("DeleteTag returned unexpected error: %v", err)
+		t.Fatalf("DeleteTagByID returned unexpected error: %v", err)
 	}
 	if resp.Tag.ID != created.ID {
 		t.Errorf("deleted tag ID: expected %s, got %s", created.ID, resp.Tag.ID)
@@ -304,8 +304,8 @@ func TestDeleteTag_ExistingTag_TagIsRemovedFromDB(t *testing.T) {
 	}
 
 	tagID := tag.NewTagID(tag.TagIDWithUUID(created.ID))
-	if _, err = svc.DeleteTag(ctx, tagID); err != nil {
-		t.Fatalf("DeleteTag: %v", err)
+	if _, err = svc.DeleteTagByID(ctx, tagID); err != nil {
+		t.Fatalf("DeleteTagByID: %v", err)
 	}
 
 	_, err = svc.FindTagByID(ctx, tagID)
@@ -319,7 +319,7 @@ func TestDeleteTag_NotFound_ReturnsWrappedErrTagNotFound(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	_, err := svc.DeleteTag(ctx, tag.NewTagID())
+	_, err := svc.DeleteTagByID(ctx, tag.NewTagID())
 
 	if err == nil {
 		t.Fatal("expected error for non-existent tag, got nil")

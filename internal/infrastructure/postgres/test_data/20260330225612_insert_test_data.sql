@@ -3,6 +3,7 @@
 -- Add test data for tags table
 -- kind: string | boolean | integer
 -- quality: bad | uncertain | good | simulated
+--- default version for database is 1 - tag.TagVersionCommitted
 INSERT INTO tags (id, name, kind, value, quality, version) VALUES
     ('6ba7b810-9dad-11d1-80b4-00c04fd430c8', 'is_active', 'boolean', 'true', 'good', 1),
     ('6ba7b811-9dad-11d1-80b4-00c04fd430c8', 'max_connections', 'integer', '100', 'good', 1),

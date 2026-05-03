@@ -68,7 +68,7 @@ func (h TagsHandlers) DeleteTagByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response, err := h.service.DeleteTag(r.Context(), tagID)
+	response, err := h.service.DeleteTagByID(r.Context(), tagID)
 	if err != nil {
 		if errors.Is(err, tag.ErrTagNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), tagIDString, r.URL.Path))

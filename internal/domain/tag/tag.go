@@ -5,7 +5,8 @@ import (
 )
 
 const (
-	TagVersionInitial = 0
+	TagVersionInitial   = 0
+	TagVersionCommitted = 1
 )
 
 // Tag - interface representing a tag.
@@ -82,12 +83,13 @@ func (t tagImpl) Version() int {
 
 // SetValue updates the tag's value and quality
 func (t *tagImpl) SetValue(aValue any, aQuality TagQuality) error {
-	t.quality = aQuality
 	newValue, err := t.kind.NewTagValue(aValue)
 	if err != nil {
 		return fmt.Errorf("cannot update tag value: %w", err)
 	}
+	// Set value and quality simultaneously
 	t.value = newValue
+	t.quality = aQuality
 	return nil
 }
 

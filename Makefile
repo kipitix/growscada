@@ -15,3 +15,6 @@ db_up:
 db_down:
 	cd tools/debug_db && docker compose down
 	docker volume rm debug_db_growscada_data
+
+test:
+	go test ./... -v
