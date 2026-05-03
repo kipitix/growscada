@@ -61,12 +61,12 @@ func (t tagServiceImpl) CreateTag(ctx context.Context, newTagData dto.CreateTagR
 		return dto.CreateTagResponse{}, fmt.Errorf("cannot create tag because of name: %w", err)
 	}
 
-	newTagKind, err := tag.NewTagKind(newTagData.Kind)
+	newTagType, err := tag.NewTagType(newTagData.Type)
 	if err != nil {
-		return dto.CreateTagResponse{}, fmt.Errorf("cannot create tag because of kind: %w", err)
+		return dto.CreateTagResponse{}, fmt.Errorf("cannot create tag because of type: %w", err)
 	}
 
-	newTagValue, err := newTagKind.NewTagValue(newTagData.Value)
+	newTagValue, err := newTagType.NewTagValue(newTagData.Value)
 	if err != nil {
 		return dto.CreateTagResponse{}, fmt.Errorf("cannot create tag because of value: %w", err)
 	}
@@ -76,7 +76,7 @@ func (t tagServiceImpl) CreateTag(ctx context.Context, newTagData dto.CreateTagR
 		return dto.CreateTagResponse{}, fmt.Errorf("cannot create tag because of quality: %w", err)
 	}
 
-	newTag, err := tag.NewTag(newTagID, newTagName, newTagKind, newTagValue, newTagQuality, tag.TagVersionInitial)
+	newTag, err := tag.NewTag(newTagID, newTagName, newTagType, newTagValue, newTagQuality, tag.TagVersionInitial)
 	if err != nil {
 		return dto.CreateTagResponse{}, fmt.Errorf("cannot create tag: %w", err)
 	}

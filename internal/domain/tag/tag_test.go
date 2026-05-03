@@ -6,10 +6,10 @@ func makeTestTag(t *testing.T) Tag {
 	t.Helper()
 	id := NewTagID()
 	name, _ := NewTagName("temperature")
-	kind := TagKindInteger
-	value, _ := kind.NewTagValue(0)
+	tagType := TagTypeInteger
+	value, _ := tagType.NewTagValue(0)
 	quality := TagQualityGood
-	tag, err := NewTag(id, name, kind, value, quality, TagVersionInitial)
+	tag, err := NewTag(id, name, tagType, value, quality, TagVersionInitial)
 	if err != nil {
 		t.Fatalf("NewTag returned unexpected error: %v", err)
 	}
@@ -19,12 +19,12 @@ func makeTestTag(t *testing.T) Tag {
 func TestNewTag_FieldsAreSet(t *testing.T) {
 	id := NewTagID()
 	name, _ := NewTagName("pressure")
-	kind := TagKindString
-	value, _ := kind.NewTagValue("100")
+	tagType := TagTypeString
+	value, _ := tagType.NewTagValue("100")
 	quality := TagQualityGood
 	version := 3
 
-	tag, err := NewTag(id, name, kind, value, quality, version)
+	tag, err := NewTag(id, name, tagType, value, quality, version)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -35,8 +35,8 @@ func TestNewTag_FieldsAreSet(t *testing.T) {
 	if tag.Name() != name {
 		t.Errorf("Name mismatch: expected %v, got %v", name, tag.Name())
 	}
-	if tag.Kind() != kind {
-		t.Errorf("Kind mismatch: expected %v, got %v", kind, tag.Kind())
+	if tag.Type() != tagType {
+		t.Errorf("Type mismatch: expected %v, got %v", tagType, tag.Type())
 	}
 	if tag.Value().String() != value.String() {
 		t.Errorf("Value mismatch: expected %v, got %v", value.String(), tag.Value().String())
@@ -102,7 +102,7 @@ func TestTag_SetValue_ChangesQuality(t *testing.T) {
 }
 
 func TestTag_SetValue_InvalidInput_ReturnsError(t *testing.T) {
-	tag := makeTestTag(t) // TagKindInteger
+	tag := makeTestTag(t) // TagTypeInteger
 
 	// float64 is unsupported by the integer value constructor
 	err := tag.SetValue(3.14, TagQualityGood)
@@ -116,7 +116,7 @@ func TestTag_SetValue_InvalidInput_DoesNotChangeQuality(t *testing.T) {
 	originalQuality := tag.Quality()
 
 	// Intentionally pass a bad value to trigger an error.
-	// Function makeTestTag makes tag with TagKindInteger.
+	// Function makeTestTag makes tag with TagTypeInteger.
 	// 3.14 is not a valid integer.
 	err := tag.SetValue(3.14, TagQualityBad)
 	if err == nil {

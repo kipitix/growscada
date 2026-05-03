@@ -87,12 +87,12 @@ func makeTag(t *testing.T, name string, repo tag.TagRepository) tag.Tag {
 	if err != nil {
 		t.Fatalf("NewTagName(%q): %v", name, err)
 	}
-	kind := tag.TagKindInteger
-	value, err := kind.NewTagValue(0)
+	tagType := tag.TagTypeInteger
+	value, err := tagType.NewTagValue(0)
 	if err != nil {
 		t.Fatalf("NewTagValue: %v", err)
 	}
-	newTag, err := tag.NewTag(id, tagName, kind, value, tag.TagQualityGood, tag.TagVersionInitial)
+	newTag, err := tag.NewTag(id, tagName, tagType, value, tag.TagQualityGood, tag.TagVersionInitial)
 	if err != nil {
 		t.Fatalf("NewTag: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestSave_DuplicateID_ReturnsError(t *testing.T) {
 		t.Fatalf("first Save failed: %v", err)
 	}
 
-	duplicate, _ := tag.NewTag(newTag.ID(), newTag.Name(), newTag.Kind(), newTag.Value(), newTag.Quality(), tag.TagVersionInitial)
+	duplicate, _ := tag.NewTag(newTag.ID(), newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), tag.TagVersionInitial)
 	err := repo.Save(ctx, duplicate)
 
 	if err == nil {
@@ -186,7 +186,7 @@ func TestSave_StaleVersion_ReturnsError(t *testing.T) {
 	}
 
 	// version=100 while DB has version=1 → optimistic lock conflict
-	staleTag, _ := tag.NewTag(newTag.ID(), newTag.Name(), newTag.Kind(), newTag.Value(), newTag.Quality(), 100)
+	staleTag, _ := tag.NewTag(newTag.ID(), newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), 100)
 	err := repo.Save(ctx, staleTag)
 
 	if err == nil {
@@ -215,8 +215,8 @@ func TestFindByID_ExistingTag_ReturnsTag(t *testing.T) {
 	if found.Name() != newTag.Name() {
 		t.Errorf("Name: expected %v, got %v", newTag.Name(), found.Name())
 	}
-	if found.Kind() != newTag.Kind() {
-		t.Errorf("Kind: expected %v, got %v", newTag.Kind(), found.Kind())
+	if found.Type() != newTag.Type() {
+		t.Errorf("Type: expected %v, got %v", newTag.Type(), found.Type())
 	}
 	if found.Quality() != newTag.Quality() {
 		t.Errorf("Quality: expected %v, got %v", newTag.Quality(), found.Quality())
@@ -301,8 +301,8 @@ func TestDeleteByID_ExistingTag_ReturnsDeletedTag(t *testing.T) {
 	if deleted.Name() != newTag.Name() {
 		t.Errorf("Name: expected %v, got %v", newTag.Name(), deleted.Name())
 	}
-	if deleted.Kind() != newTag.Kind() {
-		t.Errorf("Kind: expected %v, got %v", newTag.Kind(), deleted.Kind())
+	if deleted.Type() != newTag.Type() {
+		t.Errorf("Type: expected %v, got %v", newTag.Type(), deleted.Type())
 	}
 	if deleted.Value().String() != "0" {
 		t.Errorf("Value: expected '0', got %q", deleted.Value().String())

@@ -50,31 +50,19 @@
 Например VO TagValue:
 
 ```go
-package tag
-
-import "fmt"
-
-// TagValue представляет значение тега
-// Value Object
-type TagValue interface {
-	Value() any
-	String() string
-}
-
-// NewTagValue создает значение тега
-func NewTagValue(aValue any, aKind TagKind) (TagValue, error) {
-	switch aKind {
-	case TagKindString:
+// NewTagValue creates a new tag value
+func (t TagType) NewTagValue(aValue any) (TagValue, error) {
+	switch t {
+	case TagTypeString:
 		return NewTagValueString(aValue)
-	case TagKindBoolean:
+	case TagTypeBoolean:
 		return NewTagValueBoolean(aValue)
-	case TagKindInteger:
+	case TagTypeInteger:
 		return NewTagValueInteger(aValue)
 	default:
-		return nil, fmt.Errorf("unknown tag kind: %v", aKind)
+		return nil, fmt.Errorf("unknown tag type: %v", t)
 	}
 }
-
 ```
 
 В интерфейсе достаточно органично смотрится метод `Equals`, который принимает для сравнения другой TagID как интерфейс.

@@ -38,9 +38,9 @@ func (r tagRepositoryPostgresImpl) Save(ctx context.Context, aTag tag.Tag) error
 	if aTag.Version() == tag.TagVersionInitial {
 		// SQL for inserting a new tag
 		sqlResult, err := r.db.ExecContext(ctx,
-			`INSERT INTO tags (id, name, kind, value, quality, version)
+			`INSERT INTO tags (id, name, type, value, quality, version)
 			VALUES ($1, $2, $3, $4, $5, $6)`,
-			aTag.ID().UUID(), aTag.Name().String(), aTag.Kind().String(), aTag.Value().String(), aTag.Quality().String(), tag.TagVersionCommitted,
+			aTag.ID().UUID(), aTag.Name().String(), aTag.Type().String(), aTag.Value().String(), aTag.Quality().String(), tag.TagVersionCommitted,
 		)
 		// Handle error
 		if err != nil {
@@ -67,9 +67,9 @@ func (r tagRepositoryPostgresImpl) Save(ctx context.Context, aTag tag.Tag) error
 		// SQL for updating the tag
 		sqlResult, err := r.db.ExecContext(ctx,
 			`UPDATE tags
-			 SET name = $1, kind = $2, value = $3, quality = $4, version = version + 1
+			 SET name = $1, type = $2, value = $3, quality = $4, version = version + 1
 			 WHERE id = $5 AND version = $6`,
-			aTag.Name().String(), aTag.Kind().String(), aTag.Value().String(), aTag.Quality().String(), aTag.ID().UUID(), aTag.Version(),
+			aTag.Name().String(), aTag.Type().String(), aTag.Value().String(), aTag.Quality().String(), aTag.ID().UUID(), aTag.Version(),
 		)
 		// Handle error
 		if err != nil {
@@ -96,19 +96,19 @@ func (r tagRepositoryPostgresImpl) Save(ctx context.Context, aTag tag.Tag) error
 
 // FindByID retrieves a tag from the database by its identifier.
 func (r tagRepositoryPostgresImpl) FindByID(ctx context.Context, id tag.TagID) (tag.Tag, error) {
-	query := `SELECT id, name, kind, value, quality, version FROM tags WHERE id = $1`
+	query := `SELECT id, name, type, value, quality, version FROM tags WHERE id = $1`
 
 	var (
 		tagUUID uuid.UUID
 		name    string
-		kind    string
+		tagType string
 		value   string
 		quality string
 		version int
 	)
 
 	row := r.db.QueryRowContext(ctx, query, id.UUID())
-	err := row.Scan(&tagUUID, &name, &kind, &value, &quality, &version)
+	err := row.Scan(&tagUUID, &name, &tagType, &value, &quality, &version)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, tag.ErrTagNotFound
@@ -123,12 +123,12 @@ func (r tagRepositoryPostgresImpl) FindByID(ctx context.Context, id tag.TagID) (
 		return nil, fmt.Errorf("cannot create tag name: %w", err)
 	}
 
-	newKind, err := tag.NewTagKind(kind)
+	newType, err := tag.NewTagType(tagType)
 	if err != nil {
-		return nil, fmt.Errorf("cannot create tag kind: %w", err)
+		return nil, fmt.Errorf("cannot create tag type: %w", err)
 	}
 
-	newValue, err := newKind.NewTagValue(value)
+	newValue, err := newType.NewTagValue(value)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create tag value: %w", err)
 	}
@@ -138,24 +138,24 @@ func (r tagRepositoryPostgresImpl) FindByID(ctx context.Context, id tag.TagID) (
 		return nil, fmt.Errorf("cannot create tag quality: %w", err)
 	}
 
-	return tag.NewTag(newID, newName, newKind, newValue, newQuality, version)
+	return tag.NewTag(newID, newName, newType, newValue, newQuality, version)
 }
 
 // DeleteByID removes a tag from the database by its identifier and returns it.
 func (r tagRepositoryPostgresImpl) DeleteByID(ctx context.Context, id tag.TagID) (tag.Tag, error) {
-	query := `DELETE FROM tags WHERE id = $1 RETURNING id, name, kind, value, quality, version`
+	query := `DELETE FROM tags WHERE id = $1 RETURNING id, name, type, value, quality, version`
 
 	var (
 		tagUUID uuid.UUID
 		name    string
-		kind    string
+		tagType string
 		value   string
 		quality string
 		version int
 	)
 
 	row := r.db.QueryRowContext(ctx, query, id.UUID())
-	err := row.Scan(&tagUUID, &name, &kind, &value, &quality, &version)
+	err := row.Scan(&tagUUID, &name, &tagType, &value, &quality, &version)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, tag.ErrTagNotFound
@@ -170,12 +170,12 @@ func (r tagRepositoryPostgresImpl) DeleteByID(ctx context.Context, id tag.TagID)
 		return nil, fmt.Errorf("cannot create tag name: %w", err)
 	}
 
-	newKind, err := tag.NewTagKind(kind)
+	newType, err := tag.NewTagType(tagType)
 	if err != nil {
-		return nil, fmt.Errorf("cannot create tag kind: %w", err)
+		return nil, fmt.Errorf("cannot create tag type: %w", err)
 	}
 
-	newValue, err := newKind.NewTagValue(value)
+	newValue, err := newType.NewTagValue(value)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create tag value: %w", err)
 	}
@@ -185,13 +185,13 @@ func (r tagRepositoryPostgresImpl) DeleteByID(ctx context.Context, id tag.TagID)
 		return nil, fmt.Errorf("cannot create tag quality: %w", err)
 	}
 
-	return tag.NewTag(newID, newName, newKind, newValue, newQuality, version)
+	return tag.NewTag(newID, newName, newType, newValue, newQuality, version)
 }
 
 // FindAll retrieves all tags from the database.
 func (r tagRepositoryPostgresImpl) FindAll(ctx context.Context) ([]tag.Tag, error) {
 	// SQL for selecting all tags
-	query := `SELECT id, name, kind, value, quality, version FROM tags`
+	query := `SELECT id, name, type, value, quality, version FROM tags`
 	// Execute query and process results
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
@@ -206,13 +206,13 @@ func (r tagRepositoryPostgresImpl) FindAll(ctx context.Context) ([]tag.Tag, erro
 		var (
 			uuid    uuid.UUID
 			name    string
-			kind    string
+			tagType string
 			value   string
 			quality string
 			version int
 		)
 		// Scan row
-		err := rows.Scan(&uuid, &name, &kind, &value, &quality, &version)
+		err := rows.Scan(&uuid, &name, &tagType, &value, &quality, &version)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning tag: %w", err)
 		}
@@ -223,13 +223,13 @@ func (r tagRepositoryPostgresImpl) FindAll(ctx context.Context) ([]tag.Tag, erro
 		if err != nil {
 			return nil, fmt.Errorf("cannot create tag name: %w", err)
 		}
-		// Create new TagKind value object
-		newKind, err := tag.NewTagKind(kind)
+		// Create new TagType value object
+		newType, err := tag.NewTagType(tagType)
 		if err != nil {
-			return nil, fmt.Errorf("cannot create tag kind: %w", err)
+			return nil, fmt.Errorf("cannot create tag type: %w", err)
 		}
 		// Create new TagValue value object
-		newValue, err := newKind.NewTagValue(value)
+		newValue, err := newType.NewTagValue(value)
 		if err != nil {
 			return nil, fmt.Errorf("cannot create tag value: %w", err)
 		}
@@ -239,7 +239,7 @@ func (r tagRepositoryPostgresImpl) FindAll(ctx context.Context) ([]tag.Tag, erro
 			return nil, fmt.Errorf("cannot create tag quality: %w", err)
 		}
 		// Create new Tag aggregate
-		newTag, err := tag.NewTag(newID, newName, newKind, newValue, newQuality, version)
+		newTag, err := tag.NewTag(newID, newName, newType, newValue, newQuality, version)
 		if err != nil {
 			return nil, fmt.Errorf("cannot create tag: %w", err)
 		}

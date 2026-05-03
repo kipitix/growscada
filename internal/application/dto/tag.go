@@ -10,7 +10,7 @@ import (
 type Tag struct {
 	ID      uuid.UUID `json:"id"`
 	Name    string    `json:"name"`
-	Kind    string    `json:"kind"`
+	Type    string    `json:"type"`
 	Value   string    `json:"value"`
 	Quality string    `json:"quality"`
 	Version int       `json:"version"`
@@ -30,7 +30,7 @@ type FindAllTagsResponse struct {
 // CreateTagRequest - request structure for creating a tag
 type CreateTagRequest struct {
 	Name    string `json:"name"`
-	Kind    string `json:"kind"`
+	Type    string `json:"type"`
 	Value   string `json:"value"`
 	Quality string `json:"quality"`
 }
@@ -67,7 +67,7 @@ func NewTag(aTag tag.Tag) Tag {
 	return Tag{
 		ID:      aTag.ID().UUID(),
 		Name:    aTag.Name().String(),
-		Kind:    aTag.Kind().String(),
+		Type:    aTag.Type().String(),
 		Value:   aTag.Value().String(),
 		Quality: aTag.Quality().String(),
 		Version: aTag.Version(),

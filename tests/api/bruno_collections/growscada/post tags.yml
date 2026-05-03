@@ -11,7 +11,7 @@ http:
     data: |-
       {
         "name": "test",
-        "kind": "string",
+        "type": "string",
         "value": "test",
         "quality": "good"
       }

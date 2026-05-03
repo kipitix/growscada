@@ -14,7 +14,7 @@ const (
 type Tag interface {
 	ID() TagID
 	Name() TagName
-	Kind() TagKind
+	Type() TagType
 	Value() TagValue
 	Quality() TagQuality
 	Version() int
@@ -27,7 +27,7 @@ type Tag interface {
 type tagImpl struct {
 	id      TagID
 	name    TagName
-	kind    TagKind
+	tagType TagType
 	value   TagValue
 	quality TagQuality
 	// TODO : make VO TagVersion
@@ -39,11 +39,11 @@ var _ Tag = (*tagImpl)(nil)
 // NewTag creates a new tag with the given identifier, name, and type.
 // Sets the initial value to nil and quality to TagQualityBad.
 // version is initialized to 0.
-func NewTag(anID TagID, aName TagName, aKind TagKind, aValue TagValue, aQuality TagQuality, aVersion int) (Tag, error) {
+func NewTag(anID TagID, aName TagName, aType TagType, aValue TagValue, aQuality TagQuality, aVersion int) (Tag, error) {
 	newTag := &tagImpl{
 		id:      anID,
 		name:    aName,
-		kind:    aKind,
+		tagType: aType,
 		value:   aValue,
 		quality: aQuality,
 		version: aVersion,
@@ -62,9 +62,9 @@ func (t tagImpl) Name() TagName {
 	return t.name
 }
 
-// Kind returns the tag type
-func (t tagImpl) Kind() TagKind {
-	return t.kind
+// Type returns the tag type
+func (t tagImpl) Type() TagType {
+	return t.tagType
 }
 
 func (t tagImpl) Value() TagValue {
@@ -83,7 +83,7 @@ func (t tagImpl) Version() int {
 
 // SetValue updates the tag's value and quality
 func (t *tagImpl) SetValue(aValue any, aQuality TagQuality) error {
-	newValue, err := t.kind.NewTagValue(aValue)
+	newValue, err := t.tagType.NewTagValue(aValue)
 	if err != nil {
 		return fmt.Errorf("cannot update tag value: %w", err)
 	}
