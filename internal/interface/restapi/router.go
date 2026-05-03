@@ -30,8 +30,8 @@ func NewRouter(tagService application.TagService) *APIRouter {
 	router.serveMux.HandleFunc("GET /api/v1/tags", router.tagsHandlers.GetTags)
 	router.serveMux.HandleFunc("GET /api/v1/tags/{id}", router.tagsHandlers.GetTagsByID)
 	router.serveMux.HandleFunc("POST /api/v1/tags", router.tagsHandlers.PostTags)
-	router.serveMux.HandleFunc("DELETE /api/v1/tags/{id}", router.tagsHandlers.DeleteTagByID)
-	router.serveMux.HandleFunc("PATCH /api/v1/tags/{id}/value", router.tagsHandlers.PatchTagValue)
+	router.serveMux.HandleFunc("DELETE /api/v1/tags/{id}", router.tagsHandlers.DeleteTagsByID)
+	router.serveMux.HandleFunc("PATCH /api/v1/tags/{id}/value", router.tagsHandlers.PatchTagsValue)
 
 	return router
 }

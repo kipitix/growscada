@@ -60,7 +60,7 @@ func (h TagsHandlers) GetTagsByID(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeleteTagByID handles DELETE /tags/{id} for removing a tag
-func (h TagsHandlers) DeleteTagByID(w http.ResponseWriter, r *http.Request) {
+func (h TagsHandlers) DeleteTagsByID(w http.ResponseWriter, r *http.Request) {
 	tagIDString := r.PathValue("id")
 	tagID, err := tag.ParseTagID(tagIDString)
 	if err != nil {
@@ -82,7 +82,7 @@ func (h TagsHandlers) DeleteTagByID(w http.ResponseWriter, r *http.Request) {
 }
 
 // PatchTagValue handles PATCH /tags/{id}/value for setting tag value and quality
-func (h TagsHandlers) PatchTagValue(w http.ResponseWriter, r *http.Request) {
+func (h TagsHandlers) PatchTagsValue(w http.ResponseWriter, r *http.Request) {
 	tagIDString := r.PathValue("id")
 	tagID, err := tag.ParseTagID(tagIDString)
 	if err != nil {
