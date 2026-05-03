@@ -92,12 +92,12 @@ func newRouter() *restapi.APIRouter {
 	return restapi.NewRouter(svc)
 }
 
-func createTagViaService(t *testing.T, name, kind, value, quality string) dto.CreateTagResponse {
+func createTagViaService(t *testing.T, name, tagType, value, quality string) dto.CreateTagResponse {
 	t.Helper()
 	repo := repositories.NewTagRepositoryPostgres(testDB)
 	svc := application.NewTagService(repo)
 	resp, err := svc.CreateTag(context.Background(), dto.CreateTagRequest{
-		Name: name, Kind: kind, Value: value, Quality: quality,
+		Name: name, Type: tagType, Value: value, Quality: quality,
 	})
 	if err != nil {
 		t.Fatalf("createTagViaService(%q): %v", name, err)
@@ -176,8 +176,8 @@ func TestGetTagsByID_ExistingTag_Returns200WithTag(t *testing.T) {
 	if resp.Value != "55" {
 		t.Errorf("Value: expected '55', got %q", resp.Value)
 	}
-	if resp.Kind != "integer" {
-		t.Errorf("Kind: expected 'integer', got %q", resp.Kind)
+	if resp.Type != "integer" {
+		t.Errorf("Type:expected 'integer', got %q", resp.Type)
 	}
 	if resp.Quality != "good" {
 		t.Errorf("Quality: expected 'good', got %q", resp.Quality)
@@ -237,7 +237,7 @@ func TestPostTags_ValidBody_Returns201WithID(t *testing.T) {
 	cleanTags(t)
 	router := newRouter()
 
-	body, _ := json.Marshal(dto.CreateTagRequest{Name: "flow", Kind: "integer", Value: "0", Quality: "good"})
+	body, _ := json.Marshal(dto.CreateTagRequest{Name: "flow", Type:"integer", Value: "0", Quality: "good"})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tags", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -280,10 +280,10 @@ func TestPostTags_InvalidJSON_Returns400WithProblemDetails(t *testing.T) {
 	}
 }
 
-func TestPostTags_InvalidKind_Returns500WithProblemDetails(t *testing.T) {
+func TestPostTags_InvalidType_Returns500WithProblemDetails(t *testing.T) {
 	router := newRouter()
 
-	body, _ := json.Marshal(dto.CreateTagRequest{Name: "sensor", Kind: "unknown", Value: "0", Quality: "good"})
+	body, _ := json.Marshal(dto.CreateTagRequest{Name: "sensor", Type:"unknown", Value: "0", Quality: "good"})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tags", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()

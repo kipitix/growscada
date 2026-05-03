@@ -4,21 +4,21 @@ import (
 	"testing"
 )
 
-func TestNewTagValue_DispatchesByKind(t *testing.T) {
+func TestNewTagValue_DispatchesByType(t *testing.T) {
 	cases := []struct {
 		name         string
-		kind         TagKind
+		tagType         TagType
 		input        any
 		expectedType string
 	}{
-		{"string kind", TagKindString, "hello", "TagValueString"},
-		{"boolean kind", TagKindBoolean, true, "TagValueBoolean"},
-		{"integer kind", TagKindInteger, 42, "TagValueInteger"},
+		{"string tagType", TagTypeString, "hello", "TagValueString"},
+		{"boolean tagType", TagTypeBoolean, true, "TagValueBoolean"},
+		{"integer tagType", TagTypeInteger, 42, "TagValueInteger"},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			v, err := tc.kind.NewTagValue(tc.input)
+			v, err := tc.tagType.NewTagValue(tc.input)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -29,8 +29,8 @@ func TestNewTagValue_DispatchesByKind(t *testing.T) {
 	}
 }
 
-func TestNewTagValue_StringKind_StoresCorrectValue(t *testing.T) {
-	v, err := TagKindString.NewTagValue("world")
+func TestNewTagValue_StringType_StoresCorrectValue(t *testing.T) {
+	v, err := TagTypeString.NewTagValue("world")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -39,8 +39,8 @@ func TestNewTagValue_StringKind_StoresCorrectValue(t *testing.T) {
 	}
 }
 
-func TestNewTagValue_BooleanKind_StoresCorrectValue(t *testing.T) {
-	v, err := TagKindBoolean.NewTagValue(true)
+func TestNewTagValue_BooleanType_StoresCorrectValue(t *testing.T) {
+	v, err := TagTypeBoolean.NewTagValue(true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -49,8 +49,8 @@ func TestNewTagValue_BooleanKind_StoresCorrectValue(t *testing.T) {
 	}
 }
 
-func TestNewTagValue_IntegerKind_StoresCorrectValue(t *testing.T) {
-	v, err := TagKindInteger.NewTagValue(7)
+func TestNewTagValue_IntegerType_StoresCorrectValue(t *testing.T) {
+	v, err := TagTypeInteger.NewTagValue(7)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -59,16 +59,16 @@ func TestNewTagValue_IntegerKind_StoresCorrectValue(t *testing.T) {
 	}
 }
 
-func TestNewTagValue_UnknownKind_ReturnsError(t *testing.T) {
-	_, err := TagKind(99).NewTagValue("x")
+func TestNewTagValue_UnknownType_ReturnsError(t *testing.T) {
+	_, err := TagType(99).NewTagValue("x")
 	if err == nil {
-		t.Error("expected error for unknown kind, got nil")
+		t.Error("expected error for unknown tagType, got nil")
 	}
 }
 
 func TestNewTagValue_IncompatibleInput_ReturnsError(t *testing.T) {
 	// float64 is not supported by any value constructor
-	_, err := TagKindString.NewTagValue(3.14)
+	_, err := TagTypeString.NewTagValue(3.14)
 	if err == nil {
 		t.Error("expected error for unsupported input type, got nil")
 	}

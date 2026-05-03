@@ -95,7 +95,7 @@ func TestCreateTag_ValidIntegerTag_ReturnsID(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	req := dto.CreateTagRequest{Name: "temperature", Kind: "integer", Value: "42", Quality: "good"}
+	req := dto.CreateTagRequest{Name: "temperature", Type:"integer", Value: "42", Quality: "good"}
 	resp, err := svc.CreateTag(ctx, req)
 
 	if err != nil {
@@ -111,7 +111,7 @@ func TestCreateTag_ValidStringTag_ReturnsID(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	req := dto.CreateTagRequest{Name: "label", Kind: "string", Value: "hello", Quality: "good"}
+	req := dto.CreateTagRequest{Name: "label", Type:"string", Value: "hello", Quality: "good"}
 	resp, err := svc.CreateTag(ctx, req)
 
 	if err != nil {
@@ -127,7 +127,7 @@ func TestCreateTag_ValidBooleanTag_ReturnsID(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	req := dto.CreateTagRequest{Name: "enabled", Kind: "boolean", Value: "true", Quality: "good"}
+	req := dto.CreateTagRequest{Name: "enabled", Type:"boolean", Value: "true", Quality: "good"}
 	resp, err := svc.CreateTag(ctx, req)
 
 	if err != nil {
@@ -138,16 +138,16 @@ func TestCreateTag_ValidBooleanTag_ReturnsID(t *testing.T) {
 	}
 }
 
-func TestCreateTag_InvalidKind_ReturnsError(t *testing.T) {
+func TestCreateTag_InvalidType_ReturnsError(t *testing.T) {
 	cleanTags(t)
 	svc := newService()
 	ctx := context.Background()
 
-	req := dto.CreateTagRequest{Name: "temperature", Kind: "unknown", Value: "42", Quality: "good"}
+	req := dto.CreateTagRequest{Name: "temperature", Type:"unknown", Value: "42", Quality: "good"}
 	_, err := svc.CreateTag(ctx, req)
 
 	if err == nil {
-		t.Error("expected error for invalid kind, got nil")
+		t.Error("expected error for invalid type, got nil")
 	}
 }
 
@@ -156,7 +156,7 @@ func TestCreateTag_InvalidQuality_ReturnsError(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	req := dto.CreateTagRequest{Name: "temperature", Kind: "integer", Value: "42", Quality: "unknown"}
+	req := dto.CreateTagRequest{Name: "temperature", Type:"integer", Value: "42", Quality: "unknown"}
 	_, err := svc.CreateTag(ctx, req)
 
 	if err == nil {
@@ -164,16 +164,16 @@ func TestCreateTag_InvalidQuality_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestCreateTag_InvalidValueForKind_ReturnsError(t *testing.T) {
+func TestCreateTag_InvalidValueForType_ReturnsError(t *testing.T) {
 	cleanTags(t)
 	svc := newService()
 	ctx := context.Background()
 
-	req := dto.CreateTagRequest{Name: "temperature", Kind: "integer", Value: "not-a-number", Quality: "good"}
+	req := dto.CreateTagRequest{Name: "temperature", Type:"integer", Value: "not-a-number", Quality: "good"}
 	_, err := svc.CreateTag(ctx, req)
 
 	if err == nil {
-		t.Error("expected error for value incompatible with kind, got nil")
+		t.Error("expected error for value incompatible with type, got nil")
 	}
 }
 
@@ -199,8 +199,8 @@ func TestFindAllTags_MultipleTags_ReturnsAll(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	req1 := dto.CreateTagRequest{Name: "temperature", Kind: "integer", Value: "10", Quality: "good"}
-	req2 := dto.CreateTagRequest{Name: "pressure", Kind: "integer", Value: "20", Quality: "good"}
+	req1 := dto.CreateTagRequest{Name: "temperature", Type:"integer", Value: "10", Quality: "good"}
+	req2 := dto.CreateTagRequest{Name: "pressure", Type:"integer", Value: "20", Quality: "good"}
 	if _, err := svc.CreateTag(ctx, req1); err != nil {
 		t.Fatalf("CreateTag(temperature): %v", err)
 	}
@@ -225,7 +225,7 @@ func TestFindTagByID_ExistingTag_ReturnsTag(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	req := dto.CreateTagRequest{Name: "humidity", Kind: "integer", Value: "55", Quality: "good"}
+	req := dto.CreateTagRequest{Name: "humidity", Type:"integer", Value: "55", Quality: "good"}
 	createResp, err := svc.CreateTag(ctx, req)
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
@@ -240,8 +240,8 @@ func TestFindTagByID_ExistingTag_ReturnsTag(t *testing.T) {
 	if found.Name != "humidity" {
 		t.Errorf("Name: expected 'humidity', got %q", found.Name)
 	}
-	if found.Kind != "integer" {
-		t.Errorf("Kind: expected 'integer', got %q", found.Kind)
+	if found.Type != "integer" {
+		t.Errorf("Type:expected 'integer', got %q", found.Type)
 	}
 	if found.Value != "55" {
 		t.Errorf("Value: expected '55', got %q", found.Value)
@@ -274,7 +274,7 @@ func TestDeleteTag_ExistingTag_ReturnsDeletedTag(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "sensor", Kind: "integer", Value: "10", Quality: "good"})
+	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "sensor", Type:"integer", Value: "10", Quality: "good"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -298,7 +298,7 @@ func TestDeleteTag_ExistingTag_TagIsRemovedFromDB(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "valve", Kind: "boolean", Value: "true", Quality: "good"})
+	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "valve", Type:"boolean", Value: "true", Quality: "good"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -336,7 +336,7 @@ func TestSetTagValueByID_ValidUpdate_ReturnsIncrementedVersion(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "pressure", Kind: "integer", Value: "100", Quality: "good"})
+	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "pressure", Type:"integer", Value: "100", Quality: "good"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -356,7 +356,7 @@ func TestSetTagValueByID_ValidUpdate_ValueAndQualityAreUpdated(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "flow", Kind: "integer", Value: "0", Quality: "bad"})
+	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "flow", Type:"integer", Value: "0", Quality: "bad"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -398,7 +398,7 @@ func TestSetTagValueByID_InvalidQuality_ReturnsError(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "temp", Kind: "integer", Value: "10", Quality: "good"})
+	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "temp", Type:"integer", Value: "10", Quality: "good"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -410,12 +410,12 @@ func TestSetTagValueByID_InvalidQuality_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestSetTagValueByID_InvalidValueForKind_ReturnsError(t *testing.T) {
+func TestSetTagValueByID_InvalidValueForType_ReturnsError(t *testing.T) {
 	cleanTags(t)
 	svc := newService()
 	ctx := context.Background()
 
-	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "counter", Kind: "integer", Value: "0", Quality: "good"})
+	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "counter", Type:"integer", Value: "0", Quality: "good"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -423,6 +423,6 @@ func TestSetTagValueByID_InvalidValueForKind_ReturnsError(t *testing.T) {
 	_, err = svc.SetTagValueByID(ctx, dto.UpdateTagRequest{ID: created.ID, Value: "not-a-number", Quality: "good"})
 
 	if err == nil {
-		t.Error("expected error for value incompatible with kind, got nil")
+		t.Error("expected error for value incompatible with type, got nil")
 	}
 }
