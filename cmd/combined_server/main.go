@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -22,6 +23,12 @@ const (
 	databaseDSN = "postgres://growscada:growscada@localhost:5432/growscada?sslmode=disable"
 )
 
+type slogAdapter struct{}
+
+func (slogAdapter) Println(v ...any) {
+	slog.Info(fmt.Sprint(v...))
+}
+
 func main() {
 	// Server setup for serving the client-side app (PWA)
 	app.Route("/", func() app.Composer {
@@ -34,7 +41,7 @@ func main() {
 	app.RunWhenOnBrowser()
 
 	// Create a graceful shutdown manager
-	gracedownManager := gracedown.NewManager()
+	gracedownManager := gracedown.NewManager(gracedown.WithLogger(slogAdapter{}))
 
 	// INFRASTRUCTURE COMPONENTS
 	// Create database connection
@@ -48,13 +55,13 @@ func main() {
 	})
 	// Check DB open error
 	if err != nil {
-		fmt.Printf("❌ Database connection error: %v\n", err)
+		slog.Error("Database connection error", "error", err)
 		emergencyExit(gracedownManager, gracedown.ExitIOErr)
 	}
 	// Check DB connection
 	err = sqlDB.Ping()
 	if err != nil {
-		fmt.Printf("❌ Database ping error: %v\n", err)
+		slog.Error("Database ping error", "error", err)
 		emergencyExit(gracedownManager, gracedown.ExitIOErr)
 	}
 
@@ -78,9 +85,9 @@ func main() {
 
 	// Start the API server in a separate goroutine
 	go func() {
-		fmt.Println("🚀 API Server starting on :9090")
+		slog.Info("API Server starting on :9090")
 		if err := apiServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			fmt.Printf("❌ API Server error: %v\n", err)
+			slog.Error("API Server error", "error", err)
 		}
 	}()
 
@@ -98,20 +105,20 @@ func main() {
 	})
 	// Start the PWA server in a separate goroutine
 	go func() {
-		fmt.Println("🚀 PWA Server starting on :8080")
+		slog.Info("PWA Server starting on :8080")
 		if err := pwaServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			fmt.Printf("❌ PWA Server error: %v\n", err)
+			slog.Error("PWA Server error", "error", err)
 		}
 	}()
 
 	// Wait for shutdown signal
 	err = gracedownManager.WaitForSignalAndShutdown()
 	if err != nil {
-		fmt.Printf("❌ Error on graceful shutdown: %v\n", err)
+		slog.Error("Error on graceful shutdown", "error", err)
 		os.Exit(gracedown.ExitFailure)
 	}
 
-	fmt.Println("😎 Server stopped gracefully")
+	slog.Info("Server stopped gracefully")
 
 	os.Exit(gracedown.ExitSuccess)
 }
@@ -119,7 +126,7 @@ func main() {
 // emergencyExit shuts down all registered components and exits with the given code.
 func emergencyExit(manager *gracedown.Manager, exitCode int) {
 	if shutdownErr := manager.EmergencyShutdown(); shutdownErr != nil {
-		fmt.Printf("❌ Emergency shutdown error: %v\n", shutdownErr)
+		slog.Error("Emergency shutdown error", "error", shutdownErr)
 	}
 	os.Exit(exitCode)
 }
