@@ -1,10 +1,17 @@
 package tag
 
-import "github.com/google/uuid"
+import (
+	"fmt"
+
+	"github.com/google/uuid"
+)
 
 // TagID - UUID-based tag identifier.
 // Represents a value object for unique tag identification.
 type TagID uuid.UUID
+
+// Interfaces for TagID
+var _ fmt.Stringer = TagID{}
 
 // UUID converts TagID to a uuid.UUID
 func (id TagID) UUID() uuid.UUID {
@@ -67,4 +74,9 @@ func ParseTagID(s string) (TagID, error) {
 		return TagID{}, err
 	}
 	return TagID(id), nil
+}
+
+// String implements [fmt.Stringer].
+func (id TagID) String() string {
+	return uuid.UUID(id).String()
 }

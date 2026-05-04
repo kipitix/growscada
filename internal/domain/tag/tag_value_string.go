@@ -4,8 +4,10 @@ import "fmt"
 
 type TagValueString string
 
+// Interfaces for TagValueString
 var _ TagValue = TagValueString("")
 
+// Factory method
 func NewTagValueString(aValue any) (TagValueString, error) {
 	switch srcValue := aValue.(type) {
 	case string:

@@ -8,6 +8,9 @@ import (
 // Value Object
 type TagQuality int
 
+// Interfaces for TagQuality
+var _ fmt.Stringer = TagQuality(0)
+
 // Tag quality enumeration values.
 // TagQualityBad - bad quality (unavailable, error).
 // TagQualityUncertain - uncertain quality.

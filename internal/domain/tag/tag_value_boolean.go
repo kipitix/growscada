@@ -4,8 +4,10 @@ import "fmt"
 
 type TagValueBoolean bool
 
+// Interfaces for TagValueBoolean
 var _ TagValue = TagValueBoolean(false)
 
+// Factory method
 func NewTagValueBoolean(aValue any) (TagValueBoolean, error) {
 	switch srcValue := aValue.(type) {
 	case string:

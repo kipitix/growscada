@@ -8,6 +8,9 @@ import (
 // Value Object
 type TagType int
 
+// Interfaces for TagType
+var _ fmt.Stringer = TagType(0)
+
 // Constants for each tag type.
 // TagTypeString - string tag type.
 // TagTypeBoolean - boolean tag type.
