@@ -1,38 +1,31 @@
 package event
 
 import (
-	"time"
-
 	"github.com/kipitix/growscada/internal/domain/tag"
 )
 
 type TagDeletedEvent interface {
-	Event
-	TagID() tag.TagID
+	TagEvent
 }
 
 type tagDeletedEventImpl struct {
-	tagID tag.TagID
+	tagEventImpl
 }
 
 var _ TagDeletedEvent = (*tagDeletedEventImpl)(nil)
 
-func NewTagDeletedEvent(aTagID tag.TagID) TagDeletedEvent {
-	return &tagDeletedEventImpl{tagID: aTagID}
-}
+func NewTagDeletedEvent(anID tag.TagID, opts ...EventOption) TagDeletedEvent {
+	ev := &tagDeletedEventImpl{
+		tagEventImpl: tagEventImpl{
+			tagID: anID,
+			eventImpl: eventImpl{
+				eventType: EventTypeTagDeleted,
+				timestamp: NewEventTimestamp(),
+			},
+		},
+	}
 
-func (e tagDeletedEventImpl) Type() EventType {
-	return EventTypeTagDeleted
-}
+	ev.applyOptions(opts...)
 
-func (e tagDeletedEventImpl) Timestamp() EventTimestamp {
-	return EventTimestamp(time.Now())
-}
-
-func (e tagDeletedEventImpl) String() string {
-	return "EventTagDeleted"
-}
-
-func (e tagDeletedEventImpl) TagID() tag.TagID {
-	return e.tagID
+	return ev
 }

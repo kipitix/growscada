@@ -6,6 +6,7 @@ import "fmt"
 // Value Object
 type EventType int
 
+// String returns the string representation of the EventType.
 var _ fmt.Stringer = EventType(0)
 
 const (
@@ -15,6 +16,8 @@ const (
 	EventTypeTagDeleted
 )
 
+// NewEventType creates a new EventType from a string representation.
+// Returns an error if the string does not match any known event type.
 func NewEventType(s string) (EventType, error) {
 	switch s {
 	case "system_ready":
@@ -30,6 +33,8 @@ func NewEventType(s string) (EventType, error) {
 	}
 }
 
+// String returns the string representation of the EventType.
+// Implements the fmt.Stringer interface.
 func (et EventType) String() string {
 	switch et {
 	case EventTypeSystemReady:
@@ -44,17 +49,3 @@ func (et EventType) String() string {
 		return "unknown"
 	}
 }
-
-// func (et EventType) NewEvent() (Event, error) {
-// 	switch et {
-// 	case EventTypeSystemReady:
-// 		return NewSystemReadyEvent(), nil
-// 	case EventTypeTagCreated:
-// 		return NewTagCreatedEvent(), nil
-// 	case EventTypeTagUpdated:
-// 		return NewTagUpdatedEvent(), nil
-// 	case EventTypeTagDeleted:
-// 		return NewTagDeletedEvent(), nil
-// 	}
-// 	return nil, fmt.Errorf("unknown event type: %s", et.String())
-// }

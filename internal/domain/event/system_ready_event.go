@@ -1,28 +1,24 @@
 package event
 
-import "time"
-
 type SystemReadyEvent interface {
 	Event
 }
 
 type systemReadyEventImpl struct {
+	eventImpl
 }
 
 var _ SystemReadyEvent = (*systemReadyEventImpl)(nil)
 
-func NewSystemReadyEvent() SystemReadyEvent {
-	return &systemReadyEventImpl{}
-}
+func NewSystemReadyEvent(opts ...EventOption) SystemReadyEvent {
+	ev := &systemReadyEventImpl{
+		eventImpl: eventImpl{
+			eventType: EventTypeSystemReady,
+			timestamp: NewEventTimestamp(),
+		},
+	}
 
-func (e systemReadyEventImpl) Type() EventType {
-	return EventTypeSystemReady
-}
+	ev.applyOptions(opts...)
 
-func (e systemReadyEventImpl) Timestamp() EventTimestamp {
-	return EventTimestamp(time.Now())
-}
-
-func (e systemReadyEventImpl) String() string {
-	return "EventSystemReady"
+	return ev
 }
