@@ -11,6 +11,7 @@ import (
 
 	"github.com/kipitix/gracedown"
 	"github.com/kipitix/growscada/internal/application"
+	"github.com/kipitix/growscada/internal/domain/event"
 	"github.com/kipitix/growscada/internal/infrastructure/postgres/repositories"
 	"github.com/kipitix/growscada/internal/interface/restapi"
 	"github.com/kipitix/growscada/internal/interface/ui/root"
@@ -44,6 +45,7 @@ func main() {
 	gracedownManager := gracedown.NewManager(gracedown.WithLogger(slogAdapter{}))
 
 	// INFRASTRUCTURE COMPONENTS
+
 	// Create database connection
 	sqlDB, err := sql.Open("postgres", databaseDSN)
 	// Add hook to shutdown database connection
@@ -65,11 +67,17 @@ func main() {
 		emergencyExit(gracedownManager, gracedown.ExitIOErr)
 	}
 
+	// Create message broker connection
+	// TODO
+	// Add hook to shutdown message broker connection
+	// Create event bus
+	eventBus := event.NewEventBus()
+
 	// INTERFACE COMPONENTS
 	// API server
 	tagRepository := repositories.NewTagRepositoryPostgres(sqlDB)
 	// Create services
-	tagService := application.NewTagService(tagRepository)
+	tagService := application.NewTagService(tagRepository, eventBus)
 	// Create router
 	apiRouter := restapi.NewRouter(tagService)
 	// Start HTTP server for API

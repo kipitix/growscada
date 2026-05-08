@@ -1,51 +1,40 @@
 package tag
 
-import "github.com/google/uuid"
+import (
+	"fmt"
+
+	"github.com/google/uuid"
+)
 
 // TagID - UUID-based tag identifier.
 // Represents a value object for unique tag identification.
 type TagID uuid.UUID
 
-// UUID converts TagID to a uuid.UUID
-func (id TagID) UUID() uuid.UUID {
-	return uuid.UUID(id)
-}
+// Interfaces for TagID.
+var _ fmt.Stringer = TagID{}
 
 // NewTagID generates a new random TagID.
 // Uses uuid.New() to create a unique identifier.
 func NewTagID(opts ...TagIDOption) TagID {
-	// Initialize config with default values
-	cfg := &tagIDConfig{
-		existingUUID: nil,
-	}
+	// Create a new UUID
+	tagID := TagID(uuid.New())
 
 	// Apply options
 	for _, opt := range opts {
-		opt(cfg)
+		opt(&tagID)
 	}
 
-	// If an existing UUID is provided, use it
-	if cfg.existingUUID != nil {
-		return TagID(*cfg.existingUUID)
-	}
-
-	// Otherwise generate a new one
-	return TagID(uuid.New())
+	return tagID
 }
 
-// TagIDOption - option function for configuring TagID creation
-type TagIDOption func(*tagIDConfig)
-
-// tagIDConfig - configuration for TagID creation
-type tagIDConfig struct {
-	existingUUID *uuid.UUID
-}
+// TagIDOption - option function for configuring TagID creation.
+type TagIDOption func(*TagID)
 
 // TagIDWithUUID allows specifying an existing UUID for TagID creation.
 // Used when a TagID needs to be created from an existing UUID.
-func TagIDWithUUID(id uuid.UUID) TagIDOption {
-	return func(cfg *tagIDConfig) {
-		cfg.existingUUID = &id
+func TagIDWithUUID(tagUUID uuid.UUID) TagIDOption {
+	return func(tagID *TagID) {
+		*tagID = TagID(tagUUID)
 	}
 }
 
@@ -67,4 +56,14 @@ func ParseTagID(s string) (TagID, error) {
 		return TagID{}, err
 	}
 	return TagID(id), nil
+}
+
+// UUID converts TagID to a uuid.UUID.
+func (id TagID) UUID() uuid.UUID {
+	return uuid.UUID(id)
+}
+
+// String implements [fmt.Stringer].
+func (id TagID) String() string {
+	return uuid.UUID(id).String()
 }

@@ -21,6 +21,7 @@ import (
 
 	"github.com/kipitix/growscada/internal/application"
 	"github.com/kipitix/growscada/internal/application/dto"
+	"github.com/kipitix/growscada/internal/domain/event"
 	"github.com/kipitix/growscada/internal/infrastructure/postgres/repositories"
 	"github.com/kipitix/growscada/internal/interface/restapi"
 )
@@ -88,14 +89,14 @@ func cleanTags(t *testing.T) {
 
 func newRouter() *restapi.APIRouter {
 	repo := repositories.NewTagRepositoryPostgres(testDB)
-	svc := application.NewTagService(repo)
+	svc := application.NewTagService(repo, event.NewEventBus())
 	return restapi.NewRouter(svc)
 }
 
 func createTagViaService(t *testing.T, name, tagType, value, quality string) dto.CreateTagResponse {
 	t.Helper()
 	repo := repositories.NewTagRepositoryPostgres(testDB)
-	svc := application.NewTagService(repo)
+	svc := application.NewTagService(repo, event.NewEventBus())
 	resp, err := svc.CreateTag(context.Background(), dto.CreateTagRequest{
 		Name: name, Type: tagType, Value: value, Quality: quality,
 	})

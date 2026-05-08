@@ -21,6 +21,8 @@ type Tag interface {
 
 	SetValue(any, TagQuality) error
 	IncrementVersion()
+
+	fmt.Stringer
 }
 
 // tagImpl - tag implementation struct
@@ -96,4 +98,12 @@ func (t *tagImpl) SetValue(aValue any, aQuality TagQuality) error {
 // IncrementVersion increments the tag version by one
 func (t *tagImpl) IncrementVersion() {
 	t.version++
+}
+
+// String returns a string representation of the tag
+func (t tagImpl) String() string {
+	return fmt.Sprintf(
+		"Tag: %s, Type: %s, Value: %v, Quality: %s, Version: %d",
+		t.name, t.tagType, t.value, t.quality, t.version,
+	)
 }

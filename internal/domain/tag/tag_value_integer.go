@@ -7,6 +7,7 @@ import (
 
 type TagValueInteger int
 
+// Interfaces for TagValueInteger
 var _ TagValue = TagValueInteger(0)
 
 func NewTagValueInteger(aValue any) (TagValueInteger, error) {
