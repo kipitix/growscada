@@ -2,6 +2,7 @@ package mqtt
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/kipitix/growscada/internal/domain/event"
 )
@@ -33,7 +34,7 @@ func (m *mqttEventBusImpl) Publish(e event.Event) {
 	payload := []byte(e.String())
 	err := m.client.Publish(topic, payload)
 	if err != nil {
-		panic(fmt.Errorf("cannot publish event: %w", err))
+		slog.Error(fmt.Errorf("cannot publish event: %w", err).Error())
 	}
 }
 

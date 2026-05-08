@@ -22,7 +22,7 @@ func TestNewEventTimestamp_NoOptions_IsCloseToNow(t *testing.T) {
 
 func TestNewEventTimestamp_WithTime_UsesProvidedTime(t *testing.T) {
 	fixed := time.Date(2025, 1, 15, 12, 0, 0, 0, time.UTC)
-	ts := event.NewEventTimestamp(event.EventTimestampWIthTime(fixed))
+	ts := event.NewEventTimestamp(event.EventTimestampWшthTime(fixed))
 
 	if !ts.Time().Equal(fixed) {
 		t.Errorf("expected %v, got %v", fixed, ts.Time())
@@ -214,7 +214,7 @@ func TestNewSystemReadyEvent_String_IsNonEmpty(t *testing.T) {
 }
 
 func TestNewSystemReadyEvent_WithTimestamp_SetsTimestamp(t *testing.T) {
-	fixed := event.NewEventTimestamp(event.EventTimestampWIthTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)))
+	fixed := event.NewEventTimestamp(event.EventTimestampWшthTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)))
 	e := event.NewSystemReadyEvent(event.WithTimestamp(fixed))
 
 	if !e.Timestamp().Time().Equal(fixed.Time()) {
@@ -255,7 +255,7 @@ func TestNewTagCreatedEvent_String_IsNonEmpty(t *testing.T) {
 }
 
 func TestNewTagCreatedEvent_WithTimestamp_SetsTimestamp(t *testing.T) {
-	fixed := event.NewEventTimestamp(event.EventTimestampWIthTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)))
+	fixed := event.NewEventTimestamp(event.EventTimestampWшthTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)))
 	e := event.NewTagCreatedEvent(tag.NewTagID(), event.WithTimestamp(fixed))
 
 	if !e.Timestamp().Time().Equal(fixed.Time()) {

@@ -70,8 +70,6 @@ func main() {
 	// Create message broker connection
 	// TODO
 	// Add hook to shutdown message broker connection
-	// gracedownManager.RegisterInfrastructure("Message Broker", 15*time.Second, func(ctx context.Context) error {
-	// }
 	// Create event bus
 	eventBus := event.NewEventBus()
 
