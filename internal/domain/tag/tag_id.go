@@ -32,9 +32,9 @@ type TagIDOption func(*TagID)
 
 // TagIDWithUUID allows specifying an existing UUID for TagID creation.
 // Used when a TagID needs to be created from an existing UUID.
-func TagIDWithUUID(uuid uuid.UUID) TagIDOption {
+func TagIDWithUUID(tagUUID uuid.UUID) TagIDOption {
 	return func(tagID *TagID) {
-		*tagID = TagID(uuid)
+		*tagID = TagID(tagUUID)
 	}
 }
 

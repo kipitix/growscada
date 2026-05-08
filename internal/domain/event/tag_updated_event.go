@@ -14,10 +14,10 @@ type tagUpdatedEventImpl struct {
 
 var _ TagUpdatedEvent = (*tagUpdatedEventImpl)(nil)
 
-func NewTagUpdatedEvent(anTagID tag.TagID, opts ...EventOption) TagUpdatedEvent {
+func NewTagUpdatedEvent(aTagID tag.TagID, opts ...EventOption) TagUpdatedEvent {
 	ev := &tagUpdatedEventImpl{
 		tagEventImpl: tagEventImpl{
-			tagID: anTagID,
+			tagID: aTagID,
 			eventImpl: eventImpl{
 				eventType: EventTypeTagUpdated,
 				timestamp: NewEventTimestamp(),

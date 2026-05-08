@@ -11,6 +11,7 @@ import (
 type Mode string
 
 const (
+	ModeUnknown   Mode = ""
 	ModeLibrary   Mode = "library"
 	ModeProject   Mode = "project"
 	ModeOperation Mode = "operation"

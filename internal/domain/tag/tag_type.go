@@ -12,11 +12,13 @@ type TagType int
 var _ fmt.Stringer = TagType(0)
 
 // Constants for each tag type.
+// TagTypeUnknown - unknown tag type (zero value, uninitialized).
 // TagTypeString - string tag type.
 // TagTypeBoolean - boolean tag type.
 // TagTypeInteger - integer tag type.
 const (
-	TagTypeString TagType = iota
+	TagTypeUnknown TagType = iota
+	TagTypeString
 	TagTypeBoolean
 	TagTypeInteger
 	// TODO: add remaining types
@@ -34,13 +36,15 @@ func NewTagType(s string) (TagType, error) {
 	case "integer":
 		return TagTypeInteger, nil
 	default:
-		return -1, fmt.Errorf("unknown tag type: %s", s)
+		return TagTypeUnknown, fmt.Errorf("unknown tag type: %s", s)
 	}
 }
 
 // String returns the string representation of the tag type
 func (e TagType) String() string {
 	switch e {
+	case TagTypeUnknown:
+		return "unknown"
 	case TagTypeString:
 		return "string"
 	case TagTypeBoolean:

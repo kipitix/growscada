@@ -31,7 +31,10 @@ func (m *mqttEventBusImpl) Publish(e event.Event) {
 
 	topic := fmt.Sprintf("events/%s", e.Type())
 	payload := []byte(e.String())
-	_ = m.client.Publish(topic, payload)
+	err := m.client.Publish(topic, payload)
+	if err != nil {
+		panic(fmt.Errorf("cannot publish event: %w", err))
+	}
 }
 
 func (m *mqttEventBusImpl) Subscribe(eventType event.EventType, handler event.EventHandler) {

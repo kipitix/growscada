@@ -12,12 +12,14 @@ type TagQuality int
 var _ fmt.Stringer = TagQuality(0)
 
 // Tag quality enumeration values.
+// TagQualityUnknown - unknown quality (zero value, uninitialized).
 // TagQualityBad - bad quality (unavailable, error).
 // TagQualityUncertain - uncertain quality.
 // TagQualityGood - good quality (normal value).
 // TagQualitySimulated - simulated quality (value set manually).
 const (
-	TagQualityBad TagQuality = iota
+	TagQualityUnknown TagQuality = iota
+	TagQualityBad
 	TagQualityUncertain
 	TagQualityGood
 	TagQualitySimulated
@@ -35,13 +37,15 @@ func NewTagQuality(s string) (TagQuality, error) {
 	case "simulated":
 		return TagQualitySimulated, nil
 	default:
-		return -1, fmt.Errorf("unknown tag quality enum: %s", s)
+		return TagQualityUnknown, fmt.Errorf("unknown tag quality enum: %s", s)
 	}
 }
 
 // String returns the string representation of the enum
 func (e TagQuality) String() string {
 	switch e {
+	case TagQualityUnknown:
+		return "unknown"
 	case TagQualityBad:
 		return "bad"
 	case TagQualityUncertain:

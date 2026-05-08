@@ -95,22 +95,22 @@ func (t tagServiceImpl) CreateTag(ctx context.Context, newTagData dto.CreateTagR
 }
 
 // DeleteTagByID deletes a tag by its identifier and returns the deleted tag
-func (t tagServiceImpl) DeleteTagByID(ctx context.Context, tagIDtoDelete tag.TagID) (dto.DeleteTagResponse, error) {
-	deletedTag, err := t.tagRepository.DeleteByID(ctx, tagIDtoDelete)
+func (t tagServiceImpl) DeleteTagByID(ctx context.Context, tagIDToDelete tag.TagID) (dto.DeleteTagResponse, error) {
+	deletedTag, err := t.tagRepository.DeleteByID(ctx, tagIDToDelete)
 	if err != nil {
 		return dto.DeleteTagResponse{}, fmt.Errorf("cannot delete tag: %w", err)
 	}
 
-	t.eventBus.Publish(event.NewTagDeletedEvent(tagIDtoDelete))
+	t.eventBus.Publish(event.NewTagDeletedEvent(tagIDToDelete))
 
 	return dto.DeleteTagResponse{Tag: dto.NewTag(deletedTag)}, nil
 }
 
 // SetTagValue updates the value and quality of an existing tag
 func (t tagServiceImpl) SetTagValueByID(ctx context.Context, request dto.UpdateTagRequest) (dto.UpdateTagResponse, error) {
-	tagIDtoUpdate := tag.NewTagID(tag.TagIDWithUUID(request.ID))
+	tagIDToUpdate := tag.NewTagID(tag.TagIDWithUUID(request.ID))
 
-	foundTag, err := t.tagRepository.FindByID(ctx, tagIDtoUpdate)
+	foundTag, err := t.tagRepository.FindByID(ctx, tagIDToUpdate)
 	if err != nil {
 		return dto.UpdateTagResponse{}, fmt.Errorf("error on find tag by id in repository: %w", err)
 	}
@@ -128,7 +128,7 @@ func (t tagServiceImpl) SetTagValueByID(ctx context.Context, request dto.UpdateT
 		return dto.UpdateTagResponse{}, fmt.Errorf("cannot save tag: %w", err)
 	}
 
-	t.eventBus.Publish(event.NewTagUpdatedEvent(tagIDtoUpdate))
+	t.eventBus.Publish(event.NewTagUpdatedEvent(tagIDToUpdate))
 
 	return dto.UpdateTagResponse{Version: foundTag.Version()}, nil
 }

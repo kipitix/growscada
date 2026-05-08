@@ -10,7 +10,7 @@ import (
 type EventTimestamp time.Time
 
 // Interface implementation.
-var _ fmt.Stringer = EventTimestamp(time.Now())
+var _ fmt.Stringer = EventTimestamp(time.Time{})
 
 // NewEventTimestamp - creates new EventTimestamp.
 // Accepts options.

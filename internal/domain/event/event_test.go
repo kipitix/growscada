@@ -101,10 +101,19 @@ func TestNewEventType_ValidStrings_ReturnsCorrectType(t *testing.T) {
 	}
 }
 
-func TestNewEventType_UnknownString_ReturnsError(t *testing.T) {
-	_, err := event.NewEventType("unknown_type")
+func TestNewEventType_UnknownString_ReturnsErrorAndUnknownType(t *testing.T) {
+	got, err := event.NewEventType("unknown_type")
 	if err == nil {
 		t.Error("expected error for unknown event type, got nil")
+	}
+	if got != event.EventTypeUnknown {
+		t.Errorf("expected EventTypeUnknown, got %v", got)
+	}
+}
+
+func TestEventType_String_Unknown(t *testing.T) {
+	if got := event.EventTypeUnknown.String(); got != "unknown" {
+		t.Errorf("expected %q, got %q", "unknown", got)
 	}
 }
 

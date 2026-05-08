@@ -10,7 +10,8 @@ type EventType int
 var _ fmt.Stringer = EventType(0)
 
 const (
-	EventTypeSystemReady EventType = iota
+	EventTypeUnknown EventType = iota
+	EventTypeSystemReady
 	EventTypeTagCreated
 	EventTypeTagUpdated
 	EventTypeTagDeleted
@@ -29,7 +30,7 @@ func NewEventType(s string) (EventType, error) {
 	case "tag_deleted":
 		return EventTypeTagDeleted, nil
 	default:
-		return 0, fmt.Errorf("unknown event type: %s", s)
+		return EventTypeUnknown, fmt.Errorf("unknown event type: %s", s)
 	}
 }
 
@@ -37,6 +38,8 @@ func NewEventType(s string) (EventType, error) {
 // Implements the fmt.Stringer interface.
 func (et EventType) String() string {
 	switch et {
+	case EventTypeUnknown:
+		return "unknown"
 	case EventTypeSystemReady:
 		return "system_ready"
 	case EventTypeTagCreated:
