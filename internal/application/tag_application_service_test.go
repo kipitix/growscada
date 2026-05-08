@@ -18,6 +18,7 @@ import (
 
 	"github.com/kipitix/growscada/internal/application"
 	"github.com/kipitix/growscada/internal/application/dto"
+	"github.com/kipitix/growscada/internal/domain/event"
 	"github.com/kipitix/growscada/internal/domain/tag"
 	"github.com/kipitix/growscada/internal/infrastructure/postgres/repositories"
 )
@@ -85,7 +86,13 @@ func cleanTags(t *testing.T) {
 
 func newService() application.TagService {
 	repo := repositories.NewTagRepositoryPostgres(testDB)
-	return application.NewTagService(repo)
+	return application.NewTagService(repo, event.NewEventBus())
+}
+
+func newServiceWithBus() (application.TagService, event.EventBus) {
+	repo := repositories.NewTagRepositoryPostgres(testDB)
+	bus := event.NewEventBus()
+	return application.NewTagService(repo, bus), bus
 }
 
 // --- CreateTag ---
@@ -407,6 +414,154 @@ func TestSetTagValueByID_InvalidQuality_ReturnsError(t *testing.T) {
 
 	if err == nil {
 		t.Error("expected error for invalid quality, got nil")
+	}
+}
+
+// --- Events ---
+
+func TestCreateTag_Success_PublishesTagCreatedEvent(t *testing.T) {
+	cleanTags(t)
+	svc, bus := newServiceWithBus()
+	ctx := context.Background()
+
+	var received []event.Event
+	bus.Subscribe(event.EventTypeTagCreated, func(e event.Event) {
+		received = append(received, e)
+	})
+
+	resp, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "sensor", Type: "integer", Value: "1", Quality: "good"})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+
+	if len(received) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(received))
+	}
+	tagEvent, ok := received[0].(event.TagEvent)
+	if !ok {
+		t.Fatal("expected event to implement TagEvent")
+	}
+	if tagEvent.TagID().UUID() != resp.ID {
+		t.Errorf("event TagID: expected %s, got %s", resp.ID, tagEvent.TagID().UUID())
+	}
+}
+
+func TestCreateTag_InvalidRequest_NoEventPublished(t *testing.T) {
+	cleanTags(t)
+	svc, bus := newServiceWithBus()
+	ctx := context.Background()
+
+	var received []event.Event
+	bus.Subscribe(event.EventTypeTagCreated, func(e event.Event) {
+		received = append(received, e)
+	})
+
+	_, _ = svc.CreateTag(ctx, dto.CreateTagRequest{Name: "sensor", Type: "unknown", Value: "1", Quality: "good"})
+
+	if len(received) != 0 {
+		t.Errorf("expected no events on error, got %d", len(received))
+	}
+}
+
+func TestDeleteTagByID_Success_PublishesTagDeletedEvent(t *testing.T) {
+	cleanTags(t)
+	svc, bus := newServiceWithBus()
+	ctx := context.Background()
+
+	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "valve", Type: "boolean", Value: "true", Quality: "good"})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+
+	var received []event.Event
+	bus.Subscribe(event.EventTypeTagDeleted, func(e event.Event) {
+		received = append(received, e)
+	})
+
+	tagID := tag.NewTagID(tag.TagIDWithUUID(created.ID))
+	if _, err = svc.DeleteTagByID(ctx, tagID); err != nil {
+		t.Fatalf("DeleteTagByID: %v", err)
+	}
+
+	if len(received) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(received))
+	}
+	tagEvent, ok := received[0].(event.TagEvent)
+	if !ok {
+		t.Fatal("expected event to implement TagEvent")
+	}
+	if tagEvent.TagID().UUID() != created.ID {
+		t.Errorf("event TagID: expected %s, got %s", created.ID, tagEvent.TagID().UUID())
+	}
+}
+
+func TestDeleteTagByID_NotFound_NoEventPublished(t *testing.T) {
+	cleanTags(t)
+	svc, bus := newServiceWithBus()
+	ctx := context.Background()
+
+	var received []event.Event
+	bus.Subscribe(event.EventTypeTagDeleted, func(e event.Event) {
+		received = append(received, e)
+	})
+
+	_, _ = svc.DeleteTagByID(ctx, tag.NewTagID())
+
+	if len(received) != 0 {
+		t.Errorf("expected no events on error, got %d", len(received))
+	}
+}
+
+func TestSetTagValueByID_Success_PublishesTagUpdatedEvent(t *testing.T) {
+	cleanTags(t)
+	svc, bus := newServiceWithBus()
+	ctx := context.Background()
+
+	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "pressure", Type: "integer", Value: "10", Quality: "good"})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+
+	var received []event.Event
+	bus.Subscribe(event.EventTypeTagUpdated, func(e event.Event) {
+		received = append(received, e)
+	})
+
+	if _, err = svc.SetTagValueByID(ctx, dto.UpdateTagRequest{ID: created.ID, Value: "20", Quality: "good"}); err != nil {
+		t.Fatalf("SetTagValueByID: %v", err)
+	}
+
+	if len(received) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(received))
+	}
+	tagEvent, ok := received[0].(event.TagEvent)
+	if !ok {
+		t.Fatal("expected event to implement TagEvent")
+	}
+	if tagEvent.TagID().UUID() != created.ID {
+		t.Errorf("event TagID: expected %s, got %s", created.ID, tagEvent.TagID().UUID())
+	}
+}
+
+func TestSetTagValueByID_InvalidRequest_NoEventPublished(t *testing.T) {
+	cleanTags(t)
+	svc, bus := newServiceWithBus()
+	ctx := context.Background()
+
+	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "flow", Type: "integer", Value: "0", Quality: "good"})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+
+	var received []event.Event
+	bus.Subscribe(event.EventTypeTagUpdated, func(e event.Event) {
+		received = append(received, e)
+	})
+
+	_, _ = svc.SetTagValueByID(ctx, dto.UpdateTagRequest{ID: created.ID, Value: "not-a-number", Quality: "good"})
+
+	if len(received) != 0 {
+		t.Errorf("expected no events on error, got %d", len(received))
 	}
 }
 

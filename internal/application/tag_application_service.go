@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/kipitix/growscada/internal/application/dto"
+	"github.com/kipitix/growscada/internal/domain/event"
 	"github.com/kipitix/growscada/internal/domain/tag"
 )
 
@@ -20,15 +21,17 @@ type TagService interface {
 // tagServiceImpl - tag service implementation
 type tagServiceImpl struct {
 	tagRepository tag.TagRepository
+	eventBus      event.EventBus
 }
 
 var _ TagService = (*tagServiceImpl)(nil)
 
 // NewTagService creates and returns a new tag service instance.
 // Returns a TagService interface implementation.
-func NewTagService(aTagRepository tag.TagRepository) TagService {
+func NewTagService(aTagRepository tag.TagRepository, anEventBus event.EventBus) TagService {
 	return &tagServiceImpl{
 		tagRepository: aTagRepository,
+		eventBus:      anEventBus,
 	}
 }
 
@@ -86,24 +89,28 @@ func (t tagServiceImpl) CreateTag(ctx context.Context, newTagData dto.CreateTagR
 		return dto.CreateTagResponse{}, fmt.Errorf("cannot save tag: %w", err)
 	}
 
+	t.eventBus.Publish(event.NewTagCreatedEvent(newTagID))
+
 	return dto.CreateTagResponse{ID: newTagID.UUID()}, nil
 }
 
 // DeleteTagByID deletes a tag by its identifier and returns the deleted tag
-func (t tagServiceImpl) DeleteTagByID(ctx context.Context, tagID tag.TagID) (dto.DeleteTagResponse, error) {
-	deletedTag, err := t.tagRepository.DeleteByID(ctx, tagID)
+func (t tagServiceImpl) DeleteTagByID(ctx context.Context, tagIDtoDelete tag.TagID) (dto.DeleteTagResponse, error) {
+	deletedTag, err := t.tagRepository.DeleteByID(ctx, tagIDtoDelete)
 	if err != nil {
 		return dto.DeleteTagResponse{}, fmt.Errorf("cannot delete tag: %w", err)
 	}
+
+	t.eventBus.Publish(event.NewTagDeletedEvent(tagIDtoDelete))
 
 	return dto.DeleteTagResponse{Tag: dto.NewTag(deletedTag)}, nil
 }
 
 // SetTagValue updates the value and quality of an existing tag
 func (t tagServiceImpl) SetTagValueByID(ctx context.Context, request dto.UpdateTagRequest) (dto.UpdateTagResponse, error) {
-	tagID := tag.NewTagID(tag.TagIDWithUUID(request.ID))
+	tagIDtoUpdate := tag.NewTagID(tag.TagIDWithUUID(request.ID))
 
-	foundTag, err := t.tagRepository.FindByID(ctx, tagID)
+	foundTag, err := t.tagRepository.FindByID(ctx, tagIDtoUpdate)
 	if err != nil {
 		return dto.UpdateTagResponse{}, fmt.Errorf("error on find tag by id in repository: %w", err)
 	}
@@ -120,6 +127,8 @@ func (t tagServiceImpl) SetTagValueByID(ctx context.Context, request dto.UpdateT
 	if err = t.tagRepository.Save(ctx, foundTag); err != nil {
 		return dto.UpdateTagResponse{}, fmt.Errorf("cannot save tag: %w", err)
 	}
+
+	t.eventBus.Publish(event.NewTagUpdatedEvent(tagIDtoUpdate))
 
 	return dto.UpdateTagResponse{Version: foundTag.Version()}, nil
 }
