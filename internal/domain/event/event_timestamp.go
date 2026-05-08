@@ -31,9 +31,9 @@ func NewEventTimestamp(opts ...EventTimestampOption) EventTimestamp {
 // EventTimestampOption - option for EventTimestamp.
 type EventTimestampOption func(*EventTimestamp)
 
-// EventTimestampWшthTime allows specifying an existing time for EventTimestamp creation.
+// EventTimestampWithTime allows specifying an existing time for EventTimestamp creation.
 // Used when an EventTimestamp needs to be created from an existing time.
-func EventTimestampWшthTime(t time.Time) EventTimestampOption {
+func EventTimestampWithTime(t time.Time) EventTimestampOption {
 	return func(et *EventTimestamp) {
 		*et = EventTimestamp(t)
 	}

@@ -34,7 +34,7 @@ func (m *mqttEventBusImpl) Publish(e event.Event) {
 	payload := []byte(e.String())
 	err := m.client.Publish(topic, payload)
 	if err != nil {
-		slog.Error(fmt.Errorf("cannot publish event: %w", err).Error())
+		slog.Error("cannot publish event", "error", err)
 	}
 }
 
