@@ -102,7 +102,7 @@ func TestCreateTag_ValidIntegerTag_ReturnsID(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	req := dto.CreateTagRequest{Name: "temperature", Type:"integer", Value: "42", Quality: "good"}
+	req := dto.CreateTagRequest{Name: "temperature", Type: "integer", Value: "42", Quality: "good"}
 	resp, err := svc.CreateTag(ctx, req)
 
 	if err != nil {
@@ -118,7 +118,7 @@ func TestCreateTag_ValidStringTag_ReturnsID(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	req := dto.CreateTagRequest{Name: "label", Type:"string", Value: "hello", Quality: "good"}
+	req := dto.CreateTagRequest{Name: "label", Type: "string", Value: "hello", Quality: "good"}
 	resp, err := svc.CreateTag(ctx, req)
 
 	if err != nil {
@@ -134,7 +134,7 @@ func TestCreateTag_ValidBooleanTag_ReturnsID(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	req := dto.CreateTagRequest{Name: "enabled", Type:"boolean", Value: "true", Quality: "good"}
+	req := dto.CreateTagRequest{Name: "enabled", Type: "boolean", Value: "true", Quality: "good"}
 	resp, err := svc.CreateTag(ctx, req)
 
 	if err != nil {
@@ -150,7 +150,7 @@ func TestCreateTag_InvalidType_ReturnsError(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	req := dto.CreateTagRequest{Name: "temperature", Type:"unknown", Value: "42", Quality: "good"}
+	req := dto.CreateTagRequest{Name: "temperature", Type: "unknown", Value: "42", Quality: "good"}
 	_, err := svc.CreateTag(ctx, req)
 
 	if err == nil {
@@ -163,7 +163,7 @@ func TestCreateTag_InvalidQuality_ReturnsError(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	req := dto.CreateTagRequest{Name: "temperature", Type:"integer", Value: "42", Quality: "unknown"}
+	req := dto.CreateTagRequest{Name: "temperature", Type: "integer", Value: "42", Quality: "unknown"}
 	_, err := svc.CreateTag(ctx, req)
 
 	if err == nil {
@@ -176,7 +176,7 @@ func TestCreateTag_InvalidValueForType_ReturnsError(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	req := dto.CreateTagRequest{Name: "temperature", Type:"integer", Value: "not-a-number", Quality: "good"}
+	req := dto.CreateTagRequest{Name: "temperature", Type: "integer", Value: "not-a-number", Quality: "good"}
 	_, err := svc.CreateTag(ctx, req)
 
 	if err == nil {
@@ -206,8 +206,8 @@ func TestFindAllTags_MultipleTags_ReturnsAll(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	req1 := dto.CreateTagRequest{Name: "temperature", Type:"integer", Value: "10", Quality: "good"}
-	req2 := dto.CreateTagRequest{Name: "pressure", Type:"integer", Value: "20", Quality: "good"}
+	req1 := dto.CreateTagRequest{Name: "temperature", Type: "integer", Value: "10", Quality: "good"}
+	req2 := dto.CreateTagRequest{Name: "pressure", Type: "integer", Value: "20", Quality: "good"}
 	if _, err := svc.CreateTag(ctx, req1); err != nil {
 		t.Fatalf("CreateTag(temperature): %v", err)
 	}
@@ -232,7 +232,7 @@ func TestFindTagByID_ExistingTag_ReturnsTag(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	req := dto.CreateTagRequest{Name: "humidity", Type:"integer", Value: "55", Quality: "good"}
+	req := dto.CreateTagRequest{Name: "humidity", Type: "integer", Value: "55", Quality: "good"}
 	createResp, err := svc.CreateTag(ctx, req)
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
@@ -281,7 +281,7 @@ func TestDeleteTag_ExistingTag_ReturnsDeletedTag(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "sensor", Type:"integer", Value: "10", Quality: "good"})
+	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "sensor", Type: "integer", Value: "10", Quality: "good"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -292,11 +292,11 @@ func TestDeleteTag_ExistingTag_ReturnsDeletedTag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DeleteTagByID returned unexpected error: %v", err)
 	}
-	if resp.Tag.ID != created.ID {
-		t.Errorf("deleted tag ID: expected %s, got %s", created.ID, resp.Tag.ID)
+	if resp.ID != created.ID {
+		t.Errorf("deleted tag ID: expected %s, got %s", created.ID, resp.ID)
 	}
-	if resp.Tag.Name != "sensor" {
-		t.Errorf("deleted tag Name: expected 'sensor', got %q", resp.Tag.Name)
+	if resp.Name != "sensor" {
+		t.Errorf("deleted tag Name: expected 'sensor', got %q", resp.Name)
 	}
 }
 
@@ -305,7 +305,7 @@ func TestDeleteTag_ExistingTag_TagIsRemovedFromDB(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "valve", Type:"boolean", Value: "true", Quality: "good"})
+	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "valve", Type: "boolean", Value: "true", Quality: "good"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -343,7 +343,7 @@ func TestSetTagValueByID_ValidUpdate_ReturnsIncrementedVersion(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "pressure", Type:"integer", Value: "100", Quality: "good"})
+	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "pressure", Type: "integer", Value: "100", Quality: "good"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -363,7 +363,7 @@ func TestSetTagValueByID_ValidUpdate_ValueAndQualityAreUpdated(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "flow", Type:"integer", Value: "0", Quality: "bad"})
+	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "flow", Type: "integer", Value: "0", Quality: "bad"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -405,7 +405,7 @@ func TestSetTagValueByID_InvalidQuality_ReturnsError(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "temp", Type:"integer", Value: "10", Quality: "good"})
+	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "temp", Type: "integer", Value: "10", Quality: "good"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -570,7 +570,7 @@ func TestSetTagValueByID_InvalidValueForType_ReturnsError(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "counter", Type:"integer", Value: "0", Quality: "good"})
+	created, err := svc.CreateTag(ctx, dto.CreateTagRequest{Name: "counter", Type: "integer", Value: "0", Quality: "good"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}

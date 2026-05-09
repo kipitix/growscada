@@ -6,8 +6,9 @@ import (
 	"net/http"
 
 	"github.com/kipitix/growscada/internal/application"
-	"github.com/kipitix/growscada/internal/application/dto"
+	appdto "github.com/kipitix/growscada/internal/application/dto"
 	"github.com/kipitix/growscada/internal/domain/tag"
+	restdto "github.com/kipitix/growscada/internal/interface/restapi/dto"
 )
 
 // TagsHandlers handles HTTP requests related to tags.
@@ -29,7 +30,7 @@ func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
 		sendJSONResponse(w, http.StatusInternalServerError, NewInternalError(err.Error(), r.URL.Path))
 		return
 	}
-	sendJSONResponse(w, http.StatusOK, tagList)
+	sendJSONResponse(w, http.StatusOK, restdto.NewGetTagsResponse(tagList))
 }
 
 // GetTagsByID handles GET /tags/{id}
@@ -37,29 +38,24 @@ func (h TagsHandlers) GetTagsByID(w http.ResponseWriter, r *http.Request) {
 	tagIDString := r.PathValue("id")
 	tagID, err := tag.ParseTagID(tagIDString)
 	if err != nil {
-		errorResponse := NewBadRequest(err.Error(), r.URL.Path)
-		sendJSONResponse(w, http.StatusBadRequest, errorResponse)
+		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
 		return
 	}
 
 	foundTag, err := h.service.FindTagByID(r.Context(), tagID)
 	if err != nil {
-		// Specific error when not found
 		if errors.Is(err, tag.ErrTagNotFound) {
-			errorResponse := NewNotFound(err.Error(), tagIDString, r.URL.Path)
-			sendJSONResponse(w, http.StatusNotFound, errorResponse)
+			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), tagIDString, r.URL.Path))
 			return
 		}
-		// Generic error
-		errorResponse := NewInternalError(err.Error(), r.URL.Path)
-		sendJSONResponse(w, http.StatusInternalServerError, errorResponse)
+		sendJSONResponse(w, http.StatusInternalServerError, NewInternalError(err.Error(), r.URL.Path))
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, foundTag)
+	sendJSONResponse(w, http.StatusOK, restdto.NewTagResponse(foundTag))
 }
 
-// DeleteTagByID handles DELETE /tags/{id} for removing a tag
+// DeleteTagsByID handles DELETE /tags/{id} for removing a tag
 func (h TagsHandlers) DeleteTagsByID(w http.ResponseWriter, r *http.Request) {
 	tagIDString := r.PathValue("id")
 	tagID, err := tag.ParseTagID(tagIDString)
@@ -68,7 +64,7 @@ func (h TagsHandlers) DeleteTagsByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response, err := h.service.DeleteTagByID(r.Context(), tagID)
+	deletedTag, err := h.service.DeleteTagByID(r.Context(), tagID)
 	if err != nil {
 		if errors.Is(err, tag.ErrTagNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), tagIDString, r.URL.Path))
@@ -78,10 +74,10 @@ func (h TagsHandlers) DeleteTagsByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, response)
+	sendJSONResponse(w, http.StatusOK, restdto.DeleteTagResponse{Tag: restdto.NewTagResponse(deletedTag)})
 }
 
-// PatchTagValue handles PATCH /tags/{id}/value for setting tag value and quality
+// PatchTagsValue handles PATCH /tags/{id}/value for setting tag value and quality
 func (h TagsHandlers) PatchTagsValue(w http.ResponseWriter, r *http.Request) {
 	tagIDString := r.PathValue("id")
 	tagID, err := tag.ParseTagID(tagIDString)
@@ -90,14 +86,17 @@ func (h TagsHandlers) PatchTagsValue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var request dto.UpdateTagRequest
+	var request restdto.UpdateTagRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
 		return
 	}
-	request.ID = tagID.UUID()
 
-	response, err := h.service.SetTagValueByID(r.Context(), request)
+	updatedTag, err := h.service.SetTagValueByID(r.Context(), appdto.UpdateTagRequest{
+		ID:      tagID.UUID(),
+		Value:   request.Value,
+		Quality: request.Quality,
+	})
 	if err != nil {
 		if errors.Is(err, tag.ErrTagNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), tagIDString, r.URL.Path))
@@ -107,24 +106,28 @@ func (h TagsHandlers) PatchTagsValue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, response)
+	sendJSONResponse(w, http.StatusOK, restdto.UpdateTagResponse{Version: updatedTag.Version})
 }
 
 // PostTags handles POST /tags for creating a new tag
 func (h TagsHandlers) PostTags(w http.ResponseWriter, r *http.Request) {
-	var request dto.CreateTagRequest
+	var request restdto.CreateTagRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		errorResponse := NewBadRequest(err.Error(), r.URL.Path)
-		sendJSONResponse(w, http.StatusBadRequest, errorResponse)
+		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
 		return
 	}
 
-	response, err := h.service.CreateTag(r.Context(), request)
+	createdTag, err := h.service.CreateTag(r.Context(), appdto.CreateTagRequest{
+		Name:    request.Name,
+		Type:    request.Type,
+		Value:   request.Value,
+		Quality: request.Quality,
+	})
 	if err != nil {
 		sendJSONResponse(w, http.StatusInternalServerError, NewInternalError(err.Error(), r.URL.Path))
 		return
 	}
 
-	sendJSONResponse(w, http.StatusCreated, response)
+	sendJSONResponse(w, http.StatusCreated, restdto.CreateTagResponse{ID: createdTag.ID})
 }

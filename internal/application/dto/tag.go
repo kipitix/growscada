@@ -5,61 +5,35 @@ import (
 	"github.com/kipitix/growscada/internal/domain/tag"
 )
 
-// Tag - data structure for transferring tag information through the API.
-// Contains the main tag attributes in a JSON-friendly format.
+// Tag - DTO уровня прикладного сервиса для передачи данных тега.
+// Поля не имеют json-тегов — сериализация выполняется на уровне интерфейса.
 type Tag struct {
-	ID      uuid.UUID `json:"id"`
-	Name    string    `json:"name"`
-	Type    string    `json:"type"`
-	Value   string    `json:"value"`
-	Quality string    `json:"quality"`
-	Version int       `json:"version"`
+	ID      uuid.UUID
+	Name    string
+	Type    string
+	Value   string
+	Quality string
+	Version int
 }
 
-// FindTagByIDResponse - response structure for a single tag
-type FindTagByIDResponse struct {
-	Tag Tag `json:"tag"`
+// TagList - DTO уровня прикладного сервиса для передачи списка тегов.
+type TagList struct {
+	Tags []Tag
 }
 
-// FindAllTagsResponse - structure for transferring a list of tags.
-// Used for returning a collection of tags in API responses.
-type FindAllTagsResponse struct {
-	Tags []Tag `json:"tags"`
-}
-
-// CreateTagRequest - request structure for creating a tag
+// CreateTagRequest - входные данные для создания тега
 type CreateTagRequest struct {
-	Name    string `json:"name"`
-	Type    string `json:"type"`
-	Value   string `json:"value"`
-	Quality string `json:"quality"`
+	Name    string
+	Type    string
+	Value   string
+	Quality string
 }
 
-// CreateTagResponse - response structure for creating a tag
-type CreateTagResponse struct {
-	ID uuid.UUID `json:"id"`
-}
-
-// UpdateTagRequest - request structure for updating a tag
+// UpdateTagRequest - входные данные для обновления значения тега
 type UpdateTagRequest struct {
-	ID      uuid.UUID `json:"id"`
-	Value   string    `json:"value"`
-	Quality string    `json:"quality"`
-}
-
-// UpdateTagResponse - response structure for updating a tag
-type UpdateTagResponse struct {
-	Version int `json:"version"`
-}
-
-// DeleteTagRequest - request structure for deleting a tag
-type DeleteTagRequest struct {
-	ID uuid.UUID `json:"id"`
-}
-
-// DeleteTagResponse - response structure for deleting a tag
-type DeleteTagResponse struct {
-	Tag Tag `json:"tag"`
+	ID      uuid.UUID
+	Value   string
+	Quality string
 }
 
 // NewTag creates a Tag DTO from the tag.Tag domain aggregate
@@ -74,13 +48,11 @@ func NewTag(aTag tag.Tag) Tag {
 	}
 }
 
-// NewFindAllTagsResponse creates a FindAllTagsResponse DTO from a list of tag.Tag domain aggregates
-func NewFindAllTagsResponse(aTagList []tag.Tag) FindAllTagsResponse {
+// NewTagList creates a TagList DTO from a list of tag.Tag domain aggregates
+func NewTagList(aTagList []tag.Tag) TagList {
 	tags := make([]Tag, len(aTagList))
 	for i, t := range aTagList {
 		tags[i] = NewTag(t)
 	}
-	return FindAllTagsResponse{
-		Tags: tags,
-	}
+	return TagList{Tags: tags}
 }
