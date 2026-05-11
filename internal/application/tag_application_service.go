@@ -13,9 +13,9 @@ import (
 type TagService interface {
 	FindAllTags(context.Context) (appdto.TagList, error)
 	FindTagByID(context.Context, tag.TagID) (appdto.Tag, error)
-	CreateTag(context.Context, appdto.CreateTagRequest) (appdto.Tag, error)
+	CreateTag(context.Context, appdto.CreateTagInput) (appdto.Tag, error)
 	DeleteTagByID(context.Context, tag.TagID) (appdto.Tag, error)
-	SetTagValueByID(context.Context, appdto.UpdateTagRequest) (appdto.Tag, error)
+	SetTagValueByID(context.Context, appdto.UpdateTagInput) (appdto.Tag, error)
 }
 
 // tagServiceImpl - tag service implementation
@@ -56,7 +56,7 @@ func (t tagServiceImpl) FindTagByID(ctx context.Context, tagID tag.TagID) (appdt
 }
 
 // CreateTag creates a new tag and returns the created tag DTO
-func (t tagServiceImpl) CreateTag(ctx context.Context, newTagData appdto.CreateTagRequest) (appdto.Tag, error) {
+func (t tagServiceImpl) CreateTag(ctx context.Context, newTagData appdto.CreateTagInput) (appdto.Tag, error) {
 	newTagID := t.tagRepository.NextID()
 
 	newTagName, err := tag.NewTagName(newTagData.Name)
@@ -107,7 +107,7 @@ func (t tagServiceImpl) DeleteTagByID(ctx context.Context, tagIDToDelete tag.Tag
 }
 
 // SetTagValueByID updates the value and quality of an existing tag and returns the updated tag
-func (t tagServiceImpl) SetTagValueByID(ctx context.Context, request appdto.UpdateTagRequest) (appdto.Tag, error) {
+func (t tagServiceImpl) SetTagValueByID(ctx context.Context, request appdto.UpdateTagInput) (appdto.Tag, error) {
 	tagIDToUpdate := tag.NewTagID(tag.TagIDWithUUID(request.ID))
 
 	foundTag, err := t.tagRepository.FindByID(ctx, tagIDToUpdate)

@@ -21,16 +21,16 @@ type TagList struct {
 	Tags []Tag
 }
 
-// CreateTagRequest - входные данные для создания тега
-type CreateTagRequest struct {
+// CreateTagInput - входные данные для создания тега
+type CreateTagInput struct {
 	Name    string
 	Type    string
 	Value   string
 	Quality string
 }
 
-// UpdateTagRequest - входные данные для обновления значения тега
-type UpdateTagRequest struct {
+// UpdateTagInput - входные данные для обновления значения тега
+type UpdateTagInput struct {
 	ID      uuid.UUID
 	Value   string
 	Quality string

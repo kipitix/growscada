@@ -1,6 +1,8 @@
 {
 	"cSpell.words": [
-		"growscada"
+		"appdto",
+		"growscada",
+		"restdto"
 	],
 	"chat.mcp.serverSampling": {
 		"growscada/.vscode/mcp.json: gopls": {

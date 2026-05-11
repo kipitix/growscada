@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/kipitix/growscada/internal/application"
-	"github.com/kipitix/growscada/internal/application/appdto"
 	"github.com/kipitix/growscada/internal/domain/tag"
 	"github.com/kipitix/growscada/internal/interface/restapi/restdto"
 )
@@ -74,7 +73,7 @@ func (h TagsHandlers) DeleteTagsByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, restdto.DeleteTagResponse{Tag: restdto.NewTagResponse(deletedTag)})
+	sendJSONResponse(w, http.StatusOK, restdto.NewDeleteTagResponse(deletedTag))
 }
 
 // PatchTagsValue handles PATCH /tags/{id}/value for setting tag value and quality
@@ -92,11 +91,7 @@ func (h TagsHandlers) PatchTagsValue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updatedTag, err := h.service.SetTagValueByID(r.Context(), appdto.UpdateTagRequest{
-		ID:      tagID.UUID(),
-		Value:   request.Value,
-		Quality: request.Quality,
-	})
+	updatedTag, err := h.service.SetTagValueByID(r.Context(), restdto.NewUpdateTagInput(request, tagID.UUID()))
 	if err != nil {
 		if errors.Is(err, tag.ErrTagNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), tagIDString, r.URL.Path))
@@ -106,7 +101,7 @@ func (h TagsHandlers) PatchTagsValue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, restdto.UpdateTagResponse{Version: updatedTag.Version})
+	sendJSONResponse(w, http.StatusOK, restdto.NewUpdateTagResponse(updatedTag))
 }
 
 // PostTags handles POST /tags for creating a new tag
@@ -118,12 +113,7 @@ func (h TagsHandlers) PostTags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	createdTag, err := h.service.CreateTag(r.Context(), appdto.CreateTagRequest{
-		Name:    request.Name,
-		Type:    request.Type,
-		Value:   request.Value,
-		Quality: request.Quality,
-	})
+	createdTag, err := h.service.CreateTag(r.Context(), restdto.NewCreateTagInput(request))
 	if err != nil {
 		sendJSONResponse(w, http.StatusInternalServerError, NewInternalError(err.Error(), r.URL.Path))
 		return

@@ -98,7 +98,7 @@ func createTagViaService(t *testing.T, name, tagType, value, quality string) app
 	t.Helper()
 	repo := repositories.NewTagRepositoryPostgres(testDB)
 	svc := application.NewTagService(repo, event.NewEventBus())
-	resp, err := svc.CreateTag(context.Background(), appdto.CreateTagRequest{
+	resp, err := svc.CreateTag(context.Background(), appdto.CreateTagInput{
 		Name: name, Type: tagType, Value: value, Quality: quality,
 	})
 	if err != nil {
@@ -168,7 +168,7 @@ func TestGetTagsByID_ExistingTag_Returns200WithTag(t *testing.T) {
 		t.Errorf("status: expected 200, got %d", rec.Code)
 	}
 
-	var resp restdto.TagResponse
+	var resp restdto.GetTagResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -326,11 +326,11 @@ func TestDeleteTagByID_ExistingTag_Returns200WithDeletedTag(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if resp.Tag.ID != created.ID {
-		t.Errorf("deleted tag ID: expected %s, got %s", created.ID, resp.Tag.ID)
+	if resp.ID != created.ID {
+		t.Errorf("deleted tag ID: expected %s, got %s", created.ID, resp.ID)
 	}
-	if resp.Tag.Name != "pump" {
-		t.Errorf("deleted tag Name: expected 'pump', got %q", resp.Tag.Name)
+	if resp.Name != "pump" {
+		t.Errorf("deleted tag Name: expected 'pump', got %q", resp.Name)
 	}
 }
 
@@ -448,7 +448,7 @@ func TestPatchTagValue_ValidUpdate_ValueAndQualityAreUpdated(t *testing.T) {
 	getRec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(getRec, getReq)
 
-	var tag restdto.TagResponse
+	var tag restdto.GetTagResponse
 	if err := json.NewDecoder(getRec.Body).Decode(&tag); err != nil {
 		t.Fatalf("decode tag: %v", err)
 	}
