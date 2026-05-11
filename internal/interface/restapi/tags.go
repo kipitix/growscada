@@ -73,7 +73,7 @@ func (h TagsHandlers) DeleteTagsByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, restdto.NewDeleteTagResponse(deletedTag))
+	sendJSONResponse(w, http.StatusOK, restdto.NewTagResponse(deletedTag))
 }
 
 // PatchTagsValue handles PATCH /tags/{id}/value for setting tag value and quality
@@ -119,5 +119,5 @@ func (h TagsHandlers) PostTags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendJSONResponse(w, http.StatusCreated, restdto.CreateTagResponse{ID: createdTag.ID})
+	sendJSONResponse(w, http.StatusCreated, restdto.NewCreateTagResponse(createdTag))
 }

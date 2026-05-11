@@ -5,8 +5,7 @@ import (
 	"github.com/kipitix/growscada/internal/domain/tag"
 )
 
-// Tag - DTO уровня прикладного сервиса для передачи данных тега.
-// Поля не имеют json-тегов — сериализация выполняется на уровне интерфейса.
+// Tag is the application-layer DTO for tag data. Fields have no JSON tags — serialization is handled at the interface layer.
 type Tag struct {
 	ID      uuid.UUID
 	Name    string
@@ -16,12 +15,7 @@ type Tag struct {
 	Version int
 }
 
-// TagList - DTO уровня прикладного сервиса для передачи списка тегов.
-type TagList struct {
-	Tags []Tag
-}
-
-// CreateTagInput - входные данные для создания тега
+// CreateTagInput holds the input data for creating a tag.
 type CreateTagInput struct {
 	Name    string
 	Type    string
@@ -29,7 +23,7 @@ type CreateTagInput struct {
 	Quality string
 }
 
-// UpdateTagInput - входные данные для обновления значения тега
+// UpdateTagInput holds the input data for updating a tag's value and quality.
 type UpdateTagInput struct {
 	ID      uuid.UUID
 	Value   string
@@ -49,10 +43,10 @@ func NewTag(aTag tag.Tag) Tag {
 }
 
 // NewTagList creates a TagList DTO from a list of tag.Tag domain aggregates
-func NewTagList(aTagList []tag.Tag) TagList {
+func NewTagList(aTagList []tag.Tag) []Tag {
 	tags := make([]Tag, len(aTagList))
 	for i, t := range aTagList {
 		tags[i] = NewTag(t)
 	}
-	return TagList{Tags: tags}
+	return tags
 }

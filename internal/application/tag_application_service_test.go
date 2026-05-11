@@ -196,8 +196,8 @@ func TestFindAllTags_EmptyDB_ReturnsEmptyList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindAllTags returned unexpected error: %v", err)
 	}
-	if len(resp.Tags) != 0 {
-		t.Errorf("expected 0 tags, got %d", len(resp.Tags))
+	if len(resp) != 0 {
+		t.Errorf("expected 0 tags, got %d", len(resp))
 	}
 }
 
@@ -220,8 +220,8 @@ func TestFindAllTags_MultipleTags_ReturnsAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindAllTags returned unexpected error: %v", err)
 	}
-	if len(resp.Tags) != 2 {
-		t.Errorf("expected 2 tags, got %d", len(resp.Tags))
+	if len(resp) != 2 {
+		t.Errorf("expected 2 tags, got %d", len(resp))
 	}
 }
 

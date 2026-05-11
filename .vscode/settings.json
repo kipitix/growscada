@@ -3,13 +3,5 @@
 		"appdto",
 		"growscada",
 		"restdto"
-	],
-	"chat.mcp.serverSampling": {
-		"growscada/.vscode/mcp.json: gopls": {
-			"allowedModels": [
-				"copilot/auto",
-				"copilotcli/claude-haiku-4.5"
-			]
-		}
-	}
+	]
 }

@@ -5,8 +5,8 @@ import (
 	"github.com/kipitix/growscada/internal/application/appdto"
 )
 
-// GetTagResponse - HTTP DTO для представления тега в ответах API.
-type GetTagResponse struct {
+// TagResponse is the HTTP DTO for representing a tag in API responses.
+type TagResponse struct {
 	ID      uuid.UUID `json:"id"`
 	Name    string    `json:"name"`
 	Type    string    `json:"type"`
@@ -15,12 +15,12 @@ type GetTagResponse struct {
 	Version int       `json:"version"`
 }
 
-// GetTagsResponse - HTTP DTO для ответа со списком тегов.
+// GetTagsResponse is the HTTP DTO for a list of tags response.
 type GetTagsResponse struct {
-	Tags []GetTagResponse `json:"tags"`
+	Tags []TagResponse `json:"tags"`
 }
 
-// CreateTagRequest - HTTP DTO для запроса создания тега.
+// CreateTagRequest is the HTTP DTO for a tag creation request.
 type CreateTagRequest struct {
 	Name    string `json:"name"`
 	Type    string `json:"type"`
@@ -28,35 +28,25 @@ type CreateTagRequest struct {
 	Quality string `json:"quality"`
 }
 
-// CreateTagResponse - HTTP DTO для ответа на создание тега.
+// CreateTagResponse is the HTTP DTO for a tag creation response.
 type CreateTagResponse struct {
 	ID uuid.UUID `json:"id"`
 }
 
-// UpdateTagRequest - HTTP DTO для запроса обновления значения тега.
+// UpdateTagRequest is the HTTP DTO for a tag value update request.
 type UpdateTagRequest struct {
 	Value   string `json:"value"`
 	Quality string `json:"quality"`
 }
 
-// UpdateTagResponse - HTTP DTO для ответа на обновление значения тега.
+// UpdateTagResponse is the HTTP DTO for a tag value update response.
 type UpdateTagResponse struct {
 	Version int `json:"version"`
 }
 
-// DeleteTagResponse - HTTP DTO для ответа на удаление тега.
-type DeleteTagResponse struct {
-	ID      uuid.UUID `json:"id"`
-	Name    string    `json:"name"`
-	Type    string    `json:"type"`
-	Value   string    `json:"value"`
-	Quality string    `json:"quality"`
-	Version int       `json:"version"`
-}
-
 // NewTagResponse converts an app-level Tag DTO to a TagResponse HTTP DTO.
-func NewTagResponse(t appdto.Tag) GetTagResponse {
-	return GetTagResponse{
+func NewTagResponse(t appdto.Tag) TagResponse {
+	return TagResponse{
 		ID:      t.ID,
 		Name:    t.Name,
 		Type:    t.Type,
@@ -67,9 +57,9 @@ func NewTagResponse(t appdto.Tag) GetTagResponse {
 }
 
 // NewGetTagsResponse converts an app-level TagList DTO to a GetTagsResponse HTTP DTO.
-func NewGetTagsResponse(list appdto.TagList) GetTagsResponse {
-	tags := make([]GetTagResponse, len(list.Tags))
-	for i, t := range list.Tags {
+func NewGetTagsResponse(list []appdto.Tag) GetTagsResponse {
+	tags := make([]TagResponse, len(list))
+	for i, t := range list {
 		tags[i] = NewTagResponse(t)
 	}
 	return GetTagsResponse{Tags: tags}
@@ -83,18 +73,6 @@ func NewCreateTagResponse(t appdto.Tag) CreateTagResponse {
 // NewUpdateTagResponse converts an app-level Tag DTO to an UpdateTagResponse HTTP DTO.
 func NewUpdateTagResponse(t appdto.Tag) UpdateTagResponse {
 	return UpdateTagResponse{Version: t.Version}
-}
-
-// NewDeleteTagResponse converts an app-level Tag DTO to a DeleteTagResponse HTTP DTO.
-func NewDeleteTagResponse(t appdto.Tag) DeleteTagResponse {
-	return DeleteTagResponse{
-		ID:      t.ID,
-		Name:    t.Name,
-		Type:    t.Type,
-		Value:   t.Value,
-		Quality: t.Quality,
-		Version: t.Version,
-	}
 }
 
 // NewCreateTagInput converts a CreateTagRequest HTTP DTO to an app-level CreateTagInput DTO.

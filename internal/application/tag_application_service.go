@@ -11,7 +11,7 @@ import (
 
 // TagService - service interface for working with tags
 type TagService interface {
-	FindAllTags(context.Context) (appdto.TagList, error)
+	FindAllTags(context.Context) ([]appdto.Tag, error)
 	FindTagByID(context.Context, tag.TagID) (appdto.Tag, error)
 	CreateTag(context.Context, appdto.CreateTagInput) (appdto.Tag, error)
 	DeleteTagByID(context.Context, tag.TagID) (appdto.Tag, error)
@@ -36,10 +36,10 @@ func NewTagService(aTagRepository tag.TagRepository, anEventBus event.EventBus) 
 }
 
 // FindAllTags returns a list of all tags
-func (t tagServiceImpl) FindAllTags(ctx context.Context) (appdto.TagList, error) {
+func (t tagServiceImpl) FindAllTags(ctx context.Context) ([]appdto.Tag, error) {
 	tags, err := t.tagRepository.FindAll(ctx)
 	if err != nil {
-		return appdto.TagList{}, fmt.Errorf("error on find tags in repository: %w", err)
+		return []appdto.Tag{}, fmt.Errorf("error on find tags in repository: %w", err)
 	}
 
 	return appdto.NewTagList(tags), nil

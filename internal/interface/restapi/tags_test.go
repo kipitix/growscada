@@ -168,7 +168,7 @@ func TestGetTagsByID_ExistingTag_Returns200WithTag(t *testing.T) {
 		t.Errorf("status: expected 200, got %d", rec.Code)
 	}
 
-	var resp restdto.GetTagResponse
+	var resp restdto.TagResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -322,7 +322,7 @@ func TestDeleteTagByID_ExistingTag_Returns200WithDeletedTag(t *testing.T) {
 		t.Errorf("status: expected 200, got %d\nbody: %s", rec.Code, rec.Body.String())
 	}
 
-	var resp restdto.DeleteTagResponse
+	var resp restdto.TagResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -448,7 +448,7 @@ func TestPatchTagValue_ValidUpdate_ValueAndQualityAreUpdated(t *testing.T) {
 	getRec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(getRec, getReq)
 
-	var tag restdto.GetTagResponse
+	var tag restdto.TagResponse
 	if err := json.NewDecoder(getRec.Body).Decode(&tag); err != nil {
 		t.Fatalf("decode tag: %v", err)
 	}
