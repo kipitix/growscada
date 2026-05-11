@@ -20,11 +20,11 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/kipitix/growscada/internal/application"
-	appdto "github.com/kipitix/growscada/internal/application/dto"
+	"github.com/kipitix/growscada/internal/application/appdto"
 	"github.com/kipitix/growscada/internal/domain/event"
 	"github.com/kipitix/growscada/internal/infrastructure/postgres/repositories"
 	"github.com/kipitix/growscada/internal/interface/restapi"
-	restdto "github.com/kipitix/growscada/internal/interface/restapi/dto"
+	"github.com/kipitix/growscada/internal/interface/restapi/restdto"
 )
 
 var testDB *sql.DB

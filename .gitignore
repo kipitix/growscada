@@ -2,4 +2,3 @@ bin/
 .venv/
 .claude/
 .idea/
-#.vscode/

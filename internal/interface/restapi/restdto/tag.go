@@ -1,8 +1,8 @@
-package dto
+package restdto
 
 import (
 	"github.com/google/uuid"
-	appdto "github.com/kipitix/growscada/internal/application/dto"
+	"github.com/kipitix/growscada/internal/application/appdto"
 )
 
 // TagResponse - HTTP DTO для представления тега в ответах API.

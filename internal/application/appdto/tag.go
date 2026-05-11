@@ -1,4 +1,4 @@
-package dto
+package appdto
 
 import (
 	"github.com/google/uuid"

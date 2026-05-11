@@ -6,9 +6,9 @@ import (
 	"net/http"
 
 	"github.com/kipitix/growscada/internal/application"
-	appdto "github.com/kipitix/growscada/internal/application/dto"
+	"github.com/kipitix/growscada/internal/application/appdto"
 	"github.com/kipitix/growscada/internal/domain/tag"
-	restdto "github.com/kipitix/growscada/internal/interface/restapi/dto"
+	"github.com/kipitix/growscada/internal/interface/restapi/restdto"
 )
 
 // TagsHandlers handles HTTP requests related to tags.
