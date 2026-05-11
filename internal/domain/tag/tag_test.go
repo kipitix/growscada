@@ -22,7 +22,7 @@ func TestNewTag_FieldsAreSet(t *testing.T) {
 	tagType := TagTypeString
 	value, _ := tagType.NewTagValue("100")
 	quality := TagQualityGood
-	version := 3
+	version := TagVersion(3)
 
 	tag, err := NewTag(id, name, tagType, value, quality, version)
 	if err != nil {

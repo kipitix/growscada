@@ -5,8 +5,8 @@ import (
 )
 
 const (
-	TagVersionInitial   = 0
-	TagVersionCommitted = 1
+	TagVersionInitial   TagVersion = 0
+	TagVersionCommitted TagVersion = 1
 )
 
 // Tag - interface representing a tag.
@@ -17,7 +17,7 @@ type Tag interface {
 	Type() TagType
 	Value() TagValue
 	Quality() TagQuality
-	Version() int
+	Version() TagVersion
 
 	SetValue(any, TagQuality) error
 	IncrementVersion()
@@ -32,8 +32,7 @@ type tagImpl struct {
 	tagType TagType
 	value   TagValue
 	quality TagQuality
-	// TODO : make VO TagVersion
-	version int
+	version TagVersion
 }
 
 var _ Tag = (*tagImpl)(nil)
@@ -41,7 +40,7 @@ var _ Tag = (*tagImpl)(nil)
 // NewTag creates a new tag with the given identifier, name, and type.
 // Sets the initial value to nil and quality to TagQualityBad.
 // version is initialized to 0.
-func NewTag(anID TagID, aName TagName, aType TagType, aValue TagValue, aQuality TagQuality, aVersion int) (Tag, error) {
+func NewTag(anID TagID, aName TagName, aType TagType, aValue TagValue, aQuality TagQuality, aVersion TagVersion) (Tag, error) {
 	newTag := &tagImpl{
 		id:      anID,
 		name:    aName,
@@ -79,7 +78,7 @@ func (t tagImpl) Quality() TagQuality {
 }
 
 // Version returns the current tag version
-func (t tagImpl) Version() int {
+func (t tagImpl) Version() TagVersion {
 	return t.version
 }
 

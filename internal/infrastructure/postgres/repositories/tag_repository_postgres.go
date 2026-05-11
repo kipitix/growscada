@@ -138,7 +138,7 @@ func (r tagRepositoryPostgresImpl) FindByID(ctx context.Context, id tag.TagID) (
 		return nil, fmt.Errorf("cannot create tag quality: %w", err)
 	}
 
-	return tag.NewTag(newID, newName, newType, newValue, newQuality, version)
+	return tag.NewTag(newID, newName, newType, newValue, newQuality, tag.TagVersion(version))
 }
 
 // DeleteByID removes a tag from the database by its identifier and returns it.
@@ -185,7 +185,7 @@ func (r tagRepositoryPostgresImpl) DeleteByID(ctx context.Context, id tag.TagID)
 		return nil, fmt.Errorf("cannot create tag quality: %w", err)
 	}
 
-	return tag.NewTag(newID, newName, newType, newValue, newQuality, version)
+	return tag.NewTag(newID, newName, newType, newValue, newQuality, tag.TagVersion(version))
 }
 
 // FindAll retrieves all tags from the database.
@@ -239,7 +239,7 @@ func (r tagRepositoryPostgresImpl) FindAll(ctx context.Context) ([]tag.Tag, erro
 			return nil, fmt.Errorf("cannot create tag quality: %w", err)
 		}
 		// Create new Tag aggregate
-		newTag, err := tag.NewTag(newID, newName, newType, newValue, newQuality, version)
+		newTag, err := tag.NewTag(newID, newName, newType, newValue, newQuality, tag.TagVersion(version))
 		if err != nil {
 			return nil, fmt.Errorf("cannot create tag: %w", err)
 		}
