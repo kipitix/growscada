@@ -17,6 +17,7 @@ type IndicatorType interface {
 	ScriptLanguage() ScriptLanguage
 	Version() IndicatorTypeVersion
 
+	Update(name IndicatorTypeName, svgTemplate SvgTemplate, script Script, lang ScriptLanguage)
 	IncrementVersion()
 
 	fmt.Stringer
@@ -81,6 +82,14 @@ func (it indicatorTypeImpl) ScriptLanguage() ScriptLanguage {
 // Version returns the current version of the indicator type.
 func (it indicatorTypeImpl) Version() IndicatorTypeVersion {
 	return it.version
+}
+
+// Update replaces all mutable fields of the indicator type.
+func (it *indicatorTypeImpl) Update(name IndicatorTypeName, svgTemplate SvgTemplate, script Script, lang ScriptLanguage) {
+	it.name = name
+	it.svgTemplate = svgTemplate
+	it.script = script
+	it.scriptLanguage = lang
 }
 
 // IncrementVersion increments the version by one.

@@ -15,6 +15,9 @@ const (
 	EventTypeTagCreated
 	EventTypeTagUpdated
 	EventTypeTagDeleted
+	EventTypeIndicatorTypeCreated
+	EventTypeIndicatorTypeUpdated
+	EventTypeIndicatorTypeDeleted
 )
 
 // NewEventType creates a new EventType from a string representation.
@@ -29,6 +32,12 @@ func NewEventType(s string) (EventType, error) {
 		return EventTypeTagUpdated, nil
 	case "tag_deleted":
 		return EventTypeTagDeleted, nil
+	case "indicator_type_created":
+		return EventTypeIndicatorTypeCreated, nil
+	case "indicator_type_updated":
+		return EventTypeIndicatorTypeUpdated, nil
+	case "indicator_type_deleted":
+		return EventTypeIndicatorTypeDeleted, nil
 	default:
 		return EventTypeUnknown, fmt.Errorf("unknown event type: %s", s)
 	}
@@ -48,6 +57,12 @@ func (et EventType) String() string {
 		return "tag_updated"
 	case EventTypeTagDeleted:
 		return "tag_deleted"
+	case EventTypeIndicatorTypeCreated:
+		return "indicator_type_created"
+	case EventTypeIndicatorTypeUpdated:
+		return "indicator_type_updated"
+	case EventTypeIndicatorTypeDeleted:
+		return "indicator_type_deleted"
 	default:
 		return "unknown"
 	}

@@ -1,0 +1,15 @@
+info:
+  name: delete indicator type by id
+  type: http
+  seq: 10
+
+http:
+  method: DELETE
+  url: http://{{API_SERVER}}/api/v1/indicator-types/{{INDICATOR_TYPE_ID}}
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

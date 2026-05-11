@@ -8,30 +8,32 @@ import (
 )
 
 type APIRouter struct {
-	serveMux     *http.ServeMux
-	tagsHandlers *TagsHandlers
+	serveMux               *http.ServeMux
+	tagsHandlers           *TagsHandlers
+	indicatorTypesHandlers *IndicatorTypesHandlers
 }
 
 func (r APIRouter) ServeMux() *http.ServeMux {
 	return r.serveMux
 }
 
-func NewRouter(tagService application.TagService) *APIRouter {
-	// Create router — container for handlers
+func NewRouter(tagService application.TagService, indicatorTypeService application.IndicatorTypeService) *APIRouter {
 	router := &APIRouter{}
-
-	// Create mux and register handlers
 	router.serveMux = http.NewServeMux()
 
-	// Create handlers — wrappers over services
 	router.tagsHandlers = NewTagsHandler(tagService)
-
-	// Register handlers
 	router.serveMux.HandleFunc("GET /api/v1/tags", router.tagsHandlers.GetTags)
 	router.serveMux.HandleFunc("GET /api/v1/tags/{id}", router.tagsHandlers.GetTagsByID)
 	router.serveMux.HandleFunc("POST /api/v1/tags", router.tagsHandlers.PostTags)
 	router.serveMux.HandleFunc("DELETE /api/v1/tags/{id}", router.tagsHandlers.DeleteTagsByID)
 	router.serveMux.HandleFunc("PATCH /api/v1/tags/{id}/value", router.tagsHandlers.PatchTagsValue)
+
+	router.indicatorTypesHandlers = NewIndicatorTypesHandler(indicatorTypeService)
+	router.serveMux.HandleFunc("GET /api/v1/indicator-types", router.indicatorTypesHandlers.GetIndicatorTypes)
+	router.serveMux.HandleFunc("GET /api/v1/indicator-types/{id}", router.indicatorTypesHandlers.GetIndicatorTypesByID)
+	router.serveMux.HandleFunc("POST /api/v1/indicator-types", router.indicatorTypesHandlers.PostIndicatorTypes)
+	router.serveMux.HandleFunc("PUT /api/v1/indicator-types/{id}", router.indicatorTypesHandlers.PutIndicatorTypesByID)
+	router.serveMux.HandleFunc("DELETE /api/v1/indicator-types/{id}", router.indicatorTypesHandlers.DeleteIndicatorTypesByID)
 
 	return router
 }

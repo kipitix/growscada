@@ -89,9 +89,11 @@ func cleanTags(t *testing.T) {
 }
 
 func newRouter() *restapi.APIRouter {
-	repo := repositories.NewTagRepositoryPostgres(testDB)
-	svc := application.NewTagService(repo, event.NewEventBus())
-	return restapi.NewRouter(svc)
+	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
+	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
+	itRepo := repositories.NewIndicatorTypeRepositoryPostgres(testDB)
+	itSvc := application.NewIndicatorTypeService(itRepo, event.NewEventBus())
+	return restapi.NewRouter(tagSvc, itSvc)
 }
 
 func createTagViaService(t *testing.T, name, tagType, value, quality string) appdto.Tag {
