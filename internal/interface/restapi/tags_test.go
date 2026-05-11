@@ -20,10 +20,11 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/kipitix/growscada/internal/application"
-	"github.com/kipitix/growscada/internal/application/dto"
+	"github.com/kipitix/growscada/internal/application/appdto"
 	"github.com/kipitix/growscada/internal/domain/event"
 	"github.com/kipitix/growscada/internal/infrastructure/postgres/repositories"
 	"github.com/kipitix/growscada/internal/interface/restapi"
+	"github.com/kipitix/growscada/internal/interface/restapi/restdto"
 )
 
 var testDB *sql.DB
@@ -93,11 +94,11 @@ func newRouter() *restapi.APIRouter {
 	return restapi.NewRouter(svc)
 }
 
-func createTagViaService(t *testing.T, name, tagType, value, quality string) dto.CreateTagResponse {
+func createTagViaService(t *testing.T, name, tagType, value, quality string) appdto.Tag {
 	t.Helper()
 	repo := repositories.NewTagRepositoryPostgres(testDB)
 	svc := application.NewTagService(repo, event.NewEventBus())
-	resp, err := svc.CreateTag(context.Background(), dto.CreateTagRequest{
+	resp, err := svc.CreateTag(context.Background(), appdto.CreateTagInput{
 		Name: name, Type: tagType, Value: value, Quality: quality,
 	})
 	if err != nil {
@@ -120,7 +121,7 @@ func TestGetTags_EmptyDB_Returns200WithEmptyList(t *testing.T) {
 		t.Errorf("status: expected 200, got %d", rec.Code)
 	}
 
-	var resp dto.FindAllTagsResponse
+	var resp restdto.GetTagsResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -143,7 +144,7 @@ func TestGetTags_WithTags_Returns200WithAll(t *testing.T) {
 		t.Errorf("status: expected 200, got %d", rec.Code)
 	}
 
-	var resp dto.FindAllTagsResponse
+	var resp restdto.GetTagsResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -167,7 +168,7 @@ func TestGetTagsByID_ExistingTag_Returns200WithTag(t *testing.T) {
 		t.Errorf("status: expected 200, got %d", rec.Code)
 	}
 
-	var resp dto.Tag
+	var resp restdto.TagResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -238,7 +239,7 @@ func TestPostTags_ValidBody_Returns201WithID(t *testing.T) {
 	cleanTags(t)
 	router := newRouter()
 
-	body, _ := json.Marshal(dto.CreateTagRequest{Name: "flow", Type:"integer", Value: "0", Quality: "good"})
+	body, _ := json.Marshal(restdto.CreateTagRequest{Name: "flow", Type: "integer", Value: "0", Quality: "good"})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tags", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -248,7 +249,7 @@ func TestPostTags_ValidBody_Returns201WithID(t *testing.T) {
 		t.Errorf("status: expected 201, got %d\nbody: %s", rec.Code, rec.Body.String())
 	}
 
-	var resp dto.CreateTagResponse
+	var resp restdto.CreateTagResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -284,7 +285,7 @@ func TestPostTags_InvalidJSON_Returns400WithProblemDetails(t *testing.T) {
 func TestPostTags_InvalidType_Returns500WithProblemDetails(t *testing.T) {
 	router := newRouter()
 
-	body, _ := json.Marshal(dto.CreateTagRequest{Name: "sensor", Type:"unknown", Value: "0", Quality: "good"})
+	body, _ := json.Marshal(restdto.CreateTagRequest{Name: "sensor", Type: "unknown", Value: "0", Quality: "good"})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tags", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -321,15 +322,15 @@ func TestDeleteTagByID_ExistingTag_Returns200WithDeletedTag(t *testing.T) {
 		t.Errorf("status: expected 200, got %d\nbody: %s", rec.Code, rec.Body.String())
 	}
 
-	var resp dto.DeleteTagResponse
+	var resp restdto.TagResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if resp.Tag.ID != created.ID {
-		t.Errorf("deleted tag ID: expected %s, got %s", created.ID, resp.Tag.ID)
+	if resp.ID != created.ID {
+		t.Errorf("deleted tag ID: expected %s, got %s", created.ID, resp.ID)
 	}
-	if resp.Tag.Name != "pump" {
-		t.Errorf("deleted tag Name: expected 'pump', got %q", resp.Tag.Name)
+	if resp.Name != "pump" {
+		t.Errorf("deleted tag Name: expected 'pump', got %q", resp.Name)
 	}
 }
 
@@ -419,7 +420,7 @@ func TestPatchTagValue_ValidUpdate_Returns200WithVersion(t *testing.T) {
 		t.Errorf("status: expected 200, got %d\nbody: %s", rec.Code, rec.Body.String())
 	}
 
-	var resp dto.UpdateTagResponse
+	var resp restdto.UpdateTagResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -447,7 +448,7 @@ func TestPatchTagValue_ValidUpdate_ValueAndQualityAreUpdated(t *testing.T) {
 	getRec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(getRec, getReq)
 
-	var tag dto.Tag
+	var tag restdto.TagResponse
 	if err := json.NewDecoder(getRec.Body).Decode(&tag); err != nil {
 		t.Fatalf("decode tag: %v", err)
 	}

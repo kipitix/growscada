@@ -1,5 +1,23 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.10] - 2026-05-12
+
+### Added
+
+- `internal/application/appdto` — новый пакет с DTO уровня прикладного сервиса: `Tag`, `CreateTagInput`, `UpdateTagInput`; поля не имеют JSON-тегов, сериализация делегирована интерфейсному слою; фабричные функции `NewTag` и `NewTagList` конвертируют доменные агрегаты в DTO
+- `internal/interface/restapi/restdto` — новый пакет с HTTP-DTO: `TagResponse`, `GetTagsResponse`, `CreateTagRequest`, `CreateTagResponse`, `UpdateTagRequest`, `UpdateTagResponse`; конвертеры `NewTagResponse`, `NewGetTagsResponse`, `NewCreateTagResponse`, `NewUpdateTagResponse`, `NewCreateTagInput`, `NewUpdateTagInput` изолируют маппинг между слоями
+
+### Removed
+
+- `internal/application/dto` — удалён единый DTO-пакет, смешивавший JSON-сериализацию и application-слой; его ответственность разделена между `appdto` и `restdto`
+
+### Changed
+
+- `TagService` — все методы переведены на `appdto`: `FindAllTags` возвращает `[]appdto.Tag` вместо `dto.FindAllTagsResponse`; `FindTagByID` возвращает `appdto.Tag` вместо `dto.Tag`; `CreateTag` принимает `appdto.CreateTagInput` вместо `dto.CreateTagRequest` и возвращает полный `appdto.Tag` вместо `dto.CreateTagResponse{ID}`; `DeleteTagByID` возвращает плоский `appdto.Tag` вместо `dto.DeleteTagResponse{Tag: dto.Tag}`; `SetTagValueByID` принимает `appdto.UpdateTagInput` вместо `dto.UpdateTagRequest` и возвращает `appdto.Tag` вместо `dto.UpdateTagResponse{Version}`
+- `restapi/tags.go` — хендлеры переведены на `restdto`: каждый хендлер конвертирует результат сервиса через соответствующую фабрику `restdto.New*`; удалены промежуточные переменные для ответов с ошибками; `UpdateTagRequest` больше не содержит поле `ID` — идентификатор передаётся только через path-параметр и подставляется в `NewUpdateTagInput`
+- Тесты `tag_application_service_test.go` и `tags_test.go` — обновлены импорты и типы: `dto.CreateTagRequest` → `appdto.CreateTagInput`, `dto.UpdateTagRequest` → `appdto.UpdateTagInput`; тип возврата `createTagViaService` изменён с `dto.CreateTagResponse` на `appdto.Tag`; декодирование HTTP-ответов использует `restdto.*` вместо `dto.*`
+- Все doc-комментарии в `appdto` и `restdto` переведены на английский язык
+
 ## [0.0.9] - 2026-05-08
 
 ### Added
