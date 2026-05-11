@@ -9,7 +9,7 @@ import (
 	"github.com/kipitix/growscada/internal/domain/tag"
 )
 
-// TagService - service interface for working with tags
+// TagService is the service interface for working with tags.
 type TagService interface {
 	FindAllTags(context.Context) ([]appdto.Tag, error)
 	FindTagByID(context.Context, tag.TagID) (appdto.Tag, error)
@@ -18,7 +18,7 @@ type TagService interface {
 	SetTagValueByID(context.Context, appdto.UpdateTagInput) (appdto.Tag, error)
 }
 
-// tagServiceImpl - tag service implementation
+// tagServiceImpl is the tag service implementation.
 type tagServiceImpl struct {
 	tagRepository tag.TagRepository
 	eventBus      event.EventBus
@@ -39,7 +39,7 @@ func NewTagService(aTagRepository tag.TagRepository, anEventBus event.EventBus) 
 func (t tagServiceImpl) FindAllTags(ctx context.Context) ([]appdto.Tag, error) {
 	tags, err := t.tagRepository.FindAll(ctx)
 	if err != nil {
-		return []appdto.Tag{}, fmt.Errorf("error on find tags in repository: %w", err)
+		return nil, fmt.Errorf("error on find tags in repository: %w", err)
 	}
 
 	return appdto.NewTagList(tags), nil
