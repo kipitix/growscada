@@ -1,6 +1,8 @@
 package tag
 
-import "testing"
+import (
+	"testing"
+)
 
 func makeTestTag(t *testing.T) Tag {
 	t.Helper()
@@ -9,7 +11,8 @@ func makeTestTag(t *testing.T) Tag {
 	tagType := TagTypeInteger
 	value, _ := tagType.NewTagValue(0)
 	quality := TagQualityGood
-	tag, err := NewTag(id, name, tagType, value, quality, TagVersionInitial)
+	version, _ := NewTagVersion()
+	tag, err := NewTag(id, name, tagType, value, quality, version)
 	if err != nil {
 		t.Fatalf("NewTag returned unexpected error: %v", err)
 	}
@@ -22,7 +25,10 @@ func TestNewTag_FieldsAreSet(t *testing.T) {
 	tagType := TagTypeString
 	value, _ := tagType.NewTagValue("100")
 	quality := TagQualityGood
-	version := TagVersion(3)
+	version, err := NewTagVersion(TagVersionWithNumber(3))
+	if err != nil {
+		t.Fatalf("unexpected error creating version: %v", err)
+	}
 
 	tag, err := NewTag(id, name, tagType, value, quality, version)
 	if err != nil {
@@ -50,7 +56,7 @@ func TestNewTag_FieldsAreSet(t *testing.T) {
 }
 
 func TestTagVersionInitial_IsZero(t *testing.T) {
-	if TagVersionInitial != 0 {
+	if TagVersionInitial.Number() != 0 {
 		t.Errorf("expected TagVersionInitial to be 0, got %d", TagVersionInitial)
 	}
 }
@@ -65,11 +71,11 @@ func TestNewTag_InitialVersion(t *testing.T) {
 func TestTag_IncrementVersion(t *testing.T) {
 	tag := makeTestTag(t)
 	tag.IncrementVersion()
-	if tag.Version() != 1 {
+	if tag.Version().Number() != 1 {
 		t.Errorf("expected version 1 after first increment, got %d", tag.Version())
 	}
 	tag.IncrementVersion()
-	if tag.Version() != 2 {
+	if tag.Version().Number() != 2 {
 		t.Errorf("expected version 2 after second increment, got %d", tag.Version())
 	}
 }

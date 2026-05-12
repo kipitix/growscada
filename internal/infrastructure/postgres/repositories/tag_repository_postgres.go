@@ -28,7 +28,7 @@ func NewTagRepositoryPostgres(aDb *sql.DB) tag.TagRepository {
 // NextID generates a new unique tag identifier.
 // Uses uuid.New() to generate a UUID and converts it to TagID.
 func (r tagRepositoryPostgresImpl) NextID() tag.TagID {
-	return tag.TagID(uuid.New())
+	return tag.NewTagID()
 }
 
 // Save stores a tag in the database.
@@ -40,7 +40,7 @@ func (r tagRepositoryPostgresImpl) Save(ctx context.Context, aTag tag.Tag) error
 		sqlResult, err := r.db.ExecContext(ctx,
 			`INSERT INTO tags (id, name, type, value, quality, version)
 			VALUES ($1, $2, $3, $4, $5, $6)`,
-			aTag.ID().UUID(), aTag.Name().String(), aTag.Type().String(), aTag.Value().String(), aTag.Quality().String(), tag.TagVersionCommitted,
+			aTag.ID().UUID(), aTag.Name().String(), aTag.Type().String(), aTag.Value().String(), aTag.Quality().String(), tag.TagVersionCommitted.Number(),
 		)
 		// Handle error
 		if err != nil {
@@ -63,13 +63,13 @@ func (r tagRepositoryPostgresImpl) Save(ctx context.Context, aTag tag.Tag) error
 	}
 
 	// If the tag already exists, update it in the database
-	if aTag.Version() > tag.TagVersionInitial {
+	if aTag.Version().IsCommitted() {
 		// SQL for updating the tag
 		sqlResult, err := r.db.ExecContext(ctx,
 			`UPDATE tags
 			 SET name = $1, type = $2, value = $3, quality = $4, version = version + 1
 			 WHERE id = $5 AND version = $6`,
-			aTag.Name().String(), aTag.Type().String(), aTag.Value().String(), aTag.Quality().String(), aTag.ID().UUID(), aTag.Version(),
+			aTag.Name().String(), aTag.Type().String(), aTag.Value().String(), aTag.Quality().String(), aTag.ID().UUID(), aTag.Version().Number(),
 		)
 		// Handle error
 		if err != nil {
@@ -138,7 +138,12 @@ func (r tagRepositoryPostgresImpl) FindByID(ctx context.Context, id tag.TagID) (
 		return nil, fmt.Errorf("cannot create tag quality: %w", err)
 	}
 
-	return tag.NewTag(newID, newName, newType, newValue, newQuality, tag.TagVersion(version))
+	newVersion, err := tag.NewTagVersion(tag.TagVersionWithNumber(version))
+	if err != nil {
+		return nil, fmt.Errorf("cannot create tag version: %w", err)
+	}
+
+	return tag.NewTag(newID, newName, newType, newValue, newQuality, newVersion)
 }
 
 // DeleteByID removes a tag from the database by its identifier and returns it.
@@ -185,7 +190,12 @@ func (r tagRepositoryPostgresImpl) DeleteByID(ctx context.Context, id tag.TagID)
 		return nil, fmt.Errorf("cannot create tag quality: %w", err)
 	}
 
-	return tag.NewTag(newID, newName, newType, newValue, newQuality, tag.TagVersion(version))
+	newVersion, err := tag.NewTagVersion(tag.TagVersionWithNumber(version))
+	if err != nil {
+		return nil, fmt.Errorf("cannot create tag version: %w", err)
+	}
+
+	return tag.NewTag(newID, newName, newType, newValue, newQuality, newVersion)
 }
 
 // FindAll retrieves all tags from the database.
@@ -239,7 +249,11 @@ func (r tagRepositoryPostgresImpl) FindAll(ctx context.Context) ([]tag.Tag, erro
 			return nil, fmt.Errorf("cannot create tag quality: %w", err)
 		}
 		// Create new Tag aggregate
-		newTag, err := tag.NewTag(newID, newName, newType, newValue, newQuality, tag.TagVersion(version))
+		newVersion, err := tag.NewTagVersion(tag.TagVersionWithNumber(version))
+		if err != nil {
+			return nil, fmt.Errorf("cannot create tag version: %w", err)
+		}
+		newTag, err := tag.NewTag(newID, newName, newType, newValue, newQuality, newVersion)
 		if err != nil {
 			return nil, fmt.Errorf("cannot create tag: %w", err)
 		}

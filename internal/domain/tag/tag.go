@@ -4,13 +4,9 @@ import (
 	"fmt"
 )
 
-const (
-	TagVersionInitial   TagVersion = 0
-	TagVersionCommitted TagVersion = 1
-)
-
 // Tag - interface representing a tag.
 // A tag is the fundamental system entity containing an identifier, name, type, value, and quality.
+// Aggregate
 type Tag interface {
 	ID() TagID
 	Name() TagName
@@ -53,36 +49,37 @@ func NewTag(anID TagID, aName TagName, aType TagType, aValue TagValue, aQuality 
 	return newTag, nil
 }
 
-// ID returns the tag identifier
+// ID returns the tag identifier.
 func (t tagImpl) ID() TagID {
 	return t.id
 }
 
-// Name returns the tag name
+// Name returns the tag name.
 func (t tagImpl) Name() TagName {
 	return t.name
 }
 
-// Type returns the tag type
+// Type returns the tag type.
 func (t tagImpl) Type() TagType {
 	return t.tagType
 }
 
+// Value returns the tag value.
 func (t tagImpl) Value() TagValue {
 	return t.value
 }
 
-// Quality returns the tag quality
+// Quality returns the tag quality.
 func (t tagImpl) Quality() TagQuality {
 	return t.quality
 }
 
-// Version returns the current tag version
+// Version returns the current tag version.
 func (t tagImpl) Version() TagVersion {
 	return t.version
 }
 
-// SetValue updates the tag's value and quality
+// SetValue updates the tag's value and quality.
 func (t *tagImpl) SetValue(aValue any, aQuality TagQuality) error {
 	newValue, err := t.tagType.NewTagValue(aValue)
 	if err != nil {
@@ -94,12 +91,12 @@ func (t *tagImpl) SetValue(aValue any, aQuality TagQuality) error {
 	return nil
 }
 
-// IncrementVersion increments the tag version by one
+// IncrementVersion increments the tag version by one.
 func (t *tagImpl) IncrementVersion() {
-	t.version++
+	t.version = t.version.Next()
 }
 
-// String returns a string representation of the tag
+// String returns a string representation of the tag.
 func (t tagImpl) String() string {
 	return fmt.Sprintf(
 		"Tag: %s, Type: %s, Value: %v, Quality: %s, Version: %d",

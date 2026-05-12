@@ -2,17 +2,22 @@ package tag
 
 import "fmt"
 
-type TagName string
-
-// Interfaces for TagName
-var _ fmt.Stringer = TagName("")
-
-// Factory method
-func NewTagName(name string) (TagName, error) {
-	return TagName(name), nil
+// TagName - name of the tag.
+// Value Object.
+type TagName struct {
+	name string
 }
 
-// String method
+// Interfaces for TagName.
+var _ fmt.Stringer = TagName{}
+
+// Factory method.
+func NewTagName(aName string) (TagName, error) {
+	// TODO: add restrictions and validation
+	return TagName{name: aName}, nil
+}
+
+// String method.
 func (tn TagName) String() string {
-	return string(tn)
+	return tn.name
 }

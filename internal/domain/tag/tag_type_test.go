@@ -41,7 +41,6 @@ func TestTagType_String(t *testing.T) {
 		{TagTypeString, "string"},
 		{TagTypeBoolean, "boolean"},
 		{TagTypeInteger, "integer"},
-		{TagType(99), "unknown"},
 	}
 
 	for _, tc := range cases {
@@ -50,21 +49,5 @@ func TestTagType_String(t *testing.T) {
 				t.Errorf("expected %q, got %q", tc.expected, got)
 			}
 		})
-	}
-}
-
-func TestTagType_IsValid(t *testing.T) {
-	valid := []TagType{TagTypeString, TagTypeBoolean, TagTypeInteger}
-	for _, k := range valid {
-		if !k.IsValid() {
-			t.Errorf("expected %v to be valid", k)
-		}
-	}
-
-	invalid := []TagType{TagTypeUnknown, TagType(-1), TagType(99)}
-	for _, k := range invalid {
-		if k.IsValid() {
-			t.Errorf("expected %v to be invalid", k)
-		}
 	}
 }

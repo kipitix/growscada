@@ -186,7 +186,8 @@ func TestSave_StaleVersion_ReturnsError(t *testing.T) {
 	}
 
 	// version=100 while DB has version=1 → optimistic lock conflict
-	staleTag, _ := tag.NewTag(newTag.ID(), newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), 100)
+	badVersion, _ := tag.NewTagVersion(tag.TagVersionWithNumber(100))
+	staleTag, _ := tag.NewTag(newTag.ID(), newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), badVersion)
 	err := repo.Save(ctx, staleTag)
 
 	if err == nil {
@@ -310,7 +311,7 @@ func TestDeleteByID_ExistingTag_ReturnsDeletedTag(t *testing.T) {
 	if deleted.Quality() != tag.TagQualityGood {
 		t.Errorf("Quality: expected good, got %v", deleted.Quality())
 	}
-	if deleted.Version() != 1 {
+	if deleted.Version().Number() != 1 {
 		t.Errorf("Version: expected 1, got %d", deleted.Version())
 	}
 }
