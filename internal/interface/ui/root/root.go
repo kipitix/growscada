@@ -1,11 +1,11 @@
 package root
 
 import (
-	"github.com/maxence-charriere/go-app/v10/pkg/app"
 	"github.com/kipitix/growscada/internal/interface/ui/history"
 	"github.com/kipitix/growscada/internal/interface/ui/library"
 	"github.com/kipitix/growscada/internal/interface/ui/operation"
 	"github.com/kipitix/growscada/internal/interface/ui/project"
+	"github.com/maxence-charriere/go-app/v10/pkg/app"
 )
 
 type Mode string
@@ -20,7 +20,15 @@ const (
 
 type Root struct {
 	app.Compo
-	currentMode Mode
+	currentMode  Mode
+	apiServerURL string
+}
+
+func NewRoot(anAPIServerURL string) *Root {
+	return &Root{
+		currentMode:  ModeLibrary, // Default mode
+		apiServerURL: anAPIServerURL,
+	}
 }
 
 func (r *Root) Render() app.UI {
@@ -38,7 +46,7 @@ func (r *Root) Render() app.UI {
 		// Content
 		app.Div().Class("content").Body(
 			app.If(r.currentMode == ModeLibrary, func() app.UI {
-				return &library.Library{}
+				return library.NewLibrary(r.apiServerURL)
 			}).ElseIf(r.currentMode == ModeProject, func() app.UI {
 				return &project.Project{}
 			}).ElseIf(r.currentMode == ModeOperation, func() app.UI {

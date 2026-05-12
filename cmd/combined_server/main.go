@@ -21,7 +21,8 @@ import (
 )
 
 const (
-	databaseDSN = "postgres://growscada:growscada@localhost:5432/growscada?sslmode=disable"
+	databaseDSN  = "postgres://growscada:growscada@localhost:5432/growscada?sslmode=disable"
+	apiServerURL = "http://localhost:9090"
 )
 
 type slogAdapter struct{}
@@ -33,7 +34,7 @@ func (slogAdapter) Println(v ...any) {
 func main() {
 	// Server setup for serving the client-side app (PWA)
 	app.Route("/", func() app.Composer {
-		r := &root.Root{}
+		r := root.NewRoot(apiServerURL)
 		r.SetMode(root.ModeOperation)
 		return r
 	})
