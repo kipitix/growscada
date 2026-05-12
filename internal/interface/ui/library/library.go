@@ -45,12 +45,13 @@ type Library struct {
 	indicatorTypes []indicatorTypeItem
 	loading        bool
 	fetchErr       string
-	selectedID          string
-	editedName          string
-	editedSVG           string
-	editedScript        string
-	editedScriptLang    string
-	newItemName         string
+	selectedID       string
+	editedName       string
+	editedSVG        string
+	editedScript     string
+	editedScriptLang string
+	editingID        string
+	editingName      string
 }
 
 func NewLibrary(apiServerURL string) *Library {
@@ -95,10 +96,7 @@ const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="
 const defaultScript = "function update() {\n}"
 
 func (l *Library) createItem(ctx app.Context) {
-	name := l.newItemName
-	if name == "" {
-		name = "New Indicator Type"
-	}
+	name := "New Indicator Type"
 	url := l.apiServerURL + "/api/v1/indicator-types"
 	body, _ := json.Marshal(createIndicatorTypeRequest{
 		Name:           name,
@@ -132,7 +130,6 @@ func (l *Library) createItem(ctx app.Context) {
 			l.editedSVG = defaultSVG
 			l.editedScript = defaultScript
 			l.editedScriptLang = "javascript"
-			l.newItemName = ""
 			l.loadList(ctx)
 		})
 	})
@@ -204,6 +201,60 @@ func (l *Library) applyChanges(ctx app.Context) {
 		resp.Body.Close()
 		ctx.Dispatch(func(ctx app.Context) {
 			l.fetchErr = ""
+			l.loadList(ctx)
+		})
+	})
+}
+
+func (l *Library) startEditing(id, currentName string) {
+	l.editingID = id
+	l.editingName = currentName
+}
+
+func (l *Library) commitEdit(ctx app.Context) {
+	if l.editingID == "" {
+		return
+	}
+	id := l.editingID
+	name := l.editingName
+	l.editingID = ""
+	l.editingName = ""
+
+	var found indicatorTypeItem
+	for _, it := range l.indicatorTypes {
+		if it.ID == id {
+			found = it
+			break
+		}
+	}
+	if found.ID == "" {
+		return
+	}
+
+	url := l.apiServerURL + "/api/v1/indicator-types/" + id
+	body, _ := json.Marshal(updateIndicatorTypeRequest{
+		Name:           name,
+		SvgTemplate:    found.SvgTemplate,
+		Script:         found.Script,
+		ScriptLanguage: found.ScriptLanguage,
+	})
+	ctx.Async(func() {
+		req, _ := http.NewRequest(http.MethodPut, url, bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			ctx.Dispatch(func(ctx app.Context) {
+				l.fetchErr = err.Error()
+			})
+			return
+		}
+		resp.Body.Close()
+		ctx.Dispatch(func(ctx app.Context) {
+			l.fetchErr = ""
+			if l.selectedID == id {
+				l.editedName = name
+			}
+			l.loadList(ctx)
 		})
 	})
 }
@@ -269,40 +320,21 @@ func (l *Library) renderListButtons() app.UI {
 
 	return app.Div().
 		Style("display", "flex").
-		Style("flex-direction", "column").
 		Style("gap", "4px").
 		Style("margin-bottom", "4px").
 		Body(
-			app.Input().
-				Type("text").
-				Placeholder("Name").
-				Value(l.newItemName).
-				Style("width", "100%").
-				Style("padding", "4px 6px").
+			app.Button().
+				Style("flex", "1").
+				Style("padding", "4px 0").
 				Style("font-size", "13px").
+				Style("cursor", "pointer").
 				Style("border", "1px solid #ccc").
 				Style("border-radius", "4px").
-				Style("box-sizing", "border-box").
-				OnInput(func(ctx app.Context, e app.Event) {
-					l.newItemName = ctx.JSSrc().Get("value").String()
+				Text("Create").
+				OnClick(func(ctx app.Context, e app.Event) {
+					l.createItem(ctx)
 				}),
-			app.Div().
-				Style("display", "flex").
-				Style("gap", "4px").
-				Body(
-					app.Button().
-						Style("flex", "1").
-						Style("padding", "4px 0").
-						Style("font-size", "13px").
-						Style("cursor", "pointer").
-						Style("border", "1px solid #ccc").
-						Style("border-radius", "4px").
-						Text("Create").
-						OnClick(func(ctx app.Context, e app.Event) {
-							l.createItem(ctx)
-						}),
-					deleteBtn,
-				),
+			deleteBtn,
 		)
 }
 
@@ -321,21 +353,58 @@ func (l *Library) renderList() app.UI {
 	for i, it := range l.indicatorTypes {
 		id := it.ID
 		name := it.Name
-		item := app.Div().
-			Style("padding", "6px 8px").
-			Style("cursor", "pointer").
-			Style("border-radius", "4px").
-			Style("font-size", "13px").
-			Body(app.Text(name)).
-			OnClick(func(ctx app.Context, e app.Event) {
-				l.selectItem(id)
-			})
-		if l.selectedID == id {
-			item = item.
-				Style("background", "#0066cc").
-				Style("color", "#fff")
+		var item app.UI
+		if l.editingID == id {
+			item = app.Div().
+				Style("padding", "2px 4px").
+				Style("border-radius", "4px").
+				Body(
+					app.Input().
+						Type("text").
+						Value(l.editingName).
+						AutoFocus(true).
+						Style("width", "100%").
+						Style("font-size", "13px").
+						Style("padding", "3px 4px").
+						Style("border", "1px solid #0066cc").
+						Style("border-radius", "2px").
+						Style("box-sizing", "border-box").
+						OnInput(func(ctx app.Context, e app.Event) {
+							l.editingName = ctx.JSSrc().Get("value").String()
+						}).
+						OnBlur(func(ctx app.Context, e app.Event) {
+							l.commitEdit(ctx)
+						}).
+						OnKeyDown(func(ctx app.Context, e app.Event) {
+							switch e.Get("key").String() {
+							case "Enter":
+								l.commitEdit(ctx)
+							case "Escape":
+								l.editingID = ""
+								l.editingName = ""
+							}
+						}),
+				)
 		} else {
-			item = item.Style("color", "#333")
+			item = app.Div().
+				Style("padding", "6px 8px").
+				Style("cursor", "pointer").
+				Style("border-radius", "4px").
+				Style("font-size", "13px").
+				Body(app.Text(name)).
+				OnClick(func(ctx app.Context, e app.Event) {
+					l.selectItem(id)
+				}).
+				OnDblClick(func(ctx app.Context, e app.Event) {
+					l.startEditing(id, name)
+				})
+			if l.selectedID == id {
+				item = item.(app.HTMLDiv).
+					Style("background", "#0066cc").
+					Style("color", "#fff")
+			} else {
+				item = item.(app.HTMLDiv).Style("color", "#333")
+			}
 		}
 		items[i] = item
 	}
