@@ -35,7 +35,6 @@ func main() {
 	// Server setup for serving the client-side app (PWA)
 	app.Route("/", func() app.Composer {
 		r := root.NewRoot(apiServerURL)
-		r.SetMode(root.ModeOperation)
 		return r
 	})
 

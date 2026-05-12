@@ -26,50 +26,72 @@ type Root struct {
 
 func NewRoot(anAPIServerURL string) *Root {
 	return &Root{
-		currentMode:  ModeLibrary, // Default mode
+		currentMode:  ModeLibrary,
 		apiServerURL: anAPIServerURL,
 	}
 }
 
 func (r *Root) Render() app.UI {
-	return app.Div().Body(
-		// Toolbar with radio buttons
-		app.Div().Class("toolbar").Body(
-			app.Div().Class("mode-selector").Body(
-				r.radioOption("Library", ModeLibrary),
-				r.radioOption("Project", ModeProject),
-				r.radioOption("Operation", ModeOperation),
-				r.radioOption("History", ModeHistory),
-			),
-		),
-
-		// Content
-		app.Div().Class("content").Body(
-			app.If(r.currentMode == ModeLibrary, func() app.UI {
-				return library.NewLibrary(r.apiServerURL)
-			}).ElseIf(r.currentMode == ModeProject, func() app.UI {
-				return &project.Project{}
-			}).ElseIf(r.currentMode == ModeOperation, func() app.UI {
-				return &operation.Operation{}
-			}).Else(func() app.UI {
-				return &history.History{}
-			}),
-		),
-	)
+	return app.Div().
+		Style("display", "flex").
+		Style("flex-direction", "column").
+		Style("height", "100vh").
+		Style("font-family", "sans-serif").
+		Body(
+			app.Div().
+				Style("display", "flex").
+				Style("flex-direction", "row").
+				Style("border-bottom", "2px solid #ddd").
+				Style("background", "#f8f8f8").
+				Body(
+					r.tab("Library", ModeLibrary),
+					r.tab("Project", ModeProject),
+					r.tab("Operation", ModeOperation),
+					r.tab("History", ModeHistory),
+				),
+			app.Div().
+				Style("flex", "1").
+				Style("min-height", "0").
+				Style("display", "flex").
+				Style("padding", "12px").
+				Style("box-sizing", "border-box").
+				Body(
+					app.If(r.currentMode == ModeLibrary, func() app.UI {
+						return library.NewLibrary(r.apiServerURL)
+					}).ElseIf(r.currentMode == ModeProject, func() app.UI {
+						return &project.Project{}
+					}).ElseIf(r.currentMode == ModeOperation, func() app.UI {
+						return &operation.Operation{}
+					}).Else(func() app.UI {
+						return &history.History{}
+					}),
+				),
+		)
 }
 
-func (r *Root) radioOption(label string, mode Mode) app.UI {
-	return app.Label().Class("radio-option").Body(
-		app.Input().
-			Type("radio").
-			Name("mode").
-			Value(string(mode)).
-			Checked(r.currentMode == mode).
-			OnChange(func(ctx app.Context, e app.Event) {
-				r.currentMode = mode
-			}),
-		app.Text(label),
-	)
+func (r *Root) tab(label string, mode Mode) app.UI {
+	active := r.currentMode == mode
+
+	tab := app.Div().
+		Style("padding", "10px 20px").
+		Style("cursor", "pointer").
+		Style("font-size", "14px").
+		Style("user-select", "none").
+		Style("border-bottom", "2px solid transparent").
+		Style("margin-bottom", "-2px").
+		Text(label).
+		OnClick(func(ctx app.Context, e app.Event) {
+			r.currentMode = mode
+		})
+
+	if active {
+		return tab.
+			Style("border-bottom-color", "#0066cc").
+			Style("color", "#0066cc").
+			Style("font-weight", "600")
+	}
+	return tab.
+		Style("color", "#555")
 }
 
 func (r *Root) SetMode(mode Mode) {
