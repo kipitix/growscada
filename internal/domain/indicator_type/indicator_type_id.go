@@ -7,17 +7,27 @@ import (
 )
 
 // IndicatorTypeID - UUID-based indicator type identifier.
-type IndicatorTypeID uuid.UUID
+// Represents a value object for unique indicator type identification.
+type IndicatorTypeID struct {
+	uuid uuid.UUID
+}
 
 // Interfaces for IndicatorTypeID.
 var _ fmt.Stringer = IndicatorTypeID{}
 
 // NewIndicatorTypeID generates a new random IndicatorTypeID.
+// Uses uuid.New() to create a unique identifier.
 func NewIndicatorTypeID(opts ...IndicatorTypeIDOption) IndicatorTypeID {
-	id := IndicatorTypeID(uuid.New())
+	id := IndicatorTypeID{}
 
+	// Apply options
 	for _, opt := range opts {
 		opt(&id)
+	}
+
+	// Create a new UUID if none provided
+	if id.uuid == uuid.Nil {
+		id.uuid = uuid.New()
 	}
 
 	return id
@@ -27,9 +37,10 @@ func NewIndicatorTypeID(opts ...IndicatorTypeIDOption) IndicatorTypeID {
 type IndicatorTypeIDOption func(*IndicatorTypeID)
 
 // IndicatorTypeIDWithUUID allows specifying an existing UUID for IndicatorTypeID creation.
-func IndicatorTypeIDWithUUID(u uuid.UUID) IndicatorTypeIDOption {
+// Used when an IndicatorTypeID needs to be created from an existing UUID.
+func IndicatorTypeIDWithUUID(anUUID uuid.UUID) IndicatorTypeIDOption {
 	return func(id *IndicatorTypeID) {
-		*id = IndicatorTypeID(u)
+		id.uuid = anUUID
 	}
 }
 
@@ -44,20 +55,21 @@ func MustParseIndicatorTypeID(s string) IndicatorTypeID {
 }
 
 // ParseIndicatorTypeID creates an IndicatorTypeID from a UUID string.
+// Returns an error if the string is not a valid UUID.
 func ParseIndicatorTypeID(s string) (IndicatorTypeID, error) {
-	id, err := uuid.Parse(s)
+	uuid, err := uuid.Parse(s)
 	if err != nil {
 		return IndicatorTypeID{}, err
 	}
-	return IndicatorTypeID(id), nil
+	return NewIndicatorTypeID(IndicatorTypeIDWithUUID(uuid)), nil
 }
 
 // UUID converts IndicatorTypeID to a uuid.UUID.
 func (id IndicatorTypeID) UUID() uuid.UUID {
-	return uuid.UUID(id)
+	return id.uuid
 }
 
 // String implements [fmt.Stringer].
 func (id IndicatorTypeID) String() string {
-	return uuid.UUID(id).String()
+	return id.uuid.String()
 }

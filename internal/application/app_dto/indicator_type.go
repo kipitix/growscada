@@ -1,4 +1,4 @@
-package appdto
+package app_dto
 
 import (
 	"github.com/google/uuid"
@@ -40,7 +40,7 @@ func NewIndicatorType(it indicator_type.IndicatorType) IndicatorType {
 		SvgTemplate:    it.SvgTemplate().String(),
 		Script:         it.Script().String(),
 		ScriptLanguage: it.ScriptLanguage().String(),
-		Version:        it.Version().Int(),
+		Version:        it.Version().Number(),
 	}
 }
 

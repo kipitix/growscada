@@ -1,8 +1,8 @@
-package restdto
+package rest_dto
 
 import (
 	"github.com/google/uuid"
-	"github.com/kipitix/growscada/internal/application/appdto"
+	"github.com/kipitix/growscada/internal/application/app_dto"
 )
 
 // IndicatorTypeResponse is the HTTP DTO for representing an indicator type in API responses.
@@ -46,7 +46,7 @@ type UpdateIndicatorTypeResponse struct {
 	Version int `json:"version"`
 }
 
-func NewIndicatorTypeResponse(it appdto.IndicatorType) IndicatorTypeResponse {
+func NewIndicatorTypeResponse(it app_dto.IndicatorType) IndicatorTypeResponse {
 	return IndicatorTypeResponse{
 		ID:             it.ID,
 		Name:           it.Name,
@@ -57,7 +57,7 @@ func NewIndicatorTypeResponse(it appdto.IndicatorType) IndicatorTypeResponse {
 	}
 }
 
-func NewGetIndicatorTypesResponse(list []appdto.IndicatorType) GetIndicatorTypesResponse {
+func NewGetIndicatorTypesResponse(list []app_dto.IndicatorType) GetIndicatorTypesResponse {
 	items := make([]IndicatorTypeResponse, len(list))
 	for i, it := range list {
 		items[i] = NewIndicatorTypeResponse(it)
@@ -65,16 +65,16 @@ func NewGetIndicatorTypesResponse(list []appdto.IndicatorType) GetIndicatorTypes
 	return GetIndicatorTypesResponse{IndicatorTypes: items}
 }
 
-func NewCreateIndicatorTypeResponse(it appdto.IndicatorType) CreateIndicatorTypeResponse {
+func NewCreateIndicatorTypeResponse(it app_dto.IndicatorType) CreateIndicatorTypeResponse {
 	return CreateIndicatorTypeResponse{ID: it.ID}
 }
 
-func NewUpdateIndicatorTypeResponse(it appdto.IndicatorType) UpdateIndicatorTypeResponse {
+func NewUpdateIndicatorTypeResponse(it app_dto.IndicatorType) UpdateIndicatorTypeResponse {
 	return UpdateIndicatorTypeResponse{Version: it.Version}
 }
 
-func NewCreateIndicatorTypeInput(r CreateIndicatorTypeRequest) appdto.CreateIndicatorTypeInput {
-	return appdto.CreateIndicatorTypeInput{
+func NewCreateIndicatorTypeInput(r CreateIndicatorTypeRequest) app_dto.CreateIndicatorTypeInput {
+	return app_dto.CreateIndicatorTypeInput{
 		Name:           r.Name,
 		SvgTemplate:    r.SvgTemplate,
 		Script:         r.Script,
@@ -82,8 +82,8 @@ func NewCreateIndicatorTypeInput(r CreateIndicatorTypeRequest) appdto.CreateIndi
 	}
 }
 
-func NewUpdateIndicatorTypeInput(r UpdateIndicatorTypeRequest, id uuid.UUID) appdto.UpdateIndicatorTypeInput {
-	return appdto.UpdateIndicatorTypeInput{
+func NewUpdateIndicatorTypeInput(r UpdateIndicatorTypeRequest, id uuid.UUID) app_dto.UpdateIndicatorTypeInput {
+	return app_dto.UpdateIndicatorTypeInput{
 		ID:             id,
 		Name:           r.Name,
 		SvgTemplate:    r.SvgTemplate,

@@ -3,17 +3,21 @@ package indicator_type
 import "fmt"
 
 // IndicatorTypeName - name of the indicator type.
-type IndicatorTypeName string
-
-// Interfaces for IndicatorTypeName.
-var _ fmt.Stringer = IndicatorTypeName("")
-
-// NewIndicatorTypeName creates an IndicatorTypeName from a string.
-func NewIndicatorTypeName(name string) (IndicatorTypeName, error) {
-	return IndicatorTypeName(name), nil
+// Value Object.
+type IndicatorTypeName struct {
+	name string
 }
 
-// String implements [fmt.Stringer].
+// Interfaces for IndicatorTypeName.
+var _ fmt.Stringer = IndicatorTypeName{}
+
+// Factory method.
+func NewIndicatorTypeName(aName string) (IndicatorTypeName, error) {
+	// TODO: add restrictions and validation
+	return IndicatorTypeName{name: aName}, nil
+}
+
+// String method.
 func (n IndicatorTypeName) String() string {
-	return string(n)
+	return n.name
 }

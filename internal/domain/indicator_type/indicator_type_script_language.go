@@ -4,16 +4,23 @@ import "fmt"
 
 // ScriptLanguage - enumeration for the scripting language used in Script.
 // Value Object.
-type ScriptLanguage int
+type ScriptLanguage struct {
+	language int
+}
 
 // Interfaces for ScriptLanguage.
-var _ fmt.Stringer = ScriptLanguage(0)
+var _ fmt.Stringer = ScriptLanguage{}
 
-const (
-	ScriptLanguageUnknown    ScriptLanguage = iota
-	ScriptLanguageJavaScript
-	ScriptLanguagePython
-	ScriptLanguageLua
+// Script language enumeration values.
+// ScriptLanguageUnknown - unknown language (zero value, uninitialized).
+// ScriptLanguageJavaScript - JavaScript.
+// ScriptLanguagePython - Python.
+// ScriptLanguageLua - Lua.
+var (
+	ScriptLanguageUnknown    = ScriptLanguage{language: 0}
+	ScriptLanguageJavaScript = ScriptLanguage{language: 1}
+	ScriptLanguagePython     = ScriptLanguage{language: 2}
+	ScriptLanguageLua        = ScriptLanguage{language: 3}
 )
 
 // NewScriptLanguage parses a string into the ScriptLanguage enum.
@@ -46,5 +53,5 @@ func (l ScriptLanguage) String() string {
 
 // IsValid checks whether the ScriptLanguage value is a known language.
 func (l ScriptLanguage) IsValid() bool {
-	return l >= ScriptLanguageJavaScript && l <= ScriptLanguageLua
+	return l.language >= 1 && l.language <= 3
 }

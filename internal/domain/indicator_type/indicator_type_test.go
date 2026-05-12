@@ -22,7 +22,7 @@ func TestNewIndicatorType_FieldsAreSet(t *testing.T) {
 	svgTemplate, _ := NewSvgTemplate("<svg><rect/></svg>")
 	script, _ := NewScript("function draw() {}")
 	lang := ScriptLanguagePython
-	version := IndicatorTypeVersion(3)
+	version, _ := NewIndicatorTypeVersion(IndicatorTypeVersionWithNumber(3))
 
 	it, err := NewIndicatorType(id, name, svgTemplate, script, lang, version)
 	if err != nil {
@@ -59,12 +59,12 @@ func TestNewIndicatorType_InitialVersion(t *testing.T) {
 func TestIndicatorType_IncrementVersion(t *testing.T) {
 	it := makeTestIndicatorType(t)
 	it.IncrementVersion()
-	if it.Version() != 1 {
-		t.Errorf("expected version 1 after first increment, got %d", it.Version())
+	if it.Version().Number() != 1 {
+		t.Errorf("expected version 1 after first increment, got %d", it.Version().Number())
 	}
 	it.IncrementVersion()
-	if it.Version() != 2 {
-		t.Errorf("expected version 2 after second increment, got %d", it.Version())
+	if it.Version().Number() != 2 {
+		t.Errorf("expected version 2 after second increment, got %d", it.Version().Number())
 	}
 }
 

@@ -2,11 +2,6 @@ package indicator_type
 
 import "fmt"
 
-const (
-	IndicatorTypeVersionInitial   IndicatorTypeVersion = 0
-	IndicatorTypeVersionCommitted IndicatorTypeVersion = 1
-)
-
 // IndicatorType - aggregate representing a visual indicator type.
 // Defines how a SCADA indicator element is rendered via an SVG template and a script.
 type IndicatorType interface {
@@ -94,7 +89,7 @@ func (it *indicatorTypeImpl) Update(name IndicatorTypeName, svgTemplate SvgTempl
 
 // IncrementVersion increments the version by one.
 func (it *indicatorTypeImpl) IncrementVersion() {
-	it.version++
+	it.version = it.version.Next()
 }
 
 // String implements [fmt.Stringer].

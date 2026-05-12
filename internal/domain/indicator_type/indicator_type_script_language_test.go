@@ -41,7 +41,7 @@ func TestScriptLanguage_String(t *testing.T) {
 		{ScriptLanguageJavaScript, "javascript"},
 		{ScriptLanguagePython, "python"},
 		{ScriptLanguageLua, "lua"},
-		{ScriptLanguage(99), "unknown"},
+		{ScriptLanguage{language: 99}, "unknown"},
 	}
 
 	for _, tc := range cases {
@@ -61,7 +61,7 @@ func TestScriptLanguage_IsValid(t *testing.T) {
 		}
 	}
 
-	invalid := []ScriptLanguage{ScriptLanguageUnknown, ScriptLanguage(-1), ScriptLanguage(99)}
+	invalid := []ScriptLanguage{ScriptLanguageUnknown, ScriptLanguage{language: -1}, ScriptLanguage{language: 99}}
 	for _, l := range invalid {
 		if l.IsValid() {
 			t.Errorf("expected %v to be invalid", l)

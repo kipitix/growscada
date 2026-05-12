@@ -21,7 +21,7 @@ func NewIndicatorTypeRepositoryPostgres(aDb *sql.DB) indicator_type.IndicatorTyp
 }
 
 func (r indicatorTypeRepositoryPostgresImpl) NextID() indicator_type.IndicatorTypeID {
-	return indicator_type.IndicatorTypeID(uuid.New())
+	return indicator_type.NewIndicatorTypeID()
 }
 
 func (r indicatorTypeRepositoryPostgresImpl) Save(ctx context.Context, it indicator_type.IndicatorType) error {
@@ -31,7 +31,7 @@ func (r indicatorTypeRepositoryPostgresImpl) Save(ctx context.Context, it indica
 			VALUES ($1, $2, $3, $4, $5, $6)`,
 			it.ID().UUID(), it.Name().String(), it.SvgTemplate().String(),
 			it.Script().String(), it.ScriptLanguage().String(),
-			indicator_type.IndicatorTypeVersionCommitted,
+			indicator_type.IndicatorTypeVersionCommitted.Number(),
 		)
 		if err != nil {
 			return fmt.Errorf("cannot insert new indicator type: %w", err)
@@ -47,13 +47,13 @@ func (r indicatorTypeRepositoryPostgresImpl) Save(ctx context.Context, it indica
 		return nil
 	}
 
-	if it.Version() > indicator_type.IndicatorTypeVersionInitial {
+	if it.Version().IsCommitted() {
 		sqlResult, err := r.db.ExecContext(ctx,
 			`UPDATE indicator_types
 			 SET name = $1, svg_template = $2, script = $3, script_language = $4, version = version + 1
 			 WHERE id = $5 AND version = $6`,
 			it.Name().String(), it.SvgTemplate().String(), it.Script().String(),
-			it.ScriptLanguage().String(), it.ID().UUID(), it.Version(),
+			it.ScriptLanguage().String(), it.ID().UUID(), it.Version().Number(),
 		)
 		if err != nil {
 			return fmt.Errorf("cannot update indicator type: %w", err)
@@ -69,7 +69,7 @@ func (r indicatorTypeRepositoryPostgresImpl) Save(ctx context.Context, it indica
 		return nil
 	}
 
-	return fmt.Errorf("undefined behavior with version %d", it.Version())
+	return fmt.Errorf("undefined behavior with version %d", it.Version().Number())
 }
 
 func (r indicatorTypeRepositoryPostgresImpl) FindByID(ctx context.Context, id indicator_type.IndicatorTypeID) (indicator_type.IndicatorType, error) {
@@ -181,5 +181,10 @@ func (r indicatorTypeRepositoryPostgresImpl) reconstruct(
 		return nil, fmt.Errorf("cannot create script language: %w", err)
 	}
 
-	return indicator_type.NewIndicatorType(newID, newName, newSvg, newScript, newLang, indicator_type.IndicatorTypeVersion(version))
+	newVersion, err := indicator_type.NewIndicatorTypeVersion(indicator_type.IndicatorTypeVersionWithNumber(version))
+	if err != nil {
+		return nil, fmt.Errorf("cannot create indicator type version: %w", err)
+	}
+
+	return indicator_type.NewIndicatorType(newID, newName, newSvg, newScript, newLang, newVersion)
 }
