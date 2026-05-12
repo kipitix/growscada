@@ -1,3 +1,5 @@
 # Test Data for Tests and Debugging
 
-This directory contains migrations that will add test data for debugging and testing.
+В этой директории содержатся миграции с данными для тестов.
+
+Если добавляются миграции в основную папку migrations, то в этой директории нужно переименовывать дату миграций, чтобы они были позже последней основной миграции.
