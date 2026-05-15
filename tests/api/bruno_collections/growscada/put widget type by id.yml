@@ -1,17 +1,17 @@
 info:
-  name: put indicator type by id
+  name: put widget type by id
   type: http
   seq: 9
 
 http:
   method: PUT
-  url: http://{{API_SERVER}}/api/v1/indicator-types/{{INDICATOR_TYPE_ID}}
+  url: http://{{API_SERVER}}/api/v1/widget-types/{{WIDGET_TYPE_ID}}
   body:
     type: json
     data: |-
       {
         "name": "pressure gauge updated",
-        "svg_template": "<svg xmlns='http://www.w3.org/2000/svg'><rect width='80' height='80'/></svg>",
+        "html_template": "<div class=\"gauge updated\"><span class=\"value\"></span></div>",
         "script": "function render(value) { return value * 2; }",
         "script_language": "javascript"
       }

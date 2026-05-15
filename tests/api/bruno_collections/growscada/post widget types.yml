@@ -1,17 +1,17 @@
 info:
-  name: post indicator types
+  name: post widget types
   type: http
   seq: 7
 
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v1/indicator-types
+  url: http://{{API_SERVER}}/api/v1/widget-types
   body:
     type: json
     data: |-
       {
         "name": "pressure gauge",
-        "svg_template": "<svg xmlns='http://www.w3.org/2000/svg'><circle cx='50' cy='50' r='40'/></svg>",
+        "html_template": "<div class=\"gauge\"><span class=\"value\"></span></div>",
         "script": "function render(value) { return value; }",
         "script_language": "javascript"
       }

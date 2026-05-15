@@ -1,11 +1,11 @@
 info:
-  name: get indicator types
+  name: get widget types
   type: http
   seq: 6
 
 http:
   method: GET
-  url: http://{{API_SERVER}}/api/v1/indicator-types
+  url: http://{{API_SERVER}}/api/v1/widget-types
   auth: inherit
 
 settings:
