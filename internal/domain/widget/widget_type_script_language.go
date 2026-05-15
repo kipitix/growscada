@@ -45,8 +45,3 @@ func (l ScriptLanguage) String() string {
 		return "unknown"
 	}
 }
-
-// IsValid checks whether the ScriptLanguage value is a known language.
-func (l ScriptLanguage) IsValid() bool {
-	return l.language >= 1 && l.language <= 3
-}

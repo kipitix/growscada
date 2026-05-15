@@ -52,19 +52,3 @@ func TestScriptLanguage_String(t *testing.T) {
 		})
 	}
 }
-
-func TestScriptLanguage_IsValid(t *testing.T) {
-	valid := []ScriptLanguage{ScriptLanguageJavaScript, ScriptLanguagePython, ScriptLanguageLua}
-	for _, l := range valid {
-		if !l.IsValid() {
-			t.Errorf("expected %v to be valid", l)
-		}
-	}
-
-	invalid := []ScriptLanguage{ScriptLanguageUnknown, {language: -1}, {language: 99}}
-	for _, l := range invalid {
-		if l.IsValid() {
-			t.Errorf("expected %v to be invalid", l)
-		}
-	}
-}
