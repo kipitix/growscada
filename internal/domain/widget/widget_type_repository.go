@@ -5,7 +5,12 @@ import (
 	"errors"
 )
 
-var ErrWidgetTypeNotFound = errors.New("widget type not found")
+var (
+	ErrWidgetTypeNotFound = errors.New("widget type not found")
+	// ErrWidgetTypeConflict is returned by Save when the stored version does not match,
+	// indicating a concurrent modification.
+	ErrWidgetTypeConflict = errors.New("widget type version conflict")
+)
 
 // WidgetTypeRepository - repository interface for storing and managing widget types.
 type WidgetTypeRepository interface {
@@ -13,7 +18,8 @@ type WidgetTypeRepository interface {
 	NextID() WidgetTypeID
 
 	// Save stores a widget type in the repository.
-	// Returns the saved widget type with updated version on success, or an error on failure.
+	// Returns ErrWidgetTypeNotFound if the record does not exist.
+	// Returns ErrWidgetTypeConflict if the stored version does not match.
 	Save(context.Context, WidgetType) (WidgetType, error)
 
 	// FindByID returns a widget type by its identifier.

@@ -2,6 +2,7 @@ package restapi
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/kipitix/growscada/internal/application"
@@ -51,7 +52,13 @@ func NewRouter(tagService application.TagService, widgetTypeService application.
 	return router
 }
 
-// Helper function for sending a JSON response
+// sendInternalError logs the full error and sends a generic 500 to the client.
+func sendInternalError(w http.ResponseWriter, r *http.Request, err error) {
+	slog.Error("internal server error", "path", r.URL.Path, "method", r.Method, "error", err)
+	sendJSONResponse(w, http.StatusInternalServerError, NewInternalError("an internal error occurred", r.URL.Path))
+}
+
+// sendJSONResponse writes a JSON response with the given status code.
 func sendJSONResponse(w http.ResponseWriter, status int, data any) {
 	body, err := json.Marshal(data)
 	if err != nil {

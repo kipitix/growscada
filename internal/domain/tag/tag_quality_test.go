@@ -35,18 +35,20 @@ func TestNewTagQuality_UnknownValue(t *testing.T) {
 
 func TestTagQuality_String(t *testing.T) {
 	cases := []struct {
+		name     string
 		quality  TagQuality
 		expected string
 	}{
-		{TagQualityUnknown, "unknown"},
-		{TagQualityBad, "bad"},
-		{TagQualityUncertain, "uncertain"},
-		{TagQualityGood, "good"},
-		{TagQualitySimulated, "simulated"},
+		{"unknown", TagQualityUnknown, "unknown"},
+		{"bad", TagQualityBad, "bad"},
+		{"uncertain", TagQualityUncertain, "uncertain"},
+		{"good", TagQualityGood, "good"},
+		{"simulated", TagQualitySimulated, "simulated"},
+		{"default", TagQuality{quality: 99}, "unknown"},
 	}
 
 	for _, tc := range cases {
-		t.Run(tc.expected, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			if got := tc.quality.String(); got != tc.expected {
 				t.Errorf("expected %q, got %q", tc.expected, got)
 			}

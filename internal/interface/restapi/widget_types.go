@@ -23,7 +23,7 @@ func NewWidgetTypesHandler(s application.WidgetTypeService) *WidgetTypesHandlers
 func (h WidgetTypesHandlers) GetWidgetTypes(w http.ResponseWriter, r *http.Request) {
 	list, err := h.service.FindAllWidgetTypes(r.Context())
 	if err != nil {
-		sendJSONResponse(w, http.StatusInternalServerError, NewInternalError(err.Error(), r.URL.Path))
+		sendInternalError(w, r, err)
 		return
 	}
 	sendJSONResponse(w, http.StatusOK, restdto.NewGetWidgetTypesResponse(list))
@@ -44,7 +44,7 @@ func (h WidgetTypesHandlers) GetWidgetTypesByID(w http.ResponseWriter, r *http.R
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
 			return
 		}
-		sendJSONResponse(w, http.StatusInternalServerError, NewInternalError(err.Error(), r.URL.Path))
+		sendInternalError(w, r, err)
 		return
 	}
 
@@ -61,7 +61,7 @@ func (h WidgetTypesHandlers) PostWidgetTypes(w http.ResponseWriter, r *http.Requ
 
 	created, err := h.service.CreateWidgetType(r.Context(), restdto.NewCreateWidgetTypeInput(request))
 	if err != nil {
-		sendJSONResponse(w, http.StatusInternalServerError, NewInternalError(err.Error(), r.URL.Path))
+		sendInternalError(w, r, err)
 		return
 	}
 
@@ -89,7 +89,11 @@ func (h WidgetTypesHandlers) PutWidgetTypesByID(w http.ResponseWriter, r *http.R
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
 			return
 		}
-		sendJSONResponse(w, http.StatusInternalServerError, NewInternalError(err.Error(), r.URL.Path))
+		if errors.Is(err, widget.ErrWidgetTypeConflict) {
+			sendJSONResponse(w, http.StatusConflict, NewConflict("widget type", err.Error(), r.URL.Path))
+			return
+		}
+		sendInternalError(w, r, err)
 		return
 	}
 
@@ -111,7 +115,7 @@ func (h WidgetTypesHandlers) DeleteWidgetTypesByID(w http.ResponseWriter, r *htt
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
 			return
 		}
-		sendJSONResponse(w, http.StatusInternalServerError, NewInternalError(err.Error(), r.URL.Path))
+		sendInternalError(w, r, err)
 		return
 	}
 

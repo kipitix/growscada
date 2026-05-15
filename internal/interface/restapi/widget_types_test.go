@@ -13,6 +13,7 @@ import (
 	"github.com/kipitix/growscada/internal/application"
 	"github.com/kipitix/growscada/internal/application/appdto"
 	"github.com/kipitix/growscada/internal/domain/event"
+	"github.com/kipitix/growscada/internal/domain/widget"
 	"github.com/kipitix/growscada/internal/infrastructure/postgres/repositories"
 	"github.com/kipitix/growscada/internal/interface/restapi"
 	"github.com/kipitix/growscada/internal/interface/restapi/restdto"
@@ -274,6 +275,35 @@ func TestPutWidgetTypesByID_InvalidUUID_Returns400(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status: expected 400, got %d", rec.Code)
 	}
+}
+
+func TestPutWidgetTypesByID_Conflict_Returns409(t *testing.T) {
+	svc := &stubWidgetTypeService{updateErr: widget.ErrWidgetTypeConflict}
+	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
+	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
+	router := restapi.NewRouter(tagSvc, svc)
+
+	body, _ := json.Marshal(restdto.UpdateWidgetTypeRequest{
+		Name: "x", HtmlTemplate: "<div/>", Script: "x", ScriptLanguage: "lua",
+	})
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/widget-types/"+uuid.New().String(), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Errorf("status: expected 409, got %d", rec.Code)
+	}
+}
+
+// stubWidgetTypeService is a minimal WidgetTypeService stub for handler-level tests.
+type stubWidgetTypeService struct {
+	application.WidgetTypeService
+	updateErr error
+}
+
+func (s *stubWidgetTypeService) UpdateWidgetType(_ context.Context, _ appdto.UpdateWidgetTypeInput) (appdto.WidgetType, error) {
+	return appdto.WidgetType{}, s.updateErr
 }
 
 // --- DELETE /api/v1/widget-types/{id} ---

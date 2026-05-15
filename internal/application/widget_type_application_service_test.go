@@ -91,8 +91,12 @@ func TestFindAllWidgetTypes_Multiple_ReturnsAll(t *testing.T) {
 
 	input2 := testCreateWidgetTypeInput
 	input2.Name = "thermometer"
-	svc.CreateWidgetType(ctx, testCreateWidgetTypeInput) //nolint:errcheck
-	svc.CreateWidgetType(ctx, input2)                   //nolint:errcheck
+	if _, err := svc.CreateWidgetType(ctx, testCreateWidgetTypeInput); err != nil {
+		t.Fatalf("CreateWidgetType: %v", err)
+	}
+	if _, err := svc.CreateWidgetType(ctx, input2); err != nil {
+		t.Fatalf("CreateWidgetType: %v", err)
+	}
 
 	resp, err := svc.FindAllWidgetTypes(ctx)
 
