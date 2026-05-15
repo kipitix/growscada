@@ -26,7 +26,7 @@ func NewTagsHandler(s application.TagService) *TagsHandlers {
 func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
 	tagList, err := h.service.FindAllTags(r.Context())
 	if err != nil {
-		sendJSONResponse(w, http.StatusInternalServerError, NewInternalError(err.Error(), r.URL.Path))
+		sendInternalError(w, r, err)
 		return
 	}
 	sendJSONResponse(w, http.StatusOK, restdto.NewGetTagsResponse(tagList))
@@ -47,7 +47,7 @@ func (h TagsHandlers) GetTagsByID(w http.ResponseWriter, r *http.Request) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), tagIDString, r.URL.Path))
 			return
 		}
-		sendJSONResponse(w, http.StatusInternalServerError, NewInternalError(err.Error(), r.URL.Path))
+		sendInternalError(w, r, err)
 		return
 	}
 
@@ -69,7 +69,7 @@ func (h TagsHandlers) DeleteTagsByID(w http.ResponseWriter, r *http.Request) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), tagIDString, r.URL.Path))
 			return
 		}
-		sendJSONResponse(w, http.StatusInternalServerError, NewInternalError(err.Error(), r.URL.Path))
+		sendInternalError(w, r, err)
 		return
 	}
 
@@ -97,7 +97,7 @@ func (h TagsHandlers) PatchTagsValue(w http.ResponseWriter, r *http.Request) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), tagIDString, r.URL.Path))
 			return
 		}
-		sendJSONResponse(w, http.StatusInternalServerError, NewInternalError(err.Error(), r.URL.Path))
+		sendInternalError(w, r, err)
 		return
 	}
 
@@ -115,7 +115,7 @@ func (h TagsHandlers) PostTags(w http.ResponseWriter, r *http.Request) {
 
 	createdTag, err := h.service.CreateTag(r.Context(), restdto.NewCreateTagInput(request))
 	if err != nil {
-		sendJSONResponse(w, http.StatusInternalServerError, NewInternalError(err.Error(), r.URL.Path))
+		sendInternalError(w, r, err)
 		return
 	}
 

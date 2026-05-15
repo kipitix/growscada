@@ -7,6 +7,7 @@ import (
 	"github.com/kipitix/growscada/internal/application/appdto"
 	"github.com/kipitix/growscada/internal/domain/event"
 	"github.com/kipitix/growscada/internal/domain/tag"
+	"github.com/kipitix/growscada/internal/domain/version"
 )
 
 // TagService is the service interface for working with tags.
@@ -79,12 +80,12 @@ func (t tagServiceImpl) CreateTag(ctx context.Context, newTagData appdto.CreateT
 		return appdto.Tag{}, fmt.Errorf("cannot create tag because of quality: %w", err)
 	}
 
-	newTag, err := tag.NewTag(newTagID, newTagName, newTagType, newTagValue, newTagQuality, tag.TagVersionInitial)
+	newTag, err := tag.NewTag(newTagID, newTagName, newTagType, newTagValue, newTagQuality, version.Initial)
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("cannot create tag: %w", err)
 	}
 
-	err = t.tagRepository.Save(ctx, newTag)
+	newTag, err = t.tagRepository.Save(ctx, newTag)
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("cannot save tag: %w", err)
 	}
@@ -124,7 +125,8 @@ func (t tagServiceImpl) SetTagValueByID(ctx context.Context, request appdto.Upda
 		return appdto.Tag{}, fmt.Errorf("cannot set tag value: %w", err)
 	}
 
-	if err = t.tagRepository.Save(ctx, foundTag); err != nil {
+	foundTag, err = t.tagRepository.Save(ctx, foundTag)
+	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("cannot save tag: %w", err)
 	}
 

@@ -15,8 +15,8 @@ type TagRepository interface {
 	NextID() TagID
 
 	// Save stores a tag in the repository.
-	// Returns nil on success, or an error on failure.
-	Save(context.Context, Tag) error
+	// Returns the saved tag with updated version on success, or an error on failure.
+	Save(context.Context, Tag) (Tag, error)
 
 	// FindByID returns a tag by its identifier.
 	// Returns the tag and nil on success, or nil and an error if not found or on failure.

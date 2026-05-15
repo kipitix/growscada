@@ -5,24 +5,26 @@ import (
 )
 
 // TagQuality - enumeration for tag quality.
-// Value Object
-type TagQuality int
+// Value Object.
+type TagQuality struct {
+	quality int
+}
 
 // Interfaces for TagQuality
-var _ fmt.Stringer = TagQuality(0)
+var _ fmt.Stringer = TagQuality{}
 
-// Tag quality enumeration values.
+// Sentinel values for TagQuality. Must not be reassigned.
 // TagQualityUnknown - unknown quality (zero value, uninitialized).
 // TagQualityBad - bad quality (unavailable, error).
 // TagQualityUncertain - uncertain quality.
 // TagQualityGood - good quality (normal value).
 // TagQualitySimulated - simulated quality (value set manually).
-const (
-	TagQualityUnknown TagQuality = iota
-	TagQualityBad
-	TagQualityUncertain
-	TagQualityGood
-	TagQualitySimulated
+var (
+	TagQualityUnknown   = TagQuality{quality: 0}
+	TagQualityBad       = TagQuality{quality: 1}
+	TagQualityUncertain = TagQuality{quality: 2}
+	TagQualityGood      = TagQuality{quality: 3}
+	TagQualitySimulated = TagQuality{quality: 4}
 )
 
 // NewTagQuality parses a string into the enum
@@ -57,9 +59,4 @@ func (e TagQuality) String() string {
 	default:
 		return "unknown"
 	}
-}
-
-// IsValid checks whether the value is valid
-func (e TagQuality) IsValid() bool {
-	return e >= TagQualityBad && e <= TagQualitySimulated
 }

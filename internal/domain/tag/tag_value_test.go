@@ -7,7 +7,7 @@ import (
 func TestNewTagValue_DispatchesByType(t *testing.T) {
 	cases := []struct {
 		name         string
-		tagType         TagType
+		tagType      TagType
 		input        any
 		expectedType string
 	}{
@@ -56,13 +56,6 @@ func TestNewTagValue_IntegerType_StoresCorrectValue(t *testing.T) {
 	}
 	if v.String() != "7" {
 		t.Errorf("expected '7', got %q", v.String())
-	}
-}
-
-func TestNewTagValue_UnknownType_ReturnsError(t *testing.T) {
-	_, err := TagType(99).NewTagValue("x")
-	if err == nil {
-		t.Error("expected error for unknown tagType, got nil")
 	}
 }
 

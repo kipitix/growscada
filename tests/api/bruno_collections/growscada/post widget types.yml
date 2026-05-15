@@ -1,0 +1,24 @@
+info:
+  name: post widget types
+  type: http
+  seq: 7
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v1/widget-types
+  body:
+    type: json
+    data: |-
+      {
+        "name": "pressure gauge",
+        "html_template": "<div class=\"gauge\"><span class=\"value\"></span></div>",
+        "script": "function render(value) { return value; }",
+        "script_language": "javascript"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

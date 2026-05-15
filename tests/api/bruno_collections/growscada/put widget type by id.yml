@@ -1,0 +1,24 @@
+info:
+  name: put widget type by id
+  type: http
+  seq: 9
+
+http:
+  method: PUT
+  url: http://{{API_SERVER}}/api/v1/widget-types/{{WIDGET_TYPE_ID}}
+  body:
+    type: json
+    data: |-
+      {
+        "name": "pressure gauge updated",
+        "html_template": "<div class=\"gauge updated\"><span class=\"value\"></span></div>",
+        "script": "function render(value) { return value * 2; }",
+        "script_language": "javascript"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

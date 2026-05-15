@@ -5,22 +5,24 @@ import (
 )
 
 // TagType - enumeration for tag type.
-// Value Object
-type TagType int
+// Value Object.
+type TagType struct {
+	tagType int
+}
 
 // Interfaces for TagType
-var _ fmt.Stringer = TagType(0)
+var _ fmt.Stringer = TagType{}
 
 // Constants for each tag type.
 // TagTypeUnknown - unknown tag type (zero value, uninitialized).
 // TagTypeString - string tag type.
 // TagTypeBoolean - boolean tag type.
 // TagTypeInteger - integer tag type.
-const (
-	TagTypeUnknown TagType = iota
-	TagTypeString
-	TagTypeBoolean
-	TagTypeInteger
+var (
+	TagTypeUnknown = TagType{tagType: 0}
+	TagTypeString  = TagType{tagType: 1}
+	TagTypeBoolean = TagType{tagType: 2}
+	TagTypeInteger = TagType{tagType: 3}
 	// TODO: add remaining types
 	// TagTypeFloat
 	// TagTypeBytes
@@ -56,12 +58,8 @@ func (e TagType) String() string {
 	}
 }
 
-// IsValid checks whether the value is valid for the tag type
-func (t TagType) IsValid() bool {
-	return t >= TagTypeString && t <= TagTypeInteger
-}
-
-// NewTagValue creates a new tag value
+// NewTagValue creates a new tag value.
+// Factory method.
 func (t TagType) NewTagValue(aValue any) (TagValue, error) {
 	switch t {
 	case TagTypeString:

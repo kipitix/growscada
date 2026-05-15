@@ -38,7 +38,7 @@ func NewTag(aTag tag.Tag) Tag {
 		Type:    aTag.Type().String(),
 		Value:   aTag.Value().String(),
 		Quality: aTag.Quality().String(),
-		Version: aTag.Version(),
+		Version: aTag.Version().Number(),
 	}
 }
 

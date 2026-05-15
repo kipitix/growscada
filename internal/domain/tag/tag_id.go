@@ -8,7 +8,9 @@ import (
 
 // TagID - UUID-based tag identifier.
 // Represents a value object for unique tag identification.
-type TagID uuid.UUID
+type TagID struct {
+	uuid uuid.UUID
+}
 
 // Interfaces for TagID.
 var _ fmt.Stringer = TagID{}
@@ -16,12 +18,16 @@ var _ fmt.Stringer = TagID{}
 // NewTagID generates a new random TagID.
 // Uses uuid.New() to create a unique identifier.
 func NewTagID(opts ...TagIDOption) TagID {
-	// Create a new UUID
-	tagID := TagID(uuid.New())
+	tagID := TagID{}
 
 	// Apply options
 	for _, opt := range opts {
 		opt(&tagID)
+	}
+
+	// Create a new UUID if none provided
+	if tagID.uuid == uuid.Nil {
+		tagID.uuid = uuid.New()
 	}
 
 	return tagID
@@ -32,9 +38,9 @@ type TagIDOption func(*TagID)
 
 // TagIDWithUUID allows specifying an existing UUID for TagID creation.
 // Used when a TagID needs to be created from an existing UUID.
-func TagIDWithUUID(tagUUID uuid.UUID) TagIDOption {
+func TagIDWithUUID(anUUID uuid.UUID) TagIDOption {
 	return func(tagID *TagID) {
-		*tagID = TagID(tagUUID)
+		tagID.uuid = anUUID
 	}
 }
 
@@ -51,19 +57,19 @@ func MustParseTagID(s string) TagID {
 // ParseTagID creates a TagID from a UUID string.
 // Returns an error if the string is not a valid UUID.
 func ParseTagID(s string) (TagID, error) {
-	id, err := uuid.Parse(s)
+	uuid, err := uuid.Parse(s)
 	if err != nil {
 		return TagID{}, err
 	}
-	return TagID(id), nil
+	return NewTagID(TagIDWithUUID(uuid)), nil
 }
 
 // UUID converts TagID to a uuid.UUID.
 func (id TagID) UUID() uuid.UUID {
-	return uuid.UUID(id)
+	return id.uuid
 }
 
 // String implements [fmt.Stringer].
 func (id TagID) String() string {
-	return uuid.UUID(id).String()
+	return id.uuid.String()
 }

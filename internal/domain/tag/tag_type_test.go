@@ -34,37 +34,22 @@ func TestNewTagType_UnknownValue(t *testing.T) {
 
 func TestTagType_String(t *testing.T) {
 	cases := []struct {
+		name     string
 		tagType  TagType
 		expected string
 	}{
-		{TagTypeUnknown, "unknown"},
-		{TagTypeString, "string"},
-		{TagTypeBoolean, "boolean"},
-		{TagTypeInteger, "integer"},
-		{TagType(99), "unknown"},
+		{"unknown", TagTypeUnknown, "unknown"},
+		{"string", TagTypeString, "string"},
+		{"boolean", TagTypeBoolean, "boolean"},
+		{"integer", TagTypeInteger, "integer"},
+		{"default", TagType{tagType: 99}, "unknown"},
 	}
 
 	for _, tc := range cases {
-		t.Run(tc.expected, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			if got := tc.tagType.String(); got != tc.expected {
 				t.Errorf("expected %q, got %q", tc.expected, got)
 			}
 		})
-	}
-}
-
-func TestTagType_IsValid(t *testing.T) {
-	valid := []TagType{TagTypeString, TagTypeBoolean, TagTypeInteger}
-	for _, k := range valid {
-		if !k.IsValid() {
-			t.Errorf("expected %v to be valid", k)
-		}
-	}
-
-	invalid := []TagType{TagTypeUnknown, TagType(-1), TagType(99)}
-	for _, k := range invalid {
-		if k.IsValid() {
-			t.Errorf("expected %v to be invalid", k)
-		}
 	}
 }

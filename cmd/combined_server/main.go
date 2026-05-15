@@ -21,7 +21,8 @@ import (
 )
 
 const (
-	databaseDSN = "postgres://growscada:growscada@localhost:5432/growscada?sslmode=disable"
+	databaseDSN  = "postgres://growscada:growscada@localhost:5432/growscada?sslmode=disable"
+	apiServerURL = "http://localhost:9090"
 )
 
 type slogAdapter struct{}
@@ -33,8 +34,7 @@ func (slogAdapter) Println(v ...any) {
 func main() {
 	// Server setup for serving the client-side app (PWA)
 	app.Route("/", func() app.Composer {
-		r := &root.Root{}
-		r.SetMode(root.ModeOperation)
+		r := root.NewRoot(apiServerURL)
 		return r
 	})
 
@@ -76,10 +76,12 @@ func main() {
 	// INTERFACE COMPONENTS
 	// API server
 	tagRepository := repositories.NewTagRepositoryPostgres(sqlDB)
+	widgetTypeRepository := repositories.NewWidgetTypeRepositoryPostgres(sqlDB)
 	// Create services
 	tagService := application.NewTagService(tagRepository, eventBus)
+	widgetTypeService := application.NewWidgetTypeService(widgetTypeRepository, eventBus)
 	// Create router
-	apiRouter := restapi.NewRouter(tagService)
+	apiRouter := restapi.NewRouter(tagService, widgetTypeService)
 	// Start HTTP server for API
 	apiServer := &http.Server{
 		Addr:    ":9090",

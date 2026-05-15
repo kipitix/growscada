@@ -1,22 +1,64 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.11] - 2026-05-16
+
+### Added
+
+- `internal/domain/widget` — новый пакет домена для типов виджетов:
+  - `WidgetType` — агрегат (интерфейс + `widgetTypeImpl`); immutable: поля не мутируются напрямую, обновление через создание нового экземпляра в репозитории
+  - `WidgetTypeID` — Value Object на основе UUID; функциональные опции `WidgetTypeIDWithUUID`; `ParseWidgetTypeID`, `MustParseWidgetTypeID`
+  - `WidgetTypeName` — Value Object; валидация: пустая строка возвращает ошибку
+  - `HtmlTemplate`, `Script` — Value Object-обёртки над строками; валидация зарезервирована (TODO)
+  - `ScriptLanguage` — enum-VO (`javascript`, `python`, `lua`); сериализуется строкой; `NewScriptLanguage` возвращает ошибку для неизвестных значений
+  - `WidgetTypeRepository` — интерфейс репозитория с методами `NextID`, `Save`, `FindByID`, `FindAll`, `DeleteByID`; sentinel-ошибки `ErrWidgetTypeNotFound` и `ErrWidgetTypeConflict` (optimistic locking)
+- `internal/domain/version` — новый пакет Value Object `Version` для оптимистичной блокировки: константы `Initial` (0) и `Committed` (1); методы `Next()`, `IsCommitted()`, `Number()`; конструктор с валидацией на отрицательные числа
+- `internal/domain/event` — события для жизненного цикла `WidgetType`: `WidgetTypeCreatedEvent`, `WidgetTypeUpdatedEvent`, `WidgetTypeDeletedEvent`; `EventType` расширен тремя новыми значениями
+- `internal/application/widget_type_application_service.go` — `WidgetTypeService` с методами `FindAllWidgetTypes`, `FindWidgetTypeByID`, `CreateWidgetType`, `UpdateWidgetType`, `DeleteWidgetTypeByID`; публикует события через `EventBus` после каждой успешной мутации
+- `internal/application/appdto/widget_type.go` — DTO `WidgetType`, `CreateWidgetTypeInput`, `UpdateWidgetTypeInput`; фабрики `NewWidgetType`, `NewWidgetTypeList`
+- `internal/infrastructure/postgres/repositories/widget_type_repository_postgres.go` — PostgreSQL-реализация `WidgetTypeRepository`; INSERT при `version == Initial`, UPDATE с `WHERE id = $X AND version = $Y` при `IsCommitted()`; при `rowsAffected == 0` метод `classifyUpdateConflict` делает `SELECT EXISTS` и возвращает `ErrWidgetTypeNotFound` или `ErrWidgetTypeConflict`
+- `internal/infrastructure/postgres/migrations/20260515000000_create_widget_types.sql` — DDL таблицы `widget_types`
+- `internal/infrastructure/postgres/test_data/20260515000001_insert_test_data.sql` — тестовые данные для `widget_types`
+- `internal/interface/restapi/widget_types.go` — REST-хэндлеры CRUD:
+  - `GET /api/v1/widget-types` — список всех типов виджетов
+  - `GET /api/v1/widget-types/{id}` — тип виджета по ID; 404 при отсутствии
+  - `POST /api/v1/widget-types` — создание; 201 с ID
+  - `PUT /api/v1/widget-types/{id}` — обновление; 404 при отсутствии, 409 при конфликте версий
+  - `DELETE /api/v1/widget-types/{id}` — удаление; 200 с телом удалённого объекта, 404 при отсутствии
+- `internal/interface/restapi/restdto/widget_type.go` — HTTP-DTO `WidgetTypeResponse`, `GetWidgetTypesResponse`, `CreateWidgetTypeRequest/Response`, `UpdateWidgetTypeRequest/Response`
+- `internal/interface/ui/library/library.go` — UI-компонент `Library` для управления типами виджетов: список, создание, редактирование, удаление через REST API
+- Bruno-коллекция: запросы `GET /widget-types`, `GET /widget-types/{{ID}}`, `POST /widget-types`, `PUT /widget-types/{{ID}}`, `DELETE /widget-types/{{ID}}`
+- Юнит-тесты домена `widget` — `widget_type_test.go`, `widget_type_id_test.go`, `widget_type_name_test.go`, `widget_type_script_language_test.go`
+- Юнит-тесты `internal/domain/version/version_test.go` — `New` с валидными значениями, отрицательное → ошибка, константы, `Next`, `IsCommitted`, `String`
+- Интеграционные тесты `internal/application/widget_type_application_service_test.go` — CRUD, not-found, конфликт версий, публикация событий
+- Интеграционные тесты `internal/interface/restapi/widget_types_test.go` — все CRUD-хэндлеры включая 409 Conflict
+
+### Changed
+
+- `internal/domain/version` — версия тега перенесена из `int` в `version.Version`; `Tag.Version()` теперь возвращает `version.Version`; `tag.TagVersionInitial`/`TagVersionCommitted` удалены
+- `Tag.IncrementVersion()` — удалён из интерфейса и реализации; инкремент версии выполняется в репозитории через `version.Next()`
+- `TagRepository.Save` — сигнатура изменена с `error` на `(Tag, error)`; репозиторий возвращает сохранённый агрегат с обновлённой версией
+- `TagID`, `TagName`, `TagQuality`, `TagType` — переведены с type alias / primitive (`type Foo int`, `type Foo string`) на `struct { field T }`; исключает нечаянные приведения типов
+- `TagQuality.IsValid()`, `TagType.IsValid()` — удалены; валидность гарантируется конструктором (`NewTagQuality`, `NewTagType` возвращают ошибку для неизвестных строк)
+- `restapi/tags.go`, `restapi/widget_types.go` — 500-ошибки переведены на `sendInternalError(w, r, err)`: внутренние детали (SQL, стек) логируются, но не попадают в тело HTTP-ответа
+- Тесты `tag_quality_test.go`, `tag_type_test.go` — граничный кейс `default` в `String()` восстановлен через `TagQuality{quality: 99}` / `TagType{tagType: 99}` вместо ранее использовавшихся raw-приведений типов
+
 ## [0.0.10] - 2026-05-12
 
 ### Added
 
-- `internal/application/appdto` — новый пакет с DTO уровня прикладного сервиса: `Tag`, `CreateTagInput`, `UpdateTagInput`; поля не имеют JSON-тегов, сериализация делегирована интерфейсному слою; фабричные функции `NewTag` и `NewTagList` конвертируют доменные агрегаты в DTO
-- `internal/interface/restapi/restdto` — новый пакет с HTTP-DTO: `TagResponse`, `GetTagsResponse`, `CreateTagRequest`, `CreateTagResponse`, `UpdateTagRequest`, `UpdateTagResponse`; конвертеры `NewTagResponse`, `NewGetTagsResponse`, `NewCreateTagResponse`, `NewUpdateTagResponse`, `NewCreateTagInput`, `NewUpdateTagInput` изолируют маппинг между слоями
+- `internal/application/app_dto` — новый пакет с DTO уровня прикладного сервиса: `Tag`, `CreateTagInput`, `UpdateTagInput`; поля не имеют JSON-тегов, сериализация делегирована интерфейсному слою; фабричные функции `NewTag` и `NewTagList` конвертируют доменные агрегаты в DTO
+- `internal/interface/restapi/rest_dto` — новый пакет с HTTP-DTO: `TagResponse`, `GetTagsResponse`, `CreateTagRequest`, `CreateTagResponse`, `UpdateTagRequest`, `UpdateTagResponse`; конвертеры `NewTagResponse`, `NewGetTagsResponse`, `NewCreateTagResponse`, `NewUpdateTagResponse`, `NewCreateTagInput`, `NewUpdateTagInput` изолируют маппинг между слоями
 
 ### Removed
 
-- `internal/application/dto` — удалён единый DTO-пакет, смешивавший JSON-сериализацию и application-слой; его ответственность разделена между `appdto` и `restdto`
+- `internal/application/dto` — удалён единый DTO-пакет, смешивавший JSON-сериализацию и application-слой; его ответственность разделена между `app_dto` и `rest_dto`
 
 ### Changed
 
-- `TagService` — все методы переведены на `appdto`: `FindAllTags` возвращает `[]appdto.Tag` вместо `dto.FindAllTagsResponse`; `FindTagByID` возвращает `appdto.Tag` вместо `dto.Tag`; `CreateTag` принимает `appdto.CreateTagInput` вместо `dto.CreateTagRequest` и возвращает полный `appdto.Tag` вместо `dto.CreateTagResponse{ID}`; `DeleteTagByID` возвращает плоский `appdto.Tag` вместо `dto.DeleteTagResponse{Tag: dto.Tag}`; `SetTagValueByID` принимает `appdto.UpdateTagInput` вместо `dto.UpdateTagRequest` и возвращает `appdto.Tag` вместо `dto.UpdateTagResponse{Version}`
-- `restapi/tags.go` — хендлеры переведены на `restdto`: каждый хендлер конвертирует результат сервиса через соответствующую фабрику `restdto.New*`; удалены промежуточные переменные для ответов с ошибками; `UpdateTagRequest` больше не содержит поле `ID` — идентификатор передаётся только через path-параметр и подставляется в `NewUpdateTagInput`
-- Тесты `tag_application_service_test.go` и `tags_test.go` — обновлены импорты и типы: `dto.CreateTagRequest` → `appdto.CreateTagInput`, `dto.UpdateTagRequest` → `appdto.UpdateTagInput`; тип возврата `createTagViaService` изменён с `dto.CreateTagResponse` на `appdto.Tag`; декодирование HTTP-ответов использует `restdto.*` вместо `dto.*`
-- Все doc-комментарии в `appdto` и `restdto` переведены на английский язык
+- `TagService` — все методы переведены на `app_dto`: `FindAllTags` возвращает `[]app_dto.Tag` вместо `dto.FindAllTagsResponse`; `FindTagByID` возвращает `app_dto.Tag` вместо `dto.Tag`; `CreateTag` принимает `app_dto.CreateTagInput` вместо `dto.CreateTagRequest` и возвращает полный `app_dto.Tag` вместо `dto.CreateTagResponse{ID}`; `DeleteTagByID` возвращает плоский `app_dto.Tag` вместо `dto.DeleteTagResponse{Tag: dto.Tag}`; `SetTagValueByID` принимает `app_dto.UpdateTagInput` вместо `dto.UpdateTagRequest` и возвращает `app_dto.Tag` вместо `dto.UpdateTagResponse{Version}`
+- `restapi/tags.go` — хендлеры переведены на `rest_dto`: каждый хендлер конвертирует результат сервиса через соответствующую фабрику `rest_dto.New*`; удалены промежуточные переменные для ответов с ошибками; `UpdateTagRequest` больше не содержит поле `ID` — идентификатор передаётся только через path-параметр и подставляется в `NewUpdateTagInput`
+- Тесты `tag_application_service_test.go` и `tags_test.go` — обновлены импорты и типы: `dto.CreateTagRequest` → `app_dto.CreateTagInput`, `dto.UpdateTagRequest` → `app_dto.UpdateTagInput`; тип возврата `createTagViaService` изменён с `dto.CreateTagResponse` на `app_dto.Tag`; декодирование HTTP-ответов использует `rest_dto.*` вместо `dto.*`
+- Все doc-комментарии в `app_dto` и `rest_dto` переведены на английский язык
 
 ## [0.0.9] - 2026-05-08
 

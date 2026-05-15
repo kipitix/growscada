@@ -16,6 +16,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/kipitix/growscada/internal/domain/tag"
+	"github.com/kipitix/growscada/internal/domain/version"
 	"github.com/kipitix/growscada/internal/infrastructure/postgres/repositories"
 )
 
@@ -92,7 +93,7 @@ func makeTag(t *testing.T, name string, repo tag.TagRepository) tag.Tag {
 	if err != nil {
 		t.Fatalf("NewTagValue: %v", err)
 	}
-	newTag, err := tag.NewTag(id, tagName, tagType, value, tag.TagQualityGood, tag.TagVersionInitial)
+	newTag, err := tag.NewTag(id, tagName, tagType, value, tag.TagQualityGood, version.Initial)
 	if err != nil {
 		t.Fatalf("NewTag: %v", err)
 	}
@@ -117,7 +118,7 @@ func TestSave_NewTag_InsertsSuccessfully(t *testing.T) {
 
 	newTag := makeTag(t, "temperature", repo)
 
-	err := repo.Save(ctx, newTag)
+	_, err := repo.Save(ctx, newTag)
 
 	if err != nil {
 		t.Fatalf("Save returned unexpected error: %v", err)
@@ -130,12 +131,12 @@ func TestSave_DuplicateID_ReturnsError(t *testing.T) {
 	ctx := context.Background()
 
 	newTag := makeTag(t, "temperature", repo)
-	if err := repo.Save(ctx, newTag); err != nil {
+	if _, err := repo.Save(ctx, newTag); err != nil {
 		t.Fatalf("first Save failed: %v", err)
 	}
 
-	duplicate, _ := tag.NewTag(newTag.ID(), newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), tag.TagVersionInitial)
-	err := repo.Save(ctx, duplicate)
+	duplicate, _ := tag.NewTag(newTag.ID(), newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), version.Initial)
+	_, err := repo.Save(ctx, duplicate)
 
 	if err == nil {
 		t.Error("expected error on duplicate insert, got nil")
@@ -148,7 +149,7 @@ func TestSave_ExistingTag_UpdatesSuccessfully(t *testing.T) {
 	ctx := context.Background()
 
 	newTag := makeTag(t, "temperature", repo)
-	if err := repo.Save(ctx, newTag); err != nil {
+	if _, err := repo.Save(ctx, newTag); err != nil {
 		t.Fatalf("initial Save failed: %v", err)
 	}
 
@@ -159,7 +160,7 @@ func TestSave_ExistingTag_UpdatesSuccessfully(t *testing.T) {
 	if err := found.SetValue(99, tag.TagQualitySimulated); err != nil {
 		t.Fatalf("SetValue failed: %v", err)
 	}
-	if err := repo.Save(ctx, found); err != nil {
+	if _, err := repo.Save(ctx, found); err != nil {
 		t.Fatalf("update Save failed: %v", err)
 	}
 
@@ -181,13 +182,14 @@ func TestSave_StaleVersion_ReturnsError(t *testing.T) {
 	ctx := context.Background()
 
 	newTag := makeTag(t, "temperature", repo)
-	if err := repo.Save(ctx, newTag); err != nil {
+	if _, err := repo.Save(ctx, newTag); err != nil {
 		t.Fatalf("initial Save failed: %v", err)
 	}
 
 	// version=100 while DB has version=1 → optimistic lock conflict
-	staleTag, _ := tag.NewTag(newTag.ID(), newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), 100)
-	err := repo.Save(ctx, staleTag)
+	badVersion, _ := version.New(version.WithNumber(100))
+	staleTag, _ := tag.NewTag(newTag.ID(), newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), badVersion)
+	_, err := repo.Save(ctx, staleTag)
 
 	if err == nil {
 		t.Error("expected error on stale version update, got nil")
@@ -200,29 +202,30 @@ func TestFindByID_ExistingTag_ReturnsTag(t *testing.T) {
 	ctx := context.Background()
 
 	newTag := makeTag(t, "pressure", repo)
-	if err := repo.Save(ctx, newTag); err != nil {
+	savedTag, err := repo.Save(ctx, newTag)
+	if err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
 
-	found, err := repo.FindByID(ctx, newTag.ID())
+	found, err := repo.FindByID(ctx, savedTag.ID())
 
 	if err != nil {
 		t.Fatalf("FindByID returned unexpected error: %v", err)
 	}
-	if found.ID() != newTag.ID() {
-		t.Errorf("ID: expected %v, got %v", newTag.ID(), found.ID())
+	if found.ID() != savedTag.ID() {
+		t.Errorf("ID: expected %v, got %v", savedTag.ID(), found.ID())
 	}
-	if found.Name() != newTag.Name() {
-		t.Errorf("Name: expected %v, got %v", newTag.Name(), found.Name())
+	if found.Name() != savedTag.Name() {
+		t.Errorf("Name: expected %v, got %v", savedTag.Name(), found.Name())
 	}
-	if found.Type() != newTag.Type() {
-		t.Errorf("Type: expected %v, got %v", newTag.Type(), found.Type())
+	if found.Type() != savedTag.Type() {
+		t.Errorf("Type: expected %v, got %v", savedTag.Type(), found.Type())
 	}
-	if found.Quality() != newTag.Quality() {
-		t.Errorf("Quality: expected %v, got %v", newTag.Quality(), found.Quality())
+	if found.Quality() != savedTag.Quality() {
+		t.Errorf("Quality: expected %v, got %v", savedTag.Quality(), found.Quality())
 	}
-	if found.Version() != newTag.Version() {
-		t.Errorf("Version: expected %d, got %d", newTag.Version(), found.Version())
+	if found.Version() != savedTag.Version() {
+		t.Errorf("Version: expected %d, got %d", savedTag.Version(), found.Version())
 	}
 }
 
@@ -261,10 +264,10 @@ func TestFindAll_MultipleTags_ReturnsAll(t *testing.T) {
 
 	tag1 := makeTag(t, "temperature", repo)
 	tag2 := makeTag(t, "pressure", repo)
-	if err := repo.Save(ctx, tag1); err != nil {
+	if _, err := repo.Save(ctx, tag1); err != nil {
 		t.Fatalf("Save tag1 failed: %v", err)
 	}
-	if err := repo.Save(ctx, tag2); err != nil {
+	if _, err := repo.Save(ctx, tag2); err != nil {
 		t.Fatalf("Save tag2 failed: %v", err)
 	}
 
@@ -286,7 +289,7 @@ func TestDeleteByID_ExistingTag_ReturnsDeletedTag(t *testing.T) {
 	ctx := context.Background()
 
 	newTag := makeTag(t, "valve", repo)
-	if err := repo.Save(ctx, newTag); err != nil {
+	if _, err := repo.Save(ctx, newTag); err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
 
@@ -310,7 +313,7 @@ func TestDeleteByID_ExistingTag_ReturnsDeletedTag(t *testing.T) {
 	if deleted.Quality() != tag.TagQualityGood {
 		t.Errorf("Quality: expected good, got %v", deleted.Quality())
 	}
-	if deleted.Version() != 1 {
+	if deleted.Version().Number() != 1 {
 		t.Errorf("Version: expected 1, got %d", deleted.Version())
 	}
 }
@@ -321,7 +324,7 @@ func TestDeleteByID_ExistingTag_TagIsRemovedFromDB(t *testing.T) {
 	ctx := context.Background()
 
 	newTag := makeTag(t, "pump", repo)
-	if err := repo.Save(ctx, newTag); err != nil {
+	if _, err := repo.Save(ctx, newTag); err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
 	deleted, err := repo.DeleteByID(ctx, newTag.ID())
@@ -349,10 +352,10 @@ func TestDeleteByID_ExistingTag_OtherTagsAreUnaffected(t *testing.T) {
 
 	tag1 := makeTag(t, "temperature", repo)
 	tag2 := makeTag(t, "pressure", repo)
-	if err := repo.Save(ctx, tag1); err != nil {
+	if _, err := repo.Save(ctx, tag1); err != nil {
 		t.Fatalf("Save tag1 failed: %v", err)
 	}
-	if err := repo.Save(ctx, tag2); err != nil {
+	if _, err := repo.Save(ctx, tag2); err != nil {
 		t.Fatalf("Save tag2 failed: %v", err)
 	}
 

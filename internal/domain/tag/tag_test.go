@@ -1,6 +1,10 @@
 package tag
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/kipitix/growscada/internal/domain/version"
+)
 
 func makeTestTag(t *testing.T) Tag {
 	t.Helper()
@@ -9,7 +13,7 @@ func makeTestTag(t *testing.T) Tag {
 	tagType := TagTypeInteger
 	value, _ := tagType.NewTagValue(0)
 	quality := TagQualityGood
-	tag, err := NewTag(id, name, tagType, value, quality, TagVersionInitial)
+	tag, err := NewTag(id, name, tagType, value, quality, version.Initial)
 	if err != nil {
 		t.Fatalf("NewTag returned unexpected error: %v", err)
 	}
@@ -22,7 +26,10 @@ func TestNewTag_FieldsAreSet(t *testing.T) {
 	tagType := TagTypeString
 	value, _ := tagType.NewTagValue("100")
 	quality := TagQualityGood
-	version := 3
+	version, err := version.New(version.WithNumber(3))
+	if err != nil {
+		t.Fatalf("unexpected error creating version: %v", err)
+	}
 
 	tag, err := NewTag(id, name, tagType, value, quality, version)
 	if err != nil {
@@ -50,27 +57,15 @@ func TestNewTag_FieldsAreSet(t *testing.T) {
 }
 
 func TestTagVersionInitial_IsZero(t *testing.T) {
-	if TagVersionInitial != 0 {
-		t.Errorf("expected TagVersionInitial to be 0, got %d", TagVersionInitial)
+	if version.Initial.Number() != 0 {
+		t.Errorf("expected version.Initial to be 0, got %d", version.Initial.Number())
 	}
 }
 
 func TestNewTag_InitialVersion(t *testing.T) {
 	tag := makeTestTag(t)
-	if tag.Version() != TagVersionInitial {
-		t.Errorf("expected initial version %d, got %d", TagVersionInitial, tag.Version())
-	}
-}
-
-func TestTag_IncrementVersion(t *testing.T) {
-	tag := makeTestTag(t)
-	tag.IncrementVersion()
-	if tag.Version() != 1 {
-		t.Errorf("expected version 1 after first increment, got %d", tag.Version())
-	}
-	tag.IncrementVersion()
-	if tag.Version() != 2 {
-		t.Errorf("expected version 2 after second increment, got %d", tag.Version())
+	if tag.Version() != version.Initial {
+		t.Errorf("expected initial version %d, got %d", version.Initial, tag.Version())
 	}
 }
 
@@ -104,7 +99,6 @@ func TestTag_SetValue_ChangesQuality(t *testing.T) {
 func TestTag_SetValue_InvalidInput_ReturnsError(t *testing.T) {
 	tag := makeTestTag(t) // TagTypeInteger
 
-	// float64 is unsupported by the integer value constructor
 	err := tag.SetValue(3.14, TagQualityGood)
 	if err == nil {
 		t.Error("expected error for unsupported value type, got nil")
@@ -115,20 +109,15 @@ func TestTag_SetValue_InvalidInput_DoesNotChangeQuality(t *testing.T) {
 	tag := makeTestTag(t)
 	originalQuality := tag.Quality()
 
-	// Intentionally pass a bad value to trigger an error.
-	// Function makeTestTag makes tag with TagTypeInteger.
-	// 3.14 is not a valid integer.
 	err := tag.SetValue(3.14, TagQualityBad)
 	if err == nil {
 		t.Error("expected error for unsupported value type, got nil")
 	}
 
-	// Verify quality remains unchanged.
 	if tag.Quality() != originalQuality {
 		t.Errorf("expected quality %v, got %v", originalQuality, tag.Quality())
 	}
 
-	// Verify value remains unchanged.
 	if tag.Value().Value() != 0 {
 		t.Errorf("expected value 0, got %v", tag.Value().Value())
 	}
