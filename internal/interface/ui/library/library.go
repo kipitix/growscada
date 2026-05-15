@@ -231,6 +231,17 @@ func (l *Library) commitEdit(ctx app.Context) {
 		return
 	}
 
+	// Optimistically update the name in the local list immediately.
+	for i, it := range l.widgetTypes {
+		if it.ID == id {
+			l.widgetTypes[i].Name = name
+			break
+		}
+	}
+	if l.selectedID == id {
+		l.editedName = name
+	}
+
 	url := l.apiServerURL + "/api/v1/widget-types/" + id
 	body, _ := json.Marshal(updateWidgetTypeRequest{
 		Name:           name,
@@ -251,10 +262,6 @@ func (l *Library) commitEdit(ctx app.Context) {
 		resp.Body.Close()
 		ctx.Dispatch(func(ctx app.Context) {
 			l.fetchErr = ""
-			if l.selectedID == id {
-				l.editedName = name
-			}
-			l.loadList(ctx)
 		})
 	})
 }

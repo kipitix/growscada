@@ -15,9 +15,6 @@ const (
 	EventTypeTagCreated
 	EventTypeTagUpdated
 	EventTypeTagDeleted
-	EventTypeIndicatorTypeCreated
-	EventTypeIndicatorTypeUpdated
-	EventTypeIndicatorTypeDeleted
 	EventTypeWidgetTypeCreated
 	EventTypeWidgetTypeUpdated
 	EventTypeWidgetTypeDeleted
@@ -35,12 +32,6 @@ func NewEventType(s string) (EventType, error) {
 		return EventTypeTagUpdated, nil
 	case "tag_deleted":
 		return EventTypeTagDeleted, nil
-	case "indicator_type_created":
-		return EventTypeIndicatorTypeCreated, nil
-	case "indicator_type_updated":
-		return EventTypeIndicatorTypeUpdated, nil
-	case "indicator_type_deleted":
-		return EventTypeIndicatorTypeDeleted, nil
 	case "widget_type_created":
 		return EventTypeWidgetTypeCreated, nil
 	case "widget_type_updated":
@@ -66,12 +57,6 @@ func (et EventType) String() string {
 		return "tag_updated"
 	case EventTypeTagDeleted:
 		return "tag_deleted"
-	case EventTypeIndicatorTypeCreated:
-		return "indicator_type_created"
-	case EventTypeIndicatorTypeUpdated:
-		return "indicator_type_updated"
-	case EventTypeIndicatorTypeDeleted:
-		return "indicator_type_deleted"
 	case EventTypeWidgetTypeCreated:
 		return "widget_type_created"
 	case EventTypeWidgetTypeUpdated:

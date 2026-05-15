@@ -28,11 +28,9 @@ func cleanWidgetTypes(t *testing.T) {
 func newRouterWithWidgetTypes() *restapi.APIRouter {
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
 	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
-	itRepo := repositories.NewIndicatorTypeRepositoryPostgres(testDB)
-	itSvc := application.NewIndicatorTypeService(itRepo, event.NewEventBus())
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	wtSvc := application.NewWidgetTypeService(wtRepo, event.NewEventBus())
-	return restapi.NewRouter(tagSvc, itSvc, wtSvc)
+	return restapi.NewRouter(tagSvc, wtSvc)
 }
 
 func createWidgetTypeViaService(t *testing.T, input appdto.CreateWidgetTypeInput) appdto.WidgetType {
