@@ -13,11 +13,7 @@ func makeTestWidgetType(t *testing.T) WidgetType {
 	htmlTemplate, _ := NewHtmlTemplate("<div class='gauge'></div>")
 	script, _ := NewScript("function render(value) { return value; }")
 	lang := ScriptLanguageJavaScript
-	wt, err := NewWidgetType(id, name, htmlTemplate, script, lang, version.Initial)
-	if err != nil {
-		t.Fatalf("NewWidgetType returned unexpected error: %v", err)
-	}
-	return wt
+	return NewWidgetType(id, name, htmlTemplate, script, lang, version.Initial)
 }
 
 func TestNewWidgetType_FieldsAreSet(t *testing.T) {
@@ -28,10 +24,7 @@ func TestNewWidgetType_FieldsAreSet(t *testing.T) {
 	lang := ScriptLanguagePython
 	version, _ := version.New(version.WithNumber(3))
 
-	wt, err := NewWidgetType(id, name, htmlTemplate, script, lang, version)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	wt := NewWidgetType(id, name, htmlTemplate, script, lang, version)
 
 	if wt.ID() != id {
 		t.Errorf("ID mismatch: expected %v, got %v", id, wt.ID())

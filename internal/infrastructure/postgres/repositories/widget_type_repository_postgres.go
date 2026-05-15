@@ -43,11 +43,7 @@ func (r widgetTypeRepositoryPostgresImpl) Save(ctx context.Context, wt widget.Wi
 		if rowsAffected != 1 {
 			return nil, fmt.Errorf("expected 1 row affected on insert, got %d", rowsAffected)
 		}
-		saved, err := widget.NewWidgetType(wt.ID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), version.Committed)
-		if err != nil {
-			return nil, fmt.Errorf("cannot build saved widget type: %w", err)
-		}
-		return saved, nil
+		return widget.NewWidgetType(wt.ID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), version.Committed), nil
 	}
 
 	if wt.Version().IsCommitted() {
@@ -68,11 +64,7 @@ func (r widgetTypeRepositoryPostgresImpl) Save(ctx context.Context, wt widget.Wi
 		if rowsAffected != 1 {
 			return nil, fmt.Errorf("expected 1 row affected on update, got %d", rowsAffected)
 		}
-		saved, err := widget.NewWidgetType(wt.ID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.Version().Next())
-		if err != nil {
-			return nil, fmt.Errorf("cannot build saved widget type: %w", err)
-		}
-		return saved, nil
+		return widget.NewWidgetType(wt.ID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.Version().Next()), nil
 	}
 
 	return nil, fmt.Errorf("undefined behavior with version %d", wt.Version().Number())
@@ -192,5 +184,5 @@ func (r widgetTypeRepositoryPostgresImpl) reconstruct(
 		return nil, fmt.Errorf("cannot create widget type version: %w", err)
 	}
 
-	return widget.NewWidgetType(newID, newName, newHtml, newScript, newLang, newVersion)
+	return widget.NewWidgetType(newID, newName, newHtml, newScript, newLang, newVersion), nil
 }

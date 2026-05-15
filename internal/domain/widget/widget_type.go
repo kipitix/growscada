@@ -41,7 +41,7 @@ func NewWidgetType(
 	aScript Script,
 	aScriptLanguage ScriptLanguage,
 	aVersion version.Version,
-) (WidgetType, error) {
+) WidgetType {
 	return &widgetTypeImpl{
 		id:             anID,
 		name:           aName,
@@ -49,7 +49,7 @@ func NewWidgetType(
 		script:         aScript,
 		scriptLanguage: aScriptLanguage,
 		version:        aVersion,
-	}, nil
+	}
 }
 
 func (wt widgetTypeImpl) ID() WidgetTypeID           { return wt.id }
