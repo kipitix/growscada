@@ -7,7 +7,7 @@ import (
 
 	"github.com/kipitix/growscada/internal/application"
 	"github.com/kipitix/growscada/internal/domain/indicator_type"
-	"github.com/kipitix/growscada/internal/interface/restapi/rest_dto"
+	"github.com/kipitix/growscada/internal/interface/restapi/restdto"
 )
 
 // IndicatorTypesHandlers handles HTTP requests related to indicator types.
@@ -26,7 +26,7 @@ func (h IndicatorTypesHandlers) GetIndicatorTypes(w http.ResponseWriter, r *http
 		sendJSONResponse(w, http.StatusInternalServerError, NewInternalError(err.Error(), r.URL.Path))
 		return
 	}
-	sendJSONResponse(w, http.StatusOK, rest_dto.NewGetIndicatorTypesResponse(list))
+	sendJSONResponse(w, http.StatusOK, restdto.NewGetIndicatorTypesResponse(list))
 }
 
 // GetIndicatorTypesByID handles GET /indicator-types/{id}
@@ -48,24 +48,24 @@ func (h IndicatorTypesHandlers) GetIndicatorTypesByID(w http.ResponseWriter, r *
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, rest_dto.NewIndicatorTypeResponse(found))
+	sendJSONResponse(w, http.StatusOK, restdto.NewIndicatorTypeResponse(found))
 }
 
 // PostIndicatorTypes handles POST /indicator-types
 func (h IndicatorTypesHandlers) PostIndicatorTypes(w http.ResponseWriter, r *http.Request) {
-	var request rest_dto.CreateIndicatorTypeRequest
+	var request restdto.CreateIndicatorTypeRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
 		return
 	}
 
-	created, err := h.service.CreateIndicatorType(r.Context(), rest_dto.NewCreateIndicatorTypeInput(request))
+	created, err := h.service.CreateIndicatorType(r.Context(), restdto.NewCreateIndicatorTypeInput(request))
 	if err != nil {
 		sendJSONResponse(w, http.StatusInternalServerError, NewInternalError(err.Error(), r.URL.Path))
 		return
 	}
 
-	sendJSONResponse(w, http.StatusCreated, rest_dto.NewCreateIndicatorTypeResponse(created))
+	sendJSONResponse(w, http.StatusCreated, restdto.NewCreateIndicatorTypeResponse(created))
 }
 
 // PutIndicatorTypesByID handles PUT /indicator-types/{id}
@@ -77,13 +77,13 @@ func (h IndicatorTypesHandlers) PutIndicatorTypesByID(w http.ResponseWriter, r *
 		return
 	}
 
-	var request rest_dto.UpdateIndicatorTypeRequest
+	var request restdto.UpdateIndicatorTypeRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
 		return
 	}
 
-	updated, err := h.service.UpdateIndicatorType(r.Context(), rest_dto.NewUpdateIndicatorTypeInput(request, id.UUID()))
+	updated, err := h.service.UpdateIndicatorType(r.Context(), restdto.NewUpdateIndicatorTypeInput(request, id.UUID()))
 	if err != nil {
 		if errors.Is(err, indicator_type.ErrIndicatorTypeNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
@@ -93,7 +93,7 @@ func (h IndicatorTypesHandlers) PutIndicatorTypesByID(w http.ResponseWriter, r *
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, rest_dto.NewUpdateIndicatorTypeResponse(updated))
+	sendJSONResponse(w, http.StatusOK, restdto.NewUpdateIndicatorTypeResponse(updated))
 }
 
 // DeleteIndicatorTypesByID handles DELETE /indicator-types/{id}
@@ -115,5 +115,5 @@ func (h IndicatorTypesHandlers) DeleteIndicatorTypesByID(w http.ResponseWriter, 
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, rest_dto.NewIndicatorTypeResponse(deleted))
+	sendJSONResponse(w, http.StatusOK, restdto.NewIndicatorTypeResponse(deleted))
 }

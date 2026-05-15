@@ -11,11 +11,11 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/application"
-	"github.com/kipitix/growscada/internal/application/app_dto"
+	"github.com/kipitix/growscada/internal/application/appdto"
 	"github.com/kipitix/growscada/internal/domain/event"
 	"github.com/kipitix/growscada/internal/infrastructure/postgres/repositories"
 	"github.com/kipitix/growscada/internal/interface/restapi"
-	"github.com/kipitix/growscada/internal/interface/restapi/rest_dto"
+	"github.com/kipitix/growscada/internal/interface/restapi/restdto"
 )
 
 func cleanIndicatorTypes(t *testing.T) {
@@ -30,10 +30,12 @@ func newRouterWithIndicatorTypes() *restapi.APIRouter {
 	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
 	itRepo := repositories.NewIndicatorTypeRepositoryPostgres(testDB)
 	itSvc := application.NewIndicatorTypeService(itRepo, event.NewEventBus())
-	return restapi.NewRouter(tagSvc, itSvc)
+	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
+	wtSvc := application.NewWidgetTypeService(wtRepo, event.NewEventBus())
+	return restapi.NewRouter(tagSvc, itSvc, wtSvc)
 }
 
-func createIndicatorTypeViaService(t *testing.T, input app_dto.CreateIndicatorTypeInput) app_dto.IndicatorType {
+func createIndicatorTypeViaService(t *testing.T, input appdto.CreateIndicatorTypeInput) appdto.IndicatorType {
 	t.Helper()
 	repo := repositories.NewIndicatorTypeRepositoryPostgres(testDB)
 	svc := application.NewIndicatorTypeService(repo, event.NewEventBus())
@@ -44,7 +46,7 @@ func createIndicatorTypeViaService(t *testing.T, input app_dto.CreateIndicatorTy
 	return resp
 }
 
-var testItInput = app_dto.CreateIndicatorTypeInput{
+var testItInput = appdto.CreateIndicatorTypeInput{
 	Name:           "gauge",
 	SvgTemplate:    "<svg><circle r='10'/></svg>",
 	Script:         "function render(v) { return v; }",
@@ -64,7 +66,7 @@ func TestGetIndicatorTypes_EmptyDB_Returns200WithEmptyList(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("status: expected 200, got %d", rec.Code)
 	}
-	var resp rest_dto.GetIndicatorTypesResponse
+	var resp restdto.GetIndicatorTypesResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -88,7 +90,7 @@ func TestGetIndicatorTypes_WithItems_Returns200WithAll(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("status: expected 200, got %d", rec.Code)
 	}
-	var resp rest_dto.GetIndicatorTypesResponse
+	var resp restdto.GetIndicatorTypesResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -111,7 +113,7 @@ func TestGetIndicatorTypesByID_Existing_Returns200(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("status: expected 200, got %d", rec.Code)
 	}
-	var resp rest_dto.IndicatorTypeResponse
+	var resp restdto.IndicatorTypeResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -158,7 +160,7 @@ func TestPostIndicatorTypes_Valid_Returns201WithID(t *testing.T) {
 	cleanIndicatorTypes(t)
 	router := newRouterWithIndicatorTypes()
 
-	body, _ := json.Marshal(rest_dto.CreateIndicatorTypeRequest{
+	body, _ := json.Marshal(restdto.CreateIndicatorTypeRequest{
 		Name:           "gauge",
 		SvgTemplate:    "<svg/>",
 		Script:         "render()",
@@ -172,7 +174,7 @@ func TestPostIndicatorTypes_Valid_Returns201WithID(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Errorf("status: expected 201, got %d\nbody: %s", rec.Code, rec.Body.String())
 	}
-	var resp rest_dto.CreateIndicatorTypeResponse
+	var resp restdto.CreateIndicatorTypeResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -197,7 +199,7 @@ func TestPostIndicatorTypes_InvalidJSON_Returns400(t *testing.T) {
 func TestPostIndicatorTypes_InvalidScriptLanguage_Returns500(t *testing.T) {
 	router := newRouterWithIndicatorTypes()
 
-	body, _ := json.Marshal(rest_dto.CreateIndicatorTypeRequest{
+	body, _ := json.Marshal(restdto.CreateIndicatorTypeRequest{
 		Name:           "x",
 		SvgTemplate:    "<svg/>",
 		Script:         "x",
@@ -220,7 +222,7 @@ func TestPutIndicatorTypesByID_Valid_Returns200WithVersion(t *testing.T) {
 	created := createIndicatorTypeViaService(t, testItInput)
 	router := newRouterWithIndicatorTypes()
 
-	body, _ := json.Marshal(rest_dto.UpdateIndicatorTypeRequest{
+	body, _ := json.Marshal(restdto.UpdateIndicatorTypeRequest{
 		Name:           "updated-gauge",
 		SvgTemplate:    "<svg><rect/></svg>",
 		Script:         "print('hi')",
@@ -234,7 +236,7 @@ func TestPutIndicatorTypesByID_Valid_Returns200WithVersion(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("status: expected 200, got %d\nbody: %s", rec.Code, rec.Body.String())
 	}
-	var resp rest_dto.UpdateIndicatorTypeResponse
+	var resp restdto.UpdateIndicatorTypeResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -247,7 +249,7 @@ func TestPutIndicatorTypesByID_NotFound_Returns404(t *testing.T) {
 	cleanIndicatorTypes(t)
 	router := newRouterWithIndicatorTypes()
 
-	body, _ := json.Marshal(rest_dto.UpdateIndicatorTypeRequest{
+	body, _ := json.Marshal(restdto.UpdateIndicatorTypeRequest{
 		Name: "x", SvgTemplate: "<svg/>", Script: "x", ScriptLanguage: "lua",
 	})
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/indicator-types/"+uuid.New().String(), bytes.NewReader(body))
@@ -263,7 +265,7 @@ func TestPutIndicatorTypesByID_NotFound_Returns404(t *testing.T) {
 func TestPutIndicatorTypesByID_InvalidUUID_Returns400(t *testing.T) {
 	router := newRouterWithIndicatorTypes()
 
-	body, _ := json.Marshal(rest_dto.UpdateIndicatorTypeRequest{
+	body, _ := json.Marshal(restdto.UpdateIndicatorTypeRequest{
 		Name: "x", SvgTemplate: "<svg/>", Script: "x", ScriptLanguage: "lua",
 	})
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/indicator-types/not-a-uuid", bytes.NewReader(body))
@@ -290,7 +292,7 @@ func TestDeleteIndicatorTypesByID_Existing_Returns200WithDeletedItem(t *testing.
 	if rec.Code != http.StatusOK {
 		t.Errorf("status: expected 200, got %d\nbody: %s", rec.Code, rec.Body.String())
 	}
-	var resp rest_dto.IndicatorTypeResponse
+	var resp restdto.IndicatorTypeResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}

@@ -9,32 +9,32 @@ import (
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 )
 
-type indicatorTypeItem struct {
+type widgetTypeItem struct {
 	ID             string `json:"id"`
 	Name           string `json:"name"`
-	SvgTemplate    string `json:"svg_template"`
+	HtmlTemplate   string `json:"html_template"`
 	Script         string `json:"script"`
 	ScriptLanguage string `json:"script_language"`
 }
 
-type getIndicatorTypesResponse struct {
-	IndicatorTypes []indicatorTypeItem `json:"indicator_types"`
+type getWidgetTypesResponse struct {
+	WidgetTypes []widgetTypeItem `json:"widget_types"`
 }
 
-type createIndicatorTypeRequest struct {
+type createWidgetTypeRequest struct {
 	Name           string `json:"name"`
-	SvgTemplate    string `json:"svg_template"`
+	HtmlTemplate   string `json:"html_template"`
 	Script         string `json:"script"`
 	ScriptLanguage string `json:"script_language"`
 }
 
-type createIndicatorTypeResponse struct {
+type createWidgetTypeResponse struct {
 	ID string `json:"id"`
 }
 
-type updateIndicatorTypeRequest struct {
+type updateWidgetTypeRequest struct {
 	Name           string `json:"name"`
-	SvgTemplate    string `json:"svg_template"`
+	HtmlTemplate   string `json:"html_template"`
 	Script         string `json:"script"`
 	ScriptLanguage string `json:"script_language"`
 }
@@ -42,12 +42,12 @@ type updateIndicatorTypeRequest struct {
 type Library struct {
 	app.Compo
 	apiServerURL   string
-	indicatorTypes []indicatorTypeItem
+	widgetTypes    []widgetTypeItem
 	loading        bool
 	fetchErr       string
 	selectedID       string
 	editedName       string
-	editedSVG        string
+	editedHTML       string
 	editedScript     string
 	editedScriptLang string
 	editingID        string
@@ -64,7 +64,7 @@ func (l *Library) OnMount(ctx app.Context) {
 
 func (l *Library) loadList(ctx app.Context) {
 	l.loading = true
-	url := l.apiServerURL + "/api/v1/indicator-types"
+	url := l.apiServerURL + "/api/v1/widget-types"
 	ctx.Async(func() {
 		resp, err := http.Get(url)
 		if err != nil {
@@ -76,7 +76,7 @@ func (l *Library) loadList(ctx app.Context) {
 		}
 		defer resp.Body.Close()
 
-		var result getIndicatorTypesResponse
+		var result getWidgetTypesResponse
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 			ctx.Dispatch(func(ctx app.Context) {
 				l.loading = false
@@ -87,20 +87,20 @@ func (l *Library) loadList(ctx app.Context) {
 
 		ctx.Dispatch(func(ctx app.Context) {
 			l.loading = false
-			l.indicatorTypes = result.IndicatorTypes
+			l.widgetTypes = result.WidgetTypes
 		})
 	})
 }
 
-const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"></svg>`
+const defaultHTML = `<div class="widget"></div>`
 const defaultScript = "function update() {\n}"
 
 func (l *Library) createItem(ctx app.Context) {
-	name := "New Indicator Type"
-	url := l.apiServerURL + "/api/v1/indicator-types"
-	body, _ := json.Marshal(createIndicatorTypeRequest{
+	name := "New Widget Type"
+	url := l.apiServerURL + "/api/v1/widget-types"
+	body, _ := json.Marshal(createWidgetTypeRequest{
 		Name:           name,
-		SvgTemplate:    defaultSVG,
+		HtmlTemplate:   defaultHTML,
 		Script:         defaultScript,
 		ScriptLanguage: "javascript",
 	})
@@ -114,7 +114,7 @@ func (l *Library) createItem(ctx app.Context) {
 		}
 		defer resp.Body.Close()
 
-		var result createIndicatorTypeResponse
+		var result createWidgetTypeResponse
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 			ctx.Dispatch(func(ctx app.Context) {
 				l.fetchErr = err.Error()
@@ -127,7 +127,7 @@ func (l *Library) createItem(ctx app.Context) {
 			l.fetchErr = ""
 			l.selectedID = newID
 			l.editedName = name
-			l.editedSVG = defaultSVG
+			l.editedHTML = defaultHTML
 			l.editedScript = defaultScript
 			l.editedScriptLang = "javascript"
 			l.loadList(ctx)
@@ -139,7 +139,7 @@ func (l *Library) deleteItem(ctx app.Context) {
 	if l.selectedID == "" {
 		return
 	}
-	url := l.apiServerURL + "/api/v1/indicator-types/" + l.selectedID
+	url := l.apiServerURL + "/api/v1/widget-types/" + l.selectedID
 	deletedID := l.selectedID
 	ctx.Async(func() {
 		req, _ := http.NewRequest(http.MethodDelete, url, nil)
@@ -156,7 +156,7 @@ func (l *Library) deleteItem(ctx app.Context) {
 			l.fetchErr = ""
 			if l.selectedID == deletedID {
 				l.selectedID = ""
-				l.editedSVG = ""
+				l.editedHTML = ""
 				l.editedScript = ""
 			}
 			l.loadList(ctx)
@@ -165,11 +165,11 @@ func (l *Library) deleteItem(ctx app.Context) {
 }
 
 func (l *Library) selectItem(id string) {
-	for _, it := range l.indicatorTypes {
+	for _, it := range l.widgetTypes {
 		if it.ID == id {
 			l.selectedID = id
 			l.editedName = it.Name
-			l.editedSVG = it.SvgTemplate
+			l.editedHTML = it.HtmlTemplate
 			l.editedScript = it.Script
 			l.editedScriptLang = it.ScriptLanguage
 			return
@@ -181,10 +181,10 @@ func (l *Library) applyChanges(ctx app.Context) {
 	if l.selectedID == "" {
 		return
 	}
-	url := l.apiServerURL + "/api/v1/indicator-types/" + l.selectedID
-	body, _ := json.Marshal(updateIndicatorTypeRequest{
+	url := l.apiServerURL + "/api/v1/widget-types/" + l.selectedID
+	body, _ := json.Marshal(updateWidgetTypeRequest{
 		Name:           l.editedName,
-		SvgTemplate:    l.editedSVG,
+		HtmlTemplate:   l.editedHTML,
 		Script:         l.editedScript,
 		ScriptLanguage: l.editedScriptLang,
 	})
@@ -220,8 +220,8 @@ func (l *Library) commitEdit(ctx app.Context) {
 	l.editingID = ""
 	l.editingName = ""
 
-	var found indicatorTypeItem
-	for _, it := range l.indicatorTypes {
+	var found widgetTypeItem
+	for _, it := range l.widgetTypes {
 		if it.ID == id {
 			found = it
 			break
@@ -231,10 +231,10 @@ func (l *Library) commitEdit(ctx app.Context) {
 		return
 	}
 
-	url := l.apiServerURL + "/api/v1/indicator-types/" + id
-	body, _ := json.Marshal(updateIndicatorTypeRequest{
+	url := l.apiServerURL + "/api/v1/widget-types/" + id
+	body, _ := json.Marshal(updateWidgetTypeRequest{
 		Name:           name,
-		SvgTemplate:    found.SvgTemplate,
+		HtmlTemplate:   found.HtmlTemplate,
 		Script:         found.Script,
 		ScriptLanguage: found.ScriptLanguage,
 	})
@@ -268,8 +268,8 @@ func (l *Library) Render() app.UI {
 		Style("gap", "8px").
 		Body(
 			l.renderListColumn(),
-			l.renderEditorColumn("SVG Template", l.editedSVG, func(ctx app.Context, e app.Event) {
-				l.editedSVG = ctx.JSSrc().Get("value").String()
+			l.renderEditorColumn("HTML Template", l.editedHTML, func(ctx app.Context, e app.Event) {
+				l.editedHTML = ctx.JSSrc().Get("value").String()
 			}, true),
 			l.renderEditorColumn("Script", l.editedScript, func(ctx app.Context, e app.Event) {
 				l.editedScript = ctx.JSSrc().Get("value").String()
@@ -287,7 +287,7 @@ func (l *Library) renderListColumn() app.UI {
 		Style("flex-shrink", "0").
 		Style("min-height", "0").
 		Body(
-			app.H3().Style("margin", "0 0 8px 0").Text("Indicator Types"),
+			app.H3().Style("margin", "0 0 8px 0").Text("Widget Types"),
 			l.renderListButtons(),
 			app.Div().
 				Style("flex", "1").
@@ -345,12 +345,12 @@ func (l *Library) renderList() app.UI {
 	if l.fetchErr != "" {
 		return app.Div().Style("font-size", "13px").Style("color", "#c00").Text(fmt.Sprintf("Error: %s", l.fetchErr))
 	}
-	if len(l.indicatorTypes) == 0 {
-		return app.Div().Style("font-size", "13px").Style("color", "#999").Text("No indicator types found.")
+	if len(l.widgetTypes) == 0 {
+		return app.Div().Style("font-size", "13px").Style("color", "#999").Text("No widget types found.")
 	}
 
-	items := make([]app.UI, len(l.indicatorTypes))
-	for i, it := range l.indicatorTypes {
+	items := make([]app.UI, len(l.widgetTypes))
+	for i, it := range l.widgetTypes {
 		id := it.ID
 		name := it.Name
 		var item app.UI
@@ -475,13 +475,14 @@ func (l *Library) renderEditorColumn(title, value string, onInput func(app.Conte
 
 func (l *Library) renderPreviewColumn() app.UI {
 	var content app.UI
-	if l.editedSVG == "" {
+	if l.editedHTML == "" {
 		content = app.Div().
 			Style("color", "#999").
 			Style("font-size", "13px").
-			Text("No SVG to preview.")
+			Text("No HTML to preview.")
 	} else {
-		content = app.Raw(l.editedSVG)
+		// app.Raw renders arbitrary HTML content, supporting any valid HTML including SVG
+		content = app.Raw(l.editedHTML)
 	}
 	return app.Div().
 		Style("display", "flex").

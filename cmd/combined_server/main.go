@@ -77,11 +77,13 @@ func main() {
 	// API server
 	tagRepository := repositories.NewTagRepositoryPostgres(sqlDB)
 	indicatorTypeRepository := repositories.NewIndicatorTypeRepositoryPostgres(sqlDB)
+	widgetTypeRepository := repositories.NewWidgetTypeRepositoryPostgres(sqlDB)
 	// Create services
 	tagService := application.NewTagService(tagRepository, eventBus)
 	indicatorTypeService := application.NewIndicatorTypeService(indicatorTypeRepository, eventBus)
+	widgetTypeService := application.NewWidgetTypeService(widgetTypeRepository, eventBus)
 	// Create router
-	apiRouter := restapi.NewRouter(tagService, indicatorTypeService)
+	apiRouter := restapi.NewRouter(tagService, indicatorTypeService, widgetTypeService)
 	// Start HTTP server for API
 	apiServer := &http.Server{
 		Addr:    ":9090",

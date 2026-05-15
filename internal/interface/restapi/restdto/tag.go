@@ -1,8 +1,8 @@
-package rest_dto
+package restdto
 
 import (
 	"github.com/google/uuid"
-	"github.com/kipitix/growscada/internal/application/app_dto"
+	"github.com/kipitix/growscada/internal/application/appdto"
 )
 
 // TagResponse is the HTTP DTO for representing a tag in API responses.
@@ -45,7 +45,7 @@ type UpdateTagResponse struct {
 }
 
 // NewTagResponse converts an app-level Tag DTO to a TagResponse HTTP DTO.
-func NewTagResponse(t app_dto.Tag) TagResponse {
+func NewTagResponse(t appdto.Tag) TagResponse {
 	return TagResponse{
 		ID:      t.ID,
 		Name:    t.Name,
@@ -57,7 +57,7 @@ func NewTagResponse(t app_dto.Tag) TagResponse {
 }
 
 // NewGetTagsResponse converts an app-level TagList DTO to a GetTagsResponse HTTP DTO.
-func NewGetTagsResponse(list []app_dto.Tag) GetTagsResponse {
+func NewGetTagsResponse(list []appdto.Tag) GetTagsResponse {
 	tags := make([]TagResponse, len(list))
 	for i, t := range list {
 		tags[i] = NewTagResponse(t)
@@ -66,18 +66,18 @@ func NewGetTagsResponse(list []app_dto.Tag) GetTagsResponse {
 }
 
 // NewCreateTagResponse converts an app-level Tag DTO to a CreateTagResponse HTTP DTO.
-func NewCreateTagResponse(t app_dto.Tag) CreateTagResponse {
+func NewCreateTagResponse(t appdto.Tag) CreateTagResponse {
 	return CreateTagResponse{ID: t.ID}
 }
 
 // NewUpdateTagResponse converts an app-level Tag DTO to an UpdateTagResponse HTTP DTO.
-func NewUpdateTagResponse(t app_dto.Tag) UpdateTagResponse {
+func NewUpdateTagResponse(t appdto.Tag) UpdateTagResponse {
 	return UpdateTagResponse{Version: t.Version}
 }
 
 // NewCreateTagInput converts a CreateTagRequest HTTP DTO to an app-level CreateTagInput DTO.
-func NewCreateTagInput(r CreateTagRequest) app_dto.CreateTagInput {
-	return app_dto.CreateTagInput{
+func NewCreateTagInput(r CreateTagRequest) appdto.CreateTagInput {
+	return appdto.CreateTagInput{
 		Name:    r.Name,
 		Type:    r.Type,
 		Value:   r.Value,
@@ -86,8 +86,8 @@ func NewCreateTagInput(r CreateTagRequest) app_dto.CreateTagInput {
 }
 
 // NewUpdateTagInput converts an UpdateTagRequest HTTP DTO to an app-level UpdateTagInput DTO.
-func NewUpdateTagInput(r UpdateTagRequest, tagID uuid.UUID) app_dto.UpdateTagInput {
-	return app_dto.UpdateTagInput{
+func NewUpdateTagInput(r UpdateTagRequest, tagID uuid.UUID) appdto.UpdateTagInput {
+	return appdto.UpdateTagInput{
 		ID:      tagID,
 		Value:   r.Value,
 		Quality: r.Quality,

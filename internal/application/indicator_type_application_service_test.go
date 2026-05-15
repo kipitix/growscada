@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/application"
-	"github.com/kipitix/growscada/internal/application/app_dto"
+	"github.com/kipitix/growscada/internal/application/appdto"
 	"github.com/kipitix/growscada/internal/domain/event"
 	"github.com/kipitix/growscada/internal/domain/indicator_type"
 	"github.com/kipitix/growscada/internal/infrastructure/postgres/repositories"
@@ -32,7 +32,7 @@ func newIndicatorTypeServiceWithBus() (application.IndicatorTypeService, event.E
 	return application.NewIndicatorTypeService(repo, bus), bus
 }
 
-var testCreateInput = app_dto.CreateIndicatorTypeInput{
+var testCreateInput = appdto.CreateIndicatorTypeInput{
 	Name:           "gauge",
 	SvgTemplate:    "<svg><circle r='10'/></svg>",
 	Script:         "function render(v) { return v; }",
@@ -156,7 +156,7 @@ func TestUpdateIndicatorType_Valid_ReturnsIncrementedVersion(t *testing.T) {
 		t.Fatalf("CreateIndicatorType: %v", err)
 	}
 
-	updated, err := svc.UpdateIndicatorType(ctx, app_dto.UpdateIndicatorTypeInput{
+	updated, err := svc.UpdateIndicatorType(ctx, appdto.UpdateIndicatorTypeInput{
 		ID:             created.ID,
 		Name:           "updated-gauge",
 		SvgTemplate:    "<svg/>",
@@ -182,7 +182,7 @@ func TestUpdateIndicatorType_Valid_FieldsAreUpdated(t *testing.T) {
 		t.Fatalf("CreateIndicatorType: %v", err)
 	}
 
-	_, err = svc.UpdateIndicatorType(ctx, app_dto.UpdateIndicatorTypeInput{
+	_, err = svc.UpdateIndicatorType(ctx, appdto.UpdateIndicatorTypeInput{
 		ID:             created.ID,
 		Name:           "new-name",
 		SvgTemplate:    "<svg><rect/></svg>",
@@ -210,7 +210,7 @@ func TestUpdateIndicatorType_NotFound_ReturnsWrappedError(t *testing.T) {
 	cleanIndicatorTypes(t)
 	svc := newIndicatorTypeService()
 
-	_, err := svc.UpdateIndicatorType(context.Background(), app_dto.UpdateIndicatorTypeInput{
+	_, err := svc.UpdateIndicatorType(context.Background(), appdto.UpdateIndicatorTypeInput{
 		ID:             uuid.New(),
 		Name:           "x",
 		SvgTemplate:    "<svg/>",
@@ -236,7 +236,7 @@ func TestUpdateIndicatorType_InvalidScriptLanguage_ReturnsError(t *testing.T) {
 		t.Fatalf("CreateIndicatorType: %v", err)
 	}
 
-	_, err = svc.UpdateIndicatorType(ctx, app_dto.UpdateIndicatorTypeInput{
+	_, err = svc.UpdateIndicatorType(ctx, appdto.UpdateIndicatorTypeInput{
 		ID:             created.ID,
 		Name:           "x",
 		SvgTemplate:    "<svg/>",
@@ -383,7 +383,7 @@ func TestUpdateIndicatorType_Success_PublishesUpdatedEvent(t *testing.T) {
 		received = append(received, e)
 	})
 
-	_, err = svc.UpdateIndicatorType(ctx, app_dto.UpdateIndicatorTypeInput{
+	_, err = svc.UpdateIndicatorType(ctx, appdto.UpdateIndicatorTypeInput{
 		ID:             created.ID,
 		Name:           "updated",
 		SvgTemplate:    "<svg/>",

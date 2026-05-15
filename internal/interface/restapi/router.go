@@ -11,6 +11,7 @@ type APIRouter struct {
 	serveMux               *http.ServeMux
 	tagsHandlers           *TagsHandlers
 	indicatorTypesHandlers *IndicatorTypesHandlers
+	widgetTypesHandlers    *WidgetTypesHandlers
 }
 
 func (r APIRouter) ServeMux() http.Handler {
@@ -30,7 +31,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func NewRouter(tagService application.TagService, indicatorTypeService application.IndicatorTypeService) *APIRouter {
+func NewRouter(tagService application.TagService, indicatorTypeService application.IndicatorTypeService, widgetTypeService application.WidgetTypeService) *APIRouter {
 	router := &APIRouter{}
 	router.serveMux = http.NewServeMux()
 
@@ -47,6 +48,13 @@ func NewRouter(tagService application.TagService, indicatorTypeService applicati
 	router.serveMux.HandleFunc("POST /api/v1/indicator-types", router.indicatorTypesHandlers.PostIndicatorTypes)
 	router.serveMux.HandleFunc("PUT /api/v1/indicator-types/{id}", router.indicatorTypesHandlers.PutIndicatorTypesByID)
 	router.serveMux.HandleFunc("DELETE /api/v1/indicator-types/{id}", router.indicatorTypesHandlers.DeleteIndicatorTypesByID)
+
+	router.widgetTypesHandlers = NewWidgetTypesHandler(widgetTypeService)
+	router.serveMux.HandleFunc("GET /api/v1/widget-types", router.widgetTypesHandlers.GetWidgetTypes)
+	router.serveMux.HandleFunc("GET /api/v1/widget-types/{id}", router.widgetTypesHandlers.GetWidgetTypesByID)
+	router.serveMux.HandleFunc("POST /api/v1/widget-types", router.widgetTypesHandlers.PostWidgetTypes)
+	router.serveMux.HandleFunc("PUT /api/v1/widget-types/{id}", router.widgetTypesHandlers.PutWidgetTypesByID)
+	router.serveMux.HandleFunc("DELETE /api/v1/widget-types/{id}", router.widgetTypesHandlers.DeleteWidgetTypesByID)
 
 	return router
 }
