@@ -16,8 +16,6 @@ type WidgetType interface {
 	ScriptLanguage() ScriptLanguage
 	Version() version.Version
 
-	Update(name WidgetTypeName, htmlTemplate HtmlTemplate, script Script, lang ScriptLanguage)
-
 	fmt.Stringer
 }
 
@@ -58,14 +56,6 @@ func (wt widgetTypeImpl) HtmlTemplate() HtmlTemplate  { return wt.htmlTemplate }
 func (wt widgetTypeImpl) Script() Script              { return wt.script }
 func (wt widgetTypeImpl) ScriptLanguage() ScriptLanguage { return wt.scriptLanguage }
 func (wt widgetTypeImpl) Version() version.Version    { return wt.version }
-
-// Update replaces all mutable fields of the widget type.
-func (wt *widgetTypeImpl) Update(name WidgetTypeName, htmlTemplate HtmlTemplate, script Script, lang ScriptLanguage) {
-	wt.name = name
-	wt.htmlTemplate = htmlTemplate
-	wt.script = script
-	wt.scriptLanguage = lang
-}
 
 // String implements [fmt.Stringer].
 func (wt widgetTypeImpl) String() string {

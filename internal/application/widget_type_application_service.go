@@ -112,9 +112,9 @@ func (s widgetTypeServiceImpl) UpdateWidgetType(ctx context.Context, input appdt
 		return appdto.WidgetType{}, fmt.Errorf("cannot parse script language: %w", err)
 	}
 
-	found.Update(newName, newHtml, newScript, newLang)
+	updated := widget.NewWidgetType(found.ID(), newName, newHtml, newScript, newLang, found.Version())
 
-	found, err = s.repository.Save(ctx, found)
+	found, err = s.repository.Save(ctx, updated)
 	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("cannot save widget type: %w", err)
 	}
