@@ -13,12 +13,9 @@ func TestNewWidgetTypeName_ReturnsCorrectValue(t *testing.T) {
 }
 
 func TestNewWidgetTypeName_EmptyString(t *testing.T) {
-	name, err := NewWidgetTypeName("")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if name.String() != "" {
-		t.Errorf("expected empty string, got %q", name.String())
+	_, err := NewWidgetTypeName("")
+	if err == nil {
+		t.Error("expected error for empty name, got nil")
 	}
 }
 

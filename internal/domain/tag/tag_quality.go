@@ -13,7 +13,7 @@ type TagQuality struct {
 // Interfaces for TagQuality
 var _ fmt.Stringer = TagQuality{}
 
-// Tag quality enumeration values.
+// Sentinel values for TagQuality. Must not be reassigned.
 // TagQualityUnknown - unknown quality (zero value, uninitialized).
 // TagQualityBad - bad quality (unavailable, error).
 // TagQualityUncertain - uncertain quality.

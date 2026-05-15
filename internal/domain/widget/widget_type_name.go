@@ -12,7 +12,9 @@ var _ fmt.Stringer = WidgetTypeName{}
 
 // NewWidgetTypeName creates a WidgetTypeName from a string.
 func NewWidgetTypeName(aName string) (WidgetTypeName, error) {
-	// TODO: add restrictions and validation
+	if aName == "" {
+		return WidgetTypeName{}, fmt.Errorf("widget type name must not be empty")
+	}
 	return WidgetTypeName{name: aName}, nil
 }
 

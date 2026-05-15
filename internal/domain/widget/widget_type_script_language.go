@@ -10,7 +10,7 @@ type ScriptLanguage struct {
 
 var _ fmt.Stringer = ScriptLanguage{}
 
-// Script language enumeration values.
+// Sentinel values for ScriptLanguage. Must not be reassigned.
 var (
 	ScriptLanguageUnknown    = ScriptLanguage{language: 0}
 	ScriptLanguageJavaScript = ScriptLanguage{language: 1}
