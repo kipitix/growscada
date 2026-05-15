@@ -1,6 +1,10 @@
 package widget
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/kipitix/growscada/internal/domain/version"
+)
 
 func makeTestWidgetType(t *testing.T) WidgetType {
 	t.Helper()
@@ -9,7 +13,7 @@ func makeTestWidgetType(t *testing.T) WidgetType {
 	htmlTemplate, _ := NewHtmlTemplate("<div class='gauge'></div>")
 	script, _ := NewScript("function render(value) { return value; }")
 	lang := ScriptLanguageJavaScript
-	wt, err := NewWidgetType(id, name, htmlTemplate, script, lang, WidgetTypeVersionInitial)
+	wt, err := NewWidgetType(id, name, htmlTemplate, script, lang, version.Initial)
 	if err != nil {
 		t.Fatalf("NewWidgetType returned unexpected error: %v", err)
 	}
@@ -22,7 +26,7 @@ func TestNewWidgetType_FieldsAreSet(t *testing.T) {
 	htmlTemplate, _ := NewHtmlTemplate("<div class='thermometer'></div>")
 	script, _ := NewScript("function draw() {}")
 	lang := ScriptLanguagePython
-	version, _ := NewWidgetTypeVersion(WidgetTypeVersionWithNumber(3))
+	version, _ := version.New(version.WithNumber(3))
 
 	wt, err := NewWidgetType(id, name, htmlTemplate, script, lang, version)
 	if err != nil {
@@ -51,27 +55,14 @@ func TestNewWidgetType_FieldsAreSet(t *testing.T) {
 
 func TestNewWidgetType_InitialVersion(t *testing.T) {
 	wt := makeTestWidgetType(t)
-	if wt.Version() != WidgetTypeVersionInitial {
-		t.Errorf("expected initial version %d, got %d", WidgetTypeVersionInitial, wt.Version())
-	}
-}
-
-func TestWidgetType_IncrementVersion(t *testing.T) {
-	wt := makeTestWidgetType(t)
-	wt.IncrementVersion()
-	if wt.Version().Number() != 1 {
-		t.Errorf("expected version 1 after first increment, got %d", wt.Version().Number())
-	}
-	wt.IncrementVersion()
-	if wt.Version().Number() != 2 {
-		t.Errorf("expected version 2 after second increment, got %d", wt.Version().Number())
+	if wt.Version() != version.Initial {
+		t.Errorf("expected initial version %d, got %d", version.Initial, wt.Version())
 	}
 }
 
 func TestNewWidgetType_String(t *testing.T) {
 	wt := makeTestWidgetType(t)
-	s := wt.String()
-	if s == "" {
+	if wt.String() == "" {
 		t.Error("expected non-empty String() output")
 	}
 }

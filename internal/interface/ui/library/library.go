@@ -41,14 +41,15 @@ type updateWidgetTypeRequest struct {
 
 type Library struct {
 	app.Compo
-	apiServerURL   string
-	widgetTypes    []widgetTypeItem
-	loading        bool
-	fetchErr       string
+	apiServerURL     string
+	widgetTypes      []widgetTypeItem
+	loading          bool
+	fetchErr         string
 	selectedID       string
 	editedName       string
 	editedHTML       string
 	editedScript     string
+	editedInputData  string
 	editedScriptLang string
 	editingID        string
 	editingName      string
@@ -129,6 +130,7 @@ func (l *Library) createItem(ctx app.Context) {
 			l.editedName = name
 			l.editedHTML = defaultHTML
 			l.editedScript = defaultScript
+			l.editedInputData = ""
 			l.editedScriptLang = "javascript"
 			l.loadList(ctx)
 		})
@@ -158,6 +160,7 @@ func (l *Library) deleteItem(ctx app.Context) {
 				l.selectedID = ""
 				l.editedHTML = ""
 				l.editedScript = ""
+				l.editedInputData = ""
 			}
 			l.loadList(ctx)
 		})
@@ -172,6 +175,7 @@ func (l *Library) selectItem(id string) {
 			l.editedHTML = it.HtmlTemplate
 			l.editedScript = it.Script
 			l.editedScriptLang = it.ScriptLanguage
+			l.editedInputData = ""
 			return
 		}
 	}
@@ -231,7 +235,6 @@ func (l *Library) commitEdit(ctx app.Context) {
 		return
 	}
 
-	// Optimistically update the name in the local list immediately.
 	for i, it := range l.widgetTypes {
 		if it.ID == id {
 			l.widgetTypes[i].Name = name
@@ -275,13 +278,15 @@ func (l *Library) Render() app.UI {
 		Style("gap", "8px").
 		Body(
 			l.renderListColumn(),
-			l.renderEditorColumn("HTML Template", l.editedHTML, func(ctx app.Context, e app.Event) {
+			l.renderEditorColumn("HTML Template", "html-template", l.editedHTML, func(ctx app.Context, e app.Event) {
 				l.editedHTML = ctx.JSSrc().Get("value").String()
 			}, true),
-			l.renderEditorColumn("Script", l.editedScript, func(ctx app.Context, e app.Event) {
+			l.renderEditorColumn("Script", "script-editor", l.editedScript, func(ctx app.Context, e app.Event) {
 				l.editedScript = ctx.JSSrc().Get("value").String()
 			}, true),
-			l.renderEditorColumn("Input Data", "", nil, false),
+			l.renderEditorColumn("Input Data", "input-data", l.editedInputData, func(ctx app.Context, e app.Event) {
+				l.editedInputData = ctx.JSSrc().Get("value").String()
+			}, false),
 			l.renderPreviewColumn(),
 		)
 }
@@ -418,23 +423,19 @@ func (l *Library) renderList() app.UI {
 	return app.Div().Body(items...)
 }
 
-func (l *Library) renderEditorColumn(title, value string, onInput func(app.Context, app.Event), showApply bool) app.UI {
+func (l *Library) renderEditorColumn(title, id, value string, onInput func(app.Context, app.Event), showApply bool) app.UI {
+	base := app.Textarea().
+		ID(id).
+		Style("flex", "1").
+		Style("resize", "none").
+		Style("font-family", "monospace").
+		Style("font-size", "13px")
+
 	var textarea app.UI
 	if onInput != nil {
-		textarea = app.Textarea().
-			Style("flex", "1").
-			Style("resize", "none").
-			Style("font-family", "monospace").
-			Style("font-size", "13px").
-			Text(value).
-			OnInput(onInput)
+		textarea = base.Text(value).OnInput(onInput)
 	} else {
-		textarea = app.Textarea().
-			Style("flex", "1").
-			Style("resize", "none").
-			Style("font-family", "monospace").
-			Style("font-size", "13px").
-			Disabled(true)
+		textarea = base.Disabled(true)
 	}
 
 	applyDisabled := l.selectedID == ""
@@ -488,8 +489,12 @@ func (l *Library) renderPreviewColumn() app.UI {
 			Style("font-size", "13px").
 			Text("No HTML to preview.")
 	} else {
-		// app.Raw renders arbitrary HTML content, supporting any valid HTML including SVG
-		content = app.Raw(l.editedHTML)
+		content = app.IFrame().
+			Attr("srcdoc", buildSrcdoc(l.editedHTML, l.editedScript, l.editedInputData)).
+			Attr("sandbox", "allow-scripts").
+			Style("width", "100%").
+			Style("height", "100%").
+			Style("border", "none")
 	}
 	return app.Div().
 		Style("display", "flex").
@@ -506,4 +511,15 @@ func (l *Library) renderPreviewColumn() app.UI {
 				Style("border", "1px solid #ddd").
 				Body(content),
 		)
+}
+
+// buildSrcdoc constructs the iframe srcdoc for sandboxed widget preview.
+// inputData is a raw JS expression passed to the widget's render(value) function.
+func buildSrcdoc(htmlTemplate, script, inputData string) string {
+	callRender := ""
+	if inputData != "" {
+		callRender = fmt.Sprintf("\ntry { render(%s); } catch(e) {}", inputData)
+	}
+	return fmt.Sprintf(`<!DOCTYPE html><html><body>%s<script>%s%s</script></body></html>`,
+		htmlTemplate, script, callRender)
 }

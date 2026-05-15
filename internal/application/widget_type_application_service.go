@@ -6,6 +6,7 @@ import (
 
 	"github.com/kipitix/growscada/internal/application/appdto"
 	"github.com/kipitix/growscada/internal/domain/event"
+	"github.com/kipitix/growscada/internal/domain/version"
 	"github.com/kipitix/growscada/internal/domain/widget"
 )
 
@@ -71,12 +72,13 @@ func (s widgetTypeServiceImpl) CreateWidgetType(ctx context.Context, input appdt
 		return appdto.WidgetType{}, fmt.Errorf("cannot create widget type because of script language: %w", err)
 	}
 
-	newWt, err := widget.NewWidgetType(newID, newName, newHtml, newScript, newLang, widget.WidgetTypeVersionInitial)
+	newWt, err := widget.NewWidgetType(newID, newName, newHtml, newScript, newLang, version.Initial)
 	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("cannot create widget type: %w", err)
 	}
 
-	if err = s.repository.Save(ctx, newWt); err != nil {
+	newWt, err = s.repository.Save(ctx, newWt)
+	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("cannot save widget type: %w", err)
 	}
 
@@ -115,7 +117,8 @@ func (s widgetTypeServiceImpl) UpdateWidgetType(ctx context.Context, input appdt
 
 	found.Update(newName, newHtml, newScript, newLang)
 
-	if err = s.repository.Save(ctx, found); err != nil {
+	found, err = s.repository.Save(ctx, found)
+	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("cannot save widget type: %w", err)
 	}
 

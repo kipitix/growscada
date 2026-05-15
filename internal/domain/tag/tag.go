@@ -2,6 +2,8 @@ package tag
 
 import (
 	"fmt"
+
+	"github.com/kipitix/growscada/internal/domain/version"
 )
 
 // Tag - interface representing a tag.
@@ -13,10 +15,9 @@ type Tag interface {
 	Type() TagType
 	Value() TagValue
 	Quality() TagQuality
-	Version() TagVersion
+	Version() version.Version
 
 	SetValue(any, TagQuality) error
-	IncrementVersion()
 
 	fmt.Stringer
 }
@@ -28,25 +29,21 @@ type tagImpl struct {
 	tagType TagType
 	value   TagValue
 	quality TagQuality
-	version TagVersion
+	version version.Version
 }
 
 var _ Tag = (*tagImpl)(nil)
 
-// NewTag creates a new tag with the given identifier, name, and type.
-// Sets the initial value to nil and quality to TagQualityBad.
-// version is initialized to 0.
-func NewTag(anID TagID, aName TagName, aType TagType, aValue TagValue, aQuality TagQuality, aVersion TagVersion) (Tag, error) {
-	newTag := &tagImpl{
+// NewTag creates a new tag with the given identifier, name, type, value, quality and version.
+func NewTag(anID TagID, aName TagName, aType TagType, aValue TagValue, aQuality TagQuality, aVersion version.Version) (Tag, error) {
+	return &tagImpl{
 		id:      anID,
 		name:    aName,
 		tagType: aType,
 		value:   aValue,
 		quality: aQuality,
 		version: aVersion,
-	}
-
-	return newTag, nil
+	}, nil
 }
 
 // ID returns the tag identifier.
@@ -75,7 +72,7 @@ func (t tagImpl) Quality() TagQuality {
 }
 
 // Version returns the current tag version.
-func (t tagImpl) Version() TagVersion {
+func (t tagImpl) Version() version.Version {
 	return t.version
 }
 
@@ -85,15 +82,9 @@ func (t *tagImpl) SetValue(aValue any, aQuality TagQuality) error {
 	if err != nil {
 		return fmt.Errorf("cannot update tag value: %w", err)
 	}
-	// Set value and quality simultaneously
 	t.value = newValue
 	t.quality = aQuality
 	return nil
-}
-
-// IncrementVersion increments the tag version by one.
-func (t *tagImpl) IncrementVersion() {
-	t.version = t.version.Next()
 }
 
 // String returns a string representation of the tag.

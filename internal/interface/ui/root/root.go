@@ -31,6 +31,10 @@ func NewRoot(anAPIServerURL string) *Root {
 	}
 }
 
+func (r *Root) OnMount(ctx app.Context) {
+	ctx.Page().SetTitle("GrowSCADA")
+}
+
 func (r *Root) Render() app.UI {
 	return app.Div().
 		Style("display", "flex").
@@ -39,6 +43,7 @@ func (r *Root) Render() app.UI {
 		Style("font-family", "sans-serif").
 		Body(
 			app.Div().
+				Attr("role", "tablist").
 				Style("display", "flex").
 				Style("flex-direction", "row").
 				Style("border-bottom", "2px solid #ddd").
@@ -72,7 +77,17 @@ func (r *Root) Render() app.UI {
 func (r *Root) tab(label string, mode Mode) app.UI {
 	active := r.currentMode == mode
 
+	ariaSelected := "false"
+	tabIdx := -1
+	if active {
+		ariaSelected = "true"
+		tabIdx = 0
+	}
+
 	tab := app.Div().
+		Attr("role", "tab").
+		Attr("aria-selected", ariaSelected).
+		TabIndex(tabIdx).
 		Style("padding", "10px 20px").
 		Style("cursor", "pointer").
 		Style("font-size", "14px").

@@ -1,6 +1,10 @@
 package widget
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/kipitix/growscada/internal/domain/version"
+)
 
 // WidgetType - aggregate representing a visual widget type.
 // Defines how a SCADA widget element is rendered via an HTML template and a script.
@@ -10,10 +14,9 @@ type WidgetType interface {
 	HtmlTemplate() HtmlTemplate
 	Script() Script
 	ScriptLanguage() ScriptLanguage
-	Version() WidgetTypeVersion
+	Version() version.Version
 
 	Update(name WidgetTypeName, htmlTemplate HtmlTemplate, script Script, lang ScriptLanguage)
-	IncrementVersion()
 
 	fmt.Stringer
 }
@@ -25,7 +28,7 @@ type widgetTypeImpl struct {
 	htmlTemplate   HtmlTemplate
 	script         Script
 	scriptLanguage ScriptLanguage
-	version        WidgetTypeVersion
+	version        version.Version
 }
 
 var _ WidgetType = (*widgetTypeImpl)(nil)
@@ -37,7 +40,7 @@ func NewWidgetType(
 	anHtmlTemplate HtmlTemplate,
 	aScript Script,
 	aScriptLanguage ScriptLanguage,
-	aVersion WidgetTypeVersion,
+	aVersion version.Version,
 ) (WidgetType, error) {
 	return &widgetTypeImpl{
 		id:             anID,
@@ -49,35 +52,12 @@ func NewWidgetType(
 	}, nil
 }
 
-// ID returns the widget type identifier.
-func (wt widgetTypeImpl) ID() WidgetTypeID {
-	return wt.id
-}
-
-// Name returns the widget type name.
-func (wt widgetTypeImpl) Name() WidgetTypeName {
-	return wt.name
-}
-
-// HtmlTemplate returns the HTML template.
-func (wt widgetTypeImpl) HtmlTemplate() HtmlTemplate {
-	return wt.htmlTemplate
-}
-
-// Script returns the rendering script.
-func (wt widgetTypeImpl) Script() Script {
-	return wt.script
-}
-
-// ScriptLanguage returns the scripting language.
-func (wt widgetTypeImpl) ScriptLanguage() ScriptLanguage {
-	return wt.scriptLanguage
-}
-
-// Version returns the current version of the widget type.
-func (wt widgetTypeImpl) Version() WidgetTypeVersion {
-	return wt.version
-}
+func (wt widgetTypeImpl) ID() WidgetTypeID           { return wt.id }
+func (wt widgetTypeImpl) Name() WidgetTypeName        { return wt.name }
+func (wt widgetTypeImpl) HtmlTemplate() HtmlTemplate  { return wt.htmlTemplate }
+func (wt widgetTypeImpl) Script() Script              { return wt.script }
+func (wt widgetTypeImpl) ScriptLanguage() ScriptLanguage { return wt.scriptLanguage }
+func (wt widgetTypeImpl) Version() version.Version    { return wt.version }
 
 // Update replaces all mutable fields of the widget type.
 func (wt *widgetTypeImpl) Update(name WidgetTypeName, htmlTemplate HtmlTemplate, script Script, lang ScriptLanguage) {
@@ -87,15 +67,7 @@ func (wt *widgetTypeImpl) Update(name WidgetTypeName, htmlTemplate HtmlTemplate,
 	wt.scriptLanguage = lang
 }
 
-// IncrementVersion increments the version by one.
-func (wt *widgetTypeImpl) IncrementVersion() {
-	wt.version = wt.version.Next()
-}
-
 // String implements [fmt.Stringer].
 func (wt widgetTypeImpl) String() string {
-	return fmt.Sprintf(
-		"WidgetType: %s, Language: %s",
-		wt.name, wt.scriptLanguage,
-	)
+	return fmt.Sprintf("WidgetType: %s, Language: %s", wt.name, wt.scriptLanguage)
 }

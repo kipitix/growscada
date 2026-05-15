@@ -13,7 +13,8 @@ type WidgetTypeRepository interface {
 	NextID() WidgetTypeID
 
 	// Save stores a widget type in the repository.
-	Save(context.Context, WidgetType) error
+	// Returns the saved widget type with updated version on success, or an error on failure.
+	Save(context.Context, WidgetType) (WidgetType, error)
 
 	// FindByID returns a widget type by its identifier.
 	// Returns ErrWidgetTypeNotFound if not found.
