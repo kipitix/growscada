@@ -31,7 +31,9 @@ func newRouterWithWidgetTypes() *restapi.APIRouter {
 	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	wtSvc := application.NewWidgetTypeService(wtRepo, event.NewEventBus())
-	return restapi.NewRouter(tagSvc, wtSvc)
+	wRepo := repositories.NewWidgetRepositoryPostgres(testDB)
+	wSvc := application.NewWidgetService(wRepo, event.NewEventBus())
+	return restapi.NewRouter(tagSvc, wtSvc, wSvc)
 }
 
 func createWidgetTypeViaService(t *testing.T, input appdto.CreateWidgetTypeInput) appdto.WidgetType {
@@ -281,7 +283,9 @@ func TestPutWidgetTypesByID_Conflict_Returns409(t *testing.T) {
 	svc := &stubWidgetTypeService{updateErr: widget.ErrWidgetTypeConflict}
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
 	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
-	router := restapi.NewRouter(tagSvc, svc)
+	wRepo := repositories.NewWidgetRepositoryPostgres(testDB)
+	wSvc := application.NewWidgetService(wRepo, event.NewEventBus())
+	router := restapi.NewRouter(tagSvc, svc, wSvc)
 
 	body, _ := json.Marshal(restdto.UpdateWidgetTypeRequest{
 		Name: "x", HtmlTemplate: "<div/>", Script: "x", ScriptLanguage: "lua",
