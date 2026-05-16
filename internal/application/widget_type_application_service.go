@@ -72,7 +72,7 @@ func (s widgetTypeServiceImpl) CreateWidgetType(ctx context.Context, input appdt
 		return appdto.WidgetType{}, fmt.Errorf("cannot create widget type because of script language: %w", err)
 	}
 
-	newWt := widget.NewWidgetType(newID, newName, newHtml, newScript, newLang, version.Initial)
+	newWt := widget.NewWidgetType(newID, newName, newHtml, newScript, newLang, version.Initial[widget.WidgetType]())
 
 	newWt, err = s.repository.Save(ctx, newWt)
 	if err != nil {

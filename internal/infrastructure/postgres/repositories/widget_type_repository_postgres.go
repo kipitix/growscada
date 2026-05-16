@@ -26,12 +26,12 @@ func (r widgetTypeRepositoryPostgresImpl) NextID() widget.WidgetTypeID {
 }
 
 func (r widgetTypeRepositoryPostgresImpl) Save(ctx context.Context, wt widget.WidgetType) (widget.WidgetType, error) {
-	if wt.Version() == version.Initial {
+	if wt.Version() == version.Initial[widget.WidgetType]() {
 		sqlResult, err := r.db.ExecContext(ctx,
 			`INSERT INTO widget_types (id, name, html_template, script, script_language, version)
 			VALUES ($1, $2, $3, $4, $5, $6)`,
 			wt.ID().UUID(), wt.Name().String(), wt.HtmlTemplate().String(),
-			wt.Script().String(), wt.ScriptLanguage().String(), version.Committed.Number(),
+			wt.Script().String(), wt.ScriptLanguage().String(), version.Committed[widget.WidgetType]().Number(),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("cannot insert new widget type: %w", err)
@@ -43,7 +43,7 @@ func (r widgetTypeRepositoryPostgresImpl) Save(ctx context.Context, wt widget.Wi
 		if rowsAffected != 1 {
 			return nil, fmt.Errorf("expected 1 row affected on insert, got %d", rowsAffected)
 		}
-		return widget.NewWidgetType(wt.ID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), version.Committed), nil
+		return widget.NewWidgetType(wt.ID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), version.Committed[widget.WidgetType]()), nil
 	}
 
 	if wt.Version().IsCommitted() {
@@ -193,7 +193,7 @@ func (r widgetTypeRepositoryPostgresImpl) reconstruct(
 		return nil, fmt.Errorf("cannot create script language: %w", err)
 	}
 
-	newVersion, err := version.New(version.WithNumber(aVersion))
+	newVersion, err := version.New[widget.WidgetType](version.WithNumber[widget.WidgetType](aVersion))
 	if err != nil {
 		return nil, fmt.Errorf("cannot create widget type version: %w", err)
 	}

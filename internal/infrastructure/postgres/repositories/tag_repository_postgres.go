@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/kipitix/growscada/internal/domain/id"
 	"github.com/kipitix/growscada/internal/domain/tag"
 	"github.com/kipitix/growscada/internal/domain/version"
 )
@@ -21,17 +22,18 @@ func NewTagRepositoryPostgres(aDb *sql.DB) tag.TagRepository {
 	return &tagRepositoryPostgresImpl{db: aDb}
 }
 
-func (r tagRepositoryPostgresImpl) NextID() tag.TagID {
-	return tag.NewTagID()
+func (r tagRepositoryPostgresImpl) NextID() id.ID[tag.Tag] {
+	newID, _ := id.NewID[tag.Tag]()
+	return newID
 }
 
 func (r tagRepositoryPostgresImpl) Save(ctx context.Context, aTag tag.Tag) (tag.Tag, error) {
-	if aTag.Version() == version.Initial {
+	if aTag.Version() == version.Initial[tag.Tag]() {
 		sqlResult, err := r.db.ExecContext(ctx,
 			`INSERT INTO tags (id, name, type, value, quality, version)
 			VALUES ($1, $2, $3, $4, $5, $6)`,
 			aTag.ID().UUID(), aTag.Name().String(), aTag.Type().String(),
-			aTag.Value().String(), aTag.Quality().String(), version.Committed.Number(),
+			aTag.Value().String(), aTag.Quality().String(), version.Committed[tag.Tag]().Number(),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("cannot insert new tag: %w", err)
@@ -43,7 +45,7 @@ func (r tagRepositoryPostgresImpl) Save(ctx context.Context, aTag tag.Tag) (tag.
 		if rowsAffected != 1 {
 			return nil, fmt.Errorf("expected 1 row affected on insert, got %d", rowsAffected)
 		}
-		saved, err := tag.NewTag(aTag.ID(), aTag.Name(), aTag.Type(), aTag.Value(), aTag.Quality(), version.Committed)
+		saved, err := tag.NewTag(aTag.ID(), aTag.Name(), aTag.Type(), aTag.Value(), aTag.Quality(), version.Committed[tag.Tag]())
 		if err != nil {
 			return nil, fmt.Errorf("cannot build saved tag: %w", err)
 		}
@@ -78,21 +80,21 @@ func (r tagRepositoryPostgresImpl) Save(ctx context.Context, aTag tag.Tag) (tag.
 	return nil, fmt.Errorf("undefined behavior with version %d", aTag.Version())
 }
 
-func (r tagRepositoryPostgresImpl) FindByID(ctx context.Context, id tag.TagID) (tag.Tag, error) {
+func (r tagRepositoryPostgresImpl) FindByID(ctx context.Context, tagID id.ID[tag.Tag]) (tag.Tag, error) {
 	var (
 		tagUUID uuid.UUID
 		name    string
 		tagType string
 		value   string
 		quality string
-		version int
+		ver     int
 	)
 
 	row := r.db.QueryRowContext(ctx,
 		`SELECT id, name, type, value, quality, version FROM tags WHERE id = $1`,
-		id.UUID(),
+		tagID.UUID(),
 	)
-	err := row.Scan(&tagUUID, &name, &tagType, &value, &quality, &version)
+	err := row.Scan(&tagUUID, &name, &tagType, &value, &quality, &ver)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, tag.ErrTagNotFound
@@ -100,10 +102,10 @@ func (r tagRepositoryPostgresImpl) FindByID(ctx context.Context, id tag.TagID) (
 		return nil, fmt.Errorf("error scanning tag: %w", err)
 	}
 
-	return r.reconstruct(tagUUID, name, tagType, value, quality, version)
+	return r.reconstruct(tagUUID, name, tagType, value, quality, ver)
 }
 
-func (r tagRepositoryPostgresImpl) DeleteByID(ctx context.Context, id tag.TagID) (tag.Tag, error) {
+func (r tagRepositoryPostgresImpl) DeleteByID(ctx context.Context, tagID id.ID[tag.Tag]) (tag.Tag, error) {
 	var (
 		tagUUID    uuid.UUID
 		tagName    string
@@ -115,7 +117,7 @@ func (r tagRepositoryPostgresImpl) DeleteByID(ctx context.Context, id tag.TagID)
 
 	row := r.db.QueryRowContext(ctx,
 		`DELETE FROM tags WHERE id = $1 RETURNING id, name, type, value, quality, version`,
-		id.UUID(),
+		tagID.UUID(),
 	)
 	err := row.Scan(&tagUUID, &tagName, &tagType, &tagValue, &tagQuality, &tagVersion)
 	if err != nil {
@@ -165,7 +167,7 @@ func (r tagRepositoryPostgresImpl) FindAll(ctx context.Context) ([]tag.Tag, erro
 func (r tagRepositoryPostgresImpl) reconstruct(
 	aTagUUID uuid.UUID, aName, aTagType, aValue, aQuality string, aVersion int,
 ) (tag.Tag, error) {
-	newID := tag.NewTagID(tag.TagIDWithUUID(aTagUUID))
+	newID, _ := id.NewID(id.IDWithUUID[tag.Tag](aTagUUID))
 
 	newName, err := tag.NewTagName(aName)
 	if err != nil {
@@ -187,7 +189,7 @@ func (r tagRepositoryPostgresImpl) reconstruct(
 		return nil, fmt.Errorf("cannot create tag quality: %w", err)
 	}
 
-	newVersion, err := version.New(version.WithNumber(aVersion))
+	newVersion, err := version.New[tag.Tag](version.WithNumber[tag.Tag](aVersion))
 	if err != nil {
 		return nil, fmt.Errorf("cannot create tag version: %w", err)
 	}

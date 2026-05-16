@@ -93,7 +93,7 @@ func makeTag(t *testing.T, name string, repo tag.TagRepository) tag.Tag {
 	if err != nil {
 		t.Fatalf("NewTagValue: %v", err)
 	}
-	newTag, err := tag.NewTag(id, tagName, tagType, value, tag.TagQualityGood, version.Initial)
+	newTag, err := tag.NewTag(id, tagName, tagType, value, tag.TagQualityGood, version.Initial[tag.Tag]())
 	if err != nil {
 		t.Fatalf("NewTag: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestSave_DuplicateID_ReturnsError(t *testing.T) {
 		t.Fatalf("first Save failed: %v", err)
 	}
 
-	duplicate, _ := tag.NewTag(newTag.ID(), newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), version.Initial)
+	duplicate, _ := tag.NewTag(newTag.ID(), newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), version.Initial[tag.Tag]())
 	_, err := repo.Save(ctx, duplicate)
 
 	if err == nil {
@@ -187,7 +187,7 @@ func TestSave_StaleVersion_ReturnsError(t *testing.T) {
 	}
 
 	// version=100 while DB has version=1 → optimistic lock conflict
-	badVersion, _ := version.New(version.WithNumber(100))
+	badVersion, _ := version.New[tag.Tag](version.WithNumber[tag.Tag](100))
 	staleTag, _ := tag.NewTag(newTag.ID(), newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), badVersion)
 	_, err := repo.Save(ctx, staleTag)
 

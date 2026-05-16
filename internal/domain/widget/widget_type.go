@@ -14,7 +14,7 @@ type WidgetType interface {
 	HtmlTemplate() HtmlTemplate
 	Script() Script
 	ScriptLanguage() ScriptLanguage
-	Version() version.Version
+	Version() version.Version[WidgetType]
 
 	fmt.Stringer
 }
@@ -26,7 +26,7 @@ type widgetTypeImpl struct {
 	htmlTemplate   HtmlTemplate
 	script         Script
 	scriptLanguage ScriptLanguage
-	version        version.Version
+	version        version.Version[WidgetType]
 }
 
 var _ WidgetType = (*widgetTypeImpl)(nil)
@@ -38,7 +38,7 @@ func NewWidgetType(
 	anHtmlTemplate HtmlTemplate,
 	aScript Script,
 	aScriptLanguage ScriptLanguage,
-	aVersion version.Version,
+	aVersion version.Version[WidgetType],
 ) WidgetType {
 	return &widgetTypeImpl{
 		id:             anID,
@@ -55,7 +55,7 @@ func (wt widgetTypeImpl) Name() WidgetTypeName        { return wt.name }
 func (wt widgetTypeImpl) HtmlTemplate() HtmlTemplate  { return wt.htmlTemplate }
 func (wt widgetTypeImpl) Script() Script              { return wt.script }
 func (wt widgetTypeImpl) ScriptLanguage() ScriptLanguage { return wt.scriptLanguage }
-func (wt widgetTypeImpl) Version() version.Version    { return wt.version }
+func (wt widgetTypeImpl) Version() version.Version[WidgetType] { return wt.version }
 
 // String implements [fmt.Stringer].
 func (wt widgetTypeImpl) String() string {

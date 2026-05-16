@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/kipitix/growscada/internal/application"
+	"github.com/kipitix/growscada/internal/domain/id"
 	"github.com/kipitix/growscada/internal/domain/tag"
 	"github.com/kipitix/growscada/internal/interface/restapi/restdto"
 )
@@ -22,6 +23,15 @@ func NewTagsHandler(s application.TagService) *TagsHandlers {
 	return &TagsHandlers{service: s}
 }
 
+func parseTagID(s string) (id.ID[tag.Tag], error) {
+	opt, err := id.IDWithString[tag.Tag](s)
+	if err != nil {
+		return id.ID[tag.Tag]{}, err
+	}
+	tagID, _ := id.NewID(opt)
+	return tagID, nil
+}
+
 // GetTags handles GET /tags request to retrieve the list of tags
 func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
 	tagList, err := h.service.FindAllTags(r.Context())
@@ -35,7 +45,7 @@ func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
 // GetTagsByID handles GET /tags/{id}
 func (h TagsHandlers) GetTagsByID(w http.ResponseWriter, r *http.Request) {
 	tagIDString := r.PathValue("id")
-	tagID, err := tag.ParseTagID(tagIDString)
+	tagID, err := parseTagID(tagIDString)
 	if err != nil {
 		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
 		return
@@ -57,7 +67,7 @@ func (h TagsHandlers) GetTagsByID(w http.ResponseWriter, r *http.Request) {
 // DeleteTagsByID handles DELETE /tags/{id} for removing a tag
 func (h TagsHandlers) DeleteTagsByID(w http.ResponseWriter, r *http.Request) {
 	tagIDString := r.PathValue("id")
-	tagID, err := tag.ParseTagID(tagIDString)
+	tagID, err := parseTagID(tagIDString)
 	if err != nil {
 		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
 		return
@@ -79,7 +89,7 @@ func (h TagsHandlers) DeleteTagsByID(w http.ResponseWriter, r *http.Request) {
 // PatchTagsValue handles PATCH /tags/{id}/value for setting tag value and quality
 func (h TagsHandlers) PatchTagsValue(w http.ResponseWriter, r *http.Request) {
 	tagIDString := r.PathValue("id")
-	tagID, err := tag.ParseTagID(tagIDString)
+	tagID, err := parseTagID(tagIDString)
 	if err != nil {
 		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
 		return

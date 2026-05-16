@@ -8,6 +8,7 @@ import (
 
 // ID - UUID-based aggregates identifier.
 // Represents a value object for unique aggregates identification.
+// Generic type T is used to specify the type of the aggregate.
 type ID[T any] struct {
 	uuid uuid.UUID
 }

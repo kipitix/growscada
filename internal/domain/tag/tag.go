@@ -3,6 +3,7 @@ package tag
 import (
 	"fmt"
 
+	"github.com/kipitix/growscada/internal/domain/id"
 	"github.com/kipitix/growscada/internal/domain/version"
 )
 
@@ -10,12 +11,12 @@ import (
 // A tag is the fundamental system entity containing an identifier, name, type, value, and quality.
 // Aggregate
 type Tag interface {
-	ID() TagID
+	ID() id.ID[Tag]
 	Name() TagName
 	Type() TagType
 	Value() TagValue
 	Quality() TagQuality
-	Version() version.Version
+	Version() version.Version[Tag]
 
 	SetValue(any, TagQuality) error
 
@@ -24,18 +25,18 @@ type Tag interface {
 
 // tagImpl - tag implementation struct
 type tagImpl struct {
-	id      TagID
+	id      id.ID[Tag]
 	name    TagName
 	tagType TagType
 	value   TagValue
 	quality TagQuality
-	version version.Version
+	version version.Version[Tag]
 }
 
 var _ Tag = (*tagImpl)(nil)
 
 // NewTag creates a new tag with the given identifier, name, type, value, quality and version.
-func NewTag(anID TagID, aName TagName, aType TagType, aValue TagValue, aQuality TagQuality, aVersion version.Version) (Tag, error) {
+func NewTag(anID id.ID[Tag], aName TagName, aType TagType, aValue TagValue, aQuality TagQuality, aVersion version.Version[Tag]) (Tag, error) {
 	return &tagImpl{
 		id:      anID,
 		name:    aName,
@@ -46,12 +47,12 @@ func NewTag(anID TagID, aName TagName, aType TagType, aValue TagValue, aQuality 
 	}, nil
 }
 
-func (t tagImpl) ID() TagID              { return t.id }
-func (t tagImpl) Name() TagName          { return t.name }
-func (t tagImpl) Type() TagType          { return t.tagType }
-func (t tagImpl) Value() TagValue        { return t.value }
-func (t tagImpl) Quality() TagQuality    { return t.quality }
-func (t tagImpl) Version() version.Version { return t.version }
+func (t tagImpl) ID() id.ID[Tag]            { return t.id }
+func (t tagImpl) Name() TagName              { return t.name }
+func (t tagImpl) Type() TagType              { return t.tagType }
+func (t tagImpl) Value() TagValue            { return t.value }
+func (t tagImpl) Quality() TagQuality        { return t.quality }
+func (t tagImpl) Version() version.Version[Tag] { return t.version }
 
 // SetValue updates the tag's value and quality.
 func (t *tagImpl) SetValue(aValue any, aQuality TagQuality) error {

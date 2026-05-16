@@ -19,6 +19,7 @@ import (
 	"github.com/kipitix/growscada/internal/application"
 	"github.com/kipitix/growscada/internal/application/appdto"
 	"github.com/kipitix/growscada/internal/domain/event"
+	"github.com/kipitix/growscada/internal/domain/id"
 	"github.com/kipitix/growscada/internal/domain/tag"
 	"github.com/kipitix/growscada/internal/infrastructure/postgres/repositories"
 )
@@ -93,6 +94,16 @@ func newServiceWithBus() (application.TagService, event.EventBus) {
 	repo := repositories.NewTagRepositoryPostgres(testDB)
 	bus := event.NewEventBus()
 	return application.NewTagService(repo, bus), bus
+}
+
+func mustTagIDFromUUID(u uuid.UUID) id.ID[tag.Tag] {
+	tagID, _ := id.NewID(id.IDWithUUID[tag.Tag](u))
+	return tagID
+}
+
+func mustNewTagID() id.ID[tag.Tag] {
+	tagID, _ := id.NewID[tag.Tag]()
+	return tagID
 }
 
 // --- CreateTag ---
@@ -238,8 +249,7 @@ func TestFindTagByID_ExistingTag_ReturnsTag(t *testing.T) {
 		t.Fatalf("CreateTag: %v", err)
 	}
 
-	tagID := tag.NewTagID(tag.TagIDWithUUID(createResp.ID))
-	found, err := svc.FindTagByID(ctx, tagID)
+	found, err := svc.FindTagByID(ctx, mustTagIDFromUUID(createResp.ID))
 
 	if err != nil {
 		t.Fatalf("FindTagByID returned unexpected error: %v", err)
@@ -263,8 +273,7 @@ func TestFindTagByID_NotFound_ReturnsWrappedErrTagNotFound(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	nonExistentID := tag.NewTagID()
-	_, err := svc.FindTagByID(ctx, nonExistentID)
+	_, err := svc.FindTagByID(ctx, mustNewTagID())
 
 	if err == nil {
 		t.Fatal("expected error for non-existent tag, got nil")
@@ -286,8 +295,7 @@ func TestDeleteTag_ExistingTag_ReturnsDeletedTag(t *testing.T) {
 		t.Fatalf("CreateTag: %v", err)
 	}
 
-	tagID := tag.NewTagID(tag.TagIDWithUUID(created.ID))
-	resp, err := svc.DeleteTagByID(ctx, tagID)
+	resp, err := svc.DeleteTagByID(ctx, mustTagIDFromUUID(created.ID))
 
 	if err != nil {
 		t.Fatalf("DeleteTagByID returned unexpected error: %v", err)
@@ -310,7 +318,7 @@ func TestDeleteTag_ExistingTag_TagIsRemovedFromDB(t *testing.T) {
 		t.Fatalf("CreateTag: %v", err)
 	}
 
-	tagID := tag.NewTagID(tag.TagIDWithUUID(created.ID))
+	tagID := mustTagIDFromUUID(created.ID)
 	if _, err = svc.DeleteTagByID(ctx, tagID); err != nil {
 		t.Fatalf("DeleteTagByID: %v", err)
 	}
@@ -326,7 +334,7 @@ func TestDeleteTag_NotFound_ReturnsWrappedErrTagNotFound(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	_, err := svc.DeleteTagByID(ctx, tag.NewTagID())
+	_, err := svc.DeleteTagByID(ctx, mustNewTagID())
 
 	if err == nil {
 		t.Fatal("expected error for non-existent tag, got nil")
@@ -368,7 +376,7 @@ func TestSetTagValueByID_ValidUpdate_ValueAndQualityAreUpdated(t *testing.T) {
 		t.Fatalf("CreateTag: %v", err)
 	}
 
-	tagID := tag.NewTagID(tag.TagIDWithUUID(created.ID))
+	tagID := mustTagIDFromUUID(created.ID)
 	if _, err = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "42", Quality: "good"}); err != nil {
 		t.Fatalf("SetTagValueByID: %v", err)
 	}
@@ -478,8 +486,7 @@ func TestDeleteTagByID_Success_PublishesTagDeletedEvent(t *testing.T) {
 		received = append(received, e)
 	})
 
-	tagID := tag.NewTagID(tag.TagIDWithUUID(created.ID))
-	if _, err = svc.DeleteTagByID(ctx, tagID); err != nil {
+	if _, err = svc.DeleteTagByID(ctx, mustTagIDFromUUID(created.ID)); err != nil {
 		t.Fatalf("DeleteTagByID: %v", err)
 	}
 
@@ -505,7 +512,7 @@ func TestDeleteTagByID_NotFound_NoEventPublished(t *testing.T) {
 		received = append(received, e)
 	})
 
-	_, _ = svc.DeleteTagByID(ctx, tag.NewTagID())
+	_, _ = svc.DeleteTagByID(ctx, mustNewTagID())
 
 	if len(received) != 0 {
 		t.Errorf("expected no events on error, got %d", len(received))
