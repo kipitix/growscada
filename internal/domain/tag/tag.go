@@ -46,35 +46,12 @@ func NewTag(anID TagID, aName TagName, aType TagType, aValue TagValue, aQuality 
 	}, nil
 }
 
-// ID returns the tag identifier.
-func (t tagImpl) ID() TagID {
-	return t.id
-}
-
-// Name returns the tag name.
-func (t tagImpl) Name() TagName {
-	return t.name
-}
-
-// Type returns the tag type.
-func (t tagImpl) Type() TagType {
-	return t.tagType
-}
-
-// Value returns the tag value.
-func (t tagImpl) Value() TagValue {
-	return t.value
-}
-
-// Quality returns the tag quality.
-func (t tagImpl) Quality() TagQuality {
-	return t.quality
-}
-
-// Version returns the current tag version.
-func (t tagImpl) Version() version.Version {
-	return t.version
-}
+func (t tagImpl) ID() TagID              { return t.id }
+func (t tagImpl) Name() TagName          { return t.name }
+func (t tagImpl) Type() TagType          { return t.tagType }
+func (t tagImpl) Value() TagValue        { return t.value }
+func (t tagImpl) Quality() TagQuality    { return t.quality }
+func (t tagImpl) Version() version.Version { return t.version }
 
 // SetValue updates the tag's value and quality.
 func (t *tagImpl) SetValue(aValue any, aQuality TagQuality) error {
