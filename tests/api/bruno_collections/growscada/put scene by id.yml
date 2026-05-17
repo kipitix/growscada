@@ -1,0 +1,24 @@
+info:
+  name: put scene by id
+  type: http
+  seq: 14
+
+http:
+  method: PUT
+  url: http://{{API_SERVER}}/api/v1/scenes/{{SCENE_ID}}
+  body:
+    type: json
+    data: |-
+      {
+        "name": "pump room updated",
+        "width": 2560,
+        "height": 1440,
+        "background_html": "<div class=\"background pump-room updated\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"2560\" height=\"1440\"><rect width=\"100%\" height=\"100%\" fill=\"#0f3460\"/></svg></div>"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

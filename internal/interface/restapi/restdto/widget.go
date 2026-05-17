@@ -25,6 +25,7 @@ type WidgetResponse struct {
 	Name        string              `json:"name"`
 	Coordinates CoordinatesResponse `json:"coordinates"`
 	TypeID      uuid.UUID           `json:"type_id"`
+	SceneID     uuid.UUID           `json:"scene_id"`
 	Labels      []string            `json:"labels"`
 	TagIDs      []uuid.UUID         `json:"tag_ids"`
 	Version     int                 `json:"version"`
@@ -40,6 +41,7 @@ type CreateWidgetRequest struct {
 	Name        string             `json:"name"`
 	Coordinates CoordinatesRequest `json:"coordinates"`
 	TypeID      uuid.UUID          `json:"type_id"`
+	SceneID     uuid.UUID          `json:"scene_id"`
 	Labels      []string           `json:"labels"`
 	TagIDs      []uuid.UUID        `json:"tag_ids"`
 }
@@ -54,6 +56,7 @@ type UpdateWidgetRequest struct {
 	Name        string             `json:"name"`
 	Coordinates CoordinatesRequest `json:"coordinates"`
 	TypeID      uuid.UUID          `json:"type_id"`
+	SceneID     uuid.UUID          `json:"scene_id"`
 	Labels      []string           `json:"labels"`
 	TagIDs      []uuid.UUID        `json:"tag_ids"`
 }
@@ -81,6 +84,7 @@ func NewWidgetResponse(w appdto.Widget) WidgetResponse {
 			Z: w.Z,
 		},
 		TypeID:  w.TypeID,
+		SceneID: w.SceneID,
 		Labels:  labels,
 		TagIDs:  tagIDs,
 		Version: w.Version,
@@ -105,25 +109,27 @@ func NewUpdateWidgetResponse(w appdto.Widget) UpdateWidgetResponse {
 
 func NewCreateWidgetInput(r CreateWidgetRequest) appdto.CreateWidgetInput {
 	return appdto.CreateWidgetInput{
-		Name:   r.Name,
-		X:      r.Coordinates.X,
-		Y:      r.Coordinates.Y,
-		Z:      r.Coordinates.Z,
-		TypeID: r.TypeID,
-		Labels: r.Labels,
-		TagIDs: r.TagIDs,
+		Name:    r.Name,
+		X:       r.Coordinates.X,
+		Y:       r.Coordinates.Y,
+		Z:       r.Coordinates.Z,
+		TypeID:  r.TypeID,
+		SceneID: r.SceneID,
+		Labels:  r.Labels,
+		TagIDs:  r.TagIDs,
 	}
 }
 
 func NewUpdateWidgetInput(r UpdateWidgetRequest, widgetID uuid.UUID) appdto.UpdateWidgetInput {
 	return appdto.UpdateWidgetInput{
-		ID:     widgetID,
-		Name:   r.Name,
-		X:      r.Coordinates.X,
-		Y:      r.Coordinates.Y,
-		Z:      r.Coordinates.Z,
-		TypeID: r.TypeID,
-		Labels: r.Labels,
-		TagIDs: r.TagIDs,
+		ID:      widgetID,
+		Name:    r.Name,
+		X:       r.Coordinates.X,
+		Y:       r.Coordinates.Y,
+		Z:       r.Coordinates.Z,
+		TypeID:  r.TypeID,
+		SceneID: r.SceneID,
+		Labels:  r.Labels,
+		TagIDs:  r.TagIDs,
 	}
 }

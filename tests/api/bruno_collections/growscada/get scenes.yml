@@ -1,0 +1,15 @@
+info:
+  name: get scenes
+  type: http
+  seq: 11
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v1/scenes
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

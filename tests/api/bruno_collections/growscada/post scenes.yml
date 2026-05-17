@@ -1,0 +1,24 @@
+info:
+  name: post scenes
+  type: http
+  seq: 13
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v1/scenes
+  body:
+    type: json
+    data: |-
+      {
+        "name": "pump room",
+        "width": 1920,
+        "height": 1080,
+        "background_html": "<div class=\"background pump-room\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1920\" height=\"1080\"><rect width=\"100%\" height=\"100%\" fill=\"#1a1a2e\"/></svg></div>"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

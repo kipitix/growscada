@@ -1,0 +1,26 @@
+info:
+  name: post widgets
+  type: http
+  seq: 18
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v1/widgets
+  body:
+    type: json
+    data: |-
+      {
+        "name": "pressure-gauge",
+        "coordinates": { "x": 100.0, "y": 200.0, "z": 0.0 },
+        "type_id": "{{WIDGET_TYPE_ID}}",
+        "scene_id": "{{SCENE_ID}}",
+        "labels": ["sensor", "pressure"],
+        "tag_ids": []
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

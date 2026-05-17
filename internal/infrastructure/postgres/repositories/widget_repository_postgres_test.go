@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/domain/id"
+	"github.com/kipitix/growscada/internal/domain/scene"
 	"github.com/kipitix/growscada/internal/domain/tag"
 	"github.com/kipitix/growscada/internal/domain/version"
 	"github.com/kipitix/growscada/internal/domain/widget"
@@ -30,7 +31,7 @@ func makeWidget(t *testing.T, name string, repo widget.WidgetRepository) widget.
 	}
 	coords := widget.NewCoordinates(10.0, 20.0, 0.0)
 	typeID, _ := id.NewID(id.IDWithUUID[widget.WidgetType](uuid.New()))
-	w, err := widget.NewWidget(newID, newName, coords, typeID, []string{"label1"}, nil, version.Initial[widget.Widget]())
+	w, err := widget.NewWidget(newID, newName, coords, typeID, id.ID[scene.Scene]{}, []string{"label1"}, nil, version.Initial[widget.Widget]())
 	if err != nil {
 		t.Fatalf("NewWidget: %v", err)
 	}
@@ -92,7 +93,7 @@ func TestWidgetSave_DuplicateID_ReturnsError(t *testing.T) {
 		t.Fatalf("first Save failed: %v", err)
 	}
 
-	duplicate, _ := widget.NewWidget(w.ID(), w.Name(), w.Coordinates(), w.TypeID(), w.Labels(), w.TagIDs(), version.Initial[widget.Widget]())
+	duplicate, _ := widget.NewWidget(w.ID(), w.Name(), w.Coordinates(), w.TypeID(), w.SceneID(), w.Labels(), w.TagIDs(), version.Initial[widget.Widget]())
 	_, err := repo.Save(ctx, duplicate)
 
 	if err == nil {
@@ -118,7 +119,7 @@ func TestWidgetSave_ExistingWidget_UpdatesSuccessfully(t *testing.T) {
 	}
 
 	newName, _ := widget.NewWidgetName("gauge-updated")
-	updated, _ := widget.NewWidget(found.ID(), newName, found.Coordinates(), found.TypeID(), found.Labels(), found.TagIDs(), found.Version())
+	updated, _ := widget.NewWidget(found.ID(), newName, found.Coordinates(), found.TypeID(), found.SceneID(), found.Labels(), found.TagIDs(), found.Version())
 	if _, err := repo.Save(ctx, updated); err != nil {
 		t.Fatalf("update Save failed: %v", err)
 	}
@@ -142,7 +143,7 @@ func TestWidgetSave_ExistingWidget_VersionIsIncremented(t *testing.T) {
 	found, _ := repo.FindByID(ctx, saved.ID())
 
 	newName, _ := widget.NewWidgetName("gauge-v2")
-	updated, _ := widget.NewWidget(found.ID(), newName, found.Coordinates(), found.TypeID(), found.Labels(), found.TagIDs(), found.Version())
+	updated, _ := widget.NewWidget(found.ID(), newName, found.Coordinates(), found.TypeID(), found.SceneID(), found.Labels(), found.TagIDs(), found.Version())
 	saved2, err := repo.Save(ctx, updated)
 
 	if err != nil {
@@ -164,7 +165,7 @@ func TestWidgetSave_StaleVersion_ReturnsError(t *testing.T) {
 	}
 
 	badVersion, _ := version.New[widget.Widget](version.WithNumber[widget.Widget](100))
-	stale, _ := widget.NewWidget(w.ID(), w.Name(), w.Coordinates(), w.TypeID(), w.Labels(), w.TagIDs(), badVersion)
+	stale, _ := widget.NewWidget(w.ID(), w.Name(), w.Coordinates(), w.TypeID(), w.SceneID(), w.Labels(), w.TagIDs(), badVersion)
 	_, err := repo.Save(ctx, stale)
 
 	if err == nil {
@@ -272,7 +273,7 @@ func TestWidgetFindAll_WithTagIDs_RoundTripsCorrectly(t *testing.T) {
 	newName, _ := widget.NewWidgetName("with-tags")
 	coords := widget.NewCoordinates(1, 2, 3)
 	typeID, _ := id.NewID(id.IDWithUUID[widget.WidgetType](uuid.New()))
-	w, _ := widget.NewWidget(newID, newName, coords, typeID, []string{"a", "b"}, []id.ID[tag.Tag]{tagID1, tagID2}, version.Initial[widget.Widget]())
+	w, _ := widget.NewWidget(newID, newName, coords, typeID, id.ID[scene.Scene]{}, []string{"a", "b"}, []id.ID[tag.Tag]{tagID1, tagID2}, version.Initial[widget.Widget]())
 
 	if _, err := repo.Save(ctx, w); err != nil {
 		t.Fatalf("Save: %v", err)

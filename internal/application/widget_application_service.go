@@ -8,6 +8,7 @@ import (
 	"github.com/kipitix/growscada/internal/application/appdto"
 	"github.com/kipitix/growscada/internal/domain/event"
 	"github.com/kipitix/growscada/internal/domain/id"
+	"github.com/kipitix/growscada/internal/domain/scene"
 	"github.com/kipitix/growscada/internal/domain/tag"
 	"github.com/kipitix/growscada/internal/domain/version"
 	"github.com/kipitix/growscada/internal/domain/widget"
@@ -64,12 +65,17 @@ func (s widgetServiceImpl) CreateWidget(ctx context.Context, input appdto.Create
 		return appdto.Widget{}, fmt.Errorf("cannot create widget because of type id: %w", err)
 	}
 
+	sceneID, err := id.NewID(id.IDWithUUID[scene.Scene](input.SceneID))
+	if err != nil {
+		return appdto.Widget{}, fmt.Errorf("cannot create widget because of scene id: %w", err)
+	}
+
 	tagIDs, err := uuidsToTagIDs(input.TagIDs)
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot create widget because of tag ids: %w", err)
 	}
 
-	newWidget, err := widget.NewWidget(newID, newName, coords, typeID, input.Labels, tagIDs, version.Initial[widget.Widget]())
+	newWidget, err := widget.NewWidget(newID, newName, coords, typeID, sceneID, input.Labels, tagIDs, version.Initial[widget.Widget]())
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot create widget: %w", err)
 	}
@@ -107,12 +113,17 @@ func (s widgetServiceImpl) UpdateWidget(ctx context.Context, input appdto.Update
 		return appdto.Widget{}, fmt.Errorf("cannot parse type id: %w", err)
 	}
 
+	sceneID, err := id.NewID(id.IDWithUUID[scene.Scene](input.SceneID))
+	if err != nil {
+		return appdto.Widget{}, fmt.Errorf("cannot parse scene id: %w", err)
+	}
+
 	tagIDs, err := uuidsToTagIDs(input.TagIDs)
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot parse tag ids: %w", err)
 	}
 
-	updated, err := widget.NewWidget(found.ID(), newName, coords, typeID, input.Labels, tagIDs, found.Version())
+	updated, err := widget.NewWidget(found.ID(), newName, coords, typeID, sceneID, input.Labels, tagIDs, found.Version())
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot build updated widget: %w", err)
 	}

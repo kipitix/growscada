@@ -21,6 +21,9 @@ const (
 	EventTypeWidgetCreated
 	EventTypeWidgetUpdated
 	EventTypeWidgetDeleted
+	EventTypeSceneCreated
+	EventTypeSceneUpdated
+	EventTypeSceneDeleted
 )
 
 // NewEventType creates a new EventType from a string representation.
@@ -47,6 +50,12 @@ func NewEventType(s string) (EventType, error) {
 		return EventTypeWidgetUpdated, nil
 	case "widget_deleted":
 		return EventTypeWidgetDeleted, nil
+	case "scene_created":
+		return EventTypeSceneCreated, nil
+	case "scene_updated":
+		return EventTypeSceneUpdated, nil
+	case "scene_deleted":
+		return EventTypeSceneDeleted, nil
 	default:
 		return EventTypeUnknown, fmt.Errorf("unknown event type: %s", s)
 	}
@@ -78,6 +87,12 @@ func (et EventType) String() string {
 		return "widget_updated"
 	case EventTypeWidgetDeleted:
 		return "widget_deleted"
+	case EventTypeSceneCreated:
+		return "scene_created"
+	case EventTypeSceneUpdated:
+		return "scene_updated"
+	case EventTypeSceneDeleted:
+		return "scene_deleted"
 	default:
 		return "unknown"
 	}
