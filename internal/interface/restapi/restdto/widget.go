@@ -24,6 +24,8 @@ type WidgetResponse struct {
 	ID          uuid.UUID           `json:"id"`
 	Name        string              `json:"name"`
 	Coordinates CoordinatesResponse `json:"coordinates"`
+	Width       int                 `json:"width"`
+	Height      int                 `json:"height"`
 	TypeID      uuid.UUID           `json:"type_id"`
 	SceneID     uuid.UUID           `json:"scene_id"`
 	Labels      []string            `json:"labels"`
@@ -40,6 +42,8 @@ type GetWidgetsResponse struct {
 type CreateWidgetRequest struct {
 	Name        string             `json:"name"`
 	Coordinates CoordinatesRequest `json:"coordinates"`
+	Width       int                `json:"width"`
+	Height      int                `json:"height"`
 	TypeID      uuid.UUID          `json:"type_id"`
 	SceneID     uuid.UUID          `json:"scene_id"`
 	Labels      []string           `json:"labels"`
@@ -55,6 +59,8 @@ type CreateWidgetResponse struct {
 type UpdateWidgetRequest struct {
 	Name        string             `json:"name"`
 	Coordinates CoordinatesRequest `json:"coordinates"`
+	Width       int                `json:"width"`
+	Height      int                `json:"height"`
 	TypeID      uuid.UUID          `json:"type_id"`
 	SceneID     uuid.UUID          `json:"scene_id"`
 	Labels      []string           `json:"labels"`
@@ -83,6 +89,8 @@ func NewWidgetResponse(w appdto.Widget) WidgetResponse {
 			Y: w.Y,
 			Z: w.Z,
 		},
+		Width:   w.Width,
+		Height:  w.Height,
 		TypeID:  w.TypeID,
 		SceneID: w.SceneID,
 		Labels:  labels,
@@ -113,6 +121,8 @@ func NewCreateWidgetInput(r CreateWidgetRequest) appdto.CreateWidgetInput {
 		X:       r.Coordinates.X,
 		Y:       r.Coordinates.Y,
 		Z:       r.Coordinates.Z,
+		Width:   r.Width,
+		Height:  r.Height,
 		TypeID:  r.TypeID,
 		SceneID: r.SceneID,
 		Labels:  r.Labels,
@@ -127,6 +137,8 @@ func NewUpdateWidgetInput(r UpdateWidgetRequest, widgetID uuid.UUID) appdto.Upda
 		X:       r.Coordinates.X,
 		Y:       r.Coordinates.Y,
 		Z:       r.Coordinates.Z,
+		Width:   r.Width,
+		Height:  r.Height,
 		TypeID:  r.TypeID,
 		SceneID: r.SceneID,
 		Labels:  r.Labels,

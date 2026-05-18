@@ -64,7 +64,7 @@ func (r *Root) Render() app.UI {
 					app.If(r.currentMode == ModeLibrary, func() app.UI {
 						return library.NewLibrary(r.apiServerURL)
 					}).ElseIf(r.currentMode == ModeProject, func() app.UI {
-						return &project.Project{}
+						return project.NewProject(r.apiServerURL)
 					}).ElseIf(r.currentMode == ModeOperation, func() app.UI {
 						return &operation.Operation{}
 					}).Else(func() app.UI {

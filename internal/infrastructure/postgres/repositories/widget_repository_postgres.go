@@ -39,10 +39,11 @@ func (r widgetRepositoryPostgresImpl) Save(ctx context.Context, w widget.Widget)
 
 	if w.Version() == version.Initial[widget.Widget]() {
 		sqlResult, err := r.db.ExecContext(ctx,
-			`INSERT INTO widgets (id, name, x, y, z, type_id, scene_id, labels, tag_ids, version)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+			`INSERT INTO widgets (id, name, x, y, z, width, height, type_id, scene_id, labels, tag_ids, version)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
 			w.ID().UUID(), w.Name().String(),
 			w.Coordinates().X(), w.Coordinates().Y(), w.Coordinates().Z(),
+			w.Size().Width(), w.Size().Height(),
 			w.TypeID().UUID(), nullableUUID(w.SceneID().UUID()),
 			pq.Array(w.Labels()), pq.Array(tagIDStrings),
 			version.Committed[widget.Widget]().Number(),
@@ -57,16 +58,18 @@ func (r widgetRepositoryPostgresImpl) Save(ctx context.Context, w widget.Widget)
 		if rowsAffected != 1 {
 			return nil, fmt.Errorf("expected 1 row affected on insert, got %d", rowsAffected)
 		}
-		return widget.NewWidget(w.ID(), w.Name(), w.Coordinates(), w.TypeID(), w.SceneID(), w.Labels(), w.TagIDs(), version.Committed[widget.Widget]())
+		return widget.NewWidget(w.ID(), w.Name(), w.Coordinates(), w.Size(), w.TypeID(), w.SceneID(), w.Labels(), w.TagIDs(), version.Committed[widget.Widget]())
 	}
 
 	if w.Version().IsCommitted() {
 		sqlResult, err := r.db.ExecContext(ctx,
 			`UPDATE widgets
-			 SET name = $1, x = $2, y = $3, z = $4, type_id = $5, scene_id = $6, labels = $7, tag_ids = $8, version = version + 1
-			 WHERE id = $9 AND version = $10`,
+			 SET name = $1, x = $2, y = $3, z = $4, width = $5, height = $6,
+			     type_id = $7, scene_id = $8, labels = $9, tag_ids = $10, version = version + 1
+			 WHERE id = $11 AND version = $12`,
 			w.Name().String(),
 			w.Coordinates().X(), w.Coordinates().Y(), w.Coordinates().Z(),
+			w.Size().Width(), w.Size().Height(),
 			w.TypeID().UUID(), nullableUUID(w.SceneID().UUID()),
 			pq.Array(w.Labels()), pq.Array(tagIDStrings),
 			w.ID().UUID(), w.Version().Number(),
@@ -81,7 +84,7 @@ func (r widgetRepositoryPostgresImpl) Save(ctx context.Context, w widget.Widget)
 		if rowsAffected != 1 {
 			return nil, r.classifyUpdateConflict(ctx, w.ID())
 		}
-		return widget.NewWidget(w.ID(), w.Name(), w.Coordinates(), w.TypeID(), w.SceneID(), w.Labels(), w.TagIDs(), w.Version().Next())
+		return widget.NewWidget(w.ID(), w.Name(), w.Coordinates(), w.Size(), w.TypeID(), w.SceneID(), w.Labels(), w.TagIDs(), w.Version().Next())
 	}
 
 	return nil, fmt.Errorf("undefined behavior with version %d", w.Version().Number())
@@ -114,6 +117,7 @@ func (r widgetRepositoryPostgresImpl) FindByID(ctx context.Context, widgetID id.
 		rawID     uuid.UUID
 		name      string
 		x, y, z   float64
+		w, h      int
 		typeID    uuid.UUID
 		sceneID   *uuid.UUID
 		labels    pq.StringArray
@@ -122,10 +126,10 @@ func (r widgetRepositoryPostgresImpl) FindByID(ctx context.Context, widgetID id.
 	)
 
 	row := r.db.QueryRowContext(ctx,
-		`SELECT id, name, x, y, z, type_id, scene_id, labels, tag_ids::text[], version FROM widgets WHERE id = $1`,
+		`SELECT id, name, x, y, z, width, height, type_id, scene_id, labels, tag_ids::text[], version FROM widgets WHERE id = $1`,
 		widgetID.UUID(),
 	)
-	err := row.Scan(&rawID, &name, &x, &y, &z, &typeID, &sceneID, &labels, &rawTagIDs, &ver)
+	err := row.Scan(&rawID, &name, &x, &y, &z, &w, &h, &typeID, &sceneID, &labels, &rawTagIDs, &ver)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, widget.ErrWidgetNotFound
@@ -133,7 +137,7 @@ func (r widgetRepositoryPostgresImpl) FindByID(ctx context.Context, widgetID id.
 		return nil, fmt.Errorf("error scanning widget: %w", err)
 	}
 
-	return r.reconstruct(rawID, name, x, y, z, typeID, sceneID, labels, rawTagIDs, ver)
+	return r.reconstruct(rawID, name, x, y, z, w, h, typeID, sceneID, labels, rawTagIDs, ver)
 }
 
 func (r widgetRepositoryPostgresImpl) DeleteByID(ctx context.Context, widgetID id.ID[widget.Widget]) (widget.Widget, error) {
@@ -141,6 +145,7 @@ func (r widgetRepositoryPostgresImpl) DeleteByID(ctx context.Context, widgetID i
 		rawID     uuid.UUID
 		name      string
 		x, y, z   float64
+		w, h      int
 		typeID    uuid.UUID
 		sceneID   *uuid.UUID
 		labels    pq.StringArray
@@ -149,10 +154,10 @@ func (r widgetRepositoryPostgresImpl) DeleteByID(ctx context.Context, widgetID i
 	)
 
 	row := r.db.QueryRowContext(ctx,
-		`DELETE FROM widgets WHERE id = $1 RETURNING id, name, x, y, z, type_id, scene_id, labels, tag_ids::text[], version`,
+		`DELETE FROM widgets WHERE id = $1 RETURNING id, name, x, y, z, width, height, type_id, scene_id, labels, tag_ids::text[], version`,
 		widgetID.UUID(),
 	)
-	err := row.Scan(&rawID, &name, &x, &y, &z, &typeID, &sceneID, &labels, &rawTagIDs, &ver)
+	err := row.Scan(&rawID, &name, &x, &y, &z, &w, &h, &typeID, &sceneID, &labels, &rawTagIDs, &ver)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, widget.ErrWidgetNotFound
@@ -160,12 +165,12 @@ func (r widgetRepositoryPostgresImpl) DeleteByID(ctx context.Context, widgetID i
 		return nil, fmt.Errorf("cannot delete widget: %w", err)
 	}
 
-	return r.reconstruct(rawID, name, x, y, z, typeID, sceneID, labels, rawTagIDs, ver)
+	return r.reconstruct(rawID, name, x, y, z, w, h, typeID, sceneID, labels, rawTagIDs, ver)
 }
 
 func (r widgetRepositoryPostgresImpl) FindAll(ctx context.Context) ([]widget.Widget, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, name, x, y, z, type_id, scene_id, labels, tag_ids::text[], version FROM widgets`,
+		`SELECT id, name, x, y, z, width, height, type_id, scene_id, labels, tag_ids::text[], version FROM widgets`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("error querying widgets: %w", err)
@@ -178,20 +183,21 @@ func (r widgetRepositoryPostgresImpl) FindAll(ctx context.Context) ([]widget.Wid
 			rawID     uuid.UUID
 			name      string
 			x, y, z   float64
+			w, h      int
 			typeID    uuid.UUID
 			sceneID   *uuid.UUID
 			labels    pq.StringArray
 			rawTagIDs pq.StringArray
 			ver       int
 		)
-		if err := rows.Scan(&rawID, &name, &x, &y, &z, &typeID, &sceneID, &labels, &rawTagIDs, &ver); err != nil {
+		if err := rows.Scan(&rawID, &name, &x, &y, &z, &w, &h, &typeID, &sceneID, &labels, &rawTagIDs, &ver); err != nil {
 			return nil, fmt.Errorf("error scanning widget: %w", err)
 		}
-		w, err := r.reconstruct(rawID, name, x, y, z, typeID, sceneID, labels, rawTagIDs, ver)
+		widget, err := r.reconstruct(rawID, name, x, y, z, w, h, typeID, sceneID, labels, rawTagIDs, ver)
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, w)
+		result = append(result, widget)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating over widgets: %w", err)
@@ -201,6 +207,7 @@ func (r widgetRepositoryPostgresImpl) FindAll(ctx context.Context) ([]widget.Wid
 
 func (r widgetRepositoryPostgresImpl) reconstruct(
 	aRawID uuid.UUID, aName string, aX, aY, aZ float64,
+	aWidth, aHeight int,
 	aTypeID uuid.UUID, aSceneID *uuid.UUID, someLabels pq.StringArray, someTagIDs pq.StringArray, aVersion int,
 ) (widget.Widget, error) {
 	newID, _ := id.NewID(id.IDWithUUID[widget.Widget](aRawID))
@@ -211,6 +218,11 @@ func (r widgetRepositoryPostgresImpl) reconstruct(
 	}
 
 	coords := widget.NewCoordinates(aX, aY, aZ)
+
+	size, err := widget.NewSize(aWidth, aHeight)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create widget size: %w", err)
+	}
 
 	typeID, err := id.NewID(id.IDWithUUID[widget.WidgetType](aTypeID))
 	if err != nil {
@@ -241,5 +253,5 @@ func (r widgetRepositoryPostgresImpl) reconstruct(
 		return nil, fmt.Errorf("cannot create widget version: %w", err)
 	}
 
-	return widget.NewWidget(newID, newName, coords, typeID, sceneID, someLabels, tagIDs, newVersion)
+	return widget.NewWidget(newID, newName, coords, size, typeID, sceneID, someLabels, tagIDs, newVersion)
 }

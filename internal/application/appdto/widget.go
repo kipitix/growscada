@@ -10,6 +10,8 @@ type Widget struct {
 	ID      uuid.UUID
 	Name    string
 	X, Y, Z float64
+	Width   int
+	Height  int
 	TypeID  uuid.UUID
 	SceneID uuid.UUID
 	Labels  []string
@@ -21,6 +23,8 @@ type Widget struct {
 type CreateWidgetInput struct {
 	Name    string
 	X, Y, Z float64
+	Width   int
+	Height  int
 	TypeID  uuid.UUID
 	SceneID uuid.UUID
 	Labels  []string
@@ -32,6 +36,8 @@ type UpdateWidgetInput struct {
 	ID      uuid.UUID
 	Name    string
 	X, Y, Z float64
+	Width   int
+	Height  int
 	TypeID  uuid.UUID
 	SceneID uuid.UUID
 	Labels  []string
@@ -52,6 +58,8 @@ func NewWidget(w widget.Widget) Widget {
 		X:       w.Coordinates().X(),
 		Y:       w.Coordinates().Y(),
 		Z:       w.Coordinates().Z(),
+		Width:   w.Size().Width(),
+		Height:  w.Size().Height(),
 		TypeID:  w.TypeID().UUID(),
 		SceneID: w.SceneID().UUID(),
 		Labels:  labels,

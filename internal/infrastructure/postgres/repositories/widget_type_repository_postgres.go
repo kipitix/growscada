@@ -28,10 +28,12 @@ func (r widgetTypeRepositoryPostgresImpl) NextID() widget.WidgetTypeID {
 func (r widgetTypeRepositoryPostgresImpl) Save(ctx context.Context, wt widget.WidgetType) (widget.WidgetType, error) {
 	if wt.Version() == version.Initial[widget.WidgetType]() {
 		sqlResult, err := r.db.ExecContext(ctx,
-			`INSERT INTO widget_types (id, name, html_template, script, script_language, version)
-			VALUES ($1, $2, $3, $4, $5, $6)`,
+			`INSERT INTO widget_types (id, name, html_template, script, script_language, default_width, default_height, version)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 			wt.ID().UUID(), wt.Name().String(), wt.HtmlTemplate().String(),
-			wt.Script().String(), wt.ScriptLanguage().String(), version.Committed[widget.WidgetType]().Number(),
+			wt.Script().String(), wt.ScriptLanguage().String(),
+			wt.DefaultSize().Width(), wt.DefaultSize().Height(),
+			version.Committed[widget.WidgetType]().Number(),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("cannot insert new widget type: %w", err)
@@ -43,16 +45,19 @@ func (r widgetTypeRepositoryPostgresImpl) Save(ctx context.Context, wt widget.Wi
 		if rowsAffected != 1 {
 			return nil, fmt.Errorf("expected 1 row affected on insert, got %d", rowsAffected)
 		}
-		return widget.NewWidgetType(wt.ID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), version.Committed[widget.WidgetType]()), nil
+		return widget.NewWidgetType(wt.ID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.DefaultSize(), version.Committed[widget.WidgetType]()), nil
 	}
 
 	if wt.Version().IsCommitted() {
 		sqlResult, err := r.db.ExecContext(ctx,
 			`UPDATE widget_types
-			 SET name = $1, html_template = $2, script = $3, script_language = $4, version = version + 1
-			 WHERE id = $5 AND version = $6`,
+			 SET name = $1, html_template = $2, script = $3, script_language = $4,
+			     default_width = $5, default_height = $6, version = version + 1
+			 WHERE id = $7 AND version = $8`,
 			wt.Name().String(), wt.HtmlTemplate().String(), wt.Script().String(),
-			wt.ScriptLanguage().String(), wt.ID().UUID(), wt.Version().Number(),
+			wt.ScriptLanguage().String(),
+			wt.DefaultSize().Width(), wt.DefaultSize().Height(),
+			wt.ID().UUID(), wt.Version().Number(),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("cannot update widget type: %w", err)
@@ -64,7 +69,7 @@ func (r widgetTypeRepositoryPostgresImpl) Save(ctx context.Context, wt widget.Wi
 		if rowsAffected != 1 {
 			return nil, r.classifyUpdateConflict(ctx, wt.ID())
 		}
-		return widget.NewWidgetType(wt.ID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.Version().Next()), nil
+		return widget.NewWidgetType(wt.ID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.DefaultSize(), wt.Version().Next()), nil
 	}
 
 	return nil, fmt.Errorf("undefined behavior with version %d", wt.Version().Number())
@@ -91,14 +96,17 @@ func (r widgetTypeRepositoryPostgresImpl) FindByID(ctx context.Context, id widge
 		htmlTemplate      string
 		script            string
 		language          string
+		defaultWidth      int
+		defaultHeight     int
 		widgetTypeVersion int
 	)
 
 	row := r.db.QueryRowContext(ctx,
-		`SELECT id, name, html_template, script, script_language, version FROM widget_types WHERE id = $1`,
+		`SELECT id, name, html_template, script, script_language, default_width, default_height, version
+		 FROM widget_types WHERE id = $1`,
 		id.UUID(),
 	)
-	err := row.Scan(&rawID, &name, &htmlTemplate, &script, &language, &widgetTypeVersion)
+	err := row.Scan(&rawID, &name, &htmlTemplate, &script, &language, &defaultWidth, &defaultHeight, &widgetTypeVersion)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, widget.ErrWidgetTypeNotFound
@@ -106,7 +114,7 @@ func (r widgetTypeRepositoryPostgresImpl) FindByID(ctx context.Context, id widge
 		return nil, fmt.Errorf("error scanning widget type: %w", err)
 	}
 
-	return r.reconstruct(rawID, name, htmlTemplate, script, language, widgetTypeVersion)
+	return r.reconstruct(rawID, name, htmlTemplate, script, language, defaultWidth, defaultHeight, widgetTypeVersion)
 }
 
 func (r widgetTypeRepositoryPostgresImpl) DeleteByID(ctx context.Context, id widget.WidgetTypeID) (widget.WidgetType, error) {
@@ -116,14 +124,17 @@ func (r widgetTypeRepositoryPostgresImpl) DeleteByID(ctx context.Context, id wid
 		htmlTemplate      string
 		script            string
 		lang              string
+		defaultWidth      int
+		defaultHeight     int
 		widgetTypeVersion int
 	)
 
 	row := r.db.QueryRowContext(ctx,
-		`DELETE FROM widget_types WHERE id = $1 RETURNING id, name, html_template, script, script_language, version`,
+		`DELETE FROM widget_types WHERE id = $1
+		 RETURNING id, name, html_template, script, script_language, default_width, default_height, version`,
 		id.UUID(),
 	)
-	err := row.Scan(&rawID, &name, &htmlTemplate, &script, &lang, &widgetTypeVersion)
+	err := row.Scan(&rawID, &name, &htmlTemplate, &script, &lang, &defaultWidth, &defaultHeight, &widgetTypeVersion)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, widget.ErrWidgetTypeNotFound
@@ -131,12 +142,12 @@ func (r widgetTypeRepositoryPostgresImpl) DeleteByID(ctx context.Context, id wid
 		return nil, fmt.Errorf("cannot delete widget type: %w", err)
 	}
 
-	return r.reconstruct(rawID, name, htmlTemplate, script, lang, widgetTypeVersion)
+	return r.reconstruct(rawID, name, htmlTemplate, script, lang, defaultWidth, defaultHeight, widgetTypeVersion)
 }
 
 func (r widgetTypeRepositoryPostgresImpl) FindAll(ctx context.Context) ([]widget.WidgetType, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, name, html_template, script, script_language, version FROM widget_types`,
+		`SELECT id, name, html_template, script, script_language, default_width, default_height, version FROM widget_types`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("error querying widget types: %w", err)
@@ -151,12 +162,14 @@ func (r widgetTypeRepositoryPostgresImpl) FindAll(ctx context.Context) ([]widget
 			htmlTemplate      string
 			script            string
 			lang              string
+			defaultWidth      int
+			defaultHeight     int
 			widgetTypeVersion int
 		)
-		if err := rows.Scan(&rawID, &name, &htmlTemplate, &script, &lang, &widgetTypeVersion); err != nil {
+		if err := rows.Scan(&rawID, &name, &htmlTemplate, &script, &lang, &defaultWidth, &defaultHeight, &widgetTypeVersion); err != nil {
 			return nil, fmt.Errorf("error scanning widget type: %w", err)
 		}
-		wt, err := r.reconstruct(rawID, name, htmlTemplate, script, lang, widgetTypeVersion)
+		wt, err := r.reconstruct(rawID, name, htmlTemplate, script, lang, defaultWidth, defaultHeight, widgetTypeVersion)
 		if err != nil {
 			return nil, err
 		}
@@ -169,7 +182,9 @@ func (r widgetTypeRepositoryPostgresImpl) FindAll(ctx context.Context) ([]widget
 }
 
 func (r widgetTypeRepositoryPostgresImpl) reconstruct(
-	aRawID uuid.UUID, aName, aHTMLTemplate, aScript, aLanguage string, aVersion int,
+	aRawID uuid.UUID, aName, aHTMLTemplate, aScript, aLanguage string,
+	aDefaultWidth, aDefaultHeight int,
+	aVersion int,
 ) (widget.WidgetType, error) {
 	newID := widget.NewWidgetTypeID(widget.WidgetTypeIDWithUUID(aRawID))
 
@@ -193,10 +208,15 @@ func (r widgetTypeRepositoryPostgresImpl) reconstruct(
 		return nil, fmt.Errorf("cannot create script language: %w", err)
 	}
 
+	defaultSize, err := widget.NewSize(aDefaultWidth, aDefaultHeight)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create default size: %w", err)
+	}
+
 	newVersion, err := version.New[widget.WidgetType](version.WithNumber[widget.WidgetType](aVersion))
 	if err != nil {
 		return nil, fmt.Errorf("cannot create widget type version: %w", err)
 	}
 
-	return widget.NewWidgetType(newID, newName, newHtml, newScript, newLang, newVersion), nil
+	return widget.NewWidgetType(newID, newName, newHtml, newScript, newLang, defaultSize, newVersion), nil
 }

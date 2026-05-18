@@ -12,6 +12,8 @@ type WidgetTypeResponse struct {
 	HtmlTemplate   string    `json:"html_template"`
 	Script         string    `json:"script"`
 	ScriptLanguage string    `json:"script_language"`
+	DefaultWidth   int       `json:"default_width"`
+	DefaultHeight  int       `json:"default_height"`
 	Version        int       `json:"version"`
 }
 
@@ -26,6 +28,8 @@ type CreateWidgetTypeRequest struct {
 	HtmlTemplate   string `json:"html_template"`
 	Script         string `json:"script"`
 	ScriptLanguage string `json:"script_language"`
+	DefaultWidth   int    `json:"default_width"`
+	DefaultHeight  int    `json:"default_height"`
 }
 
 // CreateWidgetTypeResponse is the HTTP DTO for a creation response.
@@ -39,6 +43,8 @@ type UpdateWidgetTypeRequest struct {
 	HtmlTemplate   string `json:"html_template"`
 	Script         string `json:"script"`
 	ScriptLanguage string `json:"script_language"`
+	DefaultWidth   int    `json:"default_width"`
+	DefaultHeight  int    `json:"default_height"`
 }
 
 // UpdateWidgetTypeResponse is the HTTP DTO for an update response.
@@ -53,6 +59,8 @@ func NewWidgetTypeResponse(wt appdto.WidgetType) WidgetTypeResponse {
 		HtmlTemplate:   wt.HtmlTemplate,
 		Script:         wt.Script,
 		ScriptLanguage: wt.ScriptLanguage,
+		DefaultWidth:   wt.DefaultWidth,
+		DefaultHeight:  wt.DefaultHeight,
 		Version:        wt.Version,
 	}
 }
@@ -79,6 +87,8 @@ func NewCreateWidgetTypeInput(r CreateWidgetTypeRequest) appdto.CreateWidgetType
 		HtmlTemplate:   r.HtmlTemplate,
 		Script:         r.Script,
 		ScriptLanguage: r.ScriptLanguage,
+		DefaultWidth:   r.DefaultWidth,
+		DefaultHeight:  r.DefaultHeight,
 	}
 }
 
@@ -89,5 +99,7 @@ func NewUpdateWidgetTypeInput(r UpdateWidgetTypeRequest, id uuid.UUID) appdto.Up
 		HtmlTemplate:   r.HtmlTemplate,
 		Script:         r.Script,
 		ScriptLanguage: r.ScriptLanguage,
+		DefaultWidth:   r.DefaultWidth,
+		DefaultHeight:  r.DefaultHeight,
 	}
 }

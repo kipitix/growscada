@@ -16,6 +16,7 @@ type Widget interface {
 	ID() id.ID[Widget]
 	Name() WidgetName
 	Coordinates() Coordinates
+	Size() Size
 	TypeID() id.ID[WidgetType]
 	SceneID() id.ID[scene.Scene]
 	Labels() []string
@@ -30,6 +31,7 @@ type widgetImpl struct {
 	id          id.ID[Widget]
 	name        WidgetName
 	coordinates Coordinates
+	size        Size
 	typeID      id.ID[WidgetType]
 	sceneID     id.ID[scene.Scene]
 	labels      []string
@@ -44,6 +46,7 @@ func NewWidget(
 	anID id.ID[Widget],
 	aName WidgetName,
 	aCoordinates Coordinates,
+	aSize Size,
 	aTypeID id.ID[WidgetType],
 	aSceneID id.ID[scene.Scene],
 	someLabels []string,
@@ -60,6 +63,7 @@ func NewWidget(
 		id:          anID,
 		name:        aName,
 		coordinates: aCoordinates,
+		size:        aSize,
 		typeID:      aTypeID,
 		sceneID:     aSceneID,
 		labels:      labels,
@@ -71,6 +75,7 @@ func NewWidget(
 func (w widgetImpl) ID() id.ID[Widget]               { return w.id }
 func (w widgetImpl) Name() WidgetName                 { return w.name }
 func (w widgetImpl) Coordinates() Coordinates         { return w.coordinates }
+func (w widgetImpl) Size() Size                       { return w.size }
 func (w widgetImpl) TypeID() id.ID[WidgetType]        { return w.typeID }
 func (w widgetImpl) SceneID() id.ID[scene.Scene]      { return w.sceneID }
 func (w widgetImpl) Labels() []string                 { return w.labels }
@@ -79,5 +84,5 @@ func (w widgetImpl) Version() version.Version[Widget] { return w.version }
 
 // String implements [fmt.Stringer].
 func (w widgetImpl) String() string {
-	return fmt.Sprintf("Widget: %s, TypeID: %s, SceneID: %s, Coords: %s", w.name, w.typeID, w.sceneID, w.coordinates)
+	return fmt.Sprintf("Widget: %s, TypeID: %s, SceneID: %s, Coords: %s, Size: %s", w.name, w.typeID, w.sceneID, w.coordinates, w.size)
 }

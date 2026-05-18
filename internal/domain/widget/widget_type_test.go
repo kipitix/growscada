@@ -13,7 +13,7 @@ func makeTestWidgetType(t *testing.T) WidgetType {
 	htmlTemplate, _ := NewHtmlTemplate("<div class='gauge'></div>")
 	script, _ := NewScript("function render(value) { return value; }")
 	lang := ScriptLanguageJavaScript
-	return NewWidgetType(id, name, htmlTemplate, script, lang, version.Initial[WidgetType]())
+	return NewWidgetType(id, name, htmlTemplate, script, lang, DefaultSize(), version.Initial[WidgetType]())
 }
 
 func TestNewWidgetType_FieldsAreSet(t *testing.T) {
@@ -22,9 +22,10 @@ func TestNewWidgetType_FieldsAreSet(t *testing.T) {
 	htmlTemplate, _ := NewHtmlTemplate("<div class='thermometer'></div>")
 	script, _ := NewScript("function draw() {}")
 	lang := ScriptLanguagePython
+	size, _ := NewSize(120, 80)
 	ver, _ := version.New[WidgetType](version.WithNumber[WidgetType](3))
 
-	wt := NewWidgetType(id, name, htmlTemplate, script, lang, ver)
+	wt := NewWidgetType(id, name, htmlTemplate, script, lang, size, ver)
 
 	if wt.ID() != id {
 		t.Errorf("ID mismatch: expected %v, got %v", id, wt.ID())
@@ -40,6 +41,9 @@ func TestNewWidgetType_FieldsAreSet(t *testing.T) {
 	}
 	if wt.ScriptLanguage() != lang {
 		t.Errorf("ScriptLanguage mismatch: expected %v, got %v", lang, wt.ScriptLanguage())
+	}
+	if wt.DefaultSize() != size {
+		t.Errorf("DefaultSize mismatch: expected %v, got %v", size, wt.DefaultSize())
 	}
 	if wt.Version() != ver {
 		t.Errorf("Version mismatch: expected %d, got %d", ver, wt.Version())

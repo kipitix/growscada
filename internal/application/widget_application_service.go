@@ -60,6 +60,11 @@ func (s widgetServiceImpl) CreateWidget(ctx context.Context, input appdto.Create
 
 	coords := widget.NewCoordinates(input.X, input.Y, input.Z)
 
+	size, err := normalizeSize(input.Width, input.Height)
+	if err != nil {
+		return appdto.Widget{}, fmt.Errorf("cannot create widget because of size: %w", err)
+	}
+
 	typeID, err := id.NewID(id.IDWithUUID[widget.WidgetType](input.TypeID))
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot create widget because of type id: %w", err)
@@ -75,7 +80,7 @@ func (s widgetServiceImpl) CreateWidget(ctx context.Context, input appdto.Create
 		return appdto.Widget{}, fmt.Errorf("cannot create widget because of tag ids: %w", err)
 	}
 
-	newWidget, err := widget.NewWidget(newID, newName, coords, typeID, sceneID, input.Labels, tagIDs, version.Initial[widget.Widget]())
+	newWidget, err := widget.NewWidget(newID, newName, coords, size, typeID, sceneID, input.Labels, tagIDs, version.Initial[widget.Widget]())
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot create widget: %w", err)
 	}
@@ -108,6 +113,11 @@ func (s widgetServiceImpl) UpdateWidget(ctx context.Context, input appdto.Update
 
 	coords := widget.NewCoordinates(input.X, input.Y, input.Z)
 
+	size, err := normalizeSize(input.Width, input.Height)
+	if err != nil {
+		return appdto.Widget{}, fmt.Errorf("cannot parse widget size: %w", err)
+	}
+
 	typeID, err := id.NewID(id.IDWithUUID[widget.WidgetType](input.TypeID))
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot parse type id: %w", err)
@@ -123,7 +133,7 @@ func (s widgetServiceImpl) UpdateWidget(ctx context.Context, input appdto.Update
 		return appdto.Widget{}, fmt.Errorf("cannot parse tag ids: %w", err)
 	}
 
-	updated, err := widget.NewWidget(found.ID(), newName, coords, typeID, sceneID, input.Labels, tagIDs, found.Version())
+	updated, err := widget.NewWidget(found.ID(), newName, coords, size, typeID, sceneID, input.Labels, tagIDs, found.Version())
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot build updated widget: %w", err)
 	}
