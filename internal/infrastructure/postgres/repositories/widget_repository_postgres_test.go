@@ -31,16 +31,12 @@ func makeWidget(t *testing.T, name string, repo widget.WidgetRepository) widget.
 	}
 	pos := widget.NewPosition(10.0, 20.0, 0)
 	typeID := id.NewID(id.IDWithUUID[widget.WidgetType](uuid.New()))
-	w, err := widget.NewWidget(
+	return widget.NewWidget(
 		newID, newName, pos, widget.DefaultSize(),
 		widget.DefaultOrigin(), widget.DefaultRotation(),
 		typeID, id.ID[scene.Scene]{}, []string{"label1"}, nil,
 		version.Initial[widget.Widget](),
 	)
-	if err != nil {
-		t.Fatalf("NewWidget: %v", err)
-	}
-	return w
 }
 
 // --- NextID ---
@@ -98,7 +94,7 @@ func TestWidgetSave_DuplicateID_ReturnsError(t *testing.T) {
 		t.Fatalf("first Save failed: %v", err)
 	}
 
-	duplicate, _ := widget.NewWidget(
+	duplicate := widget.NewWidget(
 		w.ID(), w.Name(), w.Position(), w.Size(),
 		w.Origin(), w.Rotation(),
 		w.TypeID(), w.SceneID(), w.Labels(), w.TagIDs(),
@@ -129,7 +125,7 @@ func TestWidgetSave_ExistingWidget_UpdatesSuccessfully(t *testing.T) {
 	}
 
 	newName, _ := widget.NewWidgetName("gauge-updated")
-	updated, _ := widget.NewWidget(
+	updated := widget.NewWidget(
 		found.ID(), newName, found.Position(), found.Size(),
 		found.Origin(), found.Rotation(),
 		found.TypeID(), found.SceneID(), found.Labels(), found.TagIDs(),
@@ -158,7 +154,7 @@ func TestWidgetSave_ExistingWidget_VersionIsIncremented(t *testing.T) {
 	found, _ := repo.FindByID(ctx, saved.ID())
 
 	newName, _ := widget.NewWidgetName("gauge-v2")
-	updated, _ := widget.NewWidget(
+	updated := widget.NewWidget(
 		found.ID(), newName, found.Position(), found.Size(),
 		found.Origin(), found.Rotation(),
 		found.TypeID(), found.SceneID(), found.Labels(), found.TagIDs(),
@@ -185,7 +181,7 @@ func TestWidgetSave_StaleVersion_ReturnsError(t *testing.T) {
 	}
 
 	badVersion, _ := version.New[widget.Widget](version.WithNumber[widget.Widget](100))
-	stale, _ := widget.NewWidget(
+	stale := widget.NewWidget(
 		w.ID(), w.Name(), w.Position(), w.Size(),
 		w.Origin(), w.Rotation(),
 		w.TypeID(), w.SceneID(), w.Labels(), w.TagIDs(),
@@ -298,7 +294,7 @@ func TestWidgetFindAll_WithTagIDs_RoundTripsCorrectly(t *testing.T) {
 	newName, _ := widget.NewWidgetName("with-tags")
 	pos := widget.NewPosition(1, 2, 3)
 	typeID := id.NewID(id.IDWithUUID[widget.WidgetType](uuid.New()))
-	w, _ := widget.NewWidget(
+	w := widget.NewWidget(
 		newID, newName, pos, widget.DefaultSize(),
 		widget.DefaultOrigin(), widget.DefaultRotation(),
 		typeID, id.ID[scene.Scene]{}, []string{"a", "b"},
@@ -338,7 +334,7 @@ func TestWidgetFindByID_OriginAndRotation_RoundTripsCorrectly(t *testing.T) {
 	rotation := widget.NewRotation(90.0)
 	typeID := id.NewID(id.IDWithUUID[widget.WidgetType](uuid.New()))
 
-	w, _ := widget.NewWidget(
+	w := widget.NewWidget(
 		newID, newName, pos, size, origin, rotation,
 		typeID, id.ID[scene.Scene]{}, nil, nil,
 		version.Initial[widget.Widget](),

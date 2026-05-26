@@ -59,7 +59,7 @@ func NewWidget(
 	someLabels []string,
 	someTagIDs []id.ID[tag.Tag],
 	aVersion version.Version[Widget],
-) (Widget, error) {
+) Widget {
 	labels := make([]string, len(someLabels))
 	copy(labels, someLabels)
 
@@ -78,7 +78,7 @@ func NewWidget(
 		labels:   labels,
 		tagIDs:   tagIDs,
 		version:  aVersion,
-	}, nil
+	}
 }
 
 func (w widgetImpl) ID() id.ID[Widget]               { return w.id }

@@ -78,14 +78,11 @@ func (s widgetServiceImpl) CreateWidget(ctx context.Context, input appdto.Create
 
 	tagIDs := uuidsToTagIDs(input.TagIDs)
 
-	newWidget, err := widget.NewWidget(
+	newWidget := widget.NewWidget(
 		newID, newName, pos, size, origin, rotation,
 		typeID, sceneID, input.Labels, tagIDs,
 		version.Initial[widget.Widget](),
 	)
-	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot create widget: %w", err)
-	}
 
 	saved, err := s.repository.Save(ctx, newWidget)
 	if err != nil {
@@ -98,10 +95,6 @@ func (s widgetServiceImpl) CreateWidget(ctx context.Context, input appdto.Create
 }
 
 func (s widgetServiceImpl) UpdateWidget(ctx context.Context, input appdto.UpdateWidgetInput) (appdto.Widget, error) {
-	if input.Version <= 0 {
-		return appdto.Widget{}, fmt.Errorf("update requires a valid version (got %d)", input.Version)
-	}
-
 	widgetID := id.NewID(id.IDWithUUID[widget.Widget](input.ID))
 
 	newName, err := widget.NewWidgetName(input.Name)
@@ -133,14 +126,11 @@ func (s widgetServiceImpl) UpdateWidget(ctx context.Context, input appdto.Update
 		return appdto.Widget{}, fmt.Errorf("cannot build widget version: %w", err)
 	}
 
-	updated, err := widget.NewWidget(
+	updated := widget.NewWidget(
 		widgetID, newName, pos, size, origin, rotation,
 		typeID, sceneID, input.Labels, tagIDs,
 		inputVersion,
 	)
-	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot build updated widget: %w", err)
-	}
 
 	saved, err := s.repository.Save(ctx, updated)
 	if err != nil {

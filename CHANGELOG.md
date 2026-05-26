@@ -6,7 +6,7 @@
 
 - `internal/domain/widget` — новый пакет домена для типов виджетов:
   - `WidgetType` — агрегат (интерфейс + `widgetTypeImpl`); immutable: поля не мутируются напрямую, обновление через создание нового экземпляра в репозитории
-  - `id.ID[WidgetType]` — Value Object на основе UUID; функциональные опции `id.ID[WidgetType]WithUUID`; `Parseid.ID[WidgetType]`, `MustParseid.ID[WidgetType]`
+ - `WidgetTypeID` — Value Object на основе UUID; функциональные опции `WidgetTypeIDWithUUID`; `ParseWidgetTypeID`, `MustParseWidgetTypeID`
   - `WidgetTypeName` — Value Object; валидация: пустая строка возвращает ошибку
   - `HtmlTemplate`, `Script` — Value Object-обёртки над строками; валидация зарезервирована (TODO)
   - `ScriptLanguage` — enum-VO (`javascript`, `python`, `lua`); сериализуется строкой; `NewScriptLanguage` возвращает ошибку для неизвестных значений

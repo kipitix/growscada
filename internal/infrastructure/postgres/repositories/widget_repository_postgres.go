@@ -65,7 +65,7 @@ func (r widgetRepositoryPostgresImpl) Save(ctx context.Context, w widget.Widget)
 			w.ID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(),
 			w.TypeID(), w.SceneID(), w.Labels(), w.TagIDs(),
 			version.Committed[widget.Widget](),
-		)
+		), nil
 	}
 
 	if w.Version().IsCommitted() {
@@ -99,7 +99,7 @@ func (r widgetRepositoryPostgresImpl) Save(ctx context.Context, w widget.Widget)
 			w.ID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(),
 			w.TypeID(), w.SceneID(), w.Labels(), w.TagIDs(),
 			w.Version().Next(),
-		)
+		), nil
 	}
 
 	return nil, fmt.Errorf("undefined behavior with version %d", w.Version().Number())
@@ -268,5 +268,5 @@ func (r widgetRepositoryPostgresImpl) reconstruct(
 		return nil, fmt.Errorf("cannot create widget version: %w", err)
 	}
 
-	return widget.NewWidget(newID, newName, pos, size, origin, rotation, typeID, sceneID, someLabels, tagIDs, newVersion)
+	return widget.NewWidget(newID, newName, pos, size, origin, rotation, typeID, sceneID, someLabels, tagIDs, newVersion), nil
 }

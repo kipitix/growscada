@@ -20,17 +20,13 @@ func makeTestWidget(t *testing.T, pos Position, size Size, origin Origin, rot Ro
 	typeID := id.NewID[WidgetType]()
 	sceneID := id.NewID[scene.Scene]()
 
-	w, err := NewWidget(
+	return NewWidget(
 		wID, name, pos, size, origin, rot,
 		typeID, sceneID,
 		[]string{"label_a", "label_b"},
 		[]id.ID[tag.Tag]{id.NewID[tag.Tag]()},
 		version.Initial[Widget](),
 	)
-	if err != nil {
-		t.Fatalf("NewWidget failed: %v", err)
-	}
-	return w
 }
 
 func TestNewWidget_FieldsAreSet(t *testing.T) {
@@ -47,10 +43,7 @@ func TestNewWidget_FieldsAreSet(t *testing.T) {
 	tagIDs := []id.ID[tag.Tag]{tagID}
 	ver := version.Initial[Widget]()
 
-	w, err := NewWidget(wID, name, pos, size, origin, rot, typeID, sceneID, labels, tagIDs, ver)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	w := NewWidget(wID, name, pos, size, origin, rot, typeID, sceneID, labels, tagIDs, ver)
 
 	if w.ID() != wID {
 		t.Errorf("ID mismatch: expected %v, got %v", wID, w.ID())
@@ -97,7 +90,7 @@ func TestNewWidget_LabelsCopied(t *testing.T) {
 	sceneID := id.NewID[scene.Scene]()
 	labels := []string{"x", "y"}
 
-	widget, _ := NewWidget(wID, name, pos, size, origin, rot, typeID, sceneID, labels, nil, version.Initial[Widget]())
+	widget := NewWidget(wID, name, pos, size, origin, rot, typeID, sceneID, labels, nil, version.Initial[Widget]())
 
 	labels[0] = "mutated"
 	if widget.Labels()[0] != "x" {
@@ -119,7 +112,7 @@ func TestNewWidget_TagIDsCopied(t *testing.T) {
 	originalTagID := id.NewID[tag.Tag]()
 	tagIDs := []id.ID[tag.Tag]{originalTagID}
 
-	widget, _ := NewWidget(wID, name, pos, size, origin, rot, typeID, sceneID, nil, tagIDs, version.Initial[Widget]())
+	widget := NewWidget(wID, name, pos, size, origin, rot, typeID, sceneID, nil, tagIDs, version.Initial[Widget]())
 
 	tagIDs[0] = id.NewID[tag.Tag]() // mutate external slice
 	if widget.TagIDs()[0] != originalTagID {
@@ -137,10 +130,7 @@ func TestNewWidget_NilLabelsAndTagIDs(t *testing.T) {
 	typeID := id.NewID[WidgetType]()
 	sceneID := id.NewID[scene.Scene]()
 
-	w, err := NewWidget(wID, name, pos, size, origin, rot, typeID, sceneID, nil, nil, version.Initial[Widget]())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	w := NewWidget(wID, name, pos, size, origin, rot, typeID, sceneID, nil, nil, version.Initial[Widget]())
 	if len(w.Labels()) != 0 {
 		t.Errorf("expected empty labels, got %v", w.Labels())
 	}
