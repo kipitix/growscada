@@ -37,6 +37,9 @@ func NewTransformationMatrix(pos Position, origin Origin, rot Rotation, size Siz
 	cos := math.Cos(rad)
 	sin := math.Sin(rad)
 
+	// Size.Width/Height are integer pixels; explicit float64 cast is required for
+	// sub-pixel-accurate matrix arithmetic. If sub-pixel widget dimensions are ever
+	// needed, change Size fields to float64 and remove the casts.
 	ox := origin.X() * float64(size.Width())
 	oy := origin.Y() * float64(size.Height())
 

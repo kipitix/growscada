@@ -119,7 +119,7 @@ func TestTag_SetValue_InvalidInput_DoesNotChangeQuality(t *testing.T) {
 		t.Errorf("expected quality %v, got %v", originalQuality, tag.Quality())
 	}
 
-	if tag.Value().Value() != 0 {
+	if tag.Value().Value() != int64(0) {
 		t.Errorf("expected value 0, got %v", tag.Value().Value())
 	}
 }

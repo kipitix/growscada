@@ -36,6 +36,9 @@ func New[T any](opts ...Option[T]) (Version[T], error) {
 }
 
 // WithNumber sets the version number.
+// The value must fit in a 32-bit signed integer (≤ math.MaxInt32) because the
+// backing store uses a Postgres INTEGER column. Postgres rejects writes that
+// exceed this range with an explicit error, so no silent truncation occurs.
 func WithNumber[T any](number int) Option[T] {
 	return func(v *Version[T]) {
 		v.number = number

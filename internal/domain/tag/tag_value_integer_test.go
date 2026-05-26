@@ -1,16 +1,20 @@
 package tag
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func TestNewTagValueInteger_FromString(t *testing.T) {
 	cases := []struct {
 		input    string
-		expected int
+		expected int64
 		wantErr  bool
 	}{
 		{"42", 42, false},
 		{"0", 0, false},
 		{"-7", -7, false},
+		{"9223372036854775807", math.MaxInt64, false}, // int64 max
 		{"abc", 0, true},
 		{"3.14", 0, true},
 	}
@@ -27,8 +31,8 @@ func TestNewTagValueInteger_FromString(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if int(v) != tc.expected {
-				t.Errorf("expected %d, got %d", tc.expected, int(v))
+			if int64(v) != tc.expected {
+				t.Errorf("expected %d, got %d", tc.expected, int64(v))
 			}
 		})
 	}
@@ -39,26 +43,47 @@ func TestNewTagValueInteger_FromBool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if int(v) != 1 {
-		t.Errorf("expected 1 for true, got %d", int(v))
+	if int64(v) != 1 {
+		t.Errorf("expected 1 for true, got %d", int64(v))
 	}
 
 	v, err = NewTagValueInteger(false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if int(v) != 0 {
-		t.Errorf("expected 0 for false, got %d", int(v))
+	if int64(v) != 0 {
+		t.Errorf("expected 0 for false, got %d", int64(v))
 	}
 }
 
 func TestNewTagValueInteger_FromInt(t *testing.T) {
-	v, err := NewTagValueInteger(100)
+	v, err := NewTagValueInteger(int(100))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if int(v) != 100 {
-		t.Errorf("expected 100, got %d", int(v))
+	if int64(v) != 100 {
+		t.Errorf("expected 100, got %d", int64(v))
+	}
+}
+
+func TestNewTagValueInteger_FromInt32(t *testing.T) {
+	v, err := NewTagValueInteger(int32(math.MaxInt32))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if int64(v) != math.MaxInt32 {
+		t.Errorf("expected %d, got %d", int64(math.MaxInt32), int64(v))
+	}
+}
+
+func TestNewTagValueInteger_FromInt64(t *testing.T) {
+	large := int64(math.MaxInt64)
+	v, err := NewTagValueInteger(large)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if int64(v) != large {
+		t.Errorf("expected %d, got %d", large, int64(v))
 	}
 }
 
@@ -71,9 +96,9 @@ func TestNewTagValueInteger_UnsupportedType(t *testing.T) {
 
 func TestTagValueInteger_Value(t *testing.T) {
 	v := TagValueInteger(55)
-	got, ok := v.Value().(int)
+	got, ok := v.Value().(int64)
 	if !ok {
-		t.Fatal("Value() did not return int")
+		t.Fatal("Value() did not return int64")
 	}
 	if got != 55 {
 		t.Errorf("expected 55, got %d", got)

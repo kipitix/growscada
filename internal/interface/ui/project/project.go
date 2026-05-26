@@ -408,6 +408,19 @@ func (p *Project) selectedWidgetIdx() int {
 	return -1
 }
 
+// widgetByID returns the current live widget data by ID.
+// Use this inside event handler closures instead of the closure-captured `w`,
+// because go-app may not re-attach handlers when only the transform changes,
+// leaving `w` stale across drags.
+func (p *Project) widgetByID(id string) (widgetItem, bool) {
+	for _, w := range p.widgets {
+		if w.ID == id {
+			return w, true
+		}
+	}
+	return widgetItem{}, false
+}
+
 // ── Scene operations ───────────────────────────────────────────────────────────
 
 func (p *Project) createScene(ctx app.Context) {
@@ -746,6 +759,127 @@ func (p *Project) Render() app.UI {
 		Style("min-height", "0").
 		Style("overflow", "hidden").
 		Style("gap", "0").
+		// ── Drag handlers live here so they capture mouse events across the
+		// entire Project panel regardless of which scene/canvas is active.
+		// Previously these were on the canvas div, which caused drag to break
+		// on smaller scenes (e.g. 1280×720) when the mouse left the canvas.
+		OnMouseMove(func(ctx app.Context, e app.Event) {
+			anyDrag := p.draggingWidgetID != "" ||
+				p.draggingOriginID != "" ||
+				p.rotatingWidgetID != "" ||
+				p.resizingWidgetID != ""
+			if !anyDrag {
+				return
+			}
+			e.PreventDefault()
+
+			clientX := e.Get("clientX").Float()
+			clientY := e.Get("clientY").Float()
+
+			// Move widget body
+			if p.draggingWidgetID != "" {
+				dx := clientX - p.dragStartCliX
+				dy := clientY - p.dragStartCliY
+				for i := range p.widgets {
+					if p.widgets[i].ID == p.draggingWidgetID {
+						p.widgets[i].Position.X = p.dragStartPosX + dx
+						p.widgets[i].Position.Y = p.dragStartPosY + dy
+						if p.selectedWidgetID == p.draggingWidgetID {
+							p.editingPosX = fmt.Sprintf("%.1f", p.widgets[i].Position.X)
+							p.editingPosY = fmt.Sprintf("%.1f", p.widgets[i].Position.Y)
+						}
+						break
+					}
+				}
+			}
+
+			// Move origin anchor within widget (adjust position to keep content fixed)
+			if p.draggingOriginID != "" {
+				dx := clientX - p.originCliX
+				dy := clientY - p.originCliY
+				rad := p.originDragRotDeg * math.Pi / 180
+				cosA := math.Cos(rad)
+				sinA := math.Sin(rad)
+				// Transform screen delta → local widget space (inverse rotation)
+				dxLocal := dx*cosA + dy*sinA
+				dyLocal := -dx*sinA + dy*cosA
+				newOX := math.Max(0, math.Min(1, p.originStartOX+dxLocal/float64(p.originDragW)))
+				newOY := math.Max(0, math.Min(1, p.originStartOY+dyLocal/float64(p.originDragH)))
+				// Keep visual widget bounding-box in place by adjusting position
+				newPosX := p.originStartPosX + (p.originStartOX-newOX)*float64(p.originDragW)
+				newPosY := p.originStartPosY + (p.originStartOY-newOY)*float64(p.originDragH)
+				for i := range p.widgets {
+					if p.widgets[i].ID == p.draggingOriginID {
+						p.widgets[i].Origin.X = newOX
+						p.widgets[i].Origin.Y = newOY
+						p.widgets[i].Position.X = newPosX
+						p.widgets[i].Position.Y = newPosY
+						if p.selectedWidgetID == p.draggingOriginID {
+							p.editingOriginX = fmt.Sprintf("%.3f", newOX)
+							p.editingOriginY = fmt.Sprintf("%.3f", newOY)
+							p.editingPosX = fmt.Sprintf("%.1f", newPosX)
+							p.editingPosY = fmt.Sprintf("%.1f", newPosY)
+						}
+						break
+					}
+				}
+			}
+
+			// Rotate widget around origin
+			if p.rotatingWidgetID != "" {
+				dx := clientX - p.rotOriginCliX
+				dy := clientY - p.rotOriginCliY
+				currentAngle := math.Atan2(dy, dx)
+				delta := currentAngle - p.rotStartAngle
+				newDeg := math.Mod(p.rotStartDeg+delta*180/math.Pi, 360)
+				if newDeg < 0 {
+					newDeg += 360
+				}
+				for i := range p.widgets {
+					if p.widgets[i].ID == p.rotatingWidgetID {
+						p.widgets[i].Rotation.Degrees = newDeg
+						if p.selectedWidgetID == p.rotatingWidgetID {
+							p.editingRotation = fmt.Sprintf("%.1f", newDeg)
+						}
+						break
+					}
+				}
+			}
+
+			// Resize widget via SE handle (inverse-rotation corrected)
+			if p.resizingWidgetID != "" {
+				dx := clientX - p.resizeStartCliX
+				dy := clientY - p.resizeStartCliY
+				rad := p.resizeStartDeg * math.Pi / 180
+				cosA := math.Cos(rad)
+				sinA := math.Sin(rad)
+				dxLocal := dx*cosA + dy*sinA
+				dyLocal := -dx*sinA + dy*cosA
+				const minSize = 20
+				newW := p.resizeStartW + int(math.Round(dxLocal))
+				newH := p.resizeStartH + int(math.Round(dyLocal))
+				if newW < minSize {
+					newW = minSize
+				}
+				if newH < minSize {
+					newH = minSize
+				}
+				for i := range p.widgets {
+					if p.widgets[i].ID == p.resizingWidgetID {
+						p.widgets[i].Size.Width = newW
+						p.widgets[i].Size.Height = newH
+						if p.selectedWidgetID == p.resizingWidgetID {
+							p.editingWidth = strconv.Itoa(newW)
+							p.editingHeight = strconv.Itoa(newH)
+						}
+						break
+					}
+				}
+			}
+		}).
+		OnMouseUp(func(ctx app.Context, e app.Event) {
+			p.finalizeAllDrags(ctx)
+		}).
 		Body(
 			p.renderWidgetTypePanel(),
 			p.renderScenePanel(),
@@ -1003,127 +1137,10 @@ func (p *Project) renderSceneCanvas() app.UI {
 		Style("background-size", "24px 24px").
 		Style("flex-shrink", "0").
 		Style("cursor", canvasCursor).
-		// ── Mouse move: handle all drag modes ──────────────────────────────
-		OnMouseMove(func(ctx app.Context, e app.Event) {
-			anyDrag := p.draggingWidgetID != "" ||
-				p.draggingOriginID != "" ||
-				p.rotatingWidgetID != "" ||
-				p.resizingWidgetID != ""
-			if !anyDrag {
-				return
-			}
-			e.PreventDefault()
-
-			clientX := e.Get("clientX").Float()
-			clientY := e.Get("clientY").Float()
-
-			// Move widget body
-			if p.draggingWidgetID != "" {
-				dx := clientX - p.dragStartCliX
-				dy := clientY - p.dragStartCliY
-				for i := range p.widgets {
-					if p.widgets[i].ID == p.draggingWidgetID {
-						p.widgets[i].Position.X = p.dragStartPosX + dx
-						p.widgets[i].Position.Y = p.dragStartPosY + dy
-						if p.selectedWidgetID == p.draggingWidgetID {
-							p.editingPosX = fmt.Sprintf("%.1f", p.widgets[i].Position.X)
-							p.editingPosY = fmt.Sprintf("%.1f", p.widgets[i].Position.Y)
-						}
-						break
-					}
-				}
-			}
-
-			// Move origin anchor within widget (adjust position to keep content fixed)
-			if p.draggingOriginID != "" {
-				dx := clientX - p.originCliX
-				dy := clientY - p.originCliY
-				rad := p.originDragRotDeg * math.Pi / 180
-				cosA := math.Cos(rad)
-				sinA := math.Sin(rad)
-				// Transform screen delta → local widget space (inverse rotation)
-				dxLocal := dx*cosA + dy*sinA
-				dyLocal := -dx*sinA + dy*cosA
-				newOX := math.Max(0, math.Min(1, p.originStartOX+dxLocal/float64(p.originDragW)))
-				newOY := math.Max(0, math.Min(1, p.originStartOY+dyLocal/float64(p.originDragH)))
-				// Keep visual widget bounding-box in place by adjusting position
-				newPosX := p.originStartPosX + (p.originStartOX-newOX)*float64(p.originDragW)
-				newPosY := p.originStartPosY + (p.originStartOY-newOY)*float64(p.originDragH)
-				for i := range p.widgets {
-					if p.widgets[i].ID == p.draggingOriginID {
-						p.widgets[i].Origin.X = newOX
-						p.widgets[i].Origin.Y = newOY
-						p.widgets[i].Position.X = newPosX
-						p.widgets[i].Position.Y = newPosY
-						if p.selectedWidgetID == p.draggingOriginID {
-							p.editingOriginX = fmt.Sprintf("%.3f", newOX)
-							p.editingOriginY = fmt.Sprintf("%.3f", newOY)
-							p.editingPosX = fmt.Sprintf("%.1f", newPosX)
-							p.editingPosY = fmt.Sprintf("%.1f", newPosY)
-						}
-						break
-					}
-				}
-			}
-
-			// Rotate widget around origin
-			if p.rotatingWidgetID != "" {
-				dx := clientX - p.rotOriginCliX
-				dy := clientY - p.rotOriginCliY
-				currentAngle := math.Atan2(dy, dx)
-				delta := currentAngle - p.rotStartAngle
-				newDeg := math.Mod(p.rotStartDeg+delta*180/math.Pi, 360)
-				if newDeg < 0 {
-					newDeg += 360
-				}
-				for i := range p.widgets {
-					if p.widgets[i].ID == p.rotatingWidgetID {
-						p.widgets[i].Rotation.Degrees = newDeg
-						if p.selectedWidgetID == p.rotatingWidgetID {
-							p.editingRotation = fmt.Sprintf("%.1f", newDeg)
-						}
-						break
-					}
-				}
-			}
-
-			// Resize widget via SE handle (inverse-rotation corrected)
-			if p.resizingWidgetID != "" {
-				dx := clientX - p.resizeStartCliX
-				dy := clientY - p.resizeStartCliY
-				rad := p.resizeStartDeg * math.Pi / 180
-				cosA := math.Cos(rad)
-				sinA := math.Sin(rad)
-				dxLocal := dx*cosA + dy*sinA
-				dyLocal := -dx*sinA + dy*cosA
-				const minSize = 20
-				newW := p.resizeStartW + int(dxLocal)
-				newH := p.resizeStartH + int(dyLocal)
-				if newW < minSize {
-					newW = minSize
-				}
-				if newH < minSize {
-					newH = minSize
-				}
-				for i := range p.widgets {
-					if p.widgets[i].ID == p.resizingWidgetID {
-						p.widgets[i].Size.Width = newW
-						p.widgets[i].Size.Height = newH
-						if p.selectedWidgetID == p.resizingWidgetID {
-							p.editingWidth = strconv.Itoa(newW)
-							p.editingHeight = strconv.Itoa(newH)
-						}
-						break
-					}
-				}
-			}
-		}).
-		OnMouseUp(func(ctx app.Context, e app.Event) {
-			p.finalizeAllDrags(ctx)
-		}).
-		OnMouseLeave(func(ctx app.Context, e app.Event) {
-			p.finalizeAllDrags(ctx)
-		}).
+		// OnMouseMove / OnMouseUp are intentionally on the root Render() div
+		// so drags are not clipped by the canvas boundary (especially on
+		// smaller scenes like 1280×720 where the canvas is smaller than the
+		// scroll viewport).
 		OnDragOver(func(ctx app.Context, e app.Event) {
 			e.PreventDefault()
 			e.Get("dataTransfer").Set("dropEffect", "copy")
@@ -1208,12 +1225,16 @@ func (p *Project) renderWidget(w widgetItem) app.UI {
 			p.draggingWidgetID = wid
 			p.dragStartCliX = e.Get("clientX").Float()
 			p.dragStartCliY = e.Get("clientY").Float()
-			p.dragStartPosX = w.Position.X
-			p.dragStartPosY = w.Position.Y
-		}).
+			// Read position from live p.widgets — the closure-captured w.Position
+			// may be stale if go-app didn't re-attach this handler after a drag.
+			if cur, ok := p.widgetByID(wid); ok {
+				p.dragStartPosX = cur.Position.X
+				p.dragStartPosY = cur.Position.Y
+			}
+		}, app.EventScope(wid)).
 		OnClick(func(ctx app.Context, e app.Event) {
 			e.Call("stopPropagation")
-		})
+		}, app.EventScope(wid))
 
 	bodyItems := []app.UI{content}
 
@@ -1248,7 +1269,12 @@ func (p *Project) renderWidget(w widgetItem) app.UI {
 				e.Call("stopPropagation")
 				e.PreventDefault()
 
-				rad := w.Rotation.Degrees * math.Pi / 180
+				cur, ok := p.widgetByID(wid)
+				if !ok {
+					return
+				}
+				rotDeg := cur.Rotation.Degrees
+				rad := rotDeg * math.Pi / 180
 				sinA := math.Sin(rad)
 				cosA := math.Cos(rad)
 
@@ -1266,9 +1292,9 @@ func (p *Project) renderWidget(w widgetItem) app.UI {
 				p.rotOriginCliX = handleCX - rotHandleDist*sinA
 				p.rotOriginCliY = handleCY + rotHandleDist*cosA
 				p.rotStartAngle = math.Atan2(handleCY-p.rotOriginCliY, handleCX-p.rotOriginCliX)
-				p.rotStartDeg = w.Rotation.Degrees
+				p.rotStartDeg = rotDeg
 				p.rotatingWidgetID = wid
-			})
+			}, app.EventScope(wid))
 
 		// Origin handle: orange circle at anchor point
 		originHandle := app.Div().
@@ -1290,14 +1316,16 @@ func (p *Project) renderWidget(w widgetItem) app.UI {
 				p.draggingOriginID = wid
 				p.originCliX = e.Get("clientX").Float()
 				p.originCliY = e.Get("clientY").Float()
-				p.originStartOX = w.Origin.X
-				p.originStartOY = w.Origin.Y
-				p.originStartPosX = w.Position.X
-				p.originStartPosY = w.Position.Y
-				p.originDragW = w.Size.Width
-				p.originDragH = w.Size.Height
-				p.originDragRotDeg = w.Rotation.Degrees
-			})
+				if cur, ok := p.widgetByID(wid); ok {
+					p.originStartOX = cur.Origin.X
+					p.originStartOY = cur.Origin.Y
+					p.originStartPosX = cur.Position.X
+					p.originStartPosY = cur.Position.Y
+					p.originDragW = cur.Size.Width
+					p.originDragH = cur.Size.Height
+					p.originDragRotDeg = cur.Rotation.Degrees
+				}
+			}, app.EventScope(wid))
 
 		// SE resize handle: small square at bottom-right corner
 		resizeHandle := app.Div().
@@ -1317,10 +1345,12 @@ func (p *Project) renderWidget(w widgetItem) app.UI {
 				p.resizingWidgetID = wid
 				p.resizeStartCliX = e.Get("clientX").Float()
 				p.resizeStartCliY = e.Get("clientY").Float()
-				p.resizeStartW = w.Size.Width
-				p.resizeStartH = w.Size.Height
-				p.resizeStartDeg = w.Rotation.Degrees
-			})
+				if cur, ok := p.widgetByID(wid); ok {
+					p.resizeStartW = cur.Size.Width
+					p.resizeStartH = cur.Size.Height
+					p.resizeStartDeg = cur.Rotation.Degrees
+				}
+			}, app.EventScope(wid))
 
 		bodyItems = append(bodyItems, rotLine, rotHandle, originHandle, resizeHandle)
 	}
