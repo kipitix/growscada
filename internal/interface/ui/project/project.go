@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 )
 
-// ── DTOs ────────────────────────────────────────────────────────────────────
+// ── DTOs ─────────────────────────────────────────────────────────────────────
 
 type widgetTypeItem struct {
 	ID            string `json:"id"`
@@ -53,22 +54,51 @@ type updateSceneRequest struct {
 	BackgroundHTML string `json:"background_html"`
 }
 
-type coordinatesItem struct {
+// Widget geometry sub-DTOs (match server restdto shape).
+
+type positionDTO struct {
 	X float64 `json:"x"`
 	Y float64 `json:"y"`
-	Z float64 `json:"z"`
+	Z int     `json:"z"`
+}
+
+type sizeDTO struct {
+	Width  int `json:"width"`
+	Height int `json:"height"`
+}
+
+type originDTO struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+type rotationDTO struct {
+	Degrees float64 `json:"degrees"`
+}
+
+type transformMatrixDTO struct {
+	A   float64 `json:"a"`
+	B   float64 `json:"b"`
+	C   float64 `json:"c"`
+	D   float64 `json:"d"`
+	E   float64 `json:"e"`
+	F   float64 `json:"f"`
+	CSS string  `json:"css"`
 }
 
 type widgetItem struct {
-	ID          string          `json:"id"`
-	Name        string          `json:"name"`
-	Coordinates coordinatesItem `json:"coordinates"`
-	Width       int             `json:"width"`
-	Height      int             `json:"height"`
-	TypeID      string          `json:"type_id"`
-	SceneID     string          `json:"scene_id"`
-	Labels      []string        `json:"labels"`
-	TagIDs      []string        `json:"tag_ids"`
+	ID              string             `json:"id"`
+	Name            string             `json:"name"`
+	Position        positionDTO        `json:"position"`
+	Size            sizeDTO            `json:"size"`
+	Origin          originDTO          `json:"origin"`
+	Rotation        rotationDTO        `json:"rotation"`
+	TransformMatrix transformMatrixDTO `json:"transform_matrix"`
+	TypeID          string             `json:"type_id"`
+	SceneID         string             `json:"scene_id"`
+	Labels          []string           `json:"labels"`
+	TagIDs          []string           `json:"tag_ids"`
+	Version         int                `json:"version"`
 }
 
 type getWidgetsResponse struct {
@@ -76,14 +106,15 @@ type getWidgetsResponse struct {
 }
 
 type createWidgetRequest struct {
-	Name        string          `json:"name"`
-	Coordinates coordinatesItem `json:"coordinates"`
-	Width       int             `json:"width"`
-	Height      int             `json:"height"`
-	TypeID      string          `json:"type_id"`
-	SceneID     string          `json:"scene_id"`
-	Labels      []string        `json:"labels"`
-	TagIDs      []string        `json:"tag_ids"`
+	Name     string      `json:"name"`
+	Position positionDTO `json:"position"`
+	Size     sizeDTO     `json:"size"`
+	Origin   originDTO   `json:"origin"`
+	Rotation rotationDTO `json:"rotation"`
+	TypeID   string      `json:"type_id"`
+	SceneID  string      `json:"scene_id"`
+	Labels   []string    `json:"labels"`
+	TagIDs   []string    `json:"tag_ids"`
 }
 
 type createWidgetResponse struct {
@@ -91,14 +122,20 @@ type createWidgetResponse struct {
 }
 
 type updateWidgetRequest struct {
-	Name        string          `json:"name"`
-	Coordinates coordinatesItem `json:"coordinates"`
-	Width       int             `json:"width"`
-	Height      int             `json:"height"`
-	TypeID      string          `json:"type_id"`
-	SceneID     string          `json:"scene_id"`
-	Labels      []string        `json:"labels"`
-	TagIDs      []string        `json:"tag_ids"`
+	Name     string      `json:"name"`
+	Position positionDTO `json:"position"`
+	Size     sizeDTO     `json:"size"`
+	Origin   originDTO   `json:"origin"`
+	Rotation rotationDTO `json:"rotation"`
+	TypeID   string      `json:"type_id"`
+	SceneID  string      `json:"scene_id"`
+	Labels   []string    `json:"labels"`
+	TagIDs   []string    `json:"tag_ids"`
+	Version  int         `json:"version"`
+}
+
+type updateWidgetResponse struct {
+	Version int `json:"version"`
 }
 
 type tagItem struct {
@@ -110,7 +147,34 @@ type getTagsResponse struct {
 	Tags []tagItem `json:"tags"`
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
+// ── Matrix helper ─────────────────────────────────────────────────────────────
+
+// computeMatrixCSS calculates the CSS matrix() string from widget geometric
+// properties. Mirrors the domain TransformationMatrix formula:
+//
+//	T(pos) · T(+ox,+oy) · R(θ) · T(-ox,-oy)
+func computeMatrixCSS(posX, posY, originX, originY, rotDeg float64, width, height int) string {
+	rad := rotDeg * math.Pi / 180
+	cosA := math.Cos(rad)
+	sinA := math.Sin(rad)
+	ox := originX * float64(width)
+	oy := originY * float64(height)
+	e := posX - cosA*ox + sinA*oy + ox
+	f := posY - sinA*ox - cosA*oy + oy
+	return fmt.Sprintf("matrix(%.6f,%.6f,%.6f,%.6f,%.6f,%.6f)",
+		cosA, sinA, -sinA, cosA, e, f)
+}
+
+func widgetMatrixCSS(w widgetItem) string {
+	return computeMatrixCSS(
+		w.Position.X, w.Position.Y,
+		w.Origin.X, w.Origin.Y,
+		w.Rotation.Degrees,
+		w.Size.Width, w.Size.Height,
+	)
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 type Project struct {
 	app.Compo
@@ -129,22 +193,57 @@ type Project struct {
 
 	draggedTypeID string
 
-	// widget drag-to-move
+	// ── Drag: move widget body ──────────────────────────────────────────────
 	draggingWidgetID string
-	dragOffsetX      float64
-	dragOffsetY      float64
+	dragStartCliX    float64
+	dragStartCliY    float64
+	dragStartPosX    float64
+	dragStartPosY    float64
 
-	// widget resize
-	resizingWidgetID  string
-	resizeStartMouseX float64
-	resizeStartMouseY float64
-	resizeStartWidth  int
-	resizeStartHeight int
+	// ── Drag: move origin anchor ────────────────────────────────────────────
+	// The anchor is moved within the widget in local space; the widget
+	// position is adjusted simultaneously to keep the visual bounding-box
+	// stationary on screen.
+	draggingOriginID  string
+	originCliX        float64 // client X when drag started
+	originCliY        float64 // client Y when drag started
+	originStartOX     float64 // origin.X before drag
+	originStartOY     float64 // origin.Y before drag
+	originStartPosX   float64 // position.X before drag
+	originStartPosY   float64 // position.Y before drag
+	originDragW       int     // widget width during drag
+	originDragH       int     // widget height during drag
+	originDragRotDeg  float64 // widget rotation during drag
 
-	editingWidgetName   string
-	editingWidgetWidth  string
-	editingWidgetHeight string
-	addingTagID         string
+	// ── Drag: rotation handle ───────────────────────────────────────────────
+	// Dragging a circle positioned above the origin in local widget space.
+	// We store the origin's client-space position and the initial angle so we
+	// can compute the angular delta on every mousemove.
+	rotatingWidgetID  string
+	rotOriginCliX     float64 // origin screen position X (client coords)
+	rotOriginCliY     float64 // origin screen position Y (client coords)
+	rotStartAngle     float64 // atan2 from origin to handle when drag started
+	rotStartDeg       float64 // rotation.Degrees before drag
+
+	// ── Drag: resize SE handle ──────────────────────────────────────────────
+	resizingWidgetID string
+	resizeStartCliX  float64
+	resizeStartCliY  float64
+	resizeStartW     int
+	resizeStartH     int
+	resizeStartDeg   float64 // for inverse-rotation delta
+
+	// ── Properties panel editing state ─────────────────────────────────────
+	editingWidgetName string
+	editingPosX       string
+	editingPosY       string
+	editingPosZ       string
+	editingWidth      string
+	editingHeight     string
+	editingOriginX    string
+	editingOriginY    string
+	editingRotation   string
+	addingTagID       string
 
 	fetchErr string
 }
@@ -160,7 +259,7 @@ func (p *Project) OnMount(ctx app.Context) {
 	p.loadTags(ctx)
 }
 
-// ── Data loading ─────────────────────────────────────────────────────────────
+// ── Data loading ──────────────────────────────────────────────────────────────
 
 func (p *Project) loadWidgetTypes(ctx app.Context) {
 	url := p.apiServerURL + "/api/v1/widget-types"
@@ -176,9 +275,7 @@ func (p *Project) loadWidgetTypes(ctx app.Context) {
 			ctx.Dispatch(func(ctx app.Context) { p.fetchErr = err.Error() })
 			return
 		}
-		ctx.Dispatch(func(ctx app.Context) {
-			p.widgetTypes = result.WidgetTypes
-		})
+		ctx.Dispatch(func(ctx app.Context) { p.widgetTypes = result.WidgetTypes })
 	})
 }
 
@@ -198,11 +295,9 @@ func (p *Project) loadScenes(ctx app.Context) {
 		}
 		ctx.Dispatch(func(ctx app.Context) {
 			p.scenes = result.Scenes
-			// auto-select first scene if none selected
 			if p.selectedSceneID == "" && len(result.Scenes) > 0 {
 				p.selectedSceneID = result.Scenes[0].ID
 			}
-			// deselect if scene was deleted
 			found := false
 			for _, sc := range result.Scenes {
 				if sc.ID == p.selectedSceneID {
@@ -212,8 +307,7 @@ func (p *Project) loadScenes(ctx app.Context) {
 			}
 			if !found {
 				p.selectedSceneID = ""
-				p.selectedWidgetID = ""
-				p.editingWidgetName = ""
+				p.clearWidgetSelection()
 			}
 		})
 	})
@@ -235,6 +329,15 @@ func (p *Project) loadWidgets(ctx app.Context) {
 		}
 		ctx.Dispatch(func(ctx app.Context) {
 			p.widgets = result.Widgets
+			// Re-sync editing fields if selected widget was refreshed
+			if p.selectedWidgetID != "" {
+				for _, w := range p.widgets {
+					if w.ID == p.selectedWidgetID {
+						p.syncEditingFields(w)
+						break
+					}
+				}
+			}
 		})
 	})
 }
@@ -253,13 +356,59 @@ func (p *Project) loadTags(ctx app.Context) {
 			ctx.Dispatch(func(ctx app.Context) { p.fetchErr = err.Error() })
 			return
 		}
-		ctx.Dispatch(func(ctx app.Context) {
-			p.tags = result.Tags
-		})
+		ctx.Dispatch(func(ctx app.Context) { p.tags = result.Tags })
 	})
 }
 
-// ── Scene operations ──────────────────────────────────────────────────────────
+// ── Widget selection helpers ──────────────────────────────────────────────────
+
+func (p *Project) selectWidget(id string) {
+	p.selectedWidgetID = id
+	p.addingTagID = ""
+	for _, w := range p.widgets {
+		if w.ID == id {
+			p.syncEditingFields(w)
+			break
+		}
+	}
+}
+
+func (p *Project) syncEditingFields(w widgetItem) {
+	p.editingWidgetName = w.Name
+	p.editingPosX = fmt.Sprintf("%.1f", w.Position.X)
+	p.editingPosY = fmt.Sprintf("%.1f", w.Position.Y)
+	p.editingPosZ = strconv.Itoa(w.Position.Z)
+	p.editingWidth = strconv.Itoa(w.Size.Width)
+	p.editingHeight = strconv.Itoa(w.Size.Height)
+	p.editingOriginX = fmt.Sprintf("%.3f", w.Origin.X)
+	p.editingOriginY = fmt.Sprintf("%.3f", w.Origin.Y)
+	p.editingRotation = fmt.Sprintf("%.1f", w.Rotation.Degrees)
+}
+
+func (p *Project) clearWidgetSelection() {
+	p.selectedWidgetID = ""
+	p.editingWidgetName = ""
+	p.editingPosX = ""
+	p.editingPosY = ""
+	p.editingPosZ = ""
+	p.editingWidth = ""
+	p.editingHeight = ""
+	p.editingOriginX = ""
+	p.editingOriginY = ""
+	p.editingRotation = ""
+	p.addingTagID = ""
+}
+
+func (p *Project) selectedWidgetIdx() int {
+	for i, w := range p.widgets {
+		if w.ID == p.selectedWidgetID {
+			return i
+		}
+	}
+	return -1
+}
+
+// ── Scene operations ───────────────────────────────────────────────────────────
 
 func (p *Project) createScene(ctx app.Context) {
 	url := p.apiServerURL + "/api/v1/scenes"
@@ -324,15 +473,12 @@ func (p *Project) commitSceneEdit(ctx app.Context) {
 	if sc.ID == "" {
 		return
 	}
-
-	// optimistic local update
 	for i, s := range p.scenes {
 		if s.ID == id {
 			p.scenes[i].Name = name
 			break
 		}
 	}
-
 	url := p.apiServerURL + "/api/v1/scenes/" + id
 	body, _ := json.Marshal(updateSceneRequest{
 		Name:           name,
@@ -353,14 +499,14 @@ func (p *Project) commitSceneEdit(ctx app.Context) {
 	})
 }
 
-// ── Widget operations ─────────────────────────────────────────────────────────
+// ── Widget operations ──────────────────────────────────────────────────────────
 
 func (p *Project) createWidget(ctx app.Context, typeID string, x, y float64) {
 	if p.selectedSceneID == "" {
 		return
 	}
 	name := "Widget"
-	width, height := 100, 100
+	width, height := 120, 60
 	for _, wt := range p.widgetTypes {
 		if wt.ID == typeID {
 			name = wt.Name
@@ -375,14 +521,15 @@ func (p *Project) createWidget(ctx app.Context, typeID string, x, y float64) {
 	}
 	url := p.apiServerURL + "/api/v1/widgets"
 	body, _ := json.Marshal(createWidgetRequest{
-		Name:        name,
-		Coordinates: coordinatesItem{X: x, Y: y},
-		Width:       width,
-		Height:      height,
-		TypeID:      typeID,
-		SceneID:     p.selectedSceneID,
-		Labels:      []string{},
-		TagIDs:      []string{},
+		Name:     name,
+		Position: positionDTO{X: x, Y: y, Z: 0},
+		Size:     sizeDTO{Width: width, Height: height},
+		Origin:   originDTO{X: 0.5, Y: 0.5},
+		Rotation: rotationDTO{Degrees: 0},
+		TypeID:   typeID,
+		SceneID:  p.selectedSceneID,
+		Labels:   []string{},
+		TagIDs:   []string{},
 	})
 	ctx.Async(func() {
 		resp, err := http.Post(url, "application/json", bytes.NewReader(body))
@@ -398,9 +545,16 @@ func (p *Project) createWidget(ctx app.Context, typeID string, x, y float64) {
 		}
 		ctx.Dispatch(func(ctx app.Context) {
 			p.selectedWidgetID = result.ID
+			// Pre-fill editing fields optimistically
 			p.editingWidgetName = name
-			p.editingWidgetWidth = strconv.Itoa(width)
-			p.editingWidgetHeight = strconv.Itoa(height)
+			p.editingPosX = fmt.Sprintf("%.1f", x)
+			p.editingPosY = fmt.Sprintf("%.1f", y)
+			p.editingPosZ = "0"
+			p.editingWidth = strconv.Itoa(width)
+			p.editingHeight = strconv.Itoa(height)
+			p.editingOriginX = "0.500"
+			p.editingOriginY = "0.500"
+			p.editingRotation = "0.0"
 			p.loadWidgets(ctx)
 		})
 	})
@@ -418,33 +572,14 @@ func (p *Project) deleteWidget(ctx app.Context, widgetID string) {
 		resp.Body.Close()
 		ctx.Dispatch(func(ctx app.Context) {
 			if p.selectedWidgetID == widgetID {
-				p.selectedWidgetID = ""
-				p.editingWidgetName = ""
-				p.editingWidgetWidth = ""
-				p.editingWidgetHeight = ""
+				p.clearWidgetSelection()
 			}
 			p.loadWidgets(ctx)
 		})
 	})
 }
 
-func (p *Project) selectWidget(id string) {
-	p.selectedWidgetID = id
-	p.addingTagID = ""
-	for _, w := range p.widgets {
-		if w.ID == id {
-			p.editingWidgetName = w.Name
-			p.editingWidgetWidth = strconv.Itoa(w.Width)
-			p.editingWidgetHeight = strconv.Itoa(w.Height)
-			break
-		}
-	}
-}
-
 func (p *Project) saveWidgetName(ctx app.Context) {
-	if p.selectedWidgetID == "" {
-		return
-	}
 	idx := p.selectedWidgetIdx()
 	if idx < 0 {
 		return
@@ -453,24 +588,34 @@ func (p *Project) saveWidgetName(ctx app.Context) {
 	p.putWidget(ctx, p.widgets[idx])
 }
 
-func (p *Project) saveWidgetSize(ctx app.Context) {
-	if p.selectedWidgetID == "" {
-		return
-	}
+// saveWidgetGeometry parses all geometry editing fields and PUTs the widget.
+func (p *Project) saveWidgetGeometry(ctx app.Context) {
 	idx := p.selectedWidgetIdx()
 	if idx < 0 {
 		return
 	}
-	w, err := strconv.Atoi(p.editingWidgetWidth)
-	if err != nil || w <= 0 {
-		return
+	posX, _ := strconv.ParseFloat(p.editingPosX, 64)
+	posY, _ := strconv.ParseFloat(p.editingPosY, 64)
+	posZ, _ := strconv.Atoi(p.editingPosZ)
+	width, _ := strconv.Atoi(p.editingWidth)
+	height, _ := strconv.Atoi(p.editingHeight)
+	originX, _ := strconv.ParseFloat(p.editingOriginX, 64)
+	originY, _ := strconv.ParseFloat(p.editingOriginY, 64)
+	rotDeg, _ := strconv.ParseFloat(p.editingRotation, 64)
+
+	if width <= 0 {
+		width = 10
 	}
-	h, err := strconv.Atoi(p.editingWidgetHeight)
-	if err != nil || h <= 0 {
-		return
+	if height <= 0 {
+		height = 10
 	}
-	p.widgets[idx].Width = w
-	p.widgets[idx].Height = h
+	originX = math.Max(0, math.Min(1, originX))
+	originY = math.Max(0, math.Min(1, originY))
+
+	p.widgets[idx].Position = positionDTO{X: posX, Y: posY, Z: posZ}
+	p.widgets[idx].Size = sizeDTO{Width: width, Height: height}
+	p.widgets[idx].Origin = originDTO{X: originX, Y: originY}
+	p.widgets[idx].Rotation = rotationDTO{Degrees: rotDeg}
 	p.putWidget(ctx, p.widgets[idx])
 }
 
@@ -510,17 +655,9 @@ func (p *Project) removeTagFromWidget(ctx app.Context, tagID string) {
 	p.putWidget(ctx, p.widgets[idx])
 }
 
-func (p *Project) selectedWidgetIdx() int {
-	for i, w := range p.widgets {
-		if w.ID == p.selectedWidgetID {
-			return i
-		}
-	}
-	return -1
-}
-
 func (p *Project) putWidget(ctx app.Context, w widgetItem) {
 	url := p.apiServerURL + "/api/v1/widgets/" + w.ID
+	wid := w.ID
 	tagIDs := w.TagIDs
 	if tagIDs == nil {
 		tagIDs = []string{}
@@ -530,14 +667,16 @@ func (p *Project) putWidget(ctx app.Context, w widgetItem) {
 		labels = []string{}
 	}
 	body, _ := json.Marshal(updateWidgetRequest{
-		Name:        w.Name,
-		Coordinates: w.Coordinates,
-		Width:       w.Width,
-		Height:      w.Height,
-		TypeID:      w.TypeID,
-		SceneID:     w.SceneID,
-		Labels:      labels,
-		TagIDs:      tagIDs,
+		Name:     w.Name,
+		Position: w.Position,
+		Size:     w.Size,
+		Origin:   w.Origin,
+		Rotation: w.Rotation,
+		TypeID:   w.TypeID,
+		SceneID:  w.SceneID,
+		Labels:   labels,
+		TagIDs:   tagIDs,
+		Version:  w.Version,
 	})
 	ctx.Async(func() {
 		req, _ := http.NewRequest(http.MethodPut, url, bytes.NewReader(body))
@@ -547,34 +686,53 @@ func (p *Project) putWidget(ctx app.Context, w widgetItem) {
 			ctx.Dispatch(func(ctx app.Context) { p.fetchErr = err.Error() })
 			return
 		}
-		resp.Body.Close()
-		ctx.Dispatch(func(ctx app.Context) { p.fetchErr = "" })
+		defer resp.Body.Close()
+		var result updateWidgetResponse
+		if err := json.NewDecoder(resp.Body).Decode(&result); err == nil && result.Version > 0 {
+			ctx.Dispatch(func(ctx app.Context) {
+				for i := range p.widgets {
+					if p.widgets[i].ID == wid {
+						p.widgets[i].Version = result.Version
+						break
+					}
+				}
+				p.fetchErr = ""
+			})
+		}
 	})
 }
 
-// finalizeDragResize saves the widget after a drag-move or mouse-resize gesture ends.
-func (p *Project) finalizeDragResize(ctx app.Context) {
-	if p.draggingWidgetID != "" {
-		for i := range p.widgets {
-			if p.widgets[i].ID == p.draggingWidgetID {
-				p.putWidget(ctx, p.widgets[i])
-				break
-			}
-		}
+// ── Drag finalisation ─────────────────────────────────────────────────────────
+
+// finalizeAllDrags saves any active drag operation to the server.
+func (p *Project) finalizeAllDrags(ctx app.Context) {
+	if id := p.draggingWidgetID; id != "" {
 		p.draggingWidgetID = ""
+		p.saveDraggedWidget(ctx, id)
 	}
-	if p.resizingWidgetID != "" {
-		for i := range p.widgets {
-			if p.widgets[i].ID == p.resizingWidgetID {
-				if p.selectedWidgetID == p.resizingWidgetID {
-					p.editingWidgetWidth = strconv.Itoa(p.widgets[i].Width)
-					p.editingWidgetHeight = strconv.Itoa(p.widgets[i].Height)
-				}
-				p.putWidget(ctx, p.widgets[i])
-				break
-			}
-		}
+	if id := p.draggingOriginID; id != "" {
+		p.draggingOriginID = ""
+		p.saveDraggedWidget(ctx, id)
+	}
+	if id := p.rotatingWidgetID; id != "" {
+		p.rotatingWidgetID = ""
+		p.saveDraggedWidget(ctx, id)
+	}
+	if id := p.resizingWidgetID; id != "" {
 		p.resizingWidgetID = ""
+		p.saveDraggedWidget(ctx, id)
+	}
+}
+
+func (p *Project) saveDraggedWidget(ctx app.Context, id string) {
+	for i := range p.widgets {
+		if p.widgets[i].ID == id {
+			if p.selectedWidgetID == id {
+				p.syncEditingFields(p.widgets[i])
+			}
+			p.putWidget(ctx, p.widgets[i])
+			break
+		}
 	}
 }
 
@@ -595,15 +753,14 @@ func (p *Project) Render() app.UI {
 		)
 }
 
-// ── Left panel: Widget Types ──────────────────────────────────────────────────
+// ── Left panel: Widget Types ───────────────────────────────────────────────────
 
 func (p *Project) renderWidgetTypePanel() app.UI {
 	items := make([]app.UI, len(p.widgetTypes))
 	for i, wt := range p.widgetTypes {
 		id := wt.ID
 		name := wt.Name
-		w := wt.DefaultWidth
-		h := wt.DefaultHeight
+		w, h := wt.DefaultWidth, wt.DefaultHeight
 		if w <= 0 {
 			w = 100
 		}
@@ -673,7 +830,7 @@ func (p *Project) renderWidgetTypePanel() app.UI {
 		)
 }
 
-// ── Center panel: Scene ───────────────────────────────────────────────────────
+// ── Center panel: Scene ────────────────────────────────────────────────────────
 
 func (p *Project) renderScenePanel() app.UI {
 	return app.Div().
@@ -694,16 +851,9 @@ func (p *Project) renderSceneTabs() app.UI {
 	for _, sc := range p.scenes {
 		sc := sc
 		active := p.selectedSceneID == sc.ID
-
-		bg := "#f0f0f0"
-		borderBottom := "2px solid transparent"
-		color := "#555"
-		fontWeight := "normal"
+		bg, borderBottom, color, fontWeight := "#f0f0f0", "2px solid transparent", "#555", "normal"
 		if active {
-			bg = "#fff"
-			borderBottom = "2px solid #0066cc"
-			color = "#0066cc"
-			fontWeight = "600"
+			bg, borderBottom, color, fontWeight = "#fff", "2px solid #0066cc", "#0066cc", "600"
 		}
 
 		var tabInner app.UI
@@ -744,10 +894,7 @@ func (p *Project) renderSceneTabs() app.UI {
 						Text(sc.Name).
 						OnClick(func(ctx app.Context, e app.Event) {
 							p.selectedSceneID = sc.ID
-							p.selectedWidgetID = ""
-							p.editingWidgetName = ""
-							p.editingWidgetWidth = ""
-							p.editingWidgetHeight = ""
+							p.clearWidgetSelection()
 						}).
 						OnDblClick(func(ctx app.Context, e app.Event) {
 							p.startEditingScene(sc.ID, sc.Name)
@@ -789,9 +936,7 @@ func (p *Project) renderSceneTabs() app.UI {
 		Style("color", "#0066cc").
 		Style("line-height", "1").
 		Text("+").
-		OnClick(func(ctx app.Context, e app.Event) {
-			p.createScene(ctx)
-		}),
+		OnClick(func(ctx app.Context, e app.Event) { p.createScene(ctx) }),
 	)
 
 	return app.Div().
@@ -828,114 +973,24 @@ func (p *Project) renderSceneCanvas() app.UI {
 		}
 	}
 
-	widgetEls := make([]app.UI, 0)
+	widgetEls := make([]app.UI, 0, len(p.widgets))
 	for _, w := range p.widgets {
 		if w.SceneID != p.selectedSceneID {
 			continue
 		}
-		wid := w.ID
-		wname := w.Name
-		wx := w.Coordinates.X
-		wy := w.Coordinates.Y
-		ww := w.Width
-		wh := w.Height
-		if ww <= 0 {
-			ww = 100
-		}
-		if wh <= 0 {
-			wh = 100
-		}
-		isSelected := p.selectedWidgetID == wid
-
-		border := "1px solid #bbb"
-		shadow := "0 1px 3px rgba(0,0,0,0.15)"
-		bg := "#fff"
-		if isSelected {
-			border = "2px solid #0066cc"
-			shadow = "0 0 0 3px rgba(0,102,204,0.2)"
-			bg = "#f0f5ff"
-		}
-
-		// resize handle — visible only when widget is selected
-		var resizeHandle app.UI
-		if isSelected {
-			resizeHandle = app.Div().
-				Style("position", "absolute").
-				Style("right", "0").
-				Style("bottom", "0").
-				Style("width", "12px").
-				Style("height", "12px").
-				Style("background", "rgba(0,102,204,0.55)").
-				Style("border-radius", "2px 0 4px 0").
-				Style("cursor", "se-resize").
-				Style("flex-shrink", "0").
-				OnMouseDown(func(ctx app.Context, e app.Event) {
-					e.Call("stopPropagation")
-					e.PreventDefault()
-					p.resizingWidgetID = wid
-					p.resizeStartMouseX = e.Get("clientX").Float()
-					p.resizeStartMouseY = e.Get("clientY").Float()
-					p.resizeStartWidth = ww
-					p.resizeStartHeight = wh
-				})
-		} else {
-			resizeHandle = app.Span()
-		}
-
-		widgetCursor := "move"
-		if p.resizingWidgetID == wid {
-			widgetCursor = "se-resize"
-		} else if p.draggingWidgetID == wid {
-			widgetCursor = "grabbing"
-		}
-
-		widgetEls = append(widgetEls, app.Div().
-			Style("position", "absolute").
-			Style("left", fmt.Sprintf("%.0fpx", wx)).
-			Style("top", fmt.Sprintf("%.0fpx", wy)).
-			Style("width", fmt.Sprintf("%dpx", ww)).
-			Style("height", fmt.Sprintf("%dpx", wh)).
-			Style("background", bg).
-			Style("border", border).
-			Style("border-radius", "4px").
-			Style("font-size", "12px").
-			Style("cursor", widgetCursor).
-			Style("user-select", "none").
-			Style("box-shadow", shadow).
-			Style("display", "flex").
-			Style("align-items", "center").
-			Style("justify-content", "center").
-			Style("overflow", "hidden").
-			Style("padding", "0 6px").
-			Style("box-sizing", "border-box").
-			Body(
-				app.Span().
-					Style("white-space", "nowrap").
-					Style("text-overflow", "ellipsis").
-					Style("overflow", "hidden").
-					Text(wname),
-				resizeHandle,
-			).
-			OnMouseDown(func(ctx app.Context, e app.Event) {
-				e.Call("stopPropagation")
-				p.selectWidget(wid)
-				// capture click offset inside the widget so it doesn't jump on drag
-				rect := e.Get("currentTarget").Call("getBoundingClientRect")
-				p.draggingWidgetID = wid
-				p.dragOffsetX = e.Get("clientX").Float() - rect.Get("left").Float()
-				p.dragOffsetY = e.Get("clientY").Float() - rect.Get("top").Float()
-			}).
-			OnClick(func(ctx app.Context, e app.Event) {
-				// stop click from reaching canvas's OnClick (which deselects)
-				e.Call("stopPropagation")
-			}),
-		)
+		widgetEls = append(widgetEls, p.renderWidget(w))
 	}
 
+	// Determine overall canvas cursor from active drag mode.
 	canvasCursor := "default"
-	if p.draggingWidgetID != "" {
+	switch {
+	case p.draggingWidgetID != "":
 		canvasCursor = "grabbing"
-	} else if p.resizingWidgetID != "" {
+	case p.draggingOriginID != "":
+		canvasCursor = "crosshair"
+	case p.rotatingWidgetID != "":
+		canvasCursor = "alias"
+	case p.resizingWidgetID != "":
 		canvasCursor = "se-resize"
 	}
 
@@ -948,36 +1003,102 @@ func (p *Project) renderSceneCanvas() app.UI {
 		Style("background-size", "24px 24px").
 		Style("flex-shrink", "0").
 		Style("cursor", canvasCursor).
+		// ── Mouse move: handle all drag modes ──────────────────────────────
 		OnMouseMove(func(ctx app.Context, e app.Event) {
-			if p.draggingWidgetID == "" && p.resizingWidgetID == "" {
+			anyDrag := p.draggingWidgetID != "" ||
+				p.draggingOriginID != "" ||
+				p.rotatingWidgetID != "" ||
+				p.resizingWidgetID != ""
+			if !anyDrag {
 				return
 			}
 			e.PreventDefault()
 
+			clientX := e.Get("clientX").Float()
+			clientY := e.Get("clientY").Float()
+
+			// Move widget body
 			if p.draggingWidgetID != "" {
-				rect := e.Get("currentTarget").Call("getBoundingClientRect")
-				newX := e.Get("clientX").Float() - rect.Get("left").Float() - p.dragOffsetX
-				newY := e.Get("clientY").Float() - rect.Get("top").Float() - p.dragOffsetY
-				if newX < 0 {
-					newX = 0
-				}
-				if newY < 0 {
-					newY = 0
-				}
+				dx := clientX - p.dragStartCliX
+				dy := clientY - p.dragStartCliY
 				for i := range p.widgets {
 					if p.widgets[i].ID == p.draggingWidgetID {
-						p.widgets[i].Coordinates.X = newX
-						p.widgets[i].Coordinates.Y = newY
+						p.widgets[i].Position.X = p.dragStartPosX + dx
+						p.widgets[i].Position.Y = p.dragStartPosY + dy
+						if p.selectedWidgetID == p.draggingWidgetID {
+							p.editingPosX = fmt.Sprintf("%.1f", p.widgets[i].Position.X)
+							p.editingPosY = fmt.Sprintf("%.1f", p.widgets[i].Position.Y)
+						}
 						break
 					}
 				}
-			} else {
-				// resizing
-				dx := e.Get("clientX").Float() - p.resizeStartMouseX
-				dy := e.Get("clientY").Float() - p.resizeStartMouseY
+			}
+
+			// Move origin anchor within widget (adjust position to keep content fixed)
+			if p.draggingOriginID != "" {
+				dx := clientX - p.originCliX
+				dy := clientY - p.originCliY
+				rad := p.originDragRotDeg * math.Pi / 180
+				cosA := math.Cos(rad)
+				sinA := math.Sin(rad)
+				// Transform screen delta → local widget space (inverse rotation)
+				dxLocal := dx*cosA + dy*sinA
+				dyLocal := -dx*sinA + dy*cosA
+				newOX := math.Max(0, math.Min(1, p.originStartOX+dxLocal/float64(p.originDragW)))
+				newOY := math.Max(0, math.Min(1, p.originStartOY+dyLocal/float64(p.originDragH)))
+				// Keep visual widget bounding-box in place by adjusting position
+				newPosX := p.originStartPosX + (p.originStartOX-newOX)*float64(p.originDragW)
+				newPosY := p.originStartPosY + (p.originStartOY-newOY)*float64(p.originDragH)
+				for i := range p.widgets {
+					if p.widgets[i].ID == p.draggingOriginID {
+						p.widgets[i].Origin.X = newOX
+						p.widgets[i].Origin.Y = newOY
+						p.widgets[i].Position.X = newPosX
+						p.widgets[i].Position.Y = newPosY
+						if p.selectedWidgetID == p.draggingOriginID {
+							p.editingOriginX = fmt.Sprintf("%.3f", newOX)
+							p.editingOriginY = fmt.Sprintf("%.3f", newOY)
+							p.editingPosX = fmt.Sprintf("%.1f", newPosX)
+							p.editingPosY = fmt.Sprintf("%.1f", newPosY)
+						}
+						break
+					}
+				}
+			}
+
+			// Rotate widget around origin
+			if p.rotatingWidgetID != "" {
+				dx := clientX - p.rotOriginCliX
+				dy := clientY - p.rotOriginCliY
+				currentAngle := math.Atan2(dy, dx)
+				delta := currentAngle - p.rotStartAngle
+				newDeg := math.Mod(p.rotStartDeg+delta*180/math.Pi, 360)
+				if newDeg < 0 {
+					newDeg += 360
+				}
+				for i := range p.widgets {
+					if p.widgets[i].ID == p.rotatingWidgetID {
+						p.widgets[i].Rotation.Degrees = newDeg
+						if p.selectedWidgetID == p.rotatingWidgetID {
+							p.editingRotation = fmt.Sprintf("%.1f", newDeg)
+						}
+						break
+					}
+				}
+			}
+
+			// Resize widget via SE handle (inverse-rotation corrected)
+			if p.resizingWidgetID != "" {
+				dx := clientX - p.resizeStartCliX
+				dy := clientY - p.resizeStartCliY
+				rad := p.resizeStartDeg * math.Pi / 180
+				cosA := math.Cos(rad)
+				sinA := math.Sin(rad)
+				dxLocal := dx*cosA + dy*sinA
+				dyLocal := -dx*sinA + dy*cosA
 				const minSize = 20
-				newW := p.resizeStartWidth + int(dx)
-				newH := p.resizeStartHeight + int(dy)
+				newW := p.resizeStartW + int(dxLocal)
+				newH := p.resizeStartH + int(dyLocal)
 				if newW < minSize {
 					newW = minSize
 				}
@@ -986,19 +1107,22 @@ func (p *Project) renderSceneCanvas() app.UI {
 				}
 				for i := range p.widgets {
 					if p.widgets[i].ID == p.resizingWidgetID {
-						p.widgets[i].Width = newW
-						p.widgets[i].Height = newH
+						p.widgets[i].Size.Width = newW
+						p.widgets[i].Size.Height = newH
+						if p.selectedWidgetID == p.resizingWidgetID {
+							p.editingWidth = strconv.Itoa(newW)
+							p.editingHeight = strconv.Itoa(newH)
+						}
 						break
 					}
 				}
 			}
 		}).
 		OnMouseUp(func(ctx app.Context, e app.Event) {
-			p.finalizeDragResize(ctx)
+			p.finalizeAllDrags(ctx)
 		}).
 		OnMouseLeave(func(ctx app.Context, e app.Event) {
-			// save state when cursor leaves canvas mid-drag
-			p.finalizeDragResize(ctx)
+			p.finalizeAllDrags(ctx)
 		}).
 		OnDragOver(func(ctx app.Context, e app.Event) {
 			e.PreventDefault()
@@ -1020,10 +1144,7 @@ func (p *Project) renderSceneCanvas() app.UI {
 			p.createWidget(ctx, typeID, x, y)
 		}).
 		OnClick(func(ctx app.Context, e app.Event) {
-			p.selectedWidgetID = ""
-			p.editingWidgetName = ""
-			p.editingWidgetWidth = ""
-			p.editingWidgetHeight = ""
+			p.clearWidgetSelection()
 		}).
 		Body(widgetEls...)
 
@@ -1036,7 +1157,187 @@ func (p *Project) renderSceneCanvas() app.UI {
 		Body(canvas)
 }
 
-// ── Right panel: Properties ───────────────────────────────────────────────────
+// renderWidget renders a single widget element on the canvas using a CSS
+// transformation matrix. When selected, overlay handles are shown:
+//   - Orange circle: origin anchor (drag to move anchor within widget)
+//   - Blue circle + line: rotation handle (drag to rotate)
+//   - Blue square corner: SE resize handle (drag to resize)
+func (p *Project) renderWidget(w widgetItem) app.UI {
+	wid := w.ID
+	isSelected := p.selectedWidgetID == wid
+
+	// Local pixel position of the origin anchor within the widget.
+	ox := w.Origin.X * float64(w.Size.Width)
+	oy := w.Origin.Y * float64(w.Size.Height)
+
+	// Visual style for selection state.
+	border := "1.5px solid #bbb"
+	bg := "rgba(240,240,240,0.85)"
+	if isSelected {
+		border = "2px solid #0066cc"
+		bg = "rgba(235,245,255,0.92)"
+	}
+
+	// ── Widget content (name label) ─────────────────────────────────────────
+	content := app.Div().
+		Style("position", "absolute").
+		Style("inset", "0").
+		Style("display", "flex").
+		Style("align-items", "center").
+		Style("justify-content", "center").
+		Style("overflow", "hidden").
+		Style("padding", "0 8px").
+		Style("box-sizing", "border-box").
+		Style("background", bg).
+		Style("border", border).
+		Style("border-radius", "4px").
+		Style("cursor", "move").
+		Style("user-select", "none").
+		Body(
+			app.Span().
+				Style("font-size", "12px").
+				Style("white-space", "nowrap").
+				Style("text-overflow", "ellipsis").
+				Style("overflow", "hidden").
+				Text(w.Name),
+		).
+		OnMouseDown(func(ctx app.Context, e app.Event) {
+			e.Call("stopPropagation")
+			e.PreventDefault()
+			p.selectWidget(wid)
+			p.draggingWidgetID = wid
+			p.dragStartCliX = e.Get("clientX").Float()
+			p.dragStartCliY = e.Get("clientY").Float()
+			p.dragStartPosX = w.Position.X
+			p.dragStartPosY = w.Position.Y
+		}).
+		OnClick(func(ctx app.Context, e app.Event) {
+			e.Call("stopPropagation")
+		})
+
+	bodyItems := []app.UI{content}
+
+	// ── Selection handles (only when selected) ──────────────────────────────
+	if isSelected {
+		// Rotation arm: vertical line from origin toward the rotation handle
+		const rotHandleDist = 40.0 // px above origin in local space
+		rotLine := app.Div().
+			Style("position", "absolute").
+			Style("left", fmt.Sprintf("%.1fpx", ox-1)).
+			Style("top", fmt.Sprintf("%.1fpx", oy-rotHandleDist)).
+			Style("width", "2px").
+			Style("height", fmt.Sprintf("%.0fpx", rotHandleDist)).
+			Style("background", "#0066cc").
+			Style("pointer-events", "none").
+			Style("z-index", "1")
+
+		// Rotation handle circle (above the origin in local space)
+		rotHandle := app.Div().
+			Style("position", "absolute").
+			Style("left", fmt.Sprintf("%.1fpx", ox-8)).
+			Style("top", fmt.Sprintf("%.1fpx", oy-rotHandleDist-8)).
+			Style("width", "16px").
+			Style("height", "16px").
+			Style("background", "#0066cc").
+			Style("border", "2px solid #fff").
+			Style("border-radius", "50%").
+			Style("cursor", "alias").
+			Style("z-index", "3").
+			Style("box-shadow", "0 1px 3px rgba(0,0,0,0.3)").
+			OnMouseDown(func(ctx app.Context, e app.Event) {
+				e.Call("stopPropagation")
+				e.PreventDefault()
+
+				rad := w.Rotation.Degrees * math.Pi / 180
+				sinA := math.Sin(rad)
+				cosA := math.Cos(rad)
+
+				// Compute origin position in client coordinates from handle rect.
+				// The rotation handle is placed at local (ox, oy - rotHandleDist).
+				// After the widget matrix transform, its client position is:
+				//   handleClientX = (posX + ox + rotHandleDist*sinA) + canvasClientX
+				//   handleClientY = (posY + oy - rotHandleDist*cosA) + canvasClientY
+				// So: originClientX = handleClientX - rotHandleDist*sinA
+				//     originClientY = handleClientY + rotHandleDist*cosA
+				handleRect := e.Get("currentTarget").Call("getBoundingClientRect")
+				handleCX := (handleRect.Get("left").Float() + handleRect.Get("right").Float()) / 2
+				handleCY := (handleRect.Get("top").Float() + handleRect.Get("bottom").Float()) / 2
+
+				p.rotOriginCliX = handleCX - rotHandleDist*sinA
+				p.rotOriginCliY = handleCY + rotHandleDist*cosA
+				p.rotStartAngle = math.Atan2(handleCY-p.rotOriginCliY, handleCX-p.rotOriginCliX)
+				p.rotStartDeg = w.Rotation.Degrees
+				p.rotatingWidgetID = wid
+			})
+
+		// Origin handle: orange circle at anchor point
+		originHandle := app.Div().
+			Style("position", "absolute").
+			Style("left", fmt.Sprintf("%.1fpx", ox-7)).
+			Style("top", fmt.Sprintf("%.1fpx", oy-7)).
+			Style("width", "14px").
+			Style("height", "14px").
+			Style("background", "#ff8c00").
+			Style("border", "2px solid #fff").
+			Style("border-radius", "50%").
+			Style("cursor", "crosshair").
+			Style("z-index", "3").
+			Style("box-shadow", "0 1px 3px rgba(0,0,0,0.3)").
+			OnMouseDown(func(ctx app.Context, e app.Event) {
+				e.Call("stopPropagation")
+				e.PreventDefault()
+				p.selectWidget(wid)
+				p.draggingOriginID = wid
+				p.originCliX = e.Get("clientX").Float()
+				p.originCliY = e.Get("clientY").Float()
+				p.originStartOX = w.Origin.X
+				p.originStartOY = w.Origin.Y
+				p.originStartPosX = w.Position.X
+				p.originStartPosY = w.Position.Y
+				p.originDragW = w.Size.Width
+				p.originDragH = w.Size.Height
+				p.originDragRotDeg = w.Rotation.Degrees
+			})
+
+		// SE resize handle: small square at bottom-right corner
+		resizeHandle := app.Div().
+			Style("position", "absolute").
+			Style("right", "0").
+			Style("bottom", "0").
+			Style("width", "12px").
+			Style("height", "12px").
+			Style("background", "#0066cc").
+			Style("border", "2px solid #fff").
+			Style("border-radius", "3px 0 4px 0").
+			Style("cursor", "se-resize").
+			Style("z-index", "3").
+			OnMouseDown(func(ctx app.Context, e app.Event) {
+				e.Call("stopPropagation")
+				e.PreventDefault()
+				p.resizingWidgetID = wid
+				p.resizeStartCliX = e.Get("clientX").Float()
+				p.resizeStartCliY = e.Get("clientY").Float()
+				p.resizeStartW = w.Size.Width
+				p.resizeStartH = w.Size.Height
+				p.resizeStartDeg = w.Rotation.Degrees
+			})
+
+		bodyItems = append(bodyItems, rotLine, rotHandle, originHandle, resizeHandle)
+	}
+
+	return app.Div().
+		Style("position", "absolute").
+		Style("left", "0").
+		Style("top", "0").
+		Style("width", fmt.Sprintf("%dpx", w.Size.Width)).
+		Style("height", fmt.Sprintf("%dpx", w.Size.Height)).
+		Style("transform-origin", "0 0").
+		Style("transform", widgetMatrixCSS(w)).
+		Style("overflow", "visible").
+		Body(bodyItems...)
+}
+
+// ── Right panel: Properties ────────────────────────────────────────────────────
 
 func (p *Project) renderPropertiesPanel() app.UI {
 	var content app.UI
@@ -1064,7 +1365,7 @@ func (p *Project) renderPropertiesPanel() app.UI {
 	return app.Div().
 		Style("display", "flex").
 		Style("flex-direction", "column").
-		Style("width", "240px").
+		Style("width", "260px").
 		Style("flex-shrink", "0").
 		Style("min-height", "0").
 		Style("overflow-y", "auto").
@@ -1084,6 +1385,8 @@ func (p *Project) renderPropertiesPanel() app.UI {
 }
 
 func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
+	wid := w.ID
+
 	tagNameOf := func(id string) string {
 		for _, t := range p.tags {
 			if t.ID == id {
@@ -1093,7 +1396,189 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 		return id
 	}
 
-	// current tag rows
+	// ── Section header helper ─────────────────────────────────────────────
+	sectionHeader := func(label string) app.UI {
+		return app.Div().
+			Style("font-size", "10px").
+			Style("font-weight", "700").
+			Style("color", "#888").
+			Style("letter-spacing", "0.6px").
+			Style("text-transform", "uppercase").
+			Style("margin-bottom", "6px").
+			Style("margin-top", "2px").
+			Text(label)
+	}
+
+	inputStyle := func(el app.HTMLInput) app.HTMLInput {
+		return el.
+			Style("font-size", "12px").
+			Style("padding", "3px 5px").
+			Style("border", "1px solid #ccc").
+			Style("border-radius", "3px").
+			Style("box-sizing", "border-box")
+	}
+
+	smallLabel := func(txt string) app.UI {
+		return app.Span().
+			Style("font-size", "11px").
+			Style("color", "#888").
+			Style("min-width", "12px").
+			Style("text-align", "center").
+			Text(txt)
+	}
+
+	applyBtn := func(onClick func(ctx app.Context, e app.Event)) app.UI {
+		return app.Button().
+			Style("font-size", "11px").
+			Style("padding", "3px 8px").
+			Style("cursor", "pointer").
+			Style("border", "1px solid #ccc").
+			Style("border-radius", "3px").
+			Style("background", "#f0f0f0").
+			Style("white-space", "nowrap").
+			Text("Apply").
+			OnClick(onClick)
+	}
+
+	row2 := func(items ...app.UI) app.UI {
+		return app.Div().
+			Style("display", "flex").
+			Style("align-items", "center").
+			Style("gap", "4px").
+			Style("margin-bottom", "8px").
+			Body(items...)
+	}
+
+	section := func(items ...app.UI) app.UI {
+		return app.Div().
+			Style("margin-bottom", "14px").
+			Style("padding-bottom", "12px").
+			Style("border-bottom", "1px solid #f0f0f0").
+			Body(items...)
+	}
+
+	// ── Name ─────────────────────────────────────────────────────────────
+	nameSection := section(
+		sectionHeader("Name"),
+		row2(
+			inputStyle(app.Input().
+				Type("text").
+				Value(p.editingWidgetName).
+				Style("flex", "1").
+				Style("min-width", "0").
+				OnInput(func(ctx app.Context, e app.Event) {
+					p.editingWidgetName = ctx.JSSrc().Get("value").String()
+				}).
+				OnKeyDown(func(ctx app.Context, e app.Event) {
+					if e.Get("key").String() == "Enter" {
+						p.saveWidgetName(ctx)
+					}
+				})),
+			applyBtn(func(ctx app.Context, e app.Event) { p.saveWidgetName(ctx) }),
+		),
+	)
+
+	// ── Position ─────────────────────────────────────────────────────────
+	posSection := section(
+		sectionHeader("Position (px)"),
+		row2(
+			smallLabel("X"),
+			inputStyle(app.Input().Type("number").Value(p.editingPosX).
+				Style("width", "68px").Style("text-align", "right").
+				OnInput(func(ctx app.Context, e app.Event) {
+					p.editingPosX = ctx.JSSrc().Get("value").String()
+				})),
+			smallLabel("Y"),
+			inputStyle(app.Input().Type("number").Value(p.editingPosY).
+				Style("width", "68px").Style("text-align", "right").
+				OnInput(func(ctx app.Context, e app.Event) {
+					p.editingPosY = ctx.JSSrc().Get("value").String()
+				})),
+			smallLabel("Z"),
+			inputStyle(app.Input().Type("number").Value(p.editingPosZ).
+				Style("width", "44px").Style("text-align", "right").
+				OnInput(func(ctx app.Context, e app.Event) {
+					p.editingPosZ = ctx.JSSrc().Get("value").String()
+				})),
+		),
+	)
+
+	// ── Size ─────────────────────────────────────────────────────────────
+	sizeSection := section(
+		sectionHeader("Size (px)"),
+		row2(
+			smallLabel("W"),
+			inputStyle(app.Input().Type("number").Value(p.editingWidth).
+				Style("width", "68px").Style("text-align", "right").
+				OnInput(func(ctx app.Context, e app.Event) {
+					p.editingWidth = ctx.JSSrc().Get("value").String()
+				})),
+			smallLabel("H"),
+			inputStyle(app.Input().Type("number").Value(p.editingHeight).
+				Style("width", "68px").Style("text-align", "right").
+				OnInput(func(ctx app.Context, e app.Event) {
+					p.editingHeight = ctx.JSSrc().Get("value").String()
+				})),
+		),
+	)
+
+	// ── Origin ────────────────────────────────────────────────────────────
+	originSection := section(
+		sectionHeader("Origin (0–1)"),
+		app.Div().
+			Style("font-size", "10px").
+			Style("color", "#aaa").
+			Style("margin-bottom", "5px").
+			Text("Anchor for rotation. (0,0)=top-left, (0.5,0.5)=center"),
+		row2(
+			smallLabel("X"),
+			inputStyle(app.Input().Type("number").Value(p.editingOriginX).
+				Style("width", "72px").Style("text-align", "right").
+				OnInput(func(ctx app.Context, e app.Event) {
+					p.editingOriginX = ctx.JSSrc().Get("value").String()
+				})),
+			smallLabel("Y"),
+			inputStyle(app.Input().Type("number").Value(p.editingOriginY).
+				Style("width", "72px").Style("text-align", "right").
+				OnInput(func(ctx app.Context, e app.Event) {
+					p.editingOriginY = ctx.JSSrc().Get("value").String()
+				})),
+		),
+	)
+
+	// ── Rotation ──────────────────────────────────────────────────────────
+	rotSection := section(
+		sectionHeader("Rotation (°)"),
+		row2(
+			smallLabel("°"),
+			inputStyle(app.Input().Type("number").Value(p.editingRotation).
+				Style("flex", "1").Style("text-align", "right").
+				OnInput(func(ctx app.Context, e app.Event) {
+					p.editingRotation = ctx.JSSrc().Get("value").String()
+				})),
+		),
+	)
+
+	// ── Apply geometry button ─────────────────────────────────────────────
+	applyGeomBtn := app.Div().
+		Style("margin-bottom", "14px").
+		Body(
+			app.Button().
+				Style("width", "100%").
+				Style("padding", "5px 0").
+				Style("font-size", "12px").
+				Style("cursor", "pointer").
+				Style("border", "1px solid #0066cc").
+				Style("border-radius", "3px").
+				Style("background", "#e8f0ff").
+				Style("color", "#0044aa").
+				Text("Apply Geometry").
+				OnClick(func(ctx app.Context, e app.Event) {
+					p.saveWidgetGeometry(ctx)
+				}),
+		)
+
+	// ── Tags ──────────────────────────────────────────────────────────────
 	tagRows := make([]app.UI, len(w.TagIDs))
 	for i, tid := range w.TagIDs {
 		tid := tid
@@ -1113,7 +1598,6 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 					Style("cursor", "pointer").
 					Style("color", "#c00").
 					Style("font-size", "14px").
-					Style("line-height", "1").
 					Style("padding", "0 2px").
 					Text("×").
 					OnClick(func(ctx app.Context, e app.Event) {
@@ -1122,7 +1606,6 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 			)
 	}
 
-	// available tags (not yet assigned)
 	assigned := make(map[string]bool, len(w.TagIDs))
 	for _, tid := range w.TagIDs {
 		assigned[tid] = true
@@ -1136,119 +1619,10 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 		}
 	}
 
-	wid := w.ID
-
-	return app.Div().Body(
-		// Name
-		app.Div().
-			Style("margin-bottom", "16px").
-			Body(
-				app.Div().
-					Style("font-size", "11px").
-					Style("font-weight", "600").
-					Style("color", "#666").
-					Style("margin-bottom", "4px").
-					Text("NAME"),
-				app.Div().
-					Style("display", "flex").
-					Style("gap", "4px").
-					Body(
-						app.Input().
-							Type("text").
-							Value(p.editingWidgetName).
-							Style("flex", "1").
-							Style("min-width", "0").
-							Style("font-size", "13px").
-							Style("padding", "4px 6px").
-							Style("border", "1px solid #ccc").
-							Style("border-radius", "3px").
-							OnInput(func(ctx app.Context, e app.Event) {
-								p.editingWidgetName = ctx.JSSrc().Get("value").String()
-							}).
-							OnKeyDown(func(ctx app.Context, e app.Event) {
-								if e.Get("key").String() == "Enter" {
-									p.saveWidgetName(ctx)
-								}
-							}),
-						app.Button().
-							Style("font-size", "12px").
-							Style("padding", "4px 8px").
-							Style("cursor", "pointer").
-							Style("border", "1px solid #ccc").
-							Style("border-radius", "3px").
-							Style("background", "#f5f5f5").
-							Text("Save").
-							OnClick(func(ctx app.Context, e app.Event) {
-								p.saveWidgetName(ctx)
-							}),
-					),
-			),
-
-		// Size
-		app.Div().
-			Style("margin-bottom", "16px").
-			Body(
-				app.Div().
-					Style("font-size", "11px").
-					Style("font-weight", "600").
-					Style("color", "#666").
-					Style("margin-bottom", "4px").
-					Text("SIZE (px)"),
-				app.Div().
-					Style("display", "flex").
-					Style("gap", "4px").
-					Style("align-items", "center").
-					Body(
-						app.Input().
-							Type("number").
-							Value(p.editingWidgetWidth).
-							Style("width", "60px").
-							Style("font-size", "13px").
-							Style("padding", "4px 6px").
-							Style("border", "1px solid #ccc").
-							Style("border-radius", "3px").
-							Style("text-align", "center").
-							OnInput(func(ctx app.Context, e app.Event) {
-								p.editingWidgetWidth = ctx.JSSrc().Get("value").String()
-							}),
-						app.Span().
-							Style("font-size", "12px").
-							Style("color", "#888").
-							Text("×"),
-						app.Input().
-							Type("number").
-							Value(p.editingWidgetHeight).
-							Style("width", "60px").
-							Style("font-size", "13px").
-							Style("padding", "4px 6px").
-							Style("border", "1px solid #ccc").
-							Style("border-radius", "3px").
-							Style("text-align", "center").
-							OnInput(func(ctx app.Context, e app.Event) {
-								p.editingWidgetHeight = ctx.JSSrc().Get("value").String()
-							}),
-						app.Button().
-							Style("font-size", "12px").
-							Style("padding", "4px 8px").
-							Style("cursor", "pointer").
-							Style("border", "1px solid #ccc").
-							Style("border-radius", "3px").
-							Style("background", "#f5f5f5").
-							Text("Apply").
-							OnClick(func(ctx app.Context, e app.Event) {
-								p.saveWidgetSize(ctx)
-							}),
-					),
-			),
-
-		// Tags
-		app.Div().Body(
-			app.Div().
-				Style("font-size", "11px").
-				Style("font-weight", "600").
-				Style("color", "#666").
-				Style("margin-bottom", "6px").
-				Text("TAGS"),
+	tagSection := app.Div().
+		Style("margin-bottom", "14px").
+		Body(
+			sectionHeader("Tags"),
 			app.Div().Body(tagRows...),
 			app.Div().
 				Style("display", "flex").
@@ -1278,27 +1652,54 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 							p.addTagToWidget(ctx, p.addingTagID)
 						}),
 				),
-		),
+		)
 
-		// Delete
-		app.Div().
-			Style("margin-top", "20px").
-			Style("padding-top", "16px").
-			Style("border-top", "1px solid #eee").
-			Body(
-				app.Button().
-					Style("width", "100%").
-					Style("padding", "5px 0").
-					Style("font-size", "12px").
-					Style("cursor", "pointer").
-					Style("border", "1px solid #e0b0b0").
-					Style("border-radius", "3px").
-					Style("background", "#fff5f5").
-					Style("color", "#c00").
-					Text("Delete Widget").
-					OnClick(func(ctx app.Context, e app.Event) {
-						p.deleteWidget(ctx, wid)
-					}),
-			),
+	// ── Transform matrix display (read-only) ──────────────────────────────
+	matrix := widgetMatrixCSS(w)
+	matrixDisplay := app.Div().
+		Style("margin-bottom", "14px").
+		Body(
+			sectionHeader("Transform Matrix"),
+			app.Div().
+				Style("font-size", "10px").
+				Style("font-family", "monospace").
+				Style("color", "#666").
+				Style("background", "#f8f8f8").
+				Style("border", "1px solid #e8e8e8").
+				Style("border-radius", "3px").
+				Style("padding", "4px 6px").
+				Style("word-break", "break-all").
+				Text(matrix),
+		)
+
+	// ── Delete ────────────────────────────────────────────────────────────
+	deleteBtn := app.Div().
+		Style("padding-top", "4px").
+		Body(
+			app.Button().
+				Style("width", "100%").
+				Style("padding", "5px 0").
+				Style("font-size", "12px").
+				Style("cursor", "pointer").
+				Style("border", "1px solid #e0b0b0").
+				Style("border-radius", "3px").
+				Style("background", "#fff5f5").
+				Style("color", "#c00").
+				Text("Delete Widget").
+				OnClick(func(ctx app.Context, e app.Event) {
+					p.deleteWidget(ctx, wid)
+				}),
+		)
+
+	return app.Div().Body(
+		nameSection,
+		posSection,
+		sizeSection,
+		originSection,
+		rotSection,
+		applyGeomBtn,
+		tagSection,
+		matrixDisplay,
+		deleteBtn,
 	)
 }
