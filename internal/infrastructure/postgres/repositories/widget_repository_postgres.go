@@ -47,7 +47,7 @@ func (r widgetRepositoryPostgresImpl) Save(ctx context.Context, w widget.Widget)
 			w.Size().Width(), w.Size().Height(),
 			w.Origin().X(), w.Origin().Y(),
 			w.Rotation().Degrees(),
-			w.TypeID().UUID(), nullableUUID(w.SceneID().UUID()),
+			w.TypeID().UUID(), w.SceneID().UUID(),
 			pq.Array(w.Labels()), pq.Array(tagIDStrings),
 			version.Committed[widget.Widget]().Number(),
 		)
@@ -81,7 +81,7 @@ func (r widgetRepositoryPostgresImpl) Save(ctx context.Context, w widget.Widget)
 			w.Size().Width(), w.Size().Height(),
 			w.Origin().X(), w.Origin().Y(),
 			w.Rotation().Degrees(),
-			w.TypeID().UUID(), nullableUUID(w.SceneID().UUID()),
+			w.TypeID().UUID(), w.SceneID().UUID(),
 			pq.Array(w.Labels()), pq.Array(tagIDStrings),
 			w.ID().UUID(), w.Version().Number(),
 		)
@@ -105,13 +105,6 @@ func (r widgetRepositoryPostgresImpl) Save(ctx context.Context, w widget.Widget)
 	return nil, fmt.Errorf("undefined behavior with version %d", w.Version().Number())
 }
 
-// nullableUUID returns nil for uuid.Nil (no scene assigned) and a pointer otherwise.
-func nullableUUID(u uuid.UUID) *uuid.UUID {
-	if u == uuid.Nil {
-		return nil
-	}
-	return &u
-}
 
 func (r widgetRepositoryPostgresImpl) classifyUpdateConflict(ctx context.Context, widgetID id.ID[widget.Widget]) error {
 	var exists bool
@@ -198,7 +191,7 @@ func (r widgetRepositoryPostgresImpl) scanWidget(
 		originX, originY float64
 		rotDegrees       float64
 		typeID           uuid.UUID
-		sceneID          *uuid.UUID
+		sceneID          uuid.UUID
 		labels           pq.StringArray
 		rawTagIDs        pq.StringArray
 		ver              int
@@ -221,7 +214,7 @@ func (r widgetRepositoryPostgresImpl) reconstruct(
 	aWidth, aHeight int,
 	anOriginX, anOriginY float64,
 	aRotDegrees float64,
-	aTypeID uuid.UUID, aSceneID *uuid.UUID,
+	aTypeID uuid.UUID, aSceneID uuid.UUID,
 	someLabels pq.StringArray, someTagIDs pq.StringArray,
 	aVersion int,
 ) (widget.Widget, error) {
@@ -248,11 +241,7 @@ func (r widgetRepositoryPostgresImpl) reconstruct(
 
 	typeID := id.NewID(id.IDWithUUID[widget.WidgetType](aTypeID))
 
-	var sceneUUID uuid.UUID
-	if aSceneID != nil {
-		sceneUUID = *aSceneID
-	}
-	sceneID := id.NewID(id.IDWithUUID[scene.Scene](sceneUUID))
+	sceneID := id.NewID(id.IDWithUUID[scene.Scene](aSceneID))
 
 	tagIDs := make([]id.ID[tag.Tag], len(someTagIDs))
 	for i, s := range someTagIDs {
