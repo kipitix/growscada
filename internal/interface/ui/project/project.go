@@ -129,6 +129,18 @@ type Project struct {
 
 	draggedTypeID string
 
+	// widget drag-to-move
+	draggingWidgetID string
+	dragOffsetX      float64
+	dragOffsetY      float64
+
+	// widget resize
+	resizingWidgetID  string
+	resizeStartMouseX float64
+	resizeStartMouseY float64
+	resizeStartWidth  int
+	resizeStartHeight int
+
 	editingWidgetName   string
 	editingWidgetWidth  string
 	editingWidgetHeight string
@@ -540,6 +552,32 @@ func (p *Project) putWidget(ctx app.Context, w widgetItem) {
 	})
 }
 
+// finalizeDragResize saves the widget after a drag-move or mouse-resize gesture ends.
+func (p *Project) finalizeDragResize(ctx app.Context) {
+	if p.draggingWidgetID != "" {
+		for i := range p.widgets {
+			if p.widgets[i].ID == p.draggingWidgetID {
+				p.putWidget(ctx, p.widgets[i])
+				break
+			}
+		}
+		p.draggingWidgetID = ""
+	}
+	if p.resizingWidgetID != "" {
+		for i := range p.widgets {
+			if p.widgets[i].ID == p.resizingWidgetID {
+				if p.selectedWidgetID == p.resizingWidgetID {
+					p.editingWidgetWidth = strconv.Itoa(p.widgets[i].Width)
+					p.editingWidgetHeight = strconv.Itoa(p.widgets[i].Height)
+				}
+				p.putWidget(ctx, p.widgets[i])
+				break
+			}
+		}
+		p.resizingWidgetID = ""
+	}
+}
+
 // ── Render ────────────────────────────────────────────────────────────────────
 
 func (p *Project) Render() app.UI {
@@ -818,6 +856,39 @@ func (p *Project) renderSceneCanvas() app.UI {
 			bg = "#f0f5ff"
 		}
 
+		// resize handle — visible only when widget is selected
+		var resizeHandle app.UI
+		if isSelected {
+			resizeHandle = app.Div().
+				Style("position", "absolute").
+				Style("right", "0").
+				Style("bottom", "0").
+				Style("width", "12px").
+				Style("height", "12px").
+				Style("background", "rgba(0,102,204,0.55)").
+				Style("border-radius", "2px 0 4px 0").
+				Style("cursor", "se-resize").
+				Style("flex-shrink", "0").
+				OnMouseDown(func(ctx app.Context, e app.Event) {
+					e.Call("stopPropagation")
+					e.PreventDefault()
+					p.resizingWidgetID = wid
+					p.resizeStartMouseX = e.Get("clientX").Float()
+					p.resizeStartMouseY = e.Get("clientY").Float()
+					p.resizeStartWidth = ww
+					p.resizeStartHeight = wh
+				})
+		} else {
+			resizeHandle = app.Span()
+		}
+
+		widgetCursor := "move"
+		if p.resizingWidgetID == wid {
+			widgetCursor = "se-resize"
+		} else if p.draggingWidgetID == wid {
+			widgetCursor = "grabbing"
+		}
+
 		widgetEls = append(widgetEls, app.Div().
 			Style("position", "absolute").
 			Style("left", fmt.Sprintf("%.0fpx", wx)).
@@ -828,7 +899,7 @@ func (p *Project) renderSceneCanvas() app.UI {
 			Style("border", border).
 			Style("border-radius", "4px").
 			Style("font-size", "12px").
-			Style("cursor", "pointer").
+			Style("cursor", widgetCursor).
 			Style("user-select", "none").
 			Style("box-shadow", shadow).
 			Style("display", "flex").
@@ -843,12 +914,29 @@ func (p *Project) renderSceneCanvas() app.UI {
 					Style("text-overflow", "ellipsis").
 					Style("overflow", "hidden").
 					Text(wname),
+				resizeHandle,
 			).
-			OnClick(func(ctx app.Context, e app.Event) {
+			OnMouseDown(func(ctx app.Context, e app.Event) {
 				e.Call("stopPropagation")
 				p.selectWidget(wid)
+				// capture click offset inside the widget so it doesn't jump on drag
+				rect := e.Get("currentTarget").Call("getBoundingClientRect")
+				p.draggingWidgetID = wid
+				p.dragOffsetX = e.Get("clientX").Float() - rect.Get("left").Float()
+				p.dragOffsetY = e.Get("clientY").Float() - rect.Get("top").Float()
+			}).
+			OnClick(func(ctx app.Context, e app.Event) {
+				// stop click from reaching canvas's OnClick (which deselects)
+				e.Call("stopPropagation")
 			}),
 		)
+	}
+
+	canvasCursor := "default"
+	if p.draggingWidgetID != "" {
+		canvasCursor = "grabbing"
+	} else if p.resizingWidgetID != "" {
+		canvasCursor = "se-resize"
 	}
 
 	canvas := app.Div().
@@ -859,6 +947,59 @@ func (p *Project) renderSceneCanvas() app.UI {
 		Style("background-image", "radial-gradient(circle, #ccc 1px, transparent 1px)").
 		Style("background-size", "24px 24px").
 		Style("flex-shrink", "0").
+		Style("cursor", canvasCursor).
+		OnMouseMove(func(ctx app.Context, e app.Event) {
+			if p.draggingWidgetID == "" && p.resizingWidgetID == "" {
+				return
+			}
+			e.PreventDefault()
+
+			if p.draggingWidgetID != "" {
+				rect := e.Get("currentTarget").Call("getBoundingClientRect")
+				newX := e.Get("clientX").Float() - rect.Get("left").Float() - p.dragOffsetX
+				newY := e.Get("clientY").Float() - rect.Get("top").Float() - p.dragOffsetY
+				if newX < 0 {
+					newX = 0
+				}
+				if newY < 0 {
+					newY = 0
+				}
+				for i := range p.widgets {
+					if p.widgets[i].ID == p.draggingWidgetID {
+						p.widgets[i].Coordinates.X = newX
+						p.widgets[i].Coordinates.Y = newY
+						break
+					}
+				}
+			} else {
+				// resizing
+				dx := e.Get("clientX").Float() - p.resizeStartMouseX
+				dy := e.Get("clientY").Float() - p.resizeStartMouseY
+				const minSize = 20
+				newW := p.resizeStartWidth + int(dx)
+				newH := p.resizeStartHeight + int(dy)
+				if newW < minSize {
+					newW = minSize
+				}
+				if newH < minSize {
+					newH = minSize
+				}
+				for i := range p.widgets {
+					if p.widgets[i].ID == p.resizingWidgetID {
+						p.widgets[i].Width = newW
+						p.widgets[i].Height = newH
+						break
+					}
+				}
+			}
+		}).
+		OnMouseUp(func(ctx app.Context, e app.Event) {
+			p.finalizeDragResize(ctx)
+		}).
+		OnMouseLeave(func(ctx app.Context, e app.Event) {
+			// save state when cursor leaves canvas mid-drag
+			p.finalizeDragResize(ctx)
+		}).
 		OnDragOver(func(ctx app.Context, e app.Event) {
 			e.PreventDefault()
 			e.Get("dataTransfer").Set("dropEffect", "copy")
