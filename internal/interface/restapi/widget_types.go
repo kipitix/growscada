@@ -5,8 +5,8 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/kipitix/growscada/internal/application"
-	"github.com/kipitix/growscada/internal/domain/id"
 	"github.com/kipitix/growscada/internal/domain/widget"
 	"github.com/kipitix/growscada/internal/interface/restapi/restdto"
 )
@@ -33,14 +33,7 @@ func (h WidgetTypesHandlers) GetWidgetTypes(w http.ResponseWriter, r *http.Reque
 // GetWidgetTypesByID handles GET /widget-types/{id}
 func (h WidgetTypesHandlers) GetWidgetTypesByID(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
-
-	idOpt, err := id.IDWithString[widget.WidgetType](idStr)
-	if err != nil {
-		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
-		return
-	}
-
-	inID, err := id.NewID[widget.WidgetType](idOpt)
+	inID, err := uuid.Parse(idStr)
 	if err != nil {
 		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
 		return
@@ -79,14 +72,7 @@ func (h WidgetTypesHandlers) PostWidgetTypes(w http.ResponseWriter, r *http.Requ
 // PutWidgetTypesByID handles PUT /widget-types/{id}
 func (h WidgetTypesHandlers) PutWidgetTypesByID(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
-
-	idOpt, err := id.IDWithString[widget.WidgetType](idStr)
-	if err != nil {
-		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
-		return
-	}
-
-	inID, err := id.NewID[widget.WidgetType](idOpt)
+	inID, err := uuid.Parse(idStr)
 	if err != nil {
 		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
 		return
@@ -118,14 +104,7 @@ func (h WidgetTypesHandlers) PutWidgetTypesByID(w http.ResponseWriter, r *http.R
 // DeleteWidgetTypesByID handles DELETE /widget-types/{id}
 func (h WidgetTypesHandlers) DeleteWidgetTypesByID(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
-
-	idOpt, err := id.IDWithString[widget.WidgetType](idStr)
-	if err != nil {
-		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
-		return
-	}
-
-	inID, err := id.NewID[widget.WidgetType](idOpt)
+	inID, err := uuid.Parse(idStr)
 	if err != nil {
 		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
 		return

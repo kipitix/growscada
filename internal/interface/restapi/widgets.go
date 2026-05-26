@@ -5,8 +5,8 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/kipitix/growscada/internal/application"
-	"github.com/kipitix/growscada/internal/domain/id"
 	"github.com/kipitix/growscada/internal/domain/widget"
 	"github.com/kipitix/growscada/internal/interface/restapi/restdto"
 )
@@ -18,15 +18,6 @@ type WidgetsHandlers struct {
 
 func NewWidgetsHandler(s application.WidgetService) *WidgetsHandlers {
 	return &WidgetsHandlers{service: s}
-}
-
-func parseWidgetID(s string) (id.ID[widget.Widget], error) {
-	opt, err := id.IDWithString[widget.Widget](s)
-	if err != nil {
-		return id.ID[widget.Widget]{}, err
-	}
-	widgetID, _ := id.NewID(opt)
-	return widgetID, nil
 }
 
 // GetWidgets handles GET /widgets
@@ -42,7 +33,7 @@ func (h WidgetsHandlers) GetWidgets(w http.ResponseWriter, r *http.Request) {
 // GetWidgetsByID handles GET /widgets/{id}
 func (h WidgetsHandlers) GetWidgetsByID(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
-	widgetID, err := parseWidgetID(idStr)
+	widgetID, err := uuid.Parse(idStr)
 	if err != nil {
 		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
 		return
@@ -81,7 +72,7 @@ func (h WidgetsHandlers) PostWidgets(w http.ResponseWriter, r *http.Request) {
 // PutWidgetsByID handles PUT /widgets/{id}
 func (h WidgetsHandlers) PutWidgetsByID(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
-	widgetID, err := parseWidgetID(idStr)
+	widgetID, err := uuid.Parse(idStr)
 	if err != nil {
 		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
 		return
@@ -93,7 +84,7 @@ func (h WidgetsHandlers) PutWidgetsByID(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	updated, err := h.service.UpdateWidget(r.Context(), restdto.NewUpdateWidgetInput(request, widgetID.UUID()))
+	updated, err := h.service.UpdateWidget(r.Context(), restdto.NewUpdateWidgetInput(request, widgetID))
 	if err != nil {
 		if errors.Is(err, widget.ErrWidgetNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
@@ -113,7 +104,7 @@ func (h WidgetsHandlers) PutWidgetsByID(w http.ResponseWriter, r *http.Request) 
 // DeleteWidgetsByID handles DELETE /widgets/{id}
 func (h WidgetsHandlers) DeleteWidgetsByID(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
-	widgetID, err := parseWidgetID(idStr)
+	widgetID, err := uuid.Parse(idStr)
 	if err != nil {
 		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
 		return

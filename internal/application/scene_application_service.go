@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/kipitix/growscada/internal/application/appdto"
 	"github.com/kipitix/growscada/internal/domain/event"
 	"github.com/kipitix/growscada/internal/domain/id"
@@ -14,10 +15,10 @@ import (
 // SceneService is the service interface for working with scenes.
 type SceneService interface {
 	FindAllScenes(context.Context) ([]appdto.Scene, error)
-	FindSceneByID(context.Context, id.ID[scene.Scene]) (appdto.Scene, error)
+	FindSceneByID(context.Context, uuid.UUID) (appdto.Scene, error)
 	CreateScene(context.Context, appdto.CreateSceneInput) (appdto.Scene, error)
 	UpdateScene(context.Context, appdto.UpdateSceneInput) (appdto.Scene, error)
-	DeleteSceneByID(context.Context, id.ID[scene.Scene]) (appdto.Scene, error)
+	DeleteSceneByID(context.Context, uuid.UUID) (appdto.Scene, error)
 }
 
 type sceneServiceImpl struct {
@@ -39,7 +40,8 @@ func (s sceneServiceImpl) FindAllScenes(ctx context.Context) ([]appdto.Scene, er
 	return appdto.NewSceneList(list), nil
 }
 
-func (s sceneServiceImpl) FindSceneByID(ctx context.Context, sceneID id.ID[scene.Scene]) (appdto.Scene, error) {
+func (s sceneServiceImpl) FindSceneByID(ctx context.Context, rawID uuid.UUID) (appdto.Scene, error) {
+	sceneID, _ := id.NewID(id.IDWithUUID[scene.Scene](rawID))
 	found, err := s.repository.FindByID(ctx, sceneID)
 	if err != nil {
 		return appdto.Scene{}, fmt.Errorf("error on find scene by id in repository: %w", err)
@@ -73,10 +75,7 @@ func (s sceneServiceImpl) CreateScene(ctx context.Context, input appdto.CreateSc
 }
 
 func (s sceneServiceImpl) UpdateScene(ctx context.Context, input appdto.UpdateSceneInput) (appdto.Scene, error) {
-	sceneID, err := id.NewID(id.IDWithUUID[scene.Scene](input.ID))
-	if err != nil {
-		return appdto.Scene{}, fmt.Errorf("cannot build scene id: %w", err)
-	}
+	sceneID, _ := id.NewID(id.IDWithUUID[scene.Scene](input.ID))
 
 	found, err := s.repository.FindByID(ctx, sceneID)
 	if err != nil {
@@ -105,7 +104,9 @@ func (s sceneServiceImpl) UpdateScene(ctx context.Context, input appdto.UpdateSc
 	return appdto.NewScene(saved), nil
 }
 
-func (s sceneServiceImpl) DeleteSceneByID(ctx context.Context, sceneID id.ID[scene.Scene]) (appdto.Scene, error) {
+func (s sceneServiceImpl) DeleteSceneByID(ctx context.Context, rawID uuid.UUID) (appdto.Scene, error) {
+	sceneID, _ := id.NewID(id.IDWithUUID[scene.Scene](rawID))
+
 	deleted, err := s.repository.DeleteByID(ctx, sceneID)
 	if err != nil {
 		return appdto.Scene{}, fmt.Errorf("cannot delete scene: %w", err)

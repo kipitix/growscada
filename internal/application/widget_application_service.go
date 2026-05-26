@@ -17,10 +17,10 @@ import (
 // WidgetService is the service interface for working with widget instances.
 type WidgetService interface {
 	FindAllWidgets(context.Context) ([]appdto.Widget, error)
-	FindWidgetByID(context.Context, id.ID[widget.Widget]) (appdto.Widget, error)
+	FindWidgetByID(context.Context, uuid.UUID) (appdto.Widget, error)
 	CreateWidget(context.Context, appdto.CreateWidgetInput) (appdto.Widget, error)
 	UpdateWidget(context.Context, appdto.UpdateWidgetInput) (appdto.Widget, error)
-	DeleteWidgetByID(context.Context, id.ID[widget.Widget]) (appdto.Widget, error)
+	DeleteWidgetByID(context.Context, uuid.UUID) (appdto.Widget, error)
 }
 
 type widgetServiceImpl struct {
@@ -42,7 +42,8 @@ func (s widgetServiceImpl) FindAllWidgets(ctx context.Context) ([]appdto.Widget,
 	return appdto.NewWidgetList(list), nil
 }
 
-func (s widgetServiceImpl) FindWidgetByID(ctx context.Context, widgetID id.ID[widget.Widget]) (appdto.Widget, error) {
+func (s widgetServiceImpl) FindWidgetByID(ctx context.Context, rawID uuid.UUID) (appdto.Widget, error) {
+	widgetID, _ := id.NewID(id.IDWithUUID[widget.Widget](rawID))
 	found, err := s.repository.FindByID(ctx, widgetID)
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("error on find widget by id in repository: %w", err)
@@ -72,15 +73,8 @@ func (s widgetServiceImpl) CreateWidget(ctx context.Context, input appdto.Create
 
 	rotation := widget.NewRotation(input.RotationDegrees)
 
-	typeID, err := id.NewID(id.IDWithUUID[widget.WidgetType](input.TypeID))
-	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot create widget because of type id: %w", err)
-	}
-
-	sceneID, err := id.NewID(id.IDWithUUID[scene.Scene](input.SceneID))
-	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot create widget because of scene id: %w", err)
-	}
+	typeID, _ := id.NewID(id.IDWithUUID[widget.WidgetType](input.TypeID))
+	sceneID, _ := id.NewID(id.IDWithUUID[scene.Scene](input.SceneID))
 
 	tagIDs, err := uuidsToTagIDs(input.TagIDs)
 	if err != nil {
@@ -111,10 +105,7 @@ func (s widgetServiceImpl) UpdateWidget(ctx context.Context, input appdto.Update
 		return appdto.Widget{}, fmt.Errorf("update requires a valid version (got %d)", input.Version)
 	}
 
-	widgetID, err := id.NewID(id.IDWithUUID[widget.Widget](input.ID))
-	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot build widget id: %w", err)
-	}
+	widgetID, _ := id.NewID(id.IDWithUUID[widget.Widget](input.ID))
 
 	newName, err := widget.NewWidgetName(input.Name)
 	if err != nil {
@@ -135,15 +126,8 @@ func (s widgetServiceImpl) UpdateWidget(ctx context.Context, input appdto.Update
 
 	rotation := widget.NewRotation(input.RotationDegrees)
 
-	typeID, err := id.NewID(id.IDWithUUID[widget.WidgetType](input.TypeID))
-	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot parse type id: %w", err)
-	}
-
-	sceneID, err := id.NewID(id.IDWithUUID[scene.Scene](input.SceneID))
-	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot parse scene id: %w", err)
-	}
+	typeID, _ := id.NewID(id.IDWithUUID[widget.WidgetType](input.TypeID))
+	sceneID, _ := id.NewID(id.IDWithUUID[scene.Scene](input.SceneID))
 
 	tagIDs, err := uuidsToTagIDs(input.TagIDs)
 	if err != nil {
@@ -174,7 +158,9 @@ func (s widgetServiceImpl) UpdateWidget(ctx context.Context, input appdto.Update
 	return appdto.NewWidget(saved), nil
 }
 
-func (s widgetServiceImpl) DeleteWidgetByID(ctx context.Context, widgetID id.ID[widget.Widget]) (appdto.Widget, error) {
+func (s widgetServiceImpl) DeleteWidgetByID(ctx context.Context, rawID uuid.UUID) (appdto.Widget, error) {
+	widgetID, _ := id.NewID(id.IDWithUUID[widget.Widget](rawID))
+
 	deleted, err := s.repository.DeleteByID(ctx, widgetID)
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot delete widget: %w", err)
@@ -188,10 +174,7 @@ func (s widgetServiceImpl) DeleteWidgetByID(ctx context.Context, widgetID id.ID[
 func uuidsToTagIDs(uuids []uuid.UUID) ([]id.ID[tag.Tag], error) {
 	tagIDs := make([]id.ID[tag.Tag], len(uuids))
 	for i, u := range uuids {
-		tid, err := id.NewID(id.IDWithUUID[tag.Tag](u))
-		if err != nil {
-			return nil, err
-		}
+		tid, _ := id.NewID(id.IDWithUUID[tag.Tag](u))
 		tagIDs[i] = tid
 	}
 	return tagIDs, nil

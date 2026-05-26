@@ -19,7 +19,6 @@ import (
 	"github.com/kipitix/growscada/internal/application"
 	"github.com/kipitix/growscada/internal/application/appdto"
 	"github.com/kipitix/growscada/internal/domain/event"
-	"github.com/kipitix/growscada/internal/domain/id"
 	"github.com/kipitix/growscada/internal/domain/tag"
 	"github.com/kipitix/growscada/internal/infrastructure/postgres/repositories"
 )
@@ -96,14 +95,12 @@ func newServiceWithBus() (application.TagService, event.EventBus) {
 	return application.NewTagService(repo, bus), bus
 }
 
-func mustTagIDFromUUID(u uuid.UUID) id.ID[tag.Tag] {
-	tagID, _ := id.NewID(id.IDWithUUID[tag.Tag](u))
-	return tagID
+func mustTagIDFromUUID(u uuid.UUID) uuid.UUID {
+	return u
 }
 
-func mustNewTagID() id.ID[tag.Tag] {
-	tagID, _ := id.NewID[tag.Tag]()
-	return tagID
+func mustNewTagID() uuid.UUID {
+	return uuid.New()
 }
 
 // --- CreateTag ---

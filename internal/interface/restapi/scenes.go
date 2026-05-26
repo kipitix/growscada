@@ -5,8 +5,8 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/kipitix/growscada/internal/application"
-	"github.com/kipitix/growscada/internal/domain/id"
 	"github.com/kipitix/growscada/internal/domain/scene"
 	"github.com/kipitix/growscada/internal/interface/restapi/restdto"
 )
@@ -18,15 +18,6 @@ type ScenesHandlers struct {
 
 func NewScenesHandler(s application.SceneService) *ScenesHandlers {
 	return &ScenesHandlers{service: s}
-}
-
-func parseSceneID(s string) (id.ID[scene.Scene], error) {
-	opt, err := id.IDWithString[scene.Scene](s)
-	if err != nil {
-		return id.ID[scene.Scene]{}, err
-	}
-	sceneID, _ := id.NewID(opt)
-	return sceneID, nil
 }
 
 // GetScenes handles GET /scenes
@@ -42,7 +33,7 @@ func (h ScenesHandlers) GetScenes(w http.ResponseWriter, r *http.Request) {
 // GetScenesByID handles GET /scenes/{id}
 func (h ScenesHandlers) GetScenesByID(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
-	sceneID, err := parseSceneID(idStr)
+	sceneID, err := uuid.Parse(idStr)
 	if err != nil {
 		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
 		return
@@ -81,7 +72,7 @@ func (h ScenesHandlers) PostScenes(w http.ResponseWriter, r *http.Request) {
 // PutScenesByID handles PUT /scenes/{id}
 func (h ScenesHandlers) PutScenesByID(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
-	sceneID, err := parseSceneID(idStr)
+	sceneID, err := uuid.Parse(idStr)
 	if err != nil {
 		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
 		return
@@ -93,7 +84,7 @@ func (h ScenesHandlers) PutScenesByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := h.service.UpdateScene(r.Context(), restdto.NewUpdateSceneInput(request, sceneID.UUID()))
+	updated, err := h.service.UpdateScene(r.Context(), restdto.NewUpdateSceneInput(request, sceneID))
 	if err != nil {
 		if errors.Is(err, scene.ErrSceneNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
@@ -113,7 +104,7 @@ func (h ScenesHandlers) PutScenesByID(w http.ResponseWriter, r *http.Request) {
 // DeleteScenesByID handles DELETE /scenes/{id}
 func (h ScenesHandlers) DeleteScenesByID(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
-	sceneID, err := parseSceneID(idStr)
+	sceneID, err := uuid.Parse(idStr)
 	if err != nil {
 		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
 		return

@@ -10,7 +10,6 @@ import (
 	"github.com/kipitix/growscada/internal/application"
 	"github.com/kipitix/growscada/internal/application/appdto"
 	"github.com/kipitix/growscada/internal/domain/event"
-	"github.com/kipitix/growscada/internal/domain/id"
 	"github.com/kipitix/growscada/internal/domain/widget"
 	"github.com/kipitix/growscada/internal/infrastructure/postgres/repositories"
 )
@@ -74,8 +73,7 @@ func TestCreateWidget_Valid_FieldsAreStored(t *testing.T) {
 		t.Fatalf("CreateWidget: %v", err)
 	}
 
-	widgetID, _ := id.NewID(id.IDWithUUID[widget.Widget](created.ID))
-	found, err := svc.FindWidgetByID(ctx, widgetID)
+	found, err := svc.FindWidgetByID(ctx, created.ID)
 	if err != nil {
 		t.Fatalf("FindWidgetByID: %v", err)
 	}
@@ -175,8 +173,7 @@ func TestFindWidgetByID_Existing_ReturnsCorrectFields(t *testing.T) {
 		t.Fatalf("CreateWidget: %v", err)
 	}
 
-	widgetID, _ := id.NewID(id.IDWithUUID[widget.Widget](created.ID))
-	found, err := svc.FindWidgetByID(ctx, widgetID)
+	found, err := svc.FindWidgetByID(ctx, created.ID)
 
 	if err != nil {
 		t.Fatalf("FindWidgetByID: %v", err)
@@ -199,8 +196,7 @@ func TestFindWidgetByID_Existing_TransformMatrixIsPresent(t *testing.T) {
 		t.Fatalf("CreateWidget: %v", err)
 	}
 
-	widgetID, _ := id.NewID(id.IDWithUUID[widget.Widget](created.ID))
-	found, err := svc.FindWidgetByID(ctx, widgetID)
+	found, err := svc.FindWidgetByID(ctx, created.ID)
 	if err != nil {
 		t.Fatalf("FindWidgetByID: %v", err)
 	}
@@ -218,8 +214,7 @@ func TestFindWidgetByID_NotFound_ReturnsWrappedError(t *testing.T) {
 	cleanWidgets(t)
 	svc := newWidgetService()
 
-	nonExistentID, _ := id.NewID[widget.Widget]()
-	_, err := svc.FindWidgetByID(context.Background(), nonExistentID)
+	_, err := svc.FindWidgetByID(context.Background(), uuid.New())
 
 	if err == nil {
 		t.Fatal("expected error, got nil")
@@ -295,8 +290,7 @@ func TestUpdateWidget_Valid_FieldsAreUpdated(t *testing.T) {
 		t.Fatalf("UpdateWidget: %v", err)
 	}
 
-	widgetID, _ := id.NewID(id.IDWithUUID[widget.Widget](created.ID))
-	found, err := svc.FindWidgetByID(ctx, widgetID)
+	found, err := svc.FindWidgetByID(ctx, created.ID)
 	if err != nil {
 		t.Fatalf("FindWidgetByID: %v", err)
 	}
@@ -421,8 +415,7 @@ func TestDeleteWidget_Existing_ReturnsDeletedItem(t *testing.T) {
 		t.Fatalf("CreateWidget: %v", err)
 	}
 
-	widgetID, _ := id.NewID(id.IDWithUUID[widget.Widget](created.ID))
-	deleted, err := svc.DeleteWidgetByID(ctx, widgetID)
+	deleted, err := svc.DeleteWidgetByID(ctx, created.ID)
 
 	if err != nil {
 		t.Fatalf("DeleteWidgetByID: %v", err)
@@ -442,12 +435,11 @@ func TestDeleteWidget_Existing_RemovedFromDB(t *testing.T) {
 		t.Fatalf("CreateWidget: %v", err)
 	}
 
-	widgetID, _ := id.NewID(id.IDWithUUID[widget.Widget](created.ID))
-	if _, err = svc.DeleteWidgetByID(ctx, widgetID); err != nil {
+	if _, err = svc.DeleteWidgetByID(ctx, created.ID); err != nil {
 		t.Fatalf("DeleteWidgetByID: %v", err)
 	}
 
-	_, err = svc.FindWidgetByID(ctx, widgetID)
+	_, err = svc.FindWidgetByID(ctx, created.ID)
 	if !errors.Is(err, widget.ErrWidgetNotFound) {
 		t.Errorf("expected ErrWidgetNotFound after delete, got: %v", err)
 	}
@@ -457,8 +449,7 @@ func TestDeleteWidget_NotFound_ReturnsWrappedError(t *testing.T) {
 	cleanWidgets(t)
 	svc := newWidgetService()
 
-	nonExistentID, _ := id.NewID[widget.Widget]()
-	_, err := svc.DeleteWidgetByID(context.Background(), nonExistentID)
+	_, err := svc.DeleteWidgetByID(context.Background(), uuid.New())
 
 	if err == nil {
 		t.Fatal("expected error, got nil")
@@ -512,8 +503,7 @@ func TestDeleteWidget_Success_PublishesDeletedEvent(t *testing.T) {
 		received = append(received, e)
 	})
 
-	widgetID, _ := id.NewID(id.IDWithUUID[widget.Widget](created.ID))
-	if _, err = svc.DeleteWidgetByID(ctx, widgetID); err != nil {
+	if _, err = svc.DeleteWidgetByID(ctx, created.ID); err != nil {
 		t.Fatalf("DeleteWidgetByID: %v", err)
 	}
 
