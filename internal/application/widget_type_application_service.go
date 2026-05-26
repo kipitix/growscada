@@ -44,7 +44,7 @@ func (s widgetTypeServiceImpl) FindAllWidgetTypes(ctx context.Context) ([]appdto
 }
 
 func (s widgetTypeServiceImpl) FindWidgetTypeByID(ctx context.Context, rawID uuid.UUID) (appdto.WidgetType, error) {
-	widgetTypeID, _ := id.NewID(id.IDWithUUID[widget.WidgetType](rawID))
+	widgetTypeID := id.NewID(id.IDWithUUID[widget.WidgetType](rawID))
 	wt, err := s.repository.FindByID(ctx, widgetTypeID)
 	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("error on find widget type by id in repository: %w", err)
@@ -93,7 +93,7 @@ func (s widgetTypeServiceImpl) CreateWidgetType(ctx context.Context, input appdt
 }
 
 func (s widgetTypeServiceImpl) UpdateWidgetType(ctx context.Context, input appdto.UpdateWidgetTypeInput) (appdto.WidgetType, error) {
-	widgetTypeID, _ := id.NewID(id.IDWithUUID[widget.WidgetType](input.ID))
+	widgetTypeID := id.NewID(id.IDWithUUID[widget.WidgetType](input.ID))
 
 	found, err := s.repository.FindByID(ctx, widgetTypeID)
 	if err != nil {
@@ -138,7 +138,7 @@ func (s widgetTypeServiceImpl) UpdateWidgetType(ctx context.Context, input appdt
 }
 
 func (s widgetTypeServiceImpl) DeleteWidgetTypeByID(ctx context.Context, rawID uuid.UUID) (appdto.WidgetType, error) {
-	widgetTypeID, _ := id.NewID(id.IDWithUUID[widget.WidgetType](rawID))
+	widgetTypeID := id.NewID(id.IDWithUUID[widget.WidgetType](rawID))
 
 	deleted, err := s.repository.DeleteByID(ctx, widgetTypeID)
 	if err != nil {

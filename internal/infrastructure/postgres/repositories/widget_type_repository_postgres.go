@@ -23,11 +23,7 @@ func NewWidgetTypeRepositoryPostgres(aDb *sql.DB) widget.WidgetTypeRepository {
 }
 
 func (r widgetTypeRepositoryPostgresImpl) NextID() id.ID[widget.WidgetType] {
-	newID, err := id.NewID[widget.WidgetType]()
-	if err != nil {
-		panic(err)
-	}
-	return newID
+	return id.NewID[widget.WidgetType]()
 }
 
 func (r widgetTypeRepositoryPostgresImpl) Save(ctx context.Context, wt widget.WidgetType) (widget.WidgetType, error) {
@@ -191,10 +187,7 @@ func (r widgetTypeRepositoryPostgresImpl) reconstruct(
 	aDefaultWidth, aDefaultHeight int,
 	aVersion int,
 ) (widget.WidgetType, error) {
-	newID, err := id.NewID(id.IDWithUUID[widget.WidgetType](aRawID))
-	if err != nil {
-		return nil, fmt.Errorf("cannot create widget type id: %w", err)
-	}
+	newID := id.NewID(id.IDWithUUID[widget.WidgetType](aRawID))
 
 	newName, err := widget.NewWidgetTypeName(aName)
 	if err != nil {

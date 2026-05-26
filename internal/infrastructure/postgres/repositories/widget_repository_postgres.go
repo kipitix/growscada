@@ -27,11 +27,7 @@ func NewWidgetRepositoryPostgres(aDb *sql.DB) widget.WidgetRepository {
 }
 
 func (r widgetRepositoryPostgresImpl) NextID() id.ID[widget.Widget] {
-	newID, err := id.NewID[widget.Widget]()
-	if err != nil {
-		panic(err)
-	}
-	return newID
+	return id.NewID[widget.Widget]()
 }
 
 func (r widgetRepositoryPostgresImpl) Save(ctx context.Context, w widget.Widget) (widget.Widget, error) {
@@ -229,7 +225,7 @@ func (r widgetRepositoryPostgresImpl) reconstruct(
 	someLabels pq.StringArray, someTagIDs pq.StringArray,
 	aVersion int,
 ) (widget.Widget, error) {
-	newID, _ := id.NewID(id.IDWithUUID[widget.Widget](aRawID))
+	newID := id.NewID(id.IDWithUUID[widget.Widget](aRawID))
 
 	newName, err := widget.NewWidgetName(aName)
 	if err != nil {
@@ -250,16 +246,13 @@ func (r widgetRepositoryPostgresImpl) reconstruct(
 
 	rotation := widget.NewRotation(aRotDegrees)
 
-	typeID, err := id.NewID(id.IDWithUUID[widget.WidgetType](aTypeID))
-	if err != nil {
-		return nil, fmt.Errorf("cannot create widget type id: %w", err)
-	}
+	typeID := id.NewID(id.IDWithUUID[widget.WidgetType](aTypeID))
 
 	var sceneUUID uuid.UUID
 	if aSceneID != nil {
 		sceneUUID = *aSceneID
 	}
-	sceneID, _ := id.NewID(id.IDWithUUID[scene.Scene](sceneUUID))
+	sceneID := id.NewID(id.IDWithUUID[scene.Scene](sceneUUID))
 
 	tagIDs := make([]id.ID[tag.Tag], len(someTagIDs))
 	for i, s := range someTagIDs {
@@ -267,11 +260,7 @@ func (r widgetRepositoryPostgresImpl) reconstruct(
 		if err != nil {
 			return nil, fmt.Errorf("cannot parse tag id %q: %w", s, err)
 		}
-		tid, err := id.NewID(id.IDWithUUID[tag.Tag](u))
-		if err != nil {
-			return nil, fmt.Errorf("cannot create tag id: %w", err)
-		}
-		tagIDs[i] = tid
+		tagIDs[i] = id.NewID(id.IDWithUUID[tag.Tag](u))
 	}
 
 	newVersion, err := version.New(version.WithNumber[widget.Widget](aVersion))

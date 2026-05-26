@@ -50,7 +50,7 @@ func (t tagServiceImpl) FindAllTags(ctx context.Context) ([]appdto.Tag, error) {
 
 // FindTagByID returns a tag by its identifier
 func (t tagServiceImpl) FindTagByID(ctx context.Context, rawID uuid.UUID) (appdto.Tag, error) {
-	tagID, _ := id.NewID(id.IDWithUUID[tag.Tag](rawID))
+	tagID := id.NewID(id.IDWithUUID[tag.Tag](rawID))
 	foundTag, err := t.tagRepository.FindByID(ctx, tagID)
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("error on find tag by id in repository: %w", err)
@@ -100,7 +100,7 @@ func (t tagServiceImpl) CreateTag(ctx context.Context, newTagData appdto.CreateT
 
 // DeleteTagByID deletes a tag by its identifier and returns the deleted tag
 func (t tagServiceImpl) DeleteTagByID(ctx context.Context, rawID uuid.UUID) (appdto.Tag, error) {
-	tagID, _ := id.NewID(id.IDWithUUID[tag.Tag](rawID))
+	tagID := id.NewID(id.IDWithUUID[tag.Tag](rawID))
 
 	deletedTag, err := t.tagRepository.DeleteByID(ctx, tagID)
 	if err != nil {
@@ -114,7 +114,7 @@ func (t tagServiceImpl) DeleteTagByID(ctx context.Context, rawID uuid.UUID) (app
 
 // SetTagValueByID updates the value and quality of an existing tag and returns the updated tag
 func (t tagServiceImpl) SetTagValueByID(ctx context.Context, request appdto.UpdateTagInput) (appdto.Tag, error) {
-	tagID, _ := id.NewID(id.IDWithUUID[tag.Tag](request.ID))
+	tagID := id.NewID(id.IDWithUUID[tag.Tag](request.ID))
 
 	foundTag, err := t.tagRepository.FindByID(ctx, tagID)
 	if err != nil {

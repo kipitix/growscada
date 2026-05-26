@@ -24,11 +24,7 @@ func NewSceneRepositoryPostgres(aDb *sql.DB) scene.SceneRepository {
 }
 
 func (r sceneRepositoryPostgresImpl) NextID() id.ID[scene.Scene] {
-	newID, err := id.NewID[scene.Scene]()
-	if err != nil {
-		panic(err)
-	}
-	return newID
+	return id.NewID[scene.Scene]()
 }
 
 func (r sceneRepositoryPostgresImpl) Save(ctx context.Context, s scene.Scene) (scene.Scene, error) {
@@ -178,7 +174,7 @@ func (r sceneRepositoryPostgresImpl) FindAll(ctx context.Context) ([]scene.Scene
 func (r sceneRepositoryPostgresImpl) reconstruct(
 	aRawID uuid.UUID, aName string, aWidth, aHeight int, aBackgroundHTML string, aVersion int,
 ) (scene.Scene, error) {
-	newID, _ := id.NewID(id.IDWithUUID[scene.Scene](aRawID))
+	newID := id.NewID(id.IDWithUUID[scene.Scene](aRawID))
 
 	newName, err := scene.NewSceneName(aName)
 	if err != nil {

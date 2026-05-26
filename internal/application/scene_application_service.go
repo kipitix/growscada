@@ -41,7 +41,7 @@ func (s sceneServiceImpl) FindAllScenes(ctx context.Context) ([]appdto.Scene, er
 }
 
 func (s sceneServiceImpl) FindSceneByID(ctx context.Context, rawID uuid.UUID) (appdto.Scene, error) {
-	sceneID, _ := id.NewID(id.IDWithUUID[scene.Scene](rawID))
+	sceneID := id.NewID(id.IDWithUUID[scene.Scene](rawID))
 	found, err := s.repository.FindByID(ctx, sceneID)
 	if err != nil {
 		return appdto.Scene{}, fmt.Errorf("error on find scene by id in repository: %w", err)
@@ -75,7 +75,7 @@ func (s sceneServiceImpl) CreateScene(ctx context.Context, input appdto.CreateSc
 }
 
 func (s sceneServiceImpl) UpdateScene(ctx context.Context, input appdto.UpdateSceneInput) (appdto.Scene, error) {
-	sceneID, _ := id.NewID(id.IDWithUUID[scene.Scene](input.ID))
+	sceneID := id.NewID(id.IDWithUUID[scene.Scene](input.ID))
 
 	found, err := s.repository.FindByID(ctx, sceneID)
 	if err != nil {
@@ -105,7 +105,7 @@ func (s sceneServiceImpl) UpdateScene(ctx context.Context, input appdto.UpdateSc
 }
 
 func (s sceneServiceImpl) DeleteSceneByID(ctx context.Context, rawID uuid.UUID) (appdto.Scene, error) {
-	sceneID, _ := id.NewID(id.IDWithUUID[scene.Scene](rawID))
+	sceneID := id.NewID(id.IDWithUUID[scene.Scene](rawID))
 
 	deleted, err := s.repository.DeleteByID(ctx, sceneID)
 	if err != nil {

@@ -30,7 +30,7 @@ func makeWidget(t *testing.T, name string, repo widget.WidgetRepository) widget.
 		t.Fatalf("NewWidgetName(%q): %v", name, err)
 	}
 	pos := widget.NewPosition(10.0, 20.0, 0)
-	typeID, _ := id.NewID(id.IDWithUUID[widget.WidgetType](uuid.New()))
+	typeID := id.NewID(id.IDWithUUID[widget.WidgetType](uuid.New()))
 	w, err := widget.NewWidget(
 		newID, newName, pos, widget.DefaultSize(),
 		widget.DefaultOrigin(), widget.DefaultRotation(),
@@ -291,13 +291,13 @@ func TestWidgetFindAll_WithTagIDs_RoundTripsCorrectly(t *testing.T) {
 	repo := repositories.NewWidgetRepositoryPostgres(testDB)
 	ctx := context.Background()
 
-	tagID1, _ := id.NewID[tag.Tag]()
-	tagID2, _ := id.NewID[tag.Tag]()
+	tagID1 := id.NewID[tag.Tag]()
+	tagID2 := id.NewID[tag.Tag]()
 
 	newID := repo.NextID()
 	newName, _ := widget.NewWidgetName("with-tags")
 	pos := widget.NewPosition(1, 2, 3)
-	typeID, _ := id.NewID(id.IDWithUUID[widget.WidgetType](uuid.New()))
+	typeID := id.NewID(id.IDWithUUID[widget.WidgetType](uuid.New()))
 	w, _ := widget.NewWidget(
 		newID, newName, pos, widget.DefaultSize(),
 		widget.DefaultOrigin(), widget.DefaultRotation(),
@@ -336,7 +336,7 @@ func TestWidgetFindByID_OriginAndRotation_RoundTripsCorrectly(t *testing.T) {
 	size, _ := widget.NewSize(200, 150)
 	origin, _ := widget.NewOrigin(0.25, 0.75)
 	rotation := widget.NewRotation(90.0)
-	typeID, _ := id.NewID(id.IDWithUUID[widget.WidgetType](uuid.New()))
+	typeID := id.NewID(id.IDWithUUID[widget.WidgetType](uuid.New()))
 
 	w, _ := widget.NewWidget(
 		newID, newName, pos, size, origin, rotation,

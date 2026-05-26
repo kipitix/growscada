@@ -23,11 +23,7 @@ func NewTagRepositoryPostgres(aDb *sql.DB) tag.TagRepository {
 }
 
 func (r tagRepositoryPostgresImpl) NextID() id.ID[tag.Tag] {
-	newID, err := id.NewID[tag.Tag]()
-	if err != nil {
-		panic(err)
-	}
-	return newID
+	return id.NewID[tag.Tag]()
 }
 
 func (r tagRepositoryPostgresImpl) Save(ctx context.Context, aTag tag.Tag) (tag.Tag, error) {
@@ -170,7 +166,7 @@ func (r tagRepositoryPostgresImpl) FindAll(ctx context.Context) ([]tag.Tag, erro
 func (r tagRepositoryPostgresImpl) reconstruct(
 	aTagUUID uuid.UUID, aName, aTagType, aValue, aQuality string, aVersion int,
 ) (tag.Tag, error) {
-	newID, _ := id.NewID(id.IDWithUUID[tag.Tag](aTagUUID))
+	newID := id.NewID(id.IDWithUUID[tag.Tag](aTagUUID))
 
 	newName, err := tag.NewTagName(aName)
 	if err != nil {

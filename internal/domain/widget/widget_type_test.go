@@ -9,7 +9,7 @@ import (
 
 func makeTestWidgetType(t *testing.T) WidgetType {
 	t.Helper()
-	id, _ := id.NewID[WidgetType]()
+	id := id.NewID[WidgetType]()
 	name, _ := NewWidgetTypeName("gauge")
 	htmlTemplate, _ := NewHtmlTemplate("<div class='gauge'></div>")
 	script, _ := NewScript("function render(value) { return value; }")
@@ -18,7 +18,7 @@ func makeTestWidgetType(t *testing.T) WidgetType {
 }
 
 func TestNewWidgetType_FieldsAreSet(t *testing.T) {
-	id, _ := id.NewID[WidgetType]()
+	id := id.NewID[WidgetType]()
 	name, _ := NewWidgetTypeName("thermometer")
 	htmlTemplate, _ := NewHtmlTemplate("<div class='thermometer'></div>")
 	script, _ := NewScript("function draw() {}")

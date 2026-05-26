@@ -10,8 +10,7 @@ import (
 )
 
 func mustTagID() id.ID[tag.Tag] {
-	tagID, _ := id.NewID[tag.Tag]()
-	return tagID
+	return id.NewID[tag.Tag]()
 }
 
 // --- EventTimestamp ---

@@ -17,42 +17,29 @@ type ID[T any] struct {
 var _ fmt.Stringer = ID[int]{}
 
 // IDOption - option function for configuring ID creation.
-type IDOption[T any] func(*ID[T]) error
+type IDOption[T any] func(*ID[T])
 
 // NewID generates a new random ID.
 // Returns an error if any option fails.
-func NewID[T any](opts ...IDOption[T]) (ID[T], error) {
+func NewID[T any](opts ...IDOption[T]) ID[T] {
 	newID := ID[T]{}
 
 	for _, opt := range opts {
-		if err := opt(&newID); err != nil {
-			return ID[T]{}, err
-		}
+		opt(&newID)
 	}
 
 	if newID.uuid == uuid.Nil {
 		newID.uuid = uuid.New()
 	}
 
-	return newID, nil
+	return newID
 }
 
 // IDWithUUID allows specifying an existing UUID for ID creation.
 func IDWithUUID[T any](anUUID uuid.UUID) IDOption[T] {
-	return func(id *ID[T]) error {
+	return func(id *ID[T]) {
 		id.uuid = anUUID
-		return nil
 	}
-}
-
-// IDWithString parses a UUID string and returns an option for AggregateID creation.
-// Returns an error if the string is not a valid UUID.
-func IDWithString[T any](s string) (IDOption[T], error) {
-	u, err := uuid.Parse(s)
-	if err != nil {
-		return nil, err
-	}
-	return IDWithUUID[T](u), nil
 }
 
 // UUID converts ID to a uuid.UUID.

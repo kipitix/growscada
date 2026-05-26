@@ -43,7 +43,7 @@ func (s widgetServiceImpl) FindAllWidgets(ctx context.Context) ([]appdto.Widget,
 }
 
 func (s widgetServiceImpl) FindWidgetByID(ctx context.Context, rawID uuid.UUID) (appdto.Widget, error) {
-	widgetID, _ := id.NewID(id.IDWithUUID[widget.Widget](rawID))
+	widgetID := id.NewID(id.IDWithUUID[widget.Widget](rawID))
 	found, err := s.repository.FindByID(ctx, widgetID)
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("error on find widget by id in repository: %w", err)
@@ -73,13 +73,10 @@ func (s widgetServiceImpl) CreateWidget(ctx context.Context, input appdto.Create
 
 	rotation := widget.NewRotation(input.RotationDegrees)
 
-	typeID, _ := id.NewID(id.IDWithUUID[widget.WidgetType](input.TypeID))
-	sceneID, _ := id.NewID(id.IDWithUUID[scene.Scene](input.SceneID))
+	typeID := id.NewID(id.IDWithUUID[widget.WidgetType](input.TypeID))
+	sceneID := id.NewID(id.IDWithUUID[scene.Scene](input.SceneID))
 
-	tagIDs, err := uuidsToTagIDs(input.TagIDs)
-	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot create widget because of tag ids: %w", err)
-	}
+	tagIDs := uuidsToTagIDs(input.TagIDs)
 
 	newWidget, err := widget.NewWidget(
 		newID, newName, pos, size, origin, rotation,
@@ -105,7 +102,7 @@ func (s widgetServiceImpl) UpdateWidget(ctx context.Context, input appdto.Update
 		return appdto.Widget{}, fmt.Errorf("update requires a valid version (got %d)", input.Version)
 	}
 
-	widgetID, _ := id.NewID(id.IDWithUUID[widget.Widget](input.ID))
+	widgetID := id.NewID(id.IDWithUUID[widget.Widget](input.ID))
 
 	newName, err := widget.NewWidgetName(input.Name)
 	if err != nil {
@@ -126,13 +123,10 @@ func (s widgetServiceImpl) UpdateWidget(ctx context.Context, input appdto.Update
 
 	rotation := widget.NewRotation(input.RotationDegrees)
 
-	typeID, _ := id.NewID(id.IDWithUUID[widget.WidgetType](input.TypeID))
-	sceneID, _ := id.NewID(id.IDWithUUID[scene.Scene](input.SceneID))
+	typeID := id.NewID(id.IDWithUUID[widget.WidgetType](input.TypeID))
+	sceneID := id.NewID(id.IDWithUUID[scene.Scene](input.SceneID))
 
-	tagIDs, err := uuidsToTagIDs(input.TagIDs)
-	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot parse tag ids: %w", err)
-	}
+	tagIDs := uuidsToTagIDs(input.TagIDs)
 
 	inputVersion, err := version.New(version.WithNumber[widget.Widget](input.Version))
 	if err != nil {
@@ -159,7 +153,7 @@ func (s widgetServiceImpl) UpdateWidget(ctx context.Context, input appdto.Update
 }
 
 func (s widgetServiceImpl) DeleteWidgetByID(ctx context.Context, rawID uuid.UUID) (appdto.Widget, error) {
-	widgetID, _ := id.NewID(id.IDWithUUID[widget.Widget](rawID))
+	widgetID := id.NewID(id.IDWithUUID[widget.Widget](rawID))
 
 	deleted, err := s.repository.DeleteByID(ctx, widgetID)
 	if err != nil {
@@ -171,11 +165,10 @@ func (s widgetServiceImpl) DeleteWidgetByID(ctx context.Context, rawID uuid.UUID
 	return appdto.NewWidget(deleted), nil
 }
 
-func uuidsToTagIDs(uuids []uuid.UUID) ([]id.ID[tag.Tag], error) {
+func uuidsToTagIDs(uuids []uuid.UUID) []id.ID[tag.Tag] {
 	tagIDs := make([]id.ID[tag.Tag], len(uuids))
 	for i, u := range uuids {
-		tid, _ := id.NewID(id.IDWithUUID[tag.Tag](u))
-		tagIDs[i] = tid
+		tagIDs[i] = id.NewID(id.IDWithUUID[tag.Tag](u))
 	}
-	return tagIDs, nil
+	return tagIDs
 }

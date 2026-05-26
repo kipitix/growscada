@@ -9,7 +9,7 @@ import (
 
 func makeTestTag(t *testing.T) Tag {
 	t.Helper()
-	tagID, _ := id.NewID[Tag]()
+	tagID := id.NewID[Tag]()
 	name, _ := NewTagName("temperature")
 	tagType := TagTypeInteger
 	value, _ := tagType.NewTagValue(0)
@@ -22,7 +22,7 @@ func makeTestTag(t *testing.T) Tag {
 }
 
 func TestNewTag_FieldsAreSet(t *testing.T) {
-	tagID, _ := id.NewID[Tag]()
+	tagID := id.NewID[Tag]()
 	name, _ := NewTagName("pressure")
 	tagType := TagTypeString
 	value, _ := tagType.NewTagValue("100")
