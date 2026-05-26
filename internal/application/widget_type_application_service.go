@@ -6,6 +6,7 @@ import (
 
 	"github.com/kipitix/growscada/internal/application/appdto"
 	"github.com/kipitix/growscada/internal/domain/event"
+	"github.com/kipitix/growscada/internal/domain/id"
 	"github.com/kipitix/growscada/internal/domain/version"
 	"github.com/kipitix/growscada/internal/domain/widget"
 )
@@ -13,10 +14,10 @@ import (
 // WidgetTypeService is the service interface for working with widget types.
 type WidgetTypeService interface {
 	FindAllWidgetTypes(context.Context) ([]appdto.WidgetType, error)
-	FindWidgetTypeByID(context.Context, widget.WidgetTypeID) (appdto.WidgetType, error)
+	FindWidgetTypeByID(context.Context, id.ID[widget.WidgetType]) (appdto.WidgetType, error)
 	CreateWidgetType(context.Context, appdto.CreateWidgetTypeInput) (appdto.WidgetType, error)
 	UpdateWidgetType(context.Context, appdto.UpdateWidgetTypeInput) (appdto.WidgetType, error)
-	DeleteWidgetTypeByID(context.Context, widget.WidgetTypeID) (appdto.WidgetType, error)
+	DeleteWidgetTypeByID(context.Context, id.ID[widget.WidgetType]) (appdto.WidgetType, error)
 }
 
 type widgetTypeServiceImpl struct {
@@ -41,7 +42,7 @@ func (s widgetTypeServiceImpl) FindAllWidgetTypes(ctx context.Context) ([]appdto
 	return appdto.NewWidgetTypeList(list), nil
 }
 
-func (s widgetTypeServiceImpl) FindWidgetTypeByID(ctx context.Context, id widget.WidgetTypeID) (appdto.WidgetType, error) {
+func (s widgetTypeServiceImpl) FindWidgetTypeByID(ctx context.Context, id id.ID[widget.WidgetType]) (appdto.WidgetType, error) {
 	wt, err := s.repository.FindByID(ctx, id)
 	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("error on find widget type by id in repository: %w", err)
@@ -90,9 +91,12 @@ func (s widgetTypeServiceImpl) CreateWidgetType(ctx context.Context, input appdt
 }
 
 func (s widgetTypeServiceImpl) UpdateWidgetType(ctx context.Context, input appdto.UpdateWidgetTypeInput) (appdto.WidgetType, error) {
-	id := widget.NewWidgetTypeID(widget.WidgetTypeIDWithUUID(input.ID))
+	widgetTypeID, err := id.NewID(id.IDWithUUID[widget.WidgetType](input.ID))
+	if err != nil {
+		return appdto.WidgetType{}, fmt.Errorf("cannot build widget type id: %w", err)
+	}
 
-	found, err := s.repository.FindByID(ctx, id)
+	found, err := s.repository.FindByID(ctx, widgetTypeID)
 	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("error on find widget type by id in repository: %w", err)
 	}
@@ -129,12 +133,12 @@ func (s widgetTypeServiceImpl) UpdateWidgetType(ctx context.Context, input appdt
 		return appdto.WidgetType{}, fmt.Errorf("cannot save widget type: %w", err)
 	}
 
-	s.eventBus.Publish(event.NewWidgetTypeUpdatedEvent(id))
+	s.eventBus.Publish(event.NewWidgetTypeUpdatedEvent(widgetTypeID))
 
 	return appdto.NewWidgetType(found), nil
 }
 
-func (s widgetTypeServiceImpl) DeleteWidgetTypeByID(ctx context.Context, id widget.WidgetTypeID) (appdto.WidgetType, error) {
+func (s widgetTypeServiceImpl) DeleteWidgetTypeByID(ctx context.Context, id id.ID[widget.WidgetType]) (appdto.WidgetType, error) {
 	deleted, err := s.repository.DeleteByID(ctx, id)
 	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("cannot delete widget type: %w", err)

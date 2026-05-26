@@ -58,12 +58,19 @@ func (s widgetServiceImpl) CreateWidget(ctx context.Context, input appdto.Create
 		return appdto.Widget{}, fmt.Errorf("cannot create widget because of name: %w", err)
 	}
 
-	coords := widget.NewCoordinates(input.X, input.Y, input.Z)
+	pos := widget.NewPosition(input.X, input.Y, input.Z)
 
 	size, err := normalizeSize(input.Width, input.Height)
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot create widget because of size: %w", err)
 	}
+
+	origin, err := widget.NewOrigin(input.OriginX, input.OriginY)
+	if err != nil {
+		return appdto.Widget{}, fmt.Errorf("cannot create widget because of origin: %w", err)
+	}
+
+	rotation := widget.NewRotation(input.RotationDegrees)
 
 	typeID, err := id.NewID(id.IDWithUUID[widget.WidgetType](input.TypeID))
 	if err != nil {
@@ -80,7 +87,11 @@ func (s widgetServiceImpl) CreateWidget(ctx context.Context, input appdto.Create
 		return appdto.Widget{}, fmt.Errorf("cannot create widget because of tag ids: %w", err)
 	}
 
-	newWidget, err := widget.NewWidget(newID, newName, coords, size, typeID, sceneID, input.Labels, tagIDs, version.Initial[widget.Widget]())
+	newWidget, err := widget.NewWidget(
+		newID, newName, pos, size, origin, rotation,
+		typeID, sceneID, input.Labels, tagIDs,
+		version.Initial[widget.Widget](),
+	)
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot create widget: %w", err)
 	}
@@ -96,14 +107,13 @@ func (s widgetServiceImpl) CreateWidget(ctx context.Context, input appdto.Create
 }
 
 func (s widgetServiceImpl) UpdateWidget(ctx context.Context, input appdto.UpdateWidgetInput) (appdto.Widget, error) {
+	if input.Version <= 0 {
+		return appdto.Widget{}, fmt.Errorf("update requires a valid version (got %d)", input.Version)
+	}
+
 	widgetID, err := id.NewID(id.IDWithUUID[widget.Widget](input.ID))
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot build widget id: %w", err)
-	}
-
-	found, err := s.repository.FindByID(ctx, widgetID)
-	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("error on find widget by id in repository: %w", err)
 	}
 
 	newName, err := widget.NewWidgetName(input.Name)
@@ -111,12 +121,19 @@ func (s widgetServiceImpl) UpdateWidget(ctx context.Context, input appdto.Update
 		return appdto.Widget{}, fmt.Errorf("cannot parse widget name: %w", err)
 	}
 
-	coords := widget.NewCoordinates(input.X, input.Y, input.Z)
+	pos := widget.NewPosition(input.X, input.Y, input.Z)
 
 	size, err := normalizeSize(input.Width, input.Height)
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot parse widget size: %w", err)
 	}
+
+	origin, err := widget.NewOrigin(input.OriginX, input.OriginY)
+	if err != nil {
+		return appdto.Widget{}, fmt.Errorf("cannot parse widget origin: %w", err)
+	}
+
+	rotation := widget.NewRotation(input.RotationDegrees)
 
 	typeID, err := id.NewID(id.IDWithUUID[widget.WidgetType](input.TypeID))
 	if err != nil {
@@ -133,7 +150,16 @@ func (s widgetServiceImpl) UpdateWidget(ctx context.Context, input appdto.Update
 		return appdto.Widget{}, fmt.Errorf("cannot parse tag ids: %w", err)
 	}
 
-	updated, err := widget.NewWidget(found.ID(), newName, coords, size, typeID, sceneID, input.Labels, tagIDs, found.Version())
+	inputVersion, err := version.New(version.WithNumber[widget.Widget](input.Version))
+	if err != nil {
+		return appdto.Widget{}, fmt.Errorf("cannot build widget version: %w", err)
+	}
+
+	updated, err := widget.NewWidget(
+		widgetID, newName, pos, size, origin, rotation,
+		typeID, sceneID, input.Labels, tagIDs,
+		inputVersion,
+	)
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot build updated widget: %w", err)
 	}

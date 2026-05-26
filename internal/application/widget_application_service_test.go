@@ -34,13 +34,18 @@ func newWidgetServiceWithBus() (application.WidgetService, event.EventBus) {
 }
 
 var testCreateWidgetInput = appdto.CreateWidgetInput{
-	Name:   "pressure-gauge",
-	X:      10.0,
-	Y:      20.0,
-	Z:      0.0,
-	TypeID: uuid.New(),
-	Labels: []string{"sensor", "pressure"},
-	TagIDs: nil,
+	Name:            "pressure-gauge",
+	X:               10.0,
+	Y:               20.0,
+	Z:               0,
+	Width:           100,
+	Height:          100,
+	OriginX:         0.5,
+	OriginY:         0.5,
+	RotationDegrees: 0.0,
+	TypeID:          uuid.New(),
+	Labels:          []string{"sensor", "pressure"},
+	TagIDs:          nil,
 }
 
 // --- CreateWidget ---
@@ -84,6 +89,12 @@ func TestCreateWidget_Valid_FieldsAreStored(t *testing.T) {
 	if found.TypeID != testCreateWidgetInput.TypeID {
 		t.Errorf("TypeID: expected %v, got %v", testCreateWidgetInput.TypeID, found.TypeID)
 	}
+	if found.OriginX != testCreateWidgetInput.OriginX {
+		t.Errorf("OriginX: expected %v, got %v", testCreateWidgetInput.OriginX, found.OriginX)
+	}
+	if found.RotationDegrees != testCreateWidgetInput.RotationDegrees {
+		t.Errorf("RotationDegrees: expected %v, got %v", testCreateWidgetInput.RotationDegrees, found.RotationDegrees)
+	}
 }
 
 func TestCreateWidget_EmptyName_ReturnsError(t *testing.T) {
@@ -96,6 +107,19 @@ func TestCreateWidget_EmptyName_ReturnsError(t *testing.T) {
 
 	if err == nil {
 		t.Error("expected error for empty name, got nil")
+	}
+}
+
+func TestCreateWidget_InvalidOrigin_ReturnsError(t *testing.T) {
+	cleanWidgets(t)
+	svc := newWidgetService()
+
+	input := testCreateWidgetInput
+	input.OriginX = 1.5 // out of [0,1]
+	_, err := svc.CreateWidget(context.Background(), input)
+
+	if err == nil {
+		t.Error("expected error for invalid origin, got nil")
 	}
 }
 
@@ -165,6 +189,31 @@ func TestFindWidgetByID_Existing_ReturnsCorrectFields(t *testing.T) {
 	}
 }
 
+func TestFindWidgetByID_Existing_TransformMatrixIsPresent(t *testing.T) {
+	cleanWidgets(t)
+	svc := newWidgetService()
+	ctx := context.Background()
+
+	created, err := svc.CreateWidget(ctx, testCreateWidgetInput)
+	if err != nil {
+		t.Fatalf("CreateWidget: %v", err)
+	}
+
+	widgetID, _ := id.NewID(id.IDWithUUID[widget.Widget](created.ID))
+	found, err := svc.FindWidgetByID(ctx, widgetID)
+	if err != nil {
+		t.Fatalf("FindWidgetByID: %v", err)
+	}
+
+	if found.TransformMatrix.CSS == "" {
+		t.Error("expected non-empty TransformMatrix.CSS")
+	}
+	// Identity-like matrix for zero rotation (a=1, b=0, c=0, d=1).
+	if found.TransformMatrix.A != 1.0 {
+		t.Errorf("TransformMatrix.A: expected 1.0 for 0° rotation, got %v", found.TransformMatrix.A)
+	}
+}
+
 func TestFindWidgetByID_NotFound_ReturnsWrappedError(t *testing.T) {
 	cleanWidgets(t)
 	svc := newWidgetService()
@@ -193,13 +242,19 @@ func TestUpdateWidget_Valid_ReturnsIncrementedVersion(t *testing.T) {
 	}
 
 	updated, err := svc.UpdateWidget(ctx, appdto.UpdateWidgetInput{
-		ID:     created.ID,
-		Name:   "updated-gauge",
-		X:      5.0,
-		Y:      15.0,
-		Z:      1.0,
-		TypeID: created.TypeID,
-		Labels: []string{"updated"},
+		ID:              created.ID,
+		Name:            "updated-gauge",
+		X:               5.0,
+		Y:               15.0,
+		Z:               1,
+		Width:           100,
+		Height:          100,
+		OriginX:         0.5,
+		OriginY:         0.5,
+		RotationDegrees: 0.0,
+		TypeID:          created.TypeID,
+		Labels:          []string{"updated"},
+		Version:         created.Version,
 	})
 
 	if err != nil {
@@ -222,13 +277,19 @@ func TestUpdateWidget_Valid_FieldsAreUpdated(t *testing.T) {
 
 	newTypeID := uuid.New()
 	_, err = svc.UpdateWidget(ctx, appdto.UpdateWidgetInput{
-		ID:     created.ID,
-		Name:   "renamed-widget",
-		X:      99.0,
-		Y:      88.0,
-		Z:      7.0,
-		TypeID: newTypeID,
-		Labels: []string{"x"},
+		ID:              created.ID,
+		Name:            "renamed-widget",
+		X:               99.0,
+		Y:               88.0,
+		Z:               7,
+		Width:           200,
+		Height:          150,
+		OriginX:         0.0,
+		OriginY:         1.0,
+		RotationDegrees: 45.0,
+		TypeID:          newTypeID,
+		Labels:          []string{"x"},
+		Version:         created.Version,
 	})
 	if err != nil {
 		t.Fatalf("UpdateWidget: %v", err)
@@ -246,8 +307,60 @@ func TestUpdateWidget_Valid_FieldsAreUpdated(t *testing.T) {
 	if found.X != 99.0 {
 		t.Errorf("X: expected 99.0, got %v", found.X)
 	}
+	if found.RotationDegrees != 45.0 {
+		t.Errorf("RotationDegrees: expected 45.0, got %v", found.RotationDegrees)
+	}
 	if found.TypeID != newTypeID {
 		t.Errorf("TypeID: expected %v, got %v", newTypeID, found.TypeID)
+	}
+}
+
+func TestUpdateWidget_StaleVersion_ReturnsConflict(t *testing.T) {
+	cleanWidgets(t)
+	svc := newWidgetService()
+	ctx := context.Background()
+
+	created, err := svc.CreateWidget(ctx, testCreateWidgetInput)
+	if err != nil {
+		t.Fatalf("CreateWidget: %v", err)
+	}
+
+	_, err = svc.UpdateWidget(ctx, appdto.UpdateWidgetInput{
+		ID:      created.ID,
+		Name:    "stale-attempt",
+		TypeID:  created.TypeID,
+		OriginX: 0.5, OriginY: 0.5,
+		Width: 100, Height: 100,
+		Version: created.Version + 99, // wrong version
+	})
+
+	if err == nil {
+		t.Fatal("expected error on stale version, got nil")
+	}
+	if !errors.Is(err, widget.ErrWidgetConflict) {
+		t.Errorf("expected wrapped ErrWidgetConflict, got: %v", err)
+	}
+}
+
+func TestUpdateWidget_ZeroVersion_ReturnsError(t *testing.T) {
+	cleanWidgets(t)
+	svc := newWidgetService()
+	ctx := context.Background()
+
+	created, err := svc.CreateWidget(ctx, testCreateWidgetInput)
+	if err != nil {
+		t.Fatalf("CreateWidget: %v", err)
+	}
+
+	_, err = svc.UpdateWidget(ctx, appdto.UpdateWidgetInput{
+		ID:     created.ID,
+		Name:   "bad",
+		TypeID: created.TypeID,
+		Version: 0, // invalid: version 0 is the initial (unsaved) state
+	})
+
+	if err == nil {
+		t.Error("expected error for version 0, got nil")
 	}
 }
 
@@ -256,9 +369,12 @@ func TestUpdateWidget_NotFound_ReturnsWrappedError(t *testing.T) {
 	svc := newWidgetService()
 
 	_, err := svc.UpdateWidget(context.Background(), appdto.UpdateWidgetInput{
-		ID:     uuid.New(),
-		Name:   "x",
-		TypeID: uuid.New(),
+		ID:      uuid.New(),
+		Name:    "x",
+		TypeID:  uuid.New(),
+		OriginX: 0.5, OriginY: 0.5,
+		Width: 100, Height: 100,
+		Version: 1,
 	})
 
 	if err == nil {
@@ -280,9 +396,12 @@ func TestUpdateWidget_EmptyName_ReturnsError(t *testing.T) {
 	}
 
 	_, err = svc.UpdateWidget(ctx, appdto.UpdateWidgetInput{
-		ID:     created.ID,
-		Name:   "",
-		TypeID: created.TypeID,
+		ID:      created.ID,
+		Name:    "",
+		TypeID:  created.TypeID,
+		OriginX: 0.5, OriginY: 0.5,
+		Width: 100, Height: 100,
+		Version: created.Version,
 	})
 
 	if err == nil {
@@ -426,9 +545,12 @@ func TestUpdateWidget_Success_PublishesUpdatedEvent(t *testing.T) {
 	})
 
 	_, err = svc.UpdateWidget(ctx, appdto.UpdateWidgetInput{
-		ID:     created.ID,
-		Name:   "updated",
-		TypeID: created.TypeID,
+		ID:      created.ID,
+		Name:    "updated",
+		TypeID:  created.TypeID,
+		OriginX: 0.5, OriginY: 0.5,
+		Width: 100, Height: 100,
+		Version: created.Version,
 	})
 	if err != nil {
 		t.Fatalf("UpdateWidget: %v", err)

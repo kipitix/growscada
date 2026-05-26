@@ -89,13 +89,15 @@ INSERT INTO scenes (id, name, width, height, background_html, version) VALUES
 -- Add test data for widgets table
 -- scene_id references scenes above; type_id references widget_types above
 -- tag_ids reference tags above
-INSERT INTO widgets (id, name, x, y, z, type_id, scene_id, labels, tag_ids, version) VALUES
+-- origin_x/origin_y: anchor point in [0,1] (0.5 = center)
+-- rotation_degrees: rotation angle, normalized to [0, 360)
+INSERT INTO widgets (id, name, x, y, z, width, height, origin_x, origin_y, rotation_degrees, type_id, scene_id, labels, tag_ids, version) VALUES
     (
         'b1c2d3e4-0001-4000-8000-000000000001',
         'pressure-gauge-main',
-        100.0,
-        200.0,
-        0.0,
+        100.0, 200.0, 0,
+        100, 100,
+        0.5, 0.5, 0.0,
         'a1b2c3d4-0001-4000-8000-000000000001',
         'c1d2e3f4-0001-4000-8000-000000000001',
         '{"sensor","pressure"}',
@@ -105,9 +107,9 @@ INSERT INTO widgets (id, name, x, y, z, type_id, scene_id, labels, tag_ids, vers
     (
         'b1c2d3e4-0002-4000-8000-000000000002',
         'temperature-indicator-main',
-        350.0,
-        150.0,
-        1.0,
+        350.0, 150.0, 1,
+        100, 100,
+        0.5, 0.5, 0.0,
         'a1b2c3d4-0002-4000-8000-000000000002',
         'c1d2e3f4-0001-4000-8000-000000000001',
         '{"sensor","temperature"}',
@@ -117,9 +119,9 @@ INSERT INTO widgets (id, name, x, y, z, type_id, scene_id, labels, tag_ids, vers
     (
         'b1c2d3e4-0003-4000-8000-000000000003',
         'boolean-lamp-overview',
-        50.0,
-        400.0,
-        0.0,
+        50.0, 400.0, 0,
+        100, 100,
+        0.5, 0.5, 0.0,
         'a1b2c3d4-0003-4000-8000-000000000003',
         'c1d2e3f4-0002-4000-8000-000000000002',
         '{"indicator","status"}',

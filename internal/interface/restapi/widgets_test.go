@@ -50,13 +50,18 @@ func createWidgetViaService(t *testing.T, input appdto.CreateWidgetInput) appdto
 }
 
 var testWidgetInput = appdto.CreateWidgetInput{
-	Name:   "pressure-gauge",
-	X:      10.0,
-	Y:      20.0,
-	Z:      0.0,
-	TypeID: uuid.New(),
-	Labels: []string{"sensor"},
-	TagIDs: nil,
+	Name:            "pressure-gauge",
+	X:               10.0,
+	Y:               20.0,
+	Z:               0,
+	Width:           100,
+	Height:          100,
+	OriginX:         0.5,
+	OriginY:         0.5,
+	RotationDegrees: 0.0,
+	TypeID:          uuid.New(),
+	Labels:          []string{"sensor"},
+	TagIDs:          nil,
 }
 
 // --- GET /api/v1/widgets ---
@@ -126,8 +131,11 @@ func TestGetWidgetsByID_Existing_Returns200(t *testing.T) {
 	if resp.Name != testWidgetInput.Name {
 		t.Errorf("Name: expected %q, got %q", testWidgetInput.Name, resp.Name)
 	}
-	if resp.Coordinates.X != testWidgetInput.X {
-		t.Errorf("Coordinates.X: expected %v, got %v", testWidgetInput.X, resp.Coordinates.X)
+	if resp.Position.X != testWidgetInput.X {
+		t.Errorf("Position.X: expected %v, got %v", testWidgetInput.X, resp.Position.X)
+	}
+	if resp.TransformMatrix.CSS == "" {
+		t.Error("expected non-empty TransformMatrix.CSS")
 	}
 }
 
@@ -170,11 +178,14 @@ func TestPostWidgets_Valid_Returns201WithID(t *testing.T) {
 	router := newRouterWithWidgets()
 
 	body, _ := json.Marshal(restdto.CreateWidgetRequest{
-		Name:        "flow-meter",
-		Coordinates: restdto.CoordinatesRequest{X: 5, Y: 10, Z: 0},
-		TypeID:      uuid.New(),
-		Labels:      []string{"flow"},
-		TagIDs:      []uuid.UUID{},
+		Name:     "flow-meter",
+		Position: restdto.PositionRequest{X: 5, Y: 10, Z: 0},
+		Size:     restdto.SizeRequest{Width: 100, Height: 100},
+		Origin:   restdto.OriginRequest{X: 0.5, Y: 0.5},
+		Rotation: restdto.RotationRequest{Degrees: 0},
+		TypeID:   uuid.New(),
+		Labels:   []string{"flow"},
+		TagIDs:   []uuid.UUID{},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/widgets", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -210,9 +221,11 @@ func TestPostWidgets_EmptyName_Returns500(t *testing.T) {
 	router := newRouterWithWidgets()
 
 	body, _ := json.Marshal(restdto.CreateWidgetRequest{
-		Name:        "",
-		Coordinates: restdto.CoordinatesRequest{X: 0, Y: 0, Z: 0},
-		TypeID:      uuid.New(),
+		Name:     "",
+		Position: restdto.PositionRequest{X: 0, Y: 0, Z: 0},
+		Size:     restdto.SizeRequest{Width: 100, Height: 100},
+		Origin:   restdto.OriginRequest{X: 0.5, Y: 0.5},
+		TypeID:   uuid.New(),
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/widgets", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -232,11 +245,15 @@ func TestPutWidgetsByID_Valid_Returns200WithIncrementedVersion(t *testing.T) {
 	router := newRouterWithWidgets()
 
 	body, _ := json.Marshal(restdto.UpdateWidgetRequest{
-		Name:        "updated-gauge",
-		Coordinates: restdto.CoordinatesRequest{X: 1, Y: 2, Z: 3},
-		TypeID:      uuid.New(),
-		Labels:      []string{"updated"},
-		TagIDs:      []uuid.UUID{},
+		Name:     "updated-gauge",
+		Position: restdto.PositionRequest{X: 1, Y: 2, Z: 3},
+		Size:     restdto.SizeRequest{Width: 100, Height: 100},
+		Origin:   restdto.OriginRequest{X: 0.5, Y: 0.5},
+		Rotation: restdto.RotationRequest{Degrees: 0},
+		TypeID:   uuid.New(),
+		Labels:   []string{"updated"},
+		TagIDs:   []uuid.UUID{},
+		Version:  created.Version,
 	})
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/widgets/"+created.ID.String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -260,8 +277,11 @@ func TestPutWidgetsByID_NotFound_Returns404(t *testing.T) {
 	router := newRouterWithWidgets()
 
 	body, _ := json.Marshal(restdto.UpdateWidgetRequest{
-		Name:   "x",
-		TypeID: uuid.New(),
+		Name:    "x",
+		TypeID:  uuid.New(),
+		Origin:  restdto.OriginRequest{X: 0.5, Y: 0.5},
+		Size:    restdto.SizeRequest{Width: 100, Height: 100},
+		Version: 1,
 	})
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/widgets/"+uuid.New().String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -276,7 +296,13 @@ func TestPutWidgetsByID_NotFound_Returns404(t *testing.T) {
 func TestPutWidgetsByID_InvalidUUID_Returns400(t *testing.T) {
 	router := newRouterWithWidgets()
 
-	body, _ := json.Marshal(restdto.UpdateWidgetRequest{Name: "x", TypeID: uuid.New()})
+	body, _ := json.Marshal(restdto.UpdateWidgetRequest{
+		Name:    "x",
+		TypeID:  uuid.New(),
+		Origin:  restdto.OriginRequest{X: 0.5, Y: 0.5},
+		Size:    restdto.SizeRequest{Width: 100, Height: 100},
+		Version: 1,
+	})
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/widgets/not-a-uuid", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -297,7 +323,13 @@ func TestPutWidgetsByID_Conflict_Returns409(t *testing.T) {
 	sceneSvc := application.NewSceneService(sceneRepo, event.NewEventBus())
 	router := restapi.NewRouter(tagSvc, wtSvc, svc, sceneSvc)
 
-	body, _ := json.Marshal(restdto.UpdateWidgetRequest{Name: "x", TypeID: uuid.New()})
+	body, _ := json.Marshal(restdto.UpdateWidgetRequest{
+		Name:    "x",
+		TypeID:  uuid.New(),
+		Origin:  restdto.OriginRequest{X: 0.5, Y: 0.5},
+		Size:    restdto.SizeRequest{Width: 100, Height: 100},
+		Version: 1,
+	})
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/widgets/"+uuid.New().String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()

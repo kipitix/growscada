@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/kipitix/growscada/internal/application"
+	"github.com/kipitix/growscada/internal/domain/id"
 	"github.com/kipitix/growscada/internal/domain/widget"
 	"github.com/kipitix/growscada/internal/interface/restapi/restdto"
 )
@@ -32,13 +33,20 @@ func (h WidgetTypesHandlers) GetWidgetTypes(w http.ResponseWriter, r *http.Reque
 // GetWidgetTypesByID handles GET /widget-types/{id}
 func (h WidgetTypesHandlers) GetWidgetTypesByID(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
-	id, err := widget.ParseWidgetTypeID(idStr)
+
+	idOpt, err := id.IDWithString[widget.WidgetType](idStr)
 	if err != nil {
 		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
 		return
 	}
 
-	found, err := h.service.FindWidgetTypeByID(r.Context(), id)
+	inID, err := id.NewID[widget.WidgetType](idOpt)
+	if err != nil {
+		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
+		return
+	}
+
+	found, err := h.service.FindWidgetTypeByID(r.Context(), inID)
 	if err != nil {
 		if errors.Is(err, widget.ErrWidgetTypeNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
@@ -71,7 +79,14 @@ func (h WidgetTypesHandlers) PostWidgetTypes(w http.ResponseWriter, r *http.Requ
 // PutWidgetTypesByID handles PUT /widget-types/{id}
 func (h WidgetTypesHandlers) PutWidgetTypesByID(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
-	id, err := widget.ParseWidgetTypeID(idStr)
+
+	idOpt, err := id.IDWithString[widget.WidgetType](idStr)
+	if err != nil {
+		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
+		return
+	}
+
+	inID, err := id.NewID[widget.WidgetType](idOpt)
 	if err != nil {
 		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
 		return
@@ -83,7 +98,7 @@ func (h WidgetTypesHandlers) PutWidgetTypesByID(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	updated, err := h.service.UpdateWidgetType(r.Context(), restdto.NewUpdateWidgetTypeInput(request, id.UUID()))
+	updated, err := h.service.UpdateWidgetType(r.Context(), restdto.NewUpdateWidgetTypeInput(request, inID))
 	if err != nil {
 		if errors.Is(err, widget.ErrWidgetTypeNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
@@ -103,13 +118,20 @@ func (h WidgetTypesHandlers) PutWidgetTypesByID(w http.ResponseWriter, r *http.R
 // DeleteWidgetTypesByID handles DELETE /widget-types/{id}
 func (h WidgetTypesHandlers) DeleteWidgetTypesByID(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
-	id, err := widget.ParseWidgetTypeID(idStr)
+
+	idOpt, err := id.IDWithString[widget.WidgetType](idStr)
 	if err != nil {
 		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
 		return
 	}
 
-	deleted, err := h.service.DeleteWidgetTypeByID(r.Context(), id)
+	inID, err := id.NewID[widget.WidgetType](idOpt)
+	if err != nil {
+		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
+		return
+	}
+
+	deleted, err := h.service.DeleteWidgetTypeByID(r.Context(), inID)
 	if err != nil {
 		if errors.Is(err, widget.ErrWidgetTypeNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))

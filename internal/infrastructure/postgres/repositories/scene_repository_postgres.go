@@ -24,7 +24,10 @@ func NewSceneRepositoryPostgres(aDb *sql.DB) scene.SceneRepository {
 }
 
 func (r sceneRepositoryPostgresImpl) NextID() id.ID[scene.Scene] {
-	newID, _ := id.NewID[scene.Scene]()
+	newID, err := id.NewID[scene.Scene]()
+	if err != nil {
+		panic(err)
+	}
 	return newID
 }
 

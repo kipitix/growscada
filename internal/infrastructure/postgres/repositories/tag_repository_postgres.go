@@ -23,7 +23,10 @@ func NewTagRepositoryPostgres(aDb *sql.DB) tag.TagRepository {
 }
 
 func (r tagRepositoryPostgresImpl) NextID() id.ID[tag.Tag] {
-	newID, _ := id.NewID[tag.Tag]()
+	newID, err := id.NewID[tag.Tag]()
+	if err != nil {
+		panic(err)
+	}
 	return newID
 }
 

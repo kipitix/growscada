@@ -10,6 +10,7 @@ import (
 	"github.com/kipitix/growscada/internal/application"
 	"github.com/kipitix/growscada/internal/application/appdto"
 	"github.com/kipitix/growscada/internal/domain/event"
+	"github.com/kipitix/growscada/internal/domain/id"
 	"github.com/kipitix/growscada/internal/domain/widget"
 	"github.com/kipitix/growscada/internal/infrastructure/postgres/repositories"
 )
@@ -120,7 +121,11 @@ func TestFindWidgetTypeByID_Existing_ReturnsCorrectFields(t *testing.T) {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
 
-	id := widget.NewWidgetTypeID(widget.WidgetTypeIDWithUUID(created.ID))
+	id, err := id.NewID(id.IDWithUUID[widget.WidgetType](created.ID))
+	if err != nil {
+		t.Fatalf("NewID: %v", err)
+	}
+
 	found, err := svc.FindWidgetTypeByID(ctx, id)
 
 	if err != nil {
@@ -138,7 +143,12 @@ func TestFindWidgetTypeByID_NotFound_ReturnsWrappedError(t *testing.T) {
 	cleanWidgetTypes(t)
 	svc := newWidgetTypeService()
 
-	_, err := svc.FindWidgetTypeByID(context.Background(), widget.NewWidgetTypeID())
+	id, err := id.NewID[widget.WidgetType]()
+	if err != nil {
+		t.Fatalf("NewID: %v", err)
+	}
+
+	_, err = svc.FindWidgetTypeByID(context.Background(), id)
 
 	if err == nil {
 		t.Fatal("expected error for non-existent widget type, got nil")
@@ -197,7 +207,11 @@ func TestUpdateWidgetType_Valid_FieldsAreUpdated(t *testing.T) {
 		t.Fatalf("UpdateWidgetType: %v", err)
 	}
 
-	id := widget.NewWidgetTypeID(widget.WidgetTypeIDWithUUID(created.ID))
+	id, err := id.NewID(id.IDWithUUID[widget.WidgetType](created.ID))
+	if err != nil {
+		t.Fatalf("NewID: %v", err)
+	}
+
 	found, err := svc.FindWidgetTypeByID(ctx, id)
 	if err != nil {
 		t.Fatalf("FindWidgetTypeByID: %v", err)
@@ -265,7 +279,11 @@ func TestDeleteWidgetType_Existing_ReturnsDeletedItem(t *testing.T) {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
 
-	id := widget.NewWidgetTypeID(widget.WidgetTypeIDWithUUID(created.ID))
+	id, err := id.NewID(id.IDWithUUID[widget.WidgetType](created.ID))
+	if err != nil {
+		t.Fatalf("NewID: %v", err)
+	}
+
 	deleted, err := svc.DeleteWidgetTypeByID(ctx, id)
 
 	if err != nil {
@@ -286,7 +304,11 @@ func TestDeleteWidgetType_Existing_RemovedFromDB(t *testing.T) {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
 
-	id := widget.NewWidgetTypeID(widget.WidgetTypeIDWithUUID(created.ID))
+	id, err := id.NewID(id.IDWithUUID[widget.WidgetType](created.ID))
+	if err != nil {
+		t.Fatalf("NewID: %v", err)
+	}
+
 	if _, err = svc.DeleteWidgetTypeByID(ctx, id); err != nil {
 		t.Fatalf("DeleteWidgetTypeByID: %v", err)
 	}
@@ -301,7 +323,12 @@ func TestDeleteWidgetType_NotFound_ReturnsWrappedError(t *testing.T) {
 	cleanWidgetTypes(t)
 	svc := newWidgetTypeService()
 
-	_, err := svc.DeleteWidgetTypeByID(context.Background(), widget.NewWidgetTypeID())
+	idToDelete, err := id.NewID[widget.WidgetType]()
+	if err != nil {
+		t.Fatalf("NewID: %v", err)
+	}
+
+	_, err = svc.DeleteWidgetTypeByID(context.Background(), idToDelete)
 
 	if err == nil {
 		t.Fatal("expected error for non-existent widget type, got nil")
@@ -355,7 +382,11 @@ func TestDeleteWidgetType_Success_PublishesDeletedEvent(t *testing.T) {
 		received = append(received, e)
 	})
 
-	id := widget.NewWidgetTypeID(widget.WidgetTypeIDWithUUID(created.ID))
+	id, err := id.NewID(id.IDWithUUID[widget.WidgetType](created.ID))
+	if err != nil {
+		t.Fatalf("NewID: %v", err)
+	}
+
 	if _, err = svc.DeleteWidgetTypeByID(ctx, id); err != nil {
 		t.Fatalf("DeleteWidgetTypeByID: %v", err)
 	}

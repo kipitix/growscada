@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/kipitix/growscada/internal/domain/id"
 	"github.com/kipitix/growscada/internal/domain/version"
 	"github.com/kipitix/growscada/internal/domain/widget"
 )
@@ -21,8 +22,12 @@ func NewWidgetTypeRepositoryPostgres(aDb *sql.DB) widget.WidgetTypeRepository {
 	return &widgetTypeRepositoryPostgresImpl{db: aDb}
 }
 
-func (r widgetTypeRepositoryPostgresImpl) NextID() widget.WidgetTypeID {
-	return widget.NewWidgetTypeID()
+func (r widgetTypeRepositoryPostgresImpl) NextID() id.ID[widget.WidgetType] {
+	newID, err := id.NewID[widget.WidgetType]()
+	if err != nil {
+		panic(err)
+	}
+	return newID
 }
 
 func (r widgetTypeRepositoryPostgresImpl) Save(ctx context.Context, wt widget.WidgetType) (widget.WidgetType, error) {
@@ -75,10 +80,10 @@ func (r widgetTypeRepositoryPostgresImpl) Save(ctx context.Context, wt widget.Wi
 	return nil, fmt.Errorf("undefined behavior with version %d", wt.Version().Number())
 }
 
-func (r widgetTypeRepositoryPostgresImpl) classifyUpdateConflict(ctx context.Context, id widget.WidgetTypeID) error {
+func (r widgetTypeRepositoryPostgresImpl) classifyUpdateConflict(ctx context.Context, anID id.ID[widget.WidgetType]) error {
 	var exists bool
 	err := r.db.QueryRowContext(ctx,
-		`SELECT EXISTS(SELECT 1 FROM widget_types WHERE id = $1)`, id.UUID(),
+		`SELECT EXISTS(SELECT 1 FROM widget_types WHERE id = $1)`, anID.UUID(),
 	).Scan(&exists)
 	if err != nil {
 		return fmt.Errorf("cannot check widget type existence: %w", err)
@@ -89,7 +94,7 @@ func (r widgetTypeRepositoryPostgresImpl) classifyUpdateConflict(ctx context.Con
 	return widget.ErrWidgetTypeConflict
 }
 
-func (r widgetTypeRepositoryPostgresImpl) FindByID(ctx context.Context, id widget.WidgetTypeID) (widget.WidgetType, error) {
+func (r widgetTypeRepositoryPostgresImpl) FindByID(ctx context.Context, anID id.ID[widget.WidgetType]) (widget.WidgetType, error) {
 	var (
 		rawID             uuid.UUID
 		name              string
@@ -104,7 +109,7 @@ func (r widgetTypeRepositoryPostgresImpl) FindByID(ctx context.Context, id widge
 	row := r.db.QueryRowContext(ctx,
 		`SELECT id, name, html_template, script, script_language, default_width, default_height, version
 		 FROM widget_types WHERE id = $1`,
-		id.UUID(),
+		anID.UUID(),
 	)
 	err := row.Scan(&rawID, &name, &htmlTemplate, &script, &language, &defaultWidth, &defaultHeight, &widgetTypeVersion)
 	if err != nil {
@@ -117,7 +122,7 @@ func (r widgetTypeRepositoryPostgresImpl) FindByID(ctx context.Context, id widge
 	return r.reconstruct(rawID, name, htmlTemplate, script, language, defaultWidth, defaultHeight, widgetTypeVersion)
 }
 
-func (r widgetTypeRepositoryPostgresImpl) DeleteByID(ctx context.Context, id widget.WidgetTypeID) (widget.WidgetType, error) {
+func (r widgetTypeRepositoryPostgresImpl) DeleteByID(ctx context.Context, anID id.ID[widget.WidgetType]) (widget.WidgetType, error) {
 	var (
 		rawID             uuid.UUID
 		name              string
@@ -132,7 +137,7 @@ func (r widgetTypeRepositoryPostgresImpl) DeleteByID(ctx context.Context, id wid
 	row := r.db.QueryRowContext(ctx,
 		`DELETE FROM widget_types WHERE id = $1
 		 RETURNING id, name, html_template, script, script_language, default_width, default_height, version`,
-		id.UUID(),
+		anID.UUID(),
 	)
 	err := row.Scan(&rawID, &name, &htmlTemplate, &script, &lang, &defaultWidth, &defaultHeight, &widgetTypeVersion)
 	if err != nil {
@@ -186,7 +191,10 @@ func (r widgetTypeRepositoryPostgresImpl) reconstruct(
 	aDefaultWidth, aDefaultHeight int,
 	aVersion int,
 ) (widget.WidgetType, error) {
-	newID := widget.NewWidgetTypeID(widget.WidgetTypeIDWithUUID(aRawID))
+	newID, err := id.NewID(id.IDWithUUID[widget.WidgetType](aRawID))
+	if err != nil {
+		return nil, fmt.Errorf("cannot create widget type id: %w", err)
+	}
 
 	newName, err := widget.NewWidgetTypeName(aName)
 	if err != nil {

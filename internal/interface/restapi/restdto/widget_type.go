@@ -3,6 +3,8 @@ package restdto
 import (
 	"github.com/google/uuid"
 	"github.com/kipitix/growscada/internal/application/appdto"
+	"github.com/kipitix/growscada/internal/domain/id"
+	"github.com/kipitix/growscada/internal/domain/widget"
 )
 
 // WidgetTypeResponse is the HTTP DTO for representing a widget type in API responses.
@@ -92,9 +94,9 @@ func NewCreateWidgetTypeInput(r CreateWidgetTypeRequest) appdto.CreateWidgetType
 	}
 }
 
-func NewUpdateWidgetTypeInput(r UpdateWidgetTypeRequest, id uuid.UUID) appdto.UpdateWidgetTypeInput {
+func NewUpdateWidgetTypeInput(r UpdateWidgetTypeRequest, anID id.ID[widget.WidgetType]) appdto.UpdateWidgetTypeInput {
 	return appdto.UpdateWidgetTypeInput{
-		ID:             id,
+		ID:             anID.UUID(),
 		Name:           r.Name,
 		HtmlTemplate:   r.HtmlTemplate,
 		Script:         r.Script,

@@ -29,9 +29,14 @@ func makeWidget(t *testing.T, name string, repo widget.WidgetRepository) widget.
 	if err != nil {
 		t.Fatalf("NewWidgetName(%q): %v", name, err)
 	}
-	coords := widget.NewCoordinates(10.0, 20.0, 0.0)
+	pos := widget.NewPosition(10.0, 20.0, 0)
 	typeID, _ := id.NewID(id.IDWithUUID[widget.WidgetType](uuid.New()))
-	w, err := widget.NewWidget(newID, newName, coords, widget.DefaultSize(), typeID, id.ID[scene.Scene]{}, []string{"label1"}, nil, version.Initial[widget.Widget]())
+	w, err := widget.NewWidget(
+		newID, newName, pos, widget.DefaultSize(),
+		widget.DefaultOrigin(), widget.DefaultRotation(),
+		typeID, id.ID[scene.Scene]{}, []string{"label1"}, nil,
+		version.Initial[widget.Widget](),
+	)
 	if err != nil {
 		t.Fatalf("NewWidget: %v", err)
 	}
@@ -93,7 +98,12 @@ func TestWidgetSave_DuplicateID_ReturnsError(t *testing.T) {
 		t.Fatalf("first Save failed: %v", err)
 	}
 
-	duplicate, _ := widget.NewWidget(w.ID(), w.Name(), w.Coordinates(), w.Size(), w.TypeID(), w.SceneID(), w.Labels(), w.TagIDs(), version.Initial[widget.Widget]())
+	duplicate, _ := widget.NewWidget(
+		w.ID(), w.Name(), w.Position(), w.Size(),
+		w.Origin(), w.Rotation(),
+		w.TypeID(), w.SceneID(), w.Labels(), w.TagIDs(),
+		version.Initial[widget.Widget](),
+	)
 	_, err := repo.Save(ctx, duplicate)
 
 	if err == nil {
@@ -119,7 +129,12 @@ func TestWidgetSave_ExistingWidget_UpdatesSuccessfully(t *testing.T) {
 	}
 
 	newName, _ := widget.NewWidgetName("gauge-updated")
-	updated, _ := widget.NewWidget(found.ID(), newName, found.Coordinates(), found.Size(), found.TypeID(), found.SceneID(), found.Labels(), found.TagIDs(), found.Version())
+	updated, _ := widget.NewWidget(
+		found.ID(), newName, found.Position(), found.Size(),
+		found.Origin(), found.Rotation(),
+		found.TypeID(), found.SceneID(), found.Labels(), found.TagIDs(),
+		found.Version(),
+	)
 	if _, err := repo.Save(ctx, updated); err != nil {
 		t.Fatalf("update Save failed: %v", err)
 	}
@@ -143,7 +158,12 @@ func TestWidgetSave_ExistingWidget_VersionIsIncremented(t *testing.T) {
 	found, _ := repo.FindByID(ctx, saved.ID())
 
 	newName, _ := widget.NewWidgetName("gauge-v2")
-	updated, _ := widget.NewWidget(found.ID(), newName, found.Coordinates(), found.Size(), found.TypeID(), found.SceneID(), found.Labels(), found.TagIDs(), found.Version())
+	updated, _ := widget.NewWidget(
+		found.ID(), newName, found.Position(), found.Size(),
+		found.Origin(), found.Rotation(),
+		found.TypeID(), found.SceneID(), found.Labels(), found.TagIDs(),
+		found.Version(),
+	)
 	saved2, err := repo.Save(ctx, updated)
 
 	if err != nil {
@@ -165,7 +185,12 @@ func TestWidgetSave_StaleVersion_ReturnsError(t *testing.T) {
 	}
 
 	badVersion, _ := version.New[widget.Widget](version.WithNumber[widget.Widget](100))
-	stale, _ := widget.NewWidget(w.ID(), w.Name(), w.Coordinates(), w.Size(), w.TypeID(), w.SceneID(), w.Labels(), w.TagIDs(), badVersion)
+	stale, _ := widget.NewWidget(
+		w.ID(), w.Name(), w.Position(), w.Size(),
+		w.Origin(), w.Rotation(),
+		w.TypeID(), w.SceneID(), w.Labels(), w.TagIDs(),
+		badVersion,
+	)
 	_, err := repo.Save(ctx, stale)
 
 	if err == nil {
@@ -197,8 +222,8 @@ func TestWidgetFindByID_Existing_ReturnsWidget(t *testing.T) {
 	if found.Name() != saved.Name() {
 		t.Errorf("Name: expected %v, got %v", saved.Name(), found.Name())
 	}
-	if found.Coordinates().X() != saved.Coordinates().X() {
-		t.Errorf("Coordinates.X: expected %v, got %v", saved.Coordinates().X(), found.Coordinates().X())
+	if found.Position().X() != saved.Position().X() {
+		t.Errorf("Position.X: expected %v, got %v", saved.Position().X(), found.Position().X())
 	}
 	if found.Version() != saved.Version() {
 		t.Errorf("Version: expected %d, got %d", saved.Version().Number(), found.Version().Number())
@@ -271,9 +296,15 @@ func TestWidgetFindAll_WithTagIDs_RoundTripsCorrectly(t *testing.T) {
 
 	newID := repo.NextID()
 	newName, _ := widget.NewWidgetName("with-tags")
-	coords := widget.NewCoordinates(1, 2, 3)
+	pos := widget.NewPosition(1, 2, 3)
 	typeID, _ := id.NewID(id.IDWithUUID[widget.WidgetType](uuid.New()))
-	w, _ := widget.NewWidget(newID, newName, coords, widget.DefaultSize(), typeID, id.ID[scene.Scene]{}, []string{"a", "b"}, []id.ID[tag.Tag]{tagID1, tagID2}, version.Initial[widget.Widget]())
+	w, _ := widget.NewWidget(
+		newID, newName, pos, widget.DefaultSize(),
+		widget.DefaultOrigin(), widget.DefaultRotation(),
+		typeID, id.ID[scene.Scene]{}, []string{"a", "b"},
+		[]id.ID[tag.Tag]{tagID1, tagID2},
+		version.Initial[widget.Widget](),
+	)
 
 	if _, err := repo.Save(ctx, w); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -289,6 +320,48 @@ func TestWidgetFindAll_WithTagIDs_RoundTripsCorrectly(t *testing.T) {
 	}
 	if len(found.Labels()) != 2 {
 		t.Errorf("Labels: expected 2, got %d", len(found.Labels()))
+	}
+}
+
+// --- Origin and Rotation round-trip ---
+
+func TestWidgetFindByID_OriginAndRotation_RoundTripsCorrectly(t *testing.T) {
+	cleanWidgets(t)
+	repo := repositories.NewWidgetRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	newID := repo.NextID()
+	newName, _ := widget.NewWidgetName("rotated-widget")
+	pos := widget.NewPosition(50, 100, 2)
+	size, _ := widget.NewSize(200, 150)
+	origin, _ := widget.NewOrigin(0.25, 0.75)
+	rotation := widget.NewRotation(90.0)
+	typeID, _ := id.NewID(id.IDWithUUID[widget.WidgetType](uuid.New()))
+
+	w, _ := widget.NewWidget(
+		newID, newName, pos, size, origin, rotation,
+		typeID, id.ID[scene.Scene]{}, nil, nil,
+		version.Initial[widget.Widget](),
+	)
+
+	if _, err := repo.Save(ctx, w); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	found, err := repo.FindByID(ctx, newID)
+	if err != nil {
+		t.Fatalf("FindByID: %v", err)
+	}
+
+	if found.Origin().X() != origin.X() || found.Origin().Y() != origin.Y() {
+		t.Errorf("Origin: expected (%.4f, %.4f), got (%.4f, %.4f)",
+			origin.X(), origin.Y(), found.Origin().X(), found.Origin().Y())
+	}
+	if found.Rotation().Degrees() != rotation.Degrees() {
+		t.Errorf("Rotation: expected %.4f°, got %.4f°", rotation.Degrees(), found.Rotation().Degrees())
+	}
+	if found.Position().Z() != pos.Z() {
+		t.Errorf("Position.Z: expected %d, got %d", pos.Z(), found.Position().Z())
 	}
 }
 

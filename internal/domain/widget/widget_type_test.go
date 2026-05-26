@@ -3,12 +3,13 @@ package widget
 import (
 	"testing"
 
+	"github.com/kipitix/growscada/internal/domain/id"
 	"github.com/kipitix/growscada/internal/domain/version"
 )
 
 func makeTestWidgetType(t *testing.T) WidgetType {
 	t.Helper()
-	id := NewWidgetTypeID()
+	id, _ := id.NewID[WidgetType]()
 	name, _ := NewWidgetTypeName("gauge")
 	htmlTemplate, _ := NewHtmlTemplate("<div class='gauge'></div>")
 	script, _ := NewScript("function render(value) { return value; }")
@@ -17,7 +18,7 @@ func makeTestWidgetType(t *testing.T) WidgetType {
 }
 
 func TestNewWidgetType_FieldsAreSet(t *testing.T) {
-	id := NewWidgetTypeID()
+	id, _ := id.NewID[WidgetType]()
 	name, _ := NewWidgetTypeName("thermometer")
 	htmlTemplate, _ := NewHtmlTemplate("<div class='thermometer'></div>")
 	script, _ := NewScript("function draw() {}")
