@@ -1,5 +1,75 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.12] - 2026-05-27
+
+### Added
+
+- `internal/domain/scene` — новый пакет домена для сцен:
+  - `Scene` — агрегат (интерфейс + `sceneImpl`): `ID`, `Name`, `Size`, `BackgroundHTML`, `Version`
+  - `SceneName` — Value Object; валидация: пустая строка возвращает ошибку
+  - `SceneSize` — Value Object; ширина и высота в пикселях; `NewSceneSize` возвращает ошибку при неположительных значениях
+  - `BackgroundHTML` — Value Object-обёртка над строкой статического HTML-фона сцены
+  - `SceneRepository` — интерфейс с методами `NextID`, `Save`, `FindByID`, `FindAll`, `DeleteByID`; sentinel-ошибки `ErrSceneNotFound`, `ErrSceneConflict`, `ErrSceneValidation`
+- `internal/domain/widget` — расширен агрегатом экземпляра виджета:
+  - `Widget` — агрегат (интерфейс + `widgetImpl`): экземпляр `WidgetType`, размещённый на `Scene`; поля: `ID`, `Name`, `Position`, `Size`, `Origin`, `Rotation`, `TransformationMatrix`, `TypeID`, `SceneID`, `Labels`, `TagIDs`, `Version`
+  - `WidgetName` — Value Object; валидация: пустая строка возвращает ошибку
+  - `Position` — Value Object; координаты на холсте (`x`, `y` float64, `z` int для z-index)
+  - `Size` — Value Object; ширина и высота в пикселях; `NewSize` возвращает ошибку при неположительных значениях
+  - `Origin` — Value Object; нормализованная точка привязки трансформации (`0.0`–`1.0` по каждой оси)
+  - `Rotation` — Value Object; угол поворота в градусах (float64)
+  - `TransformationMatrix` — Value Object; 2D аффинная матрица CSS `matrix(a,b,c,d,e,f)`, вычисляется из `Position`, `Origin`, `Rotation`, `Size` с учётом точки привязки; метод `CSS()` возвращает строку для `transform:`
+  - `WidgetRepository` — интерфейс с методами `NextID`, `Save`, `FindByID`, `FindAll`, `FindBySceneID`, `DeleteByID`; sentinel-ошибки `ErrWidgetNotFound`, `ErrWidgetConflict`, `ErrWidgetInvalidInput`
+- `internal/domain/id` — новый пакет обобщённого Value Object `ID[T]`:
+  - `ID[T]` — UUID-обёртка с типовым параметром агрегата; исключает перепутывание ID разных агрегатов на этапе компиляции
+  - `NewID[T]`, `IDWithUUID[T]`, `IDOption[T]`; при создании без опций генерирует новый UUID автоматически
+- `internal/domain/event` — события для жизненного цикла `Widget` и `Scene`:
+  - `WidgetCreatedEvent`, `WidgetUpdatedEvent`, `WidgetDeletedEvent`
+  - `SceneCreatedEvent`, `SceneUpdatedEvent`, `SceneDeletedEvent`
+  - `EventType` расширен 6 новыми значениями
+- `internal/application/widget_application_service.go` — `WidgetService` с методами `FindAllWidgets`, `FindWidgetsBySceneID`, `FindWidgetByID`, `CreateWidget`, `UpdateWidget`, `DeleteWidgetByID`; валидация обязательных полей `scene_id` и `type_id` на уровне сервиса; публикует события через `EventBus`
+- `internal/application/scene_application_service.go` — `SceneService` с методами `FindAllScenes`, `FindSceneByID`, `CreateScene`, `UpdateScene`, `DeleteSceneByID`; публикует события через `EventBus`
+- `internal/application/appdto/widget.go` — DTO `Widget`, `CreateWidgetInput`, `UpdateWidgetInput`; фабрики `NewWidget`, `NewWidgetList`
+- `internal/application/appdto/scene.go` — DTO `Scene`, `CreateSceneInput`, `UpdateSceneInput`; фабрики `NewScene`, `NewSceneList`
+- `internal/infrastructure/postgres/repositories/widget_repository_postgres.go` — PostgreSQL-реализация `WidgetRepository`; INSERT при `version == Initial`, UPDATE с оптимистичной блокировкой; `classifyUpdateConflict` определяет `ErrWidgetNotFound` vs `ErrWidgetConflict`
+- `internal/infrastructure/postgres/repositories/scene_repository_postgres.go` — PostgreSQL-реализация `SceneRepository`; аналогичная стратегия оптимистичной блокировки
+- Миграции:
+  - `20260516000000_create_widgets.sql` — DDL таблицы `widgets`
+  - `20260516000001_create_scenes.sql` — DDL таблицы `scenes`
+  - `20260516000002_add_scene_id_to_widgets.sql` — добавлен FK `scene_id` в `widgets`
+  - `20260518000001_add_size_to_widgets.sql` — добавлены колонки `width`, `height` в `widgets`
+  - `20260526000000_add_transform_to_widgets.sql` — добавлены `origin_x`, `origin_y`, `rotation_degrees` в `widgets`
+  - `20260527000000_widget_scene_id_not_null.sql` — `scene_id` переведён в `NOT NULL`
+- `internal/interface/restapi/widgets.go` — REST-хэндлеры CRUD для экземпляров виджетов:
+  - `GET /api/v1/widgets` — список всех виджетов
+  - `GET /api/v1/widgets/{id}` — виджет по ID; 404 при отсутствии
+  - `POST /api/v1/widgets` — создание; 201 с объектом; 400 при невалидном вводе
+  - `PUT /api/v1/widgets/{id}` — обновление; 404 при отсутствии, 409 при конфликте версий
+  - `DELETE /api/v1/widgets/{id}` — удаление; 200 с телом удалённого объекта, 404 при отсутствии
+  - `GET /api/v1/scenes/{id}/widgets` — виджеты по сцене (вложенный ресурс)
+- `internal/interface/restapi/scenes.go` — REST-хэндлеры CRUD для сцен:
+  - `GET /api/v1/scenes` — список всех сцен
+  - `GET /api/v1/scenes/{id}` — сцена по ID; 404 при отсутствии
+  - `POST /api/v1/scenes` — создание; 201; 422 при ошибке валидации домена
+  - `PUT /api/v1/scenes/{id}` — обновление; 404, 409 (конфликт версий), 422 (валидация)
+  - `DELETE /api/v1/scenes/{id}` — удаление; 200 с телом удалённой сцены
+- `internal/interface/restapi/restdto/widget.go` — HTTP-DTO `WidgetResponse`, `GetWidgetsResponse`, `CreateWidgetRequest/Response`, `UpdateWidgetRequest/Response`
+- `internal/interface/restapi/restdto/scene.go` — HTTP-DTO `SceneResponse`, `GetScenesResponse`, `CreateSceneRequest/Response`, `UpdateSceneRequest/Response`
+- Bruno-коллекция — новые запросы: `get_scenes`, `get_scene_by_id`, `post_scenes`, `put_scene_by_id`, `delete_scene_by_id`, `get_widgets`, `get_widget_by_id`, `get_widgets_by_scene_id`, `post_widgets`, `put_widget_by_id`, `delete_widget_by_id`
+- Юнит-тесты домена `widget` — `widget_test.go`, `widget_name_test.go`, `widget_position_test.go`, `widget_size_test.go`, `widget_origin_test.go`, `widget_rotation_test.go`, `widget_transform_matrix_test.go`
+- Юнит-тесты домена `scene` — `scene_test.go`, `scene_name_test.go`, `scene_size_test.go`, `scene_background_html_test.go`
+- Юнит-тесты `internal/domain/id/id_test.go` — генерация нового UUID, задание через `IDWithUUID`, `String`, тип-параметр как изолятор
+- Интеграционные тесты `internal/application/widget_application_service_test.go` — полный CRUD, валидация обязательных полей, конфликт версий, публикация событий
+- Интеграционные тесты `internal/infrastructure/postgres/repositories/widget_repository_postgres_test.go`
+- Интеграционные тесты `internal/interface/restapi/widgets_test.go` и `scenes_test.go` — все хэндлеры включая 409 Conflict и 422 Unprocessable Entity
+
+### Changed
+
+- `internal/domain/id` — `TagID`, `WidgetTypeID` и все прочие агрегатные идентификаторы переведены на обобщённый `id.ID[T]` из нового пакета `internal/domain/id`; per-aggregate `TagID`, `WidgetTypeID` удалены как отдельные типы
+- `internal/domain/version` — `Version` стал обобщённым `Version[T]`; конструкторы `Initial[T]()` и `Committed[T]()` получили тип-параметр агрегата; исключает применение версии одного агрегата к другому
+- `internal/interface/ui/library` — `Library` разбита на отдельные файлы: `library.go` (структура и монтирование), `dto.go`, `render_list.go`, `render_editor.go`, `widget_type_ops.go` (сетевые операции)
+- `internal/interface/ui/project` — монолитный `project.go` разбит на: `project.go` (корневая структура), `dto.go`, `matrix.go`, `render_scene.go`, `render_properties.go`, `render_widget_types.go`, `scene_ops.go`, `widget_ops.go`
+- Bruno-коллекция — все имена файлов с пробелами переименованы в snake_case (например, `get tag by id.yml` → `get_tag_by_id.yml`)
+
 ## [0.0.11] - 2026-05-16
 
 ### Added
