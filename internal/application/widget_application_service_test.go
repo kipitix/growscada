@@ -376,9 +376,9 @@ func TestUpdateWidget_ZeroVersion_ReturnsError(t *testing.T) {
 	}
 
 	_, err = svc.UpdateWidget(ctx, appdto.UpdateWidgetInput{
-		ID:     created.ID,
-		Name:   "bad",
-		TypeID: created.TypeID,
+		ID:      created.ID,
+		Name:    "bad",
+		TypeID:  created.TypeID,
 		Version: 0, // invalid: version 0 is the initial (unsaved) state
 	})
 
@@ -611,11 +611,10 @@ func TestFindWidgetsBySceneID_MultipleWidgetsInSameScene_ReturnsAll(t *testing.T
 	sceneID := uuid.New()
 	mustInsertScene(t, sceneID)
 
-	for i, name := range []string{"widget-a", "widget-b", "widget-c"} {
+	for _, name := range []string{"widget-a", "widget-b", "widget-c"} {
 		input := testCreateWidgetInput
 		input.Name = name
 		input.SceneID = sceneID
-		_ = i
 		if _, err := svc.CreateWidget(ctx, input); err != nil {
 			t.Fatalf("CreateWidget %q: %v", name, err)
 		}

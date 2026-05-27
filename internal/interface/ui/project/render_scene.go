@@ -153,9 +153,6 @@ func (p *Project) renderSceneCanvas() app.UI {
 
 	widgetEls := make([]app.UI, 0, len(p.widgets))
 	for _, w := range p.widgets {
-		if w.SceneID != p.selectedSceneID {
-			continue
-		}
 		widgetEls = append(widgetEls, p.renderWidget(w))
 	}
 

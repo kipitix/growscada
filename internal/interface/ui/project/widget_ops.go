@@ -259,21 +259,17 @@ func (p *Project) putWidget(ctx app.Context, w widgetItem) {
 
 // finalizeAllDrags saves any active drag operation to the server.
 func (p *Project) finalizeAllDrags(ctx app.Context) {
-	if id := p.draggingWidgetID; id != "" {
-		p.draggingWidgetID = ""
-		p.saveDraggedWidget(ctx, id)
-	}
-	if id := p.draggingOriginID; id != "" {
-		p.draggingOriginID = ""
-		p.saveDraggedWidget(ctx, id)
-	}
-	if id := p.rotatingWidgetID; id != "" {
-		p.rotatingWidgetID = ""
-		p.saveDraggedWidget(ctx, id)
-	}
-	if id := p.resizingWidgetID; id != "" {
-		p.resizingWidgetID = ""
-		p.saveDraggedWidget(ctx, id)
+	for _, idPtr := range []*string{
+		&p.draggingWidgetID,
+		&p.draggingOriginID,
+		&p.rotatingWidgetID,
+		&p.resizingWidgetID,
+	} {
+		if *idPtr != "" {
+			id := *idPtr
+			*idPtr = ""
+			p.saveDraggedWidget(ctx, id)
+		}
 	}
 }
 

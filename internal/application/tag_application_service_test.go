@@ -108,10 +108,6 @@ func newServiceWithBus() (application.TagService, event.EventBus) {
 	return application.NewTagService(repo, bus), bus
 }
 
-func mustTagIDFromUUID(u uuid.UUID) uuid.UUID {
-	return u
-}
-
 func mustNewTagID() uuid.UUID {
 	return uuid.New()
 }
@@ -259,7 +255,7 @@ func TestFindTagByID_ExistingTag_ReturnsTag(t *testing.T) {
 		t.Fatalf("CreateTag: %v", err)
 	}
 
-	found, err := svc.FindTagByID(ctx, mustTagIDFromUUID(createResp.ID))
+	found, err := svc.FindTagByID(ctx, createResp.ID)
 
 	if err != nil {
 		t.Fatalf("FindTagByID returned unexpected error: %v", err)
@@ -305,7 +301,7 @@ func TestDeleteTag_ExistingTag_ReturnsDeletedTag(t *testing.T) {
 		t.Fatalf("CreateTag: %v", err)
 	}
 
-	resp, err := svc.DeleteTagByID(ctx, mustTagIDFromUUID(created.ID))
+	resp, err := svc.DeleteTagByID(ctx, created.ID)
 
 	if err != nil {
 		t.Fatalf("DeleteTagByID returned unexpected error: %v", err)
@@ -328,12 +324,11 @@ func TestDeleteTag_ExistingTag_TagIsRemovedFromDB(t *testing.T) {
 		t.Fatalf("CreateTag: %v", err)
 	}
 
-	tagID := mustTagIDFromUUID(created.ID)
-	if _, err = svc.DeleteTagByID(ctx, tagID); err != nil {
+	if _, err = svc.DeleteTagByID(ctx, created.ID); err != nil {
 		t.Fatalf("DeleteTagByID: %v", err)
 	}
 
-	_, err = svc.FindTagByID(ctx, tagID)
+	_, err = svc.FindTagByID(ctx, created.ID)
 	if !errors.Is(err, tag.ErrTagNotFound) {
 		t.Errorf("expected ErrTagNotFound after delete, got: %v", err)
 	}
@@ -386,12 +381,11 @@ func TestSetTagValueByID_ValidUpdate_ValueAndQualityAreUpdated(t *testing.T) {
 		t.Fatalf("CreateTag: %v", err)
 	}
 
-	tagID := mustTagIDFromUUID(created.ID)
 	if _, err = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "42", Quality: "good", Version: created.Version}); err != nil {
 		t.Fatalf("SetTagValueByID: %v", err)
 	}
 
-	found, err := svc.FindTagByID(ctx, tagID)
+	found, err := svc.FindTagByID(ctx, created.ID)
 	if err != nil {
 		t.Fatalf("FindTagByID: %v", err)
 	}
@@ -496,7 +490,7 @@ func TestDeleteTagByID_Success_PublishesTagDeletedEvent(t *testing.T) {
 		received = append(received, e)
 	})
 
-	if _, err = svc.DeleteTagByID(ctx, mustTagIDFromUUID(created.ID)); err != nil {
+	if _, err = svc.DeleteTagByID(ctx, created.ID); err != nil {
 		t.Fatalf("DeleteTagByID: %v", err)
 	}
 
