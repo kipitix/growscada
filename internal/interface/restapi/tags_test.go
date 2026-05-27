@@ -74,6 +74,20 @@ func TestMain(m *testing.M) {
 
 	testDB = db
 
+	// Insert a shared scene row. The widgets table has a FK on scene_id, so
+	// every widget insert needs a real scene. We set testWidgetInput.SceneID
+	// here so all widget tests pick it up automatically.
+	testSceneID = uuid.New()
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO scenes (id, name, width, height, background_html, version) VALUES ($1, $2, $3, $4, $5, $6)`,
+		testSceneID, "test-scene", 1920, 1080, "", 1,
+	); err != nil {
+		db.Close()
+		pgContainer.Terminate(ctx)
+		panic("failed to insert test scene: " + err.Error())
+	}
+	testWidgetInput.SceneID = testSceneID
+
 	code := m.Run()
 
 	db.Close()
@@ -93,7 +107,11 @@ func newRouter() *restapi.APIRouter {
 	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	wtSvc := application.NewWidgetTypeService(wtRepo, event.NewEventBus())
-	return restapi.NewRouter(tagSvc, wtSvc)
+	wRepo := repositories.NewWidgetRepositoryPostgres(testDB)
+	wSvc := application.NewWidgetService(wRepo, event.NewEventBus())
+	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
+	sceneSvc := application.NewSceneService(sceneRepo, event.NewEventBus())
+	return restapi.NewRouter(tagSvc, wtSvc, wSvc, sceneSvc)
 }
 
 func createTagViaService(t *testing.T, name, tagType, value, quality string) appdto.Tag {
@@ -412,7 +430,7 @@ func TestPatchTagValue_ValidUpdate_Returns200WithVersion(t *testing.T) {
 	created := createTagViaService(t, "temperature", "integer", "10", "bad")
 	router := newRouter()
 
-	body, _ := json.Marshal(map[string]string{"value": "99", "quality": "good"})
+	body, _ := json.Marshal(restdto.UpdateTagRequest{Value: "99", Quality: "good", Version: created.Version})
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/tags/"+created.ID.String()+"/value", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -436,7 +454,7 @@ func TestPatchTagValue_ValidUpdate_ValueAndQualityAreUpdated(t *testing.T) {
 	created := createTagViaService(t, "humidity", "integer", "0", "bad")
 	router := newRouter()
 
-	body, _ := json.Marshal(map[string]string{"value": "75", "quality": "good"})
+	body, _ := json.Marshal(restdto.UpdateTagRequest{Value: "75", Quality: "good", Version: created.Version})
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/tags/"+created.ID.String()+"/value", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()

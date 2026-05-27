@@ -12,6 +12,8 @@ type APIRouter struct {
 	serveMux            *http.ServeMux
 	tagsHandlers        *TagsHandlers
 	widgetTypesHandlers *WidgetTypesHandlers
+	widgetsHandlers     *WidgetsHandlers
+	scenesHandlers      *ScenesHandlers
 }
 
 func (r APIRouter) ServeMux() http.Handler {
@@ -31,7 +33,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func NewRouter(tagService application.TagService, widgetTypeService application.WidgetTypeService) *APIRouter {
+func NewRouter(tagService application.TagService, widgetTypeService application.WidgetTypeService, widgetService application.WidgetService, sceneService application.SceneService) *APIRouter {
 	router := &APIRouter{}
 	router.serveMux = http.NewServeMux()
 
@@ -48,6 +50,21 @@ func NewRouter(tagService application.TagService, widgetTypeService application.
 	router.serveMux.HandleFunc("POST /api/v1/widget-types", router.widgetTypesHandlers.PostWidgetTypes)
 	router.serveMux.HandleFunc("PUT /api/v1/widget-types/{id}", router.widgetTypesHandlers.PutWidgetTypesByID)
 	router.serveMux.HandleFunc("DELETE /api/v1/widget-types/{id}", router.widgetTypesHandlers.DeleteWidgetTypesByID)
+
+	router.widgetsHandlers = NewWidgetsHandler(widgetService)
+	router.serveMux.HandleFunc("GET /api/v1/widgets", router.widgetsHandlers.GetWidgets)
+	router.serveMux.HandleFunc("GET /api/v1/widgets/{id}", router.widgetsHandlers.GetWidgetsByID)
+	router.serveMux.HandleFunc("POST /api/v1/widgets", router.widgetsHandlers.PostWidgets)
+	router.serveMux.HandleFunc("PUT /api/v1/widgets/{id}", router.widgetsHandlers.PutWidgetsByID)
+	router.serveMux.HandleFunc("DELETE /api/v1/widgets/{id}", router.widgetsHandlers.DeleteWidgetsByID)
+	router.serveMux.HandleFunc("GET /api/v1/scenes/{id}/widgets", router.widgetsHandlers.GetWidgetsBySceneID)
+
+	router.scenesHandlers = NewScenesHandler(sceneService)
+	router.serveMux.HandleFunc("GET /api/v1/scenes", router.scenesHandlers.GetScenes)
+	router.serveMux.HandleFunc("GET /api/v1/scenes/{id}", router.scenesHandlers.GetScenesByID)
+	router.serveMux.HandleFunc("POST /api/v1/scenes", router.scenesHandlers.PostScenes)
+	router.serveMux.HandleFunc("PUT /api/v1/scenes/{id}", router.scenesHandlers.PutScenesByID)
+	router.serveMux.HandleFunc("DELETE /api/v1/scenes/{id}", router.scenesHandlers.DeleteScenesByID)
 
 	return router
 }

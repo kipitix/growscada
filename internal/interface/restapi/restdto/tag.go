@@ -34,9 +34,11 @@ type CreateTagResponse struct {
 }
 
 // UpdateTagRequest is the HTTP DTO for a tag value update request.
+// Version must match the current persisted version for optimistic locking.
 type UpdateTagRequest struct {
 	Value   string `json:"value"`
 	Quality string `json:"quality"`
+	Version int    `json:"version"`
 }
 
 // UpdateTagResponse is the HTTP DTO for a tag value update response.
@@ -91,5 +93,6 @@ func NewUpdateTagInput(r UpdateTagRequest, tagID uuid.UUID) appdto.UpdateTagInpu
 		ID:      tagID,
 		Value:   r.Value,
 		Quality: r.Quality,
+		Version: r.Version,
 	}
 }

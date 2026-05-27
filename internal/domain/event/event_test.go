@@ -5,8 +5,13 @@ import (
 	"time"
 
 	"github.com/kipitix/growscada/internal/domain/event"
+	"github.com/kipitix/growscada/internal/domain/id"
 	"github.com/kipitix/growscada/internal/domain/tag"
 )
+
+func mustTagID() id.ID[tag.Tag] {
+	return id.NewID[tag.Tag]()
+}
 
 // --- EventTimestamp ---
 
@@ -147,7 +152,7 @@ func TestEventBus_Publish_CallsSubscribedHandler(t *testing.T) {
 		received = append(received, e)
 	})
 
-	e := event.NewTagCreatedEvent(tag.NewTagID())
+	e := event.NewTagCreatedEvent(mustTagID())
 	bus.Publish(e)
 
 	if len(received) != 1 {
@@ -165,7 +170,7 @@ func TestEventBus_Publish_DoesNotCallHandlerForDifferentType(t *testing.T) {
 		received = append(received, e)
 	})
 
-	bus.Publish(event.NewTagCreatedEvent(tag.NewTagID()))
+	bus.Publish(event.NewTagCreatedEvent(mustTagID()))
 
 	if len(received) != 0 {
 		t.Errorf("expected no events, got %d", len(received))
@@ -178,7 +183,7 @@ func TestEventBus_Publish_CallsAllSubscribersForSameType(t *testing.T) {
 	bus.Subscribe(event.EventTypeTagCreated, func(e event.Event) { count++ })
 	bus.Subscribe(event.EventTypeTagCreated, func(e event.Event) { count++ })
 
-	bus.Publish(event.NewTagCreatedEvent(tag.NewTagID()))
+	bus.Publish(event.NewTagCreatedEvent(mustTagID()))
 
 	if count != 2 {
 		t.Errorf("expected 2 handler calls, got %d", count)
@@ -187,7 +192,7 @@ func TestEventBus_Publish_CallsAllSubscribersForSameType(t *testing.T) {
 
 func TestEventBus_Publish_NoSubscribers_DoesNotPanic(t *testing.T) {
 	bus := event.NewEventBus()
-	bus.Publish(event.NewTagCreatedEvent(tag.NewTagID()))
+	bus.Publish(event.NewTagCreatedEvent(mustTagID()))
 }
 
 // --- SystemReadyEvent ---
@@ -225,30 +230,30 @@ func TestNewSystemReadyEvent_WithTimestamp_SetsTimestamp(t *testing.T) {
 // --- TagCreatedEvent ---
 
 func TestNewTagCreatedEvent_Type_IsTagCreated(t *testing.T) {
-	e := event.NewTagCreatedEvent(tag.NewTagID())
+	e := event.NewTagCreatedEvent(mustTagID())
 	if e.Type() != event.EventTypeTagCreated {
 		t.Errorf("expected %s, got %s", event.EventTypeTagCreated, e.Type())
 	}
 }
 
 func TestNewTagCreatedEvent_TagID_MatchesProvided(t *testing.T) {
-	id := tag.NewTagID()
-	e := event.NewTagCreatedEvent(id)
+	tagID := mustTagID()
+	e := event.NewTagCreatedEvent(tagID)
 
-	if e.TagID() != id {
-		t.Errorf("expected TagID %v, got %v", id, e.TagID())
+	if e.TagID() != tagID {
+		t.Errorf("expected TagID %v, got %v", tagID, e.TagID())
 	}
 }
 
 func TestNewTagCreatedEvent_Timestamp_IsNonZero(t *testing.T) {
-	e := event.NewTagCreatedEvent(tag.NewTagID())
+	e := event.NewTagCreatedEvent(mustTagID())
 	if e.Timestamp().Time().IsZero() {
 		t.Error("expected non-zero timestamp")
 	}
 }
 
 func TestNewTagCreatedEvent_String_IsNonEmpty(t *testing.T) {
-	e := event.NewTagCreatedEvent(tag.NewTagID())
+	e := event.NewTagCreatedEvent(mustTagID())
 	if e.String() == "" {
 		t.Error("expected non-empty string representation")
 	}
@@ -256,7 +261,7 @@ func TestNewTagCreatedEvent_String_IsNonEmpty(t *testing.T) {
 
 func TestNewTagCreatedEvent_WithTimestamp_SetsTimestamp(t *testing.T) {
 	fixed := event.NewEventTimestamp(event.EventTimestampWithTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)))
-	e := event.NewTagCreatedEvent(tag.NewTagID(), event.WithTimestamp(fixed))
+	e := event.NewTagCreatedEvent(mustTagID(), event.WithTimestamp(fixed))
 
 	if !e.Timestamp().Time().Equal(fixed.Time()) {
 		t.Errorf("expected %v, got %v", fixed.Time(), e.Timestamp().Time())
@@ -266,30 +271,30 @@ func TestNewTagCreatedEvent_WithTimestamp_SetsTimestamp(t *testing.T) {
 // --- TagUpdatedEvent ---
 
 func TestNewTagUpdatedEvent_Type_IsTagUpdated(t *testing.T) {
-	e := event.NewTagUpdatedEvent(tag.NewTagID())
+	e := event.NewTagUpdatedEvent(mustTagID())
 	if e.Type() != event.EventTypeTagUpdated {
 		t.Errorf("expected %s, got %s", event.EventTypeTagUpdated, e.Type())
 	}
 }
 
 func TestNewTagUpdatedEvent_TagID_MatchesProvided(t *testing.T) {
-	id := tag.NewTagID()
-	e := event.NewTagUpdatedEvent(id)
+	tagID := mustTagID()
+	e := event.NewTagUpdatedEvent(tagID)
 
-	if e.TagID() != id {
-		t.Errorf("expected TagID %v, got %v", id, e.TagID())
+	if e.TagID() != tagID {
+		t.Errorf("expected TagID %v, got %v", tagID, e.TagID())
 	}
 }
 
 func TestNewTagUpdatedEvent_Timestamp_IsNonZero(t *testing.T) {
-	e := event.NewTagUpdatedEvent(tag.NewTagID())
+	e := event.NewTagUpdatedEvent(mustTagID())
 	if e.Timestamp().Time().IsZero() {
 		t.Error("expected non-zero timestamp")
 	}
 }
 
 func TestNewTagUpdatedEvent_String_IsNonEmpty(t *testing.T) {
-	e := event.NewTagUpdatedEvent(tag.NewTagID())
+	e := event.NewTagUpdatedEvent(mustTagID())
 	if e.String() == "" {
 		t.Error("expected non-empty string representation")
 	}
@@ -298,30 +303,30 @@ func TestNewTagUpdatedEvent_String_IsNonEmpty(t *testing.T) {
 // --- TagDeletedEvent ---
 
 func TestNewTagDeletedEvent_Type_IsTagDeleted(t *testing.T) {
-	e := event.NewTagDeletedEvent(tag.NewTagID())
+	e := event.NewTagDeletedEvent(mustTagID())
 	if e.Type() != event.EventTypeTagDeleted {
 		t.Errorf("expected %s, got %s", event.EventTypeTagDeleted, e.Type())
 	}
 }
 
 func TestNewTagDeletedEvent_TagID_MatchesProvided(t *testing.T) {
-	id := tag.NewTagID()
-	e := event.NewTagDeletedEvent(id)
+	tagID := mustTagID()
+	e := event.NewTagDeletedEvent(tagID)
 
-	if e.TagID() != id {
-		t.Errorf("expected TagID %v, got %v", id, e.TagID())
+	if e.TagID() != tagID {
+		t.Errorf("expected TagID %v, got %v", tagID, e.TagID())
 	}
 }
 
 func TestNewTagDeletedEvent_Timestamp_IsNonZero(t *testing.T) {
-	e := event.NewTagDeletedEvent(tag.NewTagID())
+	e := event.NewTagDeletedEvent(mustTagID())
 	if e.Timestamp().Time().IsZero() {
 		t.Error("expected non-zero timestamp")
 	}
 }
 
 func TestNewTagDeletedEvent_String_IsNonEmpty(t *testing.T) {
-	e := event.NewTagDeletedEvent(tag.NewTagID())
+	e := event.NewTagDeletedEvent(mustTagID())
 	if e.String() == "" {
 		t.Error("expected non-empty string representation")
 	}

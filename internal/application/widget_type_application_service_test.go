@@ -37,6 +37,8 @@ var testCreateWidgetTypeInput = appdto.CreateWidgetTypeInput{
 	HtmlTemplate:   "<div class='gauge'><span class='value'></span></div>",
 	Script:         "function render(v) { return v; }",
 	ScriptLanguage: "javascript",
+	DefaultWidth:   120,
+	DefaultHeight:  60,
 }
 
 // --- CreateWidgetType ---
@@ -120,8 +122,7 @@ func TestFindWidgetTypeByID_Existing_ReturnsCorrectFields(t *testing.T) {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
 
-	id := widget.NewWidgetTypeID(widget.WidgetTypeIDWithUUID(created.ID))
-	found, err := svc.FindWidgetTypeByID(ctx, id)
+	found, err := svc.FindWidgetTypeByID(ctx, created.ID)
 
 	if err != nil {
 		t.Fatalf("FindWidgetTypeByID returned unexpected error: %v", err)
@@ -138,7 +139,7 @@ func TestFindWidgetTypeByID_NotFound_ReturnsWrappedError(t *testing.T) {
 	cleanWidgetTypes(t)
 	svc := newWidgetTypeService()
 
-	_, err := svc.FindWidgetTypeByID(context.Background(), widget.NewWidgetTypeID())
+	_, err := svc.FindWidgetTypeByID(context.Background(), uuid.New())
 
 	if err == nil {
 		t.Fatal("expected error for non-existent widget type, got nil")
@@ -166,6 +167,9 @@ func TestUpdateWidgetType_Valid_ReturnsIncrementedVersion(t *testing.T) {
 		HtmlTemplate:   "<div class='updated'></div>",
 		Script:         "function draw() {}",
 		ScriptLanguage: "python",
+		DefaultWidth:   120,
+		DefaultHeight:  60,
+		Version:        created.Version,
 	})
 
 	if err != nil {
@@ -192,13 +196,15 @@ func TestUpdateWidgetType_Valid_FieldsAreUpdated(t *testing.T) {
 		HtmlTemplate:   "<div class='new'></div>",
 		Script:         "print('hello')",
 		ScriptLanguage: "python",
+		DefaultWidth:   120,
+		DefaultHeight:  60,
+		Version:        created.Version,
 	})
 	if err != nil {
 		t.Fatalf("UpdateWidgetType: %v", err)
 	}
 
-	id := widget.NewWidgetTypeID(widget.WidgetTypeIDWithUUID(created.ID))
-	found, err := svc.FindWidgetTypeByID(ctx, id)
+	found, err := svc.FindWidgetTypeByID(ctx, created.ID)
 	if err != nil {
 		t.Fatalf("FindWidgetTypeByID: %v", err)
 	}
@@ -246,6 +252,9 @@ func TestUpdateWidgetType_InvalidScriptLanguage_ReturnsError(t *testing.T) {
 		HtmlTemplate:   "<div/>",
 		Script:         "x",
 		ScriptLanguage: "ruby",
+		DefaultWidth:   120,
+		DefaultHeight:  60,
+		Version:        created.Version,
 	})
 
 	if err == nil {
@@ -265,8 +274,7 @@ func TestDeleteWidgetType_Existing_ReturnsDeletedItem(t *testing.T) {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
 
-	id := widget.NewWidgetTypeID(widget.WidgetTypeIDWithUUID(created.ID))
-	deleted, err := svc.DeleteWidgetTypeByID(ctx, id)
+	deleted, err := svc.DeleteWidgetTypeByID(ctx, created.ID)
 
 	if err != nil {
 		t.Fatalf("DeleteWidgetTypeByID returned unexpected error: %v", err)
@@ -286,12 +294,11 @@ func TestDeleteWidgetType_Existing_RemovedFromDB(t *testing.T) {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
 
-	id := widget.NewWidgetTypeID(widget.WidgetTypeIDWithUUID(created.ID))
-	if _, err = svc.DeleteWidgetTypeByID(ctx, id); err != nil {
+	if _, err = svc.DeleteWidgetTypeByID(ctx, created.ID); err != nil {
 		t.Fatalf("DeleteWidgetTypeByID: %v", err)
 	}
 
-	_, err = svc.FindWidgetTypeByID(ctx, id)
+	_, err = svc.FindWidgetTypeByID(ctx, created.ID)
 	if !errors.Is(err, widget.ErrWidgetTypeNotFound) {
 		t.Errorf("expected ErrWidgetTypeNotFound after delete, got: %v", err)
 	}
@@ -301,7 +308,7 @@ func TestDeleteWidgetType_NotFound_ReturnsWrappedError(t *testing.T) {
 	cleanWidgetTypes(t)
 	svc := newWidgetTypeService()
 
-	_, err := svc.DeleteWidgetTypeByID(context.Background(), widget.NewWidgetTypeID())
+	_, err := svc.DeleteWidgetTypeByID(context.Background(), uuid.New())
 
 	if err == nil {
 		t.Fatal("expected error for non-existent widget type, got nil")
@@ -355,8 +362,7 @@ func TestDeleteWidgetType_Success_PublishesDeletedEvent(t *testing.T) {
 		received = append(received, e)
 	})
 
-	id := widget.NewWidgetTypeID(widget.WidgetTypeIDWithUUID(created.ID))
-	if _, err = svc.DeleteWidgetTypeByID(ctx, id); err != nil {
+	if _, err = svc.DeleteWidgetTypeByID(ctx, created.ID); err != nil {
 		t.Fatalf("DeleteWidgetTypeByID: %v", err)
 	}
 
@@ -393,6 +399,9 @@ func TestUpdateWidgetType_Success_PublishesUpdatedEvent(t *testing.T) {
 		HtmlTemplate:   "<div/>",
 		Script:         "x",
 		ScriptLanguage: "lua",
+		DefaultWidth:   120,
+		DefaultHeight:  60,
+		Version:        created.Version,
 	})
 	if err != nil {
 		t.Fatalf("UpdateWidgetType: %v", err)
@@ -407,5 +416,34 @@ func TestUpdateWidgetType_Success_PublishesUpdatedEvent(t *testing.T) {
 	}
 	if wtEvent.WidgetTypeID().UUID() != created.ID {
 		t.Errorf("event WidgetTypeID: expected %s, got %s", created.ID, wtEvent.WidgetTypeID().UUID())
+	}
+}
+
+func TestUpdateWidgetType_StaleVersion_ReturnsConflict(t *testing.T) {
+	cleanWidgetTypes(t)
+	svc := newWidgetTypeService()
+	ctx := context.Background()
+
+	created, err := svc.CreateWidgetType(ctx, testCreateWidgetTypeInput)
+	if err != nil {
+		t.Fatalf("CreateWidgetType: %v", err)
+	}
+
+	_, err = svc.UpdateWidgetType(ctx, appdto.UpdateWidgetTypeInput{
+		ID:             created.ID,
+		Name:           "x",
+		HtmlTemplate:   "<div/>",
+		Script:         "x",
+		ScriptLanguage: "lua",
+		DefaultWidth:   120,
+		DefaultHeight:  60,
+		Version:        created.Version - 1, // intentionally stale
+	})
+
+	if err == nil {
+		t.Fatal("expected ErrWidgetTypeConflict for stale version, got nil")
+	}
+	if !errors.Is(err, widget.ErrWidgetTypeConflict) {
+		t.Errorf("expected wrapped ErrWidgetTypeConflict, got: %v", err)
 	}
 }

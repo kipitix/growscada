@@ -3,42 +3,46 @@ package widget
 import (
 	"fmt"
 
+	"github.com/kipitix/growscada/internal/domain/id"
 	"github.com/kipitix/growscada/internal/domain/version"
 )
 
 // WidgetType - aggregate representing a visual widget type.
 // Defines how a SCADA widget element is rendered via an HTML template and a script.
 type WidgetType interface {
-	ID() WidgetTypeID
+	ID() id.ID[WidgetType]
 	Name() WidgetTypeName
 	HtmlTemplate() HtmlTemplate
 	Script() Script
 	ScriptLanguage() ScriptLanguage
-	Version() version.Version
+	DefaultSize() Size
+	Version() version.Version[WidgetType]
 
 	fmt.Stringer
 }
 
 // widgetTypeImpl - WidgetType implementation struct.
 type widgetTypeImpl struct {
-	id             WidgetTypeID
+	id             id.ID[WidgetType]
 	name           WidgetTypeName
 	htmlTemplate   HtmlTemplate
 	script         Script
 	scriptLanguage ScriptLanguage
-	version        version.Version
+	defaultSize    Size
+	version        version.Version[WidgetType]
 }
 
 var _ WidgetType = (*widgetTypeImpl)(nil)
 
 // NewWidgetType creates a new WidgetType aggregate.
 func NewWidgetType(
-	anID WidgetTypeID,
+	anID id.ID[WidgetType],
 	aName WidgetTypeName,
 	anHtmlTemplate HtmlTemplate,
 	aScript Script,
 	aScriptLanguage ScriptLanguage,
-	aVersion version.Version,
+	aDefaultSize Size,
+	aVersion version.Version[WidgetType],
 ) WidgetType {
 	return &widgetTypeImpl{
 		id:             anID,
@@ -46,18 +50,20 @@ func NewWidgetType(
 		htmlTemplate:   anHtmlTemplate,
 		script:         aScript,
 		scriptLanguage: aScriptLanguage,
+		defaultSize:    aDefaultSize,
 		version:        aVersion,
 	}
 }
 
-func (wt widgetTypeImpl) ID() WidgetTypeID           { return wt.id }
-func (wt widgetTypeImpl) Name() WidgetTypeName        { return wt.name }
-func (wt widgetTypeImpl) HtmlTemplate() HtmlTemplate  { return wt.htmlTemplate }
-func (wt widgetTypeImpl) Script() Script              { return wt.script }
-func (wt widgetTypeImpl) ScriptLanguage() ScriptLanguage { return wt.scriptLanguage }
-func (wt widgetTypeImpl) Version() version.Version    { return wt.version }
+func (wt widgetTypeImpl) ID() id.ID[WidgetType]                { return wt.id }
+func (wt widgetTypeImpl) Name() WidgetTypeName                 { return wt.name }
+func (wt widgetTypeImpl) HtmlTemplate() HtmlTemplate           { return wt.htmlTemplate }
+func (wt widgetTypeImpl) Script() Script                       { return wt.script }
+func (wt widgetTypeImpl) ScriptLanguage() ScriptLanguage       { return wt.scriptLanguage }
+func (wt widgetTypeImpl) DefaultSize() Size                    { return wt.defaultSize }
+func (wt widgetTypeImpl) Version() version.Version[WidgetType] { return wt.version }
 
 // String implements [fmt.Stringer].
 func (wt widgetTypeImpl) String() string {
-	return fmt.Sprintf("WidgetType: %s, Language: %s", wt.name, wt.scriptLanguage)
+	return fmt.Sprintf("WidgetType: %s, Language: %s, DefaultSize: %s", wt.name, wt.scriptLanguage, wt.defaultSize)
 }

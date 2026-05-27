@@ -12,6 +12,8 @@ type WidgetType struct {
 	HtmlTemplate   string
 	Script         string
 	ScriptLanguage string
+	DefaultWidth   int
+	DefaultHeight  int
 	Version        int
 }
 
@@ -21,15 +23,21 @@ type CreateWidgetTypeInput struct {
 	HtmlTemplate   string
 	Script         string
 	ScriptLanguage string
+	DefaultWidth   int
+	DefaultHeight  int
 }
 
 // UpdateWidgetTypeInput holds the input data for updating a widget type.
+// Version must match the current persisted version for optimistic locking.
 type UpdateWidgetTypeInput struct {
 	ID             uuid.UUID
 	Name           string
 	HtmlTemplate   string
 	Script         string
 	ScriptLanguage string
+	DefaultWidth   int
+	DefaultHeight  int
+	Version        int
 }
 
 // NewWidgetType creates a WidgetType DTO from the domain aggregate.
@@ -40,6 +48,8 @@ func NewWidgetType(wt widget.WidgetType) WidgetType {
 		HtmlTemplate:   wt.HtmlTemplate().String(),
 		Script:         wt.Script().String(),
 		ScriptLanguage: wt.ScriptLanguage().String(),
+		DefaultWidth:   wt.DefaultSize().Width(),
+		DefaultHeight:  wt.DefaultSize().Height(),
 		Version:        wt.Version().Number(),
 	}
 }

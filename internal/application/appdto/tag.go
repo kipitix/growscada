@@ -24,10 +24,12 @@ type CreateTagInput struct {
 }
 
 // UpdateTagInput holds the input data for updating a tag's value and quality.
+// Version must match the current persisted version for optimistic locking.
 type UpdateTagInput struct {
 	ID      uuid.UUID
 	Value   string
 	Quality string
+	Version int
 }
 
 // NewTag creates a Tag DTO from the tag.Tag domain aggregate

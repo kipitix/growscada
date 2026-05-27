@@ -3,17 +3,18 @@ package tag
 import (
 	"testing"
 
+	"github.com/kipitix/growscada/internal/domain/id"
 	"github.com/kipitix/growscada/internal/domain/version"
 )
 
 func makeTestTag(t *testing.T) Tag {
 	t.Helper()
-	id := NewTagID()
+	tagID := id.NewID[Tag]()
 	name, _ := NewTagName("temperature")
 	tagType := TagTypeInteger
 	value, _ := tagType.NewTagValue(0)
 	quality := TagQualityGood
-	tag, err := NewTag(id, name, tagType, value, quality, version.Initial)
+	tag, err := NewTag(tagID, name, tagType, value, quality, version.Initial[Tag]())
 	if err != nil {
 		t.Fatalf("NewTag returned unexpected error: %v", err)
 	}
@@ -21,23 +22,23 @@ func makeTestTag(t *testing.T) Tag {
 }
 
 func TestNewTag_FieldsAreSet(t *testing.T) {
-	id := NewTagID()
+	tagID := id.NewID[Tag]()
 	name, _ := NewTagName("pressure")
 	tagType := TagTypeString
 	value, _ := tagType.NewTagValue("100")
 	quality := TagQualityGood
-	version, err := version.New(version.WithNumber(3))
+	ver, err := version.New[Tag](version.WithNumber[Tag](3))
 	if err != nil {
 		t.Fatalf("unexpected error creating version: %v", err)
 	}
 
-	tag, err := NewTag(id, name, tagType, value, quality, version)
+	tag, err := NewTag(tagID, name, tagType, value, quality, ver)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if tag.ID() != id {
-		t.Errorf("ID mismatch: expected %v, got %v", id, tag.ID())
+	if tag.ID() != tagID {
+		t.Errorf("ID mismatch: expected %v, got %v", tagID, tag.ID())
 	}
 	if tag.Name() != name {
 		t.Errorf("Name mismatch: expected %v, got %v", name, tag.Name())
@@ -51,21 +52,21 @@ func TestNewTag_FieldsAreSet(t *testing.T) {
 	if tag.Quality() != quality {
 		t.Errorf("Quality mismatch: expected %v, got %v", quality, tag.Quality())
 	}
-	if tag.Version() != version {
-		t.Errorf("Version mismatch: expected %d, got %d", version, tag.Version())
+	if tag.Version() != ver {
+		t.Errorf("Version mismatch: expected %d, got %d", ver, tag.Version())
 	}
 }
 
 func TestTagVersionInitial_IsZero(t *testing.T) {
-	if version.Initial.Number() != 0 {
-		t.Errorf("expected version.Initial to be 0, got %d", version.Initial.Number())
+	if version.Initial[Tag]().Number() != 0 {
+		t.Errorf("expected version.Initial to be 0, got %d", version.Initial[Tag]().Number())
 	}
 }
 
 func TestNewTag_InitialVersion(t *testing.T) {
 	tag := makeTestTag(t)
-	if tag.Version() != version.Initial {
-		t.Errorf("expected initial version %d, got %d", version.Initial, tag.Version())
+	if tag.Version() != version.Initial[Tag]() {
+		t.Errorf("expected initial version %d, got %d", version.Initial[Tag](), tag.Version())
 	}
 }
 
@@ -118,7 +119,7 @@ func TestTag_SetValue_InvalidInput_DoesNotChangeQuality(t *testing.T) {
 		t.Errorf("expected quality %v, got %v", originalQuality, tag.Quality())
 	}
 
-	if tag.Value().Value() != 0 {
+	if tag.Value().Value() != int64(0) {
 		t.Errorf("expected value 0, got %v", tag.Value().Value())
 	}
 }

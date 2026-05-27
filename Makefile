@@ -17,4 +17,4 @@ db_down:
 	docker volume rm debug_db_growscada_data
 
 test:
-	go test ./... -v
+	go test --cover ./...

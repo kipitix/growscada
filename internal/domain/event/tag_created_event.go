@@ -1,6 +1,7 @@
 package event
 
 import (
+	"github.com/kipitix/growscada/internal/domain/id"
 	"github.com/kipitix/growscada/internal/domain/tag"
 )
 
@@ -14,7 +15,7 @@ type tagCreatedEventImpl struct {
 
 var _ TagCreatedEvent = (*tagCreatedEventImpl)(nil)
 
-func NewTagCreatedEvent(anID tag.TagID, opts ...EventOption) TagCreatedEvent {
+func NewTagCreatedEvent(anID id.ID[tag.Tag], opts ...EventOption) TagCreatedEvent {
 	ev := &tagCreatedEventImpl{
 		tagEventImpl: tagEventImpl{
 			tagID: anID,

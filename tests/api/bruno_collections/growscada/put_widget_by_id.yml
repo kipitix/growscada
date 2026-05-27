@@ -1,0 +1,30 @@
+info:
+  name: put widget by id
+  type: http
+  seq: 19
+
+http:
+  method: PUT
+  url: http://{{API_SERVER}}/api/v1/widgets/{{WIDGET_ID}}
+  body:
+    type: json
+    data: |-
+      {
+        "name": "pressure-gauge-updated",
+        "position": { "x": 150.0, "y": 250.0, "z": 1 },
+        "size": { "width": 200, "height": 200 },
+        "origin": { "x": 0.5, "y": 0.5 },
+        "rotation": { "degrees": 45.0 },
+        "type_id": "{{WIDGET_TYPE_ID}}",
+        "scene_id": "{{SCENE_ID}}",
+        "labels": ["sensor", "pressure", "updated"],
+        "tag_ids": [],
+        "version": 1
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -13,7 +13,9 @@ http:
         "name": "pressure gauge",
         "html_template": "<div class=\"gauge\"><span class=\"value\"></span></div>",
         "script": "function render(value) { return value; }",
-        "script_language": "javascript"
+        "script_language": "javascript",
+        "default_width": 150,
+        "default_height": 150
       }
   auth: inherit
 

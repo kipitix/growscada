@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 	"github.com/pressly/goose/v3"
 	"github.com/testcontainers/testcontainers-go"
@@ -67,6 +68,18 @@ func TestMain(m *testing.M) {
 
 	testDB = db
 
+	// Insert a shared scene used by widget tests. The widgets table has a FK
+	// on scene_id, so every widget insert needs a real scene row.
+	testSceneID = uuid.New()
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO scenes (id, name, width, height, background_html, version) VALUES ($1, $2, $3, $4, $5, $6)`,
+		testSceneID, "test-scene", 1920, 1080, "", 1,
+	); err != nil {
+		db.Close()
+		pgContainer.Terminate(ctx)
+		panic("failed to insert test scene: " + err.Error())
+	}
+
 	code := m.Run()
 
 	db.Close()
@@ -93,7 +106,7 @@ func makeTag(t *testing.T, name string, repo tag.TagRepository) tag.Tag {
 	if err != nil {
 		t.Fatalf("NewTagValue: %v", err)
 	}
-	newTag, err := tag.NewTag(id, tagName, tagType, value, tag.TagQualityGood, version.Initial)
+	newTag, err := tag.NewTag(id, tagName, tagType, value, tag.TagQualityGood, version.Initial[tag.Tag]())
 	if err != nil {
 		t.Fatalf("NewTag: %v", err)
 	}
@@ -135,7 +148,7 @@ func TestSave_DuplicateID_ReturnsError(t *testing.T) {
 		t.Fatalf("first Save failed: %v", err)
 	}
 
-	duplicate, _ := tag.NewTag(newTag.ID(), newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), version.Initial)
+	duplicate, _ := tag.NewTag(newTag.ID(), newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), version.Initial[tag.Tag]())
 	_, err := repo.Save(ctx, duplicate)
 
 	if err == nil {
@@ -187,7 +200,7 @@ func TestSave_StaleVersion_ReturnsError(t *testing.T) {
 	}
 
 	// version=100 while DB has version=1 → optimistic lock conflict
-	badVersion, _ := version.New(version.WithNumber(100))
+	badVersion, _ := version.New[tag.Tag](version.WithNumber[tag.Tag](100))
 	staleTag, _ := tag.NewTag(newTag.ID(), newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), badVersion)
 	_, err := repo.Save(ctx, staleTag)
 

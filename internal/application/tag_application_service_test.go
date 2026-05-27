@@ -70,6 +70,19 @@ func TestMain(m *testing.M) {
 
 	testDB = db
 
+	// Insert a shared scene used by widget tests. This must exist before any
+	// widget is created because the widgets table has a FK on scene_id.
+	testSceneID = uuid.New()
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO scenes (id, name, width, height, background_html, version) VALUES ($1, $2, $3, $4, $5, $6)`,
+		testSceneID, "test-scene", 1920, 1080, "", 1,
+	); err != nil {
+		db.Close()
+		pgContainer.Terminate(ctx)
+		panic("failed to insert test scene: " + err.Error())
+	}
+	testCreateWidgetInput.SceneID = testSceneID
+
 	code := m.Run()
 
 	db.Close()
@@ -93,6 +106,10 @@ func newServiceWithBus() (application.TagService, event.EventBus) {
 	repo := repositories.NewTagRepositoryPostgres(testDB)
 	bus := event.NewEventBus()
 	return application.NewTagService(repo, bus), bus
+}
+
+func mustNewTagID() uuid.UUID {
+	return uuid.New()
 }
 
 // --- CreateTag ---
@@ -238,8 +255,7 @@ func TestFindTagByID_ExistingTag_ReturnsTag(t *testing.T) {
 		t.Fatalf("CreateTag: %v", err)
 	}
 
-	tagID := tag.NewTagID(tag.TagIDWithUUID(createResp.ID))
-	found, err := svc.FindTagByID(ctx, tagID)
+	found, err := svc.FindTagByID(ctx, createResp.ID)
 
 	if err != nil {
 		t.Fatalf("FindTagByID returned unexpected error: %v", err)
@@ -263,8 +279,7 @@ func TestFindTagByID_NotFound_ReturnsWrappedErrTagNotFound(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	nonExistentID := tag.NewTagID()
-	_, err := svc.FindTagByID(ctx, nonExistentID)
+	_, err := svc.FindTagByID(ctx, mustNewTagID())
 
 	if err == nil {
 		t.Fatal("expected error for non-existent tag, got nil")
@@ -286,8 +301,7 @@ func TestDeleteTag_ExistingTag_ReturnsDeletedTag(t *testing.T) {
 		t.Fatalf("CreateTag: %v", err)
 	}
 
-	tagID := tag.NewTagID(tag.TagIDWithUUID(created.ID))
-	resp, err := svc.DeleteTagByID(ctx, tagID)
+	resp, err := svc.DeleteTagByID(ctx, created.ID)
 
 	if err != nil {
 		t.Fatalf("DeleteTagByID returned unexpected error: %v", err)
@@ -310,12 +324,11 @@ func TestDeleteTag_ExistingTag_TagIsRemovedFromDB(t *testing.T) {
 		t.Fatalf("CreateTag: %v", err)
 	}
 
-	tagID := tag.NewTagID(tag.TagIDWithUUID(created.ID))
-	if _, err = svc.DeleteTagByID(ctx, tagID); err != nil {
+	if _, err = svc.DeleteTagByID(ctx, created.ID); err != nil {
 		t.Fatalf("DeleteTagByID: %v", err)
 	}
 
-	_, err = svc.FindTagByID(ctx, tagID)
+	_, err = svc.FindTagByID(ctx, created.ID)
 	if !errors.Is(err, tag.ErrTagNotFound) {
 		t.Errorf("expected ErrTagNotFound after delete, got: %v", err)
 	}
@@ -326,7 +339,7 @@ func TestDeleteTag_NotFound_ReturnsWrappedErrTagNotFound(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	_, err := svc.DeleteTagByID(ctx, tag.NewTagID())
+	_, err := svc.DeleteTagByID(ctx, mustNewTagID())
 
 	if err == nil {
 		t.Fatal("expected error for non-existent tag, got nil")
@@ -348,7 +361,7 @@ func TestSetTagValueByID_ValidUpdate_ReturnsIncrementedVersion(t *testing.T) {
 		t.Fatalf("CreateTag: %v", err)
 	}
 
-	resp, err := svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "200", Quality: "good"})
+	resp, err := svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "200", Quality: "good", Version: created.Version})
 
 	if err != nil {
 		t.Fatalf("SetTagValueByID returned unexpected error: %v", err)
@@ -368,12 +381,11 @@ func TestSetTagValueByID_ValidUpdate_ValueAndQualityAreUpdated(t *testing.T) {
 		t.Fatalf("CreateTag: %v", err)
 	}
 
-	tagID := tag.NewTagID(tag.TagIDWithUUID(created.ID))
-	if _, err = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "42", Quality: "good"}); err != nil {
+	if _, err = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "42", Quality: "good", Version: created.Version}); err != nil {
 		t.Fatalf("SetTagValueByID: %v", err)
 	}
 
-	found, err := svc.FindTagByID(ctx, tagID)
+	found, err := svc.FindTagByID(ctx, created.ID)
 	if err != nil {
 		t.Fatalf("FindTagByID: %v", err)
 	}
@@ -390,7 +402,7 @@ func TestSetTagValueByID_NotFound_ReturnsWrappedErrTagNotFound(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	_, err := svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: uuid.New(), Value: "1", Quality: "good"})
+	_, err := svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: uuid.New(), Value: "1", Quality: "good", Version: 1})
 
 	if err == nil {
 		t.Fatal("expected error for non-existent tag, got nil")
@@ -410,7 +422,7 @@ func TestSetTagValueByID_InvalidQuality_ReturnsError(t *testing.T) {
 		t.Fatalf("CreateTag: %v", err)
 	}
 
-	_, err = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "20", Quality: "unknown"})
+	_, err = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "20", Quality: "unknown", Version: created.Version})
 
 	if err == nil {
 		t.Error("expected error for invalid quality, got nil")
@@ -478,8 +490,7 @@ func TestDeleteTagByID_Success_PublishesTagDeletedEvent(t *testing.T) {
 		received = append(received, e)
 	})
 
-	tagID := tag.NewTagID(tag.TagIDWithUUID(created.ID))
-	if _, err = svc.DeleteTagByID(ctx, tagID); err != nil {
+	if _, err = svc.DeleteTagByID(ctx, created.ID); err != nil {
 		t.Fatalf("DeleteTagByID: %v", err)
 	}
 
@@ -505,7 +516,7 @@ func TestDeleteTagByID_NotFound_NoEventPublished(t *testing.T) {
 		received = append(received, e)
 	})
 
-	_, _ = svc.DeleteTagByID(ctx, tag.NewTagID())
+	_, _ = svc.DeleteTagByID(ctx, mustNewTagID())
 
 	if len(received) != 0 {
 		t.Errorf("expected no events on error, got %d", len(received))
@@ -527,7 +538,7 @@ func TestSetTagValueByID_Success_PublishesTagUpdatedEvent(t *testing.T) {
 		received = append(received, e)
 	})
 
-	if _, err = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "20", Quality: "good"}); err != nil {
+	if _, err = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "20", Quality: "good", Version: created.Version}); err != nil {
 		t.Fatalf("SetTagValueByID: %v", err)
 	}
 
@@ -558,7 +569,7 @@ func TestSetTagValueByID_InvalidRequest_NoEventPublished(t *testing.T) {
 		received = append(received, e)
 	})
 
-	_, _ = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "not-a-number", Quality: "good"})
+	_, _ = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "not-a-number", Quality: "good", Version: created.Version})
 
 	if len(received) != 0 {
 		t.Errorf("expected no events on error, got %d", len(received))
@@ -575,9 +586,34 @@ func TestSetTagValueByID_InvalidValueForType_ReturnsError(t *testing.T) {
 		t.Fatalf("CreateTag: %v", err)
 	}
 
-	_, err = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "not-a-number", Quality: "good"})
+	_, err = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "not-a-number", Quality: "good", Version: created.Version})
 
 	if err == nil {
 		t.Error("expected error for value incompatible with type, got nil")
+	}
+}
+
+func TestSetTagValueByID_StaleVersion_ReturnsConflict(t *testing.T) {
+	cleanTags(t)
+	svc := newService()
+	ctx := context.Background()
+
+	created, err := svc.CreateTag(ctx, appdto.CreateTagInput{Name: "sensor", Type: "integer", Value: "10", Quality: "good"})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+
+	_, err = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{
+		ID:      created.ID,
+		Value:   "20",
+		Quality: "good",
+		Version: created.Version - 1, // intentionally stale
+	})
+
+	if err == nil {
+		t.Fatal("expected ErrTagConflict for stale version, got nil")
+	}
+	if !errors.Is(err, tag.ErrTagConflict) {
+		t.Errorf("expected wrapped ErrTagConflict, got: %v", err)
 	}
 }

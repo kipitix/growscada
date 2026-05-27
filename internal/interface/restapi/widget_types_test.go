@@ -31,7 +31,11 @@ func newRouterWithWidgetTypes() *restapi.APIRouter {
 	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	wtSvc := application.NewWidgetTypeService(wtRepo, event.NewEventBus())
-	return restapi.NewRouter(tagSvc, wtSvc)
+	wRepo := repositories.NewWidgetRepositoryPostgres(testDB)
+	wSvc := application.NewWidgetService(wRepo, event.NewEventBus())
+	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
+	sceneSvc := application.NewSceneService(sceneRepo, event.NewEventBus())
+	return restapi.NewRouter(tagSvc, wtSvc, wSvc, sceneSvc)
 }
 
 func createWidgetTypeViaService(t *testing.T, input appdto.CreateWidgetTypeInput) appdto.WidgetType {
@@ -50,6 +54,8 @@ var testWtInput = appdto.CreateWidgetTypeInput{
 	HtmlTemplate:   "<div class='gauge'><span class='value'></span></div>",
 	Script:         "function render(v) { return v; }",
 	ScriptLanguage: "javascript",
+	DefaultWidth:   200,
+	DefaultHeight:  150,
 }
 
 // --- GET /api/v1/widget-types ---
@@ -164,6 +170,8 @@ func TestPostWidgetTypes_Valid_Returns201WithID(t *testing.T) {
 		HtmlTemplate:   "<div class='gauge'></div>",
 		Script:         "render()",
 		ScriptLanguage: "javascript",
+		DefaultWidth:   200,
+		DefaultHeight:  150,
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/widget-types", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -226,6 +234,9 @@ func TestPutWidgetTypesByID_Valid_Returns200WithVersion(t *testing.T) {
 		HtmlTemplate:   "<div class='updated'></div>",
 		Script:         "print('hi')",
 		ScriptLanguage: "python",
+		DefaultWidth:   300,
+		DefaultHeight:  200,
+		Version:        created.Version,
 	})
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/widget-types/"+created.ID.String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -281,7 +292,11 @@ func TestPutWidgetTypesByID_Conflict_Returns409(t *testing.T) {
 	svc := &stubWidgetTypeService{updateErr: widget.ErrWidgetTypeConflict}
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
 	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
-	router := restapi.NewRouter(tagSvc, svc)
+	wRepo := repositories.NewWidgetRepositoryPostgres(testDB)
+	wSvc := application.NewWidgetService(wRepo, event.NewEventBus())
+	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
+	sceneSvc := application.NewSceneService(sceneRepo, event.NewEventBus())
+	router := restapi.NewRouter(tagSvc, svc, wSvc, sceneSvc)
 
 	body, _ := json.Marshal(restdto.UpdateWidgetTypeRequest{
 		Name: "x", HtmlTemplate: "<div/>", Script: "x", ScriptLanguage: "lua",

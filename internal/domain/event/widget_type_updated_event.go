@@ -1,6 +1,9 @@
 package event
 
-import "github.com/kipitix/growscada/internal/domain/widget"
+import (
+	"github.com/kipitix/growscada/internal/domain/id"
+	"github.com/kipitix/growscada/internal/domain/widget"
+)
 
 // WidgetTypeUpdatedEvent - event published when a widget type is updated.
 type WidgetTypeUpdatedEvent interface {
@@ -13,7 +16,7 @@ type widgetTypeUpdatedEventImpl struct {
 
 var _ WidgetTypeUpdatedEvent = (*widgetTypeUpdatedEventImpl)(nil)
 
-func NewWidgetTypeUpdatedEvent(anID widget.WidgetTypeID, opts ...EventOption) WidgetTypeUpdatedEvent {
+func NewWidgetTypeUpdatedEvent(anID id.ID[widget.WidgetType], opts ...EventOption) WidgetTypeUpdatedEvent {
 	ev := &widgetTypeUpdatedEventImpl{
 		widgetTypeEventImpl: widgetTypeEventImpl{
 			widgetTypeID: anID,

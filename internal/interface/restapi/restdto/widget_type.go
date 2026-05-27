@@ -12,6 +12,8 @@ type WidgetTypeResponse struct {
 	HtmlTemplate   string    `json:"html_template"`
 	Script         string    `json:"script"`
 	ScriptLanguage string    `json:"script_language"`
+	DefaultWidth   int       `json:"default_width"`
+	DefaultHeight  int       `json:"default_height"`
 	Version        int       `json:"version"`
 }
 
@@ -26,6 +28,8 @@ type CreateWidgetTypeRequest struct {
 	HtmlTemplate   string `json:"html_template"`
 	Script         string `json:"script"`
 	ScriptLanguage string `json:"script_language"`
+	DefaultWidth   int    `json:"default_width"`
+	DefaultHeight  int    `json:"default_height"`
 }
 
 // CreateWidgetTypeResponse is the HTTP DTO for a creation response.
@@ -34,11 +38,15 @@ type CreateWidgetTypeResponse struct {
 }
 
 // UpdateWidgetTypeRequest is the HTTP DTO for updating a widget type.
+// Version must match the current persisted version for optimistic locking.
 type UpdateWidgetTypeRequest struct {
 	Name           string `json:"name"`
 	HtmlTemplate   string `json:"html_template"`
 	Script         string `json:"script"`
 	ScriptLanguage string `json:"script_language"`
+	DefaultWidth   int    `json:"default_width"`
+	DefaultHeight  int    `json:"default_height"`
+	Version        int    `json:"version"`
 }
 
 // UpdateWidgetTypeResponse is the HTTP DTO for an update response.
@@ -53,6 +61,8 @@ func NewWidgetTypeResponse(wt appdto.WidgetType) WidgetTypeResponse {
 		HtmlTemplate:   wt.HtmlTemplate,
 		Script:         wt.Script,
 		ScriptLanguage: wt.ScriptLanguage,
+		DefaultWidth:   wt.DefaultWidth,
+		DefaultHeight:  wt.DefaultHeight,
 		Version:        wt.Version,
 	}
 }
@@ -79,15 +89,20 @@ func NewCreateWidgetTypeInput(r CreateWidgetTypeRequest) appdto.CreateWidgetType
 		HtmlTemplate:   r.HtmlTemplate,
 		Script:         r.Script,
 		ScriptLanguage: r.ScriptLanguage,
+		DefaultWidth:   r.DefaultWidth,
+		DefaultHeight:  r.DefaultHeight,
 	}
 }
 
-func NewUpdateWidgetTypeInput(r UpdateWidgetTypeRequest, id uuid.UUID) appdto.UpdateWidgetTypeInput {
+func NewUpdateWidgetTypeInput(r UpdateWidgetTypeRequest, anID uuid.UUID) appdto.UpdateWidgetTypeInput {
 	return appdto.UpdateWidgetTypeInput{
-		ID:             id,
+		ID:             anID,
 		Name:           r.Name,
 		HtmlTemplate:   r.HtmlTemplate,
 		Script:         r.Script,
 		ScriptLanguage: r.ScriptLanguage,
+		DefaultWidth:   r.DefaultWidth,
+		DefaultHeight:  r.DefaultHeight,
+		Version:        r.Version,
 	}
 }

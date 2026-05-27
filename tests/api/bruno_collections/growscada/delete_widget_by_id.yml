@@ -1,0 +1,15 @@
+info:
+  name: delete widget by id
+  type: http
+  seq: 20
+
+http:
+  method: DELETE
+  url: http://{{API_SERVER}}/api/v1/widgets/{{WIDGET_ID}}
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

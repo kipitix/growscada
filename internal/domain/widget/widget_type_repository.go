@@ -3,6 +3,8 @@ package widget
 import (
 	"context"
 	"errors"
+
+	"github.com/kipitix/growscada/internal/domain/id"
 )
 
 var (
@@ -15,7 +17,7 @@ var (
 // WidgetTypeRepository - repository interface for storing and managing widget types.
 type WidgetTypeRepository interface {
 	// NextID returns a new unique identifier for a widget type.
-	NextID() WidgetTypeID
+	NextID() id.ID[WidgetType]
 
 	// Save stores a widget type in the repository.
 	// Returns ErrWidgetTypeNotFound if the record does not exist.
@@ -24,11 +26,11 @@ type WidgetTypeRepository interface {
 
 	// FindByID returns a widget type by its identifier.
 	// Returns ErrWidgetTypeNotFound if not found.
-	FindByID(context.Context, WidgetTypeID) (WidgetType, error)
+	FindByID(context.Context, id.ID[WidgetType]) (WidgetType, error)
 
 	// DeleteByID removes a widget type by its identifier and returns it.
 	// Returns ErrWidgetTypeNotFound if the widget type does not exist.
-	DeleteByID(context.Context, WidgetTypeID) (WidgetType, error)
+	DeleteByID(context.Context, id.ID[WidgetType]) (WidgetType, error)
 
 	// FindAll returns all widget types.
 	FindAll(context.Context) ([]WidgetType, error)
