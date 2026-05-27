@@ -62,6 +62,10 @@ func (h WidgetsHandlers) PostWidgets(w http.ResponseWriter, r *http.Request) {
 
 	created, err := h.service.CreateWidget(r.Context(), restdto.NewCreateWidgetInput(request))
 	if err != nil {
+		if errors.Is(err, widget.ErrWidgetInvalidInput) {
+			sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
+			return
+		}
 		sendInternalError(w, r, err)
 		return
 	}
@@ -86,6 +90,10 @@ func (h WidgetsHandlers) PutWidgetsByID(w http.ResponseWriter, r *http.Request) 
 
 	updated, err := h.service.UpdateWidget(r.Context(), restdto.NewUpdateWidgetInput(request, widgetID))
 	if err != nil {
+		if errors.Is(err, widget.ErrWidgetInvalidInput) {
+			sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
+			return
+		}
 		if errors.Is(err, widget.ErrWidgetNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
 			return

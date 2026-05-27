@@ -13,6 +13,8 @@ var (
 	// ErrWidgetConflict is returned by Save when the stored version does not match,
 	// indicating a concurrent modification.
 	ErrWidgetConflict = errors.New("widget version conflict")
+	// ErrWidgetInvalidInput is returned when required fields are missing or invalid.
+	ErrWidgetInvalidInput = errors.New("widget invalid input")
 )
 
 // WidgetRepository - repository interface for storing and managing widget instances.

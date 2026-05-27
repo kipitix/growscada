@@ -62,6 +62,13 @@ func (s widgetServiceImpl) FindWidgetByID(ctx context.Context, rawID uuid.UUID) 
 }
 
 func (s widgetServiceImpl) CreateWidget(ctx context.Context, input appdto.CreateWidgetInput) (appdto.Widget, error) {
+	if input.SceneID == uuid.Nil {
+		return appdto.Widget{}, fmt.Errorf("scene_id is required: %w", widget.ErrWidgetInvalidInput)
+	}
+	if input.TypeID == uuid.Nil {
+		return appdto.Widget{}, fmt.Errorf("type_id is required: %w", widget.ErrWidgetInvalidInput)
+	}
+
 	newID := s.repository.NextID()
 
 	newName, err := widget.NewWidgetName(input.Name)
@@ -105,6 +112,13 @@ func (s widgetServiceImpl) CreateWidget(ctx context.Context, input appdto.Create
 }
 
 func (s widgetServiceImpl) UpdateWidget(ctx context.Context, input appdto.UpdateWidgetInput) (appdto.Widget, error) {
+	if input.SceneID == uuid.Nil {
+		return appdto.Widget{}, fmt.Errorf("scene_id is required: %w", widget.ErrWidgetInvalidInput)
+	}
+	if input.TypeID == uuid.Nil {
+		return appdto.Widget{}, fmt.Errorf("type_id is required: %w", widget.ErrWidgetInvalidInput)
+	}
+
 	widgetID := id.NewID(id.IDWithUUID[widget.Widget](input.ID))
 
 	found, err := s.repository.FindByID(ctx, widgetID)
