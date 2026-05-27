@@ -54,6 +54,8 @@ var testWtInput = appdto.CreateWidgetTypeInput{
 	HtmlTemplate:   "<div class='gauge'><span class='value'></span></div>",
 	Script:         "function render(v) { return v; }",
 	ScriptLanguage: "javascript",
+	DefaultWidth:   200,
+	DefaultHeight:  150,
 }
 
 // --- GET /api/v1/widget-types ---
@@ -168,6 +170,8 @@ func TestPostWidgetTypes_Valid_Returns201WithID(t *testing.T) {
 		HtmlTemplate:   "<div class='gauge'></div>",
 		Script:         "render()",
 		ScriptLanguage: "javascript",
+		DefaultWidth:   200,
+		DefaultHeight:  150,
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/widget-types", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -230,6 +234,9 @@ func TestPutWidgetTypesByID_Valid_Returns200WithVersion(t *testing.T) {
 		HtmlTemplate:   "<div class='updated'></div>",
 		Script:         "print('hi')",
 		ScriptLanguage: "python",
+		DefaultWidth:   300,
+		DefaultHeight:  200,
+		Version:        created.Version,
 	})
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/widget-types/"+created.ID.String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")

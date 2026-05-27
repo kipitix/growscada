@@ -19,10 +19,40 @@ import (
 	"github.com/kipitix/growscada/internal/interface/restapi/restdto"
 )
 
+// testSceneID is populated in TestMain before any test runs.
+// It holds a real scene row so widget inserts satisfy the FK on scene_id.
+var testSceneID uuid.UUID
+
+// mustInsertScene inserts a minimal scene row so that widget inserts satisfy
+// the FK constraint on scene_id. The row is cleaned up after the test.
+func mustInsertScene(t *testing.T, sceneID uuid.UUID) {
+	t.Helper()
+	_, err := testDB.ExecContext(context.Background(),
+		`INSERT INTO scenes (id, name, width, height, background_html, version)
+		 VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING`,
+		sceneID, "test-scene-"+sceneID.String(), 1920, 1080, "", 1,
+	)
+	if err != nil {
+		t.Fatalf("mustInsertScene: %v", err)
+	}
+	t.Cleanup(func() {
+		testDB.ExecContext(context.Background(), "DELETE FROM scenes WHERE id = $1", sceneID)
+	})
+}
+
 func cleanWidgetsRest(t *testing.T) {
 	t.Helper()
 	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM widgets"); err != nil {
 		t.Fatalf("cleanWidgetsRest: %v", err)
+	}
+	// cleanScenesRest (used by scene tests) deletes all scenes including testSceneID.
+	// Re-insert it here so widget tests always have a valid scene_id to reference.
+	if _, err := testDB.ExecContext(context.Background(),
+		`INSERT INTO scenes (id, name, width, height, background_html, version)
+		 VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING`,
+		testSceneID, "test-scene", 1920, 1080, "", 1,
+	); err != nil {
+		t.Fatalf("cleanWidgetsRest re-insert testSceneID: %v", err)
 	}
 }
 
@@ -184,6 +214,7 @@ func TestPostWidgets_Valid_Returns201WithID(t *testing.T) {
 		Origin:   restdto.OriginRequest{X: 0.5, Y: 0.5},
 		Rotation: restdto.RotationRequest{Degrees: 0},
 		TypeID:   uuid.New(),
+		SceneID:  testSceneID,
 		Labels:   []string{"flow"},
 		TagIDs:   []uuid.UUID{},
 	})
@@ -226,6 +257,7 @@ func TestPostWidgets_EmptyName_Returns500(t *testing.T) {
 		Size:     restdto.SizeRequest{Width: 100, Height: 100},
 		Origin:   restdto.OriginRequest{X: 0.5, Y: 0.5},
 		TypeID:   uuid.New(),
+		SceneID:  testSceneID,
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/widgets", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -251,6 +283,7 @@ func TestPutWidgetsByID_Valid_Returns200WithIncrementedVersion(t *testing.T) {
 		Origin:   restdto.OriginRequest{X: 0.5, Y: 0.5},
 		Rotation: restdto.RotationRequest{Degrees: 0},
 		TypeID:   uuid.New(),
+		SceneID:  created.SceneID,
 		Labels:   []string{"updated"},
 		TagIDs:   []uuid.UUID{},
 		Version:  created.Version,
@@ -279,6 +312,7 @@ func TestPutWidgetsByID_NotFound_Returns404(t *testing.T) {
 	body, _ := json.Marshal(restdto.UpdateWidgetRequest{
 		Name:    "x",
 		TypeID:  uuid.New(),
+		SceneID: testSceneID,
 		Origin:  restdto.OriginRequest{X: 0.5, Y: 0.5},
 		Size:    restdto.SizeRequest{Width: 100, Height: 100},
 		Version: 1,
@@ -425,6 +459,8 @@ func TestGetWidgetsBySceneID_WithWidgets_ReturnsOnlyMatchingScene(t *testing.T) 
 
 	targetSceneID := uuid.New()
 	otherSceneID := uuid.New()
+	mustInsertScene(t, targetSceneID)
+	mustInsertScene(t, otherSceneID)
 
 	inTarget := testWidgetInput
 	inTarget.Name = "widget-in-target"
@@ -472,6 +508,10 @@ func TestGetWidgetsBySceneID_MultipleWidgets_ReturnsAll(t *testing.T) {
 	cleanWidgetsRest(t)
 
 	sceneID := uuid.New()
+	otherSceneID := uuid.New()
+	mustInsertScene(t, sceneID)
+	mustInsertScene(t, otherSceneID)
+
 	for _, name := range []string{"widget-a", "widget-b"} {
 		input := testWidgetInput
 		input.Name = name
@@ -481,7 +521,7 @@ func TestGetWidgetsBySceneID_MultipleWidgets_ReturnsAll(t *testing.T) {
 	// Also create a widget in another scene — should not appear.
 	other := testWidgetInput
 	other.Name = "widget-other"
-	other.SceneID = uuid.New()
+	other.SceneID = otherSceneID
 	createWidgetViaService(t, other)
 
 	router := newRouterWithWidgets()

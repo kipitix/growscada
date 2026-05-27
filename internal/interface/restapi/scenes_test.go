@@ -21,6 +21,7 @@ import (
 
 func cleanScenesRest(t *testing.T) {
 	t.Helper()
+	// ON DELETE CASCADE removes widgets too; that's fine for scene tests.
 	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM scenes"); err != nil {
 		t.Fatalf("cleanScenesRest: %v", err)
 	}
@@ -208,7 +209,7 @@ func TestPostScenes_InvalidJSON_Returns400(t *testing.T) {
 	}
 }
 
-func TestPostScenes_EmptyName_Returns500(t *testing.T) {
+func TestPostScenes_EmptyName_Returns422(t *testing.T) {
 	router := newRouterWithScenes()
 
 	body, _ := json.Marshal(restdto.CreateSceneRequest{
@@ -221,12 +222,12 @@ func TestPostScenes_EmptyName_Returns500(t *testing.T) {
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("status: expected 500, got %d", rec.Code)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("status: expected 422, got %d", rec.Code)
 	}
 }
 
-func TestPostScenes_ZeroWidth_Returns500(t *testing.T) {
+func TestPostScenes_ZeroWidth_Returns422(t *testing.T) {
 	router := newRouterWithScenes()
 
 	body, _ := json.Marshal(restdto.CreateSceneRequest{
@@ -239,8 +240,8 @@ func TestPostScenes_ZeroWidth_Returns500(t *testing.T) {
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("status: expected 500, got %d", rec.Code)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("status: expected 422, got %d", rec.Code)
 	}
 }
 
@@ -256,6 +257,7 @@ func TestPutScenesByID_Valid_Returns200WithIncrementedVersion(t *testing.T) {
 		Width:          2560,
 		Height:         1440,
 		BackgroundHTML: `<div class="updated-bg"></div>`,
+		Version:        created.Version,
 	})
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/scenes/"+created.ID.String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")

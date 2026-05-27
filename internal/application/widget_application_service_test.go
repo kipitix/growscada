@@ -351,6 +351,7 @@ func TestUpdateWidget_StaleVersion_ReturnsConflict(t *testing.T) {
 		ID:      created.ID,
 		Name:    "stale-attempt",
 		TypeID:  created.TypeID,
+		SceneID: created.SceneID,
 		OriginX: 0.5, OriginY: 0.5,
 		Width: 100, Height: 100,
 		Version: created.Version + 99, // wrong version
@@ -394,6 +395,7 @@ func TestUpdateWidget_NotFound_ReturnsWrappedError(t *testing.T) {
 		ID:      uuid.New(),
 		Name:    "x",
 		TypeID:  uuid.New(),
+		SceneID: testSceneID,
 		OriginX: 0.5, OriginY: 0.5,
 		Width: 100, Height: 100,
 		Version: 1,

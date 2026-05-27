@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 	"github.com/pressly/goose/v3"
 	"github.com/testcontainers/testcontainers-go"
@@ -66,6 +67,18 @@ func TestMain(m *testing.M) {
 	}
 
 	testDB = db
+
+	// Insert a shared scene used by widget tests. The widgets table has a FK
+	// on scene_id, so every widget insert needs a real scene row.
+	testSceneID = uuid.New()
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO scenes (id, name, width, height, background_html, version) VALUES ($1, $2, $3, $4, $5, $6)`,
+		testSceneID, "test-scene", 1920, 1080, "", 1,
+	); err != nil {
+		db.Close()
+		pgContainer.Terminate(ctx)
+		panic("failed to insert test scene: " + err.Error())
+	}
 
 	code := m.Run()
 

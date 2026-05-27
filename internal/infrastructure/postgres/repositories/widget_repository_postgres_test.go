@@ -15,6 +15,26 @@ import (
 	"github.com/kipitix/growscada/internal/infrastructure/postgres/repositories"
 )
 
+// testSceneID is populated in TestMain before any test runs.
+// It holds a real scene row so widget inserts satisfy the FK on scene_id.
+var testSceneID uuid.UUID
+
+// mustInsertScene inserts a minimal scene row so widget inserts satisfy the FK.
+func mustInsertScene(t *testing.T, sceneID uuid.UUID) {
+	t.Helper()
+	_, err := testDB.ExecContext(context.Background(),
+		`INSERT INTO scenes (id, name, width, height, background_html, version)
+		 VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING`,
+		sceneID, "test-scene-"+sceneID.String(), 1920, 1080, "", 1,
+	)
+	if err != nil {
+		t.Fatalf("mustInsertScene: %v", err)
+	}
+	t.Cleanup(func() {
+		testDB.ExecContext(context.Background(), "DELETE FROM scenes WHERE id = $1", sceneID)
+	})
+}
+
 func cleanWidgets(t *testing.T) {
 	t.Helper()
 	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM widgets"); err != nil {
@@ -31,10 +51,11 @@ func makeWidget(t *testing.T, name string, repo widget.WidgetRepository) widget.
 	}
 	pos := widget.NewPosition(10.0, 20.0, 0)
 	typeID := id.NewID(id.IDWithUUID[widget.WidgetType](uuid.New()))
+	sceneID := id.NewID(id.IDWithUUID[scene.Scene](testSceneID))
 	return widget.NewWidget(
 		newID, newName, pos, widget.DefaultSize(),
 		widget.DefaultOrigin(), widget.DefaultRotation(),
-		typeID, id.ID[scene.Scene]{}, []string{"label1"}, nil,
+		typeID, sceneID, []string{"label1"}, nil,
 		version.Initial[widget.Widget](),
 	)
 }
@@ -311,10 +332,11 @@ func TestWidgetFindAll_WithTagIDs_RoundTripsCorrectly(t *testing.T) {
 	newName, _ := widget.NewWidgetName("with-tags")
 	pos := widget.NewPosition(1, 2, 3)
 	typeID := id.NewID(id.IDWithUUID[widget.WidgetType](uuid.New()))
+	sceneID := id.NewID(id.IDWithUUID[scene.Scene](testSceneID))
 	w := widget.NewWidget(
 		newID, newName, pos, widget.DefaultSize(),
 		widget.DefaultOrigin(), widget.DefaultRotation(),
-		typeID, id.ID[scene.Scene]{}, []string{"a", "b"},
+		typeID, sceneID, []string{"a", "b"},
 		[]id.ID[tag.Tag]{tagID1, tagID2},
 		version.Initial[widget.Widget](),
 	)
@@ -350,10 +372,11 @@ func TestWidgetFindByID_OriginAndRotation_RoundTripsCorrectly(t *testing.T) {
 	origin, _ := widget.NewOrigin(0.25, 0.75)
 	rotation := widget.NewRotation(90.0)
 	typeID := id.NewID(id.IDWithUUID[widget.WidgetType](uuid.New()))
+	sceneID := id.NewID(id.IDWithUUID[scene.Scene](testSceneID))
 
 	w := widget.NewWidget(
 		newID, newName, pos, size, origin, rotation,
-		typeID, id.ID[scene.Scene]{}, nil, nil,
+		typeID, sceneID, nil, nil,
 		version.Initial[widget.Widget](),
 	)
 
@@ -485,6 +508,8 @@ func TestWidgetFindBySceneID_WidgetsInScene_ReturnsOnlyMatchingWidgets(t *testin
 
 	targetSceneID := id.NewID[scene.Scene]()
 	otherSceneID := id.NewID[scene.Scene]()
+	mustInsertScene(t, targetSceneID.UUID())
+	mustInsertScene(t, otherSceneID.UUID())
 
 	w1 := makeWidgetWithSceneID(t, "widget-in-target-1", targetSceneID, repo)
 	w2 := makeWidgetWithSceneID(t, "widget-in-target-2", targetSceneID, repo)
@@ -517,6 +542,7 @@ func TestWidgetFindBySceneID_NoMatch_ReturnsEmptySlice(t *testing.T) {
 	ctx := context.Background()
 
 	existingSceneID := id.NewID[scene.Scene]()
+	mustInsertScene(t, existingSceneID.UUID())
 	w := makeWidgetWithSceneID(t, "some-widget", existingSceneID, repo)
 	if _, err := repo.Save(ctx, w); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -539,6 +565,7 @@ func TestWidgetFindBySceneID_PreservesWidgetFields(t *testing.T) {
 	ctx := context.Background()
 
 	sceneID := id.NewID[scene.Scene]()
+	mustInsertScene(t, sceneID.UUID())
 	w := makeWidgetWithSceneID(t, "pressure-gauge", sceneID, repo)
 	saved, err := repo.Save(ctx, w)
 	if err != nil {
