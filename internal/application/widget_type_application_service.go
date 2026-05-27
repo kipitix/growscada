@@ -100,6 +100,10 @@ func (s widgetTypeServiceImpl) UpdateWidgetType(ctx context.Context, input appdt
 		return appdto.WidgetType{}, fmt.Errorf("error on find widget type by id in repository: %w", err)
 	}
 
+	if found.Version().Number() != input.Version {
+		return appdto.WidgetType{}, widget.ErrWidgetTypeConflict
+	}
+
 	newName, err := widget.NewWidgetTypeName(input.Name)
 	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("cannot parse name: %w", err)

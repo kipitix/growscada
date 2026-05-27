@@ -98,6 +98,10 @@ func (h TagsHandlers) PatchTagsValue(w http.ResponseWriter, r *http.Request) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
 			return
 		}
+		if errors.Is(err, tag.ErrTagConflict) {
+			sendJSONResponse(w, http.StatusConflict, NewConflict("tag", err.Error(), r.URL.Path))
+			return
+		}
 		sendInternalError(w, r, err)
 		return
 	}

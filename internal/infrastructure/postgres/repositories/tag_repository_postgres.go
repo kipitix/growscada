@@ -67,7 +67,7 @@ func (r tagRepositoryPostgresImpl) Save(ctx context.Context, aTag tag.Tag) (tag.
 			return nil, fmt.Errorf("cannot get rows affected on update: %w", err)
 		}
 		if rowsAffected != 1 {
-			return nil, fmt.Errorf("expected 1 row affected on update, got %d", rowsAffected)
+			return nil, r.classifyUpdateConflict(ctx, aTag.ID())
 		}
 		saved, err := tag.NewTag(aTag.ID(), aTag.Name(), aTag.Type(), aTag.Value(), aTag.Quality(), aTag.Version().Next())
 		if err != nil {
@@ -77,6 +77,22 @@ func (r tagRepositoryPostgresImpl) Save(ctx context.Context, aTag tag.Tag) (tag.
 	}
 
 	return nil, fmt.Errorf("undefined behavior with version %d", aTag.Version())
+}
+
+// classifyUpdateConflict checks whether the tag still exists after a failed UPDATE.
+// Returns ErrTagNotFound if the row is gone, or ErrTagConflict if the version didn't match.
+func (r tagRepositoryPostgresImpl) classifyUpdateConflict(ctx context.Context, tagID id.ID[tag.Tag]) error {
+	var exists bool
+	err := r.db.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM tags WHERE id = $1)`, tagID.UUID(),
+	).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("cannot check tag existence: %w", err)
+	}
+	if !exists {
+		return tag.ErrTagNotFound
+	}
+	return tag.ErrTagConflict
 }
 
 func (r tagRepositoryPostgresImpl) FindByID(ctx context.Context, tagID id.ID[tag.Tag]) (tag.Tag, error) {

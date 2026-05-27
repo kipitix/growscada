@@ -7,7 +7,12 @@ import (
 	"github.com/kipitix/growscada/internal/domain/id"
 )
 
-var ErrTagNotFound = errors.New("tag not found")
+var (
+	ErrTagNotFound = errors.New("tag not found")
+	// ErrTagConflict is returned by Save when the stored version does not match,
+	// indicating a concurrent modification.
+	ErrTagConflict = errors.New("tag version conflict")
+)
 
 // TagRepository - repository interface for storing and managing tags.
 // Defines operations for getting the next identifier,

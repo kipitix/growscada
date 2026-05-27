@@ -82,6 +82,10 @@ func (s sceneServiceImpl) UpdateScene(ctx context.Context, input appdto.UpdateSc
 		return appdto.Scene{}, fmt.Errorf("error on find scene by id in repository: %w", err)
 	}
 
+	if found.Version().Number() != input.Version {
+		return appdto.Scene{}, scene.ErrSceneConflict
+	}
+
 	newName, err := scene.NewSceneName(input.Name)
 	if err != nil {
 		return appdto.Scene{}, fmt.Errorf("cannot parse scene name: %w", err)

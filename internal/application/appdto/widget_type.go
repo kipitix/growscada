@@ -28,6 +28,7 @@ type CreateWidgetTypeInput struct {
 }
 
 // UpdateWidgetTypeInput holds the input data for updating a widget type.
+// Version must match the current persisted version for optimistic locking.
 type UpdateWidgetTypeInput struct {
 	ID             uuid.UUID
 	Name           string
@@ -36,6 +37,7 @@ type UpdateWidgetTypeInput struct {
 	ScriptLanguage string
 	DefaultWidth   int
 	DefaultHeight  int
+	Version        int
 }
 
 // NewWidgetType creates a WidgetType DTO from the domain aggregate.

@@ -34,11 +34,13 @@ type CreateSceneResponse struct {
 }
 
 // UpdateSceneRequest is the HTTP DTO for updating a scene.
+// Version must match the current persisted version for optimistic locking.
 type UpdateSceneRequest struct {
 	Name           string `json:"name"`
 	Width          int    `json:"width"`
 	Height         int    `json:"height"`
 	BackgroundHTML string `json:"background_html"`
+	Version        int    `json:"version"`
 }
 
 // UpdateSceneResponse is the HTTP DTO for a scene update response.
@@ -89,5 +91,6 @@ func NewUpdateSceneInput(r UpdateSceneRequest, sceneID uuid.UUID) appdto.UpdateS
 		Width:          r.Width,
 		Height:         r.Height,
 		BackgroundHTML: r.BackgroundHTML,
+		Version:        r.Version,
 	}
 }

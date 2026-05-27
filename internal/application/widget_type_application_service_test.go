@@ -37,6 +37,8 @@ var testCreateWidgetTypeInput = appdto.CreateWidgetTypeInput{
 	HtmlTemplate:   "<div class='gauge'><span class='value'></span></div>",
 	Script:         "function render(v) { return v; }",
 	ScriptLanguage: "javascript",
+	DefaultWidth:   120,
+	DefaultHeight:  60,
 }
 
 // --- CreateWidgetType ---
@@ -165,6 +167,9 @@ func TestUpdateWidgetType_Valid_ReturnsIncrementedVersion(t *testing.T) {
 		HtmlTemplate:   "<div class='updated'></div>",
 		Script:         "function draw() {}",
 		ScriptLanguage: "python",
+		DefaultWidth:   120,
+		DefaultHeight:  60,
+		Version:        created.Version,
 	})
 
 	if err != nil {
@@ -191,6 +196,9 @@ func TestUpdateWidgetType_Valid_FieldsAreUpdated(t *testing.T) {
 		HtmlTemplate:   "<div class='new'></div>",
 		Script:         "print('hello')",
 		ScriptLanguage: "python",
+		DefaultWidth:   120,
+		DefaultHeight:  60,
+		Version:        created.Version,
 	})
 	if err != nil {
 		t.Fatalf("UpdateWidgetType: %v", err)
@@ -244,6 +252,9 @@ func TestUpdateWidgetType_InvalidScriptLanguage_ReturnsError(t *testing.T) {
 		HtmlTemplate:   "<div/>",
 		Script:         "x",
 		ScriptLanguage: "ruby",
+		DefaultWidth:   120,
+		DefaultHeight:  60,
+		Version:        created.Version,
 	})
 
 	if err == nil {
@@ -388,6 +399,9 @@ func TestUpdateWidgetType_Success_PublishesUpdatedEvent(t *testing.T) {
 		HtmlTemplate:   "<div/>",
 		Script:         "x",
 		ScriptLanguage: "lua",
+		DefaultWidth:   120,
+		DefaultHeight:  60,
+		Version:        created.Version,
 	})
 	if err != nil {
 		t.Fatalf("UpdateWidgetType: %v", err)
@@ -402,5 +416,34 @@ func TestUpdateWidgetType_Success_PublishesUpdatedEvent(t *testing.T) {
 	}
 	if wtEvent.WidgetTypeID().UUID() != created.ID {
 		t.Errorf("event WidgetTypeID: expected %s, got %s", created.ID, wtEvent.WidgetTypeID().UUID())
+	}
+}
+
+func TestUpdateWidgetType_StaleVersion_ReturnsConflict(t *testing.T) {
+	cleanWidgetTypes(t)
+	svc := newWidgetTypeService()
+	ctx := context.Background()
+
+	created, err := svc.CreateWidgetType(ctx, testCreateWidgetTypeInput)
+	if err != nil {
+		t.Fatalf("CreateWidgetType: %v", err)
+	}
+
+	_, err = svc.UpdateWidgetType(ctx, appdto.UpdateWidgetTypeInput{
+		ID:             created.ID,
+		Name:           "x",
+		HtmlTemplate:   "<div/>",
+		Script:         "x",
+		ScriptLanguage: "lua",
+		DefaultWidth:   120,
+		DefaultHeight:  60,
+		Version:        created.Version - 1, // intentionally stale
+	})
+
+	if err == nil {
+		t.Fatal("expected ErrWidgetTypeConflict for stale version, got nil")
+	}
+	if !errors.Is(err, widget.ErrWidgetTypeConflict) {
+		t.Errorf("expected wrapped ErrWidgetTypeConflict, got: %v", err)
 	}
 }

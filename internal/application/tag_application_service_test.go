@@ -366,7 +366,7 @@ func TestSetTagValueByID_ValidUpdate_ReturnsIncrementedVersion(t *testing.T) {
 		t.Fatalf("CreateTag: %v", err)
 	}
 
-	resp, err := svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "200", Quality: "good"})
+	resp, err := svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "200", Quality: "good", Version: created.Version})
 
 	if err != nil {
 		t.Fatalf("SetTagValueByID returned unexpected error: %v", err)
@@ -387,7 +387,7 @@ func TestSetTagValueByID_ValidUpdate_ValueAndQualityAreUpdated(t *testing.T) {
 	}
 
 	tagID := mustTagIDFromUUID(created.ID)
-	if _, err = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "42", Quality: "good"}); err != nil {
+	if _, err = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "42", Quality: "good", Version: created.Version}); err != nil {
 		t.Fatalf("SetTagValueByID: %v", err)
 	}
 
@@ -408,7 +408,7 @@ func TestSetTagValueByID_NotFound_ReturnsWrappedErrTagNotFound(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	_, err := svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: uuid.New(), Value: "1", Quality: "good"})
+	_, err := svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: uuid.New(), Value: "1", Quality: "good", Version: 1})
 
 	if err == nil {
 		t.Fatal("expected error for non-existent tag, got nil")
@@ -428,7 +428,7 @@ func TestSetTagValueByID_InvalidQuality_ReturnsError(t *testing.T) {
 		t.Fatalf("CreateTag: %v", err)
 	}
 
-	_, err = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "20", Quality: "unknown"})
+	_, err = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "20", Quality: "unknown", Version: created.Version})
 
 	if err == nil {
 		t.Error("expected error for invalid quality, got nil")
@@ -544,7 +544,7 @@ func TestSetTagValueByID_Success_PublishesTagUpdatedEvent(t *testing.T) {
 		received = append(received, e)
 	})
 
-	if _, err = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "20", Quality: "good"}); err != nil {
+	if _, err = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "20", Quality: "good", Version: created.Version}); err != nil {
 		t.Fatalf("SetTagValueByID: %v", err)
 	}
 
@@ -575,7 +575,7 @@ func TestSetTagValueByID_InvalidRequest_NoEventPublished(t *testing.T) {
 		received = append(received, e)
 	})
 
-	_, _ = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "not-a-number", Quality: "good"})
+	_, _ = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "not-a-number", Quality: "good", Version: created.Version})
 
 	if len(received) != 0 {
 		t.Errorf("expected no events on error, got %d", len(received))
@@ -592,9 +592,34 @@ func TestSetTagValueByID_InvalidValueForType_ReturnsError(t *testing.T) {
 		t.Fatalf("CreateTag: %v", err)
 	}
 
-	_, err = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "not-a-number", Quality: "good"})
+	_, err = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "not-a-number", Quality: "good", Version: created.Version})
 
 	if err == nil {
 		t.Error("expected error for value incompatible with type, got nil")
+	}
+}
+
+func TestSetTagValueByID_StaleVersion_ReturnsConflict(t *testing.T) {
+	cleanTags(t)
+	svc := newService()
+	ctx := context.Background()
+
+	created, err := svc.CreateTag(ctx, appdto.CreateTagInput{Name: "sensor", Type: "integer", Value: "10", Quality: "good"})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+
+	_, err = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{
+		ID:      created.ID,
+		Value:   "20",
+		Quality: "good",
+		Version: created.Version - 1, // intentionally stale
+	})
+
+	if err == nil {
+		t.Fatal("expected ErrTagConflict for stale version, got nil")
+	}
+	if !errors.Is(err, tag.ErrTagConflict) {
+		t.Errorf("expected wrapped ErrTagConflict, got: %v", err)
 	}
 }

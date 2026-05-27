@@ -26,6 +26,23 @@ func cleanWidgets(t *testing.T) {
 	}
 }
 
+// mustInsertScene inserts a minimal scene row directly into the DB so that
+// widget inserts satisfy the FK constraint on widgets.scene_id.
+func mustInsertScene(t *testing.T, sceneID uuid.UUID) {
+	t.Helper()
+	_, err := testDB.ExecContext(context.Background(),
+		`INSERT INTO scenes (id, name, width, height, background_html, version) VALUES ($1, $2, $3, $4, $5, $6)
+		 ON CONFLICT (id) DO NOTHING`,
+		sceneID, "test-scene-"+sceneID.String(), 1920, 1080, "", 1,
+	)
+	if err != nil {
+		t.Fatalf("mustInsertScene: %v", err)
+	}
+	t.Cleanup(func() {
+		testDB.ExecContext(context.Background(), "DELETE FROM scenes WHERE id = $1", sceneID)
+	})
+}
+
 func newWidgetService() application.WidgetService {
 	repo := repositories.NewWidgetRepositoryPostgres(testDB)
 	return application.NewWidgetService(repo, event.NewEventBus())
@@ -553,6 +570,8 @@ func TestFindWidgetsBySceneID_WidgetsInScene_ReturnsOnlyThoseWidgets(t *testing.
 
 	targetSceneID := uuid.New()
 	otherSceneID := uuid.New()
+	mustInsertScene(t, targetSceneID)
+	mustInsertScene(t, otherSceneID)
 
 	inTarget := testCreateWidgetInput
 	inTarget.Name = "widget-in-target"
@@ -588,6 +607,7 @@ func TestFindWidgetsBySceneID_MultipleWidgetsInSameScene_ReturnsAll(t *testing.T
 	ctx := context.Background()
 
 	sceneID := uuid.New()
+	mustInsertScene(t, sceneID)
 
 	for i, name := range []string{"widget-a", "widget-b", "widget-c"} {
 		input := testCreateWidgetInput
@@ -615,8 +635,10 @@ func TestFindWidgetsBySceneID_UnknownScene_ReturnsEmptyList(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a widget in a known scene.
+	knownSceneID := uuid.New()
+	mustInsertScene(t, knownSceneID)
 	input := testCreateWidgetInput
-	input.SceneID = uuid.New()
+	input.SceneID = knownSceneID
 	if _, err := svc.CreateWidget(ctx, input); err != nil {
 		t.Fatalf("CreateWidget: %v", err)
 	}
@@ -638,6 +660,7 @@ func TestFindWidgetsBySceneID_TransformMatrixIsPresent(t *testing.T) {
 	ctx := context.Background()
 
 	sceneID := uuid.New()
+	mustInsertScene(t, sceneID)
 	input := testCreateWidgetInput
 	input.SceneID = sceneID
 	if _, err := svc.CreateWidget(ctx, input); err != nil {

@@ -38,6 +38,7 @@ type CreateWidgetTypeResponse struct {
 }
 
 // UpdateWidgetTypeRequest is the HTTP DTO for updating a widget type.
+// Version must match the current persisted version for optimistic locking.
 type UpdateWidgetTypeRequest struct {
 	Name           string `json:"name"`
 	HtmlTemplate   string `json:"html_template"`
@@ -45,6 +46,7 @@ type UpdateWidgetTypeRequest struct {
 	ScriptLanguage string `json:"script_language"`
 	DefaultWidth   int    `json:"default_width"`
 	DefaultHeight  int    `json:"default_height"`
+	Version        int    `json:"version"`
 }
 
 // UpdateWidgetTypeResponse is the HTTP DTO for an update response.
@@ -101,5 +103,6 @@ func NewUpdateWidgetTypeInput(r UpdateWidgetTypeRequest, anID uuid.UUID) appdto.
 		ScriptLanguage: r.ScriptLanguage,
 		DefaultWidth:   r.DefaultWidth,
 		DefaultHeight:  r.DefaultHeight,
+		Version:        r.Version,
 	}
 }

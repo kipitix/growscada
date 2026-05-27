@@ -121,6 +121,10 @@ func (t tagServiceImpl) SetTagValueByID(ctx context.Context, request appdto.Upda
 		return appdto.Tag{}, fmt.Errorf("error on find tag by id in repository: %w", err)
 	}
 
+	if foundTag.Version().Number() != request.Version {
+		return appdto.Tag{}, tag.ErrTagConflict
+	}
+
 	newQuality, err := tag.NewTagQuality(request.Quality)
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("cannot parse quality: %w", err)

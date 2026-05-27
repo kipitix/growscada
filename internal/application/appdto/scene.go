@@ -24,12 +24,14 @@ type CreateSceneInput struct {
 }
 
 // UpdateSceneInput holds the input data for updating a scene.
+// Version must match the current persisted version for optimistic locking.
 type UpdateSceneInput struct {
 	ID             uuid.UUID
 	Name           string
 	Width          int
 	Height         int
 	BackgroundHTML string
+	Version        int
 }
 
 // NewScene creates a Scene DTO from the domain aggregate.

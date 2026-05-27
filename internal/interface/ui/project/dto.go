@@ -19,6 +19,7 @@ type sceneItem struct {
 	Width          int    `json:"width"`
 	Height         int    `json:"height"`
 	BackgroundHTML string `json:"background_html"`
+	Version        int    `json:"version"`
 }
 
 type getScenesResponse struct {
@@ -41,6 +42,11 @@ type updateSceneRequest struct {
 	Width          int    `json:"width"`
 	Height         int    `json:"height"`
 	BackgroundHTML string `json:"background_html"`
+	Version        int    `json:"version"`
+}
+
+type updateSceneResponse struct {
+	Version int `json:"version"`
 }
 
 // Widget geometry sub-DTOs (match server restdto shape).

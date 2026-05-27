@@ -15,6 +15,9 @@ type widgetTypeItem struct {
 	HtmlTemplate   string `json:"html_template"`
 	Script         string `json:"script"`
 	ScriptLanguage string `json:"script_language"`
+	DefaultWidth   int    `json:"default_width"`
+	DefaultHeight  int    `json:"default_height"`
+	Version        int    `json:"version"`
 }
 
 type getWidgetTypesResponse struct {
@@ -26,6 +29,8 @@ type createWidgetTypeRequest struct {
 	HtmlTemplate   string `json:"html_template"`
 	Script         string `json:"script"`
 	ScriptLanguage string `json:"script_language"`
+	DefaultWidth   int    `json:"default_width"`
+	DefaultHeight  int    `json:"default_height"`
 }
 
 type createWidgetTypeResponse struct {
@@ -37,6 +42,9 @@ type updateWidgetTypeRequest struct {
 	HtmlTemplate   string `json:"html_template"`
 	Script         string `json:"script"`
 	ScriptLanguage string `json:"script_language"`
+	DefaultWidth   int    `json:"default_width"`
+	DefaultHeight  int    `json:"default_height"`
+	Version        int    `json:"version"`
 }
 
 type Library struct {
@@ -104,6 +112,8 @@ func (l *Library) createItem(ctx app.Context) {
 		HtmlTemplate:   defaultHTML,
 		Script:         defaultScript,
 		ScriptLanguage: "javascript",
+		DefaultWidth:   120,
+		DefaultHeight:  60,
 	})
 	ctx.Async(func() {
 		resp, err := http.Post(url, "application/json", bytes.NewReader(body))
@@ -185,12 +195,22 @@ func (l *Library) applyChanges(ctx app.Context) {
 	if l.selectedID == "" {
 		return
 	}
+	var currentItem widgetTypeItem
+	for _, it := range l.widgetTypes {
+		if it.ID == l.selectedID {
+			currentItem = it
+			break
+		}
+	}
 	url := l.apiServerURL + "/api/v1/widget-types/" + l.selectedID
 	body, _ := json.Marshal(updateWidgetTypeRequest{
 		Name:           l.editedName,
 		HtmlTemplate:   l.editedHTML,
 		Script:         l.editedScript,
 		ScriptLanguage: l.editedScriptLang,
+		DefaultWidth:   currentItem.DefaultWidth,
+		DefaultHeight:  currentItem.DefaultHeight,
+		Version:        currentItem.Version,
 	})
 	ctx.Async(func() {
 		req, _ := http.NewRequest(http.MethodPut, url, bytes.NewReader(body))
@@ -251,6 +271,9 @@ func (l *Library) commitEdit(ctx app.Context) {
 		HtmlTemplate:   found.HtmlTemplate,
 		Script:         found.Script,
 		ScriptLanguage: found.ScriptLanguage,
+		DefaultWidth:   found.DefaultWidth,
+		DefaultHeight:  found.DefaultHeight,
+		Version:        found.Version,
 	})
 	ctx.Async(func() {
 		req, _ := http.NewRequest(http.MethodPut, url, bytes.NewReader(body))

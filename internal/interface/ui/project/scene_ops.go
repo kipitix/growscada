@@ -128,7 +128,9 @@ func (p *Project) commitSceneEdit(ctx app.Context) {
 		Width:          sc.Width,
 		Height:         sc.Height,
 		BackgroundHTML: sc.BackgroundHTML,
+		Version:        sc.Version,
 	})
+	sceneID := id
 	ctx.Async(func() {
 		req, _ := http.NewRequest(http.MethodPut, url, bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -137,7 +139,18 @@ func (p *Project) commitSceneEdit(ctx app.Context) {
 			ctx.Dispatch(func(ctx app.Context) { p.fetchErr = err.Error() })
 			return
 		}
-		resp.Body.Close()
-		ctx.Dispatch(func(ctx app.Context) { p.fetchErr = "" })
+		defer resp.Body.Close()
+		var result updateSceneResponse
+		if err := json.NewDecoder(resp.Body).Decode(&result); err == nil && result.Version > 0 {
+			ctx.Dispatch(func(ctx app.Context) {
+				for i := range p.scenes {
+					if p.scenes[i].ID == sceneID {
+						p.scenes[i].Version = result.Version
+						break
+					}
+				}
+				p.fetchErr = ""
+			})
+		}
 	})
 }
