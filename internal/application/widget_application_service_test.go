@@ -519,6 +519,136 @@ func TestDeleteWidget_Success_PublishesDeletedEvent(t *testing.T) {
 	}
 }
 
+// --- FindWidgetsBySceneID ---
+
+func TestFindWidgetsBySceneID_EmptyDB_ReturnsEmptyList(t *testing.T) {
+	cleanWidgets(t)
+	svc := newWidgetService()
+
+	resp, err := svc.FindWidgetsBySceneID(context.Background(), uuid.New())
+
+	if err != nil {
+		t.Fatalf("FindWidgetsBySceneID: %v", err)
+	}
+	if len(resp) != 0 {
+		t.Errorf("expected 0 widgets, got %d", len(resp))
+	}
+}
+
+func TestFindWidgetsBySceneID_WidgetsInScene_ReturnsOnlyThoseWidgets(t *testing.T) {
+	cleanWidgets(t)
+	svc := newWidgetService()
+	ctx := context.Background()
+
+	targetSceneID := uuid.New()
+	otherSceneID := uuid.New()
+
+	inTarget := testCreateWidgetInput
+	inTarget.Name = "widget-in-target"
+	inTarget.SceneID = targetSceneID
+
+	inOther := testCreateWidgetInput
+	inOther.Name = "widget-in-other"
+	inOther.SceneID = otherSceneID
+
+	if _, err := svc.CreateWidget(ctx, inTarget); err != nil {
+		t.Fatalf("CreateWidget (target): %v", err)
+	}
+	if _, err := svc.CreateWidget(ctx, inOther); err != nil {
+		t.Fatalf("CreateWidget (other): %v", err)
+	}
+
+	resp, err := svc.FindWidgetsBySceneID(ctx, targetSceneID)
+
+	if err != nil {
+		t.Fatalf("FindWidgetsBySceneID: %v", err)
+	}
+	if len(resp) != 1 {
+		t.Errorf("expected 1 widget, got %d", len(resp))
+	}
+	if len(resp) == 1 && resp[0].SceneID != targetSceneID {
+		t.Errorf("SceneID: expected %v, got %v", targetSceneID, resp[0].SceneID)
+	}
+}
+
+func TestFindWidgetsBySceneID_MultipleWidgetsInSameScene_ReturnsAll(t *testing.T) {
+	cleanWidgets(t)
+	svc := newWidgetService()
+	ctx := context.Background()
+
+	sceneID := uuid.New()
+
+	for i, name := range []string{"widget-a", "widget-b", "widget-c"} {
+		input := testCreateWidgetInput
+		input.Name = name
+		input.SceneID = sceneID
+		_ = i
+		if _, err := svc.CreateWidget(ctx, input); err != nil {
+			t.Fatalf("CreateWidget %q: %v", name, err)
+		}
+	}
+
+	resp, err := svc.FindWidgetsBySceneID(ctx, sceneID)
+
+	if err != nil {
+		t.Fatalf("FindWidgetsBySceneID: %v", err)
+	}
+	if len(resp) != 3 {
+		t.Errorf("expected 3 widgets, got %d", len(resp))
+	}
+}
+
+func TestFindWidgetsBySceneID_UnknownScene_ReturnsEmptyList(t *testing.T) {
+	cleanWidgets(t)
+	svc := newWidgetService()
+	ctx := context.Background()
+
+	// Create a widget in a known scene.
+	input := testCreateWidgetInput
+	input.SceneID = uuid.New()
+	if _, err := svc.CreateWidget(ctx, input); err != nil {
+		t.Fatalf("CreateWidget: %v", err)
+	}
+
+	// Query a completely different scene.
+	resp, err := svc.FindWidgetsBySceneID(ctx, uuid.New())
+
+	if err != nil {
+		t.Fatalf("FindWidgetsBySceneID: %v", err)
+	}
+	if len(resp) != 0 {
+		t.Errorf("expected 0 widgets for unknown scene, got %d", len(resp))
+	}
+}
+
+func TestFindWidgetsBySceneID_TransformMatrixIsPresent(t *testing.T) {
+	cleanWidgets(t)
+	svc := newWidgetService()
+	ctx := context.Background()
+
+	sceneID := uuid.New()
+	input := testCreateWidgetInput
+	input.SceneID = sceneID
+	if _, err := svc.CreateWidget(ctx, input); err != nil {
+		t.Fatalf("CreateWidget: %v", err)
+	}
+
+	resp, err := svc.FindWidgetsBySceneID(ctx, sceneID)
+
+	if err != nil {
+		t.Fatalf("FindWidgetsBySceneID: %v", err)
+	}
+	if len(resp) != 1 {
+		t.Fatalf("expected 1 widget, got %d", len(resp))
+	}
+	if resp[0].TransformMatrix.CSS == "" {
+		t.Error("expected non-empty TransformMatrix.CSS")
+	}
+	if resp[0].TransformMatrix.A != 1.0 {
+		t.Errorf("TransformMatrix.A: expected 1.0 for 0° rotation, got %v", resp[0].TransformMatrix.A)
+	}
+}
+
 func TestUpdateWidget_Success_PublishesUpdatedEvent(t *testing.T) {
 	cleanWidgets(t)
 	svc, bus := newWidgetServiceWithBus()

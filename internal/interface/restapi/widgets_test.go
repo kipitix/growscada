@@ -398,6 +398,109 @@ func TestDeleteWidgetsByID_InvalidUUID_Returns400(t *testing.T) {
 	}
 }
 
+// --- GET /api/v1/scenes/{id}/widgets ---
+
+func TestGetWidgetsBySceneID_EmptyScene_Returns200WithEmptyList(t *testing.T) {
+	cleanWidgetsRest(t)
+	router := newRouterWithWidgets()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/scenes/"+uuid.New().String()+"/widgets", nil)
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status: expected 200, got %d", rec.Code)
+	}
+	var resp restdto.GetWidgetsResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Widgets) != 0 {
+		t.Errorf("expected 0 items, got %d", len(resp.Widgets))
+	}
+}
+
+func TestGetWidgetsBySceneID_WithWidgets_ReturnsOnlyMatchingScene(t *testing.T) {
+	cleanWidgetsRest(t)
+
+	targetSceneID := uuid.New()
+	otherSceneID := uuid.New()
+
+	inTarget := testWidgetInput
+	inTarget.Name = "widget-in-target"
+	inTarget.SceneID = targetSceneID
+	createWidgetViaService(t, inTarget)
+
+	inOther := testWidgetInput
+	inOther.Name = "widget-in-other"
+	inOther.SceneID = otherSceneID
+	createWidgetViaService(t, inOther)
+
+	router := newRouterWithWidgets()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/scenes/"+targetSceneID.String()+"/widgets", nil)
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status: expected 200, got %d\nbody: %s", rec.Code, rec.Body.String())
+	}
+	var resp restdto.GetWidgetsResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Widgets) != 1 {
+		t.Errorf("expected 1 widget for target scene, got %d", len(resp.Widgets))
+	}
+	if len(resp.Widgets) == 1 && resp.Widgets[0].SceneID != targetSceneID {
+		t.Errorf("SceneID: expected %v, got %v", targetSceneID, resp.Widgets[0].SceneID)
+	}
+}
+
+func TestGetWidgetsBySceneID_InvalidUUID_Returns400(t *testing.T) {
+	router := newRouterWithWidgets()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/scenes/not-a-uuid/widgets", nil)
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status: expected 400, got %d", rec.Code)
+	}
+}
+
+func TestGetWidgetsBySceneID_MultipleWidgets_ReturnsAll(t *testing.T) {
+	cleanWidgetsRest(t)
+
+	sceneID := uuid.New()
+	for _, name := range []string{"widget-a", "widget-b"} {
+		input := testWidgetInput
+		input.Name = name
+		input.SceneID = sceneID
+		createWidgetViaService(t, input)
+	}
+	// Also create a widget in another scene — should not appear.
+	other := testWidgetInput
+	other.Name = "widget-other"
+	other.SceneID = uuid.New()
+	createWidgetViaService(t, other)
+
+	router := newRouterWithWidgets()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/scenes/"+sceneID.String()+"/widgets", nil)
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status: expected 200, got %d", rec.Code)
+	}
+	var resp restdto.GetWidgetsResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Widgets) != 2 {
+		t.Errorf("expected 2 widgets, got %d", len(resp.Widgets))
+	}
+}
+
 func TestDeleteWidgetsByID_Existing_RemovedFromDB(t *testing.T) {
 	cleanWidgetsRest(t)
 	created := createWidgetViaService(t, testWidgetInput)

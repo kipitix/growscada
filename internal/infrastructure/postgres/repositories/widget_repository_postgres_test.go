@@ -39,6 +39,23 @@ func makeWidget(t *testing.T, name string, repo widget.WidgetRepository) widget.
 	)
 }
 
+func makeWidgetWithSceneID(t *testing.T, name string, sceneID id.ID[scene.Scene], repo widget.WidgetRepository) widget.Widget {
+	t.Helper()
+	newID := repo.NextID()
+	newName, err := widget.NewWidgetName(name)
+	if err != nil {
+		t.Fatalf("NewWidgetName(%q): %v", name, err)
+	}
+	pos := widget.NewPosition(10.0, 20.0, 0)
+	typeID := id.NewID(id.IDWithUUID[widget.WidgetType](uuid.New()))
+	return widget.NewWidget(
+		newID, newName, pos, widget.DefaultSize(),
+		widget.DefaultOrigin(), widget.DefaultRotation(),
+		typeID, sceneID, []string{"label1"}, nil,
+		version.Initial[widget.Widget](),
+	)
+}
+
 // --- NextID ---
 
 func TestWidgetNextID_ReturnsUniqueIDs(t *testing.T) {
@@ -440,5 +457,110 @@ func TestWidgetDeleteByID_NotFound_ReturnsErrWidgetNotFound(t *testing.T) {
 
 	if !errors.Is(err, widget.ErrWidgetNotFound) {
 		t.Errorf("expected ErrWidgetNotFound, got %v", err)
+	}
+}
+
+// --- FindBySceneID ---
+
+func TestWidgetFindBySceneID_EmptyDB_ReturnsEmptySlice(t *testing.T) {
+	cleanWidgets(t)
+	repo := repositories.NewWidgetRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	sceneID := id.NewID[scene.Scene]()
+	result, err := repo.FindBySceneID(ctx, sceneID)
+
+	if err != nil {
+		t.Fatalf("FindBySceneID returned unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("expected 0 widgets, got %d", len(result))
+	}
+}
+
+func TestWidgetFindBySceneID_WidgetsInScene_ReturnsOnlyMatchingWidgets(t *testing.T) {
+	cleanWidgets(t)
+	repo := repositories.NewWidgetRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	targetSceneID := id.NewID[scene.Scene]()
+	otherSceneID := id.NewID[scene.Scene]()
+
+	w1 := makeWidgetWithSceneID(t, "widget-in-target-1", targetSceneID, repo)
+	w2 := makeWidgetWithSceneID(t, "widget-in-target-2", targetSceneID, repo)
+	w3 := makeWidgetWithSceneID(t, "widget-in-other", otherSceneID, repo)
+
+	for _, w := range []widget.Widget{w1, w2, w3} {
+		if _, err := repo.Save(ctx, w); err != nil {
+			t.Fatalf("Save %q: %v", w.Name().String(), err)
+		}
+	}
+
+	result, err := repo.FindBySceneID(ctx, targetSceneID)
+
+	if err != nil {
+		t.Fatalf("FindBySceneID: %v", err)
+	}
+	if len(result) != 2 {
+		t.Errorf("expected 2 widgets, got %d", len(result))
+	}
+	for _, w := range result {
+		if w.SceneID() != targetSceneID {
+			t.Errorf("widget %v has wrong SceneID: expected %v, got %v", w.ID(), targetSceneID, w.SceneID())
+		}
+	}
+}
+
+func TestWidgetFindBySceneID_NoMatch_ReturnsEmptySlice(t *testing.T) {
+	cleanWidgets(t)
+	repo := repositories.NewWidgetRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	existingSceneID := id.NewID[scene.Scene]()
+	w := makeWidgetWithSceneID(t, "some-widget", existingSceneID, repo)
+	if _, err := repo.Save(ctx, w); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	nonExistentSceneID := id.NewID[scene.Scene]()
+	result, err := repo.FindBySceneID(ctx, nonExistentSceneID)
+
+	if err != nil {
+		t.Fatalf("FindBySceneID: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("expected 0 widgets for unknown scene, got %d", len(result))
+	}
+}
+
+func TestWidgetFindBySceneID_PreservesWidgetFields(t *testing.T) {
+	cleanWidgets(t)
+	repo := repositories.NewWidgetRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	sceneID := id.NewID[scene.Scene]()
+	w := makeWidgetWithSceneID(t, "pressure-gauge", sceneID, repo)
+	saved, err := repo.Save(ctx, w)
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	result, err := repo.FindBySceneID(ctx, sceneID)
+
+	if err != nil {
+		t.Fatalf("FindBySceneID: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 widget, got %d", len(result))
+	}
+	got := result[0]
+	if got.ID() != saved.ID() {
+		t.Errorf("ID: expected %v, got %v", saved.ID(), got.ID())
+	}
+	if got.Name() != saved.Name() {
+		t.Errorf("Name: expected %v, got %v", saved.Name(), got.Name())
+	}
+	if got.SceneID() != sceneID {
+		t.Errorf("SceneID: expected %v, got %v", sceneID, got.SceneID())
 	}
 }

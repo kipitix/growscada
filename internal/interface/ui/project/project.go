@@ -254,8 +254,7 @@ func NewProject(apiServerURL string) *Project {
 
 func (p *Project) OnMount(ctx app.Context) {
 	p.loadWidgetTypes(ctx)
-	p.loadScenes(ctx)
-	p.loadWidgets(ctx)
+	p.loadScenes(ctx) // loadScenes calls loadWidgets once selectedSceneID is known
 	p.loadTags(ctx)
 }
 
@@ -294,6 +293,7 @@ func (p *Project) loadScenes(ctx app.Context) {
 			return
 		}
 		ctx.Dispatch(func(ctx app.Context) {
+			prevSceneID := p.selectedSceneID
 			p.scenes = result.Scenes
 			if p.selectedSceneID == "" && len(result.Scenes) > 0 {
 				p.selectedSceneID = result.Scenes[0].ID
@@ -309,12 +309,21 @@ func (p *Project) loadScenes(ctx app.Context) {
 				p.selectedSceneID = ""
 				p.clearWidgetSelection()
 			}
+			// Reload widgets whenever the active scene changes (including initial load).
+			if p.selectedSceneID != prevSceneID {
+				p.loadWidgets(ctx)
+			}
 		})
 	})
 }
 
 func (p *Project) loadWidgets(ctx app.Context) {
-	url := p.apiServerURL + "/api/v1/widgets"
+	sceneID := p.selectedSceneID
+	if sceneID == "" {
+		ctx.Dispatch(func(ctx app.Context) { p.widgets = nil })
+		return
+	}
+	url := p.apiServerURL + "/api/v1/scenes/" + sceneID + "/widgets"
 	ctx.Async(func() {
 		resp, err := http.Get(url)
 		if err != nil {
@@ -328,8 +337,13 @@ func (p *Project) loadWidgets(ctx app.Context) {
 			return
 		}
 		ctx.Dispatch(func(ctx app.Context) {
+			// Discard the response if the user has switched to a different scene
+			// while the request was in flight.
+			if p.selectedSceneID != sceneID {
+				return
+			}
 			p.widgets = result.Widgets
-			// Re-sync editing fields if selected widget was refreshed
+			// Re-sync editing fields if selected widget was refreshed.
 			if p.selectedWidgetID != "" {
 				for _, w := range p.widgets {
 					if w.ID == p.selectedWidgetID {
@@ -440,7 +454,9 @@ func (p *Project) createScene(ctx app.Context) {
 		}
 		ctx.Dispatch(func(ctx app.Context) {
 			p.selectedSceneID = result.ID
+			p.widgets = nil // clear widgets from previous scene immediately
 			p.loadScenes(ctx)
+			p.loadWidgets(ctx) // new scene has no widgets; clears stale list
 		})
 	})
 }
@@ -1029,6 +1045,7 @@ func (p *Project) renderSceneTabs() app.UI {
 						OnClick(func(ctx app.Context, e app.Event) {
 							p.selectedSceneID = sc.ID
 							p.clearWidgetSelection()
+							p.loadWidgets(ctx)
 						}).
 						OnDblClick(func(ctx app.Context, e app.Event) {
 							p.startEditingScene(sc.ID, sc.Name)

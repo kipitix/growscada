@@ -57,6 +57,7 @@ func NewRouter(tagService application.TagService, widgetTypeService application.
 	router.serveMux.HandleFunc("POST /api/v1/widgets", router.widgetsHandlers.PostWidgets)
 	router.serveMux.HandleFunc("PUT /api/v1/widgets/{id}", router.widgetsHandlers.PutWidgetsByID)
 	router.serveMux.HandleFunc("DELETE /api/v1/widgets/{id}", router.widgetsHandlers.DeleteWidgetsByID)
+	router.serveMux.HandleFunc("GET /api/v1/scenes/{id}/widgets", router.widgetsHandlers.GetWidgetsBySceneID)
 
 	router.scenesHandlers = NewScenesHandler(sceneService)
 	router.serveMux.HandleFunc("GET /api/v1/scenes", router.scenesHandlers.GetScenes)

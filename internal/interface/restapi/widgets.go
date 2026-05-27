@@ -101,6 +101,23 @@ func (h WidgetsHandlers) PutWidgetsByID(w http.ResponseWriter, r *http.Request) 
 	sendJSONResponse(w, http.StatusOK, restdto.NewUpdateWidgetResponse(updated))
 }
 
+// GetWidgetsBySceneID handles GET /scenes/{id}/widgets
+func (h WidgetsHandlers) GetWidgetsBySceneID(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	sceneID, err := uuid.Parse(idStr)
+	if err != nil {
+		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
+		return
+	}
+
+	list, err := h.service.FindWidgetsBySceneID(r.Context(), sceneID)
+	if err != nil {
+		sendInternalError(w, r, err)
+		return
+	}
+	sendJSONResponse(w, http.StatusOK, restdto.NewGetWidgetsResponse(list))
+}
+
 // DeleteWidgetsByID handles DELETE /widgets/{id}
 func (h WidgetsHandlers) DeleteWidgetsByID(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
