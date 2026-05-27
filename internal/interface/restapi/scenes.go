@@ -62,6 +62,10 @@ func (h ScenesHandlers) PostScenes(w http.ResponseWriter, r *http.Request) {
 
 	created, err := h.service.CreateScene(r.Context(), restdto.NewCreateSceneInput(request))
 	if err != nil {
+		if errors.Is(err, scene.ErrSceneValidation) {
+			sendJSONResponse(w, http.StatusUnprocessableEntity, NewValidationError(map[string][]string{"scene": {err.Error()}}, r.URL.Path))
+			return
+		}
 		sendInternalError(w, r, err)
 		return
 	}
@@ -92,6 +96,10 @@ func (h ScenesHandlers) PutScenesByID(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(err, scene.ErrSceneConflict) {
 			sendJSONResponse(w, http.StatusConflict, NewConflict("scene", err.Error(), r.URL.Path))
+			return
+		}
+		if errors.Is(err, scene.ErrSceneValidation) {
+			sendJSONResponse(w, http.StatusUnprocessableEntity, NewValidationError(map[string][]string{"scene": {err.Error()}}, r.URL.Path))
 			return
 		}
 		sendInternalError(w, r, err)

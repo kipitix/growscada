@@ -12,6 +12,9 @@ var (
 	// ErrSceneConflict is returned by Save when the stored version does not match,
 	// indicating a concurrent modification.
 	ErrSceneConflict = errors.New("scene version conflict")
+	// ErrSceneValidation is returned when input fails domain validation
+	// (e.g. empty name, non-positive dimensions).
+	ErrSceneValidation = errors.New("scene validation error")
 )
 
 // SceneRepository - repository interface for storing and managing scenes.

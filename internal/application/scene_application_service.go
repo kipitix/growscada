@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -54,12 +55,12 @@ func (s sceneServiceImpl) CreateScene(ctx context.Context, input appdto.CreateSc
 
 	newName, err := scene.NewSceneName(input.Name)
 	if err != nil {
-		return appdto.Scene{}, fmt.Errorf("cannot create scene because of name: %w", err)
+		return appdto.Scene{}, fmt.Errorf("cannot create scene because of name: %w", errors.Join(scene.ErrSceneValidation, err))
 	}
 
 	newSize, err := scene.NewSceneSize(input.Width, input.Height)
 	if err != nil {
-		return appdto.Scene{}, fmt.Errorf("cannot create scene because of size: %w", err)
+		return appdto.Scene{}, fmt.Errorf("cannot create scene because of size: %w", errors.Join(scene.ErrSceneValidation, err))
 	}
 
 	newScene := scene.NewScene(newID, newName, newSize, scene.NewBackgroundHTML(input.BackgroundHTML), version.Initial[scene.Scene]())
@@ -88,12 +89,12 @@ func (s sceneServiceImpl) UpdateScene(ctx context.Context, input appdto.UpdateSc
 
 	newName, err := scene.NewSceneName(input.Name)
 	if err != nil {
-		return appdto.Scene{}, fmt.Errorf("cannot parse scene name: %w", err)
+		return appdto.Scene{}, fmt.Errorf("cannot parse scene name: %w", errors.Join(scene.ErrSceneValidation, err))
 	}
 
 	newSize, err := scene.NewSceneSize(input.Width, input.Height)
 	if err != nil {
-		return appdto.Scene{}, fmt.Errorf("cannot parse scene size: %w", err)
+		return appdto.Scene{}, fmt.Errorf("cannot parse scene size: %w", errors.Join(scene.ErrSceneValidation, err))
 	}
 
 	updated := scene.NewScene(found.ID(), newName, newSize, scene.NewBackgroundHTML(input.BackgroundHTML), found.Version())
