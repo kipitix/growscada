@@ -68,26 +68,12 @@ func (r sceneRepositoryPostgresImpl) Save(ctx context.Context, s scene.Scene) (s
 			return nil, fmt.Errorf("cannot get rows affected on update: %w", err)
 		}
 		if rowsAffected != 1 {
-			return nil, r.classifyUpdateConflict(ctx, s.ID())
+			return nil, classifyUpdateConflict[scene.Scene](ctx, r.db, tableNameScenes, s.ID(), scene.ErrSceneNotFound, scene.ErrSceneConflict)
 		}
 		return scene.NewScene(s.ID(), s.Name(), s.Size(), s.BackgroundHTML(), s.Version().Next()), nil
 	}
 
 	return nil, fmt.Errorf("undefined behavior with version %d", s.Version().Number())
-}
-
-func (r sceneRepositoryPostgresImpl) classifyUpdateConflict(ctx context.Context, sceneID id.ID[scene.Scene]) error {
-	var exists bool
-	err := r.db.QueryRowContext(ctx,
-		`SELECT EXISTS(SELECT 1 FROM scenes WHERE id = $1)`, sceneID.UUID(),
-	).Scan(&exists)
-	if err != nil {
-		return fmt.Errorf("cannot check scene existence: %w", err)
-	}
-	if !exists {
-		return scene.ErrSceneNotFound
-	}
-	return scene.ErrSceneConflict
 }
 
 func (r sceneRepositoryPostgresImpl) FindByID(ctx context.Context, sceneID id.ID[scene.Scene]) (scene.Scene, error) {

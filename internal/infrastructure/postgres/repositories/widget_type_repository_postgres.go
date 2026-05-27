@@ -68,26 +68,12 @@ func (r widgetTypeRepositoryPostgresImpl) Save(ctx context.Context, wt widget.Wi
 			return nil, fmt.Errorf("cannot get rows affected on update: %w", err)
 		}
 		if rowsAffected != 1 {
-			return nil, r.classifyUpdateConflict(ctx, wt.ID())
+			return nil, classifyUpdateConflict(ctx, r.db, tableNameWidgetTypes, wt.ID(), widget.ErrWidgetTypeNotFound, widget.ErrWidgetTypeConflict)
 		}
 		return widget.NewWidgetType(wt.ID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.DefaultSize(), wt.Version().Next()), nil
 	}
 
 	return nil, fmt.Errorf("undefined behavior with version %d", wt.Version().Number())
-}
-
-func (r widgetTypeRepositoryPostgresImpl) classifyUpdateConflict(ctx context.Context, anID id.ID[widget.WidgetType]) error {
-	var exists bool
-	err := r.db.QueryRowContext(ctx,
-		`SELECT EXISTS(SELECT 1 FROM widget_types WHERE id = $1)`, anID.UUID(),
-	).Scan(&exists)
-	if err != nil {
-		return fmt.Errorf("cannot check widget type existence: %w", err)
-	}
-	if !exists {
-		return widget.ErrWidgetTypeNotFound
-	}
-	return widget.ErrWidgetTypeConflict
 }
 
 func (r widgetTypeRepositoryPostgresImpl) FindByID(ctx context.Context, anID id.ID[widget.WidgetType]) (widget.WidgetType, error) {

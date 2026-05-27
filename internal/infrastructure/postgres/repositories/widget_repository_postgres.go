@@ -93,7 +93,7 @@ func (r widgetRepositoryPostgresImpl) Save(ctx context.Context, w widget.Widget)
 			return nil, fmt.Errorf("cannot get rows affected on update: %w", err)
 		}
 		if rowsAffected != 1 {
-			return nil, r.classifyUpdateConflict(ctx, w.ID())
+			return nil, classifyUpdateConflict(ctx, r.db, tableNameWidgets, w.ID(), widget.ErrWidgetNotFound, widget.ErrWidgetConflict)
 		}
 		return widget.NewWidget(
 			w.ID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(),
@@ -103,21 +103,6 @@ func (r widgetRepositoryPostgresImpl) Save(ctx context.Context, w widget.Widget)
 	}
 
 	return nil, fmt.Errorf("undefined behavior with version %d", w.Version().Number())
-}
-
-
-func (r widgetRepositoryPostgresImpl) classifyUpdateConflict(ctx context.Context, widgetID id.ID[widget.Widget]) error {
-	var exists bool
-	err := r.db.QueryRowContext(ctx,
-		`SELECT EXISTS(SELECT 1 FROM widgets WHERE id = $1)`, widgetID.UUID(),
-	).Scan(&exists)
-	if err != nil {
-		return fmt.Errorf("cannot check widget existence: %w", err)
-	}
-	if !exists {
-		return widget.ErrWidgetNotFound
-	}
-	return widget.ErrWidgetConflict
 }
 
 const selectWidgetColumns = `id, name, x, y, z, width, height, origin_x, origin_y, rotation_degrees, type_id, scene_id, labels, tag_ids::text[], version`
