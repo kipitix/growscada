@@ -1,5 +1,23 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.13] - 2026-05-27
+
+### Fixed
+
+- Оптимистичная блокировка виджетов: `UpdateWidget` с `version=0` в теле запроса тихо уходил в INSERT вместо UPDATE, вызывая ошибку PK-ограничения (HTTP 500 вместо 409). Исправлено: application-сервис выполняет `FindByID` + сравнение версий до `Save`; репозиторий добавил ветку `IsCommitted()` и fallback-ошибку для неопределённых состояний версии
+- Оптимистичная блокировка сцен: `UpdateSceneInput` не содержал поле `Version`, что делало OCC структурно невозможным. Исправлено: добавлено поле `Version int` в `UpdateSceneInput`, `UpdateSceneRequest` и `UpdateSceneResponse`; `UpdateScene` проверяет `found.Version().Number() != input.Version` → `ErrSceneConflict`
+- Оптимистичная блокировка типов виджетов: `UpdateWidgetType` игнорировал версию клиента — конкурентные правки перезаписывали друг друга без 409. Исправлено аналогичной проверкой версии в application-сервисе
+- Nil-UUID валидация: `CreateWidget`/`UpdateWidget` с отсутствующим `scene_id` или `type_id` в JSON тихо сохраняли виджет с произвольным UUID. Исправлено явными проверками `== uuid.Nil` → `ErrWidgetInvalidInput` в application-сервисе
+- `PostScenes` возвращал HTTP 500 при ошибках валидации домена; теперь возвращает 422 Unprocessable Entity при `ErrSceneValidation`
+- `PostWidgets` возвращал HTTP 500 при невалидном вводе; теперь возвращает 400 Bad Request при `ErrWidgetInvalidInput`
+
+### Changed
+
+- `classifyUpdateConflict` — вынесена из четырёх репозиториев в единую пакетную generic-функцию `classifyUpdateConflict[T]` в `update_conflict_classification.go`; введён тип `tableName` с константами `tableNameTags`, `tableNameScenes`, `tableNameWidgets`, `tableNameWidgetTypes`, исключающий передачу произвольных строк
+- `renderSceneCanvas` — удалён избыточный клиентский фильтр `w.SceneID != p.selectedSceneID`; `FindBySceneID` уже ограничивает выборку на уровне БД
+- `finalizeAllDrags` — четыре одинаковых if-блока заменены циклом по `[]*string` с указателями на поля структуры
+- Тесты: удалена функция-заглушка `mustTagIDFromUUID` (возвращала аргумент без изменений); удалена мёртвая переменная `_ = i` в range-цикле `widget_application_service_test.go`
+
 ## [0.0.12] - 2026-05-27
 
 ### Added
