@@ -11,11 +11,15 @@ http:
     data: |-
       {
         "name": "pressure-gauge-updated",
-        "coordinates": { "x": 150.0, "y": 250.0, "z": 1.0 },
+        "position": { "x": 150.0, "y": 250.0, "z": 1 },
+        "size": { "width": 200, "height": 200 },
+        "origin": { "x": 0.5, "y": 0.5 },
+        "rotation": { "degrees": 45.0 },
         "type_id": "{{WIDGET_TYPE_ID}}",
         "scene_id": "{{SCENE_ID}}",
         "labels": ["sensor", "pressure", "updated"],
-        "tag_ids": []
+        "tag_ids": [],
+        "version": 1
       }
   auth: inherit
 

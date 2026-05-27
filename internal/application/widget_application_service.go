@@ -107,6 +107,15 @@ func (s widgetServiceImpl) CreateWidget(ctx context.Context, input appdto.Create
 func (s widgetServiceImpl) UpdateWidget(ctx context.Context, input appdto.UpdateWidgetInput) (appdto.Widget, error) {
 	widgetID := id.NewID(id.IDWithUUID[widget.Widget](input.ID))
 
+	found, err := s.repository.FindByID(ctx, widgetID)
+	if err != nil {
+		return appdto.Widget{}, fmt.Errorf("error finding widget for update: %w", err)
+	}
+
+	if found.Version().Number() != input.Version {
+		return appdto.Widget{}, widget.ErrWidgetConflict
+	}
+
 	newName, err := widget.NewWidgetName(input.Name)
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot parse widget name: %w", err)
@@ -131,15 +140,10 @@ func (s widgetServiceImpl) UpdateWidget(ctx context.Context, input appdto.Update
 
 	tagIDs := uuidsToTagIDs(input.TagIDs)
 
-	inputVersion, err := version.New(version.WithNumber[widget.Widget](input.Version))
-	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot build widget version: %w", err)
-	}
-
 	updated := widget.NewWidget(
-		widgetID, newName, pos, size, origin, rotation,
+		found.ID(), newName, pos, size, origin, rotation,
 		typeID, sceneID, input.Labels, tagIDs,
-		inputVersion,
+		found.Version(),
 	)
 
 	saved, err := s.repository.Save(ctx, updated)

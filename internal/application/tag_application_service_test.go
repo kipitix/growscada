@@ -70,6 +70,19 @@ func TestMain(m *testing.M) {
 
 	testDB = db
 
+	// Insert a shared scene used by widget tests. This must exist before any
+	// widget is created because the widgets table has a FK on scene_id.
+	testSceneID = uuid.New()
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO scenes (id, name, width, height, background_html, version) VALUES ($1, $2, $3, $4, $5, $6)`,
+		testSceneID, "test-scene", 1920, 1080, "", 1,
+	); err != nil {
+		db.Close()
+		pgContainer.Terminate(ctx)
+		panic("failed to insert test scene: " + err.Error())
+	}
+	testCreateWidgetInput.SceneID = testSceneID
+
 	code := m.Run()
 
 	db.Close()

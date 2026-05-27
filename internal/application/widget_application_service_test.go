@@ -14,6 +14,11 @@ import (
 	"github.com/kipitix/growscada/internal/infrastructure/postgres/repositories"
 )
 
+// testSceneID is populated in TestMain before any test runs.
+// It holds the UUID of a scene row inserted into the DB so that widget
+// inserts satisfy the FK constraint on widgets.scene_id.
+var testSceneID uuid.UUID
+
 func cleanWidgets(t *testing.T) {
 	t.Helper()
 	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM widgets"); err != nil {
@@ -32,6 +37,9 @@ func newWidgetServiceWithBus() (application.WidgetService, event.EventBus) {
 	return application.NewWidgetService(repo, bus), bus
 }
 
+// testCreateWidgetInput is a template used by widget tests.
+// Its SceneID field is set to testSceneID in TestMain after the shared scene
+// row has been inserted into the DB.
 var testCreateWidgetInput = appdto.CreateWidgetInput{
 	Name:            "pressure-gauge",
 	X:               10.0,
@@ -45,6 +53,7 @@ var testCreateWidgetInput = appdto.CreateWidgetInput{
 	TypeID:          uuid.New(),
 	Labels:          []string{"sensor", "pressure"},
 	TagIDs:          nil,
+	// SceneID is assigned in TestMain once testSceneID is available.
 }
 
 // --- CreateWidget ---
@@ -248,6 +257,7 @@ func TestUpdateWidget_Valid_ReturnsIncrementedVersion(t *testing.T) {
 		OriginY:         0.5,
 		RotationDegrees: 0.0,
 		TypeID:          created.TypeID,
+		SceneID:         created.SceneID,
 		Labels:          []string{"updated"},
 		Version:         created.Version,
 	})
@@ -283,6 +293,7 @@ func TestUpdateWidget_Valid_FieldsAreUpdated(t *testing.T) {
 		OriginY:         1.0,
 		RotationDegrees: 45.0,
 		TypeID:          newTypeID,
+		SceneID:         created.SceneID,
 		Labels:          []string{"x"},
 		Version:         created.Version,
 	})
@@ -668,6 +679,7 @@ func TestUpdateWidget_Success_PublishesUpdatedEvent(t *testing.T) {
 		ID:      created.ID,
 		Name:    "updated",
 		TypeID:  created.TypeID,
+		SceneID: created.SceneID,
 		OriginX: 0.5, OriginY: 0.5,
 		Width: 100, Height: 100,
 		Version: created.Version,
