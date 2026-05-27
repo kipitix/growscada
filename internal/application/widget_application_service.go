@@ -17,6 +17,7 @@ import (
 // WidgetService is the service interface for working with widget instances.
 type WidgetService interface {
 	FindAllWidgets(context.Context) ([]appdto.Widget, error)
+	FindWidgetsBySceneID(context.Context, uuid.UUID) ([]appdto.Widget, error)
 	FindWidgetByID(context.Context, uuid.UUID) (appdto.Widget, error)
 	CreateWidget(context.Context, appdto.CreateWidgetInput) (appdto.Widget, error)
 	UpdateWidget(context.Context, appdto.UpdateWidgetInput) (appdto.Widget, error)
@@ -42,6 +43,15 @@ func (s widgetServiceImpl) FindAllWidgets(ctx context.Context) ([]appdto.Widget,
 	return appdto.NewWidgetList(list), nil
 }
 
+func (s widgetServiceImpl) FindWidgetsBySceneID(ctx context.Context, rawSceneID uuid.UUID) ([]appdto.Widget, error) {
+	sceneID := id.NewID(id.IDWithUUID[scene.Scene](rawSceneID))
+	list, err := s.repository.FindBySceneID(ctx, sceneID)
+	if err != nil {
+		return nil, fmt.Errorf("error on find widgets by scene id in repository: %w", err)
+	}
+	return appdto.NewWidgetList(list), nil
+}
+
 func (s widgetServiceImpl) FindWidgetByID(ctx context.Context, rawID uuid.UUID) (appdto.Widget, error) {
 	widgetID := id.NewID(id.IDWithUUID[widget.Widget](rawID))
 	found, err := s.repository.FindByID(ctx, widgetID)
@@ -61,7 +71,7 @@ func (s widgetServiceImpl) CreateWidget(ctx context.Context, input appdto.Create
 
 	pos := widget.NewPosition(input.X, input.Y, input.Z)
 
-	size, err := normalizeSize(input.Width, input.Height)
+	size, err := widget.NewSize(input.Width, input.Height)
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot create widget because of size: %w", err)
 	}
@@ -104,7 +114,7 @@ func (s widgetServiceImpl) UpdateWidget(ctx context.Context, input appdto.Update
 
 	pos := widget.NewPosition(input.X, input.Y, input.Z)
 
-	size, err := normalizeSize(input.Width, input.Height)
+	size, err := widget.NewSize(input.Width, input.Height)
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot parse widget size: %w", err)
 	}

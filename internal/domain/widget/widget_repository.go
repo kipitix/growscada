@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/kipitix/growscada/internal/domain/id"
+	"github.com/kipitix/growscada/internal/domain/scene"
 )
 
 var (
@@ -32,6 +33,9 @@ type WidgetRepository interface {
 	// Returns ErrWidgetNotFound if the widget does not exist.
 	DeleteByID(context.Context, id.ID[Widget]) (Widget, error)
 
-	// FindAll returns all widgets.
+	// FindAll returns all widgets across all scenes.
 	FindAll(context.Context) ([]Widget, error)
+
+	// FindBySceneID returns all widgets belonging to the given scene.
+	FindBySceneID(context.Context, id.ID[scene.Scene]) ([]Widget, error)
 }

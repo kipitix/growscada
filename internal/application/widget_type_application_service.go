@@ -75,7 +75,7 @@ func (s widgetTypeServiceImpl) CreateWidgetType(ctx context.Context, input appdt
 		return appdto.WidgetType{}, fmt.Errorf("cannot create widget type because of script language: %w", err)
 	}
 
-	defaultSize, err := normalizeSize(input.DefaultWidth, input.DefaultHeight)
+	defaultSize, err := widget.NewSize(input.DefaultWidth, input.DefaultHeight)
 	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("cannot create widget type because of default size: %w", err)
 	}
@@ -120,7 +120,7 @@ func (s widgetTypeServiceImpl) UpdateWidgetType(ctx context.Context, input appdt
 		return appdto.WidgetType{}, fmt.Errorf("cannot parse script language: %w", err)
 	}
 
-	defaultSize, err := normalizeSize(input.DefaultWidth, input.DefaultHeight)
+	defaultSize, err := widget.NewSize(input.DefaultWidth, input.DefaultHeight)
 	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("cannot parse default size: %w", err)
 	}
@@ -150,13 +150,3 @@ func (s widgetTypeServiceImpl) DeleteWidgetTypeByID(ctx context.Context, rawID u
 	return appdto.NewWidgetType(deleted), nil
 }
 
-// normalizeSize defaults zero dimensions to 100 and calls NewSize.
-func normalizeSize(width, height int) (widget.Size, error) {
-	if width <= 0 {
-		width = 100
-	}
-	if height <= 0 {
-		height = 100
-	}
-	return widget.NewSize(width, height)
-}
