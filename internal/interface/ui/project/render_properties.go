@@ -1,6 +1,7 @@
 package project
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
@@ -34,11 +35,10 @@ func (p *Project) renderPropertiesPanel() app.UI {
 	return app.Div().
 		Style("display", "flex").
 		Style("flex-direction", "column").
-		Style("width", "260px").
+		Style("width", fmt.Sprintf("%dpx", p.propertiesWidth)).
 		Style("flex-shrink", "0").
 		Style("min-height", "0").
 		Style("overflow-y", "auto").
-		Style("border-left", "1px solid var(--border)").
 		Style("padding", "12px 10px").
 		Body(
 			app.H3().

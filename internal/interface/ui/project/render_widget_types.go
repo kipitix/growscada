@@ -63,10 +63,9 @@ func (p *Project) renderWidgetTypePanel() app.UI {
 	return app.Div().
 		Style("display", "flex").
 		Style("flex-direction", "column").
-		Style("width", "180px").
+		Style("width", fmt.Sprintf("%dpx", p.widgetTypeWidth)).
 		Style("flex-shrink", "0").
 		Style("min-height", "0").
-		Style("border-right", "1px solid var(--border)").
 		Style("padding", "12px 8px").
 		Body(
 			app.H3().

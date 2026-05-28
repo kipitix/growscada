@@ -129,6 +129,12 @@ func darkVars() string {
 
 func buildThemeCSS(mode string) string {
 	formReset := `
+html, body {
+	margin: 0;
+	padding: 0;
+	height: 100%;
+	overflow: hidden;
+}
 input, select, textarea, button {
 	background-color: var(--input-bg);
 	color: var(--text);
