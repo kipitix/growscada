@@ -123,6 +123,7 @@ func (l *Library) renderList() app.UI {
 				Body(app.Text(name)).
 				OnClick(func(ctx app.Context, e app.Event) {
 					l.selectItem(id)
+					ctx.LocalStorage().Set("library:selectedID", id)
 				}).
 				OnDblClick(func(ctx app.Context, e app.Event) {
 					l.startEditing(id, name)

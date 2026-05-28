@@ -71,7 +71,8 @@ func (p *Project) renderSceneTabs() app.UI {
 						Text(sc.Name).
 						OnClick(func(ctx app.Context, e app.Event) {
 							p.selectedSceneID = sc.ID
-							p.clearWidgetSelection()
+							ctx.LocalStorage().Set("project:sceneID", sc.ID)
+							p.clearWidgetSelection(ctx)
 							p.loadWidgets(ctx)
 						}).
 						OnDblClick(func(ctx app.Context, e app.Event) {
@@ -202,7 +203,7 @@ func (p *Project) renderSceneCanvas() app.UI {
 			p.createWidget(ctx, typeID, x, y)
 		}).
 		OnClick(func(ctx app.Context, e app.Event) {
-			p.clearWidgetSelection()
+			p.clearWidgetSelection(ctx)
 		}).
 		Body(widgetEls...)
 
@@ -262,7 +263,7 @@ func (p *Project) renderWidget(w widgetItem) app.UI {
 		OnMouseDown(func(ctx app.Context, e app.Event) {
 			e.Call("stopPropagation")
 			e.PreventDefault()
-			p.selectWidget(wid)
+			p.selectWidget(ctx, wid)
 			p.draggingWidgetID = wid
 			p.dragStartCliX = e.Get("clientX").Float()
 			p.dragStartCliY = e.Get("clientY").Float()
@@ -353,7 +354,7 @@ func (p *Project) renderWidget(w widgetItem) app.UI {
 			OnMouseDown(func(ctx app.Context, e app.Event) {
 				e.Call("stopPropagation")
 				e.PreventDefault()
-				p.selectWidget(wid)
+				p.selectWidget(ctx, wid)
 				p.draggingOriginID = wid
 				p.originCliX = e.Get("clientX").Float()
 				p.originCliY = e.Get("clientY").Float()

@@ -33,6 +33,13 @@ func NewRoot(anAPIServerURL string) *Root {
 
 func (r *Root) OnMount(ctx app.Context) {
 	ctx.Page().SetTitle("GrowSCADA")
+	var savedMode string
+	ctx.LocalStorage().Get("root:mode", &savedMode)
+	if Mode(savedMode) != ModeUnknown {
+		ctx.Dispatch(func(ctx app.Context) {
+			r.currentMode = Mode(savedMode)
+		})
+	}
 }
 
 func (r *Root) Render() app.UI {
@@ -97,6 +104,7 @@ func (r *Root) tab(label string, mode Mode) app.UI {
 		Text(label).
 		OnClick(func(ctx app.Context, e app.Event) {
 			r.currentMode = mode
+			ctx.LocalStorage().Set("root:mode", string(mode))
 		})
 
 	if active {

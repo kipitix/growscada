@@ -105,6 +105,14 @@ func NewProject(apiServerURL string) *Project {
 }
 
 func (p *Project) OnMount(ctx app.Context) {
+	var savedTab string
+	ctx.LocalStorage().Get("project:subTab", &savedTab)
+	if savedTab != "" {
+		p.activeSubTab = projectSubTab(savedTab)
+	}
+	ctx.LocalStorage().Get("project:sceneID", &p.selectedSceneID)
+	ctx.LocalStorage().Get("project:widgetID", &p.selectedWidgetID)
+	ctx.LocalStorage().Get("project:tagID", &p.selectedTagID)
 	p.loadWidgetTypes(ctx)
 	p.loadScenes(ctx) // loadScenes calls loadWidgets once selectedSceneID is known
 	p.loadTags(ctx)
@@ -144,15 +152,31 @@ func (p *Project) loadTags(ctx app.Context) {
 			ctx.Dispatch(func(ctx app.Context) { p.fetchErr = err.Error() })
 			return
 		}
-		ctx.Dispatch(func(ctx app.Context) { p.tags = result.Tags })
+		ctx.Dispatch(func(ctx app.Context) {
+			p.tags = result.Tags
+			if p.selectedTagID != "" {
+				found := false
+				for _, t := range result.Tags {
+					if t.ID == p.selectedTagID {
+						found = true
+						break
+					}
+				}
+				if !found {
+					p.selectedTagID = ""
+					ctx.LocalStorage().Set("project:tagID", "")
+				}
+			}
+		})
 	})
 }
 
 // ── Widget selection helpers ──────────────────────────────────────────────────
 
-func (p *Project) selectWidget(id string) {
+func (p *Project) selectWidget(ctx app.Context, id string) {
 	p.selectedWidgetID = id
 	p.addingTagID = ""
+	ctx.LocalStorage().Set("project:widgetID", id)
 	for _, w := range p.widgets {
 		if w.ID == id {
 			p.syncEditingFields(w)
@@ -173,7 +197,7 @@ func (p *Project) syncEditingFields(w widgetItem) {
 	p.editingRotation = fmt.Sprintf("%.1f", w.Rotation.Degrees)
 }
 
-func (p *Project) clearWidgetSelection() {
+func (p *Project) clearWidgetSelection(ctx app.Context) {
 	p.selectedWidgetID = ""
 	p.editingWidgetName = ""
 	p.editingPosX = ""
@@ -185,6 +209,7 @@ func (p *Project) clearWidgetSelection() {
 	p.editingOriginY = ""
 	p.editingRotation = ""
 	p.addingTagID = ""
+	ctx.LocalStorage().Set("project:widgetID", "")
 }
 
 func (p *Project) selectedWidgetIdx() int {
@@ -253,6 +278,7 @@ func (p *Project) subTab(label string, tab projectSubTab) app.UI {
 		Text(label).
 		OnClick(func(ctx app.Context, e app.Event) {
 			p.activeSubTab = tab
+			ctx.LocalStorage().Set("project:subTab", string(tab))
 		})
 	if active {
 		return el.

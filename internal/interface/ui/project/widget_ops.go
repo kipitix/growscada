@@ -39,13 +39,19 @@ func (p *Project) loadWidgets(ctx app.Context) {
 				return
 			}
 			p.widgets = result.Widgets
-			// Re-sync editing fields if selected widget was refreshed.
+			// Re-sync editing fields if selected widget was refreshed;
+			// clear selection if it no longer exists in this scene.
 			if p.selectedWidgetID != "" {
+				found := false
 				for _, w := range p.widgets {
 					if w.ID == p.selectedWidgetID {
 						p.syncEditingFields(w)
+						found = true
 						break
 					}
+				}
+				if !found {
+					p.clearWidgetSelection(ctx)
 				}
 			}
 		})
@@ -98,6 +104,7 @@ func (p *Project) createWidget(ctx app.Context, typeID string, x, y float64) {
 		}
 		ctx.Dispatch(func(ctx app.Context) {
 			p.selectedWidgetID = result.ID
+			ctx.LocalStorage().Set("project:widgetID", result.ID)
 			// Pre-fill editing fields optimistically
 			p.editingWidgetName = name
 			p.editingPosX = fmt.Sprintf("%.1f", x)
@@ -125,7 +132,7 @@ func (p *Project) deleteWidget(ctx app.Context, widgetID string) {
 		resp.Body.Close()
 		ctx.Dispatch(func(ctx app.Context) {
 			if p.selectedWidgetID == widgetID {
-				p.clearWidgetSelection()
+				p.clearWidgetSelection(ctx)
 			}
 			p.loadWidgets(ctx)
 		})

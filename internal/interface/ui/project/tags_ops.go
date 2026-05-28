@@ -53,6 +53,7 @@ func (p *Project) createTag(ctx app.Context) {
 			p.newTagName = ""
 			p.newTagType = ""
 			p.selectedTagID = result.ID
+			ctx.LocalStorage().Set("project:tagID", result.ID)
 			p.loadTags(ctx)
 		})
 	})
@@ -92,6 +93,7 @@ func (p *Project) deleteTag(ctx app.Context) {
 			p.tagFetchErr = ""
 			if p.selectedTagID == deletedID {
 				p.selectedTagID = ""
+				ctx.LocalStorage().Set("project:tagID", "")
 			}
 			p.loadTags(ctx)
 		})
