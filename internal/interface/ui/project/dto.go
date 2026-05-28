@@ -134,10 +134,25 @@ type updateWidgetResponse struct {
 }
 
 type tagItem struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Value   string `json:"value"`
+	Quality string `json:"quality"`
+	Version int    `json:"version"`
 }
 
 type getTagsResponse struct {
 	Tags []tagItem `json:"tags"`
+}
+
+type createTagRequest struct {
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Value   string `json:"value"`
+	Quality string `json:"quality"`
+}
+
+type createTagResponse struct {
+	ID string `json:"id"`
 }

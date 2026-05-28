@@ -18,3 +18,5 @@ db_down:
 
 test:
 	go test --cover ./...
+
+full_restart: db_down db_up run

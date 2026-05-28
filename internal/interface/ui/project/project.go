@@ -12,14 +12,30 @@ import (
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+type projectSubTab string
+
+const (
+	subTabScenes projectSubTab = "scenes"
+	subTabTags   projectSubTab = "tags"
+)
+
 type Project struct {
 	app.Compo
 	apiServerURL string
+
+	activeSubTab projectSubTab
 
 	widgetTypes []widgetTypeItem
 	scenes      []sceneItem
 	widgets     []widgetItem
 	tags        []tagItem
+
+	// ── Tags sub-tab state ──────────────────────────────────────────────────
+	selectedTagID string
+	creatingTag   bool
+	newTagName    string
+	newTagType    string
+	tagFetchErr   string
 
 	selectedSceneID  string
 	selectedWidgetID string
@@ -85,7 +101,7 @@ type Project struct {
 }
 
 func NewProject(apiServerURL string) *Project {
-	return &Project{apiServerURL: apiServerURL}
+	return &Project{apiServerURL: apiServerURL, activeSubTab: subTabScenes}
 }
 
 func (p *Project) OnMount(ctx app.Context) {
@@ -196,6 +212,58 @@ func (p *Project) widgetByID(id string) (widgetItem, bool) {
 // ── Render ────────────────────────────────────────────────────────────────────
 
 func (p *Project) Render() app.UI {
+	return app.Div().
+		Style("display", "flex").
+		Style("flex-direction", "column").
+		Style("flex", "1").
+		Style("min-height", "0").
+		Style("overflow", "hidden").
+		Body(
+			p.renderSubTabs(),
+			app.If(p.activeSubTab == subTabScenes, func() app.UI {
+				return p.renderScenesContent()
+			}).Else(func() app.UI {
+				return p.renderTagsContent()
+			}),
+		)
+}
+
+func (p *Project) renderSubTabs() app.UI {
+	return app.Div().
+		Style("display", "flex").
+		Style("flex-direction", "row").
+		Style("border-bottom", "1px solid #ddd").
+		Style("background", "#fafafa").
+		Style("padding", "0 4px").
+		Body(
+			p.subTab("Scenes", subTabScenes),
+			p.subTab("Tags", subTabTags),
+		)
+}
+
+func (p *Project) subTab(label string, tab projectSubTab) app.UI {
+	active := p.activeSubTab == tab
+	el := app.Div().
+		Style("padding", "6px 16px").
+		Style("cursor", "pointer").
+		Style("font-size", "13px").
+		Style("user-select", "none").
+		Style("border-bottom", "2px solid transparent").
+		Style("margin-bottom", "-1px").
+		Text(label).
+		OnClick(func(ctx app.Context, e app.Event) {
+			p.activeSubTab = tab
+		})
+	if active {
+		return el.
+			Style("border-bottom-color", "#0066cc").
+			Style("color", "#0066cc").
+			Style("font-weight", "600")
+	}
+	return el.Style("color", "#666")
+}
+
+func (p *Project) renderScenesContent() app.UI {
 	return app.Div().
 		Style("display", "flex").
 		Style("flex-direction", "row").
@@ -329,4 +397,8 @@ func (p *Project) Render() app.UI {
 			p.renderScenePanel(),
 			p.renderPropertiesPanel(),
 		)
+}
+
+func (p *Project) renderTagsContent() app.UI {
+	return p.renderTagsPanel()
 }
