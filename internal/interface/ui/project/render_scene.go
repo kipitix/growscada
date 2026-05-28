@@ -98,6 +98,9 @@ func (p *Project) renderSceneTabs() app.UI {
 						Text("×").
 						OnClick(func(ctx app.Context, e app.Event) {
 							e.Call("stopPropagation")
+							if !app.Window().Call("confirm", "Are you sure you want to delete this scene?").Bool() {
+								return
+							}
 							p.deleteScene(ctx, sc.ID)
 						}),
 				)
@@ -373,8 +376,6 @@ func (p *Project) renderWidget(w widgetItem) app.UI {
 				if cur, ok := p.widgetByID(wid); ok {
 					p.originStartOX = cur.Origin.X
 					p.originStartOY = cur.Origin.Y
-					p.originStartPosX = cur.Position.X
-					p.originStartPosY = cur.Position.Y
 					p.originDragW = cur.Size.Width
 					p.originDragH = cur.Size.Height
 					p.originDragRotDeg = cur.Rotation.Degrees

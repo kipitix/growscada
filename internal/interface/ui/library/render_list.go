@@ -34,12 +34,15 @@ func (l *Library) renderListButtons() app.UI {
 		Style("padding", "4px 0").
 		Style("font-size", "13px").
 		Style("cursor", "pointer").
-		Style("border", "1px solid var(--border-input)").
+		Style("border", "1px solid var(--error-border)").
 		Style("border-radius", "4px").
-		Style("background", "var(--bg-hover)").
-		Style("color", "var(--text)").
+		Style("background", "var(--error-bg)").
+		Style("color", "var(--error)").
 		Text("Delete").
 		OnClick(func(ctx app.Context, e app.Event) {
+			if !app.Window().Call("confirm", "Are you sure you want to delete?").Bool() {
+				return
+			}
 			l.deleteItem(ctx)
 		})
 	if deleteDisabled {
@@ -59,10 +62,10 @@ func (l *Library) renderListButtons() app.UI {
 				Style("padding", "4px 0").
 				Style("font-size", "13px").
 				Style("cursor", "pointer").
-				Style("border", "1px solid var(--border-input)").
+				Style("border", "1px solid var(--accent-border)").
 				Style("border-radius", "4px").
-				Style("background", "var(--bg-hover)").
-				Style("color", "var(--text)").
+				Style("background", "var(--accent-bg)").
+				Style("color", "var(--accent)").
 				Text("Create").
 				OnClick(func(ctx app.Context, e app.Event) {
 					l.createItem(ctx)

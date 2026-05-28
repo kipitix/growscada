@@ -429,6 +429,9 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 					Style("padding", "0 2px").
 					Text("×").
 					OnClick(func(ctx app.Context, e app.Event) {
+						if !app.Window().Call("confirm", "Are you sure you want to remove this tag?").Bool() {
+							return
+						}
 						p.removeTagFromWidget(ctx, tid)
 					}),
 			)
@@ -515,6 +518,9 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 				Style("color", "var(--error)").
 				Text("Delete Widget").
 				OnClick(func(ctx app.Context, e app.Event) {
+					if !app.Window().Call("confirm", "Are you sure you want to delete this widget?").Bool() {
+						return
+					}
 					p.deleteWidget(ctx, wid)
 				}),
 		)

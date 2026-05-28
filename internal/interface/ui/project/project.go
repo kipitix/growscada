@@ -59,11 +59,9 @@ type Project struct {
 	draggingOriginID string
 	originCliX       float64 // client X when drag started
 	originCliY       float64 // client Y when drag started
-	originStartOX    float64 // origin.X before drag
-	originStartOY    float64 // origin.Y before drag
-	originStartPosX  float64 // position.X before drag
-	originStartPosY  float64 // position.Y before drag
-	originDragW      int     // widget width during drag
+	originStartOX float64 // origin.X before drag
+	originStartOY float64 // origin.Y before drag
+	originDragW   int     // widget width during drag
 	originDragH      int     // widget height during drag
 	originDragRotDeg float64 // widget rotation during drag
 
@@ -331,7 +329,7 @@ func (p *Project) renderScenesContent() app.UI {
 				}
 			}
 
-			// Move origin anchor within widget (adjust position to keep content fixed)
+			// Move origin anchor within widget (widget position stays fixed)
 			if p.draggingOriginID != "" {
 				dx := clientX - p.originCliX
 				dy := clientY - p.originCliY
@@ -343,20 +341,13 @@ func (p *Project) renderScenesContent() app.UI {
 				dyLocal := -dx*sinA + dy*cosA
 				newOX := math.Max(0, math.Min(1, p.originStartOX+dxLocal/float64(p.originDragW)))
 				newOY := math.Max(0, math.Min(1, p.originStartOY+dyLocal/float64(p.originDragH)))
-				// Keep visual widget bounding-box in place by adjusting position
-				newPosX := p.originStartPosX + (p.originStartOX-newOX)*float64(p.originDragW)
-				newPosY := p.originStartPosY + (p.originStartOY-newOY)*float64(p.originDragH)
 				for i := range p.widgets {
 					if p.widgets[i].ID == p.draggingOriginID {
 						p.widgets[i].Origin.X = newOX
 						p.widgets[i].Origin.Y = newOY
-						p.widgets[i].Position.X = newPosX
-						p.widgets[i].Position.Y = newPosY
 						if p.selectedWidgetID == p.draggingOriginID {
 							p.editingOriginX = fmt.Sprintf("%.3f", newOX)
 							p.editingOriginY = fmt.Sprintf("%.3f", newOY)
-							p.editingPosX = fmt.Sprintf("%.1f", newPosX)
-							p.editingPosY = fmt.Sprintf("%.1f", newPosY)
 						}
 						break
 					}
