@@ -1,8 +1,6 @@
 package project
 
 import (
-	"fmt"
-
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 )
 
@@ -93,7 +91,7 @@ func (p *Project) renderTagListButtons() app.UI {
 
 func (p *Project) renderTagList() app.UI {
 	if p.tagFetchErr != "" {
-		return app.Div().Style("font-size", "13px").Style("color", "#c00").Text(fmt.Sprintf("Error: %s", p.tagFetchErr))
+		return app.Div().Style("font-size", "13px").Style("color", "#c00").Text("Error: " + p.tagFetchErr)
 	}
 	if len(p.tags) == 0 {
 		return app.Div().Style("font-size", "13px").Style("color", "#999").Text("No tags.")
@@ -104,7 +102,7 @@ func (p *Project) renderTagList() app.UI {
 		id := t.ID
 		name := t.Name
 		tagType := t.Type
-		item := app.Div().
+		var item app.HTMLDiv = app.Div().
 			Style("padding", "6px 8px").
 			Style("cursor", "pointer").
 			Style("border-radius", "4px").
@@ -118,11 +116,9 @@ func (p *Project) renderTagList() app.UI {
 				p.creatingTag = false
 			})
 		if p.selectedTagID == id {
-			item = item.(app.HTMLDiv).
-				Style("background", "#0066cc").
-				Style("color", "#fff")
+			item = item.Style("background", "#0066cc").Style("color", "#fff")
 		} else {
-			item = item.(app.HTMLDiv).Style("color", "#333")
+			item = item.Style("color", "#333")
 		}
 		items[i] = item
 	}

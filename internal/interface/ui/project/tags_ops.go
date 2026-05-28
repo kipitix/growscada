@@ -12,12 +12,16 @@ func (p *Project) createTag(ctx app.Context) {
 	name := p.newTagName
 	tagType := p.newTagType
 	url := p.apiServerURL + "/api/v1/tags"
-	body, _ := json.Marshal(createTagRequest{
+	body, err := json.Marshal(createTagRequest{
 		Name:    name,
 		Type:    tagType,
 		Value:   defaultTagValue(tagType),
 		Quality: "good",
 	})
+	if err != nil {
+		p.tagFetchErr = err.Error()
+		return
+	}
 	ctx.Async(func() {
 		resp, err := http.Post(url, "application/json", bytes.NewReader(body))
 		if err != nil {
@@ -27,6 +31,13 @@ func (p *Project) createTag(ctx app.Context) {
 			return
 		}
 		defer resp.Body.Close()
+
+		if resp.StatusCode >= 400 {
+			ctx.Dispatch(func(ctx app.Context) {
+				p.tagFetchErr = "server error: " + resp.Status
+			})
+			return
+		}
 
 		var result createTagResponse
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -54,7 +65,13 @@ func (p *Project) deleteTag(ctx app.Context) {
 	deletedID := p.selectedTagID
 	url := p.apiServerURL + "/api/v1/tags/" + deletedID
 	ctx.Async(func() {
-		req, _ := http.NewRequest(http.MethodDelete, url, nil)
+		req, err := http.NewRequest(http.MethodDelete, url, nil)
+		if err != nil {
+			ctx.Dispatch(func(ctx app.Context) {
+				p.tagFetchErr = err.Error()
+			})
+			return
+		}
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			ctx.Dispatch(func(ctx app.Context) {
@@ -62,7 +79,14 @@ func (p *Project) deleteTag(ctx app.Context) {
 			})
 			return
 		}
-		resp.Body.Close()
+		defer resp.Body.Close()
+
+		if resp.StatusCode >= 400 {
+			ctx.Dispatch(func(ctx app.Context) {
+				p.tagFetchErr = "server error: " + resp.Status
+			})
+			return
+		}
 
 		ctx.Dispatch(func(ctx app.Context) {
 			p.tagFetchErr = ""

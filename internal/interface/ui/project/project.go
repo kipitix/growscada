@@ -223,7 +223,7 @@ func (p *Project) Render() app.UI {
 			app.If(p.activeSubTab == subTabScenes, func() app.UI {
 				return p.renderScenesContent()
 			}).Else(func() app.UI {
-				return p.renderTagsContent()
+				return p.renderTagsPanel()
 			}),
 		)
 }
@@ -399,6 +399,3 @@ func (p *Project) renderScenesContent() app.UI {
 		)
 }
 
-func (p *Project) renderTagsContent() app.UI {
-	return p.renderTagsPanel()
-}
