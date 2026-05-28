@@ -1,5 +1,20 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.14] - 2026-05-28
+
+### Added
+
+- `internal/interface/ui/project` — вкладка **Tags** в Project-компоненте:
+  - `projectSubTab` — тип-перечисление (`scenes` / `tags`); `activeSubTab` хранит активную вкладку; `renderSubTabs()` рендерит таб-бар; `subTab()` — helper для отдельного таба с подсветкой активного состояния
+  - `tags_render.go` — рендеринг тегов: `renderTagsPanel` (две колонки), `renderTagListColumn` (список с кнопками Create/Delete), `renderTagList` (кликабельные строки с именем и типом), `renderTagPropertiesPanel` (панель свойств выбранного тега: Name, Type, Value, Quality), `renderTagCreateForm` (форма с полями Name и Type, кнопки Create/Cancel)
+  - `tags_ops.go` — сетевые операции: `createTag` (POST `/api/v1/tags`), `deleteTag` (DELETE `/api/v1/tags/{id}`); вспомогательная `defaultTagValue` возвращает начальное значение по типу тега
+- `Makefile` — цель `full_restart`: `db_down` → `db_up` → `run`
+
+### Changed
+
+- `dto.go` — `tagItem` расширен полями `Type`, `Value`, `Quality`, `Version`; добавлены `createTagRequest` и `createTagResponse`
+- `docs/ubiquitous_language/ubiquitous_language.md` — термин `Alarm` переименован в `Alert` во всех вхождениях
+
 ## [0.0.13] - 2026-05-27
 
 ### Fixed
