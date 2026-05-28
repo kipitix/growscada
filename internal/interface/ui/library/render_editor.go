@@ -14,7 +14,13 @@ func (l *Library) renderEditorColumn(title, id, value string, onInput func(app.C
 		Style("flex", "1").
 		Style("resize", "none").
 		Style("font-family", "monospace").
-		Style("font-size", "13px")
+		Style("font-size", "13px").
+		Style("background", "var(--input-bg)").
+		Style("color", "var(--text)").
+		Style("border", "1px solid var(--border-input)").
+		Style("border-radius", "3px").
+		Style("padding", "4px 6px").
+		Style("box-sizing", "border-box")
 
 	var textarea app.UI
 	if onInput != nil {
@@ -28,9 +34,11 @@ func (l *Library) renderEditorColumn(title, id, value string, onInput func(app.C
 		Style("margin-top", "4px").
 		Style("padding", "4px 12px").
 		Style("font-size", "13px").
-		Style("border", "1px solid #ccc").
+		Style("border", "1px solid var(--border-input)").
 		Style("border-radius", "4px").
 		Style("align-self", "flex-end").
+		Style("background", "var(--bg-hover)").
+		Style("color", "var(--text)").
 		Text("Apply").
 		OnClick(func(ctx app.Context, e app.Event) {
 			l.applyChanges(ctx)
@@ -70,7 +78,7 @@ func (l *Library) renderPreviewColumn() app.UI {
 	var content app.UI
 	if l.editedHTML == "" {
 		content = app.Div().
-			Style("color", "#999").
+			Style("color", "var(--text-muted)").
 			Style("font-size", "13px").
 			Text("No HTML to preview.")
 	} else {
@@ -93,7 +101,7 @@ func (l *Library) renderPreviewColumn() app.UI {
 				Style("flex", "1").
 				Style("min-height", "0").
 				Style("overflow", "auto").
-				Style("border", "1px solid #ddd").
+				Style("border", "1px solid var(--border)").
 				Body(content),
 		)
 }

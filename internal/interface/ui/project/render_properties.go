@@ -13,7 +13,7 @@ func (p *Project) renderPropertiesPanel() app.UI {
 	if p.selectedWidgetID == "" {
 		content = app.Div().
 			Style("font-size", "13px").
-			Style("color", "#aaa").
+			Style("color", "var(--text-muted)").
 			Style("margin-top", "12px").
 			Text("Select a widget to view its properties.")
 	} else {
@@ -25,7 +25,7 @@ func (p *Project) renderPropertiesPanel() app.UI {
 			}
 		}
 		if found.ID == "" {
-			content = app.Div().Style("font-size", "13px").Style("color", "#aaa").Text("Widget not found.")
+			content = app.Div().Style("font-size", "13px").Style("color", "var(--text-muted)").Text("Widget not found.")
 		} else {
 			content = p.renderWidgetProperties(found)
 		}
@@ -38,14 +38,14 @@ func (p *Project) renderPropertiesPanel() app.UI {
 		Style("flex-shrink", "0").
 		Style("min-height", "0").
 		Style("overflow-y", "auto").
-		Style("border-left", "1px solid #ddd").
+		Style("border-left", "1px solid var(--border)").
 		Style("padding", "12px 10px").
 		Body(
 			app.H3().
 				Style("margin", "0 0 10px 0").
 				Style("font-size", "13px").
 				Style("font-weight", "600").
-				Style("color", "#333").
+				Style("color", "var(--text)").
 				Style("text-transform", "uppercase").
 				Style("letter-spacing", "0.5px").
 				Text("Properties"),
@@ -86,7 +86,7 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 		return app.Div().
 			Style("font-size", "10px").
 			Style("font-weight", "700").
-			Style("color", "#888").
+			Style("color", "var(--text-3)").
 			Style("letter-spacing", "0.6px").
 			Style("text-transform", "uppercase").
 			Style("margin-bottom", "6px").
@@ -98,7 +98,7 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 		return el.
 			Style("font-size", "12px").
 			Style("padding", "3px 5px").
-			Style("border", "1px solid #ccc").
+			Style("border", "1px solid var(--border-input)").
 			Style("border-radius", "3px").
 			Style("box-sizing", "border-box")
 	}
@@ -106,7 +106,7 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 	smallLabel := func(txt string) app.UI {
 		return app.Span().
 			Style("font-size", "11px").
-			Style("color", "#888").
+			Style("color", "var(--text-3)").
 			Style("min-width", "12px").
 			Style("text-align", "center").
 			Text(txt)
@@ -132,7 +132,7 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 			Style("border", "none").
 			Style("background", "transparent").
 			Style("cursor", "pointer").
-			Style("color", "#bbb").
+			Style("color", "var(--text-muted)").
 			Style("font-size", "11px").
 			Style("line-height", "1").
 			Style("display", "flex").
@@ -173,7 +173,7 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 		return app.Div().
 			Style("margin-bottom", "14px").
 			Style("padding-bottom", "12px").
-			Style("border-bottom", "1px solid #f0f0f0").
+			Style("border-bottom", "1px solid var(--border-subtle)").
 			Body(items...)
 	}
 
@@ -329,7 +329,7 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 		sectionHeader("Origin (0–1)"),
 		app.Div().
 			Style("font-size", "10px").
-			Style("color", "#aaa").
+			Style("color", "var(--text-muted)").
 			Style("margin-bottom", "5px").
 			Text("Anchor for rotation. (0,0)=top-left, (0.5,0.5)=center"),
 		row2(
@@ -415,8 +415,8 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 			Style("align-items", "center").
 			Style("justify-content", "space-between").
 			Style("padding", "3px 6px").
-			Style("background", "#f0f4ff").
-			Style("border", "1px solid #c8d8f8").
+			Style("background", "var(--accent-bg)").
+			Style("border", "1px solid var(--accent-border)").
 			Style("border-radius", "3px").
 			Style("margin-bottom", "4px").
 			Style("font-size", "12px").
@@ -424,7 +424,7 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 				app.Span().Text(tagNameOf(tid)),
 				app.Span().
 					Style("cursor", "pointer").
-					Style("color", "#c00").
+					Style("color", "var(--error)").
 					Style("font-size", "14px").
 					Style("padding", "0 2px").
 					Text("×").
@@ -462,7 +462,7 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 						Style("min-width", "0").
 						Style("font-size", "12px").
 						Style("padding", "3px 4px").
-						Style("border", "1px solid #ccc").
+						Style("border", "1px solid var(--border-input)").
 						Style("border-radius", "3px").
 						Body(addOptions...).
 						OnChange(func(ctx app.Context, e app.Event) {
@@ -472,9 +472,9 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 						Style("font-size", "12px").
 						Style("padding", "3px 8px").
 						Style("cursor", "pointer").
-						Style("border", "1px solid #ccc").
+						Style("border", "1px solid var(--border-input)").
 						Style("border-radius", "3px").
-						Style("background", "#f5f5f5").
+						Style("background", "var(--bg-hover)").
 						Text("Add").
 						OnClick(func(ctx app.Context, e app.Event) {
 							p.addTagToWidget(ctx, p.addingTagID)
@@ -491,9 +491,9 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 			app.Div().
 				Style("font-size", "10px").
 				Style("font-family", "monospace").
-				Style("color", "#666").
-				Style("background", "#f8f8f8").
-				Style("border", "1px solid #e8e8e8").
+				Style("color", "var(--text-2)").
+				Style("background", "var(--bg-elevated)").
+				Style("border", "1px solid var(--border)").
 				Style("border-radius", "3px").
 				Style("padding", "4px 6px").
 				Style("word-break", "break-all").
@@ -509,10 +509,10 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 				Style("padding", "5px 0").
 				Style("font-size", "12px").
 				Style("cursor", "pointer").
-				Style("border", "1px solid #e0b0b0").
+				Style("border", "1px solid var(--error-border)").
 				Style("border-radius", "3px").
-				Style("background", "#fff5f5").
-				Style("color", "#c00").
+				Style("background", "var(--error-bg)").
+				Style("color", "var(--error)").
 				Text("Delete Widget").
 				OnClick(func(ctx app.Context, e app.Event) {
 					p.deleteWidget(ctx, wid)

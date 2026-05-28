@@ -23,9 +23,10 @@ func (p *Project) renderWidgetTypePanel() app.UI {
 		items[i] = app.Div().
 			Style("padding", "7px 10px").
 			Style("margin-bottom", "4px").
-			Style("border", "1px solid #d0d0d0").
+			Style("border", "1px solid var(--border-input)").
 			Style("border-radius", "4px").
-			Style("background", "#f5f5f5").
+			Style("background", "var(--bg-hover)").
+			Style("color", "var(--text)").
 			Style("cursor", "grab").
 			Style("user-select", "none").
 			Body(
@@ -37,7 +38,7 @@ func (p *Project) renderWidgetTypePanel() app.UI {
 					Text(name),
 				app.Div().
 					Style("font-size", "11px").
-					Style("color", "#888").
+					Style("color", "var(--text-3)").
 					Style("margin-top", "2px").
 					Text(fmt.Sprintf("%d × %d", w, h)),
 			).
@@ -53,7 +54,7 @@ func (p *Project) renderWidgetTypePanel() app.UI {
 	if len(items) == 0 {
 		listBody = app.Div().
 			Style("font-size", "13px").
-			Style("color", "#999").
+			Style("color", "var(--text-muted)").
 			Text("No widget types. Create them in the Library tab.")
 	} else {
 		listBody = app.Div().Body(items...)
@@ -65,14 +66,14 @@ func (p *Project) renderWidgetTypePanel() app.UI {
 		Style("width", "180px").
 		Style("flex-shrink", "0").
 		Style("min-height", "0").
-		Style("border-right", "1px solid #ddd").
+		Style("border-right", "1px solid var(--border)").
 		Style("padding", "12px 8px").
 		Body(
 			app.H3().
 				Style("margin", "0 0 10px 0").
 				Style("font-size", "13px").
 				Style("font-weight", "600").
-				Style("color", "#333").
+				Style("color", "var(--text)").
 				Style("text-transform", "uppercase").
 				Style("letter-spacing", "0.5px").
 				Text("Widget Types"),

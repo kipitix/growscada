@@ -134,7 +134,13 @@ func (p *Project) deleteWidget(ctx app.Context, widgetID string) {
 			if p.selectedWidgetID == widgetID {
 				p.clearWidgetSelection(ctx)
 			}
-			p.loadWidgets(ctx)
+			filtered := p.widgets[:0]
+			for _, w := range p.widgets {
+				if w.ID != widgetID {
+					filtered = append(filtered, w)
+				}
+			}
+			p.widgets = filtered
 		})
 	})
 }

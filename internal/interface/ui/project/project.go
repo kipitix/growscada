@@ -257,8 +257,8 @@ func (p *Project) renderSubTabs() app.UI {
 	return app.Div().
 		Style("display", "flex").
 		Style("flex-direction", "row").
-		Style("border-bottom", "1px solid #ddd").
-		Style("background", "#fafafa").
+		Style("border-bottom", "1px solid var(--border)").
+		Style("background", "var(--bg-elevated)").
 		Style("padding", "0 4px").
 		Body(
 			p.subTab("Scenes", subTabScenes),
@@ -282,11 +282,11 @@ func (p *Project) subTab(label string, tab projectSubTab) app.UI {
 		})
 	if active {
 		return el.
-			Style("border-bottom-color", "#0066cc").
-			Style("color", "#0066cc").
+			Style("border-bottom-color", "var(--accent)").
+			Style("color", "var(--accent)").
 			Style("font-weight", "600")
 	}
-	return el.Style("color", "#666")
+	return el.Style("color", "var(--text-2)")
 }
 
 func (p *Project) renderScenesContent() app.UI {

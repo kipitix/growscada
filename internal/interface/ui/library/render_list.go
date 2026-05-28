@@ -34,8 +34,10 @@ func (l *Library) renderListButtons() app.UI {
 		Style("padding", "4px 0").
 		Style("font-size", "13px").
 		Style("cursor", "pointer").
-		Style("border", "1px solid #ccc").
+		Style("border", "1px solid var(--border-input)").
 		Style("border-radius", "4px").
+		Style("background", "var(--bg-hover)").
+		Style("color", "var(--text)").
 		Text("Delete").
 		OnClick(func(ctx app.Context, e app.Event) {
 			l.deleteItem(ctx)
@@ -57,8 +59,10 @@ func (l *Library) renderListButtons() app.UI {
 				Style("padding", "4px 0").
 				Style("font-size", "13px").
 				Style("cursor", "pointer").
-				Style("border", "1px solid #ccc").
+				Style("border", "1px solid var(--border-input)").
 				Style("border-radius", "4px").
+				Style("background", "var(--bg-hover)").
+				Style("color", "var(--text)").
 				Text("Create").
 				OnClick(func(ctx app.Context, e app.Event) {
 					l.createItem(ctx)
@@ -69,13 +73,13 @@ func (l *Library) renderListButtons() app.UI {
 
 func (l *Library) renderList() app.UI {
 	if l.loading {
-		return app.Div().Style("font-size", "13px").Style("color", "#999").Text("Loading...")
+		return app.Div().Style("font-size", "13px").Style("color", "var(--text-muted)").Text("Loading...")
 	}
 	if l.fetchErr != "" {
-		return app.Div().Style("font-size", "13px").Style("color", "#c00").Text(fmt.Sprintf("Error: %s", l.fetchErr))
+		return app.Div().Style("font-size", "13px").Style("color", "var(--error)").Text(fmt.Sprintf("Error: %s", l.fetchErr))
 	}
 	if len(l.widgetTypes) == 0 {
-		return app.Div().Style("font-size", "13px").Style("color", "#999").Text("No widget types found.")
+		return app.Div().Style("font-size", "13px").Style("color", "var(--text-muted)").Text("No widget types found.")
 	}
 
 	items := make([]app.UI, len(l.widgetTypes))
@@ -95,9 +99,11 @@ func (l *Library) renderList() app.UI {
 						Style("width", "100%").
 						Style("font-size", "13px").
 						Style("padding", "3px 4px").
-						Style("border", "1px solid #0066cc").
+						Style("border", "1px solid var(--accent)").
 						Style("border-radius", "2px").
 						Style("box-sizing", "border-box").
+						Style("background", "var(--input-bg)").
+						Style("color", "var(--text)").
 						OnInput(func(ctx app.Context, e app.Event) {
 							l.editingName = ctx.JSSrc().Get("value").String()
 						}).
@@ -130,10 +136,10 @@ func (l *Library) renderList() app.UI {
 				})
 			if l.selectedID == id {
 				item = item.(app.HTMLDiv).
-					Style("background", "#0066cc").
-					Style("color", "#fff")
+					Style("background", "var(--accent)").
+					Style("color", "var(--accent-text)")
 			} else {
-				item = item.(app.HTMLDiv).Style("color", "#333")
+				item = item.(app.HTMLDiv).Style("color", "var(--text)")
 			}
 		}
 		items[i] = item
