@@ -1,5 +1,39 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.15] - 2026-05-29
+
+### Added
+
+- `internal/interface/ui/root` — система тем оформления:
+  - CSS custom properties (`var(--bg)`, `var(--accent)`, `var(--error)`, …) инжектируются через `<style id="gs-theme-vars">` в `<head>` при каждой смене темы
+  - Три режима: `light`, `dark`, `auto` (авто использует `@media (prefers-color-scheme: dark)`)
+  - Кнопка переключения темы заменена на одиночный cycling-значок: `◑` (auto) → `☀` (light) → `☾` (dark); режим сохраняется в `localStorage` (`root:theme`)
+  - CSS-сброс `html, body { margin: 0; overflow: hidden }` устраняет постоянно видимый вертикальный scrollbar браузера
+- `internal/interface/ui/project` — изменяемые ширины панелей в Scenes:
+  - Левая панель Widget Types и правая панель Properties разделены 5px-разделителями с `cursor: col-resize`
+  - Drag-изменение ширины: левая панель — диапазон [100, 480] px, правая — [160, 600] px; реализовано через поля `resizingPanelSide`, `panelResizeStartX`, `panelResizeStartWidth` и обработчики `OnMouseMove`/`OnMouseUp` на контейнере
+  - Ширины сохраняются в `localStorage` (`project:widgetTypeWidth`, `project:propertiesWidth`); умолчания 180 px / 260 px восстанавливаются при первом монтировании
+- Диалоги подтверждения (`app.Window().Call("confirm", …).Bool()`) перед всеми деструктивными операциями:
+  - Library — удаление типа виджета (`render_list.go`)
+  - Project — удаление сцены (`render_scene.go`), удаление виджета и удаление тега из виджета (`×`) в панели свойств (`render_properties.go`), удаление тега (`tags_render.go`)
+- Персистентность состояния UI в `localStorage`:
+  - Активная вкладка навигации `root:mode` — `root.go`
+  - Активная сцена `project:sceneID` — `scene_ops.go`, `render_scene.go`
+  - Активная под-вкладка Scenes/Tags `project:subTab` — `project.go`
+  - Выбранный тип виджета в Library `library:selectedID` — `library.go`, `render_list.go`
+  - Выбранный виджет на холсте сохраняется между переключениями вкладок — `project.go`, `widget_ops.go`
+
+### Changed
+
+- Все UI-компоненты Library и Project переведены с жёстко заданных hex-цветов на CSS custom properties (`var(--X)`) — `render_list.go`, `render_editor.go`, `render_scene.go`, `render_properties.go`, `render_widget_types.go`, `tags_render.go`, `widget_ops.go`
+- Кнопки Delete везде стилизованы красным (`var(--error-bg)` / `var(--error-border)` / `var(--error)`) — Library и Project
+- Кнопки Create стилизованы приглушённым акцентом (`var(--accent-bg)` / `var(--accent-border)` / `var(--accent)`) — Library и Project
+
+### Fixed
+
+- Виджет не пропадал с холста после удаления: `loadWidgets` вызывался внутри `ctx.Dispatch`, что запускало `ctx.Async` в запрещённом контексте и go-app молча игнорировал вызов; заменено прямой фильтрацией среза `p.widgets` (оптимистичное обновление UI) — `widget_ops.go`
+- Перетаскивание точки Origin перемещало виджет: компенсация `Position.X/Y` при движении origin была удалена; теперь изменяются только `Origin.X/Y`, позиция виджета остаётся фиксированной — `render_scene.go`, `project.go`
+
 ## [0.0.14] - 2026-05-28
 
 ### Added
