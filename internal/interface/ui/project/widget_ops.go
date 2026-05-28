@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 )
@@ -146,6 +147,9 @@ func (p *Project) deleteWidget(ctx app.Context, widgetID string) {
 }
 
 func (p *Project) saveWidgetName(ctx app.Context) {
+	if strings.TrimSpace(p.editingWidgetName) == "" {
+		return
+	}
 	idx := p.selectedWidgetIdx()
 	if idx < 0 {
 		return

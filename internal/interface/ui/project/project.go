@@ -124,7 +124,10 @@ func (p *Project) OnMount(ctx app.Context) {
 	ctx.LocalStorage().Get("project:widgetID", &p.selectedWidgetID)
 	ctx.LocalStorage().Get("project:tagID", &p.selectedTagID)
 	p.loadWidgetTypes(ctx)
-	p.loadScenes(ctx) // loadScenes calls loadWidgets once selectedSceneID is known
+	p.loadScenes(ctx)
+	if p.selectedSceneID != "" {
+		p.loadWidgets(ctx) // load widgets for the restored scene immediately
+	}
 	p.loadTags(ctx)
 }
 
@@ -337,6 +340,17 @@ func (p *Project) renderScenesContent() app.UI {
 				p.resizingWidgetID != "" ||
 				p.resizingPanelSide != ""
 			if !anyDrag {
+				return
+			}
+			// Mouse button released outside this element — cancel all drags.
+			if e.Get("buttons").Int() == 0 {
+				if p.resizingPanelSide == "left" {
+					ctx.LocalStorage().Set("project:widgetTypeWidth", p.widgetTypeWidth)
+				} else if p.resizingPanelSide == "right" {
+					ctx.LocalStorage().Set("project:propertiesWidth", p.propertiesWidth)
+				}
+				p.resizingPanelSide = ""
+				p.finalizeAllDrags(ctx)
 				return
 			}
 			e.PreventDefault()

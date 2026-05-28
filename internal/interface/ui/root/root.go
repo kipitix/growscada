@@ -38,18 +38,20 @@ func (r *Root) OnMount(ctx app.Context) {
 
 	var savedMode string
 	ctx.LocalStorage().Get("root:mode", &savedMode)
-	if Mode(savedMode) != ModeUnknown {
-		ctx.Dispatch(func(ctx app.Context) {
-			r.currentMode = Mode(savedMode)
-		})
-	}
 
 	var savedTheme string
 	ctx.LocalStorage().Get("root:theme", &savedTheme)
-	if savedTheme == "light" || savedTheme == "dark" || savedTheme == "auto" {
-		r.themeMode = savedTheme
+	if savedTheme != "light" && savedTheme != "dark" && savedTheme != "auto" {
+		savedTheme = r.themeMode // keep default "auto"
 	}
-	injectThemeCSS(r.themeMode)
+	injectThemeCSS(savedTheme) // inject CSS before dispatch to minimise FOUC
+
+	ctx.Dispatch(func(ctx app.Context) {
+		r.themeMode = savedTheme
+		if Mode(savedMode) != ModeUnknown {
+			r.currentMode = Mode(savedMode)
+		}
+	})
 }
 
 func (r *Root) setTheme(ctx app.Context, mode string) {

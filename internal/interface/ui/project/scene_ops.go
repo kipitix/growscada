@@ -46,9 +46,9 @@ func (p *Project) loadScenes(ctx app.Context) {
 			}
 			if p.selectedSceneID != prevSceneID {
 				ctx.LocalStorage().Set("project:sceneID", p.selectedSceneID)
-			}
-			if p.selectedSceneID != "" {
-				p.loadWidgets(ctx)
+				if p.selectedSceneID != "" {
+					p.loadWidgets(ctx)
+				}
 			}
 		})
 	})
@@ -94,7 +94,6 @@ func (p *Project) deleteScene(ctx app.Context, sceneID string) {
 		resp.Body.Close()
 		ctx.Dispatch(func(ctx app.Context) {
 			p.loadScenes(ctx)
-			p.loadWidgets(ctx)
 		})
 	})
 }
