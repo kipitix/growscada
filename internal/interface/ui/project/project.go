@@ -59,11 +59,9 @@ type Project struct {
 	draggingOriginID string
 	originCliX       float64 // client X when drag started
 	originCliY       float64 // client Y when drag started
-	originStartOX    float64 // origin.X before drag
-	originStartOY    float64 // origin.Y before drag
-	originStartPosX  float64 // position.X before drag
-	originStartPosY  float64 // position.Y before drag
-	originDragW      int     // widget width during drag
+	originStartOX float64 // origin.X before drag
+	originStartOY float64 // origin.Y before drag
+	originDragW   int     // widget width during drag
 	originDragH      int     // widget height during drag
 	originDragRotDeg float64 // widget rotation during drag
 
@@ -98,6 +96,13 @@ type Project struct {
 	addingTagID       string
 
 	fetchErr string
+
+	// ── Panel resize state ──────────────────────────────────────────────────
+	widgetTypeWidth      int
+	propertiesWidth      int
+	resizingPanelSide    string // "left" | "right" | ""
+	panelResizeStartX    float64
+	panelResizeStartWidth int
 }
 
 func NewProject(apiServerURL string) *Project {
@@ -105,8 +110,24 @@ func NewProject(apiServerURL string) *Project {
 }
 
 func (p *Project) OnMount(ctx app.Context) {
+	p.widgetTypeWidth = 180
+	p.propertiesWidth = 260
+	ctx.LocalStorage().Get("project:widgetTypeWidth", &p.widgetTypeWidth)
+	ctx.LocalStorage().Get("project:propertiesWidth", &p.propertiesWidth)
+
+	var savedTab string
+	ctx.LocalStorage().Get("project:subTab", &savedTab)
+	if savedTab != "" {
+		p.activeSubTab = projectSubTab(savedTab)
+	}
+	ctx.LocalStorage().Get("project:sceneID", &p.selectedSceneID)
+	ctx.LocalStorage().Get("project:widgetID", &p.selectedWidgetID)
+	ctx.LocalStorage().Get("project:tagID", &p.selectedTagID)
 	p.loadWidgetTypes(ctx)
-	p.loadScenes(ctx) // loadScenes calls loadWidgets once selectedSceneID is known
+	p.loadScenes(ctx)
+	if p.selectedSceneID != "" {
+		p.loadWidgets(ctx) // load widgets for the restored scene immediately
+	}
 	p.loadTags(ctx)
 }
 
@@ -144,15 +165,31 @@ func (p *Project) loadTags(ctx app.Context) {
 			ctx.Dispatch(func(ctx app.Context) { p.fetchErr = err.Error() })
 			return
 		}
-		ctx.Dispatch(func(ctx app.Context) { p.tags = result.Tags })
+		ctx.Dispatch(func(ctx app.Context) {
+			p.tags = result.Tags
+			if p.selectedTagID != "" {
+				found := false
+				for _, t := range result.Tags {
+					if t.ID == p.selectedTagID {
+						found = true
+						break
+					}
+				}
+				if !found {
+					p.selectedTagID = ""
+					ctx.LocalStorage().Set("project:tagID", "")
+				}
+			}
+		})
 	})
 }
 
 // ── Widget selection helpers ──────────────────────────────────────────────────
 
-func (p *Project) selectWidget(id string) {
+func (p *Project) selectWidget(ctx app.Context, id string) {
 	p.selectedWidgetID = id
 	p.addingTagID = ""
+	ctx.LocalStorage().Set("project:widgetID", id)
 	for _, w := range p.widgets {
 		if w.ID == id {
 			p.syncEditingFields(w)
@@ -173,7 +210,7 @@ func (p *Project) syncEditingFields(w widgetItem) {
 	p.editingRotation = fmt.Sprintf("%.1f", w.Rotation.Degrees)
 }
 
-func (p *Project) clearWidgetSelection() {
+func (p *Project) clearWidgetSelection(ctx app.Context) {
 	p.selectedWidgetID = ""
 	p.editingWidgetName = ""
 	p.editingPosX = ""
@@ -185,6 +222,7 @@ func (p *Project) clearWidgetSelection() {
 	p.editingOriginY = ""
 	p.editingRotation = ""
 	p.addingTagID = ""
+	ctx.LocalStorage().Set("project:widgetID", "")
 }
 
 func (p *Project) selectedWidgetIdx() int {
@@ -232,8 +270,8 @@ func (p *Project) renderSubTabs() app.UI {
 	return app.Div().
 		Style("display", "flex").
 		Style("flex-direction", "row").
-		Style("border-bottom", "1px solid #ddd").
-		Style("background", "#fafafa").
+		Style("border-bottom", "1px solid var(--border)").
+		Style("background", "var(--bg-elevated)").
 		Style("padding", "0 4px").
 		Body(
 			p.subTab("Scenes", subTabScenes),
@@ -253,14 +291,34 @@ func (p *Project) subTab(label string, tab projectSubTab) app.UI {
 		Text(label).
 		OnClick(func(ctx app.Context, e app.Event) {
 			p.activeSubTab = tab
+			ctx.LocalStorage().Set("project:subTab", string(tab))
 		})
 	if active {
 		return el.
-			Style("border-bottom-color", "#0066cc").
-			Style("color", "#0066cc").
+			Style("border-bottom-color", "var(--accent)").
+			Style("color", "var(--accent)").
 			Style("font-weight", "600")
 	}
-	return el.Style("color", "#666")
+	return el.Style("color", "var(--text-2)")
+}
+
+func (p *Project) renderPanelDivider(side string) app.UI {
+	return app.Div().
+		Style("width", "5px").
+		Style("flex-shrink", "0").
+		Style("cursor", "col-resize").
+		Style("background", "var(--border)").
+		Style("user-select", "none").
+		OnMouseDown(func(ctx app.Context, e app.Event) {
+			e.PreventDefault()
+			p.resizingPanelSide = side
+			p.panelResizeStartX = e.Get("clientX").Float()
+			if side == "left" {
+				p.panelResizeStartWidth = p.widgetTypeWidth
+			} else {
+				p.panelResizeStartWidth = p.propertiesWidth
+			}
+		})
 }
 
 func (p *Project) renderScenesContent() app.UI {
@@ -279,14 +337,48 @@ func (p *Project) renderScenesContent() app.UI {
 			anyDrag := p.draggingWidgetID != "" ||
 				p.draggingOriginID != "" ||
 				p.rotatingWidgetID != "" ||
-				p.resizingWidgetID != ""
+				p.resizingWidgetID != "" ||
+				p.resizingPanelSide != ""
 			if !anyDrag {
+				return
+			}
+			// Mouse button released outside this element — cancel all drags.
+			if e.Get("buttons").Int() == 0 {
+				if p.resizingPanelSide == "left" {
+					ctx.LocalStorage().Set("project:widgetTypeWidth", p.widgetTypeWidth)
+				} else if p.resizingPanelSide == "right" {
+					ctx.LocalStorage().Set("project:propertiesWidth", p.propertiesWidth)
+				}
+				p.resizingPanelSide = ""
+				p.finalizeAllDrags(ctx)
 				return
 			}
 			e.PreventDefault()
 
 			clientX := e.Get("clientX").Float()
 			clientY := e.Get("clientY").Float()
+
+			// Resize left or right panel
+			if p.resizingPanelSide != "" {
+				dx := int(clientX - p.panelResizeStartX)
+				if p.resizingPanelSide == "left" {
+					newW := p.panelResizeStartWidth + dx
+					if newW < 100 {
+						newW = 100
+					} else if newW > 480 {
+						newW = 480
+					}
+					p.widgetTypeWidth = newW
+				} else {
+					newW := p.panelResizeStartWidth - dx
+					if newW < 160 {
+						newW = 160
+					} else if newW > 600 {
+						newW = 600
+					}
+					p.propertiesWidth = newW
+				}
+			}
 
 			// Move widget body
 			if p.draggingWidgetID != "" {
@@ -305,7 +397,7 @@ func (p *Project) renderScenesContent() app.UI {
 				}
 			}
 
-			// Move origin anchor within widget (adjust position to keep content fixed)
+			// Move origin anchor within widget (widget position stays fixed)
 			if p.draggingOriginID != "" {
 				dx := clientX - p.originCliX
 				dy := clientY - p.originCliY
@@ -317,20 +409,13 @@ func (p *Project) renderScenesContent() app.UI {
 				dyLocal := -dx*sinA + dy*cosA
 				newOX := math.Max(0, math.Min(1, p.originStartOX+dxLocal/float64(p.originDragW)))
 				newOY := math.Max(0, math.Min(1, p.originStartOY+dyLocal/float64(p.originDragH)))
-				// Keep visual widget bounding-box in place by adjusting position
-				newPosX := p.originStartPosX + (p.originStartOX-newOX)*float64(p.originDragW)
-				newPosY := p.originStartPosY + (p.originStartOY-newOY)*float64(p.originDragH)
 				for i := range p.widgets {
 					if p.widgets[i].ID == p.draggingOriginID {
 						p.widgets[i].Origin.X = newOX
 						p.widgets[i].Origin.Y = newOY
-						p.widgets[i].Position.X = newPosX
-						p.widgets[i].Position.Y = newPosY
 						if p.selectedWidgetID == p.draggingOriginID {
 							p.editingOriginX = fmt.Sprintf("%.3f", newOX)
 							p.editingOriginY = fmt.Sprintf("%.3f", newOY)
-							p.editingPosX = fmt.Sprintf("%.1f", newPosX)
-							p.editingPosY = fmt.Sprintf("%.1f", newPosY)
 						}
 						break
 					}
@@ -390,11 +475,19 @@ func (p *Project) renderScenesContent() app.UI {
 			}
 		}).
 		OnMouseUp(func(ctx app.Context, e app.Event) {
+			if p.resizingPanelSide == "left" {
+				ctx.LocalStorage().Set("project:widgetTypeWidth", p.widgetTypeWidth)
+			} else if p.resizingPanelSide == "right" {
+				ctx.LocalStorage().Set("project:propertiesWidth", p.propertiesWidth)
+			}
+			p.resizingPanelSide = ""
 			p.finalizeAllDrags(ctx)
 		}).
 		Body(
 			p.renderWidgetTypePanel(),
+			p.renderPanelDivider("left"),
 			p.renderScenePanel(),
+			p.renderPanelDivider("right"),
 			p.renderPropertiesPanel(),
 		)
 }

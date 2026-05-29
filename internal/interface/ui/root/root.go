@@ -21,19 +21,142 @@ const (
 type Root struct {
 	app.Compo
 	currentMode  Mode
+	themeMode    string // "auto" | "light" | "dark"
 	apiServerURL string
 }
 
 func NewRoot(anAPIServerURL string) *Root {
 	return &Root{
-		currentMode:  ModeLibrary,
+		currentMode: ModeLibrary,
+		themeMode:   "auto",
 		apiServerURL: anAPIServerURL,
 	}
 }
 
 func (r *Root) OnMount(ctx app.Context) {
 	ctx.Page().SetTitle("GrowSCADA")
+
+	var savedMode string
+	ctx.LocalStorage().Get("root:mode", &savedMode)
+
+	var savedTheme string
+	ctx.LocalStorage().Get("root:theme", &savedTheme)
+	if savedTheme != "light" && savedTheme != "dark" && savedTheme != "auto" {
+		savedTheme = r.themeMode // keep default "auto"
+	}
+	injectThemeCSS(savedTheme) // inject CSS before dispatch to minimise FOUC
+
+	ctx.Dispatch(func(ctx app.Context) {
+		r.themeMode = savedTheme
+		if Mode(savedMode) != ModeUnknown {
+			r.currentMode = Mode(savedMode)
+		}
+	})
 }
+
+func (r *Root) setTheme(ctx app.Context, mode string) {
+	r.themeMode = mode
+	ctx.LocalStorage().Set("root:theme", mode)
+	injectThemeCSS(mode)
+}
+
+// ── CSS theme injection ───────────────────────────────────────────────────────
+
+func injectThemeCSS(mode string) {
+	doc := app.Window().Get("document")
+	el := doc.Call("getElementById", "gs-theme-vars")
+	if !el.Truthy() {
+		el = doc.Call("createElement", "style")
+		el.Set("id", "gs-theme-vars")
+		doc.Get("head").Call("appendChild", el)
+	}
+	el.Set("textContent", buildThemeCSS(mode))
+}
+
+func lightVars() string {
+	return `
+		--bg: #ffffff;
+		--bg-elevated: #f8f8f8;
+		--bg-hover: #f0f0f0;
+		--bg-inset: #e8e8e8;
+		--surface: #fafafa;
+		--border: #dddddd;
+		--border-subtle: #f0f0f0;
+		--border-input: #cccccc;
+		--text: #222222;
+		--text-2: #555555;
+		--text-3: #888888;
+		--text-muted: #aaaaaa;
+		--accent: #0066cc;
+		--accent-text: #ffffff;
+		--accent-bg: #f0f4ff;
+		--accent-border: #c8d8f8;
+		--error: #cc0000;
+		--error-bg: #fff5f5;
+		--error-border: #e0b0b0;
+		--input-bg: #ffffff;
+		--widget-bg: rgba(240,240,240,0.85);
+		--widget-sel-bg: rgba(235,245,255,0.92);
+		--dot-color: #cccccc;
+		color-scheme: light;`
+}
+
+func darkVars() string {
+	return `
+		--bg: #1a1a1a;
+		--bg-elevated: #242424;
+		--bg-hover: #2e2e2e;
+		--bg-inset: #111111;
+		--surface: #1e1e1e;
+		--border: #363636;
+		--border-subtle: #2a2a2a;
+		--border-input: #4a4a4a;
+		--text: #e4e4e4;
+		--text-2: #999999;
+		--text-3: #6a6a6a;
+		--text-muted: #585858;
+		--accent: #4d9fff;
+		--accent-text: #ffffff;
+		--accent-bg: #192840;
+		--accent-border: #2a4a7a;
+		--error: #ff6868;
+		--error-bg: #2a1818;
+		--error-border: #7a3838;
+		--input-bg: #262626;
+		--widget-bg: rgba(36,36,36,0.92);
+		--widget-sel-bg: rgba(18,38,64,0.95);
+		--dot-color: #282828;
+		color-scheme: dark;`
+}
+
+func buildThemeCSS(mode string) string {
+	formReset := `
+html, body {
+	margin: 0;
+	padding: 0;
+	height: 100%;
+	overflow: hidden;
+}
+input, select, textarea, button {
+	background-color: var(--input-bg);
+	color: var(--text);
+}
+button {
+	background-color: var(--bg-hover);
+}`
+
+	switch mode {
+	case "dark":
+		return `:root {` + darkVars() + `}` + formReset
+	case "light":
+		return `:root {` + lightVars() + `}` + formReset
+	default: // auto
+		return `:root {` + lightVars() + `}
+@media (prefers-color-scheme: dark) { :root {` + darkVars() + `} }` + formReset
+	}
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
 
 func (r *Root) Render() app.UI {
 	return app.Div().
@@ -41,18 +164,23 @@ func (r *Root) Render() app.UI {
 		Style("flex-direction", "column").
 		Style("height", "100vh").
 		Style("font-family", "sans-serif").
+		Style("background", "var(--bg)").
+		Style("color", "var(--text)").
 		Body(
 			app.Div().
 				Attr("role", "tablist").
 				Style("display", "flex").
 				Style("flex-direction", "row").
-				Style("border-bottom", "2px solid #ddd").
-				Style("background", "#f8f8f8").
+				Style("align-items", "center").
+				Style("border-bottom", "2px solid var(--border)").
+				Style("background", "var(--bg-elevated)").
 				Body(
 					r.tab("Library", ModeLibrary),
 					r.tab("Project", ModeProject),
 					r.tab("Operation", ModeOperation),
 					r.tab("History", ModeHistory),
+					app.Div().Style("flex", "1"),
+					r.renderThemeToggle(),
 				),
 			app.Div().
 				Style("flex", "1").
@@ -60,6 +188,7 @@ func (r *Root) Render() app.UI {
 				Style("display", "flex").
 				Style("padding", "12px").
 				Style("box-sizing", "border-box").
+				Style("background", "var(--bg)").
 				Body(
 					app.If(r.currentMode == ModeLibrary, func() app.UI {
 						return library.NewLibrary(r.apiServerURL)
@@ -97,16 +226,46 @@ func (r *Root) tab(label string, mode Mode) app.UI {
 		Text(label).
 		OnClick(func(ctx app.Context, e app.Event) {
 			r.currentMode = mode
+			ctx.LocalStorage().Set("root:mode", string(mode))
 		})
 
 	if active {
 		return tab.
-			Style("border-bottom-color", "#0066cc").
-			Style("color", "#0066cc").
+			Style("border-bottom-color", "var(--accent)").
+			Style("color", "var(--accent)").
 			Style("font-weight", "600")
 	}
 	return tab.
-		Style("color", "#555")
+		Style("color", "var(--text-2)")
+}
+
+func (r *Root) renderThemeToggle() app.UI {
+	var icon, title string
+	switch r.themeMode {
+	case "light":
+		icon, title = "☀", "Light theme — click for dark"
+	case "dark":
+		icon, title = "☾", "Dark theme — click for auto"
+	default:
+		icon, title = "◑", "Auto theme — click for light"
+	}
+
+	return app.Button().
+		Title(title).
+		Style("margin", "0 10px").
+		Style("padding", "4px 7px").
+		Style("font-size", "15px").
+		Style("line-height", "1").
+		Style("cursor", "pointer").
+		Style("border", "1px solid var(--border-input)").
+		Style("border-radius", "5px").
+		Style("background", "var(--bg-elevated)").
+		Style("color", "var(--text-2)").
+		Text(icon).
+		OnClick(func(ctx app.Context, e app.Event) {
+			next := map[string]string{"auto": "light", "light": "dark", "dark": "auto"}
+			r.setTheme(ctx, next[r.themeMode])
+		})
 }
 
 func (r *Root) SetMode(mode Mode) {

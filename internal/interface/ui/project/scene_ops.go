@@ -27,23 +27,28 @@ func (p *Project) loadScenes(ctx app.Context) {
 		ctx.Dispatch(func(ctx app.Context) {
 			prevSceneID := p.selectedSceneID
 			p.scenes = result.Scenes
+			// Validate restored/current scene ID; fall through to auto-select if invalid.
+			if p.selectedSceneID != "" {
+				found := false
+				for _, sc := range result.Scenes {
+					if sc.ID == p.selectedSceneID {
+						found = true
+						break
+					}
+				}
+				if !found {
+					p.selectedSceneID = ""
+					p.clearWidgetSelection(ctx)
+				}
+			}
 			if p.selectedSceneID == "" && len(result.Scenes) > 0 {
 				p.selectedSceneID = result.Scenes[0].ID
 			}
-			found := false
-			for _, sc := range result.Scenes {
-				if sc.ID == p.selectedSceneID {
-					found = true
-					break
-				}
-			}
-			if !found {
-				p.selectedSceneID = ""
-				p.clearWidgetSelection()
-			}
-			// Reload widgets whenever the active scene changes (including initial load).
 			if p.selectedSceneID != prevSceneID {
-				p.loadWidgets(ctx)
+				ctx.LocalStorage().Set("project:sceneID", p.selectedSceneID)
+				if p.selectedSceneID != "" {
+					p.loadWidgets(ctx)
+				}
 			}
 		})
 	})
@@ -69,6 +74,8 @@ func (p *Project) createScene(ctx app.Context) {
 		ctx.Dispatch(func(ctx app.Context) {
 			p.selectedSceneID = result.ID
 			p.widgets = nil // clear widgets from previous scene immediately
+			ctx.LocalStorage().Set("project:sceneID", result.ID)
+			p.clearWidgetSelection(ctx)
 			p.loadScenes(ctx)
 			p.loadWidgets(ctx) // new scene has no widgets; clears stale list
 		})
@@ -87,7 +94,6 @@ func (p *Project) deleteScene(ctx app.Context, sceneID string) {
 		resp.Body.Close()
 		ctx.Dispatch(func(ctx app.Context) {
 			p.loadScenes(ctx)
-			p.loadWidgets(ctx)
 		})
 	})
 }

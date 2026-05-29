@@ -28,9 +28,18 @@ func (p *Project) renderSceneTabs() app.UI {
 	for _, sc := range p.scenes {
 		sc := sc
 		active := p.selectedSceneID == sc.ID
-		bg, borderBottom, color, fontWeight := "#f0f0f0", "2px solid transparent", "#555", "normal"
+
+		var bg, borderBottom, color, fontWeight string
 		if active {
-			bg, borderBottom, color, fontWeight = "#fff", "2px solid #0066cc", "#0066cc", "600"
+			bg = "var(--bg)"
+			borderBottom = "2px solid var(--accent)"
+			color = "var(--accent)"
+			fontWeight = "600"
+		} else {
+			bg = "var(--bg-hover)"
+			borderBottom = "2px solid transparent"
+			color = "var(--text-2)"
+			fontWeight = "normal"
 		}
 
 		var tabInner app.UI
@@ -41,9 +50,11 @@ func (p *Project) renderSceneTabs() app.UI {
 				AutoFocus(true).
 				Style("font-size", "13px").
 				Style("padding", "1px 4px").
-				Style("border", "1px solid #0066cc").
+				Style("border", "1px solid var(--accent)").
 				Style("border-radius", "2px").
 				Style("width", "90px").
+				Style("background", "var(--input-bg)").
+				Style("color", "var(--text)").
 				OnInput(func(ctx app.Context, e app.Event) {
 					p.editingSceneName = ctx.JSSrc().Get("value").String()
 				}).
@@ -71,7 +82,8 @@ func (p *Project) renderSceneTabs() app.UI {
 						Text(sc.Name).
 						OnClick(func(ctx app.Context, e app.Event) {
 							p.selectedSceneID = sc.ID
-							p.clearWidgetSelection()
+							ctx.LocalStorage().Set("project:sceneID", sc.ID)
+							p.clearWidgetSelection(ctx)
 							p.loadWidgets(ctx)
 						}).
 						OnDblClick(func(ctx app.Context, e app.Event) {
@@ -81,11 +93,14 @@ func (p *Project) renderSceneTabs() app.UI {
 						Style("cursor", "pointer").
 						Style("font-size", "14px").
 						Style("line-height", "1").
-						Style("color", "#aaa").
+						Style("color", "var(--text-muted)").
 						Style("padding", "0 1px").
 						Text("×").
 						OnClick(func(ctx app.Context, e app.Event) {
 							e.Call("stopPropagation")
+							if !app.Window().Call("confirm", "Are you sure you want to delete this scene?").Bool() {
+								return
+							}
 							p.deleteScene(ctx, sc.ID)
 						}),
 				)
@@ -96,7 +111,7 @@ func (p *Project) renderSceneTabs() app.UI {
 			Style("align-items", "center").
 			Style("padding", "6px 14px").
 			Style("background", bg).
-			Style("border-right", "1px solid #ddd").
+			Style("border-right", "1px solid var(--border)").
 			Style("border-bottom", borderBottom).
 			Style("color", color).
 			Style("font-weight", fontWeight).
@@ -111,7 +126,7 @@ func (p *Project) renderSceneTabs() app.UI {
 		Style("padding", "6px 10px").
 		Style("cursor", "pointer").
 		Style("font-size", "18px").
-		Style("color", "#0066cc").
+		Style("color", "var(--accent)").
 		Style("line-height", "1").
 		Text("+").
 		OnClick(func(ctx app.Context, e app.Event) { p.createScene(ctx) }),
@@ -121,8 +136,8 @@ func (p *Project) renderSceneTabs() app.UI {
 		Style("display", "flex").
 		Style("flex-direction", "row").
 		Style("flex-shrink", "0").
-		Style("border-bottom", "1px solid #ddd").
-		Style("background", "#f8f8f8").
+		Style("border-bottom", "1px solid var(--border)").
+		Style("background", "var(--bg-elevated)").
 		Body(tabs...)
 }
 
@@ -133,7 +148,7 @@ func (p *Project) renderSceneCanvas() app.UI {
 			Style("display", "flex").
 			Style("align-items", "center").
 			Style("justify-content", "center").
-			Style("color", "#aaa").
+			Style("color", "var(--text-muted)").
 			Style("font-size", "14px").
 			Body(app.Text("Create a scene to get started"))
 	}
@@ -173,8 +188,8 @@ func (p *Project) renderSceneCanvas() app.UI {
 		Style("position", "relative").
 		Style("width", fmt.Sprintf("%dpx", sceneWidth)).
 		Style("height", fmt.Sprintf("%dpx", sceneHeight)).
-		Style("background-color", "#fafafa").
-		Style("background-image", "radial-gradient(circle, #ccc 1px, transparent 1px)").
+		Style("background-color", "var(--surface)").
+		Style("background-image", "radial-gradient(circle, var(--dot-color) 1px, transparent 1px)").
 		Style("background-size", "24px 24px").
 		Style("flex-shrink", "0").
 		Style("cursor", canvasCursor).
@@ -202,7 +217,7 @@ func (p *Project) renderSceneCanvas() app.UI {
 			p.createWidget(ctx, typeID, x, y)
 		}).
 		OnClick(func(ctx app.Context, e app.Event) {
-			p.clearWidgetSelection()
+			p.clearWidgetSelection(ctx)
 		}).
 		Body(widgetEls...)
 
@@ -210,7 +225,7 @@ func (p *Project) renderSceneCanvas() app.UI {
 		Style("flex", "1").
 		Style("min-height", "0").
 		Style("overflow", "auto").
-		Style("background", "#e8e8e8").
+		Style("background", "var(--bg-inset)").
 		Style("padding", "24px").
 		Body(canvas)
 }
@@ -229,11 +244,11 @@ func (p *Project) renderWidget(w widgetItem) app.UI {
 	oy := w.Origin.Y * float64(w.Size.Height)
 
 	// Visual style for selection state.
-	border := "1.5px solid #bbb"
-	bg := "rgba(240,240,240,0.85)"
+	border := "1.5px solid var(--border-input)"
+	bg := "var(--widget-bg)"
 	if isSelected {
-		border = "2px solid #0066cc"
-		bg = "rgba(235,245,255,0.92)"
+		border = "2px solid var(--accent)"
+		bg = "var(--widget-sel-bg)"
 	}
 
 	// ── Widget content (name label) ─────────────────────────────────────────
@@ -257,12 +272,13 @@ func (p *Project) renderWidget(w widgetItem) app.UI {
 				Style("white-space", "nowrap").
 				Style("text-overflow", "ellipsis").
 				Style("overflow", "hidden").
+				Style("color", "var(--text)").
 				Text(w.Name),
 		).
 		OnMouseDown(func(ctx app.Context, e app.Event) {
 			e.Call("stopPropagation")
 			e.PreventDefault()
-			p.selectWidget(wid)
+			p.selectWidget(ctx, wid)
 			p.draggingWidgetID = wid
 			p.dragStartCliX = e.Get("clientX").Float()
 			p.dragStartCliY = e.Get("clientY").Float()
@@ -289,7 +305,7 @@ func (p *Project) renderWidget(w widgetItem) app.UI {
 			Style("top", fmt.Sprintf("%.1fpx", oy-rotHandleDist)).
 			Style("width", "2px").
 			Style("height", fmt.Sprintf("%.0fpx", rotHandleDist)).
-			Style("background", "#0066cc").
+			Style("background", "var(--accent)").
 			Style("pointer-events", "none").
 			Style("z-index", "1")
 
@@ -300,8 +316,8 @@ func (p *Project) renderWidget(w widgetItem) app.UI {
 			Style("top", fmt.Sprintf("%.1fpx", oy-rotHandleDist-8)).
 			Style("width", "16px").
 			Style("height", "16px").
-			Style("background", "#0066cc").
-			Style("border", "2px solid #fff").
+			Style("background", "var(--accent)").
+			Style("border", "2px solid var(--bg)").
 			Style("border-radius", "50%").
 			Style("cursor", "alias").
 			Style("z-index", "3").
@@ -345,7 +361,7 @@ func (p *Project) renderWidget(w widgetItem) app.UI {
 			Style("width", "14px").
 			Style("height", "14px").
 			Style("background", "#ff8c00").
-			Style("border", "2px solid #fff").
+			Style("border", "2px solid var(--bg)").
 			Style("border-radius", "50%").
 			Style("cursor", "crosshair").
 			Style("z-index", "3").
@@ -353,15 +369,13 @@ func (p *Project) renderWidget(w widgetItem) app.UI {
 			OnMouseDown(func(ctx app.Context, e app.Event) {
 				e.Call("stopPropagation")
 				e.PreventDefault()
-				p.selectWidget(wid)
+				p.selectWidget(ctx, wid)
 				p.draggingOriginID = wid
 				p.originCliX = e.Get("clientX").Float()
 				p.originCliY = e.Get("clientY").Float()
 				if cur, ok := p.widgetByID(wid); ok {
 					p.originStartOX = cur.Origin.X
 					p.originStartOY = cur.Origin.Y
-					p.originStartPosX = cur.Position.X
-					p.originStartPosY = cur.Position.Y
 					p.originDragW = cur.Size.Width
 					p.originDragH = cur.Size.Height
 					p.originDragRotDeg = cur.Rotation.Degrees
@@ -375,8 +389,8 @@ func (p *Project) renderWidget(w widgetItem) app.UI {
 			Style("bottom", "0").
 			Style("width", "12px").
 			Style("height", "12px").
-			Style("background", "#0066cc").
-			Style("border", "2px solid #fff").
+			Style("background", "var(--accent)").
+			Style("border", "2px solid var(--bg)").
 			Style("border-radius", "3px 0 4px 0").
 			Style("cursor", "se-resize").
 			Style("z-index", "3").

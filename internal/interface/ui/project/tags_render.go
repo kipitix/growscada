@@ -47,10 +47,15 @@ func (p *Project) renderTagListButtons() app.UI {
 		Style("padding", "4px 0").
 		Style("font-size", "13px").
 		Style("cursor", "pointer").
-		Style("border", "1px solid #ccc").
+		Style("border", "1px solid var(--error-border)").
 		Style("border-radius", "4px").
+		Style("background", "var(--error-bg)").
+		Style("color", "var(--error)").
 		Text("Delete").
 		OnClick(func(ctx app.Context, e app.Event) {
+			if !app.Window().Call("confirm", "Are you sure you want to delete?").Bool() {
+				return
+			}
 			p.deleteTag(ctx)
 		})
 	if deleteDisabled {
@@ -66,14 +71,17 @@ func (p *Project) renderTagListButtons() app.UI {
 		Style("padding", "4px 0").
 		Style("font-size", "13px").
 		Style("cursor", "pointer").
-		Style("border", "1px solid #ccc").
+		Style("border", "1px solid var(--accent-border)").
 		Style("border-radius", "4px").
+		Style("background", "var(--accent-bg)").
+		Style("color", "var(--accent)").
 		Text("Create").
 		OnClick(func(ctx app.Context, e app.Event) {
 			p.creatingTag = true
 			p.newTagName = "New Tag"
 			p.newTagType = "string"
 			p.selectedTagID = ""
+			ctx.LocalStorage().Set("project:tagID", "")
 		})
 	if createDisabled {
 		createBtn = createBtn.
@@ -91,10 +99,10 @@ func (p *Project) renderTagListButtons() app.UI {
 
 func (p *Project) renderTagList() app.UI {
 	if p.tagFetchErr != "" {
-		return app.Div().Style("font-size", "13px").Style("color", "#c00").Text("Error: " + p.tagFetchErr)
+		return app.Div().Style("font-size", "13px").Style("color", "var(--error)").Text("Error: " + p.tagFetchErr)
 	}
 	if len(p.tags) == 0 {
-		return app.Div().Style("font-size", "13px").Style("color", "#999").Text("No tags.")
+		return app.Div().Style("font-size", "13px").Style("color", "var(--text-muted)").Text("No tags.")
 	}
 
 	items := make([]app.UI, len(p.tags))
@@ -114,11 +122,12 @@ func (p *Project) renderTagList() app.UI {
 			OnClick(func(ctx app.Context, e app.Event) {
 				p.selectedTagID = id
 				p.creatingTag = false
+				ctx.LocalStorage().Set("project:tagID", id)
 			})
 		if p.selectedTagID == id {
-			item = item.Style("background", "#0066cc").Style("color", "#fff")
+			item = item.Style("background", "var(--accent)").Style("color", "var(--accent-text)")
 		} else {
-			item = item.Style("color", "#333")
+			item = item.Style("color", "var(--text)")
 		}
 		items[i] = item
 	}
@@ -137,7 +146,7 @@ func (p *Project) renderTagPropertiesPanel() app.UI {
 			Style("display", "flex").
 			Style("align-items", "center").
 			Style("justify-content", "center").
-			Style("color", "#aaa").
+			Style("color", "var(--text-muted)").
 			Style("font-size", "14px").
 			Body(app.Text("Select a tag or create a new one."))
 	}
@@ -173,13 +182,13 @@ func (p *Project) renderTagPropRow(label, value string) app.UI {
 		Body(
 			app.Div().
 				Style("font-size", "11px").
-				Style("color", "#888").
+				Style("color", "var(--text-3)").
 				Style("text-transform", "uppercase").
 				Style("letter-spacing", "0.04em").
 				Text(label),
 			app.Div().
 				Style("font-size", "14px").
-				Style("color", "#222").
+				Style("color", "var(--text)").
 				Text(value),
 		)
 }
@@ -208,14 +217,14 @@ func (p *Project) renderTagCreateForm() app.UI {
 				Style("flex-direction", "column").
 				Style("gap", "4px").
 				Body(
-					app.Label().Style("font-size", "12px").Style("color", "#555").Text("Name"),
+					app.Label().Style("font-size", "12px").Style("color", "var(--text-2)").Text("Name"),
 					app.Input().
 						Type("text").
 						Value(p.newTagName).
 						AutoFocus(true).
 						Style("font-size", "14px").
 						Style("padding", "5px 8px").
-						Style("border", "1px solid #ccc").
+						Style("border", "1px solid var(--border-input)").
 						Style("border-radius", "4px").
 						Style("width", "100%").
 						Style("box-sizing", "border-box").
@@ -228,11 +237,11 @@ func (p *Project) renderTagCreateForm() app.UI {
 				Style("flex-direction", "column").
 				Style("gap", "4px").
 				Body(
-					app.Label().Style("font-size", "12px").Style("color", "#555").Text("Type"),
+					app.Label().Style("font-size", "12px").Style("color", "var(--text-2)").Text("Type"),
 					app.Select().
 						Style("font-size", "14px").
 						Style("padding", "5px 8px").
-						Style("border", "1px solid #ccc").
+						Style("border", "1px solid var(--border-input)").
 						Style("border-radius", "4px").
 						Style("width", "100%").
 						Style("box-sizing", "border-box").
@@ -249,10 +258,10 @@ func (p *Project) renderTagCreateForm() app.UI {
 						Style("padding", "6px 18px").
 						Style("font-size", "13px").
 						Style("cursor", "pointer").
-						Style("border", "1px solid #0066cc").
+						Style("border", "1px solid var(--accent)").
 						Style("border-radius", "4px").
-						Style("background", "#0066cc").
-						Style("color", "#fff").
+						Style("background", "var(--accent)").
+						Style("color", "var(--accent-text)").
 						Text("Create").
 						OnClick(func(ctx app.Context, e app.Event) {
 							p.createTag(ctx)
@@ -261,9 +270,9 @@ func (p *Project) renderTagCreateForm() app.UI {
 						Style("padding", "6px 18px").
 						Style("font-size", "13px").
 						Style("cursor", "pointer").
-						Style("border", "1px solid #ccc").
+						Style("border", "1px solid var(--border-input)").
 						Style("border-radius", "4px").
-						Style("background", "#fff").
+						Style("background", "var(--bg)").
 						Text("Cancel").
 						OnClick(func(ctx app.Context, e app.Event) {
 							p.creatingTag = false

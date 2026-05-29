@@ -30,6 +30,7 @@ func NewLibrary(apiServerURL string) *Library {
 }
 
 func (l *Library) OnMount(ctx app.Context) {
+	ctx.LocalStorage().Get("library:selectedID", &l.selectedID)
 	l.loadList(ctx)
 }
 
@@ -61,6 +62,22 @@ func (l *Library) loadList(ctx app.Context) {
 		ctx.Dispatch(func(ctx app.Context) {
 			l.loading = false
 			l.widgetTypes = result.WidgetTypes
+			// Restore selection: re-run selectItem to populate editing fields.
+			if l.selectedID != "" {
+				found := false
+				for _, it := range result.WidgetTypes {
+					if it.ID == l.selectedID {
+						found = true
+						break
+					}
+				}
+				if found {
+					l.selectItem(l.selectedID)
+				} else {
+					l.selectedID = ""
+					ctx.LocalStorage().Set("library:selectedID", "")
+				}
+			}
 		})
 	})
 }
