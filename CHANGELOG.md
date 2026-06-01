@@ -1,5 +1,15 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.18] - 2026-06-02
+
+### Fixed
+
+- `internal/interface/ui/project` — исправлено смещение виджета при изменении размера через хендл SE после поворота (`project.go`, `render_scene.go`):
+  - **Причина**: CSS-матрица виджета содержит трансляцию `e = posX + ox·(1−cosA) + oy·sinA`, `f = posY − ox·sinA + oy·(1−cosA)`, где `ox = originX·W`, `oy = originY·H`. При изменении ширины/высоты `ox` и `oy` менялись, сдвигая левый-верхний угол виджета на экране — даже если `posX`/`posY` оставались прежними
+  - При mousedown на хендле SE теперь фиксируется канвас-позиция левого-верхнего угла (`resizeStartE`, `resizeStartF`) и текущий `origin` (`resizeOriginX`, `resizeOriginY`)
+  - В каждом mousemove после вычисления нового размера `posX`/`posY` пересчитываются так, чтобы `(e, f)` оставалась неизменной: `newPosX = E − newOx·(1−cosA) − sinA·newOy`, `newPosY = F + sinA·newOx − newOy·(1−cosA)`
+  - Панель свойств обновляет поля X/Y синхронно с изменением размера
+
 ## [0.0.17] - 2026-06-01
 
 ### Added

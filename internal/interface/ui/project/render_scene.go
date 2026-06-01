@@ -416,6 +416,18 @@ func (p *Project) renderWidget(w widgetItem) app.UI {
 					p.resizeStartW = cur.Size.Width
 					p.resizeStartH = cur.Size.Height
 					p.resizeStartDeg = cur.Rotation.Degrees
+					p.resizeOriginX = cur.Origin.X
+					p.resizeOriginY = cur.Origin.Y
+					// Record canvas-space top-left corner so it stays anchored
+					// during resize even when origin is not at (0,0) and widget
+					// is rotated.
+					rad := cur.Rotation.Degrees * math.Pi / 180
+					cosA := math.Cos(rad)
+					sinA := math.Sin(rad)
+					startOx := cur.Origin.X * float64(cur.Size.Width)
+					startOy := cur.Origin.Y * float64(cur.Size.Height)
+					p.resizeStartE = cur.Position.X + startOx*(1-cosA) + sinA*startOy
+					p.resizeStartF = cur.Position.Y - sinA*startOx + startOy*(1-cosA)
 				}
 			}, app.EventScope(wid))
 
