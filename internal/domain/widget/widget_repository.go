@@ -40,4 +40,7 @@ type WidgetRepository interface {
 
 	// FindBySceneID returns all widgets belonging to the given scene.
 	FindBySceneID(context.Context, id.ID[scene.Scene]) ([]Widget, error)
+
+	// FindByTypeID returns all widgets that use the given widget type.
+	FindByTypeID(context.Context, id.ID[WidgetType]) ([]Widget, error)
 }

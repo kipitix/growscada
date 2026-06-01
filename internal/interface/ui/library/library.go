@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
+
+	"github.com/kipitix/growscada/internal/interface/ui/uidto"
 )
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -16,13 +18,18 @@ type Library struct {
 	loading          bool
 	fetchErr         string
 	selectedID       string
-	editedName       string
-	editedHTML       string
-	editedScript     string
-	editedInputData  string
-	editedScriptLang string
-	editingID        string
-	editingName      string
+	editedName        string
+	editedHTML        string
+	editedScript      string
+	editedInputValues map[string]string
+	editedScriptLang  string
+	editedInputPorts  []uidto.InputPortDTO
+	editingID         string
+	editingName       string
+	// add-port form state
+	newPortName string
+	newPortDesc string
+	newPortType string
 }
 
 func NewLibrary(apiServerURL string) *Library {
@@ -92,7 +99,13 @@ func (l *Library) selectItem(id string) {
 			l.editedHTML = it.HtmlTemplate
 			l.editedScript = it.Script
 			l.editedScriptLang = it.ScriptLanguage
-			l.editedInputData = ""
+			l.editedInputValues = make(map[string]string)
+			ports := make([]uidto.InputPortDTO, len(it.InputPorts))
+			copy(ports, it.InputPorts)
+			l.editedInputPorts = ports
+			l.newPortName = ""
+			l.newPortDesc = ""
+			l.newPortType = ""
 			return
 		}
 	}
@@ -120,9 +133,8 @@ func (l *Library) Render() app.UI {
 			l.renderEditorColumn("Script", "script-editor", l.editedScript, func(ctx app.Context, e app.Event) {
 				l.editedScript = ctx.JSSrc().Get("value").String()
 			}, true),
-			l.renderEditorColumn("Input Data", "input-data", l.editedInputData, func(ctx app.Context, e app.Event) {
-				l.editedInputData = ctx.JSSrc().Get("value").String()
-			}, false),
+			l.renderInputPortsColumn(),
+			l.renderInputDataColumn(),
 			l.renderPreviewColumn(),
 		)
 }

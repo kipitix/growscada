@@ -120,3 +120,7 @@ Tests in `internal/infrastructure/postgres/repositories/` use **testcontainers-g
 ## API Collections
 
 Manual/exploratory API tests are maintained as [Bruno](https://www.usebruno.com/) collections in `tests/api/bruno_collections/`. The `localhost` environment points to `http://localhost:9090`.
+
+## Tools
+
+When task finished send notification via e-mail.

@@ -60,9 +60,9 @@ func newRouterWithWidgets() *restapi.APIRouter {
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
 	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	wtSvc := application.NewWidgetTypeService(wtRepo, event.NewEventBus())
 	wRepo := repositories.NewWidgetRepositoryPostgres(testDB)
-	wSvc := application.NewWidgetService(wRepo, event.NewEventBus())
+	wtSvc := application.NewWidgetTypeService(wtRepo, wRepo, event.NewEventBus())
+	wSvc := application.NewWidgetService(wRepo, wtRepo, event.NewEventBus())
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
 	sceneSvc := application.NewSceneService(sceneRepo, event.NewEventBus())
 	return restapi.NewRouter(tagSvc, wtSvc, wSvc, sceneSvc)
@@ -71,7 +71,8 @@ func newRouterWithWidgets() *restapi.APIRouter {
 func createWidgetViaService(t *testing.T, input appdto.CreateWidgetInput) appdto.Widget {
 	t.Helper()
 	repo := repositories.NewWidgetRepositoryPostgres(testDB)
-	svc := application.NewWidgetService(repo, event.NewEventBus())
+	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
+	svc := application.NewWidgetService(repo, wtRepo, event.NewEventBus())
 	resp, err := svc.CreateWidget(context.Background(), input)
 	if err != nil {
 		t.Fatalf("createWidgetViaService: %v", err)
@@ -90,8 +91,8 @@ var testWidgetInput = appdto.CreateWidgetInput{
 	OriginY:         0.5,
 	RotationDegrees: 0.0,
 	TypeID:          uuid.New(),
-	Labels:          []string{"sensor"},
-	TagIDs:          nil,
+	Labels:       []string{"sensor"},
+	PortBindings: nil,
 }
 
 // --- GET /api/v1/widgets ---
@@ -215,8 +216,8 @@ func TestPostWidgets_Valid_Returns201WithID(t *testing.T) {
 		Rotation: restdto.RotationRequest{Degrees: 0},
 		TypeID:   uuid.New(),
 		SceneID:  testSceneID,
-		Labels:   []string{"flow"},
-		TagIDs:   []uuid.UUID{},
+		Labels:       []string{"flow"},
+		PortBindings: []restdto.PortBindingDTO{},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/widgets", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -284,9 +285,9 @@ func TestPutWidgetsByID_Valid_Returns200WithIncrementedVersion(t *testing.T) {
 		Rotation: restdto.RotationRequest{Degrees: 0},
 		TypeID:   uuid.New(),
 		SceneID:  created.SceneID,
-		Labels:   []string{"updated"},
-		TagIDs:   []uuid.UUID{},
-		Version:  created.Version,
+		Labels:       []string{"updated"},
+		PortBindings: []restdto.PortBindingDTO{},
+		Version:      created.Version,
 	})
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/widgets/"+created.ID.String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -352,7 +353,8 @@ func TestPutWidgetsByID_Conflict_Returns409(t *testing.T) {
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
 	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	wtSvc := application.NewWidgetTypeService(wtRepo, event.NewEventBus())
+	wRepo := repositories.NewWidgetRepositoryPostgres(testDB)
+	wtSvc := application.NewWidgetTypeService(wtRepo, wRepo, event.NewEventBus())
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
 	sceneSvc := application.NewSceneService(sceneRepo, event.NewEventBus())
 	router := restapi.NewRouter(tagSvc, wtSvc, svc, sceneSvc)

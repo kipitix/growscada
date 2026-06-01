@@ -12,6 +12,12 @@ type TransformMatrix struct {
 	CSS              string
 }
 
+// PortBinding is the application-layer DTO for a widget port binding.
+type PortBinding struct {
+	PortName string
+	TagID    uuid.UUID
+}
+
 // Widget is the application-layer DTO for widget instance data.
 type Widget struct {
 	ID              uuid.UUID
@@ -26,7 +32,7 @@ type Widget struct {
 	TypeID          uuid.UUID
 	SceneID         uuid.UUID
 	Labels          []string
-	TagIDs          []uuid.UUID
+	PortBindings    []PortBinding
 	Version         int
 }
 
@@ -42,7 +48,7 @@ type CreateWidgetInput struct {
 	TypeID          uuid.UUID
 	SceneID         uuid.UUID
 	Labels          []string
-	TagIDs          []uuid.UUID
+	PortBindings    []PortBinding
 }
 
 // UpdateWidgetInput holds the input data for updating a widget instance.
@@ -59,17 +65,22 @@ type UpdateWidgetInput struct {
 	TypeID          uuid.UUID
 	SceneID         uuid.UUID
 	Labels          []string
-	TagIDs          []uuid.UUID
+	PortBindings    []PortBinding
 	Version         int
 }
 
 // NewWidget creates a Widget DTO from the domain aggregate.
 // The TransformationMatrix is computed on the fly from the domain object.
 func NewWidget(w widget.Widget) Widget {
-	tagIDs := make([]uuid.UUID, len(w.TagIDs()))
-	for i, tid := range w.TagIDs() {
-		tagIDs[i] = tid.UUID()
+	domainBindings := w.PortBindings()
+	portBindings := make([]PortBinding, len(domainBindings))
+	for i, b := range domainBindings {
+		portBindings[i] = PortBinding{
+			PortName: b.PortName().String(),
+			TagID:    b.TagID().UUID(),
+		}
 	}
+
 	labels := make([]string, len(w.Labels()))
 	copy(labels, w.Labels())
 
@@ -95,11 +106,11 @@ func NewWidget(w widget.Widget) Widget {
 			F:   m.F(),
 			CSS: m.CSS(),
 		},
-		TypeID:  w.TypeID().UUID(),
-		SceneID: w.SceneID().UUID(),
-		Labels:  labels,
-		TagIDs:  tagIDs,
-		Version: w.Version().Number(),
+		TypeID:       w.TypeID().UUID(),
+		SceneID:      w.SceneID().UUID(),
+		Labels:       labels,
+		PortBindings: portBindings,
+		Version:      w.Version().Number(),
 	}
 }
 

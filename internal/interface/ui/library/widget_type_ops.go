@@ -3,9 +3,12 @@ package library
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
+
+	"github.com/kipitix/growscada/internal/interface/ui/uidto"
 )
 
 const defaultHTML = `<div class="widget"></div>`
@@ -23,6 +26,7 @@ func (l *Library) createItem(ctx app.Context) {
 		ScriptLanguage: "javascript",
 		DefaultWidth:   120,
 		DefaultHeight:  60,
+		InputPorts:     []uidto.InputPortDTO{},
 	})
 	ctx.Async(func() {
 		resp, err := http.Post(url, "application/json", bytes.NewReader(body))
@@ -49,7 +53,8 @@ func (l *Library) createItem(ctx app.Context) {
 			l.editedName = name
 			l.editedHTML = defaultHTML
 			l.editedScript = defaultScript
-			l.editedInputData = ""
+			l.editedInputValues = make(map[string]string)
+			l.editedInputPorts = nil
 			l.editedScriptLang = "javascript"
 			l.loadList(ctx)
 		})
@@ -79,7 +84,8 @@ func (l *Library) deleteItem(ctx app.Context) {
 				l.selectedID = ""
 				l.editedHTML = ""
 				l.editedScript = ""
-				l.editedInputData = ""
+				l.editedInputValues = make(map[string]string)
+				l.editedInputPorts = nil
 			}
 			l.loadList(ctx)
 		})
@@ -98,6 +104,10 @@ func (l *Library) applyChanges(ctx app.Context) {
 		}
 	}
 	url := l.apiServerURL + "/api/v1/widget-types/" + l.selectedID
+	ports := l.editedInputPorts
+	if ports == nil {
+		ports = []uidto.InputPortDTO{}
+	}
 	body, _ := json.Marshal(updateWidgetTypeRequest{
 		Name:           l.editedName,
 		HtmlTemplate:   l.editedHTML,
@@ -105,8 +115,10 @@ func (l *Library) applyChanges(ctx app.Context) {
 		ScriptLanguage: l.editedScriptLang,
 		DefaultWidth:   currentItem.DefaultWidth,
 		DefaultHeight:  currentItem.DefaultHeight,
+		InputPorts:     ports,
 		Version:        currentItem.Version,
 	})
+	nextVersion := currentItem.Version + 1
 	ctx.Async(func() {
 		req, _ := http.NewRequest(http.MethodPut, url, bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -118,8 +130,20 @@ func (l *Library) applyChanges(ctx app.Context) {
 			return
 		}
 		resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			ctx.Dispatch(func(ctx app.Context) {
+				l.fetchErr = fmt.Sprintf("save failed: server returned %d", resp.StatusCode)
+			})
+			return
+		}
 		ctx.Dispatch(func(ctx app.Context) {
 			l.fetchErr = ""
+			for i, it := range l.widgetTypes {
+				if it.ID == l.selectedID {
+					l.widgetTypes[i].Version = nextVersion
+					break
+				}
+			}
 			l.loadList(ctx)
 		})
 	})
@@ -156,6 +180,10 @@ func (l *Library) commitEdit(ctx app.Context) {
 	}
 
 	url := l.apiServerURL + "/api/v1/widget-types/" + id
+	foundPorts := found.InputPorts
+	if foundPorts == nil {
+		foundPorts = []uidto.InputPortDTO{}
+	}
 	body, _ := json.Marshal(updateWidgetTypeRequest{
 		Name:           name,
 		HtmlTemplate:   found.HtmlTemplate,
@@ -163,6 +191,7 @@ func (l *Library) commitEdit(ctx app.Context) {
 		ScriptLanguage: found.ScriptLanguage,
 		DefaultWidth:   found.DefaultWidth,
 		DefaultHeight:  found.DefaultHeight,
+		InputPorts:     foundPorts,
 		Version:        found.Version,
 	})
 	ctx.Async(func() {

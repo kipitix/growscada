@@ -25,14 +25,15 @@ type WidgetService interface {
 }
 
 type widgetServiceImpl struct {
-	repository widget.WidgetRepository
-	eventBus   event.EventBus
+	repository         widget.WidgetRepository
+	widgetTypeRepository widget.WidgetTypeRepository
+	eventBus           event.EventBus
 }
 
 var _ WidgetService = (*widgetServiceImpl)(nil)
 
-func NewWidgetService(repo widget.WidgetRepository, bus event.EventBus) WidgetService {
-	return &widgetServiceImpl{repository: repo, eventBus: bus}
+func NewWidgetService(repo widget.WidgetRepository, wtRepo widget.WidgetTypeRepository, bus event.EventBus) WidgetService {
+	return &widgetServiceImpl{repository: repo, widgetTypeRepository: wtRepo, eventBus: bus}
 }
 
 func (s widgetServiceImpl) FindAllWidgets(ctx context.Context) ([]appdto.Widget, error) {
@@ -93,11 +94,20 @@ func (s widgetServiceImpl) CreateWidget(ctx context.Context, input appdto.Create
 	typeID := id.NewID(id.IDWithUUID[widget.WidgetType](input.TypeID))
 	sceneID := id.NewID(id.IDWithUUID[scene.Scene](input.SceneID))
 
-	tagIDs := uuidsToTagIDs(input.TagIDs)
+	portBindings, err := dtoPortBindingsToDomain(input.PortBindings)
+	if err != nil {
+		return appdto.Widget{}, fmt.Errorf("cannot create widget because of port bindings: %w", err)
+	}
+
+	if len(portBindings) > 0 {
+		if err := s.validatePortBindingsAgainstType(ctx, typeID, portBindings); err != nil {
+			return appdto.Widget{}, fmt.Errorf("cannot create widget because of port bindings: %w", err)
+		}
+	}
 
 	newWidget := widget.NewWidget(
 		newID, newName, pos, size, origin, rotation,
-		typeID, sceneID, input.Labels, tagIDs,
+		typeID, sceneID, input.Labels, portBindings,
 		version.Initial[widget.Widget](),
 	)
 
@@ -152,11 +162,20 @@ func (s widgetServiceImpl) UpdateWidget(ctx context.Context, input appdto.Update
 	typeID := id.NewID(id.IDWithUUID[widget.WidgetType](input.TypeID))
 	sceneID := id.NewID(id.IDWithUUID[scene.Scene](input.SceneID))
 
-	tagIDs := uuidsToTagIDs(input.TagIDs)
+	portBindings, err := dtoPortBindingsToDomain(input.PortBindings)
+	if err != nil {
+		return appdto.Widget{}, fmt.Errorf("cannot parse widget port bindings: %w", err)
+	}
+
+	if len(portBindings) > 0 {
+		if err := s.validatePortBindingsAgainstType(ctx, typeID, portBindings); err != nil {
+			return appdto.Widget{}, fmt.Errorf("cannot update widget because of port bindings: %w", err)
+		}
+	}
 
 	updated := widget.NewWidget(
 		found.ID(), newName, pos, size, origin, rotation,
-		typeID, sceneID, input.Labels, tagIDs,
+		typeID, sceneID, input.Labels, portBindings,
 		found.Version(),
 	)
 
@@ -183,10 +202,36 @@ func (s widgetServiceImpl) DeleteWidgetByID(ctx context.Context, rawID uuid.UUID
 	return appdto.NewWidget(deleted), nil
 }
 
-func uuidsToTagIDs(uuids []uuid.UUID) []id.ID[tag.Tag] {
-	tagIDs := make([]id.ID[tag.Tag], len(uuids))
-	for i, u := range uuids {
-		tagIDs[i] = id.NewID(id.IDWithUUID[tag.Tag](u))
+// validatePortBindingsAgainstType checks that every PortBinding port name is
+// declared on the given WidgetType. Called only when bindings is non-empty.
+func (s widgetServiceImpl) validatePortBindingsAgainstType(ctx context.Context, typeID id.ID[widget.WidgetType], bindings []widget.PortBinding) error {
+	wt, err := s.widgetTypeRepository.FindByID(ctx, typeID)
+	if err != nil {
+		return fmt.Errorf("cannot find widget type for port binding validation: %w", err)
 	}
-	return tagIDs
+	allowed := make(map[string]struct{}, len(wt.InputPorts()))
+	for _, p := range wt.InputPorts() {
+		allowed[p.Name().String()] = struct{}{}
+	}
+	for _, b := range bindings {
+		if _, ok := allowed[b.PortName().String()]; !ok {
+			return fmt.Errorf("port %q is not declared on widget type %q: %w",
+				b.PortName().String(), wt.Name().String(), widget.ErrWidgetInvalidInput)
+		}
+	}
+	return nil
+}
+
+// dtoPortBindingsToDomain converts appdto.PortBinding slice to domain PortBinding slice.
+func dtoPortBindingsToDomain(dtos []appdto.PortBinding) ([]widget.PortBinding, error) {
+	bindings := make([]widget.PortBinding, 0, len(dtos))
+	for _, dto := range dtos {
+		portName, err := widget.NewInputPortName(dto.PortName)
+		if err != nil {
+			return nil, fmt.Errorf("invalid port binding name %q: %w", dto.PortName, err)
+		}
+		tagID := id.NewID(id.IDWithUUID[tag.Tag](dto.TagID))
+		bindings = append(bindings, widget.NewPortBinding(portName, tagID))
+	}
+	return bindings, nil
 }

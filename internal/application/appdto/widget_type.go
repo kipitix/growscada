@@ -5,6 +5,13 @@ import (
 	"github.com/kipitix/growscada/internal/domain/widget"
 )
 
+// InputPort is the application-layer DTO for a WidgetType input port.
+type InputPort struct {
+	Name        string
+	Description string
+	TypeHint    string
+}
+
 // WidgetType is the application-layer DTO for widget type data.
 type WidgetType struct {
 	ID             uuid.UUID
@@ -14,6 +21,7 @@ type WidgetType struct {
 	ScriptLanguage string
 	DefaultWidth   int
 	DefaultHeight  int
+	InputPorts     []InputPort
 	Version        int
 }
 
@@ -25,6 +33,7 @@ type CreateWidgetTypeInput struct {
 	ScriptLanguage string
 	DefaultWidth   int
 	DefaultHeight  int
+	InputPorts     []InputPort
 }
 
 // UpdateWidgetTypeInput holds the input data for updating a widget type.
@@ -37,11 +46,21 @@ type UpdateWidgetTypeInput struct {
 	ScriptLanguage string
 	DefaultWidth   int
 	DefaultHeight  int
+	InputPorts     []InputPort
 	Version        int
 }
 
 // NewWidgetType creates a WidgetType DTO from the domain aggregate.
 func NewWidgetType(wt widget.WidgetType) WidgetType {
+	domainPorts := wt.InputPorts()
+	ports := make([]InputPort, len(domainPorts))
+	for i, p := range domainPorts {
+		ports[i] = InputPort{
+			Name:        p.Name().String(),
+			Description: p.Description(),
+			TypeHint:    p.TypeHint().String(),
+		}
+	}
 	return WidgetType{
 		ID:             wt.ID().UUID(),
 		Name:           wt.Name().String(),
@@ -50,6 +69,7 @@ func NewWidgetType(wt widget.WidgetType) WidgetType {
 		ScriptLanguage: wt.ScriptLanguage().String(),
 		DefaultWidth:   wt.DefaultSize().Width(),
 		DefaultHeight:  wt.DefaultSize().Height(),
+		InputPorts:     ports,
 		Version:        wt.Version().Number(),
 	}
 }

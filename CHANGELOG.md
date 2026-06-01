@@ -4,35 +4,54 @@
 
 ### Added
 
+- `internal/domain/widget` — **InputPort** и **PortBinding** Value Objects:
+  - `InputPortName` — валидируется как JS-идентификатор (`^[a-zA-Z_$][a-zA-Z0-9_$]*$`); `NewInputPortNameFromStorage` пропускает regex для доверенных данных из БД
+  - `InputPort` — именованный типизированный слот ввода на WidgetType; поля `Name`, `Description`, `TypeHint` (`tag.TagType`); `TypeHint == TagTypeUnknown` означает «любой тип тега»
+  - `PortBinding` — связь порта (по имени) с конкретным экземпляром `Tag` (через `id.ID[tag.Tag]`)
+  - `NewWidgetType` возвращает `(WidgetType, error)` и проверяет уникальность имён портов; при дубликате — `ErrDuplicateInputPortName`
+  - `WidgetType.InputPorts()` — возвращает защитную копию среза
+  - `Widget.PortBindings()` заменяет `Widget.TagIDs()` — виджет теперь хранит именованные привязки портов вместо плоского списка UUID тегов
+- `internal/application` — `InputPortDTO`, `PortBindingDTO` добавлены в `appdto/widget.go` и `appdto/widget_type.go`; application-сервисы `WidgetService` и `WidgetTypeService` маппят порты и привязки через `NewInputPort` / `NewPortBinding`
+- `internal/infrastructure/postgres/migrations`:
+  - `20260601000000_add_input_ports_to_widget_types.sql` — колонка `input_ports JSONB NOT NULL DEFAULT '[]'` в `widget_types`; элемент: `{"name":"…","description":"…","type_hint":"…"}`
+  - `20260601000001_replace_tag_ids_with_port_bindings_in_widgets.sql` — добавляет `port_bindings JSONB`, мигрирует существующие `tag_ids` в синтетические имена `port_0`, `port_1`, …, затем удаляет колонку `tag_ids`
+- `internal/infrastructure/postgres/repositories` — репозитории `widget_repository_postgres` и `widget_type_repository_postgres` сериализуют/десериализуют `InputPort[]` и `PortBinding[]` как JSONB; `widget_type_repository_postgres_test.go` — новый набор интеграционных тестов
+- `internal/interface/restapi/restdto` — `InputPortDTO` и `PortBindingDTO` добавлены в REST-DTO; поле `tag_ids []uuid` заменено на `port_bindings []PortBindingDTO` в `WidgetRequest/Response`; `input_ports []InputPortDTO` добавлено в `WidgetTypeRequest/Response`
+- `internal/interface/ui/library` — редактор типов виджетов расширен колонкой **Input Ports**:
+  - список существующих портов с кнопкой удаления (✕)
+  - форма добавления: поля Name (JS identifier), Description (опционально), Type Hint (any / string / boolean / integer)
+  - порты сохраняются через PUT вместе с остальными полями типа виджета
+- `internal/interface/ui/project` — панель свойств виджета заменяет тег-список секцией **Port Bindings**:
+  - для каждого входного порта WidgetType отображается `<select>` с тегами, отфильтрованными по `type_hint`; текущая привязка подсвечивается; можно сменить тег или снять привязку (`— unbound —`)
+  - изменения сохраняются через PUT виджета
+- `internal/interface/ui/uidto` — новый пакет `uidto` с `InputPortDTO`, общим для пакетов `library` и `project`, устраняет дублирование DTO
 - `internal/interface/ui/root` — система тем оформления:
   - CSS custom properties (`var(--bg)`, `var(--accent)`, `var(--error)`, …) инжектируются через `<style id="gs-theme-vars">` в `<head>` при каждой смене темы
   - Три режима: `light`, `dark`, `auto` (авто использует `@media (prefers-color-scheme: dark)`)
-  - Кнопка переключения темы заменена на одиночный cycling-значок: `◑` (auto) → `☀` (light) → `☾` (dark); режим сохраняется в `localStorage` (`root:theme`)
-  - CSS-сброс `html, body { margin: 0; overflow: hidden }` устраняет постоянно видимый вертикальный scrollbar браузера
+  - Кнопка переключения темы: одиночный cycling-значок `◑` (auto) → `☀` (light) → `☾` (dark); режим сохраняется в `localStorage` (`root:theme`)
+  - CSS-сброс `html, body { margin: 0; overflow: hidden }` устраняет постоянно видимый вертикальный scrollbar
 - `internal/interface/ui/project` — изменяемые ширины панелей в Scenes:
   - Левая панель Widget Types и правая панель Properties разделены 5px-разделителями с `cursor: col-resize`
-  - Drag-изменение ширины: левая панель — диапазон [100, 480] px, правая — [160, 600] px; реализовано через поля `resizingPanelSide`, `panelResizeStartX`, `panelResizeStartWidth` и обработчики `OnMouseMove`/`OnMouseUp` на контейнере
-  - Ширины сохраняются в `localStorage` (`project:widgetTypeWidth`, `project:propertiesWidth`); умолчания 180 px / 260 px восстанавливаются при первом монтировании
-- Диалоги подтверждения (`app.Window().Call("confirm", …).Bool()`) перед всеми деструктивными операциями:
-  - Library — удаление типа виджета (`render_list.go`)
-  - Project — удаление сцены (`render_scene.go`), удаление виджета и удаление тега из виджета (`×`) в панели свойств (`render_properties.go`), удаление тега (`tags_render.go`)
-- Персистентность состояния UI в `localStorage`:
-  - Активная вкладка навигации `root:mode` — `root.go`
-  - Активная сцена `project:sceneID` — `scene_ops.go`, `render_scene.go`
-  - Активная под-вкладка Scenes/Tags `project:subTab` — `project.go`
-  - Выбранный тип виджета в Library `library:selectedID` — `library.go`, `render_list.go`
-  - Выбранный виджет на холсте сохраняется между переключениями вкладок — `project.go`, `widget_ops.go`
+  - Drag-изменение ширины: левая [100, 480] px, правая [160, 600] px; ширины персистируются в `localStorage` (`project:widgetTypeWidth`, `project:propertiesWidth`)
+- Диалоги подтверждения (`app.Window().Call("confirm", …).Bool()`) перед всеми деструктивными операциями в Library и Project
+- Персистентность состояния UI в `localStorage`: активная вкладка навигации (`root:mode`), активная сцена (`project:sceneID`), активная под-вкладка Scenes/Tags (`project:subTab`), выбранный тип виджета в Library (`library:selectedID`), выбранный виджет на холсте
+- Юнит-тесты `internal/domain/widget/input_port_test.go` — `TestNewInputPortName_*`, `TestNewInputPort_*`, `TestNewWidgetType_DuplicateInputPortName`, `TestNewWidgetType_UniqueInputPorts_OK`, `TestNewWidgetType_InputPortsCopied`
 
 ### Changed
 
-- Все UI-компоненты Library и Project переведены с жёстко заданных hex-цветов на CSS custom properties (`var(--X)`) — `render_list.go`, `render_editor.go`, `render_scene.go`, `render_properties.go`, `render_widget_types.go`, `tags_render.go`, `widget_ops.go`
-- Кнопки Delete везде стилизованы красным (`var(--error-bg)` / `var(--error-border)` / `var(--error)`) — Library и Project
-- Кнопки Create стилизованы приглушённым акцентом (`var(--accent-bg)` / `var(--accent-border)` / `var(--accent)`) — Library и Project
+- `Widget.TagIDs() []id.ID[tag.Tag]` → `Widget.PortBindings() []PortBinding` во всём стеке (домен → application → инфраструктура → REST → UI)
+- `NewWidgetType` сигнатура: добавлен параметр `someInputPorts []InputPort`; возврат изменён с `WidgetType` на `(WidgetType, error)`
+- `tag.NewTagType` принимает `"unknown"` и `""` как синонимы `TagTypeUnknown` без ошибки — упрощает маппинг `type_hint` из JSON
+- `internal/interface/restapi/restdto/widget_type.go` — `WidgetTypeResponse.InputPorts` ранее отсутствовало и добавлено в Put-запрос; имя поля `input_ports` унифицировано с JSONB-схемой БД
+- Все UI-компоненты Library и Project переведены с жёстко заданных hex-цветов на CSS custom properties; кнопки Delete стилизованы красным (`var(--error-*)`), Create — приглушённым акцентом (`var(--accent-*)`)
 
 ### Fixed
 
-- Виджет не пропадал с холста после удаления: `loadWidgets` вызывался внутри `ctx.Dispatch`, что запускало `ctx.Async` в запрещённом контексте и go-app молча игнорировал вызов; заменено прямой фильтрацией среза `p.widgets` (оптимистичное обновление UI) — `widget_ops.go`
-- Перетаскивание точки Origin перемещало виджет: компенсация `Position.X/Y` при движении origin была удалена; теперь изменяются только `Origin.X/Y`, позиция виджета остаётся фиксированной — `render_scene.go`, `project.go`
+- Виджет не пропадал с холста после удаления: `loadWidgets` внутри `ctx.Dispatch` запускал `ctx.Async` в запрещённом контексте; заменено прямой фильтрацией среза `p.widgets` (оптимистичное обновление UI) — `widget_ops.go`
+- Перетаскивание точки Origin перемещало виджет: удалена компенсация `Position.X/Y`; теперь изменяются только `Origin.X/Y` — `render_scene.go`, `project.go`
+- `WidgetTypeService.UpdateWidgetType` при пустом срезе `InputPorts` в запросе обнулял порты вместо сохранения существующих; исправлено явной передачей портов из request — `widget_type_application_service.go`
+- `WidgetService.UpdateWidget` аналогично игнорировал `PortBindings` при обновлении позиции/размера — `widget_application_service.go`, `widget_ops.go`
+- UI Library: форма добавления порта не очищалась после добавления и не валидировала пустое имя — `render_editor.go`
 
 ## [0.0.14] - 2026-05-28
 

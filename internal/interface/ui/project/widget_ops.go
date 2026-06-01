@@ -81,15 +81,15 @@ func (p *Project) createWidget(ctx app.Context, typeID string, x, y float64) {
 	}
 	url := p.apiServerURL + "/api/v1/widgets"
 	body, _ := json.Marshal(createWidgetRequest{
-		Name:     name,
-		Position: positionDTO{X: x, Y: y, Z: 0},
-		Size:     sizeDTO{Width: width, Height: height},
-		Origin:   originDTO{X: 0.5, Y: 0.5},
-		Rotation: rotationDTO{Degrees: 0},
-		TypeID:   typeID,
-		SceneID:  p.selectedSceneID,
-		Labels:   []string{},
-		TagIDs:   []string{},
+		Name:         name,
+		Position:     positionDTO{X: x, Y: y, Z: 0},
+		Size:         sizeDTO{Width: width, Height: height},
+		Origin:       originDTO{X: 0.5, Y: 0.5},
+		Rotation:     rotationDTO{Degrees: 0},
+		TypeID:       typeID,
+		SceneID:      p.selectedSceneID,
+		Labels:       []string{},
+		PortBindings: []portBindingDTO{},
 	})
 	ctx.Async(func() {
 		resp, err := http.Post(url, "application/json", bytes.NewReader(body))
@@ -189,25 +189,33 @@ func (p *Project) saveWidgetGeometry(ctx app.Context) {
 	p.putWidget(ctx, p.widgets[idx])
 }
 
-func (p *Project) addTagToWidget(ctx app.Context, tagID string) {
-	if p.selectedWidgetID == "" || tagID == "" {
+func (p *Project) bindPort(ctx app.Context, portName, tagID string) {
+	if p.selectedWidgetID == "" || portName == "" || tagID == "" {
 		return
 	}
 	idx := p.selectedWidgetIdx()
 	if idx < 0 {
 		return
 	}
-	for _, tid := range p.widgets[idx].TagIDs {
-		if tid == tagID {
-			return
+	// Replace existing binding for this port, or append new one.
+	found := false
+	for i, b := range p.widgets[idx].PortBindings {
+		if b.PortName == portName {
+			p.widgets[idx].PortBindings[i].TagID = tagID
+			found = true
+			break
 		}
 	}
-	p.widgets[idx].TagIDs = append(p.widgets[idx].TagIDs, tagID)
-	p.addingTagID = ""
+	if !found {
+		p.widgets[idx].PortBindings = append(p.widgets[idx].PortBindings, portBindingDTO{
+			PortName: portName,
+			TagID:    tagID,
+		})
+	}
 	p.putWidget(ctx, p.widgets[idx])
 }
 
-func (p *Project) removeTagFromWidget(ctx app.Context, tagID string) {
+func (p *Project) unbindPort(ctx app.Context, portName string) {
 	if p.selectedWidgetID == "" {
 		return
 	}
@@ -215,38 +223,38 @@ func (p *Project) removeTagFromWidget(ctx app.Context, tagID string) {
 	if idx < 0 {
 		return
 	}
-	filtered := make([]string, 0, len(p.widgets[idx].TagIDs))
-	for _, tid := range p.widgets[idx].TagIDs {
-		if tid != tagID {
-			filtered = append(filtered, tid)
+	filtered := make([]portBindingDTO, 0, len(p.widgets[idx].PortBindings))
+	for _, b := range p.widgets[idx].PortBindings {
+		if b.PortName != portName {
+			filtered = append(filtered, b)
 		}
 	}
-	p.widgets[idx].TagIDs = filtered
+	p.widgets[idx].PortBindings = filtered
 	p.putWidget(ctx, p.widgets[idx])
 }
 
 func (p *Project) putWidget(ctx app.Context, w widgetItem) {
 	url := p.apiServerURL + "/api/v1/widgets/" + w.ID
 	wid := w.ID
-	tagIDs := w.TagIDs
-	if tagIDs == nil {
-		tagIDs = []string{}
+	portBindings := w.PortBindings
+	if portBindings == nil {
+		portBindings = []portBindingDTO{}
 	}
 	labels := w.Labels
 	if labels == nil {
 		labels = []string{}
 	}
 	body, _ := json.Marshal(updateWidgetRequest{
-		Name:     w.Name,
-		Position: w.Position,
-		Size:     w.Size,
-		Origin:   w.Origin,
-		Rotation: w.Rotation,
-		TypeID:   w.TypeID,
-		SceneID:  w.SceneID,
-		Labels:   labels,
-		TagIDs:   tagIDs,
-		Version:  w.Version,
+		Name:         w.Name,
+		Position:     w.Position,
+		Size:         w.Size,
+		Origin:       w.Origin,
+		Rotation:     w.Rotation,
+		TypeID:       w.TypeID,
+		SceneID:      w.SceneID,
+		Labels:       labels,
+		PortBindings: portBindings,
+		Version:      w.Version,
 	})
 	ctx.Async(func() {
 		req, _ := http.NewRequest(http.MethodPut, url, bytes.NewReader(body))
@@ -257,6 +265,12 @@ func (p *Project) putWidget(ctx app.Context, w widgetItem) {
 			return
 		}
 		defer resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			ctx.Dispatch(func(ctx app.Context) {
+				p.fetchErr = fmt.Sprintf("failed to save widget: server returned %d", resp.StatusCode)
+			})
+			return
+		}
 		var result updateWidgetResponse
 		if err := json.NewDecoder(resp.Body).Decode(&result); err == nil && result.Version > 0 {
 			ctx.Dispatch(func(ctx app.Context) {

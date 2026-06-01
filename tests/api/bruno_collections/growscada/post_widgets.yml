@@ -18,7 +18,9 @@ http:
         "type_id": "{{WIDGET_TYPE_ID}}",
         "scene_id": "{{SCENE_ID}}",
         "labels": ["sensor", "pressure"],
-        "tag_ids": []
+        "port_bindings": [
+          { "port_name": "pressure", "tag_id": "{{TAG_ID}}" }
+        ]
       }
   auth: inherit
 

@@ -92,8 +92,7 @@ type Project struct {
 	editingHeight     string
 	editingOriginX    string
 	editingOriginY    string
-	editingRotation   string
-	addingTagID       string
+	editingRotation string
 
 	fetchErr string
 
@@ -188,7 +187,6 @@ func (p *Project) loadTags(ctx app.Context) {
 
 func (p *Project) selectWidget(ctx app.Context, id string) {
 	p.selectedWidgetID = id
-	p.addingTagID = ""
 	ctx.LocalStorage().Set("project:widgetID", id)
 	for _, w := range p.widgets {
 		if w.ID == id {
@@ -221,7 +219,6 @@ func (p *Project) clearWidgetSelection(ctx app.Context) {
 	p.editingOriginX = ""
 	p.editingOriginY = ""
 	p.editingRotation = ""
-	p.addingTagID = ""
 	ctx.LocalStorage().Set("project:widgetID", "")
 }
 

@@ -5,13 +5,12 @@ import (
 
 	"github.com/kipitix/growscada/internal/domain/id"
 	"github.com/kipitix/growscada/internal/domain/scene"
-	"github.com/kipitix/growscada/internal/domain/tag"
 	"github.com/kipitix/growscada/internal/domain/version"
 )
 
 // Widget - aggregate representing a widget instance placed on a scene.
 // Each widget is an instance of a WidgetType, positioned at given coordinates,
-// optionally labelled, and bound to a set of data tags.
+// optionally labelled, and bound to tags via named PortBindings.
 type Widget interface {
 	ID() id.ID[Widget]
 	Name() WidgetName
@@ -23,7 +22,7 @@ type Widget interface {
 	TypeID() id.ID[WidgetType]
 	SceneID() id.ID[scene.Scene]
 	Labels() []string
-	TagIDs() []id.ID[tag.Tag]
+	PortBindings() []PortBinding
 	Version() version.Version[Widget]
 
 	fmt.Stringer
@@ -31,17 +30,17 @@ type Widget interface {
 
 // widgetImpl - Widget implementation struct.
 type widgetImpl struct {
-	id       id.ID[Widget]
-	name     WidgetName
-	position Position
-	size     Size
-	origin   Origin
-	rotation Rotation
-	typeID   id.ID[WidgetType]
-	sceneID  id.ID[scene.Scene]
-	labels   []string
-	tagIDs   []id.ID[tag.Tag]
-	version  version.Version[Widget]
+	id           id.ID[Widget]
+	name         WidgetName
+	position     Position
+	size         Size
+	origin       Origin
+	rotation     Rotation
+	typeID       id.ID[WidgetType]
+	sceneID      id.ID[scene.Scene]
+	labels       []string
+	portBindings []PortBinding
+	version      version.Version[Widget]
 }
 
 var _ Widget = (*widgetImpl)(nil)
@@ -57,27 +56,27 @@ func NewWidget(
 	aTypeID id.ID[WidgetType],
 	aSceneID id.ID[scene.Scene],
 	someLabels []string,
-	someTagIDs []id.ID[tag.Tag],
+	somePortBindings []PortBinding,
 	aVersion version.Version[Widget],
 ) Widget {
 	labels := make([]string, len(someLabels))
 	copy(labels, someLabels)
 
-	tagIDs := make([]id.ID[tag.Tag], len(someTagIDs))
-	copy(tagIDs, someTagIDs)
+	portBindings := make([]PortBinding, len(somePortBindings))
+	copy(portBindings, somePortBindings)
 
 	return &widgetImpl{
-		id:       anID,
-		name:     aName,
-		position: aPosition,
-		size:     aSize,
-		origin:   anOrigin,
-		rotation: aRotation,
-		typeID:   aTypeID,
-		sceneID:  aSceneID,
-		labels:   labels,
-		tagIDs:   tagIDs,
-		version:  aVersion,
+		id:           anID,
+		name:         aName,
+		position:     aPosition,
+		size:         aSize,
+		origin:       anOrigin,
+		rotation:     aRotation,
+		typeID:       aTypeID,
+		sceneID:      aSceneID,
+		labels:       labels,
+		portBindings: portBindings,
+		version:      aVersion,
 	}
 }
 
@@ -90,7 +89,7 @@ func (w widgetImpl) Rotation() Rotation               { return w.rotation }
 func (w widgetImpl) TypeID() id.ID[WidgetType]        { return w.typeID }
 func (w widgetImpl) SceneID() id.ID[scene.Scene]      { return w.sceneID }
 func (w widgetImpl) Labels() []string                 { return w.labels }
-func (w widgetImpl) TagIDs() []id.ID[tag.Tag]         { return w.tagIDs }
+func (w widgetImpl) PortBindings() []PortBinding      { return w.portBindings }
 func (w widgetImpl) Version() version.Version[Widget] { return w.version }
 
 // TransformationMatrix computes the 2D affine CSS matrix from the widget's
