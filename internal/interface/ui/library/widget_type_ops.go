@@ -51,6 +51,7 @@ func (l *Library) createItem(ctx app.Context) {
 			l.editedHTML = defaultHTML
 			l.editedScript = defaultScript
 			l.editedInputValues = make(map[string]string)
+			l.editedInputPorts = nil
 			l.editedScriptLang = "javascript"
 			l.loadList(ctx)
 		})
@@ -81,6 +82,7 @@ func (l *Library) deleteItem(ctx app.Context) {
 				l.editedHTML = ""
 				l.editedScript = ""
 				l.editedInputValues = make(map[string]string)
+				l.editedInputPorts = nil
 			}
 			l.loadList(ctx)
 		})
