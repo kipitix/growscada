@@ -91,7 +91,11 @@ type Project struct {
 	resizeStartCliY  float64
 	resizeStartW     int
 	resizeStartH     int
-	resizeStartDeg   float64 // for inverse-rotation delta
+	resizeStartDeg   float64  // for inverse-rotation delta
+	resizeStartE     float64  // canvas X of widget top-left at resize start
+	resizeStartF     float64  // canvas Y of widget top-left at resize start
+	resizeOriginX    float64  // origin.X at resize start (for position compensation)
+	resizeOriginY    float64  // origin.Y at resize start
 
 	// ── Properties panel editing state ─────────────────────────────────────
 	editingWidgetName string
@@ -466,7 +470,11 @@ func (p *Project) renderScenesContent() app.UI {
 				}
 			}
 
-			// Resize widget via SE handle (inverse-rotation corrected)
+			// Resize widget via SE handle (inverse-rotation corrected).
+			// After computing the new size we also recompute posX/posY so
+			// that the canvas-space top-left corner (e, f) stays fixed,
+			// preventing the widget from shifting when it is rotated and the
+			// origin is not at (0, 0).
 			if p.resizingWidgetID != "" {
 				dx := clientX - p.resizeStartCliX
 				dy := clientY - p.resizeStartCliY
@@ -484,13 +492,22 @@ func (p *Project) renderScenesContent() app.UI {
 				if newH < minSize {
 					newH = minSize
 				}
+				// Compensate position so the top-left canvas corner is unchanged.
+				newOx := p.resizeOriginX * float64(newW)
+				newOy := p.resizeOriginY * float64(newH)
+				newPosX := p.resizeStartE - newOx*(1-cosA) - sinA*newOy
+				newPosY := p.resizeStartF + sinA*newOx - newOy*(1-cosA)
 				for i := range p.widgets {
 					if p.widgets[i].ID == p.resizingWidgetID {
 						p.widgets[i].Size.Width = newW
 						p.widgets[i].Size.Height = newH
+						p.widgets[i].Position.X = newPosX
+						p.widgets[i].Position.Y = newPosY
 						if p.selectedWidgetID == p.resizingWidgetID {
 							p.editingWidth = strconv.Itoa(newW)
 							p.editingHeight = strconv.Itoa(newH)
+							p.editingPosX = fmt.Sprintf("%.1f", newPosX)
+							p.editingPosY = fmt.Sprintf("%.1f", newPosY)
 						}
 						break
 					}
