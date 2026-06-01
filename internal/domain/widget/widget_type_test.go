@@ -7,18 +7,32 @@ import (
 	"github.com/kipitix/growscada/internal/domain/version"
 )
 
+func mustWidgetTypeID(t *testing.T) id.ID[WidgetType] {
+	t.Helper()
+	return id.NewID[WidgetType]()
+}
+
+func mustWidgetTypeVersion(t *testing.T) version.Version[WidgetType] {
+	t.Helper()
+	return version.Initial[WidgetType]()
+}
+
 func makeTestWidgetType(t *testing.T) WidgetType {
 	t.Helper()
-	id := id.NewID[WidgetType]()
+	anID := id.NewID[WidgetType]()
 	name, _ := NewWidgetTypeName("gauge")
 	htmlTemplate, _ := NewHtmlTemplate("<div class='gauge'></div>")
 	script, _ := NewScript("function render(value) { return value; }")
 	lang := ScriptLanguageJavaScript
-	return NewWidgetType(id, name, htmlTemplate, script, lang, DefaultSize(), version.Initial[WidgetType]())
+	wt, err := NewWidgetType(anID, name, htmlTemplate, script, lang, DefaultSize(), nil, version.Initial[WidgetType]())
+	if err != nil {
+		t.Fatalf("makeTestWidgetType: %v", err)
+	}
+	return wt
 }
 
 func TestNewWidgetType_FieldsAreSet(t *testing.T) {
-	id := id.NewID[WidgetType]()
+	anID := id.NewID[WidgetType]()
 	name, _ := NewWidgetTypeName("thermometer")
 	htmlTemplate, _ := NewHtmlTemplate("<div class='thermometer'></div>")
 	script, _ := NewScript("function draw() {}")
@@ -26,10 +40,13 @@ func TestNewWidgetType_FieldsAreSet(t *testing.T) {
 	size, _ := NewSize(120, 80)
 	ver, _ := version.New[WidgetType](version.WithNumber[WidgetType](3))
 
-	wt := NewWidgetType(id, name, htmlTemplate, script, lang, size, ver)
+	wt, err := NewWidgetType(anID, name, htmlTemplate, script, lang, size, nil, ver)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	if wt.ID() != id {
-		t.Errorf("ID mismatch: expected %v, got %v", id, wt.ID())
+	if wt.ID() != anID {
+		t.Errorf("ID mismatch: expected %v, got %v", anID, wt.ID())
 	}
 	if wt.Name() != name {
 		t.Errorf("Name mismatch: expected %v, got %v", name, wt.Name())

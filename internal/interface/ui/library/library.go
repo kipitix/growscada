@@ -21,8 +21,13 @@ type Library struct {
 	editedScript     string
 	editedInputData  string
 	editedScriptLang string
+	editedInputPorts []inputPortDTO
 	editingID        string
 	editingName      string
+	// add-port form state
+	newPortName string
+	newPortDesc string
+	newPortType string
 }
 
 func NewLibrary(apiServerURL string) *Library {
@@ -93,6 +98,12 @@ func (l *Library) selectItem(id string) {
 			l.editedScript = it.Script
 			l.editedScriptLang = it.ScriptLanguage
 			l.editedInputData = ""
+			ports := make([]inputPortDTO, len(it.InputPorts))
+			copy(ports, it.InputPorts)
+			l.editedInputPorts = ports
+			l.newPortName = ""
+			l.newPortDesc = ""
+			l.newPortType = ""
 			return
 		}
 	}
@@ -120,6 +131,7 @@ func (l *Library) Render() app.UI {
 			l.renderEditorColumn("Script", "script-editor", l.editedScript, func(ctx app.Context, e app.Event) {
 				l.editedScript = ctx.JSSrc().Get("value").String()
 			}, true),
+			l.renderInputPortsColumn(),
 			l.renderEditorColumn("Input Data", "input-data", l.editedInputData, func(ctx app.Context, e app.Event) {
 				l.editedInputData = ctx.JSSrc().Get("value").String()
 			}, false),

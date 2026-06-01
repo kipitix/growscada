@@ -20,11 +20,16 @@ func makeTestWidget(t *testing.T, pos Position, size Size, origin Origin, rot Ro
 	typeID := id.NewID[WidgetType]()
 	sceneID := id.NewID[scene.Scene]()
 
+	portName, _ := NewInputPortName("temperature")
+	portBindings := []PortBinding{
+		NewPortBinding(portName, id.NewID[tag.Tag]()),
+	}
+
 	return NewWidget(
 		wID, name, pos, size, origin, rot,
 		typeID, sceneID,
 		[]string{"label_a", "label_b"},
-		[]id.ID[tag.Tag]{id.NewID[tag.Tag]()},
+		portBindings,
 		version.Initial[Widget](),
 	)
 }
@@ -39,11 +44,11 @@ func TestNewWidget_FieldsAreSet(t *testing.T) {
 	typeID := id.NewID[WidgetType]()
 	sceneID := id.NewID[scene.Scene]()
 	labels := []string{"pump", "main_loop"}
-	tagID := id.NewID[tag.Tag]()
-	tagIDs := []id.ID[tag.Tag]{tagID}
+	portName, _ := NewInputPortName("val")
+	portBindings := []PortBinding{NewPortBinding(portName, id.NewID[tag.Tag]())}
 	ver := version.Initial[Widget]()
 
-	w := NewWidget(wID, name, pos, size, origin, rot, typeID, sceneID, labels, tagIDs, ver)
+	w := NewWidget(wID, name, pos, size, origin, rot, typeID, sceneID, labels, portBindings, ver)
 
 	if w.ID() != wID {
 		t.Errorf("ID mismatch: expected %v, got %v", wID, w.ID())
@@ -72,18 +77,16 @@ func TestNewWidget_FieldsAreSet(t *testing.T) {
 	if w.Version() != ver {
 		t.Errorf("Version mismatch: expected %v, got %v", ver, w.Version())
 	}
+	if len(w.PortBindings()) != 1 {
+		t.Errorf("expected 1 port binding, got %d", len(w.PortBindings()))
+	}
 }
 
 func TestNewWidget_LabelsCopied(t *testing.T) {
-	original := []string{"a", "b"}
 	pos := NewPosition(0, 0, 0)
 	size, _ := NewSize(100, 100)
 	origin, _ := NewOrigin(0, 0)
 	rot := NewRotation(0)
-
-	w := makeTestWidget(t, pos, size, origin, rot)
-	_ = original // confirm we built a widget; now test copy semantics below
-
 	wID := id.NewID[Widget]()
 	name, _ := NewWidgetName("copy_test")
 	typeID := id.NewID[WidgetType]()
@@ -96,31 +99,33 @@ func TestNewWidget_LabelsCopied(t *testing.T) {
 	if widget.Labels()[0] != "x" {
 		t.Error("NewWidget must copy the labels slice; external mutation should not affect widget")
 	}
-	_ = w
 }
 
-func TestNewWidget_TagIDsCopied(t *testing.T) {
+func TestNewWidget_PortBindingsCopied(t *testing.T) {
 	pos := NewPosition(0, 0, 0)
 	size, _ := NewSize(100, 100)
 	origin, _ := NewOrigin(0, 0)
 	rot := NewRotation(0)
 	wID := id.NewID[Widget]()
-	name, _ := NewWidgetName("tag_copy_test")
+	name, _ := NewWidgetName("binding_copy_test")
 	typeID := id.NewID[WidgetType]()
 	sceneID := id.NewID[scene.Scene]()
 
+	portName, _ := NewInputPortName("temperature")
 	originalTagID := id.NewID[tag.Tag]()
-	tagIDs := []id.ID[tag.Tag]{originalTagID}
+	bindings := []PortBinding{NewPortBinding(portName, originalTagID)}
 
-	widget := NewWidget(wID, name, pos, size, origin, rot, typeID, sceneID, nil, tagIDs, version.Initial[Widget]())
+	w := NewWidget(wID, name, pos, size, origin, rot, typeID, sceneID, nil, bindings, version.Initial[Widget]())
 
-	tagIDs[0] = id.NewID[tag.Tag]() // mutate external slice
-	if widget.TagIDs()[0] != originalTagID {
-		t.Error("NewWidget must copy the tagIDs slice; external mutation should not affect widget")
+	// Mutate external slice — should not affect widget.
+	otherPortName, _ := NewInputPortName("pressure")
+	bindings[0] = NewPortBinding(otherPortName, id.NewID[tag.Tag]())
+	if w.PortBindings()[0].PortName().String() != "temperature" {
+		t.Error("NewWidget must copy the portBindings slice; external mutation should not affect widget")
 	}
 }
 
-func TestNewWidget_NilLabelsAndTagIDs(t *testing.T) {
+func TestNewWidget_NilLabelsAndPortBindings(t *testing.T) {
 	pos := NewPosition(0, 0, 0)
 	size, _ := NewSize(100, 100)
 	origin, _ := NewOrigin(0, 0)
@@ -134,8 +139,8 @@ func TestNewWidget_NilLabelsAndTagIDs(t *testing.T) {
 	if len(w.Labels()) != 0 {
 		t.Errorf("expected empty labels, got %v", w.Labels())
 	}
-	if len(w.TagIDs()) != 0 {
-		t.Errorf("expected empty tagIDs, got %v", w.TagIDs())
+	if len(w.PortBindings()) != 0 {
+		t.Errorf("expected empty port bindings, got %v", w.PortBindings())
 	}
 }
 

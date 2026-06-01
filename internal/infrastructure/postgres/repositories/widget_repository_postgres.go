@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -31,16 +32,16 @@ func (r widgetRepositoryPostgresImpl) NextID() id.ID[widget.Widget] {
 }
 
 func (r widgetRepositoryPostgresImpl) Save(ctx context.Context, w widget.Widget) (widget.Widget, error) {
-	tagIDStrings := make([]string, len(w.TagIDs()))
-	for i, tid := range w.TagIDs() {
-		tagIDStrings[i] = tid.UUID().String()
+	portBindingsJSON, err := marshalPortBindings(w.PortBindings())
+	if err != nil {
+		return nil, fmt.Errorf("cannot serialize port bindings: %w", err)
 	}
 
 	if w.Version() == version.Initial[widget.Widget]() {
 		sqlResult, err := r.db.ExecContext(ctx,
 			`INSERT INTO widgets
 			    (id, name, x, y, z, width, height, origin_x, origin_y, rotation_degrees,
-			     type_id, scene_id, labels, tag_ids, version)
+			     type_id, scene_id, labels, port_bindings, version)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
 			w.ID().UUID(), w.Name().String(),
 			w.Position().X(), w.Position().Y(), w.Position().Z(),
@@ -48,7 +49,7 @@ func (r widgetRepositoryPostgresImpl) Save(ctx context.Context, w widget.Widget)
 			w.Origin().X(), w.Origin().Y(),
 			w.Rotation().Degrees(),
 			w.TypeID().UUID(), w.SceneID().UUID(),
-			pq.Array(w.Labels()), pq.Array(tagIDStrings),
+			pq.Array(w.Labels()), portBindingsJSON,
 			version.Committed[widget.Widget]().Number(),
 		)
 		if err != nil {
@@ -63,7 +64,7 @@ func (r widgetRepositoryPostgresImpl) Save(ctx context.Context, w widget.Widget)
 		}
 		return widget.NewWidget(
 			w.ID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(),
-			w.TypeID(), w.SceneID(), w.Labels(), w.TagIDs(),
+			w.TypeID(), w.SceneID(), w.Labels(), w.PortBindings(),
 			version.Committed[widget.Widget](),
 		), nil
 	}
@@ -73,7 +74,7 @@ func (r widgetRepositoryPostgresImpl) Save(ctx context.Context, w widget.Widget)
 			`UPDATE widgets
 			 SET name = $1, x = $2, y = $3, z = $4, width = $5, height = $6,
 			     origin_x = $7, origin_y = $8, rotation_degrees = $9,
-			     type_id = $10, scene_id = $11, labels = $12, tag_ids = $13,
+			     type_id = $10, scene_id = $11, labels = $12, port_bindings = $13,
 			     version = version + 1
 			 WHERE id = $14 AND version = $15`,
 			w.Name().String(),
@@ -82,7 +83,7 @@ func (r widgetRepositoryPostgresImpl) Save(ctx context.Context, w widget.Widget)
 			w.Origin().X(), w.Origin().Y(),
 			w.Rotation().Degrees(),
 			w.TypeID().UUID(), w.SceneID().UUID(),
-			pq.Array(w.Labels()), pq.Array(tagIDStrings),
+			pq.Array(w.Labels()), portBindingsJSON,
 			w.ID().UUID(), w.Version().Number(),
 		)
 		if err != nil {
@@ -97,7 +98,7 @@ func (r widgetRepositoryPostgresImpl) Save(ctx context.Context, w widget.Widget)
 		}
 		return widget.NewWidget(
 			w.ID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(),
-			w.TypeID(), w.SceneID(), w.Labels(), w.TagIDs(),
+			w.TypeID(), w.SceneID(), w.Labels(), w.PortBindings(),
 			w.Version().Next(),
 		), nil
 	}
@@ -105,7 +106,7 @@ func (r widgetRepositoryPostgresImpl) Save(ctx context.Context, w widget.Widget)
 	return nil, fmt.Errorf("undefined behavior with version %d", w.Version().Number())
 }
 
-const selectWidgetColumns = `id, name, x, y, z, width, height, origin_x, origin_y, rotation_degrees, type_id, scene_id, labels, tag_ids::text[], version`
+const selectWidgetColumns = `id, name, x, y, z, width, height, origin_x, origin_y, rotation_degrees, type_id, scene_id, labels, port_bindings, version`
 
 func (r widgetRepositoryPostgresImpl) FindByID(ctx context.Context, widgetID id.ID[widget.Widget]) (widget.Widget, error) {
 	row := r.db.QueryRowContext(ctx,
@@ -185,26 +186,26 @@ func (r widgetRepositoryPostgresImpl) FindBySceneID(ctx context.Context, sceneID
 }
 
 // rawWidgetRow holds the raw column values read from a widgets row before domain validation.
-// The field order matches [selectWidgetColumns].
+// The field order matches selectWidgetColumns.
 type rawWidgetRow struct {
-	id         uuid.UUID
-	name       string
-	x, y       float64
-	z          int
-	width      int
-	height     int
-	originX    float64
-	originY    float64
-	rotDegrees float64
-	typeID     uuid.UUID
-	sceneID    uuid.UUID
-	labels     pq.StringArray
-	tagIDs     pq.StringArray
-	version    int
+	id               uuid.UUID
+	name             string
+	x, y             float64
+	z                int
+	width            int
+	height           int
+	originX          float64
+	originY          float64
+	rotDegrees       float64
+	typeID           uuid.UUID
+	sceneID          uuid.UUID
+	labels           pq.StringArray
+	portBindingsJSON []byte
+	version          int
 }
 
 // scanWidget reads a single widget row using the provided scan function.
-// The column order must match [selectWidgetColumns].
+// The column order must match selectWidgetColumns.
 func (r widgetRepositoryPostgresImpl) scanWidget(
 	scan func(...any) error,
 ) (widget.Widget, error) {
@@ -216,7 +217,7 @@ func (r widgetRepositoryPostgresImpl) scanWidget(
 		&row.originX, &row.originY,
 		&row.rotDegrees,
 		&row.typeID, &row.sceneID,
-		&row.labels, &row.tagIDs,
+		&row.labels, &row.portBindingsJSON,
 		&row.version,
 	); err != nil {
 		return nil, err
@@ -249,13 +250,9 @@ func (r widgetRepositoryPostgresImpl) reconstruct(row rawWidgetRow) (widget.Widg
 	typeID := id.NewID(id.IDWithUUID[widget.WidgetType](row.typeID))
 	sceneID := id.NewID(id.IDWithUUID[scene.Scene](row.sceneID))
 
-	tagIDs := make([]id.ID[tag.Tag], len(row.tagIDs))
-	for i, s := range row.tagIDs {
-		u, err := uuid.Parse(s)
-		if err != nil {
-			return nil, fmt.Errorf("cannot parse tag id %q: %w", s, err)
-		}
-		tagIDs[i] = id.NewID(id.IDWithUUID[tag.Tag](u))
+	portBindings, err := unmarshalPortBindings(row.portBindingsJSON)
+	if err != nil {
+		return nil, fmt.Errorf("cannot unmarshal port bindings: %w", err)
 	}
 
 	newVersion, err := version.New(version.WithNumber[widget.Widget](row.version))
@@ -263,5 +260,46 @@ func (r widgetRepositoryPostgresImpl) reconstruct(row rawWidgetRow) (widget.Widg
 		return nil, fmt.Errorf("cannot create widget version: %w", err)
 	}
 
-	return widget.NewWidget(newID, newName, pos, size, origin, rotation, typeID, sceneID, row.labels, tagIDs, newVersion), nil
+	return widget.NewWidget(newID, newName, pos, size, origin, rotation, typeID, sceneID, row.labels, portBindings, newVersion), nil
+}
+
+// portBindingJSON is the on-disk representation of a PortBinding.
+type portBindingJSON struct {
+	PortName string `json:"port_name"`
+	TagID    string `json:"tag_id"`
+}
+
+func marshalPortBindings(bindings []widget.PortBinding) ([]byte, error) {
+	rows := make([]portBindingJSON, len(bindings))
+	for i, b := range bindings {
+		rows[i] = portBindingJSON{
+			PortName: b.PortName().String(),
+			TagID:    b.TagID().UUID().String(),
+		}
+	}
+	return json.Marshal(rows)
+}
+
+func unmarshalPortBindings(data []byte) ([]widget.PortBinding, error) {
+	if len(data) == 0 {
+		return nil, nil
+	}
+	var rows []portBindingJSON
+	if err := json.Unmarshal(data, &rows); err != nil {
+		return nil, fmt.Errorf("cannot decode port_bindings JSON: %w", err)
+	}
+	bindings := make([]widget.PortBinding, 0, len(rows))
+	for _, row := range rows {
+		portName, err := widget.NewInputPortName(row.PortName)
+		if err != nil {
+			return nil, fmt.Errorf("invalid stored port name %q: %w", row.PortName, err)
+		}
+		tagUUID, err := uuid.Parse(row.TagID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid stored tag id %q: %w", row.TagID, err)
+		}
+		tagID := id.NewID(id.IDWithUUID[tag.Tag](tagUUID))
+		bindings = append(bindings, widget.NewPortBinding(portName, tagID))
+	}
+	return bindings, nil
 }

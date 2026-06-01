@@ -69,11 +69,15 @@ type TransformMatrixResponse struct {
 	CSS string  `json:"css"`
 }
 
+// PortBindingDTO is the HTTP DTO for a widget port binding.
+type PortBindingDTO struct {
+	PortName string    `json:"port_name"`
+	TagID    uuid.UUID `json:"tag_id"`
+}
+
 // --- Widget request / response types ---
 
 // WidgetResponse is the HTTP DTO for representing a widget instance in API responses.
-// The transform_matrix field is computed on the fly and reflects the current
-// Position, Origin, Rotation, and Size values.
 type WidgetResponse struct {
 	ID              uuid.UUID               `json:"id"`
 	Name            string                  `json:"name"`
@@ -85,7 +89,7 @@ type WidgetResponse struct {
 	TypeID          uuid.UUID               `json:"type_id"`
 	SceneID         uuid.UUID               `json:"scene_id"`
 	Labels          []string                `json:"labels"`
-	TagIDs          []uuid.UUID             `json:"tag_ids"`
+	PortBindings    []PortBindingDTO        `json:"port_bindings"`
 	Version         int                     `json:"version"`
 }
 
@@ -96,15 +100,15 @@ type GetWidgetsResponse struct {
 
 // CreateWidgetRequest is the HTTP DTO for creating a widget instance.
 type CreateWidgetRequest struct {
-	Name     string          `json:"name"`
-	Position PositionRequest `json:"position"`
-	Size     SizeRequest     `json:"size"`
-	Origin   OriginRequest   `json:"origin"`
-	Rotation RotationRequest `json:"rotation"`
-	TypeID   uuid.UUID       `json:"type_id"`
-	SceneID  uuid.UUID       `json:"scene_id"`
-	Labels   []string        `json:"labels"`
-	TagIDs   []uuid.UUID     `json:"tag_ids"`
+	Name         string           `json:"name"`
+	Position     PositionRequest  `json:"position"`
+	Size         SizeRequest      `json:"size"`
+	Origin       OriginRequest    `json:"origin"`
+	Rotation     RotationRequest  `json:"rotation"`
+	TypeID       uuid.UUID        `json:"type_id"`
+	SceneID      uuid.UUID        `json:"scene_id"`
+	Labels       []string         `json:"labels"`
+	PortBindings []PortBindingDTO `json:"port_bindings"`
 }
 
 // CreateWidgetResponse is the HTTP DTO for a widget creation response.
@@ -115,16 +119,16 @@ type CreateWidgetResponse struct {
 // UpdateWidgetRequest is the HTTP DTO for updating a widget instance.
 // Version must equal the current persisted version for optimistic locking.
 type UpdateWidgetRequest struct {
-	Name     string          `json:"name"`
-	Position PositionRequest `json:"position"`
-	Size     SizeRequest     `json:"size"`
-	Origin   OriginRequest   `json:"origin"`
-	Rotation RotationRequest `json:"rotation"`
-	TypeID   uuid.UUID       `json:"type_id"`
-	SceneID  uuid.UUID       `json:"scene_id"`
-	Labels   []string        `json:"labels"`
-	TagIDs   []uuid.UUID     `json:"tag_ids"`
-	Version  int             `json:"version"`
+	Name         string           `json:"name"`
+	Position     PositionRequest  `json:"position"`
+	Size         SizeRequest      `json:"size"`
+	Origin       OriginRequest    `json:"origin"`
+	Rotation     RotationRequest  `json:"rotation"`
+	TypeID       uuid.UUID        `json:"type_id"`
+	SceneID      uuid.UUID        `json:"scene_id"`
+	Labels       []string         `json:"labels"`
+	PortBindings []PortBindingDTO `json:"port_bindings"`
+	Version      int              `json:"version"`
 }
 
 // UpdateWidgetResponse is the HTTP DTO for a widget update response.
@@ -134,14 +138,30 @@ type UpdateWidgetResponse struct {
 
 // --- Mapping functions ---
 
+func portBindingDTOsToAppDTOs(bindings []PortBindingDTO) []appdto.PortBinding {
+	result := make([]appdto.PortBinding, len(bindings))
+	for i, b := range bindings {
+		result[i] = appdto.PortBinding{PortName: b.PortName, TagID: b.TagID}
+	}
+	return result
+}
+
+func appPortBindingDTOsToRest(bindings []appdto.PortBinding) []PortBindingDTO {
+	result := make([]PortBindingDTO, len(bindings))
+	for i, b := range bindings {
+		result[i] = PortBindingDTO{PortName: b.PortName, TagID: b.TagID}
+	}
+	return result
+}
+
 func NewWidgetResponse(w appdto.Widget) WidgetResponse {
 	labels := w.Labels
 	if labels == nil {
 		labels = []string{}
 	}
-	tagIDs := w.TagIDs
-	if tagIDs == nil {
-		tagIDs = []uuid.UUID{}
+	portBindings := appPortBindingDTOsToRest(w.PortBindings)
+	if portBindings == nil {
+		portBindings = []PortBindingDTO{}
 	}
 	return WidgetResponse{
 		ID:   w.ID,
@@ -171,11 +191,11 @@ func NewWidgetResponse(w appdto.Widget) WidgetResponse {
 			F:   w.TransformMatrix.F,
 			CSS: w.TransformMatrix.CSS,
 		},
-		TypeID:  w.TypeID,
-		SceneID: w.SceneID,
-		Labels:  labels,
-		TagIDs:  tagIDs,
-		Version: w.Version,
+		TypeID:       w.TypeID,
+		SceneID:      w.SceneID,
+		Labels:       labels,
+		PortBindings: portBindings,
+		Version:      w.Version,
 	}
 }
 
@@ -209,7 +229,7 @@ func NewCreateWidgetInput(r CreateWidgetRequest) appdto.CreateWidgetInput {
 		TypeID:          r.TypeID,
 		SceneID:         r.SceneID,
 		Labels:          r.Labels,
-		TagIDs:          r.TagIDs,
+		PortBindings:    portBindingDTOsToAppDTOs(r.PortBindings),
 	}
 }
 
@@ -228,7 +248,7 @@ func NewUpdateWidgetInput(r UpdateWidgetRequest, widgetID uuid.UUID) appdto.Upda
 		TypeID:          r.TypeID,
 		SceneID:         r.SceneID,
 		Labels:          r.Labels,
-		TagIDs:          r.TagIDs,
+		PortBindings:    portBindingDTOsToAppDTOs(r.PortBindings),
 		Version:         r.Version,
 	}
 }

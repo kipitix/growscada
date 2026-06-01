@@ -2,11 +2,23 @@ package project
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
+type inputPortDTO struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	TypeHint    string `json:"type_hint"`
+}
+
+type portBindingDTO struct {
+	PortName string `json:"port_name"`
+	TagID    string `json:"tag_id"`
+}
+
 type widgetTypeItem struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	DefaultWidth  int    `json:"default_width"`
-	DefaultHeight int    `json:"default_height"`
+	ID            string         `json:"id"`
+	Name          string         `json:"name"`
+	DefaultWidth  int            `json:"default_width"`
+	DefaultHeight int            `json:"default_height"`
+	InputPorts    []inputPortDTO `json:"input_ports"`
 }
 
 type getWidgetTypesResponse struct {
@@ -92,7 +104,7 @@ type widgetItem struct {
 	TypeID          string             `json:"type_id"`
 	SceneID         string             `json:"scene_id"`
 	Labels          []string           `json:"labels"`
-	TagIDs          []string           `json:"tag_ids"`
+	PortBindings    []portBindingDTO   `json:"port_bindings"`
 	Version         int                `json:"version"`
 }
 
@@ -101,15 +113,15 @@ type getWidgetsResponse struct {
 }
 
 type createWidgetRequest struct {
-	Name     string      `json:"name"`
-	Position positionDTO `json:"position"`
-	Size     sizeDTO     `json:"size"`
-	Origin   originDTO   `json:"origin"`
-	Rotation rotationDTO `json:"rotation"`
-	TypeID   string      `json:"type_id"`
-	SceneID  string      `json:"scene_id"`
-	Labels   []string    `json:"labels"`
-	TagIDs   []string    `json:"tag_ids"`
+	Name         string           `json:"name"`
+	Position     positionDTO      `json:"position"`
+	Size         sizeDTO          `json:"size"`
+	Origin       originDTO        `json:"origin"`
+	Rotation     rotationDTO      `json:"rotation"`
+	TypeID       string           `json:"type_id"`
+	SceneID      string           `json:"scene_id"`
+	Labels       []string         `json:"labels"`
+	PortBindings []portBindingDTO `json:"port_bindings"`
 }
 
 type createWidgetResponse struct {
@@ -117,16 +129,16 @@ type createWidgetResponse struct {
 }
 
 type updateWidgetRequest struct {
-	Name     string      `json:"name"`
-	Position positionDTO `json:"position"`
-	Size     sizeDTO     `json:"size"`
-	Origin   originDTO   `json:"origin"`
-	Rotation rotationDTO `json:"rotation"`
-	TypeID   string      `json:"type_id"`
-	SceneID  string      `json:"scene_id"`
-	Labels   []string    `json:"labels"`
-	TagIDs   []string    `json:"tag_ids"`
-	Version  int         `json:"version"`
+	Name         string           `json:"name"`
+	Position     positionDTO      `json:"position"`
+	Size         sizeDTO          `json:"size"`
+	Origin       originDTO        `json:"origin"`
+	Rotation     rotationDTO      `json:"rotation"`
+	TypeID       string           `json:"type_id"`
+	SceneID      string           `json:"scene_id"`
+	Labels       []string         `json:"labels"`
+	PortBindings []portBindingDTO `json:"port_bindings"`
+	Version      int              `json:"version"`
 }
 
 type updateWidgetResponse struct {

@@ -8,6 +8,7 @@ import (
 	"github.com/kipitix/growscada/internal/application/appdto"
 	"github.com/kipitix/growscada/internal/domain/event"
 	"github.com/kipitix/growscada/internal/domain/id"
+	"github.com/kipitix/growscada/internal/domain/tag"
 	"github.com/kipitix/growscada/internal/domain/version"
 	"github.com/kipitix/growscada/internal/domain/widget"
 )
@@ -80,7 +81,15 @@ func (s widgetTypeServiceImpl) CreateWidgetType(ctx context.Context, input appdt
 		return appdto.WidgetType{}, fmt.Errorf("cannot create widget type because of default size: %w", err)
 	}
 
-	newWt := widget.NewWidgetType(newID, newName, newHtml, newScript, newLang, defaultSize, version.Initial[widget.WidgetType]())
+	inputPorts, err := dtoInputPortsToDomain(input.InputPorts)
+	if err != nil {
+		return appdto.WidgetType{}, fmt.Errorf("cannot create widget type because of input ports: %w", err)
+	}
+
+	newWt, err := widget.NewWidgetType(newID, newName, newHtml, newScript, newLang, defaultSize, inputPorts, version.Initial[widget.WidgetType]())
+	if err != nil {
+		return appdto.WidgetType{}, fmt.Errorf("cannot create widget type: %w", err)
+	}
 
 	newWt, err = s.repository.Save(ctx, newWt)
 	if err != nil {
@@ -129,7 +138,15 @@ func (s widgetTypeServiceImpl) UpdateWidgetType(ctx context.Context, input appdt
 		return appdto.WidgetType{}, fmt.Errorf("cannot parse default size: %w", err)
 	}
 
-	updated := widget.NewWidgetType(found.ID(), newName, newHtml, newScript, newLang, defaultSize, found.Version())
+	inputPorts, err := dtoInputPortsToDomain(input.InputPorts)
+	if err != nil {
+		return appdto.WidgetType{}, fmt.Errorf("cannot parse input ports: %w", err)
+	}
+
+	updated, err := widget.NewWidgetType(found.ID(), newName, newHtml, newScript, newLang, defaultSize, inputPorts, found.Version())
+	if err != nil {
+		return appdto.WidgetType{}, fmt.Errorf("cannot build updated widget type: %w", err)
+	}
 
 	found, err = s.repository.Save(ctx, updated)
 	if err != nil {
@@ -154,3 +171,22 @@ func (s widgetTypeServiceImpl) DeleteWidgetTypeByID(ctx context.Context, rawID u
 	return appdto.NewWidgetType(deleted), nil
 }
 
+// dtoInputPortsToDomain converts appdto.InputPort slice to domain InputPort slice.
+func dtoInputPortsToDomain(dtos []appdto.InputPort) ([]widget.InputPort, error) {
+	ports := make([]widget.InputPort, 0, len(dtos))
+	for _, dto := range dtos {
+		name, err := widget.NewInputPortName(dto.Name)
+		if err != nil {
+			return nil, fmt.Errorf("invalid input port name %q: %w", dto.Name, err)
+		}
+		var typeHint tag.TagType
+		if dto.TypeHint != "" && dto.TypeHint != "unknown" {
+			typeHint, err = tag.NewTagType(dto.TypeHint)
+			if err != nil {
+				return nil, fmt.Errorf("invalid input port type hint %q: %w", dto.TypeHint, err)
+			}
+		}
+		ports = append(ports, widget.NewInputPort(name, dto.Description, typeHint))
+	}
+	return ports, nil
+}

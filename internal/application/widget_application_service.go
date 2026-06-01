@@ -93,11 +93,14 @@ func (s widgetServiceImpl) CreateWidget(ctx context.Context, input appdto.Create
 	typeID := id.NewID(id.IDWithUUID[widget.WidgetType](input.TypeID))
 	sceneID := id.NewID(id.IDWithUUID[scene.Scene](input.SceneID))
 
-	tagIDs := uuidsToTagIDs(input.TagIDs)
+	portBindings, err := dtoPortBindingsToDomain(input.PortBindings)
+	if err != nil {
+		return appdto.Widget{}, fmt.Errorf("cannot create widget because of port bindings: %w", err)
+	}
 
 	newWidget := widget.NewWidget(
 		newID, newName, pos, size, origin, rotation,
-		typeID, sceneID, input.Labels, tagIDs,
+		typeID, sceneID, input.Labels, portBindings,
 		version.Initial[widget.Widget](),
 	)
 
@@ -152,11 +155,14 @@ func (s widgetServiceImpl) UpdateWidget(ctx context.Context, input appdto.Update
 	typeID := id.NewID(id.IDWithUUID[widget.WidgetType](input.TypeID))
 	sceneID := id.NewID(id.IDWithUUID[scene.Scene](input.SceneID))
 
-	tagIDs := uuidsToTagIDs(input.TagIDs)
+	portBindings, err := dtoPortBindingsToDomain(input.PortBindings)
+	if err != nil {
+		return appdto.Widget{}, fmt.Errorf("cannot parse widget port bindings: %w", err)
+	}
 
 	updated := widget.NewWidget(
 		found.ID(), newName, pos, size, origin, rotation,
-		typeID, sceneID, input.Labels, tagIDs,
+		typeID, sceneID, input.Labels, portBindings,
 		found.Version(),
 	)
 
@@ -183,10 +189,16 @@ func (s widgetServiceImpl) DeleteWidgetByID(ctx context.Context, rawID uuid.UUID
 	return appdto.NewWidget(deleted), nil
 }
 
-func uuidsToTagIDs(uuids []uuid.UUID) []id.ID[tag.Tag] {
-	tagIDs := make([]id.ID[tag.Tag], len(uuids))
-	for i, u := range uuids {
-		tagIDs[i] = id.NewID(id.IDWithUUID[tag.Tag](u))
+// dtoPortBindingsToDomain converts appdto.PortBinding slice to domain PortBinding slice.
+func dtoPortBindingsToDomain(dtos []appdto.PortBinding) ([]widget.PortBinding, error) {
+	bindings := make([]widget.PortBinding, 0, len(dtos))
+	for _, dto := range dtos {
+		portName, err := widget.NewInputPortName(dto.PortName)
+		if err != nil {
+			return nil, fmt.Errorf("invalid port binding name %q: %w", dto.PortName, err)
+		}
+		tagID := id.NewID(id.IDWithUUID[tag.Tag](dto.TagID))
+		bindings = append(bindings, widget.NewPortBinding(portName, tagID))
 	}
-	return tagIDs
+	return bindings, nil
 }

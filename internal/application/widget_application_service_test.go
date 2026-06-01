@@ -69,7 +69,7 @@ var testCreateWidgetInput = appdto.CreateWidgetInput{
 	RotationDegrees: 0.0,
 	TypeID:          uuid.New(),
 	Labels:          []string{"sensor", "pressure"},
-	TagIDs:          nil,
+	PortBindings:    nil,
 	// SceneID is assigned in TestMain once testSceneID is available.
 }
 

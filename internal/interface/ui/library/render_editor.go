@@ -2,6 +2,7 @@ package library
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 )
@@ -103,6 +104,203 @@ func (l *Library) renderPreviewColumn() app.UI {
 				Style("overflow", "auto").
 				Style("border", "1px solid var(--border)").
 				Body(content),
+		)
+}
+
+// renderInputPortsColumn renders the Input Ports management panel.
+func (l *Library) renderInputPortsColumn() app.UI {
+	disabled := l.selectedID == ""
+
+	// Existing ports list
+	portRows := make([]app.UI, 0, len(l.editedInputPorts))
+	for i, p := range l.editedInputPorts {
+		idx := i
+		typeLabel := p.TypeHint
+		if typeLabel == "" || typeLabel == "unknown" {
+			typeLabel = "any"
+		}
+		desc := p.Description
+		if desc == "" {
+			desc = "—"
+		}
+		row := app.Div().
+			Style("display", "flex").
+			Style("align-items", "center").
+			Style("gap", "4px").
+			Style("padding", "3px 0").
+			Style("border-bottom", "1px solid var(--border)").
+			Body(
+				app.Div().
+					Style("flex", "1").
+					Style("font-size", "13px").
+					Body(
+						app.Span().Style("font-weight", "600").Text(p.Name),
+						app.Span().Style("color", "var(--text-muted)").Style("margin-left", "4px").Text("("+typeLabel+")"),
+						app.Div().Style("font-size", "11px").Style("color", "var(--text-muted)").Text(desc),
+					),
+				app.Button().
+					Style("font-size", "11px").
+					Style("padding", "1px 6px").
+					Style("cursor", "pointer").
+					Style("border", "1px solid var(--border-input)").
+					Style("border-radius", "3px").
+					Style("background", "var(--bg-hover)").
+					Style("color", "var(--text)").
+					Text("✕").
+					Disabled(disabled).
+					OnClick(func(ctx app.Context, e app.Event) {
+						ports := make([]inputPortDTO, 0, len(l.editedInputPorts)-1)
+						for j, pp := range l.editedInputPorts {
+							if j != idx {
+								ports = append(ports, pp)
+							}
+						}
+						l.editedInputPorts = ports
+					}),
+			)
+		portRows = append(portRows, row)
+	}
+
+	emptyNote := app.If(len(l.editedInputPorts) == 0,
+		func() app.UI {
+			return app.Div().
+				Style("font-size", "12px").
+				Style("color", "var(--text-muted)").
+				Style("padding", "4px 0").
+				Text("No ports defined.")
+		},
+	)
+
+	// Type hint options
+	typeOptions := []app.UI{
+		app.Option().Value("").Text("any"),
+		app.Option().Value("string").Text("string"),
+		app.Option().Value("boolean").Text("boolean"),
+		app.Option().Value("integer").Text("integer"),
+	}
+
+	// Add-port form
+	addForm := app.Div().
+		Style("display", "flex").
+		Style("flex-direction", "column").
+		Style("gap", "4px").
+		Style("margin-top", "8px").
+		Body(
+			app.Input().
+				Type("text").
+				Placeholder("Port name (JS identifier)").
+				Value(l.newPortName).
+				Style("font-size", "12px").
+				Style("padding", "3px 6px").
+				Style("border", "1px solid var(--border-input)").
+				Style("border-radius", "3px").
+				Style("background", "var(--input-bg)").
+				Style("color", "var(--text)").
+				Disabled(disabled).
+				OnInput(func(ctx app.Context, e app.Event) {
+					l.newPortName = ctx.JSSrc().Get("value").String()
+				}),
+			app.Input().
+				Type("text").
+				Placeholder("Description (optional)").
+				Value(l.newPortDesc).
+				Style("font-size", "12px").
+				Style("padding", "3px 6px").
+				Style("border", "1px solid var(--border-input)").
+				Style("border-radius", "3px").
+				Style("background", "var(--input-bg)").
+				Style("color", "var(--text)").
+				Disabled(disabled).
+				OnInput(func(ctx app.Context, e app.Event) {
+					l.newPortDesc = ctx.JSSrc().Get("value").String()
+				}),
+			app.Select().
+				Style("font-size", "12px").
+				Style("padding", "3px 6px").
+				Style("border", "1px solid var(--border-input)").
+				Style("border-radius", "3px").
+				Style("background", "var(--input-bg)").
+				Style("color", "var(--text)").
+				Disabled(disabled).
+				OnChange(func(ctx app.Context, e app.Event) {
+					l.newPortType = ctx.JSSrc().Get("value").String()
+				}).
+				Body(typeOptions...),
+			app.Button().
+				Style("font-size", "12px").
+				Style("padding", "3px 8px").
+				Style("cursor", "pointer").
+				Style("border", "1px solid var(--border-input)").
+				Style("border-radius", "3px").
+				Style("background", "var(--bg-hover)").
+				Style("color", "var(--text)").
+				Style("align-self", "flex-start").
+				Text("+ Add Port").
+				Disabled(disabled).
+				OnClick(func(ctx app.Context, e app.Event) {
+					name := strings.TrimSpace(l.newPortName)
+					if name == "" {
+						return
+					}
+					// Prevent duplicate names in UI
+					for _, p := range l.editedInputPorts {
+						if p.Name == name {
+							return
+						}
+					}
+					l.editedInputPorts = append(l.editedInputPorts, inputPortDTO{
+						Name:        name,
+						Description: l.newPortDesc,
+						TypeHint:    l.newPortType,
+					})
+					l.newPortName = ""
+					l.newPortDesc = ""
+					l.newPortType = ""
+				}),
+		)
+
+	applyDisabled := l.selectedID == ""
+	applyBtn := app.Button().
+		Style("margin-top", "4px").
+		Style("padding", "4px 12px").
+		Style("font-size", "13px").
+		Style("border", "1px solid var(--border-input)").
+		Style("border-radius", "4px").
+		Style("align-self", "flex-end").
+		Style("background", "var(--bg-hover)").
+		Style("color", "var(--text)").
+		Text("Apply").
+		OnClick(func(ctx app.Context, e app.Event) {
+			l.applyChanges(ctx)
+		})
+	if applyDisabled {
+		applyBtn = applyBtn.
+			Style("opacity", "0.4").
+			Style("cursor", "default").
+			Disabled(true)
+	} else {
+		applyBtn = applyBtn.Style("cursor", "pointer")
+	}
+
+	portList := make([]app.UI, 0, len(portRows)+1)
+	portList = append(portList, emptyNote)
+	portList = append(portList, portRows...)
+
+	return app.Div().
+		Style("display", "flex").
+		Style("flex-direction", "column").
+		Style("flex", "1").
+		Style("min-width", "0").
+		Style("min-height", "0").
+		Body(
+			app.H3().Style("margin", "0 0 8px 0").Text("Input Ports"),
+			app.Div().
+				Style("flex", "1").
+				Style("min-height", "0").
+				Style("overflow-y", "auto").
+				Body(portList...),
+			addForm,
+			applyBtn,
 		)
 }
 

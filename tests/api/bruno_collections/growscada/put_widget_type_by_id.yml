@@ -12,10 +12,15 @@ http:
       {
         "name": "pressure gauge updated",
         "html_template": "<div class=\"gauge updated\"><span class=\"value\"></span></div>",
-        "script": "function render(value) { return value * 2; }",
+        "script": "function update(inputs) { document.querySelector('.value').textContent = inputs.pressure + ' bar'; }",
         "script_language": "javascript",
         "default_width": 200,
-        "default_height": 200
+        "default_height": 200,
+        "input_ports": [
+          { "name": "pressure", "description": "Line pressure in bar", "type_hint": "integer" },
+          { "name": "temperature", "description": "Fluid temperature", "type_hint": "integer" }
+        ],
+        "version": 1
       }
   auth: inherit
 

@@ -98,7 +98,6 @@ func TestWidgetSave_NewWidget_InsertsSuccessfully(t *testing.T) {
 	ctx := context.Background()
 
 	w := makeWidget(t, "gauge1", repo)
-
 	_, err := repo.Save(ctx, w)
 
 	if err != nil {
@@ -135,7 +134,7 @@ func TestWidgetSave_DuplicateID_ReturnsError(t *testing.T) {
 	duplicate := widget.NewWidget(
 		w.ID(), w.Name(), w.Position(), w.Size(),
 		w.Origin(), w.Rotation(),
-		w.TypeID(), w.SceneID(), w.Labels(), w.TagIDs(),
+		w.TypeID(), w.SceneID(), w.Labels(), w.PortBindings(),
 		version.Initial[widget.Widget](),
 	)
 	_, err := repo.Save(ctx, duplicate)
@@ -166,7 +165,7 @@ func TestWidgetSave_ExistingWidget_UpdatesSuccessfully(t *testing.T) {
 	updated := widget.NewWidget(
 		found.ID(), newName, found.Position(), found.Size(),
 		found.Origin(), found.Rotation(),
-		found.TypeID(), found.SceneID(), found.Labels(), found.TagIDs(),
+		found.TypeID(), found.SceneID(), found.Labels(), found.PortBindings(),
 		found.Version(),
 	)
 	if _, err := repo.Save(ctx, updated); err != nil {
@@ -195,7 +194,7 @@ func TestWidgetSave_ExistingWidget_VersionIsIncremented(t *testing.T) {
 	updated := widget.NewWidget(
 		found.ID(), newName, found.Position(), found.Size(),
 		found.Origin(), found.Rotation(),
-		found.TypeID(), found.SceneID(), found.Labels(), found.TagIDs(),
+		found.TypeID(), found.SceneID(), found.Labels(), found.PortBindings(),
 		found.Version(),
 	)
 	saved2, err := repo.Save(ctx, updated)
@@ -222,7 +221,7 @@ func TestWidgetSave_StaleVersion_ReturnsError(t *testing.T) {
 	stale := widget.NewWidget(
 		w.ID(), w.Name(), w.Position(), w.Size(),
 		w.Origin(), w.Rotation(),
-		w.TypeID(), w.SceneID(), w.Labels(), w.TagIDs(),
+		w.TypeID(), w.SceneID(), w.Labels(), w.PortBindings(),
 		badVersion,
 	)
 	_, err := repo.Save(ctx, stale)
@@ -318,26 +317,31 @@ func TestWidgetFindAll_MultipleWidgets_ReturnsAll(t *testing.T) {
 	}
 }
 
-// --- FindAll with tag IDs ---
+// --- PortBindings round-trip ---
 
-func TestWidgetFindAll_WithTagIDs_RoundTripsCorrectly(t *testing.T) {
+func TestWidgetFindAll_WithPortBindings_RoundTripsCorrectly(t *testing.T) {
 	cleanWidgets(t)
 	repo := repositories.NewWidgetRepositoryPostgres(testDB)
 	ctx := context.Background()
 
 	tagID1 := id.NewID[tag.Tag]()
 	tagID2 := id.NewID[tag.Tag]()
+	portName1, _ := widget.NewInputPortName("temperature")
+	portName2, _ := widget.NewInputPortName("pressure")
 
 	newID := repo.NextID()
-	newName, _ := widget.NewWidgetName("with-tags")
+	newName, _ := widget.NewWidgetName("with-bindings")
 	pos := widget.NewPosition(1, 2, 3)
 	typeID := id.NewID(id.IDWithUUID[widget.WidgetType](uuid.New()))
 	sceneID := id.NewID(id.IDWithUUID[scene.Scene](testSceneID))
+	bindings := []widget.PortBinding{
+		widget.NewPortBinding(portName1, tagID1),
+		widget.NewPortBinding(portName2, tagID2),
+	}
 	w := widget.NewWidget(
 		newID, newName, pos, widget.DefaultSize(),
 		widget.DefaultOrigin(), widget.DefaultRotation(),
-		typeID, sceneID, []string{"a", "b"},
-		[]id.ID[tag.Tag]{tagID1, tagID2},
+		typeID, sceneID, []string{"a", "b"}, bindings,
 		version.Initial[widget.Widget](),
 	)
 
@@ -350,11 +354,35 @@ func TestWidgetFindAll_WithTagIDs_RoundTripsCorrectly(t *testing.T) {
 		t.Fatalf("FindByID: %v", err)
 	}
 
-	if len(found.TagIDs()) != 2 {
-		t.Errorf("TagIDs: expected 2, got %d", len(found.TagIDs()))
+	if len(found.PortBindings()) != 2 {
+		t.Fatalf("PortBindings: expected 2, got %d", len(found.PortBindings()))
+	}
+	if found.PortBindings()[0].PortName().String() != "temperature" {
+		t.Errorf("PortBindings[0].PortName: expected 'temperature', got %q", found.PortBindings()[0].PortName().String())
+	}
+	if found.PortBindings()[1].PortName().String() != "pressure" {
+		t.Errorf("PortBindings[1].PortName: expected 'pressure', got %q", found.PortBindings()[1].PortName().String())
 	}
 	if len(found.Labels()) != 2 {
 		t.Errorf("Labels: expected 2, got %d", len(found.Labels()))
+	}
+}
+
+func TestWidgetFindAll_NoPortBindings_RoundTripsCorrectly(t *testing.T) {
+	cleanWidgets(t)
+	repo := repositories.NewWidgetRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	w := makeWidget(t, "empty-bindings", repo)
+	if _, err := repo.Save(ctx, w); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	found, err := repo.FindByID(ctx, w.ID())
+	if err != nil {
+		t.Fatalf("FindByID: %v", err)
+	}
+	if len(found.PortBindings()) != 0 {
+		t.Errorf("expected 0 port bindings, got %d", len(found.PortBindings()))
 	}
 }
 

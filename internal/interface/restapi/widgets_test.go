@@ -90,8 +90,8 @@ var testWidgetInput = appdto.CreateWidgetInput{
 	OriginY:         0.5,
 	RotationDegrees: 0.0,
 	TypeID:          uuid.New(),
-	Labels:          []string{"sensor"},
-	TagIDs:          nil,
+	Labels:       []string{"sensor"},
+	PortBindings: nil,
 }
 
 // --- GET /api/v1/widgets ---
@@ -215,8 +215,8 @@ func TestPostWidgets_Valid_Returns201WithID(t *testing.T) {
 		Rotation: restdto.RotationRequest{Degrees: 0},
 		TypeID:   uuid.New(),
 		SceneID:  testSceneID,
-		Labels:   []string{"flow"},
-		TagIDs:   []uuid.UUID{},
+		Labels:       []string{"flow"},
+		PortBindings: []restdto.PortBindingDTO{},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/widgets", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -284,9 +284,9 @@ func TestPutWidgetsByID_Valid_Returns200WithIncrementedVersion(t *testing.T) {
 		Rotation: restdto.RotationRequest{Degrees: 0},
 		TypeID:   uuid.New(),
 		SceneID:  created.SceneID,
-		Labels:   []string{"updated"},
-		TagIDs:   []uuid.UUID{},
-		Version:  created.Version,
+		Labels:       []string{"updated"},
+		PortBindings: []restdto.PortBindingDTO{},
+		Version:      created.Version,
 	})
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/widgets/"+created.ID.String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")

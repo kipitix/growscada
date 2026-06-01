@@ -56,15 +56,6 @@ func (p *Project) renderPropertiesPanel() app.UI {
 func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 	wid := w.ID
 
-	tagNameOf := func(id string) string {
-		for _, t := range p.tags {
-			if t.ID == id {
-				return t.Name
-			}
-		}
-		return id
-	}
-
 	// Defaults for reset buttons
 	defaultName := "Widget"
 	defaultW, defaultH := 120, 60
@@ -406,83 +397,113 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 		),
 	)
 
-	// ── Tags ──────────────────────────────────────────────────────────────
-	tagRows := make([]app.UI, len(w.TagIDs))
-	for i, tid := range w.TagIDs {
-		tid := tid
-		tagRows[i] = app.Div().
-			Style("display", "flex").
-			Style("align-items", "center").
-			Style("justify-content", "space-between").
-			Style("padding", "3px 6px").
-			Style("background", "var(--accent-bg)").
-			Style("border", "1px solid var(--accent-border)").
-			Style("border-radius", "3px").
-			Style("margin-bottom", "4px").
-			Style("font-size", "12px").
-			Body(
-				app.Span().Text(tagNameOf(tid)),
-				app.Span().
-					Style("cursor", "pointer").
-					Style("color", "var(--error)").
-					Style("font-size", "14px").
-					Style("padding", "0 2px").
-					Text("×").
-					OnClick(func(ctx app.Context, e app.Event) {
-						if !app.Window().Call("confirm", "Are you sure you want to remove this tag?").Bool() {
-							return
-						}
-						p.removeTagFromWidget(ctx, tid)
-					}),
-			)
+	// ── Port Bindings ─────────────────────────────────────────────────────
+	// Find the InputPorts defined on this widget's WidgetType.
+	var inputPorts []inputPortDTO
+	for _, wt := range p.widgetTypes {
+		if wt.ID == w.TypeID {
+			inputPorts = wt.InputPorts
+			break
+		}
 	}
 
-	assigned := make(map[string]bool, len(w.TagIDs))
-	for _, tid := range w.TagIDs {
-		assigned[tid] = true
+	// Build a map from port name → bound tag ID for quick lookup.
+	boundTagID := make(map[string]string, len(w.PortBindings))
+	for _, b := range w.PortBindings {
+		boundTagID[b.PortName] = b.TagID
 	}
-	addOptions := make([]app.UI, 0, len(p.tags)+1)
-	addOptions = append(addOptions, app.Option().Value("").Selected(p.addingTagID == "").Text("— select tag —"))
-	for _, t := range p.tags {
-		if !assigned[t.ID] {
-			t := t
-			addOptions = append(addOptions, app.Option().Value(t.ID).Selected(t.ID == p.addingTagID).Text(t.Name))
+
+	portBindingRows := make([]app.UI, 0, len(inputPorts))
+	for _, port := range inputPorts {
+		port := port
+		currentTagID := boundTagID[port.Name]
+
+		typeLabel := port.TypeHint
+		if typeLabel == "" || typeLabel == "unknown" {
+			typeLabel = "any"
 		}
+
+		// Build tag options filtered by type hint
+		tagOptions := make([]app.UI, 0, len(p.tags)+1)
+		tagOptions = append(tagOptions, app.Option().Value("").Selected(currentTagID == "").Text("— unbound —"))
+		for _, t := range p.tags {
+			t := t
+			if port.TypeHint != "" && port.TypeHint != "unknown" && t.Type != port.TypeHint {
+				continue
+			}
+			tagOptions = append(tagOptions, app.Option().Value(t.ID).Selected(t.ID == currentTagID).Text(t.Name+" ("+t.Type+")"))
+		}
+
+		var descEl app.UI
+		if port.Description != "" {
+			descEl = app.Div().
+				Style("font-size", "10px").
+				Style("color", "var(--text-muted)").
+				Text(port.Description)
+		} else {
+			descEl = app.Text("")
+		}
+
+		row := app.Div().
+			Style("margin-bottom", "8px").
+			Body(
+				app.Div().
+					Style("display", "flex").
+					Style("align-items", "center").
+					Style("gap", "4px").
+					Style("margin-bottom", "2px").
+					Body(
+						app.Span().Style("font-size", "12px").Style("font-weight", "600").Text(port.Name),
+						app.Span().
+							Style("font-size", "10px").
+							Style("color", "var(--text-muted)").
+							Style("border", "1px solid var(--border)").
+							Style("border-radius", "2px").
+							Style("padding", "0 3px").
+							Text(typeLabel),
+					),
+				descEl,
+				app.Div().
+					Style("display", "flex").
+					Style("align-items", "center").
+					Style("gap", "4px").
+					Style("margin-top", "3px").
+					Body(
+						app.Select().
+							Style("flex", "1").
+							Style("font-size", "12px").
+							Style("padding", "2px 4px").
+							Style("border", "1px solid var(--border-input)").
+							Style("border-radius", "3px").
+							Body(tagOptions...).
+							OnChange(func(ctx app.Context, e app.Event) {
+								val := ctx.JSSrc().Get("value").String()
+								if val == "" {
+									p.unbindPort(ctx, port.Name)
+								} else {
+									p.bindPort(ctx, port.Name, val)
+								}
+							}),
+					),
+			)
+		portBindingRows = append(portBindingRows, row)
+	}
+
+	var portBindingsBody app.UI
+	if len(inputPorts) == 0 {
+		portBindingsBody = app.Div().
+			Style("font-size", "12px").
+			Style("color", "var(--text-muted)").
+			Text("This widget type has no input ports.")
+	} else {
+		portBindingsBody = app.Div().Body(portBindingRows...)
 	}
 
 	tagSection := app.Div().
 		Style("margin-bottom", "14px").
 		Body(
-			sectionHeader("Tags"),
-			app.Div().Body(tagRows...),
-			app.Div().
-				Style("display", "flex").
-				Style("gap", "4px").
-				Style("margin-top", "4px").
-				Body(
-					app.Select().
-						Style("flex", "1").
-						Style("min-width", "0").
-						Style("font-size", "12px").
-						Style("padding", "3px 4px").
-						Style("border", "1px solid var(--border-input)").
-						Style("border-radius", "3px").
-						Body(addOptions...).
-						OnChange(func(ctx app.Context, e app.Event) {
-							p.addingTagID = ctx.JSSrc().Get("value").String()
-						}),
-					app.Button().
-						Style("font-size", "12px").
-						Style("padding", "3px 8px").
-						Style("cursor", "pointer").
-						Style("border", "1px solid var(--border-input)").
-						Style("border-radius", "3px").
-						Style("background", "var(--bg-hover)").
-						Text("Add").
-						OnClick(func(ctx app.Context, e app.Event) {
-							p.addTagToWidget(ctx, p.addingTagID)
-						}),
-				),
+			sectionHeader("Port Bindings"),
+			portBindingsBody,
 		)
 
 	// ── Transform matrix display (read-only) ──────────────────────────────

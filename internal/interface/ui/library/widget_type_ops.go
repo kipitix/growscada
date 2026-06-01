@@ -23,6 +23,7 @@ func (l *Library) createItem(ctx app.Context) {
 		ScriptLanguage: "javascript",
 		DefaultWidth:   120,
 		DefaultHeight:  60,
+		InputPorts:     []inputPortDTO{},
 	})
 	ctx.Async(func() {
 		resp, err := http.Post(url, "application/json", bytes.NewReader(body))
@@ -98,6 +99,10 @@ func (l *Library) applyChanges(ctx app.Context) {
 		}
 	}
 	url := l.apiServerURL + "/api/v1/widget-types/" + l.selectedID
+	ports := l.editedInputPorts
+	if ports == nil {
+		ports = []inputPortDTO{}
+	}
 	body, _ := json.Marshal(updateWidgetTypeRequest{
 		Name:           l.editedName,
 		HtmlTemplate:   l.editedHTML,
@@ -105,6 +110,7 @@ func (l *Library) applyChanges(ctx app.Context) {
 		ScriptLanguage: l.editedScriptLang,
 		DefaultWidth:   currentItem.DefaultWidth,
 		DefaultHeight:  currentItem.DefaultHeight,
+		InputPorts:     ports,
 		Version:        currentItem.Version,
 	})
 	ctx.Async(func() {
@@ -156,6 +162,10 @@ func (l *Library) commitEdit(ctx app.Context) {
 	}
 
 	url := l.apiServerURL + "/api/v1/widget-types/" + id
+	foundPorts := found.InputPorts
+	if foundPorts == nil {
+		foundPorts = []inputPortDTO{}
+	}
 	body, _ := json.Marshal(updateWidgetTypeRequest{
 		Name:           name,
 		HtmlTemplate:   found.HtmlTemplate,
@@ -163,6 +173,7 @@ func (l *Library) commitEdit(ctx app.Context) {
 		ScriptLanguage: found.ScriptLanguage,
 		DefaultWidth:   found.DefaultWidth,
 		DefaultHeight:  found.DefaultHeight,
+		InputPorts:     foundPorts,
 		Version:        found.Version,
 	})
 	ctx.Async(func() {

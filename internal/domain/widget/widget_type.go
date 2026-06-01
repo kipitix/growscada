@@ -16,6 +16,7 @@ type WidgetType interface {
 	Script() Script
 	ScriptLanguage() ScriptLanguage
 	DefaultSize() Size
+	InputPorts() []InputPort
 	Version() version.Version[WidgetType]
 
 	fmt.Stringer
@@ -29,12 +30,14 @@ type widgetTypeImpl struct {
 	script         Script
 	scriptLanguage ScriptLanguage
 	defaultSize    Size
+	inputPorts     []InputPort
 	version        version.Version[WidgetType]
 }
 
 var _ WidgetType = (*widgetTypeImpl)(nil)
 
 // NewWidgetType creates a new WidgetType aggregate.
+// Returns ErrDuplicateInputPortName if any two InputPorts share the same name.
 func NewWidgetType(
 	anID id.ID[WidgetType],
 	aName WidgetTypeName,
@@ -42,8 +45,21 @@ func NewWidgetType(
 	aScript Script,
 	aScriptLanguage ScriptLanguage,
 	aDefaultSize Size,
+	someInputPorts []InputPort,
 	aVersion version.Version[WidgetType],
-) WidgetType {
+) (WidgetType, error) {
+	seen := make(map[string]struct{}, len(someInputPorts))
+	for _, p := range someInputPorts {
+		key := p.Name().String()
+		if _, exists := seen[key]; exists {
+			return nil, fmt.Errorf("%w: %q", ErrDuplicateInputPortName, key)
+		}
+		seen[key] = struct{}{}
+	}
+
+	ports := make([]InputPort, len(someInputPorts))
+	copy(ports, someInputPorts)
+
 	return &widgetTypeImpl{
 		id:             anID,
 		name:           aName,
@@ -51,8 +67,9 @@ func NewWidgetType(
 		script:         aScript,
 		scriptLanguage: aScriptLanguage,
 		defaultSize:    aDefaultSize,
+		inputPorts:     ports,
 		version:        aVersion,
-	}
+	}, nil
 }
 
 func (wt widgetTypeImpl) ID() id.ID[WidgetType]                { return wt.id }
@@ -62,6 +79,12 @@ func (wt widgetTypeImpl) Script() Script                       { return wt.scrip
 func (wt widgetTypeImpl) ScriptLanguage() ScriptLanguage       { return wt.scriptLanguage }
 func (wt widgetTypeImpl) DefaultSize() Size                    { return wt.defaultSize }
 func (wt widgetTypeImpl) Version() version.Version[WidgetType] { return wt.version }
+
+func (wt widgetTypeImpl) InputPorts() []InputPort {
+	out := make([]InputPort, len(wt.inputPorts))
+	copy(out, wt.inputPorts)
+	return out
+}
 
 // String implements [fmt.Stringer].
 func (wt widgetTypeImpl) String() string {
