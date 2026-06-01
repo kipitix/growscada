@@ -121,6 +121,40 @@ Tests in `internal/infrastructure/postgres/repositories/` use **testcontainers-g
 
 Manual/exploratory API tests are maintained as [Bruno](https://www.usebruno.com/) collections in `tests/api/bruno_collections/`. The `localhost` environment points to `http://localhost:9090`.
 
-## Tools
+## MCP Servers
 
-When task finished send notification via e-mail.
+Three MCP servers are available and should be used during development:
+
+### gopls
+Go language server. Use it for accurate code intelligence instead of plain-text grep:
+- `go_diagnostics` — compiler and vet errors for a file
+- `go_file_context` — symbols, imports, and structure of a file
+- `go_package_api` — exported API of any package
+- `go_search` — workspace-wide symbol search
+- `go_symbol_references` — find all usages of a symbol
+- `go_rename_symbol` — safe rename across the workspace
+- `go_vulncheck` — check dependencies for known vulnerabilities
+
+### chrome-devtools
+Browser automation. Use for verifying UI changes in the running PWA (port 8080):
+- `navigate_page`, `take_screenshot` — open pages and capture state
+- `click`, `fill`, `press_key`, `type_text` — interact with the UI
+- `evaluate_script` — run JavaScript in the page context
+- `list_console_messages`, `list_network_requests` — inspect runtime behavior
+- `lighthouse_audit` — performance and accessibility audit
+
+### mail-mcp
+E-mail send/receive via IMAP/SMTP. Use to send task-completion notifications (see Development Rule 4):
+- Call `list_all_accounts` first to see configured accounts and their send method.
+- Send with `smtp_send_message` (or `graph_send_message` / `ews_send_message` depending on account config).
+- Always show a full preview to the user and wait for confirmation before sending.
+
+## Development Rules
+
+1. **Work in a separate branch.** Never make changes directly on the `path` branch. If the current branch is `path`, stop and ask the user to create or switch to a feature branch before proceeding.
+
+2. **Always verify build and tests.** After any code change, run `make build` to confirm the build succeeds and `make test` to confirm all tests pass. Do not report a task as done until both commands exit cleanly.
+
+3. **Keep Bruno collections in sync.** When any REST API endpoint is added, removed, or modified (URL, method, request/response shape), update the corresponding Bruno collection in `tests/api/bruno_collections/` to reflect the change.
+
+4. **Send an e-mail notification on completion.** After finishing a task, send a brief summary e-mail to kipitix@gmail.com describing what was done (2–5 bullet points, no prose padding).
