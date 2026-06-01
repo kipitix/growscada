@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
+
+	"github.com/kipitix/growscada/internal/interface/ui/uidto"
 )
 
 // ── Editor columns ────────────────────────────────────────────────────────────
@@ -32,29 +34,6 @@ func (l *Library) renderEditorColumn(title, id, value string, onInput func(app.C
 		textarea = base.Disabled(true)
 	}
 
-	applyDisabled := l.selectedID == ""
-	applyBtn := app.Button().
-		Style("margin-top", "4px").
-		Style("padding", "4px 12px").
-		Style("font-size", "13px").
-		Style("border", "1px solid var(--border-input)").
-		Style("border-radius", "4px").
-		Style("align-self", "flex-end").
-		Style("background", "var(--bg-hover)").
-		Style("color", "var(--text)").
-		Text("Apply").
-		OnClick(func(ctx app.Context, e app.Event) {
-			l.applyChanges(ctx)
-		})
-	if applyDisabled {
-		applyBtn = applyBtn.
-			Style("opacity", "0.4").
-			Style("cursor", "default").
-			Disabled(true)
-	} else {
-		applyBtn = applyBtn.Style("cursor", "pointer")
-	}
-
 	colBody := []app.UI{
 		app.H3().Style("margin", "0 0 8px 0").Text(title),
 		app.Div().
@@ -65,7 +44,7 @@ func (l *Library) renderEditorColumn(title, id, value string, onInput func(app.C
 			Body(textarea),
 	}
 	if showApply {
-		colBody = append(colBody, applyBtn)
+		colBody = append(colBody, l.renderApplyButton())
 	}
 
 	return app.Div().
@@ -151,7 +130,7 @@ func (l *Library) renderInputPortsColumn() app.UI {
 					Text("✕").
 					Disabled(disabled).
 					OnClick(func(ctx app.Context, e app.Event) {
-						ports := make([]inputPortDTO, 0, len(l.editedInputPorts)-1)
+						ports := make([]uidto.InputPortDTO, 0, len(l.editedInputPorts)-1)
 						for j, pp := range l.editedInputPorts {
 							if j != idx {
 								ports = append(ports, pp)
@@ -250,7 +229,7 @@ func (l *Library) renderInputPortsColumn() app.UI {
 							return
 						}
 					}
-					l.editedInputPorts = append(l.editedInputPorts, inputPortDTO{
+					l.editedInputPorts = append(l.editedInputPorts, uidto.InputPortDTO{
 						Name:        name,
 						Description: l.newPortDesc,
 						TypeHint:    l.newPortType,
@@ -260,29 +239,6 @@ func (l *Library) renderInputPortsColumn() app.UI {
 					l.newPortType = ""
 				}),
 		)
-
-	applyDisabled := l.selectedID == ""
-	applyBtn := app.Button().
-		Style("margin-top", "4px").
-		Style("padding", "4px 12px").
-		Style("font-size", "13px").
-		Style("border", "1px solid var(--border-input)").
-		Style("border-radius", "4px").
-		Style("align-self", "flex-end").
-		Style("background", "var(--bg-hover)").
-		Style("color", "var(--text)").
-		Text("Apply").
-		OnClick(func(ctx app.Context, e app.Event) {
-			l.applyChanges(ctx)
-		})
-	if applyDisabled {
-		applyBtn = applyBtn.
-			Style("opacity", "0.4").
-			Style("cursor", "default").
-			Disabled(true)
-	} else {
-		applyBtn = applyBtn.Style("cursor", "pointer")
-	}
 
 	portList := make([]app.UI, 0, len(portRows)+1)
 	portList = append(portList, emptyNote)
@@ -302,7 +258,7 @@ func (l *Library) renderInputPortsColumn() app.UI {
 				Style("overflow-y", "auto").
 				Body(portList...),
 			addForm,
-			applyBtn,
+			l.renderApplyButton(),
 		)
 }
 
@@ -411,7 +367,7 @@ func (l *Library) renderInputDataColumn() app.UI {
 
 // buildSrcdoc constructs the iframe srcdoc for sandboxed widget preview.
 // It builds an `inputs` object from inputValues keyed by port name.
-func buildSrcdoc(htmlTemplate, script string, inputValues map[string]string, ports []inputPortDTO) string {
+func buildSrcdoc(htmlTemplate, script string, inputValues map[string]string, ports []uidto.InputPortDTO) string {
 	callRender := ""
 	if len(ports) > 0 {
 		parts := make([]string, 0, len(ports))
@@ -422,6 +378,26 @@ func buildSrcdoc(htmlTemplate, script string, inputValues map[string]string, por
 	}
 	return fmt.Sprintf(`<!DOCTYPE html><html><body>%s<script>%s%s</script></body></html>`,
 		htmlTemplate, script, callRender)
+}
+
+func (l *Library) renderApplyButton() app.UI {
+	btn := app.Button().
+		Style("margin-top", "4px").
+		Style("padding", "4px 12px").
+		Style("font-size", "13px").
+		Style("border", "1px solid var(--border-input)").
+		Style("border-radius", "4px").
+		Style("align-self", "flex-end").
+		Style("background", "var(--bg-hover)").
+		Style("color", "var(--text)").
+		Text("Apply").
+		OnClick(func(ctx app.Context, e app.Event) {
+			l.applyChanges(ctx)
+		})
+	if l.selectedID == "" {
+		return btn.Style("opacity", "0.4").Style("cursor", "default").Disabled(true)
+	}
+	return btn.Style("cursor", "pointer")
 }
 
 // portValueToJS converts a user-entered string to a JS literal based on type hint.

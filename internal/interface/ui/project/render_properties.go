@@ -5,6 +5,8 @@ import (
 	"strconv"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
+
+	"github.com/kipitix/growscada/internal/interface/ui/uidto"
 )
 
 // ── Right panel: Properties ────────────────────────────────────────────────────
@@ -56,9 +58,10 @@ func (p *Project) renderPropertiesPanel() app.UI {
 func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 	wid := w.ID
 
-	// Defaults for reset buttons
+	// Defaults for reset buttons; InputPorts resolved in the same pass.
 	defaultName := "Widget"
 	defaultW, defaultH := 120, 60
+	var wtInputPorts []uidto.InputPortDTO
 	for _, wt := range p.widgetTypes {
 		if wt.ID == w.TypeID {
 			defaultName = wt.Name
@@ -68,6 +71,7 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 			if wt.DefaultHeight > 0 {
 				defaultH = wt.DefaultHeight
 			}
+			wtInputPorts = wt.InputPorts
 			break
 		}
 	}
@@ -398,14 +402,7 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 	)
 
 	// ── Port Bindings ─────────────────────────────────────────────────────
-	// Find the InputPorts defined on this widget's WidgetType.
-	var inputPorts []inputPortDTO
-	for _, wt := range p.widgetTypes {
-		if wt.ID == w.TypeID {
-			inputPorts = wt.InputPorts
-			break
-		}
-	}
+	inputPorts := wtInputPorts
 
 	// Build a map from port name → bound tag ID for quick lookup.
 	boundTagID := make(map[string]string, len(w.PortBindings))

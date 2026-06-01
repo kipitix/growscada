@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
+
+	"github.com/kipitix/growscada/internal/interface/ui/uidto"
 )
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -21,7 +23,7 @@ type Library struct {
 	editedScript      string
 	editedInputValues map[string]string
 	editedScriptLang  string
-	editedInputPorts  []inputPortDTO
+	editedInputPorts  []uidto.InputPortDTO
 	editingID         string
 	editingName       string
 	// add-port form state
@@ -98,7 +100,7 @@ func (l *Library) selectItem(id string) {
 			l.editedScript = it.Script
 			l.editedScriptLang = it.ScriptLanguage
 			l.editedInputValues = make(map[string]string)
-			ports := make([]inputPortDTO, len(it.InputPorts))
+			ports := make([]uidto.InputPortDTO, len(it.InputPorts))
 			copy(ports, it.InputPorts)
 			l.editedInputPorts = ports
 			l.newPortName = ""

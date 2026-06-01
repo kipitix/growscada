@@ -160,9 +160,6 @@ func NewWidgetResponse(w appdto.Widget) WidgetResponse {
 		labels = []string{}
 	}
 	portBindings := appPortBindingDTOsToRest(w.PortBindings)
-	if portBindings == nil {
-		portBindings = []PortBindingDTO{}
-	}
 	return WidgetResponse{
 		ID:   w.ID,
 		Name: w.Name,

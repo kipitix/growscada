@@ -1,12 +1,8 @@
 package project
 
-// ── DTOs ─────────────────────────────────────────────────────────────────────
+import "github.com/kipitix/growscada/internal/interface/ui/uidto"
 
-type inputPortDTO struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	TypeHint    string `json:"type_hint"`
-}
+// ── DTOs ─────────────────────────────────────────────────────────────────────
 
 type portBindingDTO struct {
 	PortName string `json:"port_name"`
@@ -18,7 +14,7 @@ type widgetTypeItem struct {
 	Name          string         `json:"name"`
 	DefaultWidth  int            `json:"default_width"`
 	DefaultHeight int            `json:"default_height"`
-	InputPorts    []inputPortDTO `json:"input_ports"`
+	InputPorts    []uidto.InputPortDTO `json:"input_ports"`
 }
 
 type getWidgetTypesResponse struct {

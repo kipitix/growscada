@@ -7,6 +7,8 @@ import (
 	"net/http"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
+
+	"github.com/kipitix/growscada/internal/interface/ui/uidto"
 )
 
 const defaultHTML = `<div class="widget"></div>`
@@ -24,7 +26,7 @@ func (l *Library) createItem(ctx app.Context) {
 		ScriptLanguage: "javascript",
 		DefaultWidth:   120,
 		DefaultHeight:  60,
-		InputPorts:     []inputPortDTO{},
+		InputPorts:     []uidto.InputPortDTO{},
 	})
 	ctx.Async(func() {
 		resp, err := http.Post(url, "application/json", bytes.NewReader(body))
@@ -104,7 +106,7 @@ func (l *Library) applyChanges(ctx app.Context) {
 	url := l.apiServerURL + "/api/v1/widget-types/" + l.selectedID
 	ports := l.editedInputPorts
 	if ports == nil {
-		ports = []inputPortDTO{}
+		ports = []uidto.InputPortDTO{}
 	}
 	body, _ := json.Marshal(updateWidgetTypeRequest{
 		Name:           l.editedName,
@@ -180,7 +182,7 @@ func (l *Library) commitEdit(ctx app.Context) {
 	url := l.apiServerURL + "/api/v1/widget-types/" + id
 	foundPorts := found.InputPorts
 	if foundPorts == nil {
-		foundPorts = []inputPortDTO{}
+		foundPorts = []uidto.InputPortDTO{}
 	}
 	body, _ := json.Marshal(updateWidgetTypeRequest{
 		Name:           name,
