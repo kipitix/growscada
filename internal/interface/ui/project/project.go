@@ -43,8 +43,15 @@ type Project struct {
 	editingSceneID   string
 	editingSceneName string
 
-	draggedTypeID  string
+	// ── Scene properties panel editing state ───────────────────────────────
+	editingScenePropsName   string
+	editingScenePropsWidth  string
+	editingScenePropsHeight string
+	editingScenePropsBG     string
+
+	draggedTypeID string
 	dragJustEnded bool // suppresses the canvas OnClick that fires right after mouseup
+	dragDidMove   bool // true if mouse moved during the drag; only then suppress the click
 
 	// ── Drag: move widget body ──────────────────────────────────────────────
 	draggingWidgetID string
@@ -378,6 +385,11 @@ func (p *Project) renderScenesContent() app.UI {
 					}
 					p.propertiesWidth = newW
 				}
+			}
+
+			// Mark that a real drag occurred (not just a mousedown+mouseup click).
+			if p.draggingWidgetID != "" || p.draggingOriginID != "" || p.rotatingWidgetID != "" || p.resizingWidgetID != "" {
+				p.dragDidMove = true
 			}
 
 			// Move widget body

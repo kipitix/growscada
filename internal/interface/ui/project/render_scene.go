@@ -84,6 +84,7 @@ func (p *Project) renderSceneTabs() app.UI {
 							p.selectedSceneID = sc.ID
 							ctx.LocalStorage().Set("project:sceneID", sc.ID)
 							p.clearWidgetSelection(ctx)
+							p.syncSceneEditingFields()
 							p.loadWidgets(ctx)
 						}).
 						OnDblClick(func(ctx app.Context, e app.Event) {
@@ -215,6 +216,11 @@ func (p *Project) renderSceneCanvas() app.UI {
 			x := e.Get("clientX").Float() - rect.Get("left").Float()
 			y := e.Get("clientY").Float() - rect.Get("top").Float()
 			p.createWidget(ctx, typeID, x, y)
+		}).
+		OnMouseDown(func(ctx app.Context, e app.Event) {
+			// Any intentional mousedown on the canvas clears the post-drag
+			// suppression flag so the subsequent click correctly deselects.
+			p.dragJustEnded = false
 		}).
 		OnClick(func(ctx app.Context, e app.Event) {
 			if p.dragJustEnded {

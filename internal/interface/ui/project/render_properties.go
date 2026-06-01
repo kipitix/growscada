@@ -14,11 +14,15 @@ import (
 func (p *Project) renderPropertiesPanel() app.UI {
 	var content app.UI
 	if p.selectedWidgetID == "" {
-		content = app.Div().
-			Style("font-size", "13px").
-			Style("color", "var(--text-muted)").
-			Style("margin-top", "12px").
-			Text("Select a widget to view its properties.")
+		if p.selectedSceneID == "" {
+			content = app.Div().
+				Style("font-size", "13px").
+				Style("color", "var(--text-muted)").
+				Style("margin-top", "12px").
+				Text("No scene selected.")
+		} else {
+			content = p.renderSceneProperties()
+		}
 	} else {
 		var found widgetItem
 		for _, w := range p.widgets {
@@ -53,6 +57,147 @@ func (p *Project) renderPropertiesPanel() app.UI {
 				Text("Properties"),
 			content,
 		)
+}
+
+func (p *Project) renderSceneProperties() app.UI {
+	sectionHeader := func(label string) app.UI {
+		return app.Div().
+			Style("font-size", "10px").
+			Style("font-weight", "700").
+			Style("color", "var(--text-3)").
+			Style("letter-spacing", "0.6px").
+			Style("text-transform", "uppercase").
+			Style("margin-bottom", "6px").
+			Style("margin-top", "2px").
+			Text(label)
+	}
+
+	inputStyle := func(el app.HTMLInput) app.HTMLInput {
+		return el.
+			Style("font-size", "12px").
+			Style("padding", "3px 5px").
+			Style("border", "1px solid var(--border-input)").
+			Style("border-radius", "3px").
+			Style("box-sizing", "border-box")
+	}
+
+	smallLabel := func(txt string) app.UI {
+		return app.Span().
+			Style("font-size", "11px").
+			Style("color", "var(--text-3)").
+			Style("min-width", "12px").
+			Style("text-align", "center").
+			Text(txt)
+	}
+
+	row2 := func(items ...app.UI) app.UI {
+		return app.Div().
+			Style("display", "flex").
+			Style("align-items", "center").
+			Style("gap", "4px").
+			Style("margin-bottom", "8px").
+			Body(items...)
+	}
+
+	section := func(items ...app.UI) app.UI {
+		return app.Div().
+			Style("margin-bottom", "14px").
+			Style("padding-bottom", "12px").
+			Style("border-bottom", "1px solid var(--border-subtle)").
+			Body(items...)
+	}
+
+	// ── Name ─────────────────────────────────────────────────────────────
+	nameSection := section(
+		sectionHeader("Name"),
+		row2(
+			inputStyle(
+				app.Input().
+					Type("text").
+					Value(p.editingScenePropsName).
+					Style("flex", "1").
+					Style("min-width", "0").
+					OnInput(func(ctx app.Context, e app.Event) {
+						p.editingScenePropsName = ctx.JSSrc().Get("value").String()
+					}).
+					OnBlur(func(ctx app.Context, e app.Event) {
+						p.saveSceneProperties(ctx)
+					}).
+					OnKeyDown(func(ctx app.Context, e app.Event) {
+						if e.Get("key").String() == "Enter" {
+							p.saveSceneProperties(ctx)
+						}
+					}),
+			),
+		),
+	)
+
+	// ── Size ─────────────────────────────────────────────────────────────
+	sizeSection := section(
+		sectionHeader("Size (px)"),
+		row2(
+			smallLabel("W"),
+			inputStyle(
+				app.Input().Type("number").Value(p.editingScenePropsWidth).
+					Style("width", "72px").Style("text-align", "right").
+					OnInput(func(ctx app.Context, e app.Event) {
+						p.editingScenePropsWidth = ctx.JSSrc().Get("value").String()
+					}).
+					OnBlur(func(ctx app.Context, e app.Event) {
+						p.saveSceneProperties(ctx)
+					}).
+					OnKeyDown(func(ctx app.Context, e app.Event) {
+						if e.Get("key").String() == "Enter" {
+							p.saveSceneProperties(ctx)
+						}
+					}),
+			),
+			smallLabel("H"),
+			inputStyle(
+				app.Input().Type("number").Value(p.editingScenePropsHeight).
+					Style("width", "72px").Style("text-align", "right").
+					OnInput(func(ctx app.Context, e app.Event) {
+						p.editingScenePropsHeight = ctx.JSSrc().Get("value").String()
+					}).
+					OnBlur(func(ctx app.Context, e app.Event) {
+						p.saveSceneProperties(ctx)
+					}).
+					OnKeyDown(func(ctx app.Context, e app.Event) {
+						if e.Get("key").String() == "Enter" {
+							p.saveSceneProperties(ctx)
+						}
+					}),
+			),
+		),
+	)
+
+	// ── Background HTML ───────────────────────────────────────────────────
+	bgSection := app.Div().
+		Style("margin-bottom", "14px").
+		Body(
+			sectionHeader("Background HTML"),
+			app.Textarea().
+				Style("width", "100%").
+				Style("font-size", "11px").
+				Style("font-family", "monospace").
+				Style("padding", "4px 5px").
+				Style("border", "1px solid var(--border-input)").
+				Style("border-radius", "3px").
+				Style("box-sizing", "border-box").
+				Style("resize", "vertical").
+				Style("min-height", "80px").
+				Style("background", "var(--bg)").
+				Style("color", "var(--text)").
+				Text(p.editingScenePropsBG).
+				OnInput(func(ctx app.Context, e app.Event) {
+					p.editingScenePropsBG = ctx.JSSrc().Get("value").String()
+				}).
+				OnBlur(func(ctx app.Context, e app.Event) {
+					p.saveSceneProperties(ctx)
+				}),
+		)
+
+	return app.Div().Body(nameSection, sizeSection, bgSection)
 }
 
 func (p *Project) renderWidgetProperties(w widgetItem) app.UI {

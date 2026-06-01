@@ -305,7 +305,8 @@ func (p *Project) finalizeAllDrags(ctx app.Context) {
 		}
 	}
 	if anyDrag {
-		p.dragJustEnded = true
+		p.dragJustEnded = p.dragDidMove
+		p.dragDidMove = false
 	}
 }
 

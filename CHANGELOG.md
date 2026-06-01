@@ -1,5 +1,22 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.17] - 2026-06-01
+
+### Added
+
+- `internal/interface/ui/project` — панель **Properties** при отсутствии выбранного виджета теперь отображает свойства текущей сцены вместо текста «Select a widget» (`render_properties.go`, `scene_ops.go`, `project.go`):
+  - Поля Name (text input), Size W × H (number spinbutton), Background HTML (textarea) — редактируемые, сохраняются через PUT `/api/v1/scenes/:id` при потере фокуса или нажатии Enter
+  - Добавлены поля `editingScenePropsName`, `editingScenePropsWidth`, `editingScenePropsHeight`, `editingScenePropsBG` в структуру `Project`
+  - `syncSceneEditingFields()` — синхронизирует поля панели с выбранной сценой; вызывается при загрузке, переключении вкладки сцены и переименовании через inline-редактор
+  - `saveSceneProperties(ctx)` — отправляет PUT с оптимистичным обновлением in-memory + обновлением `Version` из ответа
+
+### Fixed
+
+- `internal/interface/ui/project` — исправлен сброс выбора виджета: один клик по холсту теперь снимает фокус (`project.go`, `render_scene.go`, `widget_ops.go`):
+  - **Причина**: `OnMouseDown` на виджете сразу выставлял `draggingWidgetID`, из-за чего `finalizeAllDrags` при `mouseup` ставил `dragJustEnded = true` даже без реального перемещения — первый клик по сцене проглатывался
+  - Добавлен флаг `dragDidMove bool`: выставляется в `OnMouseMove` только при наличии активного drag-операции; `finalizeAllDrags` теперь устанавливает `dragJustEnded = dragDidMove` (и сбрасывает `dragDidMove = false`) — подавление срабатывает только после реального перетаскивания, а не при обычном клике
+  - Добавлен `OnMouseDown` на холст, сбрасывающий `dragJustEnded`: устраняет случай, когда после drag браузер не генерирует `click` (mousedown и mouseup на разных элементах) — флаг оставался `true` и следующий намеренный клик по сцене тоже проглатывался
+
 ## [0.0.16] - 2026-06-01
 
 ### Fixed

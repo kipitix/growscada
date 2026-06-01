@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 )
@@ -44,6 +45,7 @@ func (p *Project) loadScenes(ctx app.Context) {
 			if p.selectedSceneID == "" && len(result.Scenes) > 0 {
 				p.selectedSceneID = result.Scenes[0].ID
 			}
+			p.syncSceneEditingFields()
 			if p.selectedSceneID != prevSceneID {
 				ctx.LocalStorage().Set("project:sceneID", p.selectedSceneID)
 				if p.selectedSceneID != "" {
@@ -98,6 +100,95 @@ func (p *Project) deleteScene(ctx app.Context, sceneID string) {
 	})
 }
 
+// syncSceneEditingFields populates the Properties-panel editing state from
+// the currently selected scene. Call whenever the scene selection changes.
+func (p *Project) syncSceneEditingFields() {
+	for _, sc := range p.scenes {
+		if sc.ID == p.selectedSceneID {
+			p.editingScenePropsName = sc.Name
+			p.editingScenePropsWidth = strconv.Itoa(sc.Width)
+			p.editingScenePropsHeight = strconv.Itoa(sc.Height)
+			p.editingScenePropsBG = sc.BackgroundHTML
+			return
+		}
+	}
+	p.editingScenePropsName = ""
+	p.editingScenePropsWidth = ""
+	p.editingScenePropsHeight = ""
+	p.editingScenePropsBG = ""
+}
+
+// saveSceneProperties sends a PUT with the current Properties-panel state.
+func (p *Project) saveSceneProperties(ctx app.Context) {
+	if p.selectedSceneID == "" {
+		return
+	}
+	id := p.selectedSceneID
+	name := p.editingScenePropsName
+	w, _ := strconv.Atoi(p.editingScenePropsWidth)
+	h, _ := strconv.Atoi(p.editingScenePropsHeight)
+	if w <= 0 {
+		w = 1920
+	}
+	if h <= 0 {
+		h = 1080
+	}
+	bg := p.editingScenePropsBG
+
+	var sc sceneItem
+	for _, s := range p.scenes {
+		if s.ID == id {
+			sc = s
+			break
+		}
+	}
+	if sc.ID == "" {
+		return
+	}
+
+	// Optimistic in-memory update.
+	for i := range p.scenes {
+		if p.scenes[i].ID == id {
+			p.scenes[i].Name = name
+			p.scenes[i].Width = w
+			p.scenes[i].Height = h
+			p.scenes[i].BackgroundHTML = bg
+			break
+		}
+	}
+
+	url := p.apiServerURL + "/api/v1/scenes/" + id
+	body, _ := json.Marshal(updateSceneRequest{
+		Name:           name,
+		Width:          w,
+		Height:         h,
+		BackgroundHTML: bg,
+		Version:        sc.Version,
+	})
+	ctx.Async(func() {
+		req, _ := http.NewRequest(http.MethodPut, url, bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			ctx.Dispatch(func(ctx app.Context) { p.fetchErr = err.Error() })
+			return
+		}
+		defer resp.Body.Close()
+		var result updateSceneResponse
+		if err := json.NewDecoder(resp.Body).Decode(&result); err == nil && result.Version > 0 {
+			ctx.Dispatch(func(ctx app.Context) {
+				for i := range p.scenes {
+					if p.scenes[i].ID == id {
+						p.scenes[i].Version = result.Version
+						break
+					}
+				}
+				p.fetchErr = ""
+			})
+		}
+	})
+}
+
 func (p *Project) startEditingScene(id, name string) {
 	p.editingSceneID = id
 	p.editingSceneName = name
@@ -127,6 +218,9 @@ func (p *Project) commitSceneEdit(ctx app.Context) {
 			p.scenes[i].Name = name
 			break
 		}
+	}
+	if p.selectedSceneID == id {
+		p.editingScenePropsName = name
 	}
 	url := p.apiServerURL + "/api/v1/scenes/" + id
 	body, _ := json.Marshal(updateSceneRequest{
