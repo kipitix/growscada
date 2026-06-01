@@ -290,6 +290,7 @@ func (p *Project) putWidget(ctx app.Context, w widgetItem) {
 
 // finalizeAllDrags saves any active drag operation to the server.
 func (p *Project) finalizeAllDrags(ctx app.Context) {
+	anyDrag := false
 	for _, idPtr := range []*string{
 		&p.draggingWidgetID,
 		&p.draggingOriginID,
@@ -297,10 +298,14 @@ func (p *Project) finalizeAllDrags(ctx app.Context) {
 		&p.resizingWidgetID,
 	} {
 		if *idPtr != "" {
+			anyDrag = true
 			id := *idPtr
 			*idPtr = ""
 			p.saveDraggedWidget(ctx, id)
 		}
+	}
+	if anyDrag {
+		p.dragJustEnded = true
 	}
 }
 

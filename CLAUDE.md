@@ -144,7 +144,7 @@ Browser automation. Use for verifying UI changes in the running PWA (port 8080):
 - `lighthouse_audit` — performance and accessibility audit
 
 ### mail-mcp
-E-mail send/receive via IMAP/SMTP. Use to send task-completion notifications (see Development Rule 4):
+E-mail send/receive via IMAP/SMTP. Use to send task-completion notifications (see Development Rule 5):
 - Call `list_all_accounts` first to see configured accounts and their send method.
 - Send with `smtp_send_message` (or `graph_send_message` / `ews_send_message` depending on account config).
 - Always show a full preview to the user and wait for confirmation before sending.
@@ -157,4 +157,6 @@ E-mail send/receive via IMAP/SMTP. Use to send task-completion notifications (se
 
 3. **Keep Bruno collections in sync.** When any REST API endpoint is added, removed, or modified (URL, method, request/response shape), update the corresponding Bruno collection in `tests/api/bruno_collections/` to reflect the change.
 
-4. **Send an e-mail notification on completion.** After finishing a task, send a brief summary e-mail to kipitix@gmail.com describing what was done (2–5 bullet points, no prose padding).
+4. **Verify UI changes in the browser.** After any UI change, launch the app and open it in the browser to confirm the result looks and behaves correctly. Use the `chrome-devtools` MCP server (`take_screenshot`, `click`, etc.) to interact with and inspect the running PWA on port 8080.
+
+5. **Send an e-mail notification on completion.** After finishing a task, send a brief summary e-mail to kipitix@gmail.com describing what was done (2–5 bullet points, no prose padding).

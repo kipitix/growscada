@@ -43,7 +43,8 @@ type Project struct {
 	editingSceneID   string
 	editingSceneName string
 
-	draggedTypeID string
+	draggedTypeID  string
+	dragJustEnded bool // suppresses the canvas OnClick that fires right after mouseup
 
 	// ── Drag: move widget body ──────────────────────────────────────────────
 	draggingWidgetID string
@@ -59,10 +60,12 @@ type Project struct {
 	draggingOriginID string
 	originCliX       float64 // client X when drag started
 	originCliY       float64 // client Y when drag started
-	originStartOX float64 // origin.X before drag
-	originStartOY float64 // origin.Y before drag
-	originDragW   int     // widget width during drag
-	originDragH      int     // widget height during drag
+	originStartOX   float64 // origin.X before drag
+	originStartOY   float64 // origin.Y before drag
+	originStartPosX float64 // position.X before drag
+	originStartPosY float64 // position.Y before drag
+	originDragW     int     // widget width during drag
+	originDragH     int     // widget height during drag
 	originDragRotDeg float64 // widget rotation during drag
 
 	// ── Drag: rotation handle ───────────────────────────────────────────────
@@ -394,25 +397,36 @@ func (p *Project) renderScenesContent() app.UI {
 				}
 			}
 
-			// Move origin anchor within widget (widget position stays fixed)
+			// Move origin anchor; compensate position to keep widget visually stationary.
+			// Screen delta (dx,dy) is rotated into widget-local space to get the local
+			// origin delta; position is then compensated so the matrix e/f stays fixed.
 			if p.draggingOriginID != "" {
 				dx := clientX - p.originCliX
 				dy := clientY - p.originCliY
 				rad := p.originDragRotDeg * math.Pi / 180
 				cosA := math.Cos(rad)
 				sinA := math.Sin(rad)
-				// Transform screen delta → local widget space (inverse rotation)
-				dxLocal := dx*cosA + dy*sinA
-				dyLocal := -dx*sinA + dy*cosA
-				newOX := math.Max(0, math.Min(1, p.originStartOX+dxLocal/float64(p.originDragW)))
-				newOY := math.Max(0, math.Min(1, p.originStartOY+dyLocal/float64(p.originDragH)))
+				// Rotate screen delta into widget-local coordinate axes.
+				dOxPx := cosA*dx + sinA*dy
+				dOyPx := -sinA*dx + cosA*dy
+				newOX := math.Max(0, math.Min(1, p.originStartOX+dOxPx/float64(p.originDragW)))
+				newOY := math.Max(0, math.Min(1, p.originStartOY+dOyPx/float64(p.originDragH)))
+				// Use clamped pixel deltas for position compensation.
+				dOx := (newOX - p.originStartOX) * float64(p.originDragW)
+				dOy := (newOY - p.originStartOY) * float64(p.originDragH)
+				newPosX := p.originStartPosX - dOx*(1-cosA) - dOy*sinA
+				newPosY := p.originStartPosY - dOy*(1-cosA) + dOx*sinA
 				for i := range p.widgets {
 					if p.widgets[i].ID == p.draggingOriginID {
 						p.widgets[i].Origin.X = newOX
 						p.widgets[i].Origin.Y = newOY
+						p.widgets[i].Position.X = newPosX
+						p.widgets[i].Position.Y = newPosY
 						if p.selectedWidgetID == p.draggingOriginID {
 							p.editingOriginX = fmt.Sprintf("%.3f", newOX)
 							p.editingOriginY = fmt.Sprintf("%.3f", newOY)
+							p.editingPosX = fmt.Sprintf("%.1f", newPosX)
+							p.editingPosY = fmt.Sprintf("%.1f", newPosY)
 						}
 						break
 					}

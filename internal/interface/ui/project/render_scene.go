@@ -217,6 +217,10 @@ func (p *Project) renderSceneCanvas() app.UI {
 			p.createWidget(ctx, typeID, x, y)
 		}).
 		OnClick(func(ctx app.Context, e app.Event) {
+			if p.dragJustEnded {
+				p.dragJustEnded = false
+				return
+			}
 			p.clearWidgetSelection(ctx)
 		}).
 		Body(widgetEls...)
@@ -376,6 +380,8 @@ func (p *Project) renderWidget(w widgetItem) app.UI {
 				if cur, ok := p.widgetByID(wid); ok {
 					p.originStartOX = cur.Origin.X
 					p.originStartOY = cur.Origin.Y
+					p.originStartPosX = cur.Position.X
+					p.originStartPosY = cur.Position.Y
 					p.originDragW = cur.Size.Width
 					p.originDragH = cur.Size.Height
 					p.originDragRotDeg = cur.Rotation.Degrees
@@ -419,5 +425,8 @@ func (p *Project) renderWidget(w widgetItem) app.UI {
 		Style("transform-origin", "0 0").
 		Style("transform", widgetMatrixCSS(w)).
 		Style("overflow", "visible").
+		OnClick(func(ctx app.Context, e app.Event) {
+			e.Call("stopPropagation")
+		}, app.EventScope(wid)).
 		Body(bodyItems...)
 }
