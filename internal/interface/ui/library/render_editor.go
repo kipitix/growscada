@@ -3,6 +3,7 @@ package library
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
@@ -424,7 +425,7 @@ func buildSrcdoc(htmlTemplate, script string, inputValues map[string]string, por
 }
 
 // portValueToJS converts a user-entered string to a JS literal based on type hint.
-// string type hint → JSON-encoded string; others → raw JS expression.
+// Values are validated/encoded to prevent JS injection in the preview srcdoc.
 func portValueToJS(val, typeHint string) string {
 	if val == "" {
 		switch typeHint {
@@ -438,9 +439,19 @@ func portValueToJS(val, typeHint string) string {
 			return "undefined"
 		}
 	}
-	if typeHint == "string" {
+	switch typeHint {
+	case "integer":
+		if _, err := strconv.ParseInt(val, 10, 64); err == nil {
+			return val
+		}
+		return "0"
+	case "boolean":
+		if val == "true" || val == "false" {
+			return val
+		}
+		return "false"
+	default: // "string", "unknown", "" and any future type hints
 		b, _ := json.Marshal(val)
 		return string(b)
 	}
-	return val
 }
