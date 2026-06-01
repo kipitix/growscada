@@ -45,13 +45,15 @@ func mustInsertScene(t *testing.T, sceneID uuid.UUID) {
 
 func newWidgetService() application.WidgetService {
 	repo := repositories.NewWidgetRepositoryPostgres(testDB)
-	return application.NewWidgetService(repo, event.NewEventBus())
+	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
+	return application.NewWidgetService(repo, wtRepo, event.NewEventBus())
 }
 
 func newWidgetServiceWithBus() (application.WidgetService, event.EventBus) {
 	repo := repositories.NewWidgetRepositoryPostgres(testDB)
+	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	bus := event.NewEventBus()
-	return application.NewWidgetService(repo, bus), bus
+	return application.NewWidgetService(repo, wtRepo, bus), bus
 }
 
 // testCreateWidgetInput is a template used by widget tests.

@@ -170,6 +170,30 @@ func (r widgetRepositoryPostgresImpl) FindBySceneID(ctx context.Context, sceneID
 	return result, nil
 }
 
+func (r widgetRepositoryPostgresImpl) FindByTypeID(ctx context.Context, typeID id.ID[widget.WidgetType]) ([]widget.Widget, error) {
+	rows, err := r.db.QueryContext(ctx,
+		"SELECT "+selectWidgetColumns+" FROM widgets WHERE type_id = $1",
+		typeID.UUID(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error querying widgets by type id: %w", err)
+	}
+	defer rows.Close()
+
+	var result []widget.Widget
+	for rows.Next() {
+		w, err := r.scanWidget(rows.Scan)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning widget: %w", err)
+		}
+		result = append(result, w)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over widgets: %w", err)
+	}
+	return result, nil
+}
+
 // rawWidgetRow holds the raw column values read from a widgets row before domain validation.
 // The field order matches selectWidgetColumns.
 type rawWidgetRow struct {
@@ -275,7 +299,7 @@ func unmarshalPortBindings(data []byte) ([]widget.PortBinding, error) {
 	}
 	bindings := make([]widget.PortBinding, 0, len(rows))
 	for _, row := range rows {
-		portName, err := widget.NewInputPortName(row.PortName)
+		portName, err := widget.NewInputPortNameFromStorage(row.PortName)
 		if err != nil {
 			return nil, fmt.Errorf("invalid stored port name %q: %w", row.PortName, err)
 		}

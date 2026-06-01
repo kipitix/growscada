@@ -3,14 +3,12 @@ package restdto
 import (
 	"github.com/google/uuid"
 	"github.com/kipitix/growscada/internal/application/appdto"
+	"github.com/kipitix/growscada/internal/interface/ui/uidto"
 )
 
 // InputPortDTO is the HTTP DTO for a WidgetType input port.
-type InputPortDTO struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	TypeHint    string `json:"type_hint"`
-}
+// Type alias for uidto.InputPortDTO — both packages share the same wire format.
+type InputPortDTO = uidto.InputPortDTO
 
 // WidgetTypeResponse is the HTTP DTO for representing a widget type in API responses.
 type WidgetTypeResponse struct {

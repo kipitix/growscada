@@ -415,10 +415,7 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 		port := port
 		currentTagID := boundTagID[port.Name]
 
-		typeLabel := port.TypeHint
-		if typeLabel == "" || typeLabel == "unknown" {
-			typeLabel = "any"
-		}
+		typeLabel := uidto.TypeHintLabel(port.TypeHint)
 
 		// Build tag options filtered by type hint
 		tagOptions := make([]app.UI, 0, len(p.tags)+1)

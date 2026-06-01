@@ -28,7 +28,9 @@ var (
 	// TagTypeBytes
 )
 
-// NewTagType parses a string into the enum
+// NewTagType parses a string into the enum.
+// Empty string and "unknown" both map to TagTypeUnknown without error,
+// so callers do not need special-case guards for those sentinel values.
 func NewTagType(s string) (TagType, error) {
 	switch s {
 	case "string":
@@ -37,6 +39,8 @@ func NewTagType(s string) (TagType, error) {
 		return TagTypeBoolean, nil
 	case "integer":
 		return TagTypeInteger, nil
+	case "unknown", "":
+		return TagTypeUnknown, nil
 	default:
 		return TagTypeUnknown, fmt.Errorf("unknown tag type: %s", s)
 	}

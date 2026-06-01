@@ -96,10 +96,7 @@ func (l *Library) renderInputPortsColumn() app.UI {
 	portRows := make([]app.UI, 0, len(l.editedInputPorts))
 	for i, p := range l.editedInputPorts {
 		idx := i
-		typeLabel := p.TypeHint
-		if typeLabel == "" || typeLabel == "unknown" {
-			typeLabel = "any"
-		}
+		typeLabel := uidto.TypeHintLabel(p.TypeHint)
 		desc := p.Description
 		if desc == "" {
 			desc = "—"
@@ -264,10 +261,6 @@ func (l *Library) renderInputPortsColumn() app.UI {
 
 // renderInputDataColumn renders a per-port value table for the preview sandbox.
 func (l *Library) renderInputDataColumn() app.UI {
-	if l.editedInputValues == nil {
-		l.editedInputValues = make(map[string]string)
-	}
-
 	emptyNote := app.If(len(l.editedInputPorts) == 0, func() app.UI {
 		return app.Div().
 			Style("font-size", "12px").
@@ -279,10 +272,7 @@ func (l *Library) renderInputDataColumn() app.UI {
 	rows := make([]app.UI, 0, len(l.editedInputPorts))
 	for _, p := range l.editedInputPorts {
 		portName := p.Name
-		typeLabel := p.TypeHint
-		if typeLabel == "" || typeLabel == "unknown" {
-			typeLabel = "any"
-		}
+		typeLabel := uidto.TypeHintLabel(p.TypeHint)
 		placeholder := map[string]string{
 			"integer": "0",
 			"boolean": "true",
@@ -374,7 +364,7 @@ func buildSrcdoc(htmlTemplate, script string, inputValues map[string]string, por
 		for _, p := range ports {
 			parts = append(parts, p.Name+":"+portValueToJS(inputValues[p.Name], p.TypeHint))
 		}
-		callRender = fmt.Sprintf("\nvar inputs={%s};\ntry{render(inputs);}catch(e){}", strings.Join(parts, ","))
+		callRender = fmt.Sprintf("\nvar inputs={%s};\ntry{update(inputs);}catch(e){}", strings.Join(parts, ","))
 	}
 	return fmt.Sprintf(`<!DOCTYPE html><html><body>%s<script>%s%s</script></body></html>`,
 		htmlTemplate, script, callRender)

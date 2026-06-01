@@ -211,10 +211,14 @@ type inputPortJSON struct {
 func marshalInputPorts(ports []widget.InputPort) ([]byte, error) {
 	rows := make([]inputPortJSON, len(ports))
 	for i, p := range ports {
+		typeHint := ""
+		if p.TypeHint() != tag.TagTypeUnknown {
+			typeHint = p.TypeHint().String()
+		}
 		rows[i] = inputPortJSON{
 			Name:        p.Name().String(),
 			Description: p.Description(),
-			TypeHint:    p.TypeHint().String(),
+			TypeHint:    typeHint,
 		}
 	}
 	return json.Marshal(rows)
@@ -230,16 +234,13 @@ func unmarshalInputPorts(data []byte) ([]widget.InputPort, error) {
 	}
 	ports := make([]widget.InputPort, 0, len(rows))
 	for _, row := range rows {
-		name, err := widget.NewInputPortName(row.Name)
+		name, err := widget.NewInputPortNameFromStorage(row.Name)
 		if err != nil {
 			return nil, fmt.Errorf("invalid stored input port name %q: %w", row.Name, err)
 		}
-		var typeHint tag.TagType
-		if row.TypeHint != "" && row.TypeHint != "unknown" {
-			typeHint, err = tag.NewTagType(row.TypeHint)
-			if err != nil {
-				return nil, fmt.Errorf("invalid stored type hint %q: %w", row.TypeHint, err)
-			}
+		typeHint, err := tag.NewTagType(row.TypeHint)
+		if err != nil {
+			return nil, fmt.Errorf("invalid stored type hint %q: %w", row.TypeHint, err)
 		}
 		ports = append(ports, widget.NewInputPort(name, row.Description, typeHint))
 	}

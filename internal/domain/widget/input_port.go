@@ -38,6 +38,16 @@ func NewInputPortName(s string) (InputPortName, error) {
 // String implements [fmt.Stringer].
 func (n InputPortName) String() string { return n.name }
 
+// NewInputPortNameFromStorage constructs an InputPortName from a trusted source
+// (e.g. the database). Skips JS-identifier regex validation since the value was
+// already validated when written; only guards against an empty string.
+func NewInputPortNameFromStorage(s string) (InputPortName, error) {
+	if s == "" {
+		return InputPortName{}, fmt.Errorf("stored port name must not be empty")
+	}
+	return InputPortName{name: s}, nil
+}
+
 // InputPort is a named, typed input slot defined on a WidgetType.
 // The JS template accesses it as input.<name>.
 // typeHint == tag.TagTypeUnknown means any tag type is accepted.

@@ -7,3 +7,12 @@ type InputPortDTO struct {
 	Description string `json:"description"`
 	TypeHint    string `json:"type_hint"`
 }
+
+// TypeHintLabel returns the display label for a type hint string.
+// Empty string and "unknown" both normalize to "any".
+func TypeHintLabel(typeHint string) string {
+	if typeHint == "" || typeHint == "unknown" {
+		return "any"
+	}
+	return typeHint
+}

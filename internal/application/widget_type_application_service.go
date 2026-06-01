@@ -23,16 +23,18 @@ type WidgetTypeService interface {
 }
 
 type widgetTypeServiceImpl struct {
-	repository widget.WidgetTypeRepository
-	eventBus   event.EventBus
+	repository       widget.WidgetTypeRepository
+	widgetRepository widget.WidgetRepository
+	eventBus         event.EventBus
 }
 
 var _ WidgetTypeService = (*widgetTypeServiceImpl)(nil)
 
-func NewWidgetTypeService(aRepository widget.WidgetTypeRepository, anEventBus event.EventBus) WidgetTypeService {
+func NewWidgetTypeService(aRepository widget.WidgetTypeRepository, aWidgetRepository widget.WidgetRepository, anEventBus event.EventBus) WidgetTypeService {
 	return &widgetTypeServiceImpl{
-		repository: aRepository,
-		eventBus:   anEventBus,
+		repository:       aRepository,
+		widgetRepository: aWidgetRepository,
+		eventBus:         anEventBus,
 	}
 }
 
@@ -155,6 +157,10 @@ func (s widgetTypeServiceImpl) UpdateWidgetType(ctx context.Context, input appdt
 
 	s.eventBus.Publish(event.NewWidgetTypeUpdatedEvent(widgetTypeID))
 
+	if err := s.removeOrphanedPortBindings(ctx, widgetTypeID, updated.InputPorts()); err != nil {
+		return appdto.WidgetType{}, fmt.Errorf("cannot clean up orphaned port bindings: %w", err)
+	}
+
 	return appdto.NewWidgetType(found), nil
 }
 
@@ -168,7 +174,47 @@ func (s widgetTypeServiceImpl) DeleteWidgetTypeByID(ctx context.Context, rawID u
 
 	s.eventBus.Publish(event.NewWidgetTypeDeletedEvent(widgetTypeID))
 
+	// Clear all port bindings on widgets that referenced the deleted type.
+	if err := s.removeOrphanedPortBindings(ctx, widgetTypeID, nil); err != nil {
+		return appdto.WidgetType{}, fmt.Errorf("cannot clean up orphaned port bindings after delete: %w", err)
+	}
+
 	return appdto.NewWidgetType(deleted), nil
+}
+
+// removeOrphanedPortBindings finds all widgets using the given widget type and
+// removes any PortBindings whose port name is not in allowedPorts. Passing nil
+// (or an empty slice) removes all port bindings — used on type deletion.
+func (s widgetTypeServiceImpl) removeOrphanedPortBindings(ctx context.Context, typeID id.ID[widget.WidgetType], allowedPorts []widget.InputPort) error {
+	allowed := make(map[string]struct{}, len(allowedPorts))
+	for _, p := range allowedPorts {
+		allowed[p.Name().String()] = struct{}{}
+	}
+
+	widgets, err := s.widgetRepository.FindByTypeID(ctx, typeID)
+	if err != nil {
+		return fmt.Errorf("cannot list widgets for type %s: %w", typeID, err)
+	}
+
+	for _, w := range widgets {
+		filtered := make([]widget.PortBinding, 0, len(w.PortBindings()))
+		for _, b := range w.PortBindings() {
+			if _, ok := allowed[b.PortName().String()]; ok {
+				filtered = append(filtered, b)
+			}
+		}
+		if len(filtered) == len(w.PortBindings()) {
+			continue // nothing to remove
+		}
+		updated := widget.NewWidget(
+			w.ID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(),
+			w.TypeID(), w.SceneID(), w.Labels(), filtered, w.Version(),
+		)
+		if _, err := s.widgetRepository.Save(ctx, updated); err != nil {
+			return fmt.Errorf("cannot save widget %s after port binding cleanup: %w", w.ID(), err)
+		}
+	}
+	return nil
 }
 
 // dtoInputPortsToDomain converts appdto.InputPort slice to domain InputPort slice.
@@ -179,12 +225,9 @@ func dtoInputPortsToDomain(dtos []appdto.InputPort) ([]widget.InputPort, error) 
 		if err != nil {
 			return nil, fmt.Errorf("invalid input port name %q: %w", dto.Name, err)
 		}
-		var typeHint tag.TagType
-		if dto.TypeHint != "" && dto.TypeHint != "unknown" {
-			typeHint, err = tag.NewTagType(dto.TypeHint)
-			if err != nil {
-				return nil, fmt.Errorf("invalid input port type hint %q: %w", dto.TypeHint, err)
-			}
+		typeHint, err := tag.NewTagType(dto.TypeHint)
+		if err != nil {
+			return nil, fmt.Errorf("invalid input port type hint %q: %w", dto.TypeHint, err)
 		}
 		ports = append(ports, widget.NewInputPort(name, dto.Description, typeHint))
 	}

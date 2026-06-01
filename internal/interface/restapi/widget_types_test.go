@@ -30,9 +30,9 @@ func newRouterWithWidgetTypes() *restapi.APIRouter {
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
 	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	wtSvc := application.NewWidgetTypeService(wtRepo, event.NewEventBus())
 	wRepo := repositories.NewWidgetRepositoryPostgres(testDB)
-	wSvc := application.NewWidgetService(wRepo, event.NewEventBus())
+	wtSvc := application.NewWidgetTypeService(wtRepo, wRepo, event.NewEventBus())
+	wSvc := application.NewWidgetService(wRepo, wtRepo, event.NewEventBus())
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
 	sceneSvc := application.NewSceneService(sceneRepo, event.NewEventBus())
 	return restapi.NewRouter(tagSvc, wtSvc, wSvc, sceneSvc)
@@ -41,7 +41,8 @@ func newRouterWithWidgetTypes() *restapi.APIRouter {
 func createWidgetTypeViaService(t *testing.T, input appdto.CreateWidgetTypeInput) appdto.WidgetType {
 	t.Helper()
 	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	svc := application.NewWidgetTypeService(repo, event.NewEventBus())
+	wRepo := repositories.NewWidgetRepositoryPostgres(testDB)
+	svc := application.NewWidgetTypeService(repo, wRepo, event.NewEventBus())
 	resp, err := svc.CreateWidgetType(context.Background(), input)
 	if err != nil {
 		t.Fatalf("createWidgetTypeViaService: %v", err)
@@ -292,8 +293,9 @@ func TestPutWidgetTypesByID_Conflict_Returns409(t *testing.T) {
 	svc := &stubWidgetTypeService{updateErr: widget.ErrWidgetTypeConflict}
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
 	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
+	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	wRepo := repositories.NewWidgetRepositoryPostgres(testDB)
-	wSvc := application.NewWidgetService(wRepo, event.NewEventBus())
+	wSvc := application.NewWidgetService(wRepo, wtRepo, event.NewEventBus())
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
 	sceneSvc := application.NewSceneService(sceneRepo, event.NewEventBus())
 	router := restapi.NewRouter(tagSvc, svc, wSvc, sceneSvc)

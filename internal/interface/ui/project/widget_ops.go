@@ -265,6 +265,12 @@ func (p *Project) putWidget(ctx app.Context, w widgetItem) {
 			return
 		}
 		defer resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			ctx.Dispatch(func(ctx app.Context) {
+				p.fetchErr = fmt.Sprintf("failed to save widget: server returned %d", resp.StatusCode)
+			})
+			return
+		}
 		var result updateWidgetResponse
 		if err := json.NewDecoder(resp.Body).Decode(&result); err == nil && result.Version > 0 {
 			ctx.Dispatch(func(ctx app.Context) {
