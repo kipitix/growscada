@@ -1,6 +1,7 @@
 package library
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -84,7 +85,7 @@ func (l *Library) renderPreviewColumn() app.UI {
 			Text("No HTML to preview.")
 	} else {
 		content = app.IFrame().
-			Attr("srcdoc", buildSrcdoc(l.editedHTML, l.editedScript, l.editedInputData)).
+			Attr("srcdoc", buildSrcdoc(l.editedHTML, l.editedScript, l.editedInputValues, l.editedInputPorts)).
 			Attr("sandbox", "allow-scripts").
 			Style("width", "100%").
 			Style("height", "100%").
@@ -304,13 +305,142 @@ func (l *Library) renderInputPortsColumn() app.UI {
 		)
 }
 
+// renderInputDataColumn renders a per-port value table for the preview sandbox.
+func (l *Library) renderInputDataColumn() app.UI {
+	if l.editedInputValues == nil {
+		l.editedInputValues = make(map[string]string)
+	}
+
+	emptyNote := app.If(len(l.editedInputPorts) == 0, func() app.UI {
+		return app.Div().
+			Style("font-size", "12px").
+			Style("color", "var(--text-muted)").
+			Style("padding", "4px 0").
+			Text("Define Input Ports first.")
+	})
+
+	rows := make([]app.UI, 0, len(l.editedInputPorts))
+	for _, p := range l.editedInputPorts {
+		portName := p.Name
+		typeLabel := p.TypeHint
+		if typeLabel == "" || typeLabel == "unknown" {
+			typeLabel = "any"
+		}
+		placeholder := map[string]string{
+			"integer": "0",
+			"boolean": "true",
+			"string":  "hello",
+		}[p.TypeHint]
+		if placeholder == "" {
+			placeholder = "value"
+		}
+		val := l.editedInputValues[portName]
+
+		row := app.Tr().Body(
+			app.Td().
+				Style("padding", "4px 8px 4px 0").
+				Style("font-size", "13px").
+				Style("font-weight", "600").
+				Style("white-space", "nowrap").
+				Style("vertical-align", "middle").
+				Text(portName),
+			app.Td().
+				Style("padding", "4px 6px").
+				Style("vertical-align", "middle").
+				Body(
+					app.Span().
+						Style("font-size", "11px").
+						Style("padding", "2px 6px").
+						Style("border-radius", "3px").
+						Style("background", "var(--bg-hover)").
+						Style("color", "var(--text-muted)").
+						Style("white-space", "nowrap").
+						Text(typeLabel),
+				),
+			app.Td().
+				Style("padding", "4px 0").
+				Style("width", "100%").
+				Style("vertical-align", "middle").
+				Body(
+					app.Input().
+						Type("text").
+						Placeholder(placeholder).
+						Value(val).
+						Style("width", "100%").
+						Style("font-size", "12px").
+						Style("padding", "3px 6px").
+						Style("border", "1px solid var(--border-input)").
+						Style("border-radius", "3px").
+						Style("background", "var(--input-bg)").
+						Style("color", "var(--text)").
+						Style("box-sizing", "border-box").
+						OnInput(func(ctx app.Context, e app.Event) {
+							if l.editedInputValues == nil {
+								l.editedInputValues = make(map[string]string)
+							}
+							l.editedInputValues[portName] = ctx.JSSrc().Get("value").String()
+						}),
+				),
+		)
+		rows = append(rows, row)
+	}
+
+	tableUI := app.If(len(l.editedInputPorts) > 0, func() app.UI {
+		return app.Table().
+			Style("width", "100%").
+			Style("border-collapse", "collapse").
+			Body(rows...)
+	})
+
+	return app.Div().
+		Style("display", "flex").
+		Style("flex-direction", "column").
+		Style("flex", "1").
+		Style("min-width", "0").
+		Style("min-height", "0").
+		Body(
+			app.H3().Style("margin", "0 0 8px 0").Text("Input Data"),
+			app.Div().
+				Style("flex", "1").
+				Style("min-height", "0").
+				Style("overflow-y", "auto").
+				Body(emptyNote, tableUI),
+		)
+}
+
 // buildSrcdoc constructs the iframe srcdoc for sandboxed widget preview.
-// inputData is a raw JS expression passed to the widget's render(value) function.
-func buildSrcdoc(htmlTemplate, script, inputData string) string {
+// It builds an `inputs` object from inputValues keyed by port name.
+func buildSrcdoc(htmlTemplate, script string, inputValues map[string]string, ports []inputPortDTO) string {
 	callRender := ""
-	if inputData != "" {
-		callRender = fmt.Sprintf("\ntry { render(%s); } catch(e) {}", inputData)
+	if len(ports) > 0 {
+		parts := make([]string, 0, len(ports))
+		for _, p := range ports {
+			parts = append(parts, p.Name+":"+portValueToJS(inputValues[p.Name], p.TypeHint))
+		}
+		callRender = fmt.Sprintf("\nvar inputs={%s};\ntry{render(inputs);}catch(e){}", strings.Join(parts, ","))
 	}
 	return fmt.Sprintf(`<!DOCTYPE html><html><body>%s<script>%s%s</script></body></html>`,
 		htmlTemplate, script, callRender)
+}
+
+// portValueToJS converts a user-entered string to a JS literal based on type hint.
+// string type hint → JSON-encoded string; others → raw JS expression.
+func portValueToJS(val, typeHint string) string {
+	if val == "" {
+		switch typeHint {
+		case "integer":
+			return "0"
+		case "boolean":
+			return "false"
+		case "string":
+			return `""`
+		default:
+			return "undefined"
+		}
+	}
+	if typeHint == "string" {
+		b, _ := json.Marshal(val)
+		return string(b)
+	}
+	return val
 }

@@ -16,14 +16,14 @@ type Library struct {
 	loading          bool
 	fetchErr         string
 	selectedID       string
-	editedName       string
-	editedHTML       string
-	editedScript     string
-	editedInputData  string
-	editedScriptLang string
-	editedInputPorts []inputPortDTO
-	editingID        string
-	editingName      string
+	editedName        string
+	editedHTML        string
+	editedScript      string
+	editedInputValues map[string]string
+	editedScriptLang  string
+	editedInputPorts  []inputPortDTO
+	editingID         string
+	editingName       string
 	// add-port form state
 	newPortName string
 	newPortDesc string
@@ -97,7 +97,7 @@ func (l *Library) selectItem(id string) {
 			l.editedHTML = it.HtmlTemplate
 			l.editedScript = it.Script
 			l.editedScriptLang = it.ScriptLanguage
-			l.editedInputData = ""
+			l.editedInputValues = make(map[string]string)
 			ports := make([]inputPortDTO, len(it.InputPorts))
 			copy(ports, it.InputPorts)
 			l.editedInputPorts = ports
@@ -132,9 +132,7 @@ func (l *Library) Render() app.UI {
 				l.editedScript = ctx.JSSrc().Get("value").String()
 			}, true),
 			l.renderInputPortsColumn(),
-			l.renderEditorColumn("Input Data", "input-data", l.editedInputData, func(ctx app.Context, e app.Event) {
-				l.editedInputData = ctx.JSSrc().Get("value").String()
-			}, false),
+			l.renderInputDataColumn(),
 			l.renderPreviewColumn(),
 		)
 }

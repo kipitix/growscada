@@ -50,7 +50,7 @@ func (l *Library) createItem(ctx app.Context) {
 			l.editedName = name
 			l.editedHTML = defaultHTML
 			l.editedScript = defaultScript
-			l.editedInputData = ""
+			l.editedInputValues = make(map[string]string)
 			l.editedScriptLang = "javascript"
 			l.loadList(ctx)
 		})
@@ -80,7 +80,7 @@ func (l *Library) deleteItem(ctx app.Context) {
 				l.selectedID = ""
 				l.editedHTML = ""
 				l.editedScript = ""
-				l.editedInputData = ""
+				l.editedInputValues = make(map[string]string)
 			}
 			l.loadList(ctx)
 		})
