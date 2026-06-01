@@ -153,10 +153,12 @@ E-mail send/receive via IMAP/SMTP. Use to send task-completion notifications (se
 
 1. **Work in a separate branch.** Never make changes directly on the `path` branch. If the current branch is `path`, stop and ask the user to create or switch to a feature branch before proceeding.
 
-2. **Always verify build and tests.** After any code change, run `make build` to confirm the build succeeds and `make test` to confirm all tests pass. Do not report a task as done until both commands exit cleanly.
+2. **Never commit without explicit user request.** Do not run `git commit` on your own initiative. Only commit when the user explicitly asks ("commit this", "make a commit", etc.). Preparing and staging changes is fine; committing is not.
 
-3. **Keep Bruno collections in sync.** When any REST API endpoint is added, removed, or modified (URL, method, request/response shape), update the corresponding Bruno collection in `tests/api/bruno_collections/` to reflect the change.
+3. **Always verify build and tests.** After any code change, run `make build` to confirm the build succeeds and `make test` to confirm all tests pass. Do not report a task as done until both commands exit cleanly.
 
-4. **Verify UI changes in the browser.** After any UI change, launch the app and open it in the browser to confirm the result looks and behaves correctly. Use the `chrome-devtools` MCP server (`take_screenshot`, `click`, etc.) to interact with and inspect the running PWA on port 8080.
+4. **Keep Bruno collections in sync.** When any REST API endpoint is added, removed, or modified (URL, method, request/response shape), update the corresponding Bruno collection in `tests/api/bruno_collections/` to reflect the change.
 
-5. **Send an e-mail notification on completion.** After finishing a task, send a brief summary e-mail to kipitix@gmail.com describing what was done (2–5 bullet points, no prose padding).
+5. **Verify UI changes in the browser.** After any UI change, launch the app and open it in the browser to confirm the result looks and behaves correctly. Use the `chrome-devtools` MCP server (`take_screenshot`, `click`, etc.) to interact with and inspect the running PWA on port 8080.
+
+6. **Send an e-mail notification on completion.** After finishing a task, send a brief summary e-mail to kipitix@gmail.com describing what was done (2–5 bullet points, no prose padding).
