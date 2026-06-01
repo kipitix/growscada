@@ -3,6 +3,7 @@ package library
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
@@ -115,6 +116,7 @@ func (l *Library) applyChanges(ctx app.Context) {
 		InputPorts:     ports,
 		Version:        currentItem.Version,
 	})
+	nextVersion := currentItem.Version + 1
 	ctx.Async(func() {
 		req, _ := http.NewRequest(http.MethodPut, url, bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -126,8 +128,20 @@ func (l *Library) applyChanges(ctx app.Context) {
 			return
 		}
 		resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			ctx.Dispatch(func(ctx app.Context) {
+				l.fetchErr = fmt.Sprintf("save failed: server returned %d", resp.StatusCode)
+			})
+			return
+		}
 		ctx.Dispatch(func(ctx app.Context) {
 			l.fetchErr = ""
+			for i, it := range l.widgetTypes {
+				if it.ID == l.selectedID {
+					l.widgetTypes[i].Version = nextVersion
+					break
+				}
+			}
 			l.loadList(ctx)
 		})
 	})

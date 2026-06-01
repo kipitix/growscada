@@ -35,51 +35,44 @@ func (r widgetTypeRepositoryPostgresImpl) Save(ctx context.Context, wt widget.Wi
 	}
 
 	if wt.Version() == version.Initial[widget.WidgetType]() {
-		sqlResult, err := r.db.ExecContext(ctx,
+		row := r.db.QueryRowContext(ctx,
 			`INSERT INTO widget_types (id, name, html_template, script, script_language, default_width, default_height, input_ports, version)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			RETURNING `+selectWidgetTypeColumns,
 			wt.ID().UUID(), wt.Name().String(), wt.HtmlTemplate().String(),
 			wt.Script().String(), wt.ScriptLanguage().String(),
 			wt.DefaultSize().Width(), wt.DefaultSize().Height(),
 			portsJSON,
 			version.Committed[widget.WidgetType]().Number(),
 		)
+		saved, err := r.scanWidgetType(row.Scan)
 		if err != nil {
 			return nil, fmt.Errorf("cannot insert new widget type: %w", err)
 		}
-		rowsAffected, err := sqlResult.RowsAffected()
-		if err != nil {
-			return nil, fmt.Errorf("cannot get rows affected on insert: %w", err)
-		}
-		if rowsAffected != 1 {
-			return nil, fmt.Errorf("expected 1 row affected on insert, got %d", rowsAffected)
-		}
-		return widget.NewWidgetType(wt.ID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.DefaultSize(), wt.InputPorts(), version.Committed[widget.WidgetType]())
+		return saved, nil
 	}
 
 	if wt.Version().IsCommitted() {
-		sqlResult, err := r.db.ExecContext(ctx,
+		row := r.db.QueryRowContext(ctx,
 			`UPDATE widget_types
 			 SET name = $1, html_template = $2, script = $3, script_language = $4,
 			     default_width = $5, default_height = $6, input_ports = $7, version = version + 1
-			 WHERE id = $8 AND version = $9`,
+			 WHERE id = $8 AND version = $9
+			 RETURNING `+selectWidgetTypeColumns,
 			wt.Name().String(), wt.HtmlTemplate().String(), wt.Script().String(),
 			wt.ScriptLanguage().String(),
 			wt.DefaultSize().Width(), wt.DefaultSize().Height(),
 			portsJSON,
 			wt.ID().UUID(), wt.Version().Number(),
 		)
+		saved, err := r.scanWidgetType(row.Scan)
 		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, classifyUpdateConflict(ctx, r.db, tableNameWidgetTypes, wt.ID(), widget.ErrWidgetTypeNotFound, widget.ErrWidgetTypeConflict)
+			}
 			return nil, fmt.Errorf("cannot update widget type: %w", err)
 		}
-		rowsAffected, err := sqlResult.RowsAffected()
-		if err != nil {
-			return nil, fmt.Errorf("cannot get rows affected on update: %w", err)
-		}
-		if rowsAffected != 1 {
-			return nil, classifyUpdateConflict(ctx, r.db, tableNameWidgetTypes, wt.ID(), widget.ErrWidgetTypeNotFound, widget.ErrWidgetTypeConflict)
-		}
-		return widget.NewWidgetType(wt.ID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.DefaultSize(), wt.InputPorts(), wt.Version().Next())
+		return saved, nil
 	}
 
 	return nil, fmt.Errorf("undefined behavior with version %d", wt.Version().Number())

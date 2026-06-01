@@ -38,11 +38,12 @@ func (r widgetRepositoryPostgresImpl) Save(ctx context.Context, w widget.Widget)
 	}
 
 	if w.Version() == version.Initial[widget.Widget]() {
-		sqlResult, err := r.db.ExecContext(ctx,
+		row := r.db.QueryRowContext(ctx,
 			`INSERT INTO widgets
 			    (id, name, x, y, z, width, height, origin_x, origin_y, rotation_degrees,
 			     type_id, scene_id, labels, port_bindings, version)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			 RETURNING `+selectWidgetColumns,
 			w.ID().UUID(), w.Name().String(),
 			w.Position().X(), w.Position().Y(), w.Position().Z(),
 			w.Size().Width(), w.Size().Height(),
@@ -52,31 +53,22 @@ func (r widgetRepositoryPostgresImpl) Save(ctx context.Context, w widget.Widget)
 			pq.Array(w.Labels()), portBindingsJSON,
 			version.Committed[widget.Widget]().Number(),
 		)
+		saved, err := r.scanWidget(row.Scan)
 		if err != nil {
 			return nil, fmt.Errorf("cannot insert new widget: %w", err)
 		}
-		rowsAffected, err := sqlResult.RowsAffected()
-		if err != nil {
-			return nil, fmt.Errorf("cannot get rows affected on insert: %w", err)
-		}
-		if rowsAffected != 1 {
-			return nil, fmt.Errorf("expected 1 row affected on insert, got %d", rowsAffected)
-		}
-		return widget.NewWidget(
-			w.ID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(),
-			w.TypeID(), w.SceneID(), w.Labels(), w.PortBindings(),
-			version.Committed[widget.Widget](),
-		), nil
+		return saved, nil
 	}
 
 	if w.Version().IsCommitted() {
-		sqlResult, err := r.db.ExecContext(ctx,
+		row := r.db.QueryRowContext(ctx,
 			`UPDATE widgets
 			 SET name = $1, x = $2, y = $3, z = $4, width = $5, height = $6,
 			     origin_x = $7, origin_y = $8, rotation_degrees = $9,
 			     type_id = $10, scene_id = $11, labels = $12, port_bindings = $13,
 			     version = version + 1
-			 WHERE id = $14 AND version = $15`,
+			 WHERE id = $14 AND version = $15
+			 RETURNING `+selectWidgetColumns,
 			w.Name().String(),
 			w.Position().X(), w.Position().Y(), w.Position().Z(),
 			w.Size().Width(), w.Size().Height(),
@@ -86,21 +78,14 @@ func (r widgetRepositoryPostgresImpl) Save(ctx context.Context, w widget.Widget)
 			pq.Array(w.Labels()), portBindingsJSON,
 			w.ID().UUID(), w.Version().Number(),
 		)
+		saved, err := r.scanWidget(row.Scan)
 		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, classifyUpdateConflict(ctx, r.db, tableNameWidgets, w.ID(), widget.ErrWidgetNotFound, widget.ErrWidgetConflict)
+			}
 			return nil, fmt.Errorf("cannot update widget: %w", err)
 		}
-		rowsAffected, err := sqlResult.RowsAffected()
-		if err != nil {
-			return nil, fmt.Errorf("cannot get rows affected on update: %w", err)
-		}
-		if rowsAffected != 1 {
-			return nil, classifyUpdateConflict(ctx, r.db, tableNameWidgets, w.ID(), widget.ErrWidgetNotFound, widget.ErrWidgetConflict)
-		}
-		return widget.NewWidget(
-			w.ID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(),
-			w.TypeID(), w.SceneID(), w.Labels(), w.PortBindings(),
-			w.Version().Next(),
-		), nil
+		return saved, nil
 	}
 
 	return nil, fmt.Errorf("undefined behavior with version %d", w.Version().Number())
