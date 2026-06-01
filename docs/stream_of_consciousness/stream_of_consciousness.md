@@ -28,6 +28,25 @@
 ~~На момент инициализации индикационного элемента должны существовать теги, от которых зависит индикация.~~
 Теги могут быть добавлены и после создания объекта, которых от них будет зависеть. Главное это обеспечить событиями о том, что тег создался и теперь надо обновить привязки.
 
+### Индикация = SVG+JS
+
+Типовой сценарий, чтобы что-то нарисовать на мнемосхеме:
+
+1. Создать `WidgetType` в библиотеке (`Library`)
+1.1. Создать `HTMLTemplate` - шаблон будущего виджета, показывающего индикацию
+1.2. Создать `Script` который будет обновлять внешний вид виджета (`Widget`) на основании входных значений тегов (`Tag`), для скрипта нужно объявить входные теги и их типы
+1.3. Путём подстановки значений тегов отладить изменение индикации, нужна возможность имитировать как сами значения (`TagValue`), так и качество тега (`TagQuality`)
+2. Создать требуемые теги (`Tag`)
+3. Расположить на сцене виджет (`Widget`), созданный на основании `WidgetType`
+4. Осуществить привязку тегов (`Tag`) к виджету (`Widget`)
+5. Открыть окно `Operation` и увидеть живую картину на мнемосхеме
+
+Чтобы всё работало нужно учесть следующие моменты:
+1. Где-то нужно хранить подписки на теги. При получении клиентом события обновления тега, нужно получить новое значение и перерисовать виджет.
+2. Нужно где-то хранить скрипты в странице, желательно в обфусцированном виде или вообще в виде скрытом от пользователя (чтобы нельзя было увидеть скрипт через dev-tools), желательно избегать повторения вставки.
+3. Должен быть вполне понятный способ искать в разметке часть элемента из `HTMLTemplate`. Проблема, которая может возникнуть - то, что на одной сцене будет несколько виджетов, созданных из одного `WidgetType`, а скрипт обновления удобнее, чтобы ориентировался на имена классов или ID из `HTMLTemplate`.
+4. Желательно избежать дублирования не только скрипта обновления, но и самого виджета. Лучше всего было бы, если вставить в разметку один `HTMLTemplate` и дублировать его через что-то вроде `href` (не уверен, стоит уточнить),навесить на него подписки на теги и обновлять по событиям.
+
 ## Теги
 
 Было два варианта реализации тегов: статическая типизация или динамическая типизация.
@@ -193,3 +212,179 @@ func (r TagRepositoryPostgres) Save(ctx context.Context, t tag.Tag) error {
 ```
 
 Один запрос всё же проще чем два!
+
+## Анализ
+
+### 2026-06-01 — Подготовка к режиму Operation и протоколу событий
+
+#### 1. Главная проблема: нет именованных портов
+
+`Widget.TagIDs []uuid.UUID` — просто массив без семантики. Скрипт не знает, какой тег — температура, а какой — давление. Нужно ввести понятие **входного порта**.
+
+**Добавить `InputPorts` в `WidgetType`:**
+
+```go
+type InputPort struct {
+    Name string   // "running", "speed" — ключ, который использует скрипт
+    Type TagType  // tag.TagTypeBoolean / TagTypeInteger / TagTypeString
+}
+```
+
+`WidgetType` получает поле `InputPorts() []InputPort`. Это контракт: что именно ждёт скрипт.
+
+**Заменить `TagIDs` на `TagBindings` в `Widget`:**
+
+```go
+// Вместо: TagIDs() []id.ID[tag.Tag]
+TagBindings() map[string]id.ID[tag.Tag]
+// ключ = имя порта из WidgetType.InputPorts, значение = конкретный Tag ID
+```
+
+При получении события `TagUpdated` — найти все виджеты, подписанные на этот тег, и знать, под каким именем (`portName`) передать значение в скрипт.
+
+#### 2. Конвенция Script и HTMLTemplate
+
+**HTMLTemplate — только классы, без глобальных `id`:**
+
+На одной сцене может быть несколько виджетов одного типа, `id` в DOM дублируется. Только классы:
+
+```html
+<div class="pump">
+  <div class="pump__indicator"></div>
+  <span class="pump__speed">--</span>
+</div>
+```
+
+**Script — единый контракт `render(container, tagValues)`:**
+
+```javascript
+function render(container, tagValues) {
+  // container: корневой DOM-элемент этого экземпляра виджета
+  // tagValues: { portName: { value: string, quality: string } }
+
+  const running = tagValues['running'];
+  const indicator = container.querySelector('.pump__indicator');
+
+  if (!running || running.quality === 'bad') {
+    indicator.style.background = 'yellow';
+  } else {
+    indicator.style.background = running.value === 'true' ? 'green' : 'gray';
+  }
+
+  const speed = tagValues['speed'];
+  if (speed && speed.quality === 'good') {
+    container.querySelector('.pump__speed').textContent = speed.value;
+  }
+}
+```
+
+`container` изолирует один экземпляр виджета от другого на сцене.
+
+#### 3. Хранение скриптов в DOM без дублирования
+
+Для каждого `WidgetType` скрипт вставляется **один раз** и регистрируется в глобальном реестре:
+
+```html
+<script id="wts-<widgetTypeID>">
+  (function() {
+    window.__wt = window.__wt || {};
+    window.__wt['<widgetTypeID>'] = function render(container, tagValues) {
+      /* тело скрипта пользователя */
+    };
+  })();
+</script>
+```
+
+При рендеринге Operation: если `window.__wt[wtID]` уже определён — не вставлять скрипт снова.
+
+> Полностью скрыть скрипт от devtools невозможно — любой JS, выполняемый в браузере, виден. Минификация/обфускация — максимум что реально. Это ограничение платформы, не архитектуры.
+
+#### 4. HTMLTemplate через `<template>` элемент — без дублирования разметки
+
+```html
+<!-- Один раз: шаблон WidgetType -->
+<template id="wtmpl-<widgetTypeID>">
+  <div class="pump">
+    <div class="pump__indicator"></div>
+    <span class="pump__speed">--</span>
+  </div>
+</template>
+
+<!-- Для каждого экземпляра Widget: контейнер с клоном шаблона -->
+<div data-widget-id="<widgetID>"
+     data-widget-type="<widgetTypeID>"
+     style="position:absolute; left:Xpx; top:Ypx; width:Wpx; height:Hpx;">
+  <!-- сюда клонируется template.content -->
+</div>
+```
+
+```javascript
+const tmpl = document.getElementById('wtmpl-' + widgetTypeID);
+const clone = tmpl.content.cloneNode(true);
+container.appendChild(clone);
+```
+
+Стандартный [`<template>`](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/template) — браузерная фича именно для этого.
+
+#### 5. Протокол передачи событий на Frontend — SSE
+
+Server-Sent Events — однонаправленный поток сервер → клиент:
+
+```
+GET /api/v1/events
+Accept: text/event-stream
+```
+
+Формат:
+
+```
+event: tag_updated
+data: {"tag_id":"<uuid>","name":"pump_running","value":"true","quality":"good"}
+```
+
+На сервере: `restapi` подписывается на `EventBus.Subscribe(EventTypeTagUpdated, handler)` → пушит в SSE-клиента. Один goroutine на соединение, канал для передачи событий.
+
+На клиенте (WASM):
+
+```javascript
+const es = new EventSource('/api/v1/events');
+es.addEventListener('tag_updated', (e) => {
+  const data = JSON.parse(e.data);
+  updateWidgetsForTag(data.tag_id, data.value, data.quality);
+});
+```
+
+#### 6. Реестр подписок на клиенте (Operation mode)
+
+При загрузке сцены строится:
+
+```
+tagID → [ {widgetID, portName}, ... ]    // кого уведомить при обновлении тега
+widgetID → { container, widgetTypeID, tagValues: { portName: {value, quality} } }
+```
+
+При событии `tag_updated`:
+1. Найти все записи `tagID → widgets`
+2. Для каждого `widgetID` → обновить `tagValues[portName]`
+3. Вызвать `window.__wt[widgetTypeID](container, tagValues)`
+
+#### 7. Улучшения Library для отладки (симуляция тегов)
+
+Сейчас `editedInputData` — просто строка. Нужно:
+
+- При объявлении `InputPorts` в WidgetType — показывать форму с полями по одному на порт
+- Каждое поле: `value` (строка) + `quality` (select: good/bad/uncertain/simulated)
+- `buildSrcdoc` собирает из этих полей объект `tagValues` и вызывает `render(container, tagValues)`
+
+#### Итого: что нужно изменить
+
+| Слой | Изменение |
+|---|---|
+| `domain/widget/WidgetType` | Добавить `InputPorts() []InputPort` |
+| `domain/widget/Widget` | Заменить `TagIDs` → `TagBindings map[string]id.ID[tag.Tag]` |
+| `appdto`, `restdto` | Добавить `input_ports`, заменить `tag_ids` на `tag_bindings` |
+| DB migration | `input_ports jsonb` в `widget_types`, `tag_bindings jsonb` в `widgets` |
+| REST API | Новый endpoint `GET /api/v1/events` (SSE) |
+| UI Library | Форма симуляции с именованными портами (value + quality) |
+| UI Operation | Клон `<template>`, реестр подписок, SSE-клиент, вызов `window.__wt[wtID]` |
+
