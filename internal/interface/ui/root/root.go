@@ -5,6 +5,7 @@ import (
 	"github.com/kipitix/growscada/internal/interface/ui/library"
 	"github.com/kipitix/growscada/internal/interface/ui/operation"
 	"github.com/kipitix/growscada/internal/interface/ui/project"
+	"github.com/kipitix/growscada/internal/interface/ui/toast"
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 )
 
@@ -36,6 +37,8 @@ func NewRoot(anAPIServerURL string) *Root {
 func (r *Root) OnMount(ctx app.Context) {
 	ctx.Page().SetTitle("GrowSCADA")
 
+	injectToastCSS()
+
 	var savedMode string
 	ctx.LocalStorage().Get("root:mode", &savedMode)
 
@@ -58,6 +61,39 @@ func (r *Root) setTheme(ctx app.Context, mode string) {
 	r.themeMode = mode
 	ctx.LocalStorage().Set("root:theme", mode)
 	injectThemeCSS(mode)
+}
+
+// ── CSS animations (toast) ────────────────────────────────────────────────────
+
+func injectToastCSS() {
+	doc := app.Window().Get("document")
+	el := doc.Call("getElementById", "gs-toast-css")
+	if el.Truthy() {
+		return // already injected
+	}
+	el = doc.Call("createElement", "style")
+	el.Set("id", "gs-toast-css")
+	el.Set("textContent", `
+@keyframes gs-toast-wrap-enter {
+  from { max-height: 0; overflow: hidden; }
+  to   { max-height: 300px; overflow: hidden; }
+}
+@keyframes gs-toast-card-enter {
+  0%   { opacity: 0; }
+  35%  { opacity: 0; }
+  100% { opacity: 1; }
+}
+@keyframes gs-toast-wrap-exit {
+  0%   { max-height: 300px; overflow: hidden; }
+  45%  { max-height: 300px; overflow: hidden; }
+  100% { max-height: 0;   overflow: hidden; }
+}
+@keyframes gs-toast-card-exit {
+  0%   { opacity: 1; transform: translateY(0); }
+  45%  { opacity: 0; transform: translateY(-22px); }
+  100% { opacity: 0; transform: translateY(-22px); }
+}`)
+	doc.Get("head").Call("appendChild", el)
 }
 
 // ── CSS theme injection ───────────────────────────────────────────────────────
@@ -167,6 +203,7 @@ func (r *Root) Render() app.UI {
 		Style("background", "var(--bg)").
 		Style("color", "var(--text)").
 		Body(
+			&toast.Container{},
 			app.Div().
 				Attr("role", "tablist").
 				Style("display", "flex").

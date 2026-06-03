@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
+
+	"github.com/kipitix/growscada/internal/interface/ui/toast"
 )
 
 func (p *Project) createTag(ctx app.Context) {
@@ -19,36 +21,35 @@ func (p *Project) createTag(ctx app.Context) {
 		Quality: "good",
 	})
 	if err != nil {
-		p.tagFetchErr = err.Error()
+		ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
 		return
 	}
 	ctx.Async(func() {
 		resp, err := http.Post(url, "application/json", bytes.NewReader(body))
 		if err != nil {
 			ctx.Dispatch(func(ctx app.Context) {
-				p.tagFetchErr = err.Error()
+				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
+			})
+			return
+		}
+		if resp.StatusCode >= 400 {
+			prob := toast.FromHTTPError(resp)
+			ctx.Dispatch(func(ctx app.Context) {
+				ctx.NewActionWithValue(toast.ActionAdd, prob)
 			})
 			return
 		}
 		defer resp.Body.Close()
 
-		if resp.StatusCode >= 400 {
-			ctx.Dispatch(func(ctx app.Context) {
-				p.tagFetchErr = "server error: " + resp.Status
-			})
-			return
-		}
-
 		var result createTagResponse
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 			ctx.Dispatch(func(ctx app.Context) {
-				p.tagFetchErr = err.Error()
+				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
 			})
 			return
 		}
 
 		ctx.Dispatch(func(ctx app.Context) {
-			p.tagFetchErr = ""
 			p.creatingTag = false
 			p.newTagName = ""
 			p.newTagType = ""
@@ -69,28 +70,27 @@ func (p *Project) deleteTag(ctx app.Context) {
 		req, err := http.NewRequest(http.MethodDelete, url, nil)
 		if err != nil {
 			ctx.Dispatch(func(ctx app.Context) {
-				p.tagFetchErr = err.Error()
+				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
 			})
 			return
 		}
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			ctx.Dispatch(func(ctx app.Context) {
-				p.tagFetchErr = err.Error()
+				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
 			})
 			return
 		}
-		defer resp.Body.Close()
-
 		if resp.StatusCode >= 400 {
+			prob := toast.FromHTTPError(resp)
 			ctx.Dispatch(func(ctx app.Context) {
-				p.tagFetchErr = "server error: " + resp.Status
+				ctx.NewActionWithValue(toast.ActionAdd, prob)
 			})
 			return
 		}
+		resp.Body.Close()
 
 		ctx.Dispatch(func(ctx app.Context) {
-			p.tagFetchErr = ""
 			if p.selectedTagID == deletedID {
 				p.selectedTagID = ""
 				ctx.LocalStorage().Set("project:tagID", "")

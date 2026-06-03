@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
+
+	"github.com/kipitix/growscada/internal/interface/ui/toast"
 )
 
 // ── Widget data loading ───────────────────────────────────────────────────────
@@ -24,24 +26,31 @@ func (p *Project) loadWidgets(ctx app.Context) {
 	ctx.Async(func() {
 		resp, err := http.Get(url)
 		if err != nil {
-			ctx.Dispatch(func(ctx app.Context) { p.fetchErr = err.Error() })
+			ctx.Dispatch(func(ctx app.Context) {
+				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
+			})
+			return
+		}
+		if resp.StatusCode >= 400 {
+			prob := toast.FromHTTPError(resp)
+			ctx.Dispatch(func(ctx app.Context) {
+				ctx.NewActionWithValue(toast.ActionAdd, prob)
+			})
 			return
 		}
 		defer resp.Body.Close()
 		var result getWidgetsResponse
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			ctx.Dispatch(func(ctx app.Context) { p.fetchErr = err.Error() })
+			ctx.Dispatch(func(ctx app.Context) {
+				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
+			})
 			return
 		}
 		ctx.Dispatch(func(ctx app.Context) {
-			// Discard the response if the user has switched to a different scene
-			// while the request was in flight.
 			if p.selectedSceneID != sceneID {
 				return
 			}
 			p.widgets = result.Widgets
-			// Re-sync editing fields if selected widget was refreshed;
-			// clear selection if it no longer exists in this scene.
 			if p.selectedWidgetID != "" {
 				found := false
 				for _, w := range p.widgets {
@@ -94,19 +103,29 @@ func (p *Project) createWidget(ctx app.Context, typeID string, x, y float64) {
 	ctx.Async(func() {
 		resp, err := http.Post(url, "application/json", bytes.NewReader(body))
 		if err != nil {
-			ctx.Dispatch(func(ctx app.Context) { p.fetchErr = err.Error() })
+			ctx.Dispatch(func(ctx app.Context) {
+				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
+			})
+			return
+		}
+		if resp.StatusCode >= 400 {
+			prob := toast.FromHTTPError(resp)
+			ctx.Dispatch(func(ctx app.Context) {
+				ctx.NewActionWithValue(toast.ActionAdd, prob)
+			})
 			return
 		}
 		defer resp.Body.Close()
 		var result createWidgetResponse
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			ctx.Dispatch(func(ctx app.Context) { p.fetchErr = err.Error() })
+			ctx.Dispatch(func(ctx app.Context) {
+				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
+			})
 			return
 		}
 		ctx.Dispatch(func(ctx app.Context) {
 			p.selectedWidgetID = result.ID
 			ctx.LocalStorage().Set("project:widgetID", result.ID)
-			// Pre-fill editing fields optimistically
 			p.editingWidgetName = name
 			p.editingPosX = fmt.Sprintf("%.1f", x)
 			p.editingPosY = fmt.Sprintf("%.1f", y)
@@ -127,7 +146,16 @@ func (p *Project) deleteWidget(ctx app.Context, widgetID string) {
 		req, _ := http.NewRequest(http.MethodDelete, url, nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			ctx.Dispatch(func(ctx app.Context) { p.fetchErr = err.Error() })
+			ctx.Dispatch(func(ctx app.Context) {
+				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
+			})
+			return
+		}
+		if resp.StatusCode >= 400 {
+			prob := toast.FromHTTPError(resp)
+			ctx.Dispatch(func(ctx app.Context) {
+				ctx.NewActionWithValue(toast.ActionAdd, prob)
+			})
 			return
 		}
 		resp.Body.Close()
@@ -158,7 +186,6 @@ func (p *Project) saveWidgetName(ctx app.Context) {
 	p.putWidget(ctx, p.widgets[idx])
 }
 
-// saveWidgetGeometry parses all geometry editing fields and PUTs the widget.
 func (p *Project) saveWidgetGeometry(ctx app.Context) {
 	idx := p.selectedWidgetIdx()
 	if idx < 0 {
@@ -197,7 +224,6 @@ func (p *Project) bindPort(ctx app.Context, portName, tagID string) {
 	if idx < 0 {
 		return
 	}
-	// Replace existing binding for this port, or append new one.
 	found := false
 	for i, b := range p.widgets[idx].PortBindings {
 		if b.PortName == portName {
@@ -261,16 +287,19 @@ func (p *Project) putWidget(ctx app.Context, w widgetItem) {
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			ctx.Dispatch(func(ctx app.Context) { p.fetchErr = err.Error() })
-			return
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			ctx.Dispatch(func(ctx app.Context) {
-				p.fetchErr = fmt.Sprintf("failed to save widget: server returned %d", resp.StatusCode)
+				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
 			})
 			return
 		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			prob := toast.FromHTTPError(resp)
+			ctx.Dispatch(func(ctx app.Context) {
+				ctx.NewActionWithValue(toast.ActionAdd, prob)
+			})
+			return
+		}
+		defer resp.Body.Close()
 		var result updateWidgetResponse
 		if err := json.NewDecoder(resp.Body).Decode(&result); err == nil && result.Version > 0 {
 			ctx.Dispatch(func(ctx app.Context) {
@@ -280,7 +309,6 @@ func (p *Project) putWidget(ctx app.Context, w widgetItem) {
 						break
 					}
 				}
-				p.fetchErr = ""
 			})
 		}
 	})
@@ -288,7 +316,6 @@ func (p *Project) putWidget(ctx app.Context, w widgetItem) {
 
 // ── Drag finalisation ─────────────────────────────────────────────────────────
 
-// finalizeAllDrags saves any active drag operation to the server.
 func (p *Project) finalizeAllDrags(ctx app.Context) {
 	anyDrag := false
 	for _, idPtr := range []*string{

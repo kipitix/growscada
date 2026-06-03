@@ -3,11 +3,11 @@ package library
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
+	"github.com/kipitix/growscada/internal/interface/ui/toast"
 	"github.com/kipitix/growscada/internal/interface/ui/uidto"
 )
 
@@ -32,7 +32,14 @@ func (l *Library) createItem(ctx app.Context) {
 		resp, err := http.Post(url, "application/json", bytes.NewReader(body))
 		if err != nil {
 			ctx.Dispatch(func(ctx app.Context) {
-				l.fetchErr = err.Error()
+				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
+			})
+			return
+		}
+		if resp.StatusCode >= 400 {
+			prob := toast.FromHTTPError(resp)
+			ctx.Dispatch(func(ctx app.Context) {
+				ctx.NewActionWithValue(toast.ActionAdd, prob)
 			})
 			return
 		}
@@ -41,14 +48,13 @@ func (l *Library) createItem(ctx app.Context) {
 		var result createWidgetTypeResponse
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 			ctx.Dispatch(func(ctx app.Context) {
-				l.fetchErr = err.Error()
+				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
 			})
 			return
 		}
 
 		newID := result.ID
 		ctx.Dispatch(func(ctx app.Context) {
-			l.fetchErr = ""
 			l.selectedID = newID
 			l.editedName = name
 			l.editedHTML = defaultHTML
@@ -72,14 +78,20 @@ func (l *Library) deleteItem(ctx app.Context) {
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			ctx.Dispatch(func(ctx app.Context) {
-				l.fetchErr = err.Error()
+				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
+			})
+			return
+		}
+		if resp.StatusCode >= 400 {
+			prob := toast.FromHTTPError(resp)
+			ctx.Dispatch(func(ctx app.Context) {
+				ctx.NewActionWithValue(toast.ActionAdd, prob)
 			})
 			return
 		}
 		resp.Body.Close()
 
 		ctx.Dispatch(func(ctx app.Context) {
-			l.fetchErr = ""
 			if l.selectedID == deletedID {
 				l.selectedID = ""
 				l.editedHTML = ""
@@ -125,19 +137,19 @@ func (l *Library) applyChanges(ctx app.Context) {
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			ctx.Dispatch(func(ctx app.Context) {
-				l.fetchErr = err.Error()
+				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
+			})
+			return
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			prob := toast.FromHTTPError(resp)
+			ctx.Dispatch(func(ctx app.Context) {
+				ctx.NewActionWithValue(toast.ActionAdd, prob)
 			})
 			return
 		}
 		resp.Body.Close()
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			ctx.Dispatch(func(ctx app.Context) {
-				l.fetchErr = fmt.Sprintf("save failed: server returned %d", resp.StatusCode)
-			})
-			return
-		}
 		ctx.Dispatch(func(ctx app.Context) {
-			l.fetchErr = ""
 			for i, it := range l.widgetTypes {
 				if it.ID == l.selectedID {
 					l.widgetTypes[i].Version = nextVersion
@@ -200,13 +212,17 @@ func (l *Library) commitEdit(ctx app.Context) {
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			ctx.Dispatch(func(ctx app.Context) {
-				l.fetchErr = err.Error()
+				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
+			})
+			return
+		}
+		if resp.StatusCode >= 400 {
+			prob := toast.FromHTTPError(resp)
+			ctx.Dispatch(func(ctx app.Context) {
+				ctx.NewActionWithValue(toast.ActionAdd, prob)
 			})
 			return
 		}
 		resp.Body.Close()
-		ctx.Dispatch(func(ctx app.Context) {
-			l.fetchErr = ""
-		})
 	})
 }

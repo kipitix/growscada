@@ -98,9 +98,6 @@ func (p *Project) renderTagListButtons() app.UI {
 }
 
 func (p *Project) renderTagList() app.UI {
-	if p.tagFetchErr != "" {
-		return app.Div().Style("font-size", "13px").Style("color", "var(--error)").Text("Error: " + p.tagFetchErr)
-	}
 	if len(p.tags) == 0 {
 		return app.Div().Style("font-size", "13px").Style("color", "var(--text-muted)").Text("No tags.")
 	}
