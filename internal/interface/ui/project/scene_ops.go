@@ -202,6 +202,7 @@ func (p *Project) saveSceneProperties(ctx app.Context) {
 		if err != nil {
 			ctx.Dispatch(func(ctx app.Context) {
 				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
+				p.loadScenes(ctx)
 			})
 			return
 		}
@@ -209,6 +210,7 @@ func (p *Project) saveSceneProperties(ctx app.Context) {
 			prob := toast.FromHTTPError(resp)
 			ctx.Dispatch(func(ctx app.Context) {
 				ctx.NewActionWithValue(toast.ActionAdd, prob)
+				p.loadScenes(ctx)
 			})
 			return
 		}
@@ -276,6 +278,7 @@ func (p *Project) commitSceneEdit(ctx app.Context) {
 		if err != nil {
 			ctx.Dispatch(func(ctx app.Context) {
 				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
+				p.loadScenes(ctx)
 			})
 			return
 		}
@@ -283,6 +286,7 @@ func (p *Project) commitSceneEdit(ctx app.Context) {
 			prob := toast.FromHTTPError(resp)
 			ctx.Dispatch(func(ctx app.Context) {
 				ctx.NewActionWithValue(toast.ActionAdd, prob)
+				p.loadScenes(ctx)
 			})
 			return
 		}

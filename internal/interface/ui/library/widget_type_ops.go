@@ -141,7 +141,7 @@ func (l *Library) applyChanges(ctx app.Context) {
 			})
 			return
 		}
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode >= 400 {
 			prob := toast.FromHTTPError(resp)
 			ctx.Dispatch(func(ctx app.Context) {
 				ctx.NewActionWithValue(toast.ActionAdd, prob)

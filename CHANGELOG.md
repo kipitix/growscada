@@ -1,5 +1,30 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.19] - 2026-06-04
+
+### Added
+
+- `internal/interface/ui/toast` — новый пакет **toast** для централизованного отображения ошибок (`toast.go`):
+  - `Container` — фиксированный overlay, монтируется один раз в `root.go`; слушает глобальный экшн `toast.add` через `ctx.Handle`
+  - `Problem` — структура RFC 9457: `Title`, `Status`, `Detail`, `Instance`, `Method` (HTTP-метод из `resp.Request`, не сериализуется)
+  - `FromHTTPError(resp)` — читает и закрывает тело ответа, парсит как RFC 9457; при ошибке парсинга формирует синтетическую запись из `http.StatusText` и сырого тела
+  - `NetworkError(err)` — обёртка для транспортных ошибок (connection refused, timeout и т.п.)
+  - Анимация на трёх фазах (`entering → visible → exiting`) через вложенные `ctx.After`; CSS-кейфреймы инжектируются в `<head>` через `injectToastCSS()` один раз при монтировании `Root`
+  - Защита от регрессии фазы: `setPhase` игнорирует любые переходы, если таблица уже в фазе `exiting`
+  - Отображение: HTTP-метод (моноширинный), статус-код + заголовок, время создания (правый верхний угол), детальное сообщение, instance URI
+  - Цвета статусов и фон таблички управляются CSS-переменными темы (`--toast-bg`, `--toast-shadow`, `--toast-err-*`, `--toast-warn-*`, `--toast-info-*`, `--toast-muted-*`) — корректно адаптируются при переключении светлой/тёмной/авто темы
+
+- `internal/interface/ui/root` — добавлены переменные `--toast-*` в `lightVars()` и `darkVars()` (`root.go`); светлая тема: белый фон `rgba(252,252,252,0.98)`, тёмные цвета текста; тёмная тема: прежний полупрозрачный тёмный фон
+
+### Changed
+
+- `internal/interface/ui/library` (`library.go`, `render_list.go`, `widget_type_ops.go`) — поле `fetchErr string` и его inline-рендеринг удалены; все HTTP-ошибки (`http.Get`, `http.Post`, `http.DefaultClient.Do`) теперь диспатчат `toast.ActionAdd`
+- `internal/interface/ui/project` (`project.go`, `scene_ops.go`, `tags_ops.go`, `tags_render.go`, `widget_ops.go`) — поля `fetchErr string` и `tagFetchErr string` удалены; все HTTP-ошибки переведены на `toast.ActionAdd`
+- `internal/interface/ui/project/scene_ops.go` — при сетевой ошибке или ответе `>= 400` в `saveSceneProperties` и `commitSceneEdit` вызывается `p.loadScenes(ctx)` для отката оптимистичного обновления `p.scenes[i]`
+- `internal/interface/ui/project/widget_ops.go` — при сетевой ошибке или ответе `>= 400` в `putWidget` вызывается `p.loadWidgets(ctx)` для отката оптимистичного обновления `p.widgets[idx]`; порог ошибки выровнен с остальными хэндлерами (`>= 400` вместо `< 200 || >= 300`)
+- `internal/interface/ui/library/widget_type_ops.go` — порог ошибки в `applyChanges` выровнен: `>= 400` вместо `< 200 || >= 300`
+- `Makefile` — `make run` открывает Chromium с флагом `--start-maximized`; `make full_restart` корректно останавливает Docker Compose и удаляет том перед пересозданием БД
+
 ## [0.0.18] - 2026-06-02
 
 ### Fixed

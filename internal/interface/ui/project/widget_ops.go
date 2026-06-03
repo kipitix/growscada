@@ -289,13 +289,15 @@ func (p *Project) putWidget(ctx app.Context, w widgetItem) {
 		if err != nil {
 			ctx.Dispatch(func(ctx app.Context) {
 				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
+				p.loadWidgets(ctx)
 			})
 			return
 		}
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode >= 400 {
 			prob := toast.FromHTTPError(resp)
 			ctx.Dispatch(func(ctx app.Context) {
 				ctx.NewActionWithValue(toast.ActionAdd, prob)
+				p.loadWidgets(ctx)
 			})
 			return
 		}

@@ -76,7 +76,7 @@ func injectToastCSS() {
 	el.Set("textContent", `
 @keyframes gs-toast-wrap-enter {
   from { max-height: 0; overflow: hidden; }
-  to   { max-height: 300px; overflow: hidden; }
+  to   { max-height: 800px; overflow: hidden; }
 }
 @keyframes gs-toast-card-enter {
   0%   { opacity: 0; }
@@ -84,8 +84,8 @@ func injectToastCSS() {
   100% { opacity: 1; }
 }
 @keyframes gs-toast-wrap-exit {
-  0%   { max-height: 300px; overflow: hidden; }
-  45%  { max-height: 300px; overflow: hidden; }
+  0%   { max-height: 800px; overflow: hidden; }
+  45%  { max-height: 800px; overflow: hidden; }
   100% { max-height: 0;   overflow: hidden; }
 }
 @keyframes gs-toast-card-exit {
@@ -134,6 +134,19 @@ func lightVars() string {
 		--widget-bg: rgba(240,240,240,0.85);
 		--widget-sel-bg: rgba(235,245,255,0.92);
 		--dot-color: #cccccc;
+		--toast-bg: rgba(252,252,252,0.98);
+		--toast-shadow: 0 4px 18px rgba(0,0,0,0.12);
+		--toast-text: #222222;
+		--toast-text-meta: #888888;
+		--toast-text-instance: #aaaaaa;
+		--toast-err-border: #cc3333;
+		--toast-err-title: #cc0000;
+		--toast-warn-border: #aa7700;
+		--toast-warn-title: #886600;
+		--toast-info-border: #2266cc;
+		--toast-info-title: #0055aa;
+		--toast-muted-border: #999999;
+		--toast-muted-title: #555555;
 		color-scheme: light;`
 }
 
@@ -162,6 +175,19 @@ func darkVars() string {
 		--widget-bg: rgba(36,36,36,0.92);
 		--widget-sel-bg: rgba(18,38,64,0.95);
 		--dot-color: #282828;
+		--toast-bg: rgba(18,18,18,0.97);
+		--toast-shadow: 0 4px 18px rgba(0,0,0,0.55);
+		--toast-text: #cccccc;
+		--toast-text-meta: #666666;
+		--toast-text-instance: #666666;
+		--toast-err-border: #cc3333;
+		--toast-err-title: #ff6666;
+		--toast-warn-border: #bb8800;
+		--toast-warn-title: #ffcc33;
+		--toast-info-border: #2266cc;
+		--toast-info-title: #66aaff;
+		--toast-muted-border: #555555;
+		--toast-muted-title: #aaaaaa;
 		color-scheme: dark;`
 }
 
