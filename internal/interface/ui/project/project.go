@@ -8,6 +8,8 @@ import (
 	"strconv"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
+
+	"github.com/kipitix/growscada/internal/interface/ui/toast"
 )
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -35,7 +37,6 @@ type Project struct {
 	creatingTag   bool
 	newTagName    string
 	newTagType    string
-	tagFetchErr   string
 
 	selectedSceneID  string
 	selectedWidgetID string
@@ -108,8 +109,6 @@ type Project struct {
 	editingOriginY    string
 	editingRotation string
 
-	fetchErr string
-
 	// ── Panel resize state ──────────────────────────────────────────────────
 	widgetTypeWidth      int
 	propertiesWidth      int
@@ -151,13 +150,24 @@ func (p *Project) loadWidgetTypes(ctx app.Context) {
 	ctx.Async(func() {
 		resp, err := http.Get(url)
 		if err != nil {
-			ctx.Dispatch(func(ctx app.Context) { p.fetchErr = err.Error() })
+			ctx.Dispatch(func(ctx app.Context) {
+				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
+			})
+			return
+		}
+		if resp.StatusCode >= 400 {
+			prob := toast.FromHTTPError(resp)
+			ctx.Dispatch(func(ctx app.Context) {
+				ctx.NewActionWithValue(toast.ActionAdd, prob)
+			})
 			return
 		}
 		defer resp.Body.Close()
 		var result getWidgetTypesResponse
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			ctx.Dispatch(func(ctx app.Context) { p.fetchErr = err.Error() })
+			ctx.Dispatch(func(ctx app.Context) {
+				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
+			})
 			return
 		}
 		ctx.Dispatch(func(ctx app.Context) { p.widgetTypes = result.WidgetTypes })
@@ -169,13 +179,24 @@ func (p *Project) loadTags(ctx app.Context) {
 	ctx.Async(func() {
 		resp, err := http.Get(url)
 		if err != nil {
-			ctx.Dispatch(func(ctx app.Context) { p.fetchErr = err.Error() })
+			ctx.Dispatch(func(ctx app.Context) {
+				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
+			})
+			return
+		}
+		if resp.StatusCode >= 400 {
+			prob := toast.FromHTTPError(resp)
+			ctx.Dispatch(func(ctx app.Context) {
+				ctx.NewActionWithValue(toast.ActionAdd, prob)
+			})
 			return
 		}
 		defer resp.Body.Close()
 		var result getTagsResponse
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			ctx.Dispatch(func(ctx app.Context) { p.fetchErr = err.Error() })
+			ctx.Dispatch(func(ctx app.Context) {
+				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
+			})
 			return
 		}
 		ctx.Dispatch(func(ctx app.Context) {

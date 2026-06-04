@@ -6,6 +6,7 @@ import (
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
+	"github.com/kipitix/growscada/internal/interface/ui/toast"
 	"github.com/kipitix/growscada/internal/interface/ui/uidto"
 )
 
@@ -16,7 +17,6 @@ type Library struct {
 	apiServerURL     string
 	widgetTypes      []widgetTypeItem
 	loading          bool
-	fetchErr         string
 	selectedID       string
 	editedName        string
 	editedHTML        string
@@ -51,7 +51,15 @@ func (l *Library) loadList(ctx app.Context) {
 		if err != nil {
 			ctx.Dispatch(func(ctx app.Context) {
 				l.loading = false
-				l.fetchErr = err.Error()
+				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
+			})
+			return
+		}
+		if resp.StatusCode >= 400 {
+			prob := toast.FromHTTPError(resp)
+			ctx.Dispatch(func(ctx app.Context) {
+				l.loading = false
+				ctx.NewActionWithValue(toast.ActionAdd, prob)
 			})
 			return
 		}
@@ -61,7 +69,7 @@ func (l *Library) loadList(ctx app.Context) {
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 			ctx.Dispatch(func(ctx app.Context) {
 				l.loading = false
-				l.fetchErr = err.Error()
+				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
 			})
 			return
 		}

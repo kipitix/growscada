@@ -6,7 +6,7 @@ build:
 	go build -o bin/growscada_combined_server/growscada_combined_server cmd/combined_server/main.go
 
 run: build
-	chromium --incognito http://localhost:8080 &
+	chromium --incognito --start-maximized http://localhost:8080 &
 	cd bin/growscada_combined_server && ./growscada_combined_server
 
 db_up:
@@ -19,4 +19,7 @@ db_down:
 test:
 	go test --cover ./...
 
-full_restart: db_down db_up run
+full_restart:
+	cd tools/debug_db && docker compose down || true
+	docker volume rm debug_db_growscada_data || true
+	$(MAKE) db_up run
