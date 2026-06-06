@@ -11,6 +11,34 @@ import (
 	"github.com/kipitix/growscada/internal/interface/ui/uidto"
 )
 
+// previewFrame is a thin component that owns the sandboxed preview iframe.
+// It sets iframe.srcdoc via a JS property assignment (not setAttribute) on
+// mount and every update, because browsers only reload an iframe when the
+// srcdoc *property* is written — mutating the HTML attribute has no effect.
+type previewFrame struct {
+	app.Compo
+	Srcdoc string
+}
+
+func (p *previewFrame) Render() app.UI {
+	return app.IFrame().
+		ID("preview-iframe").
+		Attr("sandbox", "allow-scripts").
+		Style("width", "100%").
+		Style("height", "100%").
+		Style("border", "none")
+}
+
+func (p *previewFrame) setSrcdoc() {
+	app.Window().
+		Get("document").
+		Call("getElementById", "preview-iframe").
+		Set("srcdoc", p.Srcdoc)
+}
+
+func (p *previewFrame) OnMount(ctx app.Context)  { p.setSrcdoc() }
+func (p *previewFrame) OnUpdate(ctx app.Context) { p.setSrcdoc() }
+
 // ── Editor columns ────────────────────────────────────────────────────────────
 
 func (l *Library) renderEditorColumn(title, id, value string, onInput func(app.Context, app.Event), showApply bool) app.UI {
@@ -64,12 +92,9 @@ func (l *Library) renderPreviewColumn() app.UI {
 			Style("font-size", "13px").
 			Text("No HTML to preview.")
 	} else {
-		content = app.IFrame().
-			Attr("srcdoc", buildSrcdoc(l.editedHTML, l.editedScript, l.editedInputValues, l.editedInputPorts)).
-			Attr("sandbox", "allow-scripts").
-			Style("width", "100%").
-			Style("height", "100%").
-			Style("border", "none")
+		content = &previewFrame{
+			Srcdoc: buildSrcdoc(l.editedHTML, l.editedScript, l.editedInputValues, l.editedInputPorts),
+		}
 	}
 	return app.Div().
 		Style("display", "flex").
@@ -364,7 +389,7 @@ func buildSrcdoc(htmlTemplate, script string, inputValues map[string]string, por
 		for _, p := range ports {
 			parts = append(parts, p.Name+":"+portValueToJS(inputValues[p.Name], p.TypeHint))
 		}
-		callRender = fmt.Sprintf("\nvar inputs={%s};\ntry{update(inputs);}catch(e){}", strings.Join(parts, ","))
+		callRender = fmt.Sprintf("\nvar inputs={%s};\ntry{render(inputs);}catch(e){}", strings.Join(parts, ","))
 	}
 	return fmt.Sprintf(`<!DOCTYPE html><html><body>%s<script>%s%s</script></body></html>`,
 		htmlTemplate, script, callRender)

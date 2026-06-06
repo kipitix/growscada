@@ -25,51 +25,17 @@ INSERT INTO tags (id, name, type, value, quality, version) VALUES
 -- script_language: javascript | python | lua
 -- input_ports: JSON array of {name, description, type_hint}; type_hint: "" | "string" | "boolean" | "integer"
 -- version: default committed version is 1
-INSERT INTO widget_types (id, name, html_template, script, script_language, input_ports, version) VALUES
+INSERT INTO widget_types (id, name, html_template, script, script_language, input_ports, default_width, default_height, version) VALUES
     (
         'a1b2c3d4-0001-4000-8000-000000000001',
-        'Pressure Gauge',
-        '<div class="gauge pressure"><div class="gauge__label">Pressure</div><div class="gauge__value"></div><div class="gauge__unit">bar</div></div>',
-        'function render(inputs) { document.querySelector(''.gauge__value'').textContent = inputs.pressure; }',
+        'Boolean Circle',
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100%" height="100%" style="display:block"><circle class="circle-indicator" cx="50" cy="50" r="44" fill="#888888" stroke="#555555" stroke-width="2"/></svg>',
+        'function render(inputs) { var c = document.querySelector(''.circle-indicator''); c.setAttribute(''fill'', inputs.state ? ''#2ecc71'' : ''#888888''); }',
         'javascript',
-        '[{"name":"pressure","description":"Line pressure in bar","type_hint":"integer"}]',
+        '[{"name":"state","description":"Active state (true = green, false = gray)","type_hint":"boolean"}]',
+        80,
+        80,
         1
-    ),
-    (
-        'a1b2c3d4-0002-4000-8000-000000000002',
-        'Temperature Indicator',
-        '<div class="indicator temperature"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="none" stroke="#e74c3c" stroke-width="4"/><text x="50" y="55" text-anchor="middle" font-size="20" fill="#e74c3c" class="temp-value">--</text></svg></div>',
-        'function render(inputs) { document.querySelector(''.temp-value'').textContent = inputs.temperature + ''°C''; }',
-        'javascript',
-        '[{"name":"temperature","description":"Temperature in degrees Celsius","type_hint":"integer"}]',
-        1
-    ),
-    (
-        'a1b2c3d4-0003-4000-8000-000000000003',
-        'Boolean Lamp',
-        '<div class="lamp"><div class="lamp__bulb"></div><div class="lamp__label">Status</div></div>',
-        'function render(inputs) { var bulb = document.querySelector(''.lamp__bulb''); bulb.style.background = inputs.state ? ''#2ecc71'' : ''#e74c3c''; }',
-        'javascript',
-        '[{"name":"state","description":"Active state of the lamp","type_hint":"boolean"}]',
-        1
-    ),
-    (
-        'a1b2c3d4-0004-4000-8000-000000000004',
-        'Flow Meter',
-        '<div class="flow-meter"><div class="flow-meter__bar"><div class="flow-meter__fill"></div></div><div class="flow-meter__value"></div></div>',
-        'def render(inputs):\n    print(f"Flow: {inputs[''flow_rate'']} m3/h")',
-        'python',
-        '[{"name":"flow_rate","description":"Flow rate in m³/h","type_hint":"integer"}]',
-        1
-    ),
-    (
-        'a1b2c3d4-0005-4000-8000-000000000005',
-        'Level Sensor',
-        '<div class="level-sensor"><div class="level-sensor__tank"><div class="level-sensor__liquid"></div></div><div class="level-sensor__value"></div></div>',
-        'function render(inputs)\n  local pct = math.min(100, math.max(0, inputs.level))\n  return pct\nend',
-        'lua',
-        '[{"name":"level","description":"Fill level in percent","type_hint":"integer"}]',
-        2
     );
 
 -- Add test data for scenes table
@@ -100,38 +66,14 @@ INSERT INTO scenes (id, name, width, height, background_html, version) VALUES
 INSERT INTO widgets (id, name, x, y, z, width, height, origin_x, origin_y, rotation_degrees, type_id, scene_id, labels, port_bindings, version) VALUES
     (
         'b1c2d3e4-0001-4000-8000-000000000001',
-        'pressure-gauge-main',
+        'status-circle-main',
         100.0, 200.0, 0,
-        100, 100,
+        80, 80,
         0.5, 0.5, 0.0,
         'a1b2c3d4-0001-4000-8000-000000000001',
         'c1d2e3f4-0001-4000-8000-000000000001',
-        '{"sensor","pressure"}',
-        '[{"port_name":"pressure","tag_id":"6ba7b813-9dad-11d1-80b4-00c04fd430c8"}]',
-        1
-    ),
-    (
-        'b1c2d3e4-0002-4000-8000-000000000002',
-        'temperature-indicator-main',
-        350.0, 150.0, 1,
-        100, 100,
-        0.5, 0.5, 0.0,
-        'a1b2c3d4-0002-4000-8000-000000000002',
-        'c1d2e3f4-0001-4000-8000-000000000001',
-        '{"sensor","temperature"}',
-        '[{"port_name":"temperature","tag_id":"6ba7b811-9dad-11d1-80b4-00c04fd430c8"}]',
-        1
-    ),
-    (
-        'b1c2d3e4-0003-4000-8000-000000000003',
-        'boolean-lamp-overview',
-        50.0, 400.0, 0,
-        100, 100,
-        0.5, 0.5, 0.0,
-        'a1b2c3d4-0003-4000-8000-000000000003',
-        'c1d2e3f4-0002-4000-8000-000000000002',
         '{"indicator","status"}',
-        '[]',
+        '[{"port_name":"state","tag_id":"6ba7b810-9dad-11d1-80b4-00c04fd430c8"}]',
         1
     );
 -- +goose StatementEnd
@@ -140,9 +82,7 @@ INSERT INTO widgets (id, name, x, y, z, width, height, origin_x, origin_y, rotat
 -- +goose StatementBegin
 -- Delete test data for widgets table by their ids
 DELETE FROM widgets WHERE id IN (
-    'b1c2d3e4-0001-4000-8000-000000000001',
-    'b1c2d3e4-0002-4000-8000-000000000002',
-    'b1c2d3e4-0003-4000-8000-000000000003'
+    'b1c2d3e4-0001-4000-8000-000000000001'
 );
 
 -- Delete test data for scenes table by their ids
@@ -153,11 +93,7 @@ DELETE FROM scenes WHERE id IN (
 
 -- Delete test data for widget_types table by their ids
 DELETE FROM widget_types WHERE id IN (
-    'a1b2c3d4-0001-4000-8000-000000000001',
-    'a1b2c3d4-0002-4000-8000-000000000002',
-    'a1b2c3d4-0003-4000-8000-000000000003',
-    'a1b2c3d4-0004-4000-8000-000000000004',
-    'a1b2c3d4-0005-4000-8000-000000000005'
+    'a1b2c3d4-0001-4000-8000-000000000001'
 );
 
 -- Delete test data for tags table by their ids
