@@ -11,6 +11,100 @@ import (
 	"github.com/kipitix/growscada/internal/interface/ui/uidto"
 )
 
+// inputDataField is a thin component wrapping a single Input Data text field.
+// OnMount/OnUpdate explicitly set the DOM value property (not just the attribute)
+// so that the displayed value clears correctly when switching between WidgetTypes.
+// go-app's virtual DOM stores empty string as a missing attribute and removes
+// the attribute via removeAttribute, which does NOT clear input.value in the
+// browser — only assigning the property directly does.
+type inputDataField struct {
+	app.Compo
+	FieldID     string
+	Placeholder string
+	Val         string
+	PortName    string
+	OnChange    func(string)
+	lastVal     string // tracks last written DOM value to skip redundant Defer calls
+}
+
+func (f *inputDataField) Render() app.UI {
+	onChange := f.OnChange
+	portName := f.PortName
+	return app.Input().
+		ID(f.FieldID).
+		Type("text").
+		Placeholder(f.Placeholder).
+		Value(f.Val).
+		Style("width", "100%").
+		Style("font-size", "12px").
+		Style("padding", "3px 6px").
+		Style("border", "1px solid var(--border-input)").
+		Style("border-radius", "3px").
+		Style("background", "var(--input-bg)").
+		Style("color", "var(--text)").
+		Style("box-sizing", "border-box").
+		OnInput(func(ctx app.Context, e app.Event) {
+			if onChange != nil {
+				onChange(ctx.JSSrc().Get("value").String())
+			}
+		}, app.EventScope(portName))
+}
+
+func (f *inputDataField) setDOMValue(ctx app.Context) {
+	fieldID := f.FieldID
+	val := f.Val
+	// Defer runs after the DOM patch cycle, so getElementById finds the element
+	// with its already-updated id and we can set the value property directly.
+	ctx.Defer(func(ctx app.Context) {
+		elem := app.Window().Get("document").Call("getElementById", fieldID)
+		if !elem.IsNull() && !elem.IsUndefined() {
+			elem.Set("value", val)
+		}
+	})
+}
+
+func (f *inputDataField) OnMount(ctx app.Context) {
+	f.lastVal = f.Val
+	f.setDOMValue(ctx)
+}
+
+func (f *inputDataField) OnUpdate(ctx app.Context) {
+	if f.Val == f.lastVal {
+		return
+	}
+	f.lastVal = f.Val
+	f.setDOMValue(ctx)
+}
+
+// previewFrame is a thin component that owns the sandboxed preview iframe.
+// It sets iframe.srcdoc via a JS property assignment (not setAttribute) on
+// mount and every update, because browsers only reload an iframe when the
+// srcdoc *property* is written — mutating the HTML attribute has no effect.
+type previewFrame struct {
+	app.Compo
+	ID     string
+	Srcdoc string
+}
+
+func (p *previewFrame) Render() app.UI {
+	return app.IFrame().
+		ID(p.ID).
+		Attr("sandbox", "allow-scripts").
+		Style("width", "100%").
+		Style("height", "100%").
+		Style("border", "none")
+}
+
+func (p *previewFrame) setSrcdoc() {
+	elem := app.Window().Get("document").Call("getElementById", p.ID)
+	if !elem.IsNull() && !elem.IsUndefined() {
+		elem.Set("srcdoc", p.Srcdoc)
+	}
+}
+
+func (p *previewFrame) OnMount(ctx app.Context)  { p.setSrcdoc() }
+func (p *previewFrame) OnUpdate(ctx app.Context) { p.setSrcdoc() }
+
 // ── Editor columns ────────────────────────────────────────────────────────────
 
 func (l *Library) renderEditorColumn(title, id, value string, onInput func(app.Context, app.Event), showApply bool) app.UI {
@@ -64,12 +158,10 @@ func (l *Library) renderPreviewColumn() app.UI {
 			Style("font-size", "13px").
 			Text("No HTML to preview.")
 	} else {
-		content = app.IFrame().
-			Attr("srcdoc", buildSrcdoc(l.editedHTML, l.editedScript, l.editedInputValues, l.editedInputPorts)).
-			Attr("sandbox", "allow-scripts").
-			Style("width", "100%").
-			Style("height", "100%").
-			Style("border", "none")
+		content = &previewFrame{
+			ID:     "preview-iframe",
+			Srcdoc: buildSrcdoc(l.editedHTML, l.editedScript, l.editedInputValues, l.editedInputPorts),
+		}
 	}
 	return app.Div().
 		Style("display", "flex").
@@ -309,24 +401,18 @@ func (l *Library) renderInputDataColumn() app.UI {
 				Style("width", "100%").
 				Style("vertical-align", "middle").
 				Body(
-					app.Input().
-						Type("text").
-						Placeholder(placeholder).
-						Value(val).
-						Style("width", "100%").
-						Style("font-size", "12px").
-						Style("padding", "3px 6px").
-						Style("border", "1px solid var(--border-input)").
-						Style("border-radius", "3px").
-						Style("background", "var(--input-bg)").
-						Style("color", "var(--text)").
-						Style("box-sizing", "border-box").
-						OnInput(func(ctx app.Context, e app.Event) {
+					&inputDataField{
+						FieldID:     "input-data-" + portName,
+						Placeholder: placeholder,
+						Val:         val,
+						PortName:    portName,
+						OnChange: func(v string) {
 							if l.editedInputValues == nil {
 								l.editedInputValues = make(map[string]string)
 							}
-							l.editedInputValues[portName] = ctx.JSSrc().Get("value").String()
-						}),
+							l.editedInputValues[portName] = v
+						},
+					},
 				),
 		)
 		rows = append(rows, row)
@@ -364,7 +450,7 @@ func buildSrcdoc(htmlTemplate, script string, inputValues map[string]string, por
 		for _, p := range ports {
 			parts = append(parts, p.Name+":"+portValueToJS(inputValues[p.Name], p.TypeHint))
 		}
-		callRender = fmt.Sprintf("\nvar inputs={%s};\ntry{update(inputs);}catch(e){}", strings.Join(parts, ","))
+		callRender = fmt.Sprintf("\nvar inputs={%s};\ntry{render(inputs);}catch(e){}", strings.Join(parts, ","))
 	}
 	return fmt.Sprintf(`<!DOCTYPE html><html><body>%s<script>%s%s</script></body></html>`,
 		htmlTemplate, script, callRender)
