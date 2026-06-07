@@ -11,6 +11,58 @@ import (
 	"github.com/kipitix/growscada/internal/interface/ui/uidto"
 )
 
+// inputDataField is a thin component wrapping a single Input Data text field.
+// OnUpdate explicitly sets the DOM value property (not just the attribute) so
+// that the displayed value clears correctly when switching between WidgetTypes.
+// go-app's virtual DOM stores empty string as a missing attribute and removes
+// the attribute via removeAttribute, which does NOT clear input.value in the
+// browser — only assigning the property directly does.
+type inputDataField struct {
+	app.Compo
+	FieldID     string
+	Placeholder string
+	Val         string
+	PortName    string
+	Lib         *Library
+}
+
+func (f *inputDataField) Render() app.UI {
+	portName := f.PortName
+	lib := f.Lib
+	return app.Input().
+		ID(f.FieldID).
+		Type("text").
+		Placeholder(f.Placeholder).
+		Value(f.Val).
+		Style("width", "100%").
+		Style("font-size", "12px").
+		Style("padding", "3px 6px").
+		Style("border", "1px solid var(--border-input)").
+		Style("border-radius", "3px").
+		Style("background", "var(--input-bg)").
+		Style("color", "var(--text)").
+		Style("box-sizing", "border-box").
+		OnInput(func(ctx app.Context, e app.Event) {
+			if lib.editedInputValues == nil {
+				lib.editedInputValues = make(map[string]string)
+			}
+			lib.editedInputValues[portName] = ctx.JSSrc().Get("value").String()
+		}, app.EventScope(portName))
+}
+
+func (f *inputDataField) OnUpdate(ctx app.Context) {
+	fieldID := f.FieldID
+	val := f.Val
+	// Defer runs after the DOM patch cycle, so getElementById finds the element
+	// with its already-updated id and we can set the value property directly.
+	ctx.Defer(func(ctx app.Context) {
+		elem := app.Window().Get("document").Call("getElementById", fieldID)
+		if !elem.IsNull() && !elem.IsUndefined() {
+			elem.Set("value", val)
+		}
+	})
+}
+
 // previewFrame is a thin component that owns the sandboxed preview iframe.
 // It sets iframe.srcdoc via a JS property assignment (not setAttribute) on
 // mount and every update, because browsers only reload an iframe when the
@@ -334,24 +386,13 @@ func (l *Library) renderInputDataColumn() app.UI {
 				Style("width", "100%").
 				Style("vertical-align", "middle").
 				Body(
-					app.Input().
-						Type("text").
-						Placeholder(placeholder).
-						Value(val).
-						Style("width", "100%").
-						Style("font-size", "12px").
-						Style("padding", "3px 6px").
-						Style("border", "1px solid var(--border-input)").
-						Style("border-radius", "3px").
-						Style("background", "var(--input-bg)").
-						Style("color", "var(--text)").
-						Style("box-sizing", "border-box").
-						OnInput(func(ctx app.Context, e app.Event) {
-							if l.editedInputValues == nil {
-								l.editedInputValues = make(map[string]string)
-							}
-							l.editedInputValues[portName] = ctx.JSSrc().Get("value").String()
-						}),
+					&inputDataField{
+						FieldID:     "input-data-" + portName,
+						Placeholder: placeholder,
+						Val:         val,
+						PortName:    portName,
+						Lib:         l,
+					},
 				),
 		)
 		rows = append(rows, row)

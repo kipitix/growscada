@@ -19,7 +19,8 @@ INSERT INTO tags (id, name, type, value, quality, version) VALUES
     ('6ba7b815-9dad-11d1-80b4-00c04fd430c8', 'is_cached', 'boolean', 'true', 'simulated', 3),
     ('6ba7b816-9dad-11d1-80b4-00c04fd430c8', 'pool_size', 'integer', '20', 'good', 1),
     ('6ba7b817-9dad-11d1-80b4-00c04fd430c8', 'enable_tls', 'boolean', 'false', 'bad', 4),
-    ('6ba7b818-9dad-11d1-80b4-00c04fd430c8', 'creator', 'string', 'Alexander', 'good', 1);
+    ('6ba7b818-9dad-11d1-80b4-00c04fd430c8', 'creator', 'string', 'Alexander', 'good', 1),
+    ('6ba7b819-9dad-11d1-80b4-00c04fd430c8', 'status_message', 'string', 'System running normally - all checks passed', 'good', 1);
 
 -- Add test data for widget_types table
 -- script_language: javascript | python | lua
@@ -46,6 +47,17 @@ INSERT INTO widget_types (id, name, html_template, script, script_language, inpu
         '[{"name":"value","description":"Integer value (0-100)","type_hint":"integer"}]',
         120,
         120,
+        1
+    ),
+    (
+        'a1b2c3d4-0005-4000-8000-000000000003',
+        'String Ticker',
+        '<style>@keyframes mq{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}</style><div style="width:100%;height:100%;display:flex;align-items:center;"><div style="width:100%;height:100%;border-radius:6px;background:#0a0a0f;border:1px solid #222a33;overflow:hidden;display:flex;align-items:center;box-sizing:border-box;"><div class="st-track" style="overflow:hidden;flex:1;white-space:nowrap;padding:0 10px;"><span class="st-txt" style="display:inline-block;font-family:monospace;font-size:12px;color:#7fb3d3;letter-spacing:0.05em;"></span></div></div></div>',
+        'function render(inputs){var t=String(inputs.value||'''');var sp=document.querySelector(''.st-txt'');var tr=document.querySelector(''.st-track'');sp.style.animation=''none'';sp.textContent=t;requestAnimationFrame(function(){if(sp.scrollWidth>tr.clientWidth){sp.textContent=t+''  ●  ''+t;sp.style.animation=''mq ''+(t.length*0.1+1.5)+''s linear infinite'';}});}',
+        'javascript',
+        '[{"name":"value","description":"String value to display","type_hint":"string"}]',
+        280,
+        32,
         1
     );
 
@@ -98,6 +110,18 @@ INSERT INTO widgets (id, name, x, y, z, width, height, origin_x, origin_y, rotat
         '{"speedometer","gauge"}',
         '[{"port_name":"value","tag_id":"6ba7b811-9dad-11d1-80b4-00c04fd430c8"}]',
         1
+    ),
+    (
+        'b1c2d3e4-0005-4000-8000-000000000005',
+        'string-ticker-status',
+        100.0, 360.0, 0,
+        280, 32,
+        0.5, 0.5, 0.0,
+        'a1b2c3d4-0005-4000-8000-000000000003',
+        'c1d2e3f4-0001-4000-8000-000000000001',
+        '{"string","ticker"}',
+        '[{"port_name":"value","tag_id":"6ba7b819-9dad-11d1-80b4-00c04fd430c8"}]',
+        1
     );
 -- +goose StatementEnd
 
@@ -106,7 +130,8 @@ INSERT INTO widgets (id, name, x, y, z, width, height, origin_x, origin_y, rotat
 -- Delete test data for widgets table by their ids
 DELETE FROM widgets WHERE id IN (
     'b1c2d3e4-0001-4000-8000-000000000001',
-    'b1c2d3e4-0002-4000-8000-000000000002'
+    'b1c2d3e4-0002-4000-8000-000000000002',
+    'b1c2d3e4-0005-4000-8000-000000000005'
 );
 
 -- Delete test data for scenes table by their ids
@@ -118,7 +143,8 @@ DELETE FROM scenes WHERE id IN (
 -- Delete test data for widget_types table by their ids
 DELETE FROM widget_types WHERE id IN (
     'a1b2c3d4-0001-4000-8000-000000000001',
-    'a1b2c3d4-0002-4000-8000-000000000002'
+    'a1b2c3d4-0002-4000-8000-000000000002',
+    'a1b2c3d4-0005-4000-8000-000000000003'
 );
 
 -- Delete test data for tags table by their ids
@@ -131,6 +157,7 @@ DELETE FROM tags WHERE id IN (
     '6ba7b815-9dad-11d1-80b4-00c04fd430c8',
     '6ba7b816-9dad-11d1-80b4-00c04fd430c8',
     '6ba7b817-9dad-11d1-80b4-00c04fd430c8',
-    '6ba7b818-9dad-11d1-80b4-00c04fd430c8'
+    '6ba7b818-9dad-11d1-80b4-00c04fd430c8',
+    '6ba7b819-9dad-11d1-80b4-00c04fd430c8'
 );
 -- +goose StatementEnd
