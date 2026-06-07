@@ -10,16 +10,16 @@ http:
     type: json
     data: |-
       {
-        "name": "pressure-gauge",
+        "name": "status-circle",
         "position": { "x": 100.0, "y": 200.0, "z": 0 },
-        "size": { "width": 150, "height": 150 },
+        "size": { "width": 80, "height": 80 },
         "origin": { "x": 0.5, "y": 0.5 },
         "rotation": { "degrees": 0.0 },
         "type_id": "{{WIDGET_TYPE_ID}}",
         "scene_id": "{{SCENE_ID}}",
-        "labels": ["sensor", "pressure"],
+        "labels": ["indicator", "status"],
         "port_bindings": [
-          { "port_name": "pressure", "tag_id": "{{TAG_ID}}" }
+          { "port_name": "state", "tag_id": "{{TAG_ID}}" }
         ]
       }
   auth: inherit

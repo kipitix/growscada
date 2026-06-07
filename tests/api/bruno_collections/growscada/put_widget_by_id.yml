@@ -10,17 +10,16 @@ http:
     type: json
     data: |-
       {
-        "name": "pressure-gauge-updated",
+        "name": "status-circle-updated",
         "position": { "x": 150.0, "y": 250.0, "z": 1 },
-        "size": { "width": 200, "height": 200 },
+        "size": { "width": 80, "height": 80 },
         "origin": { "x": 0.5, "y": 0.5 },
         "rotation": { "degrees": 45.0 },
         "type_id": "{{WIDGET_TYPE_ID}}",
         "scene_id": "{{SCENE_ID}}",
-        "labels": ["sensor", "pressure", "updated"],
+        "labels": ["indicator", "status", "updated"],
         "port_bindings": [
-          { "port_name": "pressure", "tag_id": "{{TAG_ID}}" },
-          { "port_name": "temperature", "tag_id": "{{TAG_ID_2}}" }
+          { "port_name": "state", "tag_id": "{{TAG_ID}}" }
         ],
         "version": 1
       }

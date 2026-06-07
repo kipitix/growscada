@@ -12,7 +12,7 @@ http:
       {
         "name": "pressure gauge updated",
         "html_template": "<div class=\"gauge updated\"><span class=\"value\"></span></div>",
-        "script": "function update(inputs) { document.querySelector('.value').textContent = inputs.pressure + ' bar'; }",
+        "script": "function render(inputs) { document.querySelector('.value').textContent = inputs.pressure + ' bar'; }",
         "script_language": "javascript",
         "default_width": 200,
         "default_height": 200,

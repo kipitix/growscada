@@ -1,5 +1,37 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.20] - 2026-06-07
+
+### Added
+
+- `internal/interface/ui/library/render_editor.go` — компонент **`inputDataField`**: тонкая обёртка над полем ввода в панели «Input Data»:
+  - Решает проблему go-app vdom: при пустом значении фреймворк вызывает `removeAttribute`, а не присваивает `input.value = ""`, из-за чего браузер не очищает поле при переключении WidgetType
+  - `OnMount` и `OnUpdate` присваивают свойство `value` напрямую через `getElementById` + `ctx.Defer`; `OnUpdate` пропускает DOM-запись если `Val` не изменился (`lastVal` guard)
+  - Поле `Lib *Library` заменено на `OnChange func(string)` — компонент самодостаточен и не держит обратную ссылку на родителя
+
+- `internal/interface/ui/library/render_editor.go` — компонент **`previewFrame`**: тонкая обёртка над sandboxed-iframe предпросмотра:
+  - Решает ограничение браузера: обновление атрибута `srcdoc` через `setAttribute` не перезагружает iframe; работает только прямое присвоение JS-свойства `iframe.srcdoc`
+  - `OnMount` и `OnUpdate` вызывают `setSrcdoc()`, которая делает `getElementById(p.ID).Set("srcdoc", p.Srcdoc)`
+  - Поле `ID string` вынесено в структуру — исключает хардкод и позволяет иметь несколько экземпляров
+
+- `internal/infrastructure/postgres/test_data` — новый тег `status_message` (`6ba7b819-...`): строковый тег для демонстрации виджета String Ticker
+
+### Changed
+
+- `internal/infrastructure/postgres/test_data/20990101000000_insert_test_data.sql` — примеры WidgetType заменены на наглядные JavaScript-виджеты:
+  - **Boolean Circle** (`0001`) — SVG-круг, зеленеет при `inputs.state = true`
+  - **Integer Speedometer** (`0002`) — SVG-спидометр 0–100: дуга и стрелка, цвет меняется по порогам (зелёный / оранжевый / красный)
+  - **String Ticker** (`0003`) — бегущая строка с marquee-анимацией при переполнении контейнера
+  - Удалены старые примеры: Pressure Gauge, Temperature Indicator, Boolean Lamp (CSS/div), Flow Meter (Python), Level Sensor (Lua)
+  - DOWN-миграция расширена: теперь удаляет и старые ID (`0003`, `0004`, `0005-old`) — безопасно при их отсутствии
+
+- `internal/interface/ui/library/render_editor.go` — `buildSrcdoc` теперь вызывает `render(inputs)` вместо `update(inputs)` (исправлено несоответствие с именем функции во всех примерах)
+
+- `tests/api/bruno_collections` — приведено в соответствие с актуальными тестовыми данными:
+  - `environments/localhost.yml` — `WIDGET_TYPE_ID` исправлен: `0005-...-0001` → `0001-...-0001` (Boolean Circle)
+  - `post_widget_types.yml`, `put_widget_type_by_id.yml` — скрипты переименованы: `function update` → `function render`
+  - `post_widgets.yml`, `put_widget_by_id.yml` — порт `pressure`/`temperature` → `state`; убрана несуществующая переменная `{{TAG_ID_2}}`
+
 ## [0.0.19] - 2026-06-04
 
 ### Added
