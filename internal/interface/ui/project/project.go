@@ -109,6 +109,10 @@ type Project struct {
 	editingOriginY    string
 	editingRotation string
 
+	// ── Input simulation (in-memory only, not persisted) ───────────────────
+	// simInputs[widgetID][portName] = test value string
+	simInputs map[string]map[string]string
+
 	// ── Panel resize state ──────────────────────────────────────────────────
 	widgetTypeWidth      int
 	propertiesWidth      int
@@ -122,6 +126,7 @@ func NewProject(apiServerURL string) *Project {
 }
 
 func (p *Project) OnMount(ctx app.Context) {
+	p.simInputs = make(map[string]map[string]string)
 	p.widgetTypeWidth = 180
 	p.propertiesWidth = 260
 	ctx.LocalStorage().Get("project:widgetTypeWidth", &p.widgetTypeWidth)
@@ -277,6 +282,15 @@ func (p *Project) widgetByID(id string) (widgetItem, bool) {
 		}
 	}
 	return widgetItem{}, false
+}
+
+func (p *Project) widgetTypeByID(id string) (widgetTypeItem, bool) {
+	for _, wt := range p.widgetTypes {
+		if wt.ID == id {
+			return wt, true
+		}
+	}
+	return widgetTypeItem{}, false
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────

@@ -10,10 +10,12 @@ type portBindingDTO struct {
 }
 
 type widgetTypeItem struct {
-	ID            string         `json:"id"`
-	Name          string         `json:"name"`
-	DefaultWidth  int            `json:"default_width"`
-	DefaultHeight int            `json:"default_height"`
+	ID            string               `json:"id"`
+	Name          string               `json:"name"`
+	HtmlTemplate  string               `json:"html_template"`
+	Script        string               `json:"script"`
+	DefaultWidth  int                  `json:"default_width"`
+	DefaultHeight int                  `json:"default_height"`
 	InputPorts    []uidto.InputPortDTO `json:"input_ports"`
 }
 

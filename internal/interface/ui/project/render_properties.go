@@ -207,8 +207,10 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 	defaultName := "Widget"
 	defaultW, defaultH := 120, 60
 	var wtInputPorts []uidto.InputPortDTO
+	var capturedWT widgetTypeItem
 	for _, wt := range p.widgetTypes {
 		if wt.ID == w.TypeID {
+			capturedWT = wt
 			defaultName = wt.Name
 			if wt.DefaultWidth > 0 {
 				defaultW = wt.DefaultWidth
@@ -640,10 +642,82 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 
 	tagSection := app.Div().
 		Style("margin-bottom", "14px").
+		Style("padding-bottom", "12px").
+		Style("border-bottom", "1px solid var(--border-subtle)").
 		Body(
 			sectionHeader("Port Bindings"),
 			portBindingsBody,
 		)
+
+	// ── Simulate Inputs ───────────────────────────────────────────────────
+	simVals := p.simInputs[wid]
+
+	simRows := make([]app.UI, 0, len(inputPorts))
+	for _, port := range inputPorts {
+		port := port
+		val := ""
+		if simVals != nil {
+			val = simVals[port.Name]
+		}
+		typeLabel := uidto.TypeHintLabel(port.TypeHint)
+
+		row := app.Div().
+			Style("margin-bottom", "6px").
+			Body(
+				app.Div().
+					Style("display", "flex").
+					Style("align-items", "center").
+					Style("gap", "4px").
+					Style("margin-bottom", "2px").
+					Body(
+						app.Span().Style("font-size", "12px").Style("font-weight", "600").Text(port.Name),
+						app.Span().
+							Style("font-size", "10px").
+							Style("color", "var(--text-muted)").
+							Style("border", "1px solid var(--border)").
+							Style("border-radius", "2px").
+							Style("padding", "0 3px").
+							Text(typeLabel),
+					),
+				&simInputField{
+					FieldID:  "sim-" + wid + "-" + port.Name,
+					Val:      val,
+					PortName: port.Name,
+					OnChange: func(v string) {
+						if p.simInputs == nil {
+							p.simInputs = make(map[string]map[string]string)
+						}
+						if p.simInputs[wid] == nil {
+							p.simInputs[wid] = make(map[string]string)
+						}
+						p.simInputs[wid][port.Name] = v
+						// Directly push the updated srcdoc so the canvas preview
+						// reflects the new value without waiting for a parent re-render.
+						srcdoc := buildSrcdoc(capturedWT.HtmlTemplate, capturedWT.Script, p.simInputs[wid], capturedWT.InputPorts)
+						elem := app.Window().Get("document").Call("getElementById", "w-preview-"+wid)
+						if !elem.IsNull() && !elem.IsUndefined() {
+							elem.Set("srcdoc", srcdoc)
+						}
+					},
+				},
+			)
+		simRows = append(simRows, row)
+	}
+
+	var simSection app.UI
+	if len(inputPorts) > 0 {
+		simSection = section(
+			sectionHeader("Simulate Inputs"),
+			app.Div().
+				Style("font-size", "10px").
+				Style("color", "var(--text-muted)").
+				Style("margin-bottom", "6px").
+				Text("Test values for the canvas preview — not saved."),
+			app.Div().Body(simRows...),
+		)
+	} else {
+		simSection = app.Text("")
+	}
 
 	// ── Transform matrix display (read-only) ──────────────────────────────
 	matrix := widgetMatrixCSS(w)
@@ -692,6 +766,7 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 		originSection,
 		rotSection,
 		tagSection,
+		simSection,
 		matrixDisplay,
 		deleteBtn,
 	)
