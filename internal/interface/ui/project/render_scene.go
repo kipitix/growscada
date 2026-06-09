@@ -2,6 +2,7 @@ package project
 
 import (
 	"fmt"
+	"html"
 	"math"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
@@ -253,55 +254,59 @@ func (p *Project) renderWidget(w widgetItem) app.UI {
 	ox := w.Origin.X * float64(w.Size.Width)
 	oy := w.Origin.Y * float64(w.Size.Height)
 
-	// Visual style for selection state.
-	border := "1.5px solid var(--border-input)"
-	bg := "var(--widget-bg)"
-	if isSelected {
-		border = "2px solid var(--accent)"
-		bg = "var(--widget-sel-bg)"
+	// ── Widget content: iframe preview + transparent drag overlay ───────────
+	wt, wtOk := p.widgetTypeByID(w.TypeID)
+	var srcdoc string
+	if wtOk {
+		srcdoc = buildSrcdoc(wt.HtmlTemplate, wt.Script, p.simInputs[wid], wt.InputPorts)
+	} else {
+		// Type not loaded yet or deleted — show widget name as a text fallback.
+		srcdoc = buildSrcdoc(`<div style="display:flex;align-items:center;justify-content:center;height:100%;margin:0;font:11px sans-serif;color:#888">`+html.EscapeString(w.Name)+`</div>`, "", nil, nil)
 	}
 
-	// ── Widget content (name label) ─────────────────────────────────────────
 	content := app.Div().
 		Style("position", "absolute").
 		Style("inset", "0").
-		Style("display", "flex").
-		Style("align-items", "center").
-		Style("justify-content", "center").
 		Style("overflow", "hidden").
-		Style("padding", "0 8px").
-		Style("box-sizing", "border-box").
-		Style("background", bg).
-		Style("border", border).
-		Style("border-radius", "4px").
-		Style("cursor", "move").
-		Style("user-select", "none").
 		Body(
-			app.Span().
-				Style("font-size", "12px").
-				Style("white-space", "nowrap").
-				Style("text-overflow", "ellipsis").
-				Style("overflow", "hidden").
-				Style("color", "var(--text)").
-				Text(w.Name),
-		).
-		OnMouseDown(func(ctx app.Context, e app.Event) {
-			e.Call("stopPropagation")
-			e.PreventDefault()
-			p.selectWidget(ctx, wid)
-			p.draggingWidgetID = wid
-			p.dragStartCliX = e.Get("clientX").Float()
-			p.dragStartCliY = e.Get("clientY").Float()
-			// Read position from live p.widgets — the closure-captured w.Position
-			// may be stale if go-app didn't re-attach this handler after a drag.
-			if cur, ok := p.widgetByID(wid); ok {
-				p.dragStartPosX = cur.Position.X
-				p.dragStartPosY = cur.Position.Y
-			}
-		}, app.EventScope(wid)).
-		OnClick(func(ctx app.Context, e app.Event) {
-			e.Call("stopPropagation")
-		}, app.EventScope(wid))
+			// Widget preview iframe — pointer-events:none so mouse hits overlay.
+			&widgetPreviewFrame{
+				ID:     "w-preview-" + wid,
+				Srcdoc: srcdoc,
+			},
+			// Transparent overlay: captures drag/click for widget manipulation.
+			app.Div().
+				Style("position", "absolute").
+				Style("inset", "0").
+				Style("cursor", "move").
+				Style("user-select", "none").
+				OnMouseDown(func(ctx app.Context, e app.Event) {
+					e.Call("stopPropagation")
+					e.PreventDefault()
+					p.selectWidget(ctx, wid)
+					p.draggingWidgetID = wid
+					p.dragStartCliX = e.Get("clientX").Float()
+					p.dragStartCliY = e.Get("clientY").Float()
+					// Read position from live p.widgets — the closure-captured
+					// w.Position may be stale after a drag without handler reattachment.
+					if cur, ok := p.widgetByID(wid); ok {
+						p.dragStartPosX = cur.Position.X
+						p.dragStartPosY = cur.Position.Y
+					}
+				}, app.EventScope(wid)).
+				OnClick(func(ctx app.Context, e app.Event) {
+					e.Call("stopPropagation")
+				}, app.EventScope(wid)),
+			// Selection border overlay (pointer-events:none so it doesn't block drag).
+			app.If(isSelected, func() app.UI {
+				return app.Div().
+					Style("position", "absolute").
+					Style("inset", "0").
+					Style("border", "2px solid var(--accent)").
+					Style("pointer-events", "none").
+					Style("box-sizing", "border-box")
+			}),
+		)
 
 	bodyItems := []app.UI{content}
 

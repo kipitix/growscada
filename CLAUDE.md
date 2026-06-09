@@ -6,27 +6,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 GrowSCADA is a web-based SCADA system built in Go, following Domain-Driven Design (DDD). The backend and PWA frontend are compiled from the same Go codebase into a single binary — the server handles the API and serves the WASM frontend.
 
+## Makefile Reference
+
+All primary workflows go through `make`. **Always prefer `make <target>` over running raw commands directly.**
+
+| Target | What it does |
+|--------|-------------|
+| `make install_tools` | Installs `goose` migration tool via `go install` |
+| `make build` | Compiles WASM frontend (`app.wasm`) and server binary; outputs to `bin/growscada_combined_server/` |
+| `make run` | `build` + starts server + opens Chromium at `localhost:8080` |
+| `make db_up` | Starts the dev PostgreSQL container via Docker Compose; applies migrations and seeds automatically |
+| `make db_down` | Stops the container and **deletes** the data volume |
+| `make test` | Runs all tests with coverage (`go test --cover ./...`) |
+| `make full_restart` | Clean-slate restart: `db_down` → `db_up` → `run` (use when the DB state is stale or corrupted) |
+
+`make build` runs two compilations: `GOARCH=wasm GOOS=js` for `app.wasm`, then host-arch for the server binary.
+
 ## Commands
 
 ```bash
-# Install required tools (goose for migrations)
-make install_tools
-
-# Build both server binary and WASM frontend
-make build
-
-# Build + run (opens Chromium on localhost:8080)
-make run
-
-# Run all tests (unit + integration via testcontainers)
-make test
-
 # Run a single test
 go test ./internal/domain/tag/... -run TestTagName
-
-# Start/stop the development PostgreSQL database
-make db_up
-make db_down
 
 # Create a new migration
 goose create <migration_name> sql
@@ -36,8 +36,6 @@ export GOOSE_DRIVER=postgres
 export GOOSE_DBSTRING="user=growscada password=growscada host=localhost dbname=growscada"
 goose up
 ```
-
-The `make build` step runs two compilations: once with `GOARCH=wasm GOOS=js` to produce `app.wasm`, and once for the host platform to produce the server binary. Both outputs land in `bin/growscada_combined_server/`.
 
 ## Architecture
 
@@ -159,6 +157,6 @@ E-mail send/receive via IMAP/SMTP. Use to send task-completion notifications (se
 
 4. **Keep Bruno collections in sync.** When any REST API endpoint is added, removed, or modified (URL, method, request/response shape), update the corresponding Bruno collection in `tests/api/bruno_collections/` to reflect the change.
 
-5. **Verify UI changes in the browser.** After any UI change, launch the app and open it in the browser to confirm the result looks and behaves correctly. Use the `chrome-devtools` MCP server (`take_screenshot`, `click`, etc.) to interact with and inspect the running PWA on port 8080.
+5. **Send an e-mail notification on completion.** After finishing a task, send a brief summary e-mail to kipitix@gmail.com describing what was done (2–5 bullet points, no prose padding).
 
-6. **Send an e-mail notification on completion.** After finishing a task, send a brief summary e-mail to kipitix@gmail.com describing what was done (2–5 bullet points, no prose padding).
+6. **Start the test environment before debugging.** Before any debugging session or manual API testing, ensure the dev database is running with `make db_up`. If the database state looks stale or you hit unexpected data errors, use `make full_restart` to get a clean slate. Never run the server or hit the API endpoints without first confirming the DB container is up.

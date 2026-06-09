@@ -1,5 +1,39 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.21] - 2026-06-08
+
+### Added
+
+- `internal/interface/ui/project/preview.go` — три новых компонента и два вспомогательных функции:
+  - **`widgetPreviewFrame`** — sandboxed-iframe для отображения виджета на холсте сцены; `pointer-events:none` пропускает мышиные события к прозрачному drag-оверлею; `OnMount`/`OnUpdate` устанавливают `srcdoc` через прямое DOM-присвоение (обход ограничения браузера на перезагрузку `<iframe srcdoc>` через `setAttribute`)
+  - **`widgetThumbnailFrame`** — sandboxed-iframe для миниатюры в панели типов; рендерит виджет в нативном размере и уменьшает через CSS `transform: scale(N)` с `transform-origin: 0 0`; контейнер получает `overflow:hidden` с уже масштабированными размерами
+  - **`simInputField`** — управляемое поле ввода для панели симуляции; `OnMount`/`OnUpdate` устанавливают DOM `value` через `getElementById` + `ctx.Defer` (без этого go-app vdom вызывает `removeAttribute` для пустой строки, оставляя поле с устаревшим текстом при переключении между виджетами)
+  - **`buildSrcdoc()`** — формирует HTML-документ для `<iframe srcdoc>`: вставляет `htmlTemplate` в `<body>`, оборачивает `script` в `<script>`, генерирует JS-вызов `render(inputs)` на основе входных портов; добавляет `Content-Security-Policy: connect-src 'none'` для блокировки `fetch()`/XHR из iframe; экранирует `</script>` в пользовательском JS, чтобы содержимое поля не могло прервать `<script>` блок
+  - **`portValueToJS()`** — конвертирует строковое значение из поля ввода в JS-литерал с учётом `typeHint` (`integer`, `boolean`, `string`); использует `strconv.ParseInt`, `json.Marshal` — инъекция невозможна
+
+- `internal/interface/ui/project/render_properties.go` — панель «Simulate Inputs»:
+  - Секция появляется для виджетов с входными портами; показывает поле `simInputField` на каждый порт с меткой типа
+  - `OnChange` напрямую обновляет `srcdoc` у iframe `w-preview-<id>` через DOM без ожидания ре-рендера родительского компонента (в go-app v10 обработчики на дочернем компоненте не планируют ре-рендер родителя)
+  - `capturedWT widgetTypeItem` захватывается один раз в начале `renderWidgetProperties` и используется в замыкании `OnChange`
+  - Тестовые значения хранятся в `p.simInputs[widgetID][portName]` — не сохраняются на сервер
+
+- `internal/interface/ui/project/project.go`:
+  - Поле `simInputs map[string]map[string]string` — in-memory хранилище тестовых значений для симуляции
+  - Метод `widgetTypeByID(id string) (widgetTypeItem, bool)` — линейный поиск по `p.widgetTypes`
+
+### Changed
+
+- `internal/interface/ui/project/render_scene.go` — виджеты на холсте теперь отображаются как sandboxed-iframe вместо текстовой метки:
+  - Содержимое виджета: `widgetPreviewFrame` (`pointer-events:none`) + прозрачный `div`-оверлей для drag/click + рамка выделения (`pointer-events:none`, показывается при `isSelected`)
+  - При ненайденном `WidgetType` (тип ещё не загружен или удалён) показывается имя виджета как текстовый fallback через экранированный HTML
+  - Добавлен импорт пакета `"html"` для `html.EscapeString`
+
+- `internal/interface/ui/project/render_widget_types.go` — панель типов виджетов теперь показывает миниатюры `widgetThumbnailFrame` вместо строк «имя + размеры»:
+  - Масштаб миниатюры рассчитывается так, чтобы вписать виджет в ширину панели; при превышении `maxThumbH = 120` px пересчитывается scale и `thumbW` с повторной проверкой минимальной ширины 50 px
+  - При отсутствии `HtmlTemplate` показывается пунктирный прямоугольник с текстом «no HTML»
+
+- `internal/interface/ui/project/dto.go` — структура `widgetTypeItem` дополнена полями `HtmlTemplate string` и `Script string` для передачи шаблона и скрипта в компоненты предпросмотра
+
 ## [0.0.20] - 2026-06-07
 
 ### Added
