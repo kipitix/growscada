@@ -42,7 +42,7 @@ func (p *Project) renderWidgetTypePanel() app.UI {
 			thumbW = 50
 		}
 
-		srcdoc := buildSrcdoc(wt.HtmlTemplate, wt.Script, nil, wt.InputPorts)
+		srcdoc := buildSrcdoc(wt.HtmlTemplate, wt.Script, nil, wt.InputPorts, iframeBgColor())
 
 		var previewEl app.UI
 		if wt.HtmlTemplate != "" {

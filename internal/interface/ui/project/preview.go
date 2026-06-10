@@ -24,9 +24,11 @@ func (p *widgetPreviewFrame) Render() app.UI {
 	return app.IFrame().
 		ID(p.ID).
 		Attr("sandbox", "allow-scripts").
+		Attr("allowtransparency", "true").
 		Style("width", "100%").
 		Style("height", "100%").
 		Style("border", "none").
+		Style("background", "transparent").
 		Style("pointer-events", "none").
 		Style("display", "block")
 }
@@ -57,9 +59,11 @@ func (t *widgetThumbnailFrame) Render() app.UI {
 	return app.IFrame().
 		ID(t.ID).
 		Attr("sandbox", "allow-scripts").
+		Attr("allowtransparency", "true").
 		Style("width", fmt.Sprintf("%dpx", t.NativeW)).
 		Style("height", fmt.Sprintf("%dpx", t.NativeH)).
 		Style("border", "none").
+		Style("background", "transparent").
 		Style("pointer-events", "none").
 		Style("transform", fmt.Sprintf("scale(%.4f)", t.Scale)).
 		Style("transform-origin", "0 0").
@@ -135,10 +139,24 @@ func (f *simInputField) OnUpdate(ctx app.Context) {
 	f.setDOMValue(ctx)
 }
 
+// iframeBgColor reads the current --bg CSS variable from the parent document.
+// Called at render time so each srcdoc embeds the correct theme background.
+func iframeBgColor() string {
+	color := strings.TrimSpace(
+		app.Window().Call("getComputedStyle",
+			app.Window().Get("document").Get("documentElement"),
+		).Call("getPropertyValue", "--bg").String(),
+	)
+	if color == "" {
+		return "#ffffff"
+	}
+	return color
+}
+
 // buildSrcdoc constructs the iframe srcdoc for sandboxed widget preview.
 // It builds an `inputs` JS object from inputValues keyed by port name, then
 // calls render(inputs) if any ports are defined.
-func buildSrcdoc(htmlTemplate, script string, inputValues map[string]string, ports []uidto.InputPortDTO) string {
+func buildSrcdoc(htmlTemplate, script string, inputValues map[string]string, ports []uidto.InputPortDTO, bgColor string) string {
 	callRender := ""
 	if len(ports) > 0 {
 		parts := make([]string, 0, len(ports))
@@ -151,8 +169,8 @@ func buildSrcdoc(htmlTemplate, script string, inputValues map[string]string, por
 	// terminate the enclosing <script> element and inject new HTML.
 	safeScript := strings.ReplaceAll(script, "</script>", `<\/script>`)
 	return fmt.Sprintf(
-		`<!DOCTYPE html><html><head><meta http-equiv="Content-Security-Policy" content="connect-src 'none'"></head><body>%s<script>%s%s</script></body></html>`,
-		htmlTemplate, safeScript, callRender)
+		`<!DOCTYPE html><html><head><meta http-equiv="Content-Security-Policy" content="connect-src 'none'"><style>html,body{background:%s;margin:0;padding:0}</style></head><body>%s<script>%s%s</script></body></html>`,
+		bgColor, htmlTemplate, safeScript, callRender)
 }
 
 // portValueToJS converts a user-entered string to a JS literal based on type hint.

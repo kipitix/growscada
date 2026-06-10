@@ -23,6 +23,7 @@ const (
 
 type Project struct {
 	app.Compo
+	ThemeMode    string // exported so go-app detects theme changes and re-renders
 	apiServerURL string
 
 	activeSubTab projectSubTab
@@ -121,8 +122,8 @@ type Project struct {
 	panelResizeStartWidth int
 }
 
-func NewProject(apiServerURL string) *Project {
-	return &Project{apiServerURL: apiServerURL, activeSubTab: subTabScenes}
+func NewProject(apiServerURL, themeMode string) *Project {
+	return &Project{apiServerURL: apiServerURL, ThemeMode: themeMode, activeSubTab: subTabScenes}
 }
 
 func (p *Project) OnMount(ctx app.Context) {

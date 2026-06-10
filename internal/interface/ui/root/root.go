@@ -254,9 +254,9 @@ func (r *Root) Render() app.UI {
 				Style("background", "var(--bg)").
 				Body(
 					app.If(r.currentMode == ModeLibrary, func() app.UI {
-						return library.NewLibrary(r.apiServerURL)
+						return library.NewLibrary(r.apiServerURL, r.themeMode)
 					}).ElseIf(r.currentMode == ModeProject, func() app.UI {
-						return project.NewProject(r.apiServerURL)
+						return project.NewProject(r.apiServerURL, r.themeMode)
 					}).ElseIf(r.currentMode == ModeOperation, func() app.UI {
 						return &operation.Operation{}
 					}).Else(func() app.UI {

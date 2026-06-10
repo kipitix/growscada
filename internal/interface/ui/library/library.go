@@ -14,7 +14,8 @@ import (
 
 type Library struct {
 	app.Compo
-	apiServerURL     string
+	ThemeMode    string // exported so go-app detects theme changes and re-renders
+	apiServerURL string
 	widgetTypes      []widgetTypeItem
 	loading          bool
 	selectedID       string
@@ -32,8 +33,8 @@ type Library struct {
 	newPortType string
 }
 
-func NewLibrary(apiServerURL string) *Library {
-	return &Library{apiServerURL: apiServerURL}
+func NewLibrary(apiServerURL, themeMode string) *Library {
+	return &Library{apiServerURL: apiServerURL, ThemeMode: themeMode}
 }
 
 func (l *Library) OnMount(ctx app.Context) {

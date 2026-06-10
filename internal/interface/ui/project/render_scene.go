@@ -258,10 +258,10 @@ func (p *Project) renderWidget(w widgetItem) app.UI {
 	wt, wtOk := p.widgetTypeByID(w.TypeID)
 	var srcdoc string
 	if wtOk {
-		srcdoc = buildSrcdoc(wt.HtmlTemplate, wt.Script, p.simInputs[wid], wt.InputPorts)
+		srcdoc = buildSrcdoc(wt.HtmlTemplate, wt.Script, p.simInputs[wid], wt.InputPorts, iframeBgColor())
 	} else {
 		// Type not loaded yet or deleted — show widget name as a text fallback.
-		srcdoc = buildSrcdoc(`<div style="display:flex;align-items:center;justify-content:center;height:100%;margin:0;font:11px sans-serif;color:#888">`+html.EscapeString(w.Name)+`</div>`, "", nil, nil)
+		srcdoc = buildSrcdoc(`<div style="display:flex;align-items:center;justify-content:center;height:100%;margin:0;font:11px sans-serif;color:#888">`+html.EscapeString(w.Name)+`</div>`, "", nil, nil, iframeBgColor())
 	}
 
 	content := app.Div().

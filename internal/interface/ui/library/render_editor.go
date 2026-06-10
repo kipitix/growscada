@@ -90,9 +90,11 @@ func (p *previewFrame) Render() app.UI {
 	return app.IFrame().
 		ID(p.ID).
 		Attr("sandbox", "allow-scripts").
+		Attr("allowtransparency", "true").
 		Style("width", "100%").
 		Style("height", "100%").
-		Style("border", "none")
+		Style("border", "none").
+		Style("background", "transparent")
 }
 
 func (p *previewFrame) setSrcdoc() {
@@ -160,7 +162,7 @@ func (l *Library) renderPreviewColumn() app.UI {
 	} else {
 		content = &previewFrame{
 			ID:     "preview-iframe",
-			Srcdoc: buildSrcdoc(l.editedHTML, l.editedScript, l.editedInputValues, l.editedInputPorts),
+			Srcdoc: buildSrcdoc(l.editedHTML, l.editedScript, l.editedInputValues, l.editedInputPorts, iframeBgColor()),
 		}
 	}
 	return app.Div().
@@ -441,9 +443,23 @@ func (l *Library) renderInputDataColumn() app.UI {
 		)
 }
 
+// iframeBgColor reads the current --bg CSS variable from the parent document.
+// Called at render time so each srcdoc embeds the correct theme background.
+func iframeBgColor() string {
+	color := strings.TrimSpace(
+		app.Window().Call("getComputedStyle",
+			app.Window().Get("document").Get("documentElement"),
+		).Call("getPropertyValue", "--bg").String(),
+	)
+	if color == "" {
+		return "#ffffff"
+	}
+	return color
+}
+
 // buildSrcdoc constructs the iframe srcdoc for sandboxed widget preview.
 // It builds an `inputs` object from inputValues keyed by port name.
-func buildSrcdoc(htmlTemplate, script string, inputValues map[string]string, ports []uidto.InputPortDTO) string {
+func buildSrcdoc(htmlTemplate, script string, inputValues map[string]string, ports []uidto.InputPortDTO, bgColor string) string {
 	callRender := ""
 	if len(ports) > 0 {
 		parts := make([]string, 0, len(ports))
@@ -452,8 +468,8 @@ func buildSrcdoc(htmlTemplate, script string, inputValues map[string]string, por
 		}
 		callRender = fmt.Sprintf("\nvar inputs={%s};\ntry{render(inputs);}catch(e){}", strings.Join(parts, ","))
 	}
-	return fmt.Sprintf(`<!DOCTYPE html><html><body>%s<script>%s%s</script></body></html>`,
-		htmlTemplate, script, callRender)
+	return fmt.Sprintf(`<!DOCTYPE html><html><head><style>html,body{background:%s;margin:0;padding:0}</style></head><body>%s<script>%s%s</script></body></html>`,
+		bgColor, htmlTemplate, script, callRender)
 }
 
 func (l *Library) renderApplyButton() app.UI {
