@@ -7,6 +7,7 @@ import (
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
 	"github.com/kipitix/growscada/internal/interface/ui/uidto"
+	"github.com/kipitix/growscada/internal/interface/ui/uiutil"
 )
 
 // ── Right panel: Properties ────────────────────────────────────────────────────
@@ -693,7 +694,7 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 						p.simInputs[wid][port.Name] = v
 						// Directly push the updated srcdoc so the canvas preview
 						// reflects the new value without waiting for a parent re-render.
-						srcdoc := buildSrcdoc(capturedWT.HtmlTemplate, capturedWT.Script, p.simInputs[wid], capturedWT.InputPorts, iframeBgColor())
+						srcdoc := uiutil.BuildSrcdoc(capturedWT.HtmlTemplate, capturedWT.Script, p.simInputs[wid], capturedWT.InputPorts, uiutil.IframeBgColor())
 						elem := app.Window().Get("document").Call("getElementById", "w-preview-"+wid)
 						if !elem.IsNull() && !elem.IsUndefined() {
 							elem.Set("srcdoc", srcdoc)

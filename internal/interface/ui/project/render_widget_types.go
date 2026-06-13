@@ -4,11 +4,14 @@ import (
 	"fmt"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
+
+	"github.com/kipitix/growscada/internal/interface/ui/uiutil"
 )
 
 // ── Left panel: Widget Types ───────────────────────────────────────────────────
 
 func (p *Project) renderWidgetTypePanel() app.UI {
+	bg := uiutil.IframeBgColor()
 	items := make([]app.UI, len(p.widgetTypes))
 	for i, wt := range p.widgetTypes {
 		id := wt.ID
@@ -42,7 +45,7 @@ func (p *Project) renderWidgetTypePanel() app.UI {
 			thumbW = 50
 		}
 
-		srcdoc := buildSrcdoc(wt.HtmlTemplate, wt.Script, nil, wt.InputPorts, iframeBgColor())
+		srcdoc := uiutil.BuildSrcdoc(wt.HtmlTemplate, wt.Script, nil, wt.InputPorts, bg)
 
 		var previewEl app.UI
 		if wt.HtmlTemplate != "" {

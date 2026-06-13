@@ -51,6 +51,7 @@ func (r *Root) OnMount(ctx app.Context) {
 
 	ctx.Dispatch(func(ctx app.Context) {
 		r.themeMode = savedTheme
+		ctx.SetState("theme", savedTheme)
 		if Mode(savedMode) != ModeUnknown {
 			r.currentMode = Mode(savedMode)
 		}
@@ -61,6 +62,7 @@ func (r *Root) setTheme(ctx app.Context, mode string) {
 	r.themeMode = mode
 	ctx.LocalStorage().Set("root:theme", mode)
 	injectThemeCSS(mode)
+	ctx.SetState("theme", mode)
 }
 
 // ── CSS animations (toast) ────────────────────────────────────────────────────
@@ -254,9 +256,9 @@ func (r *Root) Render() app.UI {
 				Style("background", "var(--bg)").
 				Body(
 					app.If(r.currentMode == ModeLibrary, func() app.UI {
-						return library.NewLibrary(r.apiServerURL, r.themeMode)
+						return library.NewLibrary(r.apiServerURL)
 					}).ElseIf(r.currentMode == ModeProject, func() app.UI {
-						return project.NewProject(r.apiServerURL, r.themeMode)
+						return project.NewProject(r.apiServerURL)
 					}).ElseIf(r.currentMode == ModeOperation, func() app.UI {
 						return &operation.Operation{}
 					}).Else(func() app.UI {

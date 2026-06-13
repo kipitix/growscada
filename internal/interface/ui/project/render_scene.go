@@ -6,6 +6,8 @@ import (
 	"math"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
+
+	"github.com/kipitix/growscada/internal/interface/ui/uiutil"
 )
 
 // ── Center panel: Scene ────────────────────────────────────────────────────────
@@ -168,9 +170,10 @@ func (p *Project) renderSceneCanvas() app.UI {
 		}
 	}
 
+	bg := uiutil.IframeBgColor()
 	widgetEls := make([]app.UI, 0, len(p.widgets))
 	for _, w := range p.widgets {
-		widgetEls = append(widgetEls, p.renderWidget(w))
+		widgetEls = append(widgetEls, p.renderWidget(w, bg))
 	}
 
 	// Determine overall canvas cursor from active drag mode.
@@ -246,7 +249,7 @@ func (p *Project) renderSceneCanvas() app.UI {
 //   - Orange circle: origin anchor (drag to move anchor within widget)
 //   - Blue circle + line: rotation handle (drag to rotate)
 //   - Blue square corner: SE resize handle (drag to resize)
-func (p *Project) renderWidget(w widgetItem) app.UI {
+func (p *Project) renderWidget(w widgetItem, bg string) app.UI {
 	wid := w.ID
 	isSelected := p.selectedWidgetID == wid
 
@@ -258,10 +261,10 @@ func (p *Project) renderWidget(w widgetItem) app.UI {
 	wt, wtOk := p.widgetTypeByID(w.TypeID)
 	var srcdoc string
 	if wtOk {
-		srcdoc = buildSrcdoc(wt.HtmlTemplate, wt.Script, p.simInputs[wid], wt.InputPorts, iframeBgColor())
+		srcdoc = uiutil.BuildSrcdoc(wt.HtmlTemplate, wt.Script, p.simInputs[wid], wt.InputPorts, bg)
 	} else {
 		// Type not loaded yet or deleted — show widget name as a text fallback.
-		srcdoc = buildSrcdoc(`<div style="display:flex;align-items:center;justify-content:center;height:100%;margin:0;font:11px sans-serif;color:#888">`+html.EscapeString(w.Name)+`</div>`, "", nil, nil, iframeBgColor())
+		srcdoc = uiutil.BuildSrcdoc(`<div style="display:flex;align-items:center;justify-content:center;height:100%;margin:0;font:11px sans-serif;color:`+uiutil.IframeTextMuted()+`">`+html.EscapeString(w.Name)+`</div>`, "", nil, nil, bg)
 	}
 
 	content := app.Div().

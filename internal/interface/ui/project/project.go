@@ -122,11 +122,12 @@ type Project struct {
 	panelResizeStartWidth int
 }
 
-func NewProject(apiServerURL, themeMode string) *Project {
-	return &Project{apiServerURL: apiServerURL, ThemeMode: themeMode, activeSubTab: subTabScenes}
+func NewProject(apiServerURL string) *Project {
+	return &Project{apiServerURL: apiServerURL, activeSubTab: subTabScenes}
 }
 
 func (p *Project) OnMount(ctx app.Context) {
+	ctx.ObserveState("theme", &p.ThemeMode)
 	p.simInputs = make(map[string]map[string]string)
 	p.widgetTypeWidth = 180
 	p.propertiesWidth = 260

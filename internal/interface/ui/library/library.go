@@ -33,11 +33,12 @@ type Library struct {
 	newPortType string
 }
 
-func NewLibrary(apiServerURL, themeMode string) *Library {
-	return &Library{apiServerURL: apiServerURL, ThemeMode: themeMode}
+func NewLibrary(apiServerURL string) *Library {
+	return &Library{apiServerURL: apiServerURL}
 }
 
 func (l *Library) OnMount(ctx app.Context) {
+	ctx.ObserveState("theme", &l.ThemeMode)
 	ctx.LocalStorage().Get("library:selectedID", &l.selectedID)
 	l.loadList(ctx)
 }

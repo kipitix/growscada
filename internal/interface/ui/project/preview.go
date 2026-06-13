@@ -1,14 +1,9 @@
 package project
 
 import (
-	"encoding/json"
 	"fmt"
-	"strconv"
-	"strings"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
-
-	"github.com/kipitix/growscada/internal/interface/ui/uidto"
 )
 
 // widgetPreviewFrame renders a sandboxed iframe that fills its container.
@@ -139,68 +134,3 @@ func (f *simInputField) OnUpdate(ctx app.Context) {
 	f.setDOMValue(ctx)
 }
 
-// iframeBgColor reads the current --bg CSS variable from the parent document.
-// Called at render time so each srcdoc embeds the correct theme background.
-func iframeBgColor() string {
-	color := strings.TrimSpace(
-		app.Window().Call("getComputedStyle",
-			app.Window().Get("document").Get("documentElement"),
-		).Call("getPropertyValue", "--bg").String(),
-	)
-	if color == "" {
-		return "#ffffff"
-	}
-	return color
-}
-
-// buildSrcdoc constructs the iframe srcdoc for sandboxed widget preview.
-// It builds an `inputs` JS object from inputValues keyed by port name, then
-// calls render(inputs) if any ports are defined.
-func buildSrcdoc(htmlTemplate, script string, inputValues map[string]string, ports []uidto.InputPortDTO, bgColor string) string {
-	callRender := ""
-	if len(ports) > 0 {
-		parts := make([]string, 0, len(ports))
-		for _, p := range ports {
-			parts = append(parts, p.Name+":"+portValueToJS(inputValues[p.Name], p.TypeHint))
-		}
-		callRender = fmt.Sprintf("\nvar inputs={%s};\ntry{render(inputs);}catch(e){}", strings.Join(parts, ","))
-	}
-	// Escape </script> so a literal occurrence in user-authored JS cannot
-	// terminate the enclosing <script> element and inject new HTML.
-	safeScript := strings.ReplaceAll(script, "</script>", `<\/script>`)
-	return fmt.Sprintf(
-		`<!DOCTYPE html><html><head><meta http-equiv="Content-Security-Policy" content="connect-src 'none'"><style>html,body{background:%s;margin:0;padding:0}</style></head><body>%s<script>%s%s</script></body></html>`,
-		bgColor, htmlTemplate, safeScript, callRender)
-}
-
-// portValueToJS converts a user-entered string to a JS literal based on type hint.
-// Values are validated/encoded to prevent JS injection in the preview srcdoc.
-func portValueToJS(val, typeHint string) string {
-	if val == "" {
-		switch typeHint {
-		case "integer":
-			return "0"
-		case "boolean":
-			return "false"
-		case "string":
-			return `""`
-		default:
-			return "undefined"
-		}
-	}
-	switch typeHint {
-	case "integer":
-		if _, err := strconv.ParseInt(val, 10, 64); err == nil {
-			return val
-		}
-		return "0"
-	case "boolean":
-		if val == "true" || val == "false" {
-			return val
-		}
-		return "false"
-	default:
-		b, _ := json.Marshal(val)
-		return string(b)
-	}
-}
