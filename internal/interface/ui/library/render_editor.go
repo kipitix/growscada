@@ -95,15 +95,8 @@ func (p *previewFrame) Render() app.UI {
 		Style("background", "transparent")
 }
 
-func (p *previewFrame) setSrcdoc() {
-	elem := app.Window().Get("document").Call("getElementById", p.ID)
-	if !elem.IsNull() && !elem.IsUndefined() {
-		elem.Set("srcdoc", p.Srcdoc)
-	}
-}
-
-func (p *previewFrame) OnMount(ctx app.Context)  { p.setSrcdoc() }
-func (p *previewFrame) OnUpdate(ctx app.Context) { p.setSrcdoc() }
+func (p *previewFrame) OnMount(ctx app.Context)  { uiutil.SetIframeSrcdoc(p.ID, p.Srcdoc) }
+func (p *previewFrame) OnUpdate(ctx app.Context) { uiutil.SetIframeSrcdoc(p.ID, p.Srcdoc) }
 
 // ── Editor columns ────────────────────────────────────────────────────────────
 
@@ -309,7 +302,7 @@ func (l *Library) renderInputPortsColumn() app.UI {
 				Disabled(disabled).
 				OnClick(func(ctx app.Context, e app.Event) {
 					name := strings.TrimSpace(l.newPortName)
-					if name == "" {
+					if name == "" || !uiutil.IsValidJSIdentifier(name) {
 						return
 					}
 					// Prevent duplicate names in UI

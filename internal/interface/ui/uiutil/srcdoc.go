@@ -3,6 +3,7 @@ package uiutil
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -10,6 +11,17 @@ import (
 
 	"github.com/kipitix/growscada/internal/interface/ui/uidto"
 )
+
+// styleCloseRE matches </style> in any capitalisation or with trailing whitespace.
+var styleCloseRE = regexp.MustCompile(`(?i)</style\s*>`)
+
+var jsIdentRE = regexp.MustCompile(`^[a-zA-Z_$][a-zA-Z0-9_$]*$`)
+
+// IsValidJSIdentifier reports whether s can safely be used as an unquoted JS
+// object key. Call this before accepting user-supplied port names.
+func IsValidJSIdentifier(s string) bool {
+	return jsIdentRE.MatchString(s)
+}
 
 // IframeBgColor reads --bg from the parent document's computed CSS.
 func IframeBgColor() string {
@@ -37,12 +49,21 @@ func IframeTextMuted() string {
 	return color
 }
 
+// SetIframeSrcdoc sets the srcdoc property of the iframe identified by id.
+func SetIframeSrcdoc(id, srcdoc string) {
+	elem := app.Window().Get("document").Call("getElementById", id)
+	if !elem.IsNull() && !elem.IsUndefined() {
+		elem.Set("srcdoc", srcdoc)
+	}
+}
+
 // BuildSrcdoc constructs the iframe srcdoc for sandboxed widget preview.
 // It injects the background colour, applies a connect-src CSP, and escapes
 // any </script> in user-authored code to prevent early script-tag termination.
 func BuildSrcdoc(htmlTemplate, script string, inputValues map[string]string, ports []uidto.InputPortDTO, bgColor string) string {
-	// Prevent a CSS value containing </style> from breaking the HTML structure.
-	bgColor = strings.ReplaceAll(bgColor, "</style>", "")
+	// Strip </style> (any capitalisation/spacing) so a CSS variable value cannot
+	// close the injected <style> block prematurely.
+	bgColor = styleCloseRE.ReplaceAllString(bgColor, "")
 
 	callRender := ""
 	if len(ports) > 0 {
@@ -51,6 +72,9 @@ func BuildSrcdoc(htmlTemplate, script string, inputValues map[string]string, por
 			parts = append(parts, p.Name+":"+PortValueToJS(inputValues[p.Name], p.TypeHint))
 		}
 		callRender = fmt.Sprintf("\nvar inputs={%s};\ntry{render(inputs);}catch(e){}", strings.Join(parts, ","))
+		// Escape </script> in callRender (built from port names) the same way
+		// safeScript is escaped below — port names have no character restriction.
+		callRender = strings.ReplaceAll(callRender, "</script>", `<\/script>`)
 	}
 	// Escape </script> so a literal occurrence in user-authored JS cannot
 	// terminate the enclosing <script> element and inject new HTML.

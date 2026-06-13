@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
+
+	"github.com/kipitix/growscada/internal/interface/ui/uiutil"
 )
 
 // widgetPreviewFrame renders a sandboxed iframe that fills its container.
@@ -28,15 +30,8 @@ func (p *widgetPreviewFrame) Render() app.UI {
 		Style("display", "block")
 }
 
-func (p *widgetPreviewFrame) setSrcdoc() {
-	elem := app.Window().Get("document").Call("getElementById", p.ID)
-	if !elem.IsNull() && !elem.IsUndefined() {
-		elem.Set("srcdoc", p.Srcdoc)
-	}
-}
-
-func (p *widgetPreviewFrame) OnMount(ctx app.Context)  { p.setSrcdoc() }
-func (p *widgetPreviewFrame) OnUpdate(ctx app.Context) { p.setSrcdoc() }
+func (p *widgetPreviewFrame) OnMount(ctx app.Context)  { uiutil.SetIframeSrcdoc(p.ID, p.Srcdoc) }
+func (p *widgetPreviewFrame) OnUpdate(ctx app.Context) { uiutil.SetIframeSrcdoc(p.ID, p.Srcdoc) }
 
 // widgetThumbnailFrame renders a sandboxed iframe at the widget's native size,
 // then scales it down with CSS transform. The parent container must have
@@ -65,15 +60,8 @@ func (t *widgetThumbnailFrame) Render() app.UI {
 		Style("display", "block")
 }
 
-func (t *widgetThumbnailFrame) setSrcdoc() {
-	elem := app.Window().Get("document").Call("getElementById", t.ID)
-	if !elem.IsNull() && !elem.IsUndefined() {
-		elem.Set("srcdoc", t.Srcdoc)
-	}
-}
-
-func (t *widgetThumbnailFrame) OnMount(ctx app.Context)  { t.setSrcdoc() }
-func (t *widgetThumbnailFrame) OnUpdate(ctx app.Context) { t.setSrcdoc() }
+func (t *widgetThumbnailFrame) OnMount(ctx app.Context)  { uiutil.SetIframeSrcdoc(t.ID, t.Srcdoc) }
+func (t *widgetThumbnailFrame) OnUpdate(ctx app.Context) { uiutil.SetIframeSrcdoc(t.ID, t.Srcdoc) }
 
 // simInputField is a controlled input that explicitly sets the DOM value
 // property on mount and update, because go-app's virtual DOM removes the

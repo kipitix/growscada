@@ -171,9 +171,10 @@ func (p *Project) renderSceneCanvas() app.UI {
 	}
 
 	bg := uiutil.IframeBgColor()
+	textMuted := uiutil.IframeTextMuted()
 	widgetEls := make([]app.UI, 0, len(p.widgets))
 	for _, w := range p.widgets {
-		widgetEls = append(widgetEls, p.renderWidget(w, bg))
+		widgetEls = append(widgetEls, p.renderWidget(w, bg, textMuted))
 	}
 
 	// Determine overall canvas cursor from active drag mode.
@@ -249,7 +250,7 @@ func (p *Project) renderSceneCanvas() app.UI {
 //   - Orange circle: origin anchor (drag to move anchor within widget)
 //   - Blue circle + line: rotation handle (drag to rotate)
 //   - Blue square corner: SE resize handle (drag to resize)
-func (p *Project) renderWidget(w widgetItem, bg string) app.UI {
+func (p *Project) renderWidget(w widgetItem, bg, textMuted string) app.UI {
 	wid := w.ID
 	isSelected := p.selectedWidgetID == wid
 
@@ -264,7 +265,7 @@ func (p *Project) renderWidget(w widgetItem, bg string) app.UI {
 		srcdoc = uiutil.BuildSrcdoc(wt.HtmlTemplate, wt.Script, p.simInputs[wid], wt.InputPorts, bg)
 	} else {
 		// Type not loaded yet or deleted — show widget name as a text fallback.
-		srcdoc = uiutil.BuildSrcdoc(`<div style="display:flex;align-items:center;justify-content:center;height:100%;margin:0;font:11px sans-serif;color:`+uiutil.IframeTextMuted()+`">`+html.EscapeString(w.Name)+`</div>`, "", nil, nil, bg)
+		srcdoc = uiutil.BuildSrcdoc(`<div style="display:flex;align-items:center;justify-content:center;height:100%;margin:0;font:11px sans-serif;color:`+textMuted+`">`+html.EscapeString(w.Name)+`</div>`, "", nil, nil, bg)
 	}
 
 	content := app.Div().
