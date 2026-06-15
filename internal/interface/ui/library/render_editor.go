@@ -1,14 +1,12 @@
 package library
 
 import (
-	"encoding/json"
-	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
 	"github.com/kipitix/growscada/internal/interface/ui/uidto"
+	"github.com/kipitix/growscada/internal/interface/ui/uiutil"
 )
 
 // inputDataField is a thin component wrapping a single Input Data text field.
@@ -90,20 +88,15 @@ func (p *previewFrame) Render() app.UI {
 	return app.IFrame().
 		ID(p.ID).
 		Attr("sandbox", "allow-scripts").
+		Attr("allowtransparency", "true").
 		Style("width", "100%").
 		Style("height", "100%").
-		Style("border", "none")
+		Style("border", "none").
+		Style("background", "transparent")
 }
 
-func (p *previewFrame) setSrcdoc() {
-	elem := app.Window().Get("document").Call("getElementById", p.ID)
-	if !elem.IsNull() && !elem.IsUndefined() {
-		elem.Set("srcdoc", p.Srcdoc)
-	}
-}
-
-func (p *previewFrame) OnMount(ctx app.Context)  { p.setSrcdoc() }
-func (p *previewFrame) OnUpdate(ctx app.Context) { p.setSrcdoc() }
+func (p *previewFrame) OnMount(ctx app.Context)  { uiutil.SetIframeSrcdoc(p.ID, p.Srcdoc) }
+func (p *previewFrame) OnUpdate(ctx app.Context) { uiutil.SetIframeSrcdoc(p.ID, p.Srcdoc) }
 
 // ── Editor columns ────────────────────────────────────────────────────────────
 
@@ -160,7 +153,7 @@ func (l *Library) renderPreviewColumn() app.UI {
 	} else {
 		content = &previewFrame{
 			ID:     "preview-iframe",
-			Srcdoc: buildSrcdoc(l.editedHTML, l.editedScript, l.editedInputValues, l.editedInputPorts),
+			Srcdoc: uiutil.BuildSrcdoc(l.editedHTML, l.editedScript, l.editedInputValues, l.editedInputPorts, uiutil.IframeBgColor()),
 		}
 	}
 	return app.Div().
@@ -309,7 +302,7 @@ func (l *Library) renderInputPortsColumn() app.UI {
 				Disabled(disabled).
 				OnClick(func(ctx app.Context, e app.Event) {
 					name := strings.TrimSpace(l.newPortName)
-					if name == "" {
+					if name == "" || !uiutil.IsValidJSIdentifier(name) {
 						return
 					}
 					// Prevent duplicate names in UI
@@ -441,20 +434,6 @@ func (l *Library) renderInputDataColumn() app.UI {
 		)
 }
 
-// buildSrcdoc constructs the iframe srcdoc for sandboxed widget preview.
-// It builds an `inputs` object from inputValues keyed by port name.
-func buildSrcdoc(htmlTemplate, script string, inputValues map[string]string, ports []uidto.InputPortDTO) string {
-	callRender := ""
-	if len(ports) > 0 {
-		parts := make([]string, 0, len(ports))
-		for _, p := range ports {
-			parts = append(parts, p.Name+":"+portValueToJS(inputValues[p.Name], p.TypeHint))
-		}
-		callRender = fmt.Sprintf("\nvar inputs={%s};\ntry{render(inputs);}catch(e){}", strings.Join(parts, ","))
-	}
-	return fmt.Sprintf(`<!DOCTYPE html><html><body>%s<script>%s%s</script></body></html>`,
-		htmlTemplate, script, callRender)
-}
 
 func (l *Library) renderApplyButton() app.UI {
 	btn := app.Button().
@@ -474,36 +453,4 @@ func (l *Library) renderApplyButton() app.UI {
 		return btn.Style("opacity", "0.4").Style("cursor", "default").Disabled(true)
 	}
 	return btn.Style("cursor", "pointer")
-}
-
-// portValueToJS converts a user-entered string to a JS literal based on type hint.
-// Values are validated/encoded to prevent JS injection in the preview srcdoc.
-func portValueToJS(val, typeHint string) string {
-	if val == "" {
-		switch typeHint {
-		case "integer":
-			return "0"
-		case "boolean":
-			return "false"
-		case "string":
-			return `""`
-		default:
-			return "undefined"
-		}
-	}
-	switch typeHint {
-	case "integer":
-		if _, err := strconv.ParseInt(val, 10, 64); err == nil {
-			return val
-		}
-		return "0"
-	case "boolean":
-		if val == "true" || val == "false" {
-			return val
-		}
-		return "false"
-	default: // "string", "unknown", "" and any future type hints
-		b, _ := json.Marshal(val)
-		return string(b)
-	}
 }

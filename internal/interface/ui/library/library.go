@@ -14,7 +14,8 @@ import (
 
 type Library struct {
 	app.Compo
-	apiServerURL     string
+	ThemeMode    string // exported so go-app detects theme changes and re-renders
+	apiServerURL string
 	widgetTypes      []widgetTypeItem
 	loading          bool
 	selectedID       string
@@ -37,6 +38,7 @@ func NewLibrary(apiServerURL string) *Library {
 }
 
 func (l *Library) OnMount(ctx app.Context) {
+	ctx.ObserveState("theme", &l.ThemeMode)
 	ctx.LocalStorage().Get("library:selectedID", &l.selectedID)
 	l.loadList(ctx)
 }

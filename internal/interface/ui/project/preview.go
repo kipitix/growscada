@@ -1,14 +1,11 @@
 package project
 
 import (
-	"encoding/json"
 	"fmt"
-	"strconv"
-	"strings"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
-	"github.com/kipitix/growscada/internal/interface/ui/uidto"
+	"github.com/kipitix/growscada/internal/interface/ui/uiutil"
 )
 
 // widgetPreviewFrame renders a sandboxed iframe that fills its container.
@@ -24,22 +21,17 @@ func (p *widgetPreviewFrame) Render() app.UI {
 	return app.IFrame().
 		ID(p.ID).
 		Attr("sandbox", "allow-scripts").
+		Attr("allowtransparency", "true").
 		Style("width", "100%").
 		Style("height", "100%").
 		Style("border", "none").
+		Style("background", "transparent").
 		Style("pointer-events", "none").
 		Style("display", "block")
 }
 
-func (p *widgetPreviewFrame) setSrcdoc() {
-	elem := app.Window().Get("document").Call("getElementById", p.ID)
-	if !elem.IsNull() && !elem.IsUndefined() {
-		elem.Set("srcdoc", p.Srcdoc)
-	}
-}
-
-func (p *widgetPreviewFrame) OnMount(ctx app.Context)  { p.setSrcdoc() }
-func (p *widgetPreviewFrame) OnUpdate(ctx app.Context) { p.setSrcdoc() }
+func (p *widgetPreviewFrame) OnMount(ctx app.Context)  { uiutil.SetIframeSrcdoc(p.ID, p.Srcdoc) }
+func (p *widgetPreviewFrame) OnUpdate(ctx app.Context) { uiutil.SetIframeSrcdoc(p.ID, p.Srcdoc) }
 
 // widgetThumbnailFrame renders a sandboxed iframe at the widget's native size,
 // then scales it down with CSS transform. The parent container must have
@@ -57,24 +49,19 @@ func (t *widgetThumbnailFrame) Render() app.UI {
 	return app.IFrame().
 		ID(t.ID).
 		Attr("sandbox", "allow-scripts").
+		Attr("allowtransparency", "true").
 		Style("width", fmt.Sprintf("%dpx", t.NativeW)).
 		Style("height", fmt.Sprintf("%dpx", t.NativeH)).
 		Style("border", "none").
+		Style("background", "transparent").
 		Style("pointer-events", "none").
 		Style("transform", fmt.Sprintf("scale(%.4f)", t.Scale)).
 		Style("transform-origin", "0 0").
 		Style("display", "block")
 }
 
-func (t *widgetThumbnailFrame) setSrcdoc() {
-	elem := app.Window().Get("document").Call("getElementById", t.ID)
-	if !elem.IsNull() && !elem.IsUndefined() {
-		elem.Set("srcdoc", t.Srcdoc)
-	}
-}
-
-func (t *widgetThumbnailFrame) OnMount(ctx app.Context)  { t.setSrcdoc() }
-func (t *widgetThumbnailFrame) OnUpdate(ctx app.Context) { t.setSrcdoc() }
+func (t *widgetThumbnailFrame) OnMount(ctx app.Context)  { uiutil.SetIframeSrcdoc(t.ID, t.Srcdoc) }
+func (t *widgetThumbnailFrame) OnUpdate(ctx app.Context) { uiutil.SetIframeSrcdoc(t.ID, t.Srcdoc) }
 
 // simInputField is a controlled input that explicitly sets the DOM value
 // property on mount and update, because go-app's virtual DOM removes the
@@ -135,54 +122,3 @@ func (f *simInputField) OnUpdate(ctx app.Context) {
 	f.setDOMValue(ctx)
 }
 
-// buildSrcdoc constructs the iframe srcdoc for sandboxed widget preview.
-// It builds an `inputs` JS object from inputValues keyed by port name, then
-// calls render(inputs) if any ports are defined.
-func buildSrcdoc(htmlTemplate, script string, inputValues map[string]string, ports []uidto.InputPortDTO) string {
-	callRender := ""
-	if len(ports) > 0 {
-		parts := make([]string, 0, len(ports))
-		for _, p := range ports {
-			parts = append(parts, p.Name+":"+portValueToJS(inputValues[p.Name], p.TypeHint))
-		}
-		callRender = fmt.Sprintf("\nvar inputs={%s};\ntry{render(inputs);}catch(e){}", strings.Join(parts, ","))
-	}
-	// Escape </script> so a literal occurrence in user-authored JS cannot
-	// terminate the enclosing <script> element and inject new HTML.
-	safeScript := strings.ReplaceAll(script, "</script>", `<\/script>`)
-	return fmt.Sprintf(
-		`<!DOCTYPE html><html><head><meta http-equiv="Content-Security-Policy" content="connect-src 'none'"></head><body>%s<script>%s%s</script></body></html>`,
-		htmlTemplate, safeScript, callRender)
-}
-
-// portValueToJS converts a user-entered string to a JS literal based on type hint.
-// Values are validated/encoded to prevent JS injection in the preview srcdoc.
-func portValueToJS(val, typeHint string) string {
-	if val == "" {
-		switch typeHint {
-		case "integer":
-			return "0"
-		case "boolean":
-			return "false"
-		case "string":
-			return `""`
-		default:
-			return "undefined"
-		}
-	}
-	switch typeHint {
-	case "integer":
-		if _, err := strconv.ParseInt(val, 10, 64); err == nil {
-			return val
-		}
-		return "0"
-	case "boolean":
-		if val == "true" || val == "false" {
-			return val
-		}
-		return "false"
-	default:
-		b, _ := json.Marshal(val)
-		return string(b)
-	}
-}

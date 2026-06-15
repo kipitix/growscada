@@ -51,6 +51,7 @@ func (r *Root) OnMount(ctx app.Context) {
 
 	ctx.Dispatch(func(ctx app.Context) {
 		r.themeMode = savedTheme
+		ctx.SetState("theme", savedTheme)
 		if Mode(savedMode) != ModeUnknown {
 			r.currentMode = Mode(savedMode)
 		}
@@ -61,6 +62,7 @@ func (r *Root) setTheme(ctx app.Context, mode string) {
 	r.themeMode = mode
 	ctx.LocalStorage().Set("root:theme", mode)
 	injectThemeCSS(mode)
+	ctx.SetState("theme", mode)
 }
 
 // ── CSS animations (toast) ────────────────────────────────────────────────────

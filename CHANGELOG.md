@@ -1,5 +1,50 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.22] - 2026-06-14
+
+### Added
+
+- `internal/interface/ui/uiutil/srcdoc.go` — новый пакет с общими утилитами для sandboxed-iframe превью:
+  - **`BuildSrcdoc()`** — объединённая версия `buildSrcdoc()` из `library` и `project`; дополнительно инжектирует `<style>html,body{background:<bgColor>}</style>` в `<head>` iframe, чтобы фон совпадал с темой приложения; защищает от преждевременного закрытия `<style>` через `styleCloseRE.ReplaceAllString`
+  - **`SetIframeSrcdoc()`** — общий хелпер для прямого DOM-присвоения `srcdoc` по `id`
+  - **`IframeBgColor()`** — читает CSS-переменную `--bg` из `document.documentElement` через `getComputedStyle`; fallback `"#ffffff"`
+  - **`IframeTextMuted()`** — читает `--text-muted`; fallback `"#888888"`
+  - **`IsValidJSIdentifier()`** — проверяет, что строка соответствует `^[a-zA-Z_$][a-zA-Z0-9_$]*$`; используется для валидации имён портов перед добавлением
+  - **`PortValueToJS()`** — перенесена из `library` и `project` (ранее приватная); логика без изменений
+
+### Changed
+
+- `internal/interface/ui/library/render_editor.go`:
+  - Приватные `buildSrcdoc()` и `portValueToJS()` удалены — заменены вызовами `uiutil.BuildSrcdoc()` и `uiutil.PortValueToJS()`
+  - `previewFrame.setSrcdoc()` удалена — `OnMount`/`OnUpdate` теперь вызывают `uiutil.SetIframeSrcdoc()`
+  - iframe получает `allowtransparency="true"` и `background: transparent` для сквозной прозрачности
+  - Валидация имени порта расширена: добавлена проверка `uiutil.IsValidJSIdentifier(name)` перед добавлением порта
+  - Превью Library теперь передаёт `uiutil.IframeBgColor()` в `BuildSrcdoc` — фон iframe синхронизирован с темой
+
+- `internal/interface/ui/project/preview.go`:
+  - Приватные `buildSrcdoc()`, `portValueToJS()`, `setSrcdoc()` удалены из файла — заменены `uiutil`-аналогами
+  - `widgetPreviewFrame` и `widgetThumbnailFrame` получают `allowtransparency="true"` и `background: transparent`
+
+- `internal/interface/ui/project/render_scene.go`:
+  - `renderSceneCanvas()` вычисляет `bg` и `textMuted` один раз через `uiutil.IframeBgColor()` / `uiutil.IframeTextMuted()` и передаёт их в `renderWidget()`
+  - Подпись `renderWidget()` расширена параметрами `bg, textMuted string`; fallback-текст ненайденного виджета использует `textMuted` вместо захардкоженного `#888`
+
+- `internal/interface/ui/project/render_widget_types.go`:
+  - Миниатюры в панели типов строятся через `uiutil.BuildSrcdoc()` с явным `bg`
+
+- `internal/interface/ui/project/render_properties.go`:
+  - `buildSrcdoc()` в обработчике `OnChange` заменена на `uiutil.BuildSrcdoc()` с `uiutil.IframeBgColor()`
+
+- `internal/interface/ui/library/library.go`:
+  - Добавлено поле `ThemeMode string` (экспортированное — go-app отслеживает изменения полей компонента для планирования ре-рендера)
+  - `OnMount` подписывается на состояние `"theme"` через `ctx.ObserveState`
+
+- `internal/interface/ui/project/project.go`:
+  - Аналогично `library`: добавлено `ThemeMode string` и `ctx.ObserveState("theme", &p.ThemeMode)`
+
+- `internal/interface/ui/root/root.go`:
+  - `setTheme()` теперь публикует тему в `ctx.SetState("theme", mode)`; то же происходит при `OnMount` для восстановления сохранённой темы — компоненты `Library` и `Project` получают уведомление и перерисовываются с актуальным фоном
+
 ## [0.0.21] - 2026-06-08
 
 ### Added

@@ -23,6 +23,7 @@ const (
 
 type Project struct {
 	app.Compo
+	ThemeMode    string // exported so go-app detects theme changes and re-renders
 	apiServerURL string
 
 	activeSubTab projectSubTab
@@ -126,6 +127,7 @@ func NewProject(apiServerURL string) *Project {
 }
 
 func (p *Project) OnMount(ctx app.Context) {
+	ctx.ObserveState("theme", &p.ThemeMode)
 	p.simInputs = make(map[string]map[string]string)
 	p.widgetTypeWidth = 180
 	p.propertiesWidth = 260
