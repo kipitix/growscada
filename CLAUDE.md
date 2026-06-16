@@ -121,7 +121,20 @@ Manual/exploratory API tests are maintained as [Bruno](https://www.usebruno.com/
 
 ## MCP Servers
 
-Three MCP servers are available and should be used during development:
+Four MCP servers are available and should be used during development:
+
+### codegraph
+
+**Use codegraph BEFORE grep/find or reading files** when you need to understand or locate code. The index is a pre-built SQLite knowledge graph of every symbol, call edge, and file in the workspace — sub-millisecond reads, updated within ~1s of file changes.
+
+- `codegraph_explore` — PRIMARY tool. Pass a natural-language question or a bag of symbol/file names; returns the verbatim source of all relevant symbols grouped by file, plus call paths between them. Equivalent to running Read on multiple files at once — treat returned source as already read. Most questions need only this one call.
+- `codegraph_node` — Read a single file (pass `file` only) or look up one named symbol (pass `symbol`). Returns source with line numbers + caller/callee trail so you see the blast radius before editing.
+- `codegraph_search` — Quick symbol lookup by name. Returns locations only (no code). Use `codegraph_explore` to get the actual source.
+
+**When to use it:**
+- Before any edit — run `codegraph_node` on the symbol you're about to change to see who calls it.
+- When exploring an unfamiliar area — one `codegraph_explore` call replaces a grep + multi-file Read loop.
+- When asking "how does X work" or "where is Y defined" — answer directly from codegraph, no file reading needed.
 
 ### gopls
 Go language server. Use it for accurate code intelligence instead of plain-text grep:
