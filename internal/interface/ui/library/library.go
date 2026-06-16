@@ -31,10 +31,12 @@ type Library struct {
 	newPortName string
 	newPortDesc string
 	newPortType string
+	// code column tab: "html" | "js"
+	codeTab string
 }
 
 func NewLibrary(apiServerURL string) *Library {
-	return &Library{apiServerURL: apiServerURL}
+	return &Library{apiServerURL: apiServerURL, codeTab: "html"}
 }
 
 func (l *Library) OnMount(ctx app.Context) {
@@ -131,20 +133,16 @@ func (l *Library) startEditing(id, currentName string) {
 func (l *Library) Render() app.UI {
 	return app.Div().
 		Style("display", "flex").
-		Style("flex-direction", "row").
+		Style("flex-direction", "column").
 		Style("flex", "1").
 		Style("min-height", "0").
-		Style("gap", "8px").
 		Body(
-			l.renderListColumn(),
-			l.renderEditorColumn("HTML Template", "html-template", l.editedHTML, func(ctx app.Context, e app.Event) {
-				l.editedHTML = ctx.JSSrc().Get("value").String()
-			}, true),
-			l.renderEditorColumn("Script", "script-editor", l.editedScript, func(ctx app.Context, e app.Event) {
-				l.editedScript = ctx.JSSrc().Get("value").String()
-			}, true),
-			l.renderInputPortsColumn(),
-			l.renderInputDataColumn(),
-			l.renderPreviewColumn(),
+			app.Div().Class("ed-body").Body(
+				l.renderWidgetTypesPanel(),
+				l.renderCodePanel(),
+				l.renderPortsDataPanel(),
+				l.renderPreviewPanel(),
+			),
+			l.renderStatusBar(),
 		)
 }

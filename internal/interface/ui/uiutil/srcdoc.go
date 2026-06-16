@@ -23,12 +23,12 @@ func IsValidJSIdentifier(s string) bool {
 	return jsIdentRE.MatchString(s)
 }
 
-// IframeBgColor reads --bg from the parent document's computed CSS.
+// IframeBgColor reads --bg-panel from the parent document's computed CSS.
 func IframeBgColor() string {
 	color := strings.TrimSpace(
 		app.Window().Call("getComputedStyle",
 			app.Window().Get("document").Get("documentElement"),
-		).Call("getPropertyValue", "--bg").String(),
+		).Call("getPropertyValue", "--bg-panel").String(),
 	)
 	if color == "" {
 		return "#ffffff"

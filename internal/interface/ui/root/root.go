@@ -38,6 +38,7 @@ func (r *Root) OnMount(ctx app.Context) {
 	ctx.Page().SetTitle("GrowSCADA")
 
 	injectToastCSS()
+	injectDesignCSS()
 
 	var savedMode string
 	ctx.LocalStorage().Get("root:mode", &savedMode)
@@ -125,10 +126,26 @@ func lightVars() string {
 		--text-2: #555555;
 		--text-3: #888888;
 		--text-muted: #aaaaaa;
-		--accent: #0066cc;
+		--accent: #0d9488;
 		--accent-text: #ffffff;
-		--accent-bg: #f0f4ff;
-		--accent-border: #c8d8f8;
+		--accent-bg: #e6f7f5;
+		--accent-border: #9fd9d0;
+		--accent-soft: rgba(13,148,136,0.12);
+		--accent-line: rgba(13,148,136,0.45);
+		--ok: #1a7f37;
+		--warm: #c2761a;
+		--bg-app: #eceef1;
+		--bg-panel: #ffffff;
+		--bg-elev: #f6f7f9;
+		--bg-code: #fbfbfd;
+		--bg-input: #ffffff;
+		--border-soft: #e8ebef;
+		--border-strong: #c9d0d9;
+		--text-dim: #5d6675;
+		--text-faint: #97a0ad;
+		--hover: rgba(20,30,50,0.04);
+		--shadow: 0 1px 2px rgba(20,30,50,0.08);
+		--grid: rgba(20,30,50,0.05);
 		--error: #cc0000;
 		--error-bg: #fff5f5;
 		--error-border: #e0b0b0;
@@ -166,10 +183,26 @@ func darkVars() string {
 		--text-2: #999999;
 		--text-3: #6a6a6a;
 		--text-muted: #585858;
-		--accent: #4d9fff;
+		--accent: #15b8a6;
 		--accent-text: #ffffff;
-		--accent-bg: #192840;
-		--accent-border: #2a4a7a;
+		--accent-bg: rgba(21,184,166,0.16);
+		--accent-border: rgba(21,184,166,0.5);
+		--accent-soft: rgba(21,184,166,0.16);
+		--accent-line: rgba(21,184,166,0.5);
+		--ok: #2ecc71;
+		--warm: #e0922e;
+		--bg-app: #161b22;
+		--bg-panel: #1b212b;
+		--bg-elev: #212934;
+		--bg-code: #12161d;
+		--bg-input: #0f141a;
+		--border-soft: #232b35;
+		--border-strong: #3a4452;
+		--text-dim: #8a94a3;
+		--text-faint: #5c6675;
+		--hover: rgba(255,255,255,0.045);
+		--shadow: 0 1px 3px rgba(0,0,0,0.4);
+		--grid: rgba(255,255,255,0.04);
 		--error: #ff6868;
 		--error-bg: #2a1818;
 		--error-border: #7a3838;
@@ -227,33 +260,35 @@ func (r *Root) Render() app.UI {
 		Style("display", "flex").
 		Style("flex-direction", "column").
 		Style("height", "100vh").
-		Style("font-family", "sans-serif").
-		Style("background", "var(--bg)").
+		Style("font-family", "-apple-system, BlinkMacSystemFont, \"Segoe UI\", system-ui, sans-serif").
+		Style("background", "var(--bg-app)").
 		Style("color", "var(--text)").
 		Body(
 			&toast.Container{},
 			app.Div().
 				Attr("role", "tablist").
-				Style("display", "flex").
-				Style("flex-direction", "row").
-				Style("align-items", "center").
-				Style("border-bottom", "2px solid var(--border)").
-				Style("background", "var(--bg-elevated)").
+				Class("ed-top").
 				Body(
 					r.tab("Library", ModeLibrary),
 					r.tab("Project", ModeProject),
 					r.tab("Operation", ModeOperation),
 					r.tab("History", ModeHistory),
-					app.Div().Style("flex", "1"),
+					app.Div().Class("ed-spacer"),
+					app.Div().Class("ed-brand").Body(
+						app.Div().Class("ed-brand-mark"),
+						app.Div().Class("ed-brand-name").Body(
+							app.Text("Grow"),
+							app.Span().Text("SCADA"),
+						),
+					),
 					r.renderThemeToggle(),
 				),
 			app.Div().
 				Style("flex", "1").
 				Style("min-height", "0").
 				Style("display", "flex").
-				Style("padding", "12px").
 				Style("box-sizing", "border-box").
-				Style("background", "var(--bg)").
+				Style("background", "var(--bg-app)").
 				Body(
 					app.If(r.currentMode == ModeLibrary, func() app.UI {
 						return library.NewLibrary(r.apiServerURL)
@@ -278,30 +313,21 @@ func (r *Root) tab(label string, mode Mode) app.UI {
 		tabIdx = 0
 	}
 
-	tab := app.Div().
+	class := "ed-tab"
+	if active {
+		class += " active"
+	}
+
+	return app.Div().
 		Attr("role", "tab").
 		Attr("aria-selected", ariaSelected).
+		Class(class).
 		TabIndex(tabIdx).
-		Style("padding", "10px 20px").
-		Style("cursor", "pointer").
-		Style("font-size", "14px").
-		Style("user-select", "none").
-		Style("border-bottom", "2px solid transparent").
-		Style("margin-bottom", "-2px").
 		Text(label).
 		OnClick(func(ctx app.Context, e app.Event) {
 			r.currentMode = mode
 			ctx.LocalStorage().Set("root:mode", string(mode))
 		})
-
-	if active {
-		return tab.
-			Style("border-bottom-color", "var(--accent)").
-			Style("color", "var(--accent)").
-			Style("font-weight", "600")
-	}
-	return tab.
-		Style("color", "var(--text-2)")
 }
 
 func (r *Root) renderThemeToggle() app.UI {
@@ -316,16 +342,8 @@ func (r *Root) renderThemeToggle() app.UI {
 	}
 
 	return app.Button().
+		Class("icon-btn").
 		Title(title).
-		Style("margin", "0 10px").
-		Style("padding", "4px 7px").
-		Style("font-size", "15px").
-		Style("line-height", "1").
-		Style("cursor", "pointer").
-		Style("border", "1px solid var(--border-input)").
-		Style("border-radius", "5px").
-		Style("background", "var(--bg-elevated)").
-		Style("color", "var(--text-2)").
 		Text(icon).
 		OnClick(func(ctx app.Context, e app.Event) {
 			next := map[string]string{"auto": "light", "light": "dark", "dark": "auto"}

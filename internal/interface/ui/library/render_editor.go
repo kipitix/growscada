@@ -1,6 +1,7 @@
 package library
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
@@ -9,7 +10,7 @@ import (
 	"github.com/kipitix/growscada/internal/interface/ui/uiutil"
 )
 
-// inputDataField is a thin component wrapping a single Input Data text field.
+// inputDataField is a thin component wrapping a single Input Data field.
 // OnMount/OnUpdate explicitly set the DOM value property (not just the attribute)
 // so that the displayed value clears correctly when switching between WidgetTypes.
 // go-app's virtual DOM stores empty string as a missing attribute and removes
@@ -18,6 +19,7 @@ import (
 type inputDataField struct {
 	app.Compo
 	FieldID     string
+	InputType   string // "text" | "number"
 	Placeholder string
 	Val         string
 	PortName    string
@@ -28,19 +30,16 @@ type inputDataField struct {
 func (f *inputDataField) Render() app.UI {
 	onChange := f.OnChange
 	portName := f.PortName
+	inputType := f.InputType
+	if inputType == "" {
+		inputType = "text"
+	}
 	return app.Input().
+		Class("inp").
 		ID(f.FieldID).
-		Type("text").
+		Type(inputType).
 		Placeholder(f.Placeholder).
 		Value(f.Val).
-		Style("width", "100%").
-		Style("font-size", "12px").
-		Style("padding", "3px 6px").
-		Style("border", "1px solid var(--border-input)").
-		Style("border-radius", "3px").
-		Style("background", "var(--input-bg)").
-		Style("color", "var(--text)").
-		Style("box-sizing", "border-box").
 		OnInput(func(ctx app.Context, e app.Event) {
 			if onChange != nil {
 				onChange(ctx.JSSrc().Get("value").String())
@@ -98,143 +97,146 @@ func (p *previewFrame) Render() app.UI {
 func (p *previewFrame) OnMount(ctx app.Context)  { uiutil.SetIframeSrcdoc(p.ID, p.Srcdoc) }
 func (p *previewFrame) OnUpdate(ctx app.Context) { uiutil.SetIframeSrcdoc(p.ID, p.Srcdoc) }
 
-// ── Editor columns ────────────────────────────────────────────────────────────
+// ── Code column ───────────────────────────────────────────────────────────────
 
-func (l *Library) renderEditorColumn(title, id, value string, onInput func(app.Context, app.Event), showApply bool) app.UI {
-	base := app.Textarea().
-		ID(id).
-		Style("flex", "1").
-		Style("resize", "none").
-		Style("font-family", "monospace").
-		Style("font-size", "13px").
-		Style("background", "var(--input-bg)").
-		Style("color", "var(--text)").
-		Style("border", "1px solid var(--border-input)").
-		Style("border-radius", "3px").
-		Style("padding", "4px 6px").
-		Style("box-sizing", "border-box")
+func (l *Library) renderCodePanel() app.UI {
+	disabled := l.selectedID == ""
 
-	var textarea app.UI
-	if onInput != nil {
-		textarea = base.Text(value).OnInput(onInput)
-	} else {
-		textarea = base.Disabled(true)
+	segBtn := func(tab, label string) app.UI {
+		class := "seg-btn"
+		if l.codeTab == tab {
+			class += " active"
+		}
+		return app.Button().
+			Class(class).
+			Text(label).
+			OnClick(func(ctx app.Context, e app.Event) {
+				l.codeTab = tab
+			})
 	}
 
-	colBody := []app.UI{
-		app.H3().Style("margin", "0 0 8px 0").Text(title),
-		app.Div().
-			Style("flex", "1").
-			Style("min-height", "0").
-			Style("display", "flex").
-			Style("flex-direction", "column").
-			Body(textarea),
+	value := l.editedHTML
+	onInput := func(ctx app.Context, e app.Event) {
+		l.editedHTML = ctx.JSSrc().Get("value").String()
 	}
-	if showApply {
-		colBody = append(colBody, l.renderApplyButton())
-	}
-
-	return app.Div().
-		Style("display", "flex").
-		Style("flex-direction", "column").
-		Style("flex", "1").
-		Style("min-width", "0").
-		Style("min-height", "0").
-		Body(colBody...)
-}
-
-func (l *Library) renderPreviewColumn() app.UI {
-	var content app.UI
-	if l.editedHTML == "" {
-		content = app.Div().
-			Style("color", "var(--text-muted)").
-			Style("font-size", "13px").
-			Text("No HTML to preview.")
-	} else {
-		content = &previewFrame{
-			ID:     "preview-iframe",
-			Srcdoc: uiutil.BuildSrcdoc(l.editedHTML, l.editedScript, l.editedInputValues, l.editedInputPorts, uiutil.IframeBgColor()),
+	if l.codeTab == "js" {
+		value = l.editedScript
+		onInput = func(ctx app.Context, e app.Event) {
+			l.editedScript = ctx.JSSrc().Get("value").String()
 		}
 	}
+
+	textarea := app.Textarea().
+		Class("code-editor").
+		Text(value)
+	if disabled {
+		textarea = textarea.Disabled(true)
+	} else {
+		textarea = textarea.OnInput(onInput)
+	}
+
 	return app.Div().
-		Style("display", "flex").
-		Style("flex-direction", "column").
-		Style("flex", "1").
-		Style("min-width", "0").
-		Style("min-height", "0").
+		Class("panel").
+		Style("flex", "1.3 1 0").
 		Body(
-			app.H3().Style("margin", "0 0 8px 0").Text("Preview"),
-			app.Div().
-				Style("flex", "1").
-				Style("min-height", "0").
-				Style("overflow", "auto").
-				Style("border", "1px solid var(--border)").
-				Body(content),
+			app.Div().Class("panel-head").Style("height", "40px").Style("flex-basis", "40px").Body(
+				app.Div().Class("seg").Body(
+					segBtn("html", "Template"),
+					segBtn("js", "Script"),
+				),
+				app.Div().Class("panel-head-actions").Body(
+					l.renderApplyButton(),
+				),
+			),
+			app.Div().Class("panel-body").Style("padding", "0").Body(
+				app.Div().Class("codepanel").Body(textarea),
+			),
 		)
 }
 
-// renderInputPortsColumn renders the Input Ports management panel.
-func (l *Library) renderInputPortsColumn() app.UI {
+func (l *Library) renderApplyButton() app.UI {
+	disabled := l.selectedID == ""
+	return app.Button().
+		Class("btn", "btn-accent", "btn-sm").
+		Text("✓ Apply").
+		Disabled(disabled).
+		OnClick(func(ctx app.Context, e app.Event) {
+			l.applyChanges(ctx)
+		})
+}
+
+// ── Ports + Data column ──────────────────────────────────────────────────────
+
+func (l *Library) renderPortsDataPanel() app.UI {
+	return app.Div().
+		Class("panel").
+		Style("flex", "0 0 296px").
+		Body(
+			app.Div().Class("panel-head").Body(
+				app.Div().Class("panel-title").Text("Input Ports"),
+				app.Span().Class("panel-count").Text(len(l.editedInputPorts)),
+				app.Div().Class("panel-head-actions").Body(
+					l.renderApplyButton(),
+				),
+			),
+			app.Div().Class("panel-body").Style("flex", "0 0 auto").Style("max-height", "46%").Body(
+				l.renderPortsList(),
+			),
+			app.Div().Class("panel-head").Style("border-top", "1px solid var(--border-soft)").Body(
+				app.Div().Class("panel-title").Text("Input Data"),
+				app.Span().Class("panel-count").Text(len(l.editedInputPorts)),
+			),
+			app.Div().Class("panel-body").Style("flex", "1 1 0").Body(
+				l.renderDataList(),
+			),
+		)
+}
+
+func (l *Library) renderTypeBadge(typeHint string) app.UI {
+	label := uidto.TypeHintLabel(typeHint)
+	class := "badge badge-" + label
+	return app.Span().Class(class).Text(label)
+}
+
+func (l *Library) renderPortsList() app.UI {
 	disabled := l.selectedID == ""
 
-	// Existing ports list
-	portRows := make([]app.UI, 0, len(l.editedInputPorts))
+	rows := make([]app.UI, 0, len(l.editedInputPorts)+1)
 	for i, p := range l.editedInputPorts {
 		idx := i
-		typeLabel := uidto.TypeHintLabel(p.TypeHint)
 		desc := p.Description
 		if desc == "" {
 			desc = "—"
 		}
-		row := app.Div().
-			Style("display", "flex").
-			Style("align-items", "center").
-			Style("gap", "4px").
-			Style("padding", "3px 0").
-			Style("border-bottom", "1px solid var(--border)").
-			Body(
-				app.Div().
-					Style("flex", "1").
-					Style("font-size", "13px").
-					Body(
-						app.Span().Style("font-weight", "600").Text(p.Name),
-						app.Span().Style("color", "var(--text-muted)").Style("margin-left", "4px").Text("("+typeLabel+")"),
-						app.Div().Style("font-size", "11px").Style("color", "var(--text-muted)").Text(desc),
-					),
-				app.Button().
-					Style("font-size", "11px").
-					Style("padding", "1px 6px").
-					Style("cursor", "pointer").
-					Style("border", "1px solid var(--border-input)").
-					Style("border-radius", "3px").
-					Style("background", "var(--bg-hover)").
-					Style("color", "var(--text)").
-					Text("✕").
-					Disabled(disabled).
-					OnClick(func(ctx app.Context, e app.Event) {
-						ports := make([]uidto.InputPortDTO, 0, len(l.editedInputPorts)-1)
-						for j, pp := range l.editedInputPorts {
-							if j != idx {
-								ports = append(ports, pp)
-							}
+		rows = append(rows, app.Div().Class("port-row").Body(
+			app.Div().Class("port-handle").Text("⏚"),
+			app.Div().Class("port-main").Body(
+				app.Div().Class("port-name-row").Body(
+					app.Span().Class("port-name").Text(p.Name),
+					l.renderTypeBadge(p.TypeHint),
+				),
+				app.Div().Class("port-desc").Text(desc),
+			),
+			app.Button().
+				Class("port-x").
+				Text("✕").
+				Disabled(disabled).
+				OnClick(func(ctx app.Context, e app.Event) {
+					ports := make([]uidto.InputPortDTO, 0, len(l.editedInputPorts)-1)
+					for j, pp := range l.editedInputPorts {
+						if j != idx {
+							ports = append(ports, pp)
 						}
-						l.editedInputPorts = ports
-					}),
-			)
-		portRows = append(portRows, row)
+					}
+					l.editedInputPorts = ports
+				}),
+		))
 	}
 
-	emptyNote := app.If(len(l.editedInputPorts) == 0,
-		func() app.UI {
-			return app.Div().
-				Style("font-size", "12px").
-				Style("color", "var(--text-muted)").
-				Style("padding", "4px 0").
-				Text("No ports defined.")
-		},
-	)
+	if len(l.editedInputPorts) == 0 {
+		rows = append(rows, app.Div().Class("empty").Text("No ports defined."))
+	}
 
-	// Type hint options
 	typeOptions := []app.UI{
 		app.Option().Value("").Text("any"),
 		app.Option().Value("string").Text("string"),
@@ -242,215 +244,209 @@ func (l *Library) renderInputPortsColumn() app.UI {
 		app.Option().Value("integer").Text("integer"),
 	}
 
-	// Add-port form
-	addForm := app.Div().
-		Style("display", "flex").
-		Style("flex-direction", "column").
-		Style("gap", "4px").
-		Style("margin-top", "8px").
-		Body(
-			app.Input().
-				Type("text").
-				Placeholder("Port name (JS identifier)").
-				Value(l.newPortName).
-				Style("font-size", "12px").
-				Style("padding", "3px 6px").
-				Style("border", "1px solid var(--border-input)").
-				Style("border-radius", "3px").
-				Style("background", "var(--input-bg)").
-				Style("color", "var(--text)").
-				Disabled(disabled).
-				OnInput(func(ctx app.Context, e app.Event) {
-					l.newPortName = ctx.JSSrc().Get("value").String()
-				}),
-			app.Input().
-				Type("text").
-				Placeholder("Description (optional)").
-				Value(l.newPortDesc).
-				Style("font-size", "12px").
-				Style("padding", "3px 6px").
-				Style("border", "1px solid var(--border-input)").
-				Style("border-radius", "3px").
-				Style("background", "var(--input-bg)").
-				Style("color", "var(--text)").
-				Disabled(disabled).
-				OnInput(func(ctx app.Context, e app.Event) {
-					l.newPortDesc = ctx.JSSrc().Get("value").String()
-				}),
-			app.Select().
-				Style("font-size", "12px").
-				Style("padding", "3px 6px").
-				Style("border", "1px solid var(--border-input)").
-				Style("border-radius", "3px").
-				Style("background", "var(--input-bg)").
-				Style("color", "var(--text)").
-				Disabled(disabled).
-				OnChange(func(ctx app.Context, e app.Event) {
-					l.newPortType = ctx.JSSrc().Get("value").String()
-				}).
-				Body(typeOptions...),
-			app.Button().
-				Style("font-size", "12px").
-				Style("padding", "3px 8px").
-				Style("cursor", "pointer").
-				Style("border", "1px solid var(--border-input)").
-				Style("border-radius", "3px").
-				Style("background", "var(--bg-hover)").
-				Style("color", "var(--text)").
-				Style("align-self", "flex-start").
-				Text("+ Add Port").
-				Disabled(disabled).
-				OnClick(func(ctx app.Context, e app.Event) {
-					name := strings.TrimSpace(l.newPortName)
-					if name == "" || !uiutil.IsValidJSIdentifier(name) {
+	addForm := app.Div().Class("addport").Body(
+		app.Input().
+			Class("inp").
+			Type("text").
+			Placeholder("Port name (JS identifier)").
+			Value(l.newPortName).
+			Disabled(disabled).
+			OnInput(func(ctx app.Context, e app.Event) {
+				l.newPortName = ctx.JSSrc().Get("value").String()
+			}),
+		app.Input().
+			Class("inp").
+			Type("text").
+			Placeholder("Description (optional)").
+			Value(l.newPortDesc).
+			Disabled(disabled).
+			OnInput(func(ctx app.Context, e app.Event) {
+				l.newPortDesc = ctx.JSSrc().Get("value").String()
+			}),
+		app.Select().
+			Class("inp").
+			Disabled(disabled).
+			OnChange(func(ctx app.Context, e app.Event) {
+				l.newPortType = ctx.JSSrc().Get("value").String()
+			}).
+			Body(typeOptions...),
+		app.Button().
+			Class("btn", "btn-sm", "btn-block").
+			Text("+ Add Port").
+			Disabled(disabled).
+			OnClick(func(ctx app.Context, e app.Event) {
+				name := strings.TrimSpace(l.newPortName)
+				if name == "" || !uiutil.IsValidJSIdentifier(name) {
+					return
+				}
+				for _, p := range l.editedInputPorts {
+					if p.Name == name {
 						return
 					}
-					// Prevent duplicate names in UI
-					for _, p := range l.editedInputPorts {
-						if p.Name == name {
-							return
-						}
-					}
-					l.editedInputPorts = append(l.editedInputPorts, uidto.InputPortDTO{
-						Name:        name,
-						Description: l.newPortDesc,
-						TypeHint:    l.newPortType,
-					})
-					l.newPortName = ""
-					l.newPortDesc = ""
-					l.newPortType = ""
-				}),
-		)
+				}
+				l.editedInputPorts = append(l.editedInputPorts, uidto.InputPortDTO{
+					Name:        name,
+					Description: l.newPortDesc,
+					TypeHint:    l.newPortType,
+				})
+				l.newPortName = ""
+				l.newPortDesc = ""
+				l.newPortType = ""
+			}),
+	)
 
-	portList := make([]app.UI, 0, len(portRows)+1)
-	portList = append(portList, emptyNote)
-	portList = append(portList, portRows...)
-
-	return app.Div().
-		Style("display", "flex").
-		Style("flex-direction", "column").
-		Style("flex", "1").
-		Style("min-width", "0").
-		Style("min-height", "0").
-		Body(
-			app.H3().Style("margin", "0 0 8px 0").Text("Input Ports"),
-			app.Div().
-				Style("flex", "1").
-				Style("min-height", "0").
-				Style("overflow-y", "auto").
-				Body(portList...),
-			addForm,
-			l.renderApplyButton(),
-		)
+	rows = append(rows, addForm)
+	return app.Div().Class("ports").Body(rows...)
 }
 
-// renderInputDataColumn renders a per-port value table for the preview sandbox.
-func (l *Library) renderInputDataColumn() app.UI {
-	emptyNote := app.If(len(l.editedInputPorts) == 0, func() app.UI {
-		return app.Div().
-			Style("font-size", "12px").
-			Style("color", "var(--text-muted)").
-			Style("padding", "4px 0").
-			Text("Define Input Ports first.")
-	})
+func (l *Library) renderDataList() app.UI {
+	if len(l.editedInputPorts) == 0 {
+		return app.Div().Class("empty").Text("Define Input Ports first.")
+	}
 
 	rows := make([]app.UI, 0, len(l.editedInputPorts))
 	for _, p := range l.editedInputPorts {
 		portName := p.Name
-		typeLabel := uidto.TypeHintLabel(p.TypeHint)
-		placeholder := map[string]string{
-			"integer": "0",
-			"boolean": "true",
-			"string":  "hello",
-		}[p.TypeHint]
-		if placeholder == "" {
-			placeholder = "value"
-		}
 		val := l.editedInputValues[portName]
 
-		row := app.Tr().Body(
-			app.Td().
-				Style("padding", "4px 8px 4px 0").
-				Style("font-size", "13px").
-				Style("font-weight", "600").
-				Style("white-space", "nowrap").
-				Style("vertical-align", "middle").
-				Text(portName),
-			app.Td().
-				Style("padding", "4px 6px").
-				Style("vertical-align", "middle").
-				Body(
-					app.Span().
-						Style("font-size", "11px").
-						Style("padding", "2px 6px").
-						Style("border-radius", "3px").
-						Style("background", "var(--bg-hover)").
-						Style("color", "var(--text-muted)").
-						Style("white-space", "nowrap").
-						Text(typeLabel),
-				),
-			app.Td().
-				Style("padding", "4px 0").
-				Style("width", "100%").
-				Style("vertical-align", "middle").
-				Body(
-					&inputDataField{
-						FieldID:     "input-data-" + portName,
-						Placeholder: placeholder,
-						Val:         val,
-						PortName:    portName,
-						OnChange: func(v string) {
-							if l.editedInputValues == nil {
-								l.editedInputValues = make(map[string]string)
-							}
-							l.editedInputValues[portName] = v
-						},
-					},
-				),
-		)
-		rows = append(rows, row)
+		onChange := func(v string) {
+			if l.editedInputValues == nil {
+				l.editedInputValues = make(map[string]string)
+			}
+			l.editedInputValues[portName] = v
+		}
+
+		var control app.UI
+		switch p.TypeHint {
+		case "boolean":
+			control = l.renderBooleanToggle(portName, val, onChange)
+		case "integer":
+			control = &inputDataField{
+				FieldID:     "input-data-" + portName,
+				InputType:   "number",
+				Placeholder: "0",
+				Val:         val,
+				PortName:    portName,
+				OnChange:    onChange,
+			}
+		default:
+			placeholder := "value"
+			if p.TypeHint == "string" {
+				placeholder = "hello"
+			}
+			control = &inputDataField{
+				FieldID:     "input-data-" + portName,
+				InputType:   "text",
+				Placeholder: placeholder,
+				Val:         val,
+				PortName:    portName,
+				OnChange:    onChange,
+			}
+		}
+
+		rows = append(rows, app.Div().Class("data-row").Body(
+			app.Div().Class("data-info").Body(
+				app.Span().Class("data-name").Text(portName),
+				l.renderTypeBadge(p.TypeHint),
+			),
+			app.Div().Class("data-val").Body(control),
+		))
 	}
+	return app.Div().Class("data").Body(rows...)
+}
 
-	tableUI := app.If(len(l.editedInputPorts) > 0, func() app.UI {
-		return app.Table().
-			Style("width", "100%").
-			Style("border-collapse", "collapse").
-			Body(rows...)
-	})
-
+func (l *Library) renderBooleanToggle(portName, val string, onChange func(string)) app.UI {
+	on := val == "true"
+	class := "toggle"
+	if on {
+		class += " on"
+	}
+	label := "false"
+	if on {
+		label = "true"
+	}
 	return app.Div().
-		Style("display", "flex").
-		Style("flex-direction", "column").
-		Style("flex", "1").
-		Style("min-width", "0").
-		Style("min-height", "0").
+		Class(class).
+		OnClick(func(ctx app.Context, e app.Event) {
+			newVal := "true"
+			if on {
+				newVal = "false"
+			}
+			onChange(newVal)
+		}).
 		Body(
-			app.H3().Style("margin", "0 0 8px 0").Text("Input Data"),
-			app.Div().
-				Style("flex", "1").
-				Style("min-height", "0").
-				Style("overflow-y", "auto").
-				Body(emptyNote, tableUI),
+			app.Div().Class("toggle-track").Body(
+				app.Div().Class("toggle-knob"),
+			),
+			app.Span().Class("toggle-label").Text(label),
 		)
 }
 
+// ── Preview column ───────────────────────────────────────────────────────────
 
-func (l *Library) renderApplyButton() app.UI {
-	btn := app.Button().
-		Style("margin-top", "4px").
-		Style("padding", "4px 12px").
-		Style("font-size", "13px").
-		Style("border", "1px solid var(--border-input)").
-		Style("border-radius", "4px").
-		Style("align-self", "flex-end").
-		Style("background", "var(--bg-hover)").
-		Style("color", "var(--text)").
-		Text("Apply").
-		OnClick(func(ctx app.Context, e app.Event) {
-			l.applyChanges(ctx)
-		})
-	if l.selectedID == "" {
-		return btn.Style("opacity", "0.4").Style("cursor", "default").Disabled(true)
+func (l *Library) renderPreviewPanel() app.UI {
+	var stage app.UI
+	if l.editedHTML == "" {
+		stage = app.Div().Class("empty").Text("No HTML to preview.")
+	} else {
+		stage = &previewFrame{
+			ID:     "preview-iframe",
+			Srcdoc: uiutil.BuildSrcdoc(l.editedHTML, l.editedScript, l.editedInputValues, l.editedInputPorts, uiutil.IframeBgColor()),
+		}
 	}
-	return btn.Style("cursor", "pointer")
+
+	widgetName := l.editedName
+	if l.selectedID == "" {
+		widgetName = "—"
+	}
+
+	valueParts := make([]string, 0, len(l.editedInputPorts))
+	for _, p := range l.editedInputPorts {
+		valueParts = append(valueParts, p.Name+" = "+l.editedInputValues[p.Name])
+	}
+
+	return app.Div().
+		Class("panel").
+		Style("flex", "1.05 1 0").
+		Body(
+			app.Div().Class("panel-head").Body(
+				app.Div().Class("panel-title").Text("Preview"),
+				app.Div().Class("panel-head-actions").Body(
+					app.Span().Class("badge").Text("live"),
+				),
+			),
+			app.Div().Class("preview-wrap").Body(
+				app.Div().Class("preview-frame").Body(
+					app.Div().Class("preview-card").Body(stage),
+				),
+				app.Div().Class("preview-meta").Body(
+					app.Span().Class("dot"),
+					app.Span().Text(widgetName),
+					app.Span().Class("preview-meta-values").Text(strings.Join(valueParts, "   ")),
+				),
+			),
+		)
+}
+
+// ── Status bar ────────────────────────────────────────────────────────────────
+
+func (l *Library) renderStatusBar() app.UI {
+	widgetName := l.editedName
+	if l.selectedID == "" {
+		widgetName = "No widget selected"
+	}
+	mode := "template.svg"
+	if l.codeTab == "js" {
+		mode = "render.js"
+	}
+	return app.Div().Class("statusbar").Body(
+		app.Div().Class("status-item").Text(widgetName),
+		app.Div().Class("status-item", "status-soft").Text(mode),
+		app.Div().Class("status-sep"),
+		app.Div().Class("status-item", "status-soft").Text(fmt.Sprintf("%d ports bound", len(l.editedInputPorts))),
+		app.Div().Class("status-item").Body(
+			app.Span().Class("status-dot"),
+			app.Text(" Live"),
+		),
+	)
 }

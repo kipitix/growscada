@@ -4,104 +4,77 @@ import (
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 )
 
-// ── List column ───────────────────────────────────────────────────────────────
+// ── Widget Types column ──────────────────────────────────────────────────────
 
-func (l *Library) renderListColumn() app.UI {
+func (l *Library) renderWidgetTypesPanel() app.UI {
 	return app.Div().
-		Style("display", "flex").
-		Style("flex-direction", "column").
-		Style("width", "200px").
-		Style("flex-shrink", "0").
-		Style("min-height", "0").
+		Class("panel").
+		Style("flex", "0 0 224px").
 		Body(
-			app.H3().Style("margin", "0 0 8px 0").Text("Widget Types"),
-			l.renderListButtons(),
-			app.Div().
-				Style("flex", "1").
-				Style("overflow-y", "auto").
-				Style("margin-top", "4px").
-				Body(l.renderList()),
+			app.Div().Class("panel-head").Body(
+				app.Div().Class("panel-title").Body(
+					app.Span().Class("panel-title-icon").Text("▣"),
+					app.Text("Widget Types"),
+				),
+				app.Span().Class("panel-count").Text(len(l.widgetTypes)),
+				app.Div().Class("panel-head-actions").Body(
+					app.Button().
+						Class("btn", "btn-accent", "btn-sm").
+						Title("Create widget type").
+						Text("+").
+						OnClick(func(ctx app.Context, e app.Event) {
+							l.createItem(ctx)
+						}),
+				),
+			),
+			app.Div().Class("panel-body").Body(l.renderList()),
+			app.Div().Class("panel-foot").Body(
+				l.renderDeleteButton(),
+			),
 		)
 }
 
-func (l *Library) renderListButtons() app.UI {
-	deleteDisabled := l.selectedID == ""
-
-	deleteBtn := app.Button().
-		Style("flex", "1").
-		Style("padding", "4px 0").
-		Style("font-size", "13px").
-		Style("cursor", "pointer").
-		Style("border", "1px solid var(--error-border)").
-		Style("border-radius", "4px").
-		Style("background", "var(--error-bg)").
-		Style("color", "var(--error)").
-		Text("Delete").
+func (l *Library) renderDeleteButton() app.UI {
+	disabled := l.selectedID == ""
+	return app.Button().
+		Class("btn", "btn-ghost", "btn-danger", "btn-sm", "btn-block").
+		Text("Delete widget").
+		Disabled(disabled).
 		OnClick(func(ctx app.Context, e app.Event) {
 			if !app.Window().Call("confirm", "Are you sure you want to delete?").Bool() {
 				return
 			}
 			l.deleteItem(ctx)
 		})
-	if deleteDisabled {
-		deleteBtn = deleteBtn.
-			Style("opacity", "0.4").
-			Style("cursor", "default").
-			Disabled(true)
-	}
-
-	return app.Div().
-		Style("display", "flex").
-		Style("gap", "4px").
-		Style("margin-bottom", "4px").
-		Body(
-			app.Button().
-				Style("flex", "1").
-				Style("padding", "4px 0").
-				Style("font-size", "13px").
-				Style("cursor", "pointer").
-				Style("border", "1px solid var(--accent-border)").
-				Style("border-radius", "4px").
-				Style("background", "var(--accent-bg)").
-				Style("color", "var(--accent)").
-				Text("Create").
-				OnClick(func(ctx app.Context, e app.Event) {
-					l.createItem(ctx)
-				}),
-			deleteBtn,
-		)
 }
 
 func (l *Library) renderList() app.UI {
 	if l.loading {
-		return app.Div().Style("font-size", "13px").Style("color", "var(--text-muted)").Text("Loading...")
+		return app.Div().Class("empty").Text("Loading...")
 	}
-if len(l.widgetTypes) == 0 {
-		return app.Div().Style("font-size", "13px").Style("color", "var(--text-muted)").Text("No widget types found.")
+	if len(l.widgetTypes) == 0 {
+		return app.Div().Class("empty").Text("No widget types found.")
 	}
 
 	items := make([]app.UI, len(l.widgetTypes))
 	for i, it := range l.widgetTypes {
 		id := it.ID
 		name := it.Name
+		kind := it.ScriptLanguage
+		if kind == "" {
+			kind = "—"
+		}
+
 		var item app.UI
 		if l.editingID == id {
 			item = app.Div().
-				Style("padding", "2px 4px").
-				Style("border-radius", "4px").
+				Style("padding", "2px").
 				Body(
 					app.Input().
+						Class("inp").
 						Type("text").
 						Value(l.editingName).
 						AutoFocus(true).
-						Style("width", "100%").
-						Style("font-size", "13px").
-						Style("padding", "3px 4px").
-						Style("border", "1px solid var(--accent)").
-						Style("border-radius", "2px").
-						Style("box-sizing", "border-box").
-						Style("background", "var(--input-bg)").
-						Style("color", "var(--text)").
 						OnInput(func(ctx app.Context, e app.Event) {
 							l.editingName = ctx.JSSrc().Get("value").String()
 						}).
@@ -119,12 +92,19 @@ if len(l.widgetTypes) == 0 {
 						}),
 				)
 		} else {
+			class := "witem"
+			if l.selectedID == id {
+				class += " active"
+			}
 			item = app.Div().
-				Style("padding", "6px 8px").
-				Style("cursor", "pointer").
-				Style("border-radius", "4px").
-				Style("font-size", "13px").
-				Body(app.Text(name)).
+				Class(class).
+				Body(
+					app.Div().Class("witem-ico").Text("▣"),
+					app.Div().Class("witem-main").Body(
+						app.Div().Class("witem-name").Text(name),
+						app.Div().Class("witem-kind").Text(kind),
+					),
+				).
 				OnClick(func(ctx app.Context, e app.Event) {
 					l.selectItem(id)
 					ctx.LocalStorage().Set("library:selectedID", id)
@@ -132,15 +112,8 @@ if len(l.widgetTypes) == 0 {
 				OnDblClick(func(ctx app.Context, e app.Event) {
 					l.startEditing(id, name)
 				})
-			if l.selectedID == id {
-				item = item.(app.HTMLDiv).
-					Style("background", "var(--accent)").
-					Style("color", "var(--accent-text)")
-			} else {
-				item = item.(app.HTMLDiv).Style("color", "var(--text)")
-			}
 		}
 		items[i] = item
 	}
-	return app.Div().Body(items...)
+	return app.Div().Class("wlist").Body(items...)
 }

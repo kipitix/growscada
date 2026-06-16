@@ -43,39 +43,23 @@ func (p *Project) renderTagListButtons() app.UI {
 	deleteDisabled := p.selectedTagID == "" || p.creatingTag
 
 	deleteBtn := app.Button().
+		Class("btn", "btn-ghost", "btn-danger", "btn-sm").
 		Style("flex", "1").
-		Style("padding", "4px 0").
-		Style("font-size", "13px").
-		Style("cursor", "pointer").
-		Style("border", "1px solid var(--error-border)").
-		Style("border-radius", "4px").
-		Style("background", "var(--error-bg)").
-		Style("color", "var(--error)").
 		Text("Delete").
+		Disabled(deleteDisabled).
 		OnClick(func(ctx app.Context, e app.Event) {
 			if !app.Window().Call("confirm", "Are you sure you want to delete?").Bool() {
 				return
 			}
 			p.deleteTag(ctx)
 		})
-	if deleteDisabled {
-		deleteBtn = deleteBtn.
-			Style("opacity", "0.4").
-			Style("cursor", "default").
-			Disabled(true)
-	}
 
 	createDisabled := p.creatingTag
 	createBtn := app.Button().
+		Class("btn", "btn-accent", "btn-sm").
 		Style("flex", "1").
-		Style("padding", "4px 0").
-		Style("font-size", "13px").
-		Style("cursor", "pointer").
-		Style("border", "1px solid var(--accent-border)").
-		Style("border-radius", "4px").
-		Style("background", "var(--accent-bg)").
-		Style("color", "var(--accent)").
 		Text("Create").
+		Disabled(createDisabled).
 		OnClick(func(ctx app.Context, e app.Event) {
 			p.creatingTag = true
 			p.newTagName = "New Tag"
@@ -83,12 +67,6 @@ func (p *Project) renderTagListButtons() app.UI {
 			p.selectedTagID = ""
 			ctx.LocalStorage().Set("project:tagID", "")
 		})
-	if createDisabled {
-		createBtn = createBtn.
-			Style("opacity", "0.4").
-			Style("cursor", "default").
-			Disabled(true)
-	}
 
 	return app.Div().
 		Style("display", "flex").
@@ -107,28 +85,25 @@ func (p *Project) renderTagList() app.UI {
 		id := t.ID
 		name := t.Name
 		tagType := t.Type
-		var item app.HTMLDiv = app.Div().
-			Style("padding", "6px 8px").
-			Style("cursor", "pointer").
-			Style("border-radius", "4px").
-			Style("font-size", "13px").
+		class := "witem"
+		if p.selectedTagID == id {
+			class += " active"
+		}
+		items[i] = app.Div().
+			Class(class).
 			Body(
-				app.Div().Text(name),
-				app.Div().Style("font-size", "11px").Style("opacity", "0.65").Text(tagType),
+				app.Div().Class("witem-main").Body(
+					app.Div().Class("witem-name").Text(name),
+					app.Div().Class("witem-kind").Text(tagType),
+				),
 			).
 			OnClick(func(ctx app.Context, e app.Event) {
 				p.selectedTagID = id
 				p.creatingTag = false
 				ctx.LocalStorage().Set("project:tagID", id)
 			})
-		if p.selectedTagID == id {
-			item = item.Style("background", "var(--accent)").Style("color", "var(--accent-text)")
-		} else {
-			item = item.Style("color", "var(--text)")
-		}
-		items[i] = item
 	}
-	return app.Div().Body(items...)
+	return app.Div().Class("wlist").Body(items...)
 }
 
 // ── Right panel: properties ───────────────────────────────────────────────────
@@ -252,24 +227,13 @@ func (p *Project) renderTagCreateForm() app.UI {
 				Style("gap", "8px").
 				Body(
 					app.Button().
-						Style("padding", "6px 18px").
-						Style("font-size", "13px").
-						Style("cursor", "pointer").
-						Style("border", "1px solid var(--accent)").
-						Style("border-radius", "4px").
-						Style("background", "var(--accent)").
-						Style("color", "var(--accent-text)").
+						Class("btn", "btn-accent").
 						Text("Create").
 						OnClick(func(ctx app.Context, e app.Event) {
 							p.createTag(ctx)
 						}),
 					app.Button().
-						Style("padding", "6px 18px").
-						Style("font-size", "13px").
-						Style("cursor", "pointer").
-						Style("border", "1px solid var(--border-input)").
-						Style("border-radius", "4px").
-						Style("background", "var(--bg)").
+						Class("btn", "btn-ghost").
 						Text("Cancel").
 						OnClick(func(ctx app.Context, e app.Event) {
 							p.creatingTag = false

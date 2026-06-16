@@ -316,11 +316,10 @@ func (p *Project) Render() app.UI {
 
 func (p *Project) renderSubTabs() app.UI {
 	return app.Div().
-		Style("display", "flex").
-		Style("flex-direction", "row").
-		Style("border-bottom", "1px solid var(--border)").
-		Style("background", "var(--bg-elevated)").
-		Style("padding", "0 4px").
+		Class("ed-top").
+		Style("height", "34px").
+		Style("flex", "0 0 34px").
+		Style("padding", "0 8px").
 		Body(
 			p.subTab("Scenes", subTabScenes),
 			p.subTab("Tags", subTabTags),
@@ -329,25 +328,18 @@ func (p *Project) renderSubTabs() app.UI {
 
 func (p *Project) subTab(label string, tab projectSubTab) app.UI {
 	active := p.activeSubTab == tab
-	el := app.Div().
-		Style("padding", "6px 16px").
-		Style("cursor", "pointer").
-		Style("font-size", "13px").
-		Style("user-select", "none").
-		Style("border-bottom", "2px solid transparent").
-		Style("margin-bottom", "-1px").
+	class := "ed-tab"
+	if active {
+		class += " active"
+	}
+	return app.Div().
+		Class(class).
+		Style("height", "34px").
 		Text(label).
 		OnClick(func(ctx app.Context, e app.Event) {
 			p.activeSubTab = tab
 			ctx.LocalStorage().Set("project:subTab", string(tab))
 		})
-	if active {
-		return el.
-			Style("border-bottom-color", "var(--accent)").
-			Style("color", "var(--accent)").
-			Style("font-weight", "600")
-	}
-	return el.Style("color", "var(--text-2)")
 }
 
 func (p *Project) renderPanelDivider(side string) app.UI {
