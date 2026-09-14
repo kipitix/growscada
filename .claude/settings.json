@@ -1,0 +1,21 @@
+{
+  "includeCoAuthoredBy": false,
+  "enabledMcpjsonServers": [
+    "gopls",
+    "chrome-devtools",
+    "codegraph"
+  ],
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v notify-send >/dev/null 2>&1 && notify-send \"Claude Code\" \"Задача завершена: $(basename \"$PWD\")\" -a \"Claude Code\" -i dialog-information 2>/dev/null; true",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
