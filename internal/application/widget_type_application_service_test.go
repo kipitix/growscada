@@ -449,3 +449,89 @@ func TestUpdateWidgetType_StaleVersion_ReturnsConflict(t *testing.T) {
 		t.Errorf("expected wrapped ErrWidgetTypeConflict, got: %v", err)
 	}
 }
+
+// --- removeOrphanedPortBindings ---
+
+// TestUpdateWidgetType_RemovedPort_CleansBindingsOnAllWidgetsInSameScene is the
+// regression test for a bug where removeOrphanedPortBindings reused the same
+// (now-stale) scene version for every widget it touched: with 2+ widgets of
+// the same type in one scene, the second widget's cleanup update failed with a
+// spurious scene.ErrSceneConflict because the first update had already bumped
+// the scene's version in the DB.
+func TestUpdateWidgetType_RemovedPort_CleansBindingsOnAllWidgetsInSameScene(t *testing.T) {
+	cleanScenes(t)
+	cleanWidgetTypes(t)
+	wtSvc := newWidgetTypeService()
+	sceneSvc := newSceneService()
+	ctx := context.Background()
+
+	createdType, err := wtSvc.CreateWidgetType(ctx, appdto.CreateWidgetTypeInput{
+		Name:           "sensor",
+		HtmlTemplate:   "<div></div>",
+		Script:         "function render(v) {}",
+		ScriptLanguage: "javascript",
+		DefaultWidth:   100,
+		DefaultHeight:  100,
+		InputPorts:     []appdto.InputPort{{Name: "value"}},
+	})
+	if err != nil {
+		t.Fatalf("CreateWidgetType: %v", err)
+	}
+
+	sc := mustCreateScene(t, sceneSvc)
+
+	widgetInput := appdto.CreateWidgetInput{
+		Name:         "widget-1",
+		Width:        100,
+		Height:       100,
+		OriginX:      0.5,
+		OriginY:      0.5,
+		TypeID:       createdType.ID,
+		SceneVersion: sc.Version,
+		PortBindings: []appdto.PortBinding{{PortName: "value", TagID: uuid.New()}},
+	}
+	first, err := sceneSvc.CreateWidget(ctx, sc.ID, widgetInput)
+	if err != nil {
+		t.Fatalf("CreateWidget 1: %v", err)
+	}
+
+	widgetInput.Name = "widget-2"
+	widgetInput.SceneVersion = first.SceneVersion
+	second, err := sceneSvc.CreateWidget(ctx, sc.ID, widgetInput)
+	if err != nil {
+		t.Fatalf("CreateWidget 2: %v", err)
+	}
+
+	// Drop the "value" port from the type: both widgets' bindings to it are
+	// now orphaned and must be cleaned up by the same UpdateWidgetType call.
+	_, err = wtSvc.UpdateWidgetType(ctx, appdto.UpdateWidgetTypeInput{
+		ID:             createdType.ID,
+		Name:           createdType.Name,
+		HtmlTemplate:   createdType.HtmlTemplate,
+		Script:         createdType.Script,
+		ScriptLanguage: createdType.ScriptLanguage,
+		DefaultWidth:   createdType.DefaultWidth,
+		DefaultHeight:  createdType.DefaultHeight,
+		InputPorts:     nil,
+		Version:        createdType.Version,
+	})
+	if err != nil {
+		t.Fatalf("UpdateWidgetType: %v", err)
+	}
+
+	w1, err := sceneSvc.FindWidgetByID(ctx, sc.ID, first.ID)
+	if err != nil {
+		t.Fatalf("FindWidgetByID 1: %v", err)
+	}
+	if len(w1.PortBindings) != 0 {
+		t.Errorf("widget 1: expected orphaned port bindings removed, got %v", w1.PortBindings)
+	}
+
+	w2, err := sceneSvc.FindWidgetByID(ctx, sc.ID, second.ID)
+	if err != nil {
+		t.Fatalf("FindWidgetByID 2: %v", err)
+	}
+	if len(w2.PortBindings) != 0 {
+		t.Errorf("widget 2: expected orphaned port bindings removed, got %v", w2.PortBindings)
+	}
+}

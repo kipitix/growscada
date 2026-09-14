@@ -173,16 +173,22 @@ func (s sceneServiceImpl) FindWidgetByID(ctx context.Context, rawSceneID, rawWid
 	sceneID := id.NewID(id.IDWithUUID[scene.Scene](rawSceneID))
 	widgetID := id.NewID(id.IDWithUUID[widget.Widget](rawWidgetID))
 
-	sceneVersion, err := s.repository.FindByID(ctx, sceneID)
+	sc, err := s.repository.FindByID(ctx, sceneID)
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("error on find scene by id in repository: %w", err)
 	}
 
-	found, err := s.repository.FindWidgetByID(ctx, sceneID, widgetID)
-	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("error on find widget by id in repository: %w", err)
+	// Scan the widgets already loaded with the scene instead of issuing a
+	// second, separate query: two independent reads could otherwise observe
+	// the scene at different points in time (e.g. a concurrent update lands
+	// between them), pairing a stale SceneVersion with newer widget content
+	// or vice versa.
+	for _, w := range sc.Widgets() {
+		if w.ID() == widgetID {
+			return appdto.NewWidget(w, rawSceneID, sc.Version().Number()), nil
+		}
 	}
-	return appdto.NewWidget(found, rawSceneID, sceneVersion.Version().Number()), nil
+	return appdto.Widget{}, fmt.Errorf("error on find widget by id in repository: %w", widget.ErrWidgetNotFound)
 }
 
 func (s sceneServiceImpl) CreateWidget(ctx context.Context, rawSceneID uuid.UUID, input appdto.CreateWidgetInput) (appdto.Widget, error) {

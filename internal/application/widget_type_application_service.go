@@ -197,6 +197,16 @@ func (s widgetTypeServiceImpl) removeOrphanedPortBindings(ctx context.Context, t
 		return fmt.Errorf("cannot list widgets for type %s: %w", typeID, err)
 	}
 
+	// Track the latest known version per scene: several widgets in this batch
+	// can belong to the same scene, and each UpdateWidget call bumps it, so the
+	// version captured by FindWidgetsByTypeID is only valid for the first update.
+	sceneVersions := make(map[id.ID[scene.Scene]]version.Version[scene.Scene], len(widgetsInScenes))
+	for _, item := range widgetsInScenes {
+		if _, ok := sceneVersions[item.SceneID]; !ok {
+			sceneVersions[item.SceneID] = item.SceneVersion
+		}
+	}
+
 	for _, item := range widgetsInScenes {
 		w := item.Widget
 		filtered := make([]widget.PortBinding, 0, len(w.PortBindings()))
@@ -212,9 +222,11 @@ func (s widgetTypeServiceImpl) removeOrphanedPortBindings(ctx context.Context, t
 			w.ID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(),
 			w.TypeID(), w.Labels(), filtered,
 		)
-		if _, _, err := s.sceneRepository.UpdateWidget(ctx, item.SceneID, item.SceneVersion, updated); err != nil {
+		_, newSceneVersion, err := s.sceneRepository.UpdateWidget(ctx, item.SceneID, sceneVersions[item.SceneID], updated)
+		if err != nil {
 			return fmt.Errorf("cannot save widget %s after port binding cleanup: %w", w.ID(), err)
 		}
+		sceneVersions[item.SceneID] = newSceneVersion
 	}
 	return nil
 }
