@@ -80,12 +80,10 @@ func main() {
 	sceneRepository := repositories.NewSceneRepositoryPostgres(sqlDB)
 	// Create services
 	tagService := application.NewTagService(tagRepository, eventBus)
-	widgetRepository := repositories.NewWidgetRepositoryPostgres(sqlDB)
-	widgetTypeService := application.NewWidgetTypeService(widgetTypeRepository, widgetRepository, eventBus)
-	widgetService := application.NewWidgetService(widgetRepository, widgetTypeRepository, eventBus)
-	sceneService := application.NewSceneService(sceneRepository, eventBus)
+	widgetTypeService := application.NewWidgetTypeService(widgetTypeRepository, sceneRepository, eventBus)
+	sceneService := application.NewSceneService(sceneRepository, widgetTypeRepository, eventBus)
 	// Create router
-	apiRouter := restapi.NewRouter(tagService, widgetTypeService, widgetService, sceneService)
+	apiRouter := restapi.NewRouter(tagService, widgetTypeService, sceneService)
 	// Start HTTP server for API
 	apiServer := &http.Server{
 		Addr:    ":9090",

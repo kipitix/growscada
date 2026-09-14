@@ -5,7 +5,7 @@ info:
 
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v1/widgets
+  url: http://{{API_SERVER}}/api/v1/scenes/{{SCENE_ID}}/widgets
   body:
     type: json
     data: |-
@@ -16,11 +16,11 @@ http:
         "origin": { "x": 0.5, "y": 0.5 },
         "rotation": { "degrees": 0.0 },
         "type_id": "{{WIDGET_TYPE_ID}}",
-        "scene_id": "{{SCENE_ID}}",
         "labels": ["indicator", "status"],
         "port_bindings": [
           { "port_name": "state", "tag_id": "{{TAG_ID}}" }
-        ]
+        ],
+        "scene_version": 1
       }
   auth: inherit
 

@@ -31,18 +31,17 @@ func newRouterWithScenes() *restapi.APIRouter {
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
 	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	wRepo := repositories.NewWidgetRepositoryPostgres(testDB)
-	wtSvc := application.NewWidgetTypeService(wtRepo, wRepo, event.NewEventBus())
-	wSvc := application.NewWidgetService(wRepo, wtRepo, event.NewEventBus())
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	sceneSvc := application.NewSceneService(sceneRepo, event.NewEventBus())
-	return restapi.NewRouter(tagSvc, wtSvc, wSvc, sceneSvc)
+	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo, event.NewEventBus())
+	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, event.NewEventBus())
+	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc)
 }
 
 func createSceneViaService(t *testing.T, input appdto.CreateSceneInput) appdto.Scene {
 	t.Helper()
 	repo := repositories.NewSceneRepositoryPostgres(testDB)
-	svc := application.NewSceneService(repo, event.NewEventBus())
+	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
+	svc := application.NewSceneService(repo, wtRepo, event.NewEventBus())
 	resp, err := svc.CreateScene(context.Background(), input)
 	if err != nil {
 		t.Fatalf("createSceneViaService: %v", err)
@@ -314,10 +313,9 @@ func TestPutScenesByID_Conflict_Returns409(t *testing.T) {
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
 	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	wRepo := repositories.NewWidgetRepositoryPostgres(testDB)
-	wtSvc := application.NewWidgetTypeService(wtRepo, wRepo, event.NewEventBus())
-	wSvc := application.NewWidgetService(wRepo, wtRepo, event.NewEventBus())
-	router := restapi.NewRouter(tagSvc, wtSvc, wSvc, svc)
+	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
+	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo, event.NewEventBus())
+	router := restapi.NewRouter(tagSvc, wtSvc, svc)
 
 	body, _ := json.Marshal(restdto.UpdateSceneRequest{Name: "x", Width: 800, Height: 600})
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/scenes/"+uuid.New().String(), bytes.NewReader(body))

@@ -5,7 +5,7 @@ info:
 
 http:
   method: PUT
-  url: http://{{API_SERVER}}/api/v1/widgets/{{WIDGET_ID}}
+  url: http://{{API_SERVER}}/api/v1/scenes/{{SCENE_ID}}/widgets/{{WIDGET_ID}}
   body:
     type: json
     data: |-
@@ -16,12 +16,11 @@ http:
         "origin": { "x": 0.5, "y": 0.5 },
         "rotation": { "degrees": 45.0 },
         "type_id": "{{WIDGET_TYPE_ID}}",
-        "scene_id": "{{SCENE_ID}}",
         "labels": ["indicator", "status", "updated"],
         "port_bindings": [
           { "port_name": "state", "tag_id": "{{TAG_ID}}" }
         ],
-        "version": 1
+        "scene_version": 1
       }
   auth: inherit
 

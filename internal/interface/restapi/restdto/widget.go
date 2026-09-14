@@ -78,6 +78,8 @@ type PortBindingDTO struct {
 // --- Widget request / response types ---
 
 // WidgetResponse is the HTTP DTO for representing a widget instance in API responses.
+// Widget has no version of its own — SceneVersion is the owning scene's current
+// version, the sole optimistic-lock boundary for the scene and all its widgets.
 type WidgetResponse struct {
 	ID              uuid.UUID               `json:"id"`
 	Name            string                  `json:"name"`
@@ -88,9 +90,9 @@ type WidgetResponse struct {
 	TransformMatrix TransformMatrixResponse `json:"transform_matrix"`
 	TypeID          uuid.UUID               `json:"type_id"`
 	SceneID         uuid.UUID               `json:"scene_id"`
+	SceneVersion    int                     `json:"scene_version"`
 	Labels          []string                `json:"labels"`
 	PortBindings    []PortBindingDTO        `json:"port_bindings"`
-	Version         int                     `json:"version"`
 }
 
 // GetWidgetsResponse is the HTTP DTO for a list of widget instances.
@@ -99,6 +101,8 @@ type GetWidgetsResponse struct {
 }
 
 // CreateWidgetRequest is the HTTP DTO for creating a widget instance.
+// The owning scene is taken from the URL path. SceneVersion must equal the
+// scene's current persisted version for optimistic locking.
 type CreateWidgetRequest struct {
 	Name         string           `json:"name"`
 	Position     PositionRequest  `json:"position"`
@@ -106,18 +110,20 @@ type CreateWidgetRequest struct {
 	Origin       OriginRequest    `json:"origin"`
 	Rotation     RotationRequest  `json:"rotation"`
 	TypeID       uuid.UUID        `json:"type_id"`
-	SceneID      uuid.UUID        `json:"scene_id"`
+	SceneVersion int              `json:"scene_version"`
 	Labels       []string         `json:"labels"`
 	PortBindings []PortBindingDTO `json:"port_bindings"`
 }
 
 // CreateWidgetResponse is the HTTP DTO for a widget creation response.
 type CreateWidgetResponse struct {
-	ID uuid.UUID `json:"id"`
+	ID           uuid.UUID `json:"id"`
+	SceneVersion int       `json:"scene_version"`
 }
 
 // UpdateWidgetRequest is the HTTP DTO for updating a widget instance.
-// Version must equal the current persisted version for optimistic locking.
+// SceneVersion must equal the owning scene's current persisted version for
+// optimistic locking.
 type UpdateWidgetRequest struct {
 	Name         string           `json:"name"`
 	Position     PositionRequest  `json:"position"`
@@ -125,15 +131,14 @@ type UpdateWidgetRequest struct {
 	Origin       OriginRequest    `json:"origin"`
 	Rotation     RotationRequest  `json:"rotation"`
 	TypeID       uuid.UUID        `json:"type_id"`
-	SceneID      uuid.UUID        `json:"scene_id"`
+	SceneVersion int              `json:"scene_version"`
 	Labels       []string         `json:"labels"`
 	PortBindings []PortBindingDTO `json:"port_bindings"`
-	Version      int              `json:"version"`
 }
 
 // UpdateWidgetResponse is the HTTP DTO for a widget update response.
 type UpdateWidgetResponse struct {
-	Version int `json:"version"`
+	SceneVersion int `json:"scene_version"`
 }
 
 // --- Mapping functions ---
@@ -190,9 +195,9 @@ func NewWidgetResponse(w appdto.Widget) WidgetResponse {
 		},
 		TypeID:       w.TypeID,
 		SceneID:      w.SceneID,
+		SceneVersion: w.SceneVersion,
 		Labels:       labels,
 		PortBindings: portBindings,
-		Version:      w.Version,
 	}
 }
 
@@ -205,11 +210,11 @@ func NewGetWidgetsResponse(list []appdto.Widget) GetWidgetsResponse {
 }
 
 func NewCreateWidgetResponse(w appdto.Widget) CreateWidgetResponse {
-	return CreateWidgetResponse{ID: w.ID}
+	return CreateWidgetResponse{ID: w.ID, SceneVersion: w.SceneVersion}
 }
 
 func NewUpdateWidgetResponse(w appdto.Widget) UpdateWidgetResponse {
-	return UpdateWidgetResponse{Version: w.Version}
+	return UpdateWidgetResponse{SceneVersion: w.SceneVersion}
 }
 
 func NewCreateWidgetInput(r CreateWidgetRequest) appdto.CreateWidgetInput {
@@ -224,7 +229,7 @@ func NewCreateWidgetInput(r CreateWidgetRequest) appdto.CreateWidgetInput {
 		OriginY:         r.Origin.Y,
 		RotationDegrees: r.Rotation.Degrees,
 		TypeID:          r.TypeID,
-		SceneID:         r.SceneID,
+		SceneVersion:    r.SceneVersion,
 		Labels:          r.Labels,
 		PortBindings:    portBindingDTOsToAppDTOs(r.PortBindings),
 	}
@@ -243,9 +248,8 @@ func NewUpdateWidgetInput(r UpdateWidgetRequest, widgetID uuid.UUID) appdto.Upda
 		OriginY:         r.Origin.Y,
 		RotationDegrees: r.Rotation.Degrees,
 		TypeID:          r.TypeID,
-		SceneID:         r.SceneID,
+		SceneVersion:    r.SceneVersion,
 		Labels:          r.Labels,
 		PortBindings:    portBindingDTOsToAppDTOs(r.PortBindings),
-		Version:         r.Version,
 	}
 }

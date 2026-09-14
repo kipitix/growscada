@@ -13,46 +13,18 @@ import (
 	"github.com/kipitix/growscada/internal/application"
 	"github.com/kipitix/growscada/internal/application/appdto"
 	"github.com/kipitix/growscada/internal/domain/event"
-	"github.com/kipitix/growscada/internal/domain/widget"
+	"github.com/kipitix/growscada/internal/domain/scene"
 	"github.com/kipitix/growscada/internal/infrastructure/postgres/repositories"
 	"github.com/kipitix/growscada/internal/interface/restapi"
 	"github.com/kipitix/growscada/internal/interface/restapi/restdto"
 )
 
-// testSceneID is populated in TestMain before any test runs.
-// It holds a real scene row so widget inserts satisfy the FK on scene_id.
-var testSceneID uuid.UUID
-
-// mustInsertScene inserts a minimal scene row so that widget inserts satisfy
-// the FK constraint on scene_id. The row is cleaned up after the test.
-func mustInsertScene(t *testing.T, sceneID uuid.UUID) {
-	t.Helper()
-	_, err := testDB.ExecContext(context.Background(),
-		`INSERT INTO scenes (id, name, width, height, background_html, version)
-		 VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING`,
-		sceneID, "test-scene-"+sceneID.String(), 1920, 1080, "", 1,
-	)
-	if err != nil {
-		t.Fatalf("mustInsertScene: %v", err)
-	}
-	t.Cleanup(func() {
-		testDB.ExecContext(context.Background(), "DELETE FROM scenes WHERE id = $1", sceneID)
-	})
-}
-
 func cleanWidgetsRest(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM widgets"); err != nil {
+	// ON DELETE CASCADE removes widgets with their scene, which is fine here —
+	// each test creates the scene(s) it needs.
+	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM scenes"); err != nil {
 		t.Fatalf("cleanWidgetsRest: %v", err)
-	}
-	// cleanScenesRest (used by scene tests) deletes all scenes including testSceneID.
-	// Re-insert it here so widget tests always have a valid scene_id to reference.
-	if _, err := testDB.ExecContext(context.Background(),
-		`INSERT INTO scenes (id, name, width, height, background_html, version)
-		 VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING`,
-		testSceneID, "test-scene", 1920, 1080, "", 1,
-	); err != nil {
-		t.Fatalf("cleanWidgetsRest re-insert testSceneID: %v", err)
 	}
 }
 
@@ -60,20 +32,32 @@ func newRouterWithWidgets() *restapi.APIRouter {
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
 	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	wRepo := repositories.NewWidgetRepositoryPostgres(testDB)
-	wtSvc := application.NewWidgetTypeService(wtRepo, wRepo, event.NewEventBus())
-	wSvc := application.NewWidgetService(wRepo, wtRepo, event.NewEventBus())
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	sceneSvc := application.NewSceneService(sceneRepo, event.NewEventBus())
-	return restapi.NewRouter(tagSvc, wtSvc, wSvc, sceneSvc)
+	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo, event.NewEventBus())
+	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, event.NewEventBus())
+	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc)
 }
 
-func createWidgetViaService(t *testing.T, input appdto.CreateWidgetInput) appdto.Widget {
+func createSceneViaSceneService(t *testing.T) appdto.Scene {
 	t.Helper()
-	repo := repositories.NewWidgetRepositoryPostgres(testDB)
+	repo := repositories.NewSceneRepositoryPostgres(testDB)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	svc := application.NewWidgetService(repo, wtRepo, event.NewEventBus())
-	resp, err := svc.CreateWidget(context.Background(), input)
+	svc := application.NewSceneService(repo, wtRepo, event.NewEventBus())
+	resp, err := svc.CreateScene(context.Background(), appdto.CreateSceneInput{
+		Name: "test-scene-" + uuid.New().String(), Width: 1920, Height: 1080,
+	})
+	if err != nil {
+		t.Fatalf("createSceneViaSceneService: %v", err)
+	}
+	return resp
+}
+
+func createWidgetViaService(t *testing.T, sceneID uuid.UUID, input appdto.CreateWidgetInput) appdto.Widget {
+	t.Helper()
+	repo := repositories.NewSceneRepositoryPostgres(testDB)
+	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
+	svc := application.NewSceneService(repo, wtRepo, event.NewEventBus())
+	resp, err := svc.CreateWidget(context.Background(), sceneID, input)
 	if err != nil {
 		t.Fatalf("createWidgetViaService: %v", err)
 	}
@@ -91,17 +75,18 @@ var testWidgetInput = appdto.CreateWidgetInput{
 	OriginY:         0.5,
 	RotationDegrees: 0.0,
 	TypeID:          uuid.New(),
-	Labels:       []string{"sensor"},
-	PortBindings: nil,
+	Labels:          []string{"sensor"},
+	PortBindings:    nil,
 }
 
-// --- GET /api/v1/widgets ---
+// --- GET /api/v1/scenes/{id}/widgets ---
 
-func TestGetWidgets_EmptyDB_Returns200WithEmptyList(t *testing.T) {
+func TestGetWidgetsBySceneID_EmptyScene_Returns200WithEmptyList(t *testing.T) {
 	cleanWidgetsRest(t)
+	sc := createSceneViaSceneService(t)
 	router := newRouterWithWidgets()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/widgets", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/scenes/"+sc.ID.String()+"/widgets", nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -117,15 +102,32 @@ func TestGetWidgets_EmptyDB_Returns200WithEmptyList(t *testing.T) {
 	}
 }
 
-func TestGetWidgets_WithItems_Returns200WithAll(t *testing.T) {
+func TestGetWidgetsBySceneID_UnknownScene_Returns404(t *testing.T) {
 	cleanWidgetsRest(t)
-	createWidgetViaService(t, testWidgetInput)
-	input2 := testWidgetInput
-	input2.Name = "thermometer"
-	createWidgetViaService(t, input2)
 	router := newRouterWithWidgets()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/widgets", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/scenes/"+uuid.New().String()+"/widgets", nil)
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status: expected 404, got %d", rec.Code)
+	}
+}
+
+func TestGetWidgetsBySceneID_WithItems_Returns200WithAll(t *testing.T) {
+	cleanWidgetsRest(t)
+	sc := createSceneViaSceneService(t)
+	input := testWidgetInput
+	input.SceneVersion = sc.Version
+	created := createWidgetViaService(t, sc.ID, input)
+	input2 := testWidgetInput
+	input2.Name = "thermometer"
+	input2.SceneVersion = created.SceneVersion
+	createWidgetViaService(t, sc.ID, input2)
+	router := newRouterWithWidgets()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/scenes/"+sc.ID.String()+"/widgets", nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -141,14 +143,64 @@ func TestGetWidgets_WithItems_Returns200WithAll(t *testing.T) {
 	}
 }
 
-// --- GET /api/v1/widgets/{id} ---
+func TestGetWidgetsBySceneID_InvalidUUID_Returns400(t *testing.T) {
+	router := newRouterWithWidgets()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/scenes/not-a-uuid/widgets", nil)
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status: expected 400, got %d", rec.Code)
+	}
+}
+
+func TestGetWidgetsBySceneID_TwoScenes_ReturnsOnlyMatchingScene(t *testing.T) {
+	cleanWidgetsRest(t)
+	target := createSceneViaSceneService(t)
+	other := createSceneViaSceneService(t)
+
+	inTarget := testWidgetInput
+	inTarget.Name = "widget-in-target"
+	inTarget.SceneVersion = target.Version
+	createWidgetViaService(t, target.ID, inTarget)
+
+	inOther := testWidgetInput
+	inOther.Name = "widget-in-other"
+	inOther.SceneVersion = other.Version
+	createWidgetViaService(t, other.ID, inOther)
+
+	router := newRouterWithWidgets()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/scenes/"+target.ID.String()+"/widgets", nil)
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status: expected 200, got %d\nbody: %s", rec.Code, rec.Body.String())
+	}
+	var resp restdto.GetWidgetsResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Widgets) != 1 {
+		t.Errorf("expected 1 widget for target scene, got %d", len(resp.Widgets))
+	}
+	if len(resp.Widgets) == 1 && resp.Widgets[0].SceneID != target.ID {
+		t.Errorf("SceneID: expected %v, got %v", target.ID, resp.Widgets[0].SceneID)
+	}
+}
+
+// --- GET /api/v1/scenes/{sceneId}/widgets/{widgetId} ---
 
 func TestGetWidgetsByID_Existing_Returns200(t *testing.T) {
 	cleanWidgetsRest(t)
-	created := createWidgetViaService(t, testWidgetInput)
+	sc := createSceneViaSceneService(t)
+	input := testWidgetInput
+	input.SceneVersion = sc.Version
+	created := createWidgetViaService(t, sc.ID, input)
 	router := newRouterWithWidgets()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/widgets/"+created.ID.String(), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/scenes/"+sc.ID.String()+"/widgets/"+created.ID.String(), nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -172,9 +224,10 @@ func TestGetWidgetsByID_Existing_Returns200(t *testing.T) {
 
 func TestGetWidgetsByID_NotFound_Returns404(t *testing.T) {
 	cleanWidgetsRest(t)
+	sc := createSceneViaSceneService(t)
 	router := newRouterWithWidgets()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/widgets/"+uuid.New().String(), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/scenes/"+sc.ID.String()+"/widgets/"+uuid.New().String(), nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -193,7 +246,7 @@ func TestGetWidgetsByID_NotFound_Returns404(t *testing.T) {
 func TestGetWidgetsByID_InvalidUUID_Returns400(t *testing.T) {
 	router := newRouterWithWidgets()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/widgets/not-a-uuid", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/scenes/"+uuid.New().String()+"/widgets/not-a-uuid", nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -202,24 +255,25 @@ func TestGetWidgetsByID_InvalidUUID_Returns400(t *testing.T) {
 	}
 }
 
-// --- POST /api/v1/widgets ---
+// --- POST /api/v1/scenes/{id}/widgets ---
 
 func TestPostWidgets_Valid_Returns201WithID(t *testing.T) {
 	cleanWidgetsRest(t)
+	sc := createSceneViaSceneService(t)
 	router := newRouterWithWidgets()
 
 	body, _ := json.Marshal(restdto.CreateWidgetRequest{
-		Name:     "flow-meter",
-		Position: restdto.PositionRequest{X: 5, Y: 10, Z: 0},
-		Size:     restdto.SizeRequest{Width: 100, Height: 100},
-		Origin:   restdto.OriginRequest{X: 0.5, Y: 0.5},
-		Rotation: restdto.RotationRequest{Degrees: 0},
-		TypeID:   uuid.New(),
-		SceneID:  testSceneID,
+		Name:         "flow-meter",
+		Position:     restdto.PositionRequest{X: 5, Y: 10, Z: 0},
+		Size:         restdto.SizeRequest{Width: 100, Height: 100},
+		Origin:       restdto.OriginRequest{X: 0.5, Y: 0.5},
+		Rotation:     restdto.RotationRequest{Degrees: 0},
+		TypeID:       uuid.New(),
+		SceneVersion: sc.Version,
 		Labels:       []string{"flow"},
 		PortBindings: []restdto.PortBindingDTO{},
 	})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/widgets", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/scenes/"+sc.ID.String()+"/widgets", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
@@ -234,12 +288,16 @@ func TestPostWidgets_Valid_Returns201WithID(t *testing.T) {
 	if resp.ID == uuid.Nil {
 		t.Error("expected non-zero ID")
 	}
+	if resp.SceneVersion <= sc.Version {
+		t.Errorf("SceneVersion: expected > %d, got %d", sc.Version, resp.SceneVersion)
+	}
 }
 
 func TestPostWidgets_InvalidJSON_Returns400(t *testing.T) {
+	sc := createSceneViaSceneService(t)
 	router := newRouterWithWidgets()
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/widgets", bytes.NewBufferString("not json"))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/scenes/"+sc.ID.String()+"/widgets", bytes.NewBufferString("not json"))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
@@ -250,17 +308,18 @@ func TestPostWidgets_InvalidJSON_Returns400(t *testing.T) {
 }
 
 func TestPostWidgets_EmptyName_Returns500(t *testing.T) {
+	sc := createSceneViaSceneService(t)
 	router := newRouterWithWidgets()
 
 	body, _ := json.Marshal(restdto.CreateWidgetRequest{
-		Name:     "",
-		Position: restdto.PositionRequest{X: 0, Y: 0, Z: 0},
-		Size:     restdto.SizeRequest{Width: 100, Height: 100},
-		Origin:   restdto.OriginRequest{X: 0.5, Y: 0.5},
-		TypeID:   uuid.New(),
-		SceneID:  testSceneID,
+		Name:         "",
+		Position:     restdto.PositionRequest{X: 0, Y: 0, Z: 0},
+		Size:         restdto.SizeRequest{Width: 100, Height: 100},
+		Origin:       restdto.OriginRequest{X: 0.5, Y: 0.5},
+		TypeID:       uuid.New(),
+		SceneVersion: sc.Version,
 	})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/widgets", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/scenes/"+sc.ID.String()+"/widgets", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
@@ -270,26 +329,51 @@ func TestPostWidgets_EmptyName_Returns500(t *testing.T) {
 	}
 }
 
-// --- PUT /api/v1/widgets/{id} ---
-
-func TestPutWidgetsByID_Valid_Returns200WithIncrementedVersion(t *testing.T) {
+func TestPostWidgets_StaleSceneVersion_Returns409(t *testing.T) {
 	cleanWidgetsRest(t)
-	created := createWidgetViaService(t, testWidgetInput)
+	sc := createSceneViaSceneService(t)
+	router := newRouterWithWidgets()
+
+	body, _ := json.Marshal(restdto.CreateWidgetRequest{
+		Name:         "flow-meter",
+		Position:     restdto.PositionRequest{X: 5, Y: 10, Z: 0},
+		Size:         restdto.SizeRequest{Width: 100, Height: 100},
+		Origin:       restdto.OriginRequest{X: 0.5, Y: 0.5},
+		TypeID:       uuid.New(),
+		SceneVersion: sc.Version + 99,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/scenes/"+sc.ID.String()+"/widgets", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Errorf("status: expected 409, got %d\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// --- PUT /api/v1/scenes/{sceneId}/widgets/{widgetId} ---
+
+func TestPutWidgetsByID_Valid_Returns200WithIncrementedSceneVersion(t *testing.T) {
+	cleanWidgetsRest(t)
+	sc := createSceneViaSceneService(t)
+	input := testWidgetInput
+	input.SceneVersion = sc.Version
+	created := createWidgetViaService(t, sc.ID, input)
 	router := newRouterWithWidgets()
 
 	body, _ := json.Marshal(restdto.UpdateWidgetRequest{
-		Name:     "updated-gauge",
-		Position: restdto.PositionRequest{X: 1, Y: 2, Z: 3},
-		Size:     restdto.SizeRequest{Width: 100, Height: 100},
-		Origin:   restdto.OriginRequest{X: 0.5, Y: 0.5},
-		Rotation: restdto.RotationRequest{Degrees: 0},
-		TypeID:   uuid.New(),
-		SceneID:  created.SceneID,
+		Name:         "updated-gauge",
+		Position:     restdto.PositionRequest{X: 1, Y: 2, Z: 3},
+		Size:         restdto.SizeRequest{Width: 100, Height: 100},
+		Origin:       restdto.OriginRequest{X: 0.5, Y: 0.5},
+		Rotation:     restdto.RotationRequest{Degrees: 0},
+		TypeID:       uuid.New(),
 		Labels:       []string{"updated"},
 		PortBindings: []restdto.PortBindingDTO{},
-		Version:      created.Version,
+		SceneVersion: created.SceneVersion,
 	})
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/widgets/"+created.ID.String(), bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/scenes/"+sc.ID.String()+"/widgets/"+created.ID.String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
@@ -301,24 +385,24 @@ func TestPutWidgetsByID_Valid_Returns200WithIncrementedVersion(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.Version <= created.Version {
-		t.Errorf("Version: expected > %d, got %d", created.Version, resp.Version)
+	if resp.SceneVersion <= created.SceneVersion {
+		t.Errorf("SceneVersion: expected > %d, got %d", created.SceneVersion, resp.SceneVersion)
 	}
 }
 
 func TestPutWidgetsByID_NotFound_Returns404(t *testing.T) {
 	cleanWidgetsRest(t)
+	sc := createSceneViaSceneService(t)
 	router := newRouterWithWidgets()
 
 	body, _ := json.Marshal(restdto.UpdateWidgetRequest{
-		Name:    "x",
-		TypeID:  uuid.New(),
-		SceneID: testSceneID,
-		Origin:  restdto.OriginRequest{X: 0.5, Y: 0.5},
-		Size:    restdto.SizeRequest{Width: 100, Height: 100},
-		Version: 1,
+		Name:         "x",
+		TypeID:       uuid.New(),
+		Origin:       restdto.OriginRequest{X: 0.5, Y: 0.5},
+		Size:         restdto.SizeRequest{Width: 100, Height: 100},
+		SceneVersion: sc.Version,
 	})
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/widgets/"+uuid.New().String(), bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/scenes/"+sc.ID.String()+"/widgets/"+uuid.New().String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
@@ -332,13 +416,12 @@ func TestPutWidgetsByID_InvalidUUID_Returns400(t *testing.T) {
 	router := newRouterWithWidgets()
 
 	body, _ := json.Marshal(restdto.UpdateWidgetRequest{
-		Name:    "x",
-		TypeID:  uuid.New(),
-		Origin:  restdto.OriginRequest{X: 0.5, Y: 0.5},
-		Size:    restdto.SizeRequest{Width: 100, Height: 100},
-		Version: 1,
+		Name:   "x",
+		TypeID: uuid.New(),
+		Origin: restdto.OriginRequest{X: 0.5, Y: 0.5},
+		Size:   restdto.SizeRequest{Width: 100, Height: 100},
 	})
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/widgets/not-a-uuid", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/scenes/"+uuid.New().String()+"/widgets/not-a-uuid", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
@@ -349,24 +432,21 @@ func TestPutWidgetsByID_InvalidUUID_Returns400(t *testing.T) {
 }
 
 func TestPutWidgetsByID_Conflict_Returns409(t *testing.T) {
-	svc := &stubWidgetService{updateErr: widget.ErrWidgetConflict}
+	svc := &stubSceneServiceForWidgets{updateErr: scene.ErrSceneConflict}
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
 	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	wRepo := repositories.NewWidgetRepositoryPostgres(testDB)
-	wtSvc := application.NewWidgetTypeService(wtRepo, wRepo, event.NewEventBus())
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	sceneSvc := application.NewSceneService(sceneRepo, event.NewEventBus())
-	router := restapi.NewRouter(tagSvc, wtSvc, svc, sceneSvc)
+	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo, event.NewEventBus())
+	router := restapi.NewRouter(tagSvc, wtSvc, svc)
 
 	body, _ := json.Marshal(restdto.UpdateWidgetRequest{
-		Name:    "x",
-		TypeID:  uuid.New(),
-		Origin:  restdto.OriginRequest{X: 0.5, Y: 0.5},
-		Size:    restdto.SizeRequest{Width: 100, Height: 100},
-		Version: 1,
+		Name:   "x",
+		TypeID: uuid.New(),
+		Origin: restdto.OriginRequest{X: 0.5, Y: 0.5},
+		Size:   restdto.SizeRequest{Width: 100, Height: 100},
 	})
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/widgets/"+uuid.New().String(), bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/scenes/"+uuid.New().String()+"/widgets/"+uuid.New().String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
@@ -376,24 +456,28 @@ func TestPutWidgetsByID_Conflict_Returns409(t *testing.T) {
 	}
 }
 
-// stubWidgetService is a minimal WidgetService stub for handler-level tests.
-type stubWidgetService struct {
-	application.WidgetService
+// stubSceneServiceForWidgets is a minimal SceneService stub for widget
+// handler-level tests.
+type stubSceneServiceForWidgets struct {
+	application.SceneService
 	updateErr error
 }
 
-func (s *stubWidgetService) UpdateWidget(_ context.Context, _ appdto.UpdateWidgetInput) (appdto.Widget, error) {
+func (s *stubSceneServiceForWidgets) UpdateWidget(_ context.Context, _, _ uuid.UUID, _ appdto.UpdateWidgetInput) (appdto.Widget, error) {
 	return appdto.Widget{}, s.updateErr
 }
 
-// --- DELETE /api/v1/widgets/{id} ---
+// --- DELETE /api/v1/scenes/{sceneId}/widgets/{widgetId} ---
 
 func TestDeleteWidgetsByID_Existing_Returns200WithDeletedItem(t *testing.T) {
 	cleanWidgetsRest(t)
-	created := createWidgetViaService(t, testWidgetInput)
+	sc := createSceneViaSceneService(t)
+	input := testWidgetInput
+	input.SceneVersion = sc.Version
+	created := createWidgetViaService(t, sc.ID, input)
 	router := newRouterWithWidgets()
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/widgets/"+created.ID.String(), nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/scenes/"+sc.ID.String()+"/widgets/"+created.ID.String(), nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -411,9 +495,10 @@ func TestDeleteWidgetsByID_Existing_Returns200WithDeletedItem(t *testing.T) {
 
 func TestDeleteWidgetsByID_NotFound_Returns404(t *testing.T) {
 	cleanWidgetsRest(t)
+	sc := createSceneViaSceneService(t)
 	router := newRouterWithWidgets()
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/widgets/"+uuid.New().String(), nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/scenes/"+sc.ID.String()+"/widgets/"+uuid.New().String(), nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -425,130 +510,24 @@ func TestDeleteWidgetsByID_NotFound_Returns404(t *testing.T) {
 func TestDeleteWidgetsByID_InvalidUUID_Returns400(t *testing.T) {
 	router := newRouterWithWidgets()
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/widgets/not-a-uuid", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/scenes/"+uuid.New().String()+"/widgets/not-a-uuid", nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status: expected 400, got %d", rec.Code)
-	}
-}
-
-// --- GET /api/v1/scenes/{id}/widgets ---
-
-func TestGetWidgetsBySceneID_EmptyScene_Returns200WithEmptyList(t *testing.T) {
-	cleanWidgetsRest(t)
-	router := newRouterWithWidgets()
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/scenes/"+uuid.New().String()+"/widgets", nil)
-	rec := httptest.NewRecorder()
-	router.ServeMux().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Errorf("status: expected 200, got %d", rec.Code)
-	}
-	var resp restdto.GetWidgetsResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(resp.Widgets) != 0 {
-		t.Errorf("expected 0 items, got %d", len(resp.Widgets))
-	}
-}
-
-func TestGetWidgetsBySceneID_WithWidgets_ReturnsOnlyMatchingScene(t *testing.T) {
-	cleanWidgetsRest(t)
-
-	targetSceneID := uuid.New()
-	otherSceneID := uuid.New()
-	mustInsertScene(t, targetSceneID)
-	mustInsertScene(t, otherSceneID)
-
-	inTarget := testWidgetInput
-	inTarget.Name = "widget-in-target"
-	inTarget.SceneID = targetSceneID
-	createWidgetViaService(t, inTarget)
-
-	inOther := testWidgetInput
-	inOther.Name = "widget-in-other"
-	inOther.SceneID = otherSceneID
-	createWidgetViaService(t, inOther)
-
-	router := newRouterWithWidgets()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/scenes/"+targetSceneID.String()+"/widgets", nil)
-	rec := httptest.NewRecorder()
-	router.ServeMux().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Errorf("status: expected 200, got %d\nbody: %s", rec.Code, rec.Body.String())
-	}
-	var resp restdto.GetWidgetsResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(resp.Widgets) != 1 {
-		t.Errorf("expected 1 widget for target scene, got %d", len(resp.Widgets))
-	}
-	if len(resp.Widgets) == 1 && resp.Widgets[0].SceneID != targetSceneID {
-		t.Errorf("SceneID: expected %v, got %v", targetSceneID, resp.Widgets[0].SceneID)
-	}
-}
-
-func TestGetWidgetsBySceneID_InvalidUUID_Returns400(t *testing.T) {
-	router := newRouterWithWidgets()
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/scenes/not-a-uuid/widgets", nil)
-	rec := httptest.NewRecorder()
-	router.ServeMux().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("status: expected 400, got %d", rec.Code)
-	}
-}
-
-func TestGetWidgetsBySceneID_MultipleWidgets_ReturnsAll(t *testing.T) {
-	cleanWidgetsRest(t)
-
-	sceneID := uuid.New()
-	otherSceneID := uuid.New()
-	mustInsertScene(t, sceneID)
-	mustInsertScene(t, otherSceneID)
-
-	for _, name := range []string{"widget-a", "widget-b"} {
-		input := testWidgetInput
-		input.Name = name
-		input.SceneID = sceneID
-		createWidgetViaService(t, input)
-	}
-	// Also create a widget in another scene — should not appear.
-	other := testWidgetInput
-	other.Name = "widget-other"
-	other.SceneID = otherSceneID
-	createWidgetViaService(t, other)
-
-	router := newRouterWithWidgets()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/scenes/"+sceneID.String()+"/widgets", nil)
-	rec := httptest.NewRecorder()
-	router.ServeMux().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Errorf("status: expected 200, got %d", rec.Code)
-	}
-	var resp restdto.GetWidgetsResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(resp.Widgets) != 2 {
-		t.Errorf("expected 2 widgets, got %d", len(resp.Widgets))
 	}
 }
 
 func TestDeleteWidgetsByID_Existing_RemovedFromDB(t *testing.T) {
 	cleanWidgetsRest(t)
-	created := createWidgetViaService(t, testWidgetInput)
+	sc := createSceneViaSceneService(t)
+	input := testWidgetInput
+	input.SceneVersion = sc.Version
+	created := createWidgetViaService(t, sc.ID, input)
 	router := newRouterWithWidgets()
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/widgets/"+created.ID.String(), nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/scenes/"+sc.ID.String()+"/widgets/"+created.ID.String(), nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -556,11 +535,38 @@ func TestDeleteWidgetsByID_Existing_RemovedFromDB(t *testing.T) {
 		t.Fatalf("delete status: expected 200, got %d", rec.Code)
 	}
 
-	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/widgets/"+created.ID.String(), nil)
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/scenes/"+sc.ID.String()+"/widgets/"+created.ID.String(), nil)
 	getRec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(getRec, getReq)
 
 	if getRec.Code != http.StatusNotFound {
 		t.Errorf("after delete GET: expected 404, got %d", getRec.Code)
+	}
+}
+
+// --- Scene delete cascades widgets (audit-trail regression) ---
+
+func TestDeleteScenesByID_WithWidgets_WidgetsAreGoneAfter(t *testing.T) {
+	cleanWidgetsRest(t)
+	sc := createSceneViaSceneService(t)
+	input := testWidgetInput
+	input.SceneVersion = sc.Version
+	created := createWidgetViaService(t, sc.ID, input)
+	router := newRouterWithWidgets()
+
+	delReq := httptest.NewRequest(http.MethodDelete, "/api/v1/scenes/"+sc.ID.String(), nil)
+	delRec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(delRec, delReq)
+
+	if delRec.Code != http.StatusOK {
+		t.Fatalf("delete scene status: expected 200, got %d", delRec.Code)
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/scenes/"+sc.ID.String()+"/widgets/"+created.ID.String(), nil)
+	getRec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(getRec, getReq)
+
+	if getRec.Code != http.StatusNotFound {
+		t.Errorf("after scene delete, widget GET: expected 404, got %d", getRec.Code)
 	}
 }

@@ -91,6 +91,9 @@ type transformMatrixDTO struct {
 	CSS string  `json:"css"`
 }
 
+// widgetItem is the client-side widget representation. Widget has no version
+// of its own — SceneVersion is the owning scene's current version, the sole
+// optimistic-lock boundary for the scene and all its widgets.
 type widgetItem struct {
 	ID              string             `json:"id"`
 	Name            string             `json:"name"`
@@ -101,9 +104,9 @@ type widgetItem struct {
 	TransformMatrix transformMatrixDTO `json:"transform_matrix"`
 	TypeID          string             `json:"type_id"`
 	SceneID         string             `json:"scene_id"`
+	SceneVersion    int                `json:"scene_version"`
 	Labels          []string           `json:"labels"`
 	PortBindings    []portBindingDTO   `json:"port_bindings"`
-	Version         int                `json:"version"`
 }
 
 type getWidgetsResponse struct {
@@ -117,13 +120,14 @@ type createWidgetRequest struct {
 	Origin       originDTO        `json:"origin"`
 	Rotation     rotationDTO      `json:"rotation"`
 	TypeID       string           `json:"type_id"`
-	SceneID      string           `json:"scene_id"`
+	SceneVersion int              `json:"scene_version"`
 	Labels       []string         `json:"labels"`
 	PortBindings []portBindingDTO `json:"port_bindings"`
 }
 
 type createWidgetResponse struct {
-	ID string `json:"id"`
+	ID           string `json:"id"`
+	SceneVersion int    `json:"scene_version"`
 }
 
 type updateWidgetRequest struct {
@@ -133,14 +137,13 @@ type updateWidgetRequest struct {
 	Origin       originDTO        `json:"origin"`
 	Rotation     rotationDTO      `json:"rotation"`
 	TypeID       string           `json:"type_id"`
-	SceneID      string           `json:"scene_id"`
+	SceneVersion int              `json:"scene_version"`
 	Labels       []string         `json:"labels"`
 	PortBindings []portBindingDTO `json:"port_bindings"`
-	Version      int              `json:"version"`
 }
 
 type updateWidgetResponse struct {
-	Version int `json:"version"`
+	SceneVersion int `json:"scene_version"`
 }
 
 type tagItem struct {

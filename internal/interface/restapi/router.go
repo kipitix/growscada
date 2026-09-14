@@ -33,7 +33,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func NewRouter(tagService application.TagService, widgetTypeService application.WidgetTypeService, widgetService application.WidgetService, sceneService application.SceneService) *APIRouter {
+func NewRouter(tagService application.TagService, widgetTypeService application.WidgetTypeService, sceneService application.SceneService) *APIRouter {
 	router := &APIRouter{}
 	router.serveMux = http.NewServeMux()
 
@@ -51,13 +51,12 @@ func NewRouter(tagService application.TagService, widgetTypeService application.
 	router.serveMux.HandleFunc("PUT /api/v1/widget-types/{id}", router.widgetTypesHandlers.PutWidgetTypesByID)
 	router.serveMux.HandleFunc("DELETE /api/v1/widget-types/{id}", router.widgetTypesHandlers.DeleteWidgetTypesByID)
 
-	router.widgetsHandlers = NewWidgetsHandler(widgetService)
-	router.serveMux.HandleFunc("GET /api/v1/widgets", router.widgetsHandlers.GetWidgets)
-	router.serveMux.HandleFunc("GET /api/v1/widgets/{id}", router.widgetsHandlers.GetWidgetsByID)
-	router.serveMux.HandleFunc("POST /api/v1/widgets", router.widgetsHandlers.PostWidgets)
-	router.serveMux.HandleFunc("PUT /api/v1/widgets/{id}", router.widgetsHandlers.PutWidgetsByID)
-	router.serveMux.HandleFunc("DELETE /api/v1/widgets/{id}", router.widgetsHandlers.DeleteWidgetsByID)
+	router.widgetsHandlers = NewWidgetsHandler(sceneService)
 	router.serveMux.HandleFunc("GET /api/v1/scenes/{id}/widgets", router.widgetsHandlers.GetWidgetsBySceneID)
+	router.serveMux.HandleFunc("POST /api/v1/scenes/{id}/widgets", router.widgetsHandlers.PostWidgets)
+	router.serveMux.HandleFunc("GET /api/v1/scenes/{sceneId}/widgets/{widgetId}", router.widgetsHandlers.GetWidgetsByID)
+	router.serveMux.HandleFunc("PUT /api/v1/scenes/{sceneId}/widgets/{widgetId}", router.widgetsHandlers.PutWidgetsByID)
+	router.serveMux.HandleFunc("DELETE /api/v1/scenes/{sceneId}/widgets/{widgetId}", router.widgetsHandlers.DeleteWidgetsByID)
 
 	router.scenesHandlers = NewScenesHandler(sceneService)
 	router.serveMux.HandleFunc("GET /api/v1/scenes", router.scenesHandlers.GetScenes)

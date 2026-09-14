@@ -13,7 +13,6 @@ type tableName string
 const (
 	tableNameTags        tableName = "tags"
 	tableNameScenes      tableName = "scenes"
-	tableNameWidgets     tableName = "widgets"
 	tableNameWidgetTypes tableName = "widget_types"
 )
 

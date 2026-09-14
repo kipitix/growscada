@@ -68,6 +68,34 @@ func (p *Project) loadWidgets(ctx app.Context) {
 	})
 }
 
+// currentSceneVersion returns the last-known version of the selected scene,
+// the sole optimistic-lock boundary shared by the scene and all its widgets.
+func (p *Project) currentSceneVersion() int {
+	for _, sc := range p.scenes {
+		if sc.ID == p.selectedSceneID {
+			return sc.Version
+		}
+	}
+	return 0
+}
+
+// applyNewSceneVersion records a scene version bump (from a widget mutation)
+// in both the scene list and every currently loaded widget, so the next
+// mutation is checked against the up-to-date version.
+func (p *Project) applyNewSceneVersion(sceneID string, newVersion int) {
+	for i := range p.scenes {
+		if p.scenes[i].ID == sceneID {
+			p.scenes[i].Version = newVersion
+			break
+		}
+	}
+	if p.selectedSceneID == sceneID {
+		for i := range p.widgets {
+			p.widgets[i].SceneVersion = newVersion
+		}
+	}
+}
+
 // ── Widget CRUD ───────────────────────────────────────────────────────────────
 
 func (p *Project) createWidget(ctx app.Context, typeID string, x, y float64) {
@@ -88,7 +116,8 @@ func (p *Project) createWidget(ctx app.Context, typeID string, x, y float64) {
 			break
 		}
 	}
-	url := p.apiServerURL + "/api/v1/widgets"
+	sceneID := p.selectedSceneID
+	url := p.apiServerURL + "/api/v1/scenes/" + sceneID + "/widgets"
 	body, _ := json.Marshal(createWidgetRequest{
 		Name:         name,
 		Position:     positionDTO{X: x, Y: y, Z: 0},
@@ -96,7 +125,7 @@ func (p *Project) createWidget(ctx app.Context, typeID string, x, y float64) {
 		Origin:       originDTO{X: 0.5, Y: 0.5},
 		Rotation:     rotationDTO{Degrees: 0},
 		TypeID:       typeID,
-		SceneID:      p.selectedSceneID,
+		SceneVersion: p.currentSceneVersion(),
 		Labels:       []string{},
 		PortBindings: []portBindingDTO{},
 	})
@@ -124,6 +153,7 @@ func (p *Project) createWidget(ctx app.Context, typeID string, x, y float64) {
 			return
 		}
 		ctx.Dispatch(func(ctx app.Context) {
+			p.applyNewSceneVersion(sceneID, result.SceneVersion)
 			p.selectedWidgetID = result.ID
 			ctx.LocalStorage().Set("project:widgetID", result.ID)
 			p.editingWidgetName = name
@@ -141,7 +171,8 @@ func (p *Project) createWidget(ctx app.Context, typeID string, x, y float64) {
 }
 
 func (p *Project) deleteWidget(ctx app.Context, widgetID string) {
-	url := p.apiServerURL + "/api/v1/widgets/" + widgetID
+	sceneID := p.selectedSceneID
+	url := p.apiServerURL + "/api/v1/scenes/" + sceneID + "/widgets/" + widgetID
 	ctx.Async(func() {
 		req, _ := http.NewRequest(http.MethodDelete, url, nil)
 		resp, err := http.DefaultClient.Do(req)
@@ -158,8 +189,13 @@ func (p *Project) deleteWidget(ctx app.Context, widgetID string) {
 			})
 			return
 		}
-		resp.Body.Close()
+		defer resp.Body.Close()
+		var result widgetItem
+		_ = json.NewDecoder(resp.Body).Decode(&result)
 		ctx.Dispatch(func(ctx app.Context) {
+			if result.SceneVersion > 0 {
+				p.applyNewSceneVersion(sceneID, result.SceneVersion)
+			}
 			if p.selectedWidgetID == widgetID {
 				p.clearWidgetSelection(ctx)
 			}
@@ -260,8 +296,8 @@ func (p *Project) unbindPort(ctx app.Context, portName string) {
 }
 
 func (p *Project) putWidget(ctx app.Context, w widgetItem) {
-	url := p.apiServerURL + "/api/v1/widgets/" + w.ID
-	wid := w.ID
+	sceneID := p.selectedSceneID
+	url := p.apiServerURL + "/api/v1/scenes/" + sceneID + "/widgets/" + w.ID
 	portBindings := w.PortBindings
 	if portBindings == nil {
 		portBindings = []portBindingDTO{}
@@ -277,10 +313,9 @@ func (p *Project) putWidget(ctx app.Context, w widgetItem) {
 		Origin:       w.Origin,
 		Rotation:     w.Rotation,
 		TypeID:       w.TypeID,
-		SceneID:      w.SceneID,
 		Labels:       labels,
 		PortBindings: portBindings,
-		Version:      w.Version,
+		SceneVersion: p.currentSceneVersion(),
 	})
 	ctx.Async(func() {
 		req, _ := http.NewRequest(http.MethodPut, url, bytes.NewReader(body))
@@ -303,14 +338,9 @@ func (p *Project) putWidget(ctx app.Context, w widgetItem) {
 		}
 		defer resp.Body.Close()
 		var result updateWidgetResponse
-		if err := json.NewDecoder(resp.Body).Decode(&result); err == nil && result.Version > 0 {
+		if err := json.NewDecoder(resp.Body).Decode(&result); err == nil && result.SceneVersion > 0 {
 			ctx.Dispatch(func(ctx app.Context) {
-				for i := range p.widgets {
-					if p.widgets[i].ID == wid {
-						p.widgets[i].Version = result.Version
-						break
-					}
-				}
+				p.applyNewSceneVersion(sceneID, result.SceneVersion)
 			})
 		}
 	})

@@ -4,11 +4,12 @@ import (
 	"fmt"
 
 	"github.com/kipitix/growscada/internal/domain/id"
-	"github.com/kipitix/growscada/internal/domain/scene"
-	"github.com/kipitix/growscada/internal/domain/version"
 )
 
-// Widget - aggregate representing a widget instance placed on a scene.
+// Widget - entity representing a widget instance placed on a scene.
+// Widget belongs to the Scene aggregate: it has no identity of its own outside
+// of the Scene that contains it, and no independent optimistic-concurrency version —
+// consistency is guaranteed by the owning Scene's version.
 // Each widget is an instance of a WidgetType, positioned at given coordinates,
 // optionally labelled, and bound to tags via named PortBindings.
 type Widget interface {
@@ -20,10 +21,8 @@ type Widget interface {
 	Rotation() Rotation
 	TransformationMatrix() TransformationMatrix
 	TypeID() id.ID[WidgetType]
-	SceneID() id.ID[scene.Scene]
 	Labels() []string
 	PortBindings() []PortBinding
-	Version() version.Version[Widget]
 
 	fmt.Stringer
 }
@@ -37,15 +36,13 @@ type widgetImpl struct {
 	origin       Origin
 	rotation     Rotation
 	typeID       id.ID[WidgetType]
-	sceneID      id.ID[scene.Scene]
 	labels       []string
 	portBindings []PortBinding
-	version      version.Version[Widget]
 }
 
 var _ Widget = (*widgetImpl)(nil)
 
-// NewWidget creates a new Widget aggregate.
+// NewWidget creates a new Widget entity.
 func NewWidget(
 	anID id.ID[Widget],
 	aName WidgetName,
@@ -54,10 +51,8 @@ func NewWidget(
 	anOrigin Origin,
 	aRotation Rotation,
 	aTypeID id.ID[WidgetType],
-	aSceneID id.ID[scene.Scene],
 	someLabels []string,
 	somePortBindings []PortBinding,
-	aVersion version.Version[Widget],
 ) Widget {
 	labels := make([]string, len(someLabels))
 	copy(labels, someLabels)
@@ -73,24 +68,20 @@ func NewWidget(
 		origin:       anOrigin,
 		rotation:     aRotation,
 		typeID:       aTypeID,
-		sceneID:      aSceneID,
 		labels:       labels,
 		portBindings: portBindings,
-		version:      aVersion,
 	}
 }
 
-func (w widgetImpl) ID() id.ID[Widget]               { return w.id }
-func (w widgetImpl) Name() WidgetName                 { return w.name }
-func (w widgetImpl) Position() Position               { return w.position }
-func (w widgetImpl) Size() Size                       { return w.size }
-func (w widgetImpl) Origin() Origin                   { return w.origin }
-func (w widgetImpl) Rotation() Rotation               { return w.rotation }
-func (w widgetImpl) TypeID() id.ID[WidgetType]        { return w.typeID }
-func (w widgetImpl) SceneID() id.ID[scene.Scene]      { return w.sceneID }
-func (w widgetImpl) Labels() []string                 { return w.labels }
-func (w widgetImpl) PortBindings() []PortBinding      { return w.portBindings }
-func (w widgetImpl) Version() version.Version[Widget] { return w.version }
+func (w widgetImpl) ID() id.ID[Widget]           { return w.id }
+func (w widgetImpl) Name() WidgetName            { return w.name }
+func (w widgetImpl) Position() Position          { return w.position }
+func (w widgetImpl) Size() Size                  { return w.size }
+func (w widgetImpl) Origin() Origin              { return w.origin }
+func (w widgetImpl) Rotation() Rotation          { return w.rotation }
+func (w widgetImpl) TypeID() id.ID[WidgetType]   { return w.typeID }
+func (w widgetImpl) Labels() []string            { return w.labels }
+func (w widgetImpl) PortBindings() []PortBinding { return w.portBindings }
 
 // TransformationMatrix computes the 2D affine CSS matrix from the widget's
 // position, origin, rotation and size.
@@ -101,7 +92,7 @@ func (w widgetImpl) TransformationMatrix() TransformationMatrix {
 // String implements [fmt.Stringer].
 func (w widgetImpl) String() string {
 	return fmt.Sprintf(
-		"Widget: %s, TypeID: %s, SceneID: %s, Position: %s, Size: %s, Origin: %s, Rotation: %s",
-		w.name, w.typeID, w.sceneID, w.position, w.size, w.origin, w.rotation,
+		"Widget: %s, TypeID: %s, Position: %s, Size: %s, Origin: %s, Rotation: %s",
+		w.name, w.typeID, w.position, w.size, w.origin, w.rotation,
 	)
 }
