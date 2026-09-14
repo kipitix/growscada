@@ -30,19 +30,17 @@ func newRouterWithWidgetTypes() *restapi.APIRouter {
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
 	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	wRepo := repositories.NewWidgetRepositoryPostgres(testDB)
-	wtSvc := application.NewWidgetTypeService(wtRepo, wRepo, event.NewEventBus())
-	wSvc := application.NewWidgetService(wRepo, wtRepo, event.NewEventBus())
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	sceneSvc := application.NewSceneService(sceneRepo, event.NewEventBus())
-	return restapi.NewRouter(tagSvc, wtSvc, wSvc, sceneSvc)
+	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo, event.NewEventBus())
+	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, event.NewEventBus())
+	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc)
 }
 
 func createWidgetTypeViaService(t *testing.T, input appdto.CreateWidgetTypeInput) appdto.WidgetType {
 	t.Helper()
 	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	wRepo := repositories.NewWidgetRepositoryPostgres(testDB)
-	svc := application.NewWidgetTypeService(repo, wRepo, event.NewEventBus())
+	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
+	svc := application.NewWidgetTypeService(repo, sceneRepo, event.NewEventBus())
 	resp, err := svc.CreateWidgetType(context.Background(), input)
 	if err != nil {
 		t.Fatalf("createWidgetTypeViaService: %v", err)
@@ -294,11 +292,9 @@ func TestPutWidgetTypesByID_Conflict_Returns409(t *testing.T) {
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
 	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	wRepo := repositories.NewWidgetRepositoryPostgres(testDB)
-	wSvc := application.NewWidgetService(wRepo, wtRepo, event.NewEventBus())
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	sceneSvc := application.NewSceneService(sceneRepo, event.NewEventBus())
-	router := restapi.NewRouter(tagSvc, svc, wSvc, sceneSvc)
+	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, event.NewEventBus())
+	router := restapi.NewRouter(tagSvc, svc, sceneSvc)
 
 	body, _ := json.Marshal(restdto.UpdateWidgetTypeRequest{
 		Name: "x", HtmlTemplate: "<div/>", Script: "x", ScriptLanguage: "lua",

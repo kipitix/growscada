@@ -23,15 +23,15 @@ func cleanWidgetTypes(t *testing.T) {
 
 func newWidgetTypeService() application.WidgetTypeService {
 	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	wRepo := repositories.NewWidgetRepositoryPostgres(testDB)
-	return application.NewWidgetTypeService(repo, wRepo, event.NewEventBus())
+	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
+	return application.NewWidgetTypeService(repo, sceneRepo, event.NewEventBus())
 }
 
 func newWidgetTypeServiceWithBus() (application.WidgetTypeService, event.EventBus) {
 	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	wRepo := repositories.NewWidgetRepositoryPostgres(testDB)
+	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
 	bus := event.NewEventBus()
-	return application.NewWidgetTypeService(repo, wRepo, bus), bus
+	return application.NewWidgetTypeService(repo, sceneRepo, bus), bus
 }
 
 var testCreateWidgetTypeInput = appdto.CreateWidgetTypeInput{

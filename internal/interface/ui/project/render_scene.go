@@ -102,10 +102,7 @@ func (p *Project) renderSceneTabs() app.UI {
 						Text("×").
 						OnClick(func(ctx app.Context, e app.Event) {
 							e.Call("stopPropagation")
-							if !app.Window().Call("confirm", "Are you sure you want to delete this scene?").Bool() {
-								return
-							}
-							p.deleteScene(ctx, sc.ID)
+							p.confirmDeleteScene(ctx, sc.ID, sc.Name)
 						}),
 				)
 		}

@@ -3,6 +3,7 @@ package project
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -103,6 +104,34 @@ func (p *Project) createScene(ctx app.Context) {
 			p.clearWidgetSelection(ctx)
 			p.loadScenes(ctx)
 			p.loadWidgets(ctx)
+		})
+	})
+}
+
+// confirmDeleteScene fetches the scene's widget count so the confirmation
+// dialog can warn the user how much they are about to delete along with the
+// scene, then deletes it if they confirm.
+func (p *Project) confirmDeleteScene(ctx app.Context, sceneID, sceneName string) {
+	url := p.apiServerURL + "/api/v1/scenes/" + sceneID + "/widgets"
+	ctx.Async(func() {
+		resp, err := http.Get(url)
+		widgetCount := -1 // unknown, e.g. on network error
+		if err == nil && resp.StatusCode < 400 {
+			defer resp.Body.Close()
+			var result getWidgetsResponse
+			if json.NewDecoder(resp.Body).Decode(&result) == nil {
+				widgetCount = len(result.Widgets)
+			}
+		}
+		ctx.Dispatch(func(ctx app.Context) {
+			message := fmt.Sprintf("Delete scene %q?", sceneName)
+			if widgetCount > 0 {
+				message = fmt.Sprintf("Scene %q contains %d widget(s). Delete the scene and all of its widgets?", sceneName, widgetCount)
+			}
+			if !app.Window().Call("confirm", message).Bool() {
+				return
+			}
+			p.deleteScene(ctx, sceneID)
 		})
 	})
 }

@@ -2,6 +2,10 @@
 
 This file provides guidance to AI coding agents (Claude Code, Codex, etc.) working in this repository.
 
+## Language
+
+Communicate with the user in Russian.
+
 ## Project Overview
 
 GrowSCADA is a web-based SCADA system built in Go, following Domain-Driven Design (DDD). The backend and PWA frontend are compiled from the same Go codebase into a single binary — the server handles the API and serves the WASM frontend.

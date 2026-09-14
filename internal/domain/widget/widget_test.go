@@ -5,9 +5,7 @@ import (
 	"testing"
 
 	"github.com/kipitix/growscada/internal/domain/id"
-	"github.com/kipitix/growscada/internal/domain/scene"
 	"github.com/kipitix/growscada/internal/domain/tag"
-	"github.com/kipitix/growscada/internal/domain/version"
 )
 
 // makeTestWidget is a test helper that creates a Widget with the given geometry
@@ -18,7 +16,6 @@ func makeTestWidget(t *testing.T, pos Position, size Size, origin Origin, rot Ro
 	wID := id.NewID[Widget]()
 	name, _ := NewWidgetName("test_widget")
 	typeID := id.NewID[WidgetType]()
-	sceneID := id.NewID[scene.Scene]()
 
 	portName, _ := NewInputPortName("temperature")
 	portBindings := []PortBinding{
@@ -27,10 +24,9 @@ func makeTestWidget(t *testing.T, pos Position, size Size, origin Origin, rot Ro
 
 	return NewWidget(
 		wID, name, pos, size, origin, rot,
-		typeID, sceneID,
+		typeID,
 		[]string{"label_a", "label_b"},
 		portBindings,
-		version.Initial[Widget](),
 	)
 }
 
@@ -42,13 +38,11 @@ func TestNewWidget_FieldsAreSet(t *testing.T) {
 	origin, _ := NewOrigin(0.5, 0.5)
 	rot := NewRotation(45)
 	typeID := id.NewID[WidgetType]()
-	sceneID := id.NewID[scene.Scene]()
 	labels := []string{"pump", "main_loop"}
 	portName, _ := NewInputPortName("val")
 	portBindings := []PortBinding{NewPortBinding(portName, id.NewID[tag.Tag]())}
-	ver := version.Initial[Widget]()
 
-	w := NewWidget(wID, name, pos, size, origin, rot, typeID, sceneID, labels, portBindings, ver)
+	w := NewWidget(wID, name, pos, size, origin, rot, typeID, labels, portBindings)
 
 	if w.ID() != wID {
 		t.Errorf("ID mismatch: expected %v, got %v", wID, w.ID())
@@ -71,12 +65,6 @@ func TestNewWidget_FieldsAreSet(t *testing.T) {
 	if w.TypeID() != typeID {
 		t.Errorf("TypeID mismatch: expected %v, got %v", typeID, w.TypeID())
 	}
-	if w.SceneID() != sceneID {
-		t.Errorf("SceneID mismatch: expected %v, got %v", sceneID, w.SceneID())
-	}
-	if w.Version() != ver {
-		t.Errorf("Version mismatch: expected %v, got %v", ver, w.Version())
-	}
 	if len(w.PortBindings()) != 1 {
 		t.Errorf("expected 1 port binding, got %d", len(w.PortBindings()))
 	}
@@ -90,10 +78,9 @@ func TestNewWidget_LabelsCopied(t *testing.T) {
 	wID := id.NewID[Widget]()
 	name, _ := NewWidgetName("copy_test")
 	typeID := id.NewID[WidgetType]()
-	sceneID := id.NewID[scene.Scene]()
 	labels := []string{"x", "y"}
 
-	widget := NewWidget(wID, name, pos, size, origin, rot, typeID, sceneID, labels, nil, version.Initial[Widget]())
+	widget := NewWidget(wID, name, pos, size, origin, rot, typeID, labels, nil)
 
 	labels[0] = "mutated"
 	if widget.Labels()[0] != "x" {
@@ -109,13 +96,12 @@ func TestNewWidget_PortBindingsCopied(t *testing.T) {
 	wID := id.NewID[Widget]()
 	name, _ := NewWidgetName("binding_copy_test")
 	typeID := id.NewID[WidgetType]()
-	sceneID := id.NewID[scene.Scene]()
 
 	portName, _ := NewInputPortName("temperature")
 	originalTagID := id.NewID[tag.Tag]()
 	bindings := []PortBinding{NewPortBinding(portName, originalTagID)}
 
-	w := NewWidget(wID, name, pos, size, origin, rot, typeID, sceneID, nil, bindings, version.Initial[Widget]())
+	w := NewWidget(wID, name, pos, size, origin, rot, typeID, nil, bindings)
 
 	// Mutate external slice — should not affect widget.
 	otherPortName, _ := NewInputPortName("pressure")
@@ -133,9 +119,8 @@ func TestNewWidget_NilLabelsAndPortBindings(t *testing.T) {
 	wID := id.NewID[Widget]()
 	name, _ := NewWidgetName("nil_slices")
 	typeID := id.NewID[WidgetType]()
-	sceneID := id.NewID[scene.Scene]()
 
-	w := NewWidget(wID, name, pos, size, origin, rot, typeID, sceneID, nil, nil, version.Initial[Widget]())
+	w := NewWidget(wID, name, pos, size, origin, rot, typeID, nil, nil)
 	if len(w.Labels()) != 0 {
 		t.Errorf("expected empty labels, got %v", w.Labels())
 	}

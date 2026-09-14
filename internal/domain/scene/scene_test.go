@@ -15,7 +15,7 @@ func makeTestScene(t *testing.T) Scene {
 	name, _ := NewSceneName("test_scene")
 	size, _ := NewSceneSize(1024, 768)
 	bg := NewBackgroundHTML("<div></div>")
-	return NewScene(sceneID, name, size, bg, version.Initial[Scene]())
+	return NewScene(sceneID, name, size, bg, nil, version.Initial[Scene]())
 }
 
 func TestNewScene_FieldsAreSet(t *testing.T) {
@@ -25,7 +25,7 @@ func TestNewScene_FieldsAreSet(t *testing.T) {
 	bg := NewBackgroundHTML("<svg></svg>")
 	ver, _ := version.New[Scene](version.WithNumber[Scene](2))
 
-	s := NewScene(sceneID, name, size, bg, ver)
+	s := NewScene(sceneID, name, size, bg, nil, ver)
 
 	if s.ID() != sceneID {
 		t.Errorf("ID mismatch: expected %v, got %v", sceneID, s.ID())
@@ -62,7 +62,7 @@ func TestNewScene_String_NonEmpty(t *testing.T) {
 func TestNewScene_String_ContainsNameAndSize(t *testing.T) {
 	name, _ := NewSceneName("overview")
 	size, _ := NewSceneSize(800, 600)
-	s := NewScene(id.NewID[Scene](), name, size, NewBackgroundHTML(""), version.Initial[Scene]())
+	s := NewScene(id.NewID[Scene](), name, size, NewBackgroundHTML(""), nil, version.Initial[Scene]())
 
 	str := s.String()
 	if !strings.Contains(str, "overview") {
@@ -77,7 +77,7 @@ func TestNewScene_String_ContainsNameAndSize(t *testing.T) {
 }
 
 func TestNewScene_EmptyBackgroundHTML(t *testing.T) {
-	s := NewScene(id.NewID[Scene](), mustSceneName(t, "empty_bg"), mustSceneSize(t, 100, 100), NewBackgroundHTML(""), version.Initial[Scene]())
+	s := NewScene(id.NewID[Scene](), mustSceneName(t, "empty_bg"), mustSceneSize(t, 100, 100), NewBackgroundHTML(""), nil, version.Initial[Scene]())
 	if s.BackgroundHTML().Content() != "" {
 		t.Errorf("expected empty background HTML, got %q", s.BackgroundHTML().Content())
 	}

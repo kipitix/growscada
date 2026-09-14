@@ -74,20 +74,6 @@ func TestMain(m *testing.M) {
 
 	testDB = db
 
-	// Insert a shared scene row. The widgets table has a FK on scene_id, so
-	// every widget insert needs a real scene. We set testWidgetInput.SceneID
-	// here so all widget tests pick it up automatically.
-	testSceneID = uuid.New()
-	if _, err := db.ExecContext(ctx,
-		`INSERT INTO scenes (id, name, width, height, background_html, version) VALUES ($1, $2, $3, $4, $5, $6)`,
-		testSceneID, "test-scene", 1920, 1080, "", 1,
-	); err != nil {
-		db.Close()
-		pgContainer.Terminate(ctx)
-		panic("failed to insert test scene: " + err.Error())
-	}
-	testWidgetInput.SceneID = testSceneID
-
 	code := m.Run()
 
 	db.Close()
@@ -106,12 +92,10 @@ func newRouter() *restapi.APIRouter {
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
 	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	wRepo := repositories.NewWidgetRepositoryPostgres(testDB)
-	wtSvc := application.NewWidgetTypeService(wtRepo, wRepo, event.NewEventBus())
-	wSvc := application.NewWidgetService(wRepo, wtRepo, event.NewEventBus())
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	sceneSvc := application.NewSceneService(sceneRepo, event.NewEventBus())
-	return restapi.NewRouter(tagSvc, wtSvc, wSvc, sceneSvc)
+	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo, event.NewEventBus())
+	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, event.NewEventBus())
+	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc)
 }
 
 func createTagViaService(t *testing.T, name, tagType, value, quality string) appdto.Tag {

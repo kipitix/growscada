@@ -8,6 +8,7 @@ import (
 	"github.com/kipitix/growscada/internal/application/appdto"
 	"github.com/kipitix/growscada/internal/domain/event"
 	"github.com/kipitix/growscada/internal/domain/id"
+	"github.com/kipitix/growscada/internal/domain/scene"
 	"github.com/kipitix/growscada/internal/domain/tag"
 	"github.com/kipitix/growscada/internal/domain/version"
 	"github.com/kipitix/growscada/internal/domain/widget"
@@ -23,18 +24,18 @@ type WidgetTypeService interface {
 }
 
 type widgetTypeServiceImpl struct {
-	repository       widget.WidgetTypeRepository
-	widgetRepository widget.WidgetRepository
-	eventBus         event.EventBus
+	repository      widget.WidgetTypeRepository
+	sceneRepository scene.SceneRepository
+	eventBus        event.EventBus
 }
 
 var _ WidgetTypeService = (*widgetTypeServiceImpl)(nil)
 
-func NewWidgetTypeService(aRepository widget.WidgetTypeRepository, aWidgetRepository widget.WidgetRepository, anEventBus event.EventBus) WidgetTypeService {
+func NewWidgetTypeService(aRepository widget.WidgetTypeRepository, aSceneRepository scene.SceneRepository, anEventBus event.EventBus) WidgetTypeService {
 	return &widgetTypeServiceImpl{
-		repository:       aRepository,
-		widgetRepository: aWidgetRepository,
-		eventBus:         anEventBus,
+		repository:      aRepository,
+		sceneRepository: aSceneRepository,
+		eventBus:        anEventBus,
 	}
 }
 
@@ -191,12 +192,13 @@ func (s widgetTypeServiceImpl) removeOrphanedPortBindings(ctx context.Context, t
 		allowed[p.Name().String()] = struct{}{}
 	}
 
-	widgets, err := s.widgetRepository.FindByTypeID(ctx, typeID)
+	widgetsInScenes, err := s.sceneRepository.FindWidgetsByTypeID(ctx, typeID)
 	if err != nil {
 		return fmt.Errorf("cannot list widgets for type %s: %w", typeID, err)
 	}
 
-	for _, w := range widgets {
+	for _, item := range widgetsInScenes {
+		w := item.Widget
 		filtered := make([]widget.PortBinding, 0, len(w.PortBindings()))
 		for _, b := range w.PortBindings() {
 			if _, ok := allowed[b.PortName().String()]; ok {
@@ -208,9 +210,9 @@ func (s widgetTypeServiceImpl) removeOrphanedPortBindings(ctx context.Context, t
 		}
 		updated := widget.NewWidget(
 			w.ID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(),
-			w.TypeID(), w.SceneID(), w.Labels(), filtered, w.Version(),
+			w.TypeID(), w.Labels(), filtered,
 		)
-		if _, err := s.widgetRepository.Save(ctx, updated); err != nil {
+		if _, _, err := s.sceneRepository.UpdateWidget(ctx, item.SceneID, item.SceneVersion, updated); err != nil {
 			return fmt.Errorf("cannot save widget %s after port binding cleanup: %w", w.ID(), err)
 		}
 	}

@@ -5,7 +5,7 @@ info:
 
 http:
   method: DELETE
-  url: http://{{API_SERVER}}/api/v1/widgets/{{WIDGET_ID}}
+  url: http://{{API_SERVER}}/api/v1/scenes/{{SCENE_ID}}/widgets/{{WIDGET_ID}}
   auth: inherit
 
 settings:
