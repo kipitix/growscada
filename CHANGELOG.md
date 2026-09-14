@@ -1,5 +1,30 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.23] - 2026-09-14
+
+### Changed
+
+- **`Widget` стал entity внутри агрегата `Scene`** вместо самостоятельного aggregate root — устраняет несогласованность между доменной моделью и слоем событий при удалении сцены (виджеты удалялись каскадом в БД, но `WidgetDeletedEvent` не публиковался, ломая аудит в History). Единая версия `Scene.Version()` теперь служит границей optimistic concurrency и для сцены, и для всех её виджетов.
+  - `internal/domain/widget/widget.go`: `Widget` лишился `SceneID()` и `Version()`; `NewWidget()` больше не принимает `sceneID`/`version`
+  - `internal/domain/widget/widget_repository.go` удалён; ошибки `ErrWidgetNotFound`/`ErrWidgetInvalidInput` перенесены в новый `internal/domain/widget/errors.go` (`ErrWidgetConflict` убран — конфликт версии теперь выражается через `scene.ErrSceneConflict`)
+  - `internal/domain/scene/scene.go`: `Scene` получил `Widgets() []widget.Widget`; `NewScene()` принимает список виджетов
+  - `internal/domain/scene/scene_repository.go`: `SceneRepository` — единственная точка доступа к виджетам (`NextWidgetID`, `FindWidgetsBySceneID`, `FindWidgetByID`, `AddWidget`, `UpdateWidget`, `DeleteWidget`, `FindWidgetsByTypeID`); `AddWidget`/`UpdateWidget` проверяют версию сцены и атомарно её инкрементируют, `DeleteWidget` инкрементирует без проверки версии (удаление не рискует затереть чужие изменения)
+  - `internal/infrastructure/postgres/repositories/widget_repository_postgres.go` удалён, логика объединена в `scene_repository_postgres.go`; общие функции сканирования/сериализации виджета вынесены в новый `widget_scan.go`. Точечные операции (`AddWidget`/`UpdateWidget`/`DeleteWidget`) делают целевой `UPDATE`/`INSERT`/`DELETE` по одной строке `widgets` + инкремент `scenes.version` в одной транзакции, не перечитывая все виджеты сцены. `DeleteByID` сцены читает её виджеты до каскадного удаления (для последующей публикации событий) в той же транзакции, что и сам `DELETE`
+  - `internal/application/scene_application_service.go`: `SceneService` получил методы работы с виджетами (`FindWidgetsBySceneID`, `FindWidgetByID`, `CreateWidget`, `UpdateWidget`, `DeleteWidgetByID`), включая валидацию port bindings против `WidgetType` (перенесена из `WidgetService`). `DeleteSceneByID` публикует `WidgetDeletedEvent` для каждого виджета сцены перед `SceneDeletedEvent`
+  - `internal/application/widget_application_service.go` удалён — `WidgetService` упразднён
+  - `internal/application/widget_type_application_service.go`: `removeOrphanedPortBindings` теперь использует `SceneRepository.FindWidgetsByTypeID` (кросс-сценовый запрос, единственное легитимное исключение из правила "виджет только через сцену") вместо `WidgetRepository`
+  - `internal/application/appdto/widget.go`: `Widget`/`CreateWidgetInput`/`UpdateWidgetInput` получили `SceneVersion` вместо `Version`; `SceneID` убран из `Create/UpdateWidgetInput` (передаётся отдельным параметром, приходит из URL)
+  - REST API: `/api/v1/widgets/*` заменён на вложенный `/api/v1/scenes/{sceneId}/widgets` и `/api/v1/scenes/{sceneId}/widgets/{widgetId}` (breaking change); `internal/interface/restapi/widgets.go`, `router.go`, `restdto/widget.go` обновлены; тело запроса/ответа виджета несёт `scene_version` вместо `version`, `scene_id` в теле запроса убран (уже есть в пути)
+  - `cmd/combined_server/main.go`: убрана отдельная wiring для `widgetRepository`/`widgetService`
+  - UI (`internal/interface/ui/project/`): `dto.go`, `widget_ops.go` обновлены под вложенные URL и версионирование через сцену (`currentSceneVersion()`/`applyNewSceneVersion()` вместо версии на виджет); `scene_ops.go`/`render_scene.go` — удаление сцены теперь подтверждается диалогом с числом виджетов (`confirmDeleteScene()`)
+  - `internal/infrastructure/postgres/migrations/20260601000002_drop_widgets_version.sql` — колонка `widgets.version` удалена как более не используемая (единственная версия — `scenes.version`); каскад `ON DELETE CASCADE` на `widgets.scene_id` не тронут
+  - `internal/infrastructure/postgres/test_data/20990101000000_insert_test_data.sql`: `INSERT INTO widgets` больше не указывает колонку `version` — без этого seed падал с ошибкой (колонки не существует) и 3 примера виджетов (`status-circle-main`, `speedometer-max-connections`, `string-ticker-status`) не создавались при `make db_up`
+  - `tests/api/bruno_collections/growscada/`: `post_widgets.yml`, `put_widget_by_id.yml`, `delete_widget_by_id.yml`, `get_widget_by_id.yml` переведены на вложенные URL и `scene_version`; `get_widgets.yml` (глобальный список виджетов) удалён — эндпоинта больше нет
+
+### Removed
+
+- Глобальные REST-эндпоинты `GET/POST /api/v1/widgets`, `GET/PUT/DELETE /api/v1/widgets/{id}` — виджет больше не адресуется независимо от сцены
+
 ## [0.0.22] - 2026-06-14
 
 ### Added

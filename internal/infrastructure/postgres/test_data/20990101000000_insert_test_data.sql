@@ -86,7 +86,7 @@ INSERT INTO scenes (id, name, width, height, background_html, version) VALUES
 -- port_bindings: JSON array of {port_name, tag_id} mapping InputPort names to tag IDs above
 -- origin_x/origin_y: anchor point in [0,1] (0.5 = center)
 -- rotation_degrees: rotation angle, normalized to [0, 360)
-INSERT INTO widgets (id, name, x, y, z, width, height, origin_x, origin_y, rotation_degrees, type_id, scene_id, labels, port_bindings, version) VALUES
+INSERT INTO widgets (id, name, x, y, z, width, height, origin_x, origin_y, rotation_degrees, type_id, scene_id, labels, port_bindings) VALUES
     (
         'b1c2d3e4-0001-4000-8000-000000000001',
         'status-circle-main',
@@ -96,8 +96,7 @@ INSERT INTO widgets (id, name, x, y, z, width, height, origin_x, origin_y, rotat
         'a1b2c3d4-0001-4000-8000-000000000001',
         'c1d2e3f4-0001-4000-8000-000000000001',
         '{"indicator","status"}',
-        '[{"port_name":"state","tag_id":"6ba7b810-9dad-11d1-80b4-00c04fd430c8"}]',
-        1
+        '[{"port_name":"state","tag_id":"6ba7b810-9dad-11d1-80b4-00c04fd430c8"}]'
     ),
     (
         'b1c2d3e4-0002-4000-8000-000000000002',
@@ -108,8 +107,7 @@ INSERT INTO widgets (id, name, x, y, z, width, height, origin_x, origin_y, rotat
         'a1b2c3d4-0002-4000-8000-000000000002',
         'c1d2e3f4-0001-4000-8000-000000000001',
         '{"speedometer","gauge"}',
-        '[{"port_name":"value","tag_id":"6ba7b811-9dad-11d1-80b4-00c04fd430c8"}]',
-        1
+        '[{"port_name":"value","tag_id":"6ba7b811-9dad-11d1-80b4-00c04fd430c8"}]'
     ),
     (
         'b1c2d3e4-0005-4000-8000-000000000005',
@@ -120,8 +118,7 @@ INSERT INTO widgets (id, name, x, y, z, width, height, origin_x, origin_y, rotat
         'a1b2c3d4-0005-4000-8000-000000000003',
         'c1d2e3f4-0001-4000-8000-000000000001',
         '{"string","ticker"}',
-        '[{"port_name":"value","tag_id":"6ba7b819-9dad-11d1-80b4-00c04fd430c8"}]',
-        1
+        '[{"port_name":"value","tag_id":"6ba7b819-9dad-11d1-80b4-00c04fd430c8"}]'
     );
 -- +goose StatementEnd
 
