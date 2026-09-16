@@ -1,0 +1,27 @@
+info:
+  name: get events (SSE stream)
+  type: http
+  seq: 22
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v1/events
+  auth: inherit
+
+docs: |
+  Opens a Server-Sent Events stream of domain events published on the
+  server's EventBus (tag/widget/widget-type/scene created/updated/deleted,
+  plus client_connected/client_disconnected). One connection per client, no
+  history replay — only events published after connecting are sent.
+
+  Bruno sends the request and waits for the response body, so it will hang
+  until the connection is closed (the stream never completes on its own);
+  cancel the request manually to inspect what was received so far. Each
+  message is a single SSE `data:` line containing JSON:
+  `{"type":"tag_created","timestamp":"2026-01-01T12:00:00Z","id":"<uuid>"}`.
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kipitix/growscada/internal/domain/client"
 	"github.com/kipitix/growscada/internal/domain/event"
 	"github.com/kipitix/growscada/internal/domain/id"
 	"github.com/kipitix/growscada/internal/domain/tag"
@@ -11,6 +12,10 @@ import (
 
 func mustTagID() id.ID[tag.Tag] {
 	return id.NewID[tag.Tag]()
+}
+
+func mustClientID() id.ID[client.Client] {
+	return id.NewID[client.Client]()
 }
 
 // --- EventTimestamp ---
@@ -193,6 +198,123 @@ func TestEventBus_Publish_CallsAllSubscribersForSameType(t *testing.T) {
 func TestEventBus_Publish_NoSubscribers_DoesNotPanic(t *testing.T) {
 	bus := event.NewEventBus()
 	bus.Publish(event.NewTagCreatedEvent(mustTagID()))
+}
+
+func TestEventBus_Unsubscribe_StopsReceivingEvents(t *testing.T) {
+	bus := event.NewEventBus()
+	count := 0
+	sub := bus.Subscribe(event.EventTypeTagCreated, func(e event.Event) { count++ })
+
+	bus.Publish(event.NewTagCreatedEvent(mustTagID()))
+	bus.Unsubscribe(sub)
+	bus.Publish(event.NewTagCreatedEvent(mustTagID()))
+
+	if count != 1 {
+		t.Errorf("expected 1 handler call before unsubscribe, got %d", count)
+	}
+}
+
+func TestEventBus_Unsubscribe_OnlyRemovesTargetedSubscription(t *testing.T) {
+	bus := event.NewEventBus()
+	countA, countB := 0, 0
+	subA := bus.Subscribe(event.EventTypeTagCreated, func(e event.Event) { countA++ })
+	bus.Subscribe(event.EventTypeTagCreated, func(e event.Event) { countB++ })
+
+	bus.Unsubscribe(subA)
+	bus.Publish(event.NewTagCreatedEvent(mustTagID()))
+
+	if countA != 0 {
+		t.Errorf("expected unsubscribed handler to not be called, got %d calls", countA)
+	}
+	if countB != 1 {
+		t.Errorf("expected remaining handler to be called once, got %d", countB)
+	}
+}
+
+func TestEventBus_Unsubscribe_UnknownSubscription_DoesNotPanic(t *testing.T) {
+	bus := event.NewEventBus()
+	sub := bus.Subscribe(event.EventTypeTagCreated, func(e event.Event) {})
+	bus.Unsubscribe(sub)
+	bus.Unsubscribe(sub) // double unsubscribe
+}
+
+// --- AllEventTypes ---
+
+func TestAllEventTypes_ExcludesUnknown(t *testing.T) {
+	for _, et := range event.AllEventTypes() {
+		if et == event.EventTypeUnknown {
+			t.Error("expected AllEventTypes to not include EventTypeUnknown")
+		}
+	}
+}
+
+func TestAllEventTypes_IncludesClientLifecycleTypes(t *testing.T) {
+	types := event.AllEventTypes()
+	hasConnected, hasDisconnected := false, false
+	for _, et := range types {
+		if et == event.EventTypeClientConnected {
+			hasConnected = true
+		}
+		if et == event.EventTypeClientDisconnected {
+			hasDisconnected = true
+		}
+	}
+	if !hasConnected || !hasDisconnected {
+		t.Errorf("expected AllEventTypes to include client connected/disconnected, got %v", types)
+	}
+}
+
+// --- ClientConnectedEvent / ClientDisconnectedEvent ---
+
+func TestNewClientConnectedEvent_Type_IsClientConnected(t *testing.T) {
+	e := event.NewClientConnectedEvent(mustClientID())
+	if e.Type() != event.EventTypeClientConnected {
+		t.Errorf("expected %s, got %s", event.EventTypeClientConnected, e.Type())
+	}
+}
+
+func TestNewClientConnectedEvent_ClientID_MatchesProvided(t *testing.T) {
+	id := mustClientID()
+	e := event.NewClientConnectedEvent(id)
+	if e.ClientID() != id {
+		t.Errorf("expected ClientID %v, got %v", id, e.ClientID())
+	}
+}
+
+func TestNewClientDisconnectedEvent_Type_IsClientDisconnected(t *testing.T) {
+	e := event.NewClientDisconnectedEvent(mustClientID())
+	if e.Type() != event.EventTypeClientDisconnected {
+		t.Errorf("expected %s, got %s", event.EventTypeClientDisconnected, e.Type())
+	}
+}
+
+func TestNewClientDisconnectedEvent_ClientID_MatchesProvided(t *testing.T) {
+	id := mustClientID()
+	e := event.NewClientDisconnectedEvent(id)
+	if e.ClientID() != id {
+		t.Errorf("expected ClientID %v, got %v", id, e.ClientID())
+	}
+}
+
+func TestEventType_String_ClientLifecycle(t *testing.T) {
+	if got := event.EventTypeClientConnected.String(); got != "client_connected" {
+		t.Errorf("expected %q, got %q", "client_connected", got)
+	}
+	if got := event.EventTypeClientDisconnected.String(); got != "client_disconnected" {
+		t.Errorf("expected %q, got %q", "client_disconnected", got)
+	}
+}
+
+func TestNewEventType_ClientLifecycleStrings_RoundTrip(t *testing.T) {
+	for _, s := range []string{"client_connected", "client_disconnected"} {
+		got, err := event.NewEventType(s)
+		if err != nil {
+			t.Fatalf("unexpected error for %q: %v", s, err)
+		}
+		if got.String() != s {
+			t.Errorf("round-trip failed: expected %q, got %q", s, got.String())
+		}
+	}
 }
 
 // --- SystemReadyEvent ---

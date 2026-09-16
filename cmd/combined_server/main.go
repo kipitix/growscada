@@ -83,7 +83,7 @@ func main() {
 	widgetTypeService := application.NewWidgetTypeService(widgetTypeRepository, sceneRepository, eventBus)
 	sceneService := application.NewSceneService(sceneRepository, widgetTypeRepository, eventBus)
 	// Create router
-	apiRouter := restapi.NewRouter(tagService, widgetTypeService, sceneService)
+	apiRouter := restapi.NewRouter(tagService, widgetTypeService, sceneService, eventBus)
 	// Start HTTP server for API
 	apiServer := &http.Server{
 		Addr:    ":9090",
