@@ -33,7 +33,7 @@ func newRouterWithWidgetTypes() *restapi.APIRouter {
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
 	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo, event.NewEventBus())
 	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, event.NewEventBus())
-	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, event.NewEventBus())
+	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, event.NewEventBus(), 100)
 }
 
 func createWidgetTypeViaService(t *testing.T, input appdto.CreateWidgetTypeInput) appdto.WidgetType {
@@ -294,7 +294,7 @@ func TestPutWidgetTypesByID_Conflict_Returns409(t *testing.T) {
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
 	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, event.NewEventBus())
-	router := restapi.NewRouter(tagSvc, svc, sceneSvc, event.NewEventBus())
+	router := restapi.NewRouter(tagSvc, svc, sceneSvc, event.NewEventBus(), 100)
 
 	body, _ := json.Marshal(restdto.UpdateWidgetTypeRequest{
 		Name: "x", HtmlTemplate: "<div/>", Script: "x", ScriptLanguage: "lua",

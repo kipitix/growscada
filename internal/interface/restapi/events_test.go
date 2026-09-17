@@ -60,6 +60,58 @@ func (w *blockingResponseWriter) Write(p []byte) (int, error) {
 
 func (w *blockingResponseWriter) Flush() {}
 
+// syncRecorder wraps httptest.ResponseRecorder with a mutex. The handler
+// under test writes to it from its own goroutine (started by
+// runEventsHandler) while the test goroutine polls its body/headers via
+// waitFor; httptest.ResponseRecorder gives no such guarantee on its own,
+// since its Write/Body/Header aren't synchronized against concurrent use.
+type syncRecorder struct {
+	mu  sync.Mutex
+	rec *httptest.ResponseRecorder
+}
+
+func newSyncRecorder() *syncRecorder {
+	return &syncRecorder{rec: httptest.NewRecorder()}
+}
+
+func (s *syncRecorder) Header() http.Header {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.rec.Header()
+}
+
+func (s *syncRecorder) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.rec.Write(p)
+}
+
+func (s *syncRecorder) WriteHeader(code int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rec.WriteHeader(code)
+}
+
+func (s *syncRecorder) Flush() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rec.Flush()
+}
+
+// body returns the response body accumulated so far; safe to call
+// concurrently with the handler still writing.
+func (s *syncRecorder) body() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.rec.Body.String()
+}
+
+func (s *syncRecorder) code() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.rec.Code
+}
+
 func runEventsHandler(t *testing.T, h *restapi.EventsHandlers, w http.ResponseWriter) (cancel func(), done <-chan struct{}) {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events", nil)
@@ -88,11 +140,11 @@ func waitFor(t *testing.T, d time.Duration, condition func() bool) {
 
 func TestEventsHandlers_GetEvents_SetsSSEHeaders(t *testing.T) {
 	bus := event.NewEventBus()
-	h := restapi.NewEventsHandler(bus)
+	h := restapi.NewEventsHandler(bus, 100)
 
-	rec := httptest.NewRecorder()
+	rec := newSyncRecorder()
 	cancel, done := runEventsHandler(t, h, rec)
-	waitFor(t, time.Second, func() bool { return strings.Contains(rec.Body.String(), ": connected") })
+	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), ": connected") })
 	cancel()
 	<-done
 
@@ -103,20 +155,20 @@ func TestEventsHandlers_GetEvents_SetsSSEHeaders(t *testing.T) {
 
 func TestEventsHandlers_GetEvents_StreamsPublishedEvent(t *testing.T) {
 	bus := event.NewEventBus()
-	h := restapi.NewEventsHandler(bus)
+	h := restapi.NewEventsHandler(bus, 100)
 
-	rec := httptest.NewRecorder()
+	rec := newSyncRecorder()
 	cancel, done := runEventsHandler(t, h, rec)
-	waitFor(t, time.Second, func() bool { return strings.Contains(rec.Body.String(), ": connected") })
+	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), ": connected") })
 
 	tagID := id.NewID[tag.Tag]()
 	bus.Publish(event.NewTagCreatedEvent(tagID))
 
-	waitFor(t, time.Second, func() bool { return strings.Contains(rec.Body.String(), "tag_created") })
+	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), "tag_created") })
 	cancel()
 	<-done
 
-	body := rec.Body.String()
+	body := rec.body()
 	if !strings.Contains(body, `"type":"tag_created"`) {
 		t.Errorf("expected body to contain tag_created event, got %q", body)
 	}
@@ -127,7 +179,7 @@ func TestEventsHandlers_GetEvents_StreamsPublishedEvent(t *testing.T) {
 
 func TestEventsHandlers_GetEvents_PublishesConnectAndDisconnectEvents(t *testing.T) {
 	bus := event.NewEventBus()
-	h := restapi.NewEventsHandler(bus)
+	h := restapi.NewEventsHandler(bus, 100)
 
 	var mu sync.Mutex
 	var seen []event.EventType
@@ -142,7 +194,7 @@ func TestEventsHandlers_GetEvents_PublishesConnectAndDisconnectEvents(t *testing
 		seen = append(seen, e.Type())
 	})
 
-	rec := httptest.NewRecorder()
+	rec := newSyncRecorder()
 	cancel, done := runEventsHandler(t, h, rec)
 	waitFor(t, time.Second, func() bool {
 		mu.Lock()
@@ -161,26 +213,103 @@ func TestEventsHandlers_GetEvents_PublishesConnectAndDisconnectEvents(t *testing
 
 func TestEventsHandlers_GetEvents_MultipleClientsEachReceiveBroadcast(t *testing.T) {
 	bus := event.NewEventBus()
-	h := restapi.NewEventsHandler(bus)
+	h := restapi.NewEventsHandler(bus, 100)
 
-	rec1 := httptest.NewRecorder()
+	rec1 := newSyncRecorder()
 	cancel1, done1 := runEventsHandler(t, h, rec1)
-	rec2 := httptest.NewRecorder()
+	rec2 := newSyncRecorder()
 	cancel2, done2 := runEventsHandler(t, h, rec2)
 
 	waitFor(t, time.Second, func() bool {
-		return strings.Contains(rec1.Body.String(), ": connected") && strings.Contains(rec2.Body.String(), ": connected")
+		return strings.Contains(rec1.body(), ": connected") && strings.Contains(rec2.body(), ": connected")
 	})
 
 	bus.Publish(event.NewSceneCreatedEvent(id.NewID[scene.Scene]()))
 
 	waitFor(t, time.Second, func() bool {
-		return strings.Contains(rec1.Body.String(), "scene_created") && strings.Contains(rec2.Body.String(), "scene_created")
+		return strings.Contains(rec1.body(), "scene_created") && strings.Contains(rec2.body(), "scene_created")
 	})
 
 	cancel1()
 	cancel2()
 	<-done1
+	<-done2
+}
+
+// TestEventsHandlers_Publish_NoClientsDoesNotAllocate guards the fix for the
+// CODE_REVIEW.md finding that eventHub.broadcast used to marshal every
+// domain event to JSON synchronously in the publishing goroutine (i.e. the
+// REST request path) even with zero SSE tabs open. No GetEvents call is
+// made here, so the hub never gains a client.
+func TestEventsHandlers_Publish_NoClientsDoesNotAllocate(t *testing.T) {
+	bus := event.NewEventBus()
+	_ = restapi.NewEventsHandler(bus, 100) // subscribes the hub to bus; no client connects
+
+	e := event.NewTagCreatedEvent(id.NewID[tag.Tag]())
+
+	allocs := testing.AllocsPerRun(200, func() {
+		bus.Publish(e)
+	})
+
+	if allocs > 0 {
+		t.Errorf("expected zero allocations broadcasting with no SSE clients, got %.2f allocs/op", allocs)
+	}
+}
+
+// BenchmarkEventsHandlers_Publish_NoClients measures the same no-client
+// broadcast path for manual profiling; run with `make bench`.
+func BenchmarkEventsHandlers_Publish_NoClients(b *testing.B) {
+	bus := event.NewEventBus()
+	_ = restapi.NewEventsHandler(bus, 100)
+
+	e := event.NewTagCreatedEvent(id.NewID[tag.Tag]())
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		bus.Publish(e)
+	}
+}
+
+// TestEventsHandlers_GetEvents_RejectsBeyondMaxClients guards the fix for
+// the CODE_REVIEW.md finding that GET /api/v1/events accepted an unbounded
+// number of concurrent SSE connections. A small maxClients (2) keeps the
+// test from needing to open 100 real connections.
+func TestEventsHandlers_GetEvents_RejectsBeyondMaxClients(t *testing.T) {
+	bus := event.NewEventBus()
+	h := restapi.NewEventsHandler(bus, 2)
+
+	rec1 := newSyncRecorder()
+	cancel1, done1 := runEventsHandler(t, h, rec1)
+	rec2 := newSyncRecorder()
+	cancel2, done2 := runEventsHandler(t, h, rec2)
+	waitFor(t, time.Second, func() bool {
+		return strings.Contains(rec1.body(), ": connected") && strings.Contains(rec2.body(), ": connected")
+	})
+
+	rec3 := newSyncRecorder()
+	cancel3, done3 := runEventsHandler(t, h, rec3)
+	<-done3
+	cancel3()
+
+	if rec3.code() != http.StatusServiceUnavailable {
+		t.Errorf("expected 503 when over the connection limit, got %d", rec3.code())
+	}
+	if ct := rec3.Header().Get("Content-Type"); ct != "application/json" {
+		t.Errorf("expected a JSON problem response, got Content-Type %q, body %q", ct, rec3.body())
+	}
+
+	// Freeing a slot must let a new connection through.
+	cancel1()
+	<-done1
+
+	rec4 := newSyncRecorder()
+	cancel4, done4 := runEventsHandler(t, h, rec4)
+	waitFor(t, time.Second, func() bool { return strings.Contains(rec4.body(), ": connected") })
+	cancel4()
+	<-done4
+
+	cancel2()
 	<-done2
 }
 
@@ -190,7 +319,7 @@ func TestEventsHandlers_GetEvents_MultipleClientsEachReceiveBroadcast(t *testing
 // eventually be disconnected once its buffer overflows.
 func TestEventsHandlers_GetEvents_SlowClientIsDroppedWithoutBlockingPublish(t *testing.T) {
 	bus := event.NewEventBus()
-	h := restapi.NewEventsHandler(bus)
+	h := restapi.NewEventsHandler(bus, 100)
 
 	w := newBlockingResponseWriter()
 	cancel, done := runEventsHandler(t, h, w)

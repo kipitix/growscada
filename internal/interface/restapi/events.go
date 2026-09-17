@@ -14,8 +14,10 @@ type EventsHandlers struct {
 	hub *eventHub
 }
 
-func NewEventsHandler(bus event.EventBus) *EventsHandlers {
-	return &EventsHandlers{hub: newEventHub(bus)}
+// NewEventsHandler creates the SSE event handler. maxClients caps how many
+// concurrent event streams the hub will accept — see eventHub.addClient.
+func NewEventsHandler(bus event.EventBus, maxClients int) *EventsHandlers {
+	return &EventsHandlers{hub: newEventHub(bus, maxClients)}
 }
 
 // GetEvents handles GET /api/v1/events. It upgrades the connection to an SSE
@@ -27,6 +29,15 @@ func (h *EventsHandlers) GetEvents(w http.ResponseWriter, r *http.Request) {
 		sendJSONResponse(w, http.StatusInternalServerError, NewInternalError("streaming not supported", r.URL.Path))
 		return
 	}
+
+	// Checked before writing any response so a rejection can still be a
+	// normal JSON error instead of an already-committed SSE stream.
+	c, ok := h.hub.addClient()
+	if !ok {
+		sendJSONResponse(w, http.StatusServiceUnavailable, NewServiceUnavailableError("too many concurrent event stream connections", r.URL.Path))
+		return
+	}
+	defer h.hub.removeClient(c)
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -40,9 +51,6 @@ func (h *EventsHandlers) GetEvents(w http.ResponseWriter, r *http.Request) {
 	connectionID := id.NewID[client.Client]()
 	h.hub.Publish(event.NewClientConnectedEvent(connectionID))
 	defer h.hub.Publish(event.NewClientDisconnectedEvent(connectionID))
-
-	c := h.hub.addClient()
-	defer h.hub.removeClient(c)
 
 	for {
 		select {

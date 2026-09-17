@@ -10,7 +10,7 @@ const (
 	categoryScene      category = "Scene"
 	categoryValue      category = "Value"
 	categoryClient     category = "Client"
-	categoryOther      category = ""
+	categoryOther      category = "Other"
 )
 
 // allCategories lists every filter toggle, in display order.
@@ -21,6 +21,7 @@ var allCategories = []category{
 	categoryScene,
 	categoryValue,
 	categoryClient,
+	categoryOther,
 }
 
 // defaultEnabled is the initial filter state: everything is shown except
@@ -33,6 +34,7 @@ func defaultFilters() map[category]bool {
 		categoryScene:      true,
 		categoryValue:      false,
 		categoryClient:     true,
+		categoryOther:      true,
 	}
 }
 

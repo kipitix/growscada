@@ -26,6 +26,7 @@ type eventMessage struct {
 type eventHub struct {
 	bus           event.EventBus
 	subscriptions []event.Subscription
+	maxClients    int
 
 	mu      sync.Mutex
 	clients map[*eventClient]struct{}
@@ -36,10 +37,11 @@ type eventClient struct {
 	closed   bool
 }
 
-func newEventHub(bus event.EventBus) *eventHub {
+func newEventHub(bus event.EventBus, maxClients int) *eventHub {
 	h := &eventHub{
-		bus:     bus,
-		clients: make(map[*eventClient]struct{}),
+		bus:        bus,
+		maxClients: maxClients,
+		clients:    make(map[*eventClient]struct{}),
 	}
 
 	for _, et := range event.AllEventTypes() {
@@ -65,6 +67,13 @@ func (h *eventHub) Close() {
 }
 
 func (h *eventHub) broadcast(e event.Event) {
+	h.mu.Lock()
+	if len(h.clients) == 0 {
+		h.mu.Unlock()
+		return
+	}
+	h.mu.Unlock()
+
 	payload, err := json.Marshal(eventMessage{
 		Type:      e.Type().String(),
 		Timestamp: e.Timestamp().Time().Format(time.RFC3339),
@@ -91,12 +100,19 @@ func (h *eventHub) broadcast(e event.Event) {
 }
 
 // addClient registers a new SSE connection and returns its message channel.
-func (h *eventHub) addClient() *eventClient {
-	c := &eventClient{messages: make(chan []byte, eventClientBufferSize)}
+// It refuses to register beyond maxClients, returning ok=false so the
+// caller can reject the connection before committing to any response.
+func (h *eventHub) addClient() (c *eventClient, ok bool) {
 	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if len(h.clients) >= h.maxClients {
+		return nil, false
+	}
+
+	c = &eventClient{messages: make(chan []byte, eventClientBufferSize)}
 	h.clients[c] = struct{}{}
-	h.mu.Unlock()
-	return c
+	return c, true
 }
 
 // removeClient unregisters an SSE connection. Safe to call more than once.

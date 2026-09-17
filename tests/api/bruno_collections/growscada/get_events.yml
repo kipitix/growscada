@@ -20,6 +20,10 @@ docs: |
   message is a single SSE `data:` line containing JSON:
   `{"type":"tag_created","timestamp":"2026-01-01T12:00:00Z","id":"<uuid>"}`.
 
+  The server caps the number of concurrent event streams (configurable via
+  the MAX_SSE_CLIENTS env var, default 100). Once at capacity, a new request
+  gets a normal JSON 503 Problem Details response instead of an SSE stream.
+
 settings:
   encodeUrl: true
   timeout: 0

@@ -1,7 +1,17 @@
 package eventlog
 
 import (
+	"fmt"
+
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
+)
+
+// visibleRows and entryRowHeightPx fix the entry list's height at exactly
+// visibleRows rows, whether it holds zero entries or hundreds — the panel
+// never grows/shrinks with content, only scrolls internally.
+const (
+	visibleRows      = 10
+	entryRowHeightPx = 22
 )
 
 func (b *Bar) Render() app.UI {
@@ -58,14 +68,12 @@ func (b *Bar) renderPanel() app.UI {
 	return app.Div().
 		Style("display", "flex").
 		Style("flex-direction", "column").
-		Style("max-height", "240px").
 		Style("border-top", "1px solid var(--border)").
 		Style("background", "var(--surface)").
 		Body(
 			b.renderFilters(),
 			app.Div().
-				Style("flex", "1").
-				Style("min-height", "0").
+				Style("height", fmt.Sprintf("%dpx", visibleRows*entryRowHeightPx)).
 				Style("overflow-y", "auto").
 				Body(b.renderEntries()),
 		)
@@ -121,7 +129,10 @@ func (b *Bar) renderEntries() app.UI {
 
 	if len(visible) == 0 {
 		return app.Div().
-			Style("padding", "10px 12px").
+			Style("height", fmt.Sprintf("%dpx", entryRowHeightPx)).
+			Style("box-sizing", "border-box").
+			Style("padding", "0 12px").
+			Style("line-height", fmt.Sprintf("%dpx", entryRowHeightPx)).
 			Style("font-size", "12px").
 			Style("color", "var(--text-muted)").
 			Text("No events.")
@@ -132,9 +143,12 @@ func (b *Bar) renderEntries() app.UI {
 
 func (b *Bar) renderEntry(entry logEntry) app.UI {
 	return app.Div().
+		Style("box-sizing", "border-box").
+		Style("height", fmt.Sprintf("%dpx", entryRowHeightPx)).
 		Style("display", "flex").
+		Style("align-items", "center").
 		Style("gap", "10px").
-		Style("padding", "3px 12px").
+		Style("padding", "0 12px").
 		Style("font-size", "12px").
 		Style("border-bottom", "1px solid var(--border-subtle)").
 		Body(
