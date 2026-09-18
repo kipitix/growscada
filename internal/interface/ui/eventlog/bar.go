@@ -6,10 +6,13 @@ package eventlog
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
+
+	"github.com/kipitix/growscada/internal/interface/ui/toast"
 )
 
 // maxEntries is the cap on how many events are kept in the client-side
@@ -42,9 +45,10 @@ type Bar struct {
 	entries   []logEntry
 	filters   map[category]bool
 
-	eventSource app.Value
-	onMessage   app.Func
-	onError     app.Func
+	eventSource        app.Value
+	onMessage          app.Func
+	onError            app.Func
+	connectionDegraded bool
 }
 
 func NewBar(apiServerURL string) *Bar {
@@ -99,12 +103,23 @@ func (b *Bar) connect(ctx app.Context) {
 		return nil
 	})
 
+	b.onError = app.FuncOf(func(this app.Value, args []app.Value) any {
+		ctx.Dispatch(func(ctx app.Context) {
+			b.handleError(ctx)
+		})
+		return nil
+	})
+
 	es := app.Window().Get("EventSource").New(url)
 	es.Set("onmessage", b.onMessage)
+	es.Set("onerror", b.onError)
 	b.eventSource = es
 }
 
 func (b *Bar) handleMessage(data string) {
+	// A message proves the stream is live, so a prior error toast is stale.
+	b.connectionDegraded = false
+
 	var msg wireMessage
 	if err := json.Unmarshal([]byte(data), &msg); err != nil {
 		return
@@ -129,6 +144,28 @@ func (b *Bar) handleMessage(data string) {
 	if len(b.entries) > maxEntries {
 		b.entries = b.entries[:maxEntries]
 	}
+}
+
+// handleError responds to the SSE connection's "error" event (dropped
+// connection, unreachable server, ...). The native EventSource retries
+// automatically and re-fires this event on every failed attempt, so
+// shouldNotifyError throttles it to one toast per outage instead of one per
+// retry.
+func (b *Bar) handleError(ctx app.Context) {
+	notify, degraded := shouldNotifyError(b.connectionDegraded)
+	b.connectionDegraded = degraded
+	if notify {
+		ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(
+			errors.New("lost connection to the event stream; the browser will retry automatically"),
+		))
+	}
+}
+
+// shouldNotifyError decides whether an EventSource error should surface a
+// toast, given whether the connection was already known to be degraded.
+// Only the transition into "degraded" notifies.
+func shouldNotifyError(wasDegraded bool) (notify, degraded bool) {
+	return !wasDegraded, true
 }
 
 // displayTime renders the server's RFC3339 event timestamp in the browser's

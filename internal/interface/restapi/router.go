@@ -22,6 +22,12 @@ func (r APIRouter) ServeMux() http.Handler {
 	return corsMiddleware(r.serveMux)
 }
 
+// Close releases the router's long-lived resources (currently just the SSE
+// event hub's EventBus subscriptions) for graceful shutdown.
+func (r APIRouter) Close() {
+	r.eventsHandlers.Close()
+}
+
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")

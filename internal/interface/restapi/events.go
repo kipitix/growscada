@@ -20,6 +20,12 @@ func NewEventsHandler(bus event.EventBus, maxClients int) *EventsHandlers {
 	return &EventsHandlers{hub: newEventHub(bus, maxClients)}
 }
 
+// Close detaches the hub from the EventBus. Connected clients are left to be
+// disconnected by their own request context cancellation.
+func (h *EventsHandlers) Close() {
+	h.hub.Close()
+}
+
 // GetEvents handles GET /api/v1/events. It upgrades the connection to an SSE
 // stream and forwards every domain event published after this point — no
 // history is replayed.

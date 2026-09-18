@@ -93,6 +93,11 @@ func main() {
 	sceneService := application.NewSceneService(sceneRepository, widgetTypeRepository, eventBus)
 	// Create router
 	apiRouter := restapi.NewRouter(tagService, widgetTypeService, sceneService, eventBus, cliArgs.MaxSSEClients)
+	// Register the event hub shutdown handler
+	gracedownManager.RegisterInterface("Event Hub", 15*time.Second, func(ctx context.Context) error {
+		apiRouter.Close()
+		return nil
+	})
 	// Start HTTP server for API
 	apiServer := &http.Server{
 		Addr:    ":9090",

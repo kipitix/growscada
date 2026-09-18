@@ -271,6 +271,45 @@ func BenchmarkEventsHandlers_Publish_NoClients(b *testing.B) {
 	}
 }
 
+// TestEventsHandlers_Close_StopsForwardingNewEvents guards the fix for the
+// CODE_REVIEW.md finding that eventHub.Close() was never wired into the
+// server's graceful shutdown. It asserts Close()'s actual effect: once
+// called, the hub is unsubscribed from the EventBus, so events published
+// afterwards never reach an already-connected client — even though, per
+// eventHub.Close's contract, the connection itself is left open until its
+// own request context is canceled.
+func TestEventsHandlers_Close_StopsForwardingNewEvents(t *testing.T) {
+	bus := event.NewEventBus()
+	h := restapi.NewEventsHandler(bus, 100)
+
+	rec := newSyncRecorder()
+	cancel, done := runEventsHandler(t, h, rec)
+	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), ": connected") })
+
+	tagID := id.NewID[tag.Tag]()
+	bus.Publish(event.NewTagCreatedEvent(tagID))
+	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), "tag_created") })
+
+	h.Close()
+
+	sceneID := id.NewID[scene.Scene]()
+	bus.Publish(event.NewSceneCreatedEvent(sceneID))
+
+	// There is no positive signal to wait for here — Close() means this
+	// event should never arrive. EventBus.Publish calls subscribers
+	// synchronously, so if the hub were still subscribed the client's
+	// buffered channel would already hold the message by the time Publish
+	// returns, and the handler's read loop would drain it into rec within
+	// microseconds; a short fixed wait is enough to catch a regression.
+	time.Sleep(50 * time.Millisecond)
+	if strings.Contains(rec.body(), "scene_created") {
+		t.Error("expected no events to be forwarded after Close(), but scene_created was received")
+	}
+
+	cancel()
+	<-done
+}
+
 // TestEventsHandlers_GetEvents_RejectsBeyondMaxClients guards the fix for
 // the CODE_REVIEW.md finding that GET /api/v1/events accepted an unbounded
 // number of concurrent SSE connections. A small maxClients (2) keeps the
