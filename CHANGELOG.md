@@ -1,5 +1,35 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.24] - 2026-09-18
+
+### Added
+
+- **Протокол доменных событий клиент-сервер на базе SSE** — сервер транслирует все события `EventBus` подключённым клиентам через `GET /api/v1/events`, клиент отображает их в новой панели лога в статус-баре:
+  - `internal/interface/restapi/event_hub.go` — `eventHub`: подписывается на `event.AllEventTypes()` ровно один раз при создании и раздаёт каждое опубликованное событие всем текущим SSE-клиентам (`broadcast`); у каждого клиента канал `messages` с буфером `eventClientBufferSize = 64`; при переполнении буфера клиент считается медленным и отключается (`closed = true`, канал закрывается), не блокируя `Publish` для остальной части приложения; `addClient`/`removeClient` учитывают лимит `maxClients`
+  - `internal/interface/restapi/events.go` — `EventsHandlers.GetEvents`: хендлер `GET /api/v1/events`; проверяет лимит подключений до апгрейда до SSE (при превышении — обычный JSON 503, а не уже отправленный поток); пишет SSE-комментарий `: connected\n\n` сразу после заголовков; публикует `ClientConnectedEvent`/`ClientDisconnectedEvent` (через `defer`) при подключении/отключении; история не воспроизводится — только события, случившиеся после подключения
+  - `internal/domain/client` (новый пакет) — `Client` — маркерный интерфейс-идентичность для событий жизненного цикла SSE-подключения; поведение агрегата пока не определено
+  - `internal/domain/event/client_event.go`, `client_connected_event.go`, `client_disconnected_event.go` — `ClientEvent` (база с `ClientID() id.ID[client.Client]`), `ClientConnectedEvent`, `ClientDisconnectedEvent`; `EventType` расширен значениями `EventTypeClientConnected`/`EventTypeClientDisconnected`
+  - `internal/domain/event/event_type.go` — `AllEventTypes()`: возвращает все известные `EventType` кроме `EventTypeUnknown`; используется хабом для универсальной подписки без ручного перечисления типов при добавлении новых
+  - `internal/domain/event/event_bus.go` — `EventBus.Subscribe` теперь возвращает `Subscription` (непрозрачный хендл `{eventType, id}`), добавлен метод `Unsubscribe(Subscription)`; внутреннее хранилище обработчиков сменилось с `map[EventType][]EventHandler` на `map[EventType]map[uint64]EventHandler`, чтобы обработчики (не сравнимые как `func`) можно было адресно удалять; `internal/infrastructure/mqtt/event_bus_mqtt.go` обновлён под новую сигнатуру (декоратор проксирует `Subscribe`/`Unsubscribe` во внутреннюю шину)
+  - `internal/interface/restapi/problems.go` — `NewServiceUnavailableError()`: RFC 7807 503 для случая превышения лимита одновременных SSE-подключений
+  - `internal/interface/restapi/router.go` — `NewRouter` принимает `event.EventBus` и `maxSSEClients`; регистрирует `GET /api/v1/events`; `APIRouter.Close()` отписывает хаб от шины при graceful shutdown
+  - `cmd/combined_server/main.go` — конфигурация через `github.com/alexflint/go-arg`: `serverArgs.MaxSSEClients` (env `MAX_SSE_CLIENTS`, по умолчанию 100); хаб зарегистрирован в `gracedownManager` как отдельный интерфейс `"Event Hub"` с таймаутом остановки 15s
+  - `internal/interface/ui/eventlog` (новый пакет) — компонент **`Bar`**: статус-бар (текущее время, обновляется раз в секунду через `ctx.After`, + кнопка «Events») и раскрываемая панель лога событий под ним:
+    - Подключение к `/api/v1/events` через нативный `EventSource` держится всё время жизни компонента независимо от того, открыта ли панель; браузер сам переподключается при разрыве, история не восстанавливается ни на клиенте, ни на сервере
+    - Буфер `entries` ограничен `maxEntries = 500`; старые записи вытесняются независимо от активных фильтров (фильтры влияют только на отображение)
+    - Панель — фиксированная высота на `visibleRows = 10` строк с внутренним скроллом, не меняется в зависимости от количества записей
+    - Фильтры по категориям (`event_types.go`): `Tag`, `Widget`, `WidgetType`, `Scene`, `Value`, `Client`, `Other`; каждый тип события из `eventTypeInfoByType` маппится на категорию и человекочитаемый шаблон описания; по умолчанию скрыта только категория `Value` (поштучные обновления значений тегов иначе засоряют лог); состояние фильтров персистируется в `localStorage` (`eventlog:filters`)
+    - `internal/interface/ui/root/root.go` — `eventlog.NewBar(r.apiServerURL)` смонтирован в `Root.Render()`
+  - `tests/api/bruno_collections/growscada/get_events.yml` — запрос для ручной проверки SSE-потока
+  - `internal/domain/event/event_test.go` — тесты на `Subscribe`/`Unsubscribe` (адресное снятие обработчика без затрагивания остальных подписчиков того же типа)
+  - `internal/interface/restapi/events_test.go` — интеграционные тесты SSE-хендлера: подключение/формат сообщений, лимит `maxSSEClients` → 503, публикация `client_connected`/`client_disconnected`, отключение медленного клиента
+  - `internal/interface/ui/eventlog/bar_test.go`, `event_types_test.go` — юнит-тесты фильтров по умолчанию и маппинга типов событий на категории/описания
+
+### Changed
+
+- `go.mod` — новая прямая зависимость `github.com/alexflint/go-arg` (+ indirect `github.com/alexflint/go-scalar`); `github.com/pressly/goose/v3`, `github.com/testcontainers/testcontainers-go`, `github.com/testcontainers/testcontainers-go/modules/postgres` переведены из indirect в прямые зависимости
+- `Makefile` — добавлена цель `bench`: `go test -run=^$ -bench=. -benchmem ./...`
+
 ## [0.0.23] - 2026-09-14
 
 ### Changed
