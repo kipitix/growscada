@@ -35,7 +35,7 @@ func newRouterWithWidgets() *restapi.APIRouter {
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
 	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo, event.NewEventBus())
 	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, event.NewEventBus())
-	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc)
+	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, event.NewEventBus(), 100)
 }
 
 func createSceneViaSceneService(t *testing.T) appdto.Scene {
@@ -438,7 +438,7 @@ func TestPutWidgetsByID_Conflict_Returns409(t *testing.T) {
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
 	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo, event.NewEventBus())
-	router := restapi.NewRouter(tagSvc, wtSvc, svc)
+	router := restapi.NewRouter(tagSvc, wtSvc, svc, event.NewEventBus(), 100)
 
 	body, _ := json.Marshal(restdto.UpdateWidgetRequest{
 		Name:   "x",

@@ -95,7 +95,7 @@ func newRouter() *restapi.APIRouter {
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
 	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo, event.NewEventBus())
 	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, event.NewEventBus())
-	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc)
+	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, event.NewEventBus(), 100)
 }
 
 func createTagViaService(t *testing.T, name, tagType, value, quality string) appdto.Tag {

@@ -38,6 +38,10 @@ func (m *mqttEventBusImpl) Publish(e event.Event) {
 	}
 }
 
-func (m *mqttEventBusImpl) Subscribe(eventType event.EventType, handler event.EventHandler) {
-	m.inner.Subscribe(eventType, handler)
+func (m *mqttEventBusImpl) Subscribe(eventType event.EventType, handler event.EventHandler) event.Subscription {
+	return m.inner.Subscribe(eventType, handler)
+}
+
+func (m *mqttEventBusImpl) Unsubscribe(subscription event.Subscription) {
+	m.inner.Unsubscribe(subscription)
 }

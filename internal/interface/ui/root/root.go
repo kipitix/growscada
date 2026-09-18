@@ -1,6 +1,7 @@
 package root
 
 import (
+	"github.com/kipitix/growscada/internal/interface/ui/eventlog"
 	"github.com/kipitix/growscada/internal/interface/ui/history"
 	"github.com/kipitix/growscada/internal/interface/ui/library"
 	"github.com/kipitix/growscada/internal/interface/ui/operation"
@@ -28,8 +29,8 @@ type Root struct {
 
 func NewRoot(anAPIServerURL string) *Root {
 	return &Root{
-		currentMode: ModeLibrary,
-		themeMode:   "auto",
+		currentMode:  ModeLibrary,
+		themeMode:    "auto",
 		apiServerURL: anAPIServerURL,
 	}
 }
@@ -265,6 +266,7 @@ func (r *Root) Render() app.UI {
 						return &history.History{}
 					}),
 				),
+			eventlog.NewBar(r.apiServerURL),
 		)
 }
 

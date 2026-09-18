@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/alexflint/go-arg"
 	"github.com/kipitix/gracedown"
 	"github.com/kipitix/growscada/internal/application"
 	"github.com/kipitix/growscada/internal/domain/event"
@@ -25,6 +26,11 @@ const (
 	apiServerURL = "http://localhost:9090"
 )
 
+// serverArgs is the server's command-line/environment configuration.
+type serverArgs struct {
+	MaxSSEClients int `arg:"env:MAX_SSE_CLIENTS" default:"100" help:"maximum number of concurrent SSE event-stream connections"`
+}
+
 type slogAdapter struct{}
 
 func (slogAdapter) Println(v ...any) {
@@ -40,6 +46,9 @@ func main() {
 
 	// Required go-app framework call to initialize the PWA
 	app.RunWhenOnBrowser()
+
+	var cliArgs serverArgs
+	arg.MustParse(&cliArgs)
 
 	// Create a graceful shutdown manager
 	gracedownManager := gracedown.NewManager(gracedown.WithLogger(slogAdapter{}))
@@ -83,7 +92,12 @@ func main() {
 	widgetTypeService := application.NewWidgetTypeService(widgetTypeRepository, sceneRepository, eventBus)
 	sceneService := application.NewSceneService(sceneRepository, widgetTypeRepository, eventBus)
 	// Create router
-	apiRouter := restapi.NewRouter(tagService, widgetTypeService, sceneService)
+	apiRouter := restapi.NewRouter(tagService, widgetTypeService, sceneService, eventBus, cliArgs.MaxSSEClients)
+	// Register the event hub shutdown handler
+	gracedownManager.RegisterInterface("Event Hub", 15*time.Second, func(ctx context.Context) error {
+		apiRouter.Close()
+		return nil
+	})
 	// Start HTTP server for API
 	apiServer := &http.Server{
 		Addr:    ":9090",

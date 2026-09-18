@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/kipitix/growscada/internal/application"
+	"github.com/kipitix/growscada/internal/domain/event"
 )
 
 type APIRouter struct {
@@ -14,10 +15,17 @@ type APIRouter struct {
 	widgetTypesHandlers *WidgetTypesHandlers
 	widgetsHandlers     *WidgetsHandlers
 	scenesHandlers      *ScenesHandlers
+	eventsHandlers      *EventsHandlers
 }
 
 func (r APIRouter) ServeMux() http.Handler {
 	return corsMiddleware(r.serveMux)
+}
+
+// Close releases the router's long-lived resources (currently just the SSE
+// event hub's EventBus subscriptions) for graceful shutdown.
+func (r APIRouter) Close() {
+	r.eventsHandlers.Close()
 }
 
 func corsMiddleware(next http.Handler) http.Handler {
@@ -33,7 +41,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func NewRouter(tagService application.TagService, widgetTypeService application.WidgetTypeService, sceneService application.SceneService) *APIRouter {
+func NewRouter(tagService application.TagService, widgetTypeService application.WidgetTypeService, sceneService application.SceneService, eventBus event.EventBus, maxSSEClients int) *APIRouter {
 	router := &APIRouter{}
 	router.serveMux = http.NewServeMux()
 
@@ -64,6 +72,9 @@ func NewRouter(tagService application.TagService, widgetTypeService application.
 	router.serveMux.HandleFunc("POST /api/v1/scenes", router.scenesHandlers.PostScenes)
 	router.serveMux.HandleFunc("PUT /api/v1/scenes/{id}", router.scenesHandlers.PutScenesByID)
 	router.serveMux.HandleFunc("DELETE /api/v1/scenes/{id}", router.scenesHandlers.DeleteScenesByID)
+
+	router.eventsHandlers = NewEventsHandler(eventBus, maxSSEClients)
+	router.serveMux.HandleFunc("GET /api/v1/events", router.eventsHandlers.GetEvents)
 
 	return router
 }

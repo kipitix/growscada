@@ -19,6 +19,9 @@ db_down:
 test:
 	go test --cover ./...
 
+bench:
+	go test -run=^$ -bench=. -benchmem ./...
+
 full_restart:
 	cd tools/debug_db && docker compose down || true
 	docker volume rm debug_db_growscada_data || true

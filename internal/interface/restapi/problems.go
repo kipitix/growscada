@@ -171,3 +171,13 @@ func NewInternalError(detail, instance string) *ProblemDetails {
 		Instance: instance,
 	}
 }
+
+func NewServiceUnavailableError(detail, instance string) *ProblemDetails {
+	return &ProblemDetails{
+		Type:     TypeUnavailable,
+		Title:    "Service Unavailable",
+		Status:   http.StatusServiceUnavailable, // 503
+		Detail:   detail,
+		Instance: instance,
+	}
+}

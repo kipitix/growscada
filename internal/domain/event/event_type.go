@@ -24,7 +24,30 @@ const (
 	EventTypeSceneCreated
 	EventTypeSceneUpdated
 	EventTypeSceneDeleted
+	EventTypeClientConnected
+	EventTypeClientDisconnected
 )
+
+// AllEventTypes returns every known EventType except EventTypeUnknown.
+func AllEventTypes() []EventType {
+	return []EventType{
+		EventTypeSystemReady,
+		EventTypeTagCreated,
+		EventTypeTagUpdated,
+		EventTypeTagDeleted,
+		EventTypeWidgetTypeCreated,
+		EventTypeWidgetTypeUpdated,
+		EventTypeWidgetTypeDeleted,
+		EventTypeWidgetCreated,
+		EventTypeWidgetUpdated,
+		EventTypeWidgetDeleted,
+		EventTypeSceneCreated,
+		EventTypeSceneUpdated,
+		EventTypeSceneDeleted,
+		EventTypeClientConnected,
+		EventTypeClientDisconnected,
+	}
+}
 
 // NewEventType creates a new EventType from a string representation.
 // Returns an error if the string does not match any known event type.
@@ -56,6 +79,10 @@ func NewEventType(s string) (EventType, error) {
 		return EventTypeSceneUpdated, nil
 	case "scene_deleted":
 		return EventTypeSceneDeleted, nil
+	case "client_connected":
+		return EventTypeClientConnected, nil
+	case "client_disconnected":
+		return EventTypeClientDisconnected, nil
 	default:
 		return EventTypeUnknown, fmt.Errorf("unknown event type: %s", s)
 	}
@@ -93,6 +120,10 @@ func (et EventType) String() string {
 		return "scene_updated"
 	case EventTypeSceneDeleted:
 		return "scene_deleted"
+	case EventTypeClientConnected:
+		return "client_connected"
+	case EventTypeClientDisconnected:
+		return "client_disconnected"
 	default:
 		return "unknown"
 	}
