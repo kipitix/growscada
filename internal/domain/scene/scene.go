@@ -8,7 +8,7 @@ import (
 	"github.com/kipitix/growscada/internal/domain/widget"
 )
 
-// Scene - aggregate representing a scene (a page inside a project).
+// Scene - aggregate representing a scene (a mnemonic/synoptic display canvas).
 // A scene has a name, canvas dimensions, a static HTML background,
 // and a collection of widgets overlaid on top of it. Widget is an entity of
 // this aggregate: it has no identity or optimistic-concurrency version of its
