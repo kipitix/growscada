@@ -5,6 +5,8 @@ import (
 )
 
 // TagQuality - enumeration for tag quality.
+// Describes how trustworthy a value is, never where it came from.
+// The zero value is invalid (see docs/adr/0001-no-unknown-enum-sentinels.md).
 // Value Object.
 type TagQuality struct {
 	quality int
@@ -14,20 +16,17 @@ type TagQuality struct {
 var _ fmt.Stringer = TagQuality{}
 
 // Sentinel values for TagQuality. Must not be reassigned.
-// TagQualityUnknown - unknown quality (zero value, uninitialized).
 // TagQualityBad - bad quality (unavailable, error).
 // TagQualityUncertain - uncertain quality.
 // TagQualityGood - good quality (normal value).
-// TagQualitySimulated - simulated quality (value set manually).
 var (
-	TagQualityUnknown   = TagQuality{quality: 0}
 	TagQualityBad       = TagQuality{quality: 1}
 	TagQualityUncertain = TagQuality{quality: 2}
 	TagQualityGood      = TagQuality{quality: 3}
-	TagQualitySimulated = TagQuality{quality: 4}
 )
 
-// NewTagQuality parses a string into the enum
+// NewTagQuality parses a string into the enum.
+// Returns an error for any string that is not a known quality.
 func NewTagQuality(s string) (TagQuality, error) {
 	switch s {
 	case "bad":
@@ -36,27 +35,26 @@ func NewTagQuality(s string) (TagQuality, error) {
 		return TagQualityUncertain, nil
 	case "good":
 		return TagQualityGood, nil
-	case "simulated":
-		return TagQualitySimulated, nil
 	default:
-		return TagQualityUnknown, fmt.Errorf("unknown tag quality enum: %s", s)
+		return TagQuality{}, fmt.Errorf("unknown tag quality enum: %q", s)
 	}
+}
+
+// IsValid reports whether the quality is one of the known values (not the zero value).
+func (e TagQuality) IsValid() bool {
+	return e != TagQuality{}
 }
 
 // String returns the string representation of the enum
 func (e TagQuality) String() string {
 	switch e {
-	case TagQualityUnknown:
-		return "unknown"
 	case TagQualityBad:
 		return "bad"
 	case TagQualityUncertain:
 		return "uncertain"
 	case TagQualityGood:
 		return "good"
-	case TagQualitySimulated:
-		return "simulated"
 	default:
-		return "unknown"
+		return "invalid"
 	}
 }

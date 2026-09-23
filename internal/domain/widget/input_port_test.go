@@ -41,11 +41,20 @@ func TestInputPortName_String(t *testing.T) {
 	}
 }
 
+func mustOnlyTagType(t *testing.T, tt tag.TagType) PortTypeHint {
+	t.Helper()
+	h, err := OnlyTagType(tt)
+	if err != nil {
+		t.Fatalf("OnlyTagType(%v): %v", tt, err)
+	}
+	return h
+}
+
 // ── InputPort ─────────────────────────────────────────────────────────────────
 
 func TestNewInputPort_StoresAllFields(t *testing.T) {
 	name, _ := NewInputPortName("pressure")
-	port := NewInputPort(name, "Process pressure in bar", tag.TagTypeInteger)
+	port := NewInputPort(name, "Process pressure in bar", mustOnlyTagType(t, tag.TagTypeInteger))
 
 	if port.Name() != name {
 		t.Errorf("Name mismatch: expected %v, got %v", name, port.Name())
@@ -53,16 +62,16 @@ func TestNewInputPort_StoresAllFields(t *testing.T) {
 	if port.Description() != "Process pressure in bar" {
 		t.Errorf("Description mismatch: expected %q, got %q", "Process pressure in bar", port.Description())
 	}
-	if port.TypeHint() != tag.TagTypeInteger {
+	if got, ok := port.TypeHint().TagType(); !ok || got != tag.TagTypeInteger {
 		t.Errorf("TypeHint mismatch: expected %v, got %v", tag.TagTypeInteger, port.TypeHint())
 	}
 }
 
-func TestNewInputPort_UnknownTypeHintIsZeroValue(t *testing.T) {
+func TestNewInputPort_AnyTypeHint(t *testing.T) {
 	name, _ := NewInputPortName("val")
-	port := NewInputPort(name, "", tag.TagTypeUnknown)
-	if port.TypeHint() != tag.TagTypeUnknown {
-		t.Errorf("expected TagTypeUnknown, got %v", port.TypeHint())
+	port := NewInputPort(name, "", AnyTagType())
+	if !port.TypeHint().IsAny() {
+		t.Errorf("expected any-type hint, got %v", port.TypeHint())
 	}
 }
 
@@ -77,8 +86,8 @@ func TestNewWidgetType_DuplicateInputPortName(t *testing.T) {
 
 	portName, _ := NewInputPortName("temperature")
 	ports := []InputPort{
-		NewInputPort(portName, "first", tag.TagTypeUnknown),
-		NewInputPort(portName, "duplicate", tag.TagTypeUnknown),
+		NewInputPort(portName, "first", AnyTagType()),
+		NewInputPort(portName, "duplicate", AnyTagType()),
 	}
 
 	_, err := NewWidgetType(wtID, name, html, script, ScriptLanguageJavaScript, size, ports, mustWidgetTypeVersion(t))
@@ -100,8 +109,8 @@ func TestNewWidgetType_UniqueInputPorts_OK(t *testing.T) {
 	p1Name, _ := NewInputPortName("temperature")
 	p2Name, _ := NewInputPortName("pressure")
 	ports := []InputPort{
-		NewInputPort(p1Name, "temp", tag.TagTypeInteger),
-		NewInputPort(p2Name, "pres", tag.TagTypeInteger),
+		NewInputPort(p1Name, "temp", mustOnlyTagType(t, tag.TagTypeInteger)),
+		NewInputPort(p2Name, "pres", mustOnlyTagType(t, tag.TagTypeInteger)),
 	}
 
 	wt, err := NewWidgetType(wtID, name, html, script, ScriptLanguageJavaScript, size, ports, mustWidgetTypeVersion(t))
@@ -128,12 +137,12 @@ func TestNewWidgetType_InputPortsCopied(t *testing.T) {
 	size := DefaultSize()
 
 	pName, _ := NewInputPortName("val")
-	ports := []InputPort{NewInputPort(pName, "", tag.TagTypeUnknown)}
+	ports := []InputPort{NewInputPort(pName, "", AnyTagType())}
 
 	wt, _ := NewWidgetType(wtID, name, html, script, ScriptLanguageJavaScript, size, ports, mustWidgetTypeVersion(t))
 
 	// Mutate original slice — should not affect the aggregate.
-	ports[0] = NewInputPort(pName, "mutated", tag.TagTypeString)
+	ports[0] = NewInputPort(pName, "mutated", mustOnlyTagType(t, tag.TagTypeString))
 	if wt.InputPorts()[0].Description() != "" {
 		t.Error("NewWidgetType must copy the inputPorts slice; external mutation should not affect the aggregate")
 	}

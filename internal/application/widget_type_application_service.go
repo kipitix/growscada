@@ -9,7 +9,6 @@ import (
 	"github.com/kipitix/growscada/internal/domain/event"
 	"github.com/kipitix/growscada/internal/domain/id"
 	"github.com/kipitix/growscada/internal/domain/scene"
-	"github.com/kipitix/growscada/internal/domain/tag"
 	"github.com/kipitix/growscada/internal/domain/version"
 	"github.com/kipitix/growscada/internal/domain/widget"
 )
@@ -239,7 +238,7 @@ func dtoInputPortsToDomain(dtos []appdto.InputPort) ([]widget.InputPort, error) 
 		if err != nil {
 			return nil, fmt.Errorf("invalid input port name %q: %w", dto.Name, err)
 		}
-		typeHint, err := tag.NewTagType(dto.TypeHint)
+		typeHint, err := widget.NewPortTypeHint(dto.TypeHint)
 		if err != nil {
 			return nil, fmt.Errorf("invalid input port type hint %q: %w", dto.TypeHint, err)
 		}

@@ -3,32 +3,34 @@ package event
 import "fmt"
 
 // EventType - enumeration for event type.
+// The zero value is invalid (see docs/adr/0001-no-unknown-enum-sentinels.md).
 // Value Object
-type EventType int
+type EventType struct {
+	eventType int
+}
 
-// String returns the string representation of the EventType.
-var _ fmt.Stringer = EventType(0)
+var _ fmt.Stringer = EventType{}
 
-const (
-	EventTypeUnknown EventType = iota
-	EventTypeSystemReady
-	EventTypeTagCreated
-	EventTypeTagUpdated
-	EventTypeTagDeleted
-	EventTypeWidgetTypeCreated
-	EventTypeWidgetTypeUpdated
-	EventTypeWidgetTypeDeleted
-	EventTypeWidgetCreated
-	EventTypeWidgetUpdated
-	EventTypeWidgetDeleted
-	EventTypeSceneCreated
-	EventTypeSceneUpdated
-	EventTypeSceneDeleted
-	EventTypeClientConnected
-	EventTypeClientDisconnected
+// Sentinel values for EventType. Must not be reassigned.
+var (
+	EventTypeSystemReady        = EventType{eventType: 1}
+	EventTypeTagCreated         = EventType{eventType: 2}
+	EventTypeTagUpdated         = EventType{eventType: 3}
+	EventTypeTagDeleted         = EventType{eventType: 4}
+	EventTypeWidgetTypeCreated  = EventType{eventType: 5}
+	EventTypeWidgetTypeUpdated  = EventType{eventType: 6}
+	EventTypeWidgetTypeDeleted  = EventType{eventType: 7}
+	EventTypeWidgetCreated      = EventType{eventType: 8}
+	EventTypeWidgetUpdated      = EventType{eventType: 9}
+	EventTypeWidgetDeleted      = EventType{eventType: 10}
+	EventTypeSceneCreated       = EventType{eventType: 11}
+	EventTypeSceneUpdated       = EventType{eventType: 12}
+	EventTypeSceneDeleted       = EventType{eventType: 13}
+	EventTypeClientConnected    = EventType{eventType: 14}
+	EventTypeClientDisconnected = EventType{eventType: 15}
 )
 
-// AllEventTypes returns every known EventType except EventTypeUnknown.
+// AllEventTypes returns every known EventType.
 func AllEventTypes() []EventType {
 	return []EventType{
 		EventTypeSystemReady,
@@ -84,7 +86,7 @@ func NewEventType(s string) (EventType, error) {
 	case "client_disconnected":
 		return EventTypeClientDisconnected, nil
 	default:
-		return EventTypeUnknown, fmt.Errorf("unknown event type: %s", s)
+		return EventType{}, fmt.Errorf("unknown event type: %q", s)
 	}
 }
 
@@ -92,8 +94,6 @@ func NewEventType(s string) (EventType, error) {
 // Implements the fmt.Stringer interface.
 func (et EventType) String() string {
 	switch et {
-	case EventTypeUnknown:
-		return "unknown"
 	case EventTypeSystemReady:
 		return "system_ready"
 	case EventTypeTagCreated:
@@ -125,6 +125,6 @@ func (et EventType) String() string {
 	case EventTypeClientDisconnected:
 		return "client_disconnected"
 	default:
-		return "unknown"
+		return "invalid"
 	}
 }

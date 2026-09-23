@@ -570,7 +570,7 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 		tagOptions = append(tagOptions, app.Option().Value("").Selected(currentTagID == "").Text("— unbound —"))
 		for _, t := range p.tags {
 			t := t
-			if port.TypeHint != "" && port.TypeHint != "unknown" && t.Type != port.TypeHint {
+			if port.TypeHint != "" && t.Type != port.TypeHint {
 				continue
 			}
 			tagOptions = append(tagOptions, app.Option().Value(t.ID).Selected(t.ID == currentTagID).Text(t.Name+" ("+t.Type+")"))

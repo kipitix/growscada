@@ -5,6 +5,7 @@ import (
 )
 
 // TagType - enumeration for tag type.
+// The zero value is invalid (see docs/adr/0001-no-unknown-enum-sentinels.md).
 // Value Object.
 type TagType struct {
 	tagType int
@@ -14,12 +15,10 @@ type TagType struct {
 var _ fmt.Stringer = TagType{}
 
 // Constants for each tag type.
-// TagTypeUnknown - unknown tag type (zero value, uninitialized).
 // TagTypeString - string tag type.
 // TagTypeBoolean - boolean tag type.
 // TagTypeInteger - integer tag type.
 var (
-	TagTypeUnknown = TagType{tagType: 0}
 	TagTypeString  = TagType{tagType: 1}
 	TagTypeBoolean = TagType{tagType: 2}
 	TagTypeInteger = TagType{tagType: 3}
@@ -29,8 +28,7 @@ var (
 )
 
 // NewTagType parses a string into the enum.
-// Empty string and "unknown" both map to TagTypeUnknown without error,
-// so callers do not need special-case guards for those sentinel values.
+// Returns an error for any string that is not a known tag type.
 func NewTagType(s string) (TagType, error) {
 	switch s {
 	case "string":
@@ -39,18 +37,19 @@ func NewTagType(s string) (TagType, error) {
 		return TagTypeBoolean, nil
 	case "integer":
 		return TagTypeInteger, nil
-	case "unknown", "":
-		return TagTypeUnknown, nil
 	default:
-		return TagTypeUnknown, fmt.Errorf("unknown tag type: %s", s)
+		return TagType{}, fmt.Errorf("unknown tag type: %q", s)
 	}
+}
+
+// IsValid reports whether the tag type is one of the known values (not the zero value).
+func (e TagType) IsValid() bool {
+	return e != TagType{}
 }
 
 // String returns the string representation of the tag type
 func (e TagType) String() string {
 	switch e {
-	case TagTypeUnknown:
-		return "unknown"
 	case TagTypeString:
 		return "string"
 	case TagTypeBoolean:
@@ -58,7 +57,7 @@ func (e TagType) String() string {
 	case TagTypeInteger:
 		return "integer"
 	default:
-		return "unknown"
+		return "invalid"
 	}
 }
 

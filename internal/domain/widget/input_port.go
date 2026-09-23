@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-
-	"github.com/kipitix/growscada/internal/domain/tag"
 )
 
 // ErrDuplicateInputPortName is returned when a WidgetType is constructed with
@@ -50,19 +48,18 @@ func NewInputPortNameFromStorage(s string) (InputPortName, error) {
 
 // InputPort is a named, typed input slot defined on a WidgetType.
 // The JS template accesses it as input.<name>.
-// typeHint == tag.TagTypeUnknown means any tag type is accepted.
 // Value Object.
 type InputPort struct {
 	name        InputPortName
 	description string
-	typeHint    tag.TagType
+	typeHint    PortTypeHint
 }
 
 // NewInputPort creates an InputPort.
-func NewInputPort(name InputPortName, description string, typeHint tag.TagType) InputPort {
+func NewInputPort(name InputPortName, description string, typeHint PortTypeHint) InputPort {
 	return InputPort{name: name, description: description, typeHint: typeHint}
 }
 
 func (p InputPort) Name() InputPortName { return p.name }
 func (p InputPort) Description() string { return p.description }
-func (p InputPort) TypeHint() tag.TagType { return p.typeHint }
+func (p InputPort) TypeHint() PortTypeHint { return p.typeHint }

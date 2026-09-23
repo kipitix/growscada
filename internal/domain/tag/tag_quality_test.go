@@ -10,7 +10,6 @@ func TestNewTagQuality_ValidValues(t *testing.T) {
 		{"bad", TagQualityBad},
 		{"uncertain", TagQualityUncertain},
 		{"good", TagQualityGood},
-		{"simulated", TagQualitySimulated},
 	}
 
 	for _, tc := range cases {
@@ -26,10 +25,28 @@ func TestNewTagQuality_ValidValues(t *testing.T) {
 	}
 }
 
-func TestNewTagQuality_UnknownValue(t *testing.T) {
-	_, err := NewTagQuality("excellent")
-	if err == nil {
-		t.Error("expected error for unknown quality, got nil")
+func TestNewTagQuality_UnrecognisedValue_ReturnsErrorAndInvalid(t *testing.T) {
+	for _, input := range []string{"excellent", "simulated", "unknown", ""} {
+		t.Run(input, func(t *testing.T) {
+			q, err := NewTagQuality(input)
+			if err == nil {
+				t.Errorf("expected error for %q, got nil", input)
+			}
+			if q.IsValid() {
+				t.Errorf("expected invalid zero value for %q, got %v", input, q)
+			}
+		})
+	}
+}
+
+func TestTagQuality_IsValid(t *testing.T) {
+	for _, q := range []TagQuality{TagQualityBad, TagQualityUncertain, TagQualityGood} {
+		if !q.IsValid() {
+			t.Errorf("expected %v to be valid", q)
+		}
+	}
+	if (TagQuality{}).IsValid() {
+		t.Error("expected zero value to be invalid")
 	}
 }
 
@@ -39,12 +56,11 @@ func TestTagQuality_String(t *testing.T) {
 		quality  TagQuality
 		expected string
 	}{
-		{"unknown", TagQualityUnknown, "unknown"},
+		{"zero", TagQuality{}, "invalid"},
 		{"bad", TagQualityBad, "bad"},
 		{"uncertain", TagQualityUncertain, "uncertain"},
 		{"good", TagQualityGood, "good"},
-		{"simulated", TagQualitySimulated, "simulated"},
-		{"default", TagQuality{quality: 99}, "unknown"},
+		{"default", TagQuality{quality: 99}, "invalid"},
 	}
 
 	for _, tc := range cases {

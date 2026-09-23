@@ -81,3 +81,14 @@ func TestNewWidgetType_String(t *testing.T) {
 		t.Error("expected non-empty String() output")
 	}
 }
+
+func TestNewWidgetType_InvalidScriptLanguage_ReturnsError(t *testing.T) {
+	name, _ := NewWidgetTypeName("gauge")
+	htmlTemplate, _ := NewHtmlTemplate("<div></div>")
+	script, _ := NewScript("function update(){}")
+
+	_, err := NewWidgetType(id.NewID[WidgetType](), name, htmlTemplate, script, ScriptLanguage{}, DefaultSize(), nil, version.Initial[WidgetType]())
+	if err == nil {
+		t.Error("expected error for invalid script language, got nil")
+	}
+}

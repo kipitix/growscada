@@ -123,3 +123,41 @@ func TestTag_SetValue_InvalidInput_DoesNotChangeQuality(t *testing.T) {
 		t.Errorf("expected value 0, got %v", tag.Value().Value())
 	}
 }
+
+func TestNewTag_InvalidTypeOrQuality_ReturnsError(t *testing.T) {
+	name, _ := NewTagName("temperature")
+	value, _ := TagTypeInteger.NewTagValue(0)
+
+	cases := []struct {
+		name    string
+		tagType TagType
+		quality TagQuality
+	}{
+		{"zero type", TagType{}, TagQualityGood},
+		{"zero quality", TagTypeInteger, TagQuality{}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := NewTag(id.NewID[Tag](), name, tc.tagType, value, tc.quality, version.Initial[Tag]())
+			if err == nil {
+				t.Error("expected error, got nil")
+			}
+		})
+	}
+}
+
+func TestTag_SetValue_InvalidQuality_ReturnsErrorAndKeepsState(t *testing.T) {
+	tag := makeTestTag(t)
+
+	err := tag.SetValue(42, TagQuality{})
+	if err == nil {
+		t.Fatal("expected error for invalid quality, got nil")
+	}
+	if tag.Quality() != TagQualityGood {
+		t.Errorf("expected quality good, got %v", tag.Quality())
+	}
+	if tag.Value().Value() != int64(0) {
+		t.Errorf("expected value 0, got %v", tag.Value().Value())
+	}
+}

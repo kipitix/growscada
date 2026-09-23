@@ -111,19 +111,23 @@ func TestNewEventType_ValidStrings_ReturnsCorrectType(t *testing.T) {
 	}
 }
 
-func TestNewEventType_UnknownString_ReturnsErrorAndUnknownType(t *testing.T) {
-	got, err := event.NewEventType("unknown_type")
-	if err == nil {
-		t.Error("expected error for unknown event type, got nil")
-	}
-	if got != event.EventTypeUnknown {
-		t.Errorf("expected EventTypeUnknown, got %v", got)
+func TestNewEventType_UnrecognisedString_ReturnsErrorAndZeroValue(t *testing.T) {
+	for _, input := range []string{"unknown_type", "unknown", ""} {
+		t.Run(input, func(t *testing.T) {
+			got, err := event.NewEventType(input)
+			if err == nil {
+				t.Errorf("expected error for %q, got nil", input)
+			}
+			if got != (event.EventType{}) {
+				t.Errorf("expected zero value, got %v", got)
+			}
+		})
 	}
 }
 
-func TestEventType_String_Unknown(t *testing.T) {
-	if got := event.EventTypeUnknown.String(); got != "unknown" {
-		t.Errorf("expected %q, got %q", "unknown", got)
+func TestEventType_String_ZeroValueIsInvalid(t *testing.T) {
+	if got := (event.EventType{}).String(); got != "invalid" {
+		t.Errorf("expected %q, got %q", "invalid", got)
 	}
 }
 
@@ -240,10 +244,10 @@ func TestEventBus_Unsubscribe_UnknownSubscription_DoesNotPanic(t *testing.T) {
 
 // --- AllEventTypes ---
 
-func TestAllEventTypes_ExcludesUnknown(t *testing.T) {
+func TestAllEventTypes_ExcludesZeroValue(t *testing.T) {
 	for _, et := range event.AllEventTypes() {
-		if et == event.EventTypeUnknown {
-			t.Error("expected AllEventTypes to not include EventTypeUnknown")
+		if et == (event.EventType{}) {
+			t.Error("expected AllEventTypes to not include the zero value")
 		}
 	}
 }

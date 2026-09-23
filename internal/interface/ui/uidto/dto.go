@@ -9,9 +9,9 @@ type InputPortDTO struct {
 }
 
 // TypeHintLabel returns the display label for a type hint string.
-// Empty string and "unknown" both normalize to "any".
+// An empty string means the port accepts any tag type.
 func TypeHintLabel(typeHint string) string {
-	if typeHint == "" || typeHint == "unknown" {
+	if typeHint == "" {
 		return "any"
 	}
 	return typeHint

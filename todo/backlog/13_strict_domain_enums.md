@@ -4,7 +4,7 @@
 
 - Качество описывает надёжность значения, а не его происхождение. Если бы имитатор ставил `Simulated`, он не смог бы имитировать разное качество сигнала. Имитатор (задача 15) поставляет обычные `Good`/`Bad`/`Uncertain`, а пометка «это имитатор» — описательная метаинформация `Device` (задача 22).
 - Новая goose-миграция: существующие теги с `simulated` переводятся в `good`, `chk_tags_quality` пересоздаётся без `simulated`. `Down` возвращает старое ограничение и данные не трогает.
-- API на `"quality": "simulated"` отвечает 400 (Problem Details); breaking change записать в `CHANGELOG.md`.
+- API на `"quality": "simulated"` отвечает ошибкой; breaking change записать в `CHANGELOG.md`. Сейчас это 500, как и любая ошибка валидации домена; маппинг в 400 — задача 33.
 - Тестовые данные: тег `is_cached` получает `uncertain`. Тест репозитория вместо `Simulated` ставит `Bad` (качество, отличное от исходного).
 
 ## Убрать заглушки `Unknown` (см. ADR 0001)
@@ -26,11 +26,11 @@
 
 ## `PortTypeHint` вместо `TagTypeUnknown` у `InputPort`
 
-- Новый value object в пакете `widget`: либо «любой тип», либо конкретный `TagType` (`AnyTagType()`, `OnlyTagType(t)`, `Accepts(t)`, `TagType() (tag.TagType, bool)`).
-- На стыке (REST, JSON-колонка `input_ports`) «любой» — это `""` или отсутствующее поле; `"unknown"` даёт ошибку (400). Миграция данных не нужна: «любой» уже хранится как `""`.
+- Новый value object в пакете `widget`: либо «любой тип», либо конкретный `TagType` (`AnyTagType()`, `OnlyTagType(t) (PortTypeHint, error)`, `NewPortTypeHint(s)`, `IsAny()`, `Accepts(t)`, `TagType() (tag.TagType, bool)`).
+- На стыке (REST, JSON-колонка `input_ports`) «любой» — это `""` или отсутствующее поле; `"unknown"` даёт ошибку (сейчас 500, см. задачу 33). Миграция данных не нужна: «любой» уже хранится как `""`.
 - UI (`uidto.TypeHintLabel`) больше не обрабатывает `"unknown"`.
 
 ## Сопутствующее
 
-- Обновить Bruno-коллекции, если меняется поведение эндпоинтов (400 на `simulated`/`unknown`).
+- Bruno-коллекции: форма запросов не меняется, `simulated`/`unknown` в них не используются.
 - Глоссарий (`CONTEXT.md`, `AGENTS.md`) уже обновлён.

@@ -157,7 +157,7 @@ func TestSave_ExistingTag_UpdatesSuccessfully(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindByID failed: %v", err)
 	}
-	if err := found.SetValue(99, tag.TagQualitySimulated); err != nil {
+	if err := found.SetValue(99, tag.TagQualityBad); err != nil {
 		t.Fatalf("SetValue failed: %v", err)
 	}
 	if _, err := repo.Save(ctx, found); err != nil {
@@ -171,8 +171,8 @@ func TestSave_ExistingTag_UpdatesSuccessfully(t *testing.T) {
 	if updated.Value().String() != "99" {
 		t.Errorf("value: expected '99', got %q", updated.Value().String())
 	}
-	if updated.Quality() != tag.TagQualitySimulated {
-		t.Errorf("quality: expected simulated, got %v", updated.Quality())
+	if updated.Quality() != tag.TagQualityBad {
+		t.Errorf("quality: expected bad, got %v", updated.Quality())
 	}
 }
 

@@ -37,7 +37,8 @@ type widgetTypeImpl struct {
 var _ WidgetType = (*widgetTypeImpl)(nil)
 
 // NewWidgetType creates a new WidgetType aggregate.
-// Returns ErrDuplicateInputPortName if any two InputPorts share the same name.
+// Returns ErrDuplicateInputPortName if any two InputPorts share the same name,
+// and an error if the script language is the invalid zero value.
 func NewWidgetType(
 	anID id.ID[WidgetType],
 	aName WidgetTypeName,
@@ -48,6 +49,10 @@ func NewWidgetType(
 	someInputPorts []InputPort,
 	aVersion version.Version[WidgetType],
 ) (WidgetType, error) {
+	if !aScriptLanguage.IsValid() {
+		return nil, fmt.Errorf("cannot create widget type: invalid script language")
+	}
+
 	seen := make(map[string]struct{}, len(someInputPorts))
 	for _, p := range someInputPorts {
 		key := p.Name().String()

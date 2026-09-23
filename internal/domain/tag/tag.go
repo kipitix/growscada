@@ -36,7 +36,14 @@ type tagImpl struct {
 var _ Tag = (*tagImpl)(nil)
 
 // NewTag creates a new tag with the given identifier, name, type, value, quality and version.
+// Returns an error if the type or quality is the invalid zero value.
 func NewTag(anID id.ID[Tag], aName TagName, aType TagType, aValue TagValue, aQuality TagQuality, aVersion version.Version[Tag]) (Tag, error) {
+	if !aType.IsValid() {
+		return nil, fmt.Errorf("cannot create tag: invalid type")
+	}
+	if !aQuality.IsValid() {
+		return nil, fmt.Errorf("cannot create tag: invalid quality")
+	}
 	return &tagImpl{
 		id:      anID,
 		name:    aName,
@@ -55,7 +62,11 @@ func (t tagImpl) Quality() TagQuality        { return t.quality }
 func (t tagImpl) Version() version.Version[Tag] { return t.version }
 
 // SetValue updates the tag's value and quality.
+// Returns an error if the quality is the invalid zero value.
 func (t *tagImpl) SetValue(aValue any, aQuality TagQuality) error {
+	if !aQuality.IsValid() {
+		return fmt.Errorf("cannot update tag value: invalid quality")
+	}
 	newValue, err := t.tagType.NewTagValue(aValue)
 	if err != nil {
 		return fmt.Errorf("cannot update tag value: %w", err)

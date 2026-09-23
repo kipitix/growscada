@@ -175,6 +175,19 @@ func TestCreateTag_InvalidQuality_ReturnsError(t *testing.T) {
 	}
 }
 
+func TestCreateTag_SimulatedQuality_ReturnsError(t *testing.T) {
+	cleanTags(t)
+	svc := newService()
+	ctx := context.Background()
+
+	req := appdto.CreateTagInput{Name: "temperature", Type: "integer", Value: "42", Quality: "simulated"}
+	_, err := svc.CreateTag(ctx, req)
+
+	if err == nil {
+		t.Error("expected error for removed simulated quality, got nil")
+	}
+}
+
 func TestCreateTag_InvalidValueForType_ReturnsError(t *testing.T) {
 	cleanTags(t)
 	svc := newService()

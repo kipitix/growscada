@@ -1,5 +1,27 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [Unreleased]
+
+### Removed
+
+- **BREAKING: качество тега `simulated`** — Quality описывает надёжность значения, а не его происхождение; имитатор (задача 15) поставляет обычные `good`/`bad`/`uncertain`, а пометка «это имитатор» станет метаинформацией `Device` (задача 22):
+  - `internal/domain/tag/tag_quality.go` — удалён `TagQualitySimulated`
+  - `internal/infrastructure/postgres/migrations/20260923000000_remove_simulated_tag_quality.sql` — существующие теги с `simulated` переводятся в `good`, `chk_tags_quality` пересоздаётся без `simulated` (`Down` возвращает ограничение, данные не трогает)
+  - `POST /api/v1/tags` и `PATCH /api/v1/tags/{id}/value` с `"quality": "simulated"` теперь отклоняются (пока 500, как и любая ошибка валидации домена — маппинг в 400 вынесен в задачу 33)
+  - тестовые данные: тег `is_cached` получил качество `uncertain`
+- **Заглушки `Unknown` в доменных перечислениях** (`docs/adr/0001-no-unknown-enum-sentinels.md`) — удалены `TagQualityUnknown`, `TagTypeUnknown`, `ScriptLanguageUnknown`, `EventTypeUnknown`; нулевое значение перечисления невалидно (`String()` → `"invalid"`, `IsValid()` → `false`), разбор `"unknown"`, `""` и любой нестандартной строки возвращает ошибку
+
+### Changed
+
+- `internal/domain/tag/tag.go` — `NewTag` отклоняет невалидные тип и качество, `SetValue` — невалидное качество (раньше нулевое значение останавливал только CHECK в БД)
+- `internal/domain/widget/widget_type.go` — `NewWidgetType` отклоняет невалидный `ScriptLanguage`
+- `internal/domain/event/event_type.go` — `EventType` из `int` + `iota` стал struct value object с приватным полем, как остальные перечисления; снаружи пакета нельзя получить произвольное значение приведением
+- **BREAKING: `InputPort` type hint** — новый value object `widget.PortTypeHint` (`internal/domain/widget/port_type_hint.go`): либо «любой тип» (`AnyTagType()`), либо конкретный `TagType` (`OnlyTagType`); методы `IsAny`, `TagType`, `Accepts`; «любой тип» в REST и в JSON-колонке `input_ports` — это `""`:
+  - в ответах API «любой тип» теперь `"type_hint": ""` вместо `"unknown"`
+  - запрос с `"type_hint": "unknown"` отклоняется (пока 500, см. задачу 33)
+  - UI (`uidto.TypeHintLabel`, `project/render_properties.go`) больше не обрабатывает `"unknown"`
+- Глоссарий (`CONTEXT.md`, `AGENTS.md`): Quality — `Bad`/`Uncertain`/`Good`, TagType без `Unknown`, новый термин Device
+
 ## [0.0.24] - 2026-09-18
 
 ### Added

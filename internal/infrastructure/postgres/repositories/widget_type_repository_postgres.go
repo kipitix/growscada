@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kipitix/growscada/internal/domain/id"
-	"github.com/kipitix/growscada/internal/domain/tag"
 	"github.com/kipitix/growscada/internal/domain/version"
 	"github.com/kipitix/growscada/internal/domain/widget"
 )
@@ -211,14 +210,10 @@ type inputPortJSON struct {
 func marshalInputPorts(ports []widget.InputPort) ([]byte, error) {
 	rows := make([]inputPortJSON, len(ports))
 	for i, p := range ports {
-		typeHint := ""
-		if p.TypeHint() != tag.TagTypeUnknown {
-			typeHint = p.TypeHint().String()
-		}
 		rows[i] = inputPortJSON{
 			Name:        p.Name().String(),
 			Description: p.Description(),
-			TypeHint:    typeHint,
+			TypeHint:    p.TypeHint().String(),
 		}
 	}
 	return json.Marshal(rows)
@@ -238,7 +233,7 @@ func unmarshalInputPorts(data []byte) ([]widget.InputPort, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid stored input port name %q: %w", row.Name, err)
 		}
-		typeHint, err := tag.NewTagType(row.TypeHint)
+		typeHint, err := widget.NewPortTypeHint(row.TypeHint)
 		if err != nil {
 			return nil, fmt.Errorf("invalid stored type hint %q: %w", row.TypeHint, err)
 		}

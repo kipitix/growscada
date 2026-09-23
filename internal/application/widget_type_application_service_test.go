@@ -72,6 +72,38 @@ func TestCreateWidgetType_InvalidScriptLanguage_ReturnsError(t *testing.T) {
 	}
 }
 
+func TestCreateWidgetType_InputPortTypeHint(t *testing.T) {
+	cases := []struct {
+		typeHint string
+		wantErr  bool
+	}{
+		{"", false},
+		{"integer", false},
+		{"unknown", true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.typeHint, func(t *testing.T) {
+			cleanWidgetTypes(t)
+			svc := newWidgetTypeService()
+
+			input := testCreateWidgetTypeInput
+			input.InputPorts = []appdto.InputPort{{Name: "value", TypeHint: tc.typeHint}}
+			resp, err := svc.CreateWidgetType(context.Background(), input)
+
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("CreateWidgetType error = %v, wantErr %v", err, tc.wantErr)
+			}
+			if tc.wantErr {
+				return
+			}
+			if got := resp.InputPorts[0].TypeHint; got != tc.typeHint {
+				t.Errorf("TypeHint: expected %q, got %q", tc.typeHint, got)
+			}
+		})
+	}
+}
+
 // --- FindAllWidgetTypes ---
 
 func TestFindAllWidgetTypes_EmptyDB_ReturnsEmptyList(t *testing.T) {

@@ -3,6 +3,7 @@ package widget
 import "fmt"
 
 // ScriptLanguage - enumeration for the scripting language used in Script.
+// The zero value is invalid (see docs/adr/0001-no-unknown-enum-sentinels.md).
 // Value Object.
 type ScriptLanguage struct {
 	language int
@@ -12,7 +13,6 @@ var _ fmt.Stringer = ScriptLanguage{}
 
 // Sentinel values for ScriptLanguage. Must not be reassigned.
 var (
-	ScriptLanguageUnknown    = ScriptLanguage{language: 0}
 	ScriptLanguageJavaScript = ScriptLanguage{language: 1}
 	ScriptLanguagePython     = ScriptLanguage{language: 2}
 	ScriptLanguageLua        = ScriptLanguage{language: 3}
@@ -28,8 +28,13 @@ func NewScriptLanguage(s string) (ScriptLanguage, error) {
 	case "lua":
 		return ScriptLanguageLua, nil
 	default:
-		return ScriptLanguageUnknown, fmt.Errorf("unknown script language: %s", s)
+		return ScriptLanguage{}, fmt.Errorf("unknown script language: %q", s)
 	}
+}
+
+// IsValid reports whether the language is one of the known values (not the zero value).
+func (l ScriptLanguage) IsValid() bool {
+	return l != ScriptLanguage{}
 }
 
 // String returns the string representation of the ScriptLanguage.
@@ -42,6 +47,6 @@ func (l ScriptLanguage) String() string {
 	case ScriptLanguageLua:
 		return "lua"
 	default:
-		return "unknown"
+		return "invalid"
 	}
 }

@@ -25,10 +25,17 @@ func TestNewScriptLanguage_ValidValues(t *testing.T) {
 	}
 }
 
-func TestNewScriptLanguage_UnknownValue(t *testing.T) {
-	_, err := NewScriptLanguage("ruby")
-	if err == nil {
-		t.Error("expected error for unknown language, got nil")
+func TestNewScriptLanguage_UnrecognisedValue_ReturnsErrorAndInvalid(t *testing.T) {
+	for _, input := range []string{"ruby", "unknown", ""} {
+		t.Run(input, func(t *testing.T) {
+			lang, err := NewScriptLanguage(input)
+			if err == nil {
+				t.Errorf("expected error for %q, got nil", input)
+			}
+			if lang.IsValid() {
+				t.Errorf("expected invalid zero value for %q, got %v", input, lang)
+			}
+		})
 	}
 }
 
@@ -37,11 +44,11 @@ func TestScriptLanguage_String(t *testing.T) {
 		lang     ScriptLanguage
 		expected string
 	}{
-		{ScriptLanguageUnknown, "unknown"},
+		{ScriptLanguage{}, "invalid"},
 		{ScriptLanguageJavaScript, "javascript"},
 		{ScriptLanguagePython, "python"},
 		{ScriptLanguageLua, "lua"},
-		{ScriptLanguage{language: 99}, "unknown"},
+		{ScriptLanguage{language: 99}, "invalid"},
 	}
 
 	for _, tc := range cases {

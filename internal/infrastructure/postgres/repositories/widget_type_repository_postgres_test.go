@@ -145,9 +145,13 @@ func TestWidgetTypeSave_WithInputPorts_RoundTripsCorrectly(t *testing.T) {
 
 	p1Name, _ := widget.NewInputPortName("temperature")
 	p2Name, _ := widget.NewInputPortName("pressure")
+	integerHint, err := widget.OnlyTagType(tag.TagTypeInteger)
+	if err != nil {
+		t.Fatalf("OnlyTagType: %v", err)
+	}
 	ports := []widget.InputPort{
-		widget.NewInputPort(p1Name, "Process temperature", tag.TagTypeInteger),
-		widget.NewInputPort(p2Name, "Line pressure", tag.TagTypeInteger),
+		widget.NewInputPort(p1Name, "Process temperature", integerHint),
+		widget.NewInputPort(p2Name, "Line pressure", widget.AnyTagType()),
 	}
 
 	wt := makeWidgetType(t, "dual-gauge", ports, repo)
@@ -170,11 +174,14 @@ func TestWidgetTypeSave_WithInputPorts_RoundTripsCorrectly(t *testing.T) {
 	if found.InputPorts()[0].Description() != "Process temperature" {
 		t.Errorf("InputPorts[0].Description: expected 'Process temperature', got %q", found.InputPorts()[0].Description())
 	}
-	if found.InputPorts()[0].TypeHint() != tag.TagTypeInteger {
+	if found.InputPorts()[0].TypeHint() != integerHint {
 		t.Errorf("InputPorts[0].TypeHint: expected integer, got %v", found.InputPorts()[0].TypeHint())
 	}
 	if found.InputPorts()[1].Name().String() != "pressure" {
 		t.Errorf("InputPorts[1].Name: expected 'pressure', got %q", found.InputPorts()[1].Name().String())
+	}
+	if !found.InputPorts()[1].TypeHint().IsAny() {
+		t.Errorf("InputPorts[1].TypeHint: expected any, got %v", found.InputPorts()[1].TypeHint())
 	}
 }
 
@@ -208,7 +215,11 @@ func TestWidgetTypeSave_InputPortsAreUpdated(t *testing.T) {
 	found, _ := repo.FindByID(ctx, saved.ID())
 
 	pName, _ := widget.NewInputPortName("val")
-	ports := []widget.InputPort{widget.NewInputPort(pName, "new port", tag.TagTypeBoolean)}
+	booleanHint, err := widget.OnlyTagType(tag.TagTypeBoolean)
+	if err != nil {
+		t.Fatalf("OnlyTagType: %v", err)
+	}
+	ports := []widget.InputPort{widget.NewInputPort(pName, "new port", booleanHint)}
 	updated, err := widget.NewWidgetType(found.ID(), found.Name(), found.HtmlTemplate(), found.Script(), found.ScriptLanguage(), found.DefaultSize(), ports, found.Version())
 	if err != nil {
 		t.Fatalf("NewWidgetType: %v", err)
