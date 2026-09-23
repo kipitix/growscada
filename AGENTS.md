@@ -114,11 +114,11 @@ Tests in `internal/infrastructure/postgres/repositories/` use **testcontainers-g
 | Term | Meaning |
 |------|---------|
 | **Tag** | Single process variable with quality metadata |
-| **TagType** | A Tag's data type: `Unknown`, `String`, `Boolean`, `Integer` |
+| **TagType** | A Tag's data type: `String`, `Boolean`, `Integer` |
 | **WidgetType** | Reusable visual component definition: HTML + JS |
 | **Widget** | Placed instance of a WidgetType on a Scene, bound to Tag IDs |
 | **Scene** | A mnemonic/synoptic display canvas |
-| **Quality** | Data reliability: `Unknown`, `Bad`, `Uncertain`, `Good`, `Simulated` |
+| **Quality** | Data reliability: `Bad`, `Uncertain`, `Good` |
 
 ## API Collections
 

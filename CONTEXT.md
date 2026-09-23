@@ -11,12 +11,16 @@ The atomic process variable — an identifier, name, type, current value, and qu
 _Avoid_: variable, point, signal
 
 **Quality**:
-A Tag's reliability indicator: `Unknown`, `Bad`, `Uncertain`, `Good`, or `Simulated` (manually overridden value).
-_Avoid_: status, state
+A Tag's reliability indicator: `Bad`, `Uncertain`, or `Good`. Describes how trustworthy the value is, never where it came from. There is no "unknown" Quality — every Tag always has one of the three, stated explicitly by whoever creates or updates it.
+_Avoid_: status, state; simulated/forced/unknown as a Quality
 
 **TagType**:
-A Tag's data type: `Unknown`, `String`, `Boolean`, or `Integer`. Governs which values the Tag accepts.
+A Tag's data type: `String`, `Boolean`, or `Integer`. Governs which values the Tag accepts. There is no "unknown" TagType.
 _Avoid_: analog/discrete, data type
+
+**Device**:
+A source of Tag values — real equipment, a protocol adapter, or a simulator. Whether it is a simulator is descriptive metadata of the Device, not a Quality. Not yet modelled.
+_Avoid_: source, adapter, PLC
 
 ### Visualization
 
@@ -25,7 +29,7 @@ A reusable template defining how a widget renders: an HTML template plus a scrip
 _Avoid_: component, widget definition
 
 **InputPort**:
-A named, typed input slot declared on a WidgetType, referenced in its template/script as `input.<name>`. Its type hint may accept any Tag type.
+A named, typed input slot declared on a WidgetType, referenced in its template/script as `input.<name>`. Its type hint either names one TagType or accepts any TagType — "any" is a property of the hint, not a TagType.
 _Avoid_: parameter, slot
 
 **Widget**:
