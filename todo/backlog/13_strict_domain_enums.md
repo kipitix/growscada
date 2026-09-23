@@ -26,7 +26,7 @@
 
 ## `PortTypeHint` вместо `TagTypeUnknown` у `InputPort`
 
-- Новый value object в пакете `widget`: либо «любой тип», либо конкретный `TagType` (`AnyTagType()`, `OnlyTagType(t) (PortTypeHint, error)`, `NewPortTypeHint(s)`, `IsAny()`, `Accepts(t)`, `TagType() (tag.TagType, bool)`).
+- Новый value object в пакете `widget`: либо «любой тип», либо конкретный `TagType` (`AnyTypeHint()`, `TypeHintFor(t) (PortTypeHint, error)`, `NewPortTypeHint(s)`, `IsAny()`, `Accepts(t)`, `TagType() (tag.TagType, bool)`).
 - На стыке (REST, JSON-колонка `input_ports`) «любой» — это `""` или отсутствующее поле; `"unknown"` даёт ошибку (сейчас 500, см. задачу 33). Миграция данных не нужна: «любой» уже хранится как `""`.
 - UI (`uidto.TypeHintLabel`) больше не обрабатывает `"unknown"`.
 

@@ -118,10 +118,19 @@ func TestNewEventType_UnrecognisedString_ReturnsErrorAndZeroValue(t *testing.T) 
 			if err == nil {
 				t.Errorf("expected error for %q, got nil", input)
 			}
-			if got != (event.EventType{}) {
+			if got.IsValid() {
 				t.Errorf("expected zero value, got %v", got)
 			}
 		})
+	}
+}
+
+func TestEventType_IsValid(t *testing.T) {
+	if !event.EventTypeTagCreated.IsValid() {
+		t.Error("expected EventTypeTagCreated to be valid")
+	}
+	if (event.EventType{}).IsValid() {
+		t.Error("expected zero value to be invalid")
 	}
 }
 
@@ -246,7 +255,7 @@ func TestEventBus_Unsubscribe_UnknownSubscription_DoesNotPanic(t *testing.T) {
 
 func TestAllEventTypes_ExcludesZeroValue(t *testing.T) {
 	for _, et := range event.AllEventTypes() {
-		if et == (event.EventType{}) {
+		if !et.IsValid() {
 			t.Error("expected AllEventTypes to not include the zero value")
 		}
 	}

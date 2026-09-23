@@ -16,14 +16,14 @@ type PortTypeHint struct {
 
 var _ fmt.Stringer = PortTypeHint{}
 
-// AnyTagType returns a hint that accepts any TagType.
-func AnyTagType() PortTypeHint {
+// AnyTypeHint returns a hint that accepts any TagType.
+func AnyTypeHint() PortTypeHint {
 	return PortTypeHint{}
 }
 
-// OnlyTagType returns a hint that accepts only the given TagType.
+// TypeHintFor returns a hint that accepts only the given TagType.
 // Returns an error if the TagType is the invalid zero value.
-func OnlyTagType(t tag.TagType) (PortTypeHint, error) {
+func TypeHintFor(t tag.TagType) (PortTypeHint, error) {
 	if !t.IsValid() {
 		return PortTypeHint{}, fmt.Errorf("port type hint: invalid tag type")
 	}
@@ -34,7 +34,7 @@ func OnlyTagType(t tag.TagType) (PortTypeHint, error) {
 // otherwise the string must be a known TagType.
 func NewPortTypeHint(s string) (PortTypeHint, error) {
 	if s == "" {
-		return AnyTagType(), nil
+		return AnyTypeHint(), nil
 	}
 	t, err := tag.NewTagType(s)
 	if err != nil {

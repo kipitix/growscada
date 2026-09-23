@@ -172,3 +172,17 @@ Browser automation. Use for verifying UI changes in the running PWA (port 8080):
 5. **Completion notification is automatic — no action needed.** A `Stop` hook (`.claude/settings.json`) fires a desktop notification (`notify-send`) whenever a turn ends. It's a no-op if `notify-send` isn't installed (e.g. non-Linux, or a Linux desktop without a notification daemon), so it's safe on any machine. Don't try to send an e-mail or otherwise notify the user yourself — the old `mail-mcp`-based e-mail step has been removed.
 
 6. **Start the test environment before debugging.** Before any debugging session or manual API testing, ensure the dev database is running with `make db_up`. If the database state looks stale or you hit unexpected data errors, use `make full_restart` to get a clean slate. Never run the server or hit the API endpoints without first confirming the DB container is up.
+
+## Agent skills
+
+### Issue tracker
+
+Задачи ведутся markdown-файлами в `todo/` (`backlog/` → `done/`). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Пять канонических ролей, строки совпадают с именами (`Status:` в файле задачи). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` в корне. See `docs/agents/domain.md`.

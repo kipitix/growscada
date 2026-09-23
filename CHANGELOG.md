@@ -16,7 +16,7 @@
 - `internal/domain/tag/tag.go` — `NewTag` отклоняет невалидные тип и качество, `SetValue` — невалидное качество (раньше нулевое значение останавливал только CHECK в БД)
 - `internal/domain/widget/widget_type.go` — `NewWidgetType` отклоняет невалидный `ScriptLanguage`
 - `internal/domain/event/event_type.go` — `EventType` из `int` + `iota` стал struct value object с приватным полем, как остальные перечисления; снаружи пакета нельзя получить произвольное значение приведением
-- **BREAKING: `InputPort` type hint** — новый value object `widget.PortTypeHint` (`internal/domain/widget/port_type_hint.go`): либо «любой тип» (`AnyTagType()`), либо конкретный `TagType` (`OnlyTagType`); методы `IsAny`, `TagType`, `Accepts`; «любой тип» в REST и в JSON-колонке `input_ports` — это `""`:
+- **BREAKING: `InputPort` type hint** — новый value object `widget.PortTypeHint` (`internal/domain/widget/port_type_hint.go`): либо «любой тип» (`AnyTypeHint()`), либо конкретный `TagType` (`TypeHintFor`); методы `IsAny`, `TagType`, `Accepts`; «любой тип» в REST и в JSON-колонке `input_ports` — это `""`:
   - в ответах API «любой тип» теперь `"type_hint": ""` вместо `"unknown"`
   - запрос с `"type_hint": "unknown"` отклоняется (пока 500, см. задачу 33)
   - UI (`uidto.TypeHintLabel`, `project/render_properties.go`) больше не обрабатывает `"unknown"`

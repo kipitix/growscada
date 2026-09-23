@@ -90,6 +90,11 @@ func NewEventType(s string) (EventType, error) {
 	}
 }
 
+// IsValid reports whether the event type is one of the known values (not the zero value).
+func (et EventType) IsValid() bool {
+	return et != EventType{}
+}
+
 // String returns the string representation of the EventType.
 // Implements the fmt.Stringer interface.
 func (et EventType) String() string {

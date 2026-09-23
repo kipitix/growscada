@@ -145,13 +145,13 @@ func TestWidgetTypeSave_WithInputPorts_RoundTripsCorrectly(t *testing.T) {
 
 	p1Name, _ := widget.NewInputPortName("temperature")
 	p2Name, _ := widget.NewInputPortName("pressure")
-	integerHint, err := widget.OnlyTagType(tag.TagTypeInteger)
+	integerHint, err := widget.TypeHintFor(tag.TagTypeInteger)
 	if err != nil {
-		t.Fatalf("OnlyTagType: %v", err)
+		t.Fatalf("TypeHintFor: %v", err)
 	}
 	ports := []widget.InputPort{
 		widget.NewInputPort(p1Name, "Process temperature", integerHint),
-		widget.NewInputPort(p2Name, "Line pressure", widget.AnyTagType()),
+		widget.NewInputPort(p2Name, "Line pressure", widget.AnyTypeHint()),
 	}
 
 	wt := makeWidgetType(t, "dual-gauge", ports, repo)
@@ -215,9 +215,9 @@ func TestWidgetTypeSave_InputPortsAreUpdated(t *testing.T) {
 	found, _ := repo.FindByID(ctx, saved.ID())
 
 	pName, _ := widget.NewInputPortName("val")
-	booleanHint, err := widget.OnlyTagType(tag.TagTypeBoolean)
+	booleanHint, err := widget.TypeHintFor(tag.TagTypeBoolean)
 	if err != nil {
-		t.Fatalf("OnlyTagType: %v", err)
+		t.Fatalf("TypeHintFor: %v", err)
 	}
 	ports := []widget.InputPort{widget.NewInputPort(pName, "new port", booleanHint)}
 	updated, err := widget.NewWidgetType(found.ID(), found.Name(), found.HtmlTemplate(), found.Script(), found.ScriptLanguage(), found.DefaultSize(), ports, found.Version())

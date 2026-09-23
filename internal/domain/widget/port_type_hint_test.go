@@ -6,8 +6,8 @@ import (
 	"github.com/kipitix/growscada/internal/domain/tag"
 )
 
-func TestAnyTagType_AcceptsEveryTagType(t *testing.T) {
-	h := AnyTagType()
+func TestAnyTypeHint_AcceptsEveryTagType(t *testing.T) {
+	h := AnyTypeHint()
 	if !h.IsAny() {
 		t.Error("expected IsAny to be true")
 	}
@@ -24,8 +24,8 @@ func TestAnyTagType_AcceptsEveryTagType(t *testing.T) {
 	}
 }
 
-func TestOnlyTagType_AcceptsOnlyThatType(t *testing.T) {
-	h, err := OnlyTagType(tag.TagTypeInteger)
+func TestTypeHintFor_AcceptsOnlyThatType(t *testing.T) {
+	h, err := TypeHintFor(tag.TagTypeInteger)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -46,8 +46,8 @@ func TestOnlyTagType_AcceptsOnlyThatType(t *testing.T) {
 	}
 }
 
-func TestOnlyTagType_InvalidTagType_ReturnsError(t *testing.T) {
-	if _, err := OnlyTagType(tag.TagType{}); err == nil {
+func TestTypeHintFor_InvalidTagType_ReturnsError(t *testing.T) {
+	if _, err := TypeHintFor(tag.TagType{}); err == nil {
 		t.Error("expected error for invalid tag type, got nil")
 	}
 }

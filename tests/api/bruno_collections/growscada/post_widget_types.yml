@@ -17,7 +17,8 @@ http:
         "default_width": 150,
         "default_height": 150,
         "input_ports": [
-          { "name": "pressure", "description": "Line pressure in bar", "type_hint": "integer" }
+          { "name": "pressure", "description": "Line pressure in bar", "type_hint": "integer" },
+          { "name": "label", "description": "Caption, accepts a tag of any type", "type_hint": "" }
         ]
       }
   auth: inherit
