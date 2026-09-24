@@ -1,6 +1,12 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
-## [Unreleased]
+## [0.0.25] - 2026-09-24
+
+### Added
+
+- `internal/domain/event/event_type_test.go` — `TestAllEventTypes_ListsEveryDeclaredEventType`: разбирает `event_type.go` и сверяет число объявленных значений `EventType` с `len(AllEventTypes())`; ловит значение, не добавленное в таблицу имён (такие события молча не доходили бы до SSE-клиентов, т. к. хаб подписывается на `AllEventTypes()`)
+- `tests/api/bruno_collections/growscada/post_widget_types.yml` — пример порта с `"type_hint": ""` («любой тип»)
+- `docs/agents/` (`issue-tracker.md`, `triage-labels.md`, `domain.md`) и раздел «Agent skills» в `AGENTS.md` — конфигурация agent skills: задачи ведутся в `todo/`, стандартные triage-метки, single-context `CONTEXT.md` + `docs/adr/`
 
 ### Removed
 
@@ -21,6 +27,9 @@
   - запрос с `"type_hint": "unknown"` отклоняется (пока 500, см. задачу 33)
   - UI (`uidto.TypeHintLabel`, `project/render_properties.go`) больше не обрабатывает `"unknown"`
 - Глоссарий (`CONTEXT.md`, `AGENTS.md`): Quality — `Bad`/`Uncertain`/`Good`, TagType без `Unknown`, новый термин Device
+- `internal/domain/event/event_type.go` — имена типов событий заданы одной таблицей `eventTypeNames`, из неё выводятся `AllEventTypes()`, `NewEventType()` и `String()` (вместо двух параллельных `switch` на 15 веток); добавлен `IsValid()`, как у остальных перечислений. Строковые имена и порядок `AllEventTypes()` не изменились. Round-trip тест теперь покрывает все значения `AllEventTypes()`, добавлена проверка уникальности значений и имён
+- `docs/adr/0001-no-unknown-enum-sentinels.md` — оговорено исключение: нулевое значение `PortTypeHint{}` валидно и означает «любой тип» (это отдельный value object, а не перечисление)
+- Форматирование `gofmt` в `internal/domain/tag/tag.go`, `internal/domain/widget/{input_port,port_binding}.go`, `internal/interface/ui/library/*.go`, `internal/interface/ui/project/{preview,project}.go` — без изменения поведения
 
 ## [0.0.24] - 2026-09-18
 

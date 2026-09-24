@@ -54,11 +54,11 @@ func NewTag(anID id.ID[Tag], aName TagName, aType TagType, aValue TagValue, aQua
 	}, nil
 }
 
-func (t tagImpl) ID() id.ID[Tag]            { return t.id }
-func (t tagImpl) Name() TagName              { return t.name }
-func (t tagImpl) Type() TagType              { return t.tagType }
-func (t tagImpl) Value() TagValue            { return t.value }
-func (t tagImpl) Quality() TagQuality        { return t.quality }
+func (t tagImpl) ID() id.ID[Tag]                { return t.id }
+func (t tagImpl) Name() TagName                 { return t.name }
+func (t tagImpl) Type() TagType                 { return t.tagType }
+func (t tagImpl) Value() TagValue               { return t.value }
+func (t tagImpl) Quality() TagQuality           { return t.quality }
 func (t tagImpl) Version() version.Version[Tag] { return t.version }
 
 // SetValue updates the tag's value and quality.

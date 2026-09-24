@@ -140,16 +140,12 @@ func TestEventType_String_ZeroValueIsInvalid(t *testing.T) {
 	}
 }
 
-func TestEventType_String_RoundTrips(t *testing.T) {
-	types := []event.EventType{
-		event.EventTypeSystemReady,
-		event.EventTypeTagCreated,
-		event.EventTypeTagUpdated,
-		event.EventTypeTagDeleted,
-	}
-
-	for _, et := range types {
+func TestEventType_String_RoundTripsForAllEventTypes(t *testing.T) {
+	for _, et := range event.AllEventTypes() {
 		t.Run(et.String(), func(t *testing.T) {
+			if et.String() == "invalid" {
+				t.Fatalf("expected a name, got %q", et.String())
+			}
 			parsed, err := event.NewEventType(et.String())
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -158,6 +154,21 @@ func TestEventType_String_RoundTrips(t *testing.T) {
 				t.Errorf("round-trip failed: expected %v, got %v", et, parsed)
 			}
 		})
+	}
+}
+
+func TestAllEventTypes_ValuesAndNamesAreUnique(t *testing.T) {
+	seenTypes := make(map[event.EventType]bool)
+	seenNames := make(map[string]bool)
+	for _, et := range event.AllEventTypes() {
+		if seenTypes[et] {
+			t.Errorf("duplicate event type %v", et)
+		}
+		if seenNames[et.String()] {
+			t.Errorf("duplicate event type name %q", et.String())
+		}
+		seenTypes[et] = true
+		seenNames[et.String()] = true
 	}
 }
 

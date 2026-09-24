@@ -69,12 +69,12 @@ type Project struct {
 	draggingOriginID string
 	originCliX       float64 // client X when drag started
 	originCliY       float64 // client Y when drag started
-	originStartOX   float64 // origin.X before drag
-	originStartOY   float64 // origin.Y before drag
-	originStartPosX float64 // position.X before drag
-	originStartPosY float64 // position.Y before drag
-	originDragW     int     // widget width during drag
-	originDragH     int     // widget height during drag
+	originStartOX    float64 // origin.X before drag
+	originStartOY    float64 // origin.Y before drag
+	originStartPosX  float64 // position.X before drag
+	originStartPosY  float64 // position.Y before drag
+	originDragW      int     // widget width during drag
+	originDragH      int     // widget height during drag
 	originDragRotDeg float64 // widget rotation during drag
 
 	// ── Drag: rotation handle ───────────────────────────────────────────────
@@ -93,11 +93,11 @@ type Project struct {
 	resizeStartCliY  float64
 	resizeStartW     int
 	resizeStartH     int
-	resizeStartDeg   float64  // for inverse-rotation delta
-	resizeStartE     float64  // canvas X of widget top-left at resize start
-	resizeStartF     float64  // canvas Y of widget top-left at resize start
-	resizeOriginX    float64  // origin.X at resize start (for position compensation)
-	resizeOriginY    float64  // origin.Y at resize start
+	resizeStartDeg   float64 // for inverse-rotation delta
+	resizeStartE     float64 // canvas X of widget top-left at resize start
+	resizeStartF     float64 // canvas Y of widget top-left at resize start
+	resizeOriginX    float64 // origin.X at resize start (for position compensation)
+	resizeOriginY    float64 // origin.Y at resize start
 
 	// ── Properties panel editing state ─────────────────────────────────────
 	editingWidgetName string
@@ -108,17 +108,17 @@ type Project struct {
 	editingHeight     string
 	editingOriginX    string
 	editingOriginY    string
-	editingRotation string
+	editingRotation   string
 
 	// ── Input simulation (in-memory only, not persisted) ───────────────────
 	// simInputs[widgetID][portName] = test value string
 	simInputs map[string]map[string]string
 
 	// ── Panel resize state ──────────────────────────────────────────────────
-	widgetTypeWidth      int
-	propertiesWidth      int
-	resizingPanelSide    string // "left" | "right" | ""
-	panelResizeStartX    float64
+	widgetTypeWidth       int
+	propertiesWidth       int
+	resizingPanelSide     string // "left" | "right" | ""
+	panelResizeStartX     float64
 	panelResizeStartWidth int
 }
 
@@ -568,4 +568,3 @@ func (p *Project) renderScenesContent() app.UI {
 			p.renderPropertiesPanel(),
 		)
 }
-

@@ -14,11 +14,11 @@ import (
 
 type Library struct {
 	app.Compo
-	ThemeMode    string // exported so go-app detects theme changes and re-renders
-	apiServerURL string
-	widgetTypes      []widgetTypeItem
-	loading          bool
-	selectedID       string
+	ThemeMode         string // exported so go-app detects theme changes and re-renders
+	apiServerURL      string
+	widgetTypes       []widgetTypeItem
+	loading           bool
+	selectedID        string
 	editedName        string
 	editedHTML        string
 	editedScript      string

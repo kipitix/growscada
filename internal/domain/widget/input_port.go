@@ -60,6 +60,6 @@ func NewInputPort(name InputPortName, description string, typeHint PortTypeHint)
 	return InputPort{name: name, description: description, typeHint: typeHint}
 }
 
-func (p InputPort) Name() InputPortName { return p.name }
-func (p InputPort) Description() string { return p.description }
+func (p InputPort) Name() InputPortName    { return p.name }
+func (p InputPort) Description() string    { return p.description }
 func (p InputPort) TypeHint() PortTypeHint { return p.typeHint }

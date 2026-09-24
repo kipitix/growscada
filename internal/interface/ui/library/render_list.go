@@ -76,7 +76,7 @@ func (l *Library) renderList() app.UI {
 	if l.loading {
 		return app.Div().Style("font-size", "13px").Style("color", "var(--text-muted)").Text("Loading...")
 	}
-if len(l.widgetTypes) == 0 {
+	if len(l.widgetTypes) == 0 {
 		return app.Div().Style("font-size", "13px").Style("color", "var(--text-muted)").Text("No widget types found.")
 	}
 

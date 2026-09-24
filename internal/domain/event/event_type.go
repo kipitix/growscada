@@ -12,6 +12,7 @@ type EventType struct {
 var _ fmt.Stringer = EventType{}
 
 // Sentinel values for EventType. Must not be reassigned.
+// A new value must also be added to eventTypeNames.
 var (
 	EventTypeSystemReady        = EventType{eventType: 1}
 	EventTypeTagCreated         = EventType{eventType: 2}
@@ -30,64 +31,48 @@ var (
 	EventTypeClientDisconnected = EventType{eventType: 15}
 )
 
+// eventTypeNames is the single source of truth for known event types:
+// AllEventTypes, NewEventType and String are all derived from it.
+// The order of entries is the order returned by AllEventTypes.
+var eventTypeNames = []struct {
+	eventType EventType
+	name      string
+}{
+	{EventTypeSystemReady, "system_ready"},
+	{EventTypeTagCreated, "tag_created"},
+	{EventTypeTagUpdated, "tag_updated"},
+	{EventTypeTagDeleted, "tag_deleted"},
+	{EventTypeWidgetTypeCreated, "widget_type_created"},
+	{EventTypeWidgetTypeUpdated, "widget_type_updated"},
+	{EventTypeWidgetTypeDeleted, "widget_type_deleted"},
+	{EventTypeWidgetCreated, "widget_created"},
+	{EventTypeWidgetUpdated, "widget_updated"},
+	{EventTypeWidgetDeleted, "widget_deleted"},
+	{EventTypeSceneCreated, "scene_created"},
+	{EventTypeSceneUpdated, "scene_updated"},
+	{EventTypeSceneDeleted, "scene_deleted"},
+	{EventTypeClientConnected, "client_connected"},
+	{EventTypeClientDisconnected, "client_disconnected"},
+}
+
 // AllEventTypes returns every known EventType.
 func AllEventTypes() []EventType {
-	return []EventType{
-		EventTypeSystemReady,
-		EventTypeTagCreated,
-		EventTypeTagUpdated,
-		EventTypeTagDeleted,
-		EventTypeWidgetTypeCreated,
-		EventTypeWidgetTypeUpdated,
-		EventTypeWidgetTypeDeleted,
-		EventTypeWidgetCreated,
-		EventTypeWidgetUpdated,
-		EventTypeWidgetDeleted,
-		EventTypeSceneCreated,
-		EventTypeSceneUpdated,
-		EventTypeSceneDeleted,
-		EventTypeClientConnected,
-		EventTypeClientDisconnected,
+	types := make([]EventType, len(eventTypeNames))
+	for i, entry := range eventTypeNames {
+		types[i] = entry.eventType
 	}
+	return types
 }
 
 // NewEventType creates a new EventType from a string representation.
 // Returns an error if the string does not match any known event type.
 func NewEventType(s string) (EventType, error) {
-	switch s {
-	case "system_ready":
-		return EventTypeSystemReady, nil
-	case "tag_created":
-		return EventTypeTagCreated, nil
-	case "tag_updated":
-		return EventTypeTagUpdated, nil
-	case "tag_deleted":
-		return EventTypeTagDeleted, nil
-	case "widget_type_created":
-		return EventTypeWidgetTypeCreated, nil
-	case "widget_type_updated":
-		return EventTypeWidgetTypeUpdated, nil
-	case "widget_type_deleted":
-		return EventTypeWidgetTypeDeleted, nil
-	case "widget_created":
-		return EventTypeWidgetCreated, nil
-	case "widget_updated":
-		return EventTypeWidgetUpdated, nil
-	case "widget_deleted":
-		return EventTypeWidgetDeleted, nil
-	case "scene_created":
-		return EventTypeSceneCreated, nil
-	case "scene_updated":
-		return EventTypeSceneUpdated, nil
-	case "scene_deleted":
-		return EventTypeSceneDeleted, nil
-	case "client_connected":
-		return EventTypeClientConnected, nil
-	case "client_disconnected":
-		return EventTypeClientDisconnected, nil
-	default:
-		return EventType{}, fmt.Errorf("unknown event type: %q", s)
+	for _, entry := range eventTypeNames {
+		if entry.name == s {
+			return entry.eventType, nil
+		}
 	}
+	return EventType{}, fmt.Errorf("unknown event type: %q", s)
 }
 
 // IsValid reports whether the event type is one of the known values (not the zero value).
@@ -98,38 +83,10 @@ func (et EventType) IsValid() bool {
 // String returns the string representation of the EventType.
 // Implements the fmt.Stringer interface.
 func (et EventType) String() string {
-	switch et {
-	case EventTypeSystemReady:
-		return "system_ready"
-	case EventTypeTagCreated:
-		return "tag_created"
-	case EventTypeTagUpdated:
-		return "tag_updated"
-	case EventTypeTagDeleted:
-		return "tag_deleted"
-	case EventTypeWidgetTypeCreated:
-		return "widget_type_created"
-	case EventTypeWidgetTypeUpdated:
-		return "widget_type_updated"
-	case EventTypeWidgetTypeDeleted:
-		return "widget_type_deleted"
-	case EventTypeWidgetCreated:
-		return "widget_created"
-	case EventTypeWidgetUpdated:
-		return "widget_updated"
-	case EventTypeWidgetDeleted:
-		return "widget_deleted"
-	case EventTypeSceneCreated:
-		return "scene_created"
-	case EventTypeSceneUpdated:
-		return "scene_updated"
-	case EventTypeSceneDeleted:
-		return "scene_deleted"
-	case EventTypeClientConnected:
-		return "client_connected"
-	case EventTypeClientDisconnected:
-		return "client_disconnected"
-	default:
-		return "invalid"
+	for _, entry := range eventTypeNames {
+		if entry.eventType == et {
+			return entry.name
+		}
 	}
+	return "invalid"
 }

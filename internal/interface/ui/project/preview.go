@@ -121,4 +121,3 @@ func (f *simInputField) OnUpdate(ctx app.Context) {
 	f.lastVal = f.Val
 	f.setDOMValue(ctx)
 }
-

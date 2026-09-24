@@ -434,7 +434,6 @@ func (l *Library) renderInputDataColumn() app.UI {
 		)
 }
 
-
 func (l *Library) renderApplyButton() app.UI {
 	btn := app.Button().
 		Style("margin-top", "4px").

@@ -15,5 +15,5 @@ func NewPortBinding(portName InputPortName, tagID id.ID[tag.Tag]) PortBinding {
 	return PortBinding{portName: portName, tagID: tagID}
 }
 
-func (b PortBinding) PortName() InputPortName  { return b.portName }
-func (b PortBinding) TagID() id.ID[tag.Tag]    { return b.tagID }
+func (b PortBinding) PortName() InputPortName { return b.portName }
+func (b PortBinding) TagID() id.ID[tag.Tag]   { return b.tagID }
