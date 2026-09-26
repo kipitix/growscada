@@ -1,0 +1,24 @@
+info:
+  name: get tags by name regex
+  type: http
+  seq: 25
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v1/tags?name_regex=^(is|enable)_
+  auth: inherit
+
+docs: |
+  Filters tags by a Go (RE2) regular expression matched anywhere in the name;
+  anchor it with `^` and `$` for a whole-name match, `(?i)` makes it
+  case-insensitive. The response has the same shape as `GET /tags`:
+  `{"tags":[...]}` with any number of tags.
+
+  An invalid expression returns 400 Problem Details. Only one of `name`,
+  `name_pattern`, `name_regex` may be given, otherwise 400.
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

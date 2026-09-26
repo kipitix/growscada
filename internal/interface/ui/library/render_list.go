@@ -73,7 +73,9 @@ func (l *Library) renderListButtons() app.UI {
 }
 
 func (l *Library) renderList() app.UI {
-	if l.loading {
+	// Only the initial load shows a placeholder; event-driven reloads keep the
+	// current list on screen until the fresh one arrives.
+	if l.loading && len(l.widgetTypes) == 0 {
 		return app.Div().Style("font-size", "13px").Style("color", "var(--text-muted)").Text("Loading...")
 	}
 	if len(l.widgetTypes) == 0 {

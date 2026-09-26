@@ -1,12 +1,14 @@
 package restapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 
 	"github.com/google/uuid"
 	"github.com/kipitix/growscada/internal/application"
+	"github.com/kipitix/growscada/internal/application/appdto"
 	"github.com/kipitix/growscada/internal/domain/tag"
 	"github.com/kipitix/growscada/internal/interface/restapi/restdto"
 )
@@ -23,10 +25,69 @@ func NewTagsHandler(s application.TagService) *TagsHandlers {
 	return &TagsHandlers{service: s}
 }
 
-// GetTags handles GET /tags request to retrieve the list of tags
+// GetTags handles GET /tags request to retrieve the list of tags.
+// At most one name filter may be given:
+//   - ?name=<name> — exact unique name, the list holds 0 or 1 tags;
+//   - ?name_pattern=<pattern> — wildcard over the whole name ("*" any sequence, "?" one character);
+//   - ?name_regex=<regex> — Go (RE2) regular expression matched anywhere in the name.
 func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	filters := 0
+	for _, param := range []string{"name", "name_pattern", "name_regex"} {
+		if query.Has(param) {
+			filters++
+		}
+	}
+	if filters > 1 {
+		sendJSONResponse(w, http.StatusBadRequest,
+			NewBadRequest("use only one of name, name_pattern, name_regex", r.URL.Path))
+		return
+	}
+
+	switch {
+	case query.Has("name"):
+		h.getTagsByName(w, r, query.Get("name"))
+		return
+	case query.Has("name_pattern"):
+		h.sendMatchedTags(w, r, h.service.FindTagsByNamePattern, query.Get("name_pattern"))
+		return
+	case query.Has("name_regex"):
+		h.sendMatchedTags(w, r, h.service.FindTagsByNameRegex, query.Get("name_regex"))
+		return
+	}
+
 	tagList, err := h.service.FindAllTags(r.Context())
 	if err != nil {
+		sendInternalError(w, r, err)
+		return
+	}
+	sendJSONResponse(w, http.StatusOK, restdto.NewGetTagsResponse(tagList))
+}
+
+// getTagsByName handles GET /tags?name=<name>
+func (h TagsHandlers) getTagsByName(w http.ResponseWriter, r *http.Request, name string) {
+	foundTag, err := h.service.FindTagByName(r.Context(), name)
+	if err != nil {
+		if errors.Is(err, tag.ErrTagNotFound) {
+			sendJSONResponse(w, http.StatusOK, restdto.NewGetTagsResponse(nil))
+			return
+		}
+		sendInternalError(w, r, err)
+		return
+	}
+	sendJSONResponse(w, http.StatusOK, restdto.NewGetTagsResponse([]appdto.Tag{foundTag}))
+}
+
+// sendMatchedTags responds with the tags selected by a name pattern or regex;
+// an invalid one is a 400.
+func (h TagsHandlers) sendMatchedTags(w http.ResponseWriter, r *http.Request,
+	find func(context.Context, string) ([]appdto.Tag, error), filter string) {
+	tagList, err := find(r.Context(), filter)
+	if err != nil {
+		if errors.Is(err, tag.ErrInvalidTagNameMatcher) {
+			sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
+			return
+		}
 		sendInternalError(w, r, err)
 		return
 	}
@@ -120,6 +181,10 @@ func (h TagsHandlers) PostTags(w http.ResponseWriter, r *http.Request) {
 
 	createdTag, err := h.service.CreateTag(r.Context(), restdto.NewCreateTagInput(request))
 	if err != nil {
+		if errors.Is(err, tag.ErrTagNameTaken) {
+			sendJSONResponse(w, http.StatusConflict, NewConflict("tag", err.Error(), r.URL.Path))
+			return
+		}
 		sendInternalError(w, r, err)
 		return
 	}

@@ -7,7 +7,7 @@ A web-based SCADA (Supervisory Control and Data Acquisition) system: it exposes 
 ### Data
 
 **Tag**:
-The atomic process variable — an identifier, name, type, current value, and quality. Aggregate. Its name and TagType form the Tag's definition (configuration, part of the Draft); its value and Quality are process state, never part of the Draft or a Revision.
+The atomic process variable — an identifier, name, type, current value, and quality. Aggregate. Its name is unique across the system and is the natural key by which people, manifests and Devices refer to it. Its name and TagType form the Tag's definition (configuration, part of the Draft); its value and Quality are process state, never part of the Draft or a Revision.
 _Avoid_: variable, point, signal
 
 **Quality**:

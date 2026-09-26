@@ -4,9 +4,10 @@ install_tools:
 build:
 	GOARCH=wasm GOOS=js go build -o bin/growscada_combined_server/web/app.wasm cmd/combined_server/main.go
 	go build -o bin/growscada_combined_server/growscada_combined_server cmd/combined_server/main.go
+	go build -o bin/growctl/growctl cmd/growctl/main.go
 
 run: build
-	chromium --incognito --start-maximized http://localhost:8080 &
+	chromium --incognito --start-maximized --disable-background-networking http://localhost:8080 &
 	cd bin/growscada_combined_server && ./growscada_combined_server
 
 db_up:

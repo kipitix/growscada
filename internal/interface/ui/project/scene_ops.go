@@ -12,63 +12,6 @@ import (
 	"github.com/kipitix/growscada/internal/interface/ui/toast"
 )
 
-// ── Scene data loading ────────────────────────────────────────────────────────
-
-func (p *Project) loadScenes(ctx app.Context) {
-	url := p.apiServerURL + "/api/v1/scenes"
-	ctx.Async(func() {
-		resp, err := http.Get(url)
-		if err != nil {
-			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
-			})
-			return
-		}
-		if resp.StatusCode >= 400 {
-			prob := toast.FromHTTPError(resp)
-			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, prob)
-			})
-			return
-		}
-		defer resp.Body.Close()
-		var result getScenesResponse
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
-			})
-			return
-		}
-		ctx.Dispatch(func(ctx app.Context) {
-			prevSceneID := p.selectedSceneID
-			p.scenes = result.Scenes
-			if p.selectedSceneID != "" {
-				found := false
-				for _, sc := range result.Scenes {
-					if sc.ID == p.selectedSceneID {
-						found = true
-						break
-					}
-				}
-				if !found {
-					p.selectedSceneID = ""
-					p.clearWidgetSelection(ctx)
-				}
-			}
-			if p.selectedSceneID == "" && len(result.Scenes) > 0 {
-				p.selectedSceneID = result.Scenes[0].ID
-			}
-			p.syncSceneEditingFields()
-			if p.selectedSceneID != prevSceneID {
-				ctx.LocalStorage().Set("project:sceneID", p.selectedSceneID)
-				if p.selectedSceneID != "" {
-					p.loadWidgets(ctx)
-				}
-			}
-		})
-	})
-}
-
 // ── Scene CRUD ────────────────────────────────────────────────────────────────
 
 func (p *Project) createScene(ctx app.Context) {

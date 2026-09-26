@@ -22,6 +22,18 @@ const maxEntries = 500
 
 const filtersStorageKey = "eventlog:filters"
 
+// ActionServerEvent is the go-app action the Bar fires for every event received
+// from the server's SSE stream; its value is a ServerEvent. Components that
+// show server data handle it (ctx.Handle) to refresh themselves, so the app
+// keeps a single SSE connection.
+const ActionServerEvent = "eventlog.server-event"
+
+// ServerEvent is a domain event received from the server's SSE stream.
+type ServerEvent struct {
+	Type string // EventType name, e.g. "tag_created"
+	ID   string // ID of the affected aggregate/client, may be empty
+}
+
 type logEntry struct {
 	Time     string   `json:"time"`
 	Category category `json:"category"`
@@ -98,7 +110,7 @@ func (b *Bar) connect(ctx app.Context) {
 	b.onMessage = app.FuncOf(func(this app.Value, args []app.Value) any {
 		data := args[0].Get("data").String()
 		ctx.Dispatch(func(ctx app.Context) {
-			b.handleMessage(data)
+			b.handleMessage(ctx, data)
 		})
 		return nil
 	})
@@ -116,7 +128,7 @@ func (b *Bar) connect(ctx app.Context) {
 	b.eventSource = es
 }
 
-func (b *Bar) handleMessage(data string) {
+func (b *Bar) handleMessage(ctx app.Context, data string) {
 	// A message proves the stream is live, so a prior error toast is stale.
 	b.connectionDegraded = false
 
@@ -124,6 +136,8 @@ func (b *Bar) handleMessage(data string) {
 	if err := json.Unmarshal([]byte(data), &msg); err != nil {
 		return
 	}
+
+	ctx.NewActionWithValue(ActionServerEvent, ServerEvent{Type: msg.Type, ID: msg.ID})
 
 	cat := categoryOther
 	text := msg.Type

@@ -1,0 +1,24 @@
+info:
+  name: get tags by name pattern
+  type: http
+  seq: 24
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v1/tags?name_pattern=is_*
+  auth: inherit
+
+docs: |
+  Filters tags by a wildcard pattern over the whole name: `*` matches any
+  sequence of characters (including none), `?` matches exactly one character,
+  everything else is literal (`.` is a dot). The response has the same shape
+  as `GET /tags`: `{"tags":[...]}` with any number of tags.
+
+  Only one of `name`, `name_pattern`, `name_regex` may be given, otherwise 400.
+  URL-encode the pattern (`?` is `%3F`).
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

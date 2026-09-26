@@ -93,11 +93,7 @@ func (l *Library) deleteItem(ctx app.Context) {
 
 		ctx.Dispatch(func(ctx app.Context) {
 			if l.selectedID == deletedID {
-				l.selectedID = ""
-				l.editedHTML = ""
-				l.editedScript = ""
-				l.editedInputValues = make(map[string]string)
-				l.editedInputPorts = nil
+				l.clearSelection()
 			}
 			l.loadList(ctx)
 		})

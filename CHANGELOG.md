@@ -1,5 +1,42 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [Unreleased]
+
+### Added
+
+- **`growctl`** (задача 14) — CLI для декларативного управления тегами через YAML-манифесты в стиле kubectl (`apiVersion: growscada/v1`, `kind: Tag`, `metadata.name`, `spec.type`/`initialValue`/`initialQuality`):
+  - `cmd/growctl/`, логика в `internal/growctl/` (разбор манифестов, чистый плановщик, REST-клиент, команды на `spf13/cobra`); собирается в `make build` → `bin/growctl/`
+  - работает только через REST API: `--server` / `GROWCTL_SERVER`, по умолчанию `http://localhost:9090`
+  - `apply -f <файл|каталог|->` создаёт недостающие теги; `initialValue`/`initialQuality` применяются только при создании; `--prune` удаляет теги сервера, которых нет в манифесте
+  - `diff -f` показывает план (код выхода 0 — нет изменений, 1 — есть, 2 — ошибка); `delete -f` удаляет теги манифеста по имени
+  - план строится до первого изменения: невалидный манифест или смена `type` у существующего тега — ошибка без изменений; сбой REST-запроса останавливает выполнение, повторный `apply` доводит дело до конца
+  - тесты: unit-тесты манифеста и плановщика, сквозные тесты через `httptest` с настоящим REST-роутером и Postgres в testcontainers
+  - `tests/manifests/example_tags.yaml` — пример манифеста
+  - шаблоны имён `--pattern` (`*`, `?`) / `--regex` (Go RE2): `apply`/`diff --prune --pattern` удаляет только лишние теги внутри шаблона; `delete --pattern|--regex` удаляет подходящие теги с подтверждением (`--yes` — без); `get tags [--pattern|--regex] [-o table|yaml]` — список тегов, `-o yaml` — манифест для `apply -f`. Клиент фильтрует ответ сервера и сам, поэтому сервер без поддержки фильтров не расширит выборку. Ошибки использования — код выхода 2
+  - клиент сверяет имя в ответе `GET /tags?name=`, поэтому корректно работает и с сервером, который фильтр ещё не поддерживает
+- `GET /api/v1/tags?name=<имя>` — фильтр по имени тега; ответ той же формы `{"tags":[...]}` с 0 или 1 элементом; Bruno: `get_tags_by_name.yml`
+- `TagRepository.FindByName`, `TagService.FindTagByName`
+- Поиск тегов по шаблону и регулярному выражению — `GET /api/v1/tags?name_pattern=<шаблон>` (`*` — любая последовательность, `?` — один символ, совпадение со всем именем) и `GET /api/v1/tags?name_regex=<regex>` (Go RE2, совпадение в любом месте имени; `^`/`$` для привязки). Ответ — `{"tags":[...]}` с любым числом тегов; невалидное выражение и более одного из `name`/`name_pattern`/`name_regex` — 400. `?name=` остаётся строгим поиском. Домен: value object `tag.TagNameMatcher` (`NewTagNamePattern`, `NewTagNameRegex`), ошибка `tag.ErrInvalidTagNameMatcher`; сервис: `FindTagsByNamePattern`, `FindTagsByNameRegex`. Bruno: `get_tags_by_name_pattern.yml`, `get_tags_by_name_regex.yml`
+- UI обновляется по SSE-событиям сервера — изменения из `growctl`, другой вкладки или по REST видны без перезагрузки страницы:
+  - `eventlog.Bar` (единственное SSE-соединение приложения) рассылает каждое событие go-app действием `eventlog.ActionServerEvent`
+  - Library перечитывает список типов виджетов по `widget_type_*`; Project — палитру типов (`widget_type_*`), сцены (`scene_*`), виджеты выбранной сцены и сцены (`widget_*`: изменение виджета повышает версию сцены без события сцены) и теги (`tag_*`) — `internal/interface/ui/project/live_reload.go`
+  - редакторы сливают свежие данные по полям (`uiutil.MergeField`): поле, которое пользователь не трогал, следует за сервером, несохранённая правка сохраняется; удалённый извне объект снимает выделение
+  - перезагрузки склеиваются (`uiutil.Reloader`): пока идёт запрос, новые события ставят в очередь не более одной повторной загрузки; перезагрузка виджетов откладывается до конца перетаскивания/поворота/ресайза; версия сцены в UI никогда не откатывается назад
+  - `uiutil.FetchJSON` — общий GET+JSON с ошибкой в виде toast
+
+### Fixed
+
+- Library: textarea редактора не очищалась, когда текст становился пустым (удаление типа, тип с пустым скриптом) — go-app не сбрасывает свойство `value`; добавлен `textareaValueSync`
+- Library: список не мигает «Loading...» при перезагрузках, плейсхолдер только при первой загрузке
+- Bruno `put_scene_by_id.yml`: добавлено обязательное поле `version` (без него запрос всегда получал 409)
+
+### Changed
+
+- **BREAKING: имя тега уникально** (`docs/adr/0002-tag-name-is-unique-natural-key.md`, `CONTEXT.md`):
+  - миграция `20260926000000_unique_tag_names.sql` — ограничение `uq_tags_name` вместо индекса `idx_tags_name` (упадёт, если в БД уже есть дубликаты имён)
+  - новая доменная ошибка `tag.ErrTagNameTaken`; репозиторий отображает в неё нарушение `uq_tags_name`
+  - `POST /api/v1/tags` с занятым именем отвечает `409 Conflict` (Problem Details); Bruno: описание в `post_tags.yml`
+
 ## [0.0.25] - 2026-09-24
 
 ### Added

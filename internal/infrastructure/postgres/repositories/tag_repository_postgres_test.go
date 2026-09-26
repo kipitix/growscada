@@ -381,3 +381,54 @@ func TestDeleteByID_NotFound_ReturnsErrTagNotFound(t *testing.T) {
 		t.Errorf("expected ErrTagNotFound, got %v", err)
 	}
 }
+
+func TestSave_DuplicateName_ReturnsErrTagNameTaken(t *testing.T) {
+	cleanTags(t)
+	repo := repositories.NewTagRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	if _, err := repo.Save(ctx, makeTag(t, "temperature", repo)); err != nil {
+		t.Fatalf("first Save failed: %v", err)
+	}
+
+	_, err := repo.Save(ctx, makeTag(t, "temperature", repo))
+
+	if !errors.Is(err, tag.ErrTagNameTaken) {
+		t.Errorf("expected ErrTagNameTaken, got %v", err)
+	}
+}
+
+func TestFindByName_ExistingTag_ReturnsTag(t *testing.T) {
+	cleanTags(t)
+	repo := repositories.NewTagRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	newTag := makeTag(t, "temperature", repo)
+	if _, err := repo.Save(ctx, newTag); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+	if _, err := repo.Save(ctx, makeTag(t, "pressure", repo)); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	found, err := repo.FindByName(ctx, newTag.Name())
+
+	if err != nil {
+		t.Fatalf("FindByName returned unexpected error: %v", err)
+	}
+	if found.ID() != newTag.ID() {
+		t.Errorf("id: expected %v, got %v", newTag.ID(), found.ID())
+	}
+}
+
+func TestFindByName_NotFound_ReturnsErrTagNotFound(t *testing.T) {
+	cleanTags(t)
+	repo := repositories.NewTagRepositoryPostgres(testDB)
+	name, _ := tag.NewTagName("missing")
+
+	_, err := repo.FindByName(context.Background(), name)
+
+	if !errors.Is(err, tag.ErrTagNotFound) {
+		t.Errorf("expected ErrTagNotFound, got %v", err)
+	}
+}

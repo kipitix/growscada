@@ -17,14 +17,15 @@ All primary workflows go through `make`. **Always prefer `make <target>` over ru
 | Target | What it does |
 |--------|-------------|
 | `make install_tools` | Installs `goose` migration tool via `go install` |
-| `make build` | Compiles WASM frontend (`app.wasm`) and server binary; outputs to `bin/growscada_combined_server/` |
+| `make build` | Compiles WASM frontend (`app.wasm`) and server binary to `bin/growscada_combined_server/`, and the `growctl` CLI to `bin/growctl/` |
 | `make run` | `build` + starts server + opens Chromium at `localhost:8080` |
 | `make db_up` | Starts the dev PostgreSQL container via Docker Compose; applies migrations and seeds automatically |
 | `make db_down` | Stops the container and **deletes** the data volume |
 | `make test` | Runs all tests with coverage (`go test --cover ./...`) |
+| `make bench` | Runs benchmarks only (`go test -run=^$ -bench=. -benchmem ./...`) |
 | `make full_restart` | Clean-slate restart: `db_down` → `db_up` → `run` (use when the DB state is stale or corrupted) |
 
-`make build` runs two compilations: `GOARCH=wasm GOOS=js` for `app.wasm`, then host-arch for the server binary.
+`make build` runs three compilations: `GOARCH=wasm GOOS=js` for `app.wasm`, then host-arch for the server binary and for `growctl` (declarative tag manifests, kubectl-style).
 
 ## Commands
 
@@ -53,6 +54,7 @@ internal/
   interface/      # Delivery mechanisms (REST API, PWA UI)
 cmd/
   combined_server/ # Entry point — wires everything together
+  growctl/         # CLI entry point; logic in internal/growctl (REST client, manifests, planner)
 ```
 
 ### Domain Layer (`internal/domain/`)

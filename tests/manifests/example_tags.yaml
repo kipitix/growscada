@@ -1,0 +1,30 @@
+# Example growctl manifest: seeds tags for a test environment.
+#   make build
+#   bin/growctl/growctl apply -f tests/manifests/example_tags.yaml
+# initialValue/initialQuality are used only when a tag is created.
+apiVersion: growscada/v1
+kind: Tag
+metadata:
+  name: sim.pump1.running
+spec:
+  type: boolean
+  initialValue: "false"
+  initialQuality: good
+---
+apiVersion: growscada/v1
+kind: Tag
+metadata:
+  name: sim.pump1.speed
+spec:
+  type: integer
+  initialValue: "0"
+  initialQuality: uncertain
+---
+apiVersion: growscada/v1
+kind: Tag
+metadata:
+  name: sim.pump1.mode
+spec:
+  type: string
+  initialValue: "auto"
+  initialQuality: good

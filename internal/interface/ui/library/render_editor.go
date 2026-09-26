@@ -98,6 +98,28 @@ func (p *previewFrame) Render() app.UI {
 func (p *previewFrame) OnMount(ctx app.Context)  { uiutil.SetIframeSrcdoc(p.ID, p.Srcdoc) }
 func (p *previewFrame) OnUpdate(ctx app.Context) { uiutil.SetIframeSrcdoc(p.ID, p.Srcdoc) }
 
+// textareaValueSync keeps the DOM value of the textarea with the given ID equal
+// to Value. go-app renders a textarea's value as its text content and never
+// resets the value property when that text becomes empty, so without this a
+// cleared editor (deleted or empty widget type) keeps showing stale text.
+type textareaValueSync struct {
+	app.Compo
+	TextareaID string
+	Value      string
+}
+
+func (s *textareaValueSync) Render() app.UI { return app.Span().Style("display", "none") }
+
+func (s *textareaValueSync) OnMount(ctx app.Context)  { s.sync() }
+func (s *textareaValueSync) OnUpdate(ctx app.Context) { s.sync() }
+
+func (s *textareaValueSync) sync() {
+	el := app.Window().Get("document").Call("getElementById", s.TextareaID)
+	if el.Truthy() && el.Get("value").String() != s.Value {
+		el.Set("value", s.Value)
+	}
+}
+
 // ── Editor columns ────────────────────────────────────────────────────────────
 
 func (l *Library) renderEditorColumn(title, id, value string, onInput func(app.Context, app.Event), showApply bool) app.UI {
@@ -128,7 +150,7 @@ func (l *Library) renderEditorColumn(title, id, value string, onInput func(app.C
 			Style("min-height", "0").
 			Style("display", "flex").
 			Style("flex-direction", "column").
-			Body(textarea),
+			Body(textarea, &textareaValueSync{TextareaID: id, Value: value}),
 	}
 	if showApply {
 		colBody = append(colBody, l.renderApplyButton())

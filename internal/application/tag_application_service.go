@@ -16,6 +16,9 @@ import (
 type TagService interface {
 	FindAllTags(context.Context) ([]appdto.Tag, error)
 	FindTagByID(context.Context, uuid.UUID) (appdto.Tag, error)
+	FindTagByName(context.Context, string) (appdto.Tag, error)
+	FindTagsByNamePattern(context.Context, string) ([]appdto.Tag, error)
+	FindTagsByNameRegex(context.Context, string) ([]appdto.Tag, error)
 	CreateTag(context.Context, appdto.CreateTagInput) (appdto.Tag, error)
 	DeleteTagByID(context.Context, uuid.UUID) (appdto.Tag, error)
 	SetTagValueByID(context.Context, appdto.UpdateTagInput) (appdto.Tag, error)
@@ -57,6 +60,57 @@ func (t tagServiceImpl) FindTagByID(ctx context.Context, rawID uuid.UUID) (appdt
 	}
 
 	return appdto.NewTag(foundTag), nil
+}
+
+// FindTagByName returns a tag by its unique name
+func (t tagServiceImpl) FindTagByName(ctx context.Context, rawName string) (appdto.Tag, error) {
+	tagName, err := tag.NewTagName(rawName)
+	if err != nil {
+		return appdto.Tag{}, fmt.Errorf("cannot find tag because of name: %w", err)
+	}
+
+	foundTag, err := t.tagRepository.FindByName(ctx, tagName)
+	if err != nil {
+		return appdto.Tag{}, fmt.Errorf("error on find tag by name in repository: %w", err)
+	}
+
+	return appdto.NewTag(foundTag), nil
+}
+
+// FindTagsByNamePattern returns the tags whose whole name matches a wildcard
+// pattern ("*" any sequence, "?" one character). An invalid pattern returns
+// an error wrapping tag.ErrInvalidTagNameMatcher.
+func (t tagServiceImpl) FindTagsByNamePattern(ctx context.Context, pattern string) ([]appdto.Tag, error) {
+	matcher, err := tag.NewTagNamePattern(pattern)
+	if err != nil {
+		return nil, err
+	}
+	return t.findTagsMatching(ctx, matcher)
+}
+
+// FindTagsByNameRegex returns the tags whose name matches a Go (RE2) regular
+// expression anywhere. An invalid expression returns an error wrapping
+// tag.ErrInvalidTagNameMatcher.
+func (t tagServiceImpl) FindTagsByNameRegex(ctx context.Context, expr string) ([]appdto.Tag, error) {
+	matcher, err := tag.NewTagNameRegex(expr)
+	if err != nil {
+		return nil, err
+	}
+	return t.findTagsMatching(ctx, matcher)
+}
+
+func (t tagServiceImpl) findTagsMatching(ctx context.Context, matcher tag.TagNameMatcher) ([]appdto.Tag, error) {
+	tags, err := t.tagRepository.FindAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("error on find tags in repository: %w", err)
+	}
+	var matched []tag.Tag
+	for _, found := range tags {
+		if matcher.Matches(found.Name()) {
+			matched = append(matched, found)
+		}
+	}
+	return appdto.NewTagList(matched), nil
 }
 
 // CreateTag creates a new tag and returns the created tag DTO

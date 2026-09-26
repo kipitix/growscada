@@ -617,3 +617,119 @@ func TestSetTagValueByID_StaleVersion_ReturnsConflict(t *testing.T) {
 		t.Errorf("expected wrapped ErrTagConflict, got: %v", err)
 	}
 }
+
+// --- FindTagByName / unique name ---
+
+func TestFindTagByName_ExistingTag_ReturnsTag(t *testing.T) {
+	cleanTags(t)
+	svc := newService()
+	ctx := context.Background()
+
+	created, err := svc.CreateTag(ctx, appdto.CreateTagInput{Name: "temperature", Type: "integer", Value: "42", Quality: "good"})
+	if err != nil {
+		t.Fatalf("CreateTag failed: %v", err)
+	}
+
+	found, err := svc.FindTagByName(ctx, "temperature")
+
+	if err != nil {
+		t.Fatalf("FindTagByName returned unexpected error: %v", err)
+	}
+	if found.ID != created.ID {
+		t.Errorf("id: expected %v, got %v", created.ID, found.ID)
+	}
+}
+
+func TestFindTagByName_NotFound_ReturnsWrappedErrTagNotFound(t *testing.T) {
+	cleanTags(t)
+	svc := newService()
+
+	_, err := svc.FindTagByName(context.Background(), "missing")
+
+	if !errors.Is(err, tag.ErrTagNotFound) {
+		t.Errorf("expected wrapped ErrTagNotFound, got: %v", err)
+	}
+}
+
+func TestCreateTag_DuplicateName_ReturnsWrappedErrTagNameTaken(t *testing.T) {
+	cleanTags(t)
+	svc, bus := newServiceWithBus()
+	ctx := context.Background()
+
+	req := appdto.CreateTagInput{Name: "temperature", Type: "integer", Value: "42", Quality: "good"}
+	if _, err := svc.CreateTag(ctx, req); err != nil {
+		t.Fatalf("first CreateTag failed: %v", err)
+	}
+	var published []event.Event
+	bus.Subscribe(event.EventTypeTagCreated, func(e event.Event) { published = append(published, e) })
+
+	_, err := svc.CreateTag(ctx, req)
+
+	if !errors.Is(err, tag.ErrTagNameTaken) {
+		t.Errorf("expected wrapped ErrTagNameTaken, got: %v", err)
+	}
+	if len(published) != 0 {
+		t.Errorf("expected no TagCreated event, got %d", len(published))
+	}
+}
+
+// --- FindTagsByNamePattern / FindTagsByNameRegex ---
+
+func createTags(t *testing.T, svc application.TagService, names ...string) {
+	t.Helper()
+	for _, name := range names {
+		if _, err := svc.CreateTag(context.Background(), appdto.CreateTagInput{Name: name, Type: "integer", Value: "0", Quality: "good"}); err != nil {
+			t.Fatalf("CreateTag(%q): %v", name, err)
+		}
+	}
+}
+
+func tagNames(tags []appdto.Tag) map[string]bool {
+	names := make(map[string]bool, len(tags))
+	for _, tg := range tags {
+		names[tg.Name] = true
+	}
+	return names
+}
+
+func TestFindTagsByNamePattern_ReturnsMatchingTags(t *testing.T) {
+	cleanTags(t)
+	svc := newService()
+	createTags(t, svc, "pump1.speed", "pump2.speed", "pump12.speed", "valve1.state")
+
+	got, err := svc.FindTagsByNamePattern(context.Background(), "pump?.speed")
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	names := tagNames(got)
+	if len(names) != 2 || !names["pump1.speed"] || !names["pump2.speed"] {
+		t.Errorf("got %v, want pump1.speed and pump2.speed", names)
+	}
+}
+
+func TestFindTagsByNameRegex_ReturnsMatchingTags(t *testing.T) {
+	cleanTags(t)
+	svc := newService()
+	createTags(t, svc, "pump1.speed", "pump12.speed", "valve1.state")
+
+	got, err := svc.FindTagsByNameRegex(context.Background(), `^pump\d+\.`)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	names := tagNames(got)
+	if len(names) != 2 || !names["pump1.speed"] || !names["pump12.speed"] {
+		t.Errorf("got %v, want pump1.speed and pump12.speed", names)
+	}
+}
+
+func TestFindTagsByNameRegex_Invalid_ReturnsErrInvalidTagNameMatcher(t *testing.T) {
+	svc := newService()
+
+	_, err := svc.FindTagsByNameRegex(context.Background(), `pump(`)
+
+	if !errors.Is(err, tag.ErrInvalidTagNameMatcher) {
+		t.Errorf("expected ErrInvalidTagNameMatcher, got %v", err)
+	}
+}

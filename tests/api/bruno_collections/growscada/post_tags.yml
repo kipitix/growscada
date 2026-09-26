@@ -17,6 +17,10 @@ http:
       }
   auth: inherit
 
+docs: |
+  A tag's name is unique (ADR 0002): creating a second tag with an existing
+  name returns `409 Conflict` Problem Details.
+
 settings:
   encodeUrl: true
   timeout: 0

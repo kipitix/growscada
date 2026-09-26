@@ -1,15 +1,13 @@
 package project
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
-	"net/http"
 	"strconv"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
-	"github.com/kipitix/growscada/internal/interface/ui/toast"
+	"github.com/kipitix/growscada/internal/interface/ui/uiutil"
 )
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -32,6 +30,15 @@ type Project struct {
 	scenes      []sceneItem
 	widgets     []widgetItem
 	tags        []tagItem
+
+	// Coalesce reloads of each server-backed list (see live_reload.go).
+	widgetTypesReloader uiutil.Reloader
+	scenesReloader      uiutil.Reloader
+	widgetsReloader     uiutil.Reloader
+	tagsReloader        uiutil.Reloader
+	// widgetsReloadDeferred is set when a widget reload arrives mid-drag; it
+	// runs once the drag ends so the canvas does not jump under the cursor.
+	widgetsReloadDeferred bool
 
 	// ── Tags sub-tab state ──────────────────────────────────────────────────
 	selectedTagID string
@@ -148,82 +155,11 @@ func (p *Project) OnMount(ctx app.Context) {
 		p.loadWidgets(ctx) // load widgets for the restored scene immediately
 	}
 	p.loadTags(ctx)
+
+	p.handleServerEvents(ctx)
 }
 
 // ── Data loading ──────────────────────────────────────────────────────────────
-
-func (p *Project) loadWidgetTypes(ctx app.Context) {
-	url := p.apiServerURL + "/api/v1/widget-types"
-	ctx.Async(func() {
-		resp, err := http.Get(url)
-		if err != nil {
-			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
-			})
-			return
-		}
-		if resp.StatusCode >= 400 {
-			prob := toast.FromHTTPError(resp)
-			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, prob)
-			})
-			return
-		}
-		defer resp.Body.Close()
-		var result getWidgetTypesResponse
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
-			})
-			return
-		}
-		ctx.Dispatch(func(ctx app.Context) { p.widgetTypes = result.WidgetTypes })
-	})
-}
-
-func (p *Project) loadTags(ctx app.Context) {
-	url := p.apiServerURL + "/api/v1/tags"
-	ctx.Async(func() {
-		resp, err := http.Get(url)
-		if err != nil {
-			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
-			})
-			return
-		}
-		if resp.StatusCode >= 400 {
-			prob := toast.FromHTTPError(resp)
-			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, prob)
-			})
-			return
-		}
-		defer resp.Body.Close()
-		var result getTagsResponse
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
-			})
-			return
-		}
-		ctx.Dispatch(func(ctx app.Context) {
-			p.tags = result.Tags
-			if p.selectedTagID != "" {
-				found := false
-				for _, t := range result.Tags {
-					if t.ID == p.selectedTagID {
-						found = true
-						break
-					}
-				}
-				if !found {
-					p.selectedTagID = ""
-					ctx.LocalStorage().Set("project:tagID", "")
-				}
-			}
-		})
-	})
-}
 
 // ── Widget selection helpers ──────────────────────────────────────────────────
 
@@ -236,18 +172,6 @@ func (p *Project) selectWidget(ctx app.Context, id string) {
 			break
 		}
 	}
-}
-
-func (p *Project) syncEditingFields(w widgetItem) {
-	p.editingWidgetName = w.Name
-	p.editingPosX = fmt.Sprintf("%.1f", w.Position.X)
-	p.editingPosY = fmt.Sprintf("%.1f", w.Position.Y)
-	p.editingPosZ = strconv.Itoa(w.Position.Z)
-	p.editingWidth = strconv.Itoa(w.Size.Width)
-	p.editingHeight = strconv.Itoa(w.Size.Height)
-	p.editingOriginX = fmt.Sprintf("%.3f", w.Origin.X)
-	p.editingOriginY = fmt.Sprintf("%.3f", w.Origin.Y)
-	p.editingRotation = fmt.Sprintf("%.1f", w.Rotation.Degrees)
 }
 
 func (p *Project) clearWidgetSelection(ctx app.Context) {

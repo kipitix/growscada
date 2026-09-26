@@ -35,6 +35,9 @@ func (r tagRepositoryPostgresImpl) Save(ctx context.Context, aTag tag.Tag) (tag.
 			aTag.Value().String(), aTag.Quality().String(), version.Committed[tag.Tag]().Number(),
 		)
 		if err != nil {
+			if isUniqueViolation(err, constraintTagsName) {
+				return nil, tag.ErrTagNameTaken
+			}
 			return nil, fmt.Errorf("cannot insert new tag: %w", err)
 		}
 		rowsAffected, err := sqlResult.RowsAffected()
@@ -60,6 +63,9 @@ func (r tagRepositoryPostgresImpl) Save(ctx context.Context, aTag tag.Tag) (tag.
 			aTag.Quality().String(), aTag.ID().UUID(), aTag.Version().Number(),
 		)
 		if err != nil {
+			if isUniqueViolation(err, constraintTagsName) {
+				return nil, tag.ErrTagNameTaken
+			}
 			return nil, fmt.Errorf("cannot update tag: %w", err)
 		}
 		rowsAffected, err := sqlResult.RowsAffected()
@@ -92,6 +98,31 @@ func (r tagRepositoryPostgresImpl) FindByID(ctx context.Context, tagID id.ID[tag
 	row := r.db.QueryRowContext(ctx,
 		`SELECT id, name, type, value, quality, version FROM tags WHERE id = $1`,
 		tagID.UUID(),
+	)
+	err := row.Scan(&tagUUID, &name, &tagType, &value, &quality, &ver)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, tag.ErrTagNotFound
+		}
+		return nil, fmt.Errorf("error scanning tag: %w", err)
+	}
+
+	return r.reconstruct(tagUUID, name, tagType, value, quality, ver)
+}
+
+func (r tagRepositoryPostgresImpl) FindByName(ctx context.Context, aName tag.TagName) (tag.Tag, error) {
+	var (
+		tagUUID uuid.UUID
+		name    string
+		tagType string
+		value   string
+		quality string
+		ver     int
+	)
+
+	row := r.db.QueryRowContext(ctx,
+		`SELECT id, name, type, value, quality, version FROM tags WHERE name = $1`,
+		aName.String(),
 	)
 	err := row.Scan(&tagUUID, &name, &tagType, &value, &quality, &ver)
 	if err != nil {

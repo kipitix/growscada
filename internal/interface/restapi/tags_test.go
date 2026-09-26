@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -157,6 +158,121 @@ func TestGetTags_WithTags_Returns200WithAll(t *testing.T) {
 	}
 }
 
+func TestGetTags_NameFilter_ExistingTag_Returns200WithOneTag(t *testing.T) {
+	cleanTags(t)
+	created := createTagViaService(t, "temperature", "integer", "10", "good")
+	createTagViaService(t, "pressure", "integer", "20", "good")
+	router := newRouter()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tags?name=temperature", nil)
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status: expected 200, got %d", rec.Code)
+	}
+
+	var resp restdto.GetTagsResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp.Tags) != 1 {
+		t.Fatalf("expected 1 tag, got %d", len(resp.Tags))
+	}
+	if resp.Tags[0].ID != created.ID {
+		t.Errorf("id: expected %v, got %v", created.ID, resp.Tags[0].ID)
+	}
+}
+
+func TestGetTags_NameFilter_NoMatch_Returns200WithEmptyList(t *testing.T) {
+	cleanTags(t)
+	createTagViaService(t, "temperature", "integer", "10", "good")
+	router := newRouter()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tags?name=missing", nil)
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status: expected 200, got %d", rec.Code)
+	}
+	if body := rec.Body.String(); body != `{"tags":[]}` {
+		t.Errorf("body: expected empty list, got %s", body)
+	}
+}
+
+func getTagNames(t *testing.T, router *restapi.APIRouter, query string) (int, map[string]bool) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tags?"+query, nil)
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		return rec.Code, nil
+	}
+	var resp restdto.GetTagsResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	names := make(map[string]bool, len(resp.Tags))
+	for _, tg := range resp.Tags {
+		names[tg.Name] = true
+	}
+	return rec.Code, names
+}
+
+func TestGetTags_NamePattern_Returns200WithMatchingTags(t *testing.T) {
+	cleanTags(t)
+	createTagViaService(t, "pump1.speed", "integer", "0", "good")
+	createTagViaService(t, "pump2.speed", "integer", "0", "good")
+	createTagViaService(t, "pump1.state", "boolean", "false", "good")
+	router := newRouter()
+
+	code, names := getTagNames(t, router, "name_pattern="+url.QueryEscape("pump*.speed"))
+
+	if code != http.StatusOK {
+		t.Fatalf("status: expected 200, got %d", code)
+	}
+	if len(names) != 2 || !names["pump1.speed"] || !names["pump2.speed"] {
+		t.Errorf("got %v, want pump1.speed and pump2.speed", names)
+	}
+}
+
+func TestGetTags_NameRegex_Returns200WithMatchingTags(t *testing.T) {
+	cleanTags(t)
+	createTagViaService(t, "pump1.speed", "integer", "0", "good")
+	createTagViaService(t, "pump1.state", "boolean", "false", "good")
+	router := newRouter()
+
+	code, names := getTagNames(t, router, "name_regex="+url.QueryEscape(`\.st`))
+
+	if code != http.StatusOK {
+		t.Fatalf("status: expected 200, got %d", code)
+	}
+	if len(names) != 1 || !names["pump1.state"] {
+		t.Errorf("got %v, want pump1.state", names)
+	}
+}
+
+func TestGetTags_NameRegex_Invalid_Returns400(t *testing.T) {
+	router := newRouter()
+
+	code, _ := getTagNames(t, router, "name_regex="+url.QueryEscape("pump("))
+
+	if code != http.StatusBadRequest {
+		t.Errorf("status: expected 400, got %d", code)
+	}
+}
+
+func TestGetTags_SeveralNameFilters_Returns400(t *testing.T) {
+	router := newRouter()
+
+	code, _ := getTagNames(t, router, "name=a&name_pattern=a*")
+
+	if code != http.StatusBadRequest {
+		t.Errorf("status: expected 400, got %d", code)
+	}
+}
+
 // --- GET /api/v1/tags/{id} ---
 
 func TestGetTagsByID_ExistingTag_Returns200WithTag(t *testing.T) {
@@ -259,6 +375,30 @@ func TestPostTags_ValidBody_Returns201WithID(t *testing.T) {
 	}
 	if resp.ID == uuid.Nil {
 		t.Error("expected non-zero ID in response")
+	}
+}
+
+func TestPostTags_DuplicateName_Returns409WithProblemDetails(t *testing.T) {
+	cleanTags(t)
+	createTagViaService(t, "flow", "integer", "0", "good")
+	router := newRouter()
+
+	body, _ := json.Marshal(restdto.CreateTagRequest{Name: "flow", Type: "boolean", Value: "false", Quality: "good"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tags", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Errorf("status: expected 409, got %d\nbody: %s", rec.Code, rec.Body.String())
+	}
+
+	var prob restapi.ProblemDetails
+	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
+		t.Fatalf("decode problem: %v", err)
+	}
+	if prob.Type != restapi.TypeConflict {
+		t.Errorf("problem type: expected %q, got %q", restapi.TypeConflict, prob.Type)
 	}
 }
 

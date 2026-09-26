@@ -16,58 +16,6 @@ import (
 
 // ── Widget data loading ───────────────────────────────────────────────────────
 
-func (p *Project) loadWidgets(ctx app.Context) {
-	sceneID := p.selectedSceneID
-	if sceneID == "" {
-		ctx.Dispatch(func(ctx app.Context) { p.widgets = nil })
-		return
-	}
-	url := p.apiServerURL + "/api/v1/scenes/" + sceneID + "/widgets"
-	ctx.Async(func() {
-		resp, err := http.Get(url)
-		if err != nil {
-			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
-			})
-			return
-		}
-		if resp.StatusCode >= 400 {
-			prob := toast.FromHTTPError(resp)
-			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, prob)
-			})
-			return
-		}
-		defer resp.Body.Close()
-		var result getWidgetsResponse
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
-			})
-			return
-		}
-		ctx.Dispatch(func(ctx app.Context) {
-			if p.selectedSceneID != sceneID {
-				return
-			}
-			p.widgets = result.Widgets
-			if p.selectedWidgetID != "" {
-				found := false
-				for _, w := range p.widgets {
-					if w.ID == p.selectedWidgetID {
-						p.syncEditingFields(w)
-						found = true
-						break
-					}
-				}
-				if !found {
-					p.clearWidgetSelection(ctx)
-				}
-			}
-		})
-	})
-}
-
 // currentSceneVersion returns the last-known version of the selected scene,
 // the sole optimistic-lock boundary shared by the scene and all its widgets.
 func (p *Project) currentSceneVersion() int {
@@ -366,6 +314,10 @@ func (p *Project) finalizeAllDrags(ctx app.Context) {
 	if anyDrag {
 		p.dragJustEnded = p.dragDidMove
 		p.dragDidMove = false
+	}
+	if p.widgetsReloadDeferred {
+		p.widgetsReloadDeferred = false
+		p.loadWidgets(ctx)
 	}
 }
 
