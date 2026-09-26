@@ -38,6 +38,11 @@ func (e *ExitError) Error() string {
 
 func (e *ExitError) Unwrap() error { return e.Err }
 
+// usageError marks an error as a usage error: exit status 2.
+func usageError(err error) error {
+	return &ExitError{Code: 2, Err: err}
+}
+
 // NewRootCommand builds the growctl command tree. Output goes to the command's
 // out writer (cmd.SetOut), manifests given as "-" are read from its input.
 func NewRootCommand() *cobra.Command {
@@ -51,10 +56,12 @@ func NewRootCommand() *cobra.Command {
 		Short:         "Declaratively manage GrowSCADA tags from YAML manifests",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		Args:          cobra.ArbitraryArgs,
+		RunE:          runGroup,
 	}
 	// Usage errors exit with 2, so diff's exit status 1 always means "there are changes".
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
-		return &ExitError{Code: 2, Err: err}
+		return usageError(err)
 	})
 	root.PersistentFlags().StringVar(&server, "server", server,
 		"GrowSCADA REST API URL (env "+ServerEnv+")")
@@ -72,10 +79,29 @@ func NewRootCommand() *cobra.Command {
 	return root
 }
 
+// runGroup is the RunE of a command group: without arguments it prints help,
+// an unknown subcommand is a usage error (exit status 2). Cobra itself reports
+// it as a plain error, or — for a non-root group — prints help and succeeds.
+// Groups set Args to cobra.ArbitraryArgs so that the argument reaches runGroup.
+func runGroup(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return cmd.Help()
+	}
+	return usageError(fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath()))
+}
+
+// requireFiles reports a missing -f as a usage error (exit status 2).
+func requireFiles(files []string) error {
+	if len(files) == 0 {
+		return usageError(errNoManifest)
+	}
+	return nil
+}
+
 // noArgs rejects positional arguments as a usage error (exit status 2).
 func noArgs(cmd *cobra.Command, args []string) error {
 	if err := cobra.NoArgs(cmd, args); err != nil {
-		return &ExitError{Code: 2, Err: err}
+		return usageError(err)
 	}
 	return nil
 }
@@ -122,6 +148,9 @@ func newApplyCommand(newClient func() *Client) *cobra.Command {
 			"--regex limits pruning to the tags they select (the manifest's own scope).",
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := requireFiles(files); err != nil {
+				return err
+			}
 			scope, err := flags.scope(cmd)
 			if err != nil {
 				return err
@@ -152,6 +181,9 @@ func newDiffCommand(newClient func() *Client) *cobra.Command {
 			"Exit status: 0 — no changes, 1 — there are changes, 2 — error.",
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := requireFiles(files); err != nil {
+				return err
+			}
 			scope, err := flags.scope(cmd)
 			if err != nil {
 				return err

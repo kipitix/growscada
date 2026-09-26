@@ -16,8 +16,22 @@ import (
 	"github.com/kipitix/growscada/internal/interface/restapi/restdto"
 )
 
-// errNotFound is returned when the server answers 404 for a tag.
+// errNotFound matches (errors.Is) an error for a 404 response.
 var errNotFound = errors.New("not found")
+
+// statusError is a response with an unexpected HTTP status. Its message names
+// the request, so a --server pointing at the wrong place is easy to spot.
+type statusError struct {
+	status int
+	msg    string
+}
+
+func (e *statusError) Error() string { return e.msg }
+
+// Is makes a 404 match errNotFound.
+func (e *statusError) Is(target error) bool {
+	return target == errNotFound && e.status == http.StatusNotFound
+}
 
 // Client talks to the GrowSCADA REST API.
 type Client struct {
@@ -55,7 +69,7 @@ func (c *Client) ListTagsMatching(ctx context.Context, f NameFilter) ([]ServerTa
 
 // FindTagByName returns the tag with the given name, or false if there is none.
 func (c *Client) FindTagByName(ctx context.Context, name string) (ServerTag, bool, error) {
-	tags, err := c.getTags(ctx, "/api/v1/tags?name="+url.QueryEscape(name))
+	tags, err := c.getTags(ctx, "/api/v1/tags?"+restdto.TagsQueryName+"="+url.QueryEscape(name))
 	if err != nil {
 		return ServerTag{}, false, err
 	}
@@ -83,7 +97,7 @@ func (c *Client) CreateTag(ctx context.Context, m TagManifest) error {
 	return c.do(ctx, http.MethodPost, "/api/v1/tags", body, http.StatusCreated, nil)
 }
 
-// DeleteTag deletes a tag by ID. Returns errNotFound if it is already gone.
+// DeleteTag deletes a tag by ID. The error matches errNotFound if it is already gone.
 func (c *Client) DeleteTag(ctx context.Context, id uuid.UUID) error {
 	return c.do(ctx, http.MethodDelete, "/api/v1/tags/"+id.String(), nil, http.StatusOK, nil)
 }
@@ -101,7 +115,7 @@ func (c *Client) getTags(ctx context.Context, path string) ([]ServerTag, error) 
 }
 
 // do sends a request and decodes a successful JSON response into out (if not nil).
-// Any other status is turned into an error carrying the Problem Details detail.
+// Any other status is a *statusError carrying the Problem Details detail.
 func (c *Client) do(ctx context.Context, method, path string, body []byte, wantStatus int, out any) error {
 	var reader io.Reader
 	if body != nil {
@@ -122,16 +136,16 @@ func (c *Client) do(ctx context.Context, method, path string, body []byte, wantS
 	defer resp.Body.Close()
 
 	if resp.StatusCode != wantStatus {
-		if resp.StatusCode == http.StatusNotFound {
-			return errNotFound
+		return &statusError{
+			status: resp.StatusCode,
+			msg:    fmt.Sprintf("%s %s: %s%s", method, req.URL, resp.Status, problemDetail(resp.Body)),
 		}
-		return fmt.Errorf("%s %s: %s%s", method, path, resp.Status, problemDetail(resp.Body))
 	}
 	if out == nil {
 		return nil
 	}
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return fmt.Errorf("%s %s: cannot decode response: %w", method, path, err)
+		return fmt.Errorf("%s %s: cannot decode response: %w", method, req.URL, err)
 	}
 	return nil
 }

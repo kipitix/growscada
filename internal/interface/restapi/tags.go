@@ -33,7 +33,7 @@ func NewTagsHandler(s application.TagService) *TagsHandlers {
 func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	filters := 0
-	for _, param := range []string{"name", "name_pattern", "name_regex"} {
+	for _, param := range []string{restdto.TagsQueryName, restdto.TagsQueryNamePattern, restdto.TagsQueryNameRegex} {
 		if query.Has(param) {
 			filters++
 		}
@@ -45,14 +45,14 @@ func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch {
-	case query.Has("name"):
-		h.getTagsByName(w, r, query.Get("name"))
+	case query.Has(restdto.TagsQueryName):
+		h.getTagsByName(w, r, query.Get(restdto.TagsQueryName))
 		return
-	case query.Has("name_pattern"):
-		h.sendMatchedTags(w, r, h.service.FindTagsByNamePattern, query.Get("name_pattern"))
+	case query.Has(restdto.TagsQueryNamePattern):
+		h.sendMatchedTags(w, r, h.service.FindTagsByNamePattern, query.Get(restdto.TagsQueryNamePattern))
 		return
-	case query.Has("name_regex"):
-		h.sendMatchedTags(w, r, h.service.FindTagsByNameRegex, query.Get("name_regex"))
+	case query.Has(restdto.TagsQueryNameRegex):
+		h.sendMatchedTags(w, r, h.service.FindTagsByNameRegex, query.Get(restdto.TagsQueryNameRegex))
 		return
 	}
 

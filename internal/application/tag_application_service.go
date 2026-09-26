@@ -83,7 +83,7 @@ func (t tagServiceImpl) FindTagByName(ctx context.Context, rawName string) (appd
 func (t tagServiceImpl) FindTagsByNamePattern(ctx context.Context, pattern string) ([]appdto.Tag, error) {
 	matcher, err := tag.NewTagNamePattern(pattern)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot find tags because of name pattern: %w", err)
 	}
 	return t.findTagsMatching(ctx, matcher)
 }
@@ -94,7 +94,7 @@ func (t tagServiceImpl) FindTagsByNamePattern(ctx context.Context, pattern strin
 func (t tagServiceImpl) FindTagsByNameRegex(ctx context.Context, expr string) ([]appdto.Tag, error) {
 	matcher, err := tag.NewTagNameRegex(expr)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot find tags because of name regex: %w", err)
 	}
 	return t.findTagsMatching(ctx, matcher)
 }

@@ -9,7 +9,7 @@ http:
   auth: inherit
 
 docs: |
-  Filters the tag list by the tag's unique name (ADR 0002). The response has
+  Filters the tag list by the tag's unique name (ADR 0003). The response has
   the same shape as `GET /tags` and holds 0 or 1 tags: `{"tags":[...]}`.
   No match is `200` with an empty list, not `404`.
 

@@ -25,6 +25,9 @@ const (
 	KindTag = "Tag"
 )
 
+// errNoManifest is returned when no manifest source is given.
+var errNoManifest = errors.New("no manifest given: use -f <file|directory|->")
+
 // TagManifest is a validated Tag document from a manifest.
 // InitialValue and InitialQuality are applied only when the tag is created.
 type TagManifest struct {
@@ -40,11 +43,12 @@ type documentHeader struct {
 	Kind       string `yaml:"kind"`
 }
 
-// tagDocument is the strict shape of a `kind: Tag` document.
+// tagDocument is the strict shape of a `kind: Tag` document, read by apply,
+// diff and delete and written by get -o yaml. Spec fields are pointers so that
+// a missing field is told apart from an empty one.
 type tagDocument struct {
-	APIVersion string `yaml:"apiVersion"`
-	Kind       string `yaml:"kind"`
-	Metadata   struct {
+	documentHeader `yaml:",inline"`
+	Metadata       struct {
 		Name string `yaml:"name"`
 	} `yaml:"metadata"`
 	Spec struct {
@@ -59,7 +63,7 @@ type tagDocument struct {
 // Tag names must be unique across all sources.
 func ReadManifests(sources []string, stdin io.Reader) ([]TagManifest, error) {
 	if len(sources) == 0 {
-		return nil, errors.New("no manifest given: use -f <file|directory|->")
+		return nil, errNoManifest
 	}
 
 	var all []TagManifest

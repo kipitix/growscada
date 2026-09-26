@@ -86,31 +86,21 @@ func (r tagRepositoryPostgresImpl) Save(ctx context.Context, aTag tag.Tag) (tag.
 }
 
 func (r tagRepositoryPostgresImpl) FindByID(ctx context.Context, tagID id.ID[tag.Tag]) (tag.Tag, error) {
-	var (
-		tagUUID uuid.UUID
-		name    string
-		tagType string
-		value   string
-		quality string
-		ver     int
-	)
-
-	row := r.db.QueryRowContext(ctx,
+	return r.scanTag(r.db.QueryRowContext(ctx,
 		`SELECT id, name, type, value, quality, version FROM tags WHERE id = $1`,
 		tagID.UUID(),
-	)
-	err := row.Scan(&tagUUID, &name, &tagType, &value, &quality, &ver)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, tag.ErrTagNotFound
-		}
-		return nil, fmt.Errorf("error scanning tag: %w", err)
-	}
-
-	return r.reconstruct(tagUUID, name, tagType, value, quality, ver)
+	))
 }
 
 func (r tagRepositoryPostgresImpl) FindByName(ctx context.Context, aName tag.TagName) (tag.Tag, error) {
+	return r.scanTag(r.db.QueryRowContext(ctx,
+		`SELECT id, name, type, value, quality, version FROM tags WHERE name = $1`,
+		aName.String(),
+	))
+}
+
+// scanTag reads a single `id, name, type, value, quality, version` row; no row is tag.ErrTagNotFound.
+func (r tagRepositoryPostgresImpl) scanTag(row *sql.Row) (tag.Tag, error) {
 	var (
 		tagUUID uuid.UUID
 		name    string
@@ -120,10 +110,6 @@ func (r tagRepositoryPostgresImpl) FindByName(ctx context.Context, aName tag.Tag
 		ver     int
 	)
 
-	row := r.db.QueryRowContext(ctx,
-		`SELECT id, name, type, value, quality, version FROM tags WHERE name = $1`,
-		aName.String(),
-	)
 	err := row.Scan(&tagUUID, &name, &tagType, &value, &quality, &ver)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

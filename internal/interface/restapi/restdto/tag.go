@@ -5,6 +5,18 @@ import (
 	"github.com/kipitix/growscada/internal/application/appdto"
 )
 
+// Name filters of GET /api/v1/tags; at most one may be given.
+const (
+	// TagsQueryName selects the tag with this exact (unique) name.
+	TagsQueryName = "name"
+	// TagsQueryNamePattern selects tags whose whole name matches a wildcard
+	// pattern ("*" any sequence, "?" one character).
+	TagsQueryNamePattern = "name_pattern"
+	// TagsQueryNameRegex selects tags whose name matches a Go (RE2) regular
+	// expression anywhere.
+	TagsQueryNameRegex = "name_regex"
+)
+
 // TagResponse is the HTTP DTO for representing a tag in API responses.
 type TagResponse struct {
 	ID      uuid.UUID `json:"id"`

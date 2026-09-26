@@ -1,7 +1,7 @@
 info:
-  name: post tags
+  name: post tags duplicate name
   type: http
-  seq: 2
+  seq: 26
 
 http:
   method: POST
@@ -10,16 +10,16 @@ http:
     type: json
     data: |-
       {
-        "name": "test",
-        "type": "string",
-        "value": "test",
+        "name": "is_active",
+        "type": "boolean",
+        "value": "false",
         "quality": "good"
       }
   auth: inherit
 
 docs: |
-  A tag's name is unique (ADR 0003): creating a second tag with an existing
-  name returns `409 Conflict` Problem Details (see "post tags duplicate name").
+  A tag's name is unique (ADR 0003). `is_active` already exists in the seed
+  data, so this request returns `409 Conflict` Problem Details.
 
 settings:
   encodeUrl: true

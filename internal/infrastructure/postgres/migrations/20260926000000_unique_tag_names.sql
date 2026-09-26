@@ -1,6 +1,6 @@
 -- +goose Up
 -- +goose StatementBegin
--- A Tag's name is its unique natural key (ADR 0002). The unique constraint's
+-- A Tag's name is its unique natural key (ADR 0003). The unique constraint's
 -- index replaces the plain name index.
 DROP INDEX IF EXISTS idx_tags_name;
 ALTER TABLE tags ADD CONSTRAINT uq_tags_name UNIQUE (name);

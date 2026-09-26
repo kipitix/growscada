@@ -1,6 +1,6 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
-## [Unreleased]
+## [0.0.26] - 2026.09.27
 
 ### Added
 
@@ -8,15 +8,17 @@
   - `cmd/growctl/`, логика в `internal/growctl/` (разбор манифестов, чистый плановщик, REST-клиент, команды на `spf13/cobra`); собирается в `make build` → `bin/growctl/`
   - работает только через REST API: `--server` / `GROWCTL_SERVER`, по умолчанию `http://localhost:9090`
   - `apply -f <файл|каталог|->` создаёт недостающие теги; `initialValue`/`initialQuality` применяются только при создании; `--prune` удаляет теги сервера, которых нет в манифесте
-  - `diff -f` показывает план (код выхода 0 — нет изменений, 1 — есть, 2 — ошибка); `delete -f` удаляет теги манифеста по имени
+  - `diff -f` показывает план, только изменения: `+ tag/<имя> (<type>)` — создание, `- tag/<имя>` — prune (код выхода 0 — нет изменений, 1 — есть, 2 — ошибка); `delete -f` удаляет теги манифеста по имени (отсутствующий тег — строка `tag/<имя> not found`, код выхода 0)
+  - `-f` можно повторять; одно имя тега, объявленное в манифестах дважды, — ошибка; `get tag` — синоним `get tags`
   - план строится до первого изменения: невалидный манифест или смена `type` у существующего тега — ошибка без изменений; сбой REST-запроса останавливает выполнение, повторный `apply` доводит дело до конца
   - тесты: unit-тесты манифеста и плановщика, сквозные тесты через `httptest` с настоящим REST-роутером и Postgres в testcontainers
   - `tests/manifests/example_tags.yaml` — пример манифеста
-  - шаблоны имён `--pattern` (`*`, `?`) / `--regex` (Go RE2): `apply`/`diff --prune --pattern` удаляет только лишние теги внутри шаблона; `delete --pattern|--regex` удаляет подходящие теги с подтверждением (`--yes` — без); `get tags [--pattern|--regex] [-o table|yaml]` — список тегов, `-o yaml` — манифест для `apply -f`. Клиент фильтрует ответ сервера и сам, поэтому сервер без поддержки фильтров не расширит выборку. Ошибки использования — код выхода 2
+  - шаблоны имён `--pattern` (`*`, `?`) / `--regex` (Go RE2): `apply`/`diff --prune --pattern` удаляет только лишние теги внутри шаблона; `delete --pattern|--regex` удаляет подходящие теги с подтверждением (`--yes` — без); `get tags [--pattern|--regex] [-o table|yaml]` — список тегов, `-o yaml` — манифест для `apply -f`. Клиент фильтрует ответ сервера и сам, поэтому сервер без поддержки фильтров не расширит выборку. Ошибки использования — код выхода 2, в том числе `apply`/`diff` без `-f` и неизвестная подкоманда (`growctl foo`, `growctl get foo`)
+  - ошибка HTTP-ответа называет метод и полный URL запроса (`GET http://…/api/v1/tags: 404 Not Found`), поэтому неверный `--server` сразу виден
   - клиент сверяет имя в ответе `GET /tags?name=`, поэтому корректно работает и с сервером, который фильтр ещё не поддерживает
 - `GET /api/v1/tags?name=<имя>` — фильтр по имени тега; ответ той же формы `{"tags":[...]}` с 0 или 1 элементом; Bruno: `get_tags_by_name.yml`
 - `TagRepository.FindByName`, `TagService.FindTagByName`
-- Поиск тегов по шаблону и регулярному выражению — `GET /api/v1/tags?name_pattern=<шаблон>` (`*` — любая последовательность, `?` — один символ, совпадение со всем именем) и `GET /api/v1/tags?name_regex=<regex>` (Go RE2, совпадение в любом месте имени; `^`/`$` для привязки). Ответ — `{"tags":[...]}` с любым числом тегов; невалидное выражение и более одного из `name`/`name_pattern`/`name_regex` — 400. `?name=` остаётся строгим поиском. Домен: value object `tag.TagNameMatcher` (`NewTagNamePattern`, `NewTagNameRegex`), ошибка `tag.ErrInvalidTagNameMatcher`; сервис: `FindTagsByNamePattern`, `FindTagsByNameRegex`. Bruno: `get_tags_by_name_pattern.yml`, `get_tags_by_name_regex.yml`
+- Поиск тегов по шаблону и регулярному выражению — `GET /api/v1/tags?name_pattern=<шаблон>` (`*` — любая последовательность, `?` — один символ, совпадение со всем именем) и `GET /api/v1/tags?name_regex=<regex>` (Go RE2, совпадение в любом месте имени; `^`/`$` для привязки). Ответ — `{"tags":[...]}` с любым числом тегов; невалидное выражение и более одного из `name`/`name_pattern`/`name_regex` — 400. `?name=` остаётся строгим поиском. Домен: value object `tag.TagNameMatcher` (`NewTagNamePattern`, `NewTagNameRegex`), ошибка `tag.ErrInvalidTagNameMatcher`; сервис: `FindTagsByNamePattern`, `FindTagsByNameRegex`. Bruno: `get_tags_by_name_pattern.yml`, `get_tags_by_name_regex.yml`. Имена параметров — константы `restdto.TagsQueryName`/`TagsQueryNamePattern`/`TagsQueryNameRegex`, общие для сервера и `growctl`
 - UI обновляется по SSE-событиям сервера — изменения из `growctl`, другой вкладки или по REST видны без перезагрузки страницы:
   - `eventlog.Bar` (единственное SSE-соединение приложения) рассылает каждое событие go-app действием `eventlog.ActionServerEvent`
   - Library перечитывает список типов виджетов по `widget_type_*`; Project — палитру типов (`widget_type_*`), сцены (`scene_*`), виджеты выбранной сцены и сцены (`widget_*`: изменение виджета повышает версию сцены без события сцены) и теги (`tag_*`) — `internal/interface/ui/project/live_reload.go`
@@ -32,10 +34,12 @@
 
 ### Changed
 
-- **BREAKING: имя тега уникально** (`docs/adr/0002-tag-name-is-unique-natural-key.md`, `CONTEXT.md`):
+- **BREAKING: имя тега уникально** (`docs/adr/0003-tag-name-is-unique-natural-key.md`, `CONTEXT.md`):
   - миграция `20260926000000_unique_tag_names.sql` — ограничение `uq_tags_name` вместо индекса `idx_tags_name` (упадёт, если в БД уже есть дубликаты имён)
   - новая доменная ошибка `tag.ErrTagNameTaken`; репозиторий отображает в неё нарушение `uq_tags_name`
-  - `POST /api/v1/tags` с занятым именем отвечает `409 Conflict` (Problem Details); Bruno: описание в `post_tags.yml`
+  - `POST /api/v1/tags` с занятым именем отвечает `409 Conflict` (Problem Details); Bruno: `post_tags_duplicate_name.yml` (имя `is_active` из сида)
+- `make run`: chromium запускается с `--disable-background-networking`
+- `AGENTS.md`: описаны сборка `growctl` в `make build` и `cmd/growctl/` в структуре слоёв; в таблицу целей добавлена существующая цель `make bench`
 
 ## [0.0.25] - 2026-09-24
 

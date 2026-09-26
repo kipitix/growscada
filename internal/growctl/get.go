@@ -14,7 +14,8 @@ func newGetCommand(newClient func() *Client) *cobra.Command {
 	get := &cobra.Command{
 		Use:   "get",
 		Short: "Display server resources",
-		Args:  noArgs,
+		Args:  cobra.ArbitraryArgs,
+		RunE:  runGroup,
 	}
 	get.AddCommand(newGetTagsCommand(newClient))
 	return get
@@ -75,32 +76,17 @@ func writeTagTable(out io.Writer, tags []ServerTag) error {
 	return w.Flush()
 }
 
-// tagManifestOut is the shape of a `kind: Tag` document written by get -o yaml.
-type tagManifestOut struct {
-	APIVersion string `yaml:"apiVersion"`
-	Kind       string `yaml:"kind"`
-	Metadata   struct {
-		Name string `yaml:"name"`
-	} `yaml:"metadata"`
-	Spec struct {
-		Type           string `yaml:"type"`
-		InitialValue   string `yaml:"initialValue"`
-		InitialQuality string `yaml:"initialQuality"`
-	} `yaml:"spec"`
-}
-
 // writeTagManifests writes the tags as a multi-document manifest.
 func writeTagManifests(out io.Writer, tags []ServerTag) error {
 	enc := yaml.NewEncoder(out)
 	enc.SetIndent(2)
 	for _, t := range tags {
-		var doc tagManifestOut
-		doc.APIVersion = APIVersion
-		doc.Kind = KindTag
+		var doc tagDocument
+		doc.documentHeader = documentHeader{APIVersion: APIVersion, Kind: KindTag}
 		doc.Metadata.Name = t.Name
-		doc.Spec.Type = t.Type
-		doc.Spec.InitialValue = t.Value
-		doc.Spec.InitialQuality = t.Quality
+		doc.Spec.Type = &t.Type
+		doc.Spec.InitialValue = &t.Value
+		doc.Spec.InitialQuality = &t.Quality
 		if err := enc.Encode(doc); err != nil {
 			return err
 		}

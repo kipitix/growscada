@@ -13,7 +13,7 @@ var (
 	// indicating a concurrent modification.
 	ErrTagConflict = errors.New("tag version conflict")
 	// ErrTagNameTaken is returned by Save when another tag already has the same name.
-	// A tag's name is its unique natural key (ADR 0002).
+	// A tag's name is its unique natural key (ADR 0003).
 	ErrTagNameTaken = errors.New("tag name already taken")
 )
 

@@ -335,10 +335,25 @@ func TestDelete_DeletesByNameAndReportsMissing(t *testing.T) {
 func TestUsageError_ExitCode2(t *testing.T) {
 	srv, _ := startServer(t)
 
-	_, err := runGrowctl(t, srv, twoTags, "diff", "--no-such-flag")
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"unknown flag", []string{"diff", "--no-such-flag", "-f", "-"}},
+		{"apply without -f", []string{"apply"}},
+		{"diff without -f", []string{"diff"}},
+		{"unexpected argument", []string{"apply", "extra", "-f", "-"}},
+		{"unknown command", []string{"no-such-command"}},
+		{"unknown get resource", []string{"get", "no-such-resource"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, err := execGrowctl(t, srv, twoTags, tt.args...)
 
-	if code := exitCode(err); code != 2 {
-		t.Errorf("exit code: expected 2, got %d (%v)", code, err)
+			if code := exitCode(err); code != 2 {
+				t.Errorf("exit code: expected 2, got %d (%v)", code, err)
+			}
+		})
 	}
 }
 
