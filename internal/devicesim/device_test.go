@@ -22,17 +22,19 @@ import (
 // fakeLink is an in-memory devicelink.Link recording every write.
 type fakeLink struct {
 	mu        sync.Mutex
-	types     map[string]string // tag name → type
-	failures  int               // resolve fails transiently this many times
+	types     map[string]devicelink.TagType
+	failures  int // resolve fails transiently this many times
 	resolves  int
 	writes    []write
 	missing   bool // Write reports the tag as deleted
 	writeErrs int
+	// block, if set, holds every Write until it is closed.
+	block chan struct{}
 }
 
 type write struct{ name, value, quality string }
 
-func newFakeLink(types map[string]string) *fakeLink { return &fakeLink{types: types} }
+func newFakeLink(types map[string]devicelink.TagType) *fakeLink { return &fakeLink{types: types} }
 
 func (l *fakeLink) Resolve(_ context.Context, name string) (devicelink.Tag, error) {
 	l.mu.Lock()
@@ -49,14 +51,17 @@ func (l *fakeLink) Resolve(_ context.Context, name string) (devicelink.Tag, erro
 	return devicelink.Tag{ID: uuid.New(), Name: name, Type: tagType}, nil
 }
 
-func (l *fakeLink) Write(_ context.Context, tag devicelink.Tag, value, quality string) error {
+func (l *fakeLink) Write(_ context.Context, tag devicelink.Tag, value string, quality devicelink.Quality) error {
+	if l.block != nil {
+		<-l.block
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.missing {
 		l.writeErrs++
 		return devicelink.ErrTagNotFound
 	}
-	l.writes = append(l.writes, write{tag.Name, value, quality})
+	l.writes = append(l.writes, write{tag.Name, value, quality.String()})
 	return nil
 }
 
@@ -146,7 +151,7 @@ tags:
 `
 
 func TestRun_WaitsForUnavailableServer(t *testing.T) {
-	link := newFakeLink(map[string]string{"counter": TypeInteger})
+	link := newFakeLink(map[string]devicelink.TagType{"counter": devicelink.TagTypeInteger})
 	link.failures = 3
 
 	d := runDevice(t, testConfig(t, rampConfig), link, Options{})
@@ -160,7 +165,7 @@ func TestRun_WaitsForUnavailableServer(t *testing.T) {
 }
 
 func TestRun_WaitsForServerWithoutLimit(t *testing.T) {
-	link := newFakeLink(map[string]string{"counter": TypeInteger})
+	link := newFakeLink(map[string]devicelink.TagType{"counter": devicelink.TagTypeInteger})
 	link.failures = 1 << 30
 	d := New(testConfig(t, rampConfig), link, Options{Logger: quietLogger, RetryDelay: time.Millisecond})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -184,7 +189,7 @@ func TestRun_WaitsForServerWithoutLimit(t *testing.T) {
 }
 
 func TestRun_WaitingForServerDoesNotRunPatternTime(t *testing.T) {
-	link := newFakeLink(map[string]string{"counter": TypeInteger})
+	link := newFakeLink(map[string]devicelink.TagType{"counter": devicelink.TagTypeInteger})
 	link.failures = 10
 	runDevice(t, testConfig(t, rampConfig), link, Options{RetryDelay: 20 * time.Millisecond})
 
@@ -206,7 +211,7 @@ func TestRun_MissingTagFailsAtOnce(t *testing.T) {
 }
 
 func TestRun_IncompatiblePatternFails(t *testing.T) {
-	link := newFakeLink(map[string]string{"counter": TypeBoolean})
+	link := newFakeLink(map[string]devicelink.TagType{"counter": devicelink.TagTypeBoolean})
 
 	err := New(testConfig(t, rampConfig), link, Options{Logger: quietLogger}).Run(context.Background())
 
@@ -219,7 +224,7 @@ func TestRun_IncompatiblePatternFails(t *testing.T) {
 }
 
 func TestControlAPI_WhileConnecting(t *testing.T) {
-	link := newFakeLink(map[string]string{"counter": TypeInteger})
+	link := newFakeLink(map[string]devicelink.TagType{"counter": devicelink.TagTypeInteger})
 	link.failures = 1 << 30
 	d := runDevice(t, testConfig(t, rampConfig), link, Options{})
 	srv := httptest.NewServer(d.Handler())
@@ -256,7 +261,7 @@ func TestControlAPI_WhileConnecting(t *testing.T) {
 }
 
 func TestRun_WritesEveryTickWithConfiguredQuality(t *testing.T) {
-	link := newFakeLink(map[string]string{"counter": TypeInteger, "mode": TypeString})
+	link := newFakeLink(map[string]devicelink.TagType{"counter": devicelink.TagTypeInteger, "mode": devicelink.TagTypeString})
 	startDevice(t, testConfig(t, rampConfig+`
   - tag: mode
     quality: uncertain
@@ -281,12 +286,11 @@ func TestRun_WritesEveryTickWithConfiguredQuality(t *testing.T) {
 }
 
 func TestStop_PausesWritesAndPatternTime(t *testing.T) {
-	link := newFakeLink(map[string]string{"counter": TypeInteger})
+	link := newFakeLink(map[string]devicelink.TagType{"counter": devicelink.TagTypeInteger})
 	d := startDevice(t, testConfig(t, rampConfig), link)
 	eventually(t, "a write", func() bool { return len(link.snapshot()) > 0 })
 
 	d.Stop()
-	time.Sleep(20 * time.Millisecond) // let an in-flight write land
 	stoppedAt := len(link.snapshot())
 	lastBefore, _ := link.last("counter")
 	time.Sleep(200 * time.Millisecond)
@@ -308,8 +312,39 @@ func TestStop_PausesWritesAndPatternTime(t *testing.T) {
 	}
 }
 
+func TestStop_WaitsForWriteInFlight(t *testing.T) {
+	link := newFakeLink(map[string]devicelink.TagType{"counter": devicelink.TagTypeInteger})
+	link.block = make(chan struct{})
+	d := startDevice(t, testConfig(t, rampConfig), link)
+	release := sync.OnceFunc(func() { close(link.block) })
+	t.Cleanup(release) // before the Device stops, should the test fail early
+	eventually(t, "a write in flight", func() bool {
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		return d.inFlight > 0
+	})
+
+	stopped := make(chan struct{})
+	go func() {
+		d.Stop()
+		close(stopped)
+	}()
+	eventually(t, "Stop to pause the device", func() bool { return !d.Status().Running })
+	select {
+	case <-stopped:
+		t.Fatal("Stop returned while a write was in flight")
+	default:
+	}
+
+	release()
+	<-stopped
+	if n := len(link.snapshot()); n != 1 {
+		t.Errorf("writes: got %d, want the one in flight", n)
+	}
+}
+
 func TestRun_WithoutAutostartWaitsForStart(t *testing.T) {
-	link := newFakeLink(map[string]string{"counter": TypeInteger})
+	link := newFakeLink(map[string]devicelink.TagType{"counter": devicelink.TagTypeInteger})
 	d := startDevice(t, testConfig(t, "autostart: false\n"+rampConfig), link)
 
 	time.Sleep(50 * time.Millisecond)
@@ -320,18 +355,18 @@ func TestRun_WithoutAutostartWaitsForStart(t *testing.T) {
 	eventually(t, "a write after start", func() bool { return len(link.snapshot()) > 0 })
 }
 
-func TestForceQuality_StickyUntilReset(t *testing.T) {
-	link := newFakeLink(map[string]string{"counter": TypeInteger})
+func TestOverrideQuality_StickyUntilReset(t *testing.T) {
+	link := newFakeLink(map[string]devicelink.TagType{"counter": devicelink.TagTypeInteger})
 	d := startDevice(t, testConfig(t, rampConfig), link)
 
-	if err := d.ForceQuality("counter", "bad"); err != nil {
-		t.Fatalf("ForceQuality: %v", err)
+	if err := d.OverrideQuality("counter", devicelink.QualityBad); err != nil {
+		t.Fatalf("OverrideQuality: %v", err)
 	}
 	eventually(t, "bad quality written", func() bool { w, _ := link.last("counter"); return w.quality == "bad" })
 	n := len(link.snapshot())
 	eventually(t, "more writes", func() bool { return len(link.snapshot()) > n+3 })
 	if w, _ := link.last("counter"); w.quality != "bad" {
-		t.Errorf("forced quality did not stick: %+v", w)
+		t.Errorf("overridden quality did not stick: %+v", w)
 	}
 
 	if err := d.ResetQuality("counter"); err != nil {
@@ -340,8 +375,8 @@ func TestForceQuality_StickyUntilReset(t *testing.T) {
 	eventually(t, "configured quality again", func() bool { w, _ := link.last("counter"); return w.quality == "good" })
 }
 
-func TestForceQuality_RepeatsRandomWalkValue(t *testing.T) {
-	link := newFakeLink(map[string]string{"level": TypeInteger})
+func TestOverrideQuality_RepeatsRandomWalkValue(t *testing.T) {
+	link := newFakeLink(map[string]devicelink.TagType{"level": devicelink.TagTypeInteger})
 	d := startDevice(t, testConfig(t, `
 defaultInterval: 1h
 tags:
@@ -351,8 +386,8 @@ tags:
 	eventually(t, "the first write", func() bool { return len(link.snapshot()) == 1 })
 
 	for i := range 20 {
-		if err := d.ForceQuality("level", "bad"); err != nil {
-			t.Fatalf("ForceQuality: %v", err)
+		if err := d.OverrideQuality("level", devicelink.QualityBad); err != nil {
+			t.Fatalf("OverrideQuality: %v", err)
 		}
 		eventually(t, "the kicked write", func() bool { return len(link.snapshot()) >= i*2+2 })
 		if err := d.ResetQuality("level"); err != nil {
@@ -367,19 +402,19 @@ tags:
 	}
 }
 
-func TestForceQuality_Rejects(t *testing.T) {
-	d := startDevice(t, testConfig(t, rampConfig), newFakeLink(map[string]string{"counter": TypeInteger}))
+func TestOverrideQuality_Rejects(t *testing.T) {
+	d := startDevice(t, testConfig(t, rampConfig), newFakeLink(map[string]devicelink.TagType{"counter": devicelink.TagTypeInteger}))
 
-	if err := d.ForceQuality("counter", "great"); err == nil {
-		t.Error("unknown quality: want an error")
+	if err := d.OverrideQuality("counter", devicelink.Quality{}); err == nil {
+		t.Error("zero quality: want an error")
 	}
-	if err := d.ForceQuality("nope", "bad"); !errors.Is(err, ErrUnknownTag) {
+	if err := d.OverrideQuality("nope", devicelink.QualityBad); !errors.Is(err, ErrUnknownTag) {
 		t.Errorf("unknown tag: got %v", err)
 	}
 }
 
 func TestSetPattern_ChangesValuesOnTheFly(t *testing.T) {
-	link := newFakeLink(map[string]string{"counter": TypeInteger})
+	link := newFakeLink(map[string]devicelink.TagType{"counter": devicelink.TagTypeInteger})
 	d := startDevice(t, testConfig(t, rampConfig), link)
 
 	err := d.SetPattern("counter", PatternSpec{Kind: KindConstant, Value: scalar("-7")})
@@ -398,7 +433,7 @@ func TestSetPattern_ChangesValuesOnTheFly(t *testing.T) {
 }
 
 func TestRun_DeletedTagIsNoLongerWritten(t *testing.T) {
-	link := newFakeLink(map[string]string{"counter": TypeInteger})
+	link := newFakeLink(map[string]devicelink.TagType{"counter": devicelink.TagTypeInteger})
 	link.missing = true
 	d := startDevice(t, testConfig(t, rampConfig), link)
 
@@ -412,7 +447,7 @@ func TestRun_DeletedTagIsNoLongerWritten(t *testing.T) {
 }
 
 func TestControlAPI(t *testing.T) {
-	link := newFakeLink(map[string]string{"counter": TypeInteger})
+	link := newFakeLink(map[string]devicelink.TagType{"counter": devicelink.TagTypeInteger})
 	d := startDevice(t, testConfig(t, rampConfig), link)
 	srv := httptest.NewServer(d.Handler())
 	defer srv.Close()
@@ -458,10 +493,10 @@ func TestControlAPI(t *testing.T) {
 	}
 
 	if code, _ := call("POST", "/api/v1/device/tags/counter/quality", `{"quality":"bad"}`); code != 200 {
-		t.Errorf("force quality: got %d", code)
+		t.Errorf("override quality: got %d", code)
 	}
-	if !d.Status().Tags[0].Forced {
-		t.Error("quality: want forced")
+	if !d.Status().Tags[0].Overridden {
+		t.Error("quality: want overridden")
 	}
 	if code, _ := call("POST", "/api/v1/device/tags/counter/quality", `{"quality":"great"}`); code != 400 {
 		t.Errorf("invalid quality: got %d, want 400", code)
@@ -469,7 +504,7 @@ func TestControlAPI(t *testing.T) {
 	if code, _ := call("DELETE", "/api/v1/device/tags/counter/quality", ""); code != 200 {
 		t.Errorf("reset quality: got %d", code)
 	}
-	if s := d.Status().Tags[0]; s.Forced || s.Quality != "good" {
+	if s := d.Status().Tags[0]; s.Overridden || s.Quality != devicelink.QualityGood {
 		t.Errorf("reset quality: got %+v", s)
 	}
 }

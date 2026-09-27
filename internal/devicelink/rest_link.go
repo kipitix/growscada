@@ -37,12 +37,16 @@ func (l *RESTLink) Resolve(ctx context.Context, name string) (Tag, error) {
 	if !ok {
 		return Tag{}, fmt.Errorf("%w: %q", ErrTagNotFound, name)
 	}
+	tagType, err := ParseTagType(found.Type)
+	if err != nil {
+		return Tag{}, fmt.Errorf("tag %q: %w", name, err)
+	}
 	l.setVersion(found.ID, found.Version)
-	return Tag{ID: found.ID, Name: found.Name, Type: found.Type}, nil
+	return Tag{ID: found.ID, Name: found.Name, Type: tagType}, nil
 }
 
 // Write sets the value with PATCH /api/v1/tags/{id}/value.
-func (l *RESTLink) Write(ctx context.Context, tag Tag, value, quality string) error {
+func (l *RESTLink) Write(ctx context.Context, tag Tag, value string, quality Quality) error {
 	version, known := l.version(tag.ID)
 	if !known {
 		if err := l.reread(ctx, tag); err != nil {
@@ -51,13 +55,13 @@ func (l *RESTLink) Write(ctx context.Context, tag Tag, value, quality string) er
 		version, _ = l.version(tag.ID)
 	}
 
-	newVersion, err := l.client.SetTagValue(ctx, tag.ID, value, quality, version)
+	newVersion, err := l.client.SetTagValue(ctx, tag.ID, value, quality.String(), version)
 	if errors.Is(err, apiclient.ErrConflict) {
 		if err := l.reread(ctx, tag); err != nil {
 			return err
 		}
 		version, _ = l.version(tag.ID)
-		newVersion, err = l.client.SetTagValue(ctx, tag.ID, value, quality, version)
+		newVersion, err = l.client.SetTagValue(ctx, tag.ID, value, quality.String(), version)
 	}
 	if errors.Is(err, apiclient.ErrNotFound) {
 		l.forget(tag.ID)

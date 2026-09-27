@@ -27,7 +27,7 @@ cmd/
 ## Контракт поставки данных (`internal/devicelink`)
 
 - Референс для будущих протокольных адаптеров: они пишут значения тегов тем же способом. Семантика фиксируется в ADR 0004.
-- Интерфейс `devicelink.Link`: `Resolve(ctx, name)` → тег (ID, тип, версия); `Write(ctx, tag, value, quality)`.
+- Интерфейс `devicelink.Link`: `Resolve(ctx, name)` → тег (ID, тип, версия); `Write(ctx, tag, value, quality)`. Тип и качество — собственные перечисления `devicelink.TagType` / `devicelink.Quality` (строки REST API, без зависимости от `server/domain`).
 - Реализация `devicelink.RESTLink` на `apiclient`:
   - теги только по имени (ADR 0003), `GET /api/v1/tags?name=`;
   - сама ведёт `version`, `PATCH /api/v1/tags/{id}/value`;
@@ -37,7 +37,7 @@ cmd/
 ## Паттерны
 
 - `constant` (`value`), `ramp` (`start`, `rate` ед/с, опц. `max` → снова `start`), `sine` (`offset`, `amplitude`, `period`), `random_walk` (`start`, `step` — ± макс. за тик, `min`, `max`), `step` (`values` циклически, `hold`).
-- Чистые функции времени с момента установки паттерна (random_walk — шаг на тик); числа float64, для integer округляются при записи.
+- Чистые функции времени с момента установки паттерна (random_walk — шаг на тик); числа float64, для integer округляются при записи. Округление касается только генерируемых значений (`ramp`, `sine`, `random_walk`): литералы `constant`/`step` для integer-тега должны быть целыми (`42.5` или `7.0` — ошибка конфига / `400`), дробное там скорее опечатка.
 - Матрица совместимости: integer — все пять; boolean — `constant`, `step`; string — `constant`, `step`. Несовместимая пара — ошибка конфига при старте и `400` в control-API.
 - Интервал на тег (`interval`, по умолчанию `defaultInterval`); запись каждый тик, даже если значение не изменилось.
 
@@ -68,7 +68,7 @@ tags:
 
 ## Control-API
 
-- `POST /api/v1/device/start`, `POST /api/v1/device/stop` — пауза: процесс и API живы, время паттернов продолжается с места остановки; идемпотентны. `autostart` (default true).
+- `POST /api/v1/device/start`, `POST /api/v1/device/stop` — пауза: процесс и API живы, время паттернов продолжается с места остановки; идемпотентны. `stop` отвечает, когда записи, уже ушедшие на сервер, завершены: после ответа устройство молчит. `autostart` (default true).
 - `GET /api/v1/device` — состояние устройства и тегов.
 - `POST /api/v1/device/tags/{name}/pattern` — тело = JSON объекта `pattern`; смена на лету.
 - `POST /api/v1/device/tags/{name}/quality` — `{"quality":"bad"}`, липкое переопределение, сразу пишется на сервер (если running); `DELETE /api/v1/device/tags/{name}/quality` — вернуть качество из конфига.
@@ -91,3 +91,12 @@ tags:
 ## CI
 
 - GitHub workflow: `make build` собирает все бинарники (сервер, wasm, growctl, симулятор). GitVerse использует ту же конфигурацию GitHub.
+
+## Сделано сверх плана
+
+- Флаг `--control` (адрес control-API) — рядом с `--config` / `--server`, чтобы запускать несколько симуляторов.
+- `tests/device_simulator/seed_dashboard.yaml` и таргеты `make run_simulator` / `make run_simulator_dashboard` — демо на seed-сцене «Main Dashboard».
+- Коллекция `tests/api/bruno_collections/growscada/` переименована в `growscada_server/`, симметрично `device_simulator/`.
+- `internal/server/servertest` — общий стенд REST API + Postgres (testcontainers, ленивый старт) для тестов devicelink, devicesim и growctl.
+- `apiclient.FindTagByName` сверяет имя и на клиенте: сервер без фильтра `?name=` вернул бы все теги.
+- В статусе control-API у тега есть `overridden` (качество переопределено) и `lost` (тег удалён на сервере); каждый успешный вызов control-API отвечает статусом.

@@ -49,7 +49,7 @@ func TestResolve_ByName(t *testing.T) {
 
 	got, err := link.Resolve(context.Background(), "pump.speed")
 
-	if err != nil || got != (devicelink.Tag{ID: created.ID, Name: "pump.speed", Type: "integer"}) {
+	if err != nil || got != (devicelink.Tag{ID: created.ID, Name: "pump.speed", Type: devicelink.TagTypeInteger}) {
 		t.Errorf("got %+v, %v", got, err)
 	}
 }
@@ -72,7 +72,7 @@ func TestWrite_TracksVersion(t *testing.T) {
 	}
 
 	for _, v := range []string{"1", "2", "3"} {
-		if err := link.Write(context.Background(), tag, v, "uncertain"); err != nil {
+		if err := link.Write(context.Background(), tag, v, devicelink.QualityUncertain); err != nil {
 			t.Fatalf("Write %s: %v", v, err)
 		}
 	}
@@ -96,7 +96,7 @@ func TestWrite_ConflictRereadsAndRetries(t *testing.T) {
 		t.Fatalf("concurrent write: %v", err)
 	}
 
-	if err := link.Write(context.Background(), tag, "5", "good"); err != nil {
+	if err := link.Write(context.Background(), tag, "5", devicelink.QualityGood); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
 
@@ -138,7 +138,7 @@ func TestWrite_DeletedTag(t *testing.T) {
 		t.Fatalf("delete: %v", err)
 	}
 
-	err = link.Write(context.Background(), tag, "1", "good")
+	err = link.Write(context.Background(), tag, "1", devicelink.QualityGood)
 
 	if !errors.Is(err, devicelink.ErrTagNotFound) {
 		t.Errorf("got %v, want ErrTagNotFound", err)

@@ -47,6 +47,10 @@ type Device struct {
 	mu        sync.Mutex
 	connected bool // tags resolved: types and generators are known
 	running   bool
+	// inFlight counts writes on their way to the server; Stop waits on idle
+	// until they are done.
+	inFlight int
+	idle     *sync.Cond
 	// Pattern time runs only while the Device is running: runTotal is the
 	// running time before resumedAt, the moment of the last start.
 	runTotal  time.Duration
@@ -59,8 +63,8 @@ type Device struct {
 type simTag struct {
 	tag      devicelink.Tag // only the name until the Device is connected
 	interval time.Duration
-	quality  string // from the config
-	override string // forced quality, "" if none
+	quality  devicelink.Quality  // from the config
+	override *devicelink.Quality // set by OverrideQuality, nil if none
 	pattern  PatternSpec
 	gen      generator     // nil until the Device is connected
 	setAt    time.Duration // Device running time when the pattern was set
@@ -91,6 +95,7 @@ func New(cfg Config, link devicelink.Link, opts Options) *Device {
 		resumedAt:  time.Now(),
 		byName:     make(map[string]*simTag, len(cfg.Tags)),
 	}
+	d.idle = sync.NewCond(&d.mu)
 	for _, tc := range cfg.Tags {
 		t := &simTag{
 			tag:      devicelink.Tag{Name: tc.Tag},
@@ -164,9 +169,9 @@ func (t *simTag) setPattern(p PatternSpec, at time.Duration) error {
 	return nil
 }
 
-func (t *simTag) currentQuality() string {
-	if t.override != "" {
-		return t.override
+func (t *simTag) currentQuality() devicelink.Quality {
+	if t.override != nil {
+		return *t.override
 	}
 	return t.quality
 }
@@ -235,15 +240,23 @@ func (d *Device) write(ctx context.Context, t *simTag, kicked bool) {
 	t.regen = false
 	value := t.last
 	quality := t.currentQuality()
+	d.inFlight++
 	d.mu.Unlock()
 
 	err := d.link.Write(ctx, t.tag, value, quality)
+
+	d.mu.Lock()
+	lost := err != nil && ctx.Err() == nil && errors.Is(err, devicelink.ErrTagNotFound)
+	t.lost = t.lost || lost
+	d.inFlight--
+	if d.inFlight == 0 {
+		d.idle.Broadcast()
+	}
+	d.mu.Unlock()
+
 	switch {
 	case err == nil, ctx.Err() != nil:
-	case errors.Is(err, devicelink.ErrTagNotFound):
-		d.mu.Lock()
-		t.lost = true
-		d.mu.Unlock()
+	case lost:
 		d.logger.Warn("tag deleted on the server, no longer simulated", "tag", t.tag.Name, "error", err)
 	default:
 		d.logger.Warn("write failed, will retry on the next tick", "tag", t.tag.Name, "error", err)
@@ -271,15 +284,19 @@ func (d *Device) Start() {
 	}
 }
 
-// Stop pauses writing; the Device and its control API stay up.
+// Stop pauses writing; the Device and its control API stay up. It returns
+// once the writes already on their way to the server are done: from then on
+// the Device is silent.
 func (d *Device) Stop() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if !d.running {
-		return
+	if d.running {
+		d.runTotal = d.runningTime()
+		d.running = false
 	}
-	d.runTotal = d.runningTime()
-	d.running = false
+	for d.inFlight > 0 {
+		d.idle.Wait()
+	}
 }
 
 // SetPattern changes a tag's pattern; its time starts from zero.
@@ -298,21 +315,21 @@ func (d *Device) SetPattern(name string, p PatternSpec) error {
 	return nil
 }
 
-// ForceQuality makes every write of the tag carry this quality until
+// OverrideQuality makes every write of the tag carry this quality until
 // ResetQuality.
-func (d *Device) ForceQuality(name, quality string) error {
-	if err := validateQuality(quality); err != nil {
-		return err
+func (d *Device) OverrideQuality(name string, quality devicelink.Quality) error {
+	if !quality.IsValid() {
+		return errors.New("quality is required")
 	}
-	return d.setOverride(name, quality)
+	return d.setOverride(name, &quality)
 }
 
 // ResetQuality returns the tag to its configured quality.
 func (d *Device) ResetQuality(name string) error {
-	return d.setOverride(name, "")
+	return d.setOverride(name, nil)
 }
 
-func (d *Device) setOverride(name, quality string) error {
+func (d *Device) setOverride(name string, quality *devicelink.Quality) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	t, err := d.tagLocked(name)
@@ -348,11 +365,12 @@ type Status struct {
 type TagStatus struct {
 	Name string `json:"name"`
 	// Type is empty while the Device is connecting.
-	Type     string      `json:"type"`
-	Interval Duration    `json:"interval"`
-	Quality  string      `json:"quality"`
-	Forced   bool        `json:"forced"`
-	Pattern  PatternSpec `json:"pattern"`
+	Type     string             `json:"type"`
+	Interval Duration           `json:"interval"`
+	Quality  devicelink.Quality `json:"quality"`
+	// Overridden is set while OverrideQuality holds the quality.
+	Overridden bool        `json:"overridden"`
+	Pattern    PatternSpec `json:"pattern"`
 	// Lost is set once the tag was deleted on the server.
 	Lost bool `json:"lost"`
 }
@@ -367,13 +385,15 @@ func (d *Device) Status() Status {
 	}
 	for i, t := range d.tags {
 		s.Tags[i] = TagStatus{
-			Name:     t.tag.Name,
-			Type:     t.tag.Type,
-			Interval: Duration{D: t.interval},
-			Quality:  t.currentQuality(),
-			Forced:   t.override != "",
-			Pattern:  t.pattern,
-			Lost:     t.lost,
+			Name:       t.tag.Name,
+			Interval:   Duration{D: t.interval},
+			Quality:    t.currentQuality(),
+			Overridden: t.override != nil,
+			Pattern:    t.pattern,
+			Lost:       t.lost,
+		}
+		if d.connected {
+			s.Tags[i].Type = t.tag.Type.String()
 		}
 	}
 	return s

@@ -4,13 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+
+	"github.com/kipitix/growscada/internal/devicelink"
 )
 
 // Handler serves the control API:
 //
 //	GET    /api/v1/device                       Device status
 //	POST   /api/v1/device/start                 resume writing
-//	POST   /api/v1/device/stop                  pause writing
+//	POST   /api/v1/device/stop                  pause writing (answers once silent)
 //	POST   /api/v1/device/tags/{name}/pattern   body: a pattern object
 //	POST   /api/v1/device/tags/{name}/quality   body: {"quality":"bad"}
 //	DELETE /api/v1/device/tags/{name}/quality   back to the configured quality
@@ -40,12 +42,12 @@ func (d *Device) Handler() http.Handler {
 	})
 	mux.HandleFunc("POST /api/v1/device/tags/{name}/quality", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			Quality string `json:"quality"`
+			Quality devicelink.Quality `json:"quality"`
 		}
 		if !decodeBody(w, r, &body) {
 			return
 		}
-		d.reply(w, r, d.ForceQuality(r.PathValue("name"), body.Quality))
+		d.reply(w, r, d.OverrideQuality(r.PathValue("name"), body.Quality))
 	})
 	mux.HandleFunc("DELETE /api/v1/device/tags/{name}/quality", func(w http.ResponseWriter, r *http.Request) {
 		d.reply(w, r, d.ResetQuality(r.PathValue("name")))

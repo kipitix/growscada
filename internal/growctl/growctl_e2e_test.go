@@ -3,99 +3,26 @@ package growctl_test
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"errors"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
-
-	_ "github.com/lib/pq"
-	"github.com/pressly/goose/v3"
-	"github.com/testcontainers/testcontainers-go"
-	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/kipitix/growscada/internal/growctl"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
-	"github.com/kipitix/growscada/internal/server/domain/event"
-	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
-	"github.com/kipitix/growscada/internal/server/interface/restapi"
+	"github.com/kipitix/growscada/internal/server/servertest"
 )
 
-var testDB *sql.DB
+// The Postgres container starts only when an end-to-end test runs, so the unit
+// tests of this package do not need Docker.
+var postgres servertest.Postgres
 
 func TestMain(m *testing.M) {
-	ctx := context.Background()
-
-	pgContainer, err := tcpostgres.Run(ctx,
-		"postgres:16-alpine",
-		tcpostgres.WithDatabase("testdb"),
-		tcpostgres.WithUsername("test"),
-		tcpostgres.WithPassword("test"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2),
-		),
-	)
-	if err != nil {
-		panic("failed to start postgres container: " + err.Error())
-	}
-
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		pgContainer.Terminate(ctx)
-		panic("failed to get connection string: " + err.Error())
-	}
-
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		pgContainer.Terminate(ctx)
-		panic("failed to open db: " + err.Error())
-	}
-
-	_, currentFile, _, _ := runtime.Caller(0)
-	migrationsDir := filepath.Join(filepath.Dir(currentFile), "..", "server", "infrastructure", "postgres", "migrations")
-
-	if err := goose.SetDialect("postgres"); err != nil {
-		db.Close()
-		pgContainer.Terminate(ctx)
-		panic("failed to set goose dialect: " + err.Error())
-	}
-	if err := goose.Up(db, migrationsDir); err != nil {
-		db.Close()
-		pgContainer.Terminate(ctx)
-		panic("failed to run migrations: " + err.Error())
-	}
-
-	testDB = db
-
 	code := m.Run()
-
-	db.Close()
-	pgContainer.Terminate(ctx)
+	postgres.Close()
 	os.Exit(code)
-}
-
-// startServer cleans the tags table and serves the real REST API over it.
-func startServer(t *testing.T) (*httptest.Server, application.TagService) {
-	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM tags"); err != nil {
-		t.Fatalf("clean tags: %v", err)
-	}
-	tagSvc := application.NewTagService(repositories.NewTagRepositoryPostgres(testDB), event.NewEventBus())
-	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo, event.NewEventBus())
-	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, event.NewEventBus())
-	router := restapi.NewRouter(tagSvc, wtSvc, sceneSvc, event.NewEventBus(), 100)
-
-	srv := httptest.NewServer(router.ServeMux())
-	t.Cleanup(srv.Close)
-	return srv, tagSvc
 }
 
 // runGrowctl runs growctl against the server with the manifest on stdin ("-f -").
@@ -151,7 +78,7 @@ func assertOutput(t *testing.T, got string, want ...string) {
 }
 
 func TestApply_EmptyServer_CreatesTagsWithInitialValues(t *testing.T) {
-	srv, svc := startServer(t)
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 
 	out, err := runGrowctl(t, srv, twoTags, "apply")
 
@@ -170,7 +97,7 @@ func TestApply_EmptyServer_CreatesTagsWithInitialValues(t *testing.T) {
 }
 
 func TestApply_Twice_IsIdempotentAndKeepsCurrentValue(t *testing.T) {
-	srv, svc := startServer(t)
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 	if _, err := runGrowctl(t, srv, twoTags, "apply"); err != nil {
 		t.Fatalf("first apply: %v", err)
 	}
@@ -194,7 +121,7 @@ func TestApply_Twice_IsIdempotentAndKeepsCurrentValue(t *testing.T) {
 }
 
 func TestApply_WithoutPrune_KeepsExtraServerTags(t *testing.T) {
-	srv, svc := startServer(t)
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 	createTag(t, svc, "extra", "integer")
 
 	if _, err := runGrowctl(t, srv, twoTags, "apply"); err != nil {
@@ -207,7 +134,7 @@ func TestApply_WithoutPrune_KeepsExtraServerTags(t *testing.T) {
 }
 
 func TestApply_Prune_DeletesExtraServerTags(t *testing.T) {
-	srv, svc := startServer(t)
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 	createTag(t, svc, "zeta", "integer")
 	createTag(t, svc, "alpha", "string")
 
@@ -223,7 +150,7 @@ func TestApply_Prune_DeletesExtraServerTags(t *testing.T) {
 }
 
 func TestApply_TypeMismatch_FailsWithoutChangingAnything(t *testing.T) {
-	srv, svc := startServer(t)
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 	createTag(t, svc, "pump1.running", "integer")
 	createTag(t, svc, "extra", "integer")
 
@@ -245,7 +172,7 @@ func TestApply_TypeMismatch_FailsWithoutChangingAnything(t *testing.T) {
 }
 
 func TestApply_InvalidManifest_FailsWithoutChangingAnything(t *testing.T) {
-	srv, svc := startServer(t)
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 
 	_, err := runGrowctl(t, srv, twoTags+"---\napiVersion: growscada/v1\nkind: Scene\n", "apply")
 
@@ -258,7 +185,7 @@ func TestApply_InvalidManifest_FailsWithoutChangingAnything(t *testing.T) {
 }
 
 func TestApply_ServerUnreachable_ReturnsError(t *testing.T) {
-	srv, _ := startServer(t)
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
 	srv.Close()
 
 	_, err := runGrowctl(t, srv, twoTags, "apply")
@@ -269,7 +196,7 @@ func TestApply_ServerUnreachable_ReturnsError(t *testing.T) {
 }
 
 func TestDiff_ReportsChangesWithExitCode1(t *testing.T) {
-	srv, svc := startServer(t)
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 	createTag(t, svc, "pump1.label", "string")
 	createTag(t, svc, "extra", "integer")
 
@@ -285,7 +212,7 @@ func TestDiff_ReportsChangesWithExitCode1(t *testing.T) {
 }
 
 func TestDiff_NoChanges_ExitCode0AndNoOutput(t *testing.T) {
-	srv, _ := startServer(t)
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
 	if _, err := runGrowctl(t, srv, twoTags, "apply"); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -301,7 +228,7 @@ func TestDiff_NoChanges_ExitCode0AndNoOutput(t *testing.T) {
 }
 
 func TestDiff_Error_ExitCode2(t *testing.T) {
-	srv, svc := startServer(t)
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 	createTag(t, svc, "pump1.running", "integer")
 
 	_, err := runGrowctl(t, srv, twoTags, "diff")
@@ -312,7 +239,7 @@ func TestDiff_Error_ExitCode2(t *testing.T) {
 }
 
 func TestDelete_DeletesByNameAndReportsMissing(t *testing.T) {
-	srv, svc := startServer(t)
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 	// Same name, different type: delete ignores the spec.
 	createTag(t, svc, "pump1.running", "integer")
 	createTag(t, svc, "extra", "integer")
@@ -333,7 +260,7 @@ func TestDelete_DeletesByNameAndReportsMissing(t *testing.T) {
 }
 
 func TestUsageError_ExitCode2(t *testing.T) {
-	srv, _ := startServer(t)
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
 
 	tests := []struct {
 		name string
@@ -370,7 +297,7 @@ func createTag(t *testing.T, svc application.TagService, name, tagType string) {
 // --- name patterns ---
 
 func TestApply_PruneWithPattern_PrunesOnlyInsideScope(t *testing.T) {
-	srv, svc := startServer(t)
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 	createTag(t, svc, "pump1.old", "integer")  // in scope, not declared → pruned
 	createTag(t, svc, "valve1.old", "integer") // out of scope → kept
 
@@ -387,7 +314,7 @@ func TestApply_PruneWithPattern_PrunesOnlyInsideScope(t *testing.T) {
 }
 
 func TestApply_PruneWithRegex_DoesNotPruneDeclaredTagsOutsideScope(t *testing.T) {
-	srv, svc := startServer(t)
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 	createTag(t, svc, "pump1.label", "string") // declared, outside the regex scope
 	createTag(t, svc, "pump1.old", "integer")
 
@@ -400,7 +327,7 @@ func TestApply_PruneWithRegex_DoesNotPruneDeclaredTagsOutsideScope(t *testing.T)
 }
 
 func TestDiff_PruneWithPattern_ShowsOnlyScopedPrunes(t *testing.T) {
-	srv, svc := startServer(t)
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 	createTag(t, svc, "pump1.old", "integer")
 	createTag(t, svc, "valve1.old", "integer")
 
@@ -428,7 +355,7 @@ func TestNameFilterUsageErrors_ExitCode2WithoutChanges(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			srv, svc := startServer(t)
+			srv, svc := servertest.StartAPI(t, postgres.DB(t))
 			createTag(t, svc, "keep", "integer")
 
 			_, _, err := execGrowctl(t, srv, twoTags, tt.args...)
@@ -444,7 +371,7 @@ func TestNameFilterUsageErrors_ExitCode2WithoutChanges(t *testing.T) {
 }
 
 func TestDeletePattern_Yes_DeletesMatchingTags(t *testing.T) {
-	srv, svc := startServer(t)
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 	createTag(t, svc, "sim.b", "integer")
 	createTag(t, svc, "sim.a", "integer")
 	createTag(t, svc, "real.a", "integer")
@@ -461,7 +388,7 @@ func TestDeletePattern_Yes_DeletesMatchingTags(t *testing.T) {
 }
 
 func TestDeletePattern_Confirmed_DeletesAfterPrompt(t *testing.T) {
-	srv, svc := startServer(t)
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 	createTag(t, svc, "sim.a", "integer")
 
 	out, prompt, err := execGrowctl(t, srv, "y\n", "delete", "--regex", "^sim")
@@ -477,7 +404,7 @@ func TestDeletePattern_Confirmed_DeletesAfterPrompt(t *testing.T) {
 
 func TestDeletePattern_NotConfirmed_DeletesNothing(t *testing.T) {
 	for _, answer := range []string{"n\n", "\n", ""} {
-		srv, svc := startServer(t)
+		srv, svc := servertest.StartAPI(t, postgres.DB(t))
 		createTag(t, svc, "sim.a", "integer")
 
 		out, prompt, err := execGrowctl(t, srv, answer, "delete", "--pattern", "sim.*")
@@ -495,7 +422,7 @@ func TestDeletePattern_NotConfirmed_DeletesNothing(t *testing.T) {
 }
 
 func TestDeletePattern_NoMatch_ReportsAndSucceeds(t *testing.T) {
-	srv, _ := startServer(t)
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
 
 	out, errOut, err := execGrowctl(t, srv, "", "delete", "--pattern", "nothing*")
 
@@ -505,7 +432,7 @@ func TestDeletePattern_NoMatch_ReportsAndSucceeds(t *testing.T) {
 }
 
 func TestGetTags_Table_SortedByName(t *testing.T) {
-	srv, svc := startServer(t)
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 	createTag(t, svc, "b.speed", "integer")
 	createTag(t, svc, "a.running", "boolean")
 
@@ -527,7 +454,7 @@ func TestGetTags_Table_SortedByName(t *testing.T) {
 }
 
 func TestGetTags_Filtered(t *testing.T) {
-	srv, svc := startServer(t)
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 	createTag(t, svc, "pump1.speed", "integer")
 	createTag(t, svc, "pump2.speed", "integer")
 	createTag(t, svc, "valve1.state", "boolean")
@@ -548,7 +475,7 @@ func TestGetTags_Filtered(t *testing.T) {
 }
 
 func TestGetTags_YAML_RoundTripsThroughApply(t *testing.T) {
-	srv, svc := startServer(t)
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 	if _, err := runGrowctl(t, srv, twoTags, "apply"); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -566,7 +493,7 @@ func TestGetTags_YAML_RoundTripsThroughApply(t *testing.T) {
 	}
 
 	// Re-applying the export to an empty server recreates the same tags.
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM tags"); err != nil {
+	if _, err := postgres.DB(t).ExecContext(context.Background(), "DELETE FROM tags"); err != nil {
 		t.Fatalf("clean tags: %v", err)
 	}
 	if _, err := runGrowctl(t, srv, exported, "apply"); err != nil {
@@ -578,7 +505,7 @@ func TestGetTags_YAML_RoundTripsThroughApply(t *testing.T) {
 }
 
 func TestGetTags_Empty_ReportsNoTags(t *testing.T) {
-	srv, _ := startServer(t)
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
 
 	out, errOut, err := execGrowctl(t, srv, "", "get", "tags")
 

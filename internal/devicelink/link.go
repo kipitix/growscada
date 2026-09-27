@@ -24,7 +24,7 @@ var ErrTagNotFound = errors.New("tag not found")
 type Tag struct {
 	ID   uuid.UUID
 	Name string
-	Type string // "string", "boolean" or "integer"
+	Type TagType
 }
 
 // Link delivers Tag values to the server.
@@ -35,7 +35,7 @@ type Link interface {
 	// Write sets a tag's value and quality. The Device is the source of truth:
 	// the Link resolves optimistic-locking conflicts itself. The error matches
 	// ErrTagNotFound if the tag is gone.
-	Write(ctx context.Context, tag Tag, value, quality string) error
+	Write(ctx context.Context, tag Tag, value string, quality Quality) error
 }
 
 // IsTransient reports whether an error is worth retrying later: the server is

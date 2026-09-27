@@ -212,12 +212,12 @@ func TestE2E_ControlAPI(t *testing.T) {
 	s := startSimulator(t, e2eConfig, e2eTags)
 	s.eventually(t, "sim.speed", "a write", func(tag appdto.Tag) bool { return tag.Quality == "good" })
 
-	// Forced quality reaches the server and sticks until reset.
+	// An overridden quality reaches the server and sticks until reset.
 	s.call(t, "POST", "/api/v1/device/tags/sim.speed/quality", `{"quality":"bad"}`)
 	bad := s.eventually(t, "sim.speed", "bad quality", func(tag appdto.Tag) bool { return tag.Quality == "bad" })
 	s.eventually(t, "sim.speed", "more bad writes", func(tag appdto.Tag) bool {
 		if tag.Quality != "bad" {
-			t.Fatalf("forced quality did not stick: %+v", tag)
+			t.Fatalf("overridden quality did not stick: %+v", tag)
 		}
 		return tag.Version >= bad.Version+3
 	})
@@ -228,9 +228,9 @@ func TestE2E_ControlAPI(t *testing.T) {
 	s.call(t, "POST", "/api/v1/device/tags/sim.speed/pattern", `{"kind":"constant","value":7}`)
 	s.eventually(t, "sim.speed", "the constant", func(tag appdto.Tag) bool { return tag.Value == "7" })
 
-	// Stop freezes every tag; start resumes.
+	// Stop freezes every tag (it answers once the writes in flight are done);
+	// start resumes.
 	s.call(t, "POST", "/api/v1/device/stop", "")
-	time.Sleep(50 * time.Millisecond) // let in-flight writes land
 	frozen := s.get(t, "sim.mode")
 	time.Sleep(150 * time.Millisecond)
 	if got := s.get(t, "sim.mode"); got.Version != frozen.Version {

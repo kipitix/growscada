@@ -10,6 +10,8 @@ http:
 
 docs: |
   Pause writing; the process and the control API stay up. Idempotent.
+  Answers once the writes already on their way to the server are done: from
+  then on the device is silent.
 
 settings:
   encodeUrl: true

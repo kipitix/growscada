@@ -15,7 +15,7 @@ http:
   auth: inherit
 
 docs: |
-  Force the tag's quality (good, uncertain, bad) on every write until reset.
+  Override the tag's quality (good, uncertain, bad) on every write until reset.
   Written to the server right away if the device is running.
   While the device is still connecting to the server this is 503.
 

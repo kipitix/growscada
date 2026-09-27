@@ -11,8 +11,9 @@ http:
 docs: |
   Snapshot of the simulated device: state ("connecting" until its tags are
   resolved on the server, then "connected"), running flag and, per tag, its
-  type (empty while connecting), interval, current quality (forced or
-  configured) and pattern. The control API is up from the start, before the
+  type (empty while connecting), interval, current quality (overridden or
+  configured), the "overridden" flag, pattern and "lost" (deleted on the
+  server). The control API is up from the start, before the
   server is reachable.
 
 settings:

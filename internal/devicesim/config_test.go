@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/kipitix/growscada/internal/devicelink"
 )
 
 func TestReadConfig_FillsDefaults(t *testing.T) {
@@ -47,7 +49,7 @@ tags:
 	if cfg.Server != "http://scada:9090" || cfg.Control != "127.0.0.1:9999" || *cfg.Autostart {
 		t.Errorf("device: got %+v", cfg)
 	}
-	if a := cfg.Tags[0]; a.Interval.D != 500*time.Millisecond || a.Quality != "uncertain" || a.Pattern.Period.D != 10*time.Second {
+	if a := cfg.Tags[0]; a.Interval.D != 500*time.Millisecond || a.Quality != devicelink.QualityUncertain || a.Pattern.Period.D != 10*time.Second {
 		t.Errorf("tag a: got %+v", a)
 	}
 	if b := cfg.Tags[1]; b.Interval.D != 2*time.Second || len(b.Pattern.Values) != 2 || b.Pattern.Values[0] != "false" {

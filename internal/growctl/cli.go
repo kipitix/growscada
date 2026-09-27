@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/kipitix/growscada/internal/apiclient"
 )
 
 const (
@@ -304,7 +306,7 @@ func executeDelete(ctx context.Context, client *Client, steps []Step, out io.Wri
 	for _, s := range steps {
 		if s.Action == ActionDelete {
 			err := client.DeleteTag(ctx, s.Server.ID)
-			if errors.Is(err, errNotFound) {
+			if errors.Is(err, apiclient.ErrNotFound) {
 				s.Action = ActionNotFound
 			} else if err != nil {
 				return fmt.Errorf("tag/%s: %w", s.Name(), err)
@@ -373,7 +375,7 @@ func executeApply(ctx context.Context, client *Client, steps []Step, out io.Writ
 		case ActionCreate:
 			err = client.CreateTag(ctx, s.Manifest)
 		case ActionPrune:
-			if err = client.DeleteTag(ctx, s.Server.ID); errors.Is(err, errNotFound) {
+			if err = client.DeleteTag(ctx, s.Server.ID); errors.Is(err, apiclient.ErrNotFound) {
 				err = nil // already gone — the desired state is reached
 			}
 		}

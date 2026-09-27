@@ -8,9 +8,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/restapi/restdto"
 )
 
-// errNotFound matches (errors.Is) an error for a 404 response.
-var errNotFound = apiclient.ErrNotFound
-
 // Client is the REST API client with the operations growctl needs on top of
 // the plain API calls.
 type Client struct {

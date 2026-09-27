@@ -51,7 +51,10 @@ goose up
 
 ### Package Layout
 
-`internal/` is split by application. The server's DDD layers live under `internal/server/`; the tools that talk to the server from outside sit next to it and use the REST API only.
+`internal/` is split by application. The server's DDD layers live under `internal/server/`; the tools that talk to the server from outside sit next to it and talk to it over the REST API only. What they may import depends on their role:
+
+- **Engineer tools** (`growctl`) may also import value objects from `internal/server/domain/` (tag name, type, quality, name matchers) to validate input the same way the server does. Never `application/`, `infrastructure/` or `interface/` beyond `restdto`.
+- **The Device side** (`devicelink`, `devicesim`, future protocol adapters) depends only on the REST contract (`apiclient` → `restdto`), never on `internal/server/domain/`: its own enums (`devicelink.TagType`, `devicelink.Quality`) mirror the API's strings, so adapters stay independent of the server's internals (ADR 0004).
 
 ```
 internal/

@@ -1,6 +1,6 @@
 // Package servertest runs the real GrowSCADA REST API over Postgres in
-// testcontainers, for tests of the tools that talk to the server (the device
-// simulator and its link).
+// testcontainers, for tests of the tools that talk to the server (growctl, the
+// device simulator and its link).
 package servertest
 
 import (

@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/kipitix/growscada/internal/devicelink"
 )
 
 // Config defaults.
@@ -15,8 +17,10 @@ const (
 	DefaultServer   = "http://localhost:9090"
 	DefaultControl  = ":9191"
 	DefaultInterval = time.Second
-	DefaultQuality  = "good"
 )
+
+// DefaultQuality is the quality of tags that set none.
+var DefaultQuality = devicelink.QualityGood
 
 // Config is the simulator's YAML config: one virtual Device.
 type Config struct {
@@ -34,10 +38,10 @@ type Config struct {
 // TagConfig is one simulated tag.
 type TagConfig struct {
 	// Tag is the tag's unique name on the server.
-	Tag      string      `yaml:"tag"`
-	Interval *Duration   `yaml:"interval"`
-	Quality  string      `yaml:"quality"`
-	Pattern  PatternSpec `yaml:"pattern"`
+	Tag      string             `yaml:"tag"`
+	Interval *Duration          `yaml:"interval"`
+	Quality  devicelink.Quality `yaml:"quality"`
+	Pattern  PatternSpec        `yaml:"pattern"`
 }
 
 // ReadConfig parses and validates a config; unknown fields are errors.
@@ -82,7 +86,7 @@ func (c *Config) applyDefaults() {
 		if t.Interval == nil {
 			t.Interval = c.DefaultInterval
 		}
-		if t.Quality == "" {
+		if !t.Quality.IsValid() { // not set: an empty one fails to parse
 			t.Quality = DefaultQuality
 		}
 	}
@@ -110,20 +114,12 @@ func (c Config) Validate() error {
 		if t.Interval.D <= 0 {
 			return fmt.Errorf("tag %q: interval must be positive", t.Tag)
 		}
-		if err := validateQuality(t.Quality); err != nil {
-			return fmt.Errorf("tag %q: %w", t.Tag, err)
+		if !t.Quality.IsValid() {
+			return fmt.Errorf("tag %q: quality is required", t.Tag)
 		}
 		if err := t.Pattern.Validate(); err != nil {
 			return fmt.Errorf("tag %q: %w", t.Tag, err)
 		}
 	}
 	return nil
-}
-
-func validateQuality(q string) error {
-	switch q {
-	case "good", "bad", "uncertain":
-		return nil
-	}
-	return fmt.Errorf("unknown quality %q (want good, bad or uncertain)", q)
 }
