@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/kipitix/growscada/internal/domain/tag"
-	"github.com/kipitix/growscada/internal/interface/restapi/restdto"
+	"github.com/kipitix/growscada/internal/server/domain/tag"
+	"github.com/kipitix/growscada/internal/server/interface/restapi/restdto"
 )
 
 const (

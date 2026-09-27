@@ -11,11 +11,11 @@ import (
 
 	"github.com/alexflint/go-arg"
 	"github.com/kipitix/gracedown"
-	"github.com/kipitix/growscada/internal/application"
-	"github.com/kipitix/growscada/internal/domain/event"
-	"github.com/kipitix/growscada/internal/infrastructure/postgres/repositories"
-	"github.com/kipitix/growscada/internal/interface/restapi"
-	"github.com/kipitix/growscada/internal/interface/ui/root"
+	"github.com/kipitix/growscada/internal/server/application"
+	"github.com/kipitix/growscada/internal/server/domain/event"
+	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
+	"github.com/kipitix/growscada/internal/server/interface/restapi"
+	"github.com/kipitix/growscada/internal/server/interface/ui/root"
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
 	_ "github.com/lib/pq"

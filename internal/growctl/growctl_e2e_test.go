@@ -18,12 +18,12 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/kipitix/growscada/internal/application"
-	"github.com/kipitix/growscada/internal/application/appdto"
-	"github.com/kipitix/growscada/internal/domain/event"
 	"github.com/kipitix/growscada/internal/growctl"
-	"github.com/kipitix/growscada/internal/infrastructure/postgres/repositories"
-	"github.com/kipitix/growscada/internal/interface/restapi"
+	"github.com/kipitix/growscada/internal/server/application"
+	"github.com/kipitix/growscada/internal/server/application/appdto"
+	"github.com/kipitix/growscada/internal/server/domain/event"
+	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
+	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
 
 var testDB *sql.DB
@@ -58,7 +58,7 @@ func TestMain(m *testing.M) {
 	}
 
 	_, currentFile, _, _ := runtime.Caller(0)
-	migrationsDir := filepath.Join(filepath.Dir(currentFile), "..", "infrastructure", "postgres", "migrations")
+	migrationsDir := filepath.Join(filepath.Dir(currentFile), "..", "server", "infrastructure", "postgres", "migrations")
 
 	if err := goose.SetDialect("postgres"); err != nil {
 		db.Close()

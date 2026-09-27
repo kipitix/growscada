@@ -5,19 +5,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/google/uuid"
+	"github.com/kipitix/growscada/internal/apiclient"
 )
 
 // ServerTag is a tag that exists on the server. The planner uses ID, Name and
 // Type; get prints the rest.
-type ServerTag struct {
-	ID      uuid.UUID
-	Name    string
-	Type    string
-	Value   string
-	Quality string
-	Version int
-}
+type ServerTag = apiclient.Tag
 
 // Action is what a Step does to one tag.
 type Action int

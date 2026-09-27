@@ -15,7 +15,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/kipitix/growscada/internal/domain/tag"
+	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
 
 const (

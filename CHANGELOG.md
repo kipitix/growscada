@@ -1,5 +1,12 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [Unreleased]
+
+### Changed
+
+- `internal/` разложен по приложениям: слои сервера (`domain`, `application`, `infrastructure`, `interface`) перенесены в `internal/server/`; поведение не менялось
+- REST-клиент вынесен из `growctl` в общий пакет `internal/apiclient` (добавлены `GetTag`, `SetTagValue`, `ErrConflict`); `growctl` использует его
+
 ## [0.0.26] - 2026.09.27
 
 ### Added

@@ -31,7 +31,7 @@ All primary workflows go through `make`. **Always prefer `make <target>` over ru
 
 ```bash
 # Run a single test
-go test ./internal/domain/tag/... -run TestTagName
+go test ./internal/server/domain/tag/... -run TestTagName
 
 # Create a new migration
 goose create <migration_name> sql
@@ -44,20 +44,25 @@ goose up
 
 ## Architecture
 
-### DDD Layer Structure
+### Package Layout
+
+`internal/` is split by application. The server's DDD layers live under `internal/server/`; the tools that talk to the server from outside sit next to it and use the REST API only.
 
 ```
 internal/
-  domain/         # Core business logic — no external dependencies
-  application/    # Use-case services, orchestrate domain objects
-  infrastructure/ # Concrete implementations (Postgres, MQTT)
-  interface/      # Delivery mechanisms (REST API, PWA UI)
+  server/           # GrowSCADA server + WASM UI (DDD layers below)
+    domain/         # Core business logic — no external dependencies
+    application/    # Use-case services, orchestrate domain objects
+    infrastructure/ # Concrete implementations (Postgres, MQTT)
+    interface/      # Delivery mechanisms (REST API, PWA UI)
+  apiclient/        # Go client of the REST API (JSON shapes from server/interface/restapi/restdto)
+  growctl/          # growctl CLI: manifests, planner
 cmd/
   combined_server/ # Entry point — wires everything together
-  growctl/         # CLI entry point; logic in internal/growctl (REST client, manifests, planner)
+  growctl/         # CLI entry point; logic in internal/growctl
 ```
 
-### Domain Layer (`internal/domain/`)
+### Domain Layer (`internal/server/domain/`)
 
 Each subdomain owns its aggregate, value objects, and repository **interface**:
 
@@ -71,7 +76,7 @@ Each subdomain owns its aggregate, value objects, and repository **interface**:
 | `id/`      | Generic `ID[T]` UUID value object; type parameter prevents mixing IDs of different aggregates |
 | `version/` | Optimistic-concurrency version value object; Generic `Version[T]` |
 
-### Application Layer (`internal/application/`)
+### Application Layer (`internal/server/application/`)
 
 Services (`TagService`, `WidgetService`, `WidgetTypeService`, `SceneService`) each accept repository and event bus interfaces injected from `main.go`. They:
 1. Construct domain objects from `appdto` input DTOs.
@@ -80,21 +85,21 @@ Services (`TagService`, `WidgetService`, `WidgetTypeService`, `SceneService`) ea
 
 `appdto/` structs are the boundary between the domain and the outside world — not the REST DTOs.
 
-### Infrastructure Layer (`internal/infrastructure/`)
+### Infrastructure Layer (`internal/server/infrastructure/`)
 
 - **PostgreSQL repositories** implement domain repository interfaces using `database/sql` + `lib/pq`.
-- **Migrations** live in `internal/infrastructure/postgres/migrations/` and are managed with [Goose](https://github.com/pressly/goose). The debug `docker-compose.yaml` automatically applies migrations and seed data on `make db_up`.
+- **Migrations** live in `internal/server/infrastructure/postgres/migrations/` and are managed with [Goose](https://github.com/pressly/goose). The debug `docker-compose.yaml` automatically applies migrations and seed data on `make db_up`.
 - **MQTT event bus** (`event_bus_mqtt.go`) is a stub — the in-memory `EventBus` is used in production for now.
 
-### Interface Layer (`internal/interface/`)
+### Interface Layer (`internal/server/interface/`)
 
-**REST API** (`internal/interface/restapi/`, port `:9090`):
+**REST API** (`internal/server/interface/restapi/`, port `:9090`):
 - Uses stdlib `http.ServeMux` with method-prefixed patterns (Go 1.22+).
 - CORS middleware applied globally.
 - Errors follow RFC 7807 Problem Details (`problems.go`).
 - Each resource has its own handler file (`tags.go`, `widgets.go`, etc.) and a `restdto/` package for JSON shapes.
 
-**PWA UI** (`internal/interface/ui/`, port `:8080`):
+**PWA UI** (`internal/server/interface/ui/`, port `:8080`):
 - Built with [go-app v10](https://go-app.dev/) — compiled to WebAssembly, served by the same binary.
 - Four top-level modes rendered by `root/root.go`:
   - **Library** — create and edit WidgetTypes (HTML template + JS script, live sandboxed preview via `<iframe srcdoc>`).
@@ -109,7 +114,7 @@ Services (`TagService`, `WidgetService`, `WidgetTypeService`, `SceneService`) ea
 
 ### Repository Integration Tests
 
-Tests in `internal/infrastructure/postgres/repositories/` use **testcontainers-go** to spin up a real Postgres container, apply migrations via Goose, and run assertions. No manual database setup is needed for `go test`.
+Tests in `internal/server/infrastructure/postgres/repositories/` use **testcontainers-go** to spin up a real Postgres container, apply migrations via Goose, and run assertions. No manual database setup is needed for `go test`.
 
 ## Key Ubiquitous Language
 
