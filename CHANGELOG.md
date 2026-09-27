@@ -2,13 +2,19 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Вкладки сцен (и списки типов виджетов, виджетов сцены) периодически меняли порядок: как и у тегов, запросы шли без `ORDER BY`, и после `UPDATE` строка уезжала в конец. Теперь `SceneRepository.FindAll`, `FindWidgetsBySceneID`, `FindWidgetsByTypeID` и `WidgetTypeRepository.FindAll` возвращают в порядке создания (`ORDER BY pk_id`): при переименовании сцена остаётся на своём месте
+- Project: после двойного клика по вкладке сцены (переименование) другие сцены показывались пустыми до перезагрузки страницы. Результат асинхронного запроса диспатчился через контекст элемента, породившего событие; go-app молча отбрасывает `Dispatch`, если этот элемент уже размонтирован (вкладка превратилась в поле ввода), и `Reloader` виджетов навсегда оставался в состоянии загрузки. Теперь все асинхронные операции Project и Library диспатчат через контекст компонента (`compoCtx`, захватывается в `OnMount`); заодно больше не теряется новая версия сцены после переименования
+- Список тегов (Project → Tags, `GET /api/v1/tags`, в том числе с `?name_pattern=`/`?name_regex=`) перемешивался при обновлении значений тегов: Postgres отдавал строки без `ORDER BY` в порядке хранения, а `UPDATE` перемещает строку. Теперь `TagRepository.FindAll` сортирует по имени
+
 ### Added
 
-- **Симулятор устройства нижнего уровня** (задача 15) — `cmd/device_simulator/`, логика в `internal/devicesim/`; собирается в `make build` (или отдельно `make build_simulator`) → `bin/growscada_device_simulator/`, `make run_simulator` — с примером `tests/device_simulator/example.yaml`:
-  - один процесс — одно виртуальное устройство; YAML-конфиг (`server`, `control`, `autostart`, `defaultInterval`, `tags`), неизвестные поля — ошибка; `--config`, `--server` / `DEVSIM_SERVER`, `--control`, `--startup-timeout`
-  - теги только по имени (ADR 0003), сам их не создаёт и не удаляет; при старте ждёт сервер до `--startup-timeout`, отсутствующий тег или несовместимый с типом паттерн — ошибка без единой записи
+- **Симулятор устройства нижнего уровня** (задача 15) — `cmd/device_simulator/`, логика в `internal/devicesim/`; собирается в `make build` (или отдельно `make build_simulator`) → `bin/growscada_device_simulator/`, `make run_simulator` — с примером `tests/device_simulator/example.yaml`, `make run_simulator_dashboard` — с `tests/device_simulator/seed_dashboard.yaml`, который управляет сидовыми тегами сцены «Main Dashboard» (результат виден в Operation сразу после `make db_up`):
+  - один процесс — одно виртуальное устройство; YAML-конфиг (`server`, `control`, `autostart`, `defaultInterval`, `tags`), неизвестные поля — ошибка; `--config`, `--server` / `DEVSIM_SERVER`, `--control`; завершение через `gracedown`, как у сервера: по SIGINT/SIGTERM сначала останавливается control-API, затем устройство (текущие записи дописываются); коды выхода sysexits — 0 при штатной остановке, 66 — нет файла конфига, 78 — ошибка конфига, отсутствующий тег или несовместимый паттерн, 69 — не удалось занять порт control-API
+  - теги только по имени (ADR 0003), сам их не создаёт и не удаляет; control-API поднимается сразу, а сервер симулятор ждёт без ограничения по времени, как настоящее устройство (пока ждёт: `GET /api/v1/device` → `"state":"connecting"`, запросы к тегам → 503); отсутствующий тег или несовместимый с типом паттерн — ошибка без единой записи
   - паттерны `constant`, `ramp`, `sine`, `random_walk`, `step`; integer — все, boolean и string — `constant` и `step`; интервал на тег, запись каждый тик
-  - control-API (`:9191`): `POST /control/start|stop` (пауза, время паттернов не идёт), `GET /control/status`, `POST /control/tags/{name}/pattern` (смена на лету), `POST|DELETE /control/tags/{name}/quality` (липкое принудительное качество и сброс); ошибки — Problem Details
+  - control-API (`:9191`): `POST /api/v1/device/start|stop` (пауза, время паттернов не идёт), `GET /api/v1/device`, `POST /api/v1/device/tags/{name}/pattern` (смена на лету), `POST|DELETE /api/v1/device/tags/{name}/quality` (липкое принудительное качество и сброс); ошибки — Problem Details
   - тесты: unit (паттерны, конфиг, устройство и control-API с фейковым линком), интеграционные и сквозные против настоящего REST API и Postgres в testcontainers, включая конфликт версий (409)
   - Bruno: коллекция `tests/api/bruno_collections/device_simulator/` для ручных запросов к control-API
 - `internal/devicelink` — контракт поставки значений тегов от Device к серверу (ADR 0004): резолв по имени, учёт версии, при 409 — перечитать и повторить один раз, 404 — тег выбывает
@@ -18,6 +24,7 @@
 
 ### Changed
 
+- Bruno: коллекция сервера переименована `tests/api/bruno_collections/growscada/` → `growscada_server/` (в Bruno — «growscada server»), коллекция симулятора называется «growscada device simulator»; в Bruno это две отдельные коллекции, каждая открывается своей папкой
 - `internal/` разложен по приложениям: слои сервера (`domain`, `application`, `infrastructure`, `interface`) перенесены в `internal/server/`; поведение не менялось
 - REST-клиент вынесен из `growctl` в общий пакет `internal/apiclient` (добавлены `GetTag`, `SetTagValue`, `ErrConflict`); `growctl` использует его
 

@@ -1,0 +1,23 @@
+# Device simulator config for the seeded "Main Dashboard" scene: drives the
+# tags its widgets are bound to, so the result is visible in Operation right
+# after `make db_up` / `make full_restart` (no growctl apply needed).
+#   make run_simulator_dashboard
+defaultInterval: 500ms
+tags:
+  - tag: max_connections        # speedometer, 0..100
+    pattern:
+      kind: sine
+      offset: 50
+      amplitude: 45
+      period: 20s
+  - tag: is_active              # status circle
+    pattern:
+      kind: step
+      values: [true, false]
+      hold: 3s
+  - tag: status_message         # string ticker
+    interval: 1s
+    pattern:
+      kind: step
+      values: ["Pump running", "Pressure rising", "Pressure nominal", "Maintenance due"]
+      hold: 4s

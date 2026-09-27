@@ -1,11 +1,11 @@
 info:
-  name: post start
+  name: post device start
   type: http
   seq: 2
 
 http:
   method: POST
-  url: http://{{CONTROL_SERVER}}/control/start
+  url: http://{{CONTROL_SERVER}}/api/v1/device/start
   auth: inherit
 
 docs: |

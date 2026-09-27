@@ -15,27 +15,38 @@ import (
 	"github.com/kipitix/growscada/internal/devicelink"
 )
 
-// ErrUnknownTag means the Device does not simulate a tag with that name.
-var ErrUnknownTag = errors.New("tag is not simulated by this device")
+var (
+	// ErrUnknownTag means the Device does not simulate a tag with that name.
+	ErrUnknownTag = errors.New("tag is not simulated by this device")
+	// ErrConnecting means the Device has not resolved its tags on the server
+	// yet, so their types — and which patterns fit them — are unknown.
+	ErrConnecting = errors.New("device is still connecting to the server")
+)
 
-// Options tune how a Device is opened.
+// Device states, as reported by Status.
+const (
+	StateConnecting = "connecting"
+	StateConnected  = "connected"
+)
+
+// Options tune a Device.
 type Options struct {
 	// Logger receives warnings about failed writes; default slog.Default().
 	Logger *slog.Logger
-	// StartupTimeout bounds waiting for the server while resolving tags;
-	// default 30s.
-	StartupTimeout time.Duration
-	// RetryDelay is the pause between resolve attempts; default 1s.
+	// RetryDelay is the pause between attempts to reach the server while
+	// connecting; default 1s.
 	RetryDelay time.Duration
 }
 
 // Device is one simulated Device. Its methods are safe for concurrent use.
 type Device struct {
-	link   devicelink.Link
-	logger *slog.Logger
+	link       devicelink.Link
+	logger     *slog.Logger
+	retryDelay time.Duration
 
-	mu      sync.Mutex
-	running bool
+	mu        sync.Mutex
+	connected bool // tags resolved: types and generators are known
+	running   bool
 	// Pattern time runs only while the Device is running: runTotal is the
 	// running time before resumedAt, the moment of the last start.
 	runTotal  time.Duration
@@ -46,78 +57,100 @@ type Device struct {
 
 // simTag is one simulated tag; its fields are guarded by Device.mu.
 type simTag struct {
-	tag      devicelink.Tag
+	tag      devicelink.Tag // only the name until the Device is connected
 	interval time.Duration
 	quality  string // from the config
 	override string // forced quality, "" if none
 	pattern  PatternSpec
-	gen      generator
+	gen      generator     // nil until the Device is connected
 	setAt    time.Duration // Device running time when the pattern was set
 	rnd      *rand.Rand
 	lost     bool          // deleted on the server: no longer written
 	kick     chan struct{} // write now instead of waiting for the tick
+	// A kick repeats the last value (a random_walk must not take an extra
+	// step), unless regen asks for a fresh one after a pattern change.
+	regen   bool
+	last    string
+	written bool // last holds a generated value
 }
 
-// Open resolves the config's tags on the server and checks each pattern against
-// the tag's type. Network errors and server failures are retried until
-// StartupTimeout; a missing tag or an incompatible pattern fails at once.
-// Nothing is written before Run.
-func Open(ctx context.Context, cfg Config, link devicelink.Link, opts Options) (*Device, error) {
+// New creates the Device of a config. It does not talk to the server: Run
+// connects first, so the control API can serve the Device right away.
+func New(cfg Config, link devicelink.Link, opts Options) *Device {
 	if opts.Logger == nil {
 		opts.Logger = slog.Default()
-	}
-	if opts.StartupTimeout <= 0 {
-		opts.StartupTimeout = 30 * time.Second
 	}
 	if opts.RetryDelay <= 0 {
 		opts.RetryDelay = time.Second
 	}
-	ctx, cancel := context.WithTimeout(ctx, opts.StartupTimeout)
-	defer cancel()
-
 	d := &Device{
-		link:    link,
-		logger:  opts.Logger,
-		running: *cfg.Autostart,
-		byName:  make(map[string]*simTag, len(cfg.Tags)),
+		link:       link,
+		logger:     opts.Logger,
+		retryDelay: opts.RetryDelay,
+		running:    *cfg.Autostart,
+		resumedAt:  time.Now(),
+		byName:     make(map[string]*simTag, len(cfg.Tags)),
 	}
-	d.resumedAt = time.Now()
 	for _, tc := range cfg.Tags {
-		resolved, err := resolve(ctx, link, tc.Tag, opts)
-		if err != nil {
-			return nil, err
-		}
 		t := &simTag{
-			tag:      resolved,
+			tag:      devicelink.Tag{Name: tc.Tag},
 			interval: tc.Interval.D,
 			quality:  tc.Quality,
+			pattern:  tc.Pattern,
 			rnd:      rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())),
 			kick:     make(chan struct{}, 1),
-		}
-		if err := t.setPattern(tc.Pattern, 0); err != nil {
-			return nil, fmt.Errorf("tag %q: %w", tc.Tag, err)
 		}
 		d.tags = append(d.tags, t)
 		d.byName[tc.Tag] = t
 	}
-	return d, nil
+	return d
+}
+
+// connect resolves the tags on the server and checks each pattern against the
+// tag's type. An unreachable or failing server is waited for without limit, as
+// a real Device would; a missing tag or an incompatible pattern is an error.
+func (d *Device) connect(ctx context.Context) error {
+	resolved := make([]devicelink.Tag, len(d.tags))
+	for i, t := range d.tags {
+		tag, err := d.resolve(ctx, t.tag.Name)
+		if err != nil {
+			return err
+		}
+		resolved[i] = tag
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for i, t := range d.tags {
+		t.tag = resolved[i]
+		if err := t.setPattern(t.pattern, 0); err != nil {
+			return fmt.Errorf("tag %q: %w", t.tag.Name, err)
+		}
+	}
+	d.connected = true
+	// Pattern time starts now, not while waiting for the server.
+	d.runTotal, d.resumedAt = 0, time.Now()
+	return nil
 }
 
 // resolve looks a tag up, retrying while the server is unreachable or failing.
-func resolve(ctx context.Context, link devicelink.Link, name string, opts Options) (devicelink.Tag, error) {
-	for {
-		tag, err := link.Resolve(ctx, name)
+func (d *Device) resolve(ctx context.Context, name string) (devicelink.Tag, error) {
+	for warned := false; ; {
+		tag, err := d.link.Resolve(ctx, name)
 		if err == nil {
 			return tag, nil
 		}
 		if !devicelink.IsTransient(err) {
 			return devicelink.Tag{}, err
 		}
-		opts.Logger.Warn("server unavailable, retrying", "tag", name, "error", err)
+		if !warned {
+			d.logger.Warn("server unavailable, waiting for it", "tag", name, "error", err)
+			warned = true
+		}
 		select {
 		case <-ctx.Done():
-			return devicelink.Tag{}, fmt.Errorf("tag %q: server did not become available: %w", name, err)
-		case <-time.After(opts.RetryDelay):
+			return devicelink.Tag{}, fmt.Errorf("tag %q: %w", name, ctx.Err())
+		case <-time.After(d.retryDelay):
 		}
 	}
 }
@@ -145,9 +178,19 @@ func (t *simTag) poke() {
 	}
 }
 
-// Run writes every tag at its interval while the Device is running, until ctx
-// is done. Each tag is written right away, then on every tick.
-func (d *Device) Run(ctx context.Context) {
+// Run connects to the server, then writes every tag at its interval while the
+// Device is running, until ctx is done. Each tag is written right away, then
+// on every tick. It returns an error only if connecting fails for a reason
+// other than ctx being done (a missing tag, an incompatible pattern).
+func (d *Device) Run(ctx context.Context) error {
+	if err := d.connect(ctx); err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		return err
+	}
+	d.logger.Info("connected to the server", "tags", len(d.tags))
+
 	var wg sync.WaitGroup
 	for _, t := range d.tags {
 		wg.Add(1)
@@ -157,31 +200,40 @@ func (d *Device) Run(ctx context.Context) {
 		}()
 	}
 	wg.Wait()
+	return nil
 }
 
 func (d *Device) runTag(ctx context.Context, t *simTag) {
 	ticker := time.NewTicker(t.interval)
 	defer ticker.Stop()
+	kicked := false
 	for {
-		d.write(ctx, t)
+		d.write(ctx, t, kicked)
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			kicked = false
 		case <-t.kick:
+			kicked = true
 		}
 	}
 }
 
 // write generates the tag's next value and delivers it, if the Device is
-// running and the tag still exists.
-func (d *Device) write(ctx context.Context, t *simTag) {
+// running and the tag still exists. A kicked write repeats the last value
+// unless the pattern has changed since.
+func (d *Device) write(ctx context.Context, t *simTag, kicked bool) {
 	d.mu.Lock()
 	if !d.running || t.lost {
 		d.mu.Unlock()
 		return
 	}
-	value := t.gen.next(d.runningTime() - t.setAt)
+	if !kicked || t.regen || !t.written {
+		t.last, t.written = t.gen.next(d.runningTime()-t.setAt), true
+	}
+	t.regen = false
+	value := t.last
 	quality := t.currentQuality()
 	d.mu.Unlock()
 
@@ -234,13 +286,14 @@ func (d *Device) Stop() {
 func (d *Device) SetPattern(name string, p PatternSpec) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	t, ok := d.byName[name]
-	if !ok {
-		return fmt.Errorf("%w: %q", ErrUnknownTag, name)
+	t, err := d.tagLocked(name)
+	if err != nil {
+		return err
 	}
 	if err := t.setPattern(p, d.runningTime()); err != nil {
 		return err
 	}
+	t.regen = true
 	t.poke()
 	return nil
 }
@@ -262,24 +315,39 @@ func (d *Device) ResetQuality(name string) error {
 func (d *Device) setOverride(name, quality string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	t, ok := d.byName[name]
-	if !ok {
-		return fmt.Errorf("%w: %q", ErrUnknownTag, name)
+	t, err := d.tagLocked(name)
+	if err != nil {
+		return err
 	}
 	t.override = quality
 	t.poke()
 	return nil
 }
 
+// tagLocked returns a simulated tag once the Device is connected; d.mu held.
+func (d *Device) tagLocked(name string) (*simTag, error) {
+	t, ok := d.byName[name]
+	if !ok {
+		return nil, fmt.Errorf("%w: %q", ErrUnknownTag, name)
+	}
+	if !d.connected {
+		return nil, ErrConnecting
+	}
+	return t, nil
+}
+
 // Status is a snapshot of the Device.
 type Status struct {
+	// State is StateConnecting until the tags are resolved on the server.
+	State   string      `json:"state"`
 	Running bool        `json:"running"`
 	Tags    []TagStatus `json:"tags"`
 }
 
 // TagStatus is a snapshot of one simulated tag.
 type TagStatus struct {
-	Name     string      `json:"name"`
+	Name string `json:"name"`
+	// Type is empty while the Device is connecting.
 	Type     string      `json:"type"`
 	Interval Duration    `json:"interval"`
 	Quality  string      `json:"quality"`
@@ -293,7 +361,10 @@ type TagStatus struct {
 func (d *Device) Status() Status {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	s := Status{Running: d.running, Tags: make([]TagStatus, len(d.tags))}
+	s := Status{State: StateConnecting, Running: d.running, Tags: make([]TagStatus, len(d.tags))}
+	if d.connected {
+		s.State = StateConnected
+	}
 	for i, t := range d.tags {
 		s.Tags[i] = TagStatus{
 			Name:     t.tag.Name,

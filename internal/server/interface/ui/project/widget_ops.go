@@ -47,6 +47,7 @@ func (p *Project) applyNewSceneVersion(sceneID string, newVersion int) {
 // ── Widget CRUD ───────────────────────────────────────────────────────────────
 
 func (p *Project) createWidget(ctx app.Context, typeID string, x, y float64) {
+	ctx = p.compoCtx
 	if p.selectedSceneID == "" {
 		return
 	}
@@ -119,6 +120,7 @@ func (p *Project) createWidget(ctx app.Context, typeID string, x, y float64) {
 }
 
 func (p *Project) deleteWidget(ctx app.Context, widgetID string) {
+	ctx = p.compoCtx
 	sceneID := p.selectedSceneID
 	url := p.apiServerURL + "/api/v1/scenes/" + sceneID + "/widgets/" + widgetID
 	ctx.Async(func() {
@@ -244,6 +246,7 @@ func (p *Project) unbindPort(ctx app.Context, portName string) {
 }
 
 func (p *Project) putWidget(ctx app.Context, w widgetItem) {
+	ctx = p.compoCtx
 	sceneID := p.selectedSceneID
 	url := p.apiServerURL + "/api/v1/scenes/" + sceneID + "/widgets/" + w.ID
 	portBindings := w.PortBindings

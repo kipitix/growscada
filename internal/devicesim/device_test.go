@@ -94,23 +94,35 @@ func testConfig(t *testing.T, yaml string) Config {
 	return cfg
 }
 
-// startDevice opens the Device over the link and runs it until the test ends.
-func startDevice(t *testing.T, cfg Config, link devicelink.Link) *Device {
+// runDevice runs a new Device over the link until the test ends, without
+// waiting for it to connect.
+func runDevice(t *testing.T, cfg Config, link devicelink.Link, opts Options) *Device {
 	t.Helper()
-	d, err := Open(context.Background(), cfg, link, Options{Logger: quietLogger, RetryDelay: time.Millisecond})
-	if err != nil {
-		t.Fatalf("Open: %v", err)
+	if opts.Logger == nil {
+		opts.Logger = quietLogger
 	}
+	if opts.RetryDelay == 0 {
+		opts.RetryDelay = time.Millisecond
+	}
+	d := New(cfg, link, opts)
 	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		d.Run(ctx)
-		close(done)
-	}()
+	done := make(chan error, 1)
+	go func() { done <- d.Run(ctx) }()
 	t.Cleanup(func() {
 		cancel()
-		<-done
+		if err := <-done; err != nil {
+			t.Errorf("Run: %v", err)
+		}
 	})
+	return d
+}
+
+// startDevice runs a new Device over the link until the test ends and waits
+// until it is connected.
+func startDevice(t *testing.T, cfg Config, link devicelink.Link) *Device {
+	t.Helper()
+	d := runDevice(t, cfg, link, Options{})
+	eventually(t, "the device to connect", func() bool { return d.Status().State == StateConnected })
 	return d
 }
 
@@ -133,52 +145,113 @@ tags:
     pattern: {kind: ramp, start: 0, rate: 1000}
 `
 
-func TestOpen_RetriesUnavailableServer(t *testing.T) {
+func TestRun_WaitsForUnavailableServer(t *testing.T) {
 	link := newFakeLink(map[string]string{"counter": TypeInteger})
 	link.failures = 3
 
-	d, err := Open(context.Background(), testConfig(t, rampConfig), link, Options{Logger: quietLogger, RetryDelay: time.Millisecond})
+	d := runDevice(t, testConfig(t, rampConfig), link, Options{})
 
-	if err != nil || d == nil {
-		t.Fatalf("Open: %v", err)
-	}
+	eventually(t, "the device to connect", func() bool { return d.Status().State == StateConnected })
+	link.mu.Lock()
+	defer link.mu.Unlock()
 	if link.resolves != 4 {
 		t.Errorf("resolves: got %d, want 4", link.resolves)
 	}
 }
 
-func TestOpen_GivesUpAfterStartupTimeout(t *testing.T) {
+func TestRun_WaitsForServerWithoutLimit(t *testing.T) {
 	link := newFakeLink(map[string]string{"counter": TypeInteger})
 	link.failures = 1 << 30
+	d := New(testConfig(t, rampConfig), link, Options{Logger: quietLogger, RetryDelay: time.Millisecond})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- d.Run(ctx) }()
 
-	_, err := Open(context.Background(), testConfig(t, rampConfig), link,
-		Options{Logger: quietLogger, RetryDelay: time.Millisecond, StartupTimeout: 50 * time.Millisecond})
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case err := <-done:
+		t.Fatalf("Run gave up waiting for the server: %v", err)
+	default:
+	}
+	if got := d.Status().State; got != StateConnecting {
+		t.Errorf("state: got %q, want %q", got, StateConnecting)
+	}
 
-	if err == nil || !strings.Contains(err.Error(), "server did not become available") {
-		t.Errorf("got %v, want a startup timeout", err)
+	cancel()
+	if err := <-done; err != nil {
+		t.Errorf("Run after cancel: got %v, want nil", err)
 	}
 }
 
-func TestOpen_MissingTagFailsAtOnce(t *testing.T) {
+func TestRun_WaitingForServerDoesNotRunPatternTime(t *testing.T) {
+	link := newFakeLink(map[string]string{"counter": TypeInteger})
+	link.failures = 10
+	runDevice(t, testConfig(t, rampConfig), link, Options{RetryDelay: 20 * time.Millisecond})
+
+	eventually(t, "a write", func() bool { return len(link.snapshot()) > 0 })
+	// rate 1000/s: counting ~200ms of retries, the first value would be ~200.
+	if v := atoi(t, link.snapshot()[0].value); v > 100 {
+		t.Errorf("first value %d: pattern time ran while waiting for the server", v)
+	}
+}
+
+func TestRun_MissingTagFailsAtOnce(t *testing.T) {
 	link := newFakeLink(nil)
 
-	_, err := Open(context.Background(), testConfig(t, rampConfig), link, Options{Logger: quietLogger})
+	err := New(testConfig(t, rampConfig), link, Options{Logger: quietLogger}).Run(context.Background())
 
 	if !errors.Is(err, devicelink.ErrTagNotFound) || link.resolves != 1 {
 		t.Errorf("got %v after %d resolves, want ErrTagNotFound at once", err, link.resolves)
 	}
 }
 
-func TestOpen_IncompatiblePatternFails(t *testing.T) {
+func TestRun_IncompatiblePatternFails(t *testing.T) {
 	link := newFakeLink(map[string]string{"counter": TypeBoolean})
 
-	_, err := Open(context.Background(), testConfig(t, rampConfig), link, Options{Logger: quietLogger})
+	err := New(testConfig(t, rampConfig), link, Options{Logger: quietLogger}).Run(context.Background())
 
 	if err == nil || !strings.Contains(err.Error(), "does not apply to a boolean tag") {
 		t.Errorf("got %v, want an incompatible pattern error", err)
 	}
 	if len(link.snapshot()) != 0 {
 		t.Error("nothing must be written")
+	}
+}
+
+func TestControlAPI_WhileConnecting(t *testing.T) {
+	link := newFakeLink(map[string]string{"counter": TypeInteger})
+	link.failures = 1 << 30
+	d := runDevice(t, testConfig(t, rampConfig), link, Options{})
+	srv := httptest.NewServer(d.Handler())
+	defer srv.Close()
+
+	status := func(method, path, body string) (int, map[string]any) {
+		t.Helper()
+		req, _ := http.NewRequest(method, srv.URL+path, strings.NewReader(body))
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s %s: %v", method, path, err)
+		}
+		defer resp.Body.Close()
+		var out map[string]any
+		json.NewDecoder(resp.Body).Decode(&out)
+		return resp.StatusCode, out
+	}
+
+	if code, out := status("GET", "/api/v1/device", ""); code != 200 || out["state"] != StateConnecting {
+		t.Errorf("status: %d %v", code, out)
+	}
+	if code, out := status("POST", "/api/v1/device/stop", ""); code != 200 || out["running"] != false {
+		t.Errorf("stop: %d %v", code, out)
+	}
+	if code, out := status("POST", "/api/v1/device/tags/counter/pattern", `{"kind":"constant","value":1}`); code != 503 {
+		t.Errorf("pattern: %d %v, want 503", code, out)
+	}
+	if code, out := status("POST", "/api/v1/device/tags/counter/quality", `{"quality":"bad"}`); code != 503 {
+		t.Errorf("quality: %d %v, want 503", code, out)
+	}
+	if code, _ := status("POST", "/api/v1/device/tags/nope/pattern", `{"kind":"constant","value":1}`); code != 404 {
+		t.Errorf("unknown tag: got %d, want 404", code)
 	}
 }
 
@@ -235,7 +308,7 @@ func TestStop_PausesWritesAndPatternTime(t *testing.T) {
 	}
 }
 
-func TestOpen_WithoutAutostartWaitsForStart(t *testing.T) {
+func TestRun_WithoutAutostartWaitsForStart(t *testing.T) {
 	link := newFakeLink(map[string]string{"counter": TypeInteger})
 	d := startDevice(t, testConfig(t, "autostart: false\n"+rampConfig), link)
 
@@ -265,6 +338,33 @@ func TestForceQuality_StickyUntilReset(t *testing.T) {
 		t.Fatalf("ResetQuality: %v", err)
 	}
 	eventually(t, "configured quality again", func() bool { w, _ := link.last("counter"); return w.quality == "good" })
+}
+
+func TestForceQuality_RepeatsRandomWalkValue(t *testing.T) {
+	link := newFakeLink(map[string]string{"level": TypeInteger})
+	d := startDevice(t, testConfig(t, `
+defaultInterval: 1h
+tags:
+  - tag: level
+    pattern: {kind: random_walk, start: 50, step: 10, min: 0, max: 100}
+`), link)
+	eventually(t, "the first write", func() bool { return len(link.snapshot()) == 1 })
+
+	for i := range 20 {
+		if err := d.ForceQuality("level", "bad"); err != nil {
+			t.Fatalf("ForceQuality: %v", err)
+		}
+		eventually(t, "the kicked write", func() bool { return len(link.snapshot()) >= i*2+2 })
+		if err := d.ResetQuality("level"); err != nil {
+			t.Fatalf("ResetQuality: %v", err)
+		}
+		eventually(t, "the kicked write", func() bool { return len(link.snapshot()) >= i*2+3 })
+	}
+	for _, w := range link.snapshot() {
+		if w.value != "50" {
+			t.Fatalf("quality overrides moved the random walk: %+v", w)
+		}
+	}
 }
 
 func TestForceQuality_Rejects(t *testing.T) {
@@ -330,43 +430,43 @@ func TestControlAPI(t *testing.T) {
 		return resp.StatusCode, out
 	}
 
-	if code, out := call("POST", "/control/stop", ""); code != 200 || out["running"] != false {
+	if code, out := call("POST", "/api/v1/device/stop", ""); code != 200 || out["running"] != false {
 		t.Errorf("stop: %d %v", code, out)
 	}
-	if code, out := call("GET", "/control/status", ""); code != 200 || out["running"] != false {
+	if code, out := call("GET", "/api/v1/device", ""); code != 200 || out["running"] != false {
 		t.Errorf("status: %d %v", code, out)
 	}
-	if code, out := call("POST", "/control/start", ""); code != 200 || out["running"] != true {
+	if code, out := call("POST", "/api/v1/device/start", ""); code != 200 || out["running"] != true {
 		t.Errorf("start: %d %v", code, out)
 	}
 
-	code, out := call("POST", "/control/tags/counter/pattern", `{"kind":"sine","offset":5,"amplitude":1,"period":"1s"}`)
+	code, out := call("POST", "/api/v1/device/tags/counter/pattern", `{"kind":"sine","offset":5,"amplitude":1,"period":"1s"}`)
 	if code != 200 {
 		t.Errorf("pattern: %d %v", code, out)
 	}
 	if got := d.Status().Tags[0].Pattern.Kind; got != KindSine {
 		t.Errorf("pattern: got kind %q", got)
 	}
-	if code, out := call("POST", "/control/tags/counter/pattern", `{"kind":"step","values":["a"],"hold":"1s"}`); code != 400 || !strings.Contains(fmt.Sprint(out["detail"]), "is not an integer") {
+	if code, out := call("POST", "/api/v1/device/tags/counter/pattern", `{"kind":"step","values":["a"],"hold":"1s"}`); code != 400 || !strings.Contains(fmt.Sprint(out["detail"]), "is not an integer") {
 		t.Errorf("incompatible pattern: %d %v", code, out)
 	}
-	if code, _ := call("POST", "/control/tags/counter/pattern", `{"kind":"constant","value":1,"extra":1}`); code != 400 {
+	if code, _ := call("POST", "/api/v1/device/tags/counter/pattern", `{"kind":"constant","value":1,"extra":1}`); code != 400 {
 		t.Errorf("unknown field: got %d, want 400", code)
 	}
-	if code, out := call("POST", "/control/tags/nope/pattern", `{"kind":"constant","value":1}`); code != 404 || out["status"] != float64(404) {
+	if code, out := call("POST", "/api/v1/device/tags/nope/pattern", `{"kind":"constant","value":1}`); code != 404 || out["status"] != float64(404) {
 		t.Errorf("unknown tag: %d %v", code, out)
 	}
 
-	if code, _ := call("POST", "/control/tags/counter/quality", `{"quality":"bad"}`); code != 200 {
+	if code, _ := call("POST", "/api/v1/device/tags/counter/quality", `{"quality":"bad"}`); code != 200 {
 		t.Errorf("force quality: got %d", code)
 	}
 	if !d.Status().Tags[0].Forced {
 		t.Error("quality: want forced")
 	}
-	if code, _ := call("POST", "/control/tags/counter/quality", `{"quality":"great"}`); code != 400 {
+	if code, _ := call("POST", "/api/v1/device/tags/counter/quality", `{"quality":"great"}`); code != 400 {
 		t.Errorf("invalid quality: got %d, want 400", code)
 	}
-	if code, _ := call("DELETE", "/control/tags/counter/quality", ""); code != 200 {
+	if code, _ := call("DELETE", "/api/v1/device/tags/counter/quality", ""); code != 200 {
 		t.Errorf("reset quality: got %d", code)
 	}
 	if s := d.Status().Tags[0]; s.Forced || s.Quality != "good" {

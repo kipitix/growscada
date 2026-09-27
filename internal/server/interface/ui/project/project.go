@@ -21,6 +21,12 @@ const (
 
 type Project struct {
 	app.Compo
+	// compoCtx is the component's own context, captured in OnMount. Async work
+	// dispatches its result through it: an event handler's ctx belongs to the
+	// element that fired the event, and go-app silently drops Dispatch once that
+	// element is unmounted (e.g. a tab that turns into its rename input), which
+	// would lose the result and leave a Reloader loading forever.
+	compoCtx app.Context
 	ThemeMode    string // exported so go-app detects theme changes and re-renders
 	apiServerURL string
 
@@ -134,6 +140,7 @@ func NewProject(apiServerURL string) *Project {
 }
 
 func (p *Project) OnMount(ctx app.Context) {
+	p.compoCtx = ctx
 	ctx.ObserveState("theme", &p.ThemeMode)
 	p.simInputs = make(map[string]map[string]string)
 	p.widgetTypeWidth = 180

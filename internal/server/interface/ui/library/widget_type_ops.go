@@ -17,6 +17,7 @@ const defaultScript = "function update() {\n}"
 // ── Widget type CRUD ──────────────────────────────────────────────────────────
 
 func (l *Library) createItem(ctx app.Context) {
+	ctx = l.compoCtx
 	name := "New Widget Type"
 	url := l.apiServerURL + "/api/v1/widget-types"
 	body, _ := json.Marshal(createWidgetTypeRequest{
@@ -68,6 +69,7 @@ func (l *Library) createItem(ctx app.Context) {
 }
 
 func (l *Library) deleteItem(ctx app.Context) {
+	ctx = l.compoCtx
 	if l.selectedID == "" {
 		return
 	}
@@ -101,6 +103,7 @@ func (l *Library) deleteItem(ctx app.Context) {
 }
 
 func (l *Library) applyChanges(ctx app.Context) {
+	ctx = l.compoCtx
 	if l.selectedID == "" {
 		return
 	}
@@ -158,6 +161,7 @@ func (l *Library) applyChanges(ctx app.Context) {
 }
 
 func (l *Library) commitEdit(ctx app.Context) {
+	ctx = l.compoCtx
 	if l.editingID == "" {
 		return
 	}

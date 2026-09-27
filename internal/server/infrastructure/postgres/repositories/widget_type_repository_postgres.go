@@ -111,7 +111,7 @@ func (r widgetTypeRepositoryPostgresImpl) DeleteByID(ctx context.Context, anID i
 
 func (r widgetTypeRepositoryPostgresImpl) FindAll(ctx context.Context) ([]widget.WidgetType, error) {
 	rows, err := r.db.QueryContext(ctx,
-		"SELECT "+selectWidgetTypeColumns+" FROM widget_types",
+		"SELECT "+selectWidgetTypeColumns+" FROM widget_types ORDER BY pk_id",
 	)
 	if err != nil {
 		return nil, fmt.Errorf("error querying widget types: %w", err)

@@ -72,25 +72,28 @@ func startSimulator(t *testing.T, yaml string, tagTypes map[string]string) *simu
 	}
 	cfg.Server = api.URL
 	link := devicelink.NewRESTLink(apiclient.New(cfg.Server, api.Client()))
-	device, err := devicesim.Open(context.Background(), cfg, link, devicesim.Options{
+	device := devicesim.New(cfg, link, devicesim.Options{
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
 	s.control = httptest.NewServer(device.Handler())
 
 	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		device.Run(ctx)
-		close(done)
-	}()
+	done := make(chan error, 1)
+	go func() { done <- device.Run(ctx) }()
 	t.Cleanup(func() {
 		cancel()
-		<-done
+		if err := <-done; err != nil {
+			t.Errorf("Run: %v", err)
+		}
 		s.control.Close()
 	})
+	deadline := time.Now().Add(10 * time.Second)
+	for device.Status().State != devicesim.StateConnected {
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for the simulator to connect")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 	return s
 }
 
@@ -210,7 +213,7 @@ func TestE2E_ControlAPI(t *testing.T) {
 	s.eventually(t, "sim.speed", "a write", func(tag appdto.Tag) bool { return tag.Quality == "good" })
 
 	// Forced quality reaches the server and sticks until reset.
-	s.call(t, "POST", "/control/tags/sim.speed/quality", `{"quality":"bad"}`)
+	s.call(t, "POST", "/api/v1/device/tags/sim.speed/quality", `{"quality":"bad"}`)
 	bad := s.eventually(t, "sim.speed", "bad quality", func(tag appdto.Tag) bool { return tag.Quality == "bad" })
 	s.eventually(t, "sim.speed", "more bad writes", func(tag appdto.Tag) bool {
 		if tag.Quality != "bad" {
@@ -218,26 +221,26 @@ func TestE2E_ControlAPI(t *testing.T) {
 		}
 		return tag.Version >= bad.Version+3
 	})
-	s.call(t, "DELETE", "/control/tags/sim.speed/quality", "")
+	s.call(t, "DELETE", "/api/v1/device/tags/sim.speed/quality", "")
 	s.eventually(t, "sim.speed", "good quality again", func(tag appdto.Tag) bool { return tag.Quality == "good" })
 
 	// A new pattern takes effect on the fly.
-	s.call(t, "POST", "/control/tags/sim.speed/pattern", `{"kind":"constant","value":7}`)
+	s.call(t, "POST", "/api/v1/device/tags/sim.speed/pattern", `{"kind":"constant","value":7}`)
 	s.eventually(t, "sim.speed", "the constant", func(tag appdto.Tag) bool { return tag.Value == "7" })
 
 	// Stop freezes every tag; start resumes.
-	s.call(t, "POST", "/control/stop", "")
+	s.call(t, "POST", "/api/v1/device/stop", "")
 	time.Sleep(50 * time.Millisecond) // let in-flight writes land
 	frozen := s.get(t, "sim.mode")
 	time.Sleep(150 * time.Millisecond)
 	if got := s.get(t, "sim.mode"); got.Version != frozen.Version {
 		t.Fatalf("written while stopped: version %d → %d", frozen.Version, got.Version)
 	}
-	s.call(t, "POST", "/control/start", "")
+	s.call(t, "POST", "/api/v1/device/start", "")
 	s.eventually(t, "sim.mode", "writes after start", func(tag appdto.Tag) bool { return tag.Version > frozen.Version })
 }
 
-func TestE2E_OpenFailsOnMissingTag(t *testing.T) {
+func TestE2E_RunFailsOnMissingTag(t *testing.T) {
 	api, _ := servertest.StartAPI(t, postgres.DB(t))
 	cfg, err := devicesim.ReadConfig(strings.NewReader(e2eConfig))
 	if err != nil {
@@ -245,7 +248,7 @@ func TestE2E_OpenFailsOnMissingTag(t *testing.T) {
 	}
 	link := devicelink.NewRESTLink(apiclient.New(api.URL, api.Client()))
 
-	_, err = devicesim.Open(context.Background(), cfg, link, devicesim.Options{})
+	err = devicesim.New(cfg, link, devicesim.Options{}).Run(context.Background())
 
 	if err == nil || !strings.Contains(err.Error(), `"sim.speed"`) {
 		t.Errorf("got %v, want an error naming the missing tag", err)

@@ -150,7 +150,7 @@ func (r sceneRepositoryPostgresImpl) DeleteByID(ctx context.Context, sceneID id.
 
 func (r sceneRepositoryPostgresImpl) FindAll(ctx context.Context) ([]scene.Scene, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, name, width, height, background_html, version FROM scenes`,
+		`SELECT id, name, width, height, background_html, version FROM scenes ORDER BY pk_id`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("error querying scenes: %w", err)
@@ -226,7 +226,7 @@ type dbTX interface {
 
 func (r sceneRepositoryPostgresImpl) findWidgetsBySceneIDTx(ctx context.Context, tx dbTX, sceneID id.ID[scene.Scene]) ([]widget.Widget, error) {
 	rows, err := tx.QueryContext(ctx,
-		"SELECT "+selectWidgetColumns+" FROM widgets WHERE scene_id = $1",
+		"SELECT "+selectWidgetColumns+" FROM widgets WHERE scene_id = $1 ORDER BY pk_id",
 		sceneID.UUID(),
 	)
 	if err != nil {
@@ -249,7 +249,7 @@ func (r sceneRepositoryPostgresImpl) findWidgetsBySceneIDTx(ctx context.Context,
 }
 
 func (r sceneRepositoryPostgresImpl) findAllWidgetsGroupedByScene(ctx context.Context) (map[uuid.UUID][]widget.Widget, error) {
-	rows, err := r.db.QueryContext(ctx, "SELECT "+selectWidgetColumns+" FROM widgets")
+	rows, err := r.db.QueryContext(ctx, "SELECT "+selectWidgetColumns+" FROM widgets ORDER BY pk_id")
 	if err != nil {
 		return nil, fmt.Errorf("error querying widgets: %w", err)
 	}
@@ -281,7 +281,8 @@ func (r sceneRepositoryPostgresImpl) FindWidgetsByTypeID(ctx context.Context, ty
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT `+selectWidgetInSceneColumns+`, s.version
 		 FROM widgets w JOIN scenes s ON s.id = w.scene_id
-		 WHERE w.type_id = $1`,
+		 WHERE w.type_id = $1
+		 ORDER BY s.pk_id, w.pk_id`,
 		typeID.UUID(),
 	)
 	if err != nil {

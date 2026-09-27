@@ -35,7 +35,7 @@ var kindsByType = map[string][]string{
 }
 
 // PatternSpec is how a tag's values are generated: the `pattern` object of the
-// config and the body of POST /control/tags/{name}/pattern. Which fields apply
+// config and the body of POST /api/v1/device/tags/{name}/pattern. Which fields apply
 // depends on Kind; the others must be absent.
 type PatternSpec struct {
 	Kind string `yaml:"kind" json:"kind"`

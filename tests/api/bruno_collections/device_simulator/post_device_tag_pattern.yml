@@ -1,11 +1,11 @@
 info:
-  name: post tag pattern
+  name: post device tag pattern
   type: http
   seq: 4
 
 http:
   method: POST
-  url: http://{{CONTROL_SERVER}}/control/tags/{{TAG_NAME}}/pattern
+  url: http://{{CONTROL_SERVER}}/api/v1/device/tags/{{TAG_NAME}}/pattern
   body:
     type: json
     data: |-
@@ -24,6 +24,7 @@ docs: |
   max), step (values, hold). integer tags take all kinds; boolean and string
   only constant and step. An invalid or incompatible pattern is 400, a tag the
   device does not simulate is 404.
+  While the device is still connecting to the server this is 503.
 
 settings:
   encodeUrl: true

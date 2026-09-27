@@ -1,0 +1,22 @@
+info:
+  name: get device
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: http://{{CONTROL_SERVER}}/api/v1/device
+  auth: inherit
+
+docs: |
+  Snapshot of the simulated device: state ("connecting" until its tags are
+  resolved on the server, then "connected"), running flag and, per tag, its
+  type (empty while connecting), interval, current quality (forced or
+  configured) and pattern. The control API is up from the start, before the
+  server is reachable.
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

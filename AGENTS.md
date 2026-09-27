@@ -22,6 +22,7 @@ All primary workflows go through `make`. **Always prefer `make <target>` over ru
 | `make build_growctl` | Compiles the `growctl` CLI (declarative tag manifests, kubectl-style) to `bin/growctl/` |
 | `make build_simulator` | Compiles the device simulator to `bin/growscada_device_simulator/` |
 | `make run_simulator` | `build_simulator` + runs it with `tests/device_simulator/example.yaml` (needs a running server and the tags from `tests/manifests/example_tags.yaml`) |
+| `make run_simulator_dashboard` | `build_simulator` + runs it with `tests/device_simulator/seed_dashboard.yaml`: drives the seeded tags bound to the "Main Dashboard" scene, visible in Operation right after `make db_up` / `make full_restart` |
 | `make run` | `build_server` + starts server + opens Chromium at `localhost:8080` |
 | `make db_up` | Starts the dev PostgreSQL container via Docker Compose; applies migrations and seeds automatically |
 | `make db_down` | Stops the container and **deletes** the data volume |
@@ -138,7 +139,7 @@ Tests of the tools that talk to the server (`internal/devicelink`, `internal/dev
 
 ## API Collections
 
-Manual/exploratory API tests are maintained as [Bruno](https://www.usebruno.com/) collections in `tests/api/bruno_collections/`: `growscada/` for the server REST API (the `localhost` environment points to `http://localhost:9090`) and `device_simulator/` for the simulator's control API (`localhost:9191`). Automated tests are Go tests only.
+Manual/exploratory API tests are maintained as [Bruno](https://www.usebruno.com/) collections in `tests/api/bruno_collections/`: `growscada_server/` for the server REST API (the `localhost` environment points to `http://localhost:9090`) and `device_simulator/` for the simulator's control API (`localhost:9191`). Automated tests are Go tests only.
 
 ## MCP Servers
 

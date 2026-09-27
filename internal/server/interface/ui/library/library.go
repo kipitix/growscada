@@ -15,6 +15,12 @@ import (
 
 type Library struct {
 	app.Compo
+	// compoCtx is the component's own context, captured in OnMount. Async work
+	// dispatches its result through it: an event handler's ctx belongs to the
+	// element that fired the event, and go-app silently drops Dispatch once that
+	// element is unmounted (e.g. a tab that turns into its rename input), which
+	// would lose the result and leave a Reloader loading forever.
+	compoCtx app.Context
 	ThemeMode         string // exported so go-app detects theme changes and re-renders
 	apiServerURL      string
 	widgetTypes       []widgetTypeItem
@@ -40,6 +46,7 @@ func NewLibrary(apiServerURL string) *Library {
 }
 
 func (l *Library) OnMount(ctx app.Context) {
+	l.compoCtx = ctx
 	ctx.ObserveState("theme", &l.ThemeMode)
 	ctx.LocalStorage().Get("library:selectedID", &l.selectedID)
 	l.loadList(ctx)
@@ -64,6 +71,7 @@ func isWidgetTypeEvent(eventType string) bool {
 
 // loadList (re)loads the widget type list; concurrent requests are coalesced.
 func (l *Library) loadList(ctx app.Context) {
+	ctx = l.compoCtx
 	if !l.reloader.Start() {
 		return
 	}

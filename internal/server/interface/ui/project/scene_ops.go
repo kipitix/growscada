@@ -15,6 +15,7 @@ import (
 // ── Scene CRUD ────────────────────────────────────────────────────────────────
 
 func (p *Project) createScene(ctx app.Context) {
+	ctx = p.compoCtx
 	url := p.apiServerURL + "/api/v1/scenes"
 	body, _ := json.Marshal(createSceneRequest{Name: "New Scene", Width: 1920, Height: 1080})
 	ctx.Async(func() {
@@ -55,6 +56,7 @@ func (p *Project) createScene(ctx app.Context) {
 // dialog can warn the user how much they are about to delete along with the
 // scene, then deletes it if they confirm.
 func (p *Project) confirmDeleteScene(ctx app.Context, sceneID, sceneName string) {
+	ctx = p.compoCtx
 	url := p.apiServerURL + "/api/v1/scenes/" + sceneID + "/widgets"
 	ctx.Async(func() {
 		resp, err := http.Get(url)
@@ -80,6 +82,7 @@ func (p *Project) confirmDeleteScene(ctx app.Context, sceneID, sceneName string)
 }
 
 func (p *Project) deleteScene(ctx app.Context, sceneID string) {
+	ctx = p.compoCtx
 	url := p.apiServerURL + "/api/v1/scenes/" + sceneID
 	ctx.Async(func() {
 		req, _ := http.NewRequest(http.MethodDelete, url, nil)
@@ -123,6 +126,7 @@ func (p *Project) syncSceneEditingFields() {
 }
 
 func (p *Project) saveSceneProperties(ctx app.Context) {
+	ctx = p.compoCtx
 	if p.selectedSceneID == "" {
 		return
 	}
@@ -207,6 +211,7 @@ func (p *Project) startEditingScene(id, name string) {
 }
 
 func (p *Project) commitSceneEdit(ctx app.Context) {
+	ctx = p.compoCtx
 	if p.editingSceneID == "" {
 		return
 	}

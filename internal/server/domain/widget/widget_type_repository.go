@@ -32,6 +32,7 @@ type WidgetTypeRepository interface {
 	// Returns ErrWidgetTypeNotFound if the widget type does not exist.
 	DeleteByID(context.Context, id.ID[WidgetType]) (WidgetType, error)
 
-	// FindAll returns all widget types.
+	// FindAll returns all widget types in creation order, so the order is
+	// stable while widget types change.
 	FindAll(context.Context) ([]WidgetType, error)
 }

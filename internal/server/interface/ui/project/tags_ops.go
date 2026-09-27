@@ -11,6 +11,7 @@ import (
 )
 
 func (p *Project) createTag(ctx app.Context) {
+	ctx = p.compoCtx
 	name := p.newTagName
 	tagType := p.newTagType
 	url := p.apiServerURL + "/api/v1/tags"
@@ -61,6 +62,7 @@ func (p *Project) createTag(ctx app.Context) {
 }
 
 func (p *Project) deleteTag(ctx app.Context) {
+	ctx = p.compoCtx
 	if p.selectedTagID == "" {
 		return
 	}

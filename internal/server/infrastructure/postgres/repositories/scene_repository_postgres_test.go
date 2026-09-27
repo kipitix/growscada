@@ -3,6 +3,7 @@ package repositories_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -559,5 +560,91 @@ func TestSceneAddWidget_WithPortBindings_RoundTripsCorrectly(t *testing.T) {
 	}
 	if len(found.Labels()) != 2 {
 		t.Errorf("Labels: expected 2, got %d", len(found.Labels()))
+	}
+}
+
+// ══════════════════════════════ Ordering ═══════════════════════════════════
+//
+// Postgres returns unordered rows in storage order, and an UPDATE moves a
+// row; lists must keep the creation order however often their items change.
+
+func TestSceneFindAll_CreationOrderEvenAfterUpdates(t *testing.T) {
+	cleanScenes(t)
+	repo := repositories.NewSceneRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	var created []scene.Scene
+	for _, name := range []string{"charlie", "alpha", "bravo"} {
+		created = append(created, mustSaveScene(t, repo, name))
+	}
+	for round := range 3 {
+		for i := range 2 {
+			newName, _ := scene.NewSceneName(fmt.Sprintf("renamed-%d-%d", i, round))
+			sc := created[i]
+			saved, err := repo.Save(ctx, scene.NewScene(sc.ID(), newName, sc.Size(), sc.BackgroundHTML(), nil, sc.Version()))
+			if err != nil {
+				t.Fatalf("Save (update): %v", err)
+			}
+			created[i] = saved
+		}
+	}
+
+	all, err := repo.FindAll(ctx)
+
+	if err != nil {
+		t.Fatalf("FindAll: %v", err)
+	}
+	if len(all) != len(created) {
+		t.Fatalf("expected %d scenes, got %d", len(created), len(all))
+	}
+	for i := range created {
+		if all[i].ID() != created[i].ID() {
+			t.Errorf("position %d: got %q, want %q (creation order)", i, all[i].Name().String(), created[i].Name().String())
+		}
+	}
+}
+
+func TestSceneFindWidgetsBySceneID_CreationOrderEvenAfterUpdates(t *testing.T) {
+	cleanScenes(t)
+	repo := repositories.NewSceneRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	sc := mustSaveScene(t, repo, "scene-1")
+	ver := sc.Version()
+	var widgets []widget.Widget
+	for _, name := range []string{"w-1", "w-2", "w-3"} {
+		w := makeWidget(t, repo, name)
+		saved, newVer, err := repo.AddWidget(ctx, sc.ID(), ver, w)
+		if err != nil {
+			t.Fatalf("AddWidget: %v", err)
+		}
+		widgets, ver = append(widgets, saved), newVer
+	}
+	for round := range 3 {
+		for _, w := range widgets[:2] {
+			moved := widget.NewWidget(
+				w.ID(), w.Name(), widget.NewPosition(float64(round), 0, 0), w.Size(), w.Origin(), w.Rotation(),
+				w.TypeID(), w.Labels(), w.PortBindings(),
+			)
+			_, newVer, err := repo.UpdateWidget(ctx, sc.ID(), ver, moved)
+			if err != nil {
+				t.Fatalf("UpdateWidget: %v", err)
+			}
+			ver = newVer
+		}
+	}
+
+	found, err := repo.FindWidgetsBySceneID(ctx, sc.ID())
+
+	if err != nil {
+		t.Fatalf("FindWidgetsBySceneID: %v", err)
+	}
+	if len(found) != len(widgets) {
+		t.Fatalf("expected %d widgets, got %d", len(widgets), len(found))
+	}
+	for i := range widgets {
+		if found[i].ID() != widgets[i].ID() {
+			t.Errorf("position %d: got %q, want %q (creation order)", i, found[i].Name().String(), widgets[i].Name().String())
+		}
 	}
 }

@@ -157,3 +157,13 @@ func TestIsTransient(t *testing.T) {
 		t.Error("a missing tag must not be transient")
 	}
 }
+
+func TestIsTransient_BadURLIsNot(t *testing.T) {
+	link := devicelink.NewRESTLink(apiclient.New("localhost:9090", http.DefaultClient)) // no scheme
+
+	_, err := link.Resolve(context.Background(), "x")
+
+	if err == nil || devicelink.IsTransient(err) {
+		t.Errorf("unsupported scheme: %v must not be transient", err)
+	}
+}

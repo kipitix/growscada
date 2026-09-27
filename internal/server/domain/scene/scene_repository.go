@@ -45,11 +45,12 @@ type SceneRepository interface {
 	// Returns ErrSceneNotFound if the scene does not exist.
 	DeleteByID(context.Context, id.ID[Scene]) (Scene, error)
 
-	// FindAll returns all scenes, with their widgets.
+	// FindAll returns all scenes, with their widgets, in creation order, so
+	// the order is stable while scenes change (scene tabs do not jump).
 	FindAll(context.Context) ([]Scene, error)
 
 	// FindWidgetsBySceneID returns all widgets belonging to the given scene,
-	// without loading the rest of the scene.
+	// in creation order, without loading the rest of the scene.
 	FindWidgetsBySceneID(context.Context, id.ID[Scene]) ([]widget.Widget, error)
 
 	// FindWidgetByID returns a single widget belonging to the given scene.

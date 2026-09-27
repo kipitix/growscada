@@ -148,7 +148,7 @@ func (r tagRepositoryPostgresImpl) DeleteByID(ctx context.Context, tagID id.ID[t
 
 func (r tagRepositoryPostgresImpl) FindAll(ctx context.Context) ([]tag.Tag, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, name, type, value, quality, version FROM tags`,
+		`SELECT id, name, type, value, quality, version FROM tags ORDER BY name`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("error querying tags: %w", err)

@@ -8,36 +8,37 @@ import (
 
 // Handler serves the control API:
 //
-//	POST   /control/start                 resume writing
-//	POST   /control/stop                  pause writing
-//	GET    /control/status                Device snapshot
-//	POST   /control/tags/{name}/pattern   body: a pattern object
-//	POST   /control/tags/{name}/quality   body: {"quality":"bad"}
-//	DELETE /control/tags/{name}/quality   back to the configured quality
+//	GET    /api/v1/device                       Device status
+//	POST   /api/v1/device/start                 resume writing
+//	POST   /api/v1/device/stop                  pause writing
+//	POST   /api/v1/device/tags/{name}/pattern   body: a pattern object
+//	POST   /api/v1/device/tags/{name}/quality   body: {"quality":"bad"}
+//	DELETE /api/v1/device/tags/{name}/quality   back to the configured quality
 //
-// Every successful call answers with the Device status; errors are RFC 7807
-// Problem Details.
+// The API is served from the start, while the Device is still connecting to
+// the server; tag calls answer 503 until it is connected. Every successful
+// call answers with the Device status; errors are RFC 7807 Problem Details.
 func (d *Device) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /control/start", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/v1/device/start", func(w http.ResponseWriter, r *http.Request) {
 		d.Start()
 		d.sendStatus(w)
 	})
-	mux.HandleFunc("POST /control/stop", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/v1/device/stop", func(w http.ResponseWriter, r *http.Request) {
 		d.Stop()
 		d.sendStatus(w)
 	})
-	mux.HandleFunc("GET /control/status", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/v1/device", func(w http.ResponseWriter, r *http.Request) {
 		d.sendStatus(w)
 	})
-	mux.HandleFunc("POST /control/tags/{name}/pattern", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/v1/device/tags/{name}/pattern", func(w http.ResponseWriter, r *http.Request) {
 		var p PatternSpec
 		if !decodeBody(w, r, &p) {
 			return
 		}
 		d.reply(w, r, d.SetPattern(r.PathValue("name"), p))
 	})
-	mux.HandleFunc("POST /control/tags/{name}/quality", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/v1/device/tags/{name}/quality", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Quality string `json:"quality"`
 		}
@@ -46,20 +47,22 @@ func (d *Device) Handler() http.Handler {
 		}
 		d.reply(w, r, d.ForceQuality(r.PathValue("name"), body.Quality))
 	})
-	mux.HandleFunc("DELETE /control/tags/{name}/quality", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("DELETE /api/v1/device/tags/{name}/quality", func(w http.ResponseWriter, r *http.Request) {
 		d.reply(w, r, d.ResetQuality(r.PathValue("name")))
 	})
 	return mux
 }
 
 // reply sends the status, or the error as a problem: 404 for a tag the Device
-// does not simulate, 400 for anything else.
+// does not simulate, 503 while it is connecting, 400 for anything else.
 func (d *Device) reply(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case err == nil:
 		d.sendStatus(w)
 	case errors.Is(err, ErrUnknownTag):
 		sendProblem(w, r, http.StatusNotFound, err)
+	case errors.Is(err, ErrConnecting):
+		sendProblem(w, r, http.StatusServiceUnavailable, err)
 	default:
 		sendProblem(w, r, http.StatusBadRequest, err)
 	}

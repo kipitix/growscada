@@ -6,8 +6,10 @@ package devicelink
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
 	"net/http"
+	"net/url"
 
 	"github.com/google/uuid"
 
@@ -39,6 +41,15 @@ type Link interface {
 // IsTransient reports whether an error is worth retrying later: the server is
 // unreachable or failed (5xx), as opposed to rejecting the request.
 func IsTransient(err error) bool {
+	// *url.Error is a net.Error whatever it wraps: judge by the cause, so a
+	// bad URL scheme or a TLS certificate error is not retried.
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		err = urlErr.Err
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true // the server closed the connection, e.g. while restarting
+	}
 	var netErr net.Error
 	if errors.As(err, &netErr) {
 		return true

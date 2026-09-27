@@ -5,15 +5,15 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/alexflint/go-arg"
+	"github.com/kipitix/gracedown"
 
 	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/devicelink"
@@ -21,30 +21,28 @@ import (
 )
 
 type simulatorArgs struct {
-	Config         string        `arg:"--config,required" help:"YAML config of the simulated device"`
-	Server         string        `arg:"--server,env:DEVSIM_SERVER" help:"GrowSCADA REST API URL; overrides the config"`
-	Control        string        `arg:"--control" help:"control API listen address; overrides the config"`
-	StartupTimeout time.Duration `arg:"--startup-timeout" default:"30s" help:"how long to wait for the server at startup"`
+	Config  string `arg:"--config,required" help:"YAML config of the simulated device"`
+	Server  string `arg:"--server,env:DEVSIM_SERVER" help:"GrowSCADA REST API URL; overrides the config"`
+	Control string `arg:"--control" help:"control API listen address; overrides the config"`
+}
+
+type slogAdapter struct{}
+
+func (slogAdapter) Println(v ...any) {
+	slog.Info(fmt.Sprint(v...))
 }
 
 func main() {
 	var args simulatorArgs
 	arg.MustParse(&args)
-	if err := run(args); err != nil {
-		slog.Error("device simulator failed", "error", err)
-		os.Exit(1)
-	}
-}
 
-func run(args simulatorArgs) error {
-	f, err := os.Open(args.Config)
+	cfg, err := readConfig(args.Config)
 	if err != nil {
-		return err
-	}
-	cfg, err := devicesim.ReadConfig(f)
-	f.Close()
-	if err != nil {
-		return err
+		slog.Error("Config error", "error", err)
+		if errors.Is(err, os.ErrNotExist) {
+			os.Exit(gracedown.ExitNoInput)
+		}
+		os.Exit(gracedown.ExitConfig)
 	}
 	if args.Server != "" {
 		cfg.Server = args.Server
@@ -53,33 +51,86 @@ func run(args simulatorArgs) error {
 		cfg.Control = args.Control
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	// Create a graceful shutdown manager
+	gracedownManager := gracedown.NewManager(gracedown.WithLogger(slogAdapter{}))
 
 	link := devicelink.NewRESTLink(apiclient.New(cfg.Server, &http.Client{Timeout: 10 * time.Second}))
-	device, err := devicesim.Open(ctx, cfg, link, devicesim.Options{StartupTimeout: args.StartupTimeout})
-	if err != nil {
-		return err
-	}
+	device := devicesim.New(cfg, link, devicesim.Options{})
 
+	// INTERFACE COMPONENTS
+	// The control API comes up first: it answers while the Device waits for
+	// the server.
 	listener, err := net.Listen("tcp", cfg.Control)
 	if err != nil {
-		return err
+		slog.Error("Control API listen error", "address", cfg.Control, "error", err)
+		emergencyExit(gracedownManager, gracedown.ExitUnavailable)
 	}
-	control := &http.Server{Handler: device.Handler()}
+	controlServer := &http.Server{Handler: device.Handler()}
+	// Register the control API shutdown handler
+	gracedownManager.RegisterInterface("Control API HTTP Server", 5*time.Second, func(ctx context.Context) error {
+		return controlServer.Shutdown(ctx)
+	})
+	// Start the control API in a separate goroutine
 	go func() {
-		if err := control.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			slog.Error("control API failed", "error", err)
-			stop()
+		slog.Info("Control API starting", "address", listener.Addr().String())
+		if err := controlServer.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("Control API error", "error", err)
+			emergencyExit(gracedownManager, gracedown.ExitUnavailable)
 		}
 	}()
-	slog.Info("device simulator started", "server", cfg.Server, "control", listener.Addr().String(),
-		"tags", len(cfg.Tags), "running", device.Status().Running)
 
-	device.Run(ctx)
+	// INFRASTRUCTURE COMPONENTS
+	// The Device and its link to the server: stopped after the control API,
+	// so no control call races the shutdown; in-flight writes may finish.
+	runCtx, stopDevice := context.WithCancel(context.Background())
+	deviceDone := make(chan struct{})
+	gracedownManager.RegisterInfrastructure("Device", 10*time.Second, func(ctx context.Context) error {
+		stopDevice()
+		select {
+		case <-deviceDone:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	})
+	// Run the Device in a separate goroutine: it connects to the server
+	// (waiting for it as long as it takes), then writes the tags.
+	go func() {
+		slog.Info("Device starting", "server", cfg.Server, "tags", len(cfg.Tags), "running", device.Status().Running)
+		err := device.Run(runCtx)
+		close(deviceDone) // before an emergency exit, whose Device hook waits for it
+		if err != nil {
+			// A missing tag or a pattern that does not fit its tag's type.
+			slog.Error("Device error", "error", err)
+			emergencyExit(gracedownManager, gracedown.ExitConfig)
+		}
+	}()
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	slog.Info("device simulator stopping")
-	return control.Shutdown(shutdownCtx)
+	// Wait for shutdown signal
+	err = gracedownManager.WaitForSignalAndShutdown()
+	if err != nil {
+		slog.Error("Error on graceful shutdown", "error", err)
+		os.Exit(gracedown.ExitFailure)
+	}
+
+	slog.Info("Device simulator stopped gracefully")
+
+	os.Exit(gracedown.ExitSuccess)
+}
+
+func readConfig(path string) (devicesim.Config, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return devicesim.Config{}, err
+	}
+	defer f.Close()
+	return devicesim.ReadConfig(f)
+}
+
+// emergencyExit shuts down all registered components and exits with the given code.
+func emergencyExit(manager *gracedown.Manager, exitCode int) {
+	if shutdownErr := manager.EmergencyShutdown(); shutdownErr != nil {
+		slog.Error("Emergency shutdown error", "error", shutdownErr)
+	}
+	os.Exit(exitCode)
 }

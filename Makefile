@@ -16,6 +16,9 @@ build_simulator:
 run_simulator: build_simulator
 	bin/growscada_device_simulator/growscada_device_simulator --config tests/device_simulator/example.yaml
 
+run_simulator_dashboard: build_simulator
+	bin/growscada_device_simulator/growscada_device_simulator --config tests/device_simulator/seed_dashboard.yaml
+
 run: build_server
 	chromium --incognito --start-maximized --disable-background-networking http://localhost:8080 &
 	cd bin/growscada_combined_server && ./growscada_combined_server

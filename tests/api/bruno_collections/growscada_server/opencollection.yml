@@ -1,7 +1,7 @@
 opencollection: 1.0.0
 
 info:
-  name: growscada
+  name: growscada server
 bundled: false
 extensions:
   bruno:

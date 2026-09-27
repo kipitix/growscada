@@ -1,11 +1,11 @@
 info:
-  name: post tag quality
+  name: post device tag quality
   type: http
   seq: 5
 
 http:
   method: POST
-  url: http://{{CONTROL_SERVER}}/control/tags/{{TAG_NAME}}/quality
+  url: http://{{CONTROL_SERVER}}/api/v1/device/tags/{{TAG_NAME}}/quality
   body:
     type: json
     data: |-
@@ -17,6 +17,7 @@ http:
 docs: |
   Force the tag's quality (good, uncertain, bad) on every write until reset.
   Written to the server right away if the device is running.
+  While the device is still connecting to the server this is 503.
 
 settings:
   encodeUrl: true

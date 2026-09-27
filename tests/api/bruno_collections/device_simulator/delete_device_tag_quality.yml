@@ -1,15 +1,16 @@
 info:
-  name: delete tag quality
+  name: delete device tag quality
   type: http
   seq: 6
 
 http:
   method: DELETE
-  url: http://{{CONTROL_SERVER}}/control/tags/{{TAG_NAME}}/quality
+  url: http://{{CONTROL_SERVER}}/api/v1/device/tags/{{TAG_NAME}}/quality
   auth: inherit
 
 docs: |
   Return the tag to its configured quality.
+  While the device is still connecting to the server this is 503.
 
 settings:
   encodeUrl: true

@@ -3,6 +3,7 @@ package repositories_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -269,5 +270,51 @@ func TestWidgetTypeDeleteByID_Existing_ReturnsDeletedWidgetType(t *testing.T) {
 	}
 	if deleted.ID() != saved.ID() {
 		t.Errorf("ID mismatch: expected %v, got %v", saved.ID(), deleted.ID())
+	}
+}
+
+func TestWidgetTypeFindAll_CreationOrderEvenAfterUpdates(t *testing.T) {
+	// Postgres returns unordered rows in storage order, and an UPDATE moves a
+	// row; the Library must keep the creation order however often types change.
+	cleanWidgetTypes(t)
+	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	var created []widget.WidgetType
+	for _, name := range []string{"charlie", "alpha", "bravo"} {
+		saved, err := repo.Save(ctx, makeWidgetType(t, name, nil, repo))
+		if err != nil {
+			t.Fatalf("Save %s: %v", name, err)
+		}
+		created = append(created, saved)
+	}
+	for round := range 3 {
+		for i := range 2 {
+			wt := created[i]
+			newName, _ := widget.NewWidgetTypeName(fmt.Sprintf("renamed-%d-%d", i, round))
+			updated, err := widget.NewWidgetType(wt.ID(), newName, wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.DefaultSize(), wt.InputPorts(), wt.Version())
+			if err != nil {
+				t.Fatalf("NewWidgetType: %v", err)
+			}
+			saved, err := repo.Save(ctx, updated)
+			if err != nil {
+				t.Fatalf("update Save: %v", err)
+			}
+			created[i] = saved
+		}
+	}
+
+	all, err := repo.FindAll(ctx)
+
+	if err != nil {
+		t.Fatalf("FindAll: %v", err)
+	}
+	if len(all) != len(created) {
+		t.Fatalf("expected %d widget types, got %d", len(created), len(all))
+	}
+	for i := range created {
+		if all[i].ID() != created[i].ID() {
+			t.Errorf("position %d: got %q, want %q (creation order)", i, all[i].Name().String(), created[i].Name().String())
+		}
 	}
 }

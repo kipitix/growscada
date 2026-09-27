@@ -65,6 +65,7 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 // ── Widget types ──────────────────────────────────────────────────────────────
 
 func (p *Project) loadWidgetTypes(ctx app.Context) {
+	ctx = p.compoCtx
 	if !p.widgetTypesReloader.Start() {
 		return
 	}
@@ -87,6 +88,7 @@ func (p *Project) loadWidgetTypes(ctx app.Context) {
 // ── Scenes ────────────────────────────────────────────────────────────────────
 
 func (p *Project) loadScenes(ctx app.Context) {
+	ctx = p.compoCtx
 	if !p.scenesReloader.Start() {
 		return
 	}
@@ -173,6 +175,7 @@ func (p *Project) isInteracting() bool {
 // loadWidgets (re)loads the widgets of the selected scene. During a canvas
 // interaction the reload is deferred until it ends (finalizeAllDrags).
 func (p *Project) loadWidgets(ctx app.Context) {
+	ctx = p.compoCtx
 	if p.selectedSceneID == "" {
 		p.widgets = nil
 		return
@@ -317,6 +320,7 @@ func mergeEditFields(local, old, current widgetEditFields) widgetEditFields {
 // ── Tags ──────────────────────────────────────────────────────────────────────
 
 func (p *Project) loadTags(ctx app.Context) {
+	ctx = p.compoCtx
 	if !p.tagsReloader.Start() {
 		return
 	}

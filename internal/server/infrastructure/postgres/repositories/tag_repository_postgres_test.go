@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	_ "github.com/lib/pq"
@@ -278,6 +279,48 @@ func TestFindAll_MultipleTags_ReturnsAll(t *testing.T) {
 	}
 	if len(allTags) != 2 {
 		t.Errorf("expected 2 tags, got %d", len(allTags))
+	}
+}
+
+func TestFindAll_SortedByNameEvenAfterUpdates(t *testing.T) {
+	// Postgres returns unordered rows in storage order, and an UPDATE moves a
+	// row; the list must not reshuffle when tag values change.
+	cleanTags(t)
+	repo := repositories.NewTagRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	for _, name := range []string{"charlie", "alpha", "bravo"} {
+		if _, err := repo.Save(ctx, makeTag(t, name, repo)); err != nil {
+			t.Fatalf("Save %s failed: %v", name, err)
+		}
+	}
+	for round := range 3 {
+		for _, name := range []string{"alpha", "bravo"} {
+			tagName, _ := tag.NewTagName(name)
+			found, err := repo.FindByName(ctx, tagName)
+			if err != nil {
+				t.Fatalf("FindByName %s failed: %v", name, err)
+			}
+			if err := found.SetValue(round, tag.TagQualityGood); err != nil {
+				t.Fatalf("SetValue failed: %v", err)
+			}
+			if _, err := repo.Save(ctx, found); err != nil {
+				t.Fatalf("update Save %s failed: %v", name, err)
+			}
+		}
+	}
+
+	allTags, err := repo.FindAll(ctx)
+
+	if err != nil {
+		t.Fatalf("FindAll returned unexpected error: %v", err)
+	}
+	var got []string
+	for _, tg := range allTags {
+		got = append(got, tg.Name().String())
+	}
+	if want := "alpha bravo charlie"; strings.Join(got, " ") != want {
+		t.Errorf("order: got %v, want %s", got, want)
 	}
 }
 

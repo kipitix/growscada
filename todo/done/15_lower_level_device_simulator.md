@@ -63,15 +63,15 @@ tags:
 
 ## Старт
 
-- Сетевые ошибки / 5xx при резолве — повтор с паузой до `--startup-timeout` (default 30s).
+- Control-API поднимается сразу, до подключения к серверу. Сетевые ошибки / 5xx при резолве — повтор с паузой без ограничения по времени, как у настоящего устройства. Пока симулятор подключается, `GET /api/v1/device` отдаёт `"state": "connecting"`, start/stop принимаются, а запросы к тегам (pattern, quality) — `503`: тип тега ещё неизвестен.
 - Тег не найден или тип несовместим с паттерном — ошибка и выход с кодом ≠ 0, ничего не записав.
 
 ## Control-API
 
-- `POST /control/start`, `POST /control/stop` — пауза: процесс и API живы, время паттернов продолжается с места остановки; идемпотентны. `autostart` (default true).
-- `GET /control/status` — состояние устройства и тегов.
-- `POST /control/tags/{name}/pattern` — тело = JSON объекта `pattern`; смена на лету.
-- `POST /control/tags/{name}/quality` — `{"quality":"bad"}`, липкое переопределение, сразу пишется на сервер (если running); `DELETE /control/tags/{name}/quality` — вернуть качество из конфига.
+- `POST /api/v1/device/start`, `POST /api/v1/device/stop` — пауза: процесс и API живы, время паттернов продолжается с места остановки; идемпотентны. `autostart` (default true).
+- `GET /api/v1/device` — состояние устройства и тегов.
+- `POST /api/v1/device/tags/{name}/pattern` — тело = JSON объекта `pattern`; смена на лету.
+- `POST /api/v1/device/tags/{name}/quality` — `{"quality":"bad"}`, липкое переопределение, сразу пишется на сервер (если running); `DELETE /api/v1/device/tags/{name}/quality` — вернуть качество из конфига.
 - Ошибки — RFC 7807 Problem Details.
 
 ## Сборка

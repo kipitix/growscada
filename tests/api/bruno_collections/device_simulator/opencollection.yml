@@ -1,7 +1,7 @@
 opencollection: 1.0.0
 
 info:
-  name: device_simulator
+  name: growscada device simulator
 bundled: false
 extensions:
   bruno:
