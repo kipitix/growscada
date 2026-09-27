@@ -1,0 +1,18 @@
+info:
+  name: post stop
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: http://{{CONTROL_SERVER}}/control/stop
+  auth: inherit
+
+docs: |
+  Pause writing; the process and the control API stay up. Idempotent.
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -1,0 +1,30 @@
+# Example device simulator config: one virtual pump.
+# Seed its tags first, then run the simulator against a running server:
+#   bin/growctl/growctl apply -f tests/manifests/example_tags.yaml
+#   make run_simulator
+# Tags are referenced by name; the simulator never creates or deletes them.
+server: http://localhost:9090   # overridden by --server / DEVSIM_SERVER
+control: :9191                  # control API, overridden by --control
+autostart: true                 # false: wait for POST /control/start
+defaultInterval: 1s             # write interval of tags that set none
+tags:
+  - tag: sim.pump1.speed
+    interval: 500ms
+    pattern:
+      kind: sine                # offset, amplitude, period
+      offset: 1500
+      amplitude: 300
+      period: 20s
+  - tag: sim.pump1.running
+    quality: good               # good (default), uncertain or bad
+    pattern:
+      kind: step                # values in turn, each held for hold
+      values: [true, false]
+      hold: 15s
+  - tag: sim.pump1.mode
+    pattern:
+      kind: constant            # value
+      value: auto
+# Other patterns (integer tags only):
+#   {kind: ramp, start: 0, rate: 2, max: 1000}          # rate per second; back to start at max (optional)
+#   {kind: random_walk, start: 20, step: 1, min: 0, max: 100}  # at most ±step per tick

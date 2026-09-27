@@ -1,0 +1,32 @@
+info:
+  name: post tag pattern
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: http://{{CONTROL_SERVER}}/control/tags/{{TAG_NAME}}/pattern
+  body:
+    type: json
+    data: |-
+      {
+        "kind": "sine",
+        "offset": 1500,
+        "amplitude": 300,
+        "period": "10s"
+      }
+  auth: inherit
+
+docs: |
+  Change the tag's pattern on the fly; its time starts from zero. The body is a
+  pattern object as in the YAML config. Kinds: constant (value), ramp (start,
+  rate, max?), sine (offset, amplitude, period), random_walk (start, step, min,
+  max), step (values, hold). integer tags take all kinds; boolean and string
+  only constant and step. An invalid or incompatible pattern is 400, a tag the
+  device does not simulate is 404.
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

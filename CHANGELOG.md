@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Симулятор устройства нижнего уровня** (задача 15) — `cmd/device_simulator/`, логика в `internal/devicesim/`; собирается в `make build` (или отдельно `make build_simulator`) → `bin/growscada_device_simulator/`, `make run_simulator` — с примером `tests/device_simulator/example.yaml`:
+  - один процесс — одно виртуальное устройство; YAML-конфиг (`server`, `control`, `autostart`, `defaultInterval`, `tags`), неизвестные поля — ошибка; `--config`, `--server` / `DEVSIM_SERVER`, `--control`, `--startup-timeout`
+  - теги только по имени (ADR 0003), сам их не создаёт и не удаляет; при старте ждёт сервер до `--startup-timeout`, отсутствующий тег или несовместимый с типом паттерн — ошибка без единой записи
+  - паттерны `constant`, `ramp`, `sine`, `random_walk`, `step`; integer — все, boolean и string — `constant` и `step`; интервал на тег, запись каждый тик
+  - control-API (`:9191`): `POST /control/start|stop` (пауза, время паттернов не идёт), `GET /control/status`, `POST /control/tags/{name}/pattern` (смена на лету), `POST|DELETE /control/tags/{name}/quality` (липкое принудительное качество и сброс); ошибки — Problem Details
+  - тесты: unit (паттерны, конфиг, устройство и control-API с фейковым линком), интеграционные и сквозные против настоящего REST API и Postgres в testcontainers, включая конфликт версий (409)
+  - Bruno: коллекция `tests/api/bruno_collections/device_simulator/` для ручных запросов к control-API
+- `internal/devicelink` — контракт поставки значений тегов от Device к серверу (ADR 0004): резолв по имени, учёт версии, при 409 — перечитать и повторить один раз, 404 — тег выбывает
+- `internal/server/servertest` — общий тестовый стенд: настоящий REST API поверх Postgres в testcontainers с ленивым стартом контейнера
+- `make build` разбит на `build_server` (WASM + сервер), `build_growctl` и `build_simulator` и собирает все три; `make run` собирает только сервер
+- GitHub CI собирает все бинарники через `make build`
+
 ### Changed
 
 - `internal/` разложен по приложениям: слои сервера (`domain`, `application`, `infrastructure`, `interface`) перенесены в `internal/server/`; поведение не менялось

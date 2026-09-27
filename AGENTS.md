@@ -17,15 +17,19 @@ All primary workflows go through `make`. **Always prefer `make <target>` over ru
 | Target | What it does |
 |--------|-------------|
 | `make install_tools` | Installs `goose` migration tool via `go install` |
-| `make build` | Compiles WASM frontend (`app.wasm`) and server binary to `bin/growscada_combined_server/`, and the `growctl` CLI to `bin/growctl/` |
-| `make run` | `build` + starts server + opens Chromium at `localhost:8080` |
+| `make build` | Builds everything: `build_server` + `build_growctl` + `build_simulator` |
+| `make build_server` | Compiles WASM frontend (`app.wasm`) and server binary to `bin/growscada_combined_server/` |
+| `make build_growctl` | Compiles the `growctl` CLI (declarative tag manifests, kubectl-style) to `bin/growctl/` |
+| `make build_simulator` | Compiles the device simulator to `bin/growscada_device_simulator/` |
+| `make run_simulator` | `build_simulator` + runs it with `tests/device_simulator/example.yaml` (needs a running server and the tags from `tests/manifests/example_tags.yaml`) |
+| `make run` | `build_server` + starts server + opens Chromium at `localhost:8080` |
 | `make db_up` | Starts the dev PostgreSQL container via Docker Compose; applies migrations and seeds automatically |
 | `make db_down` | Stops the container and **deletes** the data volume |
 | `make test` | Runs all tests with coverage (`go test --cover ./...`) |
 | `make bench` | Runs benchmarks only (`go test -run=^$ -bench=. -benchmem ./...`) |
 | `make full_restart` | Clean-slate restart: `db_down` → `db_up` → `run` (use when the DB state is stale or corrupted) |
 
-`make build` runs three compilations: `GOARCH=wasm GOOS=js` for `app.wasm`, then host-arch for the server binary and for `growctl` (declarative tag manifests, kubectl-style).
+`build_server` runs two compilations of the same `cmd/combined_server/main.go`: `GOARCH=wasm GOOS=js` for `app.wasm`, then host-arch for the server binary.
 
 ## Commands
 
@@ -57,9 +61,12 @@ internal/
     interface/      # Delivery mechanisms (REST API, PWA UI)
   apiclient/        # Go client of the REST API (JSON shapes from server/interface/restapi/restdto)
   growctl/          # growctl CLI: manifests, planner
+  devicelink/       # Contract by which a Device delivers Tag values to the server (ADR 0004)
+  devicesim/        # Lower-level device simulator: patterns, virtual Device, control API
 cmd/
-  combined_server/ # Entry point — wires everything together
-  growctl/         # CLI entry point; logic in internal/growctl
+  combined_server/  # Entry point — wires everything together
+  growctl/          # CLI entry point; logic in internal/growctl
+  device_simulator/ # Simulator entry point; logic in internal/devicesim
 ```
 
 ### Domain Layer (`internal/server/domain/`)
@@ -116,6 +123,8 @@ Services (`TagService`, `WidgetService`, `WidgetTypeService`, `SceneService`) ea
 
 Tests in `internal/server/infrastructure/postgres/repositories/` use **testcontainers-go** to spin up a real Postgres container, apply migrations via Goose, and run assertions. No manual database setup is needed for `go test`.
 
+Tests of the tools that talk to the server (`internal/devicelink`, `internal/devicesim` end-to-end) run the real REST API over Postgres via `internal/server/servertest`: the container starts lazily on first use, so the unit tests of those packages don't need Docker.
+
 ## Key Ubiquitous Language
 
 | Term | Meaning |
@@ -129,7 +138,7 @@ Tests in `internal/server/infrastructure/postgres/repositories/` use **testconta
 
 ## API Collections
 
-Manual/exploratory API tests are maintained as [Bruno](https://www.usebruno.com/) collections in `tests/api/bruno_collections/`. The `localhost` environment points to `http://localhost:9090`.
+Manual/exploratory API tests are maintained as [Bruno](https://www.usebruno.com/) collections in `tests/api/bruno_collections/`: `growscada/` for the server REST API (the `localhost` environment points to `http://localhost:9090`) and `device_simulator/` for the simulator's control API (`localhost:9191`). Automated tests are Go tests only.
 
 ## MCP Servers
 

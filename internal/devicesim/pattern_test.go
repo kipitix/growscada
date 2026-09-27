@@ -1,0 +1,162 @@
+package devicesim
+
+import (
+	"math/rand/v2"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+)
+
+func f(v float64) *float64 { return &v }
+
+func dur(d time.Duration) *Duration { return &Duration{D: d} }
+
+func scalar(s string) *Scalar { v := Scalar(s); return &v }
+
+func mustGen(t *testing.T, p PatternSpec, tagType string) generator {
+	t.Helper()
+	g, err := newGenerator(p, tagType, rand.New(rand.NewPCG(1, 2)))
+	if err != nil {
+		t.Fatalf("newGenerator: %v", err)
+	}
+	return g
+}
+
+func TestGenerators_ValuesOverTime(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern PatternSpec
+		tagType string
+		at      []time.Duration
+		want    []string
+	}{
+		{
+			name:    "constant integer",
+			pattern: PatternSpec{Kind: KindConstant, Value: scalar("42")},
+			tagType: TypeInteger,
+			at:      []time.Duration{0, time.Hour},
+			want:    []string{"42", "42"},
+		},
+		{
+			name:    "constant string",
+			pattern: PatternSpec{Kind: KindConstant, Value: scalar("auto")},
+			tagType: TypeString,
+			at:      []time.Duration{0},
+			want:    []string{"auto"},
+		},
+		{
+			name:    "ramp grows by rate per second, rounded",
+			pattern: PatternSpec{Kind: KindRamp, Start: f(10), Rate: f(2.5)},
+			tagType: TypeInteger,
+			at:      []time.Duration{0, time.Second, 2 * time.Second, 10 * time.Second},
+			want:    []string{"10", "13", "15", "35"},
+		},
+		{
+			name:    "ramp goes back to start at max",
+			pattern: PatternSpec{Kind: KindRamp, Start: f(0), Rate: f(10), Max: f(100)},
+			tagType: TypeInteger,
+			at:      []time.Duration{5 * time.Second, 10 * time.Second, 12 * time.Second},
+			want:    []string{"50", "0", "20"},
+		},
+		{
+			name:    "ramp may fall",
+			pattern: PatternSpec{Kind: KindRamp, Start: f(0), Rate: f(-1)},
+			tagType: TypeInteger,
+			at:      []time.Duration{3 * time.Second},
+			want:    []string{"-3"},
+		},
+		{
+			name:    "sine over one period",
+			pattern: PatternSpec{Kind: KindSine, Offset: f(50), Amplitude: f(20), Period: dur(4 * time.Second)},
+			tagType: TypeInteger,
+			at:      []time.Duration{0, time.Second, 2 * time.Second, 3 * time.Second, 4 * time.Second},
+			want:    []string{"50", "70", "50", "30", "50"},
+		},
+		{
+			name:    "step cycles through values",
+			pattern: PatternSpec{Kind: KindStep, Values: []Scalar{"false", "true"}, Hold: dur(5 * time.Second)},
+			tagType: TypeBoolean,
+			at:      []time.Duration{0, 4 * time.Second, 5 * time.Second, 10 * time.Second},
+			want:    []string{"false", "false", "true", "false"},
+		},
+		{
+			name:    "step over strings",
+			pattern: PatternSpec{Kind: KindStep, Values: []Scalar{"auto", "manual", "off"}, Hold: dur(time.Second)},
+			tagType: TypeString,
+			at:      []time.Duration{0, time.Second, 2 * time.Second, 3 * time.Second},
+			want:    []string{"auto", "manual", "off", "auto"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := mustGen(t, tt.pattern, tt.tagType)
+			for i, at := range tt.at {
+				if got := g.next(at); got != tt.want[i] {
+					t.Errorf("at %v: got %q, want %q", at, got, tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestRandomWalk_StartsAtStartAndStaysInBounds(t *testing.T) {
+	g := mustGen(t, PatternSpec{Kind: KindRandomWalk, Start: f(5), Step: f(3), Min: f(0), Max: f(10)}, TypeInteger)
+
+	if got := g.next(0); got != "5" {
+		t.Fatalf("first value: got %q, want the start 5", got)
+	}
+	prev := 5
+	changed := false
+	for i := range 1000 {
+		v, err := strconv.Atoi(g.next(0))
+		if err != nil {
+			t.Fatalf("tick %d: %v", i, err)
+		}
+		if v < 0 || v > 10 {
+			t.Fatalf("tick %d: %d is out of [0, 10]", i, v)
+		}
+		// ±3 per tick, plus up to 1 from rounding on each side.
+		if d := v - prev; d < -4 || d > 4 {
+			t.Fatalf("tick %d: moved by %d, more than the step", i, d)
+		}
+		changed = changed || v != prev
+		prev = v
+	}
+	if !changed {
+		t.Error("random walk never moved")
+	}
+}
+
+func TestNewGenerator_Rejects(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern PatternSpec
+		tagType string
+		wantErr string
+	}{
+		{"missing kind", PatternSpec{}, TypeInteger, "kind is required"},
+		{"unknown kind", PatternSpec{Kind: "square"}, TypeInteger, `unknown kind "square"`},
+		{"missing field", PatternSpec{Kind: KindRamp, Start: f(0)}, TypeInteger, "rate is required"},
+		{"foreign field", PatternSpec{Kind: KindConstant, Value: scalar("1"), Rate: f(1)}, TypeInteger, "rate does not apply"},
+		{"sine on boolean", PatternSpec{Kind: KindSine, Offset: f(0), Amplitude: f(1), Period: dur(time.Second)}, TypeBoolean, "does not apply to a boolean tag"},
+		{"ramp on string", PatternSpec{Kind: KindRamp, Start: f(0), Rate: f(1)}, TypeString, "does not apply to a string tag"},
+		{"non-integer constant", PatternSpec{Kind: KindConstant, Value: scalar("1.5")}, TypeInteger, "is not an integer"},
+		{"non-boolean step", PatternSpec{Kind: KindStep, Values: []Scalar{"true", "yes"}, Hold: dur(time.Second)}, TypeBoolean, `values[1]: "yes" is not a boolean`},
+		{"empty step", PatternSpec{Kind: KindStep, Values: []Scalar{}, Hold: dur(time.Second)}, TypeString, "values must not be empty"},
+		{"zero hold", PatternSpec{Kind: KindStep, Values: []Scalar{"a"}, Hold: dur(0)}, TypeString, "hold must be positive"},
+		{"zero period", PatternSpec{Kind: KindSine, Offset: f(0), Amplitude: f(1), Period: dur(0)}, TypeInteger, "period must be positive"},
+		{"ramp max below start", PatternSpec{Kind: KindRamp, Start: f(10), Rate: f(1), Max: f(5)}, TypeInteger, "max greater than start"},
+		{"ramp max with falling rate", PatternSpec{Kind: KindRamp, Start: f(0), Rate: f(-1), Max: f(5)}, TypeInteger, "rate must be positive"},
+		{"walk start out of bounds", PatternSpec{Kind: KindRandomWalk, Start: f(20), Step: f(1), Min: f(0), Max: f(10)}, TypeInteger, "min <= start <= max"},
+		{"walk zero step", PatternSpec{Kind: KindRandomWalk, Start: f(0), Step: f(0), Min: f(0), Max: f(10)}, TypeInteger, "step must be positive"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := newGenerator(tt.pattern, tt.tagType, rand.New(rand.NewPCG(1, 2)))
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("got %v, want an error containing %q", err, tt.wantErr)
+			}
+		})
+	}
+}

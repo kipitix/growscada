@@ -76,7 +76,7 @@ tags:
 
 ## Сборка
 
-- `cmd/device_simulator/`, отдельный таргет `make build_simulator` → `bin/device_simulator/`; не участвует в `make build`.
+- `cmd/device_simulator/`, таргет `make build_simulator` → `bin/growscada_device_simulator/`. `make build` объединяет `build_server`, `build_growctl` и `build_simulator`.
 - Пример конфига `tests/device_simulator/example.yaml` под теги `tests/manifests/example_tags.yaml`.
 
 ## Тесты
@@ -90,4 +90,4 @@ tags:
 
 ## CI
 
-- GitHub workflow: собрать все бинарники (сервер, wasm, growctl, симулятор). GitVerse использует ту же конфигурацию GitHub.
+- GitHub workflow: `make build` собирает все бинарники (сервер, wasm, growctl, симулятор). GitVerse использует ту же конфигурацию GitHub.

@@ -1,0 +1,18 @@
+info:
+  name: delete tag quality
+  type: http
+  seq: 6
+
+http:
+  method: DELETE
+  url: http://{{CONTROL_SERVER}}/control/tags/{{TAG_NAME}}/quality
+  auth: inherit
+
+docs: |
+  Return the tag to its configured quality.
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -1,0 +1,7 @@
+name: localhost
+variables:
+  - name: CONTROL_SERVER
+    value: |
+      localhost:9191
+  - name: TAG_NAME
+    value: sim.pump1.speed

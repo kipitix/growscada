@@ -1,0 +1,18 @@
+info:
+  name: post start
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: http://{{CONTROL_SERVER}}/control/start
+  auth: inherit
+
+docs: |
+  Resume writing. Pattern time continues where stop left it. Idempotent.
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

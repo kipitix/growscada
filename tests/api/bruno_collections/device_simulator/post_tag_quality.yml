@@ -1,0 +1,25 @@
+info:
+  name: post tag quality
+  type: http
+  seq: 5
+
+http:
+  method: POST
+  url: http://{{CONTROL_SERVER}}/control/tags/{{TAG_NAME}}/quality
+  body:
+    type: json
+    data: |-
+      {
+        "quality": "bad"
+      }
+  auth: inherit
+
+docs: |
+  Force the tag's quality (good, uncertain, bad) on every write until reset.
+  Written to the server right away if the device is running.
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

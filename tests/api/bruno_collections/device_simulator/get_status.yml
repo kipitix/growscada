@@ -1,0 +1,19 @@
+info:
+  name: get status
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: http://{{CONTROL_SERVER}}/control/status
+  auth: inherit
+
+docs: |
+  Snapshot of the simulated device: running flag and, per tag, its type,
+  interval, current quality (forced or configured) and pattern.
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
