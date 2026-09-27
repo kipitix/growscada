@@ -80,10 +80,10 @@
 
 ### Removed
 
-- **BREAKING: качество тега `simulated`** — Quality описывает надёжность значения, а не его происхождение; имитатор (задача 15) поставляет обычные `good`/`bad`/`uncertain`, а пометка «это имитатор» станет метаинформацией `Device` (задача 22):
+- **BREAKING: качество тега `simulated`** — Quality описывает надёжность значения, а не его происхождение; имитатор (задача 15) поставляет обычные `good`/`bad`/`uncertain`, а пометка «это имитатор» станет метаинформацией `Device` (задача 23):
   - `internal/domain/tag/tag_quality.go` — удалён `TagQualitySimulated`
   - `internal/infrastructure/postgres/migrations/20260923000000_remove_simulated_tag_quality.sql` — существующие теги с `simulated` переводятся в `good`, `chk_tags_quality` пересоздаётся без `simulated` (`Down` возвращает ограничение, данные не трогает)
-  - `POST /api/v1/tags` и `PATCH /api/v1/tags/{id}/value` с `"quality": "simulated"` теперь отклоняются (пока 500, как и любая ошибка валидации домена — маппинг в 400 вынесен в задачу 33)
+  - `POST /api/v1/tags` и `PATCH /api/v1/tags/{id}/value` с `"quality": "simulated"` теперь отклоняются (пока 500, как и любая ошибка валидации домена — маппинг в 400 вынесен в задачу 34)
   - тестовые данные: тег `is_cached` получил качество `uncertain`
 - **Заглушки `Unknown` в доменных перечислениях** (`docs/adr/0001-no-unknown-enum-sentinels.md`) — удалены `TagQualityUnknown`, `TagTypeUnknown`, `ScriptLanguageUnknown`, `EventTypeUnknown`; нулевое значение перечисления невалидно (`String()` → `"invalid"`, `IsValid()` → `false`), разбор `"unknown"`, `""` и любой нестандартной строки возвращает ошибку
 
@@ -94,7 +94,7 @@
 - `internal/domain/event/event_type.go` — `EventType` из `int` + `iota` стал struct value object с приватным полем, как остальные перечисления; снаружи пакета нельзя получить произвольное значение приведением
 - **BREAKING: `InputPort` type hint** — новый value object `widget.PortTypeHint` (`internal/domain/widget/port_type_hint.go`): либо «любой тип» (`AnyTypeHint()`), либо конкретный `TagType` (`TypeHintFor`); методы `IsAny`, `TagType`, `Accepts`; «любой тип» в REST и в JSON-колонке `input_ports` — это `""`:
   - в ответах API «любой тип» теперь `"type_hint": ""` вместо `"unknown"`
-  - запрос с `"type_hint": "unknown"` отклоняется (пока 500, см. задачу 33)
+  - запрос с `"type_hint": "unknown"` отклоняется (пока 500, см. задачу 34)
   - UI (`uidto.TypeHintLabel`, `project/render_properties.go`) больше не обрабатывает `"unknown"`
 - Глоссарий (`CONTEXT.md`, `AGENTS.md`): Quality — `Bad`/`Uncertain`/`Good`, TagType без `Unknown`, новый термин Device
 - `internal/domain/event/event_type.go` — имена типов событий заданы одной таблицей `eventTypeNames`, из неё выводятся `AllEventTypes()`, `NewEventType()` и `String()` (вместо двух параллельных `switch` на 15 веток); добавлен `IsValid()`, как у остальных перечислений. Строковые имена и порядок `AllEventTypes()` не изменились. Round-trip тест теперь покрывает все значения `AllEventTypes()`, добавлена проверка уникальности значений и имён

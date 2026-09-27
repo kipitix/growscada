@@ -32,7 +32,7 @@ Status: ready-for-human
 - Q18: Operation и History — один Player.
 - Q19: Checkpoint на каждый Deploy и периодически.
 - Q20: Существующие таблицы становятся Draft; Revision — неизменяемый jsonb-документ.
-- Q21: Один неявный проект (задача 29 отдельно).
+- Q21: Один неявный проект (задача 30 отдельно).
 - Q23–Q25: Два файла — ProjectFile (конфигурация) и PlaybackFile (Revisions + Journal + Checkpoints за период); PlaybackFile на сервере открывается только для просмотра в History.
 - Q26–Q27: Один бинарник, роли Engineering node и Runtime node; сейчас обе в одном процессе.
 - Q28: Две схемы БД (`engineering.*`, `runtime.*`), связь только через API Runtime node; номер Revision присваивает Runtime node.
@@ -57,4 +57,4 @@ Status: ready-for-human
 | 12 | Runtime-сущности от Operator и Adopt | 03, 08 |
 | 13 | Разнесение узлов по сети (отложено) | 03 |
 
-Связанные задачи вне пакета: 16 (версионирование JSON — формат ProjectFile/Journal), 20 (групповой перенос — после 05), 22 (Device регистрирует runtime-теги), 23 (поглощена тикетом 02), 29 (Project), 30/31 (User и права — кто может Deploy/Rollback).
+Связанные задачи вне пакета: 16 (временный Operation — основа тикета 08), 17 (версионирование JSON — формат ProjectFile/Journal), 21 (групповой перенос — после 05), 23 (Device регистрирует runtime-теги), 24 (поглощена тикетом 02), 30 (Project), 31/32 (User и права — кто может Deploy/Rollback).

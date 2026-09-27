@@ -8,4 +8,4 @@ Blocked by: 03, 04
 - Стек очищается при Deploy и Discard; глубина ограничена константой.
 - Все текущие операции Project/Library переводятся на DraftChange (удаление Tag с привязками, удаление Scene с Widgets — одна DraftChange).
 - UI: кнопки и Ctrl+Z / Ctrl+Shift+Z, описание следующего шага.
-- После — задача 20 (групповой перенос как одна DraftChange).
+- После — задача 21 (групповой перенос как одна DraftChange).
