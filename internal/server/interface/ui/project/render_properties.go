@@ -694,7 +694,7 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 						p.simInputs[wid][port.Name] = v
 						// Directly push the updated srcdoc so the canvas preview
 						// reflects the new value without waiting for a parent re-render.
-						srcdoc := uiutil.BuildSrcdoc(capturedWT.HtmlTemplate, capturedWT.Script, p.simInputs[wid], capturedWT.InputPorts, uiutil.IframeBgColor())
+						srcdoc := uiutil.BuildSrcdoc(capturedWT.HtmlTemplate, capturedWT.Script, uiutil.PreviewInputs(p.simInputs[wid], capturedWT.InputPorts), capturedWT.InputPorts, uiutil.IframeBgColor())
 						elem := app.Window().Get("document").Call("getElementById", "w-preview-"+wid)
 						if !elem.IsNull() && !elem.IsUndefined() {
 							elem.Set("srcdoc", srcdoc)

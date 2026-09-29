@@ -259,7 +259,7 @@ func (p *Project) renderWidget(w widgetItem, bg, textMuted string) app.UI {
 	wt, wtOk := p.widgetTypeByID(w.TypeID)
 	var srcdoc string
 	if wtOk {
-		srcdoc = uiutil.BuildSrcdoc(wt.HtmlTemplate, wt.Script, p.simInputs[wid], wt.InputPorts, bg)
+		srcdoc = uiutil.BuildSrcdoc(wt.HtmlTemplate, wt.Script, uiutil.PreviewInputs(p.simInputs[wid], wt.InputPorts), wt.InputPorts, bg)
 	} else {
 		// Type not loaded yet or deleted — show widget name as a text fallback.
 		srcdoc = uiutil.BuildSrcdoc(`<div style="display:flex;align-items:center;justify-content:center;height:100%;margin:0;font:11px sans-serif;color:`+textMuted+`">`+html.EscapeString(w.Name)+`</div>`, "", nil, nil, bg)

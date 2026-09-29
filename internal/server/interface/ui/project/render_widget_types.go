@@ -45,7 +45,7 @@ func (p *Project) renderWidgetTypePanel() app.UI {
 			thumbW = 50
 		}
 
-		srcdoc := uiutil.BuildSrcdoc(wt.HtmlTemplate, wt.Script, nil, wt.InputPorts, bg)
+		srcdoc := uiutil.BuildSrcdoc(wt.HtmlTemplate, wt.Script, uiutil.PreviewInputs(nil, wt.InputPorts), wt.InputPorts, bg)
 
 		var previewEl app.UI
 		if wt.HtmlTemplate != "" {

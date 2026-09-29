@@ -8,10 +8,28 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
+	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 func mustTagID() id.ID[tag.Tag] {
 	return id.NewID[tag.Tag]()
+}
+
+func mustTag(t *testing.T) tag.Tag {
+	t.Helper()
+	name, err := tag.NewTagName("pressure")
+	if err != nil {
+		t.Fatalf("NewTagName: %v", err)
+	}
+	value, err := tag.TagTypeInteger.NewTagValue(int64(42))
+	if err != nil {
+		t.Fatalf("NewTagValue: %v", err)
+	}
+	aTag, err := tag.NewTag(mustTagID(), name, tag.TagTypeInteger, value, tag.TagQualityGood, version.Committed[tag.Tag]())
+	if err != nil {
+		t.Fatalf("NewTag: %v", err)
+	}
+	return aTag
 }
 
 func mustClientID() id.ID[client.Client] {
@@ -417,30 +435,39 @@ func TestNewTagCreatedEvent_WithTimestamp_SetsTimestamp(t *testing.T) {
 // --- TagUpdatedEvent ---
 
 func TestNewTagUpdatedEvent_Type_IsTagUpdated(t *testing.T) {
-	e := event.NewTagUpdatedEvent(mustTagID())
+	e := event.NewTagUpdatedEvent(mustTag(t))
 	if e.Type() != event.EventTypeTagUpdated {
 		t.Errorf("expected %s, got %s", event.EventTypeTagUpdated, e.Type())
 	}
 }
 
-func TestNewTagUpdatedEvent_TagID_MatchesProvided(t *testing.T) {
-	tagID := mustTagID()
-	e := event.NewTagUpdatedEvent(tagID)
+func TestNewTagUpdatedEvent_TagID_MatchesTag(t *testing.T) {
+	aTag := mustTag(t)
+	e := event.NewTagUpdatedEvent(aTag)
 
-	if e.TagID() != tagID {
-		t.Errorf("expected TagID %v, got %v", tagID, e.TagID())
+	if e.TagID() != aTag.ID() {
+		t.Errorf("expected TagID %v, got %v", aTag.ID(), e.TagID())
+	}
+}
+
+func TestNewTagUpdatedEvent_Tag_CarriesState(t *testing.T) {
+	aTag := mustTag(t)
+	e := event.NewTagUpdatedEvent(aTag)
+
+	if e.Tag() != aTag {
+		t.Errorf("expected event to carry the tag %v, got %v", aTag, e.Tag())
 	}
 }
 
 func TestNewTagUpdatedEvent_Timestamp_IsNonZero(t *testing.T) {
-	e := event.NewTagUpdatedEvent(mustTagID())
+	e := event.NewTagUpdatedEvent(mustTag(t))
 	if e.Timestamp().Time().IsZero() {
 		t.Error("expected non-zero timestamp")
 	}
 }
 
 func TestNewTagUpdatedEvent_String_IsNonEmpty(t *testing.T) {
-	e := event.NewTagUpdatedEvent(mustTagID())
+	e := event.NewTagUpdatedEvent(mustTag(t))
 	if e.String() == "" {
 		t.Error("expected non-empty string representation")
 	}

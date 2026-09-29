@@ -57,61 +57,125 @@ func SetIframeSrcdoc(id, srcdoc string) {
 	}
 }
 
-// BuildSrcdoc constructs the iframe srcdoc for sandboxed widget preview.
-// It injects the background colour, applies a connect-src CSP, and escapes
-// any </script> in user-authored code to prevent early script-tag termination.
-func BuildSrcdoc(htmlTemplate, script string, inputValues map[string]string, ports []uidto.InputPortDTO, bgColor string) string {
+// Input is one InputPort's entry in the `inputs` object a WidgetType script's
+// render(inputs) receives: `inputs.<port>.value`. Fields are only ever added
+// to it, never changed (docs/widget_type_contract.md).
+type Input struct {
+	// Value is the JS value of the port; nil means undefined.
+	Value any
+}
+
+// MarshalJSON encodes the Input as `{"value": ...}`, omitting "value" when it
+// is undefined so the script sees `inputs.<port>.value === undefined`.
+func (in Input) MarshalJSON() ([]byte, error) {
+	if in.Value == nil {
+		return []byte("{}"), nil
+	}
+	return json.Marshal(struct {
+		Value any `json:"value"`
+	}{in.Value})
+}
+
+// Inputs is the `inputs` object passed to render(inputs), keyed by port name.
+type Inputs map[string]Input
+
+// InputsJSON encodes inputs as a JSON object. The encoder escapes <, > and &,
+// so the result can be embedded in a <script> element as is.
+func InputsJSON(inputs Inputs) string {
+	if inputs == nil {
+		inputs = Inputs{}
+	}
+	b, err := json.Marshal(inputs)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
+}
+
+// NewInput converts a raw string value to the port's JS value by type: an
+// "integer", "boolean" or "string" TagType or type hint. An empty type ("any"
+// hint) keeps a non-empty value as a string. A value that is empty or does not
+// parse falls back to the type's default: 0, false, "" or, for "any", undefined.
+func NewInput(raw, typ string) Input {
+	switch typ {
+	case "integer":
+		if n, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			return Input{Value: n}
+		}
+		return Input{Value: int64(0)}
+	case "boolean":
+		return Input{Value: raw == "true"}
+	case "string":
+		return Input{Value: raw}
+	default:
+		if raw == "" {
+			return Input{}
+		}
+		return Input{Value: raw}
+	}
+}
+
+// PreviewInputs builds the inputs of a preview (Library, Project) from values
+// typed in by the Engineer, converted by each port's type hint.
+func PreviewInputs(values map[string]string, ports []uidto.InputPortDTO) Inputs {
+	inputs := make(Inputs, len(ports))
+	for _, p := range ports {
+		inputs[p.Name] = NewInput(values[p.Name], p.TypeHint)
+	}
+	return inputs
+}
+
+// srcdocPage wraps a widget's HTML and scripts into the sandboxed iframe
+// document: it injects the background colour and a connect-src CSP, and
+// escapes any </script> in user-authored code to prevent early script-tag
+// termination. tail is trusted code run after the WidgetType script in a
+// separate <script>, so an error thrown by the script does not stop it.
+func srcdocPage(htmlTemplate, script, tail, bgColor string) string {
 	// Strip </style> (any capitalisation/spacing) so a CSS variable value cannot
 	// close the injected <style> block prematurely.
 	bgColor = styleCloseRE.ReplaceAllString(bgColor, "")
-
-	callRender := ""
-	if len(ports) > 0 {
-		parts := make([]string, 0, len(ports))
-		for _, p := range ports {
-			parts = append(parts, p.Name+":"+PortValueToJS(inputValues[p.Name], p.TypeHint))
-		}
-		callRender = fmt.Sprintf("\nvar inputs={%s};\ntry{render(inputs);}catch(e){}", strings.Join(parts, ","))
-		// Escape </script> in callRender (built from port names) the same way
-		// safeScript is escaped below — port names have no character restriction.
-		callRender = strings.ReplaceAll(callRender, "</script>", `<\/script>`)
-	}
 	// Escape </script> so a literal occurrence in user-authored JS cannot
 	// terminate the enclosing <script> element and inject new HTML.
 	safeScript := strings.ReplaceAll(script, "</script>", `<\/script>`)
 	return fmt.Sprintf(
-		`<!DOCTYPE html><html><head><meta http-equiv="Content-Security-Policy" content="connect-src 'none'"><style>html,body{background:%s;margin:0;padding:0}</style></head><body>%s<script>%s%s</script></body></html>`,
-		bgColor, htmlTemplate, safeScript, callRender)
+		`<!DOCTYPE html><html><head><meta http-equiv="Content-Security-Policy" content="connect-src 'none'"><style>html,body{background:%s;margin:0;padding:0}</style></head><body>%s<script>%s</script><script>%s</script></body></html>`,
+		bgColor, htmlTemplate, safeScript, tail)
 }
 
-// PortValueToJS converts a user-entered string to a JS literal based on type hint.
-// Values are validated/encoded to prevent JS injection in the preview srcdoc.
-func PortValueToJS(val, typeHint string) string {
-	if val == "" {
-		switch typeHint {
-		case "integer":
-			return "0"
-		case "boolean":
-			return "false"
-		case "string":
-			return `""`
-		default:
-			return "undefined"
-		}
+// BuildSrcdoc constructs the iframe srcdoc for a sandboxed widget preview: the
+// WidgetType's render(inputs) is called once with the given inputs, if the
+// type has any ports. The script contract is in docs/widget_type_contract.md.
+func BuildSrcdoc(htmlTemplate, script string, inputs Inputs, ports []uidto.InputPortDTO, bgColor string) string {
+	tail := ""
+	if len(ports) > 0 {
+		tail = fmt.Sprintf("try{render(%s);}catch(e){}", InputsJSON(inputs))
 	}
-	switch typeHint {
-	case "integer":
-		if _, err := strconv.ParseInt(val, 10, 64); err == nil {
-			return val
-		}
-		return "0"
-	case "boolean":
-		if val == "true" || val == "false" {
-			return val
-		}
-		return "false"
-	default:
-		b, _ := json.Marshal(val)
-		return string(b)
-	}
+	return srcdocPage(htmlTemplate, script, tail, bgColor)
+}
+
+// Messages exchanged with a live widget iframe (BuildLiveSrcdoc).
+const (
+	// MessageReady is sent by the iframe to its parent once the WidgetType
+	// script has run: `{type: "ready"}`.
+	MessageReady = "ready"
+	// MessageInputs is sent by the parent to the iframe to (re)render it:
+	// `{type: "inputs", inputs: {...}}`.
+	MessageInputs = "inputs"
+)
+
+// liveWidgetTail listens for inputs messages from the parent window only and
+// announces readiness, so the parent sends inputs no earlier than the iframe
+// can apply them.
+const liveWidgetTail = `window.addEventListener("message",function(e){` +
+	`if(e.source!==window.parent)return;var m=e.data;` +
+	`if(!m||m.type!=="` + MessageInputs + `"||typeof render!=="function")return;` +
+	`try{render(m.inputs);}catch(err){}});` +
+	`window.parent.postMessage({type:"` + MessageReady + `"},"*");`
+
+// BuildLiveSrcdoc constructs the srcdoc of a live widget (Operation): the
+// iframe is loaded once and render(inputs) is called on every inputs message
+// from the parent, without reloading it. The script contract is in
+// docs/widget_type_contract.md.
+func BuildLiveSrcdoc(htmlTemplate, script, bgColor string) string {
+	return srcdocPage(htmlTemplate, script, liveWidgetTail, bgColor)
 }

@@ -193,7 +193,7 @@ func (t tagServiceImpl) SetTagValueByID(ctx context.Context, request appdto.Upda
 		return appdto.Tag{}, fmt.Errorf("cannot save tag: %w", err)
 	}
 
-	t.eventBus.Publish(event.NewTagUpdatedEvent(tagID))
+	t.eventBus.Publish(event.NewTagUpdatedEvent(foundTag))
 
 	return appdto.NewTag(foundTag), nil
 }

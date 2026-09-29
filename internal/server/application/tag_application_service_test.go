@@ -545,12 +545,18 @@ func TestSetTagValueByID_Success_PublishesTagUpdatedEvent(t *testing.T) {
 	if len(received) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(received))
 	}
-	tagEvent, ok := received[0].(event.TagEvent)
+	tagEvent, ok := received[0].(event.TagUpdatedEvent)
 	if !ok {
-		t.Fatal("expected event to implement TagEvent")
+		t.Fatal("expected event to implement TagUpdatedEvent")
 	}
 	if tagEvent.TagID().UUID() != created.ID {
 		t.Errorf("event TagID: expected %s, got %s", created.ID, tagEvent.TagID().UUID())
+	}
+	if got := tagEvent.Tag().Value().String(); got != "20" {
+		t.Errorf("event tag value: expected 20, got %s", got)
+	}
+	if got := tagEvent.Tag().Version().Number(); got != created.Version+1 {
+		t.Errorf("event tag version: expected %d, got %d", created.Version+1, got)
 	}
 }
 

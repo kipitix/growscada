@@ -29,7 +29,7 @@ A reusable template defining how a widget renders: an HTML template plus a scrip
 _Avoid_: component, widget definition
 
 **InputPort**:
-A named, typed input slot declared on a WidgetType, referenced in its template/script as `input.<name>`. Its type hint either names one TagType or accepts any TagType — "any" is a property of the hint, not a TagType.
+A named, typed input slot declared on a WidgetType; the script receives it by name as an extensible object carrying the bound Tag's current value. Its type hint either names one TagType or accepts any TagType — "any" is a property of the hint, not a TagType.
 _Avoid_: parameter, slot
 
 **Widget**:

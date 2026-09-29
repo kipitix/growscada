@@ -261,7 +261,7 @@ func (r *Root) Render() app.UI {
 					}).ElseIf(r.currentMode == ModeProject, func() app.UI {
 						return project.NewProject(r.apiServerURL)
 					}).ElseIf(r.currentMode == ModeOperation, func() app.UI {
-						return &operation.Operation{}
+						return operation.NewOperation(r.apiServerURL)
 					}).Else(func() app.UI {
 						return &history.History{}
 					}),

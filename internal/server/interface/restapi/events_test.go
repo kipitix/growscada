@@ -3,6 +3,7 @@ package restapi_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
+	"github.com/kipitix/growscada/internal/server/domain/version"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
 
@@ -174,6 +176,81 @@ func TestEventsHandlers_GetEvents_StreamsPublishedEvent(t *testing.T) {
 	}
 	if !strings.Contains(body, tagID.String()) {
 		t.Errorf("expected body to contain tag id %s, got %q", tagID, body)
+	}
+}
+
+// sseEventMessages parses every `data:` line of an SSE body as JSON.
+func sseEventMessages(t *testing.T, body string) []map[string]any {
+	t.Helper()
+	var msgs []map[string]any
+	for _, line := range strings.Split(body, "\n") {
+		data, ok := strings.CutPrefix(line, "data: ")
+		if !ok {
+			continue
+		}
+		var m map[string]any
+		if err := json.Unmarshal([]byte(data), &m); err != nil {
+			t.Fatalf("invalid event JSON %q: %v", data, err)
+		}
+		msgs = append(msgs, m)
+	}
+	return msgs
+}
+
+func TestEventsHandlers_GetEvents_TagUpdatedCarriesTagState(t *testing.T) {
+	bus := event.NewEventBus()
+	h := restapi.NewEventsHandler(bus, 100)
+
+	rec := newSyncRecorder()
+	cancel, done := runEventsHandler(t, h, rec)
+	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), ": connected") })
+
+	name, _ := tag.NewTagName("pressure")
+	value, _ := tag.TagTypeInteger.NewTagValue(int64(42))
+	aVersion, _ := version.New(version.WithNumber[tag.Tag](7))
+	aTag, err := tag.NewTag(id.NewID[tag.Tag](), name, tag.TagTypeInteger, value, tag.TagQualityUncertain, aVersion)
+	if err != nil {
+		t.Fatalf("NewTag: %v", err)
+	}
+	bus.Publish(event.NewTagCreatedEvent(aTag.ID()))
+	bus.Publish(event.NewTagUpdatedEvent(aTag))
+
+	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), "tag_updated") })
+	cancel()
+	<-done
+
+	var created, updated map[string]any
+	for _, m := range sseEventMessages(t, rec.body()) {
+		switch m["type"] {
+		case "tag_created":
+			created = m
+		case "tag_updated":
+			updated = m
+		}
+	}
+	if created == nil || updated == nil {
+		t.Fatalf("expected tag_created and tag_updated events, got %q", rec.body())
+	}
+	if _, ok := created["tag"]; ok {
+		t.Errorf("tag_created must not carry a tag, got %v", created)
+	}
+
+	want := map[string]any{
+		"id":      aTag.ID().String(),
+		"name":    "pressure",
+		"type":    "integer",
+		"value":   "42",
+		"quality": "uncertain",
+		"version": float64(7),
+	}
+	got, ok := updated["tag"].(map[string]any)
+	if !ok {
+		t.Fatalf("tag_updated: expected tag object, got %v", updated["tag"])
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("tag_updated tag.%s: expected %v, got %v", k, v, got[k])
+		}
 	}
 }
 

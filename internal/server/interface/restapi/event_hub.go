@@ -5,7 +5,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/event"
+	"github.com/kipitix/growscada/internal/server/interface/restapi/restdto"
 )
 
 // eventClientBufferSize is the per-connection outgoing buffer. A client that
@@ -14,11 +16,13 @@ import (
 const eventClientBufferSize = 64
 
 // eventMessage is the wire payload sent as SSE `data:` for every domain
-// event, regardless of its concrete type.
+// event, regardless of its concrete type. Tag carries the Tag's full new
+// state, in the shape of GET /api/v1/tags/{id}, on tag_updated only.
 type eventMessage struct {
-	Type      string `json:"type"`
-	Timestamp string `json:"timestamp"`
-	ID        string `json:"id,omitempty"`
+	Type      string               `json:"type"`
+	Timestamp string               `json:"timestamp"`
+	ID        string               `json:"id,omitempty"`
+	Tag       *restdto.TagResponse `json:"tag,omitempty"`
 }
 
 // eventHub subscribes to every EventType on the domain EventBus exactly once
@@ -78,6 +82,7 @@ func (h *eventHub) broadcast(e event.Event) {
 		Type:      e.Type().String(),
 		Timestamp: e.Timestamp().Time().Format(time.RFC3339),
 		ID:        eventSourceID(e),
+		Tag:       eventTag(e),
 	})
 	if err != nil {
 		return
@@ -147,4 +152,15 @@ func eventSourceID(e event.Event) string {
 	default:
 		return ""
 	}
+}
+
+// eventTag returns the Tag state carried by a tag_updated event, or nil for
+// every other event.
+func eventTag(e event.Event) *restdto.TagResponse {
+	ev, ok := e.(event.TagUpdatedEvent)
+	if !ok {
+		return nil
+	}
+	resp := restdto.NewTagResponse(appdto.NewTag(ev.Tag()))
+	return &resp
 }

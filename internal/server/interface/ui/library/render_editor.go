@@ -175,7 +175,7 @@ func (l *Library) renderPreviewColumn() app.UI {
 	} else {
 		content = &previewFrame{
 			ID:     "preview-iframe",
-			Srcdoc: uiutil.BuildSrcdoc(l.editedHTML, l.editedScript, l.editedInputValues, l.editedInputPorts, uiutil.IframeBgColor()),
+			Srcdoc: uiutil.BuildSrcdoc(l.editedHTML, l.editedScript, uiutil.PreviewInputs(l.editedInputValues, l.editedInputPorts), l.editedInputPorts, uiutil.IframeBgColor()),
 		}
 	}
 	return app.Div().
