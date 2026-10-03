@@ -18,16 +18,7 @@ type widgetPreviewFrame struct {
 }
 
 func (p *widgetPreviewFrame) Render() app.UI {
-	return app.IFrame().
-		ID(p.ID).
-		Attr("sandbox", "allow-scripts").
-		Attr("allowtransparency", "true").
-		Style("width", "100%").
-		Style("height", "100%").
-		Style("border", "none").
-		Style("background", "transparent").
-		Style("pointer-events", "none").
-		Style("display", "block")
+	return uiutil.WidgetIFrame().ID(p.ID)
 }
 
 func (p *widgetPreviewFrame) OnMount(ctx app.Context)  { uiutil.SetIframeSrcdoc(p.ID, p.Srcdoc) }

@@ -7,23 +7,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/livescene"
 )
 
-func TestReloadTargetsFor(t *testing.T) {
-	cases := map[string]reloadTargets{
-		"widget_type_updated": {widgetTypes: true},
-		"scene_deleted":       {scenes: true},
-		"widget_created":      {widgets: true},
-		"tag_created":         {tags: true},
-		"tag_deleted":         {tags: true},
-		"tag_updated":         {}, // applied from the event itself
-		"client_connected":    {},
-	}
-	for ev, want := range cases {
-		if got := reloadTargetsFor(ev); got != want {
-			t.Errorf("%s: got %+v, want %+v", ev, got, want)
-		}
-	}
-}
-
 func TestDecodeTagUpdate(t *testing.T) {
 	raw := json.RawMessage(`{"id":"t1","name":"speed","type":"integer","value":"42","quality":"uncertain","version":3}`)
 	got, ok := decodeTagUpdate(raw)
@@ -87,6 +70,26 @@ func TestMergeTags(t *testing.T) {
 	}
 	if got["created"].Value != "list" {
 		t.Errorf("a new Tag from the list must be added, got %+v", got["created"])
+	}
+}
+
+func TestForgetVersions_FreshStateWinsAfterVersionsStartOver(t *testing.T) {
+	// Seen before the server was restarted with a fresh database.
+	known := map[string]livescene.Tag{"t1": tagV("t1", "old", 500)}
+
+	forgotten := forgetVersions(known)
+
+	if forgotten["t1"].Value != "old" {
+		t.Errorf("the value must stay on screen until fresh data arrives, got %+v", forgotten["t1"])
+	}
+	if known["t1"].Version != 500 {
+		t.Error("the given map must not be modified")
+	}
+	if got := mergeTags(forgotten, []livescene.Tag{tagV("t1", "list", 3)}); got["t1"].Value != "list" {
+		t.Errorf("the reloaded list must win over a forgotten Version, got %+v", got["t1"])
+	}
+	if got := applyTagUpdate(forgotten, tagV("t1", "event", 1)); got["t1"].Value != "event" {
+		t.Errorf("an event must win over a forgotten Version, got %+v", got["t1"])
 	}
 }
 

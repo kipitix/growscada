@@ -19,44 +19,23 @@ import (
 // growctl, a Device). Editors merge fresh data field by field: a field the user
 // has not edited follows the server, an unsaved edit is kept.
 
-// reloadTargets says which lists a server event makes stale.
-type reloadTargets struct {
-	widgetTypes, scenes, widgets, tags bool
-}
-
-func reloadTargetsFor(eventType string) reloadTargets {
-	switch eventType {
-	case "widget_type_created", "widget_type_updated", "widget_type_deleted":
-		return reloadTargets{widgetTypes: true}
-	case "scene_created", "scene_updated", "scene_deleted":
-		return reloadTargets{scenes: true}
-	case "widget_created", "widget_updated", "widget_deleted":
-		// A widget change bumps its Scene's version (the shared optimistic
-		// lock) without a scene event, so the scenes are reloaded as well.
-		return reloadTargets{scenes: true, widgets: true}
-	case "tag_created", "tag_updated", "tag_deleted":
-		return reloadTargets{tags: true}
-	}
-	return reloadTargets{}
-}
-
 func (p *Project) handleServerEvents(ctx app.Context) {
 	ctx.Handle(eventlog.ActionServerEvent, func(ctx app.Context, a app.Action) {
 		ev, ok := a.Value.(eventlog.ServerEvent)
 		if !ok {
 			return
 		}
-		targets := reloadTargetsFor(ev.Type)
-		if targets.widgetTypes {
+		targets := eventlog.ReloadTargetsFor(ev.Type)
+		if targets.WidgetTypes {
 			p.loadWidgetTypes(ctx)
 		}
-		if targets.scenes {
+		if targets.Scenes {
 			p.loadScenes(ctx)
 		}
-		if targets.widgets {
+		if targets.Widgets {
 			p.loadWidgets(ctx)
 		}
-		if targets.tags {
+		if targets.Tags {
 			p.loadTags(ctx)
 		}
 	})

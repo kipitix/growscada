@@ -23,6 +23,12 @@ func IsValidJSIdentifier(s string) bool {
 	return jsIdentRE.MatchString(s)
 }
 
+// SceneWidgetBackground is the background of a Widget placed on a Scene
+// (Operation, Project's canvas): none, so the Widget is drawn right on the
+// Scene's background. Previews shown on their own (Library, Project's widget
+// type thumbnails) use the theme's background instead (IframeBgColor).
+const SceneWidgetBackground = "transparent"
+
 // IframeBgColor reads --bg from the parent document's computed CSS.
 func IframeBgColor() string {
 	color := strings.TrimSpace(
@@ -174,8 +180,9 @@ const liveWidgetTail = `window.addEventListener("message",function(e){` +
 
 // BuildLiveSrcdoc constructs the srcdoc of a live widget (Operation): the
 // iframe is loaded once and render(inputs) is called on every inputs message
-// from the parent, without reloading it. The script contract is in
+// from the parent, without reloading it. A live widget is always on a Scene,
+// so its background is SceneWidgetBackground. The script contract is in
 // docs/widget_type_contract.md.
-func BuildLiveSrcdoc(htmlTemplate, script, bgColor string) string {
-	return srcdocPage(htmlTemplate, script, liveWidgetTail, bgColor)
+func BuildLiveSrcdoc(htmlTemplate, script string) string {
+	return srcdocPage(htmlTemplate, script, liveWidgetTail, SceneWidgetBackground)
 }

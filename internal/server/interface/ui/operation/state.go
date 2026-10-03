@@ -6,31 +6,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/livescene"
 )
 
-// reloadTargets says which server-backed lists a server event makes stale.
-type reloadTargets struct {
-	widgetTypes, scenes, widgets, tags bool
-}
-
-// reloadTargetsFor routes a server event. tag_updated carries the Tag's new
-// state and is applied directly (applyTagUpdate), so it reloads nothing.
-func reloadTargetsFor(eventType string) reloadTargets {
-	switch eventType {
-	case "widget_type_created", "widget_type_updated", "widget_type_deleted":
-		return reloadTargets{widgetTypes: true}
-	case "scene_created", "scene_updated", "scene_deleted":
-		return reloadTargets{scenes: true}
-	case "widget_created", "widget_updated", "widget_deleted":
-		return reloadTargets{widgets: true}
-	case "tag_created", "tag_deleted":
-		return reloadTargets{tags: true}
-	}
-	return reloadTargets{}
-}
-
-// allTargets is every list: what a reconnection reloads, since the events
-// published while disconnected are lost.
-var allTargets = reloadTargets{widgetTypes: true, scenes: true, widgets: true, tags: true}
-
 // decodeTagUpdate extracts the Tag state carried by a tag_updated event.
 func decodeTagUpdate(raw json.RawMessage) (livescene.Tag, bool) {
 	if len(raw) == 0 {
@@ -72,6 +47,20 @@ func mergeTags(known map[string]livescene.Tag, loaded []livescene.Tag) map[strin
 		merged[t.ID] = t
 	}
 	return merged
+}
+
+// forgetVersions returns the Tags with their states kept on screen but their
+// Versions reset to 0, below any persisted Version, so the next state received
+// for each Tag wins. Used on a resync: while disconnected the server may have
+// been restarted with a fresh database, its Versions starting over below the
+// ones known here, which would otherwise keep the stale values forever.
+func forgetVersions(tags map[string]livescene.Tag) map[string]livescene.Tag {
+	forgotten := make(map[string]livescene.Tag, len(tags))
+	for id, t := range tags {
+		t.Version = 0
+		forgotten[id] = t
+	}
+	return forgotten
 }
 
 // selectScene keeps the selected Scene if it still exists, otherwise falls

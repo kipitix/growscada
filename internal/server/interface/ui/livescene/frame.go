@@ -23,15 +23,7 @@ type widgetFrame struct {
 }
 
 func (f *widgetFrame) Render() app.UI {
-	return app.IFrame().
-		Attr("sandbox", "allow-scripts").
-		Attr("allowtransparency", "true").
-		Style("width", "100%").
-		Style("height", "100%").
-		Style("border", "none").
-		Style("background", "transparent").
-		Style("pointer-events", "none").
-		Style("display", "block")
+	return uiutil.WidgetIFrame()
 }
 
 func (f *widgetFrame) OnMount(ctx app.Context) {

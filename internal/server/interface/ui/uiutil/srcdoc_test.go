@@ -64,8 +64,10 @@ func TestBuildSrcdoc_EscapesScriptClose(t *testing.T) {
 }
 
 func TestBuildLiveSrcdoc_ListensAndAnnouncesReady(t *testing.T) {
-	doc := BuildLiveSrcdoc("<div></div>", "function render(inputs){}", "#fff")
+	doc := BuildLiveSrcdoc("<div></div>", "function render(inputs){}")
 	for _, want := range []string{
+		// Drawn right on the Scene's background.
+		`html,body{background:transparent;`,
 		`if(e.source!==window.parent)return;`,
 		`m.type!=="inputs"`,
 		`window.parent.postMessage({type:"ready"},"*");`,
@@ -77,5 +79,15 @@ func TestBuildLiveSrcdoc_ListensAndAnnouncesReady(t *testing.T) {
 	}
 	if strings.Contains(doc, "try{render({") {
 		t.Error("a live widget must wait for its inputs message instead of rendering inline")
+	}
+}
+
+func TestWidgetNamePlaceholder_EscapesNameAndColor(t *testing.T) {
+	got := WidgetNamePlaceholder(`<b>pump</b>`, `red"><script>`)
+	if strings.Contains(got, "<b>") || strings.Contains(got, "<script>") {
+		t.Errorf("name and colour must be escaped, got %s", got)
+	}
+	if !strings.Contains(got, "&lt;b&gt;pump&lt;/b&gt;") {
+		t.Errorf("the escaped name must be shown, got %s", got)
 	}
 }

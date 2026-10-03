@@ -51,14 +51,10 @@ func (o *Operation) OnMount(ctx app.Context) {
 	o.widgetTypes = map[string]livescene.WidgetType{}
 	o.tags = map[string]livescene.Tag{}
 	ctx.ObserveState("theme", &o.ThemeMode)
-	ctx.ObserveState(eventlog.StateDisconnected, &o.disconnected).OnChange(func() {
-		if !o.disconnected {
-			o.reload(o.compoCtx, allTargets)
-		}
-	})
+	ctx.ObserveState(eventlog.StateDisconnected, &o.disconnected)
 	ctx.LocalStorage().Get(sceneStorageKey, &o.selectedSceneID)
 
-	o.reload(ctx, allTargets)
+	o.reload(ctx, eventlog.AllTargets)
 
 	ctx.Handle(eventlog.ActionServerEvent, func(ctx app.Context, a app.Action) {
 		ev, ok := a.Value.(eventlog.ServerEvent)
@@ -68,26 +64,27 @@ func (o *Operation) OnMount(ctx app.Context) {
 		if ev.Type == "tag_updated" {
 			if t, ok := decodeTagUpdate(ev.Tag); ok {
 				o.tags = applyTagUpdate(o.tags, t)
-			} else {
-				o.loadTags(ctx)
+				return
 			}
-			return
 		}
-		o.reload(ctx, reloadTargetsFor(ev.Type))
+		if ev.Type == eventlog.EventResync {
+			o.tags = forgetVersions(o.tags)
+		}
+		o.reload(ctx, eventlog.ReloadTargetsFor(ev.Type))
 	})
 }
 
-func (o *Operation) reload(ctx app.Context, targets reloadTargets) {
-	if targets.widgetTypes {
+func (o *Operation) reload(ctx app.Context, targets eventlog.ReloadTargets) {
+	if targets.WidgetTypes {
 		o.loadWidgetTypes(ctx)
 	}
-	if targets.scenes {
+	if targets.Scenes {
 		o.loadScenes(ctx)
 	}
-	if targets.widgets {
+	if targets.Widgets {
 		o.loadWidgets(ctx)
 	}
-	if targets.tags {
+	if targets.Tags {
 		o.loadTags(ctx)
 	}
 }
@@ -176,8 +173,9 @@ func (o *Operation) renderScene() app.UI {
 		Scene:       sc,
 		Widgets:     widgets,
 		WidgetTypes: o.widgetTypes,
-		Tags:        o.tags,
+		Tags:        livescene.SceneTags(widgets, o.tags),
 		Connected:   !o.disconnected,
+		Theme:       o.ThemeMode,
 	}
 }
 

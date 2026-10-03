@@ -2,7 +2,6 @@ package livescene
 
 import (
 	"fmt"
-	"html"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
@@ -11,6 +10,10 @@ import (
 
 // View renders a Scene 1:1 with its background and Widgets fed by live Tag
 // values. It is purely presentational: whoever owns it supplies the state.
+//
+// go-app re-renders the View when any exported field changes, so its owner
+// should pass in Tags only those the Widgets read (SceneTags): a change of
+// any other Tag then costs the View nothing.
 type View struct {
 	app.Compo
 	Scene       Scene
@@ -20,18 +23,51 @@ type View struct {
 	// Connected is false while the connection to the server is lost: a banner
 	// is shown and every Widget is marked at least Uncertain.
 	Connected bool
+	// Theme is the UI theme ("light", "dark", "auto"). The colour of the
+	// placeholder shown for a Widget without its WidgetType is read from the
+	// page's CSS, so the View must re-render when it changes; the value itself
+	// is not used. Widgets themselves are transparent, theme-independent.
+	Theme string
+
+	// srcdocs caches the live document of each WidgetType (by ID): it depends
+	// on the WidgetType only, not on Tag values.
+	srcdocs map[string]cachedSrcdoc
+}
+
+// cachedSrcdoc is a live document with what it was built from.
+type cachedSrcdoc struct {
+	htmlTemplate, script string
+	srcdoc               string
 }
 
 func (v *View) Render() app.UI {
-	bg := uiutil.IframeBgColor()
 	textMuted := uiutil.IframeTextMuted()
+
+	// Rebuilt on every render from the WidgetTypes in use, so the entries of
+	// deleted or unused types are dropped.
+	cached := v.srcdocs
+	v.srcdocs = make(map[string]cachedSrcdoc, len(cached))
+	for _, w := range v.Widgets {
+		wt, ok := v.WidgetTypes[w.TypeID]
+		if !ok {
+			continue
+		}
+		if _, done := v.srcdocs[wt.ID]; done {
+			continue
+		}
+		c, ok := cached[wt.ID]
+		if !ok || c.htmlTemplate != wt.HtmlTemplate || c.script != wt.Script {
+			c = cachedSrcdoc{wt.HtmlTemplate, wt.Script, uiutil.BuildLiveSrcdoc(wt.HtmlTemplate, wt.Script)}
+		}
+		v.srcdocs[wt.ID] = c
+	}
 
 	layers := make([]app.UI, 0, len(v.Widgets)+1)
 	if v.Scene.BackgroundHTML != "" {
 		layers = append(layers, v.renderBackground())
 	}
 	for _, w := range v.Widgets {
-		layers = append(layers, v.renderWidget(w, bg, textMuted))
+		layers = append(layers, v.renderWidget(w, textMuted))
 	}
 
 	canvas := app.Div().
@@ -89,16 +125,16 @@ func (v *View) renderBackground() app.UI {
 		Style("display", "block")
 }
 
-func (v *View) renderWidget(w Widget, bg, textMuted string) app.UI {
+func (v *View) renderWidget(w Widget, textMuted string) app.UI {
 	var srcdoc, inputsJSON string
 	quality := QualityBad
 	if wt, ok := v.WidgetTypes[w.TypeID]; ok {
-		srcdoc = uiutil.BuildLiveSrcdoc(wt.HtmlTemplate, wt.Script, bg)
+		srcdoc = v.srcdocs[wt.ID].srcdoc
 		inputsJSON = uiutil.InputsJSON(WidgetInputs(w, wt, v.Tags))
 		quality = WidgetQuality(w, wt, v.Tags, v.Connected)
 	} else {
 		// WidgetType not loaded yet or deleted — show the widget name instead.
-		srcdoc = uiutil.BuildLiveSrcdoc(`<div style="display:flex;align-items:center;justify-content:center;height:100%;margin:0;font:11px sans-serif;color:`+textMuted+`">`+html.EscapeString(w.Name)+`</div>`, "", bg)
+		srcdoc = uiutil.BuildLiveSrcdoc(uiutil.WidgetNamePlaceholder(w.Name, textMuted), "")
 		inputsJSON = uiutil.InputsJSON(nil)
 	}
 

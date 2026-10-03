@@ -52,19 +52,10 @@ func (l *Library) OnMount(ctx app.Context) {
 	l.loadList(ctx)
 
 	ctx.Handle(eventlog.ActionServerEvent, func(ctx app.Context, a app.Action) {
-		if ev, ok := a.Value.(eventlog.ServerEvent); ok && isWidgetTypeEvent(ev.Type) {
+		if ev, ok := a.Value.(eventlog.ServerEvent); ok && eventlog.ReloadTargetsFor(ev.Type).WidgetTypes {
 			l.loadList(ctx)
 		}
 	})
-}
-
-// isWidgetTypeEvent reports whether a server event changes the widget type list.
-func isWidgetTypeEvent(eventType string) bool {
-	switch eventType {
-	case "widget_type_created", "widget_type_updated", "widget_type_deleted":
-		return true
-	}
-	return false
 }
 
 // ── Data loading ──────────────────────────────────────────────────────────────

@@ -28,11 +28,19 @@ const filtersStorageKey = "eventlog:filters"
 // keeps a single SSE connection.
 const ActionServerEvent = "eventlog.server-event"
 
+// EventResync is the Type of the synthetic ServerEvent the Bar fires each time
+// the SSE connection is (re)established, the first time included. The server
+// subscribes a client before it answers, so from this point on no event is
+// missed; but events published before it (while disconnected, or before the
+// first connection was up) are not replayed. A component that shows server
+// data therefore reloads all of it on EventResync.
+const EventResync = "resync"
+
 // StateDisconnected is the go-app state (ctx.ObserveState) holding, as a
 // bool, whether the SSE connection to the server is lost. It turns true on
-// the loss and false again once the browser has reconnected; events published
-// meanwhile are not replayed, so a component that shows server data reloads it
-// when the state turns false. Unset (false) until the first loss.
+// the loss and false again once the browser has reconnected. It drives the
+// "stale data" indication only: the reload after a reconnection is triggered
+// by EventResync. Unset (false) until the first loss.
 const StateDisconnected = "eventlog.disconnected"
 
 // ServerEvent is a domain event received from the server's SSE stream.
@@ -225,9 +233,12 @@ func (b *Bar) handleError(ctx app.Context) {
 	}
 }
 
-// handleOpen responds to the SSE connection being (re)established.
+// handleOpen responds to the SSE connection being (re)established: events
+// published before it are lost, so the components showing server data are
+// told to resync.
 func (b *Bar) handleOpen(ctx app.Context) {
 	b.markConnected(ctx)
+	ctx.NewActionWithValue(ActionServerEvent, ServerEvent{Type: EventResync})
 }
 
 // markConnected leaves the degraded state, announcing the reconnection to

@@ -2,7 +2,6 @@ package project
 
 import (
 	"fmt"
-	"html"
 	"math"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
@@ -167,11 +166,10 @@ func (p *Project) renderSceneCanvas() app.UI {
 		}
 	}
 
-	bg := uiutil.IframeBgColor()
 	textMuted := uiutil.IframeTextMuted()
 	widgetEls := make([]app.UI, 0, len(p.widgets))
 	for _, w := range p.widgets {
-		widgetEls = append(widgetEls, p.renderWidget(w, bg, textMuted))
+		widgetEls = append(widgetEls, p.renderWidget(w, textMuted))
 	}
 
 	// Determine overall canvas cursor from active drag mode.
@@ -247,7 +245,7 @@ func (p *Project) renderSceneCanvas() app.UI {
 //   - Orange circle: origin anchor (drag to move anchor within widget)
 //   - Blue circle + line: rotation handle (drag to rotate)
 //   - Blue square corner: SE resize handle (drag to resize)
-func (p *Project) renderWidget(w widgetItem, bg, textMuted string) app.UI {
+func (p *Project) renderWidget(w widgetItem, textMuted string) app.UI {
 	wid := w.ID
 	isSelected := p.selectedWidgetID == wid
 
@@ -259,10 +257,10 @@ func (p *Project) renderWidget(w widgetItem, bg, textMuted string) app.UI {
 	wt, wtOk := p.widgetTypeByID(w.TypeID)
 	var srcdoc string
 	if wtOk {
-		srcdoc = uiutil.BuildSrcdoc(wt.HtmlTemplate, wt.Script, uiutil.PreviewInputs(p.simInputs[wid], wt.InputPorts), wt.InputPorts, bg)
+		srcdoc = uiutil.BuildSrcdoc(wt.HtmlTemplate, wt.Script, uiutil.PreviewInputs(p.simInputs[wid], wt.InputPorts), wt.InputPorts, uiutil.SceneWidgetBackground)
 	} else {
 		// Type not loaded yet or deleted — show widget name as a text fallback.
-		srcdoc = uiutil.BuildSrcdoc(`<div style="display:flex;align-items:center;justify-content:center;height:100%;margin:0;font:11px sans-serif;color:`+textMuted+`">`+html.EscapeString(w.Name)+`</div>`, "", nil, nil, bg)
+		srcdoc = uiutil.BuildSrcdoc(uiutil.WidgetNamePlaceholder(w.Name, textMuted), "", nil, nil, uiutil.SceneWidgetBackground)
 	}
 
 	content := app.Div().

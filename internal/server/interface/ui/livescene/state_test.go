@@ -1,6 +1,7 @@
 package livescene
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/kipitix/growscada/internal/server/interface/ui/uidto"
@@ -116,5 +117,29 @@ func TestWorst(t *testing.T) {
 		if got := Worst(c.a, c.b); got != c.want {
 			t.Errorf("Worst(%s, %s) = %s, want %s", c.a, c.b, got, c.want)
 		}
+	}
+}
+
+func TestSceneTags_KeepsOnlyBoundTags(t *testing.T) {
+	tags := map[string]Tag{
+		"t-speed": {ID: "t-speed", Value: "42"},
+		"t-other": {ID: "t-other", Value: "1"},
+	}
+	widgets := []Widget{
+		testWidget(PortBinding{PortName: "speed", TagID: "t-speed"}),
+		testWidget(PortBinding{PortName: "on", TagID: "t-deleted"}),
+	}
+
+	got := SceneTags(widgets, tags)
+
+	if len(got) != 1 || got["t-speed"].Value != "42" {
+		t.Errorf("want only the existing bound Tag, got %+v", got)
+	}
+
+	// A change of an unbound Tag must leave the result equal, so the View is
+	// not re-rendered.
+	tags["t-other"] = Tag{ID: "t-other", Value: "2"}
+	if again := SceneTags(widgets, tags); !reflect.DeepEqual(again, got) {
+		t.Errorf("an unbound Tag changed the result: %+v vs %+v", again, got)
 	}
 }

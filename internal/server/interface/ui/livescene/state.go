@@ -14,6 +14,21 @@ func boundTag(w Widget, port string, tags map[string]Tag) (Tag, bool) {
 	return Tag{}, false
 }
 
+// SceneTags returns the Tags bound to the Widgets' PortBindings: all a View
+// of these Widgets reads. Given to the View instead of every Tag, it keeps the
+// View from re-rendering when a Tag shown elsewhere changes.
+func SceneTags(widgets []Widget, tags map[string]Tag) map[string]Tag {
+	bound := make(map[string]Tag)
+	for _, w := range widgets {
+		for _, b := range w.PortBindings {
+			if t, ok := tags[b.TagID]; ok {
+				bound[b.TagID] = t
+			}
+		}
+	}
+	return bound
+}
+
 // WidgetInputs computes the `inputs` of the Widget's render(inputs): each
 // InputPort gets its bound Tag's current value, converted by the Tag's
 // TagType. A port without a PortBinding, or bound to a deleted Tag, gets its
