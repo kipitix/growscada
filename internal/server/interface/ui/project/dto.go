@@ -59,7 +59,7 @@ type updateSceneResponse struct {
 	Version int `json:"version"`
 }
 
-// Widget geometry sub-DTOs (match server restdto shape).
+// Widget geometry sub-DTOs (match the shapes in contract/api/v0).
 
 type positionDTO struct {
 	X float64 `json:"x"`

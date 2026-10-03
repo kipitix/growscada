@@ -9,6 +9,7 @@ import (
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 )
 
@@ -16,7 +17,7 @@ import (
 
 func (p *Project) createScene(ctx app.Context) {
 	ctx = p.compoCtx
-	url := p.apiServerURL + "/api/v1/scenes"
+	url := p.apiServerURL + apiv0.PathPrefix + "/scenes"
 	body, _ := json.Marshal(createSceneRequest{Name: "New Scene", Width: 1920, Height: 1080})
 	ctx.Async(func() {
 		resp, err := http.Post(url, "application/json", bytes.NewReader(body))
@@ -57,7 +58,7 @@ func (p *Project) createScene(ctx app.Context) {
 // scene, then deletes it if they confirm.
 func (p *Project) confirmDeleteScene(ctx app.Context, sceneID, sceneName string) {
 	ctx = p.compoCtx
-	url := p.apiServerURL + "/api/v1/scenes/" + sceneID + "/widgets"
+	url := p.apiServerURL + apiv0.PathPrefix + "/scenes/" + sceneID + "/widgets"
 	ctx.Async(func() {
 		resp, err := http.Get(url)
 		widgetCount := -1 // unknown, e.g. on network error
@@ -83,7 +84,7 @@ func (p *Project) confirmDeleteScene(ctx app.Context, sceneID, sceneName string)
 
 func (p *Project) deleteScene(ctx app.Context, sceneID string) {
 	ctx = p.compoCtx
-	url := p.apiServerURL + "/api/v1/scenes/" + sceneID
+	url := p.apiServerURL + apiv0.PathPrefix + "/scenes/" + sceneID
 	ctx.Async(func() {
 		req, _ := http.NewRequest(http.MethodDelete, url, nil)
 		resp, err := http.DefaultClient.Do(req)
@@ -163,7 +164,7 @@ func (p *Project) saveSceneProperties(ctx app.Context) {
 		}
 	}
 
-	url := p.apiServerURL + "/api/v1/scenes/" + id
+	url := p.apiServerURL + apiv0.PathPrefix + "/scenes/" + id
 	body, _ := json.Marshal(updateSceneRequest{
 		Name:           name,
 		Width:          w,
@@ -239,7 +240,7 @@ func (p *Project) commitSceneEdit(ctx app.Context) {
 	if p.selectedSceneID == id {
 		p.editingScenePropsName = name
 	}
-	url := p.apiServerURL + "/api/v1/scenes/" + id
+	url := p.apiServerURL + apiv0.PathPrefix + "/scenes/" + id
 	body, _ := json.Marshal(updateSceneRequest{
 		Name:           name,
 		Width:          sc.Width,

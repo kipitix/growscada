@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
-	"github.com/kipitix/growscada/internal/server/interface/restapi/restdto"
 )
 
 // Client is the REST API client with the operations growctl needs on top of
@@ -39,7 +39,7 @@ func (c *Client) ListTagsMatching(ctx context.Context, f NameFilter) ([]ServerTa
 
 // CreateTag creates a tag from its manifest.
 func (c *Client) CreateTag(ctx context.Context, m TagManifest) error {
-	return c.Client.CreateTag(ctx, restdto.CreateTagRequest{
+	return c.Client.CreateTag(ctx, apiv0.CreateTagRequest{
 		Name:    m.Name,
 		Type:    m.Type,
 		Value:   m.InitialValue,

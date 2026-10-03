@@ -1,0 +1,817 @@
+{
+  "$defs": {
+    "CreateSceneRequest": {
+      "properties": {
+        "background_html": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "width": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "width",
+        "height",
+        "background_html"
+      ],
+      "type": "object"
+    },
+    "CreateSceneResponse": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "CreateTagRequest": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "quality": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "value",
+        "quality"
+      ],
+      "type": "object"
+    },
+    "CreateTagResponse": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "CreateWidgetRequest": {
+      "properties": {
+        "labels": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "$ref": "#/$defs/OriginRequest"
+        },
+        "port_bindings": {
+          "items": {
+            "$ref": "#/$defs/PortBinding"
+          },
+          "type": "array"
+        },
+        "position": {
+          "$ref": "#/$defs/PositionRequest"
+        },
+        "rotation": {
+          "$ref": "#/$defs/RotationRequest"
+        },
+        "scene_version": {
+          "type": "integer"
+        },
+        "size": {
+          "$ref": "#/$defs/SizeRequest"
+        },
+        "type_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "position",
+        "size",
+        "origin",
+        "rotation",
+        "type_id",
+        "scene_version",
+        "labels",
+        "port_bindings"
+      ],
+      "type": "object"
+    },
+    "CreateWidgetResponse": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "scene_version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "scene_version"
+      ],
+      "type": "object"
+    },
+    "CreateWidgetTypeRequest": {
+      "properties": {
+        "default_height": {
+          "type": "integer"
+        },
+        "default_width": {
+          "type": "integer"
+        },
+        "html_template": {
+          "type": "string"
+        },
+        "input_ports": {
+          "items": {
+            "$ref": "#/$defs/InputPort"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "script": {
+          "type": "string"
+        },
+        "script_language": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "html_template",
+        "script",
+        "script_language",
+        "default_width",
+        "default_height",
+        "input_ports"
+      ],
+      "type": "object"
+    },
+    "CreateWidgetTypeResponse": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "Event": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "tag": {
+          "$ref": "#/$defs/TagResponse"
+        },
+        "timestamp": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "timestamp"
+      ],
+      "type": "object"
+    },
+    "GetScenesResponse": {
+      "properties": {
+        "scenes": {
+          "items": {
+            "$ref": "#/$defs/SceneResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "scenes"
+      ],
+      "type": "object"
+    },
+    "GetTagsResponse": {
+      "properties": {
+        "tags": {
+          "items": {
+            "$ref": "#/$defs/TagResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "tags"
+      ],
+      "type": "object"
+    },
+    "GetWidgetTypesResponse": {
+      "properties": {
+        "widget_types": {
+          "items": {
+            "$ref": "#/$defs/WidgetTypeResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "widget_types"
+      ],
+      "type": "object"
+    },
+    "GetWidgetsResponse": {
+      "properties": {
+        "widgets": {
+          "items": {
+            "$ref": "#/$defs/WidgetResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "widgets"
+      ],
+      "type": "object"
+    },
+    "InputPort": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type_hint": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "type_hint"
+      ],
+      "type": "object"
+    },
+    "OriginRequest": {
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "OriginResponse": {
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "PortBinding": {
+      "properties": {
+        "port_name": {
+          "type": "string"
+        },
+        "tag_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "port_name",
+        "tag_id"
+      ],
+      "type": "object"
+    },
+    "PositionRequest": {
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "z": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "type": "object"
+    },
+    "PositionResponse": {
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "z": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "type": "object"
+    },
+    "RotationRequest": {
+      "properties": {
+        "degrees": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "degrees"
+      ],
+      "type": "object"
+    },
+    "RotationResponse": {
+      "properties": {
+        "degrees": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "degrees"
+      ],
+      "type": "object"
+    },
+    "SceneResponse": {
+      "properties": {
+        "background_html": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        },
+        "width": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "width",
+        "height",
+        "background_html",
+        "version"
+      ],
+      "type": "object"
+    },
+    "SizeRequest": {
+      "properties": {
+        "height": {
+          "type": "integer"
+        },
+        "width": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width",
+        "height"
+      ],
+      "type": "object"
+    },
+    "SizeResponse": {
+      "properties": {
+        "height": {
+          "type": "integer"
+        },
+        "width": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width",
+        "height"
+      ],
+      "type": "object"
+    },
+    "TagResponse": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "quality": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "type",
+        "value",
+        "quality",
+        "version"
+      ],
+      "type": "object"
+    },
+    "TransformMatrixResponse": {
+      "properties": {
+        "a": {
+          "type": "number"
+        },
+        "b": {
+          "type": "number"
+        },
+        "c": {
+          "type": "number"
+        },
+        "css": {
+          "type": "string"
+        },
+        "d": {
+          "type": "number"
+        },
+        "e": {
+          "type": "number"
+        },
+        "f": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f",
+        "css"
+      ],
+      "type": "object"
+    },
+    "UpdateSceneRequest": {
+      "properties": {
+        "background_html": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        },
+        "width": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "width",
+        "height",
+        "background_html",
+        "version"
+      ],
+      "type": "object"
+    },
+    "UpdateSceneResponse": {
+      "properties": {
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    },
+    "UpdateTagRequest": {
+      "properties": {
+        "quality": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "value",
+        "quality",
+        "version"
+      ],
+      "type": "object"
+    },
+    "UpdateTagResponse": {
+      "properties": {
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    },
+    "UpdateWidgetRequest": {
+      "properties": {
+        "labels": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "$ref": "#/$defs/OriginRequest"
+        },
+        "port_bindings": {
+          "items": {
+            "$ref": "#/$defs/PortBinding"
+          },
+          "type": "array"
+        },
+        "position": {
+          "$ref": "#/$defs/PositionRequest"
+        },
+        "rotation": {
+          "$ref": "#/$defs/RotationRequest"
+        },
+        "scene_version": {
+          "type": "integer"
+        },
+        "size": {
+          "$ref": "#/$defs/SizeRequest"
+        },
+        "type_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "position",
+        "size",
+        "origin",
+        "rotation",
+        "type_id",
+        "scene_version",
+        "labels",
+        "port_bindings"
+      ],
+      "type": "object"
+    },
+    "UpdateWidgetResponse": {
+      "properties": {
+        "scene_version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "scene_version"
+      ],
+      "type": "object"
+    },
+    "UpdateWidgetTypeRequest": {
+      "properties": {
+        "default_height": {
+          "type": "integer"
+        },
+        "default_width": {
+          "type": "integer"
+        },
+        "html_template": {
+          "type": "string"
+        },
+        "input_ports": {
+          "items": {
+            "$ref": "#/$defs/InputPort"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "script": {
+          "type": "string"
+        },
+        "script_language": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "html_template",
+        "script",
+        "script_language",
+        "default_width",
+        "default_height",
+        "input_ports",
+        "version"
+      ],
+      "type": "object"
+    },
+    "UpdateWidgetTypeResponse": {
+      "properties": {
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    },
+    "WidgetResponse": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "labels": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "$ref": "#/$defs/OriginResponse"
+        },
+        "port_bindings": {
+          "items": {
+            "$ref": "#/$defs/PortBinding"
+          },
+          "type": "array"
+        },
+        "position": {
+          "$ref": "#/$defs/PositionResponse"
+        },
+        "rotation": {
+          "$ref": "#/$defs/RotationResponse"
+        },
+        "scene_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "scene_version": {
+          "type": "integer"
+        },
+        "size": {
+          "$ref": "#/$defs/SizeResponse"
+        },
+        "transform_matrix": {
+          "$ref": "#/$defs/TransformMatrixResponse"
+        },
+        "type_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "position",
+        "size",
+        "origin",
+        "rotation",
+        "transform_matrix",
+        "type_id",
+        "scene_id",
+        "scene_version",
+        "labels",
+        "port_bindings"
+      ],
+      "type": "object"
+    },
+    "WidgetTypeResponse": {
+      "properties": {
+        "default_height": {
+          "type": "integer"
+        },
+        "default_width": {
+          "type": "integer"
+        },
+        "html_template": {
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "input_ports": {
+          "items": {
+            "$ref": "#/$defs/InputPort"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "script": {
+          "type": "string"
+        },
+        "script_language": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "html_template",
+        "script",
+        "script_language",
+        "default_width",
+        "default_height",
+        "input_ports",
+        "version"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/kipitix/growscada/schemas/api/0.1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GrowSCADA server API 0.1"
+}

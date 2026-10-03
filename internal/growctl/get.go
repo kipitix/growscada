@@ -8,6 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
+
+	manifestv0 "github.com/kipitix/growscada/contract/manifest/v0"
 )
 
 func newGetCommand(newClient func() *Client) *cobra.Command {
@@ -81,8 +83,8 @@ func writeTagManifests(out io.Writer, tags []ServerTag) error {
 	enc := yaml.NewEncoder(out)
 	enc.SetIndent(2)
 	for _, t := range tags {
-		var doc tagDocument
-		doc.documentHeader = documentHeader{APIVersion: APIVersion, Kind: KindTag}
+		var doc manifestv0.TagDocument
+		doc.Header = manifestv0.Header{APIVersion: manifestv0.APIVersion(), Kind: manifestv0.KindTag}
 		doc.Metadata.Name = t.Name
 		doc.Spec.Type = &t.Type
 		doc.Spec.InitialValue = &t.Value

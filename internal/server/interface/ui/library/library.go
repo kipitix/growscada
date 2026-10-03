@@ -5,6 +5,7 @@ import (
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uidto"
@@ -20,7 +21,7 @@ type Library struct {
 	// element that fired the event, and go-app silently drops Dispatch once that
 	// element is unmounted (e.g. a tab that turns into its rename input), which
 	// would lose the result and leave a Reloader loading forever.
-	compoCtx app.Context
+	compoCtx          app.Context
 	ThemeMode         string // exported so go-app detects theme changes and re-renders
 	apiServerURL      string
 	widgetTypes       []widgetTypeItem
@@ -67,7 +68,7 @@ func (l *Library) loadList(ctx app.Context) {
 		return
 	}
 	l.loading = true
-	url := l.apiServerURL + "/api/v1/widget-types"
+	url := l.apiServerURL + apiv0.PathPrefix + "/widget-types"
 	ctx.Async(func() {
 		result, problem := uiutil.FetchJSON[getWidgetTypesResponse](url)
 		ctx.Dispatch(func(ctx app.Context) {

@@ -28,7 +28,7 @@ func NewRESTLink(client *apiclient.Client) *RESTLink {
 	return &RESTLink{client: client, versions: make(map[uuid.UUID]int)}
 }
 
-// Resolve looks a tag up with GET /api/v1/tags?name=.
+// Resolve looks a tag up with GET /api/v0/tags?name=.
 func (l *RESTLink) Resolve(ctx context.Context, name string) (Tag, error) {
 	found, ok, err := l.client.FindTagByName(ctx, name)
 	if err != nil {
@@ -45,7 +45,7 @@ func (l *RESTLink) Resolve(ctx context.Context, name string) (Tag, error) {
 	return Tag{ID: found.ID, Name: found.Name, Type: tagType}, nil
 }
 
-// Write sets the value with PATCH /api/v1/tags/{id}/value.
+// Write sets the value with PATCH /api/v0/tags/{id}/value.
 func (l *RESTLink) Write(ctx context.Context, tag Tag, value string, quality Quality) error {
 	version, known := l.version(tag.ID)
 	if !known {
@@ -77,7 +77,7 @@ func (l *RESTLink) Write(ctx context.Context, tag Tag, value string, quality Qua
 	return nil
 }
 
-// reread refreshes the tag's version from GET /api/v1/tags/{id}.
+// reread refreshes the tag's version from GET /api/v0/tags/{id}.
 func (l *RESTLink) reread(ctx context.Context, tag Tag) error {
 	current, err := l.client.GetTag(ctx, tag.ID)
 	if errors.Is(err, apiclient.ErrNotFound) {

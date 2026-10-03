@@ -5,7 +5,7 @@ info:
 
 http:
   method: GET
-  url: http://{{API_SERVER}}/api/v1/scenes
+  url: http://{{API_SERVER}}/api/v0/scenes
   auth: inherit
 
 settings:

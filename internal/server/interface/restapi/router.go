@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/kipitix/growscada/contract"
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 )
@@ -19,7 +21,7 @@ type APIRouter struct {
 }
 
 func (r APIRouter) ServeMux() http.Handler {
-	return corsMiddleware(r.serveMux)
+	return schemaVersionMiddleware(corsMiddleware(r.serveMux))
 }
 
 // Close releases the router's long-lived resources (currently just the SSE
@@ -32,7 +34,8 @@ func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, "+contract.SchemaVersionHeader)
+		w.Header().Set("Access-Control-Expose-Headers", contract.SchemaVersionHeader)
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -46,35 +49,35 @@ func NewRouter(tagService application.TagService, widgetTypeService application.
 	router.serveMux = http.NewServeMux()
 
 	router.tagsHandlers = NewTagsHandler(tagService)
-	router.serveMux.HandleFunc("GET /api/v1/tags", router.tagsHandlers.GetTags)
-	router.serveMux.HandleFunc("GET /api/v1/tags/{id}", router.tagsHandlers.GetTagsByID)
-	router.serveMux.HandleFunc("POST /api/v1/tags", router.tagsHandlers.PostTags)
-	router.serveMux.HandleFunc("DELETE /api/v1/tags/{id}", router.tagsHandlers.DeleteTagsByID)
-	router.serveMux.HandleFunc("PATCH /api/v1/tags/{id}/value", router.tagsHandlers.PatchTagsValue)
+	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/tags", router.tagsHandlers.GetTags)
+	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/tags/{id}", router.tagsHandlers.GetTagsByID)
+	router.serveMux.HandleFunc("POST "+apiv0.PathPrefix+"/tags", router.tagsHandlers.PostTags)
+	router.serveMux.HandleFunc("DELETE "+apiv0.PathPrefix+"/tags/{id}", router.tagsHandlers.DeleteTagsByID)
+	router.serveMux.HandleFunc("PATCH "+apiv0.PathPrefix+"/tags/{id}/value", router.tagsHandlers.PatchTagsValue)
 
 	router.widgetTypesHandlers = NewWidgetTypesHandler(widgetTypeService)
-	router.serveMux.HandleFunc("GET /api/v1/widget-types", router.widgetTypesHandlers.GetWidgetTypes)
-	router.serveMux.HandleFunc("GET /api/v1/widget-types/{id}", router.widgetTypesHandlers.GetWidgetTypesByID)
-	router.serveMux.HandleFunc("POST /api/v1/widget-types", router.widgetTypesHandlers.PostWidgetTypes)
-	router.serveMux.HandleFunc("PUT /api/v1/widget-types/{id}", router.widgetTypesHandlers.PutWidgetTypesByID)
-	router.serveMux.HandleFunc("DELETE /api/v1/widget-types/{id}", router.widgetTypesHandlers.DeleteWidgetTypesByID)
+	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/widget-types", router.widgetTypesHandlers.GetWidgetTypes)
+	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/widget-types/{id}", router.widgetTypesHandlers.GetWidgetTypesByID)
+	router.serveMux.HandleFunc("POST "+apiv0.PathPrefix+"/widget-types", router.widgetTypesHandlers.PostWidgetTypes)
+	router.serveMux.HandleFunc("PUT "+apiv0.PathPrefix+"/widget-types/{id}", router.widgetTypesHandlers.PutWidgetTypesByID)
+	router.serveMux.HandleFunc("DELETE "+apiv0.PathPrefix+"/widget-types/{id}", router.widgetTypesHandlers.DeleteWidgetTypesByID)
 
 	router.widgetsHandlers = NewWidgetsHandler(sceneService)
-	router.serveMux.HandleFunc("GET /api/v1/scenes/{id}/widgets", router.widgetsHandlers.GetWidgetsBySceneID)
-	router.serveMux.HandleFunc("POST /api/v1/scenes/{id}/widgets", router.widgetsHandlers.PostWidgets)
-	router.serveMux.HandleFunc("GET /api/v1/scenes/{sceneId}/widgets/{widgetId}", router.widgetsHandlers.GetWidgetsByID)
-	router.serveMux.HandleFunc("PUT /api/v1/scenes/{sceneId}/widgets/{widgetId}", router.widgetsHandlers.PutWidgetsByID)
-	router.serveMux.HandleFunc("DELETE /api/v1/scenes/{sceneId}/widgets/{widgetId}", router.widgetsHandlers.DeleteWidgetsByID)
+	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/scenes/{id}/widgets", router.widgetsHandlers.GetWidgetsBySceneID)
+	router.serveMux.HandleFunc("POST "+apiv0.PathPrefix+"/scenes/{id}/widgets", router.widgetsHandlers.PostWidgets)
+	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/scenes/{sceneId}/widgets/{widgetId}", router.widgetsHandlers.GetWidgetsByID)
+	router.serveMux.HandleFunc("PUT "+apiv0.PathPrefix+"/scenes/{sceneId}/widgets/{widgetId}", router.widgetsHandlers.PutWidgetsByID)
+	router.serveMux.HandleFunc("DELETE "+apiv0.PathPrefix+"/scenes/{sceneId}/widgets/{widgetId}", router.widgetsHandlers.DeleteWidgetsByID)
 
 	router.scenesHandlers = NewScenesHandler(sceneService)
-	router.serveMux.HandleFunc("GET /api/v1/scenes", router.scenesHandlers.GetScenes)
-	router.serveMux.HandleFunc("GET /api/v1/scenes/{id}", router.scenesHandlers.GetScenesByID)
-	router.serveMux.HandleFunc("POST /api/v1/scenes", router.scenesHandlers.PostScenes)
-	router.serveMux.HandleFunc("PUT /api/v1/scenes/{id}", router.scenesHandlers.PutScenesByID)
-	router.serveMux.HandleFunc("DELETE /api/v1/scenes/{id}", router.scenesHandlers.DeleteScenesByID)
+	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/scenes", router.scenesHandlers.GetScenes)
+	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/scenes/{id}", router.scenesHandlers.GetScenesByID)
+	router.serveMux.HandleFunc("POST "+apiv0.PathPrefix+"/scenes", router.scenesHandlers.PostScenes)
+	router.serveMux.HandleFunc("PUT "+apiv0.PathPrefix+"/scenes/{id}", router.scenesHandlers.PutScenesByID)
+	router.serveMux.HandleFunc("DELETE "+apiv0.PathPrefix+"/scenes/{id}", router.scenesHandlers.DeleteScenesByID)
 
 	router.eventsHandlers = NewEventsHandler(eventBus, maxSSEClients)
-	router.serveMux.HandleFunc("GET /api/v1/events", router.eventsHandlers.GetEvents)
+	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/events", router.eventsHandlers.GetEvents)
 
 	return router
 }

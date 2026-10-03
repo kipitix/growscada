@@ -1,5 +1,24 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.29] - 2026.10.04
+
+### Added
+
+- **Версионирование контрактов** (задача 17, ADR 0005, термин SchemaVersion в `CONTEXT.md`): у каждого из четырёх контрактов — серверный API, формат проекта, формат операционной записи, манифесты growctl — своя SchemaVersion `MAJOR.MINOR`, у всех стартовая `0.1`. Пока MAJOR = 0, совместимость не обещается
+- публичный пакет `contract/`: `SchemaVersion`, по подпакету на контракт и MAJOR (`contract/api/v0`, `contract/project/v0`, `contract/record/v0`, `contract/manifest/v0`). Форматы проекта и записи пока заготовки — только версия и корневое поле `schema_version`
+- JSON-схемы генерируются из Go-типов в `schemas/<контракт>/<MAJOR.MINOR>.json` (`make schemas`) и коммитятся. `make test` падает, если типы изменились, а версию не подняли, и если новая MINOR (при MAJOR ≥ 1) не только добавляет необязательные поля
+- заголовок `GrowSCADA-Schema-Version`: сервер ставит его в каждый ответ, включая поток событий и CORS preflight (разрешён и виден браузеру); `apiclient` и UI отправляют его в каждом запросе
+- Bruno: запрос «post tags newer client»
+- ADR 0005 «Contracts carry a MAJOR.MINOR SchemaVersion; readers skip, receivers reject»; в `AGENTS.md` — правило «изменил тип в `contract/` — подними SchemaVersion и запусти `make schemas`», цель `make schemas` и раскладка пакетов `contract/` и `schemas/`
+
+### Changed
+
+- **Ломающее изменение API**: префикс `/api/v1` → `/api/v0` (MAJOR в пути). Control API симулятора не изменился
+- **Ломающее изменение манифестов**: `apiVersion: growscada/v0.1` вместо `growscada/v1`; `growscada/v0` читается как `v0.0`. Манифест более новой MINOR growctl отклоняет с просьбой обновить growctl, а не с ошибкой «unknown field»
+- сервер разбирает тела запросов строго: незнакомое поле → `400` (раньше молча отбрасывалось). Если в заголовке клиент указал версию новее серверной, в ответе написано «обновите сервер»
+- задача 17 переписана по итогам grilling-сессии 2026-10-03 и перенесена в `todo/done/`; пути в ADR 0004 и Bruno-коллекции `growscada_server` — `/api/v0`
+- JSON-типы REST API перенесены из `internal/server/interface/restapi/restdto` в `contract/api/v0` (`InputPortDTO` → `InputPort`, `PortBindingDTO` → `PortBinding`). Сообщение потока событий — тип `apiv0.Event`, преобразования в `appdto` — в `restapi/dto_mapping.go`
+
 ## [0.0.28] - 2026.09.29
 
 ### Added

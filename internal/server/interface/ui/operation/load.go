@@ -3,6 +3,7 @@ package operation
 import (
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/interface/ui/livescene"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
@@ -16,7 +17,7 @@ func (o *Operation) loadWidgetTypes(ctx app.Context) {
 	if !o.widgetTypesReloader.Start() {
 		return
 	}
-	url := o.apiServerURL + "/api/v1/widget-types"
+	url := o.apiServerURL + apiv0.PathPrefix + "/widget-types"
 	ctx.Async(func() {
 		result, problem := uiutil.FetchJSON[getWidgetTypesResponse](url)
 		ctx.Dispatch(func(ctx app.Context) {
@@ -41,7 +42,7 @@ func (o *Operation) loadScenes(ctx app.Context) {
 	if !o.scenesReloader.Start() {
 		return
 	}
-	url := o.apiServerURL + "/api/v1/scenes"
+	url := o.apiServerURL + apiv0.PathPrefix + "/scenes"
 	ctx.Async(func() {
 		result, problem := uiutil.FetchJSON[getScenesResponse](url)
 		ctx.Dispatch(func(ctx app.Context) {
@@ -69,7 +70,7 @@ func (o *Operation) loadWidgets(ctx app.Context) {
 		return
 	}
 	sceneID := o.selectedSceneID
-	url := o.apiServerURL + "/api/v1/scenes/" + sceneID + "/widgets"
+	url := o.apiServerURL + apiv0.PathPrefix + "/scenes/" + sceneID + "/widgets"
 	ctx.Async(func() {
 		result, problem := uiutil.FetchJSON[getWidgetsResponse](url)
 		ctx.Dispatch(func(ctx app.Context) {
@@ -94,7 +95,7 @@ func (o *Operation) loadTags(ctx app.Context) {
 	if !o.tagsReloader.Start() {
 		return
 	}
-	url := o.apiServerURL + "/api/v1/tags"
+	url := o.apiServerURL + apiv0.PathPrefix + "/tags"
 	ctx.Async(func() {
 		result, problem := uiutil.FetchJSON[getTagsResponse](url)
 		ctx.Dispatch(func(ctx app.Context) {

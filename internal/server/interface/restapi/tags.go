@@ -2,15 +2,14 @@ package restapi
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 
 	"github.com/google/uuid"
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
-	"github.com/kipitix/growscada/internal/server/interface/restapi/restdto"
 )
 
 // TagsHandlers handles HTTP requests related to tags.
@@ -33,7 +32,7 @@ func NewTagsHandler(s application.TagService) *TagsHandlers {
 func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	filters := 0
-	for _, param := range []string{restdto.TagsQueryName, restdto.TagsQueryNamePattern, restdto.TagsQueryNameRegex} {
+	for _, param := range []string{apiv0.TagsQueryName, apiv0.TagsQueryNamePattern, apiv0.TagsQueryNameRegex} {
 		if query.Has(param) {
 			filters++
 		}
@@ -45,14 +44,14 @@ func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch {
-	case query.Has(restdto.TagsQueryName):
-		h.getTagsByName(w, r, query.Get(restdto.TagsQueryName))
+	case query.Has(apiv0.TagsQueryName):
+		h.getTagsByName(w, r, query.Get(apiv0.TagsQueryName))
 		return
-	case query.Has(restdto.TagsQueryNamePattern):
-		h.sendMatchedTags(w, r, h.service.FindTagsByNamePattern, query.Get(restdto.TagsQueryNamePattern))
+	case query.Has(apiv0.TagsQueryNamePattern):
+		h.sendMatchedTags(w, r, h.service.FindTagsByNamePattern, query.Get(apiv0.TagsQueryNamePattern))
 		return
-	case query.Has(restdto.TagsQueryNameRegex):
-		h.sendMatchedTags(w, r, h.service.FindTagsByNameRegex, query.Get(restdto.TagsQueryNameRegex))
+	case query.Has(apiv0.TagsQueryNameRegex):
+		h.sendMatchedTags(w, r, h.service.FindTagsByNameRegex, query.Get(apiv0.TagsQueryNameRegex))
 		return
 	}
 
@@ -61,7 +60,7 @@ func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
 		sendInternalError(w, r, err)
 		return
 	}
-	sendJSONResponse(w, http.StatusOK, restdto.NewGetTagsResponse(tagList))
+	sendJSONResponse(w, http.StatusOK, newGetTagsResponse(tagList))
 }
 
 // getTagsByName handles GET /tags?name=<name>
@@ -69,13 +68,13 @@ func (h TagsHandlers) getTagsByName(w http.ResponseWriter, r *http.Request, name
 	foundTag, err := h.service.FindTagByName(r.Context(), name)
 	if err != nil {
 		if errors.Is(err, tag.ErrTagNotFound) {
-			sendJSONResponse(w, http.StatusOK, restdto.NewGetTagsResponse(nil))
+			sendJSONResponse(w, http.StatusOK, newGetTagsResponse(nil))
 			return
 		}
 		sendInternalError(w, r, err)
 		return
 	}
-	sendJSONResponse(w, http.StatusOK, restdto.NewGetTagsResponse([]appdto.Tag{foundTag}))
+	sendJSONResponse(w, http.StatusOK, newGetTagsResponse([]appdto.Tag{foundTag}))
 }
 
 // sendMatchedTags responds with the tags selected by a name pattern or regex;
@@ -91,7 +90,7 @@ func (h TagsHandlers) sendMatchedTags(w http.ResponseWriter, r *http.Request,
 		sendInternalError(w, r, err)
 		return
 	}
-	sendJSONResponse(w, http.StatusOK, restdto.NewGetTagsResponse(tagList))
+	sendJSONResponse(w, http.StatusOK, newGetTagsResponse(tagList))
 }
 
 // GetTagsByID handles GET /tags/{id}
@@ -113,7 +112,7 @@ func (h TagsHandlers) GetTagsByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, restdto.NewTagResponse(foundTag))
+	sendJSONResponse(w, http.StatusOK, newTagResponse(foundTag))
 }
 
 // DeleteTagsByID handles DELETE /tags/{id} for removing a tag
@@ -135,7 +134,7 @@ func (h TagsHandlers) DeleteTagsByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, restdto.NewTagResponse(deletedTag))
+	sendJSONResponse(w, http.StatusOK, newTagResponse(deletedTag))
 }
 
 // PatchTagsValue handles PATCH /tags/{id}/value for setting tag value and quality
@@ -147,13 +146,12 @@ func (h TagsHandlers) PatchTagsValue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var request restdto.UpdateTagRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
+	var request apiv0.UpdateTagRequest
+	if !decodeRequest(w, r, &request) {
 		return
 	}
 
-	updatedTag, err := h.service.SetTagValueByID(r.Context(), restdto.NewUpdateTagInput(request, tagID))
+	updatedTag, err := h.service.SetTagValueByID(r.Context(), newUpdateTagInput(request, tagID))
 	if err != nil {
 		if errors.Is(err, tag.ErrTagNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
@@ -167,19 +165,18 @@ func (h TagsHandlers) PatchTagsValue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, restdto.NewUpdateTagResponse(updatedTag))
+	sendJSONResponse(w, http.StatusOK, newUpdateTagResponse(updatedTag))
 }
 
 // PostTags handles POST /tags for creating a new tag
 func (h TagsHandlers) PostTags(w http.ResponseWriter, r *http.Request) {
-	var request restdto.CreateTagRequest
+	var request apiv0.CreateTagRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
+	if !decodeRequest(w, r, &request) {
 		return
 	}
 
-	createdTag, err := h.service.CreateTag(r.Context(), restdto.NewCreateTagInput(request))
+	createdTag, err := h.service.CreateTag(r.Context(), newCreateTagInput(request))
 	if err != nil {
 		if errors.Is(err, tag.ErrTagNameTaken) {
 			sendJSONResponse(w, http.StatusConflict, NewConflict("tag", err.Error(), r.URL.Path))
@@ -189,5 +186,5 @@ func (h TagsHandlers) PostTags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendJSONResponse(w, http.StatusCreated, restdto.NewCreateTagResponse(createdTag))
+	sendJSONResponse(w, http.StatusCreated, newCreateTagResponse(createdTag))
 }

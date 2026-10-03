@@ -1,14 +1,13 @@
 package restapi
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
 	"github.com/google/uuid"
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
-	"github.com/kipitix/growscada/internal/server/interface/restapi/restdto"
 )
 
 // ScenesHandlers handles HTTP requests related to scenes.
@@ -27,7 +26,7 @@ func (h ScenesHandlers) GetScenes(w http.ResponseWriter, r *http.Request) {
 		sendInternalError(w, r, err)
 		return
 	}
-	sendJSONResponse(w, http.StatusOK, restdto.NewGetScenesResponse(list))
+	sendJSONResponse(w, http.StatusOK, newGetScenesResponse(list))
 }
 
 // GetScenesByID handles GET /scenes/{id}
@@ -49,18 +48,17 @@ func (h ScenesHandlers) GetScenesByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, restdto.NewSceneResponse(found))
+	sendJSONResponse(w, http.StatusOK, newSceneResponse(found))
 }
 
 // PostScenes handles POST /scenes
 func (h ScenesHandlers) PostScenes(w http.ResponseWriter, r *http.Request) {
-	var request restdto.CreateSceneRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
+	var request apiv0.CreateSceneRequest
+	if !decodeRequest(w, r, &request) {
 		return
 	}
 
-	created, err := h.service.CreateScene(r.Context(), restdto.NewCreateSceneInput(request))
+	created, err := h.service.CreateScene(r.Context(), newCreateSceneInput(request))
 	if err != nil {
 		if errors.Is(err, scene.ErrSceneValidation) {
 			sendJSONResponse(w, http.StatusUnprocessableEntity, NewValidationError(map[string][]string{"scene": {err.Error()}}, r.URL.Path))
@@ -70,7 +68,7 @@ func (h ScenesHandlers) PostScenes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendJSONResponse(w, http.StatusCreated, restdto.NewCreateSceneResponse(created))
+	sendJSONResponse(w, http.StatusCreated, newCreateSceneResponse(created))
 }
 
 // PutScenesByID handles PUT /scenes/{id}
@@ -82,13 +80,12 @@ func (h ScenesHandlers) PutScenesByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var request restdto.UpdateSceneRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
+	var request apiv0.UpdateSceneRequest
+	if !decodeRequest(w, r, &request) {
 		return
 	}
 
-	updated, err := h.service.UpdateScene(r.Context(), restdto.NewUpdateSceneInput(request, sceneID))
+	updated, err := h.service.UpdateScene(r.Context(), newUpdateSceneInput(request, sceneID))
 	if err != nil {
 		if errors.Is(err, scene.ErrSceneNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
@@ -106,7 +103,7 @@ func (h ScenesHandlers) PutScenesByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, restdto.NewUpdateSceneResponse(updated))
+	sendJSONResponse(w, http.StatusOK, newUpdateSceneResponse(updated))
 }
 
 // DeleteScenesByID handles DELETE /scenes/{id}
@@ -128,5 +125,5 @@ func (h ScenesHandlers) DeleteScenesByID(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, restdto.NewSceneResponse(deleted))
+	sendJSONResponse(w, http.StatusOK, newSceneResponse(deleted))
 }

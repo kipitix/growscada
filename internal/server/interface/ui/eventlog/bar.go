@@ -12,6 +12,7 @@ import (
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 )
 
@@ -47,7 +48,7 @@ const StateDisconnected = "eventlog.disconnected"
 type ServerEvent struct {
 	Type string // EventType name, e.g. "tag_created"
 	ID   string // ID of the affected aggregate/client, may be empty
-	// Tag is the Tag's full new state (the JSON of GET /api/v1/tags/{id}),
+	// Tag is the Tag's full new state (the JSON of GET /api/v0/tags/{id}),
 	// carried by tag_updated only; nil otherwise.
 	Tag json.RawMessage
 }
@@ -163,7 +164,7 @@ func (b *Bar) connect(ctx app.Context) {
 }
 
 func (b *Bar) openEventSource() {
-	es := app.Window().Get("EventSource").New(b.apiServerURL + "/api/v1/events")
+	es := app.Window().Get("EventSource").New(b.apiServerURL + apiv0.PathPrefix + "/events")
 	es.Set("onmessage", b.onMessage)
 	es.Set("onerror", b.onError)
 	es.Set("onopen", b.onOpen)

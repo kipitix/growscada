@@ -1,0 +1,60 @@
+{
+  "$defs": {
+    "Metadata": {
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "TagDocument": {
+      "properties": {
+        "apiVersion": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/$defs/Metadata"
+        },
+        "spec": {
+          "$ref": "#/$defs/TagSpec"
+        }
+      },
+      "required": [
+        "apiVersion",
+        "kind",
+        "metadata",
+        "spec"
+      ],
+      "type": "object"
+    },
+    "TagSpec": {
+      "properties": {
+        "initialQuality": {
+          "type": "string"
+        },
+        "initialValue": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "initialValue",
+        "initialQuality"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/kipitix/growscada/schemas/manifest/0.1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GrowSCADA growctl manifest 0.1"
+}

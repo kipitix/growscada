@@ -26,7 +26,7 @@ func (h *EventsHandlers) Close() {
 	h.hub.Close()
 }
 
-// GetEvents handles GET /api/v1/events. It upgrades the connection to an SSE
+// GetEvents handles GET /api/v0/events. It upgrades the connection to an SSE
 // stream and forwards every domain event published after this point — no
 // history is replayed.
 func (h *EventsHandlers) GetEvents(w http.ResponseWriter, r *http.Request) {

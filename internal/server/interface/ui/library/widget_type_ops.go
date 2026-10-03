@@ -7,6 +7,7 @@ import (
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uidto"
 )
@@ -19,7 +20,7 @@ const defaultScript = "function update() {\n}"
 func (l *Library) createItem(ctx app.Context) {
 	ctx = l.compoCtx
 	name := "New Widget Type"
-	url := l.apiServerURL + "/api/v1/widget-types"
+	url := l.apiServerURL + apiv0.PathPrefix + "/widget-types"
 	body, _ := json.Marshal(createWidgetTypeRequest{
 		Name:           name,
 		HtmlTemplate:   defaultHTML,
@@ -73,7 +74,7 @@ func (l *Library) deleteItem(ctx app.Context) {
 	if l.selectedID == "" {
 		return
 	}
-	url := l.apiServerURL + "/api/v1/widget-types/" + l.selectedID
+	url := l.apiServerURL + apiv0.PathPrefix + "/widget-types/" + l.selectedID
 	deletedID := l.selectedID
 	ctx.Async(func() {
 		req, _ := http.NewRequest(http.MethodDelete, url, nil)
@@ -114,7 +115,7 @@ func (l *Library) applyChanges(ctx app.Context) {
 			break
 		}
 	}
-	url := l.apiServerURL + "/api/v1/widget-types/" + l.selectedID
+	url := l.apiServerURL + apiv0.PathPrefix + "/widget-types/" + l.selectedID
 	ports := l.editedInputPorts
 	if ports == nil {
 		ports = []uidto.InputPortDTO{}
@@ -191,7 +192,7 @@ func (l *Library) commitEdit(ctx app.Context) {
 		l.editedName = name
 	}
 
-	url := l.apiServerURL + "/api/v1/widget-types/" + id
+	url := l.apiServerURL + apiv0.PathPrefix + "/widget-types/" + id
 	foundPorts := found.InputPorts
 	if foundPorts == nil {
 		foundPorts = []uidto.InputPortDTO{}

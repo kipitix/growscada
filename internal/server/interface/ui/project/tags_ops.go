@@ -7,6 +7,7 @@ import (
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 )
 
@@ -14,7 +15,7 @@ func (p *Project) createTag(ctx app.Context) {
 	ctx = p.compoCtx
 	name := p.newTagName
 	tagType := p.newTagType
-	url := p.apiServerURL + "/api/v1/tags"
+	url := p.apiServerURL + apiv0.PathPrefix + "/tags"
 	body, err := json.Marshal(createTagRequest{
 		Name:    name,
 		Type:    tagType,
@@ -67,7 +68,7 @@ func (p *Project) deleteTag(ctx app.Context) {
 		return
 	}
 	deletedID := p.selectedTagID
-	url := p.apiServerURL + "/api/v1/tags/" + deletedID
+	url := p.apiServerURL + apiv0.PathPrefix + "/tags/" + deletedID
 	ctx.Async(func() {
 		req, err := http.NewRequest(http.MethodDelete, url, nil)
 		if err != nil {

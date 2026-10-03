@@ -11,6 +11,7 @@ import (
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 )
 
@@ -66,7 +67,7 @@ func (p *Project) createWidget(ctx app.Context, typeID string, x, y float64) {
 		}
 	}
 	sceneID := p.selectedSceneID
-	url := p.apiServerURL + "/api/v1/scenes/" + sceneID + "/widgets"
+	url := p.apiServerURL + apiv0.PathPrefix + "/scenes/" + sceneID + "/widgets"
 	body, _ := json.Marshal(createWidgetRequest{
 		Name:         name,
 		Position:     positionDTO{X: x, Y: y, Z: 0},
@@ -122,7 +123,7 @@ func (p *Project) createWidget(ctx app.Context, typeID string, x, y float64) {
 func (p *Project) deleteWidget(ctx app.Context, widgetID string) {
 	ctx = p.compoCtx
 	sceneID := p.selectedSceneID
-	url := p.apiServerURL + "/api/v1/scenes/" + sceneID + "/widgets/" + widgetID
+	url := p.apiServerURL + apiv0.PathPrefix + "/scenes/" + sceneID + "/widgets/" + widgetID
 	ctx.Async(func() {
 		req, _ := http.NewRequest(http.MethodDelete, url, nil)
 		resp, err := http.DefaultClient.Do(req)
@@ -248,7 +249,7 @@ func (p *Project) unbindPort(ctx app.Context, portName string) {
 func (p *Project) putWidget(ctx app.Context, w widgetItem) {
 	ctx = p.compoCtx
 	sceneID := p.selectedSceneID
-	url := p.apiServerURL + "/api/v1/scenes/" + sceneID + "/widgets/" + w.ID
+	url := p.apiServerURL + apiv0.PathPrefix + "/scenes/" + sceneID + "/widgets/" + w.ID
 	portBindings := w.PortBindings
 	if portBindings == nil {
 		portBindings = []portBindingDTO{}

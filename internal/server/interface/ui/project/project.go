@@ -26,7 +26,7 @@ type Project struct {
 	// element that fired the event, and go-app silently drops Dispatch once that
 	// element is unmounted (e.g. a tab that turns into its rename input), which
 	// would lose the result and leave a Reloader loading forever.
-	compoCtx app.Context
+	compoCtx     app.Context
 	ThemeMode    string // exported so go-app detects theme changes and re-renders
 	apiServerURL string
 

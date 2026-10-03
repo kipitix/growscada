@@ -5,7 +5,7 @@ info:
 
 http:
   method: GET
-  url: http://{{API_SERVER}}/api/v1/tags?name_pattern=is_*
+  url: http://{{API_SERVER}}/api/v0/tags?name_pattern=is_*
   auth: inherit
 
 docs: |

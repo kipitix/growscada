@@ -15,7 +15,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/kipitix/growscada/internal/server/interface/restapi/restdto"
+	"github.com/kipitix/growscada/contract"
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
 
 var (
@@ -68,20 +69,20 @@ func New(baseURL string, httpClient *http.Client) *Client {
 
 // ListTags returns every tag on the server.
 func (c *Client) ListTags(ctx context.Context) ([]Tag, error) {
-	return c.getTags(ctx, "/api/v1/tags")
+	return c.getTags(ctx, apiv0.PathPrefix+"/tags")
 }
 
 // ListTagsFiltered returns the tags selected by one GET /tags name filter
-// (restdto.TagsQueryName, TagsQueryNamePattern or TagsQueryNameRegex).
+// (apiv0.TagsQueryName, TagsQueryNamePattern or TagsQueryNameRegex).
 // A server that does not know the filter ignores it and returns every tag, so
 // callers that must not widen the selection filter the result themselves.
 func (c *Client) ListTagsFiltered(ctx context.Context, param, value string) ([]Tag, error) {
-	return c.getTags(ctx, "/api/v1/tags?"+param+"="+url.QueryEscape(value))
+	return c.getTags(ctx, apiv0.PathPrefix+"/tags?"+param+"="+url.QueryEscape(value))
 }
 
 // FindTagByName returns the tag with the given name, or false if there is none.
 func (c *Client) FindTagByName(ctx context.Context, name string) (Tag, bool, error) {
-	tags, err := c.ListTagsFiltered(ctx, restdto.TagsQueryName, name)
+	tags, err := c.ListTagsFiltered(ctx, apiv0.TagsQueryName, name)
 	if err != nil {
 		return Tag{}, false, err
 	}
@@ -97,32 +98,32 @@ func (c *Client) FindTagByName(ctx context.Context, name string) (Tag, bool, err
 
 // GetTag returns a tag by ID. The error matches ErrNotFound if there is none.
 func (c *Client) GetTag(ctx context.Context, id uuid.UUID) (Tag, error) {
-	var resp restdto.TagResponse
-	if err := c.do(ctx, http.MethodGet, "/api/v1/tags/"+id.String(), nil, http.StatusOK, &resp); err != nil {
+	var resp apiv0.TagResponse
+	if err := c.do(ctx, http.MethodGet, apiv0.PathPrefix+"/tags/"+id.String(), nil, http.StatusOK, &resp); err != nil {
 		return Tag{}, err
 	}
 	return newTag(resp), nil
 }
 
 // CreateTag creates a tag.
-func (c *Client) CreateTag(ctx context.Context, req restdto.CreateTagRequest) error {
+func (c *Client) CreateTag(ctx context.Context, req apiv0.CreateTagRequest) error {
 	body, err := json.Marshal(req)
 	if err != nil {
 		return err
 	}
-	return c.do(ctx, http.MethodPost, "/api/v1/tags", body, http.StatusCreated, nil)
+	return c.do(ctx, http.MethodPost, apiv0.PathPrefix+"/tags", body, http.StatusCreated, nil)
 }
 
 // SetTagValue writes a tag's value and quality, expecting its current version
 // (optimistic locking), and returns the new version. The error matches
 // ErrConflict if the version is stale and ErrNotFound if the tag is gone.
 func (c *Client) SetTagValue(ctx context.Context, id uuid.UUID, value, quality string, version int) (int, error) {
-	body, err := json.Marshal(restdto.UpdateTagRequest{Value: value, Quality: quality, Version: version})
+	body, err := json.Marshal(apiv0.UpdateTagRequest{Value: value, Quality: quality, Version: version})
 	if err != nil {
 		return 0, err
 	}
-	var resp restdto.UpdateTagResponse
-	if err := c.do(ctx, http.MethodPatch, "/api/v1/tags/"+id.String()+"/value", body, http.StatusOK, &resp); err != nil {
+	var resp apiv0.UpdateTagResponse
+	if err := c.do(ctx, http.MethodPatch, apiv0.PathPrefix+"/tags/"+id.String()+"/value", body, http.StatusOK, &resp); err != nil {
 		return 0, err
 	}
 	return resp.Version, nil
@@ -130,11 +131,11 @@ func (c *Client) SetTagValue(ctx context.Context, id uuid.UUID, value, quality s
 
 // DeleteTag deletes a tag by ID. The error matches ErrNotFound if it is already gone.
 func (c *Client) DeleteTag(ctx context.Context, id uuid.UUID) error {
-	return c.do(ctx, http.MethodDelete, "/api/v1/tags/"+id.String(), nil, http.StatusOK, nil)
+	return c.do(ctx, http.MethodDelete, apiv0.PathPrefix+"/tags/"+id.String(), nil, http.StatusOK, nil)
 }
 
 func (c *Client) getTags(ctx context.Context, path string) ([]Tag, error) {
-	var resp restdto.GetTagsResponse
+	var resp apiv0.GetTagsResponse
 	if err := c.do(ctx, http.MethodGet, path, nil, http.StatusOK, &resp); err != nil {
 		return nil, err
 	}
@@ -145,7 +146,7 @@ func (c *Client) getTags(ctx context.Context, path string) ([]Tag, error) {
 	return tags, nil
 }
 
-func newTag(t restdto.TagResponse) Tag {
+func newTag(t apiv0.TagResponse) Tag {
 	return Tag{ID: t.ID, Name: t.Name, Type: t.Type, Value: t.Value, Quality: t.Quality, Version: t.Version}
 }
 
@@ -163,6 +164,7 @@ func (c *Client) do(ctx context.Context, method, path string, body []byte, wantS
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	req.Header.Set(contract.SchemaVersionHeader, apiv0.SchemaVersion.String())
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

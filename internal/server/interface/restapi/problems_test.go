@@ -105,7 +105,7 @@ func TestProblemDetails_MarshalJSON_ExtensionDoesNotOverrideStandardField(t *tes
 }
 
 func TestProblemDetails_UnmarshalJSON_ParsesStandardFields(t *testing.T) {
-	raw := `{"type":"https://example.com/error","title":"Test","status":404,"detail":"not found","instance":"/api/v1/tags/123"}`
+	raw := `{"type":"https://example.com/error","title":"Test","status":404,"detail":"not found","instance":"/api/v0/tags/123"}`
 
 	var p restapi.ProblemDetails
 	if err := json.Unmarshal([]byte(raw), &p); err != nil {
@@ -124,8 +124,8 @@ func TestProblemDetails_UnmarshalJSON_ParsesStandardFields(t *testing.T) {
 	if p.Detail != "not found" {
 		t.Errorf("Detail: expected %q, got %q", "not found", p.Detail)
 	}
-	if p.Instance != "/api/v1/tags/123" {
-		t.Errorf("Instance: expected %q, got %q", "/api/v1/tags/123", p.Instance)
+	if p.Instance != "/api/v0/tags/123" {
+		t.Errorf("Instance: expected %q, got %q", "/api/v0/tags/123", p.Instance)
 	}
 }
 
@@ -146,7 +146,7 @@ func TestProblemDetails_UnmarshalJSON_PopulatesExtensions(t *testing.T) {
 }
 
 func TestNewBadRequest_HasCorrectFields(t *testing.T) {
-	p := restapi.NewBadRequest("bad input", "/api/v1/tags")
+	p := restapi.NewBadRequest("bad input", "/api/v0/tags")
 
 	if p.Status != http.StatusBadRequest {
 		t.Errorf("Status: expected 400, got %d", p.Status)
@@ -157,13 +157,13 @@ func TestNewBadRequest_HasCorrectFields(t *testing.T) {
 	if p.Detail != "bad input" {
 		t.Errorf("Detail: expected %q, got %q", "bad input", p.Detail)
 	}
-	if p.Instance != "/api/v1/tags" {
-		t.Errorf("Instance: expected %q, got %q", "/api/v1/tags", p.Instance)
+	if p.Instance != "/api/v0/tags" {
+		t.Errorf("Instance: expected %q, got %q", "/api/v0/tags", p.Instance)
 	}
 }
 
 func TestNewNotFound_HasCorrectStatusAndType(t *testing.T) {
-	p := restapi.NewNotFound("tag", "abc-123", "/api/v1/tags/abc-123")
+	p := restapi.NewNotFound("tag", "abc-123", "/api/v0/tags/abc-123")
 
 	if p.Status != http.StatusNotFound {
 		t.Errorf("Status: expected 404, got %d", p.Status)
@@ -177,7 +177,7 @@ func TestNewNotFound_HasCorrectStatusAndType(t *testing.T) {
 }
 
 func TestNewConflict_HasCorrectStatusAndType(t *testing.T) {
-	p := restapi.NewConflict("tag", "already exists", "/api/v1/tags")
+	p := restapi.NewConflict("tag", "already exists", "/api/v0/tags")
 
 	if p.Status != http.StatusConflict {
 		t.Errorf("Status: expected 409, got %d", p.Status)
@@ -189,7 +189,7 @@ func TestNewConflict_HasCorrectStatusAndType(t *testing.T) {
 
 func TestNewValidationError_HasExtensionsWithErrors(t *testing.T) {
 	errs := map[string][]string{"name": {"required"}}
-	p := restapi.NewValidationError(errs, "/api/v1/tags")
+	p := restapi.NewValidationError(errs, "/api/v0/tags")
 
 	if p.Status != http.StatusUnprocessableEntity {
 		t.Errorf("Status: expected 422, got %d", p.Status)
@@ -206,7 +206,7 @@ func TestNewValidationError_HasExtensionsWithErrors(t *testing.T) {
 }
 
 func TestNewInternalError_HasCorrectFields(t *testing.T) {
-	p := restapi.NewInternalError("database error", "/api/v1/tags")
+	p := restapi.NewInternalError("database error", "/api/v0/tags")
 
 	if p.Status != http.StatusInternalServerError {
 		t.Errorf("Status: expected 500, got %d", p.Status)

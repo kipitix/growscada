@@ -2,7 +2,7 @@
 #   make build
 #   bin/growctl/growctl apply -f tests/manifests/example_tags.yaml
 # initialValue/initialQuality are used only when a tag is created.
-apiVersion: growscada/v1
+apiVersion: growscada/v0.1
 kind: Tag
 metadata:
   name: sim.pump1.running
@@ -11,7 +11,7 @@ spec:
   initialValue: "false"
   initialQuality: good
 ---
-apiVersion: growscada/v1
+apiVersion: growscada/v0.1
 kind: Tag
 metadata:
   name: sim.pump1.speed
@@ -20,7 +20,7 @@ spec:
   initialValue: "0"
   initialQuality: uncertain
 ---
-apiVersion: growscada/v1
+apiVersion: growscada/v0.1
 kind: Tag
 metadata:
   name: sim.pump1.mode

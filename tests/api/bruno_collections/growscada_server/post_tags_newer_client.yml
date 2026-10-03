@@ -1,0 +1,40 @@
+info:
+  name: post tags newer client
+  type: http
+  seq: 27
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/tags
+  headers:
+    - name: GrowSCADA-Schema-Version
+      value: "0.99"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "newer_client_tag",
+        "type": "integer",
+        "value": "0",
+        "quality": "good",
+        "unit": "rpm"
+      }
+  auth: inherit
+
+docs: |
+  Contract versioning (ADR 0005). Every response carries the server API's
+  SchemaVersion in the `GrowSCADA-Schema-Version` header; clients state theirs
+  in the same header (optional — requests without it are accepted).
+
+  The server reads request bodies strictly: a field it does not know is
+  `400 Bad Request`, never silently dropped. This request plays a newer
+  client (0.99) sending a field (`unit`) the server does not have yet, so
+  the Problem Details detail says the client is newer than the server and
+  the server needs updating. Without the header the same body gets a plain
+  `unknown field "unit"` error.
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

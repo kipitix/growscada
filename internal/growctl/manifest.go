@@ -15,14 +15,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	manifestv0 "github.com/kipitix/growscada/contract/manifest/v0"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
-)
-
-const (
-	// APIVersion is the only manifest apiVersion growctl understands.
-	APIVersion = "growscada/v1"
-	// KindTag is the manifest kind for a Tag.
-	KindTag = "Tag"
 )
 
 // errNoManifest is returned when no manifest source is given.
@@ -35,27 +29,6 @@ type TagManifest struct {
 	Type           string
 	InitialValue   string
 	InitialQuality string
-}
-
-// documentHeader is the kind-independent part of a manifest document.
-type documentHeader struct {
-	APIVersion string `yaml:"apiVersion"`
-	Kind       string `yaml:"kind"`
-}
-
-// tagDocument is the strict shape of a `kind: Tag` document, read by apply,
-// diff and delete and written by get -o yaml. Spec fields are pointers so that
-// a missing field is told apart from an empty one.
-type tagDocument struct {
-	documentHeader `yaml:",inline"`
-	Metadata       struct {
-		Name string `yaml:"name"`
-	} `yaml:"metadata"`
-	Spec struct {
-		Type           *string `yaml:"type"`
-		InitialValue   *string `yaml:"initialValue"`
-		InitialQuality *string `yaml:"initialQuality"`
-	} `yaml:"spec"`
 }
 
 // ReadManifests reads Tag manifests from the given sources: a file, a directory
@@ -129,7 +102,8 @@ func expandSource(source string) ([]string, error) {
 
 // ParseManifests parses a multi-document YAML manifest. Empty documents are
 // skipped; unknown fields, kinds and apiVersions are errors, and every spec
-// field is required.
+// field is required. A manifest of a newer MINOR than growctl knows is
+// refused with a request to update growctl (ADR 0005).
 func ParseManifests(data []byte) ([]TagManifest, error) {
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	var manifests []TagManifest
@@ -163,15 +137,15 @@ func isEmptyDocument(node *yaml.Node) bool {
 }
 
 func parseDocument(node *yaml.Node) (TagManifest, error) {
-	var header documentHeader
+	var header manifestv0.Header
 	if err := node.Decode(&header); err != nil {
 		return TagManifest{}, err
 	}
-	if header.APIVersion != APIVersion {
-		return TagManifest{}, fmt.Errorf("unsupported apiVersion %q, expected %q", header.APIVersion, APIVersion)
+	if err := checkAPIVersion(header.APIVersion); err != nil {
+		return TagManifest{}, err
 	}
-	if header.Kind != KindTag {
-		return TagManifest{}, fmt.Errorf("unsupported kind %q, expected %q", header.Kind, KindTag)
+	if header.Kind != manifestv0.KindTag {
+		return TagManifest{}, fmt.Errorf("unsupported kind %q, expected %q", header.Kind, manifestv0.KindTag)
 	}
 
 	// yaml.Node.Decode cannot reject unknown fields, so re-encode the document
@@ -182,14 +156,29 @@ func parseDocument(node *yaml.Node) (TagManifest, error) {
 	}
 	strict := yaml.NewDecoder(bytes.NewReader(raw))
 	strict.KnownFields(true)
-	var doc tagDocument
+	var doc manifestv0.TagDocument
 	if err := strict.Decode(&doc); err != nil {
 		return TagManifest{}, err
 	}
 	return validateTag(doc)
 }
 
-func validateTag(doc tagDocument) (TagManifest, error) {
+// checkAPIVersion accepts any MINOR up to the one growctl knows of its
+// MAJOR. The check runs before the strict decode, so a field from a newer
+// MINOR is reported as "update growctl" rather than as an unknown field.
+func checkAPIVersion(apiVersion string) error {
+	v, err := manifestv0.ParseAPIVersion(apiVersion)
+	if err != nil || !v.SameMajor(manifestv0.SchemaVersion) {
+		return fmt.Errorf("unsupported apiVersion %q, expected %q", apiVersion, manifestv0.APIVersion())
+	}
+	if v.NewerThan(manifestv0.SchemaVersion) {
+		return fmt.Errorf("apiVersion %q is newer than this growctl understands (%s): update growctl",
+			apiVersion, manifestv0.APIVersion())
+	}
+	return nil
+}
+
+func validateTag(doc manifestv0.TagDocument) (TagManifest, error) {
 	name := doc.Metadata.Name
 	if name == "" {
 		return TagManifest{}, errors.New("metadata.name is required")

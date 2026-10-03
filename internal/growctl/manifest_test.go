@@ -11,7 +11,7 @@ import (
 )
 
 const twoTags = `
-apiVersion: growscada/v1
+apiVersion: growscada/v0.1
 kind: Tag
 metadata:
   name: pump1.running
@@ -20,7 +20,7 @@ spec:
   initialValue: false
   initialQuality: good
 ---
-apiVersion: growscada/v1
+apiVersion: growscada/v0.1
 kind: Tag
 metadata:
   name: pump1.label
@@ -56,8 +56,20 @@ func TestParseManifests_EmptyDocuments_AreSkipped(t *testing.T) {
 	}
 }
 
+func TestParseManifests_OlderMinor_IsAccepted(t *testing.T) {
+	// "growscada/v0" reads as v0.0, which this growctl (v0.1) understands.
+	got, err := growctl.ParseManifests([]byte("apiVersion: growscada/v0\nkind: Tag\nmetadata:\n  name: t\n" +
+		"spec: {type: integer, initialValue: 0, initialQuality: good}\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "t" {
+		t.Errorf("got %+v", got)
+	}
+}
+
 func TestParseManifests_Invalid_ReturnsError(t *testing.T) {
-	const header = "apiVersion: growscada/v1\nkind: Tag\nmetadata:\n  name: t\n"
+	const header = "apiVersion: growscada/v0.1\nkind: Tag\nmetadata:\n  name: t\n"
 	tests := []struct {
 		name     string
 		manifest string
@@ -65,10 +77,12 @@ func TestParseManifests_Invalid_ReturnsError(t *testing.T) {
 	}{
 		{"wrong apiVersion", "apiVersion: growscada/v2\nkind: Tag\n", "unsupported apiVersion"},
 		{"missing apiVersion", "kind: Tag\n", "unsupported apiVersion"},
-		{"unknown kind", "apiVersion: growscada/v1\nkind: Scene\n", "unsupported kind"},
+		{"other MAJOR", "apiVersion: growscada/v1.0\nkind: Tag\n", "unsupported apiVersion"},
+		{"newer MINOR with a new field", "apiVersion: growscada/v0.99\nkind: Tag\nmetadata:\n  name: t\nspec: {type: integer, initialValue: 0, initialQuality: good, unit: rpm}\n", "update growctl"},
+		{"unknown kind", "apiVersion: growscada/v0.1\nkind: Scene\n", "unsupported kind"},
 		{"unknown top-level field", header + "status: {}\nspec: {type: integer, initialValue: 0, initialQuality: good}\n", "field status not found"},
 		{"unknown spec field", header + "spec: {type: integer, initialValue: 0, initialQuality: good, value: 1}\n", "field value not found"},
-		{"missing name", "apiVersion: growscada/v1\nkind: Tag\nspec: {type: integer, initialValue: 0, initialQuality: good}\n", "metadata.name is required"},
+		{"missing name", "apiVersion: growscada/v0.1\nkind: Tag\nspec: {type: integer, initialValue: 0, initialQuality: good}\n", "metadata.name is required"},
 		{"missing type", header + "spec: {initialValue: 0, initialQuality: good}\n", "spec.type is required"},
 		{"missing initialValue", header + "spec: {type: integer, initialQuality: good}\n", "spec.initialValue is required"},
 		{"missing initialQuality", header + "spec: {type: integer, initialValue: 0}\n", "spec.initialQuality is required"},
@@ -142,7 +156,7 @@ func TestReadManifests_NoSources_ReturnsError(t *testing.T) {
 
 func TestReadManifests_ErrorMentionsFile(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "bad.yaml")
-	writeFile(t, file, "apiVersion: growscada/v1\nkind: Scene\n")
+	writeFile(t, file, "apiVersion: growscada/v0.1\nkind: Scene\n")
 
 	_, err := growctl.ReadManifests([]string{file}, nil)
 
@@ -152,7 +166,7 @@ func TestReadManifests_ErrorMentionsFile(t *testing.T) {
 }
 
 func tagYAML(name string) string {
-	return "apiVersion: growscada/v1\nkind: Tag\nmetadata:\n  name: " + name +
+	return "apiVersion: growscada/v0.1\nkind: Tag\nmetadata:\n  name: " + name +
 		"\nspec:\n  type: integer\n  initialValue: \"0\"\n  initialQuality: good\n"
 }
 

@@ -174,7 +174,7 @@ func TestApply_TypeMismatch_FailsWithoutChangingAnything(t *testing.T) {
 func TestApply_InvalidManifest_FailsWithoutChangingAnything(t *testing.T) {
 	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 
-	_, err := runGrowctl(t, srv, twoTags+"---\napiVersion: growscada/v1\nkind: Scene\n", "apply")
+	_, err := runGrowctl(t, srv, twoTags+"---\napiVersion: growscada/v0.1\nkind: Scene\n", "apply")
 
 	if err == nil || !strings.Contains(err.Error(), "unsupported kind") {
 		t.Fatalf("expected manifest error, got %v", err)

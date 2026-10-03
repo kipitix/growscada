@@ -5,7 +5,7 @@ info:
 
 http:
   method: GET
-  url: http://{{API_SERVER}}/api/v1/events
+  url: http://{{API_SERVER}}/api/v0/events
   auth: inherit
 
 docs: |
@@ -21,7 +21,7 @@ docs: |
   `{"type":"tag_created","timestamp":"2026-01-01T12:00:00Z","id":"<uuid>"}`.
 
   `tag_updated` additionally carries the Tag's full new state in `tag`, in
-  the same shape as `GET /api/v1/tags/{id}`, so clients need not read it back:
+  the same shape as `GET /api/v0/tags/{id}`, so clients need not read it back:
   `{"type":"tag_updated","timestamp":"2026-01-01T12:00:00Z","id":"<uuid>","tag":{"id":"<uuid>","name":"pressure","type":"integer","value":"42","quality":"good","version":3}}`.
 
   The server caps the number of concurrent event streams (configurable via

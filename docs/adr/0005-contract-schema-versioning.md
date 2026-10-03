@@ -1,0 +1,20 @@
+# Contracts carry a MAJOR.MINOR SchemaVersion; readers skip, receivers reject
+
+Every JSON/YAML shape that crosses a process or time boundary belongs to one of four contracts, each with its own `MAJOR.MINOR` SchemaVersion: the server API (REST requests, responses and the live event stream), the project format (ProjectFile and Revision), the operational record format (Journal entries, Checkpoints, PlaybackFiles) and growctl manifests. Nested DTOs take the version of the contract they travel in; versioning each DTO separately was rejected because nesting (Tag inside an event, Widget inside a Scene, Revision inside a PlaybackFile) made version combinations unmanageable. The device simulator's config and control API are test tooling and are not versioned.
+
+MINOR grows when an old reader can safely ignore what was added (an optional field, a new event type); MAJOR grows on anything else, including a new enum value in the data — ADR 0001 stays strict, so an old reader cannot be asked to interpret an enum value it does not know. Each MAJOR has its own JSON schema. There is no third digit: the problem it was meant to solve is decided by reader behaviour, not by the label.
+
+The rule for unknown fields depends on what the reader does with the data. A party that only **reads** (a client reading a response or event) skips unknown fields, so updating the server never breaks old Devices or tools. A party that **accepts data to keep** — the server decoding a request body, a Runtime node accepting a Deploy or importing a file, growctl reading a manifest — rejects them, because silently dropping an Engineer's intent is worse than an error; the optional `GrowSCADA-Schema-Version` header only turns that error into "client 1.2 is newer than server 1.1".
+
+The version travels where the data has room for it: MAJOR in the API path (`/api/v0`) and the full version in the `GrowSCADA-Schema-Version` header for the server API; a root field in stored documents; `apiVersion: growscada/vMAJOR.MINOR` in manifests (`growscada/v0` reads as `v0.0`). The server serves the current and the previous API MAJOR side by side. Its own database is migrated to the current MAJOR on upgrade, so it reads one shape; external ProjectFiles and PlaybackFiles of any age are lifted through a chain of pure `vN-1 → vN` converters, so History is never lost.
+
+Go structs in a public `contract/` package (not `internal/`, so adapters outside the repo can import them) are the source of truth; JSON schemas are generated into `schemas/<contract>/<MAJOR.MINOR>.json` and committed, and tests fail when the generated schema differs from the committed one for the current version, or when a new MINOR does more than add optional fields to the previous one.
+
+Until the first release all contracts are at MAJOR `0`: every change bumps only MINOR, no compatibility is promised and no converters are written. The mechanisms (header, schemas, tests) are in place from the start; the rules above bind from `1.0`.
+
+## Considered Options
+
+- Strict readers everywhere: rejected — every added field on the server would break every deployed Device.
+- Tolerant receivers everywhere: rejected — a newer growctl or Engineering node would lose data on an older server without anyone noticing.
+- Upcasting stored documents on every read instead of migrating the database: rejected — every History replay would pay for conversions; external files still use the converter chain.
+- A separate Go module for contracts: deferred until there are consumers outside the repository; a public package can be split out later.

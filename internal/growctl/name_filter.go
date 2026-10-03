@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
-	"github.com/kipitix/growscada/internal/server/interface/restapi/restdto"
 )
 
 const (
@@ -19,7 +19,7 @@ const (
 // expression, with the same semantics as the server's GET /tags?name_pattern=
 // and ?name_regex=. The zero value selects nothing and IsSet reports false.
 type NameFilter struct {
-	param   string // REST query parameter: restdto.TagsQueryNamePattern or TagsQueryNameRegex
+	param   string // REST query parameter: apiv0.TagsQueryNamePattern or TagsQueryNameRegex
 	expr    string
 	matcher tag.TagNameMatcher
 }
@@ -31,7 +31,7 @@ func NewPatternFilter(pattern string) (NameFilter, error) {
 	if err != nil {
 		return NameFilter{}, err
 	}
-	return NameFilter{param: restdto.TagsQueryNamePattern, expr: pattern, matcher: m}, nil
+	return NameFilter{param: apiv0.TagsQueryNamePattern, expr: pattern, matcher: m}, nil
 }
 
 // NewRegexFilter creates a filter from a Go (RE2) regular expression matched
@@ -41,7 +41,7 @@ func NewRegexFilter(expr string) (NameFilter, error) {
 	if err != nil {
 		return NameFilter{}, err
 	}
-	return NameFilter{param: restdto.TagsQueryNameRegex, expr: expr, matcher: m}, nil
+	return NameFilter{param: apiv0.TagsQueryNameRegex, expr: expr, matcher: m}, nil
 }
 
 // IsSet reports whether the filter was given.
@@ -56,9 +56,9 @@ func (f NameFilter) Matches(name string) bool {
 // String renders the filter as its command-line flag.
 func (f NameFilter) String() string {
 	switch f.param {
-	case restdto.TagsQueryNamePattern:
+	case apiv0.TagsQueryNamePattern:
 		return fmt.Sprintf("--%s %q", patternFlag, f.expr)
-	case restdto.TagsQueryNameRegex:
+	case apiv0.TagsQueryNameRegex:
 		return fmt.Sprintf("--%s %q", regexFlag, f.expr)
 	}
 	return ""

@@ -1,15 +1,14 @@
 package restapi
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
 	"github.com/google/uuid"
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/widget"
-	"github.com/kipitix/growscada/internal/server/interface/restapi/restdto"
 )
 
 // WidgetsHandlers handles HTTP requests related to widget instances. Widget is
@@ -40,7 +39,7 @@ func (h WidgetsHandlers) GetWidgetsBySceneID(w http.ResponseWriter, r *http.Requ
 		sendInternalError(w, r, err)
 		return
 	}
-	sendJSONResponse(w, http.StatusOK, restdto.NewGetWidgetsResponse(list))
+	sendJSONResponse(w, http.StatusOK, newGetWidgetsResponse(list))
 }
 
 // GetWidgetsByID handles GET /scenes/{sceneId}/widgets/{widgetId}
@@ -72,7 +71,7 @@ func (h WidgetsHandlers) GetWidgetsByID(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, restdto.NewWidgetResponse(found))
+	sendJSONResponse(w, http.StatusOK, newWidgetResponse(found))
 }
 
 // PostWidgets handles POST /scenes/{id}/widgets
@@ -84,13 +83,12 @@ func (h WidgetsHandlers) PostWidgets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var request restdto.CreateWidgetRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
+	var request apiv0.CreateWidgetRequest
+	if !decodeRequest(w, r, &request) {
 		return
 	}
 
-	created, err := h.service.CreateWidget(r.Context(), sceneID, restdto.NewCreateWidgetInput(request))
+	created, err := h.service.CreateWidget(r.Context(), sceneID, newCreateWidgetInput(request))
 	if err != nil {
 		if errors.Is(err, widget.ErrWidgetInvalidInput) {
 			sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
@@ -108,7 +106,7 @@ func (h WidgetsHandlers) PostWidgets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendJSONResponse(w, http.StatusCreated, restdto.NewCreateWidgetResponse(created))
+	sendJSONResponse(w, http.StatusCreated, newCreateWidgetResponse(created))
 }
 
 // PutWidgetsByID handles PUT /scenes/{sceneId}/widgets/{widgetId}
@@ -126,13 +124,12 @@ func (h WidgetsHandlers) PutWidgetsByID(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var request restdto.UpdateWidgetRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
+	var request apiv0.UpdateWidgetRequest
+	if !decodeRequest(w, r, &request) {
 		return
 	}
 
-	updated, err := h.service.UpdateWidget(r.Context(), sceneID, widgetID, restdto.NewUpdateWidgetInput(request, widgetID))
+	updated, err := h.service.UpdateWidget(r.Context(), sceneID, widgetID, newUpdateWidgetInput(request, widgetID))
 	if err != nil {
 		if errors.Is(err, widget.ErrWidgetInvalidInput) {
 			sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
@@ -154,7 +151,7 @@ func (h WidgetsHandlers) PutWidgetsByID(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, restdto.NewUpdateWidgetResponse(updated))
+	sendJSONResponse(w, http.StatusOK, newUpdateWidgetResponse(updated))
 }
 
 // DeleteWidgetsByID handles DELETE /scenes/{sceneId}/widgets/{widgetId}
@@ -186,5 +183,5 @@ func (h WidgetsHandlers) DeleteWidgetsByID(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, restdto.NewWidgetResponse(deleted))
+	sendJSONResponse(w, http.StatusOK, newWidgetResponse(deleted))
 }

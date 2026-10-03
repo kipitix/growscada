@@ -36,6 +36,12 @@ test:
 bench:
 	go test -run=^$ -bench=. -benchmem ./...
 
+# Regenerates the committed JSON schemas (schemas/<contract>/<MAJOR.MINOR>.json)
+# from the contract types. Run it after raising a contract's SchemaVersion.
+.PHONY: schemas
+schemas:
+	go test ./contract/... -run TestSchemaIsCommitted -update
+
 full_restart:
 	cd tools/debug_db && docker compose down || true
 	docker volume rm debug_db_growscada_data || true

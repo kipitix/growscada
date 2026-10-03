@@ -116,7 +116,7 @@ func (s *syncRecorder) code() int {
 
 func runEventsHandler(t *testing.T, h *restapi.EventsHandlers, w http.ResponseWriter) (cancel func(), done <-chan struct{}) {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/events", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/events", nil)
 	ctx, cancelFn := context.WithCancel(req.Context())
 	req = req.WithContext(ctx)
 
@@ -388,7 +388,7 @@ func TestEventsHandlers_Close_StopsForwardingNewEvents(t *testing.T) {
 }
 
 // TestEventsHandlers_GetEvents_RejectsBeyondMaxClients guards the fix for
-// the CODE_REVIEW.md finding that GET /api/v1/events accepted an unbounded
+// the CODE_REVIEW.md finding that GET /api/v0/events accepted an unbounded
 // number of concurrent SSE connections. A small maxClients (2) keeps the
 // test from needing to open 100 real connections.
 func TestEventsHandlers_GetEvents_RejectsBeyondMaxClients(t *testing.T) {

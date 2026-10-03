@@ -1,0 +1,17 @@
+// Package recordv0 is MAJOR 0 of the operational record format: Journal
+// entries, Checkpoints and PlaybackFiles (ADR 0005). The format itself is not
+// modelled yet; this package fixes its SchemaVersion and the root field that
+// every record document carries.
+package recordv0
+
+import "github.com/kipitix/growscada/contract"
+
+// SchemaVersion is the version of the operational record format this package
+// describes.
+var SchemaVersion = contract.SchemaVersion{Major: 0, Minor: 1}
+
+// Header is the root of every record document: the SchemaVersion the rest of
+// the document follows. A reader checks it before anything else.
+type Header struct {
+	SchemaVersion contract.SchemaVersion `json:"schema_version"`
+}

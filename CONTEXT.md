@@ -127,8 +127,12 @@ _Avoid_: viewer, replayer
 ### Cross-cutting
 
 **Version**:
-The optimistic-concurrency counter carried by every aggregate (Tag, WidgetType, Scene), incremented on each committed change. Not to be confused with Revision.
+The optimistic-concurrency counter carried by every aggregate (Tag, WidgetType, Scene), incremented on each committed change. Not to be confused with Revision or SchemaVersion.
 _Avoid_: etag
+
+**SchemaVersion**:
+The `MAJOR.MINOR` version of the JSON schema that a message or document conforms to. Each of four contracts carries its own: the server API (requests, responses and live events), the project format (ProjectFile and Revision), the operational record format (Journal entries, Checkpoints, PlaybackFiles) and growctl manifests. MINOR grows when old readers can safely ignore what was added; MAJOR grows when they cannot — including any new enum value in the data. While MAJOR is `0` (before the first release) every change only bumps MINOR and no compatibility is promised. Says what shape the data has, never how many times the data changed.
+_Avoid_: version (unqualified), protocol version, format version
 
 **Client**:
 Identity marker for a connected SSE (Server-Sent Events) client, used by connection-lifecycle domain events. Not yet a full aggregate — no access rights or behavior defined.

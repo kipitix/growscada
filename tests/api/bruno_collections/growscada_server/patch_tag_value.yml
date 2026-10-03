@@ -5,7 +5,7 @@ info:
 
 http:
   method: PATCH
-  url: http://{{API_SERVER}}/api/v1/tags/{{TAG_ID}}/value
+  url: http://{{API_SERVER}}/api/v0/tags/{{TAG_ID}}/value
   body:
     type: json
     data: |-

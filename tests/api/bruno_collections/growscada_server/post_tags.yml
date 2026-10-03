@@ -5,7 +5,7 @@ info:
 
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v1/tags
+  url: http://{{API_SERVER}}/api/v0/tags
   body:
     type: json
     data: |-

@@ -28,6 +28,7 @@ All primary workflows go through `make`. **Always prefer `make <target>` over ru
 | `make db_down` | Stops the container and **deletes** the data volume |
 | `make test` | Runs all tests with coverage (`go test --cover ./...`) |
 | `make bench` | Runs benchmarks only (`go test -run=^$ -bench=. -benchmem ./...`) |
+| `make schemas` | Regenerates the committed JSON schemas `schemas/<contract>/<MAJOR.MINOR>.json` from the `contract/` types; run it after raising a contract's SchemaVersion |
 | `make full_restart` | Clean-slate restart: `db_down` → `db_up` → `run` (use when the DB state is stale or corrupted) |
 
 `build_server` runs two compilations of the same `cmd/combined_server/main.go`: `GOARCH=wasm GOOS=js` for `app.wasm`, then host-arch for the server binary.
@@ -51,19 +52,25 @@ goose up
 
 ### Package Layout
 
-`internal/` is split by application. The server's DDD layers live under `internal/server/`; the tools that talk to the server from outside sit next to it and talk to it over the REST API only. What they may import depends on their role:
+`internal/` is split by application. The server's DDD layers live under `internal/server/`; the tools that talk to the server from outside sit next to it and talk to it over the REST API only. The shapes of everything that crosses a process or time boundary live in the public `contract/` package (ADR 0005), which every side may import. What else they may import depends on their role:
 
-- **Engineer tools** (`growctl`) may also import value objects from `internal/server/domain/` (tag name, type, quality, name matchers) to validate input the same way the server does. Never `application/`, `infrastructure/` or `interface/` beyond `restdto`.
-- **The Device side** (`devicelink`, `devicesim`, future protocol adapters) depends only on the REST contract (`apiclient` → `restdto`), never on `internal/server/domain/`: its own enums (`devicelink.TagType`, `devicelink.Quality`) mirror the API's strings, so adapters stay independent of the server's internals (ADR 0004).
+- **Engineer tools** (`growctl`) may also import value objects from `internal/server/domain/` (tag name, type, quality, name matchers) to validate input the same way the server does. Never `application/`, `infrastructure/` or `interface/`.
+- **The Device side** (`devicelink`, `devicesim`, future protocol adapters) depends only on the REST contract (`apiclient` → `contract/api/v0`), never on `internal/server/domain/`: its own enums (`devicelink.TagType`, `devicelink.Quality`) mirror the API's strings, so adapters stay independent of the server's internals (ADR 0004).
 
 ```
+contract/           # Versioned contracts, public (ADR 0005): SchemaVersion + one package per contract and MAJOR
+  api/v0/           # Server API: REST bodies and live events (package apiv0)
+  project/v0/       # Project format: ProjectFile = Revision (not modelled yet)
+  record/v0/        # Operational record format: Journal, Checkpoint, PlaybackFile (not modelled yet)
+  manifest/v0/      # growctl manifests
+schemas/            # Generated JSON schemas, schemas/<contract>/<MAJOR.MINOR>.json (make schemas)
 internal/
   server/           # GrowSCADA server + WASM UI (DDD layers below)
     domain/         # Core business logic — no external dependencies
     application/    # Use-case services, orchestrate domain objects
     infrastructure/ # Concrete implementations (Postgres, MQTT)
     interface/      # Delivery mechanisms (REST API, PWA UI)
-  apiclient/        # Go client of the REST API (JSON shapes from server/interface/restapi/restdto)
+  apiclient/        # Go client of the REST API (JSON shapes from contract/api/v0)
   growctl/          # growctl CLI: manifests, planner
   devicelink/       # Contract by which a Device delivers Tag values to the server (ADR 0004)
   devicesim/        # Lower-level device simulator: patterns, virtual Device, control API
@@ -106,9 +113,11 @@ Services (`TagService`, `WidgetService`, `WidgetTypeService`, `SceneService`) ea
 
 **REST API** (`internal/server/interface/restapi/`, port `:9090`):
 - Uses stdlib `http.ServeMux` with method-prefixed patterns (Go 1.22+).
+- All endpoints live under `apiv0.PathPrefix` (`/api/v0`); every response carries the `GrowSCADA-Schema-Version` header.
 - CORS middleware applied globally.
 - Errors follow RFC 7807 Problem Details (`problems.go`).
-- Each resource has its own handler file (`tags.go`, `widgets.go`, etc.) and a `restdto/` package for JSON shapes.
+- Each resource has its own handler file (`tags.go`, `widgets.go`, etc.). JSON shapes are `contract/api/v0`; the conversions to/from `appdto` are in `dto_mapping.go`.
+- Request bodies are decoded strictly with `decodeRequest` (unknown field → 400); clients read responses tolerantly.
 
 **PWA UI** (`internal/server/interface/ui/`, port `:8080`):
 - Built with [go-app v10](https://go-app.dev/) — compiled to WebAssembly, served by the same binary.
@@ -187,13 +196,15 @@ Browser automation. Use for verifying UI changes in the running PWA (port 8080):
 
 3. **Always verify build and tests.** After any code change, run `make build` to confirm the build succeeds and `make test` to confirm all tests pass. Do not report a task as done until both commands exit cleanly.
 
-4. **Keep Bruno collections in sync.** When any REST API endpoint is added, removed, or modified (URL, method, request/response shape), update the corresponding Bruno collection in `tests/api/bruno_collections/` to reflect the change.
+4. **Raise the SchemaVersion when a contract changes.** Any change to a type in `contract/` changes a contract (ADR 0005): raise that contract's `SchemaVersion` — MINOR if old readers can ignore the change (an `omitempty` field, a new event type), MAJOR otherwise (removed/renamed/retyped field, new enum value) — and run `make schemas`. While MAJOR is 0 every change only bumps MINOR. `make test` fails if the types and the committed schema disagree.
 
-5. **Completion notification is automatic — no action needed.** A `Stop` hook (`.claude/settings.json`) fires a desktop notification (`notify-send`) whenever a turn ends. It's a no-op if `notify-send` isn't installed (e.g. non-Linux, or a Linux desktop without a notification daemon), so it's safe on any machine. Don't try to send an e-mail or otherwise notify the user yourself — the old `mail-mcp`-based e-mail step has been removed.
+5. **Keep Bruno collections in sync.** When any REST API endpoint is added, removed, or modified (URL, method, request/response shape), update the corresponding Bruno collection in `tests/api/bruno_collections/` to reflect the change.
 
-6. **Start the test environment before debugging.** Before any debugging session or manual API testing, ensure the dev database is running with `make db_up`. If the database state looks stale or you hit unexpected data errors, use `make full_restart` to get a clean slate. Never run the server or hit the API endpoints without first confirming the DB container is up.
+6. **Completion notification is automatic — no action needed.** A `Stop` hook (`.claude/settings.json`) fires a desktop notification (`notify-send`) whenever a turn ends. It's a no-op if `notify-send` isn't installed (e.g. non-Linux, or a Linux desktop without a notification daemon), so it's safe on any machine. Don't try to send an e-mail or otherwise notify the user yourself — the old `mail-mcp`-based e-mail step has been removed.
 
-7. **Ask questions one at a time, interactively.** When interviewing the user (grilling, design sessions, clarifications), ask exactly one question per turn via the interactive question tool (`AskUserQuestion`), with a recommended option first. This overrides any skill instruction to batch several questions into one round.
+7. **Start the test environment before debugging.** Before any debugging session or manual API testing, ensure the dev database is running with `make db_up`. If the database state looks stale or you hit unexpected data errors, use `make full_restart` to get a clean slate. Never run the server or hit the API endpoints without first confirming the DB container is up.
+
+8. **Ask questions one at a time, interactively.** When interviewing the user (grilling, design sessions, clarifications), ask exactly one question per turn via the interactive question tool (`AskUserQuestion`), with a recommended option first. This overrides any skill instruction to batch several questions into one round.
 
 ## Agent skills
 
