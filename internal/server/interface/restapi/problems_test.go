@@ -187,24 +187,6 @@ func TestNewConflict_HasCorrectStatusAndType(t *testing.T) {
 	}
 }
 
-func TestNewValidationError_HasExtensionsWithErrors(t *testing.T) {
-	errs := map[string][]string{"name": {"required"}}
-	p := restapi.NewValidationError(errs, "/api/v0/tags")
-
-	if p.Status != http.StatusUnprocessableEntity {
-		t.Errorf("Status: expected 422, got %d", p.Status)
-	}
-	if p.Type != restapi.TypeValidation {
-		t.Errorf("Type: expected %q, got %q", restapi.TypeValidation, p.Type)
-	}
-	if p.Extensions == nil {
-		t.Fatal("Extensions should not be nil")
-	}
-	if _, ok := p.Extensions["errors"]; !ok {
-		t.Error("expected 'errors' in Extensions")
-	}
-}
-
 func TestNewInternalError_HasCorrectFields(t *testing.T) {
 	p := restapi.NewInternalError("database error", "/api/v0/tags")
 

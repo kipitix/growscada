@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -184,28 +183,29 @@ func (p *Project) saveWidgetGeometry(ctx app.Context) {
 	if idx < 0 {
 		return
 	}
-	posX, _ := strconv.ParseFloat(p.editingPosX, 64)
-	posY, _ := strconv.ParseFloat(p.editingPosY, 64)
-	posZ, _ := strconv.Atoi(p.editingPosZ)
-	width, _ := strconv.Atoi(p.editingWidth)
-	height, _ := strconv.Atoi(p.editingHeight)
-	originX, _ := strconv.ParseFloat(p.editingOriginX, 64)
-	originY, _ := strconv.ParseFloat(p.editingOriginY, 64)
-	rotDeg, _ := strconv.ParseFloat(p.editingRotation, 64)
-
-	if width <= 0 {
-		width = 10
+	var nf numberFields
+	posX := nf.float("position X", p.editingPosX)
+	posY := nf.float("position Y", p.editingPosY)
+	posZ := nf.int("position Z", p.editingPosZ)
+	width := nf.int("width", p.editingWidth)
+	height := nf.int("height", p.editingHeight)
+	originX := nf.float("origin X", p.editingOriginX)
+	originY := nf.float("origin Y", p.editingOriginY)
+	rotDeg := nf.float("rotation", p.editingRotation)
+	if nf.err != nil {
+		p.compoCtx.NewActionWithValue(toast.ActionAdd, toast.ClientError(nf.err))
+		p.syncEditingFields(p.widgets[idx])
+		return
 	}
-	if height <= 0 {
-		height = 10
-	}
-	originX = math.Max(0, math.Min(1, originX))
-	originY = math.Max(0, math.Min(1, originY))
 
 	p.widgets[idx].Position = positionDTO{X: posX, Y: posY, Z: posZ}
 	p.widgets[idx].Size = sizeDTO{Width: width, Height: height}
 	p.widgets[idx].Origin = originDTO{X: originX, Y: originY}
 	p.widgets[idx].Rotation = rotationDTO{Degrees: rotDeg}
+	// Show the fields as the widget now holds them, so that the reload after
+	// a rejected save puts the server's values back (mergeWidgetEditingFields
+	// keeps only fields the user changed since).
+	p.syncEditingFields(p.widgets[idx])
 	p.putWidget(ctx, p.widgets[idx])
 }
 

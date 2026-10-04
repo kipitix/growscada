@@ -36,7 +36,7 @@ func (h WidgetsHandlers) GetWidgetsBySceneID(w http.ResponseWriter, r *http.Requ
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
 			return
 		}
-		sendInternalError(w, r, err)
+		sendServiceError(w, r, err)
 		return
 	}
 	sendJSONResponse(w, http.StatusOK, newGetWidgetsResponse(list))
@@ -67,7 +67,7 @@ func (h WidgetsHandlers) GetWidgetsByID(w http.ResponseWriter, r *http.Request) 
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), widgetIDStr, r.URL.Path))
 			return
 		}
-		sendInternalError(w, r, err)
+		sendServiceError(w, r, err)
 		return
 	}
 
@@ -90,10 +90,6 @@ func (h WidgetsHandlers) PostWidgets(w http.ResponseWriter, r *http.Request) {
 
 	created, err := h.service.CreateWidget(r.Context(), sceneID, newCreateWidgetInput(request))
 	if err != nil {
-		if errors.Is(err, widget.ErrWidgetInvalidInput) {
-			sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
-			return
-		}
 		if errors.Is(err, scene.ErrSceneNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
 			return
@@ -102,7 +98,7 @@ func (h WidgetsHandlers) PostWidgets(w http.ResponseWriter, r *http.Request) {
 			sendJSONResponse(w, http.StatusConflict, NewConflict("scene", err.Error(), r.URL.Path))
 			return
 		}
-		sendInternalError(w, r, err)
+		sendServiceError(w, r, err)
 		return
 	}
 
@@ -131,10 +127,6 @@ func (h WidgetsHandlers) PutWidgetsByID(w http.ResponseWriter, r *http.Request) 
 
 	updated, err := h.service.UpdateWidget(r.Context(), sceneID, widgetID, newUpdateWidgetInput(request, widgetID))
 	if err != nil {
-		if errors.Is(err, widget.ErrWidgetInvalidInput) {
-			sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
-			return
-		}
 		if errors.Is(err, scene.ErrSceneNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), sceneIDStr, r.URL.Path))
 			return
@@ -147,7 +139,7 @@ func (h WidgetsHandlers) PutWidgetsByID(w http.ResponseWriter, r *http.Request) 
 			sendJSONResponse(w, http.StatusConflict, NewConflict("scene", err.Error(), r.URL.Path))
 			return
 		}
-		sendInternalError(w, r, err)
+		sendServiceError(w, r, err)
 		return
 	}
 
@@ -179,7 +171,7 @@ func (h WidgetsHandlers) DeleteWidgetsByID(w http.ResponseWriter, r *http.Reques
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), widgetIDStr, r.URL.Path))
 			return
 		}
-		sendInternalError(w, r, err)
+		sendServiceError(w, r, err)
 		return
 	}
 

@@ -23,7 +23,7 @@ func NewWidgetTypesHandler(s application.WidgetTypeService) *WidgetTypesHandlers
 func (h WidgetTypesHandlers) GetWidgetTypes(w http.ResponseWriter, r *http.Request) {
 	list, err := h.service.FindAllWidgetTypes(r.Context())
 	if err != nil {
-		sendInternalError(w, r, err)
+		sendServiceError(w, r, err)
 		return
 	}
 	sendJSONResponse(w, http.StatusOK, newGetWidgetTypesResponse(list))
@@ -44,7 +44,7 @@ func (h WidgetTypesHandlers) GetWidgetTypesByID(w http.ResponseWriter, r *http.R
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
 			return
 		}
-		sendInternalError(w, r, err)
+		sendServiceError(w, r, err)
 		return
 	}
 
@@ -60,7 +60,7 @@ func (h WidgetTypesHandlers) PostWidgetTypes(w http.ResponseWriter, r *http.Requ
 
 	created, err := h.service.CreateWidgetType(r.Context(), newCreateWidgetTypeInput(request))
 	if err != nil {
-		sendInternalError(w, r, err)
+		sendServiceError(w, r, err)
 		return
 	}
 
@@ -91,7 +91,7 @@ func (h WidgetTypesHandlers) PutWidgetTypesByID(w http.ResponseWriter, r *http.R
 			sendJSONResponse(w, http.StatusConflict, NewConflict("widget type", err.Error(), r.URL.Path))
 			return
 		}
-		sendInternalError(w, r, err)
+		sendServiceError(w, r, err)
 		return
 	}
 
@@ -113,7 +113,11 @@ func (h WidgetTypesHandlers) DeleteWidgetTypesByID(w http.ResponseWriter, r *htt
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
 			return
 		}
-		sendInternalError(w, r, err)
+		if errors.Is(err, widget.ErrWidgetTypeInUse) {
+			sendJSONResponse(w, http.StatusConflict, NewConflict("widget type", err.Error(), r.URL.Path))
+			return
+		}
+		sendServiceError(w, r, err)
 		return
 	}
 

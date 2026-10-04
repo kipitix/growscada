@@ -15,9 +15,6 @@ var (
 	// version does not match, indicating a concurrent modification. Since Widget
 	// has no version of its own, this also guards widget mutations.
 	ErrSceneConflict = errors.New("scene version conflict")
-	// ErrSceneValidation is returned when input fails domain validation
-	// (e.g. empty name, non-positive dimensions).
-	ErrSceneValidation = errors.New("scene validation error")
 )
 
 // SceneRepository - repository interface for storing and managing scenes and
@@ -62,6 +59,7 @@ type SceneRepository interface {
 	// against the scene's current version and bumping it atomically.
 	// Returns ErrSceneNotFound if the scene does not exist.
 	// Returns ErrSceneConflict if expectedVersion does not match.
+	// Returns widget.ErrWidgetTypeNotFound if the widget's type does not exist.
 	AddWidget(ctx context.Context, sceneID id.ID[Scene], expectedVersion version.Version[Scene], w widget.Widget) (widget.Widget, version.Version[Scene], error)
 
 	// UpdateWidget replaces an existing widget's fields, checking expectedVersion
@@ -69,6 +67,7 @@ type SceneRepository interface {
 	// Returns ErrSceneNotFound if the scene does not exist.
 	// Returns ErrSceneConflict if expectedVersion does not match.
 	// Returns widget.ErrWidgetNotFound if the widget does not exist within the scene.
+	// Returns widget.ErrWidgetTypeNotFound if the widget's type does not exist.
 	UpdateWidget(ctx context.Context, sceneID id.ID[Scene], expectedVersion version.Version[Scene], w widget.Widget) (widget.Widget, version.Version[Scene], error)
 
 	// DeleteWidget removes a widget from the scene and bumps the scene's

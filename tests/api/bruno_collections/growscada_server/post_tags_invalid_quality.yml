@@ -1,0 +1,29 @@
+info:
+  name: post tags invalid quality
+  type: http
+  seq: 29
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/tags
+  body:
+    type: json
+    data: |-
+      {
+        "name": "invalid_quality",
+        "type": "boolean",
+        "value": "false",
+        "quality": "simulated"
+      }
+  auth: inherit
+
+docs: |
+  "simulated" is not a Quality (only bad, uncertain, good). Any value the
+  server cannot accept from a request body returns `400 Bad Request` Problem
+  Details naming the cause.
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -426,7 +426,7 @@ func TestPostTags_InvalidJSON_Returns400WithProblemDetails(t *testing.T) {
 	}
 }
 
-func TestPostTags_InvalidType_Returns500WithProblemDetails(t *testing.T) {
+func TestPostTags_InvalidType_Returns400WithProblemDetails(t *testing.T) {
 	router := newRouter()
 
 	body, _ := json.Marshal(apiv0.CreateTagRequest{Name: "sensor", Type: "unknown", Value: "0", Quality: "good"})
@@ -435,19 +435,19 @@ func TestPostTags_InvalidType_Returns500WithProblemDetails(t *testing.T) {
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("status: expected 500, got %d", rec.Code)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status: expected 400, got %d", rec.Code)
 	}
 
 	var prob restapi.ProblemDetails
 	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
 		t.Fatalf("decode problem: %v", err)
 	}
-	if prob.Status != http.StatusInternalServerError {
-		t.Errorf("problem status: expected 500, got %d", prob.Status)
+	if prob.Status != http.StatusBadRequest {
+		t.Errorf("problem status: expected 400, got %d", prob.Status)
 	}
-	if prob.Type != restapi.TypeInternalError {
-		t.Errorf("problem type: expected %q, got %q", restapi.TypeInternalError, prob.Type)
+	if prob.Type != restapi.TypeBadRequest {
+		t.Errorf("problem type: expected %q, got %q", restapi.TypeBadRequest, prob.Type)
 	}
 }
 
@@ -678,5 +678,67 @@ func TestPatchTagValue_InvalidJSON_Returns400WithProblemDetails(t *testing.T) {
 	}
 	if prob.Type != restapi.TypeBadRequest {
 		t.Errorf("problem type: expected %q, got %q", restapi.TypeBadRequest, prob.Type)
+	}
+}
+
+// --- invalid input → 400 ---
+
+// assertBadRequest fails unless rec is a 400 Problem Details response.
+func assertBadRequest(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status: expected 400, got %d\nbody: %s", rec.Code, rec.Body.String())
+	}
+	var prob restapi.ProblemDetails
+	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
+		t.Fatalf("decode problem: %v", err)
+	}
+	if prob.Type != restapi.TypeBadRequest {
+		t.Errorf("problem type: expected %q, got %q", restapi.TypeBadRequest, prob.Type)
+	}
+	if prob.Detail == "" {
+		t.Error("problem detail: expected the cause, got empty")
+	}
+}
+
+func TestPostTags_InvalidInput_Returns400(t *testing.T) {
+	cases := map[string]apiv0.CreateTagRequest{
+		"quality":        {Name: "sensor", Type: "integer", Value: "0", Quality: "simulated"},
+		"value for type": {Name: "sensor", Type: "integer", Value: "abc", Quality: "good"},
+		"boolean value":  {Name: "sensor", Type: "boolean", Value: "maybe", Quality: "good"},
+		"type and value": {Name: "sensor", Type: "", Value: "", Quality: "good"},
+	}
+	for name, request := range cases {
+		t.Run(name, func(t *testing.T) {
+			cleanTags(t)
+			body, _ := json.Marshal(request)
+			req := httptest.NewRequest(http.MethodPost, "/api/v0/tags", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			newRouter().ServeMux().ServeHTTP(rec, req)
+
+			assertBadRequest(t, rec)
+		})
+	}
+}
+
+func TestPatchTagValue_InvalidInput_Returns400(t *testing.T) {
+	cases := map[string]apiv0.UpdateTagRequest{
+		"quality":        {Value: "1", Quality: "simulated"},
+		"value for type": {Value: "abc", Quality: "good"},
+	}
+	for name, request := range cases {
+		t.Run(name, func(t *testing.T) {
+			cleanTags(t)
+			created := createTagViaService(t, "level", "integer", "0", "good")
+			request.Version = created.Version
+			body, _ := json.Marshal(request)
+			req := httptest.NewRequest(http.MethodPatch, "/api/v0/tags/"+created.ID.String()+"/value", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			newRouter().ServeMux().ServeHTTP(rec, req)
+
+			assertBadRequest(t, rec)
+		})
 	}
 }

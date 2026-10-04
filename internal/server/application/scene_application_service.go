@@ -44,12 +44,16 @@ func NewSceneService(repo scene.SceneRepository, widgetTypeRepo widget.WidgetTyp
 	return &sceneServiceImpl{repository: repo, widgetTypeRepository: widgetTypeRepo, eventBus: bus}
 }
 
-// validatePortBindingsAgainstType checks that every PortBinding port name is
-// declared on the given WidgetType. Called only when bindings is non-empty.
-func (s sceneServiceImpl) validatePortBindingsAgainstType(ctx context.Context, typeID id.ID[widget.WidgetType], bindings []widget.PortBinding) error {
+// validateWidgetType checks that the widget's WidgetType exists and declares
+// every port the bindings name. Both come from the caller, so a failure is
+// invalid input.
+func (s sceneServiceImpl) validateWidgetType(ctx context.Context, typeID id.ID[widget.WidgetType], bindings []widget.PortBinding) error {
 	wt, err := s.widgetTypeRepository.FindByID(ctx, typeID)
+	if errors.Is(err, widget.ErrWidgetTypeNotFound) {
+		return invalidInput(err)
+	}
 	if err != nil {
-		return fmt.Errorf("cannot find widget type for port binding validation: %w", err)
+		return fmt.Errorf("cannot find widget type: %w", err)
 	}
 	allowed := make(map[string]struct{}, len(wt.InputPorts()))
 	for _, p := range wt.InputPorts() {
@@ -57,11 +61,20 @@ func (s sceneServiceImpl) validatePortBindingsAgainstType(ctx context.Context, t
 	}
 	for _, b := range bindings {
 		if _, ok := allowed[b.PortName().String()]; !ok {
-			return fmt.Errorf("port %q is not declared on widget type %q: %w",
-				b.PortName().String(), wt.Name().String(), widget.ErrWidgetInvalidInput)
+			return invalidInput(fmt.Errorf("port %q is not declared on widget type %q",
+				b.PortName().String(), wt.Name().String()))
 		}
 	}
 	return nil
+}
+
+// widgetSaveError marks a failed widget save as invalid input when the
+// widget's type was deleted after validateWidgetType found it.
+func widgetSaveError(err error) error {
+	if errors.Is(err, widget.ErrWidgetTypeNotFound) {
+		return fmt.Errorf("cannot save widget: %w", invalidInput(err))
+	}
+	return fmt.Errorf("cannot save widget: %w", err)
 }
 
 func (s sceneServiceImpl) FindAllScenes(ctx context.Context) ([]appdto.Scene, error) {
@@ -86,12 +99,12 @@ func (s sceneServiceImpl) CreateScene(ctx context.Context, input appdto.CreateSc
 
 	newName, err := scene.NewSceneName(input.Name)
 	if err != nil {
-		return appdto.Scene{}, fmt.Errorf("cannot create scene because of name: %w", errors.Join(scene.ErrSceneValidation, err))
+		return appdto.Scene{}, fmt.Errorf("cannot create scene because of name: %w", invalidInput(err))
 	}
 
 	newSize, err := scene.NewSceneSize(input.Width, input.Height)
 	if err != nil {
-		return appdto.Scene{}, fmt.Errorf("cannot create scene because of size: %w", errors.Join(scene.ErrSceneValidation, err))
+		return appdto.Scene{}, fmt.Errorf("cannot create scene because of size: %w", invalidInput(err))
 	}
 
 	newScene := scene.NewScene(newID, newName, newSize, scene.NewBackgroundHTML(input.BackgroundHTML), nil, version.Initial[scene.Scene]())
@@ -120,12 +133,12 @@ func (s sceneServiceImpl) UpdateScene(ctx context.Context, input appdto.UpdateSc
 
 	newName, err := scene.NewSceneName(input.Name)
 	if err != nil {
-		return appdto.Scene{}, fmt.Errorf("cannot parse scene name: %w", errors.Join(scene.ErrSceneValidation, err))
+		return appdto.Scene{}, fmt.Errorf("cannot parse scene name: %w", invalidInput(err))
 	}
 
 	newSize, err := scene.NewSceneSize(input.Width, input.Height)
 	if err != nil {
-		return appdto.Scene{}, fmt.Errorf("cannot parse scene size: %w", errors.Join(scene.ErrSceneValidation, err))
+		return appdto.Scene{}, fmt.Errorf("cannot parse scene size: %w", invalidInput(err))
 	}
 
 	updated := scene.NewScene(found.ID(), newName, newSize, scene.NewBackgroundHTML(input.BackgroundHTML), found.Widgets(), found.Version())
@@ -193,7 +206,7 @@ func (s sceneServiceImpl) FindWidgetByID(ctx context.Context, rawSceneID, rawWid
 
 func (s sceneServiceImpl) CreateWidget(ctx context.Context, rawSceneID uuid.UUID, input appdto.CreateWidgetInput) (appdto.Widget, error) {
 	if input.TypeID == uuid.Nil {
-		return appdto.Widget{}, fmt.Errorf("type_id is required: %w", widget.ErrWidgetInvalidInput)
+		return appdto.Widget{}, fmt.Errorf("type_id is required: %w", ErrInvalidInput)
 	}
 
 	sceneID := id.NewID(id.IDWithUUID[scene.Scene](rawSceneID))
@@ -201,19 +214,19 @@ func (s sceneServiceImpl) CreateWidget(ctx context.Context, rawSceneID uuid.UUID
 
 	newName, err := widget.NewWidgetName(input.Name)
 	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot create widget because of name: %w", err)
+		return appdto.Widget{}, fmt.Errorf("cannot create widget because of name: %w", invalidInput(err))
 	}
 
 	pos := widget.NewPosition(input.X, input.Y, input.Z)
 
 	size, err := widget.NewSize(input.Width, input.Height)
 	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot create widget because of size: %w", err)
+		return appdto.Widget{}, fmt.Errorf("cannot create widget because of size: %w", invalidInput(err))
 	}
 
 	origin, err := widget.NewOrigin(input.OriginX, input.OriginY)
 	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot create widget because of origin: %w", err)
+		return appdto.Widget{}, fmt.Errorf("cannot create widget because of origin: %w", invalidInput(err))
 	}
 
 	rotation := widget.NewRotation(input.RotationDegrees)
@@ -222,13 +235,11 @@ func (s sceneServiceImpl) CreateWidget(ctx context.Context, rawSceneID uuid.UUID
 
 	portBindings, err := dtoPortBindingsToDomain(input.PortBindings)
 	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot create widget because of port bindings: %w", err)
+		return appdto.Widget{}, fmt.Errorf("cannot create widget because of port bindings: %w", invalidInput(err))
 	}
 
-	if len(portBindings) > 0 {
-		if err := s.validatePortBindingsAgainstType(ctx, typeID, portBindings); err != nil {
-			return appdto.Widget{}, fmt.Errorf("cannot create widget because of port bindings: %w", err)
-		}
+	if err := s.validateWidgetType(ctx, typeID, portBindings); err != nil {
+		return appdto.Widget{}, fmt.Errorf("cannot create widget because of type: %w", err)
 	}
 
 	newWidget := widget.NewWidget(
@@ -238,12 +249,12 @@ func (s sceneServiceImpl) CreateWidget(ctx context.Context, rawSceneID uuid.UUID
 
 	expectedVersion, err := version.New(version.WithNumber[scene.Scene](input.SceneVersion))
 	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("invalid scene version: %w", err)
+		return appdto.Widget{}, fmt.Errorf("invalid scene version: %w", invalidInput(err))
 	}
 
 	saved, newSceneVersion, err := s.repository.AddWidget(ctx, sceneID, expectedVersion, newWidget)
 	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot save widget: %w", err)
+		return appdto.Widget{}, widgetSaveError(err)
 	}
 
 	s.eventBus.Publish(event.NewWidgetCreatedEvent(newID))
@@ -253,7 +264,7 @@ func (s sceneServiceImpl) CreateWidget(ctx context.Context, rawSceneID uuid.UUID
 
 func (s sceneServiceImpl) UpdateWidget(ctx context.Context, rawSceneID, rawWidgetID uuid.UUID, input appdto.UpdateWidgetInput) (appdto.Widget, error) {
 	if input.TypeID == uuid.Nil {
-		return appdto.Widget{}, fmt.Errorf("type_id is required: %w", widget.ErrWidgetInvalidInput)
+		return appdto.Widget{}, fmt.Errorf("type_id is required: %w", ErrInvalidInput)
 	}
 
 	sceneID := id.NewID(id.IDWithUUID[scene.Scene](rawSceneID))
@@ -261,19 +272,19 @@ func (s sceneServiceImpl) UpdateWidget(ctx context.Context, rawSceneID, rawWidge
 
 	newName, err := widget.NewWidgetName(input.Name)
 	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot parse widget name: %w", err)
+		return appdto.Widget{}, fmt.Errorf("cannot parse widget name: %w", invalidInput(err))
 	}
 
 	pos := widget.NewPosition(input.X, input.Y, input.Z)
 
 	size, err := widget.NewSize(input.Width, input.Height)
 	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot parse widget size: %w", err)
+		return appdto.Widget{}, fmt.Errorf("cannot parse widget size: %w", invalidInput(err))
 	}
 
 	origin, err := widget.NewOrigin(input.OriginX, input.OriginY)
 	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot parse widget origin: %w", err)
+		return appdto.Widget{}, fmt.Errorf("cannot parse widget origin: %w", invalidInput(err))
 	}
 
 	rotation := widget.NewRotation(input.RotationDegrees)
@@ -282,13 +293,11 @@ func (s sceneServiceImpl) UpdateWidget(ctx context.Context, rawSceneID, rawWidge
 
 	portBindings, err := dtoPortBindingsToDomain(input.PortBindings)
 	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot parse widget port bindings: %w", err)
+		return appdto.Widget{}, fmt.Errorf("cannot parse widget port bindings: %w", invalidInput(err))
 	}
 
-	if len(portBindings) > 0 {
-		if err := s.validatePortBindingsAgainstType(ctx, typeID, portBindings); err != nil {
-			return appdto.Widget{}, fmt.Errorf("cannot update widget because of port bindings: %w", err)
-		}
+	if err := s.validateWidgetType(ctx, typeID, portBindings); err != nil {
+		return appdto.Widget{}, fmt.Errorf("cannot update widget because of type: %w", err)
 	}
 
 	updated := widget.NewWidget(
@@ -298,12 +307,12 @@ func (s sceneServiceImpl) UpdateWidget(ctx context.Context, rawSceneID, rawWidge
 
 	expectedVersion, err := version.New(version.WithNumber[scene.Scene](input.SceneVersion))
 	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("invalid scene version: %w", err)
+		return appdto.Widget{}, fmt.Errorf("invalid scene version: %w", invalidInput(err))
 	}
 
 	saved, newSceneVersion, err := s.repository.UpdateWidget(ctx, sceneID, expectedVersion, updated)
 	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot save widget: %w", err)
+		return appdto.Widget{}, widgetSaveError(err)
 	}
 
 	s.eventBus.Publish(event.NewWidgetUpdatedEvent(widgetID))

@@ -66,7 +66,7 @@ func (t tagServiceImpl) FindTagByID(ctx context.Context, rawID uuid.UUID) (appdt
 func (t tagServiceImpl) FindTagByName(ctx context.Context, rawName string) (appdto.Tag, error) {
 	tagName, err := tag.NewTagName(rawName)
 	if err != nil {
-		return appdto.Tag{}, fmt.Errorf("cannot find tag because of name: %w", err)
+		return appdto.Tag{}, fmt.Errorf("cannot find tag because of name: %w", invalidInput(err))
 	}
 
 	foundTag, err := t.tagRepository.FindByName(ctx, tagName)
@@ -79,22 +79,22 @@ func (t tagServiceImpl) FindTagByName(ctx context.Context, rawName string) (appd
 
 // FindTagsByNamePattern returns the tags whose whole name matches a wildcard
 // pattern ("*" any sequence, "?" one character). An invalid pattern returns
-// an error wrapping tag.ErrInvalidTagNameMatcher.
+// an error wrapping tag.ErrInvalidTagNameMatcher and ErrInvalidInput.
 func (t tagServiceImpl) FindTagsByNamePattern(ctx context.Context, pattern string) ([]appdto.Tag, error) {
 	matcher, err := tag.NewTagNamePattern(pattern)
 	if err != nil {
-		return nil, fmt.Errorf("cannot find tags because of name pattern: %w", err)
+		return nil, fmt.Errorf("cannot find tags because of name pattern: %w", invalidInput(err))
 	}
 	return t.findTagsMatching(ctx, matcher)
 }
 
 // FindTagsByNameRegex returns the tags whose name matches a Go (RE2) regular
 // expression anywhere. An invalid expression returns an error wrapping
-// tag.ErrInvalidTagNameMatcher.
+// tag.ErrInvalidTagNameMatcher and ErrInvalidInput.
 func (t tagServiceImpl) FindTagsByNameRegex(ctx context.Context, expr string) ([]appdto.Tag, error) {
 	matcher, err := tag.NewTagNameRegex(expr)
 	if err != nil {
-		return nil, fmt.Errorf("cannot find tags because of name regex: %w", err)
+		return nil, fmt.Errorf("cannot find tags because of name regex: %w", invalidInput(err))
 	}
 	return t.findTagsMatching(ctx, matcher)
 }
@@ -119,22 +119,22 @@ func (t tagServiceImpl) CreateTag(ctx context.Context, newTagData appdto.CreateT
 
 	newTagName, err := tag.NewTagName(newTagData.Name)
 	if err != nil {
-		return appdto.Tag{}, fmt.Errorf("cannot create tag because of name: %w", err)
+		return appdto.Tag{}, fmt.Errorf("cannot create tag because of name: %w", invalidInput(err))
 	}
 
 	newTagType, err := tag.NewTagType(newTagData.Type)
 	if err != nil {
-		return appdto.Tag{}, fmt.Errorf("cannot create tag because of type: %w", err)
+		return appdto.Tag{}, fmt.Errorf("cannot create tag because of type: %w", invalidInput(err))
 	}
 
 	newTagValue, err := newTagType.NewTagValue(newTagData.Value)
 	if err != nil {
-		return appdto.Tag{}, fmt.Errorf("cannot create tag because of value: %w", err)
+		return appdto.Tag{}, fmt.Errorf("cannot create tag because of value: %w", invalidInput(err))
 	}
 
 	newTagQuality, err := tag.NewTagQuality(newTagData.Quality)
 	if err != nil {
-		return appdto.Tag{}, fmt.Errorf("cannot create tag because of quality: %w", err)
+		return appdto.Tag{}, fmt.Errorf("cannot create tag because of quality: %w", invalidInput(err))
 	}
 
 	newTag, err := tag.NewTag(newTagID, newTagName, newTagType, newTagValue, newTagQuality, version.Initial[tag.Tag]())
@@ -181,11 +181,11 @@ func (t tagServiceImpl) SetTagValueByID(ctx context.Context, request appdto.Upda
 
 	newQuality, err := tag.NewTagQuality(request.Quality)
 	if err != nil {
-		return appdto.Tag{}, fmt.Errorf("cannot parse quality: %w", err)
+		return appdto.Tag{}, fmt.Errorf("cannot parse quality: %w", invalidInput(err))
 	}
 
 	if err = foundTag.SetValue(request.Value, newQuality); err != nil {
-		return appdto.Tag{}, fmt.Errorf("cannot set tag value: %w", err)
+		return appdto.Tag{}, fmt.Errorf("cannot set tag value: %w", invalidInput(err))
 	}
 
 	foundTag, err = t.tagRepository.Save(ctx, foundTag)

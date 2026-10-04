@@ -133,13 +133,13 @@ func (p *Project) saveSceneProperties(ctx app.Context) {
 	}
 	id := p.selectedSceneID
 	name := p.editingScenePropsName
-	w, _ := strconv.Atoi(p.editingScenePropsWidth)
-	h, _ := strconv.Atoi(p.editingScenePropsHeight)
-	if w <= 0 {
-		w = 1920
-	}
-	if h <= 0 {
-		h = 1080
+	var nf numberFields
+	w := nf.int("width", p.editingScenePropsWidth)
+	h := nf.int("height", p.editingScenePropsHeight)
+	if nf.err != nil {
+		ctx.NewActionWithValue(toast.ActionAdd, toast.ClientError(nf.err))
+		p.syncSceneEditingFields()
+		return
 	}
 	bg := p.editingScenePropsBG
 

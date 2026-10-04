@@ -8,6 +8,11 @@ http:
   url: http://{{API_SERVER}}/api/v0/widget-types/{{WIDGET_TYPE_ID}}
   auth: inherit
 
+docs: |
+  A Widget's WidgetType always exists: while Widgets on any Scene use this
+  type the request returns `409 Conflict` Problem Details and nothing is
+  deleted. Delete or retype those Widgets first.
+
 settings:
   encodeUrl: true
   timeout: 0

@@ -12,6 +12,9 @@ var (
 	// ErrWidgetTypeConflict is returned by Save when the stored version does not match,
 	// indicating a concurrent modification.
 	ErrWidgetTypeConflict = errors.New("widget type version conflict")
+	// ErrWidgetTypeInUse is returned by DeleteByID when Widgets still use the
+	// widget type: a Widget's WidgetType always exists.
+	ErrWidgetTypeInUse = errors.New("widget type is used by widgets")
 )
 
 // WidgetTypeRepository - repository interface for storing and managing widget types.
@@ -29,7 +32,8 @@ type WidgetTypeRepository interface {
 	FindByID(context.Context, id.ID[WidgetType]) (WidgetType, error)
 
 	// DeleteByID removes a widget type by its identifier and returns it.
-	// Returns ErrWidgetTypeNotFound if the widget type does not exist.
+	// Returns ErrWidgetTypeNotFound if the widget type does not exist,
+	// ErrWidgetTypeInUse if Widgets still use it.
 	DeleteByID(context.Context, id.ID[WidgetType]) (WidgetType, error)
 
 	// FindAll returns all widget types in creation order, so the order is

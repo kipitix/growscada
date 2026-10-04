@@ -157,8 +157,8 @@ func TestCreateTag_InvalidType_ReturnsError(t *testing.T) {
 	req := appdto.CreateTagInput{Name: "temperature", Type: "unknown", Value: "42", Quality: "good"}
 	_, err := svc.CreateTag(ctx, req)
 
-	if err == nil {
-		t.Error("expected error for invalid type, got nil")
+	if !errors.Is(err, application.ErrInvalidInput) {
+		t.Errorf("expected ErrInvalidInput for invalid type, got: %v", err)
 	}
 }
 
@@ -170,8 +170,8 @@ func TestCreateTag_InvalidQuality_ReturnsError(t *testing.T) {
 	req := appdto.CreateTagInput{Name: "temperature", Type: "integer", Value: "42", Quality: "unknown"}
 	_, err := svc.CreateTag(ctx, req)
 
-	if err == nil {
-		t.Error("expected error for invalid quality, got nil")
+	if !errors.Is(err, application.ErrInvalidInput) {
+		t.Errorf("expected ErrInvalidInput for invalid quality, got: %v", err)
 	}
 }
 
@@ -183,8 +183,8 @@ func TestCreateTag_SimulatedQuality_ReturnsError(t *testing.T) {
 	req := appdto.CreateTagInput{Name: "temperature", Type: "integer", Value: "42", Quality: "simulated"}
 	_, err := svc.CreateTag(ctx, req)
 
-	if err == nil {
-		t.Error("expected error for removed simulated quality, got nil")
+	if !errors.Is(err, application.ErrInvalidInput) {
+		t.Errorf("expected ErrInvalidInput for removed simulated quality, got: %v", err)
 	}
 }
 
@@ -196,8 +196,8 @@ func TestCreateTag_InvalidValueForType_ReturnsError(t *testing.T) {
 	req := appdto.CreateTagInput{Name: "temperature", Type: "integer", Value: "not-a-number", Quality: "good"}
 	_, err := svc.CreateTag(ctx, req)
 
-	if err == nil {
-		t.Error("expected error for value incompatible with type, got nil")
+	if !errors.Is(err, application.ErrInvalidInput) {
+		t.Errorf("expected ErrInvalidInput for value incompatible with type, got: %v", err)
 	}
 }
 
@@ -424,8 +424,8 @@ func TestSetTagValueByID_InvalidQuality_ReturnsError(t *testing.T) {
 
 	_, err = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "20", Quality: "unknown", Version: created.Version})
 
-	if err == nil {
-		t.Error("expected error for invalid quality, got nil")
+	if !errors.Is(err, application.ErrInvalidInput) {
+		t.Errorf("expected ErrInvalidInput for invalid quality, got: %v", err)
 	}
 }
 
@@ -594,8 +594,8 @@ func TestSetTagValueByID_InvalidValueForType_ReturnsError(t *testing.T) {
 
 	_, err = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: "not-a-number", Quality: "good", Version: created.Version})
 
-	if err == nil {
-		t.Error("expected error for value incompatible with type, got nil")
+	if !errors.Is(err, application.ErrInvalidInput) {
+		t.Errorf("expected ErrInvalidInput for value incompatible with type, got: %v", err)
 	}
 }
 
@@ -737,5 +737,8 @@ func TestFindTagsByNameRegex_Invalid_ReturnsErrInvalidTagNameMatcher(t *testing.
 
 	if !errors.Is(err, tag.ErrInvalidTagNameMatcher) {
 		t.Errorf("expected ErrInvalidTagNameMatcher, got %v", err)
+	}
+	if !errors.Is(err, application.ErrInvalidInput) {
+		t.Errorf("expected ErrInvalidInput, got %v", err)
 	}
 }

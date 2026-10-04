@@ -17,7 +17,7 @@ import (
 
 func cleanWidgetTypes(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM widget_types"); err != nil {
+	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM widgets; DELETE FROM widget_types"); err != nil {
 		t.Fatalf("cleanWidgetTypes: %v", err)
 	}
 }
@@ -316,5 +316,27 @@ func TestWidgetTypeFindAll_CreationOrderEvenAfterUpdates(t *testing.T) {
 		if all[i].ID() != created[i].ID() {
 			t.Errorf("position %d: got %q, want %q (creation order)", i, all[i].Name().String(), created[i].Name().String())
 		}
+	}
+}
+
+func TestWidgetTypeDeleteByID_UsedByWidget_ReturnsErrWidgetTypeInUse(t *testing.T) {
+	cleanScenes(t)
+	cleanWidgetTypes(t)
+	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
+	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	sc := mustSaveScene(t, sceneRepo, "scene-1")
+	w := makeWidget(t, sceneRepo, "w1")
+	if _, _, err := sceneRepo.AddWidget(ctx, sc.ID(), sc.Version(), w); err != nil {
+		t.Fatalf("AddWidget: %v", err)
+	}
+
+	_, err := repo.DeleteByID(ctx, w.TypeID())
+	if !errors.Is(err, widget.ErrWidgetTypeInUse) {
+		t.Errorf("expected ErrWidgetTypeInUse, got %v", err)
+	}
+	if _, err := repo.FindByID(ctx, w.TypeID()); err != nil {
+		t.Errorf("widget type after refused delete: %v", err)
 	}
 }

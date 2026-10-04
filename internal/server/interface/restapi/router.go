@@ -2,6 +2,7 @@ package restapi
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -101,6 +102,17 @@ func preVersioningGone(w http.ResponseWriter, r *http.Request) {
 	detail := fmt.Sprintf("%s is the server API from before contract versioning: use %s",
 		preVersioningPathPrefix, apiv0.PathPrefix)
 	sendJSONResponse(w, http.StatusGone, NewGone(detail, r.URL.Path))
+}
+
+// sendServiceError responds to an error from the application layer that the
+// handler did not map itself (to 404, 409): invalid input is a 400 naming the
+// cause, anything else a 500.
+func sendServiceError(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, application.ErrInvalidInput) {
+		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
+		return
+	}
+	sendInternalError(w, r, err)
 }
 
 // sendInternalError logs the full error and sends a generic 500 to the client.

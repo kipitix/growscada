@@ -47,6 +47,17 @@ func mustSaveScene(t *testing.T, repo scene.SceneRepository, name string) scene.
 	return saved
 }
 
+// mustSaveWidgetType stores a new WidgetType: a Widget's type must exist.
+func mustSaveWidgetType(t *testing.T) id.ID[widget.WidgetType] {
+	t.Helper()
+	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
+	saved, err := repo.Save(context.Background(), makeWidgetType(t, "type", nil, repo))
+	if err != nil {
+		t.Fatalf("Save widget type: %v", err)
+	}
+	return saved.ID()
+}
+
 func makeWidget(t *testing.T, repo scene.SceneRepository, name string) widget.Widget {
 	t.Helper()
 	newID := repo.NextWidgetID()
@@ -55,7 +66,7 @@ func makeWidget(t *testing.T, repo scene.SceneRepository, name string) widget.Wi
 		t.Fatalf("NewWidgetName(%q): %v", name, err)
 	}
 	pos := widget.NewPosition(10.0, 20.0, 0)
-	typeID := id.NewID(id.IDWithUUID[widget.WidgetType](uuid.New()))
+	typeID := mustSaveWidgetType(t)
 	return widget.NewWidget(
 		newID, newName, pos, widget.DefaultSize(),
 		widget.DefaultOrigin(), widget.DefaultRotation(),
@@ -466,8 +477,8 @@ func TestSceneFindWidgetsByTypeID_ReturnsMatchingAcrossScenes(t *testing.T) {
 	repo := repositories.NewSceneRepositoryPostgres(testDB)
 	ctx := context.Background()
 
-	typeID := id.NewID[widget.WidgetType]()
-	otherTypeID := id.NewID[widget.WidgetType]()
+	typeID := mustSaveWidgetType(t)
+	otherTypeID := mustSaveWidgetType(t)
 
 	sc1 := mustSaveScene(t, repo, "scene-1")
 	sc2 := mustSaveScene(t, repo, "scene-2")
@@ -540,7 +551,7 @@ func TestSceneAddWidget_WithPortBindings_RoundTripsCorrectly(t *testing.T) {
 	w := widget.NewWidget(
 		repo.NextWidgetID(), mustWidgetName(t, "with-bindings"), widget.NewPosition(1, 2, 3),
 		widget.DefaultSize(), widget.DefaultOrigin(), widget.DefaultRotation(),
-		id.NewID[widget.WidgetType](), []string{"a", "b"}, bindings,
+		mustSaveWidgetType(t), []string{"a", "b"}, bindings,
 	)
 
 	if _, _, err := repo.AddWidget(ctx, sc.ID(), sc.Version(), w); err != nil {
@@ -646,5 +657,39 @@ func TestSceneFindWidgetsBySceneID_CreationOrderEvenAfterUpdates(t *testing.T) {
 		if found[i].ID() != widgets[i].ID() {
 			t.Errorf("position %d: got %q, want %q (creation order)", i, found[i].Name().String(), widgets[i].Name().String())
 		}
+	}
+}
+
+func TestSceneAddWidget_UnknownType_ReturnsErrWidgetTypeNotFound(t *testing.T) {
+	cleanScenes(t)
+	repo := repositories.NewSceneRepositoryPostgres(testDB)
+	ctx := context.Background()
+	sc := mustSaveScene(t, repo, "scene-1")
+	w := makeWidget(t, repo, "w1")
+	w = widget.NewWidget(w.ID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(),
+		id.NewID[widget.WidgetType](), w.Labels(), w.PortBindings())
+
+	_, _, err := repo.AddWidget(ctx, sc.ID(), sc.Version(), w)
+	if !errors.Is(err, widget.ErrWidgetTypeNotFound) {
+		t.Errorf("expected ErrWidgetTypeNotFound, got %v", err)
+	}
+}
+
+func TestSceneUpdateWidget_UnknownType_ReturnsErrWidgetTypeNotFound(t *testing.T) {
+	cleanScenes(t)
+	repo := repositories.NewSceneRepositoryPostgres(testDB)
+	ctx := context.Background()
+	sc := mustSaveScene(t, repo, "scene-1")
+	w := makeWidget(t, repo, "w1")
+	_, ver, err := repo.AddWidget(ctx, sc.ID(), sc.Version(), w)
+	if err != nil {
+		t.Fatalf("AddWidget: %v", err)
+	}
+	w = widget.NewWidget(w.ID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(),
+		id.NewID[widget.WidgetType](), w.Labels(), w.PortBindings())
+
+	_, _, err = repo.UpdateWidget(ctx, sc.ID(), ver, w)
+	if !errors.Is(err, widget.ErrWidgetTypeNotFound) {
+		t.Errorf("expected ErrWidgetTypeNotFound, got %v", err)
 	}
 }

@@ -21,6 +21,24 @@ func cleanScenes(t *testing.T) {
 	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM scenes"); err != nil {
 		t.Fatalf("cleanScenes: %v", err)
 	}
+	ensureTestWidgetType(t)
+}
+
+// testWidgetTypeID is the WidgetType of the shared widget fixtures: a
+// Widget's type must exist, so ensureTestWidgetType stores it.
+var testWidgetTypeID = uuid.MustParse("7e57c0de-0000-4000-8000-000000000001")
+
+func ensureTestWidgetType(t *testing.T) {
+	t.Helper()
+	if _, err := testDB.ExecContext(context.Background(),
+		`INSERT INTO widget_types
+		    (id, name, html_template, script, script_language, input_ports, default_width, default_height, version)
+		 VALUES ($1, 'test-type', '<div></div>', 'function update(){}', 'javascript', '[]', 100, 100, 1)
+		 ON CONFLICT (id) DO NOTHING`,
+		testWidgetTypeID,
+	); err != nil {
+		t.Fatalf("ensureTestWidgetType: %v", err)
+	}
 }
 
 func newSceneService() application.SceneService {
@@ -64,7 +82,7 @@ var testCreateWidgetInput = appdto.CreateWidgetInput{
 	OriginX:         0.5,
 	OriginY:         0.5,
 	RotationDegrees: 0.0,
-	TypeID:          uuid.New(),
+	TypeID:          testWidgetTypeID,
 	Labels:          []string{"sensor", "pressure"},
 	PortBindings:    nil,
 	// SceneVersion is assigned per-test once the owning scene is known.
@@ -94,11 +112,8 @@ func TestCreateScene_InvalidSize_ReturnsError(t *testing.T) {
 	input.Width = -1
 	_, err := svc.CreateScene(context.Background(), input)
 
-	if err == nil {
-		t.Error("expected error for invalid width, got nil")
-	}
-	if !errors.Is(err, scene.ErrSceneValidation) {
-		t.Errorf("expected wrapped ErrSceneValidation, got: %v", err)
+	if !errors.Is(err, application.ErrInvalidInput) {
+		t.Errorf("expected ErrInvalidInput for invalid width, got: %v", err)
 	}
 }
 
@@ -315,8 +330,8 @@ func TestCreateWidget_EmptyName_ReturnsError(t *testing.T) {
 	input.Name = ""
 	_, err := svc.CreateWidget(ctx, sc.ID, input)
 
-	if err == nil {
-		t.Error("expected error for empty name, got nil")
+	if !errors.Is(err, application.ErrInvalidInput) {
+		t.Errorf("expected ErrInvalidInput for empty name, got: %v", err)
 	}
 }
 
@@ -331,8 +346,8 @@ func TestCreateWidget_InvalidOrigin_ReturnsError(t *testing.T) {
 	input.OriginX = 1.5 // out of [0,1]
 	_, err := svc.CreateWidget(ctx, sc.ID, input)
 
-	if err == nil {
-		t.Error("expected error for invalid origin, got nil")
+	if !errors.Is(err, application.ErrInvalidInput) {
+		t.Errorf("expected ErrInvalidInput for invalid origin, got: %v", err)
 	}
 }
 
@@ -488,7 +503,7 @@ func TestUpdateWidget_NotFound_ReturnsWrappedError(t *testing.T) {
 	sc := mustCreateScene(t, svc)
 
 	_, err := svc.UpdateWidget(ctx, sc.ID, uuid.New(), appdto.UpdateWidgetInput{
-		Name: "x", TypeID: uuid.New(), OriginX: 0.5, OriginY: 0.5,
+		Name: "x", TypeID: testWidgetTypeID, OriginX: 0.5, OriginY: 0.5,
 		Width: 100, Height: 100, SceneVersion: sc.Version,
 	})
 
@@ -634,5 +649,42 @@ func TestDeleteSceneByID_EmptyScene_PublishesOnlySceneDeletedEvent(t *testing.T)
 
 	if len(widgetDeleted) != 0 {
 		t.Errorf("expected no WidgetDeletedEvent for an empty scene, got %d", len(widgetDeleted))
+	}
+}
+
+func TestCreateWidget_UnknownType_ReturnsInvalidInput(t *testing.T) {
+	cleanScenes(t)
+	svc := newSceneService()
+	sc := mustCreateScene(t, svc)
+
+	input := testCreateWidgetInput
+	input.TypeID = uuid.New()
+	input.SceneVersion = sc.Version
+	_, err := svc.CreateWidget(context.Background(), sc.ID, input)
+
+	if !errors.Is(err, application.ErrInvalidInput) {
+		t.Errorf("expected ErrInvalidInput, got: %v", err)
+	}
+}
+
+func TestUpdateWidget_UnknownType_ReturnsInvalidInput(t *testing.T) {
+	cleanScenes(t)
+	svc := newSceneService()
+	ctx := context.Background()
+	sc := mustCreateScene(t, svc)
+	input := testCreateWidgetInput
+	input.SceneVersion = sc.Version
+	created, err := svc.CreateWidget(ctx, sc.ID, input)
+	if err != nil {
+		t.Fatalf("CreateWidget: %v", err)
+	}
+
+	_, err = svc.UpdateWidget(ctx, sc.ID, created.ID, appdto.UpdateWidgetInput{
+		Name: "x", TypeID: uuid.New(), OriginX: 0.5, OriginY: 0.5,
+		Width: 100, Height: 100, SceneVersion: created.SceneVersion,
+	})
+
+	if !errors.Is(err, application.ErrInvalidInput) {
+		t.Errorf("expected ErrInvalidInput, got: %v", err)
 	}
 }

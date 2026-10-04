@@ -104,6 +104,9 @@ func (r widgetTypeRepositoryPostgresImpl) DeleteByID(ctx context.Context, anID i
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, widget.ErrWidgetTypeNotFound
 		}
+		if isForeignKeyViolation(err, constraintWidgetsTypeID) {
+			return nil, widget.ErrWidgetTypeInUse
+		}
 		return nil, fmt.Errorf("cannot delete widget type: %w", err)
 	}
 	return wt, nil

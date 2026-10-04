@@ -21,7 +21,7 @@ import (
 
 func cleanWidgetTypes(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM widget_types"); err != nil {
+	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM widgets; DELETE FROM widget_types"); err != nil {
 		t.Fatalf("cleanWidgetTypes: %v", err)
 	}
 }
@@ -202,7 +202,7 @@ func TestPostWidgetTypes_InvalidJSON_Returns400(t *testing.T) {
 	}
 }
 
-func TestPostWidgetTypes_InvalidScriptLanguage_Returns500(t *testing.T) {
+func TestPostWidgetTypes_InvalidScriptLanguage_Returns400(t *testing.T) {
 	router := newRouterWithWidgetTypes()
 
 	body, _ := json.Marshal(apiv0.CreateWidgetTypeRequest{
@@ -216,8 +216,8 @@ func TestPostWidgetTypes_InvalidScriptLanguage_Returns500(t *testing.T) {
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("status: expected 500, got %d", rec.Code)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status: expected 400, got %d", rec.Code)
 	}
 }
 
@@ -364,5 +364,65 @@ func TestDeleteWidgetTypesByID_InvalidUUID_Returns400(t *testing.T) {
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status: expected 400, got %d", rec.Code)
+	}
+}
+
+func TestPostWidgetTypes_InvalidInput_Returns400(t *testing.T) {
+	valid := func() apiv0.CreateWidgetTypeRequest {
+		return apiv0.CreateWidgetTypeRequest{
+			Name: "gauge", HtmlTemplate: "<div/>", Script: "x", ScriptLanguage: "javascript",
+			DefaultWidth: 100, DefaultHeight: 100,
+		}
+	}
+	cases := map[string]func(*apiv0.CreateWidgetTypeRequest){
+		"empty name":        func(r *apiv0.CreateWidgetTypeRequest) { r.Name = "" },
+		"zero default size": func(r *apiv0.CreateWidgetTypeRequest) { r.DefaultWidth = 0 },
+		"unknown type hint": func(r *apiv0.CreateWidgetTypeRequest) {
+			r.InputPorts = []apiv0.InputPort{{Name: "value", TypeHint: "unknown"}}
+		},
+		"port name not JS id": func(r *apiv0.CreateWidgetTypeRequest) {
+			r.InputPorts = []apiv0.InputPort{{Name: "1value", TypeHint: "integer"}}
+		},
+		"duplicate port name": func(r *apiv0.CreateWidgetTypeRequest) {
+			r.InputPorts = []apiv0.InputPort{{Name: "value", TypeHint: "integer"}, {Name: "value", TypeHint: "string"}}
+		},
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			request := valid()
+			mutate(&request)
+			body, _ := json.Marshal(request)
+			req := httptest.NewRequest(http.MethodPost, "/api/v0/widget-types", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			newRouterWithWidgetTypes().ServeMux().ServeHTTP(rec, req)
+
+			assertBadRequest(t, rec)
+		})
+	}
+}
+
+func TestDeleteWidgetTypesByID_UsedByWidget_Returns409(t *testing.T) {
+	cleanWidgetTypes(t)
+	wt := createWidgetTypeViaService(t, testWtInput)
+	sc := createSceneViaSceneService(t)
+	input := testWidgetInput
+	input.TypeID = wt.ID
+	input.SceneVersion = sc.Version
+	createWidgetViaService(t, sc.ID, input)
+	router := newRouterWithWidgetTypes()
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v0/widget-types/"+wt.ID.String(), nil)
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status: expected 409, got %d\nbody: %s", rec.Code, rec.Body.String())
+	}
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v0/widget-types/"+wt.ID.String(), nil)
+	getRec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Errorf("widget type after refused delete: expected 200, got %d", getRec.Code)
 	}
 }

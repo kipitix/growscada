@@ -57,7 +57,7 @@ func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
 
 	tagList, err := h.service.FindAllTags(r.Context())
 	if err != nil {
-		sendInternalError(w, r, err)
+		sendServiceError(w, r, err)
 		return
 	}
 	sendJSONResponse(w, http.StatusOK, newGetTagsResponse(tagList))
@@ -71,7 +71,7 @@ func (h TagsHandlers) getTagsByName(w http.ResponseWriter, r *http.Request, name
 			sendJSONResponse(w, http.StatusOK, newGetTagsResponse(nil))
 			return
 		}
-		sendInternalError(w, r, err)
+		sendServiceError(w, r, err)
 		return
 	}
 	sendJSONResponse(w, http.StatusOK, newGetTagsResponse([]appdto.Tag{foundTag}))
@@ -83,11 +83,7 @@ func (h TagsHandlers) sendMatchedTags(w http.ResponseWriter, r *http.Request,
 	find func(context.Context, string) ([]appdto.Tag, error), filter string) {
 	tagList, err := find(r.Context(), filter)
 	if err != nil {
-		if errors.Is(err, tag.ErrInvalidTagNameMatcher) {
-			sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
-			return
-		}
-		sendInternalError(w, r, err)
+		sendServiceError(w, r, err)
 		return
 	}
 	sendJSONResponse(w, http.StatusOK, newGetTagsResponse(tagList))
@@ -108,7 +104,7 @@ func (h TagsHandlers) GetTagsByID(w http.ResponseWriter, r *http.Request) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
 			return
 		}
-		sendInternalError(w, r, err)
+		sendServiceError(w, r, err)
 		return
 	}
 
@@ -130,7 +126,7 @@ func (h TagsHandlers) DeleteTagsByID(w http.ResponseWriter, r *http.Request) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
 			return
 		}
-		sendInternalError(w, r, err)
+		sendServiceError(w, r, err)
 		return
 	}
 
@@ -161,7 +157,7 @@ func (h TagsHandlers) PatchTagsValue(w http.ResponseWriter, r *http.Request) {
 			sendJSONResponse(w, http.StatusConflict, NewConflict("tag", err.Error(), r.URL.Path))
 			return
 		}
-		sendInternalError(w, r, err)
+		sendServiceError(w, r, err)
 		return
 	}
 
@@ -182,7 +178,7 @@ func (h TagsHandlers) PostTags(w http.ResponseWriter, r *http.Request) {
 			sendJSONResponse(w, http.StatusConflict, NewConflict("tag", err.Error(), r.URL.Path))
 			return
 		}
-		sendInternalError(w, r, err)
+		sendServiceError(w, r, err)
 		return
 	}
 

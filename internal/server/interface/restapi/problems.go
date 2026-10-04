@@ -112,7 +112,6 @@ const (
 	TypeNotFound        = BaseTypeURI + "not-found"
 	TypeConflict        = BaseTypeURI + "conflict"
 	TypeGone            = BaseTypeURI + "gone"
-	TypeValidation      = BaseTypeURI + "validation-error"
 	TypeTooManyRequests = BaseTypeURI + "too-many-requests"
 	TypeInternalError   = BaseTypeURI + "internal-error"
 	TypeUnavailable     = BaseTypeURI + "service-unavailable"
@@ -157,19 +156,6 @@ func NewGone(detail, instance string) *ProblemDetails {
 		Status:   http.StatusGone, // 410
 		Detail:   detail,
 		Instance: instance,
-	}
-}
-
-func NewValidationError(validationErrors map[string][]string, instance string) *ProblemDetails {
-	return &ProblemDetails{
-		Type:     TypeValidation,
-		Title:    "Validation Error",
-		Status:   http.StatusUnprocessableEntity, // 422
-		Detail:   "Request validation failed",
-		Instance: instance,
-		Extensions: map[string]interface{}{
-			"errors": validationErrors,
-		},
 	}
 }
 

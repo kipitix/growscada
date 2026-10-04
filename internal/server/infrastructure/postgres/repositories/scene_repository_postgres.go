@@ -381,6 +381,9 @@ func (r sceneRepositoryPostgresImpl) AddWidget(ctx context.Context, sceneID id.I
 	)
 	saved, _, err := scanWidget(row.Scan)
 	if err != nil {
+		if isForeignKeyViolation(err, constraintWidgetsTypeID) {
+			return nil, version.Version[scene.Scene]{}, widget.ErrWidgetTypeNotFound
+		}
 		return nil, version.Version[scene.Scene]{}, fmt.Errorf("cannot insert new widget: %w", err)
 	}
 
@@ -428,6 +431,9 @@ func (r sceneRepositoryPostgresImpl) UpdateWidget(ctx context.Context, sceneID i
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, version.Version[scene.Scene]{}, widget.ErrWidgetNotFound
+		}
+		if isForeignKeyViolation(err, constraintWidgetsTypeID) {
+			return nil, version.Version[scene.Scene]{}, widget.ErrWidgetTypeNotFound
 		}
 		return nil, version.Version[scene.Scene]{}, fmt.Errorf("cannot update widget: %w", err)
 	}

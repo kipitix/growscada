@@ -16,7 +16,7 @@ import (
 
 func cleanWidgetTypes(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM widget_types"); err != nil {
+	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM widgets; DELETE FROM widget_types"); err != nil {
 		t.Fatalf("cleanWidgetTypes: %v", err)
 	}
 }
@@ -67,8 +67,8 @@ func TestCreateWidgetType_InvalidScriptLanguage_ReturnsError(t *testing.T) {
 	input.ScriptLanguage = "ruby"
 	_, err := svc.CreateWidgetType(context.Background(), input)
 
-	if err == nil {
-		t.Error("expected error for invalid script language, got nil")
+	if !errors.Is(err, application.ErrInvalidInput) {
+		t.Errorf("expected ErrInvalidInput for invalid script language, got: %v", err)
 	}
 }
 
@@ -291,8 +291,8 @@ func TestUpdateWidgetType_InvalidScriptLanguage_ReturnsError(t *testing.T) {
 		Version:        created.Version,
 	})
 
-	if err == nil {
-		t.Error("expected error for invalid script language, got nil")
+	if !errors.Is(err, application.ErrInvalidInput) {
+		t.Errorf("expected ErrInvalidInput for invalid script language, got: %v", err)
 	}
 }
 
@@ -565,5 +565,34 @@ func TestUpdateWidgetType_RemovedPort_CleansBindingsOnAllWidgetsInSameScene(t *t
 	}
 	if len(w2.PortBindings) != 0 {
 		t.Errorf("widget 2: expected orphaned port bindings removed, got %v", w2.PortBindings)
+	}
+}
+
+func TestDeleteWidgetType_UsedByWidget_ReturnsErrWidgetTypeInUse(t *testing.T) {
+	cleanScenes(t)
+	cleanWidgetTypes(t)
+	wtSvc := newWidgetTypeService()
+	sceneSvc := newSceneService()
+	ctx := context.Background()
+
+	created, err := wtSvc.CreateWidgetType(ctx, testCreateWidgetTypeInput)
+	if err != nil {
+		t.Fatalf("CreateWidgetType: %v", err)
+	}
+	sc := mustCreateScene(t, sceneSvc)
+	input := testCreateWidgetInput
+	input.TypeID = created.ID
+	input.SceneVersion = sc.Version
+	if _, err := sceneSvc.CreateWidget(ctx, sc.ID, input); err != nil {
+		t.Fatalf("CreateWidget: %v", err)
+	}
+
+	_, err = wtSvc.DeleteWidgetTypeByID(ctx, created.ID)
+
+	if !errors.Is(err, widget.ErrWidgetTypeInUse) {
+		t.Errorf("expected wrapped ErrWidgetTypeInUse, got: %v", err)
+	}
+	if _, err := wtSvc.FindWidgetTypeByID(ctx, created.ID); err != nil {
+		t.Errorf("widget type after refused delete: %v", err)
 	}
 }

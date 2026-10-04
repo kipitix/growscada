@@ -26,6 +26,24 @@ func cleanWidgetsRest(t *testing.T) {
 	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM scenes"); err != nil {
 		t.Fatalf("cleanWidgetsRest: %v", err)
 	}
+	ensureTestWidgetType(t)
+}
+
+// testWidgetTypeID is the WidgetType of the shared widget fixtures: a
+// Widget's type must exist, so ensureTestWidgetType stores it.
+var testWidgetTypeID = uuid.MustParse("7e57c0de-0000-4000-8000-000000000001")
+
+func ensureTestWidgetType(t *testing.T) {
+	t.Helper()
+	if _, err := testDB.ExecContext(context.Background(),
+		`INSERT INTO widget_types
+		    (id, name, html_template, script, script_language, input_ports, default_width, default_height, version)
+		 VALUES ($1, 'test-type', '<div></div>', 'function update(){}', 'javascript', '[]', 100, 100, 1)
+		 ON CONFLICT (id) DO NOTHING`,
+		testWidgetTypeID,
+	); err != nil {
+		t.Fatalf("ensureTestWidgetType: %v", err)
+	}
 }
 
 func newRouterWithWidgets() *restapi.APIRouter {
@@ -40,6 +58,7 @@ func newRouterWithWidgets() *restapi.APIRouter {
 
 func createSceneViaSceneService(t *testing.T) appdto.Scene {
 	t.Helper()
+	ensureTestWidgetType(t)
 	repo := repositories.NewSceneRepositoryPostgres(testDB)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	svc := application.NewSceneService(repo, wtRepo, event.NewEventBus())
@@ -74,7 +93,7 @@ var testWidgetInput = appdto.CreateWidgetInput{
 	OriginX:         0.5,
 	OriginY:         0.5,
 	RotationDegrees: 0.0,
-	TypeID:          uuid.New(),
+	TypeID:          testWidgetTypeID,
 	Labels:          []string{"sensor"},
 	PortBindings:    nil,
 }
@@ -268,7 +287,7 @@ func TestPostWidgets_Valid_Returns201WithID(t *testing.T) {
 		Size:         apiv0.SizeRequest{Width: 100, Height: 100},
 		Origin:       apiv0.OriginRequest{X: 0.5, Y: 0.5},
 		Rotation:     apiv0.RotationRequest{Degrees: 0},
-		TypeID:       uuid.New(),
+		TypeID:       testWidgetTypeID,
 		SceneVersion: sc.Version,
 		Labels:       []string{"flow"},
 		PortBindings: []apiv0.PortBinding{},
@@ -307,7 +326,7 @@ func TestPostWidgets_InvalidJSON_Returns400(t *testing.T) {
 	}
 }
 
-func TestPostWidgets_EmptyName_Returns500(t *testing.T) {
+func TestPostWidgets_EmptyName_Returns400(t *testing.T) {
 	sc := createSceneViaSceneService(t)
 	router := newRouterWithWidgets()
 
@@ -316,7 +335,7 @@ func TestPostWidgets_EmptyName_Returns500(t *testing.T) {
 		Position:     apiv0.PositionRequest{X: 0, Y: 0, Z: 0},
 		Size:         apiv0.SizeRequest{Width: 100, Height: 100},
 		Origin:       apiv0.OriginRequest{X: 0.5, Y: 0.5},
-		TypeID:       uuid.New(),
+		TypeID:       testWidgetTypeID,
 		SceneVersion: sc.Version,
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v0/scenes/"+sc.ID.String()+"/widgets", bytes.NewReader(body))
@@ -324,8 +343,8 @@ func TestPostWidgets_EmptyName_Returns500(t *testing.T) {
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("status: expected 500, got %d", rec.Code)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status: expected 400, got %d", rec.Code)
 	}
 }
 
@@ -339,7 +358,7 @@ func TestPostWidgets_StaleSceneVersion_Returns409(t *testing.T) {
 		Position:     apiv0.PositionRequest{X: 5, Y: 10, Z: 0},
 		Size:         apiv0.SizeRequest{Width: 100, Height: 100},
 		Origin:       apiv0.OriginRequest{X: 0.5, Y: 0.5},
-		TypeID:       uuid.New(),
+		TypeID:       testWidgetTypeID,
 		SceneVersion: sc.Version + 99,
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v0/scenes/"+sc.ID.String()+"/widgets", bytes.NewReader(body))
@@ -368,7 +387,7 @@ func TestPutWidgetsByID_Valid_Returns200WithIncrementedSceneVersion(t *testing.T
 		Size:         apiv0.SizeRequest{Width: 100, Height: 100},
 		Origin:       apiv0.OriginRequest{X: 0.5, Y: 0.5},
 		Rotation:     apiv0.RotationRequest{Degrees: 0},
-		TypeID:       uuid.New(),
+		TypeID:       testWidgetTypeID,
 		Labels:       []string{"updated"},
 		PortBindings: []apiv0.PortBinding{},
 		SceneVersion: created.SceneVersion,
@@ -397,7 +416,7 @@ func TestPutWidgetsByID_NotFound_Returns404(t *testing.T) {
 
 	body, _ := json.Marshal(apiv0.UpdateWidgetRequest{
 		Name:         "x",
-		TypeID:       uuid.New(),
+		TypeID:       testWidgetTypeID,
 		Origin:       apiv0.OriginRequest{X: 0.5, Y: 0.5},
 		Size:         apiv0.SizeRequest{Width: 100, Height: 100},
 		SceneVersion: sc.Version,
@@ -568,5 +587,49 @@ func TestDeleteScenesByID_WithWidgets_WidgetsAreGoneAfter(t *testing.T) {
 
 	if getRec.Code != http.StatusNotFound {
 		t.Errorf("after scene delete, widget GET: expected 404, got %d", getRec.Code)
+	}
+}
+
+func TestPostWidgets_InvalidInput_Returns400(t *testing.T) {
+	cleanWidgetTypes(t)
+	wt := createWidgetTypeViaService(t, appdto.CreateWidgetTypeInput{
+		Name: "gauge", HtmlTemplate: "<div/>", Script: "x", ScriptLanguage: "javascript",
+		DefaultWidth: 100, DefaultHeight: 100,
+		InputPorts: []appdto.InputPort{{Name: "value", TypeHint: "integer"}},
+	})
+	cases := map[string]func(*apiv0.CreateWidgetRequest){
+		"missing type_id":        func(r *apiv0.CreateWidgetRequest) { r.TypeID = uuid.Nil },
+		"zero size":              func(r *apiv0.CreateWidgetRequest) { r.Size.Width = 0 },
+		"origin out of 0…1":      func(r *apiv0.CreateWidgetRequest) { r.Origin.X = 2 },
+		"negative scene version": func(r *apiv0.CreateWidgetRequest) { r.SceneVersion = -1 },
+		"undeclared port": func(r *apiv0.CreateWidgetRequest) {
+			r.PortBindings = []apiv0.PortBinding{{PortName: "missing", TagID: uuid.New()}}
+		},
+		"unknown widget type": func(r *apiv0.CreateWidgetRequest) { r.TypeID = uuid.New() },
+		"unknown widget type with bindings": func(r *apiv0.CreateWidgetRequest) {
+			r.TypeID = uuid.New()
+			r.PortBindings = []apiv0.PortBinding{{PortName: "value", TagID: uuid.New()}}
+		},
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			cleanWidgetsRest(t)
+			sc := createSceneViaSceneService(t)
+			request := apiv0.CreateWidgetRequest{
+				Name:         "gauge-1",
+				Size:         apiv0.SizeRequest{Width: 100, Height: 100},
+				Origin:       apiv0.OriginRequest{X: 0.5, Y: 0.5},
+				TypeID:       wt.ID,
+				SceneVersion: sc.Version,
+			}
+			mutate(&request)
+			body, _ := json.Marshal(request)
+			req := httptest.NewRequest(http.MethodPost, "/api/v0/scenes/"+sc.ID.String()+"/widgets", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			newRouterWithWidgets().ServeMux().ServeHTTP(rec, req)
+
+			assertBadRequest(t, rec)
+		})
 	}
 }

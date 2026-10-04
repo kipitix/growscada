@@ -208,7 +208,7 @@ func TestPostScenes_InvalidJSON_Returns400(t *testing.T) {
 	}
 }
 
-func TestPostScenes_EmptyName_Returns422(t *testing.T) {
+func TestPostScenes_EmptyName_Returns400(t *testing.T) {
 	router := newRouterWithScenes()
 
 	body, _ := json.Marshal(apiv0.CreateSceneRequest{
@@ -221,12 +221,12 @@ func TestPostScenes_EmptyName_Returns422(t *testing.T) {
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Errorf("status: expected 422, got %d", rec.Code)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status: expected 400, got %d", rec.Code)
 	}
 }
 
-func TestPostScenes_ZeroWidth_Returns422(t *testing.T) {
+func TestPostScenes_ZeroWidth_Returns400(t *testing.T) {
 	router := newRouterWithScenes()
 
 	body, _ := json.Marshal(apiv0.CreateSceneRequest{
@@ -239,8 +239,8 @@ func TestPostScenes_ZeroWidth_Returns422(t *testing.T) {
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Errorf("status: expected 422, got %d", rec.Code)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status: expected 400, got %d", rec.Code)
 	}
 }
 
@@ -408,5 +408,26 @@ func TestDeleteScenesByID_Existing_RemovedFromDB(t *testing.T) {
 
 	if getRec.Code != http.StatusNotFound {
 		t.Errorf("after delete GET: expected 404, got %d", getRec.Code)
+	}
+}
+
+func TestPutScenesByID_InvalidInput_Returns400(t *testing.T) {
+	cases := map[string]apiv0.UpdateSceneRequest{
+		"empty name":     {Name: "", Width: 800, Height: 600},
+		"negative width": {Name: "main", Width: -1, Height: 600},
+	}
+	for name, request := range cases {
+		t.Run(name, func(t *testing.T) {
+			cleanScenesRest(t)
+			created := createSceneViaService(t, appdto.CreateSceneInput{Name: "main", Width: 800, Height: 600})
+			request.Version = created.Version
+			body, _ := json.Marshal(request)
+			req := httptest.NewRequest(http.MethodPut, "/api/v0/scenes/"+created.ID.String(), bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			newRouterWithScenes().ServeMux().ServeHTTP(rec, req)
+
+			assertBadRequest(t, rec)
+		})
 	}
 }

@@ -1,5 +1,24 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.31] - 2026.10.04
+
+### Changed
+
+- **Невалидный ввод в REST API → `400 Bad Request`** (задача 18): ошибки разбора и валидации значений из запроса (имя, `TagType`, `Quality`, значение тега, в т. ч. несовместимое с типом, `ScriptLanguage`, `PortTypeHint`, имя порта, размеры, origin, версия сцены, matcher имени) раньше уходили в `500`, теперь — `400` с причиной в `detail`
+  - сцены: `422 Validation Error` заменён на `400`
+  - ссылка из тела на несуществующий WidgetType и порт, не объявленный на WidgetType, — `400`; тип виджета теперь проверяется всегда, а не только при port bindings
+  - `404` остаётся только для ресурса из URL, `409` — для конфликта версии или имени
+  - devicelink и device simulator больше не ретраят такой ввод: `IsTransient` считает временными только `5xx`
+- **WidgetType виджета всегда существует**: `DELETE /api/v0/widget-types/{id}` для типа, который используют Widgets, отвечает `409 Conflict` и ничего не удаляет (раньше тип удалялся, а у его Widgets очищались port bindings). Гарантирует внешний ключ `fk_widgets_type_id` (`ON DELETE RESTRICT`); репозитории отдают `widget.ErrWidgetTypeInUse` и `widget.ErrWidgetTypeNotFound` (распознаются оба SQLSTATE блокировки удаления: `23503` до PostgreSQL 18 и `23001` restrict_violation с 18 — тесты идут на 16, dev-БД на 18)
+  - миграция `20261004000000_widgets_type_id_foreign_key` **удаляет Widgets с несуществующим типом**, оставшиеся от прежних удалений
+  - `CONTEXT.md`: правило в термине WidgetType; Bruno: `delete_widget_type_by_id` описывает `409`, новый пример `post_tags_invalid_quality` (`400`)
+- **UI больше не подменяет ввод**: свойства сцены (ширина/высота ≤ 0 → 1920/1080) и геометрия виджета (размер ≤ 0 → 10, origin обрезался до 0–1, нечисловое поле → 0) молча сохраняли не то, что ввёл пользователь, а в поле оставалось введённое. Теперь число уходит как есть: сервер отвечает `400`, toast показывает причину, поле возвращается к сохранённому значению; нечисловое или пустое поле — toast «Client Error» с именем поля, запрос не отправляется (`project/number_fields.go`)
+- application-слой помечает ввод вызывающего общим `application.ErrInvalidInput`; ошибки восстановления сохранённых данных маркер не получают и остаются `500`. Хендлеры маппят ошибки сервисов общим `sendServiceError`
+
+### Removed
+
+- `scene.ErrSceneValidation`, `widget.ErrWidgetInvalidInput` (заменены `application.ErrInvalidInput`), `restapi.NewValidationError` и `restapi.TypeValidation`
+
 ## [0.0.30] - 2026.10.04
 
 ### Added

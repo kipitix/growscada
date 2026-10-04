@@ -33,7 +33,7 @@ _Avoid_: API key, password, credential (unqualified)
 ### Visualization
 
 **WidgetType**:
-A reusable template defining how a widget renders: an HTML template plus a script, a default size, and the InputPorts it exposes. Aggregate.
+A reusable template defining how a widget renders: an HTML template plus a script, a default size, and the InputPorts it exposes. Aggregate. Every Widget's WidgetType exists: a WidgetType cannot be removed while Widgets use it.
 _Avoid_: component, widget definition
 
 **InputPort**:

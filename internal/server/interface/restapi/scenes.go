@@ -23,7 +23,7 @@ func NewScenesHandler(s application.SceneService) *ScenesHandlers {
 func (h ScenesHandlers) GetScenes(w http.ResponseWriter, r *http.Request) {
 	list, err := h.service.FindAllScenes(r.Context())
 	if err != nil {
-		sendInternalError(w, r, err)
+		sendServiceError(w, r, err)
 		return
 	}
 	sendJSONResponse(w, http.StatusOK, newGetScenesResponse(list))
@@ -44,7 +44,7 @@ func (h ScenesHandlers) GetScenesByID(w http.ResponseWriter, r *http.Request) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
 			return
 		}
-		sendInternalError(w, r, err)
+		sendServiceError(w, r, err)
 		return
 	}
 
@@ -60,11 +60,7 @@ func (h ScenesHandlers) PostScenes(w http.ResponseWriter, r *http.Request) {
 
 	created, err := h.service.CreateScene(r.Context(), newCreateSceneInput(request))
 	if err != nil {
-		if errors.Is(err, scene.ErrSceneValidation) {
-			sendJSONResponse(w, http.StatusUnprocessableEntity, NewValidationError(map[string][]string{"scene": {err.Error()}}, r.URL.Path))
-			return
-		}
-		sendInternalError(w, r, err)
+		sendServiceError(w, r, err)
 		return
 	}
 
@@ -95,11 +91,7 @@ func (h ScenesHandlers) PutScenesByID(w http.ResponseWriter, r *http.Request) {
 			sendJSONResponse(w, http.StatusConflict, NewConflict("scene", err.Error(), r.URL.Path))
 			return
 		}
-		if errors.Is(err, scene.ErrSceneValidation) {
-			sendJSONResponse(w, http.StatusUnprocessableEntity, NewValidationError(map[string][]string{"scene": {err.Error()}}, r.URL.Path))
-			return
-		}
-		sendInternalError(w, r, err)
+		sendServiceError(w, r, err)
 		return
 	}
 
@@ -121,7 +113,7 @@ func (h ScenesHandlers) DeleteScenesByID(w http.ResponseWriter, r *http.Request)
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
 			return
 		}
-		sendInternalError(w, r, err)
+		sendServiceError(w, r, err)
 		return
 	}
 
