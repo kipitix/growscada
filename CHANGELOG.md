@@ -1,5 +1,37 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.30] - 2026.10.04
+
+### Added
+
+- **Модель многоарендности и библиотек** (grilling-сессия 2026-10-04, только документация, код не менялся):
+  - ADR 0006 «Every operational entity is keyed by Project, every Project by Organization»: сервер хостит много проектов в обеих ролях узла, `project_id` вводится во все таблицы до появления Journal и Revision, пока одна стартовая Organization из seed
+  - ADR 0007 «Libraries are shared by pinned release and copied into the Revision on Deploy»: Library принадлежит Organization и может быть публичной, у неё свой Draft (EditLock, undo/redo) и Release → неизменяемый Library Release; проект закрепляет по одному релизу от нескольких Library, при Deploy используемое содержимое копируется в Revision
+  - `CONTEXT.md`: термины Organization, Project, Library, Library Release, Release, Device Gateway, Device Token
+- задачи 25 (Organization и Project), 27 (Library и Library Release), 28 (Device, Device Gateway, Device Token) переписаны по решениям сессии; задача 45 уточнена: «Runtime node со вшитой Revision»
+
+### Changed
+
+- **Перенумерация backlog**: номер задачи — её место в очереди, следующий свободный — 52:
+  - 18–24 — мелкие независимые задачи (бывшие 34, 35, 38, 39, 40, 37, 33)
+  - A, 25–26 — Organization и Project; разделение хранилищ engineering/runtime, Origin
+  - B, 27–30 — Library Release; Device; ProjectFile, Deploy, Revision, Discard; Rollback
+  - C, 31–35 — EditLock; DraftChange и undo/redo; ProjectFile в UI; групповое выделение; направляющие
+  - D, 36–41 — Journal; Player и Operation; Checkpoint; History; PlaybackFile; наведение мыши
+  - E–F, 42–44 — runtime-сущности и Adopt; User; права доступа
+  - 45–51 — Runtime node со вшитой Revision; разнесение узлов по сети; Command; Alert; звуки; Computation; Theme
+- пакет `36_project_undo_redo_history` расформирован: его тикеты стали обычными задачами со строками `Status:` и `Blocked by:`, решения Q1–Q30 из `map.md` разнесены по `## Comments` соответствующих задач. Отменены Q7 (Library — часть Draft проекта) и Q21 (один неявный проект)
+- ProjectFile в UI (33) стоит после DraftChange (32): открытие файла — одна DraftChange
+- Deploy (29) и Rollback (30) больше не зависят от Journal: их записи в Journal добавляет задача 36
+- задача 36 (Journal) поглотила бывшую 24 «Запись и воспроизведение событий»; задача 42 (Adopt) зависит от DraftChange (32); EditLock (31) и DraftChange (32) работают и для Draft Library; User (43) — член Organization, а не владелец проектов
+- ссылки «задача N» в `todo/backlog/`, `todo/done/` и в этом файле пересчитаны на новые номера
+- `CONTEXT.md`: Device — конфигурация оборудования в проекте, а не процесс; Draft, EditLock и Discard — у проекта и у Library; имя Tag уникально внутри Project; у Tag не больше одного поставщика значения
+- ADR 0003: имя Tag уникально внутри Project; ADR 0004: поправка — Device как конфигурация, Device Gateway исполняет её по Device Token, токен переживает Deploy и Rollback и отзывается только явно
+
+### Removed
+
+- `todo/backlog/36_project_undo_redo_history/` (`map.md` и 13 тикетов) и `todo/backlog/24_event_record_playback.md` — содержимое перенесено в задачи 26, 29–33, 36–40, 42, 46
+
 ## [0.0.29] - 2026.10.04
 
 ### Added
@@ -128,10 +160,10 @@
 
 ### Removed
 
-- **BREAKING: качество тега `simulated`** — Quality описывает надёжность значения, а не его происхождение; имитатор (задача 15) поставляет обычные `good`/`bad`/`uncertain`, а пометка «это имитатор» станет метаинформацией `Device` (задача 23):
+- **BREAKING: качество тега `simulated`** — Quality описывает надёжность значения, а не его происхождение; имитатор (задача 15) поставляет обычные `good`/`bad`/`uncertain`, а пометка «это имитатор» станет метаинформацией `Device` (задача 28):
   - `internal/domain/tag/tag_quality.go` — удалён `TagQualitySimulated`
   - `internal/infrastructure/postgres/migrations/20260923000000_remove_simulated_tag_quality.sql` — существующие теги с `simulated` переводятся в `good`, `chk_tags_quality` пересоздаётся без `simulated` (`Down` возвращает ограничение, данные не трогает)
-  - `POST /api/v1/tags` и `PATCH /api/v1/tags/{id}/value` с `"quality": "simulated"` теперь отклоняются (пока 500, как и любая ошибка валидации домена — маппинг в 400 вынесен в задачу 34)
+  - `POST /api/v1/tags` и `PATCH /api/v1/tags/{id}/value` с `"quality": "simulated"` теперь отклоняются (пока 500, как и любая ошибка валидации домена — маппинг в 400 вынесен в задачу 18)
   - тестовые данные: тег `is_cached` получил качество `uncertain`
 - **Заглушки `Unknown` в доменных перечислениях** (`docs/adr/0001-no-unknown-enum-sentinels.md`) — удалены `TagQualityUnknown`, `TagTypeUnknown`, `ScriptLanguageUnknown`, `EventTypeUnknown`; нулевое значение перечисления невалидно (`String()` → `"invalid"`, `IsValid()` → `false`), разбор `"unknown"`, `""` и любой нестандартной строки возвращает ошибку
 
@@ -142,7 +174,7 @@
 - `internal/domain/event/event_type.go` — `EventType` из `int` + `iota` стал struct value object с приватным полем, как остальные перечисления; снаружи пакета нельзя получить произвольное значение приведением
 - **BREAKING: `InputPort` type hint** — новый value object `widget.PortTypeHint` (`internal/domain/widget/port_type_hint.go`): либо «любой тип» (`AnyTypeHint()`), либо конкретный `TagType` (`TypeHintFor`); методы `IsAny`, `TagType`, `Accepts`; «любой тип» в REST и в JSON-колонке `input_ports` — это `""`:
   - в ответах API «любой тип» теперь `"type_hint": ""` вместо `"unknown"`
-  - запрос с `"type_hint": "unknown"` отклоняется (пока 500, см. задачу 34)
+  - запрос с `"type_hint": "unknown"` отклоняется (пока 500, см. задачу 18)
   - UI (`uidto.TypeHintLabel`, `project/render_properties.go`) больше не обрабатывает `"unknown"`
 - Глоссарий (`CONTEXT.md`, `AGENTS.md`): Quality — `Bad`/`Uncertain`/`Good`, TagType без `Unknown`, новый термин Device
 - `internal/domain/event/event_type.go` — имена типов событий заданы одной таблицей `eventTypeNames`, из неё выводятся `AllEventTypes()`, `NewEventType()` и `String()` (вместо двух параллельных `switch` на 15 веток); добавлен `IsValid()`, как у остальных перечислений. Строковые имена и порядок `AllEventTypes()` не изменились. Round-trip тест теперь покрывает все значения `AllEventTypes()`, добавлена проверка уникальности значений и имён

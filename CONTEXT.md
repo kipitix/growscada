@@ -7,7 +7,7 @@ A web-based SCADA (Supervisory Control and Data Acquisition) system: it exposes 
 ### Data
 
 **Tag**:
-The atomic process variable — an identifier, name, type, current value, and quality. Aggregate. Its name is unique across the system and is the natural key by which people, manifests and Devices refer to it. Its name and TagType form the Tag's definition (configuration, part of the Draft); its value and Quality are process state, never part of the Draft or a Revision.
+The atomic process variable — an identifier, name, type, current value, and quality. Aggregate. Belongs to exactly one Project. Its name is unique within that Project and, together with the Project, is the natural key by which people, manifests and Devices refer to it. Its name and TagType form the Tag's definition (configuration, part of the Draft); its value and Quality are process state, never part of the Draft or a Revision. A Tag has at most one supplier of its value — one Device (or, later, one Computation); a Tag with no supplier is set by people.
 _Avoid_: variable, point, signal
 
 **Quality**:
@@ -19,8 +19,16 @@ A Tag's data type: `String`, `Boolean`, or `Integer`. Governs which values the T
 _Avoid_: analog/discrete, data type
 
 **Device**:
-A source of Tag values — real equipment, a protocol adapter, or a simulator. Whether it is a simulator is descriptive metadata of the Device, not a Quality. Not yet modelled.
-_Avoid_: source, adapter, PLC
+A piece of equipment that supplies Tag values, as described in a Project: its address, protocol, connection parameters and how each of its Tags is extracted from that protocol. Configuration — part of the Draft and the Revision. Whether it is a simulator is descriptive metadata of the Device, not a Quality. Not yet modelled.
+_Avoid_: source, adapter, PLC, driver
+
+**Device Gateway**:
+The external process that executes Device configurations: it talks each Device's protocol to the equipment, usually from inside the plant network, and delivers Tag values to the Runtime node over the device link. One Device Gateway may serve several Devices. The device simulator is a Device Gateway whose "equipment" is a loop inside itself.
+_Avoid_: connector, adapter, driver, agent
+
+**Device Token**:
+The secret by which a Device Gateway acts for one Device on the Runtime node: it fetches that Device's configuration from the running Revision and writes only that Device's Tags. Issued on the Runtime node per Device identity, never part of the Draft or a Revision; it outlives Deploys and Rollbacks and ends only when explicitly revoked or rotated. While the running Revision has no such Device, the token is dormant: it is refused, not revoked.
+_Avoid_: API key, password, credential (unqualified)
 
 ### Visualization
 
@@ -43,6 +51,24 @@ _Avoid_: mapping, connection
 **Scene**:
 A named canvas (a page inside a project) with fixed dimensions, a static HTML background, and the Widgets placed on it. Aggregate — the sole consistency boundary for itself and its Widgets.
 _Avoid_: screen, mnemonic, page, display
+
+### Organisation
+
+**Organization**:
+The tenant: the top-level owner of Projects and Libraries, whose members are the people working in them. Everything a server stores belongs to exactly one Organization; Organizations are isolated from each other, except that an Organization may make a Library public so that any Project on the server can pin its Library Releases. Not yet modelled.
+_Avoid_: tenant (in UI), company, account, team
+
+**Project**:
+Owned by one Organization. The unit of operational ownership and isolation: Tags, Scenes with their Widgets, the Draft, Revisions and the Journal belong to exactly one Project. One server may host several Projects, in both node roles; Projects never reference each other's entities. The only thing Projects share are Libraries, each through a pinned Library Release.
+_Avoid_: workspace, site, solution
+
+**Library**:
+A reusable collection of WidgetTypes (and, later, ComputationTypes and Themes) owned by an Organization, outside any Project, and used by any number of Projects — of other Organizations too, if it is public. Aggregate. Projects never see its working state, only its Library Releases.
+_Avoid_: catalog, toolbox, package
+
+**Library Release**:
+An immutable, numbered snapshot of a Library. A Project's Draft pins at most one Library Release per Library, for any number of Libraries; adding, removing or switching a pin is a DraftChange. Libraries do not depend on each other. On Deploy the content the Project uses from its pinned releases is copied into the Revision, so a Revision never depends on the Library.
+_Avoid_: library version (that is the concurrency counter), snapshot
 
 ### Roles
 
@@ -67,28 +93,32 @@ _Avoid_: production server, station, runtime (unqualified)
 ### Project lifecycle
 
 **EditLock**:
-The marker that one Engineer currently holds the project for editing; acquired and released explicitly, expires when its holder disconnects, and may be taken over by another Engineer. Without it the Draft is read-only.
+The marker that one Engineer currently holds one Draft (of a Project or a Library) for editing; acquired and released explicitly, expires when its holder disconnects, and may be taken over by another Engineer. Without it the Draft is read-only.
 _Avoid_: checkout, lock (unqualified)
 
 **Draft**:
-The project's configuration as it is being edited — Scenes with their Widgets, WidgetTypes (the Library) and Tag definitions — not yet visible in Operation. Changes to it become operational only through Deploy.
+The working state of a Project or of a Library as it is being edited. A Project's Draft holds Scenes with their Widgets, Tag definitions and the pinned Library Releases, and becomes operational only through Deploy. A Library's Draft holds its WidgetTypes and becomes usable by Projects only through Release. Each Draft has its own EditLock and DraftChanges.
 _Avoid_: working copy, unsaved changes
 
 **DraftChange**:
-One Engineer intent applied to the Draft — possibly touching several aggregates at once — and the unit of undo/redo. The Draft keeps its DraftChanges since the last Deploy or Discard; nothing further back can be undone.
+One Engineer intent applied to the Draft — possibly touching several aggregates at once — and the unit of undo/redo. The Draft keeps its DraftChanges since the last Deploy, Release or Discard; nothing further back can be undone.
 _Avoid_: edit, step, command, operation
 
 **Discard**:
-Resetting the Draft to the Revision currently running in Operation, dropping all DraftChanges.
+Resetting a Draft to its last published state — the Revision currently running in Operation for a Project, the latest Library Release for a Library — dropping all DraftChanges.
 _Avoid_: revert, reset, cancel
 
 **Deploy**:
 The act of delivering the whole Draft, as a ProjectFile, to a Runtime node, which atomically makes it a new Revision and switches Operation to it. Loading a ProjectFile into a Runtime node by hand is also a Deploy.
 _Avoid_: publish, apply, save
 
+**Release**:
+The act of turning a Library's Draft into a new Library Release. The Library counterpart of Deploy; it changes nothing in any Project until a Project's Draft pins the new Library Release.
+_Avoid_: publish, tag, version
+
 **Revision**:
 An immutable, numbered snapshot of the project configuration produced by Deploy. Operation always runs exactly one Revision.
-_Avoid_: release, build, version (that is the concurrency counter)
+_Avoid_: release (that is a Library Release), build, version (that is the concurrency counter)
 
 **Origin**:
 Where a Tag or Widget came from: `Project` (defined in the Draft and deployed) or `Runtime` (created while the system runs — by a Device, an integration, or a person in Operation). WidgetTypes have no Origin: they are always project-defined.
