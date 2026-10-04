@@ -28,6 +28,12 @@ func NetworkError(err error) Problem {
 	return Problem{Title: "Network Error", Status: 0, Detail: err.Error()}
 }
 
+// ClientError creates a Problem for a request the UI could not build from its
+// own state, e.g. a malformed ID; nothing was sent to the server.
+func ClientError(err error) Problem {
+	return Problem{Title: "Client Error", Status: 0, Detail: err.Error()}
+}
+
 // FromHTTPError reads and closes resp.Body, parses it as RFC 9457,
 // and returns a Problem. Falls back to a synthetic one on parse failure.
 func FromHTTPError(resp *http.Response) Problem {

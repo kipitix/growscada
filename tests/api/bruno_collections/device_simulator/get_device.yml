@@ -5,7 +5,7 @@ info:
 
 http:
   method: GET
-  url: http://{{CONTROL_SERVER}}/api/v1/device
+  url: http://{{CONTROL_SERVER}}/control/device
   auth: inherit
 
 docs: |

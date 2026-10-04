@@ -213,7 +213,7 @@ func TestE2E_ControlAPI(t *testing.T) {
 	s.eventually(t, "sim.speed", "a write", func(tag appdto.Tag) bool { return tag.Quality == "good" })
 
 	// An overridden quality reaches the server and sticks until reset.
-	s.call(t, "POST", "/api/v1/device/tags/sim.speed/quality", `{"quality":"bad"}`)
+	s.call(t, "POST", "/control/device/tags/sim.speed/quality", `{"quality":"bad"}`)
 	bad := s.eventually(t, "sim.speed", "bad quality", func(tag appdto.Tag) bool { return tag.Quality == "bad" })
 	s.eventually(t, "sim.speed", "more bad writes", func(tag appdto.Tag) bool {
 		if tag.Quality != "bad" {
@@ -221,22 +221,22 @@ func TestE2E_ControlAPI(t *testing.T) {
 		}
 		return tag.Version >= bad.Version+3
 	})
-	s.call(t, "DELETE", "/api/v1/device/tags/sim.speed/quality", "")
+	s.call(t, "DELETE", "/control/device/tags/sim.speed/quality", "")
 	s.eventually(t, "sim.speed", "good quality again", func(tag appdto.Tag) bool { return tag.Quality == "good" })
 
 	// A new pattern takes effect on the fly.
-	s.call(t, "POST", "/api/v1/device/tags/sim.speed/pattern", `{"kind":"constant","value":7}`)
+	s.call(t, "POST", "/control/device/tags/sim.speed/pattern", `{"kind":"constant","value":7}`)
 	s.eventually(t, "sim.speed", "the constant", func(tag appdto.Tag) bool { return tag.Value == "7" })
 
 	// Stop freezes every tag (it answers once the writes in flight are done);
 	// start resumes.
-	s.call(t, "POST", "/api/v1/device/stop", "")
+	s.call(t, "POST", "/control/device/stop", "")
 	frozen := s.get(t, "sim.mode")
 	time.Sleep(150 * time.Millisecond)
 	if got := s.get(t, "sim.mode"); got.Version != frozen.Version {
 		t.Fatalf("written while stopped: version %d → %d", frozen.Version, got.Version)
 	}
-	s.call(t, "POST", "/api/v1/device/start", "")
+	s.call(t, "POST", "/control/device/start", "")
 	s.eventually(t, "sim.mode", "writes after start", func(tag appdto.Tag) bool { return tag.Version > frozen.Version })
 }
 

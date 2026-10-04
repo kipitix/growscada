@@ -17,7 +17,8 @@ import (
 
 // SchemaVersion is the version of the manifest contract this package
 // describes.
-var SchemaVersion = contract.SchemaVersion{Major: 0, Minor: 1}
+// A function rather than a variable, so no importer can change it.
+func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 1} }
 
 // apiVersionPrefix precedes the version in apiVersion.
 const apiVersionPrefix = "growscada/v"
@@ -27,7 +28,7 @@ const KindTag = "Tag"
 
 // APIVersion is the apiVersion written into manifests of this version.
 func APIVersion() string {
-	return FormatAPIVersion(SchemaVersion)
+	return FormatAPIVersion(SchemaVersion())
 }
 
 // FormatAPIVersion renders a version as an apiVersion value.

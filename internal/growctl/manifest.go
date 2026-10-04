@@ -163,15 +163,25 @@ func parseDocument(node *yaml.Node) (TagManifest, error) {
 	return validateTag(doc)
 }
 
+// preVersioningAPIVersion is what manifests carried before ADR 0005: the
+// format of today's v0. growctl names the fix rather than calling it an
+// unknown version. Remove it when the manifests reach 1.0, where the label
+// takes its real meaning.
+const preVersioningAPIVersion = "growscada/v1"
+
 // checkAPIVersion accepts any MINOR up to the one growctl knows of its
 // MAJOR. The check runs before the strict decode, so a field from a newer
 // MINOR is reported as "update growctl" rather than as an unknown field.
 func checkAPIVersion(apiVersion string) error {
+	if apiVersion == preVersioningAPIVersion {
+		return fmt.Errorf("apiVersion %q is the format from before contract versioning: replace it with %q",
+			apiVersion, manifestv0.APIVersion())
+	}
 	v, err := manifestv0.ParseAPIVersion(apiVersion)
-	if err != nil || !v.SameMajor(manifestv0.SchemaVersion) {
+	if err != nil || !v.SameMajor(manifestv0.SchemaVersion()) {
 		return fmt.Errorf("unsupported apiVersion %q, expected %q", apiVersion, manifestv0.APIVersion())
 	}
-	if v.NewerThan(manifestv0.SchemaVersion) {
+	if v.NewerThan(manifestv0.SchemaVersion()) {
 		return fmt.Errorf("apiVersion %q is newer than this growctl understands (%s): update growctl",
 			apiVersion, manifestv0.APIVersion())
 	}

@@ -36,23 +36,8 @@ type getScenesResponse struct {
 	Scenes []sceneItem `json:"scenes"`
 }
 
-type createSceneRequest struct {
-	Name           string `json:"name"`
-	Width          int    `json:"width"`
-	Height         int    `json:"height"`
-	BackgroundHTML string `json:"background_html"`
-}
-
 type createSceneResponse struct {
 	ID string `json:"id"`
-}
-
-type updateSceneRequest struct {
-	Name           string `json:"name"`
-	Width          int    `json:"width"`
-	Height         int    `json:"height"`
-	BackgroundHTML string `json:"background_html"`
-	Version        int    `json:"version"`
 }
 
 type updateSceneResponse struct {
@@ -113,33 +98,9 @@ type getWidgetsResponse struct {
 	Widgets []widgetItem `json:"widgets"`
 }
 
-type createWidgetRequest struct {
-	Name         string           `json:"name"`
-	Position     positionDTO      `json:"position"`
-	Size         sizeDTO          `json:"size"`
-	Origin       originDTO        `json:"origin"`
-	Rotation     rotationDTO      `json:"rotation"`
-	TypeID       string           `json:"type_id"`
-	SceneVersion int              `json:"scene_version"`
-	Labels       []string         `json:"labels"`
-	PortBindings []portBindingDTO `json:"port_bindings"`
-}
-
 type createWidgetResponse struct {
 	ID           string `json:"id"`
 	SceneVersion int    `json:"scene_version"`
-}
-
-type updateWidgetRequest struct {
-	Name         string           `json:"name"`
-	Position     positionDTO      `json:"position"`
-	Size         sizeDTO          `json:"size"`
-	Origin       originDTO        `json:"origin"`
-	Rotation     rotationDTO      `json:"rotation"`
-	TypeID       string           `json:"type_id"`
-	SceneVersion int              `json:"scene_version"`
-	Labels       []string         `json:"labels"`
-	PortBindings []portBindingDTO `json:"port_bindings"`
 }
 
 type updateWidgetResponse struct {
@@ -157,13 +118,6 @@ type tagItem struct {
 
 type getTagsResponse struct {
 	Tags []tagItem `json:"tags"`
-}
-
-type createTagRequest struct {
-	Name    string `json:"name"`
-	Type    string `json:"type"`
-	Value   string `json:"value"`
-	Quality string `json:"quality"`
 }
 
 type createTagResponse struct {

@@ -13,7 +13,8 @@ import (
 
 // TestCommittedMinorsAreCompatible checks every pair of consecutive committed
 // schemas of the same MAJOR: the newer MINOR may only add what old readers
-// can ignore. MAJOR 0 promises no compatibility and is skipped.
+// can ignore. MAJOR 0 promises no compatibility: its pairs are still checked,
+// so the check runs on real schemas long before 1.0, but only logged.
 func TestCommittedMinorsAreCompatible(t *testing.T) {
 	contracts, err := os.ReadDir("../schemas")
 	if err != nil {
@@ -26,12 +27,17 @@ func TestCommittedMinorsAreCompatible(t *testing.T) {
 		versions := committedVersions(t, filepath.Join("../schemas", dir.Name()))
 		for i := 1; i < len(versions); i++ {
 			older, newer := versions[i-1], versions[i]
-			if !newer.SameMajor(older) || newer.Major == 0 {
+			if !newer.SameMajor(older) {
 				continue
 			}
 			t.Run(dir.Name()+"/"+newer.String(), func(t *testing.T) {
 				problems := jsonschema.MinorIncompatibilities(
 					readSchema(t, dir.Name(), older), readSchema(t, dir.Name(), newer))
+				if len(problems) > 0 && newer.Major == 0 {
+					t.Logf("%s %v breaks readers of %v (allowed while MAJOR is 0):\n%s",
+						dir.Name(), newer, older, strings.Join(problems, "\n"))
+					return
+				}
 				if len(problems) > 0 {
 					t.Fatalf("%s %v is not a compatible MINOR of %v — raise MAJOR instead:\n%s",
 						dir.Name(), newer, older, strings.Join(problems, "\n"))

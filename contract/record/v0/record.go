@@ -8,7 +8,8 @@ import "github.com/kipitix/growscada/contract"
 
 // SchemaVersion is the version of the operational record format this package
 // describes.
-var SchemaVersion = contract.SchemaVersion{Major: 0, Minor: 1}
+// A function rather than a variable, so no importer can change it.
+func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 1} }
 
 // Header is the root of every record document: the SchemaVersion the rest of
 // the document follows. A reader checks it before anything else.

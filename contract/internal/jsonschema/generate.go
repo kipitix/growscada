@@ -80,20 +80,25 @@ var (
 )
 
 func (g *generator) schemaOf(t reflect.Type) (map[string]any, error) {
+	// A pointer has the schema of what it points to. Dereferencing first keeps
+	// the interface checks below off nil pointers: *T of a T with a value
+	// method would otherwise call it on nil and panic.
+	if t.Kind() == reflect.Pointer {
+		return g.schemaOf(t.Elem())
+	}
+	pt := reflect.PointerTo(t)
 	switch {
-	case t.Implements(describerType):
-		return reflect.Zero(t).Interface().(Describer).JSONSchema(), nil
+	case t.Implements(describerType) || pt.Implements(describerType):
+		return reflect.New(t).Interface().(Describer).JSONSchema(), nil
 	case t == uuidType:
 		return map[string]any{"type": "string", "format": "uuid"}, nil
 	case t == timeType:
 		return map[string]any{"type": "string", "format": "date-time"}, nil
-	case t.Implements(textMarshalerType):
+	case t.Implements(textMarshalerType) || pt.Implements(textMarshalerType):
 		return map[string]any{"type": "string"}, nil
 	}
 
 	switch t.Kind() {
-	case reflect.Pointer:
-		return g.schemaOf(t.Elem())
 	case reflect.String:
 		return map[string]any{"type": "string"}, nil
 	case reflect.Bool:
@@ -163,36 +168,36 @@ func (g *generator) structSchema(t reflect.Type) (map[string]any, error) {
 	return schema, nil
 }
 
-// addFields collects t's fields, flattening embedded structs (json) and
-// ",inline" ones (yaml) into the same object.
+// addFields collects t's fields, flattening the ones the encoder flattens into
+// the same object: for json an embedded struct whose tag gives no name, for
+// yaml (yaml.v3) only a field marked ",inline".
 func (g *generator) addFields(t reflect.Type, properties map[string]any, required *[]string) error {
 	for i := range t.NumField() {
 		field := t.Field(i)
-		name, opts, tagged := g.fieldName(field)
-		if name == "-" || (!field.IsExported() && !field.Anonymous) {
+		name, opts, named, skip := g.fieldName(field)
+		// An unexported field is invisible to both encoders, except an embedded
+		// struct, whose exported fields are promoted.
+		if skip || (!field.IsExported() && !(field.Anonymous && isStruct(field.Type))) {
 			continue
 		}
-		inline := opts["inline"] || (field.Anonymous && !tagged)
-		if inline {
-			ft := field.Type
-			if ft.Kind() == reflect.Pointer {
-				ft = ft.Elem()
-			}
-			if ft.Kind() != reflect.Struct {
+		if g.inlines(field, opts, named) {
+			if !isStruct(field.Type) {
 				return fmt.Errorf("%v.%s: only structs can be inlined", t, field.Name)
 			}
-			if err := g.addFields(ft, properties, required); err != nil {
+			if err := g.addFields(deref(field.Type), properties, required); err != nil {
 				return err
 			}
 			continue
 		}
-		if !field.IsExported() {
+		// encoding/json writes an embedded unexported struct that its tag names
+		// as an ordinary field; yaml.v3 cannot encode one.
+		if !field.IsExported() && g.tag == "yaml" {
 			continue
 		}
 		if _, dup := properties[name]; dup {
 			return fmt.Errorf("%v: two fields are named %q", t, name)
 		}
-		schema, err := g.schemaOf(field.Type)
+		schema, err := g.fieldSchema(field, opts)
 		if err != nil {
 			return fmt.Errorf("%v.%s: %w", t, field.Name, err)
 		}
@@ -204,22 +209,53 @@ func (g *generator) addFields(t reflect.Type, properties map[string]any, require
 	return nil
 }
 
-func (g *generator) fieldName(field reflect.StructField) (string, map[string]bool, bool) {
-	tag, tagged := field.Tag.Lookup(g.tag)
+// inlines reports whether the encoder flattens field into its parent object.
+// encoding/json flattens an embedded struct (or pointer to one) whose tag
+// names nothing, even with options such as ",omitempty", and has no
+// ",inline" option; yaml.v3 flattens only ",inline" and nests an embedded
+// field without it under its name.
+func (g *generator) inlines(field reflect.StructField, opts map[string]bool, named bool) bool {
+	if g.tag == "yaml" {
+		return opts["inline"]
+	}
+	return field.Anonymous && !named && isStruct(field.Type)
+}
+
+func deref(t reflect.Type) reflect.Type {
+	if t.Kind() == reflect.Pointer {
+		return t.Elem()
+	}
+	return t
+}
+
+// isStruct reports whether t is a struct or a pointer to one.
+func isStruct(t reflect.Type) bool {
+	return deref(t).Kind() == reflect.Struct
+}
+
+// fieldName returns the field's property name, its tag options, whether the
+// tag gave the name and whether the encoder skips the field (tag "-"; "-,"
+// names a field "-").
+func (g *generator) fieldName(field reflect.StructField) (name string, opts map[string]bool, named, skip bool) {
+	tag := field.Tag.Get(g.tag)
+	if tag == "-" {
+		return "", nil, false, true
+	}
 	name, rest, _ := strings.Cut(tag, ",")
-	opts := map[string]bool{}
+	opts = map[string]bool{}
 	for opt := range strings.SplitSeq(rest, ",") {
 		if opt != "" {
 			opts[opt] = true
 		}
 	}
-	if name == "" {
-		name = field.Name
-		if g.tag == "yaml" {
-			name = strings.ToLower(name) // yaml.v3's default field name
-		}
+	if name != "" {
+		return name, opts, true, false
 	}
-	return name, opts, tagged && tag != ""
+	name = field.Name
+	if g.tag == "yaml" {
+		name = strings.ToLower(name) // yaml.v3's default field name
+	}
+	return name, opts, false, false
 }
 
 func (g *generator) isRequired(field reflect.StructField, opts map[string]bool) bool {
@@ -229,5 +265,37 @@ func (g *generator) isRequired(field reflect.StructField, opts map[string]bool) 
 	case "optional":
 		return false
 	}
-	return field.Type.Kind() != reflect.Pointer && !opts["omitempty"]
+	if field.Type.Kind() == reflect.Pointer || opts["omitempty"] {
+		return false
+	}
+	// encoding/json leaves out a zero value with ",omitzero" (yaml.v3 has no
+	// such option).
+	return g.tag != "json" || !opts["omitzero"]
+}
+
+// fieldSchema is the schema of field's value as the encoder writes it.
+func (g *generator) fieldSchema(field reflect.StructField, opts map[string]bool) (map[string]any, error) {
+	if g.tag == "json" && opts["string"] {
+		if schema, ok := quotedSchema(deref(field.Type)); ok {
+			return schema, nil
+		}
+	}
+	return g.schemaOf(field.Type)
+}
+
+// quotedSchema is the schema of a ",string" field: encoding/json writes a
+// string, number or bool as a JSON string holding its JSON encoding, and
+// ignores the option on any other kind.
+func quotedSchema(t reflect.Type) (map[string]any, bool) {
+	switch t.Kind() {
+	case reflect.Bool:
+		return map[string]any{"type": "string", "enum": []any{"true", "false"}}, true
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return map[string]any{"type": "string", "pattern": "^-?(0|[1-9][0-9]*)$"}, true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return map[string]any{"type": "string", "pattern": "^(0|[1-9][0-9]*)$"}, true
+	case reflect.Float32, reflect.Float64, reflect.String:
+		return map[string]any{"type": "string"}, true
+	}
+	return nil, false
 }

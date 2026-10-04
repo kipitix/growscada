@@ -5,7 +5,7 @@ info:
 
 http:
   method: POST
-  url: http://{{CONTROL_SERVER}}/api/v1/device/stop
+  url: http://{{CONTROL_SERVER}}/control/device/stop
   auth: inherit
 
 docs: |

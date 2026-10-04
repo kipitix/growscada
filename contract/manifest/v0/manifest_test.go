@@ -23,15 +23,15 @@ func TestParseAPIVersion(t *testing.T) {
 			t.Errorf("ParseAPIVersion(%q) = %v, want error", text, v)
 		}
 	}
-	if got := APIVersion(); got != "growscada/v"+SchemaVersion.String() {
+	if got := APIVersion(); got != "growscada/v"+SchemaVersion().String() {
 		t.Errorf("APIVersion() = %q", got)
 	}
 }
 
 func TestSchemaIsCommitted(t *testing.T) {
-	jsonschema.CheckCommitted(t, "../../../schemas/manifest/"+SchemaVersion.String()+".json", jsonschema.Document{
-		ID:    "https://github.com/kipitix/growscada/schemas/manifest/" + SchemaVersion.String() + ".json",
-		Title: "GrowSCADA growctl manifest " + SchemaVersion.String(),
+	jsonschema.CheckCommitted(t, "../../../schemas/manifest/"+SchemaVersion().String()+".json", jsonschema.Document{
+		ID:    "https://github.com/kipitix/growscada/schemas/manifest/" + SchemaVersion().String() + ".json",
+		Title: "GrowSCADA growctl manifest " + SchemaVersion().String(),
 		Tag:   "yaml",
 		Roots: []any{TagDocument{}},
 	})

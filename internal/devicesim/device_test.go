@@ -243,19 +243,19 @@ func TestControlAPI_WhileConnecting(t *testing.T) {
 		return resp.StatusCode, out
 	}
 
-	if code, out := status("GET", "/api/v1/device", ""); code != 200 || out["state"] != StateConnecting {
+	if code, out := status("GET", "/control/device", ""); code != 200 || out["state"] != StateConnecting {
 		t.Errorf("status: %d %v", code, out)
 	}
-	if code, out := status("POST", "/api/v1/device/stop", ""); code != 200 || out["running"] != false {
+	if code, out := status("POST", "/control/device/stop", ""); code != 200 || out["running"] != false {
 		t.Errorf("stop: %d %v", code, out)
 	}
-	if code, out := status("POST", "/api/v1/device/tags/counter/pattern", `{"kind":"constant","value":1}`); code != 503 {
+	if code, out := status("POST", "/control/device/tags/counter/pattern", `{"kind":"constant","value":1}`); code != 503 {
 		t.Errorf("pattern: %d %v, want 503", code, out)
 	}
-	if code, out := status("POST", "/api/v1/device/tags/counter/quality", `{"quality":"bad"}`); code != 503 {
+	if code, out := status("POST", "/control/device/tags/counter/quality", `{"quality":"bad"}`); code != 503 {
 		t.Errorf("quality: %d %v, want 503", code, out)
 	}
-	if code, _ := status("POST", "/api/v1/device/tags/nope/pattern", `{"kind":"constant","value":1}`); code != 404 {
+	if code, _ := status("POST", "/control/device/tags/nope/pattern", `{"kind":"constant","value":1}`); code != 404 {
 		t.Errorf("unknown tag: got %d, want 404", code)
 	}
 }
@@ -465,43 +465,43 @@ func TestControlAPI(t *testing.T) {
 		return resp.StatusCode, out
 	}
 
-	if code, out := call("POST", "/api/v1/device/stop", ""); code != 200 || out["running"] != false {
+	if code, out := call("POST", "/control/device/stop", ""); code != 200 || out["running"] != false {
 		t.Errorf("stop: %d %v", code, out)
 	}
-	if code, out := call("GET", "/api/v1/device", ""); code != 200 || out["running"] != false {
+	if code, out := call("GET", "/control/device", ""); code != 200 || out["running"] != false {
 		t.Errorf("status: %d %v", code, out)
 	}
-	if code, out := call("POST", "/api/v1/device/start", ""); code != 200 || out["running"] != true {
+	if code, out := call("POST", "/control/device/start", ""); code != 200 || out["running"] != true {
 		t.Errorf("start: %d %v", code, out)
 	}
 
-	code, out := call("POST", "/api/v1/device/tags/counter/pattern", `{"kind":"sine","offset":5,"amplitude":1,"period":"1s"}`)
+	code, out := call("POST", "/control/device/tags/counter/pattern", `{"kind":"sine","offset":5,"amplitude":1,"period":"1s"}`)
 	if code != 200 {
 		t.Errorf("pattern: %d %v", code, out)
 	}
 	if got := d.Status().Tags[0].Pattern.Kind; got != KindSine {
 		t.Errorf("pattern: got kind %q", got)
 	}
-	if code, out := call("POST", "/api/v1/device/tags/counter/pattern", `{"kind":"step","values":["a"],"hold":"1s"}`); code != 400 || !strings.Contains(fmt.Sprint(out["detail"]), "is not an integer") {
+	if code, out := call("POST", "/control/device/tags/counter/pattern", `{"kind":"step","values":["a"],"hold":"1s"}`); code != 400 || !strings.Contains(fmt.Sprint(out["detail"]), "is not an integer") {
 		t.Errorf("incompatible pattern: %d %v", code, out)
 	}
-	if code, _ := call("POST", "/api/v1/device/tags/counter/pattern", `{"kind":"constant","value":1,"extra":1}`); code != 400 {
+	if code, _ := call("POST", "/control/device/tags/counter/pattern", `{"kind":"constant","value":1,"extra":1}`); code != 400 {
 		t.Errorf("unknown field: got %d, want 400", code)
 	}
-	if code, out := call("POST", "/api/v1/device/tags/nope/pattern", `{"kind":"constant","value":1}`); code != 404 || out["status"] != float64(404) {
+	if code, out := call("POST", "/control/device/tags/nope/pattern", `{"kind":"constant","value":1}`); code != 404 || out["status"] != float64(404) {
 		t.Errorf("unknown tag: %d %v", code, out)
 	}
 
-	if code, _ := call("POST", "/api/v1/device/tags/counter/quality", `{"quality":"bad"}`); code != 200 {
+	if code, _ := call("POST", "/control/device/tags/counter/quality", `{"quality":"bad"}`); code != 200 {
 		t.Errorf("override quality: got %d", code)
 	}
 	if !d.Status().Tags[0].Overridden {
 		t.Error("quality: want overridden")
 	}
-	if code, _ := call("POST", "/api/v1/device/tags/counter/quality", `{"quality":"great"}`); code != 400 {
+	if code, _ := call("POST", "/control/device/tags/counter/quality", `{"quality":"great"}`); code != 400 {
 		t.Errorf("invalid quality: got %d, want 400", code)
 	}
-	if code, _ := call("DELETE", "/api/v1/device/tags/counter/quality", ""); code != 200 {
+	if code, _ := call("DELETE", "/control/device/tags/counter/quality", ""); code != 200 {
 		t.Errorf("reset quality: got %d", code)
 	}
 	if s := d.Status().Tags[0]; s.Overridden || s.Quality != devicelink.QualityGood {

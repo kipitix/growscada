@@ -78,6 +78,7 @@ func TestParseManifests_Invalid_ReturnsError(t *testing.T) {
 		{"wrong apiVersion", "apiVersion: growscada/v2\nkind: Tag\n", "unsupported apiVersion"},
 		{"missing apiVersion", "kind: Tag\n", "unsupported apiVersion"},
 		{"other MAJOR", "apiVersion: growscada/v1.0\nkind: Tag\n", "unsupported apiVersion"},
+		{"pre-versioning label", "apiVersion: growscada/v1\nkind: Tag\n", `replace it with "growscada/v0.`},
 		{"newer MINOR with a new field", "apiVersion: growscada/v0.99\nkind: Tag\nmetadata:\n  name: t\nspec: {type: integer, initialValue: 0, initialQuality: good, unit: rpm}\n", "update growctl"},
 		{"unknown kind", "apiVersion: growscada/v0.1\nkind: Scene\n", "unsupported kind"},
 		{"unknown top-level field", header + "status: {}\nspec: {type: integer, initialValue: 0, initialQuality: good}\n", "field status not found"},

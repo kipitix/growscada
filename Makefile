@@ -38,9 +38,13 @@ bench:
 
 # Regenerates the committed JSON schemas (schemas/<contract>/<MAJOR.MINOR>.json)
 # from the contract types. Run it after raising a contract's SchemaVersion.
+# Refuses to rewrite a version already on the branch `path`, freezes older
+# versions in schemas/<contract>/frozen.sha256 and, while MAJOR is 0, notes
+# what in a new MINOR would have needed a MAJOR after 1.0.
 .PHONY: schemas
 schemas:
-	go test ./contract/... -run TestSchemaIsCommitted -update
+	@out=$$(go test ./contract/... -run TestSchemaIsCommitted -update -v 2>&1); status=$$?; \
+	printf '%s\n' "$$out" | grep -vE '^(=== RUN|--- PASS|PASS$$|ok |testing: warning: no tests to run)'; exit $$status
 
 full_restart:
 	cd tools/debug_db && docker compose down || true

@@ -28,7 +28,7 @@ type Config struct {
 	Server string `yaml:"server"`
 	// Control is the listen address of the control API.
 	Control string `yaml:"control"`
-	// Autostart starts generating right away; otherwise on POST /api/v1/device/start.
+	// Autostart starts generating right away; otherwise on POST /control/device/start.
 	Autostart *bool `yaml:"autostart"`
 	// DefaultInterval is the write interval of tags that set none.
 	DefaultInterval *Duration   `yaml:"defaultInterval"`

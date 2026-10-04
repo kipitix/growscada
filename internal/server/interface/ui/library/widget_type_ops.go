@@ -21,7 +21,7 @@ func (l *Library) createItem(ctx app.Context) {
 	ctx = l.compoCtx
 	name := "New Widget Type"
 	url := l.apiServerURL + apiv0.PathPrefix + "/widget-types"
-	body, _ := json.Marshal(createWidgetTypeRequest{
+	body, _ := json.Marshal(apiv0.CreateWidgetTypeRequest{
 		Name:           name,
 		HtmlTemplate:   defaultHTML,
 		Script:         defaultScript,
@@ -120,7 +120,7 @@ func (l *Library) applyChanges(ctx app.Context) {
 	if ports == nil {
 		ports = []uidto.InputPortDTO{}
 	}
-	body, _ := json.Marshal(updateWidgetTypeRequest{
+	body, _ := json.Marshal(apiv0.UpdateWidgetTypeRequest{
 		Name:           l.editedName,
 		HtmlTemplate:   l.editedHTML,
 		Script:         l.editedScript,
@@ -197,7 +197,7 @@ func (l *Library) commitEdit(ctx app.Context) {
 	if foundPorts == nil {
 		foundPorts = []uidto.InputPortDTO{}
 	}
-	body, _ := json.Marshal(updateWidgetTypeRequest{
+	body, _ := json.Marshal(apiv0.UpdateWidgetTypeRequest{
 		Name:           name,
 		HtmlTemplate:   found.HtmlTemplate,
 		Script:         found.Script,

@@ -79,7 +79,7 @@ func TestRequests_StateSchemaVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := " " + apiv0.SchemaVersion.String()
+	want := " " + apiv0.SchemaVersion().String()
 	for _, request := range got {
 		if !strings.HasPrefix(strings.SplitN(request, " ", 3)[1], apiv0.PathPrefix+"/") || !strings.HasSuffix(request, want) {
 			t.Errorf("request %q: want path under %s and %s%s", request, apiv0.PathPrefix, contract.SchemaVersionHeader, want)

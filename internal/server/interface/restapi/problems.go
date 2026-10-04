@@ -111,6 +111,7 @@ const (
 	TypeForbidden       = BaseTypeURI + "forbidden"
 	TypeNotFound        = BaseTypeURI + "not-found"
 	TypeConflict        = BaseTypeURI + "conflict"
+	TypeGone            = BaseTypeURI + "gone"
 	TypeValidation      = BaseTypeURI + "validation-error"
 	TypeTooManyRequests = BaseTypeURI + "too-many-requests"
 	TypeInternalError   = BaseTypeURI + "internal-error"
@@ -144,6 +145,16 @@ func NewConflict(resource, detail, instance string) *ProblemDetails {
 		Type:     TypeConflict,
 		Title:    fmt.Sprintf("Conflict: %s", resource),
 		Status:   http.StatusConflict, //409
+		Detail:   detail,
+		Instance: instance,
+	}
+}
+
+func NewGone(detail, instance string) *ProblemDetails {
+	return &ProblemDetails{
+		Type:     TypeGone,
+		Title:    "Gone",
+		Status:   http.StatusGone, // 410
 		Detail:   detail,
 		Instance: instance,
 	}

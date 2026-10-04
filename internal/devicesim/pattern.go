@@ -142,7 +142,7 @@ func kindNames(fits func(kindSpec) bool) string {
 }
 
 // PatternSpec is how a tag's values are generated: the `pattern` object of the
-// config and the body of POST /api/v1/device/tags/{name}/pattern. Which fields apply
+// config and the body of POST /control/device/tags/{name}/pattern. Which fields apply
 // depends on Kind; the others must be absent.
 type PatternSpec struct {
 	Kind PatternKind `yaml:"kind" json:"kind"`

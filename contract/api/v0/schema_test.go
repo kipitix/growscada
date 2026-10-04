@@ -7,9 +7,9 @@ import (
 )
 
 func TestSchemaIsCommitted(t *testing.T) {
-	jsonschema.CheckCommitted(t, "../../../schemas/api/"+SchemaVersion.String()+".json", jsonschema.Document{
-		ID:    "https://github.com/kipitix/growscada/schemas/api/" + SchemaVersion.String() + ".json",
-		Title: "GrowSCADA server API " + SchemaVersion.String(),
+	jsonschema.CheckCommitted(t, "../../../schemas/api/"+SchemaVersion().String()+".json", jsonschema.Document{
+		ID:    "https://github.com/kipitix/growscada/schemas/api/" + SchemaVersion().String() + ".json",
+		Title: "GrowSCADA server API " + SchemaVersion().String(),
 		Tag:   "json",
 		Roots: []any{
 			TagResponse{}, GetTagsResponse{}, CreateTagRequest{}, CreateTagResponse{}, UpdateTagRequest{}, UpdateTagResponse{},

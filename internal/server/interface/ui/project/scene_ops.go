@@ -18,7 +18,7 @@ import (
 func (p *Project) createScene(ctx app.Context) {
 	ctx = p.compoCtx
 	url := p.apiServerURL + apiv0.PathPrefix + "/scenes"
-	body, _ := json.Marshal(createSceneRequest{Name: "New Scene", Width: 1920, Height: 1080})
+	body, _ := json.Marshal(apiv0.CreateSceneRequest{Name: "New Scene", Width: 1920, Height: 1080})
 	ctx.Async(func() {
 		resp, err := http.Post(url, "application/json", bytes.NewReader(body))
 		if err != nil {
@@ -165,7 +165,7 @@ func (p *Project) saveSceneProperties(ctx app.Context) {
 	}
 
 	url := p.apiServerURL + apiv0.PathPrefix + "/scenes/" + id
-	body, _ := json.Marshal(updateSceneRequest{
+	body, _ := json.Marshal(apiv0.UpdateSceneRequest{
 		Name:           name,
 		Width:          w,
 		Height:         h,
@@ -241,7 +241,7 @@ func (p *Project) commitSceneEdit(ctx app.Context) {
 		p.editingScenePropsName = name
 	}
 	url := p.apiServerURL + apiv0.PathPrefix + "/scenes/" + id
-	body, _ := json.Marshal(updateSceneRequest{
+	body, _ := json.Marshal(apiv0.UpdateSceneRequest{
 		Name:           name,
 		Width:          sc.Width,
 		Height:         sc.Height,

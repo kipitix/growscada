@@ -164,7 +164,7 @@ func (c *Client) do(ctx context.Context, method, path string, body []byte, wantS
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	req.Header.Set(contract.SchemaVersionHeader, apiv0.SchemaVersion.String())
+	req.Header.Set(contract.SchemaVersionHeader, apiv0.SchemaVersion().String())
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

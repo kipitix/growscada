@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
@@ -68,16 +69,21 @@ func (p *Project) createWidget(ctx app.Context, typeID string, x, y float64) {
 	}
 	sceneID := p.selectedSceneID
 	url := p.apiServerURL + apiv0.PathPrefix + "/scenes/" + sceneID + "/widgets"
-	body, _ := json.Marshal(createWidgetRequest{
+	typeUUID, err := uuid.Parse(typeID)
+	if err != nil {
+		ctx.NewActionWithValue(toast.ActionAdd, toast.ClientError(err))
+		return
+	}
+	body, _ := json.Marshal(apiv0.CreateWidgetRequest{
 		Name:         name,
-		Position:     positionDTO{X: x, Y: y, Z: 0},
-		Size:         sizeDTO{Width: width, Height: height},
-		Origin:       originDTO{X: 0.5, Y: 0.5},
-		Rotation:     rotationDTO{Degrees: 0},
-		TypeID:       typeID,
+		Position:     apiv0.PositionRequest{X: x, Y: y, Z: 0},
+		Size:         apiv0.SizeRequest{Width: width, Height: height},
+		Origin:       apiv0.OriginRequest{X: 0.5, Y: 0.5},
+		Rotation:     apiv0.RotationRequest{Degrees: 0},
+		TypeID:       typeUUID,
 		SceneVersion: p.currentSceneVersion(),
 		Labels:       []string{},
-		PortBindings: []portBindingDTO{},
+		PortBindings: []apiv0.PortBinding{},
 	})
 	ctx.Async(func() {
 		resp, err := http.Post(url, "application/json", bytes.NewReader(body))
@@ -250,21 +256,31 @@ func (p *Project) putWidget(ctx app.Context, w widgetItem) {
 	ctx = p.compoCtx
 	sceneID := p.selectedSceneID
 	url := p.apiServerURL + apiv0.PathPrefix + "/scenes/" + sceneID + "/widgets/" + w.ID
-	portBindings := w.PortBindings
-	if portBindings == nil {
-		portBindings = []portBindingDTO{}
+	typeUUID, err := uuid.Parse(w.TypeID)
+	if err != nil {
+		ctx.NewActionWithValue(toast.ActionAdd, toast.ClientError(err))
+		return
+	}
+	portBindings := make([]apiv0.PortBinding, 0, len(w.PortBindings))
+	for _, b := range w.PortBindings {
+		tagID, err := uuid.Parse(b.TagID)
+		if err != nil {
+			ctx.NewActionWithValue(toast.ActionAdd, toast.ClientError(err))
+			return
+		}
+		portBindings = append(portBindings, apiv0.PortBinding{PortName: b.PortName, TagID: tagID})
 	}
 	labels := w.Labels
 	if labels == nil {
 		labels = []string{}
 	}
-	body, _ := json.Marshal(updateWidgetRequest{
+	body, _ := json.Marshal(apiv0.UpdateWidgetRequest{
 		Name:         w.Name,
-		Position:     w.Position,
-		Size:         w.Size,
-		Origin:       w.Origin,
-		Rotation:     w.Rotation,
-		TypeID:       w.TypeID,
+		Position:     apiv0.PositionRequest(w.Position),
+		Size:         apiv0.SizeRequest(w.Size),
+		Origin:       apiv0.OriginRequest(w.Origin),
+		Rotation:     apiv0.RotationRequest(w.Rotation),
+		TypeID:       typeUUID,
 		Labels:       labels,
 		PortBindings: portBindings,
 		SceneVersion: p.currentSceneVersion(),

@@ -2,6 +2,7 @@ package restapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -30,12 +31,18 @@ func (r APIRouter) Close() {
 	r.eventsHandlers.Close()
 }
 
+// corsMaxAge is how long, in seconds, a browser may cache a CORS preflight.
+const corsMaxAge = "7200"
+
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, "+contract.SchemaVersionHeader)
 		w.Header().Set("Access-Control-Expose-Headers", contract.SchemaVersionHeader)
+		// Lets the browser reuse a preflight instead of repeating it before every
+		// POST/PUT/PATCH/DELETE; browsers cap the value (Chromium at 2 hours).
+		w.Header().Set("Access-Control-Max-Age", corsMaxAge)
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -79,7 +86,21 @@ func NewRouter(tagService application.TagService, widgetTypeService application.
 	router.eventsHandlers = NewEventsHandler(eventBus, maxSSEClients)
 	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/events", router.eventsHandlers.GetEvents)
 
+	router.serveMux.HandleFunc(preVersioningPathPrefix+"/", preVersioningGone)
+
 	return router
+}
+
+// preVersioningPathPrefix is where the API lived before ADR 0005: the shapes
+// of today's v0. A client still calling it is told where the API moved rather
+// than getting a bare 404. Remove it when the API reaches 1.0, where the path
+// takes its real meaning.
+const preVersioningPathPrefix = "/api/v1"
+
+func preVersioningGone(w http.ResponseWriter, r *http.Request) {
+	detail := fmt.Sprintf("%s is the server API from before contract versioning: use %s",
+		preVersioningPathPrefix, apiv0.PathPrefix)
+	sendJSONResponse(w, http.StatusGone, NewGone(detail, r.URL.Path))
 }
 
 // sendInternalError logs the full error and sends a generic 500 to the client.

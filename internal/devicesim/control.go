@@ -10,37 +10,37 @@ import (
 
 // Handler serves the control API:
 //
-//	GET    /api/v1/device                       Device status
-//	POST   /api/v1/device/start                 resume writing
-//	POST   /api/v1/device/stop                  pause writing (answers once silent)
-//	POST   /api/v1/device/tags/{name}/pattern   body: a pattern object
-//	POST   /api/v1/device/tags/{name}/quality   body: {"quality":"bad"}
-//	DELETE /api/v1/device/tags/{name}/quality   back to the configured quality
+//	GET    /control/device                       Device status
+//	POST   /control/device/start                 resume writing
+//	POST   /control/device/stop                  pause writing (answers once silent)
+//	POST   /control/device/tags/{name}/pattern   body: a pattern object
+//	POST   /control/device/tags/{name}/quality   body: {"quality":"bad"}
+//	DELETE /control/device/tags/{name}/quality   back to the configured quality
 //
 // The API is served from the start, while the Device is still connecting to
 // the server; tag calls answer 503 until it is connected. Every successful
 // call answers with the Device status; errors are RFC 7807 Problem Details.
 func (d *Device) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/v1/device/start", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /control/device/start", func(w http.ResponseWriter, r *http.Request) {
 		d.Start()
 		d.sendStatus(w)
 	})
-	mux.HandleFunc("POST /api/v1/device/stop", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /control/device/stop", func(w http.ResponseWriter, r *http.Request) {
 		d.Stop()
 		d.sendStatus(w)
 	})
-	mux.HandleFunc("GET /api/v1/device", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /control/device", func(w http.ResponseWriter, r *http.Request) {
 		d.sendStatus(w)
 	})
-	mux.HandleFunc("POST /api/v1/device/tags/{name}/pattern", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /control/device/tags/{name}/pattern", func(w http.ResponseWriter, r *http.Request) {
 		var p PatternSpec
 		if !decodeBody(w, r, &p) {
 			return
 		}
 		d.reply(w, r, d.SetPattern(r.PathValue("name"), p))
 	})
-	mux.HandleFunc("POST /api/v1/device/tags/{name}/quality", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /control/device/tags/{name}/quality", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Quality devicelink.Quality `json:"quality"`
 		}
@@ -49,7 +49,7 @@ func (d *Device) Handler() http.Handler {
 		}
 		d.reply(w, r, d.OverrideQuality(r.PathValue("name"), body.Quality))
 	})
-	mux.HandleFunc("DELETE /api/v1/device/tags/{name}/quality", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("DELETE /control/device/tags/{name}/quality", func(w http.ResponseWriter, r *http.Request) {
 		d.reply(w, r, d.ResetQuality(r.PathValue("name")))
 	})
 	return mux

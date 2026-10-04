@@ -16,7 +16,7 @@ func (p *Project) createTag(ctx app.Context) {
 	name := p.newTagName
 	tagType := p.newTagType
 	url := p.apiServerURL + apiv0.PathPrefix + "/tags"
-	body, err := json.Marshal(createTagRequest{
+	body, err := json.Marshal(apiv0.CreateTagRequest{
 		Name:    name,
 		Type:    tagType,
 		Value:   defaultTagValue(tagType),

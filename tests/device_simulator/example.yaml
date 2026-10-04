@@ -5,7 +5,7 @@
 # Tags are referenced by name; the simulator never creates or deletes them.
 server: http://localhost:9090   # overridden by --server / DEVSIM_SERVER
 control: :9191                  # control API, overridden by --control
-autostart: true                 # false: wait for POST /api/v1/device/start
+autostart: true                 # false: wait for POST /control/device/start
 defaultInterval: 1s             # write interval of tags that set none
 tags:
   - tag: sim.pump1.speed
