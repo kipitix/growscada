@@ -163,6 +163,10 @@ func (p *Project) saveSceneProperties(ctx app.Context) {
 			break
 		}
 	}
+	// Show the fields as the scene now holds them, so that the reload after
+	// a rejected save puts the server's values back (mergeSceneEditingFields
+	// keeps only fields the user changed since).
+	p.syncSceneEditingFields()
 
 	url := p.apiServerURL + apiv0.PathPrefix + "/scenes/" + id
 	body, _ := json.Marshal(apiv0.UpdateSceneRequest{

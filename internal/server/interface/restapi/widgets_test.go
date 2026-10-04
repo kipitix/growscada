@@ -62,7 +62,7 @@ func createSceneViaSceneService(t *testing.T) appdto.Scene {
 	repo := repositories.NewSceneRepositoryPostgres(testDB)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	svc := application.NewSceneService(repo, wtRepo, event.NewEventBus())
-	resp, err := svc.CreateScene(context.Background(), appdto.CreateSceneInput{
+	resp, err := svc.CreateScene(context.Background(), appdto.SceneInput{
 		Name: "test-scene-" + uuid.New().String(), Width: 1920, Height: 1080,
 	})
 	if err != nil {
@@ -71,19 +71,19 @@ func createSceneViaSceneService(t *testing.T) appdto.Scene {
 	return resp
 }
 
-func createWidgetViaService(t *testing.T, sceneID uuid.UUID, input appdto.CreateWidgetInput) appdto.Widget {
+func createWidgetViaService(t *testing.T, sceneID uuid.UUID, sceneVersion int, input appdto.WidgetInput) appdto.Widget {
 	t.Helper()
 	repo := repositories.NewSceneRepositoryPostgres(testDB)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	svc := application.NewSceneService(repo, wtRepo, event.NewEventBus())
-	resp, err := svc.CreateWidget(context.Background(), sceneID, input)
+	resp, err := svc.CreateWidget(context.Background(), sceneID, sceneVersion, input)
 	if err != nil {
 		t.Fatalf("createWidgetViaService: %v", err)
 	}
 	return resp
 }
 
-var testWidgetInput = appdto.CreateWidgetInput{
+var testWidgetInput = appdto.WidgetInput{
 	Name:            "pressure-gauge",
 	X:               10.0,
 	Y:               20.0,
@@ -138,12 +138,10 @@ func TestGetWidgetsBySceneID_WithItems_Returns200WithAll(t *testing.T) {
 	cleanWidgetsRest(t)
 	sc := createSceneViaSceneService(t)
 	input := testWidgetInput
-	input.SceneVersion = sc.Version
-	created := createWidgetViaService(t, sc.ID, input)
+	created := createWidgetViaService(t, sc.ID, sc.Version, input)
 	input2 := testWidgetInput
 	input2.Name = "thermometer"
-	input2.SceneVersion = created.SceneVersion
-	createWidgetViaService(t, sc.ID, input2)
+	createWidgetViaService(t, sc.ID, created.SceneVersion, input2)
 	router := newRouterWithWidgets()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v0/scenes/"+sc.ID.String()+"/widgets", nil)
@@ -181,13 +179,11 @@ func TestGetWidgetsBySceneID_TwoScenes_ReturnsOnlyMatchingScene(t *testing.T) {
 
 	inTarget := testWidgetInput
 	inTarget.Name = "widget-in-target"
-	inTarget.SceneVersion = target.Version
-	createWidgetViaService(t, target.ID, inTarget)
+	createWidgetViaService(t, target.ID, target.Version, inTarget)
 
 	inOther := testWidgetInput
 	inOther.Name = "widget-in-other"
-	inOther.SceneVersion = other.Version
-	createWidgetViaService(t, other.ID, inOther)
+	createWidgetViaService(t, other.ID, other.Version, inOther)
 
 	router := newRouterWithWidgets()
 	req := httptest.NewRequest(http.MethodGet, "/api/v0/scenes/"+target.ID.String()+"/widgets", nil)
@@ -215,8 +211,7 @@ func TestGetWidgetsByID_Existing_Returns200(t *testing.T) {
 	cleanWidgetsRest(t)
 	sc := createSceneViaSceneService(t)
 	input := testWidgetInput
-	input.SceneVersion = sc.Version
-	created := createWidgetViaService(t, sc.ID, input)
+	created := createWidgetViaService(t, sc.ID, sc.Version, input)
 	router := newRouterWithWidgets()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v0/scenes/"+sc.ID.String()+"/widgets/"+created.ID.String(), nil)
@@ -377,8 +372,7 @@ func TestPutWidgetsByID_Valid_Returns200WithIncrementedSceneVersion(t *testing.T
 	cleanWidgetsRest(t)
 	sc := createSceneViaSceneService(t)
 	input := testWidgetInput
-	input.SceneVersion = sc.Version
-	created := createWidgetViaService(t, sc.ID, input)
+	created := createWidgetViaService(t, sc.ID, sc.Version, input)
 	router := newRouterWithWidgets()
 
 	body, _ := json.Marshal(apiv0.UpdateWidgetRequest{
@@ -482,7 +476,7 @@ type stubSceneServiceForWidgets struct {
 	updateErr error
 }
 
-func (s *stubSceneServiceForWidgets) UpdateWidget(_ context.Context, _, _ uuid.UUID, _ appdto.UpdateWidgetInput) (appdto.Widget, error) {
+func (s *stubSceneServiceForWidgets) UpdateWidget(_ context.Context, _, _ uuid.UUID, _ int, _ appdto.WidgetInput) (appdto.Widget, error) {
 	return appdto.Widget{}, s.updateErr
 }
 
@@ -492,8 +486,7 @@ func TestDeleteWidgetsByID_Existing_Returns200WithDeletedItem(t *testing.T) {
 	cleanWidgetsRest(t)
 	sc := createSceneViaSceneService(t)
 	input := testWidgetInput
-	input.SceneVersion = sc.Version
-	created := createWidgetViaService(t, sc.ID, input)
+	created := createWidgetViaService(t, sc.ID, sc.Version, input)
 	router := newRouterWithWidgets()
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v0/scenes/"+sc.ID.String()+"/widgets/"+created.ID.String(), nil)
@@ -542,8 +535,7 @@ func TestDeleteWidgetsByID_Existing_RemovedFromDB(t *testing.T) {
 	cleanWidgetsRest(t)
 	sc := createSceneViaSceneService(t)
 	input := testWidgetInput
-	input.SceneVersion = sc.Version
-	created := createWidgetViaService(t, sc.ID, input)
+	created := createWidgetViaService(t, sc.ID, sc.Version, input)
 	router := newRouterWithWidgets()
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v0/scenes/"+sc.ID.String()+"/widgets/"+created.ID.String(), nil)
@@ -569,8 +561,7 @@ func TestDeleteScenesByID_WithWidgets_WidgetsAreGoneAfter(t *testing.T) {
 	cleanWidgetsRest(t)
 	sc := createSceneViaSceneService(t)
 	input := testWidgetInput
-	input.SceneVersion = sc.Version
-	created := createWidgetViaService(t, sc.ID, input)
+	created := createWidgetViaService(t, sc.ID, sc.Version, input)
 	router := newRouterWithWidgets()
 
 	delReq := httptest.NewRequest(http.MethodDelete, "/api/v0/scenes/"+sc.ID.String(), nil)
@@ -592,7 +583,7 @@ func TestDeleteScenesByID_WithWidgets_WidgetsAreGoneAfter(t *testing.T) {
 
 func TestPostWidgets_InvalidInput_Returns400(t *testing.T) {
 	cleanWidgetTypes(t)
-	wt := createWidgetTypeViaService(t, appdto.CreateWidgetTypeInput{
+	wt := createWidgetTypeViaService(t, appdto.WidgetTypeInput{
 		Name: "gauge", HtmlTemplate: "<div/>", Script: "x", ScriptLanguage: "javascript",
 		DefaultWidth: 100, DefaultHeight: 100,
 		InputPorts: []appdto.InputPort{{Name: "value", TypeHint: "integer"}},

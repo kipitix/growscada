@@ -274,7 +274,7 @@ func (p *Project) putWidget(ctx app.Context, w widgetItem) {
 	if labels == nil {
 		labels = []string{}
 	}
-	body, _ := json.Marshal(apiv0.UpdateWidgetRequest{
+	body, err := json.Marshal(apiv0.UpdateWidgetRequest{
 		Name:         w.Name,
 		Position:     apiv0.PositionRequest(w.Position),
 		Size:         apiv0.SizeRequest(w.Size),
@@ -285,6 +285,11 @@ func (p *Project) putWidget(ctx app.Context, w widgetItem) {
 		PortBindings: portBindings,
 		SceneVersion: p.currentSceneVersion(),
 	})
+	if err != nil {
+		ctx.NewActionWithValue(toast.ActionAdd, toast.ClientError(err))
+		p.loadWidgets(ctx)
+		return
+	}
 	ctx.Async(func() {
 		req, _ := http.NewRequest(http.MethodPut, url, bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -316,6 +321,36 @@ func (p *Project) putWidget(ctx app.Context, w widgetItem) {
 
 // ── Drag finalisation ─────────────────────────────────────────────────────────
 
+// widgetGeometry is the part of a widget a canvas drag changes.
+type widgetGeometry struct {
+	Position positionDTO
+	Size     sizeDTO
+	Origin   originDTO
+	Rotation rotationDTO
+}
+
+func (w widgetItem) geometry() widgetGeometry {
+	return widgetGeometry{Position: w.Position, Size: w.Size, Origin: w.Origin, Rotation: w.Rotation}
+}
+
+// draggedWidgetID returns the widget a canvas drag (move, origin, rotate or
+// resize) is changing, or "" when none is.
+func (p *Project) draggedWidgetID() string {
+	for _, id := range []string{p.draggingWidgetID, p.draggingOriginID, p.rotatingWidgetID, p.resizingWidgetID} {
+		if id != "" {
+			return id
+		}
+	}
+	return ""
+}
+
+// dragChangedWidget reports whether the drag that is ending changed w: a
+// click (no move) or a drag back to the start leaves nothing to save, and
+// saving it anyway would bump the scene version for every other client.
+func (p *Project) dragChangedWidget(w widgetItem) bool {
+	return p.dragDidMove && w.geometry() != p.dragStartGeometry
+}
+
 func (p *Project) finalizeAllDrags(ctx app.Context) {
 	anyDrag := false
 	for _, idPtr := range []*string{
@@ -344,6 +379,9 @@ func (p *Project) finalizeAllDrags(ctx app.Context) {
 func (p *Project) saveDraggedWidget(ctx app.Context, id string) {
 	for i := range p.widgets {
 		if p.widgets[i].ID == id {
+			if !p.dragChangedWidget(p.widgets[i]) {
+				break
+			}
 			if p.selectedWidgetID == id {
 				p.syncEditingFields(p.widgets[i])
 			}

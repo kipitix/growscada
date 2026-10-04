@@ -184,6 +184,8 @@ func (t tagServiceImpl) SetTagValueByID(ctx context.Context, request appdto.Upda
 		return appdto.Tag{}, fmt.Errorf("cannot parse quality: %w", invalidInput(err))
 	}
 
+	// The stored tag's type is valid (FindByID rejects any other), so SetValue
+	// fails only when the caller's value does not fit that type.
 	if err = foundTag.SetValue(request.Value, newQuality); err != nil {
 		return appdto.Tag{}, fmt.Errorf("cannot set tag value: %w", invalidInput(err))
 	}

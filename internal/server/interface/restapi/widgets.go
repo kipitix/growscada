@@ -88,7 +88,7 @@ func (h WidgetsHandlers) PostWidgets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := h.service.CreateWidget(r.Context(), sceneID, newCreateWidgetInput(request))
+	created, err := h.service.CreateWidget(r.Context(), sceneID, request.SceneVersion, newCreateWidgetInput(request))
 	if err != nil {
 		if errors.Is(err, scene.ErrSceneNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
@@ -125,7 +125,7 @@ func (h WidgetsHandlers) PutWidgetsByID(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	updated, err := h.service.UpdateWidget(r.Context(), sceneID, widgetID, newUpdateWidgetInput(request, widgetID))
+	updated, err := h.service.UpdateWidget(r.Context(), sceneID, widgetID, request.SceneVersion, newUpdateWidgetInput(request))
 	if err != nil {
 		if errors.Is(err, scene.ErrSceneNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), sceneIDStr, r.URL.Path))

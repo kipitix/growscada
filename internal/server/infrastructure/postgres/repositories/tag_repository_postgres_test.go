@@ -21,7 +21,12 @@ import (
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
 
-var testDB *sql.DB
+var (
+	testDB *sql.DB
+	// testConnStr connects to testDB; tests that need a database of their own
+	// (migrationDB) create it on the same server.
+	testConnStr string
+)
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
@@ -67,6 +72,7 @@ func TestMain(m *testing.M) {
 	}
 
 	testDB = db
+	testConnStr = connStr
 
 	code := m.Run()
 

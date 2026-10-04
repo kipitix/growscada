@@ -88,8 +88,8 @@ func newUpdateSceneResponse(s appdto.Scene) apiv0.UpdateSceneResponse {
 	return apiv0.UpdateSceneResponse{Version: s.Version}
 }
 
-func newCreateSceneInput(r apiv0.CreateSceneRequest) appdto.CreateSceneInput {
-	return appdto.CreateSceneInput{
+func newCreateSceneInput(r apiv0.CreateSceneRequest) appdto.SceneInput {
+	return appdto.SceneInput{
 		Name:           r.Name,
 		Width:          r.Width,
 		Height:         r.Height,
@@ -97,14 +97,12 @@ func newCreateSceneInput(r apiv0.CreateSceneRequest) appdto.CreateSceneInput {
 	}
 }
 
-func newUpdateSceneInput(r apiv0.UpdateSceneRequest, sceneID uuid.UUID) appdto.UpdateSceneInput {
-	return appdto.UpdateSceneInput{
-		ID:             sceneID,
+func newUpdateSceneInput(r apiv0.UpdateSceneRequest) appdto.SceneInput {
+	return appdto.SceneInput{
 		Name:           r.Name,
 		Width:          r.Width,
 		Height:         r.Height,
 		BackgroundHTML: r.BackgroundHTML,
-		Version:        r.Version,
 	}
 }
 
@@ -182,8 +180,8 @@ func newUpdateWidgetResponse(w appdto.Widget) apiv0.UpdateWidgetResponse {
 	return apiv0.UpdateWidgetResponse{SceneVersion: w.SceneVersion}
 }
 
-func newCreateWidgetInput(r apiv0.CreateWidgetRequest) appdto.CreateWidgetInput {
-	return appdto.CreateWidgetInput{
+func newCreateWidgetInput(r apiv0.CreateWidgetRequest) appdto.WidgetInput {
+	return appdto.WidgetInput{
 		Name:            r.Name,
 		X:               r.Position.X,
 		Y:               r.Position.Y,
@@ -194,15 +192,13 @@ func newCreateWidgetInput(r apiv0.CreateWidgetRequest) appdto.CreateWidgetInput 
 		OriginY:         r.Origin.Y,
 		RotationDegrees: r.Rotation.Degrees,
 		TypeID:          r.TypeID,
-		SceneVersion:    r.SceneVersion,
 		Labels:          r.Labels,
 		PortBindings:    portBindingDTOsToAppDTOs(r.PortBindings),
 	}
 }
 
-func newUpdateWidgetInput(r apiv0.UpdateWidgetRequest, widgetID uuid.UUID) appdto.UpdateWidgetInput {
-	return appdto.UpdateWidgetInput{
-		ID:              widgetID,
+func newUpdateWidgetInput(r apiv0.UpdateWidgetRequest) appdto.WidgetInput {
+	return appdto.WidgetInput{
 		Name:            r.Name,
 		X:               r.Position.X,
 		Y:               r.Position.Y,
@@ -213,7 +209,6 @@ func newUpdateWidgetInput(r apiv0.UpdateWidgetRequest, widgetID uuid.UUID) appdt
 		OriginY:         r.Origin.Y,
 		RotationDegrees: r.Rotation.Degrees,
 		TypeID:          r.TypeID,
-		SceneVersion:    r.SceneVersion,
 		Labels:          r.Labels,
 		PortBindings:    portBindingDTOsToAppDTOs(r.PortBindings),
 	}
@@ -273,8 +268,8 @@ func newUpdateWidgetTypeResponse(wt appdto.WidgetType) apiv0.UpdateWidgetTypeRes
 	return apiv0.UpdateWidgetTypeResponse{Version: wt.Version}
 }
 
-func newCreateWidgetTypeInput(r apiv0.CreateWidgetTypeRequest) appdto.CreateWidgetTypeInput {
-	return appdto.CreateWidgetTypeInput{
+func newCreateWidgetTypeInput(r apiv0.CreateWidgetTypeRequest) appdto.WidgetTypeInput {
+	return appdto.WidgetTypeInput{
 		Name:           r.Name,
 		HtmlTemplate:   r.HtmlTemplate,
 		Script:         r.Script,
@@ -285,9 +280,8 @@ func newCreateWidgetTypeInput(r apiv0.CreateWidgetTypeRequest) appdto.CreateWidg
 	}
 }
 
-func newUpdateWidgetTypeInput(r apiv0.UpdateWidgetTypeRequest, anID uuid.UUID) appdto.UpdateWidgetTypeInput {
-	return appdto.UpdateWidgetTypeInput{
-		ID:             anID,
+func newUpdateWidgetTypeInput(r apiv0.UpdateWidgetTypeRequest) appdto.WidgetTypeInput {
+	return appdto.WidgetTypeInput{
 		Name:           r.Name,
 		HtmlTemplate:   r.HtmlTemplate,
 		Script:         r.Script,
@@ -295,6 +289,5 @@ func newUpdateWidgetTypeInput(r apiv0.UpdateWidgetTypeRequest, anID uuid.UUID) a
 		DefaultWidth:   r.DefaultWidth,
 		DefaultHeight:  r.DefaultHeight,
 		InputPorts:     inputPortDTOsToAppDTOs(r.InputPorts),
-		Version:        r.Version,
 	}
 }

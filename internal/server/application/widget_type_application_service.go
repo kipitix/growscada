@@ -17,8 +17,8 @@ import (
 type WidgetTypeService interface {
 	FindAllWidgetTypes(context.Context) ([]appdto.WidgetType, error)
 	FindWidgetTypeByID(context.Context, uuid.UUID) (appdto.WidgetType, error)
-	CreateWidgetType(context.Context, appdto.CreateWidgetTypeInput) (appdto.WidgetType, error)
-	UpdateWidgetType(context.Context, appdto.UpdateWidgetTypeInput) (appdto.WidgetType, error)
+	CreateWidgetType(context.Context, appdto.WidgetTypeInput) (appdto.WidgetType, error)
+	UpdateWidgetType(ctx context.Context, widgetTypeID uuid.UUID, version int, input appdto.WidgetTypeInput) (appdto.WidgetType, error)
 	DeleteWidgetTypeByID(context.Context, uuid.UUID) (appdto.WidgetType, error)
 }
 
@@ -55,40 +55,10 @@ func (s widgetTypeServiceImpl) FindWidgetTypeByID(ctx context.Context, rawID uui
 	return appdto.NewWidgetType(wt), nil
 }
 
-func (s widgetTypeServiceImpl) CreateWidgetType(ctx context.Context, input appdto.CreateWidgetTypeInput) (appdto.WidgetType, error) {
+func (s widgetTypeServiceImpl) CreateWidgetType(ctx context.Context, input appdto.WidgetTypeInput) (appdto.WidgetType, error) {
 	newID := s.repository.NextID()
 
-	newName, err := widget.NewWidgetTypeName(input.Name)
-	if err != nil {
-		return appdto.WidgetType{}, fmt.Errorf("cannot create widget type because of name: %w", invalidInput(err))
-	}
-
-	newHtml, err := widget.NewHtmlTemplate(input.HtmlTemplate)
-	if err != nil {
-		return appdto.WidgetType{}, fmt.Errorf("cannot create widget type because of html template: %w", invalidInput(err))
-	}
-
-	newScript, err := widget.NewScript(input.Script)
-	if err != nil {
-		return appdto.WidgetType{}, fmt.Errorf("cannot create widget type because of script: %w", invalidInput(err))
-	}
-
-	newLang, err := widget.NewScriptLanguage(input.ScriptLanguage)
-	if err != nil {
-		return appdto.WidgetType{}, fmt.Errorf("cannot create widget type because of script language: %w", invalidInput(err))
-	}
-
-	defaultSize, err := widget.NewSize(input.DefaultWidth, input.DefaultHeight)
-	if err != nil {
-		return appdto.WidgetType{}, fmt.Errorf("cannot create widget type because of default size: %w", invalidInput(err))
-	}
-
-	inputPorts, err := dtoInputPortsToDomain(input.InputPorts)
-	if err != nil {
-		return appdto.WidgetType{}, fmt.Errorf("cannot create widget type because of input ports: %w", invalidInput(err))
-	}
-
-	newWt, err := widget.NewWidgetType(newID, newName, newHtml, newScript, newLang, defaultSize, inputPorts, version.Initial[widget.WidgetType]())
+	newWt, err := parseWidgetType(newID, version.Initial[widget.WidgetType](), input)
 	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("cannot create widget type: %w", invalidInput(err))
 	}
@@ -103,51 +73,21 @@ func (s widgetTypeServiceImpl) CreateWidgetType(ctx context.Context, input appdt
 	return appdto.NewWidgetType(newWt), nil
 }
 
-func (s widgetTypeServiceImpl) UpdateWidgetType(ctx context.Context, input appdto.UpdateWidgetTypeInput) (appdto.WidgetType, error) {
-	widgetTypeID := id.NewID(id.IDWithUUID[widget.WidgetType](input.ID))
+func (s widgetTypeServiceImpl) UpdateWidgetType(ctx context.Context, rawID uuid.UUID, expectedVersion int, input appdto.WidgetTypeInput) (appdto.WidgetType, error) {
+	widgetTypeID := id.NewID(id.IDWithUUID[widget.WidgetType](rawID))
 
 	found, err := s.repository.FindByID(ctx, widgetTypeID)
 	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("error on find widget type by id in repository: %w", err)
 	}
 
-	if found.Version().Number() != input.Version {
+	if found.Version().Number() != expectedVersion {
 		return appdto.WidgetType{}, widget.ErrWidgetTypeConflict
 	}
 
-	newName, err := widget.NewWidgetTypeName(input.Name)
+	updated, err := parseWidgetType(found.ID(), found.Version(), input)
 	if err != nil {
-		return appdto.WidgetType{}, fmt.Errorf("cannot parse name: %w", invalidInput(err))
-	}
-
-	newHtml, err := widget.NewHtmlTemplate(input.HtmlTemplate)
-	if err != nil {
-		return appdto.WidgetType{}, fmt.Errorf("cannot parse html template: %w", invalidInput(err))
-	}
-
-	newScript, err := widget.NewScript(input.Script)
-	if err != nil {
-		return appdto.WidgetType{}, fmt.Errorf("cannot parse script: %w", invalidInput(err))
-	}
-
-	newLang, err := widget.NewScriptLanguage(input.ScriptLanguage)
-	if err != nil {
-		return appdto.WidgetType{}, fmt.Errorf("cannot parse script language: %w", invalidInput(err))
-	}
-
-	defaultSize, err := widget.NewSize(input.DefaultWidth, input.DefaultHeight)
-	if err != nil {
-		return appdto.WidgetType{}, fmt.Errorf("cannot parse default size: %w", invalidInput(err))
-	}
-
-	inputPorts, err := dtoInputPortsToDomain(input.InputPorts)
-	if err != nil {
-		return appdto.WidgetType{}, fmt.Errorf("cannot parse input ports: %w", invalidInput(err))
-	}
-
-	updated, err := widget.NewWidgetType(found.ID(), newName, newHtml, newScript, newLang, defaultSize, inputPorts, found.Version())
-	if err != nil {
-		return appdto.WidgetType{}, fmt.Errorf("cannot build updated widget type: %w", invalidInput(err))
+		return appdto.WidgetType{}, fmt.Errorf("cannot update widget type: %w", invalidInput(err))
 	}
 
 	found, err = s.repository.Save(ctx, updated)
@@ -162,6 +102,37 @@ func (s widgetTypeServiceImpl) UpdateWidgetType(ctx context.Context, input appdt
 	}
 
 	return appdto.NewWidgetType(found), nil
+}
+
+// parseWidgetType builds a widget type from the client's fields; each error
+// names the field it comes from. The caller marks the error as invalid input.
+func parseWidgetType(widgetTypeID id.ID[widget.WidgetType], ver version.Version[widget.WidgetType], input appdto.WidgetTypeInput) (widget.WidgetType, error) {
+	name, err := widget.NewWidgetTypeName(input.Name)
+	if err != nil {
+		return nil, fmt.Errorf("name: %w", err)
+	}
+	html, err := widget.NewHtmlTemplate(input.HtmlTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("html_template: %w", err)
+	}
+	script, err := widget.NewScript(input.Script)
+	if err != nil {
+		return nil, fmt.Errorf("script: %w", err)
+	}
+	lang, err := widget.NewScriptLanguage(input.ScriptLanguage)
+	if err != nil {
+		return nil, fmt.Errorf("script_language: %w", err)
+	}
+	defaultSize, err := widget.NewSize(input.DefaultWidth, input.DefaultHeight)
+	if err != nil {
+		return nil, fmt.Errorf("default_width, default_height: %w", err)
+	}
+	inputPorts, err := dtoInputPortsToDomain(input.InputPorts)
+	if err != nil {
+		return nil, fmt.Errorf("input_ports: %w", err)
+	}
+	// NewWidgetType checks the fields together (e.g. port names are unique).
+	return widget.NewWidgetType(widgetTypeID, name, html, script, lang, defaultSize, inputPorts, ver)
 }
 
 // DeleteWidgetTypeByID deletes a widget type no Widget uses; while Widgets

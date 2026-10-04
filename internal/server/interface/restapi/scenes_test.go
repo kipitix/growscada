@@ -37,7 +37,7 @@ func newRouterWithScenes() *restapi.APIRouter {
 	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, event.NewEventBus(), 100)
 }
 
-func createSceneViaService(t *testing.T, input appdto.CreateSceneInput) appdto.Scene {
+func createSceneViaService(t *testing.T, input appdto.SceneInput) appdto.Scene {
 	t.Helper()
 	repo := repositories.NewSceneRepositoryPostgres(testDB)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
@@ -49,7 +49,7 @@ func createSceneViaService(t *testing.T, input appdto.CreateSceneInput) appdto.S
 	return resp
 }
 
-var testSceneInput = appdto.CreateSceneInput{
+var testSceneInput = appdto.SceneInput{
 	Name:           "main-dashboard",
 	Width:          1920,
 	Height:         1080,
@@ -334,7 +334,7 @@ type stubSceneService struct {
 	updateErr error
 }
 
-func (s *stubSceneService) UpdateScene(_ context.Context, _ appdto.UpdateSceneInput) (appdto.Scene, error) {
+func (s *stubSceneService) UpdateScene(_ context.Context, _ uuid.UUID, _ int, _ appdto.SceneInput) (appdto.Scene, error) {
 	return appdto.Scene{}, s.updateErr
 }
 
@@ -419,7 +419,7 @@ func TestPutScenesByID_InvalidInput_Returns400(t *testing.T) {
 	for name, request := range cases {
 		t.Run(name, func(t *testing.T) {
 			cleanScenesRest(t)
-			created := createSceneViaService(t, appdto.CreateSceneInput{Name: "main", Width: 800, Height: 600})
+			created := createSceneViaService(t, appdto.SceneInput{Name: "main", Width: 800, Height: 600})
 			request.Version = created.Version
 			body, _ := json.Marshal(request)
 			req := httptest.NewRequest(http.MethodPut, "/api/v0/scenes/"+created.ID.String(), bytes.NewReader(body))

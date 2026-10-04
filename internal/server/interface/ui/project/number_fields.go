@@ -2,6 +2,7 @@ package project
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 )
 
@@ -24,7 +25,8 @@ func (n *numberFields) int(name, s string) int {
 
 func (n *numberFields) float(name, s string) float64 {
 	v, err := strconv.ParseFloat(s, 64)
-	if err != nil && n.err == nil {
+	// NaN and ±Inf parse but have no JSON form, so they cannot be sent either.
+	if (err != nil || math.IsNaN(v) || math.IsInf(v, 0)) && n.err == nil {
 		n.err = fmt.Errorf("%s: %q is not a number", name, s)
 	}
 	return v

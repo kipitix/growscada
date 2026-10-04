@@ -25,8 +25,10 @@ type WidgetType struct {
 	Version        int
 }
 
-// CreateWidgetTypeInput holds the input data for creating a widget type.
-type CreateWidgetTypeInput struct {
+// WidgetTypeInput holds the fields of a widget type a client creates or
+// updates. The widget type's ID and the version an update expects are passed
+// separately.
+type WidgetTypeInput struct {
 	Name           string
 	HtmlTemplate   string
 	Script         string
@@ -34,20 +36,6 @@ type CreateWidgetTypeInput struct {
 	DefaultWidth   int
 	DefaultHeight  int
 	InputPorts     []InputPort
-}
-
-// UpdateWidgetTypeInput holds the input data for updating a widget type.
-// Version must match the current persisted version for optimistic locking.
-type UpdateWidgetTypeInput struct {
-	ID             uuid.UUID
-	Name           string
-	HtmlTemplate   string
-	Script         string
-	ScriptLanguage string
-	DefaultWidth   int
-	DefaultHeight  int
-	InputPorts     []InputPort
-	Version        int
 }
 
 // NewWidgetType creates a WidgetType DTO from the domain aggregate.

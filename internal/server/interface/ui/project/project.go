@@ -67,6 +67,9 @@ type Project struct {
 	draggedTypeID string
 	dragJustEnded bool // suppresses the canvas OnClick that fires right after mouseup
 	dragDidMove   bool // true if mouse moved during the drag; only then suppress the click
+	// dragStartGeometry is the dragged widget's geometry before its first
+	// move; a drag that ends where it started saves nothing.
+	dragStartGeometry widgetGeometry
 
 	// ── Drag: move widget body ──────────────────────────────────────────────
 	draggingWidgetID string
@@ -359,8 +362,14 @@ func (p *Project) renderScenesContent() app.UI {
 				}
 			}
 
-			// Mark that a real drag occurred (not just a mousedown+mouseup click).
-			if p.draggingWidgetID != "" || p.draggingOriginID != "" || p.rotatingWidgetID != "" || p.resizingWidgetID != "" {
+			// Mark that a real drag occurred (not just a mousedown+mouseup click),
+			// remembering the widget as it was before the first move.
+			if id := p.draggedWidgetID(); id != "" {
+				if !p.dragDidMove {
+					if w, ok := p.widgetByID(id); ok {
+						p.dragStartGeometry = w.geometry()
+					}
+				}
 				p.dragDidMove = true
 			}
 

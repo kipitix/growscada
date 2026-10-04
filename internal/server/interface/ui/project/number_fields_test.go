@@ -25,3 +25,13 @@ func TestNumberFields_ReportsFirstFieldThatIsNotANumber(t *testing.T) {
 		t.Errorf("err: expected %q, got %v", want, nf.err)
 	}
 }
+
+func TestNumberFields_RejectsNaNAndInf(t *testing.T) {
+	for _, s := range []string{"NaN", "nan", "Inf", "-Inf", "+inf", "infinity", "1e999"} {
+		var nf numberFields
+		nf.float("rotation", s)
+		if nf.err == nil {
+			t.Errorf("%q: expected an error, got nil", s)
+		}
+	}
+}

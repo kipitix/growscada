@@ -81,7 +81,7 @@ func (h WidgetTypesHandlers) PutWidgetTypesByID(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	updated, err := h.service.UpdateWidgetType(r.Context(), newUpdateWidgetTypeInput(request, inID))
+	updated, err := h.service.UpdateWidgetType(r.Context(), inID, request.Version, newUpdateWidgetTypeInput(request))
 	if err != nil {
 		if errors.Is(err, widget.ErrWidgetTypeNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))

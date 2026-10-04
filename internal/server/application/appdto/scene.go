@@ -15,23 +15,13 @@ type Scene struct {
 	Version        int
 }
 
-// CreateSceneInput holds the input data for creating a scene.
-type CreateSceneInput struct {
+// SceneInput holds the fields of a scene a client creates or updates. The
+// scene's ID and the version an update expects are passed separately.
+type SceneInput struct {
 	Name           string
 	Width          int
 	Height         int
 	BackgroundHTML string
-}
-
-// UpdateSceneInput holds the input data for updating a scene.
-// Version must match the current persisted version for optimistic locking.
-type UpdateSceneInput struct {
-	ID             uuid.UUID
-	Name           string
-	Width          int
-	Height         int
-	BackgroundHTML string
-	Version        int
 }
 
 // NewScene creates a Scene DTO from the domain aggregate.

@@ -81,7 +81,7 @@ func (h ScenesHandlers) PutScenesByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := h.service.UpdateScene(r.Context(), newUpdateSceneInput(request, sceneID))
+	updated, err := h.service.UpdateScene(r.Context(), sceneID, request.Version, newUpdateSceneInput(request))
 	if err != nil {
 		if errors.Is(err, scene.ErrSceneNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))

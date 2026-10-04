@@ -71,3 +71,35 @@ func TestTagType_String(t *testing.T) {
 		})
 	}
 }
+
+// Every TagType a stored tag can have must build values: SetTagValueByID
+// treats each SetValue error as the caller's invalid value, which holds only
+// while NewTagValue has no unreachable "unknown tag type" branch for a valid
+// type. The types are walked by their internal number, so a type added later
+// is covered without editing this test.
+func TestTagType_EveryValidTypeBuildsValues(t *testing.T) {
+	inputs := []any{"", "0", "false", 0, false}
+	for n := 1; ; n++ {
+		tt := TagType{tagType: n}
+		if tt.String() == "invalid" {
+			if n == 1 {
+				t.Fatal("no tag types found")
+			}
+			return
+		}
+		parsed, err := NewTagType(tt.String())
+		if err != nil || parsed != tt {
+			t.Errorf("NewTagType(%q): expected %v, got %v (err %v)", tt.String(), tt, parsed, err)
+		}
+		built := false
+		for _, in := range inputs {
+			if _, err := tt.NewTagValue(in); err == nil {
+				built = true
+				break
+			}
+		}
+		if !built {
+			t.Errorf("%s: NewTagValue rejects every input %v; is the type missing from its switch?", tt, inputs)
+		}
+	}
+}

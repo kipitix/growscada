@@ -36,7 +36,7 @@ func newRouterWithWidgetTypes() *restapi.APIRouter {
 	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, event.NewEventBus(), 100)
 }
 
-func createWidgetTypeViaService(t *testing.T, input appdto.CreateWidgetTypeInput) appdto.WidgetType {
+func createWidgetTypeViaService(t *testing.T, input appdto.WidgetTypeInput) appdto.WidgetType {
 	t.Helper()
 	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
@@ -48,7 +48,7 @@ func createWidgetTypeViaService(t *testing.T, input appdto.CreateWidgetTypeInput
 	return resp
 }
 
-var testWtInput = appdto.CreateWidgetTypeInput{
+var testWtInput = appdto.WidgetTypeInput{
 	Name:           "gauge",
 	HtmlTemplate:   "<div class='gauge'><span class='value'></span></div>",
 	Script:         "function render(v) { return v; }",
@@ -315,7 +315,7 @@ type stubWidgetTypeService struct {
 	updateErr error
 }
 
-func (s *stubWidgetTypeService) UpdateWidgetType(_ context.Context, _ appdto.UpdateWidgetTypeInput) (appdto.WidgetType, error) {
+func (s *stubWidgetTypeService) UpdateWidgetType(_ context.Context, _ uuid.UUID, _ int, _ appdto.WidgetTypeInput) (appdto.WidgetType, error) {
 	return appdto.WidgetType{}, s.updateErr
 }
 
@@ -408,8 +408,7 @@ func TestDeleteWidgetTypesByID_UsedByWidget_Returns409(t *testing.T) {
 	sc := createSceneViaSceneService(t)
 	input := testWidgetInput
 	input.TypeID = wt.ID
-	input.SceneVersion = sc.Version
-	createWidgetViaService(t, sc.ID, input)
+	createWidgetViaService(t, sc.ID, sc.Version, input)
 	router := newRouterWithWidgetTypes()
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v0/widget-types/"+wt.ID.String(), nil)

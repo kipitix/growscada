@@ -38,11 +38,10 @@ type Widget struct {
 	PortBindings     []PortBinding
 }
 
-// CreateWidgetInput holds the input data for creating a widget instance.
-// The owning scene is identified separately (it is part of the URL path, not
-// the body); SceneVersion must match that scene's current persisted version
-// for optimistic locking.
-type CreateWidgetInput struct {
+// WidgetInput holds the fields of a widget instance a client creates or
+// updates. The owning scene, the widget's ID and the scene version the write
+// expects are passed separately.
+type WidgetInput struct {
 	Name             string
 	X, Y             float64
 	Z                int
@@ -51,25 +50,6 @@ type CreateWidgetInput struct {
 	OriginX, OriginY float64
 	RotationDegrees  float64
 	TypeID           uuid.UUID
-	SceneVersion     int
-	Labels           []string
-	PortBindings     []PortBinding
-}
-
-// UpdateWidgetInput holds the input data for updating a widget instance.
-// SceneVersion must match the owning scene's current persisted version for
-// optimistic locking.
-type UpdateWidgetInput struct {
-	ID               uuid.UUID
-	Name             string
-	X, Y             float64
-	Z                int
-	Width            int
-	Height           int
-	OriginX, OriginY float64
-	RotationDegrees  float64
-	TypeID           uuid.UUID
-	SceneVersion     int
 	Labels           []string
 	PortBindings     []PortBinding
 }

@@ -34,7 +34,7 @@ func newWidgetTypeServiceWithBus() (application.WidgetTypeService, event.EventBu
 	return application.NewWidgetTypeService(repo, sceneRepo, bus), bus
 }
 
-var testCreateWidgetTypeInput = appdto.CreateWidgetTypeInput{
+var testCreateWidgetTypeInput = appdto.WidgetTypeInput{
 	Name:           "gauge",
 	HtmlTemplate:   "<div class='gauge'><span class='value'></span></div>",
 	Script:         "function render(v) { return v; }",
@@ -195,15 +195,13 @@ func TestUpdateWidgetType_Valid_ReturnsIncrementedVersion(t *testing.T) {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
 
-	updated, err := svc.UpdateWidgetType(ctx, appdto.UpdateWidgetTypeInput{
-		ID:             created.ID,
+	updated, err := svc.UpdateWidgetType(ctx, created.ID, created.Version, appdto.WidgetTypeInput{
 		Name:           "updated-gauge",
 		HtmlTemplate:   "<div class='updated'></div>",
 		Script:         "function draw() {}",
 		ScriptLanguage: "python",
 		DefaultWidth:   120,
 		DefaultHeight:  60,
-		Version:        created.Version,
 	})
 
 	if err != nil {
@@ -224,15 +222,13 @@ func TestUpdateWidgetType_Valid_FieldsAreUpdated(t *testing.T) {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
 
-	_, err = svc.UpdateWidgetType(ctx, appdto.UpdateWidgetTypeInput{
-		ID:             created.ID,
+	_, err = svc.UpdateWidgetType(ctx, created.ID, created.Version, appdto.WidgetTypeInput{
 		Name:           "new-name",
 		HtmlTemplate:   "<div class='new'></div>",
 		Script:         "print('hello')",
 		ScriptLanguage: "python",
 		DefaultWidth:   120,
 		DefaultHeight:  60,
-		Version:        created.Version,
 	})
 	if err != nil {
 		t.Fatalf("UpdateWidgetType: %v", err)
@@ -254,8 +250,7 @@ func TestUpdateWidgetType_NotFound_ReturnsWrappedError(t *testing.T) {
 	cleanWidgetTypes(t)
 	svc := newWidgetTypeService()
 
-	_, err := svc.UpdateWidgetType(context.Background(), appdto.UpdateWidgetTypeInput{
-		ID:             uuid.New(),
+	_, err := svc.UpdateWidgetType(context.Background(), uuid.New(), 0, appdto.WidgetTypeInput{
 		Name:           "x",
 		HtmlTemplate:   "<div/>",
 		Script:         "x",
@@ -280,15 +275,13 @@ func TestUpdateWidgetType_InvalidScriptLanguage_ReturnsError(t *testing.T) {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
 
-	_, err = svc.UpdateWidgetType(ctx, appdto.UpdateWidgetTypeInput{
-		ID:             created.ID,
+	_, err = svc.UpdateWidgetType(ctx, created.ID, created.Version, appdto.WidgetTypeInput{
 		Name:           "x",
 		HtmlTemplate:   "<div/>",
 		Script:         "x",
 		ScriptLanguage: "ruby",
 		DefaultWidth:   120,
 		DefaultHeight:  60,
-		Version:        created.Version,
 	})
 
 	if !errors.Is(err, application.ErrInvalidInput) {
@@ -427,15 +420,13 @@ func TestUpdateWidgetType_Success_PublishesUpdatedEvent(t *testing.T) {
 		received = append(received, e)
 	})
 
-	_, err = svc.UpdateWidgetType(ctx, appdto.UpdateWidgetTypeInput{
-		ID:             created.ID,
+	_, err = svc.UpdateWidgetType(ctx, created.ID, created.Version, appdto.WidgetTypeInput{
 		Name:           "updated",
 		HtmlTemplate:   "<div/>",
 		Script:         "x",
 		ScriptLanguage: "lua",
 		DefaultWidth:   120,
 		DefaultHeight:  60,
-		Version:        created.Version,
 	})
 	if err != nil {
 		t.Fatalf("UpdateWidgetType: %v", err)
@@ -463,15 +454,14 @@ func TestUpdateWidgetType_StaleVersion_ReturnsConflict(t *testing.T) {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
 
-	_, err = svc.UpdateWidgetType(ctx, appdto.UpdateWidgetTypeInput{
-		ID:             created.ID,
+	_, err = svc.UpdateWidgetType(ctx, created.ID, created.Version-1, appdto.WidgetTypeInput{
 		Name:           "x",
 		HtmlTemplate:   "<div/>",
 		Script:         "x",
 		ScriptLanguage: "lua",
 		DefaultWidth:   120,
 		DefaultHeight:  60,
-		Version:        created.Version - 1, // intentionally stale
+		// intentionally stale
 	})
 
 	if err == nil {
@@ -497,7 +487,7 @@ func TestUpdateWidgetType_RemovedPort_CleansBindingsOnAllWidgetsInSameScene(t *t
 	sceneSvc := newSceneService()
 	ctx := context.Background()
 
-	createdType, err := wtSvc.CreateWidgetType(ctx, appdto.CreateWidgetTypeInput{
+	createdType, err := wtSvc.CreateWidgetType(ctx, appdto.WidgetTypeInput{
 		Name:           "sensor",
 		HtmlTemplate:   "<div></div>",
 		Script:         "function render(v) {}",
@@ -512,32 +502,29 @@ func TestUpdateWidgetType_RemovedPort_CleansBindingsOnAllWidgetsInSameScene(t *t
 
 	sc := mustCreateScene(t, sceneSvc)
 
-	widgetInput := appdto.CreateWidgetInput{
+	widgetInput := appdto.WidgetInput{
 		Name:         "widget-1",
 		Width:        100,
 		Height:       100,
 		OriginX:      0.5,
 		OriginY:      0.5,
 		TypeID:       createdType.ID,
-		SceneVersion: sc.Version,
 		PortBindings: []appdto.PortBinding{{PortName: "value", TagID: uuid.New()}},
 	}
-	first, err := sceneSvc.CreateWidget(ctx, sc.ID, widgetInput)
+	first, err := sceneSvc.CreateWidget(ctx, sc.ID, sc.Version, widgetInput)
 	if err != nil {
 		t.Fatalf("CreateWidget 1: %v", err)
 	}
 
 	widgetInput.Name = "widget-2"
-	widgetInput.SceneVersion = first.SceneVersion
-	second, err := sceneSvc.CreateWidget(ctx, sc.ID, widgetInput)
+	second, err := sceneSvc.CreateWidget(ctx, sc.ID, first.SceneVersion, widgetInput)
 	if err != nil {
 		t.Fatalf("CreateWidget 2: %v", err)
 	}
 
 	// Drop the "value" port from the type: both widgets' bindings to it are
 	// now orphaned and must be cleaned up by the same UpdateWidgetType call.
-	_, err = wtSvc.UpdateWidgetType(ctx, appdto.UpdateWidgetTypeInput{
-		ID:             createdType.ID,
+	_, err = wtSvc.UpdateWidgetType(ctx, createdType.ID, createdType.Version, appdto.WidgetTypeInput{
 		Name:           createdType.Name,
 		HtmlTemplate:   createdType.HtmlTemplate,
 		Script:         createdType.Script,
@@ -545,7 +532,6 @@ func TestUpdateWidgetType_RemovedPort_CleansBindingsOnAllWidgetsInSameScene(t *t
 		DefaultWidth:   createdType.DefaultWidth,
 		DefaultHeight:  createdType.DefaultHeight,
 		InputPorts:     nil,
-		Version:        createdType.Version,
 	})
 	if err != nil {
 		t.Fatalf("UpdateWidgetType: %v", err)
@@ -582,8 +568,7 @@ func TestDeleteWidgetType_UsedByWidget_ReturnsErrWidgetTypeInUse(t *testing.T) {
 	sc := mustCreateScene(t, sceneSvc)
 	input := testCreateWidgetInput
 	input.TypeID = created.ID
-	input.SceneVersion = sc.Version
-	if _, err := sceneSvc.CreateWidget(ctx, sc.ID, input); err != nil {
+	if _, err := sceneSvc.CreateWidget(ctx, sc.ID, sc.Version, input); err != nil {
 		t.Fatalf("CreateWidget: %v", err)
 	}
 
