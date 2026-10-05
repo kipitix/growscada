@@ -1,8 +1,8 @@
 # Агрегат User
-Blocked by: 25
+Blocked by: 31
 
-- User — член Organization (задача 25); Projects и Libraries принадлежат Organization, а не User.
-- Держатель EditLock (задача 31) становится User вместо Client.
+- User — член Organization (задача 31); Projects и Libraries принадлежат Organization, а не User.
+- Держатель EditLock (задача 37) становится User вместо Client.
 
 ## Comments
 

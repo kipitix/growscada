@@ -1,6 +1,6 @@
 # ProjectFile в UI
 Status: ready-for-human
-Blocked by: 29, 32
+Blocked by: 35, 38
 
 Слой C.
 
@@ -11,4 +11,4 @@ Blocked by: 29, 32
 
 ## Comments
 
-- 2026-10-04: бывший тикет 06 задачи 36. Решения: Q23–Q25 (два файла — ProjectFile и PlaybackFile), Q29 (открытый ProjectFile заменяет Draft одной DraftChange, требует EditLock). Стоит после DraftChange (задача 32), поэтому перенесён из слоя B в слой C.
+- 2026-10-04: бывший тикет 06 задачи 36. Решения: Q23–Q25 (два файла — ProjectFile и PlaybackFile), Q29 (открытый ProjectFile заменяет Draft одной DraftChange, требует EditLock). Стоит после DraftChange (задача 38), поэтому перенесён из слоя B в слой C.

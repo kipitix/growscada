@@ -25,3 +25,7 @@ Status: ready-for-agent
 - `make run`, открыть UI (вкладка Operation), остановить сервер Ctrl+C: процесс завершается за доли секунды, в логе «API HTTP Server stopped» без таймаута.
 - В UI сразу появляется плашка «No connection to the server», а после запуска сервера всё восстанавливается само. Переподключение `eventlog.Bar` из задачи 16 работает и в этом случае.
 - `make build` и `make test` проходят.
+
+## Comments
+
+- 2026-10-05: форма событий (SceneID в событиях Widget, константы типов) вынесена в задачу 24.

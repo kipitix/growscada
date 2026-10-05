@@ -1,6 +1,6 @@
 # Every operational entity is keyed by Project, every Project by Organization
 
-A server hosts many Projects in both node roles, and each Project belongs to one Organization (the tenant). Tags, Scenes with their Widgets, Devices, the Draft, Revisions, the Journal and Checkpoints all carry `project_id`, natural keys are scoped to the Project (a Tag is identified by Project + name, see ADR 0003), and Projects never reference each other's entities. We introduce these keys before the Engineering/Runtime storage split, Revisions and the Journal exist, because adding them afterwards would be a second migration of every table, every journaled payload and every Checkpoint. Until Users exist (task 43) the server runs with one seeded Organization; the key is there, the multi-tenant UX comes later.
+A server hosts many Projects in both node roles, and each Project belongs to one Organization (the tenant). Tags, Scenes with their Widgets, Devices, the Draft, Revisions, the Journal and Checkpoints all carry `project_id`, natural keys are scoped to the Project (a Tag is identified by Project + name, see ADR 0003), and Projects never reference each other's entities. We introduce these keys before the Engineering/Runtime storage split, Revisions and the Journal exist, because adding them afterwards would be a second migration of every table, every journaled payload and every Checkpoint. Until Users exist (task 49) the server runs with one seeded Organization; the key is there, the multi-tenant UX comes later.
 
 ## Considered Options
 

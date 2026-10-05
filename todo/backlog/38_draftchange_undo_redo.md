@@ -1,6 +1,6 @@
 # DraftChange и undo/redo
 Status: ready-for-human
-Blocked by: 29, 31
+Blocked by: 35, 37
 
 Слой C. Термин — `CONTEXT.md` (DraftChange).
 
@@ -9,7 +9,7 @@ Blocked by: 29, 31
 - Стек очищается при Deploy, Release и Discard; глубина ограничена константой.
 - Все текущие операции Project/Library переводятся на DraftChange (удаление Tag с привязками, удаление Scene с Widgets, смена закреплённого Library Release — одна DraftChange).
 - UI: кнопки и Ctrl+Z / Ctrl+Shift+Z, описание следующего шага.
-- После — задача 34 (групповой перенос как одна DraftChange).
+- После — задача 40 (групповой перенос как одна DraftChange).
 
 ## Comments
 

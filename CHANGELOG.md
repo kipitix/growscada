@@ -1,6 +1,16 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
-## [0.0.31] - 2026.10.04
+## [0.0.32] - 2026-10-05
+
+### Added
+
+- задачи 19–24 по итогам архитектурного ревью 2026-10-05 (только backlog, код не менялся): изменения Widget через агрегат Scene (19), единица работы — состояние, Journal и события в одной транзакции (20), атомарное согласование Widget при изменении WidgetType (21), перевод ошибок в Problem Details одним модулем restapi (22), типизированный клиент сервера для PWA UI (23), SceneID в событиях Widget и типы событий в контракте (24)
+
+### Changed
+
+- **Перенумерация backlog**: задачи 19–51 сдвинуты на 6 и стали 25–57, следующий свободный номер — 58. Ссылки «задача N» и `Blocked by:` в `todo/backlog/`, `todo/done/` и ADR 0003, 0004, 0006 пересчитаны; исторические упоминания («бывшая задача N», тикеты расформированного пакета 36) и прошлые записи этого файла не менялись
+
+## [0.0.31] - 2026-10-04
 
 ### Changed
 
@@ -25,7 +35,7 @@
 - `scene.ErrSceneValidation`, `widget.ErrWidgetInvalidInput` (заменены `application.ErrInvalidInput`), `restapi.NewValidationError` и `restapi.TypeValidation`
 - `appdto.CreateSceneInput`/`UpdateSceneInput`, `CreateWidgetTypeInput`/`UpdateWidgetTypeInput`, `CreateWidgetInput`/`UpdateWidgetInput` (заменены едиными входами)
 
-## [0.0.30] - 2026.10.04
+## [0.0.30] - 2026-10-04
 
 ### Added
 
@@ -57,7 +67,7 @@
 
 - `todo/backlog/36_project_undo_redo_history/` (`map.md` и 13 тикетов) и `todo/backlog/24_event_record_playback.md` — содержимое перенесено в задачи 26, 29–33, 36–40, 42, 46
 
-## [0.0.29] - 2026.10.04
+## [0.0.29] - 2026-10-04
 
 ### Added
 
@@ -86,7 +96,7 @@
 - генератор JSON-схем встраивал поля не так, как кодировщики: для yaml встраивал анонимное поле без `,inline` (yaml.v3 вкладывает его под ключом), для json не встраивал встроенную структуру с тегом без имени (`json:",omitempty"`), пропускал встроенную неэкспортированную структуру с именем в теге и пропускал поле с тегом `json:"-,"` (это поле с именем `-`). Закоммиченные схемы не изменились
 - генератор JSON-схем объявлял обязательным поле с `json:",omitzero"`, которое encoding/json опускает, и описывал поле с `json:",string"` его Go-типом, хотя в JSON оно строка: теперь `string` с `pattern` для целых и `enum` для bool
 
-## [0.0.28] - 2026.09.29
+## [0.0.28] - 2026-09-29
 
 ### Added
 
@@ -105,7 +115,7 @@
 - SSE-сообщение `tag_updated` несёт полное состояние тега в поле `tag` (форма `GET /api/v1/tags/{id}`); доменное `TagUpdatedEvent` содержит Tag
 - `eventlog.Bar` публикует состояние связи `eventlog.StateDisconnected` и передаёт состояние тега в `ServerEvent.Tag`
 
-## [0.0.27] - 2026.09.28
+## [0.0.27] - 2026-09-28
 
 ### Fixed
 
@@ -134,7 +144,7 @@
 - REST-клиент вынесен из `growctl` в общий пакет `internal/apiclient` (добавлены `GetTag`, `SetTagValue`, `ErrConflict`); `growctl` использует его
 - AGENTS.md: правило зависимостей инструментов вне `server/` по ролям — Engineer-инструменты (`growctl`) могут импортировать value objects из `server/domain`, сторона Device (`devicelink`, `devicesim`) — только контракт REST
 
-## [0.0.26] - 2026.09.27
+## [0.0.26] - 2026-09-27
 
 ### Added
 

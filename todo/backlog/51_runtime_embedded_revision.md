@@ -1,5 +1,5 @@
 # Runtime node со вшитой Revision (killer feature)
-Blocked by: 29
+Blocked by: 35
 
 - Из проекта (ProjectFile) собирается автономный исполняемый файл: Runtime node с уже вшитой конфигурацией, запускается на объекте без Engineering node и без Deploy.
 - Решить: нужен ли такому бинарнику внешний Postgres или встроенное хранилище.
