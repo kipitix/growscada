@@ -7,7 +7,7 @@ Status: needs-triage
 
 - 9 мутирующих методов в `tag_application_service.go`, `scene_application_service.go` и `widget_type_application_service.go` повторяют одни шаги: разбор ID → `FindByID` и сверка Version → разбор входа → `repo.Save` → `eventBus.Publish` → `appdto.NewX`.
 - Три Postgres-реализации `Save` зеркальны: `version.Initial` → INSERT, иначе UPDATE `WHERE version = $n` → `classifyUpdateConflict`.
-- Сверка Version в сервисе лишняя: SQL её всё равно делает.
+- Сверка ожидаемой Version (конфликт правки) живёт в сервисах, а не в агрегатах. SQL-CAS её не заменяет: он сверяет загруженную Version и ловит только гонку записи.
 - `EventBus.Publish` синхронный. Событие уходит после commit только потому, что репозиторий сам закрыл свою транзакцию, и это ничем не гарантировано.
 - Операция над несколькими агрегатами атомарной быть не может, пример — задача 21.
 - In-memory реализаций репозиториев нет, поэтому каждый тест application поднимает Postgres.
@@ -18,7 +18,7 @@ Status: needs-triage
   - открывает транзакцию (с областью Project, когда появится задача 31);
   - даёт сервису загрузить, изменить и сохранить один или несколько агрегатов;
   - собирает доменные события и публикует их только после commit.
-- Перевести на него Tag, Scene и WidgetType. Лишнюю сверку Version в сервисах удалить.
+- Перевести на него Tag, Scene и WidgetType. Конфликт правки ловят агрегаты (как Scene в задаче 19), гонку записи — CAS при сохранении.
 - Держать место для записи в Journal и DraftChange, но не реализовывать их здесь (задачи 42 и 38).
 - Два адаптера: Postgres и in-memory, чтобы тесты application шли без Docker.
 
