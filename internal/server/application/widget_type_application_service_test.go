@@ -10,7 +10,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/event"
-	"github.com/kipitix/growscada/internal/server/domain/widget"
+	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
 
@@ -178,7 +178,7 @@ func TestFindWidgetTypeByID_NotFound_ReturnsWrappedError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for non-existent widget type, got nil")
 	}
-	if !errors.Is(err, widget.ErrWidgetTypeNotFound) {
+	if !errors.Is(err, library.ErrWidgetTypeNotFound) {
 		t.Errorf("expected wrapped ErrWidgetTypeNotFound, got: %v", err)
 	}
 }
@@ -260,7 +260,7 @@ func TestUpdateWidgetType_NotFound_ReturnsWrappedError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for non-existent widget type, got nil")
 	}
-	if !errors.Is(err, widget.ErrWidgetTypeNotFound) {
+	if !errors.Is(err, library.ErrWidgetTypeNotFound) {
 		t.Errorf("expected wrapped ErrWidgetTypeNotFound, got: %v", err)
 	}
 }
@@ -326,7 +326,7 @@ func TestDeleteWidgetType_Existing_RemovedFromDB(t *testing.T) {
 	}
 
 	_, err = svc.FindWidgetTypeByID(ctx, created.ID)
-	if !errors.Is(err, widget.ErrWidgetTypeNotFound) {
+	if !errors.Is(err, library.ErrWidgetTypeNotFound) {
 		t.Errorf("expected ErrWidgetTypeNotFound after delete, got: %v", err)
 	}
 }
@@ -340,7 +340,7 @@ func TestDeleteWidgetType_NotFound_ReturnsWrappedError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for non-existent widget type, got nil")
 	}
-	if !errors.Is(err, widget.ErrWidgetTypeNotFound) {
+	if !errors.Is(err, library.ErrWidgetTypeNotFound) {
 		t.Errorf("expected wrapped ErrWidgetTypeNotFound, got: %v", err)
 	}
 }
@@ -467,7 +467,7 @@ func TestUpdateWidgetType_StaleVersion_ReturnsConflict(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected ErrWidgetTypeConflict for stale version, got nil")
 	}
-	if !errors.Is(err, widget.ErrWidgetTypeConflict) {
+	if !errors.Is(err, library.ErrWidgetTypeConflict) {
 		t.Errorf("expected wrapped ErrWidgetTypeConflict, got: %v", err)
 	}
 }
@@ -574,7 +574,7 @@ func TestDeleteWidgetType_UsedByWidget_ReturnsErrWidgetTypeInUse(t *testing.T) {
 
 	_, err = wtSvc.DeleteWidgetTypeByID(ctx, created.ID)
 
-	if !errors.Is(err, widget.ErrWidgetTypeInUse) {
+	if !errors.Is(err, library.ErrWidgetTypeInUse) {
 		t.Errorf("expected wrapped ErrWidgetTypeInUse, got: %v", err)
 	}
 	if _, err := wtSvc.FindWidgetTypeByID(ctx, created.ID); err != nil {

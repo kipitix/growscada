@@ -2,7 +2,7 @@ package appdto
 
 import (
 	"github.com/google/uuid"
-	"github.com/kipitix/growscada/internal/server/domain/widget"
+	"github.com/kipitix/growscada/internal/server/domain/scene"
 )
 
 // TransformMatrix is the application-layer representation of the computed
@@ -56,7 +56,7 @@ type WidgetInput struct {
 
 // NewWidget creates a Widget DTO from the domain entity. sceneID and
 // sceneVersion come from the owning Scene, since Widget itself carries neither.
-func NewWidget(w widget.Widget, sceneID uuid.UUID, sceneVersion int) Widget {
+func NewWidget(w scene.Widget, sceneID uuid.UUID, sceneVersion int) Widget {
 	domainBindings := w.PortBindings()
 	portBindings := make([]PortBinding, len(domainBindings))
 	for i, b := range domainBindings {
@@ -101,7 +101,7 @@ func NewWidget(w widget.Widget, sceneID uuid.UUID, sceneVersion int) Widget {
 
 // NewWidgetList creates a slice of Widget DTOs from domain entities that all
 // belong to the same scene.
-func NewWidgetList(list []widget.Widget, sceneID uuid.UUID, sceneVersion int) []Widget {
+func NewWidgetList(list []scene.Widget, sceneID uuid.UUID, sceneVersion int) []Widget {
 	result := make([]Widget, len(list))
 	for i, w := range list {
 		result[i] = NewWidget(w, sceneID, sceneVersion)

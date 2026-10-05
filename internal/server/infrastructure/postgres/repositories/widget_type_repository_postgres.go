@@ -9,31 +9,31 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/version"
-	"github.com/kipitix/growscada/internal/server/domain/widget"
 )
 
 type widgetTypeRepositoryPostgresImpl struct {
 	db *sql.DB
 }
 
-var _ widget.WidgetTypeRepository = (*widgetTypeRepositoryPostgresImpl)(nil)
+var _ library.WidgetTypeRepository = (*widgetTypeRepositoryPostgresImpl)(nil)
 
-func NewWidgetTypeRepositoryPostgres(aDb *sql.DB) widget.WidgetTypeRepository {
+func NewWidgetTypeRepositoryPostgres(aDb *sql.DB) library.WidgetTypeRepository {
 	return &widgetTypeRepositoryPostgresImpl{db: aDb}
 }
 
-func (r widgetTypeRepositoryPostgresImpl) NextID() id.ID[widget.WidgetType] {
-	return id.NewID[widget.WidgetType]()
+func (r widgetTypeRepositoryPostgresImpl) NextID() id.ID[library.WidgetType] {
+	return id.NewID[library.WidgetType]()
 }
 
-func (r widgetTypeRepositoryPostgresImpl) Save(ctx context.Context, wt widget.WidgetType) (widget.WidgetType, error) {
+func (r widgetTypeRepositoryPostgresImpl) Save(ctx context.Context, wt library.WidgetType) (library.WidgetType, error) {
 	portsJSON, err := marshalInputPorts(wt.InputPorts())
 	if err != nil {
 		return nil, fmt.Errorf("cannot serialize input ports: %w", err)
 	}
 
-	if wt.Version() == version.Initial[widget.WidgetType]() {
+	if wt.Version() == version.Initial[library.WidgetType]() {
 		row := r.db.QueryRowContext(ctx,
 			`INSERT INTO widget_types (id, name, html_template, script, script_language, default_width, default_height, input_ports, version)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -42,7 +42,7 @@ func (r widgetTypeRepositoryPostgresImpl) Save(ctx context.Context, wt widget.Wi
 			wt.Script().String(), wt.ScriptLanguage().String(),
 			wt.DefaultSize().Width(), wt.DefaultSize().Height(),
 			portsJSON,
-			version.Committed[widget.WidgetType]().Number(),
+			version.Committed[library.WidgetType]().Number(),
 		)
 		saved, err := r.scanWidgetType(row.Scan)
 		if err != nil {
@@ -67,7 +67,7 @@ func (r widgetTypeRepositoryPostgresImpl) Save(ctx context.Context, wt widget.Wi
 		saved, err := r.scanWidgetType(row.Scan)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return nil, classifyUpdateConflict(ctx, r.db, tableNameWidgetTypes, wt.ID(), widget.ErrWidgetTypeNotFound, widget.ErrWidgetTypeConflict)
+				return nil, classifyUpdateConflict(ctx, r.db, tableNameWidgetTypes, wt.ID(), library.ErrWidgetTypeNotFound, library.ErrWidgetTypeConflict)
 			}
 			return nil, fmt.Errorf("cannot update widget type: %w", err)
 		}
@@ -79,7 +79,7 @@ func (r widgetTypeRepositoryPostgresImpl) Save(ctx context.Context, wt widget.Wi
 
 const selectWidgetTypeColumns = `id, name, html_template, script, script_language, default_width, default_height, input_ports, version`
 
-func (r widgetTypeRepositoryPostgresImpl) FindByID(ctx context.Context, anID id.ID[widget.WidgetType]) (widget.WidgetType, error) {
+func (r widgetTypeRepositoryPostgresImpl) FindByID(ctx context.Context, anID id.ID[library.WidgetType]) (library.WidgetType, error) {
 	row := r.db.QueryRowContext(ctx,
 		"SELECT "+selectWidgetTypeColumns+" FROM widget_types WHERE id = $1",
 		anID.UUID(),
@@ -87,14 +87,14 @@ func (r widgetTypeRepositoryPostgresImpl) FindByID(ctx context.Context, anID id.
 	wt, err := r.scanWidgetType(row.Scan)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, widget.ErrWidgetTypeNotFound
+			return nil, library.ErrWidgetTypeNotFound
 		}
 		return nil, fmt.Errorf("error scanning widget type: %w", err)
 	}
 	return wt, nil
 }
 
-func (r widgetTypeRepositoryPostgresImpl) DeleteByID(ctx context.Context, anID id.ID[widget.WidgetType]) (widget.WidgetType, error) {
+func (r widgetTypeRepositoryPostgresImpl) DeleteByID(ctx context.Context, anID id.ID[library.WidgetType]) (library.WidgetType, error) {
 	row := r.db.QueryRowContext(ctx,
 		"DELETE FROM widget_types WHERE id = $1 RETURNING "+selectWidgetTypeColumns,
 		anID.UUID(),
@@ -102,17 +102,17 @@ func (r widgetTypeRepositoryPostgresImpl) DeleteByID(ctx context.Context, anID i
 	wt, err := r.scanWidgetType(row.Scan)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, widget.ErrWidgetTypeNotFound
+			return nil, library.ErrWidgetTypeNotFound
 		}
 		if isForeignKeyViolation(err, constraintWidgetsTypeID) {
-			return nil, widget.ErrWidgetTypeInUse
+			return nil, library.ErrWidgetTypeInUse
 		}
 		return nil, fmt.Errorf("cannot delete widget type: %w", err)
 	}
 	return wt, nil
 }
 
-func (r widgetTypeRepositoryPostgresImpl) FindAll(ctx context.Context) ([]widget.WidgetType, error) {
+func (r widgetTypeRepositoryPostgresImpl) FindAll(ctx context.Context) ([]library.WidgetType, error) {
 	rows, err := r.db.QueryContext(ctx,
 		"SELECT "+selectWidgetTypeColumns+" FROM widget_types ORDER BY pk_id",
 	)
@@ -121,7 +121,7 @@ func (r widgetTypeRepositoryPostgresImpl) FindAll(ctx context.Context) ([]widget
 	}
 	defer rows.Close()
 
-	var result []widget.WidgetType
+	var result []library.WidgetType
 	for rows.Next() {
 		wt, err := r.scanWidgetType(rows.Scan)
 		if err != nil {
@@ -149,7 +149,7 @@ type rawWidgetTypeRow struct {
 	version        int
 }
 
-func (r widgetTypeRepositoryPostgresImpl) scanWidgetType(scan func(...any) error) (widget.WidgetType, error) {
+func (r widgetTypeRepositoryPostgresImpl) scanWidgetType(scan func(...any) error) (library.WidgetType, error) {
 	var row rawWidgetTypeRow
 	if err := scan(
 		&row.id, &row.name, &row.htmlTemplate, &row.script, &row.language,
@@ -162,30 +162,30 @@ func (r widgetTypeRepositoryPostgresImpl) scanWidgetType(scan func(...any) error
 	return r.reconstruct(row)
 }
 
-func (r widgetTypeRepositoryPostgresImpl) reconstruct(row rawWidgetTypeRow) (widget.WidgetType, error) {
-	newID := id.NewID(id.IDWithUUID[widget.WidgetType](row.id))
+func (r widgetTypeRepositoryPostgresImpl) reconstruct(row rawWidgetTypeRow) (library.WidgetType, error) {
+	newID := id.NewID(id.IDWithUUID[library.WidgetType](row.id))
 
-	newName, err := widget.NewWidgetTypeName(row.name)
+	newName, err := library.NewWidgetTypeName(row.name)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create widget type name: %w", err)
 	}
 
-	newHtml, err := widget.NewHtmlTemplate(row.htmlTemplate)
+	newHtml, err := library.NewHtmlTemplate(row.htmlTemplate)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create html template: %w", err)
 	}
 
-	newScript, err := widget.NewScript(row.script)
+	newScript, err := library.NewScript(row.script)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create script: %w", err)
 	}
 
-	newLang, err := widget.NewScriptLanguage(row.language)
+	newLang, err := library.NewScriptLanguage(row.language)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create script language: %w", err)
 	}
 
-	defaultSize, err := widget.NewSize(row.defaultWidth, row.defaultHeight)
+	defaultSize, err := library.NewSize(row.defaultWidth, row.defaultHeight)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create default size: %w", err)
 	}
@@ -195,12 +195,12 @@ func (r widgetTypeRepositoryPostgresImpl) reconstruct(row rawWidgetTypeRow) (wid
 		return nil, fmt.Errorf("cannot unmarshal input ports: %w", err)
 	}
 
-	newVersion, err := version.New[widget.WidgetType](version.WithNumber[widget.WidgetType](row.version))
+	newVersion, err := version.New[library.WidgetType](version.WithNumber[library.WidgetType](row.version))
 	if err != nil {
 		return nil, fmt.Errorf("cannot create widget type version: %w", err)
 	}
 
-	return widget.NewWidgetType(newID, newName, newHtml, newScript, newLang, defaultSize, inputPorts, newVersion)
+	return library.NewWidgetType(newID, newName, newHtml, newScript, newLang, defaultSize, inputPorts, newVersion)
 }
 
 // inputPortJSON is the on-disk representation of an InputPort.
@@ -210,7 +210,7 @@ type inputPortJSON struct {
 	TypeHint    string `json:"type_hint"`
 }
 
-func marshalInputPorts(ports []widget.InputPort) ([]byte, error) {
+func marshalInputPorts(ports []library.InputPort) ([]byte, error) {
 	rows := make([]inputPortJSON, len(ports))
 	for i, p := range ports {
 		rows[i] = inputPortJSON{
@@ -222,7 +222,7 @@ func marshalInputPorts(ports []widget.InputPort) ([]byte, error) {
 	return json.Marshal(rows)
 }
 
-func unmarshalInputPorts(data []byte) ([]widget.InputPort, error) {
+func unmarshalInputPorts(data []byte) ([]library.InputPort, error) {
 	if len(data) == 0 {
 		return nil, nil
 	}
@@ -230,17 +230,17 @@ func unmarshalInputPorts(data []byte) ([]widget.InputPort, error) {
 	if err := json.Unmarshal(data, &rows); err != nil {
 		return nil, fmt.Errorf("cannot decode input_ports JSON: %w", err)
 	}
-	ports := make([]widget.InputPort, 0, len(rows))
+	ports := make([]library.InputPort, 0, len(rows))
 	for _, row := range rows {
-		name, err := widget.NewInputPortNameFromStorage(row.Name)
+		name, err := library.NewInputPortNameFromStorage(row.Name)
 		if err != nil {
 			return nil, fmt.Errorf("invalid stored input port name %q: %w", row.Name, err)
 		}
-		typeHint, err := widget.NewPortTypeHint(row.TypeHint)
+		typeHint, err := library.NewPortTypeHint(row.TypeHint)
 		if err != nil {
 			return nil, fmt.Errorf("invalid stored type hint %q: %w", row.TypeHint, err)
 		}
-		ports = append(ports, widget.NewInputPort(name, row.Description, typeHint))
+		ports = append(ports, library.NewInputPort(name, row.Description, typeHint))
 	}
 	return ports, nil
 }

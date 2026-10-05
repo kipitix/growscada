@@ -1,5 +1,25 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.33] - 2026-10-05
+
+### Changed
+
+- **Изменения Widget — через агрегат Scene** (задача 19). REST API и контракт `contract/api/v0` не менялись
+  - `scene.Scene` неизменяемая: `AddWidget(expected, w, wt)`, `UpdateWidget(expected, w, wt)`, `RemoveWidget(widgetID)`, `Update(expected, name, size, background)` и `ReconcileWith(wt)` возвращают новую Scene, исходная не меняется; `FindWidget(widgetID)` ищет Widget сцены. Агрегат сам ловит конфликт правки (ожидаемая Version ≠ текущей → `ErrSceneConflict`) и проверяет, что `TypeID` Widget совпадает с переданным WidgetType и PortBinding ссылаются только на его InputPort (`ErrWidgetTypeMismatch`, `ErrPortNotDeclared`; Widget с занятым ID — `ErrWidgetAlreadyExists`)
+  - `SceneRepository` сокращён до `NextID`, `NextWidgetID`, `FindByID`, `FindAll`, `FindByWidgetTypeID` (Scene целиком), `Save`, `DeleteByID`. `Save` пишет Scene с её Widget в одной транзакции: CAS по строке `scenes` (Version повышается один раз на сохранение), затем INSERT новых / UPDATE изменённых / DELETE исчезнувших Widget. Чтение — одна read-only транзакция `REPEATABLE READ`, Scene и её Widget всегда из одного момента; `DeleteByID` блокирует строку сцены перед чтением Widget
+  - `SceneService`: каждое изменение — загрузка Scene (нет → `404`) и WidgetType (нет → `400`) → метод агрегата → `Save`; Version в сервисе не сверяется
+  - `removeOrphanedPortBindings` сервиса WidgetType: `FindByWidgetTypeID` → `ReconcileWith` → `Save` изменившихся сцен (без атомарности и событий — задача 21)
+  - **Пакеты домена**: Widget и его value objects (`WidgetName`, `Position`, `Origin`, `Rotation`, `TransformationMatrix`, `PortBinding`, `ErrWidgetNotFound`) переехали в `domain/scene`, размер Widget стал `scene.WidgetSize`. `domain/widget` переименован в `domain/library` (WidgetType, InputPort, PortTypeHint, шаблон, скрипт); размер по умолчанию WidgetType остаётся `library.Size`
+
+### Fixed
+
+- Удаление Widget поднимало Version сцены без CAS (`UPDATE scenes SET version = version + 1`) и не замечало правку сцены между чтением и записью. Теперь удаление идёт через `Save`: при гонке записи — `409`, параллельная правка не затирается
+- `FindByID` читал Scene и её Widget двумя запросами вне транзакции и мог увидеть их в разные моменты
+
+### Removed
+
+- `SceneRepository.AddWidget`, `UpdateWidget`, `DeleteWidget`, `FindWidgetsBySceneID`, `FindWidgetByID`, `FindWidgetsByTypeID`, тип `scene.WidgetInScene`; в Postgres-репозитории `bumpSceneVersion`; в `SceneService` — `validateWidgetType` и `widgetSaveError`
+
 ## [0.0.32] - 2026-10-05
 
 ### Added

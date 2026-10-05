@@ -2,7 +2,7 @@ package event
 
 import (
 	"github.com/kipitix/growscada/internal/server/domain/id"
-	"github.com/kipitix/growscada/internal/server/domain/widget"
+	"github.com/kipitix/growscada/internal/server/domain/library"
 )
 
 // WidgetTypeDeletedEvent - event published when a widget type is deleted.
@@ -16,7 +16,7 @@ type widgetTypeDeletedEventImpl struct {
 
 var _ WidgetTypeDeletedEvent = (*widgetTypeDeletedEventImpl)(nil)
 
-func NewWidgetTypeDeletedEvent(anID id.ID[widget.WidgetType], opts ...EventOption) WidgetTypeDeletedEvent {
+func NewWidgetTypeDeletedEvent(anID id.ID[library.WidgetType], opts ...EventOption) WidgetTypeDeletedEvent {
 	ev := &widgetTypeDeletedEventImpl{
 		widgetTypeEventImpl: widgetTypeEventImpl{
 			widgetTypeID: anID,

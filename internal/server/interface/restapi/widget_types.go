@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
-	"github.com/kipitix/growscada/internal/server/domain/widget"
+	"github.com/kipitix/growscada/internal/server/domain/library"
 )
 
 // WidgetTypesHandlers handles HTTP requests related to widget types.
@@ -40,7 +40,7 @@ func (h WidgetTypesHandlers) GetWidgetTypesByID(w http.ResponseWriter, r *http.R
 
 	found, err := h.service.FindWidgetTypeByID(r.Context(), inID)
 	if err != nil {
-		if errors.Is(err, widget.ErrWidgetTypeNotFound) {
+		if errors.Is(err, library.ErrWidgetTypeNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
 			return
 		}
@@ -83,11 +83,11 @@ func (h WidgetTypesHandlers) PutWidgetTypesByID(w http.ResponseWriter, r *http.R
 
 	updated, err := h.service.UpdateWidgetType(r.Context(), inID, request.Version, newUpdateWidgetTypeInput(request))
 	if err != nil {
-		if errors.Is(err, widget.ErrWidgetTypeNotFound) {
+		if errors.Is(err, library.ErrWidgetTypeNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
 			return
 		}
-		if errors.Is(err, widget.ErrWidgetTypeConflict) {
+		if errors.Is(err, library.ErrWidgetTypeConflict) {
 			sendJSONResponse(w, http.StatusConflict, NewConflict("widget type", err.Error(), r.URL.Path))
 			return
 		}
@@ -109,11 +109,11 @@ func (h WidgetTypesHandlers) DeleteWidgetTypesByID(w http.ResponseWriter, r *htt
 
 	deleted, err := h.service.DeleteWidgetTypeByID(r.Context(), inID)
 	if err != nil {
-		if errors.Is(err, widget.ErrWidgetTypeNotFound) {
+		if errors.Is(err, library.ErrWidgetTypeNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
 			return
 		}
-		if errors.Is(err, widget.ErrWidgetTypeInUse) {
+		if errors.Is(err, library.ErrWidgetTypeInUse) {
 			sendJSONResponse(w, http.StatusConflict, NewConflict("widget type", err.Error(), r.URL.Path))
 			return
 		}

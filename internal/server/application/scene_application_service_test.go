@@ -10,8 +10,8 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/event"
+	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
-	"github.com/kipitix/growscada/internal/server/domain/widget"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
 
@@ -428,7 +428,7 @@ func TestFindWidgetByID_NotFound_ReturnsWrappedError(t *testing.T) {
 
 	_, err := svc.FindWidgetByID(ctx, sc.ID, uuid.New())
 
-	if !errors.Is(err, widget.ErrWidgetNotFound) {
+	if !errors.Is(err, scene.ErrWidgetNotFound) {
 		t.Errorf("expected wrapped ErrWidgetNotFound, got: %v", err)
 	}
 }
@@ -495,7 +495,7 @@ func TestUpdateWidget_NotFound_ReturnsWrappedError(t *testing.T) {
 		Width: 100, Height: 100,
 	})
 
-	if !errors.Is(err, widget.ErrWidgetNotFound) {
+	if !errors.Is(err, scene.ErrWidgetNotFound) {
 		t.Errorf("expected wrapped ErrWidgetNotFound, got: %v", err)
 	}
 }
@@ -517,7 +517,7 @@ func TestDeleteWidget_Existing_RemovedFromDB(t *testing.T) {
 	}
 
 	_, err = svc.FindWidgetByID(ctx, sc.ID, created.ID)
-	if !errors.Is(err, widget.ErrWidgetNotFound) {
+	if !errors.Is(err, scene.ErrWidgetNotFound) {
 		t.Errorf("expected ErrWidgetNotFound after delete, got: %v", err)
 	}
 }
@@ -530,7 +530,7 @@ func TestDeleteWidget_NotFound_ReturnsWrappedError(t *testing.T) {
 
 	_, err := svc.DeleteWidgetByID(ctx, sc.ID, uuid.New())
 
-	if !errors.Is(err, widget.ErrWidgetNotFound) {
+	if !errors.Is(err, scene.ErrWidgetNotFound) {
 		t.Errorf("expected wrapped ErrWidgetNotFound, got: %v", err)
 	}
 }
@@ -698,7 +698,7 @@ func TestUpdateWidget_UnknownWidgetAndType_ReturnsWidgetNotFound(t *testing.T) {
 		Width: 100, Height: 100,
 	})
 
-	if !errors.Is(err, widget.ErrWidgetNotFound) {
+	if !errors.Is(err, scene.ErrWidgetNotFound) {
 		t.Errorf("expected wrapped ErrWidgetNotFound, got: %v", err)
 	}
 	if errors.Is(err, application.ErrInvalidInput) {
@@ -718,5 +718,97 @@ func TestCreateWidget_UnknownTypeWithBindings_ReturnsInvalidInput(t *testing.T) 
 
 	if !errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("expected ErrInvalidInput, got: %v", err)
+	}
+}
+
+func TestCreateWidget_UndeclaredPort_ReturnsInvalidInput(t *testing.T) {
+	cleanScenes(t)
+	svc := newSceneService()
+	sc := mustCreateScene(t, svc)
+
+	input := testCreateWidgetInput
+	input.PortBindings = []appdto.PortBinding{{PortName: "missing", TagID: uuid.New()}}
+	_, err := svc.CreateWidget(context.Background(), sc.ID, sc.Version, input)
+
+	if !errors.Is(err, application.ErrInvalidInput) || !errors.Is(err, scene.ErrPortNotDeclared) {
+		t.Errorf("expected ErrInvalidInput wrapping ErrPortNotDeclared, got: %v", err)
+	}
+}
+
+func TestDeleteWidget_Existing_BumpsSceneVersionOnce(t *testing.T) {
+	cleanScenes(t)
+	svc := newSceneService()
+	ctx := context.Background()
+	sc := mustCreateScene(t, svc)
+	created, err := svc.CreateWidget(ctx, sc.ID, sc.Version, testCreateWidgetInput)
+	if err != nil {
+		t.Fatalf("CreateWidget: %v", err)
+	}
+
+	deleted, err := svc.DeleteWidgetByID(ctx, sc.ID, created.ID)
+
+	if err != nil {
+		t.Fatalf("DeleteWidgetByID: %v", err)
+	}
+	if deleted.SceneVersion != created.SceneVersion+1 {
+		t.Errorf("SceneVersion: expected %d, got %d", created.SceneVersion+1, deleted.SceneVersion)
+	}
+	found, err := svc.FindSceneByID(ctx, sc.ID)
+	if err != nil {
+		t.Fatalf("FindSceneByID: %v", err)
+	}
+	if found.Version != deleted.SceneVersion {
+		t.Errorf("stored version: expected %d, got %d", deleted.SceneVersion, found.Version)
+	}
+}
+
+// racingSceneRepository runs race once, right after the first FindByID: a
+// write by someone else lands between the service's read and its Save.
+type racingSceneRepository struct {
+	scene.SceneRepository
+	race func()
+}
+
+func (r *racingSceneRepository) FindByID(ctx context.Context, sceneID id.ID[scene.Scene]) (scene.Scene, error) {
+	found, err := r.SceneRepository.FindByID(ctx, sceneID)
+	if race := r.race; race != nil {
+		r.race = nil
+		race()
+	}
+	return found, err
+}
+
+func TestDeleteWidget_SceneChangedMeanwhile_ReturnsConflictKeepsChange(t *testing.T) {
+	cleanScenes(t)
+	svc := newSceneService()
+	ctx := context.Background()
+	sc := mustCreateScene(t, svc)
+	created, err := svc.CreateWidget(ctx, sc.ID, sc.Version, testCreateWidgetInput)
+	if err != nil {
+		t.Fatalf("CreateWidget: %v", err)
+	}
+
+	repo := &racingSceneRepository{SceneRepository: repositories.NewSceneRepositoryPostgres(testDB)}
+	repo.race = func() {
+		if _, err := svc.UpdateScene(ctx, sc.ID, created.SceneVersion, appdto.SceneInput{Name: "renamed", Width: 800, Height: 600}); err != nil {
+			t.Fatalf("concurrent UpdateScene: %v", err)
+		}
+	}
+	racingSvc := application.NewSceneService(repo, repositories.NewWidgetTypeRepositoryPostgres(testDB), event.NewEventBus())
+
+	_, err = racingSvc.DeleteWidgetByID(ctx, sc.ID, created.ID)
+
+	if !errors.Is(err, scene.ErrSceneConflict) {
+		t.Fatalf("expected ErrSceneConflict, got: %v", err)
+	}
+	found, err := svc.FindSceneByID(ctx, sc.ID)
+	if err != nil {
+		t.Fatalf("FindSceneByID: %v", err)
+	}
+	if found.Name != "renamed" || found.Version != created.SceneVersion+1 {
+		t.Errorf("expected the concurrent change kept (renamed, version %d), got %q, version %d", created.SceneVersion+1, found.Name, found.Version)
+	}
+	if _, err := svc.FindWidgetByID(ctx, sc.ID, created.ID); err != nil {
+		t.Errorf("widget must survive the refused delete: %v", err)
 	}
 }

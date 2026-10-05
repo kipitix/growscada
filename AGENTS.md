@@ -87,9 +87,9 @@ Each subdomain owns its aggregate, value objects, and repository **interface**:
 | Package    | Aggregate / Concept |
 |------------|---------------------|
 | `tag/`     | `Tag` — atomic SCADA data point with type, value, quality (`Good/Bad/Uncertain`) |
-| `widget/`  | `Widget` — instance of a WidgetType placed on a Scene, with position/size/rotation/transform matrix |
-| `widget/`  | `WidgetType` — reusable template: HTML template + JavaScript script |
-| `scene/`   | `Scene` — named canvas (mnemonic screen) that hosts Widgets |
+| `scene/`   | `Scene` — named canvas (mnemonic screen); immutable aggregate whose methods (`AddWidget`, `UpdateWidget`, `RemoveWidget`, `Update`, `ReconcileWith`) return a new Scene |
+| `scene/`   | `Widget` — entity of the Scene aggregate: instance of a WidgetType placed on a Scene, with position/size/rotation/transform matrix |
+| `library/` | `WidgetType` — reusable template: HTML template + JavaScript script, InputPorts |
 | `event/`   | `EventBus` and domain events (created/updated/deleted per aggregate) |
 | `id/`      | Generic `ID[T]` UUID value object; type parameter prevents mixing IDs of different aggregates |
 | `version/` | Optimistic-concurrency version value object; Generic `Version[T]` |

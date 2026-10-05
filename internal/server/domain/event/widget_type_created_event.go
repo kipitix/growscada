@@ -2,7 +2,7 @@ package event
 
 import (
 	"github.com/kipitix/growscada/internal/server/domain/id"
-	"github.com/kipitix/growscada/internal/server/domain/widget"
+	"github.com/kipitix/growscada/internal/server/domain/library"
 )
 
 // WidgetTypeCreatedEvent - event published when a widget type is created.
@@ -16,7 +16,7 @@ type widgetTypeCreatedEventImpl struct {
 
 var _ WidgetTypeCreatedEvent = (*widgetTypeCreatedEventImpl)(nil)
 
-func NewWidgetTypeCreatedEvent(anID id.ID[widget.WidgetType], opts ...EventOption) WidgetTypeCreatedEvent {
+func NewWidgetTypeCreatedEvent(anID id.ID[library.WidgetType], opts ...EventOption) WidgetTypeCreatedEvent {
 	ev := &widgetTypeCreatedEventImpl{
 		widgetTypeEventImpl: widgetTypeEventImpl{
 			widgetTypeID: anID,

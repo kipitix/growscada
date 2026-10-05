@@ -2,7 +2,7 @@ package appdto
 
 import (
 	"github.com/google/uuid"
-	"github.com/kipitix/growscada/internal/server/domain/widget"
+	"github.com/kipitix/growscada/internal/server/domain/library"
 )
 
 // InputPort is the application-layer DTO for a WidgetType input port.
@@ -39,7 +39,7 @@ type WidgetTypeInput struct {
 }
 
 // NewWidgetType creates a WidgetType DTO from the domain aggregate.
-func NewWidgetType(wt widget.WidgetType) WidgetType {
+func NewWidgetType(wt library.WidgetType) WidgetType {
 	domainPorts := wt.InputPorts()
 	ports := make([]InputPort, len(domainPorts))
 	for i, p := range domainPorts {
@@ -63,7 +63,7 @@ func NewWidgetType(wt widget.WidgetType) WidgetType {
 }
 
 // NewWidgetTypeList creates a slice of WidgetType DTOs from domain aggregates.
-func NewWidgetTypeList(list []widget.WidgetType) []WidgetType {
+func NewWidgetTypeList(list []library.WidgetType) []WidgetType {
 	result := make([]WidgetType, len(list))
 	for i, wt := range list {
 		result[i] = NewWidgetType(wt)

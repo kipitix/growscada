@@ -14,7 +14,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/event"
-	"github.com/kipitix/growscada/internal/server/domain/widget"
+	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
@@ -288,7 +288,7 @@ func TestPutWidgetTypesByID_InvalidUUID_Returns400(t *testing.T) {
 }
 
 func TestPutWidgetTypesByID_Conflict_Returns409(t *testing.T) {
-	svc := &stubWidgetTypeService{updateErr: widget.ErrWidgetTypeConflict}
+	svc := &stubWidgetTypeService{updateErr: library.ErrWidgetTypeConflict}
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
 	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)

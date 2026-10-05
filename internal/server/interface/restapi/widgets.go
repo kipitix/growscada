@@ -8,7 +8,6 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
-	"github.com/kipitix/growscada/internal/server/domain/widget"
 )
 
 // WidgetsHandlers handles HTTP requests related to widget instances. Widget is
@@ -63,7 +62,7 @@ func (h WidgetsHandlers) GetWidgetsByID(w http.ResponseWriter, r *http.Request) 
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), sceneIDStr, r.URL.Path))
 			return
 		}
-		if errors.Is(err, widget.ErrWidgetNotFound) {
+		if errors.Is(err, scene.ErrWidgetNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), widgetIDStr, r.URL.Path))
 			return
 		}
@@ -131,7 +130,7 @@ func (h WidgetsHandlers) PutWidgetsByID(w http.ResponseWriter, r *http.Request) 
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), sceneIDStr, r.URL.Path))
 			return
 		}
-		if errors.Is(err, widget.ErrWidgetNotFound) {
+		if errors.Is(err, scene.ErrWidgetNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), widgetIDStr, r.URL.Path))
 			return
 		}
@@ -167,7 +166,7 @@ func (h WidgetsHandlers) DeleteWidgetsByID(w http.ResponseWriter, r *http.Reques
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), sceneIDStr, r.URL.Path))
 			return
 		}
-		if errors.Is(err, widget.ErrWidgetNotFound) {
+		if errors.Is(err, scene.ErrWidgetNotFound) {
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), widgetIDStr, r.URL.Path))
 			return
 		}
