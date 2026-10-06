@@ -32,7 +32,7 @@ func makeWidgetType(t *testing.T, name string, ports []library.InputPort, repo l
 	html, _ := library.NewHtmlTemplate("<div></div>")
 	script, _ := library.NewScript("function update(){}")
 	size := library.DefaultSize()
-	wt, err := library.NewWidgetType(newID, wtName, html, script, library.ScriptLanguageJavaScript, size, ports, version.Initial[library.WidgetType]())
+	wt, err := library.ReconstituteWidgetType(newID, wtName, html, script, library.ScriptLanguageJavaScript, size, ports, version.Initial[library.WidgetType]())
 	if err != nil {
 		t.Fatalf("NewWidgetType: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestWidgetTypeSave_DuplicateID_ReturnsError(t *testing.T) {
 	if _, err := repo.Save(ctx, wt); err != nil {
 		t.Fatalf("first Save failed: %v", err)
 	}
-	duplicate, _ := library.NewWidgetType(
+	duplicate, _ := library.ReconstituteWidgetType(
 		wt.ID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.DefaultSize(), nil,
 		version.Initial[library.WidgetType](),
 	)
@@ -110,7 +110,7 @@ func TestWidgetTypeSave_ExistingWidgetType_VersionIsIncremented(t *testing.T) {
 	found, _ := repo.FindByID(ctx, saved.ID())
 
 	newName, _ := library.NewWidgetTypeName("gauge-v2")
-	updated, err := library.NewWidgetType(found.ID(), newName, found.HtmlTemplate(), found.Script(), found.ScriptLanguage(), found.DefaultSize(), found.InputPorts(), found.Version())
+	updated, err := library.ReconstituteWidgetType(found.ID(), newName, found.HtmlTemplate(), found.Script(), found.ScriptLanguage(), found.DefaultSize(), found.InputPorts(), found.Version())
 	if err != nil {
 		t.Fatalf("NewWidgetType: %v", err)
 	}
@@ -221,7 +221,7 @@ func TestWidgetTypeSave_InputPortsAreUpdated(t *testing.T) {
 		t.Fatalf("TypeHintFor: %v", err)
 	}
 	ports := []library.InputPort{library.NewInputPort(pName, "new port", booleanHint)}
-	updated, err := library.NewWidgetType(found.ID(), found.Name(), found.HtmlTemplate(), found.Script(), found.ScriptLanguage(), found.DefaultSize(), ports, found.Version())
+	updated, err := library.ReconstituteWidgetType(found.ID(), found.Name(), found.HtmlTemplate(), found.Script(), found.ScriptLanguage(), found.DefaultSize(), ports, found.Version())
 	if err != nil {
 		t.Fatalf("NewWidgetType: %v", err)
 	}
@@ -242,34 +242,54 @@ func TestWidgetTypeSave_InputPortsAreUpdated(t *testing.T) {
 	}
 }
 
-// --- DeleteByID ---
+// --- Delete ---
 
-func TestWidgetTypeDeleteByID_NotFound_ReturnsErrWidgetTypeNotFound(t *testing.T) {
+func TestWidgetTypeDelete_NotFound_ReturnsErrWidgetTypeNotFound(t *testing.T) {
 	cleanWidgetTypes(t)
 	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	ctx := context.Background()
 
-	nonExistentID := id.NewID(id.IDWithUUID[library.WidgetType](uuid.New()))
-	_, err := repo.DeleteByID(ctx, nonExistentID)
+	wt := makeWidgetType(t, "never-saved", nil, repo)
+	committed, _ := library.ReconstituteWidgetType(wt.ID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.DefaultSize(), nil, version.Committed[library.WidgetType]())
+	err := repo.Delete(ctx, committed.Delete())
 	if !errors.Is(err, library.ErrWidgetTypeNotFound) {
 		t.Errorf("expected ErrWidgetTypeNotFound, got %v", err)
 	}
 }
 
-func TestWidgetTypeDeleteByID_Existing_ReturnsDeletedWidgetType(t *testing.T) {
+func TestWidgetTypeDelete_Existing_RemovesIt(t *testing.T) {
 	cleanWidgetTypes(t)
 	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	ctx := context.Background()
 
-	wt := makeWidgetType(t, "temp-gauge", nil, repo)
-	saved, _ := repo.Save(ctx, wt)
-
-	deleted, err := repo.DeleteByID(ctx, saved.ID())
+	saved, err := repo.Save(ctx, makeWidgetType(t, "temp-gauge", nil, repo))
 	if err != nil {
-		t.Fatalf("DeleteByID: %v", err)
+		t.Fatalf("Save: %v", err)
 	}
-	if deleted.ID() != saved.ID() {
-		t.Errorf("ID mismatch: expected %v, got %v", saved.ID(), deleted.ID())
+
+	if err := repo.Delete(ctx, saved.Delete()); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if _, err := repo.FindByID(ctx, saved.ID()); !errors.Is(err, library.ErrWidgetTypeNotFound) {
+		t.Errorf("expected ErrWidgetTypeNotFound after delete, got %v", err)
+	}
+}
+
+func TestWidgetTypeDelete_StaleVersion_ReturnsConflict(t *testing.T) {
+	cleanWidgetTypes(t)
+	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	stale, err := repo.Save(ctx, makeWidgetType(t, "temp-gauge", nil, repo))
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if _, err := repo.Save(ctx, stale); err != nil {
+		t.Fatalf("second Save: %v", err)
+	}
+
+	if err := repo.Delete(ctx, stale.Delete()); !errors.Is(err, library.ErrWidgetTypeConflict) {
+		t.Errorf("expected ErrWidgetTypeConflict, got %v", err)
 	}
 }
 
@@ -292,7 +312,7 @@ func TestWidgetTypeFindAll_CreationOrderEvenAfterUpdates(t *testing.T) {
 		for i := range 2 {
 			wt := created[i]
 			newName, _ := library.NewWidgetTypeName(fmt.Sprintf("renamed-%d-%d", i, round))
-			updated, err := library.NewWidgetType(wt.ID(), newName, wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.DefaultSize(), wt.InputPorts(), wt.Version())
+			updated, err := library.ReconstituteWidgetType(wt.ID(), newName, wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.DefaultSize(), wt.InputPorts(), wt.Version())
 			if err != nil {
 				t.Fatalf("NewWidgetType: %v", err)
 			}
@@ -319,7 +339,7 @@ func TestWidgetTypeFindAll_CreationOrderEvenAfterUpdates(t *testing.T) {
 	}
 }
 
-func TestWidgetTypeDeleteByID_UsedByWidget_ReturnsErrWidgetTypeInUse(t *testing.T) {
+func TestWidgetTypeDelete_UsedByWidget_ReturnsErrWidgetTypeInUse(t *testing.T) {
 	cleanScenes(t)
 	cleanWidgetTypes(t)
 	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
@@ -329,7 +349,11 @@ func TestWidgetTypeDeleteByID_UsedByWidget_ReturnsErrWidgetTypeInUse(t *testing.
 	w := makeWidget(t, sceneRepo, "w1")
 	mustSave(t, sceneRepo, withWidgets(makeScene(t, sceneRepo, "scene-1"), w))
 
-	_, err := repo.DeleteByID(ctx, w.TypeID())
+	wt, err := repo.FindByID(ctx, w.TypeID())
+	if err != nil {
+		t.Fatalf("FindByID: %v", err)
+	}
+	err = repo.Delete(ctx, wt.Delete())
 	if !errors.Is(err, library.ErrWidgetTypeInUse) {
 		t.Errorf("expected ErrWidgetTypeInUse, got %v", err)
 	}

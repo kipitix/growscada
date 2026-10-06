@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
-	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
@@ -35,13 +34,14 @@ type SceneService interface {
 type sceneServiceImpl struct {
 	repository           scene.SceneRepository
 	widgetTypeRepository library.WidgetTypeRepository
-	eventBus             event.EventBus
 }
 
 var _ SceneService = (*sceneServiceImpl)(nil)
 
-func NewSceneService(repo scene.SceneRepository, widgetTypeRepo library.WidgetTypeRepository, bus event.EventBus) SceneService {
-	return &sceneServiceImpl{repository: repo, widgetTypeRepository: widgetTypeRepo, eventBus: bus}
+// NewSceneService returns the scene service. The events of its changes are
+// recorded by the Scene and saved with it (ADR 0008).
+func NewSceneService(repo scene.SceneRepository, widgetTypeRepo library.WidgetTypeRepository) SceneService {
+	return &sceneServiceImpl{repository: repo, widgetTypeRepository: widgetTypeRepo}
 }
 
 // loadScene finds the scene named by the caller; ErrSceneNotFound if there is none.
@@ -109,14 +109,12 @@ func (s sceneServiceImpl) CreateScene(ctx context.Context, input appdto.SceneInp
 	if err != nil {
 		return appdto.Scene{}, fmt.Errorf("cannot create scene: %w", invalidInput(err))
 	}
-	newScene := scene.NewScene(newID, name, size, background, nil, version.Initial[scene.Scene]())
+	newScene := scene.CreateScene(newID, name, size, background)
 
 	saved, err := s.repository.Save(ctx, newScene)
 	if err != nil {
 		return appdto.Scene{}, fmt.Errorf("cannot save scene: %w", err)
 	}
-
-	s.eventBus.Publish(event.NewSceneCreatedEvent(newID))
 
 	return appdto.NewScene(saved), nil
 }
@@ -150,8 +148,6 @@ func (s sceneServiceImpl) UpdateScene(ctx context.Context, rawID uuid.UUID, rawE
 		return appdto.Scene{}, fmt.Errorf("cannot save scene: %w", err)
 	}
 
-	s.eventBus.Publish(event.NewSceneUpdatedEvent(sceneID))
-
 	return appdto.NewScene(saved), nil
 }
 
@@ -170,22 +166,28 @@ func parseSceneFields(input appdto.SceneInput) (scene.SceneName, scene.SceneSize
 }
 
 // DeleteSceneByID deletes a scene together with all of its widgets (the
-// widgets are removed atomically in the DB via ON DELETE CASCADE). The
-// widgets that existed immediately before deletion are read back from the
-// domain result so that a WidgetDeletedEvent can be published for each one —
-// keeping the event/audit trail honest about what the cascade actually did.
+// widgets are removed in the DB via ON DELETE CASCADE). The Scene records a
+// WidgetDeletedEvent for each widget it holds, and the delete's CAS makes
+// them the widgets the cascade removes: a widget added meanwhile makes the
+// delete lose the race, and the scene is reread with it (retryOnRace).
 func (s sceneServiceImpl) DeleteSceneByID(ctx context.Context, rawID uuid.UUID) (appdto.Scene, error) {
 	sceneID := id.NewID(id.IDWithUUID[scene.Scene](rawID))
 
-	deleted, err := s.repository.DeleteByID(ctx, sceneID)
+	var deleted scene.Scene
+	err := retryOnRace(scene.ErrSceneConflict, func() error {
+		found, err := s.loadScene(ctx, sceneID)
+		if err != nil {
+			return err
+		}
+		if err := s.repository.Delete(ctx, found.Delete()); err != nil {
+			return fmt.Errorf("cannot delete scene: %w", err)
+		}
+		deleted = found
+		return nil
+	})
 	if err != nil {
-		return appdto.Scene{}, fmt.Errorf("cannot delete scene: %w", err)
+		return appdto.Scene{}, err
 	}
-
-	for _, w := range deleted.Widgets() {
-		s.eventBus.Publish(event.NewWidgetDeletedEvent(w.ID()))
-	}
-	s.eventBus.Publish(event.NewSceneDeletedEvent(sceneID))
 
 	return appdto.NewScene(deleted), nil
 }
@@ -242,8 +244,6 @@ func (s sceneServiceImpl) CreateWidget(ctx context.Context, rawSceneID uuid.UUID
 		return appdto.Widget{}, widgetSaveError(err)
 	}
 
-	s.eventBus.Publish(event.NewWidgetCreatedEvent(newID))
-
 	return savedWidget(saved, newID, rawSceneID)
 }
 
@@ -283,8 +283,6 @@ func (s sceneServiceImpl) UpdateWidget(ctx context.Context, rawSceneID, rawWidge
 	if err != nil {
 		return appdto.Widget{}, widgetSaveError(err)
 	}
-
-	s.eventBus.Publish(event.NewWidgetUpdatedEvent(widgetID))
 
 	return savedWidget(saved, widgetID, rawSceneID)
 }
@@ -347,27 +345,32 @@ func parseWidget(widgetID id.ID[scene.Widget], input appdto.WidgetInput) (scene.
 }
 
 // DeleteWidgetByID removes a widget from its scene. Like deleting any
-// aggregate it expects no scene version, yet it never overwrites a scene
-// changed since it was read: Save then reports ErrSceneConflict.
+// aggregate it expects no scene version: a scene changed since it was read is
+// reread and the widget removed from it as it is now (retryOnRace).
 func (s sceneServiceImpl) DeleteWidgetByID(ctx context.Context, rawSceneID, rawWidgetID uuid.UUID) (appdto.Widget, error) {
 	sceneID := id.NewID(id.IDWithUUID[scene.Scene](rawSceneID))
 	widgetID := id.NewID(id.IDWithUUID[scene.Widget](rawWidgetID))
 
-	sc, err := s.loadScene(ctx, sceneID)
+	var deleted scene.Widget
+	var saved scene.Scene
+	err := retryOnRace(scene.ErrSceneConflict, func() error {
+		sc, err := s.loadScene(ctx, sceneID)
+		if err != nil {
+			return err
+		}
+		changed, w, err := sc.RemoveWidget(widgetID)
+		if err != nil {
+			return fmt.Errorf("cannot delete widget: %w", err)
+		}
+		if saved, err = s.repository.Save(ctx, changed); err != nil {
+			return fmt.Errorf("cannot save scene: %w", err)
+		}
+		deleted = w
+		return nil
+	})
 	if err != nil {
 		return appdto.Widget{}, err
 	}
-	changed, deleted, err := sc.RemoveWidget(widgetID)
-	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot delete widget: %w", err)
-	}
-
-	saved, err := s.repository.Save(ctx, changed)
-	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot save scene: %w", err)
-	}
-
-	s.eventBus.Publish(event.NewWidgetDeletedEvent(widgetID))
 
 	return appdto.NewWidget(deleted, rawSceneID, saved.Version().Number()), nil
 }

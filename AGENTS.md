@@ -68,8 +68,8 @@ internal/
   server/           # GrowSCADA server + WASM UI (DDD layers below)
     domain/         # Core business logic — no external dependencies
     application/    # Use-case services, orchestrate domain objects
-    infrastructure/ # Concrete implementations (Postgres, MQTT)
-    interface/      # Delivery mechanisms (REST API, PWA UI)
+    infrastructure/ # Concrete implementations (Postgres repositories, outbox)
+    interface/      # Delivery mechanisms (REST API + SSE, EventBus, PWA UI)
   apiclient/        # Go client of the REST API (JSON shapes from contract/api/v0)
   growctl/          # growctl CLI: manifests, planner
   devicelink/       # Contract by which a Device delivers Tag values to the server (ADR 0004)
@@ -86,20 +86,19 @@ Each subdomain owns its aggregate, value objects, and repository **interface**:
 
 | Package    | Aggregate / Concept |
 |------------|---------------------|
-| `tag/`     | `Tag` — atomic SCADA data point with type, value, quality (`Good/Bad/Uncertain`) |
-| `scene/`   | `Scene` — named canvas (mnemonic screen); immutable aggregate whose methods (`AddWidget`, `UpdateWidget`, `RemoveWidget`, `Update`, `ReconcileWith`) return a new Scene |
+| `tag/`     | `Tag` — atomic SCADA data point with type, value, quality (`Good/Bad/Uncertain`); its events (`TagCreatedEvent`, …) |
+| `scene/`   | `Scene` — named canvas (mnemonic screen); immutable aggregate whose methods (`AddWidget`, `UpdateWidget`, `RemoveWidget`, `Update`, `ReconcileWith`, `Delete`) return a new Scene; Scene and Widget events |
 | `scene/`   | `Widget` — entity of the Scene aggregate: instance of a WidgetType placed on a Scene, with position/size/rotation/transform matrix |
-| `library/` | `WidgetType` — reusable template: HTML template + JavaScript script, InputPorts |
-| `event/`   | `EventBus` and domain events (created/updated/deleted per aggregate) |
+| `library/` | `WidgetType` — reusable template: HTML template + JavaScript script, InputPorts; immutable (`Update`, `Delete`); its events |
+| `event/`   | Base of domain events: `Event`, `Base`, `EventType` (every event name), `EventTimestamp`, `Recorder`. Imports no aggregate |
 | `id/`      | Generic `ID[T]` UUID value object; type parameter prevents mixing IDs of different aggregates |
 | `version/` | Optimistic-concurrency version value object; Generic `Version[T]` |
 
 ### Application Layer (`internal/server/application/`)
 
-Services (`TagService`, `WidgetService`, `WidgetTypeService`, `SceneService`) each accept repository and event bus interfaces injected from `main.go`. They:
-1. Construct domain objects from `appdto` input DTOs.
-2. Delegate persistence to the repository.
-3. Publish domain events via `EventBus` after mutations.
+Services (`TagService`, `WidgetTypeService`, `SceneService`) accept repository interfaces injected from `main.go`. A mutation: parse input → load the aggregate → call its method → `Save`/`Delete` → `appdto`. Services publish no events (ADR 0008).
+
+**Events (ADR 0008).** One transaction changes one aggregate. The aggregate records its own events (`Create…` records Created, `Reconstitute…` — for repositories — nothing; changes and `Delete()` record theirs; see `event.Recorder`). The repository's `Save`/`Delete` writes the state (CAS on the loaded Version) and the pending events into the `outbox` table in one transaction; `outbox.Dispatcher` delivers them after commit, in commit order, to the `EventBus` (SSE) and deletes each row — at-least-once. Operations that state no expected Version (deletes) go through `retryOnRace`: on a write race they reread and retry, after 3 lost races → conflict (409).
 
 `appdto/` structs are the boundary between the domain and the outside world — not the REST DTOs.
 
@@ -107,7 +106,7 @@ Services (`TagService`, `WidgetService`, `WidgetTypeService`, `SceneService`) ea
 
 - **PostgreSQL repositories** implement domain repository interfaces using `database/sql` + `lib/pq`.
 - **Migrations** live in `internal/server/infrastructure/postgres/migrations/` and are managed with [Goose](https://github.com/pressly/goose). The debug `docker-compose.yaml` automatically applies migrations and seed data on `make db_up`.
-- **MQTT event bus** (`event_bus_mqtt.go`) is a stub — the in-memory `EventBus` is used in production for now.
+- **Outbox** (`postgres/outbox/`): `Append` (called by the repositories' shared `aggregateStore` template), the internal event codec (not a contract) and the `Dispatcher` (`Run`, `Notify` — wired to repositories via `repositories.NotifyOnCommit`, `DrainOnce` for deterministic tests). One dispatcher per database.
 
 ### Interface Layer (`internal/server/interface/`)
 
@@ -118,6 +117,8 @@ Services (`TagService`, `WidgetService`, `WidgetTypeService`, `SceneService`) ea
 - Errors follow RFC 7807 Problem Details (`problems.go`).
 - Each resource has its own handler file (`tags.go`, `widgets.go`, etc.). JSON shapes are `contract/api/v0`; the conversions to/from `appdto` are in `dto_mapping.go`.
 - Request bodies are decoded strictly with `decodeRequest` (unknown field → 400); clients read responses tolerantly.
+
+**EventBus** (`internal/server/interface/eventbus/`): in-process bus feeding the SSE stream (`GET /api/v0/events`): domain events handed over by the outbox dispatcher, plus delivery's own events (`client_connected`/`client_disconnected`, `system_ready`). `event_bus_mqtt.go` is a stub.
 
 **PWA UI** (`internal/server/interface/ui/`, port `:8080`):
 - Built with [go-app v10](https://go-app.dev/) — compiled to WebAssembly, served by the same binary.

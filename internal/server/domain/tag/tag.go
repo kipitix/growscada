@@ -2,7 +2,9 @@ package tag
 
 import (
 	"fmt"
+	"slices"
 
+	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
@@ -18,8 +20,14 @@ type Tag interface {
 	Quality() TagQuality
 	Version() version.Version[Tag]
 
+	// SetValue changes the Tag's value and Quality and records a
+	// TagUpdatedEvent carrying the state Save stores.
 	SetValue(any, TagQuality) error
 
+	// Delete records a TagDeletedEvent; the repository's Delete removes the Tag.
+	Delete()
+
+	event.Recorder
 	fmt.Stringer
 }
 
@@ -31,13 +39,27 @@ type tagImpl struct {
 	value   TagValue
 	quality TagQuality
 	version version.Version[Tag]
+	pending []event.Event
 }
 
 var _ Tag = (*tagImpl)(nil)
 
-// NewTag creates a new tag with the given identifier, name, type, value, quality and version.
+// CreateTag creates a new, not yet saved tag and records a TagCreatedEvent.
 // Returns an error if the type or quality is the invalid zero value.
-func NewTag(anID id.ID[Tag], aName TagName, aType TagType, aValue TagValue, aQuality TagQuality, aVersion version.Version[Tag]) (Tag, error) {
+func CreateTag(anID id.ID[Tag], aName TagName, aType TagType, aValue TagValue, aQuality TagQuality) (Tag, error) {
+	t, err := ReconstituteTag(anID, aName, aType, aValue, aQuality, version.Initial[Tag]())
+	if err != nil {
+		return nil, err
+	}
+	impl := t.(*tagImpl)
+	impl.pending = []event.Event{NewTagCreatedEvent(anID)}
+	return impl, nil
+}
+
+// ReconstituteTag rebuilds a tag as stored, at the given version; it records
+// no event. For repositories and the decoding of stored events.
+// Returns an error if the type or quality is the invalid zero value.
+func ReconstituteTag(anID id.ID[Tag], aName TagName, aType TagType, aValue TagValue, aQuality TagQuality, aVersion version.Version[Tag]) (Tag, error) {
 	if !aType.IsValid() {
 		return nil, fmt.Errorf("cannot create tag: invalid type")
 	}
@@ -73,7 +95,21 @@ func (t *tagImpl) SetValue(aValue any, aQuality TagQuality) error {
 	}
 	t.value = newValue
 	t.quality = aQuality
+	// Save raises the Version by one, so the event carries the state stored.
+	saved := tagImpl{
+		id: t.id, name: t.name, tagType: t.tagType,
+		value: t.value, quality: t.quality, version: t.version.Next(),
+	}
+	t.pending = append(t.pending, NewTagUpdatedEvent(&saved))
 	return nil
+}
+
+func (t *tagImpl) Delete() {
+	t.pending = append(t.pending, NewTagDeletedEvent(t.id))
+}
+
+func (t tagImpl) PendingEvents() []event.Event {
+	return slices.Clone(t.pending)
 }
 
 // String returns a string representation of the tag.

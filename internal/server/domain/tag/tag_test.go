@@ -14,14 +14,14 @@ func makeTestTag(t *testing.T) Tag {
 	tagType := TagTypeInteger
 	value, _ := tagType.NewTagValue(0)
 	quality := TagQualityGood
-	tag, err := NewTag(tagID, name, tagType, value, quality, version.Initial[Tag]())
+	tag, err := ReconstituteTag(tagID, name, tagType, value, quality, version.Initial[Tag]())
 	if err != nil {
-		t.Fatalf("NewTag returned unexpected error: %v", err)
+		t.Fatalf("ReconstituteTag returned unexpected error: %v", err)
 	}
 	return tag
 }
 
-func TestNewTag_FieldsAreSet(t *testing.T) {
+func TestReconstituteTag_FieldsAreSet(t *testing.T) {
 	tagID := id.NewID[Tag]()
 	name, _ := NewTagName("pressure")
 	tagType := TagTypeString
@@ -32,7 +32,7 @@ func TestNewTag_FieldsAreSet(t *testing.T) {
 		t.Fatalf("unexpected error creating version: %v", err)
 	}
 
-	tag, err := NewTag(tagID, name, tagType, value, quality, ver)
+	tag, err := ReconstituteTag(tagID, name, tagType, value, quality, ver)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestTagVersionInitial_IsZero(t *testing.T) {
 	}
 }
 
-func TestNewTag_InitialVersion(t *testing.T) {
+func TestReconstituteTag_InitialVersion(t *testing.T) {
 	tag := makeTestTag(t)
 	if tag.Version() != version.Initial[Tag]() {
 		t.Errorf("expected initial version %d, got %d", version.Initial[Tag](), tag.Version())
@@ -124,7 +124,7 @@ func TestTag_SetValue_InvalidInput_DoesNotChangeQuality(t *testing.T) {
 	}
 }
 
-func TestNewTag_InvalidTypeOrQuality_ReturnsError(t *testing.T) {
+func TestReconstituteTag_InvalidTypeOrQuality_ReturnsError(t *testing.T) {
 	name, _ := NewTagName("temperature")
 	value, _ := TagTypeInteger.NewTagValue(0)
 
@@ -139,7 +139,7 @@ func TestNewTag_InvalidTypeOrQuality_ReturnsError(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := NewTag(id.NewID[Tag](), name, tc.tagType, value, tc.quality, version.Initial[Tag]())
+			_, err := ReconstituteTag(id.NewID[Tag](), name, tc.tagType, value, tc.quality, version.Initial[Tag]())
 			if err == nil {
 				t.Error("expected error, got nil")
 			}

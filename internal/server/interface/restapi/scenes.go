@@ -113,6 +113,10 @@ func (h ScenesHandlers) DeleteScenesByID(w http.ResponseWriter, r *http.Request)
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
 			return
 		}
+		if errors.Is(err, scene.ErrSceneConflict) {
+			sendJSONResponse(w, http.StatusConflict, NewConflict("scene", err.Error(), r.URL.Path))
+			return
+		}
 		sendServiceError(w, r, err)
 		return
 	}

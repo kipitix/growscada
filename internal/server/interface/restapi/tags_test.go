@@ -23,8 +23,8 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
-	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
+	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
 
@@ -91,18 +91,18 @@ func cleanTags(t *testing.T) {
 
 func newRouter() *restapi.APIRouter {
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
-	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
+	tagSvc := application.NewTagService(tagRepo)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo, event.NewEventBus())
-	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, event.NewEventBus())
-	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, event.NewEventBus(), 100)
+	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo)
+	sceneSvc := application.NewSceneService(sceneRepo, wtRepo)
+	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, eventbus.NewEventBus(), 100)
 }
 
 func createTagViaService(t *testing.T, name, tagType, value, quality string) appdto.Tag {
 	t.Helper()
 	repo := repositories.NewTagRepositoryPostgres(testDB)
-	svc := application.NewTagService(repo, event.NewEventBus())
+	svc := application.NewTagService(repo)
 	resp, err := svc.CreateTag(context.Background(), appdto.CreateTagInput{
 		Name: name, Type: tagType, Value: value, Quality: quality,
 	})

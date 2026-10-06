@@ -10,7 +10,6 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
-	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
@@ -37,7 +36,7 @@ func (r corruptTagRepository) FindAll(context.Context) ([]tag.Tag, error) {
 // A value the domain rejects is invalid input only when the caller sent it:
 // the same constructors failing on a stored row is a server fault.
 func TestTagService_CorruptStoredTag_IsNotInvalidInput(t *testing.T) {
-	svc := application.NewTagService(corruptTagRepository{}, event.NewEventBus())
+	svc := application.NewTagService(corruptTagRepository{})
 	ctx := context.Background()
 
 	_, err := svc.FindTagByID(ctx, uuid.New())

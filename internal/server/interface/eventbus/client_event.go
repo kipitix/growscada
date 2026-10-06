@@ -1,18 +1,21 @@
-package event
+package eventbus
 
 import (
 	"github.com/kipitix/growscada/internal/server/domain/client"
+	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 )
 
 // ClientEvent - base interface for all client connection-lifecycle events.
+// They are events of delivery, not of the domain: the SSE handler publishes
+// them straight to the EventBus, and they never reach the outbox.
 type ClientEvent interface {
-	Event
+	event.Event
 	ClientID() id.ID[client.Client]
 }
 
 type clientEventImpl struct {
-	eventImpl
+	event.Base
 	clientID id.ID[client.Client]
 }
 

@@ -24,14 +24,14 @@ func makeTestWidgetType(t *testing.T) WidgetType {
 	htmlTemplate, _ := NewHtmlTemplate("<div class='gauge'></div>")
 	script, _ := NewScript("function render(value) { return value; }")
 	lang := ScriptLanguageJavaScript
-	wt, err := NewWidgetType(anID, name, htmlTemplate, script, lang, DefaultSize(), nil, version.Initial[WidgetType]())
+	wt, err := ReconstituteWidgetType(anID, name, htmlTemplate, script, lang, DefaultSize(), nil, version.Initial[WidgetType]())
 	if err != nil {
 		t.Fatalf("makeTestWidgetType: %v", err)
 	}
 	return wt
 }
 
-func TestNewWidgetType_FieldsAreSet(t *testing.T) {
+func TestReconstituteWidgetType_FieldsAreSet(t *testing.T) {
 	anID := id.NewID[WidgetType]()
 	name, _ := NewWidgetTypeName("thermometer")
 	htmlTemplate, _ := NewHtmlTemplate("<div class='thermometer'></div>")
@@ -40,7 +40,7 @@ func TestNewWidgetType_FieldsAreSet(t *testing.T) {
 	size, _ := NewSize(120, 80)
 	ver, _ := version.New[WidgetType](version.WithNumber[WidgetType](3))
 
-	wt, err := NewWidgetType(anID, name, htmlTemplate, script, lang, size, nil, ver)
+	wt, err := ReconstituteWidgetType(anID, name, htmlTemplate, script, lang, size, nil, ver)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -68,26 +68,26 @@ func TestNewWidgetType_FieldsAreSet(t *testing.T) {
 	}
 }
 
-func TestNewWidgetType_InitialVersion(t *testing.T) {
+func TestReconstituteWidgetType_InitialVersion(t *testing.T) {
 	wt := makeTestWidgetType(t)
 	if wt.Version() != version.Initial[WidgetType]() {
 		t.Errorf("expected initial version %d, got %d", version.Initial[WidgetType](), wt.Version())
 	}
 }
 
-func TestNewWidgetType_String(t *testing.T) {
+func TestReconstituteWidgetType_String(t *testing.T) {
 	wt := makeTestWidgetType(t)
 	if wt.String() == "" {
 		t.Error("expected non-empty String() output")
 	}
 }
 
-func TestNewWidgetType_InvalidScriptLanguage_ReturnsError(t *testing.T) {
+func TestReconstituteWidgetType_InvalidScriptLanguage_ReturnsError(t *testing.T) {
 	name, _ := NewWidgetTypeName("gauge")
 	htmlTemplate, _ := NewHtmlTemplate("<div></div>")
 	script, _ := NewScript("function update(){}")
 
-	_, err := NewWidgetType(id.NewID[WidgetType](), name, htmlTemplate, script, ScriptLanguage{}, DefaultSize(), nil, version.Initial[WidgetType]())
+	_, err := ReconstituteWidgetType(id.NewID[WidgetType](), name, htmlTemplate, script, ScriptLanguage{}, DefaultSize(), nil, version.Initial[WidgetType]())
 	if err == nil {
 		t.Error("expected error for invalid script language, got nil")
 	}

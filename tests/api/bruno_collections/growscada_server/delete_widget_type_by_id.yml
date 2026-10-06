@@ -13,6 +13,10 @@ docs: |
   type the request returns `409 Conflict` Problem Details and nothing is
   deleted. Delete or retype those Widgets first.
 
+  The delete states no version: a delete that loses a write race (the
+  resource changed between reading and deleting it) is retried against the
+  fresh state; one that loses it 3 times in a row returns `409 Conflict`.
+
 settings:
   encodeUrl: true
   timeout: 0

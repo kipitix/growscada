@@ -35,7 +35,7 @@ func makeScene(t *testing.T, repo scene.SceneRepository, name string) scene.Scen
 	if err != nil {
 		t.Fatalf("NewSceneSize: %v", err)
 	}
-	return scene.NewScene(newID, sceneName, size, scene.NewBackgroundHTML(""), nil, version.Initial[scene.Scene]())
+	return scene.ReconstituteScene(newID, sceneName, size, scene.NewBackgroundHTML(""), nil, version.Initial[scene.Scene]())
 }
 
 func mustSaveScene(t *testing.T, repo scene.SceneRepository, name string) scene.Scene {
@@ -102,7 +102,7 @@ func TestSceneSave_ExistingScene_VersionIsIncremented(t *testing.T) {
 
 	saved := mustSaveScene(t, repo, "scene-1")
 	newName, _ := scene.NewSceneName("scene-1-renamed")
-	updated := scene.NewScene(saved.ID(), newName, saved.Size(), saved.BackgroundHTML(), nil, saved.Version())
+	updated := scene.ReconstituteScene(saved.ID(), newName, saved.Size(), saved.BackgroundHTML(), nil, saved.Version())
 
 	saved2, err := repo.Save(ctx, updated)
 
@@ -121,7 +121,7 @@ func TestSceneSave_StaleVersion_ReturnsConflict(t *testing.T) {
 
 	saved := mustSaveScene(t, repo, "scene-1")
 	badVersion, _ := version.New[scene.Scene](version.WithNumber[scene.Scene](100))
-	stale := scene.NewScene(saved.ID(), saved.Name(), saved.Size(), saved.BackgroundHTML(), nil, badVersion)
+	stale := scene.ReconstituteScene(saved.ID(), saved.Name(), saved.Size(), saved.BackgroundHTML(), nil, badVersion)
 
 	_, err := repo.Save(ctx, stale)
 
@@ -178,11 +178,11 @@ func TestSceneFindAll_MultipleScenes_ReturnsAll(t *testing.T) {
 	}
 }
 
-func TestSceneDeleteByID_NotFound_ReturnsErrSceneNotFound(t *testing.T) {
+func TestSceneDelete_NotFound_ReturnsErrSceneNotFound(t *testing.T) {
 	cleanScenes(t)
 	repo := repositories.NewSceneRepositoryPostgres(testDB)
 
-	_, err := repo.DeleteByID(context.Background(), repo.NextID())
+	err := repo.Delete(context.Background(), withVersion(makeScene(t, repo, "never-saved"), 1).Delete())
 
 	if !errors.Is(err, scene.ErrSceneNotFound) {
 		t.Errorf("expected ErrSceneNotFound, got %v", err)
@@ -193,7 +193,7 @@ func TestSceneDeleteByID_NotFound_ReturnsErrSceneNotFound(t *testing.T) {
 
 // withWidgets returns sc holding someWidgets instead of its own, at the same version.
 func withWidgets(sc scene.Scene, someWidgets ...scene.Widget) scene.Scene {
-	return scene.NewScene(sc.ID(), sc.Name(), sc.Size(), sc.BackgroundHTML(), someWidgets, sc.Version())
+	return scene.ReconstituteScene(sc.ID(), sc.Name(), sc.Size(), sc.BackgroundHTML(), someWidgets, sc.Version())
 }
 
 func mustSave(t *testing.T, repo scene.SceneRepository, sc scene.Scene) scene.Scene {
@@ -277,7 +277,7 @@ func TestSceneSave_UnknownScene_ReturnsNotFound(t *testing.T) {
 	repo := repositories.NewSceneRepositoryPostgres(testDB)
 
 	sc := makeScene(t, repo, "never-saved")
-	_, err := repo.Save(context.Background(), scene.NewScene(sc.ID(), sc.Name(), sc.Size(), sc.BackgroundHTML(), nil, version.Committed[scene.Scene]()))
+	_, err := repo.Save(context.Background(), scene.ReconstituteScene(sc.ID(), sc.Name(), sc.Size(), sc.BackgroundHTML(), nil, version.Committed[scene.Scene]()))
 
 	if !errors.Is(err, scene.ErrSceneNotFound) {
 		t.Errorf("expected ErrSceneNotFound, got %v", err)
@@ -409,32 +409,15 @@ func TestSceneFindAll_ReturnsWidgetsOfEachScene(t *testing.T) {
 
 // ══════════════════════ Scene delete cascades widgets ═══════════════════════
 
-func TestSceneDeleteByID_WithWidgets_ReturnsThemInResult(t *testing.T) {
-	cleanScenes(t)
-	repo := repositories.NewSceneRepositoryPostgres(testDB)
-	ctx := context.Background()
-
-	sc := mustSave(t, repo, withWidgets(makeScene(t, repo, "scene-1"), makeWidget(t, repo, "widget-1"), makeWidget(t, repo, "widget-2")))
-
-	deleted, err := repo.DeleteByID(ctx, sc.ID())
-
-	if err != nil {
-		t.Fatalf("DeleteByID: %v", err)
-	}
-	if len(deleted.Widgets()) != 2 {
-		t.Fatalf("expected 2 widgets in deleted scene, got %d", len(deleted.Widgets()))
-	}
-}
-
-func TestSceneDeleteByID_WithWidgets_CascadesWidgetRowsInDB(t *testing.T) {
+func TestSceneDelete_WithWidgets_CascadesWidgetRowsInDB(t *testing.T) {
 	cleanScenes(t)
 	repo := repositories.NewSceneRepositoryPostgres(testDB)
 	ctx := context.Background()
 
 	sc := mustSave(t, repo, withWidgets(makeScene(t, repo, "scene-1"), makeWidget(t, repo, "widget-1")))
 
-	if _, err := repo.DeleteByID(ctx, sc.ID()); err != nil {
-		t.Fatalf("DeleteByID: %v", err)
+	if err := repo.Delete(ctx, sc.Delete()); err != nil {
+		t.Fatalf("Delete: %v", err)
 	}
 
 	var count int
@@ -444,6 +427,33 @@ func TestSceneDeleteByID_WithWidgets_CascadesWidgetRowsInDB(t *testing.T) {
 	if count != 0 {
 		t.Errorf("expected 0 widget rows after scene deletion, got %d", count)
 	}
+	if _, err := repo.FindByID(ctx, sc.ID()); !errors.Is(err, scene.ErrSceneNotFound) {
+		t.Errorf("expected ErrSceneNotFound after delete, got %v", err)
+	}
+}
+
+func TestSceneDelete_StaleVersion_ReturnsConflictAndKeepsScene(t *testing.T) {
+	cleanScenes(t)
+	repo := repositories.NewSceneRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	stale := mustSave(t, repo, makeScene(t, repo, "scene-1"))
+	mustSave(t, repo, withWidgets(stale, makeWidget(t, repo, "added meanwhile")))
+
+	err := repo.Delete(ctx, stale.Delete())
+
+	if !errors.Is(err, scene.ErrSceneConflict) {
+		t.Errorf("expected ErrSceneConflict, got %v", err)
+	}
+	if found := mustFindByID(t, repo, stale.ID()); len(found.Widgets()) != 1 {
+		t.Errorf("expected the scene kept with its widget, got %d widgets", len(found.Widgets()))
+	}
+}
+
+// withVersion returns sc at the given version number.
+func withVersion(sc scene.Scene, number int) scene.Scene {
+	ver, _ := version.New(version.WithNumber[scene.Scene](number))
+	return scene.ReconstituteScene(sc.ID(), sc.Name(), sc.Size(), sc.BackgroundHTML(), sc.Widgets(), ver)
 }
 
 // ══════════════════════════ FindByWidgetTypeID ══════════════════════════════
@@ -547,7 +557,7 @@ func TestSceneFindAll_CreationOrderEvenAfterUpdates(t *testing.T) {
 		for i := range 2 {
 			newName, _ := scene.NewSceneName(fmt.Sprintf("renamed-%d-%d", i, round))
 			sc := created[i]
-			saved, err := repo.Save(ctx, scene.NewScene(sc.ID(), newName, sc.Size(), sc.BackgroundHTML(), nil, sc.Version()))
+			saved, err := repo.Save(ctx, scene.ReconstituteScene(sc.ID(), newName, sc.Size(), sc.BackgroundHTML(), nil, sc.Version()))
 			if err != nil {
 				t.Fatalf("Save (update): %v", err)
 			}

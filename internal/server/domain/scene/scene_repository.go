@@ -12,7 +12,8 @@ var (
 	ErrSceneNotFound = errors.New("scene not found")
 	// ErrSceneConflict is returned by the Scene's change methods when the
 	// expected version is not the current one (an edit conflict), and by Save
-	// when the stored version changed after the scene was read (a write race).
+	// and Delete when the stored version changed after the scene was read
+	// (a write race).
 	// Since Widget has no version of its own, this also guards widget changes.
 	ErrSceneConflict = errors.New("scene version conflict")
 )
@@ -40,18 +41,22 @@ type SceneRepository interface {
 	// least one widget of the given WidgetType, each with all its widgets.
 	FindByWidgetTypeID(context.Context, id.ID[library.WidgetType]) ([]Scene, error)
 
-	// Save stores a scene with its widgets: a scene of the initial version is
+	// Save stores a scene with its widgets and the events it recorded, in one
+	// transaction: a scene of the initial version is
 	// inserted, any other replaces the stored one if the stored version is
 	// still the scene's version. Widgets the scene no longer holds are
 	// removed. The version is raised once per Save; the returned scene
-	// carries the new one and its widgets as stored.
+	// carries the new one, its widgets as stored and no events.
 	// Returns ErrSceneNotFound if the scene does not exist on update.
 	// Returns ErrSceneConflict if the stored version does not match.
 	// Returns library.ErrWidgetTypeNotFound if a widget's type does not exist.
 	Save(context.Context, Scene) (Scene, error)
 
-	// DeleteByID removes a scene and (via cascade) all its widgets, returning
-	// the scene as it existed immediately before deletion, widgets included.
+	// Delete removes a scene, read at the version it carries, and (via
+	// cascade) all its widgets, and stores the events it recorded (see
+	// Scene.Delete), in one transaction. The CAS makes the widgets removed
+	// the ones the scene holds, each with its WidgetDeletedEvent.
 	// Returns ErrSceneNotFound if the scene does not exist.
-	DeleteByID(context.Context, id.ID[Scene]) (Scene, error)
+	// Returns ErrSceneConflict if the stored version does not match.
+	Delete(context.Context, Scene) error
 }

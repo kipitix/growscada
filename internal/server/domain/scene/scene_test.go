@@ -15,17 +15,17 @@ func makeTestScene(t *testing.T) Scene {
 	name, _ := NewSceneName("test_scene")
 	size, _ := NewSceneSize(1024, 768)
 	bg := NewBackgroundHTML("<div></div>")
-	return NewScene(sceneID, name, size, bg, nil, version.Initial[Scene]())
+	return ReconstituteScene(sceneID, name, size, bg, nil, version.Initial[Scene]())
 }
 
-func TestNewScene_FieldsAreSet(t *testing.T) {
+func TestReconstituteScene_FieldsAreSet(t *testing.T) {
 	sceneID := id.NewID[Scene]()
 	name, _ := NewSceneName("boiler_room")
 	size, _ := NewSceneSize(1920, 1080)
 	bg := NewBackgroundHTML("<svg></svg>")
 	ver, _ := version.New[Scene](version.WithNumber[Scene](2))
 
-	s := NewScene(sceneID, name, size, bg, nil, ver)
+	s := ReconstituteScene(sceneID, name, size, bg, nil, ver)
 
 	if s.ID() != sceneID {
 		t.Errorf("ID mismatch: expected %v, got %v", sceneID, s.ID())
@@ -44,14 +44,14 @@ func TestNewScene_FieldsAreSet(t *testing.T) {
 	}
 }
 
-func TestNewScene_InitialVersion(t *testing.T) {
+func TestReconstituteScene_InitialVersion(t *testing.T) {
 	s := makeTestScene(t)
 	if s.Version() != version.Initial[Scene]() {
 		t.Errorf("expected initial version %v, got %v", version.Initial[Scene](), s.Version())
 	}
 }
 
-func TestNewScene_String_NonEmpty(t *testing.T) {
+func TestReconstituteScene_String_NonEmpty(t *testing.T) {
 	s := makeTestScene(t)
 	str := s.String()
 	if str == "" {
@@ -59,10 +59,10 @@ func TestNewScene_String_NonEmpty(t *testing.T) {
 	}
 }
 
-func TestNewScene_String_ContainsNameAndSize(t *testing.T) {
+func TestReconstituteScene_String_ContainsNameAndSize(t *testing.T) {
 	name, _ := NewSceneName("overview")
 	size, _ := NewSceneSize(800, 600)
-	s := NewScene(id.NewID[Scene](), name, size, NewBackgroundHTML(""), nil, version.Initial[Scene]())
+	s := ReconstituteScene(id.NewID[Scene](), name, size, NewBackgroundHTML(""), nil, version.Initial[Scene]())
 
 	str := s.String()
 	if !strings.Contains(str, "overview") {
@@ -76,14 +76,14 @@ func TestNewScene_String_ContainsNameAndSize(t *testing.T) {
 	}
 }
 
-func TestNewScene_EmptyBackgroundHTML(t *testing.T) {
-	s := NewScene(id.NewID[Scene](), mustSceneName(t, "empty_bg"), mustSceneSize(t, 100, 100), NewBackgroundHTML(""), nil, version.Initial[Scene]())
+func TestReconstituteScene_EmptyBackgroundHTML(t *testing.T) {
+	s := ReconstituteScene(id.NewID[Scene](), mustSceneName(t, "empty_bg"), mustSceneSize(t, 100, 100), NewBackgroundHTML(""), nil, version.Initial[Scene]())
 	if s.BackgroundHTML().Content() != "" {
 		t.Errorf("expected empty background HTML, got %q", s.BackgroundHTML().Content())
 	}
 }
 
-func TestNewScene_UniqueIDs(t *testing.T) {
+func TestReconstituteScene_UniqueIDs(t *testing.T) {
 	s1 := makeTestScene(t)
 	s2 := makeTestScene(t)
 	if s1.ID() == s2.ID() {

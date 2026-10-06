@@ -100,7 +100,7 @@ func makeTag(t *testing.T, name string, repo tag.TagRepository) tag.Tag {
 	if err != nil {
 		t.Fatalf("NewTagValue: %v", err)
 	}
-	newTag, err := tag.NewTag(id, tagName, tagType, value, tag.TagQualityGood, version.Initial[tag.Tag]())
+	newTag, err := tag.ReconstituteTag(id, tagName, tagType, value, tag.TagQualityGood, version.Initial[tag.Tag]())
 	if err != nil {
 		t.Fatalf("NewTag: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestSave_DuplicateID_ReturnsError(t *testing.T) {
 		t.Fatalf("first Save failed: %v", err)
 	}
 
-	duplicate, _ := tag.NewTag(newTag.ID(), newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), version.Initial[tag.Tag]())
+	duplicate, _ := tag.ReconstituteTag(newTag.ID(), newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), version.Initial[tag.Tag]())
 	_, err := repo.Save(ctx, duplicate)
 
 	if err == nil {
@@ -195,7 +195,7 @@ func TestSave_StaleVersion_ReturnsError(t *testing.T) {
 
 	// version=100 while DB has version=1 → optimistic lock conflict
 	badVersion, _ := version.New[tag.Tag](version.WithNumber[tag.Tag](100))
-	staleTag, _ := tag.NewTag(newTag.ID(), newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), badVersion)
+	staleTag, _ := tag.ReconstituteTag(newTag.ID(), newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), badVersion)
 	_, err := repo.Save(ctx, staleTag)
 
 	if err == nil {
@@ -332,83 +332,44 @@ func TestFindAll_SortedByNameEvenAfterUpdates(t *testing.T) {
 
 // --- Delete ---
 
-func TestDeleteByID_ExistingTag_ReturnsDeletedTag(t *testing.T) {
-	cleanTags(t)
-	repo := repositories.NewTagRepositoryPostgres(testDB)
-	ctx := context.Background()
-
-	newTag := makeTag(t, "valve", repo)
-	if _, err := repo.Save(ctx, newTag); err != nil {
+// mustSaveTag saves aTag and returns it as stored.
+func mustSaveTag(t *testing.T, repo tag.TagRepository, aTag tag.Tag) tag.Tag {
+	t.Helper()
+	saved, err := repo.Save(context.Background(), aTag)
+	if err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
-
-	deleted, err := repo.DeleteByID(ctx, newTag.ID())
-
-	if err != nil {
-		t.Fatalf("DeleteByID returned unexpected error: %v", err)
-	}
-	if deleted.ID() != newTag.ID() {
-		t.Errorf("ID: expected %v, got %v", newTag.ID(), deleted.ID())
-	}
-	if deleted.Name() != newTag.Name() {
-		t.Errorf("Name: expected %v, got %v", newTag.Name(), deleted.Name())
-	}
-	if deleted.Type() != newTag.Type() {
-		t.Errorf("Type: expected %v, got %v", newTag.Type(), deleted.Type())
-	}
-	if deleted.Value().String() != "0" {
-		t.Errorf("Value: expected '0', got %q", deleted.Value().String())
-	}
-	if deleted.Quality() != tag.TagQualityGood {
-		t.Errorf("Quality: expected good, got %v", deleted.Quality())
-	}
-	if deleted.Version().Number() != 1 {
-		t.Errorf("Version: expected 1, got %d", deleted.Version())
-	}
+	return saved
 }
 
-func TestDeleteByID_ExistingTag_TagIsRemovedFromDB(t *testing.T) {
+func TestDelete_ExistingTag_TagIsRemovedFromDB(t *testing.T) {
 	cleanTags(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB)
 	ctx := context.Background()
 
-	newTag := makeTag(t, "pump", repo)
-	if _, err := repo.Save(ctx, newTag); err != nil {
-		t.Fatalf("Save failed: %v", err)
-	}
-	deleted, err := repo.DeleteByID(ctx, newTag.ID())
-	if err != nil {
-		t.Fatalf("DeleteByID failed: %v", err)
-	}
-	if deleted.ID() != newTag.ID() {
-		t.Errorf("ID: expected %v, got %v", newTag.ID(), deleted.ID())
-	}
-	if deleted.Name() != newTag.Name() {
-		t.Errorf("Name: expected %v, got %v", newTag.Name(), deleted.Name())
+	saved := mustSaveTag(t, repo, makeTag(t, "pump", repo))
+	saved.Delete()
+	if err := repo.Delete(ctx, saved); err != nil {
+		t.Fatalf("Delete failed: %v", err)
 	}
 
-	_, err = repo.FindByID(ctx, newTag.ID())
+	_, err := repo.FindByID(ctx, saved.ID())
 
 	if !errors.Is(err, tag.ErrTagNotFound) {
 		t.Errorf("expected ErrTagNotFound after delete, got %v", err)
 	}
 }
 
-func TestDeleteByID_ExistingTag_OtherTagsAreUnaffected(t *testing.T) {
+func TestDelete_ExistingTag_OtherTagsAreUnaffected(t *testing.T) {
 	cleanTags(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB)
 	ctx := context.Background()
 
-	tag1 := makeTag(t, "temperature", repo)
-	tag2 := makeTag(t, "pressure", repo)
-	if _, err := repo.Save(ctx, tag1); err != nil {
-		t.Fatalf("Save tag1 failed: %v", err)
-	}
-	if _, err := repo.Save(ctx, tag2); err != nil {
-		t.Fatalf("Save tag2 failed: %v", err)
-	}
+	tag1 := mustSaveTag(t, repo, makeTag(t, "temperature", repo))
+	tag2 := mustSaveTag(t, repo, makeTag(t, "pressure", repo))
 
-	if _, err := repo.DeleteByID(ctx, tag1.ID()); err != nil {
+	tag1.Delete()
+	if err := repo.Delete(ctx, tag1); err != nil {
 		t.Fatalf("Delete failed: %v", err)
 	}
 
@@ -418,16 +379,39 @@ func TestDeleteByID_ExistingTag_OtherTagsAreUnaffected(t *testing.T) {
 	}
 }
 
-func TestDeleteByID_NotFound_ReturnsErrTagNotFound(t *testing.T) {
+func TestDelete_NotFound_ReturnsErrTagNotFound(t *testing.T) {
 	cleanTags(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB)
 	ctx := context.Background()
 
-	nonExistentID := repo.NextID()
-	_, err := repo.DeleteByID(ctx, nonExistentID)
+	saved := mustSaveTag(t, repo, makeTag(t, "valve", repo))
+	if _, err := testDB.ExecContext(ctx, "DELETE FROM tags"); err != nil {
+		t.Fatalf("clean: %v", err)
+	}
+	saved.Delete()
+	err := repo.Delete(ctx, saved)
 
 	if !errors.Is(err, tag.ErrTagNotFound) {
 		t.Errorf("expected ErrTagNotFound, got %v", err)
+	}
+}
+
+func TestDelete_StaleVersion_ReturnsErrTagConflict(t *testing.T) {
+	cleanTags(t)
+	repo := repositories.NewTagRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	stale := mustSaveTag(t, repo, makeTag(t, "valve", repo))
+	if err := stale.SetValue(int64(1), tag.TagQualityGood); err != nil {
+		t.Fatalf("SetValue: %v", err)
+	}
+	mustSaveTag(t, repo, stale)
+
+	stale.Delete()
+	err := repo.Delete(ctx, stale)
+
+	if !errors.Is(err, tag.ErrTagConflict) {
+		t.Errorf("expected ErrTagConflict, got %v", err)
 	}
 }
 

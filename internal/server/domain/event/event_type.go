@@ -12,6 +12,10 @@ type EventType struct {
 var _ fmt.Stringer = EventType{}
 
 // Sentinel values for EventType. Must not be reassigned.
+// The domain events are declared in the packages of their aggregates; the
+// connection-lifecycle and system events belong to delivery (interface/
+// eventbus). Their types are all listed here, so that every name a client
+// may receive is defined once.
 // A new value must also be added to eventTypeNames.
 var (
 	EventTypeSystemReady        = EventType{eventType: 1}

@@ -3,6 +3,8 @@ package application_test
 import (
 	"context"
 	"errors"
+	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -14,6 +16,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
+	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 )
 
 func cleanWidgetTypes(t *testing.T) {
@@ -26,14 +29,14 @@ func cleanWidgetTypes(t *testing.T) {
 func newWidgetTypeService() application.WidgetTypeService {
 	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	return application.NewWidgetTypeService(repo, sceneRepo, event.NewEventBus())
+	return application.NewWidgetTypeService(repo, sceneRepo)
 }
 
-func newWidgetTypeServiceWithBus() (application.WidgetTypeService, event.EventBus) {
-	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	bus := event.NewEventBus()
-	return application.NewWidgetTypeService(repo, sceneRepo, bus), bus
+func newWidgetTypeServiceWithBus(t *testing.T) (application.WidgetTypeService, eventbus.EventBus) {
+	bus, onCommit := deliveredOnCommit(t)
+	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB, onCommit)
+	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB, onCommit)
+	return application.NewWidgetTypeService(repo, sceneRepo), bus
 }
 
 var testCreateWidgetTypeInput = appdto.WidgetTypeInput{
@@ -351,7 +354,7 @@ func TestDeleteWidgetType_NotFound_ReturnsWrappedError(t *testing.T) {
 
 func TestCreateWidgetType_Success_PublishesCreatedEvent(t *testing.T) {
 	cleanWidgetTypes(t)
-	svc, bus := newWidgetTypeServiceWithBus()
+	svc, bus := newWidgetTypeServiceWithBus(t)
 	ctx := context.Background()
 
 	var received []event.Event
@@ -367,7 +370,7 @@ func TestCreateWidgetType_Success_PublishesCreatedEvent(t *testing.T) {
 	if len(received) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(received))
 	}
-	wtEvent, ok := received[0].(event.WidgetTypeEvent)
+	wtEvent, ok := received[0].(library.WidgetTypeEvent)
 	if !ok {
 		t.Fatal("expected event to implement WidgetTypeEvent")
 	}
@@ -378,7 +381,7 @@ func TestCreateWidgetType_Success_PublishesCreatedEvent(t *testing.T) {
 
 func TestDeleteWidgetType_Success_PublishesDeletedEvent(t *testing.T) {
 	cleanWidgetTypes(t)
-	svc, bus := newWidgetTypeServiceWithBus()
+	svc, bus := newWidgetTypeServiceWithBus(t)
 	ctx := context.Background()
 
 	created, err := svc.CreateWidgetType(ctx, testCreateWidgetTypeInput)
@@ -398,7 +401,7 @@ func TestDeleteWidgetType_Success_PublishesDeletedEvent(t *testing.T) {
 	if len(received) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(received))
 	}
-	wtEvent, ok := received[0].(event.WidgetTypeEvent)
+	wtEvent, ok := received[0].(library.WidgetTypeEvent)
 	if !ok {
 		t.Fatal("expected event to implement WidgetTypeEvent")
 	}
@@ -409,7 +412,7 @@ func TestDeleteWidgetType_Success_PublishesDeletedEvent(t *testing.T) {
 
 func TestUpdateWidgetType_Success_PublishesUpdatedEvent(t *testing.T) {
 	cleanWidgetTypes(t)
-	svc, bus := newWidgetTypeServiceWithBus()
+	svc, bus := newWidgetTypeServiceWithBus(t)
 	ctx := context.Background()
 
 	created, err := svc.CreateWidgetType(ctx, testCreateWidgetTypeInput)
@@ -437,7 +440,7 @@ func TestUpdateWidgetType_Success_PublishesUpdatedEvent(t *testing.T) {
 	if len(received) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(received))
 	}
-	wtEvent, ok := received[0].(event.WidgetTypeEvent)
+	wtEvent, ok := received[0].(library.WidgetTypeEvent)
 	if !ok {
 		t.Fatal("expected event to implement WidgetTypeEvent")
 	}
@@ -612,7 +615,7 @@ func TestUpdateWidgetType_RemovedPort_SceneChangedMeanwhile_CleansBindingsKeepsC
 			t.Fatalf("concurrent UpdateScene: %v", err)
 		}
 	}
-	racingSvc := application.NewWidgetTypeService(repositories.NewWidgetTypeRepositoryPostgres(testDB), sceneRepo, event.NewEventBus())
+	racingSvc := application.NewWidgetTypeService(repositories.NewWidgetTypeRepositoryPostgres(testDB), sceneRepo)
 
 	_, err = racingSvc.UpdateWidgetType(ctx, createdType.ID, createdType.Version, appdto.WidgetTypeInput{
 		Name:           createdType.Name,
@@ -668,5 +671,92 @@ func TestDeleteWidgetType_UsedByWidget_ReturnsErrWidgetTypeInUse(t *testing.T) {
 	}
 	if _, err := wtSvc.FindWidgetTypeByID(ctx, created.ID); err != nil {
 		t.Errorf("widget type after refused delete: %v", err)
+	}
+}
+
+// outboxSceneIDs returns, per event type, the Scenes the outbox's events are
+// about: a Scene event's own, a Widget event's holder.
+func outboxSceneIDs(t *testing.T) map[string][]uuid.UUID {
+	t.Helper()
+	rows, err := testDB.QueryContext(context.Background(), "SELECT type, payload FROM outbox ORDER BY seq")
+	if err != nil {
+		t.Fatalf("read outbox: %v", err)
+	}
+	defer rows.Close()
+	out := map[string][]uuid.UUID{}
+	for rows.Next() {
+		var typeName string
+		var data []byte
+		if err := rows.Scan(&typeName, &data); err != nil {
+			t.Fatalf("scan outbox: %v", err)
+		}
+		et, err := event.NewEventType(typeName)
+		if err != nil {
+			t.Fatalf("event type: %v", err)
+		}
+		e, err := outbox.Decode(et, data)
+		if err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		switch ev := e.(type) {
+		case scene.WidgetEvent:
+			out[typeName] = append(out[typeName], ev.SceneID().UUID())
+		case scene.SceneEvent:
+			out[typeName] = append(out[typeName], ev.SceneID().UUID())
+		}
+	}
+	return out
+}
+
+func TestUpdateWidgetType_RemovedPort_OutboxHoldsEventsOfEveryChangedScene(t *testing.T) {
+	cleanScenes(t)
+	cleanWidgetTypes(t)
+	wtSvc := newWidgetTypeService()
+	sceneSvc := newSceneService()
+	ctx := context.Background()
+
+	input := appdto.WidgetTypeInput{
+		Name: "sensor", HtmlTemplate: "<div></div>", ScriptLanguage: "javascript",
+		DefaultWidth: 100, DefaultHeight: 100, InputPorts: []appdto.InputPort{{Name: "value"}},
+	}
+	createdType, err := wtSvc.CreateWidgetType(ctx, input)
+	if err != nil {
+		t.Fatalf("CreateWidgetType: %v", err)
+	}
+	bound := appdto.WidgetInput{
+		Name: "bound", Width: 100, Height: 100, OriginX: 0.5, OriginY: 0.5, TypeID: createdType.ID,
+		PortBindings: []appdto.PortBinding{{PortName: "value", TagID: uuid.New()}},
+	}
+	unbound := bound
+	unbound.PortBindings = nil
+
+	var changedScenes []uuid.UUID
+	for _, name := range []string{"first", "second"} {
+		sc, err := sceneSvc.CreateScene(ctx, appdto.SceneInput{Name: name, Width: 800, Height: 600})
+		if err != nil {
+			t.Fatalf("CreateScene: %v", err)
+		}
+		if _, err := sceneSvc.CreateWidget(ctx, sc.ID, sc.Version, bound); err != nil {
+			t.Fatalf("CreateWidget: %v", err)
+		}
+		changedScenes = append(changedScenes, sc.ID)
+	}
+	untouched, err := sceneSvc.CreateScene(ctx, appdto.SceneInput{Name: "untouched", Width: 800, Height: 600})
+	if err != nil {
+		t.Fatalf("CreateScene: %v", err)
+	}
+	if _, err := sceneSvc.CreateWidget(ctx, untouched.ID, untouched.Version, unbound); err != nil {
+		t.Fatalf("CreateWidget: %v", err)
+	}
+	cleanOutbox(t)
+
+	input.InputPorts = nil
+	if _, err := wtSvc.UpdateWidgetType(ctx, createdType.ID, createdType.Version, input); err != nil {
+		t.Fatalf("UpdateWidgetType: %v", err)
+	}
+
+	got := outboxSceneIDs(t)
+	if !slices.Equal(got["widget_updated"], changedScenes) {
+		t.Errorf("widget_updated in the outbox for scenes %v, want each changed scene %v", got["widget_updated"], changedScenes)
 	}
 }

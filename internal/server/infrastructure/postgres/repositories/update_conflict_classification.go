@@ -16,9 +16,17 @@ const (
 	tableNameWidgetTypes tableName = "widget_types"
 )
 
-func classifyUpdateConflict[T any](ctx context.Context, db *sql.DB, table tableName, anID id.ID[T], notFoundError, conflictError error) error {
+// rowQuerier is a *sql.DB or a *sql.Tx.
+type rowQuerier interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// classifyUpdateConflict tells why a compare-and-swap on anID's row matched
+// nothing: the row is gone (notFoundError) or its version moved on
+// (conflictError).
+func classifyUpdateConflict[T any](ctx context.Context, q rowQuerier, table tableName, anID id.ID[T], notFoundError, conflictError error) error {
 	var exists bool
-	err := db.QueryRowContext(ctx,
+	err := q.QueryRowContext(ctx,
 		fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %s WHERE id = $1)", table),
 		anID.UUID(),
 	).Scan(&exists)

@@ -13,9 +13,9 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
-	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
+	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
 
@@ -29,19 +29,19 @@ func cleanScenesRest(t *testing.T) {
 
 func newRouterWithScenes() *restapi.APIRouter {
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
-	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
+	tagSvc := application.NewTagService(tagRepo)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo, event.NewEventBus())
-	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, event.NewEventBus())
-	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, event.NewEventBus(), 100)
+	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo)
+	sceneSvc := application.NewSceneService(sceneRepo, wtRepo)
+	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, eventbus.NewEventBus(), 100)
 }
 
 func createSceneViaService(t *testing.T, input appdto.SceneInput) appdto.Scene {
 	t.Helper()
 	repo := repositories.NewSceneRepositoryPostgres(testDB)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	svc := application.NewSceneService(repo, wtRepo, event.NewEventBus())
+	svc := application.NewSceneService(repo, wtRepo)
 	resp, err := svc.CreateScene(context.Background(), input)
 	if err != nil {
 		t.Fatalf("createSceneViaService: %v", err)
@@ -311,11 +311,11 @@ func TestPutScenesByID_InvalidUUID_Returns400(t *testing.T) {
 func TestPutScenesByID_Conflict_Returns409(t *testing.T) {
 	svc := &stubSceneService{updateErr: scene.ErrSceneConflict}
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
-	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
+	tagSvc := application.NewTagService(tagRepo)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo, event.NewEventBus())
-	router := restapi.NewRouter(tagSvc, wtSvc, svc, event.NewEventBus(), 100)
+	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo)
+	router := restapi.NewRouter(tagSvc, wtSvc, svc, eventbus.NewEventBus(), 100)
 
 	body, _ := json.Marshal(apiv0.UpdateSceneRequest{Name: "x", Width: 800, Height: 600})
 	req := httptest.NewRequest(http.MethodPut, "/api/v0/scenes/"+uuid.New().String(), bytes.NewReader(body))

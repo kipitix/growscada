@@ -13,9 +13,9 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
-	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
+	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
 
@@ -48,12 +48,12 @@ func ensureTestWidgetType(t *testing.T) {
 
 func newRouterWithWidgets() *restapi.APIRouter {
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
-	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
+	tagSvc := application.NewTagService(tagRepo)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo, event.NewEventBus())
-	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, event.NewEventBus())
-	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, event.NewEventBus(), 100)
+	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo)
+	sceneSvc := application.NewSceneService(sceneRepo, wtRepo)
+	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, eventbus.NewEventBus(), 100)
 }
 
 func createSceneViaSceneService(t *testing.T) appdto.Scene {
@@ -61,7 +61,7 @@ func createSceneViaSceneService(t *testing.T) appdto.Scene {
 	ensureTestWidgetType(t)
 	repo := repositories.NewSceneRepositoryPostgres(testDB)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	svc := application.NewSceneService(repo, wtRepo, event.NewEventBus())
+	svc := application.NewSceneService(repo, wtRepo)
 	resp, err := svc.CreateScene(context.Background(), appdto.SceneInput{
 		Name: "test-scene-" + uuid.New().String(), Width: 1920, Height: 1080,
 	})
@@ -75,7 +75,7 @@ func createWidgetViaService(t *testing.T, sceneID uuid.UUID, sceneVersion int, i
 	t.Helper()
 	repo := repositories.NewSceneRepositoryPostgres(testDB)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	svc := application.NewSceneService(repo, wtRepo, event.NewEventBus())
+	svc := application.NewSceneService(repo, wtRepo)
 	resp, err := svc.CreateWidget(context.Background(), sceneID, sceneVersion, input)
 	if err != nil {
 		t.Fatalf("createWidgetViaService: %v", err)
@@ -447,11 +447,11 @@ func TestPutWidgetsByID_InvalidUUID_Returns400(t *testing.T) {
 func TestPutWidgetsByID_Conflict_Returns409(t *testing.T) {
 	svc := &stubSceneServiceForWidgets{updateErr: scene.ErrSceneConflict}
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
-	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
+	tagSvc := application.NewTagService(tagRepo)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo, event.NewEventBus())
-	router := restapi.NewRouter(tagSvc, wtSvc, svc, event.NewEventBus(), 100)
+	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo)
+	router := restapi.NewRouter(tagSvc, wtSvc, svc, eventbus.NewEventBus(), 100)
 
 	body, _ := json.Marshal(apiv0.UpdateWidgetRequest{
 		Name:   "x",
@@ -492,11 +492,11 @@ func (s *stubSceneServiceForWidgets) DeleteWidgetByID(_ context.Context, _, _ uu
 func TestDeleteWidgetsByID_Conflict_Returns409(t *testing.T) {
 	svc := &stubSceneServiceForWidgets{deleteErr: scene.ErrSceneConflict}
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
-	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
+	tagSvc := application.NewTagService(tagRepo)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo, event.NewEventBus())
-	router := restapi.NewRouter(tagSvc, wtSvc, svc, event.NewEventBus(), 100)
+	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo)
+	router := restapi.NewRouter(tagSvc, wtSvc, svc, eventbus.NewEventBus(), 100)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v0/scenes/"+uuid.New().String()+"/widgets/"+uuid.New().String(), nil)
 	rec := httptest.NewRecorder()

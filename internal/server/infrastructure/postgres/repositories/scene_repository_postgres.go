@@ -3,7 +3,6 @@ package repositories
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"slices"
 
@@ -17,13 +16,22 @@ import (
 )
 
 type sceneRepositoryPostgresImpl struct {
-	db *sql.DB
+	db    *sql.DB
+	store aggregateStore[scene.Scene]
 }
 
 var _ scene.SceneRepository = (*sceneRepositoryPostgresImpl)(nil)
 
-func NewSceneRepositoryPostgres(aDb *sql.DB) scene.SceneRepository {
-	return &sceneRepositoryPostgresImpl{db: aDb}
+func NewSceneRepositoryPostgres(aDb *sql.DB, opts ...Option) scene.SceneRepository {
+	o := newOptions(opts)
+	return &sceneRepositoryPostgresImpl{
+		db: aDb,
+		store: aggregateStore[scene.Scene]{
+			db: aDb, table: tableNameScenes,
+			notFound: scene.ErrSceneNotFound, conflict: scene.ErrSceneConflict,
+			onCommit: o.onCommit,
+		},
+	}
 }
 
 func (r sceneRepositoryPostgresImpl) NextID() id.ID[scene.Scene] {
@@ -39,78 +47,75 @@ func (r sceneRepositoryPostgresImpl) NextWidgetID() id.ID[scene.Widget] {
 // the same scene are serialized and the widgets read after it are the ones
 // the stored version describes.
 func (r sceneRepositoryPostgresImpl) Save(ctx context.Context, s scene.Scene) (scene.Scene, error) {
-	var newVersion version.Version[scene.Scene]
-	switch {
-	case s.Version() == version.Initial[scene.Scene]():
-		newVersion = version.Committed[scene.Scene]()
-	case s.Version().IsCommitted():
-		newVersion = s.Version().Next()
-	default:
-		return nil, fmt.Errorf("undefined behavior with version %d", s.Version().Number())
-	}
-
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("cannot begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	var stored []scene.Widget
-	if s.Version() == version.Initial[scene.Scene]() {
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO scenes (id, name, width, height, background_html, version)
-			VALUES ($1, $2, $3, $4, $5, $6)`,
-			s.ID().UUID(), s.Name().String(),
-			s.Size().Width(), s.Size().Height(),
-			s.BackgroundHTML().Content(),
-			newVersion.Number(),
-		); err != nil {
-			return nil, fmt.Errorf("cannot insert new scene: %w", err)
+	var saved []scene.Widget
+	// writeWidgets brings the widget rows from stored to the scene's and
+	// reads them back, so that the result is what a later read returns, as
+	// the stored columns hold them.
+	writeWidgets := func(tx *sql.Tx, stored []scene.Widget) error {
+		if err := saveWidgets(ctx, tx, s.ID(), stored, s.Widgets()); err != nil {
+			return err
 		}
-	} else {
-		sqlResult, err := tx.ExecContext(ctx,
-			`UPDATE scenes
-			 SET name = $1, width = $2, height = $3, background_html = $4, version = $5
-			 WHERE id = $6 AND version = $7`,
-			s.Name().String(),
-			s.Size().Width(), s.Size().Height(),
-			s.BackgroundHTML().Content(),
-			newVersion.Number(),
-			s.ID().UUID(), s.Version().Number(),
-		)
+		byScene, err := findWidgetsBySceneIDs(ctx, tx, []uuid.UUID{s.ID().UUID()})
 		if err != nil {
-			return nil, fmt.Errorf("cannot update scene: %w", err)
+			return err
 		}
-		rowsAffected, err := sqlResult.RowsAffected()
-		if err != nil {
-			return nil, fmt.Errorf("cannot get rows affected on update: %w", err)
-		}
-		if rowsAffected != 1 {
-			return nil, classifyUpdateConflict[scene.Scene](ctx, r.db, tableNameScenes, s.ID(), scene.ErrSceneNotFound, scene.ErrSceneConflict)
-		}
-
-		widgetsByScene, err := findWidgetsBySceneIDs(ctx, tx, []uuid.UUID{s.ID().UUID()})
-		if err != nil {
-			return nil, err
-		}
-		stored = widgetsByScene[s.ID().UUID()]
+		saved = byScene[s.ID().UUID()]
+		return nil
 	}
 
-	if err := saveWidgets(ctx, tx, s.ID(), stored, s.Widgets()); err != nil {
-		return nil, err
-	}
-	// The widgets are read back so that the result is what a later read
-	// returns, as the stored columns hold them.
-	saved, err := findWidgetsBySceneIDs(ctx, tx, []uuid.UUID{s.ID().UUID()})
+	newVersion, err := r.store.save(ctx, s.ID(), s.Version(), s.PendingEvents(), rowWrite[scene.Scene]{
+		insert: func(tx *sql.Tx, next version.Version[scene.Scene]) error {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO scenes (id, name, width, height, background_html, version)
+				VALUES ($1, $2, $3, $4, $5, $6)`,
+				s.ID().UUID(), s.Name().String(),
+				s.Size().Width(), s.Size().Height(),
+				s.BackgroundHTML().Content(),
+				next.Number(),
+			); err != nil {
+				return fmt.Errorf("cannot insert new scene: %w", err)
+			}
+			return writeWidgets(tx, nil)
+		},
+		update: func(tx *sql.Tx, current, next version.Version[scene.Scene]) (bool, error) {
+			res, err := tx.ExecContext(ctx,
+				`UPDATE scenes
+				 SET name = $1, width = $2, height = $3, background_html = $4, version = $5
+				 WHERE id = $6 AND version = $7`,
+				s.Name().String(),
+				s.Size().Width(), s.Size().Height(),
+				s.BackgroundHTML().Content(),
+				next.Number(),
+				s.ID().UUID(), current.Number(),
+			)
+			if err != nil {
+				return false, fmt.Errorf("cannot update scene: %w", err)
+			}
+			n, err := res.RowsAffected()
+			if err != nil {
+				return false, fmt.Errorf("cannot get rows affected on update: %w", err)
+			}
+			if n != 1 {
+				return false, nil
+			}
+			byScene, err := findWidgetsBySceneIDs(ctx, tx, []uuid.UUID{s.ID().UUID()})
+			if err != nil {
+				return false, err
+			}
+			return true, writeWidgets(tx, byScene[s.ID().UUID()])
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
+	return scene.ReconstituteScene(s.ID(), s.Name(), s.Size(), s.BackgroundHTML(), saved, newVersion), nil
+}
 
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("cannot commit scene save: %w", err)
-	}
-
-	return scene.NewScene(s.ID(), s.Name(), s.Size(), s.BackgroundHTML(), saved[s.ID().UUID()], newVersion), nil
+// Delete removes the scene row if it is still at the scene's version; its
+// widgets go by ON DELETE CASCADE. The CAS makes them the widgets the scene
+// holds, so Scene.Delete recorded a WidgetDeletedEvent for each.
+func (r sceneRepositoryPostgresImpl) Delete(ctx context.Context, s scene.Scene) error {
+	return r.store.delete(ctx, s.ID(), s.Version(), s.PendingEvents())
 }
 
 // saveWidgets brings the scene's widget rows from stored to wanted: inserts
@@ -219,43 +224,6 @@ func (r sceneRepositoryPostgresImpl) FindByWidgetTypeID(ctx context.Context, typ
 		`WHERE EXISTS (SELECT 1 FROM widgets w WHERE w.scene_id = scenes.id AND w.type_id = $1)`,
 		typeID.UUID(),
 	)
-}
-
-func (r sceneRepositoryPostgresImpl) DeleteByID(ctx context.Context, sceneID id.ID[scene.Scene]) (scene.Scene, error) {
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("cannot begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	// Lock the scene row first: Save locks it too before changing widgets, so
-	// the widgets read below are the ones the cascade deletes.
-	var row rawSceneRow
-	err = tx.QueryRowContext(ctx,
-		`SELECT `+selectSceneColumns+` FROM scenes WHERE id = $1 FOR UPDATE`,
-		sceneID.UUID(),
-	).Scan(row.dest()...)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, scene.ErrSceneNotFound
-		}
-		return nil, fmt.Errorf("cannot lock scene: %w", err)
-	}
-
-	widgetsByScene, err := findWidgetsBySceneIDs(ctx, tx, []uuid.UUID{row.id})
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err := tx.ExecContext(ctx, `DELETE FROM scenes WHERE id = $1`, sceneID.UUID()); err != nil {
-		return nil, fmt.Errorf("cannot delete scene: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("cannot commit scene deletion: %w", err)
-	}
-
-	return reconstructScene(row, widgetsByScene[row.id])
 }
 
 // selectSceneColumns lists the scenes columns read by every SELECT in this
@@ -383,5 +351,5 @@ func reconstructScene(row rawSceneRow, someWidgets []scene.Widget) (scene.Scene,
 		return nil, fmt.Errorf("cannot create scene version: %w", err)
 	}
 
-	return scene.NewScene(newID, newName, newSize, scene.NewBackgroundHTML(row.backgroundHTML), someWidgets, newVersion), nil
+	return scene.ReconstituteScene(newID, newName, newSize, scene.NewBackgroundHTML(row.backgroundHTML), someWidgets, newVersion), nil
 }

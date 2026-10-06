@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	"github.com/kipitix/growscada/internal/server/domain/client"
-	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 )
 
 // EventsHandlers handles the SSE stream of domain events.
@@ -16,7 +16,7 @@ type EventsHandlers struct {
 
 // NewEventsHandler creates the SSE event handler. maxClients caps how many
 // concurrent event streams the hub will accept — see eventHub.addClient.
-func NewEventsHandler(bus event.EventBus, maxClients int) *EventsHandlers {
+func NewEventsHandler(bus eventbus.EventBus, maxClients int) *EventsHandlers {
 	return &EventsHandlers{hub: newEventHub(bus, maxClients)}
 }
 
@@ -55,8 +55,8 @@ func (h *EventsHandlers) GetEvents(w http.ResponseWriter, r *http.Request) {
 	flusher.Flush()
 
 	connectionID := id.NewID[client.Client]()
-	h.hub.Publish(event.NewClientConnectedEvent(connectionID))
-	defer h.hub.Publish(event.NewClientDisconnectedEvent(connectionID))
+	h.hub.Publish(eventbus.NewClientConnectedEvent(connectionID))
+	defer h.hub.Publish(eventbus.NewClientDisconnectedEvent(connectionID))
 
 	for {
 		select {

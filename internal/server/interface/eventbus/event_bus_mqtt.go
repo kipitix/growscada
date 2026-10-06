@@ -1,4 +1,4 @@
-package mqtt
+package eventbus
 
 import (
 	"fmt"
@@ -14,13 +14,13 @@ type MQTTClient interface {
 }
 
 type mqttEventBusImpl struct {
-	inner  event.EventBus
+	inner  EventBus
 	client MQTTClient
 }
 
-var _ event.EventBus = (*mqttEventBusImpl)(nil)
+var _ EventBus = (*mqttEventBusImpl)(nil)
 
-func NewMQTTEventBus(inner event.EventBus, client MQTTClient) event.EventBus {
+func NewMQTTEventBus(inner EventBus, client MQTTClient) EventBus {
 	return &mqttEventBusImpl{
 		inner:  inner,
 		client: client,
@@ -38,10 +38,10 @@ func (m *mqttEventBusImpl) Publish(e event.Event) {
 	}
 }
 
-func (m *mqttEventBusImpl) Subscribe(eventType event.EventType, handler event.EventHandler) event.Subscription {
+func (m *mqttEventBusImpl) Subscribe(eventType event.EventType, handler EventHandler) Subscription {
 	return m.inner.Subscribe(eventType, handler)
 }
 
-func (m *mqttEventBusImpl) Unsubscribe(subscription event.Subscription) {
+func (m *mqttEventBusImpl) Unsubscribe(subscription Subscription) {
 	m.inner.Unsubscribe(subscription)
 }

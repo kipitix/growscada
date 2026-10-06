@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/version"
@@ -18,8 +19,9 @@ import (
 //
 // Scene is immutable: every change returns a new Scene and leaves the
 // original as it was, so the original is the state "before" and the result
-// the state "after". A change keeps the Version; the repository raises it
-// once when it saves the result.
+// the state "after". The result also records the change's events (see
+// PendingEvents). A change keeps the Version; the repository raises it once
+// when it saves the result.
 type Scene interface {
 	ID() id.ID[Scene]
 	Name() SceneName
@@ -39,11 +41,13 @@ type Scene interface {
 	// Returns ErrSceneConflict if expected is not the scene's Version.
 	CheckVersion(expected version.Version[Scene]) error
 
-	// Update changes the scene's name, size and background.
+	// Update changes the scene's name, size and background and records a
+	// SceneUpdatedEvent.
 	// Returns ErrSceneConflict if expected is not the scene's Version.
 	Update(expected version.Version[Scene], aName SceneName, aSize SceneSize, aBackgroundHTML BackgroundHTML) (Scene, error)
 
-	// AddWidget places a new widget of WidgetType wt on the scene.
+	// AddWidget places a new widget of WidgetType wt on the scene and records
+	// a WidgetCreatedEvent.
 	// Returns ErrSceneConflict if expected is not the scene's Version,
 	// ErrWidgetAlreadyExists if the scene already holds a widget with its ID,
 	// ErrWidgetTypeMismatch if wt is not the widget's type and
@@ -51,23 +55,31 @@ type Scene interface {
 	AddWidget(expected version.Version[Scene], w Widget, wt library.WidgetType) (Scene, error)
 
 	// UpdateWidget replaces the scene's widget with the same ID by w, of
-	// WidgetType wt.
+	// WidgetType wt, and records a WidgetUpdatedEvent.
 	// Returns ErrSceneConflict if expected is not the scene's Version,
 	// ErrWidgetNotFound if the scene has no widget with its ID,
 	// ErrWidgetTypeMismatch if wt is not the widget's type and
 	// ErrPortNotDeclared if the widget binds a port wt does not declare.
 	UpdateWidget(expected version.Version[Scene], w Widget, wt library.WidgetType) (Scene, error)
 
-	// RemoveWidget removes the widget with the given ID from the scene and
-	// returns it too. Like removing any aggregate, it expects no Version.
+	// RemoveWidget removes the widget with the given ID from the scene,
+	// records a WidgetDeletedEvent and returns the widget too. Like removing
+	// any aggregate, it expects no Version.
 	// Returns ErrWidgetNotFound if the scene has no such widget.
 	RemoveWidget(id.ID[Widget]) (Scene, Widget, error)
 
 	// ReconcileWith removes, from the scene's widgets of WidgetType wt, the
-	// PortBindings of ports wt no longer declares. The bool reports whether
+	// PortBindings of ports wt no longer declares, recording a
+	// WidgetUpdatedEvent for each widget it changes. The bool reports whether
 	// anything was removed.
 	ReconcileWith(wt library.WidgetType) (Scene, bool)
 
+	// Delete records a WidgetDeletedEvent for each of the scene's widgets,
+	// then a SceneDeletedEvent; the repository's Delete removes the scene
+	// with its widgets. Like removing any aggregate, it expects no Version.
+	Delete() Scene
+
+	event.Recorder
 	fmt.Stringer
 }
 
@@ -79,13 +91,29 @@ type sceneImpl struct {
 	backgroundHTML BackgroundHTML
 	widgets        []Widget
 	version        version.Version[Scene]
+	pending        []event.Event
 }
 
 var _ Scene = (*sceneImpl)(nil)
 
-// NewScene creates a new Scene aggregate. someWidgets may be nil for a scene
+// CreateScene creates a new, not yet saved scene without widgets and records
+// a SceneCreatedEvent.
+func CreateScene(anID id.ID[Scene], aName SceneName, aSize SceneSize, aBackgroundHTML BackgroundHTML) Scene {
+	return &sceneImpl{
+		id:             anID,
+		name:           aName,
+		size:           aSize,
+		backgroundHTML: aBackgroundHTML,
+		widgets:        []Widget{},
+		version:        version.Initial[Scene](),
+		pending:        []event.Event{NewSceneCreatedEvent(anID)},
+	}
+}
+
+// ReconstituteScene rebuilds a scene as stored, at the given version; it
+// records no event. For repositories. someWidgets may be nil for a scene
 // without widgets.
-func NewScene(
+func ReconstituteScene(
 	anID id.ID[Scene],
 	aName SceneName,
 	aSize SceneSize,
@@ -138,6 +166,7 @@ func (s *sceneImpl) Update(expected version.Version[Scene], aName SceneName, aSi
 		backgroundHTML: aBackgroundHTML,
 		widgets:        s.widgets,
 		version:        s.version,
+		pending:        s.record(NewSceneUpdatedEvent(s.id)),
 	}, nil
 }
 
@@ -151,7 +180,7 @@ func (s *sceneImpl) AddWidget(expected version.Version[Scene], w Widget, wt libr
 	if err := checkWidgetType(w, wt); err != nil {
 		return nil, err
 	}
-	return s.withWidgets(append(slices.Clip(s.widgets), w)), nil
+	return s.withWidgets(append(slices.Clip(s.widgets), w), NewWidgetCreatedEvent(w.ID(), s.id)), nil
 }
 
 func (s *sceneImpl) UpdateWidget(expected version.Version[Scene], w Widget, wt library.WidgetType) (Scene, error) {
@@ -167,7 +196,7 @@ func (s *sceneImpl) UpdateWidget(expected version.Version[Scene], w Widget, wt l
 	}
 	widgets := slices.Clone(s.widgets)
 	widgets[i] = w
-	return s.withWidgets(widgets), nil
+	return s.withWidgets(widgets, NewWidgetUpdatedEvent(w.ID(), s.id)), nil
 }
 
 func (s *sceneImpl) RemoveWidget(widgetID id.ID[Widget]) (Scene, Widget, error) {
@@ -175,12 +204,13 @@ func (s *sceneImpl) RemoveWidget(widgetID id.ID[Widget]) (Scene, Widget, error) 
 	if i < 0 {
 		return nil, nil, ErrWidgetNotFound
 	}
-	return s.withWidgets(slices.Concat(s.widgets[:i], s.widgets[i+1:])), s.widgets[i], nil
+	return s.withWidgets(slices.Concat(s.widgets[:i], s.widgets[i+1:]), NewWidgetDeletedEvent(widgetID, s.id)), s.widgets[i], nil
 }
 
 func (s *sceneImpl) ReconcileWith(wt library.WidgetType) (Scene, bool) {
 	declared := declaredPorts(wt)
 	var widgets []Widget // cloned on the first widget that changes
+	var events []event.Event
 	for i, w := range s.widgets {
 		if w.TypeID() != wt.ID() {
 			continue
@@ -201,11 +231,25 @@ func (s *sceneImpl) ReconcileWith(wt library.WidgetType) (Scene, bool) {
 			w.ID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(),
 			w.TypeID(), w.Labels(), kept,
 		)
+		events = append(events, NewWidgetUpdatedEvent(w.ID(), s.id))
 	}
 	if widgets == nil {
 		return s, false
 	}
-	return s.withWidgets(widgets), true
+	return s.withWidgets(widgets, events...), true
+}
+
+func (s *sceneImpl) Delete() Scene {
+	events := make([]event.Event, 0, len(s.widgets)+1)
+	for _, w := range s.widgets {
+		events = append(events, NewWidgetDeletedEvent(w.ID(), s.id))
+	}
+	events = append(events, NewSceneDeletedEvent(s.id))
+	return s.withWidgets(s.widgets, events...)
+}
+
+func (s *sceneImpl) PendingEvents() []event.Event {
+	return slices.Clone(s.pending)
 }
 
 func (s *sceneImpl) CheckVersion(expected version.Version[Scene]) error {
@@ -219,10 +263,10 @@ func (s *sceneImpl) widgetIndex(widgetID id.ID[Widget]) int {
 	return slices.IndexFunc(s.widgets, func(w Widget) bool { return w.ID() == widgetID })
 }
 
-// withWidgets returns the scene with someWidgets in place of its widgets. It
-// takes someWidgets over without copying: the caller passes a slice of its
-// own that nothing else changes.
-func (s *sceneImpl) withWidgets(someWidgets []Widget) Scene {
+// withWidgets returns the scene with someWidgets in place of its widgets,
+// having recorded someEvents. It takes someWidgets over without copying: the
+// caller passes a slice of its own that nothing else changes.
+func (s *sceneImpl) withWidgets(someWidgets []Widget, someEvents ...event.Event) Scene {
 	return &sceneImpl{
 		id:             s.id,
 		name:           s.name,
@@ -230,7 +274,14 @@ func (s *sceneImpl) withWidgets(someWidgets []Widget) Scene {
 		backgroundHTML: s.backgroundHTML,
 		widgets:        someWidgets,
 		version:        s.version,
+		pending:        s.record(someEvents...),
 	}
+}
+
+// record returns the scene's pending events followed by someEvents, in a new
+// slice: the pending events of a Scene never change.
+func (s *sceneImpl) record(someEvents ...event.Event) []event.Event {
+	return slices.Concat(s.pending, someEvents)
 }
 
 // checkWidgetType checks that wt is the widget's type and declares every

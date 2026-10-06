@@ -12,8 +12,9 @@ import (
 	"github.com/alexflint/go-arg"
 	"github.com/kipitix/gracedown"
 	"github.com/kipitix/growscada/internal/server/application"
-	"github.com/kipitix/growscada/internal/server/domain/event"
+	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
+	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 	"github.com/kipitix/growscada/internal/server/interface/ui/root"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
@@ -62,8 +63,14 @@ func main() {
 
 	// Create database connection
 	sqlDB, err := sql.Open("postgres", databaseDSN)
+	// stopOutbox stops the outbox dispatcher and delivers what is left in the
+	// outbox; set once the dispatcher runs. Within a layer gracedown stops
+	// components concurrently, so it runs in the database's hook, before the
+	// connection closes.
+	stopOutbox := func(context.Context) {}
 	// Add hook to shutdown database connection
 	gracedownManager.RegisterInfrastructure("Database", 15*time.Second, func(ctx context.Context) error {
+		stopOutbox(ctx)
 		if sqlDB != nil {
 			return sqlDB.Close()
 		}
@@ -84,18 +91,35 @@ func main() {
 	// Create message broker connection
 	// TODO
 	// Add hook to shutdown message broker connection
-	// Create event bus
-	eventBus := event.NewEventBus()
+	// Create event bus: the SSE stream's source of events
+	eventBus := eventbus.NewEventBus()
+	// Create the outbox dispatcher: it delivers the events of committed
+	// changes to the event bus (ADR 0008)
+	dispatcher := outbox.NewDispatcher(sqlDB, eventBus.Publish)
+	dispatcherCtx, stopDispatcher := context.WithCancel(context.Background())
+	dispatcherDone := make(chan struct{})
+	go func() {
+		dispatcher.Run(dispatcherCtx)
+		close(dispatcherDone)
+	}()
+	stopOutbox = func(ctx context.Context) {
+		stopDispatcher()
+		<-dispatcherDone
+		if _, err := dispatcher.DrainOnce(ctx); err != nil {
+			slog.Error("Outbox not drained on shutdown", "error", err)
+		}
+	}
+	notifyDispatcher := repositories.NotifyOnCommit(dispatcher.Notify)
 
 	// INTERFACE COMPONENTS
 	// API server
-	tagRepository := repositories.NewTagRepositoryPostgres(sqlDB)
-	widgetTypeRepository := repositories.NewWidgetTypeRepositoryPostgres(sqlDB)
-	sceneRepository := repositories.NewSceneRepositoryPostgres(sqlDB)
+	tagRepository := repositories.NewTagRepositoryPostgres(sqlDB, notifyDispatcher)
+	widgetTypeRepository := repositories.NewWidgetTypeRepositoryPostgres(sqlDB, notifyDispatcher)
+	sceneRepository := repositories.NewSceneRepositoryPostgres(sqlDB, notifyDispatcher)
 	// Create services
-	tagService := application.NewTagService(tagRepository, eventBus)
-	widgetTypeService := application.NewWidgetTypeService(widgetTypeRepository, sceneRepository, eventBus)
-	sceneService := application.NewSceneService(sceneRepository, widgetTypeRepository, eventBus)
+	tagService := application.NewTagService(tagRepository)
+	widgetTypeService := application.NewWidgetTypeService(widgetTypeRepository, sceneRepository)
+	sceneService := application.NewSceneService(sceneRepository, widgetTypeRepository)
 	// Create router
 	apiRouter := restapi.NewRouter(tagService, widgetTypeService, sceneService, eventBus, cliArgs.MaxSSEClients)
 	// Register the event hub shutdown handler

@@ -13,9 +13,9 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
-	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
+	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
 
@@ -28,19 +28,19 @@ func cleanWidgetTypes(t *testing.T) {
 
 func newRouterWithWidgetTypes() *restapi.APIRouter {
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
-	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
+	tagSvc := application.NewTagService(tagRepo)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo, event.NewEventBus())
-	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, event.NewEventBus())
-	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, event.NewEventBus(), 100)
+	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo)
+	sceneSvc := application.NewSceneService(sceneRepo, wtRepo)
+	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, eventbus.NewEventBus(), 100)
 }
 
 func createWidgetTypeViaService(t *testing.T, input appdto.WidgetTypeInput) appdto.WidgetType {
 	t.Helper()
 	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	svc := application.NewWidgetTypeService(repo, sceneRepo, event.NewEventBus())
+	svc := application.NewWidgetTypeService(repo, sceneRepo)
 	resp, err := svc.CreateWidgetType(context.Background(), input)
 	if err != nil {
 		t.Fatalf("createWidgetTypeViaService: %v", err)
@@ -290,11 +290,11 @@ func TestPutWidgetTypesByID_InvalidUUID_Returns400(t *testing.T) {
 func TestPutWidgetTypesByID_Conflict_Returns409(t *testing.T) {
 	svc := &stubWidgetTypeService{updateErr: library.ErrWidgetTypeConflict}
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
-	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
+	tagSvc := application.NewTagService(tagRepo)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, event.NewEventBus())
-	router := restapi.NewRouter(tagSvc, svc, sceneSvc, event.NewEventBus(), 100)
+	sceneSvc := application.NewSceneService(sceneRepo, wtRepo)
+	router := restapi.NewRouter(tagSvc, svc, sceneSvc, eventbus.NewEventBus(), 100)
 
 	body, _ := json.Marshal(apiv0.UpdateWidgetTypeRequest{
 		Name: "x", HtmlTemplate: "<div/>", Script: "x", ScriptLanguage: "lua",

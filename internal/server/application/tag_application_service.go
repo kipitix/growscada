@@ -6,10 +6,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
-	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
-	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 // TagService is the service interface for working with tags.
@@ -27,18 +25,15 @@ type TagService interface {
 // tagServiceImpl is the tag service implementation.
 type tagServiceImpl struct {
 	tagRepository tag.TagRepository
-	eventBus      event.EventBus
 }
 
 var _ TagService = (*tagServiceImpl)(nil)
 
-// NewTagService creates and returns a new tag service instance.
+// NewTagService creates and returns a new tag service instance. The events
+// of its changes are recorded by the Tag and saved with it (ADR 0008).
 // Returns a TagService interface implementation.
-func NewTagService(aTagRepository tag.TagRepository, anEventBus event.EventBus) TagService {
-	return &tagServiceImpl{
-		tagRepository: aTagRepository,
-		eventBus:      anEventBus,
-	}
+func NewTagService(aTagRepository tag.TagRepository) TagService {
+	return &tagServiceImpl{tagRepository: aTagRepository}
 }
 
 // FindAllTags returns a list of all tags
@@ -137,7 +132,7 @@ func (t tagServiceImpl) CreateTag(ctx context.Context, newTagData appdto.CreateT
 		return appdto.Tag{}, fmt.Errorf("cannot create tag because of quality: %w", invalidInput(err))
 	}
 
-	newTag, err := tag.NewTag(newTagID, newTagName, newTagType, newTagValue, newTagQuality, version.Initial[tag.Tag]())
+	newTag, err := tag.CreateTag(newTagID, newTagName, newTagType, newTagValue, newTagQuality)
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("cannot create tag: %w", err)
 	}
@@ -147,23 +142,33 @@ func (t tagServiceImpl) CreateTag(ctx context.Context, newTagData appdto.CreateT
 		return appdto.Tag{}, fmt.Errorf("cannot save tag: %w", err)
 	}
 
-	t.eventBus.Publish(event.NewTagCreatedEvent(newTagID))
-
 	return appdto.NewTag(newTag), nil
 }
 
-// DeleteTagByID deletes a tag by its identifier and returns the deleted tag
+// DeleteTagByID deletes a tag by its identifier and returns the deleted tag.
+// It expects no Version: a tag changed meanwhile is reread and deleted as it
+// is now (retryOnRace).
 func (t tagServiceImpl) DeleteTagByID(ctx context.Context, rawID uuid.UUID) (appdto.Tag, error) {
 	tagID := id.NewID(id.IDWithUUID[tag.Tag](rawID))
 
-	deletedTag, err := t.tagRepository.DeleteByID(ctx, tagID)
+	var deleted tag.Tag
+	err := retryOnRace(tag.ErrTagConflict, func() error {
+		found, err := t.tagRepository.FindByID(ctx, tagID)
+		if err != nil {
+			return fmt.Errorf("error on find tag by id in repository: %w", err)
+		}
+		found.Delete()
+		if err := t.tagRepository.Delete(ctx, found); err != nil {
+			return fmt.Errorf("cannot delete tag: %w", err)
+		}
+		deleted = found
+		return nil
+	})
 	if err != nil {
-		return appdto.Tag{}, fmt.Errorf("cannot delete tag: %w", err)
+		return appdto.Tag{}, err
 	}
 
-	t.eventBus.Publish(event.NewTagDeletedEvent(tagID))
-
-	return appdto.NewTag(deletedTag), nil
+	return appdto.NewTag(deleted), nil
 }
 
 // SetTagValueByID updates the value and quality of an existing tag and returns the updated tag
@@ -175,6 +180,8 @@ func (t tagServiceImpl) SetTagValueByID(ctx context.Context, request appdto.Upda
 		return appdto.Tag{}, fmt.Errorf("error on find tag by id in repository: %w", err)
 	}
 
+	// The Version check stays here, not in Tag.SetValue: a process value has
+	// a single writer, and its Version goes with task 32.
 	if foundTag.Version().Number() != request.Version {
 		return appdto.Tag{}, tag.ErrTagConflict
 	}
@@ -194,8 +201,6 @@ func (t tagServiceImpl) SetTagValueByID(ctx context.Context, request appdto.Upda
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("cannot save tag: %w", err)
 	}
-
-	t.eventBus.Publish(event.NewTagUpdatedEvent(foundTag))
 
 	return appdto.NewTag(foundTag), nil
 }

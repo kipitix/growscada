@@ -8,6 +8,11 @@ http:
   url: http://{{API_SERVER}}/api/v0/scenes/{{SCENE_ID}}
   auth: inherit
 
+docs: |
+  The delete states no version: a delete that loses a write race (the
+  resource changed between reading and deleting it) is retried against the
+  fresh state; one that loses it 3 times in a row returns `409 Conflict`.
+
 settings:
   encodeUrl: true
   timeout: 0

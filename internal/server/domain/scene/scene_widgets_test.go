@@ -32,10 +32,10 @@ func makeWidgetType(t *testing.T, ports ...string) library.WidgetType {
 	for i, p := range ports {
 		inputPorts[i] = library.NewInputPort(mustPortName(t, p), "", library.AnyTypeHint())
 	}
-	wt, err := library.NewWidgetType(id.NewID[library.WidgetType](), name, html, script,
+	wt, err := library.ReconstituteWidgetType(id.NewID[library.WidgetType](), name, html, script,
 		library.ScriptLanguageJavaScript, library.DefaultSize(), inputPorts, version.Committed[library.WidgetType]())
 	if err != nil {
-		t.Fatalf("NewWidgetType: %v", err)
+		t.Fatalf("ReconstituteWidgetType: %v", err)
 	}
 	return wt
 }
@@ -58,7 +58,7 @@ func makeStoredScene(t *testing.T, someWidgets ...Widget) Scene {
 	name, _ := NewSceneName("boiler_room")
 	size, _ := NewSceneSize(1920, 1080)
 	ver, _ := version.New(version.WithNumber[Scene](3))
-	return NewScene(id.NewID[Scene](), name, size, NewBackgroundHTML(""), someWidgets, ver)
+	return ReconstituteScene(id.NewID[Scene](), name, size, NewBackgroundHTML(""), someWidgets, ver)
 }
 
 func staleVersion(sc Scene) version.Version[Scene] {
@@ -340,10 +340,10 @@ func TestSceneReconcileWith_NothingUndeclared_ReportsNoChange(t *testing.T) {
 func makeWidgetTypeWithID(t *testing.T, anID id.ID[library.WidgetType], ports ...string) library.WidgetType {
 	t.Helper()
 	wt := makeWidgetType(t, ports...)
-	updated, err := library.NewWidgetType(anID, wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(),
+	updated, err := library.ReconstituteWidgetType(anID, wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(),
 		wt.DefaultSize(), wt.InputPorts(), wt.Version().Next())
 	if err != nil {
-		t.Fatalf("NewWidgetType: %v", err)
+		t.Fatalf("ReconstituteWidgetType: %v", err)
 	}
 	return updated
 }

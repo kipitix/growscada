@@ -8,18 +8,22 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/event"
+	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/scene"
+	"github.com/kipitix/growscada/internal/server/domain/tag"
+	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 )
 
 // eventClientBufferSize is the per-connection outgoing buffer. A client that
 // cannot drain it fast enough is disconnected rather than blocking
-// EventBus.Publish for the rest of the application.
+// EventBus.Publish (and so the outbox dispatcher) for the rest of the application.
 const eventClientBufferSize = 64
 
-// eventHub subscribes to every EventType on the domain EventBus exactly once
+// eventHub subscribes to every EventType on the EventBus exactly once
 // and fans each published event out to all currently connected SSE clients.
 type eventHub struct {
-	bus           event.EventBus
-	subscriptions []event.Subscription
+	bus           eventbus.EventBus
+	subscriptions []eventbus.Subscription
 	maxClients    int
 
 	mu      sync.Mutex
@@ -31,7 +35,7 @@ type eventClient struct {
 	closed   bool
 }
 
-func newEventHub(bus event.EventBus, maxClients int) *eventHub {
+func newEventHub(bus eventbus.EventBus, maxClients int) *eventHub {
 	h := &eventHub{
 		bus:        bus,
 		maxClients: maxClients,
@@ -129,15 +133,15 @@ func (h *eventHub) removeClient(c *eventClient) {
 // events), if any.
 func eventSourceID(e event.Event) string {
 	switch ev := e.(type) {
-	case event.TagEvent:
+	case tag.TagEvent:
 		return ev.TagID().String()
-	case event.WidgetEvent:
+	case scene.WidgetEvent:
 		return ev.WidgetID().String()
-	case event.WidgetTypeEvent:
+	case library.WidgetTypeEvent:
 		return ev.WidgetTypeID().String()
-	case event.SceneEvent:
+	case scene.SceneEvent:
 		return ev.SceneID().String()
-	case event.ClientEvent:
+	case eventbus.ClientEvent:
 		return ev.ClientID().String()
 	default:
 		return ""
@@ -147,7 +151,7 @@ func eventSourceID(e event.Event) string {
 // eventTag returns the Tag state carried by a tag_updated event, or nil for
 // every other event.
 func eventTag(e event.Event) *apiv0.TagResponse {
-	ev, ok := e.(event.TagUpdatedEvent)
+	ev, ok := e.(tag.TagUpdatedEvent)
 	if !ok {
 		return nil
 	}

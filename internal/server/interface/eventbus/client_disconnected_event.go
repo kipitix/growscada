@@ -1,7 +1,8 @@
-package event
+package eventbus
 
 import (
 	"github.com/kipitix/growscada/internal/server/domain/client"
+	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 )
 
@@ -16,16 +17,11 @@ type clientDisconnectedEventImpl struct {
 
 var _ ClientDisconnectedEvent = (*clientDisconnectedEventImpl)(nil)
 
-func NewClientDisconnectedEvent(anID id.ID[client.Client], opts ...EventOption) ClientDisconnectedEvent {
-	ev := &clientDisconnectedEventImpl{
+func NewClientDisconnectedEvent(anID id.ID[client.Client], opts ...event.EventOption) ClientDisconnectedEvent {
+	return &clientDisconnectedEventImpl{
 		clientEventImpl: clientEventImpl{
+			Base:     event.NewBase(event.EventTypeClientDisconnected, opts...),
 			clientID: anID,
-			eventImpl: eventImpl{
-				eventType: EventTypeClientDisconnected,
-				timestamp: NewEventTimestamp(),
-			},
 		},
 	}
-	ev.applyOptions(opts...)
-	return ev
 }

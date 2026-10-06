@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
-	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
@@ -26,16 +25,16 @@ type WidgetTypeService interface {
 type widgetTypeServiceImpl struct {
 	repository      library.WidgetTypeRepository
 	sceneRepository scene.SceneRepository
-	eventBus        event.EventBus
 }
 
 var _ WidgetTypeService = (*widgetTypeServiceImpl)(nil)
 
-func NewWidgetTypeService(aRepository library.WidgetTypeRepository, aSceneRepository scene.SceneRepository, anEventBus event.EventBus) WidgetTypeService {
+// NewWidgetTypeService returns the widget type service. The events of its
+// changes are recorded by the aggregates and saved with them (ADR 0008).
+func NewWidgetTypeService(aRepository library.WidgetTypeRepository, aSceneRepository scene.SceneRepository) WidgetTypeService {
 	return &widgetTypeServiceImpl{
 		repository:      aRepository,
 		sceneRepository: aSceneRepository,
-		eventBus:        anEventBus,
 	}
 }
 
@@ -59,7 +58,11 @@ func (s widgetTypeServiceImpl) FindWidgetTypeByID(ctx context.Context, rawID uui
 func (s widgetTypeServiceImpl) CreateWidgetType(ctx context.Context, input appdto.WidgetTypeInput) (appdto.WidgetType, error) {
 	newID := s.repository.NextID()
 
-	newWt, err := parseWidgetType(newID, version.Initial[library.WidgetType](), input)
+	def, err := parseWidgetTypeDefinition(input)
+	if err != nil {
+		return appdto.WidgetType{}, fmt.Errorf("cannot create widget type: %w", invalidInput(err))
+	}
+	newWt, err := library.CreateWidgetType(newID, def.name, def.html, def.script, def.lang, def.defaultSize, def.inputPorts)
 	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("cannot create widget type: %w", invalidInput(err))
 	}
@@ -68,8 +71,6 @@ func (s widgetTypeServiceImpl) CreateWidgetType(ctx context.Context, input appdt
 	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("cannot save widget type: %w", err)
 	}
-
-	s.eventBus.Publish(event.NewWidgetTypeCreatedEvent(newID))
 
 	return appdto.NewWidgetType(newWt), nil
 }
@@ -82,11 +83,24 @@ func (s widgetTypeServiceImpl) UpdateWidgetType(ctx context.Context, rawID uuid.
 		return appdto.WidgetType{}, fmt.Errorf("error on find widget type by id in repository: %w", err)
 	}
 
-	if found.Version().Number() != expectedVersion {
-		return appdto.WidgetType{}, library.ErrWidgetTypeConflict
+	// A negative version is no version a widget type has ever had: an edit conflict.
+	expected, err := version.New(version.WithNumber[library.WidgetType](expectedVersion))
+	if err != nil {
+		return appdto.WidgetType{}, fmt.Errorf("%w: %w", library.ErrWidgetTypeConflict, err)
+	}
+	// A stale write is a conflict whatever it sends.
+	if err := found.CheckVersion(expected); err != nil {
+		return appdto.WidgetType{}, fmt.Errorf("cannot update widget type: %w", err)
 	}
 
-	updated, err := parseWidgetType(found.ID(), found.Version(), input)
+	def, err := parseWidgetTypeDefinition(input)
+	if err != nil {
+		return appdto.WidgetType{}, fmt.Errorf("cannot update widget type: %w", invalidInput(err))
+	}
+	updated, err := found.Update(expected, def.name, def.html, def.script, def.lang, def.defaultSize, def.inputPorts)
+	if errors.Is(err, library.ErrWidgetTypeConflict) {
+		return appdto.WidgetType{}, fmt.Errorf("cannot update widget type: %w", err)
+	}
 	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("cannot update widget type: %w", invalidInput(err))
 	}
@@ -96,8 +110,6 @@ func (s widgetTypeServiceImpl) UpdateWidgetType(ctx context.Context, rawID uuid.
 		return appdto.WidgetType{}, fmt.Errorf("cannot save widget type: %w", err)
 	}
 
-	s.eventBus.Publish(event.NewWidgetTypeUpdatedEvent(widgetTypeID))
-
 	if err := s.removeOrphanedPortBindings(ctx, found); err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("cannot clean up orphaned port bindings: %w", err)
 	}
@@ -105,56 +117,75 @@ func (s widgetTypeServiceImpl) UpdateWidgetType(ctx context.Context, rawID uuid.
 	return appdto.NewWidgetType(found), nil
 }
 
-// parseWidgetType builds a widget type from the client's fields; each error
-// names the field it comes from. The caller marks the error as invalid input.
-func parseWidgetType(widgetTypeID id.ID[library.WidgetType], ver version.Version[library.WidgetType], input appdto.WidgetTypeInput) (library.WidgetType, error) {
-	name, err := library.NewWidgetTypeName(input.Name)
-	if err != nil {
-		return nil, fmt.Errorf("name: %w", err)
+// widgetTypeDefinition is a widget type's definition as the client sent it,
+// each field checked on its own; the WidgetType checks them together (e.g.
+// port names are unique).
+type widgetTypeDefinition struct {
+	name        library.WidgetTypeName
+	html        library.HtmlTemplate
+	script      library.Script
+	lang        library.ScriptLanguage
+	defaultSize library.Size
+	inputPorts  []library.InputPort
+}
+
+// parseWidgetTypeDefinition parses the client's fields; each error names the
+// field it comes from. The caller marks the error as invalid input.
+func parseWidgetTypeDefinition(input appdto.WidgetTypeInput) (widgetTypeDefinition, error) {
+	var def widgetTypeDefinition
+	var err error
+	if def.name, err = library.NewWidgetTypeName(input.Name); err != nil {
+		return def, fmt.Errorf("name: %w", err)
 	}
-	html, err := library.NewHtmlTemplate(input.HtmlTemplate)
-	if err != nil {
-		return nil, fmt.Errorf("html_template: %w", err)
+	if def.html, err = library.NewHtmlTemplate(input.HtmlTemplate); err != nil {
+		return def, fmt.Errorf("html_template: %w", err)
 	}
-	script, err := library.NewScript(input.Script)
-	if err != nil {
-		return nil, fmt.Errorf("script: %w", err)
+	if def.script, err = library.NewScript(input.Script); err != nil {
+		return def, fmt.Errorf("script: %w", err)
 	}
-	lang, err := library.NewScriptLanguage(input.ScriptLanguage)
-	if err != nil {
-		return nil, fmt.Errorf("script_language: %w", err)
+	if def.lang, err = library.NewScriptLanguage(input.ScriptLanguage); err != nil {
+		return def, fmt.Errorf("script_language: %w", err)
 	}
-	defaultSize, err := library.NewSize(input.DefaultWidth, input.DefaultHeight)
-	if err != nil {
-		return nil, fmt.Errorf("default_width, default_height: %w", err)
+	if def.defaultSize, err = library.NewSize(input.DefaultWidth, input.DefaultHeight); err != nil {
+		return def, fmt.Errorf("default_width, default_height: %w", err)
 	}
-	inputPorts, err := dtoInputPortsToDomain(input.InputPorts)
-	if err != nil {
-		return nil, fmt.Errorf("input_ports: %w", err)
+	if def.inputPorts, err = dtoInputPortsToDomain(input.InputPorts); err != nil {
+		return def, fmt.Errorf("input_ports: %w", err)
 	}
-	// NewWidgetType checks the fields together (e.g. port names are unique).
-	return library.NewWidgetType(widgetTypeID, name, html, script, lang, defaultSize, inputPorts, ver)
+	return def, nil
 }
 
 // DeleteWidgetTypeByID deletes a widget type no Widget uses; while Widgets
-// use it, the error wraps library.ErrWidgetTypeInUse.
+// use it, the error wraps library.ErrWidgetTypeInUse. It expects no Version:
+// a widget type changed meanwhile is reread and deleted as it is now
+// (retryOnRace).
 func (s widgetTypeServiceImpl) DeleteWidgetTypeByID(ctx context.Context, rawID uuid.UUID) (appdto.WidgetType, error) {
 	widgetTypeID := id.NewID(id.IDWithUUID[library.WidgetType](rawID))
 
-	deleted, err := s.repository.DeleteByID(ctx, widgetTypeID)
+	var deleted library.WidgetType
+	err := retryOnRace(library.ErrWidgetTypeConflict, func() error {
+		found, err := s.repository.FindByID(ctx, widgetTypeID)
+		if err != nil {
+			return fmt.Errorf("error on find widget type by id in repository: %w", err)
+		}
+		if err := s.repository.Delete(ctx, found.Delete()); err != nil {
+			return fmt.Errorf("cannot delete widget type: %w", err)
+		}
+		deleted = found
+		return nil
+	})
 	if err != nil {
-		return appdto.WidgetType{}, fmt.Errorf("cannot delete widget type: %w", err)
+		return appdto.WidgetType{}, err
 	}
-
-	s.eventBus.Publish(event.NewWidgetTypeDeletedEvent(widgetTypeID))
 
 	return appdto.NewWidgetType(deleted), nil
 }
 
 // removeOrphanedPortBindings removes, from every Widget of WidgetType wt,
 // the PortBindings of ports wt no longer declares: each Scene holding such
-// Widgets reconciles them with wt and is saved if anything changed. The
-// Scenes are saved one by one, not atomically (task 21).
+// Widgets reconciles them with wt and is saved, with the events it recorded,
+// if anything changed. Each Scene is saved in its own transaction, one by
+// one; task 21 turns this into a policy on widget_type_updated.
 func (s widgetTypeServiceImpl) removeOrphanedPortBindings(ctx context.Context, wt library.WidgetType) error {
 	scenes, err := s.sceneRepository.FindByWidgetTypeID(ctx, wt.ID())
 	if err != nil {
@@ -169,35 +200,31 @@ func (s widgetTypeServiceImpl) removeOrphanedPortBindings(ctx context.Context, w
 	return nil
 }
 
-// maxReconcileAttempts bounds how often reconcileScene rereads a Scene that
-// keeps changing under it.
-const maxReconcileAttempts = 3
-
-// reconcileScene reconciles sc with wt and saves it if anything changed.
-// The change does not rest on what a client saw, so a Scene changed since it
-// was read is reread and reconciled again rather than reported as a
-// conflict; a Scene deleted meanwhile has nothing left to clean.
+// reconcileScene reconciles the Scene sc with wt and saves it if anything
+// changed. The change does not rest on what a client saw, so a Scene changed
+// since it was read is reread and reconciled again rather than reported as a
+// conflict (retryOnRace); a Scene deleted meanwhile has nothing left to clean.
 func (s widgetTypeServiceImpl) reconcileScene(ctx context.Context, sc scene.Scene, wt library.WidgetType) error {
-	for attempt := 1; ; attempt++ {
+	first := true
+	err := retryOnRace(scene.ErrSceneConflict, func() error {
+		if !first {
+			var err error
+			if sc, err = s.sceneRepository.FindByID(ctx, sc.ID()); err != nil {
+				return fmt.Errorf("cannot reread scene: %w", err)
+			}
+		}
+		first = false
 		reconciled, changed := sc.ReconcileWith(wt)
 		if !changed {
 			return nil
 		}
 		_, err := s.sceneRepository.Save(ctx, reconciled)
-		if err == nil || errors.Is(err, scene.ErrSceneNotFound) {
-			return nil
-		}
-		if !errors.Is(err, scene.ErrSceneConflict) || attempt == maxReconcileAttempts {
-			return err
-		}
-		sc, err = s.sceneRepository.FindByID(ctx, sc.ID())
-		if errors.Is(err, scene.ErrSceneNotFound) {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("cannot reread scene: %w", err)
-		}
+		return err
+	})
+	if errors.Is(err, scene.ErrSceneNotFound) {
+		return nil
 	}
+	return err
 }
 
 // dtoInputPortsToDomain converts appdto.InputPort slice to domain InputPort slice.

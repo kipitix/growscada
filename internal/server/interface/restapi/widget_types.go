@@ -113,7 +113,7 @@ func (h WidgetTypesHandlers) DeleteWidgetTypesByID(w http.ResponseWriter, r *htt
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
 			return
 		}
-		if errors.Is(err, library.ErrWidgetTypeInUse) {
+		if errors.Is(err, library.ErrWidgetTypeInUse) || errors.Is(err, library.ErrWidgetTypeConflict) {
 			sendJSONResponse(w, http.StatusConflict, NewConflict("widget type", err.Error(), r.URL.Path))
 			return
 		}

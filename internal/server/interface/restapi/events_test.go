@@ -16,6 +16,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/domain/version"
+	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
 
@@ -141,7 +142,7 @@ func waitFor(t *testing.T, d time.Duration, condition func() bool) {
 }
 
 func TestEventsHandlers_GetEvents_SetsSSEHeaders(t *testing.T) {
-	bus := event.NewEventBus()
+	bus := eventbus.NewEventBus()
 	h := restapi.NewEventsHandler(bus, 100)
 
 	rec := newSyncRecorder()
@@ -156,7 +157,7 @@ func TestEventsHandlers_GetEvents_SetsSSEHeaders(t *testing.T) {
 }
 
 func TestEventsHandlers_GetEvents_StreamsPublishedEvent(t *testing.T) {
-	bus := event.NewEventBus()
+	bus := eventbus.NewEventBus()
 	h := restapi.NewEventsHandler(bus, 100)
 
 	rec := newSyncRecorder()
@@ -164,7 +165,7 @@ func TestEventsHandlers_GetEvents_StreamsPublishedEvent(t *testing.T) {
 	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), ": connected") })
 
 	tagID := id.NewID[tag.Tag]()
-	bus.Publish(event.NewTagCreatedEvent(tagID))
+	bus.Publish(tag.NewTagCreatedEvent(tagID))
 
 	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), "tag_created") })
 	cancel()
@@ -198,7 +199,7 @@ func sseEventMessages(t *testing.T, body string) []map[string]any {
 }
 
 func TestEventsHandlers_GetEvents_TagUpdatedCarriesTagState(t *testing.T) {
-	bus := event.NewEventBus()
+	bus := eventbus.NewEventBus()
 	h := restapi.NewEventsHandler(bus, 100)
 
 	rec := newSyncRecorder()
@@ -208,12 +209,12 @@ func TestEventsHandlers_GetEvents_TagUpdatedCarriesTagState(t *testing.T) {
 	name, _ := tag.NewTagName("pressure")
 	value, _ := tag.TagTypeInteger.NewTagValue(int64(42))
 	aVersion, _ := version.New(version.WithNumber[tag.Tag](7))
-	aTag, err := tag.NewTag(id.NewID[tag.Tag](), name, tag.TagTypeInteger, value, tag.TagQualityUncertain, aVersion)
+	aTag, err := tag.ReconstituteTag(id.NewID[tag.Tag](), name, tag.TagTypeInteger, value, tag.TagQualityUncertain, aVersion)
 	if err != nil {
 		t.Fatalf("NewTag: %v", err)
 	}
-	bus.Publish(event.NewTagCreatedEvent(aTag.ID()))
-	bus.Publish(event.NewTagUpdatedEvent(aTag))
+	bus.Publish(tag.NewTagCreatedEvent(aTag.ID()))
+	bus.Publish(tag.NewTagUpdatedEvent(aTag))
 
 	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), "tag_updated") })
 	cancel()
@@ -255,7 +256,7 @@ func TestEventsHandlers_GetEvents_TagUpdatedCarriesTagState(t *testing.T) {
 }
 
 func TestEventsHandlers_GetEvents_PublishesConnectAndDisconnectEvents(t *testing.T) {
-	bus := event.NewEventBus()
+	bus := eventbus.NewEventBus()
 	h := restapi.NewEventsHandler(bus, 100)
 
 	var mu sync.Mutex
@@ -289,7 +290,7 @@ func TestEventsHandlers_GetEvents_PublishesConnectAndDisconnectEvents(t *testing
 }
 
 func TestEventsHandlers_GetEvents_MultipleClientsEachReceiveBroadcast(t *testing.T) {
-	bus := event.NewEventBus()
+	bus := eventbus.NewEventBus()
 	h := restapi.NewEventsHandler(bus, 100)
 
 	rec1 := newSyncRecorder()
@@ -301,7 +302,7 @@ func TestEventsHandlers_GetEvents_MultipleClientsEachReceiveBroadcast(t *testing
 		return strings.Contains(rec1.body(), ": connected") && strings.Contains(rec2.body(), ": connected")
 	})
 
-	bus.Publish(event.NewSceneCreatedEvent(id.NewID[scene.Scene]()))
+	bus.Publish(scene.NewSceneCreatedEvent(id.NewID[scene.Scene]()))
 
 	waitFor(t, time.Second, func() bool {
 		return strings.Contains(rec1.body(), "scene_created") && strings.Contains(rec2.body(), "scene_created")
@@ -319,10 +320,10 @@ func TestEventsHandlers_GetEvents_MultipleClientsEachReceiveBroadcast(t *testing
 // REST request path) even with zero SSE tabs open. No GetEvents call is
 // made here, so the hub never gains a client.
 func TestEventsHandlers_Publish_NoClientsDoesNotAllocate(t *testing.T) {
-	bus := event.NewEventBus()
+	bus := eventbus.NewEventBus()
 	_ = restapi.NewEventsHandler(bus, 100) // subscribes the hub to bus; no client connects
 
-	e := event.NewTagCreatedEvent(id.NewID[tag.Tag]())
+	e := tag.NewTagCreatedEvent(id.NewID[tag.Tag]())
 
 	allocs := testing.AllocsPerRun(200, func() {
 		bus.Publish(e)
@@ -336,10 +337,10 @@ func TestEventsHandlers_Publish_NoClientsDoesNotAllocate(t *testing.T) {
 // BenchmarkEventsHandlers_Publish_NoClients measures the same no-client
 // broadcast path for manual profiling; run with `make bench`.
 func BenchmarkEventsHandlers_Publish_NoClients(b *testing.B) {
-	bus := event.NewEventBus()
+	bus := eventbus.NewEventBus()
 	_ = restapi.NewEventsHandler(bus, 100)
 
-	e := event.NewTagCreatedEvent(id.NewID[tag.Tag]())
+	e := tag.NewTagCreatedEvent(id.NewID[tag.Tag]())
 
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -356,7 +357,7 @@ func BenchmarkEventsHandlers_Publish_NoClients(b *testing.B) {
 // eventHub.Close's contract, the connection itself is left open until its
 // own request context is canceled.
 func TestEventsHandlers_Close_StopsForwardingNewEvents(t *testing.T) {
-	bus := event.NewEventBus()
+	bus := eventbus.NewEventBus()
 	h := restapi.NewEventsHandler(bus, 100)
 
 	rec := newSyncRecorder()
@@ -364,13 +365,13 @@ func TestEventsHandlers_Close_StopsForwardingNewEvents(t *testing.T) {
 	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), ": connected") })
 
 	tagID := id.NewID[tag.Tag]()
-	bus.Publish(event.NewTagCreatedEvent(tagID))
+	bus.Publish(tag.NewTagCreatedEvent(tagID))
 	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), "tag_created") })
 
 	h.Close()
 
 	sceneID := id.NewID[scene.Scene]()
-	bus.Publish(event.NewSceneCreatedEvent(sceneID))
+	bus.Publish(scene.NewSceneCreatedEvent(sceneID))
 
 	// There is no positive signal to wait for here — Close() means this
 	// event should never arrive. EventBus.Publish calls subscribers
@@ -392,7 +393,7 @@ func TestEventsHandlers_Close_StopsForwardingNewEvents(t *testing.T) {
 // number of concurrent SSE connections. A small maxClients (2) keeps the
 // test from needing to open 100 real connections.
 func TestEventsHandlers_GetEvents_RejectsBeyondMaxClients(t *testing.T) {
-	bus := event.NewEventBus()
+	bus := eventbus.NewEventBus()
 	h := restapi.NewEventsHandler(bus, 2)
 
 	rec1 := newSyncRecorder()
@@ -434,7 +435,7 @@ func TestEventsHandlers_GetEvents_RejectsBeyondMaxClients(t *testing.T) {
 // must not block EventBus.Publish for the rest of the application, and must
 // eventually be disconnected once its buffer overflows.
 func TestEventsHandlers_GetEvents_SlowClientIsDroppedWithoutBlockingPublish(t *testing.T) {
-	bus := event.NewEventBus()
+	bus := eventbus.NewEventBus()
 	h := restapi.NewEventsHandler(bus, 100)
 
 	w := newBlockingResponseWriter()
@@ -447,7 +448,7 @@ func TestEventsHandlers_GetEvents_SlowClientIsDroppedWithoutBlockingPublish(t *t
 	deadline := time.After(time.Second)
 publishUntilStarted:
 	for {
-		bus.Publish(event.NewTagCreatedEvent(id.NewID[tag.Tag]()))
+		bus.Publish(tag.NewTagCreatedEvent(id.NewID[tag.Tag]()))
 		select {
 		case <-w.started:
 			break publishUntilStarted
@@ -462,7 +463,7 @@ publishUntilStarted:
 	publishDone := make(chan struct{})
 	go func() {
 		for i := 0; i < 200; i++ {
-			bus.Publish(event.NewTagCreatedEvent(id.NewID[tag.Tag]()))
+			bus.Publish(tag.NewTagCreatedEvent(id.NewID[tag.Tag]()))
 		}
 		close(publishDone)
 	}()

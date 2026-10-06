@@ -21,6 +21,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
+	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 )
 
 var testDB *sql.DB
@@ -86,13 +87,13 @@ func cleanTags(t *testing.T) {
 
 func newService() application.TagService {
 	repo := repositories.NewTagRepositoryPostgres(testDB)
-	return application.NewTagService(repo, event.NewEventBus())
+	return application.NewTagService(repo)
 }
 
-func newServiceWithBus() (application.TagService, event.EventBus) {
-	repo := repositories.NewTagRepositoryPostgres(testDB)
-	bus := event.NewEventBus()
-	return application.NewTagService(repo, bus), bus
+func newServiceWithBus(t *testing.T) (application.TagService, eventbus.EventBus) {
+	bus, onCommit := deliveredOnCommit(t)
+	repo := repositories.NewTagRepositoryPostgres(testDB, onCommit)
+	return application.NewTagService(repo), bus
 }
 
 func mustNewTagID() uuid.UUID {
@@ -433,7 +434,7 @@ func TestSetTagValueByID_InvalidQuality_ReturnsError(t *testing.T) {
 
 func TestCreateTag_Success_PublishesTagCreatedEvent(t *testing.T) {
 	cleanTags(t)
-	svc, bus := newServiceWithBus()
+	svc, bus := newServiceWithBus(t)
 	ctx := context.Background()
 
 	var received []event.Event
@@ -449,7 +450,7 @@ func TestCreateTag_Success_PublishesTagCreatedEvent(t *testing.T) {
 	if len(received) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(received))
 	}
-	tagEvent, ok := received[0].(event.TagEvent)
+	tagEvent, ok := received[0].(tag.TagEvent)
 	if !ok {
 		t.Fatal("expected event to implement TagEvent")
 	}
@@ -460,7 +461,7 @@ func TestCreateTag_Success_PublishesTagCreatedEvent(t *testing.T) {
 
 func TestCreateTag_InvalidRequest_NoEventPublished(t *testing.T) {
 	cleanTags(t)
-	svc, bus := newServiceWithBus()
+	svc, bus := newServiceWithBus(t)
 	ctx := context.Background()
 
 	var received []event.Event
@@ -477,7 +478,7 @@ func TestCreateTag_InvalidRequest_NoEventPublished(t *testing.T) {
 
 func TestDeleteTagByID_Success_PublishesTagDeletedEvent(t *testing.T) {
 	cleanTags(t)
-	svc, bus := newServiceWithBus()
+	svc, bus := newServiceWithBus(t)
 	ctx := context.Background()
 
 	created, err := svc.CreateTag(ctx, appdto.CreateTagInput{Name: "valve", Type: "boolean", Value: "true", Quality: "good"})
@@ -497,7 +498,7 @@ func TestDeleteTagByID_Success_PublishesTagDeletedEvent(t *testing.T) {
 	if len(received) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(received))
 	}
-	tagEvent, ok := received[0].(event.TagEvent)
+	tagEvent, ok := received[0].(tag.TagEvent)
 	if !ok {
 		t.Fatal("expected event to implement TagEvent")
 	}
@@ -508,7 +509,7 @@ func TestDeleteTagByID_Success_PublishesTagDeletedEvent(t *testing.T) {
 
 func TestDeleteTagByID_NotFound_NoEventPublished(t *testing.T) {
 	cleanTags(t)
-	svc, bus := newServiceWithBus()
+	svc, bus := newServiceWithBus(t)
 	ctx := context.Background()
 
 	var received []event.Event
@@ -525,7 +526,7 @@ func TestDeleteTagByID_NotFound_NoEventPublished(t *testing.T) {
 
 func TestSetTagValueByID_Success_PublishesTagUpdatedEvent(t *testing.T) {
 	cleanTags(t)
-	svc, bus := newServiceWithBus()
+	svc, bus := newServiceWithBus(t)
 	ctx := context.Background()
 
 	created, err := svc.CreateTag(ctx, appdto.CreateTagInput{Name: "pressure", Type: "integer", Value: "10", Quality: "good"})
@@ -545,7 +546,7 @@ func TestSetTagValueByID_Success_PublishesTagUpdatedEvent(t *testing.T) {
 	if len(received) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(received))
 	}
-	tagEvent, ok := received[0].(event.TagUpdatedEvent)
+	tagEvent, ok := received[0].(tag.TagUpdatedEvent)
 	if !ok {
 		t.Fatal("expected event to implement TagUpdatedEvent")
 	}
@@ -562,7 +563,7 @@ func TestSetTagValueByID_Success_PublishesTagUpdatedEvent(t *testing.T) {
 
 func TestSetTagValueByID_InvalidRequest_NoEventPublished(t *testing.T) {
 	cleanTags(t)
-	svc, bus := newServiceWithBus()
+	svc, bus := newServiceWithBus(t)
 	ctx := context.Background()
 
 	created, err := svc.CreateTag(ctx, appdto.CreateTagInput{Name: "flow", Type: "integer", Value: "0", Quality: "good"})
@@ -659,7 +660,7 @@ func TestFindTagByName_NotFound_ReturnsWrappedErrTagNotFound(t *testing.T) {
 
 func TestCreateTag_DuplicateName_ReturnsWrappedErrTagNameTaken(t *testing.T) {
 	cleanTags(t)
-	svc, bus := newServiceWithBus()
+	svc, bus := newServiceWithBus(t)
 	ctx := context.Background()
 
 	req := appdto.CreateTagInput{Name: "temperature", Type: "integer", Value: "42", Quality: "good"}

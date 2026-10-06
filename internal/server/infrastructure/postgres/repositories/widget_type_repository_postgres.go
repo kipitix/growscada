@@ -14,13 +14,22 @@ import (
 )
 
 type widgetTypeRepositoryPostgresImpl struct {
-	db *sql.DB
+	db    *sql.DB
+	store aggregateStore[library.WidgetType]
 }
 
 var _ library.WidgetTypeRepository = (*widgetTypeRepositoryPostgresImpl)(nil)
 
-func NewWidgetTypeRepositoryPostgres(aDb *sql.DB) library.WidgetTypeRepository {
-	return &widgetTypeRepositoryPostgresImpl{db: aDb}
+func NewWidgetTypeRepositoryPostgres(aDb *sql.DB, opts ...Option) library.WidgetTypeRepository {
+	o := newOptions(opts)
+	return &widgetTypeRepositoryPostgresImpl{
+		db: aDb,
+		store: aggregateStore[library.WidgetType]{
+			db: aDb, table: tableNameWidgetTypes,
+			notFound: library.ErrWidgetTypeNotFound, conflict: library.ErrWidgetTypeConflict,
+			onCommit: o.onCommit,
+		},
+	}
 }
 
 func (r widgetTypeRepositoryPostgresImpl) NextID() id.ID[library.WidgetType] {
@@ -33,48 +42,59 @@ func (r widgetTypeRepositoryPostgresImpl) Save(ctx context.Context, wt library.W
 		return nil, fmt.Errorf("cannot serialize input ports: %w", err)
 	}
 
-	if wt.Version() == version.Initial[library.WidgetType]() {
-		row := r.db.QueryRowContext(ctx,
-			`INSERT INTO widget_types (id, name, html_template, script, script_language, default_width, default_height, input_ports, version)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-			RETURNING `+selectWidgetTypeColumns,
-			wt.ID().UUID(), wt.Name().String(), wt.HtmlTemplate().String(),
-			wt.Script().String(), wt.ScriptLanguage().String(),
-			wt.DefaultSize().Width(), wt.DefaultSize().Height(),
-			portsJSON,
-			version.Committed[library.WidgetType]().Number(),
-		)
-		saved, err := r.scanWidgetType(row.Scan)
-		if err != nil {
-			return nil, fmt.Errorf("cannot insert new widget type: %w", err)
-		}
-		return saved, nil
-	}
-
-	if wt.Version().IsCommitted() {
-		row := r.db.QueryRowContext(ctx,
-			`UPDATE widget_types
-			 SET name = $1, html_template = $2, script = $3, script_language = $4,
-			     default_width = $5, default_height = $6, input_ports = $7, version = version + 1
-			 WHERE id = $8 AND version = $9
-			 RETURNING `+selectWidgetTypeColumns,
-			wt.Name().String(), wt.HtmlTemplate().String(), wt.Script().String(),
-			wt.ScriptLanguage().String(),
-			wt.DefaultSize().Width(), wt.DefaultSize().Height(),
-			portsJSON,
-			wt.ID().UUID(), wt.Version().Number(),
-		)
-		saved, err := r.scanWidgetType(row.Scan)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return nil, classifyUpdateConflict(ctx, r.db, tableNameWidgetTypes, wt.ID(), library.ErrWidgetTypeNotFound, library.ErrWidgetTypeConflict)
+	// The row is read back so that the result is what a later read returns.
+	var saved library.WidgetType
+	_, err = r.store.save(ctx, wt.ID(), wt.Version(), wt.PendingEvents(), rowWrite[library.WidgetType]{
+		insert: func(tx *sql.Tx, next version.Version[library.WidgetType]) error {
+			row := tx.QueryRowContext(ctx,
+				`INSERT INTO widget_types (id, name, html_template, script, script_language, default_width, default_height, input_ports, version)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+				RETURNING `+selectWidgetTypeColumns,
+				wt.ID().UUID(), wt.Name().String(), wt.HtmlTemplate().String(),
+				wt.Script().String(), wt.ScriptLanguage().String(),
+				wt.DefaultSize().Width(), wt.DefaultSize().Height(),
+				portsJSON, next.Number(),
+			)
+			if saved, err = r.scanWidgetType(row.Scan); err != nil {
+				return fmt.Errorf("cannot insert new widget type: %w", err)
 			}
-			return nil, fmt.Errorf("cannot update widget type: %w", err)
-		}
-		return saved, nil
+			return nil
+		},
+		update: func(tx *sql.Tx, current, next version.Version[library.WidgetType]) (bool, error) {
+			row := tx.QueryRowContext(ctx,
+				`UPDATE widget_types
+				 SET name = $1, html_template = $2, script = $3, script_language = $4,
+				     default_width = $5, default_height = $6, input_ports = $7, version = $8
+				 WHERE id = $9 AND version = $10
+				 RETURNING `+selectWidgetTypeColumns,
+				wt.Name().String(), wt.HtmlTemplate().String(), wt.Script().String(),
+				wt.ScriptLanguage().String(),
+				wt.DefaultSize().Width(), wt.DefaultSize().Height(),
+				portsJSON, next.Number(),
+				wt.ID().UUID(), current.Number(),
+			)
+			saved, err = r.scanWidgetType(row.Scan)
+			if errors.Is(err, sql.ErrNoRows) {
+				return false, nil
+			}
+			if err != nil {
+				return false, fmt.Errorf("cannot update widget type: %w", err)
+			}
+			return true, nil
+		},
+	})
+	if err != nil {
+		return nil, err
 	}
+	return saved, nil
+}
 
-	return nil, fmt.Errorf("undefined behavior with version %d", wt.Version().Number())
+func (r widgetTypeRepositoryPostgresImpl) Delete(ctx context.Context, wt library.WidgetType) error {
+	err := r.store.delete(ctx, wt.ID(), wt.Version(), wt.PendingEvents())
+	if isForeignKeyViolation(err, constraintWidgetsTypeID) {
+		return library.ErrWidgetTypeInUse
+	}
+	return err
 }
 
 const selectWidgetTypeColumns = `id, name, html_template, script, script_language, default_width, default_height, input_ports, version`
@@ -90,24 +110,6 @@ func (r widgetTypeRepositoryPostgresImpl) FindByID(ctx context.Context, anID id.
 			return nil, library.ErrWidgetTypeNotFound
 		}
 		return nil, fmt.Errorf("error scanning widget type: %w", err)
-	}
-	return wt, nil
-}
-
-func (r widgetTypeRepositoryPostgresImpl) DeleteByID(ctx context.Context, anID id.ID[library.WidgetType]) (library.WidgetType, error) {
-	row := r.db.QueryRowContext(ctx,
-		"DELETE FROM widget_types WHERE id = $1 RETURNING "+selectWidgetTypeColumns,
-		anID.UUID(),
-	)
-	wt, err := r.scanWidgetType(row.Scan)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, library.ErrWidgetTypeNotFound
-		}
-		if isForeignKeyViolation(err, constraintWidgetsTypeID) {
-			return nil, library.ErrWidgetTypeInUse
-		}
-		return nil, fmt.Errorf("cannot delete widget type: %w", err)
 	}
 	return wt, nil
 }
@@ -200,7 +202,7 @@ func (r widgetTypeRepositoryPostgresImpl) reconstruct(row rawWidgetTypeRow) (lib
 		return nil, fmt.Errorf("cannot create widget type version: %w", err)
 	}
 
-	return library.NewWidgetType(newID, newName, newHtml, newScript, newLang, defaultSize, inputPorts, newVersion)
+	return library.ReconstituteWidgetType(newID, newName, newHtml, newScript, newLang, defaultSize, inputPorts, newVersion)
 }
 
 // inputPortJSON is the on-disk representation of an InputPort.

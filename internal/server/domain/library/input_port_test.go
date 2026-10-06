@@ -90,7 +90,7 @@ func TestNewWidgetType_DuplicateInputPortName(t *testing.T) {
 		NewInputPort(portName, "duplicate", AnyTypeHint()),
 	}
 
-	_, err := NewWidgetType(wtID, name, html, script, ScriptLanguageJavaScript, size, ports, mustWidgetTypeVersion(t))
+	_, err := ReconstituteWidgetType(wtID, name, html, script, ScriptLanguageJavaScript, size, ports, mustWidgetTypeVersion(t))
 	if err == nil {
 		t.Fatal("expected ErrDuplicateInputPortName, got nil")
 	}
@@ -113,7 +113,7 @@ func TestNewWidgetType_UniqueInputPorts_OK(t *testing.T) {
 		NewInputPort(p2Name, "pres", mustTypeHintFor(t, tag.TagTypeInteger)),
 	}
 
-	wt, err := NewWidgetType(wtID, name, html, script, ScriptLanguageJavaScript, size, ports, mustWidgetTypeVersion(t))
+	wt, err := ReconstituteWidgetType(wtID, name, html, script, ScriptLanguageJavaScript, size, ports, mustWidgetTypeVersion(t))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestNewWidgetType_InputPortsCopied(t *testing.T) {
 	pName, _ := NewInputPortName("val")
 	ports := []InputPort{NewInputPort(pName, "", AnyTypeHint())}
 
-	wt, _ := NewWidgetType(wtID, name, html, script, ScriptLanguageJavaScript, size, ports, mustWidgetTypeVersion(t))
+	wt, _ := ReconstituteWidgetType(wtID, name, html, script, ScriptLanguageJavaScript, size, ports, mustWidgetTypeVersion(t))
 
 	// Mutate original slice — should not affect the aggregate.
 	ports[0] = NewInputPort(pName, "mutated", mustTypeHintFor(t, tag.TagTypeString))

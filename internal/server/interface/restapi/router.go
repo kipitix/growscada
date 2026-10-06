@@ -10,7 +10,7 @@ import (
 	"github.com/kipitix/growscada/contract"
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
-	"github.com/kipitix/growscada/internal/server/domain/event"
+	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 )
 
 type APIRouter struct {
@@ -52,7 +52,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func NewRouter(tagService application.TagService, widgetTypeService application.WidgetTypeService, sceneService application.SceneService, eventBus event.EventBus, maxSSEClients int) *APIRouter {
+func NewRouter(tagService application.TagService, widgetTypeService application.WidgetTypeService, sceneService application.SceneService, eventBus eventbus.EventBus, maxSSEClients int) *APIRouter {
 	router := &APIRouter{}
 	router.serveMux = http.NewServeMux()
 

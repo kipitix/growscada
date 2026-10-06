@@ -20,8 +20,9 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/kipitix/growscada/internal/server/application"
-	"github.com/kipitix/growscada/internal/server/domain/event"
+	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
+	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
 
@@ -93,20 +94,35 @@ func startPostgres(ctx context.Context) (*sql.DB, *tcpostgres.PostgresContainer,
 	return db, container, nil
 }
 
-// StartAPI cleans the tags table and serves the real REST API over the
-// database. The returned TagService is the one behind the API, for arranging
-// and checking state directly.
+// StartAPI cleans the tags and outbox tables and serves the real REST API
+// over the database, with the outbox dispatcher delivering committed events
+// to its event stream, as the server does. The returned TagService is the one
+// behind the API, for arranging and checking state directly.
 func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagService) {
 	t.Helper()
-	if _, err := db.ExecContext(context.Background(), "DELETE FROM tags"); err != nil {
+	if _, err := db.ExecContext(context.Background(), "DELETE FROM tags; DELETE FROM outbox"); err != nil {
 		t.Fatalf("clean tags: %v", err)
 	}
-	tagSvc := application.NewTagService(repositories.NewTagRepositoryPostgres(db), event.NewEventBus())
-	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(db)
-	sceneRepo := repositories.NewSceneRepositoryPostgres(db)
-	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo, event.NewEventBus())
-	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, event.NewEventBus())
-	router := restapi.NewRouter(tagSvc, wtSvc, sceneSvc, event.NewEventBus(), 100)
+	bus := eventbus.NewEventBus()
+	dispatcher := outbox.NewDispatcher(db, bus.Publish)
+	ctx, stop := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		dispatcher.Run(ctx)
+		close(done)
+	}()
+	t.Cleanup(func() {
+		stop()
+		<-done
+	})
+	onCommit := repositories.NotifyOnCommit(dispatcher.Notify)
+
+	tagSvc := application.NewTagService(repositories.NewTagRepositoryPostgres(db, onCommit))
+	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(db, onCommit)
+	sceneRepo := repositories.NewSceneRepositoryPostgres(db, onCommit)
+	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo)
+	sceneSvc := application.NewSceneService(sceneRepo, wtRepo)
+	router := restapi.NewRouter(tagSvc, wtSvc, sceneSvc, bus, 100)
 
 	srv := httptest.NewServer(router.ServeMux())
 	t.Cleanup(srv.Close)

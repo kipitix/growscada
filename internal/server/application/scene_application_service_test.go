@@ -14,6 +14,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
+	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 )
 
 func cleanScenes(t *testing.T) {
@@ -45,14 +46,14 @@ func ensureTestWidgetType(t *testing.T) {
 func newSceneService() application.SceneService {
 	repo := repositories.NewSceneRepositoryPostgres(testDB)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	return application.NewSceneService(repo, wtRepo, event.NewEventBus())
+	return application.NewSceneService(repo, wtRepo)
 }
 
-func newSceneServiceWithBus() (application.SceneService, event.EventBus) {
-	repo := repositories.NewSceneRepositoryPostgres(testDB)
-	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	bus := event.NewEventBus()
-	return application.NewSceneService(repo, wtRepo, bus), bus
+func newSceneServiceWithBus(t *testing.T) (application.SceneService, eventbus.EventBus) {
+	bus, onCommit := deliveredOnCommit(t)
+	repo := repositories.NewSceneRepositoryPostgres(testDB, onCommit)
+	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB, onCommit)
+	return application.NewSceneService(repo, wtRepo), bus
 }
 
 var testCreateSceneInput = appdto.SceneInput{
@@ -601,7 +602,7 @@ func TestDeleteSceneByID_WithWidgets_CascadesInDB(t *testing.T) {
 // the DB cascade handles their removal.
 func TestDeleteSceneByID_WithWidgets_PublishesWidgetDeletedPerWidget(t *testing.T) {
 	cleanScenes(t)
-	svc, bus := newSceneServiceWithBus()
+	svc, bus := newSceneServiceWithBus(t)
 	ctx := context.Background()
 	sc := mustCreateScene(t, svc)
 
@@ -637,7 +638,7 @@ func TestDeleteSceneByID_WithWidgets_PublishesWidgetDeletedPerWidget(t *testing.
 	}
 	gotIDs := map[uuid.UUID]bool{}
 	for _, e := range widgetDeleted {
-		wEvent, ok := e.(event.WidgetEvent)
+		wEvent, ok := e.(scene.WidgetEvent)
 		if !ok {
 			t.Fatal("expected event to implement WidgetEvent")
 		}
@@ -654,7 +655,7 @@ func TestDeleteSceneByID_WithWidgets_PublishesWidgetDeletedPerWidget(t *testing.
 
 func TestDeleteSceneByID_EmptyScene_PublishesOnlySceneDeletedEvent(t *testing.T) {
 	cleanScenes(t)
-	svc, bus := newSceneServiceWithBus()
+	svc, bus := newSceneServiceWithBus(t)
 	ctx := context.Background()
 	sc := mustCreateScene(t, svc)
 
@@ -798,23 +799,38 @@ func TestDeleteWidget_Existing_BumpsSceneVersionOnce(t *testing.T) {
 	}
 }
 
-// racingSceneRepository runs race once, right after the first FindByID: a
-// write by someone else lands between the service's read and its Save.
+// racingSceneRepository runs race right after each FindByID, races times:
+// a write by someone else lands between the service's read and its write.
 type racingSceneRepository struct {
 	scene.SceneRepository
-	race func()
+	races int
+	race  func()
 }
 
 func (r *racingSceneRepository) FindByID(ctx context.Context, sceneID id.ID[scene.Scene]) (scene.Scene, error) {
 	found, err := r.SceneRepository.FindByID(ctx, sceneID)
-	if race := r.race; race != nil {
-		r.race = nil
-		race()
+	if r.races > 0 {
+		r.races--
+		r.race()
 	}
 	return found, err
 }
 
-func TestDeleteWidget_SceneChangedMeanwhile_ReturnsConflictKeepsChange(t *testing.T) {
+// renameScene returns a race that renames the scene, as another client would.
+func renameScene(t *testing.T, svc application.SceneService, sceneID uuid.UUID) func() {
+	return func() {
+		ctx := context.Background()
+		current, err := svc.FindSceneByID(ctx, sceneID)
+		if err != nil {
+			t.Fatalf("FindSceneByID: %v", err)
+		}
+		if _, err := svc.UpdateScene(ctx, sceneID, current.Version, appdto.SceneInput{Name: "renamed", Width: 800, Height: 600}); err != nil {
+			t.Fatalf("concurrent UpdateScene: %v", err)
+		}
+	}
+}
+
+func TestDeleteWidget_SceneChangedMeanwhile_RereadsAndKeepsChange(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
 	ctx := context.Background()
@@ -824,28 +840,76 @@ func TestDeleteWidget_SceneChangedMeanwhile_ReturnsConflictKeepsChange(t *testin
 		t.Fatalf("CreateWidget: %v", err)
 	}
 
-	repo := &racingSceneRepository{SceneRepository: repositories.NewSceneRepositoryPostgres(testDB)}
-	repo.race = func() {
-		if _, err := svc.UpdateScene(ctx, sc.ID, created.SceneVersion, appdto.SceneInput{Name: "renamed", Width: 800, Height: 600}); err != nil {
-			t.Fatalf("concurrent UpdateScene: %v", err)
-		}
+	repo := &racingSceneRepository{SceneRepository: repositories.NewSceneRepositoryPostgres(testDB), races: 1, race: renameScene(t, svc, sc.ID)}
+	racingSvc := application.NewSceneService(repo, repositories.NewWidgetTypeRepositoryPostgres(testDB))
+
+	deleted, err := racingSvc.DeleteWidgetByID(ctx, sc.ID, created.ID)
+
+	if err != nil {
+		t.Fatalf("DeleteWidgetByID: %v", err)
 	}
-	racingSvc := application.NewSceneService(repo, repositories.NewWidgetTypeRepositoryPostgres(testDB), event.NewEventBus())
+	found, err := svc.FindSceneByID(ctx, sc.ID)
+	if err != nil {
+		t.Fatalf("FindSceneByID: %v", err)
+	}
+	if found.Name != "renamed" || found.Version != created.SceneVersion+2 || deleted.SceneVersion != found.Version {
+		t.Errorf("expected the concurrent change kept and the widget removed after it (renamed, version %d), got %q, version %d, delete at %d",
+			created.SceneVersion+2, found.Name, found.Version, deleted.SceneVersion)
+	}
+	if _, err := svc.FindWidgetByID(ctx, sc.ID, created.ID); !errors.Is(err, scene.ErrWidgetNotFound) {
+		t.Errorf("expected the widget deleted, got %v", err)
+	}
+}
+
+func TestDeleteWidget_LosesRaceThreeTimes_ReturnsConflictKeepsWidget(t *testing.T) {
+	cleanScenes(t)
+	svc := newSceneService()
+	ctx := context.Background()
+	sc := mustCreateScene(t, svc)
+	created, err := svc.CreateWidget(ctx, sc.ID, sc.Version, testCreateWidgetInput)
+	if err != nil {
+		t.Fatalf("CreateWidget: %v", err)
+	}
+
+	repo := &racingSceneRepository{SceneRepository: repositories.NewSceneRepositoryPostgres(testDB), races: 3, race: renameScene(t, svc, sc.ID)}
+	racingSvc := application.NewSceneService(repo, repositories.NewWidgetTypeRepositoryPostgres(testDB))
 
 	_, err = racingSvc.DeleteWidgetByID(ctx, sc.ID, created.ID)
 
 	if !errors.Is(err, scene.ErrSceneConflict) {
 		t.Fatalf("expected ErrSceneConflict, got: %v", err)
 	}
-	found, err := svc.FindSceneByID(ctx, sc.ID)
-	if err != nil {
-		t.Fatalf("FindSceneByID: %v", err)
-	}
-	if found.Name != "renamed" || found.Version != created.SceneVersion+1 {
-		t.Errorf("expected the concurrent change kept (renamed, version %d), got %q, version %d", created.SceneVersion+1, found.Name, found.Version)
-	}
 	if _, err := svc.FindWidgetByID(ctx, sc.ID, created.ID); err != nil {
 		t.Errorf("widget must survive the refused delete: %v", err)
+	}
+}
+
+func TestDeleteScene_WidgetAddedMeanwhile_DeliversWidgetDeletedForIt(t *testing.T) {
+	cleanScenes(t)
+	bus, onCommit := deliveredOnCommit(t)
+	svc := application.NewSceneService(repositories.NewSceneRepositoryPostgres(testDB, onCommit), repositories.NewWidgetTypeRepositoryPostgres(testDB))
+	ctx := context.Background()
+	sc := mustCreateScene(t, svc)
+
+	var added appdto.Widget
+	repo := &racingSceneRepository{SceneRepository: repositories.NewSceneRepositoryPostgres(testDB, onCommit), races: 1, race: func() {
+		var err error
+		if added, err = svc.CreateWidget(ctx, sc.ID, sc.Version, testCreateWidgetInput); err != nil {
+			t.Fatalf("concurrent CreateWidget: %v", err)
+		}
+	}}
+	racingSvc := application.NewSceneService(repo, repositories.NewWidgetTypeRepositoryPostgres(testDB))
+	var widgetDeleted []uuid.UUID
+	bus.Subscribe(event.EventTypeWidgetDeleted, func(e event.Event) {
+		widgetDeleted = append(widgetDeleted, e.(scene.WidgetEvent).WidgetID().UUID())
+	})
+
+	if _, err := racingSvc.DeleteSceneByID(ctx, sc.ID); err != nil {
+		t.Fatalf("DeleteSceneByID: %v", err)
+	}
+
+	if len(widgetDeleted) != 1 || widgetDeleted[0] != added.ID {
+		t.Errorf("expected widget_deleted for the widget added meanwhile (%s), got %v", added.ID, widgetDeleted)
 	}
 }
 
@@ -889,7 +953,7 @@ func newServiceDeletingRacingType(t *testing.T) application.SceneService {
 			t.Fatalf("concurrent delete of widget type: %v", err)
 		}
 	}
-	return application.NewSceneService(repositories.NewSceneRepositoryPostgres(testDB), wtRepo, event.NewEventBus())
+	return application.NewSceneService(repositories.NewSceneRepositoryPostgres(testDB), wtRepo)
 }
 
 func TestCreateWidget_TypeDeletedMeanwhile_ReturnsInvalidInput(t *testing.T) {
