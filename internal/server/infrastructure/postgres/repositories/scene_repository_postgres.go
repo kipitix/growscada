@@ -99,12 +99,18 @@ func (r sceneRepositoryPostgresImpl) Save(ctx context.Context, s scene.Scene) (s
 	if err := saveWidgets(ctx, tx, s.ID(), stored, s.Widgets()); err != nil {
 		return nil, err
 	}
+	// The widgets are read back so that the result is what a later read
+	// returns, as the stored columns hold them.
+	saved, err := findWidgetsBySceneIDs(ctx, tx, []uuid.UUID{s.ID().UUID()})
+	if err != nil {
+		return nil, err
+	}
 
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("cannot commit scene save: %w", err)
 	}
 
-	return scene.NewScene(s.ID(), s.Name(), s.Size(), s.BackgroundHTML(), s.Widgets(), newVersion), nil
+	return scene.NewScene(s.ID(), s.Name(), s.Size(), s.BackgroundHTML(), saved[s.ID().UUID()], newVersion), nil
 }
 
 // saveWidgets brings the scene's widget rows from stored to wanted: inserts

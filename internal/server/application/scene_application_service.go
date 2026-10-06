@@ -75,6 +75,16 @@ func widgetChangeError(err error) error {
 	return err
 }
 
+// widgetSaveError marks a failed save of a scene with a new or changed widget
+// as invalid input when the widget's type was deleted after loadWidgetType
+// found it: the type's foreign key catches it.
+func widgetSaveError(err error) error {
+	if errors.Is(err, library.ErrWidgetTypeNotFound) {
+		return fmt.Errorf("cannot save scene: type_id: %w", invalidInput(err))
+	}
+	return fmt.Errorf("cannot save scene: %w", err)
+}
+
 func (s sceneServiceImpl) FindAllScenes(ctx context.Context) ([]appdto.Scene, error) {
 	list, err := s.repository.FindAll(ctx)
 	if err != nil {
@@ -213,6 +223,10 @@ func (s sceneServiceImpl) CreateWidget(ctx context.Context, rawSceneID uuid.UUID
 	if err != nil {
 		return appdto.Widget{}, err
 	}
+	// A stale write is a conflict whatever type it names.
+	if err := sc.CheckVersion(expectedVersion); err != nil {
+		return appdto.Widget{}, fmt.Errorf("cannot create widget: %w", err)
+	}
 	wt, err := s.loadWidgetType(ctx, newWidget.TypeID())
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot create widget: %w", err)
@@ -225,12 +239,12 @@ func (s sceneServiceImpl) CreateWidget(ctx context.Context, rawSceneID uuid.UUID
 
 	saved, err := s.repository.Save(ctx, changed)
 	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot save scene: %w", err)
+		return appdto.Widget{}, widgetSaveError(err)
 	}
 
 	s.eventBus.Publish(event.NewWidgetCreatedEvent(newID))
 
-	return appdto.NewWidget(newWidget, rawSceneID, saved.Version().Number()), nil
+	return savedWidget(saved, newID, rawSceneID)
 }
 
 func (s sceneServiceImpl) UpdateWidget(ctx context.Context, rawSceneID, rawWidgetID uuid.UUID, rawSceneVersion int, input appdto.WidgetInput) (appdto.Widget, error) {
@@ -246,8 +260,12 @@ func (s sceneServiceImpl) UpdateWidget(ctx context.Context, rawSceneID, rawWidge
 	if err != nil {
 		return appdto.Widget{}, err
 	}
-	// The widget named in the URL is checked before the type named in the
-	// body: a missing widget is 404 whatever the body says.
+	// A stale write is a conflict, and the widget named in the URL is checked
+	// before the type named in the body: a missing widget is 404 whatever
+	// the body says.
+	if err := sc.CheckVersion(expectedVersion); err != nil {
+		return appdto.Widget{}, fmt.Errorf("cannot update widget: %w", err)
+	}
 	if _, err := sc.FindWidget(widgetID); err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot update widget: %w", err)
 	}
@@ -263,12 +281,22 @@ func (s sceneServiceImpl) UpdateWidget(ctx context.Context, rawSceneID, rawWidge
 
 	saved, err := s.repository.Save(ctx, changed)
 	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot save scene: %w", err)
+		return appdto.Widget{}, widgetSaveError(err)
 	}
 
 	s.eventBus.Publish(event.NewWidgetUpdatedEvent(widgetID))
 
-	return appdto.NewWidget(updated, rawSceneID, saved.Version().Number()), nil
+	return savedWidget(saved, widgetID, rawSceneID)
+}
+
+// savedWidget returns the widget as the repository stored it in saved, the
+// scene Save returned.
+func savedWidget(saved scene.Scene, widgetID id.ID[scene.Widget], rawSceneID uuid.UUID) (appdto.Widget, error) {
+	w, err := saved.FindWidget(widgetID)
+	if err != nil {
+		return appdto.Widget{}, fmt.Errorf("saved scene lacks widget %s: %w", widgetID, err)
+	}
+	return appdto.NewWidget(w, rawSceneID, saved.Version().Number()), nil
 }
 
 // parseWidgetWrite checks what CreateWidget and UpdateWidget receive from the
@@ -296,7 +324,7 @@ func parseWidget(widgetID id.ID[scene.Widget], input appdto.WidgetInput) (scene.
 	if err != nil {
 		return nil, fmt.Errorf("name: %w", err)
 	}
-	size, err := scene.NewWidgetSize(input.Width, input.Height)
+	size, err := library.NewSize(input.Width, input.Height)
 	if err != nil {
 		return nil, fmt.Errorf("size: %w", err)
 	}
@@ -329,11 +357,7 @@ func (s sceneServiceImpl) DeleteWidgetByID(ctx context.Context, rawSceneID, rawW
 	if err != nil {
 		return appdto.Widget{}, err
 	}
-	deleted, err := sc.FindWidget(widgetID)
-	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot delete widget: %w", err)
-	}
-	changed, err := sc.RemoveWidget(widgetID)
+	changed, deleted, err := sc.RemoveWidget(widgetID)
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot delete widget: %w", err)
 	}

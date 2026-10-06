@@ -66,7 +66,7 @@ func reconstructWidget(row rawWidgetRow) (scene.Widget, error) {
 
 	pos := scene.NewPosition(row.x, row.y, row.z)
 
-	size, err := scene.NewWidgetSize(row.width, row.height)
+	size, err := library.NewSize(row.width, row.height)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create widget size: %w", err)
 	}

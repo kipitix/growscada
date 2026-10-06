@@ -170,6 +170,10 @@ func (h WidgetsHandlers) DeleteWidgetsByID(w http.ResponseWriter, r *http.Reques
 			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), widgetIDStr, r.URL.Path))
 			return
 		}
+		if errors.Is(err, scene.ErrSceneConflict) {
+			sendJSONResponse(w, http.StatusConflict, NewConflict("scene", err.Error(), r.URL.Path))
+			return
+		}
 		sendServiceError(w, r, err)
 		return
 	}

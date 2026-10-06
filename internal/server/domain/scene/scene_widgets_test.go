@@ -48,7 +48,7 @@ func makeWidgetOf(t *testing.T, wt library.WidgetType, name string, ports ...str
 	for i, p := range ports {
 		bindings[i] = NewPortBinding(mustPortName(t, p), id.NewID[tag.Tag]())
 	}
-	return NewWidget(id.NewID[Widget](), widgetName, NewPosition(0, 0, 0), DefaultWidgetSize(),
+	return NewWidget(id.NewID[Widget](), widgetName, NewPosition(0, 0, 0), library.DefaultSize(),
 		DefaultOrigin(), DefaultRotation(), wt.ID(), nil, bindings)
 }
 
@@ -227,6 +227,19 @@ func TestSceneUpdateWidget_Rejected(t *testing.T) {
 	}
 }
 
+// ── CheckVersion ────────────────────────────────────────────────────────────
+
+func TestSceneCheckVersion(t *testing.T) {
+	sc := makeStoredScene(t)
+
+	if err := sc.CheckVersion(sc.Version()); err != nil {
+		t.Errorf("current version: expected no error, got %v", err)
+	}
+	if err := sc.CheckVersion(staleVersion(sc)); !errors.Is(err, ErrSceneConflict) {
+		t.Errorf("stale version: expected ErrSceneConflict, got %v", err)
+	}
+}
+
 // ── RemoveWidget ────────────────────────────────────────────────────────────
 
 func TestSceneRemoveWidget_Existing_RemovesItLeavesOriginal(t *testing.T) {
@@ -236,10 +249,13 @@ func TestSceneRemoveWidget_Existing_RemovesItLeavesOriginal(t *testing.T) {
 	w3 := makeWidgetOf(t, wt, "w3")
 	sc := makeStoredScene(t, w1, w2, w3)
 
-	after, err := sc.RemoveWidget(w2.ID())
+	after, removed, err := sc.RemoveWidget(w2.ID())
 
 	if err != nil {
 		t.Fatalf("RemoveWidget: %v", err)
+	}
+	if removed.ID() != w2.ID() {
+		t.Errorf("removed: expected %s, got %s", w2.ID(), removed.ID())
 	}
 	if got, want := ids(after.Widgets()), ids([]Widget{w1, w3}); !slices.Equal(got, want) {
 		t.Errorf("widgets: expected %v, got %v", want, got)
@@ -253,7 +269,7 @@ func TestSceneRemoveWidget_Existing_RemovesItLeavesOriginal(t *testing.T) {
 func TestSceneRemoveWidget_Unknown_ReturnsErrWidgetNotFound(t *testing.T) {
 	sc := makeStoredScene(t, makeWidgetOf(t, makeWidgetType(t), "w1"))
 
-	_, err := sc.RemoveWidget(id.NewID[Widget]())
+	_, _, err := sc.RemoveWidget(id.NewID[Widget]())
 
 	if !errors.Is(err, ErrWidgetNotFound) {
 		t.Errorf("expected ErrWidgetNotFound, got %v", err)

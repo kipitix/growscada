@@ -2,8 +2,8 @@ package library
 
 import "fmt"
 
-// Size - default dimensions, in pixels, a WidgetType gives the Widgets placed
-// from it.
+// Size - dimensions of a widget in pixels: the default a WidgetType gives the
+// Widgets placed from it, and the size of a Widget on its Scene.
 // Value Object.
 type Size struct {
 	width  int

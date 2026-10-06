@@ -32,6 +32,13 @@ type Scene interface {
 	// Returns ErrWidgetNotFound if the scene has no such widget.
 	FindWidget(id.ID[Widget]) (Widget, error)
 
+	// CheckVersion reports an edit conflict: the caller changes the scene
+	// having seen it at a Version other than the current one. Every change
+	// that expects a Version checks it itself; CheckVersion lets a caller
+	// report the conflict before it loads what the change needs.
+	// Returns ErrSceneConflict if expected is not the scene's Version.
+	CheckVersion(expected version.Version[Scene]) error
+
 	// Update changes the scene's name, size and background.
 	// Returns ErrSceneConflict if expected is not the scene's Version.
 	Update(expected version.Version[Scene], aName SceneName, aSize SceneSize, aBackgroundHTML BackgroundHTML) (Scene, error)
@@ -51,10 +58,10 @@ type Scene interface {
 	// ErrPortNotDeclared if the widget binds a port wt does not declare.
 	UpdateWidget(expected version.Version[Scene], w Widget, wt library.WidgetType) (Scene, error)
 
-	// RemoveWidget removes the widget with the given ID from the scene. Like
-	// removing any aggregate, it expects no Version.
+	// RemoveWidget removes the widget with the given ID from the scene and
+	// returns it too. Like removing any aggregate, it expects no Version.
 	// Returns ErrWidgetNotFound if the scene has no such widget.
-	RemoveWidget(id.ID[Widget]) (Scene, error)
+	RemoveWidget(id.ID[Widget]) (Scene, Widget, error)
 
 	// ReconcileWith removes, from the scene's widgets of WidgetType wt, the
 	// PortBindings of ports wt no longer declares. The bool reports whether
@@ -120,14 +127,22 @@ func (s *sceneImpl) FindWidget(widgetID id.ID[Widget]) (Widget, error) {
 }
 
 func (s *sceneImpl) Update(expected version.Version[Scene], aName SceneName, aSize SceneSize, aBackgroundHTML BackgroundHTML) (Scene, error) {
-	if err := s.checkVersion(expected); err != nil {
+	if err := s.CheckVersion(expected); err != nil {
 		return nil, err
 	}
-	return NewScene(s.id, aName, aSize, aBackgroundHTML, s.widgets, s.version), nil
+	// The widgets are shared: no Scene ever changes its slice.
+	return &sceneImpl{
+		id:             s.id,
+		name:           aName,
+		size:           aSize,
+		backgroundHTML: aBackgroundHTML,
+		widgets:        s.widgets,
+		version:        s.version,
+	}, nil
 }
 
 func (s *sceneImpl) AddWidget(expected version.Version[Scene], w Widget, wt library.WidgetType) (Scene, error) {
-	if err := s.checkVersion(expected); err != nil {
+	if err := s.CheckVersion(expected); err != nil {
 		return nil, err
 	}
 	if s.widgetIndex(w.ID()) >= 0 {
@@ -136,11 +151,11 @@ func (s *sceneImpl) AddWidget(expected version.Version[Scene], w Widget, wt libr
 	if err := checkWidgetType(w, wt); err != nil {
 		return nil, err
 	}
-	return s.withWidgets(append(s.Widgets(), w)), nil
+	return s.withWidgets(append(slices.Clip(s.widgets), w)), nil
 }
 
 func (s *sceneImpl) UpdateWidget(expected version.Version[Scene], w Widget, wt library.WidgetType) (Scene, error) {
-	if err := s.checkVersion(expected); err != nil {
+	if err := s.CheckVersion(expected); err != nil {
 		return nil, err
 	}
 	i := s.widgetIndex(w.ID())
@@ -150,49 +165,50 @@ func (s *sceneImpl) UpdateWidget(expected version.Version[Scene], w Widget, wt l
 	if err := checkWidgetType(w, wt); err != nil {
 		return nil, err
 	}
-	widgets := s.Widgets()
+	widgets := slices.Clone(s.widgets)
 	widgets[i] = w
 	return s.withWidgets(widgets), nil
 }
 
-func (s *sceneImpl) RemoveWidget(widgetID id.ID[Widget]) (Scene, error) {
+func (s *sceneImpl) RemoveWidget(widgetID id.ID[Widget]) (Scene, Widget, error) {
 	i := s.widgetIndex(widgetID)
 	if i < 0 {
-		return nil, ErrWidgetNotFound
+		return nil, nil, ErrWidgetNotFound
 	}
-	return s.withWidgets(slices.Delete(s.Widgets(), i, i+1)), nil
+	return s.withWidgets(slices.Concat(s.widgets[:i], s.widgets[i+1:])), s.widgets[i], nil
 }
 
 func (s *sceneImpl) ReconcileWith(wt library.WidgetType) (Scene, bool) {
 	declared := declaredPorts(wt)
-	widgets := s.Widgets()
-	changed := false
-	for i, w := range widgets {
+	var widgets []Widget // cloned on the first widget that changes
+	for i, w := range s.widgets {
 		if w.TypeID() != wt.ID() {
 			continue
 		}
-		kept := slices.DeleteFunc(w.PortBindings(), func(b PortBinding) bool {
+		bindings := w.PortBindings()
+		before := len(bindings)
+		kept := slices.DeleteFunc(bindings, func(b PortBinding) bool {
 			_, ok := declared[b.PortName()]
 			return !ok
 		})
-		if len(kept) == len(w.PortBindings()) {
+		if len(kept) == before {
 			continue
+		}
+		if widgets == nil {
+			widgets = slices.Clone(s.widgets)
 		}
 		widgets[i] = NewWidget(
 			w.ID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(),
 			w.TypeID(), w.Labels(), kept,
 		)
-		changed = true
 	}
-	if !changed {
+	if widgets == nil {
 		return s, false
 	}
 	return s.withWidgets(widgets), true
 }
 
-// checkVersion reports an edit conflict: the caller changes a scene it saw
-// at a Version other than the current one.
-func (s *sceneImpl) checkVersion(expected version.Version[Scene]) error {
+func (s *sceneImpl) CheckVersion(expected version.Version[Scene]) error {
 	if expected != s.version {
 		return fmt.Errorf("%w: expected version %s, current %s", ErrSceneConflict, expected, s.version)
 	}
@@ -203,8 +219,18 @@ func (s *sceneImpl) widgetIndex(widgetID id.ID[Widget]) int {
 	return slices.IndexFunc(s.widgets, func(w Widget) bool { return w.ID() == widgetID })
 }
 
+// withWidgets returns the scene with someWidgets in place of its widgets. It
+// takes someWidgets over without copying: the caller passes a slice of its
+// own that nothing else changes.
 func (s *sceneImpl) withWidgets(someWidgets []Widget) Scene {
-	return NewScene(s.id, s.name, s.size, s.backgroundHTML, someWidgets, s.version)
+	return &sceneImpl{
+		id:             s.id,
+		name:           s.name,
+		size:           s.size,
+		backgroundHTML: s.backgroundHTML,
+		widgets:        someWidgets,
+		version:        s.version,
+	}
 }
 
 // checkWidgetType checks that wt is the widget's type and declares every

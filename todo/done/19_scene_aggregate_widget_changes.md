@@ -20,29 +20,32 @@ Status: needs-triage
 ## Решения
 
 - **Scene неизменяемая.** Методы агрегата возвращают новую Scene, исходная не меняется: «до» — исходная, «после» — результат. Отдельного типа «изменение Scene» нет; форму DraftChange проектирует задача 38.
-- **WidgetType передаётся аргументом.** Сервис загружает Scene (нет → 404), затем WidgetType (нет → 400 invalid input) и передаёт его в метод Scene. Агрегат проверяет, что `TypeID` Widget совпадает с WidgetType и PortBinding ссылаются только на его InputPort. FK `fk_widgets_type_id` остаётся страховкой.
-- **Конфликт правки ловит агрегат.** Методы изменения принимают ожидаемую Version; несовпадение с текущей → `ErrSceneConflict`. В сервисе Version не сверяется.
+- **WidgetType передаётся аргументом.** Сервис загружает Scene (нет → 404), затем WidgetType (нет → 400 invalid input) и передаёт его в метод Scene. Агрегат проверяет, что `TypeID` Widget совпадает с WidgetType и PortBinding ссылаются только на его InputPort.
+- **FK `fk_widgets_type_id` ловит гонку с удалением WidgetType.** Если WidgetType удалён между загрузкой и `Save`, репозиторий переводит нарушение FK в `ErrWidgetTypeNotFound`, а `widgetSaveError` в сервисе — в 400 `type_id`, как при отсутствии типа до загрузки.
+- **Конфликт правки ловит агрегат.** Методы изменения принимают ожидаемую Version; несовпадение с текущей → `ErrSceneConflict`. Сервис своей сверки не делает, но вызывает `Scene.CheckVersion` до загрузки WidgetType, чтобы устаревшая запись получала 409 раньше 400 по `type_id` и не тратила запрос к `widget_types`. Порядок ошибок в `UpdateWidget`: Version (409) → Widget из URL (404) → WidgetType (400).
 - **Гонку записи ловит `Save`**: CAS `WHERE version = <текущая>`, Version повышается один раз на сохранение.
 - **Удаление Widget — без ожидаемой Version**, как удаление любого агрегата (`DELETE /tags/{id}`, `/widget-types/{id}`, `/scenes/{id}`). Контракт не меняется.
-- **Widget и его value objects** (Position, Size, Origin, Rotation, TransformMatrix, PortBinding, WidgetName…) переезжают в `domain/scene`. Пакет `domain/widget` (остаются WidgetType, InputPort, PortTypeHint, шаблон, скрипт) переименовывается в `domain/library` — под будущий агрегат Library (задача 33).
+- **Widget и его value objects** (Position, Origin, Rotation, TransformMatrix, PortBinding, WidgetName…) переезжают в `domain/scene`. Пакет `domain/widget` (остаются WidgetType, InputPort, PortTypeHint, шаблон, скрипт) переименовывается в `domain/library` — под будущий агрегат Library (задача 33). Размер Widget — общий с WidgetType `library.Size`: одно правило (положительные ширина и высота, 100×100 по умолчанию) для размера по умолчанию и размера на Scene.
 
 ## Что сделать
 
 - Методы агрегата Scene:
   - `AddWidget(expected, w, wt)`, `UpdateWidget(expected, w, wt)` — проверка TypeID и InputPort, конфликт правки, Widget с таким ID есть/нет → ошибка;
-  - `RemoveWidget(widgetID)` — нет такого Widget → `ErrWidgetNotFound`;
+  - `RemoveWidget(widgetID)` — возвращает и удалённый Widget; нет такого Widget → `ErrWidgetNotFound`;
+  - `CheckVersion(expected)` — конфликт правки до загрузки того, что нужно изменению;
   - изменение имени, размера и фона Scene с ожидаемой Version;
   - `ReconcileWith(wt)` — удаляет PortBinding на InputPort, которых больше нет у WidgetType; сообщает, изменилось ли что-то.
 - `SceneRepository` сократить до: `NextID`, `NextWidgetID`, `FindByID`, `FindAll`, `FindByWidgetTypeID` (→ `[]Scene` целиком), `Save`, `DeleteByID`. Удалить `AddWidget`, `UpdateWidget`, `DeleteWidget`, `FindWidgetsBySceneID`, `FindWidgetByID`, `FindWidgetsByTypeID`, `WidgetInScene`, `bumpSceneVersion`.
-- `Save(after)` в одной транзакции: CAS по строке `scenes` (0 строк → 404/409 через `classifyUpdateConflict`), чтение текущих Widget Scene, INSERT новых / UPDATE изменённых / DELETE исчезнувших.
+- `Save(after)` в одной транзакции: CAS по строке `scenes` (0 строк → 404/409 через `classifyUpdateConflict`), чтение текущих Widget Scene, INSERT новых / UPDATE изменённых / DELETE исчезнувших. Возвращает Scene с Widget, перечитанными в той же транзакции: ответ API совпадает с последующим GET.
 - Чтение (`FindByID`, `FindAll`, `FindByWidgetTypeID`) — в одной read-only транзакции `REPEATABLE READ`.
-- `SceneService`: все изменения Widget и Scene — load → метод агрегата → `Save`. Удалить `validateWidgetType` и `widgetSaveError`.
-- `removeOrphanedPortBindings` (`application/widget_type_application_service.go`): `FindByWidgetTypeID` → для каждой Scene `ReconcileWith(wt)` → `Save`, если изменилась. Атомарность и события — задача 21.
+- `SceneService`: все изменения Widget и Scene — load → метод агрегата → `Save`. Удалить `validateWidgetType`; `widgetSaveError` оставить (см. «Решения»). `DELETE` Widget при гонке записи — 409.
+- `removeOrphanedPortBindings` (`application/widget_type_application_service.go`): `FindByWidgetTypeID` → для каждой Scene `ReconcileWith(wt)` → `Save`, если изменилась. Согласование не опирается на то, что видел клиент, поэтому при `ErrSceneConflict` Scene перечитывается и согласуется заново (до 3 попыток), Scene, удалённая тем временем, пропускается. Атомарность и события — задача 21.
 - Переезд Widget в `domain/scene` и переименование `domain/widget` → `domain/library`.
 - Тесты:
   - правила Widget и конфликт правки тестируются на агрегате, без Postgres;
   - тест: метод агрегата не меняет исходную Scene;
   - репозиторий тестируется на сохранении и чтении Scene целиком (testcontainers), включая гонку записи;
+  - гонки в сервисах: удаление WidgetType между загрузкой и `Save` → 400, параллельная правка Scene во время согласования → привязки очищены, правка сохранена, `DELETE` Widget при гонке → 409;
   - тесты удалённых методов репозитория удаляются, а не дублируются.
 
 ## Вне задачи

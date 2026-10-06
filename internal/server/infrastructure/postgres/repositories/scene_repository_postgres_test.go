@@ -68,7 +68,7 @@ func makeWidget(t *testing.T, repo scene.SceneRepository, name string) scene.Wid
 	pos := scene.NewPosition(10.0, 20.0, 0)
 	typeID := mustSaveWidgetType(t)
 	return scene.NewWidget(
-		newID, newName, pos, scene.DefaultWidgetSize(),
+		newID, newName, pos, library.DefaultSize(),
 		scene.DefaultOrigin(), scene.DefaultRotation(),
 		typeID, []string{"label1"}, nil,
 	)
@@ -456,7 +456,7 @@ func TestSceneFindByWidgetTypeID_ReturnsScenesWithAllTheirWidgets(t *testing.T) 
 	typeID := mustSaveWidgetType(t)
 	otherTypeID := mustSaveWidgetType(t)
 	newWidget := func(name string, typeID id.ID[library.WidgetType]) scene.Widget {
-		return scene.NewWidget(repo.NextWidgetID(), mustWidgetName(t, name), scene.NewPosition(0, 0, 0), scene.DefaultWidgetSize(), scene.DefaultOrigin(), scene.DefaultRotation(), typeID, nil, nil)
+		return scene.NewWidget(repo.NextWidgetID(), mustWidgetName(t, name), scene.NewPosition(0, 0, 0), library.DefaultSize(), scene.DefaultOrigin(), scene.DefaultRotation(), typeID, nil, nil)
 	}
 
 	matching1 := newWidget("m1", typeID)
@@ -511,7 +511,7 @@ func TestSceneSave_WidgetWithPortBindings_RoundTripsCorrectly(t *testing.T) {
 
 	w := scene.NewWidget(
 		repo.NextWidgetID(), mustWidgetName(t, "with-bindings"), scene.NewPosition(1, 2, 3),
-		scene.DefaultWidgetSize(), scene.DefaultOrigin(), scene.DefaultRotation(),
+		library.DefaultSize(), scene.DefaultOrigin(), scene.DefaultRotation(),
 		mustSaveWidgetType(t), []string{"a", "b"}, bindings,
 	)
 	sc := mustSave(t, repo, withWidgets(makeScene(t, repo, "scene-1"), w))

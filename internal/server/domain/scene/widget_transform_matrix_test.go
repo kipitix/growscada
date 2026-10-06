@@ -4,6 +4,8 @@ import (
 	"math"
 	"strings"
 	"testing"
+
+	"github.com/kipitix/growscada/internal/server/domain/library"
 )
 
 const matrixEpsilon = 1e-9
@@ -18,7 +20,7 @@ func TestNewTransformationMatrix_ZeroRotation(t *testing.T) {
 	pos := NewPosition(50, 80, 0)
 	origin, _ := NewOrigin(0.5, 0.5)
 	rot := NewRotation(0)
-	size, _ := NewWidgetSize(100, 100)
+	size, _ := library.NewSize(100, 100)
 
 	m := NewTransformationMatrix(pos, origin, rot, size)
 
@@ -48,7 +50,7 @@ func TestNewTransformationMatrix_ZeroRotation_OriginTopLeft(t *testing.T) {
 	pos := NewPosition(30, 40, 0)
 	origin, _ := NewOrigin(0, 0)
 	rot := NewRotation(0)
-	size, _ := NewWidgetSize(200, 100)
+	size, _ := library.NewSize(200, 100)
 
 	m := NewTransformationMatrix(pos, origin, rot, size)
 
@@ -66,7 +68,7 @@ func TestNewTransformationMatrix_90Degrees(t *testing.T) {
 	pos := NewPosition(0, 0, 0)
 	origin, _ := NewOrigin(0, 0) // top-left: ox=0, oy=0
 	rot := NewRotation(90)
-	size, _ := NewWidgetSize(100, 100)
+	size, _ := library.NewSize(100, 100)
 
 	m := NewTransformationMatrix(pos, origin, rot, size)
 
@@ -96,7 +98,7 @@ func TestNewTransformationMatrix_180Degrees(t *testing.T) {
 	pos := NewPosition(10, 20, 0)
 	origin, _ := NewOrigin(0, 0) // top-left anchor: ox=0, oy=0
 	rot := NewRotation(180)
-	size, _ := NewWidgetSize(50, 50)
+	size, _ := library.NewSize(50, 50)
 
 	m := NewTransformationMatrix(pos, origin, rot, size)
 
@@ -129,7 +131,7 @@ func TestNewTransformationMatrix_CenterOriginPreservesPosition(t *testing.T) {
 	pos := NewPosition(200, 300, 0)
 	origin, _ := NewOrigin(0.5, 0.5)
 	rot := NewRotation(0)
-	size, _ := NewWidgetSize(80, 60)
+	size, _ := library.NewSize(80, 60)
 
 	m := NewTransformationMatrix(pos, origin, rot, size)
 
@@ -146,7 +148,7 @@ func TestTransformationMatrix_CSS(t *testing.T) {
 	pos := NewPosition(0, 0, 0)
 	origin, _ := NewOrigin(0, 0)
 	rot := NewRotation(0)
-	size, _ := NewWidgetSize(100, 100)
+	size, _ := library.NewSize(100, 100)
 
 	m := NewTransformationMatrix(pos, origin, rot, size)
 	css := m.CSS()
@@ -163,7 +165,7 @@ func TestTransformationMatrix_StringMatchesCSS(t *testing.T) {
 	pos := NewPosition(10, 20, 0)
 	origin, _ := NewOrigin(0.5, 0.5)
 	rot := NewRotation(45)
-	size, _ := NewWidgetSize(100, 100)
+	size, _ := library.NewSize(100, 100)
 
 	m := NewTransformationMatrix(pos, origin, rot, size)
 
@@ -178,7 +180,7 @@ func TestNewTransformationMatrix_ViaWidget(t *testing.T) {
 	pos := NewPosition(15, 25, 0)
 	origin, _ := NewOrigin(0.5, 0.5)
 	rot := NewRotation(0)
-	size, _ := NewWidgetSize(100, 100)
+	size, _ := library.NewSize(100, 100)
 
 	direct := NewTransformationMatrix(pos, origin, rot, size)
 

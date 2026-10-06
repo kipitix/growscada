@@ -3,6 +3,8 @@ package scene
 import (
 	"fmt"
 	"math"
+
+	"github.com/kipitix/growscada/internal/server/domain/library"
 )
 
 // TransformationMatrix is the 2D affine transformation matrix for a widget,
@@ -32,14 +34,14 @@ var _ fmt.Stringer = TransformationMatrix{}
 //	T(pos)  ·  T(+ox, +oy)  ·  R(θ)  ·  T(-ox, -oy)
 //
 // where ox = origin.X * size.Width, oy = origin.Y * size.Height.
-func NewTransformationMatrix(pos Position, origin Origin, rot Rotation, size WidgetSize) TransformationMatrix {
+func NewTransformationMatrix(pos Position, origin Origin, rot Rotation, size library.Size) TransformationMatrix {
 	rad := rot.Degrees() * math.Pi / 180
 	cos := math.Cos(rad)
 	sin := math.Sin(rad)
 
 	// Size.Width/Height are integer pixels; explicit float64 cast is required for
 	// sub-pixel-accurate matrix arithmetic. If sub-pixel widget dimensions are ever
-	// needed, change WidgetSize fields to float64 and remove the casts.
+	// needed, change library.Size fields to float64 and remove the casts.
 	ox := origin.X() * float64(size.Width())
 	oy := origin.Y() * float64(size.Height())
 

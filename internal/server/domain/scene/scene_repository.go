@@ -44,7 +44,7 @@ type SceneRepository interface {
 	// inserted, any other replaces the stored one if the stored version is
 	// still the scene's version. Widgets the scene no longer holds are
 	// removed. The version is raised once per Save; the returned scene
-	// carries the new one.
+	// carries the new one and its widgets as stored.
 	// Returns ErrSceneNotFound if the scene does not exist on update.
 	// Returns ErrSceneConflict if the stored version does not match.
 	// Returns library.ErrWidgetTypeNotFound if a widget's type does not exist.

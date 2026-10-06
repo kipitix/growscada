@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -161,15 +162,42 @@ func (s widgetTypeServiceImpl) removeOrphanedPortBindings(ctx context.Context, w
 	}
 
 	for _, sc := range scenes {
-		reconciled, changed := sc.ReconcileWith(wt)
-		if !changed {
-			continue
-		}
-		if _, err := s.sceneRepository.Save(ctx, reconciled); err != nil {
+		if err := s.reconcileScene(ctx, sc, wt); err != nil {
 			return fmt.Errorf("cannot save scene %s after port binding cleanup: %w", sc.ID(), err)
 		}
 	}
 	return nil
+}
+
+// maxReconcileAttempts bounds how often reconcileScene rereads a Scene that
+// keeps changing under it.
+const maxReconcileAttempts = 3
+
+// reconcileScene reconciles sc with wt and saves it if anything changed.
+// The change does not rest on what a client saw, so a Scene changed since it
+// was read is reread and reconciled again rather than reported as a
+// conflict; a Scene deleted meanwhile has nothing left to clean.
+func (s widgetTypeServiceImpl) reconcileScene(ctx context.Context, sc scene.Scene, wt library.WidgetType) error {
+	for attempt := 1; ; attempt++ {
+		reconciled, changed := sc.ReconcileWith(wt)
+		if !changed {
+			return nil
+		}
+		_, err := s.sceneRepository.Save(ctx, reconciled)
+		if err == nil || errors.Is(err, scene.ErrSceneNotFound) {
+			return nil
+		}
+		if !errors.Is(err, scene.ErrSceneConflict) || attempt == maxReconcileAttempts {
+			return err
+		}
+		sc, err = s.sceneRepository.FindByID(ctx, sc.ID())
+		if errors.Is(err, scene.ErrSceneNotFound) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("cannot reread scene: %w", err)
+		}
+	}
 }
 
 // dtoInputPortsToDomain converts appdto.InputPort slice to domain InputPort slice.

@@ -11,6 +11,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
@@ -302,6 +303,22 @@ func TestCreateWidget_StaleSceneVersion_ReturnsConflict(t *testing.T) {
 	}
 }
 
+// A stale write is a conflict even when the type it names is gone: the
+// client must reload first, whatever else is wrong with the request.
+func TestCreateWidget_StaleSceneVersionAndUnknownType_ReturnsConflict(t *testing.T) {
+	cleanScenes(t)
+	svc := newSceneService()
+	sc := mustCreateScene(t, svc)
+
+	input := testCreateWidgetInput
+	input.TypeID = uuid.New()
+	_, err := svc.CreateWidget(context.Background(), sc.ID, sc.Version+99, input)
+
+	if !errors.Is(err, scene.ErrSceneConflict) {
+		t.Errorf("expected wrapped ErrSceneConflict, got: %v", err)
+	}
+}
+
 func TestCreateWidget_UnknownScene_ReturnsNotFound(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
@@ -478,6 +495,25 @@ func TestUpdateWidget_StaleSceneVersion_ReturnsConflict(t *testing.T) {
 		Name: "stale", TypeID: created.TypeID, OriginX: 0.5, OriginY: 0.5,
 		Width: 100, Height: 100,
 	})
+
+	if !errors.Is(err, scene.ErrSceneConflict) {
+		t.Errorf("expected wrapped ErrSceneConflict, got: %v", err)
+	}
+}
+
+func TestUpdateWidget_StaleSceneVersionAndUnknownType_ReturnsConflict(t *testing.T) {
+	cleanScenes(t)
+	svc := newSceneService()
+	ctx := context.Background()
+	sc := mustCreateScene(t, svc)
+	created, err := svc.CreateWidget(ctx, sc.ID, sc.Version, testCreateWidgetInput)
+	if err != nil {
+		t.Fatalf("CreateWidget: %v", err)
+	}
+
+	input := testCreateWidgetInput
+	input.TypeID = uuid.New()
+	_, err = svc.UpdateWidget(ctx, sc.ID, created.ID, created.SceneVersion+99, input)
 
 	if !errors.Is(err, scene.ErrSceneConflict) {
 		t.Errorf("expected wrapped ErrSceneConflict, got: %v", err)
@@ -810,5 +846,84 @@ func TestDeleteWidget_SceneChangedMeanwhile_ReturnsConflictKeepsChange(t *testin
 	}
 	if _, err := svc.FindWidgetByID(ctx, sc.ID, created.ID); err != nil {
 		t.Errorf("widget must survive the refused delete: %v", err)
+	}
+}
+
+// racingWidgetTypeRepository runs race once, right after the first FindByID:
+// the type is changed or deleted between the service's check and its Save.
+type racingWidgetTypeRepository struct {
+	library.WidgetTypeRepository
+	race func()
+}
+
+func (r *racingWidgetTypeRepository) FindByID(ctx context.Context, typeID id.ID[library.WidgetType]) (library.WidgetType, error) {
+	found, err := r.WidgetTypeRepository.FindByID(ctx, typeID)
+	if race := r.race; race != nil {
+		r.race = nil
+		race()
+	}
+	return found, err
+}
+
+// racingTypeID is a WidgetType the race deletes; the shared fixture type stays.
+var racingTypeID = uuid.MustParse("7e57c0de-0000-4000-8000-000000000002")
+
+func insertRacingWidgetType(t *testing.T) {
+	t.Helper()
+	if _, err := testDB.ExecContext(context.Background(),
+		`INSERT INTO widget_types
+		    (id, name, html_template, script, script_language, input_ports, default_width, default_height, version)
+		 VALUES ($1, 'racing-type', '<div></div>', 'function update(){}', 'javascript', '[]', 100, 100, 1)
+		 ON CONFLICT (id) DO NOTHING`,
+		racingTypeID,
+	); err != nil {
+		t.Fatalf("insertRacingWidgetType: %v", err)
+	}
+}
+
+func newServiceDeletingRacingType(t *testing.T) application.SceneService {
+	t.Helper()
+	wtRepo := &racingWidgetTypeRepository{WidgetTypeRepository: repositories.NewWidgetTypeRepositoryPostgres(testDB)}
+	wtRepo.race = func() {
+		if _, err := testDB.ExecContext(context.Background(), "DELETE FROM widget_types WHERE id = $1", racingTypeID); err != nil {
+			t.Fatalf("concurrent delete of widget type: %v", err)
+		}
+	}
+	return application.NewSceneService(repositories.NewSceneRepositoryPostgres(testDB), wtRepo, event.NewEventBus())
+}
+
+func TestCreateWidget_TypeDeletedMeanwhile_ReturnsInvalidInput(t *testing.T) {
+	cleanScenes(t)
+	insertRacingWidgetType(t)
+	sc := mustCreateScene(t, newSceneService())
+	svc := newServiceDeletingRacingType(t)
+
+	input := testCreateWidgetInput
+	input.TypeID = racingTypeID
+	_, err := svc.CreateWidget(context.Background(), sc.ID, sc.Version, input)
+
+	if !errors.Is(err, application.ErrInvalidInput) || !errors.Is(err, library.ErrWidgetTypeNotFound) {
+		t.Errorf("expected ErrInvalidInput wrapping ErrWidgetTypeNotFound, got: %v", err)
+	}
+}
+
+func TestUpdateWidget_TypeDeletedMeanwhile_ReturnsInvalidInput(t *testing.T) {
+	cleanScenes(t)
+	insertRacingWidgetType(t)
+	plain := newSceneService()
+	ctx := context.Background()
+	sc := mustCreateScene(t, plain)
+	created, err := plain.CreateWidget(ctx, sc.ID, sc.Version, testCreateWidgetInput)
+	if err != nil {
+		t.Fatalf("CreateWidget: %v", err)
+	}
+	svc := newServiceDeletingRacingType(t)
+
+	input := testCreateWidgetInput
+	input.TypeID = racingTypeID
+	_, err = svc.UpdateWidget(ctx, sc.ID, created.ID, created.SceneVersion, input)
+
+	if !errors.Is(err, application.ErrInvalidInput) || !errors.Is(err, library.ErrWidgetTypeNotFound) {
+		t.Errorf("expected ErrInvalidInput wrapping ErrWidgetTypeNotFound, got: %v", err)
 	}
 }

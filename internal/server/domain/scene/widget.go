@@ -17,7 +17,7 @@ type Widget interface {
 	ID() id.ID[Widget]
 	Name() WidgetName
 	Position() Position
-	Size() WidgetSize
+	Size() library.Size
 	Origin() Origin
 	Rotation() Rotation
 	TransformationMatrix() TransformationMatrix
@@ -33,7 +33,7 @@ type widgetImpl struct {
 	id           id.ID[Widget]
 	name         WidgetName
 	position     Position
-	size         WidgetSize
+	size         library.Size
 	origin       Origin
 	rotation     Rotation
 	typeID       id.ID[library.WidgetType]
@@ -48,7 +48,7 @@ func NewWidget(
 	anID id.ID[Widget],
 	aName WidgetName,
 	aPosition Position,
-	aSize WidgetSize,
+	aSize library.Size,
 	anOrigin Origin,
 	aRotation Rotation,
 	aTypeID id.ID[library.WidgetType],
@@ -77,7 +77,7 @@ func NewWidget(
 func (w widgetImpl) ID() id.ID[Widget]                 { return w.id }
 func (w widgetImpl) Name() WidgetName                  { return w.name }
 func (w widgetImpl) Position() Position                { return w.position }
-func (w widgetImpl) Size() WidgetSize                  { return w.size }
+func (w widgetImpl) Size() library.Size                { return w.size }
 func (w widgetImpl) Origin() Origin                    { return w.origin }
 func (w widgetImpl) Rotation() Rotation                { return w.rotation }
 func (w widgetImpl) TypeID() id.ID[library.WidgetType] { return w.typeID }

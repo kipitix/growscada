@@ -11,7 +11,7 @@ import (
 
 // makeTestWidget is a test helper that creates a Widget with the given geometry
 // and sensible defaults for the remaining fields.
-func makeTestWidget(t *testing.T, pos Position, size WidgetSize, origin Origin, rot Rotation) Widget {
+func makeTestWidget(t *testing.T, pos Position, size library.Size, origin Origin, rot Rotation) Widget {
 	t.Helper()
 
 	wID := id.NewID[Widget]()
@@ -35,7 +35,7 @@ func TestNewWidget_FieldsAreSet(t *testing.T) {
 	wID := id.NewID[Widget]()
 	name, _ := NewWidgetName("flow_meter")
 	pos := NewPosition(10, 20, 1)
-	size, _ := NewWidgetSize(150, 75)
+	size, _ := library.NewSize(150, 75)
 	origin, _ := NewOrigin(0.5, 0.5)
 	rot := NewRotation(45)
 	typeID := id.NewID[library.WidgetType]()
@@ -73,7 +73,7 @@ func TestNewWidget_FieldsAreSet(t *testing.T) {
 
 func TestNewWidget_LabelsCopied(t *testing.T) {
 	pos := NewPosition(0, 0, 0)
-	size, _ := NewWidgetSize(100, 100)
+	size, _ := library.NewSize(100, 100)
 	origin, _ := NewOrigin(0, 0)
 	rot := NewRotation(0)
 	wID := id.NewID[Widget]()
@@ -91,7 +91,7 @@ func TestNewWidget_LabelsCopied(t *testing.T) {
 
 func TestNewWidget_PortBindingsCopied(t *testing.T) {
 	pos := NewPosition(0, 0, 0)
-	size, _ := NewWidgetSize(100, 100)
+	size, _ := library.NewSize(100, 100)
 	origin, _ := NewOrigin(0, 0)
 	rot := NewRotation(0)
 	wID := id.NewID[Widget]()
@@ -114,7 +114,7 @@ func TestNewWidget_PortBindingsCopied(t *testing.T) {
 
 func TestNewWidget_NilLabelsAndPortBindings(t *testing.T) {
 	pos := NewPosition(0, 0, 0)
-	size, _ := NewWidgetSize(100, 100)
+	size, _ := library.NewSize(100, 100)
 	origin, _ := NewOrigin(0, 0)
 	rot := NewRotation(0)
 	wID := id.NewID[Widget]()
@@ -132,7 +132,7 @@ func TestNewWidget_NilLabelsAndPortBindings(t *testing.T) {
 
 func TestNewWidget_String(t *testing.T) {
 	pos := NewPosition(5, 10, 0)
-	size, _ := NewWidgetSize(120, 80)
+	size, _ := library.NewSize(120, 80)
 	origin, _ := NewOrigin(0.5, 0.5)
 	rot := NewRotation(30)
 
@@ -149,7 +149,7 @@ func TestNewWidget_String(t *testing.T) {
 
 func TestNewWidget_TransformationMatrix(t *testing.T) {
 	pos := NewPosition(0, 0, 0)
-	size, _ := NewWidgetSize(100, 100)
+	size, _ := library.NewSize(100, 100)
 	origin, _ := NewOrigin(0, 0)
 	rot := NewRotation(0)
 

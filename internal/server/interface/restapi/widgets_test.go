@@ -474,13 +474,38 @@ func TestPutWidgetsByID_Conflict_Returns409(t *testing.T) {
 type stubSceneServiceForWidgets struct {
 	application.SceneService
 	updateErr error
+	deleteErr error
 }
 
 func (s *stubSceneServiceForWidgets) UpdateWidget(_ context.Context, _, _ uuid.UUID, _ int, _ appdto.WidgetInput) (appdto.Widget, error) {
 	return appdto.Widget{}, s.updateErr
 }
 
+func (s *stubSceneServiceForWidgets) DeleteWidgetByID(_ context.Context, _, _ uuid.UUID) (appdto.Widget, error) {
+	return appdto.Widget{}, s.deleteErr
+}
+
 // --- DELETE /api/v0/scenes/{sceneId}/widgets/{widgetId} ---
+
+// A concurrent change to the scene between loading and saving it surfaces as
+// ErrSceneConflict: the client is told to reload, not given a 500.
+func TestDeleteWidgetsByID_Conflict_Returns409(t *testing.T) {
+	svc := &stubSceneServiceForWidgets{deleteErr: scene.ErrSceneConflict}
+	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
+	tagSvc := application.NewTagService(tagRepo, event.NewEventBus())
+	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
+	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
+	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo, event.NewEventBus())
+	router := restapi.NewRouter(tagSvc, wtSvc, svc, event.NewEventBus(), 100)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v0/scenes/"+uuid.New().String()+"/widgets/"+uuid.New().String(), nil)
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Errorf("status: expected 409, got %d", rec.Code)
+	}
+}
 
 func TestDeleteWidgetsByID_Existing_Returns200WithDeletedItem(t *testing.T) {
 	cleanWidgetsRest(t)

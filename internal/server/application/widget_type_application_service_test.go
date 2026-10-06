@@ -10,7 +10,9 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/event"
+	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
 
@@ -551,6 +553,93 @@ func TestUpdateWidgetType_RemovedPort_CleansBindingsOnAllWidgetsInSameScene(t *t
 	}
 	if len(w2.PortBindings) != 0 {
 		t.Errorf("widget 2: expected orphaned port bindings removed, got %v", w2.PortBindings)
+	}
+}
+
+// listRacingSceneRepository runs race once, right after the first
+// FindByWidgetTypeID: someone else changes a listed Scene before the cleanup
+// saves it.
+type listRacingSceneRepository struct {
+	scene.SceneRepository
+	race func()
+}
+
+func (r *listRacingSceneRepository) FindByWidgetTypeID(ctx context.Context, typeID id.ID[library.WidgetType]) ([]scene.Scene, error) {
+	found, err := r.SceneRepository.FindByWidgetTypeID(ctx, typeID)
+	if race := r.race; race != nil {
+		r.race = nil
+		race()
+	}
+	return found, err
+}
+
+func TestUpdateWidgetType_RemovedPort_SceneChangedMeanwhile_CleansBindingsKeepsChange(t *testing.T) {
+	cleanScenes(t)
+	cleanWidgetTypes(t)
+	wtSvc := newWidgetTypeService()
+	sceneSvc := newSceneService()
+	ctx := context.Background()
+
+	createdType, err := wtSvc.CreateWidgetType(ctx, appdto.WidgetTypeInput{
+		Name:           "sensor",
+		HtmlTemplate:   "<div></div>",
+		Script:         "function render(v) {}",
+		ScriptLanguage: "javascript",
+		DefaultWidth:   100,
+		DefaultHeight:  100,
+		InputPorts:     []appdto.InputPort{{Name: "value"}},
+	})
+	if err != nil {
+		t.Fatalf("CreateWidgetType: %v", err)
+	}
+	sc := mustCreateScene(t, sceneSvc)
+	created, err := sceneSvc.CreateWidget(ctx, sc.ID, sc.Version, appdto.WidgetInput{
+		Name:         "widget-1",
+		Width:        100,
+		Height:       100,
+		OriginX:      0.5,
+		OriginY:      0.5,
+		TypeID:       createdType.ID,
+		PortBindings: []appdto.PortBinding{{PortName: "value", TagID: uuid.New()}},
+	})
+	if err != nil {
+		t.Fatalf("CreateWidget: %v", err)
+	}
+
+	sceneRepo := &listRacingSceneRepository{SceneRepository: repositories.NewSceneRepositoryPostgres(testDB)}
+	sceneRepo.race = func() {
+		if _, err := sceneSvc.UpdateScene(ctx, sc.ID, created.SceneVersion, appdto.SceneInput{Name: "renamed", Width: 800, Height: 600}); err != nil {
+			t.Fatalf("concurrent UpdateScene: %v", err)
+		}
+	}
+	racingSvc := application.NewWidgetTypeService(repositories.NewWidgetTypeRepositoryPostgres(testDB), sceneRepo, event.NewEventBus())
+
+	_, err = racingSvc.UpdateWidgetType(ctx, createdType.ID, createdType.Version, appdto.WidgetTypeInput{
+		Name:           createdType.Name,
+		HtmlTemplate:   createdType.HtmlTemplate,
+		Script:         createdType.Script,
+		ScriptLanguage: createdType.ScriptLanguage,
+		DefaultWidth:   createdType.DefaultWidth,
+		DefaultHeight:  createdType.DefaultHeight,
+		InputPorts:     nil,
+	})
+
+	if err != nil {
+		t.Fatalf("UpdateWidgetType: %v", err)
+	}
+	found, err := sceneSvc.FindSceneByID(ctx, sc.ID)
+	if err != nil {
+		t.Fatalf("FindSceneByID: %v", err)
+	}
+	if found.Name != "renamed" {
+		t.Errorf("expected the concurrent change kept, got name %q", found.Name)
+	}
+	w, err := sceneSvc.FindWidgetByID(ctx, sc.ID, created.ID)
+	if err != nil {
+		t.Fatalf("FindWidgetByID: %v", err)
+	}
+	if len(w.PortBindings) != 0 {
+		t.Errorf("expected orphaned port bindings removed, got %v", w.PortBindings)
 	}
 }
 
