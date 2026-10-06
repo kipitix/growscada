@@ -9,9 +9,9 @@ http:
   auth: inherit
 
 docs: |
-  The delete states no version: a delete that loses a write race (the
-  resource changed between reading and deleting it) is retried against the
-  fresh state; one that loses it 3 times in a row returns `409 Conflict`.
+  The delete states no version and never returns `409 Conflict`: the tag is
+  deleted whatever value was written to it meanwhile. The response carries
+  the tag as it was read just before the delete.
 
 settings:
   encodeUrl: true

@@ -2,6 +2,7 @@ package repositories_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"slices"
 	"sync"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/kipitix/growscada/internal/server/domain/event"
+	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
@@ -231,5 +233,180 @@ func TestDispatcher_UndecodableRow_IsDroppedAndDoesNotBlock(t *testing.T) {
 	}
 	if got := outboxTypes(t); len(got) != 0 {
 		t.Errorf("expected an empty outbox, got %v", got)
+	}
+}
+
+// beginWithID begins a transaction and makes it take its id, as its first
+// write would.
+func beginWithID(t *testing.T) *sql.Tx {
+	t.Helper()
+	tx, err := testDB.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	t.Cleanup(func() { _ = tx.Rollback() })
+	if _, err := tx.Exec(`SELECT pg_current_xact_id()`); err != nil {
+		t.Fatalf("take transaction id: %v", err)
+	}
+	return tx
+}
+
+func appendDeleted(t *testing.T, ctx context.Context, tx *sql.Tx, tagID id.ID[tag.Tag]) {
+	t.Helper()
+	if err := outbox.Append(ctx, tx, []event.Event{tag.NewTagDeletedEvent(tagID)}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+}
+
+func TestAppend_WritersDoNotWaitForEachOther(t *testing.T) {
+	cleanOutbox(t)
+	ctx := context.Background()
+
+	open := beginWithID(t)
+	appendDeleted(t, ctx, open, id.NewID[tag.Tag]())
+
+	// Another writer appends and commits while the first one is still open.
+	quick, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	tx, err := testDB.BeginTx(quick, nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	appendDeleted(t, quick, tx, id.NewID[tag.Tag]())
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("a writer waited for another one's commit: %v", err)
+	}
+}
+
+func TestDispatcher_HoldsBackRowsUntilOlderTransactionsEnd(t *testing.T) {
+	cleanOutbox(t)
+	ctx := context.Background()
+	first, second := id.NewID[tag.Tag](), id.NewID[tag.Tag]()
+
+	older := beginWithID(t)
+	younger := beginWithID(t)
+	appendDeleted(t, ctx, younger, second)
+	if err := younger.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	var delivered recorder
+	d := outbox.NewDispatcher(testDB, delivered.deliver)
+	if n, err := d.DrainOnce(ctx); err != nil || n != 0 {
+		t.Fatalf("delivered %d (err %v) while an older transaction runs, want 0", n, err)
+	}
+
+	appendDeleted(t, ctx, older, first)
+	if err := older.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	if n, err := d.DrainOnce(ctx); err != nil || n != 2 {
+		t.Fatalf("delivered %d (err %v), want 2", n, err)
+	}
+	got := []id.ID[tag.Tag]{
+		delivered.events[0].(tag.TagDeletedEvent).TagID(),
+		delivered.events[1].(tag.TagDeletedEvent).TagID(),
+	}
+	if got[0] != first || got[1] != second {
+		t.Errorf("delivered %v, want the older transaction's event first: [%s %s]", got, first, second)
+	}
+}
+
+func TestDispatcher_Run_DeliversHeldBackRowsWhenOlderTransactionRollsBack(t *testing.T) {
+	cleanTags(t)
+	cleanOutbox(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var delivered recorder
+	// A poll interval long enough that only Notify and the held back retry
+	// can explain a delivery.
+	d := outbox.NewDispatcher(testDB, delivered.deliver, outbox.WithPollInterval(time.Hour))
+	done := make(chan struct{})
+	go func() { d.Run(ctx); close(done) }()
+
+	older := beginWithID(t)
+	repo := repositories.NewTagRepositoryPostgres(testDB, repositories.NotifyOnCommit(d.Notify))
+	mustSaveTag(t, repo, createTag(t, repo, "held"))
+	// The rollback sends no Notify.
+	if err := older.Rollback(); err != nil {
+		t.Fatalf("rollback: %v", err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for len(delivered.types()) == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := delivered.types(); !slices.Equal(got, []string{"tag_created"}) {
+		t.Errorf("delivered %v, want [tag_created]", got)
+	}
+	cancel()
+	<-done
+}
+
+func TestDispatcher_DrainOnce_StoppedMidBatch_DeletesDeliveredRowAndStops(t *testing.T) {
+	cleanTags(t)
+	cleanOutbox(t)
+	repo := repositories.NewTagRepositoryPostgres(testDB)
+	for _, name := range []string{"a", "b", "c"} {
+		mustSaveTag(t, repo, createTag(t, repo, name))
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var delivered recorder
+	n, err := outbox.NewDispatcher(testDB, func(e event.Event) {
+		delivered.deliver(e)
+		cancel() // the dispatcher is stopped while it delivers
+	}).DrainOnce(ctx)
+	if !errors.Is(err, context.Canceled) || n != 1 {
+		t.Fatalf("DrainOnce stopped after %d with %v, want 1 and context.Canceled", n, err)
+	}
+	if got := outboxTypes(t); len(got) != 2 {
+		t.Fatalf("outbox %v, want the 2 undelivered rows", got)
+	}
+
+	n, err = outbox.NewDispatcher(testDB, delivered.deliver).DrainOnce(context.Background())
+	if err != nil || n != 2 {
+		t.Fatalf("second DrainOnce delivered %d (err %v), want 2", n, err)
+	}
+	if got := delivered.types(); len(got) != 3 {
+		t.Errorf("delivered %v, want each of the 3 events once", got)
+	}
+}
+
+func TestDispatcher_DrainOnce_DeliversMoreThanOneBatch(t *testing.T) {
+	cleanOutbox(t)
+	ctx := context.Background()
+	const total = 250 // more than two batches of the dispatcher
+
+	tx, err := testDB.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	events := make([]event.Event, total)
+	for i := range events {
+		events[i] = tag.NewTagDeletedEvent(id.NewID[tag.Tag]())
+	}
+	if err := outbox.Append(ctx, tx, events); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	var delivered recorder
+	n, err := outbox.NewDispatcher(testDB, delivered.deliver).DrainOnce(ctx)
+	if err != nil || n != total {
+		t.Fatalf("delivered %d (err %v), want %d", n, err, total)
+	}
+	for i, e := range delivered.events {
+		if got := e.(tag.TagDeletedEvent).TagID(); got != events[i].(tag.TagDeletedEvent).TagID() {
+			t.Fatalf("event %d is about %s, want %s", i, got, events[i].(tag.TagDeletedEvent).TagID())
+		}
+	}
+	if got := outboxTypes(t); len(got) != 0 {
+		t.Errorf("expected an empty outbox, got %d rows", len(got))
 	}
 }

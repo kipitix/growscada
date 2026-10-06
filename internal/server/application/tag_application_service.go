@@ -145,30 +145,22 @@ func (t tagServiceImpl) CreateTag(ctx context.Context, newTagData appdto.CreateT
 	return appdto.NewTag(newTag), nil
 }
 
-// DeleteTagByID deletes a tag by its identifier and returns the deleted tag.
-// It expects no Version: a tag changed meanwhile is reread and deleted as it
-// is now (retryOnRace).
+// DeleteTagByID deletes a tag by its identifier and returns the deleted tag,
+// as it was read. It expects no Version, and the repository deletes the tag
+// whatever its stored Version: a value written meanwhile does not stop it.
 func (t tagServiceImpl) DeleteTagByID(ctx context.Context, rawID uuid.UUID) (appdto.Tag, error) {
 	tagID := id.NewID(id.IDWithUUID[tag.Tag](rawID))
 
-	var deleted tag.Tag
-	err := retryOnRace(tag.ErrTagConflict, func() error {
-		found, err := t.tagRepository.FindByID(ctx, tagID)
-		if err != nil {
-			return fmt.Errorf("error on find tag by id in repository: %w", err)
-		}
-		found.Delete()
-		if err := t.tagRepository.Delete(ctx, found); err != nil {
-			return fmt.Errorf("cannot delete tag: %w", err)
-		}
-		deleted = found
-		return nil
-	})
+	found, err := t.tagRepository.FindByID(ctx, tagID)
 	if err != nil {
-		return appdto.Tag{}, err
+		return appdto.Tag{}, fmt.Errorf("error on find tag by id in repository: %w", err)
+	}
+	found.Delete()
+	if err := t.tagRepository.Delete(ctx, found); err != nil {
+		return appdto.Tag{}, fmt.Errorf("cannot delete tag: %w", err)
 	}
 
-	return appdto.NewTag(deleted), nil
+	return appdto.NewTag(found), nil
 }
 
 // SetTagValueByID updates the value and quality of an existing tag and returns the updated tag

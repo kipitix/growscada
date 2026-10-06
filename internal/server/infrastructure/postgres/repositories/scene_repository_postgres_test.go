@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"sync"
 	"testing"
 
+	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
@@ -601,5 +603,73 @@ func TestSceneFindByID_WidgetsInCreationOrderEvenAfterUpdates(t *testing.T) {
 
 	if got, want := widgetIDs(found.Widgets()), widgetIDs(widgets); !slices.Equal(got, want) {
 		t.Errorf("widgets: got %v, want %v (creation order)", got, want)
+	}
+}
+
+// TestSceneSave_ReturnsWhatALaterReadReturns: Save does not read the widgets
+// back, so what it returns must already be what FindByID returns, widget
+// order included.
+func TestSceneSave_ReturnsWhatALaterReadReturns(t *testing.T) {
+	cleanScenes(t)
+	ctx := context.Background()
+	repo := repositories.NewSceneRepositoryPostgres(testDB)
+	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
+
+	assertSameAsRead := func(saved scene.Scene) {
+		t.Helper()
+		found := mustFindByID(t, repo, saved.ID())
+		if got, want := appdto.NewScene(saved), appdto.NewScene(found); !reflect.DeepEqual(got, want) {
+			t.Fatalf("Save returned\n%+v\nFindByID returns\n%+v", got, want)
+		}
+	}
+	typeOf := func(w scene.Widget) library.WidgetType {
+		t.Helper()
+		wt, err := wtRepo.FindByID(ctx, w.TypeID())
+		if err != nil {
+			t.Fatalf("FindByID widget type: %v", err)
+		}
+		return wt
+	}
+
+	saved := mustSaveScene(t, repo, "scene")
+	assertSameAsRead(saved)
+
+	var widgets []scene.Widget
+	for _, name := range []string{"w1", "w2", "w3"} {
+		w := makeWidget(t, repo, name)
+		changed, err := saved.AddWidget(saved.Version(), w, typeOf(w))
+		if err != nil {
+			t.Fatalf("AddWidget: %v", err)
+		}
+		if saved, err = repo.Save(ctx, changed); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+		assertSameAsRead(saved)
+		widgets = append(widgets, w)
+	}
+
+	middle := widgets[1]
+	moved := scene.NewWidget(middle.ID(), middle.Name(), scene.NewPosition(0.1, 1.0/3, 7),
+		middle.Size(), middle.Origin(), scene.NewRotation(12.345), middle.TypeID(),
+		[]string{"b", "a"}, nil)
+	changed, err := saved.UpdateWidget(saved.Version(), moved, typeOf(moved))
+	if err != nil {
+		t.Fatalf("UpdateWidget: %v", err)
+	}
+	if saved, err = repo.Save(ctx, changed); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	assertSameAsRead(saved)
+
+	changed, _, err = saved.RemoveWidget(widgets[0].ID())
+	if err != nil {
+		t.Fatalf("RemoveWidget: %v", err)
+	}
+	if saved, err = repo.Save(ctx, changed); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	assertSameAsRead(saved)
+	if n := len(saved.Widgets()); n != 2 {
+		t.Errorf("scene holds %d widgets, want 2", n)
 	}
 }

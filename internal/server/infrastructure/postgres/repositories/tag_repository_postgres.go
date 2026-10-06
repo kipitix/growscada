@@ -82,8 +82,10 @@ func tagWriteError(what string, err error) error {
 	return fmt.Errorf("cannot %s: %w", what, err)
 }
 
+// Delete removes the tag whatever its stored Version: only the value changes
+// after creation, and removing does not depend on it.
 func (r tagRepositoryPostgresImpl) Delete(ctx context.Context, aTag tag.Tag) error {
-	return r.store.delete(ctx, aTag.ID(), aTag.Version(), aTag.PendingEvents())
+	return r.store.deleteAnyVersion(ctx, aTag.ID(), aTag.PendingEvents())
 }
 
 func (r tagRepositoryPostgresImpl) FindByID(ctx context.Context, tagID id.ID[tag.Tag]) (tag.Tag, error) {

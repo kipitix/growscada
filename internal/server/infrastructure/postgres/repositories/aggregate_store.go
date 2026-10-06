@@ -86,11 +86,27 @@ func (s aggregateStore[T]) save(ctx context.Context, anID id.ID[T], current vers
 // delete removes an aggregate read at current (CAS), with the events it
 // recorded. Rows the aggregate owns go by the cascade of their foreign keys.
 func (s aggregateStore[T]) delete(ctx context.Context, anID id.ID[T], current version.Version[T], events []event.Event) error {
+	return s.deleteWhere(ctx, anID, &current, events)
+}
+
+// deleteAnyVersion removes an aggregate whatever Version is stored, with the
+// events it recorded: for an aggregate whose removal does not rest on the
+// state it was read in. A missing one is notFound.
+func (s aggregateStore[T]) deleteAnyVersion(ctx context.Context, anID id.ID[T], events []event.Event) error {
+	return s.deleteWhere(ctx, anID, nil, events)
+}
+
+// deleteWhere removes an aggregate, only if it is still at current unless
+// current is nil.
+func (s aggregateStore[T]) deleteWhere(ctx context.Context, anID id.ID[T], current *version.Version[T], events []event.Event) error {
 	return s.inTx(ctx, events, func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx,
-			fmt.Sprintf(`DELETE FROM %s WHERE id = $1 AND version = $2`, s.table),
-			anID.UUID(), current.Number(),
-		)
+		query := fmt.Sprintf(`DELETE FROM %s WHERE id = $1`, s.table)
+		args := []any{anID.UUID()}
+		if current != nil {
+			query += ` AND version = $2`
+			args = append(args, current.Number())
+		}
+		res, err := tx.ExecContext(ctx, query, args...)
 		if err != nil {
 			return fmt.Errorf("cannot delete from %s: %w", s.table, err)
 		}

@@ -63,14 +63,8 @@ func main() {
 
 	// Create database connection
 	sqlDB, err := sql.Open("postgres", databaseDSN)
-	// stopOutbox stops the outbox dispatcher and delivers what is left in the
-	// outbox; set once the dispatcher runs. Within a layer gracedown stops
-	// components concurrently, so it runs in the database's hook, before the
-	// connection closes.
-	stopOutbox := func(context.Context) {}
 	// Add hook to shutdown database connection
 	gracedownManager.RegisterInfrastructure("Database", 15*time.Second, func(ctx context.Context) error {
-		stopOutbox(ctx)
 		if sqlDB != nil {
 			return sqlDB.Close()
 		}
@@ -102,7 +96,8 @@ func main() {
 		dispatcher.Run(dispatcherCtx)
 		close(dispatcherDone)
 	}()
-	stopOutbox = func(ctx context.Context) {
+	// stopOutbox stops the dispatcher and delivers what is left in the outbox
+	stopOutbox := func(ctx context.Context) {
 		stopDispatcher()
 		<-dispatcherDone
 		if _, err := dispatcher.DrainOnce(ctx); err != nil {
@@ -122,8 +117,13 @@ func main() {
 	sceneService := application.NewSceneService(sceneRepository, widgetTypeRepository)
 	// Create router
 	apiRouter := restapi.NewRouter(tagService, widgetTypeService, sceneService, eventBus, cliArgs.MaxSSEClients)
-	// Register the event hub shutdown handler
+	// Register the event hub shutdown handler. The outbox is drained first,
+	// while SSE clients are still connected, so what is left in it reaches
+	// them; a change committed after the drain (the API server stops
+	// concurrently) stays in the outbox until the next start. The database
+	// closes later, in the infrastructure layer.
 	gracedownManager.RegisterInterface("Event Hub", 15*time.Second, func(ctx context.Context) error {
+		stopOutbox(ctx)
 		apiRouter.Close()
 		return nil
 	})

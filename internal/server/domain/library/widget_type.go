@@ -32,9 +32,10 @@ type WidgetType interface {
 
 	// Update replaces the widget type's definition and records a
 	// WidgetTypeUpdatedEvent.
-	// Returns ErrWidgetTypeConflict if expected is not the Version,
-	// ErrDuplicateInputPortName if two InputPorts share a name and an error
-	// if the script language is the invalid zero value.
+	// Returns ErrWidgetTypeConflict if expected is not the Version, or
+	// ErrInvalidWidgetType if the definition is invalid: two InputPorts share
+	// a name (also ErrDuplicateInputPortName) or the script language is the
+	// invalid zero value.
 	Update(
 		expected version.Version[WidgetType],
 		aName WidgetTypeName,
@@ -161,7 +162,7 @@ func (wt *widgetTypeImpl) Update(
 	}
 	updated, err := ReconstituteWidgetType(wt.id, aName, anHtmlTemplate, aScript, aScriptLanguage, aDefaultSize, someInputPorts, wt.version)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", ErrInvalidWidgetType, err)
 	}
 	impl := updated.(*widgetTypeImpl)
 	impl.pending = append(slices.Clone(wt.pending), NewWidgetTypeUpdatedEvent(wt.id))

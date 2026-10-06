@@ -88,7 +88,8 @@ func (s widgetTypeServiceImpl) UpdateWidgetType(ctx context.Context, rawID uuid.
 	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("%w: %w", library.ErrWidgetTypeConflict, err)
 	}
-	// A stale write is a conflict whatever it sends.
+	// A stale write is a conflict whatever it sends: the version is checked
+	// before the definition is parsed (Update checks it again, as its own rule).
 	if err := found.CheckVersion(expected); err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("cannot update widget type: %w", err)
 	}
@@ -98,11 +99,11 @@ func (s widgetTypeServiceImpl) UpdateWidgetType(ctx context.Context, rawID uuid.
 		return appdto.WidgetType{}, fmt.Errorf("cannot update widget type: %w", invalidInput(err))
 	}
 	updated, err := found.Update(expected, def.name, def.html, def.script, def.lang, def.defaultSize, def.inputPorts)
-	if errors.Is(err, library.ErrWidgetTypeConflict) {
-		return appdto.WidgetType{}, fmt.Errorf("cannot update widget type: %w", err)
+	if errors.Is(err, library.ErrInvalidWidgetType) {
+		return appdto.WidgetType{}, fmt.Errorf("cannot update widget type: %w", invalidInput(err))
 	}
 	if err != nil {
-		return appdto.WidgetType{}, fmt.Errorf("cannot update widget type: %w", invalidInput(err))
+		return appdto.WidgetType{}, fmt.Errorf("cannot update widget type: %w", err)
 	}
 
 	found, err = s.repository.Save(ctx, updated)

@@ -396,7 +396,7 @@ func TestDelete_NotFound_ReturnsErrTagNotFound(t *testing.T) {
 	}
 }
 
-func TestDelete_StaleVersion_ReturnsErrTagConflict(t *testing.T) {
+func TestDelete_StaleVersion_DeletesTag(t *testing.T) {
 	cleanTags(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB)
 	ctx := context.Background()
@@ -408,10 +408,12 @@ func TestDelete_StaleVersion_ReturnsErrTagConflict(t *testing.T) {
 	mustSaveTag(t, repo, stale)
 
 	stale.Delete()
-	err := repo.Delete(ctx, stale)
+	if err := repo.Delete(ctx, stale); err != nil {
+		t.Fatalf("Delete of a tag whose value changed meanwhile: %v", err)
+	}
 
-	if !errors.Is(err, tag.ErrTagConflict) {
-		t.Errorf("expected ErrTagConflict, got %v", err)
+	if _, err := repo.FindByID(ctx, stale.ID()); !errors.Is(err, tag.ErrTagNotFound) {
+		t.Errorf("expected the tag deleted, FindByID returned %v", err)
 	}
 }
 

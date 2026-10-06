@@ -46,23 +46,11 @@ func (r sceneRepositoryPostgresImpl) NextWidgetID() id.ID[scene.Widget] {
 // CAS on the scenes row comes first: it locks the row, so concurrent Saves of
 // the same scene are serialized and the widgets read after it are the ones
 // the stored version describes.
+//
+// The widgets are not read back: every column stores its value exactly, and
+// a later read returns them in insertion order, which is the scene's order
+// (a new widget is appended to it).
 func (r sceneRepositoryPostgresImpl) Save(ctx context.Context, s scene.Scene) (scene.Scene, error) {
-	var saved []scene.Widget
-	// writeWidgets brings the widget rows from stored to the scene's and
-	// reads them back, so that the result is what a later read returns, as
-	// the stored columns hold them.
-	writeWidgets := func(tx *sql.Tx, stored []scene.Widget) error {
-		if err := saveWidgets(ctx, tx, s.ID(), stored, s.Widgets()); err != nil {
-			return err
-		}
-		byScene, err := findWidgetsBySceneIDs(ctx, tx, []uuid.UUID{s.ID().UUID()})
-		if err != nil {
-			return err
-		}
-		saved = byScene[s.ID().UUID()]
-		return nil
-	}
-
 	newVersion, err := r.store.save(ctx, s.ID(), s.Version(), s.PendingEvents(), rowWrite[scene.Scene]{
 		insert: func(tx *sql.Tx, next version.Version[scene.Scene]) error {
 			if _, err := tx.ExecContext(ctx,
@@ -75,7 +63,7 @@ func (r sceneRepositoryPostgresImpl) Save(ctx context.Context, s scene.Scene) (s
 			); err != nil {
 				return fmt.Errorf("cannot insert new scene: %w", err)
 			}
-			return writeWidgets(tx, nil)
+			return saveWidgets(ctx, tx, s.ID(), nil, s.Widgets())
 		},
 		update: func(tx *sql.Tx, current, next version.Version[scene.Scene]) (bool, error) {
 			res, err := tx.ExecContext(ctx,
@@ -102,13 +90,13 @@ func (r sceneRepositoryPostgresImpl) Save(ctx context.Context, s scene.Scene) (s
 			if err != nil {
 				return false, err
 			}
-			return true, writeWidgets(tx, byScene[s.ID().UUID()])
+			return true, saveWidgets(ctx, tx, s.ID(), byScene[s.ID().UUID()], s.Widgets())
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
-	return scene.ReconstituteScene(s.ID(), s.Name(), s.Size(), s.BackgroundHTML(), saved, newVersion), nil
+	return scene.ReconstituteScene(s.ID(), s.Name(), s.Size(), s.BackgroundHTML(), s.Widgets(), newVersion), nil
 }
 
 // Delete removes the scene row if it is still at the scene's version; its

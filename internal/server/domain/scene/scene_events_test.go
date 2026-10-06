@@ -142,3 +142,25 @@ func TestSceneDelete_RecordsWidgetDeletedForEachWidgetThenSceneDeleted(t *testin
 	}
 	assertPending(t, sc)
 }
+
+func TestWidgetEvents_AreNoSceneEvents(t *testing.T) {
+	widgetID, sceneID := id.NewID[Widget](), id.NewID[Scene]()
+	for _, e := range []event.Event{
+		NewWidgetCreatedEvent(widgetID, sceneID),
+		NewWidgetUpdatedEvent(widgetID, sceneID),
+		NewWidgetDeletedEvent(widgetID, sceneID),
+	} {
+		if _, ok := e.(SceneEvent); ok {
+			t.Errorf("%s is a SceneEvent: a type switch would take it for an event of the scene", e.Type())
+		}
+	}
+	for _, e := range []event.Event{
+		NewSceneCreatedEvent(sceneID),
+		NewSceneUpdatedEvent(sceneID),
+		NewSceneDeletedEvent(sceneID),
+	} {
+		if _, ok := e.(SceneEvent); !ok {
+			t.Errorf("%s is no SceneEvent", e.Type())
+		}
+	}
+}

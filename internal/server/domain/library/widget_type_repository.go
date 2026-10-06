@@ -17,6 +17,10 @@ var (
 	// ErrWidgetTypeInUse is returned by Delete when Widgets still use the
 	// widget type: a Widget's WidgetType always exists.
 	ErrWidgetTypeInUse = errors.New("widget type is used by widgets")
+	// ErrInvalidWidgetType is returned by WidgetType.Update when the new
+	// definition breaks a rule of the widget type as a whole (e.g. two
+	// InputPorts share a name).
+	ErrInvalidWidgetType = errors.New("invalid widget type")
 )
 
 // WidgetTypeRepository - repository interface for storing and managing widget types.

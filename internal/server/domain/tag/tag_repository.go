@@ -9,8 +9,8 @@ import (
 
 var (
 	ErrTagNotFound = errors.New("tag not found")
-	// ErrTagConflict is returned by Save and Delete when the stored version
-	// does not match, indicating a concurrent modification.
+	// ErrTagConflict is returned by Save when the stored version does not
+	// match, indicating a concurrent modification.
 	ErrTagConflict = errors.New("tag version conflict")
 	// ErrTagNameTaken is returned by Save when another tag already has the same name.
 	// A tag's name is its unique natural key (ADR 0003).
@@ -41,10 +41,11 @@ type TagRepository interface {
 	// Returns the tag and nil on success, ErrTagNotFound if no tag has that name, or an error on failure.
 	FindByName(context.Context, TagName) (Tag, error)
 
-	// Delete removes a tag, read at the version it carries, and stores the
-	// events it recorded (see Tag.Delete), in one transaction.
-	// Returns ErrTagNotFound if the tag does not exist, ErrTagConflict if the
-	// stored version does not match, or an error on failure.
+	// Delete removes a tag, whatever version is stored, and stores the events
+	// it recorded (see Tag.Delete), in one transaction. The version is not
+	// checked: after creation only a tag's value changes (written often by a
+	// Device), and removing the tag does not depend on it.
+	// Returns ErrTagNotFound if the tag does not exist, or an error on failure.
 	Delete(context.Context, Tag) error
 
 	// FindAll returns all tags, sorted by name, so the order is stable while

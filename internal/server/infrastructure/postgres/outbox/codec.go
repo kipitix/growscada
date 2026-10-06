@@ -1,8 +1,8 @@
 // Package outbox stores the domain events of committed changes and delivers
 // them after commit (ADR 0008). A repository appends an aggregate's pending
 // events with Append in the transaction that saves the aggregate; the
-// Dispatcher reads them back in commit order, hands each to its sink and
-// deletes it.
+// Dispatcher reads them back in the order of their transactions, hands each
+// to its sink and deletes it.
 package outbox
 
 import (

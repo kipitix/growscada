@@ -94,7 +94,7 @@ func TestWidgetType_Update_StaleVersion_ReturnsConflict(t *testing.T) {
 	}
 }
 
-func TestWidgetType_Update_DuplicatePortNames_ReturnsError(t *testing.T) {
+func TestWidgetType_Update_DuplicatePortNames_ReturnsInvalidWidgetType(t *testing.T) {
 	wt := makeCommittedWidgetType(t)
 	portName, _ := NewInputPortName("value")
 	ports := []InputPort{
@@ -103,8 +103,11 @@ func TestWidgetType_Update_DuplicatePortNames_ReturnsError(t *testing.T) {
 	}
 
 	_, err := wt.Update(wt.Version(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.DefaultSize(), ports)
-	if !errors.Is(err, ErrDuplicateInputPortName) {
-		t.Errorf("expected ErrDuplicateInputPortName, got %v", err)
+	if !errors.Is(err, ErrDuplicateInputPortName) || !errors.Is(err, ErrInvalidWidgetType) {
+		t.Errorf("expected ErrInvalidWidgetType and ErrDuplicateInputPortName, got %v", err)
+	}
+	if errors.Is(err, ErrWidgetTypeConflict) {
+		t.Errorf("an invalid definition is no conflict: %v", err)
 	}
 }
 
