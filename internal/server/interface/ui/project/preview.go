@@ -21,8 +21,8 @@ func (p *widgetPreviewFrame) Render() app.UI {
 	return uiutil.WidgetIFrame().ID(p.ID)
 }
 
-func (p *widgetPreviewFrame) OnMount(ctx app.Context)  { uiutil.SetIframeSrcdoc(p.ID, p.Srcdoc) }
-func (p *widgetPreviewFrame) OnUpdate(ctx app.Context) { uiutil.SetIframeSrcdoc(p.ID, p.Srcdoc) }
+func (p *widgetPreviewFrame) OnMount(ctx app.Context)  { uiutil.SetIframeSrcdoc(p.JSValue(), p.Srcdoc) }
+func (p *widgetPreviewFrame) OnUpdate(ctx app.Context) { uiutil.SetIframeSrcdoc(p.JSValue(), p.Srcdoc) }
 
 // widgetThumbnailFrame renders a sandboxed iframe at the widget's native size,
 // then scales it down with CSS transform. The parent container must have
@@ -51,8 +51,8 @@ func (t *widgetThumbnailFrame) Render() app.UI {
 		Style("display", "block")
 }
 
-func (t *widgetThumbnailFrame) OnMount(ctx app.Context)  { uiutil.SetIframeSrcdoc(t.ID, t.Srcdoc) }
-func (t *widgetThumbnailFrame) OnUpdate(ctx app.Context) { uiutil.SetIframeSrcdoc(t.ID, t.Srcdoc) }
+func (t *widgetThumbnailFrame) OnMount(ctx app.Context)  { uiutil.SetIframeSrcdoc(t.JSValue(), t.Srcdoc) }
+func (t *widgetThumbnailFrame) OnUpdate(ctx app.Context) { uiutil.SetIframeSrcdoc(t.JSValue(), t.Srcdoc) }
 
 // simInputField is a controlled input that explicitly sets the DOM value
 // property on mount and update, because go-app's virtual DOM removes the

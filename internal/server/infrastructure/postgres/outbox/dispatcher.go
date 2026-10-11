@@ -22,16 +22,18 @@ const (
 	heldBackRetry = 20 * time.Millisecond
 	// batchSize is how many rows DrainOnce reads at a time.
 	batchSize = 100
-	// deleteTimeout bounds the DELETE of the delivered rows, which goes on
-	// after DrainOnce's ctx is done: a delivered row left in the outbox would
-	// be delivered again.
+	// deleteTimeout bounds the transaction deleting the delivered rows (and
+	// enqueuing their policy jobs), which goes on after DrainOnce's ctx is
+	// done: a delivered row left in the outbox would be delivered again.
 	deleteTimeout = 5 * time.Second
 )
 
 // Dispatcher delivers the outbox rows to its sink after commit and deletes
-// the delivered rows, one DELETE per batch: at-least-once, since rows
-// delivered but not yet deleted when the process stops are delivered again. There is one Dispatcher
-// per database (ADR 0008).
+// the delivered rows, one transaction per batch that also enqueues a job for
+// every policy of its PolicyRunner that keys a delivered event:
+// at-least-once, since rows delivered but not yet deleted when the process
+// stops are delivered again. A policy never holds back delivery: its jobs run
+// apart, in the PolicyRunner. There is one Dispatcher per database (ADR 0008).
 //
 // Rows go in the order of the transactions that wrote them (tx_id), and a
 // row waits until every older transaction has ended. A transaction gets its
@@ -44,6 +46,7 @@ type Dispatcher struct {
 	db           *sql.DB
 	deliver      func(event.Event)
 	pollInterval time.Duration
+	policies     *PolicyRunner
 	wake         chan struct{}
 
 	// mu makes DrainOnce calls take turns, so no row is delivered twice by
@@ -57,6 +60,12 @@ type DispatcherOption func(*Dispatcher)
 // WithPollInterval sets how often Run looks into the outbox without a Notify.
 func WithPollInterval(interval time.Duration) DispatcherOption {
 	return func(d *Dispatcher) { d.pollInterval = interval }
+}
+
+// WithPolicyRunner makes the Dispatcher enqueue the jobs of runner's
+// policies and wake runner when it has.
+func WithPolicyRunner(runner *PolicyRunner) DispatcherOption {
+	return func(d *Dispatcher) { d.policies = runner }
 }
 
 // NewDispatcher returns a Dispatcher delivering the events of db's outbox to
@@ -130,6 +139,7 @@ func (d *Dispatcher) drain(ctx context.Context) (delivered int, heldBack bool, e
 			return delivered, false, err
 		}
 		done := make([]int64, 0, len(rows))
+		jobs := map[policyJob]struct{}{}
 		for _, row := range rows {
 			if ctx.Err() != nil {
 				break
@@ -140,11 +150,17 @@ func (d *Dispatcher) drain(ctx context.Context) (delivered int, heldBack bool, e
 			} else {
 				d.deliver(e)
 				delivered++
+				for _, job := range d.jobsFor(e) {
+					jobs[job] = struct{}{}
+				}
 			}
 			done = append(done, row.seq)
 		}
-		if err := d.deleteRows(ctx, done); err != nil {
+		if err := d.finishRows(ctx, done, jobs); err != nil {
 			return delivered, false, err
+		}
+		if len(jobs) > 0 {
+			d.policies.Notify()
 		}
 		if err := ctx.Err(); err != nil {
 			return delivered, false, err
@@ -155,15 +171,36 @@ func (d *Dispatcher) drain(ctx context.Context) (delivered int, heldBack bool, e
 	}
 }
 
-// deleteRows deletes rows that have been delivered (or dropped). It is not
-// stopped by ctx: a delivered row left in the outbox would be delivered again.
-func (d *Dispatcher) deleteRows(ctx context.Context, seqs []int64) error {
+func (d *Dispatcher) jobsFor(e event.Event) []policyJob {
+	if d.policies == nil {
+		return nil
+	}
+	return d.policies.jobsFor(e)
+}
+
+// finishRows deletes rows that have been delivered (or dropped) and enqueues
+// the policy jobs their events need, in one transaction. It is not stopped by
+// ctx: a delivered row left in the outbox would be delivered again.
+func (d *Dispatcher) finishRows(ctx context.Context, seqs []int64, jobs map[policyJob]struct{}) error {
 	if len(seqs) == 0 {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deleteTimeout)
 	defer cancel()
-	if _, err := d.db.ExecContext(ctx, `DELETE FROM outbox WHERE seq = ANY($1)`, pq.Array(seqs)); err != nil {
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("cannot begin deleting %d delivered outbox rows: %w", len(seqs), err)
+	}
+	defer tx.Rollback()
+	for job := range jobs {
+		if err := enqueue(ctx, tx, job); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM outbox WHERE seq = ANY($1)`, pq.Array(seqs)); err != nil {
+		return fmt.Errorf("cannot delete %d delivered outbox rows: %w", len(seqs), err)
+	}
+	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("cannot delete %d delivered outbox rows: %w", len(seqs), err)
 	}
 	return nil

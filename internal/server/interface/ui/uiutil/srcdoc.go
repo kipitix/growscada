@@ -55,11 +55,19 @@ func IframeTextMuted() string {
 	return color
 }
 
-// SetIframeSrcdoc sets the srcdoc property of the iframe identified by id.
-func SetIframeSrcdoc(id, srcdoc string) {
-	elem := app.Window().Get("document").Call("getElementById", id)
-	if !elem.IsNull() && !elem.IsUndefined() {
-		elem.Set("srcdoc", srcdoc)
+// SetIframeSrcdoc gives the iframe element frame the document srcdoc, unless
+// it already has it (setting srcdoc reloads the iframe). A component passes
+// its own element (JSValue), never looks it up by id: go-app reuses a
+// component for another item in the same place (e.g. a Widget of another
+// Scene), and OnUpdate may run before the element's id is updated, so a
+// lookup by the new id finds nothing and the iframe keeps showing the
+// previous item.
+func SetIframeSrcdoc(frame app.Value, srcdoc string) {
+	if frame == nil || frame.IsNull() || frame.IsUndefined() {
+		return
+	}
+	if frame.Get("srcdoc").String() != srcdoc {
+		frame.Set("srcdoc", srcdoc)
 	}
 }
 

@@ -95,7 +95,7 @@ func (p *Project) createWidget(ctx app.Context, typeID string, x, y float64) {
 		if resp.StatusCode >= 400 {
 			prob := toast.FromHTTPError(resp)
 			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, prob)
+				p.showRejectedSceneEdit(ctx, prob, nil)
 			})
 			return
 		}
@@ -141,7 +141,7 @@ func (p *Project) deleteWidget(ctx app.Context, widgetID string) {
 		if resp.StatusCode >= 400 {
 			prob := toast.FromHTTPError(resp)
 			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, prob)
+				p.showRejectedSceneEdit(ctx, prob, nil)
 			})
 			return
 		}
@@ -304,8 +304,7 @@ func (p *Project) putWidget(ctx app.Context, w widgetItem) {
 		if resp.StatusCode >= 400 {
 			prob := toast.FromHTTPError(resp)
 			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, prob)
-				p.loadWidgets(ctx)
+				p.showRejectedSceneEdit(ctx, prob, p.loadWidgets)
 			})
 			return
 		}

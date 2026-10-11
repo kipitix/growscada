@@ -95,8 +95,8 @@ func (p *previewFrame) Render() app.UI {
 		Style("background", "transparent")
 }
 
-func (p *previewFrame) OnMount(ctx app.Context)  { uiutil.SetIframeSrcdoc(p.ID, p.Srcdoc) }
-func (p *previewFrame) OnUpdate(ctx app.Context) { uiutil.SetIframeSrcdoc(p.ID, p.Srcdoc) }
+func (p *previewFrame) OnMount(ctx app.Context)  { uiutil.SetIframeSrcdoc(p.JSValue(), p.Srcdoc) }
+func (p *previewFrame) OnUpdate(ctx app.Context) { uiutil.SetIframeSrcdoc(p.JSValue(), p.Srcdoc) }
 
 // textareaValueSync keeps the DOM value of the textarea with the given ID equal
 // to Value. go-app renders a textarea's value as its text content and never

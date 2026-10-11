@@ -2,7 +2,8 @@
 // them after commit (ADR 0008). A repository appends an aggregate's pending
 // events with Append in the transaction that saves the aggregate; the
 // Dispatcher reads them back in the order of their transactions, hands each
-// to its sink and deletes it.
+// to its sink and deletes it, enqueuing a job for each policy that needs the
+// event; the PolicyRunner runs those jobs apart.
 package outbox
 
 import (
@@ -30,6 +31,9 @@ type payload struct {
 	ID uuid.UUID `json:"id"`
 	// SceneID is the Scene holding the Widget of a Widget event.
 	SceneID *uuid.UUID `json:"scene_id,omitempty"`
+	// WidgetTypeID is the WidgetType of the Widget of a widget_created or
+	// widget_updated event; rows written before it was stored lack it.
+	WidgetTypeID *uuid.UUID `json:"widget_type_id,omitempty"`
 	// Tag is the new state of the Tag of a tag_updated event.
 	Tag *tagState `json:"tag,omitempty"`
 }
@@ -65,6 +69,12 @@ func Encode(e event.Event) ([]byte, error) {
 		p.ID = ev.WidgetID().UUID()
 		sceneID := ev.SceneID().UUID()
 		p.SceneID = &sceneID
+		if typed, ok := ev.(scene.WidgetTypedEvent); ok {
+			if typeID, ok := typed.WidgetTypeID(); ok {
+				rawTypeID := typeID.UUID()
+				p.WidgetTypeID = &rawTypeID
+			}
+		}
 	case scene.SceneEvent:
 		p.ID = ev.SceneID().UUID()
 	default:
@@ -118,9 +128,15 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 	holder := id.NewID(id.IDWithUUID[scene.Scene](*p.SceneID))
 	switch eventType {
 	case event.EventTypeWidgetCreated:
-		return scene.NewWidgetCreatedEvent(widgetID, holder, ts), nil
+		if p.WidgetTypeID == nil {
+			return scene.NewWidgetCreatedEventOfUnknownType(widgetID, holder, ts), nil
+		}
+		return scene.NewWidgetCreatedEvent(widgetID, holder, id.NewID(id.IDWithUUID[library.WidgetType](*p.WidgetTypeID)), ts), nil
 	case event.EventTypeWidgetUpdated:
-		return scene.NewWidgetUpdatedEvent(widgetID, holder, ts), nil
+		if p.WidgetTypeID == nil {
+			return scene.NewWidgetUpdatedEventOfUnknownType(widgetID, holder, ts), nil
+		}
+		return scene.NewWidgetUpdatedEvent(widgetID, holder, id.NewID(id.IDWithUUID[library.WidgetType](*p.WidgetTypeID)), ts), nil
 	case event.EventTypeWidgetDeleted:
 		return scene.NewWidgetDeletedEvent(widgetID, holder, ts), nil
 	}

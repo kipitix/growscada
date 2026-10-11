@@ -32,7 +32,7 @@ func newRouterWithScenes() *restapi.APIRouter {
 	tagSvc := application.NewTagService(tagRepo)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo)
+	wtSvc := application.NewWidgetTypeService(wtRepo)
 	sceneSvc := application.NewSceneService(sceneRepo, wtRepo)
 	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, eventbus.NewEventBus(), 100)
 }
@@ -313,8 +313,7 @@ func TestPutScenesByID_Conflict_Returns409(t *testing.T) {
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
 	tagSvc := application.NewTagService(tagRepo)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo)
+	wtSvc := application.NewWidgetTypeService(wtRepo)
 	router := restapi.NewRouter(tagSvc, wtSvc, svc, eventbus.NewEventBus(), 100)
 
 	body, _ := json.Marshal(apiv0.UpdateSceneRequest{Name: "x", Width: 800, Height: 600})

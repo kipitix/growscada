@@ -29,3 +29,4 @@ Status: ready-for-agent
 ## Comments
 
 - 2026-10-05: форма событий (SceneID в событиях Widget, константы типов) вынесена в задачу 24.
+- 2026-10-12 (проверка задачи 21): воспроизводится: открытая вкладка Project, SIGTERM → «API HTTP Server shutdown error: context deadline exceeded» через 15 с, процесс выходит с кодом 1. Пункт «Порядок шагов в `main.go` сохранить» опирается на порядок, которого нет: `gracedown.shutdownLayer` запускает хуки одного слоя параллельно, а «Event Hub» и «API HTTP Server» оба в слое Interface, так что `apiServer.Shutdown` может начать ждать раньше, чем hub закроет каналы клиентов. Закрытие каналов в `eventHub.Close` остановку всё равно развяжет (обработчики выйдут, как только hub закроется), но на порядок полагаться нельзя. После задач 20/21 в том же слое ещё «Policy Runner» (останавливается сразу), а хук «Event Hub» сначала дочищает outbox (`stopOutbox`), затем вызывает `apiRouter.Close()`.

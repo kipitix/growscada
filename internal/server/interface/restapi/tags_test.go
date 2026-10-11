@@ -94,7 +94,7 @@ func newRouter() *restapi.APIRouter {
 	tagSvc := application.NewTagService(tagRepo)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo)
+	wtSvc := application.NewWidgetTypeService(wtRepo)
 	sceneSvc := application.NewSceneService(sceneRepo, wtRepo)
 	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, eventbus.NewEventBus(), 100)
 }

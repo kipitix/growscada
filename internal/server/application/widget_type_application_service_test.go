@@ -3,8 +3,6 @@ package application_test
 import (
 	"context"
 	"errors"
-	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
-	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -12,9 +10,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/event"
-	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
-	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 )
@@ -28,15 +24,13 @@ func cleanWidgetTypes(t *testing.T) {
 
 func newWidgetTypeService() application.WidgetTypeService {
 	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	return application.NewWidgetTypeService(repo, sceneRepo)
+	return application.NewWidgetTypeService(repo)
 }
 
 func newWidgetTypeServiceWithBus(t *testing.T) (application.WidgetTypeService, eventbus.EventBus) {
 	bus, onCommit := deliveredOnCommit(t)
 	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB, onCommit)
-	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB, onCommit)
-	return application.NewWidgetTypeService(repo, sceneRepo), bus
+	return application.NewWidgetTypeService(repo), bus
 }
 
 var testCreateWidgetTypeInput = appdto.WidgetTypeInput{
@@ -477,175 +471,6 @@ func TestUpdateWidgetType_StaleVersion_ReturnsConflict(t *testing.T) {
 	}
 }
 
-// --- removeOrphanedPortBindings ---
-
-// TestUpdateWidgetType_RemovedPort_CleansBindingsOnAllWidgetsInSameScene is the
-// regression test for a bug where removeOrphanedPortBindings reused the same
-// (now-stale) scene version for every widget it touched: with 2+ widgets of
-// the same type in one scene, the second widget's cleanup update failed with a
-// spurious scene.ErrSceneConflict because the first update had already bumped
-// the scene's version in the DB.
-func TestUpdateWidgetType_RemovedPort_CleansBindingsOnAllWidgetsInSameScene(t *testing.T) {
-	cleanScenes(t)
-	cleanWidgetTypes(t)
-	wtSvc := newWidgetTypeService()
-	sceneSvc := newSceneService()
-	ctx := context.Background()
-
-	createdType, err := wtSvc.CreateWidgetType(ctx, appdto.WidgetTypeInput{
-		Name:           "sensor",
-		HtmlTemplate:   "<div></div>",
-		Script:         "function render(v) {}",
-		ScriptLanguage: "javascript",
-		DefaultWidth:   100,
-		DefaultHeight:  100,
-		InputPorts:     []appdto.InputPort{{Name: "value"}},
-	})
-	if err != nil {
-		t.Fatalf("CreateWidgetType: %v", err)
-	}
-
-	sc := mustCreateScene(t, sceneSvc)
-
-	widgetInput := appdto.WidgetInput{
-		Name:         "widget-1",
-		Width:        100,
-		Height:       100,
-		OriginX:      0.5,
-		OriginY:      0.5,
-		TypeID:       createdType.ID,
-		PortBindings: []appdto.PortBinding{{PortName: "value", TagID: uuid.New()}},
-	}
-	first, err := sceneSvc.CreateWidget(ctx, sc.ID, sc.Version, widgetInput)
-	if err != nil {
-		t.Fatalf("CreateWidget 1: %v", err)
-	}
-
-	widgetInput.Name = "widget-2"
-	second, err := sceneSvc.CreateWidget(ctx, sc.ID, first.SceneVersion, widgetInput)
-	if err != nil {
-		t.Fatalf("CreateWidget 2: %v", err)
-	}
-
-	// Drop the "value" port from the type: both widgets' bindings to it are
-	// now orphaned and must be cleaned up by the same UpdateWidgetType call.
-	_, err = wtSvc.UpdateWidgetType(ctx, createdType.ID, createdType.Version, appdto.WidgetTypeInput{
-		Name:           createdType.Name,
-		HtmlTemplate:   createdType.HtmlTemplate,
-		Script:         createdType.Script,
-		ScriptLanguage: createdType.ScriptLanguage,
-		DefaultWidth:   createdType.DefaultWidth,
-		DefaultHeight:  createdType.DefaultHeight,
-		InputPorts:     nil,
-	})
-	if err != nil {
-		t.Fatalf("UpdateWidgetType: %v", err)
-	}
-
-	w1, err := sceneSvc.FindWidgetByID(ctx, sc.ID, first.ID)
-	if err != nil {
-		t.Fatalf("FindWidgetByID 1: %v", err)
-	}
-	if len(w1.PortBindings) != 0 {
-		t.Errorf("widget 1: expected orphaned port bindings removed, got %v", w1.PortBindings)
-	}
-
-	w2, err := sceneSvc.FindWidgetByID(ctx, sc.ID, second.ID)
-	if err != nil {
-		t.Fatalf("FindWidgetByID 2: %v", err)
-	}
-	if len(w2.PortBindings) != 0 {
-		t.Errorf("widget 2: expected orphaned port bindings removed, got %v", w2.PortBindings)
-	}
-}
-
-// listRacingSceneRepository runs race once, right after the first
-// FindByWidgetTypeID: someone else changes a listed Scene before the cleanup
-// saves it.
-type listRacingSceneRepository struct {
-	scene.SceneRepository
-	race func()
-}
-
-func (r *listRacingSceneRepository) FindByWidgetTypeID(ctx context.Context, typeID id.ID[library.WidgetType]) ([]scene.Scene, error) {
-	found, err := r.SceneRepository.FindByWidgetTypeID(ctx, typeID)
-	if race := r.race; race != nil {
-		r.race = nil
-		race()
-	}
-	return found, err
-}
-
-func TestUpdateWidgetType_RemovedPort_SceneChangedMeanwhile_CleansBindingsKeepsChange(t *testing.T) {
-	cleanScenes(t)
-	cleanWidgetTypes(t)
-	wtSvc := newWidgetTypeService()
-	sceneSvc := newSceneService()
-	ctx := context.Background()
-
-	createdType, err := wtSvc.CreateWidgetType(ctx, appdto.WidgetTypeInput{
-		Name:           "sensor",
-		HtmlTemplate:   "<div></div>",
-		Script:         "function render(v) {}",
-		ScriptLanguage: "javascript",
-		DefaultWidth:   100,
-		DefaultHeight:  100,
-		InputPorts:     []appdto.InputPort{{Name: "value"}},
-	})
-	if err != nil {
-		t.Fatalf("CreateWidgetType: %v", err)
-	}
-	sc := mustCreateScene(t, sceneSvc)
-	created, err := sceneSvc.CreateWidget(ctx, sc.ID, sc.Version, appdto.WidgetInput{
-		Name:         "widget-1",
-		Width:        100,
-		Height:       100,
-		OriginX:      0.5,
-		OriginY:      0.5,
-		TypeID:       createdType.ID,
-		PortBindings: []appdto.PortBinding{{PortName: "value", TagID: uuid.New()}},
-	})
-	if err != nil {
-		t.Fatalf("CreateWidget: %v", err)
-	}
-
-	sceneRepo := &listRacingSceneRepository{SceneRepository: repositories.NewSceneRepositoryPostgres(testDB)}
-	sceneRepo.race = func() {
-		if _, err := sceneSvc.UpdateScene(ctx, sc.ID, created.SceneVersion, appdto.SceneInput{Name: "renamed", Width: 800, Height: 600}); err != nil {
-			t.Fatalf("concurrent UpdateScene: %v", err)
-		}
-	}
-	racingSvc := application.NewWidgetTypeService(repositories.NewWidgetTypeRepositoryPostgres(testDB), sceneRepo)
-
-	_, err = racingSvc.UpdateWidgetType(ctx, createdType.ID, createdType.Version, appdto.WidgetTypeInput{
-		Name:           createdType.Name,
-		HtmlTemplate:   createdType.HtmlTemplate,
-		Script:         createdType.Script,
-		ScriptLanguage: createdType.ScriptLanguage,
-		DefaultWidth:   createdType.DefaultWidth,
-		DefaultHeight:  createdType.DefaultHeight,
-		InputPorts:     nil,
-	})
-
-	if err != nil {
-		t.Fatalf("UpdateWidgetType: %v", err)
-	}
-	found, err := sceneSvc.FindSceneByID(ctx, sc.ID)
-	if err != nil {
-		t.Fatalf("FindSceneByID: %v", err)
-	}
-	if found.Name != "renamed" {
-		t.Errorf("expected the concurrent change kept, got name %q", found.Name)
-	}
-	w, err := sceneSvc.FindWidgetByID(ctx, sc.ID, created.ID)
-	if err != nil {
-		t.Fatalf("FindWidgetByID: %v", err)
-	}
-	if len(w.PortBindings) != 0 {
-		t.Errorf("expected orphaned port bindings removed, got %v", w.PortBindings)
-	}
-}
-
 func TestDeleteWidgetType_UsedByWidget_ReturnsErrWidgetTypeInUse(t *testing.T) {
 	cleanScenes(t)
 	cleanWidgetTypes(t)
@@ -671,92 +496,5 @@ func TestDeleteWidgetType_UsedByWidget_ReturnsErrWidgetTypeInUse(t *testing.T) {
 	}
 	if _, err := wtSvc.FindWidgetTypeByID(ctx, created.ID); err != nil {
 		t.Errorf("widget type after refused delete: %v", err)
-	}
-}
-
-// outboxSceneIDs returns, per event type, the Scenes the outbox's events are
-// about: a Scene event's own, a Widget event's holder.
-func outboxSceneIDs(t *testing.T) map[string][]uuid.UUID {
-	t.Helper()
-	rows, err := testDB.QueryContext(context.Background(), "SELECT type, payload FROM outbox ORDER BY seq")
-	if err != nil {
-		t.Fatalf("read outbox: %v", err)
-	}
-	defer rows.Close()
-	out := map[string][]uuid.UUID{}
-	for rows.Next() {
-		var typeName string
-		var data []byte
-		if err := rows.Scan(&typeName, &data); err != nil {
-			t.Fatalf("scan outbox: %v", err)
-		}
-		et, err := event.NewEventType(typeName)
-		if err != nil {
-			t.Fatalf("event type: %v", err)
-		}
-		e, err := outbox.Decode(et, data)
-		if err != nil {
-			t.Fatalf("decode: %v", err)
-		}
-		switch ev := e.(type) {
-		case scene.WidgetEvent:
-			out[typeName] = append(out[typeName], ev.SceneID().UUID())
-		case scene.SceneEvent:
-			out[typeName] = append(out[typeName], ev.SceneID().UUID())
-		}
-	}
-	return out
-}
-
-func TestUpdateWidgetType_RemovedPort_OutboxHoldsEventsOfEveryChangedScene(t *testing.T) {
-	cleanScenes(t)
-	cleanWidgetTypes(t)
-	wtSvc := newWidgetTypeService()
-	sceneSvc := newSceneService()
-	ctx := context.Background()
-
-	input := appdto.WidgetTypeInput{
-		Name: "sensor", HtmlTemplate: "<div></div>", ScriptLanguage: "javascript",
-		DefaultWidth: 100, DefaultHeight: 100, InputPorts: []appdto.InputPort{{Name: "value"}},
-	}
-	createdType, err := wtSvc.CreateWidgetType(ctx, input)
-	if err != nil {
-		t.Fatalf("CreateWidgetType: %v", err)
-	}
-	bound := appdto.WidgetInput{
-		Name: "bound", Width: 100, Height: 100, OriginX: 0.5, OriginY: 0.5, TypeID: createdType.ID,
-		PortBindings: []appdto.PortBinding{{PortName: "value", TagID: uuid.New()}},
-	}
-	unbound := bound
-	unbound.PortBindings = nil
-
-	var changedScenes []uuid.UUID
-	for _, name := range []string{"first", "second"} {
-		sc, err := sceneSvc.CreateScene(ctx, appdto.SceneInput{Name: name, Width: 800, Height: 600})
-		if err != nil {
-			t.Fatalf("CreateScene: %v", err)
-		}
-		if _, err := sceneSvc.CreateWidget(ctx, sc.ID, sc.Version, bound); err != nil {
-			t.Fatalf("CreateWidget: %v", err)
-		}
-		changedScenes = append(changedScenes, sc.ID)
-	}
-	untouched, err := sceneSvc.CreateScene(ctx, appdto.SceneInput{Name: "untouched", Width: 800, Height: 600})
-	if err != nil {
-		t.Fatalf("CreateScene: %v", err)
-	}
-	if _, err := sceneSvc.CreateWidget(ctx, untouched.ID, untouched.Version, unbound); err != nil {
-		t.Fatalf("CreateWidget: %v", err)
-	}
-	cleanOutbox(t)
-
-	input.InputPorts = nil
-	if _, err := wtSvc.UpdateWidgetType(ctx, createdType.ID, createdType.Version, input); err != nil {
-		t.Fatalf("UpdateWidgetType: %v", err)
-	}
-
-	got := outboxSceneIDs(t)
-	if !slices.Equal(got["widget_updated"], changedScenes) {
-		t.Errorf("widget_updated in the outbox for scenes %v, want each changed scene %v", got["widget_updated"], changedScenes)
 	}
 }

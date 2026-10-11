@@ -180,7 +180,7 @@ func (s *sceneImpl) AddWidget(expected version.Version[Scene], w Widget, wt libr
 	if err := checkWidgetType(w, wt); err != nil {
 		return nil, err
 	}
-	return s.withWidgets(append(slices.Clip(s.widgets), w), NewWidgetCreatedEvent(w.ID(), s.id)), nil
+	return s.withWidgets(append(slices.Clip(s.widgets), w), NewWidgetCreatedEvent(w.ID(), s.id, w.TypeID())), nil
 }
 
 func (s *sceneImpl) UpdateWidget(expected version.Version[Scene], w Widget, wt library.WidgetType) (Scene, error) {
@@ -196,7 +196,7 @@ func (s *sceneImpl) UpdateWidget(expected version.Version[Scene], w Widget, wt l
 	}
 	widgets := slices.Clone(s.widgets)
 	widgets[i] = w
-	return s.withWidgets(widgets, NewWidgetUpdatedEvent(w.ID(), s.id)), nil
+	return s.withWidgets(widgets, NewWidgetUpdatedEvent(w.ID(), s.id, w.TypeID())), nil
 }
 
 func (s *sceneImpl) RemoveWidget(widgetID id.ID[Widget]) (Scene, Widget, error) {
@@ -231,7 +231,7 @@ func (s *sceneImpl) ReconcileWith(wt library.WidgetType) (Scene, bool) {
 			w.ID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(),
 			w.TypeID(), w.Labels(), kept,
 		)
-		events = append(events, NewWidgetUpdatedEvent(w.ID(), s.id))
+		events = append(events, NewWidgetUpdatedEvent(w.ID(), s.id, w.TypeID()))
 	}
 	if widgets == nil {
 		return s, false

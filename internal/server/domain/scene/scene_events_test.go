@@ -6,6 +6,7 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
@@ -25,6 +26,9 @@ func pendingOf(t *testing.T, sc Scene) []recorded {
 			if ev.SceneID() != sc.ID() {
 				t.Errorf("%s names scene %s, want %s", ev.Type(), ev.SceneID(), sc.ID())
 			}
+			if typed, ok := ev.(WidgetTypedEvent); ok {
+				checkNamesWidgetType(t, sc, typed)
+			}
 			out = append(out, recorded{ev.Type(), ev.WidgetID().String()})
 		case SceneEvent:
 			out = append(out, recorded{ev.Type(), ev.SceneID().String()})
@@ -33,6 +37,20 @@ func pendingOf(t *testing.T, sc Scene) []recorded {
 		}
 	}
 	return out
+}
+
+// checkNamesWidgetType checks that e names the WidgetType of its widget, as
+// the scene holds it (a widget removed later in the scene is not checked).
+func checkNamesWidgetType(t *testing.T, sc Scene, e WidgetTypedEvent) {
+	t.Helper()
+	typeID, ok := e.WidgetTypeID()
+	if !ok {
+		t.Errorf("%s of widget %s names no widget type", e.Type(), e.WidgetID())
+		return
+	}
+	if w, err := sc.FindWidget(e.WidgetID()); err == nil && w.TypeID() != typeID {
+		t.Errorf("%s names widget type %s, want %s", e.Type(), typeID, w.TypeID())
+	}
 }
 
 func assertPending(t *testing.T, sc Scene, want ...recorded) {
@@ -146,8 +164,8 @@ func TestSceneDelete_RecordsWidgetDeletedForEachWidgetThenSceneDeleted(t *testin
 func TestWidgetEvents_AreNoSceneEvents(t *testing.T) {
 	widgetID, sceneID := id.NewID[Widget](), id.NewID[Scene]()
 	for _, e := range []event.Event{
-		NewWidgetCreatedEvent(widgetID, sceneID),
-		NewWidgetUpdatedEvent(widgetID, sceneID),
+		NewWidgetCreatedEvent(widgetID, sceneID, id.NewID[library.WidgetType]()),
+		NewWidgetUpdatedEvent(widgetID, sceneID, id.NewID[library.WidgetType]()),
 		NewWidgetDeletedEvent(widgetID, sceneID),
 	} {
 		if _, ok := e.(SceneEvent); ok {
@@ -161,6 +179,18 @@ func TestWidgetEvents_AreNoSceneEvents(t *testing.T) {
 	} {
 		if _, ok := e.(SceneEvent); !ok {
 			t.Errorf("%s is no SceneEvent", e.Type())
+		}
+	}
+}
+
+func TestWidgetEventsOfUnknownType_NameNoWidgetType(t *testing.T) {
+	widgetID, sceneID := id.NewID[Widget](), id.NewID[Scene]()
+	for _, e := range []WidgetTypedEvent{
+		NewWidgetCreatedEventOfUnknownType(widgetID, sceneID),
+		NewWidgetUpdatedEventOfUnknownType(widgetID, sceneID),
+	} {
+		if _, ok := e.WidgetTypeID(); ok {
+			t.Errorf("%s of unknown type names a widget type", e.Type())
 		}
 	}
 }

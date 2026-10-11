@@ -97,7 +97,7 @@ func (p *Project) deleteScene(ctx app.Context, sceneID string) {
 		if resp.StatusCode >= 400 {
 			prob := toast.FromHTTPError(resp)
 			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, prob)
+				p.showRejectedSceneEdit(ctx, prob, nil)
 			})
 			return
 		}
@@ -190,8 +190,7 @@ func (p *Project) saveSceneProperties(ctx app.Context) {
 		if resp.StatusCode >= 400 {
 			prob := toast.FromHTTPError(resp)
 			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, prob)
-				p.loadScenes(ctx)
+				p.showRejectedSceneEdit(ctx, prob, p.loadScenes)
 			})
 			return
 		}
@@ -267,8 +266,7 @@ func (p *Project) commitSceneEdit(ctx app.Context) {
 		if resp.StatusCode >= 400 {
 			prob := toast.FromHTTPError(resp)
 			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, prob)
-				p.loadScenes(ctx)
+				p.showRejectedSceneEdit(ctx, prob, p.loadScenes)
 			})
 			return
 		}

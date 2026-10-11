@@ -48,8 +48,8 @@ func sampleEvents(t *testing.T) []event.Event {
 		scene.NewSceneCreatedEvent(sceneID, ts),
 		scene.NewSceneUpdatedEvent(sceneID, ts),
 		scene.NewSceneDeletedEvent(sceneID, ts),
-		scene.NewWidgetCreatedEvent(widgetID, sceneID, ts),
-		scene.NewWidgetUpdatedEvent(widgetID, sceneID, ts),
+		scene.NewWidgetCreatedEvent(widgetID, sceneID, wtID, ts),
+		scene.NewWidgetUpdatedEvent(widgetID, sceneID, wtID, ts),
 		scene.NewWidgetDeletedEvent(widgetID, sceneID, ts),
 	}
 }
@@ -112,6 +112,13 @@ func assertSameSubject(t *testing.T, original, decoded event.Event) {
 		if got.WidgetID() != want.WidgetID() || got.SceneID() != want.SceneID() {
 			t.Errorf("widget %s in scene %s, want %s in %s", got.WidgetID(), got.SceneID(), want.WidgetID(), want.SceneID())
 		}
+		if typedWant, ok := want.(scene.WidgetTypedEvent); ok {
+			wantTypeID, _ := typedWant.WidgetTypeID()
+			gotTypeID, ok := decoded.(scene.WidgetTypedEvent).WidgetTypeID()
+			if !ok || gotTypeID != wantTypeID {
+				t.Errorf("widget type %s (known: %t), want %s", gotTypeID, ok, wantTypeID)
+			}
+		}
 	case scene.SceneEvent:
 		if got := decoded.(scene.SceneEvent); got.SceneID() != want.SceneID() {
 			t.Errorf("scene ID %s, want %s", got.SceneID(), want.SceneID())
@@ -126,5 +133,29 @@ func TestCodec_DeliveryEventTypes_AreNotDecoded(t *testing.T) {
 		if _, err := outbox.Decode(et, []byte(`{"id":"00000000-0000-0000-0000-000000000000"}`)); err == nil {
 			t.Errorf("expected %s to be refused", et)
 		}
+	}
+}
+
+// A row written before Widget events carried their WidgetType still decodes,
+// its WidgetType unknown: the policy keyed by it enqueues no job for it.
+func TestCodec_WidgetEventWithoutWidgetType_Decodes(t *testing.T) {
+	const row = `{"timestamp":"2026-10-06T12:30:15Z","id":"6f1c2a52-6e0c-4b8e-9d0a-3c1e5b7a9f10","scene_id":"0b7e7c1e-2f4d-4a6b-8c9d-1e2f3a4b5c6d"}`
+	for _, et := range []event.EventType{event.EventTypeWidgetCreated, event.EventTypeWidgetUpdated} {
+		t.Run(et.String(), func(t *testing.T) {
+			decoded, err := outbox.Decode(et, []byte(row))
+			if err != nil {
+				t.Fatalf("Decode: %v", err)
+			}
+			typed, ok := decoded.(scene.WidgetTypedEvent)
+			if !ok {
+				t.Fatalf("decoded %T, want a scene.WidgetTypedEvent", decoded)
+			}
+			if typed.WidgetID().String() != "6f1c2a52-6e0c-4b8e-9d0a-3c1e5b7a9f10" || typed.SceneID().String() != "0b7e7c1e-2f4d-4a6b-8c9d-1e2f3a4b5c6d" {
+				t.Errorf("widget %s in scene %s", typed.WidgetID(), typed.SceneID())
+			}
+			if typeID, ok := typed.WidgetTypeID(); ok {
+				t.Errorf("widget type %s, want unknown", typeID)
+			}
+		})
 	}
 }

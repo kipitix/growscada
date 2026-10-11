@@ -1,5 +1,23 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.35] - 2026-10-11
+
+### Changed
+
+- **Согласование Widget с изменённым WidgetType — политика по событию** (задача 21, ADR 0008). REST API и контракт `contract/api/v0` не менялись
+  - `UpdateWidgetType` сохраняет только WidgetType; синхронный цикл по Scene (`removeOrphanedPortBindings`, `reconcileScene`) убран из сервиса, `NewWidgetTypeService` больше не принимает `SceneRepository`. Привязки Widget к удалённым портам снимает политика вскоре после commit
+  - **Задания политик**: таблица `policy_jobs (policy, job_key, generation, attempts, next_attempt_at, last_error)`. Диспетчер outbox не выполняет политики: в транзакции, удаляющей доставленные строки, он ставит задание каждой политике, которой нужно событие (`Policy.JobKey`), и будит раннер. Задание с тем же ключом сливается со стоящим (`generation + 1`, сразу созревает), поэтому событие, пришедшее во время выполнения, приводит к повторному прогону
+  - `outbox.PolicyRunner`: одна горутина, задания по очереди; успех — `DELETE … WHERE generation = g`, сбой — `slog`, `last_error` и пауза 1 с → ×2 → 5 мин, повторы бесконечны. `Run` будится диспетчером и таймером ближайшего задания, `RunDueOnce` — для тестов. При остановке текущее задание прерывается и выполняется после старта. Реестр политик собирается в `main.go`
+  - `application.Policy` (`Name`, `JobKey`, `Run`) и `NewWidgetReconciliationPolicy`: слушает `widget_type_updated`, `widget_created` и `widget_updated`, ключ — `widget_type_id`; читает WidgetType при выполнении (удалён — задание выполнено) и согласует каждую Scene в своей транзакции (`retryOnRace`, удалённая Scene пропускается). Сбой одной Scene не останавливает остальные (`errors.Join`), повтор проходит уже согласованные вхолостую
+  - `WidgetCreatedEvent`/`WidgetUpdatedEvent` несут `WidgetTypeID` (`scene.WidgetTypedEvent`); кодек outbox хранит `widget_type_id` и читает строки без него (ключа нет — задание не ставится)
+  - **UI Project**: `409` на правке Scene или Widget — тост «Scene changed … Repeat your edit», Scenes и Widgets перечитываются сразу, не дожидаясь SSE; правка не переприменяется
+
+### Fixed
+
+- Ошибка посреди согласования (не конфликт) отвечала клиенту `500` после сохранённого WidgetType, а несогласованные Scene навсегда оставались с привязками к исчезнувшим портам. Теперь задание повторяется до успеха
+- Widget, добавленный или изменённый параллельно с удалением порта (WidgetType прочитан до удаления), навсегда сохранял привязку к удалённому порту. Теперь его событие ставит задание политики, и привязка снимается
+- Project: после переключения Scene Widget новой Scene мог показывать документ Widget прежней (например, значение из Simulate Inputs несвязанному Widget того же типа). go-app переиспользует компонент iframe, а `OnUpdate` искал элемент по новому id раньше, чем тот попадал в DOM. `uiutil.SetIframeSrcdoc` теперь принимает сам элемент компонента (`JSValue()`) и не перезагружает iframe, если документ не изменился (превью Project и Library)
+
 ## [0.0.34] - 2026-10-07
 
 ### Changed

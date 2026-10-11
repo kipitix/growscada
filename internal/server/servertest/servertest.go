@@ -94,33 +94,37 @@ func startPostgres(ctx context.Context) (*sql.DB, *tcpostgres.PostgresContainer,
 	return db, container, nil
 }
 
-// StartAPI cleans the tags and outbox tables and serves the real REST API
-// over the database, with the outbox dispatcher delivering committed events
-// to its event stream, as the server does. The returned TagService is the one
+// StartAPI cleans the tags, outbox and policy_jobs tables and serves the real
+// REST API over the database, with the outbox dispatcher delivering committed
+// events to its event stream and the policy runner running the policies, as
+// the server does. The returned TagService is the one
 // behind the API, for arranging and checking state directly.
 func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagService) {
 	t.Helper()
-	if _, err := db.ExecContext(context.Background(), "DELETE FROM tags; DELETE FROM outbox"); err != nil {
+	if _, err := db.ExecContext(context.Background(), "DELETE FROM tags; DELETE FROM outbox; DELETE FROM policy_jobs"); err != nil {
 		t.Fatalf("clean tags: %v", err)
 	}
 	bus := eventbus.NewEventBus()
-	dispatcher := outbox.NewDispatcher(db, bus.Publish)
-	ctx, stop := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		dispatcher.Run(ctx)
-		close(done)
-	}()
-	t.Cleanup(func() {
-		stop()
-		<-done
-	})
-	onCommit := repositories.NotifyOnCommit(dispatcher.Notify)
-
+	var dispatcher *outbox.Dispatcher
+	onCommit := repositories.NotifyOnCommit(func() { dispatcher.Notify() })
 	tagSvc := application.NewTagService(repositories.NewTagRepositoryPostgres(db, onCommit))
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(db, onCommit)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(db, onCommit)
-	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo)
+	runner := outbox.NewPolicyRunner(db, []application.Policy{
+		application.NewWidgetReconciliationPolicy(wtRepo, sceneRepo),
+	})
+	dispatcher = outbox.NewDispatcher(db, bus.Publish, outbox.WithPolicyRunner(runner))
+	ctx, stop := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); dispatcher.Run(ctx) }()
+	go func() { defer wg.Done(); runner.Run(ctx) }()
+	t.Cleanup(func() {
+		stop()
+		wg.Wait()
+	})
+
+	wtSvc := application.NewWidgetTypeService(wtRepo)
 	sceneSvc := application.NewSceneService(sceneRepo, wtRepo)
 	router := restapi.NewRouter(tagSvc, wtSvc, sceneSvc, bus, 100)
 

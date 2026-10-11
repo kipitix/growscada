@@ -87,9 +87,21 @@ func main() {
 	// Add hook to shutdown message broker connection
 	// Create event bus: the SSE stream's source of events
 	eventBus := eventbus.NewEventBus()
+	// Repositories wake the outbox dispatcher after each commit that wrote
+	// events; the dispatcher is created below, once the policies are
+	var dispatcher *outbox.Dispatcher
+	notifyDispatcher := repositories.NotifyOnCommit(func() { dispatcher.Notify() })
+	tagRepository := repositories.NewTagRepositoryPostgres(sqlDB, notifyDispatcher)
+	widgetTypeRepository := repositories.NewWidgetTypeRepositoryPostgres(sqlDB, notifyDispatcher)
+	sceneRepository := repositories.NewSceneRepositoryPostgres(sqlDB, notifyDispatcher)
+	// Registry of the policies: changes spanning aggregates, run as jobs
+	// apart from event delivery (ADR 0008)
+	policyRunner := outbox.NewPolicyRunner(sqlDB, []application.Policy{
+		application.NewWidgetReconciliationPolicy(widgetTypeRepository, sceneRepository),
+	})
 	// Create the outbox dispatcher: it delivers the events of committed
-	// changes to the event bus (ADR 0008)
-	dispatcher := outbox.NewDispatcher(sqlDB, eventBus.Publish)
+	// changes to the event bus and enqueues the policies' jobs (ADR 0008)
+	dispatcher = outbox.NewDispatcher(sqlDB, eventBus.Publish, outbox.WithPolicyRunner(policyRunner))
 	dispatcherCtx, stopDispatcher := context.WithCancel(context.Background())
 	dispatcherDone := make(chan struct{})
 	go func() {
@@ -104,16 +116,30 @@ func main() {
 			slog.Error("Outbox not drained on shutdown", "error", err)
 		}
 	}
-	notifyDispatcher := repositories.NotifyOnCommit(dispatcher.Notify)
+	// Run the policy jobs. On shutdown the job running is stopped and runs
+	// again after the next start. It stops with the interface layer, so
+	// before the database closes in the infrastructure layer
+	policyCtx, stopPolicies := context.WithCancel(context.Background())
+	policiesDone := make(chan struct{})
+	go func() {
+		policyRunner.Run(policyCtx)
+		close(policiesDone)
+	}()
+	gracedownManager.RegisterInterface("Policy Runner", 15*time.Second, func(ctx context.Context) error {
+		stopPolicies()
+		select {
+		case <-policiesDone:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	})
 
 	// INTERFACE COMPONENTS
 	// API server
-	tagRepository := repositories.NewTagRepositoryPostgres(sqlDB, notifyDispatcher)
-	widgetTypeRepository := repositories.NewWidgetTypeRepositoryPostgres(sqlDB, notifyDispatcher)
-	sceneRepository := repositories.NewSceneRepositoryPostgres(sqlDB, notifyDispatcher)
 	// Create services
 	tagService := application.NewTagService(tagRepository)
-	widgetTypeService := application.NewWidgetTypeService(widgetTypeRepository, sceneRepository)
+	widgetTypeService := application.NewWidgetTypeService(widgetTypeRepository)
 	sceneService := application.NewSceneService(sceneRepository, widgetTypeRepository)
 	// Create router
 	apiRouter := restapi.NewRouter(tagService, widgetTypeService, sceneService, eventBus, cliArgs.MaxSSEClients)

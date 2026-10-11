@@ -31,7 +31,7 @@ func newRouterWithWidgetTypes() *restapi.APIRouter {
 	tagSvc := application.NewTagService(tagRepo)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	wtSvc := application.NewWidgetTypeService(wtRepo, sceneRepo)
+	wtSvc := application.NewWidgetTypeService(wtRepo)
 	sceneSvc := application.NewSceneService(sceneRepo, wtRepo)
 	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, eventbus.NewEventBus(), 100)
 }
@@ -39,8 +39,7 @@ func newRouterWithWidgetTypes() *restapi.APIRouter {
 func createWidgetTypeViaService(t *testing.T, input appdto.WidgetTypeInput) appdto.WidgetType {
 	t.Helper()
 	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	svc := application.NewWidgetTypeService(repo, sceneRepo)
+	svc := application.NewWidgetTypeService(repo)
 	resp, err := svc.CreateWidgetType(context.Background(), input)
 	if err != nil {
 		t.Fatalf("createWidgetTypeViaService: %v", err)

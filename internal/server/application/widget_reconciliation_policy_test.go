@@ -1,0 +1,571 @@
+package application_test
+
+import (
+	"context"
+	"errors"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/kipitix/growscada/internal/server/application"
+	"github.com/kipitix/growscada/internal/server/application/appdto"
+	"github.com/kipitix/growscada/internal/server/domain/event"
+	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/scene"
+	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
+	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
+)
+
+func cleanPolicyJobs(t *testing.T) {
+	t.Helper()
+	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM policy_jobs"); err != nil {
+		t.Fatalf("cleanPolicyJobs: %v", err)
+	}
+}
+
+// reconciliation wires the services, the outbox dispatcher and the policy
+// runner with the reconciliation policy over testDB, as main.go does, but
+// delivers and runs jobs only when a test says so.
+type reconciliation struct {
+	wtSvc      application.WidgetTypeService
+	sceneSvc   application.SceneService
+	dispatcher *outbox.Dispatcher
+	runner     *outbox.PolicyRunner
+	delivered  []event.Event
+}
+
+// reconciliationWiring lets a test put a wrapper around a repository: the
+// policy's own, or the WidgetType repository the scene service reads.
+type reconciliationWiring struct {
+	policyScenes      func(scene.SceneRepository) scene.SceneRepository
+	policyWidgetTypes func(library.WidgetTypeRepository) library.WidgetTypeRepository
+	sceneWidgetTypes  func(library.WidgetTypeRepository) library.WidgetTypeRepository
+}
+
+func newReconciliation(t *testing.T, wiring reconciliationWiring) *reconciliation {
+	t.Helper()
+	cleanScenes(t)
+	cleanWidgetTypes(t)
+	cleanOutbox(t)
+	cleanPolicyJobs(t)
+
+	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
+	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
+	var policyScenes scene.SceneRepository = sceneRepo
+	if wiring.policyScenes != nil {
+		policyScenes = wiring.policyScenes(sceneRepo)
+	}
+	var policyWidgetTypes library.WidgetTypeRepository = wtRepo
+	if wiring.policyWidgetTypes != nil {
+		policyWidgetTypes = wiring.policyWidgetTypes(wtRepo)
+	}
+	var sceneWidgetTypes library.WidgetTypeRepository = wtRepo
+	if wiring.sceneWidgetTypes != nil {
+		sceneWidgetTypes = wiring.sceneWidgetTypes(wtRepo)
+	}
+
+	r := &reconciliation{
+		wtSvc:    application.NewWidgetTypeService(wtRepo),
+		sceneSvc: application.NewSceneService(sceneRepo, sceneWidgetTypes),
+	}
+	// A pause long enough that only a merged event makes a failed job due
+	// again within a test.
+	r.runner = outbox.NewPolicyRunner(testDB,
+		[]application.Policy{application.NewWidgetReconciliationPolicy(policyWidgetTypes, policyScenes)},
+		outbox.WithRetryPause(time.Hour, time.Hour))
+	r.dispatcher = outbox.NewDispatcher(testDB, func(e event.Event) { r.delivered = append(r.delivered, e) },
+		outbox.WithPolicyRunner(r.runner))
+	return r
+}
+
+func (r *reconciliation) drain(t *testing.T) {
+	t.Helper()
+	if _, err := r.dispatcher.DrainOnce(context.Background()); err != nil {
+		t.Fatalf("DrainOnce: %v", err)
+	}
+}
+
+func (r *reconciliation) runDue(t *testing.T) int {
+	t.Helper()
+	n, err := r.runner.RunDueOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunDueOnce: %v", err)
+	}
+	return n
+}
+
+// settle delivers the outbox and runs the due jobs until neither is left.
+func (r *reconciliation) settle(t *testing.T) {
+	t.Helper()
+	for range 10 {
+		r.drain(t)
+		if r.runDue(t) == 0 {
+			return
+		}
+	}
+	t.Fatal("jobs keep becoming due")
+}
+
+// takeDelivered returns the events delivered since the last call.
+func (r *reconciliation) takeDelivered() []event.Event {
+	out := r.delivered
+	r.delivered = nil
+	return out
+}
+
+func (r *reconciliation) createType(t *testing.T, ports ...string) appdto.WidgetType {
+	t.Helper()
+	input := appdto.WidgetTypeInput{
+		Name: "sensor", HtmlTemplate: "<div></div>", ScriptLanguage: "javascript",
+		DefaultWidth: 100, DefaultHeight: 100,
+	}
+	for _, p := range ports {
+		input.InputPorts = append(input.InputPorts, appdto.InputPort{Name: p})
+	}
+	created, err := r.wtSvc.CreateWidgetType(context.Background(), input)
+	if err != nil {
+		t.Fatalf("CreateWidgetType: %v", err)
+	}
+	return created
+}
+
+// keepPorts updates wt to declare only the given ports.
+func (r *reconciliation) keepPorts(t *testing.T, wt appdto.WidgetType, ports ...string) appdto.WidgetType {
+	t.Helper()
+	input := appdto.WidgetTypeInput{
+		Name: wt.Name, HtmlTemplate: wt.HtmlTemplate, Script: wt.Script, ScriptLanguage: wt.ScriptLanguage,
+		DefaultWidth: wt.DefaultWidth, DefaultHeight: wt.DefaultHeight,
+	}
+	for _, p := range ports {
+		input.InputPorts = append(input.InputPorts, appdto.InputPort{Name: p})
+	}
+	updated, err := r.wtSvc.UpdateWidgetType(context.Background(), wt.ID, wt.Version, input)
+	if err != nil {
+		t.Fatalf("UpdateWidgetType: %v", err)
+	}
+	return updated
+}
+
+func (r *reconciliation) createScene(t *testing.T, name string) appdto.Scene {
+	t.Helper()
+	sc, err := r.sceneSvc.CreateScene(context.Background(), appdto.SceneInput{Name: name, Width: 800, Height: 600})
+	if err != nil {
+		t.Fatalf("CreateScene: %v", err)
+	}
+	return sc
+}
+
+// addWidget adds to the scene a widget of wt bound to the given ports.
+func (r *reconciliation) addWidget(t *testing.T, sceneID uuid.UUID, sceneVersion int, wt appdto.WidgetType, ports ...string) appdto.Widget {
+	t.Helper()
+	input := appdto.WidgetInput{
+		Name: "widget", Width: 100, Height: 100, OriginX: 0.5, OriginY: 0.5, TypeID: wt.ID,
+	}
+	for _, p := range ports {
+		input.PortBindings = append(input.PortBindings, appdto.PortBinding{PortName: p, TagID: uuid.New()})
+	}
+	w, err := r.sceneSvc.CreateWidget(context.Background(), sceneID, sceneVersion, input)
+	if err != nil {
+		t.Fatalf("CreateWidget: %v", err)
+	}
+	return w
+}
+
+// boundPorts returns the ports the widget is bound to now.
+func (r *reconciliation) boundPorts(t *testing.T, sceneID, widgetID uuid.UUID) []string {
+	t.Helper()
+	w, err := r.sceneSvc.FindWidgetByID(context.Background(), sceneID, widgetID)
+	if err != nil {
+		t.Fatalf("FindWidgetByID: %v", err)
+	}
+	ports := []string{}
+	for _, b := range w.PortBindings {
+		ports = append(ports, b.PortName)
+	}
+	return ports
+}
+
+func (r *reconciliation) sceneVersion(t *testing.T, sceneID uuid.UUID) int {
+	t.Helper()
+	sc, err := r.sceneSvc.FindSceneByID(context.Background(), sceneID)
+	if err != nil {
+		t.Fatalf("FindSceneByID: %v", err)
+	}
+	return sc.Version
+}
+
+// scenesOf returns the Scenes holding the widgets of the delivered events of
+// the given type, in delivery order.
+func scenesOf(events []event.Event, et event.EventType) []uuid.UUID {
+	var out []uuid.UUID
+	for _, e := range events {
+		if ev, ok := e.(scene.WidgetEvent); ok && e.Type() == et {
+			out = append(out, ev.SceneID().UUID())
+		}
+	}
+	return out
+}
+
+type policyJobRow struct {
+	key        string
+	generation int64
+	attempts   int
+	lastError  string
+}
+
+func policyJobs(t *testing.T) []policyJobRow {
+	t.Helper()
+	rows, err := testDB.QueryContext(context.Background(),
+		`SELECT job_key, generation, attempts, coalesce(last_error, '') FROM policy_jobs WHERE policy = $1 ORDER BY job_key`,
+		application.WidgetReconciliationPolicyName)
+	if err != nil {
+		t.Fatalf("read policy_jobs: %v", err)
+	}
+	defer rows.Close()
+	var out []policyJobRow
+	for rows.Next() {
+		var j policyJobRow
+		if err := rows.Scan(&j.key, &j.generation, &j.attempts, &j.lastError); err != nil {
+			t.Fatalf("scan policy_jobs: %v", err)
+		}
+		out = append(out, j)
+	}
+	return out
+}
+
+// --- JobKey ---
+
+func TestWidgetReconciliationPolicy_JobKey(t *testing.T) {
+	policy := application.NewWidgetReconciliationPolicy(nil, nil)
+	wtID := id.NewID[library.WidgetType]()
+	widgetID, sceneID := id.NewID[scene.Widget](), id.NewID[scene.Scene]()
+
+	keyed := []event.Event{
+		library.NewWidgetTypeUpdatedEvent(wtID),
+		scene.NewWidgetCreatedEvent(widgetID, sceneID, wtID),
+		scene.NewWidgetUpdatedEvent(widgetID, sceneID, wtID),
+	}
+	for _, e := range keyed {
+		if key, ok := policy.JobKey(e); !ok || key != wtID.String() {
+			t.Errorf("%s: key %q (%t), want %q", e.Type(), key, ok, wtID)
+		}
+	}
+	notKeyed := []event.Event{
+		library.NewWidgetTypeCreatedEvent(wtID),
+		library.NewWidgetTypeDeletedEvent(wtID),
+		scene.NewWidgetDeletedEvent(widgetID, sceneID),
+		scene.NewWidgetCreatedEventOfUnknownType(widgetID, sceneID),
+		scene.NewWidgetUpdatedEventOfUnknownType(widgetID, sceneID),
+		scene.NewSceneUpdatedEvent(sceneID),
+	}
+	for _, e := range notKeyed {
+		if key, ok := policy.JobKey(e); ok {
+			t.Errorf("%s: unexpected job %q", e.Type(), key)
+		}
+	}
+}
+
+// --- Run ---
+
+func TestUpdateWidgetType_RemovedPort_LeavesScenesToThePolicy(t *testing.T) {
+	r := newReconciliation(t, reconciliationWiring{})
+	wt := r.createType(t, "value")
+	sc := r.createScene(t, "scene")
+	w := r.addWidget(t, sc.ID, sc.Version, wt, "value")
+
+	r.keepPorts(t, wt)
+
+	if got := r.boundPorts(t, sc.ID, w.ID); !slices.Equal(got, []string{"value"}) {
+		t.Errorf("bound to %v before the policy ran, want [value]", got)
+	}
+	r.settle(t)
+	if got := r.boundPorts(t, sc.ID, w.ID); len(got) != 0 {
+		t.Errorf("bound to %v after the policy ran, want none", got)
+	}
+	if jobs := policyJobs(t); len(jobs) != 0 {
+		t.Errorf("jobs left: %v", jobs)
+	}
+}
+
+// Regression: with 2+ widgets of the same type in one scene, the second
+// widget's cleanup must not fail on the version the first one raised.
+func TestWidgetReconciliation_RemovedPort_CleansBindingsOnAllWidgetsInSameScene(t *testing.T) {
+	r := newReconciliation(t, reconciliationWiring{})
+	wt := r.createType(t, "value")
+	sc := r.createScene(t, "scene")
+	first := r.addWidget(t, sc.ID, sc.Version, wt, "value")
+	second := r.addWidget(t, sc.ID, first.SceneVersion, wt, "value")
+
+	r.keepPorts(t, wt)
+	r.settle(t)
+
+	for _, w := range []appdto.Widget{first, second} {
+		if got := r.boundPorts(t, sc.ID, w.ID); len(got) != 0 {
+			t.Errorf("widget %s: bound to %v, want none", w.ID, got)
+		}
+	}
+}
+
+// listRacingSceneRepository runs race once, right after the first
+// FindByWidgetTypeID: someone else changes a listed Scene before the policy
+// saves it.
+type listRacingSceneRepository struct {
+	scene.SceneRepository
+	race func()
+}
+
+func (r *listRacingSceneRepository) FindByWidgetTypeID(ctx context.Context, typeID id.ID[library.WidgetType]) ([]scene.Scene, error) {
+	found, err := r.SceneRepository.FindByWidgetTypeID(ctx, typeID)
+	if race := r.race; race != nil {
+		r.race = nil
+		race()
+	}
+	return found, err
+}
+
+func TestWidgetReconciliation_SceneChangedMeanwhile_CleansBindingsKeepsChange(t *testing.T) {
+	racing := &listRacingSceneRepository{}
+	r := newReconciliation(t, reconciliationWiring{
+		policyScenes: func(inner scene.SceneRepository) scene.SceneRepository {
+			racing.SceneRepository = inner
+			return racing
+		},
+	})
+	wt := r.createType(t, "value")
+	sc := r.createScene(t, "scene")
+	w := r.addWidget(t, sc.ID, sc.Version, wt, "value")
+	racing.race = func() {
+		if _, err := r.sceneSvc.UpdateScene(context.Background(), sc.ID, w.SceneVersion, appdto.SceneInput{Name: "renamed", Width: 800, Height: 600}); err != nil {
+			t.Fatalf("concurrent UpdateScene: %v", err)
+		}
+	}
+
+	r.keepPorts(t, wt)
+	r.settle(t)
+
+	found, err := r.sceneSvc.FindSceneByID(context.Background(), sc.ID)
+	if err != nil {
+		t.Fatalf("FindSceneByID: %v", err)
+	}
+	if found.Name != "renamed" {
+		t.Errorf("expected the concurrent change kept, got name %q", found.Name)
+	}
+	if got := r.boundPorts(t, sc.ID, w.ID); len(got) != 0 {
+		t.Errorf("bound to %v, want none", got)
+	}
+}
+
+func TestWidgetReconciliation_RemovedPort_DeliversEventsOfEveryChangedScene(t *testing.T) {
+	r := newReconciliation(t, reconciliationWiring{})
+	wt := r.createType(t, "value")
+	var changed []uuid.UUID
+	for _, name := range []string{"first", "second"} {
+		sc := r.createScene(t, name)
+		r.addWidget(t, sc.ID, sc.Version, wt, "value")
+		changed = append(changed, sc.ID)
+	}
+	untouched := r.createScene(t, "untouched")
+	r.addWidget(t, untouched.ID, untouched.Version, wt)
+	r.settle(t)
+	r.takeDelivered()
+
+	r.keepPorts(t, wt)
+	r.drain(t)
+	r.runDue(t)
+	r.drain(t)
+
+	got := scenesOf(r.takeDelivered(), event.EventTypeWidgetUpdated)
+	slices.SortFunc(got, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
+	slices.SortFunc(changed, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
+	if !slices.Equal(got, changed) {
+		t.Errorf("widget_updated delivered for scenes %v, want each changed scene %v", got, changed)
+	}
+}
+
+// failingSaveSceneRepository fails the next failures Saves of one Scene.
+type failingSaveSceneRepository struct {
+	scene.SceneRepository
+	failScene uuid.UUID
+	failures  int
+}
+
+var errSaveFailed = errors.New("save failed")
+
+func (r *failingSaveSceneRepository) Save(ctx context.Context, sc scene.Scene) (scene.Scene, error) {
+	if sc.ID().UUID() == r.failScene && r.failures > 0 {
+		r.failures--
+		return nil, errSaveFailed
+	}
+	return r.SceneRepository.Save(ctx, sc)
+}
+
+func TestWidgetReconciliation_OneSceneFails_OthersReconciledAndOnlyItRetried(t *testing.T) {
+	failing := &failingSaveSceneRepository{}
+	r := newReconciliation(t, reconciliationWiring{
+		policyScenes: func(inner scene.SceneRepository) scene.SceneRepository {
+			failing.SceneRepository = inner
+			return failing
+		},
+	})
+	wt := r.createType(t, "value")
+	good := r.createScene(t, "good")
+	goodWidget := r.addWidget(t, good.ID, good.Version, wt, "value")
+	bad := r.createScene(t, "bad")
+	badWidget := r.addWidget(t, bad.ID, bad.Version, wt, "value")
+	r.settle(t)
+	failing.failScene, failing.failures = bad.ID, 1
+
+	r.keepPorts(t, wt)
+	r.drain(t)
+	r.runDue(t)
+
+	if got := r.boundPorts(t, good.ID, goodWidget.ID); len(got) != 0 {
+		t.Errorf("scene that did not fail: bound to %v, want none", got)
+	}
+	if got := r.boundPorts(t, bad.ID, badWidget.ID); !slices.Equal(got, []string{"value"}) {
+		t.Errorf("scene that failed: bound to %v, want [value]", got)
+	}
+	jobs := policyJobs(t)
+	if len(jobs) != 1 || jobs[0].attempts != 1 || !strings.Contains(jobs[0].lastError, errSaveFailed.Error()) {
+		t.Fatalf("jobs %+v, want one failed once with %q", jobs, errSaveFailed)
+	}
+	goodVersion := r.sceneVersion(t, good.ID)
+
+	// The event of the reconciled scene merges into the failed job: it is due
+	// at once, and the retry runs over every scene again.
+	r.drain(t)
+	r.takeDelivered()
+	r.settle(t)
+
+	if got := r.boundPorts(t, bad.ID, badWidget.ID); len(got) != 0 {
+		t.Errorf("scene that failed: bound to %v after the retry, want none", got)
+	}
+	delivered := r.takeDelivered()
+	if got := scenesOf(delivered, event.EventTypeWidgetUpdated); !slices.Equal(got, []uuid.UUID{bad.ID}) {
+		t.Errorf("retry delivered widget_updated for scenes %v, want only %s", got, bad.ID)
+	}
+	if v := r.sceneVersion(t, good.ID); v != goodVersion {
+		t.Errorf("scene reconciled before: version %d after the retry, want %d", v, goodVersion)
+	}
+	if jobs := policyJobs(t); len(jobs) != 0 {
+		t.Errorf("jobs left: %+v", jobs)
+	}
+}
+
+// racingFindWidgetTypeRepository runs race once, right after the first
+// FindByID has read the widget type, and counts the reads.
+type racingFindWidgetTypeRepository struct {
+	library.WidgetTypeRepository
+	race  func()
+	reads int
+}
+
+func (r *racingFindWidgetTypeRepository) FindByID(ctx context.Context, wtID id.ID[library.WidgetType]) (library.WidgetType, error) {
+	found, err := r.WidgetTypeRepository.FindByID(ctx, wtID)
+	r.reads++
+	if race := r.race; race != nil {
+		r.race = nil
+		race()
+	}
+	return found, err
+}
+
+func TestWidgetReconciliation_WidgetTypeUpdatedWhileJobRuns_RunsAgainWithNewWidgetType(t *testing.T) {
+	racing := &racingFindWidgetTypeRepository{}
+	r := newReconciliation(t, reconciliationWiring{
+		policyWidgetTypes: func(inner library.WidgetTypeRepository) library.WidgetTypeRepository {
+			racing.WidgetTypeRepository = inner
+			return racing
+		},
+	})
+	wt := r.createType(t, "value", "alarm")
+	sc := r.createScene(t, "scene")
+	w := r.addWidget(t, sc.ID, sc.Version, wt, "value", "alarm")
+	r.settle(t)
+	racing.reads = 0
+
+	withAlarm := r.keepPorts(t, wt, "alarm")
+	r.drain(t)
+	// The job has been taken and the widget type read: a further update is
+	// delivered while the job runs.
+	racing.race = func() {
+		r.keepPorts(t, withAlarm)
+		r.drain(t)
+	}
+	ran := r.runDue(t)
+
+	if ran != 2 || racing.reads != 2 {
+		t.Errorf("ran %d times, read the widget type %d times; want 2 and 2", ran, racing.reads)
+	}
+	if got := r.boundPorts(t, sc.ID, w.ID); len(got) != 0 {
+		t.Errorf("bound to %v, want none", got)
+	}
+}
+
+func TestWidgetReconciliation_TwoUpdatesBeforeRun_MergeIntoOneJob(t *testing.T) {
+	r := newReconciliation(t, reconciliationWiring{})
+	wt := r.createType(t, "value", "alarm")
+
+	withAlarm := r.keepPorts(t, wt, "alarm")
+	r.drain(t)
+	r.keepPorts(t, withAlarm)
+	r.drain(t)
+
+	jobs := policyJobs(t)
+	if len(jobs) != 1 || jobs[0].key != wt.ID.String() || jobs[0].generation != 2 {
+		t.Fatalf("jobs %+v, want one for %s at generation 2", jobs, wt.ID)
+	}
+	if ran := r.runDue(t); ran != 1 {
+		t.Errorf("ran %d times, want 1", ran)
+	}
+}
+
+func TestWidgetReconciliation_WidgetBoundToPortRemovedAfterTypeWasRead_LosesBinding(t *testing.T) {
+	racing := &racingFindWidgetTypeRepository{}
+	r := newReconciliation(t, reconciliationWiring{
+		sceneWidgetTypes: func(inner library.WidgetTypeRepository) library.WidgetTypeRepository {
+			racing.WidgetTypeRepository = inner
+			return racing
+		},
+	})
+	wt := r.createType(t, "value")
+	sc := r.createScene(t, "scene")
+	// CreateWidget has checked the widget against the type with "value";
+	// before it commits, the port is removed and the policy runs over a scene
+	// that does not hold the widget yet.
+	racing.race = func() {
+		r.keepPorts(t, wt)
+		r.settle(t)
+	}
+	w := r.addWidget(t, sc.ID, sc.Version, wt, "value")
+	if got := r.boundPorts(t, sc.ID, w.ID); !slices.Equal(got, []string{"value"}) {
+		t.Fatalf("bound to %v right after the race, want [value]", got)
+	}
+
+	r.drain(t)
+	r.runDue(t)
+
+	if got := r.boundPorts(t, sc.ID, w.ID); len(got) != 0 {
+		t.Errorf("bound to %v, want none", got)
+	}
+}
+
+func TestWidgetReconciliation_DeletedWidgetType_JobIsDone(t *testing.T) {
+	r := newReconciliation(t, reconciliationWiring{})
+	wt := r.createType(t, "value")
+	r.keepPorts(t, wt)
+	r.drain(t)
+	if _, err := r.wtSvc.DeleteWidgetTypeByID(context.Background(), wt.ID); err != nil {
+		t.Fatalf("DeleteWidgetTypeByID: %v", err)
+	}
+
+	r.runDue(t)
+
+	if jobs := policyJobs(t); len(jobs) != 0 {
+		t.Errorf("jobs left: %+v", jobs)
+	}
+}
