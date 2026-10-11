@@ -61,7 +61,6 @@ func (l *Library) createItem(ctx app.Context) {
 			l.editedName = name
 			l.editedHTML = defaultHTML
 			l.editedScript = defaultScript
-			l.editedInputValues = make(map[string]string)
 			l.editedInputPorts = nil
 			l.editedScriptLang = "javascript"
 			l.loadList(ctx)

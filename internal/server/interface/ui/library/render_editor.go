@@ -74,14 +74,13 @@ func (f *inputDataField) OnUpdate(ctx app.Context) {
 	f.setDOMValue(ctx)
 }
 
-// previewFrame is a thin component that owns the sandboxed preview iframe.
-// It sets iframe.srcdoc via a JS property assignment (not setAttribute) on
-// mount and every update, because browsers only reload an iframe when the
-// srcdoc *property* is written — mutating the HTML attribute has no effect.
+// previewFrame is a thin component that owns the sandboxed preview iframe;
+// it gives the iframe Srcdoc through uiutil.IframeSrcdoc.
 type previewFrame struct {
 	app.Compo
 	ID     string
 	Srcdoc string
+	doc    uiutil.IframeSrcdoc
 }
 
 func (p *previewFrame) Render() app.UI {
@@ -95,8 +94,8 @@ func (p *previewFrame) Render() app.UI {
 		Style("background", "transparent")
 }
 
-func (p *previewFrame) OnMount(ctx app.Context)  { uiutil.SetIframeSrcdoc(p.JSValue(), p.Srcdoc) }
-func (p *previewFrame) OnUpdate(ctx app.Context) { uiutil.SetIframeSrcdoc(p.JSValue(), p.Srcdoc) }
+func (p *previewFrame) OnMount(ctx app.Context)  { p.doc.Mount(p.JSValue(), p.Srcdoc) }
+func (p *previewFrame) OnUpdate(ctx app.Context) { p.doc.Update(p.JSValue(), p.Srcdoc) }
 
 // textareaValueSync keeps the DOM value of the textarea with the given ID equal
 // to Value. go-app renders a textarea's value as its text content and never
@@ -175,7 +174,7 @@ func (l *Library) renderPreviewColumn() app.UI {
 	} else {
 		content = &previewFrame{
 			ID:     "preview-iframe",
-			Srcdoc: uiutil.BuildSrcdoc(l.editedHTML, l.editedScript, uiutil.PreviewInputs(l.editedInputValues, l.editedInputPorts), l.editedInputPorts, uiutil.IframeBgColor()),
+			Srcdoc: uiutil.BuildSrcdoc(l.editedHTML, l.editedScript, uiutil.PreviewInputs(l.selectedInputValues(), l.editedInputPorts), l.editedInputPorts, uiutil.IframeBgColor()),
 		}
 	}
 	return app.Div().
@@ -388,7 +387,7 @@ func (l *Library) renderInputDataColumn() app.UI {
 		if placeholder == "" {
 			placeholder = "value"
 		}
-		val := l.editedInputValues[portName]
+		val := l.selectedInputValues()[portName]
 
 		row := app.Tr().Body(
 			app.Td().
@@ -422,10 +421,7 @@ func (l *Library) renderInputDataColumn() app.UI {
 						Val:         val,
 						PortName:    portName,
 						OnChange: func(v string) {
-							if l.editedInputValues == nil {
-								l.editedInputValues = make(map[string]string)
-							}
-							l.editedInputValues[portName] = v
+							l.setInputValue(l.compoCtx, portName, v)
 						},
 					},
 				),

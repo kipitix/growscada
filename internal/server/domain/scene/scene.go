@@ -70,8 +70,8 @@ type Scene interface {
 
 	// ReconcileWith removes, from the scene's widgets of WidgetType wt, the
 	// PortBindings of ports wt no longer declares, recording a
-	// WidgetUpdatedEvent for each widget it changes. The bool reports whether
-	// anything was removed.
+	// WidgetUpdatedEvent ByReconciliation for each widget it changes. The bool
+	// reports whether anything was removed.
 	ReconcileWith(wt library.WidgetType) (Scene, bool)
 
 	// Delete records a WidgetDeletedEvent for each of the scene's widgets,
@@ -231,7 +231,7 @@ func (s *sceneImpl) ReconcileWith(wt library.WidgetType) (Scene, bool) {
 			w.ID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(),
 			w.TypeID(), w.Labels(), kept,
 		)
-		events = append(events, NewWidgetUpdatedEvent(w.ID(), s.id, w.TypeID()))
+		events = append(events, NewWidgetUpdatedByReconciliationEvent(w.ID(), s.id, w.TypeID()))
 	}
 	if widgets == nil {
 		return s, false

@@ -2,7 +2,9 @@ package repositories_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -164,5 +166,166 @@ func TestPolicyRunner_StoppedWhileRunning_JobRunsAgainAfterStart(t *testing.T) {
 	}
 	if left := countPolicyJobs(t); left != 0 {
 		t.Errorf("%d jobs left", left)
+	}
+}
+
+// policyJobState is the row of a testPolicy job.
+type policyJobState struct {
+	generation int64
+	attempts   int
+	due        bool
+	lastError  string
+}
+
+func policyJobOf(t *testing.T, key string) (policyJobState, bool) {
+	t.Helper()
+	var j policyJobState
+	err := testDB.QueryRowContext(context.Background(),
+		`SELECT generation, attempts, next_attempt_at <= now(), coalesce(last_error, '')
+		 FROM policy_jobs WHERE policy = $1 AND job_key = $2`, testPolicyName, key,
+	).Scan(&j.generation, &j.attempts, &j.due, &j.lastError)
+	if errors.Is(err, sql.ErrNoRows) {
+		return j, false
+	}
+	if err != nil {
+		t.Fatalf("read policy job: %v", err)
+	}
+	return j, true
+}
+
+// enqueueTagCreated saves a new Tag and delivers its tag_created event, which
+// enqueues a job of runner's policies.
+func enqueueTagCreated(t *testing.T, runner *outbox.PolicyRunner, name string) tag.Tag {
+	t.Helper()
+	repo := repositories.NewTagRepositoryPostgres(testDB)
+	saved := mustSaveTag(t, repo, createTag(t, repo, name))
+	if _, err := outbox.NewDispatcher(testDB, func(event.Event) {}, outbox.WithPolicyRunner(runner)).DrainOnce(context.Background()); err != nil {
+		t.Fatalf("DrainOnce: %v", err)
+	}
+	return saved
+}
+
+func runDueOnce(t *testing.T, runner *outbox.PolicyRunner) int {
+	t.Helper()
+	n, err := runner.RunDueOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunDueOnce: %v", err)
+	}
+	return n
+}
+
+func TestPolicyRunner_PolicyPanics_FailureRecordedRunnerGoesOn(t *testing.T) {
+	cleanTags(t)
+	cleanOutbox(t)
+	cleanPolicyJobs(t)
+	policy := newTestPolicy(func(context.Context, string, int) error { panic("boom") })
+	runner := outbox.NewPolicyRunner(testDB, []application.Policy{policy}, outbox.WithRetryPause(time.Hour, time.Hour))
+	key := enqueueTagCreated(t, runner, "panicking").ID().String()
+
+	if n := runDueOnce(t, runner); n != 1 {
+		t.Errorf("ran %d jobs, want 1", n)
+	}
+
+	job, ok := policyJobOf(t, key)
+	if !ok || job.attempts != 1 || job.due || !strings.Contains(job.lastError, "boom") {
+		t.Errorf("job %+v (found %t), want one failed once with the panic, waiting", job, ok)
+	}
+}
+
+func TestPolicyRunner_AttemptOutlastsTimeout_FailsAndOtherJobsRun(t *testing.T) {
+	cleanTags(t)
+	cleanOutbox(t)
+	cleanPolicyJobs(t)
+	var hangingKey string
+	policy := newTestPolicy(func(ctx context.Context, key string, _ int) error {
+		if key == hangingKey {
+			<-ctx.Done()
+			return ctx.Err()
+		}
+		return nil
+	})
+	runner := outbox.NewPolicyRunner(testDB, []application.Policy{policy},
+		outbox.WithRetryPause(time.Hour, time.Hour), outbox.WithAttemptTimeout(50*time.Millisecond))
+	hangingKey = enqueueTagCreated(t, runner, "hanging").ID().String()
+	otherKey := enqueueTagCreated(t, runner, "other").ID().String()
+
+	if n := runDueOnce(t, runner); n != 2 {
+		t.Errorf("ran %d jobs, want 2", n)
+	}
+
+	job, ok := policyJobOf(t, hangingKey)
+	if !ok || job.attempts != 1 || job.due || !strings.Contains(job.lastError, context.DeadlineExceeded.Error()) {
+		t.Errorf("hanging job %+v (found %t), want one failed once on the timeout, waiting", job, ok)
+	}
+	if _, ok := policyJobOf(t, otherKey); ok || len(policy.runsOf(otherKey)) != 1 {
+		t.Errorf("the other job: left %t, ran %d times; want done once", ok, len(policy.runsOf(otherKey)))
+	}
+}
+
+// sameKeyPolicy keys every tag_created event by one key.
+type sameKeyPolicy struct{ *testPolicy }
+
+const sameKey = "same"
+
+func (p sameKeyPolicy) JobKey(e event.Event) (string, bool) {
+	if _, ok := p.testPolicy.JobKey(e); ok {
+		return sameKey, true
+	}
+	return "", false
+}
+
+func TestPolicyRunner_EventMergesIntoFailedJob_KeepsItsPause(t *testing.T) {
+	cleanTags(t)
+	cleanOutbox(t)
+	cleanPolicyJobs(t)
+	policy := sameKeyPolicy{newTestPolicy(func(context.Context, string, int) error { return errors.New("fails") })}
+	runner := outbox.NewPolicyRunner(testDB, []application.Policy{policy}, outbox.WithRetryPause(time.Hour, time.Hour))
+	enqueueTagCreated(t, runner, "first")
+	runDueOnce(t, runner)
+
+	enqueueTagCreated(t, runner, "second")
+
+	job, ok := policyJobOf(t, sameKey)
+	if !ok || job.generation != 2 || job.attempts != 1 || job.due {
+		t.Errorf("job %+v (found %t), want generation 2, failed once, still waiting", job, ok)
+	}
+	if n := runDueOnce(t, runner); n != 0 {
+		t.Errorf("ran %d jobs before the pause was over, want none", n)
+	}
+}
+
+func TestPolicyRunner_EventMergesWhileRetrySucceeds_RunsAgainWithFailuresForgotten(t *testing.T) {
+	cleanTags(t)
+	cleanOutbox(t)
+	cleanPolicyJobs(t)
+	var runner *outbox.PolicyRunner
+	var beforeLastRun policyJobState
+	policy := sameKeyPolicy{newTestPolicy(func(_ context.Context, _ string, attempt int) error {
+		switch attempt {
+		case 1:
+			return errors.New("first attempt fails")
+		case 2: // the retry succeeds, an event merging in meanwhile
+			enqueueTagCreated(t, runner, "second")
+		case 3:
+			beforeLastRun, _ = policyJobOf(t, sameKey)
+		}
+		return nil
+	})}
+	runner = outbox.NewPolicyRunner(testDB, []application.Policy{policy}, outbox.WithRetryPause(time.Hour, time.Hour))
+	enqueueTagCreated(t, runner, "first")
+	runDueOnce(t, runner)
+	if _, err := testDB.ExecContext(context.Background(), `UPDATE policy_jobs SET next_attempt_at = now()`); err != nil {
+		t.Fatalf("make the job due: %v", err)
+	}
+
+	if n := runDueOnce(t, runner); n != 2 {
+		t.Errorf("ran %d attempts, want the retry and one more for the merged event", n)
+	}
+
+	if beforeLastRun.attempts != 0 || beforeLastRun.lastError != "" {
+		t.Errorf("before the last run the job was %+v, want its failures forgotten", beforeLastRun)
+	}
+	if _, ok := policyJobOf(t, sameKey); ok {
+		t.Error("the job is left, want it done")
 	}
 }

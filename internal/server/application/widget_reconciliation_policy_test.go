@@ -237,6 +237,14 @@ func policyJobs(t *testing.T) []policyJobRow {
 	return out
 }
 
+// makeJobsDue ends the pause of every waiting job.
+func makeJobsDue(t *testing.T) {
+	t.Helper()
+	if _, err := testDB.ExecContext(context.Background(), `UPDATE policy_jobs SET next_attempt_at = now()`); err != nil {
+		t.Fatalf("make policy jobs due: %v", err)
+	}
+}
+
 // --- JobKey ---
 
 func TestWidgetReconciliationPolicy_JobKey(t *testing.T) {
@@ -244,22 +252,26 @@ func TestWidgetReconciliationPolicy_JobKey(t *testing.T) {
 	wtID := id.NewID[library.WidgetType]()
 	widgetID, sceneID := id.NewID[scene.Widget](), id.NewID[scene.Scene]()
 
-	keyed := []event.Event{
-		library.NewWidgetTypeUpdatedEvent(wtID),
-		scene.NewWidgetCreatedEvent(widgetID, sceneID, wtID),
-		scene.NewWidgetUpdatedEvent(widgetID, sceneID, wtID),
+	allScenes := "widget_type:" + wtID.String()
+	oneScene := allScenes + "/scene:" + sceneID.String()
+	keyed := []struct {
+		e    event.Event
+		want string
+	}{
+		{library.NewWidgetTypeUpdatedEvent(wtID), allScenes},
+		{scene.NewWidgetCreatedEvent(widgetID, sceneID, wtID), oneScene},
+		{scene.NewWidgetUpdatedEvent(widgetID, sceneID, wtID), oneScene},
 	}
-	for _, e := range keyed {
-		if key, ok := policy.JobKey(e); !ok || key != wtID.String() {
-			t.Errorf("%s: key %q (%t), want %q", e.Type(), key, ok, wtID)
+	for _, k := range keyed {
+		if key, ok := policy.JobKey(k.e); !ok || key != k.want {
+			t.Errorf("%s: key %q (%t), want %q", k.e.Type(), key, ok, k.want)
 		}
 	}
 	notKeyed := []event.Event{
 		library.NewWidgetTypeCreatedEvent(wtID),
 		library.NewWidgetTypeDeletedEvent(wtID),
 		scene.NewWidgetDeletedEvent(widgetID, sceneID),
-		scene.NewWidgetCreatedEventOfUnknownType(widgetID, sceneID),
-		scene.NewWidgetUpdatedEventOfUnknownType(widgetID, sceneID),
+		scene.NewWidgetUpdatedByReconciliationEvent(widgetID, sceneID, wtID),
 		scene.NewSceneUpdatedEvent(sceneID),
 	}
 	for _, e := range notKeyed {
@@ -338,8 +350,9 @@ func TestWidgetReconciliation_SceneChangedMeanwhile_CleansBindingsKeepsChange(t 
 	wt := r.createType(t, "value")
 	sc := r.createScene(t, "scene")
 	w := r.addWidget(t, sc.ID, sc.Version, wt, "value")
+	r.settle(t)
 	racing.race = func() {
-		if _, err := r.sceneSvc.UpdateScene(context.Background(), sc.ID, w.SceneVersion, appdto.SceneInput{Name: "renamed", Width: 800, Height: 600}); err != nil {
+		if _, err := r.sceneSvc.UpdateScene(context.Background(), sc.ID, r.sceneVersion(t, sc.ID), appdto.SceneInput{Name: "renamed", Width: 800, Height: 600}); err != nil {
 			t.Fatalf("concurrent UpdateScene: %v", err)
 		}
 	}
@@ -356,6 +369,102 @@ func TestWidgetReconciliation_SceneChangedMeanwhile_CleansBindingsKeepsChange(t 
 	}
 	if got := r.boundPorts(t, sc.ID, w.ID); len(got) != 0 {
 		t.Errorf("bound to %v, want none", got)
+	}
+}
+
+func TestWidgetReconciliation_PortAddedAndBoundWhileJobRuns_KeepsBinding(t *testing.T) {
+	racing := &listRacingSceneRepository{}
+	r := newReconciliation(t, reconciliationWiring{
+		policyScenes: func(inner scene.SceneRepository) scene.SceneRepository {
+			racing.SceneRepository = inner
+			return racing
+		},
+	})
+	wt := r.createType(t, "value", "old")
+	sc := r.createScene(t, "scene")
+	w := r.addWidget(t, sc.ID, sc.Version, wt, "value", "old")
+	r.settle(t)
+	withValue := r.keepPorts(t, wt, "value")
+	r.drain(t)
+	// The job has listed the scene, which still binds "old": before it saves,
+	// a port is added to the type and the widget is bound to it.
+	racing.race = func() {
+		r.keepPorts(t, withValue, "value", "alarm")
+		input := appdto.WidgetInput{
+			Name: "widget", Width: 100, Height: 100, OriginX: 0.5, OriginY: 0.5, TypeID: wt.ID,
+			PortBindings: []appdto.PortBinding{{PortName: "value", TagID: uuid.New()}, {PortName: "alarm", TagID: uuid.New()}},
+		}
+		if _, err := r.sceneSvc.UpdateWidget(context.Background(), sc.ID, w.ID, r.sceneVersion(t, sc.ID), input); err != nil {
+			t.Fatalf("concurrent UpdateWidget: %v", err)
+		}
+	}
+
+	r.settle(t)
+
+	if got := r.boundPorts(t, sc.ID, w.ID); !slices.Equal(got, []string{"value", "alarm"}) {
+		t.Errorf("bound to %v, want [value alarm]", got)
+	}
+}
+
+// countingSceneRepository counts the listings of Scenes by WidgetType.
+type countingSceneRepository struct {
+	scene.SceneRepository
+	listings int
+}
+
+func (r *countingSceneRepository) FindByWidgetTypeID(ctx context.Context, typeID id.ID[library.WidgetType]) ([]scene.Scene, error) {
+	r.listings++
+	return r.SceneRepository.FindByWidgetTypeID(ctx, typeID)
+}
+
+func TestWidgetReconciliation_WidgetEdited_ReconcilesOnlyItsScene(t *testing.T) {
+	counting := &countingSceneRepository{}
+	r := newReconciliation(t, reconciliationWiring{
+		policyScenes: func(inner scene.SceneRepository) scene.SceneRepository {
+			counting.SceneRepository = inner
+			return counting
+		},
+	})
+	wt := r.createType(t, "value")
+	edited := r.createScene(t, "edited")
+	other := r.createScene(t, "other")
+	r.addWidget(t, other.ID, other.Version, wt, "value")
+	r.settle(t)
+	counting.listings = 0
+
+	r.addWidget(t, edited.ID, edited.Version, wt, "value")
+	r.drain(t)
+
+	jobs := policyJobs(t)
+	if want := "widget_type:" + wt.ID.String() + "/scene:" + edited.ID.String(); len(jobs) != 1 || jobs[0].key != want {
+		t.Fatalf("jobs %+v, want one keyed %q", jobs, want)
+	}
+	if ran := r.runDue(t); ran != 1 || counting.listings != 0 {
+		t.Errorf("ran %d jobs, listed scenes by type %d times; want 1 and none", ran, counting.listings)
+	}
+}
+
+func TestWidgetReconciliation_OwnChanges_EnqueueNoJob(t *testing.T) {
+	r := newReconciliation(t, reconciliationWiring{})
+	wt := r.createType(t, "value")
+	for _, name := range []string{"first", "second"} {
+		sc := r.createScene(t, name)
+		r.addWidget(t, sc.ID, sc.Version, wt, "value")
+	}
+	r.settle(t)
+
+	r.keepPorts(t, wt)
+	r.drain(t)
+	if ran := r.runDue(t); ran != 1 {
+		t.Fatalf("ran %d jobs, want 1", ran)
+	}
+	r.drain(t)
+
+	if got := scenesOf(r.takeDelivered(), event.EventTypeWidgetUpdated); len(got) != 2 {
+		t.Errorf("widget_updated delivered for %d scenes, want 2", len(got))
+	}
+	if jobs := policyJobs(t); len(jobs) != 0 {
+		t.Errorf("the reconciliation's own events enqueued %+v, want nothing", jobs)
 	}
 }
 
@@ -435,10 +544,14 @@ func TestWidgetReconciliation_OneSceneFails_OthersReconciledAndOnlyItRetried(t *
 	}
 	goodVersion := r.sceneVersion(t, good.ID)
 
-	// The event of the reconciled scene merges into the failed job: it is due
-	// at once, and the retry runs over every scene again.
+	// The failed job waits out its pause; then the retry runs over every
+	// scene again.
 	r.drain(t)
 	r.takeDelivered()
+	if ran := r.runDue(t); ran != 0 {
+		t.Errorf("ran %d jobs before the pause was over, want none", ran)
+	}
+	makeJobsDue(t)
 	r.settle(t)
 
 	if got := r.boundPorts(t, bad.ID, badWidget.ID); len(got) != 0 {
@@ -516,7 +629,7 @@ func TestWidgetReconciliation_TwoUpdatesBeforeRun_MergeIntoOneJob(t *testing.T) 
 	r.drain(t)
 
 	jobs := policyJobs(t)
-	if len(jobs) != 1 || jobs[0].key != wt.ID.String() || jobs[0].generation != 2 {
+	if len(jobs) != 1 || jobs[0].key != "widget_type:"+wt.ID.String() || jobs[0].generation != 2 {
 		t.Fatalf("jobs %+v, want one for %s at generation 2", jobs, wt.ID)
 	}
 	if ran := r.runDue(t); ran != 1 {

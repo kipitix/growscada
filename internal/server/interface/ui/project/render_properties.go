@@ -685,13 +685,7 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 					Val:      val,
 					PortName: port.Name,
 					OnChange: func(v string) {
-						if p.simInputs == nil {
-							p.simInputs = make(map[string]map[string]string)
-						}
-						if p.simInputs[wid] == nil {
-							p.simInputs[wid] = make(map[string]string)
-						}
-						p.simInputs[wid][port.Name] = v
+						p.setSimInput(p.compoCtx, wid, port.Name, v)
 						// Directly push the updated srcdoc so the canvas preview
 						// reflects the new value without waiting for a parent re-render.
 						srcdoc := uiutil.BuildSrcdoc(capturedWT.HtmlTemplate, capturedWT.Script, uiutil.PreviewInputs(p.simInputs[wid], capturedWT.InputPorts), capturedWT.InputPorts, uiutil.IframeBgColor())

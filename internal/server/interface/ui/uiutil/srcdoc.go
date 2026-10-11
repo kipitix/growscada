@@ -55,20 +55,51 @@ func IframeTextMuted() string {
 	return color
 }
 
-// SetIframeSrcdoc gives the iframe element frame the document srcdoc, unless
-// it already has it (setting srcdoc reloads the iframe). A component passes
-// its own element (JSValue), never looks it up by id: go-app reuses a
-// component for another item in the same place (e.g. a Widget of another
-// Scene), and OnUpdate may run before the element's id is updated, so a
-// lookup by the new id finds nothing and the iframe keeps showing the
-// previous item.
-func SetIframeSrcdoc(frame app.Value, srcdoc string) {
-	if frame == nil || frame.IsNull() || frame.IsUndefined() {
+// IframeSrcdoc gives a component's iframe its document, a field of the
+// component that calls Mount from OnMount and Update from OnUpdate. It sets
+// the srcdoc property (not the attribute: only the property reloads the
+// iframe) and only when the document changed, since setting it reloads the
+// iframe. It remembers the document it set, so an update with the same
+// document (the canvas re-renders on every drag move) costs no copy of it
+// out of the DOM.
+//
+// The component passes its own element (JSValue), never looks it up by id:
+// go-app reuses a component for another item in the same place (e.g. a
+// Widget of another Scene), and OnUpdate may run before the element's id is
+// updated, so a lookup by the new id finds nothing and the iframe keeps
+// showing the previous item.
+type IframeSrcdoc struct {
+	last string
+	set  bool
+}
+
+// Mount gives the freshly mounted iframe frame the document srcdoc, unless
+// it already has it.
+func (s *IframeSrcdoc) Mount(frame app.Value, srcdoc string) {
+	s.set = false
+	if !isElement(frame) {
 		return
 	}
 	if frame.Get("srcdoc").String() != srcdoc {
 		frame.Set("srcdoc", srcdoc)
 	}
+	s.last, s.set = srcdoc, true
+}
+
+// Update gives frame the document srcdoc if it differs from the one set last.
+func (s *IframeSrcdoc) Update(frame app.Value, srcdoc string) {
+	if s.set && s.last == srcdoc {
+		return
+	}
+	if !isElement(frame) {
+		return
+	}
+	frame.Set("srcdoc", srcdoc)
+	s.last, s.set = srcdoc, true
+}
+
+func isElement(v app.Value) bool {
+	return v != nil && !v.IsNull() && !v.IsUndefined()
 }
 
 // Input is one InputPort's entry in the `inputs` object a WidgetType script's

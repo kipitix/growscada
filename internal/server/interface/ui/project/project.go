@@ -127,7 +127,8 @@ type Project struct {
 	editingRotation   string
 
 	// ── Input simulation (in-memory only, not persisted) ───────────────────
-	// simInputs[widgetID][portName] = test value string
+	// simInputs[widgetID][portName] = test value string, kept in the app
+	// state simInputsState
 	simInputs map[string]map[string]string
 
 	// ── Panel resize state ──────────────────────────────────────────────────
@@ -145,7 +146,7 @@ func NewProject(apiServerURL string) *Project {
 func (p *Project) OnMount(ctx app.Context) {
 	p.compoCtx = ctx
 	ctx.ObserveState("theme", &p.ThemeMode)
-	p.simInputs = make(map[string]map[string]string)
+	p.loadSimInputs(ctx)
 	p.widgetTypeWidth = 180
 	p.propertiesWidth = 260
 	ctx.LocalStorage().Get("project:widgetTypeWidth", &p.widgetTypeWidth)
@@ -167,6 +168,32 @@ func (p *Project) OnMount(ctx app.Context) {
 	p.loadTags(ctx)
 
 	p.handleServerEvents(ctx)
+}
+
+// ── Input simulation ──────────────────────────────────────────────────────────
+
+// simInputsState is the app state holding the Simulate Inputs values. They
+// live in the page, not in the component: Root makes a new Project each time
+// the Project tab is opened, and the values must survive a visit to another
+// tab (e.g. Library, to change the WidgetType they test). Not persisted: a
+// reload starts empty.
+const simInputsState = "project:simInputs"
+
+func (p *Project) loadSimInputs(ctx app.Context) {
+	p.simInputs = nil
+	ctx.GetState(simInputsState, &p.simInputs)
+	if p.simInputs == nil {
+		p.simInputs = make(map[string]map[string]string)
+	}
+}
+
+// setSimInput sets the Simulate Inputs value of port on the widget wid.
+func (p *Project) setSimInput(ctx app.Context, wid, port, value string) {
+	if p.simInputs[wid] == nil {
+		p.simInputs[wid] = make(map[string]string)
+	}
+	p.simInputs[wid][port] = value
+	ctx.SetState(simInputsState, p.simInputs)
 }
 
 // ── Data loading ──────────────────────────────────────────────────────────────

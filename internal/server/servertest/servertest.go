@@ -105,15 +105,15 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 		t.Fatalf("clean tags: %v", err)
 	}
 	bus := eventbus.NewEventBus()
-	var dispatcher *outbox.Dispatcher
-	onCommit := repositories.NotifyOnCommit(func() { dispatcher.Notify() })
+	dispatcher := outbox.NewDispatcher(db, bus.Publish)
+	onCommit := repositories.NotifyOnCommit(dispatcher.Notify)
 	tagSvc := application.NewTagService(repositories.NewTagRepositoryPostgres(db, onCommit))
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(db, onCommit)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(db, onCommit)
 	runner := outbox.NewPolicyRunner(db, []application.Policy{
 		application.NewWidgetReconciliationPolicy(wtRepo, sceneRepo),
 	})
-	dispatcher = outbox.NewDispatcher(db, bus.Publish, outbox.WithPolicyRunner(runner))
+	dispatcher.SetPolicyRunner(runner)
 	ctx, stop := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
 	wg.Add(2)

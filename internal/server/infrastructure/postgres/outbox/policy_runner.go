@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -19,6 +20,9 @@ const (
 	// pause doubles with each further failure up to defaultMaxRetryPause.
 	defaultRetryPause    = time.Second
 	defaultMaxRetryPause = 5 * time.Minute
+	// defaultAttemptTimeout bounds one attempt of a job, so that a policy
+	// that hangs fails instead of holding back the jobs behind it.
+	defaultAttemptTimeout = 5 * time.Minute
 	// failedLookupRetry is how soon Run looks into the jobs again after it
 	// failed to learn when the next one is due.
 	failedLookupRetry = time.Second
@@ -32,18 +36,21 @@ const (
 // the Dispatcher enqueues them in the policy_jobs table as it delivers the
 // events, and wakes the runner. A job that succeeds is deleted, unless an
 // event merged into it while it ran (its generation was raised): then it runs
-// again. A job that fails is retried forever, after a pause that doubles with
-// each failure, from the retry pause up to the maximum one; each failure is
-// logged and kept in last_error, and a further event for the job's key makes
-// it due at once. A job stopped by shutdown runs again after the next start.
-// There is one PolicyRunner per database, like the Dispatcher.
+// again at once. A job that fails, panics or outlasts the attempt timeout is
+// retried forever, after a pause that doubles with each failure, from the
+// retry pause up to the maximum one; each failure is logged and kept in
+// last_error. A further event for the key of a failing job does not cut its
+// pause short: the retry reads the state as it is then, the event included.
+// A job stopped by shutdown runs again after the next start. There is one
+// PolicyRunner per database, like the Dispatcher.
 type PolicyRunner struct {
-	db            *sql.DB
-	policies      []application.Policy
-	byName        map[string]application.Policy
-	retryPause    time.Duration
-	maxRetryPause time.Duration
-	wake          chan struct{}
+	db             *sql.DB
+	policies       []application.Policy
+	byName         map[string]application.Policy
+	retryPause     time.Duration
+	maxRetryPause  time.Duration
+	attemptTimeout time.Duration
+	wake           chan struct{}
 
 	// mu makes RunDueOnce calls take turns, so no job runs twice at once.
 	mu sync.Mutex
@@ -61,17 +68,26 @@ func WithRetryPause(first, max time.Duration) PolicyRunnerOption {
 	}
 }
 
+// WithAttemptTimeout sets how long one attempt of a job may run before its
+// context is cancelled and the attempt counts as failed.
+func WithAttemptTimeout(d time.Duration) PolicyRunnerOption {
+	return func(r *PolicyRunner) {
+		r.attemptTimeout = d
+	}
+}
+
 // NewPolicyRunner returns a PolicyRunner running the jobs of policies in
 // db's policy_jobs; jobs of a policy it does not know wait untouched. Policy
 // names must be unique.
 func NewPolicyRunner(db *sql.DB, policies []application.Policy, opts ...PolicyRunnerOption) *PolicyRunner {
 	r := &PolicyRunner{
-		db:            db,
-		policies:      policies,
-		byName:        make(map[string]application.Policy, len(policies)),
-		retryPause:    defaultRetryPause,
-		maxRetryPause: defaultMaxRetryPause,
-		wake:          make(chan struct{}, 1),
+		db:             db,
+		policies:       policies,
+		byName:         make(map[string]application.Policy, len(policies)),
+		retryPause:     defaultRetryPause,
+		maxRetryPause:  defaultMaxRetryPause,
+		attemptTimeout: defaultAttemptTimeout,
+		wake:           make(chan struct{}, 1),
 	}
 	for _, p := range policies {
 		if _, dup := r.byName[p.Name()]; dup {
@@ -113,12 +129,13 @@ func (r *PolicyRunner) jobsFor(e event.Event) []policyJob {
 
 // enqueue writes job in tx, the transaction deleting the delivered outbox
 // rows: a waiting job with the same key takes the new event in, its
-// generation raised, and becomes due at once.
+// generation raised. A new job is due at once; a waiting one keeps when it is
+// due, so events keep no failing job from backing off.
 func enqueue(ctx context.Context, tx *sql.Tx, job policyJob) error {
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO policy_jobs (policy, job_key) VALUES ($1, $2)
 		 ON CONFLICT (policy, job_key) DO UPDATE
-		 SET generation = policy_jobs.generation + 1, attempts = 0, next_attempt_at = now()`,
+		 SET generation = policy_jobs.generation + 1`,
 		job.policy, job.key,
 	); err != nil {
 		return fmt.Errorf("cannot enqueue %s job %q: %w", job.policy, job.key, err)
@@ -218,10 +235,12 @@ func (r *PolicyRunner) untilNextDue(ctx context.Context) (time.Duration, bool, e
 	return time.Duration(seconds.Float64 * float64(time.Second)), true, nil
 }
 
-// attempt runs job's policy and records the outcome for the generation it
-// took. An attempt stopped by ctx records nothing: the job stays due.
+// attempt runs job's policy and records the outcome. A success deletes the
+// job if no event merged into it meanwhile, or else makes it due at once, its
+// failures forgotten. A failure puts the next attempt off, whatever merged
+// meanwhile. An attempt stopped by ctx records nothing: the job stays due.
 func (r *PolicyRunner) attempt(ctx context.Context, job takenJob) error {
-	runErr := r.byName[job.policy].Run(ctx, job.key)
+	runErr := r.run(ctx, job)
 	if runErr != nil && ctx.Err() != nil {
 		return nil
 	}
@@ -229,11 +248,22 @@ func (r *PolicyRunner) attempt(ctx context.Context, job takenJob) error {
 	finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), finishTimeout)
 	defer cancel()
 	if runErr == nil {
-		if _, err := r.db.ExecContext(finishCtx,
+		res, err := r.db.ExecContext(finishCtx,
 			`DELETE FROM policy_jobs WHERE policy = $1 AND job_key = $2 AND generation = $3`,
 			job.policy, job.key, job.generation,
-		); err != nil {
+		)
+		if err != nil {
 			return fmt.Errorf("cannot delete the done %s job %q: %w", job.policy, job.key, err)
+		}
+		if n, err := res.RowsAffected(); err != nil || n > 0 {
+			return err
+		}
+		if _, err := r.db.ExecContext(finishCtx,
+			`UPDATE policy_jobs SET attempts = 0, next_attempt_at = now(), last_error = NULL
+			 WHERE policy = $1 AND job_key = $2`,
+			job.policy, job.key,
+		); err != nil {
+			return fmt.Errorf("cannot make the %s job %q due again: %w", job.policy, job.key, err)
 		}
 		return nil
 	}
@@ -244,13 +274,26 @@ func (r *PolicyRunner) attempt(ctx context.Context, job takenJob) error {
 		"attempts", attempts, "retry_in", pause, "error", runErr)
 	if _, err := r.db.ExecContext(finishCtx,
 		`UPDATE policy_jobs
-		 SET attempts = $4, next_attempt_at = now() + $5 * interval '1 microsecond', last_error = $6
-		 WHERE policy = $1 AND job_key = $2 AND generation = $3`,
-		job.policy, job.key, job.generation, attempts, pause.Microseconds(), runErr.Error(),
+		 SET attempts = $3, next_attempt_at = now() + $4 * interval '1 microsecond', last_error = $5
+		 WHERE policy = $1 AND job_key = $2`,
+		job.policy, job.key, attempts, pause.Microseconds(), runErr.Error(),
 	); err != nil {
 		return fmt.Errorf("cannot record the failure of the %s job %q: %w", job.policy, job.key, err)
 	}
 	return nil
+}
+
+// run runs job's policy for at most the attempt timeout; a panic in the
+// policy is returned as its error.
+func (r *PolicyRunner) run(ctx context.Context, job takenJob) (err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			err = fmt.Errorf("policy panicked: %v\n%s", p, debug.Stack())
+		}
+	}()
+	runCtx, cancel := context.WithTimeout(ctx, r.attemptTimeout)
+	defer cancel()
+	return r.byName[job.policy].Run(runCtx, job.key)
 }
 
 // pauseAfter returns how long a job waits after its attempts-th failure in a

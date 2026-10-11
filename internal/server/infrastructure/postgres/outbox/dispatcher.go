@@ -68,6 +68,14 @@ func WithPolicyRunner(runner *PolicyRunner) DispatcherOption {
 	return func(d *Dispatcher) { d.policies = runner }
 }
 
+// SetPolicyRunner does what WithPolicyRunner does, for a runner whose
+// policies need repositories that notify d: the repositories take d.Notify
+// first, the runner is built on them and set here. It must be called before
+// Run and DrainOnce.
+func (d *Dispatcher) SetPolicyRunner(runner *PolicyRunner) {
+	d.policies = runner
+}
+
 // NewDispatcher returns a Dispatcher delivering the events of db's outbox to
 // deliver (for now the EventBus of the SSE stream).
 func NewDispatcher(db *sql.DB, deliver func(event.Event), opts ...DispatcherOption) *Dispatcher {

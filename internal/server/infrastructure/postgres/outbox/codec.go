@@ -32,8 +32,12 @@ type payload struct {
 	// SceneID is the Scene holding the Widget of a Widget event.
 	SceneID *uuid.UUID `json:"scene_id,omitempty"`
 	// WidgetTypeID is the WidgetType of the Widget of a widget_created or
-	// widget_updated event; rows written before it was stored lack it.
+	// widget_updated event; rows written before it was stored lack it
+	// (untypedWidgetEvent).
 	WidgetTypeID *uuid.UUID `json:"widget_type_id,omitempty"`
+	// ByReconciliation marks a widget_updated event recorded by
+	// Scene.ReconcileWith.
+	ByReconciliation bool `json:"by_reconciliation,omitempty"`
 	// Tag is the new state of the Tag of a tag_updated event.
 	Tag *tagState `json:"tag,omitempty"`
 }
@@ -70,10 +74,11 @@ func Encode(e event.Event) ([]byte, error) {
 		sceneID := ev.SceneID().UUID()
 		p.SceneID = &sceneID
 		if typed, ok := ev.(scene.WidgetTypedEvent); ok {
-			if typeID, ok := typed.WidgetTypeID(); ok {
-				rawTypeID := typeID.UUID()
-				p.WidgetTypeID = &rawTypeID
-			}
+			rawTypeID := typed.TypeID().UUID()
+			p.WidgetTypeID = &rawTypeID
+		}
+		if updated, ok := ev.(scene.WidgetUpdatedEvent); ok {
+			p.ByReconciliation = updated.ByReconciliation()
 		}
 	case scene.SceneEvent:
 		p.ID = ev.SceneID().UUID()
@@ -127,21 +132,40 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 	}
 	holder := id.NewID(id.IDWithUUID[scene.Scene](*p.SceneID))
 	switch eventType {
-	case event.EventTypeWidgetCreated:
+	case event.EventTypeWidgetCreated, event.EventTypeWidgetUpdated:
 		if p.WidgetTypeID == nil {
-			return scene.NewWidgetCreatedEventOfUnknownType(widgetID, holder, ts), nil
+			return untypedWidgetEvent{Base: event.NewBase(eventType, ts), widgetID: widgetID, sceneID: holder}, nil
 		}
+	}
+	switch eventType {
+	case event.EventTypeWidgetCreated:
 		return scene.NewWidgetCreatedEvent(widgetID, holder, id.NewID(id.IDWithUUID[library.WidgetType](*p.WidgetTypeID)), ts), nil
 	case event.EventTypeWidgetUpdated:
-		if p.WidgetTypeID == nil {
-			return scene.NewWidgetUpdatedEventOfUnknownType(widgetID, holder, ts), nil
+		typeID := id.NewID(id.IDWithUUID[library.WidgetType](*p.WidgetTypeID))
+		if p.ByReconciliation {
+			return scene.NewWidgetUpdatedByReconciliationEvent(widgetID, holder, typeID, ts), nil
 		}
-		return scene.NewWidgetUpdatedEvent(widgetID, holder, id.NewID(id.IDWithUUID[library.WidgetType](*p.WidgetTypeID)), ts), nil
+		return scene.NewWidgetUpdatedEvent(widgetID, holder, typeID, ts), nil
 	case event.EventTypeWidgetDeleted:
 		return scene.NewWidgetDeletedEvent(widgetID, holder, ts), nil
 	}
 	return nil, fmt.Errorf("cannot decode event of type %s: not a domain event", eventType)
 }
+
+// untypedWidgetEvent is a widget_created or widget_updated event read back
+// from a row written before Widget events carried their WidgetType. It is a
+// scene.WidgetEvent, enough for delivery, but no scene.WidgetTypedEvent, so
+// no policy keyed by the WidgetType enqueues a job for it.
+type untypedWidgetEvent struct {
+	event.Base
+	widgetID id.ID[scene.Widget]
+	sceneID  id.ID[scene.Scene]
+}
+
+var _ scene.WidgetEvent = untypedWidgetEvent{}
+
+func (e untypedWidgetEvent) WidgetID() id.ID[scene.Widget] { return e.widgetID }
+func (e untypedWidgetEvent) SceneID() id.ID[scene.Scene]   { return e.sceneID }
 
 func decodeTagState(tagID id.ID[tag.Tag], s *tagState) (tag.Tag, error) {
 	if s == nil {

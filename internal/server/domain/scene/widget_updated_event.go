@@ -9,25 +9,30 @@ import (
 // WidgetUpdatedEvent is recorded by Scene.UpdateWidget and, for each widget it changes, Scene.ReconcileWith.
 type WidgetUpdatedEvent interface {
 	WidgetTypedEvent
+	// ByReconciliation reports that Scene.ReconcileWith recorded the event:
+	// the change only removed PortBindings of ports the WidgetType no longer
+	// declares, so it bound the widget to nothing new.
+	ByReconciliation() bool
 }
 
 type widgetUpdatedEventImpl struct {
 	widgetTypedEventImpl
+	byReconciliation bool
 }
 
 var _ WidgetUpdatedEvent = (*widgetUpdatedEventImpl)(nil)
 
 func NewWidgetUpdatedEvent(aWidgetID id.ID[Widget], aSceneID id.ID[Scene], aWidgetTypeID id.ID[library.WidgetType], opts ...event.EventOption) WidgetUpdatedEvent {
-	return newWidgetUpdatedEvent(aWidgetID, aSceneID, &aWidgetTypeID, opts...)
+	return newWidgetUpdatedEvent(aWidgetID, aSceneID, aWidgetTypeID, false, opts...)
 }
 
-// NewWidgetUpdatedEventOfUnknownType rebuilds a WidgetUpdatedEvent stored
-// before events carried the WidgetType. For the outbox codec.
-func NewWidgetUpdatedEventOfUnknownType(aWidgetID id.ID[Widget], aSceneID id.ID[Scene], opts ...event.EventOption) WidgetUpdatedEvent {
-	return newWidgetUpdatedEvent(aWidgetID, aSceneID, nil, opts...)
+// NewWidgetUpdatedByReconciliationEvent returns the WidgetUpdatedEvent that
+// Scene.ReconcileWith records (ByReconciliation).
+func NewWidgetUpdatedByReconciliationEvent(aWidgetID id.ID[Widget], aSceneID id.ID[Scene], aWidgetTypeID id.ID[library.WidgetType], opts ...event.EventOption) WidgetUpdatedEvent {
+	return newWidgetUpdatedEvent(aWidgetID, aSceneID, aWidgetTypeID, true, opts...)
 }
 
-func newWidgetUpdatedEvent(aWidgetID id.ID[Widget], aSceneID id.ID[Scene], aWidgetTypeID *id.ID[library.WidgetType], opts ...event.EventOption) WidgetUpdatedEvent {
+func newWidgetUpdatedEvent(aWidgetID id.ID[Widget], aSceneID id.ID[Scene], aWidgetTypeID id.ID[library.WidgetType], byReconciliation bool, opts ...event.EventOption) WidgetUpdatedEvent {
 	return &widgetUpdatedEventImpl{
 		widgetTypedEventImpl: widgetTypedEventImpl{
 			widgetEventImpl: widgetEventImpl{
@@ -37,5 +42,10 @@ func newWidgetUpdatedEvent(aWidgetID id.ID[Widget], aSceneID id.ID[Scene], aWidg
 			},
 			widgetTypeID: aWidgetTypeID,
 		},
+		byReconciliation: byReconciliation,
 	}
+}
+
+func (e widgetUpdatedEventImpl) ByReconciliation() bool {
+	return e.byReconciliation
 }

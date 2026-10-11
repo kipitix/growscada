@@ -21,21 +21,23 @@ type Library struct {
 	// element that fired the event, and go-app silently drops Dispatch once that
 	// element is unmounted (e.g. a tab that turns into its rename input), which
 	// would lose the result and leave a Reloader loading forever.
-	compoCtx          app.Context
-	ThemeMode         string // exported so go-app detects theme changes and re-renders
-	apiServerURL      string
-	widgetTypes       []widgetTypeItem
-	loading           bool
-	reloader          uiutil.Reloader
-	selectedID        string
-	editedName        string
-	editedHTML        string
-	editedScript      string
-	editedInputValues map[string]string
-	editedScriptLang  string
-	editedInputPorts  []uidto.InputPortDTO
-	editingID         string
-	editingName       string
+	compoCtx     app.Context
+	ThemeMode    string // exported so go-app detects theme changes and re-renders
+	apiServerURL string
+	widgetTypes  []widgetTypeItem
+	loading      bool
+	reloader     uiutil.Reloader
+	selectedID   string
+	editedName   string
+	editedHTML   string
+	editedScript string
+	// inputValues[widgetTypeID][portName] = Input Data value, kept in the
+	// app state inputValuesState
+	inputValues      map[string]map[string]string
+	editedScriptLang string
+	editedInputPorts []uidto.InputPortDTO
+	editingID        string
+	editingName      string
 	// add-port form state
 	newPortName string
 	newPortDesc string
@@ -49,6 +51,7 @@ func NewLibrary(apiServerURL string) *Library {
 func (l *Library) OnMount(ctx app.Context) {
 	l.compoCtx = ctx
 	ctx.ObserveState("theme", &l.ThemeMode)
+	l.loadInputValues(ctx)
 	ctx.LocalStorage().Get("library:selectedID", &l.selectedID)
 	l.loadList(ctx)
 
@@ -57,6 +60,41 @@ func (l *Library) OnMount(ctx app.Context) {
 			l.loadList(ctx)
 		}
 	})
+}
+
+// ── Input Data ────────────────────────────────────────────────────────────────
+
+// inputValuesState is the app state holding the Input Data values of the
+// preview, per WidgetType. They live in the page, not in the component: Root
+// makes a new Library each time the Library tab is opened, and the values
+// must survive a visit to another tab. Not persisted: a reload starts empty.
+const inputValuesState = "library:inputValues"
+
+func (l *Library) loadInputValues(ctx app.Context) {
+	l.inputValues = nil
+	ctx.GetState(inputValuesState, &l.inputValues)
+	if l.inputValues == nil {
+		l.inputValues = make(map[string]map[string]string)
+	}
+}
+
+// selectedInputValues returns the Input Data values of the selected
+// WidgetType, keyed by port name; nil if none was entered.
+func (l *Library) selectedInputValues() map[string]string {
+	return l.inputValues[l.selectedID]
+}
+
+// setInputValue sets the Input Data value of port for the selected
+// WidgetType.
+func (l *Library) setInputValue(ctx app.Context, port, value string) {
+	if l.selectedID == "" {
+		return
+	}
+	if l.inputValues[l.selectedID] == nil {
+		l.inputValues[l.selectedID] = make(map[string]string)
+	}
+	l.inputValues[l.selectedID][port] = value
+	ctx.SetState(inputValuesState, l.inputValues)
 }
 
 // ── Data loading ──────────────────────────────────────────────────────────────
@@ -112,7 +150,6 @@ func (l *Library) clearSelection() {
 	l.selectedID = ""
 	l.editedHTML = ""
 	l.editedScript = ""
-	l.editedInputValues = make(map[string]string)
 	l.editedInputPorts = nil
 }
 
@@ -147,7 +184,6 @@ func (l *Library) selectItem(id string) {
 			l.editedHTML = it.HtmlTemplate
 			l.editedScript = it.Script
 			l.editedScriptLang = it.ScriptLanguage
-			l.editedInputValues = make(map[string]string)
 			ports := make([]uidto.InputPortDTO, len(it.InputPorts))
 			copy(ports, it.InputPorts)
 			l.editedInputPorts = ports

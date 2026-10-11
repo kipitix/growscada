@@ -87,10 +87,11 @@ func main() {
 	// Add hook to shutdown message broker connection
 	// Create event bus: the SSE stream's source of events
 	eventBus := eventbus.NewEventBus()
-	// Repositories wake the outbox dispatcher after each commit that wrote
-	// events; the dispatcher is created below, once the policies are
-	var dispatcher *outbox.Dispatcher
-	notifyDispatcher := repositories.NotifyOnCommit(func() { dispatcher.Notify() })
+	// Create the outbox dispatcher: it delivers the events of committed
+	// changes to the event bus and enqueues the policies' jobs (ADR 0008).
+	// Repositories wake it after each commit that wrote events
+	dispatcher := outbox.NewDispatcher(sqlDB, eventBus.Publish)
+	notifyDispatcher := repositories.NotifyOnCommit(dispatcher.Notify)
 	tagRepository := repositories.NewTagRepositoryPostgres(sqlDB, notifyDispatcher)
 	widgetTypeRepository := repositories.NewWidgetTypeRepositoryPostgres(sqlDB, notifyDispatcher)
 	sceneRepository := repositories.NewSceneRepositoryPostgres(sqlDB, notifyDispatcher)
@@ -99,9 +100,7 @@ func main() {
 	policyRunner := outbox.NewPolicyRunner(sqlDB, []application.Policy{
 		application.NewWidgetReconciliationPolicy(widgetTypeRepository, sceneRepository),
 	})
-	// Create the outbox dispatcher: it delivers the events of committed
-	// changes to the event bus and enqueues the policies' jobs (ADR 0008)
-	dispatcher = outbox.NewDispatcher(sqlDB, eventBus.Publish, outbox.WithPolicyRunner(policyRunner))
+	dispatcher.SetPolicyRunner(policyRunner)
 	dispatcherCtx, stopDispatcher := context.WithCancel(context.Background())
 	dispatcherDone := make(chan struct{})
 	go func() {

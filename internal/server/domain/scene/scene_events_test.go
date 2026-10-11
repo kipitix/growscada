@@ -43,11 +43,7 @@ func pendingOf(t *testing.T, sc Scene) []recorded {
 // the scene holds it (a widget removed later in the scene is not checked).
 func checkNamesWidgetType(t *testing.T, sc Scene, e WidgetTypedEvent) {
 	t.Helper()
-	typeID, ok := e.WidgetTypeID()
-	if !ok {
-		t.Errorf("%s of widget %s names no widget type", e.Type(), e.WidgetID())
-		return
-	}
+	typeID := e.TypeID()
 	if w, err := sc.FindWidget(e.WidgetID()); err == nil && w.TypeID() != typeID {
 		t.Errorf("%s names widget type %s, want %s", e.Type(), typeID, w.TypeID())
 	}
@@ -140,6 +136,11 @@ func TestSceneReconcileWith_RecordsWidgetUpdatedForEachChangedWidget(t *testing.
 		recorded{event.EventTypeWidgetUpdated, changed1.ID().String()},
 		recorded{event.EventTypeWidgetUpdated, changed2.ID().String()},
 	)
+	for _, e := range reconciled.PendingEvents() {
+		if ev, ok := e.(WidgetUpdatedEvent); !ok || !ev.ByReconciliation() {
+			t.Errorf("%s: want a WidgetUpdatedEvent ByReconciliation", e.Type())
+		}
+	}
 }
 
 func TestSceneDelete_RecordsWidgetDeletedForEachWidgetThenSceneDeleted(t *testing.T) {
@@ -171,6 +172,9 @@ func TestWidgetEvents_AreNoSceneEvents(t *testing.T) {
 		if _, ok := e.(SceneEvent); ok {
 			t.Errorf("%s is a SceneEvent: a type switch would take it for an event of the scene", e.Type())
 		}
+		if _, ok := e.(library.WidgetTypeEvent); ok {
+			t.Errorf("%s is a library.WidgetTypeEvent: a type switch would take it for an event of the widget type", e.Type())
+		}
 	}
 	for _, e := range []event.Event{
 		NewSceneCreatedEvent(sceneID),
@@ -179,18 +183,6 @@ func TestWidgetEvents_AreNoSceneEvents(t *testing.T) {
 	} {
 		if _, ok := e.(SceneEvent); !ok {
 			t.Errorf("%s is no SceneEvent", e.Type())
-		}
-	}
-}
-
-func TestWidgetEventsOfUnknownType_NameNoWidgetType(t *testing.T) {
-	widgetID, sceneID := id.NewID[Widget](), id.NewID[Scene]()
-	for _, e := range []WidgetTypedEvent{
-		NewWidgetCreatedEventOfUnknownType(widgetID, sceneID),
-		NewWidgetUpdatedEventOfUnknownType(widgetID, sceneID),
-	} {
-		if _, ok := e.WidgetTypeID(); ok {
-			t.Errorf("%s of unknown type names a widget type", e.Type())
 		}
 	}
 }

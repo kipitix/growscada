@@ -10,24 +10,21 @@ import (
 // line with their WidgetType keys its job by it (ADR 0008).
 type WidgetTypedEvent interface {
 	WidgetEvent
-	// WidgetTypeID is the WidgetType of the widget. It is unknown (false) only
-	// for an event read back from an outbox row written before events carried
-	// it.
-	WidgetTypeID() (id.ID[library.WidgetType], bool)
+	// TypeID is the WidgetType of the widget, as Widget.TypeID. It is not
+	// named WidgetTypeID: that would make the event a library.WidgetTypeEvent
+	// too, and a type switch would take it for an event of the WidgetType.
+	TypeID() id.ID[library.WidgetType]
 }
 
 type widgetTypedEventImpl struct {
 	widgetEventImpl
-	widgetTypeID *id.ID[library.WidgetType]
+	widgetTypeID id.ID[library.WidgetType]
 }
 
 var _ WidgetTypedEvent = (*widgetTypedEventImpl)(nil)
 
 // NO FABRIC METHOD
 
-func (e widgetTypedEventImpl) WidgetTypeID() (id.ID[library.WidgetType], bool) {
-	if e.widgetTypeID == nil {
-		return id.ID[library.WidgetType]{}, false
-	}
-	return *e.widgetTypeID, true
+func (e widgetTypedEventImpl) TypeID() id.ID[library.WidgetType] {
+	return e.widgetTypeID
 }
