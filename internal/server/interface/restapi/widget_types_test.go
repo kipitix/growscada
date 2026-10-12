@@ -129,7 +129,8 @@ func TestGetWidgetTypesByID_NotFound_Returns404(t *testing.T) {
 	cleanWidgetTypes(t)
 	router := newRouterWithWidgetTypes()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v0/widget-types/"+uuid.New().String(), nil)
+	missingID := uuid.New().String()
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/widget-types/"+missingID, nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -142,6 +143,9 @@ func TestGetWidgetTypesByID_NotFound_Returns404(t *testing.T) {
 	}
 	if prob.Type != restapi.TypeNotFound {
 		t.Errorf("problem type: expected %q, got %q", restapi.TypeNotFound, prob.Type)
+	}
+	if want := "WidgetType with ID '" + missingID + "' not found"; prob.Detail != want {
+		t.Errorf("detail: expected %q, got %q", want, prob.Detail)
 	}
 }
 

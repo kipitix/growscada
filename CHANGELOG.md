@@ -1,5 +1,19 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.36] - 2026-10-13
+
+### Changed
+
+- **Перевод ошибок в Problem Details — один модуль `restapi/errors.go`** (задача 22). Коды ответов и URL не менялись, меняются только `detail` и `title`, поэтому SchemaVersion `contract/api/v0` не поднимался
+  - Таблица `{sentinel, статус, ресурс, detail для 409}` и `sendError(w, r, err)`: сначала `application.ErrInvalidInput` → 400 с текстом ошибки, затем строки таблицы, иначе 500 (полная ошибка в лог, наружу общий текст). Доменные sentinel-ошибки импортирует только этот файл, лестниц `errors.Is` в обработчиках больше нет; `sendServiceError` убран
+  - 404 — только для ресурса из пути: ID берётся из параметра, закреплённого за ресурсом (`{tagId}`, `{widgetTypeId}`, `{sceneId}`, `{widgetId}` — параметры шаблонов в `router.go` переименованы). Если параметра нет — это ошибка сервиса, 500. Ссылка из тела запроса на несуществующее остаётся 400
+  - `pathUUID` разбирает ID из пути и сам отдаёт 400 вида «sceneId: 'abc' is not a valid UUID»
+  - `title` у 409 — «Conflict: Scene» (имена ресурсов из глоссария: Tag, WidgetType, Scene, Widget); `detail` — фиксированная фраза: «Scene was changed concurrently; reload it and retry» (так же для WidgetType и Tag), «WidgetType is used by Widgets», «Tag name is already taken»
+
+### Fixed
+
+- **`detail` у 404 не раскрывает внутренний текст.** Все вызовы `NewNotFound` передавали текст ошибки вместо типа ресурса, и клиент видел, например, «error on find scene by id in repository: scene not found with ID '…' not found». Теперь — «Scene with ID '…' not found»
+
 ## [0.0.35] - 2026-10-11
 
 ### Changed

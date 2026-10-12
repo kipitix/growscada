@@ -2,9 +2,7 @@ package restapi
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 
 	"github.com/kipitix/growscada/contract"
@@ -58,31 +56,31 @@ func NewRouter(tagService application.TagService, widgetTypeService application.
 
 	router.tagsHandlers = NewTagsHandler(tagService)
 	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/tags", router.tagsHandlers.GetTags)
-	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/tags/{id}", router.tagsHandlers.GetTagsByID)
+	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/tags/{tagId}", router.tagsHandlers.GetTagsByID)
 	router.serveMux.HandleFunc("POST "+apiv0.PathPrefix+"/tags", router.tagsHandlers.PostTags)
-	router.serveMux.HandleFunc("DELETE "+apiv0.PathPrefix+"/tags/{id}", router.tagsHandlers.DeleteTagsByID)
-	router.serveMux.HandleFunc("PATCH "+apiv0.PathPrefix+"/tags/{id}/value", router.tagsHandlers.PatchTagsValue)
+	router.serveMux.HandleFunc("DELETE "+apiv0.PathPrefix+"/tags/{tagId}", router.tagsHandlers.DeleteTagsByID)
+	router.serveMux.HandleFunc("PATCH "+apiv0.PathPrefix+"/tags/{tagId}/value", router.tagsHandlers.PatchTagsValue)
 
 	router.widgetTypesHandlers = NewWidgetTypesHandler(widgetTypeService)
 	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/widget-types", router.widgetTypesHandlers.GetWidgetTypes)
-	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/widget-types/{id}", router.widgetTypesHandlers.GetWidgetTypesByID)
+	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/widget-types/{widgetTypeId}", router.widgetTypesHandlers.GetWidgetTypesByID)
 	router.serveMux.HandleFunc("POST "+apiv0.PathPrefix+"/widget-types", router.widgetTypesHandlers.PostWidgetTypes)
-	router.serveMux.HandleFunc("PUT "+apiv0.PathPrefix+"/widget-types/{id}", router.widgetTypesHandlers.PutWidgetTypesByID)
-	router.serveMux.HandleFunc("DELETE "+apiv0.PathPrefix+"/widget-types/{id}", router.widgetTypesHandlers.DeleteWidgetTypesByID)
+	router.serveMux.HandleFunc("PUT "+apiv0.PathPrefix+"/widget-types/{widgetTypeId}", router.widgetTypesHandlers.PutWidgetTypesByID)
+	router.serveMux.HandleFunc("DELETE "+apiv0.PathPrefix+"/widget-types/{widgetTypeId}", router.widgetTypesHandlers.DeleteWidgetTypesByID)
 
 	router.widgetsHandlers = NewWidgetsHandler(sceneService)
-	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/scenes/{id}/widgets", router.widgetsHandlers.GetWidgetsBySceneID)
-	router.serveMux.HandleFunc("POST "+apiv0.PathPrefix+"/scenes/{id}/widgets", router.widgetsHandlers.PostWidgets)
+	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/scenes/{sceneId}/widgets", router.widgetsHandlers.GetWidgetsBySceneID)
+	router.serveMux.HandleFunc("POST "+apiv0.PathPrefix+"/scenes/{sceneId}/widgets", router.widgetsHandlers.PostWidgets)
 	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/scenes/{sceneId}/widgets/{widgetId}", router.widgetsHandlers.GetWidgetsByID)
 	router.serveMux.HandleFunc("PUT "+apiv0.PathPrefix+"/scenes/{sceneId}/widgets/{widgetId}", router.widgetsHandlers.PutWidgetsByID)
 	router.serveMux.HandleFunc("DELETE "+apiv0.PathPrefix+"/scenes/{sceneId}/widgets/{widgetId}", router.widgetsHandlers.DeleteWidgetsByID)
 
 	router.scenesHandlers = NewScenesHandler(sceneService)
 	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/scenes", router.scenesHandlers.GetScenes)
-	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/scenes/{id}", router.scenesHandlers.GetScenesByID)
+	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/scenes/{sceneId}", router.scenesHandlers.GetScenesByID)
 	router.serveMux.HandleFunc("POST "+apiv0.PathPrefix+"/scenes", router.scenesHandlers.PostScenes)
-	router.serveMux.HandleFunc("PUT "+apiv0.PathPrefix+"/scenes/{id}", router.scenesHandlers.PutScenesByID)
-	router.serveMux.HandleFunc("DELETE "+apiv0.PathPrefix+"/scenes/{id}", router.scenesHandlers.DeleteScenesByID)
+	router.serveMux.HandleFunc("PUT "+apiv0.PathPrefix+"/scenes/{sceneId}", router.scenesHandlers.PutScenesByID)
+	router.serveMux.HandleFunc("DELETE "+apiv0.PathPrefix+"/scenes/{sceneId}", router.scenesHandlers.DeleteScenesByID)
 
 	router.eventsHandlers = NewEventsHandler(eventBus, maxSSEClients)
 	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/events", router.eventsHandlers.GetEvents)
@@ -102,23 +100,6 @@ func preVersioningGone(w http.ResponseWriter, r *http.Request) {
 	detail := fmt.Sprintf("%s is the server API from before contract versioning: use %s",
 		preVersioningPathPrefix, apiv0.PathPrefix)
 	sendJSONResponse(w, http.StatusGone, NewGone(detail, r.URL.Path))
-}
-
-// sendServiceError responds to an error from the application layer that the
-// handler did not map itself (to 404, 409): invalid input is a 400 naming the
-// cause, anything else a 500.
-func sendServiceError(w http.ResponseWriter, r *http.Request, err error) {
-	if errors.Is(err, application.ErrInvalidInput) {
-		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
-		return
-	}
-	sendInternalError(w, r, err)
-}
-
-// sendInternalError logs the full error and sends a generic 500 to the client.
-func sendInternalError(w http.ResponseWriter, r *http.Request, err error) {
-	slog.Error("internal server error", "path", r.URL.Path, "method", r.Method, "error", err)
-	sendJSONResponse(w, http.StatusInternalServerError, NewInternalError("an internal error occurred", r.URL.Path))
 }
 
 // sendJSONResponse writes a JSON response with the given status code.

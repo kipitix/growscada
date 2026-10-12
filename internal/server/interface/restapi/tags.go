@@ -2,14 +2,11 @@ package restapi
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
-	"github.com/google/uuid"
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
-	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
 
 // TagsHandlers handles HTTP requests related to tags.
@@ -57,7 +54,7 @@ func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
 
 	tagList, err := h.service.FindAllTags(r.Context())
 	if err != nil {
-		sendServiceError(w, r, err)
+		sendError(w, r, err)
 		return
 	}
 	sendJSONResponse(w, http.StatusOK, newGetTagsResponse(tagList))
@@ -67,11 +64,11 @@ func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
 func (h TagsHandlers) getTagsByName(w http.ResponseWriter, r *http.Request, name string) {
 	foundTag, err := h.service.FindTagByName(r.Context(), name)
 	if err != nil {
-		if errors.Is(err, tag.ErrTagNotFound) {
+		if isNotFound(err, tagResource) {
 			sendJSONResponse(w, http.StatusOK, newGetTagsResponse(nil))
 			return
 		}
-		sendServiceError(w, r, err)
+		sendError(w, r, err)
 		return
 	}
 	sendJSONResponse(w, http.StatusOK, newGetTagsResponse([]appdto.Tag{foundTag}))
@@ -83,62 +80,48 @@ func (h TagsHandlers) sendMatchedTags(w http.ResponseWriter, r *http.Request,
 	find func(context.Context, string) ([]appdto.Tag, error), filter string) {
 	tagList, err := find(r.Context(), filter)
 	if err != nil {
-		sendServiceError(w, r, err)
+		sendError(w, r, err)
 		return
 	}
 	sendJSONResponse(w, http.StatusOK, newGetTagsResponse(tagList))
 }
 
-// GetTagsByID handles GET /tags/{id}
+// GetTagsByID handles GET /tags/{tagId}
 func (h TagsHandlers) GetTagsByID(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("id")
-	tagID, err := uuid.Parse(idStr)
-	if err != nil {
-		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
+	tagID, ok := pathUUID(w, r, tagResource)
+	if !ok {
 		return
 	}
 
 	foundTag, err := h.service.FindTagByID(r.Context(), tagID)
 	if err != nil {
-		if errors.Is(err, tag.ErrTagNotFound) {
-			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
-			return
-		}
-		sendServiceError(w, r, err)
+		sendError(w, r, err)
 		return
 	}
 
 	sendJSONResponse(w, http.StatusOK, newTagResponse(foundTag))
 }
 
-// DeleteTagsByID handles DELETE /tags/{id} for removing a tag
+// DeleteTagsByID handles DELETE /tags/{tagId} for removing a tag
 func (h TagsHandlers) DeleteTagsByID(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("id")
-	tagID, err := uuid.Parse(idStr)
-	if err != nil {
-		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
+	tagID, ok := pathUUID(w, r, tagResource)
+	if !ok {
 		return
 	}
 
 	deletedTag, err := h.service.DeleteTagByID(r.Context(), tagID)
 	if err != nil {
-		if errors.Is(err, tag.ErrTagNotFound) {
-			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
-			return
-		}
-		sendServiceError(w, r, err)
+		sendError(w, r, err)
 		return
 	}
 
 	sendJSONResponse(w, http.StatusOK, newTagResponse(deletedTag))
 }
 
-// PatchTagsValue handles PATCH /tags/{id}/value for setting tag value and quality
+// PatchTagsValue handles PATCH /tags/{tagId}/value for setting tag value and quality
 func (h TagsHandlers) PatchTagsValue(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("id")
-	tagID, err := uuid.Parse(idStr)
-	if err != nil {
-		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
+	tagID, ok := pathUUID(w, r, tagResource)
+	if !ok {
 		return
 	}
 
@@ -149,15 +132,7 @@ func (h TagsHandlers) PatchTagsValue(w http.ResponseWriter, r *http.Request) {
 
 	updatedTag, err := h.service.SetTagValueByID(r.Context(), newUpdateTagInput(request, tagID))
 	if err != nil {
-		if errors.Is(err, tag.ErrTagNotFound) {
-			sendJSONResponse(w, http.StatusNotFound, NewNotFound(err.Error(), idStr, r.URL.Path))
-			return
-		}
-		if errors.Is(err, tag.ErrTagConflict) {
-			sendJSONResponse(w, http.StatusConflict, NewConflict("tag", err.Error(), r.URL.Path))
-			return
-		}
-		sendServiceError(w, r, err)
+		sendError(w, r, err)
 		return
 	}
 
@@ -174,11 +149,7 @@ func (h TagsHandlers) PostTags(w http.ResponseWriter, r *http.Request) {
 
 	createdTag, err := h.service.CreateTag(r.Context(), newCreateTagInput(request))
 	if err != nil {
-		if errors.Is(err, tag.ErrTagNameTaken) {
-			sendJSONResponse(w, http.StatusConflict, NewConflict("tag", err.Error(), r.URL.Path))
-			return
-		}
-		sendServiceError(w, r, err)
+		sendError(w, r, err)
 		return
 	}
 

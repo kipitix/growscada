@@ -310,7 +310,8 @@ func TestGetTagsByID_NotFound_Returns404WithProblemDetails(t *testing.T) {
 	cleanTags(t)
 	router := newRouter()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v0/tags/"+uuid.New().String(), nil)
+	missingID := uuid.New().String()
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/tags/"+missingID, nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -327,6 +328,9 @@ func TestGetTagsByID_NotFound_Returns404WithProblemDetails(t *testing.T) {
 	}
 	if prob.Type != restapi.TypeNotFound {
 		t.Errorf("problem type: expected %q, got %q", restapi.TypeNotFound, prob.Type)
+	}
+	if want := "Tag with ID '" + missingID + "' not found"; prob.Detail != want {
+		t.Errorf("detail: expected %q, got %q", want, prob.Detail)
 	}
 }
 

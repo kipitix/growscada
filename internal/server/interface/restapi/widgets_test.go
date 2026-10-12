@@ -241,7 +241,8 @@ func TestGetWidgetsByID_NotFound_Returns404(t *testing.T) {
 	sc := createSceneViaSceneService(t)
 	router := newRouterWithWidgets()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v0/scenes/"+sc.ID.String()+"/widgets/"+uuid.New().String(), nil)
+	missingID := uuid.New().String()
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/scenes/"+sc.ID.String()+"/widgets/"+missingID, nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -254,6 +255,9 @@ func TestGetWidgetsByID_NotFound_Returns404(t *testing.T) {
 	}
 	if prob.Type != restapi.TypeNotFound {
 		t.Errorf("problem type: expected %q, got %q", restapi.TypeNotFound, prob.Type)
+	}
+	if want := "Widget with ID '" + missingID + "' not found"; prob.Detail != want {
+		t.Errorf("detail: expected %q, got %q", want, prob.Detail)
 	}
 }
 
