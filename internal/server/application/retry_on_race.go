@@ -1,6 +1,9 @@
 package application
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // maxRaceAttempts bounds how often retryOnRace runs an operation that keeps
 // losing the write race.
@@ -12,7 +15,7 @@ const maxRaceAttempts = 3
 // It serves the operations that state no expected Version (removal,
 // reconciliation): what they do does not rest on what a client saw, so a
 // race is no edit conflict. After maxRaceAttempts lost races it returns the
-// last error, the aggregate's conflict.
+// last error, the aggregate's conflict, marked with ErrRaceLost.
 func retryOnRace(conflict error, op func() error) error {
 	var err error
 	for range maxRaceAttempts {
@@ -20,5 +23,5 @@ func retryOnRace(conflict error, op func() error) error {
 			return err
 		}
 	}
-	return err
+	return fmt.Errorf("%w after %d attempts: %w", ErrRaceLost, maxRaceAttempts, err)
 }

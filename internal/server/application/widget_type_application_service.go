@@ -80,10 +80,10 @@ func (s widgetTypeServiceImpl) UpdateWidgetType(ctx context.Context, rawID uuid.
 		return appdto.WidgetType{}, fmt.Errorf("error on find widget type by id in repository: %w", err)
 	}
 
-	// A negative version is no version a widget type has ever had: an edit conflict.
+	// A negative version is no version at all: the client's input, not a conflict.
 	expected, err := version.New(version.WithNumber[library.WidgetType](expectedVersion))
 	if err != nil {
-		return appdto.WidgetType{}, fmt.Errorf("%w: %w", library.ErrWidgetTypeConflict, err)
+		return appdto.WidgetType{}, invalidInput(fmt.Errorf("version: %w", err))
 	}
 	// A stale write is a conflict whatever it sends: the version is checked
 	// before the definition is parsed (Update checks it again, as its own rule).

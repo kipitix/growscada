@@ -24,6 +24,11 @@ http:
       }
   auth: inherit
 
+docs: |
+  `version` is the widget type version the edit is based on. A version other than
+  the stored one returns `409 Conflict` (reload and retry); a negative one is
+  no version at all and returns `400 Bad Request` naming `version`.
+
 settings:
   encodeUrl: true
   timeout: 0

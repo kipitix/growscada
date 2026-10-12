@@ -26,7 +26,7 @@ func (h WidgetTypesHandlers) GetWidgetTypes(w http.ResponseWriter, r *http.Reque
 	sendJSONResponse(w, http.StatusOK, newGetWidgetTypesResponse(list))
 }
 
-// GetWidgetTypesByID handles GET /widget-types/{widgetTypeId}
+// GetWidgetTypesByID handles GET /widget-types/{widget_type_id}
 func (h WidgetTypesHandlers) GetWidgetTypesByID(w http.ResponseWriter, r *http.Request) {
 	inID, ok := pathUUID(w, r, widgetTypeResource)
 	if !ok {
@@ -58,7 +58,7 @@ func (h WidgetTypesHandlers) PostWidgetTypes(w http.ResponseWriter, r *http.Requ
 	sendJSONResponse(w, http.StatusCreated, newCreateWidgetTypeResponse(created))
 }
 
-// PutWidgetTypesByID handles PUT /widget-types/{widgetTypeId}
+// PutWidgetTypesByID handles PUT /widget-types/{widget_type_id}
 func (h WidgetTypesHandlers) PutWidgetTypesByID(w http.ResponseWriter, r *http.Request) {
 	inID, ok := pathUUID(w, r, widgetTypeResource)
 	if !ok {
@@ -79,7 +79,7 @@ func (h WidgetTypesHandlers) PutWidgetTypesByID(w http.ResponseWriter, r *http.R
 	sendJSONResponse(w, http.StatusOK, newUpdateWidgetTypeResponse(updated))
 }
 
-// DeleteWidgetTypesByID handles DELETE /widget-types/{widgetTypeId}
+// DeleteWidgetTypesByID handles DELETE /widget-types/{widget_type_id}
 func (h WidgetTypesHandlers) DeleteWidgetTypesByID(w http.ResponseWriter, r *http.Request) {
 	inID, ok := pathUUID(w, r, widgetTypeResource)
 	if !ok {

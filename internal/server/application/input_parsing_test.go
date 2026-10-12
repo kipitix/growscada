@@ -106,6 +106,25 @@ func TestWidgetInput_NegativeSceneVersion_IsInvalidInputOnCreateAndUpdate(t *tes
 	assertInvalidField(t, err, "scene_version")
 }
 
+func TestUpdate_NegativeVersion_IsInvalidInput(t *testing.T) {
+	ctx := context.Background()
+
+	cleanScenes(t)
+	sceneSvc := newSceneService()
+	sc := mustCreateScene(t, sceneSvc)
+	_, err := sceneSvc.UpdateScene(ctx, sc.ID, -1, testCreateSceneInput)
+	assertInvalidField(t, err, "version")
+
+	cleanWidgetTypes(t)
+	wtSvc := newWidgetTypeService()
+	wt, err := wtSvc.CreateWidgetType(ctx, testCreateWidgetTypeInput)
+	if err != nil {
+		t.Fatalf("CreateWidgetType: %v", err)
+	}
+	_, err = wtSvc.UpdateWidgetType(ctx, wt.ID, -1, testCreateWidgetTypeInput)
+	assertInvalidField(t, err, "version")
+}
+
 func TestWidgetTypeInput_InvalidField_IsInvalidInputOnCreateAndUpdate(t *testing.T) {
 	cases := map[string]struct {
 		field  string

@@ -4,11 +4,16 @@
 
 ### Changed
 
-- **Перевод ошибок в Problem Details — один модуль `restapi/errors.go`** (задача 22). Коды ответов и URL не менялись, меняются только `detail` и `title`, поэтому SchemaVersion `contract/api/v0` не поднимался
+- **Перевод ошибок в Problem Details — один модуль `restapi/errors.go`** (задача 22). URL не менялись, коды ответов — только у отрицательной версии (см. ниже); тела ответов те же Problem Details, поэтому SchemaVersion `contract/api/v0` не поднимался
   - Таблица `{sentinel, статус, ресурс, detail для 409}` и `sendError(w, r, err)`: сначала `application.ErrInvalidInput` → 400 с текстом ошибки, затем строки таблицы, иначе 500 (полная ошибка в лог, наружу общий текст). Доменные sentinel-ошибки импортирует только этот файл, лестниц `errors.Is` в обработчиках больше нет; `sendServiceError` убран
-  - 404 — только для ресурса из пути: ID берётся из параметра, закреплённого за ресурсом (`{tagId}`, `{widgetTypeId}`, `{sceneId}`, `{widgetId}` — параметры шаблонов в `router.go` переименованы). Если параметра нет — это ошибка сервиса, 500. Ссылка из тела запроса на несуществующее остаётся 400
-  - `pathUUID` разбирает ID из пути и сам отдаёт 400 вида «sceneId: 'abc' is not a valid UUID»
+  - 404 — только для ресурса из пути: ID берётся из параметра, закреплённого за ресурсом (`{tag_id}`, `{widget_type_id}`, `{scene_id}`, `{widget_id}`). Шаблоны в `router.go` собираются из того же `resource` (`wildcard()`), так что имя параметра задано в одном месте. Если параметра нет — это ошибка сервиса, 500. Ссылка из тела запроса на несуществующее остаётся 400
+  - Not-found из репозиториев и из `Scene` несёт ID (`id.NotFoundError`, `errors.Is` по-прежнему совпадает с sentinel). Если этот ID не тот, что в пути, ответ — 500, а не 404 про ресурс из пути
+  - `pathUUID` разбирает ID из пути и сам отдаёт 400 вида «scene_id: 'abc' is not a valid UUID» — в snake_case, как поля API
+  - Тест читает исходники `domain/` и требует, чтобы каждый sentinel был либо в таблице, либо в списке намеренно не отображённых с объяснением
   - `title` у 409 — «Conflict: Scene» (имена ресурсов из глоссария: Tag, WidgetType, Scene, Widget); `detail` — фиксированная фраза: «Scene was changed concurrently; reload it and retry» (так же для WidgetType и Tag), «WidgetType is used by Widgets», «Tag name is already taken»
+  - Удаление (и снятие Widget со Scene), проигравшее гонку записи 3 раза подряд, — по-прежнему 409, но с `detail` «Scene kept changing while the request ran; retry it later»: версии в запросе нет, перезагружать нечего. `retryOnRace` помечает такой исход `application.ErrRaceLost`
+  - Строка таблицы со статусом, который `sendError` не умеет отдавать, даёт 500, а не пустой 200
+  - Отрицательная `version` в `PUT /scenes/{sceneId}` и `PUT /widget-types/{widgetTypeId}` — 400 «version: …» вместо 409 «changed concurrently»: такой версии не бывает, повтор с перезагрузкой не помог бы. Так же уже работал `scene_version` у Widget
 
 ### Fixed
 

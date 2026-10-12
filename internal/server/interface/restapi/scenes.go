@@ -26,7 +26,7 @@ func (h ScenesHandlers) GetScenes(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusOK, newGetScenesResponse(list))
 }
 
-// GetScenesByID handles GET /scenes/{sceneId}
+// GetScenesByID handles GET /scenes/{scene_id}
 func (h ScenesHandlers) GetScenesByID(w http.ResponseWriter, r *http.Request) {
 	sceneID, ok := pathUUID(w, r, sceneResource)
 	if !ok {
@@ -58,7 +58,7 @@ func (h ScenesHandlers) PostScenes(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusCreated, newCreateSceneResponse(created))
 }
 
-// PutScenesByID handles PUT /scenes/{sceneId}
+// PutScenesByID handles PUT /scenes/{scene_id}
 func (h ScenesHandlers) PutScenesByID(w http.ResponseWriter, r *http.Request) {
 	sceneID, ok := pathUUID(w, r, sceneResource)
 	if !ok {
@@ -79,7 +79,7 @@ func (h ScenesHandlers) PutScenesByID(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusOK, newUpdateSceneResponse(updated))
 }
 
-// DeleteScenesByID handles DELETE /scenes/{sceneId}
+// DeleteScenesByID handles DELETE /scenes/{scene_id}
 func (h ScenesHandlers) DeleteScenesByID(w http.ResponseWriter, r *http.Request) {
 	sceneID, ok := pathUUID(w, r, sceneResource)
 	if !ok {

@@ -24,3 +24,9 @@ func (e invalidInputError) Is(target error) bool { return target == ErrInvalidIn
 func invalidInput(err error) error {
 	return invalidInputError{err: err}
 }
+
+// ErrRaceLost matches (errors.Is) the error of an operation that states no
+// expected Version and lost the write race every time it was retried
+// (retryOnRace). The error also matches the aggregate's conflict; unlike an
+// edit conflict there is nothing for the caller to reload, only to retry later.
+var ErrRaceLost = errors.New("write race lost on every attempt")

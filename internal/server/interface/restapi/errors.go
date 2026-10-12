@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kipitix/growscada/internal/server/application"
+	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -15,22 +16,29 @@ import (
 
 // resource is a REST resource as the client sees it: its name from the
 // glossary and the path parameter that carries its ID in the router's
-// patterns.
+// patterns (wildcard), named like the API's fields since it appears in 400
+// details.
 type resource struct {
 	name      string
 	pathParam string
 }
 
 var (
-	tagResource        = resource{name: "Tag", pathParam: "tagId"}
-	widgetTypeResource = resource{name: "WidgetType", pathParam: "widgetTypeId"}
-	sceneResource      = resource{name: "Scene", pathParam: "sceneId"}
-	widgetResource     = resource{name: "Widget", pathParam: "widgetId"}
+	tagResource        = resource{name: "Tag", pathParam: "tag_id"}
+	widgetTypeResource = resource{name: "WidgetType", pathParam: "widget_type_id"}
+	sceneResource      = resource{name: "Scene", pathParam: "scene_id"}
+	widgetResource     = resource{name: "Widget", pathParam: "widget_id"}
 )
+
+// wildcard is the router pattern segment that carries the resource's ID.
+func (res resource) wildcard() string {
+	return "{" + res.pathParam + "}"
+}
 
 // errorMapping maps a domain sentinel error to a response. A 404 names the
 // resource and its ID from the path; a 409 carries a fixed detail, so the text
-// of the wrapping errors never reaches the client.
+// of the wrapping errors never reaches the client. sendError answers only 404
+// and 409; a row with another status is a 500 until sendError learns it.
 type errorMapping struct {
 	sentinel error
 	status   int
@@ -68,19 +76,45 @@ func sendError(w http.ResponseWriter, r *http.Request, err error) {
 		}
 		switch m.status {
 		case http.StatusNotFound:
-			id := r.PathValue(m.resource.pathParam)
-			if id == "" {
-				sendInternalError(w, r, fmt.Errorf("%s not found, but the path has no %s: %w",
+			pathID, ok := notFoundInPath(r, m, err)
+			if !ok {
+				sendInternalError(w, r, fmt.Errorf("%s not found, but not the one the path names by %s: %w",
 					m.resource.name, m.resource.pathParam, err))
 				return
 			}
-			sendJSONResponse(w, http.StatusNotFound, NewNotFound(m.resource.name, id, r.URL.Path))
+			sendJSONResponse(w, http.StatusNotFound, NewNotFound(m.resource.name, pathID, r.URL.Path))
 		case http.StatusConflict:
-			sendJSONResponse(w, http.StatusConflict, NewConflict(m.resource.name, m.detail, r.URL.Path))
+			detail := m.detail
+			if errors.Is(err, application.ErrRaceLost) {
+				// The request stated no version: nothing to reload, the server
+				// has already retried.
+				detail = m.resource.name + " kept changing while the request ran; retry it later"
+			}
+			sendJSONResponse(w, http.StatusConflict, NewConflict(m.resource.name, detail, r.URL.Path))
+		default:
+			sendInternalError(w, r, fmt.Errorf("error mapping for %d has no response: %w", m.status, err))
 		}
 		return
 	}
 	sendInternalError(w, r, err)
+}
+
+// notFoundInPath returns the path's ID of m's resource if err, a not-found of
+// that resource, is about it. An error that does not say which ID was not
+// found (no id.NotFoundError) is taken to be about the path's.
+func notFoundInPath(r *http.Request, m errorMapping, err error) (string, bool) {
+	pathID := r.PathValue(m.resource.pathParam)
+	if pathID == "" {
+		return "", false
+	}
+	var nf id.NotFoundError
+	if errors.As(err, &nf) && nf.Err == m.sentinel {
+		parsed, perr := uuid.Parse(pathID)
+		if perr != nil || parsed != nf.ID {
+			return "", false
+		}
+	}
+	return pathID, true
 }
 
 // isNotFound reports whether err says that res does not exist, for a handler

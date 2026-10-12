@@ -35,7 +35,7 @@ func classifyUpdateConflict[T any](ctx context.Context, q rowQuerier, table tabl
 		return fmt.Errorf("cannot check %s existence: %w", table, err)
 	}
 	if !exists {
-		return notFoundError
+		return id.NotFound(notFoundError, anID)
 	}
 	return conflictError
 }

@@ -149,7 +149,7 @@ func (s *sceneImpl) Widgets() []Widget {
 func (s *sceneImpl) FindWidget(widgetID id.ID[Widget]) (Widget, error) {
 	i := s.widgetIndex(widgetID)
 	if i < 0 {
-		return nil, ErrWidgetNotFound
+		return nil, id.NotFound(ErrWidgetNotFound, widgetID)
 	}
 	return s.widgets[i], nil
 }
@@ -189,7 +189,7 @@ func (s *sceneImpl) UpdateWidget(expected version.Version[Scene], w Widget, wt l
 	}
 	i := s.widgetIndex(w.ID())
 	if i < 0 {
-		return nil, ErrWidgetNotFound
+		return nil, id.NotFound(ErrWidgetNotFound, w.ID())
 	}
 	if err := checkWidgetType(w, wt); err != nil {
 		return nil, err
@@ -202,7 +202,7 @@ func (s *sceneImpl) UpdateWidget(expected version.Version[Scene], w Widget, wt l
 func (s *sceneImpl) RemoveWidget(widgetID id.ID[Widget]) (Scene, Widget, error) {
 	i := s.widgetIndex(widgetID)
 	if i < 0 {
-		return nil, nil, ErrWidgetNotFound
+		return nil, nil, id.NotFound(ErrWidgetNotFound, widgetID)
 	}
 	return s.withWidgets(slices.Concat(s.widgets[:i], s.widgets[i+1:]), NewWidgetDeletedEvent(widgetID, s.id)), s.widgets[i], nil
 }

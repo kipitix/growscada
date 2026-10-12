@@ -86,7 +86,7 @@ func (h TagsHandlers) sendMatchedTags(w http.ResponseWriter, r *http.Request,
 	sendJSONResponse(w, http.StatusOK, newGetTagsResponse(tagList))
 }
 
-// GetTagsByID handles GET /tags/{tagId}
+// GetTagsByID handles GET /tags/{tag_id}
 func (h TagsHandlers) GetTagsByID(w http.ResponseWriter, r *http.Request) {
 	tagID, ok := pathUUID(w, r, tagResource)
 	if !ok {
@@ -102,7 +102,7 @@ func (h TagsHandlers) GetTagsByID(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusOK, newTagResponse(foundTag))
 }
 
-// DeleteTagsByID handles DELETE /tags/{tagId} for removing a tag
+// DeleteTagsByID handles DELETE /tags/{tag_id} for removing a tag
 func (h TagsHandlers) DeleteTagsByID(w http.ResponseWriter, r *http.Request) {
 	tagID, ok := pathUUID(w, r, tagResource)
 	if !ok {
@@ -118,7 +118,7 @@ func (h TagsHandlers) DeleteTagsByID(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusOK, newTagResponse(deletedTag))
 }
 
-// PatchTagsValue handles PATCH /tags/{tagId}/value for setting tag value and quality
+// PatchTagsValue handles PATCH /tags/{tag_id}/value for setting tag value and quality
 func (h TagsHandlers) PatchTagsValue(w http.ResponseWriter, r *http.Request) {
 	tagID, ok := pathUUID(w, r, tagResource)
 	if !ok {

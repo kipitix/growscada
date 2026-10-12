@@ -205,7 +205,7 @@ func TestGetWidgetsBySceneID_TwoScenes_ReturnsOnlyMatchingScene(t *testing.T) {
 	}
 }
 
-// --- GET /api/v0/scenes/{sceneId}/widgets/{widgetId} ---
+// --- GET /api/v0/scenes/{scene_id}/widgets/{widget_id} ---
 
 func TestGetWidgetsByID_Existing_Returns200(t *testing.T) {
 	cleanWidgetsRest(t)
@@ -370,7 +370,7 @@ func TestPostWidgets_StaleSceneVersion_Returns409(t *testing.T) {
 	}
 }
 
-// --- PUT /api/v0/scenes/{sceneId}/widgets/{widgetId} ---
+// --- PUT /api/v0/scenes/{scene_id}/widgets/{widget_id} ---
 
 func TestPutWidgetsByID_Valid_Returns200WithIncrementedSceneVersion(t *testing.T) {
 	cleanWidgetsRest(t)
@@ -488,7 +488,7 @@ func (s *stubSceneServiceForWidgets) DeleteWidgetByID(_ context.Context, _, _ uu
 	return appdto.Widget{}, s.deleteErr
 }
 
-// --- DELETE /api/v0/scenes/{sceneId}/widgets/{widgetId} ---
+// --- DELETE /api/v0/scenes/{scene_id}/widgets/{widget_id} ---
 
 // A concurrent change to the scene between loading and saving it surfaces as
 // ErrSceneConflict: the client is told to reload, not given a 500.

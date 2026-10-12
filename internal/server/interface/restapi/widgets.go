@@ -17,7 +17,7 @@ func NewWidgetsHandler(s application.SceneService) *WidgetsHandlers {
 	return &WidgetsHandlers{service: s}
 }
 
-// GetWidgetsBySceneID handles GET /scenes/{sceneId}/widgets
+// GetWidgetsBySceneID handles GET /scenes/{scene_id}/widgets
 func (h WidgetsHandlers) GetWidgetsBySceneID(w http.ResponseWriter, r *http.Request) {
 	sceneID, ok := pathUUID(w, r, sceneResource)
 	if !ok {
@@ -32,7 +32,7 @@ func (h WidgetsHandlers) GetWidgetsBySceneID(w http.ResponseWriter, r *http.Requ
 	sendJSONResponse(w, http.StatusOK, newGetWidgetsResponse(list))
 }
 
-// GetWidgetsByID handles GET /scenes/{sceneId}/widgets/{widgetId}
+// GetWidgetsByID handles GET /scenes/{scene_id}/widgets/{widget_id}
 func (h WidgetsHandlers) GetWidgetsByID(w http.ResponseWriter, r *http.Request) {
 	sceneID, ok := pathUUID(w, r, sceneResource)
 	if !ok {
@@ -52,7 +52,7 @@ func (h WidgetsHandlers) GetWidgetsByID(w http.ResponseWriter, r *http.Request) 
 	sendJSONResponse(w, http.StatusOK, newWidgetResponse(found))
 }
 
-// PostWidgets handles POST /scenes/{sceneId}/widgets
+// PostWidgets handles POST /scenes/{scene_id}/widgets
 func (h WidgetsHandlers) PostWidgets(w http.ResponseWriter, r *http.Request) {
 	sceneID, ok := pathUUID(w, r, sceneResource)
 	if !ok {
@@ -73,7 +73,7 @@ func (h WidgetsHandlers) PostWidgets(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusCreated, newCreateWidgetResponse(created))
 }
 
-// PutWidgetsByID handles PUT /scenes/{sceneId}/widgets/{widgetId}
+// PutWidgetsByID handles PUT /scenes/{scene_id}/widgets/{widget_id}
 func (h WidgetsHandlers) PutWidgetsByID(w http.ResponseWriter, r *http.Request) {
 	sceneID, ok := pathUUID(w, r, sceneResource)
 	if !ok {
@@ -98,7 +98,7 @@ func (h WidgetsHandlers) PutWidgetsByID(w http.ResponseWriter, r *http.Request) 
 	sendJSONResponse(w, http.StatusOK, newUpdateWidgetResponse(updated))
 }
 
-// DeleteWidgetsByID handles DELETE /scenes/{sceneId}/widgets/{widgetId}
+// DeleteWidgetsByID handles DELETE /scenes/{scene_id}/widgets/{widget_id}
 func (h WidgetsHandlers) DeleteWidgetsByID(w http.ResponseWriter, r *http.Request) {
 	sceneID, ok := pathUUID(w, r, sceneResource)
 	if !ok {

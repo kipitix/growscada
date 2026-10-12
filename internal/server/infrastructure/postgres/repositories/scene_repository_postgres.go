@@ -198,7 +198,7 @@ func (r sceneRepositoryPostgresImpl) FindByID(ctx context.Context, sceneID id.ID
 		return nil, err
 	}
 	if len(found) == 0 {
-		return nil, scene.ErrSceneNotFound
+		return nil, id.NotFound(scene.ErrSceneNotFound, sceneID)
 	}
 	return found[0], nil
 }

@@ -107,7 +107,7 @@ func (r widgetTypeRepositoryPostgresImpl) FindByID(ctx context.Context, anID id.
 	wt, err := r.scanWidgetType(row.Scan)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, library.ErrWidgetTypeNotFound
+			return nil, id.NotFound(library.ErrWidgetTypeNotFound, anID)
 		}
 		return nil, fmt.Errorf("error scanning widget type: %w", err)
 	}

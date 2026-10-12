@@ -89,10 +89,14 @@ func (r tagRepositoryPostgresImpl) Delete(ctx context.Context, aTag tag.Tag) err
 }
 
 func (r tagRepositoryPostgresImpl) FindByID(ctx context.Context, tagID id.ID[tag.Tag]) (tag.Tag, error) {
-	return r.scanTag(r.db.QueryRowContext(ctx,
+	found, err := r.scanTag(r.db.QueryRowContext(ctx,
 		`SELECT id, name, type, value, quality, version FROM tags WHERE id = $1`,
 		tagID.UUID(),
 	))
+	if errors.Is(err, tag.ErrTagNotFound) {
+		return nil, id.NotFound(tag.ErrTagNotFound, tagID)
+	}
+	return found, err
 }
 
 func (r tagRepositoryPostgresImpl) FindByName(ctx context.Context, aName tag.TagName) (tag.Tag, error) {

@@ -127,10 +127,10 @@ func (s sceneServiceImpl) UpdateScene(ctx context.Context, rawID uuid.UUID, rawE
 		return appdto.Scene{}, err
 	}
 
-	// A negative version is no version a scene has ever had: an edit conflict.
+	// A negative version is no version at all: the client's input, not a conflict.
 	expectedVersion, err := version.New(version.WithNumber[scene.Scene](rawExpectedVersion))
 	if err != nil {
-		return appdto.Scene{}, fmt.Errorf("%w: %w", scene.ErrSceneConflict, err)
+		return appdto.Scene{}, invalidInput(fmt.Errorf("version: %w", err))
 	}
 
 	name, size, background, err := parseSceneFields(input)
