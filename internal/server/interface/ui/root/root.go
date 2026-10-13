@@ -3,6 +3,7 @@ package root
 import (
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
@@ -42,6 +43,11 @@ type Root struct {
 	// serverVersionKnown.
 	serverVersion      contract.SchemaVersion
 	serverVersionKnown bool
+	// reported is the last version observeServerVersion dispatched; it is
+	// read and written off the UI goroutine, hence the mutex.
+	reportedMu    sync.Mutex
+	reported      contract.SchemaVersion
+	reportedKnown bool
 	// reloadOnAppUpdate is set by the banner's Reload while the service
 	// worker fetches the new app (see reloadApp).
 	reloadOnAppUpdate bool
@@ -85,7 +91,16 @@ func (r *Root) OnMount(ctx app.Context) {
 // observeServerVersion records the server API version stated by a response.
 // The client calls it off the UI goroutine, so it is dispatched; requests
 // start from the modes' OnMount, which runs after Root's, so compoCtx is set.
+// Only a change is dispatched: a dispatch renders Root and every mode under
+// it, and every response states the version.
 func (r *Root) observeServerVersion(v contract.SchemaVersion) {
+	r.reportedMu.Lock()
+	same := r.reportedKnown && r.reported == v
+	r.reported, r.reportedKnown = v, true
+	r.reportedMu.Unlock()
+	if same {
+		return
+	}
 	r.compoCtx.Dispatch(func(ctx app.Context) {
 		r.serverVersion, r.serverVersionKnown = v, true
 	})

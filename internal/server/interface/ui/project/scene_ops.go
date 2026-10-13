@@ -57,7 +57,7 @@ func (p *Project) deleteScene(ctx app.Context, sceneID uuid.UUID) {
 		return p.client.DeleteScene(c, sceneID)
 	}, func(ctx app.Context, _ apiv0.SceneResponse) {
 		p.loadScenes(ctx)
-	}, p.rejectedSceneEdit(nil))
+	}, p.rejectedSceneEdit(sceneID, nil))
 }
 
 // syncSceneEditingFields populates the Properties-panel editing state from
@@ -141,17 +141,5 @@ func (p *Project) putScene(sc apiv0.SceneResponse) {
 		return p.client.UpdateScene(c, sc.ID, req)
 	}, func(ctx app.Context, updated apiv0.UpdateSceneResponse) {
 		p.sceneVersions.Observe(sc.ID, updated.Version)
-	}, p.rejectedSceneEdit(p.loadScenes))
-}
-
-func (p *Project) sceneIdx(id uuid.UUID) int {
-	if id == uuid.Nil {
-		return -1
-	}
-	for i, sc := range p.scenes {
-		if sc.ID == id {
-			return i
-		}
-	}
-	return -1
+	}, p.rejectedSceneEdit(sc.ID, p.loadScenes))
 }

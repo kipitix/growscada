@@ -8,36 +8,41 @@ import (
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
 )
 
 // ActionAdd is the action name for pushing a new toast notification.
 const ActionAdd = "toast.add"
 
-// Problem is what a toast shows: the RFC 9457 fields of a server's refusal,
-// or a synthetic problem for a failure on this side.
+// Problem is what a toast shows: a server's refusal (its Problem Details as
+// they are, so a field added there reaches the toast), or a synthetic problem
+// for a failure on this side, with Status 0.
 type Problem struct {
-	Title    string
-	Status   int // 0 when the server did not answer
-	Detail   string
-	Instance string
-	Method   string // HTTP method of the refused request
+	apiv0.Problem
+	Method string // HTTP method of the refused request
+}
+
+// synthetic is the Problem of a failure on this side: the server did not
+// answer, or not as expected.
+func synthetic(title string, err error) Problem {
+	return Problem{Problem: apiv0.Problem{Title: title, Detail: err.Error()}}
 }
 
 // NetworkError creates a Problem for a transport-level failure.
 func NetworkError(err error) Problem {
-	return Problem{Title: "Network Error", Status: 0, Detail: err.Error()}
+	return synthetic("Network Error", err)
 }
 
 // ClientError creates a Problem for a request the UI could not build from its
 // own state, e.g. invalid input; nothing was sent to the server.
 func ClientError(err error) Problem {
-	return Problem{Title: "Client Error", Status: 0, Detail: err.Error()}
+	return synthetic("Client Error", err)
 }
 
 // BadResponse creates a Problem for a server's answer the UI cannot read.
 func BadResponse(err error) Problem {
-	return Problem{Title: "Bad Response", Status: 0, Detail: err.Error()}
+	return synthetic("Bad Response", err)
 }
 
 // FromError creates the Problem for an error of an apiclient call: the
@@ -50,13 +55,7 @@ func FromError(err error) Problem {
 	var ue *url.Error
 	switch {
 	case errors.As(err, &se):
-		return Problem{
-			Title:    se.Problem.Title,
-			Status:   se.Problem.Status,
-			Detail:   se.Problem.Detail,
-			Instance: se.Problem.Instance,
-			Method:   se.Method,
-		}
+		return Problem{Problem: se.Problem, Method: se.Method}
 	case errors.Is(err, apiclient.ErrBadResponse):
 		return BadResponse(err)
 	case errors.As(err, &ue):

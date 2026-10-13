@@ -9,6 +9,7 @@ import (
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
+	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -61,7 +62,14 @@ func (l *Library) applyChanges(ctx app.Context) {
 	if l.selectedID == uuid.Nil {
 		return
 	}
-	current, _ := l.findItem(l.selectedID)
+	// Right after createItem the list may not hold the new type yet: neither
+	// its default size nor its version is known, so the update could only
+	// zero the size or fail on a stale version.
+	current, ok := l.findItem(l.selectedID)
+	if !ok {
+		ctx.NewActionWithValue(toast.ActionAdd, toast.ClientError(errors.New("the widget type is still loading; apply again")))
+		return
+	}
 	l.updateWidgetType(l.selectedID, apiv0.UpdateWidgetTypeRequest{
 		Name:           l.editedName,
 		HtmlTemplate:   l.editedHTML,
@@ -112,9 +120,9 @@ func portsRequest(ports []apiv0.InputPort) []apiv0.InputPort {
 }
 
 // updateWidgetType saves the WidgetType, then records its new version and
-// reloads the list. On a conflict (409) the known versions are forgotten and
+// reloads the list. On a conflict (409) its known version is forgotten and
 // the list reread: if the server's version went back, a newer one kept here
-// would be rejected forever.
+// would be rejected forever. The other types' versions stay.
 func (l *Library) updateWidgetType(id uuid.UUID, req apiv0.UpdateWidgetTypeRequest) {
 	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.UpdateWidgetTypeResponse, error) {
 		return l.client.UpdateWidgetType(c, id, req)
@@ -124,7 +132,7 @@ func (l *Library) updateWidgetType(id uuid.UUID, req apiv0.UpdateWidgetTypeReque
 	}, func(ctx app.Context, err error) {
 		uiutil.ShowError(ctx, err)
 		if errors.Is(err, apiclient.ErrConflict) {
-			l.versions.Forget()
+			l.versions.ForgetID(id)
 			l.loadList(ctx)
 		}
 	})

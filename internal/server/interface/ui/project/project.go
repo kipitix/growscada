@@ -3,6 +3,7 @@ package project
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 
 	"github.com/google/uuid"
@@ -238,22 +239,45 @@ func (p *Project) clearWidgetSelection(ctx app.Context) {
 	uiutil.StoreID(ctx, widgetIDKey, uuid.Nil)
 }
 
-func (p *Project) selectedWidgetIdx() int {
-	for i, w := range p.widgets {
-		if w.ID == p.selectedWidgetID {
-			return i
-		}
+// ── Lookups ───────────────────────────────────────────────────────────────────
+
+// idxByID returns the index of the item id in items; -1 if absent or uuid.Nil.
+func idxByID[T any](items []T, id uuid.UUID, idOf func(T) uuid.UUID) int {
+	if id == uuid.Nil {
+		return -1
 	}
-	return -1
+	return slices.IndexFunc(items, func(it T) bool { return idOf(it) == id })
+}
+
+// findByID returns the item id in items, or false if there is none.
+func findByID[T any](items []T, id uuid.UUID, idOf func(T) uuid.UUID) (T, bool) {
+	if i := idxByID(items, id, idOf); i >= 0 {
+		return items[i], true
+	}
+	var zero T
+	return zero, false
+}
+
+func sceneIDOf(sc apiv0.SceneResponse) uuid.UUID           { return sc.ID }
+func widgetIDOf(w apiv0.WidgetResponse) uuid.UUID          { return w.ID }
+func widgetTypeIDOf(wt apiv0.WidgetTypeResponse) uuid.UUID { return wt.ID }
+
+func (p *Project) sceneIdx(id uuid.UUID) int { return idxByID(p.scenes, id, sceneIDOf) }
+
+func (p *Project) findScene(id uuid.UUID) (apiv0.SceneResponse, bool) {
+	return findByID(p.scenes, id, sceneIDOf)
+}
+
+func (p *Project) selectedWidgetIdx() int {
+	return idxByID(p.widgets, p.selectedWidgetID, widgetIDOf)
+}
+
+func (p *Project) findWidget(id uuid.UUID) (apiv0.WidgetResponse, bool) {
+	return findByID(p.widgets, id, widgetIDOf)
 }
 
 func (p *Project) widgetTypeByID(id uuid.UUID) (apiv0.WidgetTypeResponse, bool) {
-	for _, wt := range p.widgetTypes {
-		if wt.ID == id {
-			return wt, true
-		}
-	}
-	return apiv0.WidgetTypeResponse{}, false
+	return findByID(p.widgetTypes, id, widgetTypeIDOf)
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────

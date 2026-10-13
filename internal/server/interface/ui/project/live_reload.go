@@ -93,15 +93,6 @@ func (p *Project) setScenes(ctx app.Context, scenes []apiv0.SceneResponse) {
 	}
 }
 
-func (p *Project) findScene(id uuid.UUID) (apiv0.SceneResponse, bool) {
-	for _, sc := range p.scenes {
-		if sc.ID == id {
-			return sc, true
-		}
-	}
-	return apiv0.SceneResponse{}, false
-}
-
 // mergeSceneEditingFields updates each scene property field that still holds
 // the old server value.
 func (p *Project) mergeSceneEditingFields(old, current apiv0.SceneResponse) {
@@ -184,15 +175,6 @@ func (p *Project) setWidgets(ctx app.Context, sceneID uuid.UUID, widgets []apiv0
 // handler closures instead of the closure-captured `w`, because go-app may
 // not re-attach handlers when only the transform changes, leaving `w` stale
 // across drags.
-func (p *Project) findWidget(id uuid.UUID) (apiv0.WidgetResponse, bool) {
-	for _, w := range p.widgets {
-		if w.ID == id {
-			return w, true
-		}
-	}
-	return apiv0.WidgetResponse{}, false
-}
-
 // widgetEditFields is the widget properties editor's text, formatted as the
 // editor shows it.
 type widgetEditFields struct {

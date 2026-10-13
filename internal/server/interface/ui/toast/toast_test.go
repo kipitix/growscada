@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
 )
 
@@ -26,8 +27,8 @@ func TestFromError_ServersProblem(t *testing.T) {
 	// Wrapped, as a caller may do.
 	got := FromError(fmt.Errorf("delete: %w", err))
 
-	want := Problem{Title: "Resource Not Found", Status: 404, Detail: "Tag with ID 'x' not found",
-		Instance: "/api/v0/tags/x", Method: http.MethodDelete}
+	want := Problem{Problem: apiv0.Problem{Type: "t", Title: "Resource Not Found", Status: 404,
+		Detail: "Tag with ID 'x' not found", Instance: "/api/v0/tags/x"}, Method: http.MethodDelete}
 	if got != want {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
@@ -43,9 +44,17 @@ func TestFromError_ByWhereTheCallFailed(t *testing.T) {
 		badBody:     "Bad Response",
 		unencodable: "Client Error",
 	} {
-		want := Problem{Title: title, Detail: err.Error()}
+		want := Problem{Problem: apiv0.Problem{Title: title, Detail: err.Error()}}
 		if got := FromError(err); got != want {
 			t.Errorf("got %+v, want %+v", got, want)
 		}
+	}
+}
+
+func TestFromError_RequestNotBuilt_IsClientError(t *testing.T) {
+	_, err := apiclient.New("http://bad host:port", http.DefaultClient).ListTags(context.Background())
+
+	if got := FromError(err); got.Title != "Client Error" {
+		t.Errorf("got %+v, want a Client Error: nothing was sent", got)
 	}
 }

@@ -57,7 +57,9 @@ func (e *StatusError) Is(target error) bool {
 	return false
 }
 
-// Client talks to the GrowSCADA REST API. It keeps no state between calls.
+// Client talks to the GrowSCADA REST API. The client itself keeps no state
+// between calls; its Options may (WarnOlderServer remembers what it warned
+// about), so create one Client and reuse it.
 type Client struct {
 	baseURL         string
 	httpClient      *http.Client
@@ -70,9 +72,20 @@ type Option func(*Client)
 // OnServerVersion makes the client call f with the server API SchemaVersion
 // stated by every response, an error response included. A response without
 // the header, or with one that does not parse, does not call f. f runs on the
-// goroutine of the call.
+// goroutine of the call. Several such options (WarnOlderServer is one) are
+// all called, in the order they were given.
 func OnServerVersion(f func(contract.SchemaVersion)) Option {
-	return func(c *Client) { c.onServerVersion = f }
+	return func(c *Client) {
+		prev := c.onServerVersion
+		if prev == nil {
+			c.onServerVersion = f
+			return
+		}
+		c.onServerVersion = func(v contract.SchemaVersion) {
+			prev(v)
+			f(v)
+		}
+	}
 }
 
 // New creates a client for the server at baseURL (e.g. http://localhost:9090).
@@ -297,8 +310,10 @@ const maxFallbackDetail = 200
 // do sends a request to path under apiv0.PathPrefix — the body, if not nil,
 // marshalled as JSON — and decodes a successful response into out (if not
 // nil). Any other status is a *StatusError carrying the Problem Details.
-// A DELETE's status alone tells it succeeded: an empty body (e.g. from a
-// proxy) leaves out as it is, the last state being only extra information.
+// A DELETE's status alone tells it succeeded: a body that does not decode
+// (empty, or e.g. a proxy's "OK") is no error, the last state in out being
+// only extra information. A request that cannot be built (e.g. a malformed baseURL) is an
+// error that is not a *url.Error: nothing was sent.
 func (c *Client) do(ctx context.Context, method, path string, body any, wantStatus int, out any) error {
 	var reader io.Reader
 	if body != nil {
@@ -310,7 +325,8 @@ func (c *Client) do(ctx context.Context, method, path string, body any, wantStat
 	}
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+apiv0.PathPrefix+path, reader)
 	if err != nil {
-		return err
+		// %v, not %w: the *url.Error inside would read as a network failure.
+		return fmt.Errorf("%s %s: cannot build request: %v", method, path, err)
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -333,10 +349,8 @@ func (c *Client) do(ctx context.Context, method, path string, body any, wantStat
 		return nil
 	}
 	// Tolerant: a newer server may add fields (ADR 0005).
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		if method == http.MethodDelete && errors.Is(err, io.EOF) {
-			return nil
-		}
+	err = json.NewDecoder(resp.Body).Decode(out)
+	if err != nil && method != http.MethodDelete {
 		return fmt.Errorf("%s %s: %w: %w", method, req.URL, ErrBadResponse, err)
 	}
 	return nil

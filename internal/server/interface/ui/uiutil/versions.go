@@ -10,8 +10,9 @@ import "github.com/google/uuid"
 // A version never goes back: a response that raced with a later write (a
 // list read before it) must not undo the version that write recorded. The
 // versions are forgotten instead when the server's may have gone back (it lost
-// its data, e.g. a recreated database): on a conflict and on a resync of the
-// event stream, before the lists are reread.
+// its data, e.g. a recreated database): the one in conflict on a conflict
+// (ForgetID), all of them on a resync of the event stream (Forget), before
+// the lists are reread.
 type Versions map[uuid.UUID]int
 
 // Observe records version of id if it is newer than the known one.
@@ -24,6 +25,12 @@ func (v Versions) Observe(id uuid.UUID, version int) {
 // Of returns the known version of id; 0 if none is known.
 func (v Versions) Of(id uuid.UUID) int {
 	return v[id]
+}
+
+// ForgetID drops the known version of id alone; the next response sets it
+// anew. The other aggregates' versions stay: their writes are not in doubt.
+func (v Versions) ForgetID(id uuid.UUID) {
+	delete(v, id)
 }
 
 // Forget drops every known version; the next responses set them anew.

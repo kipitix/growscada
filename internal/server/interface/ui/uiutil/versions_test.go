@@ -38,3 +38,20 @@ func TestVersions_ForgetLetsAVersionGoBack(t *testing.T) {
 		t.Errorf("got %d, want the server's 1", got)
 	}
 }
+
+func TestVersions_ForgetIDKeepsTheOthers(t *testing.T) {
+	a, b := uuid.New(), uuid.New()
+	v := Versions{}
+	v.Observe(a, 15)
+	v.Observe(b, 7)
+
+	v.ForgetID(a) // a conflict on a
+	v.Observe(a, 1)
+
+	if got := v.Of(a); got != 1 {
+		t.Errorf("a: got %d, want the server's 1", got)
+	}
+	if got := v.Of(b); got != 7 {
+		t.Errorf("b: got %d, want the untouched 7", got)
+	}
+}

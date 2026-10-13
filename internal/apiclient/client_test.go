@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"strings"
 	"testing"
@@ -197,6 +198,47 @@ func TestDelete_EmptyBody_Succeeds(t *testing.T) {
 	}
 	if _, err := client.GetTag(context.Background(), uuid.New()); err == nil {
 		t.Error("get with an empty body: want an error")
+	}
+}
+
+func TestDelete_BodyNotJSON_Succeeds(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("OK")) // 200 with a proxy's text
+	}))
+	defer srv.Close()
+	client := apiclient.New(srv.URL, srv.Client())
+
+	if _, err := client.DeleteTag(context.Background(), uuid.New()); err != nil {
+		t.Errorf("delete: %v", err)
+	}
+}
+
+func TestRequest_CannotBeBuilt_IsNoNetworkError(t *testing.T) {
+	client := apiclient.New("http://bad host:port", http.DefaultClient)
+
+	_, err := client.ListTags(context.Background())
+
+	var ue *url.Error
+	if err == nil || errors.As(err, &ue) {
+		t.Errorf("got %v, want an error that is not a *url.Error: nothing was sent", err)
+	}
+}
+
+func TestOnServerVersion_SeveralAreAllCalled(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(contract.SchemaVersionHeader, "0.7")
+		w.Write([]byte(`{"tags":[]}`))
+	}))
+	defer srv.Close()
+	var calls []string
+	client := apiclient.New(srv.URL, srv.Client(),
+		apiclient.OnServerVersion(func(contract.SchemaVersion) { calls = append(calls, "first") }),
+		apiclient.OnServerVersion(func(contract.SchemaVersion) { calls = append(calls, "second") }))
+
+	client.ListTags(context.Background())
+
+	if want := []string{"first", "second"}; !slices.Equal(calls, want) {
+		t.Errorf("got %v, want %v", calls, want)
 	}
 }
 
