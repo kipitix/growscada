@@ -1,5 +1,13 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [Unreleased]
+
+### Fixed
+
+- **CI на GitVerse**: у раннера нет Docker, и тесты с Postgres падали на testcontainers («rootless Docker not found»)
+  - `internal/server/infrastructure/postgres/pgtest` — общий запуск тестовой БД с миграциями: по умолчанию testcontainers; если задан `GROWSCADA_TEST_POSTGRES` (URL работающего сервера), пакет создаёт на нём свою базу и удаляет её после тестов. На него переведены `servertest.Postgres` и `TestMain` в `application`, `repositories`, `restapi`
+  - `.github/workflows/go.yaml`: сервис `postgres:16-alpine`, шаг выбирает хост (`postgres` в контейнерном джобе GitVerse, `localhost` на GitHub) и выставляет `GROWSCADA_TEST_POSTGRES`; тесты идут с `-p 1`, потому что dispatcher outbox ждёт самую старую транзакцию всего сервера (`pg_snapshot_xmin`) и параллельные пакеты на одном сервере задерживали доставку друг другу
+
 ## [0.0.37] - 2026-10-14
 
 ### Changed

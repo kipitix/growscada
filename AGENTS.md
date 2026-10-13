@@ -138,7 +138,7 @@ Services (`TagService`, `WidgetTypeService`, `SceneService`) accept repository i
 
 ### Repository Integration Tests
 
-Tests in `internal/server/infrastructure/postgres/repositories/` use **testcontainers-go** to spin up a real Postgres container, apply migrations via Goose, and run assertions. No manual database setup is needed for `go test`.
+Tests that need Postgres get a migrated database from `internal/server/infrastructure/postgres/pgtest`: by default a **testcontainers-go** container, so no manual database setup is needed for `go test`. Without Docker (the GitVerse CI runner) set `GROWSCADA_TEST_POSTGRES=postgres://user:password@host:port/db?sslmode=disable` to a running server: each package then creates a database of its own on it and drops it afterwards. Run such packages with `go test -p 1`: the outbox waits for the server-wide oldest transaction (`pg_snapshot_xmin`), so packages in parallel on one server delay each other's deliveries. CI (`.github/workflows/go.yaml`) does this with a `postgres` service.
 
 Tests of the tools that talk to the server (`internal/devicelink`, `internal/devicesim` end-to-end) run the real REST API over Postgres via `internal/server/servertest`: the container starts lazily on first use, so the unit tests of those packages don't need Docker.
 

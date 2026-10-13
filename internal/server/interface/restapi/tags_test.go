@@ -9,20 +9,14 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/google/uuid"
-	_ "github.com/lib/pq"
-	"github.com/pressly/goose/v3"
-	"github.com/testcontainers/testcontainers-go"
-	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/pgtest"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
@@ -31,54 +25,15 @@ import (
 var testDB *sql.DB
 
 func TestMain(m *testing.M) {
-	ctx := context.Background()
-
-	pgContainer, err := tcpostgres.Run(ctx,
-		"postgres:16-alpine",
-		tcpostgres.WithDatabase("testdb"),
-		tcpostgres.WithUsername("test"),
-		tcpostgres.WithPassword("test"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2),
-		),
-	)
+	pg, err := pgtest.Start(context.Background())
 	if err != nil {
-		panic("failed to start postgres container: " + err.Error())
+		panic("failed to start postgres: " + err.Error())
 	}
-
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		pgContainer.Terminate(ctx)
-		panic("failed to get connection string: " + err.Error())
-	}
-
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		pgContainer.Terminate(ctx)
-		panic("failed to open db: " + err.Error())
-	}
-
-	_, currentFile, _, _ := runtime.Caller(0)
-	migrationsDir := filepath.Join(filepath.Dir(currentFile), "..", "..", "infrastructure", "postgres", "migrations")
-
-	if err := goose.SetDialect("postgres"); err != nil {
-		db.Close()
-		pgContainer.Terminate(ctx)
-		panic("failed to set goose dialect: " + err.Error())
-	}
-	if err := goose.Up(db, migrationsDir); err != nil {
-		db.Close()
-		pgContainer.Terminate(ctx)
-		panic("failed to run migrations: " + err.Error())
-	}
-
-	testDB = db
+	testDB = pg.DB
 
 	code := m.Run()
 
-	db.Close()
-	pgContainer.Terminate(ctx)
+	pg.Close()
 	os.Exit(code)
 }
 

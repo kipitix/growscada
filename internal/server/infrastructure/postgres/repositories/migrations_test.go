@@ -20,7 +20,7 @@ func migrationDB(t *testing.T) (*sql.DB, string) {
 	if _, err := testDB.Exec("CREATE DATABASE " + name); err != nil {
 		t.Fatalf("create database: %v", err)
 	}
-	db, err := sql.Open("postgres", strings.Replace(testConnStr, "/testdb?", "/"+name+"?", 1))
+	db, err := sql.Open("postgres", testPG.ConnStrFor(name))
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}

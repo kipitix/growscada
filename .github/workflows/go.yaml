@@ -10,6 +10,23 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    # The runner may have no Docker for testcontainers (GitVerse), so the tests
+    # use this server instead (GROWSCADA_TEST_POSTGRES, see pgtest).
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4.2.2
@@ -22,8 +39,23 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
+      # A job in a container (GitVerse) reaches the service by its name, a job
+      # on the host (GitHub) through the published port.
+      - name: Point tests to Postgres
+        run: |
+          host=localhost
+          if getent hosts postgres >/dev/null; then host=postgres; fi
+          for i in $(seq 1 30); do
+            (echo > /dev/tcp/$host/5432) 2>/dev/null && break
+            sleep 2
+          done
+          echo "GROWSCADA_TEST_POSTGRES=postgres://test:test@$host:5432/test?sslmode=disable" >> "$GITHUB_ENV"
+        shell: bash
+
+      # One package at a time: the outbox waits for the server-wide oldest
+      # transaction, so packages sharing the server would hold each other up.
       - name: Run tests
-        run: go test ./... -v
+        run: go test -p 1 ./... -v
 
       - name: Build
         run: make build
