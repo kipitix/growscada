@@ -21,11 +21,13 @@ type Library struct {
 	// element that fired the event, and go-app silently drops Dispatch once that
 	// element is unmounted (e.g. a tab that turns into its rename input), which
 	// would lose the result and leave a Reloader loading forever.
-	compoCtx     app.Context
-	ThemeMode    string // exported so go-app detects theme changes and re-renders
-	client       *apiclient.Client
-	widgetTypes  []apiv0.WidgetTypeResponse
-	loading      bool
+	compoCtx    app.Context
+	ThemeMode   string // exported so go-app detects theme changes and re-renders
+	client      *apiclient.Client
+	widgetTypes []apiv0.WidgetTypeResponse
+	// versions holds the version each write of a WidgetType states; the
+	// Version of widgetTypes is not read.
+	versions     uiutil.Versions
 	reloader     uiutil.Reloader
 	selectedID   uuid.UUID
 	editedName   string
@@ -48,7 +50,7 @@ type Library struct {
 const selectedIDKey = "library:selectedID"
 
 func NewLibrary(client *apiclient.Client) *Library {
-	return &Library{client: client}
+	return &Library{client: client, versions: uiutil.Versions{}}
 }
 
 func (l *Library) OnMount(ctx app.Context) {
@@ -59,7 +61,14 @@ func (l *Library) OnMount(ctx app.Context) {
 	l.loadList(ctx)
 
 	ctx.Handle(eventlog.ActionServerEvent, func(ctx app.Context, a app.Action) {
-		if ev, ok := a.Value.(eventlog.ServerEvent); ok && eventlog.ReloadTargetsFor(ev.Type).WidgetTypes {
+		ev, ok := a.Value.(eventlog.ServerEvent)
+		if !ok {
+			return
+		}
+		if ev.Type == eventlog.EventResync {
+			l.versions.Forget() // events were lost: the server may have gone back
+		}
+		if eventlog.ReloadTargetsFor(ev.Type).WidgetTypes {
 			l.loadList(ctx)
 		}
 	})
@@ -104,25 +113,7 @@ func (l *Library) setInputValue(ctx app.Context, port, value string) {
 
 // loadList (re)loads the widget type list; concurrent requests are coalesced.
 func (l *Library) loadList(ctx app.Context) {
-	ctx = l.compoCtx
-	if !l.reloader.Start() {
-		return
-	}
-	l.loading = true
-	uiutil.Call(ctx, l.client.ListWidgetTypes, func(ctx app.Context, list []apiv0.WidgetTypeResponse) {
-		l.setWidgetTypes(ctx, list)
-		l.listLoaded(ctx)
-	}, func(ctx app.Context, err error) {
-		uiutil.ShowError(ctx, err)
-		l.listLoaded(ctx)
-	})
-}
-
-func (l *Library) listLoaded(ctx app.Context) {
-	l.loading = false
-	if l.reloader.Done() {
-		l.loadList(ctx)
-	}
+	uiutil.Load(l.compoCtx, &l.reloader, l.client.ListWidgetTypes, l.setWidgetTypes, l.loadList)
 }
 
 // setWidgetTypes replaces the list and brings the editor of the selected type
@@ -131,6 +122,9 @@ func (l *Library) listLoaded(ctx app.Context) {
 // deleted one drops the selection.
 func (l *Library) setWidgetTypes(ctx app.Context, items []apiv0.WidgetTypeResponse) {
 	old, known := l.findItem(l.selectedID)
+	for _, it := range items {
+		l.versions.Observe(it.ID, it.Version)
+	}
 	l.widgetTypes = items
 	if l.selectedID == uuid.Nil {
 		return
@@ -156,12 +150,15 @@ func (l *Library) clearSelection() {
 }
 
 func (l *Library) findItem(id uuid.UUID) (apiv0.WidgetTypeResponse, bool) {
-	for _, it := range l.widgetTypes {
-		if it.ID == id {
-			return it, true
-		}
+	if idx := l.itemIdx(id); idx >= 0 {
+		return l.widgetTypes[idx], true
 	}
 	return apiv0.WidgetTypeResponse{}, false
+}
+
+// itemIdx returns the index of the WidgetType id in the list; -1 if absent.
+func (l *Library) itemIdx(id uuid.UUID) int {
+	return slices.IndexFunc(l.widgetTypes, func(it apiv0.WidgetTypeResponse) bool { return it.ID == id })
 }
 
 // mergeSelected updates each editor field that still holds the old server value.

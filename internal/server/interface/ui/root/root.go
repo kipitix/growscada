@@ -3,6 +3,7 @@ package root
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
@@ -41,6 +42,9 @@ type Root struct {
 	// serverVersionKnown.
 	serverVersion      contract.SchemaVersion
 	serverVersionKnown bool
+	// reloadOnAppUpdate is set by the banner's Reload while the service
+	// worker fetches the new app (see reloadApp).
+	reloadOnAppUpdate bool
 }
 
 func NewRoot(anAPIServerURL string) *Root {
@@ -118,11 +122,54 @@ func (r *Root) renderVersionBanner() app.UI {
 				Style("padding", "2px 10px").
 				Style("font-size", "12px").
 				Style("cursor", "pointer").
-				Text("Reload").
+				Text(reloadLabel(r.reloadOnAppUpdate)).
+				Disabled(r.reloadOnAppUpdate).
 				OnClick(func(ctx app.Context, e app.Event) {
-					ctx.Reload()
+					r.reloadApp(ctx)
 				}),
 		)
+}
+
+func reloadLabel(updating bool) string {
+	if updating {
+		return "Updating…"
+	}
+	return "Reload"
+}
+
+// appUpdateTimeout bounds the wait for the service worker in reloadApp.
+const appUpdateTimeout = 10 * time.Second
+
+// reloadApp reloads the page with the server's current app. The service
+// worker serves the app from its cache, so a plain reload would bring back the
+// same app.wasm while the new worker is not yet active: unless an update is
+// already active (or no worker controls the page), the worker is asked to
+// update first and the page reloads once it has (OnAppUpdate) — or after
+// appUpdateTimeout, when there was nothing newer to fetch.
+func (r *Root) reloadApp(ctx app.Context) {
+	if ctx.AppUpdateAvailable() || !serviceWorkerControlsPage() {
+		ctx.Reload()
+		return
+	}
+	if r.reloadOnAppUpdate {
+		return
+	}
+	r.reloadOnAppUpdate = true
+	app.TryUpdate()
+	ctx.After(appUpdateTimeout, func(ctx app.Context) { ctx.Reload() })
+}
+
+// OnAppUpdate is called by go-app once the service worker has activated a new
+// version of the app.
+func (r *Root) OnAppUpdate(ctx app.Context) {
+	if r.reloadOnAppUpdate {
+		ctx.Reload()
+	}
+}
+
+func serviceWorkerControlsPage() bool {
+	sw := app.Window().Get("navigator").Get("serviceWorker")
+	return sw.Truthy() && sw.Get("controller").Truthy()
 }
 
 func versionBannerText(server contract.SchemaVersion) string {

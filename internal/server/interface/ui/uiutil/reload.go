@@ -27,6 +27,11 @@ func (r *Reloader) Start() bool {
 	return true
 }
 
+// Loading reports whether a load is in flight.
+func (r *Reloader) Loading() bool {
+	return r.loading
+}
+
 // Done marks the in-flight load finished and reports whether a rerun was
 // requested meanwhile; the caller should then load again.
 func (r *Reloader) Done() bool {

@@ -3,6 +3,7 @@ package toast
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
@@ -34,12 +35,21 @@ func ClientError(err error) Problem {
 	return Problem{Title: "Client Error", Status: 0, Detail: err.Error()}
 }
 
+// BadResponse creates a Problem for a server's answer the UI cannot read.
+func BadResponse(err error) Problem {
+	return Problem{Title: "Bad Response", Status: 0, Detail: err.Error()}
+}
+
 // FromError creates the Problem for an error of an apiclient call: the
 // server's Problem Details if it answered with one (*apiclient.StatusError),
-// a Network Error otherwise.
+// a Bad Response if its answer could not be read, a Network Error if the
+// request did not reach it (*url.Error), and a Client Error for a request
+// this side could not even build.
 func FromError(err error) Problem {
 	var se *apiclient.StatusError
-	if errors.As(err, &se) {
+	var ue *url.Error
+	switch {
+	case errors.As(err, &se):
 		return Problem{
 			Title:    se.Problem.Title,
 			Status:   se.Problem.Status,
@@ -47,8 +57,13 @@ func FromError(err error) Problem {
 			Instance: se.Problem.Instance,
 			Method:   se.Method,
 		}
+	case errors.Is(err, apiclient.ErrBadResponse):
+		return BadResponse(err)
+	case errors.As(err, &ue):
+		return NetworkError(err)
+	default:
+		return ClientError(err)
 	}
-	return NetworkError(err)
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────

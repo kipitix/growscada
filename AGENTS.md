@@ -128,7 +128,7 @@ Services (`TagService`, `WidgetTypeService`, `SceneService`) accept repository i
   - **Operation** — runtime operator view.
   - **History** — event log viewer.
 - All REST calls go through one `*apiclient.Client` created in `root` and handed to the modes; components work on the `contract/api/v0` types directly (no UI copies) and keep IDs as `uuid.UUID` (`uuid.Nil` = none), parsing text only at LocalStorage/SSE/DOM boundaries (`uiutil.LoadID`, `StoreID`, `ParseID`).
-- A call is wrapped by `uiutil.Call(compoCtx, call, onOK, onErr)`: Async → call → Dispatch; `onErr == nil` shows `toast.FromError(err)` (the server's Problem Details, or a Network Error). Project keeps each Scene's version in one place (`sceneVersions`, max of every response); writes take it from there.
+- A call is wrapped by `uiutil.Call(compoCtx, call, onOK, onErr)`: Async → call → Dispatch; `onErr == nil` shows `toast.FromError(err)` (the server's Problem Details, a Bad Response, a Network Error, or a Client Error). `uiutil.Do` hands value and error to one callback; `uiutil.Load` reloads a list through its `Reloader`. The version a write states comes from a `uiutil.Versions` (max of every response; forgotten on a 409 and on resync): Project keeps one per Scene (`sceneVersions`), Library one per WidgetType.
 - Root shows a non-dismissable banner while the server's `GrowSCADA-Schema-Version` differs from the UI's (`apiclient.OnServerVersion`).
 - UI tests mount components in go-app's `TestEngine` (`ui/uitest`; on the host go-app calls `OnPreRender`, not `OnMount`, so tests mount a `mountOnHost` wrapper) against the real API from `servertest.StartAPI`.
 

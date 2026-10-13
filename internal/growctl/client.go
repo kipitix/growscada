@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sync"
 
 	"github.com/kipitix/growscada/contract"
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
@@ -24,22 +23,9 @@ type Client struct {
 // newer one is fine, growctl reads its responses tolerantly.
 func NewClient(baseURL string, httpClient *http.Client, warnings io.Writer) *Client {
 	return &Client{Client: apiclient.New(baseURL, httpClient,
-		apiclient.OnServerVersion(warnOlderServerOnce(warnings)))}
-}
-
-// warnOlderServerOnce returns a server version handler that writes a warning
-// the first time the server's version is older than growctl's.
-func warnOlderServerOnce(w io.Writer) func(contract.SchemaVersion) {
-	var once sync.Once
-	return func(server contract.SchemaVersion) {
-		if !apiv0.SchemaVersion().NewerThan(server) {
-			return
-		}
-		once.Do(func() {
-			fmt.Fprintf(w, "warning: the server speaks API %v, older than growctl's %v: update the server\n",
-				server, apiv0.SchemaVersion())
-		})
-	}
+		apiclient.WarnOlderServer(apiclient.WarnOnce, func(server, own contract.SchemaVersion) {
+			fmt.Fprintf(warnings, "warning: the server speaks API %v, older than growctl's %v: update the server\n", server, own)
+		}))}
 }
 
 // ListTagsMatching returns the server tags selected by the filter. The result

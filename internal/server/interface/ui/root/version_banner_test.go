@@ -13,6 +13,7 @@ import (
 	"github.com/kipitix/growscada/contract"
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uitest"
+	"github.com/kipitix/growscada/internal/versiontest"
 )
 
 // mountOnHost lets go-app mount a Root on the host (see uitest).
@@ -43,7 +44,7 @@ func TestVersionBanner_ShownWhileTheServerSpeaksAnotherVersion(t *testing.T) {
 		t.Fatal("banner shown before any response")
 	}
 
-	older := contract.SchemaVersion{Major: apiv0.SchemaVersion().Major, Minor: apiv0.SchemaVersion().Minor - 1}
+	older := versiontest.Older(apiv0.SchemaVersion())
 	request(older.String())
 	if !r.versionMismatch() {
 		t.Fatal("no banner for an older server")
@@ -57,7 +58,7 @@ func TestVersionBanner_ShownWhileTheServerSpeaksAnotherVersion(t *testing.T) {
 		t.Errorf("banner %q: want both versions and what to do", text)
 	}
 
-	newer := contract.SchemaVersion{Major: apiv0.SchemaVersion().Major, Minor: apiv0.SchemaVersion().Minor + 1}
+	newer := versiontest.Newer(apiv0.SchemaVersion())
 	request(newer.String())
 	if !r.versionMismatch() || r.serverVersion != newer {
 		t.Errorf("a newer server: mismatch %v, version %v", r.versionMismatch(), r.serverVersion)

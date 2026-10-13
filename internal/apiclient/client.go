@@ -29,6 +29,9 @@ var (
 	ErrNotFound = errors.New("not found")
 	// ErrConflict matches (errors.Is) an error for a 409 response.
 	ErrConflict = errors.New("conflict")
+	// ErrBadResponse matches (errors.Is) an error for a successful response
+	// whose body cannot be read: the server answered, not as expected.
+	ErrBadResponse = errors.New("cannot decode response")
 )
 
 // StatusError is a response with an unexpected HTTP status. Problem is the
@@ -294,6 +297,8 @@ const maxFallbackDetail = 200
 // do sends a request to path under apiv0.PathPrefix — the body, if not nil,
 // marshalled as JSON — and decodes a successful response into out (if not
 // nil). Any other status is a *StatusError carrying the Problem Details.
+// A DELETE's status alone tells it succeeded: an empty body (e.g. from a
+// proxy) leaves out as it is, the last state being only extra information.
 func (c *Client) do(ctx context.Context, method, path string, body any, wantStatus int, out any) error {
 	var reader io.Reader
 	if body != nil {
@@ -329,7 +334,10 @@ func (c *Client) do(ctx context.Context, method, path string, body any, wantStat
 	}
 	// Tolerant: a newer server may add fields (ADR 0005).
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return fmt.Errorf("%s %s: cannot decode response: %w", method, req.URL, err)
+		if method == http.MethodDelete && errors.Is(err, io.EOF) {
+			return nil
+		}
+		return fmt.Errorf("%s %s: %w: %w", method, req.URL, ErrBadResponse, err)
 	}
 	return nil
 }
@@ -346,12 +354,12 @@ func (c *Client) reportServerVersion(resp *http.Response) {
 }
 
 // newStatusError reads resp's body as Problem Details. A body that is not
-// (e.g. an HTML page of a proxy) gives a Problem titled by the status, with
-// the start of the body as its detail.
+// (e.g. an HTML page or a JSON error of a proxy) gives a Problem titled by
+// the status, with the start of the body as its detail.
 func newStatusError(req *http.Request, resp *http.Response) *StatusError {
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, maxProblemBody))
 	var problem apiv0.Problem
-	if err := json.Unmarshal(data, &problem); err != nil {
+	if err := json.Unmarshal(data, &problem); err != nil || (problem.Title == "" && problem.Detail == "") {
 		problem = apiv0.Problem{Detail: truncate(strings.TrimSpace(string(data)), maxFallbackDetail)}
 	}
 	problem.Status = resp.StatusCode

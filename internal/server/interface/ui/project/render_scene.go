@@ -288,7 +288,7 @@ func (p *Project) renderWidget(w apiv0.WidgetResponse, textMuted string) app.UI 
 					p.dragStartCliY = e.Get("clientY").Float()
 					// Read position from live p.widgets — the closure-captured
 					// w.Position may be stale after a drag without handler reattachment.
-					if cur, ok := p.widgetByID(wid); ok {
+					if cur, ok := p.findWidget(wid); ok {
 						p.dragStartPosX = cur.Position.X
 						p.dragStartPosY = cur.Position.Y
 					}
@@ -340,7 +340,7 @@ func (p *Project) renderWidget(w apiv0.WidgetResponse, textMuted string) app.UI 
 				e.Call("stopPropagation")
 				e.PreventDefault()
 
-				cur, ok := p.widgetByID(wid)
+				cur, ok := p.findWidget(wid)
 				if !ok {
 					return
 				}
@@ -387,7 +387,7 @@ func (p *Project) renderWidget(w apiv0.WidgetResponse, textMuted string) app.UI 
 				p.draggingOriginID = wid
 				p.originCliX = e.Get("clientX").Float()
 				p.originCliY = e.Get("clientY").Float()
-				if cur, ok := p.widgetByID(wid); ok {
+				if cur, ok := p.findWidget(wid); ok {
 					p.originStartOX = cur.Origin.X
 					p.originStartOY = cur.Origin.Y
 					p.originStartPosX = cur.Position.X
@@ -416,7 +416,7 @@ func (p *Project) renderWidget(w apiv0.WidgetResponse, textMuted string) app.UI 
 				p.resizingWidgetID = wid
 				p.resizeStartCliX = e.Get("clientX").Float()
 				p.resizeStartCliY = e.Get("clientY").Float()
-				if cur, ok := p.widgetByID(wid); ok {
+				if cur, ok := p.findWidget(wid); ok {
 					p.resizeStartW = cur.Size.Width
 					p.resizeStartH = cur.Size.Height
 					p.resizeStartDeg = cur.Rotation.Degrees

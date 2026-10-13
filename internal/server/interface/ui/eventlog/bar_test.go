@@ -31,7 +31,11 @@ func TestParseEvent_ReadsTolerantly(t *testing.T) {
 	if ev, ok := parseEvent(`{"type":"scene_created","id":"x"}`); !ok || ev.Tag != nil {
 		t.Errorf("an event without a Tag: got %+v, %v", ev, ok)
 	}
-	for _, bad := range []string{``, `not json`, `{}`, `[]`} {
+	ev, ok = parseEvent(`{"type":"tag_updated","id":"x","tag":{"id":"","version":"3"}}`)
+	if !ok || ev.Type != "tag_updated" || ev.ID != "x" || ev.Tag != nil {
+		t.Errorf("a Tag that does not fit: got %+v, %v; want the event without it", ev, ok)
+	}
+	for _, bad := range []string{``, `not json`, `{}`, `[]`, `{"type":3}`} {
 		if _, ok := parseEvent(bad); ok {
 			t.Errorf("parseEvent(%q) should fail", bad)
 		}

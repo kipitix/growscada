@@ -38,11 +38,11 @@ func (p *Project) createWidget(ctx app.Context, typeID uuid.UUID, x, y float64) 
 			w.Size.Height = wt.DefaultHeight
 		}
 	}
-	req := apiv0.CreateWidgetRequest(widgetRequest(w, p.sceneVersions.of(sceneID)))
+	req := apiv0.CreateWidgetRequest(widgetRequest(w, p.sceneVersions.Of(sceneID)))
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.CreateWidgetResponse, error) {
 		return p.client.CreateWidget(c, sceneID, req)
 	}, func(ctx app.Context, created apiv0.CreateWidgetResponse) {
-		p.sceneVersions.observe(sceneID, created.SceneVersion)
+		p.sceneVersions.Observe(sceneID, created.SceneVersion)
 		w.ID = created.ID
 		p.selectedWidgetID = created.ID
 		uiutil.StoreID(ctx, widgetIDKey, created.ID)
@@ -56,7 +56,7 @@ func (p *Project) deleteWidget(ctx app.Context, widgetID uuid.UUID) {
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.WidgetResponse, error) {
 		return p.client.DeleteWidget(c, sceneID, widgetID)
 	}, func(ctx app.Context, deleted apiv0.WidgetResponse) {
-		p.sceneVersions.observe(sceneID, deleted.SceneVersion)
+		p.sceneVersions.Observe(sceneID, deleted.SceneVersion)
 		if p.selectedWidgetID == widgetID {
 			p.clearWidgetSelection(ctx)
 		}
@@ -156,25 +156,21 @@ func (p *Project) unbindPort(ctx app.Context, portName string) {
 // putWidget saves w on the selected Scene at the Scene's known version.
 func (p *Project) putWidget(ctx app.Context, w apiv0.WidgetResponse) {
 	sceneID := p.selectedSceneID
-	req := apiv0.UpdateWidgetRequest(widgetRequest(w, p.sceneVersions.of(sceneID)))
+	req := apiv0.UpdateWidgetRequest(widgetRequest(w, p.sceneVersions.Of(sceneID)))
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.UpdateWidgetResponse, error) {
 		return p.client.UpdateWidget(c, sceneID, w.ID, req)
 	}, func(ctx app.Context, updated apiv0.UpdateWidgetResponse) {
-		p.sceneVersions.observe(sceneID, updated.SceneVersion)
+		p.sceneVersions.Observe(sceneID, updated.SceneVersion)
 	}, p.rejectedSceneEdit(p.loadWidgets))
 }
 
 // widgetRequest is the body that writes w at sceneVersion; it converts to
 // both apiv0.CreateWidgetRequest and apiv0.UpdateWidgetRequest.
 func widgetRequest(w apiv0.WidgetResponse, sceneVersion int) apiv0.UpdateWidgetRequest {
-	labels := w.Labels
-	if labels == nil {
-		labels = []string{}
-	}
-	bindings := w.PortBindings
-	if bindings == nil {
-		bindings = []apiv0.PortBinding{}
-	}
+	// Copies, never nil: the body is marshalled later, on the Async goroutine,
+	// while the UI may already change p.widgets in place (bindPort).
+	labels := append([]string{}, w.Labels...)
+	bindings := append([]apiv0.PortBinding{}, w.PortBindings...)
 	return apiv0.UpdateWidgetRequest{
 		Name:         w.Name,
 		Position:     apiv0.PositionRequest(w.Position),

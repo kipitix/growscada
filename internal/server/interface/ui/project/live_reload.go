@@ -27,6 +27,9 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 		if !ok {
 			return
 		}
+		if ev.Type == eventlog.EventResync {
+			p.sceneVersions.Forget() // events were lost: the server may have gone back
+		}
 		targets := eventlog.ReloadTargetsFor(ev.Type)
 		if targets.WidgetTypes {
 			p.loadWidgetTypes(ctx)
@@ -46,45 +49,15 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 // ── Widget types ──────────────────────────────────────────────────────────────
 
 func (p *Project) loadWidgetTypes(ctx app.Context) {
-	ctx = p.compoCtx
-	if !p.widgetTypesReloader.Start() {
-		return
-	}
-	uiutil.Call(ctx, p.client.ListWidgetTypes, func(ctx app.Context, list []apiv0.WidgetTypeResponse) {
+	uiutil.Load(p.compoCtx, &p.widgetTypesReloader, p.client.ListWidgetTypes, func(ctx app.Context, list []apiv0.WidgetTypeResponse) {
 		p.widgetTypes = list
-		p.widgetTypesLoaded(ctx)
-	}, func(ctx app.Context, err error) {
-		uiutil.ShowError(ctx, err)
-		p.widgetTypesLoaded(ctx)
-	})
-}
-
-func (p *Project) widgetTypesLoaded(ctx app.Context) {
-	if p.widgetTypesReloader.Done() {
-		p.loadWidgetTypes(ctx)
-	}
+	}, p.loadWidgetTypes)
 }
 
 // ── Scenes ────────────────────────────────────────────────────────────────────
 
 func (p *Project) loadScenes(ctx app.Context) {
-	ctx = p.compoCtx
-	if !p.scenesReloader.Start() {
-		return
-	}
-	uiutil.Call(ctx, p.client.ListScenes, func(ctx app.Context, scenes []apiv0.SceneResponse) {
-		p.setScenes(ctx, scenes)
-		p.scenesLoaded(ctx)
-	}, func(ctx app.Context, err error) {
-		uiutil.ShowError(ctx, err)
-		p.scenesLoaded(ctx)
-	})
-}
-
-func (p *Project) scenesLoaded(ctx app.Context) {
-	if p.scenesReloader.Done() {
-		p.loadScenes(ctx)
-	}
+	uiutil.Load(p.compoCtx, &p.scenesReloader, p.client.ListScenes, p.setScenes, p.loadScenes)
 }
 
 // setScenes replaces the scene list, keeps a valid selection (falling back to
@@ -94,7 +67,7 @@ func (p *Project) setScenes(ctx app.Context, scenes []apiv0.SceneResponse) {
 	prevSceneID := p.selectedSceneID
 
 	for _, sc := range scenes {
-		p.sceneVersions.observe(sc.ID, sc.Version)
+		p.sceneVersions.Observe(sc.ID, sc.Version)
 	}
 	p.scenes = scenes
 
@@ -162,7 +135,9 @@ func (p *Project) loadWidgets(ctx app.Context) {
 		return
 	}
 	sceneID := p.selectedSceneID
-	loaded := func(ctx app.Context, widgets []apiv0.WidgetResponse, err error) {
+	uiutil.Do(ctx, func(c context.Context) ([]apiv0.WidgetResponse, error) {
+		return p.client.ListWidgets(c, sceneID)
+	}, func(ctx app.Context, widgets []apiv0.WidgetResponse, err error) {
 		rerun := p.widgetsReloader.Done()
 		switch {
 		case p.selectedSceneID != sceneID:
@@ -177,13 +152,6 @@ func (p *Project) loadWidgets(ctx app.Context) {
 		if rerun {
 			p.loadWidgets(ctx)
 		}
-	}
-	uiutil.Call(ctx, func(c context.Context) ([]apiv0.WidgetResponse, error) {
-		return p.client.ListWidgets(c, sceneID)
-	}, func(ctx app.Context, widgets []apiv0.WidgetResponse) {
-		loaded(ctx, widgets, nil)
-	}, func(ctx app.Context, err error) {
-		loaded(ctx, nil, err)
 	})
 }
 
@@ -195,7 +163,7 @@ func (p *Project) setWidgets(ctx app.Context, sceneID uuid.UUID, widgets []apiv0
 
 	// Widgets carry their Scene's version.
 	for _, w := range widgets {
-		p.sceneVersions.observe(sceneID, w.SceneVersion)
+		p.sceneVersions.Observe(sceneID, w.SceneVersion)
 	}
 
 	if p.selectedWidgetID == uuid.Nil {
@@ -212,6 +180,10 @@ func (p *Project) setWidgets(ctx app.Context, sceneID uuid.UUID, widgets []apiv0
 	}
 }
 
+// findWidget returns the current live widget data by ID. Use it inside event
+// handler closures instead of the closure-captured `w`, because go-app may
+// not re-attach handlers when only the transform changes, leaving `w` stale
+// across drags.
 func (p *Project) findWidget(id uuid.UUID) (apiv0.WidgetResponse, bool) {
 	for _, w := range p.widgets {
 		if w.ID == id {
@@ -295,23 +267,7 @@ func mergeEditFields(local, old, current widgetEditFields) widgetEditFields {
 // ── Tags ──────────────────────────────────────────────────────────────────────
 
 func (p *Project) loadTags(ctx app.Context) {
-	ctx = p.compoCtx
-	if !p.tagsReloader.Start() {
-		return
-	}
-	uiutil.Call(ctx, p.client.ListTags, func(ctx app.Context, tags []apiv0.TagResponse) {
-		p.setTags(ctx, tags)
-		p.tagsLoaded(ctx)
-	}, func(ctx app.Context, err error) {
-		uiutil.ShowError(ctx, err)
-		p.tagsLoaded(ctx)
-	})
-}
-
-func (p *Project) tagsLoaded(ctx app.Context) {
-	if p.tagsReloader.Done() {
-		p.loadTags(ctx)
-	}
+	uiutil.Load(p.compoCtx, &p.tagsReloader, p.client.ListTags, p.setTags, p.loadTags)
 }
 
 // setTags replaces the tag list and drops the selection if its tag is gone.

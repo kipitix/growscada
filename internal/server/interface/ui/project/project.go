@@ -41,7 +41,7 @@ type Project struct {
 	tags        []apiv0.TagResponse
 	// sceneVersions holds the version each write of a Scene or its Widgets
 	// states; the Version and SceneVersion of the lists above are not read.
-	sceneVersions sceneVersions
+	sceneVersions uiutil.Versions
 
 	// Coalesce reloads of each server-backed list (see live_reload.go).
 	widgetTypesReloader uiutil.Reloader
@@ -153,7 +153,7 @@ const (
 )
 
 func NewProject(client *apiclient.Client) *Project {
-	return &Project{client: client, activeSubTab: subTabScenes, sceneVersions: sceneVersions{}}
+	return &Project{client: client, activeSubTab: subTabScenes, sceneVersions: uiutil.Versions{}}
 }
 
 func (p *Project) OnMount(ctx app.Context) {
@@ -245,19 +245,6 @@ func (p *Project) selectedWidgetIdx() int {
 		}
 	}
 	return -1
-}
-
-// widgetByID returns the current live widget data by ID.
-// Use this inside event handler closures instead of the closure-captured `w`,
-// because go-app may not re-attach handlers when only the transform changes,
-// leaving `w` stale across drags.
-func (p *Project) widgetByID(id uuid.UUID) (apiv0.WidgetResponse, bool) {
-	for _, w := range p.widgets {
-		if w.ID == id {
-			return w, true
-		}
-	}
-	return apiv0.WidgetResponse{}, false
 }
 
 func (p *Project) widgetTypeByID(id uuid.UUID) (apiv0.WidgetTypeResponse, bool) {
@@ -402,7 +389,7 @@ func (p *Project) renderScenesContent() app.UI {
 			// remembering the widget as it was before the first move.
 			if id := p.draggedWidgetID(); id != uuid.Nil {
 				if !p.dragDidMove {
-					if w, ok := p.widgetByID(id); ok {
+					if w, ok := p.findWidget(id); ok {
 						p.dragStartGeometry = geometryOf(w)
 					}
 				}

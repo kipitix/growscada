@@ -188,8 +188,8 @@ func TestApplyChanges_SavesTheEditor(t *testing.T) {
 		len(wt.InputPorts) != 2 || wt.DefaultWidth != 150 {
 		t.Errorf("server widget type: %+v", wt)
 	}
-	if cur, _ := f.l.findItem(id); cur.Version != wt.Version {
-		t.Errorf("known version %d, server's %d", cur.Version, wt.Version)
+	if got := f.l.versions.Of(id); got != wt.Version {
+		t.Errorf("known version %d, server's %d", got, wt.Version)
 	}
 
 	// The next save starts from the version just written.
@@ -222,6 +222,50 @@ func TestApplyChanges_ChangedMeanwhile_ShowsTheServersConflict(t *testing.T) {
 	}
 	if name := f.widgetType(id).Name; name != "Theirs" {
 		t.Errorf("server name %q: the refused write changed it", name)
+	}
+}
+
+func TestApplyChanges_StaleListAfterTheSave_KeepsTheSavedVersion(t *testing.T) {
+	f, id := selected(t)
+	stale := f.l.widgetTypes // a list read before the save, answered after it
+
+	f.l.editedName = "Mine"
+	f.l.applyChanges(f.l.compoCtx)
+	f.run()
+	f.l.setWidgetTypes(f.l.compoCtx, stale)
+
+	f.l.editedName = "Mine again"
+	f.l.applyChanges(f.l.compoCtx)
+	f.run()
+
+	f.noToasts()
+	if name := f.widgetType(id).Name; name != "Mine again" {
+		t.Errorf("second save: server name %q", name)
+	}
+}
+
+func TestApplyChanges_ServerVersionWentBack_RecoversAfterTheConflict(t *testing.T) {
+	f, id := selected(t)
+	f.l.versions.Observe(id, 15) // the server's database was recreated since
+
+	f.l.editedName = "Mine"
+	f.l.applyChanges(f.l.compoCtx)
+	f.run()
+
+	if got := f.oneToast(); got.Status != http.StatusConflict {
+		t.Errorf("toast %+v: want the conflict", got)
+	}
+	if got, want := f.l.versions.Of(id), f.widgetType(id).Version; got != want {
+		t.Errorf("known version %d, server's %d", got, want)
+	}
+
+	f.l.editedName = "Mine"
+	f.l.applyChanges(f.l.compoCtx)
+	f.run()
+
+	f.noToasts()
+	if name := f.widgetType(id).Name; name != "Mine" {
+		t.Errorf("repeated edit: server name %q", name)
 	}
 }
 
@@ -270,7 +314,7 @@ func TestNoServer_ShowsANetworkError(t *testing.T) {
 	if got := f.oneToast(); got.Title != "Network Error" || got.Status != 0 || !strings.Contains(got.Detail, l.Addr().String()) {
 		t.Errorf("toast %+v: want a Network Error naming the server", got)
 	}
-	if f.l.loading {
+	if f.l.reloader.Loading() {
 		t.Error("still loading after the failure")
 	}
 }

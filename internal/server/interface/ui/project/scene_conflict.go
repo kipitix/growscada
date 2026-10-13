@@ -16,11 +16,13 @@ import (
 // edited it, or the server brought its Widgets into line with a changed
 // WidgetType (ADR 0008). The UI then rereads the Scenes and the Widgets
 // itself, without waiting for the event stream, and asks the user to repeat
-// the edit; it does not reapply it.
+// the edit; it does not reapply it. The known versions are forgotten first: if
+// the server's went back, a newer one kept here would be rejected forever.
 func (p *Project) showRejectedSceneEdit(ctx app.Context, err error, reload func(app.Context)) {
 	prob := toast.FromError(err)
 	if errors.Is(err, apiclient.ErrConflict) {
 		ctx.NewActionWithValue(toast.ActionAdd, sceneConflictProblem(prob))
+		p.sceneVersions.Forget()
 		p.loadScenes(ctx)
 		p.loadWidgets(ctx)
 		return

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/google/uuid"
@@ -32,11 +33,19 @@ func TestFromError_ServersProblem(t *testing.T) {
 	}
 }
 
-func TestFromError_AnythingElseIsANetworkError(t *testing.T) {
-	got := FromError(errors.New("dial tcp 127.0.0.1:1: connection refused"))
+func TestFromError_ByWhereTheCallFailed(t *testing.T) {
+	refused := &url.Error{Op: "Get", URL: "http://127.0.0.1:1/api/v0/tags", Err: errors.New("connection refused")}
+	badBody := fmt.Errorf("GET /tags: %w: %w", apiclient.ErrBadResponse, errors.New("unexpected EOF"))
+	unencodable := errors.New("POST /scenes: cannot encode request: json: unsupported value: NaN")
 
-	want := Problem{Title: "Network Error", Detail: "dial tcp 127.0.0.1:1: connection refused"}
-	if got != want {
-		t.Errorf("got %+v, want %+v", got, want)
+	for err, title := range map[error]string{
+		refused:     "Network Error",
+		badBody:     "Bad Response",
+		unencodable: "Client Error",
+	} {
+		want := Problem{Title: title, Detail: err.Error()}
+		if got := FromError(err); got != want {
+			t.Errorf("got %+v, want %+v", got, want)
+		}
 	}
 }

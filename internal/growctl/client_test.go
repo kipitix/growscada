@@ -12,6 +12,7 @@ import (
 	"github.com/kipitix/growscada/contract"
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/growctl"
+	"github.com/kipitix/growscada/internal/versiontest"
 )
 
 func TestListTagsMatching_ServerIgnoringFilter_FiltersClientSide(t *testing.T) {
@@ -38,8 +39,8 @@ func TestListTagsMatching_ServerIgnoringFilter_FiltersClientSide(t *testing.T) {
 }
 
 func TestNewClient_WarnsOnceAboutAnOlderServer(t *testing.T) {
-	older := contract.SchemaVersion{Major: apiv0.SchemaVersion().Major, Minor: apiv0.SchemaVersion().Minor - 1}
-	newer := contract.SchemaVersion{Major: apiv0.SchemaVersion().Major, Minor: apiv0.SchemaVersion().Minor + 1}
+	older := versiontest.Older(apiv0.SchemaVersion())
+	newer := versiontest.Newer(apiv0.SchemaVersion())
 	for name, tc := range map[string]struct {
 		server    contract.SchemaVersion
 		wantLines int

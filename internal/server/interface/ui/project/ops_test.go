@@ -109,7 +109,7 @@ func (f *fixture) widget(sceneID, id uuid.UUID) apiv0.WidgetResponse {
 // server's.
 func (f *fixture) knowsSceneVersion(id uuid.UUID) {
 	f.t.Helper()
-	if got, want := f.p.sceneVersions.of(id), f.scene(id).Version; got != want {
+	if got, want := f.p.sceneVersions.Of(id), f.scene(id).Version; got != want {
 		f.t.Errorf("known version of the Scene: %d, server's: %d", got, want)
 	}
 }
@@ -284,6 +284,31 @@ func TestSaveSceneProperties_SceneChangedMeanwhile_ReloadsAndAsksToRepeat(t *tes
 	}
 	if f.p.scenes[0].Name != "Theirs" || f.p.editingScenePropsName != "Theirs" {
 		t.Errorf("not reloaded: scene %q, editor %q", f.p.scenes[0].Name, f.p.editingScenePropsName)
+	}
+	f.knowsSceneVersion(sceneID)
+
+	f.p.editingScenePropsName = "Mine"
+	f.p.saveSceneProperties(f.p.compoCtx)
+	f.run()
+
+	f.noToasts()
+	if name := f.scene(sceneID).Name; name != "Mine" {
+		t.Errorf("repeated edit: server name %q", name)
+	}
+}
+
+func TestSaveSceneProperties_ServerVersionWentBack_RecoversAfterTheConflict(t *testing.T) {
+	url, api := newServer(t)
+	sceneID := createScene(t, api, "Main")
+	f := mount(t, url, api)
+	f.p.sceneVersions.Observe(sceneID, 15) // the server's database was recreated since
+
+	f.p.editingScenePropsName = "Mine"
+	f.p.saveSceneProperties(f.p.compoCtx)
+	f.run()
+
+	if got := f.oneToast(); got.Status != http.StatusConflict {
+		t.Errorf("toast %+v: want the conflict", got)
 	}
 	f.knowsSceneVersion(sceneID)
 
@@ -489,7 +514,7 @@ func TestBindPortAndUnbindPort(t *testing.T) {
 // drag moves the widget as a canvas drag would, then ends the drag.
 func (f *fixture) drag(widgetID uuid.UUID, dx, dy float64) {
 	f.p.draggingWidgetID = widgetID
-	w, _ := f.p.widgetByID(widgetID)
+	w, _ := f.p.findWidget(widgetID)
 	f.p.dragStartGeometry = geometryOf(w)
 	f.p.dragDidMove = dx != 0 || dy != 0
 	for i := range f.p.widgets {

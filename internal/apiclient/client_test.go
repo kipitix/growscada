@@ -164,6 +164,42 @@ func TestStatusError_NotProblemDetails_TitledByStatus(t *testing.T) {
 	}
 }
 
+func TestStatusError_JSONNotProblemDetails_KeepsTheBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(`{"message":"rate limited"}`))
+	}))
+	defer srv.Close()
+
+	_, err := apiclient.New(srv.URL, srv.Client()).ListScenes(context.Background())
+
+	var se *apiclient.StatusError
+	if !errors.As(err, &se) {
+		t.Fatalf("error %v is not a *StatusError", err)
+	}
+	if se.Problem.Title != "Too Many Requests" || se.Problem.Detail != `{"message":"rate limited"}` {
+		t.Errorf("got %+v, want the body as the detail", se.Problem)
+	}
+}
+
+func TestDelete_EmptyBody_Succeeds(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			return // 200 without a body, as a proxy may answer
+		}
+		w.WriteHeader(http.StatusOK) // a GET without a body is not a valid answer
+	}))
+	defer srv.Close()
+	client := apiclient.New(srv.URL, srv.Client())
+
+	if _, err := client.DeleteTag(context.Background(), uuid.New()); err != nil {
+		t.Errorf("delete: %v", err)
+	}
+	if _, err := client.GetTag(context.Background(), uuid.New()); err == nil {
+		t.Error("get with an empty body: want an error")
+	}
+}
+
 func TestOnServerVersion(t *testing.T) {
 	for name, tc := range map[string]struct {
 		header string

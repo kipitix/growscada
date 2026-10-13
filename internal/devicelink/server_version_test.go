@@ -2,40 +2,40 @@ package devicelink
 
 import (
 	"bytes"
+	"context"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/kipitix/growscada/contract"
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/apiclient"
+	"github.com/kipitix/growscada/internal/versiontest"
 )
 
-func TestServerVersionWatch_LogsAnOlderServerOncePerVersion(t *testing.T) {
-	own := apiv0.SchemaVersion()
-	older := contract.SchemaVersion{Major: own.Major, Minor: own.Minor - 1}
-	oldest := contract.SchemaVersion{Major: own.Major, Minor: own.Minor - 2}
-	newer := contract.SchemaVersion{Major: own.Major, Minor: own.Minor + 1}
+func TestWarnOlderServer_LogsBothVersions(t *testing.T) {
+	older := versiontest.Older(apiv0.SchemaVersion())
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(contract.SchemaVersionHeader, older.String())
+		w.Write([]byte(`{"tags":[]}`))
+	}))
+	defer srv.Close()
 	var log bytes.Buffer
-	w := newServerVersionWatch(slog.New(slog.NewTextHandler(&log, nil)))
+	client := apiclient.New(srv.URL, srv.Client(), WarnOlderServer(slog.New(slog.NewTextHandler(&log, nil))))
 
-	for _, step := range []struct {
-		server   contract.SchemaVersion
-		wantLogs int
-	}{
-		{older, 1},  // first seen, older
-		{older, 1},  // the same server again
-		{own, 1},    // replaced by a current one
-		{newer, 1},  // a newer one is fine
-		{older, 2},  // an older one again: a change
-		{oldest, 3}, // another older one
-		{oldest, 3},
-	} {
-		w.observe(step.server)
-		if got := strings.Count(log.String(), "\n"); got != step.wantLogs {
-			t.Fatalf("after %v: %d log record(s), want %d:\n%s", step.server, got, step.wantLogs, log.String())
+	for range 2 {
+		if _, err := client.ListTags(context.Background()); err != nil {
+			t.Fatal(err)
 		}
 	}
-	if !strings.Contains(log.String(), "server_api="+oldest.String()) {
-		t.Errorf("the record does not name the server's version:\n%s", log.String())
+
+	if got := strings.Count(log.String(), "\n"); got != 1 {
+		t.Errorf("%d log record(s), want 1:\n%s", got, log.String())
+	}
+	if !strings.Contains(log.String(), "server_api="+older.String()) ||
+		!strings.Contains(log.String(), "device_api="+apiv0.SchemaVersion().String()) {
+		t.Errorf("the record does not name both versions:\n%s", log.String())
 	}
 }

@@ -135,12 +135,12 @@ func (p *Project) putScene(sc apiv0.SceneResponse) {
 		Width:          sc.Width,
 		Height:         sc.Height,
 		BackgroundHTML: sc.BackgroundHTML,
-		Version:        p.sceneVersions.of(sc.ID),
+		Version:        p.sceneVersions.Of(sc.ID),
 	}
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.UpdateSceneResponse, error) {
 		return p.client.UpdateScene(c, sc.ID, req)
 	}, func(ctx app.Context, updated apiv0.UpdateSceneResponse) {
-		p.sceneVersions.observe(sc.ID, updated.Version)
+		p.sceneVersions.Observe(sc.ID, updated.Version)
 	}, p.rejectedSceneEdit(p.loadScenes))
 }
 

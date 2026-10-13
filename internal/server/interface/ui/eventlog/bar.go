@@ -211,10 +211,23 @@ func (b *Bar) handleMessage(ctx app.Context, data string) {
 }
 
 // parseEvent reads an SSE message's data as an apiv0.Event, tolerantly:
-// fields this UI does not know are skipped (ADR 0005).
+// fields this UI does not know are skipped (ADR 0005), and a Tag that does
+// not fit apiv0.TagResponse is dropped rather than the whole event, so the
+// event is still logged and dispatched (Operation then rereads the Tags).
 func parseEvent(data string) (apiv0.Event, bool) {
 	var ev apiv0.Event
-	if err := json.Unmarshal([]byte(data), &ev); err != nil || ev.Type == "" {
+	if err := json.Unmarshal([]byte(data), &ev); err != nil {
+		var envelope struct {
+			Type      string `json:"type"`
+			Timestamp string `json:"timestamp"`
+			ID        string `json:"id"`
+		}
+		if json.Unmarshal([]byte(data), &envelope) != nil {
+			return apiv0.Event{}, false
+		}
+		ev = apiv0.Event{Type: envelope.Type, Timestamp: envelope.Timestamp, ID: envelope.ID}
+	}
+	if ev.Type == "" {
 		return apiv0.Event{}, false
 	}
 	return ev, true

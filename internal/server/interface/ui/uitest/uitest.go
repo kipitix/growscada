@@ -38,11 +38,6 @@ func Load(t *testing.T, c app.Composer) *Engine {
 	return e
 }
 
-// Toasts returns the toasts shown so far.
-func (e *Engine) Toasts() []toast.Problem {
-	return e.recorder.all()
-}
-
 // TakeToasts returns the toasts shown so far and forgets them.
 func (e *Engine) TakeToasts() []toast.Problem {
 	return e.recorder.take()
@@ -79,12 +74,6 @@ func (r *toastRecorder) OnPreRender(ctx app.Context) {
 }
 
 func (r *toastRecorder) Render() app.UI { return app.Div() }
-
-func (r *toastRecorder) all() []toast.Problem {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return append([]toast.Problem(nil), r.toasts...)
-}
 
 func (r *toastRecorder) take() []toast.Problem {
 	r.mu.Lock()

@@ -2,11 +2,13 @@ package library
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -60,10 +62,6 @@ func (l *Library) applyChanges(ctx app.Context) {
 		return
 	}
 	current, _ := l.findItem(l.selectedID)
-	ports := l.editedInputPorts
-	if ports == nil {
-		ports = []apiv0.InputPort{}
-	}
 	l.updateWidgetType(l.selectedID, apiv0.UpdateWidgetTypeRequest{
 		Name:           l.editedName,
 		HtmlTemplate:   l.editedHTML,
@@ -71,8 +69,8 @@ func (l *Library) applyChanges(ctx app.Context) {
 		ScriptLanguage: l.editedScriptLang,
 		DefaultWidth:   current.DefaultWidth,
 		DefaultHeight:  current.DefaultHeight,
-		InputPorts:     ports,
-		Version:        current.Version,
+		InputPorts:     portsRequest(l.editedInputPorts),
+		Version:        l.versions.Of(l.selectedID),
 	})
 }
 
@@ -85,24 +83,16 @@ func (l *Library) commitEdit(ctx app.Context) {
 	l.editingID = uuid.Nil
 	l.editingName = ""
 
-	found, ok := l.findItem(id)
-	if !ok {
+	idx := l.itemIdx(id)
+	if idx < 0 {
 		return
 	}
-	for i := range l.widgetTypes {
-		if l.widgetTypes[i].ID == id {
-			l.widgetTypes[i].Name = name
-			break
-		}
-	}
+	l.widgetTypes[idx].Name = name
+	found := l.widgetTypes[idx]
 	if l.selectedID == id {
 		l.editedName = name
 	}
 
-	ports := found.InputPorts
-	if ports == nil {
-		ports = []apiv0.InputPort{}
-	}
 	l.updateWidgetType(id, apiv0.UpdateWidgetTypeRequest{
 		Name:           name,
 		HtmlTemplate:   found.HtmlTemplate,
@@ -110,23 +100,32 @@ func (l *Library) commitEdit(ctx app.Context) {
 		ScriptLanguage: found.ScriptLanguage,
 		DefaultWidth:   found.DefaultWidth,
 		DefaultHeight:  found.DefaultHeight,
-		InputPorts:     ports,
-		Version:        found.Version,
+		InputPorts:     portsRequest(found.InputPorts),
+		Version:        l.versions.Of(id),
 	})
 }
 
+// portsRequest returns a copy of ports, never nil: the body is marshalled later,
+// on the Async goroutine, while the editor may already change its ports.
+func portsRequest(ports []apiv0.InputPort) []apiv0.InputPort {
+	return append([]apiv0.InputPort{}, ports...)
+}
+
 // updateWidgetType saves the WidgetType, then records its new version and
-// reloads the list.
+// reloads the list. On a conflict (409) the known versions are forgotten and
+// the list reread: if the server's version went back, a newer one kept here
+// would be rejected forever.
 func (l *Library) updateWidgetType(id uuid.UUID, req apiv0.UpdateWidgetTypeRequest) {
 	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.UpdateWidgetTypeResponse, error) {
 		return l.client.UpdateWidgetType(c, id, req)
 	}, func(ctx app.Context, updated apiv0.UpdateWidgetTypeResponse) {
-		for i := range l.widgetTypes {
-			if l.widgetTypes[i].ID == id {
-				l.widgetTypes[i].Version = updated.Version
-				break
-			}
-		}
+		l.versions.Observe(id, updated.Version)
 		l.loadList(ctx)
-	}, nil)
+	}, func(ctx app.Context, err error) {
+		uiutil.ShowError(ctx, err)
+		if errors.Is(err, apiclient.ErrConflict) {
+			l.versions.Forget()
+			l.loadList(ctx)
+		}
+	})
 }
