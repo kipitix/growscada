@@ -3,6 +3,8 @@ package project
 import (
 	"fmt"
 	"math"
+
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
 
 // ── Matrix helper ─────────────────────────────────────────────────────────────
@@ -23,7 +25,7 @@ func computeMatrixCSS(posX, posY, originX, originY, rotDeg float64, width, heigh
 		cosA, sinA, -sinA, cosA, e, f)
 }
 
-func widgetMatrixCSS(w widgetItem) string {
+func widgetMatrixCSS(w apiv0.WidgetResponse) string {
 	return computeMatrixCSS(
 		w.Position.X, w.Position.Y,
 		w.Origin.X, w.Origin.Y,

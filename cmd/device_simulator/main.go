@@ -54,7 +54,8 @@ func main() {
 	// Create a graceful shutdown manager
 	gracedownManager := gracedown.NewManager(gracedown.WithLogger(slogAdapter{}))
 
-	link := devicelink.NewRESTLink(apiclient.New(cfg.Server, &http.Client{Timeout: 10 * time.Second}))
+	link := devicelink.NewRESTLink(apiclient.New(cfg.Server, &http.Client{Timeout: 10 * time.Second},
+		devicelink.WarnOlderServer(slog.Default())))
 	device := devicesim.New(cfg, link, devicesim.Options{})
 
 	// INTERFACE COMPONENTS

@@ -1,10 +1,14 @@
 package project
 
-import "testing"
+import (
+	"testing"
+
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+)
 
 func TestMergeEditFields_KeepsEditedFieldsAndFollowsServerForOthers(t *testing.T) {
-	old := editFieldsOf(widgetItem{Name: "pump", Position: positionDTO{X: 10, Y: 20}})
-	current := editFieldsOf(widgetItem{Name: "pump-renamed", Position: positionDTO{X: 30, Y: 40}})
+	old := editFieldsOf(apiv0.WidgetResponse{Name: "pump", Position: apiv0.PositionResponse{X: 10, Y: 20}})
+	current := editFieldsOf(apiv0.WidgetResponse{Name: "pump-renamed", Position: apiv0.PositionResponse{X: 30, Y: 40}})
 	local := old
 	local.posX = "99" // unsaved edit
 

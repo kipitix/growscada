@@ -1,6 +1,6 @@
 // Package servertest runs the real GrowSCADA REST API over Postgres in
-// testcontainers, for tests of the tools that talk to the server (growctl, the
-// device simulator and its link).
+// testcontainers, for tests of what talks to the server over it (growctl, the
+// device simulator and its link, the apiclient, the PWA UI).
 package servertest
 
 import (
@@ -94,15 +94,17 @@ func startPostgres(ctx context.Context) (*sql.DB, *tcpostgres.PostgresContainer,
 	return db, container, nil
 }
 
-// StartAPI cleans the tags, outbox and policy_jobs tables and serves the real
-// REST API over the database, with the outbox dispatcher delivering committed
-// events to its event stream and the policy runner running the policies, as
-// the server does. The returned TagService is the one
-// behind the API, for arranging and checking state directly.
+// StartAPI cleans every table (tags, widgets, scenes, widget_types, outbox,
+// policy_jobs) and serves the real REST API over the database, with the
+// outbox dispatcher delivering committed events to its event stream and the
+// policy runner running the policies, as the server does. The returned
+// TagService is the one behind the API, for arranging and checking state
+// directly.
 func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagService) {
 	t.Helper()
-	if _, err := db.ExecContext(context.Background(), "DELETE FROM tags; DELETE FROM outbox; DELETE FROM policy_jobs"); err != nil {
-		t.Fatalf("clean tags: %v", err)
+	if _, err := db.ExecContext(context.Background(), "DELETE FROM tags; DELETE FROM widgets; DELETE FROM scenes; DELETE FROM widget_types; "+
+		"DELETE FROM outbox; DELETE FROM policy_jobs"); err != nil {
+		t.Fatalf("clean the database: %v", err)
 	}
 	bus := eventbus.NewEventBus()
 	dispatcher := outbox.NewDispatcher(db, bus.Publish)

@@ -3,10 +3,15 @@ package project
 import (
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
+
+// widgetPreviewDOMID is the DOM id of the preview iframe of the Widget wid on
+// the canvas.
+func widgetPreviewDOMID(wid uuid.UUID) string { return "w-preview-" + wid.String() }
 
 // widgetPreviewFrame renders a sandboxed iframe that fills its container.
 // Used on the scene canvas — the parent div sets the exact pixel size.

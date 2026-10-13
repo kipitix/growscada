@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -198,7 +199,7 @@ func assertProblem(t *testing.T, err error, pathParams map[string]string, wantSt
 	if rec.Code != wantStatus {
 		t.Errorf("status: expected %d, got %d", wantStatus, rec.Code)
 	}
-	var prob ProblemDetails
+	var prob apiv0.Problem
 	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
 		t.Fatalf("decode problem: %v", err)
 	}
@@ -333,7 +334,7 @@ func TestPathUUID(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status: expected 400, got %d", rec.Code)
 	}
-	var prob ProblemDetails
+	var prob apiv0.Problem
 	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
 		t.Fatalf("decode problem: %v", err)
 	}

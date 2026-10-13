@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -68,7 +70,7 @@ func (p *Project) renderSceneTabs() app.UI {
 					case "Enter":
 						p.commitSceneEdit(ctx)
 					case "Escape":
-						p.editingSceneID = ""
+						p.editingSceneID = uuid.Nil
 						p.editingSceneName = ""
 					}
 				})
@@ -84,7 +86,7 @@ func (p *Project) renderSceneTabs() app.UI {
 						Text(sc.Name).
 						OnClick(func(ctx app.Context, e app.Event) {
 							p.selectedSceneID = sc.ID
-							ctx.LocalStorage().Set("project:sceneID", sc.ID)
+							uiutil.StoreID(ctx, sceneIDKey, sc.ID)
 							p.clearWidgetSelection(ctx)
 							p.syncSceneEditingFields()
 							p.loadWidgets(ctx)
@@ -142,7 +144,7 @@ func (p *Project) renderSceneTabs() app.UI {
 }
 
 func (p *Project) renderSceneCanvas() app.UI {
-	if p.selectedSceneID == "" {
+	if p.selectedSceneID == uuid.Nil {
 		return app.Div().
 			Style("flex", "1").
 			Style("display", "flex").
@@ -154,15 +156,12 @@ func (p *Project) renderSceneCanvas() app.UI {
 	}
 
 	sceneWidth, sceneHeight := 1920, 1080
-	for _, sc := range p.scenes {
-		if sc.ID == p.selectedSceneID {
-			if sc.Width > 0 {
-				sceneWidth = sc.Width
-			}
-			if sc.Height > 0 {
-				sceneHeight = sc.Height
-			}
-			break
+	if sc, ok := p.findScene(p.selectedSceneID); ok {
+		if sc.Width > 0 {
+			sceneWidth = sc.Width
+		}
+		if sc.Height > 0 {
+			sceneHeight = sc.Height
 		}
 	}
 
@@ -175,13 +174,13 @@ func (p *Project) renderSceneCanvas() app.UI {
 	// Determine overall canvas cursor from active drag mode.
 	canvasCursor := "default"
 	switch {
-	case p.draggingWidgetID != "":
+	case p.draggingWidgetID != uuid.Nil:
 		canvasCursor = "grabbing"
-	case p.draggingOriginID != "":
+	case p.draggingOriginID != uuid.Nil:
 		canvasCursor = "crosshair"
-	case p.rotatingWidgetID != "":
+	case p.rotatingWidgetID != uuid.Nil:
 		canvasCursor = "alias"
-	case p.resizingWidgetID != "":
+	case p.resizingWidgetID != uuid.Nil:
 		canvasCursor = "se-resize"
 	}
 
@@ -205,11 +204,11 @@ func (p *Project) renderSceneCanvas() app.UI {
 		OnDrop(func(ctx app.Context, e app.Event) {
 			e.PreventDefault()
 			typeID := p.draggedTypeID
-			if typeID == "" {
-				typeID = e.Get("dataTransfer").Call("getData", "text/plain").String()
+			if typeID == uuid.Nil {
+				typeID = uiutil.ParseID(e.Get("dataTransfer").Call("getData", "text/plain").String())
 			}
-			p.draggedTypeID = ""
-			if typeID == "" {
+			p.draggedTypeID = uuid.Nil
+			if typeID == uuid.Nil {
 				return
 			}
 			rect := e.Get("currentTarget").Call("getBoundingClientRect")
@@ -245,8 +244,9 @@ func (p *Project) renderSceneCanvas() app.UI {
 //   - Orange circle: origin anchor (drag to move anchor within widget)
 //   - Blue circle + line: rotation handle (drag to rotate)
 //   - Blue square corner: SE resize handle (drag to resize)
-func (p *Project) renderWidget(w widgetItem, textMuted string) app.UI {
+func (p *Project) renderWidget(w apiv0.WidgetResponse, textMuted string) app.UI {
 	wid := w.ID
+	scope := wid.String() // go-app event scope
 	isSelected := p.selectedWidgetID == wid
 
 	// Local pixel position of the origin anchor within the widget.
@@ -270,7 +270,7 @@ func (p *Project) renderWidget(w widgetItem, textMuted string) app.UI {
 		Body(
 			// Widget preview iframe — pointer-events:none so mouse hits overlay.
 			&widgetPreviewFrame{
-				ID:     "w-preview-" + wid,
+				ID:     widgetPreviewDOMID(wid),
 				Srcdoc: srcdoc,
 			},
 			// Transparent overlay: captures drag/click for widget manipulation.
@@ -292,10 +292,10 @@ func (p *Project) renderWidget(w widgetItem, textMuted string) app.UI {
 						p.dragStartPosX = cur.Position.X
 						p.dragStartPosY = cur.Position.Y
 					}
-				}, app.EventScope(wid)).
+				}, app.EventScope(scope)).
 				OnClick(func(ctx app.Context, e app.Event) {
 					e.Call("stopPropagation")
-				}, app.EventScope(wid)),
+				}, app.EventScope(scope)),
 			// Selection border overlay (pointer-events:none so it doesn't block drag).
 			app.If(isSelected, func() app.UI {
 				return app.Div().
@@ -365,7 +365,7 @@ func (p *Project) renderWidget(w widgetItem, textMuted string) app.UI {
 				p.rotStartAngle = math.Atan2(handleCY-p.rotOriginCliY, handleCX-p.rotOriginCliX)
 				p.rotStartDeg = rotDeg
 				p.rotatingWidgetID = wid
-			}, app.EventScope(wid))
+			}, app.EventScope(scope))
 
 		// Origin handle: orange circle at anchor point
 		originHandle := app.Div().
@@ -396,7 +396,7 @@ func (p *Project) renderWidget(w widgetItem, textMuted string) app.UI {
 					p.originDragH = cur.Size.Height
 					p.originDragRotDeg = cur.Rotation.Degrees
 				}
-			}, app.EventScope(wid))
+			}, app.EventScope(scope))
 
 		// SE resize handle: small square at bottom-right corner
 		resizeHandle := app.Div().
@@ -433,7 +433,7 @@ func (p *Project) renderWidget(w widgetItem, textMuted string) app.UI {
 					p.resizeStartE = cur.Position.X + startOx*(1-cosA) + sinA*startOy
 					p.resizeStartF = cur.Position.Y - sinA*startOx + startOy*(1-cosA)
 				}
-			}, app.EventScope(wid))
+			}, app.EventScope(scope))
 
 		bodyItems = append(bodyItems, rotLine, rotHandle, originHandle, resizeHandle)
 	}
@@ -449,6 +449,6 @@ func (p *Project) renderWidget(w widgetItem, textMuted string) app.UI {
 		Style("overflow", "visible").
 		OnClick(func(ctx app.Context, e app.Event) {
 			e.Call("stopPropagation")
-		}, app.EventScope(wid)).
+		}, app.EventScope(scope)).
 		Body(bodyItems...)
 }

@@ -3,8 +3,10 @@ package livescene
 import (
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -16,10 +18,10 @@ import (
 // any other Tag then costs the View nothing.
 type View struct {
 	app.Compo
-	Scene       Scene
-	Widgets     []Widget
-	WidgetTypes map[string]WidgetType // by ID
-	Tags        map[string]Tag        // by ID
+	Scene       apiv0.SceneResponse
+	Widgets     []apiv0.WidgetResponse
+	WidgetTypes map[uuid.UUID]apiv0.WidgetTypeResponse // by ID
+	Tags        map[uuid.UUID]apiv0.TagResponse        // by ID
 	// Connected is false while the connection to the server is lost: a banner
 	// is shown and every Widget is marked at least Uncertain.
 	Connected bool
@@ -31,7 +33,7 @@ type View struct {
 
 	// srcdocs caches the live document of each WidgetType (by ID): it depends
 	// on the WidgetType only, not on Tag values.
-	srcdocs map[string]cachedSrcdoc
+	srcdocs map[uuid.UUID]cachedSrcdoc
 }
 
 // cachedSrcdoc is a live document with what it was built from.
@@ -46,7 +48,7 @@ func (v *View) Render() app.UI {
 	// Rebuilt on every render from the WidgetTypes in use, so the entries of
 	// deleted or unused types are dropped.
 	cached := v.srcdocs
-	v.srcdocs = make(map[string]cachedSrcdoc, len(cached))
+	v.srcdocs = make(map[uuid.UUID]cachedSrcdoc, len(cached))
 	for _, w := range v.Widgets {
 		wt, ok := v.WidgetTypes[w.TypeID]
 		if !ok {
@@ -125,7 +127,7 @@ func (v *View) renderBackground() app.UI {
 		Style("display", "block")
 }
 
-func (v *View) renderWidget(w Widget, textMuted string) app.UI {
+func (v *View) renderWidget(w apiv0.WidgetResponse, textMuted string) app.UI {
 	var srcdoc, inputsJSON string
 	quality := QualityBad
 	if wt, ok := v.WidgetTypes[w.TypeID]; ok {

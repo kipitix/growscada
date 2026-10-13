@@ -1,5 +1,19 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.37] - 2026-10-14
+
+### Changed
+
+- **PWA UI ходит в REST API через один типизированный клиент** (задача 23). Поведение UI то же; Bruno-коллекции не менялись (запросы и ответы те же)
+  - `contract/api/v0`: `apiv0.Problem` — тело любого ответа с ошибкой, пять полей RFC 9457 (`type`, `title`, `status`, `detail`, `instance`). restapi отвечает им; `restapi.ProblemDetails` с ручным Marshal/Unmarshal и Extensions удалён. JSON на проводе прежний. SchemaVersion API 0.1 → 0.2, схема `schemas/api/0.2.json`
+  - `apiclient`: Scenes, Widgets, WidgetTypes; методы возвращают типы `apiv0` как есть (`apiclient.Tag` заменён на `apiv0.TagResponse`), создание — ответ сервера (`CreateTag` → `apiv0.CreateTagResponse`), удаление — последнее состояние ресурса. `StatusError` несёт `Method` и `apiv0.Problem` (терпимое чтение); ответ с ошибкой не в JSON (например, HTML прокси) даёт `Title` по статусу и начало тела в `Detail`. `errors.Is(ErrNotFound/ErrConflict)` как раньше. Заголовок `GrowSCADA-Schema-Version` — только у запросов с телом. Опция `apiclient.OnServerVersion` сообщает версию сервера из каждого ответа (и с ошибкой); клиент собирается под `GOOS=js GOARCH=wasm`
+  - growctl: сервер с более старым API — одно предупреждение в stderr за запуск. Device simulator (`devicelink.WarnOlderServer`): запись в лог раз на смену версии сервера. Более новый сервер — без сообщений
+  - UI: все вызовы (Project, Library, Operation, включая чтение списков) — через `*apiclient.Client` из Root и `uiutil.Call`; ошибки — `toast.FromError`. Удалены `uiutil.FetchJSON`, `uiutil.SendSchemaVersion`, `toast.FromHTTPError`, UI-копии DTO (`project/dto.go`, `library/dto.go`, `operation/dto.go`, `livescene/dto.go`, пакет `uidto`), `eventlog.wireMessage`, `operation.decodeTagUpdate`. SSE разбирается один раз в `apiv0.Event`, `ServerEvent.Tag` — `*apiv0.TagResponse`
+  - UI: ID в состоянии — `uuid.UUID`, строки разбираются только на границах (LocalStorage, SSE, DOM/drag)
+  - Project: версия Scene хранится в одном месте (`sceneVersions`) и обновляется по максимуму из любого ответа (список Scenes, Widgets, результат записи); `applyNewSceneVersion` и чтение `SceneVersion` Widget для записи убраны
+  - Root: незакрываемая плашка «The server speaks API X, this interface Y. Reload the page.» с кнопкой Reload, пока версия сервера отличается от версии UI
+  - Тесты: операции Project и Library гоняются в go-app `TestEngine` (`ui/uitest`) против настоящего API (`servertest.StartAPI`, очистка расширена на scenes, widgets, widget_types), включая 409, 400 с detail сервера и сетевую ошибку
+
 ## [0.0.36] - 2026-10-13
 
 ### Changed

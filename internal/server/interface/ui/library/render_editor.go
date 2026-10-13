@@ -3,9 +3,10 @@ package library
 import (
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
-	"github.com/kipitix/growscada/internal/server/interface/ui/uidto"
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -196,13 +197,13 @@ func (l *Library) renderPreviewColumn() app.UI {
 
 // renderInputPortsColumn renders the Input Ports management panel.
 func (l *Library) renderInputPortsColumn() app.UI {
-	disabled := l.selectedID == ""
+	disabled := l.selectedID == uuid.Nil
 
 	// Existing ports list
 	portRows := make([]app.UI, 0, len(l.editedInputPorts))
 	for i, p := range l.editedInputPorts {
 		idx := i
-		typeLabel := uidto.TypeHintLabel(p.TypeHint)
+		typeLabel := uiutil.TypeHintLabel(p.TypeHint)
 		desc := p.Description
 		if desc == "" {
 			desc = "—"
@@ -233,7 +234,7 @@ func (l *Library) renderInputPortsColumn() app.UI {
 					Text("✕").
 					Disabled(disabled).
 					OnClick(func(ctx app.Context, e app.Event) {
-						ports := make([]uidto.InputPortDTO, 0, len(l.editedInputPorts)-1)
+						ports := make([]apiv0.InputPort, 0, len(l.editedInputPorts)-1)
 						for j, pp := range l.editedInputPorts {
 							if j != idx {
 								ports = append(ports, pp)
@@ -332,7 +333,7 @@ func (l *Library) renderInputPortsColumn() app.UI {
 							return
 						}
 					}
-					l.editedInputPorts = append(l.editedInputPorts, uidto.InputPortDTO{
+					l.editedInputPorts = append(l.editedInputPorts, apiv0.InputPort{
 						Name:        name,
 						Description: l.newPortDesc,
 						TypeHint:    l.newPortType,
@@ -378,7 +379,7 @@ func (l *Library) renderInputDataColumn() app.UI {
 	rows := make([]app.UI, 0, len(l.editedInputPorts))
 	for _, p := range l.editedInputPorts {
 		portName := p.Name
-		typeLabel := uidto.TypeHintLabel(p.TypeHint)
+		typeLabel := uiutil.TypeHintLabel(p.TypeHint)
 		placeholder := map[string]string{
 			"integer": "0",
 			"boolean": "true",
@@ -466,7 +467,7 @@ func (l *Library) renderApplyButton() app.UI {
 		OnClick(func(ctx app.Context, e app.Event) {
 			l.applyChanges(ctx)
 		})
-	if l.selectedID == "" {
+	if l.selectedID == uuid.Nil {
 		return btn.Style("opacity", "0.4").Style("cursor", "default").Disabled(true)
 	}
 	return btn.Style("cursor", "pointer")

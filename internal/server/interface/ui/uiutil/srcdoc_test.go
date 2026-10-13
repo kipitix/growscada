@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kipitix/growscada/internal/server/interface/ui/uidto"
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
 
 func TestNewInput(t *testing.T) {
@@ -46,7 +46,7 @@ func TestInputsJSON(t *testing.T) {
 }
 
 func TestBuildSrcdoc_RendersOnceWithInputs(t *testing.T) {
-	ports := []uidto.InputPortDTO{{Name: "value", TypeHint: "integer"}}
+	ports := []apiv0.InputPort{{Name: "value", TypeHint: "integer"}}
 	doc := BuildSrcdoc("<div></div>", "function render(inputs){}", PreviewInputs(map[string]string{"value": "5"}, ports), ports, "#fff")
 	if !strings.Contains(doc, `render({"value":{"value":5}})`) {
 		t.Errorf("expected a render call with the inputs, got %s", doc)

@@ -69,7 +69,7 @@ func NewRootCommand() *cobra.Command {
 		"GrowSCADA REST API URL (env "+ServerEnv+")")
 
 	newClient := func() *Client {
-		return NewClient(server, &http.Client{Timeout: 30 * time.Second})
+		return NewClient(server, &http.Client{Timeout: 30 * time.Second}, root.ErrOrStderr())
 	}
 
 	root.AddCommand(
@@ -305,7 +305,7 @@ func deleteMatching(cmd *cobra.Command, client *Client, filter NameFilter, yes b
 func executeDelete(ctx context.Context, client *Client, steps []Step, out io.Writer) error {
 	for _, s := range steps {
 		if s.Action == ActionDelete {
-			err := client.DeleteTag(ctx, s.Server.ID)
+			_, err := client.DeleteTag(ctx, s.Server.ID)
 			if errors.Is(err, apiclient.ErrNotFound) {
 				s.Action = ActionNotFound
 			} else if err != nil {
@@ -375,7 +375,7 @@ func executeApply(ctx context.Context, client *Client, steps []Step, out io.Writ
 		case ActionCreate:
 			err = client.CreateTag(ctx, s.Manifest)
 		case ActionPrune:
-			if err = client.DeleteTag(ctx, s.Server.ID); errors.Is(err, apiclient.ErrNotFound) {
+			if _, err = client.DeleteTag(ctx, s.Server.ID); errors.Is(err, apiclient.ErrNotFound) {
 				err = nil // already gone — the desired state is reached
 			}
 		}

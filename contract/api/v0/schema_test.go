@@ -16,7 +16,7 @@ func TestSchemaIsCommitted(t *testing.T) {
 			SceneResponse{}, GetScenesResponse{}, CreateSceneRequest{}, CreateSceneResponse{}, UpdateSceneRequest{}, UpdateSceneResponse{},
 			WidgetResponse{}, GetWidgetsResponse{}, CreateWidgetRequest{}, CreateWidgetResponse{}, UpdateWidgetRequest{}, UpdateWidgetResponse{},
 			WidgetTypeResponse{}, GetWidgetTypesResponse{}, CreateWidgetTypeRequest{}, CreateWidgetTypeResponse{}, UpdateWidgetTypeRequest{}, UpdateWidgetTypeResponse{},
-			Event{},
+			Event{}, Problem{},
 		},
 	})
 }

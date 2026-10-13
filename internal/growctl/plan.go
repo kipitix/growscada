@@ -5,12 +5,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/kipitix/growscada/internal/apiclient"
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
 
 // ServerTag is a tag that exists on the server. The planner uses ID, Name and
 // Type; get prints the rest.
-type ServerTag = apiclient.Tag
+type ServerTag = apiv0.TagResponse
 
 // Action is what a Step does to one tag.
 type Action int

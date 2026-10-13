@@ -56,7 +56,7 @@ func IsTransient(err error) bool {
 	}
 	var statusErr *apiclient.StatusError
 	if errors.As(err, &statusErr) {
-		return statusErr.Status >= http.StatusInternalServerError
+		return statusErr.Problem.Status >= http.StatusInternalServerError
 	}
 	return false
 }

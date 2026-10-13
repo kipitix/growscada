@@ -1,7 +1,11 @@
 package project
 
 import (
+	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
+
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
 var tagTypes = []string{"string", "boolean", "integer"}
@@ -40,7 +44,7 @@ func (p *Project) renderTagListColumn() app.UI {
 }
 
 func (p *Project) renderTagListButtons() app.UI {
-	deleteDisabled := p.selectedTagID == "" || p.creatingTag
+	deleteDisabled := p.selectedTagID == uuid.Nil || p.creatingTag
 
 	deleteBtn := app.Button().
 		Style("flex", "1").
@@ -80,8 +84,8 @@ func (p *Project) renderTagListButtons() app.UI {
 			p.creatingTag = true
 			p.newTagName = "New Tag"
 			p.newTagType = "string"
-			p.selectedTagID = ""
-			ctx.LocalStorage().Set("project:tagID", "")
+			p.selectedTagID = uuid.Nil
+			uiutil.StoreID(ctx, tagIDKey, uuid.Nil)
 		})
 	if createDisabled {
 		createBtn = createBtn.
@@ -119,7 +123,7 @@ func (p *Project) renderTagList() app.UI {
 			OnClick(func(ctx app.Context, e app.Event) {
 				p.selectedTagID = id
 				p.creatingTag = false
-				ctx.LocalStorage().Set("project:tagID", id)
+				uiutil.StoreID(ctx, tagIDKey, id)
 			})
 		if p.selectedTagID == id {
 			item = item.Style("background", "var(--accent)").Style("color", "var(--accent-text)")
@@ -137,7 +141,7 @@ func (p *Project) renderTagPropertiesPanel() app.UI {
 	if p.creatingTag {
 		return p.renderTagCreateForm()
 	}
-	if p.selectedTagID == "" {
+	if p.selectedTagID == uuid.Nil {
 		return app.Div().
 			Style("flex", "1").
 			Style("display", "flex").
@@ -148,7 +152,7 @@ func (p *Project) renderTagPropertiesPanel() app.UI {
 			Body(app.Text("Select a tag or create a new one."))
 	}
 
-	var selected tagItem
+	var selected apiv0.TagResponse
 	for _, t := range p.tags {
 		if t.ID == p.selectedTagID {
 			selected = t

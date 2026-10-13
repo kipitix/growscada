@@ -1,13 +1,20 @@
 package root
 
 import (
+	"fmt"
+	"net/http"
+
+	"github.com/maxence-charriere/go-app/v10/pkg/app"
+
+	"github.com/kipitix/growscada/contract"
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
 	"github.com/kipitix/growscada/internal/server/interface/ui/history"
 	"github.com/kipitix/growscada/internal/server/interface/ui/library"
 	"github.com/kipitix/growscada/internal/server/interface/ui/operation"
 	"github.com/kipitix/growscada/internal/server/interface/ui/project"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
-	"github.com/maxence-charriere/go-app/v10/pkg/app"
 )
 
 type Mode string
@@ -22,20 +29,32 @@ const (
 
 type Root struct {
 	app.Compo
+	// compoCtx is the component's own context, captured in OnMount; the server
+	// version seen by the client is dispatched through it.
+	compoCtx     app.Context
 	currentMode  Mode
 	themeMode    string // "auto" | "light" | "dark"
 	apiServerURL string
+	// client is the one client of the REST API, given to every mode.
+	client *apiclient.Client
+	// serverVersion is the server API version of the last response, if
+	// serverVersionKnown.
+	serverVersion      contract.SchemaVersion
+	serverVersionKnown bool
 }
 
 func NewRoot(anAPIServerURL string) *Root {
-	return &Root{
+	r := &Root{
 		currentMode:  ModeLibrary,
 		themeMode:    "auto",
 		apiServerURL: anAPIServerURL,
 	}
+	r.client = apiclient.New(anAPIServerURL, http.DefaultClient, apiclient.OnServerVersion(r.observeServerVersion))
+	return r
 }
 
 func (r *Root) OnMount(ctx app.Context) {
+	r.compoCtx = ctx
 	ctx.Page().SetTitle("GrowSCADA")
 
 	injectToastCSS()
@@ -57,6 +76,57 @@ func (r *Root) OnMount(ctx app.Context) {
 			r.currentMode = Mode(savedMode)
 		}
 	})
+}
+
+// observeServerVersion records the server API version stated by a response.
+// The client calls it off the UI goroutine, so it is dispatched; requests
+// start from the modes' OnMount, which runs after Root's, so compoCtx is set.
+func (r *Root) observeServerVersion(v contract.SchemaVersion) {
+	r.compoCtx.Dispatch(func(ctx app.Context) {
+		r.serverVersion, r.serverVersionKnown = v, true
+	})
+}
+
+// versionMismatch reports whether the server speaks another API version than
+// this UI was built for: older or newer, the UI and the server were not
+// deployed together.
+func (r *Root) versionMismatch() bool {
+	return r.serverVersionKnown && r.serverVersion != apiv0.SchemaVersion()
+}
+
+// renderVersionBanner warns, until the versions match again, that the server
+// speaks another API version than the UI: a page loaded before the server was
+// updated. It cannot be dismissed but blocks nothing.
+func (r *Root) renderVersionBanner() app.UI {
+	if !r.versionMismatch() {
+		return app.Div().Style("display", "none")
+	}
+	return app.Div().
+		Attr("role", "alert").
+		Attr("data-version-banner", "").
+		Style("display", "flex").
+		Style("align-items", "center").
+		Style("gap", "12px").
+		Style("padding", "6px 12px").
+		Style("background", "var(--toast-warn-border)").
+		Style("color", "#fff").
+		Style("font-size", "13px").
+		Style("font-weight", "600").
+		Body(
+			app.Span().Text(versionBannerText(r.serverVersion)),
+			app.Button().
+				Style("padding", "2px 10px").
+				Style("font-size", "12px").
+				Style("cursor", "pointer").
+				Text("Reload").
+				OnClick(func(ctx app.Context, e app.Event) {
+					ctx.Reload()
+				}),
+		)
+}
+
+func versionBannerText(server contract.SchemaVersion) string {
+	return fmt.Sprintf("The server speaks API %v, this interface %v. Reload the page.", server, apiv0.SchemaVersion())
 }
 
 func (r *Root) setTheme(ctx app.Context, mode string) {
@@ -233,6 +303,7 @@ func (r *Root) Render() app.UI {
 		Style("color", "var(--text)").
 		Body(
 			&toast.Container{},
+			r.renderVersionBanner(),
 			app.Div().
 				Attr("role", "tablist").
 				Style("display", "flex").
@@ -257,11 +328,11 @@ func (r *Root) Render() app.UI {
 				Style("background", "var(--bg)").
 				Body(
 					app.If(r.currentMode == ModeLibrary, func() app.UI {
-						return library.NewLibrary(r.apiServerURL)
+						return library.NewLibrary(r.client)
 					}).ElseIf(r.currentMode == ModeProject, func() app.UI {
-						return project.NewProject(r.apiServerURL)
+						return project.NewProject(r.client)
 					}).ElseIf(r.currentMode == ModeOperation, func() app.UI {
-						return operation.NewOperation(r.apiServerURL)
+						return operation.NewOperation(r.client)
 					}).Else(func() app.UI {
 						return &history.History{}
 					}),

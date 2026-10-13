@@ -57,7 +57,7 @@ func (p *Project) renderWidgetTypePanel() app.UI {
 				Style("flex-shrink", "0").
 				Body(
 					&widgetThumbnailFrame{
-						ID:      "wt-thumb-" + id,
+						ID:      "wt-thumb-" + id.String(),
 						Srcdoc:  srcdoc,
 						NativeW: defaultW,
 						NativeH: defaultH,
@@ -105,7 +105,7 @@ func (p *Project) renderWidgetTypePanel() app.UI {
 			Draggable(true).
 			OnDragStart(func(ctx app.Context, e app.Event) {
 				p.draggedTypeID = id
-				e.Get("dataTransfer").Call("setData", "text/plain", id)
+				e.Get("dataTransfer").Call("setData", "text/plain", id.String())
 				e.Get("dataTransfer").Set("effectAllowed", "copy")
 			})
 	}

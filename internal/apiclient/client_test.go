@@ -2,8 +2,10 @@ package apiclient_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -51,16 +53,25 @@ func TestListTags_WrongServer404_ErrorNamesRequest(t *testing.T) {
 	}
 }
 
-func TestRequests_StateSchemaVersion(t *testing.T) {
-	var got []string
+// Only a request with a body states the SchemaVersion: the server reads it
+// only when decoding a body, and on a GET from a browser the custom header
+// would cost a CORS preflight.
+func TestRequests_StateSchemaVersionOnlyWithBody(t *testing.T) {
+	got := map[string]string{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		got = append(got, r.Method+" "+r.URL.Path+" "+r.Header.Get(contract.SchemaVersionHeader))
+		if !strings.HasPrefix(r.URL.Path, apiv0.PathPrefix+"/") {
+			t.Errorf("%s %s: want a path under %s", r.Method, r.URL.Path, apiv0.PathPrefix)
+		}
+		got[r.Method] = r.Header.Get(contract.SchemaVersionHeader)
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {
 		case http.MethodPost:
 			w.WriteHeader(http.StatusCreated)
+			w.Write([]byte(`{"id":"00000000-0000-0000-0000-000000000001"}`))
 		case http.MethodPatch:
 			w.Write([]byte(`{"version":2}`))
+		case http.MethodDelete:
+			w.Write([]byte(`{}`))
 		default:
 			w.Write([]byte(`{"tags":[]}`))
 		}
@@ -72,21 +83,118 @@ func TestRequests_StateSchemaVersion(t *testing.T) {
 	if _, err := client.ListTags(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := client.CreateTag(ctx, apiv0.CreateTagRequest{Name: "t", Type: "integer", Value: "0", Quality: "good"}); err != nil {
+	if _, err := client.CreateTag(ctx, apiv0.CreateTagRequest{Name: "t", Type: "integer", Value: "0", Quality: "good"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := client.SetTagValue(ctx, uuid.New(), "1", "good", 1); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := client.DeleteTag(ctx, uuid.New()); err != nil {
+		t.Fatal(err)
+	}
 
-	want := " " + apiv0.SchemaVersion().String()
-	for _, request := range got {
-		if !strings.HasPrefix(strings.SplitN(request, " ", 3)[1], apiv0.PathPrefix+"/") || !strings.HasSuffix(request, want) {
-			t.Errorf("request %q: want path under %s and %s%s", request, apiv0.PathPrefix, contract.SchemaVersionHeader, want)
+	want := map[string]string{
+		http.MethodGet:    "",
+		http.MethodDelete: "",
+		http.MethodPost:   apiv0.SchemaVersion().String(),
+		http.MethodPatch:  apiv0.SchemaVersion().String(),
+	}
+	for method, v := range want {
+		if got[method] != v {
+			t.Errorf("%s: %s = %q, want %q", method, contract.SchemaVersionHeader, got[method], v)
 		}
 	}
-	if len(got) != 3 {
-		t.Errorf("requests = %v, want 3", got)
+}
+
+func TestStatusError_CarriesTheProblem(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusConflict)
+		// "errors" is a member this client does not know: skipped.
+		w.Write([]byte(`{"type":"https://api.growscada.com/errors/conflict","title":"Conflict: Scene",
+			"status":409,"detail":"Scene was changed concurrently; reload it and retry",
+			"instance":"/api/v0/scenes/x","errors":[{"field":"name"}]}`))
+	}))
+	defer srv.Close()
+
+	_, err := apiclient.New(srv.URL, srv.Client()).UpdateScene(context.Background(), uuid.New(), apiv0.UpdateSceneRequest{})
+
+	var se *apiclient.StatusError
+	if !errors.As(err, &se) {
+		t.Fatalf("error %v is not a *StatusError", err)
+	}
+	want := apiv0.Problem{
+		Type:     "https://api.growscada.com/errors/conflict",
+		Title:    "Conflict: Scene",
+		Status:   http.StatusConflict,
+		Detail:   "Scene was changed concurrently; reload it and retry",
+		Instance: "/api/v0/scenes/x",
+	}
+	if se.Problem != want || se.Method != http.MethodPut {
+		t.Errorf("got %s %+v, want PUT %+v", se.Method, se.Problem, want)
+	}
+	if !errors.Is(err, apiclient.ErrConflict) || errors.Is(err, apiclient.ErrNotFound) {
+		t.Errorf("errors.Is: want ErrConflict only")
+	}
+	if !strings.HasSuffix(err.Error(), ": 409 Conflict: "+want.Detail) || !strings.HasPrefix(err.Error(), "PUT "+srv.URL) {
+		t.Errorf("message %q: want the request, the status and the detail", err)
+	}
+}
+
+func TestStatusError_NotProblemDetails_TitledByStatus(t *testing.T) {
+	page := "<html><body><h1>502 Bad Gateway</h1>" + strings.Repeat("x", 500) + "</body></html>"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusBadGateway)
+		w.Write([]byte(page))
+	}))
+	defer srv.Close()
+
+	_, err := apiclient.New(srv.URL, srv.Client()).ListScenes(context.Background())
+
+	var se *apiclient.StatusError
+	if !errors.As(err, &se) {
+		t.Fatalf("error %v is not a *StatusError", err)
+	}
+	if se.Problem.Title != "Bad Gateway" || se.Problem.Status != http.StatusBadGateway || se.Method != http.MethodGet {
+		t.Errorf("got %s %+v, want GET 502 Bad Gateway", se.Method, se.Problem)
+	}
+	if !strings.HasPrefix(se.Problem.Detail, "<html><body><h1>502 Bad Gateway</h1>") || len(se.Problem.Detail) > 210 {
+		t.Errorf("detail %q: want the start of the body", se.Problem.Detail)
+	}
+}
+
+func TestOnServerVersion(t *testing.T) {
+	for name, tc := range map[string]struct {
+		header string
+		status int
+		want   []contract.SchemaVersion
+	}{
+		"stated":                {"0.7", http.StatusOK, []contract.SchemaVersion{{Major: 0, Minor: 7}}},
+		"stated on an error":    {"0.7", http.StatusNotFound, []contract.SchemaVersion{{Major: 0, Minor: 7}}},
+		"missing":               {"", http.StatusOK, nil},
+		"does not parse":        {"zero.seven", http.StatusOK, nil},
+		"MAJOR without a MINOR": {"1", http.StatusOK, nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tc.header != "" {
+					w.Header().Set(contract.SchemaVersionHeader, tc.header)
+				}
+				w.WriteHeader(tc.status)
+				w.Write([]byte(`{"tags":[]}`))
+			}))
+			defer srv.Close()
+			var got []contract.SchemaVersion
+			client := apiclient.New(srv.URL, srv.Client(),
+				apiclient.OnServerVersion(func(v contract.SchemaVersion) { got = append(got, v) }))
+
+			client.ListTags(context.Background())
+
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("got %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 

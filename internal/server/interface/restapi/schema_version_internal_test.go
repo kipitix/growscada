@@ -34,7 +34,7 @@ func decode(t *testing.T, body, clientVersion string) (bool, string) {
 	if decodeRequest(rec, req, &v) {
 		return true, ""
 	}
-	var prob ProblemDetails
+	var prob apiv0.Problem
 	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
 		t.Fatalf("decode problem: %v", err)
 	}

@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
-	"github.com/kipitix/growscada/internal/server/interface/ui/uidto"
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -14,8 +15,8 @@ import (
 
 func (p *Project) renderPropertiesPanel() app.UI {
 	var content app.UI
-	if p.selectedWidgetID == "" {
-		if p.selectedSceneID == "" {
+	if p.selectedWidgetID == uuid.Nil {
+		if p.selectedSceneID == uuid.Nil {
 			content = app.Div().
 				Style("font-size", "13px").
 				Style("color", "var(--text-muted)").
@@ -25,17 +26,10 @@ func (p *Project) renderPropertiesPanel() app.UI {
 			content = p.renderSceneProperties()
 		}
 	} else {
-		var found widgetItem
-		for _, w := range p.widgets {
-			if w.ID == p.selectedWidgetID {
-				found = w
-				break
-			}
-		}
-		if found.ID == "" {
-			content = app.Div().Style("font-size", "13px").Style("color", "var(--text-muted)").Text("Widget not found.")
-		} else {
+		if found, ok := p.findWidget(p.selectedWidgetID); ok {
 			content = p.renderWidgetProperties(found)
+		} else {
+			content = app.Div().Style("font-size", "13px").Style("color", "var(--text-muted)").Text("Widget not found.")
 		}
 	}
 
@@ -201,14 +195,14 @@ func (p *Project) renderSceneProperties() app.UI {
 	return app.Div().Body(nameSection, sizeSection, bgSection)
 }
 
-func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
+func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 	wid := w.ID
 
 	// Defaults for reset buttons; InputPorts resolved in the same pass.
 	defaultName := "Widget"
 	defaultW, defaultH := 120, 60
-	var wtInputPorts []uidto.InputPortDTO
-	var capturedWT widgetTypeItem
+	var wtInputPorts []apiv0.InputPort
+	var capturedWT apiv0.WidgetTypeResponse
 	for _, wt := range p.widgetTypes {
 		if wt.ID == w.TypeID {
 			capturedWT = wt
@@ -553,7 +547,7 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 	inputPorts := wtInputPorts
 
 	// Build a map from port name → bound tag ID for quick lookup.
-	boundTagID := make(map[string]string, len(w.PortBindings))
+	boundTagID := make(map[string]uuid.UUID, len(w.PortBindings))
 	for _, b := range w.PortBindings {
 		boundTagID[b.PortName] = b.TagID
 	}
@@ -563,17 +557,17 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 		port := port
 		currentTagID := boundTagID[port.Name]
 
-		typeLabel := uidto.TypeHintLabel(port.TypeHint)
+		typeLabel := uiutil.TypeHintLabel(port.TypeHint)
 
 		// Build tag options filtered by type hint
 		tagOptions := make([]app.UI, 0, len(p.tags)+1)
-		tagOptions = append(tagOptions, app.Option().Value("").Selected(currentTagID == "").Text("— unbound —"))
+		tagOptions = append(tagOptions, app.Option().Value("").Selected(currentTagID == uuid.Nil).Text("— unbound —"))
 		for _, t := range p.tags {
 			t := t
 			if port.TypeHint != "" && t.Type != port.TypeHint {
 				continue
 			}
-			tagOptions = append(tagOptions, app.Option().Value(t.ID).Selected(t.ID == currentTagID).Text(t.Name+" ("+t.Type+")"))
+			tagOptions = append(tagOptions, app.Option().Value(t.ID.String()).Selected(t.ID == currentTagID).Text(t.Name+" ("+t.Type+")"))
 		}
 
 		var descEl app.UI
@@ -619,11 +613,11 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 							Style("border-radius", "3px").
 							Body(tagOptions...).
 							OnChange(func(ctx app.Context, e app.Event) {
-								val := ctx.JSSrc().Get("value").String()
-								if val == "" {
+								tagID := uiutil.ParseID(ctx.JSSrc().Get("value").String())
+								if tagID == uuid.Nil {
 									p.unbindPort(ctx, port.Name)
 								} else {
-									p.bindPort(ctx, port.Name, val)
+									p.bindPort(ctx, port.Name, tagID)
 								}
 							}),
 					),
@@ -660,7 +654,7 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 		if simVals != nil {
 			val = simVals[port.Name]
 		}
-		typeLabel := uidto.TypeHintLabel(port.TypeHint)
+		typeLabel := uiutil.TypeHintLabel(port.TypeHint)
 
 		row := app.Div().
 			Style("margin-bottom", "6px").
@@ -681,7 +675,7 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 							Text(typeLabel),
 					),
 				&simInputField{
-					FieldID:  "sim-" + wid + "-" + port.Name,
+					FieldID:  "sim-" + wid.String() + "-" + port.Name,
 					Val:      val,
 					PortName: port.Name,
 					OnChange: func(v string) {
@@ -689,7 +683,7 @@ func (p *Project) renderWidgetProperties(w widgetItem) app.UI {
 						// Directly push the updated srcdoc so the canvas preview
 						// reflects the new value without waiting for a parent re-render.
 						srcdoc := uiutil.BuildSrcdoc(capturedWT.HtmlTemplate, capturedWT.Script, uiutil.PreviewInputs(p.simInputs[wid], capturedWT.InputPorts), capturedWT.InputPorts, uiutil.IframeBgColor())
-						elem := app.Window().Get("document").Call("getElementById", "w-preview-"+wid)
+						elem := app.Window().Get("document").Call("getElementById", widgetPreviewDOMID(wid))
 						if !elem.IsNull() && !elem.IsUndefined() {
 							elem.Set("srcdoc", srcdoc)
 						}

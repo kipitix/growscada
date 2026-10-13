@@ -4,13 +4,34 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/kipitix/growscada/internal/server/interface/ui/uidto"
+	"github.com/google/uuid"
+
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
 
-func testWidgetType() WidgetType {
-	return WidgetType{
-		ID: "wt",
-		InputPorts: []uidto.InputPortDTO{
+// id is a stable ID named for readability.
+func id(name string) uuid.UUID { return uuid.NewSHA1(uuid.Nil, []byte(name)) }
+
+func tag(name, tagType, value, quality string) apiv0.TagResponse {
+	return apiv0.TagResponse{ID: id(name), Type: tagType, Value: value, Quality: quality}
+}
+
+func tagsOf(tags ...apiv0.TagResponse) map[uuid.UUID]apiv0.TagResponse {
+	byID := make(map[uuid.UUID]apiv0.TagResponse, len(tags))
+	for _, t := range tags {
+		byID[t.ID] = t
+	}
+	return byID
+}
+
+func bind(port, tagName string) apiv0.PortBinding {
+	return apiv0.PortBinding{PortName: port, TagID: id(tagName)}
+}
+
+func testWidgetType() apiv0.WidgetTypeResponse {
+	return apiv0.WidgetTypeResponse{
+		ID: id("wt"),
+		InputPorts: []apiv0.InputPort{
 			{Name: "speed", TypeHint: "integer"},
 			{Name: "any", TypeHint: ""},
 			{Name: "on", TypeHint: "boolean"},
@@ -18,20 +39,13 @@ func testWidgetType() WidgetType {
 	}
 }
 
-func testWidget(bindings ...PortBinding) Widget {
-	return Widget{ID: "w", TypeID: "wt", PortBindings: bindings}
+func testWidget(bindings ...apiv0.PortBinding) apiv0.WidgetResponse {
+	return apiv0.WidgetResponse{ID: id("w"), TypeID: id("wt"), PortBindings: bindings}
 }
 
 func TestWidgetInputs(t *testing.T) {
-	tags := map[string]Tag{
-		"t-speed": {ID: "t-speed", Type: "integer", Value: "42", Quality: QualityGood},
-		"t-count": {ID: "t-count", Type: "integer", Value: "7", Quality: QualityGood},
-	}
-	w := testWidget(
-		PortBinding{PortName: "speed", TagID: "t-speed"},
-		PortBinding{PortName: "any", TagID: "t-count"},
-		PortBinding{PortName: "on", TagID: "t-deleted"},
-	)
+	tags := tagsOf(tag("t-speed", "integer", "42", "good"), tag("t-count", "integer", "7", "good"))
+	w := testWidget(bind("speed", "t-speed"), bind("any", "t-count"), bind("on", "t-deleted"))
 
 	inputs := WidgetInputs(w, testWidgetType(), tags)
 
@@ -61,33 +75,28 @@ func TestWidgetInputs_UnboundPortsGetDefaults(t *testing.T) {
 }
 
 func TestWidgetQuality(t *testing.T) {
-	good := func(id string) Tag { return Tag{ID: id, Type: "integer", Value: "1", Quality: QualityGood} }
-	tags := map[string]Tag{
-		"g1": good("g1"), "g2": good("g2"), "g3": good("g3"),
-		"u": {ID: "u", Type: "integer", Value: "1", Quality: QualityUncertain},
-		"b": {ID: "b", Type: "integer", Value: "1", Quality: QualityBad},
-	}
-	bind := func(speed, anyTag, on string) Widget {
-		return testWidget(
-			PortBinding{PortName: "speed", TagID: speed},
-			PortBinding{PortName: "any", TagID: anyTag},
-			PortBinding{PortName: "on", TagID: on},
-		)
+	tags := tagsOf(
+		tag("g1", "integer", "1", "good"), tag("g2", "integer", "1", "good"), tag("g3", "integer", "1", "good"),
+		tag("u", "integer", "1", "uncertain"),
+		tag("b", "integer", "1", "bad"),
+	)
+	bindAll := func(speed, anyTag, on string) apiv0.WidgetResponse {
+		return testWidget(bind("speed", speed), bind("any", anyTag), bind("on", on))
 	}
 
 	cases := []struct {
 		name      string
-		w         Widget
+		w         apiv0.WidgetResponse
 		connected bool
 		want      Quality
 	}{
-		{"all good", bind("g1", "g2", "g3"), true, QualityGood},
-		{"one uncertain", bind("g1", "u", "g3"), true, QualityUncertain},
-		{"bad beats uncertain", bind("b", "u", "g3"), true, QualityBad},
-		{"deleted tag is bad", bind("g1", "g2", "gone"), true, QualityBad},
-		{"unbound port is bad", testWidget(PortBinding{PortName: "speed", TagID: "g1"}), true, QualityBad},
-		{"disconnected is uncertain", bind("g1", "g2", "g3"), false, QualityUncertain},
-		{"disconnected keeps bad", bind("b", "g2", "g3"), false, QualityBad},
+		{"all good", bindAll("g1", "g2", "g3"), true, QualityGood},
+		{"one uncertain", bindAll("g1", "u", "g3"), true, QualityUncertain},
+		{"bad beats uncertain", bindAll("b", "u", "g3"), true, QualityBad},
+		{"deleted tag is bad", bindAll("g1", "g2", "gone"), true, QualityBad},
+		{"unbound port is bad", testWidget(bind("speed", "g1")), true, QualityBad},
+		{"disconnected is uncertain", bindAll("g1", "g2", "g3"), false, QualityUncertain},
+		{"disconnected keeps bad", bindAll("b", "g2", "g3"), false, QualityBad},
 	}
 	for _, c := range cases {
 		if got := WidgetQuality(c.w, testWidgetType(), tags, c.connected); got != c.want {
@@ -97,7 +106,7 @@ func TestWidgetQuality(t *testing.T) {
 }
 
 func TestWidgetQuality_NoPorts(t *testing.T) {
-	wt := WidgetType{ID: "wt"}
+	wt := apiv0.WidgetTypeResponse{ID: id("wt")}
 	if got := WidgetQuality(testWidget(), wt, nil, true); got != QualityGood {
 		t.Errorf("connected: got %s, want good", got)
 	}
@@ -121,24 +130,21 @@ func TestWorst(t *testing.T) {
 }
 
 func TestSceneTags_KeepsOnlyBoundTags(t *testing.T) {
-	tags := map[string]Tag{
-		"t-speed": {ID: "t-speed", Value: "42"},
-		"t-other": {ID: "t-other", Value: "1"},
-	}
-	widgets := []Widget{
-		testWidget(PortBinding{PortName: "speed", TagID: "t-speed"}),
-		testWidget(PortBinding{PortName: "on", TagID: "t-deleted"}),
+	tags := tagsOf(tag("t-speed", "integer", "42", "good"), tag("t-other", "integer", "1", "good"))
+	widgets := []apiv0.WidgetResponse{
+		testWidget(bind("speed", "t-speed")),
+		testWidget(bind("on", "t-deleted")),
 	}
 
 	got := SceneTags(widgets, tags)
 
-	if len(got) != 1 || got["t-speed"].Value != "42" {
+	if len(got) != 1 || got[id("t-speed")].Value != "42" {
 		t.Errorf("want only the existing bound Tag, got %+v", got)
 	}
 
 	// A change of an unbound Tag must leave the result equal, so the View is
 	// not re-rendered.
-	tags["t-other"] = Tag{ID: "t-other", Value: "2"}
+	tags[id("t-other")] = tag("t-other", "integer", "2", "good")
 	if again := SceneTags(widgets, tags); !reflect.DeepEqual(again, got) {
 		t.Errorf("an unbound Tag changed the result: %+v vs %+v", again, got)
 	}

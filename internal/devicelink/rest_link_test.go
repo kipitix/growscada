@@ -123,7 +123,7 @@ func TestWrite_StaleVersionIsRejectedByServer(t *testing.T) {
 	_, err = client.SetTagValue(context.Background(), created.ID, "2", "good", created.Version)
 
 	var statusErr *apiclient.StatusError
-	if !errors.As(err, &statusErr) || statusErr.Status != http.StatusConflict || !errors.Is(err, apiclient.ErrConflict) {
+	if !errors.As(err, &statusErr) || statusErr.Problem.Status != http.StatusConflict || !errors.Is(err, apiclient.ErrConflict) {
 		t.Errorf("got %v, want 409 Conflict", err)
 	}
 }

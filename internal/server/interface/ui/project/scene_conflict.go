@@ -1,22 +1,25 @@
 package project
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
+	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 )
 
-// showRejectedSceneEdit shows prob, the server's refusal of an edit of a
-// Scene or of its Widgets, then calls reload (if any) to put the server's
-// state back. A conflict (409) means the Scene changed since the UI read it:
-// another client edited it, or the server brought its Widgets into line with
-// a changed WidgetType (ADR 0008). The UI then rereads the Scenes and the
-// Widgets itself, without waiting for the event stream, and asks the user to
-// repeat the edit; it does not reapply it.
-func (p *Project) showRejectedSceneEdit(ctx app.Context, prob toast.Problem, reload func(app.Context)) {
-	if prob.Status == http.StatusConflict {
+// showRejectedSceneEdit shows err, the failure of an edit of a Scene or of its
+// Widgets, then calls reload (if any) to put the server's state back. A
+// conflict (409) means the Scene changed since the UI read it: another client
+// edited it, or the server brought its Widgets into line with a changed
+// WidgetType (ADR 0008). The UI then rereads the Scenes and the Widgets
+// itself, without waiting for the event stream, and asks the user to repeat
+// the edit; it does not reapply it.
+func (p *Project) showRejectedSceneEdit(ctx app.Context, err error, reload func(app.Context)) {
+	prob := toast.FromError(err)
+	if errors.Is(err, apiclient.ErrConflict) {
 		ctx.NewActionWithValue(toast.ActionAdd, sceneConflictProblem(prob))
 		p.loadScenes(ctx)
 		p.loadWidgets(ctx)
@@ -26,6 +29,12 @@ func (p *Project) showRejectedSceneEdit(ctx app.Context, prob toast.Problem, rel
 	if reload != nil {
 		reload(ctx)
 	}
+}
+
+// rejectedSceneEdit is showRejectedSceneEdit as the error handler of a
+// uiutil.Call.
+func (p *Project) rejectedSceneEdit(reload func(app.Context)) func(app.Context, error) {
+	return func(ctx app.Context, err error) { p.showRejectedSceneEdit(ctx, err, reload) }
 }
 
 // sceneConflictProblem is the toast for prob, a 409 on an edit of a Scene or

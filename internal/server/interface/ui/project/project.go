@@ -5,8 +5,11 @@ import (
 	"math"
 	"strconv"
 
+	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -26,16 +29,19 @@ type Project struct {
 	// element that fired the event, and go-app silently drops Dispatch once that
 	// element is unmounted (e.g. a tab that turns into its rename input), which
 	// would lose the result and leave a Reloader loading forever.
-	compoCtx     app.Context
-	ThemeMode    string // exported so go-app detects theme changes and re-renders
-	apiServerURL string
+	compoCtx  app.Context
+	ThemeMode string // exported so go-app detects theme changes and re-renders
+	client    *apiclient.Client
 
 	activeSubTab projectSubTab
 
-	widgetTypes []widgetTypeItem
-	scenes      []sceneItem
-	widgets     []widgetItem
-	tags        []tagItem
+	widgetTypes []apiv0.WidgetTypeResponse
+	scenes      []apiv0.SceneResponse
+	widgets     []apiv0.WidgetResponse
+	tags        []apiv0.TagResponse
+	// sceneVersions holds the version each write of a Scene or its Widgets
+	// states; the Version and SceneVersion of the lists above are not read.
+	sceneVersions sceneVersions
 
 	// Coalesce reloads of each server-backed list (see live_reload.go).
 	widgetTypesReloader uiutil.Reloader
@@ -47,15 +53,15 @@ type Project struct {
 	widgetsReloadDeferred bool
 
 	// ── Tags sub-tab state ──────────────────────────────────────────────────
-	selectedTagID string
+	selectedTagID uuid.UUID
 	creatingTag   bool
 	newTagName    string
 	newTagType    string
 
-	selectedSceneID  string
-	selectedWidgetID string
+	selectedSceneID  uuid.UUID
+	selectedWidgetID uuid.UUID
 
-	editingSceneID   string
+	editingSceneID   uuid.UUID
 	editingSceneName string
 
 	// ── Scene properties panel editing state ───────────────────────────────
@@ -64,7 +70,7 @@ type Project struct {
 	editingScenePropsHeight string
 	editingScenePropsBG     string
 
-	draggedTypeID string
+	draggedTypeID uuid.UUID
 	dragJustEnded bool // suppresses the canvas OnClick that fires right after mouseup
 	dragDidMove   bool // true if mouse moved during the drag; only then suppress the click
 	// dragStartGeometry is the dragged widget's geometry before its first
@@ -72,7 +78,7 @@ type Project struct {
 	dragStartGeometry widgetGeometry
 
 	// ── Drag: move widget body ──────────────────────────────────────────────
-	draggingWidgetID string
+	draggingWidgetID uuid.UUID
 	dragStartCliX    float64
 	dragStartCliY    float64
 	dragStartPosX    float64
@@ -82,7 +88,7 @@ type Project struct {
 	// The anchor is moved within the widget in local space; the widget
 	// position is adjusted simultaneously to keep the visual bounding-box
 	// stationary on screen.
-	draggingOriginID string
+	draggingOriginID uuid.UUID
 	originCliX       float64 // client X when drag started
 	originCliY       float64 // client Y when drag started
 	originStartOX    float64 // origin.X before drag
@@ -97,14 +103,14 @@ type Project struct {
 	// Dragging a circle positioned above the origin in local widget space.
 	// We store the origin's client-space position and the initial angle so we
 	// can compute the angular delta on every mousemove.
-	rotatingWidgetID string
+	rotatingWidgetID uuid.UUID
 	rotOriginCliX    float64 // origin screen position X (client coords)
 	rotOriginCliY    float64 // origin screen position Y (client coords)
 	rotStartAngle    float64 // atan2 from origin to handle when drag started
 	rotStartDeg      float64 // rotation.Degrees before drag
 
 	// ── Drag: resize SE handle ──────────────────────────────────────────────
-	resizingWidgetID string
+	resizingWidgetID uuid.UUID
 	resizeStartCliX  float64
 	resizeStartCliY  float64
 	resizeStartW     int
@@ -129,7 +135,7 @@ type Project struct {
 	// ── Input simulation (in-memory only, not persisted) ───────────────────
 	// simInputs[widgetID][portName] = test value string, kept in the app
 	// state simInputsState
-	simInputs map[string]map[string]string
+	simInputs map[uuid.UUID]map[string]string
 
 	// ── Panel resize state ──────────────────────────────────────────────────
 	widgetTypeWidth       int
@@ -139,8 +145,15 @@ type Project struct {
 	panelResizeStartWidth int
 }
 
-func NewProject(apiServerURL string) *Project {
-	return &Project{apiServerURL: apiServerURL, activeSubTab: subTabScenes}
+// LocalStorage keys of the selection.
+const (
+	sceneIDKey  = "project:sceneID"
+	widgetIDKey = "project:widgetID"
+	tagIDKey    = "project:tagID"
+)
+
+func NewProject(client *apiclient.Client) *Project {
+	return &Project{client: client, activeSubTab: subTabScenes, sceneVersions: sceneVersions{}}
 }
 
 func (p *Project) OnMount(ctx app.Context) {
@@ -157,12 +170,12 @@ func (p *Project) OnMount(ctx app.Context) {
 	if savedTab != "" {
 		p.activeSubTab = projectSubTab(savedTab)
 	}
-	ctx.LocalStorage().Get("project:sceneID", &p.selectedSceneID)
-	ctx.LocalStorage().Get("project:widgetID", &p.selectedWidgetID)
-	ctx.LocalStorage().Get("project:tagID", &p.selectedTagID)
+	p.selectedSceneID = uiutil.LoadID(ctx, sceneIDKey)
+	p.selectedWidgetID = uiutil.LoadID(ctx, widgetIDKey)
+	p.selectedTagID = uiutil.LoadID(ctx, tagIDKey)
 	p.loadWidgetTypes(ctx)
 	p.loadScenes(ctx)
-	if p.selectedSceneID != "" {
+	if p.selectedSceneID != uuid.Nil {
 		p.loadWidgets(ctx) // load widgets for the restored scene immediately
 	}
 	p.loadTags(ctx)
@@ -183,12 +196,12 @@ func (p *Project) loadSimInputs(ctx app.Context) {
 	p.simInputs = nil
 	ctx.GetState(simInputsState, &p.simInputs)
 	if p.simInputs == nil {
-		p.simInputs = make(map[string]map[string]string)
+		p.simInputs = make(map[uuid.UUID]map[string]string)
 	}
 }
 
 // setSimInput sets the Simulate Inputs value of port on the widget wid.
-func (p *Project) setSimInput(ctx app.Context, wid, port, value string) {
+func (p *Project) setSimInput(ctx app.Context, wid uuid.UUID, port, value string) {
 	if p.simInputs[wid] == nil {
 		p.simInputs[wid] = make(map[string]string)
 	}
@@ -200,9 +213,9 @@ func (p *Project) setSimInput(ctx app.Context, wid, port, value string) {
 
 // ── Widget selection helpers ──────────────────────────────────────────────────
 
-func (p *Project) selectWidget(ctx app.Context, id string) {
+func (p *Project) selectWidget(ctx app.Context, id uuid.UUID) {
 	p.selectedWidgetID = id
-	ctx.LocalStorage().Set("project:widgetID", id)
+	uiutil.StoreID(ctx, widgetIDKey, id)
 	for _, w := range p.widgets {
 		if w.ID == id {
 			p.syncEditingFields(w)
@@ -212,7 +225,7 @@ func (p *Project) selectWidget(ctx app.Context, id string) {
 }
 
 func (p *Project) clearWidgetSelection(ctx app.Context) {
-	p.selectedWidgetID = ""
+	p.selectedWidgetID = uuid.Nil
 	p.editingWidgetName = ""
 	p.editingPosX = ""
 	p.editingPosY = ""
@@ -222,7 +235,7 @@ func (p *Project) clearWidgetSelection(ctx app.Context) {
 	p.editingOriginX = ""
 	p.editingOriginY = ""
 	p.editingRotation = ""
-	ctx.LocalStorage().Set("project:widgetID", "")
+	uiutil.StoreID(ctx, widgetIDKey, uuid.Nil)
 }
 
 func (p *Project) selectedWidgetIdx() int {
@@ -238,22 +251,22 @@ func (p *Project) selectedWidgetIdx() int {
 // Use this inside event handler closures instead of the closure-captured `w`,
 // because go-app may not re-attach handlers when only the transform changes,
 // leaving `w` stale across drags.
-func (p *Project) widgetByID(id string) (widgetItem, bool) {
+func (p *Project) widgetByID(id uuid.UUID) (apiv0.WidgetResponse, bool) {
 	for _, w := range p.widgets {
 		if w.ID == id {
 			return w, true
 		}
 	}
-	return widgetItem{}, false
+	return apiv0.WidgetResponse{}, false
 }
 
-func (p *Project) widgetTypeByID(id string) (widgetTypeItem, bool) {
+func (p *Project) widgetTypeByID(id uuid.UUID) (apiv0.WidgetTypeResponse, bool) {
 	for _, wt := range p.widgetTypes {
 		if wt.ID == id {
 			return wt, true
 		}
 	}
-	return widgetTypeItem{}, false
+	return apiv0.WidgetTypeResponse{}, false
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
@@ -343,11 +356,7 @@ func (p *Project) renderScenesContent() app.UI {
 		// Previously these were on the canvas div, which caused drag to break
 		// on smaller scenes (e.g. 1280×720) when the mouse left the canvas.
 		OnMouseMove(func(ctx app.Context, e app.Event) {
-			anyDrag := p.draggingWidgetID != "" ||
-				p.draggingOriginID != "" ||
-				p.rotatingWidgetID != "" ||
-				p.resizingWidgetID != "" ||
-				p.resizingPanelSide != ""
+			anyDrag := p.isInteracting() || p.resizingPanelSide != ""
 			if !anyDrag {
 				return
 			}
@@ -391,17 +400,17 @@ func (p *Project) renderScenesContent() app.UI {
 
 			// Mark that a real drag occurred (not just a mousedown+mouseup click),
 			// remembering the widget as it was before the first move.
-			if id := p.draggedWidgetID(); id != "" {
+			if id := p.draggedWidgetID(); id != uuid.Nil {
 				if !p.dragDidMove {
 					if w, ok := p.widgetByID(id); ok {
-						p.dragStartGeometry = w.geometry()
+						p.dragStartGeometry = geometryOf(w)
 					}
 				}
 				p.dragDidMove = true
 			}
 
 			// Move widget body
-			if p.draggingWidgetID != "" {
+			if p.draggingWidgetID != uuid.Nil {
 				dx := clientX - p.dragStartCliX
 				dy := clientY - p.dragStartCliY
 				for i := range p.widgets {
@@ -420,7 +429,7 @@ func (p *Project) renderScenesContent() app.UI {
 			// Move origin anchor; compensate position to keep widget visually stationary.
 			// Screen delta (dx,dy) is rotated into widget-local space to get the local
 			// origin delta; position is then compensated so the matrix e/f stays fixed.
-			if p.draggingOriginID != "" {
+			if p.draggingOriginID != uuid.Nil {
 				dx := clientX - p.originCliX
 				dy := clientY - p.originCliY
 				rad := p.originDragRotDeg * math.Pi / 180
@@ -454,7 +463,7 @@ func (p *Project) renderScenesContent() app.UI {
 			}
 
 			// Rotate widget around origin
-			if p.rotatingWidgetID != "" {
+			if p.rotatingWidgetID != uuid.Nil {
 				dx := clientX - p.rotOriginCliX
 				dy := clientY - p.rotOriginCliY
 				currentAngle := math.Atan2(dy, dx)
@@ -479,7 +488,7 @@ func (p *Project) renderScenesContent() app.UI {
 			// that the canvas-space top-left corner (e, f) stays fixed,
 			// preventing the widget from shifting when it is rotated and the
 			// origin is not at (0, 0).
-			if p.resizingWidgetID != "" {
+			if p.resizingWidgetID != uuid.Nil {
 				dx := clientX - p.resizeStartCliX
 				dy := clientY - p.resizeStartCliY
 				rad := p.resizeStartDeg * math.Pi / 180

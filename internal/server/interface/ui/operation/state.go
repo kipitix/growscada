@@ -1,32 +1,20 @@
 package operation
 
 import (
-	"encoding/json"
+	"github.com/google/uuid"
 
-	"github.com/kipitix/growscada/internal/server/interface/ui/livescene"
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
-
-// decodeTagUpdate extracts the Tag state carried by a tag_updated event.
-func decodeTagUpdate(raw json.RawMessage) (livescene.Tag, bool) {
-	if len(raw) == 0 {
-		return livescene.Tag{}, false
-	}
-	var t livescene.Tag
-	if err := json.Unmarshal(raw, &t); err != nil || t.ID == "" {
-		return livescene.Tag{}, false
-	}
-	return t, true
-}
 
 // applyTagUpdate returns the Tags with t's new state recorded, unless a newer
 // (or the same) Version is already known — events and list loads may arrive
 // out of order. An unknown Tag is added: the event carries its full state.
 // The given map is not modified: a new one lets the view notice the change.
-func applyTagUpdate(tags map[string]livescene.Tag, t livescene.Tag) map[string]livescene.Tag {
+func applyTagUpdate(tags map[uuid.UUID]apiv0.TagResponse, t apiv0.TagResponse) map[uuid.UUID]apiv0.TagResponse {
 	if cur, ok := tags[t.ID]; ok && cur.Version >= t.Version {
 		return tags
 	}
-	updated := make(map[string]livescene.Tag, len(tags)+1)
+	updated := make(map[uuid.UUID]apiv0.TagResponse, len(tags)+1)
 	for id, cur := range tags {
 		updated[id] = cur
 	}
@@ -38,8 +26,8 @@ func applyTagUpdate(tags map[string]livescene.Tag, t livescene.Tag) map[string]l
 // decides which Tags exist, and for each Tag the state with the higher
 // Version wins, so a list read before a tag_updated does not roll its value
 // back.
-func mergeTags(known map[string]livescene.Tag, loaded []livescene.Tag) map[string]livescene.Tag {
-	merged := make(map[string]livescene.Tag, len(loaded))
+func mergeTags(known map[uuid.UUID]apiv0.TagResponse, loaded []apiv0.TagResponse) map[uuid.UUID]apiv0.TagResponse {
+	merged := make(map[uuid.UUID]apiv0.TagResponse, len(loaded))
 	for _, t := range loaded {
 		if cur, ok := known[t.ID]; ok && cur.Version > t.Version {
 			t = cur
@@ -54,8 +42,8 @@ func mergeTags(known map[string]livescene.Tag, loaded []livescene.Tag) map[strin
 // for each Tag wins. Used on a resync: while disconnected the server may have
 // been restarted with a fresh database, its Versions starting over below the
 // ones known here, which would otherwise keep the stale values forever.
-func forgetVersions(tags map[string]livescene.Tag) map[string]livescene.Tag {
-	forgotten := make(map[string]livescene.Tag, len(tags))
+func forgetVersions(tags map[uuid.UUID]apiv0.TagResponse) map[uuid.UUID]apiv0.TagResponse {
+	forgotten := make(map[uuid.UUID]apiv0.TagResponse, len(tags))
 	for id, t := range tags {
 		t.Version = 0
 		forgotten[id] = t
@@ -64,8 +52,8 @@ func forgetVersions(tags map[string]livescene.Tag) map[string]livescene.Tag {
 }
 
 // selectScene keeps the selected Scene if it still exists, otherwise falls
-// back to the first Scene ("" when there are none).
-func selectScene(scenes []livescene.Scene, selected string) string {
+// back to the first Scene (uuid.Nil when there are none).
+func selectScene(scenes []apiv0.SceneResponse, selected uuid.UUID) uuid.UUID {
 	for _, sc := range scenes {
 		if sc.ID == selected {
 			return selected
@@ -74,5 +62,5 @@ func selectScene(scenes []livescene.Scene, selected string) string {
 	if len(scenes) > 0 {
 		return scenes[0].ID
 	}
-	return ""
+	return uuid.Nil
 }

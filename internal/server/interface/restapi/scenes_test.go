@@ -146,7 +146,7 @@ func TestGetScenesByID_NotFound_Returns404(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status: expected 404, got %d", rec.Code)
 	}
-	var prob restapi.ProblemDetails
+	var prob apiv0.Problem
 	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
 		t.Fatalf("decode problem: %v", err)
 	}

@@ -70,7 +70,7 @@ internal/
     application/    # Use-case services, orchestrate domain objects
     infrastructure/ # Concrete implementations (Postgres repositories, outbox)
     interface/      # Delivery mechanisms (REST API + SSE, EventBus, PWA UI)
-  apiclient/        # Go client of the REST API (JSON shapes from contract/api/v0)
+  apiclient/        # Go client of the REST API, apiv0 types as they are; used by growctl, devicelink and the PWA UI
   growctl/          # growctl CLI: manifests, planner
   devicelink/       # Contract by which a Device delivers Tag values to the server (ADR 0004)
   devicesim/        # Lower-level device simulator: patterns, virtual Device, control API
@@ -127,7 +127,10 @@ Services (`TagService`, `WidgetTypeService`, `SceneService`) accept repository i
   - **Project** — configure Scenes and place Widget instances on them.
   - **Operation** — runtime operator view.
   - **History** — event log viewer.
-- UI components communicate with the REST API directly using `http.Get/Post/…` inside `ctx.Async(…)` callbacks.
+- All REST calls go through one `*apiclient.Client` created in `root` and handed to the modes; components work on the `contract/api/v0` types directly (no UI copies) and keep IDs as `uuid.UUID` (`uuid.Nil` = none), parsing text only at LocalStorage/SSE/DOM boundaries (`uiutil.LoadID`, `StoreID`, `ParseID`).
+- A call is wrapped by `uiutil.Call(compoCtx, call, onOK, onErr)`: Async → call → Dispatch; `onErr == nil` shows `toast.FromError(err)` (the server's Problem Details, or a Network Error). Project keeps each Scene's version in one place (`sceneVersions`, max of every response); writes take it from there.
+- Root shows a non-dismissable banner while the server's `GrowSCADA-Schema-Version` differs from the UI's (`apiclient.OnServerVersion`).
+- UI tests mount components in go-app's `TestEngine` (`ui/uitest`; on the host go-app calls `OnPreRender`, not `OnMount`, so tests mount a `mountOnHost` wrapper) against the real API from `servertest.StartAPI`.
 
 ### Single Binary / Dual Compilation
 

@@ -2,8 +2,12 @@ package growctl
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"net/http"
+	"sync"
 
+	"github.com/kipitix/growscada/contract"
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
 )
@@ -14,9 +18,28 @@ type Client struct {
 	*apiclient.Client
 }
 
-// NewClient creates a client for the server at baseURL (e.g. http://localhost:9090).
-func NewClient(baseURL string, httpClient *http.Client) *Client {
-	return &Client{Client: apiclient.New(baseURL, httpClient)}
+// NewClient creates a client for the server at baseURL (e.g.
+// http://localhost:9090). A server that speaks an older API than growctl gets
+// one warning on warnings for the client's lifetime — a run of growctl; a
+// newer one is fine, growctl reads its responses tolerantly.
+func NewClient(baseURL string, httpClient *http.Client, warnings io.Writer) *Client {
+	return &Client{Client: apiclient.New(baseURL, httpClient,
+		apiclient.OnServerVersion(warnOlderServerOnce(warnings)))}
+}
+
+// warnOlderServerOnce returns a server version handler that writes a warning
+// the first time the server's version is older than growctl's.
+func warnOlderServerOnce(w io.Writer) func(contract.SchemaVersion) {
+	var once sync.Once
+	return func(server contract.SchemaVersion) {
+		if !apiv0.SchemaVersion().NewerThan(server) {
+			return
+		}
+		once.Do(func() {
+			fmt.Fprintf(w, "warning: the server speaks API %v, older than growctl's %v: update the server\n",
+				server, apiv0.SchemaVersion())
+		})
+	}
 }
 
 // ListTagsMatching returns the server tags selected by the filter. The result
@@ -39,10 +62,11 @@ func (c *Client) ListTagsMatching(ctx context.Context, f NameFilter) ([]ServerTa
 
 // CreateTag creates a tag from its manifest.
 func (c *Client) CreateTag(ctx context.Context, m TagManifest) error {
-	return c.Client.CreateTag(ctx, apiv0.CreateTagRequest{
+	_, err := c.Client.CreateTag(ctx, apiv0.CreateTagRequest{
 		Name:    m.Name,
 		Type:    m.Type,
 		Value:   m.InitialValue,
 		Quality: m.InitialQuality,
 	})
+	return err
 }

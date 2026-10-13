@@ -9,7 +9,7 @@ import (
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
-	"github.com/kipitix/growscada/internal/server/interface/ui/uidto"
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
 
 // styleCloseRE matches </style> in any capitalisation or with trailing whitespace.
@@ -162,7 +162,7 @@ func NewInput(raw, typ string) Input {
 
 // PreviewInputs builds the inputs of a preview (Library, Project) from values
 // typed in by the Engineer, converted by each port's type hint.
-func PreviewInputs(values map[string]string, ports []uidto.InputPortDTO) Inputs {
+func PreviewInputs(values map[string]string, ports []apiv0.InputPort) Inputs {
 	inputs := make(Inputs, len(ports))
 	for _, p := range ports {
 		inputs[p.Name] = NewInput(values[p.Name], p.TypeHint)
@@ -190,7 +190,7 @@ func srcdocPage(htmlTemplate, script, tail, bgColor string) string {
 // BuildSrcdoc constructs the iframe srcdoc for a sandboxed widget preview: the
 // WidgetType's render(inputs) is called once with the given inputs, if the
 // type has any ports. The script contract is in docs/widget_type_contract.md.
-func BuildSrcdoc(htmlTemplate, script string, inputs Inputs, ports []uidto.InputPortDTO, bgColor string) string {
+func BuildSrcdoc(htmlTemplate, script string, inputs Inputs, ports []apiv0.InputPort, bgColor string) string {
 	tail := ""
 	if len(ports) > 0 {
 		tail = fmt.Sprintf("try{render(%s);}catch(e){}", InputsJSON(inputs))
@@ -224,4 +224,13 @@ const liveWidgetTail = `window.addEventListener("message",function(e){` +
 // docs/widget_type_contract.md.
 func BuildLiveSrcdoc(htmlTemplate, script string) string {
 	return srcdocPage(htmlTemplate, script, liveWidgetTail, SceneWidgetBackground)
+}
+
+// TypeHintLabel returns the display label of an InputPort's type hint; an
+// empty one means the port accepts any TagType.
+func TypeHintLabel(typeHint string) string {
+	if typeHint == "" {
+		return "any"
+	}
+	return typeHint
 }

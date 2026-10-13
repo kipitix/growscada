@@ -319,7 +319,7 @@ func TestGetTagsByID_NotFound_Returns404WithProblemDetails(t *testing.T) {
 		t.Errorf("status: expected 404, got %d", rec.Code)
 	}
 
-	var prob restapi.ProblemDetails
+	var prob apiv0.Problem
 	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
 		t.Fatalf("decode problem: %v", err)
 	}
@@ -345,7 +345,7 @@ func TestGetTagsByID_InvalidUUID_Returns400WithProblemDetails(t *testing.T) {
 		t.Errorf("status: expected 400, got %d", rec.Code)
 	}
 
-	var prob restapi.ProblemDetails
+	var prob apiv0.Problem
 	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
 		t.Fatalf("decode problem: %v", err)
 	}
@@ -397,7 +397,7 @@ func TestPostTags_DuplicateName_Returns409WithProblemDetails(t *testing.T) {
 		t.Errorf("status: expected 409, got %d\nbody: %s", rec.Code, rec.Body.String())
 	}
 
-	var prob restapi.ProblemDetails
+	var prob apiv0.Problem
 	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
 		t.Fatalf("decode problem: %v", err)
 	}
@@ -418,7 +418,7 @@ func TestPostTags_InvalidJSON_Returns400WithProblemDetails(t *testing.T) {
 		t.Errorf("status: expected 400, got %d", rec.Code)
 	}
 
-	var prob restapi.ProblemDetails
+	var prob apiv0.Problem
 	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
 		t.Fatalf("decode problem: %v", err)
 	}
@@ -443,7 +443,7 @@ func TestPostTags_InvalidType_Returns400WithProblemDetails(t *testing.T) {
 		t.Errorf("status: expected 400, got %d", rec.Code)
 	}
 
-	var prob restapi.ProblemDetails
+	var prob apiv0.Problem
 	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
 		t.Fatalf("decode problem: %v", err)
 	}
@@ -516,7 +516,7 @@ func TestDeleteTagByID_NotFound_Returns404WithProblemDetails(t *testing.T) {
 		t.Errorf("status: expected 404, got %d", rec.Code)
 	}
 
-	var prob restapi.ProblemDetails
+	var prob apiv0.Problem
 	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
 		t.Fatalf("decode problem: %v", err)
 	}
@@ -539,7 +539,7 @@ func TestDeleteTagByID_InvalidUUID_Returns400WithProblemDetails(t *testing.T) {
 		t.Errorf("status: expected 400, got %d", rec.Code)
 	}
 
-	var prob restapi.ProblemDetails
+	var prob apiv0.Problem
 	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
 		t.Fatalf("decode problem: %v", err)
 	}
@@ -622,7 +622,7 @@ func TestPatchTagValue_NotFound_Returns404WithProblemDetails(t *testing.T) {
 		t.Errorf("status: expected 404, got %d", rec.Code)
 	}
 
-	var prob restapi.ProblemDetails
+	var prob apiv0.Problem
 	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
 		t.Fatalf("decode problem: %v", err)
 	}
@@ -647,7 +647,7 @@ func TestPatchTagValue_InvalidUUID_Returns400WithProblemDetails(t *testing.T) {
 		t.Errorf("status: expected 400, got %d", rec.Code)
 	}
 
-	var prob restapi.ProblemDetails
+	var prob apiv0.Problem
 	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
 		t.Fatalf("decode problem: %v", err)
 	}
@@ -673,7 +673,7 @@ func TestPatchTagValue_InvalidJSON_Returns400WithProblemDetails(t *testing.T) {
 		t.Errorf("status: expected 400, got %d", rec.Code)
 	}
 
-	var prob restapi.ProblemDetails
+	var prob apiv0.Problem
 	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
 		t.Fatalf("decode problem: %v", err)
 	}
@@ -693,7 +693,7 @@ func assertBadRequest(t *testing.T, rec *httptest.ResponseRecorder) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status: expected 400, got %d\nbody: %s", rec.Code, rec.Body.String())
 	}
-	var prob restapi.ProblemDetails
+	var prob apiv0.Problem
 	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
 		t.Fatalf("decode problem: %v", err)
 	}

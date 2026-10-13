@@ -1,3 +1,8 @@
+// Package livescene renders a Scene with live Tag values: the Widgets'
+// iframes, the Scene background and a Quality marker over each Widget. It is
+// given the whole state, in the shapes of the server API (contract/api/v0),
+// and loads nothing itself, so the same view serves Operation (state from the
+// REST API and SSE) and, later, the History Player.
 package livescene
 
 // Quality is a Tag's reliability as the REST API spells it.

@@ -1,106 +1,48 @@
 package project
 
 import (
-	"bytes"
-	"encoding/json"
-	"net/http"
+	"context"
 
+	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
-	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
+	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
 func (p *Project) createTag(ctx app.Context) {
-	ctx = p.compoCtx
-	name := p.newTagName
-	tagType := p.newTagType
-	url := p.apiServerURL + apiv0.PathPrefix + "/tags"
-	body, err := json.Marshal(apiv0.CreateTagRequest{
-		Name:    name,
-		Type:    tagType,
-		Value:   defaultTagValue(tagType),
+	req := apiv0.CreateTagRequest{
+		Name:    p.newTagName,
+		Type:    p.newTagType,
+		Value:   defaultTagValue(p.newTagType),
 		Quality: "good",
-	})
-	if err != nil {
-		ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
-		return
 	}
-	ctx.Async(func() {
-		resp, err := http.Post(url, "application/json", bytes.NewReader(body))
-		if err != nil {
-			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
-			})
-			return
-		}
-		if resp.StatusCode >= 400 {
-			prob := toast.FromHTTPError(resp)
-			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, prob)
-			})
-			return
-		}
-		defer resp.Body.Close()
-
-		var result createTagResponse
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
-			})
-			return
-		}
-
-		ctx.Dispatch(func(ctx app.Context) {
-			p.creatingTag = false
-			p.newTagName = ""
-			p.newTagType = ""
-			p.selectedTagID = result.ID
-			ctx.LocalStorage().Set("project:tagID", result.ID)
-			p.loadTags(ctx)
-		})
-	})
+	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.CreateTagResponse, error) {
+		return p.client.CreateTag(c, req)
+	}, func(ctx app.Context, created apiv0.CreateTagResponse) {
+		p.creatingTag = false
+		p.newTagName = ""
+		p.newTagType = ""
+		p.selectedTagID = created.ID
+		uiutil.StoreID(ctx, tagIDKey, created.ID)
+		p.loadTags(ctx)
+	}, nil)
 }
 
 func (p *Project) deleteTag(ctx app.Context) {
-	ctx = p.compoCtx
-	if p.selectedTagID == "" {
+	deletedID := p.selectedTagID
+	if deletedID == uuid.Nil {
 		return
 	}
-	deletedID := p.selectedTagID
-	url := p.apiServerURL + apiv0.PathPrefix + "/tags/" + deletedID
-	ctx.Async(func() {
-		req, err := http.NewRequest(http.MethodDelete, url, nil)
-		if err != nil {
-			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
-			})
-			return
+	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.TagResponse, error) {
+		return p.client.DeleteTag(c, deletedID)
+	}, func(ctx app.Context, _ apiv0.TagResponse) {
+		if p.selectedTagID == deletedID {
+			p.selectedTagID = uuid.Nil
+			uiutil.StoreID(ctx, tagIDKey, uuid.Nil)
 		}
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, toast.NetworkError(err))
-			})
-			return
-		}
-		if resp.StatusCode >= 400 {
-			prob := toast.FromHTTPError(resp)
-			ctx.Dispatch(func(ctx app.Context) {
-				ctx.NewActionWithValue(toast.ActionAdd, prob)
-			})
-			return
-		}
-		resp.Body.Close()
-
-		ctx.Dispatch(func(ctx app.Context) {
-			if p.selectedTagID == deletedID {
-				p.selectedTagID = ""
-				ctx.LocalStorage().Set("project:tagID", "")
-			}
-			p.loadTags(ctx)
-		})
-	})
+		p.loadTags(ctx)
+	}, nil)
 }
 
 func defaultTagValue(tagType string) string {

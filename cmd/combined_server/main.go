@@ -17,7 +17,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 	"github.com/kipitix/growscada/internal/server/interface/ui/root"
-	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
 	_ "github.com/lib/pq"
@@ -45,10 +44,6 @@ func main() {
 		r := root.NewRoot(apiServerURL)
 		return r
 	})
-
-	if app.IsClient {
-		uiutil.SendSchemaVersion()
-	}
 
 	// Required go-app framework call to initialize the PWA
 	app.RunWhenOnBrowser()

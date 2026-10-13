@@ -1,7 +1,10 @@
 package library
 
 import (
+	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
+
+	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
 // ── List column ───────────────────────────────────────────────────────────────
@@ -25,7 +28,7 @@ func (l *Library) renderListColumn() app.UI {
 }
 
 func (l *Library) renderListButtons() app.UI {
-	deleteDisabled := l.selectedID == ""
+	deleteDisabled := l.selectedID == uuid.Nil
 
 	deleteBtn := app.Button().
 		Style("flex", "1").
@@ -115,7 +118,7 @@ func (l *Library) renderList() app.UI {
 							case "Enter":
 								l.commitEdit(ctx)
 							case "Escape":
-								l.editingID = ""
+								l.editingID = uuid.Nil
 								l.editingName = ""
 							}
 						}),
@@ -129,7 +132,7 @@ func (l *Library) renderList() app.UI {
 				Body(app.Text(name)).
 				OnClick(func(ctx app.Context, e app.Event) {
 					l.selectItem(id)
-					ctx.LocalStorage().Set("library:selectedID", id)
+					uiutil.StoreID(ctx, selectedIDKey, id)
 				}).
 				OnDblClick(func(ctx app.Context, e app.Event) {
 					l.startEditing(id, name)

@@ -1,26 +1,26 @@
 package toast
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
-	"net/http"
-	"strings"
 	"time"
 
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
+
+	"github.com/kipitix/growscada/internal/apiclient"
 )
 
 // ActionAdd is the action name for pushing a new toast notification.
 const ActionAdd = "toast.add"
 
-// Problem mirrors the RFC 9457 fields displayed in a toast.
+// Problem is what a toast shows: the RFC 9457 fields of a server's refusal,
+// or a synthetic problem for a failure on this side.
 type Problem struct {
-	Title    string `json:"title"`
-	Status   int    `json:"status"`
-	Detail   string `json:"detail,omitempty"`
-	Instance string `json:"instance,omitempty"`
-	Method   string `json:"-"` // HTTP method, populated from resp.Request
+	Title    string
+	Status   int // 0 when the server did not answer
+	Detail   string
+	Instance string
+	Method   string // HTTP method of the refused request
 }
 
 // NetworkError creates a Problem for a transport-level failure.
@@ -29,35 +29,26 @@ func NetworkError(err error) Problem {
 }
 
 // ClientError creates a Problem for a request the UI could not build from its
-// own state, e.g. a malformed ID; nothing was sent to the server.
+// own state, e.g. invalid input; nothing was sent to the server.
 func ClientError(err error) Problem {
 	return Problem{Title: "Client Error", Status: 0, Detail: err.Error()}
 }
 
-// FromHTTPError reads and closes resp.Body, parses it as RFC 9457,
-// and returns a Problem. Falls back to a synthetic one on parse failure.
-func FromHTTPError(resp *http.Response) Problem {
-	method := ""
-	if resp.Request != nil {
-		method = resp.Request.Method
-	}
-	body, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
-	var p Problem
-	if json.Unmarshal(body, &p) == nil && p.Title != "" {
-		if p.Status == 0 {
-			p.Status = resp.StatusCode
+// FromError creates the Problem for an error of an apiclient call: the
+// server's Problem Details if it answered with one (*apiclient.StatusError),
+// a Network Error otherwise.
+func FromError(err error) Problem {
+	var se *apiclient.StatusError
+	if errors.As(err, &se) {
+		return Problem{
+			Title:    se.Problem.Title,
+			Status:   se.Problem.Status,
+			Detail:   se.Problem.Detail,
+			Instance: se.Problem.Instance,
+			Method:   se.Method,
 		}
-		p.Method = method
-		return p
 	}
-	detail := strings.TrimSpace(string(body))
-	return Problem{
-		Title:  http.StatusText(resp.StatusCode),
-		Status: resp.StatusCode,
-		Detail: detail,
-		Method: method,
-	}
+	return NetworkError(err)
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────

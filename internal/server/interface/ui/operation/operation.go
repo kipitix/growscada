@@ -8,8 +8,11 @@
 package operation
 
 import (
+	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
 	"github.com/kipitix/growscada/internal/server/interface/ui/livescene"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
@@ -21,18 +24,18 @@ type Operation struct {
 	app.Compo
 	// compoCtx is the component's own context, captured in OnMount; async
 	// results are dispatched through it (see project.Project.compoCtx).
-	compoCtx     app.Context
-	ThemeMode    string // exported so go-app detects theme changes and re-renders
-	apiServerURL string
+	compoCtx  app.Context
+	ThemeMode string // exported so go-app detects theme changes and re-renders
+	client    *apiclient.Client
 
-	scenes      []livescene.Scene
-	widgetTypes map[string]livescene.WidgetType
-	widgets     []livescene.Widget
-	tags        map[string]livescene.Tag
+	scenes      []apiv0.SceneResponse
+	widgetTypes map[uuid.UUID]apiv0.WidgetTypeResponse
+	widgets     []apiv0.WidgetResponse
+	tags        map[uuid.UUID]apiv0.TagResponse
 
-	selectedSceneID string
-	// widgetsSceneID is the Scene p.widgets belong to.
-	widgetsSceneID string
+	selectedSceneID uuid.UUID
+	// widgetsSceneID is the Scene o.widgets belong to.
+	widgetsSceneID uuid.UUID
 	disconnected   bool
 
 	// Coalesce reloads of each server-backed list.
@@ -42,17 +45,17 @@ type Operation struct {
 	tagsReloader        uiutil.Reloader
 }
 
-func NewOperation(apiServerURL string) *Operation {
-	return &Operation{apiServerURL: apiServerURL}
+func NewOperation(client *apiclient.Client) *Operation {
+	return &Operation{client: client}
 }
 
 func (o *Operation) OnMount(ctx app.Context) {
 	o.compoCtx = ctx
-	o.widgetTypes = map[string]livescene.WidgetType{}
-	o.tags = map[string]livescene.Tag{}
+	o.widgetTypes = map[uuid.UUID]apiv0.WidgetTypeResponse{}
+	o.tags = map[uuid.UUID]apiv0.TagResponse{}
 	ctx.ObserveState("theme", &o.ThemeMode)
 	ctx.ObserveState(eventlog.StateDisconnected, &o.disconnected)
-	ctx.LocalStorage().Get(sceneStorageKey, &o.selectedSceneID)
+	o.selectedSceneID = uiutil.LoadID(ctx, sceneStorageKey)
 
 	o.reload(ctx, eventlog.AllTargets)
 
@@ -61,11 +64,9 @@ func (o *Operation) OnMount(ctx app.Context) {
 		if !ok {
 			return
 		}
-		if ev.Type == "tag_updated" {
-			if t, ok := decodeTagUpdate(ev.Tag); ok {
-				o.tags = applyTagUpdate(o.tags, t)
-				return
-			}
+		if ev.Type == "tag_updated" && ev.Tag != nil && ev.Tag.ID != uuid.Nil {
+			o.tags = applyTagUpdate(o.tags, *ev.Tag)
+			return
 		}
 		if ev.Type == eventlog.EventResync {
 			o.tags = forgetVersions(o.tags)
@@ -89,12 +90,12 @@ func (o *Operation) reload(ctx app.Context, targets eventlog.ReloadTargets) {
 	}
 }
 
-func (o *Operation) selectScene(ctx app.Context, sceneID string) {
+func (o *Operation) selectScene(ctx app.Context, sceneID uuid.UUID) {
 	if sceneID == o.selectedSceneID {
 		return
 	}
 	o.selectedSceneID = sceneID
-	ctx.LocalStorage().Set(sceneStorageKey, sceneID)
+	uiutil.StoreID(ctx, sceneStorageKey, sceneID)
 	o.loadWidgets(ctx)
 }
 
@@ -165,7 +166,7 @@ func (o *Operation) renderScene() app.UI {
 			Text("No scenes to show")
 	}
 
-	var widgets []livescene.Widget
+	var widgets []apiv0.WidgetResponse
 	if o.widgetsSceneID == sc.ID {
 		widgets = o.widgets
 	}
@@ -179,11 +180,11 @@ func (o *Operation) renderScene() app.UI {
 	}
 }
 
-func (o *Operation) findScene(id string) (livescene.Scene, bool) {
+func (o *Operation) findScene(id uuid.UUID) (apiv0.SceneResponse, bool) {
 	for _, sc := range o.scenes {
 		if sc.ID == id {
 			return sc, true
 		}
 	}
-	return livescene.Scene{}, false
+	return apiv0.SceneResponse{}, false
 }

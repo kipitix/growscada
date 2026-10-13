@@ -48,22 +48,15 @@ const StateDisconnected = "eventlog.disconnected"
 type ServerEvent struct {
 	Type string // EventType name, e.g. "tag_created"
 	ID   string // ID of the affected aggregate/client, may be empty
-	// Tag is the Tag's full new state (the JSON of GET /api/v0/tags/{id}),
+	// Tag is the Tag's full new state, in the shape of GET /api/v0/tags/{id},
 	// carried by tag_updated only; nil otherwise.
-	Tag json.RawMessage
+	Tag *apiv0.TagResponse
 }
 
 type logEntry struct {
 	Time     string   `json:"time"`
 	Category category `json:"category"`
 	Text     string   `json:"text"`
-}
-
-type wireMessage struct {
-	Type      string          `json:"type"`
-	Timestamp string          `json:"timestamp"`
-	ID        string          `json:"id"`
-	Tag       json.RawMessage `json:"tag"`
 }
 
 // Bar is the global status bar + event log panel component.
@@ -189,8 +182,8 @@ func (b *Bar) handleMessage(ctx app.Context, data string) {
 	// A message proves the stream is live, so a prior error is stale.
 	b.markConnected(ctx)
 
-	var msg wireMessage
-	if err := json.Unmarshal([]byte(data), &msg); err != nil {
+	msg, ok := parseEvent(data)
+	if !ok {
 		return
 	}
 
@@ -215,6 +208,16 @@ func (b *Bar) handleMessage(ctx app.Context, data string) {
 	if len(b.entries) > maxEntries {
 		b.entries = b.entries[:maxEntries]
 	}
+}
+
+// parseEvent reads an SSE message's data as an apiv0.Event, tolerantly:
+// fields this UI does not know are skipped (ADR 0005).
+func parseEvent(data string) (apiv0.Event, bool) {
+	var ev apiv0.Event
+	if err := json.Unmarshal([]byte(data), &ev); err != nil || ev.Type == "" {
+		return apiv0.Event{}, false
+	}
+	return ev, true
 }
 
 // handleError responds to the SSE connection's "error" event (dropped

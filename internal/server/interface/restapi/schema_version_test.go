@@ -10,7 +10,6 @@ import (
 
 	"github.com/kipitix/growscada/contract"
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
-	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
 
 func TestResponses_CarrySchemaVersion(t *testing.T) {
@@ -53,7 +52,7 @@ func TestPreVersioningAPIPath_IsGoneWithHint(t *testing.T) {
 		if rec.Code != http.StatusGone {
 			t.Errorf("%s /api/v1/tags: status %d, want 410", method, rec.Code)
 		}
-		var prob restapi.ProblemDetails
+		var prob apiv0.Problem
 		if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
 			t.Fatalf("decode problem: %v", err)
 		}
@@ -80,7 +79,7 @@ func postTagWithUnknownField(t *testing.T, clientVersion string) string {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status %d, want 400 (the field must not be silently dropped): %s", rec.Code, rec.Body)
 	}
-	var prob restapi.ProblemDetails
+	var prob apiv0.Problem
 	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
 		t.Fatalf("decode problem: %v", err)
 	}

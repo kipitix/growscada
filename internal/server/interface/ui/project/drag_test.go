@@ -1,9 +1,15 @@
 package project
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/google/uuid"
+
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+)
 
 func TestDragChangedWidget_SavesOnlyAMovedAndChangedWidget(t *testing.T) {
-	start := widgetItem{ID: "w", Position: positionDTO{X: 10, Y: 20}, Size: sizeDTO{Width: 100, Height: 50}, Rotation: rotationDTO{Degrees: 0}}
+	start := apiv0.WidgetResponse{ID: uuid.New(), Position: apiv0.PositionResponse{X: 10, Y: 20}, Size: apiv0.SizeResponse{Width: 100, Height: 50}}
 	moved := start
 	moved.Position.X = 15
 	rotated := start
@@ -11,7 +17,7 @@ func TestDragChangedWidget_SavesOnlyAMovedAndChangedWidget(t *testing.T) {
 
 	cases := map[string]struct {
 		didMove bool
-		now     widgetItem
+		now     apiv0.WidgetResponse
 		want    bool
 	}{
 		"click without a move":      {false, start, false},
@@ -22,7 +28,7 @@ func TestDragChangedWidget_SavesOnlyAMovedAndChangedWidget(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			p := &Project{dragDidMove: tc.didMove, dragStartGeometry: start.geometry()}
+			p := &Project{dragDidMove: tc.didMove, dragStartGeometry: geometryOf(start)}
 			if got := p.dragChangedWidget(tc.now); got != tc.want {
 				t.Errorf("dragChangedWidget: got %v, want %v", got, tc.want)
 			}
