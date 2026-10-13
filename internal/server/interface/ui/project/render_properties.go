@@ -202,20 +202,16 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 	defaultName := "Widget"
 	defaultW, defaultH := 120, 60
 	var wtInputPorts []apiv0.InputPort
-	var capturedWT apiv0.WidgetTypeResponse
-	for _, wt := range p.widgetTypes {
-		if wt.ID == w.TypeID {
-			capturedWT = wt
-			defaultName = wt.Name
-			if wt.DefaultWidth > 0 {
-				defaultW = wt.DefaultWidth
-			}
-			if wt.DefaultHeight > 0 {
-				defaultH = wt.DefaultHeight
-			}
-			wtInputPorts = wt.InputPorts
-			break
+	capturedWT, ok := p.widgetTypeByID(w.TypeID)
+	if ok {
+		defaultName = capturedWT.Name
+		if capturedWT.DefaultWidth > 0 {
+			defaultW = capturedWT.DefaultWidth
 		}
+		if capturedWT.DefaultHeight > 0 {
+			defaultH = capturedWT.DefaultHeight
+		}
+		wtInputPorts = capturedWT.InputPorts
 	}
 
 	// ── Section header helper ─────────────────────────────────────────────

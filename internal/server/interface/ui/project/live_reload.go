@@ -1,7 +1,6 @@
 package project
 
 import (
-	"context"
 	"fmt"
 	"strconv"
 
@@ -57,17 +56,21 @@ func (p *Project) loadWidgetTypes(ctx app.Context) {
 // ── Scenes ────────────────────────────────────────────────────────────────────
 
 func (p *Project) loadScenes(ctx app.Context) {
-	uiutil.Load(p.compoCtx, &p.scenesReloader, p.client.ListScenes, p.setScenes, p.loadScenes)
+	mark := p.sceneVersions.Mark()
+	uiutil.Load(p.compoCtx, &p.scenesReloader, p.client.ListScenes, func(ctx app.Context, scenes []apiv0.SceneResponse) {
+		p.setScenes(ctx, mark, scenes)
+	}, p.loadScenes)
 }
 
 // setScenes replaces the scene list, keeps a valid selection (falling back to
-// the first scene) and merges the scene properties editor.
-func (p *Project) setScenes(ctx app.Context, scenes []apiv0.SceneResponse) {
+// the first scene) and merges the scene properties editor. mark is the moment
+// the list was requested.
+func (p *Project) setScenes(ctx app.Context, mark uiutil.Mark, scenes []apiv0.SceneResponse) {
 	old, known := p.findScene(p.selectedSceneID)
 	prevSceneID := p.selectedSceneID
 
 	for _, sc := range scenes {
-		p.sceneVersions.Observe(sc.ID, sc.Version)
+		p.sceneVersions.Observe(mark, sc.ID, sc.Version)
 	}
 	p.scenes = scenes
 
@@ -122,39 +125,26 @@ func (p *Project) loadWidgets(ctx app.Context) {
 		p.widgetsReloadDeferred = true
 		return
 	}
-	if !p.widgetsReloader.Start() {
-		return
-	}
-	sceneID := p.selectedSceneID
-	uiutil.Do(ctx, func(c context.Context) ([]apiv0.WidgetResponse, error) {
-		return p.client.ListWidgets(c, sceneID)
-	}, func(ctx app.Context, widgets []apiv0.WidgetResponse, err error) {
-		rerun := p.widgetsReloader.Done()
-		switch {
-		case p.selectedSceneID != sceneID:
-			rerun = true // the selection changed meanwhile: load the new scene
-		case err != nil:
-			uiutil.ShowError(ctx, err)
-		case p.isInteracting():
-			p.widgetsReloadDeferred = true
-		default:
-			p.setWidgets(ctx, sceneID, widgets)
-		}
-		if rerun {
-			p.loadWidgets(ctx)
-		}
-	})
+	mark := p.sceneVersions.Mark()
+	uiutil.LoadFor(ctx, &p.widgetsReloader, func() uuid.UUID { return p.selectedSceneID }, p.client.ListWidgets,
+		func(ctx app.Context, sceneID uuid.UUID, widgets []apiv0.WidgetResponse) {
+			if p.isInteracting() {
+				p.widgetsReloadDeferred = true
+				return
+			}
+			p.setWidgets(ctx, mark, sceneID, widgets)
+		}, p.loadWidgets)
 }
 
 // setWidgets replaces the selected scene's widgets and merges the widget
-// properties editor.
-func (p *Project) setWidgets(ctx app.Context, sceneID uuid.UUID, widgets []apiv0.WidgetResponse) {
+// properties editor. mark is the moment the list was requested.
+func (p *Project) setWidgets(ctx app.Context, mark uiutil.Mark, sceneID uuid.UUID, widgets []apiv0.WidgetResponse) {
 	old, known := p.findWidget(p.selectedWidgetID)
 	p.widgets = widgets
 
 	// Widgets carry their Scene's version.
 	for _, w := range widgets {
-		p.sceneVersions.Observe(sceneID, w.SceneVersion)
+		p.sceneVersions.Observe(mark, sceneID, w.SceneVersion)
 	}
 
 	if p.selectedWidgetID == uuid.Nil {
@@ -171,10 +161,6 @@ func (p *Project) setWidgets(ctx app.Context, sceneID uuid.UUID, widgets []apiv0
 	}
 }
 
-// findWidget returns the current live widget data by ID. Use it inside event
-// handler closures instead of the closure-captured `w`, because go-app may
-// not re-attach handlers when only the transform changes, leaving `w` stale
-// across drags.
 // widgetEditFields is the widget properties editor's text, formatted as the
 // editor shows it.
 type widgetEditFields struct {

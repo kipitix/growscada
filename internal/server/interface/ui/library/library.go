@@ -50,7 +50,7 @@ type Library struct {
 const selectedIDKey = "library:selectedID"
 
 func NewLibrary(client *apiclient.Client) *Library {
-	return &Library{client: client, versions: uiutil.Versions{}}
+	return &Library{client: client}
 }
 
 func (l *Library) OnMount(ctx app.Context) {
@@ -113,17 +113,20 @@ func (l *Library) setInputValue(ctx app.Context, port, value string) {
 
 // loadList (re)loads the widget type list; concurrent requests are coalesced.
 func (l *Library) loadList(ctx app.Context) {
-	uiutil.Load(l.compoCtx, &l.reloader, l.client.ListWidgetTypes, l.setWidgetTypes, l.loadList)
+	mark := l.versions.Mark()
+	uiutil.Load(l.compoCtx, &l.reloader, l.client.ListWidgetTypes, func(ctx app.Context, items []apiv0.WidgetTypeResponse) {
+		l.setWidgetTypes(ctx, mark, items)
+	}, l.loadList)
 }
 
 // setWidgetTypes replaces the list and brings the editor of the selected type
 // up to date: a type seen for the first time fills the editor, a known one is
 // merged field by field so unsaved edits survive changes made elsewhere, and a
-// deleted one drops the selection.
-func (l *Library) setWidgetTypes(ctx app.Context, items []apiv0.WidgetTypeResponse) {
+// deleted one drops the selection. mark is the moment the list was requested.
+func (l *Library) setWidgetTypes(ctx app.Context, mark uiutil.Mark, items []apiv0.WidgetTypeResponse) {
 	old, known := l.findItem(l.selectedID)
 	for _, it := range items {
-		l.versions.Observe(it.ID, it.Version)
+		l.versions.Observe(mark, it.ID, it.Version)
 	}
 	l.widgetTypes = items
 	if l.selectedID == uuid.Nil {
@@ -150,15 +153,12 @@ func (l *Library) clearSelection() {
 }
 
 func (l *Library) findItem(id uuid.UUID) (apiv0.WidgetTypeResponse, bool) {
-	if idx := l.itemIdx(id); idx >= 0 {
-		return l.widgetTypes[idx], true
-	}
-	return apiv0.WidgetTypeResponse{}, false
+	return uiutil.FindByID(l.widgetTypes, id, uiutil.WidgetTypeID)
 }
 
 // itemIdx returns the index of the WidgetType id in the list; -1 if absent.
 func (l *Library) itemIdx(id uuid.UUID) int {
-	return slices.IndexFunc(l.widgetTypes, func(it apiv0.WidgetTypeResponse) bool { return it.ID == id })
+	return uiutil.IdxByID(l.widgetTypes, id, uiutil.WidgetTypeID)
 }
 
 // mergeSelected updates each editor field that still holds the old server value.
@@ -176,22 +176,21 @@ func (l *Library) mergeSelected(old, current apiv0.WidgetTypeResponse) {
 // ── Selection helpers ─────────────────────────────────────────────────────────
 
 func (l *Library) selectItem(id uuid.UUID) {
-	for _, it := range l.widgetTypes {
-		if it.ID == id {
-			l.selectedID = id
-			l.editedName = it.Name
-			l.editedHTML = it.HtmlTemplate
-			l.editedScript = it.Script
-			l.editedScriptLang = it.ScriptLanguage
-			ports := make([]apiv0.InputPort, len(it.InputPorts))
-			copy(ports, it.InputPorts)
-			l.editedInputPorts = ports
-			l.newPortName = ""
-			l.newPortDesc = ""
-			l.newPortType = ""
-			return
-		}
+	it, ok := l.findItem(id)
+	if !ok {
+		return
 	}
+	l.selectedID = id
+	l.editedName = it.Name
+	l.editedHTML = it.HtmlTemplate
+	l.editedScript = it.Script
+	l.editedScriptLang = it.ScriptLanguage
+	ports := make([]apiv0.InputPort, len(it.InputPorts))
+	copy(ports, it.InputPorts)
+	l.editedInputPorts = ports
+	l.newPortName = ""
+	l.newPortDesc = ""
+	l.newPortType = ""
 }
 
 func (l *Library) startEditing(id uuid.UUID, currentName string) {

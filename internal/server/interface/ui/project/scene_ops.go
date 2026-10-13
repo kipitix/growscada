@@ -17,13 +17,26 @@ import (
 
 func (p *Project) createScene(ctx app.Context) {
 	req := apiv0.CreateSceneRequest{Name: "New Scene", Width: 1920, Height: 1080}
+	mark := p.sceneVersions.Mark()
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.CreateSceneResponse, error) {
 		return p.client.CreateScene(c, req)
 	}, func(ctx app.Context, created apiv0.CreateSceneResponse) {
+		// The new scene is the request as the server stored it: listed and
+		// editable at once, before the list is reread.
+		p.sceneVersions.Observe(mark, created.ID, created.Version)
+		p.scenes = append(p.scenes, apiv0.SceneResponse{
+			ID:             created.ID,
+			Name:           req.Name,
+			Width:          req.Width,
+			Height:         req.Height,
+			BackgroundHTML: req.BackgroundHTML,
+			Version:        created.Version,
+		})
 		p.selectedSceneID = created.ID
 		p.widgets = nil
 		uiutil.StoreID(ctx, sceneIDKey, created.ID)
 		p.clearWidgetSelection(ctx)
+		p.syncSceneEditingFields()
 		p.loadScenes(ctx)
 		p.loadWidgets(ctx)
 	}, nil)
@@ -137,9 +150,10 @@ func (p *Project) putScene(sc apiv0.SceneResponse) {
 		BackgroundHTML: sc.BackgroundHTML,
 		Version:        p.sceneVersions.Of(sc.ID),
 	}
+	mark := p.sceneVersions.Mark()
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.UpdateSceneResponse, error) {
 		return p.client.UpdateScene(c, sc.ID, req)
 	}, func(ctx app.Context, updated apiv0.UpdateSceneResponse) {
-		p.sceneVersions.Observe(sc.ID, updated.Version)
+		p.sceneVersions.Observe(mark, sc.ID, updated.Version)
 	}, p.rejectedSceneEdit(sc.ID, p.loadScenes))
 }

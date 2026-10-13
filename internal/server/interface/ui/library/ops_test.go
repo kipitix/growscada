@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -129,6 +130,49 @@ func TestCreateItem_SelectsTheNewWidgetType(t *testing.T) {
 	}
 }
 
+func TestApplyChanges_RightAfterCreate_SavesTheEdit(t *testing.T) {
+	url, api := newServer(t)
+	f := mount(t, url, api)
+	f.l.reloader.Start() // a list read in flight, which never lists the new type
+
+	f.l.createItem(f.l.compoCtx)
+	f.run()
+	f.l.editedName = "Mine"
+	f.l.applyChanges(f.l.compoCtx)
+	f.run()
+
+	f.noToasts()
+	list, err := api.ListWidgetTypes(context.Background())
+	if err != nil || len(list) != 1 {
+		t.Fatalf("server widget types: %+v, %v", list, err)
+	}
+	if wt := list[0]; wt.Name != "Mine" || wt.DefaultWidth != 120 || wt.DefaultHeight != 60 {
+		t.Errorf("server widget type: %+v, want the edit with the default size kept", wt)
+	}
+}
+
+func TestApplyChanges_ListReadBeforeAConflict_DoesNotRestoreTheOldVersion(t *testing.T) {
+	f, id := selected(t)
+	inFlight, mark := f.l.widgetTypes, f.l.versions.Mark() // read before the conflict
+	f.l.versions.Observe(mark, id, 15)                     // the server's database was recreated since
+
+	f.l.editedName = "Mine"
+	f.l.applyChanges(f.l.compoCtx)
+	f.run()
+	f.oneToast() // the conflict
+	stale := slices.Clone(inFlight)
+	stale[0].Version = 15
+	f.l.setWidgetTypes(f.l.compoCtx, mark, stale) // its old answer arrives after the reread
+
+	f.l.applyChanges(f.l.compoCtx)
+	f.run()
+
+	f.noToasts()
+	if name := f.widgetType(id).Name; name != "Mine" {
+		t.Errorf("repeated edit: server name %q", name)
+	}
+}
+
 func TestDeleteItem_RemovesItAndTheSelection(t *testing.T) {
 	f, id := selected(t)
 
@@ -227,12 +271,12 @@ func TestApplyChanges_ChangedMeanwhile_ShowsTheServersConflict(t *testing.T) {
 
 func TestApplyChanges_StaleListAfterTheSave_KeepsTheSavedVersion(t *testing.T) {
 	f, id := selected(t)
-	stale := f.l.widgetTypes // a list read before the save, answered after it
+	stale, mark := f.l.widgetTypes, f.l.versions.Mark() // a list read before the save, answered after it
 
 	f.l.editedName = "Mine"
 	f.l.applyChanges(f.l.compoCtx)
 	f.run()
-	f.l.setWidgetTypes(f.l.compoCtx, stale)
+	f.l.setWidgetTypes(f.l.compoCtx, mark, stale)
 
 	f.l.editedName = "Mine again"
 	f.l.applyChanges(f.l.compoCtx)
@@ -246,7 +290,7 @@ func TestApplyChanges_StaleListAfterTheSave_KeepsTheSavedVersion(t *testing.T) {
 
 func TestApplyChanges_ServerVersionWentBack_RecoversAfterTheConflict(t *testing.T) {
 	f, id := selected(t)
-	f.l.versions.Observe(id, 15) // the server's database was recreated since
+	f.l.versions.Observe(f.l.versions.Mark(), id, 15) // the server's database was recreated since
 
 	f.l.editedName = "Mine"
 	f.l.applyChanges(f.l.compoCtx)

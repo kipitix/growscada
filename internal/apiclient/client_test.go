@@ -2,12 +2,15 @@ package apiclient_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
@@ -210,6 +213,49 @@ func TestDelete_BodyNotJSON_Succeeds(t *testing.T) {
 
 	if _, err := client.DeleteTag(context.Background(), uuid.New()); err != nil {
 		t.Errorf("delete: %v", err)
+	}
+}
+
+func TestDelete_BodyCutShort_LeavesZero(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"scene_version": 7, "name": 5}`)) // decodes in part
+	}))
+	defer srv.Close()
+	client := apiclient.New(srv.URL, srv.Client())
+
+	deleted, err := client.DeleteWidget(context.Background(), uuid.New(), uuid.New())
+	if err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if deleted.SceneVersion != 0 {
+		t.Errorf("SceneVersion: got %d, want 0 (unknown), not a half-read value", deleted.SceneVersion)
+	}
+}
+
+func TestResponses_ReuseTheConnection(t *testing.T) {
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Chunked, as a streamed or large body is: its end is a chunk of its
+		// own, which the decoder of one JSON value never reads.
+		json.NewEncoder(w).Encode(apiv0.TagResponse{ID: uuid.New()})
+		w.(http.Flusher).Flush()
+	}))
+	var conns atomic.Int32
+	srv.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			conns.Add(1)
+		}
+	}
+	srv.Start()
+	defer srv.Close()
+	client := apiclient.New(srv.URL, srv.Client())
+
+	for range 3 {
+		if _, err := client.GetTag(context.Background(), uuid.New()); err != nil {
+			t.Fatalf("get: %v", err)
+		}
+	}
+	if got := conns.Load(); got != 1 {
+		t.Errorf("connections: got %d, want 1 reused by every request", got)
 	}
 }
 

@@ -9,7 +9,6 @@ import (
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
-	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -29,15 +28,25 @@ func (l *Library) createItem(ctx app.Context) {
 		DefaultHeight:  60,
 		InputPorts:     []apiv0.InputPort{},
 	}
+	mark := l.versions.Mark()
 	uiutil.Call(ctx, func(c context.Context) (apiv0.CreateWidgetTypeResponse, error) {
 		return l.client.CreateWidgetType(c, req)
 	}, func(ctx app.Context, created apiv0.CreateWidgetTypeResponse) {
-		l.selectedID = created.ID
-		l.editedName = req.Name
-		l.editedHTML = req.HtmlTemplate
-		l.editedScript = req.Script
-		l.editedInputPorts = nil
-		l.editedScriptLang = req.ScriptLanguage
+		// The new type is the request as the server stored it: listed and
+		// editable at once, before the list is reread.
+		l.versions.Observe(mark, created.ID, created.Version)
+		l.widgetTypes = append(l.widgetTypes, apiv0.WidgetTypeResponse{
+			ID:             created.ID,
+			Name:           req.Name,
+			HtmlTemplate:   req.HtmlTemplate,
+			Script:         req.Script,
+			ScriptLanguage: req.ScriptLanguage,
+			DefaultWidth:   req.DefaultWidth,
+			DefaultHeight:  req.DefaultHeight,
+			InputPorts:     req.InputPorts,
+			Version:        created.Version,
+		})
+		l.selectItem(created.ID)
 		l.loadList(ctx)
 	}, nil)
 }
@@ -62,12 +71,8 @@ func (l *Library) applyChanges(ctx app.Context) {
 	if l.selectedID == uuid.Nil {
 		return
 	}
-	// Right after createItem the list may not hold the new type yet: neither
-	// its default size nor its version is known, so the update could only
-	// zero the size or fail on a stale version.
 	current, ok := l.findItem(l.selectedID)
 	if !ok {
-		ctx.NewActionWithValue(toast.ActionAdd, toast.ClientError(errors.New("the widget type is still loading; apply again")))
 		return
 	}
 	l.updateWidgetType(l.selectedID, apiv0.UpdateWidgetTypeRequest{
@@ -124,10 +129,11 @@ func portsRequest(ports []apiv0.InputPort) []apiv0.InputPort {
 // the list reread: if the server's version went back, a newer one kept here
 // would be rejected forever. The other types' versions stay.
 func (l *Library) updateWidgetType(id uuid.UUID, req apiv0.UpdateWidgetTypeRequest) {
+	mark := l.versions.Mark()
 	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.UpdateWidgetTypeResponse, error) {
 		return l.client.UpdateWidgetType(c, id, req)
 	}, func(ctx app.Context, updated apiv0.UpdateWidgetTypeResponse) {
-		l.versions.Observe(id, updated.Version)
+		l.versions.Observe(mark, id, updated.Version)
 		l.loadList(ctx)
 	}, func(ctx app.Context, err error) {
 		uiutil.ShowError(ctx, err)

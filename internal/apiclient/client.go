@@ -15,6 +15,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 	"unicode/utf8"
 
@@ -303,6 +304,11 @@ func widgetPath(sceneID, widgetID uuid.UUID) string {
 // maxProblemBody caps how much of an error response is read.
 const maxProblemBody = 64 << 10
 
+// maxDrain caps how much of a response's rest is read before its body is
+// closed: a body read to EOF lets the transport reuse the connection, a larger
+// rest is cheaper to drop with the connection.
+const maxDrain = 64 << 10
+
 // maxFallbackDetail caps the Detail taken from an error body that is not
 // Problem Details (e.g. a proxy's HTML page).
 const maxFallbackDetail = 200
@@ -311,8 +317,9 @@ const maxFallbackDetail = 200
 // marshalled as JSON — and decodes a successful response into out (if not
 // nil). Any other status is a *StatusError carrying the Problem Details.
 // A DELETE's status alone tells it succeeded: a body that does not decode
-// (empty, or e.g. a proxy's "OK") is no error, the last state in out being
-// only extra information. A request that cannot be built (e.g. a malformed baseURL) is an
+// (empty, or e.g. a proxy's "OK") is no error, out then being left zero —
+// the last state in out is only extra information, and a caller reads a zero
+// value as "unknown". A request that cannot be built (e.g. a malformed baseURL) is an
 // error that is not a *url.Error: nothing was sent.
 func (c *Client) do(ctx context.Context, method, path string, body any, wantStatus int, out any) error {
 	var reader io.Reader
@@ -339,7 +346,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any, wantStat
 	if err != nil {
 		return err // *url.Error already names the method and URL
 	}
-	defer resp.Body.Close()
+	defer drainAndClose(resp.Body)
 	c.reportServerVersion(resp)
 
 	if resp.StatusCode != wantStatus {
@@ -350,10 +357,24 @@ func (c *Client) do(ctx context.Context, method, path string, body any, wantStat
 	}
 	// Tolerant: a newer server may add fields (ADR 0005).
 	err = json.NewDecoder(resp.Body).Decode(out)
-	if err != nil && method != http.MethodDelete {
+	switch {
+	case err == nil:
+		return nil
+	case method == http.MethodDelete:
+		// A body cut short may have filled out in part.
+		reflect.ValueOf(out).Elem().SetZero()
+		return nil
+	default:
 		return fmt.Errorf("%s %s: %w: %w", method, req.URL, ErrBadResponse, err)
 	}
-	return nil
+}
+
+// drainAndClose reads what is left of body and closes it, so the connection
+// can be reused: json.Decoder stops at the end of the value, leaving the rest
+// (the encoder's newline, a chunked body's last chunk) unread.
+func drainAndClose(body io.ReadCloser) {
+	_, _ = io.Copy(io.Discard, io.LimitReader(body, maxDrain))
+	_ = body.Close()
 }
 
 func (c *Client) reportServerVersion(resp *http.Response) {

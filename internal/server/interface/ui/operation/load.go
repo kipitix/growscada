@@ -1,8 +1,6 @@
 package operation
 
 import (
-	"context"
-
 	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
@@ -37,26 +35,10 @@ func (o *Operation) loadWidgets(ctx app.Context) {
 		o.widgets, o.widgetsSceneID = nil, uuid.Nil
 		return
 	}
-	if !o.widgetsReloader.Start() {
-		return
-	}
-	sceneID := o.selectedSceneID
-	uiutil.Do(ctx, func(c context.Context) ([]apiv0.WidgetResponse, error) {
-		return o.client.ListWidgets(c, sceneID)
-	}, func(ctx app.Context, widgets []apiv0.WidgetResponse, err error) {
-		rerun := o.widgetsReloader.Done()
-		switch {
-		case o.selectedSceneID != sceneID:
-			rerun = true // the selection changed meanwhile: load the new Scene
-		case err != nil:
-			uiutil.ShowError(ctx, err)
-		default:
+	uiutil.LoadFor(ctx, &o.widgetsReloader, func() uuid.UUID { return o.selectedSceneID }, o.client.ListWidgets,
+		func(ctx app.Context, sceneID uuid.UUID, widgets []apiv0.WidgetResponse) {
 			o.widgets, o.widgetsSceneID = widgets, sceneID
-		}
-		if rerun {
-			o.loadWidgets(ctx)
-		}
-	})
+		}, o.loadWidgets)
 }
 
 func (o *Operation) loadTags(ctx app.Context) {

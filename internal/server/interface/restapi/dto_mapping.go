@@ -81,7 +81,7 @@ func newGetScenesResponse(list []appdto.Scene) apiv0.GetScenesResponse {
 }
 
 func newCreateSceneResponse(s appdto.Scene) apiv0.CreateSceneResponse {
-	return apiv0.CreateSceneResponse{ID: s.ID}
+	return apiv0.CreateSceneResponse{ID: s.ID, Version: s.Version}
 }
 
 func newUpdateSceneResponse(s appdto.Scene) apiv0.UpdateSceneResponse {
@@ -261,7 +261,7 @@ func newGetWidgetTypesResponse(list []appdto.WidgetType) apiv0.GetWidgetTypesRes
 }
 
 func newCreateWidgetTypeResponse(wt appdto.WidgetType) apiv0.CreateWidgetTypeResponse {
-	return apiv0.CreateWidgetTypeResponse{ID: wt.ID}
+	return apiv0.CreateWidgetTypeResponse{ID: wt.ID, Version: wt.Version}
 }
 
 func newUpdateWidgetTypeResponse(wt appdto.WidgetType) apiv0.UpdateWidgetTypeResponse {

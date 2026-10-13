@@ -3,7 +3,6 @@ package project
 import (
 	"fmt"
 	"math"
-	"slices"
 	"strconv"
 
 	"github.com/google/uuid"
@@ -154,7 +153,7 @@ const (
 )
 
 func NewProject(client *apiclient.Client) *Project {
-	return &Project{client: client, activeSubTab: subTabScenes, sceneVersions: uiutil.Versions{}}
+	return &Project{client: client, activeSubTab: subTabScenes}
 }
 
 func (p *Project) OnMount(ctx app.Context) {
@@ -241,43 +240,30 @@ func (p *Project) clearWidgetSelection(ctx app.Context) {
 
 // ── Lookups ───────────────────────────────────────────────────────────────────
 
-// idxByID returns the index of the item id in items; -1 if absent or uuid.Nil.
-func idxByID[T any](items []T, id uuid.UUID, idOf func(T) uuid.UUID) int {
-	if id == uuid.Nil {
-		return -1
-	}
-	return slices.IndexFunc(items, func(it T) bool { return idOf(it) == id })
-}
-
-// findByID returns the item id in items, or false if there is none.
-func findByID[T any](items []T, id uuid.UUID, idOf func(T) uuid.UUID) (T, bool) {
-	if i := idxByID(items, id, idOf); i >= 0 {
-		return items[i], true
-	}
-	var zero T
-	return zero, false
-}
-
-func sceneIDOf(sc apiv0.SceneResponse) uuid.UUID           { return sc.ID }
-func widgetIDOf(w apiv0.WidgetResponse) uuid.UUID          { return w.ID }
-func widgetTypeIDOf(wt apiv0.WidgetTypeResponse) uuid.UUID { return wt.ID }
-
-func (p *Project) sceneIdx(id uuid.UUID) int { return idxByID(p.scenes, id, sceneIDOf) }
+func (p *Project) sceneIdx(id uuid.UUID) int { return uiutil.IdxByID(p.scenes, id, uiutil.SceneID) }
 
 func (p *Project) findScene(id uuid.UUID) (apiv0.SceneResponse, bool) {
-	return findByID(p.scenes, id, sceneIDOf)
+	return uiutil.FindByID(p.scenes, id, uiutil.SceneID)
 }
 
 func (p *Project) selectedWidgetIdx() int {
-	return idxByID(p.widgets, p.selectedWidgetID, widgetIDOf)
+	return uiutil.IdxByID(p.widgets, p.selectedWidgetID, uiutil.WidgetID)
 }
 
+// findWidget returns the current live widget data by ID. Use it inside event
+// handler closures instead of the closure-captured `w`, because go-app may
+// not re-attach handlers when only the transform changes, leaving `w` stale
+// across drags.
 func (p *Project) findWidget(id uuid.UUID) (apiv0.WidgetResponse, bool) {
-	return findByID(p.widgets, id, widgetIDOf)
+	return uiutil.FindByID(p.widgets, id, uiutil.WidgetID)
 }
 
 func (p *Project) widgetTypeByID(id uuid.UUID) (apiv0.WidgetTypeResponse, bool) {
-	return findByID(p.widgetTypes, id, widgetTypeIDOf)
+	return uiutil.FindByID(p.widgetTypes, id, uiutil.WidgetTypeID)
+}
+
+func (p *Project) findTag(id uuid.UUID) (apiv0.TagResponse, bool) {
+	return uiutil.FindByID(p.tags, id, uiutil.TagID)
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────

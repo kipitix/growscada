@@ -4,7 +4,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
-	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -152,13 +151,7 @@ func (p *Project) renderTagPropertiesPanel() app.UI {
 			Body(app.Text("Select a tag or create a new one."))
 	}
 
-	var selected apiv0.TagResponse
-	for _, t := range p.tags {
-		if t.ID == p.selectedTagID {
-			selected = t
-			break
-		}
-	}
+	selected, _ := p.findTag(p.selectedTagID)
 
 	return app.Div().
 		Style("flex", "1").

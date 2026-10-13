@@ -28,8 +28,10 @@ type CreateSceneRequest struct {
 }
 
 // CreateSceneResponse is the HTTP DTO for a scene creation response.
+// Version is the new scene's version, the one its first update states.
 type CreateSceneResponse struct {
-	ID uuid.UUID `json:"id"`
+	ID      uuid.UUID `json:"id"`
+	Version int       `json:"version"`
 }
 
 // UpdateSceneRequest is the HTTP DTO for updating a scene.

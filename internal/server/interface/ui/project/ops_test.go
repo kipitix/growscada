@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -54,7 +55,13 @@ func newServer(t *testing.T) (string, *apiclient.Client) {
 // mount mounts a Project talking to the server at url.
 func mount(t *testing.T, url string, api *apiclient.Client) *fixture {
 	t.Helper()
-	p := NewProject(apiclient.New(url, http.DefaultClient))
+	return mountWith(t, url, api, http.DefaultClient)
+}
+
+// mountWith is mount with the Project's requests sent through httpClient.
+func mountWith(t *testing.T, url string, api *apiclient.Client, httpClient *http.Client) *fixture {
+	t.Helper()
+	p := NewProject(apiclient.New(url, httpClient))
 	f := &fixture{t: t, p: p, api: api}
 	f.e = uitest.Load(t, mountOnHost{p})
 	return f
@@ -185,6 +192,26 @@ func TestCreateScene_SelectsTheNewScene(t *testing.T) {
 	f.knowsSceneVersion(scenes[0].ID)
 }
 
+func TestSaveSceneProperties_RightAfterCreate_SavesTheEdit(t *testing.T) {
+	f := startProject(t)
+	f.p.scenesReloader.Start() // a list read in flight, which never lists the new scene
+
+	f.p.createScene(f.p.compoCtx)
+	f.run()
+	f.p.editingScenePropsName = "Mine"
+	f.p.saveSceneProperties(f.p.compoCtx)
+	f.run()
+
+	f.noToasts()
+	scenes, err := f.api.ListScenes(context.Background())
+	if err != nil || len(scenes) != 1 {
+		t.Fatalf("server scenes: %+v, %v", scenes, err)
+	}
+	if sc := scenes[0]; sc.Name != "Mine" || sc.Width != 1920 {
+		t.Errorf("server scene: %+v, want the edit", sc)
+	}
+}
+
 func TestDeleteScene_RemovesIt(t *testing.T) {
 	url, api := newServer(t)
 	sceneID := createScene(t, api, "Main")
@@ -301,7 +328,7 @@ func TestSaveSceneProperties_ServerVersionWentBack_RecoversAfterTheConflict(t *t
 	url, api := newServer(t)
 	sceneID := createScene(t, api, "Main")
 	f := mount(t, url, api)
-	f.p.sceneVersions.Observe(sceneID, 15) // the server's database was recreated since
+	f.p.sceneVersions.Observe(f.p.sceneVersions.Mark(), sceneID, 15) // the server's database was recreated since
 
 	f.p.editingScenePropsName = "Mine"
 	f.p.saveSceneProperties(f.p.compoCtx)
@@ -430,6 +457,35 @@ func TestDeleteWidget_RemovesItAndTheSelection(t *testing.T) {
 	if len(f.p.widgets) != 0 || f.p.selectedWidgetID != uuid.Nil {
 		t.Errorf("widgets %+v, selected %v: want none", f.p.widgets, f.p.selectedWidgetID)
 	}
+	f.knowsSceneVersion(sceneID)
+}
+
+// okOnDelete answers a successful DELETE with a proxy's "OK" in place of the
+// server's body.
+type okOnDelete struct{}
+
+func (okOnDelete) RoundTrip(r *http.Request) (*http.Response, error) {
+	resp, err := http.DefaultTransport.RoundTrip(r)
+	if err != nil || r.Method != http.MethodDelete || resp.StatusCode != http.StatusOK {
+		return resp, err
+	}
+	resp.Body.Close()
+	resp.Body = io.NopCloser(strings.NewReader("OK"))
+	resp.ContentLength = 2
+	return resp, nil
+}
+
+func TestDeleteWidget_ResponseWithoutTheVersion_RereadsIt(t *testing.T) {
+	url, api := newServer(t)
+	sceneID := createScene(t, api, "Main")
+	typeID := createWidgetType(t, api, "Gauge")
+	widgetID := createWidget(t, api, sceneID, typeID, "gauge1")
+	f := mountWith(t, url, api, &http.Client{Transport: okOnDelete{}})
+
+	f.p.deleteWidget(f.p.compoCtx, widgetID)
+	f.run()
+
+	f.noToasts()
 	f.knowsSceneVersion(sceneID)
 }
 

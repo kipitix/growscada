@@ -39,10 +39,11 @@ func (p *Project) createWidget(ctx app.Context, typeID uuid.UUID, x, y float64) 
 		}
 	}
 	req := apiv0.CreateWidgetRequest(widgetRequest(w, p.sceneVersions.Of(sceneID)))
+	mark := p.sceneVersions.Mark()
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.CreateWidgetResponse, error) {
 		return p.client.CreateWidget(c, sceneID, req)
 	}, func(ctx app.Context, created apiv0.CreateWidgetResponse) {
-		p.sceneVersions.Observe(sceneID, created.SceneVersion)
+		p.sceneVersions.Observe(mark, sceneID, created.SceneVersion)
 		w.ID = created.ID
 		p.selectedWidgetID = created.ID
 		uiutil.StoreID(ctx, widgetIDKey, created.ID)
@@ -51,12 +52,22 @@ func (p *Project) createWidget(ctx app.Context, typeID uuid.UUID, x, y float64) 
 	}, p.rejectedSceneEdit(sceneID, nil))
 }
 
+// deleteWidget deletes the Widget widgetID of the selected Scene. The
+// response states the Scene's new version; one that does not (a body the
+// client could not read) leaves it unknown, so the known one, now stale, is
+// forgotten and the Scenes are reread.
 func (p *Project) deleteWidget(ctx app.Context, widgetID uuid.UUID) {
 	sceneID := p.selectedSceneID
+	mark := p.sceneVersions.Mark()
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.WidgetResponse, error) {
 		return p.client.DeleteWidget(c, sceneID, widgetID)
 	}, func(ctx app.Context, deleted apiv0.WidgetResponse) {
-		p.sceneVersions.Observe(sceneID, deleted.SceneVersion)
+		if deleted.SceneVersion > 0 {
+			p.sceneVersions.Observe(mark, sceneID, deleted.SceneVersion)
+		} else {
+			p.sceneVersions.ForgetID(sceneID)
+			p.loadScenes(ctx)
+		}
 		if p.selectedWidgetID == widgetID {
 			p.clearWidgetSelection(ctx)
 		}
@@ -157,10 +168,11 @@ func (p *Project) unbindPort(ctx app.Context, portName string) {
 func (p *Project) putWidget(ctx app.Context, w apiv0.WidgetResponse) {
 	sceneID := p.selectedSceneID
 	req := apiv0.UpdateWidgetRequest(widgetRequest(w, p.sceneVersions.Of(sceneID)))
+	mark := p.sceneVersions.Mark()
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.UpdateWidgetResponse, error) {
 		return p.client.UpdateWidget(c, sceneID, w.ID, req)
 	}, func(ctx app.Context, updated apiv0.UpdateWidgetResponse) {
-		p.sceneVersions.Observe(sceneID, updated.SceneVersion)
+		p.sceneVersions.Observe(mark, sceneID, updated.SceneVersion)
 	}, p.rejectedSceneEdit(sceneID, p.loadWidgets))
 }
 

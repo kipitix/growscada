@@ -181,10 +181,5 @@ func (o *Operation) renderScene() app.UI {
 }
 
 func (o *Operation) findScene(id uuid.UUID) (apiv0.SceneResponse, bool) {
-	for _, sc := range o.scenes {
-		if sc.ID == id {
-			return sc, true
-		}
-	}
-	return apiv0.SceneResponse{}, false
+	return uiutil.FindByID(o.scenes, id, uiutil.SceneID)
 }

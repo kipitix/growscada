@@ -92,15 +92,16 @@ func (r *Root) OnMount(ctx app.Context) {
 // The client calls it off the UI goroutine, so it is dispatched; requests
 // start from the modes' OnMount, which runs after Root's, so compoCtx is set.
 // Only a change is dispatched: a dispatch renders Root and every mode under
-// it, and every response states the version.
+// it, and every response states the version. It is dispatched under the
+// lock, so the dispatches queue in the order of the changes and the last one
+// leaves serverVersion at reported.
 func (r *Root) observeServerVersion(v contract.SchemaVersion) {
 	r.reportedMu.Lock()
-	same := r.reportedKnown && r.reported == v
-	r.reported, r.reportedKnown = v, true
-	r.reportedMu.Unlock()
-	if same {
+	defer r.reportedMu.Unlock()
+	if r.reportedKnown && r.reported == v {
 		return
 	}
+	r.reported, r.reportedKnown = v, true
 	r.compoCtx.Dispatch(func(ctx app.Context) {
 		r.serverVersion, r.serverVersionKnown = v, true
 	})

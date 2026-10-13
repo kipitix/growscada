@@ -42,8 +42,10 @@ type CreateWidgetTypeRequest struct {
 }
 
 // CreateWidgetTypeResponse is the HTTP DTO for a creation response.
+// Version is the new widget type's version, the one its first update states.
 type CreateWidgetTypeResponse struct {
-	ID uuid.UUID `json:"id"`
+	ID      uuid.UUID `json:"id"`
+	Version int       `json:"version"`
 }
 
 // UpdateWidgetTypeRequest is the HTTP DTO for updating a widget type.

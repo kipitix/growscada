@@ -197,6 +197,9 @@ func TestPostScenes_Valid_Returns201WithID(t *testing.T) {
 	if resp.ID == uuid.Nil {
 		t.Error("expected non-zero ID")
 	}
+	if resp.Version < 1 {
+		t.Errorf("version: expected the new version, got %d", resp.Version)
+	}
 }
 
 func TestPostScenes_InvalidJSON_Returns400(t *testing.T) {

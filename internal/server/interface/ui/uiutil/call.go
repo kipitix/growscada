@@ -44,16 +44,33 @@ func Call[T any](ctx app.Context, call func(context.Context) (T, error), onOK fu
 // or shows the error, and calls reload if a rerun was requested meanwhile.
 // reload is the caller's own loader, so a rerun picks up its current inputs.
 func Load[T any](ctx app.Context, r *Reloader, call func(context.Context) (T, error), onOK func(app.Context, T), reload func(app.Context)) {
+	LoadFor(ctx, r, func() struct{} { return struct{}{} },
+		func(c context.Context, _ struct{}) (T, error) { return call(c) },
+		func(ctx app.Context, _ struct{}, v T) { onOK(ctx, v) },
+		reload)
+}
+
+// LoadFor is Load for a list that belongs to a key, e.g. the Widgets of the
+// selected Scene: key is read when the load starts and handed to call, and
+// read again when the response arrives. If it changed meanwhile the response
+// (or its error) belongs to a list no longer shown: it is dropped and the
+// load reruns for the new key.
+func LoadFor[K comparable, T any](ctx app.Context, r *Reloader, key func() K, call func(context.Context, K) (T, error), onOK func(app.Context, K, T), reload func(app.Context)) {
 	if !r.Start() {
 		return
 	}
-	Do(ctx, call, func(ctx app.Context, v T, err error) {
-		if err != nil {
+	k := key()
+	Do(ctx, func(c context.Context) (T, error) { return call(c, k) }, func(ctx app.Context, v T, err error) {
+		rerun := r.Done()
+		switch {
+		case key() != k:
+			rerun = true
+		case err != nil:
 			ShowError(ctx, err)
-		} else {
-			onOK(ctx, v)
+		default:
+			onOK(ctx, k, v)
 		}
-		if r.Done() {
+		if rerun {
 			reload(ctx)
 		}
 	})

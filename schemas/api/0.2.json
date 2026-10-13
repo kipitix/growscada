@@ -28,10 +28,14 @@
         "id": {
           "format": "uuid",
           "type": "string"
+        },
+        "version": {
+          "type": "integer"
         }
       },
       "required": [
-        "id"
+        "id",
+        "version"
       ],
       "type": "object"
     },
@@ -179,10 +183,14 @@
         "id": {
           "format": "uuid",
           "type": "string"
+        },
+        "version": {
+          "type": "integer"
         }
       },
       "required": [
-        "id"
+        "id",
+        "version"
       ],
       "type": "object"
     },
