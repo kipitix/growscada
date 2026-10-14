@@ -1,6 +1,6 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
-## [Unreleased]
+## [0.0.38] - 2025-10-14
 
 ### Fixed
 
