@@ -1,0 +1,37 @@
+name: Go CI
+
+on:
+  push:
+    branches: [path]
+  pull_request:
+    branches: [path]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
+
+      - name: Setup Go
+        uses: actions/setup-go@v5.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install dependencies
+        run: go mod download
+
+      # GitVerse runners give the job no Docker (the socket is not an allowed
+      # volume), so testcontainers cannot start Postgres: skip the packages
+      # whose tests depend on it. GitHub CI (.github/workflows) runs them all.
+      - name: Run tests without Postgres
+        run: |
+          needs_docker=$(go list -test -f '{{if .ForTest}}{{.ForTest}} {{join .Deps " "}}{{end}}' ./... \
+            | grep testcontainers-go | cut -d' ' -f1 | sort -u)
+          echo "Skipped, need Docker:"
+          echo "$needs_docker"
+          go test --cover $(go list ./... | grep -vxF "$needs_docker")
+
+      - name: Build
+        run: make build

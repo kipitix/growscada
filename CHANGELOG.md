@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- **CI на GitVerse: тесты с Postgres падали с `rootless Docker not found`.** Job GitVerse выполняется в контейнере без Docker, и testcontainers не мог поднять Postgres. `.github/workflows/go.yaml` на GitVerse запускает job в том же образе `gitverse/runner-image:ubuntu-latest` с Docker-сокетом хоста (`-v /var/run/docker.sock:/var/run/docker.sock`); на GitHub `container.image` пустой, и job идёт на раннере, как раньше. Шаг тестов — `make test` вместо `go test ./... -v`. Исходники не менялись
+- **CI на GitVerse: тесты с Postgres падали с `rootless Docker not found`.** Общие раннеры GitVerse не дают job доступа к Docker (монтирование `/var/run/docker.sock` раннер отбрасывает: «is not a valid volume»), и testcontainers не может поднять Postgres. Для GitVerse — отдельный `.gitverse/workflows/go.yaml` (в настройках репозитория: «Use configuration from .gitverse/workflows»): тесты гоняются без пакетов, чьим тестам нужен testcontainers (список вычисляется через `go list -test`, выводится в лог), затем `make build`. `.github/workflows/go.yaml` гоняет все тесты на GitHub: `make test` вместо `go test ./... -v`. Исходники не менялись
 
 ## [0.0.37] - 2026-10-14
 
