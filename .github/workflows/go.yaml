@@ -10,6 +10,14 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    # GitVerse runs the job in a container without Docker, so testcontainers
+    # cannot start Postgres: run it in the same image with the host's Docker
+    # socket. On GitHub the image is empty and the job runs on the runner,
+    # which has Docker.
+    container:
+      image: ${{ contains(github.server_url, 'gitverse') && 'gitverse/runner-image:ubuntu-latest' || '' }}
+      options: -v /var/run/docker.sock:/var/run/docker.sock
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4.2.2
@@ -23,7 +31,7 @@ jobs:
         run: go mod download
 
       - name: Run tests
-        run: go test ./... -v
+        run: make test
 
       - name: Build
         run: make build

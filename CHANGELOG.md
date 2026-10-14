@@ -1,5 +1,11 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [Unreleased]
+
+### Fixed
+
+- **CI на GitVerse: тесты с Postgres падали с `rootless Docker not found`.** Job GitVerse выполняется в контейнере без Docker, и testcontainers не мог поднять Postgres. `.github/workflows/go.yaml` на GitVerse запускает job в том же образе `gitverse/runner-image:ubuntu-latest` с Docker-сокетом хоста (`-v /var/run/docker.sock:/var/run/docker.sock`); на GitHub `container.image` пустой, и job идёт на раннере, как раньше. Шаг тестов — `make test` вместо `go test ./... -v`. Исходники не менялись
+
 ## [0.0.37] - 2026-10-14
 
 ### Changed
