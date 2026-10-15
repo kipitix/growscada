@@ -64,12 +64,7 @@ func (o *Operation) OnMount(ctx app.Context) {
 		if !ok {
 			return
 		}
-		if ev.Type == apiv0.EventTagUpdated && ev.Tag != nil {
-			o.tags = o.tags.Apply(*ev.Tag)
-		}
-		if ev.Type == eventlog.EventResync {
-			o.tags = o.tags.ForgetVersions()
-		}
+		o.tags = eventlog.ApplyToTags(o.tags, ev)
 		o.reload(ctx, eventlog.ReloadTargetsFor(ev))
 	})
 }
@@ -83,7 +78,7 @@ func (o *Operation) reload(ctx app.Context, targets eventlog.ReloadTargets) {
 	}
 	// Only the selected Scene's Widgets are shown; a Scene's own state does
 	// not change with its Widgets'.
-	if targets.Widgets || (targets.Scene != uuid.Nil && targets.Scene == o.selectedSceneID) {
+	if targets.WidgetsOf(o.selectedSceneID) {
 		o.loadWidgets(ctx)
 	}
 	if targets.Tags {
@@ -175,7 +170,7 @@ func (o *Operation) renderScene() app.UI {
 		Scene:       sc,
 		Widgets:     widgets,
 		WidgetTypes: o.widgetTypes,
-		Tags:        livescene.SceneTags(widgets, o.tags.ByID()),
+		Tags:        livescene.SceneTags(widgets, o.tags.Find),
 		Connected:   !o.disconnected,
 		Theme:       o.ThemeMode,
 	}

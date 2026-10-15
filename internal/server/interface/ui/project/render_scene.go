@@ -85,11 +85,7 @@ func (p *Project) renderSceneTabs() app.UI {
 						Style("cursor", "pointer").
 						Text(sc.Name).
 						OnClick(func(ctx app.Context, e app.Event) {
-							p.selectedSceneID = sc.ID
-							uiutil.StoreID(ctx, sceneIDKey, sc.ID)
-							p.clearWidgetSelection(ctx)
-							p.syncSceneEditingFields()
-							p.loadWidgets(ctx)
+							p.selectScene(ctx, sc.ID)
 						}).
 						OnDblClick(func(ctx app.Context, e app.Event) {
 							p.startEditingScene(sc.ID, sc.Name)

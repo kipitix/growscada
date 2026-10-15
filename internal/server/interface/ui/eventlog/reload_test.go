@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/server/interface/ui/tagstate"
 )
 
 func TestReloadTargetsFor(t *testing.T) {
@@ -61,5 +62,46 @@ func TestReloadTargetsFor_CoversEveryKnownEvent(t *testing.T) {
 		if ReloadTargetsFor(ev) == (ReloadTargets{}) {
 			t.Errorf("%q reloads nothing", eventType)
 		}
+	}
+}
+
+func TestReloadTargets_WidgetsOf(t *testing.T) {
+	selected, other := uuid.New(), uuid.New()
+
+	for name, tc := range map[string]struct {
+		targets  ReloadTargets
+		selected uuid.UUID
+		want     bool
+	}{
+		"every Scene's":      {ReloadTargets{Widgets: true}, selected, true},
+		"the selected one's": {ReloadTargets{Scene: selected}, selected, true},
+		"another Scene's":    {ReloadTargets{Scene: other}, selected, false},
+		"none selected":      {ReloadTargets{}, uuid.Nil, false},
+		"no Widgets":         {ReloadTargets{Scenes: true}, selected, false},
+	} {
+		if got := tc.targets.WidgetsOf(tc.selected); got != tc.want {
+			t.Errorf("%s: got %v, want %v", name, got, tc.want)
+		}
+	}
+}
+
+func TestApplyToTags(t *testing.T) {
+	id := uuid.New()
+	known := tagstate.Tags{}.Merge(0, []apiv0.TagResponse{{ID: id, Value: "1", Version: 5}})
+	value := func(ts tagstate.Tags) string { tag, _ := ts.Find(id); return tag.Value }
+
+	updated := ApplyToTags(known, apiv0.Event{Type: apiv0.EventTagUpdated, ID: id.String(), Tag: &apiv0.TagResponse{ID: id, Value: "2", Version: 6}})
+	if value(updated) != "2" {
+		t.Errorf("tag_updated: got %q, want its state", value(updated))
+	}
+	if got := ApplyToTags(known, apiv0.Event{Type: apiv0.EventTagUpdated, ID: id.String()}); value(got) != "1" {
+		t.Errorf("tag_updated without a state: got %q, want the Tags as they were", value(got))
+	}
+	forgot := ApplyToTags(updated, apiv0.Event{Type: EventResync})
+	if got := ApplyToTags(forgot, apiv0.Event{Type: apiv0.EventTagUpdated, ID: id.String(), Tag: &apiv0.TagResponse{ID: id, Value: "fresh", Version: 1}}); value(got) != "fresh" {
+		t.Errorf("after a resync: got %q, want a state of the started-over Versions", value(got))
+	}
+	if got := ApplyToTags(known, apiv0.Event{Type: apiv0.EventSceneCreated}); value(got) != "1" {
+		t.Errorf("another event: got %q", value(got))
 	}
 }

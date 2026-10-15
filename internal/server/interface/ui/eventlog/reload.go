@@ -4,6 +4,7 @@ import (
 	"github.com/google/uuid"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/server/interface/ui/tagstate"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -17,6 +18,12 @@ type ReloadTargets struct {
 	// if none. The list of Scenes is not: only scene events and a resync
 	// change it.
 	Scene uuid.UUID
+}
+
+// WidgetsOf reports whether the Widgets of the Scene selected (uuid.Nil: none)
+// are stale: those of any Scene, or of this one.
+func (t ReloadTargets) WidgetsOf(selected uuid.UUID) bool {
+	return t.Widgets || (t.Scene != uuid.Nil && t.Scene == selected)
 }
 
 // AllTargets is every list: what a resync reloads, since the events
@@ -51,4 +58,17 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 		return ReloadTargets{Tags: true}
 	}
 	return ReloadTargets{}
+}
+
+// ApplyToTags returns tags with what ev tells of them by itself: the Tag's new
+// state a tag_updated carries; on a resync, the Versions forgotten, since the
+// server may have gone back. What ev makes stale is ReloadTargetsFor's.
+func ApplyToTags(tags tagstate.Tags, ev apiv0.Event) tagstate.Tags {
+	switch {
+	case ev.Type == apiv0.EventTagUpdated && ev.Tag != nil:
+		return tags.Apply(*ev.Tag)
+	case ev.Type == EventResync:
+		return tags.ForgetVersions()
+	}
+	return tags
 }

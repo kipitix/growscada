@@ -9,13 +9,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
-	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
 // maxEntries is the cap on how many events are kept in the client-side
@@ -27,9 +25,8 @@ const filtersStorageKey = "eventlog:filters"
 
 // ActionServerEvent is the go-app action the Bar fires for every event received
 // from the server's SSE stream; its value is the apiv0.Event. Its Tag, if
-// any, is the state of the Tag the event is about: the Bar drops one that is
-// not. Components that
-// show server data handle it (ctx.Handle) to refresh themselves, so the app
+// any, is the state of the Tag the event is about (apiclient.ParseEvent drops
+// one that is not). Components that show server data handle it (ctx.Handle) to refresh themselves, so the app
 // keeps a single SSE connection.
 const ActionServerEvent = "eventlog.server-event"
 
@@ -182,7 +179,7 @@ func (b *Bar) handleMessage(ctx app.Context, data string) {
 		return
 	}
 	b.addEntry(ev)
-	ctx.NewActionWithValue(ActionServerEvent, withCheckedTag(ev))
+	ctx.NewActionWithValue(ActionServerEvent, ev)
 }
 
 // addEntry logs ev, its id as it came.
@@ -206,16 +203,6 @@ func (b *Bar) addEntry(ev apiv0.Event) {
 	if len(b.entries) > maxEntries {
 		b.entries = b.entries[:maxEntries]
 	}
-}
-
-// withCheckedTag returns ev without its Tag unless the Tag is the one the
-// event is about: one without an ID, or another Tag's, cannot be applied.
-// The modes then reread the Tags instead.
-func withCheckedTag(ev apiv0.Event) apiv0.Event {
-	if ev.Tag != nil && (ev.Tag.ID == uuid.Nil || ev.Tag.ID != uiutil.ParseID(ev.ID)) {
-		ev.Tag = nil
-	}
-	return ev
 }
 
 // handleError responds to the SSE connection's "error" event (dropped

@@ -105,16 +105,25 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 }
 
 // TestAPIEventTypes_UsesEveryContractEventType guards the table from the
-// contract's side: a published name nothing translates to is never sent.
+// contract's side: a published name nothing translates to is never sent, and
+// a name sent that EventTypes does not list is unknown to its readers (the
+// UI logs it raw and reloads nothing).
 func TestAPIEventTypes_UsesEveryContractEventType(t *testing.T) {
+	contract := make(map[string]bool)
+	for _, name := range apiv0.EventTypes() {
+		contract[name] = true
+	}
 	used := make(map[string]bool, len(apiEventTypes))
-	for _, name := range apiEventTypes {
+	for et, name := range apiEventTypes {
 		if used[name] {
 			t.Errorf("%q is the translation of two event types", name)
 		}
 		used[name] = true
+		if !contract[name] {
+			t.Errorf("%s translates to %q, not in apiv0.EventTypes()", et, name)
+		}
 	}
-	for _, name := range apiv0.EventTypes() {
+	for name := range contract {
 		if !used[name] {
 			t.Errorf("contract event type %q is not in apiEventTypes", name)
 		}

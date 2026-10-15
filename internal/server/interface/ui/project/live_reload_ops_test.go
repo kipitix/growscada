@@ -57,11 +57,7 @@ func (f *fixture) event(ev apiv0.Event) {
 
 // selectScene selects the Scene as a click on its tab does.
 func (f *fixture) selectScene(id uuid.UUID) {
-	f.p.selectedSceneID = id
-	uiutil.StoreID(f.p.compoCtx, sceneIDKey, id)
-	f.p.clearWidgetSelection(f.p.compoCtx)
-	f.p.syncSceneEditingFields()
-	f.p.loadWidgets(f.p.compoCtx)
+	f.p.selectScene(f.p.compoCtx, id)
 	f.run()
 }
 
@@ -105,14 +101,15 @@ func TestWidgetEvent_SceneNotShown_RereadsThatSceneOnly(t *testing.T) {
 	}
 }
 
-func TestWidgetEvent_SceneShown_RereadsTheSceneAndItsWidgets(t *testing.T) {
+func TestWidgetEvent_SceneShown_RereadsItsWidgetsOnly(t *testing.T) {
 	f, log, shown, _, typeID := twoScenes(t)
 	widgetID := createWidget(t, f.api, shown, typeID, "w")
 
 	f.event(apiv0.Event{Type: apiv0.EventWidgetCreated, ID: widgetID.String(), SceneID: shown.String()})
 
 	f.noToasts()
-	want := []string{scenePath(shown), scenePath(shown) + "/widgets"}
+	// The Widgets carry the Scene's version.
+	want := []string{scenePath(shown) + "/widgets"}
 	if got := log.take(); !slices.Equal(got, want) {
 		t.Errorf("requests: %v, want %v", got, want)
 	}
@@ -191,5 +188,128 @@ func TestTagUpdated_AppliesTheTagWithoutRereadingTags(t *testing.T) {
 	f.event(apiv0.Event{Type: apiv0.EventTagUpdated, ID: tagID.String()})
 	if got := log.take(); !slices.Equal(got, []string{"GET /api/v0/tags"}) {
 		t.Errorf("requests: %v, want the Tags reread", got)
+	}
+}
+
+func TestSceneReread_RequestedBeforeASave_KeepsTheSave(t *testing.T) {
+	f, _, shown, _, _ := twoScenes(t)
+	stale, mark := f.scene(shown), f.p.markScenes() // a reread answered before the save
+
+	f.p.startEditingScene(shown, "Renamed")
+	f.p.commitSceneEdit(f.p.compoCtx)
+	f.run()
+	f.p.setScene(f.p.compoCtx, mark, stale)
+	f.p.setScenes(f.p.compoCtx, mark, []apiv0.SceneResponse{stale, f.scene(f.p.scenes[1].ID)})
+	f.run()
+
+	f.noToasts()
+	if sc, _ := f.p.findScene(shown); sc.Name != "Renamed" || f.p.editingScenePropsName != "Renamed" {
+		t.Errorf("listed %q, editor %q: want the saved name", sc.Name, f.p.editingScenePropsName)
+	}
+	f.p.editingScenePropsWidth = "640"
+	f.p.saveSceneProperties(f.p.compoCtx)
+	f.run()
+	f.noToasts()
+	if sc := f.scene(shown); sc.Name != "Renamed" || sc.Width != 640 {
+		t.Errorf("server scene: %+v, want the name kept and the new width", sc)
+	}
+}
+
+func TestWidgetEvent_SceneNotListedYet_ItsVersionIsKept(t *testing.T) {
+	f, _, _, _, typeID := twoScenes(t)
+	added := createScene(t, f.api, "C")
+	listed, mark := append(slices.Clone(f.p.scenes), f.scene(added)), f.p.markScenes() // a list read now, answered late
+	widgetID := createWidget(t, f.api, added, typeID, "w")
+	if _, err := f.api.DeleteWidget(context.Background(), added, widgetID); err != nil {
+		t.Fatalf("delete widget: %v", err)
+	}
+
+	f.event(apiv0.Event{Type: apiv0.EventWidgetDeleted, ID: widgetID.String(), SceneID: added.String()})
+	f.p.setScenes(f.p.compoCtx, mark, listed)
+	f.run()
+	f.selectScene(added)
+	f.p.editingScenePropsName = "Renamed"
+	f.p.saveSceneProperties(f.p.compoCtx)
+	f.run()
+
+	f.noToasts()
+	if sc := f.scene(added); sc.Name != "Renamed" {
+		t.Errorf("server scene: %+v, want the edit", sc)
+	}
+}
+
+func TestWidgetEvent_DuringADrag_TheDragDoesNotOverwriteTheChange(t *testing.T) {
+	f, sceneID, widgetID := widgetFixture(t)
+	f.p.draggingWidgetID = widgetID
+	theirs := f.widget(sceneID, widgetID)
+	theirs.Name = "theirs"
+	if _, err := f.api.UpdateWidget(context.Background(), sceneID, widgetID, widgetRequest(theirs, f.scene(sceneID).Version)); err != nil {
+		t.Fatalf("update widget: %v", err)
+	}
+
+	f.event(apiv0.Event{Type: apiv0.EventWidgetUpdated, ID: widgetID.String(), SceneID: sceneID.String()})
+	f.drag(widgetID, 5, 7) // saved with the Widgets shown
+
+	if got := f.oneToast(); got.Status != http.StatusConflict {
+		t.Errorf("toast %+v: want a conflict", got)
+	}
+	if w := f.widget(sceneID, widgetID); w.Name != "theirs" {
+		t.Errorf("server widget: %+v, want the other change kept", w)
+	}
+}
+
+func TestTagUpdated_OfATagDeletedMeanwhile_DoesNotShowIt(t *testing.T) {
+	url, api := newServer(t)
+	tagID := createTag(t, api, "speed", "integer")
+	f, _ := mountLogged(t, url, api)
+	tag, _ := f.p.findTag(tagID)
+	f.p.selectedTagID = tagID
+	f.p.deleteTag(f.p.compoCtx)
+	f.run()
+
+	tag.Value, tag.Version = "42", tag.Version+1 // committed before the delete, delivered after
+	f.event(apiv0.Event{Type: apiv0.EventTagUpdated, ID: tagID.String(), Tag: &tag})
+
+	if _, ok := f.p.findTag(tagID); ok || len(f.p.tags.List()) != 0 {
+		t.Errorf("tags shown: %+v, want none", f.p.tags.List())
+	}
+}
+
+func TestCreateTag_AListSentBefore_KeepsTheSelection(t *testing.T) {
+	f := startProject(t)
+	stale, mark, n := f.p.tags.List(), f.p.tags.Mark(), f.p.tagLists+1 // a list in flight
+	f.p.tagLists = n
+
+	f.p.newTagName, f.p.newTagType = "pump.on", "boolean"
+	f.p.createTag(f.p.compoCtx)
+	f.run()
+	created := f.p.selectedTagID
+	f.p.setTags(f.p.compoCtx, mark, n, stale)
+
+	if f.p.selectedTagID != created || created == uuid.Nil {
+		t.Errorf("selected %v, want the new Tag %v", f.p.selectedTagID, created)
+	}
+}
+
+func TestWidgetEvents_InSeveralScenesNotShown_RereadTheListOnce(t *testing.T) {
+	f, log, _, other, typeID := twoScenes(t)
+	more := []uuid.UUID{other, createScene(t, f.api, "C"), createScene(t, f.api, "D")}
+	f.p.loadScenes(f.p.compoCtx)
+	f.run()
+	log.take()
+	for _, sceneID := range more { // a WidgetType changed: the Widgets of every Scene using it are reconciled
+		widgetID := createWidget(t, f.api, sceneID, typeID, "w")
+		f.p.compoCtx.NewActionWithValue(eventlog.ActionServerEvent,
+			apiv0.Event{Type: apiv0.EventWidgetCreated, ID: widgetID.String(), SceneID: sceneID.String()})
+	}
+	f.run()
+
+	f.noToasts()
+	// The first Scene is reread by itself; the others, marked meanwhile, with the list.
+	if got, want := log.take(), []string{"GET /api/v0/scenes", scenePath(more[0])}; !slices.Equal(got, want) {
+		t.Errorf("requests: %v, want %v", got, want)
+	}
+	for _, sceneID := range more {
+		f.knowsSceneVersion(sceneID)
 	}
 }

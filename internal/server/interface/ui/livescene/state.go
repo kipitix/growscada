@@ -22,11 +22,11 @@ func boundTag(w apiv0.WidgetResponse, port string, tags map[uuid.UUID]apiv0.TagR
 // SceneTags returns the Tags bound to the Widgets' PortBindings: all a View
 // of these Widgets reads. Given to the View instead of every Tag, it keeps the
 // View from re-rendering when a Tag shown elsewhere changes.
-func SceneTags(widgets []apiv0.WidgetResponse, tags map[uuid.UUID]apiv0.TagResponse) map[uuid.UUID]apiv0.TagResponse {
+func SceneTags(widgets []apiv0.WidgetResponse, find func(uuid.UUID) (apiv0.TagResponse, bool)) map[uuid.UUID]apiv0.TagResponse {
 	bound := make(map[uuid.UUID]apiv0.TagResponse)
 	for _, w := range widgets {
 		for _, b := range w.PortBindings {
-			if t, ok := tags[b.TagID]; ok {
+			if t, ok := find(b.TagID); ok {
 				bound[b.TagID] = t
 			}
 		}

@@ -129,6 +129,14 @@ func TestWorst(t *testing.T) {
 	}
 }
 
+// findIn finds a Tag in tags, as tagstate.Tags.Find does.
+func findIn(tags map[uuid.UUID]apiv0.TagResponse) func(uuid.UUID) (apiv0.TagResponse, bool) {
+	return func(id uuid.UUID) (apiv0.TagResponse, bool) {
+		t, ok := tags[id]
+		return t, ok
+	}
+}
+
 func TestSceneTags_KeepsOnlyBoundTags(t *testing.T) {
 	tags := tagsOf(tag("t-speed", "integer", "42", "good"), tag("t-other", "integer", "1", "good"))
 	widgets := []apiv0.WidgetResponse{
@@ -136,7 +144,7 @@ func TestSceneTags_KeepsOnlyBoundTags(t *testing.T) {
 		testWidget(bind("on", "t-deleted")),
 	}
 
-	got := SceneTags(widgets, tags)
+	got := SceneTags(widgets, findIn(tags))
 
 	if len(got) != 1 || got[id("t-speed")].Value != "42" {
 		t.Errorf("want only the existing bound Tag, got %+v", got)
@@ -145,7 +153,7 @@ func TestSceneTags_KeepsOnlyBoundTags(t *testing.T) {
 	// A change of an unbound Tag must leave the result equal, so the View is
 	// not re-rendered.
 	tags[id("t-other")] = tag("t-other", "integer", "2", "good")
-	if again := SceneTags(widgets, tags); !reflect.DeepEqual(again, got) {
+	if again := SceneTags(widgets, findIn(tags)); !reflect.DeepEqual(again, got) {
 		t.Errorf("an unbound Tag changed the result: %+v vs %+v", again, got)
 	}
 }

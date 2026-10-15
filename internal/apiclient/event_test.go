@@ -45,3 +45,23 @@ func TestParseEvent_ReadsTheSceneOfAWidget(t *testing.T) {
 		t.Errorf("a widget event without scene_id: got %+v, %v", ev, ok)
 	}
 }
+
+func TestParseEvent_KeepsOnlyTheTagTheEventIsAbout(t *testing.T) {
+	const tagID = "00000000-0000-0000-0000-000000000001"
+	tag := func(id string) string {
+		return `{"type":"tag_updated","timestamp":"t","id":"` + tagID + `","tag":{"id":"` + id + `","value":"42","version":3}}`
+	}
+
+	if ev, ok := apiclient.ParseEvent(tag(tagID)); !ok || ev.Tag == nil || ev.Tag.Value != "42" {
+		t.Errorf("the Tag the event is about: got %+v, %v", ev, ok)
+	}
+	for name, id := range map[string]string{
+		"another Tag's":  "00000000-0000-0000-0000-000000000002",
+		"one without ID": "00000000-0000-0000-0000-000000000000",
+	} {
+		ev, ok := apiclient.ParseEvent(tag(id))
+		if !ok || ev.Type != "tag_updated" || ev.Timestamp != "t" || ev.ID != tagID || ev.Tag != nil {
+			t.Errorf("%s: got %+v, %v; want the event without it", name, ev, ok)
+		}
+	}
+}

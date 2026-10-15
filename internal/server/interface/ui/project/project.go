@@ -42,25 +42,36 @@ type Project struct {
 	tags        tagstate.Tags
 	// sceneVersions holds the version each write of a Scene or its Widgets
 	// states; the Version and SceneVersion of the lists above are not read.
+	// The selected Scene's is learned with its Widgets (observeSceneVersion).
 	sceneVersions uiutil.Versions
+	// sceneStates holds the version of each Scene's properties in p.scenes:
+	// a reread replaces them only with a newer state (sceneVersions also
+	// follows the Widgets' changes, which leave the properties as they are).
+	sceneStates uiutil.Versions
 
 	// Coalesce reloads of each server-backed list (see live_reload.go).
 	widgetTypesReloader uiutil.Reloader
 	scenesReloader      uiutil.Reloader
 	widgetsReloader     uiutil.Reloader
 	tagsReloader        uiutil.Reloader
-	// sceneReloaders coalesce the reloads of one Scene each (loadScene); an
-	// entry lives while its load runs.
-	sceneReloaders map[uuid.UUID]*uiutil.Reloader
+	// staleScenes are the Scenes to reread (loadScene) once the reread in
+	// flight on staleScenesReloader is done.
+	staleScenes         map[uuid.UUID]struct{}
+	staleScenesReloader uiutil.Reloader
 	// widgetsReloadDeferred is set when a widget reload arrives mid-drag; it
 	// runs once the drag ends so the canvas does not jump under the cursor.
 	widgetsReloadDeferred bool
 
 	// ── Tags sub-tab state ──────────────────────────────────────────────────
 	selectedTagID uuid.UUID
-	creatingTag   bool
-	newTagName    string
-	newTagType    string
+	// tagLists numbers the requests of the Tag list; one numbered up to
+	// tagCreated was sent before the selected Tag was created and does not
+	// hold it.
+	tagLists, tagCreated uint64
+
+	creatingTag bool
+	newTagName  string
+	newTagType  string
 
 	selectedSceneID  uuid.UUID
 	selectedWidgetID uuid.UUID

@@ -25,8 +25,8 @@ Status: ready-for-agent
 
 ## Разбор на клиенте
 
-- `apiclient.ParseEvent(data string) (apiv0.Event, bool)`: один проход в типы контракта — структура со встроенным `apiv0.Event` и `tag json.RawMessage`; ошибка разбора `tag` обнуляет только `Tag`, остальные поля сохраняются без перечисления вручную. Невалидный JSON, скаляр не той формы, пустой `type` → `false`. `TestParseEvent_ReadsTolerantly` переезжает в apiclient и дополняется случаями со `scene_id`.
-- `eventlog.Bar.handleMessage`: `ParseEvent` → запись журнала из того же `apiv0.Event` (id как пришёл) → обнуление `Tag`, если его ID нулевой или не совпадает с `id` события → `ActionServerEvent` со значением `apiv0.Event`. Resync — `apiv0.Event{Type: EventResync}`. `ServerEvent`, `parseEvent` и конверт удаляются.
+- `apiclient.ParseEvent(data string) (apiv0.Event, bool)`: один проход в типы контракта — структура со встроенным `apiv0.Event` и `tag json.RawMessage`; ошибка разбора `tag` обнуляет только `Tag`, остальные поля сохраняются без перечисления вручную. `tag` с нулевым ID или не совпадающим с `id` события тоже обнуляется. Невалидный JSON, скаляр не той формы, пустой `type` → `false`. `TestParseEvent_ReadsTolerantly` переезжает в apiclient и дополняется случаями со `scene_id`.
+- `eventlog.Bar.handleMessage`: `ParseEvent` → запись журнала из того же `apiv0.Event` (id как пришёл) → `ActionServerEvent` со значением `apiv0.Event`. Resync — `apiv0.Event{Type: EventResync}`. `ServerEvent`, `parseEvent` и конверт удаляются.
 - Режимы работают с `apiv0.Event` и константами `apiv0`, своих строк типов нет. `system_ready` добавляется в `eventTypeInfoByType` (`categoryOther`, без перечитывания).
 - `EventResync` — синтетический тип UI; тест проверяет, что его нет среди `apiv0.EventTypes()`.
 
@@ -34,7 +34,7 @@ Status: ready-for-agent
 
 - `eventlog.ReloadTargetsFor(ev apiv0.Event)`; `ReloadTargets` получает поле `Scene uuid.UUID` — одна Scene, чьё состояние и Widgets устарели. Это единственное место, где разбирается `scene_id` (`uiutil.ParseID`). `widget_*` → `{Scene: X}`; без `scene_id` или с неразборчивым — фолбэк `{Scenes, Widgets}`.
 - `tag_updated` с телом тега → пустые `ReloadTargets`, режимы применяют тег сами; без тела → `{Tags}`. Тест «каждый тип что-то перечитывает» получает для этого случая исключение.
-- **Project** на `{Scene: X}`: `GET /scenes/X` (`apiclient.GetScene`, свой Reloader с ключом по Scene), ответ вливается в `p.scenes` (Observe версии в `sceneVersions`, merge редактора свойств); виджеты перечитываются, только если X выбрана. 404 и X, которой нет в `p.scenes`, молча игнорируются: состав списка меняют только `scene_*` и resync.
+- **Project** на `{Scene: X}`: невыбранная X — `GET /scenes/X` (`apiclient.GetScene`; Scene, отмеченные, пока запрос в полёте, ждут его, и если их несколько — перечитывается список `GET /scenes`), ответ вливается в `p.scenes`, если он новее записи (merge редактора свойств), версия — в `sceneVersions`; выбранная X — только её виджеты: версию выбранной Scene дают виджеты, чтобы она не обгоняла показанные (отложенные на drag) виджеты. 404 и X, которой нет в `p.scenes`, молча игнорируются: состав списка меняют только `scene_*` и resync.
 - **Operation** на `{Scene: X}`: виджеты, только если X выбрана; список Scene не перечитывается.
 - **`tag_updated`**: `applyTagUpdate`, `mergeTags`, `forgetVersions` переезжают из `operation/state.go` в общий ui-пакет (рабочее имя `ui/tagstate`, map + упорядоченный срез для показа) с правилом «побеждает большая Version». Project применяет тег из события к списку и панели свойств, Operation — как сейчас; оба сливают загруженный список по тому же правилу и забывают версии на resync.
 
@@ -44,11 +44,11 @@ Status: ready-for-agent
 
 ## Приёмка
 
-- Юнит-тесты: `apiclient.ParseEvent`, `newAPIEvent` (полнота по `AllEventTypes`), `ReloadTargetsFor` (Scene, фолбэк, `tag_updated`), `tagstate`, проверка тела тега в Bar.
+- Юнит-тесты: `apiclient.ParseEvent`, `newAPIEvent` (полнота по `AllEventTypes`), `ReloadTargetsFor` (Scene, фолбэк, `tag_updated`), `tagstate`.
 - Тест сверяет константы контракта с `eventTypeInfoByType`.
 - uitest Project с подсчётом запросов через `http.Client` в `mountWith`:
   - событие Widget в невыбранной Scene → только `GET /scenes/X`;
-  - в выбранной → `GET /scenes/X` и её виджеты;
+  - в выбранной → только её виджеты (они несут версию Scene; без виджетов — ещё `GET /scenes/X`);
   - после удаления последнего Widget невыбранной Scene правка её свойств проходит без 409;
   - `tag_updated` не вызывает `GET /tags`.
 - В браузере по сетевым запросам: изменение Widget в одной Scene не перечитывает остальные Scene; с `make run_simulator_dashboard` Project не перечитывает теги на каждое значение.

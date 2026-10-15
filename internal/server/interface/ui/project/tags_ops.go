@@ -24,6 +24,7 @@ func (p *Project) createTag(ctx app.Context) {
 		p.newTagName = ""
 		p.newTagType = ""
 		p.selectedTagID = created.ID
+		p.tagCreated = p.tagLists
 		uiutil.StoreID(ctx, tagIDKey, created.ID)
 		p.loadTags(ctx)
 	}, nil)

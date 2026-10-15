@@ -3,13 +3,17 @@ package apiclient
 import (
 	"encoding/json"
 
+	"github.com/google/uuid"
+
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
 
 // ParseEvent reads the data of one message of the event stream (GET
 // /events) as an apiv0.Event, tolerantly (ADR 0005): fields it does not know
 // are skipped, and a Tag that does not fit apiv0.TagResponse is dropped
-// rather than the whole event, so the event's other fields are kept. Data
+// rather than the whole event, so the event's other fields are kept. So is a
+// Tag that is not the one the event is about (without an ID, or another
+// Tag's): a reader applies ev.Tag as the new state of the Tag ev.ID. Data
 // that is not a JSON object, a known field of another shape, or an event
 // without a type is no event: ok is false.
 func ParseEvent(data string) (ev apiv0.Event, ok bool) {
@@ -24,7 +28,7 @@ func ParseEvent(data string) (ev apiv0.Event, ok bool) {
 	ev = msg.Event
 	if len(msg.Tag) > 0 {
 		var t *apiv0.TagResponse
-		if json.Unmarshal(msg.Tag, &t) == nil {
+		if json.Unmarshal(msg.Tag, &t) == nil && t != nil && t.ID != uuid.Nil && t.ID.String() == ev.ID {
 			ev.Tag = t
 		}
 	}

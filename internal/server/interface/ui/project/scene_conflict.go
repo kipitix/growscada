@@ -21,16 +21,19 @@ import (
 // the edit; it does not reapply it. The Scene's known version is forgotten
 // first: if the server's went back, a newer one kept here would be rejected
 // forever. The other Scenes' versions stay, so their edits go on meanwhile.
+// Any failure also leaves the Scene's properties in the list as the edit put
+// them, at a version the server holds other ones: the reread replaces them.
 func (p *Project) showRejectedSceneEdit(ctx app.Context, sceneID uuid.UUID, err error, reload func(app.Context)) {
 	prob := toast.FromError(err)
 	if errors.Is(err, apiclient.ErrConflict) {
 		ctx.NewActionWithValue(toast.ActionAdd, sceneConflictProblem(prob))
-		p.sceneVersions.ForgetID(sceneID)
+		p.forgetSceneVersion(sceneID)
 		p.loadScenes(ctx)
 		p.loadWidgets(ctx)
 		return
 	}
 	ctx.NewActionWithValue(toast.ActionAdd, prob)
+	p.sceneStates.ForgetID(sceneID)
 	if reload != nil {
 		reload(ctx)
 	}

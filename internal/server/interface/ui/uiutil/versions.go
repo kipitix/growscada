@@ -39,15 +39,27 @@ func (v *Versions) Mark() Mark {
 // Observe records version of id, stated by the response to the request sent
 // at m, if it is newer than the known one and id was not forgotten since m.
 func (v *Versions) Observe(m Mark, id uuid.UUID, version int) {
-	if uint64(m) < v.forgotAll || uint64(m) < v.forgotID[id] {
-		return
+	v.Advance(m, id, version)
+}
+
+// Advance is Observe reporting whether it recorded version: whether the
+// response states a newer state of id than any known, so a copy of that state
+// kept along with the version is to be replaced by the response's.
+func (v *Versions) Advance(m Mark, id uuid.UUID, version int) bool {
+	if v.Forgotten(m, id) || version <= v.known[id] {
+		return false
 	}
-	if version > v.known[id] {
-		if v.known == nil {
-			v.known = make(map[uuid.UUID]int)
-		}
-		v.known[id] = version
+	if v.known == nil {
+		v.known = make(map[uuid.UUID]int)
 	}
+	v.known[id] = version
+	return true
+}
+
+// Forgotten reports whether the version of id was forgotten since m: the
+// response to a request sent at m may state the server's old one.
+func (v *Versions) Forgotten(m Mark, id uuid.UUID) bool {
+	return uint64(m) < v.forgotAll || uint64(m) < v.forgotID[id]
 }
 
 // Of returns the known version of id; 0 if none is known.

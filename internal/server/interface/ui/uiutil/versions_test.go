@@ -83,3 +83,27 @@ func TestVersions_ResponseSentBeforeAForgetIsDropped(t *testing.T) {
 		t.Errorf("b: got %d, want 4", got)
 	}
 }
+
+func TestVersions_AdvanceReportsANewerState(t *testing.T) {
+	id := uuid.New()
+	var v Versions
+	m := v.Mark()
+
+	if !v.Advance(m, id, 2) {
+		t.Error("first version: not advanced")
+	}
+	if v.Advance(m, id, 2) {
+		t.Error("the same version: advanced")
+	}
+	if v.Advance(m, id, 1) {
+		t.Error("an older version: advanced")
+	}
+
+	v.ForgetID(id)
+	if v.Advance(m, id, 9) {
+		t.Error("a response sent before the forget: advanced")
+	}
+	if !v.Advance(v.Mark(), id, 1) {
+		t.Error("after the forget: not advanced")
+	}
+}

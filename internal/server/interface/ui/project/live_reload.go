@@ -13,6 +13,7 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
+	"github.com/kipitix/growscada/internal/server/interface/ui/tagstate"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -31,13 +32,11 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 		if !ok {
 			return
 		}
-		if ev.Type == apiv0.EventTagUpdated && ev.Tag != nil {
-			p.tags = p.tags.Apply(*ev.Tag)
-		}
+		p.tags = eventlog.ApplyToTags(p.tags, ev)
 		if ev.Type == eventlog.EventResync {
 			// Events were lost: the server may have gone back.
 			p.sceneVersions.Forget()
-			p.tags = p.tags.ForgetVersions()
+			p.sceneStates.Forget()
 		}
 		targets := eventlog.ReloadTargetsFor(ev)
 		if targets.WidgetTypes {
@@ -46,11 +45,13 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 		if targets.Scenes {
 			p.loadScenes(ctx)
 		}
-		if targets.Scene != uuid.Nil {
-			p.loadScene(ctx, targets.Scene)
-		}
-		if targets.Widgets || (targets.Scene != uuid.Nil && targets.Scene == p.selectedSceneID) {
+		// The selected Scene's Widgets carry its version (and its own state
+		// does not change with theirs); another Scene is reread for it.
+		switch {
+		case targets.WidgetsOf(p.selectedSceneID):
 			p.loadWidgets(ctx)
+		case targets.Scene != uuid.Nil:
+			p.loadScene(ctx, targets.Scene)
 		}
 		if targets.Tags {
 			p.loadTags(ctx)
@@ -69,23 +70,34 @@ func (p *Project) loadWidgetTypes(ctx app.Context) {
 // ── Scenes ────────────────────────────────────────────────────────────────────
 
 func (p *Project) loadScenes(ctx app.Context) {
-	mark := p.sceneVersions.Mark()
+	mark := p.markScenes()
 	uiutil.Load(p.compoCtx, &p.scenesReloader, p.client.ListScenes, func(ctx app.Context, scenes []apiv0.SceneResponse) {
 		p.setScenes(ctx, mark, scenes)
 	}, p.loadScenes)
 }
 
 // setScenes replaces the scene list, keeps a valid selection (falling back to
-// the first scene) and merges the scene properties editor. mark is the moment
-// the list was requested.
-func (p *Project) setScenes(ctx app.Context, mark uiutil.Mark, scenes []apiv0.SceneResponse) {
+// the first scene) and merges the scene properties editor. The list decides
+// which Scenes there are; a Scene's state held is kept unless the list's is
+// newer (it may have been read before a save of it). mark is the moment the
+// list was requested.
+func (p *Project) setScenes(ctx app.Context, mark sceneMark, scenes []apiv0.SceneResponse) {
 	old, known := p.findScene(p.selectedSceneID)
 	prevSceneID := p.selectedSceneID
 
-	for _, sc := range scenes {
-		p.sceneVersions.Observe(mark, sc.ID, sc.Version)
+	merged := make([]apiv0.SceneResponse, len(scenes))
+	for i, sc := range scenes {
+		if !p.sceneStates.Advance(mark.states, sc.ID, sc.Version) {
+			if cur, ok := p.findScene(sc.ID); ok {
+				sc = cur
+			}
+		}
+		merged[i] = sc
 	}
-	p.scenes = scenes
+	p.scenes = merged
+	for _, sc := range scenes {
+		p.observeSceneVersion(ctx, mark.versions, sc.ID, sc.Version)
+	}
 
 	if _, exists := p.findScene(p.selectedSceneID); p.selectedSceneID != uuid.Nil && !exists {
 		p.selectedSceneID = uuid.Nil
@@ -109,51 +121,62 @@ func (p *Project) setScenes(ctx app.Context, mark uiutil.Mark, scenes []apiv0.Sc
 	}
 }
 
-// loadScene rereads the Scene sceneID, whose own state a change of one of its
-// Widgets made stale (its version), and puts it in place in the list. Only
-// scene events and a resync change which Scenes the list holds: a Scene not
-// in it, or gone meanwhile (404), is left alone.
+// loadScene rereads the Scene sceneID, whose version a change of one of its
+// Widgets made stale (loadStaleScenes).
 func (p *Project) loadScene(ctx app.Context, sceneID uuid.UUID) {
-	if p.sceneReloaders == nil {
-		p.sceneReloaders = make(map[uuid.UUID]*uiutil.Reloader)
+	if p.staleScenes == nil {
+		p.staleScenes = make(map[uuid.UUID]struct{})
 	}
-	r, ok := p.sceneReloaders[sceneID]
-	if !ok {
-		r = &uiutil.Reloader{}
-		p.sceneReloaders[sceneID] = r
-	}
-	if !r.Start() {
-		return
-	}
-	mark := p.sceneVersions.Mark()
-	uiutil.Do(p.compoCtx, func(c context.Context) (apiv0.SceneResponse, error) {
-		return p.client.GetScene(c, sceneID)
-	}, func(ctx app.Context, sc apiv0.SceneResponse, err error) {
-		rerun := r.Done()
-		switch {
-		case errors.Is(err, apiclient.ErrNotFound):
-		case err != nil:
-			uiutil.ShowError(ctx, err)
-		default:
-			p.setScene(mark, sc)
-		}
-		if rerun {
-			p.loadScene(ctx, sceneID)
-			return
-		}
-		delete(p.sceneReloaders, sceneID)
-	})
+	p.staleScenes[sceneID] = struct{}{}
+	p.loadStaleScenes(ctx)
 }
 
-// setScene puts the reread Scene sc in place in the list, if the list holds
-// it, and merges the scene properties editor when it is the selected one.
-// mark is the moment it was requested.
-func (p *Project) setScene(mark uiutil.Mark, sc apiv0.SceneResponse) {
-	i := uiutil.IdxByID(p.scenes, sc.ID, uiutil.SceneID)
-	if i < 0 {
+// loadStaleScenes rereads the stale Scenes, one request at a time; those
+// marked meanwhile wait for it. One Scene is reread by itself and put in
+// place in the list: only scene events and a resync change which Scenes the
+// list holds, so a Scene not in it gives its version alone, one gone
+// meanwhile (404) nothing. Several (a changed WidgetType reconciles every
+// Scene using it) are reread with the list, in turn with its other loads.
+func (p *Project) loadStaleScenes(ctx app.Context) {
+	if p.staleScenesReloader.Loading() {
+		p.staleScenesReloader.Start() // queues a rerun
 		return
 	}
-	p.sceneVersions.Observe(mark, sc.ID, sc.Version)
+	if len(p.staleScenes) > 1 {
+		clear(p.staleScenes)
+		p.loadScenes(ctx)
+		return
+	}
+	var sceneID uuid.UUID
+	for sceneID = range p.staleScenes {
+	}
+	if sceneID == uuid.Nil {
+		return
+	}
+	clear(p.staleScenes)
+	mark := p.markScenes()
+	uiutil.Load(p.compoCtx, &p.staleScenesReloader, func(c context.Context) (*apiv0.SceneResponse, error) {
+		sc, err := p.client.GetScene(c, sceneID)
+		if errors.Is(err, apiclient.ErrNotFound) {
+			return nil, nil
+		}
+		return &sc, err
+	}, func(ctx app.Context, sc *apiv0.SceneResponse) {
+		if sc != nil {
+			p.setScene(ctx, mark, *sc)
+		}
+	}, p.loadStaleScenes)
+}
+
+// setScene records the version of the reread Scene sc and, if the list holds
+// an older state of it, puts sc in its place and merges the scene properties
+// editor when it is the selected one. mark is the moment it was requested.
+func (p *Project) setScene(ctx app.Context, mark sceneMark, sc apiv0.SceneResponse) {
+	p.observeSceneVersion(ctx, mark.versions, sc.ID, sc.Version)
+	i := uiutil.IdxByID(p.scenes, sc.ID, uiutil.SceneID)
+	if i < 0 || !p.sceneStates.Advance(mark.states, sc.ID, sc.Version) {
+		return
+	}
 	old := p.scenes[i]
 	scenes := slices.Clone(p.scenes)
 	scenes[i] = sc
@@ -161,6 +184,37 @@ func (p *Project) setScene(mark uiutil.Mark, sc apiv0.SceneResponse) {
 	if sc.ID == p.selectedSceneID {
 		p.mergeSceneEditingFields(old, sc)
 	}
+}
+
+// sceneMark is the moment a request of Scenes was sent, for both
+// sceneVersions and sceneStates.
+type sceneMark struct{ versions, states uiutil.Mark }
+
+func (p *Project) markScenes() sceneMark {
+	return sceneMark{versions: p.sceneVersions.Mark(), states: p.sceneStates.Mark()}
+}
+
+// observeSceneVersion records version of the Scene id, stated by a response
+// to a request sent at mark that does not carry its Widgets. A write of the
+// selected Scene's Widgets states the version they are shown at, so while
+// some are shown it is taken from them alone: a newer version rereads them
+// (after a drag, see loadWidgets) instead of being recorded over the Widgets
+// it would overwrite.
+func (p *Project) observeSceneVersion(ctx app.Context, mark uiutil.Mark, id uuid.UUID, version int) {
+	if id == p.selectedSceneID && len(p.widgets) > 0 && p.widgets[0].SceneID == id {
+		if version > p.sceneVersions.Of(id) {
+			p.loadWidgets(ctx)
+		}
+		return
+	}
+	p.sceneVersions.Observe(mark, id, version)
+}
+
+// forgetSceneVersion forgets what is known of the Scene id's version, which
+// the server may have taken back.
+func (p *Project) forgetSceneVersion(id uuid.UUID) {
+	p.sceneVersions.ForgetID(id)
+	p.sceneStates.ForgetID(id)
 }
 
 // mergeSceneEditingFields updates each scene property field that still holds
@@ -209,9 +263,13 @@ func (p *Project) setWidgets(ctx app.Context, mark uiutil.Mark, sceneID uuid.UUI
 	old, known := p.findWidget(p.selectedWidgetID)
 	p.widgets = widgets
 
-	// Widgets carry their Scene's version.
+	// Widgets carry their Scene's version; with none, the Scene is reread
+	// for it.
 	for _, w := range widgets {
 		p.sceneVersions.Observe(mark, sceneID, w.SceneVersion)
+	}
+	if len(widgets) == 0 {
+		p.loadScene(ctx, sceneID)
 	}
 
 	if p.selectedWidgetID == uuid.Nil {
@@ -302,14 +360,21 @@ func mergeEditFields(local, old, current widgetEditFields) widgetEditFields {
 // ── Tags ──────────────────────────────────────────────────────────────────────
 
 func (p *Project) loadTags(ctx app.Context) {
-	uiutil.Load(p.compoCtx, &p.tagsReloader, p.client.ListTags, p.setTags, p.loadTags)
+	mark := p.tags.Mark()
+	p.tagLists++
+	n := p.tagLists
+	uiutil.Load(p.compoCtx, &p.tagsReloader, p.client.ListTags, func(ctx app.Context, tags []apiv0.TagResponse) {
+		p.setTags(ctx, mark, n, tags)
+	}, p.loadTags)
 }
 
 // setTags merges the loaded tag list into the known Tags (a newer state from
-// a tag_updated wins) and drops the selection if its tag is gone.
-func (p *Project) setTags(ctx app.Context, tags []apiv0.TagResponse) {
-	p.tags = p.tags.Merge(tags)
-	if _, ok := p.tags.Find(p.selectedTagID); ok || p.selectedTagID == uuid.Nil {
+// a tag_updated wins) and drops the selection if its tag is gone. mark is the
+// moment the list was requested, n its number (tagLists): a list sent before
+// the selected Tag was created leaves the selection to the next one.
+func (p *Project) setTags(ctx app.Context, mark tagstate.Mark, n uint64, tags []apiv0.TagResponse) {
+	p.tags = p.tags.Merge(mark, tags)
+	if _, ok := p.tags.Find(p.selectedTagID); ok || p.selectedTagID == uuid.Nil || n <= p.tagCreated {
 		return
 	}
 	p.selectedTagID = uuid.Nil

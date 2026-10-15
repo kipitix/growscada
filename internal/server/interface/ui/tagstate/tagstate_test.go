@@ -29,7 +29,7 @@ func value(ts Tags, name string) string {
 }
 
 func TestApply(t *testing.T) {
-	tags := Tags{}.Merge([]apiv0.TagResponse{tagV("t1", "1", 5), tagV("t0", "0", 1)})
+	tags := Tags{}.Merge(0, []apiv0.TagResponse{tagV("t1", "1", 5), tagV("t0", "0", 1)})
 
 	got := tags.Apply(tagV("t1", "2", 6))
 	if value(got, "t1") != "2" || got.List()[0].Value != "2" {
@@ -44,20 +44,29 @@ func TestApply(t *testing.T) {
 	if got := tags.Apply(tagV("t1", "9", 5)); value(got, "t1") != "1" {
 		t.Errorf("the same Version must be ignored, got %+v", got.List())
 	}
-	got = tags.Apply(tagV("t2", "3", 1))
-	if value(got, "t2") != "3" || len(got.ByID()) != 3 {
-		t.Errorf("an unknown Tag must be added, got %+v", got.List())
+}
+
+func TestApply_UnlistedTag_ShowsOnlyWhenAListHoldsIt(t *testing.T) {
+	tags := Tags{}.Merge(0, []apiv0.TagResponse{tagV("t1", "1", 5)})
+
+	got := tags.Apply(tagV("t2", "event", 4)).Apply(tagV("t2", "older", 3))
+	if _, ok := got.Find(id("t2")); ok || len(got.List()) != 1 {
+		t.Errorf("an event must not show a Tag the list does not hold, got %+v", got.List())
 	}
-	if n := names(got); len(n) != 3 || n[0] != "t1" || n[1] != "t0" || n[2] != "t2" {
-		t.Errorf("an unknown Tag must come after the loaded ones, got %v", n)
+	if listed := got.Merge(got.Mark(), []apiv0.TagResponse{tagV("t1", "1", 5), tagV("t2", "list", 2)}); value(listed, "t2") != "event" {
+		t.Errorf("a list read before the event must take its state, got %+v", listed.List())
 	}
-	if got := (Tags{}).Apply(tagV("t1", "1", 1)); value(got, "t1") != "1" {
-		t.Errorf("the zero value must take a Tag, got %+v", got.List())
+	gone := got.Merge(got.Mark(), []apiv0.TagResponse{tagV("t1", "1", 5)})
+	if _, ok := gone.Find(id("t2")); ok {
+		t.Error("a Tag the list does not hold must stay unshown")
+	}
+	if relisted := gone.Merge(gone.Mark(), []apiv0.TagResponse{tagV("t2", "list", 2)}); value(relisted, "t2") != "list" {
+		t.Errorf("a list consumes the events' states, got %+v", relisted.List())
 	}
 }
 
 func TestMerge(t *testing.T) {
-	known := Tags{}.Merge([]apiv0.TagResponse{
+	known := Tags{}.Merge(0, []apiv0.TagResponse{
 		tagV("newer", "event", 10),
 		tagV("older", "stale", 1),
 		tagV("deleted", "x", 1),
@@ -68,7 +77,7 @@ func TestMerge(t *testing.T) {
 		tagV("newer", "list", 9),
 	}
 
-	got := known.Merge(loaded)
+	got := known.Merge(known.Mark(), loaded)
 
 	if value(got, "newer") != "event" {
 		t.Errorf("a list read before the event must not roll the value back, got %+v", got.List())
@@ -89,7 +98,7 @@ func TestMerge(t *testing.T) {
 
 func TestForgetVersions_FreshStateWinsAfterVersionsStartOver(t *testing.T) {
 	// Seen before the server was restarted with a fresh database.
-	known := Tags{}.Merge([]apiv0.TagResponse{tagV("t1", "old", 500)})
+	known := Tags{}.Merge(0, []apiv0.TagResponse{tagV("t1", "old", 500)})
 
 	forgotten := known.ForgetVersions()
 
@@ -99,10 +108,23 @@ func TestForgetVersions_FreshStateWinsAfterVersionsStartOver(t *testing.T) {
 	if t1, _ := known.Find(id("t1")); t1.Version != 500 {
 		t.Error("the receiver must not be modified")
 	}
-	if got := forgotten.Merge([]apiv0.TagResponse{tagV("t1", "list", 3)}); value(got, "t1") != "list" {
+	if got := forgotten.Merge(forgotten.Mark(), []apiv0.TagResponse{tagV("t1", "list", 3)}); value(got, "t1") != "list" {
 		t.Errorf("the reloaded list must win over a forgotten Version, got %+v", got.List())
 	}
 	if got := forgotten.Apply(tagV("t1", "event", 1)); value(got, "t1") != "event" {
 		t.Errorf("an event must win over a forgotten Version, got %+v", got.List())
+	}
+}
+
+func TestMerge_DropsAListRequestedBeforeForgetVersions(t *testing.T) {
+	known := Tags{}.Merge(0, []apiv0.TagResponse{tagV("t1", "old", 500)})
+	mark := known.Mark() // a list requested from the old server
+
+	forgotten := known.ForgetVersions()
+	got := forgotten.Merge(mark, []apiv0.TagResponse{tagV("t1", "stale", 501)})
+	got = got.Merge(got.Mark(), []apiv0.TagResponse{tagV("t1", "fresh", 3)})
+
+	if value(got, "t1") != "fresh" {
+		t.Errorf("the list requested after the forget must win, got %+v", got.List())
 	}
 }

@@ -42,7 +42,8 @@ func (o *Operation) loadWidgets(ctx app.Context) {
 }
 
 func (o *Operation) loadTags(ctx app.Context) {
+	mark := o.tags.Mark()
 	uiutil.Load(o.compoCtx, &o.tagsReloader, o.client.ListTags, func(ctx app.Context, tags []apiv0.TagResponse) {
-		o.tags = o.tags.Merge(tags)
+		o.tags = o.tags.Merge(mark, tags)
 	}, o.loadTags)
 }
