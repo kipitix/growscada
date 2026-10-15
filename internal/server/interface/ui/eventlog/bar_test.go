@@ -1,6 +1,12 @@
 package eventlog
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/google/uuid"
+
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+)
 
 // TestShouldNotifyError guards the fix for the CODE_REVIEW.md finding that
 // EventSource errors were entirely invisible (dead onError field, never
@@ -19,25 +25,21 @@ func TestShouldNotifyError(t *testing.T) {
 	}
 }
 
-func TestParseEvent_ReadsTolerantly(t *testing.T) {
-	ev, ok := parseEvent(`{"type":"tag_updated","timestamp":"2026-10-13T10:00:00Z",
-		"id":"00000000-0000-0000-0000-000000000001","origin":"device",
-		"tag":{"id":"00000000-0000-0000-0000-000000000001","name":"speed","type":"integer",
-		"value":"42","quality":"good","version":3,"unit":"rpm"}}`)
-	if !ok || ev.Type != "tag_updated" || ev.Tag == nil || ev.Tag.Value != "42" || ev.Tag.Version != 3 {
-		t.Fatalf("got %+v, %v", ev, ok)
-	}
+func TestWithCheckedTag(t *testing.T) {
+	tagID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	tag := &apiv0.TagResponse{ID: tagID, Value: "42", Version: 3}
 
-	if ev, ok := parseEvent(`{"type":"scene_created","id":"x"}`); !ok || ev.Tag != nil {
-		t.Errorf("an event without a Tag: got %+v, %v", ev, ok)
+	if got := withCheckedTag(apiv0.Event{Type: apiv0.EventTagUpdated, ID: tagID.String(), Tag: tag}); got.Tag != tag {
+		t.Errorf("the Tag the event is about must be kept, got %+v", got)
 	}
-	ev, ok = parseEvent(`{"type":"tag_updated","id":"x","tag":{"id":"","version":"3"}}`)
-	if !ok || ev.Type != "tag_updated" || ev.ID != "x" || ev.Tag != nil {
-		t.Errorf("a Tag that does not fit: got %+v, %v; want the event without it", ev, ok)
+	if got := withCheckedTag(apiv0.Event{Type: apiv0.EventTagUpdated, ID: "00000000-0000-0000-0000-000000000002", Tag: tag}); got.Tag != nil {
+		t.Errorf("another Tag must be dropped, got %+v", got.Tag)
 	}
-	for _, bad := range []string{``, `not json`, `{}`, `[]`, `{"type":3}`} {
-		if _, ok := parseEvent(bad); ok {
-			t.Errorf("parseEvent(%q) should fail", bad)
-		}
+	if got := withCheckedTag(apiv0.Event{Type: apiv0.EventTagUpdated, ID: "", Tag: &apiv0.TagResponse{}}); got.Tag != nil {
+		t.Errorf("a Tag without an ID must be dropped, got %+v", got.Tag)
+	}
+	ev := apiv0.Event{Type: apiv0.EventTagUpdated, Timestamp: "ts", ID: "x", Tag: tag}
+	if got := withCheckedTag(ev); got.Type != ev.Type || got.Timestamp != ev.Timestamp || got.ID != ev.ID || got.Tag != nil {
+		t.Errorf("only the Tag may be dropped, got %+v", got)
 	}
 }

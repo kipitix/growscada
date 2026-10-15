@@ -15,6 +15,7 @@ import (
 	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
 	"github.com/kipitix/growscada/internal/server/interface/ui/livescene"
+	"github.com/kipitix/growscada/internal/server/interface/ui/tagstate"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -31,7 +32,7 @@ type Operation struct {
 	scenes      []apiv0.SceneResponse
 	widgetTypes map[uuid.UUID]apiv0.WidgetTypeResponse
 	widgets     []apiv0.WidgetResponse
-	tags        map[uuid.UUID]apiv0.TagResponse
+	tags        tagstate.Tags
 
 	selectedSceneID uuid.UUID
 	// widgetsSceneID is the Scene o.widgets belong to.
@@ -52,7 +53,6 @@ func NewOperation(client *apiclient.Client) *Operation {
 func (o *Operation) OnMount(ctx app.Context) {
 	o.compoCtx = ctx
 	o.widgetTypes = map[uuid.UUID]apiv0.WidgetTypeResponse{}
-	o.tags = map[uuid.UUID]apiv0.TagResponse{}
 	ctx.ObserveState("theme", &o.ThemeMode)
 	ctx.ObserveState(eventlog.StateDisconnected, &o.disconnected)
 	o.selectedSceneID = uiutil.LoadID(ctx, sceneStorageKey)
@@ -60,18 +60,17 @@ func (o *Operation) OnMount(ctx app.Context) {
 	o.reload(ctx, eventlog.AllTargets)
 
 	ctx.Handle(eventlog.ActionServerEvent, func(ctx app.Context, a app.Action) {
-		ev, ok := a.Value.(eventlog.ServerEvent)
+		ev, ok := a.Value.(apiv0.Event)
 		if !ok {
 			return
 		}
-		if ev.Type == "tag_updated" && ev.Tag != nil && ev.Tag.ID != uuid.Nil {
-			o.tags = applyTagUpdate(o.tags, *ev.Tag)
-			return
+		if ev.Type == apiv0.EventTagUpdated && ev.Tag != nil {
+			o.tags = o.tags.Apply(*ev.Tag)
 		}
 		if ev.Type == eventlog.EventResync {
-			o.tags = forgetVersions(o.tags)
+			o.tags = o.tags.ForgetVersions()
 		}
-		o.reload(ctx, eventlog.ReloadTargetsFor(ev.Type))
+		o.reload(ctx, eventlog.ReloadTargetsFor(ev))
 	})
 }
 
@@ -82,7 +81,9 @@ func (o *Operation) reload(ctx app.Context, targets eventlog.ReloadTargets) {
 	if targets.Scenes {
 		o.loadScenes(ctx)
 	}
-	if targets.Widgets {
+	// Only the selected Scene's Widgets are shown; a Scene's own state does
+	// not change with its Widgets'.
+	if targets.Widgets || (targets.Scene != uuid.Nil && targets.Scene == o.selectedSceneID) {
 		o.loadWidgets(ctx)
 	}
 	if targets.Tags {
@@ -174,7 +175,7 @@ func (o *Operation) renderScene() app.UI {
 		Scene:       sc,
 		Widgets:     widgets,
 		WidgetTypes: o.widgetTypes,
-		Tags:        livescene.SceneTags(widgets, o.tags),
+		Tags:        livescene.SceneTags(widgets, o.tags.ByID()),
 		Connected:   !o.disconnected,
 		Theme:       o.ThemeMode,
 	}

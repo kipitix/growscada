@@ -101,12 +101,13 @@ func (p *Project) renderTagListButtons() app.UI {
 }
 
 func (p *Project) renderTagList() app.UI {
-	if len(p.tags) == 0 {
+	tags := p.tags.List()
+	if len(tags) == 0 {
 		return app.Div().Style("font-size", "13px").Style("color", "var(--text-muted)").Text("No tags.")
 	}
 
-	items := make([]app.UI, len(p.tags))
-	for i, t := range p.tags {
+	items := make([]app.UI, len(tags))
+	for i, t := range tags {
 		id := t.ID
 		name := t.Name
 		tagType := t.Type

@@ -61,14 +61,14 @@ func (l *Library) OnMount(ctx app.Context) {
 	l.loadList(ctx)
 
 	ctx.Handle(eventlog.ActionServerEvent, func(ctx app.Context, a app.Action) {
-		ev, ok := a.Value.(eventlog.ServerEvent)
+		ev, ok := a.Value.(apiv0.Event)
 		if !ok {
 			return
 		}
 		if ev.Type == eventlog.EventResync {
 			l.versions.Forget() // events were lost: the server may have gone back
 		}
-		if eventlog.ReloadTargetsFor(ev.Type).WidgetTypes {
+		if eventlog.ReloadTargetsFor(ev).WidgetTypes {
 			l.loadList(ctx)
 		}
 	})

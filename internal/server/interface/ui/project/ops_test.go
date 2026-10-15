@@ -626,8 +626,8 @@ func TestCreateTag_SelectsTheNewTag(t *testing.T) {
 	if err != nil || len(tags) != 1 || tags[0].Name != "pump.on" || tags[0].Type != "boolean" || tags[0].Value != "false" {
 		t.Fatalf("server tags: %+v, %v", tags, err)
 	}
-	if f.p.selectedTagID != tags[0].ID || f.p.creatingTag || len(f.p.tags) != 1 {
-		t.Errorf("selected %v, creating %v, %d tags", f.p.selectedTagID, f.p.creatingTag, len(f.p.tags))
+	if f.p.selectedTagID != tags[0].ID || f.p.creatingTag || len(f.p.tags.List()) != 1 {
+		t.Errorf("selected %v, creating %v, %d tags", f.p.selectedTagID, f.p.creatingTag, len(f.p.tags.List()))
 	}
 }
 
@@ -662,8 +662,8 @@ func TestDeleteTag_RemovesItAndTheSelection(t *testing.T) {
 	if _, err := api.GetTag(context.Background(), tagID); err == nil {
 		t.Error("the tag is still on the server")
 	}
-	if len(f.p.tags) != 0 || f.p.selectedTagID != uuid.Nil {
-		t.Errorf("tags %+v, selected %v: want none", f.p.tags, f.p.selectedTagID)
+	if len(f.p.tags.List()) != 0 || f.p.selectedTagID != uuid.Nil {
+		t.Errorf("tags %+v, selected %v: want none", f.p.tags.List(), f.p.selectedTagID)
 	}
 }
 

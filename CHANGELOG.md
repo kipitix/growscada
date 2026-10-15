@@ -1,5 +1,18 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.39] - 2026-10-15
+
+### Changed
+
+- **События Widget несут SceneID, имена событий — в контракте** (задача 24, ADR 0009)
+  - `contract/api/v0`: `Event.SceneID` (`scene_id`, `omitempty`) — у `widget_created`/`widget_updated`/`widget_deleted`; имена всех 15 типов событий — константы `apiv0.Event…` и `apiv0.EventTypes()`. SchemaVersion API 0.2 → 0.3, схема `schemas/api/0.3.json`
+  - `restapi`: доменное событие переводится в `apiv0.Event` в `newAPIEvent` (`api_event.go`) по явной таблице `event.EventType → apiv0`-имя, а не через `EventType.String()`; `eventSourceID` и `eventTag` удалены. Тест требует образец на каждый тип из `event.AllEventTypes()` и использование каждой константы контракта
+  - `apiclient.ParseEvent`: разбор сообщения SSE в `apiv0.Event` за один проход; неподходящий `tag` отбрасывается, остальные поля сохраняются
+  - UI: режимы получают `apiv0.Event` (`eventlog.ServerEvent` и `parseEvent` удалены), строк типов событий в UI больше нет; Bar отбрасывает `tag` чужого или пустого ID; `system_ready` — в журнале («Server ready»)
+  - `eventlog.ReloadTargetsFor(apiv0.Event)`, поле `ReloadTargets.Scene`: событие Widget перечитывает только свою Scene (`GET /scenes/{id}`) и её виджеты, если она выбрана, — а не весь список Scene; без `scene_id` — прежний фолбэк. Operation список Scene на событие Widget не перечитывает
+  - `tag_updated` с телом тега ничего не перечитывает: Project (список и панель свойств тега), как и Operation, применяет тег сам. Общее состояние тегов — пакет `ui/tagstate` (побеждает большая Version, версии забываются на resync)
+  - Bruno: `get_events.yml` — пример `widget_*` со `scene_id`, `system_ready`
+
 ## [0.0.38] - 2025-10-14
 
 ### Fixed

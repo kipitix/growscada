@@ -556,9 +556,9 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 		typeLabel := uiutil.TypeHintLabel(port.TypeHint)
 
 		// Build tag options filtered by type hint
-		tagOptions := make([]app.UI, 0, len(p.tags)+1)
+		tagOptions := make([]app.UI, 0, len(p.tags.List())+1)
 		tagOptions = append(tagOptions, app.Option().Value("").Selected(currentTagID == uuid.Nil).Text("— unbound —"))
-		for _, t := range p.tags {
+		for _, t := range p.tags.List() {
 			t := t
 			if port.TypeHint != "" && t.Type != port.TypeHint {
 				continue

@@ -11,7 +11,8 @@ http:
 docs: |
   Opens a Server-Sent Events stream of domain events published on the
   server's EventBus (tag/widget/widget-type/scene created/updated/deleted,
-  plus client_connected/client_disconnected). One connection per client, no
+  plus client_connected/client_disconnected and system_ready). The type names
+  are the constants of contract/api/v0. One connection per client, no
   history replay — only events published after connecting are sent.
 
   Bruno sends the request and waits for the response body, so it will hang
@@ -19,6 +20,12 @@ docs: |
   cancel the request manually to inspect what was received so far. Each
   message is a single SSE `data:` line containing JSON:
   `{"type":"tag_created","timestamp":"2026-01-01T12:00:00Z","id":"<uuid>"}`.
+
+  `system_ready` carries no `id`.
+
+  `widget_created`, `widget_updated` and `widget_deleted` additionally carry
+  the ID of the Scene that holds (or held) the Widget in `scene_id`:
+  `{"type":"widget_updated","timestamp":"2026-01-01T12:00:00Z","id":"<widget uuid>","scene_id":"<scene uuid>"}`.
 
   `tag_updated` additionally carries the Tag's full new state in `tag`, in
   the same shape as `GET /api/v0/tags/{id}`, so clients need not read it back:

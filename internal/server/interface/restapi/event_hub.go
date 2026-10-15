@@ -3,14 +3,8 @@ package restapi
 import (
 	"encoding/json"
 	"sync"
-	"time"
 
-	apiv0 "github.com/kipitix/growscada/contract/api/v0"
-	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/event"
-	"github.com/kipitix/growscada/internal/server/domain/library"
-	"github.com/kipitix/growscada/internal/server/domain/scene"
-	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 )
 
@@ -72,12 +66,11 @@ func (h *eventHub) broadcast(e event.Event) {
 	}
 	h.mu.Unlock()
 
-	payload, err := json.Marshal(apiv0.Event{
-		Type:      e.Type().String(),
-		Timestamp: e.Timestamp().Time().Format(time.RFC3339),
-		ID:        eventSourceID(e),
-		Tag:       eventTag(e),
-	})
+	ev := newAPIEvent(e)
+	if ev.Type == "" {
+		return // not published: no name in the API
+	}
+	payload, err := json.Marshal(ev)
 	if err != nil {
 		return
 	}
@@ -126,35 +119,4 @@ func (h *eventHub) removeClient(c *eventClient) {
 		c.closed = true
 		close(c.messages)
 	}
-}
-
-// eventSourceID extracts the identifying UUID carried by a domain event
-// (aggregate ID for domain aggregates, connection ID for client-lifecycle
-// events), if any.
-func eventSourceID(e event.Event) string {
-	switch ev := e.(type) {
-	case tag.TagEvent:
-		return ev.TagID().String()
-	case scene.WidgetEvent:
-		return ev.WidgetID().String()
-	case library.WidgetTypeEvent:
-		return ev.WidgetTypeID().String()
-	case scene.SceneEvent:
-		return ev.SceneID().String()
-	case eventbus.ClientEvent:
-		return ev.ClientID().String()
-	default:
-		return ""
-	}
-}
-
-// eventTag returns the Tag state carried by a tag_updated event, or nil for
-// every other event.
-func eventTag(e event.Event) *apiv0.TagResponse {
-	ev, ok := e.(tag.TagUpdatedEvent)
-	if !ok {
-		return nil
-	}
-	resp := newTagResponse(appdto.NewTag(ev.Tag()))
-	return &resp
 }

@@ -10,6 +10,7 @@ import (
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
+	"github.com/kipitix/growscada/internal/server/interface/ui/tagstate"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -38,7 +39,7 @@ type Project struct {
 	widgetTypes []apiv0.WidgetTypeResponse
 	scenes      []apiv0.SceneResponse
 	widgets     []apiv0.WidgetResponse
-	tags        []apiv0.TagResponse
+	tags        tagstate.Tags
 	// sceneVersions holds the version each write of a Scene or its Widgets
 	// states; the Version and SceneVersion of the lists above are not read.
 	sceneVersions uiutil.Versions
@@ -48,6 +49,9 @@ type Project struct {
 	scenesReloader      uiutil.Reloader
 	widgetsReloader     uiutil.Reloader
 	tagsReloader        uiutil.Reloader
+	// sceneReloaders coalesce the reloads of one Scene each (loadScene); an
+	// entry lives while its load runs.
+	sceneReloaders map[uuid.UUID]*uiutil.Reloader
 	// widgetsReloadDeferred is set when a widget reload arrives mid-drag; it
 	// runs once the drag ends so the canvas does not jump under the cursor.
 	widgetsReloadDeferred bool
@@ -263,7 +267,7 @@ func (p *Project) widgetTypeByID(id uuid.UUID) (apiv0.WidgetTypeResponse, bool) 
 }
 
 func (p *Project) findTag(id uuid.UUID) (apiv0.TagResponse, bool) {
-	return uiutil.FindByID(p.tags, id, uiutil.TagID)
+	return p.tags.Find(id)
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────

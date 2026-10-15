@@ -1,13 +1,17 @@
 package project
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
@@ -17,26 +21,35 @@ import (
 // Every server-backed list of the Project mode is (re)loaded through a
 // uiutil.Reloader, both after the user's own mutations and on server events
 // (widget types, scenes, widgets and tags changed by anyone — another tab,
-// growctl, a Device). Editors merge fresh data field by field: a field the user
+// growctl, a Device); the new state of a Tag carried by tag_updated is applied
+// without a reload. Editors merge fresh data field by field: a field the user
 // has not edited follows the server, an unsaved edit is kept.
 
 func (p *Project) handleServerEvents(ctx app.Context) {
 	ctx.Handle(eventlog.ActionServerEvent, func(ctx app.Context, a app.Action) {
-		ev, ok := a.Value.(eventlog.ServerEvent)
+		ev, ok := a.Value.(apiv0.Event)
 		if !ok {
 			return
 		}
-		if ev.Type == eventlog.EventResync {
-			p.sceneVersions.Forget() // events were lost: the server may have gone back
+		if ev.Type == apiv0.EventTagUpdated && ev.Tag != nil {
+			p.tags = p.tags.Apply(*ev.Tag)
 		}
-		targets := eventlog.ReloadTargetsFor(ev.Type)
+		if ev.Type == eventlog.EventResync {
+			// Events were lost: the server may have gone back.
+			p.sceneVersions.Forget()
+			p.tags = p.tags.ForgetVersions()
+		}
+		targets := eventlog.ReloadTargetsFor(ev)
 		if targets.WidgetTypes {
 			p.loadWidgetTypes(ctx)
 		}
 		if targets.Scenes {
 			p.loadScenes(ctx)
 		}
-		if targets.Widgets {
+		if targets.Scene != uuid.Nil {
+			p.loadScene(ctx, targets.Scene)
+		}
+		if targets.Widgets || (targets.Scene != uuid.Nil && targets.Scene == p.selectedSceneID) {
 			p.loadWidgets(ctx)
 		}
 		if targets.Tags {
@@ -93,6 +106,60 @@ func (p *Project) setScenes(ctx app.Context, mark uiutil.Mark, scenes []apiv0.Sc
 		if p.selectedSceneID != uuid.Nil {
 			p.loadWidgets(ctx)
 		}
+	}
+}
+
+// loadScene rereads the Scene sceneID, whose own state a change of one of its
+// Widgets made stale (its version), and puts it in place in the list. Only
+// scene events and a resync change which Scenes the list holds: a Scene not
+// in it, or gone meanwhile (404), is left alone.
+func (p *Project) loadScene(ctx app.Context, sceneID uuid.UUID) {
+	if p.sceneReloaders == nil {
+		p.sceneReloaders = make(map[uuid.UUID]*uiutil.Reloader)
+	}
+	r, ok := p.sceneReloaders[sceneID]
+	if !ok {
+		r = &uiutil.Reloader{}
+		p.sceneReloaders[sceneID] = r
+	}
+	if !r.Start() {
+		return
+	}
+	mark := p.sceneVersions.Mark()
+	uiutil.Do(p.compoCtx, func(c context.Context) (apiv0.SceneResponse, error) {
+		return p.client.GetScene(c, sceneID)
+	}, func(ctx app.Context, sc apiv0.SceneResponse, err error) {
+		rerun := r.Done()
+		switch {
+		case errors.Is(err, apiclient.ErrNotFound):
+		case err != nil:
+			uiutil.ShowError(ctx, err)
+		default:
+			p.setScene(mark, sc)
+		}
+		if rerun {
+			p.loadScene(ctx, sceneID)
+			return
+		}
+		delete(p.sceneReloaders, sceneID)
+	})
+}
+
+// setScene puts the reread Scene sc in place in the list, if the list holds
+// it, and merges the scene properties editor when it is the selected one.
+// mark is the moment it was requested.
+func (p *Project) setScene(mark uiutil.Mark, sc apiv0.SceneResponse) {
+	i := uiutil.IdxByID(p.scenes, sc.ID, uiutil.SceneID)
+	if i < 0 {
+		return
+	}
+	p.sceneVersions.Observe(mark, sc.ID, sc.Version)
+	old := p.scenes[i]
+	scenes := slices.Clone(p.scenes)
+	scenes[i] = sc
+	p.scenes = scenes
+	if sc.ID == p.selectedSceneID {
+		p.mergeSceneEditingFields(old, sc)
 	}
 }
 
@@ -238,16 +305,12 @@ func (p *Project) loadTags(ctx app.Context) {
 	uiutil.Load(p.compoCtx, &p.tagsReloader, p.client.ListTags, p.setTags, p.loadTags)
 }
 
-// setTags replaces the tag list and drops the selection if its tag is gone.
+// setTags merges the loaded tag list into the known Tags (a newer state from
+// a tag_updated wins) and drops the selection if its tag is gone.
 func (p *Project) setTags(ctx app.Context, tags []apiv0.TagResponse) {
-	p.tags = tags
-	if p.selectedTagID == uuid.Nil {
+	p.tags = p.tags.Merge(tags)
+	if _, ok := p.tags.Find(p.selectedTagID); ok || p.selectedTagID == uuid.Nil {
 		return
-	}
-	for _, t := range tags {
-		if t.ID == p.selectedTagID {
-			return
-		}
 	}
 	p.selectedTagID = uuid.Nil
 	uiutil.StoreID(ctx, tagIDKey, uuid.Nil)

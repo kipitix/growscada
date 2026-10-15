@@ -1,5 +1,12 @@
 package eventlog
 
+import (
+	"fmt"
+	"strings"
+
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+)
+
 // category groups event types for the filter toggles shown in the panel.
 type category string
 
@@ -38,30 +45,41 @@ func defaultFilters() map[category]bool {
 	}
 }
 
-// eventTypeInfo describes how one server EventType.String() value maps to a
-// filter category and a human-readable description (with "%s" for the id).
+// eventTypeInfo describes how one type of the stream's events maps to a
+// filter category and a human-readable description (with "%s" for the id, if
+// the type carries one).
 type eventTypeInfo struct {
 	category category
 	format   string
 }
 
 var eventTypeInfoByType = map[string]eventTypeInfo{
-	"tag_created": {categoryTag, "Tag %s created"},
-	"tag_updated": {categoryValue, "Tag %s value updated"},
-	"tag_deleted": {categoryTag, "Tag %s deleted"},
+	apiv0.EventSystemReady: {categoryOther, "Server ready"},
 
-	"widget_created": {categoryWidget, "Widget %s created"},
-	"widget_updated": {categoryWidget, "Widget %s updated"},
-	"widget_deleted": {categoryWidget, "Widget %s deleted"},
+	apiv0.EventTagCreated: {categoryTag, "Tag %s created"},
+	apiv0.EventTagUpdated: {categoryValue, "Tag %s value updated"},
+	apiv0.EventTagDeleted: {categoryTag, "Tag %s deleted"},
 
-	"widget_type_created": {categoryWidgetType, "WidgetType %s created"},
-	"widget_type_updated": {categoryWidgetType, "WidgetType %s updated"},
-	"widget_type_deleted": {categoryWidgetType, "WidgetType %s deleted"},
+	apiv0.EventWidgetCreated: {categoryWidget, "Widget %s created"},
+	apiv0.EventWidgetUpdated: {categoryWidget, "Widget %s updated"},
+	apiv0.EventWidgetDeleted: {categoryWidget, "Widget %s deleted"},
 
-	"scene_created": {categoryScene, "Scene %s created"},
-	"scene_updated": {categoryScene, "Scene %s updated"},
-	"scene_deleted": {categoryScene, "Scene %s deleted"},
+	apiv0.EventWidgetTypeCreated: {categoryWidgetType, "WidgetType %s created"},
+	apiv0.EventWidgetTypeUpdated: {categoryWidgetType, "WidgetType %s updated"},
+	apiv0.EventWidgetTypeDeleted: {categoryWidgetType, "WidgetType %s deleted"},
 
-	"client_connected":    {categoryClient, "Client %s connected"},
-	"client_disconnected": {categoryClient, "Client %s disconnected"},
+	apiv0.EventSceneCreated: {categoryScene, "Scene %s created"},
+	apiv0.EventSceneUpdated: {categoryScene, "Scene %s updated"},
+	apiv0.EventSceneDeleted: {categoryScene, "Scene %s deleted"},
+
+	apiv0.EventClientConnected:    {categoryClient, "Client %s connected"},
+	apiv0.EventClientDisconnected: {categoryClient, "Client %s disconnected"},
+}
+
+// describe is the log text of an event of this type with the given id.
+func (info eventTypeInfo) describe(id string) string {
+	if !strings.Contains(info.format, "%s") {
+		return info.format
+	}
+	return fmt.Sprintf(info.format, id)
 }

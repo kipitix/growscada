@@ -5,15 +5,17 @@
 package eventlog
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
+	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
 // maxEntries is the cap on how many events are kept in the client-side
@@ -24,12 +26,14 @@ const maxEntries = 500
 const filtersStorageKey = "eventlog:filters"
 
 // ActionServerEvent is the go-app action the Bar fires for every event received
-// from the server's SSE stream; its value is a ServerEvent. Components that
+// from the server's SSE stream; its value is the apiv0.Event. Its Tag, if
+// any, is the state of the Tag the event is about: the Bar drops one that is
+// not. Components that
 // show server data handle it (ctx.Handle) to refresh themselves, so the app
 // keeps a single SSE connection.
 const ActionServerEvent = "eventlog.server-event"
 
-// EventResync is the Type of the synthetic ServerEvent the Bar fires each time
+// EventResync is the Type of the synthetic apiv0.Event the Bar fires each time
 // the SSE connection is (re)established, the first time included. The server
 // subscribes a client before it answers, so from this point on no event is
 // missed; but events published before it (while disconnected, or before the
@@ -43,15 +47,6 @@ const EventResync = "resync"
 // "stale data" indication only: the reload after a reconnection is triggered
 // by EventResync. Unset (false) until the first loss.
 const StateDisconnected = "eventlog.disconnected"
-
-// ServerEvent is a domain event received from the server's SSE stream.
-type ServerEvent struct {
-	Type string // EventType name, e.g. "tag_created"
-	ID   string // ID of the affected aggregate/client, may be empty
-	// Tag is the Tag's full new state, in the shape of GET /api/v0/tags/{id},
-	// carried by tag_updated only; nil otherwise.
-	Tag *apiv0.TagResponse
-}
 
 type logEntry struct {
 	Time     string   `json:"time"`
@@ -182,24 +177,27 @@ func (b *Bar) handleMessage(ctx app.Context, data string) {
 	// A message proves the stream is live, so a prior error is stale.
 	b.markConnected(ctx)
 
-	msg, ok := parseEvent(data)
+	ev, ok := apiclient.ParseEvent(data)
 	if !ok {
 		return
 	}
+	b.addEntry(ev)
+	ctx.NewActionWithValue(ActionServerEvent, withCheckedTag(ev))
+}
 
-	ctx.NewActionWithValue(ActionServerEvent, ServerEvent{Type: msg.Type, ID: msg.ID, Tag: msg.Tag})
-
+// addEntry logs ev, its id as it came.
+func (b *Bar) addEntry(ev apiv0.Event) {
 	cat := categoryOther
-	text := msg.Type
-	if info, ok := eventTypeInfoByType[msg.Type]; ok {
+	text := ev.Type
+	if info, ok := eventTypeInfoByType[ev.Type]; ok {
 		cat = info.category
-		text = fmt.Sprintf(info.format, msg.ID)
-	} else if msg.ID != "" {
-		text = fmt.Sprintf("%s %s", msg.Type, msg.ID)
+		text = info.describe(ev.ID)
+	} else if ev.ID != "" {
+		text = fmt.Sprintf("%s %s", ev.Type, ev.ID)
 	}
 
 	entry := logEntry{
-		Time:     displayTime(msg.Timestamp),
+		Time:     displayTime(ev.Timestamp),
 		Category: cat,
 		Text:     text,
 	}
@@ -210,27 +208,14 @@ func (b *Bar) handleMessage(ctx app.Context, data string) {
 	}
 }
 
-// parseEvent reads an SSE message's data as an apiv0.Event, tolerantly:
-// fields this UI does not know are skipped (ADR 0005), and a Tag that does
-// not fit apiv0.TagResponse is dropped rather than the whole event, so the
-// event is still logged and dispatched (Operation then rereads the Tags).
-func parseEvent(data string) (apiv0.Event, bool) {
-	var ev apiv0.Event
-	if err := json.Unmarshal([]byte(data), &ev); err != nil {
-		var envelope struct {
-			Type      string `json:"type"`
-			Timestamp string `json:"timestamp"`
-			ID        string `json:"id"`
-		}
-		if json.Unmarshal([]byte(data), &envelope) != nil {
-			return apiv0.Event{}, false
-		}
-		ev = apiv0.Event{Type: envelope.Type, Timestamp: envelope.Timestamp, ID: envelope.ID}
+// withCheckedTag returns ev without its Tag unless the Tag is the one the
+// event is about: one without an ID, or another Tag's, cannot be applied.
+// The modes then reread the Tags instead.
+func withCheckedTag(ev apiv0.Event) apiv0.Event {
+	if ev.Tag != nil && (ev.Tag.ID == uuid.Nil || ev.Tag.ID != uiutil.ParseID(ev.ID)) {
+		ev.Tag = nil
 	}
-	if ev.Type == "" {
-		return apiv0.Event{}, false
-	}
-	return ev, true
+	return ev
 }
 
 // handleError responds to the SSE connection's "error" event (dropped
@@ -255,7 +240,7 @@ func (b *Bar) handleError(ctx app.Context) {
 // told to resync.
 func (b *Bar) handleOpen(ctx app.Context) {
 	b.markConnected(ctx)
-	ctx.NewActionWithValue(ActionServerEvent, ServerEvent{Type: EventResync})
+	ctx.NewActionWithValue(ActionServerEvent, apiv0.Event{Type: EventResync})
 }
 
 // markConnected leaves the degraded state, announcing the reconnection to
