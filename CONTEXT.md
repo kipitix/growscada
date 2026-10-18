@@ -45,7 +45,7 @@ A placed instance of a WidgetType on a Scene — positioned, sized, rotated, opt
 _Avoid_: element, control
 
 **PortBinding**:
-The link between one of a Widget's InputPorts and the Tag that feeds it.
+The link between one of a Widget's InputPorts and the Tag that feeds it. Valid only while the port is declared by the Widget's WidgetType, the Tag exists, and the port's type hint accepts the Tag's TagType. A binding that breaks none of these may be made; one that stops meeting them — its port dropped, its type hint narrowed, its Tag removed — is removed, never the change that broke it refused.
 _Avoid_: mapping, connection
 
 **Scene**:

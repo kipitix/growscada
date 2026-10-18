@@ -1,0 +1,9 @@
+# A PortBinding that stops being valid is removed, not the change that broke it refused
+
+A PortBinding is valid while its InputPort is declared by the Widget's WidgetType, its Tag exists and the port's type hint accepts the Tag's TagType. The Scene checks all three when a Widget is created or updated: the application service loads the WidgetType and the TagTypes of the bound Tags and hands them to the Scene as values, so the Scene never reads other aggregates itself, and a binding that breaks the rule is invalid input. A TagType never changes, so a binding valid when made stays valid until the WidgetType or the Tag changes. Changing a WidgetType's ports or type hints and deleting a Tag are not refused because of bindings: policies (ADR 0008) remove the bindings that stopped being valid afterwards — `reconcile_widgets_with_widget_type` for a changed WidgetType and for a Widget written concurrently with such a change or with a Tag's deletion, `unbind_deleted_tag` for every Scene bound to a deleted Tag. Deleting a WidgetType is still refused while Widgets use it: a Widget cannot outlive its type, but it can outlive one of its bindings.
+
+## Considered Options
+
+- Refuse the WidgetType change or the Tag deletion while bindings would break: rejected. The check reads Scenes in another transaction than the write (one aggregate per transaction, ADR 0008), so a concurrent binding slips past it and a policy is needed anyway; and it would block a Device or growctl from deleting a Tag over a screen detail.
+- Check TagTypes in the application service instead of the Scene: rejected. The rule would be split — ports checked by the aggregate, types by the service.
+- Leave broken bindings in place: rejected. A widget's script would receive a value of a type its port does not declare, and a widget bound to a deleted Tag could not be updated without first dropping the binding.
