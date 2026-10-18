@@ -34,14 +34,15 @@ type SceneService interface {
 type sceneServiceImpl struct {
 	repository           scene.SceneRepository
 	widgetTypeRepository library.WidgetTypeRepository
+	tagRepository        tag.TagRepository
 }
 
 var _ SceneService = (*sceneServiceImpl)(nil)
 
 // NewSceneService returns the scene service. The events of its changes are
 // recorded by the Scene and saved with it (ADR 0008).
-func NewSceneService(repo scene.SceneRepository, widgetTypeRepo library.WidgetTypeRepository) SceneService {
-	return &sceneServiceImpl{repository: repo, widgetTypeRepository: widgetTypeRepo}
+func NewSceneService(repo scene.SceneRepository, widgetTypeRepo library.WidgetTypeRepository, tagRepo tag.TagRepository) SceneService {
+	return &sceneServiceImpl{repository: repo, widgetTypeRepository: widgetTypeRepo, tagRepository: tagRepo}
 }
 
 // loadScene finds the scene named by the caller; ErrSceneNotFound if there is none.
@@ -66,10 +67,33 @@ func (s sceneServiceImpl) loadWidgetType(ctx context.Context, typeID id.ID[libra
 	return wt, nil
 }
 
+// loadTagTypes reads the TagTypes of the Tags with the given IDs; a Tag that
+// does not exist is left out, for the Scene to judge the binding to it. The
+// Tags are read one by one, not at one moment: a TagType never changes, so
+// only a deletion can come between, and a Tag deleted after it was read is
+// unbound by policies (ADR 0010).
+func loadTagTypes(ctx context.Context, tags tag.TagRepository, tagIDs []id.ID[tag.Tag]) (scene.TagTypes, error) {
+	types := make(map[id.ID[tag.Tag]]tag.TagType, len(tagIDs))
+	for _, tagID := range tagIDs {
+		found, err := tags.FindByID(ctx, tagID)
+		if errors.Is(err, tag.ErrTagNotFound) {
+			continue
+		}
+		if err != nil {
+			return scene.TagTypes{}, fmt.Errorf("cannot find tag %s: %w", tagID, err)
+		}
+		types[tagID] = found.Type()
+	}
+	return scene.NewTagTypes(types), nil
+}
+
 // widgetChangeError marks a widget the Scene rejected as invalid input when
-// the rejection is about what the caller sent: the ports it binds.
+// the rejection is about what the caller sent: the ports it binds and the
+// Tags it binds them to.
 func widgetChangeError(err error) error {
-	if errors.Is(err, scene.ErrPortNotDeclared) {
+	if errors.Is(err, scene.ErrPortNotDeclared) ||
+		errors.Is(err, scene.ErrBoundTagNotFound) ||
+		errors.Is(err, scene.ErrPortTypeMismatch) {
 		return fmt.Errorf("port_bindings: %w", invalidInput(err))
 	}
 	return err
@@ -233,8 +257,12 @@ func (s sceneServiceImpl) CreateWidget(ctx context.Context, rawSceneID uuid.UUID
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot create widget: %w", err)
 	}
+	tagTypes, err := loadTagTypes(ctx, s.tagRepository, scene.BoundTagIDs(newWidget))
+	if err != nil {
+		return appdto.Widget{}, fmt.Errorf("cannot create widget: %w", err)
+	}
 
-	changed, err := sc.AddWidget(expectedVersion, newWidget, wt)
+	changed, err := sc.AddWidget(expectedVersion, newWidget, wt, tagTypes)
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot create widget: %w", widgetChangeError(err))
 	}
@@ -273,8 +301,12 @@ func (s sceneServiceImpl) UpdateWidget(ctx context.Context, rawSceneID, rawWidge
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot update widget: %w", err)
 	}
+	tagTypes, err := loadTagTypes(ctx, s.tagRepository, scene.BoundTagIDs(updated))
+	if err != nil {
+		return appdto.Widget{}, fmt.Errorf("cannot update widget: %w", err)
+	}
 
-	changed, err := sc.UpdateWidget(expectedVersion, updated, wt)
+	changed, err := sc.UpdateWidget(expectedVersion, updated, wt, tagTypes)
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot update widget: %w", widgetChangeError(err))
 	}

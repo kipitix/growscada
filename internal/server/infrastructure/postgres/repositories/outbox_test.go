@@ -12,6 +12,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
@@ -123,7 +124,7 @@ func TestSave_RolledBack_LeavesNothingInOutboxAndDeliversNothing(t *testing.T) {
 	if _, err := testDB.ExecContext(ctx, "DELETE FROM widget_types WHERE id = $1", w.TypeID().UUID()); err != nil {
 		t.Fatalf("delete widget type: %v", err)
 	}
-	changed, err := stored.AddWidget(stored.Version(), w, wt)
+	changed, err := stored.AddWidget(stored.Version(), w, wt, scene.NewTagTypes(nil))
 	if err != nil {
 		t.Fatalf("AddWidget: %v", err)
 	}

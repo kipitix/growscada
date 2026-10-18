@@ -497,6 +497,49 @@ func TestSceneFindByWidgetTypeID_ReturnsScenesWithAllTheirWidgets(t *testing.T) 
 	}
 }
 
+// ════════════════════════════════ FindByTagID ═══════════════════════════════
+
+func TestSceneFindByTagID_ReturnsScenesBoundToTheTagWithAllTheirWidgets(t *testing.T) {
+	cleanScenes(t)
+	repo := repositories.NewSceneRepositoryPostgres(testDB)
+	ctx := context.Background()
+
+	typeID := mustSaveWidgetType(t)
+	tagID, otherTagID := id.NewID[tag.Tag](), id.NewID[tag.Tag]()
+	portName, _ := library.NewInputPortName("value")
+	otherPortName, _ := library.NewInputPortName("alarm")
+	newWidget := func(name string, bindings ...scene.PortBinding) scene.Widget {
+		return scene.NewWidget(repo.NextWidgetID(), mustWidgetName(t, name), scene.NewPosition(0, 0, 0), library.DefaultSize(), scene.DefaultOrigin(), scene.DefaultRotation(), typeID, nil, bindings)
+	}
+
+	bound1 := newWidget("b1", scene.NewPortBinding(otherPortName, otherTagID), scene.NewPortBinding(portName, tagID))
+	unbound := newWidget("u1", scene.NewPortBinding(portName, otherTagID))
+	bound2 := newWidget("b2", scene.NewPortBinding(otherPortName, tagID))
+	sc1 := mustSave(t, repo, withWidgets(makeScene(t, repo, "scene-1"), bound1, unbound))
+	sc2 := mustSave(t, repo, withWidgets(makeScene(t, repo, "scene-2"), bound2))
+	mustSave(t, repo, withWidgets(makeScene(t, repo, "scene-3"), newWidget("u2", scene.NewPortBinding(portName, otherTagID)), newWidget("u3")))
+
+	result, err := repo.FindByTagID(ctx, tagID)
+
+	if err != nil {
+		t.Fatalf("FindByTagID: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("expected 2 scenes, got %d", len(result))
+	}
+	if result[0].ID() != sc1.ID() || result[1].ID() != sc2.ID() {
+		t.Errorf("expected scenes %v, %v in creation order, got %v, %v", sc1.ID(), sc2.ID(), result[0].ID(), result[1].ID())
+	}
+	if got, want := widgetIDs(result[0].Widgets()), widgetIDs([]scene.Widget{bound1, unbound}); !slices.Equal(got, want) {
+		t.Errorf("scene-1 widgets: expected all of them %v, got %v", want, got)
+	}
+
+	none, err := repo.FindByTagID(ctx, id.NewID[tag.Tag]())
+	if err != nil || len(none) != 0 {
+		t.Errorf("unbound tag: expected no scenes, got %d, %v", len(none), err)
+	}
+}
+
 func mustWidgetName(t *testing.T, s string) scene.WidgetName {
 	t.Helper()
 	n, err := scene.NewWidgetName(s)
@@ -637,7 +680,7 @@ func TestSceneSave_ReturnsWhatALaterReadReturns(t *testing.T) {
 	var widgets []scene.Widget
 	for _, name := range []string{"w1", "w2", "w3"} {
 		w := makeWidget(t, repo, name)
-		changed, err := saved.AddWidget(saved.Version(), w, typeOf(w))
+		changed, err := saved.AddWidget(saved.Version(), w, typeOf(w), scene.NewTagTypes(nil))
 		if err != nil {
 			t.Fatalf("AddWidget: %v", err)
 		}
@@ -652,7 +695,7 @@ func TestSceneSave_ReturnsWhatALaterReadReturns(t *testing.T) {
 	moved := scene.NewWidget(middle.ID(), middle.Name(), scene.NewPosition(0.1, 1.0/3, 7),
 		middle.Size(), middle.Origin(), scene.NewRotation(12.345), middle.TypeID(),
 		[]string{"b", "a"}, nil)
-	changed, err := saved.UpdateWidget(saved.Version(), moved, typeOf(moved))
+	changed, err := saved.UpdateWidget(saved.Version(), moved, typeOf(moved), scene.NewTagTypes(nil))
 	if err != nil {
 		t.Fatalf("UpdateWidget: %v", err)
 	}

@@ -14,4 +14,10 @@ var (
 	// ErrPortNotDeclared is returned when a widget binds a port its
 	// WidgetType does not declare.
 	ErrPortNotDeclared = errors.New("port is not declared on widget type")
+	// ErrBoundTagNotFound is returned when a widget binds a port to a Tag
+	// that does not exist.
+	ErrBoundTagNotFound = errors.New("bound tag not found")
+	// ErrPortTypeMismatch is returned when a widget binds a port to a Tag
+	// whose TagType the port's type hint does not accept.
+	ErrPortTypeMismatch = errors.New("port type hint does not accept tag type")
 )

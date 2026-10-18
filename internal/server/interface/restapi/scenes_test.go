@@ -33,7 +33,7 @@ func newRouterWithScenes() *restapi.APIRouter {
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
 	wtSvc := application.NewWidgetTypeService(wtRepo)
-	sceneSvc := application.NewSceneService(sceneRepo, wtRepo)
+	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, tagRepo)
 	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, eventbus.NewEventBus(), 100)
 }
 
@@ -41,7 +41,7 @@ func createSceneViaService(t *testing.T, input appdto.SceneInput) appdto.Scene {
 	t.Helper()
 	repo := repositories.NewSceneRepositoryPostgres(testDB)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	svc := application.NewSceneService(repo, wtRepo)
+	svc := application.NewSceneService(repo, wtRepo, repositories.NewTagRepositoryPostgres(testDB))
 	resp, err := svc.CreateScene(context.Background(), input)
 	if err != nil {
 		t.Fatalf("createSceneViaService: %v", err)

@@ -31,10 +31,12 @@ func TestEventsHandlers_GetEvents_DeliversCommittedChangesInCommitOrder(t *testi
 	dispatcher := outbox.NewDispatcher(testDB, bus.Publish)
 	go dispatcher.Run(ctx)
 	onCommit := repositories.NotifyOnCommit(dispatcher.Notify)
-	tagSvc := application.NewTagService(repositories.NewTagRepositoryPostgres(testDB, onCommit))
+	tagRepo := repositories.NewTagRepositoryPostgres(testDB, onCommit)
+	tagSvc := application.NewTagService(tagRepo)
 	sceneSvc := application.NewSceneService(
 		repositories.NewSceneRepositoryPostgres(testDB, onCommit),
-		repositories.NewWidgetTypeRepositoryPostgres(testDB, onCommit))
+		repositories.NewWidgetTypeRepositoryPostgres(testDB, onCommit),
+		tagRepo)
 
 	h := restapi.NewEventsHandler(bus, 100)
 	rec := newSyncRecorder()

@@ -109,11 +109,13 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	bus := eventbus.NewEventBus()
 	dispatcher := outbox.NewDispatcher(db, bus.Publish)
 	onCommit := repositories.NotifyOnCommit(dispatcher.Notify)
-	tagSvc := application.NewTagService(repositories.NewTagRepositoryPostgres(db, onCommit))
+	tagRepo := repositories.NewTagRepositoryPostgres(db, onCommit)
+	tagSvc := application.NewTagService(tagRepo)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(db, onCommit)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(db, onCommit)
 	runner := outbox.NewPolicyRunner(db, []application.Policy{
-		application.NewWidgetReconciliationPolicy(wtRepo, sceneRepo),
+		application.NewWidgetReconciliationPolicy(wtRepo, sceneRepo, tagRepo),
+		application.NewUnbindDeletedTagPolicy(sceneRepo),
 	})
 	dispatcher.SetPolicyRunner(runner)
 	ctx, stop := context.WithCancel(context.Background())
@@ -127,7 +129,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	})
 
 	wtSvc := application.NewWidgetTypeService(wtRepo)
-	sceneSvc := application.NewSceneService(sceneRepo, wtRepo)
+	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, tagRepo)
 	router := restapi.NewRouter(tagSvc, wtSvc, sceneSvc, bus, 100)
 
 	srv := httptest.NewServer(router.ServeMux())

@@ -12,6 +12,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
+	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
 
 // WidgetReconciliationPolicyName is the Name of the policy returned by
@@ -19,29 +20,34 @@ import (
 const WidgetReconciliationPolicyName = "reconcile_widgets_with_widget_type"
 
 // widgetReconciliationPolicy removes, from Widgets of a WidgetType, the
-// PortBindings of ports the WidgetType no longer declares. A
-// widget_type_updated event may have dropped a port: its job reconciles every
-// Scene holding Widgets of the type. A widget_created or widget_updated event
-// may have bound a port that a concurrent update of the WidgetType had just
-// dropped (the Widget was checked against the WidgetType as read before that
-// update): its job reconciles only the Scene of the Widget. The events of the
-// policy's own reconciliations bind nothing and enqueue no job.
+// PortBindings that are no longer valid (ADR 0010): of ports the WidgetType
+// no longer declares, of Tags whose TagType a port's type hint no longer
+// accepts and of Tags that no longer exist. A widget_type_updated event may
+// have dropped a port or narrowed a type hint: its job reconciles every Scene
+// holding Widgets of the type. A widget_created or widget_updated event may
+// have bound a port that a concurrent update of the WidgetType had just
+// dropped or narrowed, or a Tag deleted concurrently (the Widget was checked
+// against the WidgetType and the Tags as read before that change): its job
+// reconciles only the Scene of the Widget. The events of the policy's own
+// reconciliations bind nothing and enqueue no job.
 //
 // It is transitional: once a Project sees only a Library Release (ADR 0007),
 // reconciliation moves to the DraftChange of a pinned release (task 33).
 type widgetReconciliationPolicy struct {
 	widgetTypes library.WidgetTypeRepository
 	scenes      scene.SceneRepository
+	tags        tag.TagRepository
 }
 
 var _ Policy = (*widgetReconciliationPolicy)(nil)
 
 // NewWidgetReconciliationPolicy returns the policy bringing Widgets into line
 // with their WidgetType.
-func NewWidgetReconciliationPolicy(aWidgetTypeRepository library.WidgetTypeRepository, aSceneRepository scene.SceneRepository) Policy {
+func NewWidgetReconciliationPolicy(aWidgetTypeRepository library.WidgetTypeRepository, aSceneRepository scene.SceneRepository, aTagRepository tag.TagRepository) Policy {
 	return &widgetReconciliationPolicy{
 		widgetTypes: aWidgetTypeRepository,
 		scenes:      aSceneRepository,
+		tags:        aTagRepository,
 	}
 }
 
@@ -137,13 +143,14 @@ func parseJobKey(key string) (id.ID[library.WidgetType], *id.ID[scene.Scene], er
 var errWidgetTypeGone = errors.New("widget type deleted")
 
 // reconcileScene reconciles the Scene sc with the WidgetType widgetTypeID and
-// saves it if anything changed. The WidgetType is read after the Scene, so
-// every Widget the Scene holds was checked against it or an older version,
-// and no binding valid now is taken for an orphan. The change does not rest
-// on what a client saw, so a Scene changed since it was read is reread, with
-// the WidgetType after it, and reconciled again rather than reported as a
-// conflict (retryOnRace). A Scene or WidgetType deleted meanwhile leaves
-// nothing to clean.
+// the Tags its Widgets of that type bind, and saves it if anything changed.
+// The WidgetType and the Tags are read after the Scene, so every Widget the
+// Scene holds was checked against them or older versions, and no binding
+// valid now is taken for an orphan. The change does not rest on what a
+// client saw, so a Scene changed since it was read is reread, with the
+// WidgetType and the Tags after it, and reconciled again rather than
+// reported as a conflict (retryOnRace). A Scene or WidgetType deleted
+// meanwhile leaves nothing to clean.
 func (p widgetReconciliationPolicy) reconcileScene(ctx context.Context, sc scene.Scene, widgetTypeID id.ID[library.WidgetType]) error {
 	first := true
 	err := retryOnRace(scene.ErrSceneConflict, func() error {
@@ -161,7 +168,17 @@ func (p widgetReconciliationPolicy) reconcileScene(ctx context.Context, sc scene
 		if err != nil {
 			return fmt.Errorf("cannot read widget type: %w", err)
 		}
-		reconciled, changed := sc.ReconcileWith(wt)
+		var ofType []scene.Widget
+		for _, w := range sc.Widgets() {
+			if w.TypeID() == widgetTypeID {
+				ofType = append(ofType, w)
+			}
+		}
+		tagTypes, err := loadTagTypes(ctx, p.tags, scene.BoundTagIDs(ofType...))
+		if err != nil {
+			return err
+		}
+		reconciled, changed := sc.ReconcileWith(wt, tagTypes)
 		if !changed {
 			return nil
 		}

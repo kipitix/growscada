@@ -5,6 +5,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -50,6 +51,40 @@ func makeWidgetOf(t *testing.T, wt library.WidgetType, name string, ports ...str
 	}
 	return NewWidget(id.NewID[Widget](), widgetName, NewPosition(0, 0, 0), library.DefaultSize(),
 		DefaultOrigin(), DefaultRotation(), wt.ID(), nil, bindings)
+}
+
+// tagTypesOf returns TagTypes in which every Tag someWidgets bind exists, as
+// an Integer Tag.
+func tagTypesOf(someWidgets ...Widget) TagTypes {
+	types := map[id.ID[tag.Tag]]tag.TagType{}
+	for _, tagID := range BoundTagIDs(someWidgets...) {
+		types[tagID] = tag.TagTypeInteger
+	}
+	return NewTagTypes(types)
+}
+
+// makeTypedWidgetType builds a WidgetType declaring one port, "value", with
+// the given type hint ("" for any TagType).
+func makeTypedWidgetType(t *testing.T, hint string) library.WidgetType {
+	t.Helper()
+	wt := makeWidgetType(t)
+	return withValueHint(t, wt, hint, wt.Version())
+}
+
+// withValueHint builds the WidgetType wt, at aVersion, declaring one port,
+// "value", with the given type hint.
+func withValueHint(t *testing.T, wt library.WidgetType, hint string, aVersion version.Version[library.WidgetType]) library.WidgetType {
+	t.Helper()
+	typeHint, err := library.NewPortTypeHint(hint)
+	if err != nil {
+		t.Fatalf("NewPortTypeHint(%q): %v", hint, err)
+	}
+	typed, err := library.ReconstituteWidgetType(wt.ID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(),
+		wt.DefaultSize(), []library.InputPort{library.NewInputPort(mustPortName(t, "value"), "", typeHint)}, aVersion)
+	if err != nil {
+		t.Fatalf("ReconstituteWidgetType: %v", err)
+	}
+	return typed
 }
 
 // makeStoredScene builds a Scene as read back from a repository: committed, with widgets.
@@ -128,7 +163,7 @@ func TestSceneAddWidget_Valid_AppendsWidgetLeavesOriginal(t *testing.T) {
 	sc := makeStoredScene(t, existing)
 	added := makeWidgetOf(t, wt, "w2", "value")
 
-	after, err := sc.AddWidget(sc.Version(), added, wt)
+	after, err := sc.AddWidget(sc.Version(), added, wt, tagTypesOf(added))
 
 	if err != nil {
 		t.Fatalf("AddWidget: %v", err)
@@ -161,7 +196,7 @@ func TestSceneAddWidget_Rejected(t *testing.T) {
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			_, err := sc.AddWidget(tt.expected, tt.widget, tt.wt)
+			_, err := sc.AddWidget(tt.expected, tt.widget, tt.wt, tagTypesOf(tt.widget))
 			if !errors.Is(err, tt.want) {
 				t.Errorf("expected %v, got %v", tt.want, err)
 			}
@@ -181,7 +216,7 @@ func TestSceneUpdateWidget_Valid_ReplacesWidgetInPlaceLeavesOriginal(t *testing.
 	changed := NewWidget(w1.ID(), newName, NewPosition(5, 5, 0), w1.Size(), w1.Origin(), w1.Rotation(),
 		w1.TypeID(), nil, []PortBinding{NewPortBinding(mustPortName(t, "value"), id.NewID[tag.Tag]())})
 
-	after, err := sc.UpdateWidget(sc.Version(), changed, wt)
+	after, err := sc.UpdateWidget(sc.Version(), changed, wt, tagTypesOf(changed))
 
 	if err != nil {
 		t.Fatalf("UpdateWidget: %v", err)
@@ -218,12 +253,77 @@ func TestSceneUpdateWidget_Rejected(t *testing.T) {
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			_, err := sc.UpdateWidget(tt.expected, tt.widget, tt.wt)
+			_, err := sc.UpdateWidget(tt.expected, tt.widget, tt.wt, tagTypesOf(tt.widget))
 			if !errors.Is(err, tt.want) {
 				t.Errorf("expected %v, got %v", tt.want, err)
 			}
 			assertUnchanged(t, sc, []Widget{existing})
 		})
+	}
+}
+
+// ── PortBinding validity ────────────────────────────────────────────────────
+
+// bindValue returns a widget of WidgetType wt (as w1, if given) binding its
+// port "value" to tagID.
+func bindValue(t *testing.T, wt library.WidgetType, tagID id.ID[tag.Tag], as ...Widget) Widget {
+	t.Helper()
+	widgetID := id.NewID[Widget]()
+	if len(as) > 0 {
+		widgetID = as[0].ID()
+	}
+	name, _ := NewWidgetName("bound")
+	return NewWidget(widgetID, name, NewPosition(0, 0, 0), library.DefaultSize(), DefaultOrigin(), DefaultRotation(),
+		wt.ID(), nil, []PortBinding{NewPortBinding(mustPortName(t, "value"), tagID)})
+}
+
+func TestSceneWidgetChanges_CheckBoundTagTypes(t *testing.T) {
+	intTag, strTag, missingTag := id.NewID[tag.Tag](), id.NewID[tag.Tag](), id.NewID[tag.Tag]()
+	tagTypes := NewTagTypes(map[id.ID[tag.Tag]]tag.TagType{
+		intTag: tag.TagTypeInteger,
+		strTag: tag.TagTypeString,
+	})
+
+	tests := map[string]struct {
+		hint  string
+		tagID id.ID[tag.Tag]
+		want  error
+	}{
+		"hint accepts the tag type":   {"integer", intTag, nil},
+		"any hint accepts every type": {"", strTag, nil},
+		"hint refuses the tag type":   {"integer", strTag, ErrPortTypeMismatch},
+		"tag does not exist":          {"", missingTag, ErrBoundTagNotFound},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			wt := makeTypedWidgetType(t, tt.hint)
+			existing := makeWidgetOf(t, wt, "w1")
+			sc := makeStoredScene(t, existing)
+
+			_, addErr := sc.AddWidget(sc.Version(), bindValue(t, wt, tt.tagID), wt, tagTypes)
+			_, updateErr := sc.UpdateWidget(sc.Version(), bindValue(t, wt, tt.tagID, existing), wt, tagTypes)
+
+			for op, err := range map[string]error{"AddWidget": addErr, "UpdateWidget": updateErr} {
+				if tt.want == nil && err != nil {
+					t.Errorf("%s: expected no error, got %v", op, err)
+				}
+				if tt.want != nil && !errors.Is(err, tt.want) {
+					t.Errorf("%s: expected %v, got %v", op, tt.want, err)
+				}
+			}
+			assertUnchanged(t, sc, []Widget{existing})
+		})
+	}
+}
+
+func TestSceneAddWidget_UndeclaredPortGoesBeforeMissingTag(t *testing.T) {
+	wt := makeWidgetType(t, "value")
+	sc := makeStoredScene(t)
+
+	_, err := sc.AddWidget(sc.Version(), makeWidgetOf(t, wt, "w1", "missing"), wt, NewTagTypes(nil))
+
+	if !errors.Is(err, ErrPortNotDeclared) {
+		t.Errorf("expected ErrPortNotDeclared, got %v", err)
 	}
 }
 
@@ -300,7 +400,7 @@ func TestSceneReconcileWith_RemovesBindingsOfUndeclaredPortsOnly(t *testing.T) {
 	sc := makeStoredScene(t, w, untouched)
 	after := makeWidgetTypeWithID(t, before.ID(), "value")
 
-	reconciled, changed := sc.ReconcileWith(after)
+	reconciled, changed := sc.ReconcileWith(after, tagTypesOf(sc.Widgets()...))
 
 	if !changed {
 		t.Fatal("expected a change")
@@ -325,7 +425,7 @@ func TestSceneReconcileWith_NothingUndeclared_ReportsNoChange(t *testing.T) {
 	wt := makeWidgetType(t, "value")
 	sc := makeStoredScene(t, makeWidgetOf(t, wt, "w1", "value"))
 
-	reconciled, changed := sc.ReconcileWith(wt)
+	reconciled, changed := sc.ReconcileWith(wt, tagTypesOf(sc.Widgets()...))
 
 	if changed {
 		t.Error("expected no change")
@@ -346,4 +446,97 @@ func makeWidgetTypeWithID(t *testing.T, anID id.ID[library.WidgetType], ports ..
 		t.Fatalf("ReconstituteWidgetType: %v", err)
 	}
 	return updated
+}
+
+func TestSceneReconcileWith_RemovesBindingsTheNarrowedHintRefuses(t *testing.T) {
+	anyType := makeTypedWidgetType(t, "")
+	intTag, strTag := id.NewID[tag.Tag](), id.NewID[tag.Tag]()
+	tagTypes := NewTagTypes(map[id.ID[tag.Tag]]tag.TagType{
+		intTag: tag.TagTypeInteger,
+		strTag: tag.TagTypeString,
+	})
+	kept := bindValue(t, anyType, intTag)
+	refused := bindValue(t, anyType, strTag)
+	sc := makeStoredScene(t, kept, refused)
+	narrowed := withValueHint(t, anyType, "integer", anyType.Version().Next())
+
+	reconciled, changed := sc.ReconcileWith(narrowed, tagTypes)
+
+	if !changed {
+		t.Fatal("expected a change")
+	}
+	got := reconciled.Widgets()
+	if got[0] != kept {
+		t.Error("a binding the hint still accepts must stay")
+	}
+	if len(got[1].PortBindings()) != 0 {
+		t.Errorf("refused binding: expected it removed, got %v", got[1].PortBindings())
+	}
+}
+
+func TestSceneReconcileWith_RemovesBindingsOfMissingTags(t *testing.T) {
+	wt := makeWidgetType(t, "value", "alarm")
+	w := makeWidgetOf(t, wt, "w1", "value", "alarm")
+	alarmTag := w.PortBindings()[1].TagID()
+	sc := makeStoredScene(t, w)
+	onlyValue := NewTagTypes(map[id.ID[tag.Tag]]tag.TagType{w.PortBindings()[0].TagID(): tag.TagTypeInteger})
+
+	reconciled, changed := sc.ReconcileWith(wt, onlyValue)
+
+	if !changed {
+		t.Fatal("expected a change")
+	}
+	for _, b := range reconciled.Widgets()[0].PortBindings() {
+		if b.TagID() == alarmTag {
+			t.Errorf("binding of the missing tag %s not removed", alarmTag)
+		}
+	}
+	if n := len(reconciled.Widgets()[0].PortBindings()); n != 1 {
+		t.Errorf("bindings: expected 1, got %d", n)
+	}
+}
+
+// ── UnbindTag ───────────────────────────────────────────────────────────────
+
+func TestSceneUnbindTag_RemovesBindingsOfTheTagFromWidgetsOfEveryType(t *testing.T) {
+	gone := id.NewID[tag.Tag]()
+	wt1 := makeWidgetType(t, "value")
+	wt2 := makeTypedWidgetType(t, "integer")
+	w1 := bindValue(t, wt1, gone)
+	w2 := bindValue(t, wt2, gone)
+	untouched := makeWidgetOf(t, wt1, "w3", "value")
+	sc := makeStoredScene(t, w1, w2, untouched)
+
+	unbound, changed := sc.UnbindTag(gone)
+
+	if !changed {
+		t.Fatal("expected a change")
+	}
+	got := unbound.Widgets()
+	if len(got[0].PortBindings()) != 0 || len(got[1].PortBindings()) != 0 {
+		t.Errorf("bindings of the tag not removed: %v, %v", got[0].PortBindings(), got[1].PortBindings())
+	}
+	if got[2] != untouched {
+		t.Error("a widget not bound to the tag must not change")
+	}
+	assertUnchanged(t, sc, []Widget{w1, w2, untouched})
+	assertPending(t, unbound,
+		recorded{event.EventTypeWidgetUpdated, w1.ID().String()},
+		recorded{event.EventTypeWidgetUpdated, w2.ID().String()},
+	)
+	for _, e := range unbound.PendingEvents() {
+		if ev, ok := e.(WidgetUpdatedEvent); !ok || !ev.ByReconciliation() {
+			t.Errorf("event %v: expected a WidgetUpdatedEvent ByReconciliation", e)
+		}
+	}
+}
+
+func TestSceneUnbindTag_TagNotBound_ReportsNoChange(t *testing.T) {
+	sc := makeStoredScene(t, makeWidgetOf(t, makeWidgetType(t, "value"), "w1", "value"))
+
+	unbound, changed := sc.UnbindTag(id.NewID[tag.Tag]())
+
+	if changed || unbound != sc {
+		t.Error("expected the same scene and no change")
+	}
 }

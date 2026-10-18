@@ -6,6 +6,7 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
 
 var (
@@ -40,6 +41,10 @@ type SceneRepository interface {
 	// FindByWidgetTypeID returns, in creation order, every scene with at
 	// least one widget of the given WidgetType, each with all its widgets.
 	FindByWidgetTypeID(context.Context, id.ID[library.WidgetType]) ([]Scene, error)
+
+	// FindByTagID returns, in creation order, every scene with at least one
+	// widget binding a port to the given Tag, each with all its widgets.
+	FindByTagID(context.Context, id.ID[tag.Tag]) ([]Scene, error)
 
 	// Save stores a scene with its widgets and the events it recorded, in one
 	// transaction: a scene of the initial version is

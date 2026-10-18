@@ -52,7 +52,7 @@ func newRouterWithWidgets() *restapi.APIRouter {
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
 	wtSvc := application.NewWidgetTypeService(wtRepo)
-	sceneSvc := application.NewSceneService(sceneRepo, wtRepo)
+	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, tagRepo)
 	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, eventbus.NewEventBus(), 100)
 }
 
@@ -61,7 +61,7 @@ func createSceneViaSceneService(t *testing.T) appdto.Scene {
 	ensureTestWidgetType(t)
 	repo := repositories.NewSceneRepositoryPostgres(testDB)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	svc := application.NewSceneService(repo, wtRepo)
+	svc := application.NewSceneService(repo, wtRepo, repositories.NewTagRepositoryPostgres(testDB))
 	resp, err := svc.CreateScene(context.Background(), appdto.SceneInput{
 		Name: "test-scene-" + uuid.New().String(), Width: 1920, Height: 1080,
 	})
@@ -75,7 +75,7 @@ func createWidgetViaService(t *testing.T, sceneID uuid.UUID, sceneVersion int, i
 	t.Helper()
 	repo := repositories.NewSceneRepositoryPostgres(testDB)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	svc := application.NewSceneService(repo, wtRepo)
+	svc := application.NewSceneService(repo, wtRepo, repositories.NewTagRepositoryPostgres(testDB))
 	resp, err := svc.CreateWidget(context.Background(), sceneID, sceneVersion, input)
 	if err != nil {
 		t.Fatalf("createWidgetViaService: %v", err)
@@ -615,6 +615,8 @@ func TestPostWidgets_InvalidInput_Returns400(t *testing.T) {
 		DefaultWidth: 100, DefaultHeight: 100,
 		InputPorts: []appdto.InputPort{{Name: "value", TypeHint: "integer"}},
 	})
+	cleanTags(t)
+	label := createTagViaService(t, "label", "string", "", "good")
 	cases := map[string]func(*apiv0.CreateWidgetRequest){
 		"missing type_id":        func(r *apiv0.CreateWidgetRequest) { r.TypeID = uuid.Nil },
 		"zero size":              func(r *apiv0.CreateWidgetRequest) { r.Size.Width = 0 },
@@ -622,6 +624,12 @@ func TestPostWidgets_InvalidInput_Returns400(t *testing.T) {
 		"negative scene version": func(r *apiv0.CreateWidgetRequest) { r.SceneVersion = -1 },
 		"undeclared port": func(r *apiv0.CreateWidgetRequest) {
 			r.PortBindings = []apiv0.PortBinding{{PortName: "missing", TagID: uuid.New()}}
+		},
+		"unknown tag": func(r *apiv0.CreateWidgetRequest) {
+			r.PortBindings = []apiv0.PortBinding{{PortName: "value", TagID: uuid.New()}}
+		},
+		"tag type mismatch": func(r *apiv0.CreateWidgetRequest) {
+			r.PortBindings = []apiv0.PortBinding{{PortName: "value", TagID: label.ID}}
 		},
 		"unknown widget type": func(r *apiv0.CreateWidgetRequest) { r.TypeID = uuid.New() },
 		"unknown widget type with bindings": func(r *apiv0.CreateWidgetRequest) {

@@ -93,7 +93,8 @@ func main() {
 	// Registry of the policies: changes spanning aggregates, run as jobs
 	// apart from event delivery (ADR 0008)
 	policyRunner := outbox.NewPolicyRunner(sqlDB, []application.Policy{
-		application.NewWidgetReconciliationPolicy(widgetTypeRepository, sceneRepository),
+		application.NewWidgetReconciliationPolicy(widgetTypeRepository, sceneRepository, tagRepository),
+		application.NewUnbindDeletedTagPolicy(sceneRepository),
 	})
 	dispatcher.SetPolicyRunner(policyRunner)
 	dispatcherCtx, stopDispatcher := context.WithCancel(context.Background())
@@ -134,7 +135,7 @@ func main() {
 	// Create services
 	tagService := application.NewTagService(tagRepository)
 	widgetTypeService := application.NewWidgetTypeService(widgetTypeRepository)
-	sceneService := application.NewSceneService(sceneRepository, widgetTypeRepository)
+	sceneService := application.NewSceneService(sceneRepository, widgetTypeRepository, tagRepository)
 	// Create router
 	apiRouter := restapi.NewRouter(tagService, widgetTypeService, sceneService, eventBus, cliArgs.MaxSSEClients)
 	// Register the event hub shutdown handler. The outbox is drained first,

@@ -32,7 +32,7 @@ func newRouterWithWidgetTypes() *restapi.APIRouter {
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
 	wtSvc := application.NewWidgetTypeService(wtRepo)
-	sceneSvc := application.NewSceneService(sceneRepo, wtRepo)
+	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, tagRepo)
 	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, eventbus.NewEventBus(), 100)
 }
 
@@ -299,7 +299,7 @@ func TestPutWidgetTypesByID_Conflict_Returns409(t *testing.T) {
 	tagSvc := application.NewTagService(tagRepo)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	sceneSvc := application.NewSceneService(sceneRepo, wtRepo)
+	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, tagRepo)
 	router := restapi.NewRouter(tagSvc, svc, sceneSvc, eventbus.NewEventBus(), 100)
 
 	body, _ := json.Marshal(apiv0.UpdateWidgetTypeRequest{

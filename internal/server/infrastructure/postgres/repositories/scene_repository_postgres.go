@@ -12,6 +12,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
+	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
@@ -211,6 +212,16 @@ func (r sceneRepositoryPostgresImpl) FindByWidgetTypeID(ctx context.Context, typ
 	return r.readScenes(ctx,
 		`WHERE EXISTS (SELECT 1 FROM widgets w WHERE w.scene_id = scenes.id AND w.type_id = $1)`,
 		typeID.UUID(),
+	)
+}
+
+// FindByTagID matches a widget by containment: its port_bindings array holds
+// an object whose tag_id is the Tag's, whatever its port_name.
+func (r sceneRepositoryPostgresImpl) FindByTagID(ctx context.Context, tagID id.ID[tag.Tag]) ([]scene.Scene, error) {
+	return r.readScenes(ctx,
+		`WHERE EXISTS (SELECT 1 FROM widgets w WHERE w.scene_id = scenes.id
+		   AND w.port_bindings @> jsonb_build_array(jsonb_build_object('tag_id', $1::text)))`,
+		tagID.UUID().String(),
 	)
 }
 

@@ -16,6 +16,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
+	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
@@ -28,9 +29,10 @@ func cleanPolicyJobs(t *testing.T) {
 }
 
 // reconciliation wires the services, the outbox dispatcher and the policy
-// runner with the reconciliation policy over testDB, as main.go does, but
-// delivers and runs jobs only when a test says so.
+// runner with the policies over testDB, as main.go does, but delivers and
+// runs jobs only when a test says so.
 type reconciliation struct {
+	tagSvc     application.TagService
 	wtSvc      application.WidgetTypeService
 	sceneSvc   application.SceneService
 	dispatcher *outbox.Dispatcher
@@ -39,11 +41,12 @@ type reconciliation struct {
 }
 
 // reconciliationWiring lets a test put a wrapper around a repository: the
-// policy's own, or the WidgetType repository the scene service reads.
+// policies' own, or the WidgetType or Tag repository the scene service reads.
 type reconciliationWiring struct {
 	policyScenes      func(scene.SceneRepository) scene.SceneRepository
 	policyWidgetTypes func(library.WidgetTypeRepository) library.WidgetTypeRepository
 	sceneWidgetTypes  func(library.WidgetTypeRepository) library.WidgetTypeRepository
+	sceneTags         func(tag.TagRepository) tag.TagRepository
 }
 
 func newReconciliation(t *testing.T, wiring reconciliationWiring) *reconciliation {
@@ -52,7 +55,9 @@ func newReconciliation(t *testing.T, wiring reconciliationWiring) *reconciliatio
 	cleanWidgetTypes(t)
 	cleanOutbox(t)
 	cleanPolicyJobs(t)
+	cleanTags(t)
 
+	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
 	var policyScenes scene.SceneRepository = sceneRepo
@@ -68,14 +73,23 @@ func newReconciliation(t *testing.T, wiring reconciliationWiring) *reconciliatio
 		sceneWidgetTypes = wiring.sceneWidgetTypes(wtRepo)
 	}
 
+	var sceneTags tag.TagRepository = tagRepo
+	if wiring.sceneTags != nil {
+		sceneTags = wiring.sceneTags(tagRepo)
+	}
+
 	r := &reconciliation{
+		tagSvc:   application.NewTagService(tagRepo),
 		wtSvc:    application.NewWidgetTypeService(wtRepo),
-		sceneSvc: application.NewSceneService(sceneRepo, sceneWidgetTypes),
+		sceneSvc: application.NewSceneService(sceneRepo, sceneWidgetTypes, sceneTags),
 	}
 	// A pause long enough that only a merged event makes a failed job due
 	// again within a test.
 	r.runner = outbox.NewPolicyRunner(testDB,
-		[]application.Policy{application.NewWidgetReconciliationPolicy(policyWidgetTypes, policyScenes)},
+		[]application.Policy{
+			application.NewWidgetReconciliationPolicy(policyWidgetTypes, policyScenes, tagRepo),
+			application.NewUnbindDeletedTagPolicy(policyScenes),
+		},
 		outbox.WithRetryPause(time.Hour, time.Hour))
 	r.dispatcher = outbox.NewDispatcher(testDB, func(e event.Event) { r.delivered = append(r.delivered, e) },
 		outbox.WithPolicyRunner(r.runner))
@@ -117,14 +131,22 @@ func (r *reconciliation) takeDelivered() []event.Event {
 	return out
 }
 
+// inputPorts returns the InputPorts the given ports declare: "name" accepts
+// any TagType, "name:type" only that one.
+func inputPorts(ports []string) []appdto.InputPort {
+	var out []appdto.InputPort
+	for _, p := range ports {
+		name, hint, _ := strings.Cut(p, ":")
+		out = append(out, appdto.InputPort{Name: name, TypeHint: hint})
+	}
+	return out
+}
+
 func (r *reconciliation) createType(t *testing.T, ports ...string) appdto.WidgetType {
 	t.Helper()
 	input := appdto.WidgetTypeInput{
 		Name: "sensor", HtmlTemplate: "<div></div>", ScriptLanguage: "javascript",
-		DefaultWidth: 100, DefaultHeight: 100,
-	}
-	for _, p := range ports {
-		input.InputPorts = append(input.InputPorts, appdto.InputPort{Name: p})
+		DefaultWidth: 100, DefaultHeight: 100, InputPorts: inputPorts(ports),
 	}
 	created, err := r.wtSvc.CreateWidgetType(context.Background(), input)
 	if err != nil {
@@ -133,15 +155,12 @@ func (r *reconciliation) createType(t *testing.T, ports ...string) appdto.Widget
 	return created
 }
 
-// keepPorts updates wt to declare only the given ports.
+// keepPorts updates wt to declare only the given ports (see inputPorts).
 func (r *reconciliation) keepPorts(t *testing.T, wt appdto.WidgetType, ports ...string) appdto.WidgetType {
 	t.Helper()
 	input := appdto.WidgetTypeInput{
 		Name: wt.Name, HtmlTemplate: wt.HtmlTemplate, Script: wt.Script, ScriptLanguage: wt.ScriptLanguage,
-		DefaultWidth: wt.DefaultWidth, DefaultHeight: wt.DefaultHeight,
-	}
-	for _, p := range ports {
-		input.InputPorts = append(input.InputPorts, appdto.InputPort{Name: p})
+		DefaultWidth: wt.DefaultWidth, DefaultHeight: wt.DefaultHeight, InputPorts: inputPorts(ports),
 	}
 	updated, err := r.wtSvc.UpdateWidgetType(context.Background(), wt.ID, wt.Version, input)
 	if err != nil {
@@ -159,14 +178,43 @@ func (r *reconciliation) createScene(t *testing.T, name string) appdto.Scene {
 	return sc
 }
 
-// addWidget adds to the scene a widget of wt bound to the given ports.
+// createTag creates a Tag of the given type and returns its ID.
+func (r *reconciliation) createTag(t *testing.T, tagType string) uuid.UUID {
+	t.Helper()
+	values := map[string]string{"integer": "0", "string": "", "boolean": "false"}
+	created, err := r.tagSvc.CreateTag(context.Background(), appdto.CreateTagInput{
+		Name: "tag_" + strings.ReplaceAll(uuid.NewString(), "-", ""), Type: tagType, Value: values[tagType], Quality: "good",
+	})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	return created.ID
+}
+
+func (r *reconciliation) deleteTag(t *testing.T, tagID uuid.UUID) {
+	t.Helper()
+	if _, err := r.tagSvc.DeleteTagByID(context.Background(), tagID); err != nil {
+		t.Fatalf("DeleteTagByID: %v", err)
+	}
+}
+
+// addWidget adds to the scene a widget of wt binding each of the given ports
+// to a new integer Tag.
 func (r *reconciliation) addWidget(t *testing.T, sceneID uuid.UUID, sceneVersion int, wt appdto.WidgetType, ports ...string) appdto.Widget {
+	t.Helper()
+	var bindings []appdto.PortBinding
+	for _, p := range ports {
+		bindings = append(bindings, appdto.PortBinding{PortName: p, TagID: r.createTag(t, "integer")})
+	}
+	return r.addWidgetBound(t, sceneID, sceneVersion, wt, bindings...)
+}
+
+// addWidgetBound adds to the scene a widget of wt with the given bindings.
+func (r *reconciliation) addWidgetBound(t *testing.T, sceneID uuid.UUID, sceneVersion int, wt appdto.WidgetType, bindings ...appdto.PortBinding) appdto.Widget {
 	t.Helper()
 	input := appdto.WidgetInput{
 		Name: "widget", Width: 100, Height: 100, OriginX: 0.5, OriginY: 0.5, TypeID: wt.ID,
-	}
-	for _, p := range ports {
-		input.PortBindings = append(input.PortBindings, appdto.PortBinding{PortName: p, TagID: uuid.New()})
+		PortBindings: bindings,
 	}
 	w, err := r.sceneSvc.CreateWidget(context.Background(), sceneID, sceneVersion, input)
 	if err != nil {
@@ -217,11 +265,17 @@ type policyJobRow struct {
 	lastError  string
 }
 
+// policyJobs returns the jobs of the reconciliation policy.
 func policyJobs(t *testing.T) []policyJobRow {
+	t.Helper()
+	return jobsOf(t, application.WidgetReconciliationPolicyName)
+}
+
+func jobsOf(t *testing.T, policy string) []policyJobRow {
 	t.Helper()
 	rows, err := testDB.QueryContext(context.Background(),
 		`SELECT job_key, generation, attempts, coalesce(last_error, '') FROM policy_jobs WHERE policy = $1 ORDER BY job_key`,
-		application.WidgetReconciliationPolicyName)
+		policy)
 	if err != nil {
 		t.Fatalf("read policy_jobs: %v", err)
 	}
@@ -248,7 +302,7 @@ func makeJobsDue(t *testing.T) {
 // --- JobKey ---
 
 func TestWidgetReconciliationPolicy_JobKey(t *testing.T) {
-	policy := application.NewWidgetReconciliationPolicy(nil, nil)
+	policy := application.NewWidgetReconciliationPolicy(nil, nil, nil)
 	wtID := id.NewID[library.WidgetType]()
 	widgetID, sceneID := id.NewID[scene.Widget](), id.NewID[scene.Scene]()
 
@@ -392,7 +446,7 @@ func TestWidgetReconciliation_PortAddedAndBoundWhileJobRuns_KeepsBinding(t *test
 		r.keepPorts(t, withValue, "value", "alarm")
 		input := appdto.WidgetInput{
 			Name: "widget", Width: 100, Height: 100, OriginX: 0.5, OriginY: 0.5, TypeID: wt.ID,
-			PortBindings: []appdto.PortBinding{{PortName: "value", TagID: uuid.New()}, {PortName: "alarm", TagID: uuid.New()}},
+			PortBindings: []appdto.PortBinding{{PortName: "value", TagID: r.createTag(t, "integer")}, {PortName: "alarm", TagID: r.createTag(t, "integer")}},
 		}
 		if _, err := r.sceneSvc.UpdateWidget(context.Background(), sc.ID, w.ID, r.sceneVersion(t, sc.ID), input); err != nil {
 			t.Fatalf("concurrent UpdateWidget: %v", err)
@@ -680,5 +734,127 @@ func TestWidgetReconciliation_DeletedWidgetType_JobIsDone(t *testing.T) {
 
 	if jobs := policyJobs(t); len(jobs) != 0 {
 		t.Errorf("jobs left: %+v", jobs)
+	}
+}
+
+func TestWidgetReconciliation_NarrowedTypeHint_RemovesBindingsItRefuses(t *testing.T) {
+	r := newReconciliation(t, reconciliationWiring{})
+	wt := r.createType(t, "value")
+	sc := r.createScene(t, "scene")
+	accepted := r.addWidgetBound(t, sc.ID, sc.Version, wt, appdto.PortBinding{PortName: "value", TagID: r.createTag(t, "integer")})
+	refused := r.addWidgetBound(t, sc.ID, accepted.SceneVersion, wt, appdto.PortBinding{PortName: "value", TagID: r.createTag(t, "string")})
+	r.settle(t)
+
+	r.keepPorts(t, wt, "value:integer")
+	r.settle(t)
+
+	if got := r.boundPorts(t, sc.ID, accepted.ID); !slices.Equal(got, []string{"value"}) {
+		t.Errorf("binding the hint accepts: bound to %v, want [value]", got)
+	}
+	if got := r.boundPorts(t, sc.ID, refused.ID); len(got) != 0 {
+		t.Errorf("binding the hint refuses: bound to %v, want none", got)
+	}
+}
+
+// --- unbind_deleted_tag ---
+
+func TestUnbindDeletedTagPolicy_JobKey(t *testing.T) {
+	policy := application.NewUnbindDeletedTagPolicy(nil)
+	tagID := id.NewID[tag.Tag]()
+
+	if key, ok := policy.JobKey(tag.NewTagDeletedEvent(tagID)); !ok || key != "tag:"+tagID.String() {
+		t.Errorf("tag_deleted: key %q (%t), want %q", key, ok, "tag:"+tagID.String())
+	}
+	widgetID, sceneID, wtID := id.NewID[scene.Widget](), id.NewID[scene.Scene](), id.NewID[library.WidgetType]()
+	notKeyed := []event.Event{
+		tag.NewTagCreatedEvent(tagID),
+		scene.NewWidgetUpdatedEvent(widgetID, sceneID, wtID),
+		scene.NewWidgetUpdatedByReconciliationEvent(widgetID, sceneID, wtID),
+	}
+	for _, e := range notKeyed {
+		if key, ok := policy.JobKey(e); ok {
+			t.Errorf("%s: unexpected job %q", e.Type(), key)
+		}
+	}
+}
+
+func TestUnbindDeletedTag_RemovesBindingsInEveryScene(t *testing.T) {
+	r := newReconciliation(t, reconciliationWiring{})
+	gauge := r.createType(t, "value", "alarm")
+	lamp := r.createType(t, "state")
+	deleted, kept := r.createTag(t, "integer"), r.createTag(t, "integer")
+	first := r.createScene(t, "first")
+	onFirst := r.addWidgetBound(t, first.ID, first.Version, gauge,
+		appdto.PortBinding{PortName: "value", TagID: deleted}, appdto.PortBinding{PortName: "alarm", TagID: kept})
+	second := r.createScene(t, "second")
+	onSecond := r.addWidgetBound(t, second.ID, second.Version, lamp, appdto.PortBinding{PortName: "state", TagID: deleted})
+	untouched := r.createScene(t, "untouched")
+	r.addWidgetBound(t, untouched.ID, untouched.Version, lamp, appdto.PortBinding{PortName: "state", TagID: kept})
+	r.settle(t)
+	untouchedVersion := r.sceneVersion(t, untouched.ID)
+
+	r.deleteTag(t, deleted)
+	r.settle(t)
+
+	if got := r.boundPorts(t, first.ID, onFirst.ID); !slices.Equal(got, []string{"alarm"}) {
+		t.Errorf("first scene: bound to %v, want [alarm]", got)
+	}
+	if got := r.boundPorts(t, second.ID, onSecond.ID); len(got) != 0 {
+		t.Errorf("second scene: bound to %v, want none", got)
+	}
+	if v := r.sceneVersion(t, untouched.ID); v != untouchedVersion {
+		t.Errorf("scene not bound to the tag: version %d, want %d", v, untouchedVersion)
+	}
+	if jobs := jobsOf(t, application.UnbindDeletedTagPolicyName); len(jobs) != 0 {
+		t.Errorf("jobs left: %+v", jobs)
+	}
+	if jobs := policyJobs(t); len(jobs) != 0 {
+		t.Errorf("the unbinding's own events enqueued %+v, want nothing", jobs)
+	}
+}
+
+// racingFindTagRepository runs race once, right after the first FindByID
+// has read a tag.
+type racingFindTagRepository struct {
+	tag.TagRepository
+	race func()
+}
+
+func (r *racingFindTagRepository) FindByID(ctx context.Context, tagID id.ID[tag.Tag]) (tag.Tag, error) {
+	found, err := r.TagRepository.FindByID(ctx, tagID)
+	if race := r.race; race != nil {
+		r.race = nil
+		race()
+	}
+	return found, err
+}
+
+func TestWidgetReconciliation_WidgetBoundToTagDeletedAfterItWasRead_LosesBinding(t *testing.T) {
+	racing := &racingFindTagRepository{}
+	r := newReconciliation(t, reconciliationWiring{
+		sceneTags: func(inner tag.TagRepository) tag.TagRepository {
+			racing.TagRepository = inner
+			return racing
+		},
+	})
+	wt := r.createType(t, "value")
+	sc := r.createScene(t, "scene")
+	tagID := r.createTag(t, "integer")
+	// CreateWidget has read the tag; before it commits, the tag is deleted
+	// and unbind_deleted_tag runs over a scene that does not hold the widget
+	// yet.
+	racing.race = func() {
+		r.deleteTag(t, tagID)
+		r.settle(t)
+	}
+	w := r.addWidgetBound(t, sc.ID, sc.Version, wt, appdto.PortBinding{PortName: "value", TagID: tagID})
+	if got := r.boundPorts(t, sc.ID, w.ID); !slices.Equal(got, []string{"value"}) {
+		t.Fatalf("bound to %v right after the race, want [value]", got)
+	}
+
+	r.settle(t)
+
+	if got := r.boundPorts(t, sc.ID, w.ID); len(got) != 0 {
+		t.Errorf("bound to %v, want none", got)
 	}
 }

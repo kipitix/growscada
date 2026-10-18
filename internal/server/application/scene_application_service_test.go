@@ -46,14 +46,14 @@ func ensureTestWidgetType(t *testing.T) {
 func newSceneService() application.SceneService {
 	repo := repositories.NewSceneRepositoryPostgres(testDB)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	return application.NewSceneService(repo, wtRepo)
+	return application.NewSceneService(repo, wtRepo, repositories.NewTagRepositoryPostgres(testDB))
 }
 
 func newSceneServiceWithBus(t *testing.T) (application.SceneService, eventbus.EventBus) {
 	bus, onCommit := deliveredOnCommit(t)
 	repo := repositories.NewSceneRepositoryPostgres(testDB, onCommit)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB, onCommit)
-	return application.NewSceneService(repo, wtRepo), bus
+	return application.NewSceneService(repo, wtRepo, repositories.NewTagRepositoryPostgres(testDB)), bus
 }
 
 var testCreateSceneInput = appdto.SceneInput{
@@ -772,6 +772,86 @@ func TestCreateWidget_UndeclaredPort_ReturnsInvalidInput(t *testing.T) {
 	}
 }
 
+// bindingFixture creates a WidgetType whose port "value" accepts only
+// integer Tags, an integer and a string Tag, and a scene holding a widget of
+// the type bound to nothing.
+type bindingFixture struct {
+	scene             appdto.Scene
+	widget            appdto.Widget
+	typeID            uuid.UUID
+	intTag, stringTag uuid.UUID
+}
+
+func newBindingFixture(t *testing.T, svc application.SceneService) bindingFixture {
+	t.Helper()
+	cleanScenes(t)
+	cleanTags(t)
+	ctx := context.Background()
+	wt, err := newWidgetTypeService().CreateWidgetType(ctx, appdto.WidgetTypeInput{
+		Name: "typed-" + uuid.NewString(), HtmlTemplate: "<div></div>", ScriptLanguage: "javascript",
+		DefaultWidth: 100, DefaultHeight: 100,
+		InputPorts: []appdto.InputPort{{Name: "value", TypeHint: "integer"}},
+	})
+	if err != nil {
+		t.Fatalf("CreateWidgetType: %v", err)
+	}
+	tags := newService()
+	intTag, err := tags.CreateTag(ctx, appdto.CreateTagInput{Name: "level", Type: "integer", Value: "0", Quality: "good"})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	stringTag, err := tags.CreateTag(ctx, appdto.CreateTagInput{Name: "label", Type: "string", Value: "", Quality: "good"})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	sc := mustCreateScene(t, svc)
+	input := testCreateWidgetInput
+	input.TypeID = wt.ID
+	w, err := svc.CreateWidget(ctx, sc.ID, sc.Version, input)
+	if err != nil {
+		t.Fatalf("CreateWidget: %v", err)
+	}
+	return bindingFixture{scene: sc, widget: w, typeID: wt.ID, intTag: intTag.ID, stringTag: stringTag.ID}
+}
+
+func (f bindingFixture) input(tagID uuid.UUID) appdto.WidgetInput {
+	input := testCreateWidgetInput
+	input.TypeID = f.typeID
+	input.PortBindings = []appdto.PortBinding{{PortName: "value", TagID: tagID}}
+	return input
+}
+
+func TestWidgetWrites_CheckBoundTags(t *testing.T) {
+	tests := map[string]struct {
+		tag  func(bindingFixture) uuid.UUID
+		want error
+	}{
+		"tag type the hint accepts": {func(f bindingFixture) uuid.UUID { return f.intTag }, nil},
+		"tag type mismatch":         {func(f bindingFixture) uuid.UUID { return f.stringTag }, scene.ErrPortTypeMismatch},
+		"unknown tag":               {func(bindingFixture) uuid.UUID { return uuid.New() }, scene.ErrBoundTagNotFound},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			svc := newSceneService()
+			ctx := context.Background()
+
+			f := newBindingFixture(t, svc)
+			_, createErr := svc.CreateWidget(ctx, f.scene.ID, f.widget.SceneVersion, f.input(tt.tag(f)))
+			f = newBindingFixture(t, svc)
+			_, updateErr := svc.UpdateWidget(ctx, f.scene.ID, f.widget.ID, f.widget.SceneVersion, f.input(tt.tag(f)))
+
+			for op, err := range map[string]error{"CreateWidget": createErr, "UpdateWidget": updateErr} {
+				if tt.want == nil && err != nil {
+					t.Errorf("%s: expected no error, got %v", op, err)
+				}
+				if tt.want != nil && (!errors.Is(err, application.ErrInvalidInput) || !errors.Is(err, tt.want)) {
+					t.Errorf("%s: expected ErrInvalidInput wrapping %v, got %v", op, tt.want, err)
+				}
+			}
+		})
+	}
+}
+
 func TestDeleteWidget_Existing_BumpsSceneVersionOnce(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
@@ -841,7 +921,7 @@ func TestDeleteWidget_SceneChangedMeanwhile_RereadsAndKeepsChange(t *testing.T) 
 	}
 
 	repo := &racingSceneRepository{SceneRepository: repositories.NewSceneRepositoryPostgres(testDB), races: 1, race: renameScene(t, svc, sc.ID)}
-	racingSvc := application.NewSceneService(repo, repositories.NewWidgetTypeRepositoryPostgres(testDB))
+	racingSvc := application.NewSceneService(repo, repositories.NewWidgetTypeRepositoryPostgres(testDB), repositories.NewTagRepositoryPostgres(testDB))
 
 	deleted, err := racingSvc.DeleteWidgetByID(ctx, sc.ID, created.ID)
 
@@ -872,7 +952,7 @@ func TestDeleteWidget_LosesRaceThreeTimes_ReturnsConflictKeepsWidget(t *testing.
 	}
 
 	repo := &racingSceneRepository{SceneRepository: repositories.NewSceneRepositoryPostgres(testDB), races: 3, race: renameScene(t, svc, sc.ID)}
-	racingSvc := application.NewSceneService(repo, repositories.NewWidgetTypeRepositoryPostgres(testDB))
+	racingSvc := application.NewSceneService(repo, repositories.NewWidgetTypeRepositoryPostgres(testDB), repositories.NewTagRepositoryPostgres(testDB))
 
 	_, err = racingSvc.DeleteWidgetByID(ctx, sc.ID, created.ID)
 
@@ -887,7 +967,7 @@ func TestDeleteWidget_LosesRaceThreeTimes_ReturnsConflictKeepsWidget(t *testing.
 func TestDeleteScene_WidgetAddedMeanwhile_DeliversWidgetDeletedForIt(t *testing.T) {
 	cleanScenes(t)
 	bus, onCommit := deliveredOnCommit(t)
-	svc := application.NewSceneService(repositories.NewSceneRepositoryPostgres(testDB, onCommit), repositories.NewWidgetTypeRepositoryPostgres(testDB))
+	svc := application.NewSceneService(repositories.NewSceneRepositoryPostgres(testDB, onCommit), repositories.NewWidgetTypeRepositoryPostgres(testDB), repositories.NewTagRepositoryPostgres(testDB))
 	ctx := context.Background()
 	sc := mustCreateScene(t, svc)
 
@@ -898,7 +978,7 @@ func TestDeleteScene_WidgetAddedMeanwhile_DeliversWidgetDeletedForIt(t *testing.
 			t.Fatalf("concurrent CreateWidget: %v", err)
 		}
 	}}
-	racingSvc := application.NewSceneService(repo, repositories.NewWidgetTypeRepositoryPostgres(testDB))
+	racingSvc := application.NewSceneService(repo, repositories.NewWidgetTypeRepositoryPostgres(testDB), repositories.NewTagRepositoryPostgres(testDB))
 	var widgetDeleted []uuid.UUID
 	bus.Subscribe(event.EventTypeWidgetDeleted, func(e event.Event) {
 		widgetDeleted = append(widgetDeleted, e.(scene.WidgetEvent).WidgetID().UUID())
@@ -953,7 +1033,7 @@ func newServiceDeletingRacingType(t *testing.T) application.SceneService {
 			t.Fatalf("concurrent delete of widget type: %v", err)
 		}
 	}
-	return application.NewSceneService(repositories.NewSceneRepositoryPostgres(testDB), wtRepo)
+	return application.NewSceneService(repositories.NewSceneRepositoryPostgres(testDB), wtRepo, repositories.NewTagRepositoryPostgres(testDB))
 }
 
 func TestCreateWidget_TypeDeletedMeanwhile_ReturnsInvalidInput(t *testing.T) {

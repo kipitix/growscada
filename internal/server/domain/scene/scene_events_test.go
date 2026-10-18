@@ -84,11 +84,11 @@ func TestScene_Changes_RecordTheirEventsInOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Update: %v", err)
 	}
-	afterAdd, err := afterUpdate.AddWidget(sc.Version(), added, wt)
+	afterAdd, err := afterUpdate.AddWidget(sc.Version(), added, wt, tagTypesOf(added))
 	if err != nil {
 		t.Fatalf("AddWidget: %v", err)
 	}
-	afterUpdateWidget, err := afterAdd.UpdateWidget(sc.Version(), added, wt)
+	afterUpdateWidget, err := afterAdd.UpdateWidget(sc.Version(), added, wt, tagTypesOf(added))
 	if err != nil {
 		t.Fatalf("UpdateWidget: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestSceneReconcileWith_RecordsWidgetUpdatedForEachChangedWidget(t *testing.
 	sc := makeStoredScene(t, changed1, untouched, changed2)
 	after := makeWidgetTypeWithID(t, before.ID(), "value")
 
-	reconciled, ok := sc.ReconcileWith(after)
+	reconciled, ok := sc.ReconcileWith(after, tagTypesOf(sc.Widgets()...))
 
 	if !ok {
 		t.Fatal("expected a change")

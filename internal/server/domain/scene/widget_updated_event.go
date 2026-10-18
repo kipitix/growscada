@@ -6,12 +6,13 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/library"
 )
 
-// WidgetUpdatedEvent is recorded by Scene.UpdateWidget and, for each widget it changes, Scene.ReconcileWith.
+// WidgetUpdatedEvent is recorded by Scene.UpdateWidget and, for each widget
+// they change, Scene.ReconcileWith and Scene.UnbindTag.
 type WidgetUpdatedEvent interface {
 	WidgetTypedEvent
-	// ByReconciliation reports that Scene.ReconcileWith recorded the event:
-	// the change only removed PortBindings of ports the WidgetType no longer
-	// declares, so it bound the widget to nothing new.
+	// ByReconciliation reports that Scene.ReconcileWith or Scene.UnbindTag
+	// recorded the event: the change only removed PortBindings that stopped
+	// being valid, so it bound the widget to nothing new.
 	ByReconciliation() bool
 }
 
@@ -27,7 +28,7 @@ func NewWidgetUpdatedEvent(aWidgetID id.ID[Widget], aSceneID id.ID[Scene], aWidg
 }
 
 // NewWidgetUpdatedByReconciliationEvent returns the WidgetUpdatedEvent that
-// Scene.ReconcileWith records (ByReconciliation).
+// Scene.ReconcileWith and Scene.UnbindTag record (ByReconciliation).
 func NewWidgetUpdatedByReconciliationEvent(aWidgetID id.ID[Widget], aSceneID id.ID[Scene], aWidgetTypeID id.ID[library.WidgetType], opts ...event.EventOption) WidgetUpdatedEvent {
 	return newWidgetUpdatedEvent(aWidgetID, aSceneID, aWidgetTypeID, true, opts...)
 }

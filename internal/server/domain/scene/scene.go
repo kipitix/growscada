@@ -7,6 +7,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
@@ -50,17 +51,21 @@ type Scene interface {
 	// a WidgetCreatedEvent.
 	// Returns ErrSceneConflict if expected is not the scene's Version,
 	// ErrWidgetAlreadyExists if the scene already holds a widget with its ID,
-	// ErrWidgetTypeMismatch if wt is not the widget's type and
-	// ErrPortNotDeclared if the widget binds a port wt does not declare.
-	AddWidget(expected version.Version[Scene], w Widget, wt library.WidgetType) (Scene, error)
+	// ErrWidgetTypeMismatch if wt is not the widget's type, and for a
+	// PortBinding that is not valid (see checkWidgetType)
+	// ErrPortNotDeclared, ErrBoundTagNotFound or ErrPortTypeMismatch.
+	// tagTypes holds the TagTypes of the Tags the widget binds.
+	AddWidget(expected version.Version[Scene], w Widget, wt library.WidgetType, tagTypes TagTypes) (Scene, error)
 
 	// UpdateWidget replaces the scene's widget with the same ID by w, of
 	// WidgetType wt, and records a WidgetUpdatedEvent.
 	// Returns ErrSceneConflict if expected is not the scene's Version,
 	// ErrWidgetNotFound if the scene has no widget with its ID,
-	// ErrWidgetTypeMismatch if wt is not the widget's type and
-	// ErrPortNotDeclared if the widget binds a port wt does not declare.
-	UpdateWidget(expected version.Version[Scene], w Widget, wt library.WidgetType) (Scene, error)
+	// ErrWidgetTypeMismatch if wt is not the widget's type, and for a
+	// PortBinding that is not valid (see checkWidgetType)
+	// ErrPortNotDeclared, ErrBoundTagNotFound or ErrPortTypeMismatch.
+	// tagTypes holds the TagTypes of the Tags the widget binds.
+	UpdateWidget(expected version.Version[Scene], w Widget, wt library.WidgetType, tagTypes TagTypes) (Scene, error)
 
 	// RemoveWidget removes the widget with the given ID from the scene,
 	// records a WidgetDeletedEvent and returns the widget too. Like removing
@@ -69,10 +74,18 @@ type Scene interface {
 	RemoveWidget(id.ID[Widget]) (Scene, Widget, error)
 
 	// ReconcileWith removes, from the scene's widgets of WidgetType wt, the
-	// PortBindings of ports wt no longer declares, recording a
-	// WidgetUpdatedEvent ByReconciliation for each widget it changes. The bool
-	// reports whether anything was removed.
-	ReconcileWith(wt library.WidgetType) (Scene, bool)
+	// PortBindings that are no longer valid: of ports wt no longer declares,
+	// of Tags missing from tagTypes and of Tags whose TagType the port's type
+	// hint no longer accepts. It records a WidgetUpdatedEvent ByReconciliation
+	// for each widget it changes. The bool reports whether anything was
+	// removed.
+	ReconcileWith(wt library.WidgetType, tagTypes TagTypes) (Scene, bool)
+
+	// UnbindTag removes, from the scene's widgets of every WidgetType, the
+	// PortBindings of the Tag tagID, recording a WidgetUpdatedEvent
+	// ByReconciliation for each widget it changes. The bool reports whether
+	// anything was removed.
+	UnbindTag(tagID id.ID[tag.Tag]) (Scene, bool)
 
 	// Delete records a WidgetDeletedEvent for each of the scene's widgets,
 	// then a SceneDeletedEvent; the repository's Delete removes the scene
@@ -170,20 +183,20 @@ func (s *sceneImpl) Update(expected version.Version[Scene], aName SceneName, aSi
 	}, nil
 }
 
-func (s *sceneImpl) AddWidget(expected version.Version[Scene], w Widget, wt library.WidgetType) (Scene, error) {
+func (s *sceneImpl) AddWidget(expected version.Version[Scene], w Widget, wt library.WidgetType, tagTypes TagTypes) (Scene, error) {
 	if err := s.CheckVersion(expected); err != nil {
 		return nil, err
 	}
 	if s.widgetIndex(w.ID()) >= 0 {
 		return nil, fmt.Errorf("%w: %s", ErrWidgetAlreadyExists, w.ID())
 	}
-	if err := checkWidgetType(w, wt); err != nil {
+	if err := checkWidgetType(w, wt, tagTypes); err != nil {
 		return nil, err
 	}
 	return s.withWidgets(append(slices.Clip(s.widgets), w), NewWidgetCreatedEvent(w.ID(), s.id, w.TypeID())), nil
 }
 
-func (s *sceneImpl) UpdateWidget(expected version.Version[Scene], w Widget, wt library.WidgetType) (Scene, error) {
+func (s *sceneImpl) UpdateWidget(expected version.Version[Scene], w Widget, wt library.WidgetType, tagTypes TagTypes) (Scene, error) {
 	if err := s.CheckVersion(expected); err != nil {
 		return nil, err
 	}
@@ -191,7 +204,7 @@ func (s *sceneImpl) UpdateWidget(expected version.Version[Scene], w Widget, wt l
 	if i < 0 {
 		return nil, id.NotFound(ErrWidgetNotFound, w.ID())
 	}
-	if err := checkWidgetType(w, wt); err != nil {
+	if err := checkWidgetType(w, wt, tagTypes); err != nil {
 		return nil, err
 	}
 	widgets := slices.Clone(s.widgets)
@@ -207,20 +220,29 @@ func (s *sceneImpl) RemoveWidget(widgetID id.ID[Widget]) (Scene, Widget, error) 
 	return s.withWidgets(slices.Concat(s.widgets[:i], s.widgets[i+1:]), NewWidgetDeletedEvent(widgetID, s.id)), s.widgets[i], nil
 }
 
-func (s *sceneImpl) ReconcileWith(wt library.WidgetType) (Scene, bool) {
-	declared := declaredPorts(wt)
+func (s *sceneImpl) ReconcileWith(wt library.WidgetType, tagTypes TagTypes) (Scene, bool) {
+	ports := declaredPorts(wt)
+	return s.removeBindings(func(w Widget, b PortBinding) bool {
+		return w.TypeID() == wt.ID() && checkBinding(b, ports, tagTypes) != nil
+	})
+}
+
+func (s *sceneImpl) UnbindTag(tagID id.ID[tag.Tag]) (Scene, bool) {
+	return s.removeBindings(func(_ Widget, b PortBinding) bool {
+		return b.TagID() == tagID
+	})
+}
+
+// removeBindings removes from the scene's widgets the PortBindings for which
+// remove reports true, recording a WidgetUpdatedEvent ByReconciliation for
+// each widget it changes. The bool reports whether anything was removed.
+func (s *sceneImpl) removeBindings(remove func(Widget, PortBinding) bool) (Scene, bool) {
 	var widgets []Widget // cloned on the first widget that changes
 	var events []event.Event
 	for i, w := range s.widgets {
-		if w.TypeID() != wt.ID() {
-			continue
-		}
 		bindings := w.PortBindings()
 		before := len(bindings)
-		kept := slices.DeleteFunc(bindings, func(b PortBinding) bool {
-			_, ok := declared[b.PortName()]
-			return !ok
-		})
+		kept := slices.DeleteFunc(bindings, func(b PortBinding) bool { return remove(w, b) })
 		if len(kept) == before {
 			continue
 		}
@@ -284,25 +306,45 @@ func (s *sceneImpl) record(someEvents ...event.Event) []event.Event {
 	return slices.Concat(s.pending, someEvents)
 }
 
-// checkWidgetType checks that wt is the widget's type and declares every
-// port the widget binds.
-func checkWidgetType(w Widget, wt library.WidgetType) error {
+// checkWidgetType checks that wt is the widget's type and every PortBinding
+// of the widget is valid (see checkBinding).
+func checkWidgetType(w Widget, wt library.WidgetType, tagTypes TagTypes) error {
 	if w.TypeID() != wt.ID() {
 		return fmt.Errorf("%w: widget has type %s, checked against %s", ErrWidgetTypeMismatch, w.TypeID(), wt.ID())
 	}
-	declared := declaredPorts(wt)
+	ports := declaredPorts(wt)
 	for _, b := range w.PortBindings() {
-		if _, ok := declared[b.PortName()]; !ok {
-			return fmt.Errorf("%w: port %q, widget type %q", ErrPortNotDeclared, b.PortName().String(), wt.Name().String())
+		if err := checkBinding(b, ports, tagTypes); err != nil {
+			return fmt.Errorf("%w, widget type %q", err, wt.Name().String())
 		}
 	}
 	return nil
 }
 
-func declaredPorts(wt library.WidgetType) map[library.InputPortName]struct{} {
-	declared := make(map[library.InputPortName]struct{}, len(wt.InputPorts()))
+// checkBinding checks that a PortBinding is valid (ADR 0010): ports, the
+// InputPorts of the widget's WidgetType by name, declare its port
+// (ErrPortNotDeclared), its Tag exists in tagTypes (ErrBoundTagNotFound) and
+// the port's type hint accepts the Tag's TagType (ErrPortTypeMismatch).
+func checkBinding(b PortBinding, ports map[library.InputPortName]library.InputPort, tagTypes TagTypes) error {
+	port, ok := ports[b.PortName()]
+	if !ok {
+		return fmt.Errorf("%w: port %q", ErrPortNotDeclared, b.PortName().String())
+	}
+	tagType, ok := tagTypes.Of(b.TagID())
+	if !ok {
+		return fmt.Errorf("%w: port %q, tag %s", ErrBoundTagNotFound, b.PortName().String(), b.TagID())
+	}
+	if !port.TypeHint().Accepts(tagType) {
+		return fmt.Errorf("%w: port %q accepts %s, tag %s is %s",
+			ErrPortTypeMismatch, b.PortName().String(), port.TypeHint(), b.TagID(), tagType)
+	}
+	return nil
+}
+
+func declaredPorts(wt library.WidgetType) map[library.InputPortName]library.InputPort {
+	declared := make(map[library.InputPortName]library.InputPort, len(wt.InputPorts()))
 	for _, p := range wt.InputPorts() {
-		declared[p.Name()] = struct{}{}
+		declared[p.Name()] = p
 	}
 	return declared
 }

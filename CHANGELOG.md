@@ -1,5 +1,15 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.40] - 2026-10-19
+
+### Changed
+
+- **Привязка тега к порту проверяет тип тега; сломанные привязки снимаются политиками** (задача 25, ADR 0010)
+  - `scene`: `AddWidget`/`UpdateWidget` принимают `scene.TagTypes` — типы привязанных тегов значениями (Scene сама теги не читает) — и проверяют `PortTypeHint.Accepts`: несовпадение типа — `ErrPortTypeMismatch`, тег, которого нет, — `ErrBoundTagNotFound`. `SceneService` (получает `tag.TagRepository`) загружает типы тегов и отвечает на обе ошибки `port_bindings: invalid input` (400), как на `ErrPortNotDeclared`
+  - `Scene.ReconcileWith(wt, tagTypes)` снимает у виджетов типа и привязки к тегам, которые hint больше не принимает, и к несуществующим тегам. Политика `reconcile_widgets_with_widget_type` получает `tag.TagRepository` и читает теги после Scene: смена `type_hint` у WidgetType снимает несовместимые привязки, а job на `widget_created`/`widget_updated` — привязку к тегу, удалённому параллельно с записью виджета
+  - Новая политика `unbind_deleted_tag`: `tag_deleted` → job `tag:<id>`; находит Scene через `SceneRepository.FindByTagID` (поиск по JSON `port_bindings`) и в каждой отдельной транзакции снимает привязки к тегу (`Scene.UnbindTag`, событие `widget_updated` ByReconciliation, новых jobs не порождает)
+  - Удаление тега и смена портов или `type_hint` у WidgetType по-прежнему не отклоняются из-за привязок. Контракты и Bruno-коллекции не менялись
+
 ## [0.0.39] - 2026-10-15
 
 ### Changed
