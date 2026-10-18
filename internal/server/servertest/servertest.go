@@ -115,7 +115,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	sceneRepo := repositories.NewSceneRepositoryPostgres(db, onCommit)
 	runner := outbox.NewPolicyRunner(db, []application.Policy{
 		application.NewWidgetReconciliationPolicy(wtRepo, sceneRepo, tagRepo),
-		application.NewUnbindDeletedTagPolicy(sceneRepo),
+		application.NewUnbindDeletedTagPolicy(sceneRepo, tagRepo),
 	})
 	dispatcher.SetPolicyRunner(runner)
 	ctx, stop := context.WithCancel(context.Background())

@@ -8,7 +8,13 @@
   - `scene`: `AddWidget`/`UpdateWidget` принимают `scene.TagTypes` — типы привязанных тегов значениями (Scene сама теги не читает) — и проверяют `PortTypeHint.Accepts`: несовпадение типа — `ErrPortTypeMismatch`, тег, которого нет, — `ErrBoundTagNotFound`. `SceneService` (получает `tag.TagRepository`) загружает типы тегов и отвечает на обе ошибки `port_bindings: invalid input` (400), как на `ErrPortNotDeclared`
   - `Scene.ReconcileWith(wt, tagTypes)` снимает у виджетов типа и привязки к тегам, которые hint больше не принимает, и к несуществующим тегам. Политика `reconcile_widgets_with_widget_type` получает `tag.TagRepository` и читает теги после Scene: смена `type_hint` у WidgetType снимает несовместимые привязки, а job на `widget_created`/`widget_updated` — привязку к тегу, удалённому параллельно с записью виджета
   - Новая политика `unbind_deleted_tag`: `tag_deleted` → job `tag:<id>`; находит Scene через `SceneRepository.FindByTagID` (поиск по JSON `port_bindings`) и в каждой отдельной транзакции снимает привязки к тегу (`Scene.UnbindTag`, событие `widget_updated` ByReconciliation, новых jobs не порождает)
-  - Удаление тега и смена портов или `type_hint` у WidgetType по-прежнему не отклоняются из-за привязок. Контракты и Bruno-коллекции не менялись
+  - `UpdateWidget` проверяет только привязки, которых у сохранённого виджета (того же типа) не было: привязка, сломавшаяся после создания, не мешает перемещать и править виджет — её снимает job события `widget_updated`
+  - `unbind_deleted_tag` снимает привязки, только если тег на момент запуска действительно не существует
+  - `TagRepository.FindTypesByIDs`: типы привязанных тегов читаются одним запросом (`WHERE id = ANY($1)`), а не по запросу на тег; общий для политик шаг «перечитать Scene, изменить, сохранить» вынесен в `changeScene`/`changeEachScene`
+  - Миграции: GIN-индекс `idx_widgets_port_bindings` для поиска Scene по тегу; job `reconcile_widgets_with_widget_type` на каждый используемый WidgetType — снимает уже сохранённые сломанные привязки при первом запуске
+  - UI (Project → Properties): привязка к удалённому тегу или к тегу неподходящего типа показывается выбранным пунктом «⚠ …», и выбор «— unbound —» её снимает
+  - Bruno: `post widgets` и `put widget by id` привязывают порт `state` к boolean-тегу `BOOLEAN_TAG_ID`
+  - Удаление тега и смена портов или `type_hint` у WidgetType по-прежнему не отклоняются из-за привязок. Контракты не менялись
 
 ## [0.0.39] - 2026-10-15
 

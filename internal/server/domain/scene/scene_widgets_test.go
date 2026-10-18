@@ -496,6 +496,24 @@ func TestSceneReconcileWith_RemovesBindingsOfMissingTags(t *testing.T) {
 	}
 }
 
+func TestSceneUpdateWidget_ChecksOnlyBindingsTheWidgetDidNotHold(t *testing.T) {
+	wt := makeWidgetType(t, "value", "alarm")
+	stored := makeWidgetOf(t, wt, "w1", "value")
+	sc := makeStoredScene(t, stored)
+	// The Tag of the held binding no longer exists.
+	held := stored.PortBindings()[0]
+	added := NewPortBinding(mustPortName(t, "alarm"), id.NewID[tag.Tag]())
+	updated := NewWidget(stored.ID(), stored.Name(), NewPosition(10, 0, 0), stored.Size(), stored.Origin(), stored.Rotation(),
+		wt.ID(), nil, []PortBinding{held, added})
+
+	if _, err := sc.UpdateWidget(sc.Version(), updated, wt, NewTagTypes(map[id.ID[tag.Tag]]tag.TagType{added.TagID(): tag.TagTypeInteger})); err != nil {
+		t.Errorf("held binding broken since: expected no error, got %v", err)
+	}
+	if _, err := sc.UpdateWidget(sc.Version(), updated, wt, NewTagTypes(nil)); !errors.Is(err, ErrBoundTagNotFound) {
+		t.Errorf("new binding to a missing tag: expected ErrBoundTagNotFound, got %v", err)
+	}
+}
+
 // ── UnbindTag ───────────────────────────────────────────────────────────────
 
 func TestSceneUnbindTag_RemovesBindingsOfTheTagFromWidgetsOfEveryType(t *testing.T) {

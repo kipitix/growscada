@@ -1,9 +1,6 @@
 package scene
 
 import (
-	"maps"
-	"slices"
-
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
@@ -16,9 +13,11 @@ type TagTypes struct {
 	types map[id.ID[tag.Tag]]tag.TagType
 }
 
-// NewTagTypes returns TagTypes holding the given types.
+// NewTagTypes returns TagTypes holding the given types. It takes someTypes
+// over without copying: the caller passes a map of its own that nothing else
+// changes.
 func NewTagTypes(someTypes map[id.ID[tag.Tag]]tag.TagType) TagTypes {
-	return TagTypes{types: maps.Clone(someTypes)}
+	return TagTypes{types: someTypes}
 }
 
 // Of returns the TagType of the Tag with the given ID; false if TagTypes has
@@ -32,9 +31,11 @@ func (t TagTypes) Of(tagID id.ID[tag.Tag]) (tag.TagType, bool) {
 // the order they are first bound.
 func BoundTagIDs(someWidgets ...Widget) []id.ID[tag.Tag] {
 	var out []id.ID[tag.Tag]
+	seen := make(map[id.ID[tag.Tag]]struct{})
 	for _, w := range someWidgets {
 		for _, b := range w.PortBindings() {
-			if !slices.Contains(out, b.TagID()) {
+			if _, ok := seen[b.TagID()]; !ok {
+				seen[b.TagID()] = struct{}{}
 				out = append(out, b.TagID())
 			}
 		}

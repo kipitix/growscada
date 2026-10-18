@@ -88,7 +88,7 @@ func newReconciliation(t *testing.T, wiring reconciliationWiring) *reconciliatio
 	r.runner = outbox.NewPolicyRunner(testDB,
 		[]application.Policy{
 			application.NewWidgetReconciliationPolicy(policyWidgetTypes, policyScenes, tagRepo),
-			application.NewUnbindDeletedTagPolicy(policyScenes),
+			application.NewUnbindDeletedTagPolicy(policyScenes, tagRepo),
 		},
 		outbox.WithRetryPause(time.Hour, time.Hour))
 	r.dispatcher = outbox.NewDispatcher(testDB, func(e event.Event) { r.delivered = append(r.delivered, e) },
@@ -759,7 +759,7 @@ func TestWidgetReconciliation_NarrowedTypeHint_RemovesBindingsItRefuses(t *testi
 // --- unbind_deleted_tag ---
 
 func TestUnbindDeletedTagPolicy_JobKey(t *testing.T) {
-	policy := application.NewUnbindDeletedTagPolicy(nil)
+	policy := application.NewUnbindDeletedTagPolicy(nil, nil)
 	tagID := id.NewID[tag.Tag]()
 
 	if key, ok := policy.JobKey(tag.NewTagDeletedEvent(tagID)); !ok || key != "tag:"+tagID.String() {
@@ -813,15 +813,60 @@ func TestUnbindDeletedTag_RemovesBindingsInEveryScene(t *testing.T) {
 	}
 }
 
-// racingFindTagRepository runs race once, right after the first FindByID
-// has read a tag.
+func TestUnbindDeletedTag_TagExistsWhenJobRuns_KeepsBindings(t *testing.T) {
+	r := newReconciliation(t, reconciliationWiring{})
+	wt := r.createType(t, "value")
+	sc := r.createScene(t, "scene")
+	tagID := r.createTag(t, "integer")
+	w := r.addWidgetBound(t, sc.ID, sc.Version, wt, appdto.PortBinding{PortName: "value", TagID: tagID})
+	r.settle(t)
+	policy := application.NewUnbindDeletedTagPolicy(repositories.NewSceneRepositoryPostgres(testDB), repositories.NewTagRepositoryPostgres(testDB))
+
+	// A job of a tag_deleted event for a Tag that exists again, e.g. created
+	// anew with the same ID.
+	if err := policy.Run(context.Background(), "tag:"+tagID.String()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if got := r.boundPorts(t, sc.ID, w.ID); !slices.Equal(got, []string{"value"}) {
+		t.Errorf("bound to %v, want [value]", got)
+	}
+}
+
+func TestUpdateWidget_KeepsBindingBrokenSinceItWasMade_PolicyRemovesIt(t *testing.T) {
+	r := newReconciliation(t, reconciliationWiring{})
+	wt := r.createType(t, "value", "alarm")
+	sc := r.createScene(t, "scene")
+	deleted := r.createTag(t, "integer")
+	stale := appdto.PortBinding{PortName: "value", TagID: deleted}
+	w := r.addWidgetBound(t, sc.ID, sc.Version, wt, stale)
+	r.settle(t)
+	// Deleted, the policies not run yet: the widget still holds the binding.
+	r.deleteTag(t, deleted)
+
+	input := appdto.WidgetInput{
+		Name: "moved", X: 10, Width: 100, Height: 100, OriginX: 0.5, OriginY: 0.5, TypeID: wt.ID,
+		PortBindings: []appdto.PortBinding{stale, {PortName: "alarm", TagID: r.createTag(t, "integer")}},
+	}
+	if _, err := r.sceneSvc.UpdateWidget(context.Background(), sc.ID, w.ID, r.sceneVersion(t, sc.ID), input); err != nil {
+		t.Fatalf("UpdateWidget carrying the binding it already held: %v", err)
+	}
+	r.settle(t)
+
+	if got := r.boundPorts(t, sc.ID, w.ID); !slices.Equal(got, []string{"alarm"}) {
+		t.Errorf("bound to %v, want [alarm]", got)
+	}
+}
+
+// racingFindTagRepository runs race once, right after the first
+// FindTypesByIDs has read tags.
 type racingFindTagRepository struct {
 	tag.TagRepository
 	race func()
 }
 
-func (r *racingFindTagRepository) FindByID(ctx context.Context, tagID id.ID[tag.Tag]) (tag.Tag, error) {
-	found, err := r.TagRepository.FindByID(ctx, tagID)
+func (r *racingFindTagRepository) FindTypesByIDs(ctx context.Context, tagIDs []id.ID[tag.Tag]) (map[id.ID[tag.Tag]]tag.TagType, error) {
+	found, err := r.TagRepository.FindTypesByIDs(ctx, tagIDs)
 	if race := r.race; race != nil {
 		r.race = nil
 		race()

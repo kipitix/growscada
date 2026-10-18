@@ -67,22 +67,14 @@ func (s sceneServiceImpl) loadWidgetType(ctx context.Context, typeID id.ID[libra
 	return wt, nil
 }
 
-// loadTagTypes reads the TagTypes of the Tags with the given IDs; a Tag that
-// does not exist is left out, for the Scene to judge the binding to it. The
-// Tags are read one by one, not at one moment: a TagType never changes, so
-// only a deletion can come between, and a Tag deleted after it was read is
-// unbound by policies (ADR 0010).
+// loadTagTypes reads, in one query, the TagTypes of the Tags with the given
+// IDs; a Tag that does not exist is left out, for the Scene to judge the
+// binding to it. A Tag deleted after it was read is unbound by policies
+// (ADR 0010).
 func loadTagTypes(ctx context.Context, tags tag.TagRepository, tagIDs []id.ID[tag.Tag]) (scene.TagTypes, error) {
-	types := make(map[id.ID[tag.Tag]]tag.TagType, len(tagIDs))
-	for _, tagID := range tagIDs {
-		found, err := tags.FindByID(ctx, tagID)
-		if errors.Is(err, tag.ErrTagNotFound) {
-			continue
-		}
-		if err != nil {
-			return scene.TagTypes{}, fmt.Errorf("cannot find tag %s: %w", tagID, err)
-		}
-		types[tagID] = found.Type()
+	types, err := tags.FindTypesByIDs(ctx, tagIDs)
+	if err != nil {
+		return scene.TagTypes{}, fmt.Errorf("cannot read tag types: %w", err)
 	}
 	return scene.NewTagTypes(types), nil
 }

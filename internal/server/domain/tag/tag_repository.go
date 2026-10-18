@@ -37,6 +37,11 @@ type TagRepository interface {
 	// Returns the tag and nil on success, or nil and an error if not found or on failure.
 	FindByID(context.Context, id.ID[Tag]) (Tag, error)
 
+	// FindTypesByIDs returns the TagTypes of the tags with the given IDs, read
+	// in one query; a tag that does not exist is left out.
+	// Returns the types and nil on success, or nil and an error on failure.
+	FindTypesByIDs(context.Context, []id.ID[Tag]) (map[id.ID[Tag]]TagType, error)
+
 	// FindByName returns a tag by its unique name.
 	// Returns the tag and nil on success, ErrTagNotFound if no tag has that name, or an error on failure.
 	FindByName(context.Context, TagName) (Tag, error)

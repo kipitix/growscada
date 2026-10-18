@@ -558,12 +558,24 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 		// Build tag options filtered by type hint
 		tagOptions := make([]app.UI, 0, len(p.tags.List())+1)
 		tagOptions = append(tagOptions, app.Option().Value("").Selected(currentTagID == uuid.Nil).Text("— unbound —"))
+		offered := currentTagID == uuid.Nil
 		for _, t := range p.tags.List() {
 			t := t
 			if port.TypeHint != "" && t.Type != port.TypeHint {
 				continue
 			}
+			offered = offered || t.ID == currentTagID
 			tagOptions = append(tagOptions, app.Option().Value(t.ID.String()).Selected(t.ID == currentTagID).Text(t.Name+" ("+t.Type+")"))
+		}
+		// A binding broken since it was made (its Tag deleted or of a type
+		// the hint no longer accepts) stays until a policy removes it; it is
+		// shown selected, so that choosing "— unbound —" unbinds it.
+		if !offered {
+			text := "⚠ missing tag"
+			if t, ok := uiutil.FindByID(p.tags.List(), currentTagID, uiutil.TagID); ok {
+				text = "⚠ " + t.Name + " (" + t.Type + ")"
+			}
+			tagOptions = append(tagOptions, app.Option().Value(currentTagID.String()).Selected(true).Text(text))
 		}
 
 		var descEl app.UI

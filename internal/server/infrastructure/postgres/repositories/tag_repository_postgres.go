@@ -10,6 +10,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/domain/version"
+	"github.com/lib/pq"
 )
 
 type tagRepositoryPostgresImpl struct {
@@ -97,6 +98,40 @@ func (r tagRepositoryPostgresImpl) FindByID(ctx context.Context, tagID id.ID[tag
 		return nil, id.NotFound(tag.ErrTagNotFound, tagID)
 	}
 	return found, err
+}
+
+func (r tagRepositoryPostgresImpl) FindTypesByIDs(ctx context.Context, tagIDs []id.ID[tag.Tag]) (map[id.ID[tag.Tag]]tag.TagType, error) {
+	types := make(map[id.ID[tag.Tag]]tag.TagType, len(tagIDs))
+	if len(tagIDs) == 0 {
+		return types, nil
+	}
+	rawIDs := make([]string, len(tagIDs))
+	for i, tagID := range tagIDs {
+		rawIDs[i] = tagID.UUID().String()
+	}
+	rows, err := r.db.QueryContext(ctx, `SELECT id, type FROM tags WHERE id = ANY($1::uuid[])`, pq.Array(rawIDs))
+	if err != nil {
+		return nil, fmt.Errorf("error querying tag types: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			tagUUID uuid.UUID
+			rawType string
+		)
+		if err := rows.Scan(&tagUUID, &rawType); err != nil {
+			return nil, fmt.Errorf("error scanning tag type: %w", err)
+		}
+		tagType, err := tag.NewTagType(rawType)
+		if err != nil {
+			return nil, fmt.Errorf("cannot create tag type: %w", err)
+		}
+		types[id.NewID(id.IDWithUUID[tag.Tag](tagUUID))] = tagType
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over tag types: %w", err)
+	}
+	return types, nil
 }
 
 func (r tagRepositoryPostgresImpl) FindByName(ctx context.Context, aName tag.TagName) (tag.Tag, error) {

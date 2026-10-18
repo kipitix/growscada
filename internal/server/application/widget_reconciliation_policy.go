@@ -105,13 +105,10 @@ func (p widgetReconciliationPolicy) Run(ctx context.Context, key string) error {
 		return fmt.Errorf("cannot list scenes with widgets of type %s: %w", widgetTypeID, err)
 	}
 
-	var errs []error
-	for _, sc := range scenes {
-		if err := p.reconcileScene(ctx, sc, widgetTypeID); err != nil {
-			errs = append(errs, fmt.Errorf("cannot reconcile scene %s with widget type %s: %w", sc.ID(), widgetTypeID, err))
-		}
+	if err := changeEachScene(ctx, p.scenes, scenes, p.reconcile(widgetTypeID)); err != nil {
+		return fmt.Errorf("cannot reconcile with widget type %s: %w", widgetTypeID, err)
 	}
-	return errors.Join(errs...)
+	return nil
 }
 
 // parseJobKey returns the WidgetType of a job key and its Scene, nil for
@@ -138,55 +135,26 @@ func parseJobKey(key string) (id.ID[library.WidgetType], *id.ID[scene.Scene], er
 	return widgetTypeID, &sceneID, nil
 }
 
-// errWidgetTypeGone ends the reconciliation of a Scene whose WidgetType is
-// deleted: its Widgets are gone with it.
-var errWidgetTypeGone = errors.New("widget type deleted")
-
-// reconcileScene reconciles the Scene sc with the WidgetType widgetTypeID and
-// the Tags its Widgets of that type bind, and saves it if anything changed.
-// The WidgetType and the Tags are read after the Scene, so every Widget the
-// Scene holds was checked against them or older versions, and no binding
-// valid now is taken for an orphan. The change does not rest on what a
-// client saw, so a Scene changed since it was read is reread, with the
-// WidgetType and the Tags after it, and reconciled again rather than
-// reported as a conflict (retryOnRace). A Scene or WidgetType deleted
-// meanwhile leaves nothing to clean.
-func (p widgetReconciliationPolicy) reconcileScene(ctx context.Context, sc scene.Scene, widgetTypeID id.ID[library.WidgetType]) error {
-	first := true
-	err := retryOnRace(scene.ErrSceneConflict, func() error {
-		if !first {
-			var err error
-			if sc, err = p.scenes.FindByID(ctx, sc.ID()); err != nil {
-				return fmt.Errorf("cannot reread scene: %w", err)
-			}
-		}
-		first = false
+// reconcile returns the change reconciling a Scene with the WidgetType
+// widgetTypeID and the Tags its Widgets of that type bind. The WidgetType and
+// the Tags are read after the Scene, at every attempt of changeScene, so
+// every Widget the Scene holds was checked against them or older versions,
+// and no binding valid now is taken for an orphan. A deleted WidgetType
+// leaves nothing to clean: its Widgets are gone with it.
+func (p widgetReconciliationPolicy) reconcile(widgetTypeID id.ID[library.WidgetType]) sceneChange {
+	return func(ctx context.Context, sc scene.Scene) (scene.Scene, bool, error) {
 		wt, err := p.widgetTypes.FindByID(ctx, widgetTypeID)
 		if errors.Is(err, library.ErrWidgetTypeNotFound) {
-			return errWidgetTypeGone
+			return sc, false, nil
 		}
 		if err != nil {
-			return fmt.Errorf("cannot read widget type: %w", err)
+			return nil, false, fmt.Errorf("cannot read widget type: %w", err)
 		}
-		var ofType []scene.Widget
-		for _, w := range sc.Widgets() {
-			if w.TypeID() == widgetTypeID {
-				ofType = append(ofType, w)
-			}
-		}
-		tagTypes, err := loadTagTypes(ctx, p.tags, scene.BoundTagIDs(ofType...))
+		tagTypes, err := loadTagTypes(ctx, p.tags, sc.TagsBoundByType(widgetTypeID))
 		if err != nil {
-			return err
+			return nil, false, err
 		}
 		reconciled, changed := sc.ReconcileWith(wt, tagTypes)
-		if !changed {
-			return nil
-		}
-		_, err = p.scenes.Save(ctx, reconciled)
-		return err
-	})
-	if errors.Is(err, scene.ErrSceneNotFound) || errors.Is(err, errWidgetTypeGone) {
-		return nil
+		return reconciled, changed, nil
 	}
-	return err
 }

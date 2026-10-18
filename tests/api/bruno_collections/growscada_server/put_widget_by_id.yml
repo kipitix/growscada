@@ -18,7 +18,7 @@ http:
         "type_id": "{{WIDGET_TYPE_ID}}",
         "labels": ["indicator", "status", "updated"],
         "port_bindings": [
-          { "port_name": "state", "tag_id": "{{TAG_ID}}" }
+          { "port_name": "state", "tag_id": "{{BOOLEAN_TAG_ID}}" }
         ],
         "scene_version": 1
       }

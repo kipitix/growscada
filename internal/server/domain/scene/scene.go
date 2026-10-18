@@ -64,6 +64,9 @@ type Scene interface {
 	// ErrWidgetTypeMismatch if wt is not the widget's type, and for a
 	// PortBinding that is not valid (see checkWidgetType)
 	// ErrPortNotDeclared, ErrBoundTagNotFound or ErrPortTypeMismatch.
+	// Only the PortBindings the stored widget of the same type does not hold
+	// are checked: one it already held and that stopped being valid since is
+	// removed by policies, not a reason to refuse the change (ADR 0010).
 	// tagTypes holds the TagTypes of the Tags the widget binds.
 	UpdateWidget(expected version.Version[Scene], w Widget, wt library.WidgetType, tagTypes TagTypes) (Scene, error)
 
@@ -80,6 +83,11 @@ type Scene interface {
 	// for each widget it changes. The bool reports whether anything was
 	// removed.
 	ReconcileWith(wt library.WidgetType, tagTypes TagTypes) (Scene, bool)
+
+	// TagsBoundByType returns the IDs of the Tags the scene's widgets of
+	// WidgetType typeID bind, each once: those ReconcileWith needs in
+	// tagTypes.
+	TagsBoundByType(typeID id.ID[library.WidgetType]) []id.ID[tag.Tag]
 
 	// UnbindTag removes, from the scene's widgets of every WidgetType, the
 	// PortBindings of the Tag tagID, recording a WidgetUpdatedEvent
@@ -190,7 +198,7 @@ func (s *sceneImpl) AddWidget(expected version.Version[Scene], w Widget, wt libr
 	if s.widgetIndex(w.ID()) >= 0 {
 		return nil, fmt.Errorf("%w: %s", ErrWidgetAlreadyExists, w.ID())
 	}
-	if err := checkWidgetType(w, wt, tagTypes); err != nil {
+	if err := checkWidgetType(w, wt, tagTypes, nil); err != nil {
 		return nil, err
 	}
 	return s.withWidgets(append(slices.Clip(s.widgets), w), NewWidgetCreatedEvent(w.ID(), s.id, w.TypeID())), nil
@@ -204,7 +212,7 @@ func (s *sceneImpl) UpdateWidget(expected version.Version[Scene], w Widget, wt l
 	if i < 0 {
 		return nil, id.NotFound(ErrWidgetNotFound, w.ID())
 	}
-	if err := checkWidgetType(w, wt, tagTypes); err != nil {
+	if err := checkWidgetType(w, wt, tagTypes, s.widgets[i]); err != nil {
 		return nil, err
 	}
 	widgets := slices.Clone(s.widgets)
@@ -225,6 +233,16 @@ func (s *sceneImpl) ReconcileWith(wt library.WidgetType, tagTypes TagTypes) (Sce
 	return s.removeBindings(func(w Widget, b PortBinding) bool {
 		return w.TypeID() == wt.ID() && checkBinding(b, ports, tagTypes) != nil
 	})
+}
+
+func (s *sceneImpl) TagsBoundByType(typeID id.ID[library.WidgetType]) []id.ID[tag.Tag] {
+	var ofType []Widget
+	for _, w := range s.widgets {
+		if w.TypeID() == typeID {
+			ofType = append(ofType, w)
+		}
+	}
+	return BoundTagIDs(ofType...)
 }
 
 func (s *sceneImpl) UnbindTag(tagID id.ID[tag.Tag]) (Scene, bool) {
@@ -307,13 +325,22 @@ func (s *sceneImpl) record(someEvents ...event.Event) []event.Event {
 }
 
 // checkWidgetType checks that wt is the widget's type and every PortBinding
-// of the widget is valid (see checkBinding).
-func checkWidgetType(w Widget, wt library.WidgetType, tagTypes TagTypes) error {
+// of the widget is valid (see checkBinding), except those that stored, the
+// widget as the scene holds it (nil for a new one), already held while of the
+// same type.
+func checkWidgetType(w Widget, wt library.WidgetType, tagTypes TagTypes, stored Widget) error {
 	if w.TypeID() != wt.ID() {
 		return fmt.Errorf("%w: widget has type %s, checked against %s", ErrWidgetTypeMismatch, w.TypeID(), wt.ID())
 	}
+	var held []PortBinding
+	if stored != nil && stored.TypeID() == w.TypeID() {
+		held = stored.PortBindings()
+	}
 	ports := declaredPorts(wt)
 	for _, b := range w.PortBindings() {
+		if slices.Contains(held, b) {
+			continue
+		}
 		if err := checkBinding(b, ports, tagTypes); err != nil {
 			return fmt.Errorf("%w, widget type %q", err, wt.Name().String())
 		}
