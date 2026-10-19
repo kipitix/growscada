@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -351,13 +352,44 @@ func BenchmarkEventsHandlers_Publish_NoClients(b *testing.B) {
 	}
 }
 
+// countingBus is an EventBus that counts the subscriptions still active, so
+// a test can see the hub detach from the bus.
+type countingBus struct {
+	eventbus.EventBus
+	mu     sync.Mutex
+	active int
+}
+
+func (b *countingBus) Subscribe(et event.EventType, handler eventbus.EventHandler) eventbus.Subscription {
+	b.mu.Lock()
+	b.active++
+	b.mu.Unlock()
+	return b.EventBus.Subscribe(et, handler)
+}
+
+func (b *countingBus) Unsubscribe(sub eventbus.Subscription) {
+	b.mu.Lock()
+	b.active--
+	b.mu.Unlock()
+	b.EventBus.Unsubscribe(sub)
+}
+
+func (b *countingBus) activeSubscriptions() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.active
+}
+
 // TestEventsHandlers_Close_EndsOpenStream: Close ends an open stream by
 // itself, without its request context being canceled — otherwise
 // http.Server.Shutdown waits for the SSE handler until its timeout — and
-// events published afterwards reach no one.
+// detaches the hub from the EventBus.
 func TestEventsHandlers_Close_EndsOpenStream(t *testing.T) {
-	bus := eventbus.NewEventBus()
+	bus := &countingBus{EventBus: eventbus.NewEventBus()}
 	h := restapi.NewEventsHandler(bus, 100)
+	if bus.activeSubscriptions() == 0 {
+		t.Fatal("expected the hub to subscribe to the EventBus")
+	}
 
 	rec := newSyncRecorder()
 	cancel, done := runEventsHandler(t, h, rec)
@@ -372,9 +404,107 @@ func TestEventsHandlers_Close_EndsOpenStream(t *testing.T) {
 		t.Fatal("GetEvents did not return after Close")
 	}
 
+	if n := bus.activeSubscriptions(); n != 0 {
+		t.Errorf("expected the hub to unsubscribe from the EventBus on Close, %d subscriptions left", n)
+	}
+}
+
+// stalledConnWriter simulates a client that stopped reading: after the
+// ": connected" comment every write stalls until its write deadline, which
+// the test fires by closing expire.
+type stalledConnWriter struct {
+	header   http.Header
+	mu       sync.Mutex
+	writes   int
+	deadline time.Time
+	stalled  chan struct{}
+	expire   chan struct{}
+}
+
+func newStalledConnWriter() *stalledConnWriter {
+	return &stalledConnWriter{
+		header:  make(http.Header),
+		stalled: make(chan struct{}),
+		expire:  make(chan struct{}),
+	}
+}
+
+func (w *stalledConnWriter) Header() http.Header { return w.header }
+func (w *stalledConnWriter) WriteHeader(int)     {}
+func (w *stalledConnWriter) Flush()              {}
+
+func (w *stalledConnWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	w.writes++
+	n, deadline := w.writes, w.deadline
+	w.mu.Unlock()
+	if n == 1 {
+		return len(p), nil
+	}
+	if deadline.IsZero() {
+		select {} // no deadline: stalls forever, as a dead connection does
+	}
+	if n == 2 {
+		close(w.stalled)
+	}
+	<-w.expire
+	return 0, os.ErrDeadlineExceeded
+}
+
+func (w *stalledConnWriter) SetWriteDeadline(d time.Time) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.deadline = d
+	return nil
+}
+
+func (w *stalledConnWriter) writeDeadline() time.Time {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.deadline
+}
+
+// TestEventsHandlers_GetEvents_StalledWriteEndsOnDeadline: a handler stuck
+// writing to a client that stopped reading is not freed by Close (it does
+// not read its channel), so each write carries a deadline, and the handler
+// returns once the write fails — otherwise http.Server.Shutdown waits for it
+// until its timeout.
+func TestEventsHandlers_GetEvents_StalledWriteEndsOnDeadline(t *testing.T) {
+	bus := eventbus.NewEventBus()
+	h := restapi.NewEventsHandler(bus, 100)
+
+	w := newStalledConnWriter()
+	cancel, done := runEventsHandler(t, h, w)
+	defer cancel()
+	waitFor(t, time.Second, func() bool {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		return w.writes >= 1
+	})
+
+	sent := time.Now()
 	bus.Publish(scene.NewSceneCreatedEvent(id.NewID[scene.Scene]()))
-	if strings.Contains(rec.body(), "scene_created") {
-		t.Error("expected no events to be forwarded after Close(), but scene_created was received")
+	select {
+	case <-w.stalled:
+	case <-time.After(time.Second):
+		t.Fatal("the event write did not start, or started without a write deadline")
+	}
+	if d := w.writeDeadline(); d.Before(sent) || d.After(sent.Add(15*time.Second)) {
+		t.Errorf("expected a write deadline within the 15 s shutdown budget, got %v after the publish", d.Sub(sent))
+	}
+
+	h.Close()
+	select {
+	case <-done:
+		t.Fatal("GetEvents returned while its write was still stalled")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(w.expire)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("GetEvents did not return after its write failed on the deadline")
 	}
 }
 
@@ -403,8 +533,10 @@ func TestEventsHandlers_GetEvents_RejectedAfterClose(t *testing.T) {
 }
 
 // TestEventsHandlers_Close_ConcurrentWithDisconnects: Close, called twice,
-// races with clients disconnecting on their own; run with -race, it must
-// neither panic on a double channel close nor race.
+// races with clients disconnecting on their own and with events being
+// published (the outbox drain publishes during shutdown); it must neither
+// panic on a double channel close or a send on a closed channel nor race
+// (make test runs with -race).
 func TestEventsHandlers_Close_ConcurrentWithDisconnects(t *testing.T) {
 	bus := eventbus.NewEventBus()
 	h := restapi.NewEventsHandler(bus, 100)
@@ -427,6 +559,13 @@ func TestEventsHandlers_Close_ConcurrentWithDisconnects(t *testing.T) {
 	})
 
 	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() {
+			for range 50 {
+				bus.Publish(scene.NewSceneCreatedEvent(id.NewID[scene.Scene]()))
+			}
+		})
+	}
 	for _, cancel := range cancels {
 		wg.Go(cancel)
 	}

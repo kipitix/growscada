@@ -26,7 +26,7 @@ All primary workflows go through `make`. **Always prefer `make <target>` over ru
 | `make run` | `build_server` + starts server + opens Chromium at `localhost:8080` |
 | `make db_up` | Starts the dev PostgreSQL container via Docker Compose; applies migrations and seeds automatically |
 | `make db_down` | Stops the container and **deletes** the data volume |
-| `make test` | Runs all tests with coverage (`go test --cover ./...`) |
+| `make test` | Runs all tests with coverage under the race detector (`go test -race --cover ./...`) |
 | `make bench` | Runs benchmarks only (`go test -run=^$ -bench=. -benchmem ./...`) |
 | `make schemas` | Regenerates the committed JSON schemas `schemas/<contract>/<MAJOR.MINOR>.json` from the `contract/` types; run it after raising a contract's SchemaVersion. Refuses to rewrite a version already on `path`, freezes older versions in `schemas/<contract>/frozen.sha256`, and while MAJOR is 0 prints a NOTE for what in a new MINOR would need a MAJOR after 1.0 |
 | `make full_restart` | Clean-slate restart: `db_down` → `db_up` → `run` (use when the DB state is stale or corrupted) |

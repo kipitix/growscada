@@ -39,6 +39,13 @@ type Root struct {
 	apiServerURL string
 	// client is the one client of the REST API, given to every mode.
 	client *apiclient.Client
+	// The modes in the order of their slots, made once: a mode is mounted
+	// when first opened and stays mounted while another is shown, so it
+	// keeps what it loaded (shown even while the server is down), its
+	// selection and unsaved edits, and keeps following server events.
+	modes []modeView
+	// opened holds the modes opened so far (SetMode).
+	opened map[Mode]bool
 	// serverVersion is the server API version of the last response, if
 	// serverVersionKnown.
 	serverVersion      contract.SchemaVersion
@@ -60,6 +67,13 @@ func NewRoot(anAPIServerURL string) *Root {
 		apiServerURL: anAPIServerURL,
 	}
 	r.client = apiclient.New(anAPIServerURL, http.DefaultClient, apiclient.OnServerVersion(r.observeServerVersion))
+	r.modes = []modeView{
+		{ModeLibrary, library.NewLibrary(r.client)},
+		{ModeProject, project.NewProject(r.client)},
+		{ModeOperation, operation.NewOperation(r.client)},
+		{ModeHistory, &history.History{}},
+	}
+	r.opened = map[Mode]bool{}
 	return r
 }
 
@@ -82,9 +96,13 @@ func (r *Root) OnMount(ctx app.Context) {
 	ctx.Dispatch(func(ctx app.Context) {
 		r.themeMode = savedTheme
 		ctx.SetState("theme", savedTheme)
+		mode := r.currentMode
 		if Mode(savedMode) != ModeUnknown {
-			r.currentMode = Mode(savedMode)
+			mode = Mode(savedMode)
 		}
+		// Only now, so a mode is not opened (and loaded) just for being
+		// the default before the saved one is known.
+		r.SetMode(mode)
 	})
 }
 
@@ -385,23 +403,39 @@ func (r *Root) Render() app.UI {
 			app.Div().
 				Style("flex", "1").
 				Style("min-height", "0").
-				Style("display", "flex").
-				Style("padding", "12px").
-				Style("box-sizing", "border-box").
+				Style("position", "relative").
 				Style("background", "var(--bg)").
-				Body(
-					app.If(r.currentMode == ModeLibrary, func() app.UI {
-						return library.NewLibrary(r.client)
-					}).ElseIf(r.currentMode == ModeProject, func() app.UI {
-						return project.NewProject(r.client)
-					}).ElseIf(r.currentMode == ModeOperation, func() app.UI {
-						return operation.NewOperation(r.client)
-					}).Else(func() app.UI {
-						return &history.History{}
-					}),
-				),
+				Body(app.Range(r.modes).Slice(func(i int) app.UI {
+					return r.modeSlot(r.modes[i])
+				})),
 			eventlog.NewBar(r.apiServerURL),
 		)
+}
+
+// modeSlot is the fixed place of one mode: empty until the mode is first
+// opened, then holding it for good. Each mode keeps its own slot, so opening
+// one never remounts another. A mode not shown is hidden with visibility,
+// not display: the iframes of its Widgets keep their size.
+func (r *Root) modeSlot(m modeView) app.UI {
+	visibility := "hidden"
+	if m.mode == r.currentMode {
+		visibility = "visible"
+	}
+	return app.Div().
+		Attr("data-mode", string(m.mode)).
+		Style("position", "absolute").
+		Style("inset", "0").
+		Style("display", "flex").
+		Style("padding", "12px").
+		Style("box-sizing", "border-box").
+		Style("visibility", visibility).
+		Body(app.If(r.opened[m.mode], func() app.UI { return m.ui }))
+}
+
+// modeView is a mode and its component.
+type modeView struct {
+	mode Mode
+	ui   app.Composer
 }
 
 func (r *Root) tab(label string, mode Mode) app.UI {
@@ -426,7 +460,7 @@ func (r *Root) tab(label string, mode Mode) app.UI {
 		Style("margin-bottom", "-2px").
 		Text(label).
 		OnClick(func(ctx app.Context, e app.Event) {
-			r.currentMode = mode
+			r.SetMode(mode)
 			ctx.LocalStorage().Set("root:mode", string(mode))
 		})
 
@@ -469,6 +503,8 @@ func (r *Root) renderThemeToggle() app.UI {
 		})
 }
 
+// SetMode shows mode, opening it if it was not yet.
 func (r *Root) SetMode(mode Mode) {
 	r.currentMode = mode
+	r.opened[mode] = true
 }

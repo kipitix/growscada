@@ -148,8 +148,7 @@ type Project struct {
 	editingRotation   string
 
 	// ── Input simulation (in-memory only, not persisted) ───────────────────
-	// simInputs[widgetID][portName] = test value string, kept in the app
-	// state simInputsState
+	// simInputs[widgetID][portName] = test value string
 	simInputs map[uuid.UUID]map[string]string
 
 	// ── Panel resize state ──────────────────────────────────────────────────
@@ -168,13 +167,12 @@ const (
 )
 
 func NewProject(client *apiclient.Client) *Project {
-	return &Project{client: client, activeSubTab: subTabScenes}
+	return &Project{client: client, activeSubTab: subTabScenes, simInputs: make(map[uuid.UUID]map[string]string)}
 }
 
 func (p *Project) OnMount(ctx app.Context) {
 	p.compoCtx = ctx
 	ctx.ObserveState("theme", &p.ThemeMode)
-	p.loadSimInputs(ctx)
 	p.widgetTypeWidth = 180
 	p.propertiesWidth = 260
 	ctx.LocalStorage().Get("project:widgetTypeWidth", &p.widgetTypeWidth)
@@ -200,28 +198,12 @@ func (p *Project) OnMount(ctx app.Context) {
 
 // ── Input simulation ──────────────────────────────────────────────────────────
 
-// simInputsState is the app state holding the Simulate Inputs values. They
-// live in the page, not in the component: Root makes a new Project each time
-// the Project tab is opened, and the values must survive a visit to another
-// tab (e.g. Library, to change the WidgetType they test). Not persisted: a
-// reload starts empty.
-const simInputsState = "project:simInputs"
-
-func (p *Project) loadSimInputs(ctx app.Context) {
-	p.simInputs = nil
-	ctx.GetState(simInputsState, &p.simInputs)
-	if p.simInputs == nil {
-		p.simInputs = make(map[uuid.UUID]map[string]string)
-	}
-}
-
 // setSimInput sets the Simulate Inputs value of port on the widget wid.
-func (p *Project) setSimInput(ctx app.Context, wid uuid.UUID, port, value string) {
+func (p *Project) setSimInput(wid uuid.UUID, port, value string) {
 	if p.simInputs[wid] == nil {
 		p.simInputs[wid] = make(map[string]string)
 	}
 	p.simInputs[wid][port] = value
-	ctx.SetState(simInputsState, p.simInputs)
 }
 
 // ── Data loading ──────────────────────────────────────────────────────────────

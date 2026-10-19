@@ -24,8 +24,10 @@ func (r APIRouter) ServeMux() http.Handler {
 	return schemaVersionMiddleware(corsMiddleware(r.serveMux))
 }
 
-// Close releases the router's long-lived resources (currently just the SSE
-// event hub's EventBus subscriptions) for graceful shutdown.
+// Close prepares the router for graceful shutdown: the SSE event hub leaves
+// the EventBus and ends every open event stream, and later streams get 503.
+// http.Server.Shutdown waits for those streams, so Close must not wait for
+// Shutdown to return.
 func (r APIRouter) Close() {
 	r.eventsHandlers.Close()
 }

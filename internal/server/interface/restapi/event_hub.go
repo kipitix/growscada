@@ -21,20 +21,32 @@ type eventHub struct {
 	subscriptions []eventbus.Subscription
 	maxClients    int
 
+	closeOnce sync.Once
+
 	mu      sync.Mutex
 	clients map[*eventClient]struct{}
 	closed  bool
 }
 
-// Reasons addClient refuses a connection.
+// Reasons addClient refuses a connection. The texts are the problem details
+// the client gets.
 var (
-	errHubClosed      = errors.New("event hub closed")
-	errTooManyClients = errors.New("too many event stream clients")
+	errHubClosed      = errors.New("server is shutting down")
+	errTooManyClients = errors.New("too many concurrent event stream connections")
 )
 
 type eventClient struct {
 	messages chan []byte
 	closed   bool
+}
+
+// close ends the client's stream by closing its channel. Called with the
+// hub's mu held; safe to call more than once.
+func (c *eventClient) close() {
+	if !c.closed {
+		c.closed = true
+		close(c.messages)
+	}
 }
 
 func newEventHub(bus eventbus.EventBus, maxClients int) *eventHub {
@@ -61,27 +73,25 @@ func (h *eventHub) Publish(e event.Event) {
 // Close detaches the hub from the EventBus and ends every connected client's
 // stream by closing its channel, so the SSE handlers return without waiting
 // for their request context. Later connections are refused. Safe to call
-// more than once.
+// more than once: every call returns once the hub is detached.
 func (h *eventHub) Close() {
-	h.mu.Lock()
-	if h.closed {
-		h.mu.Unlock()
-		return
-	}
-	h.closed = true
-	for c := range h.clients {
-		if !c.closed {
-			c.closed = true
-			close(c.messages)
+	h.closeOnce.Do(func() {
+		h.mu.Lock()
+		h.closed = true
+		for c := range h.clients {
+			c.close()
 		}
-	}
-	h.mu.Unlock()
+		// Forgotten here, so a broadcast before the unsubscription below
+		// finds no client and marshals nothing; removeClient of a
+		// forgotten client does nothing.
+		clear(h.clients)
+		h.mu.Unlock()
 
-	// Outside mu: the bus is not called with the hub's lock held. A
-	// broadcast racing with this finds every client already closed.
-	for _, sub := range h.subscriptions {
-		h.bus.Unsubscribe(sub)
-	}
+		// Outside mu: the bus is not called with the hub's lock held.
+		for _, sub := range h.subscriptions {
+			h.bus.Unsubscribe(sub)
+		}
+	})
 }
 
 func (h *eventHub) broadcast(e event.Event) {
@@ -111,8 +121,7 @@ func (h *eventHub) broadcast(e event.Event) {
 		case c.messages <- payload:
 		default:
 			// Slow client: drop it instead of blocking the publisher.
-			c.closed = true
-			close(c.messages)
+			c.close()
 		}
 	}
 }
@@ -145,8 +154,5 @@ func (h *eventHub) removeClient(c *eventClient) {
 		return
 	}
 	delete(h.clients, c)
-	if !c.closed {
-		c.closed = true
-		close(c.messages)
-	}
+	c.close()
 }

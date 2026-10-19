@@ -687,7 +687,7 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 					Val:      val,
 					PortName: port.Name,
 					OnChange: func(v string) {
-						p.setSimInput(p.compoCtx, wid, port.Name, v)
+						p.setSimInput(wid, port.Name, v)
 						// Directly push the updated srcdoc so the canvas preview
 						// reflects the new value without waiting for a parent re-render.
 						srcdoc := uiutil.BuildSrcdoc(capturedWT.HtmlTemplate, capturedWT.Script, uiutil.PreviewInputs(p.simInputs[wid], capturedWT.InputPorts), capturedWT.InputPorts, uiutil.IframeBgColor())

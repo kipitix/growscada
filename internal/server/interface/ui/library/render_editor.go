@@ -422,7 +422,7 @@ func (l *Library) renderInputDataColumn() app.UI {
 						Val:         val,
 						PortName:    portName,
 						OnChange: func(v string) {
-							l.setInputValue(l.compoCtx, portName, v)
+							l.setInputValue(portName, v)
 						},
 					},
 				),

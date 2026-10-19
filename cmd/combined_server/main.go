@@ -106,7 +106,12 @@ func main() {
 	// stopOutbox stops the dispatcher and delivers what is left in the outbox
 	stopOutbox := func(ctx context.Context) {
 		stopDispatcher()
-		<-dispatcherDone
+		select {
+		case <-dispatcherDone:
+		case <-ctx.Done():
+			slog.Error("Outbox dispatcher did not stop on shutdown", "error", ctx.Err())
+			return
+		}
 		if _, err := dispatcher.DrainOnce(ctx); err != nil {
 			slog.Error("Outbox not drained on shutdown", "error", err)
 		}
@@ -141,13 +146,17 @@ func main() {
 	// Register the event hub shutdown handler. The outbox is drained first,
 	// while SSE clients are still connected, so what is left in it reaches
 	// them; a change committed after the drain (the API server stops
-	// concurrently) stays in the outbox until the next start. Then the hub
-	// ends every open SSE stream: the API server's Shutdown, running
-	// concurrently, waits for those handlers and is released here, whatever
-	// order the hooks start in. The database closes later, in the
-	// infrastructure layer.
+	// concurrently) stays in the outbox until the next start. The drain gets
+	// outboxDrainTimeout of the API server's 15 s, so the hub is closed in
+	// time even if the database hangs. Then the hub ends every open SSE
+	// stream: the API server's Shutdown, running concurrently, waits for
+	// those handlers and is released here. The database closes later, in
+	// the infrastructure layer.
+	const outboxDrainTimeout = 5 * time.Second
 	gracedownManager.RegisterInterface("Event Hub", 15*time.Second, func(ctx context.Context) error {
-		stopOutbox(ctx)
+		drainCtx, cancel := context.WithTimeout(ctx, outboxDrainTimeout)
+		defer cancel()
+		stopOutbox(drainCtx)
 		apiRouter.Close()
 		return nil
 	})
@@ -157,9 +166,14 @@ func main() {
 		Handler: apiRouter.ServeMux(),
 	}
 
-	// Register the API server shutdown handler
+	// Register the API server shutdown handler. Connections still open when
+	// Shutdown gives up are closed, so no handler outlives the shutdown
 	gracedownManager.RegisterInterface("API HTTP Server", 15*time.Second, func(ctx context.Context) error {
-		return apiServer.Shutdown(ctx)
+		err := apiServer.Shutdown(ctx)
+		if err != nil {
+			apiServer.Close() //nolint:errcheck
+		}
+		return err
 	})
 
 	// Start the API server in a separate goroutine

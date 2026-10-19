@@ -33,8 +33,8 @@ type Library struct {
 	editedName   string
 	editedHTML   string
 	editedScript string
-	// inputValues[widgetTypeID][portName] = Input Data value, kept in the
-	// app state inputValuesState
+	// inputValues[widgetTypeID][portName] = Input Data value of the preview.
+	// Not persisted: a reload starts empty.
 	inputValues      map[uuid.UUID]map[string]string
 	editedScriptLang string
 	editedInputPorts []apiv0.InputPort
@@ -50,13 +50,12 @@ type Library struct {
 const selectedIDKey = "library:selectedID"
 
 func NewLibrary(client *apiclient.Client) *Library {
-	return &Library{client: client}
+	return &Library{client: client, inputValues: make(map[uuid.UUID]map[string]string)}
 }
 
 func (l *Library) OnMount(ctx app.Context) {
 	l.compoCtx = ctx
 	ctx.ObserveState("theme", &l.ThemeMode)
-	l.loadInputValues(ctx)
 	l.selectedID = uiutil.LoadID(ctx, selectedIDKey)
 	l.loadList(ctx)
 
@@ -76,20 +75,6 @@ func (l *Library) OnMount(ctx app.Context) {
 
 // ── Input Data ────────────────────────────────────────────────────────────────
 
-// inputValuesState is the app state holding the Input Data values of the
-// preview, per WidgetType. They live in the page, not in the component: Root
-// makes a new Library each time the Library tab is opened, and the values
-// must survive a visit to another tab. Not persisted: a reload starts empty.
-const inputValuesState = "library:inputValues"
-
-func (l *Library) loadInputValues(ctx app.Context) {
-	l.inputValues = nil
-	ctx.GetState(inputValuesState, &l.inputValues)
-	if l.inputValues == nil {
-		l.inputValues = make(map[uuid.UUID]map[string]string)
-	}
-}
-
 // selectedInputValues returns the Input Data values of the selected
 // WidgetType, keyed by port name; nil if none was entered.
 func (l *Library) selectedInputValues() map[string]string {
@@ -98,7 +83,7 @@ func (l *Library) selectedInputValues() map[string]string {
 
 // setInputValue sets the Input Data value of port for the selected
 // WidgetType.
-func (l *Library) setInputValue(ctx app.Context, port, value string) {
+func (l *Library) setInputValue(port, value string) {
 	if l.selectedID == uuid.Nil {
 		return
 	}
@@ -106,7 +91,6 @@ func (l *Library) setInputValue(ctx app.Context, port, value string) {
 		l.inputValues[l.selectedID] = make(map[string]string)
 	}
 	l.inputValues[l.selectedID][port] = value
-	ctx.SetState(inputValuesState, l.inputValues)
 }
 
 // ── Data loading ──────────────────────────────────────────────────────────────

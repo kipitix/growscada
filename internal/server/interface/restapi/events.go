@@ -4,11 +4,17 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/kipitix/growscada/internal/server/domain/client"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 )
+
+// eventWriteTimeout bounds one write to an SSE client. A client that stops
+// reading (a dead TCP connection, a full send buffer) fails the write instead
+// of holding its handler, and so http.Server.Shutdown, forever.
+const eventWriteTimeout = 5 * time.Second
 
 // EventsHandlers handles the SSE stream of domain events.
 type EventsHandlers struct {
@@ -41,11 +47,7 @@ func (h *EventsHandlers) GetEvents(w http.ResponseWriter, r *http.Request) {
 	// normal JSON error instead of an already-committed SSE stream.
 	c, err := h.hub.addClient()
 	if err != nil {
-		detail := "too many concurrent event stream connections"
-		if errors.Is(err, errHubClosed) {
-			detail = "server is shutting down"
-		}
-		sendJSONResponse(w, http.StatusServiceUnavailable, NewServiceUnavailableError(detail, r.URL.Path))
+		sendJSONResponse(w, http.StatusServiceUnavailable, NewServiceUnavailableError(err.Error(), r.URL.Path))
 		return
 	}
 	defer h.hub.removeClient(c)
@@ -63,6 +65,7 @@ func (h *EventsHandlers) GetEvents(w http.ResponseWriter, r *http.Request) {
 	h.hub.Publish(eventbus.NewClientConnectedEvent(connectionID))
 	defer h.hub.Publish(eventbus.NewClientDisconnectedEvent(connectionID))
 
+	rc := http.NewResponseController(w)
 	for {
 		select {
 		case <-r.Context().Done():
@@ -71,8 +74,21 @@ func (h *EventsHandlers) GetEvents(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			fmt.Fprintf(w, "data: %s\n\n", payload) //nolint:errcheck
-			flusher.Flush()
+			if err := writeEvent(w, rc, payload); err != nil {
+				return
+			}
 		}
 	}
+}
+
+// writeEvent writes one SSE message within eventWriteTimeout. A writer that
+// cannot take a deadline is written to without one.
+func writeEvent(w http.ResponseWriter, rc *http.ResponseController, payload []byte) error {
+	if err := rc.SetWriteDeadline(time.Now().Add(eventWriteTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "data: %s\n\n", payload); err != nil {
+		return err
+	}
+	return rc.Flush()
 }
