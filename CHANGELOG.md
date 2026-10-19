@@ -1,5 +1,16 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.41] - 2026-10-19
+
+### Fixed
+
+- **Остановка сервера не ждёт SSE-соединения** (задача 26)
+  - `restapi`: `eventHub.Close` закрывает каналы всех подключённых клиентов (отписка от EventBus — вне мьютекса hub'а), так что `GetEvents` сразу завершается, а клиент получает конец потока; повторный вызов ничего не делает. Раньше с открытой вкладкой UI `apiServer.Shutdown` ждал SSE-обработчики до таймаута 15 с и процесс выходил с кодом 1
+  - `GetEvents` после `Close` отвечает 503 Problem Details «server is shutting down»; при превышении `MAX_SSE_CLIENTS` — по-прежнему «too many concurrent event stream connections» (`addClient` возвращает причину отказа). Контракт API не менялся
+  - Хуки «Event Hub» и «API HTTP Server» остаются параллельными: на их порядок не полагаемся — `Shutdown` ждёт SSE-обработчики, пока hub дочищает outbox, и освобождается, когда hub закрывает потоки. `client_disconnected` при закрытии hub'ом публикуется как обычно и никому не доставляется
+  - Тесты: открытый поток завершается после `Close` без отмены контекста; подключение после `Close` получает 503; `Close` дважды параллельно с отключением клиентов (`-race`); настоящий `http.Server` — `Close` и `Shutdown` параллельно, `Shutdown` возвращает `nil` до таймаута
+  - `.mcp.json`: chrome-devtools запускается с `--headless` (работает и без `DISPLAY`, например по SSH)
+
 ## [0.0.40] - 2026-10-19
 
 ### Changed

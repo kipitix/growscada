@@ -1,6 +1,7 @@
 package restapi
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -20,8 +21,8 @@ func NewEventsHandler(bus eventbus.EventBus, maxClients int) *EventsHandlers {
 	return &EventsHandlers{hub: newEventHub(bus, maxClients)}
 }
 
-// Close detaches the hub from the EventBus. Connected clients are left to be
-// disconnected by their own request context cancellation.
+// Close detaches the hub from the EventBus and ends every open event stream,
+// so http.Server.Shutdown does not wait for them; later streams get 503.
 func (h *EventsHandlers) Close() {
 	h.hub.Close()
 }
@@ -38,9 +39,13 @@ func (h *EventsHandlers) GetEvents(w http.ResponseWriter, r *http.Request) {
 
 	// Checked before writing any response so a rejection can still be a
 	// normal JSON error instead of an already-committed SSE stream.
-	c, ok := h.hub.addClient()
-	if !ok {
-		sendJSONResponse(w, http.StatusServiceUnavailable, NewServiceUnavailableError("too many concurrent event stream connections", r.URL.Path))
+	c, err := h.hub.addClient()
+	if err != nil {
+		detail := "too many concurrent event stream connections"
+		if errors.Is(err, errHubClosed) {
+			detail = "server is shutting down"
+		}
+		sendJSONResponse(w, http.StatusServiceUnavailable, NewServiceUnavailableError(detail, r.URL.Path))
 		return
 	}
 	defer h.hub.removeClient(c)

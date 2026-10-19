@@ -2,6 +2,7 @@ package restapi
 
 import (
 	"encoding/json"
+	"errors"
 	"sync"
 
 	"github.com/kipitix/growscada/internal/server/domain/event"
@@ -22,7 +23,14 @@ type eventHub struct {
 
 	mu      sync.Mutex
 	clients map[*eventClient]struct{}
+	closed  bool
 }
+
+// Reasons addClient refuses a connection.
+var (
+	errHubClosed      = errors.New("event hub closed")
+	errTooManyClients = errors.New("too many event stream clients")
+)
 
 type eventClient struct {
 	messages chan []byte
@@ -50,9 +58,27 @@ func (h *eventHub) Publish(e event.Event) {
 	h.bus.Publish(e)
 }
 
-// Close detaches the hub from the EventBus. Connected clients are left to be
-// disconnected by their own request context cancellation.
+// Close detaches the hub from the EventBus and ends every connected client's
+// stream by closing its channel, so the SSE handlers return without waiting
+// for their request context. Later connections are refused. Safe to call
+// more than once.
 func (h *eventHub) Close() {
+	h.mu.Lock()
+	if h.closed {
+		h.mu.Unlock()
+		return
+	}
+	h.closed = true
+	for c := range h.clients {
+		if !c.closed {
+			c.closed = true
+			close(c.messages)
+		}
+	}
+	h.mu.Unlock()
+
+	// Outside mu: the bus is not called with the hub's lock held. A
+	// broadcast racing with this finds every client already closed.
 	for _, sub := range h.subscriptions {
 		h.bus.Unsubscribe(sub)
 	}
@@ -92,19 +118,23 @@ func (h *eventHub) broadcast(e event.Event) {
 }
 
 // addClient registers a new SSE connection and returns its message channel.
-// It refuses to register beyond maxClients, returning ok=false so the
-// caller can reject the connection before committing to any response.
-func (h *eventHub) addClient() (c *eventClient, ok bool) {
+// It refuses to register once the hub is closed (errHubClosed) or beyond
+// maxClients (errTooManyClients), so the caller can reject the connection
+// before committing to any response.
+func (h *eventHub) addClient() (*eventClient, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	if h.closed {
+		return nil, errHubClosed
+	}
 	if len(h.clients) >= h.maxClients {
-		return nil, false
+		return nil, errTooManyClients
 	}
 
-	c = &eventClient{messages: make(chan []byte, eventClientBufferSize)}
+	c := &eventClient{messages: make(chan []byte, eventClientBufferSize)}
 	h.clients[c] = struct{}{}
-	return c, true
+	return c, nil
 }
 
 // removeClient unregisters an SSE connection. Safe to call more than once.

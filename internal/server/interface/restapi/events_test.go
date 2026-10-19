@@ -1,9 +1,11 @@
 package restapi_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -349,43 +351,130 @@ func BenchmarkEventsHandlers_Publish_NoClients(b *testing.B) {
 	}
 }
 
-// TestEventsHandlers_Close_StopsForwardingNewEvents guards the fix for the
-// CODE_REVIEW.md finding that eventHub.Close() was never wired into the
-// server's graceful shutdown. It asserts Close()'s actual effect: once
-// called, the hub is unsubscribed from the EventBus, so events published
-// afterwards never reach an already-connected client — even though, per
-// eventHub.Close's contract, the connection itself is left open until its
-// own request context is canceled.
-func TestEventsHandlers_Close_StopsForwardingNewEvents(t *testing.T) {
+// TestEventsHandlers_Close_EndsOpenStream: Close ends an open stream by
+// itself, without its request context being canceled — otherwise
+// http.Server.Shutdown waits for the SSE handler until its timeout — and
+// events published afterwards reach no one.
+func TestEventsHandlers_Close_EndsOpenStream(t *testing.T) {
 	bus := eventbus.NewEventBus()
 	h := restapi.NewEventsHandler(bus, 100)
 
 	rec := newSyncRecorder()
 	cancel, done := runEventsHandler(t, h, rec)
+	defer cancel()
 	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), ": connected") })
-
-	tagID := id.NewID[tag.Tag]()
-	bus.Publish(tag.NewTagCreatedEvent(tagID))
-	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), "tag_created") })
 
 	h.Close()
 
-	sceneID := id.NewID[scene.Scene]()
-	bus.Publish(scene.NewSceneCreatedEvent(sceneID))
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("GetEvents did not return after Close")
+	}
 
-	// There is no positive signal to wait for here — Close() means this
-	// event should never arrive. EventBus.Publish calls subscribers
-	// synchronously, so if the hub were still subscribed the client's
-	// buffered channel would already hold the message by the time Publish
-	// returns, and the handler's read loop would drain it into rec within
-	// microseconds; a short fixed wait is enough to catch a regression.
-	time.Sleep(50 * time.Millisecond)
+	bus.Publish(scene.NewSceneCreatedEvent(id.NewID[scene.Scene]()))
 	if strings.Contains(rec.body(), "scene_created") {
 		t.Error("expected no events to be forwarded after Close(), but scene_created was received")
 	}
+}
 
-	cancel()
-	<-done
+// TestEventsHandlers_GetEvents_RejectedAfterClose: a stream opened after
+// Close is refused at once with a Problem saying why, instead of hanging.
+func TestEventsHandlers_GetEvents_RejectedAfterClose(t *testing.T) {
+	bus := eventbus.NewEventBus()
+	h := restapi.NewEventsHandler(bus, 100)
+	h.Close()
+
+	rec := newSyncRecorder()
+	cancel, done := runEventsHandler(t, h, rec)
+	defer cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("GetEvents did not return after Close")
+	}
+
+	if rec.code() != http.StatusServiceUnavailable {
+		t.Errorf("expected 503 after Close, got %d", rec.code())
+	}
+	if !strings.Contains(rec.body(), "server is shutting down") {
+		t.Errorf("expected the shutdown reason in the problem, got %q", rec.body())
+	}
+}
+
+// TestEventsHandlers_Close_ConcurrentWithDisconnects: Close, called twice,
+// races with clients disconnecting on their own; run with -race, it must
+// neither panic on a double channel close nor race.
+func TestEventsHandlers_Close_ConcurrentWithDisconnects(t *testing.T) {
+	bus := eventbus.NewEventBus()
+	h := restapi.NewEventsHandler(bus, 100)
+
+	const clients = 20
+	cancels := make([]func(), clients)
+	dones := make([]<-chan struct{}, clients)
+	recs := make([]*syncRecorder, clients)
+	for i := range clients {
+		recs[i] = newSyncRecorder()
+		cancels[i], dones[i] = runEventsHandler(t, h, recs[i])
+	}
+	waitFor(t, time.Second, func() bool {
+		for _, rec := range recs {
+			if !strings.Contains(rec.body(), ": connected") {
+				return false
+			}
+		}
+		return true
+	})
+
+	var wg sync.WaitGroup
+	for _, cancel := range cancels {
+		wg.Go(cancel)
+	}
+	wg.Go(h.Close)
+	wg.Go(h.Close)
+	wg.Wait()
+
+	for _, done := range dones {
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("GetEvents did not return")
+		}
+	}
+}
+
+// TestEventsHandlers_Close_LetsServerShutdown reproduces the shutdown hang:
+// with a stream open, Close and http.Server.Shutdown run concurrently, as
+// gracedown runs the hooks of one layer. Shutdown must not wait for its
+// timeout, and the client must see the stream end.
+func TestEventsHandlers_Close_LetsServerShutdown(t *testing.T) {
+	bus := eventbus.NewEventBus()
+	h := restapi.NewEventsHandler(bus, 100)
+	srv := httptest.NewServer(http.HandlerFunc(h.GetEvents))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("GET events: %v", err)
+	}
+	defer resp.Body.Close()
+	br := bufio.NewReader(resp.Body)
+	if line, err := br.ReadString('\n'); err != nil || !strings.HasPrefix(line, ": connected") {
+		t.Fatalf("expected the connected comment, got %q, %v", line, err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	shutdownErr := make(chan error, 1)
+	go func() { shutdownErr <- srv.Config.Shutdown(ctx) }()
+	go h.Close()
+
+	if err := <-shutdownErr; err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+	if rest, err := io.ReadAll(br); err != nil {
+		t.Errorf("expected the stream to end cleanly, got %v (read %q)", err, rest)
+	}
 }
 
 // TestEventsHandlers_GetEvents_RejectsBeyondMaxClients guards the fix for
@@ -414,6 +503,9 @@ func TestEventsHandlers_GetEvents_RejectsBeyondMaxClients(t *testing.T) {
 	}
 	if ct := rec3.Header().Get("Content-Type"); ct != "application/json" {
 		t.Errorf("expected a JSON problem response, got Content-Type %q, body %q", ct, rec3.body())
+	}
+	if !strings.Contains(rec3.body(), "too many concurrent event stream connections") {
+		t.Errorf("expected the connection-limit reason in the problem, got %q", rec3.body())
 	}
 
 	// Freeing a slot must let a new connection through.

@@ -13,7 +13,8 @@
         "-y",
         "chrome-devtools-mcp@latest",
         "--no-usage-statistics",
-        "--no-performance-crux"
+        "--no-performance-crux",
+        "--headless"
       ]
     },
     "codegraph": {

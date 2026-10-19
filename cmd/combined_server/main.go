@@ -141,8 +141,11 @@ func main() {
 	// Register the event hub shutdown handler. The outbox is drained first,
 	// while SSE clients are still connected, so what is left in it reaches
 	// them; a change committed after the drain (the API server stops
-	// concurrently) stays in the outbox until the next start. The database
-	// closes later, in the infrastructure layer.
+	// concurrently) stays in the outbox until the next start. Then the hub
+	// ends every open SSE stream: the API server's Shutdown, running
+	// concurrently, waits for those handlers and is released here, whatever
+	// order the hooks start in. The database closes later, in the
+	// infrastructure layer.
 	gracedownManager.RegisterInterface("Event Hub", 15*time.Second, func(ctx context.Context) error {
 		stopOutbox(ctx)
 		apiRouter.Close()
