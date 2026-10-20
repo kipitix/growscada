@@ -163,18 +163,7 @@ func (p *Project) renderSceneCanvas() app.UI {
 		}
 	}
 
-	// Layers bottom to top: the Scene's background (the canvas's own colour
-	// when it has none), the editor's dot grid, the Widgets. The background
-	// and the grid let mouse events through to the canvas.
-	textMuted := uiutil.IframeTextMuted()
-	layers := make([]app.UI, 0, len(p.widgets)+2)
-	if backgroundHTML != "" {
-		layers = append(layers, uiutil.SceneBackground(backgroundHTML))
-	}
-	layers = append(layers, renderCanvasGrid())
-	for _, w := range p.widgets {
-		layers = append(layers, p.renderWidget(w, textMuted))
-	}
+	layers := p.canvasLayers(backgroundHTML)
 
 	// Determine overall canvas cursor from active drag mode.
 	canvasCursor := "default"
@@ -240,6 +229,22 @@ func (p *Project) renderSceneCanvas() app.UI {
 		Style("background", "var(--bg-inset)").
 		Style("padding", "24px").
 		Body(canvas)
+}
+
+// canvasLayers are the canvas's layers bottom to top: the Scene's background
+// (the canvas's own colour when it has none), the editor's dot grid, the
+// Widgets. The background and the grid let mouse events through to the canvas.
+func (p *Project) canvasLayers(backgroundHTML string) []app.UI {
+	textMuted := uiutil.IframeTextMuted()
+	widgets := make([]app.UI, 0, len(p.widgets))
+	for _, w := range p.widgets {
+		widgets = append(widgets, p.renderWidget(w, textMuted))
+	}
+	return []app.UI{
+		&uiutil.SceneBackground{HTML: backgroundHTML},
+		renderCanvasGrid(),
+		uiutil.SceneWidgetLayer(widgets),
+	}
 }
 
 // renderCanvasGrid renders the editor's dot grid over the Scene's background,
@@ -460,6 +465,7 @@ func (p *Project) renderWidget(w apiv0.WidgetResponse, textMuted string) app.UI 
 		Style("height", fmt.Sprintf("%dpx", w.Size.Height)).
 		Style("transform-origin", "0 0").
 		Style("transform", widgetMatrixCSS(w)).
+		Style("z-index", fmt.Sprint(w.Position.Z)).
 		Style("overflow", "visible").
 		OnClick(func(ctx app.Context, e app.Event) {
 			e.Call("stopPropagation")

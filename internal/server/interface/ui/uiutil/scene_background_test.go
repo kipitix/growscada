@@ -7,19 +7,41 @@ import (
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 )
 
+func TestSceneBackgroundSrcdoc(t *testing.T) {
+	if doc := SceneBackgroundSrcdoc(`<svg id="bg"></svg>`); !strings.Contains(doc, `<body><svg id="bg"></svg></body>`) {
+		t.Errorf("the background HTML is not the document's body: %s", doc)
+	}
+	if doc := SceneBackgroundSrcdoc(""); !strings.Contains(doc, `html,body{margin:0;padding:0;overflow:hidden;height:100%}`) {
+		t.Errorf("html and body must fill the Scene: %s", doc)
+	}
+}
+
 func TestSceneBackground(t *testing.T) {
-	html := app.HTMLString(SceneBackground(`<svg id="bg"></svg>`))
+	html := app.HTMLString(&SceneBackground{HTML: `<svg id="bg"></svg>`})
 	for _, want := range []string{
 		`<iframe `,
-		`sandbox="` + SceneBackgroundSandbox + `"`,
-		`<body><svg id=\"bg\"></svg></body>`,
+		`color-scheme:light`,
 		`pointer-events:none`,
+		`display:block`,
+		`tabindex="-1"`,
+		// HTMLString writes the value "true" as a bare attribute; in the
+		// browser go-app sets aria-hidden="true".
+		` aria-hidden `,
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("missing %s in %s", want, html)
 		}
 	}
-	if strings.Contains(html, "allow-scripts") {
-		t.Errorf("the background must not run scripts: %s", html)
+	// Both are set on the element on mount: sandbox="" first, then srcdoc.
+	for _, unwanted := range []string{`sandbox=`, `srcdoc=`} {
+		if strings.Contains(html, unwanted) {
+			t.Errorf("unexpected %s in %s", unwanted, html)
+		}
+	}
+}
+
+func TestSceneBackground_WithoutHTML_IsHidden(t *testing.T) {
+	if html := app.HTMLString(&SceneBackground{}); !strings.Contains(html, `display:none`) {
+		t.Errorf("an empty background must be hidden: %s", html)
 	}
 }

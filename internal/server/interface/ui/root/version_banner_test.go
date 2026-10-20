@@ -52,6 +52,9 @@ func TestVersionBanner_ShownWhileTheServerSpeaksAnotherVersion(t *testing.T) {
 	if err := app.Match(app.Span().Text(versionBannerText(older)), r.renderVersionBanner(), 0); err != nil {
 		t.Errorf("banner: %v", err)
 	}
+	if html := app.HTMLString(r.renderVersionBanner()); !strings.Contains(html, "data-version-banner") {
+		t.Errorf("the banner lacks its data-version-banner attribute: %s", html)
+	}
 	text := versionBannerText(r.serverVersion)
 	if !strings.Contains(text, "API "+older.String()) || !strings.Contains(text, apiv0.SchemaVersion().String()) ||
 		!strings.Contains(text, "Reload") {

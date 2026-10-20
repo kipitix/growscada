@@ -8,11 +8,22 @@ import (
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
-// canvasHTML is the markup of the selected Scene's canvas.
-func (f *fixture) canvasHTML() string {
-	return app.HTMLString(f.p.renderSceneCanvas())
+// canvasBackground is the background layer of the selected Scene's canvas.
+func (f *fixture) canvasBackground(t *testing.T) string {
+	t.Helper()
+	sc, _ := f.p.findScene(f.p.selectedSceneID)
+	layers := f.p.canvasLayers(sc.BackgroundHTML)
+	bg, ok := layers[0].(*uiutil.SceneBackground)
+	if !ok {
+		t.Fatalf("the bottom layer is %T, want the background", layers[0])
+	}
+	if !strings.Contains(app.HTMLString(layers[1]), "radial-gradient") {
+		t.Errorf("want the grid right over the background: %s", app.HTMLString(layers[1]))
+	}
+	return bg.HTML
 }
 
 func TestSceneCanvas_ShowsTheBackgroundUnderTheGrid(t *testing.T) {
@@ -24,22 +35,20 @@ func TestSceneCanvas_ShowsTheBackgroundUnderTheGrid(t *testing.T) {
 	}
 	f := mount(t, url, api)
 
-	html := f.canvasHTML()
-	background := strings.Index(html, `<svg id=\"bg\"></svg>`)
-	grid := strings.Index(html, "radial-gradient")
-	if background < 0 || grid < 0 || background > grid {
-		t.Errorf("want the background, then the grid over it: %s", html)
+	if got := f.canvasBackground(t); got != `<svg id="bg"></svg>` {
+		t.Errorf("background = %q", got)
 	}
 }
 
-func TestSceneCanvas_WithoutBackground_ShowsOnlyTheGrid(t *testing.T) {
+// The background keeps its place without HTML, so the Widgets' layer does not
+// move when a background is added or removed.
+func TestSceneCanvas_WithoutBackground_KeepsAnEmptyBackgroundLayer(t *testing.T) {
 	url, api := newServer(t)
 	createScene(t, api, "Main")
 	f := mount(t, url, api)
 
-	html := f.canvasHTML()
-	if strings.Contains(html, "<iframe") || !strings.Contains(html, "radial-gradient") {
-		t.Errorf("want the grid and no background: %s", html)
+	if got := f.canvasBackground(t); got != "" {
+		t.Errorf("background = %q, want none", got)
 	}
 }
 
@@ -53,7 +62,7 @@ func TestSceneCanvas_ShowsTheSavedBackground(t *testing.T) {
 	f.run()
 
 	f.noToasts()
-	if html := f.canvasHTML(); !strings.Contains(html, `<svg id=\"new\"></svg>`) {
-		t.Errorf("the saved background is not on the canvas: %s", html)
+	if got := f.canvasBackground(t); got != `<svg id="new"></svg>` {
+		t.Errorf("the saved background is not on the canvas: %q", got)
 	}
 }

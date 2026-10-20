@@ -64,14 +64,6 @@ func (v *View) Render() app.UI {
 		v.srcdocs[wt.ID] = c
 	}
 
-	layers := make([]app.UI, 0, len(v.Widgets)+1)
-	if v.Scene.BackgroundHTML != "" {
-		layers = append(layers, uiutil.SceneBackground(v.Scene.BackgroundHTML))
-	}
-	for _, w := range v.Widgets {
-		layers = append(layers, v.renderWidget(w, textMuted))
-	}
-
 	canvas := app.Div().
 		Style("position", "relative").
 		Style("width", fmt.Sprintf("%dpx", v.Scene.Width)).
@@ -82,7 +74,7 @@ func (v *View) Render() app.UI {
 		// collapse to 0 and it scrolls from its top-left corner unclipped.
 		Style("margin", "auto").
 		Style("overflow", "hidden").
-		Body(layers...)
+		Body(v.layers(textMuted)...)
 
 	return app.Div().
 		Style("flex", "1").
@@ -110,6 +102,19 @@ func (v *View) Render() app.UI {
 				Style("background", "var(--bg-inset)").
 				Body(canvas),
 		)
+}
+
+// layers are the canvas's layers bottom to top: the Scene's background (the
+// canvas's own colour when it has none), the Widgets.
+func (v *View) layers(textMuted string) []app.UI {
+	widgets := make([]app.UI, 0, len(v.Widgets))
+	for _, w := range v.Widgets {
+		widgets = append(widgets, v.renderWidget(w, textMuted))
+	}
+	return []app.UI{
+		&uiutil.SceneBackground{HTML: v.Scene.BackgroundHTML},
+		uiutil.SceneWidgetLayer(widgets),
+	}
 }
 
 func (v *View) renderWidget(w apiv0.WidgetResponse, textMuted string) app.UI {

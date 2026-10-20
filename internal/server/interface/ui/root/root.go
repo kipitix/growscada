@@ -141,7 +141,8 @@ func (r *Root) renderVersionBanner() app.UI {
 	}
 	return app.Div().
 		Attr("role", "alert").
-		Attr("data-version-banner", "").
+		// Not "": go-app drops an attribute whose value is empty.
+		Attr("data-version-banner", "true").
 		Style("display", "flex").
 		Style("align-items", "center").
 		Style("gap", "12px").
