@@ -1,5 +1,19 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.42] - 2026-10-20
+
+### Added
+
+- **Холст Project показывает фон Scene** (задача 27)
+  - `uiutil.SceneBackground(html)`: iframe фона Scene без скриптов с `pointer-events: none`; его используют и холст Project (`renderSceneCanvas`), и Operation (`livescene.View`, `renderBackground` удалён)
+  - Слои холста Project снизу вверх: однотонный `var(--surface)`, фон Scene (если `background_html` не пуст), точечная сетка редактора (отдельный слой с `pointer-events: none`), виджеты. Drop, клик по пустому месту, drag/resize/rotate по-прежнему обрабатывает холст
+  - Сохранённый (blur) `background_html` сразу виден на холсте; правки из другой вкладки или `growctl` приходят живой перезагрузкой
+  - Тесты: разметка хелпера, фон под сеткой на холсте Project, холст без фона, сохранённый фон на холсте, фон в `livescene.View`
+
+### Fixed
+
+- **Фон Scene выполнял скрипты**: go-app выбрасывает атрибут с пустым значением, и `sandbox=""` не попадал в DOM. Фон теперь в `sandbox="allow-same-origin"` (`uiutil.SceneBackgroundSandbox`) — без `allow-scripts` ничего не выполняется
+
 ## [0.0.41] - 2026-10-19
 
 ### Fixed

@@ -152,7 +152,9 @@ func (p *Project) renderSceneCanvas() app.UI {
 	}
 
 	sceneWidth, sceneHeight := 1920, 1080
+	var backgroundHTML string
 	if sc, ok := p.findScene(p.selectedSceneID); ok {
+		backgroundHTML = sc.BackgroundHTML
 		if sc.Width > 0 {
 			sceneWidth = sc.Width
 		}
@@ -161,10 +163,17 @@ func (p *Project) renderSceneCanvas() app.UI {
 		}
 	}
 
+	// Layers bottom to top: the Scene's background (the canvas's own colour
+	// when it has none), the editor's dot grid, the Widgets. The background
+	// and the grid let mouse events through to the canvas.
 	textMuted := uiutil.IframeTextMuted()
-	widgetEls := make([]app.UI, 0, len(p.widgets))
+	layers := make([]app.UI, 0, len(p.widgets)+2)
+	if backgroundHTML != "" {
+		layers = append(layers, uiutil.SceneBackground(backgroundHTML))
+	}
+	layers = append(layers, renderCanvasGrid())
 	for _, w := range p.widgets {
-		widgetEls = append(widgetEls, p.renderWidget(w, textMuted))
+		layers = append(layers, p.renderWidget(w, textMuted))
 	}
 
 	// Determine overall canvas cursor from active drag mode.
@@ -185,8 +194,6 @@ func (p *Project) renderSceneCanvas() app.UI {
 		Style("width", fmt.Sprintf("%dpx", sceneWidth)).
 		Style("height", fmt.Sprintf("%dpx", sceneHeight)).
 		Style("background-color", "var(--surface)").
-		Style("background-image", "radial-gradient(circle, var(--dot-color) 1px, transparent 1px)").
-		Style("background-size", "24px 24px").
 		Style("flex-shrink", "0").
 		Style("cursor", canvasCursor).
 		// OnMouseMove / OnMouseUp are intentionally on the root Render() div
@@ -224,7 +231,7 @@ func (p *Project) renderSceneCanvas() app.UI {
 			}
 			p.clearWidgetSelection(ctx)
 		}).
-		Body(widgetEls...)
+		Body(layers...)
 
 	return app.Div().
 		Style("flex", "1").
@@ -233,6 +240,17 @@ func (p *Project) renderSceneCanvas() app.UI {
 		Style("background", "var(--bg-inset)").
 		Style("padding", "24px").
 		Body(canvas)
+}
+
+// renderCanvasGrid renders the editor's dot grid over the Scene's background,
+// so that it shows on any background.
+func renderCanvasGrid() app.UI {
+	return app.Div().
+		Style("position", "absolute").
+		Style("inset", "0").
+		Style("background-image", "radial-gradient(circle, var(--dot-color) 1px, transparent 1px)").
+		Style("background-size", "24px 24px").
+		Style("pointer-events", "none")
 }
 
 // renderWidget renders a single widget element on the canvas using a CSS

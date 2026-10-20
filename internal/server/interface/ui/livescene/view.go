@@ -66,7 +66,7 @@ func (v *View) Render() app.UI {
 
 	layers := make([]app.UI, 0, len(v.Widgets)+1)
 	if v.Scene.BackgroundHTML != "" {
-		layers = append(layers, v.renderBackground())
+		layers = append(layers, uiutil.SceneBackground(v.Scene.BackgroundHTML))
 	}
 	for _, w := range v.Widgets {
 		layers = append(layers, v.renderWidget(w, textMuted))
@@ -110,21 +110,6 @@ func (v *View) Render() app.UI {
 				Style("background", "var(--bg-inset)").
 				Body(canvas),
 		)
-}
-
-// renderBackground renders the Scene's static background HTML under the
-// Widgets, in an iframe sandboxed without scripts.
-func (v *View) renderBackground() app.UI {
-	return app.IFrame().
-		Attr("sandbox", "").
-		Attr("srcdoc", `<!DOCTYPE html><html><head><style>html,body{margin:0;padding:0;overflow:hidden}</style></head><body>`+v.Scene.BackgroundHTML+`</body></html>`).
-		Style("position", "absolute").
-		Style("inset", "0").
-		Style("width", "100%").
-		Style("height", "100%").
-		Style("border", "none").
-		Style("pointer-events", "none").
-		Style("display", "block")
 }
 
 func (v *View) renderWidget(w apiv0.WidgetResponse, textMuted string) app.UI {
