@@ -410,8 +410,8 @@ func TestCreateWidget_PlacesTheWidgetTypeAndSelectsIt(t *testing.T) {
 	if f.p.selectedWidgetID != w.ID || len(f.p.widgets) != 1 {
 		t.Errorf("selected %v of %d widgets, want the new %v", f.p.selectedWidgetID, len(f.p.widgets), w.ID)
 	}
-	if got := f.p.editFields(); got != editFieldsOf(w) {
-		t.Errorf("editor %+v, want %+v", got, editFieldsOf(w))
+	if got := f.p.widgetEditFields(); got != widgetEditFieldsOf(w) {
+		t.Errorf("editor %+v, want %+v", got, widgetEditFieldsOf(w))
 	}
 	f.knowsSceneVersion(sceneID)
 }

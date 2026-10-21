@@ -1,14 +1,11 @@
 package library
 
 import (
-	"slices"
-
 	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
-	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -58,19 +55,7 @@ func (l *Library) OnMount(ctx app.Context) {
 	ctx.ObserveState("theme", &l.ThemeMode)
 	l.selectedID = uiutil.LoadID(ctx, selectedIDKey)
 	l.loadList(ctx)
-
-	ctx.Handle(eventlog.ActionServerEvent, func(ctx app.Context, a app.Action) {
-		ev, ok := a.Value.(apiv0.Event)
-		if !ok {
-			return
-		}
-		if ev.Type == eventlog.EventResync {
-			l.versions.Forget() // events were lost: the server may have gone back
-		}
-		if eventlog.ReloadTargetsFor(ev).WidgetTypes {
-			l.loadList(ctx)
-		}
-	})
+	l.handleServerEvents(ctx)
 }
 
 // ── Input Data ────────────────────────────────────────────────────────────────
@@ -93,40 +78,7 @@ func (l *Library) setInputValue(port, value string) {
 	l.inputValues[l.selectedID][port] = value
 }
 
-// ── Data loading ──────────────────────────────────────────────────────────────
-
-// loadList (re)loads the widget type list; concurrent requests are coalesced.
-func (l *Library) loadList(ctx app.Context) {
-	mark := l.versions.Mark()
-	uiutil.Load(l.compoCtx, &l.reloader, l.client.ListWidgetTypes, func(ctx app.Context, items []apiv0.WidgetTypeResponse) {
-		l.setWidgetTypes(ctx, mark, items)
-	}, l.loadList)
-}
-
-// setWidgetTypes replaces the list and brings the editor of the selected type
-// up to date: a type seen for the first time fills the editor, a known one is
-// merged field by field so unsaved edits survive changes made elsewhere, and a
-// deleted one drops the selection. mark is the moment the list was requested.
-func (l *Library) setWidgetTypes(ctx app.Context, mark uiutil.Mark, items []apiv0.WidgetTypeResponse) {
-	old, known := l.findItem(l.selectedID)
-	for _, it := range items {
-		l.versions.Observe(mark, it.ID, it.Version)
-	}
-	l.widgetTypes = items
-	if l.selectedID == uuid.Nil {
-		return
-	}
-	current, exists := l.findItem(l.selectedID)
-	switch {
-	case !exists:
-		l.clearSelection()
-		uiutil.StoreID(ctx, selectedIDKey, uuid.Nil)
-	case !known:
-		l.selectItem(l.selectedID)
-	default:
-		l.mergeSelected(old, current)
-	}
-}
+// ── Selection helpers ─────────────────────────────────────────────────────────
 
 // clearSelection deselects the widget type and empties its editor.
 func (l *Library) clearSelection() {
@@ -143,38 +95,6 @@ func (l *Library) findItem(id uuid.UUID) (apiv0.WidgetTypeResponse, bool) {
 // itemIdx returns the index of the WidgetType id in the list; -1 if absent.
 func (l *Library) itemIdx(id uuid.UUID) int {
 	return uiutil.IdxByID(l.widgetTypes, id, uiutil.WidgetTypeID)
-}
-
-// mergeSelected updates each editor field that still holds the old server value.
-// Preview input values and the add-port form are editor-only state and kept.
-func (l *Library) mergeSelected(old, current apiv0.WidgetTypeResponse) {
-	l.editedName = uiutil.MergeField(l.editedName, old.Name, current.Name)
-	l.editedHTML = uiutil.MergeField(l.editedHTML, old.HtmlTemplate, current.HtmlTemplate)
-	l.editedScript = uiutil.MergeField(l.editedScript, old.Script, current.Script)
-	l.editedScriptLang = uiutil.MergeField(l.editedScriptLang, old.ScriptLanguage, current.ScriptLanguage)
-	if slices.Equal(l.editedInputPorts, old.InputPorts) {
-		l.editedInputPorts = slices.Clone(current.InputPorts)
-	}
-}
-
-// ── Selection helpers ─────────────────────────────────────────────────────────
-
-func (l *Library) selectItem(id uuid.UUID) {
-	it, ok := l.findItem(id)
-	if !ok {
-		return
-	}
-	l.selectedID = id
-	l.editedName = it.Name
-	l.editedHTML = it.HtmlTemplate
-	l.editedScript = it.Script
-	l.editedScriptLang = it.ScriptLanguage
-	ports := make([]apiv0.InputPort, len(it.InputPorts))
-	copy(ports, it.InputPorts)
-	l.editedInputPorts = ports
-	l.newPortName = ""
-	l.newPortDesc = ""
-	l.newPortType = ""
 }
 
 func (l *Library) startEditing(id uuid.UUID, currentName string) {

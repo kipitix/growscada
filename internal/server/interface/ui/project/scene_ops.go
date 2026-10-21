@@ -3,7 +3,6 @@ package project
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
@@ -81,22 +80,6 @@ func (p *Project) selectScene(ctx app.Context, id uuid.UUID) {
 	p.clearWidgetSelection(ctx)
 	p.syncSceneEditingFields()
 	p.loadWidgets(ctx)
-}
-
-// syncSceneEditingFields populates the Properties-panel editing state from
-// the currently selected scene.
-func (p *Project) syncSceneEditingFields() {
-	if sc, ok := p.findScene(p.selectedSceneID); ok {
-		p.editingScenePropsName = sc.Name
-		p.editingScenePropsWidth = strconv.Itoa(sc.Width)
-		p.editingScenePropsHeight = strconv.Itoa(sc.Height)
-		p.editingScenePropsBG = sc.BackgroundHTML
-		return
-	}
-	p.editingScenePropsName = ""
-	p.editingScenePropsWidth = ""
-	p.editingScenePropsHeight = ""
-	p.editingScenePropsBG = ""
 }
 
 func (p *Project) saveSceneProperties(ctx app.Context) {

@@ -1,5 +1,15 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.44] - 2026-10-21
+
+### Changed
+
+- **Рефакторинг живой перезагрузки UI** (задача 29), поведение не меняется
+  - `project/live_reload.go` разделён по причинам для изменений: `server_events.go` (`handleServerEvents`), `load.go` (загрузчики списков WidgetType, Scene, Widget, Tag), `scene_versions.go` (версии и состояния Scene, перечитывание устаревших Scene), `edit_fields.go` (слияние правок редакторов). `live_reload_ops_test.go` → `server_events_test.go`
+  - `project/edit_fields.go`: `widgetEditFields` и новая парная `sceneEditFields` — `*EditFieldsOf`, чистые `merge*EditFields`, обёртки `set*EditFields`/`sync*`/`merge*EditingFields`; `syncSceneEditingFields` переехал из `scene_ops.go`
+  - Library по той же схеме: `server_events.go` (обработчик событий вынесен из `OnMount`), `load.go` (`loadList`, `setWidgetTypes`), `edit_fields.go` (`editFields`, чистые `editFieldsOf`/`mergeEditFields`; `selectItem` и `mergeSelected` — обёртки, порты сливаются целым списком)
+  - Тесты чистых функций слияния: `project/edit_fields_test.go` (Widget и Scene), `library/edit_fields_test.go`
+
 ## [0.0.43] - 2026-10-21
 
 ### Added

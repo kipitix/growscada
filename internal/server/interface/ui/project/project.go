@@ -49,7 +49,7 @@ type Project struct {
 	// follows the Widgets' changes, which leave the properties as they are).
 	sceneStates uiutil.Versions
 
-	// Coalesce reloads of each server-backed list (see live_reload.go).
+	// Coalesce reloads of each server-backed list (see load.go).
 	widgetTypesReloader uiutil.Reloader
 	scenesReloader      uiutil.Reloader
 	widgetsReloader     uiutil.Reloader
