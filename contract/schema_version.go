@@ -6,7 +6,9 @@
 //   - project/vN  — the project format: ProjectFile and Revision;
 //   - record/vN   — the operational record format: Journal entries,
 //     Checkpoints and PlaybackFiles;
-//   - manifest/vN — growctl manifests.
+//   - manifest/vN — growctl manifests;
+//   - widgetscript/vN — the WidgetType script contract: the `inputs` object a
+//     WidgetType's script receives in render(inputs).
 //
 // The package is public so that tools and Device adapters outside this
 // repository can share the exact shapes the server speaks. JSON schemas of

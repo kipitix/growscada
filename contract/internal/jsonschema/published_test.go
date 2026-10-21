@@ -114,4 +114,19 @@ func TestPublishedSchema(t *testing.T) {
 	if _, err := publishedSchema("nope", filepath.Join(repo, "schemas", "api", "0.1.json")); err == nil || !strings.Contains(err.Error(), errUnchecked.Error()) {
 		t.Errorf("missing branch: err = %v, want errUnchecked", err)
 	}
+	// The first schema of a new contract: its directory does not exist yet.
+	got, err = publishedSchema("main", filepath.Join(repo, "schemas", "newcontract", "0.1.json"))
+	if err != nil || got != nil {
+		t.Errorf("new contract: %q, %v; want nil, nil", got, err)
+	}
+}
+
+func TestCheckFrozen_NewContract(t *testing.T) {
+	current := filepath.Join(t.TempDir(), "newcontract", "0.1.json")
+	if problems := checkFrozen(current); len(problems) != 0 {
+		t.Fatalf("a new contract has nothing to freeze: %v", problems)
+	}
+	if err := freezeOlder(current); err != nil {
+		t.Fatal(err)
+	}
 }

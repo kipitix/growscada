@@ -10,6 +10,7 @@ import (
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	widgetscriptv0 "github.com/kipitix/growscada/contract/widgetscript/v0"
 )
 
 // styleCloseRE matches </style> in any capitalisation or with trailing whitespace.
@@ -102,33 +103,11 @@ func isElement(v app.Value) bool {
 	return v != nil && !v.IsNull() && !v.IsUndefined()
 }
 
-// Input is one InputPort's entry in the `inputs` object a WidgetType script's
-// render(inputs) receives: `inputs.<port>.value`. Fields are only ever added
-// to it, never changed (docs/widget_type_contract.md).
-type Input struct {
-	// Value is the JS value of the port; nil means undefined.
-	Value any
-}
-
-// MarshalJSON encodes the Input as `{"value": ...}`, omitting "value" when it
-// is undefined so the script sees `inputs.<port>.value === undefined`.
-func (in Input) MarshalJSON() ([]byte, error) {
-	if in.Value == nil {
-		return []byte("{}"), nil
-	}
-	return json.Marshal(struct {
-		Value any `json:"value"`
-	}{in.Value})
-}
-
-// Inputs is the `inputs` object passed to render(inputs), keyed by port name.
-type Inputs map[string]Input
-
 // InputsJSON encodes inputs as a JSON object. The encoder escapes <, > and &,
 // so the result can be embedded in a <script> element as is.
-func InputsJSON(inputs Inputs) string {
+func InputsJSON(inputs widgetscriptv0.Inputs) string {
 	if inputs == nil {
-		inputs = Inputs{}
+		inputs = widgetscriptv0.Inputs{}
 	}
 	b, err := json.Marshal(inputs)
 	if err != nil {
@@ -137,35 +116,60 @@ func InputsJSON(inputs Inputs) string {
 	return string(b)
 }
 
-// NewInput converts a raw string value to the port's JS value by type: an
-// "integer", "boolean" or "string" TagType or type hint. An empty type ("any"
-// hint) keeps a non-empty value as a string. A value that is empty or does not
-// parse falls back to the type's default: 0, false, "" or, for "any", undefined.
-func NewInput(raw, typ string) Input {
+// NewInput converts a value given as text to the input of a port of type typ:
+// an "integer", "boolean" or "string" TagType or type hint, or "" for the
+// "any" hint, which keeps the text as a string. The input's text is the value
+// in canonical form ("+007" → "7"). ok is false when text is not a value of
+// typ: an integer that does not fit int64, a boolean other than "true" or
+// "false".
+func NewInput(text, typ string) (widgetscriptv0.Input, bool) {
+	var value any
 	switch typ {
 	case "integer":
-		if n, err := strconv.ParseInt(raw, 10, 64); err == nil {
-			return Input{Value: n}
+		n, err := strconv.ParseInt(text, 10, 64)
+		if err != nil {
+			return widgetscriptv0.Input{}, false
 		}
-		return Input{Value: int64(0)}
+		value, text = n, strconv.FormatInt(n, 10)
 	case "boolean":
-		return Input{Value: raw == "true"}
-	case "string":
-		return Input{Value: raw}
-	default:
-		if raw == "" {
-			return Input{}
+		if text != "true" && text != "false" {
+			return widgetscriptv0.Input{}, false
 		}
-		return Input{Value: raw}
+		value = text == "true"
+	default:
+		value = text
+	}
+	return widgetscriptv0.Input{Value: value, Text: &text}, true
+}
+
+// NoValueInput is the input of a port without a value (no PortBinding, a
+// deleted Tag, nothing valid typed into a preview): no text, and the type
+// hint's default value — 0, false, "" or, for "any", undefined.
+func NoValueInput(typeHint string) widgetscriptv0.Input {
+	switch typeHint {
+	case "integer":
+		return widgetscriptv0.Input{Value: int64(0)}
+	case "boolean":
+		return widgetscriptv0.Input{Value: false}
+	case "string":
+		return widgetscriptv0.Input{Value: ""}
+	default:
+		return widgetscriptv0.Input{}
 	}
 }
 
 // PreviewInputs builds the inputs of a preview (Library, Project) from values
-// typed in by the Engineer, converted by each port's type hint.
-func PreviewInputs(values map[string]string, ports []apiv0.InputPort) Inputs {
-	inputs := make(Inputs, len(ports))
+// typed in by the Engineer, converted by each port's type hint. An empty
+// value, or one that is not a value of the port's type, leaves the port
+// without a value, as in Operation.
+func PreviewInputs(values map[string]string, ports []apiv0.InputPort) widgetscriptv0.Inputs {
+	inputs := make(widgetscriptv0.Inputs, len(ports))
 	for _, p := range ports {
-		inputs[p.Name] = NewInput(values[p.Name], p.TypeHint)
+		in, ok := NewInput(values[p.Name], p.TypeHint)
+		if values[p.Name] == "" || !ok {
+			in = NoValueInput(p.TypeHint)
+		}
+		inputs[p.Name] = in
 	}
 	return inputs
 }
@@ -190,7 +194,7 @@ func srcdocPage(htmlTemplate, script, tail, bgColor string) string {
 // BuildSrcdoc constructs the iframe srcdoc for a sandboxed widget preview: the
 // WidgetType's render(inputs) is called once with the given inputs, if the
 // type has any ports. The script contract is in docs/widget_type_contract.md.
-func BuildSrcdoc(htmlTemplate, script string, inputs Inputs, ports []apiv0.InputPort, bgColor string) string {
+func BuildSrcdoc(htmlTemplate, script string, inputs widgetscriptv0.Inputs, ports []apiv0.InputPort, bgColor string) string {
 	tail := ""
 	if len(ports) > 0 {
 		tail = fmt.Sprintf("try{render(%s);}catch(e){}", InputsJSON(inputs))

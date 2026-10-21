@@ -42,7 +42,7 @@ func publishedSchema(ref, path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	dir := filepath.Dir(abs)
+	dir := existingDir(filepath.Dir(abs))
 	top, err := git(dir, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errUnchecked, err)
@@ -59,6 +59,21 @@ func publishedSchema(ref, path string) ([]byte, error) {
 		return nil, nil // the ref has no such file
 	}
 	return content, nil
+}
+
+// existingDir returns dir or its nearest ancestor that exists: the first
+// schema of a new contract lives in a directory not created yet.
+func existingDir(dir string) string {
+	for {
+		if _, err := os.Stat(dir); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return dir
+		}
+		dir = parent
+	}
 }
 
 func git(dir string, args ...string) ([]byte, error) {
@@ -83,9 +98,13 @@ func schemaVersionOf(name string) (major, minor int, ok bool) {
 }
 
 // olderSchemas lists the schema files in the directory of current that are
-// not current, by name.
+// not current, by name; none when the directory does not exist yet (a new
+// contract).
 func olderSchemas(current string) ([]string, error) {
 	entries, err := os.ReadDir(filepath.Dir(current))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}

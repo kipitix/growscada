@@ -1,0 +1,22 @@
+{
+  "$defs": {
+    "Input": {
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "value": {}
+      },
+      "type": "object"
+    },
+    "Inputs": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Input"
+      },
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/kipitix/growscada/schemas/widgetscript/0.1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GrowSCADA WidgetType script contract 0.1"
+}

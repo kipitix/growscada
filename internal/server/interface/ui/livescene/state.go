@@ -4,6 +4,7 @@ import (
 	"github.com/google/uuid"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	widgetscriptv0 "github.com/kipitix/growscada/contract/widgetscript/v0"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -36,16 +37,19 @@ func SceneTags(widgets []apiv0.WidgetResponse, find func(uuid.UUID) (apiv0.TagRe
 
 // WidgetInputs computes the `inputs` of the Widget's render(inputs): each
 // InputPort gets its bound Tag's current value, converted by the Tag's
-// TagType. A port without a PortBinding, or bound to a deleted Tag, gets its
-// type hint's default.
-func WidgetInputs(w apiv0.WidgetResponse, wt apiv0.WidgetTypeResponse, tags map[uuid.UUID]apiv0.TagResponse) uiutil.Inputs {
-	inputs := make(uiutil.Inputs, len(wt.InputPorts))
+// TagType, and the value as text. A port without a PortBinding, or bound to a
+// deleted Tag, has no value: its type hint's default and no text.
+func WidgetInputs(w apiv0.WidgetResponse, wt apiv0.WidgetTypeResponse, tags map[uuid.UUID]apiv0.TagResponse) widgetscriptv0.Inputs {
+	inputs := make(widgetscriptv0.Inputs, len(wt.InputPorts))
 	for _, p := range wt.InputPorts {
-		if t, ok := boundTag(w, p.Name, tags); ok {
-			inputs[p.Name] = uiutil.NewInput(t.Value, t.Type)
-		} else {
-			inputs[p.Name] = uiutil.NewInput("", p.TypeHint)
+		in, ok := widgetscriptv0.Input{}, false
+		if t, bound := boundTag(w, p.Name, tags); bound {
+			in, ok = uiutil.NewInput(t.Value, t.Type)
 		}
+		if !ok {
+			in = uiutil.NoValueInput(p.TypeHint)
+		}
+		inputs[p.Name] = in
 	}
 	return inputs
 }

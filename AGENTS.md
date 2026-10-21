@@ -63,6 +63,7 @@ contract/           # Versioned contracts, public (ADR 0005): SchemaVersion + on
   project/v0/       # Project format: ProjectFile = Revision (not modelled yet)
   record/v0/        # Operational record format: Journal, Checkpoint, PlaybackFile (not modelled yet)
   manifest/v0/      # growctl manifests
+  widgetscript/v0/  # WidgetType script contract: the `inputs` of render(inputs) (docs/widget_type_contract.md)
 schemas/            # Generated JSON schemas, schemas/<contract>/<MAJOR.MINOR>.json (make schemas)
 internal/
   server/           # GrowSCADA server + WASM UI (DDD layers below)

@@ -46,7 +46,7 @@ type Document struct {
 func Generate(doc Document) ([]byte, error) {
 	g := generator{tag: doc.Tag, defs: map[string]any{}, types: map[string]reflect.Type{}}
 	for _, root := range doc.Roots {
-		if _, err := g.schemaOf(reflect.TypeOf(root)); err != nil {
+		if err := g.addRoot(reflect.TypeOf(root)); err != nil {
 			return nil, err
 		}
 	}
@@ -78,6 +78,25 @@ var (
 	uuidType          = reflect.TypeFor[uuid.UUID]()
 	timeType          = reflect.TypeFor[time.Time]()
 )
+
+// addRoot generates the $defs entry of a top-level type. A named struct gets
+// one on its own (structRef); any other named type, such as a map of
+// structs, would otherwise be inlined into nothing, so it is added here.
+func (g *generator) addRoot(t reflect.Type) error {
+	schema, err := g.schemaOf(t)
+	if err != nil {
+		return err
+	}
+	if t.Kind() == reflect.Struct || t.Name() == "" {
+		return nil
+	}
+	if seen, ok := g.types[t.Name()]; ok && seen != t {
+		return fmt.Errorf("two types are named %s: %v and %v", t.Name(), seen, t)
+	}
+	g.types[t.Name()] = t
+	g.defs[t.Name()] = schema
+	return nil
+}
 
 func (g *generator) schemaOf(t reflect.Type) (map[string]any, error) {
 	// A pointer has the schema of what it points to. Dereferencing first keeps

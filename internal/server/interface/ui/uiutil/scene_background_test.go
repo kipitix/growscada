@@ -24,13 +24,16 @@ func TestSceneBackground(t *testing.T) {
 		`pointer-events:none`,
 		`display:block`,
 		`tabindex="-1"`,
-		// HTMLString writes the value "true" as a bare attribute; in the
-		// browser go-app sets aria-hidden="true".
-		` aria-hidden `,
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("missing %s in %s", want, html)
 		}
+	}
+	// HTMLString writes the value "true" as a bare attribute, in no fixed
+	// order (the last one is followed by ">"); in the browser go-app sets
+	// aria-hidden="true".
+	if !strings.Contains(html, ` aria-hidden `) && !strings.Contains(html, ` aria-hidden>`) {
+		t.Errorf("missing aria-hidden in %s", html)
 	}
 	// Both are set on the element on mount: sandbox="" first, then srcdoc.
 	for _, unwanted := range []string{`sandbox=`, `srcdoc=`} {

@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
 // id is a stable ID named for readability.
@@ -58,6 +59,21 @@ func TestWidgetInputs(t *testing.T) {
 	if got := inputs["on"].Value; got != false {
 		t.Errorf("a port bound to a deleted Tag gets its default: got %#v, want false", got)
 	}
+	if inputs["on"].Text != nil {
+		t.Errorf("a port bound to a deleted Tag has no text, got %q", *inputs["on"].Text)
+	}
+}
+
+func TestWidgetInputs_TextIsExact(t *testing.T) {
+	tags := tagsOf(tag("t-big", "integer", "9007199254740993", "good"), tag("t-label", "string", "", "good"))
+	w := testWidget(bind("speed", "t-big"), bind("any", "t-label"))
+
+	got := uiutil.InputsJSON(WidgetInputs(w, testWidgetType(), tags))
+
+	want := `{"any":{"value":"","text":""},"on":{"value":false},"speed":{"value":9007199254740993,"text":"9007199254740993"}}`
+	if got != want {
+		t.Errorf("inputs = %s, want %s", got, want)
+	}
 }
 
 func TestWidgetInputs_UnboundPortsGetDefaults(t *testing.T) {
@@ -68,6 +84,11 @@ func TestWidgetInputs_UnboundPortsGetDefaults(t *testing.T) {
 	}
 	if got := inputs["any"].Value; got != nil {
 		t.Errorf("any = %#v, want undefined", got)
+	}
+	for name, in := range inputs {
+		if in.Text != nil {
+			t.Errorf("unbound port %s has text %q, want none", name, *in.Text)
+		}
 	}
 	if len(inputs) != 3 {
 		t.Errorf("expected an input per port, got %v", inputs)

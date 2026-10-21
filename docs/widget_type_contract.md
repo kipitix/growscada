@@ -2,6 +2,8 @@
 
 Документ для авторов WidgetType: как скрипт получает данные и что он должен соблюдать. Термины — по `CONTEXT.md`.
 
+Это версионируемый контракт `widgetscript` (ADR 0005), SchemaVersion **0.1**. Схема объекта `inputs`: `schemas/widgetscript/0.1.json`, Go-типы: `contract/widgetscript/v0`. Скрипту версия не передаётся.
+
 ## Точка входа
 
 Скрипт WidgetType объявляет глобальную функцию:
@@ -16,12 +18,16 @@ HTML-шаблон WidgetType уже в документе, когда скрип
 
 ## `inputs`
 
-`inputs` — объект с ключами по именам InputPort WidgetType. Каждый вход — объект, значение лежит в `value`:
+`inputs` — объект с ключами по именам InputPort WidgetType. Каждый вход — объект с полями:
+
+- `value` — значение, приведённое к JS-типу по TagType (ниже);
+- `text` — значение Tag строкой, без потери точности.
 
 ```js
 function render(inputs) {
-  var speed = inputs.speed.value;   // number
+  var speed = inputs.speed.value;     // number
   var running = inputs.running.value; // boolean
+  var exact = inputs.speed.text;      // "42"
 }
 ```
 
@@ -39,9 +45,38 @@ function render(inputs) {
 
 Для порта с type hint «any» тип тоже задаёт привязанный Tag: порт `any`, привязанный к Integer-тегу, получает число.
 
+### Точность Integer
+
+`number` в JS точно представляет целые только в пределах ±(2^53 − 1) (`Number.MAX_SAFE_INTEGER` = 9 007 199 254 740 991), а Integer-тег хранит любое 64-битное целое. За пределами этого диапазона `value` округлён: тег со значением `9007199254740993` даёт `value` `9007199254740992`. Ошибки и маркера Quality нет.
+
+Виджету, которому нужна точность (счётчики, идентификаторы), значение берётся из `text`:
+
+```js
+function render(inputs) {
+  var n = inputs.counter.text === undefined ? 0n : BigInt(inputs.counter.text);
+  document.querySelector("#counter").textContent = n.toString();
+}
+```
+
+`BigInt` нельзя смешивать с `number` в арифметике (`1n + 1` бросает `TypeError`): считайте либо в `BigInt`, либо в `number`.
+
+### Поле `text`
+
+`text` есть у входа любого TagType и содержит значение в канонической форме, в которой его хранит сервер:
+
+| TagType   | `text`                                   |
+|-----------|------------------------------------------|
+| `Integer` | десятичная запись без `+` и ведущих нулей: `"9007199254740993"`, `"-7"` |
+| `Boolean` | `"true"` или `"false"`                   |
+| `String`  | сама строка (в том числе `""`)           |
+
 ### Порт без значения
 
-Если у порта нет PortBinding или привязанный Tag удалён, `value` — значение по умолчанию для type hint порта: `0` для integer, `false` для boolean, `""` для string, `undefined` для «any».
+Если у порта нет PortBinding или привязанный Tag удалён, `value` — значение по умолчанию для type hint порта: `0` для integer, `false` для boolean, `""` для string, `undefined` для «any». Поля `text` у такого входа нет (`inputs.<port>.text === undefined`): так виджет отличает «значения нет» от настоящего `0`, `false` или `""`.
+
+### Превью Library и Project
+
+В превью значения вводит Engineer, и вход строится так же, как в Operation, по type hint порта. Ввод, допустимый для типа порта (integer — целое, умещающееся в 64 бита; boolean — только `true` или `false`), даёт `value` и `text` в канонической форме: `+007` → `value` `7`, `text` `"7"`. Пустой или недопустимый ввод (`abc` в integer-порт, `yes` в boolean-порт) — порт без значения. В порт «any» непустой ввод передаётся строкой: `value` и `text` — эта строка.
 
 ### Расширение
 

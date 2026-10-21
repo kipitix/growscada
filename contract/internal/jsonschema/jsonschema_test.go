@@ -287,6 +287,20 @@ func TestGenerateIsStable(t *testing.T) {
 	}
 }
 
+type pointsByName map[string]point
+
+func TestGenerateNamedNonStructRoot(t *testing.T) {
+	doc := generate(t, "json", pointsByName{})
+	s := def(t, doc, "pointsByName")
+	if s["type"] != "object" {
+		t.Errorf("type = %v, want object", s["type"])
+	}
+	if got := s["additionalProperties"].(map[string]any)["$ref"]; got != "#/$defs/point" {
+		t.Errorf("additionalProperties = %v", got)
+	}
+	def(t, doc, "point")
+}
+
 func TestGenerateRejectsNameClash(t *testing.T) {
 	type point struct{ Z int }
 	if _, err := Generate(Document{Tag: "json", Roots: []any{shape{}, point{}}}); err == nil {
