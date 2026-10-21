@@ -5,7 +5,13 @@
         "text": {
           "type": "string"
         },
-        "value": {}
+        "value": {
+          "type": [
+            "integer",
+            "boolean",
+            "string"
+          ]
+        }
       },
       "type": "object"
     },

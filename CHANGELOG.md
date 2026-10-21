@@ -1,5 +1,23 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.43] - 2026-10-21
+
+### Added
+
+- **Контракт скрипта WidgetType `widgetscript` и точное значение входа `text`** (задача 28, ADR 0005)
+  - Новый версионируемый контракт `contract/widgetscript/v0` (package `widgetscriptv0`), SchemaVersion **0.1**, схема `schemas/widgetscript/0.1.json`: типы `Inputs` и `Input` переехали из `uiutil`. `Input.Value` — тип `Value` (`IntegerValue`/`BooleanValue`/`StringValue`, нулевой — ключа `value` нет, `omitzero`); его `JSONSchema` перечисляет JS-типы (`integer`, `boolean`, `string`), так что смена типа, которым передаётся TagType, меняет схему. Скрипту версия не передаётся
+  - `inputs.<port>` = `{ value, text }`: `text` — значение Tag строкой в канонической форме сервера для всех TagType (`"9007199254740993"`, `"true"`, сама строка). У порта без значения (нет PortBinding, Tag удалён) `text` нет — виджет отличает «значения нет» от настоящих `0`/`false`/`""`. `value` не изменился
+  - Превью Library и Project строят вход по type hint порта: допустимый ввод даёт `value` и `text` в канонической форме (`+007` → `7`/`"7"`), пустой или недопустимый (`abc` в integer, `yes` в boolean) — порт без значения; в порт «any» непустой ввод идёт строкой как есть
+  - `uiutil`: `NewInput(text, type)`, `NoValueInput(typeHint)`, `PreviewInputs`; `livescene.WidgetInputs` строит входы через них
+  - `docs/widget_type_contract.md`: версия и схема контракта, поле `text`, предел точности Integer ±(2^53 − 1) и пример с `BigInt(inputs.<port>.text)`, расхождения превью с Operation. Doc-комментарий пакета `contract` и таблица пакетов в `AGENTS.md` дополнены
+  - Тесты: границы безопасного диапазона и `math.MaxInt64`/`math.MinInt64` (`text` точен, `value` как раньше), недопустимый ввод и порт без привязки в превью, `NewInput` принимает те же тексты и даёт ту же форму, что `tag.TagType.NewTagValue` домена, `TestSchemaIsCommitted` для `widgetscript`
+
+### Fixed
+
+- **Integer-значения больше 2^53 теряли точность в виджете**: скрипт получал только JS `number`, точного значения не было. Теперь оно в `inputs.<port>.text`
+- `jsonschema`: именованная map или slice в поле — `$ref` на запись в `$defs`, как у корня (раньше корневая map получала запись отдельной веткой, а в поле — встраивалась). Проверка опубликованной схемы (`make schemas`) работает и в репозитории, открытом через симлинк
+- Bruno: `patch tag value` передаёт `version` (без него сервер отвечает 409) и описывает его в `docs`
+
 ## [0.0.42] - 2026-10-20
 
 ### Added

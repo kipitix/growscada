@@ -11,9 +11,16 @@ http:
     data: |-
       {
         "value": "42",
-        "quality": "good"
+        "quality": "good",
+        "version": 1
       }
   auth: inherit
+
+docs: |
+  `version` is the tag version the update is based on (from `get tag by id` or
+  the previous update's response, which returns the new one). A version other
+  than the stored one, including a missing `version`, returns `409 Conflict`
+  (reload and retry).
 
 settings:
   encodeUrl: true

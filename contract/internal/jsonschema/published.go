@@ -43,18 +43,20 @@ func publishedSchema(ref, path string) ([]byte, error) {
 		return nil, err
 	}
 	dir := existingDir(filepath.Dir(abs))
-	top, err := git(dir, "rev-parse", "--show-toplevel")
-	if err != nil {
+	if _, err := git(dir, "rev-parse", "--show-toplevel"); err != nil {
 		return nil, fmt.Errorf("%w: %v", errUnchecked, err)
 	}
 	if _, err := git(dir, "rev-parse", "--verify", "--quiet", ref+"^{commit}"); err != nil {
 		return nil, fmt.Errorf("%w: no branch %q", errUnchecked, ref)
 	}
-	rel, err := filepath.Rel(strings.TrimSpace(string(top)), abs)
+	// The path is given relative to dir ("ref:./…"), not to the top level git
+	// reports: git resolves symlinks in that one and Abs does not, so a
+	// repository opened through a symlink would yield a path outside it.
+	rel, err := filepath.Rel(dir, abs)
 	if err != nil {
 		return nil, err
 	}
-	content, err := git(dir, "show", ref+":"+filepath.ToSlash(rel))
+	content, err := git(dir, "show", ref+":./"+filepath.ToSlash(rel))
 	if err != nil {
 		return nil, nil // the ref has no such file
 	}

@@ -119,6 +119,20 @@ func TestPublishedSchema(t *testing.T) {
 	if err != nil || got != nil {
 		t.Errorf("new contract: %q, %v; want nil, nil", got, err)
 	}
+	// A repository opened through a symlink: git reports the resolved top
+	// level, the path keeps the symlink.
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(repo, link); err != nil {
+		t.Fatal(err)
+	}
+	got, err = publishedSchema("main", filepath.Join(link, "schemas", "api", "0.1.json"))
+	if err != nil || string(got) != "published" {
+		t.Errorf("through a symlink: %q, %v", got, err)
+	}
+	got, err = publishedSchema("main", filepath.Join(link, "schemas", "newcontract", "0.1.json"))
+	if err != nil || got != nil {
+		t.Errorf("new contract through a symlink: %q, %v; want nil, nil", got, err)
+	}
 }
 
 func TestCheckFrozen_NewContract(t *testing.T) {

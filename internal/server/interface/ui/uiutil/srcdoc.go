@@ -123,21 +123,21 @@ func InputsJSON(inputs widgetscriptv0.Inputs) string {
 // typ: an integer that does not fit int64, a boolean other than "true" or
 // "false".
 func NewInput(text, typ string) (widgetscriptv0.Input, bool) {
-	var value any
+	var value widgetscriptv0.Value
 	switch typ {
 	case "integer":
 		n, err := strconv.ParseInt(text, 10, 64)
 		if err != nil {
 			return widgetscriptv0.Input{}, false
 		}
-		value, text = n, strconv.FormatInt(n, 10)
+		value, text = widgetscriptv0.IntegerValue(n), strconv.FormatInt(n, 10)
 	case "boolean":
 		if text != "true" && text != "false" {
 			return widgetscriptv0.Input{}, false
 		}
-		value = text == "true"
+		value = widgetscriptv0.BooleanValue(text == "true")
 	default:
-		value = text
+		value = widgetscriptv0.StringValue(text)
 	}
 	return widgetscriptv0.Input{Value: value, Text: &text}, true
 }
@@ -148,11 +148,11 @@ func NewInput(text, typ string) (widgetscriptv0.Input, bool) {
 func NoValueInput(typeHint string) widgetscriptv0.Input {
 	switch typeHint {
 	case "integer":
-		return widgetscriptv0.Input{Value: int64(0)}
+		return widgetscriptv0.Input{Value: widgetscriptv0.IntegerValue(0)}
 	case "boolean":
-		return widgetscriptv0.Input{Value: false}
+		return widgetscriptv0.Input{Value: widgetscriptv0.BooleanValue(false)}
 	case "string":
-		return widgetscriptv0.Input{Value: ""}
+		return widgetscriptv0.Input{Value: widgetscriptv0.StringValue("")}
 	default:
 		return widgetscriptv0.Input{}
 	}
@@ -165,9 +165,11 @@ func NoValueInput(typeHint string) widgetscriptv0.Input {
 func PreviewInputs(values map[string]string, ports []apiv0.InputPort) widgetscriptv0.Inputs {
 	inputs := make(widgetscriptv0.Inputs, len(ports))
 	for _, p := range ports {
-		in, ok := NewInput(values[p.Name], p.TypeHint)
-		if values[p.Name] == "" || !ok {
-			in = NoValueInput(p.TypeHint)
+		in := NoValueInput(p.TypeHint)
+		if text := values[p.Name]; text != "" {
+			if typed, ok := NewInput(text, p.TypeHint); ok {
+				in = typed
+			}
 		}
 		inputs[p.Name] = in
 	}

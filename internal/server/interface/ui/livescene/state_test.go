@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	widgetscriptv0 "github.com/kipitix/growscada/contract/widgetscript/v0"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -50,13 +51,13 @@ func TestWidgetInputs(t *testing.T) {
 
 	inputs := WidgetInputs(w, testWidgetType(), tags)
 
-	if got := inputs["speed"].Value; got != int64(42) {
+	if got := inputs["speed"].Value; got != widgetscriptv0.IntegerValue(42) {
 		t.Errorf("speed = %#v, want 42", got)
 	}
-	if got := inputs["any"].Value; got != int64(7) {
+	if got := inputs["any"].Value; got != widgetscriptv0.IntegerValue(7) {
 		t.Errorf("an \"any\" port takes its Tag's type: got %#v, want 7", got)
 	}
-	if got := inputs["on"].Value; got != false {
+	if got := inputs["on"].Value; got != widgetscriptv0.BooleanValue(false) {
 		t.Errorf("a port bound to a deleted Tag gets its default: got %#v, want false", got)
 	}
 	if inputs["on"].Text != nil {
@@ -79,10 +80,10 @@ func TestWidgetInputs_TextIsExact(t *testing.T) {
 func TestWidgetInputs_UnboundPortsGetDefaults(t *testing.T) {
 	inputs := WidgetInputs(testWidget(), testWidgetType(), nil)
 
-	if got := inputs["speed"].Value; got != int64(0) {
+	if got := inputs["speed"].Value; got != widgetscriptv0.IntegerValue(0) {
 		t.Errorf("speed = %#v, want 0", got)
 	}
-	if got := inputs["any"].Value; got != nil {
+	if got := inputs["any"].Value; !got.IsZero() {
 		t.Errorf("any = %#v, want undefined", got)
 	}
 	for name, in := range inputs {

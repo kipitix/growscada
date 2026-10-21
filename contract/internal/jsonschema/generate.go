@@ -33,8 +33,8 @@ type Document struct {
 	Title string
 	// Tag is the struct tag that names the fields: "json" or "yaml".
 	Tag string
-	// Roots are values of the top-level types; every named struct type
-	// reachable from them becomes a $defs entry.
+	// Roots are values of the top-level types; every named struct, map or
+	// slice type reachable from them becomes a $defs entry.
 	Roots []any
 }
 
@@ -46,7 +46,7 @@ type Document struct {
 func Generate(doc Document) ([]byte, error) {
 	g := generator{tag: doc.Tag, defs: map[string]any{}, types: map[string]reflect.Type{}}
 	for _, root := range doc.Roots {
-		if err := g.addRoot(reflect.TypeOf(root)); err != nil {
+		if _, err := g.schemaOf(reflect.TypeOf(root)); err != nil {
 			return nil, err
 		}
 	}
@@ -78,25 +78,6 @@ var (
 	uuidType          = reflect.TypeFor[uuid.UUID]()
 	timeType          = reflect.TypeFor[time.Time]()
 )
-
-// addRoot generates the $defs entry of a top-level type. A named struct gets
-// one on its own (structRef); any other named type, such as a map of
-// structs, would otherwise be inlined into nothing, so it is added here.
-func (g *generator) addRoot(t reflect.Type) error {
-	schema, err := g.schemaOf(t)
-	if err != nil {
-		return err
-	}
-	if t.Kind() == reflect.Struct || t.Name() == "" {
-		return nil
-	}
-	if seen, ok := g.types[t.Name()]; ok && seen != t {
-		return fmt.Errorf("two types are named %s: %v and %v", t.Name(), seen, t)
-	}
-	g.types[t.Name()] = t
-	g.defs[t.Name()] = schema
-	return nil
-}
 
 func (g *generator) schemaOf(t reflect.Type) (map[string]any, error) {
 	// A pointer has the schema of what it points to. Dereferencing first keeps
@@ -131,31 +112,20 @@ func (g *generator) schemaOf(t reflect.Type) (map[string]any, error) {
 	case reflect.Interface:
 		return map[string]any{}, nil
 	case reflect.Slice, reflect.Array:
-		items, err := g.schemaOf(t.Elem())
-		if err != nil {
-			return nil, err
-		}
-		return map[string]any{"type": "array", "items": items}, nil
+		return g.ref(t, g.arraySchema)
 	case reflect.Map:
-		if t.Key().Kind() != reflect.String {
-			return nil, fmt.Errorf("%v: map keys must be strings", t)
-		}
-		values, err := g.schemaOf(t.Elem())
-		if err != nil {
-			return nil, err
-		}
-		return map[string]any{"type": "object", "additionalProperties": values}, nil
+		return g.ref(t, g.mapSchema)
 	case reflect.Struct:
-		return g.structRef(t)
+		return g.ref(t, g.structSchema)
 	}
 	return nil, fmt.Errorf("%v: unsupported kind %v", t, t.Kind())
 }
 
-// structRef inlines an anonymous struct and turns a named one into a $ref to
-// its $defs entry, generating the entry on first use.
-func (g *generator) structRef(t reflect.Type) (map[string]any, error) {
+// ref inlines the schema of an anonymous type and turns a named one into a
+// $ref to its $defs entry, generating the entry with schema on first use.
+func (g *generator) ref(t reflect.Type, schema func(reflect.Type) (map[string]any, error)) (map[string]any, error) {
 	if t.Name() == "" {
-		return g.structSchema(t)
+		return schema(t)
 	}
 	name := t.Name()
 	ref := map[string]any{"$ref": "#/$defs/" + name}
@@ -166,12 +136,31 @@ func (g *generator) structRef(t reflect.Type) (map[string]any, error) {
 		return ref, nil
 	}
 	g.types[name] = t // before recursing, so recursive types terminate
-	schema, err := g.structSchema(t)
+	def, err := schema(t)
 	if err != nil {
 		return nil, err
 	}
-	g.defs[name] = schema
+	g.defs[name] = def
 	return ref, nil
+}
+
+func (g *generator) arraySchema(t reflect.Type) (map[string]any, error) {
+	items, err := g.schemaOf(t.Elem())
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"type": "array", "items": items}, nil
+}
+
+func (g *generator) mapSchema(t reflect.Type) (map[string]any, error) {
+	if t.Key().Kind() != reflect.String {
+		return nil, fmt.Errorf("%v: map keys must be strings", t)
+	}
+	values, err := g.schemaOf(t.Elem())
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"type": "object", "additionalProperties": values}, nil
 }
 
 func (g *generator) structSchema(t reflect.Type) (map[string]any, error) {

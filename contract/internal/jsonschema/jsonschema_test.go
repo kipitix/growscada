@@ -290,15 +290,43 @@ func TestGenerateIsStable(t *testing.T) {
 type pointsByName map[string]point
 
 func TestGenerateNamedNonStructRoot(t *testing.T) {
-	doc := generate(t, "json", pointsByName{})
-	s := def(t, doc, "pointsByName")
-	if s["type"] != "object" {
-		t.Errorf("type = %v, want object", s["type"])
+	for _, root := range []any{pointsByName{}, &pointsByName{}} {
+		doc := generate(t, "json", root)
+		s := def(t, doc, "pointsByName")
+		if s["type"] != "object" {
+			t.Errorf("%T: type = %v, want object", root, s["type"])
+		}
+		if got := s["additionalProperties"].(map[string]any)["$ref"]; got != "#/$defs/point" {
+			t.Errorf("%T: additionalProperties = %v", root, got)
+		}
+		def(t, doc, "point")
 	}
-	if got := s["additionalProperties"].(map[string]any)["$ref"]; got != "#/$defs/point" {
-		t.Errorf("additionalProperties = %v", got)
+}
+
+type pointList []point
+
+type pointSets struct {
+	ByName pointsByName `json:"byName"`
+	List   pointList    `json:"list"`
+	Plain  []point      `json:"plain"`
+}
+
+// TestGenerateNamedNonStructField: a named map or slice in a field is a $ref
+// to the same $defs entry it gets as a root, an anonymous one is inlined.
+func TestGenerateNamedNonStructField(t *testing.T) {
+	doc := generate(t, "json", pointsByName{}, pointSets{})
+	props := def(t, doc, "pointSets")["properties"].(map[string]any)
+	for name, want := range map[string]string{"byName": "#/$defs/pointsByName", "list": "#/$defs/pointList"} {
+		if got := props[name].(map[string]any)["$ref"]; got != want {
+			t.Errorf("%s = %v, want $ref %s", name, props[name], want)
+		}
 	}
-	def(t, doc, "point")
+	if got := props["plain"].(map[string]any)["type"]; got != "array" {
+		t.Errorf("plain = %v, want an inlined array", props["plain"])
+	}
+	if got := def(t, doc, "pointList")["items"].(map[string]any)["$ref"]; got != "#/$defs/point" {
+		t.Errorf("$defs/pointList items = %v", got)
+	}
 }
 
 func TestGenerateRejectsNameClash(t *testing.T) {

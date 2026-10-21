@@ -42,12 +42,11 @@ func SceneTags(widgets []apiv0.WidgetResponse, find func(uuid.UUID) (apiv0.TagRe
 func WidgetInputs(w apiv0.WidgetResponse, wt apiv0.WidgetTypeResponse, tags map[uuid.UUID]apiv0.TagResponse) widgetscriptv0.Inputs {
 	inputs := make(widgetscriptv0.Inputs, len(wt.InputPorts))
 	for _, p := range wt.InputPorts {
-		in, ok := widgetscriptv0.Input{}, false
+		in := uiutil.NoValueInput(p.TypeHint)
 		if t, bound := boundTag(w, p.Name, tags); bound {
-			in, ok = uiutil.NewInput(t.Value, t.Type)
-		}
-		if !ok {
-			in = uiutil.NoValueInput(p.TypeHint)
+			if typed, ok := uiutil.NewInput(t.Value, t.Type); ok {
+				in = typed
+			}
 		}
 		inputs[p.Name] = in
 	}
