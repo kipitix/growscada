@@ -144,7 +144,7 @@ func TestWidgetEvent_LastWidgetOfSceneNotShownDeleted_ItsPropertiesSaveWithoutCo
 
 	f.event(apiv0.Event{Type: apiv0.EventWidgetDeleted, ID: widgetID.String(), SceneID: other.String()})
 	f.selectScene(other) // no Widgets left to state the Scene's version
-	f.p.editingScenePropsName = "Renamed"
+	f.p.sceneEdit.name = "Renamed"
 	f.p.saveSceneProperties(f.p.compoCtx)
 	f.run()
 
@@ -203,10 +203,10 @@ func TestSceneReread_RequestedBeforeASave_KeepsTheSave(t *testing.T) {
 	f.run()
 
 	f.noToasts()
-	if sc, _ := f.p.findScene(shown); sc.Name != "Renamed" || f.p.editingScenePropsName != "Renamed" {
-		t.Errorf("listed %q, editor %q: want the saved name", sc.Name, f.p.editingScenePropsName)
+	if sc, _ := f.p.findScene(shown); sc.Name != "Renamed" || f.p.sceneEdit.name != "Renamed" {
+		t.Errorf("listed %q, editor %q: want the saved name", sc.Name, f.p.sceneEdit.name)
 	}
-	f.p.editingScenePropsWidth = "640"
+	f.p.sceneEdit.width = "640"
 	f.p.saveSceneProperties(f.p.compoCtx)
 	f.run()
 	f.noToasts()
@@ -228,7 +228,7 @@ func TestWidgetEvent_SceneNotListedYet_ItsVersionIsKept(t *testing.T) {
 	f.p.setScenes(f.p.compoCtx, mark, listed)
 	f.run()
 	f.selectScene(added)
-	f.p.editingScenePropsName = "Renamed"
+	f.p.sceneEdit.name = "Renamed"
 	f.p.saveSceneProperties(f.p.compoCtx)
 	f.run()
 

@@ -89,8 +89,8 @@ func (p *Project) saveSceneProperties(ctx app.Context) {
 		return
 	}
 	var nf numberFields
-	w := nf.int("width", p.editingScenePropsWidth)
-	h := nf.int("height", p.editingScenePropsHeight)
+	w := nf.int("width", p.sceneEdit.width)
+	h := nf.int("height", p.sceneEdit.height)
 	if nf.err != nil {
 		ctx.NewActionWithValue(toast.ActionAdd, toast.ClientError(nf.err))
 		p.syncSceneEditingFields()
@@ -98,10 +98,10 @@ func (p *Project) saveSceneProperties(ctx app.Context) {
 	}
 
 	sc := &p.scenes[idx]
-	sc.Name = p.editingScenePropsName
+	sc.Name = p.sceneEdit.name
 	sc.Width = w
 	sc.Height = h
-	sc.BackgroundHTML = p.editingScenePropsBG
+	sc.BackgroundHTML = p.sceneEdit.background
 	// Show the fields as the scene now holds them, so that the reload after
 	// a rejected save puts the server's values back (mergeSceneEditingFields
 	// keeps only fields the user changed since).
@@ -129,7 +129,7 @@ func (p *Project) commitSceneEdit(ctx app.Context) {
 	}
 	p.scenes[idx].Name = name
 	if p.selectedSceneID == id {
-		p.editingScenePropsName = name
+		p.sceneEdit.name = name
 	}
 	p.putScene(p.scenes[idx])
 }

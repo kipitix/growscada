@@ -51,40 +51,14 @@ func mergeWidgetEditFields(local, old, current widgetEditFields) widgetEditField
 	}
 }
 
-func (p *Project) widgetEditFields() widgetEditFields {
-	return widgetEditFields{
-		name:     p.editingWidgetName,
-		posX:     p.editingPosX,
-		posY:     p.editingPosY,
-		posZ:     p.editingPosZ,
-		width:    p.editingWidth,
-		height:   p.editingHeight,
-		originX:  p.editingOriginX,
-		originY:  p.editingOriginY,
-		rotation: p.editingRotation,
-	}
-}
-
-func (p *Project) setWidgetEditFields(f widgetEditFields) {
-	p.editingWidgetName = f.name
-	p.editingPosX = f.posX
-	p.editingPosY = f.posY
-	p.editingPosZ = f.posZ
-	p.editingWidth = f.width
-	p.editingHeight = f.height
-	p.editingOriginX = f.originX
-	p.editingOriginY = f.originY
-	p.editingRotation = f.rotation
-}
-
 func (p *Project) syncEditingFields(w apiv0.WidgetResponse) {
-	p.setWidgetEditFields(widgetEditFieldsOf(w))
+	p.widgetEdit = widgetEditFieldsOf(w)
 }
 
 // mergeWidgetEditingFields updates each widget property field that still holds
 // the old server value.
 func (p *Project) mergeWidgetEditingFields(old, current apiv0.WidgetResponse) {
-	p.setWidgetEditFields(mergeWidgetEditFields(p.widgetEditFields(), widgetEditFieldsOf(old), widgetEditFieldsOf(current)))
+	p.widgetEdit = mergeWidgetEditFields(p.widgetEdit, widgetEditFieldsOf(old), widgetEditFieldsOf(current))
 }
 
 // ── Scene ─────────────────────────────────────────────────────────────────────
@@ -114,35 +88,19 @@ func mergeSceneEditFields(local, old, current sceneEditFields) sceneEditFields {
 	}
 }
 
-func (p *Project) sceneEditFields() sceneEditFields {
-	return sceneEditFields{
-		name:       p.editingScenePropsName,
-		width:      p.editingScenePropsWidth,
-		height:     p.editingScenePropsHeight,
-		background: p.editingScenePropsBG,
-	}
-}
-
-func (p *Project) setSceneEditFields(f sceneEditFields) {
-	p.editingScenePropsName = f.name
-	p.editingScenePropsWidth = f.width
-	p.editingScenePropsHeight = f.height
-	p.editingScenePropsBG = f.background
-}
-
 // syncSceneEditingFields populates the Properties-panel editing state from
 // the currently selected scene; with none, empties it.
 func (p *Project) syncSceneEditingFields() {
 	sc, ok := p.findScene(p.selectedSceneID)
 	if !ok {
-		p.setSceneEditFields(sceneEditFields{})
+		p.sceneEdit = sceneEditFields{}
 		return
 	}
-	p.setSceneEditFields(sceneEditFieldsOf(sc))
+	p.sceneEdit = sceneEditFieldsOf(sc)
 }
 
 // mergeSceneEditingFields updates each scene property field that still holds
 // the old server value.
 func (p *Project) mergeSceneEditingFields(old, current apiv0.SceneResponse) {
-	p.setSceneEditFields(mergeSceneEditFields(p.sceneEditFields(), sceneEditFieldsOf(old), sceneEditFieldsOf(current)))
+	p.sceneEdit = mergeSceneEditFields(p.sceneEdit, sceneEditFieldsOf(old), sceneEditFieldsOf(current))
 }

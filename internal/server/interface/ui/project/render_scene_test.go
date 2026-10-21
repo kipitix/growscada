@@ -57,7 +57,7 @@ func TestSceneCanvas_ShowsTheSavedBackground(t *testing.T) {
 	createScene(t, api, "Main")
 	f := mount(t, url, api)
 
-	f.p.editingScenePropsBG = `<svg id="new"></svg>`
+	f.p.sceneEdit.background = `<svg id="new"></svg>`
 	f.p.saveSceneProperties(f.p.compoCtx)
 	f.run()
 

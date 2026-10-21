@@ -109,11 +109,11 @@ func (p *Project) renderSceneProperties() app.UI {
 			inputStyle(
 				app.Input().
 					Type("text").
-					Value(p.editingScenePropsName).
+					Value(p.sceneEdit.name).
 					Style("flex", "1").
 					Style("min-width", "0").
 					OnInput(func(ctx app.Context, e app.Event) {
-						p.editingScenePropsName = ctx.JSSrc().Get("value").String()
+						p.sceneEdit.name = ctx.JSSrc().Get("value").String()
 					}).
 					OnBlur(func(ctx app.Context, e app.Event) {
 						p.saveSceneProperties(ctx)
@@ -133,10 +133,10 @@ func (p *Project) renderSceneProperties() app.UI {
 		row2(
 			smallLabel("W"),
 			inputStyle(
-				app.Input().Type("number").Value(p.editingScenePropsWidth).
+				app.Input().Type("number").Value(p.sceneEdit.width).
 					Style("width", "72px").Style("text-align", "right").
 					OnInput(func(ctx app.Context, e app.Event) {
-						p.editingScenePropsWidth = ctx.JSSrc().Get("value").String()
+						p.sceneEdit.width = ctx.JSSrc().Get("value").String()
 					}).
 					OnBlur(func(ctx app.Context, e app.Event) {
 						p.saveSceneProperties(ctx)
@@ -149,10 +149,10 @@ func (p *Project) renderSceneProperties() app.UI {
 			),
 			smallLabel("H"),
 			inputStyle(
-				app.Input().Type("number").Value(p.editingScenePropsHeight).
+				app.Input().Type("number").Value(p.sceneEdit.height).
 					Style("width", "72px").Style("text-align", "right").
 					OnInput(func(ctx app.Context, e app.Event) {
-						p.editingScenePropsHeight = ctx.JSSrc().Get("value").String()
+						p.sceneEdit.height = ctx.JSSrc().Get("value").String()
 					}).
 					OnBlur(func(ctx app.Context, e app.Event) {
 						p.saveSceneProperties(ctx)
@@ -183,9 +183,9 @@ func (p *Project) renderSceneProperties() app.UI {
 				Style("min-height", "80px").
 				Style("background", "var(--bg)").
 				Style("color", "var(--text)").
-				Text(p.editingScenePropsBG).
+				Text(p.sceneEdit.background).
 				OnInput(func(ctx app.Context, e app.Event) {
-					p.editingScenePropsBG = ctx.JSSrc().Get("value").String()
+					p.sceneEdit.background = ctx.JSSrc().Get("value").String()
 				}).
 				OnBlur(func(ctx app.Context, e app.Event) {
 					p.saveSceneProperties(ctx)
@@ -317,9 +317,9 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 			withReset(
 				app.Input().
 					Type("text").
-					Value(p.editingWidgetName).
+					Value(p.widgetEdit.name).
 					OnInput(func(ctx app.Context, e app.Event) {
-						p.editingWidgetName = ctx.JSSrc().Get("value").String()
+						p.widgetEdit.name = ctx.JSSrc().Get("value").String()
 					}).
 					OnBlur(func(ctx app.Context, e app.Event) {
 						p.saveWidgetName(ctx)
@@ -331,7 +331,7 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 					}),
 				true,
 				func(ctx app.Context) {
-					p.editingWidgetName = defaultName
+					p.widgetEdit.name = defaultName
 					p.saveWidgetName(ctx)
 				},
 			),
@@ -344,10 +344,10 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 		row2(
 			smallLabel("X"),
 			withReset(
-				app.Input().Type("number").Value(p.editingPosX).
+				app.Input().Type("number").Value(p.widgetEdit.posX).
 					Style("width", "68px").Style("text-align", "right").
 					OnInput(func(ctx app.Context, e app.Event) {
-						p.editingPosX = ctx.JSSrc().Get("value").String()
+						p.widgetEdit.posX = ctx.JSSrc().Get("value").String()
 					}).
 					OnBlur(func(ctx app.Context, e app.Event) {
 						p.saveWidgetGeometry(ctx)
@@ -359,16 +359,16 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 					}),
 				false,
 				func(ctx app.Context) {
-					p.editingPosX = "0.0"
+					p.widgetEdit.posX = "0.0"
 					p.saveWidgetGeometry(ctx)
 				},
 			),
 			smallLabel("Y"),
 			withReset(
-				app.Input().Type("number").Value(p.editingPosY).
+				app.Input().Type("number").Value(p.widgetEdit.posY).
 					Style("width", "68px").Style("text-align", "right").
 					OnInput(func(ctx app.Context, e app.Event) {
-						p.editingPosY = ctx.JSSrc().Get("value").String()
+						p.widgetEdit.posY = ctx.JSSrc().Get("value").String()
 					}).
 					OnBlur(func(ctx app.Context, e app.Event) {
 						p.saveWidgetGeometry(ctx)
@@ -380,16 +380,16 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 					}),
 				false,
 				func(ctx app.Context) {
-					p.editingPosY = "0.0"
+					p.widgetEdit.posY = "0.0"
 					p.saveWidgetGeometry(ctx)
 				},
 			),
 			smallLabel("Z"),
 			withReset(
-				app.Input().Type("number").Value(p.editingPosZ).
+				app.Input().Type("number").Value(p.widgetEdit.posZ).
 					Style("width", "44px").Style("text-align", "right").
 					OnInput(func(ctx app.Context, e app.Event) {
-						p.editingPosZ = ctx.JSSrc().Get("value").String()
+						p.widgetEdit.posZ = ctx.JSSrc().Get("value").String()
 					}).
 					OnBlur(func(ctx app.Context, e app.Event) {
 						p.saveWidgetGeometry(ctx)
@@ -401,7 +401,7 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 					}),
 				false,
 				func(ctx app.Context) {
-					p.editingPosZ = "0"
+					p.widgetEdit.posZ = "0"
 					p.saveWidgetGeometry(ctx)
 				},
 			),
@@ -414,10 +414,10 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 		row2(
 			smallLabel("W"),
 			withReset(
-				app.Input().Type("number").Value(p.editingWidth).
+				app.Input().Type("number").Value(p.widgetEdit.width).
 					Style("width", "68px").Style("text-align", "right").
 					OnInput(func(ctx app.Context, e app.Event) {
-						p.editingWidth = ctx.JSSrc().Get("value").String()
+						p.widgetEdit.width = ctx.JSSrc().Get("value").String()
 					}).
 					OnBlur(func(ctx app.Context, e app.Event) {
 						p.saveWidgetGeometry(ctx)
@@ -429,16 +429,16 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 					}),
 				false,
 				func(ctx app.Context) {
-					p.editingWidth = strconv.Itoa(defaultW)
+					p.widgetEdit.width = strconv.Itoa(defaultW)
 					p.saveWidgetGeometry(ctx)
 				},
 			),
 			smallLabel("H"),
 			withReset(
-				app.Input().Type("number").Value(p.editingHeight).
+				app.Input().Type("number").Value(p.widgetEdit.height).
 					Style("width", "68px").Style("text-align", "right").
 					OnInput(func(ctx app.Context, e app.Event) {
-						p.editingHeight = ctx.JSSrc().Get("value").String()
+						p.widgetEdit.height = ctx.JSSrc().Get("value").String()
 					}).
 					OnBlur(func(ctx app.Context, e app.Event) {
 						p.saveWidgetGeometry(ctx)
@@ -450,7 +450,7 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 					}),
 				false,
 				func(ctx app.Context) {
-					p.editingHeight = strconv.Itoa(defaultH)
+					p.widgetEdit.height = strconv.Itoa(defaultH)
 					p.saveWidgetGeometry(ctx)
 				},
 			),
@@ -468,10 +468,10 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 		row2(
 			smallLabel("X"),
 			withReset(
-				app.Input().Type("number").Value(p.editingOriginX).
+				app.Input().Type("number").Value(p.widgetEdit.originX).
 					Style("width", "72px").Style("text-align", "right").
 					OnInput(func(ctx app.Context, e app.Event) {
-						p.editingOriginX = ctx.JSSrc().Get("value").String()
+						p.widgetEdit.originX = ctx.JSSrc().Get("value").String()
 					}).
 					OnBlur(func(ctx app.Context, e app.Event) {
 						p.saveWidgetGeometry(ctx)
@@ -483,16 +483,16 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 					}),
 				false,
 				func(ctx app.Context) {
-					p.editingOriginX = "0.500"
+					p.widgetEdit.originX = "0.500"
 					p.saveWidgetGeometry(ctx)
 				},
 			),
 			smallLabel("Y"),
 			withReset(
-				app.Input().Type("number").Value(p.editingOriginY).
+				app.Input().Type("number").Value(p.widgetEdit.originY).
 					Style("width", "72px").Style("text-align", "right").
 					OnInput(func(ctx app.Context, e app.Event) {
-						p.editingOriginY = ctx.JSSrc().Get("value").String()
+						p.widgetEdit.originY = ctx.JSSrc().Get("value").String()
 					}).
 					OnBlur(func(ctx app.Context, e app.Event) {
 						p.saveWidgetGeometry(ctx)
@@ -504,7 +504,7 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 					}),
 				false,
 				func(ctx app.Context) {
-					p.editingOriginY = "0.500"
+					p.widgetEdit.originY = "0.500"
 					p.saveWidgetGeometry(ctx)
 				},
 			),
@@ -517,10 +517,10 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 		row2(
 			smallLabel("°"),
 			withReset(
-				app.Input().Type("number").Value(p.editingRotation).
+				app.Input().Type("number").Value(p.widgetEdit.rotation).
 					Style("text-align", "right").
 					OnInput(func(ctx app.Context, e app.Event) {
-						p.editingRotation = ctx.JSSrc().Get("value").String()
+						p.widgetEdit.rotation = ctx.JSSrc().Get("value").String()
 					}).
 					OnBlur(func(ctx app.Context, e app.Event) {
 						p.saveWidgetGeometry(ctx)
@@ -532,7 +532,7 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 					}),
 				true,
 				func(ctx app.Context) {
-					p.editingRotation = "0.0"
+					p.widgetEdit.rotation = "0.0"
 					p.saveWidgetGeometry(ctx)
 				},
 			),

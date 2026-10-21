@@ -82,14 +82,14 @@ func (p *Project) deleteWidget(ctx app.Context, widgetID uuid.UUID) {
 }
 
 func (p *Project) saveWidgetName(ctx app.Context) {
-	if strings.TrimSpace(p.editingWidgetName) == "" {
+	if strings.TrimSpace(p.widgetEdit.name) == "" {
 		return
 	}
 	idx := p.selectedWidgetIdx()
 	if idx < 0 {
 		return
 	}
-	p.widgets[idx].Name = p.editingWidgetName
+	p.widgets[idx].Name = p.widgetEdit.name
 	p.putWidget(ctx, p.widgets[idx])
 }
 
@@ -99,14 +99,14 @@ func (p *Project) saveWidgetGeometry(ctx app.Context) {
 		return
 	}
 	var nf numberFields
-	posX := nf.float("position X", p.editingPosX)
-	posY := nf.float("position Y", p.editingPosY)
-	posZ := nf.int("position Z", p.editingPosZ)
-	width := nf.int("width", p.editingWidth)
-	height := nf.int("height", p.editingHeight)
-	originX := nf.float("origin X", p.editingOriginX)
-	originY := nf.float("origin Y", p.editingOriginY)
-	rotDeg := nf.float("rotation", p.editingRotation)
+	posX := nf.float("position X", p.widgetEdit.posX)
+	posY := nf.float("position Y", p.widgetEdit.posY)
+	posZ := nf.int("position Z", p.widgetEdit.posZ)
+	width := nf.int("width", p.widgetEdit.width)
+	height := nf.int("height", p.widgetEdit.height)
+	originX := nf.float("origin X", p.widgetEdit.originX)
+	originY := nf.float("origin Y", p.widgetEdit.originY)
+	rotDeg := nf.float("rotation", p.widgetEdit.rotation)
 	if nf.err != nil {
 		p.compoCtx.NewActionWithValue(toast.ActionAdd, toast.ClientError(nf.err))
 		p.syncEditingFields(p.widgets[idx])

@@ -32,7 +32,8 @@ func editFieldsOf(it apiv0.WidgetTypeResponse) editFields {
 }
 
 // mergeEditFields updates each field of local that still holds the old server
-// value to current. The ports are merged as one list.
+// value to current. The ports are merged as one list; current's ports are
+// taken as they are, so current must own them (editFieldsOf copies).
 func mergeEditFields(local, old, current editFields) editFields {
 	m := uiutil.MergeField[string]
 	merged := editFields{
@@ -43,27 +44,9 @@ func mergeEditFields(local, old, current editFields) editFields {
 		ports:      local.ports,
 	}
 	if slices.Equal(local.ports, old.ports) {
-		merged.ports = slices.Clone(current.ports)
+		merged.ports = current.ports
 	}
 	return merged
-}
-
-func (l *Library) editFields() editFields {
-	return editFields{
-		name:       l.editedName,
-		html:       l.editedHTML,
-		script:     l.editedScript,
-		scriptLang: l.editedScriptLang,
-		ports:      l.editedInputPorts,
-	}
-}
-
-func (l *Library) setEditFields(f editFields) {
-	l.editedName = f.name
-	l.editedHTML = f.html
-	l.editedScript = f.script
-	l.editedScriptLang = f.scriptLang
-	l.editedInputPorts = f.ports
 }
 
 // selectItem selects the WidgetType id and fills the editor with it.
@@ -73,7 +56,12 @@ func (l *Library) selectItem(id uuid.UUID) {
 		return
 	}
 	l.selectedID = id
-	l.setEditFields(editFieldsOf(it))
+	l.edit = editFieldsOf(it)
+	l.clearPortForm()
+}
+
+// clearPortForm empties the add-port form.
+func (l *Library) clearPortForm() {
 	l.newPortName = ""
 	l.newPortDesc = ""
 	l.newPortType = ""
@@ -82,5 +70,5 @@ func (l *Library) selectItem(id uuid.UUID) {
 // mergeSelected updates each editor field that still holds the old server value.
 // Preview input values and the add-port form are editor-only state and kept.
 func (l *Library) mergeSelected(old, current apiv0.WidgetTypeResponse) {
-	l.setEditFields(mergeEditFields(l.editFields(), editFieldsOf(old), editFieldsOf(current)))
+	l.edit = mergeEditFields(l.edit, editFieldsOf(old), editFieldsOf(current))
 }

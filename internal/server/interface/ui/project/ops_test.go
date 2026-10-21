@@ -198,7 +198,7 @@ func TestSaveSceneProperties_RightAfterCreate_SavesTheEdit(t *testing.T) {
 
 	f.p.createScene(f.p.compoCtx)
 	f.run()
-	f.p.editingScenePropsName = "Mine"
+	f.p.sceneEdit.name = "Mine"
 	f.p.saveSceneProperties(f.p.compoCtx)
 	f.run()
 
@@ -249,10 +249,10 @@ func TestSaveSceneProperties_SavesTheEditor(t *testing.T) {
 	sceneID := createScene(t, api, "Main")
 	f := mount(t, url, api)
 
-	f.p.editingScenePropsName = "Overview"
-	f.p.editingScenePropsWidth = "1024"
-	f.p.editingScenePropsHeight = "768"
-	f.p.editingScenePropsBG = "<b>bg</b>"
+	f.p.sceneEdit.name = "Overview"
+	f.p.sceneEdit.width = "1024"
+	f.p.sceneEdit.height = "768"
+	f.p.sceneEdit.background = "<b>bg</b>"
 	f.p.saveSceneProperties(f.p.compoCtx)
 	f.run()
 
@@ -278,8 +278,8 @@ func TestCommitSceneEdit_RenamesTheScene(t *testing.T) {
 	if sc := f.scene(sceneID); sc.Name != "Renamed" || sc.Width != 800 {
 		t.Errorf("server scene: %+v", sc)
 	}
-	if f.p.editingSceneID != uuid.Nil || f.p.editingScenePropsName != "Renamed" {
-		t.Errorf("editor: editing %v, name %q", f.p.editingSceneID, f.p.editingScenePropsName)
+	if f.p.editingSceneID != uuid.Nil || f.p.sceneEdit.name != "Renamed" {
+		t.Errorf("editor: editing %v, name %q", f.p.editingSceneID, f.p.sceneEdit.name)
 	}
 	f.knowsSceneVersion(sceneID)
 }
@@ -298,7 +298,7 @@ func TestSaveSceneProperties_SceneChangedMeanwhile_ReloadsAndAsksToRepeat(t *tes
 		t.Fatal(err)
 	}
 
-	f.p.editingScenePropsName = "Mine"
+	f.p.sceneEdit.name = "Mine"
 	f.p.saveSceneProperties(f.p.compoCtx)
 	f.run()
 
@@ -309,12 +309,12 @@ func TestSaveSceneProperties_SceneChangedMeanwhile_ReloadsAndAsksToRepeat(t *tes
 	if name := f.scene(sceneID).Name; name != "Theirs" {
 		t.Errorf("server name %q: the refused write changed it", name)
 	}
-	if f.p.scenes[0].Name != "Theirs" || f.p.editingScenePropsName != "Theirs" {
-		t.Errorf("not reloaded: scene %q, editor %q", f.p.scenes[0].Name, f.p.editingScenePropsName)
+	if f.p.scenes[0].Name != "Theirs" || f.p.sceneEdit.name != "Theirs" {
+		t.Errorf("not reloaded: scene %q, editor %q", f.p.scenes[0].Name, f.p.sceneEdit.name)
 	}
 	f.knowsSceneVersion(sceneID)
 
-	f.p.editingScenePropsName = "Mine"
+	f.p.sceneEdit.name = "Mine"
 	f.p.saveSceneProperties(f.p.compoCtx)
 	f.run()
 
@@ -330,7 +330,7 @@ func TestSaveSceneProperties_ServerVersionWentBack_RecoversAfterTheConflict(t *t
 	f := mount(t, url, api)
 	f.p.sceneVersions.Observe(f.p.sceneVersions.Mark(), sceneID, 15) // the server's database was recreated since
 
-	f.p.editingScenePropsName = "Mine"
+	f.p.sceneEdit.name = "Mine"
 	f.p.saveSceneProperties(f.p.compoCtx)
 	f.run()
 
@@ -339,7 +339,7 @@ func TestSaveSceneProperties_ServerVersionWentBack_RecoversAfterTheConflict(t *t
 	}
 	f.knowsSceneVersion(sceneID)
 
-	f.p.editingScenePropsName = "Mine"
+	f.p.sceneEdit.name = "Mine"
 	f.p.saveSceneProperties(f.p.compoCtx)
 	f.run()
 
@@ -354,7 +354,7 @@ func TestSaveSceneProperties_Refused_ShowsTheServersDetailAndPutsItsStateBack(t 
 	sceneID := createScene(t, api, "Main")
 	f := mount(t, url, api)
 
-	f.p.editingScenePropsWidth = "-5"
+	f.p.sceneEdit.width = "-5"
 	f.p.saveSceneProperties(f.p.compoCtx)
 	f.run()
 
@@ -363,8 +363,8 @@ func TestSaveSceneProperties_Refused_ShowsTheServersDetailAndPutsItsStateBack(t 
 		!strings.Contains(got.Detail, "width must be positive") {
 		t.Errorf("toast %+v: want the server's 400 with its detail", got)
 	}
-	if f.p.editingScenePropsWidth != "800" || f.p.scenes[0].Width != 800 {
-		t.Errorf("the server's width is not back: editor %q, scene %d", f.p.editingScenePropsWidth, f.p.scenes[0].Width)
+	if f.p.sceneEdit.width != "800" || f.p.scenes[0].Width != 800 {
+		t.Errorf("the server's width is not back: editor %q, scene %d", f.p.sceneEdit.width, f.p.scenes[0].Width)
 	}
 	if w := f.scene(sceneID).Width; w != 800 {
 		t.Errorf("server width %d", w)
@@ -410,7 +410,7 @@ func TestCreateWidget_PlacesTheWidgetTypeAndSelectsIt(t *testing.T) {
 	if f.p.selectedWidgetID != w.ID || len(f.p.widgets) != 1 {
 		t.Errorf("selected %v of %d widgets, want the new %v", f.p.selectedWidgetID, len(f.p.widgets), w.ID)
 	}
-	if got := f.p.widgetEditFields(); got != widgetEditFieldsOf(w) {
+	if got := f.p.widgetEdit; got != widgetEditFieldsOf(w) {
 		t.Errorf("editor %+v, want %+v", got, widgetEditFieldsOf(w))
 	}
 	f.knowsSceneVersion(sceneID)
@@ -492,7 +492,7 @@ func TestDeleteWidget_ResponseWithoutTheVersion_RereadsIt(t *testing.T) {
 func TestSaveWidgetName_RenamesTheWidget(t *testing.T) {
 	f, sceneID, widgetID := widgetFixture(t)
 
-	f.p.editingWidgetName = "pump"
+	f.p.widgetEdit.name = "pump"
 	f.p.saveWidgetName(f.p.compoCtx)
 	f.run()
 
@@ -506,10 +506,10 @@ func TestSaveWidgetName_RenamesTheWidget(t *testing.T) {
 func TestSaveWidgetGeometry_SavesTheEditor(t *testing.T) {
 	f, sceneID, widgetID := widgetFixture(t)
 
-	f.p.editingPosX, f.p.editingPosY, f.p.editingPosZ = "100.5", "200", "3"
-	f.p.editingWidth, f.p.editingHeight = "300", "120"
-	f.p.editingOriginX, f.p.editingOriginY = "0", "1"
-	f.p.editingRotation = "45"
+	f.p.widgetEdit.posX, f.p.widgetEdit.posY, f.p.widgetEdit.posZ = "100.5", "200", "3"
+	f.p.widgetEdit.width, f.p.widgetEdit.height = "300", "120"
+	f.p.widgetEdit.originX, f.p.widgetEdit.originY = "0", "1"
+	f.p.widgetEdit.rotation = "45"
 	f.p.saveWidgetGeometry(f.p.compoCtx)
 	f.run()
 
@@ -525,7 +525,7 @@ func TestSaveWidgetGeometry_SavesTheEditor(t *testing.T) {
 func TestSaveWidgetGeometry_Refused_ShowsTheServersDetailAndPutsItsStateBack(t *testing.T) {
 	f, sceneID, widgetID := widgetFixture(t)
 
-	f.p.editingOriginX = "2"
+	f.p.widgetEdit.originX = "2"
 	f.p.saveWidgetGeometry(f.p.compoCtx)
 	f.run()
 
@@ -533,8 +533,8 @@ func TestSaveWidgetGeometry_Refused_ShowsTheServersDetailAndPutsItsStateBack(t *
 	if got.Status != http.StatusBadRequest || got.Detail == "" || got.Method != http.MethodPut {
 		t.Errorf("toast %+v: want the server's 400 with its detail", got)
 	}
-	if f.p.editingOriginX != "0.500" {
-		t.Errorf("editor origin X %q: want the server's back", f.p.editingOriginX)
+	if f.p.widgetEdit.originX != "0.500" {
+		t.Errorf("editor origin X %q: want the server's back", f.p.widgetEdit.originX)
 	}
 	if w := f.widget(sceneID, widgetID); w.Origin.X != 0.5 {
 		t.Errorf("server widget: %+v", w)
@@ -592,8 +592,8 @@ func TestDrag_SavesTheMovedWidget(t *testing.T) {
 	if w := f.widget(sceneID, widgetID); w.Position.X != 15 || w.Position.Y != 27 {
 		t.Errorf("server position: %+v", w.Position)
 	}
-	if f.p.editingPosX != "15.0" || f.p.editingPosY != "27.0" {
-		t.Errorf("editor position: %q, %q", f.p.editingPosX, f.p.editingPosY)
+	if f.p.widgetEdit.posX != "15.0" || f.p.widgetEdit.posY != "27.0" {
+		t.Errorf("editor position: %q, %q", f.p.widgetEdit.posX, f.p.widgetEdit.posY)
 	}
 	f.knowsSceneVersion(sceneID)
 }

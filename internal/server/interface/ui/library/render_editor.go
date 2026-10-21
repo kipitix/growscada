@@ -167,7 +167,7 @@ func (l *Library) renderEditorColumn(title, id, value string, onInput func(app.C
 
 func (l *Library) renderPreviewColumn() app.UI {
 	var content app.UI
-	if l.editedHTML == "" {
+	if l.edit.html == "" {
 		content = app.Div().
 			Style("color", "var(--text-muted)").
 			Style("font-size", "13px").
@@ -175,7 +175,7 @@ func (l *Library) renderPreviewColumn() app.UI {
 	} else {
 		content = &previewFrame{
 			ID:     "preview-iframe",
-			Srcdoc: uiutil.BuildSrcdoc(l.editedHTML, l.editedScript, uiutil.PreviewInputs(l.selectedInputValues(), l.editedInputPorts), l.editedInputPorts, uiutil.IframeBgColor()),
+			Srcdoc: uiutil.BuildSrcdoc(l.edit.html, l.edit.script, uiutil.PreviewInputs(l.selectedInputValues(), l.edit.ports), l.edit.ports, uiutil.IframeBgColor()),
 		}
 	}
 	return app.Div().
@@ -200,8 +200,8 @@ func (l *Library) renderInputPortsColumn() app.UI {
 	disabled := l.selectedID == uuid.Nil
 
 	// Existing ports list
-	portRows := make([]app.UI, 0, len(l.editedInputPorts))
-	for i, p := range l.editedInputPorts {
+	portRows := make([]app.UI, 0, len(l.edit.ports))
+	for i, p := range l.edit.ports {
 		idx := i
 		typeLabel := uiutil.TypeHintLabel(p.TypeHint)
 		desc := p.Description
@@ -234,19 +234,19 @@ func (l *Library) renderInputPortsColumn() app.UI {
 					Text("✕").
 					Disabled(disabled).
 					OnClick(func(ctx app.Context, e app.Event) {
-						ports := make([]apiv0.InputPort, 0, len(l.editedInputPorts)-1)
-						for j, pp := range l.editedInputPorts {
+						ports := make([]apiv0.InputPort, 0, len(l.edit.ports)-1)
+						for j, pp := range l.edit.ports {
 							if j != idx {
 								ports = append(ports, pp)
 							}
 						}
-						l.editedInputPorts = ports
+						l.edit.ports = ports
 					}),
 			)
 		portRows = append(portRows, row)
 	}
 
-	emptyNote := app.If(len(l.editedInputPorts) == 0,
+	emptyNote := app.If(len(l.edit.ports) == 0,
 		func() app.UI {
 			return app.Div().
 				Style("font-size", "12px").
@@ -328,12 +328,12 @@ func (l *Library) renderInputPortsColumn() app.UI {
 						return
 					}
 					// Prevent duplicate names in UI
-					for _, p := range l.editedInputPorts {
+					for _, p := range l.edit.ports {
 						if p.Name == name {
 							return
 						}
 					}
-					l.editedInputPorts = append(l.editedInputPorts, apiv0.InputPort{
+					l.edit.ports = append(l.edit.ports, apiv0.InputPort{
 						Name:        name,
 						Description: l.newPortDesc,
 						TypeHint:    l.newPortType,
@@ -368,7 +368,7 @@ func (l *Library) renderInputPortsColumn() app.UI {
 
 // renderInputDataColumn renders a per-port value table for the preview sandbox.
 func (l *Library) renderInputDataColumn() app.UI {
-	emptyNote := app.If(len(l.editedInputPorts) == 0, func() app.UI {
+	emptyNote := app.If(len(l.edit.ports) == 0, func() app.UI {
 		return app.Div().
 			Style("font-size", "12px").
 			Style("color", "var(--text-muted)").
@@ -376,8 +376,8 @@ func (l *Library) renderInputDataColumn() app.UI {
 			Text("Define Input Ports first.")
 	})
 
-	rows := make([]app.UI, 0, len(l.editedInputPorts))
-	for _, p := range l.editedInputPorts {
+	rows := make([]app.UI, 0, len(l.edit.ports))
+	for _, p := range l.edit.ports {
 		portName := p.Name
 		typeLabel := uiutil.TypeHintLabel(p.TypeHint)
 		placeholder := map[string]string{
@@ -430,7 +430,7 @@ func (l *Library) renderInputDataColumn() app.UI {
 		rows = append(rows, row)
 	}
 
-	tableUI := app.If(len(l.editedInputPorts) > 0, func() app.UI {
+	tableUI := app.If(len(l.edit.ports) > 0, func() app.UI {
 		return app.Table().
 			Style("width", "100%").
 			Style("border-collapse", "collapse").

@@ -24,19 +24,16 @@ type Library struct {
 	widgetTypes []apiv0.WidgetTypeResponse
 	// versions holds the version each write of a WidgetType states; the
 	// Version of widgetTypes is not read.
-	versions     uiutil.Versions
-	reloader     uiutil.Reloader
-	selectedID   uuid.UUID
-	editedName   string
-	editedHTML   string
-	editedScript string
+	versions   uiutil.Versions
+	reloader   uiutil.Reloader
+	selectedID uuid.UUID
+	// edit is the editor's state that comes from the server.
+	edit editFields
 	// inputValues[widgetTypeID][portName] = Input Data value of the preview.
 	// Not persisted: a reload starts empty.
-	inputValues      map[uuid.UUID]map[string]string
-	editedScriptLang string
-	editedInputPorts []apiv0.InputPort
-	editingID        uuid.UUID
-	editingName      string
+	inputValues map[uuid.UUID]map[string]string
+	editingID   uuid.UUID
+	editingName string
 	// add-port form state
 	newPortName string
 	newPortDesc string
@@ -83,9 +80,8 @@ func (l *Library) setInputValue(port, value string) {
 // clearSelection deselects the widget type and empties its editor.
 func (l *Library) clearSelection() {
 	l.selectedID = uuid.Nil
-	l.editedHTML = ""
-	l.editedScript = ""
-	l.editedInputPorts = nil
+	l.edit = editFields{}
+	l.clearPortForm()
 }
 
 func (l *Library) findItem(id uuid.UUID) (apiv0.WidgetTypeResponse, bool) {
@@ -113,11 +109,11 @@ func (l *Library) Render() app.UI {
 		Style("gap", "8px").
 		Body(
 			l.renderListColumn(),
-			l.renderEditorColumn("HTML Template", "html-template", l.editedHTML, func(ctx app.Context, e app.Event) {
-				l.editedHTML = ctx.JSSrc().Get("value").String()
+			l.renderEditorColumn("HTML Template", "html-template", l.edit.html, func(ctx app.Context, e app.Event) {
+				l.edit.html = ctx.JSSrc().Get("value").String()
 			}, true),
-			l.renderEditorColumn("Script", "script-editor", l.editedScript, func(ctx app.Context, e app.Event) {
-				l.editedScript = ctx.JSSrc().Get("value").String()
+			l.renderEditorColumn("Script", "script-editor", l.edit.script, func(ctx app.Context, e app.Event) {
+				l.edit.script = ctx.JSSrc().Get("value").String()
 			}, true),
 			l.renderInputPortsColumn(),
 			l.renderInputDataColumn(),

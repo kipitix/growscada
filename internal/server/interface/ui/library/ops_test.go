@@ -125,8 +125,8 @@ func TestCreateItem_SelectsTheNewWidgetType(t *testing.T) {
 	if wt.Name != "New Widget Type" || wt.HtmlTemplate != defaultHTML || wt.Script != defaultScript || wt.DefaultWidth != 120 {
 		t.Errorf("server widget type: %+v", wt)
 	}
-	if f.l.selectedID != wt.ID || f.l.editedName != wt.Name || len(f.l.widgetTypes) != 1 {
-		t.Errorf("selected %v (%q) of %d", f.l.selectedID, f.l.editedName, len(f.l.widgetTypes))
+	if f.l.selectedID != wt.ID || f.l.edit.name != wt.Name || len(f.l.widgetTypes) != 1 {
+		t.Errorf("selected %v (%q) of %d", f.l.selectedID, f.l.edit.name, len(f.l.widgetTypes))
 	}
 }
 
@@ -137,7 +137,7 @@ func TestApplyChanges_RightAfterCreate_SavesTheEdit(t *testing.T) {
 
 	f.l.createItem(f.l.compoCtx)
 	f.run()
-	f.l.editedName = "Mine"
+	f.l.edit.name = "Mine"
 	f.l.applyChanges(f.l.compoCtx)
 	f.run()
 
@@ -156,7 +156,7 @@ func TestApplyChanges_ListReadBeforeAConflict_DoesNotRestoreTheOldVersion(t *tes
 	inFlight, mark := f.l.widgetTypes, f.l.versions.Mark() // read before the conflict
 	f.l.versions.Observe(mark, id, 15)                     // the server's database was recreated since
 
-	f.l.editedName = "Mine"
+	f.l.edit.name = "Mine"
 	f.l.applyChanges(f.l.compoCtx)
 	f.run()
 	f.oneToast() // the conflict
@@ -219,16 +219,16 @@ func TestDeleteItem_InUse_ShowsTheServersRefusal(t *testing.T) {
 func TestApplyChanges_SavesTheEditor(t *testing.T) {
 	f, id := selected(t)
 
-	f.l.editedName = "Big gauge"
-	f.l.editedHTML = "<span></span>"
-	f.l.editedScript = "function render(inputs) { return 1 }"
-	f.l.editedInputPorts = append(f.l.editedInputPorts, apiv0.InputPort{Name: "on", TypeHint: "boolean"})
+	f.l.edit.name = "Big gauge"
+	f.l.edit.html = "<span></span>"
+	f.l.edit.script = "function render(inputs) { return 1 }"
+	f.l.edit.ports = append(f.l.edit.ports, apiv0.InputPort{Name: "on", TypeHint: "boolean"})
 	f.l.applyChanges(f.l.compoCtx)
 	f.run()
 
 	f.noToasts()
 	wt := f.widgetType(id)
-	if wt.Name != "Big gauge" || wt.HtmlTemplate != "<span></span>" || wt.Script != f.l.editedScript ||
+	if wt.Name != "Big gauge" || wt.HtmlTemplate != "<span></span>" || wt.Script != f.l.edit.script ||
 		len(wt.InputPorts) != 2 || wt.DefaultWidth != 150 {
 		t.Errorf("server widget type: %+v", wt)
 	}
@@ -237,7 +237,7 @@ func TestApplyChanges_SavesTheEditor(t *testing.T) {
 	}
 
 	// The next save starts from the version just written.
-	f.l.editedName = "Bigger gauge"
+	f.l.edit.name = "Bigger gauge"
 	f.l.applyChanges(f.l.compoCtx)
 	f.run()
 	f.noToasts()
@@ -256,7 +256,7 @@ func TestApplyChanges_ChangedMeanwhile_ShowsTheServersConflict(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f.l.editedName = "Mine"
+	f.l.edit.name = "Mine"
 	f.l.applyChanges(f.l.compoCtx)
 	f.run()
 
@@ -273,12 +273,12 @@ func TestApplyChanges_StaleListAfterTheSave_KeepsTheSavedVersion(t *testing.T) {
 	f, id := selected(t)
 	stale, mark := f.l.widgetTypes, f.l.versions.Mark() // a list read before the save, answered after it
 
-	f.l.editedName = "Mine"
+	f.l.edit.name = "Mine"
 	f.l.applyChanges(f.l.compoCtx)
 	f.run()
 	f.l.setWidgetTypes(f.l.compoCtx, mark, stale)
 
-	f.l.editedName = "Mine again"
+	f.l.edit.name = "Mine again"
 	f.l.applyChanges(f.l.compoCtx)
 	f.run()
 
@@ -292,7 +292,7 @@ func TestApplyChanges_ServerVersionWentBack_RecoversAfterTheConflict(t *testing.
 	f, id := selected(t)
 	f.l.versions.Observe(f.l.versions.Mark(), id, 15) // the server's database was recreated since
 
-	f.l.editedName = "Mine"
+	f.l.edit.name = "Mine"
 	f.l.applyChanges(f.l.compoCtx)
 	f.run()
 
@@ -303,7 +303,7 @@ func TestApplyChanges_ServerVersionWentBack_RecoversAfterTheConflict(t *testing.
 		t.Errorf("known version %d, server's %d", got, want)
 	}
 
-	f.l.editedName = "Mine"
+	f.l.edit.name = "Mine"
 	f.l.applyChanges(f.l.compoCtx)
 	f.run()
 
@@ -316,7 +316,7 @@ func TestApplyChanges_ServerVersionWentBack_RecoversAfterTheConflict(t *testing.
 func TestApplyChanges_Refused_ShowsTheServersDetail(t *testing.T) {
 	f, _ := selected(t)
 
-	f.l.editedInputPorts = append(f.l.editedInputPorts, apiv0.InputPort{Name: "value", TypeHint: "integer"})
+	f.l.edit.ports = append(f.l.edit.ports, apiv0.InputPort{Name: "value", TypeHint: "integer"})
 	f.l.applyChanges(f.l.compoCtx)
 	f.run()
 
@@ -328,7 +328,7 @@ func TestApplyChanges_Refused_ShowsTheServersDetail(t *testing.T) {
 
 func TestCommitEdit_RenamesTheWidgetType(t *testing.T) {
 	f, id := selected(t)
-	f.l.editedHTML = "<p>unsaved</p>"
+	f.l.edit.html = "<p>unsaved</p>"
 
 	f.l.startEditing(id, "Gauge")
 	f.l.editingName = "Dial"
@@ -340,8 +340,8 @@ func TestCommitEdit_RenamesTheWidgetType(t *testing.T) {
 	if wt.Name != "Dial" || wt.HtmlTemplate != "<div></div>" {
 		t.Errorf("server widget type %+v: want only the name changed", wt)
 	}
-	if f.l.editingID != uuid.Nil || f.l.editedName != "Dial" || f.l.editedHTML != "<p>unsaved</p>" {
-		t.Errorf("editor: editing %v, name %q, html %q", f.l.editingID, f.l.editedName, f.l.editedHTML)
+	if f.l.editingID != uuid.Nil || f.l.edit.name != "Dial" || f.l.edit.html != "<p>unsaved</p>" {
+		t.Errorf("editor: editing %v, name %q, html %q", f.l.editingID, f.l.edit.name, f.l.edit.html)
 	}
 }
 

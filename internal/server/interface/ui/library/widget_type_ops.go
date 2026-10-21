@@ -76,13 +76,13 @@ func (l *Library) applyChanges(ctx app.Context) {
 		return
 	}
 	l.updateWidgetType(l.selectedID, apiv0.UpdateWidgetTypeRequest{
-		Name:           l.editedName,
-		HtmlTemplate:   l.editedHTML,
-		Script:         l.editedScript,
-		ScriptLanguage: l.editedScriptLang,
+		Name:           l.edit.name,
+		HtmlTemplate:   l.edit.html,
+		Script:         l.edit.script,
+		ScriptLanguage: l.edit.scriptLang,
 		DefaultWidth:   current.DefaultWidth,
 		DefaultHeight:  current.DefaultHeight,
-		InputPorts:     portsRequest(l.editedInputPorts),
+		InputPorts:     portsRequest(l.edit.ports),
 		Version:        l.versions.Of(l.selectedID),
 	})
 }
@@ -103,7 +103,7 @@ func (l *Library) commitEdit(ctx app.Context) {
 	l.widgetTypes[idx].Name = name
 	found := l.widgetTypes[idx]
 	if l.selectedID == id {
-		l.editedName = name
+		l.edit.name = name
 	}
 
 	l.updateWidgetType(id, apiv0.UpdateWidgetTypeRequest{

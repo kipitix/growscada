@@ -1,9 +1,7 @@
 package project
 
 import (
-	"fmt"
 	"math"
-	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
@@ -80,10 +78,7 @@ type Project struct {
 	editingSceneName string
 
 	// ── Scene properties panel editing state ───────────────────────────────
-	editingScenePropsName   string
-	editingScenePropsWidth  string
-	editingScenePropsHeight string
-	editingScenePropsBG     string
+	sceneEdit sceneEditFields
 
 	draggedTypeID uuid.UUID
 	dragJustEnded bool // suppresses the canvas OnClick that fires right after mouseup
@@ -137,15 +132,7 @@ type Project struct {
 	resizeOriginY    float64 // origin.Y at resize start
 
 	// ── Properties panel editing state ─────────────────────────────────────
-	editingWidgetName string
-	editingPosX       string
-	editingPosY       string
-	editingPosZ       string
-	editingWidth      string
-	editingHeight     string
-	editingOriginX    string
-	editingOriginY    string
-	editingRotation   string
+	widgetEdit widgetEditFields
 
 	// ── Input simulation (in-memory only, not persisted) ───────────────────
 	// simInputs[widgetID][portName] = test value string
@@ -206,8 +193,6 @@ func (p *Project) setSimInput(wid uuid.UUID, port, value string) {
 	p.simInputs[wid][port] = value
 }
 
-// ── Data loading ──────────────────────────────────────────────────────────────
-
 // ── Widget selection helpers ──────────────────────────────────────────────────
 
 func (p *Project) selectWidget(ctx app.Context, id uuid.UUID) {
@@ -223,15 +208,7 @@ func (p *Project) selectWidget(ctx app.Context, id uuid.UUID) {
 
 func (p *Project) clearWidgetSelection(ctx app.Context) {
 	p.selectedWidgetID = uuid.Nil
-	p.editingWidgetName = ""
-	p.editingPosX = ""
-	p.editingPosY = ""
-	p.editingPosZ = ""
-	p.editingWidth = ""
-	p.editingHeight = ""
-	p.editingOriginX = ""
-	p.editingOriginY = ""
-	p.editingRotation = ""
+	p.widgetEdit = widgetEditFields{}
 	uiutil.StoreID(ctx, widgetIDKey, uuid.Nil)
 }
 
@@ -412,8 +389,8 @@ func (p *Project) renderScenesContent() app.UI {
 						p.widgets[i].Position.X = p.dragStartPosX + dx
 						p.widgets[i].Position.Y = p.dragStartPosY + dy
 						if p.selectedWidgetID == p.draggingWidgetID {
-							p.editingPosX = fmt.Sprintf("%.1f", p.widgets[i].Position.X)
-							p.editingPosY = fmt.Sprintf("%.1f", p.widgets[i].Position.Y)
+							f := widgetEditFieldsOf(p.widgets[i])
+							p.widgetEdit.posX, p.widgetEdit.posY = f.posX, f.posY
 						}
 						break
 					}
@@ -446,10 +423,9 @@ func (p *Project) renderScenesContent() app.UI {
 						p.widgets[i].Position.X = newPosX
 						p.widgets[i].Position.Y = newPosY
 						if p.selectedWidgetID == p.draggingOriginID {
-							p.editingOriginX = fmt.Sprintf("%.3f", newOX)
-							p.editingOriginY = fmt.Sprintf("%.3f", newOY)
-							p.editingPosX = fmt.Sprintf("%.1f", newPosX)
-							p.editingPosY = fmt.Sprintf("%.1f", newPosY)
+							f := widgetEditFieldsOf(p.widgets[i])
+							p.widgetEdit.originX, p.widgetEdit.originY = f.originX, f.originY
+							p.widgetEdit.posX, p.widgetEdit.posY = f.posX, f.posY
 						}
 						break
 					}
@@ -470,7 +446,7 @@ func (p *Project) renderScenesContent() app.UI {
 					if p.widgets[i].ID == p.rotatingWidgetID {
 						p.widgets[i].Rotation.Degrees = newDeg
 						if p.selectedWidgetID == p.rotatingWidgetID {
-							p.editingRotation = fmt.Sprintf("%.1f", newDeg)
+							p.widgetEdit.rotation = widgetEditFieldsOf(p.widgets[i]).rotation
 						}
 						break
 					}
@@ -511,10 +487,9 @@ func (p *Project) renderScenesContent() app.UI {
 						p.widgets[i].Position.X = newPosX
 						p.widgets[i].Position.Y = newPosY
 						if p.selectedWidgetID == p.resizingWidgetID {
-							p.editingWidth = strconv.Itoa(newW)
-							p.editingHeight = strconv.Itoa(newH)
-							p.editingPosX = fmt.Sprintf("%.1f", newPosX)
-							p.editingPosY = fmt.Sprintf("%.1f", newPosY)
+							f := widgetEditFieldsOf(p.widgets[i])
+							p.widgetEdit.width, p.widgetEdit.height = f.width, f.height
+							p.widgetEdit.posX, p.widgetEdit.posY = f.posX, f.posY
 						}
 						break
 					}
