@@ -3,7 +3,7 @@ package uiutil
 import (
 	"context"
 
-	"github.com/maxence-charriere/go-app/v10/pkg/app"
+	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 )

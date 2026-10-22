@@ -1,5 +1,11 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.45] - 2026-10-22
+
+### Changed
+
+- **go-app v10.1.11 → v11.0.8**: импорты `github.com/maxence-charriere/go-app/v11`. Код UI не менялся: в v11 сеттеры атрибутов (`Style`, `ID`, `Href`, `Title`, …) и `Page.Set*` принимают готовую строку, форматирующие варианты вынесены в `…f` (`Stylef`, `IDf`, …), а проект формат в них не передавал
+
 ## [0.0.44] - 2026-10-21
 
 ### Changed

@@ -1,6 +1,6 @@
 package history
 
-import "github.com/maxence-charriere/go-app/v10/pkg/app"
+import "github.com/maxence-charriere/go-app/v11/pkg/app"
 
 type History struct {
 	app.Compo

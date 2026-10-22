@@ -122,7 +122,7 @@ Services (`TagService`, `WidgetTypeService`, `SceneService`) accept repository i
 **EventBus** (`internal/server/interface/eventbus/`): in-process bus feeding the SSE stream (`GET /api/v0/events`): domain events handed over by the outbox dispatcher, plus delivery's own events (`client_connected`/`client_disconnected`, `system_ready`). `event_bus_mqtt.go` is a stub.
 
 **PWA UI** (`internal/server/interface/ui/`, port `:8080`):
-- Built with [go-app v10](https://go-app.dev/) — compiled to WebAssembly, served by the same binary.
+- Built with [go-app v11](https://go-app.dev/) — compiled to WebAssembly, served by the same binary.
 - Four top-level modes rendered by `root/root.go`:
   - **Library** — create and edit WidgetTypes (HTML template + JS script, live sandboxed preview via `<iframe srcdoc>`).
   - **Project** — configure Scenes and place Widget instances on them.

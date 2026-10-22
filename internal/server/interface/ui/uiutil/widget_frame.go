@@ -3,7 +3,7 @@ package uiutil
 import (
 	"html"
 
-	"github.com/maxence-charriere/go-app/v10/pkg/app"
+	"github.com/maxence-charriere/go-app/v11/pkg/app"
 )
 
 // WidgetIFrame is the sandboxed iframe of a Widget placed on a Scene, filling

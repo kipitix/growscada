@@ -7,7 +7,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/kipitix/gracedown v0.0.0-20260423215449-38425123f880
 	github.com/lib/pq v1.12.3
-	github.com/maxence-charriere/go-app/v10 v10.1.11
+	github.com/maxence-charriere/go-app/v11 v11.0.8
 	github.com/pressly/goose/v3 v3.27.1
 	github.com/spf13/cobra v1.10.2
 	github.com/testcontainers/testcontainers-go v0.42.0

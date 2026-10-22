@@ -2,7 +2,7 @@ package uiutil
 
 import (
 	"github.com/google/uuid"
-	"github.com/maxence-charriere/go-app/v10/pkg/app"
+	"github.com/maxence-charriere/go-app/v11/pkg/app"
 )
 
 // The UI keeps IDs as uuid.UUID, uuid.Nil meaning "none selected"; text is

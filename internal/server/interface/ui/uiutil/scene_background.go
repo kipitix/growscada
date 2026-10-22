@@ -1,6 +1,6 @@
 package uiutil
 
-import "github.com/maxence-charriere/go-app/v10/pkg/app"
+import "github.com/maxence-charriere/go-app/v11/pkg/app"
 
 // SceneBackground renders a Scene's static background HTML filling the Scene,
 // under its Widgets, in an iframe fully sandboxed (sandbox="": no scripts, an
