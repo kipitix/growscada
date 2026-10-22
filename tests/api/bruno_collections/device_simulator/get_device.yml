@@ -16,6 +16,15 @@ docs: |
   server). The control API is up from the start, before the
   server is reachable.
 
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.body.state'
+      operator: eq
+      value: '"connected"'
+
 settings:
   encodeUrl: true
   timeout: 0

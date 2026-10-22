@@ -1,7 +1,7 @@
 info:
   name: put widget type by id
   type: http
-  seq: 9
+  seq: 23
 
 http:
   method: PUT
@@ -28,6 +28,17 @@ docs: |
   `version` is the widget type version the edit is based on. A version other than
   the stored one returns `409 Conflict` (reload and retry); a negative one is
   no version at all and returns `400 Bad Request` naming `version`.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.version'
+      operator: eq
+      value: '2'
 
 settings:
   encodeUrl: true

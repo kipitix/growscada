@@ -8,6 +8,16 @@ http:
   url: http://{{API_SERVER}}/api/v0/tags
   auth: inherit
 
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.tags'
+      operator: isArray
+
 settings:
   encodeUrl: true
   timeout: 0

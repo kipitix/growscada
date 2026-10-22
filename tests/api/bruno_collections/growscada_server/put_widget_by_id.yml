@@ -1,7 +1,7 @@
 info:
   name: put widget by id
   type: http
-  seq: 19
+  seq: 21
 
 http:
   method: PUT
@@ -20,9 +20,25 @@ http:
         "port_bindings": [
           { "port_name": "state", "tag_id": "{{BOOLEAN_TAG_ID}}" }
         ],
-        "scene_version": 1
+        "scene_version": 2
       }
   auth: inherit
+
+docs: |
+  The versions in this collection's bodies follow its run order (`seq`) on
+  the seed data: each Widget change raises its Scene's version (1 → post
+  widgets → 2 → put widget → 3 → put scene → 4).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.scene_version'
+      operator: eq
+      value: '3'
 
 settings:
   encodeUrl: true

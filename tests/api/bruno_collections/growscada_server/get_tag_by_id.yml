@@ -1,12 +1,26 @@
 info:
   name: get tag by id
   type: http
-  seq: 3
+  seq: 5
 
 http:
   method: GET
   url: http://{{API_SERVER}}/api/v0/tags/{{TAG_ID}}
   auth: inherit
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.id'
+      operator: eq
+      value: '"{{TAG_ID}}"'
+    - expression: 'res.body.name'
+      operator: eq
+      value: '"creator"'
 
 settings:
   encodeUrl: true

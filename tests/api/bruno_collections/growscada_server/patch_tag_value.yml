@@ -1,7 +1,7 @@
 info:
   name: patch tag value
   type: http
-  seq: 5
+  seq: 17
 
 http:
   method: PATCH
@@ -21,6 +21,17 @@ docs: |
   the previous update's response, which returns the new one). A version other
   than the stored one, including a missing `version`, returns `409 Conflict`
   (reload and retry).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.version'
+      operator: eq
+      value: '2'
 
 settings:
   encodeUrl: true

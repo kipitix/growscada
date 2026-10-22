@@ -33,6 +33,23 @@ db_down:
 test:
 	go test -race --cover ./...
 
+# Runs the Bruno collections against the application built in containers
+# (tests/api/docker-compose.yaml: fresh database with seed, server, simulator).
+# The containers are removed whatever the outcome; the exit code is bru's.
+BRUNO_CLI := @usebruno/cli@4.2.1
+BRUNO_COMPOSE := docker compose -f tests/api/docker-compose.yaml
+BRUNO_RUN := npx --yes $(BRUNO_CLI) run --env localhost --exclude-tags=manual
+
+.PHONY: bruno_test
+bruno_test:
+	@$(BRUNO_COMPOSE) up --build --wait; status=$$?; \
+	if [ $$status -ne 0 ]; then $(BRUNO_COMPOSE) logs; fi; \
+	if [ $$status -eq 0 ]; then \
+		(cd tests/api/bruno_collections/growscada_server && $(BRUNO_RUN)) || status=1; \
+		(cd tests/api/bruno_collections/device_simulator && $(BRUNO_RUN)) || status=1; \
+	fi; \
+	$(BRUNO_COMPOSE) down -v; exit $$status
+
 bench:
 	go test -run=^$ -bench=. -benchmem ./...
 

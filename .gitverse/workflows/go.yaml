@@ -25,6 +25,10 @@ jobs:
       # GitVerse runners give the job no Docker (the socket is not an allowed
       # volume), so testcontainers cannot start Postgres: skip the packages
       # whose tests depend on it. GitHub CI (.github/workflows) runs them all.
+      # The static check of the Bruno collections (TestBrunoCollection) needs
+      # no database, and its two packages start Postgres only when a test asks
+      # for it, so it runs here too. For the same reason there is no
+      # `make bruno_test` here: it runs the application in Docker.
       - name: Run tests without Postgres
         run: |
           needs_docker=$(go list -test -f '{{if .ForTest}}{{.ForTest}} {{join .Deps " "}}{{end}}' ./... \
@@ -32,6 +36,7 @@ jobs:
           echo "Skipped, need Docker:"
           echo "$needs_docker"
           go test --cover $(go list ./... | grep -vxF "$needs_docker")
+          go test -run '^TestBrunoCollection$' ./internal/devicesim ./internal/server/interface/restapi
 
       - name: Build
         run: make build

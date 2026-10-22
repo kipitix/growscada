@@ -1,7 +1,9 @@
 info:
   name: get events (SSE stream)
   type: http
-  seq: 22
+  seq: 28
+  tags:
+    - manual
 
 http:
   method: GET

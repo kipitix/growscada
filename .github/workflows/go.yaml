@@ -27,3 +27,15 @@ jobs:
 
       - name: Build
         run: make build
+
+  bruno:
+    # The Bruno collections against the application in containers
+    # (tests/api/docker-compose.yaml); the runner has Docker and Node.
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
+
+      - name: Run the Bruno collections
+        run: make bruno_test

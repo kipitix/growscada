@@ -1,7 +1,7 @@
 info:
   name: delete scene by id
   type: http
-  seq: 15
+  seq: 25
 
 http:
   method: DELETE
@@ -12,6 +12,17 @@ docs: |
   The delete states no version: a delete that loses a write race (the
   resource changed between reading and deleting it) is retried against the
   fresh state; one that loses it 3 times in a row returns `409 Conflict`.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.id'
+      operator: eq
+      value: '"{{SCENE_ID}}"'
 
 settings:
   encodeUrl: true

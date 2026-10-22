@@ -1,7 +1,7 @@
 info:
   name: get tags by name regex
   type: http
-  seq: 25
+  seq: 4
 
 http:
   method: GET
@@ -16,6 +16,17 @@ docs: |
 
   An invalid expression returns 400 Problem Details. Only one of `name`,
   `name_pattern`, `name_regex` may be given, otherwise 400.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.tags[0].name'
+      operator: matches
+      value: '^(is|enable)_'
 
 settings:
   encodeUrl: true

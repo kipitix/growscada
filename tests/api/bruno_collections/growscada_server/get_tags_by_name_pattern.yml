@@ -1,7 +1,7 @@
 info:
   name: get tags by name pattern
   type: http
-  seq: 24
+  seq: 3
 
 http:
   method: GET
@@ -16,6 +16,17 @@ docs: |
 
   Only one of `name`, `name_pattern`, `name_regex` may be given, otherwise 400.
   URL-encode the pattern (`?` is `%3F`).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.tags[0].name'
+      operator: startsWith
+      value: '"is_"'
 
 settings:
   encodeUrl: true

@@ -21,21 +21,21 @@ import (
 // and the SSE stream sends them to the client, in commit order.
 func TestEventsHandlers_GetEvents_DeliversCommittedChangesInCommitOrder(t *testing.T) {
 	cleanTags(t)
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM outbox"); err != nil {
+	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM outbox"); err != nil {
 		t.Fatalf("clean outbox: %v", err)
 	}
 	ctx, stop := context.WithCancel(context.Background())
 	defer stop()
 
 	bus := eventbus.NewEventBus()
-	dispatcher := outbox.NewDispatcher(testDB, bus.Publish)
+	dispatcher := outbox.NewDispatcher(testDB(), bus.Publish)
 	go dispatcher.Run(ctx)
 	onCommit := repositories.NotifyOnCommit(dispatcher.Notify)
-	tagRepo := repositories.NewTagRepositoryPostgres(testDB, onCommit)
+	tagRepo := repositories.NewTagRepositoryPostgres(testDB(), onCommit)
 	tagSvc := application.NewTagService(tagRepo)
 	sceneSvc := application.NewSceneService(
-		repositories.NewSceneRepositoryPostgres(testDB, onCommit),
-		repositories.NewWidgetTypeRepositoryPostgres(testDB, onCommit),
+		repositories.NewSceneRepositoryPostgres(testDB(), onCommit),
+		repositories.NewWidgetTypeRepositoryPostgres(testDB(), onCommit),
 		tagRepo)
 
 	h := restapi.NewEventsHandler(bus, 100)

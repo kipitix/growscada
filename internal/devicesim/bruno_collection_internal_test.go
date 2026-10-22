@@ -1,0 +1,37 @@
+package devicesim
+
+import (
+	"net/http"
+	"testing"
+
+	"github.com/kipitix/growscada/internal/brunotest"
+)
+
+// requestBodies maps the pattern of every route that takes a body to the type
+// its handler decodes; a POST/PUT/PATCH route without a body maps to nil.
+var requestBodies = map[string]any{
+	"POST /control/device/start":               nil,
+	"POST /control/device/stop":                nil,
+	"POST /control/device/tags/{name}/pattern": PatternSpec{},
+	"POST /control/device/tags/{name}/quality": qualityBody{},
+}
+
+// TestBrunoCollection checks that the device_simulator Bruno collection keeps
+// up with the control API: every request hits a route, every route has a
+// request and every body decodes as its handler decodes it.
+func TestBrunoCollection(t *testing.T) {
+	d := &Device{}
+	mux := http.NewServeMux()
+	var patterns []string
+	for _, rt := range d.routes() {
+		mux.HandleFunc(rt.pattern, rt.handler)
+		patterns = append(patterns, rt.pattern)
+	}
+	brunotest.Check(t, brunotest.Collection{
+		Dir:      brunotest.CollectionDir("device_simulator"),
+		Mux:      mux,
+		Patterns: patterns,
+		Bodies:   requestBodies,
+		Decode:   decodeStrict,
+	})
+}

@@ -19,6 +19,14 @@ docs: |
   Written to the server right away if the device is running.
   While the device is still connecting to the server this is 503.
 
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.body.tags'
+      operator: isArray
+
 settings:
   encodeUrl: true
   timeout: 0

@@ -1,7 +1,7 @@
 info:
   name: post widgets
   type: http
-  seq: 18
+  seq: 20
 
 http:
   method: POST
@@ -23,6 +23,24 @@ http:
         "scene_version": 1
       }
   auth: inherit
+
+docs: |
+  The versions in this collection's bodies follow its run order (`seq`) on
+  the seed data: each Widget change raises its Scene's version (1 → post
+  widgets → 2 → put widget → 3 → put scene → 4).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.id'
+      operator: isString
+    - expression: 'res.body.scene_version'
+      operator: eq
+      value: '2'
 
 settings:
   encodeUrl: true

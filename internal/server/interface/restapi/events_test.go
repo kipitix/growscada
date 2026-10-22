@@ -640,7 +640,7 @@ func TestEventsHandlers_GetEvents_RejectsBeyondMaxClients(t *testing.T) {
 	if rec3.code() != http.StatusServiceUnavailable {
 		t.Errorf("expected 503 when over the connection limit, got %d", rec3.code())
 	}
-	if ct := rec3.Header().Get("Content-Type"); ct != "application/json" {
+	if ct := rec3.Header().Get("Content-Type"); ct != "application/problem+json" {
 		t.Errorf("expected a JSON problem response, got Content-Type %q, body %q", ct, rec3.body())
 	}
 	if !strings.Contains(rec3.body(), "too many concurrent event stream connections") {

@@ -21,16 +21,16 @@ import (
 
 func cleanWidgetTypes(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM widgets; DELETE FROM widget_types"); err != nil {
+	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM widgets; DELETE FROM widget_types"); err != nil {
 		t.Fatalf("cleanWidgetTypes: %v", err)
 	}
 }
 
 func newRouterWithWidgetTypes() *restapi.APIRouter {
-	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
+	tagRepo := repositories.NewTagRepositoryPostgres(testDB())
 	tagSvc := application.NewTagService(tagRepo)
-	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
+	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB())
+	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB())
 	wtSvc := application.NewWidgetTypeService(wtRepo)
 	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, tagRepo)
 	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, eventbus.NewEventBus(), 100)
@@ -38,7 +38,7 @@ func newRouterWithWidgetTypes() *restapi.APIRouter {
 
 func createWidgetTypeViaService(t *testing.T, input appdto.WidgetTypeInput) appdto.WidgetType {
 	t.Helper()
-	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
+	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB())
 	svc := application.NewWidgetTypeService(repo)
 	resp, err := svc.CreateWidgetType(context.Background(), input)
 	if err != nil {
@@ -295,10 +295,10 @@ func TestPutWidgetTypesByID_InvalidUUID_Returns400(t *testing.T) {
 
 func TestPutWidgetTypesByID_Conflict_Returns409(t *testing.T) {
 	svc := &stubWidgetTypeService{updateErr: library.ErrWidgetTypeConflict}
-	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
+	tagRepo := repositories.NewTagRepositoryPostgres(testDB())
 	tagSvc := application.NewTagService(tagRepo)
-	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
+	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB())
+	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB())
 	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, tagRepo)
 	router := restapi.NewRouter(tagSvc, svc, sceneSvc, eventbus.NewEventBus(), 100)
 

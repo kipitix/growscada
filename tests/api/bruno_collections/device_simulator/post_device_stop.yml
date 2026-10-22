@@ -1,7 +1,7 @@
 info:
   name: post device stop
   type: http
-  seq: 3
+  seq: 2
 
 http:
   method: POST
@@ -12,6 +12,15 @@ docs: |
   Pause writing; the process and the control API stay up. Idempotent.
   Answers once the writes already on their way to the server are done: from
   then on the device is silent.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.body.running'
+      operator: eq
+      value: 'false'
 
 settings:
   encodeUrl: true

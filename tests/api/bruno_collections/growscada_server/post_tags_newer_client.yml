@@ -1,7 +1,9 @@
 info:
   name: post tags newer client
   type: http
-  seq: 27
+  seq: 15
+  tags:
+    - invalid-body
 
 http:
   method: POST
@@ -32,6 +34,20 @@ docs: |
   the Problem Details detail says the client is newer than the server and
   the server needs updating. Without the header the same body gets a plain
   `unknown field "unit"` error.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '400'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: '"application/problem+json"'
+    - expression: 'res.body.detail'
+      operator: contains
+      value: '"newer than this server"'
 
 settings:
   encodeUrl: true

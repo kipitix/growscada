@@ -1,7 +1,7 @@
 info:
   name: delete tag by id
   type: http
-  seq: 4
+  seq: 27
 
 http:
   method: DELETE
@@ -12,6 +12,20 @@ docs: |
   The delete states no version and never returns `409 Conflict`: the tag is
   deleted whatever value was written to it meanwhile. The response carries
   the tag as it was read just before the delete.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.id'
+      operator: eq
+      value: '"{{TAG_ID}}"'
+    - expression: 'res.body.name'
+      operator: eq
+      value: '"creator"'
 
 settings:
   encodeUrl: true

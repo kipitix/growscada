@@ -1,7 +1,7 @@
 info:
   name: get pre-versioning path
   type: http
-  seq: 28
+  seq: 12
 
 http:
   method: GET
@@ -13,6 +13,17 @@ docs: |
   shapes are today's v0. Any method under it answers `410 Gone` with a Problem
   Details body pointing to `/api/v0`. The route goes away when the API reaches
   1.0 and the path takes its real meaning.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '410'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: '"application/problem+json"'
 
 settings:
   encodeUrl: true

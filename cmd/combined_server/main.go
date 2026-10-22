@@ -22,14 +22,15 @@ import (
 	_ "github.com/lib/pq"
 )
 
-const (
-	databaseDSN  = "postgres://growscada:growscada@localhost:5432/growscada?sslmode=disable"
-	apiServerURL = "http://localhost:9090"
-)
+// apiPort is the port of the REST API, where the UI looks for it unless told
+// otherwise (PUBLIC_API_URL).
+const apiPort = "9090"
 
 // serverArgs is the server's command-line/environment configuration.
 type serverArgs struct {
-	MaxSSEClients int `arg:"env:MAX_SSE_CLIENTS" default:"100" help:"maximum number of concurrent SSE event-stream connections"`
+	MaxSSEClients int    `arg:"env:MAX_SSE_CLIENTS" default:"100" help:"maximum number of concurrent SSE event-stream connections"`
+	DatabaseURL   string `arg:"env:DATABASE_URL" default:"postgres://growscada:growscada@localhost:5432/growscada?sslmode=disable" help:"PostgreSQL connection string"`
+	PublicAPIURL  string `arg:"env:PUBLIC_API_URL" help:"REST API URL as the browser reaches it; default: port 9090 on the host the UI was loaded from"`
 }
 
 type slogAdapter struct{}
@@ -41,7 +42,7 @@ func (slogAdapter) Println(v ...any) {
 func main() {
 	// Server setup for serving the client-side app (PWA)
 	app.Route("/", func() app.Composer {
-		r := root.NewRoot(apiServerURL)
+		r := root.NewRoot(apiURL())
 		return r
 	})
 
@@ -57,7 +58,7 @@ func main() {
 	// INFRASTRUCTURE COMPONENTS
 
 	// Create database connection
-	sqlDB, err := sql.Open("postgres", databaseDSN)
+	sqlDB, err := sql.Open("postgres", cliArgs.DatabaseURL)
 	// Add hook to shutdown database connection
 	gracedownManager.RegisterInfrastructure("Database", 15*time.Second, func(ctx context.Context) error {
 		if sqlDB != nil {
@@ -162,7 +163,7 @@ func main() {
 	})
 	// Start HTTP server for API
 	apiServer := &http.Server{
-		Addr:    ":9090",
+		Addr:    ":" + apiPort,
 		Handler: apiRouter.ServeMux(),
 	}
 
@@ -178,7 +179,7 @@ func main() {
 
 	// Start the API server in a separate goroutine
 	go func() {
-		slog.Info("API Server starting on :9090")
+		slog.Info("API Server starting on :" + apiPort)
 		if err := apiServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("API Server error", "error", err)
 		}
@@ -190,6 +191,7 @@ func main() {
 		Handler: &app.Handler{
 			Name:        "GrowSCADA",
 			Description: "SCADA to Go",
+			Env:         pwaEnv(cliArgs.PublicAPIURL),
 		},
 	}
 	// Register the PWA server shutdown handler
@@ -214,6 +216,29 @@ func main() {
 	slog.Info("Server stopped gracefully")
 
 	os.Exit(gracedown.ExitSuccess)
+}
+
+// apiURLEnv is the PWA environment key holding PUBLIC_API_URL.
+const apiURLEnv = "API_URL"
+
+// pwaEnv is the environment handed to the PWA: API_URL if the REST API's
+// public URL is set.
+func pwaEnv(publicAPIURL string) map[string]string {
+	if publicAPIURL == "" {
+		return nil
+	}
+	return map[string]string{apiURLEnv: publicAPIURL}
+}
+
+// apiURL is the REST API URL for the UI: API_URL from the server, or else port
+// 9090 on the host the page was loaded from. One build then works behind any
+// address.
+func apiURL() string {
+	if u := app.Getenv(apiURLEnv); u != "" {
+		return u
+	}
+	page := app.Window().URL()
+	return page.Scheme + "://" + page.Hostname() + ":" + apiPort
 }
 
 // emergencyExit shuts down all registered components and exits with the given code.

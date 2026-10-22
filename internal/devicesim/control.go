@@ -3,6 +3,7 @@ package devicesim
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 
 	"github.com/kipitix/growscada/internal/devicelink"
@@ -22,37 +23,56 @@ import (
 // call answers with the Device status; errors are RFC 7807 Problem Details.
 func (d *Device) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /control/device/start", func(w http.ResponseWriter, r *http.Request) {
-		d.Start()
-		d.sendStatus(w)
-	})
-	mux.HandleFunc("POST /control/device/stop", func(w http.ResponseWriter, r *http.Request) {
-		d.Stop()
-		d.sendStatus(w)
-	})
-	mux.HandleFunc("GET /control/device", func(w http.ResponseWriter, r *http.Request) {
-		d.sendStatus(w)
-	})
-	mux.HandleFunc("POST /control/device/tags/{name}/pattern", func(w http.ResponseWriter, r *http.Request) {
-		var p PatternSpec
-		if !decodeBody(w, r, &p) {
-			return
-		}
-		d.reply(w, r, d.SetPattern(r.PathValue("name"), p))
-	})
-	mux.HandleFunc("POST /control/device/tags/{name}/quality", func(w http.ResponseWriter, r *http.Request) {
-		var body struct {
-			Quality devicelink.Quality `json:"quality"`
-		}
-		if !decodeBody(w, r, &body) {
-			return
-		}
-		d.reply(w, r, d.OverrideQuality(r.PathValue("name"), body.Quality))
-	})
-	mux.HandleFunc("DELETE /control/device/tags/{name}/quality", func(w http.ResponseWriter, r *http.Request) {
-		d.reply(w, r, d.ResetQuality(r.PathValue("name")))
-	})
+	for _, rt := range d.routes() {
+		mux.HandleFunc(rt.pattern, rt.handler)
+	}
 	return mux
+}
+
+// route is one ServeMux pattern and its handler.
+type route struct {
+	pattern string
+	handler http.HandlerFunc
+}
+
+// routes is every route of the control API. The Bruno collection check
+// (bruno_collection_internal_test.go) matches the collection against it.
+func (d *Device) routes() []route {
+	return []route{
+		{"POST /control/device/start", func(w http.ResponseWriter, r *http.Request) {
+			d.Start()
+			d.sendStatus(w)
+		}},
+		{"POST /control/device/stop", func(w http.ResponseWriter, r *http.Request) {
+			d.Stop()
+			d.sendStatus(w)
+		}},
+		{"GET /control/device", func(w http.ResponseWriter, r *http.Request) {
+			d.sendStatus(w)
+		}},
+		{"POST /control/device/tags/{name}/pattern", func(w http.ResponseWriter, r *http.Request) {
+			var p PatternSpec
+			if !decodeBody(w, r, &p) {
+				return
+			}
+			d.reply(w, r, d.SetPattern(r.PathValue("name"), p))
+		}},
+		{"POST /control/device/tags/{name}/quality", func(w http.ResponseWriter, r *http.Request) {
+			var body qualityBody
+			if !decodeBody(w, r, &body) {
+				return
+			}
+			d.reply(w, r, d.OverrideQuality(r.PathValue("name"), body.Quality))
+		}},
+		{"DELETE /control/device/tags/{name}/quality", func(w http.ResponseWriter, r *http.Request) {
+			d.reply(w, r, d.ResetQuality(r.PathValue("name")))
+		}},
+	}
+}
+
+// qualityBody is the body of POST /control/device/tags/{name}/quality.
+type qualityBody struct {
+	Quality devicelink.Quality `json:"quality"`
 }
 
 // reply sends the status, or the error as a problem: 404 for a tag the Device
@@ -78,13 +98,18 @@ func (d *Device) sendStatus(w http.ResponseWriter) {
 // decodeBody decodes a JSON body, rejecting unknown fields; on failure it
 // sends a 400 problem and returns false.
 func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(v); err != nil {
+	if err := decodeStrict(r.Body, v); err != nil {
 		sendProblem(w, r, http.StatusBadRequest, err)
 		return false
 	}
 	return true
+}
+
+// decodeStrict decodes a JSON body into v, rejecting unknown fields.
+func decodeStrict(body io.Reader, v any) error {
+	dec := json.NewDecoder(body)
+	dec.DisallowUnknownFields()
+	return dec.Decode(v)
 }
 
 // problem is an RFC 7807 Problem Details body.

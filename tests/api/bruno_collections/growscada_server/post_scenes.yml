@@ -1,7 +1,7 @@
 info:
   name: post scenes
   type: http
-  seq: 13
+  seq: 19
 
 http:
   method: POST
@@ -16,6 +16,16 @@ http:
         "background_html": "<div class=\"background pump-room\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1920\" height=\"1080\"><rect width=\"100%\" height=\"100%\" fill=\"#1a1a2e\"/></svg></div>"
       }
   auth: inherit
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.id'
+      operator: isString
 
 settings:
   encodeUrl: true

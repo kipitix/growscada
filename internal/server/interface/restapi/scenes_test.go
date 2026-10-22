@@ -22,16 +22,16 @@ import (
 func cleanScenesRest(t *testing.T) {
 	t.Helper()
 	// ON DELETE CASCADE removes widgets too; that's fine for scene tests.
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM scenes"); err != nil {
+	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM scenes"); err != nil {
 		t.Fatalf("cleanScenesRest: %v", err)
 	}
 }
 
 func newRouterWithScenes() *restapi.APIRouter {
-	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
+	tagRepo := repositories.NewTagRepositoryPostgres(testDB())
 	tagSvc := application.NewTagService(tagRepo)
-	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
+	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB())
+	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB())
 	wtSvc := application.NewWidgetTypeService(wtRepo)
 	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, tagRepo)
 	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, eventbus.NewEventBus(), 100)
@@ -39,9 +39,9 @@ func newRouterWithScenes() *restapi.APIRouter {
 
 func createSceneViaService(t *testing.T, input appdto.SceneInput) appdto.Scene {
 	t.Helper()
-	repo := repositories.NewSceneRepositoryPostgres(testDB)
-	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	svc := application.NewSceneService(repo, wtRepo, repositories.NewTagRepositoryPostgres(testDB))
+	repo := repositories.NewSceneRepositoryPostgres(testDB())
+	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB())
+	svc := application.NewSceneService(repo, wtRepo, repositories.NewTagRepositoryPostgres(testDB()))
 	resp, err := svc.CreateScene(context.Background(), input)
 	if err != nil {
 		t.Fatalf("createSceneViaService: %v", err)
@@ -317,9 +317,9 @@ func TestPutScenesByID_InvalidUUID_Returns400(t *testing.T) {
 
 func TestPutScenesByID_Conflict_Returns409(t *testing.T) {
 	svc := &stubSceneService{updateErr: scene.ErrSceneConflict}
-	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
+	tagRepo := repositories.NewTagRepositoryPostgres(testDB())
 	tagSvc := application.NewTagService(tagRepo)
-	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
+	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB())
 	wtSvc := application.NewWidgetTypeService(wtRepo)
 	router := restapi.NewRouter(tagSvc, wtSvc, svc, eventbus.NewEventBus(), 100)
 

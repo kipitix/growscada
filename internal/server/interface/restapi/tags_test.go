@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -28,12 +29,36 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
 
-var testDB *sql.DB
+// The Postgres container starts on the first testDB call, so the tests that
+// need no database (the Bruno collection check among them) run without Docker.
+var (
+	testDBOnce  sync.Once
+	testDBConn  *sql.DB
+	pgContainer *tcpostgres.PostgresContainer
+)
 
 func TestMain(m *testing.M) {
+	code := m.Run()
+	if testDBConn != nil {
+		testDBConn.Close()
+	}
+	if pgContainer != nil {
+		pgContainer.Terminate(context.Background())
+	}
+	os.Exit(code)
+}
+
+// testDB returns the migrated test database, starting its container on the
+// first call.
+func testDB() *sql.DB {
+	testDBOnce.Do(startTestDB)
+	return testDBConn
+}
+
+func startTestDB() {
 	ctx := context.Background()
 
-	pgContainer, err := tcpostgres.Run(ctx,
+	container, err := tcpostgres.Run(ctx,
 		"postgres:16-alpine",
 		tcpostgres.WithDatabase("testdb"),
 		tcpostgres.WithUsername("test"),
@@ -46,54 +71,42 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic("failed to start postgres container: " + err.Error())
 	}
+	pgContainer = container
 
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
-		pgContainer.Terminate(ctx)
 		panic("failed to get connection string: " + err.Error())
 	}
 
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
-		pgContainer.Terminate(ctx)
 		panic("failed to open db: " + err.Error())
 	}
+	testDBConn = db
 
 	_, currentFile, _, _ := runtime.Caller(0)
 	migrationsDir := filepath.Join(filepath.Dir(currentFile), "..", "..", "infrastructure", "postgres", "migrations")
 
 	if err := goose.SetDialect("postgres"); err != nil {
-		db.Close()
-		pgContainer.Terminate(ctx)
 		panic("failed to set goose dialect: " + err.Error())
 	}
 	if err := goose.Up(db, migrationsDir); err != nil {
-		db.Close()
-		pgContainer.Terminate(ctx)
 		panic("failed to run migrations: " + err.Error())
 	}
-
-	testDB = db
-
-	code := m.Run()
-
-	db.Close()
-	pgContainer.Terminate(ctx)
-	os.Exit(code)
 }
 
 func cleanTags(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM tags"); err != nil {
+	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM tags"); err != nil {
 		t.Fatalf("cleanTags: %v", err)
 	}
 }
 
 func newRouter() *restapi.APIRouter {
-	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
+	tagRepo := repositories.NewTagRepositoryPostgres(testDB())
 	tagSvc := application.NewTagService(tagRepo)
-	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
+	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB())
+	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB())
 	wtSvc := application.NewWidgetTypeService(wtRepo)
 	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, tagRepo)
 	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, eventbus.NewEventBus(), 100)
@@ -101,7 +114,7 @@ func newRouter() *restapi.APIRouter {
 
 func createTagViaService(t *testing.T, name, tagType, value, quality string) appdto.Tag {
 	t.Helper()
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB())
 	svc := application.NewTagService(repo)
 	resp, err := svc.CreateTag(context.Background(), appdto.CreateTagInput{
 		Name: name, Type: tagType, Value: value, Quality: quality,

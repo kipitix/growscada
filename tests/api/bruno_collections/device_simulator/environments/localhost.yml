@@ -4,4 +4,4 @@ variables:
     value: |
       localhost:9191
   - name: TAG_NAME
-    value: sim.pump1.speed
+    value: max_connections

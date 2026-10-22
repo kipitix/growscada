@@ -1,0 +1,83 @@
+# The application for `make bruno_test`: a fresh database with migrations and
+# seed (as `make db_up`, but without a volume), the server and the device
+# simulator driving the seeded dashboard tags. The API (9090) and the
+# simulator's control API (9191) are published for `bru` on the host; the
+# healthchecks let `docker compose up --wait` return once both are ready.
+name: growscada_bruno_test
+
+x-goose: &goose
+  image: kukymbr/goose-docker:3.27.0
+  environment:
+    GOOSE_DRIVER: postgres
+    GOOSE_DBSTRING: "postgres://growscada:growscada@db:5432/growscada?sslmode=disable"
+  command: >
+    sh -c "goose -dir /migrations up"
+  restart: "no"
+
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: growscada
+      POSTGRES_USER: growscada
+      POSTGRES_PASSWORD: growscada
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U growscada -d growscada"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+  db_migrations:
+    <<: *goose
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ../../internal/server/infrastructure/postgres/migrations:/migrations:ro
+
+  db_test_data:
+    <<: *goose
+    depends_on:
+      db_migrations:
+        condition: service_completed_successfully
+    volumes:
+      - ../../internal/server/infrastructure/postgres/test_data:/migrations:ro
+
+  server:
+    build:
+      context: ../..
+      target: server
+    depends_on:
+      db_test_data:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: "postgres://growscada:growscada@db:5432/growscada?sslmode=disable"
+    ports:
+      - "9090:9090"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9090/api/v0/tags"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+  simulator:
+    build:
+      context: ../..
+      target: simulator
+    depends_on:
+      server:
+        condition: service_healthy
+    environment:
+      DEVSIM_SERVER: "http://server:9090"
+    volumes:
+      - ../device_simulator:/config:ro
+    command: ["--config", "/config/seed_dashboard.yaml"]
+    ports:
+      - "9191:9191"
+    # Healthy once connected: until its tags are resolved on the server the
+    # tag calls of the control API answer 503.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:9191/control/device | grep -q '\"state\":\"connected\"'"]
+      interval: 2s
+      timeout: 5s
+      retries: 15

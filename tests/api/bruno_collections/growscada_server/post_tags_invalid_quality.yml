@@ -1,7 +1,9 @@
 info:
   name: post tags invalid quality
   type: http
-  seq: 29
+  seq: 16
+  tags:
+    - invalid-body
 
 http:
   method: POST
@@ -21,6 +23,17 @@ docs: |
   "simulated" is not a Quality (only bad, uncertain, good). Any value the
   server cannot accept from a request body returns `400 Bad Request` Problem
   Details naming the cause.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '400'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: '"application/problem+json"'
 
 settings:
   encodeUrl: true

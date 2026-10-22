@@ -27,6 +27,7 @@ All primary workflows go through `make`. **Always prefer `make <target>` over ru
 | `make db_up` | Starts the dev PostgreSQL container via Docker Compose; applies migrations and seeds automatically |
 | `make db_down` | Stops the container and **deletes** the data volume |
 | `make test` | Runs all tests with coverage under the race detector (`go test -race --cover ./...`) |
+| `make bruno_test` | Builds the server and simulator images (`Dockerfile`), starts them on a fresh seeded database (`tests/api/docker-compose.yaml`, ports 9090/9191 on the host), runs both Bruno collections with a pinned `@usebruno/cli` via `npx` (`--env localhost --exclude-tags=manual`) and removes the containers; needs Docker and Node |
 | `make bench` | Runs benchmarks only (`go test -run=^$ -bench=. -benchmem ./...`) |
 | `make schemas` | Regenerates the committed JSON schemas `schemas/<contract>/<MAJOR.MINOR>.json` from the `contract/` types; run it after raising a contract's SchemaVersion. Refuses to rewrite a version already on `path`, freezes older versions in `schemas/<contract>/frozen.sha256`, and while MAJOR is 0 prints a NOTE for what in a new MINOR would need a MAJOR after 1.0 |
 | `make full_restart` | Clean-slate restart: `db_down` → `db_up` → `run` (use when the DB state is stale or corrupted) |
@@ -156,7 +157,12 @@ Tests of the tools that talk to the server (`internal/devicelink`, `internal/dev
 
 ## API Collections
 
-Manual/exploratory API tests are maintained as [Bruno](https://www.usebruno.com/) collections in `tests/api/bruno_collections/`: `growscada_server/` for the server REST API (the `localhost` environment points to `http://localhost:9090`) and `device_simulator/` for the simulator's control API (`localhost:9191`). Automated tests are Go tests only.
+Manual/exploratory API tests are maintained as [Bruno](https://www.usebruno.com/) collections in `tests/api/bruno_collections/`: `growscada_server/` for the server REST API (the `localhost` environment points to `http://localhost:9090`) and `device_simulator/` for the simulator's control API (`localhost:9191`, `TAG_NAME` is the seed tag `max_connections` driven by `tests/device_simulator/seed_dashboard.yaml`). The main automated tests are Go tests; two checks keep the collections from falling behind the API:
+
+- **Static check** (`TestBrunoCollection` in `restapi` and `devicesim`, part of `make test`, no Docker): via `internal/brunotest`, every request must hit a route of the `routes()` table, every route must be covered by a request, and every body must decode strictly into the type that `requestBodies` (in the test) maps to its route.
+- **Run** (`make bruno_test`, GitHub CI only): both collections against the application in containers on a fresh seeded database, in `seq` order. Each request asserts its status, the `GrowSCADA-Schema-Version` header (server), `application/problem+json` on errors and one or two key fields on reads.
+
+Bruno tags: `manual` — left out of the run (`get_events`: the SSE stream never ends); `invalid-body` — a body meant to be rejected, skipped by the body check (it still has to cover its route).
 
 ## MCP Servers
 
@@ -203,7 +209,7 @@ Browser automation. Use for verifying UI changes in the running PWA (port 8080):
 
 4. **Raise the SchemaVersion when a contract changes.** Any change to a type in `contract/` changes a contract (ADR 0005): raise that contract's `SchemaVersion` — MINOR if old readers can ignore the change (an `omitempty` field, a new event type), MAJOR otherwise (removed/renamed/retyped field, new enum value) — and run `make schemas`. While MAJOR is 0 every change only bumps MINOR. `make test` fails if the types and the committed schema disagree.
 
-5. **Keep Bruno collections in sync.** When any REST API endpoint is added, removed, or modified (URL, method, request/response shape), update the corresponding Bruno collection in `tests/api/bruno_collections/` to reflect the change.
+5. **Keep Bruno collections in sync.** When any REST API endpoint is added, removed, or modified (URL, method, request/response shape), update the corresponding Bruno collection in `tests/api/bruno_collections/` to reflect the change: every new request has assertions (status, schema header, error content type, key fields), the `seq` order holds (reads, then changes, deletes last; IDs and versions in the bodies follow that order on the seed data), and a new route that takes a body needs an entry in the test's `requestBodies`.
 
 6. **Completion notification is automatic — no action needed.** A `Stop` hook (`.claude/settings.json`) fires a desktop notification (`notify-send`) whenever a turn ends. It's a no-op if `notify-send` isn't installed (e.g. non-Linux, or a Linux desktop without a notification daemon), so it's safe on any machine. Don't try to send an e-mail or otherwise notify the user yourself — the old `mail-mcp`-based e-mail step has been removed.
 

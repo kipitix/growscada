@@ -53,43 +53,60 @@ func corsMiddleware(next http.Handler) http.Handler {
 }
 
 func NewRouter(tagService application.TagService, widgetTypeService application.WidgetTypeService, sceneService application.SceneService, eventBus eventbus.EventBus, maxSSEClients int) *APIRouter {
-	router := &APIRouter{}
-	router.serveMux = http.NewServeMux()
-
-	router.tagsHandlers = NewTagsHandler(tagService)
-	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/tags", router.tagsHandlers.GetTags)
-	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/tags/"+tagResource.wildcard(), router.tagsHandlers.GetTagsByID)
-	router.serveMux.HandleFunc("POST "+apiv0.PathPrefix+"/tags", router.tagsHandlers.PostTags)
-	router.serveMux.HandleFunc("DELETE "+apiv0.PathPrefix+"/tags/"+tagResource.wildcard(), router.tagsHandlers.DeleteTagsByID)
-	router.serveMux.HandleFunc("PATCH "+apiv0.PathPrefix+"/tags/"+tagResource.wildcard()+"/value", router.tagsHandlers.PatchTagsValue)
-
-	router.widgetTypesHandlers = NewWidgetTypesHandler(widgetTypeService)
-	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/widget-types", router.widgetTypesHandlers.GetWidgetTypes)
-	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/widget-types/"+widgetTypeResource.wildcard(), router.widgetTypesHandlers.GetWidgetTypesByID)
-	router.serveMux.HandleFunc("POST "+apiv0.PathPrefix+"/widget-types", router.widgetTypesHandlers.PostWidgetTypes)
-	router.serveMux.HandleFunc("PUT "+apiv0.PathPrefix+"/widget-types/"+widgetTypeResource.wildcard(), router.widgetTypesHandlers.PutWidgetTypesByID)
-	router.serveMux.HandleFunc("DELETE "+apiv0.PathPrefix+"/widget-types/"+widgetTypeResource.wildcard(), router.widgetTypesHandlers.DeleteWidgetTypesByID)
-
-	router.widgetsHandlers = NewWidgetsHandler(sceneService)
-	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/scenes/"+sceneResource.wildcard()+"/widgets", router.widgetsHandlers.GetWidgetsBySceneID)
-	router.serveMux.HandleFunc("POST "+apiv0.PathPrefix+"/scenes/"+sceneResource.wildcard()+"/widgets", router.widgetsHandlers.PostWidgets)
-	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/scenes/"+sceneResource.wildcard()+"/widgets/"+widgetResource.wildcard(), router.widgetsHandlers.GetWidgetsByID)
-	router.serveMux.HandleFunc("PUT "+apiv0.PathPrefix+"/scenes/"+sceneResource.wildcard()+"/widgets/"+widgetResource.wildcard(), router.widgetsHandlers.PutWidgetsByID)
-	router.serveMux.HandleFunc("DELETE "+apiv0.PathPrefix+"/scenes/"+sceneResource.wildcard()+"/widgets/"+widgetResource.wildcard(), router.widgetsHandlers.DeleteWidgetsByID)
-
-	router.scenesHandlers = NewScenesHandler(sceneService)
-	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/scenes", router.scenesHandlers.GetScenes)
-	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/scenes/"+sceneResource.wildcard(), router.scenesHandlers.GetScenesByID)
-	router.serveMux.HandleFunc("POST "+apiv0.PathPrefix+"/scenes", router.scenesHandlers.PostScenes)
-	router.serveMux.HandleFunc("PUT "+apiv0.PathPrefix+"/scenes/"+sceneResource.wildcard(), router.scenesHandlers.PutScenesByID)
-	router.serveMux.HandleFunc("DELETE "+apiv0.PathPrefix+"/scenes/"+sceneResource.wildcard(), router.scenesHandlers.DeleteScenesByID)
-
-	router.eventsHandlers = NewEventsHandler(eventBus, maxSSEClients)
-	router.serveMux.HandleFunc("GET "+apiv0.PathPrefix+"/events", router.eventsHandlers.GetEvents)
-
-	router.serveMux.HandleFunc(preVersioningPathPrefix+"/", preVersioningGone)
-
+	router := &APIRouter{
+		serveMux:            http.NewServeMux(),
+		tagsHandlers:        NewTagsHandler(tagService),
+		widgetTypesHandlers: NewWidgetTypesHandler(widgetTypeService),
+		widgetsHandlers:     NewWidgetsHandler(sceneService),
+		scenesHandlers:      NewScenesHandler(sceneService),
+		eventsHandlers:      NewEventsHandler(eventBus, maxSSEClients),
+	}
+	for _, rt := range router.routes() {
+		router.serveMux.HandleFunc(rt.pattern, rt.handler)
+	}
 	return router
+}
+
+// route is one ServeMux pattern and its handler.
+type route struct {
+	pattern string
+	handler http.HandlerFunc
+}
+
+// routes is every route of the API. The Bruno collection check
+// (bruno_collection_internal_test.go) matches the collection against it.
+func (r *APIRouter) routes() []route {
+	const p = apiv0.PathPrefix
+	tags, widgetTypes, widgets, scenes := r.tagsHandlers, r.widgetTypesHandlers, r.widgetsHandlers, r.scenesHandlers
+	return []route{
+		{"GET " + p + "/tags", tags.GetTags},
+		{"GET " + p + "/tags/" + tagResource.wildcard(), tags.GetTagsByID},
+		{"POST " + p + "/tags", tags.PostTags},
+		{"DELETE " + p + "/tags/" + tagResource.wildcard(), tags.DeleteTagsByID},
+		{"PATCH " + p + "/tags/" + tagResource.wildcard() + "/value", tags.PatchTagsValue},
+
+		{"GET " + p + "/widget-types", widgetTypes.GetWidgetTypes},
+		{"GET " + p + "/widget-types/" + widgetTypeResource.wildcard(), widgetTypes.GetWidgetTypesByID},
+		{"POST " + p + "/widget-types", widgetTypes.PostWidgetTypes},
+		{"PUT " + p + "/widget-types/" + widgetTypeResource.wildcard(), widgetTypes.PutWidgetTypesByID},
+		{"DELETE " + p + "/widget-types/" + widgetTypeResource.wildcard(), widgetTypes.DeleteWidgetTypesByID},
+
+		{"GET " + p + "/scenes/" + sceneResource.wildcard() + "/widgets", widgets.GetWidgetsBySceneID},
+		{"POST " + p + "/scenes/" + sceneResource.wildcard() + "/widgets", widgets.PostWidgets},
+		{"GET " + p + "/scenes/" + sceneResource.wildcard() + "/widgets/" + widgetResource.wildcard(), widgets.GetWidgetsByID},
+		{"PUT " + p + "/scenes/" + sceneResource.wildcard() + "/widgets/" + widgetResource.wildcard(), widgets.PutWidgetsByID},
+		{"DELETE " + p + "/scenes/" + sceneResource.wildcard() + "/widgets/" + widgetResource.wildcard(), widgets.DeleteWidgetsByID},
+
+		{"GET " + p + "/scenes", scenes.GetScenes},
+		{"GET " + p + "/scenes/" + sceneResource.wildcard(), scenes.GetScenesByID},
+		{"POST " + p + "/scenes", scenes.PostScenes},
+		{"PUT " + p + "/scenes/" + sceneResource.wildcard(), scenes.PutScenesByID},
+		{"DELETE " + p + "/scenes/" + sceneResource.wildcard(), scenes.DeleteScenesByID},
+
+		{"GET " + p + "/events", r.eventsHandlers.GetEvents},
+
+		{preVersioningPathPrefix + "/", preVersioningGone},
+	}
 }
 
 // preVersioningPathPrefix is where the API lived before ADR 0005: the shapes
@@ -104,14 +121,19 @@ func preVersioningGone(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusGone, NewGone(detail, r.URL.Path))
 }
 
-// sendJSONResponse writes a JSON response with the given status code.
+// sendJSONResponse writes a JSON response with the given status code. Problem
+// Details go as application/problem+json (RFC 7807).
 func sendJSONResponse(w http.ResponseWriter, status int, data any) {
 	body, err := json.Marshal(data)
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
+	contentType := "application/json"
+	if _, ok := data.(*apiv0.Problem); ok {
+		contentType = "application/problem+json"
+	}
+	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(status)
 	w.Write(body) //nolint:errcheck
 }
