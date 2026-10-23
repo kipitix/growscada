@@ -1,5 +1,29 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.46] - 2026-10-23
+
+### Added
+
+- **Bruno-коллекции проверяются автоматически** (задача 30). Основными тестами остаются Go-тесты; две проверки не дают коллекциям отстать от API
+  - **Статическая сверка** (`TestBrunoCollection` в `restapi` и `devicesim`, часть `make test`, без Docker — идёт и на GitVerse): новый пакет `internal/brunotest` читает запросы коллекции с подставленными переменными окружения `localhost` и обслуживает их ServeMux из паттернов маршрутов. Каждый запрос должен попасть в обработчик маршрута (ответ ServeMux редиректом 301 на неочищенный путь или путь без завершающего слэша — не попадание), каждый маршрут — быть покрыт запросом, каждое тело — строго декодироваться в тип из `requestBodies` теста. У маршрута POST/PUT/PATCH без записи в `requestBodies` и у записи без маршрута — ошибка. Неизвестная переменная в URL — ошибка, в теле остаётся как есть (как в Bruno); динамические `{{$…}}` не подставляются. Коллекция ищется от `go.mod` вверх, так что сверка работает и под `-trimpath`
+  - Маршруты `restapi/router.go` и `devicesim/control.go` собраны в таблицы `routes()`, ServeMux регистрирует их циклом; паттерны не менялись
+  - **Прогон** — `make bruno_test` (только GitHub CI, отдельный job): `Dockerfile` (target `server` — сервер и `web/app.wasm`, target `simulator`; у каждого своя стадия сборки, кэш сборки Go — cache mount) и `tests/api/docker-compose.yaml` (свежая БД без volume, миграции и seed, сервер, симулятор с `seed_dashboard.yaml`, healthcheck'и для `up --wait`); обе коллекции идут через `npx @usebruno/cli@4.2.1` с `--env localhost --exclude-tags=manual`, контейнеры удаляются при любом исходе, код выхода — от `bru`
+  - В каждом запросе обеих коллекций — assert'ы: статус, заголовок `GrowSCADA-Schema-Version` (сервер), `application/problem+json` у ошибок, одно-два ключевых поля у чтений. Порядок `seq`: чтения, изменения, удаления в конце; версии в телах следуют этому порядку на seed-данных (Scene 1 → 4, Tag 1 → 2, WidgetType 1 → 2)
+  - Теги Bruno: `manual` — вне прогона (`get_events`: SSE-поток не завершается), `invalid-body` — тело, которое сервер должен отвергнуть, без проверки тела (`post_tags_newer_client`). `post_tags_invalid_quality` проверяется полностью: тело корректно, отказ приходит из домена, assert на `quality` в `detail`
+  - `TAG_NAME` коллекции `device_simulator` — seed-тег `max_connections`
+- Конфигурация сервера: `DATABASE_URL` (по умолчанию прежний DSN) и `PUBLIC_API_URL` — адрес REST API для браузера, передаётся PWA как `API_URL`. Без него UI ищет API на порту 9090 хоста, с которого загружена страница (раньше — всегда `http://localhost:9090`), так что один образ работает за любым адресом. Завершающий слэш обрезается, IPv6-хост берётся в скобки
+- `AGENTS.md`: `make bruno_test`, обе проверки и теги в «API Collections», правило 5 дополнено (assert'ы, порядок `seq`, `requestBodies`)
+
+### Changed
+
+- Ошибки REST API приходят с `Content-Type: application/problem+json` (RFC 7807) вместо `application/json`; тела те же, поэтому SchemaVersion `contract/api/v0` не поднимался. Ошибки отправляет `sendProblem(w, problem)`, статус берётся из `Problem.Status`; `sendJSONResponse` — только для успешных ответов
+- Тесты `restapi` поднимают Postgres при первом обращении к БД, так что тесты без БД (сверка коллекции) идут без Docker. Если подготовка БД не удалась, контейнер останавливается до паники
+
+### Fixed
+
+- Healthcheck Postgres в `tests/api/docker-compose.yaml` и `tools/debug_db/docker-compose.yaml` — `pg_isready -h 127.0.0.1`: через Unix-сокет он мог отрапортовать готовность временного сервера init образа, ещё не слушающего TCP, и миграции падали с `connection refused`. В `debug_db` имена базы и пользователя берутся из `.env`
+- Bruno: документация `get_events` описывает 503 как `application/problem+json`
+
 ## [0.0.45] - 2026-10-22
 
 ### Changed
