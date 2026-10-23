@@ -39,15 +39,15 @@ func (h *EventsHandlers) Close() {
 func (h *EventsHandlers) GetEvents(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		sendJSONResponse(w, http.StatusInternalServerError, NewInternalError("streaming not supported", r.URL.Path))
+		sendProblem(w, NewInternalError("streaming not supported", r.URL.Path))
 		return
 	}
 
 	// Checked before writing any response so a rejection can still be a
-	// normal JSON error instead of an already-committed SSE stream.
+	// Problem Details response instead of an already-committed SSE stream.
 	c, err := h.hub.addClient()
 	if err != nil {
-		sendJSONResponse(w, http.StatusServiceUnavailable, NewServiceUnavailableError(err.Error(), r.URL.Path))
+		sendProblem(w, NewServiceUnavailableError(err.Error(), r.URL.Path))
 		return
 	}
 	defer h.hub.removeClient(c)

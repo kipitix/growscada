@@ -35,8 +35,7 @@ func (h TagsHandlers) GetTags(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if filters > 1 {
-		sendJSONResponse(w, http.StatusBadRequest,
-			NewBadRequest("use only one of name, name_pattern, name_regex", r.URL.Path))
+		sendProblem(w, NewBadRequest("use only one of name, name_pattern, name_regex", r.URL.Path))
 		return
 	}
 

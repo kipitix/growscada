@@ -33,7 +33,6 @@ func TestBrunoCollection(t *testing.T) {
 	}
 	brunotest.Check(t, brunotest.Collection{
 		Dir:      brunotest.CollectionDir("growscada_server"),
-		Mux:      router.serveMux,
 		Patterns: patterns,
 		Bodies:   requestBodies,
 		Decode:   decodeStrict,

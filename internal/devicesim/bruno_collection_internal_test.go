@@ -1,7 +1,6 @@
 package devicesim
 
 import (
-	"net/http"
 	"testing"
 
 	"github.com/kipitix/growscada/internal/brunotest"
@@ -20,16 +19,12 @@ var requestBodies = map[string]any{
 // up with the control API: every request hits a route, every route has a
 // request and every body decodes as its handler decodes it.
 func TestBrunoCollection(t *testing.T) {
-	d := &Device{}
-	mux := http.NewServeMux()
 	var patterns []string
-	for _, rt := range d.routes() {
-		mux.HandleFunc(rt.pattern, rt.handler)
+	for _, rt := range (&Device{}).routes() {
 		patterns = append(patterns, rt.pattern)
 	}
 	brunotest.Check(t, brunotest.Collection{
 		Dir:      brunotest.CollectionDir("device_simulator"),
-		Mux:      mux,
 		Patterns: patterns,
 		Bodies:   requestBodies,
 		Decode:   decodeStrict,

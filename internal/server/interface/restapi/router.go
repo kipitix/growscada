@@ -118,20 +118,26 @@ const preVersioningPathPrefix = "/api/v1"
 func preVersioningGone(w http.ResponseWriter, r *http.Request) {
 	detail := fmt.Sprintf("%s is the server API from before contract versioning: use %s",
 		preVersioningPathPrefix, apiv0.PathPrefix)
-	sendJSONResponse(w, http.StatusGone, NewGone(detail, r.URL.Path))
+	sendProblem(w, NewGone(detail, r.URL.Path))
 }
 
-// sendJSONResponse writes a JSON response with the given status code. Problem
-// Details go as application/problem+json (RFC 7807).
+// sendJSONResponse writes a successful JSON response with the given status
+// code. Errors go through sendProblem.
 func sendJSONResponse(w http.ResponseWriter, status int, data any) {
+	writeJSON(w, status, "application/json", data)
+}
+
+// sendProblem writes Problem Details as application/problem+json (RFC 7807),
+// with the status the problem states.
+func sendProblem(w http.ResponseWriter, p *apiv0.Problem) {
+	writeJSON(w, p.Status, "application/problem+json", p)
+}
+
+func writeJSON(w http.ResponseWriter, status int, contentType string, data any) {
 	body, err := json.Marshal(data)
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
-	}
-	contentType := "application/json"
-	if _, ok := data.(*apiv0.Problem); ok {
-		contentType = "application/problem+json"
 	}
 	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(status)

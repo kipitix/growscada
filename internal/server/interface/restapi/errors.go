@@ -67,7 +67,7 @@ var errorMappings = []errorMapping{
 // 500 that logs the error and tells the client nothing internal.
 func sendError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, application.ErrInvalidInput) {
-		sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(err.Error(), r.URL.Path))
+		sendProblem(w, NewBadRequest(err.Error(), r.URL.Path))
 		return
 	}
 	for _, m := range errorMappings {
@@ -82,7 +82,7 @@ func sendError(w http.ResponseWriter, r *http.Request, err error) {
 					m.resource.name, m.resource.pathParam, err))
 				return
 			}
-			sendJSONResponse(w, http.StatusNotFound, NewNotFound(m.resource.name, pathID, r.URL.Path))
+			sendProblem(w, NewNotFound(m.resource.name, pathID, r.URL.Path))
 		case http.StatusConflict:
 			detail := m.detail
 			if errors.Is(err, application.ErrRaceLost) {
@@ -90,7 +90,7 @@ func sendError(w http.ResponseWriter, r *http.Request, err error) {
 				// has already retried.
 				detail = m.resource.name + " kept changing while the request ran; retry it later"
 			}
-			sendJSONResponse(w, http.StatusConflict, NewConflict(m.resource.name, detail, r.URL.Path))
+			sendProblem(w, NewConflict(m.resource.name, detail, r.URL.Path))
 		default:
 			sendInternalError(w, r, fmt.Errorf("error mapping for %d has no response: %w", m.status, err))
 		}
@@ -134,8 +134,7 @@ func pathUUID(w http.ResponseWriter, r *http.Request, res resource) (uuid.UUID, 
 	raw := r.PathValue(res.pathParam)
 	id, err := uuid.Parse(raw)
 	if err != nil {
-		sendJSONResponse(w, http.StatusBadRequest,
-			NewBadRequest(fmt.Sprintf("%s: '%s' is not a valid UUID", res.pathParam, raw), r.URL.Path))
+		sendProblem(w, NewBadRequest(fmt.Sprintf("%s: '%s' is not a valid UUID", res.pathParam, raw), r.URL.Path))
 		return uuid.Nil, false
 	}
 	return id, true
@@ -144,5 +143,5 @@ func pathUUID(w http.ResponseWriter, r *http.Request, res resource) (uuid.UUID, 
 // sendInternalError logs the full error and sends a generic 500 to the client.
 func sendInternalError(w http.ResponseWriter, r *http.Request, err error) {
 	slog.Error("internal server error", "path", r.URL.Path, "method", r.Method, "error", err)
-	sendJSONResponse(w, http.StatusInternalServerError, NewInternalError("an internal error occurred", r.URL.Path))
+	sendProblem(w, NewInternalError("an internal error occurred", r.URL.Path))
 }

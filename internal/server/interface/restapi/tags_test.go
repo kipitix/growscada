@@ -39,13 +39,26 @@ var (
 
 func TestMain(m *testing.M) {
 	code := m.Run()
+	stopTestDB()
+	os.Exit(code)
+}
+
+// stopTestDB closes the connection and terminates the container, whichever
+// of them has been started.
+func stopTestDB() {
 	if testDBConn != nil {
 		testDBConn.Close()
 	}
 	if pgContainer != nil {
 		pgContainer.Terminate(context.Background())
 	}
-	os.Exit(code)
+}
+
+// failTestDB stops what startTestDB has started and panics: the panic ends
+// the test binary before TestMain's own cleanup.
+func failTestDB(msg string, err error) {
+	stopTestDB()
+	panic(msg + ": " + err.Error())
 }
 
 // testDB returns the migrated test database, starting its container on the
@@ -68,19 +81,20 @@ func startTestDB() {
 				WithOccurrence(2),
 		),
 	)
-	if err != nil {
-		panic("failed to start postgres container: " + err.Error())
-	}
+	// A container that failed to start may still be running.
 	pgContainer = container
+	if err != nil {
+		failTestDB("failed to start postgres container", err)
+	}
 
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
-		panic("failed to get connection string: " + err.Error())
+		failTestDB("failed to get connection string", err)
 	}
 
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
-		panic("failed to open db: " + err.Error())
+		failTestDB("failed to open db", err)
 	}
 	testDBConn = db
 
@@ -88,10 +102,10 @@ func startTestDB() {
 	migrationsDir := filepath.Join(filepath.Dir(currentFile), "..", "..", "infrastructure", "postgres", "migrations")
 
 	if err := goose.SetDialect("postgres"); err != nil {
-		panic("failed to set goose dialect: " + err.Error())
+		failTestDB("failed to set goose dialect", err)
 	}
 	if err := goose.Up(db, migrationsDir); err != nil {
-		panic("failed to run migrations: " + err.Error())
+		failTestDB("failed to run migrations", err)
 	}
 }
 

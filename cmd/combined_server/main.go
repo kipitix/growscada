@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/alexflint/go-arg"
@@ -230,15 +232,15 @@ func pwaEnv(publicAPIURL string) map[string]string {
 	return map[string]string{apiURLEnv: publicAPIURL}
 }
 
-// apiURL is the REST API URL for the UI: API_URL from the server, or else port
-// 9090 on the host the page was loaded from. One build then works behind any
-// address.
+// apiURL is the REST API URL for the UI, without a trailing slash (the UI
+// appends paths to it): API_URL from the server, or else port 9090 on the host
+// the page was loaded from. One build then works behind any address.
 func apiURL() string {
-	if u := app.Getenv(apiURLEnv); u != "" {
+	if u := strings.TrimRight(app.Getenv(apiURLEnv), "/"); u != "" {
 		return u
 	}
 	page := app.Window().URL()
-	return page.Scheme + "://" + page.Hostname() + ":" + apiPort
+	return page.Scheme + "://" + net.JoinHostPort(page.Hostname(), apiPort)
 }
 
 // emergencyExit shuts down all registered components and exits with the given code.

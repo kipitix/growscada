@@ -35,7 +35,8 @@ docs: |
 
   The server caps the number of concurrent event streams (configurable via
   the MAX_SSE_CLIENTS env var, default 100). Once at capacity, a new request
-  gets a normal JSON 503 Problem Details response instead of an SSE stream.
+  gets a 503 Problem Details response (`application/problem+json`) instead
+  of an SSE stream.
 
 settings:
   encodeUrl: true

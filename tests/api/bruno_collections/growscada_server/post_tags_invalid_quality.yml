@@ -2,8 +2,6 @@ info:
   name: post tags invalid quality
   type: http
   seq: 16
-  tags:
-    - invalid-body
 
 http:
   method: POST
@@ -34,6 +32,9 @@ runtime:
     - expression: 'res.headers["content-type"]'
       operator: eq
       value: '"application/problem+json"'
+    - expression: 'res.body.detail'
+      operator: contains
+      value: '"quality"'
 
 settings:
   encodeUrl: true

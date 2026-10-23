@@ -42,7 +42,7 @@ func decodeRequest(w http.ResponseWriter, r *http.Request, v any) bool {
 				client, apiv0.SchemaVersion(), detail)
 		}
 	}
-	sendJSONResponse(w, http.StatusBadRequest, NewBadRequest(detail, r.URL.Path))
+	sendProblem(w, NewBadRequest(detail, r.URL.Path))
 	return false
 }
 
