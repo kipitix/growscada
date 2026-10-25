@@ -11,6 +11,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/organization"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
 
@@ -26,6 +27,10 @@ func (corruptTagRepository) corruptRow() error {
 }
 
 func (r corruptTagRepository) FindByID(context.Context, id.ID[tag.Tag]) (tag.Tag, error) {
+	return nil, r.corruptRow()
+}
+
+func (r corruptTagRepository) FindByIDInLiveProject(context.Context, id.ID[tag.Tag], id.ID[organization.Organization]) (tag.Tag, error) {
 	return nil, r.corruptRow()
 }
 

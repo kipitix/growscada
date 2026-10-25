@@ -72,10 +72,6 @@ func (r sceneRepositoryPostgresImpl) Save(ctx context.Context, s scene.Scene) (s
 				s.BackgroundHTML().Content(),
 				next.Number(),
 			); err != nil {
-				if isForeignKeyViolation(err, constraintScenesProjectID) {
-					// The Project was removed meanwhile: its cleanup had already run.
-					return id.NotFound(project.ErrProjectNotFound, r.project)
-				}
 				return fmt.Errorf("cannot insert new scene: %w", err)
 			}
 			return saveWidgets(ctx, tx, r.project, s.ID(), nil, s.Widgets())

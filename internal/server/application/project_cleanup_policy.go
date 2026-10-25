@@ -17,10 +17,10 @@ const ProjectCleanupPolicyName = "remove_deleted_project"
 
 // projectCleanupPolicy empties a Project marked deleted and removes it
 // (ADR 0006): its Scenes, then its Tags, each deleted in its own transaction
-// with its own events, and the Project's row last. A project_deleted event's
-// job does it; so does the job of a tag_created or scene_created event, since
-// a creation that read the Project as live just before it was marked would
-// otherwise outlive it. For a live Project the job does nothing.
+// with its own events, and the Project's row last; a project_deleted event's
+// job does it. Nothing of the Project is created once it is marked: the
+// repositories lock its row, live, for a creation. For a live Project the
+// job does nothing.
 type projectCleanupPolicy struct {
 	projects project.ProjectRepository
 	scopes   ProjectScopes
@@ -41,7 +41,7 @@ func (p projectCleanupPolicy) Name() string {
 // Job key: "project:<id>".
 func (p projectCleanupPolicy) JobKey(e event.Event) (string, bool) {
 	switch e.Type() {
-	case event.EventTypeProjectDeleted, event.EventTypeTagCreated, event.EventTypeSceneCreated:
+	case event.EventTypeProjectDeleted:
 		if ev, ok := e.(project.ContentEvent); ok {
 			return projectKeyPrefix + ev.ProjectID().String(), true
 		}

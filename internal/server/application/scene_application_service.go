@@ -139,8 +139,7 @@ func (s sceneServiceImpl) FindSceneByID(ctx context.Context, rawProjectID, rawID
 }
 
 // CreateScene creates a new scene in the project. A project deleted just
-// after it was read here loses the scene to its cleanup
-// (NewProjectCleanupPolicy keys scene_created too).
+// after it was read here is not found by the save.
 func (s sceneServiceImpl) CreateScene(ctx context.Context, rawProjectID uuid.UUID, input appdto.SceneInput) (appdto.Scene, error) {
 	projectID, scope, err := s.content.open(ctx, rawProjectID)
 	if err != nil {

@@ -359,3 +359,28 @@ func TestProjectScopes_FindProjectsUsingWidgetType(t *testing.T) {
 		t.Errorf("an unused widget type: %v, %v", none, err)
 	}
 }
+
+func TestTagRepository_FindByIDInLiveProject_ChecksTheProject(t *testing.T) {
+	cleanProjects(t)
+	projects := repositories.NewProjectRepositoryPostgres(testDB)
+	line := mustCreateProject(t, projects, "Line 1")
+	tags := repositories.NewTagRepositoryPostgres(testDB, line.ID())
+	ctx := context.Background()
+	speed := createTagIn(t, tags, line.ID(), "speed")
+
+	if found, err := tags.FindByIDInLiveProject(ctx, speed.ID(), soleOrganization(t)); err != nil || found.ID() != speed.ID() {
+		t.Errorf("a tag of a live project: %v, %v", found, err)
+	}
+	if _, err := tags.FindByIDInLiveProject(ctx, speed.ID(), id.NewID[organization.Organization]()); !errors.Is(err, tag.ErrTagNotFound) {
+		t.Errorf("through another organization: expected ErrTagNotFound, got %v", err)
+	}
+	if _, err := projects.Save(ctx, line.Delete()); err != nil {
+		t.Fatalf("mark the project deleted: %v", err)
+	}
+	if _, err := tags.FindByIDInLiveProject(ctx, speed.ID(), soleOrganization(t)); !errors.Is(err, tag.ErrTagNotFound) {
+		t.Errorf("a tag of a deleted project: expected ErrTagNotFound, got %v", err)
+	}
+	if _, err := tags.FindByID(ctx, speed.ID()); err != nil {
+		t.Errorf("FindByID still reads it, for the cleanup: %v", err)
+	}
+}

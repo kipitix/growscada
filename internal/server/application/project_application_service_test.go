@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -152,8 +153,6 @@ func TestProjectCleanupPolicy_JobKey(t *testing.T) {
 	want := "project:" + mainProject.String()
 	for _, e := range []event.Event{
 		project.NewProjectDeletedEvent(mainProjectID),
-		tag.NewTagCreatedEvent(id.NewID[tag.Tag](), mainProjectID),
-		scene.NewSceneCreatedEvent(id.NewID[scene.Scene](), mainProjectID),
 	} {
 		if key, ok := policy.JobKey(e); !ok || key != want {
 			t.Errorf("%s: key %q (%t), want %q", e.Type(), key, ok, want)
@@ -162,6 +161,8 @@ func TestProjectCleanupPolicy_JobKey(t *testing.T) {
 	for _, e := range []event.Event{
 		project.NewProjectCreatedEvent(mainProjectID),
 		project.NewProjectUpdatedEvent(mainProjectID),
+		tag.NewTagCreatedEvent(id.NewID[tag.Tag](), mainProjectID),
+		scene.NewSceneCreatedEvent(id.NewID[scene.Scene](), mainProjectID),
 		tag.NewTagDeletedEvent(id.NewID[tag.Tag](), mainProjectID),
 		scene.NewSceneDeletedEvent(id.NewID[scene.Scene](), mainProjectID),
 	} {
@@ -247,37 +248,95 @@ func TestProjectCleanup_TagSavedAfterTheProjectIsRemoved_IsProjectNotFound(t *te
 	}
 }
 
-func TestProjectCleanup_TagOfAProjectMarkedMeanwhile_IsRemoved(t *testing.T) {
+// lateTag is a Tag of the project p as a service that read p as live
+// before it was marked builds it, with the repository of p's content.
+func lateTag(t *testing.T, p uuid.UUID) (tag.TagRepository, tag.Tag) {
+	t.Helper()
+	projectID := id.NewID(id.IDWithUUID[project.Project](p))
+	repo := newScopes().ForProject(projectID).Tags()
+	name, _ := tag.NewTagName("late")
+	value, _ := tag.TagTypeInteger.NewTagValue(0)
+	late, err := tag.CreateTag(repo.NextID(), projectID, name, tag.TagTypeInteger, value, tag.TagQualityGood)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return repo, late
+}
+
+func TestProjectCleanup_TagSavedAfterTheProjectIsMarked_IsProjectNotFound(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	ctx := context.Background()
 	p := r.createProject(t, "Line 1")
-	projectID := id.NewID(id.IDWithUUID[project.Project](p))
 	// The project is marked deleted; its cleanup job is not run yet.
 	if _, err := r.projectSvc.DeleteProjectByID(ctx, p); err != nil {
 		t.Fatalf("DeleteProjectByID: %v", err)
 	}
-	r.drain(t)
-	if _, err := testDB.ExecContext(ctx, `DELETE FROM policy_jobs`); err != nil {
+
+	repo, late := lateTag(t, p)
+	if _, err := repo.Save(ctx, late); !errors.Is(err, project.ErrProjectNotFound) {
+		t.Fatalf("a tag of a marked project: expected ErrProjectNotFound, got %v", err)
+	}
+	if n := countRows(t, "tags", p); n != 0 {
+		t.Errorf("tags of the marked project: %d", n)
+	}
+}
+
+func TestProjectCleanup_TagSavedWhileTheProjectIsBeingMarked_WaitsAndIsProjectNotFound(t *testing.T) {
+	r := newReconciliation(t, reconciliationWiring{})
+	ctx := context.Background()
+	p := r.createProject(t, "Line 1")
+	// The transaction marking the project holds its row, not committed yet.
+	tx, err := testDB.BeginTx(ctx, nil)
+	if err != nil {
 		t.Fatal(err)
 	}
-	// A creation that read the project as live just before the mark commits
-	// after it: its tag_created alone brings the cleanup.
-	scope := newScopes().ForProject(projectID)
-	name, _ := tag.NewTagName("late")
-	value, _ := tag.TagTypeInteger.NewTagValue(0)
-	late, _ := tag.CreateTag(scope.Tags().NextID(), projectID, name, tag.TagTypeInteger, value, tag.TagQualityGood)
-	if _, err := scope.Tags().Save(ctx, late); err != nil {
-		t.Fatalf("Save a late tag: %v", err)
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `UPDATE projects SET deleted_at = now(), version = version + 1 WHERE id = $1`, p); err != nil {
+		t.Fatalf("mark: %v", err)
 	}
 
-	r.settle(t)
+	repo, late := lateTag(t, p)
+	saved := make(chan error, 1)
+	go func() {
+		_, err := repo.Save(ctx, late)
+		saved <- err
+	}()
+	select {
+	case err := <-saved:
+		t.Fatalf("the save did not wait for the mark: %v", err)
+	case <-time.After(300 * time.Millisecond):
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit the mark: %v", err)
+	}
 
+	if err := <-saved; !errors.Is(err, project.ErrProjectNotFound) {
+		t.Fatalf("a tag saved while the project was being marked: expected ErrProjectNotFound, got %v", err)
+	}
 	if n := countRows(t, "tags", p); n != 0 {
-		t.Errorf("the late tag is left: %d tags", n)
+		t.Errorf("tags of the marked project: %d", n)
 	}
-	var rows int
-	if err := testDB.QueryRowContext(ctx, `SELECT count(*) FROM projects WHERE id = $1`, p).Scan(&rows); err != nil || rows != 0 {
-		t.Errorf("the project's row: %d, %v", rows, err)
+}
+
+func TestSetTagValueByID_TagOfADeletedProject_IsProjectNotFound(t *testing.T) {
+	r := newReconciliation(t, reconciliationWiring{})
+	ctx := context.Background()
+	p := r.createProject(t, "Line 1")
+	speed, err := r.tagSvc.CreateTag(ctx, p, appdto.CreateTagInput{Name: "speed", Type: "integer", Value: "0", Quality: "good"})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	if _, err := r.projectSvc.DeleteProjectByID(ctx, p); err != nil {
+		t.Fatalf("DeleteProjectByID: %v", err)
+	}
+
+	// The cleanup has not run: the tag's row is still there.
+	_, err = r.tagSvc.SetTagValueByID(ctx, p, appdto.UpdateTagInput{ID: speed.ID, Value: "1", Quality: "good", Version: speed.Version})
+	if !errors.Is(err, project.ErrProjectNotFound) {
+		t.Errorf("a value of a deleted project's tag: expected ErrProjectNotFound, got %v", err)
+	}
+	if _, err := r.tagSvc.SetTagValueByID(ctx, mainProject, appdto.UpdateTagInput{ID: speed.ID, Value: "1", Quality: "good", Version: speed.Version}); !errors.Is(err, tag.ErrTagNotFound) {
+		t.Errorf("the tag through a live project of its own: expected ErrTagNotFound, got %v", err)
 	}
 }
 

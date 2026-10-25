@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/organization"
 )
 
 var (
@@ -39,6 +40,13 @@ type TagRepository interface {
 	// FindByID returns a tag by its identifier.
 	// Returns the tag and nil on success, or nil and an error if not found or on failure.
 	FindByID(context.Context, id.ID[Tag]) (Tag, error)
+
+	// FindByIDInLiveProject is FindByID that also checks, in the same query,
+	// that the Project is live and of the Organization: for the hot path of
+	// tag values, which then needs no read of the Project of its own.
+	// Returns ErrTagNotFound if there is no such tag or the Project is not
+	// one of those, or an error on failure.
+	FindByIDInLiveProject(context.Context, id.ID[Tag], id.ID[organization.Organization]) (Tag, error)
 
 	// FindTypesByIDs returns the TagTypes of the tags with the given IDs, read
 	// in one query; a tag that does not exist is left out.

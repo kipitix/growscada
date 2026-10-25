@@ -37,6 +37,14 @@ func (c ProjectContent) open(ctx context.Context, rawProjectID uuid.UUID) (id.ID
 	return projectID, c.scopes.ForProject(projectID), nil
 }
 
+// openUnchecked returns the ID and the repositories of the Project
+// rawProjectID without checking it: for a query that checks the Project
+// itself (and open on a miss, for the error).
+func (c ProjectContent) openUnchecked(rawProjectID uuid.UUID) (id.ID[project.Project], ProjectScope) {
+	projectID := id.NewID(id.IDWithUUID[project.Project](rawProjectID))
+	return projectID, c.scopes.ForProject(projectID)
+}
+
 // findOwnProject returns the live Project projectID of the Organization
 // orgID; one of another Organization is not found.
 func findOwnProject(ctx context.Context, projects project.ProjectRepository, orgID id.ID[organization.Organization], projectID id.ID[project.Project]) (project.Project, error) {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/organization"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/domain/version"
@@ -82,17 +83,13 @@ func (r tagRepositoryPostgresImpl) Save(ctx context.Context, aTag tag.Tag) (tag.
 }
 
 // tagWriteError maps a failed write of a tags row: a name taken in the
-// Project is ErrTagNameTaken, a Project removed meanwhile (its cleanup had
-// already run) ErrProjectNotFound.
+// Project is ErrTagNameTaken.
 func (r tagRepositoryPostgresImpl) tagWriteError(what string, err error) error {
 	if err == nil {
 		return nil
 	}
 	if isUniqueViolation(err, constraintTagsName) {
 		return tag.ErrTagNameTaken
-	}
-	if isForeignKeyViolation(err, constraintTagsProjectID) {
-		return id.NotFound(project.ErrProjectNotFound, r.project)
 	}
 	return fmt.Errorf("cannot %s: %w", what, err)
 }
@@ -110,6 +107,19 @@ func (r tagRepositoryPostgresImpl) FindByID(ctx context.Context, tagID id.ID[tag
 	found, err := r.scanTag(r.db.QueryRowContext(ctx,
 		`SELECT id, name, type, value, quality, version FROM tags WHERE id = $1 AND project_id = $2`,
 		tagID.UUID(), r.project.UUID(),
+	))
+	if errors.Is(err, tag.ErrTagNotFound) {
+		return nil, id.NotFound(tag.ErrTagNotFound, tagID)
+	}
+	return found, err
+}
+
+func (r tagRepositoryPostgresImpl) FindByIDInLiveProject(ctx context.Context, tagID id.ID[tag.Tag], orgID id.ID[organization.Organization]) (tag.Tag, error) {
+	found, err := r.scanTag(r.db.QueryRowContext(ctx,
+		`SELECT t.id, t.name, t.type, t.value, t.quality, t.version
+		 FROM tags t JOIN projects p ON p.id = t.project_id
+		 WHERE t.id = $1 AND t.project_id = $2 AND p.deleted_at IS NULL AND p.organization_id = $3`,
+		tagID.UUID(), r.project.UUID(), orgID.UUID(),
 	))
 	if errors.Is(err, tag.ErrTagNotFound) {
 		return nil, id.NotFound(tag.ErrTagNotFound, tagID)

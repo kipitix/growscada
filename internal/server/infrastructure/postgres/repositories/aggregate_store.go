@@ -96,6 +96,11 @@ func (s aggregateStore[T]) save(ctx context.Context, anID id.ID[T], current vers
 
 	err := s.inTx(ctx, events, func(tx *sql.Tx) error {
 		if current == version.Initial[T]() {
+			if s.project != nil {
+				if err := s.lockLiveProject(ctx, tx); err != nil {
+					return err
+				}
+			}
 			return w.insert(tx, next)
 		}
 		found, err := w.update(tx, current, next)
@@ -108,6 +113,25 @@ func (s aggregateStore[T]) save(ctx context.Context, anID id.ID[T], current vers
 		return nil
 	})
 	return next, err
+}
+
+// lockLiveProject locks the row of the store's Project for share in tx, the
+// transaction of a creation of its content; a Project marked deleted (or
+// removed) is not found. Marking the Project deleted locks its row too, so
+// it waits for the creation, or the creation for it: no content is created
+// in a Project once its cleanup may run (ADR 0006).
+func (s aggregateStore[T]) lockLiveProject(ctx context.Context, tx *sql.Tx) error {
+	var one int
+	err := tx.QueryRowContext(ctx,
+		`SELECT 1 FROM projects WHERE id = $1 AND deleted_at IS NULL FOR SHARE`, s.project.UUID(),
+	).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return id.NotFound(project.ErrProjectNotFound, *s.project)
+	}
+	if err != nil {
+		return fmt.Errorf("cannot lock project %s: %w", *s.project, err)
+	}
+	return nil
 }
 
 // delete removes an aggregate read at current (CAS), with the events it

@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -136,8 +137,7 @@ func (t tagServiceImpl) findTagsMatching(ctx context.Context, rawProjectID uuid.
 }
 
 // CreateTag creates a new tag in the project and returns the created tag DTO.
-// A project deleted just after it was read here loses the tag to its cleanup
-// (NewProjectCleanupPolicy keys tag_created too).
+// A project deleted just after it was read here is not found by the save.
 func (t tagServiceImpl) CreateTag(ctx context.Context, rawProjectID uuid.UUID, newTagData appdto.CreateTagInput) (appdto.Tag, error) {
 	projectID, scope, err := t.content.open(ctx, rawProjectID)
 	if err != nil {
@@ -201,15 +201,21 @@ func (t tagServiceImpl) DeleteTagByID(ctx context.Context, rawProjectID, rawID u
 	return appdto.NewTag(found), nil
 }
 
-// SetTagValueByID updates the value and quality of an existing tag and returns the updated tag
+// SetTagValueByID updates the value and quality of an existing tag and returns the updated tag.
+// It is the hot path of Devices: the tag is read with the check of its
+// project in one query, and the project is read apart only when the tag is
+// not found, to tell a missing project from a missing tag.
 func (t tagServiceImpl) SetTagValueByID(ctx context.Context, rawProjectID uuid.UUID, request appdto.UpdateTagInput) (appdto.Tag, error) {
-	repo, err := t.tags(ctx, rawProjectID)
-	if err != nil {
-		return appdto.Tag{}, err
-	}
+	_, scope := t.content.openUnchecked(rawProjectID)
+	repo := scope.Tags()
 	tagID := id.NewID(id.IDWithUUID[tag.Tag](request.ID))
 
-	foundTag, err := repo.FindByID(ctx, tagID)
+	foundTag, err := repo.FindByIDInLiveProject(ctx, tagID, t.content.organization)
+	if errors.Is(err, tag.ErrTagNotFound) {
+		if _, _, projectErr := t.content.open(ctx, rawProjectID); projectErr != nil {
+			return appdto.Tag{}, projectErr
+		}
+	}
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("error on find tag by id in repository: %w", err)
 	}
