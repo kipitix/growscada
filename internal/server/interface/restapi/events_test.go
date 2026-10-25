@@ -133,6 +133,13 @@ func runProjectEventsHandler(t *testing.T, h *restapi.EventsHandlers, w http.Res
 	return serveStream(req, h.GetProjectEvents, w)
 }
 
+// runEventsOfProjectHandler opens the server's event stream joined by the
+// stream of the project ?project= names (raw, as sent).
+func runEventsOfProjectHandler(t *testing.T, h *restapi.EventsHandlers, w http.ResponseWriter, project string) (cancel func(), done <-chan struct{}) {
+	t.Helper()
+	return serveStream(httptest.NewRequest(http.MethodGet, "/api/v0/events?project="+project, nil), h.GetEvents, w)
+}
+
 func serveStream(req *http.Request, handler http.HandlerFunc, w http.ResponseWriter) (cancel func(), done <-chan struct{}) {
 	ctx, cancelFn := context.WithCancel(req.Context())
 	req = req.WithContext(ctx)

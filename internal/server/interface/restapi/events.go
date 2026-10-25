@@ -8,9 +8,11 @@ import (
 
 	"github.com/google/uuid"
 
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/domain/client"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 )
 
@@ -19,8 +21,8 @@ import (
 // of holding its handler, and so http.Server.Shutdown, forever.
 const eventWriteTimeout = 5 * time.Second
 
-// EventsHandlers handles the SSE streams of domain events: the server's and
-// one per project.
+// EventsHandlers handles the SSE streams of domain events: the server's,
+// optionally joined by one project's, and one per project.
 type EventsHandlers struct {
 	hub      *eventHub
 	projects application.ProjectService
@@ -40,11 +42,29 @@ func (h *EventsHandlers) Close() {
 }
 
 // GetEvents handles GET /api/v0/events: the server's stream, of projects,
-// WidgetTypes and connections. It upgrades the connection to an SSE stream
-// and forwards every such event published after this point — no history is
-// replayed.
+// WidgetTypes and connections, joined by the stream of the project
+// ?project= names, so one connection carries both. It upgrades the
+// connection to an SSE stream and forwards every such event published after
+// this point — no history is replayed. A project not found (deleted
+// meanwhile) leaves the server's stream alone: its client learns of the
+// deletion from that stream.
 func (h *EventsHandlers) GetEvents(w http.ResponseWriter, r *http.Request) {
-	h.stream(w, r, uuid.Nil)
+	streams := eventStreams{server: true}
+	if raw := r.URL.Query().Get(apiv0.EventsQueryProject); raw != "" {
+		projectID, err := uuid.Parse(raw)
+		if err != nil {
+			sendProblem(w, NewBadRequest(fmt.Sprintf("%s: '%s' is not a valid UUID", apiv0.EventsQueryProject, raw), r.URL.Path))
+			return
+		}
+		switch _, err := h.projects.FindProjectByID(r.Context(), projectID); {
+		case err == nil:
+			streams.project = projectID
+		case !errors.Is(err, project.ErrProjectNotFound):
+			sendError(w, r, err)
+			return
+		}
+	}
+	h.stream(w, r, streams)
 }
 
 // GetProjectEvents handles GET /api/v0/projects/{project_id}/events: the
@@ -60,11 +80,11 @@ func (h *EventsHandlers) GetProjectEvents(w http.ResponseWriter, r *http.Request
 		sendError(w, r, err)
 		return
 	}
-	h.stream(w, r, projectID)
+	h.stream(w, r, eventStreams{project: projectID})
 }
 
-// stream serves the SSE stream of stream (see eventHub.addClient).
-func (h *EventsHandlers) stream(w http.ResponseWriter, r *http.Request, stream uuid.UUID) {
+// stream serves an SSE stream of streams (see eventHub.addClient).
+func (h *EventsHandlers) stream(w http.ResponseWriter, r *http.Request, streams eventStreams) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		sendProblem(w, NewInternalError("streaming not supported", r.URL.Path))
@@ -73,7 +93,7 @@ func (h *EventsHandlers) stream(w http.ResponseWriter, r *http.Request, stream u
 
 	// Checked before writing any response so a rejection can still be a
 	// Problem Details response instead of an already-committed SSE stream.
-	c, err := h.hub.addClient(stream)
+	c, err := h.hub.addClient(streams)
 	if err != nil {
 		sendProblem(w, NewServiceUnavailableError(err.Error(), r.URL.Path))
 		return

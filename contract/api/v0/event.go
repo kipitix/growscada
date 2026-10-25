@@ -1,10 +1,11 @@
 package apiv0
 
 // Event is the payload of every message of the event streams (sent as SSE
-// `data:`), whatever the domain event. There are two streams: GET /events
-// carries the events of the server's own resources — projects, WidgetTypes —
-// and of the connections; GET /projects/{id}/events those of one project's
-// content — Tags, Scenes, Widgets. Type is one of the Event… names below. ID
+// `data:`), whatever the domain event. GET /events carries the events of the
+// server's own resources — projects, WidgetTypes — and of the connections,
+// plus, with ?project= (EventsQueryProject), those of that project's content;
+// GET /projects/{id}/events those of one project's content alone — Tags,
+// Scenes, Widgets. Type is one of the Event… names below. ID
 // is the affected aggregate's (or connection's) ID; system_ready carries
 // none. SceneID is the Scene that holds (or held)
 // the Widget, on widget_created, widget_updated and widget_deleted only. Tag

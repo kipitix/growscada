@@ -85,7 +85,7 @@ func NewRootCommand() *cobra.Command {
 	root.PersistentFlags().StringVar(&s.server, "server", s.server,
 		"GrowSCADA REST API URL (env "+ServerEnv+")")
 	root.PersistentFlags().StringVar(&s.project, "project", "",
-		"project to work in (default: the context's, see growctl config use-project, or the manifests' metadata.project)")
+		"project to work in (default: the manifests' metadata.project, else the context's, see growctl config use-project)")
 
 	root.AddCommand(
 		newApplyCommand(s),
@@ -165,7 +165,8 @@ func newApplyCommand(s *settings) *cobra.Command {
 			"existing tags keep their value. The tags are those of the project growctl works\n" +
 			"in (--project). With --prune, the project's tags absent from the manifest are\n" +
 			"deleted; --pattern or --regex limits pruning to the tags they select (the\n" +
-			"manifest's own scope). Projects are never pruned.",
+			"manifest's own scope). A manifest of projects alone prunes no tags.\n" +
+			"Projects are never pruned.",
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := requireFiles(files); err != nil {
@@ -312,7 +313,8 @@ func deleteManifests(cmd *cobra.Command, client *Client, projectFlag string, fil
 	if err := executeDelete(ctx, tags, tagSteps, cmd.OutOrStdout()); err != nil {
 		return err
 	}
-	return executeProjects(ctx, client, PlanProjects(manifests.Projects, existing, true), cmd.OutOrStdout())
+	_, err = executeProjects(ctx, client, PlanProjects(manifests.Projects, existing, true), cmd.OutOrStdout())
+	return err
 }
 
 // deleteMatching deletes the tags of the project growctl works in selected by
@@ -378,16 +380,23 @@ func executeDelete(ctx context.Context, tags *Tags, steps []Step, out io.Writer)
 }
 
 // findProjects returns those of the manifests' projects that exist on the
-// server.
+// server, read with one request.
 func findProjects(ctx context.Context, client *Client, manifests []ProjectManifest) ([]ServerProject, error) {
-	var existing []ServerProject
+	if len(manifests) == 0 {
+		return nil, nil
+	}
+	all, err := client.ListProjects(ctx)
+	if err != nil {
+		return nil, err
+	}
+	declared := make(map[string]bool, len(manifests))
 	for _, m := range manifests {
-		found, ok, err := client.FindProjectByName(ctx, m.Name)
-		if err != nil {
-			return nil, err
-		}
-		if ok {
-			existing = append(existing, found)
+		declared[m.Name] = true
+	}
+	var existing []ServerProject
+	for _, p := range all {
+		if declared[p.Name] {
+			existing = append(existing, p)
 		}
 	}
 	return existing, nil
@@ -395,14 +404,20 @@ func findProjects(ctx context.Context, client *Client, manifests []ProjectManife
 
 // executeProjects runs project steps, printing each once it is done; a
 // project already gone is reported as not found, one created meanwhile as
-// unchanged. It stops at the first failure.
-func executeProjects(ctx context.Context, client *Client, steps []ProjectStep, out io.Writer) error {
+// unchanged. It stops at the first failure. It returns the projects it
+// created, by name.
+func executeProjects(ctx context.Context, client *Client, steps []ProjectStep, out io.Writer) (map[string]ServerProject, error) {
+	created := make(map[string]ServerProject)
 	for _, s := range steps {
 		var err error
 		switch s.Action {
 		case ActionCreate:
-			_, err = client.CreateProject(ctx, apiv0.CreateProjectRequest{Name: s.Name})
-			if errors.Is(err, apiclient.ErrConflict) {
+			var resp apiv0.CreateProjectResponse
+			resp, err = client.CreateProject(ctx, apiv0.CreateProjectRequest{Name: s.Name})
+			switch {
+			case err == nil:
+				created[s.Name] = ServerProject{ID: resp.ID, Name: s.Name, Version: resp.Version}
+			case errors.Is(err, apiclient.ErrConflict):
 				s.Action, err = ActionUnchanged, nil // created meanwhile: the desired state is reached
 			}
 		case ActionDelete:
@@ -411,11 +426,11 @@ func executeProjects(ctx context.Context, client *Client, steps []ProjectStep, o
 			}
 		}
 		if err != nil {
-			return fmt.Errorf("project/%s: %w", s.Name, err)
+			return nil, fmt.Errorf("project/%s: %w", s.Name, err)
 		}
 		fmt.Fprintf(out, "project/%s %s\n", s.Name, actionResult(s.Action))
 	}
-	return nil
+	return created, nil
 }
 
 // applyPlan is what apply does: the projects first, then the tags of the
@@ -424,12 +439,18 @@ type applyPlan struct {
 	projects []ProjectStep
 	// project is the project of the tags; "" when there are none to plan.
 	project string
-	tags    []Step
+	// tagsOf is the client of the project's tags, nil while the project does
+	// not exist: the plan creates it. The steps run on the project planned
+	// against, not on whatever has its name by then.
+	tagsOf *Tags
+	tags   []Step
 }
 
 // planApply reads the manifests, fetches the relevant server state and plans
-// apply. The tags are planned only when the manifests declare some or prune
-// is set; the project they are in may be one the plan creates.
+// apply. The tags are planned only when the manifests declare some, or prune
+// is set and they declare no projects either: manifests of projects alone say
+// nothing of the tags, and pruning by them would delete every tag of the
+// project. The project of the tags may be one the plan creates.
 func planApply(ctx context.Context, client *Client, projectFlag string, files []string, stdin io.Reader, prune bool, scope NameFilter) (applyPlan, error) {
 	manifests, err := ReadManifests(files, stdin)
 	if err != nil {
@@ -440,7 +461,7 @@ func planApply(ctx context.Context, client *Client, projectFlag string, files []
 		return applyPlan{}, err
 	}
 	plan := applyPlan{projects: PlanProjects(manifests.Projects, existing, false)}
-	if len(manifests.Tags) == 0 && !prune {
+	if len(manifests.Tags) == 0 && (!prune || len(manifests.Projects) > 0) {
 		return plan, nil
 	}
 
@@ -453,7 +474,8 @@ func planApply(ctx context.Context, client *Client, projectFlag string, files []
 	case err != nil:
 		return applyPlan{}, err
 	case ok:
-		if server, err = fetchServerTags(ctx, client.TagsOf(found), manifests.Tags, prune, scope); err != nil {
+		plan.tagsOf = client.TagsOf(found)
+		if server, err = fetchServerTags(ctx, plan.tagsOf, manifests.Tags, prune, scope); err != nil {
 			return applyPlan{}, err
 		}
 	case !plan.creates(plan.project):
@@ -515,15 +537,20 @@ func fetchServerTags(ctx context.Context, tags *Tags, manifests []TagManifest, p
 // projects, then the tags. It stops at the first failure; apply is
 // idempotent, so rerunning finishes the job.
 func executeApply(ctx context.Context, client *Client, plan applyPlan, out io.Writer) error {
-	if err := executeProjects(ctx, client, plan.projects, out); err != nil {
+	created, err := executeProjects(ctx, client, plan.projects, out)
+	if err != nil {
 		return err
 	}
 	if plan.project == "" {
 		return nil
 	}
-	tags, err := client.ProjectTags(ctx, plan.project)
-	if err != nil {
-		return err
+	tags := plan.tagsOf
+	if tags == nil {
+		if p, ok := created[plan.project]; ok {
+			tags = client.TagsOf(p)
+		} else if tags, err = client.ProjectTags(ctx, plan.project); err != nil {
+			return err // created meanwhile by someone else: found by its name
+		}
 	}
 	for _, s := range plan.tags {
 		var err error

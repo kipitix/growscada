@@ -19,8 +19,8 @@ const eventClientBufferSize = 64
 
 // eventHub subscribes to every EventType on the EventBus exactly once and
 // fans each published event out to the connected SSE clients of its stream:
-// an event of a project's content to the clients of that project's stream,
-// any other to the clients of the server's stream (eventStreamOf).
+// an event of a project's content to the clients following that project,
+// any other to the clients following the server's stream (eventStreamOf).
 type eventHub struct {
 	bus           eventbus.EventBus
 	subscriptions []eventbus.Subscription
@@ -41,11 +41,24 @@ var (
 )
 
 type eventClient struct {
-	// stream is the client's stream: a project's (its ID) or the server's
-	// (uuid.Nil).
-	stream   uuid.UUID
+	streams  eventStreams
 	messages chan []byte
 	closed   bool
+}
+
+// eventStreams are the streams a client follows: the server's, and the one
+// project's whose ID is project (uuid.Nil: none).
+type eventStreams struct {
+	server  bool
+	project uuid.UUID
+}
+
+// follows reports whether stream (see eventStreamOf) is one of s.
+func (s eventStreams) follows(stream uuid.UUID) bool {
+	if stream == uuid.Nil {
+		return s.server
+	}
+	return stream == s.project
 }
 
 // close ends the client's stream by closing its channel. Called with the
@@ -136,7 +149,7 @@ func (h *eventHub) broadcast(e event.Event) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for c := range h.clients {
-		if c.closed || c.stream != stream {
+		if c.closed || !c.streams.follows(stream) {
 			continue
 		}
 		select {
@@ -152,19 +165,19 @@ func (h *eventHub) broadcast(e event.Event) {
 // mu held.
 func (h *eventHub) hasClientsOf(stream uuid.UUID) bool {
 	for c := range h.clients {
-		if c.stream == stream {
+		if c.streams.follows(stream) {
 			return true
 		}
 	}
 	return false
 }
 
-// addClient registers a new SSE connection to stream (a project's ID, or
-// uuid.Nil for the server's) and returns its message channel. It refuses to
+// addClient registers a new SSE connection following streams and returns
+// its message channel. It refuses to
 // register once the hub is closed (errHubClosed) or beyond maxClients, of
 // all streams together (errTooManyClients), so the caller can reject the
 // connection before committing to any response.
-func (h *eventHub) addClient(stream uuid.UUID) (*eventClient, error) {
+func (h *eventHub) addClient(streams eventStreams) (*eventClient, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -175,7 +188,7 @@ func (h *eventHub) addClient(stream uuid.UUID) (*eventClient, error) {
 		return nil, errTooManyClients
 	}
 
-	c := &eventClient{stream: stream, messages: make(chan []byte, eventClientBufferSize)}
+	c := &eventClient{streams: streams, messages: make(chan []byte, eventClientBufferSize)}
 	h.clients[c] = struct{}{}
 	return c, nil
 }

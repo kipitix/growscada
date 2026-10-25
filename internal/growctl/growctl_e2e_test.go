@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/growctl"
 	"github.com/kipitix/growscada/internal/server/application"
@@ -618,6 +620,67 @@ func TestApply_MetadataProjectDiffersFromFlag_FailsWithoutChanges(t *testing.T) 
 	}
 }
 
+func TestApply_MetadataProject_WinsOverTheContext(t *testing.T) {
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
+	t.Setenv(growctl.ConfigEnv, filepath.Join(t.TempDir(), "config.yaml"))
+	if _, _, err := execGrowctlBare(t, srv, "", "config", "use-project", servertest.MainProjectName); err != nil {
+		t.Fatalf("use-project: %v", err)
+	}
+
+	out, _, err := execGrowctlBare(t, srv, lineProject+"---"+lineTag, "apply", "-f", "-")
+
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	assertOutput(t, out, "project/Line 1 created", "tag/speed created")
+	if tags := tagsByName(t, svc); len(tags) != 0 {
+		t.Errorf("the context's project must stay empty, got %v", tags)
+	}
+}
+
+func TestApply_ManifestsNamingTwoProjects_Fail(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+	inMain := strings.Replace(lineTag, "project: Line 1", "project: "+servertest.MainProjectName, 1)
+	inMain = strings.Replace(inMain, "name: speed", "name: other", 1)
+
+	_, _, err := execGrowctlBare(t, srv, lineProject+"---"+lineTag+"---"+inMain, "apply", "-f", "-")
+
+	if err == nil || !strings.Contains(err.Error(), "one project per command") {
+		t.Errorf("expected manifests of two projects to fail, got %v", err)
+	}
+}
+
+func TestApply_ProjectReplacedAfterThePlan_RunsOnThePlannedProject(t *testing.T) {
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
+	ctx := context.Background()
+	client := growctl.NewClient(srv.URL, srv.Client(), io.Discard)
+	execute, err := growctl.ApplyInTwoSteps(ctx, client, servertest.MainProjectName, strings.NewReader(twoTags))
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	main, _, err := client.FindProjectByName(ctx, servertest.MainProjectName)
+	if err != nil {
+		t.Fatalf("find Main: %v", err)
+	}
+	if _, err := client.UpdateProject(ctx, main.ID, apiv0.UpdateProjectRequest{Name: "Old Main", Version: main.Version}); err != nil {
+		t.Fatalf("rename Main: %v", err)
+	}
+	if _, err := client.CreateProject(ctx, apiv0.CreateProjectRequest{Name: servertest.MainProjectName}); err != nil {
+		t.Fatalf("create another Main: %v", err)
+	}
+
+	if err := execute(io.Discard); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+
+	if tags := tagsByName(t, svc); len(tags) != 2 {
+		t.Errorf("tags of the planned project: %v, want the manifest's two", tags)
+	}
+	if tags := projectTags(t, srv, servertest.MainProjectName); len(tags) != 0 {
+		t.Errorf("the new project with the name must stay empty, got %v", tags)
+	}
+}
+
 func TestApply_UnknownProject_Fails(t *testing.T) {
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
 
@@ -687,6 +750,21 @@ func TestApply_Prune_LeavesProjectsAlone(t *testing.T) {
 
 	if _, ok, err := apiclient.New(srv.URL, srv.Client()).FindProjectByName(context.Background(), "Line 1"); err != nil || !ok {
 		t.Errorf("--prune must not touch projects: %v, %v", ok, err)
+	}
+}
+
+func TestApply_PruneWithProjectsOnly_KeepsTags(t *testing.T) {
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
+	createTag(t, svc, "extra", "integer")
+
+	out, err := runGrowctl(t, srv, lineProject, "apply", "--prune")
+
+	if err != nil {
+		t.Fatalf("apply --prune: %v", err)
+	}
+	assertOutput(t, out, "project/Line 1 created")
+	if _, ok := tagsByName(t, svc)["extra"]; !ok {
+		t.Error("a manifest of projects alone must not prune the tags of the project growctl works in")
 	}
 }
 

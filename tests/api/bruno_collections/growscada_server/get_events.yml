@@ -15,7 +15,9 @@ docs: |
   own resources (project and widget-type created/updated/deleted), plus
   client_connected/client_disconnected and system_ready. The events of a
   project's content (tags, scenes, widgets) go to the project's stream, see
-  "get project events". The type names are the constants of
+  "get project events"; `?project=<project uuid>` joins them to this stream,
+  so one connection carries both (the UI's). A project not found (e.g.
+  deleted) adds nothing; an invalid UUID is a `400`. The type names are the constants of
   contract/api/v0. One connection per client, no history replay — only
   events published after connecting are sent.
 

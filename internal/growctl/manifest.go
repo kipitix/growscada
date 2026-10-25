@@ -15,6 +15,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/kipitix/growscada/contract"
 	manifestv0 "github.com/kipitix/growscada/contract/manifest/v0"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -167,7 +168,8 @@ func parseDocument(node *yaml.Node, manifests *Manifests) error {
 	if err := node.Decode(&header); err != nil {
 		return err
 	}
-	if err := checkAPIVersion(header.APIVersion); err != nil {
+	version, err := checkAPIVersion(header.APIVersion)
+	if err != nil {
 		return err
 	}
 	switch header.Kind {
@@ -180,8 +182,16 @@ func parseDocument(node *yaml.Node, manifests *Manifests) error {
 		if err != nil {
 			return err
 		}
+		if m.Project != "" {
+			if err := requireAPIVersion(version, projectsSince, "tag/"+m.Name+": metadata.project"); err != nil {
+				return err
+			}
+		}
 		manifests.Tags = append(manifests.Tags, m)
 	case manifestv0.KindProject:
+		if err := requireAPIVersion(version, projectsSince, "kind "+manifestv0.KindProject); err != nil {
+			return err
+		}
 		var doc manifestv0.ProjectDocument
 		if err := decodeStrict(node, &doc); err != nil {
 			return err
@@ -227,20 +237,36 @@ func validateProject(doc manifestv0.ProjectDocument) (ProjectManifest, error) {
 const preVersioningAPIVersion = "growscada/v1"
 
 // checkAPIVersion accepts any MINOR up to the one growctl knows of its
-// MAJOR. The check runs before the strict decode, so a field from a newer
-// MINOR is reported as "update growctl" rather than as an unknown field.
-func checkAPIVersion(apiVersion string) error {
+// MAJOR and returns it. The check runs before the strict decode, so a field
+// from a newer MINOR is reported as "update growctl" rather than as an
+// unknown field.
+func checkAPIVersion(apiVersion string) (contract.SchemaVersion, error) {
 	if apiVersion == preVersioningAPIVersion {
-		return fmt.Errorf("apiVersion %q is the format from before contract versioning: replace it with %q",
+		return contract.SchemaVersion{}, fmt.Errorf("apiVersion %q is the format from before contract versioning: replace it with %q",
 			apiVersion, manifestv0.APIVersion())
 	}
 	v, err := manifestv0.ParseAPIVersion(apiVersion)
 	if err != nil || !v.SameMajor(manifestv0.SchemaVersion()) {
-		return fmt.Errorf("unsupported apiVersion %q, expected %q", apiVersion, manifestv0.APIVersion())
+		return contract.SchemaVersion{}, fmt.Errorf("unsupported apiVersion %q, expected %q", apiVersion, manifestv0.APIVersion())
 	}
 	if v.NewerThan(manifestv0.SchemaVersion()) {
-		return fmt.Errorf("apiVersion %q is newer than this growctl understands (%s): update growctl",
+		return contract.SchemaVersion{}, fmt.Errorf("apiVersion %q is newer than this growctl understands (%s): update growctl",
 			apiVersion, manifestv0.APIVersion())
+	}
+	return v, nil
+}
+
+// projectsSince is the manifest version that brought kind Project and
+// metadata.project.
+var projectsSince = contract.SchemaVersion{Major: 0, Minor: 2}
+
+// requireAPIVersion rejects a feature of a document whose apiVersion v is
+// older than the one that brought it (since): a growctl of v would not
+// understand the document (ADR 0005).
+func requireAPIVersion(v, since contract.SchemaVersion, feature string) error {
+	if since.NewerThan(v) {
+		return fmt.Errorf("%s appeared in apiVersion %q, but the document states %q: raise its apiVersion",
+			feature, manifestv0.FormatAPIVersion(since), manifestv0.FormatAPIVersion(v))
 	}
 	return nil
 }

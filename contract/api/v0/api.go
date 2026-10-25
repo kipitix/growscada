@@ -21,3 +21,8 @@ const PathPrefix = "/api/v0"
 // ProjectPath is the path, under PathPrefix, of the project with the given
 // ID: the prefix of the resources of its content and of its event stream.
 func ProjectPath(projectID string) string { return "/projects/" + projectID }
+
+// EventsQueryProject is the parameter of GET /events joining to the stream
+// the events of the project with this ID. A project not found adds nothing:
+// the stream carries the server's events alone.
+const EventsQueryProject = "project"

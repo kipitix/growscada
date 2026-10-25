@@ -152,7 +152,7 @@ type Project struct {
 	panelResizeStartWidth int
 }
 
-// LocalStorage keys of the selection.
+// LocalStorage keys of the selection, kept per project (selectionKey).
 const (
 	sceneIDKey  = "project:sceneID"
 	widgetIDKey = "project:widgetID"
@@ -176,9 +176,7 @@ func (p *Project) OnMount(ctx app.Context) {
 	if savedTab != "" {
 		p.activeSubTab = projectSubTab(savedTab)
 	}
-	p.selectedSceneID = uiutil.LoadID(ctx, sceneIDKey)
-	p.selectedWidgetID = uiutil.LoadID(ctx, widgetIDKey)
-	p.selectedTagID = uiutil.LoadID(ctx, tagIDKey)
+	p.restoreSelection(ctx)
 	p.loadWidgetTypes(ctx)
 	p.loadScenes(ctx)
 	if p.selectedSceneID != uuid.Nil {
@@ -190,10 +188,9 @@ func (p *Project) OnMount(ctx app.Context) {
 }
 
 // SetProject shows the project id (uuid.Nil: none). What was shown of
-// another project is dropped, its selection and unsaved edits with it, and
-// the new project's content is loaded. Before the Project is mounted it only
-// remembers the project, whose content OnMount loads with the selection
-// restored.
+// another project is dropped, its unsaved edits with it; the new project's
+// selection is restored and its content loaded. Before the Project is
+// mounted it only remembers the project, whose content OnMount loads.
 func (p *Project) SetProject(id uuid.UUID) {
 	if id == p.projectID {
 		return
@@ -211,16 +208,31 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.sceneStates.Forget()
 	clear(p.staleScenes)
 	p.widgetsReloadDeferred = false
-	p.selectedSceneID, p.selectedTagID = uuid.Nil, uuid.Nil
-	uiutil.StoreID(ctx, sceneIDKey, uuid.Nil)
-	uiutil.StoreID(ctx, tagIDKey, uuid.Nil)
-	p.clearWidgetSelection(ctx)
+	p.restoreSelection(ctx)
+	p.widgetEdit = widgetEditFields{}
 	p.sceneEdit = sceneEditFields{}
 	p.editingSceneID, p.editingSceneName = uuid.Nil, ""
 	p.creatingTag, p.newTagName, p.newTagType = false, "", ""
 	p.simInputs = make(map[uuid.UUID]map[string]string)
 	p.loadScenes(ctx)
+	if p.selectedSceneID != uuid.Nil {
+		p.loadWidgets(ctx)
+	}
 	p.loadTags(ctx)
+	// Root calls it, so nothing marks this component for an update; with no
+	// project left no load dispatches either.
+	ctx.Update()
+}
+
+// selectionKey is the LocalStorage key base of the project shown.
+func (p *Project) selectionKey(base string) string { return base + ":" + p.projectID.String() }
+
+// restoreSelection reads the selection of the project shown from
+// LocalStorage.
+func (p *Project) restoreSelection(ctx app.Context) {
+	p.selectedSceneID = uiutil.LoadID(ctx, p.selectionKey(sceneIDKey))
+	p.selectedWidgetID = uiutil.LoadID(ctx, p.selectionKey(widgetIDKey))
+	p.selectedTagID = uiutil.LoadID(ctx, p.selectionKey(tagIDKey))
 }
 
 // ── Input simulation ──────────────────────────────────────────────────────────
@@ -237,7 +249,7 @@ func (p *Project) setSimInput(wid uuid.UUID, port, value string) {
 
 func (p *Project) selectWidget(ctx app.Context, id uuid.UUID) {
 	p.selectedWidgetID = id
-	uiutil.StoreID(ctx, widgetIDKey, id)
+	uiutil.StoreID(ctx, p.selectionKey(widgetIDKey), id)
 	for _, w := range p.widgets {
 		if w.ID == id {
 			p.syncEditingFields(w)
@@ -249,7 +261,7 @@ func (p *Project) selectWidget(ctx app.Context, id uuid.UUID) {
 func (p *Project) clearWidgetSelection(ctx app.Context) {
 	p.selectedWidgetID = uuid.Nil
 	p.widgetEdit = widgetEditFields{}
-	uiutil.StoreID(ctx, widgetIDKey, uuid.Nil)
+	uiutil.StoreID(ctx, p.selectionKey(widgetIDKey), uuid.Nil)
 }
 
 // ── Lookups ───────────────────────────────────────────────────────────────────

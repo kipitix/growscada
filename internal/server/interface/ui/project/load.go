@@ -81,7 +81,7 @@ func (p *Project) setScenes(ctx app.Context, mark sceneMark, scenes []apiv0.Scen
 	}
 
 	if p.selectedSceneID != prevSceneID {
-		uiutil.StoreID(ctx, sceneIDKey, p.selectedSceneID)
+		uiutil.StoreID(ctx, p.selectionKey(sceneIDKey), p.selectedSceneID)
 		if p.selectedSceneID != uuid.Nil {
 			p.loadWidgets(ctx)
 		}
@@ -188,5 +188,5 @@ func (p *Project) setTags(ctx app.Context, mark tagstate.Mark, n uint64, tags []
 		return
 	}
 	p.selectedTagID = uuid.Nil
-	uiutil.StoreID(ctx, tagIDKey, uuid.Nil)
+	uiutil.StoreID(ctx, p.selectionKey(tagIDKey), uuid.Nil)
 }

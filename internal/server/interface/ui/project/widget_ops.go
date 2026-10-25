@@ -8,6 +8,7 @@ import (
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
@@ -40,17 +41,13 @@ func (p *Project) createWidget(ctx app.Context, typeID uuid.UUID, x, y float64) 
 	}
 	req := apiv0.CreateWidgetRequest(widgetRequest(w, p.sceneVersions.Of(sceneID)))
 	mark := p.sceneVersions.Mark()
-	content := p.content
-	if content == nil {
-		return // no project shown
-	}
-	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.CreateWidgetResponse, error) {
+	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.CreateWidgetResponse, error) {
 		return content.CreateWidget(c, sceneID, req)
 	}, func(ctx app.Context, created apiv0.CreateWidgetResponse) {
 		p.sceneVersions.Observe(mark, sceneID, created.SceneVersion)
 		w.ID = created.ID
 		p.selectedWidgetID = created.ID
-		uiutil.StoreID(ctx, widgetIDKey, created.ID)
+		uiutil.StoreID(ctx, p.selectionKey(widgetIDKey), created.ID)
 		p.syncEditingFields(w)
 		p.loadWidgets(ctx)
 	}, p.rejectedSceneEdit(sceneID, nil))
@@ -63,11 +60,7 @@ func (p *Project) createWidget(ctx app.Context, typeID uuid.UUID, x, y float64) 
 func (p *Project) deleteWidget(ctx app.Context, widgetID uuid.UUID) {
 	sceneID := p.selectedSceneID
 	mark := p.sceneVersions.Mark()
-	content := p.content
-	if content == nil {
-		return // no project shown
-	}
-	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.WidgetResponse, error) {
+	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.WidgetResponse, error) {
 		return content.DeleteWidget(c, sceneID, widgetID)
 	}, func(ctx app.Context, deleted apiv0.WidgetResponse) {
 		if deleted.SceneVersion > 0 {
@@ -177,11 +170,7 @@ func (p *Project) putWidget(ctx app.Context, w apiv0.WidgetResponse) {
 	sceneID := p.selectedSceneID
 	req := apiv0.UpdateWidgetRequest(widgetRequest(w, p.sceneVersions.Of(sceneID)))
 	mark := p.sceneVersions.Mark()
-	content := p.content
-	if content == nil {
-		return // no project shown
-	}
-	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.UpdateWidgetResponse, error) {
+	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.UpdateWidgetResponse, error) {
 		return content.UpdateWidget(c, sceneID, w.ID, req)
 	}, func(ctx app.Context, updated apiv0.UpdateWidgetResponse) {
 		p.sceneVersions.Observe(mark, sceneID, updated.SceneVersion)

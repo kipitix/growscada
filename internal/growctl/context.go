@@ -78,27 +78,32 @@ func writeContext(c growctlContext) (string, error) {
 var errNoProject = errors.New("no project: use --project, growctl config use-project <name> or metadata.project")
 
 // projectFor returns the project growctl works in (ADR 0006): --project
-// (flag), else the context's, else the one the Tag manifests name in
-// metadata.project. A Tag manifest naming another project is an error, and
-// so is no project at all (a usage error).
+// (flag), else the one the Tag manifests name in metadata.project, else the
+// context's — like a namespace in kubectl, the context is only the default.
+// A Tag manifest naming another project than --project is an error, and so
+// are manifests naming two projects (a command works in one: the Tags that
+// name none are of it too) and no project at all (a usage error).
 func projectFor(flag string, tags []TagManifest) (string, error) {
-	name, from := flag, "--project"
+	name := flag
+	for _, t := range tags {
+		switch {
+		case t.Project == "":
+		case flag != "" && t.Project != flag:
+			return "", fmt.Errorf("tag/%s: metadata.project is %q, but growctl works in project %q (from --project)",
+				t.Name, t.Project, flag)
+		case name == "":
+			name = t.Project
+		case t.Project != name:
+			return "", fmt.Errorf("tag/%s: metadata.project is %q, but other manifests name project %q: growctl works in one project per command",
+				t.Name, t.Project, name)
+		}
+	}
 	if name == "" {
 		c, err := readContext()
 		if err != nil {
 			return "", err
 		}
-		name, from = c.Project, "the context"
-	}
-	for _, t := range tags {
-		switch {
-		case t.Project == "":
-		case name == "":
-			name, from = t.Project, "metadata.project of tag/"+t.Name
-		case t.Project != name:
-			return "", fmt.Errorf("tag/%s: metadata.project is %q, but growctl works in project %q (from %s)",
-				t.Name, t.Project, name, from)
-		}
+		name = c.Project
 	}
 	if name == "" {
 		return "", usageError(errNoProject)

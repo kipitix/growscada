@@ -75,8 +75,9 @@ type TagDocument struct {
 
 // Metadata identifies the declared entity of a Project: its name, unique in
 // the Project, and optionally the Project's name. Without Project the entity
-// is of the Project growctl works in (its --project or context); with one,
-// the two must agree.
+// is of the Project growctl works in (its --project, the one the other
+// manifests name, or its context); with one, it is of that Project, which
+// --project, if given, must agree with.
 type Metadata struct {
 	Name    string `yaml:"name"`
 	Project string `yaml:"project,omitempty"`

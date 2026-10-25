@@ -60,7 +60,7 @@ func (o *Operation) OnMount(ctx app.Context) {
 	o.widgetTypes = map[uuid.UUID]apiv0.WidgetTypeResponse{}
 	ctx.ObserveState("theme", &o.ThemeMode)
 	ctx.ObserveState(eventlog.StateDisconnected, &o.disconnected)
-	o.selectedSceneID = uiutil.LoadID(ctx, sceneStorageKey)
+	o.selectedSceneID = uiutil.LoadID(ctx, o.sceneKey())
 
 	o.reload(ctx, eventlog.AllTargets)
 
@@ -75,7 +75,8 @@ func (o *Operation) OnMount(ctx app.Context) {
 }
 
 // SetProject shows the project id (uuid.Nil: none), dropping what was shown
-// of another one; before the Operation is mounted it only remembers it.
+// of another one and restoring the new one's selected Scene; before the
+// Operation is mounted it only remembers it.
 func (o *Operation) SetProject(id uuid.UUID) {
 	if id == o.projectID {
 		return
@@ -88,10 +89,16 @@ func (o *Operation) SetProject(id uuid.UUID) {
 		return
 	}
 	o.scenes, o.widgets, o.widgetsSceneID, o.tags = nil, nil, uuid.Nil, tagstate.Tags{}
-	o.selectedSceneID = uuid.Nil
-	uiutil.StoreID(o.compoCtx, sceneStorageKey, uuid.Nil)
-	o.reload(o.compoCtx, eventlog.ReloadTargets{Scenes: true, Tags: true})
+	o.selectedSceneID = uiutil.LoadID(o.compoCtx, o.sceneKey())
+	o.reload(o.compoCtx, eventlog.ReloadTargets{Scenes: true, Widgets: true, Tags: true})
+	// Root calls it, so nothing marks this component for an update; with no
+	// project left no load dispatches either.
+	o.compoCtx.Update()
 }
+
+// sceneKey is the LocalStorage key of the selected Scene of the project
+// shown.
+func (o *Operation) sceneKey() string { return sceneStorageKey + ":" + o.projectID.String() }
 
 func (o *Operation) reload(ctx app.Context, targets eventlog.ReloadTargets) {
 	if targets.WidgetTypes {
@@ -115,7 +122,7 @@ func (o *Operation) selectScene(ctx app.Context, sceneID uuid.UUID) {
 		return
 	}
 	o.selectedSceneID = sceneID
-	uiutil.StoreID(ctx, sceneStorageKey, sceneID)
+	uiutil.StoreID(ctx, o.sceneKey(), sceneID)
 	o.loadWidgets(ctx)
 }
 

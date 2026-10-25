@@ -208,6 +208,73 @@ func TestEventStreams_RouteEventsByProject(t *testing.T) {
 	}
 }
 
+func TestGetEvents_WithProject_CarriesServerAndProjectEvents(t *testing.T) {
+	bus := eventbus.NewEventBus()
+	h := restapi.NewEventsHandler(bus, anyProjects{}, 100)
+	other := uuid.New()
+	otherID := id.NewID(id.IDWithUUID[project.Project](other))
+
+	rec := newSyncRecorder()
+	cancel, done := runEventsOfProjectHandler(t, h, rec, mainProject.String())
+	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), ": connected") })
+
+	mainTag := id.NewID[tag.Tag]()
+	bus.Publish(tag.NewTagCreatedEvent(id.NewID[tag.Tag](), otherID))
+	bus.Publish(tag.NewTagCreatedEvent(mainTag, mainProjectID))
+	bus.Publish(project.NewProjectCreatedEvent(otherID))
+
+	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), "project_created") })
+	cancel()
+	<-done
+
+	var got []string
+	for _, m := range sseEventMessages(t, rec.body()) {
+		if typ := m["type"].(string); !strings.HasPrefix(typ, "client_") {
+			got = append(got, typ+" "+m["id"].(string))
+		}
+	}
+	if len(got) != 2 || got[0] != "tag_created "+mainTag.String() || got[1] != "project_created "+other.String() {
+		t.Errorf("the stream with ?project=Main: %v, want Main's tag_created and project_created only", got)
+	}
+}
+
+func TestGetEvents_WithUnknownProject_CarriesServerEventsOnly(t *testing.T) {
+	cleanProjectsRest(t)
+	services := newServices()
+	bus := eventbus.NewEventBus()
+	h := restapi.NewEventsHandler(bus, services.projects, 100)
+	gone := uuid.New()
+	goneID := id.NewID(id.IDWithUUID[project.Project](gone))
+
+	rec := newSyncRecorder()
+	cancel, done := runEventsOfProjectHandler(t, h, rec, gone.String())
+	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), ": connected") })
+
+	bus.Publish(tag.NewTagCreatedEvent(id.NewID[tag.Tag](), goneID))
+	bus.Publish(project.NewProjectDeletedEvent(goneID))
+
+	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), "project_deleted") })
+	cancel()
+	<-done
+
+	if strings.Contains(rec.body(), "tag_created") {
+		t.Errorf("the stream of a project not found carries its content: %q", rec.body())
+	}
+}
+
+func TestGetEvents_InvalidProject_Is400(t *testing.T) {
+	h := restapi.NewEventsHandler(eventbus.NewEventBus(), anyProjects{}, 100)
+
+	rec := newSyncRecorder()
+	cancel, done := runEventsOfProjectHandler(t, h, rec, "not-a-uuid")
+	defer cancel()
+	<-done
+
+	if rec.code() != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d %q", rec.code(), rec.body())
+	}
+}
+
 func TestGetProjectEvents_UnknownProject_Is404(t *testing.T) {
 	cleanProjectsRest(t)
 	services := newServices()
