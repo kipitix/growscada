@@ -55,11 +55,11 @@ _Avoid_: screen, mnemonic, page, display
 ### Organisation
 
 **Organization**:
-The tenant: the top-level owner of Projects and Libraries, whose members are the people working in them. Everything a server stores belongs to exactly one Organization; Organizations are isolated from each other, except that an Organization may make a Library public so that any Project on the server can pin its Library Releases. Not yet modelled.
+The tenant: the top-level owner of Projects and Libraries, whose members are the people working in them. Everything a server stores belongs to exactly one Organization; Organizations are isolated from each other, except that an Organization may make a Library public so that any Project on the server can pin its Library Releases. An Organization exists on one server only: the same company on two servers is two Organizations. Not yet modelled.
 _Avoid_: tenant (in UI), company, account, team
 
 **Project**:
-Owned by one Organization. The unit of operational ownership and isolation: Tags, Scenes with their Widgets, the Draft, Revisions and the Journal belong to exactly one Project. One server may host several Projects, in both node roles; Projects never reference each other's entities. The only thing Projects share are Libraries, each through a pinned Library Release.
+Owned by one Organization. The unit of operational ownership and isolation: Tags, Scenes with their Widgets, the Draft, Revisions and the Journal belong to exactly one Project. One server may host several Projects, in both node roles; Projects never reference each other's entities. A Project keeps its identity across servers — through Deploy and ProjectFile — whereas its name and the Organization that owns it are local to each server: the integrator's Engineering node and the plant's Runtime node hold the same Project under different Organizations. The only thing Projects share are Libraries, each through a pinned Library Release.
 _Avoid_: workspace, site, solution
 
 **Library**:

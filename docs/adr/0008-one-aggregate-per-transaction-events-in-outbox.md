@@ -17,4 +17,5 @@ Every transaction changes exactly one aggregate. The aggregate records its own d
 - The outbox payload is an internal codec, not a contract (ADR 0005): rows live seconds, and a format change must keep reading the previous one until the outbox has drained.
 - A long transaction anywhere in the database holds back the delivery of every younger one until it ends.
 - With a second server process on the same database both dispatchers would deliver every event and SSE clients of one would miss the other's events; that needs a different design.
+- Removing a container of aggregates is a policy too: a deleted Project is emptied Scene by Scene and Tag by Tag (ADR 0006), its content briefly outliving it.
 - Policy jobs carry no event payload and merge, so they serve only policies that bring state into line. A reaction to each operational event (a notification per Alert raised, a Computation counting pulses) must not merge; it reads the Journal (ADR 0002) with a position of its own instead.
