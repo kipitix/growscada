@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -253,8 +254,9 @@ func newDeleteCommand(s *settings) *cobra.Command {
 		Long: "Delete by name: the tags declared in the manifest (-f; the spec is ignored,\n" +
 			"missing ones are reported as not found), then its projects with all their\n" +
 			"content — or the tags matching --pattern/--regex. The tags are those of the\n" +
-			"project growctl works in (--project). Deleting by pattern lists the tags and\n" +
-			"asks for confirmation unless --yes is given.",
+			"project growctl works in (--project). Deleting projects or deleting by pattern\n" +
+			"lists what goes and asks for confirmation unless --yes is given; manifests\n" +
+			"read from stdin (-f -) leave no way to answer, so they need --yes.",
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			filter, err := nameFilterFromFlags(cmd, pattern, regex)
@@ -269,18 +271,20 @@ func newDeleteCommand(s *settings) *cobra.Command {
 			case len(files) == 0:
 				return usageError(errors.New("nothing to delete: use -f <file|directory|-> or --pattern/--regex"))
 			}
-			return deleteManifests(cmd, s.client(), s.project, files)
+			return deleteManifests(cmd, s.client(), s.project, files, yes)
 		},
 	}
 	addFileFlag(cmd, &files)
 	addNameFilterFlags(cmd, &pattern, &regex, "delete")
-	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "delete by pattern without asking for confirmation")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "delete projects or by pattern without asking for confirmation")
 	return cmd
 }
 
 // deleteManifests deletes the manifests' tags by name, in the project growctl
-// works in, then their projects.
-func deleteManifests(cmd *cobra.Command, client *Client, projectFlag string, files []string) error {
+// works in, then their projects. Projects that exist go with all their
+// content, so they are deleted only after the user confirms the list (see
+// confirm) unless yes; nothing is deleted without it.
+func deleteManifests(cmd *cobra.Command, client *Client, projectFlag string, files []string, yes bool) error {
 	ctx := cmd.Context()
 	manifests, err := ReadManifests(files, cmd.InOrStdin())
 	if err != nil {
@@ -289,7 +293,7 @@ func deleteManifests(cmd *cobra.Command, client *Client, projectFlag string, fil
 	var tags *Tags
 	var tagSteps []Step
 	if len(manifests.Tags) > 0 {
-		name, err := projectFor(projectFlag, manifests.Tags)
+		name, err := projectFor(projectFlag, manifests)
 		if err != nil {
 			return err
 		}
@@ -310,11 +314,45 @@ func deleteManifests(cmd *cobra.Command, client *Client, projectFlag string, fil
 	if err != nil {
 		return err
 	}
+	projectSteps := PlanProjects(manifests.Projects, existing, true)
+	var doomed []string
+	for _, s := range projectSteps {
+		if s.Action == ActionDelete {
+			doomed = append(doomed, "project/"+s.Name)
+		}
+	}
+	if len(doomed) > 0 && !yes {
+		if slices.Contains(files, "-") {
+			return usageError(fmt.Errorf("delete of %s with all their content needs confirmation, but the manifests are read from stdin: give --yes",
+				strings.Join(doomed, ", ")))
+		}
+		if !confirm(cmd, "Projects to delete with all their scenes, widgets and tags:", doomed,
+			fmt.Sprintf("Delete %d project(s)?", len(doomed))) {
+			return nil
+		}
+	}
 	if err := executeDelete(ctx, tags, tagSteps, cmd.OutOrStdout()); err != nil {
 		return err
 	}
-	_, err = executeProjects(ctx, client, PlanProjects(manifests.Projects, existing, true), cmd.OutOrStdout())
+	_, err = executeProjects(ctx, client, projectSteps, cmd.OutOrStdout())
 	return err
+}
+
+// confirm lists the items under the header and asks the question on stderr,
+// reading the answer from stdin; anything but y/yes aborts, reported there.
+func confirm(cmd *cobra.Command, header string, items []string, question string) bool {
+	prompt := cmd.ErrOrStderr()
+	fmt.Fprintln(prompt, header)
+	for _, item := range items {
+		fmt.Fprintf(prompt, "  %s\n", item)
+	}
+	fmt.Fprintf(prompt, "%s [y/N]: ", question)
+	answer, _ := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
+	if a := strings.ToLower(strings.TrimSpace(answer)); a != "y" && a != "yes" {
+		fmt.Fprintln(prompt, "Aborted, nothing deleted.")
+		return false
+	}
+	return true
 }
 
 // deleteMatching deletes the tags of the project growctl works in selected by
@@ -322,7 +360,7 @@ func deleteManifests(cmd *cobra.Command, client *Client, projectFlag string, fil
 // stdin) unless yes.
 func deleteMatching(cmd *cobra.Command, client *Client, projectFlag string, filter NameFilter, yes bool) error {
 	ctx := cmd.Context()
-	name, err := projectFor(projectFlag, nil)
+	name, err := projectFor(projectFlag, Manifests{})
 	if err != nil {
 		return err
 	}
@@ -341,15 +379,12 @@ func deleteMatching(cmd *cobra.Command, client *Client, projectFlag string, filt
 	}
 
 	if !yes {
-		prompt := cmd.ErrOrStderr()
-		fmt.Fprintf(prompt, "Tags of project/%s matching %s:\n", name, filter)
-		for _, t := range matched {
-			fmt.Fprintf(prompt, "  tag/%s\n", t.Name)
+		items := make([]string, len(matched))
+		for i, t := range matched {
+			items[i] = "tag/" + t.Name
 		}
-		fmt.Fprintf(prompt, "Delete %d tag(s)? [y/N]: ", len(matched))
-		answer, _ := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
-		if a := strings.ToLower(strings.TrimSpace(answer)); a != "y" && a != "yes" {
-			fmt.Fprintln(prompt, "Aborted, nothing deleted.")
+		if !confirm(cmd, fmt.Sprintf("Tags of project/%s matching %s:", name, filter), items,
+			fmt.Sprintf("Delete %d tag(s)?", len(matched))) {
 			return nil
 		}
 	}
@@ -465,7 +500,7 @@ func planApply(ctx context.Context, client *Client, projectFlag string, files []
 		return plan, nil
 	}
 
-	if plan.project, err = projectFor(projectFlag, manifests.Tags); err != nil {
+	if plan.project, err = projectFor(projectFlag, manifests); err != nil {
 		return applyPlan{}, err
 	}
 	var server []ServerTag

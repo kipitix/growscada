@@ -81,7 +81,7 @@ func newGetTagsCommand(s *settings) *cobra.Command {
 			if err := checkOutput(output); err != nil {
 				return err
 			}
-			name, err := projectFor(s.project, nil)
+			name, err := projectFor(s.project, Manifests{})
 			if err != nil {
 				return err
 			}

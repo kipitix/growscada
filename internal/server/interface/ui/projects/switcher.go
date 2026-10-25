@@ -7,6 +7,7 @@ package projects
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
@@ -59,10 +60,41 @@ func (s *Switcher) OnMount(ctx app.Context) {
 	s.preferred = uiutil.LoadID(ctx, selectedKey)
 	s.load(ctx)
 	ctx.Handle(eventlog.ActionServerEvent, func(ctx app.Context, a app.Action) {
-		if ev, ok := a.Value.(apiv0.Event); ok && eventlog.ReloadTargetsFor(ev).Projects {
+		ev, ok := a.Value.(apiv0.Event)
+		if !ok || !eventlog.ReloadTargetsFor(ev).Projects {
+			return
+		}
+		if ev.Type == apiv0.EventProjectDeleted {
+			s.forget(ctx, uiutil.ParseID(ev.ID))
+		}
+		s.load(ctx)
+	})
+	ctx.Handle(uiutil.ActionProjectGone, func(ctx app.Context, a app.Action) {
+		if id, ok := a.Value.(uuid.UUID); ok {
+			s.forget(ctx, id)
 			s.load(ctx)
 		}
 	})
+}
+
+// forget drops the project id, known to be gone, from the list at once,
+// without waiting for the list to be reloaded: if it is the one selected,
+// another is selected — and announced — right away, so the modes and the
+// event stream leave it before more of its content (deleted by the server
+// after it) is loaded or shown.
+func (s *Switcher) forget(ctx app.Context, id uuid.UUID) {
+	if id == uuid.Nil {
+		return
+	}
+	if s.preferred == id {
+		s.preferred = uuid.Nil
+	}
+	if i := uiutil.IdxByID(s.projects, id, uiutil.ProjectID); i >= 0 {
+		s.projects = slices.Delete(slices.Clone(s.projects), i, i+1)
+	}
+	if s.selected == id {
+		s.reselect(ctx)
+	}
 }
 
 // load (re)loads the list of projects.
@@ -135,7 +167,7 @@ func (s *Switcher) Rename(ctx app.Context, name string) {
 }
 
 // Delete deletes the selected project with all its content; the first
-// remaining project is selected.
+// remaining project is selected as soon as the server confirms.
 func (s *Switcher) Delete(ctx app.Context) {
 	id := s.selected
 	if id == uuid.Nil {
@@ -144,6 +176,7 @@ func (s *Switcher) Delete(ctx app.Context) {
 	uiutil.Call(s.compoCtx, func(c context.Context) (apiv0.ProjectResponse, error) {
 		return s.client.DeleteProject(c, id)
 	}, func(ctx app.Context, _ apiv0.ProjectResponse) {
+		s.forget(ctx, id)
 		s.load(ctx)
 	}, func(ctx app.Context, err error) {
 		uiutil.ShowError(ctx, err)

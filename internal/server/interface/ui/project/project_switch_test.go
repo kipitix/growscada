@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
+	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
 func TestSetProject_ShowsTheContentOfTheNewProjectOnly(t *testing.T) {
@@ -51,5 +53,33 @@ func TestSetProject_ShowsTheContentOfTheNewProjectOnly(t *testing.T) {
 	}
 	if len(f.p.scenes) != 0 || f.p.selectedSceneID != uuid.Nil {
 		t.Errorf("no project: scenes %+v, selected %v", f.p.scenes, f.p.selectedSceneID)
+	}
+}
+
+// TestProjectGone_TellsTheSwitcherInsteadOfShowingAnError: the stream of a
+// project deleted meanwhile still opens (the server's alone) and its resync
+// loads the project's content; the 404 is the project's absence, not an
+// error to show.
+func TestProjectGone_TellsTheSwitcherInsteadOfShowingAnError(t *testing.T) {
+	url, api := newServer(t)
+	created, err := api.CreateProject(context.Background(), apiv0.CreateProjectRequest{Name: "Line 1"})
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	f := mount(t, url, api)
+	f.p.SetProject(created.ID)
+	var gone []uuid.UUID
+	f.p.compoCtx.Handle(uiutil.ActionProjectGone, func(_ app.Context, a app.Action) {
+		gone = append(gone, a.Value.(uuid.UUID))
+	})
+	if _, err := api.DeleteProject(context.Background(), created.ID); err != nil {
+		t.Fatalf("delete project: %v", err)
+	}
+
+	f.event(apiv0.Event{Type: eventlog.EventProjectResync})
+
+	f.noToasts()
+	if len(gone) == 0 || slices.ContainsFunc(gone, func(id uuid.UUID) bool { return id != created.ID }) {
+		t.Errorf("project gone: %v, want Line 1", gone)
 	}
 }

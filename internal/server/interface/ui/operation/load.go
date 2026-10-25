@@ -35,11 +35,11 @@ func (o *Operation) loadScenes(ctx app.Context) {
 		o.scenes = nil
 		return
 	}
-	uiutil.LoadFor(o.compoCtx, &o.scenesReloader, o.projectContent,
+	uiutil.LoadOfProject(o.compoCtx, &o.scenesReloader, o.projectContent,
 		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.SceneResponse, error) {
 			return pc.ListScenes(c)
 		},
-		func(ctx app.Context, _ *apiclient.ProjectClient, scenes []apiv0.SceneResponse) {
+		func(ctx app.Context, scenes []apiv0.SceneResponse) {
 			o.scenes = scenes
 			o.selectScene(ctx, selectScene(o.scenes, o.selectedSceneID))
 		}, o.loadScenes)
@@ -68,11 +68,11 @@ func (o *Operation) loadTags(ctx app.Context) {
 		return
 	}
 	mark := o.tags.Mark()
-	uiutil.LoadFor(o.compoCtx, &o.tagsReloader, o.projectContent,
+	uiutil.LoadOfProject(o.compoCtx, &o.tagsReloader, o.projectContent,
 		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.TagResponse, error) {
 			return pc.ListTags(c)
 		},
-		func(ctx app.Context, _ *apiclient.ProjectClient, tags []apiv0.TagResponse) {
+		func(ctx app.Context, tags []apiv0.TagResponse) {
 			o.tags = o.tags.Merge(mark, tags)
 		}, o.loadTags)
 }

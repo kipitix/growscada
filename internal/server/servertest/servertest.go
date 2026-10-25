@@ -103,7 +103,8 @@ var MainProject = uuid.MustParse("b0000000-0000-4000-8000-000000000001")
 const MainProjectName = "Main"
 
 // StartAPI cleans every table (tags, widgets, scenes, widget_types, projects
-// but MainProject, outbox, policy_jobs) and serves the real REST API over the
+// but MainProject — restored live if a test deleted it —, outbox,
+// policy_jobs) and serves the real REST API over the
 // database, with the outbox dispatcher delivering committed events to its
 // event streams and the policy runner running the policies, as the server
 // does. The returned TagService is the one behind the API, for arranging and
@@ -113,7 +114,11 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	if _, err := db.ExecContext(context.Background(), "DELETE FROM tags; DELETE FROM widgets; DELETE FROM scenes; DELETE FROM widget_types; "+
 		"DELETE FROM outbox; DELETE FROM policy_jobs; "+
 		"DELETE FROM projects WHERE id <> '"+MainProject.String()+"'; "+
-		"UPDATE projects SET name = '"+MainProjectName+"', version = 1, deleted_at = NULL"); err != nil {
+		// A test that deleted Main may have left its row removed by the
+		// cleanup policy, not only marked.
+		"INSERT INTO projects (id, organization_id, name, version) "+
+		"SELECT '"+MainProject.String()+"', id, '"+MainProjectName+"', 1 FROM organizations "+
+		"ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, version = 1, deleted_at = NULL"); err != nil {
 		t.Fatalf("clean the database: %v", err)
 	}
 	bus := eventbus.NewEventBus()

@@ -79,13 +79,15 @@ var errNoProject = errors.New("no project: use --project, growctl config use-pro
 
 // projectFor returns the project growctl works in (ADR 0006): --project
 // (flag), else the one the Tag manifests name in metadata.project, else the
-// context's — like a namespace in kubectl, the context is only the default.
-// A Tag manifest naming another project than --project is an error, and so
-// are manifests naming two projects (a command works in one: the Tags that
-// name none are of it too) and no project at all (a usage error).
-func projectFor(flag string, tags []TagManifest) (string, error) {
+// one Project the manifests declare, else the context's — like a namespace
+// in kubectl, the context is only the default. A Tag manifest naming another
+// project than --project is an error, and so are manifests naming two
+// projects (a command works in one: the Tags that name none are of it too),
+// Tags naming none beside several declared Projects (which one is theirs is
+// not said) and no project at all (a usage error).
+func projectFor(flag string, manifests Manifests) (string, error) {
 	name := flag
-	for _, t := range tags {
+	for _, t := range manifests.Tags {
 		switch {
 		case t.Project == "":
 		case flag != "" && t.Project != flag:
@@ -96,6 +98,16 @@ func projectFor(flag string, tags []TagManifest) (string, error) {
 		case t.Project != name:
 			return "", fmt.Errorf("tag/%s: metadata.project is %q, but other manifests name project %q: growctl works in one project per command",
 				t.Name, t.Project, name)
+		}
+	}
+	if name == "" && len(manifests.Tags) > 0 {
+		switch len(manifests.Projects) {
+		case 0:
+		case 1:
+			name = manifests.Projects[0].Name
+		default:
+			return "", usageError(fmt.Errorf("the manifests declare %d projects: name the project of the tags with metadata.project or --project",
+				len(manifests.Projects)))
 		}
 	}
 	if name == "" {

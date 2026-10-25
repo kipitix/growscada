@@ -2,6 +2,7 @@ package projects
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uitest"
+	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 	"github.com/kipitix/growscada/internal/server/servertest"
 )
 
@@ -42,13 +44,19 @@ type fixture struct {
 
 func start(t *testing.T, arrange func(api *apiclient.Client)) *fixture {
 	t.Helper()
+	return startWith(t, http.DefaultClient, arrange)
+}
+
+// startWith is start with the Switcher's requests sent through httpClient.
+func startWith(t *testing.T, httpClient *http.Client, arrange func(api *apiclient.Client)) *fixture {
+	t.Helper()
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
 	api := apiclient.New(srv.URL, srv.Client())
 	if arrange != nil {
 		arrange(api)
 	}
 	f := &fixture{t: t, api: api}
-	f.s = NewSwitcher(apiclient.New(srv.URL, http.DefaultClient), func(id uuid.UUID) { f.announced = append(f.announced, id) })
+	f.s = NewSwitcher(apiclient.New(srv.URL, httpClient), func(id uuid.UUID) { f.announced = append(f.announced, id) })
 	f.e = uitest.Load(t, mountOnHost{f.s})
 	return f
 }
@@ -171,5 +179,69 @@ func TestSwitcher_NoProjectLeft_SelectsNone(t *testing.T) {
 	f.lastAnnounced(uuid.Nil)
 	if html := app.HTMLString(f.s.Render()); !strings.Contains(html, "— no project —") {
 		t.Errorf("the switcher does not say there is no project: %s", html)
+	}
+}
+
+// offline fails every request once off is set, as if the server were gone.
+type offline struct{ off bool }
+
+func (o *offline) RoundTrip(r *http.Request) (*http.Response, error) {
+	if o.off {
+		return nil, errors.New("offline")
+	}
+	return http.DefaultTransport.RoundTrip(r)
+}
+
+// TestSwitcher_SelectedDeleted_LeftBeforeTheListIsReloaded: the selection
+// moves on as the deletion is learned, so the content the server deletes
+// after the project (its events still on the way) is not loaded for it.
+// The list is not reloaded here (the requests fail): the deletion alone
+// moves the selection.
+func TestSwitcher_SelectedDeleted_LeftBeforeTheListIsReloaded(t *testing.T) {
+	for name, learn := range map[string]func(ctx app.Context, id uuid.UUID){
+		"project_deleted": func(ctx app.Context, id uuid.UUID) {
+			ctx.NewActionWithValue(eventlog.ActionServerEvent, apiv0.Event{Type: apiv0.EventProjectDeleted, ID: id.String()})
+		},
+		"a mode found it gone": func(ctx app.Context, id uuid.UUID) {
+			ctx.NewActionWithValue(uiutil.ActionProjectGone, id)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			transport := &offline{}
+			f := startWith(t, &http.Client{Transport: transport}, nil)
+			line := f.createProject("Line 1")
+			f.s.load(f.s.compoCtx)
+			f.run()
+			f.s.Select(f.s.compoCtx, line)
+			if _, err := f.api.DeleteProject(context.Background(), line); err != nil {
+				t.Fatalf("delete project: %v", err)
+			}
+			transport.off = true
+
+			learn(f.s.compoCtx, line)
+			f.run()
+
+			f.lastAnnounced(servertest.MainProject)
+			if n := len(f.s.Projects()); n != 1 {
+				t.Errorf("listed %d projects, want Main only", n)
+			}
+		})
+	}
+}
+
+func TestSwitcher_OtherProjectDeleted_KeepsTheSelection(t *testing.T) {
+	f := start(t, nil)
+	line := f.createProject("Line 1")
+	f.s.load(f.s.compoCtx)
+	f.run()
+	if _, err := f.api.DeleteProject(context.Background(), line); err != nil {
+		t.Fatalf("delete project: %v", err)
+	}
+
+	f.s.compoCtx.NewActionWithValue(eventlog.ActionServerEvent, apiv0.Event{Type: apiv0.EventProjectDeleted, ID: line.String()})
+	f.run()
+
+	if len(f.announced) != 1 || f.s.Selected() != servertest.MainProject || len(f.s.Projects()) != 1 {
+		t.Errorf("announced %v, selected %v, listed %+v: want Main kept", f.announced, f.s.Selected(), f.s.Projects())
 	}
 }

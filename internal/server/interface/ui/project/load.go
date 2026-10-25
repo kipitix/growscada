@@ -34,11 +34,11 @@ func (p *Project) loadScenes(ctx app.Context) {
 		return
 	}
 	mark := p.markScenes()
-	uiutil.LoadFor(p.compoCtx, &p.scenesReloader, p.projectContent,
+	uiutil.LoadOfProject(p.compoCtx, &p.scenesReloader, p.projectContent,
 		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.SceneResponse, error) {
 			return pc.ListScenes(c)
 		},
-		func(ctx app.Context, _ *apiclient.ProjectClient, scenes []apiv0.SceneResponse) {
+		func(ctx app.Context, scenes []apiv0.SceneResponse) {
 			p.setScenes(ctx, mark, scenes)
 		}, p.loadScenes)
 }
@@ -162,11 +162,11 @@ func (p *Project) loadTags(ctx app.Context) {
 	mark := p.tags.Mark()
 	p.tagLists++
 	n := p.tagLists
-	uiutil.LoadFor(p.compoCtx, &p.tagsReloader, p.projectContent,
+	uiutil.LoadOfProject(p.compoCtx, &p.tagsReloader, p.projectContent,
 		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.TagResponse, error) {
 			return pc.ListTags(c)
 		},
-		func(ctx app.Context, _ *apiclient.ProjectClient, tags []apiv0.TagResponse) {
+		func(ctx app.Context, tags []apiv0.TagResponse) {
 			p.setTags(ctx, mark, n, tags)
 		}, p.loadTags)
 }

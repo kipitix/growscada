@@ -638,6 +638,99 @@ func TestApply_MetadataProject_WinsOverTheContext(t *testing.T) {
 	}
 }
 
+// lineTagOfNoProject is lineTag without metadata.project.
+var lineTagOfNoProject = strings.Replace(lineTag, "  project: Line 1\n", "", 1)
+
+func TestApply_TagsOfNoProject_GoToTheOneDeclaredProject_NotTheContexts(t *testing.T) {
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
+	t.Setenv(growctl.ConfigEnv, filepath.Join(t.TempDir(), "config.yaml"))
+	if _, _, err := execGrowctlBare(t, srv, "", "config", "use-project", servertest.MainProjectName); err != nil {
+		t.Fatalf("use-project: %v", err)
+	}
+
+	out, _, err := execGrowctlBare(t, srv, lineProject+"---"+lineTagOfNoProject, "apply", "-f", "-")
+
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	assertOutput(t, out, "project/Line 1 created", "tag/speed created")
+	if tags := projectTags(t, srv, "Line 1"); tags["speed"] != "7" {
+		t.Errorf("tags of Line 1: %v", tags)
+	}
+	if tags := tagsByName(t, svc); len(tags) != 0 {
+		t.Errorf("the context's project must stay empty, got %v", tags)
+	}
+}
+
+func TestApply_TagsOfNoProject_WithoutContext_GoToTheOneDeclaredProject(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+	t.Setenv(growctl.ConfigEnv, filepath.Join(t.TempDir(), "config.yaml"))
+
+	if _, _, err := execGrowctlBare(t, srv, lineProject+"---"+lineTagOfNoProject, "apply", "-f", "-"); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	if tags := projectTags(t, srv, "Line 1"); tags["speed"] != "7" {
+		t.Errorf("tags of Line 1: %v", tags)
+	}
+}
+
+func TestApply_TagsOfNoProject_FlagWinsOverTheDeclaredProject(t *testing.T) {
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
+
+	if _, err := runGrowctl(t, srv, lineProject+"---"+lineTagOfNoProject, "apply"); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	if tags := tagsByName(t, svc); tags["speed"].Value != "7" {
+		t.Errorf("tags of Main (--project): %v", tags)
+	}
+	if tags := projectTags(t, srv, "Line 1"); len(tags) != 0 {
+		t.Errorf("Line 1 must stay empty, got %v", tags)
+	}
+}
+
+func TestApply_TagsOfNoProject_BesideTwoDeclaredProjects_IsUsageError(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+	t.Setenv(growctl.ConfigEnv, filepath.Join(t.TempDir(), "config.yaml"))
+	if _, _, err := execGrowctlBare(t, srv, "", "config", "use-project", servertest.MainProjectName); err != nil {
+		t.Fatalf("use-project: %v", err)
+	}
+	lineTwo := strings.Replace(lineProject, "Line 1", "Line 2", 1)
+
+	_, _, err := execGrowctlBare(t, srv, lineProject+"---"+lineTwo+"---"+lineTagOfNoProject, "apply", "-f", "-")
+
+	if code := exitCode(err); code != 2 || !strings.Contains(err.Error(), "declare 2 projects") {
+		t.Errorf("exit code %d (%v), want 2 asking which project", code, err)
+	}
+	client := apiclient.New(srv.URL, srv.Client())
+	if _, ok, _ := client.FindProjectByName(context.Background(), "Line 1"); ok {
+		t.Error("nothing must be created")
+	}
+}
+
+func TestDelete_TagsOfNoProject_AreDeletedFromTheOneDeclaredProject(t *testing.T) {
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
+	createTag(t, svc, "speed", "integer")
+	if _, _, err := execGrowctlBare(t, srv, lineProject+"---"+lineTagOfNoProject, "apply", "-f", "-"); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	t.Setenv(growctl.ConfigEnv, filepath.Join(t.TempDir(), "config.yaml"))
+	if _, _, err := execGrowctlBare(t, srv, "", "config", "use-project", servertest.MainProjectName); err != nil {
+		t.Fatalf("use-project: %v", err)
+	}
+
+	out, _, err := execGrowctlBare(t, srv, lineProject+"---"+lineTagOfNoProject, "delete", "-f", "-", "--yes")
+
+	if err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	assertOutput(t, out, "tag/speed deleted", "project/Line 1 deleted")
+	if tags := tagsByName(t, svc); len(tags) != 1 {
+		t.Errorf("the tag of the context's project must be kept, got %v", tags)
+	}
+}
+
 func TestApply_ManifestsNamingTwoProjects_Fail(t *testing.T) {
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
 	inMain := strings.Replace(lineTag, "project: Line 1", "project: "+servertest.MainProjectName, 1)
@@ -774,7 +867,7 @@ func TestDelete_ProjectManifest_DeletesTheProject(t *testing.T) {
 		t.Fatalf("apply: %v", err)
 	}
 
-	out, _, err := execGrowctlBare(t, srv, lineProject+"---"+lineTag, "delete", "-f", "-")
+	out, _, err := execGrowctlBare(t, srv, lineProject+"---"+lineTag, "delete", "-f", "-", "--yes")
 
 	if err != nil {
 		t.Fatalf("delete: %v", err)
@@ -784,11 +877,84 @@ func TestDelete_ProjectManifest_DeletesTheProject(t *testing.T) {
 		t.Errorf("project/Line 1 must be gone: %v, %v", ok, err)
 	}
 
-	out, _, err = execGrowctlBare(t, srv, lineProject+"---"+lineTag, "delete", "-f", "-")
+	out, _, err = execGrowctlBare(t, srv, lineProject+"---"+lineTag, "delete", "-f", "-", "--yes")
 	if err != nil {
 		t.Fatalf("delete again: %v", err)
 	}
 	assertOutput(t, out, "tag/speed not found", "project/Line 1 not found")
+}
+
+// writeManifest writes the manifest into a file of its own, returning its path.
+func writeManifest(t *testing.T, manifest string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "manifest.yaml")
+	if err := os.WriteFile(path, []byte(manifest), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	return path
+}
+
+func TestDelete_ProjectFromFile_Confirmed_DeletesAfterPrompt(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+	if _, _, err := execGrowctlBare(t, srv, lineProject+"---"+lineTag, "apply", "-f", "-"); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	out, prompt, err := execGrowctlBare(t, srv, "y\n", "delete", "-f", writeManifest(t, lineProject+"---"+lineTag))
+
+	if err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if !strings.Contains(prompt, "project/Line 1") || !strings.Contains(prompt, "Delete 1 project(s)? [y/N]") {
+		t.Errorf("prompt must list the projects and ask, got %q", prompt)
+	}
+	assertOutput(t, out, "tag/speed deleted", "project/Line 1 deleted")
+}
+
+func TestDelete_ProjectFromFile_NotConfirmed_DeletesNothing(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+	if _, _, err := execGrowctlBare(t, srv, lineProject+"---"+lineTag, "apply", "-f", "-"); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	out, prompt, err := execGrowctlBare(t, srv, "n\n", "delete", "-f", writeManifest(t, lineProject+"---"+lineTag))
+
+	if err != nil || out != "" || !strings.Contains(prompt, "Aborted") {
+		t.Errorf("expected abort, got out=%q prompt=%q err=%v", out, prompt, err)
+	}
+	if tags := projectTags(t, srv, "Line 1"); tags["speed"] != "7" {
+		t.Errorf("nothing must be deleted, tags of Line 1: %v", tags)
+	}
+}
+
+func TestDelete_ProjectFromStdin_WithoutYes_IsUsageErrorAndDeletesNothing(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+	if _, _, err := execGrowctlBare(t, srv, lineProject+"---"+lineTag, "apply", "-f", "-"); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	out, _, err := execGrowctlBare(t, srv, lineProject+"---"+lineTag, "delete", "-f", "-")
+
+	if code := exitCode(err); code != 2 || !strings.Contains(err.Error(), "--yes") {
+		t.Errorf("exit code %d (%v), want 2 asking for --yes", code, err)
+	}
+	if out != "" {
+		t.Errorf("nothing must be reported deleted, got %q", out)
+	}
+	if tags := projectTags(t, srv, "Line 1"); tags["speed"] != "7" {
+		t.Errorf("nothing must be deleted, tags of Line 1: %v", tags)
+	}
+}
+
+func TestDelete_MissingProjectFromStdin_NeedsNoConfirmation(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+
+	out, _, err := execGrowctlBare(t, srv, lineProject, "delete", "-f", "-")
+
+	if err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	assertOutput(t, out, "project/Line 1 not found")
 }
 
 func TestGetProjects_TableAndYAML(t *testing.T) {

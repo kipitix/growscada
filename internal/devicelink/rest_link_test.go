@@ -182,6 +182,93 @@ func TestWrite_DeletedTag(t *testing.T) {
 	}
 }
 
+// projectLink is a link to project Main, resolved once, and a client of the
+// same server for changing its projects.
+func projectLink(t *testing.T) (*devicelink.RESTLink, *apiclient.Client, devicelink.Tag) {
+	t.Helper()
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
+	if _, err := svc.CreateTag(context.Background(), servertest.MainProject, appdto.CreateTagInput{
+		Name: "pump.speed", Type: "integer", Value: "0", Quality: "good",
+	}); err != nil {
+		t.Fatalf("create tag: %v", err)
+	}
+	client := apiclient.New(srv.URL, srv.Client())
+	link := devicelink.NewRESTLink(client, servertest.MainProjectName)
+	tag, err := link.Resolve(context.Background(), "pump.speed")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	return link, client, tag
+}
+
+func TestResolve_ProjectDeletedAfterItWasFound(t *testing.T) {
+	link, client, _ := projectLink(t)
+	if _, err := client.DeleteProject(context.Background(), servertest.MainProject); err != nil {
+		t.Fatalf("delete project: %v", err)
+	}
+
+	_, err := link.Resolve(context.Background(), "pump.speed")
+
+	if !errors.Is(err, devicelink.ErrProjectNotFound) || devicelink.IsTransient(err) {
+		t.Errorf("got %v, want ErrProjectNotFound, not transient", err)
+	}
+}
+
+// TestProjectCreatedAnew_IsFoundByName: the tags of a project deleted and
+// created anew under the name are lost (new IDs), but resolving them again
+// finds them in the new project.
+func TestProjectCreatedAnew_IsFoundByName(t *testing.T) {
+	link, client, old := projectLink(t)
+	ctx := context.Background()
+	if _, err := client.DeleteProject(ctx, servertest.MainProject); err != nil {
+		t.Fatalf("delete project: %v", err)
+	}
+	anew, err := client.CreateProject(ctx, apiv0.CreateProjectRequest{Name: servertest.MainProjectName})
+	if err != nil {
+		t.Fatalf("create project anew: %v", err)
+	}
+	created, err := client.Project(anew.ID).CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.speed", Type: "integer", Value: "0", Quality: "good"})
+	if err != nil {
+		t.Fatalf("create tag anew: %v", err)
+	}
+
+	if err := link.Write(ctx, old, "1", devicelink.QualityGood); !errors.Is(err, devicelink.ErrTagNotFound) {
+		t.Errorf("write of the old tag: got %v, want ErrTagNotFound", err)
+	}
+	tag, err := link.Resolve(ctx, "pump.speed")
+	if err != nil || tag.ID != created.ID {
+		t.Fatalf("Resolve: got %+v, %v; want the tag of the new project", tag, err)
+	}
+	if err := link.Write(ctx, tag, "7", devicelink.QualityGood); err != nil {
+		t.Fatalf("write of the new tag: %v", err)
+	}
+	if got, err := client.Project(anew.ID).GetTag(ctx, created.ID); err != nil || got.Value != "7" {
+		t.Errorf("new tag: %+v, %v; want value 7", got, err)
+	}
+}
+
+func TestResolve_ProjectCreatedAnewBeforeAnyWrite(t *testing.T) {
+	link, client, _ := projectLink(t)
+	ctx := context.Background()
+	if _, err := client.DeleteProject(ctx, servertest.MainProject); err != nil {
+		t.Fatalf("delete project: %v", err)
+	}
+	anew, err := client.CreateProject(ctx, apiv0.CreateProjectRequest{Name: servertest.MainProjectName})
+	if err != nil {
+		t.Fatalf("create project anew: %v", err)
+	}
+	created, err := client.Project(anew.ID).CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.speed", Type: "integer", Value: "0", Quality: "good"})
+	if err != nil {
+		t.Fatalf("create tag anew: %v", err)
+	}
+
+	tag, err := link.Resolve(ctx, "pump.speed")
+
+	if err != nil || tag.ID != created.ID {
+		t.Errorf("got %+v, %v; want the tag of the new project", tag, err)
+	}
+}
+
 func TestIsTransient(t *testing.T) {
 	link := devicelink.NewRESTLink(apiclient.New("http://127.0.0.1:1", http.DefaultClient), "Main")
 

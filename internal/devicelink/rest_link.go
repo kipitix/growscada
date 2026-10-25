@@ -8,12 +8,15 @@ import (
 
 	"github.com/google/uuid"
 
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
 )
 
 // RESTLink is the Link over the server's REST API, to the Tags of one
 // project named by configuration (until the Device Token names it, task 34).
-// The project is looked up by name on the first Resolve. It keeps each tag's
+// The project is looked up by name on the first Resolve, and again after a
+// 404 of a request to it: the project may have been deleted, or deleted and
+// created anew under the name (a new ID). It keeps each tag's
 // Version: a write sends the version it last saw; on 409 Conflict (someone
 // else changed the tag) it rereads the tag and retries once.
 type RESTLink struct {
@@ -34,16 +37,29 @@ func NewRESTLink(client *apiclient.Client, projectName string) *RESTLink {
 }
 
 // Resolve looks a tag up with GET /api/v0/projects/{id}/tags?name=, the
-// project found first with GET /api/v0/projects?name=. The error matches
-// ErrProjectNotFound if there is no such project.
+// project found first with GET /api/v0/projects?name=. The list is 404 only
+// when the project found earlier is gone: it is then looked up by name once
+// more. The error matches ErrProjectNotFound if there is no such project.
 func (l *RESTLink) Resolve(ctx context.Context, name string) (Tag, error) {
-	project, err := l.resolveProject(ctx)
-	if err != nil {
-		return Tag{}, err
-	}
-	found, ok, err := project.FindTagByName(ctx, name)
-	if err != nil {
-		return Tag{}, err
+	var found apiv0.TagResponse
+	var ok bool
+	for again := true; ; again = false {
+		project, err := l.resolveProject(ctx)
+		if err != nil {
+			return Tag{}, err
+		}
+		found, ok, err = project.FindTagByName(ctx, name)
+		if errors.Is(err, apiclient.ErrNotFound) {
+			l.dropProject(project)
+			if again {
+				continue
+			}
+			return Tag{}, fmt.Errorf("%w: %q: %w", ErrProjectNotFound, l.projectName, err)
+		}
+		if err != nil {
+			return Tag{}, err
+		}
+		break
 	}
 	if !ok {
 		return Tag{}, fmt.Errorf("%w: %q", ErrTagNotFound, name)
@@ -79,7 +95,19 @@ func (l *RESTLink) resolveProject(ctx context.Context) (*apiclient.ProjectClient
 	return project, nil
 }
 
-// Write sets the value with PATCH /api/v0/projects/{id}/tags/{id}/value.
+// dropProject forgets the project looked up, unless it was replaced
+// meanwhile: the next request looks it up by name again.
+func (l *RESTLink) dropProject(project *apiclient.ProjectClient) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.project == project {
+		l.project = nil
+	}
+}
+
+// Write sets the value with PATCH /api/v0/projects/{id}/tags/{id}/value. A
+// 404 is the tag's or its project's; either way the tag is gone (a project
+// created anew under the name has tags of new IDs).
 func (l *RESTLink) Write(ctx context.Context, tag Tag, value string, quality Quality) error {
 	project, err := l.resolveProject(ctx)
 	if err != nil {
@@ -103,6 +131,7 @@ func (l *RESTLink) Write(ctx context.Context, tag Tag, value string, quality Qua
 	}
 	if errors.Is(err, apiclient.ErrNotFound) {
 		l.forget(tag.ID)
+		l.dropProject(project)
 		return fmt.Errorf("%w: %q: %w", ErrTagNotFound, tag.Name, err)
 	}
 	if err != nil {
@@ -124,6 +153,7 @@ func (l *RESTLink) reread(ctx context.Context, tag Tag) error {
 	current, err := project.GetTag(ctx, tag.ID)
 	if errors.Is(err, apiclient.ErrNotFound) {
 		l.forget(tag.ID)
+		l.dropProject(project)
 		return fmt.Errorf("%w: %q: %w", ErrTagNotFound, tag.Name, err)
 	}
 	if err != nil {

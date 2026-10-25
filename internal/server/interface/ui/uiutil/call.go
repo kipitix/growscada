@@ -2,9 +2,11 @@ package uiutil
 
 import (
 	"context"
+	"errors"
 
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
+	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 )
 
@@ -56,6 +58,33 @@ func Load[T any](ctx app.Context, r *Reloader, call func(context.Context) (T, er
 // (or its error) belongs to a list no longer shown: it is dropped and the
 // load reruns for the new key.
 func LoadFor[K comparable, T any](ctx app.Context, r *Reloader, key func() K, call func(context.Context, K) (T, error), onOK func(app.Context, K, T), reload func(app.Context)) {
+	loadFor(ctx, r, key, call, onOK, func(ctx app.Context, _ K, err error) { ShowError(ctx, err) }, reload)
+}
+
+// ActionProjectGone is the go-app action fired, with the project's
+// uuid.UUID as its value, when a load of the content of the project shown
+// finds the project gone (404): the projects.Switcher drops it and selects
+// another, so a mode shows no error for what was deleted (ADR 0006).
+const ActionProjectGone = "uiutil.project-gone"
+
+// LoadOfProject is LoadFor of a list of the content of the project shown
+// (its Scenes, its Tags), keyed by the project's client (nil: none, nothing
+// is loaded by then). Such a list is 404 only when the project is gone, so
+// its 404 fires ActionProjectGone instead of showing an error.
+func LoadOfProject[T any](ctx app.Context, r *Reloader, content func() *apiclient.ProjectClient, call func(context.Context, *apiclient.ProjectClient) (T, error), onOK func(app.Context, T), reload func(app.Context)) {
+	loadFor(ctx, r, content, call,
+		func(ctx app.Context, _ *apiclient.ProjectClient, v T) { onOK(ctx, v) },
+		func(ctx app.Context, pc *apiclient.ProjectClient, err error) {
+			if errors.Is(err, apiclient.ErrNotFound) {
+				ctx.NewActionWithValue(ActionProjectGone, pc.ID())
+				return
+			}
+			ShowError(ctx, err)
+		}, reload)
+}
+
+// loadFor is LoadFor handing an error of the key's list to onErr.
+func loadFor[K comparable, T any](ctx app.Context, r *Reloader, key func() K, call func(context.Context, K) (T, error), onOK func(app.Context, K, T), onErr func(app.Context, K, error), reload func(app.Context)) {
 	if !r.Start() {
 		return
 	}
@@ -66,7 +95,7 @@ func LoadFor[K comparable, T any](ctx app.Context, r *Reloader, key func() K, ca
 		case key() != k:
 			rerun = true
 		case err != nil:
-			ShowError(ctx, err)
+			onErr(ctx, k, err)
 		default:
 			onOK(ctx, k, v)
 		}
