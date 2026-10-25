@@ -96,13 +96,6 @@ func (p *Project) isInteracting() bool {
 	return p.draggedWidgetID() != uuid.Nil
 }
 
-// sceneOfProject is the key of the Widgets loaded: the selected Scene of the
-// project shown.
-type sceneOfProject struct {
-	content *apiclient.ProjectClient
-	sceneID uuid.UUID
-}
-
 // loadWidgets (re)loads the widgets of the selected scene. During a canvas
 // interaction the reload is deferred until it ends (finalizeAllDrags).
 func (p *Project) loadWidgets(ctx app.Context) {
@@ -117,16 +110,16 @@ func (p *Project) loadWidgets(ctx app.Context) {
 	}
 	mark := p.sceneVersions.Mark()
 	uiutil.LoadFor(ctx, &p.widgetsReloader,
-		func() sceneOfProject { return sceneOfProject{content: p.content, sceneID: p.selectedSceneID} },
-		func(c context.Context, k sceneOfProject) ([]apiv0.WidgetResponse, error) {
-			return k.content.ListWidgets(c, k.sceneID)
+		func() uiutil.SceneOfProject {
+			return uiutil.SceneOfProject{Content: p.content, SceneID: p.selectedSceneID}
 		},
-		func(ctx app.Context, k sceneOfProject, widgets []apiv0.WidgetResponse) {
+		uiutil.ListWidgets,
+		func(ctx app.Context, k uiutil.SceneOfProject, widgets []apiv0.WidgetResponse) {
 			if p.isInteracting() {
 				p.widgetsReloadDeferred = true
 				return
 			}
-			p.setWidgets(ctx, mark, k.sceneID, widgets)
+			p.setWidgets(ctx, mark, k.SceneID, widgets)
 		}, p.loadWidgets)
 }
 

@@ -45,13 +45,6 @@ func (o *Operation) loadScenes(ctx app.Context) {
 		}, o.loadScenes)
 }
 
-// sceneOfProject is the key of the Widgets loaded: the selected Scene of the
-// project shown.
-type sceneOfProject struct {
-	content *apiclient.ProjectClient
-	sceneID uuid.UUID
-}
-
 // loadWidgets (re)loads the widgets of the selected Scene.
 func (o *Operation) loadWidgets(ctx app.Context) {
 	ctx = o.compoCtx
@@ -60,12 +53,12 @@ func (o *Operation) loadWidgets(ctx app.Context) {
 		return
 	}
 	uiutil.LoadFor(ctx, &o.widgetsReloader,
-		func() sceneOfProject { return sceneOfProject{content: o.content, sceneID: o.selectedSceneID} },
-		func(c context.Context, k sceneOfProject) ([]apiv0.WidgetResponse, error) {
-			return k.content.ListWidgets(c, k.sceneID)
+		func() uiutil.SceneOfProject {
+			return uiutil.SceneOfProject{Content: o.content, SceneID: o.selectedSceneID}
 		},
-		func(ctx app.Context, k sceneOfProject, widgets []apiv0.WidgetResponse) {
-			o.widgets, o.widgetsSceneID = widgets, k.sceneID
+		uiutil.ListWidgets,
+		func(ctx app.Context, k uiutil.SceneOfProject, widgets []apiv0.WidgetResponse) {
+			o.widgets, o.widgetsSceneID = widgets, k.SceneID
 		}, o.loadWidgets)
 }
 

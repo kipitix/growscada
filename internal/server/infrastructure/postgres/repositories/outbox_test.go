@@ -102,8 +102,8 @@ func TestSave_WritesRecordedEventsToOutbox(t *testing.T) {
 	}
 }
 
-// TestAppend_RowOfContentEventNamesItsProject: the outbox row of an event of
-// a Project's content carries the Project (ADR 0006); others carry none.
+// TestAppend_RowOfContentEventNamesItsProject: the outbox payload of an event
+// of a Project's content carries the Project (ADR 0006); others carry none.
 func TestAppend_RowOfContentEventNamesItsProject(t *testing.T) {
 	cleanTags(t)
 	cleanOutbox(t)
@@ -123,7 +123,7 @@ func TestAppend_RowOfContentEventNamesItsProject(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows, err := testDB.QueryContext(ctx, `SELECT type, project_id FROM outbox ORDER BY seq`)
+	rows, err := testDB.QueryContext(ctx, `SELECT type, (payload->>'project_id')::uuid FROM outbox ORDER BY seq`)
 	if err != nil {
 		t.Fatalf("read outbox: %v", err)
 	}

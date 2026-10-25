@@ -31,7 +31,7 @@ type payload struct {
 	// ID is the ID of the aggregate (or Widget) the event is about.
 	ID uuid.UUID `json:"id"`
 	// ProjectID is the Project whose content (Tag, Scene, Widget) the event
-	// is about; the outbox row's project_id holds it too.
+	// is about (ADR 0006).
 	ProjectID *uuid.UUID `json:"project_id,omitempty"`
 	// SceneID is the Scene holding the Widget of a Widget event.
 	SceneID *uuid.UUID `json:"scene_id,omitempty"`

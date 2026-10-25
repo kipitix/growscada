@@ -125,20 +125,19 @@ func TestMigrationOrganizationsAndProjects_PutsExistingContentIntoMain(t *testin
 	if err := db.QueryRowContext(ctx, `SELECT name FROM projects WHERE id = $1 AND deleted_at IS NULL`, main).Scan(&name); err != nil || name != "Main" {
 		t.Errorf("project Main: %q, %v", name, err)
 	}
-	rows, err := db.QueryContext(ctx, `SELECT type, project_id, payload->>'project_id' FROM outbox ORDER BY seq`)
+	rows, err := db.QueryContext(ctx, `SELECT type, payload->>'project_id' FROM outbox ORDER BY seq`)
 	if err != nil {
 		t.Fatalf("outbox: %v", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var eventType string
-		var column, payload sql.NullString
-		if err := rows.Scan(&eventType, &column, &payload); err != nil {
+		var payload sql.NullString
+		if err := rows.Scan(&eventType, &payload); err != nil {
 			t.Fatal(err)
 		}
-		wantProject := eventType == "tag_created"
-		if (column.String == main) != wantProject || (payload.String == main) != wantProject {
-			t.Errorf("outbox %s: project_id %v, payload project_id %v", eventType, column, payload)
+		if wantProject := eventType == "tag_created"; (payload.String == main) != wantProject {
+			t.Errorf("outbox %s: payload project_id %v", eventType, payload)
 		}
 	}
 	keys := map[string]bool{}

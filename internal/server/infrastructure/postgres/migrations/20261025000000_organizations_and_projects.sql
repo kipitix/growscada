@@ -63,12 +63,10 @@ ALTER TABLE widgets
         FOREIGN KEY (scene_id, project_id) REFERENCES scenes(id, project_id) ON DELETE CASCADE;
 CREATE INDEX idx_widgets_project_id ON widgets(project_id);
 
--- The outbox row names the project of a content event; a row still waiting
--- here is of the project "Main" (its payload says so too, for the codec).
-ALTER TABLE outbox ADD COLUMN project_id UUID;
+-- The payload of a content event names its project; a row still waiting
+-- here is of the project "Main".
 UPDATE outbox
-    SET project_id = 'b0000000-0000-4000-8000-000000000001',
-        payload = payload || jsonb_build_object('project_id', 'b0000000-0000-4000-8000-000000000001')
+    SET payload = payload || jsonb_build_object('project_id', 'b0000000-0000-4000-8000-000000000001')
     WHERE type LIKE 'tag\_%' OR type LIKE 'scene\_%' OR (type LIKE 'widget\_%' AND type NOT LIKE 'widget\_type\_%');
 
 -- The job keys of a project's content name the project.
@@ -90,7 +88,7 @@ UPDATE policy_jobs
 UPDATE policy_jobs
     SET job_key = regexp_replace(job_key, '^project:[0-9a-f-]+/', '')
     WHERE policy = 'unbind_deleted_tag';
-ALTER TABLE outbox DROP COLUMN project_id;
+UPDATE outbox SET payload = payload - 'project_id';
 
 DROP INDEX IF EXISTS idx_widgets_project_id;
 ALTER TABLE widgets

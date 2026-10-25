@@ -188,9 +188,12 @@ func (p *Project) OnMount(ctx app.Context) {
 }
 
 // SetProject shows the project id (uuid.Nil: none). What was shown of
-// another project is dropped, its unsaved edits with it; the new project's
-// selection is restored and its content loaded. Before the Project is
-// mounted it only remembers the project, whose content OnMount loads.
+// another project is dropped, its unsaved edits with it, and the new
+// project's selection is restored. Its content is loaded on the
+// EventProjectResync of the Bar's stream of it (Root switches the Bar too),
+// so no event of it published before the stream opens is missed. Before the
+// Project is mounted it only remembers the project, whose content OnMount
+// loads.
 func (p *Project) SetProject(id uuid.UUID) {
 	if id == p.projectID {
 		return
@@ -214,13 +217,7 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.editingSceneID, p.editingSceneName = uuid.Nil, ""
 	p.creatingTag, p.newTagName, p.newTagType = false, "", ""
 	p.simInputs = make(map[uuid.UUID]map[string]string)
-	p.loadScenes(ctx)
-	if p.selectedSceneID != uuid.Nil {
-		p.loadWidgets(ctx)
-	}
-	p.loadTags(ctx)
-	// Root calls it, so nothing marks this component for an update; with no
-	// project left no load dispatches either.
+	// Root calls it, so nothing marks this component for an update.
 	ctx.Update()
 }
 

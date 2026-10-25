@@ -9,6 +9,7 @@ import (
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
 )
 
 func TestSetProject_ShowsTheContentOfTheNewProjectOnly(t *testing.T) {
@@ -32,6 +33,7 @@ func TestSetProject_ShowsTheContentOfTheNewProjectOnly(t *testing.T) {
 	f.p.loadScenes(f.p.compoCtx)
 
 	f.p.SetProject(created.ID)
+	f.event(apiv0.Event{Type: eventlog.EventProjectResync}) // the Bar's stream of Line 1 opened
 	f.run()
 
 	f.noToasts()

@@ -75,8 +75,9 @@ func (o *Operation) OnMount(ctx app.Context) {
 }
 
 // SetProject shows the project id (uuid.Nil: none), dropping what was shown
-// of another one and restoring the new one's selected Scene; before the
-// Operation is mounted it only remembers it.
+// of another one and restoring the new one's selected Scene. Its content is
+// loaded on the EventProjectResync of the Bar's stream of it, like
+// Project's. Before the Operation is mounted it only remembers it.
 func (o *Operation) SetProject(id uuid.UUID) {
 	if id == o.projectID {
 		return
@@ -90,9 +91,7 @@ func (o *Operation) SetProject(id uuid.UUID) {
 	}
 	o.scenes, o.widgets, o.widgetsSceneID, o.tags = nil, nil, uuid.Nil, tagstate.Tags{}
 	o.selectedSceneID = uiutil.LoadID(o.compoCtx, o.sceneKey())
-	o.reload(o.compoCtx, eventlog.ReloadTargets{Scenes: true, Widgets: true, Tags: true})
-	// Root calls it, so nothing marks this component for an update; with no
-	// project left no load dispatches either.
+	// Root calls it, so nothing marks this component for an update.
 	o.compoCtx.Update()
 }
 
