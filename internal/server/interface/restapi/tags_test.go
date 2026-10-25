@@ -22,10 +22,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
-	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
-	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
-	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
 
@@ -117,20 +114,12 @@ func cleanTags(t *testing.T) {
 }
 
 func newRouter() *restapi.APIRouter {
-	tagRepo := repositories.NewTagRepositoryPostgres(testDB())
-	tagSvc := application.NewTagService(tagRepo)
-	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB())
-	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB())
-	wtSvc := application.NewWidgetTypeService(wtRepo)
-	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, tagRepo)
-	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, eventbus.NewEventBus(), 100)
+	return newServices().router()
 }
 
 func createTagViaService(t *testing.T, name, tagType, value, quality string) appdto.Tag {
 	t.Helper()
-	repo := repositories.NewTagRepositoryPostgres(testDB())
-	svc := application.NewTagService(repo)
-	resp, err := svc.CreateTag(context.Background(), appdto.CreateTagInput{
+	resp, err := newServices().tags.CreateTag(context.Background(), mainProject, appdto.CreateTagInput{
 		Name: name, Type: tagType, Value: value, Quality: quality,
 	})
 	if err != nil {
@@ -145,7 +134,7 @@ func TestGetTags_EmptyDB_Returns200WithEmptyList(t *testing.T) {
 	cleanTags(t)
 	router := newRouter()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v0/tags", nil)
+	req := httptest.NewRequest(http.MethodGet, mainPath+"/tags", nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -168,7 +157,7 @@ func TestGetTags_WithTags_Returns200WithAll(t *testing.T) {
 	createTagViaService(t, "pressure", "integer", "20", "good")
 	router := newRouter()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v0/tags", nil)
+	req := httptest.NewRequest(http.MethodGet, mainPath+"/tags", nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -191,7 +180,7 @@ func TestGetTags_NameFilter_ExistingTag_Returns200WithOneTag(t *testing.T) {
 	createTagViaService(t, "pressure", "integer", "20", "good")
 	router := newRouter()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v0/tags?name=temperature", nil)
+	req := httptest.NewRequest(http.MethodGet, mainPath+"/tags?name=temperature", nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -216,7 +205,7 @@ func TestGetTags_NameFilter_NoMatch_Returns200WithEmptyList(t *testing.T) {
 	createTagViaService(t, "temperature", "integer", "10", "good")
 	router := newRouter()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v0/tags?name=missing", nil)
+	req := httptest.NewRequest(http.MethodGet, mainPath+"/tags?name=missing", nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -230,7 +219,7 @@ func TestGetTags_NameFilter_NoMatch_Returns200WithEmptyList(t *testing.T) {
 
 func getTagNames(t *testing.T, router *restapi.APIRouter, query string) (int, map[string]bool) {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/api/v0/tags?"+query, nil)
+	req := httptest.NewRequest(http.MethodGet, mainPath+"/tags?"+query, nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -307,7 +296,7 @@ func TestGetTagsByID_ExistingTag_Returns200WithTag(t *testing.T) {
 	created := createTagViaService(t, "humidity", "integer", "55", "good")
 	router := newRouter()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v0/tags/"+created.ID.String(), nil)
+	req := httptest.NewRequest(http.MethodGet, mainPath+"/tags/"+created.ID.String(), nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -338,7 +327,7 @@ func TestGetTagsByID_NotFound_Returns404WithProblemDetails(t *testing.T) {
 	router := newRouter()
 
 	missingID := uuid.New().String()
-	req := httptest.NewRequest(http.MethodGet, "/api/v0/tags/"+missingID, nil)
+	req := httptest.NewRequest(http.MethodGet, mainPath+"/tags/"+missingID, nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -364,7 +353,7 @@ func TestGetTagsByID_NotFound_Returns404WithProblemDetails(t *testing.T) {
 func TestGetTagsByID_InvalidUUID_Returns400WithProblemDetails(t *testing.T) {
 	router := newRouter()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v0/tags/not-a-uuid", nil)
+	req := httptest.NewRequest(http.MethodGet, mainPath+"/tags/not-a-uuid", nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -391,7 +380,7 @@ func TestPostTags_ValidBody_Returns201WithID(t *testing.T) {
 	router := newRouter()
 
 	body, _ := json.Marshal(apiv0.CreateTagRequest{Name: "flow", Type: "integer", Value: "0", Quality: "good"})
-	req := httptest.NewRequest(http.MethodPost, "/api/v0/tags", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, mainPath+"/tags", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
@@ -415,7 +404,7 @@ func TestPostTags_DuplicateName_Returns409WithProblemDetails(t *testing.T) {
 	router := newRouter()
 
 	body, _ := json.Marshal(apiv0.CreateTagRequest{Name: "flow", Type: "boolean", Value: "false", Quality: "good"})
-	req := httptest.NewRequest(http.MethodPost, "/api/v0/tags", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, mainPath+"/tags", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
@@ -436,7 +425,7 @@ func TestPostTags_DuplicateName_Returns409WithProblemDetails(t *testing.T) {
 func TestPostTags_InvalidJSON_Returns400WithProblemDetails(t *testing.T) {
 	router := newRouter()
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v0/tags", bytes.NewBufferString("not json"))
+	req := httptest.NewRequest(http.MethodPost, mainPath+"/tags", bytes.NewBufferString("not json"))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
@@ -461,7 +450,7 @@ func TestPostTags_InvalidType_Returns400WithProblemDetails(t *testing.T) {
 	router := newRouter()
 
 	body, _ := json.Marshal(apiv0.CreateTagRequest{Name: "sensor", Type: "unknown", Value: "0", Quality: "good"})
-	req := httptest.NewRequest(http.MethodPost, "/api/v0/tags", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, mainPath+"/tags", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
@@ -489,7 +478,7 @@ func TestDeleteTagByID_ExistingTag_Returns200WithDeletedTag(t *testing.T) {
 	created := createTagViaService(t, "pump", "boolean", "false", "good")
 	router := newRouter()
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v0/tags/"+created.ID.String(), nil)
+	req := httptest.NewRequest(http.MethodDelete, mainPath+"/tags/"+created.ID.String(), nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -514,7 +503,7 @@ func TestDeleteTagByID_ExistingTag_TagIsRemovedFromDB(t *testing.T) {
 	created := createTagViaService(t, "valve", "boolean", "true", "good")
 	router := newRouter()
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v0/tags/"+created.ID.String(), nil)
+	req := httptest.NewRequest(http.MethodDelete, mainPath+"/tags/"+created.ID.String(), nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -522,7 +511,7 @@ func TestDeleteTagByID_ExistingTag_TagIsRemovedFromDB(t *testing.T) {
 		t.Fatalf("status: expected 200, got %d", rec.Code)
 	}
 
-	getReq := httptest.NewRequest(http.MethodGet, "/api/v0/tags/"+created.ID.String(), nil)
+	getReq := httptest.NewRequest(http.MethodGet, mainPath+"/tags/"+created.ID.String(), nil)
 	getRec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(getRec, getReq)
 
@@ -535,7 +524,7 @@ func TestDeleteTagByID_NotFound_Returns404WithProblemDetails(t *testing.T) {
 	cleanTags(t)
 	router := newRouter()
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v0/tags/"+uuid.New().String(), nil)
+	req := httptest.NewRequest(http.MethodDelete, mainPath+"/tags/"+uuid.New().String(), nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -558,7 +547,7 @@ func TestDeleteTagByID_NotFound_Returns404WithProblemDetails(t *testing.T) {
 func TestDeleteTagByID_InvalidUUID_Returns400WithProblemDetails(t *testing.T) {
 	router := newRouter()
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v0/tags/not-a-uuid", nil)
+	req := httptest.NewRequest(http.MethodDelete, mainPath+"/tags/not-a-uuid", nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -586,7 +575,7 @@ func TestPatchTagValue_ValidUpdate_Returns200WithVersion(t *testing.T) {
 	router := newRouter()
 
 	body, _ := json.Marshal(apiv0.UpdateTagRequest{Value: "99", Quality: "good", Version: created.Version})
-	req := httptest.NewRequest(http.MethodPatch, "/api/v0/tags/"+created.ID.String()+"/value", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPatch, mainPath+"/tags/"+created.ID.String()+"/value", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
@@ -610,7 +599,7 @@ func TestPatchTagValue_ValidUpdate_ValueAndQualityAreUpdated(t *testing.T) {
 	router := newRouter()
 
 	body, _ := json.Marshal(apiv0.UpdateTagRequest{Value: "75", Quality: "good", Version: created.Version})
-	req := httptest.NewRequest(http.MethodPatch, "/api/v0/tags/"+created.ID.String()+"/value", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPatch, mainPath+"/tags/"+created.ID.String()+"/value", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
@@ -619,7 +608,7 @@ func TestPatchTagValue_ValidUpdate_ValueAndQualityAreUpdated(t *testing.T) {
 		t.Fatalf("status: expected 200, got %d", rec.Code)
 	}
 
-	getReq := httptest.NewRequest(http.MethodGet, "/api/v0/tags/"+created.ID.String(), nil)
+	getReq := httptest.NewRequest(http.MethodGet, mainPath+"/tags/"+created.ID.String(), nil)
 	getRec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(getRec, getReq)
 
@@ -640,7 +629,7 @@ func TestPatchTagValue_NotFound_Returns404WithProblemDetails(t *testing.T) {
 	router := newRouter()
 
 	body, _ := json.Marshal(map[string]string{"value": "1", "quality": "good"})
-	req := httptest.NewRequest(http.MethodPatch, "/api/v0/tags/"+uuid.New().String()+"/value", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPatch, mainPath+"/tags/"+uuid.New().String()+"/value", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
@@ -665,7 +654,7 @@ func TestPatchTagValue_InvalidUUID_Returns400WithProblemDetails(t *testing.T) {
 	router := newRouter()
 
 	body, _ := json.Marshal(map[string]string{"value": "1", "quality": "good"})
-	req := httptest.NewRequest(http.MethodPatch, "/api/v0/tags/not-a-uuid/value", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPatch, mainPath+"/tags/not-a-uuid/value", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
@@ -691,7 +680,7 @@ func TestPatchTagValue_InvalidJSON_Returns400WithProblemDetails(t *testing.T) {
 	created := createTagViaService(t, "sensor", "integer", "0", "good")
 	router := newRouter()
 
-	req := httptest.NewRequest(http.MethodPatch, "/api/v0/tags/"+created.ID.String()+"/value", bytes.NewBufferString("not json"))
+	req := httptest.NewRequest(http.MethodPatch, mainPath+"/tags/"+created.ID.String()+"/value", bytes.NewBufferString("not json"))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
@@ -743,7 +732,7 @@ func TestPostTags_InvalidInput_Returns400(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cleanTags(t)
 			body, _ := json.Marshal(request)
-			req := httptest.NewRequest(http.MethodPost, "/api/v0/tags", bytes.NewReader(body))
+			req := httptest.NewRequest(http.MethodPost, mainPath+"/tags", bytes.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
 			newRouter().ServeMux().ServeHTTP(rec, req)
@@ -764,7 +753,7 @@ func TestPatchTagValue_InvalidInput_Returns400(t *testing.T) {
 			created := createTagViaService(t, "level", "integer", "0", "good")
 			request.Version = created.Version
 			body, _ := json.Marshal(request)
-			req := httptest.NewRequest(http.MethodPatch, "/api/v0/tags/"+created.ID.String()+"/value", bytes.NewReader(body))
+			req := httptest.NewRequest(http.MethodPatch, mainPath+"/tags/"+created.ID.String()+"/value", bytes.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
 			newRouter().ServeMux().ServeHTTP(rec, req)

@@ -13,7 +13,7 @@ func makeCreatedTag(t *testing.T) Tag {
 	t.Helper()
 	name, _ := NewTagName("pressure")
 	value, _ := TagTypeInteger.NewTagValue(int64(42))
-	aTag, err := CreateTag(id.NewID[Tag](), name, TagTypeInteger, value, TagQualityGood)
+	aTag, err := CreateTag(id.NewID[Tag](), testProject, name, TagTypeInteger, value, TagQualityGood)
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestTag_PendingEvents_ReturnsCopy(t *testing.T) {
 
 func TestNewTagCreatedEvent_WithTimestamp_SetsTimestamp(t *testing.T) {
 	fixed := event.NewEventTimestamp(event.EventTimestampWithTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)))
-	e := NewTagCreatedEvent(id.NewID[Tag](), event.WithTimestamp(fixed))
+	e := NewTagCreatedEvent(id.NewID[Tag](), testProject, event.WithTimestamp(fixed))
 
 	if !e.Timestamp().Time().Equal(fixed.Time()) {
 		t.Errorf("expected %v, got %v", fixed.Time(), e.Timestamp().Time())
@@ -115,11 +115,37 @@ func TestNewTagCreatedEvent_WithTimestamp_SetsTimestamp(t *testing.T) {
 
 func TestNewTagDeletedEvent_TypeAndID(t *testing.T) {
 	tagID := id.NewID[Tag]()
-	e := NewTagDeletedEvent(tagID)
+	e := NewTagDeletedEvent(tagID, testProject)
 	if e.Type() != event.EventTypeTagDeleted || e.TagID() != tagID {
 		t.Errorf("unexpected event %s for tag %s", e, e.TagID())
 	}
 	if e.Timestamp().Time().IsZero() {
 		t.Error("expected non-zero timestamp")
+	}
+}
+
+// TestTagEvents_NameTheTagsProject checks that every event a Tag records names
+// its Project (ADR 0006): created, updated and deleted.
+func TestTagEvents_NameTheTagsProject(t *testing.T) {
+	aTag := makeCreatedTag(t)
+	if aTag.ProjectID() != testProject {
+		t.Fatalf("ProjectID = %s, want %s", aTag.ProjectID(), testProject)
+	}
+	if err := aTag.SetValue(int64(1), TagQualityGood); err != nil {
+		t.Fatalf("SetValue: %v", err)
+	}
+	aTag.Delete()
+	events := aTag.PendingEvents()
+	if len(events) != 3 {
+		t.Fatalf("expected 3 pending events, got %d", len(events))
+	}
+	for _, e := range events {
+		tagEvent, ok := e.(TagEvent)
+		if !ok || tagEvent.ProjectID() != testProject {
+			t.Errorf("%s does not name the tag's project %s", e.Type(), testProject)
+		}
+	}
+	if updated := events[1].(TagUpdatedEvent); updated.Tag().ProjectID() != testProject {
+		t.Errorf("the state tag_updated carries is of project %s, want %s", updated.Tag().ProjectID(), testProject)
 	}
 }

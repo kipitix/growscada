@@ -17,8 +17,12 @@ func (p *Project) createTag(ctx app.Context) {
 		Value:   defaultTagValue(p.newTagType),
 		Quality: "good",
 	}
+	content := p.content
+	if content == nil {
+		return // no project shown
+	}
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.CreateTagResponse, error) {
-		return p.client.CreateTag(c, req)
+		return content.CreateTag(c, req)
 	}, func(ctx app.Context, created apiv0.CreateTagResponse) {
 		p.creatingTag = false
 		p.newTagName = ""
@@ -35,8 +39,12 @@ func (p *Project) deleteTag(ctx app.Context) {
 	if deletedID == uuid.Nil {
 		return
 	}
+	content := p.content
+	if content == nil {
+		return // no project shown
+	}
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.TagResponse, error) {
-		return p.client.DeleteTag(c, deletedID)
+		return content.DeleteTag(c, deletedID)
 	}, func(ctx app.Context, _ apiv0.TagResponse) {
 		if p.selectedTagID == deletedID {
 			p.selectedTagID = uuid.Nil

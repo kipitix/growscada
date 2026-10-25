@@ -36,20 +36,22 @@ func (r corruptTagRepository) FindAll(context.Context) ([]tag.Tag, error) {
 // A value the domain rejects is invalid input only when the caller sent it:
 // the same constructors failing on a stored row is a server fault.
 func TestTagService_CorruptStoredTag_IsNotInvalidInput(t *testing.T) {
-	svc := application.NewTagService(corruptTagRepository{})
+	scopes := newScopes()
+	scopes.tags = func(tag.TagRepository) tag.TagRepository { return corruptTagRepository{} }
+	svc := application.NewTagService(contentOver(scopes))
 	ctx := context.Background()
 
-	_, err := svc.FindTagByID(ctx, uuid.New())
+	_, err := svc.FindTagByID(ctx, mainProject, uuid.New())
 	if err == nil || errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("FindTagByID: expected an error without ErrInvalidInput, got: %v", err)
 	}
 
-	_, err = svc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: uuid.New(), Value: "1", Quality: "good", Version: 1})
+	_, err = svc.SetTagValueByID(ctx, mainProject, appdto.UpdateTagInput{ID: uuid.New(), Value: "1", Quality: "good", Version: 1})
 	if err == nil || errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("SetTagValueByID: expected an error without ErrInvalidInput, got: %v", err)
 	}
 
-	_, err = svc.FindTagsByNamePattern(ctx, "*")
+	_, err = svc.FindTagsByNamePattern(ctx, mainProject, "*")
 	if err == nil || errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("FindTagsByNamePattern: expected an error without ErrInvalidInput, got: %v", err)
 	}
@@ -58,7 +60,7 @@ func TestTagService_CorruptStoredTag_IsNotInvalidInput(t *testing.T) {
 func TestErrInvalidInput_KeepsMessageAndCause(t *testing.T) {
 	svc := newService()
 
-	_, err := svc.CreateTag(context.Background(), appdto.CreateTagInput{Name: "t", Type: "bogus", Value: "0", Quality: "good"})
+	_, err := svc.CreateTag(context.Background(), mainProject, appdto.CreateTagInput{Name: "t", Type: "bogus", Value: "0", Quality: "good"})
 
 	want := `cannot create tag because of type: unknown tag type: "bogus"`
 	if err == nil || err.Error() != want {

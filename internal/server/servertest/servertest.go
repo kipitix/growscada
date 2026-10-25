@@ -13,6 +13,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 	"github.com/pressly/goose/v3"
 	"github.com/testcontainers/testcontainers-go"
@@ -94,28 +95,43 @@ func startPostgres(ctx context.Context) (*sql.DB, *tcpostgres.PostgresContainer,
 	return db, container, nil
 }
 
-// StartAPI cleans every table (tags, widgets, scenes, widget_types, outbox,
-// policy_jobs) and serves the real REST API over the database, with the
-// outbox dispatcher delivering committed events to its event stream and the
-// policy runner running the policies, as the server does. The returned
-// TagService is the one behind the API, for arranging and checking state
-// directly.
+// MainProject is the project "Main" the migrations create, of the one
+// Organization (ADR 0006): the only project after StartAPI.
+var MainProject = uuid.MustParse("b0000000-0000-4000-8000-000000000001")
+
+// MainProjectName is the name of MainProject.
+const MainProjectName = "Main"
+
+// StartAPI cleans every table (tags, widgets, scenes, widget_types, projects
+// but MainProject, outbox, policy_jobs) and serves the real REST API over the
+// database, with the outbox dispatcher delivering committed events to its
+// event streams and the policy runner running the policies, as the server
+// does. The returned TagService is the one behind the API, for arranging and
+// checking state directly.
 func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagService) {
 	t.Helper()
 	if _, err := db.ExecContext(context.Background(), "DELETE FROM tags; DELETE FROM widgets; DELETE FROM scenes; DELETE FROM widget_types; "+
-		"DELETE FROM outbox; DELETE FROM policy_jobs"); err != nil {
+		"DELETE FROM outbox; DELETE FROM policy_jobs; "+
+		"DELETE FROM projects WHERE id <> '"+MainProject.String()+"'; "+
+		"UPDATE projects SET name = '"+MainProjectName+"', version = 1, deleted_at = NULL"); err != nil {
 		t.Fatalf("clean the database: %v", err)
 	}
 	bus := eventbus.NewEventBus()
 	dispatcher := outbox.NewDispatcher(db, bus.Publish)
 	onCommit := repositories.NotifyOnCommit(dispatcher.Notify)
-	tagRepo := repositories.NewTagRepositoryPostgres(db, onCommit)
-	tagSvc := application.NewTagService(tagRepo)
+	orgID, err := repositories.FindSoleOrganization(context.Background(), db)
+	if err != nil {
+		t.Fatalf("organization: %v", err)
+	}
+	projectRepo := repositories.NewProjectRepositoryPostgres(db, onCommit)
+	scopes := repositories.NewProjectScopes(db, onCommit)
+	content := application.NewProjectContent(projectRepo, scopes, orgID)
+	tagSvc := application.NewTagService(content)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(db, onCommit)
-	sceneRepo := repositories.NewSceneRepositoryPostgres(db, onCommit)
 	runner := outbox.NewPolicyRunner(db, []application.Policy{
-		application.NewWidgetReconciliationPolicy(wtRepo, sceneRepo, tagRepo),
-		application.NewUnbindDeletedTagPolicy(sceneRepo, tagRepo),
+		application.NewWidgetReconciliationPolicy(wtRepo, scopes),
+		application.NewUnbindDeletedTagPolicy(scopes),
+		application.NewProjectCleanupPolicy(projectRepo, scopes),
 	})
 	dispatcher.SetPolicyRunner(runner)
 	ctx, stop := context.WithCancel(context.Background())
@@ -129,8 +145,8 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	})
 
 	wtSvc := application.NewWidgetTypeService(wtRepo)
-	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, tagRepo)
-	router := restapi.NewRouter(tagSvc, wtSvc, sceneSvc, bus, 100)
+	sceneSvc := application.NewSceneService(content, wtRepo)
+	router := restapi.NewRouter(application.NewProjectService(projectRepo, orgID), tagSvc, wtSvc, sceneSvc, bus, 100)
 
 	srv := httptest.NewServer(router.ServeMux())
 	t.Cleanup(srv.Close)

@@ -40,16 +40,16 @@ type fixture struct {
 	t   *testing.T
 	l   *Library
 	e   *uitest.Engine
-	api *apiclient.Client
+	api *testAPI
 }
 
-func newServer(t *testing.T) (string, *apiclient.Client) {
+func newServer(t *testing.T) (string, *testAPI) {
 	t.Helper()
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
-	return srv.URL, apiclient.New(srv.URL, srv.Client())
+	return srv.URL, newTestAPI(apiclient.New(srv.URL, srv.Client()))
 }
 
-func mount(t *testing.T, url string, api *apiclient.Client) *fixture {
+func mount(t *testing.T, url string, api *testAPI) *fixture {
 	t.Helper()
 	l := NewLibrary(apiclient.New(url, http.DefaultClient))
 	f := &fixture{t: t, l: l, api: api}
@@ -84,7 +84,7 @@ func (f *fixture) widgetType(id uuid.UUID) apiv0.WidgetTypeResponse {
 	return wt
 }
 
-func createWidgetType(t *testing.T, api *apiclient.Client, name string) uuid.UUID {
+func createWidgetType(t *testing.T, api *testAPI, name string) uuid.UUID {
 	t.Helper()
 	created, err := api.CreateWidgetType(context.Background(), apiv0.CreateWidgetTypeRequest{
 		Name: name, HtmlTemplate: "<div></div>", Script: "function render(inputs) {}", ScriptLanguage: "javascript",

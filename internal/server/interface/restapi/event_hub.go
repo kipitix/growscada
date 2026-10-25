@@ -5,7 +5,10 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/google/uuid"
+
 	"github.com/kipitix/growscada/internal/server/domain/event"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 )
 
@@ -14,8 +17,10 @@ import (
 // EventBus.Publish (and so the outbox dispatcher) for the rest of the application.
 const eventClientBufferSize = 64
 
-// eventHub subscribes to every EventType on the EventBus exactly once
-// and fans each published event out to all currently connected SSE clients.
+// eventHub subscribes to every EventType on the EventBus exactly once and
+// fans each published event out to the connected SSE clients of its stream:
+// an event of a project's content to the clients of that project's stream,
+// any other to the clients of the server's stream (eventStreamOf).
 type eventHub struct {
 	bus           eventbus.EventBus
 	subscriptions []eventbus.Subscription
@@ -36,6 +41,9 @@ var (
 )
 
 type eventClient struct {
+	// stream is the client's stream: a project's (its ID) or the server's
+	// (uuid.Nil).
+	stream   uuid.UUID
 	messages chan []byte
 	closed   bool
 }
@@ -94,9 +102,23 @@ func (h *eventHub) Close() {
 	})
 }
 
+// eventStreamOf returns the stream an event goes to: the project's whose
+// content it is about, or the server's (uuid.Nil) for the events of projects
+// themselves, WidgetTypes, connections and the system.
+func eventStreamOf(e event.Event) uuid.UUID {
+	if _, own := e.(project.ProjectEvent); own {
+		return uuid.Nil
+	}
+	if content, ok := e.(project.ContentEvent); ok {
+		return content.ProjectID().UUID()
+	}
+	return uuid.Nil
+}
+
 func (h *eventHub) broadcast(e event.Event) {
+	stream := eventStreamOf(e)
 	h.mu.Lock()
-	if len(h.clients) == 0 {
+	if !h.hasClientsOf(stream) {
 		h.mu.Unlock()
 		return
 	}
@@ -114,7 +136,7 @@ func (h *eventHub) broadcast(e event.Event) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for c := range h.clients {
-		if c.closed {
+		if c.closed || c.stream != stream {
 			continue
 		}
 		select {
@@ -126,11 +148,23 @@ func (h *eventHub) broadcast(e event.Event) {
 	}
 }
 
-// addClient registers a new SSE connection and returns its message channel.
-// It refuses to register once the hub is closed (errHubClosed) or beyond
-// maxClients (errTooManyClients), so the caller can reject the connection
-// before committing to any response.
-func (h *eventHub) addClient() (*eventClient, error) {
+// hasClientsOf reports whether a client of stream is connected. Called with
+// mu held.
+func (h *eventHub) hasClientsOf(stream uuid.UUID) bool {
+	for c := range h.clients {
+		if c.stream == stream {
+			return true
+		}
+	}
+	return false
+}
+
+// addClient registers a new SSE connection to stream (a project's ID, or
+// uuid.Nil for the server's) and returns its message channel. It refuses to
+// register once the hub is closed (errHubClosed) or beyond maxClients, of
+// all streams together (errTooManyClients), so the caller can reject the
+// connection before committing to any response.
+func (h *eventHub) addClient(stream uuid.UUID) (*eventClient, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -141,7 +175,7 @@ func (h *eventHub) addClient() (*eventClient, error) {
 		return nil, errTooManyClients
 	}
 
-	c := &eventClient{messages: make(chan []byte, eventClientBufferSize)}
+	c := &eventClient{stream: stream, messages: make(chan []byte, eventClientBufferSize)}
 	h.clients[c] = struct{}{}
 	return c, nil
 }

@@ -1,7 +1,8 @@
 // Package eventlog renders the global status bar (current time + "Events"
 // button) and the collapsible server event log panel that it toggles. The
-// panel subscribes to the server's SSE event stream for the lifetime of the
-// app, independently of whether it is currently visible.
+// panel subscribes to the server's SSE event streams for the lifetime of the
+// app, independently of whether it is currently visible: the server's own
+// stream and the stream of the selected project (SetProject).
 package eventlog
 
 import (
@@ -9,6 +10,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
@@ -24,25 +26,33 @@ const maxEntries = 500
 const filtersStorageKey = "eventlog:filters"
 
 // ActionServerEvent is the go-app action the Bar fires for every event received
-// from the server's SSE stream; its value is the apiv0.Event. Its Tag, if
+// from the server's SSE streams; its value is the apiv0.Event. Its Tag, if
 // any, is the state of the Tag the event is about (apiclient.ParseEvent drops
 // one that is not). Components that show server data handle it (ctx.Handle) to refresh themselves, so the app
-// keeps a single SSE connection.
+// keeps a single SSE connection per stream. An event of a project's stream
+// is of the project selected when it arrives: the stream of a project no
+// longer selected is closed, and what it still delivers is dropped.
 const ActionServerEvent = "eventlog.server-event"
 
 // EventResync is the Type of the synthetic apiv0.Event the Bar fires each time
-// the SSE connection is (re)established, the first time included. The server
-// subscribes a client before it answers, so from this point on no event is
-// missed; but events published before it (while disconnected, or before the
-// first connection was up) are not replayed. A component that shows server
-// data therefore reloads all of it on EventResync.
+// the connection to the server's stream (projects, WidgetTypes) is
+// (re)established, the first time included. The server subscribes a client
+// before it answers, so from this point on no event is missed; but events
+// published before it (while disconnected, or before the first connection
+// was up) are not replayed. A component that shows the server's data
+// therefore reloads it on EventResync.
 const EventResync = "resync"
 
+// EventProjectResync is EventResync of the stream of the selected project
+// (its Scenes, Widgets and Tags): fired each time that stream is
+// (re)established, after a switch of project too.
+const EventProjectResync = "project_resync"
+
 // StateDisconnected is the go-app state (ctx.ObserveState) holding, as a
-// bool, whether the SSE connection to the server is lost. It turns true on
+// bool, whether an SSE connection to the server is lost. It turns true on
 // the loss and false again once the browser has reconnected. It drives the
 // "stale data" indication only: the reload after a reconnection is triggered
-// by EventResync. Unset (false) until the first loss.
+// by EventResync and EventProjectResync. Unset (false) until the first loss.
 const StateDisconnected = "eventlog.disconnected"
 
 type logEntry struct {
@@ -56,18 +66,34 @@ type Bar struct {
 	app.Compo
 
 	apiServerURL string
+	// compoCtx is the component's own context, set with mounted in OnMount.
+	compoCtx app.Context
+	mounted  bool
 
 	now       string
 	panelOpen bool
 	entries   []logEntry
 	filters   map[category]bool
 
-	eventSource        app.Value
+	// server is the stream of the server's own resources; project the stream
+	// of projectID, nil while none is selected.
+	server             *eventStream
+	project            *eventStream
+	projectID          uuid.UUID
+	connectionDegraded bool
+}
+
+// eventStream is one SSE connection, kept open by the Bar until closed.
+type eventStream struct {
+	url string
+	// resync is the Type of the synthetic event fired when it opens.
+	resync             string
+	source             app.Value
 	onMessage          app.Func
 	onError            app.Func
 	onOpen             app.Func
 	reconnectScheduled bool
-	connectionDegraded bool
+	closed             bool
 }
 
 func NewBar(apiServerURL string) *Bar {
@@ -75,6 +101,7 @@ func NewBar(apiServerURL string) *Bar {
 }
 
 func (b *Bar) OnMount(ctx app.Context) {
+	b.compoCtx, b.mounted = ctx, true
 	b.now = time.Now().Format("15:04:05")
 
 	b.filters = defaultFilters()
@@ -88,22 +115,37 @@ func (b *Bar) OnMount(ctx app.Context) {
 	}
 
 	ctx.After(time.Second, b.tick)
-	b.connect(ctx)
+	b.server = b.connect(ctx, b.apiServerURL+apiv0.PathPrefix+"/events", EventResync)
+	if b.projectID != uuid.Nil {
+		b.project = b.connect(ctx, b.projectURL(b.projectID), EventProjectResync)
+	}
 }
 
 func (b *Bar) OnDismount() {
-	if b.onMessage != nil {
-		b.onMessage.Release()
+	b.server.close()
+	b.project.close()
+}
+
+// SetProject switches the project stream to the project id (uuid.Nil: none);
+// before the Bar is mounted it only remembers it. The new stream fires
+// EventProjectResync once it is open.
+func (b *Bar) SetProject(id uuid.UUID) {
+	if id == b.projectID {
+		return
 	}
-	if b.onError != nil {
-		b.onError.Release()
+	b.projectID = id
+	if !b.mounted {
+		return
 	}
-	if b.onOpen != nil {
-		b.onOpen.Release()
+	b.project.close()
+	b.project = nil
+	if id != uuid.Nil {
+		b.project = b.connect(b.compoCtx, b.projectURL(id), EventProjectResync)
 	}
-	if b.eventSource != nil {
-		b.eventSource.Call("close")
-	}
+}
+
+func (b *Bar) projectURL(id uuid.UUID) string {
+	return b.apiServerURL + apiv0.PathPrefix + apiv0.ProjectPath(id.String()) + "/events"
 }
 
 func (b *Bar) tick(ctx app.Context) {
@@ -118,55 +160,79 @@ const reconnectDelay = 2 * time.Second
 // eventSourceClosed is EventSource.CLOSED: the browser will not reconnect.
 const eventSourceClosed = 2
 
-// connect opens the SSE connection and keeps it for the component's whole
-// lifetime, with no history replay on either side. The native EventSource
-// retries a dropped connection by itself, but gives up (CLOSED) when the
-// server goes away mid-stream; handleError then reopens it.
-func (b *Bar) connect(ctx app.Context) {
-	b.onMessage = app.FuncOf(func(this app.Value, args []app.Value) any {
+// connect opens an SSE connection to url and keeps it until it is closed,
+// with no history replay on either side. The native EventSource retries a
+// dropped connection by itself, but gives up (CLOSED) when the server goes
+// away mid-stream; handleError then reopens it. Callbacks of a stream closed
+// meanwhile are ignored.
+func (b *Bar) connect(ctx app.Context, url, resync string) *eventStream {
+	st := &eventStream{url: url, resync: resync}
+	st.onMessage = app.FuncOf(func(this app.Value, args []app.Value) any {
 		data := args[0].Get("data").String()
 		ctx.Dispatch(func(ctx app.Context) {
-			b.handleMessage(ctx, data)
+			if !st.closed {
+				b.handleMessage(ctx, data)
+			}
 		})
 		return nil
 	})
 
-	b.onError = app.FuncOf(func(this app.Value, args []app.Value) any {
+	st.onError = app.FuncOf(func(this app.Value, args []app.Value) any {
 		ctx.Dispatch(func(ctx app.Context) {
-			b.handleError(ctx)
+			if !st.closed {
+				b.handleError(ctx, st)
+			}
 		})
 		return nil
 	})
 
-	b.onOpen = app.FuncOf(func(this app.Value, args []app.Value) any {
+	st.onOpen = app.FuncOf(func(this app.Value, args []app.Value) any {
 		ctx.Dispatch(func(ctx app.Context) {
-			b.handleOpen(ctx)
+			if !st.closed {
+				b.handleOpen(ctx, st)
+			}
 		})
 		return nil
 	})
 
-	b.openEventSource()
+	st.open()
+	return st
 }
 
-func (b *Bar) openEventSource() {
-	es := app.Window().Get("EventSource").New(b.apiServerURL + apiv0.PathPrefix + "/events")
-	es.Set("onmessage", b.onMessage)
-	es.Set("onerror", b.onError)
-	es.Set("onopen", b.onOpen)
-	b.eventSource = es
+func (st *eventStream) open() {
+	es := app.Window().Get("EventSource").New(st.url)
+	es.Set("onmessage", st.onMessage)
+	es.Set("onerror", st.onError)
+	es.Set("onopen", st.onOpen)
+	st.source = es
+}
+
+// close ends the stream for good; safe on nil and more than once.
+func (st *eventStream) close() {
+	if st == nil || st.closed {
+		return
+	}
+	st.closed = true
+	st.source.Call("close")
+	st.onMessage.Release()
+	st.onError.Release()
+	st.onOpen.Release()
 }
 
 // reopenIfClosed schedules a new connection when the browser has stopped
-// retrying the current one, and keeps retrying while the server is down.
-func (b *Bar) reopenIfClosed(ctx app.Context) {
-	if b.reconnectScheduled || b.eventSource.Get("readyState").Int() != eventSourceClosed {
+// retrying the stream, and keeps retrying while the server is down.
+func (b *Bar) reopenIfClosed(ctx app.Context, st *eventStream) {
+	if st.reconnectScheduled || st.source.Get("readyState").Int() != eventSourceClosed {
 		return
 	}
-	b.reconnectScheduled = true
+	st.reconnectScheduled = true
 	ctx.After(reconnectDelay, func(ctx app.Context) {
-		b.reconnectScheduled = false
-		b.eventSource.Call("close")
-		b.openEventSource()
+		st.reconnectScheduled = false
+		if st.closed {
+			return
+		}
+		st.source.Call("close")
+		st.open()
 	})
 }
 
@@ -205,13 +271,13 @@ func (b *Bar) addEntry(ev apiv0.Event) {
 	}
 }
 
-// handleError responds to the SSE connection's "error" event (dropped
-// connection, unreachable server, ...). The connection is retried — by the
-// browser, or by reopenIfClosed once the browser gives up — and the event
-// re-fires on every failed attempt, so shouldNotifyError throttles it to one
-// toast per outage instead of one per retry.
-func (b *Bar) handleError(ctx app.Context) {
-	b.reopenIfClosed(ctx)
+// handleError responds to a stream's "error" event (dropped connection,
+// unreachable server, ...). The connection is retried — by the browser, or
+// by reopenIfClosed once the browser gives up — and the event re-fires on
+// every failed attempt, so shouldNotifyError throttles it to one toast per
+// outage instead of one per retry.
+func (b *Bar) handleError(ctx app.Context, st *eventStream) {
+	b.reopenIfClosed(ctx, st)
 	notify, degraded := shouldNotifyError(b.connectionDegraded)
 	b.connectionDegraded = degraded
 	if notify {
@@ -222,12 +288,11 @@ func (b *Bar) handleError(ctx app.Context) {
 	}
 }
 
-// handleOpen responds to the SSE connection being (re)established: events
-// published before it are lost, so the components showing server data are
-// told to resync.
-func (b *Bar) handleOpen(ctx app.Context) {
+// handleOpen responds to a stream being (re)established: events published
+// before it are lost, so the components showing its data are told to resync.
+func (b *Bar) handleOpen(ctx app.Context, st *eventStream) {
 	b.markConnected(ctx)
-	ctx.NewActionWithValue(ActionServerEvent, apiv0.Event{Type: EventResync})
+	ctx.NewActionWithValue(ActionServerEvent, apiv0.Event{Type: st.resync})
 }
 
 // markConnected leaves the degraded state, announcing the reconnection to

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/google/uuid"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,7 +17,7 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
-	"github.com/kipitix/growscada/internal/server/domain/scene"
+	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
@@ -118,15 +119,27 @@ func (s *syncRecorder) code() int {
 	return s.rec.Code
 }
 
+// runEventsHandler opens the server's event stream.
 func runEventsHandler(t *testing.T, h *restapi.EventsHandlers, w http.ResponseWriter) (cancel func(), done <-chan struct{}) {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/api/v0/events", nil)
+	return serveStream(httptest.NewRequest(http.MethodGet, "/api/v0/events", nil), h.GetEvents, w)
+}
+
+// runProjectEventsHandler opens the event stream of the project projectID.
+func runProjectEventsHandler(t *testing.T, h *restapi.EventsHandlers, w http.ResponseWriter, projectID uuid.UUID) (cancel func(), done <-chan struct{}) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/projects/"+projectID.String()+"/events", nil)
+	req.SetPathValue("project_id", projectID.String())
+	return serveStream(req, h.GetProjectEvents, w)
+}
+
+func serveStream(req *http.Request, handler http.HandlerFunc, w http.ResponseWriter) (cancel func(), done <-chan struct{}) {
 	ctx, cancelFn := context.WithCancel(req.Context())
 	req = req.WithContext(ctx)
 
 	doneCh := make(chan struct{})
 	go func() {
-		h.GetEvents(w, req)
+		handler(w, req)
 		close(doneCh)
 	}()
 	return cancelFn, doneCh
@@ -146,7 +159,7 @@ func waitFor(t *testing.T, d time.Duration, condition func() bool) {
 
 func TestEventsHandlers_GetEvents_SetsSSEHeaders(t *testing.T) {
 	bus := eventbus.NewEventBus()
-	h := restapi.NewEventsHandler(bus, 100)
+	h := restapi.NewEventsHandler(bus, nil, 100)
 
 	rec := newSyncRecorder()
 	cancel, done := runEventsHandler(t, h, rec)
@@ -159,16 +172,16 @@ func TestEventsHandlers_GetEvents_SetsSSEHeaders(t *testing.T) {
 	}
 }
 
-func TestEventsHandlers_GetEvents_StreamsPublishedEvent(t *testing.T) {
+func TestEventsHandlers_GetProjectEvents_StreamsPublishedEvent(t *testing.T) {
 	bus := eventbus.NewEventBus()
-	h := restapi.NewEventsHandler(bus, 100)
+	h := restapi.NewEventsHandler(bus, anyProjects{}, 100)
 
 	rec := newSyncRecorder()
-	cancel, done := runEventsHandler(t, h, rec)
+	cancel, done := runProjectEventsHandler(t, h, rec, mainProject)
 	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), ": connected") })
 
 	tagID := id.NewID[tag.Tag]()
-	bus.Publish(tag.NewTagCreatedEvent(tagID))
+	bus.Publish(tag.NewTagCreatedEvent(tagID, mainProjectID))
 
 	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), "tag_created") })
 	cancel()
@@ -201,22 +214,22 @@ func sseEventMessages(t *testing.T, body string) []map[string]any {
 	return msgs
 }
 
-func TestEventsHandlers_GetEvents_TagUpdatedCarriesTagState(t *testing.T) {
+func TestEventsHandlers_GetProjectEvents_TagUpdatedCarriesTagState(t *testing.T) {
 	bus := eventbus.NewEventBus()
-	h := restapi.NewEventsHandler(bus, 100)
+	h := restapi.NewEventsHandler(bus, anyProjects{}, 100)
 
 	rec := newSyncRecorder()
-	cancel, done := runEventsHandler(t, h, rec)
+	cancel, done := runProjectEventsHandler(t, h, rec, mainProject)
 	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), ": connected") })
 
 	name, _ := tag.NewTagName("pressure")
 	value, _ := tag.TagTypeInteger.NewTagValue(int64(42))
 	aVersion, _ := version.New(version.WithNumber[tag.Tag](7))
-	aTag, err := tag.ReconstituteTag(id.NewID[tag.Tag](), name, tag.TagTypeInteger, value, tag.TagQualityUncertain, aVersion)
+	aTag, err := tag.ReconstituteTag(id.NewID[tag.Tag](), mainProjectID, name, tag.TagTypeInteger, value, tag.TagQualityUncertain, aVersion)
 	if err != nil {
 		t.Fatalf("NewTag: %v", err)
 	}
-	bus.Publish(tag.NewTagCreatedEvent(aTag.ID()))
+	bus.Publish(tag.NewTagCreatedEvent(aTag.ID(), mainProjectID))
 	bus.Publish(tag.NewTagUpdatedEvent(aTag))
 
 	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), "tag_updated") })
@@ -260,7 +273,7 @@ func TestEventsHandlers_GetEvents_TagUpdatedCarriesTagState(t *testing.T) {
 
 func TestEventsHandlers_GetEvents_PublishesConnectAndDisconnectEvents(t *testing.T) {
 	bus := eventbus.NewEventBus()
-	h := restapi.NewEventsHandler(bus, 100)
+	h := restapi.NewEventsHandler(bus, nil, 100)
 
 	var mu sync.Mutex
 	var seen []event.EventType
@@ -294,7 +307,7 @@ func TestEventsHandlers_GetEvents_PublishesConnectAndDisconnectEvents(t *testing
 
 func TestEventsHandlers_GetEvents_MultipleClientsEachReceiveBroadcast(t *testing.T) {
 	bus := eventbus.NewEventBus()
-	h := restapi.NewEventsHandler(bus, 100)
+	h := restapi.NewEventsHandler(bus, nil, 100)
 
 	rec1 := newSyncRecorder()
 	cancel1, done1 := runEventsHandler(t, h, rec1)
@@ -305,10 +318,10 @@ func TestEventsHandlers_GetEvents_MultipleClientsEachReceiveBroadcast(t *testing
 		return strings.Contains(rec1.body(), ": connected") && strings.Contains(rec2.body(), ": connected")
 	})
 
-	bus.Publish(scene.NewSceneCreatedEvent(id.NewID[scene.Scene]()))
+	bus.Publish(library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType]()))
 
 	waitFor(t, time.Second, func() bool {
-		return strings.Contains(rec1.body(), "scene_created") && strings.Contains(rec2.body(), "scene_created")
+		return strings.Contains(rec1.body(), "widget_type_created") && strings.Contains(rec2.body(), "widget_type_created")
 	})
 
 	cancel1()
@@ -324,9 +337,9 @@ func TestEventsHandlers_GetEvents_MultipleClientsEachReceiveBroadcast(t *testing
 // made here, so the hub never gains a client.
 func TestEventsHandlers_Publish_NoClientsDoesNotAllocate(t *testing.T) {
 	bus := eventbus.NewEventBus()
-	_ = restapi.NewEventsHandler(bus, 100) // subscribes the hub to bus; no client connects
+	_ = restapi.NewEventsHandler(bus, nil, 100) // subscribes the hub to bus; no client connects
 
-	e := tag.NewTagCreatedEvent(id.NewID[tag.Tag]())
+	e := library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType]())
 
 	allocs := testing.AllocsPerRun(200, func() {
 		bus.Publish(e)
@@ -341,9 +354,9 @@ func TestEventsHandlers_Publish_NoClientsDoesNotAllocate(t *testing.T) {
 // broadcast path for manual profiling; run with `make bench`.
 func BenchmarkEventsHandlers_Publish_NoClients(b *testing.B) {
 	bus := eventbus.NewEventBus()
-	_ = restapi.NewEventsHandler(bus, 100)
+	_ = restapi.NewEventsHandler(bus, nil, 100)
 
-	e := tag.NewTagCreatedEvent(id.NewID[tag.Tag]())
+	e := library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType]())
 
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -386,7 +399,7 @@ func (b *countingBus) activeSubscriptions() int {
 // detaches the hub from the EventBus.
 func TestEventsHandlers_Close_EndsOpenStream(t *testing.T) {
 	bus := &countingBus{EventBus: eventbus.NewEventBus()}
-	h := restapi.NewEventsHandler(bus, 100)
+	h := restapi.NewEventsHandler(bus, nil, 100)
 	if bus.activeSubscriptions() == 0 {
 		t.Fatal("expected the hub to subscribe to the EventBus")
 	}
@@ -471,7 +484,7 @@ func (w *stalledConnWriter) writeDeadline() time.Time {
 // until its timeout.
 func TestEventsHandlers_GetEvents_StalledWriteEndsOnDeadline(t *testing.T) {
 	bus := eventbus.NewEventBus()
-	h := restapi.NewEventsHandler(bus, 100)
+	h := restapi.NewEventsHandler(bus, nil, 100)
 
 	w := newStalledConnWriter()
 	cancel, done := runEventsHandler(t, h, w)
@@ -483,7 +496,7 @@ func TestEventsHandlers_GetEvents_StalledWriteEndsOnDeadline(t *testing.T) {
 	})
 
 	sent := time.Now()
-	bus.Publish(scene.NewSceneCreatedEvent(id.NewID[scene.Scene]()))
+	bus.Publish(library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType]()))
 	select {
 	case <-w.stalled:
 	case <-time.After(time.Second):
@@ -512,7 +525,7 @@ func TestEventsHandlers_GetEvents_StalledWriteEndsOnDeadline(t *testing.T) {
 // Close is refused at once with a Problem saying why, instead of hanging.
 func TestEventsHandlers_GetEvents_RejectedAfterClose(t *testing.T) {
 	bus := eventbus.NewEventBus()
-	h := restapi.NewEventsHandler(bus, 100)
+	h := restapi.NewEventsHandler(bus, nil, 100)
 	h.Close()
 
 	rec := newSyncRecorder()
@@ -539,7 +552,7 @@ func TestEventsHandlers_GetEvents_RejectedAfterClose(t *testing.T) {
 // (make test runs with -race).
 func TestEventsHandlers_Close_ConcurrentWithDisconnects(t *testing.T) {
 	bus := eventbus.NewEventBus()
-	h := restapi.NewEventsHandler(bus, 100)
+	h := restapi.NewEventsHandler(bus, nil, 100)
 
 	const clients = 20
 	cancels := make([]func(), clients)
@@ -562,7 +575,7 @@ func TestEventsHandlers_Close_ConcurrentWithDisconnects(t *testing.T) {
 	for range 4 {
 		wg.Go(func() {
 			for range 50 {
-				bus.Publish(scene.NewSceneCreatedEvent(id.NewID[scene.Scene]()))
+				bus.Publish(library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType]()))
 			}
 		})
 	}
@@ -588,7 +601,7 @@ func TestEventsHandlers_Close_ConcurrentWithDisconnects(t *testing.T) {
 // timeout, and the client must see the stream end.
 func TestEventsHandlers_Close_LetsServerShutdown(t *testing.T) {
 	bus := eventbus.NewEventBus()
-	h := restapi.NewEventsHandler(bus, 100)
+	h := restapi.NewEventsHandler(bus, nil, 100)
 	srv := httptest.NewServer(http.HandlerFunc(h.GetEvents))
 	defer srv.Close()
 
@@ -622,7 +635,7 @@ func TestEventsHandlers_Close_LetsServerShutdown(t *testing.T) {
 // test from needing to open 100 real connections.
 func TestEventsHandlers_GetEvents_RejectsBeyondMaxClients(t *testing.T) {
 	bus := eventbus.NewEventBus()
-	h := restapi.NewEventsHandler(bus, 2)
+	h := restapi.NewEventsHandler(bus, nil, 2)
 
 	rec1 := newSyncRecorder()
 	cancel1, done1 := runEventsHandler(t, h, rec1)
@@ -667,7 +680,7 @@ func TestEventsHandlers_GetEvents_RejectsBeyondMaxClients(t *testing.T) {
 // eventually be disconnected once its buffer overflows.
 func TestEventsHandlers_GetEvents_SlowClientIsDroppedWithoutBlockingPublish(t *testing.T) {
 	bus := eventbus.NewEventBus()
-	h := restapi.NewEventsHandler(bus, 100)
+	h := restapi.NewEventsHandler(bus, nil, 100)
 
 	w := newBlockingResponseWriter()
 	cancel, done := runEventsHandler(t, h, w)
@@ -679,7 +692,7 @@ func TestEventsHandlers_GetEvents_SlowClientIsDroppedWithoutBlockingPublish(t *t
 	deadline := time.After(time.Second)
 publishUntilStarted:
 	for {
-		bus.Publish(tag.NewTagCreatedEvent(id.NewID[tag.Tag]()))
+		bus.Publish(library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType]()))
 		select {
 		case <-w.started:
 			break publishUntilStarted
@@ -694,7 +707,7 @@ publishUntilStarted:
 	publishDone := make(chan struct{})
 	go func() {
 		for i := 0; i < 200; i++ {
-			bus.Publish(tag.NewTagCreatedEvent(id.NewID[tag.Tag]()))
+			bus.Publish(library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType]()))
 		}
 		close(publishDone)
 	}()

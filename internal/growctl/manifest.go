@@ -1,6 +1,6 @@
 // Package growctl implements growctl — a kubectl-style CLI that declaratively
-// manages GrowSCADA entities (currently only Tags) from YAML manifests through
-// the REST API.
+// manages GrowSCADA entities (Projects and the Tags of a Project) from YAML
+// manifests through the REST API.
 package growctl
 
 import (
@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	manifestv0 "github.com/kipitix/growscada/contract/manifest/v0"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
 
@@ -24,26 +25,45 @@ var errNoManifest = errors.New("no manifest given: use -f <file|directory|->")
 
 // TagManifest is a validated Tag document from a manifest.
 // InitialValue and InitialQuality are applied only when the tag is created.
+// Project is metadata.project, "" when the document names none.
 type TagManifest struct {
 	Name           string
+	Project        string
 	Type           string
 	InitialValue   string
 	InitialQuality string
 }
 
-// ReadManifests reads Tag manifests from the given sources: a file, a directory
+// ProjectManifest is a validated Project document from a manifest.
+type ProjectManifest struct {
+	Name string
+}
+
+// Manifests are the documents of one or more manifests, by kind, each in
+// the order declared.
+type Manifests struct {
+	Projects []ProjectManifest
+	Tags     []TagManifest
+}
+
+func (m *Manifests) add(other Manifests) {
+	m.Projects = append(m.Projects, other.Projects...)
+	m.Tags = append(m.Tags, other.Tags...)
+}
+
+// ReadManifests reads manifests from the given sources: a file, a directory
 // (its *.yaml and *.yml files, non-recursive, in name order) or "-" for stdin.
-// Tag names must be unique across all sources.
-func ReadManifests(sources []string, stdin io.Reader) ([]TagManifest, error) {
+// Project names and Tag names must each be unique across all sources.
+func ReadManifests(sources []string, stdin io.Reader) (Manifests, error) {
 	if len(sources) == 0 {
-		return nil, errNoManifest
+		return Manifests{}, errNoManifest
 	}
 
-	var all []TagManifest
+	var all Manifests
 	for _, source := range sources {
 		files, err := expandSource(source)
 		if err != nil {
-			return nil, err
+			return Manifests{}, err
 		}
 		for _, file := range files {
 			var data []byte
@@ -53,22 +73,29 @@ func ReadManifests(sources []string, stdin io.Reader) ([]TagManifest, error) {
 				data, err = os.ReadFile(file)
 			}
 			if err != nil {
-				return nil, fmt.Errorf("cannot read %s: %w", file, err)
+				return Manifests{}, fmt.Errorf("cannot read %s: %w", file, err)
 			}
 			manifests, err := ParseManifests(data)
 			if err != nil {
-				return nil, fmt.Errorf("%s: %w", file, err)
+				return Manifests{}, fmt.Errorf("%s: %w", file, err)
 			}
-			all = append(all, manifests...)
+			all.add(manifests)
 		}
 	}
 
-	seen := make(map[string]bool, len(all))
-	for _, m := range all {
-		if seen[m.Name] {
-			return nil, fmt.Errorf("tag/%s is declared more than once", m.Name)
+	seenProjects := make(map[string]bool, len(all.Projects))
+	for _, m := range all.Projects {
+		if seenProjects[m.Name] {
+			return Manifests{}, fmt.Errorf("project/%s is declared more than once", m.Name)
 		}
-		seen[m.Name] = true
+		seenProjects[m.Name] = true
+	}
+	seenTags := make(map[string]bool, len(all.Tags))
+	for _, m := range all.Tags {
+		if seenTags[m.Name] {
+			return Manifests{}, fmt.Errorf("tag/%s is declared more than once", m.Name)
+		}
+		seenTags[m.Name] = true
 	}
 	return all, nil
 }
@@ -104,9 +131,9 @@ func expandSource(source string) ([]string, error) {
 // skipped; unknown fields, kinds and apiVersions are errors, and every spec
 // field is required. A manifest of a newer MINOR than growctl knows is
 // refused with a request to update growctl (ADR 0005).
-func ParseManifests(data []byte) ([]TagManifest, error) {
+func ParseManifests(data []byte) (Manifests, error) {
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
-	var manifests []TagManifest
+	var manifests Manifests
 	for docIndex := 1; ; docIndex++ {
 		var node yaml.Node
 		err := decoder.Decode(&node)
@@ -114,16 +141,14 @@ func ParseManifests(data []byte) ([]TagManifest, error) {
 			return manifests, nil
 		}
 		if err != nil {
-			return nil, fmt.Errorf("document %d: %w", docIndex, err)
+			return Manifests{}, fmt.Errorf("document %d: %w", docIndex, err)
 		}
 		if isEmptyDocument(&node) {
 			continue
 		}
-		m, err := parseDocument(&node)
-		if err != nil {
-			return nil, fmt.Errorf("document %d: %w", docIndex, err)
+		if err := parseDocument(&node, &manifests); err != nil {
+			return Manifests{}, fmt.Errorf("document %d: %w", docIndex, err)
 		}
-		manifests = append(manifests, m)
 	}
 }
 
@@ -136,31 +161,63 @@ func isEmptyDocument(node *yaml.Node) bool {
 	return content.Kind == yaml.ScalarNode && content.Tag == "!!null"
 }
 
-func parseDocument(node *yaml.Node) (TagManifest, error) {
+// parseDocument validates one document and adds it to manifests by its kind.
+func parseDocument(node *yaml.Node, manifests *Manifests) error {
 	var header manifestv0.Header
 	if err := node.Decode(&header); err != nil {
-		return TagManifest{}, err
+		return err
 	}
 	if err := checkAPIVersion(header.APIVersion); err != nil {
-		return TagManifest{}, err
+		return err
 	}
-	if header.Kind != manifestv0.KindTag {
-		return TagManifest{}, fmt.Errorf("unsupported kind %q, expected %q", header.Kind, manifestv0.KindTag)
+	switch header.Kind {
+	case manifestv0.KindTag:
+		var doc manifestv0.TagDocument
+		if err := decodeStrict(node, &doc); err != nil {
+			return err
+		}
+		m, err := validateTag(doc)
+		if err != nil {
+			return err
+		}
+		manifests.Tags = append(manifests.Tags, m)
+	case manifestv0.KindProject:
+		var doc manifestv0.ProjectDocument
+		if err := decodeStrict(node, &doc); err != nil {
+			return err
+		}
+		m, err := validateProject(doc)
+		if err != nil {
+			return err
+		}
+		manifests.Projects = append(manifests.Projects, m)
+	default:
+		return fmt.Errorf("unsupported kind %q, expected %q or %q", header.Kind, manifestv0.KindProject, manifestv0.KindTag)
 	}
+	return nil
+}
 
-	// yaml.Node.Decode cannot reject unknown fields, so re-encode the document
-	// and decode it strictly.
+// decodeStrict decodes a document rejecting unknown fields: yaml.Node.Decode
+// cannot, so the document is re-encoded and decoded strictly.
+func decodeStrict(node *yaml.Node, doc any) error {
 	raw, err := yaml.Marshal(node)
 	if err != nil {
-		return TagManifest{}, err
+		return err
 	}
 	strict := yaml.NewDecoder(bytes.NewReader(raw))
 	strict.KnownFields(true)
-	var doc manifestv0.TagDocument
-	if err := strict.Decode(&doc); err != nil {
-		return TagManifest{}, err
+	return strict.Decode(doc)
+}
+
+func validateProject(doc manifestv0.ProjectDocument) (ProjectManifest, error) {
+	name := doc.Metadata.Name
+	if name == "" {
+		return ProjectManifest{}, errors.New("metadata.name is required")
 	}
-	return validateTag(doc)
+	if _, err := project.NewProjectName(name); err != nil {
+		return ProjectManifest{}, fmt.Errorf("project/%s: invalid metadata.name: %w", name, err)
+	}
+	return ProjectManifest{Name: name}, nil
 }
 
 // preVersioningAPIVersion is what manifests carried before ADR 0005: the
@@ -196,6 +253,11 @@ func validateTag(doc manifestv0.TagDocument) (TagManifest, error) {
 	if _, err := tag.NewTagName(name); err != nil {
 		return TagManifest{}, fmt.Errorf("tag/%s: invalid metadata.name: %w", name, err)
 	}
+	if doc.Metadata.Project != "" {
+		if _, err := project.NewProjectName(doc.Metadata.Project); err != nil {
+			return TagManifest{}, fmt.Errorf("tag/%s: invalid metadata.project: %w", name, err)
+		}
+	}
 
 	spec := doc.Spec
 	for _, field := range []struct {
@@ -224,6 +286,7 @@ func validateTag(doc manifestv0.TagDocument) (TagManifest, error) {
 
 	return TagManifest{
 		Name:           name,
+		Project:        doc.Metadata.Project,
 		Type:           tagType.String(),
 		InitialValue:   *spec.InitialValue,
 		InitialQuality: *spec.InitialQuality,

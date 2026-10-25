@@ -1,11 +1,11 @@
 info:
   name: delete scene by id
   type: http
-  seq: 25
+  seq: 31
 
 http:
   method: DELETE
-  url: http://{{API_SERVER}}/api/v0/scenes/{{SCENE_ID}}
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/scenes/{{SCENE_ID}}
   auth: inherit
 
 docs: |

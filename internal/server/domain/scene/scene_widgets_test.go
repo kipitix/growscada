@@ -8,6 +8,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
@@ -60,7 +61,7 @@ func tagTypesOf(someWidgets ...Widget) TagTypes {
 	for _, tagID := range BoundTagIDs(someWidgets...) {
 		types[tagID] = tag.TagTypeInteger
 	}
-	return NewTagTypes(types)
+	return NewTagTypes(testProject, types)
 }
 
 // makeTypedWidgetType builds a WidgetType declaring one port, "value", with
@@ -93,7 +94,7 @@ func makeStoredScene(t *testing.T, someWidgets ...Widget) Scene {
 	name, _ := NewSceneName("boiler_room")
 	size, _ := NewSceneSize(1920, 1080)
 	ver, _ := version.New(version.WithNumber[Scene](3))
-	return ReconstituteScene(id.NewID[Scene](), name, size, NewBackgroundHTML(""), someWidgets, ver)
+	return ReconstituteScene(id.NewID[Scene](), testProject, name, size, NewBackgroundHTML(""), someWidgets, ver)
 }
 
 func staleVersion(sc Scene) version.Version[Scene] {
@@ -279,7 +280,7 @@ func bindValue(t *testing.T, wt library.WidgetType, tagID id.ID[tag.Tag], as ...
 
 func TestSceneWidgetChanges_CheckBoundTagTypes(t *testing.T) {
 	intTag, strTag, missingTag := id.NewID[tag.Tag](), id.NewID[tag.Tag](), id.NewID[tag.Tag]()
-	tagTypes := NewTagTypes(map[id.ID[tag.Tag]]tag.TagType{
+	tagTypes := NewTagTypes(testProject, map[id.ID[tag.Tag]]tag.TagType{
 		intTag: tag.TagTypeInteger,
 		strTag: tag.TagTypeString,
 	})
@@ -316,11 +317,31 @@ func TestSceneWidgetChanges_CheckBoundTagTypes(t *testing.T) {
 	}
 }
 
+// TestSceneWidgetChanges_BindOnlyTagsOfTheScenesProject checks that a Tag
+// known only as a Tag of another Project cannot be bound (ADR 0006): for the
+// Scene it does not exist.
+func TestSceneWidgetChanges_BindOnlyTagsOfTheScenesProject(t *testing.T) {
+	foreignTag := id.NewID[tag.Tag]()
+	ofOtherProject := NewTagTypes(id.NewID[project.Project](), map[id.ID[tag.Tag]]tag.TagType{foreignTag: tag.TagTypeInteger})
+	wt := makeTypedWidgetType(t, "")
+	existing := makeWidgetOf(t, wt, "w1")
+	sc := makeStoredScene(t, existing)
+
+	_, addErr := sc.AddWidget(sc.Version(), bindValue(t, wt, foreignTag), wt, ofOtherProject)
+	_, updateErr := sc.UpdateWidget(sc.Version(), bindValue(t, wt, foreignTag, existing), wt, ofOtherProject)
+
+	for op, err := range map[string]error{"AddWidget": addErr, "UpdateWidget": updateErr} {
+		if !errors.Is(err, ErrBoundTagNotFound) {
+			t.Errorf("%s: expected ErrBoundTagNotFound, got %v", op, err)
+		}
+	}
+}
+
 func TestSceneAddWidget_UndeclaredPortGoesBeforeMissingTag(t *testing.T) {
 	wt := makeWidgetType(t, "value")
 	sc := makeStoredScene(t)
 
-	_, err := sc.AddWidget(sc.Version(), makeWidgetOf(t, wt, "w1", "missing"), wt, NewTagTypes(nil))
+	_, err := sc.AddWidget(sc.Version(), makeWidgetOf(t, wt, "w1", "missing"), wt, NewTagTypes(testProject, nil))
 
 	if !errors.Is(err, ErrPortNotDeclared) {
 		t.Errorf("expected ErrPortNotDeclared, got %v", err)
@@ -451,7 +472,7 @@ func makeWidgetTypeWithID(t *testing.T, anID id.ID[library.WidgetType], ports ..
 func TestSceneReconcileWith_RemovesBindingsTheNarrowedHintRefuses(t *testing.T) {
 	anyType := makeTypedWidgetType(t, "")
 	intTag, strTag := id.NewID[tag.Tag](), id.NewID[tag.Tag]()
-	tagTypes := NewTagTypes(map[id.ID[tag.Tag]]tag.TagType{
+	tagTypes := NewTagTypes(testProject, map[id.ID[tag.Tag]]tag.TagType{
 		intTag: tag.TagTypeInteger,
 		strTag: tag.TagTypeString,
 	})
@@ -479,7 +500,7 @@ func TestSceneReconcileWith_RemovesBindingsOfMissingTags(t *testing.T) {
 	w := makeWidgetOf(t, wt, "w1", "value", "alarm")
 	alarmTag := w.PortBindings()[1].TagID()
 	sc := makeStoredScene(t, w)
-	onlyValue := NewTagTypes(map[id.ID[tag.Tag]]tag.TagType{w.PortBindings()[0].TagID(): tag.TagTypeInteger})
+	onlyValue := NewTagTypes(testProject, map[id.ID[tag.Tag]]tag.TagType{w.PortBindings()[0].TagID(): tag.TagTypeInteger})
 
 	reconciled, changed := sc.ReconcileWith(wt, onlyValue)
 
@@ -496,6 +517,20 @@ func TestSceneReconcileWith_RemovesBindingsOfMissingTags(t *testing.T) {
 	}
 }
 
+func TestSceneReconcileWith_RemovesBindingsOfTagsOfAnotherProject(t *testing.T) {
+	wt := makeWidgetType(t, "value")
+	w := makeWidgetOf(t, wt, "w1", "value")
+	sc := makeStoredScene(t, w)
+
+	reconciled, changed := sc.ReconcileWith(wt, NewTagTypes(id.NewID[project.Project](), map[id.ID[tag.Tag]]tag.TagType{
+		w.PortBindings()[0].TagID(): tag.TagTypeInteger,
+	}))
+
+	if !changed || len(reconciled.Widgets()[0].PortBindings()) != 0 {
+		t.Errorf("binding of a tag of another project: expected it removed, got %v", reconciled.Widgets()[0].PortBindings())
+	}
+}
+
 func TestSceneUpdateWidget_ChecksOnlyBindingsTheWidgetDidNotHold(t *testing.T) {
 	wt := makeWidgetType(t, "value", "alarm")
 	stored := makeWidgetOf(t, wt, "w1", "value")
@@ -506,10 +541,10 @@ func TestSceneUpdateWidget_ChecksOnlyBindingsTheWidgetDidNotHold(t *testing.T) {
 	updated := NewWidget(stored.ID(), stored.Name(), NewPosition(10, 0, 0), stored.Size(), stored.Origin(), stored.Rotation(),
 		wt.ID(), nil, []PortBinding{held, added})
 
-	if _, err := sc.UpdateWidget(sc.Version(), updated, wt, NewTagTypes(map[id.ID[tag.Tag]]tag.TagType{added.TagID(): tag.TagTypeInteger})); err != nil {
+	if _, err := sc.UpdateWidget(sc.Version(), updated, wt, NewTagTypes(testProject, map[id.ID[tag.Tag]]tag.TagType{added.TagID(): tag.TagTypeInteger})); err != nil {
 		t.Errorf("held binding broken since: expected no error, got %v", err)
 	}
-	if _, err := sc.UpdateWidget(sc.Version(), updated, wt, NewTagTypes(nil)); !errors.Is(err, ErrBoundTagNotFound) {
+	if _, err := sc.UpdateWidget(sc.Version(), updated, wt, NewTagTypes(testProject, nil)); !errors.Is(err, ErrBoundTagNotFound) {
 		t.Errorf("new binding to a missing tag: expected ErrBoundTagNotFound, got %v", err)
 	}
 }

@@ -31,11 +31,12 @@ spec:
 `
 
 func TestParseManifests_Valid_ReturnsTagsInOrder(t *testing.T) {
-	got, err := growctl.ParseManifests([]byte(twoTags))
+	parsed, err := growctl.ParseManifests([]byte(twoTags))
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	got := parsed.Tags
 	want := []growctl.TagManifest{
 		{Name: "pump1.running", Type: "boolean", InitialValue: "false", InitialQuality: "good"},
 		{Name: "pump1.label", Type: "string", InitialValue: "", InitialQuality: "uncertain"},
@@ -51,20 +52,46 @@ func TestParseManifests_EmptyDocuments_AreSkipped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(got) != 2 {
-		t.Errorf("expected 2 tags, got %d", len(got))
+	if len(got.Tags) != 2 {
+		t.Errorf("expected 2 tags, got %d", len(got.Tags))
 	}
 }
 
 func TestParseManifests_OlderMinor_IsAccepted(t *testing.T) {
-	// "growscada/v0" reads as v0.0, which this growctl (v0.1) understands.
+	// "growscada/v0" reads as v0.0, which this growctl (v0.2) understands.
 	got, err := growctl.ParseManifests([]byte("apiVersion: growscada/v0\nkind: Tag\nmetadata:\n  name: t\n" +
 		"spec: {type: integer, initialValue: 0, initialQuality: good}\n"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(got) != 1 || got[0].Name != "t" {
+	if len(got.Tags) != 1 || got.Tags[0].Name != "t" {
 		t.Errorf("got %+v", got)
+	}
+}
+
+func TestParseManifests_ProjectsAndTagsOfAProject(t *testing.T) {
+	got, err := growctl.ParseManifests([]byte(`
+apiVersion: growscada/v0.2
+kind: Project
+metadata:
+  name: Line 1
+---
+apiVersion: growscada/v0.2
+kind: Tag
+metadata:
+  name: speed
+  project: Line 1
+spec: {type: integer, initialValue: 0, initialQuality: good}
+`))
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !reflect.DeepEqual(got.Projects, []growctl.ProjectManifest{{Name: "Line 1"}}) {
+		t.Errorf("projects: %+v", got.Projects)
+	}
+	if len(got.Tags) != 1 || got.Tags[0].Name != "speed" || got.Tags[0].Project != "Line 1" {
+		t.Errorf("tags: %+v", got.Tags)
 	}
 }
 
@@ -91,6 +118,9 @@ func TestParseManifests_Invalid_ReturnsError(t *testing.T) {
 		{"value not matching type", header + "spec: {type: integer, initialValue: abc, initialQuality: good}\n", "invalid spec.initialValue"},
 		{"invalid quality", header + "spec: {type: integer, initialValue: 0, initialQuality: unknown}\n", "invalid spec.initialQuality"},
 		{"malformed yaml", "apiVersion: [", "document 1"},
+		{"project without name", "apiVersion: growscada/v0.2\nkind: Project\nmetadata: {}\n", "metadata.name is required"},
+		{"project with a project", "apiVersion: growscada/v0.2\nkind: Project\nmetadata: {name: a, project: b}\n", "field project not found"},
+		{"project with a spec", "apiVersion: growscada/v0.2\nkind: Project\nmetadata: {name: a}\nspec: {}\n", "field spec not found"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -117,7 +147,7 @@ func TestReadManifests_Directory_ReadsYAMLFilesInNameOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(got) != 2 || got[0].Name != "first" || got[1].Name != "second" {
+	if len(got.Tags) != 2 || got.Tags[0].Name != "first" || got.Tags[1].Name != "second" {
 		t.Errorf("got %+v, want first then second", got)
 	}
 }
@@ -128,7 +158,7 @@ func TestReadManifests_Stdin_ReadsFromReader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(got) != 1 || got[0].Name != "from-stdin" {
+	if len(got.Tags) != 1 || got.Tags[0].Name != "from-stdin" {
 		t.Errorf("got %+v", got)
 	}
 }
@@ -184,7 +214,17 @@ func TestReadManifests_ExampleManifest_IsValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("example manifest is invalid: %v", err)
 	}
-	if len(got) == 0 {
+	if len(got.Tags) == 0 {
 		t.Error("example manifest declares no tags")
+	}
+}
+
+func TestReadManifests_DuplicateProject_ReturnsError(t *testing.T) {
+	const project = "apiVersion: growscada/v0.2\nkind: Project\nmetadata:\n  name: Line 1\n"
+
+	_, err := growctl.ReadManifests([]string{"-"}, strings.NewReader(project+"---\n"+project))
+
+	if err == nil || !strings.Contains(err.Error(), "project/Line 1 is declared more than once") {
+		t.Errorf("expected duplicate error, got %v", err)
 	}
 }

@@ -1,11 +1,11 @@
 info:
   name: get tags by name
   type: http
-  seq: 2
+  seq: 5
 
 http:
   method: GET
-  url: http://{{API_SERVER}}/api/v0/tags?name=creator
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/tags?name=creator
   auth: inherit
 
 docs: |

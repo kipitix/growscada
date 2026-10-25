@@ -1,13 +1,13 @@
 info:
   name: post tags newer client
   type: http
-  seq: 15
+  seq: 20
   tags:
     - invalid-body
 
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v0/tags
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/tags
   headers:
     - name: GrowSCADA-Schema-Version
       value: "0.99"

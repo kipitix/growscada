@@ -9,6 +9,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/domain/version"
@@ -28,11 +29,12 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 	sceneID := id.NewID[scene.Scene]()
 	widgetTypeID := id.NewID[library.WidgetType]()
 	clientID := id.NewID[client.Client]()
+	projectID := id.NewID[project.Project]()
 
 	name, _ := tag.NewTagName("pressure")
 	value, _ := tag.TagTypeInteger.NewTagValue(int64(42))
 	tagVersion, _ := version.New(version.WithNumber[tag.Tag](7))
-	updatedTag, err := tag.ReconstituteTag(tagID, name, tag.TagTypeInteger, value, tag.TagQualityGood, tagVersion)
+	updatedTag, err := tag.ReconstituteTag(tagID, projectID, name, tag.TagTypeInteger, value, tag.TagQualityGood, tagVersion)
 	if err != nil {
 		t.Fatalf("reconstitute tag: %v", err)
 	}
@@ -43,13 +45,13 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 	}{
 		event.EventTypeSystemReady: {eventbus.NewSystemReadyEvent(ts),
 			apiv0.Event{Type: "system_ready"}},
-		event.EventTypeTagCreated: {tag.NewTagCreatedEvent(tagID, ts),
+		event.EventTypeTagCreated: {tag.NewTagCreatedEvent(tagID, projectID, ts),
 			apiv0.Event{Type: "tag_created", ID: tagID.String()}},
 		event.EventTypeTagUpdated: {tag.NewTagUpdatedEvent(updatedTag, ts),
 			apiv0.Event{Type: "tag_updated", ID: tagID.String(), Tag: &apiv0.TagResponse{
 				ID: tagID.UUID(), Name: "pressure", Type: "integer", Value: "42", Quality: "good", Version: 7,
 			}}},
-		event.EventTypeTagDeleted: {tag.NewTagDeletedEvent(tagID, ts),
+		event.EventTypeTagDeleted: {tag.NewTagDeletedEvent(tagID, projectID, ts),
 			apiv0.Event{Type: "tag_deleted", ID: tagID.String()}},
 		event.EventTypeWidgetTypeCreated: {library.NewWidgetTypeCreatedEvent(widgetTypeID, ts),
 			apiv0.Event{Type: "widget_type_created", ID: widgetTypeID.String()}},
@@ -57,22 +59,28 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 			apiv0.Event{Type: "widget_type_updated", ID: widgetTypeID.String()}},
 		event.EventTypeWidgetTypeDeleted: {library.NewWidgetTypeDeletedEvent(widgetTypeID, ts),
 			apiv0.Event{Type: "widget_type_deleted", ID: widgetTypeID.String()}},
-		event.EventTypeWidgetCreated: {scene.NewWidgetCreatedEvent(widgetID, sceneID, widgetTypeID, ts),
+		event.EventTypeWidgetCreated: {scene.NewWidgetCreatedEvent(widgetID, sceneID, projectID, widgetTypeID, ts),
 			apiv0.Event{Type: "widget_created", ID: widgetID.String(), SceneID: sceneID.String()}},
-		event.EventTypeWidgetUpdated: {scene.NewWidgetUpdatedEvent(widgetID, sceneID, widgetTypeID, ts),
+		event.EventTypeWidgetUpdated: {scene.NewWidgetUpdatedEvent(widgetID, sceneID, projectID, widgetTypeID, ts),
 			apiv0.Event{Type: "widget_updated", ID: widgetID.String(), SceneID: sceneID.String()}},
-		event.EventTypeWidgetDeleted: {scene.NewWidgetDeletedEvent(widgetID, sceneID, ts),
+		event.EventTypeWidgetDeleted: {scene.NewWidgetDeletedEvent(widgetID, sceneID, projectID, ts),
 			apiv0.Event{Type: "widget_deleted", ID: widgetID.String(), SceneID: sceneID.String()}},
-		event.EventTypeSceneCreated: {scene.NewSceneCreatedEvent(sceneID, ts),
+		event.EventTypeSceneCreated: {scene.NewSceneCreatedEvent(sceneID, projectID, ts),
 			apiv0.Event{Type: "scene_created", ID: sceneID.String()}},
-		event.EventTypeSceneUpdated: {scene.NewSceneUpdatedEvent(sceneID, ts),
+		event.EventTypeSceneUpdated: {scene.NewSceneUpdatedEvent(sceneID, projectID, ts),
 			apiv0.Event{Type: "scene_updated", ID: sceneID.String()}},
-		event.EventTypeSceneDeleted: {scene.NewSceneDeletedEvent(sceneID, ts),
+		event.EventTypeSceneDeleted: {scene.NewSceneDeletedEvent(sceneID, projectID, ts),
 			apiv0.Event{Type: "scene_deleted", ID: sceneID.String()}},
 		event.EventTypeClientConnected: {eventbus.NewClientConnectedEvent(clientID, ts),
 			apiv0.Event{Type: "client_connected", ID: clientID.String()}},
 		event.EventTypeClientDisconnected: {eventbus.NewClientDisconnectedEvent(clientID, ts),
 			apiv0.Event{Type: "client_disconnected", ID: clientID.String()}},
+		event.EventTypeProjectCreated: {project.NewProjectCreatedEvent(projectID, ts),
+			apiv0.Event{Type: "project_created", ID: projectID.String()}},
+		event.EventTypeProjectUpdated: {project.NewProjectUpdatedEvent(projectID, ts),
+			apiv0.Event{Type: "project_updated", ID: projectID.String()}},
+		event.EventTypeProjectDeleted: {project.NewProjectDeletedEvent(projectID, ts),
+			apiv0.Event{Type: "project_deleted", ID: projectID.String()}},
 	}
 
 	for _, et := range event.AllEventTypes() {

@@ -79,15 +79,19 @@ func (p *Project) loadStaleScenes(ctx app.Context) {
 		return
 	}
 	clear(p.staleScenes)
+	content := p.content
+	if content == nil {
+		return
+	}
 	mark := p.markScenes()
 	uiutil.Load(p.compoCtx, &p.staleScenesReloader, func(c context.Context) (*apiv0.SceneResponse, error) {
-		sc, err := p.client.GetScene(c, sceneID)
+		sc, err := content.GetScene(c, sceneID)
 		if errors.Is(err, apiclient.ErrNotFound) {
 			return nil, nil
 		}
 		return &sc, err
 	}, func(ctx app.Context, sc *apiv0.SceneResponse) {
-		if sc != nil {
+		if sc != nil && content == p.content {
 			p.setScene(ctx, mark, *sc)
 		}
 	}, p.loadStaleScenes)

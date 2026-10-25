@@ -3,10 +3,12 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
 )
@@ -36,12 +38,37 @@ func newOptions(opts []Option) options {
 // aggregateStore is the Save/Delete template of the Postgres repositories
 // (ADR 0008): one transaction writes the aggregate's row, compare-and-swap on
 // the Version it was read at, and the events it recorded into the outbox.
+// The store of a Project's content (project set) touches only rows of that
+// Project.
 type aggregateStore[T any] struct {
 	db       *sql.DB
 	table    tableName
+	project  *id.ID[project.Project]
 	notFound error
 	conflict error
 	onCommit func()
+}
+
+// errOtherProject marks the write of an aggregate of another Project through
+// the repositories of a Project: a programming error (ADR 0006).
+var errOtherProject = errors.New("aggregate of another project")
+
+// checkProject returns an error unless an aggregate of aProjectID may be
+// written through the store: one of the store's Project.
+func (s aggregateStore[T]) checkProject(aProjectID id.ID[project.Project]) error {
+	if s.project == nil || *s.project != aProjectID {
+		return fmt.Errorf("cannot write to %s: %w: %s, not %v", s.table, errOtherProject, aProjectID, s.project)
+	}
+	return nil
+}
+
+// where returns the condition matching anID's row, within the store's
+// Project if it has one, and its arguments, numbered from $1.
+func (s aggregateStore[T]) where(anID id.ID[T]) (string, []any) {
+	if s.project == nil {
+		return `id = $1`, []any{anID.UUID()}
+	}
+	return `id = $1 AND project_id = $2`, []any{anID.UUID(), s.project.UUID()}
 }
 
 // rowWrite writes an aggregate's rows in a Save's transaction.
@@ -76,7 +103,7 @@ func (s aggregateStore[T]) save(ctx context.Context, anID id.ID[T], current vers
 			return err
 		}
 		if !found {
-			return classifyUpdateConflict(ctx, tx, s.table, anID, s.notFound, s.conflict)
+			return s.classifyUpdateConflict(ctx, tx, anID)
 		}
 		return nil
 	})
@@ -100,11 +127,11 @@ func (s aggregateStore[T]) deleteAnyVersion(ctx context.Context, anID id.ID[T], 
 // current is nil.
 func (s aggregateStore[T]) deleteWhere(ctx context.Context, anID id.ID[T], current *version.Version[T], events []event.Event) error {
 	return s.inTx(ctx, events, func(tx *sql.Tx) error {
-		query := fmt.Sprintf(`DELETE FROM %s WHERE id = $1`, s.table)
-		args := []any{anID.UUID()}
+		cond, args := s.where(anID)
+		query := fmt.Sprintf(`DELETE FROM %s WHERE %s`, s.table, cond)
 		if current != nil {
-			query += ` AND version = $2`
 			args = append(args, current.Number())
+			query += fmt.Sprintf(` AND version = $%d`, len(args))
 		}
 		res, err := tx.ExecContext(ctx, query, args...)
 		if err != nil {
@@ -115,7 +142,7 @@ func (s aggregateStore[T]) deleteWhere(ctx context.Context, anID id.ID[T], curre
 			return fmt.Errorf("cannot get rows affected on delete: %w", err)
 		}
 		if n != 1 {
-			return classifyUpdateConflict(ctx, tx, s.table, anID, s.notFound, s.conflict)
+			return s.classifyUpdateConflict(ctx, tx, anID)
 		}
 		return nil
 	})

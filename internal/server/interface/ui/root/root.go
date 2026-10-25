@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	"github.com/kipitix/growscada/contract"
@@ -16,6 +17,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/library"
 	"github.com/kipitix/growscada/internal/server/interface/ui/operation"
 	"github.com/kipitix/growscada/internal/server/interface/ui/project"
+	"github.com/kipitix/growscada/internal/server/interface/ui/projects"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 )
 
@@ -33,12 +35,17 @@ type Root struct {
 	app.Compo
 	// compoCtx is the component's own context, captured in OnMount; the server
 	// version seen by the client is dispatched through it.
-	compoCtx     app.Context
-	currentMode  Mode
-	themeMode    string // "auto" | "light" | "dark"
-	apiServerURL string
+	compoCtx    app.Context
+	currentMode Mode
+	themeMode   string // "auto" | "light" | "dark"
 	// client is the one client of the REST API, given to every mode.
 	client *apiclient.Client
+	// projects selects the project Project and Operation show, and whose
+	// event stream bar follows; Library does not depend on it.
+	projects  *projects.Switcher
+	project   *project.Project
+	operation *operation.Operation
+	bar       *eventlog.Bar
 	// The modes in the order of their slots, made once: a mode is mounted
 	// when first opened and stays mounted while another is shown, so it
 	// keeps what it loaded (shown even while the server is down), its
@@ -62,15 +69,18 @@ type Root struct {
 
 func NewRoot(anAPIServerURL string) *Root {
 	r := &Root{
-		currentMode:  ModeLibrary,
-		themeMode:    "auto",
-		apiServerURL: anAPIServerURL,
+		currentMode: ModeLibrary,
+		themeMode:   "auto",
 	}
 	r.client = apiclient.New(anAPIServerURL, http.DefaultClient, apiclient.OnServerVersion(r.observeServerVersion))
+	r.project = project.NewProject(r.client)
+	r.operation = operation.NewOperation(r.client)
+	r.bar = eventlog.NewBar(anAPIServerURL)
+	r.projects = projects.NewSwitcher(r.client, r.selectProject)
 	r.modes = []modeView{
 		{ModeLibrary, library.NewLibrary(r.client)},
-		{ModeProject, project.NewProject(r.client)},
-		{ModeOperation, operation.NewOperation(r.client)},
+		{ModeProject, r.project},
+		{ModeOperation, r.operation},
 		{ModeHistory, &history.History{}},
 	}
 	r.opened = map[Mode]bool{}
@@ -104,6 +114,15 @@ func (r *Root) OnMount(ctx app.Context) {
 		// the default before the saved one is known.
 		r.SetMode(mode)
 	})
+}
+
+// selectProject shows the project id (uuid.Nil: none) in the modes of a
+// project's content and follows its event stream; the switcher calls it on
+// the UI goroutine.
+func (r *Root) selectProject(id uuid.UUID) {
+	r.project.SetProject(id)
+	r.operation.SetProject(id)
+	r.bar.SetProject(id)
 }
 
 // observeServerVersion records the server API version stated by a response.
@@ -398,6 +417,7 @@ func (r *Root) Render() app.UI {
 					r.tab("Project", ModeProject),
 					r.tab("Operation", ModeOperation),
 					r.tab("History", ModeHistory),
+					r.projects,
 					app.Div().Style("flex", "1"),
 					r.renderThemeToggle(),
 				),
@@ -409,7 +429,7 @@ func (r *Root) Render() app.UI {
 				Body(app.Range(r.modes).Slice(func(i int) app.UI {
 					return r.modeSlot(r.modes[i])
 				})),
-			eventlog.NewBar(r.apiServerURL),
+			r.bar,
 		)
 }
 

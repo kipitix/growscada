@@ -1,11 +1,11 @@
 info:
   name: patch tag value
   type: http
-  seq: 17
+  seq: 22
 
 http:
   method: PATCH
-  url: http://{{API_SERVER}}/api/v0/tags/{{TAG_ID}}/value
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/tags/{{TAG_ID}}/value
   body:
     type: json
     data: |-

@@ -40,8 +40,12 @@ func (p *Project) createWidget(ctx app.Context, typeID uuid.UUID, x, y float64) 
 	}
 	req := apiv0.CreateWidgetRequest(widgetRequest(w, p.sceneVersions.Of(sceneID)))
 	mark := p.sceneVersions.Mark()
+	content := p.content
+	if content == nil {
+		return // no project shown
+	}
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.CreateWidgetResponse, error) {
-		return p.client.CreateWidget(c, sceneID, req)
+		return content.CreateWidget(c, sceneID, req)
 	}, func(ctx app.Context, created apiv0.CreateWidgetResponse) {
 		p.sceneVersions.Observe(mark, sceneID, created.SceneVersion)
 		w.ID = created.ID
@@ -59,8 +63,12 @@ func (p *Project) createWidget(ctx app.Context, typeID uuid.UUID, x, y float64) 
 func (p *Project) deleteWidget(ctx app.Context, widgetID uuid.UUID) {
 	sceneID := p.selectedSceneID
 	mark := p.sceneVersions.Mark()
+	content := p.content
+	if content == nil {
+		return // no project shown
+	}
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.WidgetResponse, error) {
-		return p.client.DeleteWidget(c, sceneID, widgetID)
+		return content.DeleteWidget(c, sceneID, widgetID)
 	}, func(ctx app.Context, deleted apiv0.WidgetResponse) {
 		if deleted.SceneVersion > 0 {
 			p.sceneVersions.Observe(mark, sceneID, deleted.SceneVersion)
@@ -169,8 +177,12 @@ func (p *Project) putWidget(ctx app.Context, w apiv0.WidgetResponse) {
 	sceneID := p.selectedSceneID
 	req := apiv0.UpdateWidgetRequest(widgetRequest(w, p.sceneVersions.Of(sceneID)))
 	mark := p.sceneVersions.Mark()
+	content := p.content
+	if content == nil {
+		return // no project shown
+	}
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.UpdateWidgetResponse, error) {
-		return p.client.UpdateWidget(c, sceneID, w.ID, req)
+		return content.UpdateWidget(c, sceneID, w.ID, req)
 	}, func(ctx app.Context, updated apiv0.UpdateWidgetResponse) {
 		p.sceneVersions.Observe(mark, sceneID, updated.SceneVersion)
 	}, p.rejectedSceneEdit(sceneID, p.loadWidgets))

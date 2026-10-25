@@ -27,6 +27,7 @@ func FindByID[T any](items []T, id uuid.UUID, idOf func(T) uuid.UUID) (T, bool) 
 
 // The idOf functions of IdxByID and FindByID for the API's types.
 
+func ProjectID(p apiv0.ProjectResponse) uuid.UUID        { return p.ID }
 func SceneID(sc apiv0.SceneResponse) uuid.UUID           { return sc.ID }
 func WidgetID(w apiv0.WidgetResponse) uuid.UUID          { return w.ID }
 func WidgetTypeID(wt apiv0.WidgetTypeResponse) uuid.UUID { return wt.ID }

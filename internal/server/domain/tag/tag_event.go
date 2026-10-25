@@ -3,17 +3,20 @@ package tag
 import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 )
 
-// TagEvent - base interface for all events a Tag records.
+// TagEvent - base interface for all events a Tag records. It is a
+// project.ContentEvent: it names the Tag's Project.
 type TagEvent interface {
-	event.Event
+	project.ContentEvent
 	TagID() id.ID[Tag]
 }
 
 type tagEventImpl struct {
 	event.Base
-	tagID id.ID[Tag]
+	tagID     id.ID[Tag]
+	projectID id.ID[project.Project]
 }
 
 var _ TagEvent = (*tagEventImpl)(nil)
@@ -22,4 +25,8 @@ var _ TagEvent = (*tagEventImpl)(nil)
 
 func (e tagEventImpl) TagID() id.ID[Tag] {
 	return e.tagID
+}
+
+func (e tagEventImpl) ProjectID() id.ID[project.Project] {
+	return e.projectID
 }

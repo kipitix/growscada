@@ -17,8 +17,12 @@ import (
 func (p *Project) createScene(ctx app.Context) {
 	req := apiv0.CreateSceneRequest{Name: "New Scene", Width: 1920, Height: 1080}
 	mark := p.markScenes()
+	content := p.content
+	if content == nil {
+		return // no project shown
+	}
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.CreateSceneResponse, error) {
-		return p.client.CreateScene(c, req)
+		return content.CreateScene(c, req)
 	}, func(ctx app.Context, created apiv0.CreateSceneResponse) {
 		// The new scene is the request as the server stored it: listed and
 		// editable at once, before the list is reread.
@@ -56,8 +60,12 @@ func (p *Project) confirmDeleteScene(ctx app.Context, sceneID uuid.UUID, sceneNa
 		}
 		p.deleteScene(ctx, sceneID)
 	}
+	content := p.content
+	if content == nil {
+		return // no project shown
+	}
 	uiutil.Call(p.compoCtx, func(c context.Context) ([]apiv0.WidgetResponse, error) {
-		return p.client.ListWidgets(c, sceneID)
+		return content.ListWidgets(c, sceneID)
 	}, func(ctx app.Context, widgets []apiv0.WidgetResponse) {
 		confirm(ctx, len(widgets))
 	}, func(ctx app.Context, err error) {
@@ -66,8 +74,12 @@ func (p *Project) confirmDeleteScene(ctx app.Context, sceneID uuid.UUID, sceneNa
 }
 
 func (p *Project) deleteScene(ctx app.Context, sceneID uuid.UUID) {
+	content := p.content
+	if content == nil {
+		return // no project shown
+	}
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.SceneResponse, error) {
-		return p.client.DeleteScene(c, sceneID)
+		return content.DeleteScene(c, sceneID)
 	}, func(ctx app.Context, _ apiv0.SceneResponse) {
 		p.loadScenes(ctx)
 	}, p.rejectedSceneEdit(sceneID, nil))
@@ -144,8 +156,12 @@ func (p *Project) putScene(sc apiv0.SceneResponse) {
 		Version:        p.sceneVersions.Of(sc.ID),
 	}
 	mark := p.markScenes()
+	content := p.content
+	if content == nil {
+		return // no project shown
+	}
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.UpdateSceneResponse, error) {
-		return p.client.UpdateScene(c, sc.ID, req)
+		return content.UpdateScene(c, sc.ID, req)
 	}, func(ctx app.Context, updated apiv0.UpdateSceneResponse) {
 		// The list holds the properties as saved.
 		p.sceneVersions.Observe(mark.versions, sc.ID, updated.Version)

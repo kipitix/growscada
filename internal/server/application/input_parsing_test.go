@@ -45,10 +45,10 @@ func TestSceneInput_InvalidField_IsInvalidInputOnCreateAndUpdate(t *testing.T) {
 			input := testCreateSceneInput
 			tc.modify(&input)
 
-			_, err := svc.CreateScene(ctx, input)
+			_, err := svc.CreateScene(ctx, mainProject, input)
 			assertInvalidField(t, err, tc.field)
 
-			_, err = svc.UpdateScene(ctx, sc.ID, sc.Version, input)
+			_, err = svc.UpdateScene(ctx, mainProject, sc.ID, sc.Version, input)
 			assertInvalidField(t, err, tc.field)
 		})
 	}
@@ -73,17 +73,17 @@ func TestWidgetInput_InvalidField_IsInvalidInputOnCreateAndUpdate(t *testing.T) 
 			svc := newSceneService()
 			ctx := context.Background()
 			sc := mustCreateScene(t, svc)
-			created, err := svc.CreateWidget(ctx, sc.ID, sc.Version, testCreateWidgetInput)
+			created, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, testCreateWidgetInput)
 			if err != nil {
 				t.Fatalf("CreateWidget: %v", err)
 			}
 			input := testCreateWidgetInput
 			tc.modify(&input)
 
-			_, err = svc.CreateWidget(ctx, sc.ID, created.SceneVersion, input)
+			_, err = svc.CreateWidget(ctx, mainProject, sc.ID, created.SceneVersion, input)
 			assertInvalidField(t, err, tc.field)
 
-			_, err = svc.UpdateWidget(ctx, sc.ID, created.ID, created.SceneVersion, input)
+			_, err = svc.UpdateWidget(ctx, mainProject, sc.ID, created.ID, created.SceneVersion, input)
 			assertInvalidField(t, err, tc.field)
 		})
 	}
@@ -94,15 +94,15 @@ func TestWidgetInput_NegativeSceneVersion_IsInvalidInputOnCreateAndUpdate(t *tes
 	svc := newSceneService()
 	ctx := context.Background()
 	sc := mustCreateScene(t, svc)
-	created, err := svc.CreateWidget(ctx, sc.ID, sc.Version, testCreateWidgetInput)
+	created, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, testCreateWidgetInput)
 	if err != nil {
 		t.Fatalf("CreateWidget: %v", err)
 	}
 
-	_, err = svc.CreateWidget(ctx, sc.ID, -1, testCreateWidgetInput)
+	_, err = svc.CreateWidget(ctx, mainProject, sc.ID, -1, testCreateWidgetInput)
 	assertInvalidField(t, err, "scene_version")
 
-	_, err = svc.UpdateWidget(ctx, sc.ID, created.ID, -1, testCreateWidgetInput)
+	_, err = svc.UpdateWidget(ctx, mainProject, sc.ID, created.ID, -1, testCreateWidgetInput)
 	assertInvalidField(t, err, "scene_version")
 }
 
@@ -112,7 +112,7 @@ func TestUpdate_NegativeVersion_IsInvalidInput(t *testing.T) {
 	cleanScenes(t)
 	sceneSvc := newSceneService()
 	sc := mustCreateScene(t, sceneSvc)
-	_, err := sceneSvc.UpdateScene(ctx, sc.ID, -1, testCreateSceneInput)
+	_, err := sceneSvc.UpdateScene(ctx, mainProject, sc.ID, -1, testCreateSceneInput)
 	assertInvalidField(t, err, "version")
 
 	cleanWidgetTypes(t)

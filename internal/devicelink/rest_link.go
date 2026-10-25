@@ -11,26 +11,37 @@ import (
 	"github.com/kipitix/growscada/internal/apiclient"
 )
 
-// RESTLink is the Link over the server's REST API. It keeps each tag's
+// RESTLink is the Link over the server's REST API, to the Tags of one
+// project named by configuration (until the Device Token names it, task 34).
+// The project is looked up by name on the first Resolve. It keeps each tag's
 // Version: a write sends the version it last saw; on 409 Conflict (someone
 // else changed the tag) it rereads the tag and retries once.
 type RESTLink struct {
-	client *apiclient.Client
+	client      *apiclient.Client
+	projectName string
 
 	mu       sync.Mutex
+	project  *apiclient.ProjectClient // nil until resolved
 	versions map[uuid.UUID]int
 }
 
 var _ Link = (*RESTLink)(nil)
 
-// NewRESTLink creates a Link over the given REST API client.
-func NewRESTLink(client *apiclient.Client) *RESTLink {
-	return &RESTLink{client: client, versions: make(map[uuid.UUID]int)}
+// NewRESTLink creates a Link over the given REST API client to the Tags of
+// the project named projectName.
+func NewRESTLink(client *apiclient.Client, projectName string) *RESTLink {
+	return &RESTLink{client: client, projectName: projectName, versions: make(map[uuid.UUID]int)}
 }
 
-// Resolve looks a tag up with GET /api/v0/tags?name=.
+// Resolve looks a tag up with GET /api/v0/projects/{id}/tags?name=, the
+// project found first with GET /api/v0/projects?name=. The error matches
+// ErrProjectNotFound if there is no such project.
 func (l *RESTLink) Resolve(ctx context.Context, name string) (Tag, error) {
-	found, ok, err := l.client.FindTagByName(ctx, name)
+	project, err := l.resolveProject(ctx)
+	if err != nil {
+		return Tag{}, err
+	}
+	found, ok, err := project.FindTagByName(ctx, name)
 	if err != nil {
 		return Tag{}, err
 	}
@@ -45,8 +56,35 @@ func (l *RESTLink) Resolve(ctx context.Context, name string) (Tag, error) {
 	return Tag{ID: found.ID, Name: found.Name, Type: tagType}, nil
 }
 
-// Write sets the value with PATCH /api/v0/tags/{id}/value.
+// resolveProject returns the client of the link's project, looking it up by
+// name the first time.
+func (l *RESTLink) resolveProject(ctx context.Context) (*apiclient.ProjectClient, error) {
+	l.mu.Lock()
+	project := l.project
+	l.mu.Unlock()
+	if project != nil {
+		return project, nil
+	}
+	found, ok, err := l.client.FindProjectByName(ctx, l.projectName)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, fmt.Errorf("%w: %q", ErrProjectNotFound, l.projectName)
+	}
+	project = l.client.Project(found.ID)
+	l.mu.Lock()
+	l.project = project
+	l.mu.Unlock()
+	return project, nil
+}
+
+// Write sets the value with PATCH /api/v0/projects/{id}/tags/{id}/value.
 func (l *RESTLink) Write(ctx context.Context, tag Tag, value string, quality Quality) error {
+	project, err := l.resolveProject(ctx)
+	if err != nil {
+		return err
+	}
 	version, known := l.version(tag.ID)
 	if !known {
 		if err := l.reread(ctx, tag); err != nil {
@@ -55,13 +93,13 @@ func (l *RESTLink) Write(ctx context.Context, tag Tag, value string, quality Qua
 		version, _ = l.version(tag.ID)
 	}
 
-	newVersion, err := l.client.SetTagValue(ctx, tag.ID, value, quality.String(), version)
+	newVersion, err := project.SetTagValue(ctx, tag.ID, value, quality.String(), version)
 	if errors.Is(err, apiclient.ErrConflict) {
 		if err := l.reread(ctx, tag); err != nil {
 			return err
 		}
 		version, _ = l.version(tag.ID)
-		newVersion, err = l.client.SetTagValue(ctx, tag.ID, value, quality.String(), version)
+		newVersion, err = project.SetTagValue(ctx, tag.ID, value, quality.String(), version)
 	}
 	if errors.Is(err, apiclient.ErrNotFound) {
 		l.forget(tag.ID)
@@ -77,9 +115,13 @@ func (l *RESTLink) Write(ctx context.Context, tag Tag, value string, quality Qua
 	return nil
 }
 
-// reread refreshes the tag's version from GET /api/v0/tags/{id}.
+// reread refreshes the tag's version from GET /api/v0/projects/{id}/tags/{id}.
 func (l *RESTLink) reread(ctx context.Context, tag Tag) error {
-	current, err := l.client.GetTag(ctx, tag.ID)
+	project, err := l.resolveProject(ctx)
+	if err != nil {
+		return err
+	}
+	current, err := project.GetTag(ctx, tag.ID)
 	if errors.Is(err, apiclient.ErrNotFound) {
 		l.forget(tag.ID)
 		return fmt.Errorf("%w: %q: %w", ErrTagNotFound, tag.Name, err)

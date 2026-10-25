@@ -3,6 +3,7 @@ package tag
 import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 )
 
 // TagDeletedEvent is recorded by Tag.Delete.
@@ -16,11 +17,12 @@ type tagDeletedEventImpl struct {
 
 var _ TagDeletedEvent = (*tagDeletedEventImpl)(nil)
 
-func NewTagDeletedEvent(anID id.ID[Tag], opts ...event.EventOption) TagDeletedEvent {
+func NewTagDeletedEvent(anID id.ID[Tag], aProjectID id.ID[project.Project], opts ...event.EventOption) TagDeletedEvent {
 	return &tagDeletedEventImpl{
 		tagEventImpl: tagEventImpl{
-			Base:  event.NewBase(event.EventTypeTagDeleted, opts...),
-			tagID: anID,
+			Base:      event.NewBase(event.EventTypeTagDeleted, opts...),
+			tagID:     anID,
+			projectID: aProjectID,
 		},
 	}
 }

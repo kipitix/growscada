@@ -20,37 +20,38 @@ const UnbindDeletedTagPolicyName = "unbind_deleted_tag"
 
 // unbindDeletedTagPolicy removes, from Widgets of every WidgetType, the
 // PortBindings of a deleted Tag (ADR 0010): a tag_deleted event's job unbinds
-// the Tag in every Scene bound to it, once it has read that the Tag is gone.
+// the Tag in every Scene of its Project bound to it, once it has read that
+// the Tag is gone.
 // A Widget bound to the Tag concurrently with its deletion, too late for the
 // job to find, is unbound by the job of its own event
 // (widgetReconciliationPolicy). The events of the policy's own unbinding bind
 // nothing and enqueue no job.
 type unbindDeletedTagPolicy struct {
-	scenes scene.SceneRepository
-	tags   tag.TagRepository
+	scopes ProjectScopes
 }
 
 var _ Policy = (*unbindDeletedTagPolicy)(nil)
 
 // NewUnbindDeletedTagPolicy returns the policy removing the PortBindings of
-// deleted Tags.
-func NewUnbindDeletedTagPolicy(aSceneRepository scene.SceneRepository, aTagRepository tag.TagRepository) Policy {
-	return &unbindDeletedTagPolicy{scenes: aSceneRepository, tags: aTagRepository}
+// deleted Tags. It works through the repositories of the event's Project.
+func NewUnbindDeletedTagPolicy(someScopes ProjectScopes) Policy {
+	return &unbindDeletedTagPolicy{scopes: someScopes}
 }
 
 func (p unbindDeletedTagPolicy) Name() string {
 	return UnbindDeletedTagPolicyName
 }
 
-// Job key: "tag:<id>" for every Scene bound to the Tag.
-const tagKeyPrefix = "tag:"
+// Job key: "project:<id>/tag:<id>" for every Scene of the Project bound to
+// the Tag.
+const tagKeySeparator = "/tag:"
 
 func (p unbindDeletedTagPolicy) JobKey(e event.Event) (string, bool) {
 	if e.Type() != event.EventTypeTagDeleted {
 		return "", false
 	}
 	if ev, ok := e.(tag.TagEvent); ok {
-		return tagKeyPrefix + ev.TagID().String(), true
+		return projectKeyPrefix + ev.ProjectID().String() + tagKeySeparator + ev.TagID().String(), true
 	}
 	return "", false
 }
@@ -61,7 +62,11 @@ func (p unbindDeletedTagPolicy) JobKey(e event.Event) (string, bool) {
 // the others: Run returns the errors of all that failed, and the job is run
 // again, the Scenes already unbound then no longer found.
 func (p unbindDeletedTagPolicy) Run(ctx context.Context, key string) error {
-	rawTagID, ok := strings.CutPrefix(key, tagKeyPrefix)
+	projectID, rest, err := cutProjectKey(key)
+	if err != nil {
+		return err
+	}
+	rawTagID, ok := strings.CutPrefix(rest, tagKeySeparator)
 	if !ok {
 		return fmt.Errorf("invalid job key %q", key)
 	}
@@ -70,8 +75,9 @@ func (p unbindDeletedTagPolicy) Run(ctx context.Context, key string) error {
 		return fmt.Errorf("invalid tag ID in job key %q: %w", key, err)
 	}
 	tagID := id.NewID(id.IDWithUUID[tag.Tag](tagUUID))
+	scope := p.scopes.ForProject(projectID)
 
-	_, err = p.tags.FindByID(ctx, tagID)
+	_, err = scope.Tags().FindByID(ctx, tagID)
 	if err == nil {
 		return nil
 	}
@@ -79,11 +85,11 @@ func (p unbindDeletedTagPolicy) Run(ctx context.Context, key string) error {
 		return fmt.Errorf("cannot find tag %s: %w", tagID, err)
 	}
 
-	scenes, err := p.scenes.FindByTagID(ctx, tagID)
+	scenes, err := scope.Scenes().FindByTagID(ctx, tagID)
 	if err != nil {
 		return fmt.Errorf("cannot list scenes bound to tag %s: %w", tagID, err)
 	}
-	err = changeEachScene(ctx, p.scenes, scenes, func(_ context.Context, sc scene.Scene) (scene.Scene, bool, error) {
+	err = changeEachScene(ctx, scope.Scenes(), scenes, func(_ context.Context, sc scene.Scene) (scene.Scene, bool, error) {
 		unbound, changed := sc.UnbindTag(tagID)
 		return unbound, changed, nil
 	})

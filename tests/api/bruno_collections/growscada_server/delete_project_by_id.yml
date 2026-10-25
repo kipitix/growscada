@@ -1,0 +1,36 @@
+info:
+  name: delete project by id
+  type: http
+  seq: 34
+
+http:
+  method: DELETE
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}
+  auth: inherit
+
+docs: |
+  Deletes a project with all its content. It states no version. From the
+  response on the project does not exist for the API (not listed, its content
+  `404`, its name free); its scenes and tags are removed after it, each with
+  its own events (ADR 0006). The response carries the project as it was read
+  just before the delete.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.id'
+      operator: eq
+      value: '"{{OTHER_PROJECT_ID}}"'
+    - expression: 'res.body.name'
+      operator: eq
+      value: '"Line 3"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

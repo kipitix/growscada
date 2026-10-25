@@ -90,9 +90,10 @@ func (*net503) Temporary() bool { return true }
 
 var quietLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
 
+// testConfig reads a config of the project Main.
 func testConfig(t *testing.T, yaml string) Config {
 	t.Helper()
-	cfg, err := ReadConfig(strings.NewReader(yaml))
+	cfg, err := ReadConfig(strings.NewReader("project: Main\n" + yaml))
 	if err != nil {
 		t.Fatalf("ReadConfig: %v", err)
 	}

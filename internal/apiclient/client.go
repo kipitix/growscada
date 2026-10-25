@@ -98,78 +98,90 @@ func New(baseURL string, httpClient *http.Client, opts ...Option) *Client {
 	return c
 }
 
-// ── Tags ─────────────────────────────────────────────────────────────────────
+// ── Projects ─────────────────────────────────────────────────────────────────
 
-// ListTags returns every tag on the server.
-func (c *Client) ListTags(ctx context.Context) ([]apiv0.TagResponse, error) {
-	return c.getTags(ctx, "/tags")
+// ListProjects returns every live project of the server, in creation order.
+func (c *Client) ListProjects(ctx context.Context) ([]apiv0.ProjectResponse, error) {
+	return c.getProjects(ctx, "/projects")
 }
 
-// ListTagsFiltered returns the tags selected by one GET /tags name filter
-// (apiv0.TagsQueryName, TagsQueryNamePattern or TagsQueryNameRegex).
-// A server that does not know the filter ignores it and returns every tag, so
-// callers that must not widen the selection filter the result themselves.
-func (c *Client) ListTagsFiltered(ctx context.Context, param, value string) ([]apiv0.TagResponse, error) {
-	return c.getTags(ctx, "/tags?"+param+"="+url.QueryEscape(value))
-}
-
-// FindTagByName returns the tag with the given name, or false if there is none.
-func (c *Client) FindTagByName(ctx context.Context, name string) (apiv0.TagResponse, bool, error) {
-	tags, err := c.ListTagsFiltered(ctx, apiv0.TagsQueryName, name)
+// FindProjectByName returns the project with the given name, or false if
+// there is none.
+func (c *Client) FindProjectByName(ctx context.Context, name string) (apiv0.ProjectResponse, bool, error) {
+	projects, err := c.getProjects(ctx, "/projects?"+apiv0.ProjectsQueryName+"="+url.QueryEscape(name))
 	if err != nil {
-		return apiv0.TagResponse{}, false, err
+		return apiv0.ProjectResponse{}, false, err
 	}
-	// Match the name here as well: a server that predates the ?name= filter
-	// ignores it and returns every tag.
-	for _, t := range tags {
-		if t.Name == name {
-			return t, true, nil
+	// Match the name here as well: a server that does not know the filter
+	// ignores it and returns every project.
+	for _, p := range projects {
+		if p.Name == name {
+			return p, true, nil
 		}
 	}
-	return apiv0.TagResponse{}, false, nil
+	return apiv0.ProjectResponse{}, false, nil
 }
 
-// GetTag returns a tag by ID. The error matches ErrNotFound if there is none.
-func (c *Client) GetTag(ctx context.Context, id uuid.UUID) (apiv0.TagResponse, error) {
-	var resp apiv0.TagResponse
-	err := c.do(ctx, http.MethodGet, tagPath(id), nil, http.StatusOK, &resp)
+// GetProject returns a project by ID. The error matches ErrNotFound if there
+// is none (or it is deleted).
+func (c *Client) GetProject(ctx context.Context, id uuid.UUID) (apiv0.ProjectResponse, error) {
+	var resp apiv0.ProjectResponse
+	err := c.do(ctx, http.MethodGet, apiv0.ProjectPath(id.String()), nil, http.StatusOK, &resp)
 	return resp, err
 }
 
-// CreateTag creates a tag.
-func (c *Client) CreateTag(ctx context.Context, req apiv0.CreateTagRequest) (apiv0.CreateTagResponse, error) {
-	var resp apiv0.CreateTagResponse
-	err := c.do(ctx, http.MethodPost, "/tags", req, http.StatusCreated, &resp)
+// CreateProject creates a project. The error matches ErrConflict if its name
+// is taken.
+func (c *Client) CreateProject(ctx context.Context, req apiv0.CreateProjectRequest) (apiv0.CreateProjectResponse, error) {
+	var resp apiv0.CreateProjectResponse
+	err := c.do(ctx, http.MethodPost, "/projects", req, http.StatusCreated, &resp)
 	return resp, err
 }
 
-// SetTagValue writes a tag's value and quality, expecting its current version
-// (optimistic locking), and returns the new version. The error matches
-// ErrConflict if the version is stale and ErrNotFound if the tag is gone.
-func (c *Client) SetTagValue(ctx context.Context, id uuid.UUID, value, quality string, version int) (int, error) {
-	var resp apiv0.UpdateTagResponse
-	req := apiv0.UpdateTagRequest{Value: value, Quality: quality, Version: version}
-	if err := c.do(ctx, http.MethodPatch, tagPath(id)+"/value", req, http.StatusOK, &resp); err != nil {
-		return 0, err
-	}
-	return resp.Version, nil
-}
-
-// DeleteTag deletes a tag by ID and returns its last state. The error matches
-// ErrNotFound if it is already gone.
-func (c *Client) DeleteTag(ctx context.Context, id uuid.UUID) (apiv0.TagResponse, error) {
-	var resp apiv0.TagResponse
-	err := c.do(ctx, http.MethodDelete, tagPath(id), nil, http.StatusOK, &resp)
+// UpdateProject renames a project, expecting req.Version to be its current
+// version. The error matches ErrConflict if the version is stale or the name
+// is taken.
+func (c *Client) UpdateProject(ctx context.Context, id uuid.UUID, req apiv0.UpdateProjectRequest) (apiv0.UpdateProjectResponse, error) {
+	var resp apiv0.UpdateProjectResponse
+	err := c.do(ctx, http.MethodPut, apiv0.ProjectPath(id.String()), req, http.StatusOK, &resp)
 	return resp, err
 }
 
-func (c *Client) getTags(ctx context.Context, path string) ([]apiv0.TagResponse, error) {
-	var resp apiv0.GetTagsResponse
+// DeleteProject deletes a project with all its content and returns its last
+// state. The project is gone at once; its content is removed after.
+func (c *Client) DeleteProject(ctx context.Context, id uuid.UUID) (apiv0.ProjectResponse, error) {
+	var resp apiv0.ProjectResponse
+	err := c.do(ctx, http.MethodDelete, apiv0.ProjectPath(id.String()), nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+func (c *Client) getProjects(ctx context.Context, path string) ([]apiv0.ProjectResponse, error) {
+	var resp apiv0.GetProjectsResponse
 	err := c.do(ctx, http.MethodGet, path, nil, http.StatusOK, &resp)
-	return resp.Tags, err
+	return resp.Projects, err
 }
 
-func tagPath(id uuid.UUID) string { return "/tags/" + id.String() }
+// ProjectClient talks to the content of one project: its Tags, Scenes and
+// Widgets, under the project's path (ADR 0006). A project that is gone makes
+// every call fail with an error matching ErrNotFound.
+type ProjectClient struct {
+	c      *Client
+	id     uuid.UUID
+	prefix string
+}
+
+// Project returns the client of the content of the project id. It sends
+// nothing: whether the project exists is learned with the first call.
+func (c *Client) Project(id uuid.UUID) *ProjectClient {
+	return &ProjectClient{c: c, id: id, prefix: apiv0.ProjectPath(id.String())}
+}
+
+// ID returns the project the client talks to.
+func (p *ProjectClient) ID() uuid.UUID { return p.id }
+
+func (p *ProjectClient) do(ctx context.Context, method, path string, body any, wantStatus int, out any) error {
+	return p.c.do(ctx, method, p.prefix+path, body, wantStatus, out)
+}
 
 // ── WidgetTypes ──────────────────────────────────────────────────────────────
 
@@ -213,42 +225,116 @@ func (c *Client) DeleteWidgetType(ctx context.Context, id uuid.UUID) (apiv0.Widg
 
 func widgetTypePath(id uuid.UUID) string { return "/widget-types/" + id.String() }
 
+// ── Tags ─────────────────────────────────────────────────────────────────────
+
+// ListTags returns every tag of the project.
+func (p *ProjectClient) ListTags(ctx context.Context) ([]apiv0.TagResponse, error) {
+	return p.getTags(ctx, "/tags")
+}
+
+// ListTagsFiltered returns the tags selected by one GET /tags name filter
+// (apiv0.TagsQueryName, TagsQueryNamePattern or TagsQueryNameRegex).
+// A server that does not know the filter ignores it and returns every tag, so
+// callers that must not widen the selection filter the result themselves.
+func (p *ProjectClient) ListTagsFiltered(ctx context.Context, param, value string) ([]apiv0.TagResponse, error) {
+	return p.getTags(ctx, "/tags?"+param+"="+url.QueryEscape(value))
+}
+
+// FindTagByName returns the tag of the project with the given name, or false
+// if there is none.
+func (p *ProjectClient) FindTagByName(ctx context.Context, name string) (apiv0.TagResponse, bool, error) {
+	tags, err := p.ListTagsFiltered(ctx, apiv0.TagsQueryName, name)
+	if err != nil {
+		return apiv0.TagResponse{}, false, err
+	}
+	// Match the name here as well: a server that predates the ?name= filter
+	// ignores it and returns every tag.
+	for _, t := range tags {
+		if t.Name == name {
+			return t, true, nil
+		}
+	}
+	return apiv0.TagResponse{}, false, nil
+}
+
+// GetTag returns a tag by ID. The error matches ErrNotFound if there is none.
+func (p *ProjectClient) GetTag(ctx context.Context, id uuid.UUID) (apiv0.TagResponse, error) {
+	var resp apiv0.TagResponse
+	err := p.do(ctx, http.MethodGet, tagPath(id), nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+// CreateTag creates a tag.
+func (p *ProjectClient) CreateTag(ctx context.Context, req apiv0.CreateTagRequest) (apiv0.CreateTagResponse, error) {
+	var resp apiv0.CreateTagResponse
+	err := p.do(ctx, http.MethodPost, "/tags", req, http.StatusCreated, &resp)
+	return resp, err
+}
+
+// SetTagValue writes a tag's value and quality, expecting its current version
+// (optimistic locking), and returns the new version. The error matches
+// ErrConflict if the version is stale and ErrNotFound if the tag is gone.
+func (p *ProjectClient) SetTagValue(ctx context.Context, id uuid.UUID, value, quality string, version int) (int, error) {
+	var resp apiv0.UpdateTagResponse
+	req := apiv0.UpdateTagRequest{Value: value, Quality: quality, Version: version}
+	if err := p.do(ctx, http.MethodPatch, tagPath(id)+"/value", req, http.StatusOK, &resp); err != nil {
+		return 0, err
+	}
+	return resp.Version, nil
+}
+
+// DeleteTag deletes a tag by ID and returns its last state. The error matches
+// ErrNotFound if it is already gone.
+func (p *ProjectClient) DeleteTag(ctx context.Context, id uuid.UUID) (apiv0.TagResponse, error) {
+	var resp apiv0.TagResponse
+	err := p.do(ctx, http.MethodDelete, tagPath(id), nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+func (p *ProjectClient) getTags(ctx context.Context, path string) ([]apiv0.TagResponse, error) {
+	var resp apiv0.GetTagsResponse
+	err := p.do(ctx, http.MethodGet, path, nil, http.StatusOK, &resp)
+	return resp.Tags, err
+}
+
+func tagPath(id uuid.UUID) string { return "/tags/" + id.String() }
+
 // ── Scenes ───────────────────────────────────────────────────────────────────
 
-// ListScenes returns every Scene.
-func (c *Client) ListScenes(ctx context.Context) ([]apiv0.SceneResponse, error) {
+// ListScenes returns every Scene of the project.
+func (p *ProjectClient) ListScenes(ctx context.Context) ([]apiv0.SceneResponse, error) {
 	var resp apiv0.GetScenesResponse
-	err := c.do(ctx, http.MethodGet, "/scenes", nil, http.StatusOK, &resp)
+	err := p.do(ctx, http.MethodGet, "/scenes", nil, http.StatusOK, &resp)
 	return resp.Scenes, err
 }
 
 // GetScene returns a Scene by ID. The error matches ErrNotFound if there is
 // none.
-func (c *Client) GetScene(ctx context.Context, id uuid.UUID) (apiv0.SceneResponse, error) {
+func (p *ProjectClient) GetScene(ctx context.Context, id uuid.UUID) (apiv0.SceneResponse, error) {
 	var resp apiv0.SceneResponse
-	err := c.do(ctx, http.MethodGet, scenePath(id), nil, http.StatusOK, &resp)
+	err := p.do(ctx, http.MethodGet, scenePath(id), nil, http.StatusOK, &resp)
 	return resp, err
 }
 
 // CreateScene creates a Scene.
-func (c *Client) CreateScene(ctx context.Context, req apiv0.CreateSceneRequest) (apiv0.CreateSceneResponse, error) {
+func (p *ProjectClient) CreateScene(ctx context.Context, req apiv0.CreateSceneRequest) (apiv0.CreateSceneResponse, error) {
 	var resp apiv0.CreateSceneResponse
-	err := c.do(ctx, http.MethodPost, "/scenes", req, http.StatusCreated, &resp)
+	err := p.do(ctx, http.MethodPost, "/scenes", req, http.StatusCreated, &resp)
 	return resp, err
 }
 
 // UpdateScene replaces a Scene's properties, expecting req.Version to be its
 // current version. The error matches ErrConflict if the version is stale.
-func (c *Client) UpdateScene(ctx context.Context, id uuid.UUID, req apiv0.UpdateSceneRequest) (apiv0.UpdateSceneResponse, error) {
+func (p *ProjectClient) UpdateScene(ctx context.Context, id uuid.UUID, req apiv0.UpdateSceneRequest) (apiv0.UpdateSceneResponse, error) {
 	var resp apiv0.UpdateSceneResponse
-	err := c.do(ctx, http.MethodPut, scenePath(id), req, http.StatusOK, &resp)
+	err := p.do(ctx, http.MethodPut, scenePath(id), req, http.StatusOK, &resp)
 	return resp, err
 }
 
 // DeleteScene deletes a Scene with its Widgets and returns its last state.
-func (c *Client) DeleteScene(ctx context.Context, id uuid.UUID) (apiv0.SceneResponse, error) {
+func (p *ProjectClient) DeleteScene(ctx context.Context, id uuid.UUID) (apiv0.SceneResponse, error) {
 	var resp apiv0.SceneResponse
-	err := c.do(ctx, http.MethodDelete, scenePath(id), nil, http.StatusOK, &resp)
+	err := p.do(ctx, http.MethodDelete, scenePath(id), nil, http.StatusOK, &resp)
 	return resp, err
 }
 
@@ -257,41 +343,41 @@ func scenePath(id uuid.UUID) string { return "/scenes/" + id.String() }
 // ── Widgets ──────────────────────────────────────────────────────────────────
 
 // ListWidgets returns the Widgets of a Scene.
-func (c *Client) ListWidgets(ctx context.Context, sceneID uuid.UUID) ([]apiv0.WidgetResponse, error) {
+func (p *ProjectClient) ListWidgets(ctx context.Context, sceneID uuid.UUID) ([]apiv0.WidgetResponse, error) {
 	var resp apiv0.GetWidgetsResponse
-	err := c.do(ctx, http.MethodGet, scenePath(sceneID)+"/widgets", nil, http.StatusOK, &resp)
+	err := p.do(ctx, http.MethodGet, scenePath(sceneID)+"/widgets", nil, http.StatusOK, &resp)
 	return resp.Widgets, err
 }
 
 // GetWidget returns a Widget of a Scene. The error matches ErrNotFound if
 // there is none.
-func (c *Client) GetWidget(ctx context.Context, sceneID, widgetID uuid.UUID) (apiv0.WidgetResponse, error) {
+func (p *ProjectClient) GetWidget(ctx context.Context, sceneID, widgetID uuid.UUID) (apiv0.WidgetResponse, error) {
 	var resp apiv0.WidgetResponse
-	err := c.do(ctx, http.MethodGet, widgetPath(sceneID, widgetID), nil, http.StatusOK, &resp)
+	err := p.do(ctx, http.MethodGet, widgetPath(sceneID, widgetID), nil, http.StatusOK, &resp)
 	return resp, err
 }
 
 // CreateWidget places a Widget on a Scene, expecting req.SceneVersion to be
 // the Scene's current version. The error matches ErrConflict if it is stale.
-func (c *Client) CreateWidget(ctx context.Context, sceneID uuid.UUID, req apiv0.CreateWidgetRequest) (apiv0.CreateWidgetResponse, error) {
+func (p *ProjectClient) CreateWidget(ctx context.Context, sceneID uuid.UUID, req apiv0.CreateWidgetRequest) (apiv0.CreateWidgetResponse, error) {
 	var resp apiv0.CreateWidgetResponse
-	err := c.do(ctx, http.MethodPost, scenePath(sceneID)+"/widgets", req, http.StatusCreated, &resp)
+	err := p.do(ctx, http.MethodPost, scenePath(sceneID)+"/widgets", req, http.StatusCreated, &resp)
 	return resp, err
 }
 
 // UpdateWidget replaces a Widget, expecting req.SceneVersion to be its
 // Scene's current version. The error matches ErrConflict if it is stale.
-func (c *Client) UpdateWidget(ctx context.Context, sceneID, widgetID uuid.UUID, req apiv0.UpdateWidgetRequest) (apiv0.UpdateWidgetResponse, error) {
+func (p *ProjectClient) UpdateWidget(ctx context.Context, sceneID, widgetID uuid.UUID, req apiv0.UpdateWidgetRequest) (apiv0.UpdateWidgetResponse, error) {
 	var resp apiv0.UpdateWidgetResponse
-	err := c.do(ctx, http.MethodPut, widgetPath(sceneID, widgetID), req, http.StatusOK, &resp)
+	err := p.do(ctx, http.MethodPut, widgetPath(sceneID, widgetID), req, http.StatusOK, &resp)
 	return resp, err
 }
 
 // DeleteWidget removes a Widget from its Scene and returns its last state,
 // with the Scene's new version.
-func (c *Client) DeleteWidget(ctx context.Context, sceneID, widgetID uuid.UUID) (apiv0.WidgetResponse, error) {
+func (p *ProjectClient) DeleteWidget(ctx context.Context, sceneID, widgetID uuid.UUID) (apiv0.WidgetResponse, error) {
 	var resp apiv0.WidgetResponse
-	err := c.do(ctx, http.MethodDelete, widgetPath(sceneID, widgetID), nil, http.StatusOK, &resp)
+	err := p.do(ctx, http.MethodDelete, widgetPath(sceneID, widgetID), nil, http.StatusOK, &resp)
 	return resp, err
 }
 

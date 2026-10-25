@@ -1,10 +1,14 @@
 package operation
 
 import (
+	"context"
+
 	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/apiclient"
+	"github.com/kipitix/growscada/internal/server/interface/ui/tagstate"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -21,29 +25,61 @@ func (o *Operation) loadWidgetTypes(ctx app.Context) {
 	}, o.loadWidgetTypes)
 }
 
+// The lists of the project's content belong to its client (Operation.content):
+// a response of a project no longer shown is dropped.
+
+func (o *Operation) projectContent() *apiclient.ProjectClient { return o.content }
+
 func (o *Operation) loadScenes(ctx app.Context) {
-	uiutil.Load(o.compoCtx, &o.scenesReloader, o.client.ListScenes, func(ctx app.Context, scenes []apiv0.SceneResponse) {
-		o.scenes = scenes
-		o.selectScene(ctx, selectScene(o.scenes, o.selectedSceneID))
-	}, o.loadScenes)
+	if o.content == nil {
+		o.scenes = nil
+		return
+	}
+	uiutil.LoadFor(o.compoCtx, &o.scenesReloader, o.projectContent,
+		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.SceneResponse, error) {
+			return pc.ListScenes(c)
+		},
+		func(ctx app.Context, _ *apiclient.ProjectClient, scenes []apiv0.SceneResponse) {
+			o.scenes = scenes
+			o.selectScene(ctx, selectScene(o.scenes, o.selectedSceneID))
+		}, o.loadScenes)
+}
+
+// sceneOfProject is the key of the Widgets loaded: the selected Scene of the
+// project shown.
+type sceneOfProject struct {
+	content *apiclient.ProjectClient
+	sceneID uuid.UUID
 }
 
 // loadWidgets (re)loads the widgets of the selected Scene.
 func (o *Operation) loadWidgets(ctx app.Context) {
 	ctx = o.compoCtx
-	if o.selectedSceneID == uuid.Nil {
+	if o.selectedSceneID == uuid.Nil || o.content == nil {
 		o.widgets, o.widgetsSceneID = nil, uuid.Nil
 		return
 	}
-	uiutil.LoadFor(ctx, &o.widgetsReloader, func() uuid.UUID { return o.selectedSceneID }, o.client.ListWidgets,
-		func(ctx app.Context, sceneID uuid.UUID, widgets []apiv0.WidgetResponse) {
-			o.widgets, o.widgetsSceneID = widgets, sceneID
+	uiutil.LoadFor(ctx, &o.widgetsReloader,
+		func() sceneOfProject { return sceneOfProject{content: o.content, sceneID: o.selectedSceneID} },
+		func(c context.Context, k sceneOfProject) ([]apiv0.WidgetResponse, error) {
+			return k.content.ListWidgets(c, k.sceneID)
+		},
+		func(ctx app.Context, k sceneOfProject, widgets []apiv0.WidgetResponse) {
+			o.widgets, o.widgetsSceneID = widgets, k.sceneID
 		}, o.loadWidgets)
 }
 
 func (o *Operation) loadTags(ctx app.Context) {
+	if o.content == nil {
+		o.tags = tagstate.Tags{}
+		return
+	}
 	mark := o.tags.Mark()
-	uiutil.Load(o.compoCtx, &o.tagsReloader, o.client.ListTags, func(ctx app.Context, tags []apiv0.TagResponse) {
-		o.tags = o.tags.Merge(mark, tags)
-	}, o.loadTags)
+	uiutil.LoadFor(o.compoCtx, &o.tagsReloader, o.projectContent,
+		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.TagResponse, error) {
+			return pc.ListTags(c)
+		},
+		func(ctx app.Context, _ *apiclient.ProjectClient, tags []apiv0.TagResponse) {
+			o.tags = o.tags.Merge(mark, tags)
+		}, o.loadTags)
 }

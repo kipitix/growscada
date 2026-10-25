@@ -9,45 +9,56 @@ import (
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
-// SceneService is the service interface for working with scenes and their
-// widgets. Widget, as an entity of the Scene aggregate, has no service of its
-// own: every widget operation is reached through a scene.
+// SceneService is the service interface for working with the scenes of a
+// project and their widgets. Widget, as an entity of the Scene aggregate, has
+// no service of its own: every widget operation is reached through a scene.
+// Every method takes the project first; a project that does not exist (or is
+// deleted) is an error wrapping project.ErrProjectNotFound.
 type SceneService interface {
-	FindAllScenes(context.Context) ([]appdto.Scene, error)
-	FindSceneByID(context.Context, uuid.UUID) (appdto.Scene, error)
-	CreateScene(context.Context, appdto.SceneInput) (appdto.Scene, error)
-	UpdateScene(ctx context.Context, sceneID uuid.UUID, version int, input appdto.SceneInput) (appdto.Scene, error)
-	DeleteSceneByID(context.Context, uuid.UUID) (appdto.Scene, error)
+	FindAllScenes(ctx context.Context, projectID uuid.UUID) ([]appdto.Scene, error)
+	FindSceneByID(ctx context.Context, projectID, sceneID uuid.UUID) (appdto.Scene, error)
+	CreateScene(ctx context.Context, projectID uuid.UUID, input appdto.SceneInput) (appdto.Scene, error)
+	UpdateScene(ctx context.Context, projectID, sceneID uuid.UUID, version int, input appdto.SceneInput) (appdto.Scene, error)
+	DeleteSceneByID(ctx context.Context, projectID, sceneID uuid.UUID) (appdto.Scene, error)
 
-	FindWidgetsBySceneID(ctx context.Context, sceneID uuid.UUID) ([]appdto.Widget, error)
-	FindWidgetByID(ctx context.Context, sceneID, widgetID uuid.UUID) (appdto.Widget, error)
-	CreateWidget(ctx context.Context, sceneID uuid.UUID, sceneVersion int, input appdto.WidgetInput) (appdto.Widget, error)
-	UpdateWidget(ctx context.Context, sceneID, widgetID uuid.UUID, sceneVersion int, input appdto.WidgetInput) (appdto.Widget, error)
-	DeleteWidgetByID(ctx context.Context, sceneID, widgetID uuid.UUID) (appdto.Widget, error)
+	FindWidgetsBySceneID(ctx context.Context, projectID, sceneID uuid.UUID) ([]appdto.Widget, error)
+	FindWidgetByID(ctx context.Context, projectID, sceneID, widgetID uuid.UUID) (appdto.Widget, error)
+	CreateWidget(ctx context.Context, projectID, sceneID uuid.UUID, sceneVersion int, input appdto.WidgetInput) (appdto.Widget, error)
+	UpdateWidget(ctx context.Context, projectID, sceneID, widgetID uuid.UUID, sceneVersion int, input appdto.WidgetInput) (appdto.Widget, error)
+	DeleteWidgetByID(ctx context.Context, projectID, sceneID, widgetID uuid.UUID) (appdto.Widget, error)
 }
 
 type sceneServiceImpl struct {
-	repository           scene.SceneRepository
+	content              ProjectContent
 	widgetTypeRepository library.WidgetTypeRepository
-	tagRepository        tag.TagRepository
 }
 
 var _ SceneService = (*sceneServiceImpl)(nil)
 
 // NewSceneService returns the scene service. The events of its changes are
 // recorded by the Scene and saved with it (ADR 0008).
-func NewSceneService(repo scene.SceneRepository, widgetTypeRepo library.WidgetTypeRepository, tagRepo tag.TagRepository) SceneService {
-	return &sceneServiceImpl{repository: repo, widgetTypeRepository: widgetTypeRepo, tagRepository: tagRepo}
+func NewSceneService(aContent ProjectContent, widgetTypeRepo library.WidgetTypeRepository) SceneService {
+	return &sceneServiceImpl{content: aContent, widgetTypeRepository: widgetTypeRepo}
+}
+
+// scenes returns the scene repository of the live project rawProjectID.
+func (s sceneServiceImpl) scenes(ctx context.Context, rawProjectID uuid.UUID) (scene.SceneRepository, error) {
+	_, scope, err := s.content.open(ctx, rawProjectID)
+	if err != nil {
+		return nil, err
+	}
+	return scope.Scenes(), nil
 }
 
 // loadScene finds the scene named by the caller; ErrSceneNotFound if there is none.
-func (s sceneServiceImpl) loadScene(ctx context.Context, sceneID id.ID[scene.Scene]) (scene.Scene, error) {
-	found, err := s.repository.FindByID(ctx, sceneID)
+func loadScene(ctx context.Context, repo scene.SceneRepository, sceneID id.ID[scene.Scene]) (scene.Scene, error) {
+	found, err := repo.FindByID(ctx, sceneID)
 	if err != nil {
 		return nil, fmt.Errorf("error on find scene by id in repository: %w", err)
 	}
@@ -67,16 +78,17 @@ func (s sceneServiceImpl) loadWidgetType(ctx context.Context, typeID id.ID[libra
 	return wt, nil
 }
 
-// loadTagTypes reads, in one query, the TagTypes of the Tags with the given
-// IDs; a Tag that does not exist is left out, for the Scene to judge the
+// loadTagTypes reads, in one query, the TagTypes of the Tags of the Project
+// projectID with the given IDs, through tags, that Project's repository; a
+// Tag that does not exist there is left out, for the Scene to judge the
 // binding to it. A Tag deleted after it was read is unbound by policies
 // (ADR 0010).
-func loadTagTypes(ctx context.Context, tags tag.TagRepository, tagIDs []id.ID[tag.Tag]) (scene.TagTypes, error) {
+func loadTagTypes(ctx context.Context, projectID id.ID[project.Project], tags tag.TagRepository, tagIDs []id.ID[tag.Tag]) (scene.TagTypes, error) {
 	types, err := tags.FindTypesByIDs(ctx, tagIDs)
 	if err != nil {
 		return scene.TagTypes{}, fmt.Errorf("cannot read tag types: %w", err)
 	}
-	return scene.NewTagTypes(types), nil
+	return scene.NewTagTypes(projectID, types), nil
 }
 
 // widgetChangeError marks a widget the Scene rejected as invalid input when
@@ -101,33 +113,49 @@ func widgetSaveError(err error) error {
 	return fmt.Errorf("cannot save scene: %w", err)
 }
 
-func (s sceneServiceImpl) FindAllScenes(ctx context.Context) ([]appdto.Scene, error) {
-	list, err := s.repository.FindAll(ctx)
+func (s sceneServiceImpl) FindAllScenes(ctx context.Context, rawProjectID uuid.UUID) ([]appdto.Scene, error) {
+	repo, err := s.scenes(ctx, rawProjectID)
+	if err != nil {
+		return nil, err
+	}
+	list, err := repo.FindAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error on find scenes in repository: %w", err)
 	}
 	return appdto.NewSceneList(list), nil
 }
 
-func (s sceneServiceImpl) FindSceneByID(ctx context.Context, rawID uuid.UUID) (appdto.Scene, error) {
+func (s sceneServiceImpl) FindSceneByID(ctx context.Context, rawProjectID, rawID uuid.UUID) (appdto.Scene, error) {
+	repo, err := s.scenes(ctx, rawProjectID)
+	if err != nil {
+		return appdto.Scene{}, err
+	}
 	sceneID := id.NewID(id.IDWithUUID[scene.Scene](rawID))
-	found, err := s.repository.FindByID(ctx, sceneID)
+	found, err := repo.FindByID(ctx, sceneID)
 	if err != nil {
 		return appdto.Scene{}, fmt.Errorf("error on find scene by id in repository: %w", err)
 	}
 	return appdto.NewScene(found), nil
 }
 
-func (s sceneServiceImpl) CreateScene(ctx context.Context, input appdto.SceneInput) (appdto.Scene, error) {
-	newID := s.repository.NextID()
+// CreateScene creates a new scene in the project. A project deleted just
+// after it was read here loses the scene to its cleanup
+// (NewProjectCleanupPolicy keys scene_created too).
+func (s sceneServiceImpl) CreateScene(ctx context.Context, rawProjectID uuid.UUID, input appdto.SceneInput) (appdto.Scene, error) {
+	projectID, scope, err := s.content.open(ctx, rawProjectID)
+	if err != nil {
+		return appdto.Scene{}, err
+	}
+	repo := scope.Scenes()
+	newID := repo.NextID()
 
 	name, size, background, err := parseSceneFields(input)
 	if err != nil {
 		return appdto.Scene{}, fmt.Errorf("cannot create scene: %w", invalidInput(err))
 	}
-	newScene := scene.CreateScene(newID, name, size, background)
+	newScene := scene.CreateScene(newID, projectID, name, size, background)
 
-	saved, err := s.repository.Save(ctx, newScene)
+	saved, err := repo.Save(ctx, newScene)
 	if err != nil {
 		return appdto.Scene{}, fmt.Errorf("cannot save scene: %w", err)
 	}
@@ -135,10 +163,14 @@ func (s sceneServiceImpl) CreateScene(ctx context.Context, input appdto.SceneInp
 	return appdto.NewScene(saved), nil
 }
 
-func (s sceneServiceImpl) UpdateScene(ctx context.Context, rawID uuid.UUID, rawExpectedVersion int, input appdto.SceneInput) (appdto.Scene, error) {
+func (s sceneServiceImpl) UpdateScene(ctx context.Context, rawProjectID, rawID uuid.UUID, rawExpectedVersion int, input appdto.SceneInput) (appdto.Scene, error) {
+	repo, err := s.scenes(ctx, rawProjectID)
+	if err != nil {
+		return appdto.Scene{}, err
+	}
 	sceneID := id.NewID(id.IDWithUUID[scene.Scene](rawID))
 
-	found, err := s.loadScene(ctx, sceneID)
+	found, err := loadScene(ctx, repo, sceneID)
 	if err != nil {
 		return appdto.Scene{}, err
 	}
@@ -159,7 +191,7 @@ func (s sceneServiceImpl) UpdateScene(ctx context.Context, rawID uuid.UUID, rawE
 		return appdto.Scene{}, fmt.Errorf("cannot update scene: %w", err)
 	}
 
-	saved, err := s.repository.Save(ctx, updated)
+	saved, err := repo.Save(ctx, updated)
 	if err != nil {
 		return appdto.Scene{}, fmt.Errorf("cannot save scene: %w", err)
 	}
@@ -186,38 +218,54 @@ func parseSceneFields(input appdto.SceneInput) (scene.SceneName, scene.SceneSize
 // WidgetDeletedEvent for each widget it holds, and the delete's CAS makes
 // them the widgets the cascade removes: a widget added meanwhile makes the
 // delete lose the race, and the scene is reread with it (retryOnRace).
-func (s sceneServiceImpl) DeleteSceneByID(ctx context.Context, rawID uuid.UUID) (appdto.Scene, error) {
-	sceneID := id.NewID(id.IDWithUUID[scene.Scene](rawID))
+func (s sceneServiceImpl) DeleteSceneByID(ctx context.Context, rawProjectID, rawID uuid.UUID) (appdto.Scene, error) {
+	repo, err := s.scenes(ctx, rawProjectID)
+	if err != nil {
+		return appdto.Scene{}, err
+	}
+	deleted, err := deleteScene(ctx, repo, id.NewID(id.IDWithUUID[scene.Scene](rawID)))
+	if err != nil {
+		return appdto.Scene{}, err
+	}
+	return appdto.NewScene(deleted), nil
+}
 
+// deleteScene deletes the scene sceneID through repo and returns it as it
+// was read (see DeleteSceneByID).
+func deleteScene(ctx context.Context, repo scene.SceneRepository, sceneID id.ID[scene.Scene]) (scene.Scene, error) {
 	var deleted scene.Scene
 	err := retryOnRace(scene.ErrSceneConflict, func() error {
-		found, err := s.loadScene(ctx, sceneID)
+		found, err := loadScene(ctx, repo, sceneID)
 		if err != nil {
 			return err
 		}
-		if err := s.repository.Delete(ctx, found.Delete()); err != nil {
+		if err := repo.Delete(ctx, found.Delete()); err != nil {
 			return fmt.Errorf("cannot delete scene: %w", err)
 		}
 		deleted = found
 		return nil
 	})
-	if err != nil {
-		return appdto.Scene{}, err
-	}
-
-	return appdto.NewScene(deleted), nil
+	return deleted, err
 }
 
-func (s sceneServiceImpl) FindWidgetsBySceneID(ctx context.Context, rawSceneID uuid.UUID) ([]appdto.Widget, error) {
-	sc, err := s.loadScene(ctx, id.NewID(id.IDWithUUID[scene.Scene](rawSceneID)))
+func (s sceneServiceImpl) FindWidgetsBySceneID(ctx context.Context, rawProjectID, rawSceneID uuid.UUID) ([]appdto.Widget, error) {
+	repo, err := s.scenes(ctx, rawProjectID)
+	if err != nil {
+		return nil, err
+	}
+	sc, err := loadScene(ctx, repo, id.NewID(id.IDWithUUID[scene.Scene](rawSceneID)))
 	if err != nil {
 		return nil, err
 	}
 	return appdto.NewWidgetList(sc.Widgets(), rawSceneID, sc.Version().Number()), nil
 }
 
-func (s sceneServiceImpl) FindWidgetByID(ctx context.Context, rawSceneID, rawWidgetID uuid.UUID) (appdto.Widget, error) {
-	sc, err := s.loadScene(ctx, id.NewID(id.IDWithUUID[scene.Scene](rawSceneID)))
+func (s sceneServiceImpl) FindWidgetByID(ctx context.Context, rawProjectID, rawSceneID, rawWidgetID uuid.UUID) (appdto.Widget, error) {
+	repo, err := s.scenes(ctx, rawProjectID)
+	if err != nil {
+		return appdto.Widget{}, err
+	}
+	sc, err := loadScene(ctx, repo, id.NewID(id.IDWithUUID[scene.Scene](rawSceneID)))
 	if err != nil {
 		return appdto.Widget{}, err
 	}
@@ -228,16 +276,21 @@ func (s sceneServiceImpl) FindWidgetByID(ctx context.Context, rawSceneID, rawWid
 	return appdto.NewWidget(w, rawSceneID, sc.Version().Number()), nil
 }
 
-func (s sceneServiceImpl) CreateWidget(ctx context.Context, rawSceneID uuid.UUID, rawSceneVersion int, input appdto.WidgetInput) (appdto.Widget, error) {
+func (s sceneServiceImpl) CreateWidget(ctx context.Context, rawProjectID, rawSceneID uuid.UUID, rawSceneVersion int, input appdto.WidgetInput) (appdto.Widget, error) {
+	projectID, scope, err := s.content.open(ctx, rawProjectID)
+	if err != nil {
+		return appdto.Widget{}, err
+	}
+	repo := scope.Scenes()
 	sceneID := id.NewID(id.IDWithUUID[scene.Scene](rawSceneID))
-	newID := s.repository.NextWidgetID()
+	newID := repo.NextWidgetID()
 
 	newWidget, expectedVersion, err := parseWidgetWrite(newID, rawSceneVersion, input)
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot create widget: %w", err)
 	}
 
-	sc, err := s.loadScene(ctx, sceneID)
+	sc, err := loadScene(ctx, repo, sceneID)
 	if err != nil {
 		return appdto.Widget{}, err
 	}
@@ -249,7 +302,7 @@ func (s sceneServiceImpl) CreateWidget(ctx context.Context, rawSceneID uuid.UUID
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot create widget: %w", err)
 	}
-	tagTypes, err := loadTagTypes(ctx, s.tagRepository, scene.BoundTagIDs(newWidget))
+	tagTypes, err := loadTagTypes(ctx, projectID, scope.Tags(), scene.BoundTagIDs(newWidget))
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot create widget: %w", err)
 	}
@@ -259,7 +312,7 @@ func (s sceneServiceImpl) CreateWidget(ctx context.Context, rawSceneID uuid.UUID
 		return appdto.Widget{}, fmt.Errorf("cannot create widget: %w", widgetChangeError(err))
 	}
 
-	saved, err := s.repository.Save(ctx, changed)
+	saved, err := repo.Save(ctx, changed)
 	if err != nil {
 		return appdto.Widget{}, widgetSaveError(err)
 	}
@@ -267,7 +320,12 @@ func (s sceneServiceImpl) CreateWidget(ctx context.Context, rawSceneID uuid.UUID
 	return savedWidget(saved, newID, rawSceneID)
 }
 
-func (s sceneServiceImpl) UpdateWidget(ctx context.Context, rawSceneID, rawWidgetID uuid.UUID, rawSceneVersion int, input appdto.WidgetInput) (appdto.Widget, error) {
+func (s sceneServiceImpl) UpdateWidget(ctx context.Context, rawProjectID, rawSceneID, rawWidgetID uuid.UUID, rawSceneVersion int, input appdto.WidgetInput) (appdto.Widget, error) {
+	projectID, scope, err := s.content.open(ctx, rawProjectID)
+	if err != nil {
+		return appdto.Widget{}, err
+	}
+	repo := scope.Scenes()
 	sceneID := id.NewID(id.IDWithUUID[scene.Scene](rawSceneID))
 	widgetID := id.NewID(id.IDWithUUID[scene.Widget](rawWidgetID))
 
@@ -276,7 +334,7 @@ func (s sceneServiceImpl) UpdateWidget(ctx context.Context, rawSceneID, rawWidge
 		return appdto.Widget{}, fmt.Errorf("cannot update widget: %w", err)
 	}
 
-	sc, err := s.loadScene(ctx, sceneID)
+	sc, err := loadScene(ctx, repo, sceneID)
 	if err != nil {
 		return appdto.Widget{}, err
 	}
@@ -293,7 +351,7 @@ func (s sceneServiceImpl) UpdateWidget(ctx context.Context, rawSceneID, rawWidge
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot update widget: %w", err)
 	}
-	tagTypes, err := loadTagTypes(ctx, s.tagRepository, scene.BoundTagIDs(updated))
+	tagTypes, err := loadTagTypes(ctx, projectID, scope.Tags(), scene.BoundTagIDs(updated))
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot update widget: %w", err)
 	}
@@ -303,7 +361,7 @@ func (s sceneServiceImpl) UpdateWidget(ctx context.Context, rawSceneID, rawWidge
 		return appdto.Widget{}, fmt.Errorf("cannot update widget: %w", widgetChangeError(err))
 	}
 
-	saved, err := s.repository.Save(ctx, changed)
+	saved, err := repo.Save(ctx, changed)
 	if err != nil {
 		return appdto.Widget{}, widgetSaveError(err)
 	}
@@ -371,14 +429,18 @@ func parseWidget(widgetID id.ID[scene.Widget], input appdto.WidgetInput) (scene.
 // DeleteWidgetByID removes a widget from its scene. Like deleting any
 // aggregate it expects no scene version: a scene changed since it was read is
 // reread and the widget removed from it as it is now (retryOnRace).
-func (s sceneServiceImpl) DeleteWidgetByID(ctx context.Context, rawSceneID, rawWidgetID uuid.UUID) (appdto.Widget, error) {
+func (s sceneServiceImpl) DeleteWidgetByID(ctx context.Context, rawProjectID, rawSceneID, rawWidgetID uuid.UUID) (appdto.Widget, error) {
+	repo, err := s.scenes(ctx, rawProjectID)
+	if err != nil {
+		return appdto.Widget{}, err
+	}
 	sceneID := id.NewID(id.IDWithUUID[scene.Scene](rawSceneID))
 	widgetID := id.NewID(id.IDWithUUID[scene.Widget](rawWidgetID))
 
 	var deleted scene.Widget
 	var saved scene.Scene
-	err := retryOnRace(scene.ErrSceneConflict, func() error {
-		sc, err := s.loadScene(ctx, sceneID)
+	err = retryOnRace(scene.ErrSceneConflict, func() error {
+		sc, err := loadScene(ctx, repo, sceneID)
 		if err != nil {
 			return err
 		}
@@ -386,7 +448,7 @@ func (s sceneServiceImpl) DeleteWidgetByID(ctx context.Context, rawSceneID, rawW
 		if err != nil {
 			return fmt.Errorf("cannot delete widget: %w", err)
 		}
-		if saved, err = s.repository.Save(ctx, changed); err != nil {
+		if saved, err = repo.Save(ctx, changed); err != nil {
 			return fmt.Errorf("cannot save scene: %w", err)
 		}
 		deleted = w

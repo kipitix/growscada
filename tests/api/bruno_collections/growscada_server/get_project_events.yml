@@ -1,0 +1,24 @@
+info:
+  name: get project events (SSE stream)
+  type: http
+  seq: 36
+  tags:
+    - manual
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/events
+  auth: inherit
+
+docs: |
+  Opens the Server-Sent Events stream of one project: the events of its
+  content (tag, scene and widget created/updated/deleted), in the shapes of
+  "get events". The project must exist when the stream opens (else `404`).
+  Like "get events" the stream never completes on its own: cancel the request
+  manually to inspect what was received so far.
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

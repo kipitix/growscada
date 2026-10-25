@@ -1,10 +1,13 @@
 package project
 
 import (
+	"context"
+
 	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/tagstate"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
@@ -19,11 +22,25 @@ func (p *Project) loadWidgetTypes(ctx app.Context) {
 
 // ── Scenes ────────────────────────────────────────────────────────────────────
 
+// The lists of the project's content belong to its client (Project.content):
+// a response of a project no longer shown is dropped.
+
+// projectContent returns the client of the content of the project shown.
+func (p *Project) projectContent() *apiclient.ProjectClient { return p.content }
+
 func (p *Project) loadScenes(ctx app.Context) {
+	if p.content == nil {
+		p.scenes = nil
+		return
+	}
 	mark := p.markScenes()
-	uiutil.Load(p.compoCtx, &p.scenesReloader, p.client.ListScenes, func(ctx app.Context, scenes []apiv0.SceneResponse) {
-		p.setScenes(ctx, mark, scenes)
-	}, p.loadScenes)
+	uiutil.LoadFor(p.compoCtx, &p.scenesReloader, p.projectContent,
+		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.SceneResponse, error) {
+			return pc.ListScenes(c)
+		},
+		func(ctx app.Context, _ *apiclient.ProjectClient, scenes []apiv0.SceneResponse) {
+			p.setScenes(ctx, mark, scenes)
+		}, p.loadScenes)
 }
 
 // setScenes replaces the scene list, keeps a valid selection (falling back to
@@ -79,11 +96,18 @@ func (p *Project) isInteracting() bool {
 	return p.draggedWidgetID() != uuid.Nil
 }
 
+// sceneOfProject is the key of the Widgets loaded: the selected Scene of the
+// project shown.
+type sceneOfProject struct {
+	content *apiclient.ProjectClient
+	sceneID uuid.UUID
+}
+
 // loadWidgets (re)loads the widgets of the selected scene. During a canvas
 // interaction the reload is deferred until it ends (finalizeAllDrags).
 func (p *Project) loadWidgets(ctx app.Context) {
 	ctx = p.compoCtx
-	if p.selectedSceneID == uuid.Nil {
+	if p.selectedSceneID == uuid.Nil || p.content == nil {
 		p.widgets = nil
 		return
 	}
@@ -92,13 +116,17 @@ func (p *Project) loadWidgets(ctx app.Context) {
 		return
 	}
 	mark := p.sceneVersions.Mark()
-	uiutil.LoadFor(ctx, &p.widgetsReloader, func() uuid.UUID { return p.selectedSceneID }, p.client.ListWidgets,
-		func(ctx app.Context, sceneID uuid.UUID, widgets []apiv0.WidgetResponse) {
+	uiutil.LoadFor(ctx, &p.widgetsReloader,
+		func() sceneOfProject { return sceneOfProject{content: p.content, sceneID: p.selectedSceneID} },
+		func(c context.Context, k sceneOfProject) ([]apiv0.WidgetResponse, error) {
+			return k.content.ListWidgets(c, k.sceneID)
+		},
+		func(ctx app.Context, k sceneOfProject, widgets []apiv0.WidgetResponse) {
 			if p.isInteracting() {
 				p.widgetsReloadDeferred = true
 				return
 			}
-			p.setWidgets(ctx, mark, sceneID, widgets)
+			p.setWidgets(ctx, mark, k.sceneID, widgets)
 		}, p.loadWidgets)
 }
 
@@ -134,12 +162,20 @@ func (p *Project) setWidgets(ctx app.Context, mark uiutil.Mark, sceneID uuid.UUI
 // ── Tags ──────────────────────────────────────────────────────────────────────
 
 func (p *Project) loadTags(ctx app.Context) {
+	if p.content == nil {
+		p.tags = tagstate.Tags{}
+		return
+	}
 	mark := p.tags.Mark()
 	p.tagLists++
 	n := p.tagLists
-	uiutil.Load(p.compoCtx, &p.tagsReloader, p.client.ListTags, func(ctx app.Context, tags []apiv0.TagResponse) {
-		p.setTags(ctx, mark, n, tags)
-	}, p.loadTags)
+	uiutil.LoadFor(p.compoCtx, &p.tagsReloader, p.projectContent,
+		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.TagResponse, error) {
+			return pc.ListTags(c)
+		},
+		func(ctx app.Context, _ *apiclient.ProjectClient, tags []apiv0.TagResponse) {
+			p.setTags(ctx, mark, n, tags)
+		}, p.loadTags)
 }
 
 // setTags merges the loaded tag list into the known Tags (a newer state from

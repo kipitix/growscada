@@ -10,6 +10,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
@@ -24,6 +25,7 @@ type resource struct {
 }
 
 var (
+	projectResource    = resource{name: "Project", pathParam: "project_id"}
 	tagResource        = resource{name: "Tag", pathParam: "tag_id"}
 	widgetTypeResource = resource{name: "WidgetType", pathParam: "widget_type_id"}
 	sceneResource      = resource{name: "Scene", pathParam: "scene_id"}
@@ -48,9 +50,12 @@ type errorMapping struct {
 
 // errorMappings is the only place the restapi knows the domain sentinel errors.
 var errorMappings = []errorMapping{
+	{project.ErrProjectNotFound, http.StatusNotFound, projectResource, ""},
+	{project.ErrProjectConflict, http.StatusConflict, projectResource, "Project was changed concurrently; reload it and retry"},
+	{project.ErrProjectNameTaken, http.StatusConflict, projectResource, "Project name is already taken"},
 	{tag.ErrTagNotFound, http.StatusNotFound, tagResource, ""},
 	{tag.ErrTagConflict, http.StatusConflict, tagResource, "Tag was changed concurrently; reload it and retry"},
-	{tag.ErrTagNameTaken, http.StatusConflict, tagResource, "Tag name is already taken"},
+	{tag.ErrTagNameTaken, http.StatusConflict, tagResource, "Tag name is already taken in the project"},
 	{library.ErrWidgetTypeNotFound, http.StatusNotFound, widgetTypeResource, ""},
 	{library.ErrWidgetTypeConflict, http.StatusConflict, widgetTypeResource, "WidgetType was changed concurrently; reload it and retry"},
 	{library.ErrWidgetTypeInUse, http.StatusConflict, widgetTypeResource, "WidgetType is used by Widgets"},

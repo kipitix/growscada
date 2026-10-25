@@ -1,11 +1,11 @@
 info:
   name: get tag by id
   type: http
-  seq: 5
+  seq: 8
 
 http:
   method: GET
-  url: http://{{API_SERVER}}/api/v0/tags/{{TAG_ID}}
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/tags/{{TAG_ID}}
   auth: inherit
 
 runtime:

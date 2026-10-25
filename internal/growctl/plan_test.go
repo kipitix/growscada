@@ -146,3 +146,21 @@ func TestStep_IsChange(t *testing.T) {
 		}
 	}
 }
+
+func TestPlanProjects(t *testing.T) {
+	existing := growctl.ServerProject{ID: uuid.New(), Name: "a"}
+	manifests := []growctl.ProjectManifest{{Name: "a"}, {Name: "b"}}
+
+	apply := growctl.PlanProjects(manifests, []growctl.ServerProject{existing}, false)
+	remove := growctl.PlanProjects(manifests, []growctl.ServerProject{existing}, true)
+
+	if apply[0].Action != growctl.ActionUnchanged || apply[0].Server != existing || apply[1].Action != growctl.ActionCreate || apply[1].Name != "b" {
+		t.Errorf("apply: %+v", apply)
+	}
+	if remove[0].Action != growctl.ActionDelete || remove[0].Server.ID != existing.ID || remove[1].Action != growctl.ActionNotFound {
+		t.Errorf("delete: %+v", remove)
+	}
+	if !apply[1].IsChange() || apply[0].IsChange() || !remove[0].IsChange() || remove[1].IsChange() {
+		t.Error("only create and delete change the server")
+	}
+}

@@ -90,14 +90,23 @@ func main() {
 	// Repositories wake it after each commit that wrote events
 	dispatcher := outbox.NewDispatcher(sqlDB, eventBus.Publish)
 	notifyDispatcher := repositories.NotifyOnCommit(dispatcher.Notify)
-	tagRepository := repositories.NewTagRepositoryPostgres(sqlDB, notifyDispatcher)
+	projectRepository := repositories.NewProjectRepositoryPostgres(sqlDB, notifyDispatcher)
 	widgetTypeRepository := repositories.NewWidgetTypeRepositoryPostgres(sqlDB, notifyDispatcher)
-	sceneRepository := repositories.NewSceneRepositoryPostgres(sqlDB, notifyDispatcher)
+	// The repositories of a Project's content (Tags, Scenes) are opened per
+	// Project (ADR 0006)
+	projectScopes := repositories.NewProjectScopes(sqlDB, notifyDispatcher)
+	// The one Organization the server runs with until Users exist
+	organizationID, err := repositories.FindSoleOrganization(context.Background(), sqlDB)
+	if err != nil {
+		slog.Error("Organization error", "error", err)
+		emergencyExit(gracedownManager, gracedown.ExitConfig)
+	}
 	// Registry of the policies: changes spanning aggregates, run as jobs
 	// apart from event delivery (ADR 0008)
 	policyRunner := outbox.NewPolicyRunner(sqlDB, []application.Policy{
-		application.NewWidgetReconciliationPolicy(widgetTypeRepository, sceneRepository, tagRepository),
-		application.NewUnbindDeletedTagPolicy(sceneRepository, tagRepository),
+		application.NewWidgetReconciliationPolicy(widgetTypeRepository, projectScopes),
+		application.NewUnbindDeletedTagPolicy(projectScopes),
+		application.NewProjectCleanupPolicy(projectRepository, projectScopes),
 	})
 	dispatcher.SetPolicyRunner(policyRunner)
 	dispatcherCtx, stopDispatcher := context.WithCancel(context.Background())
@@ -141,11 +150,13 @@ func main() {
 	// INTERFACE COMPONENTS
 	// API server
 	// Create services
-	tagService := application.NewTagService(tagRepository)
+	projectContent := application.NewProjectContent(projectRepository, projectScopes, organizationID)
+	projectService := application.NewProjectService(projectRepository, organizationID)
+	tagService := application.NewTagService(projectContent)
 	widgetTypeService := application.NewWidgetTypeService(widgetTypeRepository)
-	sceneService := application.NewSceneService(sceneRepository, widgetTypeRepository, tagRepository)
+	sceneService := application.NewSceneService(projectContent, widgetTypeRepository)
 	// Create router
-	apiRouter := restapi.NewRouter(tagService, widgetTypeService, sceneService, eventBus, cliArgs.MaxSSEClients)
+	apiRouter := restapi.NewRouter(projectService, tagService, widgetTypeService, sceneService, eventBus, cliArgs.MaxSSEClients)
 	// Register the event hub shutdown handler. The outbox is drained first,
 	// while SSE clients are still connected, so what is left in it reaches
 	// them; a change committed after the drain (the API server stops

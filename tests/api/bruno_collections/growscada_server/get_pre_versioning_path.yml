@@ -1,7 +1,7 @@
 info:
   name: get pre-versioning path
   type: http
-  seq: 12
+  seq: 15
 
 http:
   method: GET

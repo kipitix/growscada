@@ -17,14 +17,18 @@ func NewWidgetsHandler(s application.SceneService) *WidgetsHandlers {
 	return &WidgetsHandlers{service: s}
 }
 
-// GetWidgetsBySceneID handles GET /scenes/{scene_id}/widgets
+// GetWidgetsBySceneID handles GET /projects/{project_id}/scenes/{scene_id}/widgets
 func (h WidgetsHandlers) GetWidgetsBySceneID(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := pathUUID(w, r, projectResource)
+	if !ok {
+		return
+	}
 	sceneID, ok := pathUUID(w, r, sceneResource)
 	if !ok {
 		return
 	}
 
-	list, err := h.service.FindWidgetsBySceneID(r.Context(), sceneID)
+	list, err := h.service.FindWidgetsBySceneID(r.Context(), projectID, sceneID)
 	if err != nil {
 		sendError(w, r, err)
 		return
@@ -32,8 +36,12 @@ func (h WidgetsHandlers) GetWidgetsBySceneID(w http.ResponseWriter, r *http.Requ
 	sendJSONResponse(w, http.StatusOK, newGetWidgetsResponse(list))
 }
 
-// GetWidgetsByID handles GET /scenes/{scene_id}/widgets/{widget_id}
+// GetWidgetsByID handles GET /projects/{project_id}/scenes/{scene_id}/widgets/{widget_id}
 func (h WidgetsHandlers) GetWidgetsByID(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := pathUUID(w, r, projectResource)
+	if !ok {
+		return
+	}
 	sceneID, ok := pathUUID(w, r, sceneResource)
 	if !ok {
 		return
@@ -43,7 +51,7 @@ func (h WidgetsHandlers) GetWidgetsByID(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	found, err := h.service.FindWidgetByID(r.Context(), sceneID, widgetID)
+	found, err := h.service.FindWidgetByID(r.Context(), projectID, sceneID, widgetID)
 	if err != nil {
 		sendError(w, r, err)
 		return
@@ -52,8 +60,12 @@ func (h WidgetsHandlers) GetWidgetsByID(w http.ResponseWriter, r *http.Request) 
 	sendJSONResponse(w, http.StatusOK, newWidgetResponse(found))
 }
 
-// PostWidgets handles POST /scenes/{scene_id}/widgets
+// PostWidgets handles POST /projects/{project_id}/scenes/{scene_id}/widgets
 func (h WidgetsHandlers) PostWidgets(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := pathUUID(w, r, projectResource)
+	if !ok {
+		return
+	}
 	sceneID, ok := pathUUID(w, r, sceneResource)
 	if !ok {
 		return
@@ -64,7 +76,7 @@ func (h WidgetsHandlers) PostWidgets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := h.service.CreateWidget(r.Context(), sceneID, request.SceneVersion, newCreateWidgetInput(request))
+	created, err := h.service.CreateWidget(r.Context(), projectID, sceneID, request.SceneVersion, newCreateWidgetInput(request))
 	if err != nil {
 		sendError(w, r, err)
 		return
@@ -73,8 +85,12 @@ func (h WidgetsHandlers) PostWidgets(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusCreated, newCreateWidgetResponse(created))
 }
 
-// PutWidgetsByID handles PUT /scenes/{scene_id}/widgets/{widget_id}
+// PutWidgetsByID handles PUT /projects/{project_id}/scenes/{scene_id}/widgets/{widget_id}
 func (h WidgetsHandlers) PutWidgetsByID(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := pathUUID(w, r, projectResource)
+	if !ok {
+		return
+	}
 	sceneID, ok := pathUUID(w, r, sceneResource)
 	if !ok {
 		return
@@ -89,7 +105,7 @@ func (h WidgetsHandlers) PutWidgetsByID(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	updated, err := h.service.UpdateWidget(r.Context(), sceneID, widgetID, request.SceneVersion, newUpdateWidgetInput(request))
+	updated, err := h.service.UpdateWidget(r.Context(), projectID, sceneID, widgetID, request.SceneVersion, newUpdateWidgetInput(request))
 	if err != nil {
 		sendError(w, r, err)
 		return
@@ -98,8 +114,12 @@ func (h WidgetsHandlers) PutWidgetsByID(w http.ResponseWriter, r *http.Request) 
 	sendJSONResponse(w, http.StatusOK, newUpdateWidgetResponse(updated))
 }
 
-// DeleteWidgetsByID handles DELETE /scenes/{scene_id}/widgets/{widget_id}
+// DeleteWidgetsByID handles DELETE /projects/{project_id}/scenes/{scene_id}/widgets/{widget_id}
 func (h WidgetsHandlers) DeleteWidgetsByID(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := pathUUID(w, r, projectResource)
+	if !ok {
+		return
+	}
 	sceneID, ok := pathUUID(w, r, sceneResource)
 	if !ok {
 		return
@@ -109,7 +129,7 @@ func (h WidgetsHandlers) DeleteWidgetsByID(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	deleted, err := h.service.DeleteWidgetByID(r.Context(), sceneID, widgetID)
+	deleted, err := h.service.DeleteWidgetByID(r.Context(), projectID, sceneID, widgetID)
 	if err != nil {
 		sendError(w, r, err)
 		return

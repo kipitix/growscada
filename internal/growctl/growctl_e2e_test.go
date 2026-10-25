@@ -6,9 +6,12 @@ import (
 	"errors"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/growctl"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
@@ -20,7 +23,14 @@ import (
 var postgres servertest.Postgres
 
 func TestMain(m *testing.M) {
+	// The context file of the tests is their own, never the user's.
+	dir, err := os.MkdirTemp("", "growctl-test")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv(growctl.ConfigEnv, filepath.Join(dir, "config.yaml"))
 	code := m.Run()
+	os.RemoveAll(dir)
 	postgres.Close()
 	os.Exit(code)
 }
@@ -33,8 +43,18 @@ func runGrowctl(t *testing.T, srv *httptest.Server, manifest string, args ...str
 }
 
 // execGrowctl runs growctl against the server with the given stdin and args,
-// returning stdout and stderr.
+// returning stdout and stderr. It works in the project Main unless args name
+// a --project.
 func execGrowctl(t *testing.T, srv *httptest.Server, stdin string, args ...string) (string, string, error) {
+	t.Helper()
+	if !slices.Contains(args, "--project") {
+		args = append(args, "--project", servertest.MainProjectName)
+	}
+	return execGrowctlBare(t, srv, stdin, args...)
+}
+
+// execGrowctlBare is execGrowctl without the default --project.
+func execGrowctlBare(t *testing.T, srv *httptest.Server, stdin string, args ...string) (string, string, error) {
 	t.Helper()
 	cmd := growctl.NewRootCommand()
 	var out, errOut bytes.Buffer
@@ -48,7 +68,7 @@ func execGrowctl(t *testing.T, srv *httptest.Server, stdin string, args ...strin
 
 func tagsByName(t *testing.T, svc application.TagService) map[string]appdto.Tag {
 	t.Helper()
-	tags, err := svc.FindAllTags(context.Background())
+	tags, err := svc.FindAllTags(context.Background(), servertest.MainProject)
 	if err != nil {
 		t.Fatalf("FindAllTags: %v", err)
 	}
@@ -102,7 +122,7 @@ func TestApply_Twice_IsIdempotentAndKeepsCurrentValue(t *testing.T) {
 		t.Fatalf("first apply: %v", err)
 	}
 	running := tagsByName(t, svc)["pump1.running"]
-	if _, err := svc.SetTagValueByID(context.Background(), appdto.UpdateTagInput{
+	if _, err := svc.SetTagValueByID(context.Background(), servertest.MainProject, appdto.UpdateTagInput{
 		ID: running.ID, Value: "true", Quality: "bad", Version: running.Version,
 	}); err != nil {
 		t.Fatalf("SetTagValueByID: %v", err)
@@ -287,7 +307,7 @@ func TestUsageError_ExitCode2(t *testing.T) {
 func createTag(t *testing.T, svc application.TagService, name, tagType string) {
 	t.Helper()
 	value := map[string]string{"integer": "0", "string": "", "boolean": "false"}[tagType]
-	if _, err := svc.CreateTag(context.Background(), appdto.CreateTagInput{
+	if _, err := svc.CreateTag(context.Background(), servertest.MainProject, appdto.CreateTagInput{
 		Name: name, Type: tagType, Value: value, Quality: "good",
 	}); err != nil {
 		t.Fatalf("CreateTag(%q): %v", name, err)
@@ -426,7 +446,7 @@ func TestDeletePattern_NoMatch_ReportsAndSucceeds(t *testing.T) {
 
 	out, errOut, err := execGrowctl(t, srv, "", "delete", "--pattern", "nothing*")
 
-	if err != nil || out != "" || !strings.Contains(errOut, "No tags match") {
+	if err != nil || out != "" || !strings.Contains(errOut, "No tags of project/Main match") {
 		t.Errorf("got out=%q err-out=%q err=%v", out, errOut, err)
 	}
 }
@@ -488,8 +508,8 @@ func TestGetTags_YAML_RoundTripsThroughApply(t *testing.T) {
 	if err != nil {
 		t.Fatalf("exported YAML is not a valid manifest: %v\n%s", err, exported)
 	}
-	if len(manifests) != 2 {
-		t.Fatalf("expected 2 manifests, got %d", len(manifests))
+	if len(manifests.Tags) != 2 || manifests.Tags[0].Project != servertest.MainProjectName {
+		t.Fatalf("expected 2 manifests of project Main, got %+v", manifests.Tags)
 	}
 
 	// Re-applying the export to an empty server recreates the same tags.
@@ -511,5 +531,208 @@ func TestGetTags_Empty_ReportsNoTags(t *testing.T) {
 
 	if err != nil || out != "" || !strings.Contains(errOut, "No tags found") {
 		t.Errorf("got out=%q err-out=%q err=%v", out, errOut, err)
+	}
+}
+
+// --- projects ---
+
+const lineProject = `
+apiVersion: growscada/v0.2
+kind: Project
+metadata:
+  name: Line 1
+`
+
+const lineTag = `
+apiVersion: growscada/v0.2
+kind: Tag
+metadata:
+  name: speed
+  project: Line 1
+spec: {type: integer, initialValue: "7", initialQuality: good}
+`
+
+// projectTags returns the tags of the project named name, by name.
+func projectTags(t *testing.T, srv *httptest.Server, name string) map[string]string {
+	t.Helper()
+	client := apiclient.New(srv.URL, srv.Client())
+	found, ok, err := client.FindProjectByName(context.Background(), name)
+	if err != nil || !ok {
+		t.Fatalf("find project %q: %v, %v", name, ok, err)
+	}
+	tags, err := client.Project(found.ID).ListTags(context.Background())
+	if err != nil {
+		t.Fatalf("list tags of %q: %v", name, err)
+	}
+	byName := map[string]string{}
+	for _, tg := range tags {
+		byName[tg.Name] = tg.Value
+	}
+	return byName
+}
+
+func TestApply_ProjectAndItsTags_CreatesTheProjectFirst(t *testing.T) {
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
+
+	out, _, err := execGrowctlBare(t, srv, lineProject+"---"+lineTag, "apply", "-f", "-")
+
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	assertOutput(t, out, "project/Line 1 created", "tag/speed created")
+	if tags := projectTags(t, srv, "Line 1"); tags["speed"] != "7" {
+		t.Errorf("tags of Line 1: %v", tags)
+	}
+	if tags := tagsByName(t, svc); len(tags) != 0 {
+		t.Errorf("Main must stay empty, got %v", tags)
+	}
+
+	out, _, err = execGrowctlBare(t, srv, lineProject+"---"+lineTag, "apply", "-f", "-")
+	if err != nil {
+		t.Fatalf("second apply: %v", err)
+	}
+	assertOutput(t, out, "project/Line 1 unchanged", "tag/speed unchanged")
+}
+
+func TestDiff_ShowsProjectToCreate(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+
+	out, _, err := execGrowctlBare(t, srv, lineProject+"---"+lineTag, "diff", "-f", "-")
+
+	if code := exitCode(err); code != 1 {
+		t.Fatalf("exit code: expected 1, got %d (%v)", code, err)
+	}
+	assertOutput(t, out, "+ project/Line 1", "+ tag/speed (integer)")
+}
+
+func TestApply_MetadataProjectDiffersFromFlag_FailsWithoutChanges(t *testing.T) {
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
+
+	_, err := runGrowctl(t, srv, lineTag, "apply")
+
+	if err == nil || !strings.Contains(err.Error(), `metadata.project is "Line 1", but growctl works in project "Main"`) {
+		t.Fatalf("expected a project mismatch, got %v", err)
+	}
+	if tags := tagsByName(t, svc); len(tags) != 0 {
+		t.Errorf("nothing must be created, got %v", tags)
+	}
+}
+
+func TestApply_UnknownProject_Fails(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+
+	_, err := runGrowctl(t, srv, twoTags, "apply", "--project", "Nowhere")
+
+	if err == nil || !strings.Contains(err.Error(), "project/Nowhere not found") {
+		t.Errorf("expected project not found, got %v", err)
+	}
+}
+
+func TestApply_NoProjectAnywhere_IsUsageError(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+	t.Setenv(growctl.ConfigEnv, filepath.Join(t.TempDir(), "config.yaml"))
+
+	_, _, err := execGrowctlBare(t, srv, twoTags, "apply", "-f", "-")
+
+	if code := exitCode(err); code != 2 || !strings.Contains(err.Error(), "no project") {
+		t.Errorf("exit code %d (%v), want 2 asking for a project", code, err)
+	}
+}
+
+func TestConfigUseProject_IsTheDefaultProject(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+	t.Setenv(growctl.ConfigEnv, filepath.Join(t.TempDir(), "growctl", "config.yaml"))
+	if _, _, err := execGrowctlBare(t, srv, lineProject, "apply", "-f", "-"); err != nil {
+		t.Fatalf("apply project: %v", err)
+	}
+
+	out, _, err := execGrowctlBare(t, srv, "", "config", "use-project", "Line 1")
+	if err != nil || !strings.Contains(out, "project/Line 1") {
+		t.Fatalf("use-project: %q, %v", out, err)
+	}
+	current, _, err := execGrowctlBare(t, srv, "", "config", "current-project")
+	if err != nil || current != "Line 1\n" {
+		t.Errorf("current-project: %q, %v", current, err)
+	}
+	if _, _, err := execGrowctlBare(t, srv, twoTags, "apply", "-f", "-"); err != nil {
+		t.Fatalf("apply in the context's project: %v", err)
+	}
+
+	if tags := projectTags(t, srv, "Line 1"); len(tags) != 2 {
+		t.Errorf("tags of Line 1: %v, want the manifest's two", tags)
+	}
+}
+
+func TestConfigCurrentProject_NoContext_Fails(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+	t.Setenv(growctl.ConfigEnv, filepath.Join(t.TempDir(), "config.yaml"))
+
+	if _, _, err := execGrowctlBare(t, srv, "", "config", "current-project"); err == nil {
+		t.Error("expected an error without a context")
+	}
+	if _, _, err := execGrowctlBare(t, srv, "", "config", "use-project"); exitCode(err) != 2 {
+		t.Errorf("use-project without a name: %v, want exit code 2", err)
+	}
+}
+
+func TestApply_Prune_LeavesProjectsAlone(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+	if _, _, err := execGrowctlBare(t, srv, lineProject, "apply", "-f", "-"); err != nil {
+		t.Fatalf("apply project: %v", err)
+	}
+
+	if _, err := runGrowctl(t, srv, twoTags, "apply", "--prune"); err != nil {
+		t.Fatalf("apply --prune: %v", err)
+	}
+
+	if _, ok, err := apiclient.New(srv.URL, srv.Client()).FindProjectByName(context.Background(), "Line 1"); err != nil || !ok {
+		t.Errorf("--prune must not touch projects: %v, %v", ok, err)
+	}
+}
+
+func TestDelete_ProjectManifest_DeletesTheProject(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+	if _, _, err := execGrowctlBare(t, srv, lineProject+"---"+lineTag, "apply", "-f", "-"); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	out, _, err := execGrowctlBare(t, srv, lineProject+"---"+lineTag, "delete", "-f", "-")
+
+	if err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	assertOutput(t, out, "tag/speed deleted", "project/Line 1 deleted")
+	if _, ok, err := apiclient.New(srv.URL, srv.Client()).FindProjectByName(context.Background(), "Line 1"); err != nil || ok {
+		t.Errorf("project/Line 1 must be gone: %v, %v", ok, err)
+	}
+
+	out, _, err = execGrowctlBare(t, srv, lineProject+"---"+lineTag, "delete", "-f", "-")
+	if err != nil {
+		t.Fatalf("delete again: %v", err)
+	}
+	assertOutput(t, out, "tag/speed not found", "project/Line 1 not found")
+}
+
+func TestGetProjects_TableAndYAML(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+	if _, _, err := execGrowctlBare(t, srv, lineProject, "apply", "-f", "-"); err != nil {
+		t.Fatalf("apply project: %v", err)
+	}
+
+	table, _, err := execGrowctl(t, srv, "", "get", "projects")
+	if err != nil {
+		t.Fatalf("get projects: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(table), "\n")
+	if len(lines) != 3 || !strings.HasPrefix(lines[0], "NAME") || !strings.HasPrefix(lines[1], "Main") || !strings.HasPrefix(lines[2], "Line 1") {
+		t.Errorf("unexpected table:\n%s", table)
+	}
+	exported, _, err := execGrowctl(t, srv, "", "get", "projects", "-o", "yaml")
+	if err != nil {
+		t.Fatalf("get projects -o yaml: %v", err)
+	}
+	manifests, err := growctl.ParseManifests([]byte(exported))
+	if err != nil || len(manifests.Projects) != 2 || manifests.Projects[1].Name != "Line 1" {
+		t.Errorf("exported projects: %+v, %v\n%s", manifests, err, exported)
 	}
 }

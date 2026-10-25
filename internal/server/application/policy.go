@@ -2,8 +2,14 @@ package application
 
 import (
 	"context"
+	"fmt"
+	"strings"
+
+	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/server/domain/event"
+	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 )
 
 // Policy brings state into line with the current state of what an event
@@ -21,4 +27,25 @@ type Policy interface {
 	JobKey(e event.Event) (string, bool)
 	// Run brings into line what key names.
 	Run(ctx context.Context, key string) error
+}
+
+// Job keys of a Project's content start with "project:<id>".
+const projectKeyPrefix = "project:"
+
+// cutProjectKey returns the Project a job key starts with and the rest of the
+// key.
+func cutProjectKey(key string) (id.ID[project.Project], string, error) {
+	rest, ok := strings.CutPrefix(key, projectKeyPrefix)
+	if !ok {
+		return id.ID[project.Project]{}, "", fmt.Errorf("invalid job key %q", key)
+	}
+	rawProjectID, rest, _ := strings.Cut(rest, "/")
+	projectUUID, err := uuid.Parse(rawProjectID)
+	if err != nil {
+		return id.ID[project.Project]{}, "", fmt.Errorf("invalid project ID in job key %q: %w", key, err)
+	}
+	if rest != "" {
+		rest = "/" + rest
+	}
+	return id.NewID(id.IDWithUUID[project.Project](projectUUID)), rest, nil
 }

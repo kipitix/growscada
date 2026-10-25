@@ -4,8 +4,12 @@ import (
 	"testing"
 
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
+
+// testProject is the Project of the tags the tests build.
+var testProject = id.NewID[project.Project]()
 
 func makeTestTag(t *testing.T) Tag {
 	t.Helper()
@@ -14,7 +18,7 @@ func makeTestTag(t *testing.T) Tag {
 	tagType := TagTypeInteger
 	value, _ := tagType.NewTagValue(0)
 	quality := TagQualityGood
-	tag, err := ReconstituteTag(tagID, name, tagType, value, quality, version.Initial[Tag]())
+	tag, err := ReconstituteTag(tagID, testProject, name, tagType, value, quality, version.Initial[Tag]())
 	if err != nil {
 		t.Fatalf("ReconstituteTag returned unexpected error: %v", err)
 	}
@@ -32,7 +36,7 @@ func TestReconstituteTag_FieldsAreSet(t *testing.T) {
 		t.Fatalf("unexpected error creating version: %v", err)
 	}
 
-	tag, err := ReconstituteTag(tagID, name, tagType, value, quality, ver)
+	tag, err := ReconstituteTag(tagID, testProject, name, tagType, value, quality, ver)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -139,7 +143,7 @@ func TestReconstituteTag_InvalidTypeOrQuality_ReturnsError(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := ReconstituteTag(id.NewID[Tag](), name, tc.tagType, value, tc.quality, version.Initial[Tag]())
+			_, err := ReconstituteTag(id.NewID[Tag](), testProject, name, tc.tagType, value, tc.quality, version.Initial[Tag]())
 			if err == nil {
 				t.Error("expected error, got nil")
 			}

@@ -11,6 +11,7 @@ import (
 
 func TestReadConfig_FillsDefaults(t *testing.T) {
 	cfg, err := ReadConfig(strings.NewReader(`
+project: Main
 tags:
   - tag: pump.speed
     pattern:
@@ -32,6 +33,7 @@ tags:
 func TestReadConfig_FullExample(t *testing.T) {
 	cfg, err := ReadConfig(strings.NewReader(`
 server: http://scada:9090
+project: Line 1
 control: 127.0.0.1:9999
 autostart: false
 defaultInterval: 2s
@@ -46,7 +48,7 @@ tags:
 	if err != nil {
 		t.Fatalf("ReadConfig: %v", err)
 	}
-	if cfg.Server != "http://scada:9090" || cfg.Control != "127.0.0.1:9999" || *cfg.Autostart {
+	if cfg.Server != "http://scada:9090" || cfg.Project != "Line 1" || cfg.Control != "127.0.0.1:9999" || *cfg.Autostart {
 		t.Errorf("device: got %+v", cfg)
 	}
 	if a := cfg.Tags[0]; a.Interval.D != 500*time.Millisecond || a.Quality != devicelink.QualityUncertain || a.Pattern.Period.D != 10*time.Second {
@@ -62,15 +64,16 @@ func TestReadConfig_Rejects(t *testing.T) {
 		name, yaml, wantErr string
 	}{
 		{"empty", "", "config is empty"},
-		{"unknown field", "tagz: []", "field tagz not found"},
-		{"unknown pattern field", "tags: [{tag: a, pattern: {kind: constant, value: 1, colour: red}}]", "field colour not found"},
-		{"no tags", "server: http://x", "at least one tag"},
-		{"no tag name", "tags: [{pattern: {kind: constant, value: 1}}]", "tag (the tag name) is required"},
-		{"duplicate tag", "tags: [{tag: a, pattern: {kind: constant, value: 1}}, {tag: a, pattern: {kind: constant, value: 2}}]", `tag "a" is listed twice`},
-		{"bad quality", "tags: [{tag: a, quality: great, pattern: {kind: constant, value: 1}}]", `unknown quality "great"`},
-		{"bad interval", "tags: [{tag: a, interval: soon, pattern: {kind: constant, value: 1}}]", "invalid duration"},
-		{"zero interval", "tags: [{tag: a, interval: 0s, pattern: {kind: constant, value: 1}}]", "interval must be positive"},
-		{"bad pattern", "tags: [{tag: a, pattern: {kind: ramp}}]", `tag "a": pattern ramp: start is required`},
+		{"no project", "tags: [{tag: a, pattern: {kind: constant, value: 1}}]", "project (the project name) is required"},
+		{"unknown field", "project: P\ntagz: []", "field tagz not found"},
+		{"unknown pattern field", "project: P\ntags: [{tag: a, pattern: {kind: constant, value: 1, colour: red}}]", "field colour not found"},
+		{"no tags", "project: P\nserver: http://x", "at least one tag"},
+		{"no tag name", "project: P\ntags: [{pattern: {kind: constant, value: 1}}]", "tag (the tag name) is required"},
+		{"duplicate tag", "project: P\ntags: [{tag: a, pattern: {kind: constant, value: 1}}, {tag: a, pattern: {kind: constant, value: 2}}]", `tag "a" is listed twice`},
+		{"bad quality", "project: P\ntags: [{tag: a, quality: great, pattern: {kind: constant, value: 1}}]", `unknown quality "great"`},
+		{"bad interval", "project: P\ntags: [{tag: a, interval: soon, pattern: {kind: constant, value: 1}}]", "invalid duration"},
+		{"zero interval", "project: P\ntags: [{tag: a, interval: 0s, pattern: {kind: constant, value: 1}}]", "interval must be positive"},
+		{"bad pattern", "project: P\ntags: [{tag: a, pattern: {kind: ramp}}]", `tag "a": pattern ramp: start is required`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

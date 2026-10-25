@@ -1,11 +1,11 @@
 info:
   name: post widgets
   type: http
-  seq: 20
+  seq: 25
 
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v0/scenes/{{SCENE_ID}}/widgets
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/scenes/{{SCENE_ID}}/widgets
   body:
     type: json
     data: |-

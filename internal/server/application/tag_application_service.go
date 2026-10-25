@@ -10,21 +10,23 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
 
-// TagService is the service interface for working with tags.
+// TagService is the service interface for working with the tags of a
+// project. Every method takes the project first; a project that does not
+// exist (or is deleted) is an error wrapping project.ErrProjectNotFound.
 type TagService interface {
-	FindAllTags(context.Context) ([]appdto.Tag, error)
-	FindTagByID(context.Context, uuid.UUID) (appdto.Tag, error)
-	FindTagByName(context.Context, string) (appdto.Tag, error)
-	FindTagsByNamePattern(context.Context, string) ([]appdto.Tag, error)
-	FindTagsByNameRegex(context.Context, string) ([]appdto.Tag, error)
-	CreateTag(context.Context, appdto.CreateTagInput) (appdto.Tag, error)
-	DeleteTagByID(context.Context, uuid.UUID) (appdto.Tag, error)
-	SetTagValueByID(context.Context, appdto.UpdateTagInput) (appdto.Tag, error)
+	FindAllTags(ctx context.Context, projectID uuid.UUID) ([]appdto.Tag, error)
+	FindTagByID(ctx context.Context, projectID, tagID uuid.UUID) (appdto.Tag, error)
+	FindTagByName(ctx context.Context, projectID uuid.UUID, name string) (appdto.Tag, error)
+	FindTagsByNamePattern(ctx context.Context, projectID uuid.UUID, pattern string) ([]appdto.Tag, error)
+	FindTagsByNameRegex(ctx context.Context, projectID uuid.UUID, expr string) ([]appdto.Tag, error)
+	CreateTag(ctx context.Context, projectID uuid.UUID, input appdto.CreateTagInput) (appdto.Tag, error)
+	DeleteTagByID(ctx context.Context, projectID, tagID uuid.UUID) (appdto.Tag, error)
+	SetTagValueByID(ctx context.Context, projectID uuid.UUID, input appdto.UpdateTagInput) (appdto.Tag, error)
 }
 
 // tagServiceImpl is the tag service implementation.
 type tagServiceImpl struct {
-	tagRepository tag.TagRepository
+	content ProjectContent
 }
 
 var _ TagService = (*tagServiceImpl)(nil)
@@ -32,13 +34,26 @@ var _ TagService = (*tagServiceImpl)(nil)
 // NewTagService creates and returns a new tag service instance. The events
 // of its changes are recorded by the Tag and saved with it (ADR 0008).
 // Returns a TagService interface implementation.
-func NewTagService(aTagRepository tag.TagRepository) TagService {
-	return &tagServiceImpl{tagRepository: aTagRepository}
+func NewTagService(aContent ProjectContent) TagService {
+	return &tagServiceImpl{content: aContent}
 }
 
-// FindAllTags returns a list of all tags
-func (t tagServiceImpl) FindAllTags(ctx context.Context) ([]appdto.Tag, error) {
-	tags, err := t.tagRepository.FindAll(ctx)
+// tags returns the tag repository of the live project rawProjectID.
+func (t tagServiceImpl) tags(ctx context.Context, rawProjectID uuid.UUID) (tag.TagRepository, error) {
+	_, scope, err := t.content.open(ctx, rawProjectID)
+	if err != nil {
+		return nil, err
+	}
+	return scope.Tags(), nil
+}
+
+// FindAllTags returns a list of all tags of the project
+func (t tagServiceImpl) FindAllTags(ctx context.Context, rawProjectID uuid.UUID) ([]appdto.Tag, error) {
+	repo, err := t.tags(ctx, rawProjectID)
+	if err != nil {
+		return nil, err
+	}
+	tags, err := repo.FindAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error on find tags in repository: %w", err)
 	}
@@ -47,9 +62,13 @@ func (t tagServiceImpl) FindAllTags(ctx context.Context) ([]appdto.Tag, error) {
 }
 
 // FindTagByID returns a tag by its identifier
-func (t tagServiceImpl) FindTagByID(ctx context.Context, rawID uuid.UUID) (appdto.Tag, error) {
+func (t tagServiceImpl) FindTagByID(ctx context.Context, rawProjectID, rawID uuid.UUID) (appdto.Tag, error) {
+	repo, err := t.tags(ctx, rawProjectID)
+	if err != nil {
+		return appdto.Tag{}, err
+	}
 	tagID := id.NewID(id.IDWithUUID[tag.Tag](rawID))
-	foundTag, err := t.tagRepository.FindByID(ctx, tagID)
+	foundTag, err := repo.FindByID(ctx, tagID)
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("error on find tag by id in repository: %w", err)
 	}
@@ -57,14 +76,18 @@ func (t tagServiceImpl) FindTagByID(ctx context.Context, rawID uuid.UUID) (appdt
 	return appdto.NewTag(foundTag), nil
 }
 
-// FindTagByName returns a tag by its unique name
-func (t tagServiceImpl) FindTagByName(ctx context.Context, rawName string) (appdto.Tag, error) {
+// FindTagByName returns a tag by its name, unique within the project
+func (t tagServiceImpl) FindTagByName(ctx context.Context, rawProjectID uuid.UUID, rawName string) (appdto.Tag, error) {
+	repo, err := t.tags(ctx, rawProjectID)
+	if err != nil {
+		return appdto.Tag{}, err
+	}
 	tagName, err := tag.NewTagName(rawName)
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("cannot find tag because of name: %w", invalidInput(err))
 	}
 
-	foundTag, err := t.tagRepository.FindByName(ctx, tagName)
+	foundTag, err := repo.FindByName(ctx, tagName)
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("error on find tag by name in repository: %w", err)
 	}
@@ -75,27 +98,31 @@ func (t tagServiceImpl) FindTagByName(ctx context.Context, rawName string) (appd
 // FindTagsByNamePattern returns the tags whose whole name matches a wildcard
 // pattern ("*" any sequence, "?" one character). An invalid pattern returns
 // an error wrapping tag.ErrInvalidTagNameMatcher and ErrInvalidInput.
-func (t tagServiceImpl) FindTagsByNamePattern(ctx context.Context, pattern string) ([]appdto.Tag, error) {
+func (t tagServiceImpl) FindTagsByNamePattern(ctx context.Context, rawProjectID uuid.UUID, pattern string) ([]appdto.Tag, error) {
 	matcher, err := tag.NewTagNamePattern(pattern)
 	if err != nil {
 		return nil, fmt.Errorf("cannot find tags because of name pattern: %w", invalidInput(err))
 	}
-	return t.findTagsMatching(ctx, matcher)
+	return t.findTagsMatching(ctx, rawProjectID, matcher)
 }
 
 // FindTagsByNameRegex returns the tags whose name matches a Go (RE2) regular
 // expression anywhere. An invalid expression returns an error wrapping
 // tag.ErrInvalidTagNameMatcher and ErrInvalidInput.
-func (t tagServiceImpl) FindTagsByNameRegex(ctx context.Context, expr string) ([]appdto.Tag, error) {
+func (t tagServiceImpl) FindTagsByNameRegex(ctx context.Context, rawProjectID uuid.UUID, expr string) ([]appdto.Tag, error) {
 	matcher, err := tag.NewTagNameRegex(expr)
 	if err != nil {
 		return nil, fmt.Errorf("cannot find tags because of name regex: %w", invalidInput(err))
 	}
-	return t.findTagsMatching(ctx, matcher)
+	return t.findTagsMatching(ctx, rawProjectID, matcher)
 }
 
-func (t tagServiceImpl) findTagsMatching(ctx context.Context, matcher tag.TagNameMatcher) ([]appdto.Tag, error) {
-	tags, err := t.tagRepository.FindAll(ctx)
+func (t tagServiceImpl) findTagsMatching(ctx context.Context, rawProjectID uuid.UUID, matcher tag.TagNameMatcher) ([]appdto.Tag, error) {
+	repo, err := t.tags(ctx, rawProjectID)
+	if err != nil {
+		return nil, err
+	}
+	tags, err := repo.FindAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error on find tags in repository: %w", err)
 	}
@@ -108,9 +135,16 @@ func (t tagServiceImpl) findTagsMatching(ctx context.Context, matcher tag.TagNam
 	return appdto.NewTagList(matched), nil
 }
 
-// CreateTag creates a new tag and returns the created tag DTO
-func (t tagServiceImpl) CreateTag(ctx context.Context, newTagData appdto.CreateTagInput) (appdto.Tag, error) {
-	newTagID := t.tagRepository.NextID()
+// CreateTag creates a new tag in the project and returns the created tag DTO.
+// A project deleted just after it was read here loses the tag to its cleanup
+// (NewProjectCleanupPolicy keys tag_created too).
+func (t tagServiceImpl) CreateTag(ctx context.Context, rawProjectID uuid.UUID, newTagData appdto.CreateTagInput) (appdto.Tag, error) {
+	projectID, scope, err := t.content.open(ctx, rawProjectID)
+	if err != nil {
+		return appdto.Tag{}, err
+	}
+	repo := scope.Tags()
+	newTagID := repo.NextID()
 
 	newTagName, err := tag.NewTagName(newTagData.Name)
 	if err != nil {
@@ -132,12 +166,12 @@ func (t tagServiceImpl) CreateTag(ctx context.Context, newTagData appdto.CreateT
 		return appdto.Tag{}, fmt.Errorf("cannot create tag because of quality: %w", invalidInput(err))
 	}
 
-	newTag, err := tag.CreateTag(newTagID, newTagName, newTagType, newTagValue, newTagQuality)
+	newTag, err := tag.CreateTag(newTagID, projectID, newTagName, newTagType, newTagValue, newTagQuality)
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("cannot create tag: %w", err)
 	}
 
-	newTag, err = t.tagRepository.Save(ctx, newTag)
+	newTag, err = repo.Save(ctx, newTag)
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("cannot save tag: %w", err)
 	}
@@ -148,15 +182,19 @@ func (t tagServiceImpl) CreateTag(ctx context.Context, newTagData appdto.CreateT
 // DeleteTagByID deletes a tag by its identifier and returns the deleted tag,
 // as it was read. It expects no Version, and the repository deletes the tag
 // whatever its stored Version: a value written meanwhile does not stop it.
-func (t tagServiceImpl) DeleteTagByID(ctx context.Context, rawID uuid.UUID) (appdto.Tag, error) {
+func (t tagServiceImpl) DeleteTagByID(ctx context.Context, rawProjectID, rawID uuid.UUID) (appdto.Tag, error) {
+	repo, err := t.tags(ctx, rawProjectID)
+	if err != nil {
+		return appdto.Tag{}, err
+	}
 	tagID := id.NewID(id.IDWithUUID[tag.Tag](rawID))
 
-	found, err := t.tagRepository.FindByID(ctx, tagID)
+	found, err := repo.FindByID(ctx, tagID)
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("error on find tag by id in repository: %w", err)
 	}
 	found.Delete()
-	if err := t.tagRepository.Delete(ctx, found); err != nil {
+	if err := repo.Delete(ctx, found); err != nil {
 		return appdto.Tag{}, fmt.Errorf("cannot delete tag: %w", err)
 	}
 
@@ -164,10 +202,14 @@ func (t tagServiceImpl) DeleteTagByID(ctx context.Context, rawID uuid.UUID) (app
 }
 
 // SetTagValueByID updates the value and quality of an existing tag and returns the updated tag
-func (t tagServiceImpl) SetTagValueByID(ctx context.Context, request appdto.UpdateTagInput) (appdto.Tag, error) {
+func (t tagServiceImpl) SetTagValueByID(ctx context.Context, rawProjectID uuid.UUID, request appdto.UpdateTagInput) (appdto.Tag, error) {
+	repo, err := t.tags(ctx, rawProjectID)
+	if err != nil {
+		return appdto.Tag{}, err
+	}
 	tagID := id.NewID(id.IDWithUUID[tag.Tag](request.ID))
 
-	foundTag, err := t.tagRepository.FindByID(ctx, tagID)
+	foundTag, err := repo.FindByID(ctx, tagID)
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("error on find tag by id in repository: %w", err)
 	}
@@ -189,7 +231,7 @@ func (t tagServiceImpl) SetTagValueByID(ctx context.Context, request appdto.Upda
 		return appdto.Tag{}, fmt.Errorf("cannot set tag value: %w", invalidInput(err))
 	}
 
-	foundTag, err = t.tagRepository.Save(ctx, foundTag)
+	foundTag, err = repo.Save(ctx, foundTag)
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("cannot save tag: %w", err)
 	}

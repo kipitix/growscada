@@ -1,26 +1,33 @@
 -- +goose Up
 -- +goose StatementBegin
 -- IDs used across tables:
+--   Projects:     b0000000-0000-4000-8000-00000000000N: 1 is "Main", created
+--                 by the migrations and holding the content below; 2 is the
+--                 empty "Line 2"
 --   Scenes:       c1d2e3f4-000N-4000-8000-000000000000
 --   Widgets:      b1c2d3e4-000N-4000-8000-000000000000
 --   Widget types: a1b2c3d4-000N-4000-8000-000000000000 (see below)
 --   Tags:         6ba7b81N-9dad-11d1-80b4-00c04fd430c8 (see below)
 
--- Add test data for tags table
 -- type: string | boolean | integer
 -- quality: bad | uncertain | good
 --- default version for database is 1 - tag.TagVersionCommitted
-INSERT INTO tags (id, name, type, value, quality, version) VALUES
-    ('6ba7b810-9dad-11d1-80b4-00c04fd430c8', 'is_active', 'boolean', 'true', 'good', 1),
-    ('6ba7b811-9dad-11d1-80b4-00c04fd430c8', 'max_connections', 'integer', '100', 'good', 1),
-    ('6ba7b812-9dad-11d1-80b4-00c04fd430c8', 'is_debug', 'boolean', 'false', 'bad', 1),
-    ('6ba7b813-9dad-11d1-80b4-00c04fd430c8', 'timeout_seconds', 'integer', '30', 'uncertain', 2),
-    ('6ba7b814-9dad-11d1-80b4-00c04fd430c8', 'retry_count', 'integer', '3', 'good', 1),
-    ('6ba7b815-9dad-11d1-80b4-00c04fd430c8', 'is_cached', 'boolean', 'true', 'uncertain', 3),
-    ('6ba7b816-9dad-11d1-80b4-00c04fd430c8', 'pool_size', 'integer', '20', 'good', 1),
-    ('6ba7b817-9dad-11d1-80b4-00c04fd430c8', 'enable_tls', 'boolean', 'false', 'bad', 4),
-    ('6ba7b818-9dad-11d1-80b4-00c04fd430c8', 'creator', 'string', 'Alexander', 'good', 1),
-    ('6ba7b819-9dad-11d1-80b4-00c04fd430c8', 'status_message', 'string', 'System running normally - all checks passed', 'good', 1);
+-- A second, empty project of the one organization the migrations create.
+INSERT INTO projects (id, organization_id, name, version) VALUES
+    ('b0000000-0000-4000-8000-000000000002', 'a0000000-0000-4000-8000-000000000001', 'Line 2', 1);
+
+-- Add test data for tags table, all of the project Main
+INSERT INTO tags (id, project_id, name, type, value, quality, version) VALUES
+    ('6ba7b810-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_active', 'boolean', 'true', 'good', 1),
+    ('6ba7b811-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'max_connections', 'integer', '100', 'good', 1),
+    ('6ba7b812-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_debug', 'boolean', 'false', 'bad', 1),
+    ('6ba7b813-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'timeout_seconds', 'integer', '30', 'uncertain', 2),
+    ('6ba7b814-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'retry_count', 'integer', '3', 'good', 1),
+    ('6ba7b815-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_cached', 'boolean', 'true', 'uncertain', 3),
+    ('6ba7b816-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'pool_size', 'integer', '20', 'good', 1),
+    ('6ba7b817-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'enable_tls', 'boolean', 'false', 'bad', 4),
+    ('6ba7b818-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'creator', 'string', 'Alexander', 'good', 1),
+    ('6ba7b819-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'status_message', 'string', 'System running normally - all checks passed', 'good', 1);
 
 -- Add test data for widget_types table
 -- script_language: javascript | python | lua
@@ -63,9 +70,10 @@ INSERT INTO widget_types (id, name, html_template, script, script_language, inpu
 
 -- Add test data for scenes table
 -- version: default committed version is 1
-INSERT INTO scenes (id, name, width, height, background_html, version) VALUES
+INSERT INTO scenes (id, project_id, name, width, height, background_html, version) VALUES
     (
         'c1d2e3f4-0001-4000-8000-000000000001',
+        'b0000000-0000-4000-8000-000000000001',
         'Main Dashboard',
         1920,
         1080,
@@ -74,6 +82,7 @@ INSERT INTO scenes (id, name, width, height, background_html, version) VALUES
     ),
     (
         'c1d2e3f4-0002-4000-8000-000000000002',
+        'b0000000-0000-4000-8000-000000000001',
         'Overview Panel',
         1280,
         720,
@@ -86,9 +95,10 @@ INSERT INTO scenes (id, name, width, height, background_html, version) VALUES
 -- port_bindings: JSON array of {port_name, tag_id} mapping InputPort names to tag IDs above
 -- origin_x/origin_y: anchor point in [0,1] (0.5 = center)
 -- rotation_degrees: rotation angle, normalized to [0, 360)
-INSERT INTO widgets (id, name, x, y, z, width, height, origin_x, origin_y, rotation_degrees, type_id, scene_id, labels, port_bindings) VALUES
+INSERT INTO widgets (id, project_id, name, x, y, z, width, height, origin_x, origin_y, rotation_degrees, type_id, scene_id, labels, port_bindings) VALUES
     (
         'b1c2d3e4-0001-4000-8000-000000000001',
+        'b0000000-0000-4000-8000-000000000001',
         'status-circle-main',
         100.0, 200.0, 0,
         80, 80,
@@ -100,6 +110,7 @@ INSERT INTO widgets (id, name, x, y, z, width, height, origin_x, origin_y, rotat
     ),
     (
         'b1c2d3e4-0002-4000-8000-000000000002',
+        'b0000000-0000-4000-8000-000000000001',
         'speedometer-max-connections',
         300.0, 200.0, 0,
         120, 120,
@@ -111,6 +122,7 @@ INSERT INTO widgets (id, name, x, y, z, width, height, origin_x, origin_y, rotat
     ),
     (
         'b1c2d3e4-0005-4000-8000-000000000005',
+        'b0000000-0000-4000-8000-000000000001',
         'string-ticker-status',
         100.0, 360.0, 0,
         280, 32,
@@ -161,4 +173,6 @@ DELETE FROM tags WHERE id IN (
     '6ba7b818-9dad-11d1-80b4-00c04fd430c8',
     '6ba7b819-9dad-11d1-80b4-00c04fd430c8'
 );
+
+DELETE FROM projects WHERE id = 'b0000000-0000-4000-8000-000000000002';
 -- +goose StatementEnd

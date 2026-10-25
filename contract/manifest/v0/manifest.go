@@ -1,5 +1,6 @@
 // Package manifestv0 is MAJOR 0 of the growctl manifest contract: the YAML
-// documents an Engineer writes to declare Tags (ADR 0005).
+// documents an Engineer writes to declare Projects and the Tags of a Project
+// (ADR 0005, ADR 0006).
 //
 // A manifest names its version in apiVersion as "growscada/vMAJOR.MINOR";
 // "growscada/vMAJOR" reads as MINOR 0. Manifests are written by people, so
@@ -18,13 +19,18 @@ import (
 // SchemaVersion is the version of the manifest contract this package
 // describes.
 // A function rather than a variable, so no importer can change it.
-func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 1} }
+func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 2} }
 
 // apiVersionPrefix precedes the version in apiVersion.
 const apiVersionPrefix = "growscada/v"
 
-// KindTag is the manifest kind for a Tag.
-const KindTag = "Tag"
+// Manifest kinds.
+const (
+	// KindTag is the manifest kind for a Tag.
+	KindTag = "Tag"
+	// KindProject is the manifest kind for a Project.
+	KindProject = "Project"
+)
 
 // APIVersion is the apiVersion written into manifests of this version.
 func APIVersion() string {
@@ -67,8 +73,24 @@ type TagDocument struct {
 	Spec     TagSpec  `yaml:"spec"`
 }
 
-// Metadata identifies the declared entity.
+// Metadata identifies the declared entity of a Project: its name, unique in
+// the Project, and optionally the Project's name. Without Project the entity
+// is of the Project growctl works in (its --project or context); with one,
+// the two must agree.
 type Metadata struct {
+	Name    string `yaml:"name"`
+	Project string `yaml:"project,omitempty"`
+}
+
+// ProjectDocument is a `kind: Project` document: a Project, identified by its
+// name, unique on the server. It has no spec yet.
+type ProjectDocument struct {
+	Header   `yaml:",inline"`
+	Metadata ProjectMetadata `yaml:"metadata"`
+}
+
+// ProjectMetadata identifies a declared Project.
+type ProjectMetadata struct {
 	Name string `yaml:"name"`
 }
 

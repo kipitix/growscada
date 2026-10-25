@@ -13,6 +13,7 @@ import (
 
 type APIRouter struct {
 	serveMux            *http.ServeMux
+	projectsHandlers    *ProjectsHandlers
 	tagsHandlers        *TagsHandlers
 	widgetTypesHandlers *WidgetTypesHandlers
 	widgetsHandlers     *WidgetsHandlers
@@ -52,14 +53,15 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func NewRouter(tagService application.TagService, widgetTypeService application.WidgetTypeService, sceneService application.SceneService, eventBus eventbus.EventBus, maxSSEClients int) *APIRouter {
+func NewRouter(projectService application.ProjectService, tagService application.TagService, widgetTypeService application.WidgetTypeService, sceneService application.SceneService, eventBus eventbus.EventBus, maxSSEClients int) *APIRouter {
 	router := &APIRouter{
 		serveMux:            http.NewServeMux(),
+		projectsHandlers:    NewProjectsHandler(projectService),
 		tagsHandlers:        NewTagsHandler(tagService),
 		widgetTypesHandlers: NewWidgetTypesHandler(widgetTypeService),
 		widgetsHandlers:     NewWidgetsHandler(sceneService),
 		scenesHandlers:      NewScenesHandler(sceneService),
-		eventsHandlers:      NewEventsHandler(eventBus, maxSSEClients),
+		eventsHandlers:      NewEventsHandler(eventBus, projectService, maxSSEClients),
 	}
 	for _, rt := range router.routes() {
 		router.serveMux.HandleFunc(rt.pattern, rt.handler)
@@ -75,15 +77,23 @@ type route struct {
 
 // routes is every route of the API. The Bruno collection check
 // (bruno_collection_internal_test.go) matches the collection against it.
+// The content of a project lives under its path, pp (ADR 0006).
 func (r *APIRouter) routes() []route {
 	const p = apiv0.PathPrefix
-	tags, widgetTypes, widgets, scenes := r.tagsHandlers, r.widgetTypesHandlers, r.widgetsHandlers, r.scenesHandlers
+	pp := p + apiv0.ProjectPath(projectResource.wildcard())
+	projects, tags, widgetTypes, widgets, scenes := r.projectsHandlers, r.tagsHandlers, r.widgetTypesHandlers, r.widgetsHandlers, r.scenesHandlers
 	return []route{
-		{"GET " + p + "/tags", tags.GetTags},
-		{"GET " + p + "/tags/" + tagResource.wildcard(), tags.GetTagsByID},
-		{"POST " + p + "/tags", tags.PostTags},
-		{"DELETE " + p + "/tags/" + tagResource.wildcard(), tags.DeleteTagsByID},
-		{"PATCH " + p + "/tags/" + tagResource.wildcard() + "/value", tags.PatchTagsValue},
+		{"GET " + p + "/projects", projects.GetProjects},
+		{"GET " + pp, projects.GetProjectsByID},
+		{"POST " + p + "/projects", projects.PostProjects},
+		{"PUT " + pp, projects.PutProjectsByID},
+		{"DELETE " + pp, projects.DeleteProjectsByID},
+
+		{"GET " + pp + "/tags", tags.GetTags},
+		{"GET " + pp + "/tags/" + tagResource.wildcard(), tags.GetTagsByID},
+		{"POST " + pp + "/tags", tags.PostTags},
+		{"DELETE " + pp + "/tags/" + tagResource.wildcard(), tags.DeleteTagsByID},
+		{"PATCH " + pp + "/tags/" + tagResource.wildcard() + "/value", tags.PatchTagsValue},
 
 		{"GET " + p + "/widget-types", widgetTypes.GetWidgetTypes},
 		{"GET " + p + "/widget-types/" + widgetTypeResource.wildcard(), widgetTypes.GetWidgetTypesByID},
@@ -91,19 +101,20 @@ func (r *APIRouter) routes() []route {
 		{"PUT " + p + "/widget-types/" + widgetTypeResource.wildcard(), widgetTypes.PutWidgetTypesByID},
 		{"DELETE " + p + "/widget-types/" + widgetTypeResource.wildcard(), widgetTypes.DeleteWidgetTypesByID},
 
-		{"GET " + p + "/scenes/" + sceneResource.wildcard() + "/widgets", widgets.GetWidgetsBySceneID},
-		{"POST " + p + "/scenes/" + sceneResource.wildcard() + "/widgets", widgets.PostWidgets},
-		{"GET " + p + "/scenes/" + sceneResource.wildcard() + "/widgets/" + widgetResource.wildcard(), widgets.GetWidgetsByID},
-		{"PUT " + p + "/scenes/" + sceneResource.wildcard() + "/widgets/" + widgetResource.wildcard(), widgets.PutWidgetsByID},
-		{"DELETE " + p + "/scenes/" + sceneResource.wildcard() + "/widgets/" + widgetResource.wildcard(), widgets.DeleteWidgetsByID},
+		{"GET " + pp + "/scenes/" + sceneResource.wildcard() + "/widgets", widgets.GetWidgetsBySceneID},
+		{"POST " + pp + "/scenes/" + sceneResource.wildcard() + "/widgets", widgets.PostWidgets},
+		{"GET " + pp + "/scenes/" + sceneResource.wildcard() + "/widgets/" + widgetResource.wildcard(), widgets.GetWidgetsByID},
+		{"PUT " + pp + "/scenes/" + sceneResource.wildcard() + "/widgets/" + widgetResource.wildcard(), widgets.PutWidgetsByID},
+		{"DELETE " + pp + "/scenes/" + sceneResource.wildcard() + "/widgets/" + widgetResource.wildcard(), widgets.DeleteWidgetsByID},
 
-		{"GET " + p + "/scenes", scenes.GetScenes},
-		{"GET " + p + "/scenes/" + sceneResource.wildcard(), scenes.GetScenesByID},
-		{"POST " + p + "/scenes", scenes.PostScenes},
-		{"PUT " + p + "/scenes/" + sceneResource.wildcard(), scenes.PutScenesByID},
-		{"DELETE " + p + "/scenes/" + sceneResource.wildcard(), scenes.DeleteScenesByID},
+		{"GET " + pp + "/scenes", scenes.GetScenes},
+		{"GET " + pp + "/scenes/" + sceneResource.wildcard(), scenes.GetScenesByID},
+		{"POST " + pp + "/scenes", scenes.PostScenes},
+		{"PUT " + pp + "/scenes/" + sceneResource.wildcard(), scenes.PutScenesByID},
+		{"DELETE " + pp + "/scenes/" + sceneResource.wildcard(), scenes.DeleteScenesByID},
 
 		{"GET " + p + "/events", r.eventsHandlers.GetEvents},
+		{"GET " + pp + "/events", r.eventsHandlers.GetProjectEvents},
 
 		{preVersioningPathPrefix + "/", preVersioningGone},
 	}

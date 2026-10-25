@@ -1,0 +1,36 @@
+info:
+  name: post projects duplicate name
+  type: http
+  seq: 17
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Main"
+      }
+  auth: inherit
+
+docs: |
+  `Main` is the seeded project, so this request returns `409 Conflict`
+  Problem Details.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '409'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: '"application/problem+json"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

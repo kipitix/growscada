@@ -31,7 +31,11 @@ func TestReloadTargetsFor(t *testing.T) {
 		{apiv0.Event{Type: apiv0.EventTagUpdated, Tag: &apiv0.TagResponse{ID: sceneID}}, ReloadTargets{}},
 		{apiv0.Event{Type: apiv0.EventTagUpdated}, ReloadTargets{Tags: true}},
 		{apiv0.Event{Type: apiv0.EventTagDeleted}, ReloadTargets{Tags: true}},
-		{apiv0.Event{Type: EventResync}, AllTargets},
+		{apiv0.Event{Type: EventResync}, ReloadTargets{Projects: true, WidgetTypes: true}},
+		{apiv0.Event{Type: EventProjectResync}, ReloadTargets{Scenes: true, Widgets: true, Tags: true}},
+		{apiv0.Event{Type: apiv0.EventProjectCreated}, ReloadTargets{Projects: true}},
+		{apiv0.Event{Type: apiv0.EventProjectUpdated}, ReloadTargets{Projects: true}},
+		{apiv0.Event{Type: apiv0.EventProjectDeleted}, ReloadTargets{Projects: true}},
 		{apiv0.Event{Type: apiv0.EventClientConnected}, ReloadTargets{}},
 		{apiv0.Event{Type: apiv0.EventSystemReady}, ReloadTargets{}},
 		{apiv0.Event{Type: "unknown"}, ReloadTargets{}},
@@ -97,9 +101,13 @@ func TestApplyToTags(t *testing.T) {
 	if got := ApplyToTags(known, apiv0.Event{Type: apiv0.EventTagUpdated, ID: id.String()}); value(got) != "1" {
 		t.Errorf("tag_updated without a state: got %q, want the Tags as they were", value(got))
 	}
-	forgot := ApplyToTags(updated, apiv0.Event{Type: EventResync})
+	forgot := ApplyToTags(updated, apiv0.Event{Type: EventProjectResync})
 	if got := ApplyToTags(forgot, apiv0.Event{Type: apiv0.EventTagUpdated, ID: id.String(), Tag: &apiv0.TagResponse{ID: id, Value: "fresh", Version: 1}}); value(got) != "fresh" {
-		t.Errorf("after a resync: got %q, want a state of the started-over Versions", value(got))
+		t.Errorf("after a resync of the project's stream: got %q, want a state of the started-over Versions", value(got))
+	}
+	// The server's stream carries no Tags: its resync leaves them as they are.
+	if got := ApplyToTags(updated, apiv0.Event{Type: EventResync}); value(ApplyToTags(got, apiv0.Event{Type: apiv0.EventTagUpdated, ID: id.String(), Tag: &apiv0.TagResponse{ID: id, Value: "old", Version: 1}})) != "2" {
+		t.Errorf("after a resync of the server's stream the Versions must be kept")
 	}
 	if got := ApplyToTags(known, apiv0.Event{Type: apiv0.EventSceneCreated}); value(got) != "1" {
 		t.Errorf("another event: got %q", value(got))

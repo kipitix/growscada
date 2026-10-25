@@ -6,6 +6,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/domain/client"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
@@ -16,15 +19,18 @@ import (
 // of holding its handler, and so http.Server.Shutdown, forever.
 const eventWriteTimeout = 5 * time.Second
 
-// EventsHandlers handles the SSE stream of domain events.
+// EventsHandlers handles the SSE streams of domain events: the server's and
+// one per project.
 type EventsHandlers struct {
-	hub *eventHub
+	hub      *eventHub
+	projects application.ProjectService
 }
 
-// NewEventsHandler creates the SSE event handler. maxClients caps how many
+// NewEventsHandler creates the SSE event handler; a project's stream is
+// opened only for a project projects finds. maxClients caps how many
 // concurrent event streams the hub will accept — see eventHub.addClient.
-func NewEventsHandler(bus eventbus.EventBus, maxClients int) *EventsHandlers {
-	return &EventsHandlers{hub: newEventHub(bus, maxClients)}
+func NewEventsHandler(bus eventbus.EventBus, projects application.ProjectService, maxClients int) *EventsHandlers {
+	return &EventsHandlers{hub: newEventHub(bus, maxClients), projects: projects}
 }
 
 // Close detaches the hub from the EventBus and ends every open event stream,
@@ -33,10 +39,32 @@ func (h *EventsHandlers) Close() {
 	h.hub.Close()
 }
 
-// GetEvents handles GET /api/v0/events. It upgrades the connection to an SSE
-// stream and forwards every domain event published after this point — no
-// history is replayed.
+// GetEvents handles GET /api/v0/events: the server's stream, of projects,
+// WidgetTypes and connections. It upgrades the connection to an SSE stream
+// and forwards every such event published after this point — no history is
+// replayed.
 func (h *EventsHandlers) GetEvents(w http.ResponseWriter, r *http.Request) {
+	h.stream(w, r, uuid.Nil)
+}
+
+// GetProjectEvents handles GET /api/v0/projects/{project_id}/events: the
+// stream of the project's content (Tags, Scenes, Widgets), like GetEvents.
+// The project must exist when the stream opens; once it is deleted the
+// stream stays open, with nothing more to carry.
+func (h *EventsHandlers) GetProjectEvents(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := pathUUID(w, r, projectResource)
+	if !ok {
+		return
+	}
+	if _, err := h.projects.FindProjectByID(r.Context(), projectID); err != nil {
+		sendError(w, r, err)
+		return
+	}
+	h.stream(w, r, projectID)
+}
+
+// stream serves the SSE stream of stream (see eventHub.addClient).
+func (h *EventsHandlers) stream(w http.ResponseWriter, r *http.Request, stream uuid.UUID) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		sendProblem(w, NewInternalError("streaming not supported", r.URL.Path))
@@ -45,7 +73,7 @@ func (h *EventsHandlers) GetEvents(w http.ResponseWriter, r *http.Request) {
 
 	// Checked before writing any response so a rejection can still be a
 	// Problem Details response instead of an already-committed SSE stream.
-	c, err := h.hub.addClient()
+	c, err := h.hub.addClient(stream)
 	if err != nil {
 		sendProblem(w, NewServiceUnavailableError(err.Error(), r.URL.Path))
 		return

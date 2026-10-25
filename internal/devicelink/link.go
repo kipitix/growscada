@@ -16,9 +16,13 @@ import (
 	"github.com/kipitix/growscada/internal/apiclient"
 )
 
-// ErrTagNotFound means the server has no tag with the given name, or the tag
-// was deleted while the Device was writing it.
+// ErrTagNotFound means the Device's project has no tag with the given name,
+// or the tag (or the project) was deleted while the Device was writing it.
 var ErrTagNotFound = errors.New("tag not found")
+
+// ErrProjectNotFound means the server has no project of the name the Device
+// is configured with.
+var ErrProjectNotFound = errors.New("project not found")
 
 // Tag is a server tag a Device writes: its identity and TagType.
 type Tag struct {
@@ -27,10 +31,12 @@ type Tag struct {
 	Type TagType
 }
 
-// Link delivers Tag values to the server.
+// Link delivers Tag values to the server, to the Tags of the Device's
+// project.
 type Link interface {
-	// Resolve looks a tag up by its unique name (ADR 0003). The error matches
-	// ErrTagNotFound if there is none.
+	// Resolve looks a tag up by its name, unique in the project (ADR 0003).
+	// The error matches ErrTagNotFound if there is none, ErrProjectNotFound
+	// if the project does not exist.
 	Resolve(ctx context.Context, name string) (Tag, error)
 	// Write sets a tag's value and quality. The Device is the source of truth:
 	// the Link resolves optimistic-locking conflicts itself. The error matches

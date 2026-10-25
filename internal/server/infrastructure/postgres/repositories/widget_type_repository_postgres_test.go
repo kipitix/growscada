@@ -343,7 +343,7 @@ func TestWidgetTypeDelete_UsedByWidget_ReturnsErrWidgetTypeInUse(t *testing.T) {
 	cleanScenes(t)
 	cleanWidgetTypes(t)
 	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
+	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
 	ctx := context.Background()
 
 	w := makeWidget(t, sceneRepo, "w1")

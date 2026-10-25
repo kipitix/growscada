@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/google/uuid"
 	"slices"
 	"sync"
 	"testing"
@@ -69,7 +70,7 @@ func (r *recorder) types() []string {
 func createTag(t *testing.T, repo tag.TagRepository, name string) tag.Tag {
 	t.Helper()
 	tmpl := makeTag(t, name, repo)
-	created, err := tag.CreateTag(tmpl.ID(), tmpl.Name(), tmpl.Type(), tmpl.Value(), tmpl.Quality())
+	created, err := tag.CreateTag(tmpl.ID(), mainProject, tmpl.Name(), tmpl.Type(), tmpl.Value(), tmpl.Quality())
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -79,7 +80,7 @@ func createTag(t *testing.T, repo tag.TagRepository, name string) tag.Tag {
 func TestSave_WritesRecordedEventsToOutbox(t *testing.T) {
 	cleanTags(t)
 	cleanOutbox(t)
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	ctx := context.Background()
 
 	saved := mustSaveTag(t, repo, createTag(t, repo, "level"))
@@ -101,13 +102,56 @@ func TestSave_WritesRecordedEventsToOutbox(t *testing.T) {
 	}
 }
 
+// TestAppend_RowOfContentEventNamesItsProject: the outbox row of an event of
+// a Project's content carries the Project (ADR 0006); others carry none.
+func TestAppend_RowOfContentEventNamesItsProject(t *testing.T) {
+	cleanTags(t)
+	cleanOutbox(t)
+	ctx := context.Background()
+	tags := repositories.NewTagRepositoryPostgres(testDB, mainProject)
+	if _, err := tags.Save(ctx, createTag(t, tags, "pressure")); err != nil {
+		t.Fatalf("Save tag: %v", err)
+	}
+	tx, err := testDB.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := outbox.Append(ctx, tx, []event.Event{library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType]())}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := testDB.QueryContext(ctx, `SELECT type, project_id FROM outbox ORDER BY seq`)
+	if err != nil {
+		t.Fatalf("read outbox: %v", err)
+	}
+	defer rows.Close()
+	got := map[string]*uuid.UUID{}
+	for rows.Next() {
+		var eventType string
+		var projectID *uuid.UUID
+		if err := rows.Scan(&eventType, &projectID); err != nil {
+			t.Fatal(err)
+		}
+		got[eventType] = projectID
+	}
+	if p := got["tag_created"]; p == nil || *p != mainProject.UUID() {
+		t.Errorf("tag_created: project_id %v, want %s", p, mainProject)
+	}
+	if p, ok := got["widget_type_created"]; !ok || p != nil {
+		t.Errorf("widget_type_created: project_id %v, want none", p)
+	}
+}
+
 func TestSave_RolledBack_LeavesNothingInOutboxAndDeliversNothing(t *testing.T) {
 	cleanTags(t)
 	cleanScenes(t)
 	cleanOutbox(t)
 	ctx := context.Background()
-	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
-	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
+	tagRepo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
+	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
 	mustSaveTag(t, tagRepo, makeTag(t, "taken", tagRepo))
 
 	// A taken name fails the insert itself.
@@ -124,7 +168,7 @@ func TestSave_RolledBack_LeavesNothingInOutboxAndDeliversNothing(t *testing.T) {
 	if _, err := testDB.ExecContext(ctx, "DELETE FROM widget_types WHERE id = $1", w.TypeID().UUID()); err != nil {
 		t.Fatalf("delete widget type: %v", err)
 	}
-	changed, err := stored.AddWidget(stored.Version(), w, wt, scene.NewTagTypes(nil))
+	changed, err := stored.AddWidget(stored.Version(), w, wt, scene.NewTagTypes(mainProject, nil))
 	if err != nil {
 		t.Fatalf("AddWidget: %v", err)
 	}
@@ -149,7 +193,7 @@ func TestDispatcher_DrainOnce_DeliversInCommitOrderAndEmptiesOutbox(t *testing.T
 	cleanTags(t)
 	cleanOutbox(t)
 	ctx := context.Background()
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 
 	a := mustSaveTag(t, repo, createTag(t, repo, "a"))
 	b := mustSaveTag(t, repo, createTag(t, repo, "b"))
@@ -201,7 +245,7 @@ func TestDispatcher_Run_DeliversOnNotify(t *testing.T) {
 	done := make(chan struct{})
 	go func() { d.Run(ctx); close(done) }()
 
-	repo := repositories.NewTagRepositoryPostgres(testDB, repositories.NotifyOnCommit(d.Notify))
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject, repositories.NotifyOnCommit(d.Notify))
 	mustSaveTag(t, repo, createTag(t, repo, "notified"))
 
 	deadline := time.Now().Add(5 * time.Second)
@@ -222,7 +266,7 @@ func TestDispatcher_UndecodableRow_IsDroppedAndDoesNotBlock(t *testing.T) {
 	if _, err := testDB.ExecContext(ctx, `INSERT INTO outbox (type, payload) VALUES ('no_such_event', '{}')`); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	mustSaveTag(t, repo, createTag(t, repo, "after"))
 
 	var delivered recorder
@@ -254,7 +298,7 @@ func beginWithID(t *testing.T) *sql.Tx {
 
 func appendDeleted(t *testing.T, ctx context.Context, tx *sql.Tx, tagID id.ID[tag.Tag]) {
 	t.Helper()
-	if err := outbox.Append(ctx, tx, []event.Event{tag.NewTagDeletedEvent(tagID)}); err != nil {
+	if err := outbox.Append(ctx, tx, []event.Event{tag.NewTagDeletedEvent(tagID, mainProject)}); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
 }
@@ -328,7 +372,7 @@ func TestDispatcher_Run_DeliversHeldBackRowsWhenOlderTransactionRollsBack(t *tes
 	go func() { d.Run(ctx); close(done) }()
 
 	older := beginWithID(t)
-	repo := repositories.NewTagRepositoryPostgres(testDB, repositories.NotifyOnCommit(d.Notify))
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject, repositories.NotifyOnCommit(d.Notify))
 	mustSaveTag(t, repo, createTag(t, repo, "held"))
 	// The rollback sends no Notify.
 	if err := older.Rollback(); err != nil {
@@ -349,7 +393,7 @@ func TestDispatcher_Run_DeliversHeldBackRowsWhenOlderTransactionRollsBack(t *tes
 func TestDispatcher_DrainOnce_StoppedMidBatch_DeletesDeliveredRowAndStops(t *testing.T) {
 	cleanTags(t)
 	cleanOutbox(t)
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	for _, name := range []string{"a", "b", "c"} {
 		mustSaveTag(t, repo, createTag(t, repo, name))
 	}
@@ -388,7 +432,7 @@ func TestDispatcher_DrainOnce_DeliversMoreThanOneBatch(t *testing.T) {
 	defer func() { _ = tx.Rollback() }()
 	events := make([]event.Event, total)
 	for i := range events {
-		events[i] = tag.NewTagDeletedEvent(id.NewID[tag.Tag]())
+		events[i] = tag.NewTagDeletedEvent(id.NewID[tag.Tag](), mainProject)
 	}
 	if err := outbox.Append(ctx, tx, events); err != nil {
 		t.Fatalf("Append: %v", err)

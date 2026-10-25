@@ -485,7 +485,7 @@ func TestDeleteWidgetType_UsedByWidget_ReturnsErrWidgetTypeInUse(t *testing.T) {
 	sc := mustCreateScene(t, sceneSvc)
 	input := testCreateWidgetInput
 	input.TypeID = created.ID
-	if _, err := sceneSvc.CreateWidget(ctx, sc.ID, sc.Version, input); err != nil {
+	if _, err := sceneSvc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, input); err != nil {
 		t.Fatalf("CreateWidget: %v", err)
 	}
 

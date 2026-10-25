@@ -44,16 +44,19 @@ func ensureTestWidgetType(t *testing.T) {
 }
 
 func newSceneService() application.SceneService {
-	repo := repositories.NewSceneRepositoryPostgres(testDB)
-	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	return application.NewSceneService(repo, wtRepo, repositories.NewTagRepositoryPostgres(testDB))
+	return sceneServiceOver(newScopes(), repositories.NewWidgetTypeRepositoryPostgres(testDB))
 }
 
 func newSceneServiceWithBus(t *testing.T) (application.SceneService, eventbus.EventBus) {
 	bus, onCommit := deliveredOnCommit(t)
-	repo := repositories.NewSceneRepositoryPostgres(testDB, onCommit)
-	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB, onCommit)
-	return application.NewSceneService(repo, wtRepo, repositories.NewTagRepositoryPostgres(testDB)), bus
+	return sceneServiceOver(newScopes(onCommit), repositories.NewWidgetTypeRepositoryPostgres(testDB, onCommit)), bus
+}
+
+// sceneServiceWith returns the scene service whose scene repository is repo.
+func sceneServiceWith(repo scene.SceneRepository) application.SceneService {
+	scopes := newScopes()
+	scopes.scenes = sceneRepository(repo)
+	return sceneServiceOver(scopes, repositories.NewWidgetTypeRepositoryPostgres(testDB))
 }
 
 var testCreateSceneInput = appdto.SceneInput{
@@ -67,7 +70,7 @@ var testCreateSceneInput = appdto.SceneInput{
 // its DTO (ID and initial committed version).
 func mustCreateScene(t *testing.T, svc application.SceneService) appdto.Scene {
 	t.Helper()
-	created, err := svc.CreateScene(context.Background(), testCreateSceneInput)
+	created, err := svc.CreateScene(context.Background(), mainProject, testCreateSceneInput)
 	if err != nil {
 		t.Fatalf("CreateScene: %v", err)
 	}
@@ -95,7 +98,7 @@ func TestCreateScene_Valid_ReturnsID(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
 
-	resp, err := svc.CreateScene(context.Background(), testCreateSceneInput)
+	resp, err := svc.CreateScene(context.Background(), mainProject, testCreateSceneInput)
 
 	if err != nil {
 		t.Fatalf("CreateScene returned unexpected error: %v", err)
@@ -111,7 +114,7 @@ func TestCreateScene_InvalidSize_ReturnsError(t *testing.T) {
 
 	input := testCreateSceneInput
 	input.Width = -1
-	_, err := svc.CreateScene(context.Background(), input)
+	_, err := svc.CreateScene(context.Background(), mainProject, input)
 
 	if !errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("expected ErrInvalidInput for invalid width, got: %v", err)
@@ -122,7 +125,7 @@ func TestFindAllScenes_EmptyDB_ReturnsEmptyList(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
 
-	resp, err := svc.FindAllScenes(context.Background())
+	resp, err := svc.FindAllScenes(context.Background(), mainProject)
 
 	if err != nil {
 		t.Fatalf("FindAllScenes: %v", err)
@@ -139,14 +142,14 @@ func TestFindAllScenes_Multiple_ReturnsAll(t *testing.T) {
 
 	input2 := testCreateSceneInput
 	input2.Name = "second-scene"
-	if _, err := svc.CreateScene(ctx, testCreateSceneInput); err != nil {
+	if _, err := svc.CreateScene(ctx, mainProject, testCreateSceneInput); err != nil {
 		t.Fatalf("CreateScene 1: %v", err)
 	}
-	if _, err := svc.CreateScene(ctx, input2); err != nil {
+	if _, err := svc.CreateScene(ctx, mainProject, input2); err != nil {
 		t.Fatalf("CreateScene 2: %v", err)
 	}
 
-	resp, err := svc.FindAllScenes(ctx)
+	resp, err := svc.FindAllScenes(ctx, mainProject)
 
 	if err != nil {
 		t.Fatalf("FindAllScenes: %v", err)
@@ -163,7 +166,7 @@ func TestFindSceneByID_Existing_ReturnsCorrectFields(t *testing.T) {
 
 	created := mustCreateScene(t, svc)
 
-	found, err := svc.FindSceneByID(ctx, created.ID)
+	found, err := svc.FindSceneByID(ctx, mainProject, created.ID)
 
 	if err != nil {
 		t.Fatalf("FindSceneByID: %v", err)
@@ -177,7 +180,7 @@ func TestFindSceneByID_NotFound_ReturnsWrappedError(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
 
-	_, err := svc.FindSceneByID(context.Background(), uuid.New())
+	_, err := svc.FindSceneByID(context.Background(), mainProject, uuid.New())
 
 	if !errors.Is(err, scene.ErrSceneNotFound) {
 		t.Errorf("expected wrapped ErrSceneNotFound, got: %v", err)
@@ -191,7 +194,7 @@ func TestUpdateScene_Valid_ReturnsIncrementedVersion(t *testing.T) {
 
 	created := mustCreateScene(t, svc)
 
-	updated, err := svc.UpdateScene(ctx, created.ID, created.Version, appdto.SceneInput{
+	updated, err := svc.UpdateScene(ctx, mainProject, created.ID, created.Version, appdto.SceneInput{
 		Name: "renamed", Width: 800, Height: 600,
 	})
 
@@ -210,7 +213,7 @@ func TestUpdateScene_StaleVersion_ReturnsConflict(t *testing.T) {
 
 	created := mustCreateScene(t, svc)
 
-	_, err := svc.UpdateScene(ctx, created.ID, created.Version+99, appdto.SceneInput{
+	_, err := svc.UpdateScene(ctx, mainProject, created.ID, created.Version+99, appdto.SceneInput{
 		Name: "x", Width: 800, Height: 600,
 	})
 
@@ -226,7 +229,7 @@ func TestDeleteScene_Existing_ReturnsDeletedItem(t *testing.T) {
 
 	created := mustCreateScene(t, svc)
 
-	deleted, err := svc.DeleteSceneByID(ctx, created.ID)
+	deleted, err := svc.DeleteSceneByID(ctx, mainProject, created.ID)
 
 	if err != nil {
 		t.Fatalf("DeleteSceneByID: %v", err)
@@ -240,7 +243,7 @@ func TestDeleteScene_NotFound_ReturnsWrappedError(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
 
-	_, err := svc.DeleteSceneByID(context.Background(), uuid.New())
+	_, err := svc.DeleteSceneByID(context.Background(), mainProject, uuid.New())
 
 	if !errors.Is(err, scene.ErrSceneNotFound) {
 		t.Errorf("expected wrapped ErrSceneNotFound, got: %v", err)
@@ -256,7 +259,7 @@ func TestCreateWidget_Valid_ReturnsNonNilID(t *testing.T) {
 	sc := mustCreateScene(t, svc)
 
 	input := testCreateWidgetInput
-	resp, err := svc.CreateWidget(ctx, sc.ID, sc.Version, input)
+	resp, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, input)
 
 	if err != nil {
 		t.Fatalf("CreateWidget returned unexpected error: %v", err)
@@ -273,7 +276,7 @@ func TestCreateWidget_Valid_BumpsSceneVersion(t *testing.T) {
 	sc := mustCreateScene(t, svc)
 
 	input := testCreateWidgetInput
-	created, err := svc.CreateWidget(ctx, sc.ID, sc.Version, input)
+	created, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, input)
 	if err != nil {
 		t.Fatalf("CreateWidget: %v", err)
 	}
@@ -281,7 +284,7 @@ func TestCreateWidget_Valid_BumpsSceneVersion(t *testing.T) {
 	if created.SceneVersion <= sc.Version {
 		t.Errorf("SceneVersion: expected > %d, got %d", sc.Version, created.SceneVersion)
 	}
-	refetched, err := svc.FindSceneByID(ctx, sc.ID)
+	refetched, err := svc.FindSceneByID(ctx, mainProject, sc.ID)
 	if err != nil {
 		t.Fatalf("FindSceneByID: %v", err)
 	}
@@ -297,7 +300,7 @@ func TestCreateWidget_StaleSceneVersion_ReturnsConflict(t *testing.T) {
 	sc := mustCreateScene(t, svc)
 
 	input := testCreateWidgetInput
-	_, err := svc.CreateWidget(ctx, sc.ID, sc.Version+99, input)
+	_, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version+99, input)
 
 	if !errors.Is(err, scene.ErrSceneConflict) {
 		t.Errorf("expected wrapped ErrSceneConflict, got: %v", err)
@@ -313,7 +316,7 @@ func TestCreateWidget_StaleSceneVersionAndUnknownType_ReturnsConflict(t *testing
 
 	input := testCreateWidgetInput
 	input.TypeID = uuid.New()
-	_, err := svc.CreateWidget(context.Background(), sc.ID, sc.Version+99, input)
+	_, err := svc.CreateWidget(context.Background(), mainProject, sc.ID, sc.Version+99, input)
 
 	if !errors.Is(err, scene.ErrSceneConflict) {
 		t.Errorf("expected wrapped ErrSceneConflict, got: %v", err)
@@ -325,7 +328,7 @@ func TestCreateWidget_UnknownScene_ReturnsNotFound(t *testing.T) {
 	svc := newSceneService()
 
 	input := testCreateWidgetInput
-	_, err := svc.CreateWidget(context.Background(), uuid.New(), 1, input)
+	_, err := svc.CreateWidget(context.Background(), mainProject, uuid.New(), 1, input)
 
 	if !errors.Is(err, scene.ErrSceneNotFound) {
 		t.Errorf("expected wrapped ErrSceneNotFound, got: %v", err)
@@ -340,7 +343,7 @@ func TestCreateWidget_EmptyName_ReturnsError(t *testing.T) {
 
 	input := testCreateWidgetInput
 	input.Name = ""
-	_, err := svc.CreateWidget(ctx, sc.ID, sc.Version, input)
+	_, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, input)
 
 	if !errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("expected ErrInvalidInput for empty name, got: %v", err)
@@ -355,7 +358,7 @@ func TestCreateWidget_InvalidOrigin_ReturnsError(t *testing.T) {
 
 	input := testCreateWidgetInput
 	input.OriginX = 1.5 // out of [0,1]
-	_, err := svc.CreateWidget(ctx, sc.ID, sc.Version, input)
+	_, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, input)
 
 	if !errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("expected ErrInvalidInput for invalid origin, got: %v", err)
@@ -368,7 +371,7 @@ func TestFindWidgetsBySceneID_EmptyScene_ReturnsEmptyList(t *testing.T) {
 	ctx := context.Background()
 	sc := mustCreateScene(t, svc)
 
-	resp, err := svc.FindWidgetsBySceneID(ctx, sc.ID)
+	resp, err := svc.FindWidgetsBySceneID(ctx, mainProject, sc.ID)
 
 	if err != nil {
 		t.Fatalf("FindWidgetsBySceneID: %v", err)
@@ -387,17 +390,17 @@ func TestFindWidgetsBySceneID_MultipleWidgets_ReturnsOnlyThoseInScene(t *testing
 
 	inTarget := testCreateWidgetInput
 	inTarget.Name = "widget-in-target"
-	if _, err := svc.CreateWidget(ctx, target.ID, target.Version, inTarget); err != nil {
+	if _, err := svc.CreateWidget(ctx, mainProject, target.ID, target.Version, inTarget); err != nil {
 		t.Fatalf("CreateWidget (target): %v", err)
 	}
 
 	inOther := testCreateWidgetInput
 	inOther.Name = "widget-in-other"
-	if _, err := svc.CreateWidget(ctx, other.ID, other.Version, inOther); err != nil {
+	if _, err := svc.CreateWidget(ctx, mainProject, other.ID, other.Version, inOther); err != nil {
 		t.Fatalf("CreateWidget (other): %v", err)
 	}
 
-	resp, err := svc.FindWidgetsBySceneID(ctx, target.ID)
+	resp, err := svc.FindWidgetsBySceneID(ctx, mainProject, target.ID)
 
 	if err != nil {
 		t.Fatalf("FindWidgetsBySceneID: %v", err)
@@ -420,12 +423,12 @@ func TestFindWidgetByID_Existing_ReturnsCorrectFields(t *testing.T) {
 	sc := mustCreateScene(t, svc)
 
 	input := testCreateWidgetInput
-	created, err := svc.CreateWidget(ctx, sc.ID, sc.Version, input)
+	created, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, input)
 	if err != nil {
 		t.Fatalf("CreateWidget: %v", err)
 	}
 
-	found, err := svc.FindWidgetByID(ctx, sc.ID, created.ID)
+	found, err := svc.FindWidgetByID(ctx, mainProject, sc.ID, created.ID)
 
 	if err != nil {
 		t.Fatalf("FindWidgetByID: %v", err)
@@ -444,7 +447,7 @@ func TestFindWidgetByID_NotFound_ReturnsWrappedError(t *testing.T) {
 	ctx := context.Background()
 	sc := mustCreateScene(t, svc)
 
-	_, err := svc.FindWidgetByID(ctx, sc.ID, uuid.New())
+	_, err := svc.FindWidgetByID(ctx, mainProject, sc.ID, uuid.New())
 
 	if !errors.Is(err, scene.ErrWidgetNotFound) {
 		t.Errorf("expected wrapped ErrWidgetNotFound, got: %v", err)
@@ -458,7 +461,7 @@ func TestUpdateWidget_Valid_BumpsSceneVersion(t *testing.T) {
 	sc := mustCreateScene(t, svc)
 
 	input := testCreateWidgetInput
-	created, err := svc.CreateWidget(ctx, sc.ID, sc.Version, input)
+	created, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, input)
 	if err != nil {
 		t.Fatalf("CreateWidget: %v", err)
 	}
@@ -467,7 +470,7 @@ func TestUpdateWidget_Valid_BumpsSceneVersion(t *testing.T) {
 		Name: "updated-gauge", X: 5, Y: 15, Width: 100, Height: 100,
 		OriginX: 0.5, OriginY: 0.5, TypeID: created.TypeID,
 	}
-	updated, err := svc.UpdateWidget(ctx, sc.ID, created.ID, created.SceneVersion, updateInput)
+	updated, err := svc.UpdateWidget(ctx, mainProject, sc.ID, created.ID, created.SceneVersion, updateInput)
 
 	if err != nil {
 		t.Fatalf("UpdateWidget: %v", err)
@@ -487,12 +490,12 @@ func TestUpdateWidget_StaleSceneVersion_ReturnsConflict(t *testing.T) {
 	sc := mustCreateScene(t, svc)
 
 	input := testCreateWidgetInput
-	created, err := svc.CreateWidget(ctx, sc.ID, sc.Version, input)
+	created, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, input)
 	if err != nil {
 		t.Fatalf("CreateWidget: %v", err)
 	}
 
-	_, err = svc.UpdateWidget(ctx, sc.ID, created.ID, created.SceneVersion+99, appdto.WidgetInput{
+	_, err = svc.UpdateWidget(ctx, mainProject, sc.ID, created.ID, created.SceneVersion+99, appdto.WidgetInput{
 		Name: "stale", TypeID: created.TypeID, OriginX: 0.5, OriginY: 0.5,
 		Width: 100, Height: 100,
 	})
@@ -507,14 +510,14 @@ func TestUpdateWidget_StaleSceneVersionAndUnknownType_ReturnsConflict(t *testing
 	svc := newSceneService()
 	ctx := context.Background()
 	sc := mustCreateScene(t, svc)
-	created, err := svc.CreateWidget(ctx, sc.ID, sc.Version, testCreateWidgetInput)
+	created, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, testCreateWidgetInput)
 	if err != nil {
 		t.Fatalf("CreateWidget: %v", err)
 	}
 
 	input := testCreateWidgetInput
 	input.TypeID = uuid.New()
-	_, err = svc.UpdateWidget(ctx, sc.ID, created.ID, created.SceneVersion+99, input)
+	_, err = svc.UpdateWidget(ctx, mainProject, sc.ID, created.ID, created.SceneVersion+99, input)
 
 	if !errors.Is(err, scene.ErrSceneConflict) {
 		t.Errorf("expected wrapped ErrSceneConflict, got: %v", err)
@@ -527,7 +530,7 @@ func TestUpdateWidget_NotFound_ReturnsWrappedError(t *testing.T) {
 	ctx := context.Background()
 	sc := mustCreateScene(t, svc)
 
-	_, err := svc.UpdateWidget(ctx, sc.ID, uuid.New(), sc.Version, appdto.WidgetInput{
+	_, err := svc.UpdateWidget(ctx, mainProject, sc.ID, uuid.New(), sc.Version, appdto.WidgetInput{
 		Name: "x", TypeID: testWidgetTypeID, OriginX: 0.5, OriginY: 0.5,
 		Width: 100, Height: 100,
 	})
@@ -544,16 +547,16 @@ func TestDeleteWidget_Existing_RemovedFromDB(t *testing.T) {
 	sc := mustCreateScene(t, svc)
 
 	input := testCreateWidgetInput
-	created, err := svc.CreateWidget(ctx, sc.ID, sc.Version, input)
+	created, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, input)
 	if err != nil {
 		t.Fatalf("CreateWidget: %v", err)
 	}
 
-	if _, err = svc.DeleteWidgetByID(ctx, sc.ID, created.ID); err != nil {
+	if _, err = svc.DeleteWidgetByID(ctx, mainProject, sc.ID, created.ID); err != nil {
 		t.Fatalf("DeleteWidgetByID: %v", err)
 	}
 
-	_, err = svc.FindWidgetByID(ctx, sc.ID, created.ID)
+	_, err = svc.FindWidgetByID(ctx, mainProject, sc.ID, created.ID)
 	if !errors.Is(err, scene.ErrWidgetNotFound) {
 		t.Errorf("expected ErrWidgetNotFound after delete, got: %v", err)
 	}
@@ -565,7 +568,7 @@ func TestDeleteWidget_NotFound_ReturnsWrappedError(t *testing.T) {
 	ctx := context.Background()
 	sc := mustCreateScene(t, svc)
 
-	_, err := svc.DeleteWidgetByID(ctx, sc.ID, uuid.New())
+	_, err := svc.DeleteWidgetByID(ctx, mainProject, sc.ID, uuid.New())
 
 	if !errors.Is(err, scene.ErrWidgetNotFound) {
 		t.Errorf("expected wrapped ErrWidgetNotFound, got: %v", err)
@@ -581,16 +584,16 @@ func TestDeleteSceneByID_WithWidgets_CascadesInDB(t *testing.T) {
 	sc := mustCreateScene(t, svc)
 
 	input := testCreateWidgetInput
-	created, err := svc.CreateWidget(ctx, sc.ID, sc.Version, input)
+	created, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, input)
 	if err != nil {
 		t.Fatalf("CreateWidget: %v", err)
 	}
 
-	if _, err := svc.DeleteSceneByID(ctx, sc.ID); err != nil {
+	if _, err := svc.DeleteSceneByID(ctx, mainProject, sc.ID); err != nil {
 		t.Fatalf("DeleteSceneByID: %v", err)
 	}
 
-	_, err = svc.FindWidgetByID(ctx, sc.ID, created.ID)
+	_, err = svc.FindWidgetByID(ctx, mainProject, sc.ID, created.ID)
 	if !errors.Is(err, scene.ErrSceneNotFound) {
 		t.Errorf("expected ErrSceneNotFound for widget lookup after scene delete, got: %v", err)
 	}
@@ -608,14 +611,14 @@ func TestDeleteSceneByID_WithWidgets_PublishesWidgetDeletedPerWidget(t *testing.
 
 	firstInput := testCreateWidgetInput
 	firstInput.Name = "widget-1"
-	first, err := svc.CreateWidget(ctx, sc.ID, sc.Version, firstInput)
+	first, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, firstInput)
 	if err != nil {
 		t.Fatalf("CreateWidget 1: %v", err)
 	}
 
 	secondInput := testCreateWidgetInput
 	secondInput.Name = "widget-2"
-	second, err := svc.CreateWidget(ctx, sc.ID, first.SceneVersion, secondInput)
+	second, err := svc.CreateWidget(ctx, mainProject, sc.ID, first.SceneVersion, secondInput)
 	if err != nil {
 		t.Fatalf("CreateWidget 2: %v", err)
 	}
@@ -629,7 +632,7 @@ func TestDeleteSceneByID_WithWidgets_PublishesWidgetDeletedPerWidget(t *testing.
 		sceneDeleted = append(sceneDeleted, e)
 	})
 
-	if _, err := svc.DeleteSceneByID(ctx, sc.ID); err != nil {
+	if _, err := svc.DeleteSceneByID(ctx, mainProject, sc.ID); err != nil {
 		t.Fatalf("DeleteSceneByID: %v", err)
 	}
 
@@ -664,7 +667,7 @@ func TestDeleteSceneByID_EmptyScene_PublishesOnlySceneDeletedEvent(t *testing.T)
 		widgetDeleted = append(widgetDeleted, e)
 	})
 
-	if _, err := svc.DeleteSceneByID(ctx, sc.ID); err != nil {
+	if _, err := svc.DeleteSceneByID(ctx, mainProject, sc.ID); err != nil {
 		t.Fatalf("DeleteSceneByID: %v", err)
 	}
 
@@ -680,7 +683,7 @@ func TestCreateWidget_UnknownType_ReturnsInvalidInput(t *testing.T) {
 
 	input := testCreateWidgetInput
 	input.TypeID = uuid.New()
-	_, err := svc.CreateWidget(context.Background(), sc.ID, sc.Version, input)
+	_, err := svc.CreateWidget(context.Background(), mainProject, sc.ID, sc.Version, input)
 
 	if !errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("expected ErrInvalidInput, got: %v", err)
@@ -693,12 +696,12 @@ func TestUpdateWidget_UnknownType_ReturnsInvalidInput(t *testing.T) {
 	ctx := context.Background()
 	sc := mustCreateScene(t, svc)
 	input := testCreateWidgetInput
-	created, err := svc.CreateWidget(ctx, sc.ID, sc.Version, input)
+	created, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, input)
 	if err != nil {
 		t.Fatalf("CreateWidget: %v", err)
 	}
 
-	_, err = svc.UpdateWidget(ctx, sc.ID, created.ID, created.SceneVersion, appdto.WidgetInput{
+	_, err = svc.UpdateWidget(ctx, mainProject, sc.ID, created.ID, created.SceneVersion, appdto.WidgetInput{
 		Name: "x", TypeID: uuid.New(), OriginX: 0.5, OriginY: 0.5,
 		Width: 100, Height: 100,
 	})
@@ -715,7 +718,7 @@ func TestCreateWidget_UnknownSceneAndType_ReturnsSceneNotFound(t *testing.T) {
 	input := testCreateWidgetInput
 	input.TypeID = uuid.New()
 	input.PortBindings = []appdto.PortBinding{{PortName: "value", TagID: uuid.New()}}
-	_, err := svc.CreateWidget(context.Background(), uuid.New(), 1, input)
+	_, err := svc.CreateWidget(context.Background(), mainProject, uuid.New(), 1, input)
 
 	if !errors.Is(err, scene.ErrSceneNotFound) {
 		t.Errorf("expected wrapped ErrSceneNotFound, got: %v", err)
@@ -730,7 +733,7 @@ func TestUpdateWidget_UnknownWidgetAndType_ReturnsWidgetNotFound(t *testing.T) {
 	svc := newSceneService()
 	sc := mustCreateScene(t, svc)
 
-	_, err := svc.UpdateWidget(context.Background(), sc.ID, uuid.New(), sc.Version, appdto.WidgetInput{
+	_, err := svc.UpdateWidget(context.Background(), mainProject, sc.ID, uuid.New(), sc.Version, appdto.WidgetInput{
 		Name: "x", TypeID: uuid.New(), OriginX: 0.5, OriginY: 0.5,
 		Width: 100, Height: 100,
 	})
@@ -751,7 +754,7 @@ func TestCreateWidget_UnknownTypeWithBindings_ReturnsInvalidInput(t *testing.T) 
 	input := testCreateWidgetInput
 	input.TypeID = uuid.New()
 	input.PortBindings = []appdto.PortBinding{{PortName: "value", TagID: uuid.New()}}
-	_, err := svc.CreateWidget(context.Background(), sc.ID, sc.Version, input)
+	_, err := svc.CreateWidget(context.Background(), mainProject, sc.ID, sc.Version, input)
 
 	if !errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("expected ErrInvalidInput, got: %v", err)
@@ -765,7 +768,7 @@ func TestCreateWidget_UndeclaredPort_ReturnsInvalidInput(t *testing.T) {
 
 	input := testCreateWidgetInput
 	input.PortBindings = []appdto.PortBinding{{PortName: "missing", TagID: uuid.New()}}
-	_, err := svc.CreateWidget(context.Background(), sc.ID, sc.Version, input)
+	_, err := svc.CreateWidget(context.Background(), mainProject, sc.ID, sc.Version, input)
 
 	if !errors.Is(err, application.ErrInvalidInput) || !errors.Is(err, scene.ErrPortNotDeclared) {
 		t.Errorf("expected ErrInvalidInput wrapping ErrPortNotDeclared, got: %v", err)
@@ -796,18 +799,18 @@ func newBindingFixture(t *testing.T, svc application.SceneService) bindingFixtur
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
 	tags := newService()
-	intTag, err := tags.CreateTag(ctx, appdto.CreateTagInput{Name: "level", Type: "integer", Value: "0", Quality: "good"})
+	intTag, err := tags.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "level", Type: "integer", Value: "0", Quality: "good"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
-	stringTag, err := tags.CreateTag(ctx, appdto.CreateTagInput{Name: "label", Type: "string", Value: "", Quality: "good"})
+	stringTag, err := tags.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "label", Type: "string", Value: "", Quality: "good"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
 	sc := mustCreateScene(t, svc)
 	input := testCreateWidgetInput
 	input.TypeID = wt.ID
-	w, err := svc.CreateWidget(ctx, sc.ID, sc.Version, input)
+	w, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, input)
 	if err != nil {
 		t.Fatalf("CreateWidget: %v", err)
 	}
@@ -836,9 +839,9 @@ func TestWidgetWrites_CheckBoundTags(t *testing.T) {
 			ctx := context.Background()
 
 			f := newBindingFixture(t, svc)
-			_, createErr := svc.CreateWidget(ctx, f.scene.ID, f.widget.SceneVersion, f.input(tt.tag(f)))
+			_, createErr := svc.CreateWidget(ctx, mainProject, f.scene.ID, f.widget.SceneVersion, f.input(tt.tag(f)))
 			f = newBindingFixture(t, svc)
-			_, updateErr := svc.UpdateWidget(ctx, f.scene.ID, f.widget.ID, f.widget.SceneVersion, f.input(tt.tag(f)))
+			_, updateErr := svc.UpdateWidget(ctx, mainProject, f.scene.ID, f.widget.ID, f.widget.SceneVersion, f.input(tt.tag(f)))
 
 			for op, err := range map[string]error{"CreateWidget": createErr, "UpdateWidget": updateErr} {
 				if tt.want == nil && err != nil {
@@ -857,12 +860,12 @@ func TestDeleteWidget_Existing_BumpsSceneVersionOnce(t *testing.T) {
 	svc := newSceneService()
 	ctx := context.Background()
 	sc := mustCreateScene(t, svc)
-	created, err := svc.CreateWidget(ctx, sc.ID, sc.Version, testCreateWidgetInput)
+	created, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, testCreateWidgetInput)
 	if err != nil {
 		t.Fatalf("CreateWidget: %v", err)
 	}
 
-	deleted, err := svc.DeleteWidgetByID(ctx, sc.ID, created.ID)
+	deleted, err := svc.DeleteWidgetByID(ctx, mainProject, sc.ID, created.ID)
 
 	if err != nil {
 		t.Fatalf("DeleteWidgetByID: %v", err)
@@ -870,7 +873,7 @@ func TestDeleteWidget_Existing_BumpsSceneVersionOnce(t *testing.T) {
 	if deleted.SceneVersion != created.SceneVersion+1 {
 		t.Errorf("SceneVersion: expected %d, got %d", created.SceneVersion+1, deleted.SceneVersion)
 	}
-	found, err := svc.FindSceneByID(ctx, sc.ID)
+	found, err := svc.FindSceneByID(ctx, mainProject, sc.ID)
 	if err != nil {
 		t.Fatalf("FindSceneByID: %v", err)
 	}
@@ -900,11 +903,11 @@ func (r *racingSceneRepository) FindByID(ctx context.Context, sceneID id.ID[scen
 func renameScene(t *testing.T, svc application.SceneService, sceneID uuid.UUID) func() {
 	return func() {
 		ctx := context.Background()
-		current, err := svc.FindSceneByID(ctx, sceneID)
+		current, err := svc.FindSceneByID(ctx, mainProject, sceneID)
 		if err != nil {
 			t.Fatalf("FindSceneByID: %v", err)
 		}
-		if _, err := svc.UpdateScene(ctx, sceneID, current.Version, appdto.SceneInput{Name: "renamed", Width: 800, Height: 600}); err != nil {
+		if _, err := svc.UpdateScene(ctx, mainProject, sceneID, current.Version, appdto.SceneInput{Name: "renamed", Width: 800, Height: 600}); err != nil {
 			t.Fatalf("concurrent UpdateScene: %v", err)
 		}
 	}
@@ -915,20 +918,20 @@ func TestDeleteWidget_SceneChangedMeanwhile_RereadsAndKeepsChange(t *testing.T) 
 	svc := newSceneService()
 	ctx := context.Background()
 	sc := mustCreateScene(t, svc)
-	created, err := svc.CreateWidget(ctx, sc.ID, sc.Version, testCreateWidgetInput)
+	created, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, testCreateWidgetInput)
 	if err != nil {
 		t.Fatalf("CreateWidget: %v", err)
 	}
 
-	repo := &racingSceneRepository{SceneRepository: repositories.NewSceneRepositoryPostgres(testDB), races: 1, race: renameScene(t, svc, sc.ID)}
-	racingSvc := application.NewSceneService(repo, repositories.NewWidgetTypeRepositoryPostgres(testDB), repositories.NewTagRepositoryPostgres(testDB))
+	repo := &racingSceneRepository{SceneRepository: repositories.NewSceneRepositoryPostgres(testDB, mainProjectID), races: 1, race: renameScene(t, svc, sc.ID)}
+	racingSvc := sceneServiceWith(repo)
 
-	deleted, err := racingSvc.DeleteWidgetByID(ctx, sc.ID, created.ID)
+	deleted, err := racingSvc.DeleteWidgetByID(ctx, mainProject, sc.ID, created.ID)
 
 	if err != nil {
 		t.Fatalf("DeleteWidgetByID: %v", err)
 	}
-	found, err := svc.FindSceneByID(ctx, sc.ID)
+	found, err := svc.FindSceneByID(ctx, mainProject, sc.ID)
 	if err != nil {
 		t.Fatalf("FindSceneByID: %v", err)
 	}
@@ -936,7 +939,7 @@ func TestDeleteWidget_SceneChangedMeanwhile_RereadsAndKeepsChange(t *testing.T) 
 		t.Errorf("expected the concurrent change kept and the widget removed after it (renamed, version %d), got %q, version %d, delete at %d",
 			created.SceneVersion+2, found.Name, found.Version, deleted.SceneVersion)
 	}
-	if _, err := svc.FindWidgetByID(ctx, sc.ID, created.ID); !errors.Is(err, scene.ErrWidgetNotFound) {
+	if _, err := svc.FindWidgetByID(ctx, mainProject, sc.ID, created.ID); !errors.Is(err, scene.ErrWidgetNotFound) {
 		t.Errorf("expected the widget deleted, got %v", err)
 	}
 }
@@ -946,20 +949,20 @@ func TestDeleteWidget_LosesRaceThreeTimes_ReturnsConflictKeepsWidget(t *testing.
 	svc := newSceneService()
 	ctx := context.Background()
 	sc := mustCreateScene(t, svc)
-	created, err := svc.CreateWidget(ctx, sc.ID, sc.Version, testCreateWidgetInput)
+	created, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, testCreateWidgetInput)
 	if err != nil {
 		t.Fatalf("CreateWidget: %v", err)
 	}
 
-	repo := &racingSceneRepository{SceneRepository: repositories.NewSceneRepositoryPostgres(testDB), races: 3, race: renameScene(t, svc, sc.ID)}
-	racingSvc := application.NewSceneService(repo, repositories.NewWidgetTypeRepositoryPostgres(testDB), repositories.NewTagRepositoryPostgres(testDB))
+	repo := &racingSceneRepository{SceneRepository: repositories.NewSceneRepositoryPostgres(testDB, mainProjectID), races: 3, race: renameScene(t, svc, sc.ID)}
+	racingSvc := sceneServiceWith(repo)
 
-	_, err = racingSvc.DeleteWidgetByID(ctx, sc.ID, created.ID)
+	_, err = racingSvc.DeleteWidgetByID(ctx, mainProject, sc.ID, created.ID)
 
 	if !errors.Is(err, scene.ErrSceneConflict) {
 		t.Fatalf("expected ErrSceneConflict, got: %v", err)
 	}
-	if _, err := svc.FindWidgetByID(ctx, sc.ID, created.ID); err != nil {
+	if _, err := svc.FindWidgetByID(ctx, mainProject, sc.ID, created.ID); err != nil {
 		t.Errorf("widget must survive the refused delete: %v", err)
 	}
 }
@@ -967,24 +970,24 @@ func TestDeleteWidget_LosesRaceThreeTimes_ReturnsConflictKeepsWidget(t *testing.
 func TestDeleteScene_WidgetAddedMeanwhile_DeliversWidgetDeletedForIt(t *testing.T) {
 	cleanScenes(t)
 	bus, onCommit := deliveredOnCommit(t)
-	svc := application.NewSceneService(repositories.NewSceneRepositoryPostgres(testDB, onCommit), repositories.NewWidgetTypeRepositoryPostgres(testDB), repositories.NewTagRepositoryPostgres(testDB))
+	svc := sceneServiceOver(newScopes(onCommit), repositories.NewWidgetTypeRepositoryPostgres(testDB))
 	ctx := context.Background()
 	sc := mustCreateScene(t, svc)
 
 	var added appdto.Widget
-	repo := &racingSceneRepository{SceneRepository: repositories.NewSceneRepositoryPostgres(testDB, onCommit), races: 1, race: func() {
+	repo := &racingSceneRepository{SceneRepository: repositories.NewSceneRepositoryPostgres(testDB, mainProjectID, onCommit), races: 1, race: func() {
 		var err error
-		if added, err = svc.CreateWidget(ctx, sc.ID, sc.Version, testCreateWidgetInput); err != nil {
+		if added, err = svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, testCreateWidgetInput); err != nil {
 			t.Fatalf("concurrent CreateWidget: %v", err)
 		}
 	}}
-	racingSvc := application.NewSceneService(repo, repositories.NewWidgetTypeRepositoryPostgres(testDB), repositories.NewTagRepositoryPostgres(testDB))
+	racingSvc := sceneServiceWith(repo)
 	var widgetDeleted []uuid.UUID
 	bus.Subscribe(event.EventTypeWidgetDeleted, func(e event.Event) {
 		widgetDeleted = append(widgetDeleted, e.(scene.WidgetEvent).WidgetID().UUID())
 	})
 
-	if _, err := racingSvc.DeleteSceneByID(ctx, sc.ID); err != nil {
+	if _, err := racingSvc.DeleteSceneByID(ctx, mainProject, sc.ID); err != nil {
 		t.Fatalf("DeleteSceneByID: %v", err)
 	}
 
@@ -1033,7 +1036,7 @@ func newServiceDeletingRacingType(t *testing.T) application.SceneService {
 			t.Fatalf("concurrent delete of widget type: %v", err)
 		}
 	}
-	return application.NewSceneService(repositories.NewSceneRepositoryPostgres(testDB), wtRepo, repositories.NewTagRepositoryPostgres(testDB))
+	return sceneServiceOver(newScopes(), wtRepo)
 }
 
 func TestCreateWidget_TypeDeletedMeanwhile_ReturnsInvalidInput(t *testing.T) {
@@ -1044,7 +1047,7 @@ func TestCreateWidget_TypeDeletedMeanwhile_ReturnsInvalidInput(t *testing.T) {
 
 	input := testCreateWidgetInput
 	input.TypeID = racingTypeID
-	_, err := svc.CreateWidget(context.Background(), sc.ID, sc.Version, input)
+	_, err := svc.CreateWidget(context.Background(), mainProject, sc.ID, sc.Version, input)
 
 	if !errors.Is(err, application.ErrInvalidInput) || !errors.Is(err, library.ErrWidgetTypeNotFound) {
 		t.Errorf("expected ErrInvalidInput wrapping ErrWidgetTypeNotFound, got: %v", err)
@@ -1057,7 +1060,7 @@ func TestUpdateWidget_TypeDeletedMeanwhile_ReturnsInvalidInput(t *testing.T) {
 	plain := newSceneService()
 	ctx := context.Background()
 	sc := mustCreateScene(t, plain)
-	created, err := plain.CreateWidget(ctx, sc.ID, sc.Version, testCreateWidgetInput)
+	created, err := plain.CreateWidget(ctx, mainProject, sc.ID, sc.Version, testCreateWidgetInput)
 	if err != nil {
 		t.Fatalf("CreateWidget: %v", err)
 	}
@@ -1065,7 +1068,7 @@ func TestUpdateWidget_TypeDeletedMeanwhile_ReturnsInvalidInput(t *testing.T) {
 
 	input := testCreateWidgetInput
 	input.TypeID = racingTypeID
-	_, err = svc.UpdateWidget(ctx, sc.ID, created.ID, created.SceneVersion, input)
+	_, err = svc.UpdateWidget(ctx, mainProject, sc.ID, created.ID, created.SceneVersion, input)
 
 	if !errors.Is(err, application.ErrInvalidInput) || !errors.Is(err, library.ErrWidgetTypeNotFound) {
 		t.Errorf("expected ErrInvalidInput wrapping ErrWidgetTypeNotFound, got: %v", err)

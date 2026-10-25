@@ -42,26 +42,27 @@ type fixture struct {
 	t   *testing.T
 	p   *Project
 	e   *uitest.Engine
-	api *apiclient.Client
+	api *testAPI
 }
 
 // newServer starts the API and returns a client of it for arranging.
-func newServer(t *testing.T) (string, *apiclient.Client) {
+func newServer(t *testing.T) (string, *testAPI) {
 	t.Helper()
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
-	return srv.URL, apiclient.New(srv.URL, srv.Client())
+	return srv.URL, newTestAPI(apiclient.New(srv.URL, srv.Client()))
 }
 
 // mount mounts a Project talking to the server at url.
-func mount(t *testing.T, url string, api *apiclient.Client) *fixture {
+func mount(t *testing.T, url string, api *testAPI) *fixture {
 	t.Helper()
 	return mountWith(t, url, api, http.DefaultClient)
 }
 
 // mountWith is mount with the Project's requests sent through httpClient.
-func mountWith(t *testing.T, url string, api *apiclient.Client, httpClient *http.Client) *fixture {
+func mountWith(t *testing.T, url string, api *testAPI, httpClient *http.Client) *fixture {
 	t.Helper()
 	p := NewProject(apiclient.New(url, httpClient))
+	p.SetProject(servertest.MainProject)
 	f := &fixture{t: t, p: p, api: api}
 	f.e = uitest.Load(t, mountOnHost{p})
 	return f
@@ -123,7 +124,7 @@ func (f *fixture) knowsSceneVersion(id uuid.UUID) {
 
 // ── Arranging the server's state ─────────────────────────────────────────────
 
-func createScene(t *testing.T, api *apiclient.Client, name string) uuid.UUID {
+func createScene(t *testing.T, api *testAPI, name string) uuid.UUID {
 	t.Helper()
 	created, err := api.CreateScene(context.Background(), apiv0.CreateSceneRequest{Name: name, Width: 800, Height: 600})
 	if err != nil {
@@ -132,7 +133,7 @@ func createScene(t *testing.T, api *apiclient.Client, name string) uuid.UUID {
 	return created.ID
 }
 
-func createWidgetType(t *testing.T, api *apiclient.Client, name string, ports ...apiv0.InputPort) uuid.UUID {
+func createWidgetType(t *testing.T, api *testAPI, name string, ports ...apiv0.InputPort) uuid.UUID {
 	t.Helper()
 	if ports == nil {
 		ports = []apiv0.InputPort{}
@@ -147,7 +148,7 @@ func createWidgetType(t *testing.T, api *apiclient.Client, name string, ports ..
 	return created.ID
 }
 
-func createTag(t *testing.T, api *apiclient.Client, name, tagType string) uuid.UUID {
+func createTag(t *testing.T, api *testAPI, name, tagType string) uuid.UUID {
 	t.Helper()
 	created, err := api.CreateTag(context.Background(), apiv0.CreateTagRequest{Name: name, Type: tagType, Value: "0", Quality: "good"})
 	if err != nil {
@@ -156,7 +157,7 @@ func createTag(t *testing.T, api *apiclient.Client, name, tagType string) uuid.U
 	return created.ID
 }
 
-func createWidget(t *testing.T, api *apiclient.Client, sceneID, typeID uuid.UUID, name string) uuid.UUID {
+func createWidget(t *testing.T, api *testAPI, sceneID, typeID uuid.UUID, name string) uuid.UUID {
 	t.Helper()
 	ctx := context.Background()
 	sc, err := api.GetScene(ctx, sceneID)

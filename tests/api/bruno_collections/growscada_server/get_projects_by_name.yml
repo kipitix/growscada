@@ -1,0 +1,31 @@
+info:
+  name: get projects by name
+  type: http
+  seq: 2
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects?name=Main
+  auth: inherit
+
+docs: |
+  `?name=` selects the project with that exact name, unique among the live
+  projects: the list holds 0 or 1 projects. Tools (growctl, the device
+  simulator) find a project by name this way; the API addresses it by ID.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.projects[0].id'
+      operator: eq
+      value: '"{{PROJECT_ID}}"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

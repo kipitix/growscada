@@ -34,7 +34,7 @@ func TestVersionBanner_ShownWhileTheServerSpeaksAnotherVersion(t *testing.T) {
 	request := func(version string) {
 		t.Helper()
 		serverVersion.Store(version)
-		if _, err := r.client.ListTags(context.Background()); err != nil {
+		if _, err := r.client.ListWidgetTypes(context.Background()); err != nil {
 			t.Fatal(err)
 		}
 		e.ConsumeAll()

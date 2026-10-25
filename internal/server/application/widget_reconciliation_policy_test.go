@@ -32,6 +32,7 @@ func cleanPolicyJobs(t *testing.T) {
 // runner with the policies over testDB, as main.go does, but delivers and
 // runs jobs only when a test says so.
 type reconciliation struct {
+	projectSvc application.ProjectService
 	tagSvc     application.TagService
 	wtSvc      application.WidgetTypeService
 	sceneSvc   application.SceneService
@@ -56,14 +57,11 @@ func newReconciliation(t *testing.T, wiring reconciliationWiring) *reconciliatio
 	cleanOutbox(t)
 	cleanPolicyJobs(t)
 	cleanTags(t)
+	cleanProjects(t)
 
-	tagRepo := repositories.NewTagRepositoryPostgres(testDB)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB)
-	var policyScenes scene.SceneRepository = sceneRepo
-	if wiring.policyScenes != nil {
-		policyScenes = wiring.policyScenes(sceneRepo)
-	}
+	policyScopes := newScopes()
+	policyScopes.scenes = wiring.policyScenes
 	var policyWidgetTypes library.WidgetTypeRepository = wtRepo
 	if wiring.policyWidgetTypes != nil {
 		policyWidgetTypes = wiring.policyWidgetTypes(wtRepo)
@@ -72,23 +70,23 @@ func newReconciliation(t *testing.T, wiring reconciliationWiring) *reconciliatio
 	if wiring.sceneWidgetTypes != nil {
 		sceneWidgetTypes = wiring.sceneWidgetTypes(wtRepo)
 	}
+	sceneScopes := newScopes()
+	sceneScopes.tags = wiring.sceneTags
 
-	var sceneTags tag.TagRepository = tagRepo
-	if wiring.sceneTags != nil {
-		sceneTags = wiring.sceneTags(tagRepo)
-	}
-
+	projects := repositories.NewProjectRepositoryPostgres(testDB)
 	r := &reconciliation{
-		tagSvc:   application.NewTagService(tagRepo),
-		wtSvc:    application.NewWidgetTypeService(wtRepo),
-		sceneSvc: application.NewSceneService(sceneRepo, sceneWidgetTypes, sceneTags),
+		projectSvc: application.NewProjectService(projects, soleOrganization()),
+		tagSvc:     application.NewTagService(contentOver(newScopes())),
+		wtSvc:      application.NewWidgetTypeService(wtRepo),
+		sceneSvc:   sceneServiceOver(sceneScopes, sceneWidgetTypes),
 	}
 	// A pause long enough that only a merged event makes a failed job due
 	// again within a test.
 	r.runner = outbox.NewPolicyRunner(testDB,
 		[]application.Policy{
-			application.NewWidgetReconciliationPolicy(policyWidgetTypes, policyScenes, tagRepo),
-			application.NewUnbindDeletedTagPolicy(policyScenes, tagRepo),
+			application.NewWidgetReconciliationPolicy(policyWidgetTypes, policyScopes),
+			application.NewUnbindDeletedTagPolicy(policyScopes),
+			application.NewProjectCleanupPolicy(projects, policyScopes),
 		},
 		outbox.WithRetryPause(time.Hour, time.Hour))
 	r.dispatcher = outbox.NewDispatcher(testDB, func(e event.Event) { r.delivered = append(r.delivered, e) },
@@ -171,7 +169,7 @@ func (r *reconciliation) keepPorts(t *testing.T, wt appdto.WidgetType, ports ...
 
 func (r *reconciliation) createScene(t *testing.T, name string) appdto.Scene {
 	t.Helper()
-	sc, err := r.sceneSvc.CreateScene(context.Background(), appdto.SceneInput{Name: name, Width: 800, Height: 600})
+	sc, err := r.sceneSvc.CreateScene(context.Background(), mainProject, appdto.SceneInput{Name: name, Width: 800, Height: 600})
 	if err != nil {
 		t.Fatalf("CreateScene: %v", err)
 	}
@@ -182,7 +180,7 @@ func (r *reconciliation) createScene(t *testing.T, name string) appdto.Scene {
 func (r *reconciliation) createTag(t *testing.T, tagType string) uuid.UUID {
 	t.Helper()
 	values := map[string]string{"integer": "0", "string": "", "boolean": "false"}
-	created, err := r.tagSvc.CreateTag(context.Background(), appdto.CreateTagInput{
+	created, err := r.tagSvc.CreateTag(context.Background(), mainProject, appdto.CreateTagInput{
 		Name: "tag_" + strings.ReplaceAll(uuid.NewString(), "-", ""), Type: tagType, Value: values[tagType], Quality: "good",
 	})
 	if err != nil {
@@ -193,7 +191,7 @@ func (r *reconciliation) createTag(t *testing.T, tagType string) uuid.UUID {
 
 func (r *reconciliation) deleteTag(t *testing.T, tagID uuid.UUID) {
 	t.Helper()
-	if _, err := r.tagSvc.DeleteTagByID(context.Background(), tagID); err != nil {
+	if _, err := r.tagSvc.DeleteTagByID(context.Background(), mainProject, tagID); err != nil {
 		t.Fatalf("DeleteTagByID: %v", err)
 	}
 }
@@ -216,7 +214,7 @@ func (r *reconciliation) addWidgetBound(t *testing.T, sceneID uuid.UUID, sceneVe
 		Name: "widget", Width: 100, Height: 100, OriginX: 0.5, OriginY: 0.5, TypeID: wt.ID,
 		PortBindings: bindings,
 	}
-	w, err := r.sceneSvc.CreateWidget(context.Background(), sceneID, sceneVersion, input)
+	w, err := r.sceneSvc.CreateWidget(context.Background(), mainProject, sceneID, sceneVersion, input)
 	if err != nil {
 		t.Fatalf("CreateWidget: %v", err)
 	}
@@ -226,7 +224,7 @@ func (r *reconciliation) addWidgetBound(t *testing.T, sceneID uuid.UUID, sceneVe
 // boundPorts returns the ports the widget is bound to now.
 func (r *reconciliation) boundPorts(t *testing.T, sceneID, widgetID uuid.UUID) []string {
 	t.Helper()
-	w, err := r.sceneSvc.FindWidgetByID(context.Background(), sceneID, widgetID)
+	w, err := r.sceneSvc.FindWidgetByID(context.Background(), mainProject, sceneID, widgetID)
 	if err != nil {
 		t.Fatalf("FindWidgetByID: %v", err)
 	}
@@ -239,7 +237,7 @@ func (r *reconciliation) boundPorts(t *testing.T, sceneID, widgetID uuid.UUID) [
 
 func (r *reconciliation) sceneVersion(t *testing.T, sceneID uuid.UUID) int {
 	t.Helper()
-	sc, err := r.sceneSvc.FindSceneByID(context.Background(), sceneID)
+	sc, err := r.sceneSvc.FindSceneByID(context.Background(), mainProject, sceneID)
 	if err != nil {
 		t.Fatalf("FindSceneByID: %v", err)
 	}
@@ -302,19 +300,19 @@ func makeJobsDue(t *testing.T) {
 // --- JobKey ---
 
 func TestWidgetReconciliationPolicy_JobKey(t *testing.T) {
-	policy := application.NewWidgetReconciliationPolicy(nil, nil, nil)
+	policy := application.NewWidgetReconciliationPolicy(nil, nil)
 	wtID := id.NewID[library.WidgetType]()
 	widgetID, sceneID := id.NewID[scene.Widget](), id.NewID[scene.Scene]()
 
 	allScenes := "widget_type:" + wtID.String()
-	oneScene := allScenes + "/scene:" + sceneID.String()
+	oneScene := allScenes + "/project:" + mainProject.String() + "/scene:" + sceneID.String()
 	keyed := []struct {
 		e    event.Event
 		want string
 	}{
 		{library.NewWidgetTypeUpdatedEvent(wtID), allScenes},
-		{scene.NewWidgetCreatedEvent(widgetID, sceneID, wtID), oneScene},
-		{scene.NewWidgetUpdatedEvent(widgetID, sceneID, wtID), oneScene},
+		{scene.NewWidgetCreatedEvent(widgetID, sceneID, mainProjectID, wtID), oneScene},
+		{scene.NewWidgetUpdatedEvent(widgetID, sceneID, mainProjectID, wtID), oneScene},
 	}
 	for _, k := range keyed {
 		if key, ok := policy.JobKey(k.e); !ok || key != k.want {
@@ -324,9 +322,9 @@ func TestWidgetReconciliationPolicy_JobKey(t *testing.T) {
 	notKeyed := []event.Event{
 		library.NewWidgetTypeCreatedEvent(wtID),
 		library.NewWidgetTypeDeletedEvent(wtID),
-		scene.NewWidgetDeletedEvent(widgetID, sceneID),
-		scene.NewWidgetUpdatedByReconciliationEvent(widgetID, sceneID, wtID),
-		scene.NewSceneUpdatedEvent(sceneID),
+		scene.NewWidgetDeletedEvent(widgetID, sceneID, mainProjectID),
+		scene.NewWidgetUpdatedByReconciliationEvent(widgetID, sceneID, mainProjectID, wtID),
+		scene.NewSceneUpdatedEvent(sceneID, mainProjectID),
 	}
 	for _, e := range notKeyed {
 		if key, ok := policy.JobKey(e); ok {
@@ -406,7 +404,7 @@ func TestWidgetReconciliation_SceneChangedMeanwhile_CleansBindingsKeepsChange(t 
 	w := r.addWidget(t, sc.ID, sc.Version, wt, "value")
 	r.settle(t)
 	racing.race = func() {
-		if _, err := r.sceneSvc.UpdateScene(context.Background(), sc.ID, r.sceneVersion(t, sc.ID), appdto.SceneInput{Name: "renamed", Width: 800, Height: 600}); err != nil {
+		if _, err := r.sceneSvc.UpdateScene(context.Background(), mainProject, sc.ID, r.sceneVersion(t, sc.ID), appdto.SceneInput{Name: "renamed", Width: 800, Height: 600}); err != nil {
 			t.Fatalf("concurrent UpdateScene: %v", err)
 		}
 	}
@@ -414,7 +412,7 @@ func TestWidgetReconciliation_SceneChangedMeanwhile_CleansBindingsKeepsChange(t 
 	r.keepPorts(t, wt)
 	r.settle(t)
 
-	found, err := r.sceneSvc.FindSceneByID(context.Background(), sc.ID)
+	found, err := r.sceneSvc.FindSceneByID(context.Background(), mainProject, sc.ID)
 	if err != nil {
 		t.Fatalf("FindSceneByID: %v", err)
 	}
@@ -448,7 +446,7 @@ func TestWidgetReconciliation_PortAddedAndBoundWhileJobRuns_KeepsBinding(t *test
 			Name: "widget", Width: 100, Height: 100, OriginX: 0.5, OriginY: 0.5, TypeID: wt.ID,
 			PortBindings: []appdto.PortBinding{{PortName: "value", TagID: r.createTag(t, "integer")}, {PortName: "alarm", TagID: r.createTag(t, "integer")}},
 		}
-		if _, err := r.sceneSvc.UpdateWidget(context.Background(), sc.ID, w.ID, r.sceneVersion(t, sc.ID), input); err != nil {
+		if _, err := r.sceneSvc.UpdateWidget(context.Background(), mainProject, sc.ID, w.ID, r.sceneVersion(t, sc.ID), input); err != nil {
 			t.Fatalf("concurrent UpdateWidget: %v", err)
 		}
 	}
@@ -490,8 +488,13 @@ func TestWidgetReconciliation_WidgetEdited_ReconcilesOnlyItsScene(t *testing.T) 
 	r.drain(t)
 
 	jobs := policyJobs(t)
-	if want := "widget_type:" + wt.ID.String() + "/scene:" + edited.ID.String(); len(jobs) != 1 || jobs[0].key != want {
+	if want := "widget_type:" + wt.ID.String() + "/project:" + mainProject.String() + "/scene:" + edited.ID.String(); len(jobs) != 1 || jobs[0].key != want {
 		t.Fatalf("jobs %+v, want one keyed %q", jobs, want)
+	}
+	// The tag the widget binds was created too: its job of the project's
+	// cleanup has nothing to do here.
+	if _, err := testDB.ExecContext(context.Background(), `DELETE FROM policy_jobs WHERE policy <> $1`, application.WidgetReconciliationPolicyName); err != nil {
+		t.Fatal(err)
 	}
 	if ran := r.runDue(t); ran != 1 || counting.listings != 0 {
 		t.Errorf("ran %d jobs, listed scenes by type %d times; want 1 and none", ran, counting.listings)
@@ -759,17 +762,18 @@ func TestWidgetReconciliation_NarrowedTypeHint_RemovesBindingsItRefuses(t *testi
 // --- unbind_deleted_tag ---
 
 func TestUnbindDeletedTagPolicy_JobKey(t *testing.T) {
-	policy := application.NewUnbindDeletedTagPolicy(nil, nil)
+	policy := application.NewUnbindDeletedTagPolicy(nil)
 	tagID := id.NewID[tag.Tag]()
 
-	if key, ok := policy.JobKey(tag.NewTagDeletedEvent(tagID)); !ok || key != "tag:"+tagID.String() {
-		t.Errorf("tag_deleted: key %q (%t), want %q", key, ok, "tag:"+tagID.String())
+	want := "project:" + mainProject.String() + "/tag:" + tagID.String()
+	if key, ok := policy.JobKey(tag.NewTagDeletedEvent(tagID, mainProjectID)); !ok || key != want {
+		t.Errorf("tag_deleted: key %q (%t), want %q", key, ok, want)
 	}
 	widgetID, sceneID, wtID := id.NewID[scene.Widget](), id.NewID[scene.Scene](), id.NewID[library.WidgetType]()
 	notKeyed := []event.Event{
-		tag.NewTagCreatedEvent(tagID),
-		scene.NewWidgetUpdatedEvent(widgetID, sceneID, wtID),
-		scene.NewWidgetUpdatedByReconciliationEvent(widgetID, sceneID, wtID),
+		tag.NewTagCreatedEvent(tagID, mainProjectID),
+		scene.NewWidgetUpdatedEvent(widgetID, sceneID, mainProjectID, wtID),
+		scene.NewWidgetUpdatedByReconciliationEvent(widgetID, sceneID, mainProjectID, wtID),
 	}
 	for _, e := range notKeyed {
 		if key, ok := policy.JobKey(e); ok {
@@ -820,11 +824,11 @@ func TestUnbindDeletedTag_TagExistsWhenJobRuns_KeepsBindings(t *testing.T) {
 	tagID := r.createTag(t, "integer")
 	w := r.addWidgetBound(t, sc.ID, sc.Version, wt, appdto.PortBinding{PortName: "value", TagID: tagID})
 	r.settle(t)
-	policy := application.NewUnbindDeletedTagPolicy(repositories.NewSceneRepositoryPostgres(testDB), repositories.NewTagRepositoryPostgres(testDB))
+	policy := application.NewUnbindDeletedTagPolicy(repositories.NewProjectScopes(testDB))
 
 	// A job of a tag_deleted event for a Tag that exists again, e.g. created
 	// anew with the same ID.
-	if err := policy.Run(context.Background(), "tag:"+tagID.String()); err != nil {
+	if err := policy.Run(context.Background(), "project:"+mainProject.String()+"/tag:"+tagID.String()); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 
@@ -848,7 +852,7 @@ func TestUpdateWidget_KeepsBindingBrokenSinceItWasMade_PolicyRemovesIt(t *testin
 		Name: "moved", X: 10, Width: 100, Height: 100, OriginX: 0.5, OriginY: 0.5, TypeID: wt.ID,
 		PortBindings: []appdto.PortBinding{stale, {PortName: "alarm", TagID: r.createTag(t, "integer")}},
 	}
-	if _, err := r.sceneSvc.UpdateWidget(context.Background(), sc.ID, w.ID, r.sceneVersion(t, sc.ID), input); err != nil {
+	if _, err := r.sceneSvc.UpdateWidget(context.Background(), mainProject, sc.ID, w.ID, r.sceneVersion(t, sc.ID), input); err != nil {
 		t.Fatalf("UpdateWidget carrying the binding it already held: %v", err)
 	}
 	r.settle(t)

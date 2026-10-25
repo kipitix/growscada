@@ -6,7 +6,8 @@ import (
 
 // Name filters of GET /tags; at most one may be given.
 const (
-	// TagsQueryName selects the tag with this exact (unique) name.
+	// TagsQueryName selects the tag with this exact name, unique within the
+	// project.
 	TagsQueryName = "name"
 	// TagsQueryNamePattern selects tags whose whole name matches a wildcard
 	// pattern ("*" any sequence, "?" one character).

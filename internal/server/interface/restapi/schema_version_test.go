@@ -16,9 +16,9 @@ func TestResponses_CarrySchemaVersion(t *testing.T) {
 	router := newRouter()
 
 	for _, tc := range []struct{ method, path string }{
-		{http.MethodGet, apiv0.PathPrefix + "/tags"},
-		{http.MethodGet, apiv0.PathPrefix + "/tags/not-a-uuid"}, // errors too
-		{http.MethodOptions, apiv0.PathPrefix + "/tags"},        // CORS preflight
+		{http.MethodGet, mainPath + "/tags"},
+		{http.MethodGet, mainPath + "/tags/not-a-uuid"}, // errors too
+		{http.MethodOptions, mainPath + "/tags"},        // CORS preflight
 	} {
 		rec := httptest.NewRecorder()
 		router.ServeMux().ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, nil))
@@ -31,7 +31,7 @@ func TestResponses_CarrySchemaVersion(t *testing.T) {
 
 func TestCORS_AllowsAndExposesSchemaVersionHeader(t *testing.T) {
 	rec := httptest.NewRecorder()
-	newRouter().ServeMux().ServeHTTP(rec, httptest.NewRequest(http.MethodOptions, apiv0.PathPrefix+"/tags", nil))
+	newRouter().ServeMux().ServeHTTP(rec, httptest.NewRequest(http.MethodOptions, mainPath+"/tags", nil))
 
 	if got := rec.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, contract.SchemaVersionHeader) {
 		t.Errorf("Access-Control-Allow-Headers = %q, want it to contain %s", got, contract.SchemaVersionHeader)
@@ -68,7 +68,7 @@ func postTagWithUnknownField(t *testing.T, clientVersion string) string {
 	t.Helper()
 	cleanTags(t)
 	body := `{"name":"t.unknown","type":"integer","value":"0","quality":"good","unit":"rpm"}`
-	req := httptest.NewRequest(http.MethodPost, apiv0.PathPrefix+"/tags", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, mainPath+"/tags", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	if clientVersion != "" {
 		req.Header.Set(contract.SchemaVersionHeader, clientVersion)
@@ -114,7 +114,7 @@ func TestRequest_NewerClient_KnownFields_IsAccepted(t *testing.T) {
 	cleanTags(t)
 	newer := contract.SchemaVersion{Major: apiv0.SchemaVersion().Major, Minor: apiv0.SchemaVersion().Minor + 1}
 	body := `{"name":"t.newer","type":"integer","value":"0","quality":"good"}`
-	req := httptest.NewRequest(http.MethodPost, apiv0.PathPrefix+"/tags", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, mainPath+"/tags", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(contract.SchemaVersionHeader, newer.String())
 	rec := httptest.NewRecorder()

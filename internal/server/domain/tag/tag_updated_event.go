@@ -23,8 +23,9 @@ var _ TagUpdatedEvent = (*tagUpdatedEventImpl)(nil)
 func NewTagUpdatedEvent(aTag Tag, opts ...event.EventOption) TagUpdatedEvent {
 	return &tagUpdatedEventImpl{
 		tagEventImpl: tagEventImpl{
-			Base:  event.NewBase(event.EventTypeTagUpdated, opts...),
-			tagID: aTag.ID(),
+			Base:      event.NewBase(event.EventTypeTagUpdated, opts...),
+			tagID:     aTag.ID(),
+			projectID: aTag.ProjectID(),
 		},
 		tag: aTag,
 	}

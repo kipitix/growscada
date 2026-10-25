@@ -55,7 +55,7 @@ func main() {
 	gracedownManager := gracedown.NewManager(gracedown.WithLogger(slogAdapter{}))
 
 	link := devicelink.NewRESTLink(apiclient.New(cfg.Server, &http.Client{Timeout: 10 * time.Second},
-		devicelink.WarnOlderServer(slog.Default())))
+		devicelink.WarnOlderServer(slog.Default())), cfg.Project)
 	device := devicesim.New(cfg, link, devicesim.Options{})
 
 	// INTERFACE COMPONENTS
@@ -97,11 +97,12 @@ func main() {
 	// Run the Device in a separate goroutine: it connects to the server
 	// (waiting for it as long as it takes), then writes the tags.
 	go func() {
-		slog.Info("Device starting", "server", cfg.Server, "tags", len(cfg.Tags), "running", device.Status().Running)
+		slog.Info("Device starting", "server", cfg.Server, "project", cfg.Project, "tags", len(cfg.Tags), "running", device.Status().Running)
 		err := device.Run(runCtx)
 		close(deviceDone) // before an emergency exit, whose Device hook waits for it
 		if err != nil {
-			// A missing tag or a pattern that does not fit its tag's type.
+			// A missing project or tag, or a pattern that does not fit its
+			// tag's type.
 			slog.Error("Device error", "error", err)
 			emergencyExit(gracedownManager, gracedown.ExitConfig)
 		}

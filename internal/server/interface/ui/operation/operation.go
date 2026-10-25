@@ -26,8 +26,13 @@ type Operation struct {
 	// compoCtx is the component's own context, captured in OnMount; async
 	// results are dispatched through it (see project.Project.compoCtx).
 	compoCtx  app.Context
+	mounted   bool
 	ThemeMode string // exported so go-app detects theme changes and re-renders
 	client    *apiclient.Client
+	// projectID is the project shown, uuid.Nil if none; content is the client
+	// of its content, nil if none (SetProject). WidgetTypes are the server's.
+	projectID uuid.UUID
+	content   *apiclient.ProjectClient
 
 	scenes      []apiv0.SceneResponse
 	widgetTypes map[uuid.UUID]apiv0.WidgetTypeResponse
@@ -51,7 +56,7 @@ func NewOperation(client *apiclient.Client) *Operation {
 }
 
 func (o *Operation) OnMount(ctx app.Context) {
-	o.compoCtx = ctx
+	o.compoCtx, o.mounted = ctx, true
 	o.widgetTypes = map[uuid.UUID]apiv0.WidgetTypeResponse{}
 	ctx.ObserveState("theme", &o.ThemeMode)
 	ctx.ObserveState(eventlog.StateDisconnected, &o.disconnected)
@@ -67,6 +72,25 @@ func (o *Operation) OnMount(ctx app.Context) {
 		o.tags = eventlog.ApplyToTags(o.tags, ev)
 		o.reload(ctx, eventlog.ReloadTargetsFor(ev))
 	})
+}
+
+// SetProject shows the project id (uuid.Nil: none), dropping what was shown
+// of another one; before the Operation is mounted it only remembers it.
+func (o *Operation) SetProject(id uuid.UUID) {
+	if id == o.projectID {
+		return
+	}
+	o.projectID, o.content = id, nil
+	if id != uuid.Nil {
+		o.content = o.client.Project(id)
+	}
+	if !o.mounted {
+		return
+	}
+	o.scenes, o.widgets, o.widgetsSceneID, o.tags = nil, nil, uuid.Nil, tagstate.Tags{}
+	o.selectedSceneID = uuid.Nil
+	uiutil.StoreID(o.compoCtx, sceneStorageKey, uuid.Nil)
+	o.reload(o.compoCtx, eventlog.ReloadTargets{Scenes: true, Tags: true})
 }
 
 func (o *Operation) reload(ctx app.Context, targets eventlog.ReloadTargets) {
@@ -96,6 +120,9 @@ func (o *Operation) selectScene(ctx app.Context, sceneID uuid.UUID) {
 }
 
 func (o *Operation) Render() app.UI {
+	if o.content == nil {
+		return uiutil.NoProject()
+	}
 	return app.Div().
 		Style("display", "flex").
 		Style("flex-direction", "column").

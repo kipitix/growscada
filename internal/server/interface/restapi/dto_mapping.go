@@ -10,6 +10,18 @@ import (
 // Conversions between the server API contract (apiv0) and the application
 // layer's DTOs.
 
+func newProjectResponse(p appdto.Project) apiv0.ProjectResponse {
+	return apiv0.ProjectResponse{ID: p.ID, Name: p.Name, Version: p.Version}
+}
+
+func newGetProjectsResponse(list []appdto.Project) apiv0.GetProjectsResponse {
+	items := make([]apiv0.ProjectResponse, len(list))
+	for i, p := range list {
+		items[i] = newProjectResponse(p)
+	}
+	return apiv0.GetProjectsResponse{Projects: items}
+}
+
 // newTagResponse converts an app-level Tag DTO to an apiv0.TagResponse DTO.
 func newTagResponse(t appdto.Tag) apiv0.TagResponse {
 	return apiv0.TagResponse{

@@ -29,8 +29,14 @@ type Project struct {
 	// element is unmounted (e.g. a tab that turns into its rename input), which
 	// would lose the result and leave a Reloader loading forever.
 	compoCtx  app.Context
+	mounted   bool
 	ThemeMode string // exported so go-app detects theme changes and re-renders
 	client    *apiclient.Client
+	// projectID is the project shown, uuid.Nil if none; content is the client
+	// of its content, nil if none (SetProject). WidgetTypes are the server's,
+	// shown whatever the project.
+	projectID uuid.UUID
+	content   *apiclient.ProjectClient
 
 	activeSubTab projectSubTab
 
@@ -158,7 +164,7 @@ func NewProject(client *apiclient.Client) *Project {
 }
 
 func (p *Project) OnMount(ctx app.Context) {
-	p.compoCtx = ctx
+	p.compoCtx, p.mounted = ctx, true
 	ctx.ObserveState("theme", &p.ThemeMode)
 	p.widgetTypeWidth = 180
 	p.propertiesWidth = 260
@@ -181,6 +187,40 @@ func (p *Project) OnMount(ctx app.Context) {
 	p.loadTags(ctx)
 
 	p.handleServerEvents(ctx)
+}
+
+// SetProject shows the project id (uuid.Nil: none). What was shown of
+// another project is dropped, its selection and unsaved edits with it, and
+// the new project's content is loaded. Before the Project is mounted it only
+// remembers the project, whose content OnMount loads with the selection
+// restored.
+func (p *Project) SetProject(id uuid.UUID) {
+	if id == p.projectID {
+		return
+	}
+	p.projectID, p.content = id, nil
+	if id != uuid.Nil {
+		p.content = p.client.Project(id)
+	}
+	if !p.mounted {
+		return
+	}
+	ctx := p.compoCtx
+	p.scenes, p.widgets, p.tags = nil, nil, tagstate.Tags{}
+	p.sceneVersions.Forget()
+	p.sceneStates.Forget()
+	clear(p.staleScenes)
+	p.widgetsReloadDeferred = false
+	p.selectedSceneID, p.selectedTagID = uuid.Nil, uuid.Nil
+	uiutil.StoreID(ctx, sceneIDKey, uuid.Nil)
+	uiutil.StoreID(ctx, tagIDKey, uuid.Nil)
+	p.clearWidgetSelection(ctx)
+	p.sceneEdit = sceneEditFields{}
+	p.editingSceneID, p.editingSceneName = uuid.Nil, ""
+	p.creatingTag, p.newTagName, p.newTagType = false, "", ""
+	p.simInputs = make(map[uuid.UUID]map[string]string)
+	p.loadScenes(ctx)
+	p.loadTags(ctx)
 }
 
 // ── Input simulation ──────────────────────────────────────────────────────────
@@ -243,6 +283,9 @@ func (p *Project) findTag(id uuid.UUID) (apiv0.TagResponse, bool) {
 // ── Render ────────────────────────────────────────────────────────────────────
 
 func (p *Project) Render() app.UI {
+	if p.content == nil {
+		return uiutil.NoProject()
+	}
 	return app.Div().
 		Style("display", "flex").
 		Style("flex-direction", "column").

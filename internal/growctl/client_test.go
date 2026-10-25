@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/kipitix/growscada/contract"
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/growctl"
@@ -31,7 +33,7 @@ func TestListTagsMatching_ServerIgnoringFilter_FiltersClientSide(t *testing.T) {
 		t.Fatalf("NewPatternFilter: %v", err)
 	}
 
-	tags, err := client.ListTagsMatching(context.Background(), filter)
+	tags, err := client.TagsOf(apiv0.ProjectResponse{ID: uuid.New(), Name: "p"}).ListTagsMatching(context.Background(), filter)
 
 	if err != nil || len(tags) != 1 || tags[0].Name != "sim.a" {
 		t.Errorf("got %+v, %v; want only sim.a", tags, err)
@@ -52,14 +54,14 @@ func TestNewClient_WarnsOnceAboutAnOlderServer(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set(contract.SchemaVersionHeader, tc.server.String())
-				w.Write([]byte(`{"tags":[]}`))
+				w.Write([]byte(`{"projects":[]}`))
 			}))
 			defer srv.Close()
 			var warnings bytes.Buffer
 			client := growctl.NewClient(srv.URL, srv.Client(), &warnings)
 
 			for range 3 {
-				if _, err := client.ListTags(context.Background()); err != nil {
+				if _, err := client.ListProjects(context.Background()); err != nil {
 					t.Fatal(err)
 				}
 			}

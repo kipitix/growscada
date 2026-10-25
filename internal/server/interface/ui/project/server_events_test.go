@@ -10,9 +10,9 @@ import (
 	"github.com/google/uuid"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
-	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
+	"github.com/kipitix/growscada/internal/server/servertest"
 )
 
 // requestLog is a transport that records the requests sent through it.
@@ -40,7 +40,7 @@ func (l *requestLog) take() []string {
 
 // mountLogged mounts a Project whose requests are recorded, and forgets the
 // requests of its mounting.
-func mountLogged(t *testing.T, url string, api *apiclient.Client) (*fixture, *requestLog) {
+func mountLogged(t *testing.T, url string, api *testAPI) (*fixture, *requestLog) {
 	t.Helper()
 	log := &requestLog{}
 	f := mountWith(t, url, api, &http.Client{Transport: log})
@@ -82,8 +82,11 @@ func twoScenes(t *testing.T) (f *fixture, log *requestLog, shown, other, typeID 
 	return f, log, shown, other, typeID
 }
 
-// scenePath is the request of the Scene id of the Scene id.
-func scenePath(id uuid.UUID) string { return "GET /api/v0/scenes/" + id.String() }
+// mainContent is the path of the content of the project Main the tests work in.
+var mainContent = apiv0.PathPrefix + apiv0.ProjectPath(servertest.MainProject.String())
+
+// scenePath is the request of the Scene id.
+func scenePath(id uuid.UUID) string { return "GET " + mainContent + "/scenes/" + id.String() }
 
 func TestWidgetEvent_SceneNotShown_RereadsThatSceneOnly(t *testing.T) {
 	f, log, _, other, typeID := twoScenes(t)
@@ -186,7 +189,7 @@ func TestTagUpdated_AppliesTheTagWithoutRereadingTags(t *testing.T) {
 
 	// Without its state, the Tags are reread.
 	f.event(apiv0.Event{Type: apiv0.EventTagUpdated, ID: tagID.String()})
-	if got := log.take(); !slices.Equal(got, []string{"GET /api/v0/tags"}) {
+	if got := log.take(); !slices.Equal(got, []string{"GET " + mainContent + "/tags"}) {
 		t.Errorf("requests: %v, want the Tags reread", got)
 	}
 }
@@ -306,7 +309,7 @@ func TestWidgetEvents_InSeveralScenesNotShown_RereadTheListOnce(t *testing.T) {
 
 	f.noToasts()
 	// The first Scene is reread by itself; the others, marked meanwhile, with the list.
-	if got, want := log.take(), []string{"GET /api/v0/scenes", scenePath(more[0])}; !slices.Equal(got, want) {
+	if got, want := log.take(), []string{"GET " + mainContent + "/scenes", scenePath(more[0])}; !slices.Equal(got, want) {
 		t.Errorf("requests: %v, want %v", got, want)
 	}
 	for _, sceneID := range more {

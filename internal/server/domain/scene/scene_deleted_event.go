@@ -3,6 +3,7 @@ package scene
 import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 )
 
 // SceneDeletedEvent is recorded by Scene.Delete.
@@ -16,11 +17,12 @@ type sceneDeletedEventImpl struct {
 
 var _ SceneDeletedEvent = (*sceneDeletedEventImpl)(nil)
 
-func NewSceneDeletedEvent(anID id.ID[Scene], opts ...event.EventOption) SceneDeletedEvent {
+func NewSceneDeletedEvent(anID id.ID[Scene], aProjectID id.ID[project.Project], opts ...event.EventOption) SceneDeletedEvent {
 	return &sceneDeletedEventImpl{
 		sceneEventImpl: sceneEventImpl{
-			Base:    event.NewBase(event.EventTypeSceneDeleted, opts...),
-			sceneID: anID,
+			Base:      event.NewBase(event.EventTypeSceneDeleted, opts...),
+			sceneID:   anID,
+			projectID: aProjectID,
 		},
 	}
 }

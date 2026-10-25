@@ -1,11 +1,11 @@
 info:
   name: post scenes
   type: http
-  seq: 19
+  seq: 24
 
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v0/scenes
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/scenes
   body:
     type: json
     data: |-

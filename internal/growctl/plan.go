@@ -116,3 +116,46 @@ func indexByName(server []ServerTag) map[string]ServerTag {
 	}
 	return byName
 }
+
+// ServerProject is a project that exists on the server.
+type ServerProject = apiv0.ProjectResponse
+
+// ProjectStep is one planned action on one project: ActionCreate or
+// ActionUnchanged (apply), ActionDelete or ActionNotFound (delete -f).
+// Projects are never pruned.
+type ProjectStep struct {
+	Action Action
+	Name   string
+	// Server is set for ActionUnchanged and ActionDelete.
+	Server ServerProject
+}
+
+// IsChange reports whether executing the step modifies the server.
+func (s ProjectStep) IsChange() bool {
+	return s.Action == ActionCreate || s.Action == ActionDelete
+}
+
+// PlanProjects computes the steps of the manifests' projects, in manifest
+// order, given those of them that exist on the server: apply creates the
+// missing ones (forDelete false), delete -f deletes the existing ones.
+func PlanProjects(manifests []ProjectManifest, server []ServerProject, forDelete bool) []ProjectStep {
+	byName := make(map[string]ServerProject, len(server))
+	for _, p := range server {
+		byName[p.Name] = p
+	}
+	steps := make([]ProjectStep, 0, len(manifests))
+	for _, m := range manifests {
+		existing, ok := byName[m.Name]
+		switch {
+		case ok && forDelete:
+			steps = append(steps, ProjectStep{Action: ActionDelete, Name: m.Name, Server: existing})
+		case ok:
+			steps = append(steps, ProjectStep{Action: ActionUnchanged, Name: m.Name, Server: existing})
+		case forDelete:
+			steps = append(steps, ProjectStep{Action: ActionNotFound, Name: m.Name})
+		default:
+			steps = append(steps, ProjectStep{Action: ActionCreate, Name: m.Name})
+		}
+	}
+	return steps
+}

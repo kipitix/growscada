@@ -2,6 +2,7 @@ package devicesim_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -31,6 +32,7 @@ func TestMain(m *testing.M) {
 }
 
 const e2eConfig = `
+project: Main
 defaultInterval: 20ms
 tags:
   - tag: sim.speed
@@ -57,7 +59,7 @@ func startSimulator(t *testing.T, yaml string, tagTypes map[string]string) *simu
 	s := &simulator{svc: svc, tags: make(map[string]appdto.Tag)}
 	initial := map[string]string{"integer": "0", "boolean": "false", "string": ""}
 	for name, tagType := range tagTypes {
-		created, err := svc.CreateTag(context.Background(), appdto.CreateTagInput{
+		created, err := svc.CreateTag(context.Background(), servertest.MainProject, appdto.CreateTagInput{
 			Name: name, Type: tagType, Value: initial[tagType], Quality: "bad",
 		})
 		if err != nil {
@@ -71,7 +73,7 @@ func startSimulator(t *testing.T, yaml string, tagTypes map[string]string) *simu
 		t.Fatalf("ReadConfig: %v", err)
 	}
 	cfg.Server = api.URL
-	link := devicelink.NewRESTLink(apiclient.New(cfg.Server, api.Client()))
+	link := devicelink.NewRESTLink(apiclient.New(cfg.Server, api.Client()), cfg.Project)
 	device := devicesim.New(cfg, link, devicesim.Options{
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
@@ -100,7 +102,7 @@ func startSimulator(t *testing.T, yaml string, tagTypes map[string]string) *simu
 // get reads a tag's current state from the server.
 func (s *simulator) get(t *testing.T, name string) appdto.Tag {
 	t.Helper()
-	got, err := s.svc.FindTagByID(context.Background(), s.tags[name].ID)
+	got, err := s.svc.FindTagByID(context.Background(), servertest.MainProject, s.tags[name].ID)
 	if err != nil {
 		t.Fatalf("find %s: %v", name, err)
 	}
@@ -191,7 +193,7 @@ func TestE2E_ConcurrentWriterConflictIsResolved(t *testing.T) {
 	for {
 		cur := s.get(t, "sim.speed")
 		var err error
-		theirs, err = s.svc.SetTagValueByID(context.Background(), appdto.UpdateTagInput{
+		theirs, err = s.svc.SetTagValueByID(context.Background(), servertest.MainProject, appdto.UpdateTagInput{
 			ID: cur.ID, Value: "-1000", Quality: "bad", Version: cur.Version,
 		})
 		if err == nil {
@@ -246,11 +248,26 @@ func TestE2E_RunFailsOnMissingTag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadConfig: %v", err)
 	}
-	link := devicelink.NewRESTLink(apiclient.New(api.URL, api.Client()))
+	link := devicelink.NewRESTLink(apiclient.New(api.URL, api.Client()), cfg.Project)
 
 	err = devicesim.New(cfg, link, devicesim.Options{}).Run(context.Background())
 
 	if err == nil || !strings.Contains(err.Error(), `"sim.speed"`) {
 		t.Errorf("got %v, want an error naming the missing tag", err)
+	}
+}
+
+func TestE2E_RunFailsOnMissingProject(t *testing.T) {
+	api, _ := servertest.StartAPI(t, postgres.DB(t))
+	cfg, err := devicesim.ReadConfig(strings.NewReader(strings.Replace(e2eConfig, "project: Main", "project: Nowhere", 1)))
+	if err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+	link := devicelink.NewRESTLink(apiclient.New(api.URL, api.Client()), cfg.Project)
+
+	err = devicesim.New(cfg, link, devicesim.Options{}).Run(context.Background())
+
+	if !errors.Is(err, devicelink.ErrProjectNotFound) || !strings.Contains(err.Error(), `"Nowhere"`) {
+		t.Errorf("got %v, want ErrProjectNotFound naming the project", err)
 	}
 }

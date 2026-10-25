@@ -2,6 +2,7 @@
 # tags its widgets are bound to, so the result is visible in Operation right
 # after `make db_up` / `make full_restart` (no growctl apply needed).
 #   make run_simulator_dashboard
+project: Main                   # the seeded project
 defaultInterval: 500ms
 tags:
   - tag: max_connections        # speedometer, 0..100

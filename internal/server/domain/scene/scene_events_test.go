@@ -7,6 +7,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
@@ -59,7 +60,7 @@ func assertPending(t *testing.T, sc Scene, want ...recorded) {
 func TestCreateScene_RecordsCreatedEventAtInitialVersion(t *testing.T) {
 	name, _ := NewSceneName("boiler_room")
 	size, _ := NewSceneSize(800, 600)
-	sc := CreateScene(id.NewID[Scene](), name, size, NewBackgroundHTML(""))
+	sc := CreateScene(id.NewID[Scene](), testProject, name, size, NewBackgroundHTML(""))
 
 	if sc.Version() != version.Initial[Scene]() {
 		t.Errorf("expected initial version, got %s", sc.Version())
@@ -165,9 +166,9 @@ func TestSceneDelete_RecordsWidgetDeletedForEachWidgetThenSceneDeleted(t *testin
 func TestWidgetEvents_AreNoSceneEvents(t *testing.T) {
 	widgetID, sceneID := id.NewID[Widget](), id.NewID[Scene]()
 	for _, e := range []event.Event{
-		NewWidgetCreatedEvent(widgetID, sceneID, id.NewID[library.WidgetType]()),
-		NewWidgetUpdatedEvent(widgetID, sceneID, id.NewID[library.WidgetType]()),
-		NewWidgetDeletedEvent(widgetID, sceneID),
+		NewWidgetCreatedEvent(widgetID, sceneID, testProject, id.NewID[library.WidgetType]()),
+		NewWidgetUpdatedEvent(widgetID, sceneID, testProject, id.NewID[library.WidgetType]()),
+		NewWidgetDeletedEvent(widgetID, sceneID, testProject),
 	} {
 		if _, ok := e.(SceneEvent); ok {
 			t.Errorf("%s is a SceneEvent: a type switch would take it for an event of the scene", e.Type())
@@ -177,12 +178,42 @@ func TestWidgetEvents_AreNoSceneEvents(t *testing.T) {
 		}
 	}
 	for _, e := range []event.Event{
-		NewSceneCreatedEvent(sceneID),
-		NewSceneUpdatedEvent(sceneID),
-		NewSceneDeletedEvent(sceneID),
+		NewSceneCreatedEvent(sceneID, testProject),
+		NewSceneUpdatedEvent(sceneID, testProject),
+		NewSceneDeletedEvent(sceneID, testProject),
 	} {
 		if _, ok := e.(SceneEvent); !ok {
 			t.Errorf("%s is no SceneEvent", e.Type())
 		}
+	}
+}
+
+// TestSceneEvents_NameTheScenesProject checks that every event a Scene records,
+// of itself and of its widgets, names its Project (ADR 0006).
+func TestSceneEvents_NameTheScenesProject(t *testing.T) {
+	wt := makeWidgetType(t, "value")
+	w := makeWidgetOf(t, wt, "w1", "value")
+	sc := makeStoredScene(t, w)
+	if sc.ProjectID() != testProject {
+		t.Fatalf("ProjectID = %s, want %s", sc.ProjectID(), testProject)
+	}
+	updated, err := sc.Update(sc.Version(), sc.Name(), sc.Size(), sc.BackgroundHTML())
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	added, err := updated.AddWidget(sc.Version(), makeWidgetOf(t, wt, "w2"), wt, tagTypesOf())
+	if err != nil {
+		t.Fatalf("AddWidget: %v", err)
+	}
+	reconciled, _ := added.ReconcileWith(wt, NewTagTypes(testProject, nil))
+	deleted := reconciled.Delete()
+	for _, e := range deleted.PendingEvents() {
+		content, ok := e.(project.ContentEvent)
+		if !ok || content.ProjectID() != testProject {
+			t.Errorf("%s does not name the scene's project %s", e.Type(), testProject)
+		}
+	}
+	if deleted.ProjectID() != testProject {
+		t.Errorf("a change kept project %s, want %s", deleted.ProjectID(), testProject)
 	}
 }

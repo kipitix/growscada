@@ -1,7 +1,7 @@
 info:
   name: get events (SSE stream)
   type: http
-  seq: 28
+  seq: 35
   tags:
     - manual
 
@@ -11,11 +11,13 @@ http:
   auth: inherit
 
 docs: |
-  Opens a Server-Sent Events stream of domain events published on the
-  server's EventBus (tag/widget/widget-type/scene created/updated/deleted,
-  plus client_connected/client_disconnected and system_ready). The type names
-  are the constants of contract/api/v0. One connection per client, no
-  history replay — only events published after connecting are sent.
+  Opens the server's Server-Sent Events stream: the events of the server's
+  own resources (project and widget-type created/updated/deleted), plus
+  client_connected/client_disconnected and system_ready. The events of a
+  project's content (tags, scenes, widgets) go to the project's stream, see
+  "get project events". The type names are the constants of
+  contract/api/v0. One connection per client, no history replay — only
+  events published after connecting are sent.
 
   Bruno sends the request and waits for the response body, so it will hang
   until the connection is closed (the stream never completes on its own);
@@ -30,7 +32,7 @@ docs: |
   `{"type":"widget_updated","timestamp":"2026-01-01T12:00:00Z","id":"<widget uuid>","scene_id":"<scene uuid>"}`.
 
   `tag_updated` additionally carries the Tag's full new state in `tag`, in
-  the same shape as `GET /api/v0/tags/{id}`, so clients need not read it back:
+  the same shape as `GET /api/v0/projects/{project}/tags/{id}`, so clients need not read it back:
   `{"type":"tag_updated","timestamp":"2026-01-01T12:00:00Z","id":"<uuid>","tag":{"id":"<uuid>","name":"pressure","type":"integer","value":"42","quality":"good","version":3}}`.
 
   The server caps the number of concurrent event streams (configurable via

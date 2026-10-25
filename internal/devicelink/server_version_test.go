@@ -19,14 +19,14 @@ func TestWarnOlderServer_LogsBothVersions(t *testing.T) {
 	older := versiontest.Older(apiv0.SchemaVersion())
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(contract.SchemaVersionHeader, older.String())
-		w.Write([]byte(`{"tags":[]}`))
+		w.Write([]byte(`{"widget_types":[]}`))
 	}))
 	defer srv.Close()
 	var log bytes.Buffer
 	client := apiclient.New(srv.URL, srv.Client(), WarnOlderServer(slog.New(slog.NewTextHandler(&log, nil))))
 
 	for range 2 {
-		if _, err := client.ListTags(context.Background()); err != nil {
+		if _, err := client.ListWidgetTypes(context.Background()); err != nil {
 			t.Fatal(err)
 		}
 	}

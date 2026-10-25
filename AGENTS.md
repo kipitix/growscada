@@ -19,9 +19,9 @@ All primary workflows go through `make`. **Always prefer `make <target>` over ru
 | `make install_tools` | Installs `goose` migration tool via `go install` |
 | `make build` | Builds everything: `build_server` + `build_growctl` + `build_simulator` |
 | `make build_server` | Compiles WASM frontend (`app.wasm`) and server binary to `bin/growscada_combined_server/` |
-| `make build_growctl` | Compiles the `growctl` CLI (declarative tag manifests, kubectl-style) to `bin/growctl/` |
+| `make build_growctl` | Compiles the `growctl` CLI (declarative project and tag manifests, kubectl-style) to `bin/growctl/` |
 | `make build_simulator` | Compiles the device simulator to `bin/growscada_device_simulator/` |
-| `make run_simulator` | `build_simulator` + runs it with `tests/device_simulator/example.yaml` (needs a running server and the tags from `tests/manifests/example_tags.yaml`) |
+| `make run_simulator` | `build_simulator` + runs it with `tests/device_simulator/example.yaml` (needs a running server and the tags from `tests/manifests/example_tags.yaml` in project `Main`) |
 | `make run_simulator_dashboard` | `build_simulator` + runs it with `tests/device_simulator/seed_dashboard.yaml`: drives the seeded tags bound to the "Main Dashboard" scene, visible in Operation right after `make db_up` / `make full_restart` |
 | `make run` | `build_server` + starts server + opens Chromium at `localhost:8080` |
 | `make db_up` | Starts the dev PostgreSQL container via Docker Compose; applies migrations and seeds automatically |
@@ -55,7 +55,7 @@ goose up
 
 `internal/` is split by application. The server's DDD layers live under `internal/server/`; the tools that talk to the server from outside sit next to it and talk to it over the REST API only. The shapes of everything that crosses a process or time boundary live in the public `contract/` package (ADR 0005), which every side may import. What else they may import depends on their role:
 
-- **Engineer tools** (`growctl`) may also import value objects from `internal/server/domain/` (tag name, type, quality, name matchers) to validate input the same way the server does. Never `application/`, `infrastructure/` or `interface/`.
+- **Engineer tools** (`growctl`) may also import value objects from `internal/server/domain/` (tag name, type, quality, name matchers, project name) to validate input the same way the server does. Never `application/`, `infrastructure/` or `interface/`.
 - **The Device side** (`devicelink`, `devicesim`, future protocol adapters) depends only on the REST contract (`apiclient` → `contract/api/v0`), never on `internal/server/domain/`: its own enums (`devicelink.TagType`, `devicelink.Quality`) mirror the API's strings, so adapters stay independent of the server's internals (ADR 0004).
 
 ```
@@ -88,8 +88,10 @@ Each subdomain owns its aggregate, value objects, and repository **interface**:
 
 | Package    | Aggregate / Concept |
 |------------|---------------------|
-| `tag/`     | `Tag` — atomic SCADA data point with type, value, quality (`Good/Bad/Uncertain`); its events (`TagCreatedEvent`, …) |
-| `scene/`   | `Scene` — named canvas (mnemonic screen); immutable aggregate whose methods (`AddWidget`, `UpdateWidget`, `RemoveWidget`, `Update`, `ReconcileWith`, `Delete`) return a new Scene; Scene and Widget events |
+| `project/` | `Project` — unit of isolation (ADR 0006): name unique among the live Projects of its Organization; immutable (`Rename`, `Delete` marks it deleted); `ProjectEvent` (its own events) and `ContentEvent` (events of its Tags, Scenes, Widgets, which name the Project) |
+| `organization/` | `Organization` — identity marker of the tenant; the server runs with the one the migrations create |
+| `tag/`     | `Tag` — atomic SCADA data point with type, value, quality (`Good/Bad/Uncertain`), of one Project (`ProjectID`, immutable); its events (`TagCreatedEvent`, …) |
+| `scene/`   | `Scene` — named canvas (mnemonic screen) of one Project, binding only Tags of it (`TagTypes` are read for a Project); immutable aggregate whose methods (`AddWidget`, `UpdateWidget`, `RemoveWidget`, `Update`, `ReconcileWith`, `Delete`) return a new Scene; Scene and Widget events |
 | `scene/`   | `Widget` — entity of the Scene aggregate: instance of a WidgetType placed on a Scene, with position/size/rotation/transform matrix |
 | `library/` | `WidgetType` — reusable template: HTML template + JavaScript script, InputPorts; immutable (`Update`, `Delete`); its events |
 | `event/`   | Base of domain events: `Event`, `Base`, `EventType` (every event name), `EventTimestamp`, `Recorder`. Imports no aggregate |
@@ -98,9 +100,11 @@ Each subdomain owns its aggregate, value objects, and repository **interface**:
 
 ### Application Layer (`internal/server/application/`)
 
-Services (`TagService`, `WidgetTypeService`, `SceneService`) accept repository interfaces injected from `main.go`. A mutation: parse input → load the aggregate → call its method → `Save`/`Delete` → `appdto`. Services publish no events (ADR 0008).
+Services (`ProjectService`, `TagService`, `WidgetTypeService`, `SceneService`) accept repository interfaces injected from `main.go`. A mutation: parse input → load the aggregate → call its method → `Save`/`Delete` → `appdto`. Services publish no events (ADR 0008).
 
-**Events (ADR 0008).** One transaction changes one aggregate. The aggregate records its own events (`Create…` records Created, `Reconstitute…` — for repositories — nothing; changes and `Delete()` record theirs; see `event.Recorder`). The repository's `Save`/`Delete` writes the state (CAS on the loaded Version) and the pending events into the `outbox` table in one transaction; `outbox.Dispatcher` delivers them after commit, in the order of their transactions (`tx_id`; a row waits for every older transaction to end, so writers take no lock), to the `EventBus` (SSE) and deletes each row — at-least-once. Changes spanning aggregates are **policies** (`application.Policy`: `Name`, `JobKey(event)`, `Run(ctx, key)`): in the transaction that deletes a delivered row the dispatcher enqueues a job per policy that keys the event into `policy_jobs`; jobs with the same key merge (`generation`), and the `outbox.PolicyRunner` runs them apart from delivery, retrying a failure forever with backoff (1 s ×2 → 5 min). A policy brings state into line with what it reads when it runs, never with the event's payload (e.g. `NewWidgetReconciliationPolicy`: Widgets ↔ their changed WidgetType and the Tags they bind, each Scene in its own transaction; `NewUnbindDeletedTagPolicy`: a deleted Tag's PortBindings removed from every Scene, ADR 0010). Operations that state no expected Version (deletes, policies) go through `retryOnRace`: on a write race they reread and retry, after 3 lost races → conflict (409). A Tag is deleted without CAS: after creation only its value changes.
+**Projects (ADR 0006).** The repositories of a Project's content are opened per Project: `ProjectScopes.ForProject(p)` → `Tags()`, `Scenes()`, every query scoped by `project_id`; saving an aggregate of another Project through them is an error. `ProjectContent` (Tag and Scene services) first checks that the Project is live and of the server's Organization (`ErrProjectNotFound` → 404 of the Project), then opens its scope. Deleting a Project only marks it; `NewProjectCleanupPolicy` deletes its Scenes, then its Tags, each with its own events, and the Project's row last (FKs without CASCADE); it also keys `tag_created`/`scene_created`, so content created against a Project marked meanwhile is removed too. Job keys of a Project's content start with `project:<id>`.
+
+**Events (ADR 0008).** One transaction changes one aggregate. The aggregate records its own events (`Create…` records Created, `Reconstitute…` — for repositories — nothing; changes and `Delete()` record theirs; see `event.Recorder`). The repository's `Save`/`Delete` writes the state (CAS on the loaded Version) and the pending events into the `outbox` table in one transaction; `outbox.Dispatcher` delivers them after commit, in the order of their transactions (`tx_id`; a row waits for every older transaction to end, so writers take no lock), to the `EventBus` (SSE) and deletes each row — at-least-once. Changes spanning aggregates are **policies** (`application.Policy`: `Name`, `JobKey(event)`, `Run(ctx, key)`): in the transaction that deletes a delivered row the dispatcher enqueues a job per policy that keys the event into `policy_jobs`; jobs with the same key merge (`generation`), and the `outbox.PolicyRunner` runs them apart from delivery, retrying a failure forever with backoff (1 s ×2 → 5 min). A policy brings state into line with what it reads when it runs, never with the event's payload (e.g. `NewWidgetReconciliationPolicy`: Widgets ↔ their changed WidgetType and the Tags they bind, each Scene in its own transaction; `NewUnbindDeletedTagPolicy`: a deleted Tag's PortBindings removed from every Scene of its Project, ADR 0010; `NewProjectCleanupPolicy`: see Projects). Operations that state no expected Version (deletes, policies) go through `retryOnRace`: on a write race they reread and retry, after 3 lost races → conflict (409). A Tag is deleted without CAS: after creation only its value changes.
 
 `appdto/` structs are the boundary between the domain and the outside world — not the REST DTOs.
 
@@ -108,19 +112,21 @@ Services (`TagService`, `WidgetTypeService`, `SceneService`) accept repository i
 
 - **PostgreSQL repositories** implement domain repository interfaces using `database/sql` + `lib/pq`.
 - **Migrations** live in `internal/server/infrastructure/postgres/migrations/` and are managed with [Goose](https://github.com/pressly/goose). The debug `docker-compose.yaml` automatically applies migrations and seed data on `make db_up`.
-- **Outbox** (`postgres/outbox/`): `Append` (called by the repositories' shared `aggregateStore` template), the internal event codec (not a contract) and the `Dispatcher` (`Run`, `Notify` — wired to repositories via `repositories.NotifyOnCommit`, `DrainOnce` for deterministic tests; `WithPolicyRunner` makes it enqueue policy jobs) and the `PolicyRunner` (`Run` — woken by the dispatcher and by the timer of the next due job, `RunDueOnce` for deterministic tests); the policy registry is assembled in `main.go`. One dispatcher and one runner per database.
+- **Repositories of a Project's content** (`NewProjectScopes`, `NewTagRepositoryPostgres(db, project)`, `NewSceneRepositoryPostgres(db, project)`) carry the Project in their `aggregateStore`; `FindSoleOrganization` reads the one Organization the migrations create (`main.go` fails to start without exactly one).
+- **Outbox** (`postgres/outbox/`): `Append` (called by the repositories' shared `aggregateStore` template), the internal event codec (not a contract; the row and the payload carry the `project_id` of a content event) and the `Dispatcher` (`Run`, `Notify` — wired to repositories via `repositories.NotifyOnCommit`, `DrainOnce` for deterministic tests; `WithPolicyRunner` makes it enqueue policy jobs) and the `PolicyRunner` (`Run` — woken by the dispatcher and by the timer of the next due job, `RunDueOnce` for deterministic tests); the policy registry is assembled in `main.go`. One dispatcher and one runner per database.
 
 ### Interface Layer (`internal/server/interface/`)
 
 **REST API** (`internal/server/interface/restapi/`, port `:9090`):
 - Uses stdlib `http.ServeMux` with method-prefixed patterns (Go 1.22+).
 - All endpoints live under `apiv0.PathPrefix` (`/api/v0`); every response carries the `GrowSCADA-Schema-Version` header.
+- The content of a Project (Tags, Scenes, Widgets, its event stream) lives under `apiv0.ProjectPath(id)` (`/api/v0/projects/{project_id}/…`); Projects (`/projects`, `?name=`) and WidgetTypes are the server's.
 - CORS middleware applied globally.
 - Errors follow RFC 7807 Problem Details (`problems.go`).
 - Each resource has its own handler file (`tags.go`, `widgets.go`, etc.). JSON shapes are `contract/api/v0`; the conversions to/from `appdto` are in `dto_mapping.go`.
 - Request bodies are decoded strictly with `decodeRequest` (unknown field → 400); clients read responses tolerantly.
 
-**EventBus** (`internal/server/interface/eventbus/`): in-process bus feeding the SSE stream (`GET /api/v0/events`): domain events handed over by the outbox dispatcher, plus delivery's own events (`client_connected`/`client_disconnected`, `system_ready`). `event_bus_mqtt.go` is a stub.
+**EventBus** (`internal/server/interface/eventbus/`): in-process bus feeding the SSE streams: domain events handed over by the outbox dispatcher, plus delivery's own events (`client_connected`/`client_disconnected`, `system_ready`). The `eventHub` routes a `ContentEvent` to the stream of its Project (`GET /api/v0/projects/{id}/events`) and everything else — Projects, WidgetTypes, connections — to the server's (`GET /api/v0/events`). `event_bus_mqtt.go` is a stub.
 
 **PWA UI** (`internal/server/interface/ui/`, port `:8080`):
 - Built with [go-app v11](https://go-app.dev/) — compiled to WebAssembly, served by the same binary.
@@ -129,7 +135,8 @@ Services (`TagService`, `WidgetTypeService`, `SceneService`) accept repository i
   - **Project** — configure Scenes and place Widget instances on them.
   - **Operation** — runtime operator view.
   - **History** — event log viewer.
-- All REST calls go through one `*apiclient.Client` created in `root` and handed to the modes; components work on the `contract/api/v0` types directly (no UI copies) and keep IDs as `uuid.UUID` (`uuid.Nil` = none), parsing text only at LocalStorage/SSE/DOM boundaries (`uiutil.LoadID`, `StoreID`, `ParseID`).
+- Root's header holds the project switcher (`ui/projects.Switcher`: list, create, rename, delete with confirmation; the selection in LocalStorage, the first Project when it is gone). Project and Operation show the selected Project (`SetProject`, its `*apiclient.ProjectClient`; loads are keyed by it, so a response of another Project is dropped); Library does not depend on it. The event Bar keeps two SSE connections — the server's (`EventResync` on open) and the selected Project's (`EventProjectResync`).
+- All REST calls go through one `*apiclient.Client` created in `root` and handed to the modes (`Client.Project(id)` for a Project's content); components work on the `contract/api/v0` types directly (no UI copies) and keep IDs as `uuid.UUID` (`uuid.Nil` = none), parsing text only at LocalStorage/SSE/DOM boundaries (`uiutil.LoadID`, `StoreID`, `ParseID`).
 - A call is wrapped by `uiutil.Call(compoCtx, call, onOK, onErr)`: Async → call → Dispatch; `onErr == nil` shows `toast.FromError(err)` (the server's Problem Details, a Bad Response, a Network Error, or a Client Error). `uiutil.Do` hands value and error to one callback; `uiutil.Load` reloads a list through its `Reloader`, `uiutil.LoadFor` a list that belongs to a key (the Widgets of the selected Scene: a response for another key is dropped and the load reruns). The version a write states comes from a `uiutil.Versions` (max of every response; forgotten on a 409 and on resync; a request takes a `Mark` when sent, and a response sent before a forget does not bring the old version back): Project keeps one per Scene (`sceneVersions`), Library one per WidgetType. Lookups by ID go through `uiutil.FindByID` / `IdxByID`.
 - Root shows a non-dismissable banner while the server's `GrowSCADA-Schema-Version` differs from the UI's (`apiclient.OnServerVersion`).
 - UI tests mount components in go-app's `TestEngine` (`ui/uitest`; on the host go-app calls `OnPreRender`, not `OnMount`, so tests mount a `mountOnHost` wrapper) against the real API from `servertest.StartAPI`.
@@ -154,6 +161,8 @@ Tests of the tools that talk to the server (`internal/devicelink`, `internal/dev
 | **Widget** | Placed instance of a WidgetType on a Scene, bound to Tag IDs |
 | **Scene** | A mnemonic/synoptic display canvas |
 | **Quality** | Data reliability: `Bad`, `Uncertain`, `Good` |
+| **Project** | Unit of isolation owning Tags and Scenes; owned by an Organization |
+| **Organization** | The tenant owning Projects (one per server for now) |
 
 ## API Collections
 
@@ -162,7 +171,7 @@ Manual/exploratory API tests are maintained as [Bruno](https://www.usebruno.com/
 - **Static check** (`TestBrunoCollection` in `restapi` and `devicesim`, part of `make test`, no Docker): via `internal/brunotest`, every request must hit a route of the `routes()` table, every route must be covered by a request, and every body must decode strictly into the type that `requestBodies` (in the test) maps to its route.
 - **Run** (`make bruno_test`, GitHub CI only): both collections against the application in containers on a fresh seeded database, in `seq` order. Each request asserts its status, the `GrowSCADA-Schema-Version` header (server), `application/problem+json` on errors and one or two key fields on reads.
 
-Bruno tags: `manual` — left out of the run (`get_events`: the SSE stream never ends); `invalid-body` — a body meant to be rejected, skipped by the body check (it still has to cover its route).
+Bruno tags: `manual` — left out of the run (`get_events`, `get_project_events`: the SSE streams never end); `invalid-body` — a body meant to be rejected, skipped by the body check (it still has to cover its route).
 
 ## MCP Servers
 

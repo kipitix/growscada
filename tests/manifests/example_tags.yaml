@@ -1,6 +1,7 @@
-# Example growctl manifest: seeds tags for a test environment.
+# Example growctl manifest: seeds tags for a test environment, in the project
+# growctl works in (the seeded "Main" here).
 #   make build
-#   bin/growctl/growctl apply -f tests/manifests/example_tags.yaml
+#   bin/growctl/growctl apply -f tests/manifests/example_tags.yaml --project Main
 # initialValue/initialQuality are used only when a tag is created.
 apiVersion: growscada/v0.1
 kind: Tag

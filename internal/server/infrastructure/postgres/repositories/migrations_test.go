@@ -80,3 +80,128 @@ func TestMigrationWidgetsTypeIDForeignKey_BumpsVersionOfScenesThatLoseWidgets(t 
 		t.Errorf("scene that kept its widgets: expected version 7, got %d", versions[keptScene])
 	}
 }
+
+func TestMigrationOrganizationsAndProjects_PutsExistingContentIntoMain(t *testing.T) {
+	ctx := context.Background()
+	db, dir := migrationDB(t)
+	if err := goose.UpToContext(ctx, db, dir, 20261019000001); err != nil {
+		t.Fatalf("migrate to the previous version: %v", err)
+	}
+	mustExec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := db.ExecContext(ctx, query, args...); err != nil {
+			t.Fatalf("%s: %v", query, err)
+		}
+	}
+	typeID, sceneID, tagID := uuid.New(), uuid.New(), uuid.New()
+	mustExec(`INSERT INTO widget_types (id, name, html_template, script, script_language)
+	          VALUES ($1, 'type', '', '', 'javascript')`, typeID)
+	mustExec(`INSERT INTO scenes (id, name) VALUES ($1, 'scene')`, sceneID)
+	mustExec(`INSERT INTO widgets (id, name, type_id, scene_id) VALUES ($1, 'w', $2, $3)`, uuid.New(), typeID, sceneID)
+	mustExec(`INSERT INTO tags (id, name, type, value, quality) VALUES ($1, 'speed', 'integer', '0', 'good')`, tagID)
+	mustExec(`INSERT INTO outbox (type, payload) VALUES ('tag_created', $1), ('widget_type_updated', $2)`,
+		`{"timestamp":"2026-10-06T12:30:15Z","id":"`+tagID.String()+`"}`,
+		`{"timestamp":"2026-10-06T12:30:15Z","id":"`+typeID.String()+`"}`)
+	mustExec(`INSERT INTO policy_jobs (policy, job_key) VALUES
+	          ('unbind_deleted_tag', 'tag:' || $1::text),
+	          ('reconcile_widgets_with_widget_type', 'widget_type:' || $2::text || '/scene:' || $3::text),
+	          ('reconcile_widgets_with_widget_type', 'widget_type:' || $2::text)`, tagID, typeID, sceneID)
+
+	if err := goose.UpToContext(ctx, db, dir, 20261025000000); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	const main = "b0000000-0000-4000-8000-000000000001"
+	for _, table := range []string{"tags", "scenes", "widgets"} {
+		var others int
+		if err := db.QueryRowContext(ctx, `SELECT count(*) FROM `+table+` WHERE project_id <> $1`, main).Scan(&others); err != nil {
+			t.Fatalf("%s: %v", table, err)
+		}
+		if others != 0 {
+			t.Errorf("%s: %d rows outside the project Main", table, others)
+		}
+	}
+	var name string
+	if err := db.QueryRowContext(ctx, `SELECT name FROM projects WHERE id = $1 AND deleted_at IS NULL`, main).Scan(&name); err != nil || name != "Main" {
+		t.Errorf("project Main: %q, %v", name, err)
+	}
+	rows, err := db.QueryContext(ctx, `SELECT type, project_id, payload->>'project_id' FROM outbox ORDER BY seq`)
+	if err != nil {
+		t.Fatalf("outbox: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var eventType string
+		var column, payload sql.NullString
+		if err := rows.Scan(&eventType, &column, &payload); err != nil {
+			t.Fatal(err)
+		}
+		wantProject := eventType == "tag_created"
+		if (column.String == main) != wantProject || (payload.String == main) != wantProject {
+			t.Errorf("outbox %s: project_id %v, payload project_id %v", eventType, column, payload)
+		}
+	}
+	keys := map[string]bool{}
+	jobs, err := db.QueryContext(ctx, `SELECT job_key FROM policy_jobs`)
+	if err != nil {
+		t.Fatalf("policy_jobs: %v", err)
+	}
+	defer jobs.Close()
+	for jobs.Next() {
+		var key string
+		if err := jobs.Scan(&key); err != nil {
+			t.Fatal(err)
+		}
+		keys[key] = true
+	}
+	for _, want := range []string{
+		"project:" + main + "/tag:" + tagID.String(),
+		"widget_type:" + typeID.String() + "/project:" + main + "/scene:" + sceneID.String(),
+		"widget_type:" + typeID.String(),
+	} {
+		if !keys[want] {
+			t.Errorf("no job %q among %v", want, keys)
+		}
+	}
+}
+
+// TestSeedData_AppliesOnTheMigratedSchema keeps the seed of make db_up and of
+// make bruno_test in step with the migrations: the demo content in the
+// project Main, and the empty project Line 2.
+func TestSeedData_AppliesOnTheMigratedSchema(t *testing.T) {
+	ctx := context.Background()
+	db, dir := migrationDB(t)
+	if err := goose.UpContext(ctx, db, dir); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if err := goose.UpContext(ctx, db, filepath.Join(dir, "..", "test_data")); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	const main = "b0000000-0000-4000-8000-000000000001"
+	for _, table := range []string{"tags", "scenes", "widgets"} {
+		var inMain, all int
+		if err := db.QueryRowContext(ctx, `SELECT count(*) FILTER (WHERE project_id = $1), count(*) FROM `+table, main).Scan(&inMain, &all); err != nil {
+			t.Fatalf("%s: %v", table, err)
+		}
+		if all == 0 || inMain != all {
+			t.Errorf("%s: %d of %d rows in the project Main, want all of some", table, inMain, all)
+		}
+	}
+	var names []string
+	rows, err := db.QueryContext(ctx, `SELECT name FROM projects WHERE deleted_at IS NULL ORDER BY pk_id`)
+	if err != nil {
+		t.Fatalf("projects: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatal(err)
+		}
+		names = append(names, name)
+	}
+	if strings.Join(names, ",") != "Main,Line 2" {
+		t.Errorf("projects %v, want Main and Line 2", names)
+	}
+}

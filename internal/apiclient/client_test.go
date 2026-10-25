@@ -20,6 +20,10 @@ import (
 	"github.com/kipitix/growscada/internal/apiclient"
 )
 
+// testProject is the project whose content the tests ask for; the fake
+// servers answer whatever path they are asked.
+var testProject = uuid.MustParse("b0000000-0000-4000-8000-000000000001")
+
 func TestFindTagByName_ServerIgnoringNameFilter_MatchesByName(t *testing.T) {
 	// A server that predates ?name= returns every tag.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -31,12 +35,12 @@ func TestFindTagByName_ServerIgnoringNameFilter_MatchesByName(t *testing.T) {
 	defer srv.Close()
 	client := apiclient.New(srv.URL, srv.Client())
 
-	found, ok, err := client.FindTagByName(context.Background(), "wanted")
+	found, ok, err := client.Project(testProject).FindTagByName(context.Background(), "wanted")
 	if err != nil || !ok || found.Name != "wanted" {
 		t.Errorf("wanted: got %+v, %v, %v", found, ok, err)
 	}
 
-	_, ok, err = client.FindTagByName(context.Background(), "missing")
+	_, ok, err = client.Project(testProject).FindTagByName(context.Background(), "missing")
 	if err != nil || ok {
 		t.Errorf("missing: expected not found, got ok=%v err=%v", ok, err)
 	}
@@ -49,9 +53,9 @@ func TestListTags_WrongServer404_ErrorNamesRequest(t *testing.T) {
 	defer srv.Close()
 	client := apiclient.New(srv.URL, srv.Client())
 
-	_, err := client.ListTags(context.Background())
+	_, err := client.Project(testProject).ListTags(context.Background())
 
-	want := "GET " + srv.URL + "/api/v0/tags: 404 Not Found"
+	want := "GET " + srv.URL + "/api/v0/projects/" + testProject.String() + "/tags: 404 Not Found"
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Errorf("error: got %v, want it to contain %q", err, want)
 	}
@@ -84,16 +88,16 @@ func TestRequests_StateSchemaVersionOnlyWithBody(t *testing.T) {
 	client := apiclient.New(srv.URL, srv.Client())
 	ctx := context.Background()
 
-	if _, err := client.ListTags(ctx); err != nil {
+	if _, err := client.Project(testProject).ListTags(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := client.CreateTag(ctx, apiv0.CreateTagRequest{Name: "t", Type: "integer", Value: "0", Quality: "good"}); err != nil {
+	if _, err := client.Project(testProject).CreateTag(ctx, apiv0.CreateTagRequest{Name: "t", Type: "integer", Value: "0", Quality: "good"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := client.SetTagValue(ctx, uuid.New(), "1", "good", 1); err != nil {
+	if _, err := client.Project(testProject).SetTagValue(ctx, uuid.New(), "1", "good", 1); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := client.DeleteTag(ctx, uuid.New()); err != nil {
+	if _, err := client.Project(testProject).DeleteTag(ctx, uuid.New()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -121,7 +125,7 @@ func TestStatusError_CarriesTheProblem(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := apiclient.New(srv.URL, srv.Client()).UpdateScene(context.Background(), uuid.New(), apiv0.UpdateSceneRequest{})
+	_, err := apiclient.New(srv.URL, srv.Client()).Project(testProject).UpdateScene(context.Background(), uuid.New(), apiv0.UpdateSceneRequest{})
 
 	var se *apiclient.StatusError
 	if !errors.As(err, &se) {
@@ -154,7 +158,7 @@ func TestStatusError_NotProblemDetails_TitledByStatus(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := apiclient.New(srv.URL, srv.Client()).ListScenes(context.Background())
+	_, err := apiclient.New(srv.URL, srv.Client()).Project(testProject).ListScenes(context.Background())
 
 	var se *apiclient.StatusError
 	if !errors.As(err, &se) {
@@ -175,7 +179,7 @@ func TestStatusError_JSONNotProblemDetails_KeepsTheBody(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := apiclient.New(srv.URL, srv.Client()).ListScenes(context.Background())
+	_, err := apiclient.New(srv.URL, srv.Client()).Project(testProject).ListScenes(context.Background())
 
 	var se *apiclient.StatusError
 	if !errors.As(err, &se) {
@@ -196,10 +200,10 @@ func TestDelete_EmptyBody_Succeeds(t *testing.T) {
 	defer srv.Close()
 	client := apiclient.New(srv.URL, srv.Client())
 
-	if _, err := client.DeleteTag(context.Background(), uuid.New()); err != nil {
+	if _, err := client.Project(testProject).DeleteTag(context.Background(), uuid.New()); err != nil {
 		t.Errorf("delete: %v", err)
 	}
-	if _, err := client.GetTag(context.Background(), uuid.New()); err == nil {
+	if _, err := client.Project(testProject).GetTag(context.Background(), uuid.New()); err == nil {
 		t.Error("get with an empty body: want an error")
 	}
 }
@@ -211,7 +215,7 @@ func TestDelete_BodyNotJSON_Succeeds(t *testing.T) {
 	defer srv.Close()
 	client := apiclient.New(srv.URL, srv.Client())
 
-	if _, err := client.DeleteTag(context.Background(), uuid.New()); err != nil {
+	if _, err := client.Project(testProject).DeleteTag(context.Background(), uuid.New()); err != nil {
 		t.Errorf("delete: %v", err)
 	}
 }
@@ -223,7 +227,7 @@ func TestDelete_BodyCutShort_LeavesZero(t *testing.T) {
 	defer srv.Close()
 	client := apiclient.New(srv.URL, srv.Client())
 
-	deleted, err := client.DeleteWidget(context.Background(), uuid.New(), uuid.New())
+	deleted, err := client.Project(testProject).DeleteWidget(context.Background(), uuid.New(), uuid.New())
 	if err != nil {
 		t.Fatalf("delete: %v", err)
 	}
@@ -250,7 +254,7 @@ func TestResponses_ReuseTheConnection(t *testing.T) {
 	client := apiclient.New(srv.URL, srv.Client())
 
 	for range 3 {
-		if _, err := client.GetTag(context.Background(), uuid.New()); err != nil {
+		if _, err := client.Project(testProject).GetTag(context.Background(), uuid.New()); err != nil {
 			t.Fatalf("get: %v", err)
 		}
 	}
@@ -262,7 +266,7 @@ func TestResponses_ReuseTheConnection(t *testing.T) {
 func TestRequest_CannotBeBuilt_IsNoNetworkError(t *testing.T) {
 	client := apiclient.New("http://bad host:port", http.DefaultClient)
 
-	_, err := client.ListTags(context.Background())
+	_, err := client.Project(testProject).ListTags(context.Background())
 
 	var ue *url.Error
 	if err == nil || errors.As(err, &ue) {
@@ -281,7 +285,7 @@ func TestOnServerVersion_SeveralAreAllCalled(t *testing.T) {
 		apiclient.OnServerVersion(func(contract.SchemaVersion) { calls = append(calls, "first") }),
 		apiclient.OnServerVersion(func(contract.SchemaVersion) { calls = append(calls, "second") }))
 
-	client.ListTags(context.Background())
+	client.Project(testProject).ListTags(context.Background())
 
 	if want := []string{"first", "second"}; !slices.Equal(calls, want) {
 		t.Errorf("got %v, want %v", calls, want)
@@ -313,7 +317,7 @@ func TestOnServerVersion(t *testing.T) {
 			client := apiclient.New(srv.URL, srv.Client(),
 				apiclient.OnServerVersion(func(v contract.SchemaVersion) { got = append(got, v) }))
 
-			client.ListTags(context.Background())
+			client.Project(testProject).ListTags(context.Background())
 
 			if !slices.Equal(got, tc.want) {
 				t.Errorf("got %v, want %v", got, tc.want)
@@ -331,7 +335,7 @@ func TestResponse_UnknownFields_AreSkipped(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	tags, err := apiclient.New(srv.URL, srv.Client()).ListTags(context.Background())
+	tags, err := apiclient.New(srv.URL, srv.Client()).Project(testProject).ListTags(context.Background())
 	if err != nil || len(tags) != 1 || tags[0].Version != 3 {
 		t.Fatalf("got %+v, %v", tags, err)
 	}

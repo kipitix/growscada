@@ -33,6 +33,9 @@ var (
 	EventTypeSceneDeleted       = EventType{eventType: 13}
 	EventTypeClientConnected    = EventType{eventType: 14}
 	EventTypeClientDisconnected = EventType{eventType: 15}
+	EventTypeProjectCreated     = EventType{eventType: 16}
+	EventTypeProjectUpdated     = EventType{eventType: 17}
+	EventTypeProjectDeleted     = EventType{eventType: 18}
 )
 
 // eventTypeNames is the single source of truth for known event types:
@@ -57,6 +60,9 @@ var eventTypeNames = []struct {
 	{EventTypeSceneDeleted, "scene_deleted"},
 	{EventTypeClientConnected, "client_connected"},
 	{EventTypeClientDisconnected, "client_disconnected"},
+	{EventTypeProjectCreated, "project_created"},
+	{EventTypeProjectUpdated, "project_updated"},
+	{EventTypeProjectDeleted, "project_deleted"},
 }
 
 // AllEventTypes returns every known EventType.

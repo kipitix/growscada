@@ -15,7 +15,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
-	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
 
@@ -27,13 +26,7 @@ func cleanWidgetTypes(t *testing.T) {
 }
 
 func newRouterWithWidgetTypes() *restapi.APIRouter {
-	tagRepo := repositories.NewTagRepositoryPostgres(testDB())
-	tagSvc := application.NewTagService(tagRepo)
-	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB())
-	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB())
-	wtSvc := application.NewWidgetTypeService(wtRepo)
-	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, tagRepo)
-	return restapi.NewRouter(tagSvc, wtSvc, sceneSvc, eventbus.NewEventBus(), 100)
+	return newServices().router()
 }
 
 func createWidgetTypeViaService(t *testing.T, input appdto.WidgetTypeInput) appdto.WidgetType {
@@ -295,12 +288,9 @@ func TestPutWidgetTypesByID_InvalidUUID_Returns400(t *testing.T) {
 
 func TestPutWidgetTypesByID_Conflict_Returns409(t *testing.T) {
 	svc := &stubWidgetTypeService{updateErr: library.ErrWidgetTypeConflict}
-	tagRepo := repositories.NewTagRepositoryPostgres(testDB())
-	tagSvc := application.NewTagService(tagRepo)
-	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB())
-	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB())
-	sceneSvc := application.NewSceneService(sceneRepo, wtRepo, tagRepo)
-	router := restapi.NewRouter(tagSvc, svc, sceneSvc, eventbus.NewEventBus(), 100)
+	services := newServices()
+	services.widgetTypes = svc
+	router := services.router()
 
 	body, _ := json.Marshal(apiv0.UpdateWidgetTypeRequest{
 		Name: "x", HtmlTemplate: "<div/>", Script: "x", ScriptLanguage: "lua",

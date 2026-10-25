@@ -33,6 +33,6 @@ func TestSchemaIsCommitted(t *testing.T) {
 		ID:    "https://github.com/kipitix/growscada/schemas/manifest/" + SchemaVersion().String() + ".json",
 		Title: "GrowSCADA growctl manifest " + SchemaVersion().String(),
 		Tag:   "yaml",
-		Roots: []any{TagDocument{}},
+		Roots: []any{TagDocument{}, ProjectDocument{}},
 	})
 }

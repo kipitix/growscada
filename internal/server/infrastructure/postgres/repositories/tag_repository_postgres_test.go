@@ -10,16 +10,23 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 	"github.com/pressly/goose/v3"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
+
+// mainProject is the project "Main" the migrations create: the tests' content
+// lives in it unless they make projects of their own.
+var mainProject = id.NewID(id.IDWithUUID[project.Project](uuid.MustParse("b0000000-0000-4000-8000-000000000001")))
 
 var (
 	testDB *sql.DB
@@ -100,7 +107,7 @@ func makeTag(t *testing.T, name string, repo tag.TagRepository) tag.Tag {
 	if err != nil {
 		t.Fatalf("NewTagValue: %v", err)
 	}
-	newTag, err := tag.ReconstituteTag(id, tagName, tagType, value, tag.TagQualityGood, version.Initial[tag.Tag]())
+	newTag, err := tag.ReconstituteTag(id, mainProject, tagName, tagType, value, tag.TagQualityGood, version.Initial[tag.Tag]())
 	if err != nil {
 		t.Fatalf("NewTag: %v", err)
 	}
@@ -108,7 +115,7 @@ func makeTag(t *testing.T, name string, repo tag.TagRepository) tag.Tag {
 }
 
 func TestNextID_ReturnsUniqueIDs(t *testing.T) {
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 
 	id1 := repo.NextID()
 	id2 := repo.NextID()
@@ -120,7 +127,7 @@ func TestNextID_ReturnsUniqueIDs(t *testing.T) {
 
 func TestSave_NewTag_InsertsSuccessfully(t *testing.T) {
 	cleanTags(t)
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	ctx := context.Background()
 
 	newTag := makeTag(t, "temperature", repo)
@@ -134,7 +141,7 @@ func TestSave_NewTag_InsertsSuccessfully(t *testing.T) {
 
 func TestSave_DuplicateID_ReturnsError(t *testing.T) {
 	cleanTags(t)
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	ctx := context.Background()
 
 	newTag := makeTag(t, "temperature", repo)
@@ -142,7 +149,7 @@ func TestSave_DuplicateID_ReturnsError(t *testing.T) {
 		t.Fatalf("first Save failed: %v", err)
 	}
 
-	duplicate, _ := tag.ReconstituteTag(newTag.ID(), newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), version.Initial[tag.Tag]())
+	duplicate, _ := tag.ReconstituteTag(newTag.ID(), mainProject, newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), version.Initial[tag.Tag]())
 	_, err := repo.Save(ctx, duplicate)
 
 	if err == nil {
@@ -152,7 +159,7 @@ func TestSave_DuplicateID_ReturnsError(t *testing.T) {
 
 func TestSave_ExistingTag_UpdatesSuccessfully(t *testing.T) {
 	cleanTags(t)
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	ctx := context.Background()
 
 	newTag := makeTag(t, "temperature", repo)
@@ -185,7 +192,7 @@ func TestSave_ExistingTag_UpdatesSuccessfully(t *testing.T) {
 
 func TestSave_StaleVersion_ReturnsError(t *testing.T) {
 	cleanTags(t)
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	ctx := context.Background()
 
 	newTag := makeTag(t, "temperature", repo)
@@ -195,7 +202,7 @@ func TestSave_StaleVersion_ReturnsError(t *testing.T) {
 
 	// version=100 while DB has version=1 → optimistic lock conflict
 	badVersion, _ := version.New[tag.Tag](version.WithNumber[tag.Tag](100))
-	staleTag, _ := tag.ReconstituteTag(newTag.ID(), newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), badVersion)
+	staleTag, _ := tag.ReconstituteTag(newTag.ID(), mainProject, newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), badVersion)
 	_, err := repo.Save(ctx, staleTag)
 
 	if err == nil {
@@ -205,7 +212,7 @@ func TestSave_StaleVersion_ReturnsError(t *testing.T) {
 
 func TestFindByID_ExistingTag_ReturnsTag(t *testing.T) {
 	cleanTags(t)
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	ctx := context.Background()
 
 	newTag := makeTag(t, "pressure", repo)
@@ -238,7 +245,7 @@ func TestFindByID_ExistingTag_ReturnsTag(t *testing.T) {
 
 func TestFindByID_NotFound_ReturnsErrTagNotFound(t *testing.T) {
 	cleanTags(t)
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	ctx := context.Background()
 
 	nonExistentID := repo.NextID()
@@ -251,7 +258,7 @@ func TestFindByID_NotFound_ReturnsErrTagNotFound(t *testing.T) {
 
 func TestFindAll_EmptyDB_ReturnsEmptySlice(t *testing.T) {
 	cleanTags(t)
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	ctx := context.Background()
 
 	tags, err := repo.FindAll(ctx)
@@ -266,7 +273,7 @@ func TestFindAll_EmptyDB_ReturnsEmptySlice(t *testing.T) {
 
 func TestFindAll_MultipleTags_ReturnsAll(t *testing.T) {
 	cleanTags(t)
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	ctx := context.Background()
 
 	tag1 := makeTag(t, "temperature", repo)
@@ -292,7 +299,7 @@ func TestFindAll_SortedByNameEvenAfterUpdates(t *testing.T) {
 	// Postgres returns unordered rows in storage order, and an UPDATE moves a
 	// row; the list must not reshuffle when tag values change.
 	cleanTags(t)
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	ctx := context.Background()
 
 	for _, name := range []string{"charlie", "alpha", "bravo"} {
@@ -344,7 +351,7 @@ func mustSaveTag(t *testing.T, repo tag.TagRepository, aTag tag.Tag) tag.Tag {
 
 func TestDelete_ExistingTag_TagIsRemovedFromDB(t *testing.T) {
 	cleanTags(t)
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	ctx := context.Background()
 
 	saved := mustSaveTag(t, repo, makeTag(t, "pump", repo))
@@ -362,7 +369,7 @@ func TestDelete_ExistingTag_TagIsRemovedFromDB(t *testing.T) {
 
 func TestDelete_ExistingTag_OtherTagsAreUnaffected(t *testing.T) {
 	cleanTags(t)
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	ctx := context.Background()
 
 	tag1 := mustSaveTag(t, repo, makeTag(t, "temperature", repo))
@@ -381,7 +388,7 @@ func TestDelete_ExistingTag_OtherTagsAreUnaffected(t *testing.T) {
 
 func TestDelete_NotFound_ReturnsErrTagNotFound(t *testing.T) {
 	cleanTags(t)
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	ctx := context.Background()
 
 	saved := mustSaveTag(t, repo, makeTag(t, "valve", repo))
@@ -398,7 +405,7 @@ func TestDelete_NotFound_ReturnsErrTagNotFound(t *testing.T) {
 
 func TestDelete_StaleVersion_DeletesTag(t *testing.T) {
 	cleanTags(t)
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	ctx := context.Background()
 
 	stale := mustSaveTag(t, repo, makeTag(t, "valve", repo))
@@ -419,7 +426,7 @@ func TestDelete_StaleVersion_DeletesTag(t *testing.T) {
 
 func TestSave_DuplicateName_ReturnsErrTagNameTaken(t *testing.T) {
 	cleanTags(t)
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	ctx := context.Background()
 
 	if _, err := repo.Save(ctx, makeTag(t, "temperature", repo)); err != nil {
@@ -435,7 +442,7 @@ func TestSave_DuplicateName_ReturnsErrTagNameTaken(t *testing.T) {
 
 func TestFindByName_ExistingTag_ReturnsTag(t *testing.T) {
 	cleanTags(t)
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	ctx := context.Background()
 
 	newTag := makeTag(t, "temperature", repo)
@@ -458,7 +465,7 @@ func TestFindByName_ExistingTag_ReturnsTag(t *testing.T) {
 
 func TestFindByName_NotFound_ReturnsErrTagNotFound(t *testing.T) {
 	cleanTags(t)
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	name, _ := tag.NewTagName("missing")
 
 	_, err := repo.FindByName(context.Background(), name)

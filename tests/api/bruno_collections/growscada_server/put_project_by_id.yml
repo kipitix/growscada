@@ -1,0 +1,37 @@
+info:
+  name: put project by id
+  type: http
+  seq: 29
+
+http:
+  method: PUT
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Line 3",
+        "version": 1
+      }
+  auth: inherit
+
+docs: |
+  Renames a project. `version` is the version the rename is based on; another
+  one returns `409 Conflict` (reload and retry).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.version'
+      operator: eq
+      value: '2'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

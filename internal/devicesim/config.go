@@ -26,6 +26,10 @@ var DefaultQuality = devicelink.QualityGood
 type Config struct {
 	// Server is the GrowSCADA REST API URL.
 	Server string `yaml:"server"`
+	// Project is the name of the project whose Tags the Device writes;
+	// required. Until Device Tokens exist (task 34) the configuration names
+	// it; the simulator looks it up when it starts.
+	Project string `yaml:"project"`
 	// Control is the listen address of the control API.
 	Control string `yaml:"control"`
 	// Autostart starts generating right away; otherwise on POST /control/device/start.
@@ -37,7 +41,7 @@ type Config struct {
 
 // TagConfig is one simulated tag.
 type TagConfig struct {
-	// Tag is the tag's unique name on the server.
+	// Tag is the tag's name, unique in the project.
 	Tag      string             `yaml:"tag"`
 	Interval *Duration          `yaml:"interval"`
 	Quality  devicelink.Quality `yaml:"quality"`
@@ -96,6 +100,9 @@ func (c *Config) applyDefaults() {
 // not known yet: the pattern/type compatibility is checked when the tags are
 // resolved on the server.
 func (c Config) Validate() error {
+	if c.Project == "" {
+		return errors.New("project (the project name) is required")
+	}
 	if c.DefaultInterval.D <= 0 {
 		return errors.New("defaultInterval must be positive")
 	}

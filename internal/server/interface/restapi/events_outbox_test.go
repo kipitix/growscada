@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
@@ -15,11 +14,11 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
 
-// TestEventsHandlers_GetEvents_DeliversCommittedChangesInCommitOrder runs the
+// TestEventsHandlers_GetProjectEvents_DeliversCommittedChangesInCommitOrder runs the
 // whole path of a domain event: a service saves an aggregate with its events
 // into the outbox, the dispatcher delivers them after commit to the EventBus,
 // and the SSE stream sends them to the client, in commit order.
-func TestEventsHandlers_GetEvents_DeliversCommittedChangesInCommitOrder(t *testing.T) {
+func TestEventsHandlers_GetProjectEvents_DeliversCommittedChangesInCommitOrder(t *testing.T) {
 	cleanTags(t)
 	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM outbox"); err != nil {
 		t.Fatalf("clean outbox: %v", err)
@@ -31,38 +30,34 @@ func TestEventsHandlers_GetEvents_DeliversCommittedChangesInCommitOrder(t *testi
 	dispatcher := outbox.NewDispatcher(testDB(), bus.Publish)
 	go dispatcher.Run(ctx)
 	onCommit := repositories.NotifyOnCommit(dispatcher.Notify)
-	tagRepo := repositories.NewTagRepositoryPostgres(testDB(), onCommit)
-	tagSvc := application.NewTagService(tagRepo)
-	sceneSvc := application.NewSceneService(
-		repositories.NewSceneRepositoryPostgres(testDB(), onCommit),
-		repositories.NewWidgetTypeRepositoryPostgres(testDB(), onCommit),
-		tagRepo)
+	services := newServices(onCommit)
+	tagSvc, sceneSvc := services.tags, services.scenes
 
-	h := restapi.NewEventsHandler(bus, 100)
+	h := restapi.NewEventsHandler(bus, services.projects, 100)
 	rec := newSyncRecorder()
-	cancel, done := runEventsHandler(t, h, rec)
+	cancel, done := runProjectEventsHandler(t, h, rec, mainProject)
 	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), ": connected") })
 
-	created, err := tagSvc.CreateTag(ctx, appdto.CreateTagInput{Name: "level", Type: "integer", Value: "0", Quality: "good"})
+	created, err := tagSvc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "level", Type: "integer", Value: "0", Quality: "good"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
-	sc, err := sceneSvc.CreateScene(ctx, appdto.SceneInput{Name: "ordered", Width: 800, Height: 600})
+	sc, err := sceneSvc.CreateScene(ctx, mainProject, appdto.SceneInput{Name: "ordered", Width: 800, Height: 600})
 	if err != nil {
 		t.Fatalf("CreateScene: %v", err)
 	}
 	ver := created.Version
 	for i := range 3 {
-		updated, err := tagSvc.SetTagValueByID(ctx, appdto.UpdateTagInput{ID: created.ID, Value: string(rune('1' + i)), Quality: "good", Version: ver})
+		updated, err := tagSvc.SetTagValueByID(ctx, mainProject, appdto.UpdateTagInput{ID: created.ID, Value: string(rune('1' + i)), Quality: "good", Version: ver})
 		if err != nil {
 			t.Fatalf("SetTagValueByID: %v", err)
 		}
 		ver = updated.Version
 	}
-	if _, err := sceneSvc.DeleteSceneByID(ctx, sc.ID); err != nil {
+	if _, err := sceneSvc.DeleteSceneByID(ctx, mainProject, sc.ID); err != nil {
 		t.Fatalf("DeleteSceneByID: %v", err)
 	}
-	if _, err := tagSvc.DeleteTagByID(ctx, created.ID); err != nil {
+	if _, err := tagSvc.DeleteTagByID(ctx, mainProject, created.ID); err != nil {
 		t.Fatalf("DeleteTagByID: %v", err)
 	}
 

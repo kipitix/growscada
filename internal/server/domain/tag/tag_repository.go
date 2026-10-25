@@ -12,14 +12,16 @@ var (
 	// ErrTagConflict is returned by Save when the stored version does not
 	// match, indicating a concurrent modification.
 	ErrTagConflict = errors.New("tag version conflict")
-	// ErrTagNameTaken is returned by Save when another tag already has the same name.
-	// A tag's name is its unique natural key (ADR 0003).
+	// ErrTagNameTaken is returned by Save when another tag of the same Project
+	// already has the name. Within its Project a tag's name is its unique
+	// natural key (ADR 0003).
 	ErrTagNameTaken = errors.New("tag name already taken")
 )
 
-// TagRepository - repository interface for storing and managing tags.
-// Defines operations for getting the next identifier,
-// saving a tag, and retrieving a tag by its identifier.
+// TagRepository - repository interface for storing and managing the tags of
+// one Project (ADR 0006): every read sees only the tags of that Project, so
+// a tag of another one is not found, and saving or deleting a tag of another
+// Project is a programming error.
 type TagRepository interface {
 	// NextID returns a new unique identifier for a tag
 	NextID() id.ID[Tag]
@@ -30,7 +32,8 @@ type TagRepository interface {
 	// once per Save; the returned tag carries the new one and no events.
 	// Returns ErrTagNotFound if the tag does not exist on update,
 	// ErrTagConflict if the stored version does not match, ErrTagNameTaken if
-	// another tag already has the same name, or an error on failure.
+	// another tag of the Project already has the same name, or an error on
+	// failure (a tag of another Project included).
 	Save(context.Context, Tag) (Tag, error)
 
 	// FindByID returns a tag by its identifier.
@@ -42,7 +45,7 @@ type TagRepository interface {
 	// Returns the types and nil on success, or nil and an error on failure.
 	FindTypesByIDs(context.Context, []id.ID[Tag]) (map[id.ID[Tag]]TagType, error)
 
-	// FindByName returns a tag by its unique name.
+	// FindByName returns a tag by its name, unique within the Project.
 	// Returns the tag and nil on success, ErrTagNotFound if no tag has that name, or an error on failure.
 	FindByName(context.Context, TagName) (Tag, error)
 

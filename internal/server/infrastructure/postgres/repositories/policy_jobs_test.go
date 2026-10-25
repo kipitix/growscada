@@ -88,7 +88,7 @@ func TestPolicyRunner_FailedJob_RetriedAfterPause_DeliveryNotHeldBack(t *testing
 	cleanOutbox(t)
 	cleanPolicyJobs(t)
 	const pause = 500 * time.Millisecond
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	first := createTag(t, repo, "first")
 	second := createTag(t, repo, "second")
 	firstKey, secondKey := first.ID().String(), second.ID().String()
@@ -108,7 +108,7 @@ func TestPolicyRunner_FailedJob_RetriedAfterPause_DeliveryNotHeldBack(t *testing
 	go func() { defer wg.Done(); d.Run(ctx) }()
 	go func() { defer wg.Done(); runner.Run(ctx) }()
 	defer func() { cancel(); wg.Wait() }()
-	repo = repositories.NewTagRepositoryPostgres(testDB, repositories.NotifyOnCommit(d.Notify))
+	repo = repositories.NewTagRepositoryPostgres(testDB, mainProject, repositories.NotifyOnCommit(d.Notify))
 
 	mustSaveTag(t, repo, first)
 	waitFor(t, "the first attempt", func() bool { return len(policy.runsOf(firstKey)) == 1 })
@@ -136,7 +136,7 @@ func TestPolicyRunner_StoppedWhileRunning_JobRunsAgainAfterStart(t *testing.T) {
 	cleanTags(t)
 	cleanOutbox(t)
 	cleanPolicyJobs(t)
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	mustSaveTag(t, repo, createTag(t, repo, "stopped"))
 
 	started := make(chan struct{})
@@ -197,7 +197,7 @@ func policyJobOf(t *testing.T, key string) (policyJobState, bool) {
 // enqueues a job of runner's policies.
 func enqueueTagCreated(t *testing.T, runner *outbox.PolicyRunner, name string) tag.Tag {
 	t.Helper()
-	repo := repositories.NewTagRepositoryPostgres(testDB)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	saved := mustSaveTag(t, repo, createTag(t, repo, name))
 	if _, err := outbox.NewDispatcher(testDB, func(event.Event) {}, outbox.WithPolicyRunner(runner)).DrainOnce(context.Background()); err != nil {
 		t.Fatalf("DrainOnce: %v", err)

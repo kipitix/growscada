@@ -16,6 +16,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/domain/version"
@@ -29,6 +30,9 @@ type payload struct {
 	Timestamp time.Time `json:"timestamp"`
 	// ID is the ID of the aggregate (or Widget) the event is about.
 	ID uuid.UUID `json:"id"`
+	// ProjectID is the Project whose content (Tag, Scene, Widget) the event
+	// is about; the outbox row's project_id holds it too.
+	ProjectID *uuid.UUID `json:"project_id,omitempty"`
 	// SceneID is the Scene holding the Widget of a Widget event.
 	SceneID *uuid.UUID `json:"scene_id,omitempty"`
 	// WidgetTypeID is the WidgetType of the Widget of a widget_created or
@@ -54,6 +58,12 @@ type tagState struct {
 // (connection lifecycle, system) are never stored and fail to encode.
 func Encode(e event.Event) ([]byte, error) {
 	p := payload{Timestamp: e.Timestamp().Time()}
+	if content, ok := e.(project.ContentEvent); ok {
+		if _, own := e.(project.ProjectEvent); !own {
+			projectID := content.ProjectID().UUID()
+			p.ProjectID = &projectID
+		}
+	}
 	switch ev := e.(type) {
 	case tag.TagUpdatedEvent:
 		p.ID = ev.TagID().UUID()
@@ -82,6 +92,8 @@ func Encode(e event.Event) ([]byte, error) {
 		}
 	case scene.SceneEvent:
 		p.ID = ev.SceneID().UUID()
+	case project.ProjectEvent:
+		p.ID = ev.ProjectID().UUID()
 	default:
 		return nil, fmt.Errorf("cannot encode event %s: not a domain event", e.Type())
 	}
@@ -101,29 +113,45 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 	sceneID := id.NewID(id.IDWithUUID[scene.Scene](p.ID))
 	widgetID := id.NewID(id.IDWithUUID[scene.Widget](p.ID))
 
+	projectOfEvent := id.NewID(id.IDWithUUID[project.Project](p.ID))
+
 	switch eventType {
-	case event.EventTypeTagCreated:
-		return tag.NewTagCreatedEvent(tagID, ts), nil
-	case event.EventTypeTagUpdated:
-		t, err := decodeTagState(tagID, p.Tag)
-		if err != nil {
-			return nil, err
-		}
-		return tag.NewTagUpdatedEvent(t, ts), nil
-	case event.EventTypeTagDeleted:
-		return tag.NewTagDeletedEvent(tagID, ts), nil
 	case event.EventTypeWidgetTypeCreated:
 		return library.NewWidgetTypeCreatedEvent(widgetTypeID, ts), nil
 	case event.EventTypeWidgetTypeUpdated:
 		return library.NewWidgetTypeUpdatedEvent(widgetTypeID, ts), nil
 	case event.EventTypeWidgetTypeDeleted:
 		return library.NewWidgetTypeDeletedEvent(widgetTypeID, ts), nil
+	case event.EventTypeProjectCreated:
+		return project.NewProjectCreatedEvent(projectOfEvent, ts), nil
+	case event.EventTypeProjectUpdated:
+		return project.NewProjectUpdatedEvent(projectOfEvent, ts), nil
+	case event.EventTypeProjectDeleted:
+		return project.NewProjectDeletedEvent(projectOfEvent, ts), nil
+	}
+
+	// Events of a Project's content: the Project is stored beside them.
+	if p.ProjectID == nil {
+		return nil, fmt.Errorf("cannot decode %s payload: no project_id", eventType)
+	}
+	projectID := id.NewID(id.IDWithUUID[project.Project](*p.ProjectID))
+	switch eventType {
+	case event.EventTypeTagCreated:
+		return tag.NewTagCreatedEvent(tagID, projectID, ts), nil
+	case event.EventTypeTagUpdated:
+		t, err := decodeTagState(tagID, projectID, p.Tag)
+		if err != nil {
+			return nil, err
+		}
+		return tag.NewTagUpdatedEvent(t, ts), nil
+	case event.EventTypeTagDeleted:
+		return tag.NewTagDeletedEvent(tagID, projectID, ts), nil
 	case event.EventTypeSceneCreated:
-		return scene.NewSceneCreatedEvent(sceneID, ts), nil
+		return scene.NewSceneCreatedEvent(sceneID, projectID, ts), nil
 	case event.EventTypeSceneUpdated:
-		return scene.NewSceneUpdatedEvent(sceneID, ts), nil
+		return scene.NewSceneUpdatedEvent(sceneID, projectID, ts), nil
 	case event.EventTypeSceneDeleted:
-		return scene.NewSceneDeletedEvent(sceneID, ts), nil
+		return scene.NewSceneDeletedEvent(sceneID, projectID, ts), nil
 	}
 
 	// Widget events: the Scene that holds the widget is stored beside it.
@@ -134,20 +162,20 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 	switch eventType {
 	case event.EventTypeWidgetCreated, event.EventTypeWidgetUpdated:
 		if p.WidgetTypeID == nil {
-			return untypedWidgetEvent{Base: event.NewBase(eventType, ts), widgetID: widgetID, sceneID: holder}, nil
+			return untypedWidgetEvent{Base: event.NewBase(eventType, ts), widgetID: widgetID, sceneID: holder, projectID: projectID}, nil
 		}
 	}
 	switch eventType {
 	case event.EventTypeWidgetCreated:
-		return scene.NewWidgetCreatedEvent(widgetID, holder, id.NewID(id.IDWithUUID[library.WidgetType](*p.WidgetTypeID)), ts), nil
+		return scene.NewWidgetCreatedEvent(widgetID, holder, projectID, id.NewID(id.IDWithUUID[library.WidgetType](*p.WidgetTypeID)), ts), nil
 	case event.EventTypeWidgetUpdated:
 		typeID := id.NewID(id.IDWithUUID[library.WidgetType](*p.WidgetTypeID))
 		if p.ByReconciliation {
-			return scene.NewWidgetUpdatedByReconciliationEvent(widgetID, holder, typeID, ts), nil
+			return scene.NewWidgetUpdatedByReconciliationEvent(widgetID, holder, projectID, typeID, ts), nil
 		}
-		return scene.NewWidgetUpdatedEvent(widgetID, holder, typeID, ts), nil
+		return scene.NewWidgetUpdatedEvent(widgetID, holder, projectID, typeID, ts), nil
 	case event.EventTypeWidgetDeleted:
-		return scene.NewWidgetDeletedEvent(widgetID, holder, ts), nil
+		return scene.NewWidgetDeletedEvent(widgetID, holder, projectID, ts), nil
 	}
 	return nil, fmt.Errorf("cannot decode event of type %s: not a domain event", eventType)
 }
@@ -158,16 +186,18 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 // no policy keyed by the WidgetType enqueues a job for it.
 type untypedWidgetEvent struct {
 	event.Base
-	widgetID id.ID[scene.Widget]
-	sceneID  id.ID[scene.Scene]
+	widgetID  id.ID[scene.Widget]
+	sceneID   id.ID[scene.Scene]
+	projectID id.ID[project.Project]
 }
 
 var _ scene.WidgetEvent = untypedWidgetEvent{}
 
-func (e untypedWidgetEvent) WidgetID() id.ID[scene.Widget] { return e.widgetID }
-func (e untypedWidgetEvent) SceneID() id.ID[scene.Scene]   { return e.sceneID }
+func (e untypedWidgetEvent) WidgetID() id.ID[scene.Widget]     { return e.widgetID }
+func (e untypedWidgetEvent) SceneID() id.ID[scene.Scene]       { return e.sceneID }
+func (e untypedWidgetEvent) ProjectID() id.ID[project.Project] { return e.projectID }
 
-func decodeTagState(tagID id.ID[tag.Tag], s *tagState) (tag.Tag, error) {
+func decodeTagState(tagID id.ID[tag.Tag], projectID id.ID[project.Project], s *tagState) (tag.Tag, error) {
 	if s == nil {
 		return nil, fmt.Errorf("cannot decode tag_updated payload: no tag")
 	}
@@ -191,5 +221,5 @@ func decodeTagState(tagID id.ID[tag.Tag], s *tagState) (tag.Tag, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cannot decode tag version: %w", err)
 	}
-	return tag.ReconstituteTag(tagID, name, tagType, value, quality, ver)
+	return tag.ReconstituteTag(tagID, projectID, name, tagType, value, quality, ver)
 }

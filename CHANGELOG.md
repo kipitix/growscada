@@ -1,5 +1,26 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.47] - 2026-10-25
+
+### Added
+
+- **Organization и Project: `project_id` везде** (задача 31, ADR 0006)
+  - Домен: агрегат `project.Project` (имя уникально среди живых проектов Organization; `Rename` с ожидаемой Version, `Delete` только помечает), события `project_created`/`project_updated`/`project_deleted`; `organization.Organization` — пока только ключ. `Tag` и `Scene` несут неизменяемый `ProjectID`, их события и события Widget — тоже (`project.ContentEvent`). `scene.TagTypes` читаются для Project: Widget привязывается только к Tag своего проекта, чужой — «tag not found» (400 на запись, удаление привязки политикой)
+  - Миграция `20261025000000_organizations_and_projects`: таблицы `organizations` (стартовая Organization) и `projects` (частичный `UNIQUE (organization_id, name) WHERE deleted_at IS NULL`); `project_id` в `tags`, `scenes`, `widgets` (FK Widget → `(scene_id, project_id)`), FK без CASCADE; `UNIQUE (project_id, name)` у тегов вместо `uq_tags_name`; всё существующее — в проект «Main»; строки outbox и ключи ждущих заданий политик получают проект
+  - Шов `application.ProjectScopes`: `ForProject(p)` → `Tags()`, `Scenes()`, каждый запрос с `project_id`, запись агрегата чужого проекта — ошибка. `ProjectContent` проверяет, что проект жив и принадлежит Organization сервера, прежде чем открыть его содержимое
+  - Политика `remove_deleted_project`: по `project_deleted` (а также `tag_created`/`scene_created` — гонка с созданием) удаляет Scenes, затем Tags, каждое своей транзакцией со своими событиями, строку проекта — последней. `unbind_deleted_tag` и `reconcile_widgets_with_widget_type` работают через репозитории проекта события; обновлённый WidgetType сверяет Scenes всех проектов (`FindProjectsUsingWidgetType`)
+  - REST API **0.4**: `GET/POST /api/v0/projects` (`?name=`), `GET/PUT/DELETE /api/v0/projects/{project_id}`; Tags, Scenes, Widgets — под `/api/v0/projects/{project_id}/…`; несуществующий или удалённый проект — 404 проекта. SSE: `/api/v0/events` — проекты, WidgetTypes, подключения; `/api/v0/projects/{id}/events` — содержимое проекта. `apiclient`: методы проектов и `Client.Project(id)` → `ProjectClient`
+  - growctl (манифесты **0.2**): `--project`, контекст `growctl config use-project`/`current-project` (файл `GROWCTL_CONFIG`, по умолчанию `growctl/config.yaml` в каталоге настроек пользователя), необязательное `metadata.project` (расхождение — ошибка), `kind: Project` (apply создаёт до тегов, `--prune` проекты не трогает, `delete -f` удаляет), `get projects [-o yaml]`; `get tags -o yaml` пишет `metadata.project`
+  - devicelink и симулятор: обязательное `project:` в конфигурации, проект ищется по имени при старте; нет такого — `ExitConfig` (78)
+  - UI: переключатель проекта в шапке (список, создание, переименование, удаление с подтверждением), выбор в LocalStorage, удалённый выбранный проект — выбирается первый; Project и Operation показывают выбранный проект, Library от него не зависит; Bar держит два SSE-потока (`EventResync` и `EventProjectResync`)
+  - Seed: содержимое — в «Main», плюс пустой проект «Line 2»; тест накатывает миграции и seed на чистую БД
+  - Тесты: агрегат Project, изоляция репозиториев и сервисов, миграция существующих данных, outbox, политика удаления (включая гонку с созданием), сверка по всем проектам, REST и маршрутизация SSE по проектам, growctl (проекты, контекст, расхождение `metadata.project`), devicelink/симулятор с проектом, переключатель и смена проекта в UI
+  - Bruno: запросы проектов (`get projects`, `… by name`, `… by id`, `post projects`, `… duplicate name`, `put project`, `delete project`, `get project events` — manual), пути содержимого под `projects/{{PROJECT_ID}}`, новый порядок `seq`
+
+### Changed
+
+- ADR 0004: пути devicelink под проектом; AGENTS.md: слой проектов, маршрутизация SSE, переключатель проекта
+
 ## [0.0.46] - 2026-10-23
 
 ### Added

@@ -22,7 +22,7 @@ func TestFromError_ServersProblem(t *testing.T) {
 			"detail":"Tag with ID 'x' not found","instance":"/api/v0/tags/x"}`))
 	}))
 	defer srv.Close()
-	_, err := apiclient.New(srv.URL, srv.Client()).DeleteTag(context.Background(), uuid.New())
+	_, err := apiclient.New(srv.URL, srv.Client()).Project(uuid.New()).DeleteTag(context.Background(), uuid.New())
 
 	// Wrapped, as a caller may do.
 	got := FromError(fmt.Errorf("delete: %w", err))
@@ -52,7 +52,7 @@ func TestFromError_ByWhereTheCallFailed(t *testing.T) {
 }
 
 func TestFromError_RequestNotBuilt_IsClientError(t *testing.T) {
-	_, err := apiclient.New("http://bad host:port", http.DefaultClient).ListTags(context.Background())
+	_, err := apiclient.New("http://bad host:port", http.DefaultClient).ListWidgetTypes(context.Background())
 
 	if got := FromError(err); got.Title != "Client Error" {
 		t.Errorf("got %+v, want a Client Error: nothing was sent", got)

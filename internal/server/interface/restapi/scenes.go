@@ -16,9 +16,13 @@ func NewScenesHandler(s application.SceneService) *ScenesHandlers {
 	return &ScenesHandlers{service: s}
 }
 
-// GetScenes handles GET /scenes
+// GetScenes handles GET /projects/{project_id}/scenes
 func (h ScenesHandlers) GetScenes(w http.ResponseWriter, r *http.Request) {
-	list, err := h.service.FindAllScenes(r.Context())
+	projectID, ok := pathUUID(w, r, projectResource)
+	if !ok {
+		return
+	}
+	list, err := h.service.FindAllScenes(r.Context(), projectID)
 	if err != nil {
 		sendError(w, r, err)
 		return
@@ -26,14 +30,18 @@ func (h ScenesHandlers) GetScenes(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusOK, newGetScenesResponse(list))
 }
 
-// GetScenesByID handles GET /scenes/{scene_id}
+// GetScenesByID handles GET /projects/{project_id}/scenes/{scene_id}
 func (h ScenesHandlers) GetScenesByID(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := pathUUID(w, r, projectResource)
+	if !ok {
+		return
+	}
 	sceneID, ok := pathUUID(w, r, sceneResource)
 	if !ok {
 		return
 	}
 
-	found, err := h.service.FindSceneByID(r.Context(), sceneID)
+	found, err := h.service.FindSceneByID(r.Context(), projectID, sceneID)
 	if err != nil {
 		sendError(w, r, err)
 		return
@@ -42,14 +50,18 @@ func (h ScenesHandlers) GetScenesByID(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusOK, newSceneResponse(found))
 }
 
-// PostScenes handles POST /scenes
+// PostScenes handles POST /projects/{project_id}/scenes
 func (h ScenesHandlers) PostScenes(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := pathUUID(w, r, projectResource)
+	if !ok {
+		return
+	}
 	var request apiv0.CreateSceneRequest
 	if !decodeRequest(w, r, &request) {
 		return
 	}
 
-	created, err := h.service.CreateScene(r.Context(), newCreateSceneInput(request))
+	created, err := h.service.CreateScene(r.Context(), projectID, newCreateSceneInput(request))
 	if err != nil {
 		sendError(w, r, err)
 		return
@@ -58,8 +70,12 @@ func (h ScenesHandlers) PostScenes(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusCreated, newCreateSceneResponse(created))
 }
 
-// PutScenesByID handles PUT /scenes/{scene_id}
+// PutScenesByID handles PUT /projects/{project_id}/scenes/{scene_id}
 func (h ScenesHandlers) PutScenesByID(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := pathUUID(w, r, projectResource)
+	if !ok {
+		return
+	}
 	sceneID, ok := pathUUID(w, r, sceneResource)
 	if !ok {
 		return
@@ -70,7 +86,7 @@ func (h ScenesHandlers) PutScenesByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := h.service.UpdateScene(r.Context(), sceneID, request.Version, newUpdateSceneInput(request))
+	updated, err := h.service.UpdateScene(r.Context(), projectID, sceneID, request.Version, newUpdateSceneInput(request))
 	if err != nil {
 		sendError(w, r, err)
 		return
@@ -79,14 +95,18 @@ func (h ScenesHandlers) PutScenesByID(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusOK, newUpdateSceneResponse(updated))
 }
 
-// DeleteScenesByID handles DELETE /scenes/{scene_id}
+// DeleteScenesByID handles DELETE /projects/{project_id}/scenes/{scene_id}
 func (h ScenesHandlers) DeleteScenesByID(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := pathUUID(w, r, projectResource)
+	if !ok {
+		return
+	}
 	sceneID, ok := pathUUID(w, r, sceneResource)
 	if !ok {
 		return
 	}
 
-	deleted, err := h.service.DeleteSceneByID(r.Context(), sceneID)
+	deleted, err := h.service.DeleteSceneByID(r.Context(), projectID, sceneID)
 	if err != nil {
 		sendError(w, r, err)
 		return

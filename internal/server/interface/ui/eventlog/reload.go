@@ -9,10 +9,11 @@ import (
 )
 
 // ReloadTargets says which server-backed lists an event makes stale.
-// It is the single routing table of the modes that show server data
-// (Library, Project, Operation); each reloads the lists it shows.
+// It is the single routing table of the parts that show server data (the
+// project switcher of Root, Library, Project, Operation); each reloads the
+// lists it shows. Scenes, Widgets and Tags are those of the selected project.
 type ReloadTargets struct {
-	WidgetTypes, Scenes, Widgets, Tags bool
+	Projects, WidgetTypes, Scenes, Widgets, Tags bool
 	// Scene is the one Scene whose own state and Widgets are stale (a Widget
 	// of it changed, which bumps its version without a scene event); uuid.Nil
 	// if none. The list of Scenes is not: only scene events and a resync
@@ -26,17 +27,27 @@ func (t ReloadTargets) WidgetsOf(selected uuid.UUID) bool {
 	return t.Widgets || (t.Scene != uuid.Nil && t.Scene == selected)
 }
 
-// AllTargets is every list: what a resync reloads, since the events
-// published while disconnected are lost.
-var AllTargets = ReloadTargets{WidgetTypes: true, Scenes: true, Widgets: true, Tags: true}
+// AllTargets is every list.
+var AllTargets = ReloadTargets{Projects: true, WidgetTypes: true, Scenes: true, Widgets: true, Tags: true}
 
-// ReloadTargetsFor routes an event of the stream (or EventResync) by its
-// Type. tag_updated with the Tag's new state makes nothing stale: the modes
-// apply the state themselves.
+// The lists of each stream: what its resync reloads, since the events it
+// published while disconnected are lost.
+var (
+	serverTargets  = ReloadTargets{Projects: true, WidgetTypes: true}
+	projectTargets = ReloadTargets{Scenes: true, Widgets: true, Tags: true}
+)
+
+// ReloadTargetsFor routes an event of the streams (or EventResync,
+// EventProjectResync) by its Type. tag_updated with the Tag's new state makes
+// nothing stale: the modes apply the state themselves.
 func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 	switch ev.Type {
 	case EventResync:
-		return AllTargets
+		return serverTargets
+	case EventProjectResync:
+		return projectTargets
+	case apiv0.EventProjectCreated, apiv0.EventProjectUpdated, apiv0.EventProjectDeleted:
+		return ReloadTargets{Projects: true}
 	case apiv0.EventWidgetTypeCreated, apiv0.EventWidgetTypeUpdated, apiv0.EventWidgetTypeDeleted:
 		return ReloadTargets{WidgetTypes: true}
 	case apiv0.EventSceneCreated, apiv0.EventSceneUpdated, apiv0.EventSceneDeleted:
@@ -61,13 +72,14 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 }
 
 // ApplyToTags returns tags with what ev tells of them by itself: the Tag's new
-// state a tag_updated carries; on a resync, the Versions forgotten, since the
-// server may have gone back. What ev makes stale is ReloadTargetsFor's.
+// state a tag_updated carries; on a resync of the project's stream, the
+// Versions forgotten, since the server may have gone back. What ev makes
+// stale is ReloadTargetsFor's.
 func ApplyToTags(tags tagstate.Tags, ev apiv0.Event) tagstate.Tags {
 	switch {
 	case ev.Type == apiv0.EventTagUpdated && ev.Tag != nil:
 		return tags.Apply(*ev.Tag)
-	case ev.Type == EventResync:
+	case ev.Type == EventProjectResync:
 		return tags.ForgetVersions()
 	}
 	return tags

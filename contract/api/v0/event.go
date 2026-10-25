@@ -1,9 +1,12 @@
 package apiv0
 
-// Event is the payload of every message of the event stream (GET
-// /events, sent as SSE `data:`), whatever the domain event. Type is one of
-// the Event… names below. ID is the affected aggregate's (or connection's)
-// ID; system_ready carries none. SceneID is the Scene that holds (or held)
+// Event is the payload of every message of the event streams (sent as SSE
+// `data:`), whatever the domain event. There are two streams: GET /events
+// carries the events of the server's own resources — projects, WidgetTypes —
+// and of the connections; GET /projects/{id}/events those of one project's
+// content — Tags, Scenes, Widgets. Type is one of the Event… names below. ID
+// is the affected aggregate's (or connection's) ID; system_ready carries
+// none. SceneID is the Scene that holds (or held)
 // the Widget, on widget_created, widget_updated and widget_deleted only. Tag
 // carries the Tag's full new state, in the shape of GET /tags/{id}, on
 // tag_updated only.
@@ -33,6 +36,9 @@ const (
 	EventSceneDeleted       = "scene_deleted"
 	EventClientConnected    = "client_connected"
 	EventClientDisconnected = "client_disconnected"
+	EventProjectCreated     = "project_created"
+	EventProjectUpdated     = "project_updated"
+	EventProjectDeleted     = "project_deleted"
 )
 
 // EventTypes returns every type of Event of this version of the contract.
@@ -44,5 +50,6 @@ func EventTypes() []string {
 		EventWidgetCreated, EventWidgetUpdated, EventWidgetDeleted,
 		EventSceneCreated, EventSceneUpdated, EventSceneDeleted,
 		EventClientConnected, EventClientDisconnected,
+		EventProjectCreated, EventProjectUpdated, EventProjectDeleted,
 	}
 }

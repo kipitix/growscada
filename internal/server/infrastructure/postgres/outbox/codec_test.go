@@ -7,6 +7,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/domain/version"
@@ -29,7 +30,8 @@ func sampleEvents(t *testing.T) []event.Event {
 	name, _ := tag.NewTagName("boiler.pressure")
 	value, _ := tag.TagTypeInteger.NewTagValue(int64(-42))
 	ver, _ := version.New(version.WithNumber[tag.Tag](7))
-	aTag, err := tag.ReconstituteTag(id.NewID[tag.Tag](), name, tag.TagTypeInteger, value, tag.TagQualityUncertain, ver)
+	projectID := id.NewID[project.Project]()
+	aTag, err := tag.ReconstituteTag(id.NewID[tag.Tag](), projectID, name, tag.TagTypeInteger, value, tag.TagQualityUncertain, ver)
 	if err != nil {
 		t.Fatalf("ReconstituteTag: %v", err)
 	}
@@ -39,19 +41,22 @@ func sampleEvents(t *testing.T) []event.Event {
 	sceneID := id.NewID[scene.Scene]()
 	widgetID := id.NewID[scene.Widget]()
 	return []event.Event{
-		tag.NewTagCreatedEvent(tagID, ts),
+		tag.NewTagCreatedEvent(tagID, projectID, ts),
 		tag.NewTagUpdatedEvent(aTag, ts),
-		tag.NewTagDeletedEvent(tagID, ts),
+		tag.NewTagDeletedEvent(tagID, projectID, ts),
 		library.NewWidgetTypeCreatedEvent(wtID, ts),
 		library.NewWidgetTypeUpdatedEvent(wtID, ts),
 		library.NewWidgetTypeDeletedEvent(wtID, ts),
-		scene.NewSceneCreatedEvent(sceneID, ts),
-		scene.NewSceneUpdatedEvent(sceneID, ts),
-		scene.NewSceneDeletedEvent(sceneID, ts),
-		scene.NewWidgetCreatedEvent(widgetID, sceneID, wtID, ts),
-		scene.NewWidgetUpdatedEvent(widgetID, sceneID, wtID, ts),
-		scene.NewWidgetUpdatedByReconciliationEvent(widgetID, sceneID, wtID, ts),
-		scene.NewWidgetDeletedEvent(widgetID, sceneID, ts),
+		scene.NewSceneCreatedEvent(sceneID, projectID, ts),
+		scene.NewSceneUpdatedEvent(sceneID, projectID, ts),
+		scene.NewSceneDeletedEvent(sceneID, projectID, ts),
+		scene.NewWidgetCreatedEvent(widgetID, sceneID, projectID, wtID, ts),
+		scene.NewWidgetUpdatedEvent(widgetID, sceneID, projectID, wtID, ts),
+		scene.NewWidgetUpdatedByReconciliationEvent(widgetID, sceneID, projectID, wtID, ts),
+		scene.NewWidgetDeletedEvent(widgetID, sceneID, projectID, ts),
+		project.NewProjectCreatedEvent(projectID, ts),
+		project.NewProjectUpdatedEvent(projectID, ts),
+		project.NewProjectDeletedEvent(projectID, ts),
 	}
 }
 
@@ -92,11 +97,21 @@ func TestCodec_EveryEventSurvivesRoundTrip(t *testing.T) {
 
 func assertSameSubject(t *testing.T, original, decoded event.Event) {
 	t.Helper()
+	if want, ok := original.(project.ContentEvent); ok {
+		got, ok := decoded.(project.ContentEvent)
+		if !ok || got.ProjectID() != want.ProjectID() {
+			t.Errorf("decoded %T, want project %s", decoded, want.ProjectID())
+		}
+	}
 	switch want := original.(type) {
+	case project.ProjectEvent:
+		if _, ok := decoded.(project.ProjectEvent); !ok {
+			t.Errorf("decoded %T, want a project.ProjectEvent", decoded)
+		}
 	case tag.TagUpdatedEvent:
 		got := decoded.(tag.TagUpdatedEvent)
 		w, g := want.Tag(), got.Tag()
-		if g.ID() != w.ID() || g.Name() != w.Name() || g.Type() != w.Type() ||
+		if g.ID() != w.ID() || g.ProjectID() != w.ProjectID() || g.Name() != w.Name() || g.Type() != w.Type() ||
 			g.Value().String() != w.Value().String() || g.Quality() != w.Quality() || g.Version() != w.Version() {
 			t.Errorf("tag %s, want %s", g, w)
 		}
@@ -145,7 +160,8 @@ func TestCodec_DeliveryEventTypes_AreNotDecoded(t *testing.T) {
 // into a Widget event that names no WidgetType: the policy keyed by it
 // enqueues no job for it.
 func TestCodec_WidgetEventWithoutWidgetType_Decodes(t *testing.T) {
-	const row = `{"timestamp":"2026-10-06T12:30:15Z","id":"6f1c2a52-6e0c-4b8e-9d0a-3c1e5b7a9f10","scene_id":"0b7e7c1e-2f4d-4a6b-8c9d-1e2f3a4b5c6d"}`
+	const row = `{"timestamp":"2026-10-06T12:30:15Z","id":"6f1c2a52-6e0c-4b8e-9d0a-3c1e5b7a9f10","scene_id":"0b7e7c1e-2f4d-4a6b-8c9d-1e2f3a4b5c6d",` +
+		`"project_id":"b0000000-0000-4000-8000-000000000001"}`
 	for _, et := range []event.EventType{event.EventTypeWidgetCreated, event.EventTypeWidgetUpdated} {
 		t.Run(et.String(), func(t *testing.T) {
 			decoded, err := outbox.Decode(et, []byte(row))
@@ -163,5 +179,17 @@ func TestCodec_WidgetEventWithoutWidgetType_Decodes(t *testing.T) {
 				t.Errorf("widget type %s, want none", typed.TypeID())
 			}
 		})
+	}
+}
+
+// TestCodec_ContentEventWithoutProject_IsRefused: an event of a Project's
+// content says which Project it describes (ADR 0006); the migration gave
+// every waiting row one.
+func TestCodec_ContentEventWithoutProject_IsRefused(t *testing.T) {
+	const row = `{"timestamp":"2026-10-06T12:30:15Z","id":"6f1c2a52-6e0c-4b8e-9d0a-3c1e5b7a9f10","scene_id":"0b7e7c1e-2f4d-4a6b-8c9d-1e2f3a4b5c6d"}`
+	for _, et := range []event.EventType{event.EventTypeTagCreated, event.EventTypeSceneCreated, event.EventTypeWidgetDeleted} {
+		if _, err := outbox.Decode(et, []byte(row)); err == nil {
+			t.Errorf("%s without project_id: expected an error", et)
+		}
 	}
 }

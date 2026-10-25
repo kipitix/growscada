@@ -62,8 +62,8 @@ func TestEventTypeInfo_CoversTheContract(t *testing.T) {
 // never be confused with one the server sends.
 func TestEventResync_IsNoContractEventType(t *testing.T) {
 	for _, et := range apiv0.EventTypes() {
-		if et == EventResync {
-			t.Errorf("EventResync %q is a contract event type", EventResync)
+		if et == EventResync || et == EventProjectResync {
+			t.Errorf("the resync %q is a contract event type", et)
 		}
 	}
 }

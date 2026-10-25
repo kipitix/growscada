@@ -20,6 +20,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
@@ -49,6 +50,29 @@ func TestSendError(t *testing.T) {
 		wantDetail string
 	}{
 		{
+			name:       "project not found of a tag's path names the project",
+			err:        wrapped(id.NotFoundError{Err: project.ErrProjectNotFound, ID: uuid.MustParse(errorsTestID)}),
+			pathParams: map[string]string{"project_id": errorsTestID, "tag_id": "11111111-1111-1111-1111-111111111111"},
+			wantStatus: http.StatusNotFound,
+			wantTitle:  "Resource Not Found",
+			wantDetail: "Project with ID '" + errorsTestID + "' not found",
+		},
+		{
+			name:       "project conflict",
+			err:        wrapped(project.ErrProjectConflict),
+			pathParams: map[string]string{"project_id": errorsTestID},
+			wantStatus: http.StatusConflict,
+			wantTitle:  "Conflict: Project",
+			wantDetail: "Project was changed concurrently; reload it and retry",
+		},
+		{
+			name:       "project name taken",
+			err:        wrapped(project.ErrProjectNameTaken),
+			wantStatus: http.StatusConflict,
+			wantTitle:  "Conflict: Project",
+			wantDetail: "Project name is already taken",
+		},
+		{
 			name:       "tag not found",
 			err:        wrapped(tag.ErrTagNotFound),
 			pathParams: map[string]string{"tag_id": errorsTestID},
@@ -69,7 +93,7 @@ func TestSendError(t *testing.T) {
 			err:        wrapped(tag.ErrTagNameTaken),
 			wantStatus: http.StatusConflict,
 			wantTitle:  "Conflict: Tag",
-			wantDetail: "Tag name is already taken",
+			wantDetail: "Tag name is already taken in the project",
 		},
 		{
 			name:       "widget type not found",
@@ -220,6 +244,10 @@ func assertProblem(t *testing.T, err error, pathParams map[string]string, wantSt
 // domainSentinels lists every exported Err… variable of the domain packages;
 // TestDomainSentinels_AreListed keeps it complete.
 var domainSentinels = map[string]error{
+	"project.ErrProjectNotFound":        project.ErrProjectNotFound,
+	"project.ErrProjectConflict":        project.ErrProjectConflict,
+	"project.ErrProjectNameTaken":       project.ErrProjectNameTaken,
+	"project.ErrProjectNotEmpty":        project.ErrProjectNotEmpty,
 	"library.ErrWidgetTypeNotFound":     library.ErrWidgetTypeNotFound,
 	"library.ErrWidgetTypeConflict":     library.ErrWidgetTypeConflict,
 	"library.ErrWidgetTypeInUse":        library.ErrWidgetTypeInUse,
@@ -250,6 +278,7 @@ var unmappedSentinels = map[string]string{
 	"tag.ErrInvalidTagNameMatcher":      "400: the service marks it invalid input",
 	"scene.ErrWidgetAlreadyExists":      "500: the server makes a new Widget's ID, a clash is its fault",
 	"scene.ErrWidgetTypeMismatch":       "500: the service checks a Widget against its own WidgetType",
+	"project.ErrProjectNotEmpty":        "500: only the cleanup policy removes a project's row, never the API",
 }
 
 // TestDomainSentinels_AreListed reads the domain sources, so a new sentinel
@@ -328,7 +357,7 @@ func TestErrorMappings_CoverEveryDomainSentinelOnce(t *testing.T) {
 }
 
 func TestPathUUID(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/api/v0/scenes/abc", nil)
+	req := httptest.NewRequest(http.MethodGet, apiv0.PathPrefix+"/projects/"+errorsTestID+"/scenes/abc", nil)
 	req.SetPathValue("scene_id", "abc")
 	rec := httptest.NewRecorder()
 

@@ -7,6 +7,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
@@ -16,7 +17,9 @@ import (
 // and a collection of widgets overlaid on top of it. Widget is an entity of
 // this aggregate: it has no identity or optimistic-concurrency version of its
 // own — the Scene's Version is the sole consistency boundary for both the
-// scene's own fields and its widgets.
+// scene's own fields and its widgets. A scene belongs to exactly one Project,
+// fixed at creation, and its widgets bind only Tags of that Project
+// (ADR 0006).
 //
 // Scene is immutable: every change returns a new Scene and leaves the
 // original as it was, so the original is the state "before" and the result
@@ -25,6 +28,8 @@ import (
 // when it saves the result.
 type Scene interface {
 	ID() id.ID[Scene]
+	// ProjectID is the Project the scene belongs to; it never changes.
+	ProjectID() id.ID[project.Project]
 	Name() SceneName
 	Size() SceneSize
 	BackgroundHTML() BackgroundHTML
@@ -54,7 +59,8 @@ type Scene interface {
 	// ErrWidgetTypeMismatch if wt is not the widget's type, and for a
 	// PortBinding that is not valid (see checkWidgetType)
 	// ErrPortNotDeclared, ErrBoundTagNotFound or ErrPortTypeMismatch.
-	// tagTypes holds the TagTypes of the Tags the widget binds.
+	// tagTypes holds the TagTypes of the Tags the widget binds; a Tag that
+	// is not in it as a Tag of the scene's Project does not exist.
 	AddWidget(expected version.Version[Scene], w Widget, wt library.WidgetType, tagTypes TagTypes) (Scene, error)
 
 	// UpdateWidget replaces the scene's widget with the same ID by w, of
@@ -67,7 +73,8 @@ type Scene interface {
 	// Only the PortBindings the stored widget of the same type does not hold
 	// are checked: one it already held and that stopped being valid since is
 	// removed by policies, not a reason to refuse the change (ADR 0010).
-	// tagTypes holds the TagTypes of the Tags the widget binds.
+	// tagTypes holds the TagTypes of the Tags the widget binds; a Tag that
+	// is not in it as a Tag of the scene's Project does not exist.
 	UpdateWidget(expected version.Version[Scene], w Widget, wt library.WidgetType, tagTypes TagTypes) (Scene, error)
 
 	// RemoveWidget removes the widget with the given ID from the scene,
@@ -78,7 +85,8 @@ type Scene interface {
 
 	// ReconcileWith removes, from the scene's widgets of WidgetType wt, the
 	// PortBindings that are no longer valid: of ports wt no longer declares,
-	// of Tags missing from tagTypes and of Tags whose TagType the port's type
+	// of Tags missing from tagTypes as Tags of the scene's Project and of Tags
+	// whose TagType the port's type
 	// hint no longer accepts. It records a WidgetUpdatedEvent ByReconciliation
 	// for each widget it changes. The bool reports whether anything was
 	// removed.
@@ -107,6 +115,7 @@ type Scene interface {
 // sceneImpl - Scene implementation struct.
 type sceneImpl struct {
 	id             id.ID[Scene]
+	projectID      id.ID[project.Project]
 	name           SceneName
 	size           SceneSize
 	backgroundHTML BackgroundHTML
@@ -117,17 +126,18 @@ type sceneImpl struct {
 
 var _ Scene = (*sceneImpl)(nil)
 
-// CreateScene creates a new, not yet saved scene without widgets and records
-// a SceneCreatedEvent.
-func CreateScene(anID id.ID[Scene], aName SceneName, aSize SceneSize, aBackgroundHTML BackgroundHTML) Scene {
+// CreateScene creates a new, not yet saved scene of the Project aProjectID
+// without widgets and records a SceneCreatedEvent.
+func CreateScene(anID id.ID[Scene], aProjectID id.ID[project.Project], aName SceneName, aSize SceneSize, aBackgroundHTML BackgroundHTML) Scene {
 	return &sceneImpl{
 		id:             anID,
+		projectID:      aProjectID,
 		name:           aName,
 		size:           aSize,
 		backgroundHTML: aBackgroundHTML,
 		widgets:        []Widget{},
 		version:        version.Initial[Scene](),
-		pending:        []event.Event{NewSceneCreatedEvent(anID)},
+		pending:        []event.Event{NewSceneCreatedEvent(anID, aProjectID)},
 	}
 }
 
@@ -136,6 +146,7 @@ func CreateScene(anID id.ID[Scene], aName SceneName, aSize SceneSize, aBackgroun
 // without widgets.
 func ReconstituteScene(
 	anID id.ID[Scene],
+	aProjectID id.ID[project.Project],
 	aName SceneName,
 	aSize SceneSize,
 	aBackgroundHTML BackgroundHTML,
@@ -147,6 +158,7 @@ func ReconstituteScene(
 
 	return &sceneImpl{
 		id:             anID,
+		projectID:      aProjectID,
 		name:           aName,
 		size:           aSize,
 		backgroundHTML: aBackgroundHTML,
@@ -155,11 +167,12 @@ func ReconstituteScene(
 	}
 }
 
-func (s *sceneImpl) ID() id.ID[Scene]                { return s.id }
-func (s *sceneImpl) Name() SceneName                 { return s.name }
-func (s *sceneImpl) Size() SceneSize                 { return s.size }
-func (s *sceneImpl) BackgroundHTML() BackgroundHTML  { return s.backgroundHTML }
-func (s *sceneImpl) Version() version.Version[Scene] { return s.version }
+func (s *sceneImpl) ID() id.ID[Scene]                  { return s.id }
+func (s *sceneImpl) ProjectID() id.ID[project.Project] { return s.projectID }
+func (s *sceneImpl) Name() SceneName                   { return s.name }
+func (s *sceneImpl) Size() SceneSize                   { return s.size }
+func (s *sceneImpl) BackgroundHTML() BackgroundHTML    { return s.backgroundHTML }
+func (s *sceneImpl) Version() version.Version[Scene]   { return s.version }
 
 func (s *sceneImpl) Widgets() []Widget {
 	out := make([]Widget, len(s.widgets))
@@ -182,12 +195,13 @@ func (s *sceneImpl) Update(expected version.Version[Scene], aName SceneName, aSi
 	// The widgets are shared: no Scene ever changes its slice.
 	return &sceneImpl{
 		id:             s.id,
+		projectID:      s.projectID,
 		name:           aName,
 		size:           aSize,
 		backgroundHTML: aBackgroundHTML,
 		widgets:        s.widgets,
 		version:        s.version,
-		pending:        s.record(NewSceneUpdatedEvent(s.id)),
+		pending:        s.record(NewSceneUpdatedEvent(s.id, s.projectID)),
 	}, nil
 }
 
@@ -198,10 +212,10 @@ func (s *sceneImpl) AddWidget(expected version.Version[Scene], w Widget, wt libr
 	if s.widgetIndex(w.ID()) >= 0 {
 		return nil, fmt.Errorf("%w: %s", ErrWidgetAlreadyExists, w.ID())
 	}
-	if err := checkWidgetType(w, wt, tagTypes, nil); err != nil {
+	if err := s.checkWidgetType(w, wt, tagTypes, nil); err != nil {
 		return nil, err
 	}
-	return s.withWidgets(append(slices.Clip(s.widgets), w), NewWidgetCreatedEvent(w.ID(), s.id, w.TypeID())), nil
+	return s.withWidgets(append(slices.Clip(s.widgets), w), NewWidgetCreatedEvent(w.ID(), s.id, s.projectID, w.TypeID())), nil
 }
 
 func (s *sceneImpl) UpdateWidget(expected version.Version[Scene], w Widget, wt library.WidgetType, tagTypes TagTypes) (Scene, error) {
@@ -212,12 +226,12 @@ func (s *sceneImpl) UpdateWidget(expected version.Version[Scene], w Widget, wt l
 	if i < 0 {
 		return nil, id.NotFound(ErrWidgetNotFound, w.ID())
 	}
-	if err := checkWidgetType(w, wt, tagTypes, s.widgets[i]); err != nil {
+	if err := s.checkWidgetType(w, wt, tagTypes, s.widgets[i]); err != nil {
 		return nil, err
 	}
 	widgets := slices.Clone(s.widgets)
 	widgets[i] = w
-	return s.withWidgets(widgets, NewWidgetUpdatedEvent(w.ID(), s.id, w.TypeID())), nil
+	return s.withWidgets(widgets, NewWidgetUpdatedEvent(w.ID(), s.id, s.projectID, w.TypeID())), nil
 }
 
 func (s *sceneImpl) RemoveWidget(widgetID id.ID[Widget]) (Scene, Widget, error) {
@@ -225,13 +239,13 @@ func (s *sceneImpl) RemoveWidget(widgetID id.ID[Widget]) (Scene, Widget, error) 
 	if i < 0 {
 		return nil, nil, id.NotFound(ErrWidgetNotFound, widgetID)
 	}
-	return s.withWidgets(slices.Concat(s.widgets[:i], s.widgets[i+1:]), NewWidgetDeletedEvent(widgetID, s.id)), s.widgets[i], nil
+	return s.withWidgets(slices.Concat(s.widgets[:i], s.widgets[i+1:]), NewWidgetDeletedEvent(widgetID, s.id, s.projectID)), s.widgets[i], nil
 }
 
 func (s *sceneImpl) ReconcileWith(wt library.WidgetType, tagTypes TagTypes) (Scene, bool) {
 	ports := declaredPorts(wt)
 	return s.removeBindings(func(w Widget, b PortBinding) bool {
-		return w.TypeID() == wt.ID() && checkBinding(b, ports, tagTypes) != nil
+		return w.TypeID() == wt.ID() && s.checkBinding(b, ports, tagTypes) != nil
 	})
 }
 
@@ -271,7 +285,7 @@ func (s *sceneImpl) removeBindings(remove func(Widget, PortBinding) bool) (Scene
 			w.ID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(),
 			w.TypeID(), w.Labels(), kept,
 		)
-		events = append(events, NewWidgetUpdatedByReconciliationEvent(w.ID(), s.id, w.TypeID()))
+		events = append(events, NewWidgetUpdatedByReconciliationEvent(w.ID(), s.id, s.projectID, w.TypeID()))
 	}
 	if widgets == nil {
 		return s, false
@@ -282,9 +296,9 @@ func (s *sceneImpl) removeBindings(remove func(Widget, PortBinding) bool) (Scene
 func (s *sceneImpl) Delete() Scene {
 	events := make([]event.Event, 0, len(s.widgets)+1)
 	for _, w := range s.widgets {
-		events = append(events, NewWidgetDeletedEvent(w.ID(), s.id))
+		events = append(events, NewWidgetDeletedEvent(w.ID(), s.id, s.projectID))
 	}
-	events = append(events, NewSceneDeletedEvent(s.id))
+	events = append(events, NewSceneDeletedEvent(s.id, s.projectID))
 	return s.withWidgets(s.widgets, events...)
 }
 
@@ -309,6 +323,7 @@ func (s *sceneImpl) widgetIndex(widgetID id.ID[Widget]) int {
 func (s *sceneImpl) withWidgets(someWidgets []Widget, someEvents ...event.Event) Scene {
 	return &sceneImpl{
 		id:             s.id,
+		projectID:      s.projectID,
 		name:           s.name,
 		size:           s.size,
 		backgroundHTML: s.backgroundHTML,
@@ -328,7 +343,7 @@ func (s *sceneImpl) record(someEvents ...event.Event) []event.Event {
 // of the widget is valid (see checkBinding), except those that stored, the
 // widget as the scene holds it (nil for a new one), already held while of the
 // same type.
-func checkWidgetType(w Widget, wt library.WidgetType, tagTypes TagTypes, stored Widget) error {
+func (s *sceneImpl) checkWidgetType(w Widget, wt library.WidgetType, tagTypes TagTypes, stored Widget) error {
 	if w.TypeID() != wt.ID() {
 		return fmt.Errorf("%w: widget has type %s, checked against %s", ErrWidgetTypeMismatch, w.TypeID(), wt.ID())
 	}
@@ -341,7 +356,7 @@ func checkWidgetType(w Widget, wt library.WidgetType, tagTypes TagTypes, stored 
 		if slices.Contains(held, b) {
 			continue
 		}
-		if err := checkBinding(b, ports, tagTypes); err != nil {
+		if err := s.checkBinding(b, ports, tagTypes); err != nil {
 			return fmt.Errorf("%w, widget type %q", err, wt.Name().String())
 		}
 	}
@@ -350,16 +365,17 @@ func checkWidgetType(w Widget, wt library.WidgetType, tagTypes TagTypes, stored 
 
 // checkBinding checks that a PortBinding is valid (ADR 0010): ports, the
 // InputPorts of the widget's WidgetType by name, declare its port
-// (ErrPortNotDeclared), its Tag exists in tagTypes (ErrBoundTagNotFound) and
-// the port's type hint accepts the Tag's TagType (ErrPortTypeMismatch).
-func checkBinding(b PortBinding, ports map[library.InputPortName]library.InputPort, tagTypes TagTypes) error {
+// (ErrPortNotDeclared), its Tag exists in tagTypes as a Tag of the scene's
+// Project (ErrBoundTagNotFound) and the port's type hint accepts the Tag's
+// TagType (ErrPortTypeMismatch).
+func (s *sceneImpl) checkBinding(b PortBinding, ports map[library.InputPortName]library.InputPort, tagTypes TagTypes) error {
 	port, ok := ports[b.PortName()]
 	if !ok {
 		return fmt.Errorf("%w: port %q", ErrPortNotDeclared, b.PortName().String())
 	}
-	tagType, ok := tagTypes.Of(b.TagID())
+	tagType, ok := tagTypes.Of(s.projectID, b.TagID())
 	if !ok {
-		return fmt.Errorf("%w: port %q, tag %s", ErrBoundTagNotFound, b.PortName().String(), b.TagID())
+		return fmt.Errorf("%w in project %s: port %q, tag %s", ErrBoundTagNotFound, s.projectID, b.PortName().String(), b.TagID())
 	}
 	if !port.TypeHint().Accepts(tagType) {
 		return fmt.Errorf("%w: port %q accepts %s, tag %s is %s",
@@ -378,5 +394,5 @@ func declaredPorts(wt library.WidgetType) map[library.InputPortName]library.Inpu
 
 // String implements [fmt.Stringer].
 func (s *sceneImpl) String() string {
-	return fmt.Sprintf("Scene: %s, Size: %s", s.name, s.size)
+	return fmt.Sprintf("Scene: %s, Project: %s, Size: %s", s.name, s.projectID, s.size)
 }

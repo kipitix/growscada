@@ -1,0 +1,39 @@
+info:
+  name: post projects
+  type: http
+  seq: 16
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Line 1"
+      }
+  auth: inherit
+
+docs: |
+  Creates an empty project. Its name is unique among the live projects of
+  the server: a taken one returns `409 Conflict` (see "post projects duplicate
+  name").
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.id'
+      operator: isString
+    - expression: 'res.body.version'
+      operator: eq
+      value: '1'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

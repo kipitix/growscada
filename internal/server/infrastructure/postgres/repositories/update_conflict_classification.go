@@ -14,6 +14,7 @@ const (
 	tableNameTags        tableName = "tags"
 	tableNameScenes      tableName = "scenes"
 	tableNameWidgetTypes tableName = "widget_types"
+	tableNameProjects    tableName = "projects"
 )
 
 // rowQuerier is a *sql.DB or a *sql.Tx.
@@ -22,20 +23,21 @@ type rowQuerier interface {
 }
 
 // classifyUpdateConflict tells why a compare-and-swap on anID's row matched
-// nothing: the row is gone (notFoundError) or its version moved on
-// (conflictError).
-func classifyUpdateConflict[T any](ctx context.Context, q rowQuerier, table tableName, anID id.ID[T], notFoundError, conflictError error) error {
+// nothing: the row is gone from the store's scope (notFound) or its version
+// moved on (conflict).
+func (s aggregateStore[T]) classifyUpdateConflict(ctx context.Context, q rowQuerier, anID id.ID[T]) error {
+	cond, args := s.where(anID)
 	var exists bool
 	err := q.QueryRowContext(ctx,
-		fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %s WHERE id = $1)", table),
-		anID.UUID(),
+		fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %s WHERE %s)", s.table, cond),
+		args...,
 	).Scan(&exists)
 
 	if err != nil {
-		return fmt.Errorf("cannot check %s existence: %w", table, err)
+		return fmt.Errorf("cannot check %s existence: %w", s.table, err)
 	}
 	if !exists {
-		return id.NotFound(notFoundError, anID)
+		return id.NotFound(s.notFound, anID)
 	}
-	return conflictError
+	return s.conflict
 }
