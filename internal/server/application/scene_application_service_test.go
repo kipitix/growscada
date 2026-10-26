@@ -20,7 +20,7 @@ import (
 func cleanScenes(t *testing.T) {
 	t.Helper()
 	// widgets cascade-delete with their scene (ON DELETE CASCADE on scene_id).
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM scenes"); err != nil {
+	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM engineering.scenes"); err != nil {
 		t.Fatalf("cleanScenes: %v", err)
 	}
 	ensureTestWidgetType(t)
@@ -33,7 +33,7 @@ var testWidgetTypeID = uuid.MustParse("7e57c0de-0000-4000-8000-000000000001")
 func ensureTestWidgetType(t *testing.T) {
 	t.Helper()
 	if _, err := testDB.ExecContext(context.Background(),
-		`INSERT INTO widget_types
+		`INSERT INTO engineering.widget_types
 		    (id, name, html_template, script, script_language, input_ports, default_width, default_height, version)
 		 VALUES ($1, 'test-type', '<div></div>', 'function update(){}', 'javascript', '[]', 100, 100, 1)
 		 ON CONFLICT (id) DO NOTHING`,
@@ -799,11 +799,11 @@ func newBindingFixture(t *testing.T, svc application.SceneService) bindingFixtur
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
 	tags := newService()
-	intTag, err := tags.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "level", Type: "integer", Value: "0", Quality: "good"})
+	intTag, err := tags.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "level", Type: "integer"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
-	stringTag, err := tags.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "label", Type: "string", Value: "", Quality: "good"})
+	stringTag, err := tags.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "label", Type: "string"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -1018,7 +1018,7 @@ var racingTypeID = uuid.MustParse("7e57c0de-0000-4000-8000-000000000002")
 func insertRacingWidgetType(t *testing.T) {
 	t.Helper()
 	if _, err := testDB.ExecContext(context.Background(),
-		`INSERT INTO widget_types
+		`INSERT INTO engineering.widget_types
 		    (id, name, html_template, script, script_language, input_ports, default_width, default_height, version)
 		 VALUES ($1, 'racing-type', '<div></div>', 'function update(){}', 'javascript', '[]', 100, 100, 1)
 		 ON CONFLICT (id) DO NOTHING`,
@@ -1032,7 +1032,7 @@ func newServiceDeletingRacingType(t *testing.T) application.SceneService {
 	t.Helper()
 	wtRepo := &racingWidgetTypeRepository{WidgetTypeRepository: repositories.NewWidgetTypeRepositoryPostgres(testDB)}
 	wtRepo.race = func() {
-		if _, err := testDB.ExecContext(context.Background(), "DELETE FROM widget_types WHERE id = $1", racingTypeID); err != nil {
+		if _, err := testDB.ExecContext(context.Background(), "DELETE FROM engineering.widget_types WHERE id = $1", racingTypeID); err != nil {
 			t.Fatalf("concurrent delete of widget type: %v", err)
 		}
 	}

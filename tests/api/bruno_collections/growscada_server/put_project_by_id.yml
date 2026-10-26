@@ -1,7 +1,7 @@
 info:
   name: put project by id
   type: http
-  seq: 29
+  seq: 30
 
 http:
   method: PUT

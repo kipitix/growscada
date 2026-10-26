@@ -11,9 +11,9 @@ import (
 type tableName string
 
 const (
-	tableNameTags        tableName = "tags"
-	tableNameScenes      tableName = "scenes"
-	tableNameWidgetTypes tableName = "widget_types"
+	tableNameTags        tableName = "engineering.tags"
+	tableNameScenes      tableName = "engineering.scenes"
+	tableNameWidgetTypes tableName = "engineering.widget_types"
 	tableNameProjects    tableName = "projects"
 )
 

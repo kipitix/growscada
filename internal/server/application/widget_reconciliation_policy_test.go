@@ -12,6 +12,7 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -34,6 +35,7 @@ func cleanPolicyJobs(t *testing.T) {
 type reconciliation struct {
 	projectSvc application.ProjectService
 	tagSvc     application.TagService
+	states     runtimeapp.TagStateService
 	wtSvc      application.WidgetTypeService
 	sceneSvc   application.SceneService
 	dispatcher *outbox.Dispatcher
@@ -74,9 +76,11 @@ func newReconciliation(t *testing.T, wiring reconciliationWiring) *reconciliatio
 	sceneScopes.tags = wiring.sceneTags
 
 	projects := repositories.NewProjectRepositoryPostgres(testDB)
+	states, runtimeNode := newRuntime()
 	r := &reconciliation{
 		projectSvc: application.NewProjectService(projects, soleOrganization()),
-		tagSvc:     application.NewTagService(contentOver(newScopes())),
+		tagSvc:     application.NewTagService(contentOver(newScopes()), runtimeNode),
+		states:     states,
 		wtSvc:      application.NewWidgetTypeService(wtRepo),
 		sceneSvc:   sceneServiceOver(sceneScopes, sceneWidgetTypes),
 	}
@@ -86,7 +90,8 @@ func newReconciliation(t *testing.T, wiring reconciliationWiring) *reconciliatio
 		[]application.Policy{
 			application.NewWidgetReconciliationPolicy(policyWidgetTypes, policyScopes),
 			application.NewUnbindDeletedTagPolicy(projects, policyScopes),
-			application.NewProjectCleanupPolicy(projects, policyScopes),
+			application.NewProjectCleanupPolicy(projects, policyScopes, runtimeNode),
+			application.NewRuntimeTagDefinitionsPolicy(policyScopes, runtimeNode),
 		},
 		outbox.WithRetryPause(time.Hour, time.Hour))
 	r.dispatcher = outbox.NewDispatcher(testDB, func(e event.Event) { r.delivered = append(r.delivered, e) },
@@ -179,9 +184,8 @@ func (r *reconciliation) createScene(t *testing.T, name string) appdto.Scene {
 // createTag creates a Tag of the given type and returns its ID.
 func (r *reconciliation) createTag(t *testing.T, tagType string) uuid.UUID {
 	t.Helper()
-	values := map[string]string{"integer": "0", "string": "", "boolean": "false"}
 	created, err := r.tagSvc.CreateTag(context.Background(), mainProject, appdto.CreateTagInput{
-		Name: "tag_" + strings.ReplaceAll(uuid.NewString(), "-", ""), Type: tagType, Value: values[tagType], Quality: "good",
+		Name: "tag_" + strings.ReplaceAll(uuid.NewString(), "-", ""), Type: tagType,
 	})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
@@ -849,7 +853,7 @@ func TestUnbindDeletedTag_ProjectMarkedDeleted_LeavesItsScenesToTheCleanup(t *te
 	if err != nil {
 		t.Fatalf("CreateScene: %v", err)
 	}
-	speed, err := r.tagSvc.CreateTag(ctx, p, appdto.CreateTagInput{Name: "speed", Type: "integer", Value: "0", Quality: "good"})
+	speed, err := r.tagSvc.CreateTag(ctx, p, appdto.CreateTagInput{Name: "speed", Type: "integer"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -868,7 +872,7 @@ func TestUnbindDeletedTag_ProjectMarkedDeleted_LeavesItsScenesToTheCleanup(t *te
 		t.Fatalf("DeleteProjectByID: %v", err)
 	}
 	var before int
-	if err := testDB.QueryRowContext(ctx, `SELECT version FROM scenes WHERE id = $1`, sc.ID).Scan(&before); err != nil {
+	if err := testDB.QueryRowContext(ctx, `SELECT version FROM engineering.scenes WHERE id = $1`, sc.ID).Scan(&before); err != nil {
 		t.Fatalf("scene version: %v", err)
 	}
 	counting := &countingFindByTagID{}
@@ -887,7 +891,7 @@ func TestUnbindDeletedTag_ProjectMarkedDeleted_LeavesItsScenesToTheCleanup(t *te
 		t.Errorf("FindByTagID ran %d times, want none", counting.calls)
 	}
 	var after int
-	if err := testDB.QueryRowContext(ctx, `SELECT version FROM scenes WHERE id = $1`, sc.ID).Scan(&after); err != nil || after != before {
+	if err := testDB.QueryRowContext(ctx, `SELECT version FROM engineering.scenes WHERE id = $1`, sc.ID).Scan(&after); err != nil || after != before {
 		t.Errorf("scene version %d (%v), want %d: left to the cleanup", after, err, before)
 	}
 }

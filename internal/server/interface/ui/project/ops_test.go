@@ -150,7 +150,7 @@ func createWidgetType(t *testing.T, api *testAPI, name string, ports ...apiv0.In
 
 func createTag(t *testing.T, api *testAPI, name, tagType string) uuid.UUID {
 	t.Helper()
-	created, err := api.CreateTag(context.Background(), apiv0.CreateTagRequest{Name: name, Type: tagType, Value: "0", Quality: "good"})
+	created, err := api.CreateTag(context.Background(), apiv0.CreateTagRequest{Name: name, Type: tagType})
 	if err != nil {
 		t.Fatalf("create tag: %v", err)
 	}

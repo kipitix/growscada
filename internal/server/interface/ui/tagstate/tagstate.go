@@ -1,7 +1,7 @@
 // Package tagstate keeps the state of the Tags a mode of the UI shows, fed by
 // both the list loads (GET /tags) and the Tag states of tag_updated events.
 // Events and loads may arrive out of order, so for each Tag the state with
-// the greater Version wins. Which Tags exist is decided by the lists alone:
+// the greater seq wins (ADR 0011). Which Tags exist is decided by the lists alone:
 // an event of a Tag the last list did not hold (created since, or deleted
 // before it) does not show it.
 package tagstate
@@ -28,7 +28,7 @@ type Tags struct {
 	// unlisted holds the states events carried of Tags the list does not
 	// hold, for the next list to merge if it holds them.
 	unlisted map[uuid.UUID]apiv0.TagResponse
-	// epoch counts the ForgetVersions.
+	// epoch counts the ForgetSeqs.
 	epoch uint64
 }
 
@@ -51,14 +51,14 @@ func (ts Tags) Find(id uuid.UUID) (apiv0.TagResponse, bool) {
 }
 
 // Apply returns the Tags with t's new state recorded, unless a newer (or the
-// same) Version is already known. A Tag the list does not hold stays unshown:
+// same) seq is already known. A Tag the list does not hold stays unshown:
 // its state is kept for the next list, which decides whether it exists (a
 // list read before the event was committed would else lose it).
 func (ts Tags) Apply(t apiv0.TagResponse) Tags {
 	i, listed := ts.idx[t.ID]
 	if !listed {
 		cur, listed := ts.unlisted[t.ID]
-		if listed && cur.Version >= t.Version {
+		if listed && cur.Seq >= t.Seq {
 			return ts
 		}
 		unlisted := maps.Clone(ts.unlisted)
@@ -69,7 +69,7 @@ func (ts Tags) Apply(t apiv0.TagResponse) Tags {
 		ts.unlisted = unlisted
 		return ts
 	}
-	if ts.list[i].Version >= t.Version {
+	if ts.list[i].Seq >= t.Seq {
 		return ts
 	}
 	ts.list = slices.Clone(ts.list)
@@ -79,9 +79,9 @@ func (ts Tags) Apply(t apiv0.TagResponse) Tags {
 
 // Merge combines a freshly loaded Tag list with the known state: the list
 // decides which Tags exist and their order, and for each Tag the state with
-// the greater Version wins, so a list read before a tag_updated does not roll
+// the greater seq wins, so a list read before a tag_updated does not roll
 // its value back. m is the moment the list was requested: a list requested
-// before ForgetVersions is dropped, its Versions may be the server's old ones
+// before ForgetSeqs is dropped, its seqs may be the server's old ones
 // (the reread the forget goes with brings the list).
 func (ts Tags) Merge(m Mark, loaded []apiv0.TagResponse) Tags {
 	if uint64(m) < ts.epoch {
@@ -89,10 +89,10 @@ func (ts Tags) Merge(m Mark, loaded []apiv0.TagResponse) Tags {
 	}
 	list := make([]apiv0.TagResponse, len(loaded))
 	for i, t := range loaded {
-		if cur, ok := ts.Find(t.ID); ok && cur.Version > t.Version {
+		if cur, ok := ts.Find(t.ID); ok && cur.Seq > t.Seq {
 			t = cur
 		}
-		if cur, ok := ts.unlisted[t.ID]; ok && cur.Version > t.Version {
+		if cur, ok := ts.unlisted[t.ID]; ok && cur.Seq > t.Seq {
 			t = cur
 		}
 		list[i] = t
@@ -102,16 +102,16 @@ func (ts Tags) Merge(m Mark, loaded []apiv0.TagResponse) Tags {
 	return merged
 }
 
-// ForgetVersions returns the Tags with their states kept on screen but their
-// Versions reset to 0, below any persisted Version, so the next state received
-// for each Tag wins. Used on a resync: while disconnected the server may have
-// been restarted with a fresh database, its Versions starting over below the
+// ForgetSeqs returns the Tags with their states kept on screen but their
+// seqs reset to 0, below any written one, so the next state received for
+// each Tag wins. Used on a resync: while disconnected the server may have
+// been restarted with a fresh database, its seqs starting over below the
 // ones known here, which would otherwise keep the stale values forever. A
 // list requested before is dropped by Merge.
-func (ts Tags) ForgetVersions() Tags {
+func (ts Tags) ForgetSeqs() Tags {
 	list := make([]apiv0.TagResponse, len(ts.list))
 	for i, t := range ts.list {
-		t.Version = 0
+		t.Seq = 0
 		list[i] = t
 	}
 	ts.list = list // the same Tags at the same positions: idx stays

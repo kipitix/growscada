@@ -8,6 +8,7 @@ import (
 	"github.com/kipitix/growscada/contract"
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
+	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 )
 
@@ -53,11 +54,14 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func NewRouter(projectService application.ProjectService, tagService application.TagService, widgetTypeService application.WidgetTypeService, sceneService application.SceneService, eventBus eventbus.EventBus, maxSSEClients int) *APIRouter {
+// NewRouter returns the server API over the services of both roles: the
+// Engineering node's, and the Runtime node's tagStateService, which writes
+// the tags' states (ADR 0011).
+func NewRouter(projectService application.ProjectService, tagService application.TagService, tagStateService runtimeapp.TagStateService, widgetTypeService application.WidgetTypeService, sceneService application.SceneService, eventBus eventbus.EventBus, maxSSEClients int) *APIRouter {
 	router := &APIRouter{
 		serveMux:            http.NewServeMux(),
 		projectsHandlers:    NewProjectsHandler(projectService),
-		tagsHandlers:        NewTagsHandler(tagService),
+		tagsHandlers:        NewTagsHandler(tagService, tagStateService),
 		widgetTypesHandlers: NewWidgetTypesHandler(widgetTypeService),
 		widgetsHandlers:     NewWidgetsHandler(sceneService),
 		scenesHandlers:      NewScenesHandler(sceneService),

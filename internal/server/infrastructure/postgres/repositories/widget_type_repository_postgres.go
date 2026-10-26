@@ -47,7 +47,7 @@ func (r widgetTypeRepositoryPostgresImpl) Save(ctx context.Context, wt library.W
 	_, err = r.store.save(ctx, wt.ID(), wt.Version(), wt.PendingEvents(), rowWrite[library.WidgetType]{
 		insert: func(tx *sql.Tx, next version.Version[library.WidgetType]) error {
 			row := tx.QueryRowContext(ctx,
-				`INSERT INTO widget_types (id, name, html_template, script, script_language, default_width, default_height, input_ports, version)
+				`INSERT INTO engineering.widget_types (id, name, html_template, script, script_language, default_width, default_height, input_ports, version)
 				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 				RETURNING `+selectWidgetTypeColumns,
 				wt.ID().UUID(), wt.Name().String(), wt.HtmlTemplate().String(),
@@ -62,7 +62,7 @@ func (r widgetTypeRepositoryPostgresImpl) Save(ctx context.Context, wt library.W
 		},
 		update: func(tx *sql.Tx, current, next version.Version[library.WidgetType]) (bool, error) {
 			row := tx.QueryRowContext(ctx,
-				`UPDATE widget_types
+				`UPDATE engineering.widget_types
 				 SET name = $1, html_template = $2, script = $3, script_language = $4,
 				     default_width = $5, default_height = $6, input_ports = $7, version = $8
 				 WHERE id = $9 AND version = $10
@@ -103,7 +103,7 @@ func (r widgetTypeRepositoryPostgresImpl) Delete(ctx context.Context, wt library
 func (r widgetTypeRepositoryPostgresImpl) inUse(ctx context.Context, anID id.ID[library.WidgetType]) error {
 	var live bool
 	err := r.db.QueryRowContext(ctx,
-		`SELECT EXISTS (SELECT 1 FROM widgets w JOIN projects p ON p.id = w.project_id
+		`SELECT EXISTS (SELECT 1 FROM engineering.widgets w JOIN projects p ON p.id = w.project_id
 		                WHERE w.type_id = $1 AND p.deleted_at IS NULL)`,
 		anID.UUID(),
 	).Scan(&live)
@@ -121,7 +121,7 @@ const selectWidgetTypeColumns = `id, name, html_template, script, script_languag
 
 func (r widgetTypeRepositoryPostgresImpl) FindByID(ctx context.Context, anID id.ID[library.WidgetType]) (library.WidgetType, error) {
 	row := r.db.QueryRowContext(ctx,
-		"SELECT "+selectWidgetTypeColumns+" FROM widget_types WHERE id = $1",
+		"SELECT "+selectWidgetTypeColumns+" FROM engineering.widget_types WHERE id = $1",
 		anID.UUID(),
 	)
 	wt, err := r.scanWidgetType(row.Scan)
@@ -136,7 +136,7 @@ func (r widgetTypeRepositoryPostgresImpl) FindByID(ctx context.Context, anID id.
 
 func (r widgetTypeRepositoryPostgresImpl) FindAll(ctx context.Context) ([]library.WidgetType, error) {
 	rows, err := r.db.QueryContext(ctx,
-		"SELECT "+selectWidgetTypeColumns+" FROM widget_types ORDER BY pk_id",
+		"SELECT "+selectWidgetTypeColumns+" FROM engineering.widget_types ORDER BY pk_id",
 	)
 	if err != nil {
 		return nil, fmt.Errorf("error querying widget types: %w", err)

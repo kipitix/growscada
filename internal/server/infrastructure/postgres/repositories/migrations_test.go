@@ -11,6 +11,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pressly/goose/v3"
+
+	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/migrations"
 )
 
 // migrationDB creates an empty database of its own on the test server, so
@@ -30,7 +32,7 @@ func migrationDB(t *testing.T) (*sql.DB, string) {
 		_, _ = testDB.Exec("DROP DATABASE IF EXISTS " + name)
 	})
 	_, currentFile, _, _ := runtime.Caller(0)
-	return db, filepath.Join(filepath.Dir(currentFile), "..", "migrations")
+	return db, filepath.Join(filepath.Dir(currentFile), "..", "migrations", "public")
 }
 
 func TestMigrationWidgetsTypeIDForeignKey_BumpsVersionOfScenesThatLoseWidgets(t *testing.T) {
@@ -247,19 +249,24 @@ func TestMigrationOrganizationsAndProjects_Down_LeavesOutDeletedProjects(t *test
 
 // TestSeedData_AppliesOnTheMigratedSchema keeps the seed of make db_up and of
 // make bruno_test in step with the migrations: the demo content in the
-// project Main, and the empty project Line 2.
+// project Main, every Tag with its state, and the empty project Line 2.
 func TestSeedData_AppliesOnTheMigratedSchema(t *testing.T) {
 	ctx := context.Background()
 	db, dir := migrationDB(t)
-	if err := goose.UpContext(ctx, db, dir); err != nil {
+	if err := migrations.Up(ctx, db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	if err := goose.UpContext(ctx, db, filepath.Join(dir, "..", "test_data")); err != nil {
+	if err := goose.UpContext(ctx, db, filepath.Join(dir, "..", "..", "test_data")); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
 	const main = "b0000000-0000-4000-8000-000000000001"
-	for _, table := range []string{"tags", "scenes", "widgets"} {
+	var unmatched int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM engineering.tags d FULL JOIN runtime.tags s ON s.id = d.id
+	                                   WHERE d.id IS NULL OR s.id IS NULL OR d.type <> s.type OR d.name <> s.name`).Scan(&unmatched); err != nil || unmatched != 0 {
+		t.Errorf("tag definitions without a state or the other way round: %d, %v", unmatched, err)
+	}
+	for _, table := range []string{"engineering.tags", "runtime.tags", "engineering.scenes", "engineering.widgets"} {
 		var inMain, all int
 		if err := db.QueryRowContext(ctx, `SELECT count(*) FILTER (WHERE project_id = $1), count(*) FROM `+table, main).Scan(&inMain, &all); err != nil {
 			t.Fatalf("%s: %v", table, err)
@@ -283,5 +290,158 @@ func TestSeedData_AppliesOnTheMigratedSchema(t *testing.T) {
 	}
 	if strings.Join(names, ",") != "Main,Line 2" {
 		t.Errorf("projects %v, want Main and Line 2", names)
+	}
+}
+
+// TestMigrationEngineeringAndRuntimeSchemas_MovesTablesAndSplitsTags: the
+// tables of the Draft move to engineering, each Tag's value and Quality to
+// runtime.tags with its definition's copy and a seq in the order the Tags
+// were created, tag_updated leaves the outbox, and the chains of the two
+// schemas start at their baseline (ADR 0011).
+func TestMigrationEngineeringAndRuntimeSchemas_MovesTablesAndSplitsTags(t *testing.T) {
+	ctx := context.Background()
+	db, dir := migrationDB(t)
+	if err := goose.UpToContext(ctx, db, dir, 20261025000000); err != nil {
+		t.Fatalf("migrate to the previous version: %v", err)
+	}
+	mustExec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := db.ExecContext(ctx, query, args...); err != nil {
+			t.Fatalf("%s: %v", query, err)
+		}
+	}
+	const main = "b0000000-0000-4000-8000-000000000001"
+	typeID, sceneID, first, second := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	mustExec(`INSERT INTO widget_types (id, name, html_template, script, script_language)
+	          VALUES ($1, 'type', '', '', 'javascript')`, typeID)
+	mustExec(`INSERT INTO scenes (id, project_id, name) VALUES ($1, $2, 'scene')`, sceneID, main)
+	mustExec(`INSERT INTO widgets (id, project_id, name, type_id, scene_id) VALUES ($1, $2, 'w', $3, $4)`, uuid.New(), main, typeID, sceneID)
+	mustExec(`INSERT INTO tags (id, project_id, name, type, value, quality, version)
+	          VALUES ($1, $2, 'speed', 'integer', '42', 'uncertain', 7), ($3, $2, 'mode', 'string', 'auto', 'good', 1)`, first, main, second)
+	mustExec(`INSERT INTO outbox (type, payload) VALUES ('tag_updated', $1), ('tag_created', $2)`,
+		`{"timestamp":"2026-10-26T12:00:00Z","id":"`+first.String()+`","project_id":"`+main+`","tag":{"name":"speed","type":"integer","value":"42","quality":"uncertain","version":7}}`,
+		`{"timestamp":"2026-10-26T12:00:00Z","id":"`+second.String()+`","project_id":"`+main+`"}`)
+
+	if err := goose.UpToContext(ctx, db, dir, 20261026000000); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	for table, want := range map[string]int{
+		"engineering.widget_types": 1, "engineering.scenes": 1, "engineering.widgets": 1, "engineering.tags": 2, "runtime.tags": 2,
+	} {
+		var n int
+		if err := db.QueryRowContext(ctx, `SELECT count(*) FROM `+table).Scan(&n); err != nil || n != want {
+			t.Errorf("%s: %d rows, %v; want %d", table, n, err, want)
+		}
+	}
+	var left int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM pg_tables WHERE schemaname = 'public'
+	                                   AND tablename IN ('tags', 'scenes', 'widgets', 'widget_types')`).Scan(&left); err != nil || left != 0 {
+		t.Errorf("tables of the roles left in public: %d, %v", left, err)
+	}
+	var stateColumns int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM information_schema.columns WHERE table_schema = 'engineering'
+	                                   AND table_name = 'tags' AND column_name IN ('value', 'quality')`).Scan(&stateColumns); err != nil || stateColumns != 0 {
+		t.Errorf("state columns left in the Tag definitions: %d, %v", stateColumns, err)
+	}
+	type state struct {
+		name, tagType, value, quality string
+		version                       int
+		seq                           int64
+	}
+	states := map[uuid.UUID]state{}
+	rows, err := db.QueryContext(ctx, `SELECT id, name, type, value, quality, version, seq FROM runtime.tags`)
+	if err != nil {
+		t.Fatalf("runtime.tags: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var tagID uuid.UUID
+		var s state
+		if err := rows.Scan(&tagID, &s.name, &s.tagType, &s.value, &s.quality, &s.version, &s.seq); err != nil {
+			t.Fatal(err)
+		}
+		states[tagID] = s
+	}
+	if s := states[first]; s.name != "speed" || s.tagType != "integer" || s.value != "42" || s.quality != "uncertain" || s.version != 7 {
+		t.Errorf("state of speed: %+v", s)
+	}
+	if s := states[second]; s.value != "auto" || s.quality != "good" || s.seq <= states[first].seq || states[first].seq <= 0 {
+		t.Errorf("state of mode: %+v, after speed's seq %d", s, states[first].seq)
+	}
+	var outboxTypes []string
+	typeRows, err := db.QueryContext(ctx, `SELECT type FROM outbox ORDER BY seq`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer typeRows.Close()
+	for typeRows.Next() {
+		var eventType string
+		if err := typeRows.Scan(&eventType); err != nil {
+			t.Fatal(err)
+		}
+		outboxTypes = append(outboxTypes, eventType)
+	}
+	if !slices.Equal(outboxTypes, []string{"tag_created"}) {
+		t.Errorf("outbox %v, want tag_updated gone", outboxTypes)
+	}
+
+	// The chains of the roles start at the baseline the migration marked:
+	// applying every chain changes nothing more.
+	for _, table := range []string{"engineering.goose_db_version", "runtime.goose_db_version"} {
+		var latest int64
+		if err := db.QueryRowContext(ctx, `SELECT max(version_id) FROM `+table).Scan(&latest); err != nil || latest != 20261026000000 {
+			t.Errorf("%s: latest %d, %v; want the baseline", table, latest, err)
+		}
+	}
+	if err := migrations.Up(ctx, db); err != nil {
+		t.Fatalf("every chain on the migrated database: %v", err)
+	}
+}
+
+// TestMigrationEngineeringAndRuntimeSchemas_Down_PutsTheStatesBack: the
+// tables go back to public, each Tag with its value and Quality; a Tag
+// without a state gets its type's zero value with Quality bad.
+func TestMigrationEngineeringAndRuntimeSchemas_Down_PutsTheStatesBack(t *testing.T) {
+	ctx := context.Background()
+	db, dir := migrationDB(t)
+	if err := migrations.Up(ctx, db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	const main = "b0000000-0000-4000-8000-000000000001"
+	written, stateless := uuid.New(), uuid.New()
+	if _, err := db.ExecContext(ctx, `INSERT INTO engineering.tags (id, project_id, name, type, version)
+	                                  VALUES ($1, $3, 'speed', 'integer', 1), ($2, $3, 'flag', 'boolean', 1)`, written, stateless, main); err != nil {
+		t.Fatalf("insert tag definitions: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO runtime.tags (id, project_id, name, type, version, value, quality, seq)
+	                                  VALUES ($1, $2, 'speed', 'integer', 1, '5', 'good', 9)`, written, main); err != nil {
+		t.Fatalf("insert tag state: %v", err)
+	}
+
+	if err := goose.DownToContext(ctx, db, dir, 20261025000000); err != nil {
+		t.Fatalf("migrate down: %v", err)
+	}
+
+	got := map[uuid.UUID]string{}
+	rows, err := db.QueryContext(ctx, `SELECT id, value || '/' || quality FROM public.tags`)
+	if err != nil {
+		t.Fatalf("public.tags: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var tagID uuid.UUID
+		var s string
+		if err := rows.Scan(&tagID, &s); err != nil {
+			t.Fatal(err)
+		}
+		got[tagID] = s
+	}
+	if got[written] != "5/good" || got[stateless] != "false/bad" {
+		t.Errorf("states back in the tags: %v", got)
+	}
+	var schemas int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM pg_namespace WHERE nspname IN ('engineering', 'runtime')`).Scan(&schemas); err != nil || schemas != 0 {
+		t.Errorf("schemas of the roles left: %d, %v", schemas, err)
 	}
 }

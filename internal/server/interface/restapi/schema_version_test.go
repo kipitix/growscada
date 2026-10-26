@@ -67,7 +67,7 @@ func TestPreVersioningAPIPath_IsGoneWithHint(t *testing.T) {
 func postTagWithUnknownField(t *testing.T, clientVersion string) string {
 	t.Helper()
 	cleanTags(t)
-	body := `{"name":"t.unknown","type":"integer","value":"0","quality":"good","unit":"rpm"}`
+	body := `{"name":"t.unknown","type":"integer","unit":"rpm"}`
 	req := httptest.NewRequest(http.MethodPost, mainPath+"/tags", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	if clientVersion != "" {
@@ -113,7 +113,7 @@ func TestRequest_NewerClient_UnknownField_SaysUpdateServer(t *testing.T) {
 func TestRequest_NewerClient_KnownFields_IsAccepted(t *testing.T) {
 	cleanTags(t)
 	newer := contract.SchemaVersion{Major: apiv0.SchemaVersion().Major, Minor: apiv0.SchemaVersion().Minor + 1}
-	body := `{"name":"t.newer","type":"integer","value":"0","quality":"good"}`
+	body := `{"name":"t.newer","type":"integer"}`
 	req := httptest.NewRequest(http.MethodPost, mainPath+"/tags", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(contract.SchemaVersionHeader, newer.String())

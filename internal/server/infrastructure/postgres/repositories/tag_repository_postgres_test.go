@@ -5,14 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
-	"github.com/pressly/goose/v3"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -21,6 +18,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/domain/version"
+	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/migrations"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
 
@@ -64,15 +62,7 @@ func TestMain(m *testing.M) {
 		panic("failed to open db: " + err.Error())
 	}
 
-	_, currentFile, _, _ := runtime.Caller(0)
-	migrationsDir := filepath.Join(filepath.Dir(currentFile), "..", "migrations")
-
-	if err := goose.SetDialect("postgres"); err != nil {
-		db.Close()
-		pgContainer.Terminate(ctx)
-		panic("failed to set goose dialect: " + err.Error())
-	}
-	if err := goose.Up(db, migrationsDir); err != nil {
+	if err := migrations.Up(ctx, db); err != nil {
 		db.Close()
 		pgContainer.Terminate(ctx)
 		panic("failed to run migrations: " + err.Error())
@@ -90,7 +80,7 @@ func TestMain(m *testing.M) {
 
 func cleanTags(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM tags"); err != nil {
+	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
 		t.Fatalf("cleanTags: %v", err)
 	}
 }
@@ -102,12 +92,7 @@ func makeTag(t *testing.T, name string, repo tag.TagRepository) tag.Tag {
 	if err != nil {
 		t.Fatalf("NewTagName(%q): %v", name, err)
 	}
-	tagType := tag.TagTypeInteger
-	value, err := tagType.NewTagValue(0)
-	if err != nil {
-		t.Fatalf("NewTagValue: %v", err)
-	}
-	newTag, err := tag.ReconstituteTag(id, mainProject, tagName, tagType, value, tag.TagQualityGood, version.Initial[tag.Tag]())
+	newTag, err := tag.ReconstituteTag(id, mainProject, tagName, tag.TagTypeInteger, version.Initial[tag.Tag]())
 	if err != nil {
 		t.Fatalf("NewTag: %v", err)
 	}
@@ -149,7 +134,7 @@ func TestSave_DuplicateID_ReturnsError(t *testing.T) {
 		t.Fatalf("first Save failed: %v", err)
 	}
 
-	duplicate, _ := tag.ReconstituteTag(newTag.ID(), mainProject, newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), version.Initial[tag.Tag]())
+	duplicate, _ := tag.ReconstituteTag(newTag.ID(), mainProject, newTag.Name(), newTag.Type(), version.Initial[tag.Tag]())
 	_, err := repo.Save(ctx, duplicate)
 
 	if err == nil {
@@ -157,7 +142,7 @@ func TestSave_DuplicateID_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestSave_ExistingTag_UpdatesSuccessfully(t *testing.T) {
+func TestSave_ExistingTag_RaisesItsVersion(t *testing.T) {
 	cleanTags(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	ctx := context.Background()
@@ -171,10 +156,8 @@ func TestSave_ExistingTag_UpdatesSuccessfully(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindByID failed: %v", err)
 	}
-	if err := found.SetValue(99, tag.TagQualityBad); err != nil {
-		t.Fatalf("SetValue failed: %v", err)
-	}
-	if _, err := repo.Save(ctx, found); err != nil {
+	saved, err := repo.Save(ctx, found)
+	if err != nil {
 		t.Fatalf("update Save failed: %v", err)
 	}
 
@@ -182,11 +165,11 @@ func TestSave_ExistingTag_UpdatesSuccessfully(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindByID after update failed: %v", err)
 	}
-	if updated.Value().String() != "99" {
-		t.Errorf("value: expected '99', got %q", updated.Value().String())
+	if updated.Version() != found.Version().Next() || saved.Version() != updated.Version() {
+		t.Errorf("version: stored %s, returned %s, want %s", updated.Version(), saved.Version(), found.Version().Next())
 	}
-	if updated.Quality() != tag.TagQualityBad {
-		t.Errorf("quality: expected bad, got %v", updated.Quality())
+	if updated.Name() != found.Name() || updated.Type() != found.Type() {
+		t.Errorf("definition changed: %s", updated)
 	}
 }
 
@@ -202,7 +185,7 @@ func TestSave_StaleVersion_ReturnsError(t *testing.T) {
 
 	// version=100 while DB has version=1 → optimistic lock conflict
 	badVersion, _ := version.New[tag.Tag](version.WithNumber[tag.Tag](100))
-	staleTag, _ := tag.ReconstituteTag(newTag.ID(), mainProject, newTag.Name(), newTag.Type(), newTag.Value(), newTag.Quality(), badVersion)
+	staleTag, _ := tag.ReconstituteTag(newTag.ID(), mainProject, newTag.Name(), newTag.Type(), badVersion)
 	_, err := repo.Save(ctx, staleTag)
 
 	if err == nil {
@@ -234,9 +217,6 @@ func TestFindByID_ExistingTag_ReturnsTag(t *testing.T) {
 	}
 	if found.Type() != savedTag.Type() {
 		t.Errorf("Type: expected %v, got %v", savedTag.Type(), found.Type())
-	}
-	if found.Quality() != savedTag.Quality() {
-		t.Errorf("Quality: expected %v, got %v", savedTag.Quality(), found.Quality())
 	}
 	if found.Version() != savedTag.Version() {
 		t.Errorf("Version: expected %d, got %d", savedTag.Version(), found.Version())
@@ -297,7 +277,7 @@ func TestFindAll_MultipleTags_ReturnsAll(t *testing.T) {
 
 func TestFindAll_SortedByNameEvenAfterUpdates(t *testing.T) {
 	// Postgres returns unordered rows in storage order, and an UPDATE moves a
-	// row; the list must not reshuffle when tag values change.
+	// row; the list must not reshuffle when tags are saved again.
 	cleanTags(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	ctx := context.Background()
@@ -307,15 +287,12 @@ func TestFindAll_SortedByNameEvenAfterUpdates(t *testing.T) {
 			t.Fatalf("Save %s failed: %v", name, err)
 		}
 	}
-	for round := range 3 {
+	for range 3 {
 		for _, name := range []string{"alpha", "bravo"} {
 			tagName, _ := tag.NewTagName(name)
 			found, err := repo.FindByName(ctx, tagName)
 			if err != nil {
 				t.Fatalf("FindByName %s failed: %v", name, err)
-			}
-			if err := found.SetValue(round, tag.TagQualityGood); err != nil {
-				t.Fatalf("SetValue failed: %v", err)
 			}
 			if _, err := repo.Save(ctx, found); err != nil {
 				t.Fatalf("update Save %s failed: %v", name, err)
@@ -355,8 +332,7 @@ func TestDelete_ExistingTag_TagIsRemovedFromDB(t *testing.T) {
 	ctx := context.Background()
 
 	saved := mustSaveTag(t, repo, makeTag(t, "pump", repo))
-	saved.Delete()
-	if err := repo.Delete(ctx, saved); err != nil {
+	if err := repo.Delete(ctx, saved.Delete()); err != nil {
 		t.Fatalf("Delete failed: %v", err)
 	}
 
@@ -375,8 +351,7 @@ func TestDelete_ExistingTag_OtherTagsAreUnaffected(t *testing.T) {
 	tag1 := mustSaveTag(t, repo, makeTag(t, "temperature", repo))
 	tag2 := mustSaveTag(t, repo, makeTag(t, "pressure", repo))
 
-	tag1.Delete()
-	if err := repo.Delete(ctx, tag1); err != nil {
+	if err := repo.Delete(ctx, tag1.Delete()); err != nil {
 		t.Fatalf("Delete failed: %v", err)
 	}
 
@@ -392,11 +367,10 @@ func TestDelete_NotFound_ReturnsErrTagNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	saved := mustSaveTag(t, repo, makeTag(t, "valve", repo))
-	if _, err := testDB.ExecContext(ctx, "DELETE FROM tags"); err != nil {
+	if _, err := testDB.ExecContext(ctx, "DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
 		t.Fatalf("clean: %v", err)
 	}
-	saved.Delete()
-	err := repo.Delete(ctx, saved)
+	err := repo.Delete(ctx, saved.Delete())
 
 	if !errors.Is(err, tag.ErrTagNotFound) {
 		t.Errorf("expected ErrTagNotFound, got %v", err)
@@ -409,14 +383,10 @@ func TestDelete_StaleVersion_DeletesTag(t *testing.T) {
 	ctx := context.Background()
 
 	stale := mustSaveTag(t, repo, makeTag(t, "valve", repo))
-	if err := stale.SetValue(int64(1), tag.TagQualityGood); err != nil {
-		t.Fatalf("SetValue: %v", err)
-	}
-	mustSaveTag(t, repo, stale)
+	mustSaveTag(t, repo, stale) // the stored version moves on
 
-	stale.Delete()
-	if err := repo.Delete(ctx, stale); err != nil {
-		t.Fatalf("Delete of a tag whose value changed meanwhile: %v", err)
+	if err := repo.Delete(ctx, stale.Delete()); err != nil {
+		t.Fatalf("Delete of a tag saved again meanwhile: %v", err)
 	}
 
 	if _, err := repo.FindByID(ctx, stale.ID()); !errors.Is(err, tag.ErrTagNotFound) {

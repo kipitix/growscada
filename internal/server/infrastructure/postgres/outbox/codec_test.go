@@ -10,15 +10,19 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
+	"github.com/kipitix/growscada/internal/server/domain/tagstate"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
 )
 
-// deliveryEventTypes are the event types of delivery, never stored.
-var deliveryEventTypes = map[event.EventType]bool{
+// unstoredEventTypes are the event types the outbox never holds: those of
+// delivery, and tag_updated, which the Runtime node publishes itself
+// (ADR 0011).
+var unstoredEventTypes = map[event.EventType]bool{
 	event.EventTypeSystemReady:        true,
 	event.EventTypeClientConnected:    true,
 	event.EventTypeClientDisconnected: true,
+	event.EventTypeTagUpdated:         true,
 }
 
 // sampleEvents returns one event of every domain event type.
@@ -27,22 +31,13 @@ func sampleEvents(t *testing.T) []event.Event {
 	ts := event.WithTimestamp(event.NewEventTimestamp(
 		event.EventTimestampWithTime(time.Date(2026, 10, 6, 12, 30, 15, 123456789, time.UTC))))
 
-	name, _ := tag.NewTagName("boiler.pressure")
-	value, _ := tag.TagTypeInteger.NewTagValue(int64(-42))
-	ver, _ := version.New(version.WithNumber[tag.Tag](7))
 	projectID := id.NewID[project.Project]()
-	aTag, err := tag.ReconstituteTag(id.NewID[tag.Tag](), projectID, name, tag.TagTypeInteger, value, tag.TagQualityUncertain, ver)
-	if err != nil {
-		t.Fatalf("ReconstituteTag: %v", err)
-	}
-
 	tagID := id.NewID[tag.Tag]()
 	wtID := id.NewID[library.WidgetType]()
 	sceneID := id.NewID[scene.Scene]()
 	widgetID := id.NewID[scene.Widget]()
 	return []event.Event{
 		tag.NewTagCreatedEvent(tagID, projectID, ts),
-		tag.NewTagUpdatedEvent(aTag, ts),
 		tag.NewTagDeletedEvent(tagID, projectID, ts),
 		library.NewWidgetTypeCreatedEvent(wtID, ts),
 		library.NewWidgetTypeUpdatedEvent(wtID, ts),
@@ -66,7 +61,7 @@ func TestCodec_SamplesCoverEveryDomainEventType(t *testing.T) {
 		covered[e.Type()] = true
 	}
 	for _, et := range event.AllEventTypes() {
-		if !deliveryEventTypes[et] && !covered[et] {
+		if !unstoredEventTypes[et] && !covered[et] {
 			t.Errorf("no sample of %s: add one, and teach the codec to store it", et)
 		}
 	}
@@ -108,13 +103,6 @@ func assertSameSubject(t *testing.T, original, decoded event.Event) {
 		if _, ok := decoded.(project.ProjectEvent); !ok {
 			t.Errorf("decoded %T, want a project.ProjectEvent", decoded)
 		}
-	case tag.TagUpdatedEvent:
-		got := decoded.(tag.TagUpdatedEvent)
-		w, g := want.Tag(), got.Tag()
-		if g.ID() != w.ID() || g.ProjectID() != w.ProjectID() || g.Name() != w.Name() || g.Type() != w.Type() ||
-			g.Value().String() != w.Value().String() || g.Quality() != w.Quality() || g.Version() != w.Version() {
-			t.Errorf("tag %s, want %s", g, w)
-		}
 	case tag.TagEvent:
 		if got := decoded.(tag.TagEvent); got.TagID() != want.TagID() {
 			t.Errorf("tag ID %s, want %s", got.TagID(), want.TagID())
@@ -148,11 +136,26 @@ func assertSameSubject(t *testing.T, original, decoded event.Event) {
 	}
 }
 
-func TestCodec_DeliveryEventTypes_AreNotDecoded(t *testing.T) {
-	for et := range deliveryEventTypes {
+func TestCodec_UnstoredEventTypes_AreNotDecoded(t *testing.T) {
+	for et := range unstoredEventTypes {
 		if _, err := outbox.Decode(et, []byte(`{"id":"00000000-0000-0000-0000-000000000000"}`)); err == nil {
 			t.Errorf("expected %s to be refused", et)
 		}
+	}
+}
+
+// TestCodec_TagUpdated_IsNotEncoded: a Tag state's write bypasses the outbox
+// (ADR 0011), so its event never reaches Append.
+func TestCodec_TagUpdated_IsNotEncoded(t *testing.T) {
+	name, _ := tag.NewTagName("boiler.pressure")
+	state, err := tagstate.Initial(tagstate.Definition{
+		TagID: id.NewID[tag.Tag](), ProjectID: id.NewID[project.Project](), Name: name, Type: tag.TagTypeInteger, Version: version.Committed[tag.Tag](),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := outbox.Encode(tagstate.NewTagUpdatedEvent(state)); err == nil {
+		t.Error("tag_updated was encoded for the outbox")
 	}
 }
 

@@ -36,7 +36,7 @@ func TestHotLists_ReadTheProjectOnlyToTellWhyNothingIsFound(t *testing.T) {
 	p := r.createProject(t, "Line 1")
 	projects := &countingProjects{ProjectRepository: repositories.NewProjectRepositoryPostgres(testDB)}
 	content := application.NewProjectContent(projects, newScopes(), soleOrganization())
-	tags := application.NewTagService(content)
+	tags := application.NewTagService(content, newRuntimeNode())
 	scenes := application.NewSceneService(content, repositories.NewWidgetTypeRepositoryPostgres(testDB))
 	reads := func(when string, want int) {
 		t.Helper()
@@ -57,7 +57,7 @@ func TestHotLists_ReadTheProjectOnlyToTellWhyNothingIsFound(t *testing.T) {
 	}
 	reads("nothing found", 3)
 
-	if _, err := r.tagSvc.CreateTag(ctx, p, appdto.CreateTagInput{Name: "speed", Type: "integer", Value: "0", Quality: "good"}); err != nil {
+	if _, err := r.tagSvc.CreateTag(ctx, p, appdto.CreateTagInput{Name: "speed", Type: "integer"}); err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
 	sc, err := r.sceneSvc.CreateScene(ctx, p, appdto.SceneInput{Name: "s", Width: 100, Height: 100})

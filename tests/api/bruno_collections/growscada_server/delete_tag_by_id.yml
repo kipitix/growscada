@@ -1,7 +1,7 @@
 info:
   name: delete tag by id
   type: http
-  seq: 33
+  seq: 34
 
 http:
   method: DELETE
@@ -11,7 +11,8 @@ http:
 docs: |
   The delete states no version and never returns `409 Conflict`: the tag is
   deleted whatever value was written to it meanwhile. The response carries
-  the tag as it was read just before the delete.
+  the tag as it was read just before the delete, with its last state; the
+  state goes with it, so a value written after the delete is `404`.
 
 runtime:
   assertions:

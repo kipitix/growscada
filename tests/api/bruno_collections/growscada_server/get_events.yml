@@ -1,7 +1,7 @@
 info:
   name: get events (SSE stream)
   type: http
-  seq: 35
+  seq: 36
   tags:
     - manual
 
@@ -34,8 +34,11 @@ docs: |
   `{"type":"widget_updated","timestamp":"2026-01-01T12:00:00Z","id":"<widget uuid>","scene_id":"<scene uuid>"}`.
 
   `tag_updated` additionally carries the Tag's full new state in `tag`, in
-  the same shape as `GET /api/v0/projects/{project}/tags/{id}`, so clients need not read it back:
-  `{"type":"tag_updated","timestamp":"2026-01-01T12:00:00Z","id":"<uuid>","tag":{"id":"<uuid>","name":"pressure","type":"integer","value":"42","quality":"good","version":3}}`.
+  the same shape as `GET /api/v0/projects/{project}/tags/{id}`, so clients need not read it back.
+  The Runtime node publishes it once the write is stored, apart from the
+  other events, at-most-once (ADR 0011): drop a state whose `seq` is not
+  above the one held, and reread the tags on reconnect:
+  `{"type":"tag_updated","timestamp":"2026-01-01T12:00:00Z","id":"<uuid>","tag":{"id":"<uuid>","name":"pressure","type":"integer","value":"42","quality":"good","version":1,"seq":57}}`.
 
   The server caps the number of concurrent event streams (configurable via
   the MAX_SSE_CLIENTS env var, default 100). Once at capacity, a new request

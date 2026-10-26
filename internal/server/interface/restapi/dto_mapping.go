@@ -5,6 +5,7 @@ import (
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 )
 
 // Conversions between the server API contract (apiv0) and the application
@@ -31,6 +32,21 @@ func newTagResponse(t appdto.Tag) apiv0.TagResponse {
 		Value:   t.Value,
 		Quality: t.Quality,
 		Version: t.Version,
+		Seq:     t.Seq,
+	}
+}
+
+// newTagStateResponse converts the Runtime node's Tag state DTO, its
+// definition's copy included, to an apiv0.TagResponse DTO.
+func newTagStateResponse(s runtimeapp.TagState) apiv0.TagResponse {
+	return apiv0.TagResponse{
+		ID:      s.ID,
+		Name:    s.Name,
+		Type:    s.Type,
+		Value:   s.Value,
+		Quality: s.Quality,
+		Version: s.Version,
+		Seq:     s.Seq,
 	}
 }
 
@@ -48,29 +64,19 @@ func newCreateTagResponse(t appdto.Tag) apiv0.CreateTagResponse {
 	return apiv0.CreateTagResponse{ID: t.ID}
 }
 
-// newUpdateTagResponse converts an app-level Tag DTO to an apiv0.UpdateTagResponse DTO.
-func newUpdateTagResponse(t appdto.Tag) apiv0.UpdateTagResponse {
-	return apiv0.UpdateTagResponse{Version: t.Version}
+// newUpdateTagResponse converts the written Tag state to an apiv0.UpdateTagResponse DTO.
+func newUpdateTagResponse(s runtimeapp.TagState) apiv0.UpdateTagResponse {
+	return apiv0.UpdateTagResponse{Seq: s.Seq}
 }
 
 // newCreateTagInput converts an apiv0.CreateTagRequest DTO to an app-level CreateTagInput DTO.
 func newCreateTagInput(r apiv0.CreateTagRequest) appdto.CreateTagInput {
-	return appdto.CreateTagInput{
-		Name:    r.Name,
-		Type:    r.Type,
-		Value:   r.Value,
-		Quality: r.Quality,
-	}
+	return appdto.CreateTagInput{Name: r.Name, Type: r.Type}
 }
 
-// newUpdateTagInput converts an apiv0.UpdateTagRequest DTO to an app-level UpdateTagInput DTO.
-func newUpdateTagInput(r apiv0.UpdateTagRequest, tagID uuid.UUID) appdto.UpdateTagInput {
-	return appdto.UpdateTagInput{
-		ID:      tagID,
-		Value:   r.Value,
-		Quality: r.Quality,
-		Version: r.Version,
-	}
+// newSetTagValueInput converts an apiv0.UpdateTagRequest DTO to the Runtime node's input.
+func newSetTagValueInput(r apiv0.UpdateTagRequest, tagID uuid.UUID) runtimeapp.SetTagValueInput {
+	return runtimeapp.SetTagValueInput{TagID: tagID, Value: r.Value, Quality: r.Quality}
 }
 
 func newSceneResponse(s appdto.Scene) apiv0.SceneResponse {

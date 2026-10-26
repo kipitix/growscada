@@ -12,8 +12,7 @@ import (
 func makeCreatedTag(t *testing.T) Tag {
 	t.Helper()
 	name, _ := NewTagName("pressure")
-	value, _ := TagTypeInteger.NewTagValue(int64(42))
-	aTag, err := CreateTag(id.NewID[Tag](), testProject, name, TagTypeInteger, value, TagQualityGood)
+	aTag, err := CreateTag(id.NewID[Tag](), testProject, name, TagTypeInteger)
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -45,53 +44,20 @@ func TestReconstituteTag_RecordsNothing(t *testing.T) {
 	}
 }
 
-func TestTag_SetValue_RecordsUpdatedEventWithSavedState(t *testing.T) {
-	aTag := makeTestTag(t)
-	if err := aTag.SetValue(int64(7), TagQualityBad); err != nil {
-		t.Fatalf("SetValue: %v", err)
-	}
-
-	events := aTag.PendingEvents()
-	if len(events) != 1 {
-		t.Fatalf("expected 1 pending event, got %d", len(events))
-	}
-	updated, ok := events[0].(TagUpdatedEvent)
-	if !ok {
-		t.Fatalf("expected TagUpdatedEvent, got %T", events[0])
-	}
-	state := updated.Tag()
-	if state.Value().String() != "7" || state.Quality() != TagQualityBad {
-		t.Errorf("event carries %s, want value 7 quality bad", state)
-	}
-	if state.Version() != aTag.Version().Next() {
-		t.Errorf("event carries version %s, want the one Save stores: %s", state.Version(), aTag.Version().Next())
-	}
-	if len(state.PendingEvents()) != 0 {
-		t.Error("the state an event carries records no events")
-	}
-}
-
-func TestTag_SetValue_Invalid_RecordsNothing(t *testing.T) {
-	aTag := makeTestTag(t)
-	if err := aTag.SetValue(3.14, TagQualityGood); err == nil {
-		t.Fatal("expected error")
-	}
-	if got := aTag.PendingEvents(); len(got) != 0 {
-		t.Errorf("expected no pending events, got %v", got)
-	}
-}
-
 func TestTag_Delete_RecordsDeletedEvent(t *testing.T) {
 	aTag := makeTestTag(t)
-	aTag.Delete()
+	deletedTag := aTag.Delete()
 
-	events := aTag.PendingEvents()
+	events := deletedTag.PendingEvents()
 	if len(events) != 1 {
 		t.Fatalf("expected 1 pending event, got %d", len(events))
 	}
 	deleted, ok := events[0].(TagDeletedEvent)
 	if !ok || deleted.TagID() != aTag.ID() {
 		t.Errorf("expected TagDeletedEvent for %s, got %v", aTag.ID(), events[0])
+	}
+	if got := aTag.PendingEvents(); len(got) != 0 {
+		t.Errorf("Delete changed the tag it was called on: %v", got)
 	}
 }
 
@@ -125,27 +91,20 @@ func TestNewTagDeletedEvent_TypeAndID(t *testing.T) {
 }
 
 // TestTagEvents_NameTheTagsProject checks that every event a Tag records names
-// its Project (ADR 0006): created, updated and deleted.
+// its Project (ADR 0006): created and deleted.
 func TestTagEvents_NameTheTagsProject(t *testing.T) {
 	aTag := makeCreatedTag(t)
 	if aTag.ProjectID() != testProject {
 		t.Fatalf("ProjectID = %s, want %s", aTag.ProjectID(), testProject)
 	}
-	if err := aTag.SetValue(int64(1), TagQualityGood); err != nil {
-		t.Fatalf("SetValue: %v", err)
-	}
-	aTag.Delete()
-	events := aTag.PendingEvents()
-	if len(events) != 3 {
-		t.Fatalf("expected 3 pending events, got %d", len(events))
+	events := aTag.Delete().PendingEvents()
+	if len(events) != 2 {
+		t.Fatalf("expected 2 pending events, got %d", len(events))
 	}
 	for _, e := range events {
 		tagEvent, ok := e.(TagEvent)
 		if !ok || tagEvent.ProjectID() != testProject {
 			t.Errorf("%s does not name the tag's project %s", e.Type(), testProject)
 		}
-	}
-	if updated := events[1].(TagUpdatedEvent); updated.Tag().ProjectID() != testProject {
-		t.Errorf("the state tag_updated carries is of project %s, want %s", updated.Tag().ProjectID(), testProject)
 	}
 }

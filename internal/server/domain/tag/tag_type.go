@@ -75,3 +75,18 @@ func (t TagType) NewTagValue(aValue any) (TagValue, error) {
 		return nil, fmt.Errorf("unknown tag type: %v", t)
 	}
 }
+
+// ZeroValue returns the type's zero value: "", false or 0. It is the value
+// of a Tag's state until a supplier writes one.
+func (t TagType) ZeroValue() (TagValue, error) {
+	switch t {
+	case TagTypeString:
+		return TagValueString(""), nil
+	case TagTypeBoolean:
+		return TagValueBoolean(false), nil
+	case TagTypeInteger:
+		return TagValueInteger(0), nil
+	default:
+		return nil, fmt.Errorf("unknown tag type: %v", t)
+	}
+}

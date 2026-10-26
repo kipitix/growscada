@@ -11,29 +11,42 @@
 
 -- type: string | boolean | integer
 -- quality: bad | uncertain | good
---- default version for database is 1 - tag.TagVersionCommitted
+-- version: of the Tag definition; default committed version is 1
 -- A second, empty project of the one organization the migrations create.
 INSERT INTO projects (id, organization_id, name, version) VALUES
     ('b0000000-0000-4000-8000-000000000002', 'a0000000-0000-4000-8000-000000000001', 'Line 2', 1);
 
--- Add test data for tags table, all of the project Main
-INSERT INTO tags (id, project_id, name, type, value, quality, version) VALUES
-    ('6ba7b810-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_active', 'boolean', 'true', 'good', 1),
-    ('6ba7b811-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'max_connections', 'integer', '100', 'good', 1),
-    ('6ba7b812-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_debug', 'boolean', 'false', 'bad', 1),
-    ('6ba7b813-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'timeout_seconds', 'integer', '30', 'uncertain', 2),
-    ('6ba7b814-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'retry_count', 'integer', '3', 'good', 1),
-    ('6ba7b815-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_cached', 'boolean', 'true', 'uncertain', 3),
-    ('6ba7b816-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'pool_size', 'integer', '20', 'good', 1),
-    ('6ba7b817-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'enable_tls', 'boolean', 'false', 'bad', 4),
-    ('6ba7b818-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'creator', 'string', 'Alexander', 'good', 1),
-    ('6ba7b819-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'status_message', 'string', 'System running normally - all checks passed', 'good', 1);
+-- Add test data for the Tag definitions (the Draft), all of the project Main
+INSERT INTO engineering.tags (id, project_id, name, type, version) VALUES
+    ('6ba7b810-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_active', 'boolean', 1),
+    ('6ba7b811-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'max_connections', 'integer', 1),
+    ('6ba7b812-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_debug', 'boolean', 1),
+    ('6ba7b813-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'timeout_seconds', 'integer', 1),
+    ('6ba7b814-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'retry_count', 'integer', 1),
+    ('6ba7b815-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_cached', 'boolean', 1),
+    ('6ba7b816-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'pool_size', 'integer', 1),
+    ('6ba7b817-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'enable_tls', 'boolean', 1),
+    ('6ba7b818-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'creator', 'string', 1),
+    ('6ba7b819-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'status_message', 'string', 1);
+
+-- Their Tag states, with the Runtime node's copy of the definitions (ADR 0011)
+INSERT INTO runtime.tags (id, project_id, name, type, version, value, quality, seq) VALUES
+    ('6ba7b810-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_active', 'boolean', 1, 'true', 'good', nextval('runtime.tag_state_seq')),
+    ('6ba7b811-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'max_connections', 'integer', 1, '100', 'good', nextval('runtime.tag_state_seq')),
+    ('6ba7b812-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_debug', 'boolean', 1, 'false', 'bad', nextval('runtime.tag_state_seq')),
+    ('6ba7b813-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'timeout_seconds', 'integer', 1, '30', 'uncertain', nextval('runtime.tag_state_seq')),
+    ('6ba7b814-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'retry_count', 'integer', 1, '3', 'good', nextval('runtime.tag_state_seq')),
+    ('6ba7b815-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_cached', 'boolean', 1, 'true', 'uncertain', nextval('runtime.tag_state_seq')),
+    ('6ba7b816-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'pool_size', 'integer', 1, '20', 'good', nextval('runtime.tag_state_seq')),
+    ('6ba7b817-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'enable_tls', 'boolean', 1, 'false', 'bad', nextval('runtime.tag_state_seq')),
+    ('6ba7b818-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'creator', 'string', 1, 'Alexander', 'good', nextval('runtime.tag_state_seq')),
+    ('6ba7b819-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'status_message', 'string', 1, 'System running normally - all checks passed', 'good', nextval('runtime.tag_state_seq'));
 
 -- Add test data for widget_types table
 -- script_language: javascript | python | lua
 -- input_ports: JSON array of {name, description, type_hint}; type_hint: "" | "string" | "boolean" | "integer"
 -- version: default committed version is 1
-INSERT INTO widget_types (id, name, html_template, script, script_language, input_ports, default_width, default_height, version) VALUES
+INSERT INTO engineering.widget_types (id, name, html_template, script, script_language, input_ports, default_width, default_height, version) VALUES
     (
         'a1b2c3d4-0001-4000-8000-000000000001',
         'Boolean Circle',
@@ -70,7 +83,7 @@ INSERT INTO widget_types (id, name, html_template, script, script_language, inpu
 
 -- Add test data for scenes table
 -- version: default committed version is 1
-INSERT INTO scenes (id, project_id, name, width, height, background_html, version) VALUES
+INSERT INTO engineering.scenes (id, project_id, name, width, height, background_html, version) VALUES
     (
         'c1d2e3f4-0001-4000-8000-000000000001',
         'b0000000-0000-4000-8000-000000000001',
@@ -95,7 +108,7 @@ INSERT INTO scenes (id, project_id, name, width, height, background_html, versio
 -- port_bindings: JSON array of {port_name, tag_id} mapping InputPort names to tag IDs above
 -- origin_x/origin_y: anchor point in [0,1] (0.5 = center)
 -- rotation_degrees: rotation angle, normalized to [0, 360)
-INSERT INTO widgets (id, project_id, name, x, y, z, width, height, origin_x, origin_y, rotation_degrees, type_id, scene_id, labels, port_bindings) VALUES
+INSERT INTO engineering.widgets (id, project_id, name, x, y, z, width, height, origin_x, origin_y, rotation_degrees, type_id, scene_id, labels, port_bindings) VALUES
     (
         'b1c2d3e4-0001-4000-8000-000000000001',
         'b0000000-0000-4000-8000-000000000001',
@@ -137,7 +150,7 @@ INSERT INTO widgets (id, project_id, name, x, y, z, width, height, origin_x, ori
 -- +goose Down
 -- +goose StatementBegin
 -- Delete test data for widgets table by their ids
-DELETE FROM widgets WHERE id IN (
+DELETE FROM engineering.widgets WHERE id IN (
     'b1c2d3e4-0001-4000-8000-000000000001',
     'b1c2d3e4-0002-4000-8000-000000000002',
     'b1c2d3e4-0003-4000-8000-000000000003',
@@ -145,13 +158,13 @@ DELETE FROM widgets WHERE id IN (
 );
 
 -- Delete test data for scenes table by their ids
-DELETE FROM scenes WHERE id IN (
+DELETE FROM engineering.scenes WHERE id IN (
     'c1d2e3f4-0001-4000-8000-000000000001',
     'c1d2e3f4-0002-4000-8000-000000000002'
 );
 
 -- Delete test data for widget_types table by their ids
-DELETE FROM widget_types WHERE id IN (
+DELETE FROM engineering.widget_types WHERE id IN (
     'a1b2c3d4-0001-4000-8000-000000000001',
     'a1b2c3d4-0002-4000-8000-000000000002',
     'a1b2c3d4-0003-4000-8000-000000000003',
@@ -160,8 +173,20 @@ DELETE FROM widget_types WHERE id IN (
     'a1b2c3d4-0005-4000-8000-000000000005'
 );
 
--- Delete test data for tags table by their ids
-DELETE FROM tags WHERE id IN (
+-- Delete test data for tags by their ids
+DELETE FROM runtime.tags WHERE id IN (
+    '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+    '6ba7b811-9dad-11d1-80b4-00c04fd430c8',
+    '6ba7b812-9dad-11d1-80b4-00c04fd430c8',
+    '6ba7b813-9dad-11d1-80b4-00c04fd430c8',
+    '6ba7b814-9dad-11d1-80b4-00c04fd430c8',
+    '6ba7b815-9dad-11d1-80b4-00c04fd430c8',
+    '6ba7b816-9dad-11d1-80b4-00c04fd430c8',
+    '6ba7b817-9dad-11d1-80b4-00c04fd430c8',
+    '6ba7b818-9dad-11d1-80b4-00c04fd430c8',
+    '6ba7b819-9dad-11d1-80b4-00c04fd430c8'
+);
+DELETE FROM engineering.tags WHERE id IN (
     '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
     '6ba7b811-9dad-11d1-80b4-00c04fd430c8',
     '6ba7b812-9dad-11d1-80b4-00c04fd430c8',

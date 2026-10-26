@@ -19,7 +19,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
-	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 // payload is the stored form of an event; the event type is stored beside it.
@@ -42,37 +41,21 @@ type payload struct {
 	// ByReconciliation marks a widget_updated event recorded by
 	// Scene.ReconcileWith.
 	ByReconciliation bool `json:"by_reconciliation,omitempty"`
-	// Tag is the new state of the Tag of a tag_updated event.
-	Tag *tagState `json:"tag,omitempty"`
-}
-
-type tagState struct {
-	Name    string `json:"name"`
-	Type    string `json:"type"`
-	Value   string `json:"value"`
-	Quality string `json:"quality"`
-	Version int    `json:"version"`
 }
 
 // Encode returns the stored form of a domain event. Events of delivery
-// (connection lifecycle, system) are never stored and fail to encode.
+// (connection lifecycle, system) are never stored and fail to encode, nor is
+// tag_updated: the Runtime node publishes it itself (ADR 0011).
 func Encode(e event.Event) ([]byte, error) {
+	if e.Type() == event.EventTypeTagUpdated {
+		return nil, fmt.Errorf("cannot encode event %s: not stored in the outbox", e.Type())
+	}
 	p := payload{Timestamp: e.Timestamp().Time()}
 	if content, ok := e.(project.ContentEvent); ok {
 		projectID := content.ProjectID().UUID()
 		p.ProjectID = &projectID
 	}
 	switch ev := e.(type) {
-	case tag.TagUpdatedEvent:
-		p.ID = ev.TagID().UUID()
-		t := ev.Tag()
-		p.Tag = &tagState{
-			Name:    t.Name().String(),
-			Type:    t.Type().String(),
-			Value:   t.Value().String(),
-			Quality: t.Quality().String(),
-			Version: t.Version().Number(),
-		}
 	case tag.TagEvent:
 		p.ID = ev.TagID().UUID()
 	case library.WidgetTypeEvent:
@@ -136,12 +119,6 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 	switch eventType {
 	case event.EventTypeTagCreated:
 		return tag.NewTagCreatedEvent(tagID, projectID, ts), nil
-	case event.EventTypeTagUpdated:
-		t, err := decodeTagState(tagID, projectID, p.Tag)
-		if err != nil {
-			return nil, err
-		}
-		return tag.NewTagUpdatedEvent(t, ts), nil
 	case event.EventTypeTagDeleted:
 		return tag.NewTagDeletedEvent(tagID, projectID, ts), nil
 	case event.EventTypeSceneCreated:
@@ -193,30 +170,3 @@ var _ scene.WidgetEvent = untypedWidgetEvent{}
 
 func (e untypedWidgetEvent) WidgetID() id.ID[scene.Widget] { return e.widgetID }
 func (e untypedWidgetEvent) SceneID() id.ID[scene.Scene]   { return e.sceneID }
-
-func decodeTagState(tagID id.ID[tag.Tag], projectID id.ID[project.Project], s *tagState) (tag.Tag, error) {
-	if s == nil {
-		return nil, fmt.Errorf("cannot decode tag_updated payload: no tag")
-	}
-	name, err := tag.NewTagName(s.Name)
-	if err != nil {
-		return nil, fmt.Errorf("cannot decode tag name: %w", err)
-	}
-	tagType, err := tag.NewTagType(s.Type)
-	if err != nil {
-		return nil, fmt.Errorf("cannot decode tag type: %w", err)
-	}
-	value, err := tagType.NewTagValue(s.Value)
-	if err != nil {
-		return nil, fmt.Errorf("cannot decode tag value: %w", err)
-	}
-	quality, err := tag.NewTagQuality(s.Quality)
-	if err != nil {
-		return nil, fmt.Errorf("cannot decode tag quality: %w", err)
-	}
-	ver, err := version.New(version.WithNumber[tag.Tag](s.Version))
-	if err != nil {
-		return nil, fmt.Errorf("cannot decode tag version: %w", err)
-	}
-	return tag.ReconstituteTag(tagID, projectID, name, tagType, value, quality, ver)
-}

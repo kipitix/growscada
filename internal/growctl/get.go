@@ -70,8 +70,8 @@ func newGetTagsCommand(s *settings) *cobra.Command {
 		Short:   "List the tags of the project, optionally filtered by name",
 		Long: "List the tags of the project growctl works in (--project) sorted by name,\n" +
 			"optionally filtered by --pattern or --regex. -o yaml prints them as a\n" +
-			"manifest (current value and quality become initialValue/initialQuality,\n" +
-			"the project metadata.project), ready for apply -f.",
+			"manifest (the project becomes metadata.project; a tag's value and quality\n" +
+			"are its state, not part of the manifest), ready for apply -f.",
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			filter, err := nameFilterFromFlags(cmd, pattern, regex)
@@ -160,8 +160,6 @@ func writeTagManifests(out io.Writer, project string, tags []ServerTag) error {
 		doc.Metadata.Name = t.Name
 		doc.Metadata.Project = project
 		doc.Spec.Type = &t.Type
-		doc.Spec.InitialValue = &t.Value
-		doc.Spec.InitialQuality = &t.Quality
 		if err := enc.Encode(doc); err != nil {
 			return err
 		}

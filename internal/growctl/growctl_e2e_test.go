@@ -99,7 +99,9 @@ func assertOutput(t *testing.T, got string, want ...string) {
 	}
 }
 
-func TestApply_EmptyServer_CreatesTagsWithInitialValues(t *testing.T) {
+// TestApply_EmptyServer_CreatesTagsWithTheInitialState: a created tag's state
+// is its type's zero value with quality bad until a supplier writes one.
+func TestApply_EmptyServer_CreatesTagsWithTheInitialState(t *testing.T) {
 	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 
 	out, err := runGrowctl(t, srv, twoTags, "apply")
@@ -110,10 +112,10 @@ func TestApply_EmptyServer_CreatesTagsWithInitialValues(t *testing.T) {
 	assertOutput(t, out, "tag/pump1.running created", "tag/pump1.label created")
 	tags := tagsByName(t, svc)
 	running := tags["pump1.running"]
-	if running.Type != "boolean" || running.Value != "false" || running.Quality != "good" {
+	if running.Type != "boolean" || running.Value != "false" || running.Quality != "bad" {
 		t.Errorf("pump1.running: got %+v", running)
 	}
-	if label := tags["pump1.label"]; label.Type != "string" || label.Value != "" || label.Quality != "uncertain" {
+	if label := tags["pump1.label"]; label.Type != "string" || label.Value != "" || label.Quality != "bad" {
 		t.Errorf("pump1.label: got %+v", label)
 	}
 }
@@ -124,10 +126,8 @@ func TestApply_Twice_IsIdempotentAndKeepsCurrentValue(t *testing.T) {
 		t.Fatalf("first apply: %v", err)
 	}
 	running := tagsByName(t, svc)["pump1.running"]
-	if _, err := svc.SetTagValueByID(context.Background(), servertest.MainProject, appdto.UpdateTagInput{
-		ID: running.ID, Value: "true", Quality: "bad", Version: running.Version,
-	}); err != nil {
-		t.Fatalf("SetTagValueByID: %v", err)
+	if _, err := apiclient.New(srv.URL, srv.Client()).Project(servertest.MainProject).SetTagValue(context.Background(), running.ID, "true", "good"); err != nil {
+		t.Fatalf("SetTagValue: %v", err)
 	}
 
 	out, err := runGrowctl(t, srv, twoTags, "apply")
@@ -137,7 +137,7 @@ func TestApply_Twice_IsIdempotentAndKeepsCurrentValue(t *testing.T) {
 	}
 	assertOutput(t, out, "tag/pump1.running unchanged", "tag/pump1.label unchanged")
 	after := tagsByName(t, svc)["pump1.running"]
-	if after.ID != running.ID || after.Value != "true" || after.Quality != "bad" || after.Version != running.Version+1 {
+	if after.ID != running.ID || after.Value != "true" || after.Quality != "good" || after.Version != running.Version {
 		t.Errorf("existing tag must keep its identity and current value, got %+v", after)
 	}
 }
@@ -308,9 +308,8 @@ func TestUsageError_ExitCode2(t *testing.T) {
 
 func createTag(t *testing.T, svc application.TagService, name, tagType string) {
 	t.Helper()
-	value := map[string]string{"integer": "0", "string": "", "boolean": "false"}[tagType]
 	if _, err := svc.CreateTag(context.Background(), servertest.MainProject, appdto.CreateTagInput{
-		Name: name, Type: tagType, Value: value, Quality: "good",
+		Name: name, Type: tagType,
 	}); err != nil {
 		t.Fatalf("CreateTag(%q): %v", name, err)
 	}
@@ -468,7 +467,7 @@ func TestGetTags_Table_SortedByName(t *testing.T) {
 		!strings.HasPrefix(lines[1], "a.running") || !strings.HasPrefix(lines[2], "b.speed") {
 		t.Errorf("unexpected table:\n%s", out)
 	}
-	for _, want := range []string{"boolean", "false", "good"} {
+	for _, want := range []string{"boolean", "false", "bad"} {
 		if !strings.Contains(lines[1], want) {
 			t.Errorf("row %q must contain %q", lines[1], want)
 		}
@@ -515,13 +514,13 @@ func TestGetTags_YAML_RoundTripsThroughApply(t *testing.T) {
 	}
 
 	// Re-applying the export to an empty server recreates the same tags.
-	if _, err := postgres.DB(t).ExecContext(context.Background(), "DELETE FROM tags"); err != nil {
+	if _, err := postgres.DB(t).ExecContext(context.Background(), "DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
 		t.Fatalf("clean tags: %v", err)
 	}
 	if _, err := runGrowctl(t, srv, exported, "apply"); err != nil {
 		t.Fatalf("apply exported: %v", err)
 	}
-	if running := tagsByName(t, svc)["pump1.running"]; running.Type != "boolean" || running.Value != "false" || running.Quality != "good" {
+	if running := tagsByName(t, svc)["pump1.running"]; running.Type != "boolean" || running.Value != "false" || running.Quality != "bad" {
 		t.Errorf("pump1.running after round trip: %+v", running)
 	}
 }
@@ -546,15 +545,16 @@ metadata:
 `
 
 const lineTag = `
-apiVersion: growscada/v0.2
+apiVersion: growscada/v0.3
 kind: Tag
 metadata:
   name: speed
   project: Line 1
-spec: {type: integer, initialValue: "7", initialQuality: good}
+spec: {type: integer}
 `
 
-// projectTags returns the tags of the project named name, by name.
+// projectTags returns the type of each tag of the project named name, by
+// name.
 func projectTags(t *testing.T, srv *httptest.Server, name string) map[string]string {
 	t.Helper()
 	client := apiclient.New(srv.URL, srv.Client())
@@ -568,7 +568,7 @@ func projectTags(t *testing.T, srv *httptest.Server, name string) map[string]str
 	}
 	byName := map[string]string{}
 	for _, tg := range tags {
-		byName[tg.Name] = tg.Value
+		byName[tg.Name] = tg.Type
 	}
 	return byName
 }
@@ -582,7 +582,7 @@ func TestApply_ProjectAndItsTags_CreatesTheProjectFirst(t *testing.T) {
 		t.Fatalf("apply: %v", err)
 	}
 	assertOutput(t, out, "project/Line 1 created", "tag/speed created")
-	if tags := projectTags(t, srv, "Line 1"); tags["speed"] != "7" {
+	if tags := projectTags(t, srv, "Line 1"); tags["speed"] != "integer" {
 		t.Errorf("tags of Line 1: %v", tags)
 	}
 	if tags := tagsByName(t, svc); len(tags) != 0 {
@@ -654,7 +654,7 @@ func TestApply_TagsOfNoProject_GoToTheOneDeclaredProject_NotTheContexts(t *testi
 		t.Fatalf("apply: %v", err)
 	}
 	assertOutput(t, out, "project/Line 1 created", "tag/speed created")
-	if tags := projectTags(t, srv, "Line 1"); tags["speed"] != "7" {
+	if tags := projectTags(t, srv, "Line 1"); tags["speed"] != "integer" {
 		t.Errorf("tags of Line 1: %v", tags)
 	}
 	if tags := tagsByName(t, svc); len(tags) != 0 {
@@ -670,7 +670,7 @@ func TestApply_TagsOfNoProject_WithoutContext_GoToTheOneDeclaredProject(t *testi
 		t.Fatalf("apply: %v", err)
 	}
 
-	if tags := projectTags(t, srv, "Line 1"); tags["speed"] != "7" {
+	if tags := projectTags(t, srv, "Line 1"); tags["speed"] != "integer" {
 		t.Errorf("tags of Line 1: %v", tags)
 	}
 }
@@ -682,7 +682,7 @@ func TestApply_TagsOfNoProject_FlagWinsOverTheDeclaredProject(t *testing.T) {
 		t.Fatalf("apply: %v", err)
 	}
 
-	if tags := tagsByName(t, svc); tags["speed"].Value != "7" {
+	if tags := tagsByName(t, svc); tags["speed"].Type != "integer" {
 		t.Errorf("tags of Main (--project): %v", tags)
 	}
 	if tags := projectTags(t, srv, "Line 1"); len(tags) != 0 {
@@ -922,7 +922,7 @@ func TestDelete_ProjectFromFile_NotConfirmed_DeletesNothing(t *testing.T) {
 	if err != nil || out != "" || !strings.Contains(prompt, "Aborted") {
 		t.Errorf("expected abort, got out=%q prompt=%q err=%v", out, prompt, err)
 	}
-	if tags := projectTags(t, srv, "Line 1"); tags["speed"] != "7" {
+	if tags := projectTags(t, srv, "Line 1"); tags["speed"] != "integer" {
 		t.Errorf("nothing must be deleted, tags of Line 1: %v", tags)
 	}
 }
@@ -941,7 +941,7 @@ func TestDelete_ProjectFromStdin_WithoutYes_IsUsageErrorAndDeletesNothing(t *tes
 	if out != "" {
 		t.Errorf("nothing must be reported deleted, got %q", out)
 	}
-	if tags := projectTags(t, srv, "Line 1"); tags["speed"] != "7" {
+	if tags := projectTags(t, srv, "Line 1"); tags["speed"] != "integer" {
 		t.Errorf("nothing must be deleted, tags of Line 1: %v", tags)
 	}
 }

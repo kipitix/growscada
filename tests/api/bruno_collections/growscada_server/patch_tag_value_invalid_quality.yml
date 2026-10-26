@@ -1,0 +1,40 @@
+info:
+  name: patch tag value invalid quality
+  type: http
+  seq: 23
+
+http:
+  method: PATCH
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/tags/{{TAG_ID}}/value
+  body:
+    type: json
+    data: |-
+      {
+        "value": "42",
+        "quality": "simulated"
+      }
+  auth: inherit
+
+docs: |
+  "simulated" is not a Quality (only bad, uncertain, good): `400 Bad Request`
+  Problem Details naming the cause, and the tag's state is not written.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '400'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: '"application/problem+json"'
+    - expression: 'res.body.detail'
+      operator: contains
+      value: '"quality"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

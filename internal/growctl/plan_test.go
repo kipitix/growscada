@@ -11,7 +11,7 @@ import (
 )
 
 func manifest(name, tagType string) growctl.TagManifest {
-	return growctl.TagManifest{Name: name, Type: tagType, InitialValue: "0", InitialQuality: "good"}
+	return growctl.TagManifest{Name: name, Type: tagType}
 }
 
 func serverTag(name, tagType string) growctl.ServerTag {

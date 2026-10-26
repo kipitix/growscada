@@ -8,9 +8,13 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
+	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
+	runtimepg "github.com/kipitix/growscada/internal/server/infrastructure/postgres/runtime"
+	"github.com/kipitix/growscada/internal/server/inprocess"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
@@ -29,11 +33,20 @@ const mainPath = apiv0.PathPrefix + "/projects/b0000000-0000-4000-8000-000000000
 type testServices struct {
 	projects    application.ProjectService
 	tags        application.TagService
+	states      runtimeapp.TagStateService
 	widgetTypes application.WidgetTypeService
 	scenes      application.SceneService
 }
 
+// newServices returns the services over the test database; the Runtime
+// node's tag_updated go nowhere.
 func newServices(opts ...repositories.Option) testServices {
+	return newServicesPublishingTo(func(event.Event) {}, opts...)
+}
+
+// newServicesPublishingTo returns the services over the test database, the
+// Runtime node publishing its tag_updated to publish.
+func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Option) testServices {
 	db := testDB()
 	orgID, err := repositories.FindSoleOrganization(context.Background(), db)
 	if err != nil {
@@ -42,9 +55,11 @@ func newServices(opts ...repositories.Option) testServices {
 	projectRepo := repositories.NewProjectRepositoryPostgres(db, opts...)
 	content := application.NewProjectContent(projectRepo, repositories.NewProjectScopes(db, opts...), orgID)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(db, opts...)
+	states := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, publish)
 	return testServices{
 		projects:    application.NewProjectService(projectRepo, orgID),
-		tags:        application.NewTagService(content),
+		tags:        application.NewTagService(content, inprocess.NewRuntimeNode(states)),
+		states:      states,
 		widgetTypes: application.NewWidgetTypeService(wtRepo),
 		scenes:      application.NewSceneService(content, wtRepo),
 	}
@@ -52,7 +67,7 @@ func newServices(opts ...repositories.Option) testServices {
 
 // router returns the API router over the services.
 func (s testServices) router() *restapi.APIRouter {
-	return restapi.NewRouter(s.projects, s.tags, s.widgetTypes, s.scenes, eventbus.NewEventBus(), 100)
+	return restapi.NewRouter(s.projects, s.tags, s.states, s.widgetTypes, s.scenes, eventbus.NewEventBus(), 100)
 }
 
 // anyProjects is a ProjectService that finds every project, for the event

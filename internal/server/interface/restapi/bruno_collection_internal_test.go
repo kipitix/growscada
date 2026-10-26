@@ -30,7 +30,7 @@ var requestBodies = map[string]any{
 // keeps up with the API: every request hits a route, every route has a
 // request and every body decodes as its handler decodes it.
 func TestBrunoCollection(t *testing.T) {
-	router := NewRouter(nil, nil, nil, nil, eventbus.NewEventBus(), 1)
+	router := NewRouter(nil, nil, nil, nil, nil, eventbus.NewEventBus(), 1)
 	t.Cleanup(router.Close)
 	var patterns []string
 	for _, rt := range router.routes() {

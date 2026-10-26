@@ -40,13 +40,16 @@ All primary workflows go through `make`. **Always prefer `make <target>` over ru
 # Run a single test
 go test ./internal/server/domain/tag/... -run TestTagName
 
-# Create a new migration
-goose create <migration_name> sql
+# Create a new migration in a schema's chain (public, engineering or runtime)
+goose -dir internal/server/infrastructure/postgres/migrations/engineering create <migration_name> sql
 
-# Apply migrations manually
+# Apply migrations manually: the three chains, public first
 export GOOSE_DRIVER=postgres
 export GOOSE_DBSTRING="user=growscada password=growscada host=localhost dbname=growscada"
-goose up
+cd internal/server/infrastructure/postgres/migrations
+goose -dir public up
+goose -dir engineering -table engineering.goose_db_version up
+goose -dir runtime -table runtime.goose_db_version up
 ```
 
 ## Architecture
@@ -56,6 +59,7 @@ goose up
 `internal/` is split by application. The server's DDD layers live under `internal/server/`; the tools that talk to the server from outside sit next to it and talk to it over the REST API only. The shapes of everything that crosses a process or time boundary live in the public `contract/` package (ADR 0005), which every side may import. What else they may import depends on their role:
 
 - **Engineer tools** (`growctl`) may also import value objects from `internal/server/domain/` (tag name, type, quality, name matchers, project name) to validate input the same way the server does. Never `application/`, `infrastructure/` or `interface/`.
+- **The roles of the server** (ADR 0011): the Engineering node (`domain/scene`, `domain/library`, `application`, `application/appdto`, `postgres/repositories`, `postgres/outbox`) and the Runtime node (`domain/tagstate`, `application/runtime`, `postgres/runtime`) never import each other; the Runtime node builds only on the shared domain (`domain/tag`, `project`, `organization`, `id`, `event`, `version`). The Engineering node reaches the Runtime node only through its port `application.RuntimeNode`, implemented in-process by `internal/server/inprocess` (wired in `main.go` and `servertest`; HTTP — task 52). `internal/server/roles_test.go` checks the imports and that no SQL string of a role names the other role's schema.
 - **The Device side** (`devicelink`, `devicesim`, future protocol adapters) depends only on the REST contract (`apiclient` → `contract/api/v0`), never on `internal/server/domain/`: its own enums (`devicelink.TagType`, `devicelink.Quality`) mirror the API's strings, so adapters stay independent of the server's internals (ADR 0004).
 
 ```
@@ -69,9 +73,10 @@ schemas/            # Generated JSON schemas, schemas/<contract>/<MAJOR.MINOR>.j
 internal/
   server/           # GrowSCADA server + WASM UI (DDD layers below)
     domain/         # Core business logic — no external dependencies
-    application/    # Use-case services, orchestrate domain objects
-    infrastructure/ # Concrete implementations (Postgres repositories, outbox)
+    application/    # Use-case services, orchestrate domain objects (runtime/: the Runtime node's)
+    infrastructure/ # Concrete implementations (Postgres repositories, outbox; postgres/runtime/: the Runtime node's)
     interface/      # Delivery mechanisms (REST API + SSE, EventBus, PWA UI)
+    inprocess/      # The roles wired in one process: RuntimeNode over the Runtime node's services
   apiclient/        # Go client of the REST API, apiv0 types as they are; used by growctl, devicelink and the PWA UI
   growctl/          # growctl CLI: manifests, planner
   devicelink/       # Contract by which a Device delivers Tag values to the server (ADR 0004)
@@ -90,7 +95,8 @@ Each subdomain owns its aggregate, value objects, and repository **interface**:
 |------------|---------------------|
 | `project/` | `Project` — unit of isolation (ADR 0006): name unique among the live Projects of its Organization; immutable (`Rename`, `Delete` marks it deleted); `ProjectEvent` (its own events) and `ContentEvent` (events of its Tags, Scenes, Widgets, which name the Project by embedding `project.Content`; no event is both) |
 | `organization/` | `Organization` — identity marker of the tenant; the server runs with the one the migrations create |
-| `tag/`     | `Tag` — atomic SCADA data point with type, value, quality (`Good/Bad/Uncertain`), of one Project (`ProjectID`, immutable); its events (`TagCreatedEvent`, …) |
+| `tag/`     | `Tag` — the Tag definition (name, TagType, Version) of one Project (`ProjectID`), the Engineering node's; immutable (`Delete` returns a new Tag); `TagCreatedEvent`, `TagDeletedEvent`; the value objects both roles share (`TagName`, `TagType` with `ZeroValue`, `TagValue`, `TagQuality` — `Good/Bad/Uncertain`) |
+| `tagstate/` | `TagState` — the Tag state (value, Quality, `Seq`) with its `Definition`'s copy, the Runtime node's (ADR 0011); immutable (`Write` returns a new one); `Initial` = the TagType's zero value with Quality `Bad`; `TagUpdatedEvent` (a `tag.TagEvent`, never stored in the outbox); `Repository` |
 | `scene/`   | `Scene` — named canvas (mnemonic screen) of one Project, binding only Tags of it (`TagTypes` are read through the Project's scope, `ProjectScope.ProjectID()`; TagTypes of another Project are `ErrTagTypesOfAnotherProject`, never taken for missing Tags); immutable aggregate whose methods (`AddWidget`, `UpdateWidget`, `RemoveWidget`, `Update`, `ReconcileWith`, `Delete`) return a new Scene; Scene and Widget events |
 | `scene/`   | `Widget` — entity of the Scene aggregate: instance of a WidgetType placed on a Scene, with position/size/rotation/transform matrix |
 | `library/` | `WidgetType` — reusable template: HTML template + JavaScript script, InputPorts; immutable (`Update`, `Delete`); its events |
@@ -102,17 +108,20 @@ Each subdomain owns its aggregate, value objects, and repository **interface**:
 
 Services (`ProjectService`, `TagService`, `WidgetTypeService`, `SceneService`) accept repository interfaces injected from `main.go`. A mutation: parse input → load the aggregate → call its method → `Save`/`Delete` → `appdto`. Services publish no events (ADR 0008).
 
-**Projects (ADR 0006).** The repositories of a Project's content are opened per Project: `ProjectScopes.ForProject(p)` → `Tags()`, `Scenes()`, every query scoped by `project_id`; saving an aggregate of another Project through them is an error. `ProjectContent` (Tag and Scene services) first checks that the Project is live and of the server's Organization (`ErrProjectNotFound` → 404 of the Project), then opens its scope; the hot path of Tag values (`SetTagValueByID`) checks it in the Tag's own query (`FindByIDInLiveProject`) and reads the Project only on a miss, and so do the lists the UI reloads on every event (Tags and Scenes by `FindAllInLiveProject`, a Scene's Widgets by the Scene's `FindByIDInLiveProject`), the Project read only when nothing is found. Deleting a Project only marks it; `NewProjectCleanupPolicy` deletes its Scenes, then its Tags, each with its own events, and the Project's row last (FKs without CASCADE); a creation of a Tag or Scene locks the Project's row, live, for share in its transaction (`aggregateStore.lockLiveProject`), so marking it waits for creations and none follows the mark. Job keys of a Project's content start with `project:<id>`.
+**Tag definition and Tag state (ADR 0011).** `TagService` keeps the Tag definitions of the Draft and reads each with its state through `RuntimeNode` (`FindTagStates`; a definition without a state shows the initial one). `application/runtime.TagStateService` is the Runtime node's: `SetTagValue` (the hot path, `PATCH …/value`: the state read with the check of its Project in one query, `IsProjectLive` only on a miss; no expected Version, the latest write wins, `seq` from the one sequence `runtime.tag_state_seq` taken in the UPDATE; after it is stored it publishes `tag_updated` to the EventBus itself — no outbox row, at-most-once), `FindTagStates`, `UpsertTagDefinitions` (idempotent: a Tag without a state gets its initial one), `RemoveTagStates`, `RemoveProjectTagStates`; its own `ErrInvalidInput`. Bridge until Deploy (task 35): `CreateTag` upserts the definition right after commit (a 201 Tag accepts values), `DeleteTagByID` removes the state at once, and `NewRuntimeTagDefinitionsPolicy` (`sync_runtime_tag_definitions`, key `project:<id>/tag:<id>` on `tag_created`/`tag_deleted`) upserts the Tag's definition if the Draft holds it, else removes its state — making up for a failed call.
 
-**Events (ADR 0008).** One transaction changes one aggregate. The aggregate records its own events (`Create…` records Created, `Reconstitute…` — for repositories — nothing; changes and `Delete()` record theirs; see `event.Recorder`). The repository's `Save`/`Delete` writes the state (CAS on the loaded Version) and the pending events into the `outbox` table in one transaction; `outbox.Dispatcher` delivers them after commit, in the order of their transactions (`tx_id`; a row waits for every older transaction to end, so writers take no lock), to the `EventBus` (SSE) and deletes each row — at-least-once. Changes spanning aggregates are **policies** (`application.Policy`: `Name`, `JobKey(event)`, `Run(ctx, key)`): in the transaction that deletes a delivered row the dispatcher enqueues a job per policy that keys the event into `policy_jobs`; jobs with the same key merge (`generation`), and the `outbox.PolicyRunner` runs them apart from delivery, retrying a failure forever with backoff (1 s ×2 → 5 min). A policy brings state into line with what it reads when it runs, never with the event's payload (e.g. `NewWidgetReconciliationPolicy`: Widgets ↔ their changed WidgetType and the Tags they bind, each Scene in its own transaction; `NewUnbindDeletedTagPolicy`: a deleted Tag's PortBindings removed from every Scene of its Project, ADR 0010 — nothing in a Project marked deleted, whose cleanup deletes the Scenes; `NewProjectCleanupPolicy`: see Projects). Operations that state no expected Version (deletes, policies) go through `retryOnRace`: on a write race they reread and retry, after 3 lost races → conflict (409). A Tag is deleted without CAS: after creation only its value changes.
+**Projects (ADR 0006).** The repositories of a Project's content are opened per Project: `ProjectScopes.ForProject(p)` → `Tags()`, `Scenes()`, every query scoped by `project_id`; saving an aggregate of another Project through them is an error. `ProjectContent` (Tag and Scene services) first checks that the Project is live and of the server's Organization (`ErrProjectNotFound` → 404 of the Project), then opens its scope; the hot path of Tag values (`TagStateService.SetTagValue`, the Runtime node's) checks it in the state's own query and reads the Project only on a miss, and so do the lists the UI reloads on every event (Tags and Scenes by `FindAllInLiveProject`, a Scene's Widgets by the Scene's `FindByIDInLiveProject`), the Project read only when nothing is found. Deleting a Project only marks it; `NewProjectCleanupPolicy` deletes its Scenes, then its Tags, each with its own events, then its Tag states through `RuntimeNode`, and the Project's row last (FKs without CASCADE; a state upserted late holds the row, and the next run removes it); a creation of a Tag or Scene locks the Project's row, live, for share in its transaction (`aggregateStore.lockLiveProject`), so marking it waits for creations and none follows the mark. Job keys of a Project's content start with `project:<id>`.
+
+**Events (ADR 0008).** One transaction changes one aggregate. The aggregate records its own events (`Create…` records Created, `Reconstitute…` — for repositories — nothing; changes and `Delete()` record theirs; see `event.Recorder`). The repository's `Save`/`Delete` writes the state (CAS on the loaded Version) and the pending events into the `outbox` table in one transaction; `outbox.Dispatcher` delivers them after commit, in the order of their transactions (`tx_id`; a row waits for every older transaction to end, so writers take no lock), to the `EventBus` (SSE) and deletes each row — at-least-once. Changes spanning aggregates are **policies** (`application.Policy`: `Name`, `JobKey(event)`, `Run(ctx, key)`): in the transaction that deletes a delivered row the dispatcher enqueues a job per policy that keys the event into `policy_jobs`; jobs with the same key merge (`generation`), and the `outbox.PolicyRunner` runs them apart from delivery, retrying a failure forever with backoff (1 s ×2 → 5 min). A policy brings state into line with what it reads when it runs, never with the event's payload (e.g. `NewWidgetReconciliationPolicy`: Widgets ↔ their changed WidgetType and the Tags they bind, each Scene in its own transaction; `NewUnbindDeletedTagPolicy`: a deleted Tag's PortBindings removed from every Scene of its Project, ADR 0010 — nothing in a Project marked deleted, whose cleanup deletes the Scenes; `NewProjectCleanupPolicy`: see Projects). Operations that state no expected Version (deletes, policies) go through `retryOnRace`: on a write race they reread and retry, after 3 lost races → conflict (409). A Tag definition is deleted without CAS. Writes of Tag states are the exception to all of this: no aggregate of people, no outbox (ADR 0011).
 
 `appdto/` structs are the boundary between the domain and the outside world — not the REST DTOs.
 
 ### Infrastructure Layer (`internal/server/infrastructure/`)
 
 - **PostgreSQL repositories** implement domain repository interfaces using `database/sql` + `lib/pq`.
-- **Migrations** live in `internal/server/infrastructure/postgres/migrations/` and are managed with [Goose](https://github.com/pressly/goose). The debug `docker-compose.yaml` automatically applies migrations and seed data on `make db_up`.
+- **Migrations** live in `internal/server/infrastructure/postgres/migrations/` and are managed with [Goose](https://github.com/pressly/goose): one database, three schemas, one chain each (ADR 0011) — `public/` (the server's: organizations, projects, outbox, policy_jobs; goose table `goose_db_version`), `engineering/` (WidgetTypes, Scenes, Widgets, Tag definitions; `engineering.goose_db_version`), `runtime/` (Tag states with the copy of the definitions, `runtime.tag_state_seq`; `runtime.goose_db_version`), applied in that order; the public migration `20261026000000` moved the tables and marks the baseline of the two others. Go code applies them with `migrations.Up` (embedded); the debug `docker-compose.yaml` applies the three chains (a goose service each: the `goose-docker` image runs `goose -dir=/migrations up` whatever the command, the table goes in `GOOSE_EXTRA_ARGS`) and the seed data (`test_data/`, a chain on `goose_db_version`) on `make db_up`. Queries name the role schemas (`engineering.tags`, `runtime.tags`); `public` stays unqualified.
 - **Repositories of a Project's content** (`NewProjectScopes`, `NewTagRepositoryPostgres(db, project)`, `NewSceneRepositoryPostgres(db, project)`) carry the Project in their `aggregateStore`; `FindSoleOrganization` reads the one Organization the migrations create (`main.go` fails to start without exactly one).
+- **The Runtime node's repository** (`postgres/runtime.NewTagStateRepositoryPostgres`) over `runtime.tags`: reads `public.projects`, never `engineering.*`.
 - **Outbox** (`postgres/outbox/`): `Append` (called by the repositories' shared `aggregateStore` template), the internal event codec (not a contract; the payload carries the `project_id` of a content event) and the `Dispatcher` (`Run`, `Notify` — wired to repositories via `repositories.NotifyOnCommit`, `DrainOnce` for deterministic tests; `WithPolicyRunner` makes it enqueue policy jobs) and the `PolicyRunner` (`Run` — woken by the dispatcher and by the timer of the next due job, `RunDueOnce` for deterministic tests); the policy registry is assembled in `main.go`. One dispatcher and one runner per database.
 
 ### Interface Layer (`internal/server/interface/`)
@@ -125,8 +134,9 @@ Services (`ProjectService`, `TagService`, `WidgetTypeService`, `SceneService`) a
 - Errors follow RFC 7807 Problem Details (`problems.go`).
 - Each resource has its own handler file (`tags.go`, `widgets.go`, etc.). JSON shapes are `contract/api/v0`; the conversions to/from `appdto` are in `dto_mapping.go`.
 - Request bodies are decoded strictly with `decodeRequest` (unknown field → 400); clients read responses tolerantly.
+- `NewRouter` takes the services of both roles: `PATCH …/tags/{id}/value` goes to the Runtime node's `TagStateService` (no `version`, answers `seq`), everything else to the Engineering node's; `newAPIEvent` translates `tagstate.TagUpdatedEvent` (the Tag's full state, `seq` included).
 
-**EventBus** (`internal/server/interface/eventbus/`): in-process bus feeding the SSE streams: domain events handed over by the outbox dispatcher, plus delivery's own events (`client_connected`/`client_disconnected`, `system_ready`). The `eventHub` routes a `ContentEvent` to the clients following its Project and everything else — Projects, WidgetTypes, connections — to those following the server's stream: `GET /api/v0/events` is the server's, joined by one Project's with `?project=<id>` (a Project not found adds nothing), `GET /api/v0/projects/{id}/events` one Project's alone. `event_bus_mqtt.go` is a stub.
+**EventBus** (`internal/server/interface/eventbus/`): in-process bus feeding the SSE streams: domain events handed over by the outbox dispatcher, the Runtime node's `tag_updated` (published by `TagStateService` itself, ADR 0011), plus delivery's own events (`client_connected`/`client_disconnected`, `system_ready`). The `eventHub` routes a `ContentEvent` to the clients following its Project and everything else — Projects, WidgetTypes, connections — to those following the server's stream: `GET /api/v0/events` is the server's, joined by one Project's with `?project=<id>` (a Project not found adds nothing), `GET /api/v0/projects/{id}/events` one Project's alone. `event_bus_mqtt.go` is a stub.
 
 **PWA UI** (`internal/server/interface/ui/`, port `:8080`):
 - Built with [go-app v11](https://go-app.dev/) — compiled to WebAssembly, served by the same binary.
@@ -155,7 +165,9 @@ Tests of the tools that talk to the server (`internal/devicelink`, `internal/dev
 
 | Term | Meaning |
 |------|---------|
-| **Tag** | Single process variable with quality metadata |
+| **Tag** | Single process variable with quality metadata: its Tag definition and its Tag state under one identity |
+| **Tag definition** | A Tag's name and TagType: configuration of the Draft, the Engineering node's |
+| **Tag state** | A Tag's value and Quality, numbered by `seq`: the Runtime node's; latest write wins; initially the TagType's zero value with Quality `Bad` |
 | **TagType** | A Tag's data type: `String`, `Boolean`, `Integer` |
 | **WidgetType** | Reusable visual component definition: HTML + JS |
 | **Widget** | Placed instance of a WidgetType on a Scene, bound to Tag IDs |

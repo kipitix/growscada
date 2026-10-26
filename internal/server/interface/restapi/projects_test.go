@@ -26,7 +26,7 @@ import (
 func cleanProjectsRest(t *testing.T) {
 	t.Helper()
 	if _, err := testDB().ExecContext(context.Background(),
-		"DELETE FROM tags; DELETE FROM scenes; DELETE FROM projects WHERE id <> '"+mainProject.String()+"'; "+
+		"DELETE FROM runtime.tags; DELETE FROM engineering.tags; DELETE FROM engineering.scenes; DELETE FROM projects WHERE id <> '"+mainProject.String()+"'; "+
 			"UPDATE projects SET name = 'Main', version = 1, deleted_at = NULL"); err != nil {
 		t.Fatalf("cleanProjectsRest: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestTags_SameNameInTwoProjects(t *testing.T) {
 	rec := serve(router, http.MethodPost, apiv0.PathPrefix+"/projects", apiv0.CreateProjectRequest{Name: "Line 1"})
 	other := decodeBody[apiv0.CreateProjectResponse](t, rec)
 	otherPath := apiv0.PathPrefix + apiv0.ProjectPath(other.ID.String())
-	tagReq := apiv0.CreateTagRequest{Name: "speed", Type: "integer", Value: "0", Quality: "good"}
+	tagReq := apiv0.CreateTagRequest{Name: "speed", Type: "integer"}
 
 	if rec := serve(router, http.MethodPost, mainPath+"/tags", tagReq); rec.Code != http.StatusCreated {
 		t.Fatalf("POST tag in Main: %d %s", rec.Code, rec.Body)

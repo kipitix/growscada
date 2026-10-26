@@ -11,8 +11,9 @@ import (
 // id is a stable ID named for readability.
 func id(name string) uuid.UUID { return uuid.NewSHA1(uuid.Nil, []byte(name)) }
 
-func tagV(name, value string, version int) apiv0.TagResponse {
-	return apiv0.TagResponse{ID: id(name), Name: name, Type: "integer", Value: value, Quality: "good", Version: version}
+// tagV is a Tag's state written with the given seq.
+func tagV(name, value string, seq int64) apiv0.TagResponse {
+	return apiv0.TagResponse{ID: id(name), Name: name, Type: "integer", Value: value, Quality: "good", Version: 1, Seq: seq}
 }
 
 func names(ts Tags) []string {
@@ -33,16 +34,16 @@ func TestApply(t *testing.T) {
 
 	got := tags.Apply(tagV("t1", "2", 6))
 	if value(got, "t1") != "2" || got.List()[0].Value != "2" {
-		t.Errorf("a newer Version must apply to the map and the list, got %+v", got.List())
+		t.Errorf("a newer seq must apply to the map and the list, got %+v", got.List())
 	}
 	if value(tags, "t1") != "1" || tags.List()[0].Value != "1" {
 		t.Error("the receiver must not be modified")
 	}
 	if got := tags.Apply(tagV("t1", "0", 4)); value(got, "t1") != "1" {
-		t.Errorf("an older Version must be ignored, got %+v", got.List())
+		t.Errorf("an older seq must be ignored, got %+v", got.List())
 	}
 	if got := tags.Apply(tagV("t1", "9", 5)); value(got, "t1") != "1" {
-		t.Errorf("the same Version must be ignored, got %+v", got.List())
+		t.Errorf("the same seq must be ignored, got %+v", got.List())
 	}
 }
 
@@ -96,35 +97,49 @@ func TestMerge(t *testing.T) {
 	}
 }
 
-func TestForgetVersions_FreshStateWinsAfterVersionsStartOver(t *testing.T) {
+func TestForgetSeqs_FreshStateWinsAfterSeqsStartOver(t *testing.T) {
 	// Seen before the server was restarted with a fresh database.
 	known := Tags{}.Merge(0, []apiv0.TagResponse{tagV("t1", "old", 500)})
 
-	forgotten := known.ForgetVersions()
+	forgotten := known.ForgetSeqs()
 
 	if value(forgotten, "t1") != "old" {
 		t.Errorf("the value must stay on screen until fresh data arrives, got %+v", forgotten.List())
 	}
-	if t1, _ := known.Find(id("t1")); t1.Version != 500 {
+	if t1, _ := known.Find(id("t1")); t1.Seq != 500 {
 		t.Error("the receiver must not be modified")
 	}
 	if got := forgotten.Merge(forgotten.Mark(), []apiv0.TagResponse{tagV("t1", "list", 3)}); value(got, "t1") != "list" {
-		t.Errorf("the reloaded list must win over a forgotten Version, got %+v", got.List())
+		t.Errorf("the reloaded list must win over a forgotten seq, got %+v", got.List())
 	}
 	if got := forgotten.Apply(tagV("t1", "event", 1)); value(got, "t1") != "event" {
-		t.Errorf("an event must win over a forgotten Version, got %+v", got.List())
+		t.Errorf("an event must win over a forgotten seq, got %+v", got.List())
 	}
 }
 
-func TestMerge_DropsAListRequestedBeforeForgetVersions(t *testing.T) {
+func TestMerge_DropsAListRequestedBeforeForgetSeqs(t *testing.T) {
 	known := Tags{}.Merge(0, []apiv0.TagResponse{tagV("t1", "old", 500)})
 	mark := known.Mark() // a list requested from the old server
 
-	forgotten := known.ForgetVersions()
+	forgotten := known.ForgetSeqs()
 	got := forgotten.Merge(mark, []apiv0.TagResponse{tagV("t1", "stale", 501)})
 	got = got.Merge(got.Mark(), []apiv0.TagResponse{tagV("t1", "fresh", 3)})
 
 	if value(got, "t1") != "fresh" {
 		t.Errorf("the list requested after the forget must win, got %+v", got.List())
+	}
+}
+
+// TestApply_StateNotWrittenYetLosesToAnyWrite: a Tag no supplier has written
+// yet has no seq (0), so the first write's event wins over the list's
+// initial state, and a list holding it does not roll a write back.
+func TestApply_StateNotWrittenYetLosesToAnyWrite(t *testing.T) {
+	tags := Tags{}.Merge(0, []apiv0.TagResponse{tagV("t1", "0", 0)})
+	written := tags.Apply(tagV("t1", "7", 1))
+	if value(written, "t1") != "7" {
+		t.Errorf("the first write must win over the initial state, got %+v", written.List())
+	}
+	if got := written.Merge(written.Mark(), []apiv0.TagResponse{tagV("t1", "0", 0)}); value(got, "t1") != "7" {
+		t.Errorf("a list read before the write must not roll it back, got %+v", got.List())
 	}
 }

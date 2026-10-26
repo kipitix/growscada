@@ -12,6 +12,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
+	"github.com/kipitix/growscada/internal/server/domain/tagstate"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 )
@@ -32,11 +33,12 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 	projectID := id.NewID[project.Project]()
 
 	name, _ := tag.NewTagName("pressure")
-	value, _ := tag.TagTypeInteger.NewTagValue(int64(42))
 	tagVersion, _ := version.New(version.WithNumber[tag.Tag](7))
-	updatedTag, err := tag.ReconstituteTag(tagID, projectID, name, tag.TagTypeInteger, value, tag.TagQualityGood, tagVersion)
+	updatedState, err := tagstate.Reconstitute(
+		tagstate.Definition{TagID: tagID, ProjectID: projectID, Name: name, Type: tag.TagTypeInteger, Version: tagVersion},
+		tag.TagValueInteger(42), tag.TagQualityGood, 31)
 	if err != nil {
-		t.Fatalf("reconstitute tag: %v", err)
+		t.Fatalf("reconstitute tag state: %v", err)
 	}
 
 	samples := map[event.EventType]struct {
@@ -47,9 +49,9 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 			apiv0.Event{Type: "system_ready"}},
 		event.EventTypeTagCreated: {tag.NewTagCreatedEvent(tagID, projectID, ts),
 			apiv0.Event{Type: "tag_created", ID: tagID.String()}},
-		event.EventTypeTagUpdated: {tag.NewTagUpdatedEvent(updatedTag, ts),
+		event.EventTypeTagUpdated: {tagstate.NewTagUpdatedEvent(updatedState, ts),
 			apiv0.Event{Type: "tag_updated", ID: tagID.String(), Tag: &apiv0.TagResponse{
-				ID: tagID.UUID(), Name: "pressure", Type: "integer", Value: "42", Quality: "good", Version: 7,
+				ID: tagID.UUID(), Name: "pressure", Type: "integer", Value: "42", Quality: "good", Version: 7, Seq: 31,
 			}}},
 		event.EventTypeTagDeleted: {tag.NewTagDeletedEvent(tagID, projectID, ts),
 			apiv0.Event{Type: "tag_deleted", ID: tagID.String()}},

@@ -11,9 +11,7 @@ http:
     data: |-
       {
         "name": "test",
-        "type": "string",
-        "value": "test",
-        "quality": "good"
+        "type": "string"
       }
   auth: inherit
 
@@ -22,6 +20,11 @@ docs: |
   that project (ADR 0003): creating a second tag with an existing name returns
   `409 Conflict` Problem Details (see "post tags duplicate name"). Another
   project may have a tag of the same name.
+
+  The body is the tag's definition alone (ADR 0011): its state starts as its
+  type's zero value (`""`, `false`, `0`) with quality `bad` until a supplier
+  writes one (see "patch tag value"), and the tag accepts values as soon as
+  this returns. A body with `value` or `quality` is `400 Bad Request`.
 
 runtime:
   assertions:

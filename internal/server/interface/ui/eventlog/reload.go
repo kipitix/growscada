@@ -73,14 +73,14 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 
 // ApplyToTags returns tags with what ev tells of them by itself: the Tag's new
 // state a tag_updated carries; on a resync of the project's stream, the
-// Versions forgotten, since the server may have gone back. What ev makes
+// seqs forgotten, since the server may have gone back. What ev makes
 // stale is ReloadTargetsFor's.
 func ApplyToTags(tags tagstate.Tags, ev apiv0.Event) tagstate.Tags {
 	switch {
 	case ev.Type == apiv0.EventTagUpdated && ev.Tag != nil:
 		return tags.Apply(*ev.Tag)
 	case ev.Type == EventProjectResync:
-		return tags.ForgetVersions()
+		return tags.ForgetSeqs()
 	}
 	return tags
 }

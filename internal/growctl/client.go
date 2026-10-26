@@ -75,11 +75,6 @@ func (t *Tags) ListTagsMatching(ctx context.Context, f NameFilter) ([]ServerTag,
 
 // CreateTag creates a tag from its manifest.
 func (t *Tags) CreateTag(ctx context.Context, m TagManifest) error {
-	_, err := t.ProjectClient.CreateTag(ctx, apiv0.CreateTagRequest{
-		Name:    m.Name,
-		Type:    m.Type,
-		Value:   m.InitialValue,
-		Quality: m.InitialQuality,
-	})
+	_, err := t.ProjectClient.CreateTag(ctx, apiv0.CreateTagRequest{Name: m.Name, Type: m.Type})
 	return err
 }

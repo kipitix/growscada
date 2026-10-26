@@ -2,8 +2,8 @@ package application
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
@@ -12,8 +12,10 @@ import (
 )
 
 // TagService is the service interface for working with the tags of a
-// project. Every method takes the project first; a project that does not
-// exist (or is deleted) is an error wrapping project.ErrProjectNotFound.
+// project: their definitions in the Draft, each read with its state from the
+// Runtime node (ADR 0011); a state is written there, not here. Every method
+// takes the project first; a project that does not exist (or is deleted) is
+// an error wrapping project.ErrProjectNotFound.
 type TagService interface {
 	FindAllTags(ctx context.Context, projectID uuid.UUID) ([]appdto.Tag, error)
 	FindTagByID(ctx context.Context, projectID, tagID uuid.UUID) (appdto.Tag, error)
@@ -22,21 +24,61 @@ type TagService interface {
 	FindTagsByNameRegex(ctx context.Context, projectID uuid.UUID, expr string) ([]appdto.Tag, error)
 	CreateTag(ctx context.Context, projectID uuid.UUID, input appdto.CreateTagInput) (appdto.Tag, error)
 	DeleteTagByID(ctx context.Context, projectID, tagID uuid.UUID) (appdto.Tag, error)
-	SetTagValueByID(ctx context.Context, projectID uuid.UUID, input appdto.UpdateTagInput) (appdto.Tag, error)
 }
 
 // tagServiceImpl is the tag service implementation.
 type tagServiceImpl struct {
 	content ProjectContent
+	runtime RuntimeNode
 }
 
 var _ TagService = (*tagServiceImpl)(nil)
 
 // NewTagService creates and returns a new tag service instance. The events
-// of its changes are recorded by the Tag and saved with it (ADR 0008).
+// of its changes are recorded by the Tag and saved with it (ADR 0008); the
+// states of the tags are read from aRuntime.
 // Returns a TagService interface implementation.
-func NewTagService(aContent ProjectContent) TagService {
-	return &tagServiceImpl{content: aContent}
+func NewTagService(aContent ProjectContent, aRuntime RuntimeNode) TagService {
+	return &tagServiceImpl{content: aContent, runtime: aRuntime}
+}
+
+// withStates returns the DTOs of the tags of the project, each with its
+// state from the Runtime node, read in one call; a tag the Runtime node has
+// no state of yet (its definition not upserted yet) shows its initial one.
+func (t tagServiceImpl) withStates(ctx context.Context, projectID uuid.UUID, tags []tag.Tag) ([]appdto.Tag, error) {
+	if len(tags) == 0 {
+		return []appdto.Tag{}, nil
+	}
+	ids := make([]uuid.UUID, len(tags))
+	for i, found := range tags {
+		ids[i] = found.ID().UUID()
+	}
+	states, err := t.runtime.FindTagStates(ctx, projectID, ids)
+	if err != nil {
+		return nil, fmt.Errorf("error on find tag states in runtime: %w", err)
+	}
+	byID := make(map[uuid.UUID]appdto.TagState, len(states))
+	for _, st := range states {
+		byID[st.ID] = st
+	}
+	result := make([]appdto.Tag, len(tags))
+	for i, found := range tags {
+		st, ok := byID[found.ID().UUID()]
+		if !ok {
+			st = appdto.InitialTagState(found)
+		}
+		result[i] = appdto.NewTag(found, st)
+	}
+	return result, nil
+}
+
+// withState returns the DTO of one tag with its state.
+func (t tagServiceImpl) withState(ctx context.Context, projectID uuid.UUID, found tag.Tag) (appdto.Tag, error) {
+	tags, err := t.withStates(ctx, projectID, []tag.Tag{found})
+	if err != nil {
+		return appdto.Tag{}, err
+	}
+	return tags[0], nil
 }
 
 // tags returns the tag repository of the live project rawProjectID.
@@ -64,7 +106,7 @@ func (t tagServiceImpl) FindAllTags(ctx context.Context, rawProjectID uuid.UUID)
 		}
 	}
 
-	return appdto.NewTagList(tags), nil
+	return t.withStates(ctx, rawProjectID, tags)
 }
 
 // FindTagByID returns a tag by its identifier
@@ -79,7 +121,7 @@ func (t tagServiceImpl) FindTagByID(ctx context.Context, rawProjectID, rawID uui
 		return appdto.Tag{}, fmt.Errorf("error on find tag by id in repository: %w", err)
 	}
 
-	return appdto.NewTag(foundTag), nil
+	return t.withState(ctx, rawProjectID, foundTag)
 }
 
 // FindTagByName returns a tag by its name, unique within the project
@@ -98,7 +140,7 @@ func (t tagServiceImpl) FindTagByName(ctx context.Context, rawProjectID uuid.UUI
 		return appdto.Tag{}, fmt.Errorf("error on find tag by name in repository: %w", err)
 	}
 
-	return appdto.NewTag(foundTag), nil
+	return t.withState(ctx, rawProjectID, foundTag)
 }
 
 // FindTagsByNamePattern returns the tags whose whole name matches a wildcard
@@ -138,11 +180,14 @@ func (t tagServiceImpl) findTagsMatching(ctx context.Context, rawProjectID uuid.
 			matched = append(matched, found)
 		}
 	}
-	return appdto.NewTagList(matched), nil
+	return t.withStates(ctx, rawProjectID, matched)
 }
 
-// CreateTag creates a new tag in the project and returns the created tag DTO.
-// A project deleted just after it was read here is not found by the save.
+// CreateTag creates a new tag in the project and returns the created tag DTO,
+// with its initial state. A project deleted just after it was read here is
+// not found by the save. Right after commit it gives the Runtime node the
+// tag's definition, so the tag accepts values once this returns; if that
+// fails, NewRuntimeTagDefinitionsPolicy gives it on tag_created.
 func (t tagServiceImpl) CreateTag(ctx context.Context, rawProjectID uuid.UUID, newTagData appdto.CreateTagInput) (appdto.Tag, error) {
 	projectID, scope, err := t.content.open(ctx, rawProjectID)
 	if err != nil {
@@ -161,17 +206,7 @@ func (t tagServiceImpl) CreateTag(ctx context.Context, rawProjectID uuid.UUID, n
 		return appdto.Tag{}, fmt.Errorf("cannot create tag because of type: %w", invalidInput(err))
 	}
 
-	newTagValue, err := newTagType.NewTagValue(newTagData.Value)
-	if err != nil {
-		return appdto.Tag{}, fmt.Errorf("cannot create tag because of value: %w", invalidInput(err))
-	}
-
-	newTagQuality, err := tag.NewTagQuality(newTagData.Quality)
-	if err != nil {
-		return appdto.Tag{}, fmt.Errorf("cannot create tag because of quality: %w", invalidInput(err))
-	}
-
-	newTag, err := tag.CreateTag(newTagID, projectID, newTagName, newTagType, newTagValue, newTagQuality)
+	newTag, err := tag.CreateTag(newTagID, projectID, newTagName, newTagType)
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("cannot create tag: %w", err)
 	}
@@ -181,12 +216,19 @@ func (t tagServiceImpl) CreateTag(ctx context.Context, rawProjectID uuid.UUID, n
 		return appdto.Tag{}, fmt.Errorf("cannot save tag: %w", err)
 	}
 
-	return appdto.NewTag(newTag), nil
+	if err := t.runtime.UpsertTagDefinitions(ctx, rawProjectID, []appdto.TagDefinition{appdto.NewTagDefinition(newTag)}); err != nil {
+		slog.Warn("Tag definition not given to the runtime node; the policy on tag_created gives it",
+			"project", rawProjectID, "tag", newTag.ID(), "error", err)
+	}
+
+	return appdto.NewTag(newTag, appdto.InitialTagState(newTag)), nil
 }
 
 // DeleteTagByID deletes a tag by its identifier and returns the deleted tag,
-// as it was read. It expects no Version, and the repository deletes the tag
-// whatever its stored Version: a value written meanwhile does not stop it.
+// as it was read, with its last state. It expects no Version, and the
+// repository deletes the tag whatever its stored Version. Right after commit
+// it removes the tag's state from the Runtime node; if that fails,
+// NewRuntimeTagDefinitionsPolicy removes it on tag_deleted.
 func (t tagServiceImpl) DeleteTagByID(ctx context.Context, rawProjectID, rawID uuid.UUID) (appdto.Tag, error) {
 	repo, err := t.tags(ctx, rawProjectID)
 	if err != nil {
@@ -198,54 +240,18 @@ func (t tagServiceImpl) DeleteTagByID(ctx context.Context, rawProjectID, rawID u
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("error on find tag by id in repository: %w", err)
 	}
-	found.Delete()
-	if err := repo.Delete(ctx, found); err != nil {
+	last, err := t.withState(ctx, rawProjectID, found)
+	if err != nil {
+		return appdto.Tag{}, err
+	}
+	if err := repo.Delete(ctx, found.Delete()); err != nil {
 		return appdto.Tag{}, fmt.Errorf("cannot delete tag: %w", err)
 	}
 
-	return appdto.NewTag(found), nil
-}
-
-// SetTagValueByID updates the value and quality of an existing tag and returns the updated tag.
-// It is the hot path of Devices: the tag is read with the check of its
-// project in one query, and the project is read apart only when the tag is
-// not found, to tell a missing project from a missing tag.
-func (t tagServiceImpl) SetTagValueByID(ctx context.Context, rawProjectID uuid.UUID, request appdto.UpdateTagInput) (appdto.Tag, error) {
-	_, scope := t.content.openUnchecked(rawProjectID)
-	repo := scope.Tags()
-	tagID := id.NewID(id.IDWithUUID[tag.Tag](request.ID))
-
-	foundTag, err := repo.FindByIDInLiveProject(ctx, tagID, t.content.organization)
-	if errors.Is(err, tag.ErrTagNotFound) {
-		if _, _, projectErr := t.content.open(ctx, rawProjectID); projectErr != nil {
-			return appdto.Tag{}, projectErr
-		}
-	}
-	if err != nil {
-		return appdto.Tag{}, fmt.Errorf("error on find tag by id in repository: %w", err)
+	if err := t.runtime.RemoveTagStates(ctx, rawProjectID, []uuid.UUID{rawID}); err != nil {
+		slog.Warn("Tag state not removed from the runtime node; the policy on tag_deleted removes it",
+			"project", rawProjectID, "tag", rawID, "error", err)
 	}
 
-	// The Version check stays here, not in Tag.SetValue: a process value has
-	// a single writer, and its Version goes with task 32.
-	if foundTag.Version().Number() != request.Version {
-		return appdto.Tag{}, tag.ErrTagConflict
-	}
-
-	newQuality, err := tag.NewTagQuality(request.Quality)
-	if err != nil {
-		return appdto.Tag{}, fmt.Errorf("cannot parse quality: %w", invalidInput(err))
-	}
-
-	// The stored tag's type is valid (FindByID rejects any other), so SetValue
-	// fails only when the caller's value does not fit that type.
-	if err = foundTag.SetValue(request.Value, newQuality); err != nil {
-		return appdto.Tag{}, fmt.Errorf("cannot set tag value: %w", invalidInput(err))
-	}
-
-	foundTag, err = repo.Save(ctx, foundTag)
-	if err != nil {
-		return appdto.Tag{}, fmt.Errorf("cannot save tag: %w", err)
-	}
-
-	return appdto.NewTag(foundTag), nil
+	return last, nil
 }

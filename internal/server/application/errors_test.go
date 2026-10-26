@@ -11,7 +11,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/id"
-	"github.com/kipitix/growscada/internal/server/domain/organization"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
 
@@ -30,10 +29,6 @@ func (r corruptTagRepository) FindByID(context.Context, id.ID[tag.Tag]) (tag.Tag
 	return nil, r.corruptRow()
 }
 
-func (r corruptTagRepository) FindByIDInLiveProject(context.Context, id.ID[tag.Tag], id.ID[organization.Organization]) (tag.Tag, error) {
-	return nil, r.corruptRow()
-}
-
 func (r corruptTagRepository) FindAll(context.Context) ([]tag.Tag, error) {
 	return nil, r.corruptRow()
 }
@@ -43,17 +38,12 @@ func (r corruptTagRepository) FindAll(context.Context) ([]tag.Tag, error) {
 func TestTagService_CorruptStoredTag_IsNotInvalidInput(t *testing.T) {
 	scopes := newScopes()
 	scopes.tags = func(tag.TagRepository) tag.TagRepository { return corruptTagRepository{} }
-	svc := application.NewTagService(contentOver(scopes))
+	svc := application.NewTagService(contentOver(scopes), newRuntimeNode())
 	ctx := context.Background()
 
 	_, err := svc.FindTagByID(ctx, mainProject, uuid.New())
 	if err == nil || errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("FindTagByID: expected an error without ErrInvalidInput, got: %v", err)
-	}
-
-	_, err = svc.SetTagValueByID(ctx, mainProject, appdto.UpdateTagInput{ID: uuid.New(), Value: "1", Quality: "good", Version: 1})
-	if err == nil || errors.Is(err, application.ErrInvalidInput) {
-		t.Errorf("SetTagValueByID: expected an error without ErrInvalidInput, got: %v", err)
 	}
 
 	_, err = svc.FindTagsByNamePattern(ctx, mainProject, "*")
@@ -65,7 +55,7 @@ func TestTagService_CorruptStoredTag_IsNotInvalidInput(t *testing.T) {
 func TestErrInvalidInput_KeepsMessageAndCause(t *testing.T) {
 	svc := newService()
 
-	_, err := svc.CreateTag(context.Background(), mainProject, appdto.CreateTagInput{Name: "t", Type: "bogus", Value: "0", Quality: "good"})
+	_, err := svc.CreateTag(context.Background(), mainProject, appdto.CreateTagInput{Name: "t", Type: "bogus"})
 
 	want := `cannot create tag because of type: unknown tag type: "bogus"`
 	if err == nil || err.Error() != want {

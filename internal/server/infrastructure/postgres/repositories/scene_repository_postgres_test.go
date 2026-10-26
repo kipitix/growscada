@@ -21,7 +21,7 @@ import (
 func cleanScenes(t *testing.T) {
 	t.Helper()
 	// widgets cascade-delete with their scene (ON DELETE CASCADE on scene_id).
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM scenes"); err != nil {
+	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM engineering.scenes"); err != nil {
 		t.Fatalf("cleanScenes: %v", err)
 	}
 }
@@ -423,7 +423,7 @@ func TestSceneDelete_WithWidgets_CascadesWidgetRowsInDB(t *testing.T) {
 	}
 
 	var count int
-	if err := testDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM widgets WHERE scene_id = $1", sc.ID().UUID()).Scan(&count); err != nil {
+	if err := testDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM engineering.widgets WHERE scene_id = $1", sc.ID().UUID()).Scan(&count); err != nil {
 		t.Fatalf("count widgets: %v", err)
 	}
 	if count != 0 {

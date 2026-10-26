@@ -1,7 +1,7 @@
 info:
   name: put scene by id
   type: http
-  seq: 27
+  seq: 28
 
 http:
   method: PUT

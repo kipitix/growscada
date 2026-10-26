@@ -11,16 +11,18 @@ http:
     data: |-
       {
         "value": "42",
-        "quality": "good",
-        "version": 1
+        "quality": "good"
       }
   auth: inherit
 
 docs: |
-  `version` is the tag version the update is based on (from `get tag by id` or
-  the previous update's response, which returns the new one). A version other
-  than the stored one, including a missing `version`, returns `409 Conflict`
-  (reload and retry).
+  A write of the tag's state on the Runtime node (ADR 0011). It states no
+  version and never returns `409 Conflict`: a tag's state has a single writer
+  (its Device, or people), and the latest write wins. The response carries
+  `seq`, the number the write took: each write's is above every one before
+  it, and the `tag_updated` event of the write carries the same, so a reader
+  keeps, of two states of one tag, the one with the greater `seq`. A body
+  with `version` is `400 Bad Request` (unknown field).
 
 runtime:
   assertions:
@@ -29,9 +31,8 @@ runtime:
       value: '200'
     - expression: 'res.headers["growscada-schema-version"]'
       operator: isDefined
-    - expression: 'res.body.version'
-      operator: eq
-      value: '2'
+    - expression: 'res.body.seq'
+      operator: isNumber
 
 settings:
   encodeUrl: true

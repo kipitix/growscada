@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kipitix/growscada/internal/server/application"
+	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -73,7 +74,7 @@ var errorMappings = []errorMapping{
 // 404 for a resource the path does not name, which is a service fault — is a
 // 500 that logs the error and tells the client nothing internal.
 func sendError(w http.ResponseWriter, r *http.Request, err error) {
-	if errors.Is(err, application.ErrInvalidInput) {
+	if errors.Is(err, application.ErrInvalidInput) || errors.Is(err, runtimeapp.ErrInvalidInput) {
 		sendProblem(w, NewBadRequest(err.Error(), r.URL.Path))
 		return
 	}

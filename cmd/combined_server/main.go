@@ -14,8 +14,11 @@ import (
 	"github.com/alexflint/go-arg"
 	"github.com/kipitix/gracedown"
 	"github.com/kipitix/growscada/internal/server/application"
+	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
+	runtimepg "github.com/kipitix/growscada/internal/server/infrastructure/postgres/runtime"
+	"github.com/kipitix/growscada/internal/server/inprocess"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 	"github.com/kipitix/growscada/internal/server/interface/ui/root"
@@ -101,12 +104,18 @@ func main() {
 		slog.Error("Organization error", "error", err)
 		emergencyExit(gracedownManager, gracedown.ExitConfig)
 	}
+	// The Runtime node, in this process: the Tag states (ADR 0011). It
+	// publishes tag_updated to the event bus itself, bypassing the outbox; the
+	// Engineering node reaches it only through the RuntimeNode port
+	tagStateService := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(sqlDB), organizationID, eventBus.Publish)
+	runtimeNode := inprocess.NewRuntimeNode(tagStateService)
 	// Registry of the policies: changes spanning aggregates, run as jobs
 	// apart from event delivery (ADR 0008)
 	policyRunner := outbox.NewPolicyRunner(sqlDB, []application.Policy{
 		application.NewWidgetReconciliationPolicy(widgetTypeRepository, projectScopes),
 		application.NewUnbindDeletedTagPolicy(projectRepository, projectScopes),
-		application.NewProjectCleanupPolicy(projectRepository, projectScopes),
+		application.NewProjectCleanupPolicy(projectRepository, projectScopes, runtimeNode),
+		application.NewRuntimeTagDefinitionsPolicy(projectScopes, runtimeNode),
 	})
 	dispatcher.SetPolicyRunner(policyRunner)
 	dispatcherCtx, stopDispatcher := context.WithCancel(context.Background())
@@ -152,11 +161,11 @@ func main() {
 	// Create services
 	projectContent := application.NewProjectContent(projectRepository, projectScopes, organizationID)
 	projectService := application.NewProjectService(projectRepository, organizationID)
-	tagService := application.NewTagService(projectContent)
+	tagService := application.NewTagService(projectContent, runtimeNode)
 	widgetTypeService := application.NewWidgetTypeService(widgetTypeRepository)
 	sceneService := application.NewSceneService(projectContent, widgetTypeRepository)
 	// Create router
-	apiRouter := restapi.NewRouter(projectService, tagService, widgetTypeService, sceneService, eventBus, cliArgs.MaxSSEClients)
+	apiRouter := restapi.NewRouter(projectService, tagService, tagStateService, widgetTypeService, sceneService, eventBus, cliArgs.MaxSSEClients)
 	// Register the event hub shutdown handler. The outbox is drained first,
 	// while SSE clients are still connected, so what is left in it reaches
 	// them; a change committed after the drain (the API server stops

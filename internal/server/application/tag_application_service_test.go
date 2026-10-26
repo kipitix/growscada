@@ -5,21 +5,20 @@ import (
 	"database/sql"
 	"errors"
 	"os"
-	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
-	"github.com/pressly/goose/v3"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
+	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/migrations"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 )
 
@@ -54,15 +53,7 @@ func TestMain(m *testing.M) {
 		panic("failed to open db: " + err.Error())
 	}
 
-	_, currentFile, _, _ := runtime.Caller(0)
-	migrationsDir := filepath.Join(filepath.Dir(currentFile), "..", "infrastructure", "postgres", "migrations")
-
-	if err := goose.SetDialect("postgres"); err != nil {
-		db.Close()
-		pgContainer.Terminate(ctx)
-		panic("failed to set goose dialect: " + err.Error())
-	}
-	if err := goose.Up(db, migrationsDir); err != nil {
+	if err := migrations.Up(ctx, db); err != nil {
 		db.Close()
 		pgContainer.Terminate(ctx)
 		panic("failed to run migrations: " + err.Error())
@@ -77,20 +68,21 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// cleanTags removes the Tag definitions and the Tag states.
 func cleanTags(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM tags"); err != nil {
+	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
 		t.Fatalf("cleanTags: %v", err)
 	}
 }
 
 func newService() application.TagService {
-	return application.NewTagService(contentOver(newScopes()))
+	return application.NewTagService(contentOver(newScopes()), newRuntimeNode())
 }
 
 func newServiceWithBus(t *testing.T) (application.TagService, eventbus.EventBus) {
 	bus, onCommit := deliveredOnCommit(t)
-	return application.NewTagService(contentOver(newScopes(onCommit))), bus
+	return application.NewTagService(contentOver(newScopes(onCommit)), newRuntimeNode()), bus
 }
 
 func mustNewTagID() uuid.UUID {
@@ -104,7 +96,7 @@ func TestCreateTag_ValidIntegerTag_ReturnsID(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	req := appdto.CreateTagInput{Name: "temperature", Type: "integer", Value: "42", Quality: "good"}
+	req := appdto.CreateTagInput{Name: "temperature", Type: "integer"}
 	resp, err := svc.CreateTag(ctx, mainProject, req)
 
 	if err != nil {
@@ -120,7 +112,7 @@ func TestCreateTag_ValidStringTag_ReturnsID(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	req := appdto.CreateTagInput{Name: "label", Type: "string", Value: "hello", Quality: "good"}
+	req := appdto.CreateTagInput{Name: "label", Type: "string"}
 	resp, err := svc.CreateTag(ctx, mainProject, req)
 
 	if err != nil {
@@ -136,7 +128,7 @@ func TestCreateTag_ValidBooleanTag_ReturnsID(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	req := appdto.CreateTagInput{Name: "enabled", Type: "boolean", Value: "true", Quality: "good"}
+	req := appdto.CreateTagInput{Name: "enabled", Type: "boolean"}
 	resp, err := svc.CreateTag(ctx, mainProject, req)
 
 	if err != nil {
@@ -152,50 +144,11 @@ func TestCreateTag_InvalidType_ReturnsError(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	req := appdto.CreateTagInput{Name: "temperature", Type: "unknown", Value: "42", Quality: "good"}
+	req := appdto.CreateTagInput{Name: "temperature", Type: "unknown"}
 	_, err := svc.CreateTag(ctx, mainProject, req)
 
 	if !errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("expected ErrInvalidInput for invalid type, got: %v", err)
-	}
-}
-
-func TestCreateTag_InvalidQuality_ReturnsError(t *testing.T) {
-	cleanTags(t)
-	svc := newService()
-	ctx := context.Background()
-
-	req := appdto.CreateTagInput{Name: "temperature", Type: "integer", Value: "42", Quality: "unknown"}
-	_, err := svc.CreateTag(ctx, mainProject, req)
-
-	if !errors.Is(err, application.ErrInvalidInput) {
-		t.Errorf("expected ErrInvalidInput for invalid quality, got: %v", err)
-	}
-}
-
-func TestCreateTag_SimulatedQuality_ReturnsError(t *testing.T) {
-	cleanTags(t)
-	svc := newService()
-	ctx := context.Background()
-
-	req := appdto.CreateTagInput{Name: "temperature", Type: "integer", Value: "42", Quality: "simulated"}
-	_, err := svc.CreateTag(ctx, mainProject, req)
-
-	if !errors.Is(err, application.ErrInvalidInput) {
-		t.Errorf("expected ErrInvalidInput for removed simulated quality, got: %v", err)
-	}
-}
-
-func TestCreateTag_InvalidValueForType_ReturnsError(t *testing.T) {
-	cleanTags(t)
-	svc := newService()
-	ctx := context.Background()
-
-	req := appdto.CreateTagInput{Name: "temperature", Type: "integer", Value: "not-a-number", Quality: "good"}
-	_, err := svc.CreateTag(ctx, mainProject, req)
-
-	if !errors.Is(err, application.ErrInvalidInput) {
-		t.Errorf("expected ErrInvalidInput for value incompatible with type, got: %v", err)
 	}
 }
 
@@ -221,8 +174,8 @@ func TestFindAllTags_MultipleTags_ReturnsAll(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	req1 := appdto.CreateTagInput{Name: "temperature", Type: "integer", Value: "10", Quality: "good"}
-	req2 := appdto.CreateTagInput{Name: "pressure", Type: "integer", Value: "20", Quality: "good"}
+	req1 := appdto.CreateTagInput{Name: "temperature", Type: "integer"}
+	req2 := appdto.CreateTagInput{Name: "pressure", Type: "integer"}
 	if _, err := svc.CreateTag(ctx, mainProject, req1); err != nil {
 		t.Fatalf("CreateTag(temperature): %v", err)
 	}
@@ -247,7 +200,7 @@ func TestFindTagByID_ExistingTag_ReturnsTag(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	req := appdto.CreateTagInput{Name: "humidity", Type: "integer", Value: "55", Quality: "good"}
+	req := appdto.CreateTagInput{Name: "humidity", Type: "integer"}
 	createResp, err := svc.CreateTag(ctx, mainProject, req)
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
@@ -264,11 +217,8 @@ func TestFindTagByID_ExistingTag_ReturnsTag(t *testing.T) {
 	if found.Type != "integer" {
 		t.Errorf("Type:expected 'integer', got %q", found.Type)
 	}
-	if found.Value != "55" {
-		t.Errorf("Value: expected '55', got %q", found.Value)
-	}
-	if found.Quality != "good" {
-		t.Errorf("Quality: expected 'good', got %q", found.Quality)
+	if found.Value != "0" || found.Quality != "bad" || found.Seq != 0 {
+		t.Errorf("state: expected the initial 0, bad, no seq, got %q, %q, %d", found.Value, found.Quality, found.Seq)
 	}
 }
 
@@ -294,7 +244,7 @@ func TestDeleteTag_ExistingTag_ReturnsDeletedTag(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "sensor", Type: "integer", Value: "10", Quality: "good"})
+	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "sensor", Type: "integer"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -317,7 +267,7 @@ func TestDeleteTag_ExistingTag_TagIsRemovedFromDB(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "valve", Type: "boolean", Value: "true", Quality: "good"})
+	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "valve", Type: "boolean"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -347,83 +297,106 @@ func TestDeleteTag_NotFound_ReturnsWrappedErrTagNotFound(t *testing.T) {
 	}
 }
 
-// --- SetTagValueByID ---
+// --- States from the Runtime node ---
 
-func TestSetTagValueByID_ValidUpdate_ReturnsIncrementedVersion(t *testing.T) {
+func TestCreateTag_StateIsInitialAndAcceptsValuesAtOnce(t *testing.T) {
 	cleanTags(t)
-	svc := newService()
+	svc, states := newServiceWithStates()
 	ctx := context.Background()
 
-	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "pressure", Type: "integer", Value: "100", Quality: "good"})
-	if err != nil {
-		t.Fatalf("CreateTag: %v", err)
-	}
-
-	resp, err := svc.SetTagValueByID(ctx, mainProject, appdto.UpdateTagInput{ID: created.ID, Value: "200", Quality: "good", Version: created.Version})
-
-	if err != nil {
-		t.Fatalf("SetTagValueByID returned unexpected error: %v", err)
-	}
-	if resp.Version != 2 {
-		t.Errorf("Version: expected 2, got %d", resp.Version)
+	for tagType, zero := range map[string]string{"integer": "0", "boolean": "false", "string": ""} {
+		created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "t_" + tagType, Type: tagType})
+		if err != nil {
+			t.Fatalf("CreateTag(%s): %v", tagType, err)
+		}
+		if created.Value != zero || created.Quality != "bad" || created.Seq != 0 || created.Version != 1 {
+			t.Errorf("%s: created %+v, want the zero value %q, bad, no seq, version 1", tagType, created, zero)
+		}
+		// No policy runs here: the creation gave the Runtime node the
+		// definition itself.
+		if _, err := states.SetTagValue(ctx, mainProject, runtimeapp.SetTagValueInput{TagID: created.ID, Value: zero, Quality: "good"}); err != nil {
+			t.Errorf("%s: a value written right after the creation: %v", tagType, err)
+		}
 	}
 }
 
-func TestSetTagValueByID_ValidUpdate_ValueAndQualityAreUpdated(t *testing.T) {
+func TestFindTags_CarryTheWrittenState(t *testing.T) {
 	cleanTags(t)
-	svc := newService()
+	svc, states := newServiceWithStates()
 	ctx := context.Background()
 
-	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "flow", Type: "integer", Value: "0", Quality: "bad"})
+	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "flow", Type: "integer"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
-
-	if _, err = svc.SetTagValueByID(ctx, mainProject, appdto.UpdateTagInput{ID: created.ID, Value: "42", Quality: "good", Version: created.Version}); err != nil {
-		t.Fatalf("SetTagValueByID: %v", err)
+	written, err := states.SetTagValue(ctx, mainProject, runtimeapp.SetTagValueInput{TagID: created.ID, Value: "42", Quality: "uncertain"})
+	if err != nil {
+		t.Fatalf("SetTagValue: %v", err)
 	}
 
+	byID, err := svc.FindTagByID(ctx, mainProject, created.ID)
+	if err != nil {
+		t.Fatalf("FindTagByID: %v", err)
+	}
+	all, err := svc.FindAllTags(ctx, mainProject)
+	if err != nil || len(all) != 1 {
+		t.Fatalf("FindAllTags: %v, %v", all, err)
+	}
+	byName, err := svc.FindTagByName(ctx, mainProject, "flow")
+	if err != nil {
+		t.Fatalf("FindTagByName: %v", err)
+	}
+	for how, got := range map[string]appdto.Tag{"by id": byID, "all": all[0], "by name": byName} {
+		if got.Value != "42" || got.Quality != "uncertain" || got.Seq != written.Seq || got.Version != created.Version {
+			t.Errorf("%s: %+v, want 42, uncertain, seq %d, the definition's version %d", how, got, written.Seq, created.Version)
+		}
+	}
+}
+
+// TestFindTags_WithoutAStateShowTheInitialOne: a definition the Runtime node
+// has not been given yet (its upsert failed, the policy has not run) reads
+// with its initial state.
+func TestFindTags_WithoutAStateShowTheInitialOne(t *testing.T) {
+	cleanTags(t)
+	svc := application.NewTagService(contentOver(newScopes()), failingRuntimeNode{RuntimeNode: newRuntimeNode()})
+	ctx := context.Background()
+
+	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "flag", Type: "boolean"})
+	if err != nil {
+		t.Fatalf("CreateTag with the Runtime node failing: %v", err)
+	}
 	found, err := svc.FindTagByID(ctx, mainProject, created.ID)
 	if err != nil {
 		t.Fatalf("FindTagByID: %v", err)
 	}
-	if found.Value != "42" {
-		t.Errorf("Value: expected '42', got %q", found.Value)
-	}
-	if found.Quality != "good" {
-		t.Errorf("Quality: expected 'good', got %q", found.Quality)
+	if found.Value != "false" || found.Quality != "bad" || found.Seq != 0 {
+		t.Errorf("found %+v, want the initial false, bad", found)
 	}
 }
 
-func TestSetTagValueByID_NotFound_ReturnsWrappedErrTagNotFound(t *testing.T) {
+func TestDeleteTag_RemovesItsStateAtOnce(t *testing.T) {
 	cleanTags(t)
-	svc := newService()
+	svc, states := newServiceWithStates()
 	ctx := context.Background()
 
-	_, err := svc.SetTagValueByID(ctx, mainProject, appdto.UpdateTagInput{ID: uuid.New(), Value: "1", Quality: "good", Version: 1})
-
-	if err == nil {
-		t.Fatal("expected error for non-existent tag, got nil")
-	}
-	if !errors.Is(err, tag.ErrTagNotFound) {
-		t.Errorf("expected wrapped ErrTagNotFound, got: %v", err)
-	}
-}
-
-func TestSetTagValueByID_InvalidQuality_ReturnsError(t *testing.T) {
-	cleanTags(t)
-	svc := newService()
-	ctx := context.Background()
-
-	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "temp", Type: "integer", Value: "10", Quality: "good"})
+	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "valve", Type: "boolean"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
+	if _, err := states.SetTagValue(ctx, mainProject, runtimeapp.SetTagValueInput{TagID: created.ID, Value: "true", Quality: "good"}); err != nil {
+		t.Fatalf("SetTagValue: %v", err)
+	}
 
-	_, err = svc.SetTagValueByID(ctx, mainProject, appdto.UpdateTagInput{ID: created.ID, Value: "20", Quality: "unknown", Version: created.Version})
-
-	if !errors.Is(err, application.ErrInvalidInput) {
-		t.Errorf("expected ErrInvalidInput for invalid quality, got: %v", err)
+	deleted, err := svc.DeleteTagByID(ctx, mainProject, created.ID)
+	if err != nil {
+		t.Fatalf("DeleteTagByID: %v", err)
+	}
+	if deleted.Value != "true" || deleted.Quality != "good" {
+		t.Errorf("deleted %+v, want its last state true, good", deleted)
+	}
+	_, err = states.SetTagValue(ctx, mainProject, runtimeapp.SetTagValueInput{TagID: created.ID, Value: "false", Quality: "good"})
+	if !errors.Is(err, tag.ErrTagNotFound) {
+		t.Errorf("a value written after the deletion: %v, want ErrTagNotFound", err)
 	}
 }
 
@@ -439,7 +412,7 @@ func TestCreateTag_Success_PublishesTagCreatedEvent(t *testing.T) {
 		received = append(received, e)
 	})
 
-	resp, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "sensor", Type: "integer", Value: "1", Quality: "good"})
+	resp, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "sensor", Type: "integer"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -466,7 +439,7 @@ func TestCreateTag_InvalidRequest_NoEventPublished(t *testing.T) {
 		received = append(received, e)
 	})
 
-	_, _ = svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "sensor", Type: "unknown", Value: "1", Quality: "good"})
+	_, _ = svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "sensor", Type: "unknown"})
 
 	if len(received) != 0 {
 		t.Errorf("expected no events on error, got %d", len(received))
@@ -478,7 +451,7 @@ func TestDeleteTagByID_Success_PublishesTagDeletedEvent(t *testing.T) {
 	svc, bus := newServiceWithBus(t)
 	ctx := context.Background()
 
-	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "valve", Type: "boolean", Value: "true", Quality: "good"})
+	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "valve", Type: "boolean"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -521,107 +494,6 @@ func TestDeleteTagByID_NotFound_NoEventPublished(t *testing.T) {
 	}
 }
 
-func TestSetTagValueByID_Success_PublishesTagUpdatedEvent(t *testing.T) {
-	cleanTags(t)
-	svc, bus := newServiceWithBus(t)
-	ctx := context.Background()
-
-	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "pressure", Type: "integer", Value: "10", Quality: "good"})
-	if err != nil {
-		t.Fatalf("CreateTag: %v", err)
-	}
-
-	var received []event.Event
-	bus.Subscribe(event.EventTypeTagUpdated, func(e event.Event) {
-		received = append(received, e)
-	})
-
-	if _, err = svc.SetTagValueByID(ctx, mainProject, appdto.UpdateTagInput{ID: created.ID, Value: "20", Quality: "good", Version: created.Version}); err != nil {
-		t.Fatalf("SetTagValueByID: %v", err)
-	}
-
-	if len(received) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(received))
-	}
-	tagEvent, ok := received[0].(tag.TagUpdatedEvent)
-	if !ok {
-		t.Fatal("expected event to implement TagUpdatedEvent")
-	}
-	if tagEvent.TagID().UUID() != created.ID {
-		t.Errorf("event TagID: expected %s, got %s", created.ID, tagEvent.TagID().UUID())
-	}
-	if got := tagEvent.Tag().Value().String(); got != "20" {
-		t.Errorf("event tag value: expected 20, got %s", got)
-	}
-	if got := tagEvent.Tag().Version().Number(); got != created.Version+1 {
-		t.Errorf("event tag version: expected %d, got %d", created.Version+1, got)
-	}
-}
-
-func TestSetTagValueByID_InvalidRequest_NoEventPublished(t *testing.T) {
-	cleanTags(t)
-	svc, bus := newServiceWithBus(t)
-	ctx := context.Background()
-
-	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "flow", Type: "integer", Value: "0", Quality: "good"})
-	if err != nil {
-		t.Fatalf("CreateTag: %v", err)
-	}
-
-	var received []event.Event
-	bus.Subscribe(event.EventTypeTagUpdated, func(e event.Event) {
-		received = append(received, e)
-	})
-
-	_, _ = svc.SetTagValueByID(ctx, mainProject, appdto.UpdateTagInput{ID: created.ID, Value: "not-a-number", Quality: "good", Version: created.Version})
-
-	if len(received) != 0 {
-		t.Errorf("expected no events on error, got %d", len(received))
-	}
-}
-
-func TestSetTagValueByID_InvalidValueForType_ReturnsError(t *testing.T) {
-	cleanTags(t)
-	svc := newService()
-	ctx := context.Background()
-
-	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "counter", Type: "integer", Value: "0", Quality: "good"})
-	if err != nil {
-		t.Fatalf("CreateTag: %v", err)
-	}
-
-	_, err = svc.SetTagValueByID(ctx, mainProject, appdto.UpdateTagInput{ID: created.ID, Value: "not-a-number", Quality: "good", Version: created.Version})
-
-	if !errors.Is(err, application.ErrInvalidInput) {
-		t.Errorf("expected ErrInvalidInput for value incompatible with type, got: %v", err)
-	}
-}
-
-func TestSetTagValueByID_StaleVersion_ReturnsConflict(t *testing.T) {
-	cleanTags(t)
-	svc := newService()
-	ctx := context.Background()
-
-	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "sensor", Type: "integer", Value: "10", Quality: "good"})
-	if err != nil {
-		t.Fatalf("CreateTag: %v", err)
-	}
-
-	_, err = svc.SetTagValueByID(ctx, mainProject, appdto.UpdateTagInput{
-		ID:      created.ID,
-		Value:   "20",
-		Quality: "good",
-		Version: created.Version - 1, // intentionally stale
-	})
-
-	if err == nil {
-		t.Fatal("expected ErrTagConflict for stale version, got nil")
-	}
-	if !errors.Is(err, tag.ErrTagConflict) {
-		t.Errorf("expected wrapped ErrTagConflict, got: %v", err)
-	}
-}
-
 // --- FindTagByName / unique name ---
 
 func TestFindTagByName_ExistingTag_ReturnsTag(t *testing.T) {
@@ -629,7 +501,7 @@ func TestFindTagByName_ExistingTag_ReturnsTag(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "temperature", Type: "integer", Value: "42", Quality: "good"})
+	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "temperature", Type: "integer"})
 	if err != nil {
 		t.Fatalf("CreateTag failed: %v", err)
 	}
@@ -660,7 +532,7 @@ func TestCreateTag_DuplicateName_ReturnsWrappedErrTagNameTaken(t *testing.T) {
 	svc, bus := newServiceWithBus(t)
 	ctx := context.Background()
 
-	req := appdto.CreateTagInput{Name: "temperature", Type: "integer", Value: "42", Quality: "good"}
+	req := appdto.CreateTagInput{Name: "temperature", Type: "integer"}
 	if _, err := svc.CreateTag(ctx, mainProject, req); err != nil {
 		t.Fatalf("first CreateTag failed: %v", err)
 	}
@@ -682,7 +554,7 @@ func TestCreateTag_DuplicateName_ReturnsWrappedErrTagNameTaken(t *testing.T) {
 func createTags(t *testing.T, svc application.TagService, names ...string) {
 	t.Helper()
 	for _, name := range names {
-		if _, err := svc.CreateTag(context.Background(), mainProject, appdto.CreateTagInput{Name: name, Type: "integer", Value: "0", Quality: "good"}); err != nil {
+		if _, err := svc.CreateTag(context.Background(), mainProject, appdto.CreateTagInput{Name: name, Type: "integer"}); err != nil {
 			t.Fatalf("CreateTag(%q): %v", name, err)
 		}
 	}

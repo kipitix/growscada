@@ -10,26 +10,23 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
-// Tag - interface representing a tag.
-// A tag is the fundamental system entity containing an identifier, name, type, value, and quality.
-// It belongs to exactly one Project, fixed at creation (ADR 0006).
-// Aggregate
+// Tag - interface representing a Tag definition: the Tag's name and TagType,
+// configuration of the Draft held by the Engineering node (ADR 0011). Its
+// value and Quality are its Tag state, held by the Runtime node
+// (tagstate.TagState). It belongs to exactly one Project, fixed at creation
+// (ADR 0006).
+// Immutable aggregate: Delete returns a new Tag.
 type Tag interface {
 	ID() id.ID[Tag]
 	// ProjectID is the Project the tag belongs to; it never changes.
 	ProjectID() id.ID[project.Project]
 	Name() TagName
 	Type() TagType
-	Value() TagValue
-	Quality() TagQuality
 	Version() version.Version[Tag]
 
-	// SetValue changes the Tag's value and Quality and records a
-	// TagUpdatedEvent carrying the state Save stores.
-	SetValue(any, TagQuality) error
-
-	// Delete records a TagDeletedEvent; the repository's Delete removes the Tag.
-	Delete()
+	// Delete returns the Tag with a TagDeletedEvent recorded; the
+	// repository's Delete removes it.
+	Delete() Tag
 
 	event.Recorder
 	fmt.Stringer
@@ -41,8 +38,6 @@ type tagImpl struct {
 	projectID id.ID[project.Project]
 	name      TagName
 	tagType   TagType
-	value     TagValue
-	quality   TagQuality
 	version   version.Version[Tag]
 	pending   []event.Event
 }
@@ -50,10 +45,11 @@ type tagImpl struct {
 var _ Tag = (*tagImpl)(nil)
 
 // CreateTag creates a new, not yet saved tag of the Project aProjectID and
-// records a TagCreatedEvent.
-// Returns an error if the type or quality is the invalid zero value.
-func CreateTag(anID id.ID[Tag], aProjectID id.ID[project.Project], aName TagName, aType TagType, aValue TagValue, aQuality TagQuality) (Tag, error) {
-	t, err := ReconstituteTag(anID, aProjectID, aName, aType, aValue, aQuality, version.Initial[Tag]())
+// records a TagCreatedEvent. Its state, until a supplier writes one, is its
+// TagType's zero value with Quality Bad (tagstate.Initial).
+// Returns an error if the type is the invalid zero value.
+func CreateTag(anID id.ID[Tag], aProjectID id.ID[project.Project], aName TagName, aType TagType) (Tag, error) {
+	t, err := ReconstituteTag(anID, aProjectID, aName, aType, version.Initial[Tag]())
 	if err != nil {
 		return nil, err
 	}
@@ -63,22 +59,17 @@ func CreateTag(anID id.ID[Tag], aProjectID id.ID[project.Project], aName TagName
 }
 
 // ReconstituteTag rebuilds a tag as stored, at the given version; it records
-// no event. For repositories and the decoding of stored events.
-// Returns an error if the type or quality is the invalid zero value.
-func ReconstituteTag(anID id.ID[Tag], aProjectID id.ID[project.Project], aName TagName, aType TagType, aValue TagValue, aQuality TagQuality, aVersion version.Version[Tag]) (Tag, error) {
+// no event. For repositories.
+// Returns an error if the type is the invalid zero value.
+func ReconstituteTag(anID id.ID[Tag], aProjectID id.ID[project.Project], aName TagName, aType TagType, aVersion version.Version[Tag]) (Tag, error) {
 	if !aType.IsValid() {
 		return nil, fmt.Errorf("cannot create tag: invalid type")
-	}
-	if !aQuality.IsValid() {
-		return nil, fmt.Errorf("cannot create tag: invalid quality")
 	}
 	return &tagImpl{
 		id:        anID,
 		projectID: aProjectID,
 		name:      aName,
 		tagType:   aType,
-		value:     aValue,
-		quality:   aQuality,
 		version:   aVersion,
 	}, nil
 }
@@ -87,33 +78,12 @@ func (t tagImpl) ID() id.ID[Tag]                    { return t.id }
 func (t tagImpl) ProjectID() id.ID[project.Project] { return t.projectID }
 func (t tagImpl) Name() TagName                     { return t.name }
 func (t tagImpl) Type() TagType                     { return t.tagType }
-func (t tagImpl) Value() TagValue                   { return t.value }
-func (t tagImpl) Quality() TagQuality               { return t.quality }
 func (t tagImpl) Version() version.Version[Tag]     { return t.version }
 
-// SetValue updates the tag's value and quality.
-// Returns an error if the quality is the invalid zero value.
-func (t *tagImpl) SetValue(aValue any, aQuality TagQuality) error {
-	if !aQuality.IsValid() {
-		return fmt.Errorf("cannot update tag value: invalid quality")
-	}
-	newValue, err := t.tagType.NewTagValue(aValue)
-	if err != nil {
-		return fmt.Errorf("cannot update tag value: %w", err)
-	}
-	t.value = newValue
-	t.quality = aQuality
-	// Save raises the Version by one, so the event carries the state stored.
-	saved := tagImpl{
-		id: t.id, projectID: t.projectID, name: t.name, tagType: t.tagType,
-		value: t.value, quality: t.quality, version: t.version.Next(),
-	}
-	t.pending = append(t.pending, NewTagUpdatedEvent(&saved))
-	return nil
-}
-
-func (t *tagImpl) Delete() {
-	t.pending = append(t.pending, NewTagDeletedEvent(t.id, t.projectID))
+func (t *tagImpl) Delete() Tag {
+	deleted := *t
+	deleted.pending = append(slices.Clone(t.pending), NewTagDeletedEvent(t.id, t.projectID))
+	return &deleted
 }
 
 func (t tagImpl) PendingEvents() []event.Event {
@@ -122,8 +92,5 @@ func (t tagImpl) PendingEvents() []event.Event {
 
 // String returns a string representation of the tag.
 func (t tagImpl) String() string {
-	return fmt.Sprintf(
-		"Tag: %s, Type: %s, Value: %v, Quality: %s, Version: %d",
-		t.name, t.tagType, t.value, t.quality, t.version,
-	)
+	return fmt.Sprintf("Tag: %s, Type: %s, Version: %d", t.name, t.tagType, t.version)
 }

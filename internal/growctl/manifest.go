@@ -24,15 +24,12 @@ import (
 // errNoManifest is returned when no manifest source is given.
 var errNoManifest = errors.New("no manifest given: use -f <file|directory|->")
 
-// TagManifest is a validated Tag document from a manifest.
-// InitialValue and InitialQuality are applied only when the tag is created.
-// Project is metadata.project, "" when the document names none.
+// TagManifest is a validated Tag document from a manifest: the Tag's
+// definition. Project is metadata.project, "" when the document names none.
 type TagManifest struct {
-	Name           string
-	Project        string
-	Type           string
-	InitialValue   string
-	InitialQuality string
+	Name    string
+	Project string
+	Type    string
 }
 
 // ProjectManifest is a validated Project document from a manifest.
@@ -174,6 +171,9 @@ func parseDocument(node *yaml.Node, manifests *Manifests) error {
 	}
 	switch header.Kind {
 	case manifestv0.KindTag:
+		if err := checkRemovedTagFields(node); err != nil {
+			return err
+		}
 		var doc manifestv0.TagDocument
 		if err := decodeStrict(node, &doc); err != nil {
 			return err
@@ -206,6 +206,35 @@ func parseDocument(node *yaml.Node, manifests *Manifests) error {
 	}
 	return nil
 }
+
+// removedTagFields are the spec fields of a Tag that apiVersion 0.3 removed:
+// a Tag's value and quality are its state, not configuration (ADR 0011).
+var removedTagFields = []string{"initialValue", "initialQuality"}
+
+// checkRemovedTagFields names a removed spec field of a Tag document rather
+// than leaving it to the strict decode's "unknown field", whatever the
+// document's apiVersion: no version of growctl applies them now.
+func checkRemovedTagFields(node *yaml.Node) error {
+	var doc struct {
+		Metadata struct {
+			Name string `yaml:"name"`
+		} `yaml:"metadata"`
+		Spec map[string]yaml.Node `yaml:"spec"`
+	}
+	if err := node.Decode(&doc); err != nil {
+		return nil // the strict decode reports it
+	}
+	for _, field := range removedTagFields {
+		if _, ok := doc.Spec[field]; ok {
+			return fmt.Errorf("tag/%s: spec.%s was removed in apiVersion %q: a tag's state starts as its type's zero value "+
+				"with quality bad until a supplier writes one; remove the field", doc.Metadata.Name, field, manifestv0.FormatAPIVersion(tagStateSince))
+		}
+	}
+	return nil
+}
+
+// tagStateSince is the manifest version that removed a Tag's initial state.
+var tagStateSince = contract.SchemaVersion{Major: 0, Minor: 3}
 
 // decodeStrict decodes a document rejecting unknown fields: yaml.Node.Decode
 // cannot, so the document is re-encoded and decoded strictly.
@@ -285,36 +314,13 @@ func validateTag(doc manifestv0.TagDocument) (TagManifest, error) {
 		}
 	}
 
-	spec := doc.Spec
-	for _, field := range []struct {
-		name  string
-		value *string
-	}{
-		{"type", spec.Type},
-		{"initialValue", spec.InitialValue},
-		{"initialQuality", spec.InitialQuality},
-	} {
-		if field.value == nil {
-			return TagManifest{}, fmt.Errorf("tag/%s: spec.%s is required", name, field.name)
-		}
+	if doc.Spec.Type == nil {
+		return TagManifest{}, fmt.Errorf("tag/%s: spec.type is required", name)
 	}
-
-	tagType, err := tag.NewTagType(*spec.Type)
+	tagType, err := tag.NewTagType(*doc.Spec.Type)
 	if err != nil {
 		return TagManifest{}, fmt.Errorf("tag/%s: invalid spec.type: %w", name, err)
 	}
-	if _, err := tagType.NewTagValue(*spec.InitialValue); err != nil {
-		return TagManifest{}, fmt.Errorf("tag/%s: invalid spec.initialValue: %w", name, err)
-	}
-	if _, err := tag.NewTagQuality(*spec.InitialQuality); err != nil {
-		return TagManifest{}, fmt.Errorf("tag/%s: invalid spec.initialQuality: %w", name, err)
-	}
 
-	return TagManifest{
-		Name:           name,
-		Project:        doc.Metadata.Project,
-		Type:           tagType.String(),
-		InitialValue:   *spec.InitialValue,
-		InitialQuality: *spec.InitialQuality,
-	}, nil
+	return TagManifest{Name: name, Project: doc.Metadata.Project, Type: tagType.String()}, nil
 }

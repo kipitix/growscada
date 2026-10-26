@@ -12,12 +12,7 @@ import (
 )
 
 func (p *Project) createTag(ctx app.Context) {
-	req := apiv0.CreateTagRequest{
-		Name:    p.newTagName,
-		Type:    p.newTagType,
-		Value:   defaultTagValue(p.newTagType),
-		Quality: "good",
-	}
+	req := apiv0.CreateTagRequest{Name: p.newTagName, Type: p.newTagType}
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.CreateTagResponse, error) {
 		return content.CreateTag(c, req)
 	}, func(ctx app.Context, created apiv0.CreateTagResponse) {
@@ -45,15 +40,4 @@ func (p *Project) deleteTag(ctx app.Context) {
 		}
 		p.loadTags(ctx)
 	}, nil)
-}
-
-func defaultTagValue(tagType string) string {
-	switch tagType {
-	case "boolean":
-		return "false"
-	case "integer":
-		return "0"
-	default:
-		return ""
-	}
 }

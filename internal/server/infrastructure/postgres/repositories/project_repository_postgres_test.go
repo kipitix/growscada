@@ -21,7 +21,7 @@ import (
 func cleanProjects(t *testing.T) {
 	t.Helper()
 	if _, err := testDB.ExecContext(context.Background(),
-		"DELETE FROM tags; DELETE FROM scenes; DELETE FROM projects WHERE id <> '"+mainProject.String()+"'"); err != nil {
+		"DELETE FROM runtime.tags; DELETE FROM engineering.tags; DELETE FROM engineering.scenes; DELETE FROM projects WHERE id <> '"+mainProject.String()+"'"); err != nil {
 		t.Fatalf("cleanProjects: %v", err)
 	}
 }
@@ -194,8 +194,7 @@ func TestProjectDelete_RefusedWhileContentRemains(t *testing.T) {
 	if err := repo.Delete(ctx, deleted); !errors.Is(err, project.ErrProjectNotEmpty) {
 		t.Fatalf("Delete with a tag left: expected ErrProjectNotEmpty, got %v", err)
 	}
-	created.Delete()
-	if err := tags.Delete(ctx, created); err != nil {
+	if err := tags.Delete(ctx, created.Delete()); err != nil {
 		t.Fatalf("delete tag: %v", err)
 	}
 	if err := repo.Delete(ctx, deleted); err != nil {
@@ -225,8 +224,7 @@ func TestProjectDelete_LiveProject_IsNotRemoved(t *testing.T) {
 func createTagIn(t *testing.T, repo tag.TagRepository, projectID id.ID[project.Project], name string) tag.Tag {
 	t.Helper()
 	tagName, _ := tag.NewTagName(name)
-	value, _ := tag.TagTypeInteger.NewTagValue(0)
-	created, err := tag.CreateTag(repo.NextID(), projectID, tagName, tag.TagTypeInteger, value, tag.TagQualityGood)
+	created, err := tag.CreateTag(repo.NextID(), projectID, tagName, tag.TagTypeInteger)
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -264,8 +262,7 @@ func TestTagRepository_TagsOfProjectsAreApart(t *testing.T) {
 	if _, err := mainTags.Save(ctx, inOther); err == nil {
 		t.Error("Save of another project's tag: expected an error")
 	}
-	inOther.Delete()
-	if err := mainTags.Delete(ctx, inOther); err == nil {
+	if err := mainTags.Delete(ctx, inOther.Delete()); err == nil {
 		t.Error("Delete of another project's tag: expected an error")
 	}
 	if _, err := otherTags.FindByID(ctx, inOther.ID()); err != nil {
@@ -278,8 +275,7 @@ func TestTagRepository_SaveInARemovedProject_IsProjectNotFound(t *testing.T) {
 	gone := id.NewID[project.Project]() // no such row: as if its cleanup had run
 	repo := repositories.NewTagRepositoryPostgres(testDB, gone)
 	tagName, _ := tag.NewTagName("speed")
-	value, _ := tag.TagTypeInteger.NewTagValue(0)
-	created, _ := tag.CreateTag(repo.NextID(), gone, tagName, tag.TagTypeInteger, value, tag.TagQualityGood)
+	created, _ := tag.CreateTag(repo.NextID(), gone, tagName, tag.TagTypeInteger)
 
 	if _, err := repo.Save(context.Background(), created); !errors.Is(err, project.ErrProjectNotFound) {
 		t.Errorf("expected ErrProjectNotFound, got %v", err)
@@ -329,7 +325,7 @@ func TestSceneRepository_ScenesOfProjectsAreApart(t *testing.T) {
 	}
 
 	var widgetProject uuid.UUID
-	if err := testDB.QueryRowContext(ctx, `SELECT project_id FROM widgets WHERE id = $1`, w.ID().UUID()).Scan(&widgetProject); err != nil {
+	if err := testDB.QueryRowContext(ctx, `SELECT project_id FROM engineering.widgets WHERE id = $1`, w.ID().UUID()).Scan(&widgetProject); err != nil {
 		t.Fatalf("read widget row: %v", err)
 	}
 	if widgetProject != other.ID().UUID() {
@@ -447,30 +443,5 @@ func TestInLiveProjectLists_CheckTheProject(t *testing.T) {
 	check("marked deleted", org, 0)
 	if all, err := tags.FindAll(ctx); err != nil || len(all) != 1 {
 		t.Errorf("FindAll still reads the tags, for the cleanup: %v, %v", all, err)
-	}
-}
-
-func TestTagRepository_FindByIDInLiveProject_ChecksTheProject(t *testing.T) {
-	cleanProjects(t)
-	projects := repositories.NewProjectRepositoryPostgres(testDB)
-	line := mustCreateProject(t, projects, "Line 1")
-	tags := repositories.NewTagRepositoryPostgres(testDB, line.ID())
-	ctx := context.Background()
-	speed := createTagIn(t, tags, line.ID(), "speed")
-
-	if found, err := tags.FindByIDInLiveProject(ctx, speed.ID(), soleOrganization(t)); err != nil || found.ID() != speed.ID() {
-		t.Errorf("a tag of a live project: %v, %v", found, err)
-	}
-	if _, err := tags.FindByIDInLiveProject(ctx, speed.ID(), id.NewID[organization.Organization]()); !errors.Is(err, tag.ErrTagNotFound) {
-		t.Errorf("through another organization: expected ErrTagNotFound, got %v", err)
-	}
-	if _, err := projects.Save(ctx, line.Delete()); err != nil {
-		t.Fatalf("mark the project deleted: %v", err)
-	}
-	if _, err := tags.FindByIDInLiveProject(ctx, speed.ID(), soleOrganization(t)); !errors.Is(err, tag.ErrTagNotFound) {
-		t.Errorf("a tag of a deleted project: expected ErrTagNotFound, got %v", err)
-	}
-	if _, err := tags.FindByID(ctx, speed.ID()); err != nil {
-		t.Errorf("FindByID still reads it, for the cleanup: %v", err)
 	}
 }

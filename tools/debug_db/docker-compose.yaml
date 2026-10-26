@@ -18,24 +18,50 @@ services:
       timeout: 5s
       retries: 5
 
+  # One chain per schema (ADR 0011): the server's public first, then the
+  # roles', each recorded in its own goose table. The image's entrypoint runs
+  # `goose -dir=/migrations up` whatever the command; GOOSE_EXTRA_ARGS goes
+  # before `up`.
   db_migrations:
     image: kukymbr/goose-docker:3.27.0 # Official goose Docker image
     depends_on:
       db:
         condition: service_healthy # Waits for database to be healthy
     volumes:
-      - ../../internal/server/infrastructure/postgres/migrations:/migrations # Mount your migrations folder to /migrations
+      - ../../internal/server/infrastructure/postgres/migrations/public:/migrations # The server's chain
     environment:
       GOOSE_DRIVER: postgres
       GOOSE_DBSTRING: "postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?sslmode=disable"
-    command: >
-      sh -c "goose -dir /migrations up && echo 'Migrations completed successfully'"
     restart: "no" # Runs once and exits
+  db_migrations_engineering:
+    image: kukymbr/goose-docker:3.27.0
+    depends_on:
+      db_migrations:
+        condition: service_completed_successfully
+    volumes:
+      - ../../internal/server/infrastructure/postgres/migrations/engineering:/migrations
+    environment:
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: "postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?sslmode=disable"
+      GOOSE_EXTRA_ARGS: "-table=engineering.goose_db_version"
+    restart: "no"
+  db_migrations_runtime:
+    image: kukymbr/goose-docker:3.27.0
+    depends_on:
+      db_migrations_engineering:
+        condition: service_completed_successfully
+    volumes:
+      - ../../internal/server/infrastructure/postgres/migrations/runtime:/migrations
+    environment:
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: "postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?sslmode=disable"
+      GOOSE_EXTRA_ARGS: "-table=runtime.goose_db_version"
+    restart: "no"
   db_test_data:
     image: kukymbr/goose-docker:3.27.0 # Official goose Docker image
     depends_on:
-      db_migrations:
-        condition: service_completed_successfully # Waits for database to be healthy
+      db_migrations_runtime:
+        condition: service_completed_successfully # Waits for every chain
     volumes:
       - ../../internal/server/infrastructure/postgres/test_data:/migrations # Mount your migrations folder to /migrations
     environment:

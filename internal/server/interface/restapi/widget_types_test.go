@@ -20,7 +20,7 @@ import (
 
 func cleanWidgetTypes(t *testing.T) {
 	t.Helper()
-	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM widgets; DELETE FROM widget_types"); err != nil {
+	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM engineering.widgets; DELETE FROM engineering.widget_types"); err != nil {
 		t.Fatalf("cleanWidgetTypes: %v", err)
 	}
 }

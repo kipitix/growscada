@@ -11,23 +11,19 @@ import (
 )
 
 const twoTags = `
-apiVersion: growscada/v0.1
+apiVersion: growscada/v0.3
 kind: Tag
 metadata:
   name: pump1.running
 spec:
   type: boolean
-  initialValue: false
-  initialQuality: good
 ---
-apiVersion: growscada/v0.1
+apiVersion: growscada/v0.3
 kind: Tag
 metadata:
   name: pump1.label
 spec:
   type: string
-  initialValue: ""
-  initialQuality: uncertain
 `
 
 func TestParseManifests_Valid_ReturnsTagsInOrder(t *testing.T) {
@@ -38,8 +34,8 @@ func TestParseManifests_Valid_ReturnsTagsInOrder(t *testing.T) {
 	}
 	got := parsed.Tags
 	want := []growctl.TagManifest{
-		{Name: "pump1.running", Type: "boolean", InitialValue: "false", InitialQuality: "good"},
-		{Name: "pump1.label", Type: "string", InitialValue: "", InitialQuality: "uncertain"},
+		{Name: "pump1.running", Type: "boolean"},
+		{Name: "pump1.label", Type: "string"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %+v, want %+v", got, want)
@@ -58,9 +54,9 @@ func TestParseManifests_EmptyDocuments_AreSkipped(t *testing.T) {
 }
 
 func TestParseManifests_OlderMinor_IsAccepted(t *testing.T) {
-	// "growscada/v0" reads as v0.0, which this growctl (v0.2) understands.
+	// "growscada/v0" reads as v0.0, which this growctl (v0.3) understands.
 	got, err := growctl.ParseManifests([]byte("apiVersion: growscada/v0\nkind: Tag\nmetadata:\n  name: t\n" +
-		"spec: {type: integer, initialValue: 0, initialQuality: good}\n"))
+		"spec: {type: integer}\n"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -81,7 +77,7 @@ kind: Tag
 metadata:
   name: speed
   project: Line 1
-spec: {type: integer, initialValue: 0, initialQuality: good}
+spec: {type: integer}
 `))
 
 	if err != nil {
@@ -106,23 +102,25 @@ func TestParseManifests_Invalid_ReturnsError(t *testing.T) {
 		{"missing apiVersion", "kind: Tag\n", "unsupported apiVersion"},
 		{"other MAJOR", "apiVersion: growscada/v1.0\nkind: Tag\n", "unsupported apiVersion"},
 		{"pre-versioning label", "apiVersion: growscada/v1\nkind: Tag\n", `replace it with "growscada/v0.`},
-		{"newer MINOR with a new field", "apiVersion: growscada/v0.99\nkind: Tag\nmetadata:\n  name: t\nspec: {type: integer, initialValue: 0, initialQuality: good, unit: rpm}\n", "update growctl"},
+		{"newer MINOR with a new field", "apiVersion: growscada/v0.99\nkind: Tag\nmetadata:\n  name: t\nspec: {type: integer, unit: rpm}\n", "update growctl"},
 		{"unknown kind", "apiVersion: growscada/v0.1\nkind: Scene\n", "unsupported kind"},
-		{"unknown top-level field", header + "status: {}\nspec: {type: integer, initialValue: 0, initialQuality: good}\n", "field status not found"},
-		{"unknown spec field", header + "spec: {type: integer, initialValue: 0, initialQuality: good, value: 1}\n", "field value not found"},
-		{"missing name", "apiVersion: growscada/v0.1\nkind: Tag\nspec: {type: integer, initialValue: 0, initialQuality: good}\n", "metadata.name is required"},
-		{"missing type", header + "spec: {initialValue: 0, initialQuality: good}\n", "spec.type is required"},
-		{"missing initialValue", header + "spec: {type: integer, initialQuality: good}\n", "spec.initialValue is required"},
-		{"missing initialQuality", header + "spec: {type: integer, initialValue: 0}\n", "spec.initialQuality is required"},
-		{"invalid type", header + "spec: {type: float, initialValue: 0, initialQuality: good}\n", "invalid spec.type"},
-		{"value not matching type", header + "spec: {type: integer, initialValue: abc, initialQuality: good}\n", "invalid spec.initialValue"},
-		{"invalid quality", header + "spec: {type: integer, initialValue: 0, initialQuality: unknown}\n", "invalid spec.initialQuality"},
+		{"unknown top-level field", header + "status: {}\nspec: {type: integer}\n", "field status not found"},
+		{"unknown spec field", header + "spec: {type: integer, value: 1}\n", "field value not found"},
+		{"missing name", "apiVersion: growscada/v0.1\nkind: Tag\nspec: {type: integer}\n", "metadata.name is required"},
+		{"missing type", header + "spec: {}\n", "spec.type is required"},
+		{"invalid type", header + "spec: {type: float}\n", "invalid spec.type"},
+		// A tag's state is no configuration (ADR 0011): the fields of the
+		// older versions are named as removed, in a document of any version.
+		{"initialValue of v0.2", "apiVersion: growscada/v0.2\nkind: Tag\nmetadata:\n  name: t\nspec: {type: integer, initialValue: 0, initialQuality: good}\n",
+			`tag/t: spec.initialValue was removed in apiVersion "growscada/v0.3"`},
+		{"initialQuality of v0.3", "apiVersion: growscada/v0.3\nkind: Tag\nmetadata:\n  name: t\nspec: {type: integer, initialQuality: good}\n",
+			"tag/t: spec.initialQuality was removed"},
 		{"malformed yaml", "apiVersion: [", "document 1"},
 		{"project without name", "apiVersion: growscada/v0.2\nkind: Project\nmetadata: {}\n", "metadata.name is required"},
 		{"project with a project", "apiVersion: growscada/v0.2\nkind: Project\nmetadata: {name: a, project: b}\n", "field project not found"},
 		{"project with a spec", "apiVersion: growscada/v0.2\nkind: Project\nmetadata: {name: a}\nspec: {}\n", "field spec not found"},
 		{"project in v0.1", "apiVersion: growscada/v0.1\nkind: Project\nmetadata: {name: a}\n", `kind Project appeared in apiVersion "growscada/v0.2"`},
-		{"metadata.project in v0.1", "apiVersion: growscada/v0.1\nkind: Tag\nmetadata: {name: t, project: a}\nspec: {type: integer, initialValue: 0, initialQuality: good}\n", "tag/t: metadata.project appeared in"},
+		{"metadata.project in v0.1", "apiVersion: growscada/v0.1\nkind: Tag\nmetadata: {name: t, project: a}\nspec: {type: integer}\n", "tag/t: metadata.project appeared in"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -199,8 +197,8 @@ func TestReadManifests_ErrorMentionsFile(t *testing.T) {
 }
 
 func tagYAML(name string) string {
-	return "apiVersion: growscada/v0.1\nkind: Tag\nmetadata:\n  name: " + name +
-		"\nspec:\n  type: integer\n  initialValue: \"0\"\n  initialQuality: good\n"
+	return "apiVersion: growscada/v0.3\nkind: Tag\nmetadata:\n  name: " + name +
+		"\nspec:\n  type: integer\n"
 }
 
 func writeFile(t *testing.T, path, content string) {

@@ -103,3 +103,15 @@ func TestTagType_EveryValidTypeBuildsValues(t *testing.T) {
 		}
 	}
 }
+
+func TestTagType_ZeroValue(t *testing.T) {
+	for tagType, want := range map[TagType]string{TagTypeString: "", TagTypeBoolean: "false", TagTypeInteger: "0"} {
+		got, err := tagType.ZeroValue()
+		if err != nil || got.String() != want {
+			t.Errorf("%s.ZeroValue() = %v, %v; want %q", tagType, got, err, want)
+		}
+	}
+	if _, err := (TagType{}).ZeroValue(); err == nil {
+		t.Error("the invalid TagType has a zero value")
+	}
+}

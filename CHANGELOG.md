@@ -1,5 +1,27 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.48] - 2026-10-26
+
+### Added
+
+- **Разделение узлов и хранилищ: Tag definition / Tag state** (задача 32, ADR 0011)
+  - Одна БД, три схемы, у каждой своя цепочка goose: `public` (серверная, прежняя цепочка: organizations, projects, outbox, policy_jobs; `goose_db_version`), `engineering` (widget_types, scenes, widgets, определения Tag; `engineering.goose_db_version`), `runtime` (Tag state с копией определений, последовательность `runtime.tag_state_seq`; `runtime.goose_db_version`). Миграции разложены по `migrations/public|engineering|runtime`; пакет `migrations` встраивает их и накатывает по порядку (`migrations.Up`), docker compose (`make db_up`, `make bruno_test`) — по сервису goose на цепочку (`db_migrations`, `db_migrations_engineering`, `db_migrations_runtime`, таблица — через `GOOSE_EXTRA_ARGS=-table=…`: entrypoint образа `goose-docker` игнорирует `command`, прежний `command` ничего не делал)
+  - Миграция `20261026000000_engineering_and_runtime_schemas`: `ALTER TABLE … SET SCHEMA engineering` для четырёх таблиц, значение и Quality каждого тега — в `runtime.tags` вместе с копией определения (имя, тип, версия) и `seq` в порядке создания, колонки `value`/`quality` из `engineering.tags` удаляются, строки `tag_updated` из outbox — тоже; таблицы goose новых цепочек создаются с базовой версией. Откат возвращает таблицы в `public`, теги без состояния получают нулевое значение и `bad`
+  - Домен: `tag.Tag` — неизменяемое определение (имя, TagType, Version; `Delete` возвращает новый Tag, события `tag_created`/`tag_deleted`); новый пакет `tagstate` — `TagState` (значение, Quality, `Seq`, копия `Definition`; `Initial` — нулевое значение TagType и `Bad`; `Write` без ожидаемой Version), `TagUpdatedEvent` (это `tag.TagEvent`, в outbox не попадает), интерфейс `Repository`; `TagType.ZeroValue`
+  - Runtime node: `application/runtime.TagStateService` (`SetTagValue` — запись последним-побеждает, `seq` присваивается в UPDATE, после записи сам публикует `tag_updated` в EventBus, at-most-once; `FindTagStates`, идемпотентный `UpsertTagDefinitions`, `RemoveTagStates`, `RemoveProjectTagStates`), репозиторий `postgres/runtime` над `runtime.tags`, читающий из `public` только projects
+  - Engineering node обращается к Runtime только через порт `application.RuntimeNode`; in-process реализация — пакет `internal/server/inprocess` (общий для `main.go` и `servertest`). `TagService` читает определение и состояние через порт (определение без состояния показывает начальное); создание сразу после commit отдаёт определение Runtime (тег принимает значения сразу после 201), удаление сразу удаляет состояние; политика `sync_runtime_tag_definitions` по `tag_created`/`tag_deleted` (ключ `project:<id>/tag:<id>`) сводит копию к Draft — upsert, если тег есть в Draft, иначе удаление состояния. `remove_deleted_project` удаляет и состояния тегов проекта через порт, строку проекта — последней (поздний upsert удерживает строку, следующий прогон убирает его)
+  - Тест границ ролей `internal/server/roles_test.go`: пакеты Engineering и Runtime не импортируют друг друга (Runtime — только общий домен), строки кода роли не называют таблицы схемы другой роли
+  - REST API **0.5**: `GET /tags`, `/tags/{id}` — прежняя форма, `version` — версия определения, новое обязательное поле `seq` (0 у состояния, которое ещё не писали), оно же в `tag_updated`; `PATCH /tags/{id}/value` — без `version`, без 409, ответ `{"seq": …}`; `POST /tags` — только `name` и `type`. `apiclient.SetTagValue` без версии, возвращает `seq`
+  - Манифесты growctl **0.3**: `spec.initialValue`/`spec.initialQuality` убраны; документ любой версии с ними — ошибка с объяснением, а не «unknown field»; `get tags -o yaml` их не пишет; `tests/manifests/example_tags.yaml` — `growscada/v0.3`
+  - `devicelink` не отслеживает Version и не повторяет запись после 409; e2e-тесты симулятора следят за записями по `seq`. UI (`tagstate`) отбрасывает старое состояние по `seq`, а не по Version (`ForgetSeqs` при ресинке)
+  - Тесты: домен `tagstate`, сервис Runtime на репозитории в памяти, репозиторий Runtime (testcontainers: upsert, запись подряд и конкурентная — разные возрастающие `seq`, проверка проекта), миграция и её откат, seed, мост и очистка проекта (включая поздний upsert), in-process `RuntimeNode` (передача полей и ошибок), события SSE: несколько записей подряд — `tag_updated` с возрастающими `seq` (замечание 2026-10-07), REST и Bruno
+
+### Changed
+
+- Bruno: `post tags`, `post tags duplicate name`, `post tags newer client` без `value`/`quality`; `post tags invalid quality` → `post tags invalid type`; `patch tag value` без `version`, assert на `seq`; новый `patch tag value invalid quality`; `get tag by id` проверяет `seq`; порядок `seq` сдвинут
+- Seed: определения тегов в `engineering.tags` (все версии 1), состояния — в `runtime.tags`; таблицы — со схемой
+- ADR 0004: поправка — запись без Version, без 409 и повторов; AGENTS.md: роли и схемы, `RuntimeNode`, мост, миграции по цепочкам
+
 ## [0.0.47] - 2026-10-25
 
 ### Added

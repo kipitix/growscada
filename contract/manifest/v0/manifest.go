@@ -19,7 +19,7 @@ import (
 // SchemaVersion is the version of the manifest contract this package
 // describes.
 // A function rather than a variable, so no importer can change it.
-func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 2} }
+func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 3} }
 
 // apiVersionPrefix precedes the version in apiVersion.
 const apiVersionPrefix = "growscada/v"
@@ -95,10 +95,9 @@ type ProjectMetadata struct {
 	Name string `yaml:"name"`
 }
 
-// TagSpec declares a Tag. InitialValue and InitialQuality are applied only
-// when the Tag is created.
+// TagSpec declares a Tag: its definition. Its state is no configuration: it
+// starts as its type's zero value with quality bad until a supplier writes
+// one (ADR 0011). Since 0.3 there is no initialValue nor initialQuality.
 type TagSpec struct {
-	Type           *string `yaml:"type" schema:"required"`
-	InitialValue   *string `yaml:"initialValue" schema:"required"`
-	InitialQuality *string `yaml:"initialQuality" schema:"required"`
+	Type *string `yaml:"type" schema:"required"`
 }

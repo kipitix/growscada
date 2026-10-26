@@ -20,7 +20,7 @@ import (
 func cleanScenesRest(t *testing.T) {
 	t.Helper()
 	// ON DELETE CASCADE removes widgets too; that's fine for scene tests.
-	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM scenes"); err != nil {
+	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM engineering.scenes"); err != nil {
 		t.Fatalf("cleanScenesRest: %v", err)
 	}
 }

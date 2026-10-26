@@ -162,9 +162,10 @@ func newApplyCommand(s *settings) *cobra.Command {
 		Use:   "apply -f <file|directory|->",
 		Short: "Create the manifest's projects and tags that are missing on the server",
 		Long: "Create the manifest's projects and tags that are missing on the server; the\n" +
-			"projects go first. initialValue and initialQuality are used only on creation;\n" +
-			"existing tags keep their value. The tags are those of the project growctl works\n" +
-			"in (--project). With --prune, the project's tags absent from the manifest are\n" +
+			"projects go first. A created tag's state is its type's zero value with quality\n" +
+			"bad until a supplier writes one; existing tags keep their state. The tags are\n" +
+			"those of the project growctl works in (--project). With --prune, the\n" +
+			"project's tags absent from the manifest are\n" +
 			"deleted; --pattern or --regex limits pruning to the tags they select (the\n" +
 			"manifest's own scope). A manifest of projects alone prunes no tags.\n" +
 			"Projects are never pruned.",

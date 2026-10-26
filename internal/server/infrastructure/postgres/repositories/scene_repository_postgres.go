@@ -66,7 +66,7 @@ func (r sceneRepositoryPostgresImpl) Save(ctx context.Context, s scene.Scene) (s
 	newVersion, err := r.store.save(ctx, s.ID(), s.Version(), s.PendingEvents(), rowWrite[scene.Scene]{
 		insert: func(tx *sql.Tx, next version.Version[scene.Scene]) error {
 			if _, err := tx.ExecContext(ctx,
-				`INSERT INTO scenes (id, project_id, name, width, height, background_html, version)
+				`INSERT INTO engineering.scenes (id, project_id, name, width, height, background_html, version)
 				VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 				s.ID().UUID(), r.project.UUID(), s.Name().String(),
 				s.Size().Width(), s.Size().Height(),
@@ -79,7 +79,7 @@ func (r sceneRepositoryPostgresImpl) Save(ctx context.Context, s scene.Scene) (s
 		},
 		update: func(tx *sql.Tx, current, next version.Version[scene.Scene]) (bool, error) {
 			res, err := tx.ExecContext(ctx,
-				`UPDATE scenes
+				`UPDATE engineering.scenes
 				 SET name = $1, width = $2, height = $3, background_html = $4, version = $5
 				 WHERE id = $6 AND version = $7 AND project_id = $8`,
 				s.Name().String(),
@@ -139,7 +139,7 @@ func saveWidgets(ctx context.Context, tx *sql.Tx, projectID id.ID[project.Projec
 			continue
 		}
 		if _, err := tx.ExecContext(ctx,
-			`DELETE FROM widgets WHERE id = $1 AND scene_id = $2`,
+			`DELETE FROM engineering.widgets WHERE id = $1 AND scene_id = $2`,
 			w.ID().UUID(), sceneID.UUID(),
 		); err != nil {
 			return fmt.Errorf("cannot delete widget %s: %w", w.ID(), err)
@@ -157,7 +157,7 @@ func saveWidgets(ctx context.Context, tx *sql.Tx, projectID id.ID[project.Projec
 		}
 		if exists {
 			_, err = tx.ExecContext(ctx,
-				`UPDATE widgets
+				`UPDATE engineering.widgets
 				 SET name = $1, x = $2, y = $3, z = $4, width = $5, height = $6,
 				     origin_x = $7, origin_y = $8, rotation_degrees = $9,
 				     type_id = $10, labels = $11, port_bindings = $12
@@ -173,7 +173,7 @@ func saveWidgets(ctx context.Context, tx *sql.Tx, projectID id.ID[project.Projec
 			)
 		} else {
 			_, err = tx.ExecContext(ctx,
-				`INSERT INTO widgets
+				`INSERT INTO engineering.widgets
 				    (id, name, x, y, z, width, height, origin_x, origin_y, rotation_degrees,
 				     type_id, scene_id, labels, port_bindings, project_id)
 				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
@@ -247,7 +247,7 @@ func (r sceneRepositoryPostgresImpl) FindAllInLiveProject(ctx context.Context, o
 
 func (r sceneRepositoryPostgresImpl) FindByWidgetTypeID(ctx context.Context, typeID id.ID[library.WidgetType]) ([]scene.Scene, error) {
 	return r.readScenes(ctx,
-		`AND EXISTS (SELECT 1 FROM widgets w WHERE w.scene_id = scenes.id AND w.type_id = $2)`,
+		`AND EXISTS (SELECT 1 FROM engineering.widgets w WHERE w.scene_id = scenes.id AND w.type_id = $2)`,
 		typeID.UUID(),
 	)
 }
@@ -256,7 +256,7 @@ func (r sceneRepositoryPostgresImpl) FindByWidgetTypeID(ctx context.Context, typ
 // an object whose tag_id is the Tag's, whatever its port_name.
 func (r sceneRepositoryPostgresImpl) FindByTagID(ctx context.Context, tagID id.ID[tag.Tag]) ([]scene.Scene, error) {
 	return r.readScenes(ctx,
-		`AND EXISTS (SELECT 1 FROM widgets w WHERE w.scene_id = scenes.id
+		`AND EXISTS (SELECT 1 FROM engineering.widgets w WHERE w.scene_id = scenes.id
 		   AND w.port_bindings @> jsonb_build_array(jsonb_build_object('tag_id', $2::text)))`,
 		tagID.UUID().String(),
 	)
@@ -292,7 +292,7 @@ func (r sceneRepositoryPostgresImpl) readScenes(ctx context.Context, and string,
 	defer func() { _ = tx.Rollback() }()
 
 	rows, err := tx.QueryContext(ctx,
-		`SELECT `+selectSceneColumns+` FROM scenes WHERE project_id = $1 `+and+` ORDER BY pk_id`,
+		`SELECT `+selectSceneColumns+` FROM engineering.scenes WHERE project_id = $1 `+and+` ORDER BY pk_id`,
 		append([]any{r.project.UUID()}, args...)...,
 	)
 	if err != nil {
@@ -348,7 +348,7 @@ func findWidgetsBySceneIDs(ctx context.Context, tx *sql.Tx, sceneIDs []uuid.UUID
 	}
 
 	rows, err := tx.QueryContext(ctx,
-		"SELECT "+selectWidgetColumns+" FROM widgets WHERE scene_id = ANY($1::uuid[]) ORDER BY pk_id",
+		"SELECT "+selectWidgetColumns+" FROM engineering.widgets WHERE scene_id = ANY($1::uuid[]) ORDER BY pk_id",
 		pq.Array(rawIDs),
 	)
 	if err != nil {

@@ -15,8 +15,9 @@ import (
 	"github.com/lib/pq"
 )
 
-// tagRepositoryPostgresImpl is the TagRepository of one Project: every
-// query names project_id.
+// tagRepositoryPostgresImpl is the TagRepository of one Project, over the
+// Tag definitions of the Draft (engineering.tags, ADR 0011): every query
+// names project_id.
 type tagRepositoryPostgresImpl struct {
 	db      *sql.DB
 	project id.ID[project.Project]
@@ -51,20 +52,18 @@ func (r tagRepositoryPostgresImpl) Save(ctx context.Context, aTag tag.Tag) (tag.
 	saved, err := r.store.save(ctx, aTag.ID(), aTag.Version(), aTag.PendingEvents(), rowWrite[tag.Tag]{
 		insert: func(tx *sql.Tx, next version.Version[tag.Tag]) error {
 			_, err := tx.ExecContext(ctx,
-				`INSERT INTO tags (id, project_id, name, type, value, quality, version)
-				VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-				aTag.ID().UUID(), r.project.UUID(), aTag.Name().String(), aTag.Type().String(),
-				aTag.Value().String(), aTag.Quality().String(), next.Number(),
+				`INSERT INTO engineering.tags (id, project_id, name, type, version)
+				VALUES ($1, $2, $3, $4, $5)`,
+				aTag.ID().UUID(), r.project.UUID(), aTag.Name().String(), aTag.Type().String(), next.Number(),
 			)
 			return r.tagWriteError("insert new tag", err)
 		},
 		update: func(tx *sql.Tx, current, next version.Version[tag.Tag]) (bool, error) {
 			res, err := tx.ExecContext(ctx,
-				`UPDATE tags
-				 SET name = $1, type = $2, value = $3, quality = $4, version = $5
-				 WHERE id = $6 AND version = $7 AND project_id = $8`,
-				aTag.Name().String(), aTag.Type().String(), aTag.Value().String(),
-				aTag.Quality().String(), next.Number(), aTag.ID().UUID(), current.Number(), r.project.UUID(),
+				`UPDATE engineering.tags
+				 SET name = $1, type = $2, version = $3
+				 WHERE id = $4 AND version = $5 AND project_id = $6`,
+				aTag.Name().String(), aTag.Type().String(), next.Number(), aTag.ID().UUID(), current.Number(), r.project.UUID(),
 			)
 			if err != nil {
 				return false, r.tagWriteError("update tag", err)
@@ -79,7 +78,7 @@ func (r tagRepositoryPostgresImpl) Save(ctx context.Context, aTag tag.Tag) (tag.
 	if err != nil {
 		return nil, err
 	}
-	return tag.ReconstituteTag(aTag.ID(), r.project, aTag.Name(), aTag.Type(), aTag.Value(), aTag.Quality(), saved)
+	return tag.ReconstituteTag(aTag.ID(), r.project, aTag.Name(), aTag.Type(), saved)
 }
 
 // tagWriteError maps a failed write of a tags row: a name taken in the
@@ -94,8 +93,8 @@ func (r tagRepositoryPostgresImpl) tagWriteError(what string, err error) error {
 	return fmt.Errorf("cannot %s: %w", what, err)
 }
 
-// Delete removes the tag whatever its stored Version: only the value changes
-// after creation, and removing does not depend on it.
+// Delete removes the tag whatever its stored Version: removing does not
+// depend on it.
 func (r tagRepositoryPostgresImpl) Delete(ctx context.Context, aTag tag.Tag) error {
 	if err := r.store.checkProject(aTag.ProjectID()); err != nil {
 		return err
@@ -105,21 +104,8 @@ func (r tagRepositoryPostgresImpl) Delete(ctx context.Context, aTag tag.Tag) err
 
 func (r tagRepositoryPostgresImpl) FindByID(ctx context.Context, tagID id.ID[tag.Tag]) (tag.Tag, error) {
 	found, err := r.scanTag(r.db.QueryRowContext(ctx,
-		`SELECT id, name, type, value, quality, version FROM tags WHERE id = $1 AND project_id = $2`,
+		`SELECT id, name, type, version FROM engineering.tags WHERE id = $1 AND project_id = $2`,
 		tagID.UUID(), r.project.UUID(),
-	))
-	if errors.Is(err, tag.ErrTagNotFound) {
-		return nil, id.NotFound(tag.ErrTagNotFound, tagID)
-	}
-	return found, err
-}
-
-func (r tagRepositoryPostgresImpl) FindByIDInLiveProject(ctx context.Context, tagID id.ID[tag.Tag], orgID id.ID[organization.Organization]) (tag.Tag, error) {
-	found, err := r.scanTag(r.db.QueryRowContext(ctx,
-		`SELECT t.id, t.name, t.type, t.value, t.quality, t.version
-		 FROM tags t JOIN projects p ON p.id = t.project_id
-		 WHERE t.id = $1 AND t.project_id = $2 AND p.deleted_at IS NULL AND p.organization_id = $3`,
-		tagID.UUID(), r.project.UUID(), orgID.UUID(),
 	))
 	if errors.Is(err, tag.ErrTagNotFound) {
 		return nil, id.NotFound(tag.ErrTagNotFound, tagID)
@@ -136,7 +122,7 @@ func (r tagRepositoryPostgresImpl) FindTypesByIDs(ctx context.Context, tagIDs []
 	for i, tagID := range tagIDs {
 		rawIDs[i] = tagID.UUID().String()
 	}
-	rows, err := r.db.QueryContext(ctx, `SELECT id, type FROM tags WHERE id = ANY($1::uuid[]) AND project_id = $2`,
+	rows, err := r.db.QueryContext(ctx, `SELECT id, type FROM engineering.tags WHERE id = ANY($1::uuid[]) AND project_id = $2`,
 		pq.Array(rawIDs), r.project.UUID())
 	if err != nil {
 		return nil, fmt.Errorf("error querying tag types: %w", err)
@@ -164,23 +150,21 @@ func (r tagRepositoryPostgresImpl) FindTypesByIDs(ctx context.Context, tagIDs []
 
 func (r tagRepositoryPostgresImpl) FindByName(ctx context.Context, aName tag.TagName) (tag.Tag, error) {
 	return r.scanTag(r.db.QueryRowContext(ctx,
-		`SELECT id, name, type, value, quality, version FROM tags WHERE name = $1 AND project_id = $2`,
+		`SELECT id, name, type, version FROM engineering.tags WHERE name = $1 AND project_id = $2`,
 		aName.String(), r.project.UUID(),
 	))
 }
 
-// scanTag reads a single `id, name, type, value, quality, version` row; no row is tag.ErrTagNotFound.
+// scanTag reads a single `id, name, type, version` row; no row is tag.ErrTagNotFound.
 func (r tagRepositoryPostgresImpl) scanTag(row *sql.Row) (tag.Tag, error) {
 	var (
 		tagUUID uuid.UUID
 		name    string
 		tagType string
-		value   string
-		quality string
 		ver     int
 	)
 
-	err := row.Scan(&tagUUID, &name, &tagType, &value, &quality, &ver)
+	err := row.Scan(&tagUUID, &name, &tagType, &ver)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, tag.ErrTagNotFound
@@ -188,20 +172,20 @@ func (r tagRepositoryPostgresImpl) scanTag(row *sql.Row) (tag.Tag, error) {
 		return nil, fmt.Errorf("error scanning tag: %w", err)
 	}
 
-	return r.reconstruct(tagUUID, name, tagType, value, quality, ver)
+	return r.reconstruct(tagUUID, name, tagType, ver)
 }
 
 func (r tagRepositoryPostgresImpl) FindAll(ctx context.Context) ([]tag.Tag, error) {
 	return r.readTags(ctx,
-		`SELECT id, name, type, value, quality, version FROM tags WHERE project_id = $1 ORDER BY name`,
+		`SELECT id, name, type, version FROM engineering.tags WHERE project_id = $1 ORDER BY name`,
 		r.project.UUID(),
 	)
 }
 
 func (r tagRepositoryPostgresImpl) FindAllInLiveProject(ctx context.Context, orgID id.ID[organization.Organization]) ([]tag.Tag, error) {
 	return r.readTags(ctx,
-		`SELECT t.id, t.name, t.type, t.value, t.quality, t.version
-		 FROM tags t JOIN projects p ON p.id = t.project_id
+		`SELECT t.id, t.name, t.type, t.version
+		 FROM engineering.tags t JOIN projects p ON p.id = t.project_id
 		 WHERE t.project_id = $1 AND p.deleted_at IS NULL AND p.organization_id = $2
 		 ORDER BY t.name`,
 		r.project.UUID(), orgID.UUID(),
@@ -222,14 +206,12 @@ func (r tagRepositoryPostgresImpl) readTags(ctx context.Context, query string, a
 			tagUUID    uuid.UUID
 			tagName    string
 			tagType    string
-			tagValue   string
-			tagQuality string
 			tagVersion int
 		)
-		if err := rows.Scan(&tagUUID, &tagName, &tagType, &tagValue, &tagQuality, &tagVersion); err != nil {
+		if err := rows.Scan(&tagUUID, &tagName, &tagType, &tagVersion); err != nil {
 			return nil, fmt.Errorf("error scanning tag: %w", err)
 		}
-		t, err := r.reconstruct(tagUUID, tagName, tagType, tagValue, tagQuality, tagVersion)
+		t, err := r.reconstruct(tagUUID, tagName, tagType, tagVersion)
 		if err != nil {
 			return nil, err
 		}
@@ -241,9 +223,7 @@ func (r tagRepositoryPostgresImpl) readTags(ctx context.Context, query string, a
 	return tags, nil
 }
 
-func (r tagRepositoryPostgresImpl) reconstruct(
-	aTagUUID uuid.UUID, aName, aTagType, aValue, aQuality string, aVersion int,
-) (tag.Tag, error) {
+func (r tagRepositoryPostgresImpl) reconstruct(aTagUUID uuid.UUID, aName, aTagType string, aVersion int) (tag.Tag, error) {
 	newID := id.NewID(id.IDWithUUID[tag.Tag](aTagUUID))
 
 	newName, err := tag.NewTagName(aName)
@@ -256,20 +236,10 @@ func (r tagRepositoryPostgresImpl) reconstruct(
 		return nil, fmt.Errorf("cannot create tag type: %w", err)
 	}
 
-	newValue, err := newType.NewTagValue(aValue)
-	if err != nil {
-		return nil, fmt.Errorf("cannot create tag value: %w", err)
-	}
-
-	newQuality, err := tag.NewTagQuality(aQuality)
-	if err != nil {
-		return nil, fmt.Errorf("cannot create tag quality: %w", err)
-	}
-
 	newVersion, err := version.New[tag.Tag](version.WithNumber[tag.Tag](aVersion))
 	if err != nil {
 		return nil, fmt.Errorf("cannot create tag version: %w", err)
 	}
 
-	return tag.ReconstituteTag(newID, r.project, newName, newType, newValue, newQuality, newVersion)
+	return tag.ReconstituteTag(newID, r.project, newName, newType, newVersion)
 }

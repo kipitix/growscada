@@ -9,18 +9,22 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 )
 
 // TagsHandlers handles HTTP requests related to tags.
-// It depends on the application layer abstraction.
+// It depends on the application layer abstraction: the Engineering node's
+// tag service for the definitions (read with their states), the Runtime
+// node's for the writes of states (ADR 0011).
 type TagsHandlers struct {
 	service application.TagService
+	states  runtimeapp.TagStateService
 }
 
 // NewTagsHandler creates a new handler for tags.
-// Accepts a tag service and returns a pointer to TagsHandlers.
-func NewTagsHandler(s application.TagService) *TagsHandlers {
-	return &TagsHandlers{service: s}
+// Accepts the tag services and returns a pointer to TagsHandlers.
+func NewTagsHandler(s application.TagService, states runtimeapp.TagStateService) *TagsHandlers {
+	return &TagsHandlers{service: s, states: states}
 }
 
 // GetTags handles GET /projects/{project_id}/tags request to retrieve the
@@ -131,7 +135,9 @@ func (h TagsHandlers) DeleteTagsByID(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusOK, newTagResponse(deletedTag))
 }
 
-// PatchTagsValue handles PATCH /projects/{project_id}/tags/{tag_id}/value for setting tag value and quality
+// PatchTagsValue handles PATCH /projects/{project_id}/tags/{tag_id}/value for
+// setting tag value and quality: a write of the tag's state on the Runtime
+// node, with no expected version.
 func (h TagsHandlers) PatchTagsValue(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := pathUUID(w, r, projectResource)
 	if !ok {
@@ -147,13 +153,13 @@ func (h TagsHandlers) PatchTagsValue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updatedTag, err := h.service.SetTagValueByID(r.Context(), projectID, newUpdateTagInput(request, tagID))
+	written, err := h.states.SetTagValue(r.Context(), projectID, newSetTagValueInput(request, tagID))
 	if err != nil {
 		sendError(w, r, err)
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, newUpdateTagResponse(updatedTag))
+	sendJSONResponse(w, http.StatusOK, newUpdateTagResponse(written))
 }
 
 // PostTags handles POST /projects/{project_id}/tags for creating a new tag

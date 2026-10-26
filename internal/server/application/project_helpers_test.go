@@ -2,12 +2,16 @@ package application_test
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
 	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/server/application"
+	"github.com/kipitix/growscada/internal/server/application/appdto"
+	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
+	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
@@ -15,6 +19,8 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
+	runtimepg "github.com/kipitix/growscada/internal/server/infrastructure/postgres/runtime"
+	"github.com/kipitix/growscada/internal/server/inprocess"
 )
 
 // mainProject is the project "Main" the migrations create: the tests' content
@@ -106,4 +112,57 @@ func sceneServiceOver(scopes application.ProjectScopes, wtRepo library.WidgetTyp
 // place of any repository.
 func sceneRepository(repo scene.SceneRepository) func(scene.SceneRepository) scene.SceneRepository {
 	return func(scene.SceneRepository) scene.SceneRepository { return repo }
+}
+
+// newRuntimeNode returns the Runtime node over the test database, in-process
+// as the server wires it; its tag_updated go nowhere.
+func newRuntimeNode() application.RuntimeNode {
+	_, node := newRuntime()
+	return node
+}
+
+// newRuntime returns the Runtime node's service of Tag states over the test
+// database and the RuntimeNode port over it.
+func newRuntime() (runtimeapp.TagStateService, application.RuntimeNode) {
+	states := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(testDB), soleOrganization(), func(event.Event) {})
+	return states, inprocess.NewRuntimeNode(states)
+}
+
+// newServiceWithStates returns the tag service and the Runtime node's
+// service of Tag states behind it.
+func newServiceWithStates() (application.TagService, runtimeapp.TagStateService) {
+	states, node := newRuntime()
+	return application.NewTagService(contentOver(newScopes()), node), states
+}
+
+// errRuntimeDown is the error of failingRuntimeNode.
+var errRuntimeDown = errors.New("runtime node down")
+
+// failingRuntimeNode is a Runtime node whose upserts and removals fail; its
+// reads go to the RuntimeNode it wraps.
+type failingRuntimeNode struct {
+	application.RuntimeNode
+}
+
+func (failingRuntimeNode) UpsertTagDefinitions(context.Context, uuid.UUID, []appdto.TagDefinition) error {
+	return errRuntimeDown
+}
+
+func (failingRuntimeNode) RemoveTagStates(context.Context, uuid.UUID, []uuid.UUID) error {
+	return errRuntimeDown
+}
+
+func (failingRuntimeNode) RemoveProjectTagStates(context.Context, uuid.UUID) error {
+	return errRuntimeDown
+}
+
+// tagStateCount returns how many Tag states the Runtime node holds of the
+// Project.
+func tagStateCount(t *testing.T, projectID uuid.UUID) int {
+	t.Helper()
+	var n int
+	if err := testDB.QueryRowContext(context.Background(), `SELECT count(*) FROM runtime.tags WHERE project_id = $1`, projectID).Scan(&n); err != nil {
+		t.Fatalf("count tag states: %v", err)
+	}
+	return n
 }

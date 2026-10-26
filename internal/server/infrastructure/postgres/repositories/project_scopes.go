@@ -40,7 +40,7 @@ func (s *projectScopes) ForProject(projectID id.ID[project.Project]) application
 
 func (s *projectScopes) FindProjectsUsingWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) ([]id.ID[project.Project], error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT w.project_id FROM widgets w JOIN projects p ON p.id = w.project_id
+		`SELECT w.project_id FROM engineering.widgets w JOIN projects p ON p.id = w.project_id
 		 WHERE w.type_id = $1 AND p.deleted_at IS NULL
 		 GROUP BY w.project_id ORDER BY min(w.pk_id)`,
 		typeID.UUID(),

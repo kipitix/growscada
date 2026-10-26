@@ -163,14 +163,11 @@ func TestTagUpdated_AppliesTheTagWithoutRereadingTags(t *testing.T) {
 	f, log := mountLogged(t, url, api)
 	f.p.selectedTagID = tagID
 	ctx := context.Background()
-	tag, err := api.GetTag(ctx, tagID)
-	if err != nil {
-		t.Fatalf("get tag: %v", err)
-	}
-	if _, err := api.SetTagValue(ctx, tagID, "42", "good", tag.Version); err != nil {
+	if _, err := api.SetTagValue(ctx, tagID, "42", "good"); err != nil {
 		t.Fatalf("set tag value: %v", err)
 	}
-	if tag, err = api.GetTag(ctx, tagID); err != nil {
+	tag, err := api.GetTag(ctx, tagID)
+	if err != nil {
 		t.Fatalf("get tag: %v", err)
 	}
 
@@ -180,7 +177,7 @@ func TestTagUpdated_AppliesTheTagWithoutRereadingTags(t *testing.T) {
 	if got := log.take(); len(got) != 0 {
 		t.Errorf("requests: %v, want none", got)
 	}
-	if got, _ := f.p.findTag(tagID); got.Value != "42" || got.Version != tag.Version {
+	if got, _ := f.p.findTag(tagID); got.Value != "42" || got.Seq != tag.Seq {
 		t.Errorf("the Tag shown: %+v, want %+v", got, tag)
 	}
 	if list := f.p.tags.List(); len(list) != 1 || list[0].Value != "42" {
@@ -270,7 +267,7 @@ func TestTagUpdated_OfATagDeletedMeanwhile_DoesNotShowIt(t *testing.T) {
 	f.p.deleteTag(f.p.compoCtx)
 	f.run()
 
-	tag.Value, tag.Version = "42", tag.Version+1 // committed before the delete, delivered after
+	tag.Value, tag.Seq = "42", tag.Seq+1 // committed before the delete, delivered after
 	f.event(apiv0.Event{Type: apiv0.EventTagUpdated, ID: tagID.String(), Tag: &tag})
 
 	if _, ok := f.p.findTag(tagID); ok || len(f.p.tags.List()) != 0 {

@@ -28,7 +28,7 @@ func setup(t *testing.T) (*devicelink.RESTLink, application.TagService, appdto.T
 	t.Helper()
 	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 	created, err := svc.CreateTag(context.Background(), servertest.MainProject, appdto.CreateTagInput{
-		Name: "pump.speed", Type: "integer", Value: "0", Quality: "good",
+		Name: "pump.speed", Type: "integer",
 	})
 	if err != nil {
 		t.Fatalf("create tag: %v", err)
@@ -81,7 +81,7 @@ func TestResolve_MissingProject(t *testing.T) {
 func TestResolve_TagsOfTheConfiguredProjectOnly(t *testing.T) {
 	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 	ctx := context.Background()
-	if _, err := svc.CreateTag(ctx, servertest.MainProject, appdto.CreateTagInput{Name: "pump.speed", Type: "integer", Value: "0", Quality: "good"}); err != nil {
+	if _, err := svc.CreateTag(ctx, servertest.MainProject, appdto.CreateTagInput{Name: "pump.speed", Type: "integer"}); err != nil {
 		t.Fatalf("create tag in Main: %v", err)
 	}
 	client := apiclient.New(srv.URL, srv.Client())
@@ -89,7 +89,7 @@ func TestResolve_TagsOfTheConfiguredProjectOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	inLine, err := client.Project(line.ID).CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.speed", Type: "boolean", Value: "false", Quality: "good"})
+	inLine, err := client.Project(line.ID).CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.speed", Type: "boolean"})
 	if err != nil {
 		t.Fatalf("create tag in Line 1: %v", err)
 	}
@@ -101,67 +101,41 @@ func TestResolve_TagsOfTheConfiguredProjectOnly(t *testing.T) {
 	}
 }
 
-func TestWrite_TracksVersion(t *testing.T) {
-	link, svc, created := setup(t)
-	tag, err := link.Resolve(context.Background(), "pump.speed")
-	if err != nil {
-		t.Fatalf("Resolve: %v", err)
-	}
-
-	for _, v := range []string{"1", "2", "3"} {
-		if err := link.Write(context.Background(), tag, v, devicelink.QualityUncertain); err != nil {
-			t.Fatalf("Write %s: %v", v, err)
-		}
-	}
-
-	got := current(t, svc, created)
-	if got.Value != "3" || got.Quality != "uncertain" || got.Version != created.Version+3 {
-		t.Errorf("got value %q quality %q version %d, want 3/uncertain/%d", got.Value, got.Quality, got.Version, created.Version+3)
-	}
-}
-
-func TestWrite_ConflictRereadsAndRetries(t *testing.T) {
-	link, svc, created := setup(t)
-	tag, err := link.Resolve(context.Background(), "pump.speed")
-	if err != nil {
-		t.Fatalf("Resolve: %v", err)
-	}
-	// Someone else changes the tag: the link's version is now stale.
-	if _, err := svc.SetTagValueByID(context.Background(), servertest.MainProject, appdto.UpdateTagInput{
-		ID: created.ID, Value: "99", Quality: "bad", Version: created.Version,
-	}); err != nil {
-		t.Fatalf("concurrent write: %v", err)
-	}
-
-	if err := link.Write(context.Background(), tag, "5", devicelink.QualityGood); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
-
-	got := current(t, svc, created)
-	if got.Value != "5" || got.Quality != "good" || got.Version != created.Version+2 {
-		t.Errorf("got value %q quality %q version %d, want 5/good/%d", got.Value, got.Quality, got.Version, created.Version+2)
-	}
-}
-
-func TestWrite_StaleVersionIsRejectedByServer(t *testing.T) {
-	// The contract the link relies on: a write with a stale version is a 409.
+// TestWrite_StatesNoVersion: each write is the latest, whatever was written
+// before it, by the link or by anyone else (ADR 0011); the server numbers
+// them in order.
+func TestWrite_StatesNoVersion(t *testing.T) {
 	srv, svc := servertest.StartAPI(t, postgres.DB(t))
-	created, err := svc.CreateTag(context.Background(), servertest.MainProject, appdto.CreateTagInput{
-		Name: "t", Type: "integer", Value: "0", Quality: "good",
-	})
+	ctx := context.Background()
+	created, err := svc.CreateTag(ctx, servertest.MainProject, appdto.CreateTagInput{Name: "pump.speed", Type: "integer"})
 	if err != nil {
 		t.Fatalf("create tag: %v", err)
 	}
 	client := apiclient.New(srv.URL, srv.Client())
-	if _, err := client.Project(servertest.MainProject).SetTagValue(context.Background(), created.ID, "1", "good", created.Version); err != nil {
-		t.Fatalf("first write: %v", err)
+	link := devicelink.NewRESTLink(client, servertest.MainProjectName)
+	tag, err := link.Resolve(ctx, "pump.speed")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
 	}
 
-	_, err = client.Project(servertest.MainProject).SetTagValue(context.Background(), created.ID, "2", "good", created.Version)
+	for _, v := range []string{"1", "2"} {
+		if err := link.Write(ctx, tag, v, devicelink.QualityUncertain); err != nil {
+			t.Fatalf("Write %s: %v", v, err)
+		}
+	}
+	// Someone else writes the tag meanwhile: the link's next write still goes.
+	theirs, err := client.Project(servertest.MainProject).SetTagValue(ctx, created.ID, "99", "bad")
+	if err != nil {
+		t.Fatalf("concurrent write: %v", err)
+	}
+	if err := link.Write(ctx, tag, "5", devicelink.QualityGood); err != nil {
+		t.Fatalf("Write after someone else's: %v", err)
+	}
 
-	var statusErr *apiclient.StatusError
-	if !errors.As(err, &statusErr) || statusErr.Problem.Status != http.StatusConflict || !errors.Is(err, apiclient.ErrConflict) {
-		t.Errorf("got %v, want 409 Conflict", err)
+	got := current(t, svc, created)
+	if got.Value != "5" || got.Quality != "good" || got.Seq <= theirs || got.Version != created.Version {
+		t.Errorf("got value %q quality %q seq %d version %d, want 5/good above seq %d, the definition's version %d",
+			got.Value, got.Quality, got.Seq, got.Version, theirs, created.Version)
 	}
 }
 
@@ -188,7 +162,7 @@ func projectLink(t *testing.T) (*devicelink.RESTLink, *apiclient.Client, devicel
 	t.Helper()
 	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 	if _, err := svc.CreateTag(context.Background(), servertest.MainProject, appdto.CreateTagInput{
-		Name: "pump.speed", Type: "integer", Value: "0", Quality: "good",
+		Name: "pump.speed", Type: "integer",
 	}); err != nil {
 		t.Fatalf("create tag: %v", err)
 	}
@@ -227,7 +201,7 @@ func TestProjectCreatedAnew_IsFoundByName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create project anew: %v", err)
 	}
-	created, err := client.Project(anew.ID).CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.speed", Type: "integer", Value: "0", Quality: "good"})
+	created, err := client.Project(anew.ID).CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.speed", Type: "integer"})
 	if err != nil {
 		t.Fatalf("create tag anew: %v", err)
 	}
@@ -257,7 +231,7 @@ func TestResolve_ProjectCreatedAnewBeforeAnyWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create project anew: %v", err)
 	}
-	created, err := client.Project(anew.ID).CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.speed", Type: "integer", Value: "0", Quality: "good"})
+	created, err := client.Project(anew.ID).CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.speed", Type: "integer"})
 	if err != nil {
 		t.Fatalf("create tag anew: %v", err)
 	}

@@ -9,8 +9,10 @@ package apiv0
 // is the affected aggregate's (or connection's) ID; system_ready carries
 // none. SceneID is the Scene that holds (or held)
 // the Widget, on widget_created, widget_updated and widget_deleted only. Tag
-// carries the Tag's full new state, in the shape of GET /tags/{id}, on
-// tag_updated only.
+// carries the Tag's full new state, in the shape of GET /tags/{id}, its seq
+// included, on tag_updated only. tag_updated is delivered at-most-once: a
+// reader that may have missed one rereads the tags on reconnect, and drops a
+// state whose seq is not greater than the one it holds.
 // Readers skip event types they do not know: a new type is a MINOR change.
 type Event struct {
 	Type      string       `json:"type"`

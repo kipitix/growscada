@@ -9,20 +9,19 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"path/filepath"
-	"runtime"
 	"sync"
 	"testing"
 
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
-	"github.com/pressly/goose/v3"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
+	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/migrations"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
 
@@ -95,20 +94,14 @@ func startTestDB() {
 	}
 	testDBConn = db
 
-	_, currentFile, _, _ := runtime.Caller(0)
-	migrationsDir := filepath.Join(filepath.Dir(currentFile), "..", "..", "infrastructure", "postgres", "migrations")
-
-	if err := goose.SetDialect("postgres"); err != nil {
-		failTestDB("failed to set goose dialect", err)
-	}
-	if err := goose.Up(db, migrationsDir); err != nil {
+	if err := migrations.Up(ctx, db); err != nil {
 		failTestDB("failed to run migrations", err)
 	}
 }
 
 func cleanTags(t *testing.T) {
 	t.Helper()
-	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM tags"); err != nil {
+	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
 		t.Fatalf("cleanTags: %v", err)
 	}
 }
@@ -117,14 +110,20 @@ func newRouter() *restapi.APIRouter {
 	return newServices().router()
 }
 
+// createTagViaService creates a tag and writes its state, value and quality,
+// as its supplier would; it returns the tag with that state.
 func createTagViaService(t *testing.T, name, tagType, value, quality string) appdto.Tag {
 	t.Helper()
-	resp, err := newServices().tags.CreateTag(context.Background(), mainProject, appdto.CreateTagInput{
-		Name: name, Type: tagType, Value: value, Quality: quality,
-	})
+	services := newServices()
+	resp, err := services.tags.CreateTag(context.Background(), mainProject, appdto.CreateTagInput{Name: name, Type: tagType})
 	if err != nil {
 		t.Fatalf("createTagViaService(%q): %v", name, err)
 	}
+	written, err := services.states.SetTagValue(context.Background(), mainProject, runtimeapp.SetTagValueInput{TagID: resp.ID, Value: value, Quality: quality})
+	if err != nil {
+		t.Fatalf("createTagViaService(%q): write its state: %v", name, err)
+	}
+	resp.Value, resp.Quality, resp.Seq = written.Value, written.Quality, written.Seq
 	return resp
 }
 
@@ -320,6 +319,35 @@ func TestGetTagsByID_ExistingTag_Returns200WithTag(t *testing.T) {
 	if resp.Quality != "good" {
 		t.Errorf("Quality: expected 'good', got %q", resp.Quality)
 	}
+	if resp.Seq != created.Seq || resp.Seq == 0 || resp.Version != created.Version {
+		t.Errorf("Seq %d, Version %d: want the write's seq %d and the definition's version %d", resp.Seq, resp.Version, created.Seq, created.Version)
+	}
+}
+
+// TestGetTagsByID_NotWrittenYet_IsTheInitialStateWithSeqZero: a tag no
+// supplier has written shows its type's zero value with quality bad, and
+// seq 0 in the body.
+func TestGetTagsByID_NotWrittenYet_IsTheInitialStateWithSeqZero(t *testing.T) {
+	cleanTags(t)
+	created, err := newServices().tags.CreateTag(context.Background(), mainProject, appdto.CreateTagInput{Name: "fresh", Type: "boolean"})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, mainPath+"/tags/"+created.ID.String(), nil)
+	rec := httptest.NewRecorder()
+	newRouter().ServeMux().ServeHTTP(rec, req)
+
+	var raw map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&raw); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if raw["value"] != "false" || raw["quality"] != "bad" {
+		t.Errorf("state %v, want false, bad", raw)
+	}
+	if seq, ok := raw["seq"]; !ok || seq != float64(0) {
+		t.Errorf("seq %v (present %v) in the body of a state not written yet, want 0", seq, ok)
+	}
 }
 
 func TestGetTagsByID_NotFound_Returns404WithProblemDetails(t *testing.T) {
@@ -379,7 +407,7 @@ func TestPostTags_ValidBody_Returns201WithID(t *testing.T) {
 	cleanTags(t)
 	router := newRouter()
 
-	body, _ := json.Marshal(apiv0.CreateTagRequest{Name: "flow", Type: "integer", Value: "0", Quality: "good"})
+	body, _ := json.Marshal(apiv0.CreateTagRequest{Name: "flow", Type: "integer"})
 	req := httptest.NewRequest(http.MethodPost, mainPath+"/tags", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -403,7 +431,7 @@ func TestPostTags_DuplicateName_Returns409WithProblemDetails(t *testing.T) {
 	createTagViaService(t, "flow", "integer", "0", "good")
 	router := newRouter()
 
-	body, _ := json.Marshal(apiv0.CreateTagRequest{Name: "flow", Type: "boolean", Value: "false", Quality: "good"})
+	body, _ := json.Marshal(apiv0.CreateTagRequest{Name: "flow", Type: "boolean"})
 	req := httptest.NewRequest(http.MethodPost, mainPath+"/tags", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -449,7 +477,7 @@ func TestPostTags_InvalidJSON_Returns400WithProblemDetails(t *testing.T) {
 func TestPostTags_InvalidType_Returns400WithProblemDetails(t *testing.T) {
 	router := newRouter()
 
-	body, _ := json.Marshal(apiv0.CreateTagRequest{Name: "sensor", Type: "unknown", Value: "0", Quality: "good"})
+	body, _ := json.Marshal(apiv0.CreateTagRequest{Name: "sensor", Type: "unknown"})
 	req := httptest.NewRequest(http.MethodPost, mainPath+"/tags", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -569,28 +597,49 @@ func TestDeleteTagByID_InvalidUUID_Returns400WithProblemDetails(t *testing.T) {
 
 // --- PATCH /api/v0/tags/{id}/value ---
 
-func TestPatchTagValue_ValidUpdate_Returns200WithVersion(t *testing.T) {
+// patchValue sends PATCH /tags/{id}/value with body.
+func patchValue(router *restapi.APIRouter, tagID uuid.UUID, body any) *httptest.ResponseRecorder {
+	raw, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPatch, mainPath+"/tags/"+tagID.String()+"/value", bytes.NewReader(raw))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+	return rec
+}
+
+// TestPatchTagValue_WritesInARow_Return200WithIncreasingSeqs: no version is
+// stated, none is checked; each write takes a seq above the one before.
+func TestPatchTagValue_WritesInARow_Return200WithIncreasingSeqs(t *testing.T) {
 	cleanTags(t)
 	created := createTagViaService(t, "temperature", "integer", "10", "bad")
 	router := newRouter()
 
-	body, _ := json.Marshal(apiv0.UpdateTagRequest{Value: "99", Quality: "good", Version: created.Version})
-	req := httptest.NewRequest(http.MethodPatch, mainPath+"/tags/"+created.ID.String()+"/value", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	router.ServeMux().ServeHTTP(rec, req)
+	last := created.Seq
+	for _, value := range []string{"99", "99", "100"} {
+		rec := patchValue(router, created.ID, apiv0.UpdateTagRequest{Value: value, Quality: "good"})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status: expected 200, got %d\nbody: %s", rec.Code, rec.Body.String())
+		}
+		var resp apiv0.UpdateTagResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if resp.Seq <= last {
+			t.Errorf("seq %d, want above %d", resp.Seq, last)
+		}
+		last = resp.Seq
+	}
+}
 
-	if rec.Code != http.StatusOK {
-		t.Errorf("status: expected 200, got %d\nbody: %s", rec.Code, rec.Body.String())
-	}
+// TestPatchTagValue_WithAVersion_Returns400: the body has no version any
+// more; strictly decoded, a client still sending one is told so.
+func TestPatchTagValue_WithAVersion_Returns400(t *testing.T) {
+	cleanTags(t)
+	created := createTagViaService(t, "temperature", "integer", "10", "bad")
 
-	var resp apiv0.UpdateTagResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if resp.Version != 2 {
-		t.Errorf("Version: expected 2, got %d", resp.Version)
-	}
+	rec := patchValue(newRouter(), created.ID, map[string]any{"value": "1", "quality": "good", "version": created.Version})
+
+	assertBadRequest(t, rec)
 }
 
 func TestPatchTagValue_ValidUpdate_ValueAndQualityAreUpdated(t *testing.T) {
@@ -598,7 +647,7 @@ func TestPatchTagValue_ValidUpdate_ValueAndQualityAreUpdated(t *testing.T) {
 	created := createTagViaService(t, "humidity", "integer", "0", "bad")
 	router := newRouter()
 
-	body, _ := json.Marshal(apiv0.UpdateTagRequest{Value: "75", Quality: "good", Version: created.Version})
+	body, _ := json.Marshal(apiv0.UpdateTagRequest{Value: "75", Quality: "good"})
 	req := httptest.NewRequest(http.MethodPatch, mainPath+"/tags/"+created.ID.String()+"/value", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -722,11 +771,12 @@ func assertBadRequest(t *testing.T, rec *httptest.ResponseRecorder) {
 }
 
 func TestPostTags_InvalidInput_Returns400(t *testing.T) {
-	cases := map[string]apiv0.CreateTagRequest{
-		"quality":        {Name: "sensor", Type: "integer", Value: "0", Quality: "simulated"},
-		"value for type": {Name: "sensor", Type: "integer", Value: "abc", Quality: "good"},
-		"boolean value":  {Name: "sensor", Type: "boolean", Value: "maybe", Quality: "good"},
-		"type and value": {Name: "sensor", Type: "", Value: "", Quality: "good"},
+	// A tag is created with its definition alone: a value or a quality in
+	// the body is an unknown field.
+	cases := map[string]map[string]string{
+		"type":    {"name": "sensor", "type": ""},
+		"value":   {"name": "sensor", "type": "integer", "value": "0"},
+		"quality": {"name": "sensor", "type": "integer", "quality": "good"},
 	}
 	for name, request := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -751,7 +801,6 @@ func TestPatchTagValue_InvalidInput_Returns400(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cleanTags(t)
 			created := createTagViaService(t, "level", "integer", "0", "good")
-			request.Version = created.Version
 			body, _ := json.Marshal(request)
 			req := httptest.NewRequest(http.MethodPatch, mainPath+"/tags/"+created.ID.String()+"/value", bytes.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")

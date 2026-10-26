@@ -1,5 +1,5 @@
 info:
-  name: post tags invalid quality
+  name: post tags invalid type
   type: http
   seq: 21
 
@@ -10,15 +10,13 @@ http:
     type: json
     data: |-
       {
-        "name": "invalid_quality",
-        "type": "boolean",
-        "value": "false",
-        "quality": "simulated"
+        "name": "invalid_type",
+        "type": "float"
       }
   auth: inherit
 
 docs: |
-  "simulated" is not a Quality (only bad, uncertain, good). Any value the
+  "float" is not a TagType (only string, boolean, integer). Any value the
   server cannot accept from a request body returns `400 Bad Request` Problem
   Details naming the cause.
 
@@ -34,7 +32,7 @@ runtime:
       value: '"application/problem+json"'
     - expression: 'res.body.detail'
       operator: contains
-      value: '"quality"'
+      value: '"type"'
 
 settings:
   encodeUrl: true

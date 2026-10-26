@@ -21,6 +21,8 @@ runtime:
     - expression: 'res.body.name'
       operator: eq
       value: '"creator"'
+    - expression: 'res.body.seq'
+      operator: isNumber
 
 settings:
   encodeUrl: true

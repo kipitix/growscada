@@ -91,10 +91,10 @@ func TestRequests_StateSchemaVersionOnlyWithBody(t *testing.T) {
 	if _, err := client.Project(testProject).ListTags(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := client.Project(testProject).CreateTag(ctx, apiv0.CreateTagRequest{Name: "t", Type: "integer", Value: "0", Quality: "good"}); err != nil {
+	if _, err := client.Project(testProject).CreateTag(ctx, apiv0.CreateTagRequest{Name: "t", Type: "integer"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := client.Project(testProject).SetTagValue(ctx, uuid.New(), "1", "good", 1); err != nil {
+	if _, err := client.Project(testProject).SetTagValue(ctx, uuid.New(), "1", "good"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := client.Project(testProject).DeleteTag(ctx, uuid.New()); err != nil {

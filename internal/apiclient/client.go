@@ -271,16 +271,16 @@ func (p *ProjectClient) CreateTag(ctx context.Context, req apiv0.CreateTagReques
 	return resp, err
 }
 
-// SetTagValue writes a tag's value and quality, expecting its current version
-// (optimistic locking), and returns the new version. The error matches
-// ErrConflict if the version is stale and ErrNotFound if the tag is gone.
-func (p *ProjectClient) SetTagValue(ctx context.Context, id uuid.UUID, value, quality string, version int) (int, error) {
+// SetTagValue writes a tag's value and quality — the latest write wins, no
+// version is stated — and returns the seq the write took. The error matches
+// ErrNotFound if the tag is gone.
+func (p *ProjectClient) SetTagValue(ctx context.Context, id uuid.UUID, value, quality string) (int64, error) {
 	var resp apiv0.UpdateTagResponse
-	req := apiv0.UpdateTagRequest{Value: value, Quality: quality, Version: version}
+	req := apiv0.UpdateTagRequest{Value: value, Quality: quality}
 	if err := p.do(ctx, http.MethodPatch, tagPath(id)+"/value", req, http.StatusOK, &resp); err != nil {
 		return 0, err
 	}
-	return resp.Version, nil
+	return resp.Seq, nil
 }
 
 // DeleteTag deletes a tag by ID and returns its last state. The error matches

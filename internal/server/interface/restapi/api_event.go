@@ -4,12 +4,13 @@ import (
 	"time"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
-	"github.com/kipitix/growscada/internal/server/application/appdto"
+	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
+	"github.com/kipitix/growscada/internal/server/domain/tagstate"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 )
 
@@ -51,8 +52,8 @@ func newAPIEvent(e event.Event) apiv0.Event {
 	switch e := e.(type) {
 	case tag.TagEvent:
 		ev.ID = e.TagID().String()
-		if updated, ok := e.(tag.TagUpdatedEvent); ok {
-			t := newTagResponse(appdto.NewTag(updated.Tag()))
+		if updated, ok := e.(tagstate.TagUpdatedEvent); ok {
+			t := newTagStateResponse(runtimeapp.NewTagState(updated.State()))
 			ev.Tag = &t
 		}
 	case scene.WidgetEvent:

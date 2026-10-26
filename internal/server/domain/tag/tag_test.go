@@ -13,12 +13,8 @@ var testProject = id.NewID[project.Project]()
 
 func makeTestTag(t *testing.T) Tag {
 	t.Helper()
-	tagID := id.NewID[Tag]()
 	name, _ := NewTagName("temperature")
-	tagType := TagTypeInteger
-	value, _ := tagType.NewTagValue(0)
-	quality := TagQualityGood
-	tag, err := ReconstituteTag(tagID, testProject, name, tagType, value, quality, version.Initial[Tag]())
+	tag, err := ReconstituteTag(id.NewID[Tag](), testProject, name, TagTypeInteger, version.Initial[Tag]())
 	if err != nil {
 		t.Fatalf("ReconstituteTag returned unexpected error: %v", err)
 	}
@@ -28,15 +24,12 @@ func makeTestTag(t *testing.T) Tag {
 func TestReconstituteTag_FieldsAreSet(t *testing.T) {
 	tagID := id.NewID[Tag]()
 	name, _ := NewTagName("pressure")
-	tagType := TagTypeString
-	value, _ := tagType.NewTagValue("100")
-	quality := TagQualityGood
 	ver, err := version.New[Tag](version.WithNumber[Tag](3))
 	if err != nil {
 		t.Fatalf("unexpected error creating version: %v", err)
 	}
 
-	tag, err := ReconstituteTag(tagID, testProject, name, tagType, value, quality, ver)
+	tag, err := ReconstituteTag(tagID, testProject, name, TagTypeString, ver)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -44,17 +37,14 @@ func TestReconstituteTag_FieldsAreSet(t *testing.T) {
 	if tag.ID() != tagID {
 		t.Errorf("ID mismatch: expected %v, got %v", tagID, tag.ID())
 	}
+	if tag.ProjectID() != testProject {
+		t.Errorf("ProjectID mismatch: expected %v, got %v", testProject, tag.ProjectID())
+	}
 	if tag.Name() != name {
 		t.Errorf("Name mismatch: expected %v, got %v", name, tag.Name())
 	}
-	if tag.Type() != tagType {
-		t.Errorf("Type mismatch: expected %v, got %v", tagType, tag.Type())
-	}
-	if tag.Value().String() != value.String() {
-		t.Errorf("Value mismatch: expected %v, got %v", value.String(), tag.Value().String())
-	}
-	if tag.Quality() != quality {
-		t.Errorf("Quality mismatch: expected %v, got %v", quality, tag.Quality())
+	if tag.Type() != TagTypeString {
+		t.Errorf("Type mismatch: expected %v, got %v", TagTypeString, tag.Type())
 	}
 	if tag.Version() != ver {
 		t.Errorf("Version mismatch: expected %d, got %d", ver, tag.Version())
@@ -74,94 +64,16 @@ func TestReconstituteTag_InitialVersion(t *testing.T) {
 	}
 }
 
-func TestTag_SetValue_Success(t *testing.T) {
-	tag := makeTestTag(t)
-
-	err := tag.SetValue(99, TagQualityGood)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if tag.Value().String() != "99" {
-		t.Errorf("expected value '99', got %q", tag.Value().String())
-	}
-	if tag.Quality() != TagQualityGood {
-		t.Errorf("expected quality good, got %v", tag.Quality())
-	}
-}
-
-func TestTag_SetValue_ChangesQuality(t *testing.T) {
-	tag := makeTestTag(t)
-
-	err := tag.SetValue(0, TagQualityBad)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if tag.Quality() != TagQualityBad {
-		t.Errorf("expected quality bad, got %v", tag.Quality())
-	}
-}
-
-func TestTag_SetValue_InvalidInput_ReturnsError(t *testing.T) {
-	tag := makeTestTag(t) // TagTypeInteger
-
-	err := tag.SetValue(3.14, TagQualityGood)
-	if err == nil {
-		t.Error("expected error for unsupported value type, got nil")
-	}
-}
-
-func TestTag_SetValue_InvalidInput_DoesNotChangeQuality(t *testing.T) {
-	tag := makeTestTag(t)
-	originalQuality := tag.Quality()
-
-	err := tag.SetValue(3.14, TagQualityBad)
-	if err == nil {
-		t.Error("expected error for unsupported value type, got nil")
-	}
-
-	if tag.Quality() != originalQuality {
-		t.Errorf("expected quality %v, got %v", originalQuality, tag.Quality())
-	}
-
-	if tag.Value().Value() != int64(0) {
-		t.Errorf("expected value 0, got %v", tag.Value().Value())
-	}
-}
-
-func TestReconstituteTag_InvalidTypeOrQuality_ReturnsError(t *testing.T) {
+func TestReconstituteTag_InvalidType_ReturnsError(t *testing.T) {
 	name, _ := NewTagName("temperature")
-	value, _ := TagTypeInteger.NewTagValue(0)
-
-	cases := []struct {
-		name    string
-		tagType TagType
-		quality TagQuality
-	}{
-		{"zero type", TagType{}, TagQualityGood},
-		{"zero quality", TagTypeInteger, TagQuality{}},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := ReconstituteTag(id.NewID[Tag](), testProject, name, tc.tagType, value, tc.quality, version.Initial[Tag]())
-			if err == nil {
-				t.Error("expected error, got nil")
-			}
-		})
+	if _, err := ReconstituteTag(id.NewID[Tag](), testProject, name, TagType{}, version.Initial[Tag]()); err == nil {
+		t.Error("expected error, got nil")
 	}
 }
 
-func TestTag_SetValue_InvalidQuality_ReturnsErrorAndKeepsState(t *testing.T) {
-	tag := makeTestTag(t)
-
-	err := tag.SetValue(42, TagQuality{})
-	if err == nil {
-		t.Fatal("expected error for invalid quality, got nil")
-	}
-	if tag.Quality() != TagQualityGood {
-		t.Errorf("expected quality good, got %v", tag.Quality())
-	}
-	if tag.Value().Value() != int64(0) {
-		t.Errorf("expected value 0, got %v", tag.Value().Value())
+func TestCreateTag_InvalidType_ReturnsError(t *testing.T) {
+	name, _ := NewTagName("temperature")
+	if _, err := CreateTag(id.NewID[Tag](), testProject, name, TagType{}); err == nil {
+		t.Error("expected error, got nil")
 	}
 }

@@ -14,10 +14,12 @@ const constraintTagsName = "uq_tags_project_name"
 const constraintProjectsLiveName = "uq_projects_organization_live_name"
 
 // Foreign keys of a project's content to projects; they refuse removing a
-// project that still has content.
+// project that still has content: Tag definitions and Scenes in the Draft,
+// Tag states in runtime (ADR 0011).
 const (
-	constraintTagsProjectID   = "fk_tags_project_id"
-	constraintScenesProjectID = "fk_scenes_project_id"
+	constraintTagsProjectID        = "fk_tags_project_id"
+	constraintScenesProjectID      = "fk_scenes_project_id"
+	constraintRuntimeTagsProjectID = "fk_runtime_tags_project_id"
 )
 
 // constraintWidgetsTypeID is the foreign key widgets.type_id → widget_types.

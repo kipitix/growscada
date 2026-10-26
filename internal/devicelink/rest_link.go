@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/google/uuid"
-
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
 )
@@ -16,16 +14,14 @@ import (
 // project named by configuration (until the Device Token names it, task 34).
 // The project is looked up by name on the first Resolve, and again after a
 // 404 of a request to it: the project may have been deleted, or deleted and
-// created anew under the name (a new ID). It keeps each tag's
-// Version: a write sends the version it last saw; on 409 Conflict (someone
-// else changed the tag) it rereads the tag and retries once.
+// created anew under the name (a new ID). A write states no version: the
+// Device is the tag's single writer, and the latest write wins (ADR 0011).
 type RESTLink struct {
 	client      *apiclient.Client
 	projectName string
 
-	mu       sync.Mutex
-	project  *apiclient.ProjectClient // nil until resolved
-	versions map[uuid.UUID]int
+	mu      sync.Mutex
+	project *apiclient.ProjectClient // nil until resolved
 }
 
 var _ Link = (*RESTLink)(nil)
@@ -33,7 +29,7 @@ var _ Link = (*RESTLink)(nil)
 // NewRESTLink creates a Link over the given REST API client to the Tags of
 // the project named projectName.
 func NewRESTLink(client *apiclient.Client, projectName string) *RESTLink {
-	return &RESTLink{client: client, projectName: projectName, versions: make(map[uuid.UUID]int)}
+	return &RESTLink{client: client, projectName: projectName}
 }
 
 // Resolve looks a tag up with GET /api/v0/projects/{id}/tags?name=, the
@@ -68,7 +64,6 @@ func (l *RESTLink) Resolve(ctx context.Context, name string) (Tag, error) {
 	if err != nil {
 		return Tag{}, fmt.Errorf("tag %q: %w", name, err)
 	}
-	l.setVersion(found.ID, found.Version)
 	return Tag{ID: found.ID, Name: found.Name, Type: tagType}, nil
 }
 
@@ -113,71 +108,13 @@ func (l *RESTLink) Write(ctx context.Context, tag Tag, value string, quality Qua
 	if err != nil {
 		return err
 	}
-	version, known := l.version(tag.ID)
-	if !known {
-		if err := l.reread(ctx, tag); err != nil {
-			return err
-		}
-		version, _ = l.version(tag.ID)
-	}
-
-	newVersion, err := project.SetTagValue(ctx, tag.ID, value, quality.String(), version)
-	if errors.Is(err, apiclient.ErrConflict) {
-		if err := l.reread(ctx, tag); err != nil {
-			return err
-		}
-		version, _ = l.version(tag.ID)
-		newVersion, err = project.SetTagValue(ctx, tag.ID, value, quality.String(), version)
-	}
+	_, err = project.SetTagValue(ctx, tag.ID, value, quality.String())
 	if errors.Is(err, apiclient.ErrNotFound) {
-		l.forget(tag.ID)
-		l.dropProject(project)
-		return fmt.Errorf("%w: %q: %w", ErrTagNotFound, tag.Name, err)
-	}
-	if err != nil {
-		if errors.Is(err, apiclient.ErrConflict) {
-			l.forget(tag.ID) // reread before the next write
-		}
-		return fmt.Errorf("tag %q: %w", tag.Name, err)
-	}
-	l.setVersion(tag.ID, newVersion)
-	return nil
-}
-
-// reread refreshes the tag's version from GET /api/v0/projects/{id}/tags/{id}.
-func (l *RESTLink) reread(ctx context.Context, tag Tag) error {
-	project, err := l.resolveProject(ctx)
-	if err != nil {
-		return err
-	}
-	current, err := project.GetTag(ctx, tag.ID)
-	if errors.Is(err, apiclient.ErrNotFound) {
-		l.forget(tag.ID)
 		l.dropProject(project)
 		return fmt.Errorf("%w: %q: %w", ErrTagNotFound, tag.Name, err)
 	}
 	if err != nil {
 		return fmt.Errorf("tag %q: %w", tag.Name, err)
 	}
-	l.setVersion(tag.ID, current.Version)
 	return nil
-}
-
-func (l *RESTLink) version(id uuid.UUID) (int, bool) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	v, ok := l.versions[id]
-	return v, ok
-}
-
-func (l *RESTLink) setVersion(id uuid.UUID, v int) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.versions[id] = v
-}
-
-func (l *RESTLink) forget(id uuid.UUID) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	delete(l.versions, id)
 }

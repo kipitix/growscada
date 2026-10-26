@@ -8,21 +8,22 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http/httptest"
-	"path/filepath"
-	"runtime"
 	"sync"
 	"testing"
 
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
-	"github.com/pressly/goose/v3"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/kipitix/growscada/internal/server/application"
+	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
+	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/migrations"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
+	runtimepg "github.com/kipitix/growscada/internal/server/infrastructure/postgres/runtime"
+	"github.com/kipitix/growscada/internal/server/inprocess"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
@@ -80,14 +81,7 @@ func startPostgres(ctx context.Context) (*sql.DB, *tcpostgres.PostgresContainer,
 		return nil, nil, err
 	}
 
-	_, currentFile, _, _ := runtime.Caller(0)
-	migrationsDir := filepath.Join(filepath.Dir(currentFile), "..", "infrastructure", "postgres", "migrations")
-	if err := goose.SetDialect("postgres"); err != nil {
-		db.Close()
-		container.Terminate(ctx)
-		return nil, nil, err
-	}
-	if err := goose.Up(db, migrationsDir); err != nil {
+	if err := migrations.Up(ctx, db); err != nil {
 		db.Close()
 		container.Terminate(ctx)
 		return nil, nil, fmt.Errorf("migrations: %w", err)
@@ -102,16 +96,18 @@ var MainProject = uuid.MustParse("b0000000-0000-4000-8000-000000000001")
 // MainProjectName is the name of MainProject.
 const MainProjectName = "Main"
 
-// StartAPI cleans every table (tags, widgets, scenes, widget_types, projects
-// but MainProject — restored live if a test deleted it —, outbox,
-// policy_jobs) and serves the real REST API over the
+// StartAPI cleans every table (the Tag states, tags, widgets, scenes,
+// widget_types, projects but MainProject — restored live if a test deleted
+// it —, outbox, policy_jobs) and serves the real REST API over the
 // database, with the outbox dispatcher delivering committed events to its
-// event streams and the policy runner running the policies, as the server
-// does. The returned TagService is the one behind the API, for arranging and
-// checking state directly.
+// event streams, the Runtime node publishing tag_updated, and the policy
+// runner running the policies, as the server does. The returned TagService
+// is the one behind the API, for arranging and checking state directly; a
+// tag's state is written through the API.
 func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagService) {
 	t.Helper()
-	if _, err := db.ExecContext(context.Background(), "DELETE FROM tags; DELETE FROM widgets; DELETE FROM scenes; DELETE FROM widget_types; "+
+	if _, err := db.ExecContext(context.Background(), "DELETE FROM runtime.tags; DELETE FROM engineering.tags; DELETE FROM engineering.widgets; "+
+		"DELETE FROM engineering.scenes; DELETE FROM engineering.widget_types; "+
 		"DELETE FROM outbox; DELETE FROM policy_jobs; "+
 		"DELETE FROM projects WHERE id <> '"+MainProject.String()+"'; "+
 		// A test that deleted Main may have left its row removed by the
@@ -131,12 +127,15 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	projectRepo := repositories.NewProjectRepositoryPostgres(db, onCommit)
 	scopes := repositories.NewProjectScopes(db, onCommit)
 	content := application.NewProjectContent(projectRepo, scopes, orgID)
-	tagSvc := application.NewTagService(content)
+	tagStateSvc := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, bus.Publish)
+	runtimeNode := inprocess.NewRuntimeNode(tagStateSvc)
+	tagSvc := application.NewTagService(content, runtimeNode)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(db, onCommit)
 	runner := outbox.NewPolicyRunner(db, []application.Policy{
 		application.NewWidgetReconciliationPolicy(wtRepo, scopes),
 		application.NewUnbindDeletedTagPolicy(projectRepo, scopes),
-		application.NewProjectCleanupPolicy(projectRepo, scopes),
+		application.NewProjectCleanupPolicy(projectRepo, scopes, runtimeNode),
+		application.NewRuntimeTagDefinitionsPolicy(scopes, runtimeNode),
 	})
 	dispatcher.SetPolicyRunner(runner)
 	ctx, stop := context.WithCancel(context.Background())
@@ -151,7 +150,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 
 	wtSvc := application.NewWidgetTypeService(wtRepo)
 	sceneSvc := application.NewSceneService(content, wtRepo)
-	router := restapi.NewRouter(application.NewProjectService(projectRepo, orgID), tagSvc, wtSvc, sceneSvc, bus, 100)
+	router := restapi.NewRouter(application.NewProjectService(projectRepo, orgID), tagSvc, tagStateSvc, wtSvc, sceneSvc, bus, 100)
 
 	srv := httptest.NewServer(router.ServeMux())
 	t.Cleanup(srv.Close)

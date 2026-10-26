@@ -47,6 +47,7 @@ tags:
 // simulator is a running simulator against the real REST API over Postgres.
 type simulator struct {
 	svc     application.TagService
+	api     *apiclient.ProjectClient // of the project Main, for writes of others
 	control *httptest.Server
 	tags    map[string]appdto.Tag // as created
 }
@@ -56,11 +57,10 @@ type simulator struct {
 func startSimulator(t *testing.T, yaml string, tagTypes map[string]string) *simulator {
 	t.Helper()
 	api, svc := servertest.StartAPI(t, postgres.DB(t))
-	s := &simulator{svc: svc, tags: make(map[string]appdto.Tag)}
-	initial := map[string]string{"integer": "0", "boolean": "false", "string": ""}
+	s := &simulator{svc: svc, api: apiclient.New(api.URL, api.Client()).Project(servertest.MainProject), tags: make(map[string]appdto.Tag)}
 	for name, tagType := range tagTypes {
 		created, err := svc.CreateTag(context.Background(), servertest.MainProject, appdto.CreateTagInput{
-			Name: name, Type: tagType, Value: initial[tagType], Quality: "bad",
+			Name: name, Type: tagType,
 		})
 		if err != nil {
 			t.Fatalf("seed %s: %v", name, err)
@@ -154,15 +154,22 @@ func atoi(t *testing.T, s string) int {
 
 var e2eTags = map[string]string{"sim.speed": "integer", "sim.running": "boolean", "sim.mode": "string"}
 
-func TestE2E_ValuesAndVersionsFollowPatterns(t *testing.T) {
+// written reports whether tag's state was written at least n times since
+// since's: each write takes a seq above the last, though not always the next
+// one (other tags' writes take their own).
+func written(tag, since appdto.Tag, n int64) bool {
+	return tag.Seq >= since.Seq+n
+}
+
+func TestE2E_ValuesAndSeqsFollowPatterns(t *testing.T) {
 	s := startSimulator(t, e2eConfig, e2eTags)
 
-	// ramp: the value grows with every write, and so does the version.
+	// ramp: the value grows with every write, and so does the seq.
 	first := s.eventually(t, "sim.speed", "a few writes", func(tag appdto.Tag) bool {
-		return tag.Version >= s.tags["sim.speed"].Version+3
+		return written(tag, s.tags["sim.speed"], 3)
 	})
 	later := s.eventually(t, "sim.speed", "more writes", func(tag appdto.Tag) bool {
-		return tag.Version >= first.Version+3
+		return written(tag, first, 3)
 	})
 	if atoi(t, later.Value) <= atoi(t, first.Value) {
 		t.Errorf("ramp did not grow: %s → %s", first.Value, later.Value)
@@ -178,32 +185,25 @@ func TestE2E_ValuesAndVersionsFollowPatterns(t *testing.T) {
 		t.Errorf("running quality: got %q, want uncertain", got.Quality)
 	}
 
-	// constant: written every tick, so its version keeps growing too.
+	// constant: written every tick, so its seq keeps growing too.
 	mode := s.eventually(t, "sim.mode", "auto", func(tag appdto.Tag) bool { return tag.Value == "auto" })
-	s.eventually(t, "sim.mode", "rewrites", func(tag appdto.Tag) bool { return tag.Version >= mode.Version+2 })
+	s.eventually(t, "sim.mode", "rewrites", func(tag appdto.Tag) bool { return written(tag, mode, 2) })
 }
 
-func TestE2E_ConcurrentWriterConflictIsResolved(t *testing.T) {
+// TestE2E_AnotherWriter_TheLatestWriteWins: another writer (an operator, a
+// second Device) writes the tag; no write states a version (ADR 0011), so
+// nobody gets a conflict, and the simulator's next writes win again.
+func TestE2E_AnotherWriter_TheLatestWriteWins(t *testing.T) {
 	s := startSimulator(t, e2eConfig, e2eTags)
 	s.eventually(t, "sim.speed", "a write", func(tag appdto.Tag) bool { return tag.Quality == "good" })
 
-	// Another writer (an operator, a second Device) changes the tag, so the
-	// simulator's next write carries a stale version and gets 409 Conflict.
-	var theirs appdto.Tag
-	for {
-		cur := s.get(t, "sim.speed")
-		var err error
-		theirs, err = s.svc.SetTagValueByID(context.Background(), servertest.MainProject, appdto.UpdateTagInput{
-			ID: cur.ID, Value: "-1000", Quality: "bad", Version: cur.Version,
-		})
-		if err == nil {
-			break // otherwise the simulator wrote in between: try again
-		}
+	theirs, err := s.api.SetTagValue(context.Background(), s.tags["sim.speed"].ID, "-1000", "bad")
+	if err != nil {
+		t.Fatalf("another writer's write: %v", err)
 	}
 
-	// The simulator rereads the version and keeps writing its own values.
 	got := s.eventually(t, "sim.speed", "the simulator to take over again", func(tag appdto.Tag) bool {
-		return tag.Version > theirs.Version+2 && tag.Quality == "good"
+		return tag.Seq > theirs+2 && tag.Quality == "good"
 	})
 	if atoi(t, got.Value) < 0 {
 		t.Errorf("value: got %s, want the ramp's again", got.Value)
@@ -221,7 +221,7 @@ func TestE2E_ControlAPI(t *testing.T) {
 		if tag.Quality != "bad" {
 			t.Fatalf("overridden quality did not stick: %+v", tag)
 		}
-		return tag.Version >= bad.Version+3
+		return written(tag, bad, 3)
 	})
 	s.call(t, "DELETE", "/control/device/tags/sim.speed/quality", "")
 	s.eventually(t, "sim.speed", "good quality again", func(tag appdto.Tag) bool { return tag.Quality == "good" })
@@ -235,11 +235,11 @@ func TestE2E_ControlAPI(t *testing.T) {
 	s.call(t, "POST", "/control/device/stop", "")
 	frozen := s.get(t, "sim.mode")
 	time.Sleep(150 * time.Millisecond)
-	if got := s.get(t, "sim.mode"); got.Version != frozen.Version {
-		t.Fatalf("written while stopped: version %d → %d", frozen.Version, got.Version)
+	if got := s.get(t, "sim.mode"); got.Seq != frozen.Seq {
+		t.Fatalf("written while stopped: seq %d → %d", frozen.Seq, got.Seq)
 	}
 	s.call(t, "POST", "/control/device/start", "")
-	s.eventually(t, "sim.mode", "writes after start", func(tag appdto.Tag) bool { return tag.Version > frozen.Version })
+	s.eventually(t, "sim.mode", "writes after start", func(tag appdto.Tag) bool { return written(tag, frozen, 1) })
 }
 
 func TestE2E_RunFailsOnMissingTag(t *testing.T) {

@@ -17,8 +17,6 @@ http:
       {
         "name": "newer_client_tag",
         "type": "integer",
-        "value": "0",
-        "quality": "good",
         "unit": "rpm"
       }
   auth: inherit

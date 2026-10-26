@@ -21,7 +21,7 @@ func cleanWidgetsRest(t *testing.T) {
 	t.Helper()
 	// ON DELETE CASCADE removes widgets with their scene, which is fine here —
 	// each test creates the scene(s) it needs.
-	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM scenes"); err != nil {
+	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM engineering.scenes"); err != nil {
 		t.Fatalf("cleanWidgetsRest: %v", err)
 	}
 	ensureTestWidgetType(t)
@@ -34,7 +34,7 @@ var testWidgetTypeID = uuid.MustParse("7e57c0de-0000-4000-8000-000000000001")
 func ensureTestWidgetType(t *testing.T) {
 	t.Helper()
 	if _, err := testDB().ExecContext(context.Background(),
-		`INSERT INTO widget_types
+		`INSERT INTO engineering.widget_types
 		    (id, name, html_template, script, script_language, input_ports, default_width, default_height, version)
 		 VALUES ($1, 'test-type', '<div></div>', 'function update(){}', 'javascript', '[]', 100, 100, 1)
 		 ON CONFLICT (id) DO NOTHING`,

@@ -70,7 +70,7 @@ func (r *recorder) types() []string {
 func createTag(t *testing.T, repo tag.TagRepository, name string) tag.Tag {
 	t.Helper()
 	tmpl := makeTag(t, name, repo)
-	created, err := tag.CreateTag(tmpl.ID(), mainProject, tmpl.Name(), tmpl.Type(), tmpl.Value(), tmpl.Quality())
+	created, err := tag.CreateTag(tmpl.ID(), mainProject, tmpl.Name(), tmpl.Type())
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -87,16 +87,12 @@ func TestSave_WritesRecordedEventsToOutbox(t *testing.T) {
 	if len(saved.PendingEvents()) != 0 {
 		t.Errorf("the saved tag must record nothing, got %v", saved.PendingEvents())
 	}
-	if err := saved.SetValue(int64(5), tag.TagQualityGood); err != nil {
-		t.Fatalf("SetValue: %v", err)
-	}
 	saved = mustSaveTag(t, repo, saved)
-	saved.Delete()
-	if err := repo.Delete(ctx, saved); err != nil {
+	if err := repo.Delete(ctx, saved.Delete()); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 
-	want := []string{"tag_created", "tag_updated", "tag_deleted"}
+	want := []string{"tag_created", "tag_deleted"}
 	if got := outboxTypes(t); !slices.Equal(got, want) {
 		t.Errorf("outbox %v, want %v", got, want)
 	}
@@ -165,7 +161,7 @@ func TestSave_RolledBack_LeavesNothingInOutboxAndDeliversNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindByID: %v", err)
 	}
-	if _, err := testDB.ExecContext(ctx, "DELETE FROM widget_types WHERE id = $1", w.TypeID().UUID()); err != nil {
+	if _, err := testDB.ExecContext(ctx, "DELETE FROM engineering.widget_types WHERE id = $1", w.TypeID().UUID()); err != nil {
 		t.Fatalf("delete widget type: %v", err)
 	}
 	changed, err := stored.AddWidget(stored.Version(), w, wt, scene.NewTagTypes(mainProject, nil))
@@ -197,12 +193,7 @@ func TestDispatcher_DrainOnce_DeliversInCommitOrderAndEmptiesOutbox(t *testing.T
 
 	a := mustSaveTag(t, repo, createTag(t, repo, "a"))
 	b := mustSaveTag(t, repo, createTag(t, repo, "b"))
-	if err := a.SetValue(int64(1), tag.TagQualityGood); err != nil {
-		t.Fatalf("SetValue: %v", err)
-	}
-	mustSaveTag(t, repo, a)
-	b.Delete()
-	if err := repo.Delete(ctx, b); err != nil {
+	if err := repo.Delete(ctx, b.Delete()); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 
@@ -213,17 +204,16 @@ func TestDispatcher_DrainOnce_DeliversInCommitOrderAndEmptiesOutbox(t *testing.T
 		t.Fatalf("DrainOnce: %v", err)
 	}
 
-	want := []string{"tag_created", "tag_created", "tag_updated", "tag_deleted"}
-	if got := delivered.types(); n != 4 || !slices.Equal(got, want) {
+	want := []string{"tag_created", "tag_created", "tag_deleted"}
+	if got := delivered.types(); n != 3 || !slices.Equal(got, want) {
 		t.Errorf("delivered %d %v, want %v", n, got, want)
 	}
 	created := delivered.events[0].(tag.TagCreatedEvent)
 	if created.TagID() != a.ID() {
 		t.Errorf("first event is about %s, want %s", created.TagID(), a.ID())
 	}
-	updated := delivered.events[2].(tag.TagUpdatedEvent)
-	if updated.Tag().Value().String() != "1" || updated.Tag().Version().Number() != 2 {
-		t.Errorf("tag_updated carries %s, want value 1 at version 2", updated.Tag())
+	if deleted := delivered.events[2].(tag.TagDeletedEvent); deleted.TagID() != b.ID() {
+		t.Errorf("tag_deleted is about %s, want %s", deleted.TagID(), b.ID())
 	}
 	if got := outboxTypes(t); len(got) != 0 {
 		t.Errorf("expected an empty outbox after delivery, got %v", got)

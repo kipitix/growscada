@@ -19,6 +19,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
+	"github.com/kipitix/growscada/internal/server/domain/tagstate"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
@@ -230,14 +231,17 @@ func TestEventsHandlers_GetProjectEvents_TagUpdatedCarriesTagState(t *testing.T)
 	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), ": connected") })
 
 	name, _ := tag.NewTagName("pressure")
-	value, _ := tag.TagTypeInteger.NewTagValue(int64(42))
 	aVersion, _ := version.New(version.WithNumber[tag.Tag](7))
-	aTag, err := tag.ReconstituteTag(id.NewID[tag.Tag](), mainProjectID, name, tag.TagTypeInteger, value, tag.TagQualityUncertain, aVersion)
+	aTag, err := tag.ReconstituteTag(id.NewID[tag.Tag](), mainProjectID, name, tag.TagTypeInteger, aVersion)
 	if err != nil {
 		t.Fatalf("NewTag: %v", err)
 	}
+	state, err := tagstate.Reconstitute(tagstate.NewDefinition(aTag), tag.TagValueInteger(42), tag.TagQualityUncertain, 12)
+	if err != nil {
+		t.Fatalf("Reconstitute: %v", err)
+	}
 	bus.Publish(tag.NewTagCreatedEvent(aTag.ID(), mainProjectID))
-	bus.Publish(tag.NewTagUpdatedEvent(aTag))
+	bus.Publish(tagstate.NewTagUpdatedEvent(state))
 
 	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), "tag_updated") })
 	cancel()
@@ -266,6 +270,7 @@ func TestEventsHandlers_GetProjectEvents_TagUpdatedCarriesTagState(t *testing.T)
 		"value":   "42",
 		"quality": "uncertain",
 		"version": float64(7),
+		"seq":     float64(12),
 	}
 	got, ok := updated["tag"].(map[string]any)
 	if !ok {

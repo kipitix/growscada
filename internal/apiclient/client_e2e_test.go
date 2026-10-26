@@ -30,21 +30,21 @@ func TestTags_RoundTrip(t *testing.T) {
 	client := startClient(t)
 	ctx := context.Background()
 
-	created, err := client.Project(servertest.MainProject).CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.speed", Type: "integer", Value: "1", Quality: "good"})
+	created, err := client.Project(servertest.MainProject).CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.speed", Type: "integer"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
 	got, err := client.Project(servertest.MainProject).GetTag(ctx, created.ID)
-	if err != nil || got.Name != "pump.speed" || got.Value != "1" {
-		t.Fatalf("GetTag: %+v, %v", got, err)
+	if err != nil || got.Name != "pump.speed" || got.Value != "0" || got.Quality != "bad" || got.Seq != 0 {
+		t.Fatalf("GetTag: %+v, %v; want the initial state 0, bad", got, err)
 	}
-	version, err := client.Project(servertest.MainProject).SetTagValue(ctx, created.ID, "2", "uncertain", got.Version)
-	if err != nil || version <= got.Version {
-		t.Fatalf("SetTagValue: %d, %v", version, err)
+	seq, err := client.Project(servertest.MainProject).SetTagValue(ctx, created.ID, "2", "uncertain")
+	if err != nil || seq <= 0 {
+		t.Fatalf("SetTagValue: %d, %v", seq, err)
 	}
 	list, err := client.Project(servertest.MainProject).ListTags(ctx)
-	if err != nil || len(list) != 1 || list[0].Value != "2" || list[0].Quality != "uncertain" {
-		t.Fatalf("ListTags: %+v, %v", list, err)
+	if err != nil || len(list) != 1 || list[0].Value != "2" || list[0].Quality != "uncertain" || list[0].Seq != seq || list[0].Version != got.Version {
+		t.Fatalf("ListTags: %+v, %v; want the write at seq %d", list, err, seq)
 	}
 	deleted, err := client.Project(servertest.MainProject).DeleteTag(ctx, created.ID)
 	if err != nil || deleted.ID != created.ID {
@@ -161,7 +161,7 @@ func TestScenesAndWidgets_RoundTrip(t *testing.T) {
 func TestBadRequest_CarriesTheServersDetail(t *testing.T) {
 	client := startClient(t)
 
-	_, err := client.Project(servertest.MainProject).CreateTag(context.Background(), apiv0.CreateTagRequest{Name: "x", Type: "complex", Value: "", Quality: "good"})
+	_, err := client.Project(servertest.MainProject).CreateTag(context.Background(), apiv0.CreateTagRequest{Name: "x", Type: "complex"})
 
 	var se *apiclient.StatusError
 	if !errors.As(err, &se) || se.Problem.Status != http.StatusBadRequest || se.Problem.Title != "Bad Request" || se.Problem.Detail == "" {
@@ -203,7 +203,7 @@ func TestProjects_RoundTrip(t *testing.T) {
 	if content.ID() != created.ID {
 		t.Errorf("ProjectClient.ID: %s", content.ID())
 	}
-	if _, err := content.CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.speed", Type: "integer", Value: "1", Quality: "good"}); err != nil {
+	if _, err := content.CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.speed", Type: "integer"}); err != nil {
 		t.Fatalf("CreateTag in the new project: %v", err)
 	}
 	if tags, err := client.Project(servertest.MainProject).ListTags(ctx); err != nil || len(tags) != 0 {

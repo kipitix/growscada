@@ -11,11 +11,13 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
+	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
 
 func (r *reconciliation) createProject(t *testing.T, name string) uuid.UUID {
@@ -103,7 +105,7 @@ func TestProjectContent_UnknownProject_IsNotFound(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	unknown := uuid.New()
 
-	_, err := r.tagSvc.CreateTag(context.Background(), unknown, appdto.CreateTagInput{Name: "t", Type: "integer", Value: "0", Quality: "good"})
+	_, err := r.tagSvc.CreateTag(context.Background(), unknown, appdto.CreateTagInput{Name: "t", Type: "integer"})
 
 	var nf id.NotFoundError
 	if !errors.Is(err, project.ErrProjectNotFound) || !errors.As(err, &nf) || nf.ID != unknown {
@@ -115,7 +117,7 @@ func TestProjectContent_ProjectsAreApart(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	ctx := context.Background()
 	other := r.createProject(t, "Line 1")
-	input := appdto.CreateTagInput{Name: "speed", Type: "integer", Value: "0", Quality: "good"}
+	input := appdto.CreateTagInput{Name: "speed", Type: "integer"}
 	inMain, err := r.tagSvc.CreateTag(ctx, mainProject, input)
 	if err != nil {
 		t.Fatalf("CreateTag in Main: %v", err)
@@ -149,7 +151,7 @@ func TestProjectContent_ProjectsAreApart(t *testing.T) {
 }
 
 func TestProjectCleanupPolicy_JobKey(t *testing.T) {
-	policy := application.NewProjectCleanupPolicy(nil, nil)
+	policy := application.NewProjectCleanupPolicy(nil, nil, nil)
 	want := "project:" + mainProject.String()
 	for _, e := range []event.Event{
 		project.NewProjectDeletedEvent(mainProjectID),
@@ -181,7 +183,7 @@ func TestProjectCleanup_RemovesScenesThenTagsThenTheProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateScene: %v", err)
 	}
-	speed, err := r.tagSvc.CreateTag(ctx, p, appdto.CreateTagInput{Name: "speed", Type: "integer", Value: "0", Quality: "good"})
+	speed, err := r.tagSvc.CreateTag(ctx, p, appdto.CreateTagInput{Name: "speed", Type: "integer"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -201,7 +203,7 @@ func TestProjectCleanup_RemovesScenesThenTagsThenTheProject(t *testing.T) {
 	}
 	r.settle(t)
 
-	for _, table := range []string{"tags", "scenes", "widgets"} {
+	for _, table := range []string{"engineering.tags", "engineering.scenes", "engineering.widgets", "runtime.tags"} {
 		if n := countRows(t, table, p); n != 0 {
 			t.Errorf("%s of the deleted project left: %d", table, n)
 		}
@@ -241,8 +243,7 @@ func TestProjectCleanup_TagSavedAfterTheProjectIsRemoved_IsProjectNotFound(t *te
 	// marked, written once the cleanup has already run: refused.
 	r2 := newScopes().ForProject(id.NewID(id.IDWithUUID[project.Project](p)))
 	name, _ := tag.NewTagName("late")
-	value, _ := tag.TagTypeInteger.NewTagValue(0)
-	late, _ := tag.CreateTag(r2.Tags().NextID(), id.NewID(id.IDWithUUID[project.Project](p)), name, tag.TagTypeInteger, value, tag.TagQualityGood)
+	late, _ := tag.CreateTag(r2.Tags().NextID(), id.NewID(id.IDWithUUID[project.Project](p)), name, tag.TagTypeInteger)
 	if _, err := r2.Tags().Save(ctx, late); !errors.Is(err, project.ErrProjectNotFound) {
 		t.Fatalf("a tag of a removed project: expected ErrProjectNotFound, got %v", err)
 	}
@@ -255,8 +256,7 @@ func lateTag(t *testing.T, p uuid.UUID) (tag.TagRepository, tag.Tag) {
 	projectID := id.NewID(id.IDWithUUID[project.Project](p))
 	repo := newScopes().ForProject(projectID).Tags()
 	name, _ := tag.NewTagName("late")
-	value, _ := tag.TagTypeInteger.NewTagValue(0)
-	late, err := tag.CreateTag(repo.NextID(), projectID, name, tag.TagTypeInteger, value, tag.TagQualityGood)
+	late, err := tag.CreateTag(repo.NextID(), projectID, name, tag.TagTypeInteger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +276,7 @@ func TestProjectCleanup_TagSavedAfterTheProjectIsMarked_IsProjectNotFound(t *tes
 	if _, err := repo.Save(ctx, late); !errors.Is(err, project.ErrProjectNotFound) {
 		t.Fatalf("a tag of a marked project: expected ErrProjectNotFound, got %v", err)
 	}
-	if n := countRows(t, "tags", p); n != 0 {
+	if n := countRows(t, "engineering.tags", p); n != 0 {
 		t.Errorf("tags of the marked project: %d", n)
 	}
 }
@@ -313,16 +313,16 @@ func TestProjectCleanup_TagSavedWhileTheProjectIsBeingMarked_WaitsAndIsProjectNo
 	if err := <-saved; !errors.Is(err, project.ErrProjectNotFound) {
 		t.Fatalf("a tag saved while the project was being marked: expected ErrProjectNotFound, got %v", err)
 	}
-	if n := countRows(t, "tags", p); n != 0 {
+	if n := countRows(t, "engineering.tags", p); n != 0 {
 		t.Errorf("tags of the marked project: %d", n)
 	}
 }
 
-func TestSetTagValueByID_TagOfADeletedProject_IsProjectNotFound(t *testing.T) {
+func TestSetTagValue_TagOfADeletedProject_IsProjectNotFound(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	ctx := context.Background()
 	p := r.createProject(t, "Line 1")
-	speed, err := r.tagSvc.CreateTag(ctx, p, appdto.CreateTagInput{Name: "speed", Type: "integer", Value: "0", Quality: "good"})
+	speed, err := r.tagSvc.CreateTag(ctx, p, appdto.CreateTagInput{Name: "speed", Type: "integer"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -330,14 +330,62 @@ func TestSetTagValueByID_TagOfADeletedProject_IsProjectNotFound(t *testing.T) {
 		t.Fatalf("DeleteProjectByID: %v", err)
 	}
 
-	// The cleanup has not run: the tag's row is still there.
-	_, err = r.tagSvc.SetTagValueByID(ctx, p, appdto.UpdateTagInput{ID: speed.ID, Value: "1", Quality: "good", Version: speed.Version})
+	// The cleanup has not run: the tag's state is still there.
+	_, err = r.states.SetTagValue(ctx, p, runtimeapp.SetTagValueInput{TagID: speed.ID, Value: "1", Quality: "good"})
 	if !errors.Is(err, project.ErrProjectNotFound) {
 		t.Errorf("a value of a deleted project's tag: expected ErrProjectNotFound, got %v", err)
 	}
-	if _, err := r.tagSvc.SetTagValueByID(ctx, mainProject, appdto.UpdateTagInput{ID: speed.ID, Value: "1", Quality: "good", Version: speed.Version}); !errors.Is(err, tag.ErrTagNotFound) {
+	if _, err := r.states.SetTagValue(ctx, mainProject, runtimeapp.SetTagValueInput{TagID: speed.ID, Value: "1", Quality: "good"}); !errors.Is(err, tag.ErrTagNotFound) {
 		t.Errorf("the tag through a live project of its own: expected ErrTagNotFound, got %v", err)
 	}
+}
+
+// TestProjectCleanup_StateUpsertedAfterTheStatesAreRemoved_IsRemovedOnTheNextRun:
+// a Tag state upserted after the cleanup removed the Project's states (a
+// creation's call or a bridge job running late) holds the Project's row; the
+// cleanup fails, and its next run removes the state, then the row.
+func TestProjectCleanup_StateUpsertedAfterTheStatesAreRemoved_IsRemovedOnTheNextRun(t *testing.T) {
+	r := newReconciliation(t, reconciliationWiring{})
+	ctx := context.Background()
+	p := r.createProject(t, "Line 1")
+	if _, err := r.projectSvc.DeleteProjectByID(ctx, p); err != nil {
+		t.Fatalf("DeleteProjectByID: %v", err)
+	}
+	late := uuid.New()
+	if err := newRuntimeNode().UpsertTagDefinitions(ctx, p, []appdto.TagDefinition{{ID: late, Name: "late", Type: "integer", Version: 1}}); err != nil {
+		t.Fatalf("UpsertTagDefinitions: %v", err)
+	}
+
+	policy := application.NewProjectCleanupPolicy(repositories.NewProjectRepositoryPostgres(testDB), newScopes(),
+		stateUpsertingAfterRemoval{RuntimeNode: newRuntimeNode(), project: p, tagID: late})
+	if err := policy.Run(ctx, "project:"+p.String()); !errors.Is(err, project.ErrProjectNotEmpty) {
+		t.Fatalf("the run removing the states before the upsert: expected ErrProjectNotEmpty, got %v", err)
+	}
+	if n := countRows(t, "runtime.tags", p); n != 1 {
+		t.Fatalf("states of the project after the failed run: %d, want the late one", n)
+	}
+	policy = application.NewProjectCleanupPolicy(repositories.NewProjectRepositoryPostgres(testDB), newScopes(), newRuntimeNode())
+	if err := policy.Run(ctx, "project:"+p.String()); err != nil {
+		t.Fatalf("the next run: %v", err)
+	}
+	if n := countRows(t, "runtime.tags", p); n != 0 {
+		t.Errorf("states of the removed project: %d", n)
+	}
+}
+
+// stateUpsertingAfterRemoval removes the Project's states, then upserts
+// the definition of tagID again, as a late call does.
+type stateUpsertingAfterRemoval struct {
+	application.RuntimeNode
+	project uuid.UUID
+	tagID   uuid.UUID
+}
+
+func (n stateUpsertingAfterRemoval) RemoveProjectTagStates(ctx context.Context, projectID uuid.UUID) error {
+	if err := n.RuntimeNode.RemoveProjectTagStates(ctx, projectID); err != nil {
+		return err
+	}
+	return n.RuntimeNode.UpsertTagDefinitions(ctx, n.project, []appdto.TagDefinition{{ID: n.tagID, Name: "late", Type: "integer", Version: 1}})
 }
 
 func TestWidgetReconciliation_WidgetTypeUpdate_ReconcilesScenesOfEveryProject(t *testing.T) {
@@ -352,7 +400,7 @@ func TestWidgetReconciliation_WidgetTypeUpdate_ReconcilesScenesOfEveryProject(t 
 	}
 	var bindings []appdto.PortBinding
 	for _, port := range []string{"value", "alarm"} {
-		created, err := r.tagSvc.CreateTag(ctx, other, appdto.CreateTagInput{Name: port, Type: "integer", Value: "0", Quality: "good"})
+		created, err := r.tagSvc.CreateTag(ctx, other, appdto.CreateTagInput{Name: port, Type: "integer"})
 		if err != nil {
 			t.Fatalf("CreateTag: %v", err)
 		}

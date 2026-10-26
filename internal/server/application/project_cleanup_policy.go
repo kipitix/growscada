@@ -17,21 +17,23 @@ const ProjectCleanupPolicyName = "remove_deleted_project"
 
 // projectCleanupPolicy empties a Project marked deleted and removes it
 // (ADR 0006): its Scenes, then its Tags, each deleted in its own transaction
-// with its own events, and the Project's row last; a project_deleted event's
-// job does it. Nothing of the Project is created once it is marked: the
+// with its own events, then the states of its Tags in the Runtime node
+// (ADR 0011), and the Project's row last; a project_deleted event's job does
+// it. Nothing of the Project is created once it is marked: the
 // repositories lock its row, live, for a creation. For a live Project the
 // job does nothing.
 type projectCleanupPolicy struct {
 	projects project.ProjectRepository
 	scopes   ProjectScopes
+	runtime  RuntimeNode
 }
 
 var _ Policy = (*projectCleanupPolicy)(nil)
 
 // NewProjectCleanupPolicy returns the policy removing deleted Projects with
 // their content.
-func NewProjectCleanupPolicy(aProjectRepository project.ProjectRepository, someScopes ProjectScopes) Policy {
-	return &projectCleanupPolicy{projects: aProjectRepository, scopes: someScopes}
+func NewProjectCleanupPolicy(aProjectRepository project.ProjectRepository, someScopes ProjectScopes, aRuntime RuntimeNode) Policy {
+	return &projectCleanupPolicy{projects: aProjectRepository, scopes: someScopes, runtime: aRuntime}
 }
 
 func (p projectCleanupPolicy) Name() string {
@@ -52,7 +54,9 @@ func (p projectCleanupPolicy) JobKey(e event.Event) (string, bool) {
 // Run removes the Project of the job key, if it is marked deleted, with its
 // content. A Scene or Tag that fails does not stop the others, but the
 // Project stays until all are gone: Run returns the errors, and the job is
-// run again.
+// run again. So it does when a Tag state is upserted after the states were
+// removed (a creation's call, a bridge job running late): the row's removal
+// fails while the state holds it, and the next run removes the state.
 func (p projectCleanupPolicy) Run(ctx context.Context, key string) error {
 	projectID, rest, err := cutProjectKey(key)
 	if err != nil {
@@ -74,6 +78,9 @@ func (p projectCleanupPolicy) Run(ctx context.Context, key string) error {
 		return fmt.Errorf("cannot empty project %s: %w", projectID, err)
 	}
 	if err := deleteAllTags(ctx, scope.Tags()); err != nil {
+		return fmt.Errorf("cannot empty project %s: %w", projectID, err)
+	}
+	if err := p.runtime.RemoveProjectTagStates(ctx, projectID.UUID()); err != nil {
 		return fmt.Errorf("cannot empty project %s: %w", projectID, err)
 	}
 	if err := p.projects.Delete(ctx, deleted); err != nil && !errors.Is(err, project.ErrProjectNotFound) {
@@ -107,8 +114,7 @@ func deleteAllTags(ctx context.Context, repo tag.TagRepository) error {
 	}
 	var errs []error
 	for _, t := range tags {
-		t.Delete()
-		if err := repo.Delete(ctx, t); err != nil && !errors.Is(err, tag.ErrTagNotFound) {
+		if err := repo.Delete(ctx, t.Delete()); err != nil && !errors.Is(err, tag.ErrTagNotFound) {
 			errs = append(errs, fmt.Errorf("tag %s: %w", t.ID(), err))
 		}
 	}
