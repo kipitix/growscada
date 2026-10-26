@@ -25,7 +25,7 @@ goose -dir engineering create add_something sql
 ```shell
 export GOOSE_DRIVER=postgres
 export GOOSE_DBSTRING="user=growscada password=growscada host=localhost dbname=growscada"
-goose -dir public up
+goose -dir public -allow-missing up
 goose -dir engineering -table engineering.goose_db_version up
 goose -dir runtime -table runtime.goose_db_version up
 ```

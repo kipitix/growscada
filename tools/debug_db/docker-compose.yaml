@@ -32,6 +32,10 @@ services:
     environment:
       GOOSE_DRIVER: postgres
       GOOSE_DBSTRING: "postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?sslmode=disable"
+      # The seed data (db_test_data) shares goose_db_version and its version
+      # 20990101000000 is above every migration: on an existing volume a new
+      # one would be "missing" below it without this flag.
+      GOOSE_EXTRA_ARGS: "-allow-missing"
     restart: "no" # Runs once and exits
   db_migrations_engineering:
     image: kukymbr/goose-docker:3.27.0

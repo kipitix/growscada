@@ -236,7 +236,7 @@ func TestEventsHandlers_GetProjectEvents_TagUpdatedCarriesTagState(t *testing.T)
 	if err != nil {
 		t.Fatalf("NewTag: %v", err)
 	}
-	state, err := tagstate.Reconstitute(tagstate.NewDefinition(aTag), tag.TagValueInteger(42), tag.TagQualityUncertain, 12)
+	state, err := tagstate.Reconstitute(tagstate.Definition{TagID: aTag.ID(), ProjectID: aTag.ProjectID(), Name: aTag.Name(), Type: aTag.Type(), Version: aTag.Version()}, tag.TagValueInteger(42), tag.TagQualityUncertain, 12)
 	if err != nil {
 		t.Fatalf("Reconstitute: %v", err)
 	}

@@ -361,16 +361,55 @@ func TestFindTags_WithoutAStateShowTheInitialOne(t *testing.T) {
 	svc := application.NewTagService(contentOver(newScopes()), failingRuntimeNode{RuntimeNode: newRuntimeNode()})
 	ctx := context.Background()
 
-	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "flag", Type: "boolean"})
-	if err != nil {
-		t.Fatalf("CreateTag with the Runtime node failing: %v", err)
+	if _, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "flag", Type: "boolean"}); !errors.Is(err, errRuntimeDown) {
+		t.Fatalf("CreateTag with the Runtime node failing: %v, want its error", err)
 	}
-	found, err := svc.FindTagByID(ctx, mainProject, created.ID)
+	found, err := svc.FindTagByName(ctx, mainProject, "flag")
 	if err != nil {
-		t.Fatalf("FindTagByID: %v", err)
+		t.Fatalf("FindTagByName: %v", err)
 	}
 	if found.Value != "false" || found.Quality != "bad" || found.Seq != 0 {
 		t.Errorf("found %+v, want the initial false, bad", found)
+	}
+}
+
+// unreadableRuntimeNode is a Runtime node whose reads of states fail.
+type unreadableRuntimeNode struct {
+	application.RuntimeNode
+}
+
+func (unreadableRuntimeNode) FindTagStates(context.Context, uuid.UUID, []uuid.UUID) ([]appdto.TagState, error) {
+	return nil, errRuntimeDown
+}
+
+// TestTags_RuntimeNodeUnreadable_ReadAndDeleteWithInitialStates: the Draft is
+// read and changed without the Runtime node; the tags show their initial
+// states.
+func TestTags_RuntimeNodeUnreadable_ReadAndDeleteWithInitialStates(t *testing.T) {
+	cleanTags(t)
+	ctx := context.Background()
+	created, err := newService().CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "level", Type: "integer"})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	svc := application.NewTagService(contentOver(newScopes()), unreadableRuntimeNode{RuntimeNode: newRuntimeNode()})
+
+	all, err := svc.FindAllTags(ctx, mainProject)
+	if err != nil || len(all) != 1 {
+		t.Fatalf("FindAllTags: %v, %v", all, err)
+	}
+	byName, err := svc.FindTagByName(ctx, mainProject, "level")
+	if err != nil {
+		t.Fatalf("FindTagByName: %v", err)
+	}
+	deleted, err := svc.DeleteTagByID(ctx, mainProject, created.ID)
+	if err != nil {
+		t.Fatalf("DeleteTagByID: %v", err)
+	}
+	for how, got := range map[string]appdto.Tag{"all": all[0], "by name": byName, "deleted": deleted} {
+		if got.Value != "0" || got.Quality != "bad" || got.Seq != 0 {
+			t.Errorf("%s: %+v, want the initial 0, bad", how, got)
+		}
 	}
 }
 

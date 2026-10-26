@@ -31,6 +31,10 @@ import (
 // otherwise (PUBLIC_API_URL).
 const apiPort = "9090"
 
+// tagUpdatesQueueSize is how many tag_updated wait for the SSE fan-out
+// before a Device's write waits for room.
+const tagUpdatesQueueSize = 1024
+
 // serverArgs is the server's command-line/environment configuration.
 type serverArgs struct {
 	MaxSSEClients int    `arg:"env:MAX_SSE_CLIENTS" default:"100" help:"maximum number of concurrent SSE event-stream connections"`
@@ -105,9 +109,17 @@ func main() {
 		emergencyExit(gracedownManager, gracedown.ExitConfig)
 	}
 	// The Runtime node, in this process: the Tag states (ADR 0011). It
-	// publishes tag_updated to the event bus itself, bypassing the outbox; the
-	// Engineering node reaches it only through the RuntimeNode port
-	tagStateService := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(sqlDB), organizationID, eventBus.Publish)
+	// publishes tag_updated to the event bus itself, bypassing the outbox,
+	// through a queue: a Device's write does not wait for the SSE fan-out.
+	// The Engineering node reaches it only through the RuntimeNode port
+	tagUpdates := eventbus.NewAsyncPublisher(eventBus, tagUpdatesQueueSize)
+	tagUpdatesCtx, stopTagUpdates := context.WithCancel(context.Background())
+	tagUpdatesDone := make(chan struct{})
+	go func() {
+		tagUpdates.Run(tagUpdatesCtx)
+		close(tagUpdatesDone)
+	}()
+	tagStateService := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(sqlDB), organizationID, tagUpdates.Publish)
 	runtimeNode := inprocess.NewRuntimeNode(tagStateService)
 	// Registry of the policies: changes spanning aggregates, run as jobs
 	// apart from event delivery (ADR 0008)
@@ -171,7 +183,8 @@ func main() {
 	// them; a change committed after the drain (the API server stops
 	// concurrently) stays in the outbox until the next start. The drain gets
 	// outboxDrainTimeout of the API server's 15 s, so the hub is closed in
-	// time even if the database hangs. Then the hub ends every open SSE
+	// time even if the database hangs. The tag_updated still queued are
+	// delivered too, later ones dropped. Then the hub ends every open SSE
 	// stream: the API server's Shutdown, running concurrently, waits for
 	// those handlers and is released here. The database closes later, in
 	// the infrastructure layer.
@@ -180,6 +193,12 @@ func main() {
 		drainCtx, cancel := context.WithTimeout(ctx, outboxDrainTimeout)
 		defer cancel()
 		stopOutbox(drainCtx)
+		stopTagUpdates()
+		select {
+		case <-tagUpdatesDone:
+		case <-drainCtx.Done():
+			slog.Error("Tag updates not delivered on shutdown", "error", drainCtx.Err())
+		}
 		apiRouter.Close()
 		return nil
 	})

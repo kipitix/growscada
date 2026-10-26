@@ -127,7 +127,8 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	projectRepo := repositories.NewProjectRepositoryPostgres(db, onCommit)
 	scopes := repositories.NewProjectScopes(db, onCommit)
 	content := application.NewProjectContent(projectRepo, scopes, orgID)
-	tagStateSvc := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, bus.Publish)
+	tagUpdates := eventbus.NewAsyncPublisher(bus, 1024)
+	tagStateSvc := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, tagUpdates.Publish)
 	runtimeNode := inprocess.NewRuntimeNode(tagStateSvc)
 	tagSvc := application.NewTagService(content, runtimeNode)
 	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(db, onCommit)
@@ -140,8 +141,9 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	dispatcher.SetPolicyRunner(runner)
 	ctx, stop := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(3)
 	go func() { defer wg.Done(); dispatcher.Run(ctx) }()
+	go func() { defer wg.Done(); tagUpdates.Run(ctx) }()
 	go func() { defer wg.Done(); runner.Run(ctx) }()
 	t.Cleanup(func() {
 		stop()

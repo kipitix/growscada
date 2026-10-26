@@ -20,7 +20,8 @@ import (
 type RuntimeNode interface {
 	// UpsertTagDefinitions gives the Runtime node the definitions of Tags: a
 	// Tag without a state gets its initial one, a Tag with one keeps it.
-	// Idempotent.
+	// Idempotent. A state stored of another Project or TagType is an
+	// error.
 	UpsertTagDefinitions(ctx context.Context, projectID uuid.UUID, defs []appdto.TagDefinition) error
 	// RemoveTagStates removes the states of the Tags; one without a state is
 	// skipped.

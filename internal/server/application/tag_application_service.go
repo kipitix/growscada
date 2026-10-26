@@ -2,8 +2,10 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
@@ -44,10 +46,12 @@ func NewTagService(aContent ProjectContent, aRuntime RuntimeNode) TagService {
 
 // withStates returns the DTOs of the tags of the project, each with its
 // state from the Runtime node, read in one call; a tag the Runtime node has
-// no state of yet (its definition not upserted yet) shows its initial one.
-func (t tagServiceImpl) withStates(ctx context.Context, projectID uuid.UUID, tags []tag.Tag) ([]appdto.Tag, error) {
+// no state of yet (its definition not upserted yet) shows its initial one,
+// and so does every tag when the Runtime node fails to answer: the Draft is
+// read without it.
+func (t tagServiceImpl) withStates(ctx context.Context, projectID uuid.UUID, tags []tag.Tag) []appdto.Tag {
 	if len(tags) == 0 {
-		return []appdto.Tag{}, nil
+		return []appdto.Tag{}
 	}
 	ids := make([]uuid.UUID, len(tags))
 	for i, found := range tags {
@@ -55,7 +59,8 @@ func (t tagServiceImpl) withStates(ctx context.Context, projectID uuid.UUID, tag
 	}
 	states, err := t.runtime.FindTagStates(ctx, projectID, ids)
 	if err != nil {
-		return nil, fmt.Errorf("error on find tag states in runtime: %w", err)
+		slog.Warn("Tag states not read from the runtime node; the tags show their initial ones",
+			"project", projectID, "error", err)
 	}
 	byID := make(map[uuid.UUID]appdto.TagState, len(states))
 	for _, st := range states {
@@ -69,16 +74,12 @@ func (t tagServiceImpl) withStates(ctx context.Context, projectID uuid.UUID, tag
 		}
 		result[i] = appdto.NewTag(found, st)
 	}
-	return result, nil
+	return result
 }
 
 // withState returns the DTO of one tag with its state.
-func (t tagServiceImpl) withState(ctx context.Context, projectID uuid.UUID, found tag.Tag) (appdto.Tag, error) {
-	tags, err := t.withStates(ctx, projectID, []tag.Tag{found})
-	if err != nil {
-		return appdto.Tag{}, err
-	}
-	return tags[0], nil
+func (t tagServiceImpl) withState(ctx context.Context, projectID uuid.UUID, found tag.Tag) appdto.Tag {
+	return t.withStates(ctx, projectID, []tag.Tag{found})[0]
 }
 
 // tags returns the tag repository of the live project rawProjectID.
@@ -106,7 +107,7 @@ func (t tagServiceImpl) FindAllTags(ctx context.Context, rawProjectID uuid.UUID)
 		}
 	}
 
-	return t.withStates(ctx, rawProjectID, tags)
+	return t.withStates(ctx, rawProjectID, tags), nil
 }
 
 // FindTagByID returns a tag by its identifier
@@ -121,7 +122,7 @@ func (t tagServiceImpl) FindTagByID(ctx context.Context, rawProjectID, rawID uui
 		return appdto.Tag{}, fmt.Errorf("error on find tag by id in repository: %w", err)
 	}
 
-	return t.withState(ctx, rawProjectID, foundTag)
+	return t.withState(ctx, rawProjectID, foundTag), nil
 }
 
 // FindTagByName returns a tag by its name, unique within the project
@@ -140,7 +141,7 @@ func (t tagServiceImpl) FindTagByName(ctx context.Context, rawProjectID uuid.UUI
 		return appdto.Tag{}, fmt.Errorf("error on find tag by name in repository: %w", err)
 	}
 
-	return t.withState(ctx, rawProjectID, foundTag)
+	return t.withState(ctx, rawProjectID, foundTag), nil
 }
 
 // FindTagsByNamePattern returns the tags whose whole name matches a wildcard
@@ -180,14 +181,16 @@ func (t tagServiceImpl) findTagsMatching(ctx context.Context, rawProjectID uuid.
 			matched = append(matched, found)
 		}
 	}
-	return t.withStates(ctx, rawProjectID, matched)
+	return t.withStates(ctx, rawProjectID, matched), nil
 }
 
 // CreateTag creates a new tag in the project and returns the created tag DTO,
 // with its initial state. A project deleted just after it was read here is
 // not found by the save. Right after commit it gives the Runtime node the
-// tag's definition, so the tag accepts values once this returns; if that
-// fails, NewRuntimeTagDefinitionsPolicy gives it on tag_created.
+// tag's definition (giveRuntimeDefinition), so the tag accepts values once
+// this returns; if that fails, CreateTag returns the error although the tag
+// is created, and NewRuntimeTagDefinitionsPolicy gives the definition on
+// tag_created.
 func (t tagServiceImpl) CreateTag(ctx context.Context, rawProjectID uuid.UUID, newTagData appdto.CreateTagInput) (appdto.Tag, error) {
 	projectID, scope, err := t.content.open(ctx, rawProjectID)
 	if err != nil {
@@ -216,12 +219,41 @@ func (t tagServiceImpl) CreateTag(ctx context.Context, rawProjectID uuid.UUID, n
 		return appdto.Tag{}, fmt.Errorf("cannot save tag: %w", err)
 	}
 
-	if err := t.runtime.UpsertTagDefinitions(ctx, rawProjectID, []appdto.TagDefinition{appdto.NewTagDefinition(newTag)}); err != nil {
-		slog.Warn("Tag definition not given to the runtime node; the policy on tag_created gives it",
-			"project", rawProjectID, "tag", newTag.ID(), "error", err)
+	if err := t.giveRuntimeDefinition(ctx, rawProjectID, repo, newTag); err != nil {
+		return appdto.Tag{}, fmt.Errorf("tag %s created, but not given to the runtime node yet: %w", newTag.ID(), err)
 	}
 
 	return appdto.NewTag(newTag, appdto.InitialTagState(newTag)), nil
+}
+
+// runtimeCallTimeout bounds a call to the Runtime node made after commit.
+const runtimeCallTimeout = 10 * time.Second
+
+// giveRuntimeDefinition upserts the definition of a tag just created into
+// the Runtime node, then reads the tag from the Draft again: if it has been
+// deleted meanwhile, its state is removed. The deletion's own removal and the
+// job of NewRuntimeTagDefinitionsPolicy may both have run before the upsert,
+// and nothing would remove the state left by it. A deletion committed after
+// the read removes the state itself, after the upsert. The calls run apart
+// from the caller's cancellation: the tag is committed already.
+func (t tagServiceImpl) giveRuntimeDefinition(ctx context.Context, rawProjectID uuid.UUID, repo tag.TagRepository, created tag.Tag) error {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), runtimeCallTimeout)
+	defer cancel()
+
+	if err := t.runtime.UpsertTagDefinitions(ctx, rawProjectID, []appdto.TagDefinition{appdto.NewTagDefinition(created)}); err != nil {
+		return err
+	}
+	_, err := repo.FindByID(ctx, created.ID())
+	if errors.Is(err, tag.ErrTagNotFound) {
+		if err := t.runtime.RemoveTagStates(ctx, rawProjectID, []uuid.UUID{created.ID().UUID()}); err != nil {
+			return fmt.Errorf("cannot remove the state of tag deleted meanwhile: %w", err)
+		}
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("cannot read tag back: %w", err)
+	}
+	return nil
 }
 
 // DeleteTagByID deletes a tag by its identifier and returns the deleted tag,
@@ -240,10 +272,7 @@ func (t tagServiceImpl) DeleteTagByID(ctx context.Context, rawProjectID, rawID u
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("error on find tag by id in repository: %w", err)
 	}
-	last, err := t.withState(ctx, rawProjectID, found)
-	if err != nil {
-		return appdto.Tag{}, err
-	}
+	last := t.withState(ctx, rawProjectID, found)
 	if err := repo.Delete(ctx, found.Delete()); err != nil {
 		return appdto.Tag{}, fmt.Errorf("cannot delete tag: %w", err)
 	}

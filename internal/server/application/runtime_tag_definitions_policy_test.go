@@ -50,16 +50,20 @@ func tagStateOf(t *testing.T, tagID uuid.UUID) bool {
 }
 
 // TestRuntimeTagDefinitions_ACreationThatFailedToUpsert_IsMadeUpForOnTagCreated:
-// the creation's call to the Runtime node failed; the job of its
-// tag_created gives the definition, and the tag accepts values.
+// the creation's call to the Runtime node failed, and the creation returned
+// its error although the tag is created; the job of its tag_created gives
+// the definition, and the tag accepts values.
 func TestRuntimeTagDefinitions_ACreationThatFailedToUpsert_IsMadeUpForOnTagCreated(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	ctx := context.Background()
 	svc := application.NewTagService(contentOver(newScopes()), failingRuntimeNode{RuntimeNode: newRuntimeNode()})
 
-	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "speed", Type: "integer"})
+	if _, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "speed", Type: "integer"}); !errors.Is(err, errRuntimeDown) {
+		t.Fatalf("CreateTag with the Runtime node failing: %v, want its error", err)
+	}
+	created, err := r.tagSvc.FindTagByName(ctx, mainProject, "speed")
 	if err != nil {
-		t.Fatalf("CreateTag: %v", err)
+		t.Fatalf("FindTagByName: %v", err)
 	}
 	if tagStateOf(t, created.ID) {
 		t.Fatal("the failed upsert gave a state")
@@ -122,5 +126,48 @@ func TestRuntimeTagDefinitions_ALateJobOfACreation_DoesNotBringADeletedTagBack(t
 
 	if tagStateOf(t, tagID) {
 		t.Error("a late job of the creation brought the state back")
+	}
+}
+
+// deletingRuntimeNode deletes the tag through deleteWith before it upserts
+// its definition: the deletion commits, removes no state yet and its job
+// runs, all before the creation's upsert.
+type deletingRuntimeNode struct {
+	application.RuntimeNode
+	deleteWith func(tagID uuid.UUID)
+}
+
+func (n deletingRuntimeNode) UpsertTagDefinitions(ctx context.Context, projectID uuid.UUID, defs []appdto.TagDefinition) error {
+	for _, def := range defs {
+		n.deleteWith(def.ID)
+	}
+	return n.RuntimeNode.UpsertTagDefinitions(ctx, projectID, defs)
+}
+
+// TestCreateTag_AnUpsertLateAfterADeletion_LeavesNoState: the tag is deleted,
+// and the jobs of its events run, before the creation's upsert; the creation
+// reads the Draft after the upsert and removes the state it left.
+func TestCreateTag_AnUpsertLateAfterADeletion_LeavesNoState(t *testing.T) {
+	r := newReconciliation(t, reconciliationWiring{})
+	ctx := context.Background()
+	svc := application.NewTagService(contentOver(newScopes()), deletingRuntimeNode{
+		RuntimeNode: newRuntimeNode(),
+		deleteWith: func(tagID uuid.UUID) {
+			if _, err := r.tagSvc.DeleteTagByID(ctx, mainProject, tagID); err != nil {
+				t.Fatalf("DeleteTagByID: %v", err)
+			}
+			r.settle(t)
+		},
+	})
+
+	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "late", Type: "integer"})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	if tagStateOf(t, created.ID) {
+		t.Error("the late upsert left a state of the deleted tag")
+	}
+	if _, err := r.states.SetTagValue(ctx, mainProject, runtimeapp.SetTagValueInput{TagID: created.ID, Value: "1", Quality: "good"}); !errors.Is(err, tag.ErrTagNotFound) {
+		t.Errorf("a value for the deleted tag: %v, want ErrTagNotFound", err)
 	}
 }

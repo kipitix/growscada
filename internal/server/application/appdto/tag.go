@@ -54,12 +54,12 @@ func NewTagDefinition(aTag tag.Tag) TagDefinition {
 	}
 }
 
-// InitialTagState returns the state of aTag before a supplier writes one:
-// its TagType's zero value with Quality bad.
+// InitialTagState returns the state of aTag before a supplier writes one
+// (tag.TagType.InitialState).
 func InitialTagState(aTag tag.Tag) TagState {
-	state := TagState{ID: aTag.ID().UUID(), Quality: tag.TagQualityBad.String()}
-	if zero, err := aTag.Type().ZeroValue(); err == nil {
-		state.Value = zero.String()
+	state := TagState{ID: aTag.ID().UUID()}
+	if value, quality, err := aTag.Type().InitialState(); err == nil {
+		state.Value, state.Quality = value.String(), quality.String()
 	}
 	return state
 }

@@ -31,11 +31,6 @@ type Definition struct {
 	Version   version.Version[tag.Tag]
 }
 
-// NewDefinition returns the copy of the definition aTag.
-func NewDefinition(aTag tag.Tag) Definition {
-	return Definition{TagID: aTag.ID(), ProjectID: aTag.ProjectID(), Name: aTag.Name(), Type: aTag.Type(), Version: aTag.Version()}
-}
-
 // TagState is a Tag's current value and Quality, held by the Runtime node,
 // never part of the Draft or a Revision. It has a single writer — the Tag's
 // supplier, or people — so a write states no expected Version: the latest
@@ -52,11 +47,11 @@ type TagState struct {
 // TagType's zero value with Quality Bad.
 // Returns an error if the definition's TagType is invalid.
 func Initial(aDefinition Definition) (TagState, error) {
-	zero, err := aDefinition.Type.ZeroValue()
+	value, quality, err := aDefinition.Type.InitialState()
 	if err != nil {
 		return TagState{}, fmt.Errorf("cannot create tag state: %w", err)
 	}
-	return TagState{definition: aDefinition, value: zero, quality: tag.TagQualityBad}, nil
+	return TagState{definition: aDefinition, value: value, quality: quality}, nil
 }
 
 // Reconstitute rebuilds a state as stored. For repositories.

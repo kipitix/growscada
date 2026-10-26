@@ -115,3 +115,15 @@ func TestTagType_ZeroValue(t *testing.T) {
 		t.Error("the invalid TagType has a zero value")
 	}
 }
+
+func TestTagType_InitialState_ZeroValueWithQualityBad(t *testing.T) {
+	for tagType, want := range map[TagType]string{TagTypeString: "", TagTypeBoolean: "false", TagTypeInteger: "0"} {
+		value, quality, err := tagType.InitialState()
+		if err != nil || value.String() != want || quality != TagQualityBad {
+			t.Errorf("%s.InitialState() = %v, %v, %v; want %q, bad", tagType, value, quality, err, want)
+		}
+	}
+	if _, _, err := (TagType{}).InitialState(); err == nil {
+		t.Error("the invalid TagType has an initial state")
+	}
+}

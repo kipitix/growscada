@@ -114,7 +114,9 @@ func (r tagStateRepositoryPostgres) Write(ctx context.Context, aState tagstate.T
 }
 
 // UpsertDefinitions inserts the missing rows in one transaction; a row
-// already there keeps its state and takes the definition given.
+// already there keeps its state and takes the definition given. A row of
+// another Project or TagType is not changed: the call fails, so a policy job
+// retries it instead of taking it as done.
 func (r tagStateRepositoryPostgres) UpsertDefinitions(ctx context.Context, projectID id.ID[project.Project], defs []tagstate.Definition) error {
 	if len(defs) == 0 {
 		return nil
@@ -132,15 +134,23 @@ func (r tagStateRepositoryPostgres) UpsertDefinitions(ctx context.Context, proje
 		if err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx,
+		res, err := tx.ExecContext(ctx,
 			`INSERT INTO runtime.tags (id, project_id, name, type, version, value, quality)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7)
 			 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, version = EXCLUDED.version
 			 WHERE runtime.tags.project_id = EXCLUDED.project_id AND runtime.tags.type = EXCLUDED.type`,
 			def.TagID.UUID(), projectID.UUID(), def.Name.String(), def.Type.String(), def.Version.Number(),
 			initial.Value().String(), initial.Quality().String(),
-		); err != nil {
+		)
+		if err != nil {
 			return fmt.Errorf("cannot upsert tag definition %s: %w", def.TagID, err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("cannot upsert tag definition %s: %w", def.TagID, err)
+		}
+		if n == 0 {
+			return fmt.Errorf("cannot upsert tag definition %s: its state is of another project or type than %s %s", def.TagID, projectID, def.Type)
 		}
 	}
 	if err := tx.Commit(); err != nil {

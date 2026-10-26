@@ -170,6 +170,42 @@ func TestSetTagValue_StoresAndPublishesTheStateWithItsSeq(t *testing.T) {
 	}
 }
 
+// cancellableStates fails a write whose context is done, as the database
+// driver does.
+type cancellableStates struct {
+	*memoryStates
+}
+
+func (c cancellableStates) Write(ctx context.Context, s tagstate.TagState) (tagstate.TagState, error) {
+	if err := ctx.Err(); err != nil {
+		return tagstate.TagState{}, err
+	}
+	return c.memoryStates.Write(ctx, s)
+}
+
+// TestSetTagValue_CallerGone_StillStoresAndPublishes: a caller that cancels
+// its request once the write is on its way leaves no stored state without
+// its tag_updated.
+func TestSetTagValue_CallerGone_StillStoresAndPublishes(t *testing.T) {
+	org := id.NewID[organization.Organization]()
+	p := id.NewID[project.Project]()
+	var published []event.Event
+	svc := runtimeapp.NewTagStateService(cancellableStates{newMemoryStates(org, p)}, org, func(e event.Event) { published = append(published, e) })
+	speed := uuid.New()
+	if err := svc.UpsertTagDefinitions(context.Background(), p.UUID(), []runtimeapp.TagDefinition{{ID: speed, Name: "speed", Type: "integer", Version: 1}}); err != nil {
+		t.Fatalf("UpsertTagDefinitions: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := svc.SetTagValue(ctx, p.UUID(), runtimeapp.SetTagValueInput{TagID: speed, Value: "7", Quality: "good"}); err != nil {
+		t.Fatalf("SetTagValue: %v", err)
+	}
+	if len(published) != 1 {
+		t.Errorf("published %d events, want the tag_updated of the write", len(published))
+	}
+}
+
 func TestSetTagValue_InvalidInput_PublishesNothing(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
@@ -185,6 +221,17 @@ func TestSetTagValue_InvalidInput_PublishesNothing(t *testing.T) {
 	}
 	if len(f.published) != 0 {
 		t.Errorf("published %d events on invalid input", len(f.published))
+	}
+}
+
+// TestSetTagValue_InvalidQuality_RejectedBeforeAnyRead: the quality is
+// parsed before the state is looked for, so even a write to a missing Tag of
+// a missing Project is invalid input.
+func TestSetTagValue_InvalidQuality_RejectedBeforeAnyRead(t *testing.T) {
+	f := newFixture(t)
+	_, err := f.svc.SetTagValue(context.Background(), uuid.New(), runtimeapp.SetTagValueInput{TagID: uuid.New(), Value: "1", Quality: "simulated"})
+	if !errors.Is(err, runtimeapp.ErrInvalidInput) {
+		t.Errorf("%v, want ErrInvalidInput", err)
 	}
 }
 

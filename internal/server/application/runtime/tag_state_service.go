@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -78,7 +79,8 @@ type TagStateService interface {
 	FindTagStates(ctx context.Context, projectID uuid.UUID, tagIDs []uuid.UUID) ([]TagState, error)
 	// UpsertTagDefinitions gives the Runtime node the definitions of Tags: a
 	// Tag without a state gets its initial one (its TagType's zero value,
-	// Quality bad), a Tag with one keeps it. Idempotent.
+	// Quality bad), a Tag with one keeps it. Idempotent. A state stored
+	// of another Project or TagType is an error.
 	UpsertTagDefinitions(ctx context.Context, projectID uuid.UUID, defs []TagDefinition) error
 	// RemoveTagStates removes the states of the Tags; one without a state is
 	// skipped.
@@ -102,12 +104,17 @@ func NewTagStateService(someStates tagstate.Repository, anOrganizationID id.ID[o
 	return &tagStateServiceImpl{states: someStates, organization: anOrganizationID, publish: publish}
 }
 
-// SetTagValue is the hot path of Devices: the state is read with the check
-// of its Project in one query, and the Project is read apart only when the
-// Tag is not found, to tell a missing Project from a missing Tag.
+// SetTagValue is the hot path of Devices: the Quality is parsed before any
+// query, the state is read with the check of its Project in one query, and
+// the Project is read apart only when the Tag is not found, to tell a missing
+// Project from a missing Tag.
 func (s tagStateServiceImpl) SetTagValue(ctx context.Context, rawProjectID uuid.UUID, input SetTagValueInput) (TagState, error) {
 	projectID := projectIDOf(rawProjectID)
 	tagID := tagIDOf(input.TagID)
+	quality, err := tag.NewTagQuality(input.Quality)
+	if err != nil {
+		return TagState{}, fmt.Errorf("cannot parse quality: %w", invalidInput(err))
+	}
 
 	current, err := s.states.FindInLiveProject(ctx, projectID, tagID, s.organization)
 	if errors.Is(err, tag.ErrTagNotFound) {
@@ -119,23 +126,27 @@ func (s tagStateServiceImpl) SetTagValue(ctx context.Context, rawProjectID uuid.
 		return TagState{}, fmt.Errorf("error on find tag state in repository: %w", err)
 	}
 
-	quality, err := tag.NewTagQuality(input.Quality)
-	if err != nil {
-		return TagState{}, fmt.Errorf("cannot parse quality: %w", invalidInput(err))
-	}
 	// The stored TagType is valid (the read rejects any other), so Write
 	// fails only when the caller's value does not fit it.
 	written, err := current.Write(input.Value, quality)
 	if err != nil {
 		return TagState{}, fmt.Errorf("cannot set tag value: %w", invalidInput(err))
 	}
-	stored, err := s.states.Write(ctx, written)
+	// Apart from the caller's cancellation: a write cancelled after its
+	// UPDATE committed would store the state and publish no tag_updated.
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), writeTimeout)
+	defer cancel()
+	stored, err := s.states.Write(writeCtx, written)
 	if err != nil {
 		return TagState{}, fmt.Errorf("cannot write tag state: %w", err)
 	}
 	s.publish(tagstate.NewTagUpdatedEvent(stored))
 	return NewTagState(stored), nil
 }
+
+// writeTimeout bounds a write of a state, run apart from the caller's
+// cancellation.
+const writeTimeout = 10 * time.Second
 
 // checkProject returns an error wrapping project.ErrProjectNotFound unless
 // the Project is live and of the server's Organization.

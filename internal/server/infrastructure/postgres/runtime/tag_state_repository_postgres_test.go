@@ -105,6 +105,33 @@ func TestUpsertDefinitions_OfAnotherProject_IsAnError(t *testing.T) {
 	}
 }
 
+// TestUpsertDefinitions_OverARowOfAnotherTypeOrProject_IsAnError: the row
+// stored keeps its definition, and the call fails rather than doing nothing.
+func TestUpsertDefinitions_OverARowOfAnotherTypeOrProject_IsAnError(t *testing.T) {
+	projectID, _ := newProject(t)
+	other, _ := newProject(t)
+	repo := runtimepg.NewTagStateRepositoryPostgres(postgres.DB(t))
+	ctx := context.Background()
+	speed := definition(t, projectID, "speed", tag.TagTypeInteger)
+	if err := repo.UpsertDefinitions(ctx, projectID, []tagstate.Definition{speed}); err != nil {
+		t.Fatalf("UpsertDefinitions: %v", err)
+	}
+
+	retyped := speed
+	retyped.Type = tag.TagTypeBoolean
+	if err := repo.UpsertDefinitions(ctx, projectID, []tagstate.Definition{retyped}); err == nil {
+		t.Error("an upsert of another type succeeded")
+	}
+	moved := speed
+	moved.ProjectID = other
+	if err := repo.UpsertDefinitions(ctx, other, []tagstate.Definition{moved}); err == nil {
+		t.Error("an upsert into another project succeeded")
+	}
+	if stored := mustFind(t, repo, projectID, speed.TagID); stored.Definition() != speed {
+		t.Errorf("the stored definition changed: %v", stored.Definition())
+	}
+}
+
 // TestWrite_NumbersEveryWriteHigher: several writes in a row take
 // increasing seqs, each different (the acceptance of task 32).
 func TestWrite_NumbersEveryWriteHigher(t *testing.T) {

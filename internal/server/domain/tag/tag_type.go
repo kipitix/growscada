@@ -76,8 +76,19 @@ func (t TagType) NewTagValue(aValue any) (TagValue, error) {
 	}
 }
 
-// ZeroValue returns the type's zero value: "", false or 0. It is the value
-// of a Tag's state until a supplier writes one.
+// InitialState returns the value and Quality of a Tag's state until a
+// supplier writes one: the type's zero value with Quality bad. Both roles
+// start from it: the Runtime node stores it, the Engineering node shows it
+// for a Tag the Runtime node holds no state of.
+func (t TagType) InitialState() (TagValue, TagQuality, error) {
+	zero, err := t.ZeroValue()
+	if err != nil {
+		return nil, TagQuality{}, err
+	}
+	return zero, TagQualityBad, nil
+}
+
+// ZeroValue returns the type's zero value: "", false or 0.
 func (t TagType) ZeroValue() (TagValue, error) {
 	switch t {
 	case TagTypeString:
