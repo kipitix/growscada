@@ -7,8 +7,16 @@ A web-based SCADA (Supervisory Control and Data Acquisition) system: it exposes 
 ### Data
 
 **Tag**:
-The atomic process variable — an identifier, name, type, current value, and quality. Aggregate. Belongs to exactly one Project. Its name is unique within that Project and, together with the Project, is the natural key by which people, manifests and Devices refer to it. Its name and TagType form the Tag's definition (configuration, part of the Draft); its value and Quality are process state, never part of the Draft or a Revision. A Tag has at most one supplier of its value — one Device (or, later, one Computation); a Tag with no supplier is set by people.
+The atomic process variable — an identifier, name, type, current value, and quality. Belongs to exactly one Project. Its name is unique within that Project and, together with the Project, is the natural key by which people, manifests and Devices refer to it. A Tag is two things under one identity: its **Tag definition** and its **Tag state**. A Tag has at most one supplier of its value — one Device (or, later, one Computation); a Tag with no supplier is set by people.
 _Avoid_: variable, point, signal
+
+**Tag definition**:
+A Tag's name and TagType: configuration, part of the Draft and of a Revision. Aggregate, held by the Engineering node; changed only as a whole, with an expected Version.
+_Avoid_: tag config, tag metadata
+
+**Tag state**:
+A Tag's current value and Quality: process state, held by the Runtime node, never part of the Draft or a Revision. Aggregate with a single writer — the Tag's supplier, or people — so a write states no expected Version: the latest write wins. Each write is numbered higher than every write before it, so a reader can tell the newer of two states of one Tag. Until a supplier writes, a Tag's state is its TagType's zero value with Quality `Bad`.
+_Avoid_: tag value (that is the value alone), reading, live data
 
 **Quality**:
 A Tag's reliability indicator: `Bad`, `Uncertain`, or `Good`. Describes how trustworthy the value is, never where it came from. There is no "unknown" Quality — every Tag always has one of the three, stated explicitly by whoever creates or updates it.
@@ -157,7 +165,7 @@ _Avoid_: viewer, replayer
 ### Cross-cutting
 
 **Version**:
-The optimistic-concurrency counter carried by every aggregate (Tag, WidgetType, Scene), incremented on each committed change. A change states its **expected Version** — the Version it was based on; if the aggregate's current Version differs, the change is refused as an **edit conflict**. Removal states no expected Version. Not to be confused with Revision or SchemaVersion.
+The optimistic-concurrency counter carried by every aggregate edited by people (Project, Tag definition, WidgetType, Scene) — not by Tag state, whose writes are numbered instead —, incremented on each committed change. A change states its **expected Version** — the Version it was based on; if the aggregate's current Version differs, the change is refused as an **edit conflict**. Removal states no expected Version. Not to be confused with Revision or SchemaVersion.
 _Avoid_: etag, stale client, base version
 
 **SchemaVersion**:

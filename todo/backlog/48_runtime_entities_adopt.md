@@ -8,6 +8,7 @@ Blocked by: 38, 43
 - Все изменения — записи Journal.
 - Adopt: Engineer явно принимает runtime-Tag или runtime-Widget в Draft (одна DraftChange), ID сохраняется; после Deploy Origin=Project.
 - Регистрация runtime-тегов со стороны Device — после задачи 34.
+- Поле Origin (`Project`/`Runtime`) у Tag и Widget, enum без Unknown (ADR 0001); имя Tag уникально среди всех Tag проекта независимо от Origin. Перенесено из задачи 32 (ADR 0011): вводится вместе с первым создателем Runtime-origin сущностей.
 
 ## Comments
 
