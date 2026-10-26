@@ -58,6 +58,8 @@ var errorMappings = []errorMapping{
 	{tag.ErrTagNameTaken, http.StatusConflict, tagResource, "Tag name is already taken in the project"},
 	{library.ErrWidgetTypeNotFound, http.StatusNotFound, widgetTypeResource, ""},
 	{library.ErrWidgetTypeConflict, http.StatusConflict, widgetTypeResource, "WidgetType was changed concurrently; reload it and retry"},
+	{library.ErrWidgetTypeInUseByDeletedProjects, http.StatusConflict, widgetTypeResource,
+		"WidgetType is used only by Widgets of deleted Projects, still being removed; retry shortly"},
 	{library.ErrWidgetTypeInUse, http.StatusConflict, widgetTypeResource, "WidgetType is used by Widgets"},
 	{scene.ErrSceneNotFound, http.StatusNotFound, sceneResource, ""},
 	{scene.ErrSceneConflict, http.StatusConflict, sceneResource, "Scene was changed concurrently; reload it and retry"},

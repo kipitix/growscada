@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
@@ -357,6 +358,95 @@ func TestProjectScopes_FindProjectsUsingWidgetType(t *testing.T) {
 	}
 	if none, err := scopes.FindProjectsUsingWidgetType(context.Background(), unused); err != nil || len(none) != 0 {
 		t.Errorf("an unused widget type: %v, %v", none, err)
+	}
+
+	if _, err := repositories.NewProjectRepositoryPostgres(testDB).Save(context.Background(), other.Delete()); err != nil {
+		t.Fatalf("mark the project deleted: %v", err)
+	}
+	projects, err = scopes.FindProjectsUsingWidgetType(context.Background(), w.TypeID())
+	if err != nil || len(projects) != 1 || projects[0] != mainProject {
+		t.Errorf("with %s marked deleted: got %v, %v; want Main only", other.ID(), projects, err)
+	}
+}
+
+// TestWidgetTypeDelete_UsedOnlyByDeletedProjects_SaysSo: Widgets of Projects
+// marked deleted, not removed yet, still hold the widget type, and the
+// refusal tells them from Widgets of a live Project.
+func TestWidgetTypeDelete_UsedOnlyByDeletedProjects_SaysSo(t *testing.T) {
+	cleanProjects(t)
+	projects := repositories.NewProjectRepositoryPostgres(testDB)
+	other := mustCreateProject(t, projects, "Line 1")
+	scopes := repositories.NewProjectScopes(testDB)
+	widgetTypes := repositories.NewWidgetTypeRepositoryPostgres(testDB)
+	mainScenes := scopes.ForProject(mainProject).Scenes()
+	otherScenes := scopes.ForProject(other.ID()).Scenes()
+	ctx := context.Background()
+	w := makeWidget(t, otherScenes, "w1")
+	name, _ := scene.NewSceneName("b")
+	size, _ := scene.NewSceneSize(100, 100)
+	mustSave(t, otherScenes, withWidgets(scene.CreateScene(otherScenes.NextID(), other.ID(), name, size, scene.NewBackgroundHTML("")), w))
+	if _, err := projects.Save(ctx, other.Delete()); err != nil {
+		t.Fatalf("mark the project deleted: %v", err)
+	}
+	refuse := func() error {
+		t.Helper()
+		wt, err := widgetTypes.FindByID(ctx, w.TypeID())
+		if err != nil {
+			t.Fatalf("FindByID: %v", err)
+		}
+		return widgetTypes.Delete(ctx, wt.Delete())
+	}
+
+	if err := refuse(); !errors.Is(err, library.ErrWidgetTypeInUseByDeletedProjects) || !errors.Is(err, library.ErrWidgetTypeInUse) {
+		t.Errorf("used by a deleted project only: got %v, want ErrWidgetTypeInUseByDeletedProjects", err)
+	}
+
+	same := scene.NewWidget(mainScenes.NextWidgetID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(), w.TypeID(), nil, nil)
+	mustSave(t, mainScenes, withWidgets(makeScene(t, mainScenes, "a"), same))
+	if err := refuse(); !errors.Is(err, library.ErrWidgetTypeInUse) || errors.Is(err, library.ErrWidgetTypeInUseByDeletedProjects) {
+		t.Errorf("used by Main too: got %v, want ErrWidgetTypeInUse only", err)
+	}
+}
+
+// TestInLiveProjectLists_CheckTheProject: the lists the UI reloads on every
+// event read the content of a live Project of the Organization only.
+func TestInLiveProjectLists_CheckTheProject(t *testing.T) {
+	cleanProjects(t)
+	projects := repositories.NewProjectRepositoryPostgres(testDB)
+	line := mustCreateProject(t, projects, "Line 1")
+	scopes := repositories.NewProjectScopes(testDB)
+	tags, scenes := scopes.ForProject(line.ID()).Tags(), scopes.ForProject(line.ID()).Scenes()
+	ctx := context.Background()
+	createTagIn(t, tags, line.ID(), "speed")
+	name, _ := scene.NewSceneName("s")
+	size, _ := scene.NewSceneSize(100, 100)
+	sc := mustSave(t, scenes, withWidgets(scene.CreateScene(scenes.NextID(), line.ID(), name, size, scene.NewBackgroundHTML("")), makeWidget(t, scenes, "w")))
+	org, other := soleOrganization(t), id.NewID[organization.Organization]()
+	check := func(when string, orgID id.ID[organization.Organization], want int) {
+		t.Helper()
+		if got, err := tags.FindAllInLiveProject(ctx, orgID); err != nil || len(got) != want {
+			t.Errorf("%s: tags %v, %v; want %d", when, got, err, want)
+		}
+		if got, err := scenes.FindAllInLiveProject(ctx, orgID); err != nil || len(got) != want {
+			t.Errorf("%s: scenes %v, %v; want %d", when, got, err, want)
+		}
+		found, err := scenes.FindByIDInLiveProject(ctx, sc.ID(), orgID)
+		switch {
+		case want == 1 && (err != nil || len(found.Widgets()) != 1):
+			t.Errorf("%s: scene %v, %v; want it with its widget", when, found, err)
+		case want == 0 && !errors.Is(err, scene.ErrSceneNotFound):
+			t.Errorf("%s: scene: expected ErrSceneNotFound, got %v", when, err)
+		}
+	}
+
+	check("live", org, 1)
+	check("through another organization", other, 0)
+	if _, err := projects.Save(ctx, line.Delete()); err != nil {
+		t.Fatalf("mark the project deleted: %v", err)
+	}
+	check("marked deleted", org, 0)
+	if all, err := tags.FindAll(ctx); err != nil || len(all) != 1 {
+		t.Errorf("FindAll still reads the tags, for the cleanup: %v, %v", all, err)
 	}
 }
 

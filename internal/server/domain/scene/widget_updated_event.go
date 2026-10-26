@@ -38,10 +38,10 @@ func newWidgetUpdatedEvent(aWidgetID id.ID[Widget], aSceneID id.ID[Scene], aProj
 	return &widgetUpdatedEventImpl{
 		widgetTypedEventImpl: widgetTypedEventImpl{
 			widgetEventImpl: widgetEventImpl{
-				Base:      event.NewBase(event.EventTypeWidgetUpdated, opts...),
-				widgetID:  aWidgetID,
-				sceneID:   aSceneID,
-				projectID: aProjectID,
+				Base:     event.NewBase(event.EventTypeWidgetUpdated, opts...),
+				widgetID: aWidgetID,
+				sceneID:  aSceneID,
+				Content:  project.NewContent(aProjectID),
 			},
 			widgetTypeID: aWidgetTypeID,
 		},

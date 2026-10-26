@@ -17,9 +17,9 @@ type WidgetEvent interface {
 
 type widgetEventImpl struct {
 	event.Base
-	widgetID  id.ID[Widget]
-	sceneID   id.ID[Scene]
-	projectID id.ID[project.Project]
+	widgetID id.ID[Widget]
+	sceneID  id.ID[Scene]
+	project.Content
 }
 
 var _ WidgetEvent = (*widgetEventImpl)(nil)
@@ -32,8 +32,4 @@ func (e widgetEventImpl) WidgetID() id.ID[Widget] {
 
 func (e widgetEventImpl) SceneID() id.ID[Scene] {
 	return e.sceneID
-}
-
-func (e widgetEventImpl) ProjectID() id.ID[project.Project] {
-	return e.projectID
 }

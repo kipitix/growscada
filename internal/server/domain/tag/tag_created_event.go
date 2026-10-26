@@ -20,9 +20,9 @@ var _ TagCreatedEvent = (*tagCreatedEventImpl)(nil)
 func NewTagCreatedEvent(anID id.ID[Tag], aProjectID id.ID[project.Project], opts ...event.EventOption) TagCreatedEvent {
 	return &tagCreatedEventImpl{
 		tagEventImpl: tagEventImpl{
-			Base:      event.NewBase(event.EventTypeTagCreated, opts...),
-			tagID:     anID,
-			projectID: aProjectID,
+			Base:    event.NewBase(event.EventTypeTagCreated, opts...),
+			tagID:   anID,
+			Content: project.NewContent(aProjectID),
 		},
 	}
 }

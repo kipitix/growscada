@@ -6,6 +6,7 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/organization"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
 
@@ -40,6 +41,16 @@ type SceneRepository interface {
 	// FindAll returns all scenes, with their widgets, in creation order, so
 	// the order is stable while scenes change (scene tabs do not jump).
 	FindAll(context.Context) ([]Scene, error)
+
+	// FindByIDInLiveProject and FindAllInLiveProject are FindByID and FindAll
+	// that also check, in the same query, that the Project is live and of the
+	// Organization: for the lists the UI reloads on every event (the Scenes,
+	// the Widgets of one), which then need no read of the Project of their
+	// own. A Project not one of those has no scenes: ErrSceneNotFound, an
+	// empty list, which the caller tells apart from a missing scene or an
+	// empty Project.
+	FindByIDInLiveProject(context.Context, id.ID[Scene], id.ID[organization.Organization]) (Scene, error)
+	FindAllInLiveProject(context.Context, id.ID[organization.Organization]) ([]Scene, error)
 
 	// FindByWidgetTypeID returns, in creation order, every scene with at
 	// least one widget of the given WidgetType, each with all its widgets.

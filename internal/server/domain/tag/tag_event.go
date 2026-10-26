@@ -15,8 +15,8 @@ type TagEvent interface {
 
 type tagEventImpl struct {
 	event.Base
-	tagID     id.ID[Tag]
-	projectID id.ID[project.Project]
+	tagID id.ID[Tag]
+	project.Content
 }
 
 var _ TagEvent = (*tagEventImpl)(nil)
@@ -25,8 +25,4 @@ var _ TagEvent = (*tagEventImpl)(nil)
 
 func (e tagEventImpl) TagID() id.ID[Tag] {
 	return e.tagID
-}
-
-func (e tagEventImpl) ProjectID() id.ID[project.Project] {
-	return e.projectID
 }

@@ -59,10 +59,8 @@ type tagState struct {
 func Encode(e event.Event) ([]byte, error) {
 	p := payload{Timestamp: e.Timestamp().Time()}
 	if content, ok := e.(project.ContentEvent); ok {
-		if _, own := e.(project.ProjectEvent); !own {
-			projectID := content.ProjectID().UUID()
-			p.ProjectID = &projectID
-		}
+		projectID := content.ProjectID().UUID()
+		p.ProjectID = &projectID
 	}
 	switch ev := e.(type) {
 	case tag.TagUpdatedEvent:
@@ -162,7 +160,7 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 	switch eventType {
 	case event.EventTypeWidgetCreated, event.EventTypeWidgetUpdated:
 		if p.WidgetTypeID == nil {
-			return untypedWidgetEvent{Base: event.NewBase(eventType, ts), widgetID: widgetID, sceneID: holder, projectID: projectID}, nil
+			return untypedWidgetEvent{Base: event.NewBase(eventType, ts), widgetID: widgetID, sceneID: holder, Content: project.NewContent(projectID)}, nil
 		}
 	}
 	switch eventType {
@@ -186,16 +184,15 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 // no policy keyed by the WidgetType enqueues a job for it.
 type untypedWidgetEvent struct {
 	event.Base
-	widgetID  id.ID[scene.Widget]
-	sceneID   id.ID[scene.Scene]
-	projectID id.ID[project.Project]
+	widgetID id.ID[scene.Widget]
+	sceneID  id.ID[scene.Scene]
+	project.Content
 }
 
 var _ scene.WidgetEvent = untypedWidgetEvent{}
 
-func (e untypedWidgetEvent) WidgetID() id.ID[scene.Widget]     { return e.widgetID }
-func (e untypedWidgetEvent) SceneID() id.ID[scene.Scene]       { return e.sceneID }
-func (e untypedWidgetEvent) ProjectID() id.ID[project.Project] { return e.projectID }
+func (e untypedWidgetEvent) WidgetID() id.ID[scene.Widget] { return e.widgetID }
+func (e untypedWidgetEvent) SceneID() id.ID[scene.Scene]   { return e.sceneID }
 
 func decodeTagState(tagID id.ID[tag.Tag], projectID id.ID[project.Project], s *tagState) (tag.Tag, error) {
 	if s == nil {

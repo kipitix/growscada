@@ -9,6 +9,7 @@ package eventlog
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -37,16 +38,20 @@ const ActionServerEvent = "eventlog.server-event"
 
 // EventResync is the Type of the synthetic apiv0.Event the Bar fires each time
 // the connection to the server's events (projects, WidgetTypes) is
-// (re)established, the first time and after a switch of project included. The server subscribes a client
-// before it answers, so from this point on no event is missed; but events
-// published before it (while disconnected, or before the first connection
-// was up) are not replayed. A component that shows the server's data
-// therefore reloads it on EventResync.
+// (re)established: the first time, after a loss, and after a switch of
+// project made while the server's events were not coming in. The server
+// subscribes a client before it answers, so from this point on no event is
+// missed; but events published before it (while disconnected, or before the
+// first connection was up) are not replayed. A component that shows the
+// server's data therefore reloads it on EventResync. A switch of project
+// while connected keeps the old connection until the new one is open, so
+// the server's events go on and only EventProjectResync is fired.
 const EventResync = "resync"
 
 // EventProjectResync is EventResync of the events of the selected project
-// (its Scenes, Widgets and Tags): fired after EventResync each time the
-// connection is (re)established while a project is selected.
+// (its Scenes, Widgets and Tags): fired (after EventResync, if that is fired
+// too) each time the connection is (re)established while a project is
+// selected, a switch of project included.
 const EventProjectResync = "project_resync"
 
 // StateDisconnected is the go-app state (ctx.ObserveState) holding, as a
@@ -87,7 +92,18 @@ type Bar struct {
 type eventStream struct {
 	url string
 	// resyncs are the Types of the synthetic events fired when it opens.
-	resyncs            []string
+	resyncs []string
+	// connected is whether it is open now: from its open to its next error.
+	connected bool
+	// predecessor is the connection of the project selected before, kept
+	// while this one is not open yet, so the server's events go on; it is
+	// closed once this one opens, which then fires no EventResync
+	// (skipServerResync) unless the predecessor was lost meanwhile.
+	predecessor      *eventStream
+	skipServerResync bool
+	// successor is set on a predecessor: superseded by it, it delivers only
+	// the server's events, no longer those of its project.
+	successor          *eventStream
 	source             app.Value
 	onMessage          app.Func
 	onError            app.Func
@@ -118,15 +134,23 @@ func (b *Bar) OnMount(ctx app.Context) {
 	b.stream = b.connectStream(ctx)
 }
 
+// OnDismount closes the connections; a SetProject until the next OnMount
+// only remembers the project, which that OnMount connects to.
 func (b *Bar) OnDismount() {
+	b.mounted = false
 	b.stream.close()
+	if b.stream != nil {
+		b.stream.predecessor.close()
+	}
 }
 
 // SetProject switches the connection to the events of the project id
-// (uuid.Nil: none) by reopening it; before the Bar is mounted it only
-// remembers it. The new connection fires EventResync, then
-// EventProjectResync, once it is open: Project and Operation load the new
-// project's content on the latter only.
+// (uuid.Nil: none) by opening a new one; before the Bar is mounted it only
+// remembers it. The new connection fires EventProjectResync once it is open
+// (while a project is selected): Project and Operation load the new
+// project's content on it only. If the server's events are coming in, the
+// open connection carrying them stays until the new one is open, which then
+// fires no EventResync; otherwise it fires EventResync first.
 func (b *Bar) SetProject(id uuid.UUID) {
 	if id == b.projectID {
 		return
@@ -135,8 +159,25 @@ func (b *Bar) SetProject(id uuid.UUID) {
 	if !b.mounted {
 		return
 	}
-	b.stream.close()
+	prev := b.stream
 	b.stream = b.connectStream(b.compoCtx)
+	carrier := prev
+	if prev != nil && !prev.connected {
+		// Never open (or lost): nothing comes through it. Its own
+		// predecessor may still carry the server's events.
+		carrier = prev.predecessor
+		prev.predecessor = nil
+		prev.close()
+	}
+	if carrier == nil || carrier.closed {
+		return
+	}
+	if !carrier.connected {
+		carrier.close()
+		return
+	}
+	carrier.successor = b.stream
+	b.stream.predecessor, b.stream.skipServerResync = carrier, true
 }
 
 // connectStream connects to the server's events joined by those of the
@@ -174,7 +215,7 @@ func (b *Bar) connect(ctx app.Context, url string, resyncs []string) *eventStrea
 		data := args[0].Get("data").String()
 		ctx.Dispatch(func(ctx app.Context) {
 			if !st.closed {
-				b.handleMessage(ctx, data)
+				b.handleMessage(ctx, st, data)
 			}
 		})
 		return nil
@@ -239,12 +280,12 @@ func (b *Bar) reopenIfClosed(ctx app.Context, st *eventStream) {
 	})
 }
 
-func (b *Bar) handleMessage(ctx app.Context, data string) {
+func (b *Bar) handleMessage(ctx app.Context, st *eventStream, data string) {
 	// A message proves the stream is live, so a prior error is stale.
 	b.markConnected(ctx)
 
 	ev, ok := apiclient.ParseEvent(data)
-	if !ok {
+	if !ok || !forwards(st.successor != nil, ev.Type) {
 		return
 	}
 	b.addEntry(ev)
@@ -280,6 +321,14 @@ func (b *Bar) addEntry(ev apiv0.Event) {
 // every failed attempt, so shouldNotifyError throttles it to one toast per
 // outage instead of one per retry.
 func (b *Bar) handleError(ctx app.Context, st *eventStream) {
+	st.connected = false
+	if next := st.successor; next != nil {
+		// A superseded connection lost: its successor, once open, resyncs
+		// the server's data too; it is not reopened.
+		next.predecessor, next.skipServerResync = nil, false
+		st.close()
+		return
+	}
 	b.reopenIfClosed(ctx, st)
 	notify, degraded := shouldNotifyError(b.connectionDegraded)
 	b.connectionDegraded = degraded
@@ -295,9 +344,32 @@ func (b *Bar) handleError(ctx app.Context, st *eventStream) {
 // before it are lost, so the components showing its data are told to resync.
 func (b *Bar) handleOpen(ctx app.Context, st *eventStream) {
 	b.markConnected(ctx)
-	for _, resync := range st.resyncs {
+	st.connected = true
+	if prev := st.predecessor; prev != nil {
+		st.predecessor = nil
+		prev.close()
+	}
+	for _, resync := range resyncsOnOpen(st.resyncs, st.skipServerResync) {
 		ctx.NewActionWithValue(ActionServerEvent, apiv0.Event{Type: resync})
 	}
+	st.skipServerResync = false // a later reopen follows a loss
+}
+
+// resyncsOnOpen returns the resyncs a connection fires as it opens: all of
+// them, but EventResync when the server's events went on meanwhile through
+// the connection it took over from (skipServer).
+func resyncsOnOpen(resyncs []string, skipServer bool) []string {
+	if !skipServer {
+		return resyncs
+	}
+	return slices.DeleteFunc(slices.Clone(resyncs), func(r string) bool { return r == EventResync })
+}
+
+// forwards reports whether an event of the given type a connection received
+// is delivered: a superseded one (its project no longer selected) delivers
+// only the server's events, not those of its project's content.
+func forwards(superseded bool, eventType string) bool {
+	return !superseded || !isProjectContent(eventType)
 }
 
 // markConnected leaves the degraded state, announcing the reconnection to

@@ -20,9 +20,9 @@ var _ SceneUpdatedEvent = (*sceneUpdatedEventImpl)(nil)
 func NewSceneUpdatedEvent(anID id.ID[Scene], aProjectID id.ID[project.Project], opts ...event.EventOption) SceneUpdatedEvent {
 	return &sceneUpdatedEventImpl{
 		sceneEventImpl: sceneEventImpl{
-			Base:      event.NewBase(event.EventTypeSceneUpdated, opts...),
-			sceneID:   anID,
-			projectID: aProjectID,
+			Base:    event.NewBase(event.EventTypeSceneUpdated, opts...),
+			sceneID: anID,
+			Content: project.NewContent(aProjectID),
 		},
 	}
 }

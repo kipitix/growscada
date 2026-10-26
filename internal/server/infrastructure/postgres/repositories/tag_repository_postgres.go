@@ -192,10 +192,25 @@ func (r tagRepositoryPostgresImpl) scanTag(row *sql.Row) (tag.Tag, error) {
 }
 
 func (r tagRepositoryPostgresImpl) FindAll(ctx context.Context) ([]tag.Tag, error) {
-	rows, err := r.db.QueryContext(ctx,
+	return r.readTags(ctx,
 		`SELECT id, name, type, value, quality, version FROM tags WHERE project_id = $1 ORDER BY name`,
 		r.project.UUID(),
 	)
+}
+
+func (r tagRepositoryPostgresImpl) FindAllInLiveProject(ctx context.Context, orgID id.ID[organization.Organization]) ([]tag.Tag, error) {
+	return r.readTags(ctx,
+		`SELECT t.id, t.name, t.type, t.value, t.quality, t.version
+		 FROM tags t JOIN projects p ON p.id = t.project_id
+		 WHERE t.project_id = $1 AND p.deleted_at IS NULL AND p.organization_id = $2
+		 ORDER BY t.name`,
+		r.project.UUID(), orgID.UUID(),
+	)
+}
+
+// readTags reads the tags query selects, its columns those of FindAll.
+func (r tagRepositoryPostgresImpl) readTags(ctx context.Context, query string, args ...any) ([]tag.Tag, error) {
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("error querying tags: %w", err)
 	}

@@ -48,15 +48,20 @@ func (t tagServiceImpl) tags(ctx context.Context, rawProjectID uuid.UUID) (tag.T
 	return scope.Tags(), nil
 }
 
-// FindAllTags returns a list of all tags of the project
+// FindAllTags returns a list of all tags of the project. The UI reloads it on
+// every event: the tags are read with the check of their project in one
+// query, and the project is read apart only when there are none, to tell a
+// missing project from an empty one.
 func (t tagServiceImpl) FindAllTags(ctx context.Context, rawProjectID uuid.UUID) ([]appdto.Tag, error) {
-	repo, err := t.tags(ctx, rawProjectID)
-	if err != nil {
-		return nil, err
-	}
-	tags, err := repo.FindAll(ctx)
+	_, scope := t.content.openUnchecked(rawProjectID)
+	tags, err := scope.Tags().FindAllInLiveProject(ctx, t.content.organization)
 	if err != nil {
 		return nil, fmt.Errorf("error on find tags in repository: %w", err)
+	}
+	if len(tags) == 0 {
+		if _, _, err := t.content.open(ctx, rawProjectID); err != nil {
+			return nil, err
+		}
 	}
 
 	return appdto.NewTagList(tags), nil

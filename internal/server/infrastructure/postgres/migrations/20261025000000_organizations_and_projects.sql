@@ -61,7 +61,6 @@ ALTER TABLE widgets
     DROP CONSTRAINT fk_widgets_scene_id,
     ADD CONSTRAINT fk_widgets_scene_id_project_id
         FOREIGN KEY (scene_id, project_id) REFERENCES scenes(id, project_id) ON DELETE CASCADE;
-CREATE INDEX idx_widgets_project_id ON widgets(project_id);
 
 -- The payload of a content event names its project; a row still waiting
 -- here is of the project "Main".
@@ -82,6 +81,19 @@ UPDATE policy_jobs
 -- +goose StatementBegin
 -- Only the content of one project can go back: names unique per project may
 -- collide once the projects are merged, and the down fails then.
+--
+-- A project deleted but not cleaned up yet goes as its cleanup would take
+-- it (without its events): its content must not come back merged into the
+-- one set. So do its jobs and the jobs of its cleanup, and the events of
+-- projects, which the older server does not know.
+DELETE FROM scenes WHERE project_id IN (SELECT id FROM projects WHERE deleted_at IS NOT NULL);
+DELETE FROM tags WHERE project_id IN (SELECT id FROM projects WHERE deleted_at IS NOT NULL);
+DELETE FROM policy_jobs
+    WHERE policy = 'remove_deleted_project'
+       OR EXISTS (SELECT 1 FROM projects
+                  WHERE deleted_at IS NOT NULL AND policy_jobs.job_key LIKE '%project:' || projects.id::text || '/%');
+DELETE FROM outbox WHERE type LIKE 'project\_%';
+
 UPDATE policy_jobs
     SET job_key = regexp_replace(job_key, '/project:[0-9a-f-]+/scene:', '/scene:')
     WHERE policy = 'reconcile_widgets_with_widget_type';
@@ -90,7 +102,6 @@ UPDATE policy_jobs
     WHERE policy = 'unbind_deleted_tag';
 UPDATE outbox SET payload = payload - 'project_id';
 
-DROP INDEX IF EXISTS idx_widgets_project_id;
 ALTER TABLE widgets
     DROP CONSTRAINT fk_widgets_scene_id_project_id,
     ADD CONSTRAINT fk_widgets_scene_id FOREIGN KEY (scene_id) REFERENCES scenes(id) ON DELETE CASCADE,

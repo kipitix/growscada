@@ -83,3 +83,45 @@ func TestProjectGone_TellsTheSwitcherInsteadOfShowingAnError(t *testing.T) {
 		t.Errorf("project gone: %v, want Line 1", gone)
 	}
 }
+
+// emptyRoot takes the Project's place in the engine, unmounting it.
+type emptyRoot struct{ app.Compo }
+
+func (emptyRoot) Render() app.UI { return app.Div() }
+
+// TestSetProject_WhileUnmounted_OnlyRemembersIt: an unmounted Project sends
+// nothing and touches no context for a switch of project; mounted again, it
+// shows the project it was given.
+func TestSetProject_WhileUnmounted_OnlyRemembersIt(t *testing.T) {
+	url, api := newServer(t)
+	f, log := mountLogged(t, url, api)
+	created, err := api.CreateProject(context.Background(), apiv0.CreateProjectRequest{Name: "Line 1"})
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	inLine, err := api.Project(created.ID).CreateScene(context.Background(), apiv0.CreateSceneRequest{Name: "Line scene", Width: 100, Height: 100})
+	if err != nil {
+		t.Fatalf("create scene: %v", err)
+	}
+	if err := f.e.Load(&emptyRoot{}); err != nil {
+		t.Fatalf("unmount: %v", err)
+	}
+	f.run()
+	if f.p.mounted {
+		t.Fatal("the Project is still marked mounted")
+	}
+
+	f.p.SetProject(created.ID)
+	f.run()
+	if reqs := log.take(); len(reqs) != 0 {
+		t.Errorf("unmounted: sent %v, want nothing", reqs)
+	}
+
+	if err := f.e.Load(mountOnHost{f.p}); err != nil {
+		t.Fatalf("mount again: %v", err)
+	}
+	f.run()
+	if len(f.p.scenes) != 1 || f.p.scenes[0].ID != inLine.ID {
+		t.Errorf("mounted again: scenes %+v, want Line 1's", f.p.scenes)
+	}
+}

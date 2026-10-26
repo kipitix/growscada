@@ -74,6 +74,13 @@ func (o *Operation) OnMount(ctx app.Context) {
 	})
 }
 
+// OnDismount marks the Operation unmounted: a SetProject until the next
+// OnMount only remembers the project, whose content that OnMount loads,
+// rather than working through the context of an unmounted component.
+func (o *Operation) OnDismount() {
+	o.mounted = false
+}
+
 // SetProject shows the project id (uuid.Nil: none), dropping what was shown
 // of another one and restoring the new one's selected Scene. Its content is
 // loaded on the EventProjectResync of the Bar's stream of it, like

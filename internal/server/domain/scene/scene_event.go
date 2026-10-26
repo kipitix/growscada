@@ -18,8 +18,8 @@ type SceneEvent interface {
 
 type sceneEventImpl struct {
 	event.Base
-	sceneID   id.ID[Scene]
-	projectID id.ID[project.Project]
+	sceneID id.ID[Scene]
+	project.Content
 }
 
 var _ SceneEvent = (*sceneEventImpl)(nil)
@@ -28,10 +28,6 @@ var _ SceneEvent = (*sceneEventImpl)(nil)
 
 func (e sceneEventImpl) SceneID() id.ID[Scene] {
 	return e.sceneID
-}
-
-func (e sceneEventImpl) ProjectID() id.ID[project.Project] {
-	return e.projectID
 }
 
 func (sceneEventImpl) sceneEvent() {}

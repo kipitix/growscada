@@ -112,6 +112,14 @@ func TestSendError(t *testing.T) {
 			wantDetail: "WidgetType was changed concurrently; reload it and retry",
 		},
 		{
+			name:       "widget type in use by deleted projects only",
+			err:        wrapped(library.ErrWidgetTypeInUseByDeletedProjects),
+			pathParams: map[string]string{"widget_type_id": errorsTestID},
+			wantStatus: http.StatusConflict,
+			wantTitle:  "Conflict: WidgetType",
+			wantDetail: "WidgetType is used only by Widgets of deleted Projects, still being removed; retry shortly",
+		},
+		{
 			name:       "widget type in use",
 			err:        wrapped(library.ErrWidgetTypeInUse),
 			pathParams: map[string]string{"widget_type_id": errorsTestID},
@@ -244,27 +252,29 @@ func assertProblem(t *testing.T, err error, pathParams map[string]string, wantSt
 // domainSentinels lists every exported Err… variable of the domain packages;
 // TestDomainSentinels_AreListed keeps it complete.
 var domainSentinels = map[string]error{
-	"project.ErrProjectNotFound":        project.ErrProjectNotFound,
-	"project.ErrProjectConflict":        project.ErrProjectConflict,
-	"project.ErrProjectNameTaken":       project.ErrProjectNameTaken,
-	"project.ErrProjectNotEmpty":        project.ErrProjectNotEmpty,
-	"library.ErrWidgetTypeNotFound":     library.ErrWidgetTypeNotFound,
-	"library.ErrWidgetTypeConflict":     library.ErrWidgetTypeConflict,
-	"library.ErrWidgetTypeInUse":        library.ErrWidgetTypeInUse,
-	"library.ErrInvalidWidgetType":      library.ErrInvalidWidgetType,
-	"library.ErrDuplicateInputPortName": library.ErrDuplicateInputPortName,
-	"scene.ErrSceneNotFound":            scene.ErrSceneNotFound,
-	"scene.ErrSceneConflict":            scene.ErrSceneConflict,
-	"scene.ErrWidgetNotFound":           scene.ErrWidgetNotFound,
-	"scene.ErrWidgetAlreadyExists":      scene.ErrWidgetAlreadyExists,
-	"scene.ErrWidgetTypeMismatch":       scene.ErrWidgetTypeMismatch,
-	"scene.ErrPortNotDeclared":          scene.ErrPortNotDeclared,
-	"scene.ErrBoundTagNotFound":         scene.ErrBoundTagNotFound,
-	"scene.ErrPortTypeMismatch":         scene.ErrPortTypeMismatch,
-	"tag.ErrTagNotFound":                tag.ErrTagNotFound,
-	"tag.ErrTagConflict":                tag.ErrTagConflict,
-	"tag.ErrTagNameTaken":               tag.ErrTagNameTaken,
-	"tag.ErrInvalidTagNameMatcher":      tag.ErrInvalidTagNameMatcher,
+	"project.ErrProjectNotFound":                  project.ErrProjectNotFound,
+	"project.ErrProjectConflict":                  project.ErrProjectConflict,
+	"project.ErrProjectNameTaken":                 project.ErrProjectNameTaken,
+	"project.ErrProjectNotEmpty":                  project.ErrProjectNotEmpty,
+	"library.ErrWidgetTypeNotFound":               library.ErrWidgetTypeNotFound,
+	"library.ErrWidgetTypeConflict":               library.ErrWidgetTypeConflict,
+	"library.ErrWidgetTypeInUse":                  library.ErrWidgetTypeInUse,
+	"library.ErrWidgetTypeInUseByDeletedProjects": library.ErrWidgetTypeInUseByDeletedProjects,
+	"library.ErrInvalidWidgetType":                library.ErrInvalidWidgetType,
+	"library.ErrDuplicateInputPortName":           library.ErrDuplicateInputPortName,
+	"scene.ErrSceneNotFound":                      scene.ErrSceneNotFound,
+	"scene.ErrSceneConflict":                      scene.ErrSceneConflict,
+	"scene.ErrWidgetNotFound":                     scene.ErrWidgetNotFound,
+	"scene.ErrWidgetAlreadyExists":                scene.ErrWidgetAlreadyExists,
+	"scene.ErrWidgetTypeMismatch":                 scene.ErrWidgetTypeMismatch,
+	"scene.ErrPortNotDeclared":                    scene.ErrPortNotDeclared,
+	"scene.ErrBoundTagNotFound":                   scene.ErrBoundTagNotFound,
+	"scene.ErrPortTypeMismatch":                   scene.ErrPortTypeMismatch,
+	"scene.ErrTagTypesOfAnotherProject":           scene.ErrTagTypesOfAnotherProject,
+	"tag.ErrTagNotFound":                          tag.ErrTagNotFound,
+	"tag.ErrTagConflict":                          tag.ErrTagConflict,
+	"tag.ErrTagNameTaken":                         tag.ErrTagNameTaken,
+	"tag.ErrInvalidTagNameMatcher":                tag.ErrInvalidTagNameMatcher,
 }
 
 // unmappedSentinels are the domain sentinels errorMappings leaves out on
@@ -279,6 +289,7 @@ var unmappedSentinels = map[string]string{
 	"scene.ErrWidgetAlreadyExists":      "500: the server makes a new Widget's ID, a clash is its fault",
 	"scene.ErrWidgetTypeMismatch":       "500: the service checks a Widget against its own WidgetType",
 	"project.ErrProjectNotEmpty":        "500: only the cleanup policy removes a project's row, never the API",
+	"scene.ErrTagTypesOfAnotherProject": "500: the service reads the TagTypes through the Scene's own Project",
 }
 
 // TestDomainSentinels_AreListed reads the domain sources, so a new sentinel

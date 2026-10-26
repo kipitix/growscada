@@ -13,7 +13,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
-	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
 
 // WidgetReconciliationPolicyName is the Name of the policy returned by
@@ -104,7 +103,7 @@ func (p widgetReconciliationPolicy) Run(ctx context.Context, key string) error {
 		if err != nil {
 			return fmt.Errorf("cannot find scene %s: %w", one.scene, err)
 		}
-		return p.reconcileScenes(ctx, widgetTypeID, one.project, scope, []scene.Scene{sc})
+		return p.reconcileScenes(ctx, widgetTypeID, scope, []scene.Scene{sc})
 	}
 
 	projects, err := p.scopes.FindProjectsUsingWidgetType(ctx, widgetTypeID)
@@ -116,7 +115,7 @@ func (p widgetReconciliationPolicy) Run(ctx context.Context, key string) error {
 		scope := p.scopes.ForProject(projectID)
 		scenes, err := scope.Scenes().FindByWidgetTypeID(ctx, widgetTypeID)
 		if err == nil {
-			err = p.reconcileScenes(ctx, widgetTypeID, projectID, scope, scenes)
+			err = p.reconcileScenes(ctx, widgetTypeID, scope, scenes)
 		}
 		if err != nil {
 			errs = append(errs, fmt.Errorf("project %s: %w", projectID, err))
@@ -125,10 +124,10 @@ func (p widgetReconciliationPolicy) Run(ctx context.Context, key string) error {
 	return errors.Join(errs...)
 }
 
-// reconcileScenes reconciles scenes, Scenes of the Project projectID read
-// through scope, with the WidgetType widgetTypeID.
-func (p widgetReconciliationPolicy) reconcileScenes(ctx context.Context, widgetTypeID id.ID[library.WidgetType], projectID id.ID[project.Project], scope ProjectScope, scenes []scene.Scene) error {
-	if err := changeEachScene(ctx, scope.Scenes(), scenes, p.reconcile(widgetTypeID, projectID, scope.Tags())); err != nil {
+// reconcileScenes reconciles scenes, Scenes of scope's Project read through
+// it, with the WidgetType widgetTypeID.
+func (p widgetReconciliationPolicy) reconcileScenes(ctx context.Context, widgetTypeID id.ID[library.WidgetType], scope ProjectScope, scenes []scene.Scene) error {
+	if err := changeEachScene(ctx, scope.Scenes(), scenes, p.reconcile(widgetTypeID, scope)); err != nil {
 		return fmt.Errorf("cannot reconcile with widget type %s: %w", widgetTypeID, err)
 	}
 	return nil
@@ -171,14 +170,14 @@ func parseJobKey(key string) (id.ID[library.WidgetType], *sceneOfProject, error)
 	return widgetTypeID, &sceneOfProject{project: projectID, scene: id.NewID(id.IDWithUUID[scene.Scene](sceneUUID))}, nil
 }
 
-// reconcile returns the change reconciling a Scene of the Project projectID
-// with the WidgetType widgetTypeID and the Tags its Widgets of that type
-// bind, read through tags, the Project's repository. The WidgetType and
+// reconcile returns the change reconciling a Scene of scope's Project with
+// the WidgetType widgetTypeID and the Tags its Widgets of that type bind,
+// read through scope. The WidgetType and
 // the Tags are read after the Scene, at every attempt of changeScene, so
 // every Widget the Scene holds was checked against them or older versions,
 // and no binding valid now is taken for an orphan. A deleted WidgetType
 // leaves nothing to clean: its Widgets are gone with it.
-func (p widgetReconciliationPolicy) reconcile(widgetTypeID id.ID[library.WidgetType], projectID id.ID[project.Project], tags tag.TagRepository) sceneChange {
+func (p widgetReconciliationPolicy) reconcile(widgetTypeID id.ID[library.WidgetType], scope ProjectScope) sceneChange {
 	return func(ctx context.Context, sc scene.Scene) (scene.Scene, bool, error) {
 		wt, err := p.widgetTypes.FindByID(ctx, widgetTypeID)
 		if errors.Is(err, library.ErrWidgetTypeNotFound) {
@@ -187,11 +186,10 @@ func (p widgetReconciliationPolicy) reconcile(widgetTypeID id.ID[library.WidgetT
 		if err != nil {
 			return nil, false, fmt.Errorf("cannot read widget type: %w", err)
 		}
-		tagTypes, err := loadTagTypes(ctx, projectID, tags, sc.TagsBoundByType(widgetTypeID))
+		tagTypes, err := loadTagTypes(ctx, scope, sc.TagsBoundByType(widgetTypeID))
 		if err != nil {
 			return nil, false, err
 		}
-		reconciled, changed := sc.ReconcileWith(wt, tagTypes)
-		return reconciled, changed, nil
+		return sc.ReconcileWith(wt, tagTypes)
 	}
 }

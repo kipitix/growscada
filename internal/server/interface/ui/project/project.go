@@ -187,6 +187,13 @@ func (p *Project) OnMount(ctx app.Context) {
 	p.handleServerEvents(ctx)
 }
 
+// OnDismount marks the Project unmounted: a SetProject until the next
+// OnMount only remembers the project, whose content that OnMount loads,
+// rather than working through the context of an unmounted component.
+func (p *Project) OnDismount() {
+	p.mounted = false
+}
+
 // SetProject shows the project id (uuid.Nil: none). What was shown of
 // another project is dropped, its unsaved edits with it, and the new
 // project's selection is restored. Its content is loaded on the

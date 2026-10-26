@@ -20,9 +20,9 @@ var _ SceneDeletedEvent = (*sceneDeletedEventImpl)(nil)
 func NewSceneDeletedEvent(anID id.ID[Scene], aProjectID id.ID[project.Project], opts ...event.EventOption) SceneDeletedEvent {
 	return &sceneDeletedEventImpl{
 		sceneEventImpl: sceneEventImpl{
-			Base:      event.NewBase(event.EventTypeSceneDeleted, opts...),
-			sceneID:   anID,
-			projectID: aProjectID,
+			Base:    event.NewBase(event.EventTypeSceneDeleted, opts...),
+			sceneID: anID,
+			Content: project.NewContent(aProjectID),
 		},
 	}
 }

@@ -68,4 +68,11 @@ type TagRepository interface {
 	// tag values change.
 	// Returns a slice of tags and nil on success, or an empty slice and an error on failure.
 	FindAll(context.Context) ([]Tag, error)
+
+	// FindAllInLiveProject is FindAll that also checks, in the same query,
+	// that the Project is live and of the Organization: for the list the UI
+	// reloads on every event, which then needs no read of the Project of its
+	// own. A Project not one of those has no tags: the list is empty, as an
+	// empty Project's, which the caller tells apart.
+	FindAllInLiveProject(context.Context, id.ID[organization.Organization]) ([]Tag, error)
 }

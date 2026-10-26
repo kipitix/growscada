@@ -3,6 +3,7 @@ package library
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/kipitix/growscada/internal/server/domain/id"
 )
@@ -17,6 +18,11 @@ var (
 	// ErrWidgetTypeInUse is returned by Delete when Widgets still use the
 	// widget type: a Widget's WidgetType always exists.
 	ErrWidgetTypeInUse = errors.New("widget type is used by widgets")
+	// ErrWidgetTypeInUseByDeletedProjects is ErrWidgetTypeInUse when the
+	// Widgets that still use the widget type are only of Projects marked
+	// deleted, not removed yet (ADR 0006): the delete succeeds once their
+	// cleanup is done.
+	ErrWidgetTypeInUseByDeletedProjects = fmt.Errorf("%w of projects being deleted only", ErrWidgetTypeInUse)
 	// ErrInvalidWidgetType is returned by WidgetType.Update when the new
 	// definition breaks a rule of the widget type as a whole (e.g. two
 	// InputPorts share a name).
@@ -46,7 +52,9 @@ type WidgetTypeRepository interface {
 	// transaction.
 	// Returns ErrWidgetTypeNotFound if the widget type does not exist,
 	// ErrWidgetTypeConflict if the stored version does not match,
-	// ErrWidgetTypeInUse if Widgets still use it.
+	// ErrWidgetTypeInUse if Widgets still use it —
+	// ErrWidgetTypeInUseByDeletedProjects if those are only of Projects
+	// marked deleted.
 	Delete(context.Context, WidgetType) error
 
 	// FindAll returns all widget types in creation order, so the order is

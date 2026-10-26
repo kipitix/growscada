@@ -85,7 +85,7 @@ func newReconciliation(t *testing.T, wiring reconciliationWiring) *reconciliatio
 	r.runner = outbox.NewPolicyRunner(testDB,
 		[]application.Policy{
 			application.NewWidgetReconciliationPolicy(policyWidgetTypes, policyScopes),
-			application.NewUnbindDeletedTagPolicy(policyScopes),
+			application.NewUnbindDeletedTagPolicy(projects, policyScopes),
 			application.NewProjectCleanupPolicy(projects, policyScopes),
 		},
 		outbox.WithRetryPause(time.Hour, time.Hour))
@@ -762,7 +762,7 @@ func TestWidgetReconciliation_NarrowedTypeHint_RemovesBindingsItRefuses(t *testi
 // --- unbind_deleted_tag ---
 
 func TestUnbindDeletedTagPolicy_JobKey(t *testing.T) {
-	policy := application.NewUnbindDeletedTagPolicy(nil)
+	policy := application.NewUnbindDeletedTagPolicy(nil, nil)
 	tagID := id.NewID[tag.Tag]()
 
 	want := "project:" + mainProject.String() + "/tag:" + tagID.String()
@@ -824,7 +824,7 @@ func TestUnbindDeletedTag_TagExistsWhenJobRuns_KeepsBindings(t *testing.T) {
 	tagID := r.createTag(t, "integer")
 	w := r.addWidgetBound(t, sc.ID, sc.Version, wt, appdto.PortBinding{PortName: "value", TagID: tagID})
 	r.settle(t)
-	policy := application.NewUnbindDeletedTagPolicy(repositories.NewProjectScopes(testDB))
+	policy := application.NewUnbindDeletedTagPolicy(repositories.NewProjectRepositoryPostgres(testDB), repositories.NewProjectScopes(testDB))
 
 	// A job of a tag_deleted event for a Tag that exists again, e.g. created
 	// anew with the same ID.
@@ -835,6 +835,72 @@ func TestUnbindDeletedTag_TagExistsWhenJobRuns_KeepsBindings(t *testing.T) {
 	if got := r.boundPorts(t, sc.ID, w.ID); !slices.Equal(got, []string{"value"}) {
 		t.Errorf("bound to %v, want [value]", got)
 	}
+}
+
+// TestUnbindDeletedTag_ProjectMarkedDeleted_LeavesItsScenesToTheCleanup: the
+// job of a Tag deleted in a Project marked deleted since reads no Scene, so
+// the cleanup's own tag_deleted jobs cost one lookup each.
+func TestUnbindDeletedTag_ProjectMarkedDeleted_LeavesItsScenesToTheCleanup(t *testing.T) {
+	r := newReconciliation(t, reconciliationWiring{})
+	ctx := context.Background()
+	p := r.createProject(t, "Line 1")
+	wt := r.createType(t, "value")
+	sc, err := r.sceneSvc.CreateScene(ctx, p, appdto.SceneInput{Name: "s", Width: 100, Height: 100})
+	if err != nil {
+		t.Fatalf("CreateScene: %v", err)
+	}
+	speed, err := r.tagSvc.CreateTag(ctx, p, appdto.CreateTagInput{Name: "speed", Type: "integer", Value: "0", Quality: "good"})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	if _, err := r.sceneSvc.CreateWidget(ctx, p, sc.ID, sc.Version, appdto.WidgetInput{
+		Name: "w", Width: 100, Height: 100, OriginX: 0.5, OriginY: 0.5, TypeID: wt.ID,
+		PortBindings: []appdto.PortBinding{{PortName: "value", TagID: speed.ID}},
+	}); err != nil {
+		t.Fatalf("CreateWidget: %v", err)
+	}
+	r.settle(t)
+	// The tag is deleted and the project marked, the jobs not run yet.
+	if _, err := r.tagSvc.DeleteTagByID(ctx, p, speed.ID); err != nil {
+		t.Fatalf("DeleteTagByID: %v", err)
+	}
+	if _, err := r.projectSvc.DeleteProjectByID(ctx, p); err != nil {
+		t.Fatalf("DeleteProjectByID: %v", err)
+	}
+	var before int
+	if err := testDB.QueryRowContext(ctx, `SELECT version FROM scenes WHERE id = $1`, sc.ID).Scan(&before); err != nil {
+		t.Fatalf("scene version: %v", err)
+	}
+	counting := &countingFindByTagID{}
+	scopes := newScopes()
+	scopes.scenes = func(inner scene.SceneRepository) scene.SceneRepository {
+		counting.SceneRepository = inner
+		return counting
+	}
+	policy := application.NewUnbindDeletedTagPolicy(repositories.NewProjectRepositoryPostgres(testDB), scopes)
+
+	if err := policy.Run(ctx, "project:"+p.String()+"/tag:"+speed.ID.String()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if counting.calls != 0 {
+		t.Errorf("FindByTagID ran %d times, want none", counting.calls)
+	}
+	var after int
+	if err := testDB.QueryRowContext(ctx, `SELECT version FROM scenes WHERE id = $1`, sc.ID).Scan(&after); err != nil || after != before {
+		t.Errorf("scene version %d (%v), want %d: left to the cleanup", after, err, before)
+	}
+}
+
+// countingFindByTagID counts the calls of FindByTagID.
+type countingFindByTagID struct {
+	scene.SceneRepository
+	calls int
+}
+
+func (c *countingFindByTagID) FindByTagID(ctx context.Context, tagID id.ID[tag.Tag]) ([]scene.Scene, error) {
+	c.calls++
+	return c.SceneRepository.FindByTagID(ctx, tagID)
 }
 
 func TestUpdateWidget_KeepsBindingBrokenSinceItWasMade_PolicyRemovesIt(t *testing.T) {

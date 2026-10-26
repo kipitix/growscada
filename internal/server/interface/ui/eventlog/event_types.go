@@ -48,6 +48,17 @@ func defaultFilters() map[category]bool {
 	}
 }
 
+// isProjectContent reports whether events of the type are of a project's
+// content (Tags, their values, Scenes, Widgets), carried by the stream of
+// that project; anything else is the server's.
+func isProjectContent(eventType string) bool {
+	switch eventTypeInfoByType[eventType].category {
+	case categoryTag, categoryValue, categoryScene, categoryWidget:
+		return true
+	}
+	return false
+}
+
 // eventTypeInfo describes how one type of the stream's events maps to a
 // filter category and a human-readable description (with "%s" for the id, if
 // the type carries one).

@@ -32,14 +32,17 @@ func NewProjectScopes(aDb *sql.DB, opts ...Option) application.ProjectScopes {
 
 func (s *projectScopes) ForProject(projectID id.ID[project.Project]) application.ProjectScope {
 	return projectScope{
-		tags:   NewTagRepositoryPostgres(s.db, projectID, s.opts...),
-		scenes: NewSceneRepositoryPostgres(s.db, projectID, s.opts...),
+		projectID: projectID,
+		tags:      NewTagRepositoryPostgres(s.db, projectID, s.opts...),
+		scenes:    NewSceneRepositoryPostgres(s.db, projectID, s.opts...),
 	}
 }
 
 func (s *projectScopes) FindProjectsUsingWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) ([]id.ID[project.Project], error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT project_id FROM widgets WHERE type_id = $1 GROUP BY project_id ORDER BY min(pk_id)`,
+		`SELECT w.project_id FROM widgets w JOIN projects p ON p.id = w.project_id
+		 WHERE w.type_id = $1 AND p.deleted_at IS NULL
+		 GROUP BY w.project_id ORDER BY min(w.pk_id)`,
 		typeID.UUID(),
 	)
 	if err != nil {
@@ -61,9 +64,11 @@ func (s *projectScopes) FindProjectsUsingWidgetType(ctx context.Context, typeID 
 }
 
 type projectScope struct {
-	tags   tag.TagRepository
-	scenes scene.SceneRepository
+	projectID id.ID[project.Project]
+	tags      tag.TagRepository
+	scenes    scene.SceneRepository
 }
 
-func (s projectScope) Tags() tag.TagRepository       { return s.tags }
-func (s projectScope) Scenes() scene.SceneRepository { return s.scenes }
+func (s projectScope) ProjectID() id.ID[project.Project] { return s.projectID }
+func (s projectScope) Tags() tag.TagRepository           { return s.tags }
+func (s projectScope) Scenes() scene.SceneRepository     { return s.scenes }

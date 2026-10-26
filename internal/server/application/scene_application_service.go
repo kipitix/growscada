@@ -9,7 +9,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
-	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/domain/version"
@@ -78,17 +77,17 @@ func (s sceneServiceImpl) loadWidgetType(ctx context.Context, typeID id.ID[libra
 	return wt, nil
 }
 
-// loadTagTypes reads, in one query, the TagTypes of the Tags of the Project
-// projectID with the given IDs, through tags, that Project's repository; a
-// Tag that does not exist there is left out, for the Scene to judge the
-// binding to it. A Tag deleted after it was read is unbound by policies
-// (ADR 0010).
-func loadTagTypes(ctx context.Context, projectID id.ID[project.Project], tags tag.TagRepository, tagIDs []id.ID[tag.Tag]) (scene.TagTypes, error) {
-	types, err := tags.FindTypesByIDs(ctx, tagIDs)
+// loadTagTypes reads, in one query, the TagTypes of the Tags with the given
+// IDs of scope's Project, through its tag repository: the Project of the
+// TagTypes is the one the repository read; a Tag that does not exist there
+// is left out, for the Scene to judge the binding to it. A Tag deleted after
+// it was read is unbound by policies (ADR 0010).
+func loadTagTypes(ctx context.Context, scope ProjectScope, tagIDs []id.ID[tag.Tag]) (scene.TagTypes, error) {
+	types, err := scope.Tags().FindTypesByIDs(ctx, tagIDs)
 	if err != nil {
 		return scene.TagTypes{}, fmt.Errorf("cannot read tag types: %w", err)
 	}
-	return scene.NewTagTypes(projectID, types), nil
+	return scene.NewTagTypes(scope.ProjectID(), types), nil
 }
 
 // widgetChangeError marks a widget the Scene rejected as invalid input when
@@ -113,14 +112,20 @@ func widgetSaveError(err error) error {
 	return fmt.Errorf("cannot save scene: %w", err)
 }
 
+// FindAllScenes returns the scenes of the project. The UI reloads them on
+// every event: they are read with the check of their project, and the
+// project is read apart only when there are none, to tell a missing project
+// from an empty one.
 func (s sceneServiceImpl) FindAllScenes(ctx context.Context, rawProjectID uuid.UUID) ([]appdto.Scene, error) {
-	repo, err := s.scenes(ctx, rawProjectID)
-	if err != nil {
-		return nil, err
-	}
-	list, err := repo.FindAll(ctx)
+	_, scope := s.content.openUnchecked(rawProjectID)
+	list, err := scope.Scenes().FindAllInLiveProject(ctx, s.content.organization)
 	if err != nil {
 		return nil, fmt.Errorf("error on find scenes in repository: %w", err)
+	}
+	if len(list) == 0 {
+		if _, _, err := s.content.open(ctx, rawProjectID); err != nil {
+			return nil, err
+		}
 	}
 	return appdto.NewSceneList(list), nil
 }
@@ -247,14 +252,20 @@ func deleteScene(ctx context.Context, repo scene.SceneRepository, sceneID id.ID[
 	return deleted, err
 }
 
+// FindWidgetsBySceneID returns the widgets of a scene. The UI reloads them
+// on every event of the scene: it is read with the check of its project,
+// and the project is read apart only when the scene is not found, to tell a
+// missing project from a missing scene.
 func (s sceneServiceImpl) FindWidgetsBySceneID(ctx context.Context, rawProjectID, rawSceneID uuid.UUID) ([]appdto.Widget, error) {
-	repo, err := s.scenes(ctx, rawProjectID)
-	if err != nil {
-		return nil, err
+	_, scope := s.content.openUnchecked(rawProjectID)
+	sc, err := scope.Scenes().FindByIDInLiveProject(ctx, id.NewID(id.IDWithUUID[scene.Scene](rawSceneID)), s.content.organization)
+	if errors.Is(err, scene.ErrSceneNotFound) {
+		if _, _, projectErr := s.content.open(ctx, rawProjectID); projectErr != nil {
+			return nil, projectErr
+		}
 	}
-	sc, err := loadScene(ctx, repo, id.NewID(id.IDWithUUID[scene.Scene](rawSceneID)))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error on find scene by id in repository: %w", err)
 	}
 	return appdto.NewWidgetList(sc.Widgets(), rawSceneID, sc.Version().Number()), nil
 }
@@ -276,7 +287,7 @@ func (s sceneServiceImpl) FindWidgetByID(ctx context.Context, rawProjectID, rawS
 }
 
 func (s sceneServiceImpl) CreateWidget(ctx context.Context, rawProjectID, rawSceneID uuid.UUID, rawSceneVersion int, input appdto.WidgetInput) (appdto.Widget, error) {
-	projectID, scope, err := s.content.open(ctx, rawProjectID)
+	_, scope, err := s.content.open(ctx, rawProjectID)
 	if err != nil {
 		return appdto.Widget{}, err
 	}
@@ -301,7 +312,7 @@ func (s sceneServiceImpl) CreateWidget(ctx context.Context, rawProjectID, rawSce
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot create widget: %w", err)
 	}
-	tagTypes, err := loadTagTypes(ctx, projectID, scope.Tags(), scene.BoundTagIDs(newWidget))
+	tagTypes, err := loadTagTypes(ctx, scope, scene.BoundTagIDs(newWidget))
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot create widget: %w", err)
 	}
@@ -320,7 +331,7 @@ func (s sceneServiceImpl) CreateWidget(ctx context.Context, rawProjectID, rawSce
 }
 
 func (s sceneServiceImpl) UpdateWidget(ctx context.Context, rawProjectID, rawSceneID, rawWidgetID uuid.UUID, rawSceneVersion int, input appdto.WidgetInput) (appdto.Widget, error) {
-	projectID, scope, err := s.content.open(ctx, rawProjectID)
+	_, scope, err := s.content.open(ctx, rawProjectID)
 	if err != nil {
 		return appdto.Widget{}, err
 	}
@@ -350,7 +361,7 @@ func (s sceneServiceImpl) UpdateWidget(ctx context.Context, rawProjectID, rawSce
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot update widget: %w", err)
 	}
-	tagTypes, err := loadTagTypes(ctx, projectID, scope.Tags(), scene.BoundTagIDs(updated))
+	tagTypes, err := loadTagTypes(ctx, scope, scene.BoundTagIDs(updated))
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot update widget: %w", err)
 	}

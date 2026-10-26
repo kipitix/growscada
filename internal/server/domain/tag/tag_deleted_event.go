@@ -20,9 +20,9 @@ var _ TagDeletedEvent = (*tagDeletedEventImpl)(nil)
 func NewTagDeletedEvent(anID id.ID[Tag], aProjectID id.ID[project.Project], opts ...event.EventOption) TagDeletedEvent {
 	return &tagDeletedEventImpl{
 		tagEventImpl: tagEventImpl{
-			Base:      event.NewBase(event.EventTypeTagDeleted, opts...),
-			tagID:     anID,
-			projectID: aProjectID,
+			Base:    event.NewBase(event.EventTypeTagDeleted, opts...),
+			tagID:   anID,
+			Content: project.NewContent(aProjectID),
 		},
 	}
 }

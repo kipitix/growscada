@@ -20,9 +20,9 @@ var _ SceneCreatedEvent = (*sceneCreatedEventImpl)(nil)
 func NewSceneCreatedEvent(anID id.ID[Scene], aProjectID id.ID[project.Project], opts ...event.EventOption) SceneCreatedEvent {
 	return &sceneCreatedEventImpl{
 		sceneEventImpl: sceneEventImpl{
-			Base:      event.NewBase(event.EventTypeSceneCreated, opts...),
-			sceneID:   anID,
-			projectID: aProjectID,
+			Base:    event.NewBase(event.EventTypeSceneCreated, opts...),
+			sceneID: anID,
+			Content: project.NewContent(aProjectID),
 		},
 	}
 }

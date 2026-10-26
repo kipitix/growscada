@@ -89,8 +89,9 @@ type Scene interface {
 	// whose TagType the port's type
 	// hint no longer accepts. It records a WidgetUpdatedEvent ByReconciliation
 	// for each widget it changes. The bool reports whether anything was
-	// removed.
-	ReconcileWith(wt library.WidgetType, tagTypes TagTypes) (Scene, bool)
+	// removed. TagTypes of another Project are ErrTagTypesOfAnotherProject,
+	// nothing removed.
+	ReconcileWith(wt library.WidgetType, tagTypes TagTypes) (Scene, bool, error)
 
 	// TagsBoundByType returns the IDs of the Tags the scene's widgets of
 	// WidgetType typeID bind, each once: those ReconcileWith needs in
@@ -242,11 +243,15 @@ func (s *sceneImpl) RemoveWidget(widgetID id.ID[Widget]) (Scene, Widget, error) 
 	return s.withWidgets(slices.Concat(s.widgets[:i], s.widgets[i+1:]), NewWidgetDeletedEvent(widgetID, s.id, s.projectID)), s.widgets[i], nil
 }
 
-func (s *sceneImpl) ReconcileWith(wt library.WidgetType, tagTypes TagTypes) (Scene, bool) {
+func (s *sceneImpl) ReconcileWith(wt library.WidgetType, tagTypes TagTypes) (Scene, bool, error) {
+	if err := tagTypes.checkFor(s.projectID); err != nil {
+		return s, false, err
+	}
 	ports := declaredPorts(wt)
-	return s.removeBindings(func(w Widget, b PortBinding) bool {
+	reconciled, changed := s.removeBindings(func(w Widget, b PortBinding) bool {
 		return w.TypeID() == wt.ID() && s.checkBinding(b, ports, tagTypes) != nil
 	})
+	return reconciled, changed, nil
 }
 
 func (s *sceneImpl) TagsBoundByType(typeID id.ID[library.WidgetType]) []id.ID[tag.Tag] {
@@ -344,6 +349,9 @@ func (s *sceneImpl) record(someEvents ...event.Event) []event.Event {
 // widget as the scene holds it (nil for a new one), already held while of the
 // same type.
 func (s *sceneImpl) checkWidgetType(w Widget, wt library.WidgetType, tagTypes TagTypes, stored Widget) error {
+	if err := tagTypes.checkFor(s.projectID); err != nil {
+		return err
+	}
 	if w.TypeID() != wt.ID() {
 		return fmt.Errorf("%w: widget has type %s, checked against %s", ErrWidgetTypeMismatch, w.TypeID(), wt.ID())
 	}
@@ -373,7 +381,7 @@ func (s *sceneImpl) checkBinding(b PortBinding, ports map[library.InputPortName]
 	if !ok {
 		return fmt.Errorf("%w: port %q", ErrPortNotDeclared, b.PortName().String())
 	}
-	tagType, ok := tagTypes.Of(s.projectID, b.TagID())
+	tagType, ok := tagTypes.Of(b.TagID())
 	if !ok {
 		return fmt.Errorf("%w in project %s: port %q, tag %s", ErrBoundTagNotFound, s.projectID, b.PortName().String(), b.TagID())
 	}

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -160,6 +161,86 @@ func TestMigrationOrganizationsAndProjects_PutsExistingContentIntoMain(t *testin
 	} {
 		if !keys[want] {
 			t.Errorf("no job %q among %v", want, keys)
+		}
+	}
+}
+
+// TestMigrationOrganizationsAndProjects_Down_LeavesOutDeletedProjects: the
+// content of a project deleted but not cleaned up yet does not come back
+// merged into the one set, nor do its jobs or the events of projects.
+func TestMigrationOrganizationsAndProjects_Down_LeavesOutDeletedProjects(t *testing.T) {
+	ctx := context.Background()
+	db, dir := migrationDB(t)
+	if err := goose.UpToContext(ctx, db, dir, 20261025000000); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	mustExec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := db.ExecContext(ctx, query, args...); err != nil {
+			t.Fatalf("%s: %v", query, err)
+		}
+	}
+	const main = "b0000000-0000-4000-8000-000000000001"
+	deleted, typeID := uuid.New(), uuid.New()
+	mainTag, mainScene, goneTag, goneScene := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	mustExec(`INSERT INTO projects (id, organization_id, name, version, deleted_at)
+	          SELECT $1, id, 'Line 1', 2, now() FROM organizations`, deleted)
+	mustExec(`INSERT INTO widget_types (id, name, html_template, script, script_language)
+	          VALUES ($1, 'type', '', '', 'javascript')`, typeID)
+	mustExec(`INSERT INTO tags (id, project_id, name, type, value, quality)
+	          VALUES ($1, $2, 'speed', 'integer', '0', 'good'), ($3, $4, 'level', 'integer', '0', 'good')`,
+		mainTag, main, goneTag, deleted)
+	mustExec(`INSERT INTO scenes (id, project_id, name) VALUES ($1, $2, 'main scene'), ($3, $4, 'gone scene')`,
+		mainScene, main, goneScene, deleted)
+	mustExec(`INSERT INTO widgets (id, name, type_id, scene_id, project_id)
+	          VALUES ($1, 'kept', $2, $3, $4), ($5, 'gone', $2, $6, $7)`,
+		uuid.New(), typeID, mainScene, main, uuid.New(), goneScene, deleted)
+	mustExec(`INSERT INTO outbox (type, payload) VALUES ('project_deleted', $1), ('tag_created', $2)`,
+		`{"timestamp":"2026-10-26T12:00:00Z","id":"`+deleted.String()+`"}`,
+		`{"timestamp":"2026-10-26T12:00:00Z","id":"`+mainTag.String()+`","project_id":"`+main+`"}`)
+	mustExec(`INSERT INTO policy_jobs (policy, job_key) VALUES
+	          ('remove_deleted_project', 'project:' || $1::text),
+	          ('unbind_deleted_tag', 'project:' || $1::text || '/tag:' || $2::text),
+	          ('unbind_deleted_tag', 'project:' || $3::text || '/tag:' || $4::text),
+	          ('reconcile_widgets_with_widget_type', 'widget_type:' || $5::text || '/project:' || $1::text || '/scene:' || $6::text),
+	          ('reconcile_widgets_with_widget_type', 'widget_type:' || $5::text || '/project:' || $3::text || '/scene:' || $7::text)`,
+		deleted, goneTag, main, mainTag, typeID, goneScene, mainScene)
+
+	if err := goose.DownToContext(ctx, db, dir, 20261019000001); err != nil {
+		t.Fatalf("migrate down: %v", err)
+	}
+
+	ids := func(query string) []string {
+		t.Helper()
+		rows, err := db.QueryContext(ctx, query)
+		if err != nil {
+			t.Fatalf("%s: %v", query, err)
+		}
+		defer rows.Close()
+		var got []string
+		for rows.Next() {
+			var v string
+			if err := rows.Scan(&v); err != nil {
+				t.Fatal(err)
+			}
+			got = append(got, v)
+		}
+		slices.Sort(got)
+		return got
+	}
+	for query, want := range map[string][]string{
+		`SELECT id::text FROM tags`:                                     {mainTag.String()},
+		`SELECT id::text FROM scenes`:                                   {mainScene.String()},
+		`SELECT name FROM widgets`:                                      {"kept"},
+		`SELECT type FROM outbox`:                                       {"tag_created"},
+		`SELECT payload::text FROM outbox WHERE payload ? 'project_id'`: nil,
+		`SELECT job_key FROM policy_jobs`: {
+			"tag:" + mainTag.String(),
+			"widget_type:" + typeID.String() + "/scene:" + mainScene.String(),
+		},
+	} {
+		if got := ids(query); !slices.Equal(got, want) {
+			t.Errorf("%s: got %v, want %v", query, got, want)
 		}
 	}
 }

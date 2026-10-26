@@ -48,7 +48,7 @@ func (s *wrappedScopes) ForProject(projectID id.ID[project.Project]) application
 		return scope
 	}
 	inner := s.ProjectScopes.ForProject(projectID)
-	scope := testScope{tags: inner.Tags(), scenes: inner.Scenes()}
+	scope := testScope{projectID: projectID, tags: inner.Tags(), scenes: inner.Scenes()}
 	if s.tags != nil {
 		scope.tags = s.tags(scope.tags)
 	}
@@ -63,12 +63,14 @@ func (s *wrappedScopes) ForProject(projectID id.ID[project.Project]) application
 }
 
 type testScope struct {
-	tags   tag.TagRepository
-	scenes scene.SceneRepository
+	projectID id.ID[project.Project]
+	tags      tag.TagRepository
+	scenes    scene.SceneRepository
 }
 
-func (s testScope) Tags() tag.TagRepository       { return s.tags }
-func (s testScope) Scenes() scene.SceneRepository { return s.scenes }
+func (s testScope) ProjectID() id.ID[project.Project] { return s.projectID }
+func (s testScope) Tags() tag.TagRepository           { return s.tags }
+func (s testScope) Scenes() scene.SceneRepository     { return s.scenes }
 
 // soleOrganization is the organization the migrations create.
 func soleOrganization() id.ID[organization.Organization] {

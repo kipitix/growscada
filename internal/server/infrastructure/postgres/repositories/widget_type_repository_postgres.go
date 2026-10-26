@@ -92,9 +92,29 @@ func (r widgetTypeRepositoryPostgresImpl) Save(ctx context.Context, wt library.W
 func (r widgetTypeRepositoryPostgresImpl) Delete(ctx context.Context, wt library.WidgetType) error {
 	err := r.store.delete(ctx, wt.ID(), wt.Version(), wt.PendingEvents())
 	if isForeignKeyViolation(err, constraintWidgetsTypeID) {
-		return library.ErrWidgetTypeInUse
+		return r.inUse(ctx, wt.ID())
 	}
 	return err
+}
+
+// inUse tells, once the delete of the widget type failed for its Widgets,
+// whether any of them is of a live Project. None may be left by now (the
+// cleanup of their Projects done meanwhile): a retry then succeeds as well.
+func (r widgetTypeRepositoryPostgresImpl) inUse(ctx context.Context, anID id.ID[library.WidgetType]) error {
+	var live bool
+	err := r.db.QueryRowContext(ctx,
+		`SELECT EXISTS (SELECT 1 FROM widgets w JOIN projects p ON p.id = w.project_id
+		                WHERE w.type_id = $1 AND p.deleted_at IS NULL)`,
+		anID.UUID(),
+	).Scan(&live)
+	switch {
+	case err != nil:
+		return fmt.Errorf("%w (cannot tell whose: %w)", library.ErrWidgetTypeInUse, err)
+	case live:
+		return library.ErrWidgetTypeInUse
+	default:
+		return library.ErrWidgetTypeInUseByDeletedProjects
+	}
 }
 
 const selectWidgetTypeColumns = `id, name, html_template, script, script_language, default_width, default_height, input_ports, version`

@@ -119,9 +119,6 @@ func (h *eventHub) Close() {
 // content it is about, or the server's (uuid.Nil) for the events of projects
 // themselves, WidgetTypes, connections and the system.
 func eventStreamOf(e event.Event) uuid.UUID {
-	if _, own := e.(project.ProjectEvent); own {
-		return uuid.Nil
-	}
 	if content, ok := e.(project.ContentEvent); ok {
 		return content.ProjectID().UUID()
 	}

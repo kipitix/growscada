@@ -105,7 +105,7 @@ func main() {
 	// apart from event delivery (ADR 0008)
 	policyRunner := outbox.NewPolicyRunner(sqlDB, []application.Policy{
 		application.NewWidgetReconciliationPolicy(widgetTypeRepository, projectScopes),
-		application.NewUnbindDeletedTagPolicy(projectScopes),
+		application.NewUnbindDeletedTagPolicy(projectRepository, projectScopes),
 		application.NewProjectCleanupPolicy(projectRepository, projectScopes),
 	})
 	dispatcher.SetPolicyRunner(policyRunner)

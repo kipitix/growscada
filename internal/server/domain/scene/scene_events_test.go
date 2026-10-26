@@ -128,7 +128,7 @@ func TestSceneReconcileWith_RecordsWidgetUpdatedForEachChangedWidget(t *testing.
 	sc := makeStoredScene(t, changed1, untouched, changed2)
 	after := makeWidgetTypeWithID(t, before.ID(), "value")
 
-	reconciled, ok := sc.ReconcileWith(after, tagTypesOf(sc.Widgets()...))
+	reconciled, ok := mustReconcile(t, sc, after, tagTypesOf(sc.Widgets()...))
 
 	if !ok {
 		t.Fatal("expected a change")
@@ -205,7 +205,7 @@ func TestSceneEvents_NameTheScenesProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddWidget: %v", err)
 	}
-	reconciled, _ := added.ReconcileWith(wt, NewTagTypes(testProject, nil))
+	reconciled, _ := mustReconcile(t, added, wt, NewTagTypes(testProject, nil))
 	deleted := reconciled.Delete()
 	for _, e := range deleted.PendingEvents() {
 		content, ok := e.(project.ContentEvent)

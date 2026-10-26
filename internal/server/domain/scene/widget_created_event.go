@@ -22,10 +22,10 @@ func NewWidgetCreatedEvent(aWidgetID id.ID[Widget], aSceneID id.ID[Scene], aProj
 	return &widgetCreatedEventImpl{
 		widgetTypedEventImpl: widgetTypedEventImpl{
 			widgetEventImpl: widgetEventImpl{
-				Base:      event.NewBase(event.EventTypeWidgetCreated, opts...),
-				widgetID:  aWidgetID,
-				sceneID:   aSceneID,
-				projectID: aProjectID,
+				Base:     event.NewBase(event.EventTypeWidgetCreated, opts...),
+				widgetID: aWidgetID,
+				sceneID:  aSceneID,
+				Content:  project.NewContent(aProjectID),
 			},
 			widgetTypeID: aWidgetTypeID,
 		},

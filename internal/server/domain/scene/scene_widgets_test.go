@@ -317,9 +317,19 @@ func TestSceneWidgetChanges_CheckBoundTagTypes(t *testing.T) {
 	}
 }
 
+// mustReconcile is ReconcileWith failing the test on an error.
+func mustReconcile(t *testing.T, sc Scene, wt library.WidgetType, tagTypes TagTypes) (Scene, bool) {
+	t.Helper()
+	reconciled, changed, err := sc.ReconcileWith(wt, tagTypes)
+	if err != nil {
+		t.Fatalf("ReconcileWith: %v", err)
+	}
+	return reconciled, changed
+}
+
 // TestSceneWidgetChanges_BindOnlyTagsOfTheScenesProject checks that a Tag
-// known only as a Tag of another Project cannot be bound (ADR 0006): for the
-// Scene it does not exist.
+// known only as a Tag of another Project cannot be bound (ADR 0006): the
+// Scene takes the TagTypes of its own Project only.
 func TestSceneWidgetChanges_BindOnlyTagsOfTheScenesProject(t *testing.T) {
 	foreignTag := id.NewID[tag.Tag]()
 	ofOtherProject := NewTagTypes(id.NewID[project.Project](), map[id.ID[tag.Tag]]tag.TagType{foreignTag: tag.TagTypeInteger})
@@ -331,8 +341,8 @@ func TestSceneWidgetChanges_BindOnlyTagsOfTheScenesProject(t *testing.T) {
 	_, updateErr := sc.UpdateWidget(sc.Version(), bindValue(t, wt, foreignTag, existing), wt, ofOtherProject)
 
 	for op, err := range map[string]error{"AddWidget": addErr, "UpdateWidget": updateErr} {
-		if !errors.Is(err, ErrBoundTagNotFound) {
-			t.Errorf("%s: expected ErrBoundTagNotFound, got %v", op, err)
+		if !errors.Is(err, ErrTagTypesOfAnotherProject) {
+			t.Errorf("%s: expected ErrTagTypesOfAnotherProject, got %v", op, err)
 		}
 	}
 }
@@ -421,7 +431,7 @@ func TestSceneReconcileWith_RemovesBindingsOfUndeclaredPortsOnly(t *testing.T) {
 	sc := makeStoredScene(t, w, untouched)
 	after := makeWidgetTypeWithID(t, before.ID(), "value")
 
-	reconciled, changed := sc.ReconcileWith(after, tagTypesOf(sc.Widgets()...))
+	reconciled, changed := mustReconcile(t, sc, after, tagTypesOf(sc.Widgets()...))
 
 	if !changed {
 		t.Fatal("expected a change")
@@ -446,7 +456,7 @@ func TestSceneReconcileWith_NothingUndeclared_ReportsNoChange(t *testing.T) {
 	wt := makeWidgetType(t, "value")
 	sc := makeStoredScene(t, makeWidgetOf(t, wt, "w1", "value"))
 
-	reconciled, changed := sc.ReconcileWith(wt, tagTypesOf(sc.Widgets()...))
+	reconciled, changed := mustReconcile(t, sc, wt, tagTypesOf(sc.Widgets()...))
 
 	if changed {
 		t.Error("expected no change")
@@ -481,7 +491,7 @@ func TestSceneReconcileWith_RemovesBindingsTheNarrowedHintRefuses(t *testing.T) 
 	sc := makeStoredScene(t, kept, refused)
 	narrowed := withValueHint(t, anyType, "integer", anyType.Version().Next())
 
-	reconciled, changed := sc.ReconcileWith(narrowed, tagTypes)
+	reconciled, changed := mustReconcile(t, sc, narrowed, tagTypes)
 
 	if !changed {
 		t.Fatal("expected a change")
@@ -502,7 +512,7 @@ func TestSceneReconcileWith_RemovesBindingsOfMissingTags(t *testing.T) {
 	sc := makeStoredScene(t, w)
 	onlyValue := NewTagTypes(testProject, map[id.ID[tag.Tag]]tag.TagType{w.PortBindings()[0].TagID(): tag.TagTypeInteger})
 
-	reconciled, changed := sc.ReconcileWith(wt, onlyValue)
+	reconciled, changed := mustReconcile(t, sc, wt, onlyValue)
 
 	if !changed {
 		t.Fatal("expected a change")
@@ -517,17 +527,21 @@ func TestSceneReconcileWith_RemovesBindingsOfMissingTags(t *testing.T) {
 	}
 }
 
-func TestSceneReconcileWith_RemovesBindingsOfTagsOfAnotherProject(t *testing.T) {
+// TestSceneReconcileWith_TagTypesOfAnotherProject_FailsRemovingNothing: the
+// TagTypes of another Project are a programming error of the caller, not
+// Tags that do not exist: no binding is lost to it.
+func TestSceneReconcileWith_TagTypesOfAnotherProject_FailsRemovingNothing(t *testing.T) {
 	wt := makeWidgetType(t, "value")
 	w := makeWidgetOf(t, wt, "w1", "value")
 	sc := makeStoredScene(t, w)
 
-	reconciled, changed := sc.ReconcileWith(wt, NewTagTypes(id.NewID[project.Project](), map[id.ID[tag.Tag]]tag.TagType{
+	reconciled, changed, err := sc.ReconcileWith(wt, NewTagTypes(id.NewID[project.Project](), map[id.ID[tag.Tag]]tag.TagType{
 		w.PortBindings()[0].TagID(): tag.TagTypeInteger,
 	}))
 
-	if !changed || len(reconciled.Widgets()[0].PortBindings()) != 0 {
-		t.Errorf("binding of a tag of another project: expected it removed, got %v", reconciled.Widgets()[0].PortBindings())
+	if !errors.Is(err, ErrTagTypesOfAnotherProject) || changed || len(reconciled.Widgets()[0].PortBindings()) != 1 {
+		t.Errorf("tag types of another project: %v, changed %t, bindings %v; want the error and the binding kept",
+			err, changed, reconciled.Widgets()[0].PortBindings())
 	}
 }
 

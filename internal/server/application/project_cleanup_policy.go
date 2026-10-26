@@ -42,7 +42,7 @@ func (p projectCleanupPolicy) Name() string {
 func (p projectCleanupPolicy) JobKey(e event.Event) (string, bool) {
 	switch e.Type() {
 	case event.EventTypeProjectDeleted:
-		if ev, ok := e.(project.ContentEvent); ok {
+		if ev, ok := e.(project.ProjectEvent); ok {
 			return projectKeyPrefix + ev.ProjectID().String(), true
 		}
 	}

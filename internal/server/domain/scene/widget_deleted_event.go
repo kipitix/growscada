@@ -20,10 +20,10 @@ var _ WidgetDeletedEvent = (*widgetDeletedEventImpl)(nil)
 func NewWidgetDeletedEvent(aWidgetID id.ID[Widget], aSceneID id.ID[Scene], aProjectID id.ID[project.Project], opts ...event.EventOption) WidgetDeletedEvent {
 	return &widgetDeletedEventImpl{
 		widgetEventImpl: widgetEventImpl{
-			Base:      event.NewBase(event.EventTypeWidgetDeleted, opts...),
-			widgetID:  aWidgetID,
-			sceneID:   aSceneID,
-			projectID: aProjectID,
+			Base:     event.NewBase(event.EventTypeWidgetDeleted, opts...),
+			widgetID: aWidgetID,
+			sceneID:  aSceneID,
+			Content:  project.NewContent(aProjectID),
 		},
 	}
 }

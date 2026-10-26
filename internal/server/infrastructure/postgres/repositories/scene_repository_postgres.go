@@ -11,6 +11,7 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/organization"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -220,6 +221,28 @@ func (r sceneRepositoryPostgresImpl) FindByID(ctx context.Context, sceneID id.ID
 
 func (r sceneRepositoryPostgresImpl) FindAll(ctx context.Context) ([]scene.Scene, error) {
 	return r.readScenes(ctx, ``)
+}
+
+// inLiveProject is the condition of readScenes that the scenes' Project is
+// live and of the Organization numbered $n.
+func inLiveProject(n int) string {
+	return fmt.Sprintf(`AND EXISTS (SELECT 1 FROM projects p WHERE p.id = scenes.project_id
+	   AND p.deleted_at IS NULL AND p.organization_id = $%d)`, n)
+}
+
+func (r sceneRepositoryPostgresImpl) FindByIDInLiveProject(ctx context.Context, sceneID id.ID[scene.Scene], orgID id.ID[organization.Organization]) (scene.Scene, error) {
+	found, err := r.readScenes(ctx, `AND id = $2 `+inLiveProject(3), sceneID.UUID(), orgID.UUID())
+	if err != nil {
+		return nil, err
+	}
+	if len(found) == 0 {
+		return nil, id.NotFound(scene.ErrSceneNotFound, sceneID)
+	}
+	return found[0], nil
+}
+
+func (r sceneRepositoryPostgresImpl) FindAllInLiveProject(ctx context.Context, orgID id.ID[organization.Organization]) ([]scene.Scene, error) {
+	return r.readScenes(ctx, inLiveProject(2), orgID.UUID())
 }
 
 func (r sceneRepositoryPostgresImpl) FindByWidgetTypeID(ctx context.Context, typeID id.ID[library.WidgetType]) ([]scene.Scene, error) {

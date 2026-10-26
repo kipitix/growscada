@@ -2,6 +2,7 @@ package tag
 
 import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 )
 
 // TagUpdatedEvent is recorded when a Tag's value and Quality change. It
@@ -23,9 +24,9 @@ var _ TagUpdatedEvent = (*tagUpdatedEventImpl)(nil)
 func NewTagUpdatedEvent(aTag Tag, opts ...event.EventOption) TagUpdatedEvent {
 	return &tagUpdatedEventImpl{
 		tagEventImpl: tagEventImpl{
-			Base:      event.NewBase(event.EventTypeTagUpdated, opts...),
-			tagID:     aTag.ID(),
-			projectID: aTag.ProjectID(),
+			Base:    event.NewBase(event.EventTypeTagUpdated, opts...),
+			tagID:   aTag.ID(),
+			Content: project.NewContent(aTag.ProjectID()),
 		},
 		tag: aTag,
 	}
