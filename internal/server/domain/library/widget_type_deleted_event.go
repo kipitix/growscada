@@ -16,11 +16,12 @@ type widgetTypeDeletedEventImpl struct {
 
 var _ WidgetTypeDeletedEvent = (*widgetTypeDeletedEventImpl)(nil)
 
-func NewWidgetTypeDeletedEvent(anID id.ID[WidgetType], opts ...event.EventOption) WidgetTypeDeletedEvent {
+func NewWidgetTypeDeletedEvent(anID id.ID[WidgetType], aLibraryID id.ID[Library], opts ...event.EventOption) WidgetTypeDeletedEvent {
 	return &widgetTypeDeletedEventImpl{
 		widgetTypeEventImpl: widgetTypeEventImpl{
 			Base:         event.NewBase(event.EventTypeWidgetTypeDeleted, opts...),
 			widgetTypeID: anID,
+			libraryID:    aLibraryID,
 		},
 	}
 }

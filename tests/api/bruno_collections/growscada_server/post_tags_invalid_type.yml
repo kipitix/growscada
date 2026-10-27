@@ -1,7 +1,7 @@
 info:
   name: post tags invalid type
   type: http
-  seq: 21
+  seq: 29
 
 http:
   method: POST

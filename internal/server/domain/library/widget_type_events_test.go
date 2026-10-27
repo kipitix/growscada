@@ -14,7 +14,7 @@ func makeCommittedWidgetType(t *testing.T) WidgetType {
 	name, _ := NewWidgetTypeName("gauge")
 	html, _ := NewHtmlTemplate("<div></div>")
 	script, _ := NewScript("")
-	wt, err := ReconstituteWidgetType(id.NewID[WidgetType](), name, html, script, ScriptLanguageJavaScript, DefaultSize(), nil, version.Committed[WidgetType]())
+	wt, err := ReconstituteWidgetType(id.NewID[WidgetType](), testLibraryID, name, html, script, ScriptLanguageJavaScript, DefaultSize(), nil, version.Committed[WidgetType]())
 	if err != nil {
 		t.Fatalf("ReconstituteWidgetType: %v", err)
 	}
@@ -35,7 +35,7 @@ func TestCreateWidgetType_RecordsCreatedEventAtInitialVersion(t *testing.T) {
 	script, _ := NewScript("")
 	anID := id.NewID[WidgetType]()
 
-	wt, err := CreateWidgetType(anID, name, html, script, ScriptLanguageJavaScript, DefaultSize(), nil)
+	wt, err := CreateWidgetType(anID, testLibraryID, name, html, script, ScriptLanguageJavaScript, DefaultSize(), nil)
 	if err != nil {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}

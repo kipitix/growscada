@@ -1,0 +1,40 @@
+info:
+  name: post library releases
+  type: http
+  seq: 35
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/releases
+  body:
+    type: json
+    data: |-
+      {
+        "note": "with the pressure gauge",
+        "version": 1
+      }
+  auth: inherit
+
+docs: |
+  Releases the Draft as it is: the next release of the library, the latest
+  plus one. `version` must be the library's current version.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '2'
+    - expression: 'res.body.note'
+      operator: eq
+      value: '"with the pressure gauge"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

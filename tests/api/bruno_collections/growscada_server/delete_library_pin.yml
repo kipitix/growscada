@@ -1,0 +1,30 @@
+info:
+  name: delete library pin
+  type: http
+  seq: 50
+
+http:
+  method: DELETE
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/library-pins/{{OTHER_LIBRARY_ID}}
+  auth: inherit
+
+docs: |
+  Removes the pin; refused (`409`) while Widgets of the project are of its
+  WidgetTypes.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.library_id'
+      operator: eq
+      value: '"{{OTHER_LIBRARY_ID}}"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

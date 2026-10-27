@@ -1,7 +1,7 @@
 info:
   name: delete scene by id
   type: http
-  seq: 32
+  seq: 47
 
 http:
   method: DELETE

@@ -16,4 +16,7 @@ type Problem struct {
 	Detail string `json:"detail,omitempty"`
 	// Instance is a URI reference identifying this occurrence: the request path.
 	Instance string `json:"instance,omitempty"`
+	// OrphanedWidgets are, on the 409 of a switch or removal of a Library
+	// Pin, the Widgets it would leave without their WidgetType.
+	OrphanedWidgets []PinnedWidgetResponse `json:"orphaned_widgets,omitempty"`
 }

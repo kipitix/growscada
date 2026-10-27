@@ -118,7 +118,7 @@ func TestParseManifests_Invalid_ReturnsError(t *testing.T) {
 		{"malformed yaml", "apiVersion: [", "document 1"},
 		{"project without name", "apiVersion: growscada/v0.2\nkind: Project\nmetadata: {}\n", "metadata.name is required"},
 		{"project with a project", "apiVersion: growscada/v0.2\nkind: Project\nmetadata: {name: a, project: b}\n", "field project not found"},
-		{"project with a spec", "apiVersion: growscada/v0.2\nkind: Project\nmetadata: {name: a}\nspec: {}\n", "field spec not found"},
+		{"project with a spec", "apiVersion: growscada/v0.2\nkind: Project\nmetadata: {name: a}\nspec: {}\n", "spec appeared in apiVersion"},
 		{"project in v0.1", "apiVersion: growscada/v0.1\nkind: Project\nmetadata: {name: a}\n", `kind Project appeared in apiVersion "growscada/v0.2"`},
 		{"metadata.project in v0.1", "apiVersion: growscada/v0.1\nkind: Tag\nmetadata: {name: t, project: a}\nspec: {type: integer}\n", "tag/t: metadata.project appeared in"},
 	}

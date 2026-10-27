@@ -19,6 +19,10 @@ const defaultScript = "function update() {\n}"
 
 func (l *Library) createItem(ctx app.Context) {
 	ctx = l.compoCtx
+	draft := l.draft()
+	if draft == nil || l.readOnly() {
+		return
+	}
 	req := apiv0.CreateWidgetTypeRequest{
 		Name:           "New Widget Type",
 		HtmlTemplate:   defaultHTML,
@@ -30,13 +34,14 @@ func (l *Library) createItem(ctx app.Context) {
 	}
 	mark := l.versions.Mark()
 	uiutil.Call(ctx, func(c context.Context) (apiv0.CreateWidgetTypeResponse, error) {
-		return l.client.CreateWidgetType(c, req)
+		return draft.CreateWidgetType(c, req)
 	}, func(ctx app.Context, created apiv0.CreateWidgetTypeResponse) {
 		// The new type is the request as the server stored it: listed and
 		// editable at once, before the list is reread.
 		l.versions.Observe(mark, created.ID, created.Version)
 		l.widgetTypes = append(l.widgetTypes, apiv0.WidgetTypeResponse{
 			ID:             created.ID,
+			LibraryID:      draft.ID(),
 			Name:           req.Name,
 			HtmlTemplate:   req.HtmlTemplate,
 			Script:         req.Script,
@@ -53,12 +58,13 @@ func (l *Library) createItem(ctx app.Context) {
 
 func (l *Library) deleteItem(ctx app.Context) {
 	ctx = l.compoCtx
-	if l.selectedID == uuid.Nil {
+	draft := l.draft()
+	if l.selectedID == uuid.Nil || draft == nil || l.readOnly() {
 		return
 	}
 	deletedID := l.selectedID
 	uiutil.Call(ctx, func(c context.Context) (apiv0.WidgetTypeResponse, error) {
-		return l.client.DeleteWidgetType(c, deletedID)
+		return draft.DeleteWidgetType(c, deletedID)
 	}, func(ctx app.Context, _ apiv0.WidgetTypeResponse) {
 		if l.selectedID == deletedID {
 			l.clearSelection()
@@ -68,7 +74,7 @@ func (l *Library) deleteItem(ctx app.Context) {
 }
 
 func (l *Library) applyChanges(ctx app.Context) {
-	if l.selectedID == uuid.Nil {
+	if l.selectedID == uuid.Nil || l.readOnly() {
 		return
 	}
 	current, ok := l.findItem(l.selectedID)
@@ -95,6 +101,9 @@ func (l *Library) commitEdit(ctx app.Context) {
 	name := l.editingName
 	l.editingID = uuid.Nil
 	l.editingName = ""
+	if l.readOnly() {
+		return
+	}
 
 	idx := l.itemIdx(id)
 	if idx < 0 {
@@ -129,9 +138,13 @@ func portsRequest(ports []apiv0.InputPort) []apiv0.InputPort {
 // the list reread: if the server's version went back, a newer one kept here
 // would be rejected forever. The other types' versions stay.
 func (l *Library) updateWidgetType(id uuid.UUID, req apiv0.UpdateWidgetTypeRequest) {
+	draft := l.draft()
+	if draft == nil {
+		return
+	}
 	mark := l.versions.Mark()
 	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.UpdateWidgetTypeResponse, error) {
-		return l.client.UpdateWidgetType(c, id, req)
+		return draft.UpdateWidgetType(c, id, req)
 	}, func(ctx app.Context, updated apiv0.UpdateWidgetTypeResponse) {
 		l.versions.Observe(mark, id, updated.Version)
 		l.loadList(ctx)

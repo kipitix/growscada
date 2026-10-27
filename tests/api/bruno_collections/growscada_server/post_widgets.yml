@@ -1,7 +1,7 @@
 info:
   name: post widgets
   type: http
-  seq: 26
+  seq: 40
 
 http:
   method: POST

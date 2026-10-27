@@ -1,6 +1,8 @@
 package apiclient_test
 
 import (
+	"github.com/google/uuid"
+
 	"context"
 	"errors"
 	"net/http"
@@ -58,8 +60,9 @@ func TestTags_RoundTrip(t *testing.T) {
 func TestWidgetTypes_RoundTrip(t *testing.T) {
 	client := startClient(t)
 	ctx := context.Background()
+	lib := createLibrary(t, client)
 
-	created, err := client.CreateWidgetType(ctx, apiv0.CreateWidgetTypeRequest{
+	created, err := lib.CreateWidgetType(ctx, apiv0.CreateWidgetTypeRequest{
 		Name: "Gauge", HtmlTemplate: "<div></div>", Script: "", ScriptLanguage: "javascript",
 		DefaultWidth: 100, DefaultHeight: 50,
 		InputPorts: []apiv0.InputPort{{Name: "value", TypeHint: "integer"}},
@@ -67,7 +70,7 @@ func TestWidgetTypes_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
-	got, err := client.GetWidgetType(ctx, created.ID)
+	got, err := lib.GetWidgetType(ctx, created.ID)
 	if err != nil || got.Name != "Gauge" || len(got.InputPorts) != 1 {
 		t.Fatalf("GetWidgetType: %+v, %v", got, err)
 	}
@@ -75,23 +78,96 @@ func TestWidgetTypes_RoundTrip(t *testing.T) {
 		Name: "Big gauge", HtmlTemplate: got.HtmlTemplate, ScriptLanguage: got.ScriptLanguage,
 		DefaultWidth: 200, DefaultHeight: 100, InputPorts: got.InputPorts, Version: got.Version,
 	}
-	updated, err := client.UpdateWidgetType(ctx, created.ID, update)
+	updated, err := lib.UpdateWidgetType(ctx, created.ID, update)
 	if err != nil || updated.Version <= got.Version {
 		t.Fatalf("UpdateWidgetType: %+v, %v", updated, err)
 	}
-	if _, err := client.UpdateWidgetType(ctx, created.ID, update); !errors.Is(err, apiclient.ErrConflict) {
+	if _, err := lib.UpdateWidgetType(ctx, created.ID, update); !errors.Is(err, apiclient.ErrConflict) {
 		t.Errorf("UpdateWidgetType with a stale version: %v, want ErrConflict", err)
 	}
-	list, err := client.ListWidgetTypes(ctx)
-	if err != nil || len(list) != 1 || list[0].Name != "Big gauge" {
+	list, err := lib.ListWidgetTypes(ctx)
+	if err != nil || len(list) != 1 || list[0].Name != "Big gauge" || list[0].LibraryID != lib.ID() {
 		t.Fatalf("ListWidgetTypes: %+v, %v", list, err)
 	}
-	if deleted, err := client.DeleteWidgetType(ctx, created.ID); err != nil || deleted.ID != created.ID {
+
+	release, err := lib.Release(ctx, apiv0.CreateReleaseRequest{Note: "first", Version: 1})
+	if err != nil || release.Number != 1 || len(release.WidgetTypes) != 1 {
+		t.Fatalf("Release: %+v, %v", release, err)
+	}
+	if _, err := lib.Release(ctx, apiv0.CreateReleaseRequest{Version: 1}); !errors.Is(err, apiclient.ErrConflict) {
+		t.Errorf("Release of an unchanged Draft: %v, want ErrConflict", err)
+	}
+	if releases, err := lib.ListReleases(ctx); err != nil || len(releases) != 1 {
+		t.Errorf("ListReleases: %+v, %v", releases, err)
+	}
+	if got, err := lib.GetRelease(ctx, 1); err != nil || got.Note != "first" {
+		t.Errorf("GetRelease: %+v, %v", got, err)
+	}
+	if _, err := lib.GetRelease(ctx, 2); !errors.Is(err, apiclient.ErrNotFound) {
+		t.Errorf("GetRelease 2: %v, want ErrNotFound", err)
+	}
+
+	project := client.Project(servertest.MainProject)
+	if _, err := project.PinLibrary(ctx, lib.ID(), apiv0.PutLibraryPinRequest{Release: 1}); err != nil {
+		t.Fatalf("PinLibrary: %v", err)
+	}
+	palette, err := project.ListWidgetTypes(ctx)
+	if err != nil || len(palette) != 1 || palette[0].ID != created.ID {
+		t.Errorf("the project's widget types: %+v, %v", palette, err)
+	}
+	if deleted, err := lib.DeleteWidgetType(ctx, created.ID); err != nil || deleted.ID != created.ID {
 		t.Fatalf("DeleteWidgetType: %+v, %v", deleted, err)
 	}
-	if _, err := client.GetWidgetType(ctx, created.ID); !errors.Is(err, apiclient.ErrNotFound) {
+	if _, err := lib.GetWidgetType(ctx, created.ID); !errors.Is(err, apiclient.ErrNotFound) {
 		t.Errorf("GetWidgetType after delete: %v, want ErrNotFound", err)
 	}
+	if impact, err := project.LibraryPinImpact(ctx, lib.ID(), 0); err != nil || len(impact.OrphanedWidgets) != 0 {
+		t.Errorf("LibraryPinImpact of the removal: %+v, %v", impact, err)
+	}
+	if _, err := client.DeleteLibrary(ctx, lib.ID()); !errors.Is(err, apiclient.ErrConflict) {
+		t.Errorf("DeleteLibrary while pinned: %v, want ErrConflict", err)
+	}
+	if _, err := project.UnpinLibrary(ctx, lib.ID()); err != nil {
+		t.Fatalf("UnpinLibrary: %v", err)
+	}
+	discarding, err := lib.Discard(ctx)
+	if err != nil || discarding.DiscardingTo != 1 {
+		t.Errorf("Discard: %+v, %v", discarding, err)
+	}
+}
+
+// createLibrary creates a library of a name of its own and returns its
+// client.
+func createLibrary(t *testing.T, client *apiclient.Client) *apiclient.LibraryClient {
+	t.Helper()
+	created, err := client.CreateLibrary(context.Background(), apiv0.CreateLibraryRequest{Name: "lib-" + uuid.NewString()})
+	if err != nil {
+		t.Fatalf("CreateLibrary: %v", err)
+	}
+	if found, ok, err := client.FindLibraryByName(context.Background(), "no such library"); err != nil || ok {
+		t.Fatalf("FindLibraryByName: %+v, %t, %v", found, ok, err)
+	}
+	return client.Library(created.ID)
+}
+
+// pinnedType creates a WidgetType of req in a new library, releases it and
+// pins the release in the project Main.
+func pinnedType(t *testing.T, client *apiclient.Client, req apiv0.CreateWidgetTypeRequest) apiv0.CreateWidgetTypeResponse {
+	t.Helper()
+	ctx := context.Background()
+	lib := createLibrary(t, client)
+	wt, err := lib.CreateWidgetType(ctx, req)
+	if err != nil {
+		t.Fatalf("CreateWidgetType: %v", err)
+	}
+	release, err := lib.Release(ctx, apiv0.CreateReleaseRequest{Version: 1})
+	if err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+	if _, err := client.Project(servertest.MainProject).PinLibrary(ctx, lib.ID(), apiv0.PutLibraryPinRequest{Release: release.Number}); err != nil {
+		t.Fatalf("PinLibrary: %v", err)
+	}
+	return wt
 }
 
 func TestScenesAndWidgets_RoundTrip(t *testing.T) {
@@ -111,10 +187,7 @@ func TestScenesAndWidgets_RoundTrip(t *testing.T) {
 		t.Fatalf("UpdateScene: %+v, %v", updatedScene, err)
 	}
 
-	wt, err := client.CreateWidgetType(ctx, apiv0.CreateWidgetTypeRequest{Name: "Lamp", ScriptLanguage: "javascript", DefaultWidth: 10, DefaultHeight: 10, InputPorts: []apiv0.InputPort{}})
-	if err != nil {
-		t.Fatalf("CreateWidgetType: %v", err)
-	}
+	wt := pinnedType(t, client, apiv0.CreateWidgetTypeRequest{Name: "Lamp", ScriptLanguage: "javascript", DefaultWidth: 10, DefaultHeight: 10, InputPorts: []apiv0.InputPort{}})
 	widgetReq := apiv0.CreateWidgetRequest{
 		Name: "lamp1", Size: apiv0.SizeRequest{Width: 10, Height: 10}, Origin: apiv0.OriginRequest{X: 0.5, Y: 0.5},
 		TypeID: wt.ID, SceneVersion: updatedScene.Version, Labels: []string{}, PortBindings: []apiv0.PortBinding{},

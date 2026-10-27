@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"testing"
 
 	"github.com/google/uuid"
@@ -29,7 +30,7 @@ func TestFromError_ServersProblem(t *testing.T) {
 
 	want := Problem{Problem: apiv0.Problem{Type: "t", Title: "Resource Not Found", Status: 404,
 		Detail: "Tag with ID 'x' not found", Instance: "/api/v0/tags/x"}, Method: http.MethodDelete}
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
 }
@@ -45,14 +46,14 @@ func TestFromError_ByWhereTheCallFailed(t *testing.T) {
 		unencodable: "Client Error",
 	} {
 		want := Problem{Problem: apiv0.Problem{Title: title, Detail: err.Error()}}
-		if got := FromError(err); got != want {
+		if got := FromError(err); !reflect.DeepEqual(got, want) {
 			t.Errorf("got %+v, want %+v", got, want)
 		}
 	}
 }
 
 func TestFromError_RequestNotBuilt_IsClientError(t *testing.T) {
-	_, err := apiclient.New("http://bad host:port", http.DefaultClient).ListWidgetTypes(context.Background())
+	_, err := apiclient.New("http://bad host:port", http.DefaultClient).ListLibraries(context.Background())
 
 	if got := FromError(err); got.Title != "Client Error" {
 		t.Errorf("got %+v, want a Client Error: nothing was sent", got)

@@ -15,9 +15,12 @@ func TestReloadTargetsFor(t *testing.T) {
 		ev   apiv0.Event
 		want ReloadTargets
 	}{
-		{apiv0.Event{Type: apiv0.EventWidgetTypeCreated}, ReloadTargets{WidgetTypes: true}},
-		{apiv0.Event{Type: apiv0.EventWidgetTypeUpdated}, ReloadTargets{WidgetTypes: true}},
-		{apiv0.Event{Type: apiv0.EventWidgetTypeDeleted}, ReloadTargets{WidgetTypes: true}},
+		{apiv0.Event{Type: apiv0.EventWidgetTypeCreated}, ReloadTargets{WidgetTypes: true, Libraries: true}},
+		{apiv0.Event{Type: apiv0.EventWidgetTypeUpdated}, ReloadTargets{WidgetTypes: true, Libraries: true}},
+		{apiv0.Event{Type: apiv0.EventWidgetTypeDeleted}, ReloadTargets{WidgetTypes: true, Libraries: true}},
+		{apiv0.Event{Type: apiv0.EventLibraryReleased}, ReloadTargets{WidgetTypes: true, Libraries: true}},
+		{apiv0.Event{Type: apiv0.EventLibraryUpdated}, ReloadTargets{WidgetTypes: true, Libraries: true}},
+		{apiv0.Event{Type: apiv0.EventLibraryPinUpdated}, ReloadTargets{LibraryPins: true}},
 		{apiv0.Event{Type: apiv0.EventSceneCreated}, ReloadTargets{Scenes: true}},
 		{apiv0.Event{Type: apiv0.EventSceneUpdated}, ReloadTargets{Scenes: true}},
 		{apiv0.Event{Type: apiv0.EventSceneDeleted}, ReloadTargets{Scenes: true}},
@@ -31,8 +34,8 @@ func TestReloadTargetsFor(t *testing.T) {
 		{apiv0.Event{Type: apiv0.EventTagUpdated, Tag: &apiv0.TagResponse{ID: sceneID}}, ReloadTargets{}},
 		{apiv0.Event{Type: apiv0.EventTagUpdated}, ReloadTargets{Tags: true}},
 		{apiv0.Event{Type: apiv0.EventTagDeleted}, ReloadTargets{Tags: true}},
-		{apiv0.Event{Type: EventResync}, ReloadTargets{Projects: true, WidgetTypes: true}},
-		{apiv0.Event{Type: EventProjectResync}, ReloadTargets{Scenes: true, Widgets: true, Tags: true}},
+		{apiv0.Event{Type: EventResync}, ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true}},
+		{apiv0.Event{Type: EventProjectResync}, ReloadTargets{LibraryPins: true, Scenes: true, Widgets: true, Tags: true}},
 		{apiv0.Event{Type: apiv0.EventProjectCreated}, ReloadTargets{Projects: true}},
 		{apiv0.Event{Type: apiv0.EventProjectUpdated}, ReloadTargets{Projects: true}},
 		{apiv0.Event{Type: apiv0.EventProjectDeleted}, ReloadTargets{Projects: true}},

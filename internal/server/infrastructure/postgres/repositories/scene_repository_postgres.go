@@ -123,7 +123,9 @@ func (r sceneRepositoryPostgresImpl) Delete(ctx context.Context, s scene.Scene) 
 
 // saveWidgets brings the scene's widget rows from stored to wanted: inserts
 // the new widgets, of the scene's Project projectID, updates the changed ones
-// and deletes those that are gone.
+// and deletes those that are gone. A new widget, or one whose WidgetType
+// changed, must be of a WidgetType a release the Project pins holds: the pin
+// is locked for share and checked in the transaction (checkPinned, ADR 0012).
 func saveWidgets(ctx context.Context, tx *sql.Tx, projectID id.ID[project.Project], sceneID id.ID[scene.Scene], stored, wanted []scene.Widget) error {
 	storedByID := make(map[id.ID[scene.Widget]]scene.Widget, len(stored))
 	for _, w := range stored {
@@ -146,10 +148,17 @@ func saveWidgets(ctx context.Context, tx *sql.Tx, projectID id.ID[project.Projec
 		}
 	}
 
+	pinned := map[id.ID[library.WidgetType]]struct{}{}
 	for _, w := range wanted {
 		old, exists := storedByID[w.ID()]
 		if exists && sameWidget(old, w) {
 			continue
+		}
+		if _, checked := pinned[w.TypeID()]; !checked && (!exists || old.TypeID() != w.TypeID()) {
+			if err := checkPinned(ctx, tx, projectID, w.TypeID()); err != nil {
+				return err
+			}
+			pinned[w.TypeID()] = struct{}{}
 		}
 		portBindingsJSON, err := marshalPortBindings(w.PortBindings())
 		if err != nil {
@@ -187,9 +196,6 @@ func saveWidgets(ctx context.Context, tx *sql.Tx, projectID id.ID[project.Projec
 			)
 		}
 		if err != nil {
-			if isForeignKeyViolation(err, constraintWidgetsTypeID) {
-				return library.ErrWidgetTypeNotFound
-			}
 			return fmt.Errorf("cannot save widget %s: %w", w.ID(), err)
 		}
 	}
@@ -243,13 +249,6 @@ func (r sceneRepositoryPostgresImpl) FindByIDInLiveProject(ctx context.Context, 
 
 func (r sceneRepositoryPostgresImpl) FindAllInLiveProject(ctx context.Context, orgID id.ID[organization.Organization]) ([]scene.Scene, error) {
 	return r.readScenes(ctx, inLiveProject(2), orgID.UUID())
-}
-
-func (r sceneRepositoryPostgresImpl) FindByWidgetTypeID(ctx context.Context, typeID id.ID[library.WidgetType]) ([]scene.Scene, error) {
-	return r.readScenes(ctx,
-		`AND EXISTS (SELECT 1 FROM engineering.widgets w WHERE w.scene_id = scenes.id AND w.type_id = $2)`,
-		typeID.UUID(),
-	)
 }
 
 // FindByTagID matches a widget by containment: its port_bindings array holds

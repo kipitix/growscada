@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/kipitix/growscada/internal/server/domain/event"
+	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -16,8 +17,8 @@ import (
 const ProjectCleanupPolicyName = "remove_deleted_project"
 
 // projectCleanupPolicy empties a Project marked deleted and removes it
-// (ADR 0006): its Scenes, then its Tags, each deleted in its own transaction
-// with its own events, then the states of its Tags in the Runtime node
+// (ADR 0006): its Scenes, then its Tags and its Library Pins, each deleted
+// in its own transaction with its own events, then the states of its Tags in the Runtime node
 // (ADR 0011), and the Project's row last; a project_deleted event's job does
 // it. Nothing of the Project is created once it is marked: the
 // repositories lock its row, live, for a creation. For a live Project the
@@ -80,6 +81,9 @@ func (p projectCleanupPolicy) Run(ctx context.Context, key string) error {
 	if err := deleteAllTags(ctx, scope.Tags()); err != nil {
 		return fmt.Errorf("cannot empty project %s: %w", projectID, err)
 	}
+	if err := deleteAllPins(ctx, scope.LibraryPins()); err != nil {
+		return fmt.Errorf("cannot empty project %s: %w", projectID, err)
+	}
 	if err := p.runtime.RemoveProjectTagStates(ctx, projectID.UUID()); err != nil {
 		return fmt.Errorf("cannot empty project %s: %w", projectID, err)
 	}
@@ -116,6 +120,23 @@ func deleteAllTags(ctx context.Context, repo tag.TagRepository) error {
 	for _, t := range tags {
 		if err := repo.Delete(ctx, t.Delete()); err != nil && !errors.Is(err, tag.ErrTagNotFound) {
 			errs = append(errs, fmt.Errorf("tag %s: %w", t.ID(), err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// deleteAllPins deletes every Library Pin of repo, each in its own
+// transaction; one deleted meanwhile is done. The Scenes are gone already,
+// so no Widget is left to check.
+func deleteAllPins(ctx context.Context, repo librarypin.Repository) error {
+	pins, err := repo.FindAll(ctx)
+	if err != nil {
+		return fmt.Errorf("cannot list library pins: %w", err)
+	}
+	var errs []error
+	for _, pin := range pins {
+		if err := repo.Delete(ctx, pin.Delete(), nil); err != nil && !errors.Is(err, librarypin.ErrLibraryPinNotFound) {
+			errs = append(errs, fmt.Errorf("library pin of %s: %w", pin.LibraryID(), err))
 		}
 	}
 	return errors.Join(errs...)

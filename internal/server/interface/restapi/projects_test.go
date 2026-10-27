@@ -178,7 +178,7 @@ func TestEventStreams_RouteEventsByProject(t *testing.T) {
 	bus.Publish(tag.NewTagCreatedEvent(otherTag, otherID))
 	bus.Publish(tag.NewTagCreatedEvent(mainTag, mainProjectID))
 	bus.Publish(project.NewProjectCreatedEvent(otherID))
-	bus.Publish(library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType]()))
+	bus.Publish(library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType](), id.NewID[library.Library]()))
 
 	waitFor(t, time.Second, func() bool {
 		return strings.Contains(server.body(), "widget_type_created") && strings.Contains(ofMain.body(), "tag_created")

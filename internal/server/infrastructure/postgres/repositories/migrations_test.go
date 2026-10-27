@@ -3,6 +3,7 @@ package repositories_test
 import (
 	"context"
 	"database/sql"
+	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -291,6 +292,25 @@ func TestSeedData_AppliesOnTheMigratedSchema(t *testing.T) {
 	if strings.Join(names, ",") != "Main,Line 2" {
 		t.Errorf("projects %v, want Main and Line 2", names)
 	}
+	// Two libraries, each released once with its Draft as it is; Main pins
+	// both, Line 2 Main; every Widget of a pinned type.
+	var libraries, unreleased, pins, unpinnedWidgets int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM engineering.libraries`).Scan(&libraries); err != nil || libraries != 2 {
+		t.Errorf("libraries: %d, %v; want 2", libraries, err)
+	}
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM engineering.widget_types w WHERE NOT EXISTS
+	          (SELECT 1 FROM engineering.released_widget_types r WHERE r.id = w.id AND r.name = w.name AND r.release_number = 1)`).Scan(&unreleased); err != nil || unreleased != 0 {
+		t.Errorf("widget types not in release 1: %d, %v", unreleased, err)
+	}
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM engineering.library_pins`).Scan(&pins); err != nil || pins != 3 {
+		t.Errorf("pins: %d, %v; want 3", pins, err)
+	}
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM engineering.widgets w WHERE NOT EXISTS
+	          (SELECT 1 FROM engineering.library_pins lp JOIN engineering.released_widget_types r
+	           ON r.library_id = lp.library_id AND r.release_number = lp.release_number
+	           WHERE lp.project_id = w.project_id AND r.id = w.type_id)`).Scan(&unpinnedWidgets); err != nil || unpinnedWidgets != 0 {
+		t.Errorf("widgets of a type not pinned: %d, %v", unpinnedWidgets, err)
+	}
 }
 
 // TestMigrationEngineeringAndRuntimeSchemas_MovesTablesAndSplitsTags: the
@@ -443,5 +463,103 @@ func TestMigrationEngineeringAndRuntimeSchemas_Down_PutsTheStatesBack(t *testing
 	var schemas int
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM pg_namespace WHERE nspname IN ('engineering', 'runtime')`).Scan(&schemas); err != nil || schemas != 0 {
 		t.Errorf("schemas of the roles left: %d, %v", schemas, err)
+	}
+}
+
+// TestMigrationLibraries_PutsExistingWidgetTypesIntoMain: the WidgetTypes
+// stored so far become the Draft of the Library "Main", names taken twice
+// suffixed, released once and pinned in every live Project; Widgets lose the
+// foreign key to the Draft; the outbox rows of WidgetTypes name the Library
+// and the waiting reconciliation jobs keep only their Scene (ADR 0007).
+func TestMigrationLibraries_PutsExistingWidgetTypesIntoMain(t *testing.T) {
+	ctx := context.Background()
+	db, dir := migrationDB(t)
+	if err := goose.UpToContext(ctx, db, dir, 20261026000000); err != nil {
+		t.Fatalf("migrate public: %v", err)
+	}
+	mustExec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := db.ExecContext(ctx, query, args...); err != nil {
+			t.Fatalf("%s: %v", query, err)
+		}
+	}
+	const main = "b0000000-0000-4000-8000-000000000001"
+	deleted, first, second, sceneID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	mustExec(`INSERT INTO projects (id, organization_id, name, deleted_at)
+	          SELECT $1, id, 'gone', now() FROM organizations`, deleted)
+	mustExec(`INSERT INTO engineering.widget_types (id, name, html_template, script, script_language)
+	          VALUES ($1, 'gauge', '', '', 'javascript'), ($2, 'gauge', '', '', 'javascript')`, first, second)
+	mustExec(`INSERT INTO engineering.scenes (id, project_id, name) VALUES ($1, $2, 's')`, sceneID, main)
+	mustExec(`INSERT INTO engineering.widgets (id, project_id, name, type_id, scene_id) VALUES ($1, $2, 'w', $3, $4)`, uuid.New(), main, second, sceneID)
+	mustExec(`INSERT INTO outbox (type, payload) VALUES ('widget_type_updated', $1)`,
+		`{"timestamp":"2026-10-27T12:00:00Z","id":"`+first.String()+`"}`)
+	mustExec(`INSERT INTO policy_jobs (policy, job_key) VALUES
+	          ('reconcile_widgets_with_widget_type', 'widget_type:`+first.String()+`'),
+	          ('reconcile_widgets_with_widget_type', 'widget_type:`+second.String()+`/project:`+main+`/scene:`+sceneID.String()+`')`)
+
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS(filepath.Join(dir, "..", "engineering")),
+		goose.WithTableName("engineering.goose_db_version"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := provider.UpTo(ctx, 20261027000000); err != nil {
+		t.Fatalf("migrate engineering: %v", err)
+	}
+
+	names := map[uuid.UUID]string{}
+	rows, err := db.QueryContext(ctx, `SELECT w.id, w.name FROM engineering.widget_types w
+	                                   JOIN engineering.libraries l ON l.id = w.library_id WHERE l.name = 'Main'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var id uuid.UUID
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			t.Fatal(err)
+		}
+		names[id] = name
+	}
+	rows.Close()
+	if names[first] != "gauge" || names[second] != "gauge (2)" {
+		t.Errorf("the Draft of Main: %v", names)
+	}
+	var released, pins, pinsOfDeleted int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM engineering.released_widget_types WHERE release_number = 1`).Scan(&released); err != nil || released != 2 {
+		t.Errorf("release 1 holds %d types (%v), want 2", released, err)
+	}
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FILTER (WHERE project_id = $1), count(*) FILTER (WHERE project_id = $2)
+	                                   FROM engineering.library_pins`, main, deleted).Scan(&pins, &pinsOfDeleted); err != nil || pins != 1 || pinsOfDeleted != 0 {
+		t.Errorf("pins: %d in Main, %d in a deleted project (%v); want 1 and 0", pins, pinsOfDeleted, err)
+	}
+	var libraryID string
+	if err := db.QueryRowContext(ctx, `SELECT payload->>'library_id' FROM outbox`).Scan(&libraryID); err != nil || libraryID != "d0000000-0000-4000-8000-000000000001" {
+		t.Errorf("the outbox row names library %q (%v)", libraryID, err)
+	}
+	var jobs []string
+	jobRows, err := db.QueryContext(ctx, `SELECT policy || ' ' || job_key FROM policy_jobs ORDER BY job_key`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for jobRows.Next() {
+		var j string
+		if err := jobRows.Scan(&j); err != nil {
+			t.Fatal(err)
+		}
+		jobs = append(jobs, j)
+	}
+	jobRows.Close()
+	if want := "reconcile_widgets_with_pins project:" + main + "/scene:" + sceneID.String(); len(jobs) != 1 || jobs[0] != want {
+		t.Errorf("policy jobs %v, want [%s]", jobs, want)
+	}
+	// A Widget's type need no longer be in the Draft.
+	mustExec(`DELETE FROM engineering.widget_types WHERE id = $1`, second)
+
+	if _, err := provider.DownTo(ctx, 20261026000000); err != nil {
+		t.Fatalf("migrate engineering down: %v", err)
+	}
+	var widgets int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM engineering.widgets`).Scan(&widgets); err != nil || widgets != 0 {
+		t.Errorf("down: a widget of a type gone from the Draft must go, %d left (%v)", widgets, err)
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/domain/version"
@@ -49,18 +50,16 @@ func mustSaveScene(t *testing.T, repo scene.SceneRepository, name string) scene.
 	return saved
 }
 
-// mustSaveWidgetType stores a new WidgetType: a Widget's type must exist.
-func mustSaveWidgetType(t *testing.T) id.ID[library.WidgetType] {
+// makeWidget builds a new Widget, of a WidgetType pinned in the project Main,
+// for the scenes of repo.
+func makeWidget(t *testing.T, repo scene.SceneRepository, name string) scene.Widget {
 	t.Helper()
-	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	saved, err := repo.Save(context.Background(), makeWidgetType(t, "type", nil, repo))
-	if err != nil {
-		t.Fatalf("Save widget type: %v", err)
-	}
-	return saved.ID()
+	return makeWidgetIn(t, repo, mainProject, name)
 }
 
-func makeWidget(t *testing.T, repo scene.SceneRepository, name string) scene.Widget {
+// makeWidgetIn builds a new Widget, of a WidgetType pinned in projectID, for
+// the scenes of repo, a repository of that project.
+func makeWidgetIn(t *testing.T, repo scene.SceneRepository, projectID id.ID[project.Project], name string) scene.Widget {
 	t.Helper()
 	newID := repo.NextWidgetID()
 	newName, err := scene.NewWidgetName(name)
@@ -68,7 +67,7 @@ func makeWidget(t *testing.T, repo scene.SceneRepository, name string) scene.Wid
 		t.Fatalf("NewWidgetName(%q): %v", name, err)
 	}
 	pos := scene.NewPosition(10.0, 20.0, 0)
-	typeID := mustSaveWidgetType(t)
+	typeID := mustPinWidgetType(t, projectID).ID()
 	return scene.NewWidget(
 		newID, newName, pos, library.DefaultSize(),
 		scene.DefaultOrigin(), scene.DefaultRotation(),
@@ -357,19 +356,28 @@ func TestSceneSave_ConcurrentSaves_OneWins(t *testing.T) {
 	}
 }
 
-func TestSceneSave_UnknownWidgetType_ReturnsErrWidgetTypeNotFound(t *testing.T) {
+// TestSceneSave_UnpinnedWidgetType_ReturnsErrWidgetTypeNotFound: a Widget
+// added or retyped must be of a WidgetType a release the Project pins holds
+// (ADR 0012); one of no release, or of a release another Project pins, is
+// not found.
+func TestSceneSave_UnpinnedWidgetType_ReturnsErrWidgetTypeNotFound(t *testing.T) {
 	cleanScenes(t)
 	repo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
 	ctx := context.Background()
 
 	w := makeWidget(t, repo, "w1")
 	sc := mustSave(t, repo, withWidgets(makeScene(t, repo, "scene-1"), w))
-	unknownType := scene.NewWidget(w.ID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(),
-		id.NewID[library.WidgetType](), w.Labels(), w.PortBindings())
+	retyped := func(typeID id.ID[library.WidgetType]) scene.Widget {
+		return scene.NewWidget(w.ID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(), typeID, w.Labels(), w.PortBindings())
+	}
+	unknownType := retyped(id.NewID[library.WidgetType]())
+	other := mustCreateProject(t, repositories.NewProjectRepositoryPostgres(testDB), "Pins elsewhere "+sc.ID().String())
+	notPinned := retyped(mustPinWidgetType(t, other.ID()).ID())
 
 	tests := map[string]scene.Scene{
-		"insert": withWidgets(makeScene(t, repo, "scene-2"), scene.NewWidget(repo.NextWidgetID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(), unknownType.TypeID(), nil, nil)),
-		"update": withWidgets(sc, unknownType),
+		"insert":           withWidgets(makeScene(t, repo, "scene-2"), scene.NewWidget(repo.NextWidgetID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(), unknownType.TypeID(), nil, nil)),
+		"update":           withWidgets(sc, unknownType),
+		"pinned elsewhere": withWidgets(sc, notPinned),
 	}
 	for name, toSave := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -456,45 +464,6 @@ func TestSceneDelete_StaleVersion_ReturnsConflictAndKeepsScene(t *testing.T) {
 func withVersion(sc scene.Scene, number int) scene.Scene {
 	ver, _ := version.New(version.WithNumber[scene.Scene](number))
 	return scene.ReconstituteScene(sc.ID(), sc.ProjectID(), sc.Name(), sc.Size(), sc.BackgroundHTML(), sc.Widgets(), ver)
-}
-
-// ══════════════════════════ FindByWidgetTypeID ══════════════════════════════
-
-func TestSceneFindByWidgetTypeID_ReturnsScenesWithAllTheirWidgets(t *testing.T) {
-	cleanScenes(t)
-	repo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
-
-	typeID := mustSaveWidgetType(t)
-	otherTypeID := mustSaveWidgetType(t)
-	newWidget := func(name string, typeID id.ID[library.WidgetType]) scene.Widget {
-		return scene.NewWidget(repo.NextWidgetID(), mustWidgetName(t, name), scene.NewPosition(0, 0, 0), library.DefaultSize(), scene.DefaultOrigin(), scene.DefaultRotation(), typeID, nil, nil)
-	}
-
-	matching1 := newWidget("m1", typeID)
-	nonMatching := newWidget("n1", otherTypeID)
-	matching2 := newWidget("m2", typeID)
-	sc1 := mustSave(t, repo, withWidgets(makeScene(t, repo, "scene-1"), matching1, nonMatching))
-	sc2 := mustSave(t, repo, withWidgets(makeScene(t, repo, "scene-2"), matching2))
-	mustSave(t, repo, withWidgets(makeScene(t, repo, "scene-3"), newWidget("n2", otherTypeID)))
-
-	result, err := repo.FindByWidgetTypeID(ctx, typeID)
-
-	if err != nil {
-		t.Fatalf("FindByWidgetTypeID: %v", err)
-	}
-	if len(result) != 2 {
-		t.Fatalf("expected 2 scenes, got %d", len(result))
-	}
-	if result[0].ID() != sc1.ID() || result[1].ID() != sc2.ID() {
-		t.Errorf("expected scenes %v, %v in creation order, got %v, %v", sc1.ID(), sc2.ID(), result[0].ID(), result[1].ID())
-	}
-	if got, want := widgetIDs(result[0].Widgets()), widgetIDs([]scene.Widget{matching1, nonMatching}); !slices.Equal(got, want) {
-		t.Errorf("scene-1 widgets: expected all of them %v, got %v", want, got)
-	}
-	if result[0].Version() != sc1.Version() {
-		t.Errorf("scene-1 version: expected %d, got %d", sc1.Version().Number(), result[0].Version().Number())
-	}
 }
 
 // ════════════════════════════════ FindByTagID ═══════════════════════════════
@@ -656,7 +625,7 @@ func TestSceneSave_ReturnsWhatALaterReadReturns(t *testing.T) {
 	cleanScenes(t)
 	ctx := context.Background()
 	repo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
-	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
+	pins := repositories.NewLibraryPinRepositoryPostgres(testDB, mainProject)
 
 	assertSameAsRead := func(saved scene.Scene) {
 		t.Helper()
@@ -665,11 +634,11 @@ func TestSceneSave_ReturnsWhatALaterReadReturns(t *testing.T) {
 			t.Fatalf("Save returned\n%+v\nFindByID returns\n%+v", got, want)
 		}
 	}
-	typeOf := func(w scene.Widget) library.WidgetType {
+	typeOf := func(w scene.Widget) library.ReleasedWidgetType {
 		t.Helper()
-		wt, err := wtRepo.FindByID(ctx, w.TypeID())
+		wt, err := pins.FindPinnedWidgetType(ctx, w.TypeID())
 		if err != nil {
-			t.Fatalf("FindByID widget type: %v", err)
+			t.Fatalf("FindPinnedWidgetType: %v", err)
 		}
 		return wt
 	}

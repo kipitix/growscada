@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	"github.com/kipitix/growscada/internal/server/domain/id"
-	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
@@ -52,10 +51,6 @@ type SceneRepository interface {
 	FindByIDInLiveProject(context.Context, id.ID[Scene], id.ID[organization.Organization]) (Scene, error)
 	FindAllInLiveProject(context.Context, id.ID[organization.Organization]) ([]Scene, error)
 
-	// FindByWidgetTypeID returns, in creation order, every scene with at
-	// least one widget of the given WidgetType, each with all its widgets.
-	FindByWidgetTypeID(context.Context, id.ID[library.WidgetType]) ([]Scene, error)
-
 	// FindByTagID returns, in creation order, every scene with at least one
 	// widget binding a port to the given Tag, each with all its widgets.
 	FindByTagID(context.Context, id.ID[tag.Tag]) ([]Scene, error)
@@ -68,7 +63,8 @@ type SceneRepository interface {
 	// carries the new one, its widgets as stored and no events.
 	// Returns ErrSceneNotFound if the scene does not exist on update.
 	// Returns ErrSceneConflict if the stored version does not match.
-	// Returns library.ErrWidgetTypeNotFound if a widget's type does not exist.
+	// Returns library.ErrWidgetTypeNotFound if a widget added, or whose type
+	// changed, is of a WidgetType no Library Release the Project pins holds.
 	Save(context.Context, Scene) (Scene, error)
 
 	// Delete removes a scene, read at the version it carries, and (via

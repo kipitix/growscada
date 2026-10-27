@@ -1,7 +1,7 @@
 info:
   name: post projects
   type: http
-  seq: 16
+  seq: 24
 
 http:
   method: POST

@@ -9,62 +9,91 @@ import (
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/organization"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
-// WidgetTypeService is the service interface for working with widget types.
+// WidgetTypeService is the service interface for working with the
+// WidgetTypes of a library's Draft. Every method takes the library first; a
+// library that does not exist (or is deleted) is an error wrapping
+// library.ErrLibraryNotFound. A write while a Discard of the library is
+// under way is refused (library.ErrLibraryDiscarding, ADR 0012).
 type WidgetTypeService interface {
-	FindAllWidgetTypes(context.Context) ([]appdto.WidgetType, error)
-	FindWidgetTypeByID(context.Context, uuid.UUID) (appdto.WidgetType, error)
-	CreateWidgetType(context.Context, appdto.WidgetTypeInput) (appdto.WidgetType, error)
-	UpdateWidgetType(ctx context.Context, widgetTypeID uuid.UUID, version int, input appdto.WidgetTypeInput) (appdto.WidgetType, error)
-	DeleteWidgetTypeByID(context.Context, uuid.UUID) (appdto.WidgetType, error)
+	FindAllWidgetTypes(ctx context.Context, libraryID uuid.UUID) ([]appdto.WidgetType, error)
+	FindWidgetTypeByID(ctx context.Context, libraryID, widgetTypeID uuid.UUID) (appdto.WidgetType, error)
+	CreateWidgetType(ctx context.Context, libraryID uuid.UUID, input appdto.WidgetTypeInput) (appdto.WidgetType, error)
+	UpdateWidgetType(ctx context.Context, libraryID, widgetTypeID uuid.UUID, version int, input appdto.WidgetTypeInput) (appdto.WidgetType, error)
+	DeleteWidgetTypeByID(ctx context.Context, libraryID, widgetTypeID uuid.UUID) (appdto.WidgetType, error)
 }
 
 type widgetTypeServiceImpl struct {
-	repository library.WidgetTypeRepository
+	libraries    library.LibraryRepository
+	widgetTypes  library.WidgetTypeRepositories
+	organization id.ID[organization.Organization]
 }
 
 var _ WidgetTypeService = (*widgetTypeServiceImpl)(nil)
 
-// NewWidgetTypeService returns the widget type service. The events of its
+// NewWidgetTypeService returns the service of the WidgetTypes of the Drafts
+// of the libraries of the Organization anOrganizationID. The events of its
 // changes are recorded by the aggregates and saved with them (ADR 0008).
-func NewWidgetTypeService(aRepository library.WidgetTypeRepository) WidgetTypeService {
-	return &widgetTypeServiceImpl{
-		repository: aRepository,
-	}
+// A change of a WidgetType touches no Scene: Projects see only the releases
+// they pin (ADR 0007).
+func NewWidgetTypeService(someLibraries library.LibraryRepository, someWidgetTypes library.WidgetTypeRepositories, anOrganizationID id.ID[organization.Organization]) WidgetTypeService {
+	return &widgetTypeServiceImpl{libraries: someLibraries, widgetTypes: someWidgetTypes, organization: anOrganizationID}
 }
 
-func (s widgetTypeServiceImpl) FindAllWidgetTypes(ctx context.Context) ([]appdto.WidgetType, error) {
-	list, err := s.repository.FindAll(ctx)
+// draft returns the ID and the WidgetType repository of the live library
+// rawLibraryID.
+func (s widgetTypeServiceImpl) draft(ctx context.Context, rawLibraryID uuid.UUID) (id.ID[library.Library], library.WidgetTypeRepository, error) {
+	libraryID := id.NewID(id.IDWithUUID[library.Library](rawLibraryID))
+	if _, err := findOwnLibrary(ctx, s.libraries, s.organization, libraryID); err != nil {
+		return libraryID, nil, err
+	}
+	return libraryID, s.widgetTypes.ForLibrary(libraryID), nil
+}
+
+func (s widgetTypeServiceImpl) FindAllWidgetTypes(ctx context.Context, rawLibraryID uuid.UUID) ([]appdto.WidgetType, error) {
+	_, repo, err := s.draft(ctx, rawLibraryID)
+	if err != nil {
+		return nil, err
+	}
+	list, err := repo.FindAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error on find widget types in repository: %w", err)
 	}
 	return appdto.NewWidgetTypeList(list), nil
 }
 
-func (s widgetTypeServiceImpl) FindWidgetTypeByID(ctx context.Context, rawID uuid.UUID) (appdto.WidgetType, error) {
-	widgetTypeID := id.NewID(id.IDWithUUID[library.WidgetType](rawID))
-	wt, err := s.repository.FindByID(ctx, widgetTypeID)
+func (s widgetTypeServiceImpl) FindWidgetTypeByID(ctx context.Context, rawLibraryID, rawID uuid.UUID) (appdto.WidgetType, error) {
+	_, repo, err := s.draft(ctx, rawLibraryID)
+	if err != nil {
+		return appdto.WidgetType{}, err
+	}
+	wt, err := repo.FindByID(ctx, id.NewID(id.IDWithUUID[library.WidgetType](rawID)))
 	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("error on find widget type by id in repository: %w", err)
 	}
 	return appdto.NewWidgetType(wt), nil
 }
 
-func (s widgetTypeServiceImpl) CreateWidgetType(ctx context.Context, input appdto.WidgetTypeInput) (appdto.WidgetType, error) {
-	newID := s.repository.NextID()
+func (s widgetTypeServiceImpl) CreateWidgetType(ctx context.Context, rawLibraryID uuid.UUID, input appdto.WidgetTypeInput) (appdto.WidgetType, error) {
+	libraryID, repo, err := s.draft(ctx, rawLibraryID)
+	if err != nil {
+		return appdto.WidgetType{}, err
+	}
+	newID := repo.NextID()
 
 	def, err := parseWidgetTypeDefinition(input)
 	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("cannot create widget type: %w", invalidInput(err))
 	}
-	newWt, err := library.CreateWidgetType(newID, def.name, def.html, def.script, def.lang, def.defaultSize, def.inputPorts)
+	newWt, err := library.CreateWidgetType(newID, libraryID, def.name, def.html, def.script, def.lang, def.defaultSize, def.inputPorts)
 	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("cannot create widget type: %w", invalidInput(err))
 	}
 
-	newWt, err = s.repository.Save(ctx, newWt)
+	newWt, err = repo.Save(ctx, newWt)
 	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("cannot save widget type: %w", err)
 	}
@@ -72,10 +101,14 @@ func (s widgetTypeServiceImpl) CreateWidgetType(ctx context.Context, input appdt
 	return appdto.NewWidgetType(newWt), nil
 }
 
-func (s widgetTypeServiceImpl) UpdateWidgetType(ctx context.Context, rawID uuid.UUID, expectedVersion int, input appdto.WidgetTypeInput) (appdto.WidgetType, error) {
+func (s widgetTypeServiceImpl) UpdateWidgetType(ctx context.Context, rawLibraryID, rawID uuid.UUID, expectedVersion int, input appdto.WidgetTypeInput) (appdto.WidgetType, error) {
+	_, repo, err := s.draft(ctx, rawLibraryID)
+	if err != nil {
+		return appdto.WidgetType{}, err
+	}
 	widgetTypeID := id.NewID(id.IDWithUUID[library.WidgetType](rawID))
 
-	found, err := s.repository.FindByID(ctx, widgetTypeID)
+	found, err := repo.FindByID(ctx, widgetTypeID)
 	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("error on find widget type by id in repository: %w", err)
 	}
@@ -103,9 +136,7 @@ func (s widgetTypeServiceImpl) UpdateWidgetType(ctx context.Context, rawID uuid.
 		return appdto.WidgetType{}, fmt.Errorf("cannot update widget type: %w", err)
 	}
 
-	// The Widgets of the type are brought into line later, by the policy on
-	// widget_type_updated (NewWidgetReconciliationPolicy, ADR 0008).
-	found, err = s.repository.Save(ctx, updated)
+	found, err = repo.Save(ctx, updated)
 	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("cannot save widget type: %w", err)
 	}
@@ -151,20 +182,24 @@ func parseWidgetTypeDefinition(input appdto.WidgetTypeInput) (widgetTypeDefiniti
 	return def, nil
 }
 
-// DeleteWidgetTypeByID deletes a widget type no Widget uses; while Widgets
-// use it, the error wraps library.ErrWidgetTypeInUse. It expects no Version:
-// a widget type changed meanwhile is reread and deleted as it is now
-// (retryOnRace).
-func (s widgetTypeServiceImpl) DeleteWidgetTypeByID(ctx context.Context, rawID uuid.UUID) (appdto.WidgetType, error) {
+// DeleteWidgetTypeByID removes a widget type from the library's Draft. It
+// touches no Scene: the Widgets of Projects are of the copies the releases
+// they pin hold. It expects no Version: a widget type changed meanwhile is
+// reread and deleted as it is now (retryOnRace).
+func (s widgetTypeServiceImpl) DeleteWidgetTypeByID(ctx context.Context, rawLibraryID, rawID uuid.UUID) (appdto.WidgetType, error) {
+	_, repo, err := s.draft(ctx, rawLibraryID)
+	if err != nil {
+		return appdto.WidgetType{}, err
+	}
 	widgetTypeID := id.NewID(id.IDWithUUID[library.WidgetType](rawID))
 
 	var deleted library.WidgetType
-	err := retryOnRace(library.ErrWidgetTypeConflict, func() error {
-		found, err := s.repository.FindByID(ctx, widgetTypeID)
+	err = retryOnRace(library.ErrWidgetTypeConflict, func() error {
+		found, err := repo.FindByID(ctx, widgetTypeID)
 		if err != nil {
 			return fmt.Errorf("error on find widget type by id in repository: %w", err)
 		}
-		if err := s.repository.Delete(ctx, found.Delete()); err != nil {
+		if err := repo.Delete(ctx, found.Delete()); err != nil {
 			return fmt.Errorf("cannot delete widget type: %w", err)
 		}
 		deleted = found

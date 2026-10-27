@@ -1,10 +1,8 @@
 package application
 
 import (
-	"context"
-
 	"github.com/kipitix/growscada/internal/server/domain/id"
-	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -19,6 +17,9 @@ type ProjectScope interface {
 	ProjectID() id.ID[project.Project]
 	Tags() tag.TagRepository
 	Scenes() scene.SceneRepository
+	// LibraryPins are the Library Pins of the Project's Draft, and through
+	// them the WidgetTypes its Widgets may be of (ADR 0007).
+	LibraryPins() librarypin.Repository
 }
 
 // ProjectScopes opens the ProjectScope of a Project. It knows nothing of the
@@ -27,10 +28,4 @@ type ProjectScope interface {
 type ProjectScopes interface {
 	// ForProject returns the repositories of the Project's content.
 	ForProject(id.ID[project.Project]) ProjectScope
-
-	// FindProjectsUsingWidgetType returns the live Projects that hold Widgets
-	// of the WidgetType: a WidgetType is shared by every Project until
-	// Libraries exist (ADR 0006, task 33). A Project marked deleted is left
-	// out: its cleanup removes its Widgets anyway.
-	FindProjectsUsingWidgetType(context.Context, id.ID[library.WidgetType]) ([]id.ID[project.Project], error)
 }

@@ -39,7 +39,7 @@ func SceneTags(widgets []apiv0.WidgetResponse, find func(uuid.UUID) (apiv0.TagRe
 // InputPort gets its bound Tag's current value, converted by the Tag's
 // TagType, and the value as text. A port without a PortBinding, or bound to a
 // deleted Tag, has no value: its type hint's default and no text.
-func WidgetInputs(w apiv0.WidgetResponse, wt apiv0.WidgetTypeResponse, tags map[uuid.UUID]apiv0.TagResponse) widgetscriptv0.Inputs {
+func WidgetInputs(w apiv0.WidgetResponse, wt apiv0.ReleasedWidgetTypeResponse, tags map[uuid.UUID]apiv0.TagResponse) widgetscriptv0.Inputs {
 	inputs := make(widgetscriptv0.Inputs, len(wt.InputPorts))
 	for _, p := range wt.InputPorts {
 		in := uiutil.NoValueInput(p.TypeHint)
@@ -58,7 +58,7 @@ func WidgetInputs(w apiv0.WidgetResponse, wt apiv0.WidgetTypeResponse, tags map[
 // deleted Tag, counts as Bad, so an unfinished Widget stands out. While the
 // connection to the server is lost, no value can be trusted to be current, so
 // the result is at least Uncertain.
-func WidgetQuality(w apiv0.WidgetResponse, wt apiv0.WidgetTypeResponse, tags map[uuid.UUID]apiv0.TagResponse, connected bool) Quality {
+func WidgetQuality(w apiv0.WidgetResponse, wt apiv0.ReleasedWidgetTypeResponse, tags map[uuid.UUID]apiv0.TagResponse, connected bool) Quality {
 	q := QualityGood
 	if !connected {
 		q = QualityUncertain

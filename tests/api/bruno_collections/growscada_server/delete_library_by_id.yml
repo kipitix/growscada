@@ -1,0 +1,30 @@
+info:
+  name: delete library by id
+  type: http
+  seq: 53
+
+http:
+  method: DELETE
+  url: http://{{API_SERVER}}/api/v0/libraries/{{OTHER_LIBRARY_ID}}
+  auth: inherit
+
+docs: |
+  Deletes a library with its Draft and releases, refused (`409`) while a
+  live project pins it: the project Line 2 was deleted just before.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.id'
+      operator: eq
+      value: '"{{OTHER_LIBRARY_ID}}"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

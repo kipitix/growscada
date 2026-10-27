@@ -11,9 +11,12 @@ import (
 // ReloadTargets says which server-backed lists an event makes stale.
 // It is the single routing table of the parts that show server data (the
 // project switcher of Root, Library, Project, Operation); each reloads the
-// lists it shows. Scenes, Widgets and Tags are those of the selected project.
+// lists it shows. Libraries are the server's with the WidgetTypes of their
+// Drafts (WidgetTypes); LibraryPins (the selected project's pins and the
+// WidgetTypes of the releases they pin), Scenes, Widgets and Tags are those
+// of the selected project.
 type ReloadTargets struct {
-	Projects, WidgetTypes, Scenes, Widgets, Tags bool
+	Projects, Libraries, WidgetTypes, LibraryPins, Scenes, Widgets, Tags bool
 	// Scene is the one Scene whose own state and Widgets are stale (a Widget
 	// of it changed, which bumps its version without a scene event); uuid.Nil
 	// if none. The list of Scenes is not: only scene events and a resync
@@ -28,13 +31,13 @@ func (t ReloadTargets) WidgetsOf(selected uuid.UUID) bool {
 }
 
 // AllTargets is every list.
-var AllTargets = ReloadTargets{Projects: true, WidgetTypes: true, Scenes: true, Widgets: true, Tags: true}
+var AllTargets = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, LibraryPins: true, Scenes: true, Widgets: true, Tags: true}
 
 // The lists of each stream: what its resync reloads, since the events it
 // published while disconnected are lost.
 var (
-	serverTargets  = ReloadTargets{Projects: true, WidgetTypes: true}
-	projectTargets = ReloadTargets{Scenes: true, Widgets: true, Tags: true}
+	serverTargets  = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true}
+	projectTargets = ReloadTargets{LibraryPins: true, Scenes: true, Widgets: true, Tags: true}
 )
 
 // ReloadTargetsFor routes an event of the streams (or EventResync,
@@ -49,7 +52,15 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 	case apiv0.EventProjectCreated, apiv0.EventProjectUpdated, apiv0.EventProjectDeleted:
 		return ReloadTargets{Projects: true}
 	case apiv0.EventWidgetTypeCreated, apiv0.EventWidgetTypeUpdated, apiv0.EventWidgetTypeDeleted:
-		return ReloadTargets{WidgetTypes: true}
+		// A change of the Draft changes whether its library has changes
+		// not released.
+		return ReloadTargets{WidgetTypes: true, Libraries: true}
+	case apiv0.EventLibraryCreated, apiv0.EventLibraryUpdated, apiv0.EventLibraryDeleted,
+		apiv0.EventLibraryDiscardStarted, apiv0.EventLibraryReleased:
+		// The end of a Discard (library_updated) changed the Draft.
+		return ReloadTargets{Libraries: true, WidgetTypes: true}
+	case apiv0.EventLibraryPinCreated, apiv0.EventLibraryPinUpdated, apiv0.EventLibraryPinDeleted:
+		return ReloadTargets{LibraryPins: true}
 	case apiv0.EventSceneCreated, apiv0.EventSceneUpdated, apiv0.EventSceneDeleted:
 		return ReloadTargets{Scenes: true}
 	case apiv0.EventWidgetCreated, apiv0.EventWidgetUpdated, apiv0.EventWidgetDeleted:

@@ -1,8 +1,9 @@
 // Package apiv0 is MAJOR 0 of the server API contract: the JSON bodies of
 // the REST API under PathPrefix and the live events of its event streams
-// (ADR 0005). The content of a project (Tags, Scenes, Widgets) lives under
-// ProjectPath of the project (ADR 0006); WidgetTypes and the projects
-// themselves are the server's.
+// (ADR 0005). The content of a project (Tags, Scenes, Widgets, Library Pins)
+// lives under ProjectPath of the project (ADR 0006); the projects
+// themselves and the libraries, with the WidgetTypes of their Drafts and
+// their releases, are the server's (ADR 0007).
 //
 // Readers of responses and events skip fields and event types they do not
 // know; the server rejects request bodies with unknown fields. Changing any
@@ -13,7 +14,7 @@ import "github.com/kipitix/growscada/contract"
 
 // SchemaVersion is the version of the server API this package describes.
 // A function rather than a variable, so no importer can change it.
-func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 5} }
+func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 6} }
 
 // PathPrefix is the URL path prefix of every endpoint of this MAJOR.
 const PathPrefix = "/api/v0"
@@ -26,3 +27,7 @@ func ProjectPath(projectID string) string { return "/projects/" + projectID }
 // the events of the project with this ID. A project not found adds nothing:
 // the stream carries the server's events alone.
 const EventsQueryProject = "project"
+
+// LibraryPath is the path, under PathPrefix, of the library with the given
+// ID: the prefix of the WidgetTypes of its Draft and of its releases.
+func LibraryPath(libraryID string) string { return "/libraries/" + libraryID }

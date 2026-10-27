@@ -1,7 +1,7 @@
 info:
   name: patch tag value invalid quality
   type: http
-  seq: 23
+  seq: 31
 
 http:
   method: PATCH

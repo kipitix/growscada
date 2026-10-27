@@ -7,6 +7,7 @@ import (
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -37,12 +38,22 @@ var apiEventTypes = map[event.EventType]string{
 	event.EventTypeProjectCreated:     apiv0.EventProjectCreated,
 	event.EventTypeProjectUpdated:     apiv0.EventProjectUpdated,
 	event.EventTypeProjectDeleted:     apiv0.EventProjectDeleted,
+
+	event.EventTypeLibraryCreated:        apiv0.EventLibraryCreated,
+	event.EventTypeLibraryUpdated:        apiv0.EventLibraryUpdated,
+	event.EventTypeLibraryDeleted:        apiv0.EventLibraryDeleted,
+	event.EventTypeLibraryDiscardStarted: apiv0.EventLibraryDiscardStarted,
+	event.EventTypeLibraryReleased:       apiv0.EventLibraryReleased,
+	event.EventTypeLibraryPinCreated:     apiv0.EventLibraryPinCreated,
+	event.EventTypeLibraryPinUpdated:     apiv0.EventLibraryPinUpdated,
+	event.EventTypeLibraryPinDeleted:     apiv0.EventLibraryPinDeleted,
 }
 
 // newAPIEvent translates a domain (or delivery) event into the event stream's
 // message: its type through apiEventTypes, and the fields its family carries
 // — the affected aggregate's (or connection's) ID, the Scene of a Widget, the
-// Tag's new state of tag_updated. An event type missing from the table gives
+// Library of a WidgetType, the number of a new release, the Tag's new state
+// of tag_updated. An event type missing from the table gives
 // an empty Type; such an event is not sent.
 func newAPIEvent(e event.Event) apiv0.Event {
 	ev := apiv0.Event{
@@ -61,6 +72,14 @@ func newAPIEvent(e event.Event) apiv0.Event {
 		ev.SceneID = e.SceneID().String()
 	case library.WidgetTypeEvent:
 		ev.ID = e.WidgetTypeID().String()
+		ev.LibraryID = e.LibraryID().String()
+	case library.LibraryEvent:
+		ev.ID = e.LibraryID().String()
+		if released, ok := e.(library.LibraryReleasedEvent); ok {
+			ev.Release = released.Release().Int()
+		}
+	case librarypin.LibraryPinEvent:
+		ev.ID = e.LibraryID().String()
 	case scene.SceneEvent:
 		ev.ID = e.SceneID().String()
 	case project.ProjectEvent:

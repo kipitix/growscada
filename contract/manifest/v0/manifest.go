@@ -1,6 +1,7 @@
 // Package manifestv0 is MAJOR 0 of the growctl manifest contract: the YAML
 // documents an Engineer writes to declare Projects and the Tags of a Project
-// (ADR 0005, ADR 0006).
+// (ADR 0005, ADR 0006), Libraries with the WidgetTypes of their Drafts and
+// the Library Pins of a Project (ADR 0007).
 //
 // A manifest names its version in apiVersion as "growscada/vMAJOR.MINOR";
 // "growscada/vMAJOR" reads as MINOR 0. Manifests are written by people, so
@@ -19,7 +20,7 @@ import (
 // SchemaVersion is the version of the manifest contract this package
 // describes.
 // A function rather than a variable, so no importer can change it.
-func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 3} }
+func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 4} }
 
 // apiVersionPrefix precedes the version in apiVersion.
 const apiVersionPrefix = "growscada/v"
@@ -30,6 +31,11 @@ const (
 	KindTag = "Tag"
 	// KindProject is the manifest kind for a Project.
 	KindProject = "Project"
+	// KindLibrary is the manifest kind for a Library.
+	KindLibrary = "Library"
+	// KindWidgetType is the manifest kind for a WidgetType of a Library's
+	// Draft.
+	KindWidgetType = "WidgetType"
 )
 
 // APIVersion is the apiVersion written into manifests of this version.
@@ -84,10 +90,67 @@ type Metadata struct {
 }
 
 // ProjectDocument is a `kind: Project` document: a Project, identified by its
-// name, unique on the server. It has no spec yet.
+// name, unique on the server. Its spec is optional (since 0.4).
 type ProjectDocument struct {
 	Header   `yaml:",inline"`
 	Metadata ProjectMetadata `yaml:"metadata"`
+	Spec     *ProjectSpec    `yaml:"spec,omitempty"`
+}
+
+// ProjectSpec declares what a Project's Draft pins: LibraryPins maps the
+// name of a Library to the number of its Library Release the Project uses
+// (since 0.4). A Library the map leaves out keeps its pin, if any.
+type ProjectSpec struct {
+	LibraryPins map[string]int `yaml:"libraryPins,omitempty"`
+}
+
+// LibraryDocument is a `kind: Library` document (since 0.4): a Library,
+// identified by its name, unique on the server. It has no spec: its
+// WidgetTypes are documents of their own.
+type LibraryDocument struct {
+	Header   `yaml:",inline"`
+	Metadata LibraryMetadata `yaml:"metadata"`
+}
+
+// LibraryMetadata identifies a declared Library.
+type LibraryMetadata struct {
+	Name string `yaml:"name"`
+}
+
+// WidgetTypeDocument is a `kind: WidgetType` document (since 0.4): a
+// WidgetType of the Draft of the Library metadata.library, identified by its
+// name, unique in that Library.
+type WidgetTypeDocument struct {
+	Header   `yaml:",inline"`
+	Metadata WidgetTypeMetadata `yaml:"metadata"`
+	Spec     WidgetTypeSpec     `yaml:"spec"`
+}
+
+// WidgetTypeMetadata identifies a declared WidgetType: its name and the name
+// of its Library, both required.
+type WidgetTypeMetadata struct {
+	Name    string `yaml:"name"`
+	Library string `yaml:"library"`
+}
+
+// WidgetTypeSpec declares a WidgetType's definition. HTML, Script, Width and
+// Height are required; ScriptLanguage defaults to javascript, InputPorts to
+// none.
+type WidgetTypeSpec struct {
+	HTML           *string     `yaml:"html" schema:"required"`
+	Script         *string     `yaml:"script" schema:"required"`
+	ScriptLanguage string      `yaml:"scriptLanguage,omitempty"`
+	Width          *int        `yaml:"width" schema:"required"`
+	Height         *int        `yaml:"height" schema:"required"`
+	InputPorts     []InputPort `yaml:"inputPorts,omitempty"`
+}
+
+// InputPort declares an InputPort of a WidgetType. An empty TypeHint accepts
+// any TagType.
+type InputPort struct {
+	Name        string `yaml:"name"`
+	Description string `yaml:"description,omitempty"`
+	TypeHint    string `yaml:"typeHint,omitempty"`
 }
 
 // ProjectMetadata identifies a declared Project.

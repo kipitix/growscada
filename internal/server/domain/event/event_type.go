@@ -36,6 +36,15 @@ var (
 	EventTypeProjectCreated     = EventType{eventType: 16}
 	EventTypeProjectUpdated     = EventType{eventType: 17}
 	EventTypeProjectDeleted     = EventType{eventType: 18}
+
+	EventTypeLibraryCreated        = EventType{eventType: 19}
+	EventTypeLibraryUpdated        = EventType{eventType: 20}
+	EventTypeLibraryDeleted        = EventType{eventType: 21}
+	EventTypeLibraryDiscardStarted = EventType{eventType: 22}
+	EventTypeLibraryReleased       = EventType{eventType: 23}
+	EventTypeLibraryPinCreated     = EventType{eventType: 24}
+	EventTypeLibraryPinUpdated     = EventType{eventType: 25}
+	EventTypeLibraryPinDeleted     = EventType{eventType: 26}
 )
 
 // eventTypeNames is the single source of truth for known event types:
@@ -63,6 +72,14 @@ var eventTypeNames = []struct {
 	{EventTypeProjectCreated, "project_created"},
 	{EventTypeProjectUpdated, "project_updated"},
 	{EventTypeProjectDeleted, "project_deleted"},
+	{EventTypeLibraryCreated, "library_created"},
+	{EventTypeLibraryUpdated, "library_updated"},
+	{EventTypeLibraryDeleted, "library_deleted"},
+	{EventTypeLibraryDiscardStarted, "library_discard_started"},
+	{EventTypeLibraryReleased, "library_released"},
+	{EventTypeLibraryPinCreated, "library_pin_created"},
+	{EventTypeLibraryPinUpdated, "library_pin_updated"},
+	{EventTypeLibraryPinDeleted, "library_pin_deleted"},
 }
 
 // AllEventTypes returns every known EventType.

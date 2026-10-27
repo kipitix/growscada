@@ -12,12 +12,45 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
-// ── Widget types ──────────────────────────────────────────────────────────────
+// ── Widget types and Library Pins ─────────────────────────────────────────────
 
+// loadWidgetTypes (re)loads the WidgetTypes of the releases the project pins:
+// the palette, and what its Widgets are of (ADR 0007).
 func (p *Project) loadWidgetTypes(ctx app.Context) {
-	uiutil.Load(p.compoCtx, &p.widgetTypesReloader, p.client.ListWidgetTypes, func(ctx app.Context, list []apiv0.WidgetTypeResponse) {
-		p.widgetTypes = list
-	}, p.loadWidgetTypes)
+	if p.content == nil {
+		p.widgetTypes = nil
+		return
+	}
+	uiutil.LoadOfProject(p.compoCtx, &p.widgetTypesReloader, p.projectContent,
+		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.ReleasedWidgetTypeResponse, error) {
+			return pc.ListWidgetTypes(c)
+		},
+		func(ctx app.Context, list []apiv0.ReleasedWidgetTypeResponse) {
+			p.widgetTypes = list
+		}, p.loadWidgetTypes)
+}
+
+// loadPins (re)loads the project's Library Pins.
+func (p *Project) loadPins(ctx app.Context) {
+	if p.content == nil {
+		p.pins = nil
+		return
+	}
+	uiutil.LoadOfProject(p.compoCtx, &p.pinsReloader, p.projectContent,
+		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.LibraryPinResponse, error) {
+			return pc.ListLibraryPins(c)
+		},
+		func(ctx app.Context, pins []apiv0.LibraryPinResponse) {
+			p.pins = pins
+		}, p.loadPins)
+}
+
+// loadLibraries (re)loads the server's libraries: the names of the pinned
+// ones and the releases a pin may take.
+func (p *Project) loadLibraries(ctx app.Context) {
+	uiutil.Load(p.compoCtx, &p.librariesReloader, p.client.ListLibraries, func(ctx app.Context, list []apiv0.LibraryResponse) {
+		p.libraries = list
+	}, p.loadLibraries)
 }
 
 // ── Scenes ────────────────────────────────────────────────────────────────────

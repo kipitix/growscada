@@ -1,0 +1,39 @@
+info:
+  name: post library releases unchanged
+  type: http
+  seq: 36
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/releases
+  body:
+    type: json
+    data: |-
+      {
+        "note": "",
+        "version": 1
+      }
+  auth: inherit
+
+docs: |
+  A Draft unchanged since the latest release is not released.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '409'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: '"application/problem+json"'
+    - expression: 'res.body.title'
+      operator: eq
+      value: '"Conflict: Library"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

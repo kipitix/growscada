@@ -16,11 +16,12 @@ type widgetTypeCreatedEventImpl struct {
 
 var _ WidgetTypeCreatedEvent = (*widgetTypeCreatedEventImpl)(nil)
 
-func NewWidgetTypeCreatedEvent(anID id.ID[WidgetType], opts ...event.EventOption) WidgetTypeCreatedEvent {
+func NewWidgetTypeCreatedEvent(anID id.ID[WidgetType], aLibraryID id.ID[Library], opts ...event.EventOption) WidgetTypeCreatedEvent {
 	return &widgetTypeCreatedEventImpl{
 		widgetTypeEventImpl: widgetTypeEventImpl{
 			Base:         event.NewBase(event.EventTypeWidgetTypeCreated, opts...),
 			widgetTypeID: anID,
+			libraryID:    aLibraryID,
 		},
 	}
 }

@@ -1,0 +1,38 @@
+info:
+  name: post libraries
+  type: http
+  seq: 32
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/libraries
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Bruno library"
+      }
+  auth: inherit
+
+docs: |
+  Creates a library with an empty Draft and no release. Its name is unique
+  among the live libraries of the server.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.id'
+      operator: isString
+    - expression: 'res.body.version'
+      operator: eq
+      value: '1'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

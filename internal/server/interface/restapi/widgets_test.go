@@ -27,21 +27,69 @@ func cleanWidgetsRest(t *testing.T) {
 	ensureTestWidgetType(t)
 }
 
-// testWidgetTypeID is the WidgetType of the shared widget fixtures: a
-// Widget's type must exist, so ensureTestWidgetType stores it.
-var testWidgetTypeID = uuid.MustParse("7e57c0de-0000-4000-8000-000000000001")
+// testLibrary and testWidgetTypeID are the Library and the WidgetType of the
+// shared widget fixtures: a Widget's type must be pinned, so
+// ensureTestWidgetType stores the library with the type, its release 1 and
+// its pin in mainProject.
+var (
+	testLibrary      = uuid.MustParse("7e57c0de-1000-4000-8000-000000000001")
+	testWidgetTypeID = uuid.MustParse("7e57c0de-0000-4000-8000-000000000001")
+)
 
 func ensureTestWidgetType(t *testing.T) {
 	t.Helper()
-	if _, err := testDB().ExecContext(context.Background(),
-		`INSERT INTO engineering.widget_types
-		    (id, name, html_template, script, script_language, input_ports, default_width, default_height, version)
-		 VALUES ($1, 'test-type', '<div></div>', 'function update(){}', 'javascript', '[]', 100, 100, 1)
-		 ON CONFLICT (id) DO NOTHING`,
-		testWidgetTypeID,
-	); err != nil {
-		t.Fatalf("ensureTestWidgetType: %v", err)
+	for _, q := range []struct {
+		query string
+		args  []any
+	}{
+		{`INSERT INTO engineering.libraries (id, organization_id, name, version)
+		     SELECT $1, id, 'test-library', 1 FROM organizations ON CONFLICT (id) DO NOTHING`, []any{testLibrary}},
+		{`INSERT INTO engineering.widget_types
+		    (id, library_id, name, html_template, script, script_language, input_ports, default_width, default_height, version)
+		 VALUES ($2, $1, 'test-type', '<div></div>', 'function update(){}', 'javascript', '[]', 100, 100, 1)
+		 ON CONFLICT (id) DO NOTHING`, []any{testLibrary, testWidgetTypeID}},
+		{`INSERT INTO engineering.library_releases (library_id, number) VALUES ($1, 1) ON CONFLICT DO NOTHING`, []any{testLibrary}},
+		{`INSERT INTO engineering.released_widget_types
+		    (library_id, release_number, id, name, html_template, script, script_language, input_ports, default_width, default_height)
+		 VALUES ($1, 1, $2, 'test-type', '<div></div>', 'function update(){}', 'javascript', '[]', 100, 100)
+		 ON CONFLICT DO NOTHING`, []any{testLibrary, testWidgetTypeID}},
+		{`INSERT INTO engineering.library_pins (project_id, library_id, release_number, version)
+		 VALUES ($1, $2, 1, 1) ON CONFLICT DO NOTHING`, []any{mainProject, testLibrary}},
+	} {
+		if _, err := testDB().ExecContext(context.Background(), q.query, q.args...); err != nil {
+			t.Fatalf("ensureTestWidgetType: %v", err)
+		}
 	}
+}
+
+// releaseAndPin releases the Draft of the library and pins the release in
+// mainProject, in place of the release pinned so far.
+func releaseAndPin(t *testing.T, libraryID uuid.UUID) appdto.LibraryRelease {
+	t.Helper()
+	ctx := context.Background()
+	services := newServices()
+	lib, err := services.libraries.FindLibraryByID(ctx, libraryID)
+	if err != nil {
+		t.Fatalf("FindLibraryByID: %v", err)
+	}
+	release, err := services.libraries.Release(ctx, libraryID, lib.Version, appdto.ReleaseInput{})
+	if err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+	version := 0
+	pins, err := services.pins.FindLibraryPins(ctx, mainProject)
+	if err != nil {
+		t.Fatalf("FindLibraryPins: %v", err)
+	}
+	for _, p := range pins {
+		if p.LibraryID == libraryID {
+			version = p.Version
+		}
+	}
+	if _, _, err := services.pins.PutLibraryPin(ctx, mainProject, libraryID, release.Number, version); err != nil {
+		t.Fatalf("PutLibraryPin: %v", err)
+	}
+	return release
 }
 
 func newRouterWithWidgets() *restapi.APIRouter {
@@ -597,6 +645,7 @@ func TestPostWidgets_InvalidInput_Returns400(t *testing.T) {
 		DefaultWidth: 100, DefaultHeight: 100,
 		InputPorts: []appdto.InputPort{{Name: "value", TypeHint: "integer"}},
 	})
+	releaseAndPin(t, wtLibrary)
 	cleanTags(t)
 	label := createTagViaService(t, "label", "string", "", "good")
 	cases := map[string]func(*apiv0.CreateWidgetRequest){

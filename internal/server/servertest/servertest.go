@@ -96,9 +96,9 @@ var MainProject = uuid.MustParse("b0000000-0000-4000-8000-000000000001")
 // MainProjectName is the name of MainProject.
 const MainProjectName = "Main"
 
-// StartAPI cleans every table (the Tag states, tags, widgets, scenes,
-// widget_types, projects but MainProject — restored live if a test deleted
-// it —, outbox, policy_jobs) and serves the real REST API over the
+// StartAPI cleans every table (the Tag states, tags, widgets, scenes, Library
+// Pins, libraries with their WidgetTypes and releases, projects but
+// MainProject — restored live if a test deleted it —, outbox, policy_jobs) and serves the real REST API over the
 // database, with the outbox dispatcher delivering committed events to its
 // event streams, the Runtime node publishing tag_updated, and the policy
 // runner running the policies, as the server does. The returned TagService
@@ -107,7 +107,7 @@ const MainProjectName = "Main"
 func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagService) {
 	t.Helper()
 	if _, err := db.ExecContext(context.Background(), "DELETE FROM runtime.tags; DELETE FROM engineering.tags; DELETE FROM engineering.widgets; "+
-		"DELETE FROM engineering.scenes; DELETE FROM engineering.widget_types; "+
+		"DELETE FROM engineering.scenes; DELETE FROM engineering.library_pins; DELETE FROM engineering.libraries; "+
 		"DELETE FROM outbox; DELETE FROM policy_jobs; "+
 		"DELETE FROM projects WHERE id <> '"+MainProject.String()+"'; "+
 		// A test that deleted Main may have left its row removed by the
@@ -131,9 +131,13 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	tagStateSvc := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, tagUpdates.Publish)
 	runtimeNode := inprocess.NewRuntimeNode(tagStateSvc)
 	tagSvc := application.NewTagService(content, runtimeNode)
-	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(db, onCommit)
+	libraries := repositories.NewLibraryRepositoryPostgres(db, onCommit)
+	releases := repositories.NewLibraryReleaseRepositoryPostgres(db, onCommit)
+	widgetTypes := repositories.NewWidgetTypeRepositories(db, onCommit)
 	runner := outbox.NewPolicyRunner(db, []application.Policy{
-		application.NewWidgetReconciliationPolicy(wtRepo, scopes),
+		application.NewWidgetReconciliationPolicy(scopes),
+		application.NewLibraryCleanupPolicy(libraries),
+		application.NewDiscardLibraryPolicy(libraries, releases, widgetTypes),
 		application.NewUnbindDeletedTagPolicy(projectRepo, scopes),
 		application.NewProjectCleanupPolicy(projectRepo, scopes, runtimeNode),
 		application.NewRuntimeTagDefinitionsPolicy(scopes, runtimeNode),
@@ -150,9 +154,15 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 		wg.Wait()
 	})
 
-	wtSvc := application.NewWidgetTypeService(wtRepo)
-	sceneSvc := application.NewSceneService(content, wtRepo)
-	router := restapi.NewRouter(application.NewProjectService(projectRepo, orgID), tagSvc, tagStateSvc, wtSvc, sceneSvc, bus, 100)
+	router := restapi.NewRouter(restapi.Services{
+		Projects:    application.NewProjectService(projectRepo, orgID),
+		Tags:        tagSvc,
+		TagStates:   tagStateSvc,
+		Libraries:   application.NewLibraryService(libraries, releases, widgetTypes, orgID),
+		WidgetTypes: application.NewWidgetTypeService(libraries, widgetTypes, orgID),
+		LibraryPins: application.NewLibraryPinService(content, libraries, releases),
+		Scenes:      application.NewSceneService(content),
+	}, bus, 100)
 
 	srv := httptest.NewServer(router.ServeMux())
 	t.Cleanup(srv.Close)

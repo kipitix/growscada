@@ -16,6 +16,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -41,6 +42,11 @@ type payload struct {
 	// ByReconciliation marks a widget_updated event recorded by
 	// Scene.ReconcileWith.
 	ByReconciliation bool `json:"by_reconciliation,omitempty"`
+	// LibraryID is the Library of a WidgetType's event, and the Library of a
+	// Library Pin's (whose ID is the Library's too).
+	LibraryID *uuid.UUID `json:"library_id,omitempty"`
+	// Release is the number of the Library Release of library_released.
+	Release int `json:"release,omitempty"`
 }
 
 // Encode returns the stored form of a domain event. Events of delivery
@@ -60,6 +66,15 @@ func Encode(e event.Event) ([]byte, error) {
 		p.ID = ev.TagID().UUID()
 	case library.WidgetTypeEvent:
 		p.ID = ev.WidgetTypeID().UUID()
+		libraryID := ev.LibraryID().UUID()
+		p.LibraryID = &libraryID
+	case library.LibraryReleasedEvent:
+		p.ID = ev.LibraryID().UUID()
+		p.Release = ev.Release().Int()
+	case library.LibraryEvent:
+		p.ID = ev.LibraryID().UUID()
+	case librarypin.LibraryPinEvent:
+		p.ID = ev.LibraryID().UUID()
 	case scene.WidgetEvent:
 		p.ID = ev.WidgetID().UUID()
 		sceneID := ev.SceneID().UUID()
@@ -95,14 +110,36 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 	widgetID := id.NewID(id.IDWithUUID[scene.Widget](p.ID))
 
 	projectOfEvent := id.NewID(id.IDWithUUID[project.Project](p.ID))
+	libraryOfEvent := id.NewID(id.IDWithUUID[library.Library](p.ID))
 
 	switch eventType {
-	case event.EventTypeWidgetTypeCreated:
-		return library.NewWidgetTypeCreatedEvent(widgetTypeID, ts), nil
-	case event.EventTypeWidgetTypeUpdated:
-		return library.NewWidgetTypeUpdatedEvent(widgetTypeID, ts), nil
-	case event.EventTypeWidgetTypeDeleted:
-		return library.NewWidgetTypeDeletedEvent(widgetTypeID, ts), nil
+	case event.EventTypeWidgetTypeCreated, event.EventTypeWidgetTypeUpdated, event.EventTypeWidgetTypeDeleted:
+		if p.LibraryID == nil {
+			return nil, fmt.Errorf("cannot decode %s payload: no library_id", eventType)
+		}
+		libraryID := id.NewID(id.IDWithUUID[library.Library](*p.LibraryID))
+		switch eventType {
+		case event.EventTypeWidgetTypeCreated:
+			return library.NewWidgetTypeCreatedEvent(widgetTypeID, libraryID, ts), nil
+		case event.EventTypeWidgetTypeUpdated:
+			return library.NewWidgetTypeUpdatedEvent(widgetTypeID, libraryID, ts), nil
+		default:
+			return library.NewWidgetTypeDeletedEvent(widgetTypeID, libraryID, ts), nil
+		}
+	case event.EventTypeLibraryCreated:
+		return library.NewLibraryCreatedEvent(libraryOfEvent, ts), nil
+	case event.EventTypeLibraryUpdated:
+		return library.NewLibraryUpdatedEvent(libraryOfEvent, ts), nil
+	case event.EventTypeLibraryDeleted:
+		return library.NewLibraryDeletedEvent(libraryOfEvent, ts), nil
+	case event.EventTypeLibraryDiscardStarted:
+		return library.NewLibraryDiscardStartedEvent(libraryOfEvent, ts), nil
+	case event.EventTypeLibraryReleased:
+		release, err := library.NewReleaseNumber(p.Release)
+		if err != nil {
+			return nil, fmt.Errorf("cannot decode %s payload: %w", eventType, err)
+		}
+		return library.NewLibraryReleasedEvent(libraryOfEvent, release, ts), nil
 	case event.EventTypeProjectCreated:
 		return project.NewProjectCreatedEvent(projectOfEvent, ts), nil
 	case event.EventTypeProjectUpdated:
@@ -127,6 +164,12 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 		return scene.NewSceneUpdatedEvent(sceneID, projectID, ts), nil
 	case event.EventTypeSceneDeleted:
 		return scene.NewSceneDeletedEvent(sceneID, projectID, ts), nil
+	case event.EventTypeLibraryPinCreated:
+		return librarypin.NewLibraryPinCreatedEvent(libraryOfEvent, projectID, ts), nil
+	case event.EventTypeLibraryPinUpdated:
+		return librarypin.NewLibraryPinUpdatedEvent(libraryOfEvent, projectID, ts), nil
+	case event.EventTypeLibraryPinDeleted:
+		return librarypin.NewLibraryPinDeletedEvent(libraryOfEvent, projectID, ts), nil
 	}
 
 	// Widget events: the Scene that holds the widget is stored beside it.

@@ -1,0 +1,40 @@
+info:
+  name: put library pin
+  type: http
+  seq: 37
+
+http:
+  method: PUT
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/library-pins/{{OTHER_LIBRARY_ID}}
+  body:
+    type: json
+    data: |-
+      {
+        "release": 1,
+        "version": 0
+      }
+  auth: inherit
+
+docs: |
+  `version` 0 adds the pin (`201`); any other switches it and must be the
+  pin's current version (`200`).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.release'
+      operator: eq
+      value: '1'
+    - expression: 'res.body.version'
+      operator: eq
+      value: '1'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

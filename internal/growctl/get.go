@@ -19,7 +19,7 @@ func newGetCommand(s *settings) *cobra.Command {
 		Args:  cobra.ArbitraryArgs,
 		RunE:  runGroup,
 	}
-	get.AddCommand(newGetProjectsCommand(s), newGetTagsCommand(s))
+	get.AddCommand(newGetProjectsCommand(s), newGetTagsCommand(s), newGetLibrariesCommand(s))
 	return get
 }
 

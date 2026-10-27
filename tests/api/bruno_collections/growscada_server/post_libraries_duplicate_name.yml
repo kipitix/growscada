@@ -1,0 +1,35 @@
+info:
+  name: post libraries duplicate name
+  type: http
+  seq: 33
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/libraries
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Extras"
+      }
+  auth: inherit
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '409'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: '"application/problem+json"'
+    - expression: 'res.body.title'
+      operator: eq
+      value: '"Conflict: Library"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

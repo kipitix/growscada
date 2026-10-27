@@ -1,0 +1,30 @@
+info:
+  name: post library discard
+  type: http
+  seq: 49
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/discard
+  auth: inherit
+
+docs: |
+  Resets the Draft to the latest release after the response; until then the
+  Draft is read-only (its edits and a Release return `409`).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '202'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.discarding_to'
+      operator: eq
+      value: '2'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

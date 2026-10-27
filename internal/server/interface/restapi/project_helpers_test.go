@@ -34,7 +34,9 @@ type testServices struct {
 	projects    application.ProjectService
 	tags        application.TagService
 	states      runtimeapp.TagStateService
+	libraries   application.LibraryService
 	widgetTypes application.WidgetTypeService
+	pins        application.LibraryPinService
 	scenes      application.SceneService
 }
 
@@ -54,20 +56,32 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 	}
 	projectRepo := repositories.NewProjectRepositoryPostgres(db, opts...)
 	content := application.NewProjectContent(projectRepo, repositories.NewProjectScopes(db, opts...), orgID)
-	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(db, opts...)
+	libraries := repositories.NewLibraryRepositoryPostgres(db, opts...)
+	releases := repositories.NewLibraryReleaseRepositoryPostgres(db, opts...)
+	widgetTypes := repositories.NewWidgetTypeRepositories(db, opts...)
 	states := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, publish)
 	return testServices{
 		projects:    application.NewProjectService(projectRepo, orgID),
 		tags:        application.NewTagService(content, inprocess.NewRuntimeNode(states)),
 		states:      states,
-		widgetTypes: application.NewWidgetTypeService(wtRepo),
-		scenes:      application.NewSceneService(content, wtRepo),
+		libraries:   application.NewLibraryService(libraries, releases, widgetTypes, orgID),
+		widgetTypes: application.NewWidgetTypeService(libraries, widgetTypes, orgID),
+		pins:        application.NewLibraryPinService(content, libraries, releases),
+		scenes:      application.NewSceneService(content),
+	}
+}
+
+// services returns the services as the router takes them.
+func (s testServices) services() restapi.Services {
+	return restapi.Services{
+		Projects: s.projects, Tags: s.tags, TagStates: s.states,
+		Libraries: s.libraries, WidgetTypes: s.widgetTypes, LibraryPins: s.pins, Scenes: s.scenes,
 	}
 }
 
 // router returns the API router over the services.
 func (s testServices) router() *restapi.APIRouter {
-	return restapi.NewRouter(s.projects, s.tags, s.states, s.widgetTypes, s.scenes, eventbus.NewEventBus(), 100)
+	return restapi.NewRouter(s.services(), eventbus.NewEventBus(), 100)
 }
 
 // anyProjects is a ProjectService that finds every project, for the event

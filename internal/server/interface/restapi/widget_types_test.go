@@ -14,15 +14,25 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/library"
-	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
+)
+
+// wtLibrary is the library whose Draft the widget type tests work on, a new
+// and empty one after each cleanWidgetTypes; wtPath is the path of its
+// widget types.
+var (
+	wtLibrary uuid.UUID
+	wtPath    string
 )
 
 func cleanWidgetTypes(t *testing.T) {
 	t.Helper()
-	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM engineering.widgets; DELETE FROM engineering.widget_types"); err != nil {
+	created, err := newServices().libraries.CreateLibrary(context.Background(), appdto.LibraryInput{Name: "lib-" + uuid.NewString()})
+	if err != nil {
 		t.Fatalf("cleanWidgetTypes: %v", err)
 	}
+	wtLibrary = created.ID
+	wtPath = apiv0.PathPrefix + apiv0.LibraryPath(wtLibrary.String()) + "/widget-types"
 }
 
 func newRouterWithWidgetTypes() *restapi.APIRouter {
@@ -31,9 +41,7 @@ func newRouterWithWidgetTypes() *restapi.APIRouter {
 
 func createWidgetTypeViaService(t *testing.T, input appdto.WidgetTypeInput) appdto.WidgetType {
 	t.Helper()
-	repo := repositories.NewWidgetTypeRepositoryPostgres(testDB())
-	svc := application.NewWidgetTypeService(repo)
-	resp, err := svc.CreateWidgetType(context.Background(), input)
+	resp, err := newServices().widgetTypes.CreateWidgetType(context.Background(), wtLibrary, input)
 	if err != nil {
 		t.Fatalf("createWidgetTypeViaService: %v", err)
 	}
@@ -49,13 +57,13 @@ var testWtInput = appdto.WidgetTypeInput{
 	DefaultHeight:  150,
 }
 
-// --- GET /api/v0/widget-types ---
+// --- GET /api/v0/libraries/{id}/widget-types ---
 
 func TestGetWidgetTypes_EmptyDB_Returns200WithEmptyList(t *testing.T) {
 	cleanWidgetTypes(t)
 	router := newRouterWithWidgetTypes()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v0/widget-types", nil)
+	req := httptest.NewRequest(http.MethodGet, wtPath, nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -79,7 +87,7 @@ func TestGetWidgetTypes_WithItems_Returns200WithAll(t *testing.T) {
 	createWidgetTypeViaService(t, input2)
 	router := newRouterWithWidgetTypes()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v0/widget-types", nil)
+	req := httptest.NewRequest(http.MethodGet, wtPath, nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -95,14 +103,14 @@ func TestGetWidgetTypes_WithItems_Returns200WithAll(t *testing.T) {
 	}
 }
 
-// --- GET /api/v0/widget-types/{id} ---
+// --- GET /api/v0/libraries/{id}/widget-types/{id} ---
 
 func TestGetWidgetTypesByID_Existing_Returns200(t *testing.T) {
 	cleanWidgetTypes(t)
 	created := createWidgetTypeViaService(t, testWtInput)
 	router := newRouterWithWidgetTypes()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v0/widget-types/"+created.ID.String(), nil)
+	req := httptest.NewRequest(http.MethodGet, wtPath+"/"+created.ID.String(), nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -123,7 +131,7 @@ func TestGetWidgetTypesByID_NotFound_Returns404(t *testing.T) {
 	router := newRouterWithWidgetTypes()
 
 	missingID := uuid.New().String()
-	req := httptest.NewRequest(http.MethodGet, "/api/v0/widget-types/"+missingID, nil)
+	req := httptest.NewRequest(http.MethodGet, wtPath+"/"+missingID, nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -143,9 +151,10 @@ func TestGetWidgetTypesByID_NotFound_Returns404(t *testing.T) {
 }
 
 func TestGetWidgetTypesByID_InvalidUUID_Returns400(t *testing.T) {
+	cleanWidgetTypes(t)
 	router := newRouterWithWidgetTypes()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v0/widget-types/not-a-uuid", nil)
+	req := httptest.NewRequest(http.MethodGet, wtPath+"/not-a-uuid", nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -168,7 +177,7 @@ func TestPostWidgetTypes_Valid_Returns201WithID(t *testing.T) {
 		DefaultWidth:   200,
 		DefaultHeight:  150,
 	})
-	req := httptest.NewRequest(http.MethodPost, "/api/v0/widget-types", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, wtPath, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
@@ -191,7 +200,7 @@ func TestPostWidgetTypes_Valid_Returns201WithID(t *testing.T) {
 func TestPostWidgetTypes_InvalidJSON_Returns400(t *testing.T) {
 	router := newRouterWithWidgetTypes()
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v0/widget-types", bytes.NewBufferString("not json"))
+	req := httptest.NewRequest(http.MethodPost, wtPath, bytes.NewBufferString("not json"))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
@@ -210,7 +219,7 @@ func TestPostWidgetTypes_InvalidScriptLanguage_Returns400(t *testing.T) {
 		Script:         "x",
 		ScriptLanguage: "ruby",
 	})
-	req := httptest.NewRequest(http.MethodPost, "/api/v0/widget-types", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, wtPath, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
@@ -220,7 +229,7 @@ func TestPostWidgetTypes_InvalidScriptLanguage_Returns400(t *testing.T) {
 	}
 }
 
-// --- PUT /api/v0/widget-types/{id} ---
+// --- PUT /api/v0/libraries/{id}/widget-types/{id} ---
 
 func TestPutWidgetTypesByID_Valid_Returns200WithVersion(t *testing.T) {
 	cleanWidgetTypes(t)
@@ -236,7 +245,7 @@ func TestPutWidgetTypesByID_Valid_Returns200WithVersion(t *testing.T) {
 		DefaultHeight:  200,
 		Version:        created.Version,
 	})
-	req := httptest.NewRequest(http.MethodPut, "/api/v0/widget-types/"+created.ID.String(), bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPut, wtPath+"/"+created.ID.String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
@@ -260,7 +269,7 @@ func TestPutWidgetTypesByID_NotFound_Returns404(t *testing.T) {
 	body, _ := json.Marshal(apiv0.UpdateWidgetTypeRequest{
 		Name: "x", HtmlTemplate: "<div/>", Script: "x", ScriptLanguage: "lua",
 	})
-	req := httptest.NewRequest(http.MethodPut, "/api/v0/widget-types/"+uuid.New().String(), bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPut, wtPath+"/"+uuid.New().String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
@@ -271,12 +280,13 @@ func TestPutWidgetTypesByID_NotFound_Returns404(t *testing.T) {
 }
 
 func TestPutWidgetTypesByID_InvalidUUID_Returns400(t *testing.T) {
+	cleanWidgetTypes(t)
 	router := newRouterWithWidgetTypes()
 
 	body, _ := json.Marshal(apiv0.UpdateWidgetTypeRequest{
 		Name: "x", HtmlTemplate: "<div/>", Script: "x", ScriptLanguage: "lua",
 	})
-	req := httptest.NewRequest(http.MethodPut, "/api/v0/widget-types/not-a-uuid", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPut, wtPath+"/not-a-uuid", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
@@ -287,6 +297,7 @@ func TestPutWidgetTypesByID_InvalidUUID_Returns400(t *testing.T) {
 }
 
 func TestPutWidgetTypesByID_Conflict_Returns409(t *testing.T) {
+	cleanWidgetTypes(t)
 	svc := &stubWidgetTypeService{updateErr: library.ErrWidgetTypeConflict}
 	services := newServices()
 	services.widgetTypes = svc
@@ -295,7 +306,7 @@ func TestPutWidgetTypesByID_Conflict_Returns409(t *testing.T) {
 	body, _ := json.Marshal(apiv0.UpdateWidgetTypeRequest{
 		Name: "x", HtmlTemplate: "<div/>", Script: "x", ScriptLanguage: "lua",
 	})
-	req := httptest.NewRequest(http.MethodPut, "/api/v0/widget-types/"+uuid.New().String(), bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPut, wtPath+"/"+uuid.New().String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
@@ -311,18 +322,18 @@ type stubWidgetTypeService struct {
 	updateErr error
 }
 
-func (s *stubWidgetTypeService) UpdateWidgetType(_ context.Context, _ uuid.UUID, _ int, _ appdto.WidgetTypeInput) (appdto.WidgetType, error) {
+func (s *stubWidgetTypeService) UpdateWidgetType(_ context.Context, _, _ uuid.UUID, _ int, _ appdto.WidgetTypeInput) (appdto.WidgetType, error) {
 	return appdto.WidgetType{}, s.updateErr
 }
 
-// --- DELETE /api/v0/widget-types/{id} ---
+// --- DELETE /api/v0/libraries/{id}/widget-types/{id} ---
 
 func TestDeleteWidgetTypesByID_Existing_Returns200WithDeletedItem(t *testing.T) {
 	cleanWidgetTypes(t)
 	created := createWidgetTypeViaService(t, testWtInput)
 	router := newRouterWithWidgetTypes()
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v0/widget-types/"+created.ID.String(), nil)
+	req := httptest.NewRequest(http.MethodDelete, wtPath+"/"+created.ID.String(), nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -342,7 +353,7 @@ func TestDeleteWidgetTypesByID_NotFound_Returns404(t *testing.T) {
 	cleanWidgetTypes(t)
 	router := newRouterWithWidgetTypes()
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v0/widget-types/"+uuid.New().String(), nil)
+	req := httptest.NewRequest(http.MethodDelete, wtPath+"/"+uuid.New().String(), nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -352,9 +363,10 @@ func TestDeleteWidgetTypesByID_NotFound_Returns404(t *testing.T) {
 }
 
 func TestDeleteWidgetTypesByID_InvalidUUID_Returns400(t *testing.T) {
+	cleanWidgetTypes(t)
 	router := newRouterWithWidgetTypes()
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v0/widget-types/not-a-uuid", nil)
+	req := httptest.NewRequest(http.MethodDelete, wtPath+"/not-a-uuid", nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -388,7 +400,7 @@ func TestPostWidgetTypes_InvalidInput_Returns400(t *testing.T) {
 			request := valid()
 			mutate(&request)
 			body, _ := json.Marshal(request)
-			req := httptest.NewRequest(http.MethodPost, "/api/v0/widget-types", bytes.NewReader(body))
+			req := httptest.NewRequest(http.MethodPost, wtPath, bytes.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
 			newRouterWithWidgetTypes().ServeMux().ServeHTTP(rec, req)
@@ -398,26 +410,19 @@ func TestPostWidgetTypes_InvalidInput_Returns400(t *testing.T) {
 	}
 }
 
-func TestDeleteWidgetTypesByID_UsedByWidget_Returns409(t *testing.T) {
-	cleanWidgetTypes(t)
-	wt := createWidgetTypeViaService(t, testWtInput)
-	sc := createSceneViaSceneService(t)
-	input := testWidgetInput
-	input.TypeID = wt.ID
-	createWidgetViaService(t, sc.ID, sc.Version, input)
+func TestWidgetTypes_OfAMissingLibrary_Return404OfTheLibrary(t *testing.T) {
 	router := newRouterWithWidgetTypes()
+	missing := uuid.New().String()
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v0/widget-types/"+wt.ID.String(), nil)
+	req := httptest.NewRequest(http.MethodGet, apiv0.PathPrefix+apiv0.LibraryPath(missing)+"/widget-types", nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("status: expected 409, got %d\nbody: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status: expected 404, got %d", rec.Code)
 	}
-	getReq := httptest.NewRequest(http.MethodGet, "/api/v0/widget-types/"+wt.ID.String(), nil)
-	getRec := httptest.NewRecorder()
-	router.ServeMux().ServeHTTP(getRec, getReq)
-	if getRec.Code != http.StatusOK {
-		t.Errorf("widget type after refused delete: expected 200, got %d", getRec.Code)
+	var problem apiv0.Problem
+	if err := json.NewDecoder(rec.Body).Decode(&problem); err != nil || problem.Detail != "Library with ID '"+missing+"' not found" {
+		t.Errorf("problem %+v, %v", problem, err)
 	}
 }

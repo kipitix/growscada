@@ -3,6 +3,8 @@ package project
 import (
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
@@ -12,8 +14,20 @@ import (
 
 func (p *Project) renderWidgetTypePanel() app.UI {
 	bg := uiutil.IframeBgColor()
-	items := make([]app.UI, len(p.widgetTypes))
-	for i, wt := range p.widgetTypes {
+	items := make([]app.UI, 0, len(p.widgetTypes)+len(p.pins))
+	var library uuid.UUID
+	for _, wt := range p.widgetTypes {
+		// The types come grouped by library: a header starts each group.
+		if wt.LibraryID != library {
+			library = wt.LibraryID
+			items = append(items, app.Div().
+				Class("palette-library").
+				Style("font-size", "11px").
+				Style("font-weight", "600").
+				Style("color", "var(--text-muted)").
+				Style("margin", "6px 0 4px 0").
+				Text(p.libraryName(library)))
+		}
 		id := wt.ID
 		name := wt.Name
 
@@ -83,7 +97,7 @@ func (p *Project) renderWidgetTypePanel() app.UI {
 				)
 		}
 
-		items[i] = app.Div().
+		items = append(items, app.Div().
 			Style("padding", "6px").
 			Style("margin-bottom", "6px").
 			Style("border", "1px solid var(--border-input)").
@@ -107,7 +121,7 @@ func (p *Project) renderWidgetTypePanel() app.UI {
 				p.draggedTypeID = id
 				e.Get("dataTransfer").Call("setData", "text/plain", id.String())
 				e.Get("dataTransfer").Set("effectAllowed", "copy")
-			})
+			}))
 	}
 
 	var listBody app.UI
@@ -115,7 +129,7 @@ func (p *Project) renderWidgetTypePanel() app.UI {
 		listBody = app.Div().
 			Style("font-size", "13px").
 			Style("color", "var(--text-muted)").
-			Text("No widget types. Create them in the Library tab.")
+			Text("No widget types: pin a library released in the Library tab.")
 	} else {
 		listBody = app.Div().Body(items...)
 	}
@@ -128,6 +142,7 @@ func (p *Project) renderWidgetTypePanel() app.UI {
 		Style("min-height", "0").
 		Style("padding", "12px 8px").
 		Body(
+			p.renderPinsPanel(),
 			app.H3().
 				Style("margin", "0 0 10px 0").
 				Style("font-size", "13px").

@@ -1,0 +1,33 @@
+info:
+  name: put library by id
+  type: http
+  seq: 44
+
+http:
+  method: PUT
+  url: http://{{API_SERVER}}/api/v0/libraries/{{OTHER_LIBRARY_ID}}
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Extras renamed",
+        "version": 1
+      }
+  auth: inherit
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.version'
+      operator: eq
+      value: '2'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

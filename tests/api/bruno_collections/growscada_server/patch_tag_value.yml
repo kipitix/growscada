@@ -1,7 +1,7 @@
 info:
   name: patch tag value
   type: http
-  seq: 22
+  seq: 30
 
 http:
   method: PATCH

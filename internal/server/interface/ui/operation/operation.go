@@ -35,7 +35,7 @@ type Operation struct {
 	content   *apiclient.ProjectClient
 
 	scenes      []apiv0.SceneResponse
-	widgetTypes map[uuid.UUID]apiv0.WidgetTypeResponse
+	widgetTypes map[uuid.UUID]apiv0.ReleasedWidgetTypeResponse
 	widgets     []apiv0.WidgetResponse
 	tags        tagstate.Tags
 
@@ -57,7 +57,7 @@ func NewOperation(client *apiclient.Client) *Operation {
 
 func (o *Operation) OnMount(ctx app.Context) {
 	o.compoCtx, o.mounted = ctx, true
-	o.widgetTypes = map[uuid.UUID]apiv0.WidgetTypeResponse{}
+	o.widgetTypes = map[uuid.UUID]apiv0.ReleasedWidgetTypeResponse{}
 	ctx.ObserveState("theme", &o.ThemeMode)
 	ctx.ObserveState(eventlog.StateDisconnected, &o.disconnected)
 	o.selectedSceneID = uiutil.LoadID(ctx, o.sceneKey())
@@ -97,6 +97,7 @@ func (o *Operation) SetProject(id uuid.UUID) {
 		return
 	}
 	o.scenes, o.widgets, o.widgetsSceneID, o.tags = nil, nil, uuid.Nil, tagstate.Tags{}
+	o.widgetTypes = map[uuid.UUID]apiv0.ReleasedWidgetTypeResponse{}
 	o.selectedSceneID = uiutil.LoadID(o.compoCtx, o.sceneKey())
 	// Root calls it, so nothing marks this component for an update.
 	o.compoCtx.Update()
@@ -107,7 +108,7 @@ func (o *Operation) SetProject(id uuid.UUID) {
 func (o *Operation) sceneKey() string { return sceneStorageKey + ":" + o.projectID.String() }
 
 func (o *Operation) reload(ctx app.Context, targets eventlog.ReloadTargets) {
-	if targets.WidgetTypes {
+	if targets.LibraryPins {
 		o.loadWidgetTypes(ctx)
 	}
 	if targets.Scenes {

@@ -52,7 +52,8 @@ type Scene interface {
 	// Returns ErrSceneConflict if expected is not the scene's Version.
 	Update(expected version.Version[Scene], aName SceneName, aSize SceneSize, aBackgroundHTML BackgroundHTML) (Scene, error)
 
-	// AddWidget places a new widget of WidgetType wt on the scene and records
+	// AddWidget places a new widget of WidgetType wt, as a Library Release the
+	// scene's Project pins holds it (ADR 0007), on the scene and records
 	// a WidgetCreatedEvent.
 	// Returns ErrSceneConflict if expected is not the scene's Version,
 	// ErrWidgetAlreadyExists if the scene already holds a widget with its ID,
@@ -61,7 +62,7 @@ type Scene interface {
 	// ErrPortNotDeclared, ErrBoundTagNotFound or ErrPortTypeMismatch.
 	// tagTypes holds the TagTypes of the Tags the widget binds; a Tag that
 	// is not in it as a Tag of the scene's Project does not exist.
-	AddWidget(expected version.Version[Scene], w Widget, wt library.WidgetType, tagTypes TagTypes) (Scene, error)
+	AddWidget(expected version.Version[Scene], w Widget, wt library.ReleasedWidgetType, tagTypes TagTypes) (Scene, error)
 
 	// UpdateWidget replaces the scene's widget with the same ID by w, of
 	// WidgetType wt, and records a WidgetUpdatedEvent.
@@ -75,7 +76,7 @@ type Scene interface {
 	// removed by policies, not a reason to refuse the change (ADR 0010).
 	// tagTypes holds the TagTypes of the Tags the widget binds; a Tag that
 	// is not in it as a Tag of the scene's Project does not exist.
-	UpdateWidget(expected version.Version[Scene], w Widget, wt library.WidgetType, tagTypes TagTypes) (Scene, error)
+	UpdateWidget(expected version.Version[Scene], w Widget, wt library.ReleasedWidgetType, tagTypes TagTypes) (Scene, error)
 
 	// RemoveWidget removes the widget with the given ID from the scene,
 	// records a WidgetDeletedEvent and returns the widget too. Like removing
@@ -91,7 +92,7 @@ type Scene interface {
 	// for each widget it changes. The bool reports whether anything was
 	// removed. TagTypes of another Project are ErrTagTypesOfAnotherProject,
 	// nothing removed.
-	ReconcileWith(wt library.WidgetType, tagTypes TagTypes) (Scene, bool, error)
+	ReconcileWith(wt library.ReleasedWidgetType, tagTypes TagTypes) (Scene, bool, error)
 
 	// TagsBoundByType returns the IDs of the Tags the scene's widgets of
 	// WidgetType typeID bind, each once: those ReconcileWith needs in
@@ -206,7 +207,7 @@ func (s *sceneImpl) Update(expected version.Version[Scene], aName SceneName, aSi
 	}, nil
 }
 
-func (s *sceneImpl) AddWidget(expected version.Version[Scene], w Widget, wt library.WidgetType, tagTypes TagTypes) (Scene, error) {
+func (s *sceneImpl) AddWidget(expected version.Version[Scene], w Widget, wt library.ReleasedWidgetType, tagTypes TagTypes) (Scene, error) {
 	if err := s.CheckVersion(expected); err != nil {
 		return nil, err
 	}
@@ -219,7 +220,7 @@ func (s *sceneImpl) AddWidget(expected version.Version[Scene], w Widget, wt libr
 	return s.withWidgets(append(slices.Clip(s.widgets), w), NewWidgetCreatedEvent(w.ID(), s.id, s.projectID, w.TypeID())), nil
 }
 
-func (s *sceneImpl) UpdateWidget(expected version.Version[Scene], w Widget, wt library.WidgetType, tagTypes TagTypes) (Scene, error) {
+func (s *sceneImpl) UpdateWidget(expected version.Version[Scene], w Widget, wt library.ReleasedWidgetType, tagTypes TagTypes) (Scene, error) {
 	if err := s.CheckVersion(expected); err != nil {
 		return nil, err
 	}
@@ -243,7 +244,7 @@ func (s *sceneImpl) RemoveWidget(widgetID id.ID[Widget]) (Scene, Widget, error) 
 	return s.withWidgets(slices.Concat(s.widgets[:i], s.widgets[i+1:]), NewWidgetDeletedEvent(widgetID, s.id, s.projectID)), s.widgets[i], nil
 }
 
-func (s *sceneImpl) ReconcileWith(wt library.WidgetType, tagTypes TagTypes) (Scene, bool, error) {
+func (s *sceneImpl) ReconcileWith(wt library.ReleasedWidgetType, tagTypes TagTypes) (Scene, bool, error) {
 	if err := tagTypes.checkFor(s.projectID); err != nil {
 		return s, false, err
 	}
@@ -348,7 +349,7 @@ func (s *sceneImpl) record(someEvents ...event.Event) []event.Event {
 // of the widget is valid (see checkBinding), except those that stored, the
 // widget as the scene holds it (nil for a new one), already held while of the
 // same type.
-func (s *sceneImpl) checkWidgetType(w Widget, wt library.WidgetType, tagTypes TagTypes, stored Widget) error {
+func (s *sceneImpl) checkWidgetType(w Widget, wt library.ReleasedWidgetType, tagTypes TagTypes, stored Widget) error {
 	if err := tagTypes.checkFor(s.projectID); err != nil {
 		return err
 	}
@@ -392,7 +393,7 @@ func (s *sceneImpl) checkBinding(b PortBinding, ports map[library.InputPortName]
 	return nil
 }
 
-func declaredPorts(wt library.WidgetType) map[library.InputPortName]library.InputPort {
+func declaredPorts(wt library.ReleasedWidgetType) map[library.InputPortName]library.InputPort {
 	declared := make(map[library.InputPortName]library.InputPort, len(wt.InputPorts()))
 	for _, p := range wt.InputPorts() {
 		declared[p.Name()] = p

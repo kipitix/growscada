@@ -33,14 +33,17 @@ type Project struct {
 	ThemeMode string // exported so go-app detects theme changes and re-renders
 	client    *apiclient.Client
 	// projectID is the project shown, uuid.Nil if none; content is the client
-	// of its content, nil if none (SetProject). WidgetTypes are the server's,
-	// shown whatever the project.
+	// of its content, nil if none (SetProject). The WidgetTypes are those of
+	// the releases the project pins; the libraries are the server's, shown
+	// whatever the project, for its pins.
 	projectID uuid.UUID
 	content   *apiclient.ProjectClient
 
 	activeSubTab projectSubTab
 
-	widgetTypes []apiv0.WidgetTypeResponse
+	widgetTypes []apiv0.ReleasedWidgetTypeResponse
+	libraries   []apiv0.LibraryResponse
+	pins        []apiv0.LibraryPinResponse
 	scenes      []apiv0.SceneResponse
 	widgets     []apiv0.WidgetResponse
 	tags        tagstate.Tags
@@ -55,6 +58,8 @@ type Project struct {
 
 	// Coalesce reloads of each server-backed list (see load.go).
 	widgetTypesReloader uiutil.Reloader
+	librariesReloader   uiutil.Reloader
+	pinsReloader        uiutil.Reloader
 	scenesReloader      uiutil.Reloader
 	widgetsReloader     uiutil.Reloader
 	tagsReloader        uiutil.Reloader
@@ -177,6 +182,8 @@ func (p *Project) OnMount(ctx app.Context) {
 		p.activeSubTab = projectSubTab(savedTab)
 	}
 	p.restoreSelection(ctx)
+	p.loadLibraries(ctx)
+	p.loadPins(ctx)
 	p.loadWidgetTypes(ctx)
 	p.loadScenes(ctx)
 	if p.selectedSceneID != uuid.Nil {
@@ -214,6 +221,7 @@ func (p *Project) SetProject(id uuid.UUID) {
 	}
 	ctx := p.compoCtx
 	p.scenes, p.widgets, p.tags = nil, nil, tagstate.Tags{}
+	p.widgetTypes, p.pins = nil, nil
 	p.sceneVersions.Forget()
 	p.sceneStates.Forget()
 	clear(p.staleScenes)
@@ -288,8 +296,8 @@ func (p *Project) findWidget(id uuid.UUID) (apiv0.WidgetResponse, bool) {
 	return uiutil.FindByID(p.widgets, id, uiutil.WidgetID)
 }
 
-func (p *Project) widgetTypeByID(id uuid.UUID) (apiv0.WidgetTypeResponse, bool) {
-	return uiutil.FindByID(p.widgetTypes, id, uiutil.WidgetTypeID)
+func (p *Project) widgetTypeByID(id uuid.UUID) (apiv0.ReleasedWidgetTypeResponse, bool) {
+	return uiutil.FindByID(p.widgetTypes, id, uiutil.ReleasedWidgetTypeID)
 }
 
 func (p *Project) findTag(id uuid.UUID) (apiv0.TagResponse, bool) {

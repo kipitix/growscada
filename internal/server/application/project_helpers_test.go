@@ -13,7 +13,7 @@ import (
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
-	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
@@ -38,6 +38,7 @@ type wrappedScopes struct {
 	application.ProjectScopes
 	tags   func(tag.TagRepository) tag.TagRepository
 	scenes func(scene.SceneRepository) scene.SceneRepository
+	pins   func(librarypin.Repository) librarypin.Repository
 
 	mu     sync.Mutex
 	opened map[id.ID[project.Project]]application.ProjectScope
@@ -54,12 +55,15 @@ func (s *wrappedScopes) ForProject(projectID id.ID[project.Project]) application
 		return scope
 	}
 	inner := s.ProjectScopes.ForProject(projectID)
-	scope := testScope{projectID: projectID, tags: inner.Tags(), scenes: inner.Scenes()}
+	scope := testScope{projectID: projectID, tags: inner.Tags(), scenes: inner.Scenes(), pins: inner.LibraryPins()}
 	if s.tags != nil {
 		scope.tags = s.tags(scope.tags)
 	}
 	if s.scenes != nil {
 		scope.scenes = s.scenes(scope.scenes)
+	}
+	if s.pins != nil {
+		scope.pins = s.pins(scope.pins)
 	}
 	if s.opened == nil {
 		s.opened = map[id.ID[project.Project]]application.ProjectScope{}
@@ -72,11 +76,13 @@ type testScope struct {
 	projectID id.ID[project.Project]
 	tags      tag.TagRepository
 	scenes    scene.SceneRepository
+	pins      librarypin.Repository
 }
 
 func (s testScope) ProjectID() id.ID[project.Project] { return s.projectID }
 func (s testScope) Tags() tag.TagRepository           { return s.tags }
 func (s testScope) Scenes() scene.SceneRepository     { return s.scenes }
+func (s testScope) LibraryPins() librarypin.Repository { return s.pins }
 
 // soleOrganization is the organization the migrations create.
 func soleOrganization() id.ID[organization.Organization] {
@@ -87,11 +93,12 @@ func soleOrganization() id.ID[organization.Organization] {
 	return orgID
 }
 
-// cleanProjects removes every project but mainProject; their content must be
-// gone already.
+// cleanProjects removes every project but mainProject, with their Library
+// Pins; their other content must be gone already.
 func cleanProjects(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM projects WHERE id <> $1", mainProject); err != nil {
+	if _, err := testDB.ExecContext(context.Background(),
+		"DELETE FROM engineering.library_pins WHERE project_id <> '"+mainProject.String()+"'; DELETE FROM projects WHERE id <> '"+mainProject.String()+"'"); err != nil {
 		t.Fatalf("cleanProjects: %v", err)
 	}
 }
@@ -102,10 +109,9 @@ func contentOver(scopes application.ProjectScopes) application.ProjectContent {
 	return application.NewProjectContent(repositories.NewProjectRepositoryPostgres(testDB), scopes, soleOrganization())
 }
 
-// sceneServiceOver returns the scene service over scopes and the WidgetType
-// repository wtRepo.
-func sceneServiceOver(scopes application.ProjectScopes, wtRepo library.WidgetTypeRepository) application.SceneService {
-	return application.NewSceneService(contentOver(scopes), wtRepo)
+// sceneServiceOver returns the scene service over scopes.
+func sceneServiceOver(scopes application.ProjectScopes) application.SceneService {
+	return application.NewSceneService(contentOver(scopes))
 }
 
 // sceneRepository returns, for wrappedScopes.scenes, the wrapper repo in

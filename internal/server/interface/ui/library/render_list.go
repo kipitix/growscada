@@ -17,7 +17,7 @@ func (l *Library) renderListColumn() app.UI {
 		Style("flex-shrink", "0").
 		Style("min-height", "0").
 		Body(
-			app.H3().Style("margin", "0 0 8px 0").Text("Widget Types"),
+			app.H3().Style("margin", "0 0 8px 0").Text(l.listTitle()),
 			l.renderListButtons(),
 			app.Div().
 				Style("flex", "1").
@@ -27,7 +27,18 @@ func (l *Library) renderListColumn() app.UI {
 		)
 }
 
+// listTitle names what the WidgetTypes shown are of.
+func (l *Library) listTitle() string {
+	if l.viewing != 0 {
+		return "Release " + itoa(l.viewing) + " (read-only)"
+	}
+	return "Widget Types"
+}
+
 func (l *Library) renderListButtons() app.UI {
+	if l.readOnly() {
+		return app.Div()
+	}
 	deleteDisabled := l.selectedID == uuid.Nil
 
 	deleteBtn := app.Button().
@@ -78,15 +89,19 @@ func (l *Library) renderListButtons() app.UI {
 func (l *Library) renderList() app.UI {
 	// Only the initial load shows a placeholder; event-driven reloads keep the
 	// current list on screen until the fresh one arrives.
-	if l.reloader.Loading() && len(l.widgetTypes) == 0 {
+	shown := l.shownTypes()
+	if l.libraryID == uuid.Nil {
+		return app.Div().Style("font-size", "13px").Style("color", "var(--text-muted)").Text("Create a library first.")
+	}
+	if l.reloader.Loading() && len(shown) == 0 {
 		return app.Div().Style("font-size", "13px").Style("color", "var(--text-muted)").Text("Loading...")
 	}
-	if len(l.widgetTypes) == 0 {
+	if len(shown) == 0 {
 		return app.Div().Style("font-size", "13px").Style("color", "var(--text-muted)").Text("No widget types found.")
 	}
 
-	items := make([]app.UI, len(l.widgetTypes))
-	for i, it := range l.widgetTypes {
+	items := make([]app.UI, len(shown))
+	for i, it := range shown {
 		id := it.ID
 		name := it.Name
 		var item app.UI
@@ -135,7 +150,9 @@ func (l *Library) renderList() app.UI {
 					uiutil.StoreID(ctx, selectedIDKey, id)
 				}).
 				OnDblClick(func(ctx app.Context, e app.Event) {
-					l.startEditing(id, name)
+					if !l.readOnly() {
+						l.startEditing(id, name)
+					}
 				})
 			if l.selectedID == id {
 				item = item.(app.HTMLDiv).

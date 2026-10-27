@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -161,8 +162,8 @@ func (c *Client) getProjects(ctx context.Context, path string) ([]apiv0.ProjectR
 	return resp.Projects, err
 }
 
-// ProjectClient talks to the content of one project: its Tags, Scenes and
-// Widgets, under the project's path (ADR 0006). A project that is gone makes
+// ProjectClient talks to the content of one project: its Tags, Scenes,
+// Widgets and Library Pins, under the project's path (ADR 0006). A project that is gone makes
 // every call fail with an error matching ErrNotFound.
 type ProjectClient struct {
 	c      *Client
@@ -183,47 +184,217 @@ func (p *ProjectClient) do(ctx context.Context, method, path string, body any, w
 	return p.c.do(ctx, method, p.prefix+path, body, wantStatus, out)
 }
 
-// ── WidgetTypes ──────────────────────────────────────────────────────────────
+// ── Libraries ────────────────────────────────────────────────────────────────
 
-// ListWidgetTypes returns every WidgetType.
-func (c *Client) ListWidgetTypes(ctx context.Context) ([]apiv0.WidgetTypeResponse, error) {
+// ListLibraries returns every live library of the server, in creation order.
+func (c *Client) ListLibraries(ctx context.Context) ([]apiv0.LibraryResponse, error) {
+	return c.getLibraries(ctx, "/libraries")
+}
+
+// FindLibraryByName returns the library with the given name, or false if
+// there is none.
+func (c *Client) FindLibraryByName(ctx context.Context, name string) (apiv0.LibraryResponse, bool, error) {
+	libraries, err := c.getLibraries(ctx, "/libraries?"+apiv0.LibrariesQueryName+"="+url.QueryEscape(name))
+	if err != nil {
+		return apiv0.LibraryResponse{}, false, err
+	}
+	for _, l := range libraries {
+		if l.Name == name {
+			return l, true, nil
+		}
+	}
+	return apiv0.LibraryResponse{}, false, nil
+}
+
+// GetLibrary returns a library by ID. The error matches ErrNotFound if there
+// is none (or it is deleted).
+func (c *Client) GetLibrary(ctx context.Context, id uuid.UUID) (apiv0.LibraryResponse, error) {
+	var resp apiv0.LibraryResponse
+	err := c.do(ctx, http.MethodGet, apiv0.LibraryPath(id.String()), nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+// CreateLibrary creates a library. The error matches ErrConflict if its name
+// is taken.
+func (c *Client) CreateLibrary(ctx context.Context, req apiv0.CreateLibraryRequest) (apiv0.CreateLibraryResponse, error) {
+	var resp apiv0.CreateLibraryResponse
+	err := c.do(ctx, http.MethodPost, "/libraries", req, http.StatusCreated, &resp)
+	return resp, err
+}
+
+// UpdateLibrary renames a library, expecting req.Version to be its current
+// version. The error matches ErrConflict if the version is stale or the name
+// is taken.
+func (c *Client) UpdateLibrary(ctx context.Context, id uuid.UUID, req apiv0.UpdateLibraryRequest) (apiv0.UpdateLibraryResponse, error) {
+	var resp apiv0.UpdateLibraryResponse
+	err := c.do(ctx, http.MethodPut, apiv0.LibraryPath(id.String()), req, http.StatusOK, &resp)
+	return resp, err
+}
+
+// DeleteLibrary deletes a library with its Draft and releases and returns
+// its last state. The error matches ErrConflict while a project pins it.
+func (c *Client) DeleteLibrary(ctx context.Context, id uuid.UUID) (apiv0.LibraryResponse, error) {
+	var resp apiv0.LibraryResponse
+	err := c.do(ctx, http.MethodDelete, apiv0.LibraryPath(id.String()), nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+func (c *Client) getLibraries(ctx context.Context, path string) ([]apiv0.LibraryResponse, error) {
+	var resp apiv0.GetLibrariesResponse
+	err := c.do(ctx, http.MethodGet, path, nil, http.StatusOK, &resp)
+	return resp.Libraries, err
+}
+
+// LibraryClient talks to one library: the WidgetTypes of its Draft, its
+// releases and Discards, under the library's path. A library that is gone
+// makes every call fail with an error matching ErrNotFound.
+type LibraryClient struct {
+	c      *Client
+	id     uuid.UUID
+	prefix string
+}
+
+// Library returns the client of the library id. It sends nothing.
+func (c *Client) Library(id uuid.UUID) *LibraryClient {
+	return &LibraryClient{c: c, id: id, prefix: apiv0.LibraryPath(id.String())}
+}
+
+// ID returns the library the client talks to.
+func (l *LibraryClient) ID() uuid.UUID { return l.id }
+
+func (l *LibraryClient) do(ctx context.Context, method, path string, body any, wantStatus int, out any) error {
+	return l.c.do(ctx, method, l.prefix+path, body, wantStatus, out)
+}
+
+// ListWidgetTypes returns every WidgetType of the library's Draft.
+func (l *LibraryClient) ListWidgetTypes(ctx context.Context) ([]apiv0.WidgetTypeResponse, error) {
 	var resp apiv0.GetWidgetTypesResponse
-	err := c.do(ctx, http.MethodGet, "/widget-types", nil, http.StatusOK, &resp)
+	err := l.do(ctx, http.MethodGet, "/widget-types", nil, http.StatusOK, &resp)
 	return resp.WidgetTypes, err
 }
 
-// GetWidgetType returns a WidgetType by ID. The error matches ErrNotFound if
-// there is none.
-func (c *Client) GetWidgetType(ctx context.Context, id uuid.UUID) (apiv0.WidgetTypeResponse, error) {
+// GetWidgetType returns a WidgetType of the Draft by ID. The error matches
+// ErrNotFound if there is none.
+func (l *LibraryClient) GetWidgetType(ctx context.Context, id uuid.UUID) (apiv0.WidgetTypeResponse, error) {
 	var resp apiv0.WidgetTypeResponse
-	err := c.do(ctx, http.MethodGet, widgetTypePath(id), nil, http.StatusOK, &resp)
+	err := l.do(ctx, http.MethodGet, widgetTypePath(id), nil, http.StatusOK, &resp)
 	return resp, err
 }
 
-// CreateWidgetType creates a WidgetType.
-func (c *Client) CreateWidgetType(ctx context.Context, req apiv0.CreateWidgetTypeRequest) (apiv0.CreateWidgetTypeResponse, error) {
+// CreateWidgetType creates a WidgetType in the Draft. The error matches
+// ErrConflict if its name is taken in the library, or while a Discard is
+// under way.
+func (l *LibraryClient) CreateWidgetType(ctx context.Context, req apiv0.CreateWidgetTypeRequest) (apiv0.CreateWidgetTypeResponse, error) {
 	var resp apiv0.CreateWidgetTypeResponse
-	err := c.do(ctx, http.MethodPost, "/widget-types", req, http.StatusCreated, &resp)
+	err := l.do(ctx, http.MethodPost, "/widget-types", req, http.StatusCreated, &resp)
 	return resp, err
 }
 
-// UpdateWidgetType replaces a WidgetType, expecting req.Version to be its
-// current version. The error matches ErrConflict if the version is stale.
-func (c *Client) UpdateWidgetType(ctx context.Context, id uuid.UUID, req apiv0.UpdateWidgetTypeRequest) (apiv0.UpdateWidgetTypeResponse, error) {
+// UpdateWidgetType replaces a WidgetType of the Draft, expecting req.Version
+// to be its current version. The error matches ErrConflict if the version is
+// stale, the name taken, or a Discard under way.
+func (l *LibraryClient) UpdateWidgetType(ctx context.Context, id uuid.UUID, req apiv0.UpdateWidgetTypeRequest) (apiv0.UpdateWidgetTypeResponse, error) {
 	var resp apiv0.UpdateWidgetTypeResponse
-	err := c.do(ctx, http.MethodPut, widgetTypePath(id), req, http.StatusOK, &resp)
+	err := l.do(ctx, http.MethodPut, widgetTypePath(id), req, http.StatusOK, &resp)
 	return resp, err
 }
 
-// DeleteWidgetType deletes a WidgetType and returns its last state. The error
-// matches ErrConflict if Widgets still use it.
-func (c *Client) DeleteWidgetType(ctx context.Context, id uuid.UUID) (apiv0.WidgetTypeResponse, error) {
+// DeleteWidgetType removes a WidgetType from the Draft and returns its last
+// state. It touches no project: they use the releases they pin.
+func (l *LibraryClient) DeleteWidgetType(ctx context.Context, id uuid.UUID) (apiv0.WidgetTypeResponse, error) {
 	var resp apiv0.WidgetTypeResponse
-	err := c.do(ctx, http.MethodDelete, widgetTypePath(id), nil, http.StatusOK, &resp)
+	err := l.do(ctx, http.MethodDelete, widgetTypePath(id), nil, http.StatusOK, &resp)
 	return resp, err
 }
 
 func widgetTypePath(id uuid.UUID) string { return "/widget-types/" + id.String() }
+
+// Release makes a release of the library's Draft. The error matches
+// ErrConflict if req.Version is stale, the Draft has not changed since the
+// latest release, or a Discard is under way.
+func (l *LibraryClient) Release(ctx context.Context, req apiv0.CreateReleaseRequest) (apiv0.LibraryReleaseResponse, error) {
+	var resp apiv0.LibraryReleaseResponse
+	err := l.do(ctx, http.MethodPost, "/releases", req, http.StatusCreated, &resp)
+	return resp, err
+}
+
+// ListReleases returns every release of the library, oldest first.
+func (l *LibraryClient) ListReleases(ctx context.Context) ([]apiv0.LibraryReleaseResponse, error) {
+	var resp apiv0.GetLibraryReleasesResponse
+	err := l.do(ctx, http.MethodGet, "/releases", nil, http.StatusOK, &resp)
+	return resp.Releases, err
+}
+
+// GetRelease returns the release numbered n. The error matches ErrNotFound if
+// there is none.
+func (l *LibraryClient) GetRelease(ctx context.Context, n int) (apiv0.LibraryReleaseResponse, error) {
+	var resp apiv0.LibraryReleaseResponse
+	err := l.do(ctx, http.MethodGet, "/releases/"+strconv.Itoa(n), nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+// Discard starts resetting the library's Draft to its latest release and
+// returns the library, marked as being discarded. The error matches
+// ErrConflict if it was never released or a Discard is already under way.
+func (l *LibraryClient) Discard(ctx context.Context) (apiv0.LibraryResponse, error) {
+	var resp apiv0.LibraryResponse
+	err := l.do(ctx, http.MethodPost, "/discard", nil, http.StatusAccepted, &resp)
+	return resp, err
+}
+
+// ── Library Pins ─────────────────────────────────────────────────────────────
+
+// ListLibraryPins returns the project's Library Pins, in the order they were
+// added.
+func (p *ProjectClient) ListLibraryPins(ctx context.Context) ([]apiv0.LibraryPinResponse, error) {
+	var resp apiv0.GetLibraryPinsResponse
+	err := p.do(ctx, http.MethodGet, "/library-pins", nil, http.StatusOK, &resp)
+	return resp.LibraryPins, err
+}
+
+// PinLibrary pins release req.Release of the library: req.Version 0 adds the
+// pin, any other switches it. The error matches ErrConflict if the version
+// is stale or the switch would leave Widgets without their WidgetType (the
+// StatusError's Problem names them).
+func (p *ProjectClient) PinLibrary(ctx context.Context, libraryID uuid.UUID, req apiv0.PutLibraryPinRequest) (apiv0.LibraryPinResponse, error) {
+	var resp apiv0.LibraryPinResponse
+	want := http.StatusOK
+	if req.Version == 0 {
+		want = http.StatusCreated
+	}
+	err := p.do(ctx, http.MethodPut, libraryPinPath(libraryID), req, want, &resp)
+	return resp, err
+}
+
+// UnpinLibrary removes the pin of the library. The error matches ErrConflict
+// while Widgets of the project are of its WidgetTypes.
+func (p *ProjectClient) UnpinLibrary(ctx context.Context, libraryID uuid.UUID) (apiv0.LibraryPinResponse, error) {
+	var resp apiv0.LibraryPinResponse
+	err := p.do(ctx, http.MethodDelete, libraryPinPath(libraryID), nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+// LibraryPinImpact previews pinning the release numbered release of the
+// library; release 0 previews removing the pin.
+func (p *ProjectClient) LibraryPinImpact(ctx context.Context, libraryID uuid.UUID, release int) (apiv0.PinImpactResponse, error) {
+	path := libraryPinPath(libraryID) + "/impact"
+	if release != 0 {
+		path += "?" + apiv0.LibraryPinImpactQueryRelease + "=" + strconv.Itoa(release)
+	}
+	var resp apiv0.PinImpactResponse
+	err := p.do(ctx, http.MethodGet, path, nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+// ListWidgetTypes returns the WidgetTypes of every release the project pins:
+// those its Widgets may be of.
+func (p *ProjectClient) ListWidgetTypes(ctx context.Context) ([]apiv0.ReleasedWidgetTypeResponse, error) {
+	var resp apiv0.GetPinnedWidgetTypesResponse
+	err := p.do(ctx, http.MethodGet, "/widget-types", nil, http.StatusOK, &resp)
+	return resp.WidgetTypes, err
+}
+
+func libraryPinPath(libraryID uuid.UUID) string { return "/library-pins/" + libraryID.String() }
 
 // ── Tags ─────────────────────────────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 info:
   name: put widget by id
   type: http
-  seq: 27
+  seq: 41
 
 http:
   method: PUT

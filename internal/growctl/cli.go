@@ -70,7 +70,7 @@ func NewRootCommand() *cobra.Command {
 
 	root := &cobra.Command{
 		Use:           "growctl",
-		Short:         "Declaratively manage GrowSCADA projects and their tags from YAML manifests",
+		Short:         "Declaratively manage GrowSCADA projects, their tags and libraries from YAML manifests",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Args:          cobra.ArbitraryArgs,
@@ -93,6 +93,8 @@ func NewRootCommand() *cobra.Command {
 		newDiffCommand(s),
 		newDeleteCommand(s),
 		newGetCommand(s),
+		newReleaseCommand(s),
+		newDiscardCommand(s),
 		newConfigCommand(),
 	)
 	return root
@@ -160,9 +162,13 @@ func newApplyCommand(s *settings) *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "apply -f <file|directory|->",
-		Short: "Create the manifest's projects and tags that are missing on the server",
+		Short: "Bring the server to the manifest's projects, libraries and tags",
 		Long: "Create the manifest's projects and tags that are missing on the server; the\n" +
-			"projects go first. A created tag's state is its type's zero value with quality\n" +
+			"projects go first, then the libraries: missing ones are created, the WidgetTypes\n" +
+			"of their Drafts created or updated to the manifest, and the Library Pins a\n" +
+			"project's spec.libraryPins declares added or switched (a release is made with\n" +
+			"growctl release). With --prune, the WidgetTypes of a library the manifest\n" +
+			"declares WidgetTypes of are pruned too. A created tag's state is its type's zero value with quality\n" +
 			"bad until a supplier writes one; existing tags keep their state. The tags are\n" +
 			"those of the project growctl works in (--project). With --prune, the\n" +
 			"project's tags absent from the manifest are\n" +
@@ -223,6 +229,8 @@ func newDiffCommand(s *settings) *cobra.Command {
 				}
 				changed = changed || step.IsChange()
 			}
+			printLibraryDiff(out, plan.libraries)
+			changed = changed || plan.libraries.changed()
 			for _, step := range plan.tags {
 				switch step.Action {
 				case ActionCreate:
@@ -316,27 +324,43 @@ func deleteManifests(cmd *cobra.Command, client *Client, projectFlag string, fil
 		return err
 	}
 	projectSteps := PlanProjects(manifests.Projects, existing, true)
+	typeSteps, librarySteps, err := planDeleteLibraries(ctx, client, manifests)
+	if err != nil {
+		return err
+	}
 	var doomed []string
 	for _, s := range projectSteps {
 		if s.Action == ActionDelete {
 			doomed = append(doomed, "project/"+s.Name)
 		}
 	}
+	projectCount := len(doomed)
+	for _, s := range librarySteps {
+		if s.Action == ActionDelete {
+			doomed = append(doomed, "library/"+s.Name)
+		}
+	}
+	header, question := "Projects to delete with all their scenes, widgets and tags:", fmt.Sprintf("Delete %d project(s)?", projectCount)
+	if libraryCount := len(doomed) - projectCount; libraryCount > 0 {
+		header = "Projects and libraries to delete with all their content:"
+		question = fmt.Sprintf("Delete %d project(s) and %d library(ies)?", projectCount, libraryCount)
+	}
 	if len(doomed) > 0 && !yes {
 		if slices.Contains(files, "-") {
 			return usageError(fmt.Errorf("delete of %s with all their content needs confirmation, but the manifests are read from stdin: give --yes",
 				strings.Join(doomed, ", ")))
 		}
-		if !confirm(cmd, "Projects to delete with all their scenes, widgets and tags:", doomed,
-			fmt.Sprintf("Delete %d project(s)?", len(doomed))) {
+		if !confirm(cmd, header, doomed, question) {
 			return nil
 		}
 	}
 	if err := executeDelete(ctx, tags, tagSteps, cmd.OutOrStdout()); err != nil {
 		return err
 	}
-	_, err = executeProjects(ctx, client, projectSteps, cmd.OutOrStdout())
-	return err
+	if _, err = executeProjects(ctx, client, projectSteps, cmd.OutOrStdout()); err != nil {
+		return err
+	}
+	return executeDeleteLibraries(ctx, client, typeSteps, librarySteps, cmd.OutOrStdout())
 }
 
 // confirm lists the items under the header and asks the question on stderr,
@@ -469,10 +493,12 @@ func executeProjects(ctx context.Context, client *Client, steps []ProjectStep, o
 	return created, nil
 }
 
-// applyPlan is what apply does: the projects first, then the tags of the
-// project growctl works in.
+// applyPlan is what apply does: the projects first, then the libraries with
+// their WidgetTypes and the projects' pins, then the tags of the project
+// growctl works in.
 type applyPlan struct {
-	projects []ProjectStep
+	projects  []ProjectStep
+	libraries libraryPlan
 	// project is the project of the tags; "" when there are none to plan.
 	project string
 	// tagsOf is the client of the project's tags, nil while the project does
@@ -497,7 +523,10 @@ func planApply(ctx context.Context, client *Client, projectFlag string, files []
 		return applyPlan{}, err
 	}
 	plan := applyPlan{projects: PlanProjects(manifests.Projects, existing, false)}
-	if len(manifests.Tags) == 0 && (!prune || len(manifests.Projects) > 0) {
+	if plan.libraries, err = planLibraries(ctx, client, manifests, prune); err != nil {
+		return applyPlan{}, err
+	}
+	if len(manifests.Tags) == 0 && (!prune || len(manifests.Projects) > 0 || len(manifests.Libraries) > 0 || len(manifests.WidgetTypes) > 0) {
 		return plan, nil
 	}
 
@@ -577,6 +606,9 @@ func executeApply(ctx context.Context, client *Client, plan applyPlan, out io.Wr
 	if err != nil {
 		return err
 	}
+	if err := executeLibraries(ctx, client, plan.libraries, out); err != nil {
+		return err
+	}
 	if plan.project == "" {
 		return nil
 	}
@@ -623,6 +655,8 @@ func actionResult(a Action) string {
 		return "deleted"
 	case ActionNotFound:
 		return "not found"
+	case ActionUpdate:
+		return "updated"
 	}
 	return ""
 }

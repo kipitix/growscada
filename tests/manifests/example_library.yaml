@@ -1,0 +1,47 @@
+# Example growctl manifest: a Library with two WidgetTypes in its Draft, and
+# the project "Line 2" pinning its first release.
+#   make build
+#   bin/growctl/growctl apply -f tests/manifests/example_library.yaml   # the Draft
+#   bin/growctl/growctl release Gauges --note "first"                    # release 1
+#   bin/growctl/growctl apply -f tests/manifests/example_library.yaml   # the pin
+# The pin of a release that does not exist yet fails: release first.
+apiVersion: growscada/v0.4
+kind: Library
+metadata:
+  name: Gauges
+---
+apiVersion: growscada/v0.4
+kind: WidgetType
+metadata:
+  name: Lamp
+  library: Gauges
+spec:
+  html: '<div class="lamp" style="width:100%;height:100%;border-radius:50%;background:#555"></div>'
+  script: 'function render(inputs) { document.querySelector(".lamp").style.background = inputs.on.value ? "#2ecc71" : "#555"; }'
+  width: 40
+  height: 40
+  inputPorts:
+    - name: on
+      description: Lit while true
+      typeHint: boolean
+---
+apiVersion: growscada/v0.4
+kind: WidgetType
+metadata:
+  name: Readout
+  library: Gauges
+spec:
+  html: '<span class="readout"></span>'
+  script: 'function render(inputs) { document.querySelector(".readout").textContent = String(inputs.value.value); }'
+  width: 120
+  height: 24
+  inputPorts:
+    - name: value
+---
+apiVersion: growscada/v0.4
+kind: Project
+metadata:
+  name: Line 2
+spec:
+  libraryPins:
+    Gauges: 1

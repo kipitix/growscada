@@ -15,20 +15,30 @@ import (
 // Each server-backed list is (re)loaded through a uiutil.Reloader, on mount,
 // on server events and after a reconnection.
 
-func (o *Operation) loadWidgetTypes(ctx app.Context) {
-	uiutil.Load(o.compoCtx, &o.widgetTypesReloader, o.client.ListWidgetTypes, func(ctx app.Context, list []apiv0.WidgetTypeResponse) {
-		byID := make(map[uuid.UUID]apiv0.WidgetTypeResponse, len(list))
-		for _, wt := range list {
-			byID[wt.ID] = wt
-		}
-		o.widgetTypes = byID
-	}, o.loadWidgetTypes)
-}
-
 // The lists of the project's content belong to its client (Operation.content):
 // a response of a project no longer shown is dropped.
 
 func (o *Operation) projectContent() *apiclient.ProjectClient { return o.content }
+
+// loadWidgetTypes (re)loads the WidgetTypes of the releases the project pins:
+// those its Widgets are of (ADR 0007).
+func (o *Operation) loadWidgetTypes(ctx app.Context) {
+	if o.content == nil {
+		o.widgetTypes = map[uuid.UUID]apiv0.ReleasedWidgetTypeResponse{}
+		return
+	}
+	uiutil.LoadOfProject(o.compoCtx, &o.widgetTypesReloader, o.projectContent,
+		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.ReleasedWidgetTypeResponse, error) {
+			return pc.ListWidgetTypes(c)
+		},
+		func(ctx app.Context, list []apiv0.ReleasedWidgetTypeResponse) {
+			byID := make(map[uuid.UUID]apiv0.ReleasedWidgetTypeResponse, len(list))
+			for _, wt := range list {
+				byID[wt.ID] = wt
+			}
+			o.widgetTypes = byID
+		}, o.loadWidgetTypes)
+}
 
 func (o *Operation) loadScenes(ctx app.Context) {
 	if o.content == nil {

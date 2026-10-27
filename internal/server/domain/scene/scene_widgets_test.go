@@ -24,8 +24,12 @@ func mustPortName(t *testing.T, s string) library.InputPortName {
 	return n
 }
 
-// makeWidgetType builds a WidgetType declaring the given ports.
-func makeWidgetType(t *testing.T, ports ...string) library.WidgetType {
+// testLibrary is the Library of the tests' WidgetTypes.
+var testLibrary = id.NewID[library.Library]()
+
+// makeWidgetType builds a WidgetType, as a Library Release holds it,
+// declaring the given ports.
+func makeWidgetType(t *testing.T, ports ...string) library.ReleasedWidgetType {
 	t.Helper()
 	name, _ := library.NewWidgetTypeName("gauge")
 	html, _ := library.NewHtmlTemplate("<div></div>")
@@ -34,16 +38,16 @@ func makeWidgetType(t *testing.T, ports ...string) library.WidgetType {
 	for i, p := range ports {
 		inputPorts[i] = library.NewInputPort(mustPortName(t, p), "", library.AnyTypeHint())
 	}
-	wt, err := library.ReconstituteWidgetType(id.NewID[library.WidgetType](), name, html, script,
-		library.ScriptLanguageJavaScript, library.DefaultSize(), inputPorts, version.Committed[library.WidgetType]())
+	wt, err := library.NewReleasedWidgetType(id.NewID[library.WidgetType](), testLibrary, name, html, script,
+		library.ScriptLanguageJavaScript, library.DefaultSize(), inputPorts)
 	if err != nil {
-		t.Fatalf("ReconstituteWidgetType: %v", err)
+		t.Fatalf("NewReleasedWidgetType: %v", err)
 	}
 	return wt
 }
 
 // makeWidgetOf builds a Widget of WidgetType wt binding the given ports.
-func makeWidgetOf(t *testing.T, wt library.WidgetType, name string, ports ...string) Widget {
+func makeWidgetOf(t *testing.T, wt library.ReleasedWidgetType, name string, ports ...string) Widget {
 	t.Helper()
 	widgetName, _ := NewWidgetName(name)
 	bindings := make([]PortBinding, len(ports))
@@ -66,24 +70,24 @@ func tagTypesOf(someWidgets ...Widget) TagTypes {
 
 // makeTypedWidgetType builds a WidgetType declaring one port, "value", with
 // the given type hint ("" for any TagType).
-func makeTypedWidgetType(t *testing.T, hint string) library.WidgetType {
+func makeTypedWidgetType(t *testing.T, hint string) library.ReleasedWidgetType {
 	t.Helper()
 	wt := makeWidgetType(t)
-	return withValueHint(t, wt, hint, wt.Version())
+	return withValueHint(t, wt, hint)
 }
 
-// withValueHint builds the WidgetType wt, at aVersion, declaring one port,
-// "value", with the given type hint.
-func withValueHint(t *testing.T, wt library.WidgetType, hint string, aVersion version.Version[library.WidgetType]) library.WidgetType {
+// withValueHint builds the WidgetType wt declaring one port, "value", with
+// the given type hint.
+func withValueHint(t *testing.T, wt library.ReleasedWidgetType, hint string) library.ReleasedWidgetType {
 	t.Helper()
 	typeHint, err := library.NewPortTypeHint(hint)
 	if err != nil {
 		t.Fatalf("NewPortTypeHint(%q): %v", hint, err)
 	}
-	typed, err := library.ReconstituteWidgetType(wt.ID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(),
-		wt.DefaultSize(), []library.InputPort{library.NewInputPort(mustPortName(t, "value"), "", typeHint)}, aVersion)
+	typed, err := library.NewReleasedWidgetType(wt.ID(), wt.LibraryID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(),
+		wt.DefaultSize(), []library.InputPort{library.NewInputPort(mustPortName(t, "value"), "", typeHint)})
 	if err != nil {
-		t.Fatalf("ReconstituteWidgetType: %v", err)
+		t.Fatalf("NewReleasedWidgetType: %v", err)
 	}
 	return typed
 }
@@ -186,7 +190,7 @@ func TestSceneAddWidget_Rejected(t *testing.T) {
 	tests := map[string]struct {
 		expected version.Version[Scene]
 		widget   Widget
-		wt       library.WidgetType
+		wt       library.ReleasedWidgetType
 		want     error
 	}{
 		"stale version":       {staleVersion(sc), makeWidgetOf(t, wt, "w2"), wt, ErrSceneConflict},
@@ -244,7 +248,7 @@ func TestSceneUpdateWidget_Rejected(t *testing.T) {
 	tests := map[string]struct {
 		expected version.Version[Scene]
 		widget   Widget
-		wt       library.WidgetType
+		wt       library.ReleasedWidgetType
 		want     error
 	}{
 		"stale version":     {staleVersion(sc), withPorts(), wt, ErrSceneConflict},
@@ -267,7 +271,7 @@ func TestSceneUpdateWidget_Rejected(t *testing.T) {
 
 // bindValue returns a widget of WidgetType wt (as w1, if given) binding its
 // port "value" to tagID.
-func bindValue(t *testing.T, wt library.WidgetType, tagID id.ID[tag.Tag], as ...Widget) Widget {
+func bindValue(t *testing.T, wt library.ReleasedWidgetType, tagID id.ID[tag.Tag], as ...Widget) Widget {
 	t.Helper()
 	widgetID := id.NewID[Widget]()
 	if len(as) > 0 {
@@ -318,7 +322,7 @@ func TestSceneWidgetChanges_CheckBoundTagTypes(t *testing.T) {
 }
 
 // mustReconcile is ReconcileWith failing the test on an error.
-func mustReconcile(t *testing.T, sc Scene, wt library.WidgetType, tagTypes TagTypes) (Scene, bool) {
+func mustReconcile(t *testing.T, sc Scene, wt library.ReleasedWidgetType, tagTypes TagTypes) (Scene, bool) {
 	t.Helper()
 	reconciled, changed, err := sc.ReconcileWith(wt, tagTypes)
 	if err != nil {
@@ -468,13 +472,13 @@ func TestSceneReconcileWith_NothingUndeclared_ReportsNoChange(t *testing.T) {
 
 // makeWidgetTypeWithID builds the WidgetType anID as it looks after an
 // update that left it only the given ports.
-func makeWidgetTypeWithID(t *testing.T, anID id.ID[library.WidgetType], ports ...string) library.WidgetType {
+func makeWidgetTypeWithID(t *testing.T, anID id.ID[library.WidgetType], ports ...string) library.ReleasedWidgetType {
 	t.Helper()
 	wt := makeWidgetType(t, ports...)
-	updated, err := library.ReconstituteWidgetType(anID, wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(),
-		wt.DefaultSize(), wt.InputPorts(), wt.Version().Next())
+	updated, err := library.NewReleasedWidgetType(anID, wt.LibraryID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(),
+		wt.DefaultSize(), wt.InputPorts())
 	if err != nil {
-		t.Fatalf("ReconstituteWidgetType: %v", err)
+		t.Fatalf("NewReleasedWidgetType: %v", err)
 	}
 	return updated
 }
@@ -489,7 +493,7 @@ func TestSceneReconcileWith_RemovesBindingsTheNarrowedHintRefuses(t *testing.T) 
 	kept := bindValue(t, anyType, intTag)
 	refused := bindValue(t, anyType, strTag)
 	sc := makeStoredScene(t, kept, refused)
-	narrowed := withValueHint(t, anyType, "integer", anyType.Version().Next())
+	narrowed := withValueHint(t, anyType, "integer")
 
 	reconciled, changed := mustReconcile(t, sc, narrowed, tagTypes)
 

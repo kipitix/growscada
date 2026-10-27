@@ -1,7 +1,7 @@
 info:
   name: delete project by id
   type: http
-  seq: 35
+  seq: 52
 
 http:
   method: DELETE

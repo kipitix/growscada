@@ -1,11 +1,11 @@
 info:
   name: post widget types
   type: http
-  seq: 24
+  seq: 34
 
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v0/widget-types
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/widget-types
   body:
     type: json
     data: |-

@@ -117,11 +117,11 @@ func TestUpdate_NegativeVersion_IsInvalidInput(t *testing.T) {
 
 	cleanWidgetTypes(t)
 	wtSvc := newWidgetTypeService()
-	wt, err := wtSvc.CreateWidgetType(ctx, testCreateWidgetTypeInput)
+	wt, err := wtSvc.CreateWidgetType(ctx, wtLibrary, testCreateWidgetTypeInput)
 	if err != nil {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
-	_, err = wtSvc.UpdateWidgetType(ctx, wt.ID, -1, testCreateWidgetTypeInput)
+	_, err = wtSvc.UpdateWidgetType(ctx, wtLibrary, wt.ID, -1, testCreateWidgetTypeInput)
 	assertInvalidField(t, err, "version")
 }
 
@@ -145,17 +145,17 @@ func TestWidgetTypeInput_InvalidField_IsInvalidInputOnCreateAndUpdate(t *testing
 			cleanWidgetTypes(t)
 			svc := newWidgetTypeService()
 			ctx := context.Background()
-			created, err := svc.CreateWidgetType(ctx, testCreateWidgetTypeInput)
+			created, err := svc.CreateWidgetType(ctx, wtLibrary, testCreateWidgetTypeInput)
 			if err != nil {
 				t.Fatalf("CreateWidgetType: %v", err)
 			}
 			input := testCreateWidgetTypeInput
 			tc.modify(&input)
 
-			_, err = svc.CreateWidgetType(ctx, input)
+			_, err = svc.CreateWidgetType(ctx, wtLibrary, input)
 			assertInvalidField(t, err, tc.field)
 
-			_, err = svc.UpdateWidgetType(ctx, created.ID, created.Version, input)
+			_, err = svc.UpdateWidgetType(ctx, wtLibrary, created.ID, created.Version, input)
 			assertInvalidField(t, err, tc.field)
 		})
 	}
@@ -165,19 +165,19 @@ func TestWidgetTypeInput_DuplicatePortNames_IsInvalidInputOnCreateAndUpdate(t *t
 	cleanWidgetTypes(t)
 	svc := newWidgetTypeService()
 	ctx := context.Background()
-	created, err := svc.CreateWidgetType(ctx, testCreateWidgetTypeInput)
+	created, err := svc.CreateWidgetType(ctx, wtLibrary, testCreateWidgetTypeInput)
 	if err != nil {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
 	input := testCreateWidgetTypeInput
 	input.InputPorts = []appdto.InputPort{{Name: "value"}, {Name: "value"}}
 
-	_, err = svc.CreateWidgetType(ctx, input)
+	_, err = svc.CreateWidgetType(ctx, wtLibrary, input)
 	if !errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("CreateWidgetType: expected ErrInvalidInput, got: %v", err)
 	}
 
-	_, err = svc.UpdateWidgetType(ctx, created.ID, created.Version, input)
+	_, err = svc.UpdateWidgetType(ctx, wtLibrary, created.ID, created.Version, input)
 	if !errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("UpdateWidgetType: expected ErrInvalidInput, got: %v", err)
 	}

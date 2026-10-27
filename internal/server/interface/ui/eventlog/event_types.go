@@ -15,6 +15,7 @@ const (
 	categoryTag        category = "Tag"
 	categoryWidget     category = "Widget"
 	categoryWidgetType category = "WidgetType"
+	categoryLibrary    category = "Library"
 	categoryScene      category = "Scene"
 	categoryValue      category = "Value"
 	categoryClient     category = "Client"
@@ -27,6 +28,7 @@ var allCategories = []category{
 	categoryTag,
 	categoryWidget,
 	categoryWidgetType,
+	categoryLibrary,
 	categoryScene,
 	categoryValue,
 	categoryClient,
@@ -41,6 +43,7 @@ func defaultFilters() map[category]bool {
 		categoryTag:        true,
 		categoryWidget:     true,
 		categoryWidgetType: true,
+		categoryLibrary:    true,
 		categoryScene:      true,
 		categoryValue:      false,
 		categoryClient:     true,
@@ -49,9 +52,13 @@ func defaultFilters() map[category]bool {
 }
 
 // isProjectContent reports whether events of the type are of a project's
-// content (Tags, their values, Scenes, Widgets), carried by the stream of
-// that project; anything else is the server's.
+// content (Tags, their values, Scenes, Widgets, Library Pins), carried by the
+// stream of that project; anything else is the server's.
 func isProjectContent(eventType string) bool {
+	switch eventType {
+	case apiv0.EventLibraryPinCreated, apiv0.EventLibraryPinUpdated, apiv0.EventLibraryPinDeleted:
+		return true
+	}
 	switch eventTypeInfoByType[eventType].category {
 	case categoryTag, categoryValue, categoryScene, categoryWidget:
 		return true
@@ -85,6 +92,15 @@ var eventTypeInfoByType = map[string]eventTypeInfo{
 	apiv0.EventWidgetTypeCreated: {categoryWidgetType, "WidgetType %s created"},
 	apiv0.EventWidgetTypeUpdated: {categoryWidgetType, "WidgetType %s updated"},
 	apiv0.EventWidgetTypeDeleted: {categoryWidgetType, "WidgetType %s deleted"},
+
+	apiv0.EventLibraryCreated:        {categoryLibrary, "Library %s created"},
+	apiv0.EventLibraryUpdated:        {categoryLibrary, "Library %s updated"},
+	apiv0.EventLibraryDeleted:        {categoryLibrary, "Library %s deleted"},
+	apiv0.EventLibraryDiscardStarted: {categoryLibrary, "Library %s being discarded"},
+	apiv0.EventLibraryReleased:       {categoryLibrary, "Library %s released"},
+	apiv0.EventLibraryPinCreated:     {categoryLibrary, "Library %s pinned"},
+	apiv0.EventLibraryPinUpdated:     {categoryLibrary, "Library %s pin switched"},
+	apiv0.EventLibraryPinDeleted:     {categoryLibrary, "Library %s unpinned"},
 
 	apiv0.EventSceneCreated: {categoryScene, "Scene %s created"},
 	apiv0.EventSceneUpdated: {categoryScene, "Scene %s updated"},

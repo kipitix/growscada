@@ -1,22 +1,18 @@
 package repositories
 
 import (
-	"context"
 	"database/sql"
-	"fmt"
-
-	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/domain/id"
-	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
 
 // projectScopes opens the Postgres repositories of a Project's content
-// (ADR 0006); each scope is a pair of repositories bound to its project_id.
+// (ADR 0006); each scope holds repositories bound to its project_id.
 type projectScopes struct {
 	db   *sql.DB
 	opts []Option
@@ -35,40 +31,18 @@ func (s *projectScopes) ForProject(projectID id.ID[project.Project]) application
 		projectID: projectID,
 		tags:      NewTagRepositoryPostgres(s.db, projectID, s.opts...),
 		scenes:    NewSceneRepositoryPostgres(s.db, projectID, s.opts...),
+		pins:      NewLibraryPinRepositoryPostgres(s.db, projectID, s.opts...),
 	}
-}
-
-func (s *projectScopes) FindProjectsUsingWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) ([]id.ID[project.Project], error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT w.project_id FROM engineering.widgets w JOIN projects p ON p.id = w.project_id
-		 WHERE w.type_id = $1 AND p.deleted_at IS NULL
-		 GROUP BY w.project_id ORDER BY min(w.pk_id)`,
-		typeID.UUID(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("error querying projects using widget type: %w", err)
-	}
-	defer rows.Close()
-	var projects []id.ID[project.Project]
-	for rows.Next() {
-		var raw uuid.UUID
-		if err := rows.Scan(&raw); err != nil {
-			return nil, fmt.Errorf("error scanning project id: %w", err)
-		}
-		projects = append(projects, id.NewID(id.IDWithUUID[project.Project](raw)))
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating over projects using widget type: %w", err)
-	}
-	return projects, nil
 }
 
 type projectScope struct {
 	projectID id.ID[project.Project]
 	tags      tag.TagRepository
 	scenes    scene.SceneRepository
+	pins      librarypin.Repository
 }
 
 func (s projectScope) ProjectID() id.ID[project.Project] { return s.projectID }
 func (s projectScope) Tags() tag.TagRepository           { return s.tags }
 func (s projectScope) Scenes() scene.SceneRepository     { return s.scenes }
+func (s projectScope) LibraryPins() librarypin.Repository { return s.pins }

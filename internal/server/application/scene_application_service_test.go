@@ -12,6 +12,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
@@ -26,37 +27,20 @@ func cleanScenes(t *testing.T) {
 	ensureTestWidgetType(t)
 }
 
-// testWidgetTypeID is the WidgetType of the shared widget fixtures: a
-// Widget's type must exist, so ensureTestWidgetType stores it.
-var testWidgetTypeID = uuid.MustParse("7e57c0de-0000-4000-8000-000000000001")
-
-func ensureTestWidgetType(t *testing.T) {
-	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(),
-		`INSERT INTO engineering.widget_types
-		    (id, name, html_template, script, script_language, input_ports, default_width, default_height, version)
-		 VALUES ($1, 'test-type', '<div></div>', 'function update(){}', 'javascript', '[]', 100, 100, 1)
-		 ON CONFLICT (id) DO NOTHING`,
-		testWidgetTypeID,
-	); err != nil {
-		t.Fatalf("ensureTestWidgetType: %v", err)
-	}
-}
-
 func newSceneService() application.SceneService {
-	return sceneServiceOver(newScopes(), repositories.NewWidgetTypeRepositoryPostgres(testDB))
+	return sceneServiceOver(newScopes())
 }
 
 func newSceneServiceWithBus(t *testing.T) (application.SceneService, eventbus.EventBus) {
 	bus, onCommit := deliveredOnCommit(t)
-	return sceneServiceOver(newScopes(onCommit), repositories.NewWidgetTypeRepositoryPostgres(testDB, onCommit)), bus
+	return sceneServiceOver(newScopes(onCommit)), bus
 }
 
 // sceneServiceWith returns the scene service whose scene repository is repo.
 func sceneServiceWith(repo scene.SceneRepository) application.SceneService {
 	scopes := newScopes()
 	scopes.scenes = sceneRepository(repo)
-	return sceneServiceOver(scopes, repositories.NewWidgetTypeRepositoryPostgres(testDB))
+	return sceneServiceOver(scopes)
 }
 
 var testCreateSceneInput = appdto.SceneInput{
@@ -790,14 +774,10 @@ func newBindingFixture(t *testing.T, svc application.SceneService) bindingFixtur
 	cleanScenes(t)
 	cleanTags(t)
 	ctx := context.Background()
-	wt, err := newWidgetTypeService().CreateWidgetType(ctx, appdto.WidgetTypeInput{
-		Name: "typed-" + uuid.NewString(), HtmlTemplate: "<div></div>", ScriptLanguage: "javascript",
-		DefaultWidth: 100, DefaultHeight: 100,
+	wt, _ := pinNewWidgetType(t, mainProject, appdto.WidgetTypeInput{
+		Name: "typed", HtmlTemplate: "<div></div>",
 		InputPorts: []appdto.InputPort{{Name: "value", TypeHint: "integer"}},
 	})
-	if err != nil {
-		t.Fatalf("CreateWidgetType: %v", err)
-	}
 	tags := newService()
 	intTag, err := tags.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "level", Type: "integer"})
 	if err != nil {
@@ -970,7 +950,7 @@ func TestDeleteWidget_LosesRaceThreeTimes_ReturnsConflictKeepsWidget(t *testing.
 func TestDeleteScene_WidgetAddedMeanwhile_DeliversWidgetDeletedForIt(t *testing.T) {
 	cleanScenes(t)
 	bus, onCommit := deliveredOnCommit(t)
-	svc := sceneServiceOver(newScopes(onCommit), repositories.NewWidgetTypeRepositoryPostgres(testDB))
+	svc := sceneServiceOver(newScopes(onCommit))
 	ctx := context.Background()
 	sc := mustCreateScene(t, svc)
 
@@ -996,15 +976,15 @@ func TestDeleteScene_WidgetAddedMeanwhile_DeliversWidgetDeletedForIt(t *testing.
 	}
 }
 
-// racingWidgetTypeRepository runs race once, right after the first FindByID:
-// the type is changed or deleted between the service's check and its Save.
-type racingWidgetTypeRepository struct {
-	library.WidgetTypeRepository
+// racingPins runs race once, right after the first FindPinnedWidgetType: the
+// type is unpinned between the service's check and its Save.
+type racingPins struct {
+	librarypin.Repository
 	race func()
 }
 
-func (r *racingWidgetTypeRepository) FindByID(ctx context.Context, typeID id.ID[library.WidgetType]) (library.WidgetType, error) {
-	found, err := r.WidgetTypeRepository.FindByID(ctx, typeID)
+func (r *racingPins) FindPinnedWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.ReleasedWidgetType, error) {
+	found, err := r.Repository.FindPinnedWidgetType(ctx, typeID)
 	if race := r.race; race != nil {
 		r.race = nil
 		race()
@@ -1012,34 +992,32 @@ func (r *racingWidgetTypeRepository) FindByID(ctx context.Context, typeID id.ID[
 	return found, err
 }
 
-// racingTypeID is a WidgetType the race deletes; the shared fixture type stays.
-var racingTypeID = uuid.MustParse("7e57c0de-0000-4000-8000-000000000002")
+// racingLibrary and racingTypeID are a Library and its WidgetType the race
+// unpins; the shared fixture type stays.
+var (
+	racingLibrary = uuid.MustParse("7e57c0de-1000-4000-8000-000000000002")
+	racingTypeID  = uuid.MustParse("7e57c0de-0000-4000-8000-000000000002")
+)
 
 func insertRacingWidgetType(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(),
-		`INSERT INTO engineering.widget_types
-		    (id, name, html_template, script, script_language, input_ports, default_width, default_height, version)
-		 VALUES ($1, 'racing-type', '<div></div>', 'function update(){}', 'javascript', '[]', 100, 100, 1)
-		 ON CONFLICT (id) DO NOTHING`,
-		racingTypeID,
-	); err != nil {
-		t.Fatalf("insertRacingWidgetType: %v", err)
-	}
+	ensurePinnedType(t, racingLibrary, "racing-library", racingTypeID, "racing-type", mainProject)
 }
 
 func newServiceDeletingRacingType(t *testing.T) application.SceneService {
 	t.Helper()
-	wtRepo := &racingWidgetTypeRepository{WidgetTypeRepository: repositories.NewWidgetTypeRepositoryPostgres(testDB)}
-	wtRepo.race = func() {
-		if _, err := testDB.ExecContext(context.Background(), "DELETE FROM engineering.widget_types WHERE id = $1", racingTypeID); err != nil {
-			t.Fatalf("concurrent delete of widget type: %v", err)
-		}
+	scopes := newScopes()
+	scopes.pins = func(inner librarypin.Repository) librarypin.Repository {
+		return &racingPins{Repository: inner, race: func() {
+			if _, err := testDB.ExecContext(context.Background(), "DELETE FROM engineering.library_pins WHERE library_id = $1", racingLibrary); err != nil {
+				t.Fatalf("concurrent unpin: %v", err)
+			}
+		}}
 	}
-	return sceneServiceOver(newScopes(), wtRepo)
+	return sceneServiceOver(scopes)
 }
 
-func TestCreateWidget_TypeDeletedMeanwhile_ReturnsInvalidInput(t *testing.T) {
+func TestCreateWidget_TypeUnpinnedMeanwhile_ReturnsInvalidInput(t *testing.T) {
 	cleanScenes(t)
 	insertRacingWidgetType(t)
 	sc := mustCreateScene(t, newSceneService())
@@ -1054,7 +1032,7 @@ func TestCreateWidget_TypeDeletedMeanwhile_ReturnsInvalidInput(t *testing.T) {
 	}
 }
 
-func TestUpdateWidget_TypeDeletedMeanwhile_ReturnsInvalidInput(t *testing.T) {
+func TestUpdateWidget_TypeUnpinnedMeanwhile_ReturnsInvalidInput(t *testing.T) {
 	cleanScenes(t)
 	insertRacingWidgetType(t)
 	plain := newSceneService()

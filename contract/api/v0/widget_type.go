@@ -12,9 +12,11 @@ type InputPort struct {
 	TypeHint    string `json:"type_hint"`
 }
 
-// WidgetTypeResponse is the HTTP DTO for representing a widget type in API responses.
+// WidgetTypeResponse is the HTTP DTO for representing a widget type of a
+// library's Draft in API responses.
 type WidgetTypeResponse struct {
 	ID             uuid.UUID   `json:"id"`
+	LibraryID      uuid.UUID   `json:"library_id"`
 	Name           string      `json:"name"`
 	HtmlTemplate   string      `json:"html_template"`
 	Script         string      `json:"script"`
@@ -64,4 +66,26 @@ type UpdateWidgetTypeRequest struct {
 // UpdateWidgetTypeResponse is the HTTP DTO for an update response.
 type UpdateWidgetTypeResponse struct {
 	Version int `json:"version"`
+}
+
+// ReleasedWidgetTypeResponse is the HTTP DTO of the copy of a WidgetType a
+// Library Release holds: its definition under the WidgetType's ID, with no
+// version — a release never changes. A Widget's type_id names one.
+type ReleasedWidgetTypeResponse struct {
+	ID             uuid.UUID   `json:"id"`
+	LibraryID      uuid.UUID   `json:"library_id"`
+	Name           string      `json:"name"`
+	HtmlTemplate   string      `json:"html_template"`
+	Script         string      `json:"script"`
+	ScriptLanguage string      `json:"script_language"`
+	DefaultWidth   int         `json:"default_width"`
+	DefaultHeight  int         `json:"default_height"`
+	InputPorts     []InputPort `json:"input_ports"`
+}
+
+// GetPinnedWidgetTypesResponse is the HTTP DTO of GET
+// /projects/{id}/widget-types: the WidgetTypes of every Library Release the
+// project pins, grouped by library in the order the pins were added.
+type GetPinnedWidgetTypesResponse struct {
+	WidgetTypes []ReleasedWidgetTypeResponse `json:"widget_types"`
 }

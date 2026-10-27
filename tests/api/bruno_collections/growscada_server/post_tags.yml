@@ -1,7 +1,7 @@
 info:
   name: post tags
   type: http
-  seq: 18
+  seq: 26
 
 http:
   method: POST

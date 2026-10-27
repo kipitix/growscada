@@ -24,7 +24,7 @@ func makeTestWidgetType(t *testing.T) WidgetType {
 	htmlTemplate, _ := NewHtmlTemplate("<div class='gauge'></div>")
 	script, _ := NewScript("function render(value) { return value; }")
 	lang := ScriptLanguageJavaScript
-	wt, err := ReconstituteWidgetType(anID, name, htmlTemplate, script, lang, DefaultSize(), nil, version.Initial[WidgetType]())
+	wt, err := ReconstituteWidgetType(anID, testLibraryID, name, htmlTemplate, script, lang, DefaultSize(), nil, version.Initial[WidgetType]())
 	if err != nil {
 		t.Fatalf("makeTestWidgetType: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestReconstituteWidgetType_FieldsAreSet(t *testing.T) {
 	size, _ := NewSize(120, 80)
 	ver, _ := version.New[WidgetType](version.WithNumber[WidgetType](3))
 
-	wt, err := ReconstituteWidgetType(anID, name, htmlTemplate, script, lang, size, nil, ver)
+	wt, err := ReconstituteWidgetType(anID, testLibraryID, name, htmlTemplate, script, lang, size, nil, ver)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -87,8 +87,11 @@ func TestReconstituteWidgetType_InvalidScriptLanguage_ReturnsError(t *testing.T)
 	htmlTemplate, _ := NewHtmlTemplate("<div></div>")
 	script, _ := NewScript("function update(){}")
 
-	_, err := ReconstituteWidgetType(id.NewID[WidgetType](), name, htmlTemplate, script, ScriptLanguage{}, DefaultSize(), nil, version.Initial[WidgetType]())
+	_, err := ReconstituteWidgetType(id.NewID[WidgetType](), testLibraryID, name, htmlTemplate, script, ScriptLanguage{}, DefaultSize(), nil, version.Initial[WidgetType]())
 	if err == nil {
 		t.Error("expected error for invalid script language, got nil")
 	}
 }
+
+// testLibraryID is the Library of the tests' widget types.
+var testLibraryID = id.NewID[Library]()

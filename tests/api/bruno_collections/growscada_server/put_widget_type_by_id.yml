@@ -1,11 +1,11 @@
 info:
   name: put widget type by id
   type: http
-  seq: 29
+  seq: 43
 
 http:
   method: PUT
-  url: http://{{API_SERVER}}/api/v0/widget-types/{{WIDGET_TYPE_ID}}
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/widget-types/{{WIDGET_TYPE_ID}}
   body:
     type: json
     data: |-

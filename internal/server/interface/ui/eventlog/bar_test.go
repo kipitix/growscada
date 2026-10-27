@@ -59,7 +59,8 @@ func TestForwards(t *testing.T) {
 			t.Errorf("%s from the current connection: not delivered", et)
 		}
 		content := strings.HasPrefix(et, "tag_") || strings.HasPrefix(et, "scene_") ||
-			(strings.HasPrefix(et, "widget_") && !strings.HasPrefix(et, "widget_type_"))
+			(strings.HasPrefix(et, "widget_") && !strings.HasPrefix(et, "widget_type_")) ||
+			strings.HasPrefix(et, "library_pin_")
 		if got := forwards(true, et); got == content {
 			t.Errorf("%s from a superseded connection: delivered %t, want %t", et, got, !content)
 		}

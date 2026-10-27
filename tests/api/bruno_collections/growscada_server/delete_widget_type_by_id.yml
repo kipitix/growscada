@@ -1,17 +1,16 @@
 info:
   name: delete widget type by id
   type: http
-  seq: 33
+  seq: 48
 
 http:
   method: DELETE
-  url: http://{{API_SERVER}}/api/v0/widget-types/{{WIDGET_TYPE_ID}}
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/widget-types/{{WIDGET_TYPE_ID}}
   auth: inherit
 
 docs: |
-  A Widget's WidgetType always exists: while Widgets on any Scene use this
-  type the request returns `409 Conflict` Problem Details and nothing is
-  deleted. Delete or retype those Widgets first.
+  Removes the WidgetType from the library's Draft. It touches no project:
+  their Widgets are of the copies the releases they pin hold.
 
   The delete states no version: a delete that loses a write race (the
   resource changed between reading and deleting it) is retried against the

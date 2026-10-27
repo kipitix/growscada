@@ -259,6 +259,7 @@ func appInputPortsToRest(ports []appdto.InputPort) []apiv0.InputPort {
 func newWidgetTypeResponse(wt appdto.WidgetType) apiv0.WidgetTypeResponse {
 	return apiv0.WidgetTypeResponse{
 		ID:             wt.ID,
+		LibraryID:      wt.LibraryID,
 		Name:           wt.Name,
 		HtmlTemplate:   wt.HtmlTemplate,
 		Script:         wt.Script,
@@ -308,4 +309,97 @@ func newUpdateWidgetTypeInput(r apiv0.UpdateWidgetTypeRequest) appdto.WidgetType
 		DefaultHeight:  r.DefaultHeight,
 		InputPorts:     inputPortDTOsToAppDTOs(r.InputPorts),
 	}
+}
+
+func newReleasedWidgetTypeResponse(wt appdto.ReleasedWidgetType) apiv0.ReleasedWidgetTypeResponse {
+	return apiv0.ReleasedWidgetTypeResponse{
+		ID:             wt.ID,
+		LibraryID:      wt.LibraryID,
+		Name:           wt.Name,
+		HtmlTemplate:   wt.HtmlTemplate,
+		Script:         wt.Script,
+		ScriptLanguage: wt.ScriptLanguage,
+		DefaultWidth:   wt.DefaultWidth,
+		DefaultHeight:  wt.DefaultHeight,
+		InputPorts:     appInputPortsToRest(wt.InputPorts),
+	}
+}
+
+func newReleasedWidgetTypeResponses(list []appdto.ReleasedWidgetType) []apiv0.ReleasedWidgetTypeResponse {
+	items := make([]apiv0.ReleasedWidgetTypeResponse, len(list))
+	for i, wt := range list {
+		items[i] = newReleasedWidgetTypeResponse(wt)
+	}
+	return items
+}
+
+func newLibraryResponse(l appdto.Library) apiv0.LibraryResponse {
+	return apiv0.LibraryResponse{
+		ID:                   l.ID,
+		Name:                 l.Name,
+		Version:              l.Version,
+		LatestRelease:        l.LatestRelease,
+		DiscardingTo:         l.DiscardingTo,
+		HasUnreleasedChanges: l.HasUnreleasedChanges,
+	}
+}
+
+func newGetLibrariesResponse(list []appdto.Library) apiv0.GetLibrariesResponse {
+	items := make([]apiv0.LibraryResponse, len(list))
+	for i, l := range list {
+		items[i] = newLibraryResponse(l)
+	}
+	return apiv0.GetLibrariesResponse{Libraries: items}
+}
+
+func newLibraryReleaseResponse(r appdto.LibraryRelease) apiv0.LibraryReleaseResponse {
+	return apiv0.LibraryReleaseResponse{
+		LibraryID:   r.LibraryID,
+		Number:      r.Number,
+		Note:        r.Note,
+		CreatedAt:   r.CreatedAt.UTC(),
+		WidgetTypes: newReleasedWidgetTypeResponses(r.WidgetTypes),
+	}
+}
+
+func newGetLibraryReleasesResponse(list []appdto.LibraryRelease) apiv0.GetLibraryReleasesResponse {
+	items := make([]apiv0.LibraryReleaseResponse, len(list))
+	for i, r := range list {
+		items[i] = newLibraryReleaseResponse(r)
+	}
+	return apiv0.GetLibraryReleasesResponse{Releases: items}
+}
+
+func newLibraryPinResponse(p appdto.LibraryPin) apiv0.LibraryPinResponse {
+	return apiv0.LibraryPinResponse{LibraryID: p.LibraryID, Release: p.Release, Version: p.Version}
+}
+
+func newGetLibraryPinsResponse(list []appdto.LibraryPin) apiv0.GetLibraryPinsResponse {
+	items := make([]apiv0.LibraryPinResponse, len(list))
+	for i, p := range list {
+		items[i] = newLibraryPinResponse(p)
+	}
+	return apiv0.GetLibraryPinsResponse{LibraryPins: items}
+}
+
+func newPinnedWidgetResponse(w appdto.PinnedWidget) apiv0.PinnedWidgetResponse {
+	return apiv0.PinnedWidgetResponse{SceneID: w.SceneID, WidgetID: w.WidgetID, Name: w.Name, TypeID: w.TypeID}
+}
+
+func newPinImpactResponse(i appdto.PinImpact) apiv0.PinImpactResponse {
+	resp := apiv0.PinImpactResponse{
+		OrphanedWidgets: make([]apiv0.PinnedWidgetResponse, len(i.Orphaned)),
+		BrokenBindings:  make([]apiv0.BrokenBindingResponse, len(i.Broken)),
+	}
+	for n, w := range i.Orphaned {
+		resp.OrphanedWidgets[n] = newPinnedWidgetResponse(w)
+	}
+	for n, b := range i.Broken {
+		resp.BrokenBindings[n] = apiv0.BrokenBindingResponse{
+			PinnedWidgetResponse: newPinnedWidgetResponse(b.PinnedWidget),
+			PortName:             b.PortName,
+			TagID:                b.TagID,
+		}
+	}
+	return resp
 }

@@ -25,7 +25,7 @@ func TestVersionBanner_ShownWhileTheServerSpeaksAnotherVersion(t *testing.T) {
 	var serverVersion atomic.Value
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(contract.SchemaVersionHeader, serverVersion.Load().(string))
-		w.Write([]byte(`{"tags":[]}`))
+		w.Write([]byte(`{"libraries":[]}`))
 	}))
 	defer srv.Close()
 	r := NewRoot(srv.URL)
@@ -34,7 +34,7 @@ func TestVersionBanner_ShownWhileTheServerSpeaksAnotherVersion(t *testing.T) {
 	request := func(version string) {
 		t.Helper()
 		serverVersion.Store(version)
-		if _, err := r.client.ListWidgetTypes(context.Background()); err != nil {
+		if _, err := r.client.ListLibraries(context.Background()); err != nil {
 			t.Fatal(err)
 		}
 		e.ConsumeAll()

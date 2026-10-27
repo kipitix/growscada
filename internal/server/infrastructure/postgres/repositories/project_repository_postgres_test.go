@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/server/domain/id"
-	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
@@ -21,7 +20,8 @@ import (
 func cleanProjects(t *testing.T) {
 	t.Helper()
 	if _, err := testDB.ExecContext(context.Background(),
-		"DELETE FROM runtime.tags; DELETE FROM engineering.tags; DELETE FROM engineering.scenes; DELETE FROM projects WHERE id <> '"+mainProject.String()+"'"); err != nil {
+		"DELETE FROM runtime.tags; DELETE FROM engineering.tags; DELETE FROM engineering.scenes; DELETE FROM engineering.library_pins; "+
+			"DELETE FROM projects WHERE id <> '"+mainProject.String()+"'"); err != nil {
 		t.Fatalf("cleanProjects: %v", err)
 	}
 }
@@ -298,7 +298,7 @@ func TestSceneRepository_ScenesOfProjectsAreApart(t *testing.T) {
 	inMain := mustSaveScene(t, mainScenes, "overview")
 	name, _ := scene.NewSceneName("overview")
 	size, _ := scene.NewSceneSize(100, 100)
-	w := makeWidget(t, otherScenes, "w1")
+	w := makeWidgetIn(t, otherScenes, other.ID(), "w1")
 	inOther := mustSave(t, otherScenes, withWidgets(
 		scene.CreateScene(otherScenes.NextID(), other.ID(), name, size, scene.NewBackgroundHTML("")), w))
 
@@ -308,10 +308,6 @@ func TestSceneRepository_ScenesOfProjectsAreApart(t *testing.T) {
 	all, err := mainScenes.FindAll(ctx)
 	if err != nil || len(all) != 1 || all[0].ID() != inMain.ID() || all[0].ProjectID() != mainProject {
 		t.Errorf("FindAll of Main: %v, %v", all, err)
-	}
-	byType, err := mainScenes.FindByWidgetTypeID(ctx, w.TypeID())
-	if err != nil || len(byType) != 0 {
-		t.Errorf("FindByWidgetTypeID in Main: %v, %v; want none", byType, err)
 	}
 	found := mustFindByID(t, otherScenes, inOther.ID())
 	if found.ProjectID() != other.ID() || len(found.Widgets()) != 1 {
@@ -333,74 +329,34 @@ func TestSceneRepository_ScenesOfProjectsAreApart(t *testing.T) {
 	}
 }
 
-func TestProjectScopes_FindProjectsUsingWidgetType(t *testing.T) {
-	cleanProjects(t)
-	other := mustCreateProject(t, repositories.NewProjectRepositoryPostgres(testDB), "Line 1")
-	scopes := repositories.NewProjectScopes(testDB)
-	unused := mustSaveWidgetType(t)
-	mainScenes := scopes.ForProject(mainProject).Scenes()
-	otherScenes := scopes.ForProject(other.ID()).Scenes()
-	w := makeWidget(t, mainScenes, "w1")
-	mustSave(t, mainScenes, withWidgets(makeScene(t, mainScenes, "a"), w))
-	name, _ := scene.NewSceneName("b")
-	size, _ := scene.NewSceneSize(100, 100)
-	same := scene.NewWidget(otherScenes.NextWidgetID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(), w.TypeID(), nil, nil)
-	mustSave(t, otherScenes, withWidgets(scene.CreateScene(otherScenes.NextID(), other.ID(), name, size, scene.NewBackgroundHTML("")), same))
-
-	projects, err := scopes.FindProjectsUsingWidgetType(context.Background(), w.TypeID())
-
-	if err != nil || len(projects) != 2 || projects[0] != mainProject || projects[1] != other.ID() {
-		t.Errorf("got %v, %v; want Main and %s", projects, err, other.ID())
-	}
-	if none, err := scopes.FindProjectsUsingWidgetType(context.Background(), unused); err != nil || len(none) != 0 {
-		t.Errorf("an unused widget type: %v, %v", none, err)
-	}
-
-	if _, err := repositories.NewProjectRepositoryPostgres(testDB).Save(context.Background(), other.Delete()); err != nil {
-		t.Fatalf("mark the project deleted: %v", err)
-	}
-	projects, err = scopes.FindProjectsUsingWidgetType(context.Background(), w.TypeID())
-	if err != nil || len(projects) != 1 || projects[0] != mainProject {
-		t.Errorf("with %s marked deleted: got %v, %v; want Main only", other.ID(), projects, err)
-	}
-}
-
-// TestWidgetTypeDelete_UsedOnlyByDeletedProjects_SaysSo: Widgets of Projects
-// marked deleted, not removed yet, still hold the widget type, and the
-// refusal tells them from Widgets of a live Project.
-func TestWidgetTypeDelete_UsedOnlyByDeletedProjects_SaysSo(t *testing.T) {
+// TestProjectDelete_PinsHoldTheRow: a project's row is removed only once its
+// Library Pins are gone, as its other content.
+func TestProjectDelete_PinsHoldTheRow(t *testing.T) {
 	cleanProjects(t)
 	projects := repositories.NewProjectRepositoryPostgres(testDB)
 	other := mustCreateProject(t, projects, "Line 1")
-	scopes := repositories.NewProjectScopes(testDB)
-	widgetTypes := repositories.NewWidgetTypeRepositoryPostgres(testDB)
-	mainScenes := scopes.ForProject(mainProject).Scenes()
-	otherScenes := scopes.ForProject(other.ID()).Scenes()
 	ctx := context.Background()
-	w := makeWidget(t, otherScenes, "w1")
-	name, _ := scene.NewSceneName("b")
-	size, _ := scene.NewSceneSize(100, 100)
-	mustSave(t, otherScenes, withWidgets(scene.CreateScene(otherScenes.NextID(), other.ID(), name, size, scene.NewBackgroundHTML("")), w))
+	mustPinWidgetType(t, other.ID())
 	if _, err := projects.Save(ctx, other.Delete()); err != nil {
 		t.Fatalf("mark the project deleted: %v", err)
 	}
-	refuse := func() error {
-		t.Helper()
-		wt, err := widgetTypes.FindByID(ctx, w.TypeID())
-		if err != nil {
-			t.Fatalf("FindByID: %v", err)
-		}
-		return widgetTypes.Delete(ctx, wt.Delete())
+	deleted, err := projects.FindDeleted(ctx, other.ID())
+	if err != nil {
+		t.Fatalf("FindDeleted: %v", err)
 	}
-
-	if err := refuse(); !errors.Is(err, library.ErrWidgetTypeInUseByDeletedProjects) || !errors.Is(err, library.ErrWidgetTypeInUse) {
-		t.Errorf("used by a deleted project only: got %v, want ErrWidgetTypeInUseByDeletedProjects", err)
+	if err := projects.Delete(ctx, deleted); !errors.Is(err, project.ErrProjectNotEmpty) {
+		t.Errorf("with a pin: expected ErrProjectNotEmpty, got %v", err)
 	}
-
-	same := scene.NewWidget(mainScenes.NextWidgetID(), w.Name(), w.Position(), w.Size(), w.Origin(), w.Rotation(), w.TypeID(), nil, nil)
-	mustSave(t, mainScenes, withWidgets(makeScene(t, mainScenes, "a"), same))
-	if err := refuse(); !errors.Is(err, library.ErrWidgetTypeInUse) || errors.Is(err, library.ErrWidgetTypeInUseByDeletedProjects) {
-		t.Errorf("used by Main too: got %v, want ErrWidgetTypeInUse only", err)
+	pins := repositories.NewLibraryPinRepositoryPostgres(testDB, other.ID())
+	all, err := pins.FindAll(ctx)
+	if err != nil || len(all) != 1 {
+		t.Fatalf("pins: %v, %v", all, err)
+	}
+	if err := pins.Delete(ctx, all[0].Delete(), nil); err != nil {
+		t.Fatalf("delete pin: %v", err)
+	}
+	if err := projects.Delete(ctx, deleted); err != nil {
+		t.Errorf("without pins: %v", err)
 	}
 }
 
@@ -416,7 +372,7 @@ func TestInLiveProjectLists_CheckTheProject(t *testing.T) {
 	createTagIn(t, tags, line.ID(), "speed")
 	name, _ := scene.NewSceneName("s")
 	size, _ := scene.NewSceneSize(100, 100)
-	sc := mustSave(t, scenes, withWidgets(scene.CreateScene(scenes.NextID(), line.ID(), name, size, scene.NewBackgroundHTML("")), makeWidget(t, scenes, "w")))
+	sc := mustSave(t, scenes, withWidgets(scene.CreateScene(scenes.NextID(), line.ID(), name, size, scene.NewBackgroundHTML("")), makeWidgetIn(t, scenes, line.ID(), "w")))
 	org, other := soleOrganization(t), id.NewID[organization.Organization]()
 	check := func(when string, orgID id.ID[organization.Organization], want int) {
 		t.Helper()

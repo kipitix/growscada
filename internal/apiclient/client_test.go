@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -138,7 +139,7 @@ func TestStatusError_CarriesTheProblem(t *testing.T) {
 		Detail:   "Scene was changed concurrently; reload it and retry",
 		Instance: "/api/v0/scenes/x",
 	}
-	if se.Problem != want || se.Method != http.MethodPut {
+	if !reflect.DeepEqual(se.Problem, want) || se.Method != http.MethodPut {
 		t.Errorf("got %s %+v, want PUT %+v", se.Method, se.Problem, want)
 	}
 	if !errors.Is(err, apiclient.ErrConflict) || errors.Is(err, apiclient.ErrNotFound) {

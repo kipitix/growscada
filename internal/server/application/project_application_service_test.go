@@ -178,7 +178,7 @@ func TestProjectCleanup_RemovesScenesThenTagsThenTheProject(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	ctx := context.Background()
 	p := r.createProject(t, "Line 1")
-	wt := r.createType(t, "value")
+	wt := r.createTypeIn(t, p, "value")
 	sc, err := r.sceneSvc.CreateScene(ctx, p, appdto.SceneInput{Name: "s", Width: 100, Height: 100})
 	if err != nil {
 		t.Fatalf("CreateScene: %v", err)
@@ -203,7 +203,7 @@ func TestProjectCleanup_RemovesScenesThenTagsThenTheProject(t *testing.T) {
 	}
 	r.settle(t)
 
-	for _, table := range []string{"engineering.tags", "engineering.scenes", "engineering.widgets", "runtime.tags"} {
+	for _, table := range []string{"engineering.tags", "engineering.scenes", "engineering.widgets", "engineering.library_pins", "runtime.tags"} {
 		if n := countRows(t, table, p); n != 0 {
 			t.Errorf("%s of the deleted project left: %d", table, n)
 		}
@@ -216,7 +216,7 @@ func TestProjectCleanup_RemovesScenesThenTagsThenTheProject(t *testing.T) {
 	for _, e := range r.takeDelivered() {
 		types = append(types, e.Type().String())
 	}
-	want := []string{"project_deleted", "widget_deleted", "scene_deleted", "tag_deleted"}
+	want := []string{"project_deleted", "widget_deleted", "scene_deleted", "tag_deleted", "library_pin_deleted"}
 	if !slices.Equal(types, want) {
 		t.Errorf("delivered %v, want %v", types, want)
 	}
@@ -388,11 +388,17 @@ func (n stateUpsertingAfterRemoval) RemoveProjectTagStates(ctx context.Context, 
 	return n.RuntimeNode.UpsertTagDefinitions(ctx, n.project, []appdto.TagDefinition{{ID: n.tagID, Name: "late", Type: "integer", Version: 1}})
 }
 
-func TestWidgetReconciliation_WidgetTypeUpdate_ReconcilesScenesOfEveryProject(t *testing.T) {
+// TestWidgetReconciliation_PinSwitch_ReconcilesOnlyItsProject: a release
+// dropping a port changes only the Projects that pin it (ADR 0012); a
+// Project pinning the older one keeps its bindings until it switches too.
+func TestWidgetReconciliation_PinSwitch_ReconcilesOnlyItsProject(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	ctx := context.Background()
 	other := r.createProject(t, "Line 1")
 	wt := r.createType(t, "value", "alarm")
+	if _, _, err := r.pinSvc.PutLibraryPin(ctx, other, r.libraries[wt.ID], 1, 0); err != nil {
+		t.Fatalf("pin in the other project: %v", err)
+	}
 	inMain := r.addWidget(t, r.createScene(t, "main scene").ID, 1, wt, "value", "alarm")
 	sc, err := r.sceneSvc.CreateScene(ctx, other, appdto.SceneInput{Name: "other scene", Width: 100, Height: 100})
 	if err != nil {
@@ -421,7 +427,20 @@ func TestWidgetReconciliation_WidgetTypeUpdate_ReconcilesScenesOfEveryProject(t 
 		t.Errorf("Main's widget: bound to %v, want [value]", got)
 	}
 	w, err := r.sceneSvc.FindWidgetByID(ctx, other, sc.ID, inOther.ID)
+	if err != nil || len(w.PortBindings) != 2 {
+		t.Errorf("the other project's widget: %+v, %v; want bound to [value alarm]", w.PortBindings, err)
+	}
+
+	pins, err := r.pinSvc.FindLibraryPins(ctx, other)
+	if err != nil || len(pins) != 1 {
+		t.Fatalf("pins of the other project: %v, %v", pins, err)
+	}
+	if _, _, err := r.pinSvc.PutLibraryPin(ctx, other, pins[0].LibraryID, 2, pins[0].Version); err != nil {
+		t.Fatalf("switch the other project: %v", err)
+	}
+	r.settle(t)
+	w, err = r.sceneSvc.FindWidgetByID(ctx, other, sc.ID, inOther.ID)
 	if err != nil || len(w.PortBindings) != 1 || w.PortBindings[0].PortName != "value" {
-		t.Errorf("the other project's widget: %+v, %v; want bound to [value]", w.PortBindings, err)
+		t.Errorf("the other project's widget after its switch: %+v, %v; want bound to [value]", w.PortBindings, err)
 	}
 }

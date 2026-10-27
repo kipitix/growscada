@@ -15,6 +15,8 @@ import (
 type APIRouter struct {
 	serveMux            *http.ServeMux
 	projectsHandlers    *ProjectsHandlers
+	librariesHandlers   *LibrariesHandlers
+	libraryPinsHandlers *LibraryPinsHandlers
 	tagsHandlers        *TagsHandlers
 	widgetTypesHandlers *WidgetTypesHandlers
 	widgetsHandlers     *WidgetsHandlers
@@ -54,13 +56,27 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// NewRouter returns the server API over the services of both roles: the
-// Engineering node's, and the Runtime node's tagStateService, which writes
-// the tags' states (ADR 0011).
-func NewRouter(projectService application.ProjectService, tagService application.TagService, tagStateService runtimeapp.TagStateService, widgetTypeService application.WidgetTypeService, sceneService application.SceneService, eventBus eventbus.EventBus, maxSSEClients int) *APIRouter {
+// Services are the services the server API serves: the Engineering node's,
+// and the Runtime node's TagStates, which writes the tags' states (ADR 0011).
+type Services struct {
+	Projects    application.ProjectService
+	Tags        application.TagService
+	TagStates   runtimeapp.TagStateService
+	Libraries   application.LibraryService
+	WidgetTypes application.WidgetTypeService
+	LibraryPins application.LibraryPinService
+	Scenes      application.SceneService
+}
+
+// NewRouter returns the server API over the services of both roles.
+func NewRouter(services Services, eventBus eventbus.EventBus, maxSSEClients int) *APIRouter {
+	projectService, tagService, tagStateService := services.Projects, services.Tags, services.TagStates
+	widgetTypeService, sceneService := services.WidgetTypes, services.Scenes
 	router := &APIRouter{
 		serveMux:            http.NewServeMux(),
 		projectsHandlers:    NewProjectsHandler(projectService),
+		librariesHandlers:   NewLibrariesHandler(services.Libraries),
+		libraryPinsHandlers: NewLibraryPinsHandler(services.LibraryPins),
 		tagsHandlers:        NewTagsHandler(tagService, tagStateService),
 		widgetTypesHandlers: NewWidgetTypesHandler(widgetTypeService),
 		widgetsHandlers:     NewWidgetsHandler(sceneService),
@@ -85,7 +101,9 @@ type route struct {
 func (r *APIRouter) routes() []route {
 	const p = apiv0.PathPrefix
 	pp := p + apiv0.ProjectPath(projectResource.wildcard())
+	lp := p + apiv0.LibraryPath(libraryResource.wildcard())
 	projects, tags, widgetTypes, widgets, scenes := r.projectsHandlers, r.tagsHandlers, r.widgetTypesHandlers, r.widgetsHandlers, r.scenesHandlers
+	libraries, pins := r.librariesHandlers, r.libraryPinsHandlers
 	return []route{
 		{"GET " + p + "/projects", projects.GetProjects},
 		{"GET " + pp, projects.GetProjectsByID},
@@ -99,11 +117,27 @@ func (r *APIRouter) routes() []route {
 		{"DELETE " + pp + "/tags/" + tagResource.wildcard(), tags.DeleteTagsByID},
 		{"PATCH " + pp + "/tags/" + tagResource.wildcard() + "/value", tags.PatchTagsValue},
 
-		{"GET " + p + "/widget-types", widgetTypes.GetWidgetTypes},
-		{"GET " + p + "/widget-types/" + widgetTypeResource.wildcard(), widgetTypes.GetWidgetTypesByID},
-		{"POST " + p + "/widget-types", widgetTypes.PostWidgetTypes},
-		{"PUT " + p + "/widget-types/" + widgetTypeResource.wildcard(), widgetTypes.PutWidgetTypesByID},
-		{"DELETE " + p + "/widget-types/" + widgetTypeResource.wildcard(), widgetTypes.DeleteWidgetTypesByID},
+		{"GET " + p + "/libraries", libraries.GetLibraries},
+		{"GET " + lp, libraries.GetLibrariesByID},
+		{"POST " + p + "/libraries", libraries.PostLibraries},
+		{"PUT " + lp, libraries.PutLibrariesByID},
+		{"DELETE " + lp, libraries.DeleteLibrariesByID},
+		{"POST " + lp + "/releases", libraries.PostReleases},
+		{"GET " + lp + "/releases", libraries.GetReleases},
+		{"GET " + lp + "/releases/" + releaseResource.wildcard(), libraries.GetReleasesByNumber},
+		{"POST " + lp + "/discard", libraries.PostDiscard},
+
+		{"GET " + lp + "/widget-types", widgetTypes.GetWidgetTypes},
+		{"GET " + lp + "/widget-types/" + widgetTypeResource.wildcard(), widgetTypes.GetWidgetTypesByID},
+		{"POST " + lp + "/widget-types", widgetTypes.PostWidgetTypes},
+		{"PUT " + lp + "/widget-types/" + widgetTypeResource.wildcard(), widgetTypes.PutWidgetTypesByID},
+		{"DELETE " + lp + "/widget-types/" + widgetTypeResource.wildcard(), widgetTypes.DeleteWidgetTypesByID},
+
+		{"GET " + pp + "/library-pins", pins.GetLibraryPins},
+		{"PUT " + pp + "/library-pins/" + libraryPinResource.wildcard(), pins.PutLibraryPin},
+		{"DELETE " + pp + "/library-pins/" + libraryPinResource.wildcard(), pins.DeleteLibraryPin},
+		{"GET " + pp + "/library-pins/" + libraryPinResource.wildcard() + "/impact", pins.GetLibraryPinImpact},
+		{"GET " + pp + "/widget-types", pins.GetPinnedWidgetTypes},
 
 		{"GET " + pp + "/scenes/" + sceneResource.wildcard() + "/widgets", widgets.GetWidgetsBySceneID},
 		{"POST " + pp + "/scenes/" + sceneResource.wildcard() + "/widgets", widgets.PostWidgets},

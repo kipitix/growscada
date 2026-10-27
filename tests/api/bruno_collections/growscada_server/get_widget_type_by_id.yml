@@ -1,11 +1,11 @@
 info:
   name: get widget type by id
   type: http
-  seq: 10
+  seq: 13
 
 http:
   method: GET
-  url: http://{{API_SERVER}}/api/v0/widget-types/{{WIDGET_TYPE_ID}}
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/widget-types/{{WIDGET_TYPE_ID}}
   auth: inherit
 
 runtime:
@@ -18,9 +18,9 @@ runtime:
     - expression: 'res.body.id'
       operator: eq
       value: '"{{WIDGET_TYPE_ID}}"'
-    - expression: 'res.body.name'
+    - expression: 'res.body.library_id'
       operator: eq
-      value: '"Boolean Circle"'
+      value: '"{{LIBRARY_ID}}"'
 
 settings:
   encodeUrl: true

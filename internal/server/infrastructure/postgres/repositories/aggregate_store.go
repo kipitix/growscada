@@ -8,6 +8,7 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
@@ -39,11 +40,16 @@ func newOptions(opts []Option) options {
 // (ADR 0008): one transaction writes the aggregate's row, compare-and-swap on
 // the Version it was read at, and the events it recorded into the outbox.
 // The store of a Project's content (project set) touches only rows of that
-// Project.
+// Project, the store of a Library's Draft (library set) only rows of that
+// Library.
 type aggregateStore[T any] struct {
-	db       *sql.DB
-	table    tableName
-	project  *id.ID[project.Project]
+	db      *sql.DB
+	table   tableName
+	project *id.ID[project.Project]
+	library *id.ID[library.Library]
+	// lock, if set, runs first in the transaction of every write: it locks
+	// and checks what the write rests on (e.g. the row of its Library).
+	lock     func(ctx context.Context, tx *sql.Tx) error
 	notFound error
 	conflict error
 	onCommit func()
@@ -63,12 +69,16 @@ func (s aggregateStore[T]) checkProject(aProjectID id.ID[project.Project]) error
 }
 
 // where returns the condition matching anID's row, within the store's
-// Project if it has one, and its arguments, numbered from $1.
+// Project or Library if it has one, and its arguments, numbered from $1.
 func (s aggregateStore[T]) where(anID id.ID[T]) (string, []any) {
-	if s.project == nil {
+	switch {
+	case s.project != nil:
+		return `id = $1 AND project_id = $2`, []any{anID.UUID(), s.project.UUID()}
+	case s.library != nil:
+		return `id = $1 AND library_id = $2`, []any{anID.UUID(), s.library.UUID()}
+	default:
 		return `id = $1`, []any{anID.UUID()}
 	}
-	return `id = $1 AND project_id = $2`, []any{anID.UUID(), s.project.UUID()}
 }
 
 // rowWrite writes an aggregate's rows in a Save's transaction.
@@ -95,6 +105,11 @@ func (s aggregateStore[T]) save(ctx context.Context, anID id.ID[T], current vers
 	}
 
 	err := s.inTx(ctx, events, func(tx *sql.Tx) error {
+		if s.lock != nil {
+			if err := s.lock(ctx, tx); err != nil {
+				return err
+			}
+		}
 		if current == version.Initial[T]() {
 			if s.project != nil {
 				if err := s.lockLiveProject(ctx, tx); err != nil {
@@ -151,6 +166,11 @@ func (s aggregateStore[T]) deleteAnyVersion(ctx context.Context, anID id.ID[T], 
 // current is nil.
 func (s aggregateStore[T]) deleteWhere(ctx context.Context, anID id.ID[T], current *version.Version[T], events []event.Event) error {
 	return s.inTx(ctx, events, func(tx *sql.Tx) error {
+		if s.lock != nil {
+			if err := s.lock(ctx, tx); err != nil {
+				return err
+			}
+		}
 		cond, args := s.where(anID)
 		query := fmt.Sprintf(`DELETE FROM %s WHERE %s`, s.table, cond)
 		if current != nil {

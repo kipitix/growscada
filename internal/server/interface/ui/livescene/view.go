@@ -20,7 +20,7 @@ type View struct {
 	app.Compo
 	Scene       apiv0.SceneResponse
 	Widgets     []apiv0.WidgetResponse
-	WidgetTypes map[uuid.UUID]apiv0.WidgetTypeResponse // by ID
+	WidgetTypes map[uuid.UUID]apiv0.ReleasedWidgetTypeResponse // by ID
 	Tags        map[uuid.UUID]apiv0.TagResponse        // by ID
 	// Connected is false while the connection to the server is lost: a banner
 	// is shown and every Widget is marked at least Uncertain.

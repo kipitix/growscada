@@ -330,7 +330,7 @@ func TestEventsHandlers_GetEvents_MultipleClientsEachReceiveBroadcast(t *testing
 		return strings.Contains(rec1.body(), ": connected") && strings.Contains(rec2.body(), ": connected")
 	})
 
-	bus.Publish(library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType]()))
+	bus.Publish(library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType](), id.NewID[library.Library]()))
 
 	waitFor(t, time.Second, func() bool {
 		return strings.Contains(rec1.body(), "widget_type_created") && strings.Contains(rec2.body(), "widget_type_created")
@@ -351,7 +351,7 @@ func TestEventsHandlers_Publish_NoClientsDoesNotAllocate(t *testing.T) {
 	bus := eventbus.NewEventBus()
 	_ = restapi.NewEventsHandler(bus, nil, 100) // subscribes the hub to bus; no client connects
 
-	e := library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType]())
+	e := library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType](), id.NewID[library.Library]())
 
 	allocs := testing.AllocsPerRun(200, func() {
 		bus.Publish(e)
@@ -368,7 +368,7 @@ func BenchmarkEventsHandlers_Publish_NoClients(b *testing.B) {
 	bus := eventbus.NewEventBus()
 	_ = restapi.NewEventsHandler(bus, nil, 100)
 
-	e := library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType]())
+	e := library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType](), id.NewID[library.Library]())
 
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -508,7 +508,7 @@ func TestEventsHandlers_GetEvents_StalledWriteEndsOnDeadline(t *testing.T) {
 	})
 
 	sent := time.Now()
-	bus.Publish(library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType]()))
+	bus.Publish(library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType](), id.NewID[library.Library]()))
 	select {
 	case <-w.stalled:
 	case <-time.After(time.Second):
@@ -587,7 +587,7 @@ func TestEventsHandlers_Close_ConcurrentWithDisconnects(t *testing.T) {
 	for range 4 {
 		wg.Go(func() {
 			for range 50 {
-				bus.Publish(library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType]()))
+				bus.Publish(library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType](), id.NewID[library.Library]()))
 			}
 		})
 	}
@@ -704,7 +704,7 @@ func TestEventsHandlers_GetEvents_SlowClientIsDroppedWithoutBlockingPublish(t *t
 	deadline := time.After(time.Second)
 publishUntilStarted:
 	for {
-		bus.Publish(library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType]()))
+		bus.Publish(library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType](), id.NewID[library.Library]()))
 		select {
 		case <-w.started:
 			break publishUntilStarted
@@ -719,7 +719,7 @@ publishUntilStarted:
 	publishDone := make(chan struct{})
 	go func() {
 		for i := 0; i < 200; i++ {
-			bus.Publish(library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType]()))
+			bus.Publish(library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType](), id.NewID[library.Library]()))
 		}
 		close(publishDone)
 	}()

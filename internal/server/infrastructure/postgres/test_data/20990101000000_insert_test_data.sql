@@ -6,6 +6,9 @@
 --                 empty "Line 2"
 --   Scenes:       c1d2e3f4-000N-4000-8000-000000000000
 --   Widgets:      b1c2d3e4-000N-4000-8000-000000000000
+--   Libraries:    d0000000-0000-4000-8000-00000000000N: 1 is "Main", created
+--                 by the migrations with its release 1 pinned in Main; 2 is
+--                 "Extras"
 --   Widget types: a1b2c3d4-000N-4000-8000-000000000000 (see below)
 --   Tags:         6ba7b81N-9dad-11d1-80b4-00c04fd430c8 (see below)
 
@@ -46,9 +49,11 @@ INSERT INTO runtime.tags (id, project_id, name, type, version, value, quality, s
 -- script_language: javascript | python | lua
 -- input_ports: JSON array of {name, description, type_hint}; type_hint: "" | "string" | "boolean" | "integer"
 -- version: default committed version is 1
-INSERT INTO engineering.widget_types (id, name, html_template, script, script_language, input_ports, default_width, default_height, version) VALUES
+-- library_id: the Library whose Draft holds the type
+INSERT INTO engineering.widget_types (id, library_id, name, html_template, script, script_language, input_ports, default_width, default_height, version) VALUES
     (
         'a1b2c3d4-0001-4000-8000-000000000001',
+        'd0000000-0000-4000-8000-000000000001',
         'Boolean Circle',
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100%" height="100%" style="display:block"><circle class="circle-indicator" cx="50" cy="50" r="44" fill="#888888" stroke="#555555" stroke-width="2"/></svg>',
         'function render(inputs) { var c = document.querySelector(''.circle-indicator''); c.setAttribute(''fill'', inputs.state.value ? ''#2ecc71'' : ''#888888''); }',
@@ -60,6 +65,7 @@ INSERT INTO engineering.widget_types (id, name, html_template, script, script_la
     ),
     (
         'a1b2c3d4-0002-4000-8000-000000000002',
+        'd0000000-0000-4000-8000-000000000001',
         'Integer Speedometer',
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100%" height="100%" style="display:block"><path class="spd-bg" d="M 18.82 73 A 36 36 0 1 1 81.18 73" fill="none" stroke="#333" stroke-width="6" stroke-linecap="round"/><path class="spd-arc" d="M 18.82 73 A 36 36 0 1 1 81.18 73" fill="none" stroke="#2ecc71" stroke-width="6" stroke-linecap="round" stroke-dasharray="0 1000"/><line class="spd-needle" x1="50" y1="55" x2="27.48" y2="68" stroke="#ddd" stroke-width="2.5" stroke-linecap="round"/><circle cx="50" cy="55" r="3.5" fill="#aaa"/><text class="spd-val" x="50" y="71" text-anchor="middle" font-size="11" font-family="monospace" font-weight="bold" fill="#ddd">0</text><text x="14" y="81" text-anchor="middle" font-size="7" font-family="sans-serif" fill="#666">0</text><text x="86" y="81" text-anchor="middle" font-size="7" font-family="sans-serif" fill="#666">100</text></svg>',
         'function render(inputs) { var value = Math.max(0, Math.min(100, Number(inputs.value.value) || 0)); var angleRad = (150 + value / 100 * 240) * Math.PI / 180; var x2 = (50 + 26 * Math.cos(angleRad)).toFixed(2); var y2 = (55 + 26 * Math.sin(angleRad)).toFixed(2); document.querySelector(''.spd-needle'').setAttribute(''x2'', x2); document.querySelector(''.spd-needle'').setAttribute(''y2'', y2); var arcLen = (150.8 * value / 100).toFixed(2); document.querySelector(''.spd-arc'').setAttribute(''stroke-dasharray'', arcLen + '' 1000''); var color = value < 70 ? ''#2ecc71'' : value < 90 ? ''#f39c12'' : ''#e74c3c''; document.querySelector(''.spd-arc'').setAttribute(''stroke'', color); document.querySelector(''.spd-val'').textContent = Math.round(value); }',
@@ -71,6 +77,7 @@ INSERT INTO engineering.widget_types (id, name, html_template, script, script_la
     ),
     (
         'a1b2c3d4-0005-4000-8000-000000000003',
+        'd0000000-0000-4000-8000-000000000001',
         'String Ticker',
         '<style>@keyframes mq{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}</style><div style="width:100%;height:100%;display:flex;align-items:center;"><div style="width:100%;height:100%;border-radius:6px;background:#0a0a0f;border:1px solid #222a33;overflow:hidden;display:flex;align-items:center;box-sizing:border-box;"><div class="st-track" style="overflow:hidden;flex:1;white-space:nowrap;padding:0 10px;"><span class="st-txt" style="display:inline-block;font-family:monospace;font-size:12px;color:#7fb3d3;letter-spacing:0.05em;"></span></div></div></div>',
         'function render(inputs){var t=String(inputs.value.value||'''');var sp=document.querySelector(''.st-txt'');if(sp.dataset.text===t)return;sp.dataset.text=t;var tr=document.querySelector(''.st-track'');sp.style.animation=''none'';sp.textContent=t;requestAnimationFrame(function(){if(sp.scrollWidth>tr.clientWidth){sp.textContent=t+''  ●  ''+t;sp.style.animation=''mq ''+(t.length*0.1+1.5)+''s linear infinite'';}});}',
@@ -80,6 +87,37 @@ INSERT INTO engineering.widget_types (id, name, html_template, script, script_la
         32,
         1
     );
+
+-- A second Library with one WidgetType
+INSERT INTO engineering.libraries (id, organization_id, name, version) VALUES
+    ('d0000000-0000-4000-8000-000000000002', 'a0000000-0000-4000-8000-000000000001', 'Extras', 1);
+INSERT INTO engineering.widget_types (id, library_id, name, html_template, script, script_language, input_ports, default_width, default_height, version) VALUES
+    (
+        'a1b2c3d4-0006-4000-8000-000000000006',
+        'd0000000-0000-4000-8000-000000000002',
+        'Integer Bar',
+        '<div style="width:100%;height:100%;background:#222;border-radius:4px;overflow:hidden;box-sizing:border-box;border:1px solid #444;"><div class="bar" style="height:100%;width:0%;background:#3498db;"></div></div>',
+        'function render(inputs) { var v = Math.max(0, Math.min(100, Number(inputs.value.value) || 0)); document.querySelector(''.bar'').style.width = v + ''%''; }',
+        'javascript',
+        '[{"name":"value","description":"Integer value (0-100)","type_hint":"integer"}]',
+        160,
+        24,
+        1
+    );
+
+-- The Library Releases: release 1 of Main (made empty by the migrations)
+-- gets copies of its Draft, Extras its own release 1 with its Draft
+INSERT INTO engineering.library_releases (library_id, number, note) VALUES
+    ('d0000000-0000-4000-8000-000000000002', 1, 'First release');
+INSERT INTO engineering.released_widget_types
+        (library_id, release_number, id, name, html_template, script, script_language, default_width, default_height, input_ports)
+    SELECT library_id, 1, id, name, html_template, script, script_language, default_width, default_height, input_ports
+    FROM engineering.widget_types ORDER BY pk_id;
+
+-- The Library Pins: Main pins both Libraries, Line 2 only Main
+INSERT INTO engineering.library_pins (project_id, library_id, release_number, version) VALUES
+    ('b0000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000002', 1, 1),
+    ('b0000000-0000-4000-8000-000000000002', 'd0000000-0000-4000-8000-000000000001', 1, 1);
 
 -- Add test data for scenes table
 -- version: default committed version is 1
@@ -162,6 +200,21 @@ DELETE FROM engineering.scenes WHERE id IN (
     'c1d2e3f4-0001-4000-8000-000000000001',
     'c1d2e3f4-0002-4000-8000-000000000002'
 );
+
+-- Delete the pins, releases and Library of the test data
+DELETE FROM engineering.library_pins WHERE (project_id, library_id) IN (
+    ('b0000000-0000-4000-8000-000000000001'::uuid, 'd0000000-0000-4000-8000-000000000002'::uuid),
+    ('b0000000-0000-4000-8000-000000000002'::uuid, 'd0000000-0000-4000-8000-000000000001'::uuid)
+);
+DELETE FROM engineering.released_widget_types WHERE id IN (
+    'a1b2c3d4-0001-4000-8000-000000000001',
+    'a1b2c3d4-0002-4000-8000-000000000002',
+    'a1b2c3d4-0005-4000-8000-000000000003',
+    'a1b2c3d4-0006-4000-8000-000000000006'
+);
+DELETE FROM engineering.library_releases WHERE library_id = 'd0000000-0000-4000-8000-000000000002';
+DELETE FROM engineering.widget_types WHERE library_id = 'd0000000-0000-4000-8000-000000000002';
+DELETE FROM engineering.libraries WHERE id = 'd0000000-0000-4000-8000-000000000002';
 
 -- Delete test data for widget_types table by their ids
 DELETE FROM engineering.widget_types WHERE id IN (

@@ -46,7 +46,7 @@ type fixture struct {
 func newServer(t *testing.T) (string, *testAPI) {
 	t.Helper()
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
-	return srv.URL, newTestAPI(apiclient.New(srv.URL, srv.Client()))
+	return srv.URL, newTestAPI(t, apiclient.New(srv.URL, srv.Client()))
 }
 
 func mount(t *testing.T, url string, api *testAPI) *fixture {
@@ -188,31 +188,96 @@ func TestDeleteItem_RemovesItAndTheSelection(t *testing.T) {
 	}
 }
 
-func TestDeleteItem_InUse_ShowsTheServersRefusal(t *testing.T) {
+// TestRelease_ReleasesTheDraftAndShowsItInTheHistory: Release makes release
+// 1 of the Draft, shown in the history; viewing it is read-only.
+func TestRelease_ReleasesTheDraftAndShowsItInTheHistory(t *testing.T) {
 	f, id := selected(t)
-	ctx := context.Background()
-	scene, err := f.api.CreateScene(ctx, apiv0.CreateSceneRequest{Name: "Main", Width: 800, Height: 600})
+
+	if lib, ok := f.l.selectedLibrary(); !ok || !lib.HasUnreleasedChanges || lib.LatestRelease != 0 {
+		t.Fatalf("library before the release: %+v", lib)
+	}
+	releaseNow(t, f)
+
+	if lib, _ := f.l.selectedLibrary(); lib.LatestRelease != 1 || lib.HasUnreleasedChanges {
+		t.Errorf("library after the release: %+v", lib)
+	}
+	if len(f.l.releases) != 1 || len(f.l.releases[0].WidgetTypes) != 1 || f.l.releases[0].WidgetTypes[0].ID != id {
+		t.Fatalf("history: %+v", f.l.releases)
+	}
+	f.l.view(1)
+	if !f.l.readOnly() || len(f.l.shownTypes()) != 1 {
+		t.Errorf("viewing release 1: read-only %t, %d types", f.l.readOnly(), len(f.l.shownTypes()))
+	}
+	f.l.createItem(f.l.compoCtx)
+	f.run()
+	if list, _ := f.api.ListWidgetTypes(context.Background()); len(list) != 1 {
+		t.Errorf("an edit while viewing a release reached the server: %+v", list)
+	}
+	f.l.view(0)
+	if f.l.readOnly() {
+		t.Error("the Draft is editable again")
+	}
+}
+
+// releaseNow releases the selected library's Draft as Release does, without
+// its dialog.
+func releaseNow(t *testing.T, f *fixture) {
+	t.Helper()
+	lib, _ := f.l.selectedLibrary()
+	if _, err := f.api.Release(context.Background(), apiv0.CreateReleaseRequest{Version: lib.Version}); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	f.l.loadLibraries(f.l.compoCtx)
+	f.l.loadReleases(f.l.compoCtx)
+	f.run()
+	f.noToasts()
+}
+
+// TestDiscard_MakesTheDraftReadOnlyWhileUnderWay: once the server marks the
+// Discard, the Draft cannot be edited until it ends.
+func TestDiscard_MakesTheDraftReadOnlyWhileUnderWay(t *testing.T) {
+	f, _ := selected(t)
+	releaseNow(t, f)
+	createWidgetType(t, f.api, "Added")
+	if _, err := f.api.Discard(context.Background()); err != nil {
+		t.Fatalf("discard: %v", err)
+	}
+	f.l.loadLibraries(f.l.compoCtx)
+	f.run()
+
+	lib, _ := f.l.selectedLibrary()
+	if lib.DiscardingTo == 0 {
+		// The server may have finished the Discard already.
+		t.Skip("the Discard ended before the library was read")
+	}
+	if !f.l.discarding() || !f.l.readOnly() {
+		t.Error("a Draft being discarded must be read-only")
+	}
+}
+
+func TestLibraries_SelectFallsBackToTheFirst(t *testing.T) {
+	url, api := newServer(t)
+	other, err := api.CreateLibrary(context.Background(), apiv0.CreateLibraryRequest{Name: "Other"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	sc, _ := f.api.GetScene(ctx, scene.ID)
-	if _, err := f.api.CreateWidget(ctx, scene.ID, apiv0.CreateWidgetRequest{
-		Name: "w", Size: apiv0.SizeRequest{Width: 10, Height: 10}, Origin: apiv0.OriginRequest{X: 0.5, Y: 0.5},
-		TypeID: id, SceneVersion: sc.Version, Labels: []string{}, PortBindings: []apiv0.PortBinding{},
-	}); err != nil {
+	f := mount(t, url, api)
+	f.run()
+	if f.l.libraryID != api.ID() || len(f.l.libraries) != 2 {
+		t.Fatalf("selected %v of %d libraries, want the first", f.l.libraryID, len(f.l.libraries))
+	}
+	f.l.selectLibrary(f.l.compoCtx, other.ID)
+	f.run()
+	if f.l.libraryID != other.ID || len(f.l.widgetTypes) != 0 {
+		t.Errorf("the other library: %v, %d types", f.l.libraryID, len(f.l.widgetTypes))
+	}
+	if _, err := api.DeleteLibrary(context.Background(), other.ID); err != nil {
 		t.Fatal(err)
 	}
-
-	f.l.deleteItem(f.l.compoCtx)
+	f.l.loadLibraries(f.l.compoCtx)
 	f.run()
-
-	got := f.oneToast()
-	if got.Status != http.StatusConflict || got.Method != http.MethodDelete || got.Title != "Conflict: WidgetType" ||
-		got.Detail != "WidgetType is used by Widgets" {
-		t.Errorf("toast %+v: want the server's 409", got)
-	}
-	if f.l.selectedID != id {
-		t.Error("the selection was dropped")
+	if f.l.libraryID != api.ID() {
+		t.Errorf("after the deletion selected %v, want the first", f.l.libraryID)
 	}
 }
 

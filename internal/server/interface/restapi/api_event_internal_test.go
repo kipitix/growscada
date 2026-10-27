@@ -9,6 +9,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -29,6 +30,7 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 	widgetID := id.NewID[scene.Widget]()
 	sceneID := id.NewID[scene.Scene]()
 	widgetTypeID := id.NewID[library.WidgetType]()
+	libraryID := id.NewID[library.Library]()
 	clientID := id.NewID[client.Client]()
 	projectID := id.NewID[project.Project]()
 
@@ -55,12 +57,28 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 			}}},
 		event.EventTypeTagDeleted: {tag.NewTagDeletedEvent(tagID, projectID, ts),
 			apiv0.Event{Type: "tag_deleted", ID: tagID.String()}},
-		event.EventTypeWidgetTypeCreated: {library.NewWidgetTypeCreatedEvent(widgetTypeID, ts),
-			apiv0.Event{Type: "widget_type_created", ID: widgetTypeID.String()}},
-		event.EventTypeWidgetTypeUpdated: {library.NewWidgetTypeUpdatedEvent(widgetTypeID, ts),
-			apiv0.Event{Type: "widget_type_updated", ID: widgetTypeID.String()}},
-		event.EventTypeWidgetTypeDeleted: {library.NewWidgetTypeDeletedEvent(widgetTypeID, ts),
-			apiv0.Event{Type: "widget_type_deleted", ID: widgetTypeID.String()}},
+		event.EventTypeWidgetTypeCreated: {library.NewWidgetTypeCreatedEvent(widgetTypeID, libraryID, ts),
+			apiv0.Event{Type: "widget_type_created", ID: widgetTypeID.String(), LibraryID: libraryID.String()}},
+		event.EventTypeWidgetTypeUpdated: {library.NewWidgetTypeUpdatedEvent(widgetTypeID, libraryID, ts),
+			apiv0.Event{Type: "widget_type_updated", ID: widgetTypeID.String(), LibraryID: libraryID.String()}},
+		event.EventTypeWidgetTypeDeleted: {library.NewWidgetTypeDeletedEvent(widgetTypeID, libraryID, ts),
+			apiv0.Event{Type: "widget_type_deleted", ID: widgetTypeID.String(), LibraryID: libraryID.String()}},
+		event.EventTypeLibraryCreated: {library.NewLibraryCreatedEvent(libraryID, ts),
+			apiv0.Event{Type: "library_created", ID: libraryID.String()}},
+		event.EventTypeLibraryUpdated: {library.NewLibraryUpdatedEvent(libraryID, ts),
+			apiv0.Event{Type: "library_updated", ID: libraryID.String()}},
+		event.EventTypeLibraryDeleted: {library.NewLibraryDeletedEvent(libraryID, ts),
+			apiv0.Event{Type: "library_deleted", ID: libraryID.String()}},
+		event.EventTypeLibraryDiscardStarted: {library.NewLibraryDiscardStartedEvent(libraryID, ts),
+			apiv0.Event{Type: "library_discard_started", ID: libraryID.String()}},
+		event.EventTypeLibraryReleased: {library.NewLibraryReleasedEvent(libraryID, library.FirstRelease().Next(), ts),
+			apiv0.Event{Type: "library_released", ID: libraryID.String(), Release: 2}},
+		event.EventTypeLibraryPinCreated: {librarypin.NewLibraryPinCreatedEvent(libraryID, projectID, ts),
+			apiv0.Event{Type: "library_pin_created", ID: libraryID.String()}},
+		event.EventTypeLibraryPinUpdated: {librarypin.NewLibraryPinUpdatedEvent(libraryID, projectID, ts),
+			apiv0.Event{Type: "library_pin_updated", ID: libraryID.String()}},
+		event.EventTypeLibraryPinDeleted: {librarypin.NewLibraryPinDeletedEvent(libraryID, projectID, ts),
+			apiv0.Event{Type: "library_pin_deleted", ID: libraryID.String()}},
 		event.EventTypeWidgetCreated: {scene.NewWidgetCreatedEvent(widgetID, sceneID, projectID, widgetTypeID, ts),
 			apiv0.Event{Type: "widget_created", ID: widgetID.String(), SceneID: sceneID.String()}},
 		event.EventTypeWidgetUpdated: {scene.NewWidgetUpdatedEvent(widgetID, sceneID, projectID, widgetTypeID, ts),

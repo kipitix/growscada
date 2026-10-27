@@ -1,7 +1,7 @@
 info:
   name: delete tag by id
   type: http
-  seq: 34
+  seq: 51
 
 http:
   method: DELETE

@@ -8,9 +8,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kipitix/growscada/internal/server/application"
+	"github.com/kipitix/growscada/internal/server/application/appdto"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -31,6 +33,10 @@ var (
 	widgetTypeResource = resource{name: "WidgetType", pathParam: "widget_type_id"}
 	sceneResource      = resource{name: "Scene", pathParam: "scene_id"}
 	widgetResource     = resource{name: "Widget", pathParam: "widget_id"}
+	libraryResource    = resource{name: "Library", pathParam: "library_id"}
+	releaseResource    = resource{name: "LibraryRelease", pathParam: "release_number"}
+	// A Library Pin is named by its library within its project.
+	libraryPinResource = resource{name: "LibraryPin", pathParam: "library_id"}
 )
 
 // wildcard is the router pattern segment that carries the resource's ID.
@@ -57,11 +63,23 @@ var errorMappings = []errorMapping{
 	{tag.ErrTagNotFound, http.StatusNotFound, tagResource, ""},
 	{tag.ErrTagConflict, http.StatusConflict, tagResource, "Tag was changed concurrently; reload it and retry"},
 	{tag.ErrTagNameTaken, http.StatusConflict, tagResource, "Tag name is already taken in the project"},
+	{library.ErrLibraryNotFound, http.StatusNotFound, libraryResource, ""},
+	{library.ErrLibraryConflict, http.StatusConflict, libraryResource, "Library was changed concurrently; reload it and retry"},
+	{library.ErrLibraryNameTaken, http.StatusConflict, libraryResource, "Library name is already taken"},
+	{library.ErrLibraryPinned, http.StatusConflict, libraryResource, "Library is pinned by Projects; unpin it first"},
+	{library.ErrLibraryDiscarding, http.StatusConflict, libraryResource, "Library is being discarded; its Draft is read-only until the Discard ends"},
+	{library.ErrNoRelease, http.StatusConflict, libraryResource, "Library has never been released: there is nothing to discard to"},
+	{library.ErrNothingToRelease, http.StatusConflict, libraryResource, "Library's Draft has not changed since its latest release"},
+	{library.ErrReleaseNumberTaken, http.StatusConflict, libraryResource, "Library was released concurrently; retry"},
+	{library.ErrReleaseNotFound, http.StatusNotFound, releaseResource, ""},
 	{library.ErrWidgetTypeNotFound, http.StatusNotFound, widgetTypeResource, ""},
 	{library.ErrWidgetTypeConflict, http.StatusConflict, widgetTypeResource, "WidgetType was changed concurrently; reload it and retry"},
-	{library.ErrWidgetTypeInUseByDeletedProjects, http.StatusConflict, widgetTypeResource,
-		"WidgetType is used only by Widgets of deleted Projects, still being removed; retry shortly"},
-	{library.ErrWidgetTypeInUse, http.StatusConflict, widgetTypeResource, "WidgetType is used by Widgets"},
+	{library.ErrWidgetTypeNameTaken, http.StatusConflict, widgetTypeResource, "WidgetType name is already taken in the library"},
+	{librarypin.ErrLibraryPinNotFound, http.StatusNotFound, libraryPinResource, ""},
+	{librarypin.ErrLibraryPinConflict, http.StatusConflict, libraryPinResource, "LibraryPin was changed concurrently; reload it and retry"},
+	{librarypin.ErrLibraryPinExists, http.StatusConflict, libraryPinResource, "Library is already pinned in the project"},
+	{librarypin.ErrWidgetsOrphaned, http.StatusConflict, libraryPinResource,
+		"Widgets of the project would be left without their WidgetType; remove them or change their type first"},
 	{scene.ErrSceneNotFound, http.StatusNotFound, sceneResource, ""},
 	{scene.ErrSceneConflict, http.StatusConflict, sceneResource, "Scene was changed concurrently; reload it and retry"},
 	{scene.ErrWidgetNotFound, http.StatusNotFound, widgetResource, ""},
@@ -98,7 +116,14 @@ func sendError(w http.ResponseWriter, r *http.Request, err error) {
 				// has already retried.
 				detail = m.resource.name + " kept changing while the request ran; retry it later"
 			}
-			sendProblem(w, NewConflict(m.resource.name, detail, r.URL.Path))
+			problem := NewConflict(m.resource.name, detail, r.URL.Path)
+			var orphans librarypin.OrphansError
+			if errors.As(err, &orphans) {
+				for _, pw := range orphans.Widgets {
+					problem.OrphanedWidgets = append(problem.OrphanedWidgets, newPinnedWidgetResponse(appdto.NewPinnedWidget(pw)))
+				}
+			}
+			sendProblem(w, problem)
 		default:
 			sendInternalError(w, r, fmt.Errorf("error mapping for %d has no response: %w", m.status, err))
 		}

@@ -112,7 +112,7 @@ func TestAppend_RowOfContentEventNamesItsProject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := outbox.Append(ctx, tx, []event.Event{library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType]())}); err != nil {
+	if err := outbox.Append(ctx, tx, []event.Event{library.NewWidgetTypeCreatedEvent(id.NewID[library.WidgetType](), id.NewID[library.Library]())}); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -154,16 +154,18 @@ func TestSave_RolledBack_LeavesNothingInOutboxAndDeliversNothing(t *testing.T) {
 	if _, err := tagRepo.Save(ctx, createTag(t, tagRepo, "taken")); !errors.Is(err, tag.ErrTagNameTaken) {
 		t.Fatalf("expected ErrTagNameTaken, got %v", err)
 	}
-	// A widget of a missing type fails after the scene row was written.
+	// A widget of a type no longer pinned fails after the scene row was
+	// written.
 	stored := mustSaveScene(t, sceneRepo, "scene-1")
 	w := makeWidget(t, sceneRepo, "w1")
-	wt, err := repositories.NewWidgetTypeRepositoryPostgres(testDB).FindByID(ctx, w.TypeID())
+	wt, err := repositories.NewLibraryPinRepositoryPostgres(testDB, mainProject).FindPinnedWidgetType(ctx, w.TypeID())
 	if err != nil {
-		t.Fatalf("FindByID: %v", err)
+		t.Fatalf("FindPinnedWidgetType: %v", err)
 	}
-	if _, err := testDB.ExecContext(ctx, "DELETE FROM engineering.widget_types WHERE id = $1", w.TypeID().UUID()); err != nil {
-		t.Fatalf("delete widget type: %v", err)
+	if _, err := testDB.ExecContext(ctx, "DELETE FROM engineering.library_pins WHERE project_id = $1", mainProject.UUID()); err != nil {
+		t.Fatalf("unpin: %v", err)
 	}
+	cleanOutbox(t) // the events of the library pinned for the widget
 	changed, err := stored.AddWidget(stored.Version(), w, wt, scene.NewTagTypes(mainProject, nil))
 	if err != nil {
 		t.Fatalf("AddWidget: %v", err)

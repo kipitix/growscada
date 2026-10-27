@@ -34,16 +34,16 @@ type SceneService interface {
 }
 
 type sceneServiceImpl struct {
-	content              ProjectContent
-	widgetTypeRepository library.WidgetTypeRepository
+	content ProjectContent
 }
 
 var _ SceneService = (*sceneServiceImpl)(nil)
 
 // NewSceneService returns the scene service. The events of its changes are
-// recorded by the Scene and saved with it (ADR 0008).
-func NewSceneService(aContent ProjectContent, widgetTypeRepo library.WidgetTypeRepository) SceneService {
-	return &sceneServiceImpl{content: aContent, widgetTypeRepository: widgetTypeRepo}
+// recorded by the Scene and saved with it (ADR 0008). A Widget's WidgetType
+// is the one a Library Release its Project pins holds (ADR 0007).
+func NewSceneService(aContent ProjectContent) SceneService {
+	return &sceneServiceImpl{content: aContent}
 }
 
 // scenes returns the scene repository of the live project rawProjectID.
@@ -64,15 +64,16 @@ func loadScene(ctx context.Context, repo scene.SceneRepository, sceneID id.ID[sc
 	return found, nil
 }
 
-// loadWidgetType finds the WidgetType a widget from the caller names; a
-// missing one is invalid input.
-func (s sceneServiceImpl) loadWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.WidgetType, error) {
-	wt, err := s.widgetTypeRepository.FindByID(ctx, typeID)
+// loadWidgetType finds the WidgetType a widget from the caller names among
+// those of the releases scope's Project pins; a missing one is invalid
+// input.
+func loadWidgetType(ctx context.Context, scope ProjectScope, typeID id.ID[library.WidgetType]) (library.ReleasedWidgetType, error) {
+	wt, err := scope.LibraryPins().FindPinnedWidgetType(ctx, typeID)
 	if errors.Is(err, library.ErrWidgetTypeNotFound) {
-		return nil, fmt.Errorf("type_id: %w", invalidInput(err))
+		return wt, fmt.Errorf("type_id: %w", invalidInput(err))
 	}
 	if err != nil {
-		return nil, fmt.Errorf("cannot find widget type: %w", err)
+		return wt, fmt.Errorf("cannot find widget type: %w", err)
 	}
 	return wt, nil
 }
@@ -103,8 +104,8 @@ func widgetChangeError(err error) error {
 }
 
 // widgetSaveError marks a failed save of a scene with a new or changed widget
-// as invalid input when the widget's type was deleted after loadWidgetType
-// found it: the type's foreign key catches it.
+// as invalid input when the widget's type was unpinned after loadWidgetType
+// found it: the save checks the pin in its transaction (ADR 0012).
 func widgetSaveError(err error) error {
 	if errors.Is(err, library.ErrWidgetTypeNotFound) {
 		return fmt.Errorf("cannot save scene: type_id: %w", invalidInput(err))
@@ -308,7 +309,7 @@ func (s sceneServiceImpl) CreateWidget(ctx context.Context, rawProjectID, rawSce
 	if err := sc.CheckVersion(expectedVersion); err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot create widget: %w", err)
 	}
-	wt, err := s.loadWidgetType(ctx, newWidget.TypeID())
+	wt, err := loadWidgetType(ctx, scope, newWidget.TypeID())
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot create widget: %w", err)
 	}
@@ -357,7 +358,7 @@ func (s sceneServiceImpl) UpdateWidget(ctx context.Context, rawProjectID, rawSce
 	if _, err := sc.FindWidget(widgetID); err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot update widget: %w", err)
 	}
-	wt, err := s.loadWidgetType(ctx, updated.TypeID())
+	wt, err := loadWidgetType(ctx, scope, updated.TypeID())
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("cannot update widget: %w", err)
 	}

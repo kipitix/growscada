@@ -9,9 +9,10 @@ import (
 
 // ── Server events ─────────────────────────────────────────────────────────────
 //
-// The WidgetType list is reloaded on server events (WidgetTypes changed by
-// anyone — another tab, the API); the editor merges the fresh data field by
-// field (edit_fields.go).
+// The libraries, the selected one's releases and the WidgetTypes of its
+// Draft are reloaded on server events (changed by anyone — another tab,
+// growctl, a Discard); the editor merges the fresh data field by field
+// (edit_fields.go).
 
 func (l *Library) handleServerEvents(ctx app.Context) {
 	ctx.Handle(eventlog.ActionServerEvent, func(ctx app.Context, a app.Action) {
@@ -22,7 +23,12 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 		if ev.Type == eventlog.EventResync {
 			l.versions.Forget() // events were lost: the server may have gone back
 		}
-		if eventlog.ReloadTargetsFor(ev).WidgetTypes {
+		targets := eventlog.ReloadTargetsFor(ev)
+		if targets.Libraries {
+			l.loadLibraries(ctx)
+			l.loadReleases(ctx)
+		}
+		if targets.WidgetTypes {
 			l.loadList(ctx)
 		}
 	})

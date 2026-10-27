@@ -1,7 +1,7 @@
 info:
   name: post projects duplicate name
   type: http
-  seq: 17
+  seq: 25
 
 http:
   method: POST

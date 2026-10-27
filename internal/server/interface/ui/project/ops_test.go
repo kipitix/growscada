@@ -138,12 +138,25 @@ func createWidgetType(t *testing.T, api *testAPI, name string, ports ...apiv0.In
 	if ports == nil {
 		ports = []apiv0.InputPort{}
 	}
-	created, err := api.CreateWidgetType(context.Background(), apiv0.CreateWidgetTypeRequest{
+	// In a library of its own, released and pinned in Main: the project's
+	// Widgets are of the releases it pins.
+	ctx := context.Background()
+	lib, err := api.CreateLibrary(ctx, apiv0.CreateLibraryRequest{Name: "lib-" + uuid.NewString()})
+	if err != nil {
+		t.Fatalf("create library: %v", err)
+	}
+	created, err := api.Library(lib.ID).CreateWidgetType(ctx, apiv0.CreateWidgetTypeRequest{
 		Name: name, HtmlTemplate: "<div></div>", ScriptLanguage: "javascript",
 		DefaultWidth: 150, DefaultHeight: 70, InputPorts: ports,
 	})
 	if err != nil {
 		t.Fatalf("create widget type: %v", err)
+	}
+	if _, err := api.Library(lib.ID).Release(ctx, apiv0.CreateReleaseRequest{Version: lib.Version}); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	if _, err := api.PinLibrary(ctx, lib.ID, apiv0.PutLibraryPinRequest{Release: 1}); err != nil {
+		t.Fatalf("pin: %v", err)
 	}
 	return created.ID
 }
@@ -681,7 +694,7 @@ func TestNoServer_ShowsNetworkErrors(t *testing.T) {
 	f := mount(t, url, nil)
 
 	toasts := f.e.TakeToasts()
-	if len(toasts) != 3 { // widget types, scenes, tags
+	if len(toasts) != 5 { // libraries, pins, widget types, scenes, tags
 		t.Fatalf("want a toast per list, got %+v", toasts)
 	}
 	for _, got := range toasts {

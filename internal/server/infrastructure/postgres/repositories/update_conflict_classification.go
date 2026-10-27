@@ -15,6 +15,9 @@ const (
 	tableNameScenes      tableName = "engineering.scenes"
 	tableNameWidgetTypes tableName = "engineering.widget_types"
 	tableNameProjects    tableName = "projects"
+	tableNameLibraries   tableName = "engineering.libraries"
+	tableNameReleases    tableName = "engineering.library_releases"
+	tableNameLibraryPins tableName = "engineering.library_pins"
 )
 
 // rowQuerier is a *sql.DB or a *sql.Tx.

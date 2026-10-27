@@ -7,6 +7,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -36,12 +37,22 @@ func sampleEvents(t *testing.T) []event.Event {
 	wtID := id.NewID[library.WidgetType]()
 	sceneID := id.NewID[scene.Scene]()
 	widgetID := id.NewID[scene.Widget]()
+	libraryID := id.NewID[library.Library]()
+	release, _ := library.NewReleaseNumber(3)
 	return []event.Event{
 		tag.NewTagCreatedEvent(tagID, projectID, ts),
 		tag.NewTagDeletedEvent(tagID, projectID, ts),
-		library.NewWidgetTypeCreatedEvent(wtID, ts),
-		library.NewWidgetTypeUpdatedEvent(wtID, ts),
-		library.NewWidgetTypeDeletedEvent(wtID, ts),
+		library.NewWidgetTypeCreatedEvent(wtID, libraryID, ts),
+		library.NewWidgetTypeUpdatedEvent(wtID, libraryID, ts),
+		library.NewWidgetTypeDeletedEvent(wtID, libraryID, ts),
+		library.NewLibraryCreatedEvent(libraryID, ts),
+		library.NewLibraryUpdatedEvent(libraryID, ts),
+		library.NewLibraryDeletedEvent(libraryID, ts),
+		library.NewLibraryDiscardStartedEvent(libraryID, ts),
+		library.NewLibraryReleasedEvent(libraryID, release, ts),
+		librarypin.NewLibraryPinCreatedEvent(libraryID, projectID, ts),
+		librarypin.NewLibraryPinUpdatedEvent(libraryID, projectID, ts),
+		librarypin.NewLibraryPinDeletedEvent(libraryID, projectID, ts),
 		scene.NewSceneCreatedEvent(sceneID, projectID, ts),
 		scene.NewSceneUpdatedEvent(sceneID, projectID, ts),
 		scene.NewSceneDeletedEvent(sceneID, projectID, ts),
@@ -108,8 +119,22 @@ func assertSameSubject(t *testing.T, original, decoded event.Event) {
 			t.Errorf("tag ID %s, want %s", got.TagID(), want.TagID())
 		}
 	case library.WidgetTypeEvent:
-		if got := decoded.(library.WidgetTypeEvent); got.WidgetTypeID() != want.WidgetTypeID() {
-			t.Errorf("widget type ID %s, want %s", got.WidgetTypeID(), want.WidgetTypeID())
+		if got := decoded.(library.WidgetTypeEvent); got.WidgetTypeID() != want.WidgetTypeID() || got.LibraryID() != want.LibraryID() {
+			t.Errorf("widget type %s of %s, want %s of %s", got.WidgetTypeID(), got.LibraryID(), want.WidgetTypeID(), want.LibraryID())
+		}
+	case library.LibraryEvent:
+		got, ok := decoded.(library.LibraryEvent)
+		if !ok || got.LibraryID() != want.LibraryID() {
+			t.Errorf("decoded %T, want an event of library %s", decoded, want.LibraryID())
+		}
+		if releasedWant, ok := want.(library.LibraryReleasedEvent); ok {
+			if got, ok := decoded.(library.LibraryReleasedEvent); !ok || got.Release() != releasedWant.Release() {
+				t.Errorf("decoded %T, want release %s", decoded, releasedWant.Release())
+			}
+		}
+	case librarypin.LibraryPinEvent:
+		if got, ok := decoded.(librarypin.LibraryPinEvent); !ok || got.LibraryID() != want.LibraryID() {
+			t.Errorf("decoded %T, want a pin of library %s", decoded, want.LibraryID())
 		}
 	case scene.WidgetEvent:
 		got := decoded.(scene.WidgetEvent)

@@ -1,0 +1,29 @@
+info:
+  name: get pinned widget types
+  type: http
+  seq: 17
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/widget-types
+  auth: inherit
+
+docs: |
+  The WidgetTypes of every release the project pins: those its Widgets may
+  be of (the palette of its Scenes).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.widget_types'
+      operator: isArray
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

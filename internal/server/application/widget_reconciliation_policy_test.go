@@ -16,6 +16,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
@@ -36,20 +37,25 @@ type reconciliation struct {
 	projectSvc application.ProjectService
 	tagSvc     application.TagService
 	states     runtimeapp.TagStateService
+	libSvc     application.LibraryService
 	wtSvc      application.WidgetTypeService
+	pinSvc     application.LibraryPinService
 	sceneSvc   application.SceneService
 	dispatcher *outbox.Dispatcher
 	runner     *outbox.PolicyRunner
 	delivered  []event.Event
+	// libraries are the Library of each type createType made.
+	libraries map[uuid.UUID]uuid.UUID
 }
 
 // reconciliationWiring lets a test put a wrapper around a repository: the
-// policies' own, or the WidgetType or Tag repository the scene service reads.
+// policies' own, or the Library Pin or Tag repository the scene service
+// reads.
 type reconciliationWiring struct {
-	policyScenes      func(scene.SceneRepository) scene.SceneRepository
-	policyWidgetTypes func(library.WidgetTypeRepository) library.WidgetTypeRepository
-	sceneWidgetTypes  func(library.WidgetTypeRepository) library.WidgetTypeRepository
-	sceneTags         func(tag.TagRepository) tag.TagRepository
+	policyScenes func(scene.SceneRepository) scene.SceneRepository
+	policyPins   func(librarypin.Repository) librarypin.Repository
+	scenePins    func(librarypin.Repository) librarypin.Repository
+	sceneTags    func(tag.TagRepository) tag.TagRepository
 }
 
 func newReconciliation(t *testing.T, wiring reconciliationWiring) *reconciliation {
@@ -61,19 +67,12 @@ func newReconciliation(t *testing.T, wiring reconciliationWiring) *reconciliatio
 	cleanTags(t)
 	cleanProjects(t)
 
-	wtRepo := repositories.NewWidgetTypeRepositoryPostgres(testDB)
 	policyScopes := newScopes()
 	policyScopes.scenes = wiring.policyScenes
-	var policyWidgetTypes library.WidgetTypeRepository = wtRepo
-	if wiring.policyWidgetTypes != nil {
-		policyWidgetTypes = wiring.policyWidgetTypes(wtRepo)
-	}
-	var sceneWidgetTypes library.WidgetTypeRepository = wtRepo
-	if wiring.sceneWidgetTypes != nil {
-		sceneWidgetTypes = wiring.sceneWidgetTypes(wtRepo)
-	}
+	policyScopes.pins = wiring.policyPins
 	sceneScopes := newScopes()
 	sceneScopes.tags = wiring.sceneTags
+	sceneScopes.pins = wiring.scenePins
 
 	projects := repositories.NewProjectRepositoryPostgres(testDB)
 	states, runtimeNode := newRuntime()
@@ -81,14 +80,20 @@ func newReconciliation(t *testing.T, wiring reconciliationWiring) *reconciliatio
 		projectSvc: application.NewProjectService(projects, soleOrganization()),
 		tagSvc:     application.NewTagService(contentOver(newScopes()), runtimeNode),
 		states:     states,
-		wtSvc:      application.NewWidgetTypeService(wtRepo),
-		sceneSvc:   sceneServiceOver(sceneScopes, sceneWidgetTypes),
+		libSvc:     newLibraryService(),
+		wtSvc:      newWidgetTypeService(),
+		pinSvc:     newLibraryPinService(),
+		sceneSvc:   sceneServiceOver(sceneScopes),
+		libraries:  map[uuid.UUID]uuid.UUID{},
 	}
 	// A pause long enough that only a merged event makes a failed job due
 	// again within a test.
 	r.runner = outbox.NewPolicyRunner(testDB,
 		[]application.Policy{
-			application.NewWidgetReconciliationPolicy(policyWidgetTypes, policyScopes),
+			application.NewWidgetReconciliationPolicy(policyScopes),
+			application.NewLibraryCleanupPolicy(repositories.NewLibraryRepositoryPostgres(testDB)),
+			application.NewDiscardLibraryPolicy(repositories.NewLibraryRepositoryPostgres(testDB),
+				repositories.NewLibraryReleaseRepositoryPostgres(testDB), repositories.NewWidgetTypeRepositories(testDB)),
 			application.NewUnbindDeletedTagPolicy(projects, policyScopes),
 			application.NewProjectCleanupPolicy(projects, policyScopes, runtimeNode),
 			application.NewRuntimeTagDefinitionsPolicy(policyScopes, runtimeNode),
@@ -145,31 +150,57 @@ func inputPorts(ports []string) []appdto.InputPort {
 	return out
 }
 
+// createType creates a WidgetType declaring the given ports (see inputPorts)
+// in a library of its own, releases it and pins the release in mainProject.
 func (r *reconciliation) createType(t *testing.T, ports ...string) appdto.WidgetType {
 	t.Helper()
-	input := appdto.WidgetTypeInput{
-		Name: "sensor", HtmlTemplate: "<div></div>", ScriptLanguage: "javascript",
-		DefaultWidth: 100, DefaultHeight: 100, InputPorts: inputPorts(ports),
-	}
-	created, err := r.wtSvc.CreateWidgetType(context.Background(), input)
-	if err != nil {
-		t.Fatalf("CreateWidgetType: %v", err)
-	}
+	return r.createTypeIn(t, mainProject, ports...)
+}
+
+// createTypeIn is createType pinning the release in projectID.
+func (r *reconciliation) createTypeIn(t *testing.T, projectID uuid.UUID, ports ...string) appdto.WidgetType {
+	t.Helper()
+	created, lib := pinNewWidgetType(t, projectID, appdto.WidgetTypeInput{
+		Name: "sensor", HtmlTemplate: "<div></div>", InputPorts: inputPorts(ports),
+	})
+	r.libraries[created.ID] = lib.ID
 	return created
 }
 
-// keepPorts updates wt to declare only the given ports (see inputPorts).
+// keepPorts updates wt to declare only the given ports (see inputPorts),
+// releases its library and switches the pin of mainProject to the release.
 func (r *reconciliation) keepPorts(t *testing.T, wt appdto.WidgetType, ports ...string) appdto.WidgetType {
 	t.Helper()
+	ctx := context.Background()
 	input := appdto.WidgetTypeInput{
 		Name: wt.Name, HtmlTemplate: wt.HtmlTemplate, Script: wt.Script, ScriptLanguage: wt.ScriptLanguage,
 		DefaultWidth: wt.DefaultWidth, DefaultHeight: wt.DefaultHeight, InputPorts: inputPorts(ports),
 	}
-	updated, err := r.wtSvc.UpdateWidgetType(context.Background(), wt.ID, wt.Version, input)
+	updated, err := r.wtSvc.UpdateWidgetType(ctx, r.libraries[wt.ID], wt.ID, wt.Version, input)
 	if err != nil {
 		t.Fatalf("UpdateWidgetType: %v", err)
 	}
+	r.switchPin(t, wt.ID, mustReleaseLibrary(t, r.libraries[wt.ID]).Number)
 	return updated
+}
+
+// switchPin pins release of the library of the type typeID in mainProject.
+func (r *reconciliation) switchPin(t *testing.T, typeID uuid.UUID, release int) {
+	t.Helper()
+	ctx := context.Background()
+	pins, err := r.pinSvc.FindLibraryPins(ctx, mainProject)
+	if err != nil {
+		t.Fatalf("FindLibraryPins: %v", err)
+	}
+	for _, pin := range pins {
+		if pin.LibraryID == r.libraries[typeID] {
+			if _, _, err := r.pinSvc.PutLibraryPin(ctx, mainProject, pin.LibraryID, release, pin.Version); err != nil {
+				t.Fatalf("PutLibraryPin: %v", err)
+			}
+			return
+		}
+	}
+	t.Fatalf("library of type %s not pinned", typeID)
 }
 
 func (r *reconciliation) createScene(t *testing.T, name string) appdto.Scene {
@@ -304,17 +335,17 @@ func makeJobsDue(t *testing.T) {
 // --- JobKey ---
 
 func TestWidgetReconciliationPolicy_JobKey(t *testing.T) {
-	policy := application.NewWidgetReconciliationPolicy(nil, nil)
-	wtID := id.NewID[library.WidgetType]()
+	policy := application.NewWidgetReconciliationPolicy(nil)
+	wtID, libraryID := id.NewID[library.WidgetType](), id.NewID[library.Library]()
 	widgetID, sceneID := id.NewID[scene.Widget](), id.NewID[scene.Scene]()
 
-	allScenes := "widget_type:" + wtID.String()
-	oneScene := allScenes + "/project:" + mainProject.String() + "/scene:" + sceneID.String()
+	allScenes := "project:" + mainProject.String()
+	oneScene := allScenes + "/scene:" + sceneID.String()
 	keyed := []struct {
 		e    event.Event
 		want string
 	}{
-		{library.NewWidgetTypeUpdatedEvent(wtID), allScenes},
+		{librarypin.NewLibraryPinUpdatedEvent(libraryID, mainProjectID), allScenes},
 		{scene.NewWidgetCreatedEvent(widgetID, sceneID, mainProjectID, wtID), oneScene},
 		{scene.NewWidgetUpdatedEvent(widgetID, sceneID, mainProjectID, wtID), oneScene},
 	}
@@ -324,8 +355,11 @@ func TestWidgetReconciliationPolicy_JobKey(t *testing.T) {
 		}
 	}
 	notKeyed := []event.Event{
-		library.NewWidgetTypeCreatedEvent(wtID),
-		library.NewWidgetTypeDeletedEvent(wtID),
+		library.NewWidgetTypeCreatedEvent(wtID, libraryID),
+		library.NewWidgetTypeUpdatedEvent(wtID, libraryID),
+		library.NewWidgetTypeDeletedEvent(wtID, libraryID),
+		librarypin.NewLibraryPinCreatedEvent(libraryID, mainProjectID),
+		librarypin.NewLibraryPinDeletedEvent(libraryID, mainProjectID),
 		scene.NewWidgetDeletedEvent(widgetID, sceneID, mainProjectID),
 		scene.NewWidgetUpdatedByReconciliationEvent(widgetID, sceneID, mainProjectID, wtID),
 		scene.NewSceneUpdatedEvent(sceneID, mainProjectID),
@@ -339,7 +373,11 @@ func TestWidgetReconciliationPolicy_JobKey(t *testing.T) {
 
 // --- Run ---
 
-func TestUpdateWidgetType_RemovedPort_LeavesScenesToThePolicy(t *testing.T) {
+// TestSwitchPin_RemovedPort_LeavesScenesToThePolicy: a release dropping a
+// port is pinned; the Widgets lose their bindings to it afterwards, by the
+// policy (ADR 0012). Changing the WidgetType in the Draft alone touches no
+// Scene.
+func TestSwitchPin_RemovedPort_LeavesScenesToThePolicy(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	wt := r.createType(t, "value")
 	sc := r.createScene(t, "scene")
@@ -378,16 +416,15 @@ func TestWidgetReconciliation_RemovedPort_CleansBindingsOnAllWidgetsInSameScene(
 	}
 }
 
-// listRacingSceneRepository runs race once, right after the first
-// FindByWidgetTypeID: someone else changes a listed Scene before the policy
-// saves it.
+// listRacingSceneRepository runs race once, right after the first FindAll:
+// someone else changes a listed Scene before the policy saves it.
 type listRacingSceneRepository struct {
 	scene.SceneRepository
 	race func()
 }
 
-func (r *listRacingSceneRepository) FindByWidgetTypeID(ctx context.Context, typeID id.ID[library.WidgetType]) ([]scene.Scene, error) {
-	found, err := r.SceneRepository.FindByWidgetTypeID(ctx, typeID)
+func (r *listRacingSceneRepository) FindAll(ctx context.Context) ([]scene.Scene, error) {
+	found, err := r.SceneRepository.FindAll(ctx)
 	if race := r.race; race != nil {
 		r.race = nil
 		race()
@@ -462,15 +499,15 @@ func TestWidgetReconciliation_PortAddedAndBoundWhileJobRuns_KeepsBinding(t *test
 	}
 }
 
-// countingSceneRepository counts the listings of Scenes by WidgetType.
+// countingSceneRepository counts the listings of every Scene.
 type countingSceneRepository struct {
 	scene.SceneRepository
 	listings int
 }
 
-func (r *countingSceneRepository) FindByWidgetTypeID(ctx context.Context, typeID id.ID[library.WidgetType]) ([]scene.Scene, error) {
+func (r *countingSceneRepository) FindAll(ctx context.Context) ([]scene.Scene, error) {
 	r.listings++
-	return r.SceneRepository.FindByWidgetTypeID(ctx, typeID)
+	return r.SceneRepository.FindAll(ctx)
 }
 
 func TestWidgetReconciliation_WidgetEdited_ReconcilesOnlyItsScene(t *testing.T) {
@@ -492,7 +529,7 @@ func TestWidgetReconciliation_WidgetEdited_ReconcilesOnlyItsScene(t *testing.T) 
 	r.drain(t)
 
 	jobs := policyJobs(t)
-	if want := "widget_type:" + wt.ID.String() + "/project:" + mainProject.String() + "/scene:" + edited.ID.String(); len(jobs) != 1 || jobs[0].key != want {
+	if want := "project:" + mainProject.String() + "/scene:" + edited.ID.String(); len(jobs) != 1 || jobs[0].key != want {
 		t.Fatalf("jobs %+v, want one keyed %q", jobs, want)
 	}
 	// The tag the widget binds was created too: its job of the project's
@@ -501,7 +538,7 @@ func TestWidgetReconciliation_WidgetEdited_ReconcilesOnlyItsScene(t *testing.T) 
 		t.Fatal(err)
 	}
 	if ran := r.runDue(t); ran != 1 || counting.listings != 0 {
-		t.Errorf("ran %d jobs, listed scenes by type %d times; want 1 and none", ran, counting.listings)
+		t.Errorf("ran %d jobs, listed every scene %d times; want 1 and none", ran, counting.listings)
 	}
 }
 
@@ -630,29 +667,39 @@ func TestWidgetReconciliation_OneSceneFails_OthersReconciledAndOnlyItRetried(t *
 	}
 }
 
-// racingFindWidgetTypeRepository runs race once, right after the first
-// FindByID has read the widget type, and counts the reads.
-type racingFindWidgetTypeRepository struct {
-	library.WidgetTypeRepository
+// racingFindPinnedRepository runs race once, right after the first read of
+// the pinned widget types (all of them, or one), and counts the reads.
+type racingFindPinnedRepository struct {
+	librarypin.Repository
 	race  func()
 	reads int
 }
 
-func (r *racingFindWidgetTypeRepository) FindByID(ctx context.Context, wtID id.ID[library.WidgetType]) (library.WidgetType, error) {
-	found, err := r.WidgetTypeRepository.FindByID(ctx, wtID)
+func (r *racingFindPinnedRepository) raced() {
 	r.reads++
 	if race := r.race; race != nil {
 		r.race = nil
 		race()
 	}
+}
+
+func (r *racingFindPinnedRepository) FindPinnedWidgetTypes(ctx context.Context) ([]library.ReleasedWidgetType, error) {
+	found, err := r.Repository.FindPinnedWidgetTypes(ctx)
+	r.raced()
 	return found, err
 }
 
-func TestWidgetReconciliation_WidgetTypeUpdatedWhileJobRuns_RunsAgainWithNewWidgetType(t *testing.T) {
-	racing := &racingFindWidgetTypeRepository{}
+func (r *racingFindPinnedRepository) FindPinnedWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.ReleasedWidgetType, error) {
+	found, err := r.Repository.FindPinnedWidgetType(ctx, typeID)
+	r.raced()
+	return found, err
+}
+
+func TestWidgetReconciliation_PinSwitchedWhileJobRuns_RunsAgainWithNewRelease(t *testing.T) {
+	racing := &racingFindPinnedRepository{}
 	r := newReconciliation(t, reconciliationWiring{
-		policyWidgetTypes: func(inner library.WidgetTypeRepository) library.WidgetTypeRepository {
-			racing.WidgetTypeRepository = inner
+		policyPins: func(inner librarypin.Repository) librarypin.Repository {
+			racing.Repository = inner
 			return racing
 		},
 	})
@@ -673,7 +720,7 @@ func TestWidgetReconciliation_WidgetTypeUpdatedWhileJobRuns_RunsAgainWithNewWidg
 	ran := r.runDue(t)
 
 	if ran != 2 || racing.reads != 2 {
-		t.Errorf("ran %d times, read the widget type %d times; want 2 and 2", ran, racing.reads)
+		t.Errorf("ran %d times, read the pinned widget types %d times; want 2 and 2", ran, racing.reads)
 	}
 	if got := r.boundPorts(t, sc.ID, w.ID); len(got) != 0 {
 		t.Errorf("bound to %v, want none", got)
@@ -690,8 +737,8 @@ func TestWidgetReconciliation_TwoUpdatesBeforeRun_MergeIntoOneJob(t *testing.T) 
 	r.drain(t)
 
 	jobs := policyJobs(t)
-	if len(jobs) != 1 || jobs[0].key != "widget_type:"+wt.ID.String() || jobs[0].generation != 2 {
-		t.Fatalf("jobs %+v, want one for %s at generation 2", jobs, wt.ID)
+	if len(jobs) != 1 || jobs[0].key != "project:"+mainProject.String() || jobs[0].generation != 2 {
+		t.Fatalf("jobs %+v, want one for the project at generation 2", jobs)
 	}
 	if ran := r.runDue(t); ran != 1 {
 		t.Errorf("ran %d times, want 1", ran)
@@ -699,10 +746,10 @@ func TestWidgetReconciliation_TwoUpdatesBeforeRun_MergeIntoOneJob(t *testing.T) 
 }
 
 func TestWidgetReconciliation_WidgetBoundToPortRemovedAfterTypeWasRead_LosesBinding(t *testing.T) {
-	racing := &racingFindWidgetTypeRepository{}
+	racing := &racingFindPinnedRepository{}
 	r := newReconciliation(t, reconciliationWiring{
-		sceneWidgetTypes: func(inner library.WidgetTypeRepository) library.WidgetTypeRepository {
-			racing.WidgetTypeRepository = inner
+		scenePins: func(inner librarypin.Repository) librarypin.Repository {
+			racing.Repository = inner
 			return racing
 		},
 	})
@@ -728,13 +775,13 @@ func TestWidgetReconciliation_WidgetBoundToPortRemovedAfterTypeWasRead_LosesBind
 	}
 }
 
-func TestWidgetReconciliation_DeletedWidgetType_JobIsDone(t *testing.T) {
+func TestWidgetReconciliation_PinRemovedBeforeJobRuns_JobIsDone(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	wt := r.createType(t, "value")
 	r.keepPorts(t, wt)
 	r.drain(t)
-	if _, err := r.wtSvc.DeleteWidgetTypeByID(context.Background(), wt.ID); err != nil {
-		t.Fatalf("DeleteWidgetTypeByID: %v", err)
+	if _, err := r.pinSvc.DeleteLibraryPin(context.Background(), mainProject, r.libraries[wt.ID]); err != nil {
+		t.Fatalf("DeleteLibraryPin: %v", err)
 	}
 
 	r.runDue(t)
@@ -848,7 +895,7 @@ func TestUnbindDeletedTag_ProjectMarkedDeleted_LeavesItsScenesToTheCleanup(t *te
 	r := newReconciliation(t, reconciliationWiring{})
 	ctx := context.Background()
 	p := r.createProject(t, "Line 1")
-	wt := r.createType(t, "value")
+	wt := r.createTypeIn(t, p, "value")
 	sc, err := r.sceneSvc.CreateScene(ctx, p, appdto.SceneInput{Name: "s", Width: 100, Height: 100})
 	if err != nil {
 		t.Fatalf("CreateScene: %v", err)

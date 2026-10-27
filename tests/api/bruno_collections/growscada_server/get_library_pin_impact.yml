@@ -1,0 +1,36 @@
+info:
+  name: get library pin impact
+  type: http
+  seq: 18
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/library-pins/{{LIBRARY_ID}}/impact?release=1
+  auth: inherit
+
+docs: |
+  The preview of pinning release `?release=` of the library (without it: of
+  removing the pin). `orphaned_widgets` would be left without their
+  WidgetType and refuse the change (`409`); `broken_bindings` would be removed
+  after it.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.orphaned_widgets'
+      operator: isArray
+    - expression: 'res.body.orphaned_widgets.length'
+      operator: eq
+      value: '0'
+    - expression: 'res.body.broken_bindings'
+      operator: isArray
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

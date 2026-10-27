@@ -125,12 +125,12 @@ func projectWriteError(what string, err error) error {
 
 // Delete removes the row of a project marked deleted, whatever its version:
 // nothing changes a deleted project. The foreign keys of its content refuse
-// it while Tags, Scenes or Tag states remain.
+// it while Tags, Scenes, Library Pins or Tag states remain.
 func (r projectRepositoryPostgresImpl) Delete(ctx context.Context, p project.Project) error {
 	return r.store.inTx(ctx, p.PendingEvents(), func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `DELETE FROM projects WHERE id = $1 AND deleted_at IS NOT NULL`, p.ID().UUID())
 		if isForeignKeyViolation(err, constraintTagsProjectID) || isForeignKeyViolation(err, constraintScenesProjectID) ||
-			isForeignKeyViolation(err, constraintRuntimeTagsProjectID) {
+			isForeignKeyViolation(err, constraintLibraryPinsProjectID) || isForeignKeyViolation(err, constraintRuntimeTagsProjectID) {
 			return fmt.Errorf("%w: %s", project.ErrProjectNotEmpty, p.ID())
 		}
 		if err != nil {
