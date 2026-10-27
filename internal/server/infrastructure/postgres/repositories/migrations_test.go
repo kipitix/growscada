@@ -470,7 +470,9 @@ func TestMigrationEngineeringAndRuntimeSchemas_Down_PutsTheStatesBack(t *testing
 // stored so far become the Draft of the Library "Main", names taken twice
 // suffixed, released once and pinned in every live Project; Widgets lose the
 // foreign key to the Draft; the outbox rows of WidgetTypes name the Library
-// and the waiting reconciliation jobs keep only their Scene (ADR 0007).
+// and the waiting reconciliation jobs keep only their Scene, those of every
+// Scene of a WidgetType become jobs of the Projects holding a Widget of it
+// (ADR 0007).
 func TestMigrationLibraries_PutsExistingWidgetTypesIntoMain(t *testing.T) {
 	ctx := context.Background()
 	db, dir := migrationDB(t)
@@ -496,6 +498,8 @@ func TestMigrationLibraries_PutsExistingWidgetTypesIntoMain(t *testing.T) {
 		`{"timestamp":"2026-10-27T12:00:00Z","id":"`+first.String()+`"}`)
 	mustExec(`INSERT INTO policy_jobs (policy, job_key) VALUES
 	          ('reconcile_widgets_with_widget_type', 'widget_type:`+first.String()+`'),
+	          ('reconcile_widgets_with_widget_type', 'widget_type:`+second.String()+`'),
+	          ('reconcile_widgets_with_widget_type', 'widget_type:`+taken.String()+`'),
 	          ('reconcile_widgets_with_widget_type', 'widget_type:`+first.String()+`/project:`+main+`/scene:`+sceneID.String()+`'),
 	          ('reconcile_widgets_with_widget_type', 'widget_type:`+second.String()+`/project:`+main+`/scene:`+sceneID.String()+`')`)
 
@@ -551,8 +555,11 @@ func TestMigrationLibraries_PutsExistingWidgetTypesIntoMain(t *testing.T) {
 		jobs = append(jobs, j)
 	}
 	jobRows.Close()
-	if want := "reconcile_widgets_with_pins project:" + main + "/scene:" + sceneID.String(); len(jobs) != 1 || jobs[0] != want {
-		t.Errorf("policy jobs %v, want [%s]", jobs, want)
+	if want := []string{
+		"reconcile_widgets_with_pins project:" + main,
+		"reconcile_widgets_with_pins project:" + main + "/scene:" + sceneID.String(),
+	}; !slices.Equal(jobs, want) {
+		t.Errorf("policy jobs %v, want %v", jobs, want)
 	}
 	// A Widget's type need no longer be in the Draft.
 	mustExec(`DELETE FROM engineering.widget_types WHERE id = $1`, second)

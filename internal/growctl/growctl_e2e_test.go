@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -117,6 +118,28 @@ func TestApply_EmptyServer_CreatesTagsWithTheInitialState(t *testing.T) {
 	}
 	if label := tags["pump1.label"]; label.Type != "string" || label.Value != "" || label.Quality != "bad" {
 		t.Errorf("pump1.label: got %+v", label)
+	}
+}
+
+// TestApply_TagsOnly_ReadsNoLibraries: manifests without libraries,
+// WidgetTypes and pins apply against a server that has no /libraries (API
+// before 0.6).
+func TestApply_TagsOnly_ReadsNoLibraries(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+	api := srv.Config.Handler
+	srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, apiv0.PathPrefix+"/libraries") {
+			http.NotFound(w, r)
+			return
+		}
+		api.ServeHTTP(w, r)
+	})
+
+	if _, err := runGrowctl(t, srv, twoTags, "diff"); exitCode(err) > 1 {
+		t.Errorf("diff: %v", err)
+	}
+	if _, err := runGrowctl(t, srv, twoTags, "apply"); err != nil {
+		t.Errorf("apply: %v", err)
 	}
 }
 

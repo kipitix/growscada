@@ -14,7 +14,7 @@ import (
 // ── Data loading ──────────────────────────────────────────────────────────────
 
 // loadLibraries (re)loads the library list and keeps a valid selection,
-// falling back to the first library.
+// falling back to the first library (none when the list is empty).
 func (l *Library) loadLibraries(ctx app.Context) {
 	uiutil.Load(l.compoCtx, &l.librariesReloader, l.client.ListLibraries, func(ctx app.Context, list []apiv0.LibraryResponse) {
 		l.libraries = list
@@ -25,9 +25,15 @@ func (l *Library) loadLibraries(ctx app.Context) {
 		if len(list) > 0 {
 			next = list[0].ID
 		}
-		l.libraryID = uuid.Nil // shown no longer: select anew
 		l.selectLibrary(ctx, next)
 	}, l.loadLibraries)
+}
+
+// libraryGone handles a 404 of the selected library's Draft or releases: the
+// library was deleted, so the list is reloaded, which selects another one,
+// instead of showing an error (ADR 0007).
+func (l *Library) libraryGone(ctx app.Context, _ *apiclient.LibraryClient) {
+	l.loadLibraries(ctx)
 }
 
 // loadList (re)loads the WidgetTypes of the selected library's Draft;
@@ -38,13 +44,13 @@ func (l *Library) loadList(ctx app.Context) {
 		return
 	}
 	mark := l.versions.Mark()
-	uiutil.LoadFor(l.compoCtx, &l.reloader, l.draft,
+	uiutil.LoadForGone(l.compoCtx, &l.reloader, l.draft,
 		func(c context.Context, lib *apiclient.LibraryClient) ([]apiv0.WidgetTypeResponse, error) {
 			return lib.ListWidgetTypes(c)
 		},
 		func(ctx app.Context, _ *apiclient.LibraryClient, items []apiv0.WidgetTypeResponse) {
 			l.setWidgetTypes(ctx, mark, items)
-		}, l.loadList)
+		}, l.libraryGone, l.loadList)
 }
 
 // loadReleases (re)loads the releases of the selected library.
@@ -53,13 +59,13 @@ func (l *Library) loadReleases(ctx app.Context) {
 		l.releases = nil
 		return
 	}
-	uiutil.LoadFor(l.compoCtx, &l.releasesReloader, l.draft,
+	uiutil.LoadForGone(l.compoCtx, &l.releasesReloader, l.draft,
 		func(c context.Context, lib *apiclient.LibraryClient) ([]apiv0.LibraryReleaseResponse, error) {
 			return lib.ListReleases(c)
 		},
 		func(ctx app.Context, _ *apiclient.LibraryClient, releases []apiv0.LibraryReleaseResponse) {
 			l.releases = releases
-		}, l.loadReleases)
+		}, l.libraryGone, l.loadReleases)
 }
 
 // setWidgetTypes replaces the list and brings the editor of the selected type

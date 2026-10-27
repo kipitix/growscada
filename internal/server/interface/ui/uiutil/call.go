@@ -72,11 +72,21 @@ const ActionProjectGone = "uiutil.project-gone"
 // is loaded by then). Such a list is 404 only when the project is gone, so
 // its 404 fires ActionProjectGone instead of showing an error.
 func LoadOfProject[T any](ctx app.Context, r *Reloader, content func() *apiclient.ProjectClient, call func(context.Context, *apiclient.ProjectClient) (T, error), onOK func(app.Context, T), reload func(app.Context)) {
-	loadFor(ctx, r, content, call,
+	LoadForGone(ctx, r, content, call,
 		func(ctx app.Context, _ *apiclient.ProjectClient, v T) { onOK(ctx, v) },
-		func(ctx app.Context, pc *apiclient.ProjectClient, err error) {
+		func(ctx app.Context, pc *apiclient.ProjectClient) {
+			ctx.NewActionWithValue(ActionProjectGone, pc.ID())
+		}, reload)
+}
+
+// LoadForGone is LoadFor of a list that is 404 only when its key is gone
+// (e.g. the WidgetTypes of a deleted Library): its 404 calls gone with the
+// key instead of showing an error.
+func LoadForGone[K comparable, T any](ctx app.Context, r *Reloader, key func() K, call func(context.Context, K) (T, error), onOK func(app.Context, K, T), gone func(app.Context, K), reload func(app.Context)) {
+	loadFor(ctx, r, key, call, onOK,
+		func(ctx app.Context, k K, err error) {
 			if errors.Is(err, apiclient.ErrNotFound) {
-				ctx.NewActionWithValue(ActionProjectGone, pc.ID())
+				gone(ctx, k)
 				return
 			}
 			ShowError(ctx, err)

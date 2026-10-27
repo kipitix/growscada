@@ -83,7 +83,7 @@ func (h LibraryPinsHandlers) DeleteLibraryPin(w http.ResponseWriter, r *http.Req
 // GetLibraryPinImpact handles GET
 // /projects/{project_id}/library-pins/{library_id}/impact?release=<n>: the
 // preview of pinning release n of the library, or of removing the pin
-// without ?release.
+// without ?release (404 if the project does not pin the library).
 func (h LibraryPinsHandlers) GetLibraryPinImpact(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := pathUUID(w, r, projectResource)
 	if !ok {

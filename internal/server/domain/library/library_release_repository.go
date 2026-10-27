@@ -17,14 +17,6 @@ var (
 	ErrReleaseNumberTaken = errors.New("library release number already taken")
 )
 
-// ReleaseState is what a Library's releases tell of it: its latest release
-// (the zero ReleaseNumber for none) and whether its Draft differs from it,
-// as DraftDiffers decides.
-type ReleaseState struct {
-	Latest       ReleaseNumber
-	DraftDiffers bool
-}
-
 // LibraryReleaseRepository - repository interface for storing and reading
 // Library Releases. A release is only ever added, never changed nor removed
 // but with its Library.
@@ -42,12 +34,6 @@ type LibraryReleaseRepository interface {
 	// FindLatest returns the latest release of the Library, nil if it has
 	// none.
 	FindLatest(context.Context, id.ID[Library]) (LibraryRelease, error)
-
-	// FindReleaseStates returns the ReleaseState of each of the Libraries,
-	// read at once and without the WidgetTypes' content: the same as
-	// DraftDiffers of its Draft and FindLatest. A Library that does not
-	// exist has no release and a Draft that differs.
-	FindReleaseStates(context.Context, []id.ID[Library]) (map[id.ID[Library]]ReleaseState, error)
 
 	// FindByNumber returns the release of the Library with the number.
 	// Returns ErrReleaseNotFound if there is none.

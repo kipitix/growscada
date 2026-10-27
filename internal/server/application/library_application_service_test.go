@@ -236,6 +236,10 @@ func TestLibraryPin_SwitchOrphaningWidgetsIsRefused_PreviewNamesThem(t *testing.
 	if err != nil || len(removal.Orphaned) != 2 {
 		t.Errorf("removal: %+v, %v; want both widgets orphaned", removal, err)
 	}
+	unpinned := mustCreateLibrary(t)
+	if _, err := r.pinSvc.PinImpact(ctx, mainProject, unpinned.ID, nil); !errors.Is(err, librarypin.ErrLibraryPinNotFound) {
+		t.Errorf("removal of a pin the project does not have: expected ErrLibraryPinNotFound, got %v", err)
+	}
 
 	pins, _ := r.pinSvc.FindLibraryPins(ctx, mainProject)
 	i := slices.IndexFunc(pins, func(p appdto.LibraryPin) bool { return p.LibraryID == libraryID })

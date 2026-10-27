@@ -139,6 +139,23 @@ func (r *libraryReleaseImpl) String() string {
 	return fmt.Sprintf("LibraryRelease: %s of %s, %d widget types", r.number, r.libraryID, len(r.widgetTypes))
 }
 
+// ReleaseState is what a Library's releases tell of it: its latest release
+// (the zero ReleaseNumber for none) and whether its Draft differs from it.
+type ReleaseState struct {
+	Latest       ReleaseNumber
+	DraftDiffers bool
+}
+
+// ReleaseStateOf returns the ReleaseState of a Library whose Draft is draft
+// and whose latest release is latest (nil for none), as DraftDiffers decides.
+func ReleaseStateOf(draft []WidgetType, latest LibraryRelease) ReleaseState {
+	state := ReleaseState{DraftDiffers: DraftDiffers(draft, latest)}
+	if latest != nil {
+		state.Latest = latest.Number()
+	}
+	return state
+}
+
 // DraftDiffers reports whether the Draft draft — the WidgetTypes of a
 // Library — differs from its Library Release release: a WidgetType added,
 // removed or changed since. A nil release (none yet) differs from any Draft.

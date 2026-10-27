@@ -126,12 +126,19 @@ UPDATE outbox
 
 -- The Widgets are brought into line with the pinned releases, no longer with
 -- a WidgetType of the Draft: a waiting job of one Scene keeps its Scene, one
--- of every Scene of a WidgetType is done (its WidgetType is now released as
--- it is). The jobs of one Scene of several WidgetTypes merge into one.
-DELETE FROM policy_jobs WHERE policy = 'reconcile_widgets_with_widget_type' AND job_key NOT LIKE '%/scene:%';
+-- of every Scene of a WidgetType becomes a job of every Scene of each live
+-- Project holding a Widget of it (the release copies the WidgetType as it
+-- is, but checks no binding). The jobs of one Scene or Project of several
+-- WidgetTypes merge into one.
 INSERT INTO policy_jobs (policy, job_key)
-    SELECT DISTINCT 'reconcile_widgets_with_pins', regexp_replace(job_key, '^widget_type:[0-9a-f-]+/', '')
-    FROM policy_jobs WHERE policy = 'reconcile_widgets_with_widget_type'
+    SELECT 'reconcile_widgets_with_pins', regexp_replace(job_key, '^widget_type:[0-9a-f-]+/', '')
+    FROM policy_jobs WHERE policy = 'reconcile_widgets_with_widget_type' AND job_key LIKE '%/scene:%'
+    UNION
+    SELECT 'reconcile_widgets_with_pins', 'project:' || w.project_id
+    FROM policy_jobs j
+    JOIN engineering.widgets w ON j.job_key = 'widget_type:' || w.type_id
+    JOIN projects p ON p.id = w.project_id AND p.deleted_at IS NULL
+    WHERE j.policy = 'reconcile_widgets_with_widget_type'
 ON CONFLICT (policy, job_key) DO UPDATE
     SET generation = policy_jobs.generation + 1, next_attempt_at = now();
 DELETE FROM policy_jobs WHERE policy = 'reconcile_widgets_with_widget_type';

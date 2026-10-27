@@ -281,6 +281,43 @@ func TestLibraries_SelectFallsBackToTheFirst(t *testing.T) {
 	}
 }
 
+// TestLibraries_SelectedDeleted_SelectsAnotherWithoutAnError: the Draft and
+// the releases of a library deleted elsewhere answer 404 before the list is
+// reloaded; that selects another library instead of showing an error, and
+// none once the last is gone.
+func TestLibraries_SelectedDeleted_SelectsAnotherWithoutAnError(t *testing.T) {
+	url, api := newServer(t)
+	other, err := api.CreateLibrary(context.Background(), apiv0.CreateLibraryRequest{Name: "Other"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := mount(t, url, api)
+	f.run()
+	f.l.selectLibrary(f.l.compoCtx, other.ID)
+	f.run()
+	if _, err := api.DeleteLibrary(context.Background(), other.ID); err != nil {
+		t.Fatal(err)
+	}
+	f.l.loadList(f.l.compoCtx)
+	f.l.loadReleases(f.l.compoCtx)
+	f.run()
+	f.noToasts()
+	if f.l.libraryID != api.ID() {
+		t.Errorf("after the deletion selected %v, want %v", f.l.libraryID, api.ID())
+	}
+
+	if _, err := api.DeleteLibrary(context.Background(), api.ID()); err != nil {
+		t.Fatal(err)
+	}
+	f.l.loadList(f.l.compoCtx)
+	f.run()
+	f.noToasts()
+	if f.l.libraryID != uuid.Nil || f.l.widgetTypes != nil || f.l.releases != nil {
+		t.Errorf("no library left, yet selected %v with %d types and %d releases",
+			f.l.libraryID, len(f.l.widgetTypes), len(f.l.releases))
+	}
+}
+
 func TestApplyChanges_SavesTheEditor(t *testing.T) {
 	f, id := selected(t)
 

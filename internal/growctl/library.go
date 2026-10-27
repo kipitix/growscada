@@ -103,9 +103,13 @@ func sameDefinition(server apiv0.WidgetTypeResponse, m apiv0.CreateWidgetTypeReq
 // WidgetTypes that differ updated and, with prune, those absent from the
 // manifests removed from every library the manifests declare WidgetTypes
 // of; the pins a project's spec declares are added or switched. A
-// WidgetType of a library the plan creates is created with it.
+// WidgetType of a library the plan creates is created with it. Manifests
+// without libraries, WidgetTypes and pins plan nothing and read nothing.
 func planLibraries(ctx context.Context, client *Client, manifests Manifests, prune bool) (libraryPlan, error) {
 	var plan libraryPlan
+	if !declaresLibraries(manifests) {
+		return plan, nil
+	}
 	libraries, err := client.ListLibraries(ctx)
 	if err != nil {
 		return plan, err
@@ -345,6 +349,15 @@ func pinResult(a Action) string {
 		return "switched"
 	}
 	return actionResult(a)
+}
+
+// declaresLibraries reports whether the manifests declare a library, a
+// WidgetType or a project's pins.
+func declaresLibraries(manifests Manifests) bool {
+	if len(manifests.Libraries) > 0 || len(manifests.WidgetTypes) > 0 {
+		return true
+	}
+	return slices.ContainsFunc(manifests.Projects, func(m ProjectManifest) bool { return len(m.LibraryPins) > 0 })
 }
 
 // planDeleteLibraries plans delete -f of the manifests' WidgetTypes, by

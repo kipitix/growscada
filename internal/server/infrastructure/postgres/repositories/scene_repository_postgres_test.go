@@ -8,10 +8,12 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -390,6 +392,71 @@ func TestSceneSave_UnpinnedWidgetType_ReturnsErrWidgetTypeNotFound(t *testing.T)
 	if found := mustFindByID(t, repo, sc.ID()); found.Version() != sc.Version() {
 		t.Errorf("a failed Save must change nothing: version %d, got %d", sc.Version().Number(), found.Version().Number())
 	}
+}
+
+// TestSceneSave_WaitsForASwitchOfThePin_TypeInBothReleases: a Widget added
+// while its type's pin is being switched waits for the switch and is saved
+// against the release switched to, which holds the type too.
+func TestSceneSave_WaitsForASwitchOfThePin_TypeInBothReleases(t *testing.T) {
+	cleanScenes(t)
+	ctx := context.Background()
+	repo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
+	types := newWidgetTypeRepo(t)
+	wt, err := types.Save(ctx, makeWidgetType(t, "gauge", nil, types))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pin := mustPin(t, mainProject, mustRelease(t, types.libraryID))
+	if _, err := types.Save(ctx, makeWidgetType(t, "other", nil, types)); err != nil {
+		t.Fatal(err)
+	}
+	switched, err := pin.Switch(pin.Version(), mustRelease(t, types.libraryID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc := mustSave(t, repo, makeScene(t, repo, "scene-1"))
+	w := scene.NewWidget(repo.NextWidgetID(), mustWidgetName(t, "w"), scene.NewPosition(0, 0, 0), library.DefaultSize(),
+		scene.DefaultOrigin(), scene.DefaultRotation(), wt.ID(), nil, nil)
+
+	locked, release := make(chan struct{}), make(chan struct{})
+	switchDone := make(chan error, 1)
+	go func() {
+		_, err := repositories.NewLibraryPinRepositoryPostgres(testDB, mainProject).Save(ctx, switched, func([]librarypin.PlacedWidget) error {
+			close(locked)
+			<-release
+			return nil
+		})
+		switchDone <- err
+	}()
+	<-locked
+	saveDone := make(chan error, 1)
+	go func() {
+		_, err := repo.Save(ctx, withWidgets(sc, w))
+		saveDone <- err
+	}()
+	waitForALockWait(t)
+	close(release)
+	if err := <-switchDone; err != nil {
+		t.Fatalf("switch: %v", err)
+	}
+	if err := <-saveDone; err != nil {
+		t.Errorf("the save waiting for the switch: %v", err)
+	}
+}
+
+// waitForALockWait waits until a session of testDB waits for a lock.
+func waitForALockWait(t *testing.T) {
+	t.Helper()
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		var waiting int
+		if err := testDB.QueryRow(`SELECT count(*) FROM pg_locks WHERE NOT granted`).Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+		if waiting > 0 {
+			return
+		}
+	}
+	t.Fatal("no session waits for a lock")
 }
 
 func TestSceneFindAll_ReturnsWidgetsOfEachScene(t *testing.T) {

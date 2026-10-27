@@ -289,26 +289,51 @@ func (r libraryPinRepositoryPostgresImpl) FindPinnedWidgetType(ctx context.Conte
 	return wt, nil
 }
 
-// checkPinned locks for share, in tx, the pin of the Project projectID whose
-// release holds the WidgetType typeID, and fails with
-// library.ErrWidgetTypeNotFound if there is none: a write of a Scene that adds
-// a Widget or changes its WidgetType, against a concurrent switch or removal
-// of the pin, which locks the row for update (ADR 0012).
+// checkPinned locks for share, in tx, the pin of the Project projectID of the
+// Library of the WidgetType typeID, and fails with
+// library.ErrWidgetTypeNotFound unless the release it pins holds the
+// WidgetType: a write of a Scene that adds a Widget or changes its
+// WidgetType, against a concurrent switch or removal of the pin, which locks
+// the row for update (ADR 0012). The pin is locked alone, then its release
+// read as locked: a lock that waited for a switch rereads the row switched,
+// whose release the same statement could not join anew.
 func checkPinned(ctx context.Context, tx *sql.Tx, projectID id.ID[project.Project], typeID id.ID[library.WidgetType]) error {
-	var one int
-	err := tx.QueryRowContext(ctx,
-		`SELECT 1 FROM engineering.library_pins lp
-		 JOIN engineering.released_widget_types r ON r.library_id = lp.library_id AND r.release_number = lp.release_number
-		 WHERE lp.project_id = $1 AND r.id = $2
-		 FOR SHARE OF lp`,
+	rows, err := tx.QueryContext(ctx,
+		`SELECT library_id, release_number FROM engineering.library_pins
+		 WHERE project_id = $1
+		   AND library_id IN (SELECT library_id FROM engineering.released_widget_types WHERE id = $2)
+		 FOR SHARE`,
 		projectID.UUID(), typeID.UUID(),
-	).Scan(&one)
-	if errors.Is(err, sql.ErrNoRows) {
-		return id.NotFound(library.ErrWidgetTypeNotFound, typeID)
-	}
+	)
 	if err != nil {
 		return fmt.Errorf("cannot lock the pin of widget type %s: %w", typeID, err)
 	}
+	var libraries []string
+	var releases []int64
+	for rows.Next() {
+		var libraryID string
+		var release int64
+		if err := rows.Scan(&libraryID, &release); err != nil {
+			rows.Close()
+			return fmt.Errorf("cannot lock the pin of widget type %s: %w", typeID, err)
+		}
+		libraries = append(libraries, libraryID)
+		releases = append(releases, release)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("cannot lock the pin of widget type %s: %w", typeID, err)
+	}
+	var pinned bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS (SELECT 1 FROM engineering.released_widget_types
+		                WHERE id = $1 AND (library_id, release_number) IN (SELECT unnest($2::uuid[]), unnest($3::int[])))`,
+		typeID.UUID(), pq.Array(libraries), pq.Array(releases),
+	).Scan(&pinned); err != nil {
+		return fmt.Errorf("cannot check the pin of widget type %s: %w", typeID, err)
+	}
+	if !pinned {
+		return id.NotFound(library.ErrWidgetTypeNotFound, typeID)
+	}
 	return nil
 }
-

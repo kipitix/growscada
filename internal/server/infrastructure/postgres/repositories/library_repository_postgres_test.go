@@ -146,6 +146,9 @@ func TestLibraryRelease_SaveAndRead(t *testing.T) {
 	if !ok || !released.Matches(saved) || got.CreatedAt().IsZero() {
 		t.Errorf("the release read back: %s, %v", got, got.WidgetTypes())
 	}
+	if !got.CreatedAt().Equal(first.CreatedAt()) {
+		t.Errorf("created at %v read back, %v saved", got.CreatedAt(), first.CreatedAt())
+	}
 	if _, err := releases.FindByNumber(ctx, repo.libraryID, first.Number().Next()); !errors.Is(err, library.ErrReleaseNotFound) {
 		t.Errorf("a missing release: expected ErrReleaseNotFound, got %v", err)
 	}
@@ -278,33 +281,26 @@ func TestLibraryPin_AddSwitchRemove(t *testing.T) {
 	}
 }
 
-// TestLibraryReleaseStates_AgreeWithDraftDiffers: the state computed in the
-// database is the latest release and DraftDiffers of the Draft read whole,
-// whatever the Draft's change.
-func TestLibraryReleaseStates_AgreeWithDraftDiffers(t *testing.T) {
+// TestLibraryReleaseState_OfTheStoredDraftAndRelease: a Draft and its latest
+// release read back from the database differ exactly when a WidgetType was
+// changed, added or removed since the release, whatever was stored.
+func TestLibraryReleaseState_OfTheStoredDraftAndRelease(t *testing.T) {
 	cleanLibraries(t)
 	ctx := context.Background()
 	repo := newWidgetTypeRepo(t)
 	releases := repositories.NewLibraryReleaseRepositoryPostgres(testDB)
-	other := mustSaveLibrary(t)
-	missing := repositories.NewLibraryRepositoryPostgres(testDB).NextID()
 	check := func(step string, wantLatest int, wantDiffers bool) {
 		t.Helper()
-		states, err := releases.FindReleaseStates(ctx, []id.ID[library.Library]{repo.libraryID, other.ID(), missing})
+		draft, err := repo.FindAll(ctx)
 		if err != nil {
-			t.Fatalf("%s: FindReleaseStates: %v", step, err)
+			t.Fatalf("%s: FindAll: %v", step, err)
 		}
-		draft, _ := repo.FindAll(ctx)
-		latest, _ := releases.FindLatest(ctx, repo.libraryID)
-		got := states[repo.libraryID]
-		if got.Latest.Int() != wantLatest || got.DraftDiffers != wantDiffers || got.DraftDiffers != library.DraftDiffers(draft, latest) {
-			t.Errorf("%s: %+v, want release %d, differs %t (DraftDiffers %t)", step, got, wantLatest, wantDiffers, library.DraftDiffers(draft, latest))
+		latest, err := releases.FindLatest(ctx, repo.libraryID)
+		if err != nil {
+			t.Fatalf("%s: FindLatest: %v", step, err)
 		}
-		if s := states[other.ID()]; s.Latest.IsValid() || !s.DraftDiffers {
-			t.Errorf("%s: a library never released: %+v", step, s)
-		}
-		if s, ok := states[missing]; !ok || s.Latest.IsValid() || !s.DraftDiffers {
-			t.Errorf("%s: a missing library: %+v, %t", step, s, ok)
+		if got := library.ReleaseStateOf(draft, latest); got.Latest.Int() != wantLatest || got.DraftDiffers != wantDiffers {
+			t.Errorf("%s: %+v, want release %d, differs %t", step, got, wantLatest, wantDiffers)
 		}
 	}
 

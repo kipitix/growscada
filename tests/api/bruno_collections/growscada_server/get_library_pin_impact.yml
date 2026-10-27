@@ -10,7 +10,7 @@ http:
 
 docs: |
   The preview of pinning release `?release=` of the library (without it: of
-  removing the pin). `orphaned_widgets` would be left without their
+  removing the pin, `404` if the project does not pin the library). `orphaned_widgets` would be left without their
   WidgetType and refuse the change (`409`); `broken_bindings` would be removed
   after it.
 

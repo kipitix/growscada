@@ -92,19 +92,21 @@ func (s libraryServiceImpl) describe(ctx context.Context, l library.Library) (ap
 	return list[0], nil
 }
 
-// describeAll is describe of every library of list, read in one query.
+// describeAll is describe of every library of list: its Draft compared with
+// its latest release by library.ReleaseStateOf, the one function that also
+// decides whether a Release is refused.
 func (s libraryServiceImpl) describeAll(ctx context.Context, list []library.Library) ([]appdto.Library, error) {
-	ids := make([]id.ID[library.Library], len(list))
-	for i, l := range list {
-		ids[i] = l.ID()
-	}
-	states, err := s.releases.FindReleaseStates(ctx, ids)
-	if err != nil {
-		return nil, fmt.Errorf("cannot find release states of libraries: %w", err)
-	}
 	result := make([]appdto.Library, len(list))
 	for i, l := range list {
-		result[i] = appdto.NewLibrary(l, states[l.ID()])
+		latest, err := s.releases.FindLatest(ctx, l.ID())
+		if err != nil {
+			return nil, fmt.Errorf("cannot find the latest release of library %s: %w", l.ID(), err)
+		}
+		draft, err := s.widgetTypes.ForLibrary(l.ID()).FindAll(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("cannot find the draft of library %s: %w", l.ID(), err)
+		}
+		result[i] = appdto.NewLibrary(l, library.ReleaseStateOf(draft, latest))
 	}
 	return result, nil
 }

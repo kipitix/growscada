@@ -206,7 +206,8 @@ func (s libraryPinServiceImpl) DeleteLibraryPin(ctx context.Context, rawProjectI
 
 // PinImpact previews what pinning release instead (nil: removing the pin)
 // would do to the project's Widgets as they are now: the same function
-// refuses the change itself (librarypin.ImpactOf).
+// refuses the change itself (librarypin.ImpactOf). Removing a pin the
+// project does not have is librarypin.ErrLibraryPinNotFound, as the removal.
 func (s libraryPinServiceImpl) PinImpact(ctx context.Context, rawProjectID, rawLibraryID uuid.UUID, rawRelease *int) (appdto.PinImpact, error) {
 	scope, lib, err := s.openPin(ctx, rawProjectID, rawLibraryID)
 	if err != nil {
@@ -219,7 +220,7 @@ func (s libraryPinServiceImpl) PinImpact(ctx context.Context, rawProjectID, rawL
 		if from, err = s.pinnedRelease(ctx, found); err != nil {
 			return appdto.PinImpact{}, err
 		}
-	case !errors.Is(err, librarypin.ErrLibraryPinNotFound):
+	case rawRelease == nil || !errors.Is(err, librarypin.ErrLibraryPinNotFound):
 		return appdto.PinImpact{}, fmt.Errorf("error on find library pin in repository: %w", err)
 	}
 	if rawRelease != nil {

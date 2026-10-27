@@ -168,6 +168,24 @@ func TestDraftDiffers(t *testing.T) {
 	}
 }
 
+func TestReleaseStateOf(t *testing.T) {
+	lib := makeStoredLibrary(t)
+	wt := makeCommittedWidgetType(t)
+	if got := ReleaseStateOf([]WidgetType{wt}, nil); got.Latest.IsValid() || !got.DraftDiffers {
+		t.Errorf("never released: %+v", got)
+	}
+	release, err := CreateRelease(lib, []WidgetType{wt}, nil, "", time.Now())
+	if err != nil {
+		t.Fatalf("CreateRelease: %v", err)
+	}
+	if got := ReleaseStateOf([]WidgetType{wt}, release); got.Latest != FirstRelease() || got.DraftDiffers {
+		t.Errorf("released: %+v", got)
+	}
+	if got := ReleaseStateOf(nil, release); got.Latest != FirstRelease() || !got.DraftDiffers {
+		t.Errorf("changed since: %+v", got)
+	}
+}
+
 func TestWidgetTypeResetTo_RestoresTheReleasedDefinition(t *testing.T) {
 	wt := makeCommittedWidgetType(t)
 	released := ReleasedFrom(wt)
