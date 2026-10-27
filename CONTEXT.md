@@ -41,7 +41,7 @@ _Avoid_: API key, password, credential (unqualified)
 ### Visualization
 
 **WidgetType**:
-A reusable template defining how a widget renders: an HTML template plus a script, a default size, and the InputPorts it exposes. Aggregate. Every Widget's WidgetType exists: a WidgetType cannot be removed while Widgets use it.
+A reusable template defining how a widget renders: an HTML template plus a script, a default size, and the InputPorts it exposes. Aggregate of one Library's Draft. Its name is unique within that Library and, together with the Library, is the natural key by which people and manifests refer to it. It keeps its identity through every Library Release of that Library, which holds copies of it. Every Widget's WidgetType is in a Library Release its Project pins: a pin is never switched or removed while Widgets would be left without their WidgetType. Removing a WidgetType from a Library's Draft touches no Project.
 _Avoid_: component, widget definition
 
 **InputPort**:
@@ -71,12 +71,16 @@ Owned by one Organization. The unit of operational ownership and isolation: Tags
 _Avoid_: workspace, site, solution
 
 **Library**:
-A reusable collection of WidgetTypes (and, later, ComputationTypes and Themes) owned by an Organization, outside any Project, and used by any number of Projects — of other Organizations too, if it is public. Aggregate. Projects never see its working state, only its Library Releases.
+A reusable collection of WidgetTypes (and, later, ComputationTypes and Themes) owned by an Organization, outside any Project, and used by any number of Projects. Which Projects may use it is a matter of access rights granted through its Organization; until those exist, every Project on the server may. Aggregate. Projects never see its working state, only its Library Releases. A Library is removed only while no Project pins any of its Library Releases.
 _Avoid_: catalog, toolbox, package
 
 **Library Release**:
-An immutable, numbered snapshot of a Library. A Project's Draft pins at most one Library Release per Library, for any number of Libraries; adding, removing or switching a pin is a DraftChange. Libraries do not depend on each other. On Deploy the content the Project uses from its pinned releases is copied into the Revision, so a Revision never depends on the Library.
+An immutable snapshot of a Library's Draft, numbered 1, 2, 3… within its Library, with an optional note; never removed. A Release with nothing changed since the latest Library Release is refused. A Project's Draft pins at most one Library Release per Library, for any number of Libraries; adding, removing or switching a pin is a DraftChange. Libraries do not depend on each other. On Deploy the content the Project uses from its pinned releases is copied into the Revision, so a Revision never depends on the Library.
 _Avoid_: library version (that is the concurrency counter), snapshot
+
+**Library Pin**:
+The choice, in a Project's Draft, of one Library Release of one Library: the Project uses that release's WidgetTypes and no other. A Project's Draft holds at most one Library Pin per Library, for any number of Libraries. Switching or removing a Library Pin is refused while Widgets of the Project would be left without their WidgetType; the PortBindings it breaks are removed.
+_Avoid_: dependency, import, reference, subscription
 
 ### Roles
 
@@ -101,8 +105,8 @@ _Avoid_: production server, station, runtime (unqualified)
 ### Project lifecycle
 
 **EditLock**:
-The marker that one Engineer currently holds one Draft (of a Project or a Library) for editing; acquired and released explicitly, expires when its holder disconnects, and may be taken over by another Engineer. Without it the Draft is read-only.
-_Avoid_: checkout, lock (unqualified)
+The marker that one Engineer currently holds one Draft (of a Project or a Library) for editing. The Engineer takes it by **Check out** and hands it back by **Check in**; it expires when its holder disconnects, and may be taken over by another Engineer. Without it the Draft is read-only. Check in keeps the Draft and its DraftChanges as they are: it publishes nothing.
+_Avoid_: lock (unqualified); acquire/release (Release is a Library's)
 
 **Draft**:
 The working state of a Project or of a Library as it is being edited. A Project's Draft holds Scenes with their Widgets, Tag definitions and the pinned Library Releases, and becomes operational only through Deploy. A Library's Draft holds its WidgetTypes and becomes usable by Projects only through Release. Each Draft has its own EditLock and DraftChanges.
@@ -113,7 +117,7 @@ One Engineer intent applied to the Draft — possibly touching several aggregate
 _Avoid_: edit, step, command, operation
 
 **Discard**:
-Resetting a Draft to its last published state — the Revision currently running in Operation for a Project, the latest Library Release for a Library — dropping all DraftChanges.
+Resetting a Draft to its last published state — the Revision currently running in Operation for a Project, the latest Library Release for a Library — dropping all DraftChanges. A Draft that has never been published cannot be discarded. While a Discard is under way the Draft is read-only.
 _Avoid_: revert, reset, cancel
 
 **Deploy**:

@@ -16,3 +16,4 @@ Blocked by: 32, 33, 34
 ## Comments
 
 - 2026-10-04: бывший тикет 03 задачи 36. Решения: Q1 (Draft + Deploy, а не живое редактирование), Q8 (Deploy публикует весь Draft атомарно → Revision), Q10 (Draft автосохраняется на сервере, кнопки «Сохранить» нет; явные действия — Deploy и Discard), Q15 (runtime-Widget переживает Deploy; удаляется, только если исчезли его Scene или WidgetType, с предупреждением перед Deploy), Q16 (Deploy с конфликтом имён отклоняется), Q20 (Revision — неизменяемый jsonb-документ). Зависимость от Journal снята: запись Deploy в Journal добавит задача 42.
+- 2026-10-27 (grilling задачи 33): в ProjectFile копируются `ReleasedWidgetType` из закреплённых Library Pins (только используемые Widgets); до этой задачи Operation читает их через `GET …/widget-types` проекта.
