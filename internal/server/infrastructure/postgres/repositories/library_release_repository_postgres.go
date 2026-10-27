@@ -3,7 +3,6 @@ package repositories
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 type libraryReleaseRepositoryPostgresImpl struct {
@@ -30,21 +30,19 @@ func NewLibraryReleaseRepositoryPostgres(aDb *sql.DB, opts ...Option) library.Li
 }
 
 // Save inserts the release with the copies of its WidgetTypes. It locks the
-// Library's row for share, as a write of a WidgetType does: a Discard marked
-// meanwhile waits for it, or it for the Discard and is refused (ADR 0012).
-func (r libraryReleaseRepositoryPostgresImpl) Save(ctx context.Context, release library.LibraryRelease) (library.LibraryRelease, error) {
+// Library's row for share, as a write of a WidgetType does, and checks its
+// version there: a Discard marked or a rename made meanwhile waits for it,
+// or it for them and is refused (ADR 0012).
+func (r libraryReleaseRepositoryPostgresImpl) Save(ctx context.Context, release library.LibraryRelease, expected version.Version[library.Library]) (library.LibraryRelease, error) {
 	libraryID := release.LibraryID()
 	err := r.store.inTx(ctx, release.PendingEvents(), func(tx *sql.Tx) error {
-		var discardingTo sql.NullInt64
-		err := tx.QueryRowContext(ctx,
-			`SELECT discarding_to FROM engineering.libraries WHERE id = $1 AND deleted_at IS NULL FOR SHARE`, libraryID.UUID(),
-		).Scan(&discardingTo)
+		row, err := lockLibraryRow(ctx, tx, libraryID)
 		switch {
-		case errors.Is(err, sql.ErrNoRows):
-			return id.NotFound(library.ErrLibraryNotFound, libraryID)
 		case err != nil:
-			return fmt.Errorf("cannot lock library %s: %w", libraryID, err)
-		case discardingTo.Valid:
+			return err
+		case row.version != expected.Number():
+			return fmt.Errorf("%w: expected version %s, current %d", library.ErrLibraryConflict, expected, row.version)
+		case row.discardingTo.Valid:
 			return fmt.Errorf("%w: %s", library.ErrLibraryDiscarding, libraryID)
 		}
 		if _, err := tx.ExecContext(ctx,
@@ -85,6 +83,52 @@ func (r libraryReleaseRepositoryPostgresImpl) FindLatest(ctx context.Context, li
 		return nil, err
 	}
 	return found[0], nil
+}
+
+// releaseStatesQuery computes the ReleaseState of each Library of $1 in
+// one statement: a Draft differs from the latest release when a WidgetType
+// is in one but not the other, or any column library.ReleasedWidgetType.Matches
+// compares differs.
+const releaseStatesQuery = `SELECT l.id, COALESCE(lr.latest, 0), lr.latest IS NULL OR EXISTS (
+		SELECT 1
+		FROM (SELECT * FROM engineering.widget_types WHERE library_id = l.id) d
+		FULL JOIN (SELECT * FROM engineering.released_widget_types WHERE library_id = l.id AND release_number = lr.latest) x
+			ON x.id = d.id
+		WHERE d.id IS NULL OR x.id IS NULL
+		   OR (d.name, d.html_template, d.script, d.script_language, d.default_width, d.default_height, d.input_ports)
+		      IS DISTINCT FROM (x.name, x.html_template, x.script, x.script_language, x.default_width, x.default_height, x.input_ports))
+	FROM unnest($1::uuid[]) AS l(id)
+	LEFT JOIN LATERAL (SELECT max(number) AS latest FROM engineering.library_releases WHERE library_id = l.id) lr ON true`
+
+func (r libraryReleaseRepositoryPostgresImpl) FindReleaseStates(ctx context.Context, libraryIDs []id.ID[library.Library]) (map[id.ID[library.Library]]library.ReleaseState, error) {
+	raw := make([]string, len(libraryIDs))
+	for i, libraryID := range libraryIDs {
+		raw[i] = libraryID.UUID().String()
+	}
+	rows, err := r.db.QueryContext(ctx, releaseStatesQuery, pq.Array(raw))
+	if err != nil {
+		return nil, fmt.Errorf("error querying release states: %w", err)
+	}
+	defer rows.Close()
+	states := make(map[id.ID[library.Library]]library.ReleaseState, len(libraryIDs))
+	for rows.Next() {
+		var libraryUUID uuid.UUID
+		var latest int
+		var state library.ReleaseState
+		if err := rows.Scan(&libraryUUID, &latest, &state.DraftDiffers); err != nil {
+			return nil, fmt.Errorf("error scanning release state: %w", err)
+		}
+		if latest > 0 {
+			if state.Latest, err = library.NewReleaseNumber(latest); err != nil {
+				return nil, err
+			}
+		}
+		states[id.NewID(id.IDWithUUID[library.Library](libraryUUID))] = state
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over release states: %w", err)
+	}
+	return states, nil
 }
 
 func (r libraryReleaseRepositoryPostgresImpl) FindByNumber(ctx context.Context, libraryID id.ID[library.Library], number library.ReleaseNumber) (library.LibraryRelease, error) {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -70,7 +71,8 @@ func (r libraryPinRepositoryPostgresImpl) Save(ctx context.Context, pin libraryp
 			if err := r.store.lockLiveProject(ctx, tx); err != nil {
 				return err
 			}
-			if err := lockLiveLibrary(ctx, tx, pin.LibraryID()); err != nil {
+			// No pin is added to a library once it is marked deleted.
+			if _, err := lockLibraryRow(ctx, tx, pin.LibraryID()); err != nil {
 				return err
 			}
 			_, err := tx.ExecContext(ctx,
@@ -79,7 +81,7 @@ func (r libraryPinRepositoryPostgresImpl) Save(ctx context.Context, pin libraryp
 			)
 			return pinWriteError(pin, err)
 		}
-		if err := r.lockForChange(ctx, tx, pin.LibraryID(), &current, check); err != nil {
+		if err := r.lockForChange(ctx, tx, pin.LibraryID(), current, check); err != nil {
 			return err
 		}
 		_, err := tx.ExecContext(ctx,
@@ -94,14 +96,16 @@ func (r libraryPinRepositoryPostgresImpl) Save(ctx context.Context, pin libraryp
 	return librarypin.ReconstituteLibraryPin(r.project, pin.LibraryID(), pin.Release(), next), nil
 }
 
-// Delete removes the pin once its row is locked for update and check
-// passed, whatever its version.
+// Delete removes the pin once its row is locked for update, its version
+// checked and check passed: check was built from the release the pin
+// pinned when it was read.
 func (r libraryPinRepositoryPostgresImpl) Delete(ctx context.Context, pin librarypin.LibraryPin, check librarypin.WidgetsCheck) error {
 	if err := r.checkProject(pin); err != nil {
 		return err
 	}
+	current := pin.Version()
 	return r.store.inTx(ctx, pin.PendingEvents(), func(tx *sql.Tx) error {
-		if err := r.lockForChange(ctx, tx, pin.LibraryID(), nil, check); err != nil {
+		if err := r.lockForChange(ctx, tx, pin.LibraryID(), current, check); err != nil {
 			return err
 		}
 		_, err := tx.ExecContext(ctx,
@@ -117,9 +121,8 @@ func (r libraryPinRepositoryPostgresImpl) Delete(ctx context.Context, pin librar
 
 // lockForChange locks the pin's row for update in tx — a write of a Scene
 // that adds or retypes a Widget locks it for share (checkPinned) —, checks
-// its version unless expected is nil, then runs check on the Project's
-// Widgets as they are now.
-func (r libraryPinRepositoryPostgresImpl) lockForChange(ctx context.Context, tx *sql.Tx, libraryID id.ID[library.Library], expected *version.Version[librarypin.LibraryPin], check librarypin.WidgetsCheck) error {
+// its version, then runs check on the Project's Widgets as they are now.
+func (r libraryPinRepositoryPostgresImpl) lockForChange(ctx context.Context, tx *sql.Tx, libraryID id.ID[library.Library], expected version.Version[librarypin.LibraryPin], check librarypin.WidgetsCheck) error {
 	var stored int
 	err := tx.QueryRowContext(ctx,
 		`SELECT version FROM engineering.library_pins WHERE project_id = $1 AND library_id = $2 FOR UPDATE`,
@@ -131,7 +134,7 @@ func (r libraryPinRepositoryPostgresImpl) lockForChange(ctx context.Context, tx 
 	if err != nil {
 		return fmt.Errorf("cannot lock library pin: %w", err)
 	}
-	if expected != nil && stored != expected.Number() {
+	if stored != expected.Number() {
 		return librarypin.ErrLibraryPinConflict
 	}
 	if check == nil {
@@ -178,24 +181,6 @@ func pinWriteError(pin librarypin.LibraryPin, err error) error {
 		return fmt.Errorf("%w: %s of library %s", library.ErrReleaseNotFound, pin.Release(), pin.LibraryID())
 	}
 	return fmt.Errorf("cannot write library pin: %w", err)
-}
-
-// lockLiveLibrary locks the row of the Library for share in tx; a library
-// marked deleted (or removed) is not found. Marking it deleted updates its
-// row, so it waits for the transaction, or the transaction for it: no pin is
-// added to a library once it is marked deleted (ADR 0012).
-func lockLiveLibrary(ctx context.Context, tx *sql.Tx, libraryID id.ID[library.Library]) error {
-	var one int
-	err := tx.QueryRowContext(ctx,
-		`SELECT 1 FROM engineering.libraries WHERE id = $1 AND deleted_at IS NULL FOR SHARE`, libraryID.UUID(),
-	).Scan(&one)
-	if errors.Is(err, sql.ErrNoRows) {
-		return id.NotFound(library.ErrLibraryNotFound, libraryID)
-	}
-	if err != nil {
-		return fmt.Errorf("cannot lock library %s: %w", libraryID, err)
-	}
-	return nil
 }
 
 func (r libraryPinRepositoryPostgresImpl) FindAll(ctx context.Context) ([]librarypin.LibraryPin, error) {
@@ -260,7 +245,21 @@ const pinnedWidgetTypesQuery = `SELECT ` + selectReleasedWidgetTypeColumnsOf + `
 const selectReleasedWidgetTypeColumnsOf = `r.id, r.library_id, r.name, r.html_template, r.script, r.script_language, r.default_width, r.default_height, r.input_ports`
 
 func (r libraryPinRepositoryPostgresImpl) FindPinnedWidgetTypes(ctx context.Context) ([]library.ReleasedWidgetType, error) {
-	rows, err := r.db.QueryContext(ctx, pinnedWidgetTypesQuery+` ORDER BY lp.pk_id, r.pk_id`, r.project.UUID())
+	return r.readPinned(ctx, ``)
+}
+
+func (r libraryPinRepositoryPostgresImpl) FindPinnedWidgetTypesByID(ctx context.Context, typeIDs []id.ID[library.WidgetType]) ([]library.ReleasedWidgetType, error) {
+	raw := make([]string, len(typeIDs))
+	for i, typeID := range typeIDs {
+		raw[i] = typeID.UUID().String()
+	}
+	return r.readPinned(ctx, ` AND r.id = ANY($2::uuid[])`, pq.Array(raw))
+}
+
+// readPinned reads the pinned WidgetTypes matching and, a further condition
+// whose arguments are numbered from $2, in the order of their pins.
+func (r libraryPinRepositoryPostgresImpl) readPinned(ctx context.Context, and string, args ...any) ([]library.ReleasedWidgetType, error) {
+	rows, err := r.db.QueryContext(ctx, pinnedWidgetTypesQuery+and+` ORDER BY lp.pk_id, r.pk_id`, append([]any{r.project.UUID()}, args...)...)
 	if err != nil {
 		return nil, fmt.Errorf("error querying pinned widget types: %w", err)
 	}

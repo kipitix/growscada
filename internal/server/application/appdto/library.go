@@ -32,15 +32,13 @@ type LibraryInput struct {
 
 // NewLibrary creates a Library DTO from the domain aggregate, its latest
 // release (nil for none) and whether its Draft differs from it.
-func NewLibrary(l library.Library, latest library.LibraryRelease, unreleased bool) Library {
+func NewLibrary(l library.Library, state library.ReleaseState) Library {
 	dto := Library{
 		ID:                   l.ID().UUID(),
 		Name:                 l.Name().String(),
 		Version:              l.Version().Number(),
-		HasUnreleasedChanges: unreleased,
-	}
-	if latest != nil {
-		dto.LatestRelease = latest.Number().Int()
+		LatestRelease:        state.Latest.Int(),
+		HasUnreleasedChanges: state.DraftDiffers,
 	}
 	if to, ok := l.DiscardingTo(); ok {
 		dto.DiscardingTo = to.Int()

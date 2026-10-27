@@ -56,16 +56,24 @@ type Repository interface {
 	// error.
 	Save(ctx context.Context, pin LibraryPin, check WidgetsCheck) (LibraryPin, error)
 
-	// Delete removes a pin, whatever version is stored, and stores the
-	// events it recorded (see LibraryPin.Delete), once check passed against
-	// the Project's Widgets with the pin's row locked for update.
-	// Returns ErrLibraryPinNotFound if the pin does not exist, or check's
+	// Delete removes a pin if the stored version is still the pin's version,
+	// and stores the events it recorded (see LibraryPin.Delete), once check
+	// passed against the Project's Widgets with the pin's row locked for
+	// update: a pin switched since it was read is not checked against the
+	// release it pinned before.
+	// Returns ErrLibraryPinNotFound if the pin does not exist,
+	// ErrLibraryPinConflict if the stored version does not match, or check's
 	// error.
 	Delete(ctx context.Context, pin LibraryPin, check WidgetsCheck) error
 
 	// FindPinnedWidgetTypes returns the WidgetTypes of every Library
 	// Release the Project pins: what its Widgets may be of.
 	FindPinnedWidgetTypes(context.Context) ([]library.ReleasedWidgetType, error)
+
+	// FindPinnedWidgetTypesByID returns the WidgetTypes with the given IDs
+	// from the Library Releases the Project pins; an ID none of them holds
+	// is left out.
+	FindPinnedWidgetTypesByID(context.Context, []id.ID[library.WidgetType]) ([]library.ReleasedWidgetType, error)
 
 	// FindPinnedWidgetType returns the WidgetType with the given ID from the
 	// Library Releases the Project pins.

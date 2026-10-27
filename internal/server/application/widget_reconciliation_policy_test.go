@@ -689,6 +689,12 @@ func (r *racingFindPinnedRepository) FindPinnedWidgetTypes(ctx context.Context) 
 	return found, err
 }
 
+func (r *racingFindPinnedRepository) FindPinnedWidgetTypesByID(ctx context.Context, typeIDs []id.ID[library.WidgetType]) ([]library.ReleasedWidgetType, error) {
+	found, err := r.Repository.FindPinnedWidgetTypesByID(ctx, typeIDs)
+	r.raced()
+	return found, err
+}
+
 func (r *racingFindPinnedRepository) FindPinnedWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.ReleasedWidgetType, error) {
 	found, err := r.Repository.FindPinnedWidgetType(ctx, typeID)
 	r.raced()

@@ -37,10 +37,22 @@ INSERT INTO engineering.libraries (id, organization_id, name, version)
 
 ALTER TABLE engineering.widget_types ADD COLUMN library_id UUID;
 UPDATE engineering.widget_types SET library_id = 'd0000000-0000-4000-8000-000000000001';
-UPDATE engineering.widget_types w
-    SET name = w.name || ' (' || d.n || ')'
-    FROM (SELECT id, row_number() OVER (PARTITION BY name ORDER BY pk_id) AS n FROM engineering.widget_types) d
-    WHERE d.id = w.id AND d.n > 1;
+-- A suffix already taken by another name is skipped.
+DO $$
+DECLARE
+    d RECORD;
+    k INTEGER;
+BEGIN
+    FOR d IN SELECT id, name, n FROM (SELECT id, name, pk_id, row_number() OVER (PARTITION BY name ORDER BY pk_id) AS n
+                                     FROM engineering.widget_types) t
+             WHERE n > 1 ORDER BY pk_id LOOP
+        k := d.n;
+        WHILE EXISTS (SELECT 1 FROM engineering.widget_types WHERE name = d.name || ' (' || k || ')') LOOP
+            k := k + 1;
+        END LOOP;
+        UPDATE engineering.widget_types SET name = d.name || ' (' || k || ')' WHERE id = d.id;
+    END LOOP;
+END $$;
 ALTER TABLE engineering.widget_types
     ALTER COLUMN library_id SET NOT NULL,
     ADD CONSTRAINT fk_widget_types_library_id FOREIGN KEY (library_id) REFERENCES engineering.libraries(id) ON DELETE CASCADE,
@@ -115,12 +127,14 @@ UPDATE outbox
 -- The Widgets are brought into line with the pinned releases, no longer with
 -- a WidgetType of the Draft: a waiting job of one Scene keeps its Scene, one
 -- of every Scene of a WidgetType is done (its WidgetType is now released as
--- it is).
+-- it is). The jobs of one Scene of several WidgetTypes merge into one.
 DELETE FROM policy_jobs WHERE policy = 'reconcile_widgets_with_widget_type' AND job_key NOT LIKE '%/scene:%';
-UPDATE policy_jobs
-    SET policy = 'reconcile_widgets_with_pins',
-        job_key = regexp_replace(job_key, '^widget_type:[0-9a-f-]+/', '')
-    WHERE policy = 'reconcile_widgets_with_widget_type';
+INSERT INTO policy_jobs (policy, job_key)
+    SELECT DISTINCT 'reconcile_widgets_with_pins', regexp_replace(job_key, '^widget_type:[0-9a-f-]+/', '')
+    FROM policy_jobs WHERE policy = 'reconcile_widgets_with_widget_type'
+ON CONFLICT (policy, job_key) DO UPDATE
+    SET generation = policy_jobs.generation + 1, next_attempt_at = now();
+DELETE FROM policy_jobs WHERE policy = 'reconcile_widgets_with_widget_type';
 -- +goose StatementEnd
 
 -- +goose Down

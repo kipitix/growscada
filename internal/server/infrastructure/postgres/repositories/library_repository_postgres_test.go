@@ -36,8 +36,18 @@ func TestLibrarySave_RenameNameTakenAndDiscardMark(t *testing.T) {
 		t.Errorf("a stale write: expected ErrLibraryConflict, got %v", err)
 	}
 
+	// A Discard to a release no longer the latest is a conflict.
+	first := mustRelease(t, lib.ID())
+	wts := libraryRepo{repositories.NewWidgetTypeRepositoryPostgres(testDB, lib.ID()), lib.ID()}
+	if _, err := wts.Save(ctx, makeWidgetType(t, "gauge", nil, wts)); err != nil {
+		t.Fatal(err)
+	}
+	two := mustRelease(t, lib.ID()).Number()
 	found, _ := repo.FindByID(ctx, lib.ID())
-	two, _ := library.NewReleaseNumber(2)
+	stale, _ := found.StartDiscard(first.Number())
+	if _, err := repo.Save(ctx, stale); !errors.Is(err, library.ErrLibraryConflict) {
+		t.Errorf("a Discard to release 1 of 2: expected ErrLibraryConflict, got %v", err)
+	}
 	marked, _ := found.StartDiscard(two)
 	saved, err := repo.Save(ctx, marked)
 	if err != nil {
@@ -142,11 +152,11 @@ func TestLibraryRelease_SaveAndRead(t *testing.T) {
 
 	lib, _ := repositories.NewLibraryRepositoryPostgres(testDB).FindByID(ctx, repo.libraryID)
 	again, _ := library.CreateRelease(lib, []library.WidgetType{}, nil, "", time.Now())
-	if _, err := releases.Save(ctx, again); !errors.Is(err, library.ErrReleaseNumberTaken) {
+	if _, err := releases.Save(ctx, again, lib.Version()); !errors.Is(err, library.ErrReleaseNumberTaken) {
 		t.Errorf("number 1 again: expected ErrReleaseNumberTaken, got %v", err)
 	}
 	second, _ := library.CreateRelease(lib, nil, first, "emptied", time.Now())
-	if _, err := releases.Save(ctx, second); err != nil {
+	if _, err := releases.Save(ctx, second, lib.Version()); err != nil {
 		t.Fatalf("Save second: %v", err)
 	}
 	all, err := releases.FindAll(ctx, repo.libraryID)
@@ -157,13 +167,17 @@ func TestLibraryRelease_SaveAndRead(t *testing.T) {
 		t.Errorf("FindLatest: %s", latest)
 	}
 
-	marked, _ := lib.StartDiscard(first.Number())
-	if _, err := repositories.NewLibraryRepositoryPostgres(testDB).Save(ctx, marked); err != nil {
+	marked, _ := lib.StartDiscard(first.Number().Next())
+	markedSaved, err := repositories.NewLibraryRepositoryPostgres(testDB).Save(ctx, marked)
+	if err != nil {
 		t.Fatal(err)
 	}
 	third, _ := library.CreateRelease(lib, nil, nil, "", time.Now())
 	third = library.WithNumber(third, library.FirstRelease().Next().Next())
-	if _, err := releases.Save(ctx, third); !errors.Is(err, library.ErrLibraryDiscarding) {
+	if _, err := releases.Save(ctx, third, lib.Version()); !errors.Is(err, library.ErrLibraryConflict) {
+		t.Errorf("a release of a library changed since it was read: expected ErrLibraryConflict, got %v", err)
+	}
+	if _, err := releases.Save(ctx, third, markedSaved.Version()); !errors.Is(err, library.ErrLibraryDiscarding) {
 		t.Errorf("a release during a Discard: expected ErrLibraryDiscarding, got %v", err)
 	}
 }
@@ -195,6 +209,13 @@ func TestLibraryPin_AddSwitchRemove(t *testing.T) {
 	if err != nil || len(types) != 1 || types[0].ID() != saved.ID() {
 		t.Errorf("FindPinnedWidgetTypes: %v, %v", types, err)
 	}
+	unpinned := repo.NextID()
+	if types, err := pins.FindPinnedWidgetTypesByID(ctx, []id.ID[library.WidgetType]{unpinned, saved.ID()}); err != nil || len(types) != 1 || types[0].ID() != saved.ID() {
+		t.Errorf("FindPinnedWidgetTypesByID: %v, %v; want the pinned one only", types, err)
+	}
+	if types, err := pins.FindPinnedWidgetTypesByID(ctx, []id.ID[library.WidgetType]{unpinned}); err != nil || len(types) != 0 {
+		t.Errorf("FindPinnedWidgetTypesByID of an unpinned type: %v, %v", types, err)
+	}
 
 	// A widget of the pinned type; the switch's check sees it.
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
@@ -224,10 +245,18 @@ func TestLibraryPin_AddSwitchRemove(t *testing.T) {
 	if _, err := pins.Save(ctx, switched, nil); !errors.Is(err, librarypin.ErrLibraryPinConflict) {
 		t.Errorf("a stale switch: expected ErrLibraryPinConflict, got %v", err)
 	}
-	if err := pins.Delete(ctx, switched.Delete(), func([]librarypin.PlacedWidget) error { return refuse }); !errors.Is(err, refuse) {
+	// A removal checked against the release pinned before the switch is stale.
+	if err := pins.Delete(ctx, switched.Delete(), nil); !errors.Is(err, librarypin.ErrLibraryPinConflict) {
+		t.Errorf("a stale removal: expected ErrLibraryPinConflict, got %v", err)
+	}
+	current, err := pins.FindByLibrary(ctx, repo.libraryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := pins.Delete(ctx, current.Delete(), func([]librarypin.PlacedWidget) error { return refuse }); !errors.Is(err, refuse) {
 		t.Errorf("a refused removal: got %v", err)
 	}
-	if err := pins.Delete(ctx, switched.Delete(), nil); err != nil {
+	if err := pins.Delete(ctx, current.Delete(), nil); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 	if _, err := pins.FindByLibrary(ctx, repo.libraryID); !errors.Is(err, librarypin.ErrLibraryPinNotFound) {
@@ -247,4 +276,80 @@ func TestLibraryPin_AddSwitchRemove(t *testing.T) {
 	if _, err := pins.Save(ctx, librarypin.CreateLibraryPin(otherProject, first), nil); err == nil {
 		t.Error("a pin of another project through Main's repository must fail")
 	}
+}
+
+// TestLibraryReleaseStates_AgreeWithDraftDiffers: the state computed in the
+// database is the latest release and DraftDiffers of the Draft read whole,
+// whatever the Draft's change.
+func TestLibraryReleaseStates_AgreeWithDraftDiffers(t *testing.T) {
+	cleanLibraries(t)
+	ctx := context.Background()
+	repo := newWidgetTypeRepo(t)
+	releases := repositories.NewLibraryReleaseRepositoryPostgres(testDB)
+	other := mustSaveLibrary(t)
+	missing := repositories.NewLibraryRepositoryPostgres(testDB).NextID()
+	check := func(step string, wantLatest int, wantDiffers bool) {
+		t.Helper()
+		states, err := releases.FindReleaseStates(ctx, []id.ID[library.Library]{repo.libraryID, other.ID(), missing})
+		if err != nil {
+			t.Fatalf("%s: FindReleaseStates: %v", step, err)
+		}
+		draft, _ := repo.FindAll(ctx)
+		latest, _ := releases.FindLatest(ctx, repo.libraryID)
+		got := states[repo.libraryID]
+		if got.Latest.Int() != wantLatest || got.DraftDiffers != wantDiffers || got.DraftDiffers != library.DraftDiffers(draft, latest) {
+			t.Errorf("%s: %+v, want release %d, differs %t (DraftDiffers %t)", step, got, wantLatest, wantDiffers, library.DraftDiffers(draft, latest))
+		}
+		if s := states[other.ID()]; s.Latest.IsValid() || !s.DraftDiffers {
+			t.Errorf("%s: a library never released: %+v", step, s)
+		}
+		if s, ok := states[missing]; !ok || s.Latest.IsValid() || !s.DraftDiffers {
+			t.Errorf("%s: a missing library: %+v, %t", step, s, ok)
+		}
+	}
+
+	check("a new library", 0, true)
+	port, _ := library.NewInputPortName("value")
+	ports := []library.InputPort{library.NewInputPort(port, "the value", library.AnyTypeHint())}
+	gauge, err := repo.Save(ctx, makeWidgetType(t, "gauge", ports, repo))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustRelease(t, repo.libraryID)
+	check("released", 1, false)
+
+	update := func(step string, html string, ports []library.InputPort) {
+		t.Helper()
+		h, _ := library.NewHtmlTemplate(html)
+		changed, err := gauge.Update(gauge.Version(), gauge.Name(), h, gauge.Script(), gauge.ScriptLanguage(), gauge.DefaultSize(), ports)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if gauge, err = repo.Save(ctx, changed); err != nil {
+			t.Fatalf("%s: %v", step, err)
+		}
+	}
+	update("html", "<p></p>", ports)
+	check("html changed", 1, true)
+	h, _ := library.NewHtmlTemplate("<div></div>")
+	update("html restored", h.String(), ports)
+	check("html restored", 1, false)
+	update("ports", h.String(), nil)
+	check("ports changed", 1, true)
+	mustRelease(t, repo.libraryID)
+	check("released again", 2, false)
+
+	extra, err := repo.Save(ctx, makeWidgetType(t, "extra", nil, repo))
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("a WidgetType added", 2, true)
+	if err := repo.Delete(ctx, extra.Delete()); err != nil {
+		t.Fatal(err)
+	}
+	check("the added one removed", 2, false)
+	if err := repo.Delete(ctx, gauge.Delete()); err != nil {
+		t.Fatal(err)
+	}
+	check("a released WidgetType removed", 2, true)
 }

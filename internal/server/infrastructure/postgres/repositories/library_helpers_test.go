@@ -63,7 +63,7 @@ func mustRelease(t *testing.T, libraryID id.ID[library.Library]) library.Library
 	if err != nil {
 		t.Fatalf("CreateRelease: %v", err)
 	}
-	saved, err := releases.Save(ctx, release)
+	saved, err := releases.Save(ctx, release, lib.Version())
 	if err != nil {
 		t.Fatalf("Save release: %v", err)
 	}

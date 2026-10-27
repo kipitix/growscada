@@ -136,7 +136,7 @@ func (p *Project) showOrphaned(ctx app.Context, what string, widgets []apiv0.Pin
 func (p *Project) renderPinsPanel() app.UI {
 	rows := make([]app.UI, 0, len(p.pins)+1)
 	for _, pin := range p.pins {
-		libraryID := pin.LibraryID
+		libraryID, pinned := pin.LibraryID, pin.Release
 		latest := pin.Release
 		if lib, ok := uiutil.FindByID(p.libraries, libraryID, uiutil.LibraryID); ok && lib.LatestRelease > latest {
 			latest = lib.LatestRelease
@@ -167,6 +167,9 @@ func (p *Project) renderPinsPanel() app.UI {
 					Style("border", "1px solid var(--border-input)").
 					OnChange(func(ctx app.Context, e app.Event) {
 						n, err := strconv.Atoi(ctx.JSSrc().Get("value").String())
+						// The select shows the pinned release until the reload
+						// after a switch: a cancelled or refused one leaves it.
+						ctx.JSSrc().Set("value", strconv.Itoa(pinned))
 						if err == nil {
 							p.changePin(libraryID, n)
 						}

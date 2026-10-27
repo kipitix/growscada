@@ -78,8 +78,12 @@ func TestLibraryService_DeleteRefusedWhileALiveProjectPinsIt(t *testing.T) {
 	if _, err := r.pinSvc.DeleteLibraryPin(ctx, mainProject, libraryID); err != nil {
 		t.Fatalf("DeleteLibraryPin: %v", err)
 	}
-	if _, err := r.libSvc.DeleteLibraryByID(ctx, libraryID); err != nil {
+	deleted, err := r.libSvc.DeleteLibraryByID(ctx, libraryID)
+	if err != nil {
 		t.Fatalf("DeleteLibraryByID: %v", err)
+	}
+	if deleted.LatestRelease != 1 || deleted.HasUnreleasedChanges {
+		t.Errorf("the deleted library: %+v, want it as it was, at release 1", deleted)
 	}
 	if _, err := r.libSvc.FindLibraryByID(ctx, libraryID); !errors.Is(err, library.ErrLibraryNotFound) {
 		t.Errorf("a deleted library: expected ErrLibraryNotFound, got %v", err)

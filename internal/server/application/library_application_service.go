@@ -85,15 +85,28 @@ func (s libraryServiceImpl) findOwn(ctx context.Context, rawID uuid.UUID) (libra
 // describe returns the DTO of l with its latest release and whether its
 // Draft has changes not released yet.
 func (s libraryServiceImpl) describe(ctx context.Context, l library.Library) (appdto.Library, error) {
-	latest, err := s.releases.FindLatest(ctx, l.ID())
+	list, err := s.describeAll(ctx, []library.Library{l})
 	if err != nil {
-		return appdto.Library{}, fmt.Errorf("cannot find latest release of library %s: %w", l.ID(), err)
+		return appdto.Library{}, err
 	}
-	draft, err := s.widgetTypes.ForLibrary(l.ID()).FindAll(ctx)
+	return list[0], nil
+}
+
+// describeAll is describe of every library of list, read in one query.
+func (s libraryServiceImpl) describeAll(ctx context.Context, list []library.Library) ([]appdto.Library, error) {
+	ids := make([]id.ID[library.Library], len(list))
+	for i, l := range list {
+		ids[i] = l.ID()
+	}
+	states, err := s.releases.FindReleaseStates(ctx, ids)
 	if err != nil {
-		return appdto.Library{}, fmt.Errorf("cannot read draft of library %s: %w", l.ID(), err)
+		return nil, fmt.Errorf("cannot find release states of libraries: %w", err)
 	}
-	return appdto.NewLibrary(l, latest, library.DraftDiffers(draft, latest)), nil
+	result := make([]appdto.Library, len(list))
+	for i, l := range list {
+		result[i] = appdto.NewLibrary(l, states[l.ID()])
+	}
+	return result, nil
 }
 
 func (s libraryServiceImpl) FindAllLibraries(ctx context.Context) ([]appdto.Library, error) {
@@ -101,15 +114,7 @@ func (s libraryServiceImpl) FindAllLibraries(ctx context.Context) ([]appdto.Libr
 	if err != nil {
 		return nil, fmt.Errorf("error on find libraries in repository: %w", err)
 	}
-	result := make([]appdto.Library, 0, len(list))
-	for _, l := range list {
-		dto, err := s.describe(ctx, l)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, dto)
-	}
-	return result, nil
+	return s.describeAll(ctx, list)
 }
 
 func (s libraryServiceImpl) FindLibraryByID(ctx context.Context, rawID uuid.UUID) (appdto.Library, error) {
@@ -143,7 +148,7 @@ func (s libraryServiceImpl) CreateLibrary(ctx context.Context, input appdto.Libr
 	if err != nil {
 		return appdto.Library{}, fmt.Errorf("cannot save library: %w", err)
 	}
-	return appdto.NewLibrary(saved, nil, true), nil
+	return appdto.NewLibrary(saved, library.ReleaseState{DraftDiffers: true}), nil
 }
 
 // UpdateLibrary renames a library, expecting its Version.
@@ -186,26 +191,28 @@ func libraryVersion(raw int) (version.Version[library.Library], error) {
 }
 
 // DeleteLibraryByID marks a library deleted, while no live Project pins it,
-// and returns it as it was read: from then on it does not exist for the API.
-// Its Draft and releases are removed later, by the policy of
-// NewLibraryCleanupPolicy. It expects no Version (retryOnRace).
+// and returns it as it was read, with its releases: from then on it does not
+// exist for the API. Its Draft and releases are removed later, by the policy
+// of NewLibraryCleanupPolicy. It expects no Version (retryOnRace).
 func (s libraryServiceImpl) DeleteLibraryByID(ctx context.Context, rawID uuid.UUID) (appdto.Library, error) {
-	var deleted library.Library
+	var deleted appdto.Library
 	err := retryOnRace(library.ErrLibraryConflict, func() error {
 		found, err := s.findOwn(ctx, rawID)
 		if err != nil {
 			return err
 		}
+		if deleted, err = s.describe(ctx, found); err != nil {
+			return err
+		}
 		if _, err := s.libraries.Save(ctx, found.Delete()); err != nil {
 			return fmt.Errorf("cannot delete library: %w", err)
 		}
-		deleted = found
 		return nil
 	})
 	if err != nil {
 		return appdto.Library{}, err
 	}
-	return appdto.NewLibrary(deleted, nil, false), nil
+	return deleted, nil
 }
 
 // Release makes the next Library Release of the library from its Draft as
@@ -240,7 +247,7 @@ func (s libraryServiceImpl) Release(ctx context.Context, rawID uuid.UUID, rawExp
 		if err != nil {
 			return fmt.Errorf("cannot release library: %w", err)
 		}
-		if saved, err = s.releases.Save(ctx, release); err != nil {
+		if saved, err = s.releases.Save(ctx, release, expected); err != nil {
 			return fmt.Errorf("cannot save release: %w", err)
 		}
 		return nil

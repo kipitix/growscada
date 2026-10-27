@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -118,37 +119,33 @@ func (p widgetReconciliationPolicy) reconcileScenes(ctx context.Context, scope P
 }
 
 // reconcile returns the change reconciling a Scene of scope's Project with
-// the WidgetTypes the Project pins and the Tags its Widgets bind, read
-// through scope. They are read after the Scene, at every attempt of
+// the WidgetTypes of its Widgets the Project pins and the Tags they bind,
+// read through scope. They are read after the Scene, at every attempt of
 // changeScene, so every Widget the Scene holds was checked against them or
 // older ones, and no binding valid now is taken for an orphan. A Widget of a
 // WidgetType no pinned release holds — none may be, but a pin removed
 // concurrently with this read — is left as it is.
 func (p widgetReconciliationPolicy) reconcile(scope ProjectScope) sceneChange {
 	return func(ctx context.Context, sc scene.Scene) (scene.Scene, bool, error) {
-		pinned, err := scope.LibraryPins().FindPinnedWidgetTypes(ctx)
+		var typeIDs []id.ID[library.WidgetType]
+		for _, w := range sc.Widgets() {
+			if !slices.Contains(typeIDs, w.TypeID()) {
+				typeIDs = append(typeIDs, w.TypeID())
+			}
+		}
+		if len(typeIDs) == 0 {
+			return sc, false, nil
+		}
+		pinned, err := scope.LibraryPins().FindPinnedWidgetTypesByID(ctx, typeIDs)
 		if err != nil {
 			return nil, false, fmt.Errorf("cannot read pinned widget types: %w", err)
-		}
-		byID := make(map[id.ID[library.WidgetType]]library.ReleasedWidgetType, len(pinned))
-		for _, wt := range pinned {
-			byID[wt.ID()] = wt
 		}
 		tagTypes, err := loadTagTypes(ctx, scope, scene.BoundTagIDs(sc.Widgets()...))
 		if err != nil {
 			return nil, false, err
 		}
 		changed := false
-		seen := map[id.ID[library.WidgetType]]struct{}{}
-		for _, w := range sc.Widgets() {
-			if _, done := seen[w.TypeID()]; done {
-				continue
-			}
-			seen[w.TypeID()] = struct{}{}
-			wt, ok := byID[w.TypeID()]
-			if !ok {
-				continue
-			}
+		for _, wt := range pinned {
 			var removed bool
 			if sc, removed, err = sc.ReconcileWith(wt, tagTypes); err != nil {
 				return nil, false, err

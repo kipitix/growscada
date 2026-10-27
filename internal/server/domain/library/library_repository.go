@@ -43,10 +43,12 @@ type LibraryRepository interface {
 	// a library of the initial version is inserted, any other replaces the
 	// stored live one if the stored version is still the library's version;
 	// a library marked deleted (Library.Delete) is stored so, unless a live
-	// Project pins it. The version is raised once per Save; the returned
+	// Project pins it; one marked as being discarded (StartDiscard) only to
+	// its latest release. The version is raised once per Save; the returned
 	// library carries the new one and no events.
 	// Returns ErrLibraryNotFound if there is no such live library on update,
-	// ErrLibraryConflict if the stored version does not match,
+	// ErrLibraryConflict if the stored version does not match or a release
+	// newer than the Discard's was made,
 	// ErrLibraryNameTaken if another live library of its Organization has the
 	// name, ErrLibraryPinned if it is marked deleted while pinned.
 	Save(context.Context, Library) (Library, error)

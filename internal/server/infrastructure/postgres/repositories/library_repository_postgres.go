@@ -71,6 +71,9 @@ func (r libraryRepositoryPostgresImpl) Save(ctx context.Context, l library.Libra
 				if l.IsDeleted() {
 					return true, r.checkNotPinned(ctx, tx, l.ID())
 				}
+				if release, discarding := l.DiscardingTo(); discarding {
+					return true, r.checkLatestRelease(ctx, tx, l.ID(), release)
+				}
 				return true, nil
 			}
 			// A library marked deleted is gone for the CAS: not found, not a
@@ -91,6 +94,23 @@ func (r libraryRepositoryPostgresImpl) Save(ctx context.Context, l library.Libra
 	}
 	release, _ := l.DiscardingTo()
 	return library.ReconstituteLibrary(l.ID(), l.OrganizationID(), l.Name(), l.IsDeleted(), release, saved), nil
+}
+
+// checkLatestRelease fails with ErrLibraryConflict unless release is the
+// latest of the library. The row is locked for update by then: a Release
+// committed before is seen, one after finds the Discard's mark (ADR 0012).
+func (r libraryRepositoryPostgresImpl) checkLatestRelease(ctx context.Context, tx *sql.Tx, anID id.ID[library.Library], release library.ReleaseNumber) error {
+	var latest int
+	err := tx.QueryRowContext(ctx,
+		`SELECT COALESCE(max(number), 0) FROM engineering.library_releases WHERE library_id = $1`, anID.UUID(),
+	).Scan(&latest)
+	if err != nil {
+		return fmt.Errorf("cannot find latest release of library %s: %w", anID, err)
+	}
+	if latest != release.Int() {
+		return fmt.Errorf("%w: discarding to %s, latest release %d", library.ErrLibraryConflict, release, latest)
+	}
+	return nil
 }
 
 // checkNotPinned fails with ErrLibraryPinned if a live Project pins the
@@ -243,4 +263,30 @@ func scanLibrary(scan func(...any) error) (library.Library, error) {
 		id.NewID(id.IDWithUUID[organization.Organization](rawOrgID)),
 		name, deleted, release, ver,
 	), nil
+}
+
+// lockedLibrary is the row of a live Library as read under its lock.
+type lockedLibrary struct {
+	discardingTo sql.NullInt64
+	version      int
+}
+
+// lockLibraryRow locks the row of the live Library libraryID for share in
+// tx and returns it; one marked deleted (or removed) is not found. Every
+// write that depends on a Library's state takes it — a WidgetType of its
+// Draft, a release, a new pin —, so a write of the row itself (a Discard's
+// mark, a rename, the mark of its deletion) waits for them, or they for it
+// (ADR 0012).
+func lockLibraryRow(ctx context.Context, tx *sql.Tx, libraryID id.ID[library.Library]) (lockedLibrary, error) {
+	var row lockedLibrary
+	err := tx.QueryRowContext(ctx,
+		`SELECT discarding_to, version FROM engineering.libraries WHERE id = $1 AND deleted_at IS NULL FOR SHARE`, libraryID.UUID(),
+	).Scan(&row.discardingTo, &row.version)
+	if errors.Is(err, sql.ErrNoRows) {
+		return row, id.NotFound(library.ErrLibraryNotFound, libraryID)
+	}
+	if err != nil {
+		return row, fmt.Errorf("cannot lock library %s: %w", libraryID, err)
+	}
+	return row, nil
 }

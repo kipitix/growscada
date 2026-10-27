@@ -77,18 +77,13 @@ var errNotDiscarding = errors.New("library is not being discarded")
 // Marking a Discard updates the row, so it waits for the write, or the write
 // for it.
 func (r *widgetTypeRepositoryPostgresImpl) lockLibrary(ctx context.Context, tx *sql.Tx) error {
-	var discardingTo sql.NullInt64
-	err := tx.QueryRowContext(ctx,
-		`SELECT discarding_to FROM engineering.libraries WHERE id = $1 AND deleted_at IS NULL FOR SHARE`, r.library.UUID(),
-	).Scan(&discardingTo)
+	row, err := lockLibraryRow(ctx, tx, r.library)
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		return id.NotFound(library.ErrLibraryNotFound, r.library)
 	case err != nil:
-		return fmt.Errorf("cannot lock library %s: %w", r.library, err)
-	case discardingTo.Valid && !r.discard:
+		return err
+	case row.discardingTo.Valid && !r.discard:
 		return fmt.Errorf("%w: %s", library.ErrLibraryDiscarding, r.library)
-	case !discardingTo.Valid && r.discard:
+	case !row.discardingTo.Valid && r.discard:
 		return fmt.Errorf("%w: %s", errNotDiscarding, r.library)
 	}
 	return nil

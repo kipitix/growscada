@@ -176,23 +176,30 @@ func (s libraryPinServiceImpl) PutLibraryPin(ctx context.Context, rawProjectID, 
 }
 
 // DeleteLibraryPin removes the pin of the library, unless Widgets of the
-// project are of its WidgetTypes. It expects no Version.
+// project are of its WidgetTypes. It expects no Version: a pin switched
+// meanwhile is reread with its release and checked again.
 func (s libraryPinServiceImpl) DeleteLibraryPin(ctx context.Context, rawProjectID, rawLibraryID uuid.UUID) (appdto.LibraryPin, error) {
 	scope, lib, err := s.openPin(ctx, rawProjectID, rawLibraryID)
 	if err != nil {
 		return appdto.LibraryPin{}, err
 	}
 	repo := scope.LibraryPins()
-	found, err := repo.FindByLibrary(ctx, lib.ID())
-	if err != nil {
-		return appdto.LibraryPin{}, fmt.Errorf("error on find library pin in repository: %w", err)
-	}
-	from, err := s.pinnedRelease(ctx, found)
+	var found librarypin.LibraryPin
+	err = retryOnRace(librarypin.ErrLibraryPinConflict, func() error {
+		if found, err = repo.FindByLibrary(ctx, lib.ID()); err != nil {
+			return fmt.Errorf("error on find library pin in repository: %w", err)
+		}
+		from, err := s.pinnedRelease(ctx, found)
+		if err != nil {
+			return err
+		}
+		if err := repo.Delete(ctx, found.Delete(), noOrphans(scope.ProjectID(), from, nil)); err != nil {
+			return fmt.Errorf("cannot delete library pin: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
 		return appdto.LibraryPin{}, err
-	}
-	if err := repo.Delete(ctx, found.Delete(), noOrphans(scope.ProjectID(), from, nil)); err != nil {
-		return appdto.LibraryPin{}, fmt.Errorf("cannot delete library pin: %w", err)
 	}
 	return appdto.NewLibraryPin(found), nil
 }

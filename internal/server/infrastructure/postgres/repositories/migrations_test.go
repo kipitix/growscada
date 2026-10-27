@@ -484,17 +484,19 @@ func TestMigrationLibraries_PutsExistingWidgetTypesIntoMain(t *testing.T) {
 		}
 	}
 	const main = "b0000000-0000-4000-8000-000000000001"
-	deleted, first, second, sceneID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	deleted, first, second, taken, sceneID := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	mustExec(`INSERT INTO projects (id, organization_id, name, deleted_at)
 	          SELECT $1, id, 'gone', now() FROM organizations`, deleted)
 	mustExec(`INSERT INTO engineering.widget_types (id, name, html_template, script, script_language)
-	          VALUES ($1, 'gauge', '', '', 'javascript'), ($2, 'gauge', '', '', 'javascript')`, first, second)
+	          VALUES ($1, 'gauge', '', '', 'javascript'), ($2, 'gauge', '', '', 'javascript'), ($3, 'gauge (2)', '', '', 'javascript')`,
+		first, second, taken)
 	mustExec(`INSERT INTO engineering.scenes (id, project_id, name) VALUES ($1, $2, 's')`, sceneID, main)
 	mustExec(`INSERT INTO engineering.widgets (id, project_id, name, type_id, scene_id) VALUES ($1, $2, 'w', $3, $4)`, uuid.New(), main, second, sceneID)
 	mustExec(`INSERT INTO outbox (type, payload) VALUES ('widget_type_updated', $1)`,
 		`{"timestamp":"2026-10-27T12:00:00Z","id":"`+first.String()+`"}`)
 	mustExec(`INSERT INTO policy_jobs (policy, job_key) VALUES
 	          ('reconcile_widgets_with_widget_type', 'widget_type:`+first.String()+`'),
+	          ('reconcile_widgets_with_widget_type', 'widget_type:`+first.String()+`/project:`+main+`/scene:`+sceneID.String()+`'),
 	          ('reconcile_widgets_with_widget_type', 'widget_type:`+second.String()+`/project:`+main+`/scene:`+sceneID.String()+`')`)
 
 	provider, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS(filepath.Join(dir, "..", "engineering")),
@@ -521,12 +523,12 @@ func TestMigrationLibraries_PutsExistingWidgetTypesIntoMain(t *testing.T) {
 		names[id] = name
 	}
 	rows.Close()
-	if names[first] != "gauge" || names[second] != "gauge (2)" {
+	if names[first] != "gauge" || names[second] != "gauge (3)" || names[taken] != "gauge (2)" {
 		t.Errorf("the Draft of Main: %v", names)
 	}
 	var released, pins, pinsOfDeleted int
-	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM engineering.released_widget_types WHERE release_number = 1`).Scan(&released); err != nil || released != 2 {
-		t.Errorf("release 1 holds %d types (%v), want 2", released, err)
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM engineering.released_widget_types WHERE release_number = 1`).Scan(&released); err != nil || released != 3 {
+		t.Errorf("release 1 holds %d types (%v), want 3", released, err)
 	}
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FILTER (WHERE project_id = $1), count(*) FILTER (WHERE project_id = $2)
 	                                   FROM engineering.library_pins`, main, deleted).Scan(&pins, &pinsOfDeleted); err != nil || pins != 1 || pinsOfDeleted != 0 {
