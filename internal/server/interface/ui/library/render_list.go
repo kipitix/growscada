@@ -148,12 +148,12 @@ func (l *Library) renderList() app.UI {
 				OnClick(func(ctx app.Context, e app.Event) {
 					l.selectItem(id)
 					uiutil.StoreID(ctx, selectedIDKey, id)
-				}).
+				}, app.EventScope(id.String())).
 				OnDblClick(func(ctx app.Context, e app.Event) {
 					if !l.readOnly() {
 						l.startEditing(id, name)
 					}
-				})
+				}, app.EventScope(id.String()+"/"+name))
 			if l.selectedID == id {
 				item = item.(app.HTMLDiv).
 					Style("background", "var(--accent)").

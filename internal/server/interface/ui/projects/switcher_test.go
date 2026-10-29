@@ -56,7 +56,7 @@ func startWith(t *testing.T, httpClient *http.Client, arrange func(api *apiclien
 		arrange(api)
 	}
 	f := &fixture{t: t, api: api}
-	f.s = NewSwitcher(apiclient.New(srv.URL, httpClient), func(id uuid.UUID) { f.announced = append(f.announced, id) })
+	f.s = NewSwitcher(apiclient.New(srv.URL, httpClient), "test:projectID", func(id uuid.UUID) { f.announced = append(f.announced, id) })
 	f.e = uitest.Load(t, mountOnHost{f.s})
 	return f
 }

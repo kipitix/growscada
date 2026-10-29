@@ -5,6 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+	"github.com/maxence-charriere/go-app/v11/pkg/app"
+
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
 
@@ -63,6 +66,28 @@ func TestForwards(t *testing.T) {
 			strings.HasPrefix(et, "library_pin_")
 		if got := forwards(true, et); got == content {
 			t.Errorf("%s from a superseded connection: delivered %t, want %t", et, got, !content)
+		}
+	}
+}
+
+// TestForProject: an event is for a component showing a project unless it is
+// tagged with another one; the server's events are untagged.
+func TestForProject(t *testing.T) {
+	shown, other := uuid.New(), uuid.New()
+	tagged := func(id uuid.UUID) app.Action {
+		return app.Action{Tags: app.Tags{ProjectTag: id.String()}}
+	}
+	for _, tt := range []struct {
+		name string
+		a    app.Action
+		want bool
+	}{
+		{"the server's", app.Action{}, true},
+		{"of the project shown", tagged(shown), true},
+		{"of another project", tagged(other), false},
+	} {
+		if got := ForProject(tt.a, shown); got != tt.want {
+			t.Errorf("%s: %v, want %v", tt.name, got, tt.want)
 		}
 	}
 }

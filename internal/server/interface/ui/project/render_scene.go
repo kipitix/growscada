@@ -32,6 +32,10 @@ func (p *Project) renderSceneTabs() app.UI {
 	for _, sc := range p.scenes {
 		sc := sc
 		active := p.selectedSceneID == sc.ID
+		// go-app keeps a handler of the same func literal on a reused
+		// element: scoped by what the handlers capture, a tab never acts on
+		// the scene it showed before the list changed.
+		scope := sc.ID.String() + "/" + sc.Name
 
 		var bg, borderBottom, color, fontWeight string
 		if active {
@@ -86,10 +90,10 @@ func (p *Project) renderSceneTabs() app.UI {
 						Text(sc.Name).
 						OnClick(func(ctx app.Context, e app.Event) {
 							p.selectScene(ctx, sc.ID)
-						}).
+						}, app.EventScope(scope)).
 						OnDblClick(func(ctx app.Context, e app.Event) {
 							p.startEditingScene(sc.ID, sc.Name)
-						}),
+						}, app.EventScope(scope)),
 					app.Span().
 						Style("cursor", "pointer").
 						Style("font-size", "14px").
@@ -100,7 +104,7 @@ func (p *Project) renderSceneTabs() app.UI {
 						OnClick(func(ctx app.Context, e app.Event) {
 							e.Call("stopPropagation")
 							p.confirmDeleteScene(ctx, sc.ID, sc.Name)
-						}),
+						}, app.EventScope(scope)),
 				)
 		}
 

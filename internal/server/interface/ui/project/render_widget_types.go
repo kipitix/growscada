@@ -121,7 +121,7 @@ func (p *Project) renderWidgetTypePanel() app.UI {
 				p.draggedTypeID = id
 				e.Get("dataTransfer").Call("setData", "text/plain", id.String())
 				e.Get("dataTransfer").Set("effectAllowed", "copy")
-			}))
+			}, app.EventScope(id.String())))
 	}
 
 	var listBody app.UI

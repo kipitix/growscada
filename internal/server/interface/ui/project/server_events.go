@@ -15,13 +15,14 @@ import (
 // (libraries, pins, scenes, widgets and tags changed by anyone — another tab,
 // growctl, a Device); the new state of a Tag carried by tag_updated is applied
 // without a reload. The events of the content are those of the stream of the
-// project shown (eventlog.Bar.SetProject). Editors merge fresh data field by field (edit_fields.go):
+// project followed by the Bar (eventlog.Bar.SetProject), which may be another
+// mode's: the events of another project are dropped. Editors merge fresh data field by field (edit_fields.go):
 // a field the user has not edited follows the server, an unsaved edit is kept.
 
 func (p *Project) handleServerEvents(ctx app.Context) {
 	ctx.Handle(eventlog.ActionServerEvent, func(ctx app.Context, a app.Action) {
 		ev, ok := a.Value.(apiv0.Event)
-		if !ok {
+		if !ok || !eventlog.ForProject(a, p.projectID) {
 			return
 		}
 		p.tags = eventlog.ApplyToTags(p.tags, ev)

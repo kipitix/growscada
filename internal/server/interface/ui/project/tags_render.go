@@ -124,7 +124,7 @@ func (p *Project) renderTagList() app.UI {
 				p.selectedTagID = id
 				p.creatingTag = false
 				uiutil.StoreID(ctx, p.selectionKey(tagIDKey), id)
-			})
+			}, app.EventScope(id.String()))
 		if p.selectedTagID == id {
 			item = item.Style("background", "var(--accent)").Style("color", "var(--accent-text)")
 		} else {

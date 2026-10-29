@@ -2,8 +2,8 @@
 // button) and the collapsible server event log panel that it toggles. The
 // panel subscribes to the server's SSE event stream for the lifetime of the
 // app, independently of whether it is currently visible: one connection
-// carries the server's own events and those of the selected project
-// (SetProject), so a tab holds a single connection.
+// carries the server's own events and those of the project followed — that
+// of the mode shown (SetProject) — so a tab holds a single connection.
 package eventlog
 
 import (
@@ -31,10 +31,24 @@ const filtersStorageKey = "eventlog:filters"
 // from the server's SSE streams; its value is the apiv0.Event. Its Tag, if
 // any, is the state of the Tag the event is about (apiclient.ParseEvent drops
 // one that is not). Components that show server data handle it (ctx.Handle) to refresh themselves, so the app
-// keeps a single SSE connection. An event of a project's content is of the
-// project selected when it arrives: the connection of a project no longer
-// selected is closed, and what it still delivers is dropped.
+// keeps a single SSE connection. An event of a project's content, and
+// EventProjectResync, carry the project of the connection that delivered it
+// in the tag ProjectTag (ForProject): the modes show projects of their own,
+// the connection follows one of them (SetProject). The connection of a
+// project no longer followed is closed, and what it still delivers of its
+// content is dropped.
 const ActionServerEvent = "eventlog.server-event"
+
+// ProjectTag is the tag of an ActionServerEvent naming the project whose
+// content the event is about; the server's events have none.
+const ProjectTag = "project"
+
+// ForProject reports whether the ActionServerEvent a is for a component
+// showing the project id: an event of the server, or one of that project.
+func ForProject(a app.Action, id uuid.UUID) bool {
+	tagged := a.Tags.Get(ProjectTag)
+	return tagged == "" || tagged == id.String()
+}
 
 // EventResync is the Type of the synthetic apiv0.Event the Bar fires each time
 // the connection to the server's events (projects, WidgetTypes) is
@@ -91,6 +105,8 @@ type Bar struct {
 // eventStream is one SSE connection, kept open by the Bar until closed.
 type eventStream struct {
 	url string
+	// projectID is the project whose content it carries, uuid.Nil if none.
+	projectID uuid.UUID
 	// resyncs are the Types of the synthetic events fired when it opens.
 	resyncs []string
 	// connected is whether it is open now: from its open to its next error.
@@ -189,7 +205,34 @@ func (b *Bar) connectStream(ctx app.Context) *eventStream {
 		url += "?" + apiv0.EventsQueryProject + "=" + b.projectID.String()
 		resyncs = append(resyncs, EventProjectResync)
 	}
-	return b.connect(ctx, url, resyncs)
+	st := b.connect(ctx, url, resyncs)
+	st.projectID = b.projectID
+	return st
+}
+
+// Project returns the project whose events the connection follows, uuid.Nil
+// if none.
+func (b *Bar) Project() uuid.UUID { return b.projectID }
+
+// ResyncProject fires EventProjectResync of the project followed for a
+// component that starts showing it while the connection is already open:
+// the events of it it missed are reloaded. A connection not open yet fires
+// it as it opens.
+func (b *Bar) ResyncProject() {
+	if !b.mounted || b.projectID == uuid.Nil || b.stream == nil || !b.stream.connected {
+		return
+	}
+	b.fire(b.compoCtx, b.stream, apiv0.Event{Type: EventProjectResync})
+}
+
+// fire fires ev, received through st, as an ActionServerEvent, tagged with
+// st's project if it is about its content.
+func (b *Bar) fire(ctx app.Context, st *eventStream, ev apiv0.Event) {
+	if st.projectID != uuid.Nil && (ev.Type == EventProjectResync || isProjectContent(ev.Type)) {
+		ctx.NewActionWithValue(ActionServerEvent, ev, app.T(ProjectTag, st.projectID.String()))
+		return
+	}
+	ctx.NewActionWithValue(ActionServerEvent, ev)
 }
 
 func (b *Bar) tick(ctx app.Context) {
@@ -289,7 +332,7 @@ func (b *Bar) handleMessage(ctx app.Context, st *eventStream, data string) {
 		return
 	}
 	b.addEntry(ev)
-	ctx.NewActionWithValue(ActionServerEvent, ev)
+	b.fire(ctx, st, ev)
 }
 
 // addEntry logs ev, its id as it came.
@@ -350,7 +393,7 @@ func (b *Bar) handleOpen(ctx app.Context, st *eventStream) {
 		prev.close()
 	}
 	for _, resync := range resyncsOnOpen(st.resyncs, st.skipServerResync) {
-		ctx.NewActionWithValue(ActionServerEvent, apiv0.Event{Type: resync})
+		b.fire(ctx, st, apiv0.Event{Type: resync})
 	}
 	st.skipServerResync = false // a later reopen follows a loss
 }

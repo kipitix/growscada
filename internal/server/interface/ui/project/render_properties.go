@@ -213,6 +213,10 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 		}
 		wtInputPorts = capturedWT.InputPorts
 	}
+	// The panel is reused for another widget: its handlers, scoped by the
+	// widget and the defaults they capture, are replaced along with it (go-app
+	// keeps a handler of the same func literal otherwise).
+	scope := fmt.Sprintf("%s/%s/%d/%d", wid, defaultName, defaultW, defaultH)
 
 	// ── Section header helper ─────────────────────────────────────────────
 	sectionHeader := func(label string) app.UI {
@@ -280,7 +284,7 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 			}).
 			OnClick(func(ctx app.Context, e app.Event) {
 				onReset(ctx)
-			})
+			}, app.EventScope(scope))
 
 		d := app.Div().
 			Style("position", "relative").
@@ -627,7 +631,7 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 								} else {
 									p.bindPort(ctx, port.Name, tagID)
 								}
-							}),
+							}, app.EventScope(port.Name)),
 					),
 			)
 		portBindingRows = append(portBindingRows, row)
@@ -753,7 +757,7 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 						return
 					}
 					p.deleteWidget(ctx, wid)
-				}),
+				}, app.EventScope(scope)),
 		)
 
 	return app.Div().Body(

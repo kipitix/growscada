@@ -40,12 +40,14 @@ type Root struct {
 	themeMode   string // "auto" | "light" | "dark"
 	// client is the one client of the REST API, given to every mode.
 	client *apiclient.Client
-	// projects selects the project Project and Operation show, and whose
-	// event stream bar follows; Library does not depend on it.
-	projects  *projects.Switcher
 	project   *project.Project
 	operation *operation.Operation
-	bar       *eventlog.Bar
+	// bar follows the event stream of the project of the mode shown (the
+	// last such mode while Library, which does not depend on one, is shown).
+	bar *eventlog.Bar
+	// selected holds the project each mode with a project switcher shows,
+	// once its switcher announced it.
+	selected map[Mode]uuid.UUID
 	// The modes in the order of their slots, made once: a mode is mounted
 	// when first opened and stays mounted while another is shown, so it
 	// keeps what it loaded (shown even while the server is down), its
@@ -76,14 +78,14 @@ func NewRoot(anAPIServerURL string) *Root {
 	r.project = project.NewProject(r.client)
 	r.operation = operation.NewOperation(r.client)
 	r.bar = eventlog.NewBar(anAPIServerURL)
-	r.projects = projects.NewSwitcher(r.client, r.selectProject)
 	r.modes = []modeView{
-		{ModeLibrary, library.NewLibrary(r.client)},
-		{ModeProject, r.project},
-		{ModeOperation, r.operation},
-		{ModeHistory, &history.History{}},
+		{mode: ModeLibrary, ui: library.NewLibrary(r.client)},
+		{mode: ModeProject, ui: r.project, switcher: r.newSwitcher(ModeProject)},
+		{mode: ModeOperation, ui: r.operation, switcher: r.newSwitcher(ModeOperation)},
+		{mode: ModeHistory, ui: &history.History{}, switcher: r.newSwitcher(ModeHistory)},
 	}
 	r.opened = map[Mode]bool{}
+	r.selected = map[Mode]uuid.UUID{}
 	return r
 }
 
@@ -116,13 +118,33 @@ func (r *Root) OnMount(ctx app.Context) {
 	})
 }
 
-// selectProject shows the project id (uuid.Nil: none) in the modes of a
-// project's content and follows its event stream; the switcher calls it on
-// the UI goroutine.
-func (r *Root) selectProject(id uuid.UUID) {
-	r.project.SetProject(id)
-	r.operation.SetProject(id)
-	r.bar.SetProject(id)
+// newSwitcher returns the project switcher of mode, its selection kept
+// apart from the other modes'.
+func (r *Root) newSwitcher(mode Mode) *projects.Switcher {
+	return projects.NewSwitcher(r.client, string(mode)+":projectID", func(id uuid.UUID) {
+		r.selectProject(mode, id)
+	})
+}
+
+// selectProject shows the project id (uuid.Nil: none) in mode; its switcher
+// calls it on the UI goroutine. The mode loads the project's content on the
+// EventProjectResync of the Bar's stream of it: if the Bar follows it
+// already, it resyncs now; else, if mode is shown, the Bar follows it, its
+// stream resyncing as it opens; else mode loads it once shown (SetMode).
+func (r *Root) selectProject(mode Mode, id uuid.UUID) {
+	r.selected[mode] = id
+	switch mode {
+	case ModeProject:
+		r.project.SetProject(id)
+	case ModeOperation:
+		r.operation.SetProject(id)
+	}
+	switch {
+	case r.bar.Project() == id:
+		r.bar.ResyncProject()
+	case mode == r.currentMode:
+		r.bar.SetProject(id)
+	}
 }
 
 // observeServerVersion records the server API version stated by a response.
@@ -417,7 +439,6 @@ func (r *Root) Render() app.UI {
 					r.tab("Project", ModeProject),
 					r.tab("Operation", ModeOperation),
 					r.tab("History", ModeHistory),
-					r.projects,
 					app.Div().Style("flex", "1"),
 					r.renderThemeToggle(),
 				),
@@ -450,13 +471,37 @@ func (r *Root) modeSlot(m modeView) app.UI {
 		Style("padding", "12px").
 		Style("box-sizing", "border-box").
 		Style("visibility", visibility).
-		Body(app.If(r.opened[m.mode], func() app.UI { return m.ui }))
+		Body(app.If(r.opened[m.mode], func() app.UI { return modeContent(m) }))
 }
 
-// modeView is a mode and its component.
+// modeContent is the component of a mode, under its project switcher if it
+// has one.
+func modeContent(m modeView) app.UI {
+	if m.switcher == nil {
+		return m.ui
+	}
+	return app.Div().
+		Style("display", "flex").
+		Style("flex-direction", "column").
+		Style("flex", "1").
+		Style("min-width", "0").
+		Style("min-height", "0").
+		Body(
+			m.switcher,
+			app.Div().
+				Style("display", "flex").
+				Style("flex", "1").
+				Style("min-height", "0").
+				Body(m.ui),
+		)
+}
+
+// modeView is a mode and its component, with the switcher of the project it
+// shows (nil for Library, which shows none).
 type modeView struct {
-	mode Mode
-	ui   app.Composer
+	mode     Mode
+	ui       app.Composer
+	switcher *projects.Switcher
 }
 
 func (r *Root) tab(label string, mode Mode) app.UI {
@@ -524,8 +569,13 @@ func (r *Root) renderThemeToggle() app.UI {
 		})
 }
 
-// SetMode shows mode, opening it if it was not yet.
+// SetMode shows mode, opening it if it was not yet. The Bar follows the
+// project of a mode that shows one, from its switcher's announcement on
+// (selectProject); Library leaves it as it is.
 func (r *Root) SetMode(mode Mode) {
 	r.currentMode = mode
 	r.opened[mode] = true
+	if id, ok := r.selected[mode]; ok {
+		r.bar.SetProject(id)
+	}
 }

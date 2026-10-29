@@ -24,7 +24,7 @@ func (l *Library) renderLibrariesColumn() app.UI {
 			Text(lib.Name).
 			OnClick(func(ctx app.Context, e app.Event) {
 				l.selectLibrary(ctx, id)
-			}).
+			}, app.EventScope(id.String())).
 			OnDblClick(func(ctx app.Context, e app.Event) {
 				l.renameLibrary()
 			})
@@ -112,6 +112,9 @@ func (l *Library) renderHistory() app.UI {
 	if l.libraryID == uuid.Nil {
 		return app.Div()
 	}
+	// The handlers are scoped by n: go-app keeps a handler of the same func
+	// literal on a reused element, so a release prepended to the list would
+	// leave each entry viewing the release it showed before.
 	entry := func(n int, label, title string) app.UI {
 		d := app.Div().
 			Class("library-history").
@@ -121,7 +124,7 @@ func (l *Library) renderHistory() app.UI {
 			Style("font-size", "12px").
 			Title(title).
 			Text(label).
-			OnClick(func(ctx app.Context, e app.Event) { l.view(n) })
+			OnClick(func(ctx app.Context, e app.Event) { l.view(n) }, app.EventScope(itoa(n)))
 		if n == l.viewing {
 			return d.Style("background", "var(--bg-hover)").Style("font-weight", "600").Style("color", "var(--text)")
 		}

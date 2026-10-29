@@ -66,7 +66,7 @@ func (o *Operation) OnMount(ctx app.Context) {
 
 	ctx.Handle(eventlog.ActionServerEvent, func(ctx app.Context, a app.Action) {
 		ev, ok := a.Value.(apiv0.Event)
-		if !ok {
+		if !ok || !eventlog.ForProject(a, o.projectID) { // another mode's project
 			return
 		}
 		o.tags = eventlog.ApplyToTags(o.tags, ev)
@@ -174,9 +174,12 @@ func (o *Operation) renderSceneTabs() app.UI {
 			Style("font-weight", fontWeight).
 			Style("white-space", "nowrap").
 			Text(sc.Name).
+			// Scoped by the scene: go-app keeps a handler of the same func
+			// literal on a reused tab, which would select the scene it showed
+			// before the list changed.
 			OnClick(func(ctx app.Context, e app.Event) {
 				o.selectScene(ctx, sc.ID)
-			}))
+			}, app.EventScope(sc.ID.String())))
 	}
 
 	return app.Div().

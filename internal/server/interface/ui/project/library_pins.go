@@ -137,6 +137,9 @@ func (p *Project) renderPinsPanel() app.UI {
 	rows := make([]app.UI, 0, len(p.pins)+1)
 	for _, pin := range p.pins {
 		libraryID, pinned := pin.LibraryID, pin.Release
+		// Scoped by what the handlers capture: go-app keeps a handler of the
+		// same func literal on a reused row.
+		scope := libraryID.String() + "/" + strconv.Itoa(pinned)
 		latest := pin.Release
 		if lib, ok := uiutil.FindByID(p.libraries, libraryID, uiutil.LibraryID); ok && lib.LatestRelease > latest {
 			latest = lib.LatestRelease
@@ -173,7 +176,7 @@ func (p *Project) renderPinsPanel() app.UI {
 						if err == nil {
 							p.changePin(libraryID, n)
 						}
-					}).
+					}, app.EventScope(scope)).
 					Body(options...),
 				app.Button().
 					Style("font-size", "11px").
@@ -187,7 +190,7 @@ func (p *Project) renderPinsPanel() app.UI {
 					Text("✕").
 					OnClick(func(ctx app.Context, e app.Event) {
 						p.changePin(libraryID, 0)
-					}),
+					}, app.EventScope(scope)),
 			))
 	}
 

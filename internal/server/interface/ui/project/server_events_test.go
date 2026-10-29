@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
@@ -311,5 +312,26 @@ func TestWidgetEvents_InSeveralScenesNotShown_RereadTheListOnce(t *testing.T) {
 	}
 	for _, sceneID := range more {
 		f.knowsSceneVersion(sceneID)
+	}
+}
+
+// TestServerEvents_OfAnotherProject_Dropped: the Bar may follow another
+// mode's project; an event of its content, tagged with it, changes nothing
+// here, one of the project shown is handled.
+func TestServerEvents_OfAnotherProject_Dropped(t *testing.T) {
+	url, api := newServer(t)
+	f, log := mountLogged(t, url, api)
+	created := apiv0.Event{Type: apiv0.EventSceneCreated, ID: uuid.NewString()}
+
+	f.p.compoCtx.NewActionWithValue(eventlog.ActionServerEvent, created, app.T(eventlog.ProjectTag, uuid.NewString()))
+	f.run()
+	if got := log.take(); len(got) != 0 {
+		t.Errorf("requests on another project's event: %v, want none", got)
+	}
+
+	f.p.compoCtx.NewActionWithValue(eventlog.ActionServerEvent, created, app.T(eventlog.ProjectTag, f.p.projectID.String()))
+	f.run()
+	if got, want := log.take(), []string{"GET " + mainContent + "/scenes"}; !slices.Equal(got, want) {
+		t.Errorf("requests on the project's event: %v, want %v", got, want)
 	}
 }

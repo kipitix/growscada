@@ -204,8 +204,9 @@ func (p *Project) OnDismount() {
 // SetProject shows the project id (uuid.Nil: none). What was shown of
 // another project is dropped, its unsaved edits with it, and the new
 // project's selection is restored. Its content is loaded on the
-// EventProjectResync of the Bar's stream of it (Root switches the Bar too),
-// so no event of it published before the stream opens is missed. Before the
+// EventProjectResync of the Bar's stream of it (Root has the Bar follow the
+// project of the mode shown, or resync the one it follows already), so no
+// event of it published before the stream opens is missed. Before the
 // Project is mounted it only remembers the project, whose content OnMount
 // loads.
 func (p *Project) SetProject(id uuid.UUID) {

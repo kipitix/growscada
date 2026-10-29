@@ -1,7 +1,7 @@
-// Package projects is the project switcher in the header of the UI: the
-// server's projects, the one selected — which Project and Operation show —
-// and creating, renaming and deleting them (ADR 0006). Library does not
-// depend on it: WidgetTypes are the server's.
+// Package projects is the project switcher at the top of the modes that show
+// a project (Project, Operation, History), one in each: the server's
+// projects, the one the mode shows, and creating, renaming and deleting them
+// (ADR 0006). Library does not depend on it: WidgetTypes are the server's.
 package projects
 
 import (
@@ -18,8 +18,10 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
-// selectedKey is the LocalStorage key of the selected project.
-const selectedKey = "root:projectID"
+// legacyKey is the LocalStorage key of the project selected when one
+// switcher served every mode: a switcher whose own key holds none starts
+// from it.
+const legacyKey = "root:projectID"
 
 // Switcher lists the server's projects and keeps one selected. The
 // selection is announced to onSelect once the list is known, and again each
@@ -32,6 +34,8 @@ type Switcher struct {
 	// results are dispatched through it (see project.Project.compoCtx).
 	compoCtx app.Context
 	client   *apiclient.Client
+	// key is the LocalStorage key of the selection.
+	key      string
 	onSelect func(uuid.UUID)
 
 	projects []apiv0.ProjectResponse
@@ -44,9 +48,10 @@ type Switcher struct {
 }
 
 // NewSwitcher returns the switcher of the projects of the server client
-// talks to, announcing the selection to onSelect.
-func NewSwitcher(client *apiclient.Client, onSelect func(uuid.UUID)) *Switcher {
-	return &Switcher{client: client, onSelect: onSelect}
+// talks to, keeping the selection under the LocalStorage key and announcing
+// it to onSelect.
+func NewSwitcher(client *apiclient.Client, key string, onSelect func(uuid.UUID)) *Switcher {
+	return &Switcher{client: client, key: key, onSelect: onSelect}
 }
 
 // Selected returns the project selected, uuid.Nil if none.
@@ -57,7 +62,10 @@ func (s *Switcher) Projects() []apiv0.ProjectResponse { return s.projects }
 
 func (s *Switcher) OnMount(ctx app.Context) {
 	s.compoCtx = ctx
-	s.preferred = uiutil.LoadID(ctx, selectedKey)
+	s.preferred = uiutil.LoadID(ctx, s.key)
+	if s.preferred == uuid.Nil {
+		s.preferred = uiutil.LoadID(ctx, legacyKey)
+	}
 	s.load(ctx)
 	ctx.Handle(eventlog.ActionServerEvent, func(ctx app.Context, a app.Action) {
 		ev, ok := a.Value.(apiv0.Event)
@@ -122,7 +130,7 @@ func (s *Switcher) reselect(ctx app.Context) {
 		return
 	}
 	s.selected = want
-	uiutil.StoreID(ctx, selectedKey, want)
+	uiutil.StoreID(ctx, s.key, want)
 	s.onSelect(want)
 }
 
@@ -202,14 +210,14 @@ func (s *Switcher) Render() app.UI {
 	for _, p := range s.projects {
 		options = append(options, app.Option().Value(p.ID.String()).Selected(p.ID == s.selected).Text(p.Name))
 	}
-	current, hasCurrent := s.find(s.selected)
+	_, hasCurrent := s.find(s.selected)
 
 	return app.Div().
 		Attr("data-project-switcher", "true").
 		Style("display", "flex").
 		Style("align-items", "center").
 		Style("gap", "4px").
-		Style("margin", "0 12px").
+		Style("margin-bottom", "8px").
 		Body(
 			app.Span().
 				Style("font-size", "12px").
@@ -229,12 +237,16 @@ func (s *Switcher) Render() app.UI {
 					s.Create(ctx, name)
 				}
 			}),
+			// The buttons read the selected project when clicked: go-app keeps
+			// a handler of the same func literal on a reused element.
 			s.button("✎", "Rename the project", hasCurrent, func(ctx app.Context) {
+				current, _ := s.find(s.selected)
 				if name, ok := prompt("New name of the project:", current.Name); ok && name != current.Name {
 					s.Rename(ctx, name)
 				}
 			}),
 			s.button("🗑", "Delete the project", hasCurrent, func(ctx app.Context) {
+				current, _ := s.find(s.selected)
 				message := fmt.Sprintf("Delete project %q with all its scenes, widgets and tags?", current.Name)
 				if app.Window().Call("confirm", message).Bool() {
 					s.Delete(ctx)
