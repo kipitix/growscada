@@ -71,6 +71,7 @@ var errorMappings = []errorMapping{
 	{library.ErrNoRelease, http.StatusConflict, libraryResource, "Library has never been released: there is nothing to discard to"},
 	{library.ErrNothingToRelease, http.StatusConflict, libraryResource, "Library's Draft has not changed since its latest release"},
 	{library.ErrReleaseNumberTaken, http.StatusConflict, libraryResource, "Library was released concurrently; retry"},
+	{library.ErrDraftChanged, http.StatusConflict, libraryResource, "Library's Draft changed while it was released; retry"},
 	{library.ErrReleaseNotFound, http.StatusNotFound, releaseResource, ""},
 	{library.ErrWidgetTypeNotFound, http.StatusNotFound, widgetTypeResource, ""},
 	{library.ErrWidgetTypeConflict, http.StatusConflict, widgetTypeResource, "WidgetType was changed concurrently; reload it and retry"},

@@ -236,7 +236,7 @@ func (s libraryServiceImpl) Release(ctx context.Context, rawID uuid.UUID, rawExp
 	}
 
 	var saved library.LibraryRelease
-	err = retryOnRace(library.ErrReleaseNumberTaken, func() error {
+	err = retryOnRaces(func() error {
 		latest, err := s.releases.FindLatest(ctx, found.ID())
 		if err != nil {
 			return fmt.Errorf("cannot find latest release: %w", err)
@@ -253,7 +253,7 @@ func (s libraryServiceImpl) Release(ctx context.Context, rawID uuid.UUID, rawExp
 			return fmt.Errorf("cannot save release: %w", err)
 		}
 		return nil
-	})
+	}, library.ErrReleaseNumberTaken, library.ErrDraftChanged)
 	if err != nil {
 		return appdto.LibraryRelease{}, err
 	}

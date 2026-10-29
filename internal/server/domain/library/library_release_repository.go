@@ -15,6 +15,10 @@ var (
 	// ErrReleaseNumberTaken is returned by Save when the Library already has
 	// a release with the number: another Release won the race for it.
 	ErrReleaseNumberTaken = errors.New("library release number already taken")
+	// ErrDraftChanged is returned by Save when the Draft differs from the
+	// release's copies at the time of the write: a WidgetType was changed
+	// after the Draft was read for the release.
+	ErrDraftChanged = errors.New("library draft changed while it was released")
 )
 
 // LibraryReleaseRepository - repository interface for storing and reading
@@ -28,7 +32,7 @@ type LibraryReleaseRepository interface {
 	// ErrLibraryConflict if it is not at expected,
 	// ErrLibraryDiscarding while a Discard is under way,
 	// ErrReleaseNumberTaken if the Library already has a release of its
-	// number.
+	// number, ErrDraftChanged if its Draft is not the one the release copies.
 	Save(ctx context.Context, release LibraryRelease, expected version.Version[Library]) (LibraryRelease, error)
 
 	// FindLatest returns the latest release of the Library, nil if it has

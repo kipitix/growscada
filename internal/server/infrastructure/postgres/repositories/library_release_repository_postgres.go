@@ -30,14 +30,16 @@ func NewLibraryReleaseRepositoryPostgres(aDb *sql.DB, opts ...Option) library.Li
 }
 
 // Save inserts the release with the copies of its WidgetTypes. It locks the
-// Library's row for share, as a write of a WidgetType does, and checks its
-// version there: a Discard marked or a rename made meanwhile waits for it,
-// or it for them and is refused (ADR 0012).
+// Library's row for update, which the writes of its Draft wait for, and checks
+// its version there: a Discard marked or a rename made meanwhile waits for it,
+// or it for them and is refused (ADR 0012). Under that lock it reads the Draft
+// again and refuses the release if the Draft is not the one it copies
+// (ErrDraftChanged): the release was made from a Draft read before.
 func (r libraryReleaseRepositoryPostgresImpl) Save(ctx context.Context, release library.LibraryRelease, expected version.Version[library.Library]) (library.LibraryRelease, error) {
 	libraryID := release.LibraryID()
 	var createdAt time.Time // as stored, to the column's precision
 	err := r.store.inTx(ctx, release.PendingEvents(), func(tx *sql.Tx) error {
-		row, err := lockLibraryRow(ctx, tx, libraryID)
+		row, err := lockLibraryRowExclusive(ctx, tx, libraryID)
 		switch {
 		case err != nil:
 			return err
@@ -54,6 +56,13 @@ func (r libraryReleaseRepositoryPostgresImpl) Save(ctx context.Context, release 
 				return fmt.Errorf("%w: %s of library %s", library.ErrReleaseNumberTaken, release.Number(), libraryID)
 			}
 			return fmt.Errorf("cannot insert release: %w", err)
+		}
+		draft, err := findWidgetTypes(ctx, tx, libraryID)
+		if err != nil {
+			return fmt.Errorf("cannot read draft: %w", err)
+		}
+		if library.DraftDiffers(draft, release) {
+			return fmt.Errorf("%w: %s", library.ErrDraftChanged, libraryID)
 		}
 		for _, wt := range release.WidgetTypes() {
 			portsJSON, err := marshalInputPorts(wt.InputPorts())

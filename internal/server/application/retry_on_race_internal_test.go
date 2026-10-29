@@ -55,3 +55,37 @@ func TestRetryOnRace_OtherError_IsReturnedAsIs(t *testing.T) {
 		t.Errorf("calls: expected 1, got %d", calls)
 	}
 }
+
+var errTestOtherConflict = errors.New("test other conflict")
+
+func TestRetryOnRaces_WonAfterEachKindOfConflict_IsNoError(t *testing.T) {
+	failures := []error{errTestConflict, errTestOtherConflict}
+	calls := 0
+	err := retryOnRaces(func() error {
+		calls++
+		if calls <= len(failures) {
+			return failures[calls-1]
+		}
+		return nil
+	}, errTestConflict, errTestOtherConflict)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+	if calls != 3 {
+		t.Errorf("calls: expected 3, got %d", calls)
+	}
+}
+
+func TestRetryOnRaces_ConflictNotListed_IsReturnedAsIs(t *testing.T) {
+	calls := 0
+	err := retryOnRaces(func() error {
+		calls++
+		return errTestConflict
+	}, errTestOtherConflict)
+	if err != errTestConflict {
+		t.Errorf("expected %v, got: %v", errTestConflict, err)
+	}
+	if calls != 1 {
+		t.Errorf("calls: expected 1, got %d", calls)
+	}
+}

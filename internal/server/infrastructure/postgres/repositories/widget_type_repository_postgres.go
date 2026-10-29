@@ -124,7 +124,7 @@ func (r *widgetTypeRepositoryPostgresImpl) Save(ctx context.Context, wt library.
 				wt.DefaultSize().Width(), wt.DefaultSize().Height(),
 				portsJSON, next.Number(),
 			)
-			if saved, err = r.scanWidgetType(row.Scan); err != nil {
+			if saved, err = scanWidgetType(row.Scan); err != nil {
 				return widgetTypeWriteError("insert new widget type", err)
 			}
 			return nil
@@ -142,7 +142,7 @@ func (r *widgetTypeRepositoryPostgresImpl) Save(ctx context.Context, wt library.
 				portsJSON, next.Number(),
 				wt.ID().UUID(), current.Number(), r.library.UUID(),
 			)
-			saved, err = r.scanWidgetType(row.Scan)
+			saved, err = scanWidgetType(row.Scan)
 			if errors.Is(err, sql.ErrNoRows) {
 				return false, nil
 			}
@@ -183,7 +183,7 @@ func (r *widgetTypeRepositoryPostgresImpl) FindByID(ctx context.Context, anID id
 		"SELECT "+selectWidgetTypeColumns+" FROM engineering.widget_types WHERE id = $1 AND library_id = $2",
 		anID.UUID(), r.library.UUID(),
 	)
-	wt, err := r.scanWidgetType(row.Scan)
+	wt, err := scanWidgetType(row.Scan)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, id.NotFound(library.ErrWidgetTypeNotFound, anID)
@@ -194,9 +194,20 @@ func (r *widgetTypeRepositoryPostgresImpl) FindByID(ctx context.Context, anID id
 }
 
 func (r *widgetTypeRepositoryPostgresImpl) FindAll(ctx context.Context) ([]library.WidgetType, error) {
-	rows, err := r.db.QueryContext(ctx,
+	return findWidgetTypes(ctx, r.db, r.library)
+}
+
+// queryer is what reads rows: a *sql.DB or a *sql.Tx.
+type queryer interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+// findWidgetTypes returns the widget types of the Library, in creation order,
+// as q reads them.
+func findWidgetTypes(ctx context.Context, q queryer, libraryID id.ID[library.Library]) ([]library.WidgetType, error) {
+	rows, err := q.QueryContext(ctx,
 		"SELECT "+selectWidgetTypeColumns+" FROM engineering.widget_types WHERE library_id = $1 ORDER BY pk_id",
-		r.library.UUID(),
+		libraryID.UUID(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("error querying widget types: %w", err)
@@ -205,7 +216,7 @@ func (r *widgetTypeRepositoryPostgresImpl) FindAll(ctx context.Context) ([]libra
 
 	var result []library.WidgetType
 	for rows.Next() {
-		wt, err := r.scanWidgetType(rows.Scan)
+		wt, err := scanWidgetType(rows.Scan)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning widget type: %w", err)
 		}
@@ -232,7 +243,7 @@ type rawWidgetTypeRow struct {
 	version        int
 }
 
-func (r *widgetTypeRepositoryPostgresImpl) scanWidgetType(scan func(...any) error) (library.WidgetType, error) {
+func scanWidgetType(scan func(...any) error) (library.WidgetType, error) {
 	var row rawWidgetTypeRow
 	if err := scan(
 		&row.id, &row.libraryID, &row.name, &row.htmlTemplate, &row.script, &row.language,

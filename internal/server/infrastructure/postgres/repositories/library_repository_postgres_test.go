@@ -158,6 +158,9 @@ func TestLibraryRelease_SaveAndRead(t *testing.T) {
 	if _, err := releases.Save(ctx, again, lib.Version()); !errors.Is(err, library.ErrReleaseNumberTaken) {
 		t.Errorf("number 1 again: expected ErrReleaseNumberTaken, got %v", err)
 	}
+	if err := repo.Delete(ctx, saved); err != nil {
+		t.Fatalf("Delete widget type: %v", err)
+	}
 	second, _ := library.CreateRelease(lib, nil, first, "emptied", time.Now())
 	if _, err := releases.Save(ctx, second, lib.Version()); err != nil {
 		t.Fatalf("Save second: %v", err)
@@ -182,6 +185,50 @@ func TestLibraryRelease_SaveAndRead(t *testing.T) {
 	}
 	if _, err := releases.Save(ctx, third, markedSaved.Version()); !errors.Is(err, library.ErrLibraryDiscarding) {
 		t.Errorf("a release during a Discard: expected ErrLibraryDiscarding, got %v", err)
+	}
+}
+
+func TestLibraryRelease_SaveRefusesADraftChangedSinceItWasRead(t *testing.T) {
+	cleanLibraries(t)
+	ctx := context.Background()
+	repo := newWidgetTypeRepo(t)
+	if _, err := repo.Save(ctx, makeWidgetType(t, "gauge", nil, repo)); err != nil {
+		t.Fatalf("Save widget type: %v", err)
+	}
+	releases := repositories.NewLibraryReleaseRepositoryPostgres(testDB)
+	lib, err := repositories.NewLibraryRepositoryPostgres(testDB).FindByID(ctx, repo.libraryID)
+	if err != nil {
+		t.Fatalf("FindByID library: %v", err)
+	}
+	read, err := repo.FindAll(ctx)
+	if err != nil {
+		t.Fatalf("FindAll widget types: %v", err)
+	}
+	stale, err := library.CreateRelease(lib, read, nil, "", time.Now())
+	if err != nil {
+		t.Fatalf("CreateRelease: %v", err)
+	}
+
+	if _, err := repo.Save(ctx, makeWidgetType(t, "dial", nil, repo)); err != nil {
+		t.Fatalf("Save second widget type: %v", err)
+	}
+	if _, err := releases.Save(ctx, stale, lib.Version()); !errors.Is(err, library.ErrDraftChanged) {
+		t.Fatalf("a release of a Draft read before a change: expected ErrDraftChanged, got %v", err)
+	}
+	if latest, err := releases.FindLatest(ctx, repo.libraryID); err != nil || latest != nil {
+		t.Errorf("the refused release was stored: %v, %v", latest, err)
+	}
+
+	draft, err := repo.FindAll(ctx)
+	if err != nil {
+		t.Fatalf("FindAll widget types: %v", err)
+	}
+	fresh, err := library.CreateRelease(lib, draft, nil, "", time.Now())
+	if err != nil {
+		t.Fatalf("CreateRelease of the Draft as it is: %v", err)
+	}
+	if _, err := releases.Save(ctx, fresh, lib.Version()); err != nil {
+		t.Fatalf("Save release of the Draft as it is: %v", err)
 	}
 }
 

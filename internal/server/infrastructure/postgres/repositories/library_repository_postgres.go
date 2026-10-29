@@ -274,13 +274,23 @@ type lockedLibrary struct {
 // lockLibraryRow locks the row of the live Library libraryID for share in
 // tx and returns it; one marked deleted (or removed) is not found. Every
 // write that depends on a Library's state takes it — a WidgetType of its
-// Draft, a release, a new pin —, so a write of the row itself (a Discard's
-// mark, a rename, the mark of its deletion) waits for them, or they for it
-// (ADR 0012).
+// Draft, a new pin —, so a write of the row itself (a Discard's mark, a
+// rename, the mark of its deletion) waits for them, or they for it (ADR 0012).
 func lockLibraryRow(ctx context.Context, tx *sql.Tx, libraryID id.ID[library.Library]) (lockedLibrary, error) {
+	return lockLibraryRowFor(ctx, tx, libraryID, `FOR SHARE`)
+}
+
+// lockLibraryRowExclusive is lockLibraryRow for update: a release takes it so
+// that the writes of the Draft, which hold it for share, wait for the release
+// or it for them, and the Draft it reads is the one it copies.
+func lockLibraryRowExclusive(ctx context.Context, tx *sql.Tx, libraryID id.ID[library.Library]) (lockedLibrary, error) {
+	return lockLibraryRowFor(ctx, tx, libraryID, `FOR UPDATE`)
+}
+
+func lockLibraryRowFor(ctx context.Context, tx *sql.Tx, libraryID id.ID[library.Library], lock string) (lockedLibrary, error) {
 	var row lockedLibrary
 	err := tx.QueryRowContext(ctx,
-		`SELECT discarding_to, version FROM engineering.libraries WHERE id = $1 AND deleted_at IS NULL FOR SHARE`, libraryID.UUID(),
+		`SELECT discarding_to, version FROM engineering.libraries WHERE id = $1 AND deleted_at IS NULL `+lock, libraryID.UUID(),
 	).Scan(&row.discardingTo, &row.version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return row, id.NotFound(library.ErrLibraryNotFound, libraryID)

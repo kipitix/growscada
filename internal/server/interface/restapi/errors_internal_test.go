@@ -312,6 +312,7 @@ var domainSentinels = map[string]error{
 	"library.ErrNothingToRelease":       library.ErrNothingToRelease,
 	"library.ErrReleaseNotFound":        library.ErrReleaseNotFound,
 	"library.ErrReleaseNumberTaken":     library.ErrReleaseNumberTaken,
+	"library.ErrDraftChanged":           library.ErrDraftChanged,
 	"librarypin.ErrLibraryPinNotFound":  librarypin.ErrLibraryPinNotFound,
 	"librarypin.ErrLibraryPinConflict":  librarypin.ErrLibraryPinConflict,
 	"librarypin.ErrLibraryPinExists":    librarypin.ErrLibraryPinExists,
