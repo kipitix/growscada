@@ -35,6 +35,13 @@ const apiPort = "9090"
 // before a Device's write waits for room.
 const tagUpdatesQueueSize = 1024
 
+// iconSmall and iconLarge are the PWA icons served from web/; the Makefile and
+// the Dockerfile copy the same files.
+const (
+	iconSmall = "/web/icon-192.png"
+	iconLarge = "/web/icon-512.png"
+)
+
 // serverArgs is the server's command-line/environment configuration.
 type serverArgs struct {
 	MaxSSEClients int    `arg:"env:MAX_SSE_CLIENTS" default:"100" help:"maximum number of concurrent SSE event-stream connections"`
@@ -244,7 +251,12 @@ func main() {
 		Handler: &app.Handler{
 			Name:        "GrowSCADA",
 			Description: "SCADA to Go",
-			Env:         pwaEnv(cliArgs.PublicAPIURL),
+			Icon: app.Icon{
+				Default:  iconSmall,
+				Large:    iconLarge,
+				Maskable: iconLarge,
+			},
+			Env: pwaEnv(cliArgs.PublicAPIURL),
 		},
 	}
 	// Register the PWA server shutdown handler

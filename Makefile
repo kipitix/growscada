@@ -5,6 +5,7 @@ build: build_server build_growctl build_simulator
 
 build_server:
 	GOARCH=wasm GOOS=js go build -o bin/growscada_combined_server/web/app.wasm cmd/combined_server/main.go
+	cp cmd/combined_server/web/icon-192.png cmd/combined_server/web/icon-512.png bin/growscada_combined_server/web/
 	go build -o bin/growscada_combined_server/growscada_combined_server cmd/combined_server/main.go
 
 build_growctl:

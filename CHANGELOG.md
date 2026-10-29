@@ -1,5 +1,15 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.50] - 2026-10-29
+
+### Added
+
+- Иконка загрузки PWA: круглая обрезка центра эмблемы (`cmd/combined_server/web/icon-192.png`, `icon-512.png`), центр обрезки совпадает с центром изображения, поэтому вращение go-app (`goapp-spin`) идёт вокруг эмблемы. Иконка задана в `app.Handler` (`Icon.Default`, `Large`, `Maskable`) и больше не тянется с GitHub; `make build_server` и Dockerfile копируют её в `web/`
+
+### Changed
+
+- Favicon (`Icon.SVG`) остался по умолчанию: go-app тянет его с GitHub
+
 ## [0.0.49] - 2026-10-27
 
 ### Added

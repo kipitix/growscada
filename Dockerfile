@@ -15,6 +15,7 @@ COPY . .
 FROM build AS build_server
 RUN --mount=type=cache,target=/root/.cache/go-build \
     GOARCH=wasm GOOS=js go build -o /out/server/web/app.wasm ./cmd/combined_server \
+ && cp cmd/combined_server/web/icon-192.png cmd/combined_server/web/icon-512.png /out/server/web/ \
  && CGO_ENABLED=0 go build -o /out/server/growscada_combined_server ./cmd/combined_server
 
 FROM build AS build_simulator
