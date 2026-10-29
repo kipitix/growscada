@@ -195,11 +195,11 @@ Bruno tags: `manual` — left out of the run (`get_events`, `get_project_events`
 
 ## MCP Servers
 
-Three MCP servers are available (via `.mcp.json`) and should be used during development:
+Three MCP servers are available (via `.mcp.json` for Claude Code and `opencode.json` for OpenCode — the same three servers) and should be used during development. Keep `opencode.json` plain JSON with no comments and no trailing commas: the `rtk` OpenCode plugin parses it strictly to honour `permissions`, and a JSONC comment only earns a `failed to parse permissions` warning on every shell call.
 
 ### codegraph
 
-**Use codegraph BEFORE grep/find or reading files** when you need to understand or locate code. The index is a pre-built SQLite knowledge graph of every symbol, call edge, and file in the workspace — sub-millisecond reads, updated within ~1s of file changes.
+**Use codegraph BEFORE grep/find or reading files** when you need to understand or locate code. The index is a pre-built SQLite knowledge graph of every symbol, call edge, and file in the workspace — sub-millisecond reads, updated within ~1s of file changes. It lives in `.codegraph/` and is **gitignored**: a new dev host has none until `codegraph init -y` runs there (rule 11).
 
 - `codegraph_explore` — PRIMARY tool. Pass a natural-language question or a bag of symbol/file names; returns the verbatim source of all relevant symbols grouped by file, plus call paths between them. Equivalent to running Read on multiple files at once — treat returned source as already read. Most questions need only this one call.
 - `codegraph_node` — Read a single file (pass `file` only) or look up one named symbol (pass `symbol`). Returns source with line numbers + caller/callee trail so you see the blast radius before editing.
@@ -249,6 +249,8 @@ Browser automation. Use for verifying UI changes in the running PWA (port 8080):
 9. **Audit grilling decisions against DDD.** When a grilling round ends, check every decision it produced against the domain model: aggregate boundaries and invariants, one transaction per aggregate with policies across aggregates (ADR 0008), the layer and role dependencies above (ADR 0011), and the terms of `CONTEXT.md` and `docs/adr/`. Each mismatch opens another grilling round on that decision (rule 8 applies). The grilling is done when an audit finds no mismatch.
 
 10. **Verify a finished task in the browser and with Bruno.** Once `make build` and `make test` pass (rule 3), bring up the environment (rule 7), run the server and walk every UI flow the task touches in the PWA through `chrome-devtools` (screenshots, console free of errors), then run `make bruno_test`. A task is done when both checks pass; report what each one showed.
+
+11. **Rebuild the codegraph index on a new dev host.** `.codegraph/` is gitignored, so a fresh clone or a new machine has no index: the MCP server starts without a default project and every codegraph call returns nothing until you index. Check once, early in the work — `test -d .codegraph`, or `codegraph status` (`⚠ Not initialized`) — and if it is missing, tell the user plainly that codegraph is not indexed here and that you will fall back to grep/Read until it is, then offer to run `codegraph init -y` in the repository root (about a second; it creates only the gitignored `.codegraph/`). Keep the index current with `codegraph sync` after a pull or a branch switch, and rebuild with `codegraph index` when results look stale.
 
 ## Agent skills
 
