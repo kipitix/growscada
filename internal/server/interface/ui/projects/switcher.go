@@ -38,6 +38,10 @@ type Switcher struct {
 	key      string
 	onSelect func(uuid.UUID)
 
+	// editable tells whether the switcher also creates, renames and deletes
+	// projects (its buttons), or only selects them.
+	editable bool
+
 	projects []apiv0.ProjectResponse
 	reloader uiutil.Reloader
 	// selected is the project announced, uuid.Nil until the list is known;
@@ -49,8 +53,14 @@ type Switcher struct {
 
 // NewSwitcher returns the switcher of the projects of the server client
 // talks to, keeping the selection under the LocalStorage key and announcing
-// it to onSelect.
+// it to onSelect. It creates, renames and deletes projects too.
 func NewSwitcher(client *apiclient.Client, key string, onSelect func(uuid.UUID)) *Switcher {
+	return &Switcher{client: client, key: key, onSelect: onSelect, editable: true}
+}
+
+// NewSelector returns a switcher that only selects among the projects: the
+// same as NewSwitcher without the buttons that create, rename and delete.
+func NewSelector(client *apiclient.Client, key string, onSelect func(uuid.UUID)) *Switcher {
 	return &Switcher{client: client, key: key, onSelect: onSelect}
 }
 
@@ -212,26 +222,23 @@ func (s *Switcher) Render() app.UI {
 	}
 	_, hasCurrent := s.find(s.selected)
 
-	return app.Div().
-		Attr("data-project-switcher", "true").
-		Style("display", "flex").
-		Style("align-items", "center").
-		Style("gap", "4px").
-		Style("margin-bottom", "8px").
-		Body(
-			app.Span().
-				Style("font-size", "12px").
-				Style("color", "var(--text-3)").
-				Text("Project"),
-			app.Select().
-				Attr("aria-label", "Project").
-				Style("font-size", "13px").
-				Style("padding", "2px 4px").
-				Style("max-width", "220px").
-				OnChange(func(ctx app.Context, e app.Event) {
-					s.Select(ctx, uiutil.ParseID(ctx.JSSrc().Get("value").String()))
-				}).
-				Body(options...),
+	body := []app.UI{
+		app.Span().
+			Style("font-size", "12px").
+			Style("color", "var(--text-3)").
+			Text("Project"),
+		app.Select().
+			Attr("aria-label", "Project").
+			Style("font-size", "13px").
+			Style("padding", "2px 4px").
+			Style("max-width", "220px").
+			OnChange(func(ctx app.Context, e app.Event) {
+				s.Select(ctx, uiutil.ParseID(ctx.JSSrc().Get("value").String()))
+			}).
+			Body(options...),
+	}
+	if s.editable {
+		body = append(body,
 			s.button("+", "Create a project", true, func(ctx app.Context) {
 				if name, ok := prompt("Name of the new project:", ""); ok {
 					s.Create(ctx, name)
@@ -253,6 +260,15 @@ func (s *Switcher) Render() app.UI {
 				}
 			}),
 		)
+	}
+
+	return app.Div().
+		Attr("data-project-switcher", "true").
+		Style("display", "flex").
+		Style("align-items", "center").
+		Style("gap", "4px").
+		Style("margin-bottom", "8px").
+		Body(body...)
 }
 
 func (s *Switcher) button(icon, title string, enabled bool, onClick func(app.Context)) app.UI {

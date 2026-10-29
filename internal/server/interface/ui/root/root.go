@@ -81,8 +81,8 @@ func NewRoot(anAPIServerURL string) *Root {
 	r.modes = []modeView{
 		{mode: ModeLibrary, ui: library.NewLibrary(r.client)},
 		{mode: ModeProject, ui: r.project, switcher: r.newSwitcher(ModeProject)},
-		{mode: ModeOperation, ui: r.operation, switcher: r.newSwitcher(ModeOperation)},
-		{mode: ModeHistory, ui: &history.History{}, switcher: r.newSwitcher(ModeHistory)},
+		{mode: ModeOperation, ui: r.operation, switcher: r.newSelector(ModeOperation)},
+		{mode: ModeHistory, ui: &history.History{}, switcher: r.newSelector(ModeHistory)},
 	}
 	r.opened = map[Mode]bool{}
 	r.selected = map[Mode]uuid.UUID{}
@@ -122,6 +122,13 @@ func (r *Root) OnMount(ctx app.Context) {
 // apart from the other modes'.
 func (r *Root) newSwitcher(mode Mode) *projects.Switcher {
 	return projects.NewSwitcher(r.client, string(mode)+":projectID", func(id uuid.UUID) {
+		r.selectProject(mode, id)
+	})
+}
+
+// newSelector is newSwitcher for a mode that only selects projects.
+func (r *Root) newSelector(mode Mode) *projects.Switcher {
+	return projects.NewSelector(r.client, string(mode)+":projectID", func(id uuid.UUID) {
 		r.selectProject(mode, id)
 	})
 }
