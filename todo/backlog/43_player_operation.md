@@ -2,7 +2,7 @@
 Status: ready-for-human
 Blocked by: 35, 42
 
-Слой D. Термин — `CONTEXT.md` (Player).
+Слой D. Термин — `GLOSSARY.md` (Player).
 
 - Player на клиенте: начальное состояние (Revision + runtime-сущности + значения тегов на позицию Journal) + применение записей Journal.
 - Operation — Player, закреплённый на «сейчас» (записи по SSE); рендер Scenes текущей Revision с живыми значениями.

@@ -246,7 +246,7 @@ Browser automation. Use for verifying UI changes in the running PWA (port 8080):
 
 8. **Ask questions one at a time, interactively.** When interviewing the user (grilling, design sessions, clarifications), ask exactly one question per turn via the interactive question tool (`AskUserQuestion`), with a recommended option first. This overrides any skill instruction to batch several questions into one round.
 
-9. **Audit grilling decisions against DDD.** When a grilling round ends, check every decision it produced against the domain model: aggregate boundaries and invariants, one transaction per aggregate with policies across aggregates (ADR 0008), the layer and role dependencies above (ADR 0011), and the terms of `CONTEXT.md` and `docs/adr/`. Each mismatch opens another grilling round on that decision (rule 8 applies). The grilling is done when an audit finds no mismatch.
+9. **Audit grilling decisions against DDD.** When a grilling round ends, check every decision it produced against the domain model: aggregate boundaries and invariants, one transaction per aggregate with policies across aggregates (ADR 0008), the layer and role dependencies above (ADR 0011), and the terms of `GLOSSARY.md` and `docs/adr/`. Each mismatch opens another grilling round on that decision (rule 8 applies). The grilling is done when an audit finds no mismatch.
 
 10. **Verify a finished task in the browser and with Bruno.** Once `make build` and `make test` pass (rule 3), bring up the environment (rule 7), run the server and walk every UI flow the task touches in the PWA through `chrome-devtools` (screenshots, console free of errors), then run `make bruno_test`. A task is done when both checks pass; report what each one showed.
 
@@ -264,4 +264,4 @@ Browser automation. Use for verifying UI changes in the running PWA (port 8080):
 
 ### Domain docs
 
-Single-context: `CONTEXT.md` + `docs/adr/` в корне. See `docs/agents/domain.md`.
+Single-context: `GLOSSARY.md` + `docs/adr/` в корне. See `docs/agents/domain.md`.

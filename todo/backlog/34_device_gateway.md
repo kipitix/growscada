@@ -2,7 +2,7 @@
 Status: ready-for-agent
 Blocked by: 32
 
-Слой B. Термины — `CONTEXT.md` (Device, Environment, Environment Device, Device Gateway, Device Token); обновить ADR 0004, пересмотреть ADR 0011 (структура runtime-схемы).
+Слой B. Термины — `GLOSSARY.md` (Device, Environment, Environment Device, Device Gateway, Device Token); обновить ADR 0004, пересмотреть ADR 0011 (структура runtime-схемы).
 
 **Это спецификация, не тикет.** Она уже согласована и **делать её не нужно** — работа разбита на пять частей, по одной на слой, каждая самодостаточна и проверяема:
 
@@ -36,14 +36,14 @@ Blocked by: 32
 
 - Runtime **копирует** таблицы Engineering; runtime-специфичные данные лежат в **отдельных таблицах**, ссылающихся на копии по ID:
   - `runtime.tags` — копия определения (`name`, `type`, `version`, `device_id`); `runtime.tag_states(tag_id → runtime.tags.id, value, quality, seq)` — состояние; `runtime.tag_state_seq` — своя последовательность. **Определение и состояние больше не в одной таблице** (сейчас — в `runtime.tags`).
-  - `runtime.devices` — копия `engineering.devices`; `runtime.environment_devices` — копия `engineering.environment_devices` **без токенов**.
+  - `runtime.devices` — копия `engineering.devices`; `runtime.environments` — копия `engineering.environments` (имя уникально в проекте: Gateway называет окружение по имени, и имя резолвится в пару здесь, а не в черновике); `runtime.environment_devices` — копия `engineering.environment_devices` **без токенов**.
   - `runtime.device_tokens` — боевые токены.
 - **Следствие**: мост «`UpsertTagDefinitions` по событию `tag_created`/`tag_deleted`» (ADR 0011, п. 7) заменяется Deploy'ом — задача 35; до неё копия наполняется мостом, как сейчас, но **структура таблиц — уже новая**: мост должен удалять и копию определения, и состояние.
 
 ### Device Token
 
 - **Один токен на Device**. Выпускается на Runtime-узле, хранится **только хешем** (sha-256), показывается **один раз** при выпуске. Отзыв и ротация — только явно. В UI видны «осиротевшие» токены (Device, которой больше нет).
-- Передаётся как `Authorization: Bearer gsc_dev_…` (префикс отличает device-токен от будущего пользовательского bearer'а, задача 50). Токен определяет Device, а значит **проект** (CONTEXT.md).
+- Передаётся как `Authorization: Bearer gsc_dev_…` (префикс отличает device-токен от будущего пользовательского bearer'а, задача 50). Токен определяет Device, а значит **проект** (GLOSSARY.md).
 - **В ревизию и ProjectFile токен не едет** — только его отпечаток.
 - Токен **переживает Deploy и Rollback**. Спит токен, чей Device **нет в текущей ревизии**: запросы отклоняются (403 — Gateway ждёт), но токен не отзывается.
 
@@ -116,7 +116,7 @@ Blocked by: 32
 
 ### Что меняется в коде (по слоям)
 
-- **runtime-схема**: `runtime.tags` теряет `value`/`quality` (копия определения + `device_id`); появляются `runtime.tag_states(tag_id → runtime.tags.id, value, quality, seq)` и `runtime.device_tokens(device_id → runtime.devices.id, token_hash, ...)`. Копии `runtime.devices`, `runtime.environment_devices`.
+- **runtime-схема**: `runtime.tags` теряет `value`/`quality`/`seq` (копия определения + `device_id`); появляются `runtime.tag_states(tag_id → runtime.tags.id, value, quality, seq)` и `runtime.device_tokens(device_id PK, token_hash, ...)` — без FK на копию Device, чтобы спящий токен переживал Deploy. Копии `runtime.devices`, `runtime.environments`, `runtime.environment_devices`.
 - **engineering-схема**: `engineering.devices`, `engineering.environments`, `engineering.environment_devices`; `engineering.tags.device_id`.
 - **Репозиторий Runtime-ноды** (`postgres/runtime/tag_state_repository_postgres.go`): сегодня `runtime.tags` — одна строка на Tag (определение + состояние), и `Write` — это `UPDATE runtime.tags SET value…`. После разделения: `Write` — `UPDATE runtime.tag_states … FROM runtime.tags WHERE … AND t.device_id = $device_id` (проверка поставщика в том же запросе), `FindInLiveProject`/`FindByIDs` — `JOIN` двух таблиц, `UpsertDefinitions` — вставка копии определения **и** начального состояния в одной транзакции, `Delete`/`DeleteAllOfProject` — удаляют и копию, и состояние.
 - **Домен `tagstate`**: `Definition` получает `DeviceID` (поставщик — часть определения); `Repository` получает параметр поставщика в `Write`.

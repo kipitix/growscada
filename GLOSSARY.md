@@ -1,13 +1,13 @@
 # GrowSCADA
 
-A web-based SCADA system: it exposes process variables (Tags) and lets operators view and interact with them through custom-built visual screens (Scenes) made of reusable widgets. This glossary names the concepts of that domain; `CONTEXT.md` holds the fuller account and `docs/adr/` the decisions behind them.
+A web-based SCADA system: it exposes process variables (Tags) and lets operators view and interact with them through custom-built visual screens (Scenes) made of reusable widgets. This glossary names the concepts of that domain; the decisions behind them are in `docs/adr/`.
 
 ## Language
 
 ### Data
 
 **Tag**:
-The atomic process variable — an identifier, name, type, current value, and quality. Belongs to exactly one Project. A Tag has at most one supplier of its value: one Device, or people.
+The atomic process variable — an identifier, name, type, current value, and quality — belonging to exactly one Project and supplied by at most one Device, or by people.
 _Avoid_: variable, point, signal
 
 **Tag definition**:
@@ -47,13 +47,13 @@ The secret by which a Device Gateway acts for one Device: it writes that Device'
 _Avoid_: API key, password, credential (unqualified)
 
 **Draft Tag state**:
-A Tag's value and Quality as set in the Draft. Never carried into a Revision.
+A Tag's value and Quality as set in the Draft — state, not configuration, living apart from the Tag definition. Never carried into a Revision, which gives the Tag its ordinary initial state instead.
 _Avoid_: initial value, default value, sample value
 
 ### Visualization
 
 **WidgetType**:
-A reusable template defining how a widget renders: an HTML template plus a script, a default size, and the InputPorts it exposes. Aggregate of one Library's Draft.
+A reusable template defining how a widget renders: an HTML template plus a script, a default size, and the InputPorts it exposes. Part of one Library's Draft.
 _Avoid_: component, widget definition
 
 **InputPort**:
@@ -61,7 +61,7 @@ A named, typed input slot declared on a WidgetType; the script receives it by na
 _Avoid_: parameter, slot
 
 **Widget**:
-A placed instance of a WidgetType on a Scene — positioned, sized, rotated, optionally labelled, and bound to Tags via PortBindings. Entity of the Scene aggregate.
+A placed instance of a WidgetType on a Scene — positioned, sized, rotated, optionally labelled, and bound to Tags via PortBindings.
 _Avoid_: element, control
 
 **PortBinding**:
@@ -69,7 +69,7 @@ The link between one of a Widget's InputPorts and the Tag that feeds it. A bindi
 _Avoid_: mapping, connection
 
 **Scene**:
-A named canvas with fixed dimensions, a static HTML background, and the Widgets placed on it. Aggregate — the sole consistency boundary for itself and its Widgets.
+A named canvas with fixed dimensions, a static HTML background, and the Widgets placed on it; the Scene and its Widgets change together.
 _Avoid_: screen, mnemonic, page, display
 
 ### Organisation
@@ -83,7 +83,7 @@ Owned by one Organization. The unit of operational ownership and isolation: Tags
 _Avoid_: workspace, site, solution
 
 **Library**:
-A reusable collection of WidgetTypes owned by an Organization, outside any Project, and used by any number of Projects. Aggregate.
+A reusable collection of WidgetTypes owned by an Organization, outside any Project, and used by any number of Projects.
 _Avoid_: catalog, toolbox, package
 
 **Library Release**:
@@ -125,7 +125,7 @@ The working state of a Project or of a Library as it is being edited. A Project'
 _Avoid_: working copy, unsaved changes
 
 **DraftChange**:
-One Engineer intent applied to the Draft — possibly touching several aggregates at once — and the unit of undo/redo.
+One Engineer intent applied to the Draft — possibly touching several parts of the Draft at once — and the unit of undo/redo.
 _Avoid_: edit, step, command, operation
 
 **Discard**:
@@ -141,7 +141,7 @@ The act of turning a Library's Draft into a new Library Release. The Library cou
 _Avoid_: publish, tag, version
 
 **Revision**:
-An immutable, numbered snapshot of the project configuration produced by Deploy, carrying the Environment it was deployed for. Operation always runs exactly one Revision.
+An immutable, numbered snapshot of the project configuration produced by Deploy. Operation always runs exactly one Revision.
 _Avoid_: release, build, version (the concurrency counter)
 
 **Origin**:

@@ -17,9 +17,9 @@ Blocked by: 32
 
 ### Цепочка `runtime/`
 
-- `runtime.tags` — **копия определения**: остаются `id`, `project_id`, `name`, `type`, `version`; **добавляется** `device_id UUID NULL`; **удаляются** `value`, `quality` (ADR 0011, amendment 2026-11-01: определение и состояние в разных таблицах).
+- `runtime.tags` — **копия определения**: остаются `id`, `project_id`, `name`, `type`, `version`; **добавляется** `device_id UUID NULL`; **удаляются** `value`, `quality`, `seq` (ADR 0011, amendment 2026-11-01: определение и состояние в разных таблицах, `seq` — часть состояния).
 - `runtime.tag_states(tag_id UUID PK → runtime.tags(id), value TEXT NOT NULL, quality VARCHAR(50) NOT NULL, seq BIGINT NOT NULL DEFAULT 0)`; `CHECK` на `quality` (`'bad'`, `'uncertain'`, `'good'`), как у `runtime.tags` сегодня; индекс не нужен — `tag_id` PK.
-- `runtime.devices`, `runtime.environment_devices` — копии соответствующих таблиц черновика (те же колонки, кроме `version` у `environment_devices`; токенов в копиях нет — токены в `runtime.device_tokens`, задача 3).
+- `runtime.devices`, `runtime.environments`, `runtime.environment_devices` — копии соответствующих таблиц черновика (те же колонки, кроме `version` у `environment_devices`; токенов в копиях нет — токены в `runtime.device_tokens`, задача 3). Имя окружения уникально в проекте и в копии: Gateway называет окружение по имени, и имя резолвится в пару внутри runtime-схемы. `runtime.device_tokens` без FK на копию Device: токен переживает Deploy и Rollback и спит, пока Device нет в ревизии.
 - `runtime.device_tokens(device_id UUID PK → runtime.devices(id), token_hash TEXT NOT NULL, fingerprint TEXT NOT NULL, issued_at TIMESTAMPTZ NOT NULL)` — токен на Device, в ревизию не едет (ADR 0004, amendment 2026-11-01).
 - `runtime.tag_state_seq` — остаётся как есть; `seq` переезжает в `runtime.tag_states`.
 

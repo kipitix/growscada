@@ -5,10 +5,11 @@
 ### Changed
 
 - **Схема Device, Environment и разделение состояния Tag'а** (задача 34, часть 1; ADR 0011, поправка 2026-11-01; ADR 0004, поправка 2026-11-01). Поведения в этой части нет — только миграции обеих цепочек и приведение репозитория Runtime-ноды к новой схеме; домен, application, REST и симулятор — части 2–5
-  - `engineering/20261101000000_devices_and_environments`: таблицы `devices` (имя уникально в проекте, `protocol`, `config` JSONB, своя Version), `environments` (имя уникально в проекте), `environment_devices` (пара «окружение + устройство», `params` JSONB, своя Version; ни с одной стороны нет CASCADE, поэтому Device или Environment удаляется только когда пар с ним не осталось); `engineering.tags.device_id` с FK на `devices` и индексом — поставщик значения Tag'а
-  - `runtime/20261101000000_tag_states_and_devices`: `runtime.tags` становится копией **только определения** (остаются `id`, `project_id`, `name`, `type`, `version`; добавлен `device_id`; `value`/`quality` убраны), состояние переезжает в `runtime.tag_states(tag_id PK, value, quality, seq)` — с FK на копию определения и `ON DELETE CASCADE`, `CHECK` по quality, `seq` через прежнюю `runtime.tag_state_seq`; существующие состояния переносятся без потери значений и `seq`. Копии `runtime.devices` и `runtime.environment_devices` (без `version`), `runtime.device_tokens(device_id PK, token_hash, fingerprint, issued_at)` с уникальным индексом по хешу. Откат возвращает состояния в `runtime.tags`
+  - `engineering/20261101000000_devices_and_environments`: таблицы `devices` (имя уникально в проекте, `protocol`, `config` JSONB, своя Version), `environments` (имя уникально в проекте), `environment_devices` (пара «окружение + устройство», `params` JSONB, своя Version, `created_at`/`updated_at` с триггером, как у соседних таблиц; ни с одной стороны нет CASCADE, поэтому Device или Environment удаляется только когда пар с ним не осталось); `engineering.tags.device_id` с FK на `devices` и индексом — поставщик значения Tag'а
+  - `runtime/20261101000000_tag_states_and_devices`: `runtime.tags` становится копией **только определения** (остаются `id`, `project_id`, `name`, `type`, `version`; добавлен `device_id`; `value`/`quality`/`seq` убраны), состояние переезжает в `runtime.tag_states(tag_id PK, value, quality, seq)` — с FK на копию определения и `ON DELETE CASCADE`, `CHECK` по quality, `seq` через прежнюю `runtime.tag_state_seq`; существующие состояния переносятся без потери значений и `seq`. Копии `runtime.devices`, `runtime.environments` и `runtime.environment_devices` (без `version`); у копии окружения имя уникально в проекте — Gateway называет окружение по имени, и имя резолвится в пару внутри runtime-схемы. `runtime.device_tokens(device_id PK, token_hash, fingerprint, issued_at)` с уникальным индексом по хешу и **без FK** на копию Device: токен переживает Deploy и Rollback и спит, пока его Device нет в ревизии, поэтому удаление копии его не трогает. Откат возвращает состояния в `runtime.tags` вместе с `seq`
   - Репозиторий Runtime-ноды читает и пишет две таблицы: `FindInLiveProject`/`FindByIDs` — `JOIN` копии и состояния (проверка живости проекта и типа Tag'а осталась в тех же запросах), `Write` — `UPDATE runtime.tag_states … FROM runtime.tags`, `UpsertDefinitions` — вставка копии определения и начального состояния одной транзакцией (состояние уже написанного Tag'а не трогается), `Delete`/`DeleteAllOfProject` — удаление копии, состояние уходит с ней
   - Seed и тесты миграций приведены к новой схеме; новый тест миграций проверяет перенос состояний, каскад, уникальность имён и пар в Draft, копии Runtime и откат
+- **Словарь домена — один `GLOSSARY.md`**. `CONTEXT.md` удалён: единственный словарь теперь `GLOSSARY.md` в формате скилла `domain-modeling` (термин, короткое определение без деталей реализации, `_Avoid_` с отвергнутыми синонимами, кластеры подзаголовками); ссылки на словарь обновлены в `AGENTS.md` (правило 9, «Agent skills»), `docs/agents/domain.md` (теперь ровно шаблон скилла: `GLOSSARY.md` / `GLOSSARY-MAP.md`), ADR 0004, `docs/widget_type_contract.md`, задачах `todo/` и комментарии миграции. Заодно уточнены термины: `Revision` больше не несёт Environment (Deploy его не выбирает, ADR 0004), а `Draft Tag state` описан как состояние вне определения Tag'а
 
 ## [0.0.50] - 2026-10-29
 
@@ -356,7 +357,7 @@
   - devicelink и device simulator больше не ретраят такой ввод: `IsTransient` считает временными только `5xx`
 - **WidgetType виджета всегда существует**: `DELETE /api/v0/widget-types/{id}` для типа, который используют Widgets, отвечает `409 Conflict` и ничего не удаляет (раньше тип удалялся, а у его Widgets очищались port bindings). Гарантирует внешний ключ `fk_widgets_type_id` (`ON DELETE RESTRICT`); репозитории отдают `widget.ErrWidgetTypeInUse` и `widget.ErrWidgetTypeNotFound` (распознаются оба SQLSTATE блокировки удаления: `23503` до PostgreSQL 18 и `23001` restrict_violation с 18 — тесты идут на 16, dev-БД на 18)
   - миграция `20261004000000_widgets_type_id_foreign_key` **удаляет Widgets с несуществующим типом**, оставшиеся от прежних удалений, и поднимает `version` их сцен, чтобы клиент со старой версией не записал поверх изменившейся сцены
-  - `CONTEXT.md`: правило в термине WidgetType; Bruno: `delete_widget_type_by_id` описывает `409`, новый пример `post_tags_invalid_quality` (`400`)
+  - `GLOSSARY.md`: правило в термине WidgetType; Bruno: `delete_widget_type_by_id` описывает `409`, новый пример `post_tags_invalid_quality` (`400`)
 - **UI больше не подменяет ввод**: свойства сцены (ширина/высота ≤ 0 → 1920/1080) и геометрия виджета (размер ≤ 0 → 10, origin обрезался до 0–1, нечисловое поле → 0) молча сохраняли не то, что ввёл пользователь, а в поле оставалось введённое. Теперь число уходит как есть: сервер отвечает `400`, toast показывает причину, поле возвращается к сохранённому значению; нечисловое или пустое поле, а также `NaN`/`Inf` — toast «Client Error» с именем поля, запрос не отправляется (`project/number_fields.go`)
 - application-слой помечает ввод вызывающего общим `application.ErrInvalidInput`; ошибки восстановления сохранённых данных маркер не получают и остаются `500`. Хендлеры маппят ошибки сервисов общим `sendServiceError`
 - application-слой: у Create и Update сцены, WidgetType и виджета один вход (`appdto.SceneInput`, `WidgetTypeInput`, `WidgetInput`) — только поля ресурса; ID и ожидаемая версия (в т. ч. `sceneVersion` виджета) передаются аргументами. Поля разбирает одна функция на ресурс (`parseScene`, `parseWidgetType`, `parseWidget`), ошибка называет поле из JSON-контракта: `cannot update widget: size: widget width must be positive, got 0`
@@ -377,7 +378,7 @@
 - **Модель многоарендности и библиотек** (grilling-сессия 2026-10-04, только документация, код не менялся):
   - ADR 0006 «Every operational entity is keyed by Project, every Project by Organization»: сервер хостит много проектов в обеих ролях узла, `project_id` вводится во все таблицы до появления Journal и Revision, пока одна стартовая Organization из seed
   - ADR 0007 «Libraries are shared by pinned release and copied into the Revision on Deploy»: Library принадлежит Organization и может быть публичной, у неё свой Draft (EditLock, undo/redo) и Release → неизменяемый Library Release; проект закрепляет по одному релизу от нескольких Library, при Deploy используемое содержимое копируется в Revision
-  - `CONTEXT.md`: термины Organization, Project, Library, Library Release, Release, Device Gateway, Device Token
+  - `GLOSSARY.md`: термины Organization, Project, Library, Library Release, Release, Device Gateway, Device Token
 - задачи 25 (Organization и Project), 27 (Library и Library Release), 28 (Device, Device Gateway, Device Token) переписаны по решениям сессии; задача 45 уточнена: «Runtime node со вшитой Revision»
 
 ### Changed
@@ -395,7 +396,7 @@
 - Deploy (29) и Rollback (30) больше не зависят от Journal: их записи в Journal добавляет задача 36
 - задача 36 (Journal) поглотила бывшую 24 «Запись и воспроизведение событий»; задача 42 (Adopt) зависит от DraftChange (32); EditLock (31) и DraftChange (32) работают и для Draft Library; User (43) — член Organization, а не владелец проектов
 - ссылки «задача N» в `todo/backlog/`, `todo/done/` и в этом файле пересчитаны на новые номера
-- `CONTEXT.md`: Device — конфигурация оборудования в проекте, а не процесс; Draft, EditLock и Discard — у проекта и у Library; имя Tag уникально внутри Project; у Tag не больше одного поставщика значения
+- `GLOSSARY.md`: Device — конфигурация оборудования в проекте, а не процесс; Draft, EditLock и Discard — у проекта и у Library; имя Tag уникально внутри Project; у Tag не больше одного поставщика значения
 - ADR 0003: имя Tag уникально внутри Project; ADR 0004: поправка — Device как конфигурация, Device Gateway исполняет её по Device Token, токен переживает Deploy и Rollback и отзывается только явно
 
 ### Removed
@@ -406,7 +407,7 @@
 
 ### Added
 
-- **Версионирование контрактов** (задача 17, ADR 0005, термин SchemaVersion в `CONTEXT.md`): у каждого из четырёх контрактов — серверный API, формат проекта, формат операционной записи, манифесты growctl — своя SchemaVersion `MAJOR.MINOR`, у всех стартовая `0.1`. Пока MAJOR = 0, совместимость не обещается
+- **Версионирование контрактов** (задача 17, ADR 0005, термин SchemaVersion в `GLOSSARY.md`): у каждого из четырёх контрактов — серверный API, формат проекта, формат операционной записи, манифесты growctl — своя SchemaVersion `MAJOR.MINOR`, у всех стартовая `0.1`. Пока MAJOR = 0, совместимость не обещается
 - публичный пакет `contract/`: `SchemaVersion`, по подпакету на контракт и MAJOR (`contract/api/v0`, `contract/project/v0`, `contract/record/v0`, `contract/manifest/v0`). Форматы проекта и записи пока заготовки — только версия и корневое поле `schema_version`
 - JSON-схемы генерируются из Go-типов в `schemas/<контракт>/<MAJOR.MINOR>.json` (`make schemas`) и коммитятся. `make test` падает, если типы изменились, а версию не подняли, и если новая MINOR (при MAJOR ≥ 1) не только добавляет необязательные поля
 - заголовок `GrowSCADA-Schema-Version`: сервер ставит его в каждый ответ, включая поток событий и CORS preflight (разрешён и виден браузеру); `apiclient` отправляет его в каждом запросе, UI — только в запросах с телом: сервер читает заголовок лишь при разборе тела, а на GET нестандартный заголовок стоил бы CORS-preflight. Сервер отдаёт `Access-Control-Max-Age: 7200`, чтобы браузер не повторял preflight перед каждым POST/PUT/PATCH/DELETE
@@ -513,7 +514,7 @@
 
 ### Changed
 
-- **BREAKING: имя тега уникально** (`docs/adr/0003-tag-name-is-unique-natural-key.md`, `CONTEXT.md`):
+- **BREAKING: имя тега уникально** (`docs/adr/0003-tag-name-is-unique-natural-key.md`, `GLOSSARY.md`):
   - миграция `20260926000000_unique_tag_names.sql` — ограничение `uq_tags_name` вместо индекса `idx_tags_name` (упадёт, если в БД уже есть дубликаты имён)
   - новая доменная ошибка `tag.ErrTagNameTaken`; репозиторий отображает в неё нарушение `uq_tags_name`
   - `POST /api/v1/tags` с занятым именем отвечает `409 Conflict` (Problem Details); Bruno: `post_tags_duplicate_name.yml` (имя `is_active` из сида)
@@ -526,7 +527,7 @@
 
 - `internal/domain/event/event_type_test.go` — `TestAllEventTypes_ListsEveryDeclaredEventType`: разбирает `event_type.go` и сверяет число объявленных значений `EventType` с `len(AllEventTypes())`; ловит значение, не добавленное в таблицу имён (такие события молча не доходили бы до SSE-клиентов, т. к. хаб подписывается на `AllEventTypes()`)
 - `tests/api/bruno_collections/growscada/post_widget_types.yml` — пример порта с `"type_hint": ""` («любой тип»)
-- `docs/agents/` (`issue-tracker.md`, `triage-labels.md`, `domain.md`) и раздел «Agent skills» в `AGENTS.md` — конфигурация agent skills: задачи ведутся в `todo/`, стандартные triage-метки, single-context `CONTEXT.md` + `docs/adr/`
+- `docs/agents/` (`issue-tracker.md`, `triage-labels.md`, `domain.md`) и раздел «Agent skills» в `AGENTS.md` — конфигурация agent skills: задачи ведутся в `todo/`, стандартные triage-метки, single-context `GLOSSARY.md` + `docs/adr/`
 
 ### Removed
 
@@ -546,7 +547,7 @@
   - в ответах API «любой тип» теперь `"type_hint": ""` вместо `"unknown"`
   - запрос с `"type_hint": "unknown"` отклоняется (пока 500, см. задачу 18)
   - UI (`uidto.TypeHintLabel`, `project/render_properties.go`) больше не обрабатывает `"unknown"`
-- Глоссарий (`CONTEXT.md`, `AGENTS.md`): Quality — `Bad`/`Uncertain`/`Good`, TagType без `Unknown`, новый термин Device
+- Глоссарий (`GLOSSARY.md`, `AGENTS.md`): Quality — `Bad`/`Uncertain`/`Good`, TagType без `Unknown`, новый термин Device
 - `internal/domain/event/event_type.go` — имена типов событий заданы одной таблицей `eventTypeNames`, из неё выводятся `AllEventTypes()`, `NewEventType()` и `String()` (вместо двух параллельных `switch` на 15 веток); добавлен `IsValid()`, как у остальных перечислений. Строковые имена и порядок `AllEventTypes()` не изменились. Round-trip тест теперь покрывает все значения `AllEventTypes()`, добавлена проверка уникальности значений и имён
 - `docs/adr/0001-no-unknown-enum-sentinels.md` — оговорено исключение: нулевое значение `PortTypeHint{}` валидно и означает «любой тип» (это отдельный value object, а не перечисление)
 - Форматирование `gofmt` в `internal/domain/tag/tag.go`, `internal/domain/widget/{input_port,port_binding}.go`, `internal/interface/ui/library/*.go`, `internal/interface/ui/project/{preview,project}.go` — без изменения поведения

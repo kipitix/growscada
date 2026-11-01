@@ -2,7 +2,7 @@
 Status: ready-for-human
 Blocked by: 38, 43
 
-Слой E. Термины — `CONTEXT.md` (Origin, Adopt).
+Слой E. Термины — `GLOSSARY.md` (Origin, Adopt).
 
 - Operator в Operation создаёт/изменяет/удаляет runtime-Widgets (Origin=Runtime) на Scenes текущей Revision; WidgetType менять не может.
 - Все изменения — записи Journal.

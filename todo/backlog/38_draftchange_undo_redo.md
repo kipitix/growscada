@@ -2,7 +2,7 @@
 Status: ready-for-human
 Blocked by: 35, 37
 
-Слой C. Термин — `CONTEXT.md` (DraftChange).
+Слой C. Термин — `GLOSSARY.md` (DraftChange).
 
 - Каждое намерение Engineer — одна DraftChange: атомарно применяется к одному или нескольким агрегатам Draft (проекта или Library); сервер хранит состояние затронутых агрегатов «до» и «после».
 - Undo/redo — серверные команды; стек переживает перезагрузку браузера и смену держателя EditLock.

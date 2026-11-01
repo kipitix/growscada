@@ -1,6 +1,6 @@
 # Контракт скрипта WidgetType
 
-Документ для авторов WidgetType: как скрипт получает данные и что он должен соблюдать. Термины — по `CONTEXT.md`.
+Документ для авторов WidgetType: как скрипт получает данные и что он должен соблюдать. Термины — по `GLOSSARY.md`.
 
 Это версионируемый контракт `widgetscript` (ADR 0005), SchemaVersion **0.1**. Схема объекта `inputs`: `schemas/widgetscript/0.1.json`, Go-типы: `contract/widgetscript/v0`. Скрипту версия не передаётся.
 

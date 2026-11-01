@@ -2,7 +2,7 @@
 Status: ready-for-human
 Blocked by: 45
 
-Слой D. Термин — `CONTEXT.md` (PlaybackFile).
+Слой D. Термин — `GLOSSARY.md` (PlaybackFile).
 
 - Выгрузка за период: Revisions, действовавшие в период, записи Journal и необходимые Checkpoints.
 - Загрузка на сервер открывает файл в History как отдельный источник воспроизведения — только просмотр, без смешивания с собственным Journal и без влияния на Operation.

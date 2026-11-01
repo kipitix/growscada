@@ -2,7 +2,7 @@
 Status: ready-for-human
 Blocked by: 35, 42
 
-Слой D. Термин — `CONTEXT.md` (Checkpoint).
+Слой D. Термин — `GLOSSARY.md` (Checkpoint).
 
 - Checkpoint = полное операционное состояние проекта на позицию Journal: номер Revision, runtime-сущности, значения/Quality всех тегов.
 - Создаётся при каждом Deploy/Rollback и периодически (константа).

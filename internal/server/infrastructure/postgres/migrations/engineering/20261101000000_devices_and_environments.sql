@@ -56,10 +56,16 @@ CREATE TABLE engineering.environment_devices (
     device_id      UUID    NOT NULL,
     params         JSONB   NOT NULL DEFAULT '{}',
     version        INTEGER NOT NULL DEFAULT 0,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT fk_environment_devices_environment_id FOREIGN KEY (environment_id) REFERENCES engineering.environments(id),
     CONSTRAINT fk_environment_devices_device_id FOREIGN KEY (device_id) REFERENCES engineering.devices(id),
     CONSTRAINT uq_environment_devices_pair UNIQUE (environment_id, device_id)
 );
+CREATE TRIGGER update_environment_devices_updated_at
+    BEFORE UPDATE ON engineering.environment_devices
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
 
 ALTER TABLE engineering.tags ADD COLUMN device_id UUID;
 ALTER TABLE engineering.tags
@@ -69,14 +75,11 @@ CREATE INDEX idx_tags_device_id ON engineering.tags(device_id);
 
 -- +goose Down
 -- +goose StatementBegin
-DROP INDEX engineering.idx_tags_device_id;
-ALTER TABLE engineering.tags
-    DROP CONSTRAINT fk_tags_device_id,
-    DROP COLUMN device_id;
+-- Dropping the column takes its index and its foreign key with it; dropping
+-- a table takes its triggers, so neither is named here.
+ALTER TABLE engineering.tags DROP COLUMN device_id;
 
 DROP TABLE engineering.environment_devices;
-DROP TRIGGER update_environments_updated_at ON engineering.environments;
 DROP TABLE engineering.environments;
-DROP TRIGGER update_devices_updated_at ON engineering.devices;
 DROP TABLE engineering.devices;
 -- +goose StatementEnd

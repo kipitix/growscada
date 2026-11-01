@@ -11,7 +11,7 @@ Blocked by: 34_4
 ### `devicelink` — без изменений контракта
 
 ADR 0004 цела: `Link` остаётся `Resolve` + `Write`. **Меняется только то, как Link получает доступ:**
-- `devicelink.NewRESTLink(client, projectName)` → токен вместо имени проекта: проект определяется токеном (CONTEXT.md), имя проекта больше не передаётся.
+- `devicelink.NewRESTLink(client, projectName)` → токен вместо имени проекта: проект определяется токеном (GLOSSARY.md), имя проекта больше не передаётся.
 - `RESTLink` шлёт `Authorization: Bearer <token>`; `Resolve` ищет Tag по имени в проекте токена.
 - `Resolve`/`Write` — те же пути REST, что и сегодня.
 

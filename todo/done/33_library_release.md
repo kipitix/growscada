@@ -2,7 +2,7 @@
 Status: ready-for-agent
 Blocked by: 32
 
-Слой B. Термины — `CONTEXT.md` (Library, Library Release, Library Pin, Release, Draft, Discard, WidgetType); решения — ADR 0007, ADR 0012.
+Слой B. Термины — `GLOSSARY.md` (Library, Library Release, Library Pin, Release, Draft, Discard, WidgetType); решения — ADR 0007, ADR 0012.
 
 Вне задачи: EditLock (задача 37), DraftChange и undo/redo (задача 38), копирование в Revision/ProjectFile (задача 35), публичность и права доступа к Library (задача 50). До задачи 35 Draft проекта и Operation берут WidgetTypes из закреплённых Library Release.
 

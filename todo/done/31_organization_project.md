@@ -1,7 +1,7 @@
 # Organization и Project: project_id везде
 Status: ready-for-human
 
-Первая задача фундамента (слой A). Термины — `CONTEXT.md` (Organization, Project), решение — ADR 0006.
+Первая задача фундамента (слой A). Термины — `GLOSSARY.md` (Organization, Project), решение — ADR 0006.
 
 - Агрегат Project: проект — единица изоляции. Tags, Scenes с Widgets, Draft, Revisions, Journal, Devices принадлежат ровно одному Project. Сервер хостит несколько проектов в обеих ролях (Engineering и Runtime node); проекты не ссылаются на сущности друг друга.
 - Organization (tenant) владеет Projects и Libraries. Пока только ключ в данных: одна стартовая Organization из seed, без пользователей и входа (User и права — задачи 49, 50).
@@ -18,7 +18,7 @@ Status: ready-for-human
 
 - 2026-10-04: бывшая задача 30. Отменяет решение Q21 бывшей задачи 36 («один неявный проект»): решено, что project_id нужен сразу везде, включая Runtime node, до появления Journal и Revision — иначе это вторая большая миграция.
 - 2026-10-06: из grilling задачи 20 (ADR 0008). Многоагрегатной единицы работы нет, поэтому шов, через который `project_id` попадает в запросы (ADR 0006), решается здесь. Варианты: фабрика репозиториев по области (`ForProject(p)` → `Tags()`/`Scenes()`, `ForLibrary(l)` → `WidgetTypes()` в задаче 33; интерфейсы репозиториев не меняются, забытый проект — ошибка компиляции) или `projectID` в `context.Context` (меньше diff, но ошибка только во время выполнения, политики должны класть проект в ctx сами). Требование в любом случае: строка outbox несёт `project_id`, политика берёт репозитории проекта события.
-- 2026-10-11 (обсуждение архитектуры после grilling задачи 21): отложен вопрос, не признать ли Engineering и Runtime двумя Bounded Context (свои CONTEXT.md, свой смысл Tag/Widget; CQRS — только в Runtime: Journal на запись, Checkpoint + Player на чтение). Отложен из-за дублирования моделей и перевода на границе (Deploy/ProjectFile). Смягчение, если вернёмся: общие value objects (TagName, TagType, Quality, ID) — Shared Kernel, разделять только то, что расходится по смыслу.
+- 2026-10-11 (обсуждение архитектуры после grilling задачи 21): отложен вопрос, не признать ли Engineering и Runtime двумя Bounded Context (свои GLOSSARY.md, свой смысл Tag/Widget; CQRS — только в Runtime: Journal на запись, Checkpoint + Player на чтение). Отложен из-за дублирования моделей и перевода на границе (Deploy/ProjectFile). Смягчение, если вернёмся: общие value objects (TagName, TagType, Quality, ID) — Shared Kernel, разделять только то, что расходится по смыслу.
 - 2026-10-25 (grilling, ADR 0006 обновлён). Сценарий: вендор Library V, интегратор I, завод P; серверы и раздельные, и общий. Решения:
   - Идентичность Project (UUID) глобальна и переживает Deploy/ProjectFile; имя и Organization-владелец локальны для сервера, в ProjectFile не входят.
   - `widget_types` без ключа до задачи 33 (временное отступление от изоляции, см. ADR 0006 Consequences).

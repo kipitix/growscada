@@ -2,7 +2,7 @@
 Status: needs-info
 Blocked by: 34_4
 
-Слой E. Термины — `CONTEXT.md` (Draft Tag state, Tag state).
+Слой E. Термины — `GLOSSARY.md` (Draft Tag state, Tag state).
 
 Задача выделена из задачи 34 (Device, Device Gateway, Device Token, Environment) 2026-11-01: там согласована часть A (устройства, токены, окружения, запись в Runtime), а эта — про отладку мнемосхем в Project-режиме на живых данных. **Спецификация не готова**: инженер поработает в приложении и сформулирует её здесь.
 

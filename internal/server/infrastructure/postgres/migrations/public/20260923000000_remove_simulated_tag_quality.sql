@@ -1,7 +1,7 @@
 -- +goose Up
 -- +goose StatementBegin
 -- Quality describes how trustworthy a value is, never where it came from, so
--- "simulated" is no longer a Quality (see Quality in CONTEXT.md). Manually set
+-- "simulated" is no longer a Quality (see Quality in GLOSSARY.md). Manually set
 -- values were considered correct, so they become 'good'.
 UPDATE tags
     SET quality = 'good'

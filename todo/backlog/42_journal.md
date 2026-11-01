@@ -2,7 +2,7 @@
 Status: ready-for-human
 Blocked by: 32, 35
 
-Слой D. Термин — `CONTEXT.md` (Journal); архитектура — ADR 0002.
+Слой D. Термин — `GLOSSARY.md` (Journal); архитектура — ADR 0002.
 
 - Операционные события несут полное новое состояние (payload) того, что изменилось: значение/Quality тега, runtime-сущность, Deploy, Rollback.
 - Таблица `runtime.journal(project_id, seq bigserial, ts, type, aggregate_id, payload jsonb, schema_version)` — append-only; запись в одной транзакции с изменением состояния. Контракт записи — `contract/record/v0`.

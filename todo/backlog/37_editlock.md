@@ -2,7 +2,7 @@
 Status: ready-for-human
 Blocked by: 31, 33
 
-Слой C. Термин — `CONTEXT.md` (EditLock).
+Слой C. Термин — `GLOSSARY.md` (EditLock).
 
 - Check out / Check in одного Draft — проекта или Library — Engineer'ом; без EditLock Draft только для чтения (UI и сервер отклоняют правки).
 - Пока нет User (задача 49), держатель — Client (SSE-подключение) с добровольно указанным именем.

@@ -2,7 +2,7 @@
 Status: needs-triage
 Blocked by: 34_4
 
-Слой C. Термины — `CONTEXT.md` (Device, Environment, Environment Device).
+Слой C. Термины — `GLOSSARY.md` (Device, Environment, Environment Device).
 
 Выделено из задачи 34 (части A) 2026-11-01: REST для устройств и окружений готов (часть 4), а манифестов growctl нет. **Спецификация не готова** — проектировать вместе с инженером.
 

@@ -2,7 +2,7 @@
 Status: needs-triage
 Blocked by: 34_4
 
-Слой E. Термины — `CONTEXT.md` (Device, Environment, Environment Device, Device Token).
+Слой E. Термины — `GLOSSARY.md` (Device, Environment, Environment Device, Device Token).
 
 Выделено из задачи 34 (части A) 2026-11-01: REST для устройств, окружений и токенов готов (часть 4), а интерфейса нет. **Спецификация не готова** — проектировать вместе с инженером.
 

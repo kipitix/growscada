@@ -145,15 +145,18 @@ func (r tagStateRepositoryPostgres) UpsertDefinitions(ctx context.Context, proje
 		if err != nil {
 			return err
 		}
-		var copied uuid.UUID
+		// Scan only tells whether the upsert touched a copy of the same Project
+		// and TagType: on a mismatch the WHERE of ON CONFLICT matches nothing,
+		// RETURNING yields no row, and Scan answers ErrNoRows.
+		var touched int
 		err = tx.QueryRowContext(ctx,
 			`INSERT INTO runtime.tags (id, project_id, name, type, version)
 			 VALUES ($1, $2, $3, $4, $5)
 			 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, version = EXCLUDED.version
 			 WHERE runtime.tags.project_id = EXCLUDED.project_id AND runtime.tags.type = EXCLUDED.type
-			 RETURNING id`,
+			 RETURNING 1`,
 			def.TagID.UUID(), projectID.UUID(), def.Name.String(), def.Type.String(), def.Version.Number(),
-		).Scan(&copied)
+		).Scan(&touched)
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("cannot upsert tag definition %s: its copy is of another project or type than %s %s", def.TagID, projectID, def.Type)
 		}

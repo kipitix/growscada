@@ -2,7 +2,7 @@
 Status: ready-for-human
 Blocked by: 32, 33, 34
 
-Слой B. Термины — `CONTEXT.md` (ProjectFile, Deploy, Revision, Discard).
+Слой B. Термины — `GLOSSARY.md` (ProjectFile, Deploy, Revision, Discard).
 
 - Формат ProjectFile (контракт `contract/project/v0`, ADR 0005): весь Draft проекта — Scenes с Widgets, определения Tag, Devices — плюс содержимое используемых WidgetType из закреплённых Library Release (задача 33) и `schema_version`.
 - Deploy: Engineering node сериализует Draft в ProjectFile и передаёт Runtime node; тот атомарно создаёт Revision (`runtime.revisions(project_id, n, deployed_at, config jsonb)`), присваивает номер и переключает Operation.
