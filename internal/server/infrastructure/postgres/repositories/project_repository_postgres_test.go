@@ -224,7 +224,7 @@ func TestProjectDelete_LiveProject_IsNotRemoved(t *testing.T) {
 func createTagIn(t *testing.T, repo tag.TagRepository, projectID id.ID[project.Project], name string) tag.Tag {
 	t.Helper()
 	tagName, _ := tag.NewTagName(name)
-	created, err := tag.CreateTag(repo.NextID(), projectID, tagName, tag.TagTypeInteger)
+	created, err := tag.CreateTag(repo.NextID(), projectID, tagName, tag.TagTypeInteger, tag.NoSupplier())
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -275,7 +275,7 @@ func TestTagRepository_SaveInARemovedProject_IsProjectNotFound(t *testing.T) {
 	gone := id.NewID[project.Project]() // no such row: as if its cleanup had run
 	repo := repositories.NewTagRepositoryPostgres(testDB, gone)
 	tagName, _ := tag.NewTagName("speed")
-	created, _ := tag.CreateTag(repo.NextID(), gone, tagName, tag.TagTypeInteger)
+	created, _ := tag.CreateTag(repo.NextID(), gone, tagName, tag.TagTypeInteger, tag.NoSupplier())
 
 	if _, err := repo.Save(context.Background(), created); !errors.Is(err, project.ErrProjectNotFound) {
 		t.Errorf("expected ErrProjectNotFound, got %v", err)

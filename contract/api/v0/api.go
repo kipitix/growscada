@@ -14,7 +14,7 @@ import "github.com/kipitix/growscada/contract"
 
 // SchemaVersion is the version of the server API this package describes.
 // A function rather than a variable, so no importer can change it.
-func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 6} }
+func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 7} }
 
 // PathPrefix is the URL path prefix of every endpoint of this MAJOR.
 const PathPrefix = "/api/v0"

@@ -37,3 +37,9 @@ Blocked by: 34_1
 ## Вне объёма
 
 - Миграции — часть 1. Persistence, application, REST — части 3–4.
+
+## Comments
+
+- 2026-11-01 (реализация): события Device/Environment/EnvironmentDevice заведены сразу во всех местах, которых требуют экзаустивные тесты: `event.EventType*`, `apiv0` (`EventTypes()` и поля `environment_id`/`device_id`, MINOR 0.6 → 0.7 и `make schemas`), `restapi.apiEventTypes`, outbox-кодек, журнал событий UI (`eventTypeInfoByType`, `ReloadTargets.Devices`). Без этого уже в этой части падали бы `TestCodec_SamplesCoverEveryDomainEventType`, `TestNewAPIEvent_TranslatesEveryEventType`, `TestAPIEventTypes_UsesEveryContractEventType` и `TestEventTypeInfo_CoversTheContract`; части 4 остаются маршруты, обработчики и Bruno.
+- `domain/device` отнесён к `sharedDomain`, а не к `engineeringRole`: `domain/tag` (общий для ролей) называет поставщика как `id.ID[device.Device]`, и транзитивный импорт сделал бы Runtime-ноду зависящей от engineering-пакета (`TestRoles_DoNotImportEachOther` упал бы). Если нужен именно `engineeringRole` — придётся отказаться от `id.ID[device.Device]` в `tag` (см. ревью).
+- Мутации поставщика у Tag'а нет: у Tag'а вообще нет update-метода и своего события определения (`tag_updated` занят состоянием), а привязка Tag'а к Device в API ещё не спроектирована (задача 66). Поставщик задаётся при создании и восстановлении (`tag.NoSupplier()` — «поставщика нет»); проверка «не меняется без версии» появится вместе с самой мутацией.

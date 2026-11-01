@@ -1,5 +1,23 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.52] - 2026-11-01
+
+### Added
+
+- **Домен Device, Environment и EnvironmentDevice** (задача 34, часть 2; ADR 0004, поправка 2026-11-01). Persistence, application и REST — части 3–5
+  - `internal/server/domain/device`: `Device` — имя (уникально в проекте, ADR 0003), комментарий, протокол, JSON-конфигурация под протокол и своя Version; `Update` меняет имя/комментарий/протокол/конфигурацию и ждёт ожидаемую Version, `Delete` пишет событие. `Environment` — имя (уникально в проекте), комментарий, `Rename` с ожидаемой Version, `Delete`. `EnvironmentDevice` — агрегат на пару (Environment, Device) с параметрами связи, `UpdateParams` с ожидаемой Version. Все три иммутабельны: изменение возвращает новый агрегат и записывает событие, `CheckVersion` при чужой версии отдаёт `Err…Conflict`
+  - Объекты-значения: `DeviceName`, `EnvironmentName` (пустое имя — ошибка), `DeviceProtocol` (закрытый набор, на старте только `simulation`; ноль невалиден, ADR 0001), `DeviceConfig` и `EnvironmentDeviceParams` — неизменяемый JSON-объект (вход и выход копируются, не-объект — ошибка, пусто — `{}`)
+  - События `device_created`/`_updated`/`_deleted`, `environment_*`, `environment_device_*` — `project.ContentEvent`: называют проект и едут в его SSE-поток; у событий пары есть её собственный ID, `EnvironmentID` и `DeviceID`
+  - Ошибки-сентинелы по образцу `library`/`scene` (`ErrDeviceNotFound`, `ErrDeviceConflict`, `ErrDeviceNameTaken`, `ErrEnvironment*`, `ErrEnvironmentDeviceNotFound`, `ErrEnvironmentDeviceConflict`, `ErrEnvironmentDeviceExists`) и интерфейсы `DeviceRepository`, `EnvironmentRepository`, `EnvironmentDeviceRepository` в области проекта (как `ProjectScopes`)
+- **Поставщик у Tag'а**: `Tag` несёт `DeviceID` — часть определения (`id.ID[device.Device]`, нулевой ID — поставщика нет; новый `id.ID.IsZero()`); `CreateTag`/`ReconstituteTag` принимают поставщика, `tag.NoSupplier()` — «пишут люди». Репозиторий Tag'ов читает и пишет `engineering.tags.device_id`
+- REST API **0.7**: типы событий `device_*`, `environment_*`, `environment_device_*` в `apiv0.EventTypes()` и поля `environment_id`/`device_id` у `Event` (MINOR, пока MAJOR = 0)
+
+### Changed
+
+- Outbox-кодек хранит и читает события Device, Environment и EnvironmentDevice (payload получает `environment_id`/`device_id` пары); журнал событий UI знает их типы, относит к содержимому проекта и перезагружает устройства по проектному потоку (`ReloadTargets.Devices`; панель устройств — задача 66)
+- `restapi` знает ошибки Device/Environment/EnvironmentDevice: 404 и 409 с ресурсами `Device`, `Environment`, `EnvironmentDevice` (маршруты — часть 4)
+- `roles_test`: `domain/device` отнесён к общему домену, а не к `engineeringRole`: `domain/tag` (общий для ролей) называет ID поставщика как `id.ID[device.Device]`, и Runtime-нода компилирует `tag` вместе с ним
+
 ## [0.0.51] - 2026-11-01
 
 ### Changed

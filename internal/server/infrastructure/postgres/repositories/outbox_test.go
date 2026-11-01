@@ -70,7 +70,7 @@ func (r *recorder) types() []string {
 func createTag(t *testing.T, repo tag.TagRepository, name string) tag.Tag {
 	t.Helper()
 	tmpl := makeTag(t, name, repo)
-	created, err := tag.CreateTag(tmpl.ID(), mainProject, tmpl.Name(), tmpl.Type())
+	created, err := tag.CreateTag(tmpl.ID(), mainProject, tmpl.Name(), tmpl.Type(), tag.NoSupplier())
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}

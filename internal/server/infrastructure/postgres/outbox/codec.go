@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -47,6 +48,10 @@ type payload struct {
 	LibraryID *uuid.UUID `json:"library_id,omitempty"`
 	// Release is the number of the Library Release of library_released.
 	Release int `json:"release,omitempty"`
+	// EnvironmentID and DeviceID are the pair of an environment_device_*
+	// event, whose ID is the pair's own.
+	EnvironmentID *uuid.UUID `json:"environment_id,omitempty"`
+	DeviceID      *uuid.UUID `json:"device_id,omitempty"`
 }
 
 // Encode returns the stored form of a domain event. Events of delivery
@@ -75,6 +80,16 @@ func Encode(e event.Event) ([]byte, error) {
 		p.ID = ev.LibraryID().UUID()
 	case librarypin.LibraryPinEvent:
 		p.ID = ev.LibraryID().UUID()
+	case device.EnvironmentDeviceEvent:
+		p.ID = ev.EnvironmentDeviceID().UUID()
+		environmentID := ev.EnvironmentID().UUID()
+		deviceID := ev.DeviceID().UUID()
+		p.EnvironmentID = &environmentID
+		p.DeviceID = &deviceID
+	case device.DeviceEvent:
+		p.ID = ev.DeviceID().UUID()
+	case device.EnvironmentEvent:
+		p.ID = ev.EnvironmentID().UUID()
 	case scene.WidgetEvent:
 		p.ID = ev.WidgetID().UUID()
 		sceneID := ev.SceneID().UUID()
@@ -111,6 +126,9 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 
 	projectOfEvent := id.NewID(id.IDWithUUID[project.Project](p.ID))
 	libraryOfEvent := id.NewID(id.IDWithUUID[library.Library](p.ID))
+	deviceOfEvent := id.NewID(id.IDWithUUID[device.Device](p.ID))
+	environmentOfEvent := id.NewID(id.IDWithUUID[device.Environment](p.ID))
+	environmentDeviceOfEvent := id.NewID(id.IDWithUUID[device.EnvironmentDevice](p.ID))
 
 	switch eventType {
 	case event.EventTypeWidgetTypeCreated, event.EventTypeWidgetTypeUpdated, event.EventTypeWidgetTypeDeleted:
@@ -170,6 +188,32 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 		return librarypin.NewLibraryPinUpdatedEvent(libraryOfEvent, projectID, ts), nil
 	case event.EventTypeLibraryPinDeleted:
 		return librarypin.NewLibraryPinDeletedEvent(libraryOfEvent, projectID, ts), nil
+	case event.EventTypeDeviceCreated:
+		return device.NewDeviceCreatedEvent(deviceOfEvent, projectID, ts), nil
+	case event.EventTypeDeviceUpdated:
+		return device.NewDeviceUpdatedEvent(deviceOfEvent, projectID, ts), nil
+	case event.EventTypeDeviceDeleted:
+		return device.NewDeviceDeletedEvent(deviceOfEvent, projectID, ts), nil
+	case event.EventTypeEnvironmentCreated:
+		return device.NewEnvironmentCreatedEvent(environmentOfEvent, projectID, ts), nil
+	case event.EventTypeEnvironmentUpdated:
+		return device.NewEnvironmentUpdatedEvent(environmentOfEvent, projectID, ts), nil
+	case event.EventTypeEnvironmentDeleted:
+		return device.NewEnvironmentDeletedEvent(environmentOfEvent, projectID, ts), nil
+	case event.EventTypeEnvironmentDeviceCreated, event.EventTypeEnvironmentDeviceUpdated, event.EventTypeEnvironmentDeviceDeleted:
+		if p.EnvironmentID == nil || p.DeviceID == nil {
+			return nil, fmt.Errorf("cannot decode %s payload: no environment_id or device_id", eventType)
+		}
+		environmentID := id.NewID(id.IDWithUUID[device.Environment](*p.EnvironmentID))
+		deviceID := id.NewID(id.IDWithUUID[device.Device](*p.DeviceID))
+		switch eventType {
+		case event.EventTypeEnvironmentDeviceCreated:
+			return device.NewEnvironmentDeviceCreatedEvent(environmentDeviceOfEvent, environmentID, deviceID, projectID, ts), nil
+		case event.EventTypeEnvironmentDeviceUpdated:
+			return device.NewEnvironmentDeviceUpdatedEvent(environmentDeviceOfEvent, environmentID, deviceID, projectID, ts), nil
+		default:
+			return device.NewEnvironmentDeviceDeletedEvent(environmentDeviceOfEvent, environmentID, deviceID, projectID, ts), nil
+		}
 	}
 
 	// Widget events: the Scene that holds the widget is stored beside it.

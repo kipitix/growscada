@@ -209,7 +209,7 @@ func (t tagServiceImpl) CreateTag(ctx context.Context, rawProjectID uuid.UUID, n
 		return appdto.Tag{}, fmt.Errorf("cannot create tag because of type: %w", invalidInput(err))
 	}
 
-	newTag, err := tag.CreateTag(newTagID, projectID, newTagName, newTagType)
+	newTag, err := tag.CreateTag(newTagID, projectID, newTagName, newTagType, tag.NoSupplier())
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("cannot create tag: %w", err)
 	}

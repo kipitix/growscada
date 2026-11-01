@@ -43,3 +43,13 @@ func TestID_UUID_Roundtrip(t *testing.T) {
 		t.Errorf("UUID roundtrip failed: expected %v, got %v", original, id.UUID())
 	}
 }
+
+func TestID_IsZero(t *testing.T) {
+	var absent ID[testEntity]
+	if !absent.IsZero() {
+		t.Error("the zero ID must report itself zero: it means no aggregate")
+	}
+	if NewID[testEntity]().IsZero() {
+		t.Error("a generated ID must not report itself zero")
+	}
+}

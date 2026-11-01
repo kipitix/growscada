@@ -10,6 +10,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
+	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
@@ -36,7 +37,11 @@ var (
 	libraryResource    = resource{name: "Library", pathParam: "library_id"}
 	releaseResource    = resource{name: "LibraryRelease", pathParam: "release_number"}
 	// A Library Pin is named by its library within its project.
-	libraryPinResource = resource{name: "LibraryPin", pathParam: "library_id"}
+	libraryPinResource  = resource{name: "LibraryPin", pathParam: "library_id"}
+	deviceResource      = resource{name: "Device", pathParam: "device_id"}
+	environmentResource = resource{name: "Environment", pathParam: "environment_id"}
+	// An Environment Device is named by its Device within its Environment.
+	environmentDeviceResource = resource{name: "EnvironmentDevice", pathParam: "device_id"}
 )
 
 // wildcard is the router pattern segment that carries the resource's ID.
@@ -84,6 +89,15 @@ var errorMappings = []errorMapping{
 	{scene.ErrSceneNotFound, http.StatusNotFound, sceneResource, ""},
 	{scene.ErrSceneConflict, http.StatusConflict, sceneResource, "Scene was changed concurrently; reload it and retry"},
 	{scene.ErrWidgetNotFound, http.StatusNotFound, widgetResource, ""},
+	{device.ErrDeviceNotFound, http.StatusNotFound, deviceResource, ""},
+	{device.ErrDeviceConflict, http.StatusConflict, deviceResource, "Device was changed concurrently; reload it and retry"},
+	{device.ErrDeviceNameTaken, http.StatusConflict, deviceResource, "Device name is already taken in the project"},
+	{device.ErrEnvironmentNotFound, http.StatusNotFound, environmentResource, ""},
+	{device.ErrEnvironmentConflict, http.StatusConflict, environmentResource, "Environment was changed concurrently; reload it and retry"},
+	{device.ErrEnvironmentNameTaken, http.StatusConflict, environmentResource, "Environment name is already taken in the project"},
+	{device.ErrEnvironmentDeviceNotFound, http.StatusNotFound, environmentDeviceResource, ""},
+	{device.ErrEnvironmentDeviceConflict, http.StatusConflict, environmentDeviceResource, "EnvironmentDevice was changed concurrently; reload it and retry"},
+	{device.ErrEnvironmentDeviceExists, http.StatusConflict, environmentDeviceResource, "Device is already in the environment"},
 }
 
 // sendError responds to an error from the application layer. Invalid input is

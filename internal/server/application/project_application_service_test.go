@@ -243,7 +243,7 @@ func TestProjectCleanup_TagSavedAfterTheProjectIsRemoved_IsProjectNotFound(t *te
 	// marked, written once the cleanup has already run: refused.
 	r2 := newScopes().ForProject(id.NewID(id.IDWithUUID[project.Project](p)))
 	name, _ := tag.NewTagName("late")
-	late, _ := tag.CreateTag(r2.Tags().NextID(), id.NewID(id.IDWithUUID[project.Project](p)), name, tag.TagTypeInteger)
+	late, _ := tag.CreateTag(r2.Tags().NextID(), id.NewID(id.IDWithUUID[project.Project](p)), name, tag.TagTypeInteger, tag.NoSupplier())
 	if _, err := r2.Tags().Save(ctx, late); !errors.Is(err, project.ErrProjectNotFound) {
 		t.Fatalf("a tag of a removed project: expected ErrProjectNotFound, got %v", err)
 	}
@@ -256,7 +256,7 @@ func lateTag(t *testing.T, p uuid.UUID) (tag.TagRepository, tag.Tag) {
 	projectID := id.NewID(id.IDWithUUID[project.Project](p))
 	repo := newScopes().ForProject(projectID).Tags()
 	name, _ := tag.NewTagName("late")
-	late, err := tag.CreateTag(repo.NextID(), projectID, name, tag.TagTypeInteger)
+	late, err := tag.CreateTag(repo.NextID(), projectID, name, tag.TagTypeInteger, tag.NoSupplier())
 	if err != nil {
 		t.Fatal(err)
 	}

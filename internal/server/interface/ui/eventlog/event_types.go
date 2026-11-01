@@ -56,7 +56,10 @@ func defaultFilters() map[category]bool {
 // stream of that project; anything else is the server's.
 func isProjectContent(eventType string) bool {
 	switch eventType {
-	case apiv0.EventLibraryPinCreated, apiv0.EventLibraryPinUpdated, apiv0.EventLibraryPinDeleted:
+	case apiv0.EventLibraryPinCreated, apiv0.EventLibraryPinUpdated, apiv0.EventLibraryPinDeleted,
+		apiv0.EventDeviceCreated, apiv0.EventDeviceUpdated, apiv0.EventDeviceDeleted,
+		apiv0.EventEnvironmentCreated, apiv0.EventEnvironmentUpdated, apiv0.EventEnvironmentDeleted,
+		apiv0.EventEnvironmentDeviceCreated, apiv0.EventEnvironmentDeviceUpdated, apiv0.EventEnvironmentDeviceDeleted:
 		return true
 	}
 	switch eventTypeInfoByType[eventType].category {
@@ -108,6 +111,18 @@ var eventTypeInfoByType = map[string]eventTypeInfo{
 
 	apiv0.EventClientConnected:    {categoryClient, "Client %s connected"},
 	apiv0.EventClientDisconnected: {categoryClient, "Client %s disconnected"},
+
+	// The Devices and Environments of a project. Their own filter
+	// categories wait for the Devices panel (task 66).
+	apiv0.EventDeviceCreated:            {categoryOther, "Device %s created"},
+	apiv0.EventDeviceUpdated:            {categoryOther, "Device %s updated"},
+	apiv0.EventDeviceDeleted:            {categoryOther, "Device %s deleted"},
+	apiv0.EventEnvironmentCreated:       {categoryOther, "Environment %s created"},
+	apiv0.EventEnvironmentUpdated:       {categoryOther, "Environment %s updated"},
+	apiv0.EventEnvironmentDeleted:       {categoryOther, "Environment %s deleted"},
+	apiv0.EventEnvironmentDeviceCreated: {categoryOther, "EnvironmentDevice %s created"},
+	apiv0.EventEnvironmentDeviceUpdated: {categoryOther, "EnvironmentDevice %s updated"},
+	apiv0.EventEnvironmentDeviceDeleted: {categoryOther, "EnvironmentDevice %s deleted"},
 }
 
 // describe is the log text of an event of this type with the given id.

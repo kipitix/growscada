@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -38,6 +39,9 @@ func sampleEvents(t *testing.T) []event.Event {
 	sceneID := id.NewID[scene.Scene]()
 	widgetID := id.NewID[scene.Widget]()
 	libraryID := id.NewID[library.Library]()
+	deviceID := id.NewID[device.Device]()
+	environmentID := id.NewID[device.Environment]()
+	environmentDeviceID := id.NewID[device.EnvironmentDevice]()
 	release, _ := library.NewReleaseNumber(3)
 	return []event.Event{
 		tag.NewTagCreatedEvent(tagID, projectID, ts),
@@ -63,6 +67,15 @@ func sampleEvents(t *testing.T) []event.Event {
 		project.NewProjectCreatedEvent(projectID, ts),
 		project.NewProjectUpdatedEvent(projectID, ts),
 		project.NewProjectDeletedEvent(projectID, ts),
+		device.NewDeviceCreatedEvent(deviceID, projectID, ts),
+		device.NewDeviceUpdatedEvent(deviceID, projectID, ts),
+		device.NewDeviceDeletedEvent(deviceID, projectID, ts),
+		device.NewEnvironmentCreatedEvent(environmentID, projectID, ts),
+		device.NewEnvironmentUpdatedEvent(environmentID, projectID, ts),
+		device.NewEnvironmentDeletedEvent(environmentID, projectID, ts),
+		device.NewEnvironmentDeviceCreatedEvent(environmentDeviceID, environmentID, deviceID, projectID, ts),
+		device.NewEnvironmentDeviceUpdatedEvent(environmentDeviceID, environmentID, deviceID, projectID, ts),
+		device.NewEnvironmentDeviceDeletedEvent(environmentDeviceID, environmentID, deviceID, projectID, ts),
 	}
 }
 
@@ -152,6 +165,19 @@ func assertSameSubject(t *testing.T, original, decoded event.Event) {
 				t.Errorf("by reconciliation %t, want %t", got, updatedWant.ByReconciliation())
 			}
 		}
+	case device.EnvironmentDeviceEvent:
+		got, ok := decoded.(device.EnvironmentDeviceEvent)
+		if !ok || got.EnvironmentDeviceID() != want.EnvironmentDeviceID() || got.EnvironmentID() != want.EnvironmentID() || got.DeviceID() != want.DeviceID() {
+			t.Errorf("decoded %T, want the pair (%s, %s) of %s", decoded, want.EnvironmentID(), want.DeviceID(), want.EnvironmentDeviceID())
+		}
+	case device.DeviceEvent:
+		if got, ok := decoded.(device.DeviceEvent); !ok || got.DeviceID() != want.DeviceID() {
+			t.Errorf("decoded %T, want an event of device %s", decoded, want.DeviceID())
+		}
+	case device.EnvironmentEvent:
+		if got, ok := decoded.(device.EnvironmentEvent); !ok || got.EnvironmentID() != want.EnvironmentID() {
+			t.Errorf("decoded %T, want an event of environment %s", decoded, want.EnvironmentID())
+		}
 	case scene.SceneEvent:
 		if got := decoded.(scene.SceneEvent); got.SceneID() != want.SceneID() {
 			t.Errorf("scene ID %s, want %s", got.SceneID(), want.SceneID())
@@ -215,7 +241,10 @@ func TestCodec_WidgetEventWithoutWidgetType_Decodes(t *testing.T) {
 // every waiting row one.
 func TestCodec_ContentEventWithoutProject_IsRefused(t *testing.T) {
 	const row = `{"timestamp":"2026-10-06T12:30:15Z","id":"6f1c2a52-6e0c-4b8e-9d0a-3c1e5b7a9f10","scene_id":"0b7e7c1e-2f4d-4a6b-8c9d-1e2f3a4b5c6d"}`
-	for _, et := range []event.EventType{event.EventTypeTagCreated, event.EventTypeSceneCreated, event.EventTypeWidgetDeleted} {
+	for _, et := range []event.EventType{
+		event.EventTypeTagCreated, event.EventTypeSceneCreated, event.EventTypeWidgetDeleted,
+		event.EventTypeDeviceCreated, event.EventTypeEnvironmentUpdated, event.EventTypeEnvironmentDeviceCreated,
+	} {
 		if _, err := outbox.Decode(et, []byte(row)); err == nil {
 			t.Errorf("%s without project_id: expected an error", et)
 		}

@@ -5,6 +5,7 @@ import (
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
+	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
@@ -47,13 +48,23 @@ var apiEventTypes = map[event.EventType]string{
 	event.EventTypeLibraryPinCreated:     apiv0.EventLibraryPinCreated,
 	event.EventTypeLibraryPinUpdated:     apiv0.EventLibraryPinUpdated,
 	event.EventTypeLibraryPinDeleted:     apiv0.EventLibraryPinDeleted,
+
+	event.EventTypeDeviceCreated:            apiv0.EventDeviceCreated,
+	event.EventTypeDeviceUpdated:            apiv0.EventDeviceUpdated,
+	event.EventTypeDeviceDeleted:            apiv0.EventDeviceDeleted,
+	event.EventTypeEnvironmentCreated:       apiv0.EventEnvironmentCreated,
+	event.EventTypeEnvironmentUpdated:       apiv0.EventEnvironmentUpdated,
+	event.EventTypeEnvironmentDeleted:       apiv0.EventEnvironmentDeleted,
+	event.EventTypeEnvironmentDeviceCreated: apiv0.EventEnvironmentDeviceCreated,
+	event.EventTypeEnvironmentDeviceUpdated: apiv0.EventEnvironmentDeviceUpdated,
+	event.EventTypeEnvironmentDeviceDeleted: apiv0.EventEnvironmentDeviceDeleted,
 }
 
 // newAPIEvent translates a domain (or delivery) event into the event stream's
 // message: its type through apiEventTypes, and the fields its family carries
 // — the affected aggregate's (or connection's) ID, the Scene of a Widget, the
-// Library of a WidgetType, the number of a new release, the Tag's new state
-// of tag_updated. An event type missing from the table gives
+// Library of a WidgetType, the number of a new release, the pair of an
+// EnvironmentDevice, the Tag's new state of tag_updated. An event type missing from the table gives
 // an empty Type; such an event is not sent.
 func newAPIEvent(e event.Event) apiv0.Event {
 	ev := apiv0.Event{
@@ -80,6 +91,14 @@ func newAPIEvent(e event.Event) apiv0.Event {
 		}
 	case librarypin.LibraryPinEvent:
 		ev.ID = e.LibraryID().String()
+	case device.EnvironmentDeviceEvent:
+		ev.ID = e.EnvironmentDeviceID().String()
+		ev.EnvironmentID = e.EnvironmentID().String()
+		ev.DeviceID = e.DeviceID().String()
+	case device.DeviceEvent:
+		ev.ID = e.DeviceID().String()
+	case device.EnvironmentEvent:
+		ev.ID = e.EnvironmentID().String()
 	case scene.SceneEvent:
 		ev.ID = e.SceneID().String()
 	case project.ProjectEvent:

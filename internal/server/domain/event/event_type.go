@@ -45,6 +45,16 @@ var (
 	EventTypeLibraryPinCreated     = EventType{eventType: 24}
 	EventTypeLibraryPinUpdated     = EventType{eventType: 25}
 	EventTypeLibraryPinDeleted     = EventType{eventType: 26}
+
+	EventTypeDeviceCreated            = EventType{eventType: 27}
+	EventTypeDeviceUpdated            = EventType{eventType: 28}
+	EventTypeDeviceDeleted            = EventType{eventType: 29}
+	EventTypeEnvironmentCreated       = EventType{eventType: 30}
+	EventTypeEnvironmentUpdated       = EventType{eventType: 31}
+	EventTypeEnvironmentDeleted       = EventType{eventType: 32}
+	EventTypeEnvironmentDeviceCreated = EventType{eventType: 33}
+	EventTypeEnvironmentDeviceUpdated = EventType{eventType: 34}
+	EventTypeEnvironmentDeviceDeleted = EventType{eventType: 35}
 )
 
 // eventTypeNames is the single source of truth for known event types:
@@ -80,6 +90,15 @@ var eventTypeNames = []struct {
 	{EventTypeLibraryPinCreated, "library_pin_created"},
 	{EventTypeLibraryPinUpdated, "library_pin_updated"},
 	{EventTypeLibraryPinDeleted, "library_pin_deleted"},
+	{EventTypeDeviceCreated, "device_created"},
+	{EventTypeDeviceUpdated, "device_updated"},
+	{EventTypeDeviceDeleted, "device_deleted"},
+	{EventTypeEnvironmentCreated, "environment_created"},
+	{EventTypeEnvironmentUpdated, "environment_updated"},
+	{EventTypeEnvironmentDeleted, "environment_deleted"},
+	{EventTypeEnvironmentDeviceCreated, "environment_device_created"},
+	{EventTypeEnvironmentDeviceUpdated, "environment_device_updated"},
+	{EventTypeEnvironmentDeviceDeleted, "environment_device_deleted"},
 }
 
 // AllEventTypes returns every known EventType.

@@ -232,7 +232,7 @@ func TestEventsHandlers_GetProjectEvents_TagUpdatedCarriesTagState(t *testing.T)
 
 	name, _ := tag.NewTagName("pressure")
 	aVersion, _ := version.New(version.WithNumber[tag.Tag](7))
-	aTag, err := tag.ReconstituteTag(id.NewID[tag.Tag](), mainProjectID, name, tag.TagTypeInteger, aVersion)
+	aTag, err := tag.ReconstituteTag(id.NewID[tag.Tag](), mainProjectID, name, tag.TagTypeInteger, tag.NoSupplier(), aVersion)
 	if err != nil {
 		t.Fatalf("NewTag: %v", err)
 	}

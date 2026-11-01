@@ -12,7 +12,7 @@ import (
 func makeCreatedTag(t *testing.T) Tag {
 	t.Helper()
 	name, _ := NewTagName("pressure")
-	aTag, err := CreateTag(id.NewID[Tag](), testProject, name, TagTypeInteger)
+	aTag, err := CreateTag(id.NewID[Tag](), testProject, name, TagTypeInteger, NoSupplier())
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}

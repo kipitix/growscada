@@ -41,9 +41,14 @@ var engineeringRole = []string{
 }
 
 // sharedDomain are the packages of the domain both roles build on: the Tag's
-// value objects, IDs, events, Projects and their Organization.
+// value objects, IDs, events, Projects and their Organization — and Devices,
+// whose ID a Tag definition names as its supplier, so the shared Tag package
+// refers to it. The Device aggregate itself is the Engineering node's; it
+// lives here because a package a shared one builds on cannot be of one role
+// alone (the Runtime node compiles the shared Tag package in).
 var sharedDomain = []string{
 	"internal/server/domain/tag",
+	"internal/server/domain/device",
 	"internal/server/domain/project",
 	"internal/server/domain/organization",
 	"internal/server/domain/id",

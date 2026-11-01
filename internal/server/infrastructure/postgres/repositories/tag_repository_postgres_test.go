@@ -92,7 +92,7 @@ func makeTag(t *testing.T, name string, repo tag.TagRepository) tag.Tag {
 	if err != nil {
 		t.Fatalf("NewTagName(%q): %v", name, err)
 	}
-	newTag, err := tag.ReconstituteTag(id, mainProject, tagName, tag.TagTypeInteger, version.Initial[tag.Tag]())
+	newTag, err := tag.ReconstituteTag(id, mainProject, tagName, tag.TagTypeInteger, tag.NoSupplier(), version.Initial[tag.Tag]())
 	if err != nil {
 		t.Fatalf("NewTag: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestSave_DuplicateID_ReturnsError(t *testing.T) {
 		t.Fatalf("first Save failed: %v", err)
 	}
 
-	duplicate, _ := tag.ReconstituteTag(newTag.ID(), mainProject, newTag.Name(), newTag.Type(), version.Initial[tag.Tag]())
+	duplicate, _ := tag.ReconstituteTag(newTag.ID(), mainProject, newTag.Name(), newTag.Type(), tag.NoSupplier(), version.Initial[tag.Tag]())
 	_, err := repo.Save(ctx, duplicate)
 
 	if err == nil {
@@ -185,7 +185,7 @@ func TestSave_StaleVersion_ReturnsError(t *testing.T) {
 
 	// version=100 while DB has version=1 → optimistic lock conflict
 	badVersion, _ := version.New[tag.Tag](version.WithNumber[tag.Tag](100))
-	staleTag, _ := tag.ReconstituteTag(newTag.ID(), mainProject, newTag.Name(), newTag.Type(), badVersion)
+	staleTag, _ := tag.ReconstituteTag(newTag.ID(), mainProject, newTag.Name(), newTag.Type(), tag.NoSupplier(), badVersion)
 	_, err := repo.Save(ctx, staleTag)
 
 	if err == nil {

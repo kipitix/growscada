@@ -17,6 +17,9 @@ import (
 // of the selected project.
 type ReloadTargets struct {
 	Projects, Libraries, WidgetTypes, LibraryPins, Scenes, Widgets, Tags bool
+	// Devices is the project's Devices with its Environments and the
+	// parameters of their pairs.
+	Devices bool
 	// Scene is the one Scene whose own state and Widgets are stale (a Widget
 	// of it changed, which bumps its version without a scene event); uuid.Nil
 	// if none. The list of Scenes is not: only scene events and a resync
@@ -31,13 +34,13 @@ func (t ReloadTargets) WidgetsOf(selected uuid.UUID) bool {
 }
 
 // AllTargets is every list.
-var AllTargets = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, LibraryPins: true, Scenes: true, Widgets: true, Tags: true}
+var AllTargets = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Devices: true}
 
 // The lists of each stream: what its resync reloads, since the events it
 // published while disconnected are lost.
 var (
 	serverTargets  = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true}
-	projectTargets = ReloadTargets{LibraryPins: true, Scenes: true, Widgets: true, Tags: true}
+	projectTargets = ReloadTargets{LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Devices: true}
 )
 
 // ReloadTargetsFor routes an event of the streams (or EventResync,
@@ -78,6 +81,10 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 		return ReloadTargets{Tags: true}
 	case apiv0.EventTagCreated, apiv0.EventTagDeleted:
 		return ReloadTargets{Tags: true}
+	case apiv0.EventDeviceCreated, apiv0.EventDeviceUpdated, apiv0.EventDeviceDeleted,
+		apiv0.EventEnvironmentCreated, apiv0.EventEnvironmentUpdated, apiv0.EventEnvironmentDeleted,
+		apiv0.EventEnvironmentDeviceCreated, apiv0.EventEnvironmentDeviceUpdated, apiv0.EventEnvironmentDeviceDeleted:
+		return ReloadTargets{Devices: true}
 	}
 	return ReloadTargets{}
 }
