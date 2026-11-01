@@ -1,5 +1,15 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.51] - 2026-11-01
+
+### Changed
+
+- **Схема Device, Environment и разделение состояния Tag'а** (задача 34, часть 1; ADR 0011, поправка 2026-11-01; ADR 0004, поправка 2026-11-01). Поведения в этой части нет — только миграции обеих цепочек и приведение репозитория Runtime-ноды к новой схеме; домен, application, REST и симулятор — части 2–5
+  - `engineering/20261101000000_devices_and_environments`: таблицы `devices` (имя уникально в проекте, `protocol`, `config` JSONB, своя Version), `environments` (имя уникально в проекте), `environment_devices` (пара «окружение + устройство», `params` JSONB, своя Version; ни с одной стороны нет CASCADE, поэтому Device или Environment удаляется только когда пар с ним не осталось); `engineering.tags.device_id` с FK на `devices` и индексом — поставщик значения Tag'а
+  - `runtime/20261101000000_tag_states_and_devices`: `runtime.tags` становится копией **только определения** (остаются `id`, `project_id`, `name`, `type`, `version`; добавлен `device_id`; `value`/`quality` убраны), состояние переезжает в `runtime.tag_states(tag_id PK, value, quality, seq)` — с FK на копию определения и `ON DELETE CASCADE`, `CHECK` по quality, `seq` через прежнюю `runtime.tag_state_seq`; существующие состояния переносятся без потери значений и `seq`. Копии `runtime.devices` и `runtime.environment_devices` (без `version`), `runtime.device_tokens(device_id PK, token_hash, fingerprint, issued_at)` с уникальным индексом по хешу. Откат возвращает состояния в `runtime.tags`
+  - Репозиторий Runtime-ноды читает и пишет две таблицы: `FindInLiveProject`/`FindByIDs` — `JOIN` копии и состояния (проверка живости проекта и типа Tag'а осталась в тех же запросах), `Write` — `UPDATE runtime.tag_states … FROM runtime.tags`, `UpsertDefinitions` — вставка копии определения и начального состояния одной транзакцией (состояние уже написанного Tag'а не трогается), `Delete`/`DeleteAllOfProject` — удаление копии, состояние уходит с ней
+  - Seed и тесты миграций приведены к новой схеме; новый тест миграций проверяет перенос состояний, каскад, уникальность имён и пар в Draft, копии Runtime и откат
+
 ## [0.0.50] - 2026-10-29
 
 ### Added

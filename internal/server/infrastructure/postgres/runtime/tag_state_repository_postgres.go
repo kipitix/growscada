@@ -20,10 +20,12 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
-// tagStateRepositoryPostgres is the tagstate.Repository over runtime.tags:
-// one row per Tag, its definition's copy beside its state. A write takes the
-// next number of runtime.tag_state_seq; it is no change of an aggregate edited
-// by people, so it writes no outbox row (ADR 0011).
+// tagStateRepositoryPostgres is the tagstate.Repository over the Runtime
+// node's two tables (ADR 0011, amendment 2026-11-01): runtime.tags is the
+// copy of a Tag definition, runtime.tag_states its state. Every read joins
+// them; the state of a Tag whose definition is gone goes with it (ON DELETE
+// CASCADE). A write takes the next number of runtime.tag_state_seq; it is no
+// change of an aggregate edited by people, so it writes no outbox row.
 type tagStateRepositoryPostgres struct {
 	db *sql.DB
 }
@@ -35,12 +37,14 @@ func NewTagStateRepositoryPostgres(aDb *sql.DB) tagstate.Repository {
 	return &tagStateRepositoryPostgres{db: aDb}
 }
 
-const selectTagStateColumns = `id, name, type, version, value, quality, seq`
+const selectTagStateColumns = `t.id, t.name, t.type, t.version, s.value, s.quality, s.seq`
 
 func (r tagStateRepositoryPostgres) FindInLiveProject(ctx context.Context, projectID id.ID[project.Project], tagID id.ID[tag.Tag], orgID id.ID[organization.Organization]) (tagstate.TagState, error) {
 	row := r.db.QueryRowContext(ctx,
-		`SELECT t.id, t.name, t.type, t.version, t.value, t.quality, t.seq
-		 FROM runtime.tags t JOIN projects p ON p.id = t.project_id
+		`SELECT `+selectTagStateColumns+`
+		 FROM runtime.tags t
+		 JOIN runtime.tag_states s ON s.tag_id = t.id
+		 JOIN projects p ON p.id = t.project_id
 		 WHERE t.id = $1 AND t.project_id = $2 AND p.deleted_at IS NULL AND p.organization_id = $3`,
 		tagID.UUID(), projectID.UUID(), orgID.UUID(),
 	)
@@ -60,7 +64,10 @@ func (r tagStateRepositoryPostgres) FindByIDs(ctx context.Context, projectID id.
 		return states, nil
 	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT `+selectTagStateColumns+` FROM runtime.tags WHERE id = ANY($1::uuid[]) AND project_id = $2`,
+		`SELECT `+selectTagStateColumns+`
+		 FROM runtime.tags t
+		 JOIN runtime.tag_states s ON s.tag_id = t.id
+		 WHERE t.id = ANY($1::uuid[]) AND t.project_id = $2`,
 		pq.Array(rawIDs(tagIDs)), projectID.UUID(),
 	)
 	if err != nil {
@@ -94,13 +101,16 @@ func (r tagStateRepositoryPostgres) IsProjectLive(ctx context.Context, projectID
 
 // Write numbers the state in the UPDATE itself: concurrent writes of one Tag
 // take their numbers in the order the row lock serializes them, so the state
-// stored is the one with the greatest Seq.
+// stored is the one with the greatest Seq. The definition's copy is joined,
+// so a write of a Tag whose definition is gone (or is of another Project or
+// TagType) finds no row.
 func (r tagStateRepositoryPostgres) Write(ctx context.Context, aState tagstate.TagState) (tagstate.TagState, error) {
 	var seq int64
 	err := r.db.QueryRowContext(ctx,
-		`UPDATE runtime.tags SET value = $1, quality = $2, seq = nextval('runtime.tag_state_seq')
-		 WHERE id = $3 AND project_id = $4 AND type = $5
-		 RETURNING seq`,
+		`UPDATE runtime.tag_states s SET value = $1, quality = $2, seq = nextval('runtime.tag_state_seq')
+		 FROM runtime.tags t
+		 WHERE s.tag_id = t.id AND t.id = $3 AND t.project_id = $4 AND t.type = $5
+		 RETURNING s.seq`,
 		aState.Value().String(), aState.Quality().String(),
 		aState.TagID().UUID(), aState.ProjectID().UUID(), aState.Definition().Type.String(),
 	).Scan(&seq)
@@ -113,10 +123,11 @@ func (r tagStateRepositoryPostgres) Write(ctx context.Context, aState tagstate.T
 	return tagstate.Reconstitute(aState.Definition(), aState.Value(), aState.Quality(), tagstate.Seq(seq))
 }
 
-// UpsertDefinitions inserts the missing rows in one transaction; a row
-// already there keeps its state and takes the definition given. A row of
-// another Project or TagType is not changed: the call fails, so a policy job
-// retries it instead of taking it as done.
+// UpsertDefinitions stores the copy of the definitions in one transaction,
+// each with the initial state of a Tag that has none yet: a Tag already
+// copied keeps the state written to it. A copy of another Project or TagType
+// is not changed: the call fails, so a policy job retries it instead of
+// taking it as done.
 func (r tagStateRepositoryPostgres) UpsertDefinitions(ctx context.Context, projectID id.ID[project.Project], defs []tagstate.Definition) error {
 	if len(defs) == 0 {
 		return nil
@@ -134,23 +145,28 @@ func (r tagStateRepositoryPostgres) UpsertDefinitions(ctx context.Context, proje
 		if err != nil {
 			return err
 		}
-		res, err := tx.ExecContext(ctx,
-			`INSERT INTO runtime.tags (id, project_id, name, type, version, value, quality)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		var copied uuid.UUID
+		err = tx.QueryRowContext(ctx,
+			`INSERT INTO runtime.tags (id, project_id, name, type, version)
+			 VALUES ($1, $2, $3, $4, $5)
 			 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, version = EXCLUDED.version
-			 WHERE runtime.tags.project_id = EXCLUDED.project_id AND runtime.tags.type = EXCLUDED.type`,
+			 WHERE runtime.tags.project_id = EXCLUDED.project_id AND runtime.tags.type = EXCLUDED.type
+			 RETURNING id`,
 			def.TagID.UUID(), projectID.UUID(), def.Name.String(), def.Type.String(), def.Version.Number(),
-			initial.Value().String(), initial.Quality().String(),
-		)
+		).Scan(&copied)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("cannot upsert tag definition %s: its copy is of another project or type than %s %s", def.TagID, projectID, def.Type)
+		}
 		if err != nil {
 			return fmt.Errorf("cannot upsert tag definition %s: %w", def.TagID, err)
 		}
-		n, err := res.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("cannot upsert tag definition %s: %w", def.TagID, err)
-		}
-		if n == 0 {
-			return fmt.Errorf("cannot upsert tag definition %s: its state is of another project or type than %s %s", def.TagID, projectID, def.Type)
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO runtime.tag_states (tag_id, value, quality)
+			 VALUES ($1, $2, $3)
+			 ON CONFLICT (tag_id) DO NOTHING`,
+			def.TagID.UUID(), initial.Value().String(), initial.Quality().String(),
+		); err != nil {
+			return fmt.Errorf("cannot insert the initial state of tag %s: %w", def.TagID, err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -159,6 +175,9 @@ func (r tagStateRepositoryPostgres) UpsertDefinitions(ctx context.Context, proje
 	return nil
 }
 
+// Delete removes the copy of the Tag definitions of the Project with the
+// given IDs; the states go with them (ON DELETE CASCADE), and one without a
+// copy is skipped.
 func (r tagStateRepositoryPostgres) Delete(ctx context.Context, projectID id.ID[project.Project], tagIDs []id.ID[tag.Tag]) error {
 	if len(tagIDs) == 0 {
 		return nil

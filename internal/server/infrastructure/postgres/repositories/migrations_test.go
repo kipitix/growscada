@@ -263,8 +263,11 @@ func TestSeedData_AppliesOnTheMigratedSchema(t *testing.T) {
 
 	const main = "b0000000-0000-4000-8000-000000000001"
 	var unmatched int
-	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM engineering.tags d FULL JOIN runtime.tags s ON s.id = d.id
-	                                   WHERE d.id IS NULL OR s.id IS NULL OR d.type <> s.type OR d.name <> s.name`).Scan(&unmatched); err != nil || unmatched != 0 {
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM engineering.tags d
+	                                   FULL JOIN runtime.tags c ON c.id = d.id
+	                                   FULL JOIN runtime.tag_states s ON s.tag_id = d.id
+	                                   WHERE d.id IS NULL OR c.id IS NULL OR s.tag_id IS NULL
+	                                     OR d.type <> c.type OR d.name <> c.name`).Scan(&unmatched); err != nil || unmatched != 0 {
 		t.Errorf("tag definitions without a state or the other way round: %d, %v", unmatched, err)
 	}
 	for _, table := range []string{"engineering.tags", "runtime.tags", "engineering.scenes", "engineering.widgets"} {
@@ -421,7 +424,9 @@ func TestMigrationEngineeringAndRuntimeSchemas_MovesTablesAndSplitsTags(t *testi
 
 // TestMigrationEngineeringAndRuntimeSchemas_Down_PutsTheStatesBack: the
 // tables go back to public, each Tag with its value and Quality; a Tag
-// without a state gets its type's zero value with Quality bad.
+// without a state gets its type's zero value with Quality bad. The public
+// migration goes back only from the baseline of the roles' chains, so they
+// are rolled back to it first (ADR 0011).
 func TestMigrationEngineeringAndRuntimeSchemas_Down_PutsTheStatesBack(t *testing.T) {
 	ctx := context.Background()
 	db, dir := migrationDB(t)
@@ -429,16 +434,36 @@ func TestMigrationEngineeringAndRuntimeSchemas_Down_PutsTheStatesBack(t *testing
 		t.Fatalf("migrate: %v", err)
 	}
 	const main = "b0000000-0000-4000-8000-000000000001"
+	const baseline = 20261026000000
 	written, stateless := uuid.New(), uuid.New()
 	if _, err := db.ExecContext(ctx, `INSERT INTO engineering.tags (id, project_id, name, type, version)
 	                                  VALUES ($1, $3, 'speed', 'integer', 1), ($2, $3, 'flag', 'boolean', 1)`, written, stateless, main); err != nil {
 		t.Fatalf("insert tag definitions: %v", err)
 	}
-	if _, err := db.ExecContext(ctx, `INSERT INTO runtime.tags (id, project_id, name, type, version, value, quality, seq)
-	                                  VALUES ($1, $2, 'speed', 'integer', 1, '5', 'good', 9)`, written, main); err != nil {
+	if _, err := db.ExecContext(ctx, `INSERT INTO runtime.tags (id, project_id, name, type, version)
+	                                  VALUES ($1, $2, 'speed', 'integer', 1)`, written, main); err != nil {
+		t.Fatalf("insert the copy of the tag definition: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO runtime.tag_states (tag_id, value, quality, seq)
+	                                  VALUES ($1, '5', 'good', 9)`, written); err != nil {
 		t.Fatalf("insert tag state: %v", err)
 	}
 
+	for _, c := range []struct {
+		dir   string
+		table string
+	}{
+		{filepath.Join(dir, "..", "runtime"), "runtime.goose_db_version"},
+		{filepath.Join(dir, "..", "engineering"), "engineering.goose_db_version"},
+	} {
+		provider, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS(c.dir), goose.WithTableName(c.table))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := provider.DownTo(ctx, baseline); err != nil {
+			t.Fatalf("roll %s back to its baseline: %v", c.table, err)
+		}
+	}
 	if err := goose.DownToContext(ctx, db, dir, 20261025000000); err != nil {
 		t.Fatalf("migrate down: %v", err)
 	}
@@ -463,6 +488,107 @@ func TestMigrationEngineeringAndRuntimeSchemas_Down_PutsTheStatesBack(t *testing
 	var schemas int
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM pg_namespace WHERE nspname IN ('engineering', 'runtime')`).Scan(&schemas); err != nil || schemas != 0 {
 		t.Errorf("schemas of the roles left: %d, %v", schemas, err)
+	}
+}
+
+// TestMigrationTagStatesAndDevices_SplitsTheStateAndAddsDevices: the Tag
+// state moves to runtime.tag_states, the copy of the definition keeps only
+// what a write checks, and a state never outlives its definition; the
+// Devices, the Environments and the parameters of a pair get a table of the
+// Draft and a copy in the Runtime schema (task 34, ADR 0011 amendment
+// 2026-11-01).
+func TestMigrationTagStatesAndDevices_SplitsTheStateAndAddsDevices(t *testing.T) {
+	ctx := context.Background()
+	db, dir := migrationDB(t)
+	const main = "b0000000-0000-4000-8000-000000000001"
+	const baseline = 20261026000000
+	if err := goose.UpToContext(ctx, db, dir, baseline); err != nil {
+		t.Fatalf("migrate public: %v", err)
+	}
+	mustExec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := db.ExecContext(ctx, query, args...); err != nil {
+			t.Fatalf("%s: %v", query, err)
+		}
+	}
+	tagID, deviceID, environmentID := uuid.New(), uuid.New(), uuid.New()
+	mustExec(`INSERT INTO runtime.tags (id, project_id, name, type, version, value, quality, seq)
+	          VALUES ($1, $2, 'speed', 'integer', 3, '42', 'uncertain', 7)`, tagID, main)
+	if err := migrations.Up(ctx, db); err != nil {
+		t.Fatalf("migrate the chains of the roles: %v", err)
+	}
+
+	var value, quality string
+	var seq int64
+	if err := db.QueryRowContext(ctx, `SELECT value, quality, seq FROM runtime.tag_states WHERE tag_id = $1`, tagID).
+		Scan(&value, &quality, &seq); err != nil || value != "42" || quality != "uncertain" || seq != 7 {
+		t.Errorf("the state moved: %q/%q at %d, %v", value, quality, seq, err)
+	}
+	var stateColumns int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM information_schema.columns WHERE table_schema = 'runtime'
+	                                   AND table_name = 'tags' AND column_name IN ('value', 'quality')`).Scan(&stateColumns); err != nil || stateColumns != 0 {
+		t.Errorf("state columns left in the copy of the definition: %d, %v", stateColumns, err)
+	}
+	mustExec(`DELETE FROM runtime.tags WHERE id = $1`, tagID)
+	var states int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM runtime.tag_states`).Scan(&states); err != nil || states != 0 {
+		t.Errorf("states left after their definitions went: %d, %v", states, err)
+	}
+
+	// The Draft: a Device and an Environment of the Project, one pair of
+	// them, a name unique in the Project, a Tag's supplier among the Devices.
+	mustExec(`INSERT INTO engineering.devices (id, project_id, name, protocol, config)
+	          VALUES ($1, $2, 'sim', 'simulation', '{"pattern":"sine"}')`, deviceID, main)
+	mustExec(`INSERT INTO engineering.environments (id, project_id, name) VALUES ($1, $2, 'shop')`, environmentID, main)
+	mustExec(`INSERT INTO engineering.environment_devices (id, environment_id, device_id, params)
+	          VALUES ($1, $2, $3, '{"address":"localhost:9000"}')`, uuid.New(), environmentID, deviceID)
+	mustExec(`INSERT INTO engineering.tags (id, project_id, name, type, version, device_id)
+	          VALUES ($1, $2, 'speed', 'integer', 3, $3)`, tagID, main, deviceID)
+	if _, err := db.ExecContext(ctx, `INSERT INTO engineering.environments (id, project_id, name) VALUES ($1, $2, 'shop')`,
+		uuid.New(), main); err == nil {
+		t.Error("an environment name taken twice in the project")
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO engineering.environment_devices (id, environment_id, device_id) VALUES ($1, $2, $3)`,
+		uuid.New(), environmentID, deviceID); err == nil {
+		t.Error("a pair (environment, device) taken twice")
+	}
+
+	// The copies in the Runtime schema: the Devices and the pairs, and one
+	// token per Device, looked up by its hash.
+	for _, table := range []string{"runtime.devices", "runtime.environment_devices", "runtime.device_tokens"} {
+		var n int
+		if err := db.QueryRowContext(ctx, `SELECT count(*) FROM `+table).Scan(&n); err != nil {
+			t.Errorf("%s: %v", table, err)
+		}
+	}
+	mustExec(`INSERT INTO runtime.devices (id, project_id, name, protocol) VALUES ($1, $2, 'sim', 'simulation')`, deviceID, main)
+	mustExec(`INSERT INTO runtime.device_tokens (device_id, token_hash, fingerprint, issued_at)
+	          VALUES ($1, 'hash', 'fingerprint', now())`, deviceID)
+	if _, err := db.ExecContext(ctx, `INSERT INTO runtime.device_tokens (device_id, token_hash, fingerprint, issued_at)
+	                                   VALUES ($1, 'other', 'fingerprint', now())`, deviceID); err == nil {
+		t.Error("a second token of one device")
+	}
+
+	// Down: the state goes back into the copy of the definition.
+	mustExec(`INSERT INTO runtime.tags (id, project_id, name, type, version) VALUES ($1, $2, 'speed', 'integer', 3)`, tagID, main)
+	mustExec(`INSERT INTO runtime.tag_states (tag_id, value, quality, seq) VALUES ($1, '5', 'good', 9)`, tagID)
+	for _, c := range []struct {
+		dir   string
+		table string
+	}{
+		{filepath.Join(dir, "..", "runtime"), "runtime.goose_db_version"},
+		{filepath.Join(dir, "..", "engineering"), "engineering.goose_db_version"},
+	} {
+		provider, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS(c.dir), goose.WithTableName(c.table))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := provider.DownTo(ctx, baseline); err != nil {
+			t.Fatalf("roll %s back to its baseline: %v", c.table, err)
+		}
+	}
+	if err := db.QueryRowContext(ctx, `SELECT value || '/' || quality FROM runtime.tags WHERE id = $1`, tagID).Scan(&value); err != nil || value != "5/good" {
+		t.Errorf("the state back in the copy of the definition: %q, %v", value, err)
 	}
 }
 

@@ -32,18 +32,31 @@ INSERT INTO engineering.tags (id, project_id, name, type, version) VALUES
     ('6ba7b818-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'creator', 'string', 1),
     ('6ba7b819-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'status_message', 'string', 1);
 
--- Their Tag states, with the Runtime node's copy of the definitions (ADR 0011)
-INSERT INTO runtime.tags (id, project_id, name, type, version, value, quality, seq) VALUES
-    ('6ba7b810-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_active', 'boolean', 1, 'true', 'good', nextval('runtime.tag_state_seq')),
-    ('6ba7b811-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'max_connections', 'integer', 1, '100', 'good', nextval('runtime.tag_state_seq')),
-    ('6ba7b812-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_debug', 'boolean', 1, 'false', 'bad', nextval('runtime.tag_state_seq')),
-    ('6ba7b813-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'timeout_seconds', 'integer', 1, '30', 'uncertain', nextval('runtime.tag_state_seq')),
-    ('6ba7b814-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'retry_count', 'integer', 1, '3', 'good', nextval('runtime.tag_state_seq')),
-    ('6ba7b815-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_cached', 'boolean', 1, 'true', 'uncertain', nextval('runtime.tag_state_seq')),
-    ('6ba7b816-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'pool_size', 'integer', 1, '20', 'good', nextval('runtime.tag_state_seq')),
-    ('6ba7b817-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'enable_tls', 'boolean', 1, 'false', 'bad', nextval('runtime.tag_state_seq')),
-    ('6ba7b818-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'creator', 'string', 1, 'Alexander', 'good', nextval('runtime.tag_state_seq')),
-    ('6ba7b819-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'status_message', 'string', 1, 'System running normally - all checks passed', 'good', nextval('runtime.tag_state_seq'));
+-- The Runtime node's copies of their definitions (ADR 0011)
+INSERT INTO runtime.tags (id, project_id, name, type, version) VALUES
+    ('6ba7b810-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_active', 'boolean', 1),
+    ('6ba7b811-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'max_connections', 'integer', 1),
+    ('6ba7b812-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_debug', 'boolean', 1),
+    ('6ba7b813-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'timeout_seconds', 'integer', 1),
+    ('6ba7b814-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'retry_count', 'integer', 1),
+    ('6ba7b815-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_cached', 'boolean', 1),
+    ('6ba7b816-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'pool_size', 'integer', 1),
+    ('6ba7b817-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'enable_tls', 'boolean', 1),
+    ('6ba7b818-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'creator', 'string', 1),
+    ('6ba7b819-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'status_message', 'string', 1);
+
+-- Their Tag states (ADR 0011, amendment 2026-11-01: the state is its own table)
+INSERT INTO runtime.tag_states (tag_id, value, quality, seq) VALUES
+    ('6ba7b810-9dad-11d1-80b4-00c04fd430c8', 'true', 'good', nextval('runtime.tag_state_seq')),
+    ('6ba7b811-9dad-11d1-80b4-00c04fd430c8', '100', 'good', nextval('runtime.tag_state_seq')),
+    ('6ba7b812-9dad-11d1-80b4-00c04fd430c8', 'false', 'bad', nextval('runtime.tag_state_seq')),
+    ('6ba7b813-9dad-11d1-80b4-00c04fd430c8', '30', 'uncertain', nextval('runtime.tag_state_seq')),
+    ('6ba7b814-9dad-11d1-80b4-00c04fd430c8', '3', 'good', nextval('runtime.tag_state_seq')),
+    ('6ba7b815-9dad-11d1-80b4-00c04fd430c8', 'true', 'uncertain', nextval('runtime.tag_state_seq')),
+    ('6ba7b816-9dad-11d1-80b4-00c04fd430c8', '20', 'good', nextval('runtime.tag_state_seq')),
+    ('6ba7b817-9dad-11d1-80b4-00c04fd430c8', 'false', 'bad', nextval('runtime.tag_state_seq')),
+    ('6ba7b818-9dad-11d1-80b4-00c04fd430c8', 'Alexander', 'good', nextval('runtime.tag_state_seq')),
+    ('6ba7b819-9dad-11d1-80b4-00c04fd430c8', 'System running normally - all checks passed', 'good', nextval('runtime.tag_state_seq'));
 
 -- Add test data for widget_types table
 -- script_language: javascript | python | lua
