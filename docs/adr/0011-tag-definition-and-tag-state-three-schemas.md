@@ -6,6 +6,12 @@ Each server has one database with three schemas, each with its own goose migrati
 
 Until Deploy exists (task 35), the Runtime node learns Tag definitions from a temporary bridge: a policy on `tag_created`/`tag_deleted` brings the runtime copy of a Project's Tag definitions into line with the Draft, and the Tag creation calls the same idempotent upsert right after commit, so a Tag accepts values as soon as `POST /tags` answers (a failed call answers its error); the creation then rereads the Draft and removes the state of a Tag deleted meanwhile; a policy run fixes a failed call. Deleting a Tag in the Draft removes its state at once. Deploy replaces the bridge: the runtime copy then comes from the running Revision.
 
+## Amendment 2026-11-01: the Runtime schema copies the Draft's tables; state lives apart from definition
+
+The Runtime schema holds **copies** of the Draft's tables — `runtime.tags` (the Tag definition: name, TagType, Version and the supplying Device), `runtime.devices`, `runtime.environment_devices` — each row of a copy referring to its original by ID, and the runtime-specific data in **separate tables** referring to the copies: `runtime.tag_states` (value, Quality, seq) and `runtime.device_tokens`. The definition and the state of one Tag are therefore in two tables, where before the state shared a row with the definition. The copy is the Runtime node's own: it exists so that a write can check the TagType and the supplying Device without asking the Engineering node, and it is filled from the running Revision once Deploy exists (until then, by the temporary bridge above).
+
+A Device's supplying relation is part of the Tag definition and is copied with it, because the Runtime node must refuse a write from a Device that does not supply the Tag. Nothing changes in the roles: the Runtime node still reads only its own schema, and the Engineering node reaches it through the `RuntimeNode` port alone.
+
 ## Considered Options
 
 - Two schemas only, Projects and the outbox in `engineering`: rejected. The Runtime node needs to know the Projects too, and copying them into `runtime` would make every Project deletion a cleanup in two places.

@@ -27,16 +27,28 @@ A Tag's data type: `String`, `Boolean`, or `Integer`. Governs which values the T
 _Avoid_: analog/discrete, data type
 
 **Device**:
-A piece of equipment that supplies Tag values, as described in a Project: its address, protocol, connection parameters and how each of its Tags is extracted from that protocol. Configuration — part of the Draft and the Revision. Whether it is a simulator is descriptive metadata of the Device, not a Quality. Not yet modelled.
+A piece of equipment that supplies Tag values, as described in a Project: its protocol, how each of its Tags is extracted from that protocol, and — per Environment — where it stands and how to reach it. Configuration — part of the Draft and the Revision. A Tag has at most one supplying Device. Whether it is a simulator is descriptive metadata of the Device, not a Quality. Not yet modelled.
 _Avoid_: source, adapter, PLC, driver
 
+**Environment**:
+A named set of one Project's Devices as they stand in one context of operation — a test bench, a plant, a simulator. The Project holds several Environments; each carries the connection parameters of the Devices it holds. Configuration — part of the Draft. A Deploy does not choose an Environment.
+_Avoid_: deployment (that is a Deploy), stage, profile, instance
+
+**Environment Device**:
+One Device as configured in one Environment: its connection parameters. Configuration — part of the Draft; the pair (Environment, Device) identifies it.
+_Avoid_: device binding, deployment, connection
+
 **Device Gateway**:
-The external process that executes Device configurations: it talks each Device's protocol to the equipment, usually from inside the plant network, and delivers Tag values to the Runtime node over the device link. One Device Gateway may serve several Devices. The device simulator is a Device Gateway whose "equipment" is a loop inside itself.
+The external process that executes one Device's configuration: it talks the Device's protocol to the equipment, usually from inside the plant network, and delivers Tag values to the Runtime node over the device link. One Device Gateway serves one Device. The device simulator is a Device Gateway whose "equipment" is a loop inside itself.
 _Avoid_: connector, adapter, driver, agent
 
 **Device Token**:
-The secret by which a Device Gateway acts for one Device on the Runtime node: it fetches that Device's configuration from the running Revision and writes only that Device's Tags. Issued on the Runtime node per Device identity, never part of the Draft or a Revision; it outlives Deploys and Rollbacks and ends only when explicitly revoked or rotated. While the running Revision has no such Device, the token is dormant: it is refused, not revoked.
+The secret by which a Device Gateway acts for one Device on the Runtime node: it fetches that Device's configuration and writes only that Device's Tags. Issued per Device on the Runtime node; never part of a Draft or a Revision; it outlives Deploys and Rollbacks and ends only when explicitly revoked or rotated. While the running Revision has no such Device, the token is dormant: it is refused, not revoked.
 _Avoid_: API key, password, credential (unqualified)
+
+**Draft Tag state**:
+A Tag's value and Quality as set in the Draft — never carried into a Revision, which gives the Tag its ordinary initial state instead. It is state, not configuration, and lives apart from the Tag definition.
+_Avoid_: initial value, default value, sample value
 
 ### Visualization
 
