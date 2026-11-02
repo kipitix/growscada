@@ -27,8 +27,9 @@ type Event struct {
 	SceneID   string `json:"scene_id,omitempty"`
 	LibraryID string `json:"library_id,omitempty"`
 	Release   int    `json:"release,omitempty"`
-	// EnvironmentID and DeviceID are the pair whose parameters changed, on
-	// environment_device_* only; ID is the pair's own.
+	// EnvironmentID and DeviceID name the pair whose parameters changed, on
+	// environment_device_* only; ID is the Environment's (the pair has no ID
+	// of its own), and EnvironmentID names it again.
 	EnvironmentID string       `json:"environment_id,omitempty"`
 	DeviceID      string       `json:"device_id,omitempty"`
 	Tag           *TagResponse `json:"tag,omitempty"`
