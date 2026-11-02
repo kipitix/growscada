@@ -39,9 +39,10 @@ type EnvironmentRepository interface {
 	Save(context.Context, Environment) (Environment, error)
 
 	// Delete removes an Environment if the stored version is still the
-	// Environment's version, with the EnvironmentDevices of its Devices, and
-	// stores the events it recorded (see Environment.Delete), in one
-	// transaction.
+	// Environment's version and stores the events it recorded (see
+	// Environment.Delete), in one transaction. It touches no other aggregate:
+	// the pairs of the Environment's Devices are removed by a policy
+	// (ADR 0008).
 	// Returns ErrEnvironmentNotFound if the Environment does not exist,
 	// ErrEnvironmentConflict if the stored version does not match, or an
 	// error on failure.

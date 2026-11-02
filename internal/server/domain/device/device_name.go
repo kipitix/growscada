@@ -19,5 +19,9 @@ func NewDeviceName(aName string) (DeviceName, error) {
 	return DeviceName{name: aName}, nil
 }
 
+// IsValid reports whether the name is not the zero value: a Device without a
+// name cannot be stored.
+func (n DeviceName) IsValid() bool { return n.name != "" }
+
 // String implements [fmt.Stringer].
 func (n DeviceName) String() string { return n.name }

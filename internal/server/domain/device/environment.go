@@ -36,11 +36,13 @@ type Environment interface {
 
 	// Rename changes the Environment's name and records an
 	// EnvironmentUpdatedEvent.
-	// Returns ErrEnvironmentConflict if expected is not the Version.
+	// Returns ErrEnvironmentConflict if expected is not the Version, and an
+	// error if the name is the invalid zero value.
 	Rename(expected version.Version[Environment], aName EnvironmentName) (Environment, error)
 
 	// Delete records an EnvironmentDeletedEvent; the repository's Delete
-	// removes the Environment with the parameters of its Devices.
+	// removes the Environment. What that does to the pairs of its Devices is
+	// a policy's business, not the Environment's (ADR 0008).
 	Delete() Environment
 
 	event.Recorder
@@ -61,27 +63,31 @@ var _ Environment = (*environmentImpl)(nil)
 
 // CreateEnvironment creates a new, not yet saved Environment of the Project
 // aProjectID and records an EnvironmentCreatedEvent.
-func CreateEnvironment(anID id.ID[Environment], aProjectID id.ID[project.Project], aName EnvironmentName, aComment string) Environment {
-	return &environmentImpl{
-		id:        anID,
-		projectID: aProjectID,
-		name:      aName,
-		comment:   aComment,
-		version:   version.Initial[Environment](),
-		pending:   []event.Event{NewEnvironmentCreatedEvent(anID, aProjectID)},
+// Returns an error if the name is the invalid zero value.
+func CreateEnvironment(anID id.ID[Environment], aProjectID id.ID[project.Project], aName EnvironmentName, aComment string) (Environment, error) {
+	created, err := ReconstituteEnvironment(anID, aProjectID, aName, aComment, version.Initial[Environment]())
+	if err != nil {
+		return nil, err
 	}
+	impl := created.(*environmentImpl)
+	impl.pending = []event.Event{NewEnvironmentCreatedEvent(anID, aProjectID)}
+	return impl, nil
 }
 
 // ReconstituteEnvironment rebuilds an Environment as stored, at the given
 // version; it records no event. For repositories.
-func ReconstituteEnvironment(anID id.ID[Environment], aProjectID id.ID[project.Project], aName EnvironmentName, aComment string, aVersion version.Version[Environment]) Environment {
+// Returns an error if the name is the invalid zero value.
+func ReconstituteEnvironment(anID id.ID[Environment], aProjectID id.ID[project.Project], aName EnvironmentName, aComment string, aVersion version.Version[Environment]) (Environment, error) {
+	if !aName.IsValid() {
+		return nil, fmt.Errorf("cannot create environment: invalid name")
+	}
 	return &environmentImpl{
 		id:        anID,
 		projectID: aProjectID,
 		name:      aName,
 		comment:   aComment,
 		version:   aVersion,
-	}
+	}, nil
 }
 
 func (e *environmentImpl) ID() id.ID[Environment]                { return e.id }
@@ -100,6 +106,9 @@ func (e *environmentImpl) CheckVersion(expected version.Version[Environment]) er
 func (e *environmentImpl) Rename(expected version.Version[Environment], aName EnvironmentName) (Environment, error) {
 	if err := e.CheckVersion(expected); err != nil {
 		return nil, err
+	}
+	if !aName.IsValid() {
+		return nil, fmt.Errorf("cannot rename environment: invalid name")
 	}
 	renamed := *e
 	renamed.name = aName

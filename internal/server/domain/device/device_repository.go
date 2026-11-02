@@ -38,9 +38,9 @@ type DeviceRepository interface {
 	Save(context.Context, Device) (Device, error)
 
 	// Delete removes a Device if the stored version is still the Device's
-	// version, leaves the Tags it supplied without a supplier (the Device is
-	// their supplier no more), and stores the events it recorded (see
-	// Device.Delete), in one transaction.
+	// version and stores the events it recorded (see Device.Delete), in one
+	// transaction. It touches no other aggregate: the Tags the Device
+	// supplied are unbound by a policy (ADR 0008).
 	// Returns ErrDeviceNotFound if the Device does not exist,
 	// ErrDeviceConflict if the stored version does not match, or an error on
 	// failure.

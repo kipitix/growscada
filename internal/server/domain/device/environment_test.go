@@ -13,7 +13,10 @@ import (
 
 func TestCreateEnvironment_FieldsAndEvent(t *testing.T) {
 	anID := id.NewID[device.Environment]()
-	env := device.CreateEnvironment(anID, testProject, environmentName(t, "test bench"), "the lab")
+	env, err := device.CreateEnvironment(anID, testProject, environmentName(t, "test bench"), "the lab")
+	if err != nil {
+		t.Fatalf("CreateEnvironment: %v", err)
+	}
 
 	if env.ID() != anID || env.ProjectID() != testProject || env.Name().String() != "test bench" || env.Comment() != "the lab" {
 		t.Fatalf("unexpected environment %s", env)
@@ -35,9 +38,37 @@ func TestCreateEnvironment_FieldsAndEvent(t *testing.T) {
 	}
 }
 
+// TestEnvironment_RejectsInvalidName: the zero name is invalid, and no
+// constructor or change method takes it.
+func TestEnvironment_RejectsInvalidName(t *testing.T) {
+	anID := id.NewID[device.Environment]()
+
+	if _, err := device.CreateEnvironment(anID, testProject, device.EnvironmentName{}, ""); err == nil {
+		t.Error("CreateEnvironment took an invalid name")
+	}
+	if _, err := device.ReconstituteEnvironment(anID, testProject, device.EnvironmentName{}, "",
+		version.Committed[device.Environment]()); err == nil {
+		t.Error("ReconstituteEnvironment took an invalid name")
+	}
+	stored, err := device.ReconstituteEnvironment(anID, testProject, environmentName(t, "test bench"), "",
+		version.Committed[device.Environment]())
+	if err != nil {
+		t.Fatalf("ReconstituteEnvironment: %v", err)
+	}
+	if _, err := stored.Rename(stored.Version(), device.EnvironmentName{}); err == nil {
+		t.Error("Rename took an invalid name")
+	}
+	if got := stored.PendingEvents(); len(got) != 0 {
+		t.Errorf("a rejected Rename recorded %v", got)
+	}
+}
+
 func TestEnvironment_Rename(t *testing.T) {
-	stored := device.ReconstituteEnvironment(id.NewID[device.Environment](), testProject,
+	stored, err := device.ReconstituteEnvironment(id.NewID[device.Environment](), testProject,
 		environmentName(t, "test bench"), "the lab", version.Committed[device.Environment]())
+	if err != nil {
+		t.Fatalf("ReconstituteEnvironment: %v", err)
+	}
 
 	if _, err := stored.Rename(version.Initial[device.Environment](), environmentName(t, "plant")); !errors.Is(err, device.ErrEnvironmentConflict) {
 		t.Errorf("stale rename: %v, want ErrEnvironmentConflict", err)
@@ -62,8 +93,11 @@ func TestEnvironment_Rename(t *testing.T) {
 }
 
 func TestEnvironment_Delete(t *testing.T) {
-	stored := device.ReconstituteEnvironment(id.NewID[device.Environment](), testProject,
+	stored, err := device.ReconstituteEnvironment(id.NewID[device.Environment](), testProject,
 		environmentName(t, "test bench"), "", version.Committed[device.Environment]())
+	if err != nil {
+		t.Fatalf("ReconstituteEnvironment: %v", err)
+	}
 
 	deleted := stored.Delete()
 	if got := deleted.PendingEvents(); len(got) != 1 || got[0].Type() != event.EventTypeEnvironmentDeleted {

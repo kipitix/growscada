@@ -107,6 +107,16 @@ func TestEnvironmentDeviceParams_IsCopiedInAndOut(t *testing.T) {
 	}
 }
 
+func TestEnvironmentDeviceParams_ZeroValueIsTheEmptyObject(t *testing.T) {
+	var zero device.EnvironmentDeviceParams
+	if got := zero.String(); got != `{}` {
+		t.Errorf("the zero params are %s, want the empty object", got)
+	}
+	if got := string(zero.Bytes()); got != `{}` {
+		t.Errorf("the zero params' bytes are %s, want the empty object", got)
+	}
+}
+
 func TestEnvironmentDeviceParams_RequiresAJSONObject(t *testing.T) {
 	for _, raw := range []string{`[1]`, `"text"`, `{`, `null`} {
 		if _, err := device.NewEnvironmentDeviceParams([]byte(raw)); err == nil {

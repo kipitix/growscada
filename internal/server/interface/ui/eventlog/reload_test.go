@@ -35,11 +35,16 @@ func TestReloadTargetsFor(t *testing.T) {
 		{apiv0.Event{Type: apiv0.EventTagUpdated}, ReloadTargets{Tags: true}},
 		{apiv0.Event{Type: apiv0.EventTagDeleted}, ReloadTargets{Tags: true}},
 		{apiv0.Event{Type: EventResync}, ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true}},
-		{apiv0.Event{Type: EventProjectResync}, ReloadTargets{LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Devices: true}},
+		{apiv0.Event{Type: EventProjectResync}, ReloadTargets{LibraryPins: true, Scenes: true, Widgets: true, Tags: true}},
 		{apiv0.Event{Type: apiv0.EventProjectCreated}, ReloadTargets{Projects: true}},
 		{apiv0.Event{Type: apiv0.EventProjectUpdated}, ReloadTargets{Projects: true}},
 		{apiv0.Event{Type: apiv0.EventProjectDeleted}, ReloadTargets{Projects: true}},
+		// The UI shows no Devices, Environments and pairs yet (task 66).
+		{apiv0.Event{Type: apiv0.EventDeviceCreated}, ReloadTargets{}},
+		{apiv0.Event{Type: apiv0.EventEnvironmentUpdated}, ReloadTargets{}},
+		{apiv0.Event{Type: apiv0.EventEnvironmentDeviceDeleted}, ReloadTargets{}},
 		{apiv0.Event{Type: apiv0.EventClientConnected}, ReloadTargets{}},
+
 		{apiv0.Event{Type: apiv0.EventSystemReady}, ReloadTargets{}},
 		{apiv0.Event{Type: "unknown"}, ReloadTargets{}},
 		{apiv0.Event{}, ReloadTargets{}},
@@ -51,11 +56,26 @@ func TestReloadTargetsFor(t *testing.T) {
 	}
 }
 
+// notShownYet are the event types of the content the UI does not show yet:
+// Devices, Environments and their pairs are API only until task 66, so no
+// list is stale on their events.
+var notShownYet = map[string]bool{
+	apiv0.EventDeviceCreated:            true,
+	apiv0.EventDeviceUpdated:            true,
+	apiv0.EventDeviceDeleted:            true,
+	apiv0.EventEnvironmentCreated:       true,
+	apiv0.EventEnvironmentUpdated:       true,
+	apiv0.EventEnvironmentDeleted:       true,
+	apiv0.EventEnvironmentDeviceCreated: true,
+	apiv0.EventEnvironmentDeviceUpdated: true,
+	apiv0.EventEnvironmentDeviceDeleted: true,
+}
+
 // TestReloadTargetsFor_CoversEveryKnownEvent guards the table against a new
 // aggregate event type added to the event log but not routed.
 func TestReloadTargetsFor_CoversEveryKnownEvent(t *testing.T) {
 	for eventType, info := range eventTypeInfoByType {
-		if info.category == categoryClient || eventType == apiv0.EventSystemReady {
+		if info.category == categoryClient || eventType == apiv0.EventSystemReady || notShownYet[eventType] {
 			continue // change no server-backed list
 		}
 		ev := apiv0.Event{Type: eventType}

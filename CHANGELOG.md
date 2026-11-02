@@ -14,7 +14,7 @@
 
 ### Changed
 
-- Outbox-кодек хранит и читает события Device, Environment и EnvironmentDevice (payload получает `environment_id`/`device_id` пары); журнал событий UI знает их типы, относит к содержимому проекта и перезагружает устройства по проектному потоку (`ReloadTargets.Devices`; панель устройств — задача 66)
+- Outbox-кодек хранит и читает события Device, Environment и EnvironmentDevice (payload получает `environment_id`/`device_id` пары); журнал событий UI знает их типы и относит к содержимому проекта, но ничего не перезагружает: панели устройств нет (задача 66)
 - `restapi` знает ошибки Device/Environment/EnvironmentDevice: 404 и 409 с ресурсами `Device`, `Environment`, `EnvironmentDevice` (маршруты — часть 4)
 - `roles_test`: `domain/device` отнесён к общему домену, а не к `engineeringRole`: `domain/tag` (общий для ролей) называет ID поставщика как `id.ID[device.Device]`, и Runtime-нода компилирует `tag` вместе с ним
 

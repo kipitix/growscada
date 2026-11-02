@@ -32,8 +32,18 @@ func EmptyDeviceConfig() DeviceConfig {
 }
 
 // Bytes returns the configuration's JSON: a copy, so that changing it changes
-// no Device.
-func (c DeviceConfig) Bytes() []byte { return slices.Clone(c.raw) }
+// no Device. The zero value is the empty object.
+func (c DeviceConfig) Bytes() []byte {
+	if len(c.raw) == 0 {
+		return []byte("{}")
+	}
+	return slices.Clone(c.raw)
+}
 
-// String implements [fmt.Stringer].
-func (c DeviceConfig) String() string { return string(c.raw) }
+// String implements [fmt.Stringer]. The zero value is the empty object.
+func (c DeviceConfig) String() string {
+	if len(c.raw) == 0 {
+		return "{}"
+	}
+	return string(c.raw)
+}

@@ -49,11 +49,13 @@ type Device interface {
 
 	// Update changes the Device's name, comment, protocol and configuration
 	// and records a DeviceUpdatedEvent.
-	// Returns ErrDeviceConflict if expected is not the Version.
+	// Returns ErrDeviceConflict if expected is not the Version, and an error
+	// if the name or the protocol is the invalid zero value.
 	Update(expected version.Version[Device], aName DeviceName, aComment string, aProtocol DeviceProtocol, aConfig DeviceConfig) (Device, error)
 
 	// Delete records a DeviceDeletedEvent; the repository's Delete removes
-	// the Device and leaves its Tags without a supplier.
+	// the Device. What that does to the Tags it supplied is a policy's
+	// business, not the Device's (ADR 0008).
 	Delete() Device
 
 	event.Recorder
@@ -76,22 +78,27 @@ var _ Device = (*deviceImpl)(nil)
 
 // CreateDevice creates a new, not yet saved Device of the Project
 // aProjectID and records a DeviceCreatedEvent.
-func CreateDevice(anID id.ID[Device], aProjectID id.ID[project.Project], aName DeviceName, aComment string, aProtocol DeviceProtocol, aConfig DeviceConfig) Device {
-	return &deviceImpl{
-		id:        anID,
-		projectID: aProjectID,
-		name:      aName,
-		comment:   aComment,
-		protocol:  aProtocol,
-		config:    aConfig,
-		version:   version.Initial[Device](),
-		pending:   []event.Event{NewDeviceCreatedEvent(anID, aProjectID)},
+// Returns an error if the name or the protocol is the invalid zero value.
+func CreateDevice(anID id.ID[Device], aProjectID id.ID[project.Project], aName DeviceName, aComment string, aProtocol DeviceProtocol, aConfig DeviceConfig) (Device, error) {
+	created, err := ReconstituteDevice(anID, aProjectID, aName, aComment, aProtocol, aConfig, version.Initial[Device]())
+	if err != nil {
+		return nil, err
 	}
+	impl := created.(*deviceImpl)
+	impl.pending = []event.Event{NewDeviceCreatedEvent(anID, aProjectID)}
+	return impl, nil
 }
 
 // ReconstituteDevice rebuilds a Device as stored, at the given version; it
 // records no event. For repositories.
-func ReconstituteDevice(anID id.ID[Device], aProjectID id.ID[project.Project], aName DeviceName, aComment string, aProtocol DeviceProtocol, aConfig DeviceConfig, aVersion version.Version[Device]) Device {
+// Returns an error if the name or the protocol is the invalid zero value.
+func ReconstituteDevice(anID id.ID[Device], aProjectID id.ID[project.Project], aName DeviceName, aComment string, aProtocol DeviceProtocol, aConfig DeviceConfig, aVersion version.Version[Device]) (Device, error) {
+	if !aName.IsValid() {
+		return nil, fmt.Errorf("cannot create device: invalid name")
+	}
+	if !aProtocol.IsValid() {
+		return nil, fmt.Errorf("cannot create device: invalid protocol")
+	}
 	return &deviceImpl{
 		id:        anID,
 		projectID: aProjectID,
@@ -100,7 +107,7 @@ func ReconstituteDevice(anID id.ID[Device], aProjectID id.ID[project.Project], a
 		protocol:  aProtocol,
 		config:    aConfig,
 		version:   aVersion,
-	}
+	}, nil
 }
 
 func (d *deviceImpl) ID() id.ID[Device]                 { return d.id }
@@ -121,6 +128,12 @@ func (d *deviceImpl) CheckVersion(expected version.Version[Device]) error {
 func (d *deviceImpl) Update(expected version.Version[Device], aName DeviceName, aComment string, aProtocol DeviceProtocol, aConfig DeviceConfig) (Device, error) {
 	if err := d.CheckVersion(expected); err != nil {
 		return nil, err
+	}
+	if !aName.IsValid() {
+		return nil, fmt.Errorf("cannot update device: invalid name")
+	}
+	if !aProtocol.IsValid() {
+		return nil, fmt.Errorf("cannot update device: invalid protocol")
 	}
 	updated := *d
 	updated.name = aName

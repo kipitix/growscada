@@ -31,8 +31,18 @@ func EmptyEnvironmentDeviceParams() EnvironmentDeviceParams {
 }
 
 // Bytes returns the parameters' JSON: a copy, so that changing it changes no
-// EnvironmentDevice.
-func (p EnvironmentDeviceParams) Bytes() []byte { return slices.Clone(p.raw) }
+// EnvironmentDevice. The zero value is the empty object.
+func (p EnvironmentDeviceParams) Bytes() []byte {
+	if len(p.raw) == 0 {
+		return []byte("{}")
+	}
+	return slices.Clone(p.raw)
+}
 
-// String implements [fmt.Stringer].
-func (p EnvironmentDeviceParams) String() string { return string(p.raw) }
+// String implements [fmt.Stringer]. The zero value is the empty object.
+func (p EnvironmentDeviceParams) String() string {
+	if len(p.raw) == 0 {
+		return "{}"
+	}
+	return string(p.raw)
+}

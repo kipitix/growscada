@@ -20,5 +20,9 @@ func NewEnvironmentName(aName string) (EnvironmentName, error) {
 	return EnvironmentName{name: aName}, nil
 }
 
+// IsValid reports whether the name is not the zero value: an Environment
+// without a name cannot be stored.
+func (n EnvironmentName) IsValid() bool { return n.name != "" }
+
 // String implements [fmt.Stringer].
 func (n EnvironmentName) String() string { return n.name }
