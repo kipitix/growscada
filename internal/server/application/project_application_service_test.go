@@ -275,6 +275,65 @@ func TestProjectCleanup_RuntimeCopiesGoWithTheProject(t *testing.T) {
 	}
 }
 
+// TestProjectCleanup_RemovesDevicesAndEnvironments: the cleanup deletes the
+// pairs first, then the Devices and the Environments, each with its own
+// events; the Runtime copies are derived data and go with the Project's row
+// (task 34, ADR 0011).
+func TestProjectCleanup_RemovesDevicesAndEnvironments(t *testing.T) {
+	r := newReconciliation(t, reconciliationWiring{})
+	cleanDevices(t)
+	ctx := context.Background()
+	p := r.createProject(t, "Line 1")
+
+	devices, environments := newDeviceService(), newEnvironmentService()
+	device, err := devices.CreateDevice(ctx, p, appdto.DeviceInput{Name: "sim", Protocol: "simulation"})
+	if err != nil {
+		t.Fatalf("CreateDevice: %v", err)
+	}
+	environment, err := environments.CreateEnvironment(ctx, p, appdto.EnvironmentInput{Name: "bench"})
+	if err != nil {
+		t.Fatalf("CreateEnvironment: %v", err)
+	}
+	pair, added, err := environments.PutEnvironmentDevice(ctx, p, environment.ID, device.ID, 0,
+		appdto.EnvironmentDeviceInput{Params: []byte(`{"host":"localhost"}`)})
+	if err != nil || !added {
+		t.Fatalf("PutEnvironmentDevice: %+v, %t, %v", pair, added, err)
+	}
+	r.settle(t)
+	r.takeDelivered()
+
+	if _, err := r.projectSvc.DeleteProjectByID(ctx, p); err != nil {
+		t.Fatalf("DeleteProjectByID: %v", err)
+	}
+	r.settle(t)
+
+	for _, table := range []string{"engineering.devices", "engineering.environments"} {
+		if n := countRows(t, table, p); n != 0 {
+			t.Errorf("%s of the deleted project left: %d", table, n)
+		}
+	}
+	var pairs int
+	if err := testDB.QueryRowContext(ctx, `SELECT count(*) FROM engineering.environment_devices WHERE environment_id = $1`,
+		environment.ID).Scan(&pairs); err != nil || pairs != 0 {
+		t.Errorf("pairs of the deleted project left: %d, %v", pairs, err)
+	}
+	var rows int
+	if err := testDB.QueryRowContext(ctx, `SELECT count(*) FROM projects WHERE id = $1`, p).Scan(&rows); err != nil || rows != 0 {
+		t.Errorf("the project's row: %d, %v", rows, err)
+	}
+	var types []string
+	for _, e := range r.takeDelivered() {
+		types = append(types, e.Type().String())
+	}
+	want := []string{"project_deleted", "environment_device_deleted", "device_deleted", "environment_deleted"}
+	if !slices.Equal(types, want) {
+		t.Errorf("delivered %v, want %v", types, want)
+	}
+	if jobs := jobsOf(t, application.ProjectCleanupPolicyName); len(jobs) != 0 {
+		t.Errorf("jobs left: %+v", jobs)
+	}
+}
+
 func TestProjectCleanup_TagSavedAfterTheProjectIsRemoved_IsProjectNotFound(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	ctx := context.Background()
