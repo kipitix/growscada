@@ -39,8 +39,8 @@ type DeviceRepository interface {
 
 	// Delete removes a Device if the stored version is still the Device's
 	// version and stores the events it recorded (see Device.Delete), in one
-	// transaction. It touches no other aggregate: the Tags the Device
-	// supplied are unbound by a policy (ADR 0008).
+	// transaction. A Device still in use is not removed: while a Tag of the
+	// Project is supplied by it, Delete refuses (ADR 0006).
 	// Returns ErrDeviceNotFound if the Device does not exist,
 	// ErrDeviceConflict if the stored version does not match, or an error on
 	// failure.

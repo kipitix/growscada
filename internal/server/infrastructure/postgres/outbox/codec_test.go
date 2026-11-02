@@ -41,7 +41,6 @@ func sampleEvents(t *testing.T) []event.Event {
 	libraryID := id.NewID[library.Library]()
 	deviceID := id.NewID[device.Device]()
 	environmentID := id.NewID[device.Environment]()
-	environmentDeviceID := id.NewID[device.EnvironmentDevice]()
 	release, _ := library.NewReleaseNumber(3)
 	return []event.Event{
 		tag.NewTagCreatedEvent(tagID, projectID, ts),
@@ -73,9 +72,9 @@ func sampleEvents(t *testing.T) []event.Event {
 		device.NewEnvironmentCreatedEvent(environmentID, projectID, ts),
 		device.NewEnvironmentUpdatedEvent(environmentID, projectID, ts),
 		device.NewEnvironmentDeletedEvent(environmentID, projectID, ts),
-		device.NewEnvironmentDeviceCreatedEvent(environmentDeviceID, environmentID, deviceID, projectID, ts),
-		device.NewEnvironmentDeviceUpdatedEvent(environmentDeviceID, environmentID, deviceID, projectID, ts),
-		device.NewEnvironmentDeviceDeletedEvent(environmentDeviceID, environmentID, deviceID, projectID, ts),
+		device.NewEnvironmentDeviceCreatedEvent(environmentID, deviceID, projectID, ts),
+		device.NewEnvironmentDeviceUpdatedEvent(environmentID, deviceID, projectID, ts),
+		device.NewEnvironmentDeviceDeletedEvent(environmentID, deviceID, projectID, ts),
 	}
 }
 
@@ -167,8 +166,8 @@ func assertSameSubject(t *testing.T, original, decoded event.Event) {
 		}
 	case device.EnvironmentDeviceEvent:
 		got, ok := decoded.(device.EnvironmentDeviceEvent)
-		if !ok || got.EnvironmentDeviceID() != want.EnvironmentDeviceID() || got.EnvironmentID() != want.EnvironmentID() || got.DeviceID() != want.DeviceID() {
-			t.Errorf("decoded %T, want the pair (%s, %s) of %s", decoded, want.EnvironmentID(), want.DeviceID(), want.EnvironmentDeviceID())
+		if !ok || got.EnvironmentID() != want.EnvironmentID() || got.DeviceID() != want.DeviceID() {
+			t.Errorf("decoded %T, want the pair (%s, %s)", decoded, want.EnvironmentID(), want.DeviceID())
 		}
 	case device.DeviceEvent:
 		if got, ok := decoded.(device.DeviceEvent); !ok || got.DeviceID() != want.DeviceID() {

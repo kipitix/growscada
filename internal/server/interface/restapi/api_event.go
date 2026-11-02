@@ -92,7 +92,7 @@ func newAPIEvent(e event.Event) apiv0.Event {
 	case librarypin.LibraryPinEvent:
 		ev.ID = e.LibraryID().String()
 	case device.EnvironmentDeviceEvent:
-		ev.ID = e.EnvironmentDeviceID().String()
+		ev.ID = e.EnvironmentID().String()
 		ev.EnvironmentID = e.EnvironmentID().String()
 		ev.DeviceID = e.DeviceID().String()
 	case device.DeviceEvent:

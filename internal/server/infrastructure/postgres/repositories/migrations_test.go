@@ -551,16 +551,16 @@ func TestMigrationTagStatesAndDevices_SplitsTheStateAndAddsDevices(t *testing.T)
 	mustExec(`INSERT INTO engineering.devices (id, project_id, name, protocol, config)
 	          VALUES ($1, $2, 'sim', 'simulation', '{"pattern":"sine"}')`, deviceID, main)
 	mustExec(`INSERT INTO engineering.environments (id, project_id, name) VALUES ($1, $2, 'shop')`, environmentID, main)
-	mustExec(`INSERT INTO engineering.environment_devices (id, environment_id, device_id, params)
-	          VALUES ($1, $2, $3, '{"address":"localhost:9000"}')`, uuid.New(), environmentID, deviceID)
+	mustExec(`INSERT INTO engineering.environment_devices (environment_id, device_id, params)
+	          VALUES ($1, $2, '{"address":"localhost:9000"}')`, environmentID, deviceID)
 	mustExec(`INSERT INTO engineering.tags (id, project_id, name, type, version, device_id)
 	          VALUES ($1, $2, 'speed', 'integer', 3, $3)`, tagID, main, deviceID)
 	if _, err := db.ExecContext(ctx, `INSERT INTO engineering.environments (id, project_id, name) VALUES ($1, $2, 'shop')`,
 		uuid.New(), main); err == nil {
 		t.Error("an environment name taken twice in the project")
 	}
-	if _, err := db.ExecContext(ctx, `INSERT INTO engineering.environment_devices (id, environment_id, device_id) VALUES ($1, $2, $3)`,
-		uuid.New(), environmentID, deviceID); err == nil {
+	if _, err := db.ExecContext(ctx, `INSERT INTO engineering.environment_devices (environment_id, device_id) VALUES ($1, $2)`,
+		environmentID, deviceID); err == nil {
 		t.Error("a pair (environment, device) taken twice")
 	}
 
@@ -584,8 +584,8 @@ func TestMigrationTagStatesAndDevices_SplitsTheStateAndAddsDevices(t *testing.T)
 	// A Gateway names the Environment it serves, so the copy resolves that
 	// name to the pair with the Device inside the Project (and nowhere else).
 	mustExec(`INSERT INTO runtime.environments (id, project_id, name) VALUES ($1, $2, 'shop')`, environmentID, main)
-	mustExec(`INSERT INTO runtime.environment_devices (id, environment_id, device_id, params)
-	          VALUES ($1, $2, $3, '{"address":"localhost:9000"}')`, uuid.New(), environmentID, deviceID)
+	mustExec(`INSERT INTO runtime.environment_devices (environment_id, device_id, params)
+	          VALUES ($1, $2, '{"address":"localhost:9000"}')`, environmentID, deviceID)
 	var address string
 	if err := db.QueryRowContext(ctx, `SELECT e.params->>'address' FROM runtime.environments n
 	                                    JOIN runtime.environment_devices e ON e.environment_id = n.id

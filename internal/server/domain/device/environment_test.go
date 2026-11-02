@@ -55,36 +55,36 @@ func TestEnvironment_RejectsInvalidName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReconstituteEnvironment: %v", err)
 	}
-	if _, err := stored.Rename(stored.Version(), device.EnvironmentName{}); err == nil {
-		t.Error("Rename took an invalid name")
+	if _, err := stored.Update(stored.Version(), device.EnvironmentName{}, ""); err == nil {
+		t.Error("Update took an invalid name")
 	}
 	if got := stored.PendingEvents(); len(got) != 0 {
-		t.Errorf("a rejected Rename recorded %v", got)
+		t.Errorf("a rejected Update recorded %v", got)
 	}
 }
 
-func TestEnvironment_Rename(t *testing.T) {
+func TestEnvironment_Update(t *testing.T) {
 	stored, err := device.ReconstituteEnvironment(id.NewID[device.Environment](), testProject,
 		environmentName(t, "test bench"), "the lab", version.Committed[device.Environment]())
 	if err != nil {
 		t.Fatalf("ReconstituteEnvironment: %v", err)
 	}
 
-	if _, err := stored.Rename(version.Initial[device.Environment](), environmentName(t, "plant")); !errors.Is(err, device.ErrEnvironmentConflict) {
-		t.Errorf("stale rename: %v, want ErrEnvironmentConflict", err)
+	if _, err := stored.Update(version.Initial[device.Environment](), environmentName(t, "plant"), "the bench"); !errors.Is(err, device.ErrEnvironmentConflict) {
+		t.Errorf("stale update: %v, want ErrEnvironmentConflict", err)
 	}
 
-	renamed, err := stored.Rename(stored.Version(), environmentName(t, "plant"))
+	updated, err := stored.Update(stored.Version(), environmentName(t, "plant"), "the bench")
 	if err != nil {
-		t.Fatalf("Rename: %v", err)
+		t.Fatalf("Update: %v", err)
 	}
-	if renamed.Name().String() != "plant" || renamed.Comment() != "the lab" {
-		t.Errorf("unexpected environment %s", renamed)
+	if updated.Name().String() != "plant" || updated.Comment() != "the bench" {
+		t.Errorf("unexpected environment %s", updated)
 	}
-	if stored.Name().String() != "test bench" {
-		t.Errorf("Rename changed the environment it was called on: %s", stored)
+	if stored.Name().String() != "test bench" || stored.Comment() != "the lab" {
+		t.Errorf("Update changed the environment it was called on: %s", stored)
 	}
-	if got := renamed.PendingEvents(); len(got) != 1 || got[0].Type() != event.EventTypeEnvironmentUpdated {
+	if got := updated.PendingEvents(); len(got) != 1 || got[0].Type() != event.EventTypeEnvironmentUpdated {
 		t.Errorf("PendingEvents = %v, want [environment_updated]", got)
 	}
 	if got := stored.PendingEvents(); len(got) != 0 {

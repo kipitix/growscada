@@ -34,15 +34,15 @@ type Environment interface {
 	// Returns ErrEnvironmentConflict if expected is not the Version.
 	CheckVersion(expected version.Version[Environment]) error
 
-	// Rename changes the Environment's name and records an
+	// Update changes the Environment's name and comment and records an
 	// EnvironmentUpdatedEvent.
 	// Returns ErrEnvironmentConflict if expected is not the Version, and an
 	// error if the name is the invalid zero value.
-	Rename(expected version.Version[Environment], aName EnvironmentName) (Environment, error)
+	Update(expected version.Version[Environment], aName EnvironmentName, aComment string) (Environment, error)
 
 	// Delete records an EnvironmentDeletedEvent; the repository's Delete
-	// removes the Environment. What that does to the pairs of its Devices is
-	// a policy's business, not the Environment's (ADR 0008).
+	// removes the Environment, and is refused while the Environment still has
+	// the pairs of its Devices.
 	Delete() Environment
 
 	event.Recorder
@@ -103,17 +103,18 @@ func (e *environmentImpl) CheckVersion(expected version.Version[Environment]) er
 	return nil
 }
 
-func (e *environmentImpl) Rename(expected version.Version[Environment], aName EnvironmentName) (Environment, error) {
+func (e *environmentImpl) Update(expected version.Version[Environment], aName EnvironmentName, aComment string) (Environment, error) {
 	if err := e.CheckVersion(expected); err != nil {
 		return nil, err
 	}
 	if !aName.IsValid() {
-		return nil, fmt.Errorf("cannot rename environment: invalid name")
+		return nil, fmt.Errorf("cannot update environment: invalid name")
 	}
-	renamed := *e
-	renamed.name = aName
-	renamed.pending = append(slices.Clone(e.pending), NewEnvironmentUpdatedEvent(e.id, e.projectID))
-	return &renamed, nil
+	updated := *e
+	updated.name = aName
+	updated.comment = aComment
+	updated.pending = append(slices.Clone(e.pending), NewEnvironmentUpdatedEvent(e.id, e.projectID))
+	return &updated, nil
 }
 
 func (e *environmentImpl) Delete() Environment {

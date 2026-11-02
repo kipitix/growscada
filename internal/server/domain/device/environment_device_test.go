@@ -12,13 +12,12 @@ import (
 )
 
 func TestCreateEnvironmentDevice_FieldsAndEvent(t *testing.T) {
-	anID := id.NewID[device.EnvironmentDevice]()
 	environmentID := id.NewID[device.Environment]()
 	deviceID := id.NewID[device.Device]()
 
-	pair := device.CreateEnvironmentDevice(anID, testProject, environmentID, deviceID, params(t, `{"address":"10.0.0.1"}`))
+	pair := device.CreateEnvironmentDevice(testProject, environmentID, deviceID, params(t, `{"address":"10.0.0.1"}`))
 
-	if pair.ID() != anID || pair.ProjectID() != testProject || pair.EnvironmentID() != environmentID ||
+	if pair.ProjectID() != testProject || pair.EnvironmentID() != environmentID ||
 		pair.DeviceID() != deviceID || pair.Params().String() != `{"address":"10.0.0.1"}` {
 		t.Fatalf("unexpected pair %s", pair)
 	}
@@ -32,7 +31,7 @@ func TestCreateEnvironmentDevice_FieldsAndEvent(t *testing.T) {
 	}
 	created, ok := events[0].(device.EnvironmentDeviceEvent)
 	if !ok || created.Type() != event.EventTypeEnvironmentDeviceCreated ||
-		created.EnvironmentDeviceID() != anID || created.EnvironmentID() != environmentID ||
+		created.EnvironmentID() != environmentID ||
 		created.DeviceID() != deviceID || created.ProjectID() != testProject {
 		t.Errorf("unexpected event %v", events[0])
 	}
@@ -44,7 +43,7 @@ func TestCreateEnvironmentDevice_FieldsAndEvent(t *testing.T) {
 func TestEnvironmentDevice_UpdateParams(t *testing.T) {
 	environmentID := id.NewID[device.Environment]()
 	deviceID := id.NewID[device.Device]()
-	stored := device.ReconstituteEnvironmentDevice(id.NewID[device.EnvironmentDevice](), testProject,
+	stored := device.ReconstituteEnvironmentDevice(testProject,
 		environmentID, deviceID, params(t, `{"port":1}`), version.Committed[device.EnvironmentDevice]())
 
 	if _, err := stored.UpdateParams(version.Initial[device.EnvironmentDevice](), params(t, `{"port":2}`)); !errors.Is(err, device.ErrEnvironmentDeviceConflict) {
@@ -67,15 +66,17 @@ func TestEnvironmentDevice_UpdateParams(t *testing.T) {
 	}
 	changed, ok := events[0].(device.EnvironmentDeviceEvent)
 	if !ok || changed.Type() != event.EventTypeEnvironmentDeviceUpdated ||
-		changed.EnvironmentDeviceID() != stored.ID() || changed.EnvironmentID() != environmentID ||
+		changed.EnvironmentID() != environmentID ||
 		changed.DeviceID() != deviceID || changed.ProjectID() != testProject {
 		t.Errorf("unexpected event %v", events[0])
 	}
 }
 
 func TestEnvironmentDevice_Delete(t *testing.T) {
-	stored := device.ReconstituteEnvironmentDevice(id.NewID[device.EnvironmentDevice](), testProject,
-		id.NewID[device.Environment](), id.NewID[device.Device](), device.EmptyEnvironmentDeviceParams(),
+	environmentID := id.NewID[device.Environment]()
+	deviceID := id.NewID[device.Device]()
+	stored := device.ReconstituteEnvironmentDevice(testProject,
+		environmentID, deviceID, device.EmptyEnvironmentDeviceParams(),
 		version.Committed[device.EnvironmentDevice]())
 
 	events := stored.Delete().PendingEvents()
@@ -83,7 +84,8 @@ func TestEnvironmentDevice_Delete(t *testing.T) {
 		t.Fatalf("PendingEvents = %v, want [environment_device_deleted]", events)
 	}
 	deleted, ok := events[0].(device.EnvironmentDeviceEvent)
-	if !ok || deleted.Type() != event.EventTypeEnvironmentDeviceDeleted || deleted.EnvironmentDeviceID() != stored.ID() {
+	if !ok || deleted.Type() != event.EventTypeEnvironmentDeviceDeleted || deleted.EnvironmentID() != environmentID ||
+		deleted.DeviceID() != deviceID {
 		t.Errorf("unexpected event %v", events[0])
 	}
 	if got := stored.PendingEvents(); len(got) != 0 {

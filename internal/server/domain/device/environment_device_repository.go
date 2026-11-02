@@ -11,9 +11,6 @@ import (
 // only the pairs of the Environments and Devices of that Project, and saving
 // or deleting a pair of another Project is a programming error.
 type EnvironmentDeviceRepository interface {
-	// NextID returns a new unique identifier for an EnvironmentDevice.
-	NextID() id.ID[EnvironmentDevice]
-
 	// FindAll returns the Project's pairs in creation order.
 	FindAll(context.Context) ([]EnvironmentDevice, error)
 

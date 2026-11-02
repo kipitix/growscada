@@ -36,7 +36,6 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 	projectID := id.NewID[project.Project]()
 	deviceID := id.NewID[device.Device]()
 	environmentID := id.NewID[device.Environment]()
-	environmentDeviceID := id.NewID[device.EnvironmentDevice]()
 
 	name, _ := tag.NewTagName("pressure")
 	tagVersion, _ := version.New(version.WithNumber[tag.Tag](7))
@@ -117,12 +116,12 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 			apiv0.Event{Type: "environment_updated", ID: environmentID.String()}},
 		event.EventTypeEnvironmentDeleted: {device.NewEnvironmentDeletedEvent(environmentID, projectID, ts),
 			apiv0.Event{Type: "environment_deleted", ID: environmentID.String()}},
-		event.EventTypeEnvironmentDeviceCreated: {device.NewEnvironmentDeviceCreatedEvent(environmentDeviceID, environmentID, deviceID, projectID, ts),
-			apiv0.Event{Type: "environment_device_created", ID: environmentDeviceID.String(), EnvironmentID: environmentID.String(), DeviceID: deviceID.String()}},
-		event.EventTypeEnvironmentDeviceUpdated: {device.NewEnvironmentDeviceUpdatedEvent(environmentDeviceID, environmentID, deviceID, projectID, ts),
-			apiv0.Event{Type: "environment_device_updated", ID: environmentDeviceID.String(), EnvironmentID: environmentID.String(), DeviceID: deviceID.String()}},
-		event.EventTypeEnvironmentDeviceDeleted: {device.NewEnvironmentDeviceDeletedEvent(environmentDeviceID, environmentID, deviceID, projectID, ts),
-			apiv0.Event{Type: "environment_device_deleted", ID: environmentDeviceID.String(), EnvironmentID: environmentID.String(), DeviceID: deviceID.String()}},
+		event.EventTypeEnvironmentDeviceCreated: {device.NewEnvironmentDeviceCreatedEvent(environmentID, deviceID, projectID, ts),
+			apiv0.Event{Type: "environment_device_created", ID: environmentID.String(), EnvironmentID: environmentID.String(), DeviceID: deviceID.String()}},
+		event.EventTypeEnvironmentDeviceUpdated: {device.NewEnvironmentDeviceUpdatedEvent(environmentID, deviceID, projectID, ts),
+			apiv0.Event{Type: "environment_device_updated", ID: environmentID.String(), EnvironmentID: environmentID.String(), DeviceID: deviceID.String()}},
+		event.EventTypeEnvironmentDeviceDeleted: {device.NewEnvironmentDeviceDeletedEvent(environmentID, deviceID, projectID, ts),
+			apiv0.Event{Type: "environment_device_deleted", ID: environmentID.String(), EnvironmentID: environmentID.String(), DeviceID: deviceID.String()}},
 	}
 
 	for _, et := range event.AllEventTypes() {

@@ -45,7 +45,6 @@ CREATE TABLE runtime.environments (
 -- Draft's Version does not come along — a copy has nothing to edit.
 CREATE TABLE runtime.environment_devices (
     pk_id          SERIAL PRIMARY KEY,
-    id             UUID  NOT NULL UNIQUE,
     environment_id UUID  NOT NULL,
     device_id      UUID  NOT NULL,
     params         JSONB NOT NULL DEFAULT '{}',

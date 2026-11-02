@@ -47,11 +47,12 @@ CREATE TRIGGER update_environments_updated_at
     EXECUTE FUNCTION update_updated_at_column();
 
 -- The pair (Environment, Device): its parameters are read under the Device's
--- protocol. No CASCADE from either side, so a Device or an Environment is
--- removed only once no pair holds it.
+-- protocol. The pair is what identifies it (as a Library Pin is identified by
+-- its Library in its Project), so it has no identifier of its own. No CASCADE
+-- from either side, so a Device or an Environment is removed only once no
+-- pair holds it.
 CREATE TABLE engineering.environment_devices (
     pk_id          SERIAL PRIMARY KEY,
-    id             UUID    NOT NULL UNIQUE,
     environment_id UUID    NOT NULL,
     device_id      UUID    NOT NULL,
     params         JSONB   NOT NULL DEFAULT '{}',

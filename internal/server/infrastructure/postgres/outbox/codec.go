@@ -49,7 +49,7 @@ type payload struct {
 	// Release is the number of the Library Release of library_released.
 	Release int `json:"release,omitempty"`
 	// EnvironmentID and DeviceID are the pair of an environment_device_*
-	// event, whose ID is the pair's own.
+	// event, whose ID is its Environment's.
 	EnvironmentID *uuid.UUID `json:"environment_id,omitempty"`
 	DeviceID      *uuid.UUID `json:"device_id,omitempty"`
 }
@@ -81,7 +81,7 @@ func Encode(e event.Event) ([]byte, error) {
 	case librarypin.LibraryPinEvent:
 		p.ID = ev.LibraryID().UUID()
 	case device.EnvironmentDeviceEvent:
-		p.ID = ev.EnvironmentDeviceID().UUID()
+		p.ID = ev.EnvironmentID().UUID()
 		environmentID := ev.EnvironmentID().UUID()
 		deviceID := ev.DeviceID().UUID()
 		p.EnvironmentID = &environmentID
@@ -128,7 +128,6 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 	libraryOfEvent := id.NewID(id.IDWithUUID[library.Library](p.ID))
 	deviceOfEvent := id.NewID(id.IDWithUUID[device.Device](p.ID))
 	environmentOfEvent := id.NewID(id.IDWithUUID[device.Environment](p.ID))
-	environmentDeviceOfEvent := id.NewID(id.IDWithUUID[device.EnvironmentDevice](p.ID))
 
 	switch eventType {
 	case event.EventTypeWidgetTypeCreated, event.EventTypeWidgetTypeUpdated, event.EventTypeWidgetTypeDeleted:
@@ -208,11 +207,11 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 		deviceID := id.NewID(id.IDWithUUID[device.Device](*p.DeviceID))
 		switch eventType {
 		case event.EventTypeEnvironmentDeviceCreated:
-			return device.NewEnvironmentDeviceCreatedEvent(environmentDeviceOfEvent, environmentID, deviceID, projectID, ts), nil
+			return device.NewEnvironmentDeviceCreatedEvent(environmentID, deviceID, projectID, ts), nil
 		case event.EventTypeEnvironmentDeviceUpdated:
-			return device.NewEnvironmentDeviceUpdatedEvent(environmentDeviceOfEvent, environmentID, deviceID, projectID, ts), nil
+			return device.NewEnvironmentDeviceUpdatedEvent(environmentID, deviceID, projectID, ts), nil
 		default:
-			return device.NewEnvironmentDeviceDeletedEvent(environmentDeviceOfEvent, environmentID, deviceID, projectID, ts), nil
+			return device.NewEnvironmentDeviceDeletedEvent(environmentID, deviceID, projectID, ts), nil
 		}
 	}
 

@@ -54,8 +54,7 @@ type Device interface {
 	Update(expected version.Version[Device], aName DeviceName, aComment string, aProtocol DeviceProtocol, aConfig DeviceConfig) (Device, error)
 
 	// Delete records a DeviceDeletedEvent; the repository's Delete removes
-	// the Device. What that does to the Tags it supplied is a policy's
-	// business, not the Device's (ADR 0008).
+	// the Device, and is refused while the Device still supplies a Tag.
 	Delete() Device
 
 	event.Recorder

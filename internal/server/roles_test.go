@@ -104,9 +104,9 @@ func isIn(path string, role []string) bool {
 }
 
 func TestRoles_DoNotImportEachOther(t *testing.T) {
-	listed := listPackages(t, patterns(runtimeRole, engineeringRole)...)
-	if len(listed) != len(runtimeRole)+len(engineeringRole) {
-		t.Fatalf("listed %d packages, want every package of the roles: %v", len(listed), listed)
+	listed := listPackages(t, patterns(runtimeRole, engineeringRole, sharedDomain)...)
+	if len(listed) != len(runtimeRole)+len(engineeringRole)+len(sharedDomain) {
+		t.Fatalf("listed %d packages, want every package of the roles and of the shared domain: %v", len(listed), listed)
 	}
 	for path, p := range listed {
 		for _, dep := range p.Deps {
@@ -119,6 +119,8 @@ func TestRoles_DoNotImportEachOther(t *testing.T) {
 				t.Errorf("%s (Engineering node) imports %s (Runtime node): reach it through application.RuntimeNode", path, dep)
 			case isIn(path, runtimeRole) && !isIn(dep, runtimeRole) && !isIn(dep, sharedDomain):
 				t.Errorf("%s (Runtime node) imports %s, neither the Runtime node's nor the shared domain", path, dep)
+			case isIn(path, sharedDomain) && !isIn(dep, sharedDomain):
+				t.Errorf("%s (shared domain) imports %s, a package of one role: the shared domain builds on itself alone", path, dep)
 			}
 		}
 	}

@@ -12,6 +12,10 @@ The Runtime schema holds **copies** of the Draft's tables — `runtime.tags` (th
 
 A Device's supplying relation is part of the Tag definition and is copied with it, because the Runtime node must refuse a write from a Device that does not supply the Tag. Nothing changes in the roles: the Runtime node still reads only its own schema, and the Engineering node reaches it through the `RuntimeNode` port alone.
 
+## Amendment 2026-11-02: the shared domain includes `domain/device`
+
+The packages both roles build on include `internal/server/domain/device` — the Device, Environment and EnvironmentDevice aggregates, which are the Engineering node's — because the shared `domain/tag` names a Tag's supplier as `id.ID[device.Device]`, and the Runtime node compiles `domain/tag` together with it. The isolation stays where it matters: the Runtime node's code uses no Device aggregate, and a test checks that no package of a role imports one of the other role, the shared packages included.
+
 ## Considered Options
 
 - Two schemas only, Projects and the outbox in `engineering`: rejected. The Runtime node needs to know the Projects too, and copying them into `runtime` would make every Project deletion a cleanup in two places.
@@ -20,4 +24,6 @@ A Device's supplying relation is part of the Tag definition and is copied with i
 - Tag state writes through the outbox until the Journal exists: rejected. One outbox row per value change, for an order the `seq` already gives.
 - A per-Tag counter or a timestamp to order states: rejected. A timestamp is not monotonic across concurrent transactions; one sequence matches the Journal's `seq` that replaces it.
 - An initial value as part of the Tag definition: rejected. A value is state, never configuration; until a supplier writes, `Bad` says so.
+- Keeping `domain/device` of the Engineering role alone, with the supplier held as a bare `uuid.UUID` or as a second, shared marker identifier: rejected. The first breaks the typed-identifier convention of `domain/id`, the second adds a second identifier type for one relation and a conversion on every boundary; a typed `id.ID[device.Device]` in a shared package costs less than either.
+- A Tag without a supplier modelled as a zero `id.ID` (no value object): rejected. "People write it" is a real state of the definition, and the zero ID leaked into `NULL`, the API and the Runtime copy; `tag.Supplier` names the state instead.
 - Running task 35 (Deploy) before the split, without a bridge: rejected — the split is the ground Deploy stands on.

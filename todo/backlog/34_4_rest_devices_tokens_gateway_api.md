@@ -11,7 +11,7 @@ Blocked by: 34_3
 ### Контракт `contract/api/v0`
 
 - DTO: `DeviceResponse`, `CreateDeviceRequest`, `UpdateDeviceRequest` (с `version`), `EnvironmentResponse`, `CreateEnvironmentRequest`, `UpdateEnvironmentRequest`, `EnvironmentDeviceResponse`, `UpdateEnvironmentDeviceRequest`, ответы списков, `DeviceTokenResponse` (секрет — только при выпуске/ротации), `DeviceConfigResponse` (для Gateway'а).
-- Поднять `SchemaVersion()` (MAJOR=0 → только MINOR), выполнить `make schemas`.
+- Поднять `SchemaVersion()` (MAJOR=0 → только MINOR), выполнить `make schemas`. Контракт уже поднят до **0.7** в части 2 (типы событий Device/Environment/пары), поэтому часть 4 поднимает до **0.8** — не забыть и не пытаться переиспользовать 0.7.
 - Добавить новые типы в `Roots:` в `contract/api/v0/schema_test.go` — иначе они не попадут в сгенерированную схему.
 
 ### Маршруты (`restapi`)

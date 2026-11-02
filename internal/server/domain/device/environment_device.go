@@ -12,14 +12,13 @@ import (
 
 // EnvironmentDevice - aggregate of a Project's Draft, one per pair
 // (Environment, Device): the parameters by which that Device is reached in
-// that Environment. The pair is what identifies it; its ID is its own, so a
-// client can name the row a change happened to.
+// that Environment. The pair is what identifies it, as a Library Pin is
+// identified by its Library in its Project; it has no identifier of its own.
 //
 // EnvironmentDevice is immutable: every change returns a new
 // EnvironmentDevice that also records the change's event. A change keeps the
 // Version; the repository raises it once when it saves the result.
 type EnvironmentDevice interface {
-	ID() id.ID[EnvironmentDevice]
 	// ProjectID is the Project of the Environment and of the Device; it never
 	// changes.
 	ProjectID() id.ID[project.Project]
@@ -52,7 +51,6 @@ type EnvironmentDevice interface {
 
 // environmentDeviceImpl - EnvironmentDevice implementation struct.
 type environmentDeviceImpl struct {
-	id            id.ID[EnvironmentDevice]
 	projectID     id.ID[project.Project]
 	environmentID id.ID[Environment]
 	deviceID      id.ID[Device]
@@ -66,24 +64,22 @@ var _ EnvironmentDevice = (*environmentDeviceImpl)(nil)
 // CreateEnvironmentDevice creates a new, not yet saved pair of the Device
 // aDeviceID in the Environment anEnvironmentID of the Project aProjectID, and
 // records an EnvironmentDeviceCreatedEvent.
-func CreateEnvironmentDevice(anID id.ID[EnvironmentDevice], aProjectID id.ID[project.Project], anEnvironmentID id.ID[Environment], aDeviceID id.ID[Device], aParams EnvironmentDeviceParams) EnvironmentDevice {
+func CreateEnvironmentDevice(aProjectID id.ID[project.Project], anEnvironmentID id.ID[Environment], aDeviceID id.ID[Device], aParams EnvironmentDeviceParams) EnvironmentDevice {
 	return &environmentDeviceImpl{
-		id:            anID,
 		projectID:     aProjectID,
 		environmentID: anEnvironmentID,
 		deviceID:      aDeviceID,
 		params:        aParams,
 		version:       version.Initial[EnvironmentDevice](),
-		pending:       []event.Event{NewEnvironmentDeviceCreatedEvent(anID, anEnvironmentID, aDeviceID, aProjectID)},
+		pending:       []event.Event{NewEnvironmentDeviceCreatedEvent(anEnvironmentID, aDeviceID, aProjectID)},
 	}
 }
 
 // ReconstituteEnvironmentDevice rebuilds a pair as stored, at the given
 // version; it records no event. For repositories, which read the pair within
 // its Project and so name it.
-func ReconstituteEnvironmentDevice(anID id.ID[EnvironmentDevice], aProjectID id.ID[project.Project], anEnvironmentID id.ID[Environment], aDeviceID id.ID[Device], aParams EnvironmentDeviceParams, aVersion version.Version[EnvironmentDevice]) EnvironmentDevice {
+func ReconstituteEnvironmentDevice(aProjectID id.ID[project.Project], anEnvironmentID id.ID[Environment], aDeviceID id.ID[Device], aParams EnvironmentDeviceParams, aVersion version.Version[EnvironmentDevice]) EnvironmentDevice {
 	return &environmentDeviceImpl{
-		id:            anID,
 		projectID:     aProjectID,
 		environmentID: anEnvironmentID,
 		deviceID:      aDeviceID,
@@ -92,7 +88,6 @@ func ReconstituteEnvironmentDevice(anID id.ID[EnvironmentDevice], aProjectID id.
 	}
 }
 
-func (e *environmentDeviceImpl) ID() id.ID[EnvironmentDevice]                { return e.id }
 func (e *environmentDeviceImpl) ProjectID() id.ID[project.Project]           { return e.projectID }
 func (e *environmentDeviceImpl) EnvironmentID() id.ID[Environment]           { return e.environmentID }
 func (e *environmentDeviceImpl) DeviceID() id.ID[Device]                     { return e.deviceID }
@@ -113,14 +108,14 @@ func (e *environmentDeviceImpl) UpdateParams(expected version.Version[Environmen
 	updated := *e
 	updated.params = aParams
 	updated.pending = append(slices.Clone(e.pending),
-		NewEnvironmentDeviceUpdatedEvent(e.id, e.environmentID, e.deviceID, e.projectID))
+		NewEnvironmentDeviceUpdatedEvent(e.environmentID, e.deviceID, e.projectID))
 	return &updated, nil
 }
 
 func (e *environmentDeviceImpl) Delete() EnvironmentDevice {
 	deleted := *e
 	deleted.pending = append(slices.Clone(e.pending),
-		NewEnvironmentDeviceDeletedEvent(e.id, e.environmentID, e.deviceID, e.projectID))
+		NewEnvironmentDeviceDeletedEvent(e.environmentID, e.deviceID, e.projectID))
 	return &deleted
 }
 

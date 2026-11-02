@@ -11,8 +11,12 @@ The atomic process variable — an identifier, name, type, current value, and qu
 _Avoid_: variable, point, signal
 
 **Tag definition**:
-A Tag's name and TagType: configuration, part of the Draft and of a Revision.
+A Tag's name, TagType and supplier: configuration, part of the Draft and of a Revision.
 _Avoid_: tag config, tag metadata
+
+**Supplier**:
+What writes a Tag's value and Quality: one Device, or people — at most one per Tag, part of its definition.
+_Avoid_: writer, producer, owner, source
 
 **Tag state**:
 A Tag's current value and Quality: process state, held by the Runtime node, never part of the Draft or a Revision. The latest write wins.

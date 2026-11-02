@@ -48,8 +48,8 @@ func (id ID[T]) UUID() uuid.UUID {
 }
 
 // IsZero reports whether the ID is the zero value: an aggregate always has an
-// ID, so a zero ID means no aggregate — a relation that is absent, such as a
-// Tag without a supplier.
+// ID, so a zero ID means no aggregate. A relation that may be absent is named
+// by its own value object (e.g. tag.Supplier), never by a bare zero ID.
 func (id ID[T]) IsZero() bool {
 	return id.uuid == uuid.Nil
 }
