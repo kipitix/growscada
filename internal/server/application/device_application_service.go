@@ -44,14 +44,20 @@ func NewDeviceService(aContent ProjectContent) DeviceService {
 	return &deviceServiceImpl{content: aContent}
 }
 
+// FindAllDevices returns all Devices of the Project. The UI reloads the list
+// on every event, so the Devices are read with the check of their Project in
+// one query, and the Project is read apart only when there are none, to tell
+// a missing Project from an empty one.
 func (s deviceServiceImpl) FindAllDevices(ctx context.Context, rawProjectID uuid.UUID) ([]appdto.Device, error) {
-	_, scope, err := s.content.open(ctx, rawProjectID)
-	if err != nil {
-		return nil, err
-	}
-	list, err := scope.Devices().FindAll(ctx)
+	_, scope := s.content.openUnchecked(rawProjectID)
+	list, err := scope.Devices().FindAllInLiveProject(ctx, s.content.organization)
 	if err != nil {
 		return nil, fmt.Errorf("error on find devices in repository: %w", err)
+	}
+	if len(list) == 0 {
+		if _, _, err := s.content.open(ctx, rawProjectID); err != nil {
+			return nil, err
+		}
 	}
 	return appdto.NewDeviceList(list), nil
 }

@@ -17,6 +17,7 @@
 
 - **Runtime-копии удалённого проекта уходят вместе с его строкой** (ADR 0011): `runtime.devices` и `runtime.environments` ссылаются на `projects` с `ON DELETE CASCADE`, `runtime.environment_devices` — на обе копии с тем же; иначе после Deploy (задача 35) строка проекта не удалялась бы. В Draft ссылки по-прежнему отказывают, а не каскадят (ADR 0008)
 - **Пары индексируются по Device**: `engineering.environment_devices` получил `idx_environment_devices_device_id`, `runtime.environment_devices` — одноимённый индекс. По `device_id` смотрит проверка занятости Device и FK, отказывающий его удаление; прежний уникальный ключ начинается с `environment_id` и этот поиск не покрывает
+- **Списки Device и Environment читаются в живом проекте одним запросом** (`FindAllInLiveProject`, как у Tag и Scene): UI перезагружает их на события, а проект читается отдельно только при пустом списке, чтобы отличить отсутствующий от пустого. `PutEnvironmentDevice` сначала проверяет ожидаемую Version и только потом разбирает `params` — устаревшая запись даёт 409, как у Device и Environment, даже с невалидными параметрами; гонка «Device удалили между проверкой поставщика и записью Tag'а» отдаёт `tag.ErrSupplierOfAnotherProject`, а не общий 500
 - `roles_test` уже относит `domain/device` к общему домену и проверяет, что общие пакеты не импортируют роль; поправка ADR 0011 об этом сделана в части 2
 
 ## [0.0.52] - 2026-11-01

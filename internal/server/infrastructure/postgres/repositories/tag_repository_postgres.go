@@ -112,13 +112,19 @@ func (r tagRepositoryPostgresImpl) checkSupplier(ctx context.Context, tx *sql.Tx
 }
 
 // tagWriteError maps a failed write of a tags row: a name taken in the
-// Project is ErrTagNameTaken.
+// Project is ErrTagNameTaken, and a supplier that stopped being a Device of
+// the Project between checkSupplier and the write (its deletion won the race)
+// is ErrSupplierOfAnotherProject, as the foreign key is the last line of
+// defence.
 func (r tagRepositoryPostgresImpl) tagWriteError(what string, err error) error {
 	if err == nil {
 		return nil
 	}
 	if isUniqueViolation(err, constraintTagsName) {
 		return tag.ErrTagNameTaken
+	}
+	if isForeignKeyViolation(err, constraintTagsDeviceID) {
+		return fmt.Errorf("%w: the supplier is not a device of the project", tag.ErrSupplierOfAnotherProject)
 	}
 	return fmt.Errorf("cannot %s: %w", what, err)
 }

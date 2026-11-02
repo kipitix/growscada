@@ -10,6 +10,7 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/organization"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
@@ -156,11 +157,26 @@ func (r deviceRepositoryPostgresImpl) deviceDeleteError(aDevice device.Device, e
 }
 
 func (r deviceRepositoryPostgresImpl) FindAll(ctx context.Context) ([]device.Device, error) {
-	rows, err := r.db.QueryContext(ctx,
+	return r.readDevices(ctx,
 		`SELECT id, name, comment, protocol, config, version FROM engineering.devices
 		 WHERE project_id = $1 ORDER BY pk_id`,
 		r.project.UUID(),
 	)
+}
+
+func (r deviceRepositoryPostgresImpl) FindAllInLiveProject(ctx context.Context, orgID id.ID[organization.Organization]) ([]device.Device, error) {
+	return r.readDevices(ctx,
+		`SELECT d.id, d.name, d.comment, d.protocol, d.config, d.version
+		 FROM engineering.devices d JOIN projects p ON p.id = d.project_id
+		 WHERE d.project_id = $1 AND p.deleted_at IS NULL AND p.organization_id = $2
+		 ORDER BY d.pk_id`,
+		r.project.UUID(), orgID.UUID(),
+	)
+}
+
+// readDevices reads the devices query selects, its columns those of FindAll.
+func (r deviceRepositoryPostgresImpl) readDevices(ctx context.Context, query string, args ...any) ([]device.Device, error) {
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("error querying devices: %w", err)
 	}

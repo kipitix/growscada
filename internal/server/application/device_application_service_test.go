@@ -121,6 +121,14 @@ func TestEnvironmentService_CRUDAndPairs(t *testing.T) {
 	if _, _, err := environments.PutEnvironmentDevice(ctx, mainProject, environment.ID, created.ID, pair.Version, appdto.EnvironmentDeviceInput{}); !errors.Is(err, device.ErrEnvironmentDeviceConflict) {
 		t.Errorf("a stale pair write: %v, want ErrEnvironmentDeviceConflict", err)
 	}
+	// A stale write is a conflict whatever it sends, as for a Device or an
+	// Environment; the params are parsed only once the Version is current.
+	if _, _, err := environments.PutEnvironmentDevice(ctx, mainProject, environment.ID, created.ID, pair.Version, appdto.EnvironmentDeviceInput{Params: []byte(`[]`)}); !errors.Is(err, device.ErrEnvironmentDeviceConflict) {
+		t.Errorf("a stale pair write with invalid params: %v, want ErrEnvironmentDeviceConflict", err)
+	}
+	if _, _, err := environments.PutEnvironmentDevice(ctx, mainProject, environment.ID, created.ID, changed.Version, appdto.EnvironmentDeviceInput{Params: []byte(`[]`)}); !errors.Is(err, application.ErrInvalidInput) {
+		t.Errorf("a current pair write with invalid params: %v, want ErrInvalidInput", err)
+	}
 
 	// A pair refuses removing its Environment and its Device; without one both go.
 	if _, err := environments.DeleteEnvironmentByID(ctx, mainProject, environment.ID); !errors.Is(err, device.ErrEnvironmentInUse) {
@@ -156,5 +164,39 @@ func TestDeviceService_ProjectScope(t *testing.T) {
 	}
 	if _, err := newDeviceService().FindDeviceByID(ctx, uuid.New(), mine.ID); !errors.Is(err, project.ErrProjectNotFound) {
 		t.Errorf("a missing project: %v, want ErrProjectNotFound", err)
+	}
+
+	// The lists are read with the check of their Project in one query, as the
+	// Tags and the Scenes are; an empty list still tells a missing Project
+	// from an empty one.
+	otherDevice, err := newDeviceService().CreateDevice(ctx, other.ID, appdto.DeviceInput{Name: "other-" + uuid.NewString(), Protocol: "simulation"})
+	if err != nil {
+		t.Fatalf("CreateDevice in the other project: %v", err)
+	}
+	if _, err := newEnvironmentService().CreateEnvironment(ctx, other.ID, appdto.EnvironmentInput{Name: "other-" + uuid.NewString()}); err != nil {
+		t.Fatalf("CreateEnvironment in the other project: %v", err)
+	}
+	if list, err := newDeviceService().FindAllDevices(ctx, other.ID); err != nil || len(list) != 1 || list[0].ID != otherDevice.ID {
+		t.Errorf("FindAllDevices of the other project: %v, %v", list, err)
+	}
+	if list, err := newEnvironmentService().FindAllEnvironments(ctx, other.ID); err != nil || len(list) != 1 {
+		t.Errorf("FindAllEnvironments of the other project: %v, %v", list, err)
+	}
+	if _, err := newDeviceService().FindAllDevices(ctx, uuid.New()); !errors.Is(err, project.ErrProjectNotFound) {
+		t.Errorf("FindAllDevices of a missing project: %v, want ErrProjectNotFound", err)
+	}
+	if _, err := newEnvironmentService().FindAllEnvironments(ctx, uuid.New()); !errors.Is(err, project.ErrProjectNotFound) {
+		t.Errorf("FindAllEnvironments of a missing project: %v, want ErrProjectNotFound", err)
+	}
+
+	// A marked Project has no lists, which is how the UI leaves it at once.
+	if _, err := projects.DeleteProjectByID(ctx, other.ID); err != nil {
+		t.Fatalf("DeleteProjectByID: %v", err)
+	}
+	if list, err := newDeviceService().FindAllDevices(ctx, other.ID); !errors.Is(err, project.ErrProjectNotFound) || list != nil {
+		t.Errorf("FindAllDevices of a marked project: %v, %v; want ErrProjectNotFound", list, err)
+	}
+	if list, err := newEnvironmentService().FindAllEnvironments(ctx, other.ID); !errors.Is(err, project.ErrProjectNotFound) || list != nil {
+		t.Errorf("FindAllEnvironments of a marked project: %v, %v; want ErrProjectNotFound", list, err)
 	}
 }

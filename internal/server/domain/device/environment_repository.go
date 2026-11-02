@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/organization"
 )
 
 // EnvironmentRepository - repository interface for storing and managing the
@@ -16,6 +17,12 @@ type EnvironmentRepository interface {
 
 	// FindAll returns the Project's Environments in creation order.
 	FindAll(context.Context) ([]Environment, error)
+
+	// FindAllInLiveProject is FindAll that also checks, in the same query,
+	// that the Project is live and of the Organization: for the list the UI
+	// reloads on every event. A Project not one of those has no Environments:
+	// the list is empty, as an empty Project's, which the caller tells apart.
+	FindAllInLiveProject(context.Context, id.ID[organization.Organization]) ([]Environment, error)
 
 	// FindByID returns the Environment of the Project with the given ID.
 	// Returns ErrEnvironmentNotFound if there is none.

@@ -56,14 +56,20 @@ func NewEnvironmentService(aContent ProjectContent) EnvironmentService {
 	return &environmentServiceImpl{content: aContent}
 }
 
+// FindAllEnvironments returns all Environments of the Project. The UI
+// reloads the list on every event, so the Environments are read with the
+// check of their Project in one query, and the Project is read apart only
+// when there are none, to tell a missing Project from an empty one.
 func (s environmentServiceImpl) FindAllEnvironments(ctx context.Context, rawProjectID uuid.UUID) ([]appdto.Environment, error) {
-	_, scope, err := s.content.open(ctx, rawProjectID)
-	if err != nil {
-		return nil, err
-	}
-	list, err := scope.Environments().FindAll(ctx)
+	_, scope := s.content.openUnchecked(rawProjectID)
+	list, err := scope.Environments().FindAllInLiveProject(ctx, s.content.organization)
 	if err != nil {
 		return nil, fmt.Errorf("error on find environments in repository: %w", err)
+	}
+	if len(list) == 0 {
+		if _, _, err := s.content.open(ctx, rawProjectID); err != nil {
+			return nil, err
+		}
 	}
 	return appdto.NewEnvironmentList(list), nil
 }
@@ -194,10 +200,6 @@ func (s environmentServiceImpl) PutEnvironmentDevice(ctx context.Context, rawPro
 	}
 	environmentID := id.NewID(id.IDWithUUID[device.Environment](rawEnvironmentID))
 	deviceID := id.NewID(id.IDWithUUID[device.Device](rawDeviceID))
-	params, err := device.NewEnvironmentDeviceParams(input.Params)
-	if err != nil {
-		return appdto.EnvironmentDevice{}, false, invalidInput(fmt.Errorf("params: %w", err))
-	}
 	// A negative version is no version at all: the client's input, not a conflict.
 	expected, err := environmentDeviceVersion(rawExpectedVersion)
 	if err != nil {
@@ -207,6 +209,10 @@ func (s environmentServiceImpl) PutEnvironmentDevice(ctx context.Context, rawPro
 	found, err := repo.FindByPair(ctx, environmentID, deviceID)
 	switch {
 	case errors.Is(err, device.ErrEnvironmentDeviceNotFound) && expected == version.Initial[device.EnvironmentDevice]():
+		params, err := device.NewEnvironmentDeviceParams(input.Params)
+		if err != nil {
+			return appdto.EnvironmentDevice{}, false, invalidInput(fmt.Errorf("params: %w", err))
+		}
 		created, err := repo.Save(ctx, device.CreateEnvironmentDevice(projectID, environmentID, deviceID, params))
 		if err != nil {
 			return appdto.EnvironmentDevice{}, false, fmt.Errorf("cannot save environment device: %w", err)
@@ -219,6 +225,10 @@ func (s environmentServiceImpl) PutEnvironmentDevice(ctx context.Context, rawPro
 	// A stale write is a conflict whatever it sends.
 	if err := found.CheckVersion(expected); err != nil {
 		return appdto.EnvironmentDevice{}, false, fmt.Errorf("cannot update environment device: %w", err)
+	}
+	params, err := device.NewEnvironmentDeviceParams(input.Params)
+	if err != nil {
+		return appdto.EnvironmentDevice{}, false, invalidInput(fmt.Errorf("params: %w", err))
 	}
 	updated, err := found.UpdateParams(expected, params)
 	if err != nil {

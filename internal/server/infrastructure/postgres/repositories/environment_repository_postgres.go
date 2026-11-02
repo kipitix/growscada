@@ -10,6 +10,7 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/organization"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
@@ -153,11 +154,27 @@ func (r environmentRepositoryPostgresImpl) environmentDeleteError(anEnvironment 
 }
 
 func (r environmentRepositoryPostgresImpl) FindAll(ctx context.Context) ([]device.Environment, error) {
-	rows, err := r.db.QueryContext(ctx,
+	return r.readEnvironments(ctx,
 		`SELECT id, name, comment, version FROM engineering.environments
 		 WHERE project_id = $1 ORDER BY pk_id`,
 		r.project.UUID(),
 	)
+}
+
+func (r environmentRepositoryPostgresImpl) FindAllInLiveProject(ctx context.Context, orgID id.ID[organization.Organization]) ([]device.Environment, error) {
+	return r.readEnvironments(ctx,
+		`SELECT e.id, e.name, e.comment, e.version
+		 FROM engineering.environments e JOIN projects p ON p.id = e.project_id
+		 WHERE e.project_id = $1 AND p.deleted_at IS NULL AND p.organization_id = $2
+		 ORDER BY e.pk_id`,
+		r.project.UUID(), orgID.UUID(),
+	)
+}
+
+// readEnvironments reads the environments query selects, its columns those of
+// FindAll.
+func (r environmentRepositoryPostgresImpl) readEnvironments(ctx context.Context, query string, args ...any) ([]device.Environment, error) {
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("error querying environments: %w", err)
 	}
