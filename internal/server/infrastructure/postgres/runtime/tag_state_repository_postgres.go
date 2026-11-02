@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 
+	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -37,7 +38,7 @@ func NewTagStateRepositoryPostgres(aDb *sql.DB) tagstate.Repository {
 	return &tagStateRepositoryPostgres{db: aDb}
 }
 
-const selectTagStateColumns = `t.id, t.name, t.type, t.version, s.value, s.quality, s.seq`
+const selectTagStateColumns = `t.id, t.name, t.type, t.device_id, t.version, s.value, s.quality, s.seq`
 
 func (r tagStateRepositoryPostgres) FindInLiveProject(ctx context.Context, projectID id.ID[project.Project], tagID id.ID[tag.Tag], orgID id.ID[organization.Organization]) (tagstate.TagState, error) {
 	row := r.db.QueryRowContext(ctx,
@@ -102,25 +103,48 @@ func (r tagStateRepositoryPostgres) IsProjectLive(ctx context.Context, projectID
 // Write numbers the state in the UPDATE itself: concurrent writes of one Tag
 // take their numbers in the order the row lock serializes them, so the state
 // stored is the one with the greatest Seq. The definition's copy is joined,
-// so a write of a Tag whose definition is gone (or is of another Project or
-// TagType) finds no row.
-func (r tagStateRepositoryPostgres) Write(ctx context.Context, aState tagstate.TagState) (tagstate.TagState, error) {
+// so a write of a Tag whose definition is gone (or is of another Project,
+// TagType or supplier) finds no row; a Tag that exists but is not the
+// writer's is told apart afterwards, on that failure path alone.
+func (r tagStateRepositoryPostgres) Write(ctx context.Context, aState tagstate.TagState, aSupplier tag.Supplier) (tagstate.TagState, error) {
 	var seq int64
 	err := r.db.QueryRowContext(ctx,
 		`UPDATE runtime.tag_states s SET value = $1, quality = $2, seq = nextval('runtime.tag_state_seq')
 		 FROM runtime.tags t
 		 WHERE s.tag_id = t.id AND t.id = $3 AND t.project_id = $4 AND t.type = $5
+		   AND t.device_id IS NOT DISTINCT FROM $6
 		 RETURNING s.seq`,
 		aState.Value().String(), aState.Quality().String(),
-		aState.TagID().UUID(), aState.ProjectID().UUID(), aState.Definition().Type.String(),
+		aState.TagID().UUID(), aState.ProjectID().UUID(), aState.Definition().Type.String(), supplierValue(aSupplier),
 	).Scan(&seq)
 	if errors.Is(err, sql.ErrNoRows) {
-		return tagstate.TagState{}, id.NotFound(tag.ErrTagNotFound, aState.TagID())
+		return tagstate.TagState{}, r.writeMissReason(ctx, aState, aSupplier)
 	}
 	if err != nil {
 		return tagstate.TagState{}, fmt.Errorf("cannot write tag state: %w", err)
 	}
 	return tagstate.Reconstitute(aState.Definition(), aState.Value(), aState.Quality(), tagstate.Seq(seq))
+}
+
+// writeMissReason tells why Write's UPDATE matched no row: the Tag of another
+// supplier (the Tag exists, its values are its supplier's alone) or one that
+// is gone.
+func (r tagStateRepositoryPostgres) writeMissReason(ctx context.Context, aState tagstate.TagState, aSupplier tag.Supplier) error {
+	var stored *uuid.UUID
+	err := r.db.QueryRowContext(ctx,
+		`SELECT device_id FROM runtime.tags WHERE id = $1 AND project_id = $2 AND type = $3`,
+		aState.TagID().UUID(), aState.ProjectID().UUID(), aState.Definition().Type.String(),
+	).Scan(&stored)
+	if errors.Is(err, sql.ErrNoRows) {
+		return id.NotFound(tag.ErrTagNotFound, aState.TagID())
+	}
+	if err != nil {
+		return fmt.Errorf("cannot read the supplier of tag %s: %w", aState.TagID(), err)
+	}
+	if !sameSupplier(stored, aSupplier) {
+		return fmt.Errorf("%w: tag %s, writer %s", tag.ErrTagNotSuppliedByDevice, aState.TagID(), aSupplier)
+	}
+	return id.NotFound(tag.ErrTagNotFound, aState.TagID())
 }
 
 // UpsertDefinitions stores the copy of the definitions in one transaction,
@@ -150,12 +174,12 @@ func (r tagStateRepositoryPostgres) UpsertDefinitions(ctx context.Context, proje
 		// RETURNING yields no row, and Scan answers ErrNoRows.
 		var touched int
 		err = tx.QueryRowContext(ctx,
-			`INSERT INTO runtime.tags (id, project_id, name, type, version)
-			 VALUES ($1, $2, $3, $4, $5)
-			 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, version = EXCLUDED.version
+			`INSERT INTO runtime.tags (id, project_id, name, type, device_id, version)
+			 VALUES ($1, $2, $3, $4, $5, $6)
+			 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, device_id = EXCLUDED.device_id, version = EXCLUDED.version
 			 WHERE runtime.tags.project_id = EXCLUDED.project_id AND runtime.tags.type = EXCLUDED.type
 			 RETURNING 1`,
-			def.TagID.UUID(), projectID.UUID(), def.Name.String(), def.Type.String(), def.Version.Number(),
+			def.TagID.UUID(), projectID.UUID(), def.Name.String(), def.Type.String(), supplierValue(def.Supplier), def.Version.Number(),
 		).Scan(&touched)
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("cannot upsert tag definition %s: its copy is of another project or type than %s %s", def.TagID, projectID, def.Type)
@@ -206,11 +230,12 @@ func scanTagState(projectID id.ID[project.Project], scan func(...any) error) (ta
 	var (
 		tagUUID              uuid.UUID
 		rawName, rawType     string
+		rawDeviceID          *uuid.UUID
 		rawVersion           int
 		rawValue, rawQuality string
 		seq                  int64
 	)
-	if err := scan(&tagUUID, &rawName, &rawType, &rawVersion, &rawValue, &rawQuality, &seq); err != nil {
+	if err := scan(&tagUUID, &rawName, &rawType, &rawDeviceID, &rawVersion, &rawValue, &rawQuality, &seq); err != nil {
 		return tagstate.TagState{}, err
 	}
 	name, err := tag.NewTagName(rawName)
@@ -233,8 +258,42 @@ func scanTagState(projectID id.ID[project.Project], scan func(...any) error) (ta
 	if err != nil {
 		return tagstate.TagState{}, fmt.Errorf("cannot create tag quality: %w", err)
 	}
-	def := tagstate.Definition{TagID: id.NewID(id.IDWithUUID[tag.Tag](tagUUID)), ProjectID: projectID, Name: name, Type: tagType, Version: ver}
+	def := tagstate.Definition{
+		TagID:     id.NewID(id.IDWithUUID[tag.Tag](tagUUID)),
+		ProjectID: projectID,
+		Name:      name,
+		Type:      tagType,
+		Supplier:  supplierOf(rawDeviceID),
+		Version:   ver,
+	}
 	return tagstate.Reconstitute(def, value, quality, tagstate.Seq(seq))
+}
+
+// supplierOf turns the stored device_id of a Tag (NULL when people supply it)
+// into its Supplier.
+func supplierOf(anUUID *uuid.UUID) tag.Supplier {
+	if anUUID == nil {
+		return tag.NoSupplier()
+	}
+	return tag.SuppliedByDevice(id.NewID(id.IDWithUUID[device.Device](*anUUID)))
+}
+
+// supplierValue is the device_id column of a Tag: NULL when it has no
+// supplier.
+func supplierValue(aSupplier tag.Supplier) any {
+	if !aSupplier.HasDevice() {
+		return nil
+	}
+	return aSupplier.DeviceID().UUID()
+}
+
+// sameSupplier reports whether the stored device_id names the writer's
+// Device (both absent included).
+func sameSupplier(stored *uuid.UUID, aSupplier tag.Supplier) bool {
+	if stored == nil {
+		return !aSupplier.HasDevice()
+	}
+	return aSupplier.HasDevice() && aSupplier.DeviceID().UUID() == *stored
 }
 
 func rawIDs(tagIDs []id.ID[tag.Tag]) []string {

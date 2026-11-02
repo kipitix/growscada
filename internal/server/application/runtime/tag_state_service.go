@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
@@ -39,11 +40,13 @@ func invalidInput(err error) error {
 }
 
 // TagDefinition is the copy of a Tag definition the Runtime node is given.
+// DeviceID is the supplier's ID, zero when people write the Tag.
 type TagDefinition struct {
-	ID      uuid.UUID
-	Name    string
-	Type    string
-	Version int
+	ID       uuid.UUID
+	Name     string
+	Type     string
+	DeviceID uuid.UUID
+	Version  int
 }
 
 // TagState is a Tag's state with its definition's copy. Seq 0: written by no
@@ -59,20 +62,25 @@ type TagState struct {
 }
 
 // SetTagValueInput is a write of a Tag's state; it states no expected
-// Version: the latest write wins.
+// Version: the latest write wins. DeviceID is the writer's Device — the
+// supplier the write is checked against — the zero UUID when a person writes.
 type SetTagValueInput struct {
-	TagID   uuid.UUID
-	Value   string
-	Quality string
+	TagID    uuid.UUID
+	Value    string
+	Quality  string
+	DeviceID uuid.UUID
 }
 
 // TagStateService is the Runtime node's service of Tag states. Every method
 // takes the Project first.
 type TagStateService interface {
 	// SetTagValue writes a Tag's state and, once it is stored, publishes
-	// tag_updated with it (at-most-once). A Project that is not live, or of
-	// another Organization, is an error wrapping project.ErrProjectNotFound;
-	// a Tag without a state one wrapping tag.ErrTagNotFound.
+	// tag_updated with it (at-most-once). The writer is the supplier the
+	// write is checked against in the same query: a Tag a Device supplies is
+	// written by that Device alone (tag.ErrTagNotSuppliedByDevice otherwise).
+	// A Project that is not live, or of another Organization, is an error
+	// wrapping project.ErrProjectNotFound; a Tag without a state one wrapping
+	// tag.ErrTagNotFound.
 	SetTagValue(ctx context.Context, projectID uuid.UUID, input SetTagValueInput) (TagState, error)
 	// FindTagStates returns the states of the Tags with the given IDs; a Tag
 	// without a state is left out.
@@ -136,7 +144,7 @@ func (s tagStateServiceImpl) SetTagValue(ctx context.Context, rawProjectID uuid.
 	// UPDATE committed would store the state and publish no tag_updated.
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), writeTimeout)
 	defer cancel()
-	stored, err := s.states.Write(writeCtx, written)
+	stored, err := s.states.Write(writeCtx, written, supplierOf(input.DeviceID))
 	if err != nil {
 		return TagState{}, fmt.Errorf("cannot write tag state: %w", err)
 	}
@@ -226,7 +234,23 @@ func newDefinition(projectID id.ID[project.Project], raw TagDefinition) (tagstat
 	if err != nil {
 		return tagstate.Definition{}, err
 	}
-	return tagstate.Definition{TagID: tagIDOf(raw.ID), ProjectID: projectID, Name: name, Type: tagType, Version: ver}, nil
+	return tagstate.Definition{
+		TagID:     tagIDOf(raw.ID),
+		ProjectID: projectID,
+		Name:      name,
+		Type:      tagType,
+		Supplier:  supplierOf(raw.DeviceID),
+		Version:   ver,
+	}, nil
+}
+
+// supplierOf is the Supplier of the writer or of the definition: the zero
+// Device UUID names no Device.
+func supplierOf(rawDeviceID uuid.UUID) tag.Supplier {
+	if rawDeviceID == uuid.Nil {
+		return tag.NoSupplier()
+	}
+	return tag.SuppliedByDevice(id.NewID(id.IDWithUUID[device.Device](rawDeviceID)))
 }
 
 // NewTagState returns the DTO of a state; the interface layer translates

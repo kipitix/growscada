@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -17,10 +18,11 @@ import (
 const ProjectCleanupPolicyName = "remove_deleted_project"
 
 // projectCleanupPolicy empties a Project marked deleted and removes it
-// (ADR 0006): its Scenes, then its Tags and its Library Pins, each deleted
-// in its own transaction with its own events, then the states of its Tags in the Runtime node
-// (ADR 0011), and the Project's row last; a project_deleted event's job does
-// it. Nothing of the Project is created once it is marked: the
+// (ADR 0006): its Scenes, then its Tags, its EnvironmentDevices, its Devices
+// and its Environments, and its Library Pins, each deleted in its own
+// transaction with its own events, then the states of its Tags in the Runtime
+// node (ADR 0011), and the Project's row last; a project_deleted event's job
+// does it. Nothing of the Project is created once it is marked: the
 // repositories lock its row, live, for a creation. For a live Project the
 // job does nothing.
 type projectCleanupPolicy struct {
@@ -81,6 +83,15 @@ func (p projectCleanupPolicy) Run(ctx context.Context, key string) error {
 	if err := deleteAllTags(ctx, scope.Tags()); err != nil {
 		return fmt.Errorf("cannot empty project %s: %w", projectID, err)
 	}
+	if err := deleteAllEnvironmentDevices(ctx, scope.EnvironmentDevices()); err != nil {
+		return fmt.Errorf("cannot empty project %s: %w", projectID, err)
+	}
+	if err := deleteAllDevices(ctx, scope.Devices()); err != nil {
+		return fmt.Errorf("cannot empty project %s: %w", projectID, err)
+	}
+	if err := deleteAllEnvironments(ctx, scope.Environments()); err != nil {
+		return fmt.Errorf("cannot empty project %s: %w", projectID, err)
+	}
 	if err := deleteAllPins(ctx, scope.LibraryPins()); err != nil {
 		return fmt.Errorf("cannot empty project %s: %w", projectID, err)
 	}
@@ -120,6 +131,57 @@ func deleteAllTags(ctx context.Context, repo tag.TagRepository) error {
 	for _, t := range tags {
 		if err := repo.Delete(ctx, t.Delete()); err != nil && !errors.Is(err, tag.ErrTagNotFound) {
 			errs = append(errs, fmt.Errorf("tag %s: %w", t.ID(), err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// deleteAllEnvironmentDevices deletes every pair of repo, each in its own
+// transaction; one deleted meanwhile is done. The pairs go before the Devices
+// and the Environments they hold.
+func deleteAllEnvironmentDevices(ctx context.Context, repo device.EnvironmentDeviceRepository) error {
+	pairs, err := repo.FindAll(ctx)
+	if err != nil {
+		return fmt.Errorf("cannot list environment devices: %w", err)
+	}
+	var errs []error
+	for _, pair := range pairs {
+		if err := repo.Delete(ctx, pair.Delete()); err != nil && !errors.Is(err, device.ErrEnvironmentDeviceNotFound) {
+			errs = append(errs, fmt.Errorf("environment %s device %s: %w", pair.EnvironmentID(), pair.DeviceID(), err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// deleteAllDevices deletes every Device of repo, each in its own transaction;
+// one deleted meanwhile is done. The Tags and the pairs are gone already, so
+// nothing refers to a Device.
+func deleteAllDevices(ctx context.Context, repo device.DeviceRepository) error {
+	devices, err := repo.FindAll(ctx)
+	if err != nil {
+		return fmt.Errorf("cannot list devices: %w", err)
+	}
+	var errs []error
+	for _, d := range devices {
+		if err := repo.Delete(ctx, d.Delete()); err != nil && !errors.Is(err, device.ErrDeviceNotFound) {
+			errs = append(errs, fmt.Errorf("device %s: %w", d.ID(), err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// deleteAllEnvironments deletes every Environment of repo, each in its own
+// transaction; one deleted meanwhile is done. The pairs are gone already, so
+// no Environment holds a Device.
+func deleteAllEnvironments(ctx context.Context, repo device.EnvironmentRepository) error {
+	environments, err := repo.FindAll(ctx)
+	if err != nil {
+		return fmt.Errorf("cannot list environments: %w", err)
+	}
+	var errs []error
+	for _, e := range environments {
+		if err := repo.Delete(ctx, e.Delete()); err != nil && !errors.Is(err, device.ErrEnvironmentNotFound) {
+			errs = append(errs, fmt.Errorf("environment %s: %w", e.ID(), err))
 		}
 	}
 	return errors.Join(errs...)

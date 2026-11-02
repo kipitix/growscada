@@ -1,5 +1,22 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.53] - 2026-11-02
+
+### Added
+
+- **Persistence, application и проверка поставщика** (задача 34, часть 3; ADR 0004, поправка 2026-11-01; ADR 0011)
+  - Postgres-репозитории `DeviceRepository`, `EnvironmentRepository`, `EnvironmentDeviceRepository` по образцу соседних: запись состояния и pending-событий одной транзакцией (ADR 0008), CAS по загруженной Version, все запросы ограничены проектом (ADR 0006). У пары нет своего ID: её ключ — `(environment_id, device_id)`, `Save` вставляет и обновляет по нему. Области проекта (`ProjectScopes`) получили `Devices()`, `Environments()` и `EnvironmentDevices()`
+  - `DeviceService` и `EnvironmentService` (последний — CRUD окружений и привязка пары `(Environment, Device)` с параметрами; `version 0` в `PUT` добавляет пару) и DTO Device, Environment, EnvironmentDevice в `appdto`
+  - `tag.Supplier` — объект-значение поставщика Tag'а: `tag.NoSupplier()` (пишут люди) и `tag.SuppliedByDevice(id.ID[device.Device])`; `Tag.Supplier()` заменил `DeviceID()` и сырой нулевой `id.ID`. Поставщик по-прежнему задаётся только `CreateTag`/`ReconstituteTag`; его смена с ожидаемой Version — вместе с API привязки Tag→Device (задача 68)
+  - Поставщик из другого проекта отклоняется в транзакции записи Tag'а (`tag.ErrSupplierOfAnotherProject`); страховка в схеме — составной FK `engineering.tags(device_id, project_id) → engineering.devices(id, project_id)`
+  - Удаление с ссылками — отказ, не каскад: `DeviceRepository.Delete` отдаёт `device.ErrDeviceInUse`, пока Tag поставляется Device или Device стоит в паре, `EnvironmentRepository.Delete` — `device.ErrEnvironmentInUse`, пока у окружения есть пары. Очистка удалённого проекта убирает пары, устройства и окружения перед его строкой
+  - **Мост в Runtime**: `appdto.TagDefinition`, `runtime.TagDefinition`, `tagstate.Definition` и `postgres/runtime.UpsertDefinitions` переносят `device_id` в копию определения; `inprocess` пробрасывает его
+  - **Запись только поставщиком**: `runtime.SetTagValueInput.DeviceID` — Device писателя (ноль — человек); `tagstate.Repository.Write` принимает `tag.Supplier` и проверяет его в том же UPDATE, что живость проекта и TagType (ADR 0011), отказывая `tag.ErrTagNotSuppliedByDevice` (Tag есть, писать нельзя; 403 появится с REST в части 4). Tag без поставщика по-прежнему пишут люди
+
+### Changed
+
+- `roles_test` уже относит `domain/device` к общему домену и проверяет, что общие пакеты не импортируют роль; поправка ADR 0011 об этом сделана в части 2
+
 ## [0.0.52] - 2026-11-01
 
 ### Added
@@ -9,7 +26,7 @@
   - Объекты-значения: `DeviceName`, `EnvironmentName` (пустое имя — ошибка), `DeviceProtocol` (закрытый набор, на старте только `simulation`; ноль невалиден, ADR 0001), `DeviceConfig` и `EnvironmentDeviceParams` — неизменяемый JSON-объект (вход и выход копируются, не-объект — ошибка, пусто — `{}`)
   - События `device_created`/`_updated`/`_deleted`, `environment_*`, `environment_device_*` — `project.ContentEvent`: называют проект и едут в его SSE-поток; у событий пары есть её собственный ID, `EnvironmentID` и `DeviceID`
   - Ошибки-сентинелы по образцу `library`/`scene` (`ErrDeviceNotFound`, `ErrDeviceConflict`, `ErrDeviceNameTaken`, `ErrEnvironment*`, `ErrEnvironmentDeviceNotFound`, `ErrEnvironmentDeviceConflict`, `ErrEnvironmentDeviceExists`) и интерфейсы `DeviceRepository`, `EnvironmentRepository`, `EnvironmentDeviceRepository` в области проекта (как `ProjectScopes`)
-- **Поставщик у Tag'а**: `Tag` несёт `DeviceID` — часть определения (`id.ID[device.Device]`, нулевой ID — поставщика нет; новый `id.ID.IsZero()`); `CreateTag`/`ReconstituteTag` принимают поставщика, `tag.NoSupplier()` — «пишут люди». Репозиторий Tag'ов читает и пишет `engineering.tags.device_id`
+- **Поставщик у Tag'а**: `Tag` несёт `Supplier` — объект-значение поставщика (`tag.NoSupplier()` — пишут люди, `tag.SuppliedByDevice(id.ID[device.Device])`), часть определения; `CreateTag`/`ReconstituteTag` принимают поставщика. Репозиторий Tag'ов читает и пишет `engineering.tags.device_id`
 - REST API **0.7**: типы событий `device_*`, `environment_*`, `environment_device_*` в `apiv0.EventTypes()` и поля `environment_id`/`device_id` у `Event` (MINOR, пока MAJOR = 0)
 
 ### Changed

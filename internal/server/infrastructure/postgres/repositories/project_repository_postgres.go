@@ -130,7 +130,8 @@ func (r projectRepositoryPostgresImpl) Delete(ctx context.Context, p project.Pro
 	return r.store.inTx(ctx, p.PendingEvents(), func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `DELETE FROM projects WHERE id = $1 AND deleted_at IS NOT NULL`, p.ID().UUID())
 		if isForeignKeyViolation(err, constraintTagsProjectID) || isForeignKeyViolation(err, constraintScenesProjectID) ||
-			isForeignKeyViolation(err, constraintLibraryPinsProjectID) || isForeignKeyViolation(err, constraintRuntimeTagsProjectID) {
+			isForeignKeyViolation(err, constraintLibraryPinsProjectID) || isForeignKeyViolation(err, constraintDevicesProjectID) ||
+			isForeignKeyViolation(err, constraintEnvironmentsProjectID) || isForeignKeyViolation(err, constraintRuntimeTagsProjectID) {
 			return fmt.Errorf("%w: %s", project.ErrProjectNotEmpty, p.ID())
 		}
 		if err != nil {

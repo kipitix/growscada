@@ -17,6 +17,13 @@ var (
 	// already has the name. Within its Project a tag's name is its unique
 	// natural key (ADR 0003).
 	ErrTagNameTaken = errors.New("tag name already taken")
+	// ErrSupplierOfAnotherProject is returned by Save when the Tag's supplier
+	// is not a Device of the Tag's Project (ADR 0006).
+	ErrSupplierOfAnotherProject = errors.New("tag supplier of another project")
+	// ErrTagNotSuppliedByDevice is returned by the Runtime node's write of a
+	// state when the writer is not the Device that supplies the Tag: the Tag
+	// exists, but only its supplier writes its values.
+	ErrTagNotSuppliedByDevice = errors.New("tag is not supplied by the device")
 )
 
 // TagRepository - repository interface for storing and managing the Tag
@@ -33,8 +40,9 @@ type TagRepository interface {
 	// once per Save; the returned tag carries the new one and no events.
 	// Returns ErrTagNotFound if the tag does not exist on update,
 	// ErrTagConflict if the stored version does not match, ErrTagNameTaken if
-	// another tag of the Project already has the same name, or an error on
-	// failure (a tag of another Project included).
+	// another tag of the Project already has the same name,
+	// ErrSupplierOfAnotherProject if the supplier is not a Device of the
+	// Project, or an error on failure (a tag of another Project included).
 	Save(context.Context, Tag) (Tag, error)
 
 	// FindByID returns a tag by its identifier.

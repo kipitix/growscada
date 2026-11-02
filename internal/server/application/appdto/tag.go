@@ -28,12 +28,14 @@ type CreateTagInput struct {
 }
 
 // TagDefinition is a Tag definition as the Runtime node is given it
-// (RuntimeNode).
+// (RuntimeNode). DeviceID is the supplier's ID, zero when people write the
+// Tag.
 type TagDefinition struct {
-	ID      uuid.UUID
-	Name    string
-	Type    string
-	Version int
+	ID       uuid.UUID
+	Name     string
+	Type     string
+	DeviceID uuid.UUID
+	Version  int
 }
 
 // TagState is a Tag's state as the Runtime node holds it (RuntimeNode).
@@ -47,10 +49,11 @@ type TagState struct {
 // NewTagDefinition returns the definition of aTag for the Runtime node.
 func NewTagDefinition(aTag tag.Tag) TagDefinition {
 	return TagDefinition{
-		ID:      aTag.ID().UUID(),
-		Name:    aTag.Name().String(),
-		Type:    aTag.Type().String(),
-		Version: aTag.Version().Number(),
+		ID:       aTag.ID().UUID(),
+		Name:     aTag.Name().String(),
+		Type:     aTag.Type().String(),
+		DeviceID: aTag.Supplier().DeviceID().UUID(),
+		Version:  aTag.Version().Number(),
 	}
 }
 

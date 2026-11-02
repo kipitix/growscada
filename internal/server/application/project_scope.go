@@ -1,6 +1,7 @@
 package application
 
 import (
+	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -20,6 +21,15 @@ type ProjectScope interface {
 	// LibraryPins are the Library Pins of the Project's Draft, and through
 	// them the WidgetTypes its Widgets may be of (ADR 0007).
 	LibraryPins() librarypin.Repository
+	// Devices are the Devices of the Project's Draft: what its Tags may be
+	// supplied by (ADR 0004, amendment 2026-11-01).
+	Devices() device.DeviceRepository
+	// Environments are the Environments of the Project's Draft: the
+	// parameters by which its Devices are reached.
+	Environments() device.EnvironmentRepository
+	// EnvironmentDevices are the pairs of an Environment and a Device of the
+	// Project's Draft, with their parameters.
+	EnvironmentDevices() device.EnvironmentDeviceRepository
 }
 
 // ProjectScopes opens the ProjectScope of a Project. It knows nothing of the

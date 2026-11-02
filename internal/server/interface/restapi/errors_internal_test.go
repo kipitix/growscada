@@ -332,15 +332,19 @@ var domainSentinels = map[string]error{
 	"device.ErrDeviceNotFound":            device.ErrDeviceNotFound,
 	"device.ErrDeviceConflict":            device.ErrDeviceConflict,
 	"device.ErrDeviceNameTaken":           device.ErrDeviceNameTaken,
+	"device.ErrDeviceInUse":               device.ErrDeviceInUse,
 	"device.ErrEnvironmentNotFound":       device.ErrEnvironmentNotFound,
 	"device.ErrEnvironmentConflict":       device.ErrEnvironmentConflict,
 	"device.ErrEnvironmentNameTaken":      device.ErrEnvironmentNameTaken,
+	"device.ErrEnvironmentInUse":          device.ErrEnvironmentInUse,
 	"device.ErrEnvironmentDeviceNotFound": device.ErrEnvironmentDeviceNotFound,
 	"device.ErrEnvironmentDeviceConflict": device.ErrEnvironmentDeviceConflict,
 	"device.ErrEnvironmentDeviceExists":   device.ErrEnvironmentDeviceExists,
 	"tag.ErrTagNotFound":                  tag.ErrTagNotFound,
 	"tag.ErrTagConflict":                  tag.ErrTagConflict,
 	"tag.ErrTagNameTaken":                 tag.ErrTagNameTaken,
+	"tag.ErrSupplierOfAnotherProject":     tag.ErrSupplierOfAnotherProject,
+	"tag.ErrTagNotSuppliedByDevice":       tag.ErrTagNotSuppliedByDevice,
 	"tag.ErrInvalidTagNameMatcher":        tag.ErrInvalidTagNameMatcher,
 }
 
@@ -357,6 +361,10 @@ var unmappedSentinels = map[string]string{
 	"scene.ErrWidgetTypeMismatch":       "500: the service checks a Widget against its own WidgetType",
 	"project.ErrProjectNotEmpty":        "500: only the cleanup policy removes a project's row, never the API",
 	"scene.ErrTagTypesOfAnotherProject": "500: the service reads the TagTypes through the Scene's own Project",
+	"device.ErrDeviceInUse":             "409: refused while a Tag or a pair holds the Device; the Devices API maps it (part 4)",
+	"device.ErrEnvironmentInUse":        "409: refused while a pair holds the Environment; the Environments API maps it (part 4)",
+	"tag.ErrSupplierOfAnotherProject":   "500: the Tag API names no supplier yet (task 68); the repository refuses a Device of another Project as the last line",
+	"tag.ErrTagNotSuppliedByDevice":     "403: the device write reports it once its API exists (part 4)",
 }
 
 // TestDomainSentinels_AreListed reads the domain sources, so a new sentinel

@@ -11,6 +11,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
+	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
@@ -55,7 +56,10 @@ func (s *wrappedScopes) ForProject(projectID id.ID[project.Project]) application
 		return scope
 	}
 	inner := s.ProjectScopes.ForProject(projectID)
-	scope := testScope{projectID: projectID, tags: inner.Tags(), scenes: inner.Scenes(), pins: inner.LibraryPins()}
+	scope := testScope{
+		projectID: projectID, tags: inner.Tags(), scenes: inner.Scenes(), pins: inner.LibraryPins(),
+		devices: inner.Devices(), environments: inner.Environments(), environmentDevices: inner.EnvironmentDevices(),
+	}
 	if s.tags != nil {
 		scope.tags = s.tags(scope.tags)
 	}
@@ -73,16 +77,26 @@ func (s *wrappedScopes) ForProject(projectID id.ID[project.Project]) application
 }
 
 type testScope struct {
-	projectID id.ID[project.Project]
-	tags      tag.TagRepository
-	scenes    scene.SceneRepository
-	pins      librarypin.Repository
+	projectID          id.ID[project.Project]
+	tags               tag.TagRepository
+	scenes             scene.SceneRepository
+	pins               librarypin.Repository
+	devices            device.DeviceRepository
+	environments       device.EnvironmentRepository
+	environmentDevices device.EnvironmentDeviceRepository
 }
 
-func (s testScope) ProjectID() id.ID[project.Project] { return s.projectID }
-func (s testScope) Tags() tag.TagRepository           { return s.tags }
-func (s testScope) Scenes() scene.SceneRepository     { return s.scenes }
+func (s testScope) ProjectID() id.ID[project.Project]  { return s.projectID }
+func (s testScope) Tags() tag.TagRepository            { return s.tags }
+func (s testScope) Scenes() scene.SceneRepository      { return s.scenes }
 func (s testScope) LibraryPins() librarypin.Repository { return s.pins }
+func (s testScope) Devices() device.DeviceRepository   { return s.devices }
+func (s testScope) Environments() device.EnvironmentRepository {
+	return s.environments
+}
+func (s testScope) EnvironmentDevices() device.EnvironmentDeviceRepository {
+	return s.environmentDevices
+}
 
 // soleOrganization is the organization the migrations create.
 func soleOrganization() id.ID[organization.Organization] {
@@ -93,12 +107,18 @@ func soleOrganization() id.ID[organization.Organization] {
 	return orgID
 }
 
-// cleanProjects removes every project but mainProject, with their Library
-// Pins; their other content must be gone already.
+// cleanProjects removes every project but mainProject, with its Library
+// Pins, Devices and Environments; their other content must be gone already.
 func cleanProjects(t *testing.T) {
 	t.Helper()
+	main := "'" + mainProject.String() + "'"
 	if _, err := testDB.ExecContext(context.Background(),
-		"DELETE FROM engineering.library_pins WHERE project_id <> '"+mainProject.String()+"'; DELETE FROM projects WHERE id <> '"+mainProject.String()+"'"); err != nil {
+		`DELETE FROM engineering.environment_devices ed USING engineering.environments e
+		 WHERE ed.environment_id = e.id AND e.project_id <> `+main+`;
+		 DELETE FROM engineering.devices WHERE project_id <> `+main+`;
+		 DELETE FROM engineering.environments WHERE project_id <> `+main+`;
+		 DELETE FROM engineering.library_pins WHERE project_id <> `+main+`;
+		 DELETE FROM projects WHERE id <> `+main); err != nil {
 		t.Fatalf("cleanProjects: %v", err)
 	}
 }

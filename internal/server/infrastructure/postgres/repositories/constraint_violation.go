@@ -14,13 +14,33 @@ const constraintTagsName = "uq_tags_project_name"
 const constraintProjectsLiveName = "uq_projects_organization_live_name"
 
 // Foreign keys of a project's content to projects; they refuse removing a
-// project that still has content: Tag definitions, Scenes and Library Pins
-// in the Draft, Tag states in runtime (ADR 0011).
+// project that still has content: Tag definitions, Scenes, Library Pins and
+// Devices in the Draft, Tag states in runtime (ADR 0011).
 const (
-	constraintTagsProjectID        = "fk_tags_project_id"
-	constraintScenesProjectID      = "fk_scenes_project_id"
-	constraintLibraryPinsProjectID = "fk_library_pins_project_id"
-	constraintRuntimeTagsProjectID = "fk_runtime_tags_project_id"
+	constraintTagsProjectID         = "fk_tags_project_id"
+	constraintScenesProjectID       = "fk_scenes_project_id"
+	constraintLibraryPinsProjectID  = "fk_library_pins_project_id"
+	constraintDevicesProjectID      = "fk_devices_project_id"
+	constraintEnvironmentsProjectID = "fk_environments_project_id"
+	constraintRuntimeTagsProjectID  = "fk_runtime_tags_project_id"
+)
+
+// constraintDevicesName is the unique constraint on devices (project_id,
+// name).
+const constraintDevicesName = "uq_devices_project_name"
+
+// constraintEnvironmentsName is the unique constraint on environments
+// (project_id, name).
+const constraintEnvironmentsName = "uq_environments_project_name"
+
+// Constraints of environment_devices: one pair per environment and device,
+// and the foreign keys that refuse removing a device a Tag is supplied by or
+// an environment or device a pair holds.
+const (
+	constraintEnvironmentDevicesPair          = "uq_environment_devices_pair"
+	constraintEnvironmentDevicesEnvironmentID = "fk_environment_devices_environment_id"
+	constraintEnvironmentDevicesDeviceID      = "fk_environment_devices_device_id"
+	constraintTagsDeviceID                    = "fk_tags_device_id"
 )
 
 // constraintLibrariesLiveName is the unique index on the names of the live

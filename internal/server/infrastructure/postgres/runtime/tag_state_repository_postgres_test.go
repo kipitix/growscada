@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -84,7 +85,7 @@ func TestUpsertDefinitions_InsertsTheInitialStateAndKeepsAWrittenOne(t *testing.
 	}
 
 	written, _ := initial.Write("42", tag.TagQualityGood)
-	stored, err := repo.Write(ctx, written)
+	stored, err := repo.Write(ctx, written, tag.NoSupplier())
 	if err != nil {
 		t.Fatalf("Write: %v", err)
 	}
@@ -147,7 +148,7 @@ func TestWrite_NumbersEveryWriteHigher(t *testing.T) {
 	var last tagstate.Seq
 	for i, value := range []string{"1", "2", "2", "3"} {
 		written, _ := current.Write(value, tag.TagQualityGood)
-		stored, err := repo.Write(ctx, written)
+		stored, err := repo.Write(ctx, written, tag.NoSupplier())
 		if err != nil {
 			t.Fatalf("Write %d: %v", i, err)
 		}
@@ -180,7 +181,7 @@ func TestWrite_Concurrent_TheStoredStateHasTheGreatestSeq(t *testing.T) {
 	for i := range writers {
 		wg.Go(func() {
 			written, _ := initial.Write(int64(i), tag.TagQualityGood)
-			stored, err := repo.Write(ctx, written)
+			stored, err := repo.Write(ctx, written, tag.NoSupplier())
 			if err != nil {
 				t.Errorf("Write %d: %v", i, err)
 			}
@@ -210,7 +211,7 @@ func TestWrite_WithoutAState_IsTagNotFound(t *testing.T) {
 	repo := runtimepg.NewTagStateRepositoryPostgres(postgres.DB(t))
 	never, _ := tagstate.Initial(definition(t, projectID, "never", tag.TagTypeBoolean))
 	written, _ := never.Write("true", tag.TagQualityGood)
-	if _, err := repo.Write(context.Background(), written); !errors.Is(err, tag.ErrTagNotFound) {
+	if _, err := repo.Write(context.Background(), written, tag.NoSupplier()); !errors.Is(err, tag.ErrTagNotFound) {
 		t.Errorf("a write of a tag without a state: %v, want ErrTagNotFound", err)
 	}
 }
@@ -288,5 +289,50 @@ func TestDelete_RemovesTheStatesOfTheProjectOnly(t *testing.T) {
 	}
 	if found, _ := repo.FindByIDs(ctx, other, []id.ID[tag.Tag]{c.TagID}); len(found) != 1 {
 		t.Error("the other project's state was removed")
+	}
+}
+
+// TestWrite_OnlyByTheSupplier: a Tag a Device supplies is written by that
+// Device alone; a Tag nobody supplies is written by people alone. The
+// definition's copy carries the supplier, and a write of another writer is
+// refused, not taken for a missing Tag.
+func TestWrite_OnlyByTheSupplier(t *testing.T) {
+	projectID, _ := newProject(t)
+	repo := runtimepg.NewTagStateRepositoryPostgres(postgres.DB(t))
+	ctx := context.Background()
+	supplier := tag.SuppliedByDevice(id.NewID[device.Device]())
+	speed := definition(t, projectID, "speed", tag.TagTypeInteger)
+	speed.Supplier = supplier
+	if err := repo.UpsertDefinitions(ctx, projectID, []tagstate.Definition{speed}); err != nil {
+		t.Fatalf("UpsertDefinitions: %v", err)
+	}
+	current := mustFind(t, repo, projectID, speed.TagID)
+	if current.Definition().Supplier != supplier {
+		t.Errorf("stored supplier %s, want %s", current.Definition().Supplier, supplier)
+	}
+	written, _ := current.Write("1", tag.TagQualityGood)
+
+	for name, writer := range map[string]tag.Supplier{
+		"another device": tag.SuppliedByDevice(id.NewID[device.Device]()),
+		"a person":       tag.NoSupplier(),
+	} {
+		if _, err := repo.Write(ctx, written, writer); !errors.Is(err, tag.ErrTagNotSuppliedByDevice) {
+			t.Errorf("%s writing a supplied tag: %v, want ErrTagNotSuppliedByDevice", name, err)
+		}
+	}
+	if stored, err := repo.Write(ctx, written, supplier); err != nil || stored.Value().String() != "1" {
+		t.Errorf("the supplier's write: %v, %v", stored, err)
+	}
+
+	open := definition(t, projectID, "open", tag.TagTypeInteger)
+	if err := repo.UpsertDefinitions(ctx, projectID, []tagstate.Definition{open}); err != nil {
+		t.Fatalf("UpsertDefinitions(open): %v", err)
+	}
+	openWritten, _ := mustFind(t, repo, projectID, open.TagID).Write("2", tag.TagQualityGood)
+	if _, err := repo.Write(ctx, openWritten, tag.SuppliedByDevice(id.NewID[device.Device]())); !errors.Is(err, tag.ErrTagNotSuppliedByDevice) {
+		t.Errorf("a device writing a tag nobody supplies: %v, want ErrTagNotSuppliedByDevice", err)
+	}
+	if _, err := repo.Write(ctx, openWritten, tag.NoSupplier()); err != nil {
+		t.Errorf("a person writing a tag nobody supplies: %v", err)
 	}
 }

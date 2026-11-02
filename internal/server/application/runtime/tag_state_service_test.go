@@ -3,6 +3,7 @@ package runtime_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -63,11 +64,15 @@ func (m *memoryStates) IsProjectLive(_ context.Context, p id.ID[project.Project]
 	return m.live[p] && org == m.org, nil
 }
 
-func (m *memoryStates) Write(_ context.Context, s tagstate.TagState) (tagstate.TagState, error) {
+func (m *memoryStates) Write(_ context.Context, s tagstate.TagState, writer tag.Supplier) (tagstate.TagState, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if cur, ok := m.states[s.TagID()]; !ok || cur.ProjectID() != s.ProjectID() {
+	cur, ok := m.states[s.TagID()]
+	if !ok || cur.ProjectID() != s.ProjectID() {
 		return tagstate.TagState{}, id.NotFound(tag.ErrTagNotFound, s.TagID())
+	}
+	if cur.Definition().Supplier != writer {
+		return tagstate.TagState{}, fmt.Errorf("%w: tag %s, writer %s", tag.ErrTagNotSuppliedByDevice, s.TagID(), writer)
 	}
 	m.seq++
 	stored, err := tagstate.Reconstitute(s.Definition(), s.Value(), s.Quality(), m.seq)
@@ -176,11 +181,11 @@ type cancellableStates struct {
 	*memoryStates
 }
 
-func (c cancellableStates) Write(ctx context.Context, s tagstate.TagState) (tagstate.TagState, error) {
+func (c cancellableStates) Write(ctx context.Context, s tagstate.TagState, writer tag.Supplier) (tagstate.TagState, error) {
 	if err := ctx.Err(); err != nil {
 		return tagstate.TagState{}, err
 	}
-	return c.memoryStates.Write(ctx, s)
+	return c.memoryStates.Write(ctx, s, writer)
 }
 
 // TestSetTagValue_CallerGone_StillStoresAndPublishes: a caller that cancels
@@ -290,5 +295,37 @@ func TestRemoveTagStates(t *testing.T) {
 	}
 	if got, _ := f.svc.FindTagStates(ctx, f.project, []uuid.UUID{a, b}); len(got) != 0 {
 		t.Errorf("after removing the project's: %+v", got)
+	}
+}
+
+// TestSetTagValue_OnlyTheSupplierWrites: a Tag a Device supplies is written by
+// that Device alone; a person writes a Tag nobody supplies.
+func TestSetTagValue_OnlyTheSupplierWrites(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	supplier := uuid.New()
+	speed := uuid.New()
+	if err := f.svc.UpsertTagDefinitions(ctx, f.project, []runtimeapp.TagDefinition{
+		{ID: speed, Name: "speed", Type: "integer", DeviceID: supplier, Version: 1},
+	}); err != nil {
+		t.Fatalf("UpsertTagDefinitions: %v", err)
+	}
+
+	if _, err := f.svc.SetTagValue(ctx, f.project, runtimeapp.SetTagValueInput{TagID: speed, Value: "1", Quality: "good", DeviceID: uuid.New()}); !errors.Is(err, tag.ErrTagNotSuppliedByDevice) {
+		t.Errorf("another device: %v, want ErrTagNotSuppliedByDevice", err)
+	}
+	if _, err := f.svc.SetTagValue(ctx, f.project, runtimeapp.SetTagValueInput{TagID: speed, Value: "1", Quality: "good"}); !errors.Is(err, tag.ErrTagNotSuppliedByDevice) {
+		t.Errorf("a person: %v, want ErrTagNotSuppliedByDevice", err)
+	}
+	if written, err := f.svc.SetTagValue(ctx, f.project, runtimeapp.SetTagValueInput{TagID: speed, Value: "1", Quality: "good", DeviceID: supplier}); err != nil || written.Value != "1" {
+		t.Errorf("the supplier: %+v, %v", written, err)
+	}
+
+	open := f.define(t, "open", "integer")
+	if _, err := f.svc.SetTagValue(ctx, f.project, runtimeapp.SetTagValueInput{TagID: open, Value: "2", Quality: "good", DeviceID: uuid.New()}); !errors.Is(err, tag.ErrTagNotSuppliedByDevice) {
+		t.Errorf("a device writing a tag nobody supplies: %v, want ErrTagNotSuppliedByDevice", err)
+	}
+	if written, err := f.svc.SetTagValue(ctx, f.project, runtimeapp.SetTagValueInput{TagID: open, Value: "2", Quality: "good"}); err != nil || written.Value != "2" {
+		t.Errorf("a person writing a tag nobody supplies: %+v, %v", written, err)
 	}
 }

@@ -41,9 +41,10 @@ type EnvironmentRepository interface {
 	// Delete removes an Environment if the stored version is still the
 	// Environment's version and stores the events it recorded (see
 	// Environment.Delete), in one transaction. An Environment still in use is
-	// not removed: while it holds the pairs of its Devices, Delete refuses.
+	// not removed: while it holds the pairs of its Devices, Delete refuses
+	// with ErrEnvironmentInUse.
 	// Returns ErrEnvironmentNotFound if the Environment does not exist,
-	// ErrEnvironmentConflict if the stored version does not match, or an
-	// error on failure.
+	// ErrEnvironmentConflict if the stored version does not match,
+	// ErrEnvironmentInUse if it still holds a pair, or an error on failure.
 	Delete(context.Context, Environment) error
 }

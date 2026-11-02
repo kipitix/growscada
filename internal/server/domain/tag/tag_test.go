@@ -50,8 +50,8 @@ func TestReconstituteTag_FieldsAreSet(t *testing.T) {
 	if tag.Version() != ver {
 		t.Errorf("Version mismatch: expected %d, got %d", ver, tag.Version())
 	}
-	if !tag.DeviceID().IsZero() {
-		t.Errorf("DeviceID mismatch: expected no supplier, got %s", tag.DeviceID())
+	if tag.Supplier().HasDevice() {
+		t.Errorf("Supplier mismatch: expected no supplier, got %s", tag.Supplier())
 	}
 }
 
@@ -69,23 +69,24 @@ func TestReconstituteTag_InitialVersion(t *testing.T) {
 }
 
 func TestTag_KeepsItsSupplier(t *testing.T) {
-	supplier := id.NewID[device.Device]()
+	deviceID := id.NewID[device.Device]()
+	supplier := SuppliedByDevice(deviceID)
 	name, _ := NewTagName("pressure")
 
 	created, err := CreateTag(id.NewID[Tag](), testProject, name, TagTypeInteger, supplier)
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
-	if created.DeviceID() != supplier {
-		t.Errorf("DeviceID = %s, want the supplier %s", created.DeviceID(), supplier)
+	if created.Supplier() != supplier || created.Supplier().DeviceID() != deviceID {
+		t.Errorf("Supplier = %s, want the supplier %s", created.Supplier(), supplier)
 	}
 
 	stored, err := ReconstituteTag(id.NewID[Tag](), testProject, name, TagTypeInteger, supplier, version.Committed[Tag]())
 	if err != nil {
 		t.Fatalf("ReconstituteTag: %v", err)
 	}
-	if stored.DeviceID() != supplier {
-		t.Errorf("DeviceID = %s, want the supplier %s", stored.DeviceID(), supplier)
+	if stored.Supplier() != supplier {
+		t.Errorf("Supplier = %s, want the supplier %s", stored.Supplier(), supplier)
 	}
 }
 

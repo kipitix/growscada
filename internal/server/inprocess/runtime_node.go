@@ -30,7 +30,7 @@ func NewRuntimeNode(someStates runtimeapp.TagStateService) application.RuntimeNo
 func (n runtimeNode) UpsertTagDefinitions(ctx context.Context, projectID uuid.UUID, defs []appdto.TagDefinition) error {
 	converted := make([]runtimeapp.TagDefinition, len(defs))
 	for i, d := range defs {
-		converted[i] = runtimeapp.TagDefinition{ID: d.ID, Name: d.Name, Type: d.Type, Version: d.Version}
+		converted[i] = runtimeapp.TagDefinition{ID: d.ID, Name: d.Name, Type: d.Type, DeviceID: d.DeviceID, Version: d.Version}
 	}
 	return n.states.UpsertTagDefinitions(ctx, projectID, converted)
 }

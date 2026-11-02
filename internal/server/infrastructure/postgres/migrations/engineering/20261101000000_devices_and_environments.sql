@@ -22,7 +22,11 @@ CREATE TABLE engineering.devices (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT fk_devices_project_id FOREIGN KEY (project_id) REFERENCES projects(id),
-    CONSTRAINT uq_devices_project_name UNIQUE (project_id, name)
+    CONSTRAINT uq_devices_project_name UNIQUE (project_id, name),
+    -- A Tag names its supplier and its Project together, so the composite
+    -- foreign key of engineering.tags checks that the Device is of the same
+    -- Project (ADR 0006).
+    CONSTRAINT uq_devices_id_project UNIQUE (id, project_id)
 );
 CREATE TRIGGER update_devices_updated_at
     BEFORE UPDATE ON engineering.devices
@@ -69,8 +73,11 @@ CREATE TRIGGER update_environment_devices_updated_at
     EXECUTE FUNCTION update_updated_at_column();
 
 ALTER TABLE engineering.tags ADD COLUMN device_id UUID;
+-- The composite key: a Tag's supplier is a Device of the Tag's Project. The
+-- repository checks it first, for a sentinel error; this is the last line of
+-- defence.
 ALTER TABLE engineering.tags
-    ADD CONSTRAINT fk_tags_device_id FOREIGN KEY (device_id) REFERENCES engineering.devices(id);
+    ADD CONSTRAINT fk_tags_device_id FOREIGN KEY (device_id, project_id) REFERENCES engineering.devices(id, project_id);
 CREATE INDEX idx_tags_device_id ON engineering.tags(device_id);
 -- +goose StatementEnd
 

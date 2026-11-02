@@ -21,13 +21,16 @@ import (
 type Seq int64
 
 // Definition is the Runtime node's copy of a Tag definition: the Tag's name,
-// TagType and the definition's Version, of the Tag's Project.
+// TagType, supplying Device and the definition's Version, of the Tag's
+// Project. A write of the Tag's state is checked against it in the same
+// query (Supplier).
 // Value Object.
 type Definition struct {
 	TagID     id.ID[tag.Tag]
 	ProjectID id.ID[project.Project]
 	Name      tag.TagName
 	Type      tag.TagType
+	Supplier  tag.Supplier
 	Version   version.Version[tag.Tag]
 }
 

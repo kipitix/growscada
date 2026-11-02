@@ -11,13 +11,16 @@ import (
 type tableName string
 
 const (
-	tableNameTags        tableName = "engineering.tags"
-	tableNameScenes      tableName = "engineering.scenes"
-	tableNameWidgetTypes tableName = "engineering.widget_types"
-	tableNameProjects    tableName = "projects"
-	tableNameLibraries   tableName = "engineering.libraries"
-	tableNameReleases    tableName = "engineering.library_releases"
-	tableNameLibraryPins tableName = "engineering.library_pins"
+	tableNameTags               tableName = "engineering.tags"
+	tableNameScenes             tableName = "engineering.scenes"
+	tableNameWidgetTypes        tableName = "engineering.widget_types"
+	tableNameProjects           tableName = "projects"
+	tableNameLibraries          tableName = "engineering.libraries"
+	tableNameReleases           tableName = "engineering.library_releases"
+	tableNameLibraryPins        tableName = "engineering.library_pins"
+	tableNameDevices            tableName = "engineering.devices"
+	tableNameEnvironments       tableName = "engineering.environments"
+	tableNameEnvironmentDevices tableName = "engineering.environment_devices"
 )
 
 // rowQuerier is a *sql.DB or a *sql.Tx.

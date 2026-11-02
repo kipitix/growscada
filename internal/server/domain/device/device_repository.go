@@ -40,9 +40,10 @@ type DeviceRepository interface {
 	// Delete removes a Device if the stored version is still the Device's
 	// version and stores the events it recorded (see Device.Delete), in one
 	// transaction. A Device still in use is not removed: while a Tag of the
-	// Project is supplied by it, Delete refuses (ADR 0006).
+	// Project is supplied by it, or while it stands in an EnvironmentDevice,
+	// Delete refuses with ErrDeviceInUse (ADR 0008).
 	// Returns ErrDeviceNotFound if the Device does not exist,
-	// ErrDeviceConflict if the stored version does not match, or an error on
-	// failure.
+	// ErrDeviceConflict if the stored version does not match,
+	// ErrDeviceInUse if it is still referred to, or an error on failure.
 	Delete(context.Context, Device) error
 }

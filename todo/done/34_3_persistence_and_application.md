@@ -49,3 +49,7 @@ Blocked by: 34_2
 ## Вне объёма
 
 - Миграции — часть 1; домен — часть 2; REST, токены, симулятор — части 4–5.
+
+## Comments
+
+- 2026-11-02 (реализация): репозитории `Device`, `Environment`, `EnvironmentDevice` (CAS, outbox, область проекта по `project_id`, у пары ключ `(environment_id, device_id)`); области проекта получили `Devices()`, `Environments()`, `EnvironmentDevices()`; `DeviceService` и `EnvironmentService` с DTO в `appdto`; мост в Runtime переносит `device_id` (`appdto.TagDefinition` → `runtime.TagDefinition` → `tagstate.Definition` → `runtime.tags`); `tagstate.Repository.Write` принимает `tag.Supplier` и проверяет поставщика в том же UPDATE, отказывая `tag.ErrTagNotSuppliedByDevice`. Поставщик — объект-значение `tag.Supplier` (`NoSupplier`/`SuppliedByDevice`), проверка «Device того же проекта» — в транзакции записи Tag'а (`tag.ErrSupplierOfAnotherProject`), составной FK `(device_id, project_id)` добавлен правкой миграции части 1. Удаление Device/Environment с ссылками — отказ (`ErrDeviceInUse`/`ErrEnvironmentInUse`); очистка удалённого проекта теперь убирает пары, Device и Environment перед строкой проекта. Тесты: интеграционные репозиториев (CRUD, CAS, область проекта, отказы удаления, поставщик чужого проекта), `tagstate` (чужой поставщик и Tag без поставщика), сервисы Device/Environment. `make build`, `make test`, `make bruno_test` проходят.
