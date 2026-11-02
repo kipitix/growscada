@@ -563,6 +563,11 @@ func TestMigrationTagStatesAndDevices_SplitsTheStateAndAddsDevices(t *testing.T)
 		environmentID, deviceID); err == nil {
 		t.Error("a pair (environment, device) taken twice")
 	}
+	var pairIndex int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM pg_indexes WHERE schemaname = 'engineering'
+	                                   AND tablename = 'environment_devices' AND indexname = 'idx_environment_devices_device_id'`).Scan(&pairIndex); err != nil || pairIndex != 1 {
+		t.Errorf("the index of the pairs by device: %d, %v", pairIndex, err)
+	}
 
 	// The copies in the Runtime schema: the Devices and the pairs, and one
 	// token per Device, looked up by its hash. Nothing is copied before the
@@ -605,6 +610,28 @@ func TestMigrationTagStatesAndDevices_SplitsTheStateAndAddsDevices(t *testing.T)
 	var tokens int
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM runtime.device_tokens WHERE device_id = $1`, deviceID).Scan(&tokens); err != nil || tokens != 1 {
 		t.Errorf("the token of a Device out of the Revision: %d, %v", tokens, err)
+	}
+	// A pair is derived data too: it goes with either side, while the other
+	// side and the token stay (ADR 0011). The pair of the Device is gone...
+	var pairs int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM runtime.environment_devices`).Scan(&pairs); err != nil || pairs != 0 {
+		t.Errorf("pairs left after their Device went: %d, %v", pairs, err)
+	}
+	var environments int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM runtime.environments WHERE id = $1`, environmentID).Scan(&environments); err != nil || environments != 1 {
+		t.Errorf("the Environment went with the Device's pair: %d, %v", environments, err)
+	}
+	// ...and so is the pair of the Environment.
+	otherDeviceID := uuid.New()
+	mustExec(`INSERT INTO runtime.devices (id, project_id, name, protocol) VALUES ($1, $2, 'sim-2', 'simulation')`, otherDeviceID, main)
+	mustExec(`INSERT INTO runtime.environment_devices (environment_id, device_id) VALUES ($1, $2)`, environmentID, otherDeviceID)
+	mustExec(`DELETE FROM runtime.environments WHERE id = $1`, environmentID)
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM runtime.environment_devices`).Scan(&pairs); err != nil || pairs != 0 {
+		t.Errorf("pairs left after their Environment went: %d, %v", pairs, err)
+	}
+	var devices int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM runtime.devices WHERE id = $1`, otherDeviceID).Scan(&devices); err != nil || devices != 1 {
+		t.Errorf("the Device went with the Environment's pair: %d, %v", devices, err)
 	}
 
 	// Down: the state goes back into the copy of the definition.

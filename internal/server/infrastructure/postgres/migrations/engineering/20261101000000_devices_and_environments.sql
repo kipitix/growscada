@@ -71,6 +71,11 @@ CREATE TRIGGER update_environment_devices_updated_at
     BEFORE UPDATE ON engineering.environment_devices
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
+-- The Device is looked up in the pairs on its own (the check of an in-use
+-- Device and the foreign key that refuses removing it), while the unique key
+-- indexes environment_id first: an index on device_id keeps both off a scan
+-- of every pair.
+CREATE INDEX idx_environment_devices_device_id ON engineering.environment_devices(device_id);
 
 ALTER TABLE engineering.tags ADD COLUMN device_id UUID;
 -- The composite key: a Tag's supplier is a Device of the Tag's Project. The

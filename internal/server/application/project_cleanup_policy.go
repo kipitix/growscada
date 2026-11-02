@@ -22,9 +22,11 @@ const ProjectCleanupPolicyName = "remove_deleted_project"
 // and its Environments, and its Library Pins, each deleted in its own
 // transaction with its own events, then the states of its Tags in the Runtime
 // node (ADR 0011), and the Project's row last; a project_deleted event's job
-// does it. Nothing of the Project is created once it is marked: the
-// repositories lock its row, live, for a creation. For a live Project the
-// job does nothing.
+// does it. The Runtime node's copies of the Project's Devices and
+// Environments are derived data and go with its row (their foreign keys
+// cascade), while its Tag copies are removed before it through RuntimeNode.
+// Nothing of the Project is created once it is marked: the repositories lock
+// its row, live, for a creation. For a live Project the job does nothing.
 type projectCleanupPolicy struct {
 	projects project.ProjectRepository
 	scopes   ProjectScopes

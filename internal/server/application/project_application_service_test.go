@@ -229,6 +229,52 @@ func TestProjectCleanup_RemovesScenesThenTagsThenTheProject(t *testing.T) {
 	}
 }
 
+// TestProjectCleanup_RuntimeCopiesGoWithTheProject: the Runtime node's copies
+// of Devices, Environments and their pairs are derived data, so the Project's
+// row takes them with it instead of leaving the cleanup unable to remove it
+// (ADR 0011); Deploy (task 35) is what fills them.
+func TestProjectCleanup_RuntimeCopiesGoWithTheProject(t *testing.T) {
+	r := newReconciliation(t, reconciliationWiring{})
+	ctx := context.Background()
+	p := r.createProject(t, "Line 1")
+
+	deviceID, environmentID := uuid.New(), uuid.New()
+	for _, write := range []struct {
+		query string
+		args  []any
+	}{
+		{`INSERT INTO runtime.devices (id, project_id, name, protocol) VALUES ($1, $2, 'sim', 'simulation')`, []any{deviceID, p}},
+		{`INSERT INTO runtime.environments (id, project_id, name) VALUES ($1, $2, 'shop')`, []any{environmentID, p}},
+		{`INSERT INTO runtime.environment_devices (environment_id, device_id) VALUES ($1, $2)`, []any{environmentID, deviceID}},
+	} {
+		if _, err := testDB.ExecContext(ctx, write.query, write.args...); err != nil {
+			t.Fatalf("insert a Runtime copy: %v", err)
+		}
+	}
+
+	if _, err := r.projectSvc.DeleteProjectByID(ctx, p); err != nil {
+		t.Fatalf("DeleteProjectByID: %v", err)
+	}
+	r.settle(t)
+
+	for _, table := range []string{"runtime.devices", "runtime.environments"} {
+		if n := countRows(t, table, p); n != 0 {
+			t.Errorf("%s of the deleted project left: %d", table, n)
+		}
+	}
+	var pairs int
+	if err := testDB.QueryRowContext(ctx, `SELECT count(*) FROM runtime.environment_devices WHERE environment_id = $1`, environmentID).Scan(&pairs); err != nil || pairs != 0 {
+		t.Errorf("pairs of the deleted project left: %d, %v", pairs, err)
+	}
+	var rows int
+	if err := testDB.QueryRowContext(ctx, `SELECT count(*) FROM projects WHERE id = $1`, p).Scan(&rows); err != nil || rows != 0 {
+		t.Errorf("the project's row: %d, %v", rows, err)
+	}
+	if jobs := jobsOf(t, application.ProjectCleanupPolicyName); len(jobs) != 0 {
+		t.Errorf("jobs left: %+v", jobs)
+	}
+}
+
 func TestProjectCleanup_TagSavedAfterTheProjectIsRemoved_IsProjectNotFound(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	ctx := context.Background()

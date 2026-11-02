@@ -8,7 +8,11 @@
 -- the Draft does not know; nothing here is read from the engineering schema.
 
 -- The copy of engineering.devices: what a thing is. No unique name — that is
--- the Draft's rule, not the Runtime node's.
+-- the Draft's rule, not the Runtime node's. A copy is derived data, not an
+-- aggregate people edit, so it goes with its Project instead of refusing its
+-- removal: the cleanup of a deleted Project removes the Draft's Devices with
+-- their own transactions, and the copies here would otherwise hold the
+-- Project's row until the Runtime node is asked to remove them (ADR 0011).
 CREATE TABLE runtime.devices (
     pk_id      SERIAL PRIMARY KEY,
     id         UUID        NOT NULL UNIQUE,
@@ -20,7 +24,7 @@ CREATE TABLE runtime.devices (
     version    INTEGER     NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT fk_runtime_devices_project_id FOREIGN KEY (project_id) REFERENCES projects(id)
+    CONSTRAINT fk_runtime_devices_project_id FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
 -- The copy of engineering.environments: the name a Gateway calls its
@@ -36,13 +40,18 @@ CREATE TABLE runtime.environments (
     version    INTEGER     NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT fk_runtime_environments_project_id FOREIGN KEY (project_id) REFERENCES projects(id),
+    CONSTRAINT fk_runtime_environments_project_id FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     CONSTRAINT uq_runtime_environments_project_name UNIQUE (project_id, name)
 );
 
 -- The copy of engineering.environment_devices: the parameters of one pair
 -- (Environment, Device), which is also how the Gateway asks for them. The
--- Draft's Version does not come along — a copy has nothing to edit.
+-- Draft's Version does not come along — a copy has nothing to edit. Both
+-- sides are copied data too, so a pair goes with either of them: the Draft
+-- refuses removing a Device or an Environment that still holds a pair
+-- (ADR 0008), but a copy left behind after Deploy dropped its Device would
+-- name nothing (ADR 0011). The index on device_id serves the cascade and the
+-- lookup by Device; the unique key already indexes environment_id first.
 CREATE TABLE runtime.environment_devices (
     pk_id          SERIAL PRIMARY KEY,
     environment_id UUID  NOT NULL,
@@ -50,8 +59,11 @@ CREATE TABLE runtime.environment_devices (
     params         JSONB NOT NULL DEFAULT '{}',
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT fk_runtime_environment_devices_environment_id FOREIGN KEY (environment_id) REFERENCES runtime.environments(id) ON DELETE CASCADE,
+    CONSTRAINT fk_runtime_environment_devices_device_id FOREIGN KEY (device_id) REFERENCES runtime.devices(id) ON DELETE CASCADE,
     CONSTRAINT uq_runtime_environment_devices_pair UNIQUE (environment_id, device_id)
 );
+CREATE INDEX idx_runtime_environment_devices_device_id ON runtime.environment_devices(device_id);
 
 -- The live tokens, one per Device: only the hash of the token and its
 -- fingerprint are here (ADR 0004, amendment 2026-11-01). A token never rides
