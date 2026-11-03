@@ -366,6 +366,54 @@ func TestCreateRevision_HealsACopyThatLostItsState(t *testing.T) {
 	}
 }
 
+func TestCreateRevision_TwoEnvironmentsMaySwapTheirNames(t *testing.T) {
+	projectID, _ := newProject(t)
+	db := postgres.DB(t)
+	repo := runtimepg.NewRevisionRepositoryPostgres(db)
+	ctx := context.Background()
+	first, second := uuid.New(), uuid.New()
+
+	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+		withEnvironments(
+			projectv0.Environment{ID: first, Name: "bench"},
+			projectv0.Environment{ID: second, Name: "lab"},
+		),
+	), time.Now())
+
+	// The first write takes the name the second one has not left yet.
+	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+		withEnvironments(
+			projectv0.Environment{ID: first, Name: "lab"},
+			projectv0.Environment{ID: second, Name: "bench"},
+		),
+	), time.Now())
+
+	for environmentID, want := range map[uuid.UUID]string{first: "lab", second: "bench"} {
+		var name string
+		if err := db.QueryRowContext(ctx, `SELECT name FROM runtime.environments WHERE id = $1`, environmentID).Scan(&name); err != nil {
+			t.Fatalf("read the name of environment %s: %v", environmentID, err)
+		}
+		if name != want {
+			t.Errorf("environment %s is %q, want %q", environmentID, name, want)
+		}
+	}
+}
+
+func TestCreateRevision_RefusesTwoEnvironmentsOfOneName(t *testing.T) {
+	projectID, _ := newProject(t)
+	repo := runtimepg.NewRevisionRepositoryPostgres(postgres.DB(t))
+
+	_, err := repo.CreateRevision(context.Background(), projectID.UUID(), documentOf(projectID,
+		withEnvironments(
+			projectv0.Environment{ID: uuid.New(), Name: "bench"},
+			projectv0.Environment{ID: uuid.New(), Name: "bench"},
+		),
+	), time.Now())
+	if err == nil {
+		t.Fatal("two environments of one name were taken")
+	}
+}
+
 func TestCreateRevision_ResetsTheStateOfAChangedTagTypeAndKeepsTheOthers(t *testing.T) {
 	projectID, _ := newProject(t)
 	db := postgres.DB(t)

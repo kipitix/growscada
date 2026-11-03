@@ -56,6 +56,12 @@ func (r revisionRepositoryPostgres) CreateRevision(ctx context.Context, projectI
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// Two Environments may swap their names in one Deploy, so the uniqueness of
+	// the copies' names is checked at the commit rather than row by row
+	// (runtime.environments, migration 20261103000002).
+	if _, err := tx.ExecContext(ctx, `SET CONSTRAINTS runtime.uq_runtime_environments_project_name DEFERRED`); err != nil {
+		return runtimeapp.Revision{}, fmt.Errorf("cannot defer the name uniqueness of project %s: %w", projectID, err)
+	}
 	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, projectID.String()); err != nil {
 		return runtimeapp.Revision{}, fmt.Errorf("cannot lock project %s for a deploy: %w", projectID, err)
 	}
