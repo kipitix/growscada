@@ -47,3 +47,7 @@ Blocked by: 35_1
 
 - Порт `RuntimeNode`, сервис Deploy, событие `revision_created` — часть 3.
 - Сборка ProjectFile из Draft, preview, Discard — часть 4; REST и UI — часть 5.
+
+## Comments
+
+- 2026-11-03 (реализация). `appdto.Revision` создан для порта и для копии Engineering-ноды. Репозиторий Runtime-ноды по правилам ролей (ADR 0011, `internal/server/roles_test.go`) не может импортировать `application/appdto` — это пакет Engineering-ноды, — поэтому он возвращает `application/runtime.Revision`. Часть 3 конвертирует один в другой в `inprocess`, как уже делает для `appdto.TagState` ↔ `runtime.TagState`. Сигнатуры методов — как в описании (`uuid.UUID`, `projectv0.ProjectFile`, `time.Time`).
