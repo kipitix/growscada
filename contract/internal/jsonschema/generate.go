@@ -77,7 +77,6 @@ var (
 	textMarshalerType = reflect.TypeFor[encoding.TextMarshaler]()
 	uuidType          = reflect.TypeFor[uuid.UUID]()
 	timeType          = reflect.TypeFor[time.Time]()
-	rawMessageType    = reflect.TypeFor[json.RawMessage]()
 )
 
 func (g *generator) schemaOf(t reflect.Type) (map[string]any, error) {
@@ -95,11 +94,6 @@ func (g *generator) schemaOf(t reflect.Type) (map[string]any, error) {
 		return map[string]any{"type": "string", "format": "uuid"}, nil
 	case t == timeType:
 		return map[string]any{"type": "string", "format": "date-time"}, nil
-	case t == rawMessageType:
-		// json.RawMessage is carried as it is; the contracts use it for JSON
-		// objects (a Device's protocol configuration, connection parameters),
-		// so the schema says object rather than reflecting it as []byte.
-		return map[string]any{"type": "object"}, nil
 	case t.Implements(textMarshalerType) || pt.Implements(textMarshalerType):
 		return map[string]any{"type": "string"}, nil
 	}

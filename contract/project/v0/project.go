@@ -6,8 +6,6 @@
 package projectv0
 
 import (
-	"encoding/json"
-
 	"github.com/google/uuid"
 	"github.com/kipitix/growscada/contract"
 )
@@ -59,14 +57,15 @@ type TagDefinition struct {
 
 // Device is a piece of equipment: what it is — its protocol and the
 // configuration read under it — not where it stands. Config is the
-// protocol-specific JSON object, carried as it is. Comment is descriptive
-// metadata and never affects behavior.
+// protocol-specific JSON object, carried as it is; a value that is not an
+// object is invalid input. Comment is descriptive metadata and never affects
+// behavior.
 type Device struct {
-	ID       uuid.UUID       `json:"id"`
-	Name     string          `json:"name"`
-	Comment  string          `json:"comment"`
-	Protocol string          `json:"protocol"`
-	Config   json.RawMessage `json:"config"`
+	ID       uuid.UUID  `json:"id"`
+	Name     string     `json:"name"`
+	Comment  string     `json:"comment"`
+	Protocol string     `json:"protocol"`
+	Config   JSONObject `json:"config"`
 }
 
 // Environment is a named set of one Project's Devices as they stand in one
@@ -81,11 +80,12 @@ type Environment struct {
 // EnvironmentDevice is one Device as configured in one Environment: the pair
 // (Environment, Device) and its connection parameters. The pair has no
 // identity of its own: EnvironmentID and DeviceID name it. Params is the
-// connection parameters as a JSON object, carried as it is.
+// connection parameters as a JSON object, carried as it is; a value that is
+// not an object is invalid input.
 type EnvironmentDevice struct {
-	EnvironmentID uuid.UUID       `json:"environment_id"`
-	DeviceID      uuid.UUID       `json:"device_id"`
-	Params        json.RawMessage `json:"params"`
+	EnvironmentID uuid.UUID  `json:"environment_id"`
+	DeviceID      uuid.UUID  `json:"device_id"`
+	Params        JSONObject `json:"params"`
 }
 
 // Scene is a mnemonic canvas of the Project with the Widgets placed on it.
