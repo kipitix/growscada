@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kipitix/gracedown"
@@ -58,10 +61,43 @@ func TestExitCode(t *testing.T) {
 	}
 }
 
-// TestExitCode_TagNotFoundIsNotFatal: a tag deleted while the Gateway runs is
-// not an error of Run at all; IsNoPermission must not claim it.
+// TestIsNoPermission: a tag deleted while the Gateway runs is not an error of
+// Run at all; IsNoPermission must not claim it.
 func TestIsNoPermission(t *testing.T) {
 	if devicelink.IsNoPermission(devicelink.ErrTagNotFound) {
 		t.Error("a missing tag must not read as no permission")
+	}
+	if devicelink.IsUnauthenticated(&apiclient.StatusError{Problem: apiv0.Problem{Status: http.StatusForbidden}}) {
+		t.Error("a refusal of the request must not read as a refused token")
+	}
+}
+
+// TestReadConfig_FlagOverridesBeforeValidation: a secret may come from the
+// environment alone, with no token in the file at all.
+func TestReadConfig_FlagOverridesBeforeValidation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sim.yaml")
+	err := os.WriteFile(path, []byte(`
+environment: bench
+tags:
+  - tag: a
+    pattern: {kind: constant, value: 1}
+`), 0o600)
+	if err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	if _, err := readConfig(path, simulatorArgs{}); err == nil || !strings.Contains(err.Error(), "token (the Device Token) is required") {
+		t.Errorf("readConfig without a token: got %v", err)
+	}
+
+	cfg, err := readConfig(path, simulatorArgs{Token: "gsc_dev_test", Server: "http://scada:9090", Control: ":9192"})
+	if err != nil {
+		t.Fatalf("readConfig with --token: %v", err)
+	}
+	if cfg.Token != "gsc_dev_test" || cfg.Server != "http://scada:9090" || cfg.Control != ":9192" {
+		t.Errorf("overrides: got %+v", cfg)
+	}
+	if cfg.Environment != "bench" || len(cfg.Tags) != 1 {
+		t.Errorf("config: got %+v", cfg)
 	}
 }

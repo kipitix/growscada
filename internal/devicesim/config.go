@@ -55,6 +55,20 @@ type TagConfig struct {
 // ReadConfig parses and validates a config; unknown fields are errors.
 // Defaults are filled in.
 func ReadConfig(r io.Reader) (Config, error) {
+	cfg, err := ParseConfig(r)
+	if err != nil {
+		return Config{}, err
+	}
+	if err := cfg.Validate(); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
+}
+
+// ParseConfig parses a config and fills in the defaults, without validating it:
+// for a caller that overrides fields — the command's flags, a secret from the
+// environment — before Validate. Unknown fields are errors.
+func ParseConfig(r io.Reader) (Config, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return Config{}, err
@@ -69,9 +83,6 @@ func ReadConfig(r io.Reader) (Config, error) {
 		return Config{}, err
 	}
 	cfg.applyDefaults()
-	if err := cfg.Validate(); err != nil {
-		return Config{}, err
-	}
 	return cfg, nil
 }
 

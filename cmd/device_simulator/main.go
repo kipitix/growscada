@@ -38,22 +38,13 @@ func main() {
 	var args simulatorArgs
 	arg.MustParse(&args)
 
-	cfg, err := readConfig(args.Config)
+	cfg, err := readConfig(args.Config, args)
 	if err != nil {
 		slog.Error("Config error", "error", err)
 		if errors.Is(err, os.ErrNotExist) {
 			os.Exit(gracedown.ExitNoInput)
 		}
 		os.Exit(gracedown.ExitConfig)
-	}
-	if args.Server != "" {
-		cfg.Server = args.Server
-	}
-	if args.Token != "" {
-		cfg.Token = args.Token
-	}
-	if args.Control != "" {
-		cfg.Control = args.Control
 	}
 
 	// Create a graceful shutdown manager
@@ -154,13 +145,32 @@ func exitCode(err error) int {
 	}
 }
 
-func readConfig(path string) (devicesim.Config, error) {
+// readConfig reads the config file and applies the flags over it, then
+// validates: a secret may come from the environment alone, with no token in
+// the file at all.
+func readConfig(path string, args simulatorArgs) (devicesim.Config, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return devicesim.Config{}, err
 	}
 	defer f.Close()
-	return devicesim.ReadConfig(f)
+	cfg, err := devicesim.ParseConfig(f)
+	if err != nil {
+		return devicesim.Config{}, err
+	}
+	if args.Server != "" {
+		cfg.Server = args.Server
+	}
+	if args.Token != "" {
+		cfg.Token = args.Token
+	}
+	if args.Control != "" {
+		cfg.Control = args.Control
+	}
+	if err := cfg.Validate(); err != nil {
+		return devicesim.Config{}, err
+	}
+	return cfg, nil
 }
 
 // emergencyExit shuts down all registered components and exits with the given code.

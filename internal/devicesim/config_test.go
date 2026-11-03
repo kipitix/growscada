@@ -61,6 +61,27 @@ tags:
 	}
 }
 
+// TestParseConfig_DoesNotValidate: a caller that overrides a field before
+// validating (the command's --token, DEVSIM_TOKEN) gets the config even when
+// the file leaves it out.
+func TestParseConfig_DoesNotValidate(t *testing.T) {
+	cfg, err := ParseConfig(strings.NewReader(`
+environment: bench
+tags:
+  - tag: a
+    pattern: {kind: constant, value: 1}
+`))
+	if err != nil {
+		t.Fatalf("ParseConfig: %v", err)
+	}
+	if cfg.Token != "" || cfg.Server != DefaultServer {
+		t.Errorf("config: got %+v, want no token and the default server", cfg)
+	}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "token (the Device Token) is required") {
+		t.Errorf("Validate without a token: got %v", err)
+	}
+}
+
 func TestReadConfig_Rejects(t *testing.T) {
 	tests := []struct {
 		name, yaml, wantErr string
