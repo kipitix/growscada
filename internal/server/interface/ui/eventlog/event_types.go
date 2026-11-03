@@ -52,8 +52,9 @@ func defaultFilters() map[category]bool {
 }
 
 // isProjectContent reports whether events of the type are of a project's
-// content (Tags, their values, Scenes, Widgets, Library Pins), carried by the
-// stream of that project; anything else is the server's.
+// content (Tags, their values, Scenes, Widgets, Library Pins, Devices,
+// Environments and their pairs, and the Revision), carried by the stream of
+// that project; anything else is the server's.
 func isProjectContent(eventType string) bool {
 	switch eventType {
 	case apiv0.EventLibraryPinCreated, apiv0.EventLibraryPinUpdated, apiv0.EventLibraryPinDeleted,

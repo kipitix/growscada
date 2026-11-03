@@ -79,8 +79,9 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 	case apiv0.EventTagCreated, apiv0.EventTagDeleted:
 		return ReloadTargets{Tags: true}
 	}
-	// The Device, Environment and EnvironmentDevice events make nothing
-	// stale: the UI shows no Devices yet (task 66).
+	// The Device, Environment, EnvironmentDevice and Revision events make
+	// nothing stale: the UI shows no Devices yet (task 66) and the running
+	// Revision is shown in task 35, part 5.
 	return ReloadTargets{}
 }
 

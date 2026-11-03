@@ -206,8 +206,8 @@ func sendJSON[T any](t *testing.T, srv *httptest.Server, method, path string, bo
 // releases, projects but MainProject — restored live if a test deleted it —,
 // outbox, policy_jobs) and serves the real REST API over the
 // database, with the outbox dispatcher delivering committed events to its
-// event streams, the Runtime node publishing tag_updated, and the policy
-// runner running the policies, as the server does. The returned TagService
+// event streams, the Runtime node publishing tag_updated and revision_created,
+// and the policy runner running the policies, as the server does. The returned TagService
 // is the one behind the API, for arranging and checking state directly; a
 // tag's state is written through the API.
 func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagService) {
@@ -237,9 +237,9 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	projectRepo := repositories.NewProjectRepositoryPostgres(db, onCommit)
 	scopes := repositories.NewProjectScopes(db, onCommit)
 	content := application.NewProjectContent(projectRepo, scopes, orgID)
-	tagUpdates := eventbus.NewAsyncPublisher(bus, 1024)
-	tagStateSvc := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, tagUpdates.Publish)
-	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(db), tagUpdates.Publish)
+	runtimeEvents := eventbus.NewAsyncPublisher(bus, 1024)
+	tagStateSvc := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, runtimeEvents.Publish)
+	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(db), runtimeEvents.Publish)
 	deviceTokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(db))
 	runtimeNode := inprocess.NewRuntimeNode(tagStateSvc, deviceTokens, revisions)
 	tagSvc := application.NewTagService(content, runtimeNode)
@@ -259,7 +259,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	var wg sync.WaitGroup
 	wg.Add(3)
 	go func() { defer wg.Done(); dispatcher.Run(ctx) }()
-	go func() { defer wg.Done(); tagUpdates.Run(ctx) }()
+	go func() { defer wg.Done(); runtimeEvents.Run(ctx) }()
 	go func() { defer wg.Done(); runner.Run(ctx) }()
 	t.Cleanup(func() {
 		stop()

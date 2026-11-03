@@ -143,7 +143,10 @@ func TestRevisionService_Deploy_KeepsTheTagStatesOfTheRunningRevision(t *testing
 		t.Fatalf("published %d events, want 4", len(published))
 	}
 	for i, e := range published {
-		ev := e.(runtimeapp.RevisionCreatedEvent)
+		ev, ok := e.(runtimeapp.RevisionCreatedEvent)
+		if !ok {
+			t.Fatalf("published a %T, not a RevisionCreatedEvent", e)
+		}
 		if ev.Number() != i+1 {
 			t.Errorf("event %d names revision %d, want %d", i, ev.Number(), i+1)
 		}

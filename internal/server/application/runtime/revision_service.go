@@ -44,7 +44,7 @@ func NewRevisionService(someRevisions RevisionRepository, publish func(event.Eve
 
 func (s revisionServiceImpl) Deploy(ctx context.Context, rawProjectID uuid.UUID, file projectv0.ProjectFile) (Revision, error) {
 	if file.ProjectID != rawProjectID {
-		return Revision{}, fmt.Errorf("cannot deploy a document of project %s to project %s", file.ProjectID, rawProjectID)
+		return Revision{}, invalidInput(fmt.Errorf("cannot deploy a document of project %s to project %s", file.ProjectID, rawProjectID))
 	}
 	revision, err := s.revisions.CreateRevision(ctx, rawProjectID, file, s.now())
 	if err != nil {

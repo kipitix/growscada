@@ -104,8 +104,8 @@ func TestRevisionService_Deploy_OfAForeignDocument_IsAnError(t *testing.T) {
 	service := runtimeapp.NewRevisionService(repo, recordingPublish(&published))
 	file := projectv0.ProjectFile{Header: projectv0.Header{ProjectID: uuid.New()}}
 
-	if _, err := service.Deploy(context.Background(), uuid.New(), file); err == nil {
-		t.Fatal("a document of another project was deployed")
+	if _, err := service.Deploy(context.Background(), uuid.New(), file); !errors.Is(err, runtimeapp.ErrInvalidInput) {
+		t.Fatalf("a document of another project: %v, want ErrInvalidInput", err)
 	}
 	if len(repo.created) != 0 {
 		t.Error("the repository was called for a foreign document")
