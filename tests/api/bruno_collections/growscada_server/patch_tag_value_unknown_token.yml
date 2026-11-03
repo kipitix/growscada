@@ -1,0 +1,41 @@
+info:
+  name: patch tag value with an unknown token
+  type: http
+  seq: 78
+
+http:
+  method: PATCH
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/tags/{{DEVICE_TAG_ID}}/value
+  headers:
+    - name: Authorization
+      value: Bearer gsc_dev_0000000000000000000000000000000000000000000000000000000000000000
+  body:
+    type: json
+    data: |-
+      {
+        "value": "7",
+        "quality": "good"
+      }
+  auth: inherit
+
+docs: |
+  An unknown or revoked Device Token is `401 Unauthorized`: the Gateway stops
+  instead of retrying for good. A bearer without the `gsc_dev_` prefix is not a
+  Device Token either — user authentication is task 50 — so it is `401` too.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '401'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: 'application/problem+json'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

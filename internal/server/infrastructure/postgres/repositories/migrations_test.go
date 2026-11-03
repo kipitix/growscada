@@ -579,10 +579,10 @@ func TestMigrationTagStatesAndDevices_SplitsTheStateAndAddsDevices(t *testing.T)
 		}
 	}
 	mustExec(`INSERT INTO runtime.devices (id, project_id, name, protocol) VALUES ($1, $2, 'sim', 'simulation')`, deviceID, main)
-	mustExec(`INSERT INTO runtime.device_tokens (device_id, token_hash, fingerprint, issued_at)
-	          VALUES ($1, 'hash', 'fingerprint', now())`, deviceID)
-	if _, err := db.ExecContext(ctx, `INSERT INTO runtime.device_tokens (device_id, token_hash, fingerprint, issued_at)
-	                                   VALUES ($1, 'other', 'fingerprint', now())`, deviceID); err == nil {
+	mustExec(`INSERT INTO runtime.device_tokens (device_id, project_id, token_hash, fingerprint, issued_at)
+	          VALUES ($1, $2, 'hash', 'fingerprint', now())`, deviceID, main)
+	if _, err := db.ExecContext(ctx, `INSERT INTO runtime.device_tokens (device_id, project_id, token_hash, fingerprint, issued_at)
+	                                   VALUES ($1, $2, 'other', 'fingerprint', now())`, deviceID, main); err == nil {
 		t.Error("a second token of one device")
 	}
 

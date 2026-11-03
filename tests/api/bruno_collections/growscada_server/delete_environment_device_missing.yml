@@ -1,0 +1,29 @@
+info:
+  name: delete environment device missing
+  type: http
+  seq: 81
+
+http:
+  method: DELETE
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/environments/{{ENVIRONMENT_ID}}/devices/{{OTHER_DEVICE_ID}}
+  auth: inherit
+
+docs: |
+  The pair was just removed: `404 Not Found` Problem Details.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '404'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: 'application/problem+json'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

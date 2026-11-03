@@ -1,0 +1,35 @@
+info:
+  name: delete the device tag
+  type: http
+  seq: 84
+
+http:
+  method: DELETE
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/tags/{{DEVICE_TAG_ID}}
+  auth: inherit
+
+docs: |
+  Removes the Tag the seeded Device supplies, so that the Device can be
+  removed: a Device that supplies a Tag is not (see "delete device by id"). The
+  state goes with the definition; the PortBindings of the Tag are removed by the
+  policy of ADR 0010.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.id'
+      operator: eq
+      value: '"{{DEVICE_TAG_ID}}"'
+    - expression: 'res.body.name'
+      operator: eq
+      value: '"device.speed"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

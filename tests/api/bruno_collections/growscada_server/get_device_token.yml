@@ -1,0 +1,39 @@
+info:
+  name: get device token
+  type: http
+  seq: 61
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/devices/{{DEVICE_ID}}/token
+  auth: inherit
+
+docs: |
+  The metadata of the Device's token: the Device it acts for, its fingerprint
+  and when it was issued. The secret is never returned — it is shown once, when
+  the token is issued or rotated. `404` when the Device has no token.
+
+  The fingerprint is the prefix and the first characters of the token's hash,
+  by which people tell one token from another.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.device_id'
+      operator: eq
+      value: '"{{DEVICE_ID}}"'
+    - expression: 'res.body.fingerprint'
+      operator: eq
+      value: '"gsc_dev_7431b63b"'
+    - expression: 'res.body.issued_at'
+      operator: isString
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

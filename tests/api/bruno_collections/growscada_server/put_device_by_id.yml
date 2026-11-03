@@ -1,0 +1,41 @@
+info:
+  name: put device by id
+  type: http
+  seq: 67
+
+http:
+  method: PUT
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/devices/{{DEVICE_ID}}
+  body:
+    type: json
+    data: |-
+      {
+        "name": "sim",
+        "comment": "renamed by the Bruno collection",
+        "protocol": "simulation",
+        "config": {"patterns": []},
+        "version": 1
+      }
+  auth: inherit
+
+docs: |
+  Changes the Device, expecting the Version it was read at: the body carries
+  `version`, and a stale one is `409 Conflict`. The response carries the new
+  Version.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.version'
+      operator: eq
+      value: '2'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

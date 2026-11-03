@@ -1,0 +1,33 @@
+info:
+  name: delete environment device
+  type: http
+  seq: 80
+
+http:
+  method: DELETE
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/environments/{{ENVIRONMENT_ID}}/devices/{{OTHER_DEVICE_ID}}
+  auth: inherit
+
+docs: |
+  Removes the pair (Environment, Device) with its parameters (200) and returns
+  it as it was read. The Device and the Environment stay.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.environment_id'
+      operator: eq
+      value: '"{{ENVIRONMENT_ID}}"'
+    - expression: 'res.body.device_id'
+      operator: eq
+      value: '"{{OTHER_DEVICE_ID}}"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

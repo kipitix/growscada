@@ -19,6 +19,7 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/domain/device"
+	"github.com/kipitix/growscada/internal/server/domain/devicetoken"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
@@ -346,6 +347,9 @@ var domainSentinels = map[string]error{
 	"tag.ErrSupplierOfAnotherProject":     tag.ErrSupplierOfAnotherProject,
 	"tag.ErrTagNotSuppliedByDevice":       tag.ErrTagNotSuppliedByDevice,
 	"tag.ErrInvalidTagNameMatcher":        tag.ErrInvalidTagNameMatcher,
+	"devicetoken.ErrTokenNotFound":        devicetoken.ErrTokenNotFound,
+	"devicetoken.ErrTokenExists":          devicetoken.ErrTokenExists,
+	"devicetoken.ErrNotADeviceToken":      devicetoken.ErrNotADeviceToken,
 }
 
 // unmappedSentinels are the domain sentinels errorMappings leaves out on
@@ -361,10 +365,8 @@ var unmappedSentinels = map[string]string{
 	"scene.ErrWidgetTypeMismatch":       "500: the service checks a Widget against its own WidgetType",
 	"project.ErrProjectNotEmpty":        "500: only the cleanup policy removes a project's row, never the API",
 	"scene.ErrTagTypesOfAnotherProject": "500: the service reads the TagTypes through the Scene's own Project",
-	"device.ErrDeviceInUse":             "409: refused while a Tag or a pair holds the Device; the Devices API maps it (part 4)",
-	"device.ErrEnvironmentInUse":        "409: refused while a pair holds the Environment; the Environments API maps it (part 4)",
 	"tag.ErrSupplierOfAnotherProject":   "500: the Tag API names no supplier yet (task 68); the repository refuses a Device of another Project as the last line",
-	"tag.ErrTagNotSuppliedByDevice":     "403: the device write reports it once its API exists (part 4)",
+	"devicetoken.ErrNotADeviceToken":    "401: the REST layer refuses a bearer without the Device Token prefix before any lookup",
 }
 
 // TestDomainSentinels_AreListed reads the domain sources, so a new sentinel

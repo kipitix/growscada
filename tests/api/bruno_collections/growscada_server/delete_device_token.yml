@@ -1,0 +1,33 @@
+info:
+  name: delete device token
+  type: http
+  seq: 82
+
+http:
+  method: DELETE
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/devices/{{OTHER_DEVICE_ID}}/token
+  auth: inherit
+
+docs: |
+  Revokes the Device's token (200) and returns its metadata. The Gateway using
+  it gets `401` at its next request. Revocation is explicit: a token is never
+  revoked by a Deploy or a Rollback.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.device_id'
+      operator: eq
+      value: '"{{OTHER_DEVICE_ID}}"'
+    - expression: 'res.body.fingerprint'
+      operator: isString
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

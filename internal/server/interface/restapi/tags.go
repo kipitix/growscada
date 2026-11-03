@@ -15,16 +15,18 @@ import (
 // TagsHandlers handles HTTP requests related to tags.
 // It depends on the application layer abstraction: the Engineering node's
 // tag service for the definitions (read with their states), the Runtime
-// node's for the writes of states (ADR 0011).
+// node's for the writes of states (ADR 0011) and for the Device Tokens the
+// writes may present.
 type TagsHandlers struct {
 	service application.TagService
 	states  runtimeapp.TagStateService
+	tokens  runtimeapp.DeviceTokenService
 }
 
 // NewTagsHandler creates a new handler for tags.
 // Accepts the tag services and returns a pointer to TagsHandlers.
-func NewTagsHandler(s application.TagService, states runtimeapp.TagStateService) *TagsHandlers {
-	return &TagsHandlers{service: s, states: states}
+func NewTagsHandler(s application.TagService, states runtimeapp.TagStateService, tokens runtimeapp.DeviceTokenService) *TagsHandlers {
+	return &TagsHandlers{service: s, states: states, tokens: tokens}
 }
 
 // GetTags handles GET /projects/{project_id}/tags request to retrieve the
@@ -138,6 +140,12 @@ func (h TagsHandlers) DeleteTagsByID(w http.ResponseWriter, r *http.Request) {
 // PatchTagsValue handles PATCH /projects/{project_id}/tags/{tag_id}/value for
 // setting tag value and quality: a write of the tag's state on the Runtime
 // node, with no expected version.
+//
+// The writer is the Device the Authorization header's Device Token names, or
+// people when there is none (user authentication is task 50). A token of
+// another project cannot write here (403); whether it supplies this Tag is
+// the Runtime node's check in the same UPDATE (tag.ErrTagNotSuppliedByDevice,
+// 403), so a Device writes its own Tags and nothing else.
 func (h TagsHandlers) PatchTagsValue(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := pathUUID(w, r, projectResource)
 	if !ok {
@@ -153,7 +161,20 @@ func (h TagsHandlers) PatchTagsValue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	written, err := h.states.SetTagValue(r.Context(), projectID, newSetTagValueInput(request, tagID))
+	var deviceID uuid.UUID
+	token, present, ok := deviceWriter(w, r, h.tokens)
+	if !ok {
+		return
+	}
+	if present {
+		if token.ProjectID != projectID {
+			sendProblem(w, NewForbidden("a Device Token of another project cannot write here", r.URL.Path))
+			return
+		}
+		deviceID = token.DeviceID
+	}
+
+	written, err := h.states.SetTagValue(r.Context(), projectID, newSetTagValueInput(request, tagID, deviceID))
 	if err != nil {
 		sendError(w, r, err)
 		return

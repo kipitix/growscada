@@ -31,13 +31,17 @@ const mainPath = apiv0.PathPrefix + "/projects/b0000000-0000-4000-8000-000000000
 // testServices are the application services over the test database, as
 // main.go wires them.
 type testServices struct {
-	projects    application.ProjectService
-	tags        application.TagService
-	states      runtimeapp.TagStateService
-	libraries   application.LibraryService
-	widgetTypes application.WidgetTypeService
-	pins        application.LibraryPinService
-	scenes      application.SceneService
+	projects     application.ProjectService
+	tags         application.TagService
+	states       runtimeapp.TagStateService
+	libraries    application.LibraryService
+	widgetTypes  application.WidgetTypeService
+	pins         application.LibraryPinService
+	scenes       application.SceneService
+	devices      application.DeviceService
+	environments application.EnvironmentService
+	deviceConfig application.DeviceConfigService
+	deviceTokens runtimeapp.DeviceTokenService
 }
 
 // newServices returns the services over the test database; the Runtime
@@ -61,13 +65,17 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 	widgetTypes := repositories.NewWidgetTypeRepositories(db, opts...)
 	states := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, publish)
 	return testServices{
-		projects:    application.NewProjectService(projectRepo, orgID),
-		tags:        application.NewTagService(content, inprocess.NewRuntimeNode(states)),
-		states:      states,
-		libraries:   application.NewLibraryService(libraries, releases, widgetTypes, orgID),
-		widgetTypes: application.NewWidgetTypeService(libraries, widgetTypes, orgID),
-		pins:        application.NewLibraryPinService(content, libraries, releases),
-		scenes:      application.NewSceneService(content),
+		projects:     application.NewProjectService(projectRepo, orgID),
+		tags:         application.NewTagService(content, inprocess.NewRuntimeNode(states)),
+		states:       states,
+		libraries:    application.NewLibraryService(libraries, releases, widgetTypes, orgID),
+		widgetTypes:  application.NewWidgetTypeService(libraries, widgetTypes, orgID),
+		pins:         application.NewLibraryPinService(content, libraries, releases),
+		scenes:       application.NewSceneService(content),
+		devices:      application.NewDeviceService(content),
+		environments: application.NewEnvironmentService(content),
+		deviceConfig: application.NewDeviceConfigService(content),
+		deviceTokens: runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(db)),
 	}
 }
 
@@ -76,6 +84,7 @@ func (s testServices) services() restapi.Services {
 	return restapi.Services{
 		Projects: s.projects, Tags: s.tags, TagStates: s.states,
 		Libraries: s.libraries, WidgetTypes: s.widgetTypes, LibraryPins: s.pins, Scenes: s.scenes,
+		Devices: s.devices, Environments: s.environments, DeviceConfig: s.deviceConfig, DeviceTokens: s.deviceTokens,
 	}
 }
 

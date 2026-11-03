@@ -13,15 +13,19 @@ import (
 )
 
 type APIRouter struct {
-	serveMux            *http.ServeMux
-	projectsHandlers    *ProjectsHandlers
-	librariesHandlers   *LibrariesHandlers
-	libraryPinsHandlers *LibraryPinsHandlers
-	tagsHandlers        *TagsHandlers
-	widgetTypesHandlers *WidgetTypesHandlers
-	widgetsHandlers     *WidgetsHandlers
-	scenesHandlers      *ScenesHandlers
-	eventsHandlers      *EventsHandlers
+	serveMux             *http.ServeMux
+	projectsHandlers     *ProjectsHandlers
+	librariesHandlers    *LibrariesHandlers
+	libraryPinsHandlers  *LibraryPinsHandlers
+	tagsHandlers         *TagsHandlers
+	widgetTypesHandlers  *WidgetTypesHandlers
+	widgetsHandlers      *WidgetsHandlers
+	scenesHandlers       *ScenesHandlers
+	devicesHandlers      *DevicesHandlers
+	environmentsHandlers *EnvironmentsHandlers
+	deviceTokensHandlers *DeviceTokensHandlers
+	deviceConfigHandlers *DeviceConfigHandlers
+	eventsHandlers       *EventsHandlers
 }
 
 func (r APIRouter) ServeMux() http.Handler {
@@ -43,7 +47,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, "+contract.SchemaVersionHeader)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, "+contract.SchemaVersionHeader)
 		w.Header().Set("Access-Control-Expose-Headers", contract.SchemaVersionHeader)
 		// Lets the browser reuse a preflight instead of repeating it before every
 		// POST/PUT/PATCH/DELETE; browsers cap the value (Chromium at 2 hours).
@@ -57,15 +61,22 @@ func corsMiddleware(next http.Handler) http.Handler {
 }
 
 // Services are the services the server API serves: the Engineering node's,
-// and the Runtime node's TagStates, which writes the tags' states (ADR 0011).
+// and the Runtime node's TagStates, which writes the tags' states, and
+// DeviceTokens, which authenticates Devices and manages their tokens (ADR
+// 0011). A Device token service that is nil is a server without the Runtime
+// node: token management answers 404.
 type Services struct {
-	Projects    application.ProjectService
-	Tags        application.TagService
-	TagStates   runtimeapp.TagStateService
-	Libraries   application.LibraryService
-	WidgetTypes application.WidgetTypeService
-	LibraryPins application.LibraryPinService
-	Scenes      application.SceneService
+	Projects     application.ProjectService
+	Tags         application.TagService
+	TagStates    runtimeapp.TagStateService
+	Libraries    application.LibraryService
+	WidgetTypes  application.WidgetTypeService
+	LibraryPins  application.LibraryPinService
+	Scenes       application.SceneService
+	Devices      application.DeviceService
+	Environments application.EnvironmentService
+	DeviceConfig application.DeviceConfigService
+	DeviceTokens runtimeapp.DeviceTokenService
 }
 
 // NewRouter returns the server API over the services of both roles.
@@ -73,15 +84,19 @@ func NewRouter(services Services, eventBus eventbus.EventBus, maxSSEClients int)
 	projectService, tagService, tagStateService := services.Projects, services.Tags, services.TagStates
 	widgetTypeService, sceneService := services.WidgetTypes, services.Scenes
 	router := &APIRouter{
-		serveMux:            http.NewServeMux(),
-		projectsHandlers:    NewProjectsHandler(projectService),
-		librariesHandlers:   NewLibrariesHandler(services.Libraries),
-		libraryPinsHandlers: NewLibraryPinsHandler(services.LibraryPins),
-		tagsHandlers:        NewTagsHandler(tagService, tagStateService),
-		widgetTypesHandlers: NewWidgetTypesHandler(widgetTypeService),
-		widgetsHandlers:     NewWidgetsHandler(sceneService),
-		scenesHandlers:      NewScenesHandler(sceneService),
-		eventsHandlers:      NewEventsHandler(eventBus, projectService, maxSSEClients),
+		serveMux:             http.NewServeMux(),
+		projectsHandlers:     NewProjectsHandler(projectService),
+		librariesHandlers:    NewLibrariesHandler(services.Libraries),
+		libraryPinsHandlers:  NewLibraryPinsHandler(services.LibraryPins),
+		tagsHandlers:         NewTagsHandler(tagService, tagStateService, services.DeviceTokens),
+		widgetTypesHandlers:  NewWidgetTypesHandler(widgetTypeService),
+		widgetsHandlers:      NewWidgetsHandler(sceneService),
+		scenesHandlers:       NewScenesHandler(sceneService),
+		devicesHandlers:      NewDevicesHandler(services.Devices),
+		environmentsHandlers: NewEnvironmentsHandler(services.Environments),
+		deviceTokensHandlers: NewDeviceTokensHandler(services.DeviceTokens, services.Devices),
+		deviceConfigHandlers: NewDeviceConfigHandler(services.DeviceConfig, services.DeviceTokens),
+		eventsHandlers:       NewEventsHandler(eventBus, projectService, maxSSEClients, WithDeviceTokens(services.DeviceTokens)),
 	}
 	for _, rt := range router.routes() {
 		router.serveMux.HandleFunc(rt.pattern, rt.handler)
@@ -104,6 +119,8 @@ func (r *APIRouter) routes() []route {
 	lp := p + apiv0.LibraryPath(libraryResource.wildcard())
 	projects, tags, widgetTypes, widgets, scenes := r.projectsHandlers, r.tagsHandlers, r.widgetTypesHandlers, r.widgetsHandlers, r.scenesHandlers
 	libraries, pins := r.librariesHandlers, r.libraryPinsHandlers
+	devices, environments := r.devicesHandlers, r.environmentsHandlers
+	tokens, config := r.deviceTokensHandlers, r.deviceConfigHandlers
 	return []route{
 		{"GET " + p + "/projects", projects.GetProjects},
 		{"GET " + pp, projects.GetProjectsByID},
@@ -150,6 +167,28 @@ func (r *APIRouter) routes() []route {
 		{"POST " + pp + "/scenes", scenes.PostScenes},
 		{"PUT " + pp + "/scenes/" + sceneResource.wildcard(), scenes.PutScenesByID},
 		{"DELETE " + pp + "/scenes/" + sceneResource.wildcard(), scenes.DeleteScenesByID},
+
+		{"GET " + pp + "/devices", devices.GetDevices},
+		{"GET " + pp + "/devices/" + deviceResource.wildcard(), devices.GetDevicesByID},
+		{"POST " + pp + "/devices", devices.PostDevices},
+		{"PUT " + pp + "/devices/" + deviceResource.wildcard(), devices.PutDevicesByID},
+		{"DELETE " + pp + "/devices/" + deviceResource.wildcard(), devices.DeleteDevicesByID},
+		{"GET " + pp + "/devices/" + deviceResource.wildcard() + "/token", tokens.GetDeviceToken},
+		{"POST " + pp + "/devices/" + deviceResource.wildcard() + "/token", tokens.PostDeviceToken},
+		{"DELETE " + pp + "/devices/" + deviceResource.wildcard() + "/token", tokens.DeleteDeviceToken},
+		{"POST " + pp + "/devices/" + deviceResource.wildcard() + "/token/rotate", tokens.PostDeviceTokenRotate},
+
+		{"GET " + pp + "/environments", environments.GetEnvironments},
+		{"GET " + pp + "/environments/" + environmentResource.wildcard(), environments.GetEnvironmentsByID},
+		{"POST " + pp + "/environments", environments.PostEnvironments},
+		{"PUT " + pp + "/environments/" + environmentResource.wildcard(), environments.PutEnvironmentsByID},
+		{"DELETE " + pp + "/environments/" + environmentResource.wildcard(), environments.DeleteEnvironmentsByID},
+		{"GET " + pp + "/environments/" + environmentResource.wildcard() + "/devices", environments.GetEnvironmentDevices},
+		{"PUT " + pp + "/environments/" + environmentResource.wildcard() + "/devices/" + deviceResource.wildcard(), environments.PutEnvironmentDevice},
+		{"DELETE " + pp + "/environments/" + environmentResource.wildcard() + "/devices/" + deviceResource.wildcard(), environments.DeleteEnvironmentDevice},
+
+		{"GET " + p + "/device/config", config.GetDeviceConfig},
+		{"GET " + p + "/device/events", r.eventsHandlers.GetDeviceEvents},
 
 		{"GET " + p + "/events", r.eventsHandlers.GetEvents},
 		{"GET " + pp + "/events", r.eventsHandlers.GetProjectEvents},

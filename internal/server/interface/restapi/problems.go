@@ -36,6 +36,26 @@ func NewBadRequest(detail, instance string) *apiv0.Problem {
 	}
 }
 
+func NewUnauthorized(detail, instance string) *apiv0.Problem {
+	return &apiv0.Problem{
+		Type:     TypeUnauthorized,
+		Title:    "Unauthorized",
+		Status:   http.StatusUnauthorized, // 401
+		Detail:   detail,
+		Instance: instance,
+	}
+}
+
+func NewForbidden(detail, instance string) *apiv0.Problem {
+	return &apiv0.Problem{
+		Type:     TypeForbidden,
+		Title:    "Forbidden",
+		Status:   http.StatusForbidden, // 403
+		Detail:   detail,
+		Instance: instance,
+	}
+}
+
 func NewNotFound(resourceType, resourceID, instance string) *apiv0.Problem {
 	detail := fmt.Sprintf("%s with ID '%s' not found", resourceType, resourceID)
 	return &apiv0.Problem{

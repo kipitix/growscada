@@ -1,0 +1,39 @@
+info:
+  name: post device duplicate name
+  type: http
+  seq: 66
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/devices
+  body:
+    type: json
+    data: |-
+      {
+        "name": "sim",
+        "comment": "",
+        "protocol": "simulation",
+        "config": {}
+      }
+  auth: inherit
+
+docs: |
+  A Device's name is unique in its project: a second one with the same name is
+  `409 Conflict` Problem Details.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '409'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: 'application/problem+json'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

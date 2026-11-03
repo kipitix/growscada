@@ -1,0 +1,37 @@
+info:
+  name: post environment duplicate name
+  type: http
+  seq: 69
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/environments
+  body:
+    type: json
+    data: |-
+      {
+        "name": "bench",
+        "comment": ""
+      }
+  auth: inherit
+
+docs: |
+  An Environment's name is unique in its project: a second one with the same
+  name is `409 Conflict` Problem Details.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '409'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: 'application/problem+json'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

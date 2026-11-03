@@ -1,0 +1,40 @@
+info:
+  name: post environment
+  type: http
+  seq: 68
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/environments
+  body:
+    type: json
+    data: |-
+      {
+        "name": "bench-extra",
+        "comment": "created by the Bruno collection"
+      }
+  auth: inherit
+
+docs: |
+  Creates an Environment in the project's Draft (201): a named set of the
+  project's Devices as they stand in one context of operation. Its name is
+  unique in the project.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.id'
+      operator: isString
+    - expression: 'res.body.version'
+      operator: eq
+      value: '1'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

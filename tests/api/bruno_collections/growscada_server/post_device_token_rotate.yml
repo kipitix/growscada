@@ -1,0 +1,30 @@
+info:
+  name: post device token rotate
+  type: http
+  seq: 75
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/devices/{{OTHER_DEVICE_ID}}/token/rotate
+  auth: inherit
+
+docs: |
+  Replaces the Device's token (201) and returns the new one: the old one is
+  revoked, so a Gateway still using it gets `401`. Rotation always answers a
+  token, even for a Device that had none.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.token'
+      operator: isString
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

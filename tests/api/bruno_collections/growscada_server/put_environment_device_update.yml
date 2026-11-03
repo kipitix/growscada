@@ -1,0 +1,43 @@
+info:
+  name: put environment device update
+  type: http
+  seq: 72
+
+http:
+  method: PUT
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/environments/{{ENVIRONMENT_ID}}/devices/{{OTHER_DEVICE_ID}}
+  body:
+    type: json
+    data: |-
+      {
+        "params": {"address": "10.0.0.3:502"},
+        "version": 1
+      }
+  auth: inherit
+
+docs: |
+  Changes the parameters of the pair, expecting its current Version (200).
+  The response is the pair with its new Version.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.device_id'
+      operator: eq
+      value: '"{{OTHER_DEVICE_ID}}"'
+    - expression: 'res.body.version'
+      operator: eq
+      value: '2'
+    - expression: 'res.body.params.address'
+      operator: eq
+      value: '"10.0.0.3:502"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

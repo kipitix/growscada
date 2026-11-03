@@ -1,0 +1,38 @@
+info:
+  name: patch tag value of a device tag by people
+  type: http
+  seq: 77
+
+http:
+  method: PATCH
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/tags/{{DEVICE_TAG_ID}}/value
+  body:
+    type: json
+    data: |-
+      {
+        "value": "7",
+        "quality": "good"
+      }
+  auth: inherit
+
+docs: |
+  A Tag a Device supplies is written by that Device alone: a request without
+  a Device Token is `403 Forbidden` Problem Details. People write Tags that no
+  Device supplies (see "patch tag value").
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '403'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: 'application/problem+json'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

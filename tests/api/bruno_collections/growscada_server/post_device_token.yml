@@ -1,0 +1,31 @@
+info:
+  name: post device token
+  type: http
+  seq: 73
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/devices/{{OTHER_DEVICE_ID}}/token
+  auth: inherit
+
+docs: |
+  Issues the Device's token (201) and returns it: it is shown here alone and
+  never again. The server stores its hash and its fingerprint. A Device has one
+  token; issuing a second while it has one is `409` (see "post device token
+  conflict"). `sim-2` has no token before this request.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.token'
+      operator: isString
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

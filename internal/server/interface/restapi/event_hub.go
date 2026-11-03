@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
@@ -47,10 +48,13 @@ type eventClient struct {
 }
 
 // eventStreams are the streams a client follows: the server's, and the one
-// project's whose ID is project (uuid.Nil: none).
+// project's whose ID is project (uuid.Nil: none). gateway marks a Device
+// Gateway's stream: it follows its project's stream but takes the
+// configuration events alone (gatewayConfigEvent).
 type eventStreams struct {
 	server  bool
 	project uuid.UUID
+	gateway bool
 }
 
 // follows reports whether stream (see eventStreamOf) is one of s.
@@ -128,7 +132,7 @@ func eventStreamOf(e event.Event) uuid.UUID {
 func (h *eventHub) broadcast(e event.Event) {
 	stream := eventStreamOf(e)
 	h.mu.Lock()
-	if !h.hasClientsOf(stream) {
+	if !h.wantsEvent(stream, e) {
 		h.mu.Unlock()
 		return
 	}
@@ -149,6 +153,9 @@ func (h *eventHub) broadcast(e event.Event) {
 		if c.closed || !c.streams.follows(stream) {
 			continue
 		}
+		if c.streams.gateway && !gatewayConfigEvent(e) {
+			continue
+		}
 		select {
 		case c.messages <- payload:
 		default:
@@ -158,11 +165,26 @@ func (h *eventHub) broadcast(e event.Event) {
 	}
 }
 
-// hasClientsOf reports whether a client of stream is connected. Called with
-// mu held.
-func (h *eventHub) hasClientsOf(stream uuid.UUID) bool {
+// gatewayConfigEvent reports whether e changes what a Device Gateway must
+// know: its Device, its Environment or their pair (a Project event included,
+// since a deleted Project takes them with it). The rest of the project's
+// content — a Tag value above all — is not the Gateway's business: its stream
+// carries the configuration alone.
+func gatewayConfigEvent(e event.Event) bool {
+	switch e.(type) {
+	case device.DeviceEvent, device.EnvironmentEvent, device.EnvironmentDeviceEvent, project.ProjectEvent:
+		return true
+	}
+	return false
+}
+
+// wantsEvent reports whether a connected client of stream takes e: any
+// follower of the stream, unless every one of them is a Gateway's and e is
+// no configuration event. Called with mu held.
+func (h *eventHub) wantsEvent(stream uuid.UUID, e event.Event) bool {
+	config := gatewayConfigEvent(e)
 	for c := range h.clients {
-		if c.streams.follows(stream) {
+		if c.streams.follows(stream) && (!c.streams.gateway || config) {
 			return true
 		}
 	}

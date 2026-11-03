@@ -1,0 +1,42 @@
+info:
+  name: patch tag value as the device
+  type: http
+  seq: 76
+
+http:
+  method: PATCH
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/tags/{{DEVICE_TAG_ID}}/value
+  headers:
+    - name: Authorization
+      value: Bearer {{DEVICE_TOKEN}}
+  body:
+    type: json
+    data: |-
+      {
+        "value": "42",
+        "quality": "good"
+      }
+  auth: inherit
+
+docs: |
+  A Device Gateway writes a Tag value with `Authorization: Bearer
+  gsc_dev_…`: the token names the Device, and the Runtime node checks it is the
+  Tag's supplier in the same UPDATE that checks the project and the TagType
+  (ADR 0011). The state is written and `seq` numbers it; no version is stated
+  and the latest write wins.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.seq'
+      operator: isNumber
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

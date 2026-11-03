@@ -1,0 +1,60 @@
+info:
+  name: get device config (gateway)
+  type: http
+  seq: 62
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/device/config?environment={{ENVIRONMENT_ID}}
+  headers:
+    - name: Authorization
+      value: Bearer {{DEVICE_TOKEN}}
+  auth: inherit
+
+docs: |
+  The configuration of a Device Gateway: the Device its token acts for, the
+  Environment it serves (a query parameter — a Gateway knows where it stands),
+  the connection parameters of the pair and the Tags the Device supplies.
+
+  The Device is named by the token alone (`Authorization: Bearer gsc_dev_…`), so
+  the Project is too. Until Deploy exists (task 35) the configuration comes from
+  the Draft. A token whose Device is not in the project's configuration — a
+  token that outlived a Deploy — is `403`: the Gateway waits, the token is not
+  revoked.
+
+  The seeded Device `sim` supplies the Tag `device.speed` and stands in `bench`.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.device.id'
+      operator: eq
+      value: '"{{DEVICE_ID}}"'
+    - expression: 'res.body.device.protocol'
+      operator: eq
+      value: '"simulation"'
+    - expression: 'res.body.environment.name'
+      operator: eq
+      value: '"bench"'
+    - expression: 'res.body.connection.params.address'
+      operator: eq
+      value: '"127.0.0.1:1502"'
+    - expression: 'res.body.tags[0].id'
+      operator: eq
+      value: '"{{DEVICE_TAG_ID}}"'
+    - expression: 'res.body.tags[0].name'
+      operator: eq
+      value: '"device.speed"'
+    - expression: 'res.body.tags[0].type'
+      operator: eq
+      value: '"integer"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

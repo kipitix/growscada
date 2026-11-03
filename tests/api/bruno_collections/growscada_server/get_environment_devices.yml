@@ -1,0 +1,42 @@
+info:
+  name: get environment devices
+  type: http
+  seq: 60
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/environments/{{ENVIRONMENT_ID}}/devices
+  auth: inherit
+
+docs: |
+  The Devices of the Environment with their connection parameters, in
+  creation order. The pair (Environment, Device) has no ID of its own:
+  `environment_id` and `device_id` name it.
+
+  The seeded pair is (`bench`, `sim`) with the parameters
+  `{"address":"127.0.0.1:1502"}`.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.devices'
+      operator: isArray
+    - expression: 'res.body.devices[0].environment_id'
+      operator: eq
+      value: '"{{ENVIRONMENT_ID}}"'
+    - expression: 'res.body.devices[0].device_id'
+      operator: eq
+      value: '"{{DEVICE_ID}}"'
+    - expression: 'res.body.devices[0].params.address'
+      operator: eq
+      value: '"127.0.0.1:1502"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

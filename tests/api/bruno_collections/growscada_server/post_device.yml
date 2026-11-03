@@ -1,0 +1,44 @@
+info:
+  name: post device
+  type: http
+  seq: 65
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/devices
+  body:
+    type: json
+    data: |-
+      {
+        "name": "sim-extra",
+        "comment": "created by the Bruno collection",
+        "protocol": "simulation",
+        "config": {"patterns": []}
+      }
+  auth: inherit
+
+docs: |
+  Creates a Device in the project's Draft (201): its name (unique in the
+  project), comment, protocol and the configuration read under that protocol.
+  `protocol` is a closed set, `simulation` today; the comment is descriptive
+  metadata, never behaviour. The response carries the new Device's ID and
+  Version.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.id'
+      operator: isString
+    - expression: 'res.body.version'
+      operator: eq
+      value: '1'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

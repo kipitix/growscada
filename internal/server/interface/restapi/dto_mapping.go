@@ -1,6 +1,8 @@
 package restapi
 
 import (
+	"encoding/json"
+
 	"github.com/google/uuid"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
@@ -74,9 +76,125 @@ func newCreateTagInput(r apiv0.CreateTagRequest) appdto.CreateTagInput {
 	return appdto.CreateTagInput{Name: r.Name, Type: r.Type}
 }
 
-// newSetTagValueInput converts an apiv0.UpdateTagRequest DTO to the Runtime node's input.
-func newSetTagValueInput(r apiv0.UpdateTagRequest, tagID uuid.UUID) runtimeapp.SetTagValueInput {
-	return runtimeapp.SetTagValueInput{TagID: tagID, Value: r.Value, Quality: r.Quality}
+// newSetTagValueInput converts an apiv0.UpdateTagRequest DTO to the Runtime
+// node's input; deviceID is the writer's Device, the zero UUID when a person
+// writes.
+func newSetTagValueInput(r apiv0.UpdateTagRequest, tagID, deviceID uuid.UUID) runtimeapp.SetTagValueInput {
+	return runtimeapp.SetTagValueInput{TagID: tagID, Value: r.Value, Quality: r.Quality, DeviceID: deviceID}
+}
+
+func newDeviceResponse(d appdto.Device) apiv0.DeviceResponse {
+	return apiv0.DeviceResponse{
+		ID:       d.ID,
+		Name:     d.Name,
+		Comment:  d.Comment,
+		Protocol: d.Protocol,
+		Config:   apiv0.JSONObject(d.Config),
+		Version:  d.Version,
+	}
+}
+
+func newGetDevicesResponse(list []appdto.Device) apiv0.GetDevicesResponse {
+	items := make([]apiv0.DeviceResponse, len(list))
+	for i, d := range list {
+		items[i] = newDeviceResponse(d)
+	}
+	return apiv0.GetDevicesResponse{Devices: items}
+}
+
+func newCreateDeviceResponse(d appdto.Device) apiv0.CreateDeviceResponse {
+	return apiv0.CreateDeviceResponse{ID: d.ID, Version: d.Version}
+}
+
+func newUpdateDeviceResponse(d appdto.Device) apiv0.UpdateDeviceResponse {
+	return apiv0.UpdateDeviceResponse{Version: d.Version}
+}
+
+func newCreateDeviceInput(r apiv0.CreateDeviceRequest) appdto.DeviceInput {
+	return appdto.DeviceInput{Name: r.Name, Comment: r.Comment, Protocol: r.Protocol, Config: json.RawMessage(r.Config)}
+}
+
+func newUpdateDeviceInput(r apiv0.UpdateDeviceRequest) appdto.DeviceInput {
+	return appdto.DeviceInput{Name: r.Name, Comment: r.Comment, Protocol: r.Protocol, Config: json.RawMessage(r.Config)}
+}
+
+func newEnvironmentResponse(e appdto.Environment) apiv0.EnvironmentResponse {
+	return apiv0.EnvironmentResponse{ID: e.ID, Name: e.Name, Comment: e.Comment, Version: e.Version}
+}
+
+func newGetEnvironmentsResponse(list []appdto.Environment) apiv0.GetEnvironmentsResponse {
+	items := make([]apiv0.EnvironmentResponse, len(list))
+	for i, e := range list {
+		items[i] = newEnvironmentResponse(e)
+	}
+	return apiv0.GetEnvironmentsResponse{Environments: items}
+}
+
+func newCreateEnvironmentResponse(e appdto.Environment) apiv0.CreateEnvironmentResponse {
+	return apiv0.CreateEnvironmentResponse{ID: e.ID, Version: e.Version}
+}
+
+func newUpdateEnvironmentResponse(e appdto.Environment) apiv0.UpdateEnvironmentResponse {
+	return apiv0.UpdateEnvironmentResponse{Version: e.Version}
+}
+
+func newCreateEnvironmentInput(r apiv0.CreateEnvironmentRequest) appdto.EnvironmentInput {
+	return appdto.EnvironmentInput{Name: r.Name, Comment: r.Comment}
+}
+
+func newUpdateEnvironmentInput(r apiv0.UpdateEnvironmentRequest) appdto.EnvironmentInput {
+	return appdto.EnvironmentInput{Name: r.Name, Comment: r.Comment}
+}
+
+func newEnvironmentDeviceResponse(p appdto.EnvironmentDevice) apiv0.EnvironmentDeviceResponse {
+	return apiv0.EnvironmentDeviceResponse{
+		EnvironmentID: p.EnvironmentID,
+		DeviceID:      p.DeviceID,
+		Params:        apiv0.JSONObject(p.Params),
+		Version:       p.Version,
+	}
+}
+
+func newGetEnvironmentDevicesResponse(list []appdto.EnvironmentDevice) apiv0.GetEnvironmentDevicesResponse {
+	items := make([]apiv0.EnvironmentDeviceResponse, len(list))
+	for i, p := range list {
+		items[i] = newEnvironmentDeviceResponse(p)
+	}
+	return apiv0.GetEnvironmentDevicesResponse{Devices: items}
+}
+
+func newUpdateEnvironmentDeviceInput(r apiv0.UpdateEnvironmentDeviceRequest) appdto.EnvironmentDeviceInput {
+	return appdto.EnvironmentDeviceInput{Params: json.RawMessage(r.Params)}
+}
+
+func newDeviceTokenResponse(issued runtimeapp.IssuedDeviceToken) apiv0.DeviceTokenResponse {
+	return apiv0.DeviceTokenResponse{Token: issued.Secret}
+}
+
+func newDeviceTokenMetadataResponse(t runtimeapp.DeviceToken) apiv0.DeviceTokenMetadataResponse {
+	return apiv0.DeviceTokenMetadataResponse{
+		DeviceID:    t.DeviceID,
+		Fingerprint: t.Fingerprint,
+		IssuedAt:    t.IssuedAt.UTC(),
+	}
+}
+
+func newDeviceConfigResponse(c appdto.DeviceConfig) apiv0.DeviceConfigResponse {
+	tags := make([]apiv0.DeviceConfigTagResponse, len(c.Tags))
+	for i, t := range c.Tags {
+		tags[i] = apiv0.DeviceConfigTagResponse{ID: t.ID, Name: t.Name, Type: t.Type}
+	}
+	return apiv0.DeviceConfigResponse{
+		Device: apiv0.DeviceConfigDeviceResponse{
+			ID:       c.Device.ID,
+			Name:     c.Device.Name,
+			Protocol: c.Device.Protocol,
+			Config:   apiv0.JSONObject(c.Device.Config),
+		},
+		Environment: apiv0.DeviceConfigEnvironmentResponse{ID: c.Environment.ID, Name: c.Environment.Name},
+		Connection:  apiv0.DeviceConfigConnectionResponse{Params: apiv0.JSONObject(c.Connection)},
+		Tags:        tags,
+	}
 }
 
 func newSceneResponse(s appdto.Scene) apiv0.SceneResponse {

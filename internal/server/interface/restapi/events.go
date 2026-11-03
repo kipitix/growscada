@@ -10,6 +10,7 @@ import (
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
+	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/client"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -22,17 +23,33 @@ import (
 const eventWriteTimeout = 5 * time.Second
 
 // EventsHandlers handles the SSE streams of domain events: the server's,
-// optionally joined by one project's, and one per project.
+// optionally joined by one project's, one per project, and the Device
+// Gateway's.
 type EventsHandlers struct {
 	hub      *eventHub
 	projects application.ProjectService
+	tokens   runtimeapp.DeviceTokenService
 }
 
 // NewEventsHandler creates the SSE event handler; a project's stream is
 // opened only for a project projects finds. maxClients caps how many
 // concurrent event streams the hub will accept — see eventHub.addClient.
-func NewEventsHandler(bus eventbus.EventBus, projects application.ProjectService, maxClients int) *EventsHandlers {
-	return &EventsHandlers{hub: newEventHub(bus, maxClients), projects: projects}
+func NewEventsHandler(bus eventbus.EventBus, projects application.ProjectService, maxClients int, opts ...EventsOption) *EventsHandlers {
+	h := &EventsHandlers{hub: newEventHub(bus, maxClients), projects: projects}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
+}
+
+// EventsOption configures the SSE event handler.
+type EventsOption func(*EventsHandlers)
+
+// WithDeviceTokens serves the Device Gateway's stream: a token authenticates
+// it, and its Project's events are what it carries. Without it the stream
+// answers 401: the handler serves no Runtime node.
+func WithDeviceTokens(tokens runtimeapp.DeviceTokenService) EventsOption {
+	return func(h *EventsHandlers) { h.tokens = tokens }
 }
 
 // Close detaches the hub from the EventBus and ends every open event stream,
@@ -81,6 +98,23 @@ func (h *EventsHandlers) GetProjectEvents(w http.ResponseWriter, r *http.Request
 		return
 	}
 	h.stream(w, r, eventStreams{project: projectID})
+}
+
+// GetDeviceEvents handles GET /api/v0/device/events: the event stream of a
+// Device Gateway, authenticated by its token. The token names the Device and
+// so the Project; the stream carries that Project's configuration events —
+// device_updated, environment_device_updated and their creations and
+// deletions — on which the Gateway rereads its configuration, and not the Tag
+// values. A token that is unknown or revoked is 401, so a Gateway stops
+// instead of waiting. The stream is opened at once and never ends by itself:
+// a Gateway rereads the configuration on every (re)connection, which is also
+// how it learns of a rotation.
+func (h *EventsHandlers) GetDeviceEvents(w http.ResponseWriter, r *http.Request) {
+	token, ok := authenticateDevice(w, r, h.tokens)
+	if !ok {
+		return
+	}
+	h.stream(w, r, eventStreams{project: token.ProjectID, gateway: true})
 }
 
 // stream serves an SSE stream of streams (see eventHub.addClient).

@@ -24,6 +24,7 @@ const module = "github.com/kipitix/growscada/"
 // runtimeRole are the packages of the Runtime node.
 var runtimeRole = []string{
 	"internal/server/domain/tagstate",
+	"internal/server/domain/devicetoken",
 	"internal/server/application/runtime",
 	"internal/server/infrastructure/postgres/runtime",
 }

@@ -131,6 +131,9 @@ func main() {
 		close(tagUpdatesDone)
 	}()
 	tagStateService := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(sqlDB), organizationID, tagUpdates.Publish)
+	// The Device Tokens are the Runtime node's too: a Gateway authenticates
+	// with one, and its management (issue, rotate, revoke) lives here
+	deviceTokenService := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(sqlDB))
 	runtimeNode := inprocess.NewRuntimeNode(tagStateService)
 	// Registry of the policies: changes spanning aggregates, run as jobs
 	// apart from event delivery (ADR 0008)
@@ -189,13 +192,17 @@ func main() {
 	tagService := application.NewTagService(projectContent, runtimeNode)
 	// Create router
 	apiRouter := restapi.NewRouter(restapi.Services{
-		Projects:    projectService,
-		Tags:        tagService,
-		TagStates:   tagStateService,
-		Libraries:   application.NewLibraryService(libraryRepository, releaseRepository, widgetTypeRepositories, organizationID),
-		WidgetTypes: application.NewWidgetTypeService(libraryRepository, widgetTypeRepositories, organizationID),
-		LibraryPins: application.NewLibraryPinService(projectContent, libraryRepository, releaseRepository),
-		Scenes:      application.NewSceneService(projectContent),
+		Projects:     projectService,
+		Tags:         tagService,
+		TagStates:    tagStateService,
+		Libraries:    application.NewLibraryService(libraryRepository, releaseRepository, widgetTypeRepositories, organizationID),
+		WidgetTypes:  application.NewWidgetTypeService(libraryRepository, widgetTypeRepositories, organizationID),
+		LibraryPins:  application.NewLibraryPinService(projectContent, libraryRepository, releaseRepository),
+		Scenes:       application.NewSceneService(projectContent),
+		Devices:      application.NewDeviceService(projectContent),
+		Environments: application.NewEnvironmentService(projectContent),
+		DeviceConfig: application.NewDeviceConfigService(projectContent),
+		DeviceTokens: deviceTokenService,
 	}, eventBus, cliArgs.MaxSSEClients)
 	// Register the event hub shutdown handler. The outbox is drained first,
 	// while SSE clients are still connected, so what is left in it reaches

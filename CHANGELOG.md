@@ -1,5 +1,20 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.54] - 2026-11-03
+
+### Added
+
+- **REST: устройства, окружения, токены и API для Gateway** (задача 34, часть 4; ADR 0004, поправки 2026-11-01; ADR 0011)
+  - **REST API 0.8** (MINOR, пока MAJOR = 0): DTO `DeviceResponse`/`CreateDeviceRequest`/`UpdateDeviceRequest` (с `version`), `EnvironmentResponse`/`Create…`/`Update…`, `EnvironmentDeviceResponse`/`UpdateEnvironmentDeviceRequest`, `DeviceTokenResponse` (секрет — только при выпуске и ротации), `DeviceTokenMetadataResponse` (без секрета), `DeviceConfigResponse` для Gateway'а и `JSONObject` — JSON-объект протокольных конфигураций и параметров связи, сохраняемый как есть. Схема `schemas/api/0.8.json`
+  - Маршруты: CRUD `…/devices` и `…/environments`, пары `GET …/environments/{id}/devices` + `PUT`/`DELETE …/devices/{device_id}` (пара идентифицируется двумя ID пути), токены `POST`/`GET`/`DELETE …/devices/{device_id}/token` и `POST …/token/rotate`, а также `GET /api/v0/device/config?environment=<id>` и SSE `GET /api/v0/device/events` для Gateway'а. У каждого ресурса свой `resource` в `errors.go`, свой файл обработчика, строки в `routes()` и `requestBodies`
+  - **Device Token — на Runtime-узле** (`domain/devicetoken`, `application/runtime.DeviceTokenService`, `postgres/runtime`): один токен на Device, хранится только хешем (SHA-256) и отпечатком, показывается один раз; выпуск, ротация и отзыв; `Authorization: Bearer gsc_dev_…` разрешается в Device и проект, результат кэшируется в памяти и кэш сбрасывается при ротации/отзыве. Bearer без префикса — не device-токен (401, пользовательская авторизация — задача 50)
+  - **Авторизация записи**: `PATCH …/tags/{id}/value` с device-токеном несёт `device_id` писателя в `SetTagValue`; чужой Tag — 403 (`tag.ErrTagNotSuppliedByDevice` в том же UPDATE), неизвестный/отозванный токен — 401, токен другого проекта — 403. Без заголовка пишут люди, как раньше; Tag с поставщиком человеку недоступен (403)
+  - **API для Gateway**: `DeviceConfigService` собирает конфигурацию из Draft (до Deploy, задача 35): Device, Environment, параметры пары и Tag'и, которые Device поставляет. Токен спящей Device (её нет в текущей конфигурации) — 403; SSE отдаёт проектные события по токену
+  - `runtime.device_tokens.project_id` (новая миграция): токен называет проект без обращения к Engineering-ноде и переживает Deploy; строка уходит вместе с проектом (CASCADE)
+  - Отображения ошибок: 403 (`tag.ErrTagNotSuppliedByDevice`) и 409 «в использовании» (`device.ErrDeviceInUse`, `device.ErrEnvironmentInUse`), 404/409 токена (`devicetoken.ErrTokenNotFound`/`ErrTokenExists`); `problems.go` получил `NewUnauthorized`/`NewForbidden`, `corsMiddleware` разрешает `Authorization`
+- **Bruno**: в коллекции `growscada_server` — запрос на каждый новый маршрут (чтения, затем изменения, удаления в конце), с проверками статуса, заголовка схемы, `application/problem+json` на ошибках и ключевых полей. Новые seed-данные: Device `sim`, Environment `bench`, пара с параметрами, Tag `device.speed` и fixture-токен; Device `sim-2` без токена — для выпуска, ротации и отзыва
+- Тесты: `domain/devicetoken` (генерация, хеш, отпечаток, разбор префикса), сервис токенов (выпуск/кеш/ротация/отзыв, чужой проект), репозиторий токенов на Postgres (вставка, замена, отзыв, каскад с проектом), REST — CRUD Device/Environment/пар, жизненный цикл токена, `/device/config` (200/401/403/404), запись Tag'а Device/человеком/чужим токеном, SSE Gateway'а; сентинелы ошибок в `errors_internal_test.go`
+
 ## [0.0.53] - 2026-11-02
 
 ### Added

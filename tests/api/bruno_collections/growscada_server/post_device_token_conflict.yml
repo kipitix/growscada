@@ -1,0 +1,30 @@
+info:
+  name: post device token conflict
+  type: http
+  seq: 74
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/devices/{{OTHER_DEVICE_ID}}/token
+  auth: inherit
+
+docs: |
+  A Device has one token: issuing one while it has a token that was not
+  revoked is `409 Conflict`. Rotate it or revoke it first.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '409'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: 'application/problem+json'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

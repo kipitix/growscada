@@ -1,0 +1,39 @@
+info:
+  name: put environment by id
+  type: http
+  seq: 70
+
+http:
+  method: PUT
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/environments/{{ENVIRONMENT_ID}}
+  body:
+    type: json
+    data: |-
+      {
+        "name": "bench",
+        "comment": "renamed by the Bruno collection",
+        "version": 1
+      }
+  auth: inherit
+
+docs: |
+  Changes the Environment, expecting the Version it was read at. Only its name
+  and comment change: its Devices and their parameters are the pairs, changed
+  one by one.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.version'
+      operator: eq
+      value: '2'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

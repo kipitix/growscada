@@ -1,0 +1,34 @@
+info:
+  name: get device events (SSE stream, gateway)
+  type: http
+  seq: 64
+  tags:
+    - manual
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/device/events
+  headers:
+    - name: Authorization
+      value: Bearer {{DEVICE_TOKEN}}
+  auth: inherit
+
+docs: |
+  The Device Gateway's Server-Sent Events stream, authenticated by its token:
+  the token names the Device and so the Project, and the stream carries the
+  configuration events of that Project — `device_*`, `environment_*`,
+  `environment_device_*` and the Project's own events — not the Tag values.
+  `device_updated`, `environment_device_updated` and their deletions tell the
+  Gateway to reread `/api/v0/device/config`; it also rereads on a timer as a
+  fallback. An unknown or revoked token is `401`, so a Gateway stops instead
+  of waiting.
+
+  Bruno sends the request and waits for the body, so it hangs until the
+  connection closes; cancel it manually. Each message is one SSE `data:` line,
+  as in the project's stream.
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

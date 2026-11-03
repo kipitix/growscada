@@ -11,6 +11,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/device"
+	"github.com/kipitix/growscada/internal/server/domain/devicetoken"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
@@ -42,6 +43,8 @@ var (
 	environmentResource = resource{name: "Environment", pathParam: "environment_id"}
 	// An Environment Device is named by its Device within its Environment.
 	environmentDeviceResource = resource{name: "EnvironmentDevice", pathParam: "device_id"}
+	// A Device Token is named by its Device: there is one per Device.
+	deviceTokenResource = resource{name: "DeviceToken", pathParam: "device_id"}
 )
 
 // wildcard is the router pattern segment that carries the resource's ID.
@@ -50,9 +53,9 @@ func (res resource) wildcard() string {
 }
 
 // errorMapping maps a domain sentinel error to a response. A 404 names the
-// resource and its ID from the path; a 409 carries a fixed detail, so the text
-// of the wrapping errors never reaches the client. sendError answers only 404
-// and 409; a row with another status is a 500 until sendError learns it.
+// resource and its ID from the path; 401, 403 and 409 carry a fixed detail, so
+// the text of the wrapping errors never reaches the client. A row with another
+// status is a 500 until sendError learns it.
 type errorMapping struct {
 	sentinel error
 	status   int
@@ -92,20 +95,31 @@ var errorMappings = []errorMapping{
 	{device.ErrDeviceNotFound, http.StatusNotFound, deviceResource, ""},
 	{device.ErrDeviceConflict, http.StatusConflict, deviceResource, "Device was changed concurrently; reload it and retry"},
 	{device.ErrDeviceNameTaken, http.StatusConflict, deviceResource, "Device name is already taken in the project"},
+	{device.ErrDeviceInUse, http.StatusConflict, deviceResource,
+		"Device is still in use: a Tag is supplied by it, or it stands in an environment"},
 	{device.ErrEnvironmentNotFound, http.StatusNotFound, environmentResource, ""},
 	{device.ErrEnvironmentConflict, http.StatusConflict, environmentResource, "Environment was changed concurrently; reload it and retry"},
 	{device.ErrEnvironmentNameTaken, http.StatusConflict, environmentResource, "Environment name is already taken in the project"},
+	{device.ErrEnvironmentInUse, http.StatusConflict, environmentResource,
+		"Environment still holds devices: remove their pairs first"},
 	{device.ErrEnvironmentDeviceNotFound, http.StatusNotFound, environmentDeviceResource, ""},
 	{device.ErrEnvironmentDeviceConflict, http.StatusConflict, environmentDeviceResource, "EnvironmentDevice was changed concurrently; reload it and retry"},
 	{device.ErrEnvironmentDeviceExists, http.StatusConflict, environmentDeviceResource, "Device is already in the environment"},
+	{tag.ErrTagNotSuppliedByDevice, http.StatusForbidden, tagResource,
+		"Tag is supplied by a Device: only that Device writes its value"},
+	{devicetoken.ErrTokenNotFound, http.StatusNotFound, deviceTokenResource, ""},
+	{devicetoken.ErrTokenExists, http.StatusConflict, deviceTokenResource,
+		"Device already has a token; revoke or rotate it"},
 }
 
 // sendError responds to an error from the application layer. Invalid input is
 // a 400 naming the cause and goes first: a reference from the request body to
 // something that does not exist is the caller's input, 404 is only for the
-// resource in the path. Then the rows of errorMappings; anything else — and a
-// 404 for a resource the path does not name, which is a service fault — is a
-// 500 that logs the error and tells the client nothing internal.
+// resource in the path. Then the rows of errorMappings: 404 naming the
+// resource of the path, 401, 403 and 409 with a fixed detail, so the text of
+// the wrapping errors never reaches the client. Anything else — and a 404 for
+// a resource the path does not name, which is a service fault — is a 500 that
+// logs the error and tells the client nothing internal.
 func sendError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, application.ErrInvalidInput) || errors.Is(err, runtimeapp.ErrInvalidInput) {
 		sendProblem(w, NewBadRequest(err.Error(), r.URL.Path))
@@ -124,6 +138,10 @@ func sendError(w http.ResponseWriter, r *http.Request, err error) {
 				return
 			}
 			sendProblem(w, NewNotFound(m.resource.name, pathID, r.URL.Path))
+		case http.StatusUnauthorized:
+			sendProblem(w, NewUnauthorized(m.detail, r.URL.Path))
+		case http.StatusForbidden:
+			sendProblem(w, NewForbidden(m.detail, r.URL.Path))
 		case http.StatusConflict:
 			detail := m.detail
 			if errors.Is(err, application.ErrRaceLost) {

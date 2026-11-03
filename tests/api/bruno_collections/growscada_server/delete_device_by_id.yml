@@ -1,0 +1,34 @@
+info:
+  name: delete device by id
+  type: http
+  seq: 86
+
+http:
+  method: DELETE
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/devices/{{DEVICE_ID}}
+  auth: inherit
+
+docs: |
+  Removes the Device (200) and returns it as it was read. It states no
+  Version. A Device still in use — one supplying a Tag, or one standing in an
+  Environment — is refused with `409`; both were removed just before.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.id'
+      operator: eq
+      value: '"{{DEVICE_ID}}"'
+    - expression: 'res.body.name'
+      operator: eq
+      value: '"sim"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

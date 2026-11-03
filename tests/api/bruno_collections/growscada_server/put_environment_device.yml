@@ -1,0 +1,45 @@
+info:
+  name: put environment device
+  type: http
+  seq: 71
+
+http:
+  method: PUT
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/environments/{{ENVIRONMENT_ID}}/devices/{{OTHER_DEVICE_ID}}
+  body:
+    type: json
+    data: |-
+      {
+        "params": {"address": "10.0.0.2:502"},
+        "version": 0
+      }
+  auth: inherit
+
+docs: |
+  Adds the pair (Environment, Device) with its connection parameters (201):
+  `version` 0 adds, any other changes and must match the pair's current
+  version. The pair is identified by the two IDs of the path; it has no ID of
+  its own. `params` is the JSON read under the Device's protocol.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.environment_id'
+      operator: eq
+      value: '"{{ENVIRONMENT_ID}}"'
+    - expression: 'res.body.device_id'
+      operator: eq
+      value: '"{{OTHER_DEVICE_ID}}"'
+    - expression: 'res.body.version'
+      operator: eq
+      value: '1'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

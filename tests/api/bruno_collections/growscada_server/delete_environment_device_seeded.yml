@@ -1,0 +1,33 @@
+info:
+  name: delete the seeded environment device
+  type: http
+  seq: 85
+
+http:
+  method: DELETE
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/environments/{{ENVIRONMENT_ID}}/devices/{{DEVICE_ID}}
+  auth: inherit
+
+docs: |
+  Removes the seeded pair (`bench`, `sim`), so that both the Device and the
+  Environment are free to be removed.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.environment_id'
+      operator: eq
+      value: '"{{ENVIRONMENT_ID}}"'
+    - expression: 'res.body.device_id'
+      operator: eq
+      value: '"{{DEVICE_ID}}"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

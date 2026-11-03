@@ -1,0 +1,32 @@
+info:
+  name: get device config without a token
+  type: http
+  seq: 63
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/device/config?environment={{ENVIRONMENT_ID}}
+  auth: inherit
+
+docs: |
+  A Gateway request without `Authorization` is `401 Unauthorized` Problem
+  Details. A bearer without the `gsc_dev_` prefix is not a Device Token either
+  (user authentication is task 50), and an unknown or revoked token is `401`
+  too: the Gateway stops.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '401'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: 'application/problem+json'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

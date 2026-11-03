@@ -1,0 +1,41 @@
+info:
+  name: patch tag value with a user bearer
+  type: http
+  seq: 79
+
+http:
+  method: PATCH
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/tags/{{DEVICE_TAG_ID}}/value
+  headers:
+    - name: Authorization
+      value: Bearer user-secret
+  body:
+    type: json
+    data: |-
+      {
+        "value": "7",
+        "quality": "good"
+      }
+  auth: inherit
+
+docs: |
+  `Authorization: Bearer <secret>` without the `gsc_dev_` prefix is not a
+  Device Token: the API refuses it with `401` until user authentication exists
+  (task 50).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '401'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: 'application/problem+json'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

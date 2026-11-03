@@ -106,7 +106,9 @@ const MainProjectName = "Main"
 // tag's state is written through the API.
 func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagService) {
 	t.Helper()
-	if _, err := db.ExecContext(context.Background(), "DELETE FROM runtime.tags; DELETE FROM engineering.tags; DELETE FROM engineering.widgets; "+
+	if _, err := db.ExecContext(context.Background(), "DELETE FROM runtime.device_tokens; DELETE FROM runtime.tags; DELETE FROM engineering.tags; "+
+		"DELETE FROM engineering.environment_devices; DELETE FROM engineering.devices; DELETE FROM engineering.environments; "+
+		"DELETE FROM engineering.widgets; "+
 		"DELETE FROM engineering.scenes; DELETE FROM engineering.library_pins; DELETE FROM engineering.libraries; "+
 		"DELETE FROM outbox; DELETE FROM policy_jobs; "+
 		"DELETE FROM projects WHERE id <> '"+MainProject.String()+"'; "+
@@ -129,6 +131,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	content := application.NewProjectContent(projectRepo, scopes, orgID)
 	tagUpdates := eventbus.NewAsyncPublisher(bus, 1024)
 	tagStateSvc := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, tagUpdates.Publish)
+	deviceTokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(db))
 	runtimeNode := inprocess.NewRuntimeNode(tagStateSvc)
 	tagSvc := application.NewTagService(content, runtimeNode)
 	libraries := repositories.NewLibraryRepositoryPostgres(db, onCommit)
@@ -155,13 +158,17 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	})
 
 	router := restapi.NewRouter(restapi.Services{
-		Projects:    application.NewProjectService(projectRepo, orgID),
-		Tags:        tagSvc,
-		TagStates:   tagStateSvc,
-		Libraries:   application.NewLibraryService(libraries, releases, widgetTypes, orgID),
-		WidgetTypes: application.NewWidgetTypeService(libraries, widgetTypes, orgID),
-		LibraryPins: application.NewLibraryPinService(content, libraries, releases),
-		Scenes:      application.NewSceneService(content),
+		Projects:     application.NewProjectService(projectRepo, orgID),
+		Tags:         tagSvc,
+		TagStates:    tagStateSvc,
+		Libraries:    application.NewLibraryService(libraries, releases, widgetTypes, orgID),
+		WidgetTypes:  application.NewWidgetTypeService(libraries, widgetTypes, orgID),
+		LibraryPins:  application.NewLibraryPinService(content, libraries, releases),
+		Scenes:       application.NewSceneService(content),
+		Devices:      application.NewDeviceService(content),
+		Environments: application.NewEnvironmentService(content),
+		DeviceConfig: application.NewDeviceConfigService(content),
+		DeviceTokens: deviceTokens,
 	}, bus, 100)
 
 	srv := httptest.NewServer(router.ServeMux())
