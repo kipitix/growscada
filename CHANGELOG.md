@@ -15,7 +15,7 @@
   - `apiclient`: `WithDeviceToken`, `DeviceIdentity`, `DeviceConfig`, `ListEnvironments`, `DeviceEvents` (разбор SSE, ошибка `ErrStreamClosed`); поток не ограничен таймаутом клиента
   - Seed-данные: Device `gateway` и окружение `lab` с fixture-токеном для dashboard-симулятора; Device `sim` (`bench`) остаётся fixture-устройством Bruno — у него своя судьба (Bruno отзывает его токен и удаляет его Tag), поэтому они разведены. Dashboard-теги поставляет `gateway`
   - Bruno: запрос `get_device_identity`, `get_device` симулятора проверяет Device и окружение; обе коллекции проходят
-- Тесты: e2e `internal/devicesim` против настоящего API (значения по паттернам, control API, отсутствующий Tag → `ErrConfig`, неизвестный токен, отзыв токена останавливает Gateway), unit — перечитывание конфигурации по событию и по таймеру, 403 на запись останавливает Tag, 403 конфигурации пережидается, смена типа Tag'а не возобновляет запись старым генератором; `apiclient` — токен, `/device`, `/device/config`, разбор SSE и 401; `restapi` — `/device`; `cmd/device_simulator` — таблица кодов выхода
+- Тесты: e2e `internal/devicesim` против настоящего API (значения по паттернам, control API, отсутствующий Tag → `ErrConfig`, неизвестный токен, отзыв токена останавливает Gateway), unit — перечитывание конфигурации по событию и по таймеру, 403 на запись останавливает Tag, 403 конфигурации пережидается, смена типа Tag'а не возобновляет запись старым генератором, окружение по имени и по ID (включая переименование); `apiclient` — токен, `/device`, `/device/config`, разбор SSE и 401; `restapi` — `/device`; `cmd/device_simulator` — таблица кодов выхода
 
 ### Changed
 

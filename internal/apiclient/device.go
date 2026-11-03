@@ -47,11 +47,11 @@ func (p *ProjectClient) ListEnvironments(ctx context.Context) ([]apiv0.Environme
 
 // DeviceEvents follows GET /api/v0/device/events, the configuration event
 // stream of the Device the client's token acts for: onChange runs for every
-// event until ctx is done, the stream breaks or onChange returns an error.
-// The returned error is that of the response (a *StatusError with status 401
-// for a token that is unknown or revoked) or of the broken connection; a
-// stream the server ended cleanly matches ErrStreamClosed. The request takes
-// no timeout of its own: the stream lives as long as ctx.
+// event until ctx is done or the stream breaks. The returned error is that of
+// the response (a *StatusError with status 401 for a token that is unknown or
+// revoked) or of the broken connection; a stream the server ended cleanly
+// matches ErrStreamClosed. The request takes no timeout of its own: the stream
+// lives as long as ctx.
 func (c *Client) DeviceEvents(ctx context.Context, onChange func(apiv0.Event)) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+apiv0.PathPrefix+"/device/events", nil)
 	if err != nil {

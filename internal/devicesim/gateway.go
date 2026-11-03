@@ -26,8 +26,9 @@ type Source interface {
 	Events(ctx context.Context, onChange func(apiv0.Event)) error
 }
 
-// ErrEnvironmentNotFound means the project has no Environment of the name the
-// Gateway is configured with (a UUID is never looked up by name).
+// ErrEnvironmentNotFound means the Device cannot be served in the Environment
+// the Gateway is configured with: the Project has no Environment of that name
+// or ID, or the Device does not stand in it.
 var ErrEnvironmentNotFound = errors.New("environment not found")
 
 // Gateway is the Source over the server's REST API: it reads the
@@ -49,25 +50,31 @@ func NewGateway(client *apiclient.Client, environment string) *Gateway {
 }
 
 // Configuration returns the configuration of the Device in the Gateway's
-// Environment. An Environment named by a name that the project does not have
-// is an error matching ErrEnvironmentNotFound.
+// Environment. An Environment the Device cannot be served in — one the Project
+// does not have, or one it does not stand in — is an error matching
+// ErrEnvironmentNotFound.
 func (g *Gateway) Configuration(ctx context.Context) (apiv0.DeviceConfigResponse, error) {
 	environmentID, byName, err := g.environmentID(ctx)
 	if err != nil {
 		return apiv0.DeviceConfigResponse{}, err
 	}
 	config, err := g.client.DeviceConfig(ctx, environmentID)
-	if errors.Is(err, apiclient.ErrNotFound) && byName {
-		// The Environment found earlier may have been renamed: look it up by
-		// name once more before reporting the configuration missing.
-		g.forgetEnvironment()
-		environmentID, _, lookupErr := g.environmentID(ctx)
-		if lookupErr != nil {
-			return apiv0.DeviceConfigResponse{}, lookupErr
-		}
-		return g.client.DeviceConfig(ctx, environmentID)
+	if !errors.Is(err, apiclient.ErrNotFound) {
+		return config, err
 	}
-	return config, err
+	// The Environment may have been renamed, or the Device taken out of it: an
+	// Environment named by a name is looked up once more, the answer for an ID
+	// stands. Either way a 404 is a local config the server cannot serve.
+	if byName {
+		g.forgetEnvironment()
+		if environmentID, _, err = g.environmentID(ctx); err != nil {
+			return apiv0.DeviceConfigResponse{}, err
+		}
+		if config, err = g.client.DeviceConfig(ctx, environmentID); !errors.Is(err, apiclient.ErrNotFound) {
+			return config, err
+		}
+	}
+	return apiv0.DeviceConfigResponse{}, fmt.Errorf("%w: %q: %w", ErrEnvironmentNotFound, g.environment, err)
 }
 
 // Events follows the configuration event stream of the Device.
