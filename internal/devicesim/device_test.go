@@ -337,6 +337,36 @@ func TestRun_ReloadsConfigurationOnEvent(t *testing.T) {
 	}
 }
 
+// TestRun_ChangedTypeKeepsTheTagStopped: a tag whose type changed to one its
+// pattern does not fit stops being written, and a reload of the same
+// configuration does not resume it with the generator of the old type.
+func TestRun_ChangedTypeKeepsTheTagStopped(t *testing.T) {
+	link, source := fakeDevice(map[string]devicelink.TagType{"counter": devicelink.TagTypeInteger})
+	d := startDevice(t, testConfig(t, rampConfig), link, source)
+	waitEvents(t, source)
+	eventually(t, "a write", func() bool { return len(link.snapshot()) > 0 })
+
+	// The Tag is recreated as a boolean: the ramp does not fit it any more.
+	boolean := map[string]devicelink.TagType{"counter": devicelink.TagTypeBoolean}
+	source.change(boolean, "sim")
+	eventually(t, "the tag to be lost", func() bool { return d.Status().Tags[0].Lost })
+
+	configs, _ := source.snapshot()
+	source.change(boolean, "sim")
+	eventually(t, "another configuration read", func() bool {
+		c, _ := source.snapshot()
+		return c > configs
+	})
+
+	time.Sleep(50 * time.Millisecond) // a resumed tag would write by now
+	if !d.Status().Tags[0].Lost {
+		t.Error("a tag whose pattern does not fit its type must stay lost on a reload")
+	}
+	if sourceType := d.Status().Tags[0].Type; sourceType != devicelink.TagTypeBoolean.String() {
+		t.Errorf("tag type: got %q, want the server's %q", sourceType, devicelink.TagTypeBoolean)
+	}
+}
+
 // TestRun_RereadsConfigurationOnTimer: the event stream is not the only way:
 // the configuration is reread on a timer as a fallback.
 func TestRun_RereadsConfigurationOnTimer(t *testing.T) {

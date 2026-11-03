@@ -90,7 +90,7 @@ type simTag struct {
 	quality  devicelink.Quality  // from the config
 	override *devicelink.Quality // set by OverrideQuality, nil if none
 	pattern  PatternSpec
-	gen      generator     // nil until the Device is connected
+	gen      generator     // nil until the Device is connected, and while no pattern fits the tag's type
 	setAt    time.Duration // Device running time when the pattern was set
 	rnd      *rand.Rand
 	lost     bool          // not supplied by the Device any more: not written
@@ -229,12 +229,18 @@ func (d *Device) applyConfiguration(cfg apiv0.DeviceConfigResponse, strict bool)
 			t.lost = true
 			continue
 		}
-		if t.tag.ID == definition.ID && t.tag.Type == tagType {
+		if t.tag.ID == definition.ID && t.tag.Type == tagType && t.gen != nil {
 			t.lost = false // supplied again, or never lost
 			continue
 		}
 		t.tag = devicelink.Tag{ID: definition.ID, Name: name, Type: tagType}
-		if err := t.setPattern(t.pattern, at); err != nil {
+		// The tag's identity or type changed: build its generator for the new
+		// type. A pattern that does not fit it leaves the tag without a
+		// generator, so the next reload tries again and the tag stays lost
+		// meanwhile — never the old type's generator under the new identity.
+		gen, err := newGenerator(t.pattern, tagType, t.rnd)
+		if err != nil {
+			t.gen = nil
 			if strict {
 				return fmt.Errorf("%w: tag %q: %w", ErrConfig, name, err)
 			}
@@ -242,6 +248,7 @@ func (d *Device) applyConfiguration(cfg apiv0.DeviceConfigResponse, strict bool)
 			t.lost = true
 			continue
 		}
+		t.gen, t.setAt = gen, at
 		t.lost = false
 		if d.connected {
 			// A reload: the tag's identity or type changed, so its next value
@@ -356,7 +363,7 @@ func (d *Device) runTag(ctx context.Context, t *simTag) error {
 // last value unless the pattern has changed since.
 func (d *Device) write(ctx context.Context, t *simTag, kicked bool) error {
 	d.mu.Lock()
-	if !d.running || t.lost {
+	if !d.running || t.lost || t.gen == nil {
 		d.mu.Unlock()
 		return nil
 	}
