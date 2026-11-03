@@ -13,6 +13,18 @@ Blocked by: 32, 33, 34
 - Запись Deploy в Journal — в задаче 42.
 - REST, Bruno, тесты, `CHANGELOG.md`.
 
+**Это спецификация, не тикет.** Она уже согласована и **делать её не нужно** — работа разбита на пять частей, по одной на слой; каждая самодостаточна и проверяема.
+
+| Часть | Файл | Что | Blocked by |
+|---|---|---|---|
+| 1 | `35_1_projectfile_contract.md` | Формат `contract/project/v0`: ProjectFile целиком, `SchemaVersion` 0.2, схемы | 33 |
+| 2 | `35_2_revision_storage.md` | Схема: `runtime.revisions`, `engineering.project_files`, репозитории и транзакция создания ревизии | 35_1 |
+| 3 | `35_3_runtime_deploy.md` | Runtime-нода: Deploy в порту, текущая Revision, событие `revision_created`, правила состояний Tag, конфиг Gateway из копий | 35_2 |
+| 4 | `35_4_engineering_deploy_discard.md` | Engineering: сборка ProjectFile, Deploy/preview, Discard-policy, снятие моста Draft→Runtime | 35_3 |
+| 5 | `35_5_rest_ui_docs.md` | REST, apiclient, PWA (Project и Operation), Bruno, ADR 0013 и поправки, CHANGELOG | 35_4 |
+
+Части идут по порядку; каждая ссылается на эту спецификацию как на источник истины.
+
 ## Comments
 
 - 2026-10-04: бывший тикет 03 задачи 36. Решения: Q1 (Draft + Deploy, а не живое редактирование), Q8 (Deploy публикует весь Draft атомарно → Revision), Q10 (Draft автосохраняется на сервере, кнопки «Сохранить» нет; явные действия — Deploy и Discard), Q15 (runtime-Widget переживает Deploy; удаляется, только если исчезли его Scene или WidgetType, с предупреждением перед Deploy), Q16 (Deploy с конфликтом имён отклоняется), Q20 (Revision — неизменяемый jsonb-документ). Зависимость от Journal снята: запись Deploy в Journal добавит задача 42.
@@ -36,3 +48,4 @@ Blocked by: 32, 33, 34
   **Сид, Bruno, тесты, доки (Q13).** Сид Revision не создаёт. Bruno-коллекция сервера получает раздел `deploy` (preview → deploy → revision → tag-states) до первого `PATCH …/value`; коллекция симулятора деплоит проект перед запуском драйвера. Интеграционные тесты, пишущие значения, деплоят в setup (или в хелпере `servertest`). Документация: новый ADR 0013 (Deploy/Revision/Discard; jsonb — истина; мост убран), поправки в ADR 0007 и 0011, `CHANGELOG.md`, строка в README/`AGENTS.md` о том, что ручной прогон симулятора требует Deploy.
 
   **За рамками:** список ревизий и Rollback — задача 36; DraftChanges undo/redo — 38; runtime-сущности, конфликт имён Tag, непустой `dropped_widgets` — 48; сетевой `RuntimeNode` и разделение БД — 52; EditLock — 37.
+- 2026-11-03 (разбиение): задача разбита на пять частей по слоям — `35_1_projectfile_contract`, `35_2_revision_storage`, `35_3_runtime_deploy`, `35_4_engineering_deploy_discard`, `35_5_rest_ui_docs`; каждая самодостаточна, проверяема и ссылается на эту спецификацию. Работу, которая по решению Q4/Q13 не входит в часть (список ревизий, runtime-сущности, EditLock, сетевой порт), не добавлять сюда.
