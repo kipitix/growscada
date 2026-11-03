@@ -31,7 +31,9 @@ func NewProjectFileRepositoryPostgres(aDb *sql.DB) *ProjectFileRepositoryPostgre
 }
 
 // Save replaces the copy of the Project's last ProjectFile: a Project has one,
-// the one of the Revision it runs.
+// the one of the Revision it runs. Two Deploys may finish in any order, so a
+// write of an older Revision than the stored one changes nothing: the copy
+// follows the highest numbered Revision, and an older one is no news.
 func (r ProjectFileRepositoryPostgres) Save(ctx context.Context, projectID uuid.UUID, revision appdto.Revision) error {
 	if revision.Content.ProjectID != projectID {
 		return fmt.Errorf("cannot save the project file of project %s for project %s", revision.Content.ProjectID, projectID)
@@ -44,7 +46,8 @@ func (r ProjectFileRepositoryPostgres) Save(ctx context.Context, projectID uuid.
 		`INSERT INTO engineering.project_files (project_id, revision_n, deployed_at, config)
 		 VALUES ($1, $2, $3, $4)
 		 ON CONFLICT (project_id) DO UPDATE
-		 SET revision_n = EXCLUDED.revision_n, deployed_at = EXCLUDED.deployed_at, config = EXCLUDED.config`,
+		 SET revision_n = EXCLUDED.revision_n, deployed_at = EXCLUDED.deployed_at, config = EXCLUDED.config
+		 WHERE EXCLUDED.revision_n > engineering.project_files.revision_n`,
 		projectID, revision.Number, revision.DeployedAt, config,
 	); err != nil {
 		return fmt.Errorf("cannot save the project file of project %s: %w", projectID, err)

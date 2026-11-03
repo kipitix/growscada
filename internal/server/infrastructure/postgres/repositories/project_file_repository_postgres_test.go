@@ -130,6 +130,34 @@ func TestProjectFileRepository_SavesAndFindsTheLastProjectFile(t *testing.T) {
 	}
 }
 
+func TestProjectFileRepository_AnOlderDeployChangesNothing(t *testing.T) {
+	cleanProjects(t)
+	project := mustCreateProject(t, repositories.NewProjectRepositoryPostgres(testDB), "Racing")
+	repo := repositories.NewProjectFileRepositoryPostgres(testDB)
+	ctx := context.Background()
+	at := time.Date(2026, 11, 3, 11, 0, 0, 0, time.UTC)
+
+	second := projectFileOf(project.ID().UUID())
+	second.Tags = nil
+	if err := repo.Save(ctx, project.ID().UUID(), appdto.Revision{Number: 2, DeployedAt: at, Content: second}); err != nil {
+		t.Fatalf("Save revision 2: %v", err)
+	}
+	first := projectFileOf(project.ID().UUID())
+	if err := repo.Save(ctx, project.ID().UUID(), appdto.Revision{Number: 1, DeployedAt: at.Add(-time.Hour), Content: first}); err != nil {
+		t.Fatalf("Save revision 1 after revision 2: %v", err)
+	}
+	found, ok, err := repo.FindByProject(ctx, project.ID().UUID())
+	if err != nil {
+		t.Fatalf("FindByProject: %v", err)
+	}
+	if !ok || found.Number != 2 {
+		t.Fatalf("the copy is revision %d (%v), want 2: a late deploy of an older one is no news", found.Number, ok)
+	}
+	if !sameDocument(t, found.Content, second) {
+		t.Error("the late deploy of revision 1 replaced the copy of revision 2")
+	}
+}
+
 func TestProjectFileRepository_TheProjectTakesItsProjectFileAlong(t *testing.T) {
 	cleanProjects(t)
 	project := mustCreateProject(t, repositories.NewProjectRepositoryPostgres(testDB), "Removed")
