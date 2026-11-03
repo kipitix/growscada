@@ -1,5 +1,23 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.58] - 2026-11-04
+
+### Added
+
+- **Runtime-нода: Deploy, текущая Revision, конфиг Gateway** (задача 35, часть 3; ADR 0011, ADR 0004)
+  - Порт `application.RuntimeNode` получил `Deploy(ctx, projectID, file) (appdto.Revision, error)` и `FindCurrentRevision(ctx, projectID) (appdto.Revision, bool, error)`: номер и время ревизии назначает Runtime-нода, документ чужого проекта — `runtime.ErrInvalidInput`; прежние методы и их поведение сохранены
+  - `application/runtime.RevisionService`: `Deploy` пишет ревизию через `RevisionRepository.CreateRevision` (вся транзакция — в репозитории) и **после коммита** публикует `revision_created` через `eventbus.AsyncPublisher` — без outbox, at-most-once, как `tag_updated`; `FindCurrent` отдаёт текущую ревизию. `inprocess.NewRuntimeNode` и `main.go` прокидывают сервис
+  - Событие `revision_created` — ContentEvent проекта (`{id: project_id, revision, deployed_at}`), попадает только в поток своего проекта; **REST API 0.10** (MINOR, пока MAJOR = 0): поля `revision` и `deployed_at` в `Event`, схема `schemas/api/0.10.json`
+  - `DeviceConfigService` переехал в `application/runtime` и собирает конфигурацию Device Gateway из работающей Revision — `runtime.devices`, `runtime.environments`, `runtime.environment_devices`, `runtime.tags` — в одной REPEATABLE READ транзакции, Draft не участвует: Device вне Revision (спящий токен) — 403, нет Environment или пары — 404, токен не удаляется и не меняется; Project, помеченный удалённым, конфигурацию больше не отдаёт (`ErrProjectNotFound`)
+  - Сид: копии Gateway-фикстур (`sim`/`bench`, `gateway`/`lab`) в `runtime.devices`/`environments`/`environment_devices` — без них `GET /device/config` на чистой БД отвечал 403, а Bruno и симулятор не проходили
+  - Тесты: две ревизии подряд с растущим `deployed_at` и `UNIQUE` при параллельных Deploy; `revision_created` публикуется после коммита и не публикуется при ошибке; гонка моста с Deploy — копия вне Revision не выживает; конфиг отвечает по копиям и не видит Device, которого нет в Revision, но чей токен жив
+
+### Changed
+
+- **Мост Draft→Runtime молчит у проекта с Revision** (ADR 0011, поправка 2026-11-04): `UpsertDefinitions` и `Delete` в `postgres/runtime` берут тот же advisory-lock, что `CreateRevision`, и в той же транзакции проверяют наличие Revision, поэтому копии принадлежат работающей Revision. Tag, созданный во время Deploy, попадает в **следующую** ревизию, а запись его значения до неё — 404; до первой Revision мост по-прежнему заполняет копии
+- `appdto.DeviceConfig` удалён: конфигурация Gateway — DTO Runtime-ноды (`application/runtime.DeviceConfig`)
+- Симулятор и его e2e-тесты деплоят проект через `servertest.DeployProject`; `AGENTS.md` и ADR 0011 описывают мост и конфиг Gateway по новому поведению
+
 ## [0.0.57] - 2026-11-04
 
 ### Added
