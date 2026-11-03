@@ -1,0 +1,35 @@
+info:
+  name: get the orphan device token
+  type: http
+  seq: 88
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/devices/{{DEVICE_ID}}/token
+  auth: inherit
+
+docs: |
+  The Device `sim` was removed just before, but its token was not: a token
+  outlives its Device (a Deploy can take the Device out of the running
+  Revision, the Draft can forget it). Its metadata stays readable so that the
+  UI shows the orphan and people can revoke it (task 66).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.device_id'
+      operator: eq
+      value: '"{{DEVICE_ID}}"'
+    - expression: 'res.body.fingerprint'
+      operator: eq
+      value: '"gsc_dev_7431b63b"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

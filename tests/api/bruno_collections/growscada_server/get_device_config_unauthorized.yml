@@ -24,6 +24,9 @@ runtime:
     - expression: 'res.headers["content-type"]'
       operator: eq
       value: 'application/problem+json'
+    - expression: 'res.headers["www-authenticate"]'
+      operator: eq
+      value: 'Bearer'
 
 settings:
   encodeUrl: true

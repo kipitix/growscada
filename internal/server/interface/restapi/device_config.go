@@ -34,6 +34,12 @@ func NewDeviceConfigHandler(s application.DeviceConfigService, tokens runtimeapp
 // outlived a Deploy — is refused with 403, so the Gateway waits instead of
 // failing for good.
 func (h DeviceConfigHandlers) GetDeviceConfig(w http.ResponseWriter, r *http.Request) {
+	// Authenticated first: an unauthenticated request is a 401, whatever its
+	// query says.
+	token, ok := authenticateDevice(w, r, h.tokens)
+	if !ok {
+		return
+	}
 	query := r.URL.Query()
 	rawEnvironmentID := query.Get(apiv0.DeviceConfigQueryEnvironment)
 	if rawEnvironmentID == "" {
@@ -43,10 +49,6 @@ func (h DeviceConfigHandlers) GetDeviceConfig(w http.ResponseWriter, r *http.Req
 	environmentID, err := uuid.Parse(rawEnvironmentID)
 	if err != nil {
 		sendProblem(w, NewBadRequest(apiv0.DeviceConfigQueryEnvironment+": '"+rawEnvironmentID+"' is not a valid UUID", r.URL.Path))
-		return
-	}
-	token, ok := authenticateDevice(w, r, h.tokens)
-	if !ok {
 		return
 	}
 	config, err := h.service.Config(r.Context(), token.ProjectID, token.DeviceID, environmentID)

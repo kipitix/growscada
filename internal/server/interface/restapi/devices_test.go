@@ -14,7 +14,9 @@ import (
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/domain/device"
+	"github.com/kipitix/growscada/internal/server/domain/devicetoken"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
@@ -306,6 +308,47 @@ func TestDeviceTokens_IssueRotateRevoke(t *testing.T) {
 	}
 }
 
+// TestDeviceTokens_OrphanTokenStaysVisibleAndRevocable: a token outlives its
+// Device — a Deploy can take the Device out of the running Revision, the Draft
+// can forget it — and an orphaned one must still be readable and revocable
+// through the Device it names (task 66 shows them in the UI).
+func TestDeviceTokens_OrphanTokenStaysVisibleAndRevocable(t *testing.T) {
+	cleanDevicesRest(t)
+	router := newServices().router()
+	device := createDeviceRest(t, router, "sim")
+	tokenPath := mainPath + "/devices/" + device.ID.String() + "/token"
+	issued := issueTokenRest(t, router, device.ID)
+
+	if rec := serve(router, http.MethodDelete, mainPath+"/devices/"+device.ID.String(), nil); rec.Code != http.StatusOK {
+		t.Fatalf("DELETE device: %d %s", rec.Code, rec.Body)
+	}
+	rec := serve(router, http.MethodGet, tokenPath, nil)
+	found := decodeBody[apiv0.DeviceTokenMetadataResponse](t, rec)
+	if rec.Code != http.StatusOK || found.DeviceID != device.ID {
+		t.Errorf("GET the orphan token: %d %+v", rec.Code, found)
+	}
+	secret, err := devicetoken.ParseSecret(issued)
+	if err != nil {
+		t.Fatalf("the issued token: %v", err)
+	}
+	if found.Fingerprint != secret.Fingerprint() {
+		t.Errorf("GET the orphan token fingerprint = %q, want %q", found.Fingerprint, secret.Fingerprint())
+	}
+	if rec := serve(router, http.MethodPost, tokenPath, nil); rec.Code != http.StatusNotFound {
+		t.Errorf("issue a token for the removed device: %d, want 404", rec.Code)
+	}
+	if rec := serve(router, http.MethodPost, tokenPath+"/rotate", nil); rec.Code != http.StatusNotFound {
+		t.Errorf("rotate the token of the removed device: %d, want 404", rec.Code)
+	}
+	rec = serve(router, http.MethodDelete, tokenPath, nil)
+	if rec.Code != http.StatusOK {
+		t.Errorf("DELETE the orphan token: %d %s", rec.Code, rec.Body)
+	}
+	if rec := serve(router, http.MethodDelete, tokenPath, nil); rec.Code != http.StatusNotFound {
+		t.Errorf("DELETE the revoked orphan token: %d, want 404", rec.Code)
+	}
+}
+
 func TestDeviceConfig(t *testing.T) {
 	cleanDevicesRest(t)
 	router := newServices().router()
@@ -342,6 +385,8 @@ func TestDeviceConfig(t *testing.T) {
 
 	if rec := serve(router, http.MethodGet, configPath, nil); rec.Code != http.StatusUnauthorized {
 		t.Errorf("without a token: %d, want 401", rec.Code)
+	} else if got := rec.Header().Get("WWW-Authenticate"); got != "Bearer" {
+		t.Errorf("a 401 without a challenge: WWW-Authenticate = %q", got)
 	}
 	if rec := serveAs(router, http.MethodGet, configPath, nil, "Bearer gsc_dev_"+strings.Repeat("0", 64)); rec.Code != http.StatusUnauthorized {
 		t.Errorf("an unknown token: %d, want 401", rec.Code)
@@ -352,6 +397,9 @@ func TestDeviceConfig(t *testing.T) {
 	noEnvironment := apiv0.PathPrefix + "/device/config"
 	if rec := serveAs(router, http.MethodGet, noEnvironment, nil, "Bearer "+token); rec.Code != http.StatusBadRequest {
 		t.Errorf("without an environment: %d, want 400", rec.Code)
+	}
+	if rec := serve(router, http.MethodGet, noEnvironment, nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("without a token and an environment: %d, want 401 before 400", rec.Code)
 	}
 	otherEnvironment := apiv0.PathPrefix + "/device/config?" + apiv0.DeviceConfigQueryEnvironment + "=" + uuid.NewString()
 	if rec := serveAs(router, http.MethodGet, otherEnvironment, nil, "Bearer "+token); rec.Code != http.StatusNotFound {
@@ -483,5 +531,20 @@ func TestDeviceEvents_CarriesTheConfigurationOnly(t *testing.T) {
 	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), `"type":"device_updated"`) })
 	if strings.Contains(rec.body(), "tag_created") {
 		t.Errorf("a Gateway's stream carried a Tag event: %s", rec.body())
+	}
+
+	// The events of the Gateway's own Project reach it, though they go to the
+	// server's stream; another Project's do not.
+	bus.Publish(project.NewProjectUpdatedEvent(mainProjectID))
+	bus.Publish(project.NewProjectCreatedEvent(id.NewID[project.Project]()))
+	bus.Publish(device.NewDeviceUpdatedEvent(id.NewID[device.Device](), mainProjectID))
+	waitFor(t, time.Second, func() bool {
+		return strings.Count(rec.body(), `"type":"device_updated"`) == 2
+	})
+	if !strings.Contains(rec.body(), `"type":"project_updated"`) {
+		t.Errorf("a Gateway's stream did not carry its Project's event: %s", rec.body())
+	}
+	if strings.Contains(rec.body(), `"type":"project_created"`) {
+		t.Errorf("a Gateway's stream carried another Project's event: %s", rec.body())
 	}
 }

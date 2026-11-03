@@ -50,7 +50,8 @@ type eventClient struct {
 // eventStreams are the streams a client follows: the server's, and the one
 // project's whose ID is project (uuid.Nil: none). gateway marks a Device
 // Gateway's stream: it follows its project's stream but takes the
-// configuration events alone (gatewayConfigEvent).
+// configuration events alone (gatewayConfigEvent) plus the events of its own
+// Project.
 type eventStreams struct {
 	server  bool
 	project uuid.UUID
@@ -63,6 +64,21 @@ func (s eventStreams) follows(stream uuid.UUID) bool {
 		return s.server
 	}
 	return stream == s.project
+}
+
+// accepts reports whether a client of s takes e of stream: the streams it
+// follows, and, for a Device Gateway, the configuration events alone — plus
+// the events of its own Project, which go to the server's stream (a deleted
+// Project takes the Gateway's configuration with it).
+func (s eventStreams) accepts(stream uuid.UUID, e event.Event) bool {
+	if s.follows(stream) {
+		return !s.gateway || gatewayConfigEvent(e)
+	}
+	if !s.gateway {
+		return false
+	}
+	projectEvent, ok := e.(project.ProjectEvent)
+	return ok && projectEvent.ProjectID().UUID() == s.project
 }
 
 // close ends the client's stream by closing its channel. Called with the
@@ -150,10 +166,7 @@ func (h *eventHub) broadcast(e event.Event) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for c := range h.clients {
-		if c.closed || !c.streams.follows(stream) {
-			continue
-		}
-		if c.streams.gateway && !gatewayConfigEvent(e) {
+		if c.closed || !c.streams.accepts(stream, e) {
 			continue
 		}
 		select {
@@ -166,10 +179,10 @@ func (h *eventHub) broadcast(e event.Event) {
 }
 
 // gatewayConfigEvent reports whether e changes what a Device Gateway must
-// know: its Device, its Environment or their pair (a Project event included,
-// since a deleted Project takes them with it). The rest of the project's
-// content — a Tag value above all — is not the Gateway's business: its stream
-// carries the configuration alone.
+// know: its Device, its Environment or their pair, and the events of a
+// Project itself (a deleted Project takes them with it). The rest of the
+// project's content — a Tag value above all — is not the Gateway's business:
+// its stream carries the configuration alone.
 func gatewayConfigEvent(e event.Event) bool {
 	switch e.(type) {
 	case device.DeviceEvent, device.EnvironmentEvent, device.EnvironmentDeviceEvent, project.ProjectEvent:
@@ -178,13 +191,11 @@ func gatewayConfigEvent(e event.Event) bool {
 	return false
 }
 
-// wantsEvent reports whether a connected client of stream takes e: any
-// follower of the stream, unless every one of them is a Gateway's and e is
-// no configuration event. Called with mu held.
+// wantsEvent reports whether a connected client of stream takes e. Called
+// with mu held.
 func (h *eventHub) wantsEvent(stream uuid.UUID, e event.Event) bool {
-	config := gatewayConfigEvent(e)
 	for c := range h.clients {
-		if c.streams.follows(stream) && (!c.streams.gateway || config) {
+		if c.streams.accepts(stream, e) {
 			return true
 		}
 	}

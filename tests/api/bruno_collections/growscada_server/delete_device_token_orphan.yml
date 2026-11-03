@@ -1,0 +1,34 @@
+info:
+  name: delete the orphan device token
+  type: http
+  seq: 89
+
+http:
+  method: DELETE
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/devices/{{DEVICE_ID}}/token
+  auth: inherit
+
+docs: |
+  An orphaned token is revocable: the route names the Device the token acts
+  for, and the Device need not exist any more. Revocation is explicit, as for
+  any token.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.device_id'
+      operator: eq
+      value: '"{{DEVICE_ID}}"'
+    - expression: 'res.body.fingerprint'
+      operator: eq
+      value: '"gsc_dev_7431b63b"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

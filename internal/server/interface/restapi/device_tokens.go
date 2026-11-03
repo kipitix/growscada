@@ -14,9 +14,11 @@ import (
 // tokens are the Runtime node's (ADR 0011): on a server without that role
 // there is no management at all, and the routes answer 404.
 //
-// The Device is checked in the Draft through the Engineering node's service:
-// the route names a Device of a project, and a token is never issued for one
-// that does not exist.
+// Issuing and rotating check the Device in the Draft through the Engineering
+// node's service: a token is never issued for a Device that does not exist.
+// Reading and revoking do not: a token outlives its Device (a Deploy can take
+// it out of the running Revision, the Draft can forget it), and an orphaned
+// token must stay visible and revocable — the UI shows those (task 66).
 type DeviceTokensHandlers struct {
 	tokens  runtimeapp.DeviceTokenService
 	devices application.DeviceService
@@ -62,9 +64,10 @@ func (h DeviceTokensHandlers) PostDeviceTokenRotate(w http.ResponseWriter, r *ht
 
 // DeleteDeviceToken handles DELETE
 // /projects/{project_id}/devices/{device_id}/token: revokes the token and
-// returns its metadata. A Device without a token gives 404.
+// returns its metadata. A Device without a token gives 404; a Device that does
+// not exist any more does not get in the way of revoking its token.
 func (h DeviceTokensHandlers) DeleteDeviceToken(w http.ResponseWriter, r *http.Request) {
-	projectID, deviceID, ok := h.deviceOf(w, r)
+	projectID, deviceID, ok := h.tokenOf(w, r)
 	if !ok {
 		return
 	}
@@ -78,9 +81,10 @@ func (h DeviceTokensHandlers) DeleteDeviceToken(w http.ResponseWriter, r *http.R
 
 // GetDeviceToken handles GET
 // /projects/{project_id}/devices/{device_id}/token: the token's metadata, the
-// secret never included. A Device without a token gives 404.
+// secret never included. A Device without a token gives 404; a Device that
+// does not exist any more does not hide its token.
 func (h DeviceTokensHandlers) GetDeviceToken(w http.ResponseWriter, r *http.Request) {
-	projectID, deviceID, ok := h.deviceOf(w, r)
+	projectID, deviceID, ok := h.tokenOf(w, r)
 	if !ok {
 		return
 	}
@@ -92,10 +96,10 @@ func (h DeviceTokensHandlers) GetDeviceToken(w http.ResponseWriter, r *http.Requ
 	sendJSONResponse(w, http.StatusOK, newDeviceTokenMetadataResponse(found))
 }
 
-// deviceOf parses the path and checks that the Device is one of the Project's.
+// tokenOf parses the path and checks that this server manages tokens at all.
 // Without a token service (a server with the Engineering role alone) there is
 // no management: 404. On failure it has already sent the problem.
-func (h DeviceTokensHandlers) deviceOf(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, bool) {
+func (h DeviceTokensHandlers) tokenOf(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, bool) {
 	projectID, ok := pathUUID(w, r, projectResource)
 	if !ok {
 		return uuid.Nil, uuid.Nil, false
@@ -106,6 +110,17 @@ func (h DeviceTokensHandlers) deviceOf(w http.ResponseWriter, r *http.Request) (
 	}
 	if h.tokens == nil {
 		sendProblem(w, NewNotFound(deviceTokenResource.name, deviceID.String(), r.URL.Path))
+		return uuid.Nil, uuid.Nil, false
+	}
+	return projectID, deviceID, true
+}
+
+// deviceOf parses the path and checks that the Device is one of the Project's:
+// issuing and rotating need the Device to exist. On failure it has already
+// sent the problem.
+func (h DeviceTokensHandlers) deviceOf(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, bool) {
+	projectID, deviceID, ok := h.tokenOf(w, r)
+	if !ok {
 		return uuid.Nil, uuid.Nil, false
 	}
 	if _, err := h.devices.FindDeviceByID(r.Context(), projectID, deviceID); err != nil {

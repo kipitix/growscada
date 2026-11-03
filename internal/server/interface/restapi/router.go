@@ -218,6 +218,10 @@ func sendJSONResponse(w http.ResponseWriter, status int, data any) {
 // sendProblem writes Problem Details as application/problem+json (RFC 7807),
 // with the status the problem states.
 func sendProblem(w http.ResponseWriter, p *apiv0.Problem) {
+	if p.Status == http.StatusUnauthorized {
+		// RFC 9110: a 401 carries at least one challenge.
+		w.Header().Set("WWW-Authenticate", "Bearer")
+	}
 	writeJSON(w, p.Status, "application/problem+json", p)
 }
 
