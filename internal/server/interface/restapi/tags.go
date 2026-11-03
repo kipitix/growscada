@@ -145,7 +145,9 @@ func (h TagsHandlers) DeleteTagsByID(w http.ResponseWriter, r *http.Request) {
 // people when there is none (user authentication is task 50). A token of
 // another project cannot write here (403); whether it supplies this Tag is
 // the Runtime node's check in the same UPDATE (tag.ErrTagNotSuppliedByDevice,
-// 403), so a Device writes its own Tags and nothing else.
+// 403), so a Device writes its own Tags and nothing else. The writer is
+// resolved before the body is decoded: a request the server cannot
+// authenticate is a 401, whatever its body says.
 func (h TagsHandlers) PatchTagsValue(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := pathUUID(w, r, projectResource)
 	if !ok {
@@ -153,11 +155,6 @@ func (h TagsHandlers) PatchTagsValue(w http.ResponseWriter, r *http.Request) {
 	}
 	tagID, ok := pathUUID(w, r, tagResource)
 	if !ok {
-		return
-	}
-
-	var request apiv0.UpdateTagRequest
-	if !decodeRequest(w, r, &request) {
 		return
 	}
 
@@ -172,6 +169,11 @@ func (h TagsHandlers) PatchTagsValue(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		deviceID = token.DeviceID
+	}
+
+	var request apiv0.UpdateTagRequest
+	if !decodeRequest(w, r, &request) {
+		return
 	}
 
 	written, err := h.states.SetTagValue(r.Context(), projectID, newSetTagValueInput(request, tagID, deviceID))

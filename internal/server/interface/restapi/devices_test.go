@@ -474,6 +474,15 @@ func TestPatchTagValue_DeviceToken(t *testing.T) {
 	if rec := serveAs(router, http.MethodPatch, suppliedPath, body, "Bearer user-secret"); rec.Code != http.StatusUnauthorized {
 		t.Errorf("a bearer without the prefix: %d, want 401", rec.Code)
 	}
+	// The writer is resolved before the body is read: a request the server
+	// cannot authenticate is a 401, not a 400 of its body.
+	invalidBody := apiv0.UpdateTagRequest{Value: "42", Quality: "no-such-quality"}
+	if rec := serveAs(router, http.MethodPatch, suppliedPath, invalidBody, "Bearer gsc_dev_"+strings.Repeat("0", 64)); rec.Code != http.StatusUnauthorized {
+		t.Errorf("an unknown token with an invalid body: %d, want 401", rec.Code)
+	}
+	if rec := serveAs(router, http.MethodPatch, suppliedPath, invalidBody, "Bearer "+token); rec.Code != http.StatusBadRequest {
+		t.Errorf("the supplier with an invalid body: %d, want 400", rec.Code)
+	}
 }
 
 func TestPatchTagValue_TokenOfAnotherProject(t *testing.T) {
