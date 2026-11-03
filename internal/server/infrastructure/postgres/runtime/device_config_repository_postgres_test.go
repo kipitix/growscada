@@ -12,6 +12,7 @@ import (
 
 	projectv0 "github.com/kipitix/growscada/contract/project/v0"
 	"github.com/kipitix/growscada/internal/server/domain/device"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 	runtimepg "github.com/kipitix/growscada/internal/server/infrastructure/postgres/runtime"
 )
 
@@ -102,6 +103,34 @@ func TestFindConfig_OutsideTheRevision(t *testing.T) {
 	mustCreateRevision(t, revisions, projectID.UUID(), documentOf(projectID), time.Now())
 	if _, err := repo.FindConfig(ctx, projectID.UUID(), deviceID, environmentID); !errors.Is(err, device.ErrDeviceNotFound) {
 		t.Errorf("a device outside the running revision: %v, want ErrDeviceNotFound", err)
+	}
+}
+
+// TestFindConfig_OfADeletedProject_IsProjectNotFound: a Project marked deleted
+// stops serving its Gateway's configuration at once, even while the copies it
+// leaves behind and the Device Token outlive the mark until the cleanup.
+func TestFindConfig_OfADeletedProject_IsProjectNotFound(t *testing.T) {
+	projectID, _ := newProject(t)
+	db := postgres.DB(t)
+	ctx := context.Background()
+
+	deviceID, environmentID := uuid.New(), uuid.New()
+	mustCreateRevision(t, runtimepg.NewRevisionRepositoryPostgres(db), projectID.UUID(),
+		documentOf(projectID,
+			withDevices(projectv0.Device{ID: deviceID, Name: "sim", Protocol: "simulation"}),
+			withEnvironments(projectv0.Environment{ID: environmentID, Name: "bench"}),
+			withEnvironmentDevices(projectv0.EnvironmentDevice{EnvironmentID: environmentID, DeviceID: deviceID}),
+		), time.Now())
+
+	repo := runtimepg.NewDeviceConfigRepositoryPostgres(db)
+	if _, err := repo.FindConfig(ctx, projectID.UUID(), deviceID, environmentID); err != nil {
+		t.Fatalf("FindConfig of a live project: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE projects SET deleted_at = now() WHERE id = $1`, projectID.UUID()); err != nil {
+		t.Fatalf("mark the project deleted: %v", err)
+	}
+	if _, err := repo.FindConfig(ctx, projectID.UUID(), deviceID, environmentID); !errors.Is(err, project.ErrProjectNotFound) {
+		t.Errorf("a deleted project: %v, want ErrProjectNotFound", err)
 	}
 }
 

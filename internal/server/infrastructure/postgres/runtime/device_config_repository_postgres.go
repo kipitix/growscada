@@ -11,6 +11,7 @@ import (
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 )
 
 // deviceConfigRepositoryPostgres reads the configuration a Device Gateway
@@ -32,14 +33,24 @@ func NewDeviceConfigRepositoryPostgres(aDb *sql.DB) runtimeapp.DeviceConfigRepos
 
 // FindConfig reads the Device, its Environment, their pair and the Tags the
 // Device supplies in one transaction, so a Deploy that commits meanwhile
-// cannot mix two Revisions in one answer.
+// cannot mix two Revisions in one answer. The transaction is REPEATABLE READ:
+// READ COMMITTED would give every statement its own snapshot and let a Deploy
+// land between them. A Project marked deleted is not found, as every read of
+// its content.
 func (r deviceConfigRepositoryPostgres) FindConfig(ctx context.Context, projectID, deviceID, environmentID uuid.UUID) (runtimeapp.DeviceConfig, error) {
-	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
 		return runtimeapp.DeviceConfig{}, fmt.Errorf("cannot begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	live, err := isLiveProject(ctx, tx, projectID)
+	if err != nil {
+		return runtimeapp.DeviceConfig{}, err
+	}
+	if !live {
+		return runtimeapp.DeviceConfig{}, id.NotFound(project.ErrProjectNotFound, id.NewID(id.IDWithUUID[project.Project](projectID)))
+	}
 	foundDevice, err := findConfigDevice(ctx, tx, projectID, deviceID)
 	if err != nil {
 		return runtimeapp.DeviceConfig{}, err
@@ -62,6 +73,19 @@ func (r deviceConfigRepositoryPostgres) FindConfig(ctx context.Context, projectI
 		Connection:  connection,
 		Tags:        tags,
 	}, nil
+}
+
+// isLiveProject reports whether the Project is live: a Device Gateway asks for
+// the configuration of a Project that may be on its way out, and its content
+// stops being served as soon as it is marked deleted.
+func isLiveProject(ctx context.Context, tx *sql.Tx, projectID uuid.UUID) (bool, error) {
+	var live bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS (SELECT 1 FROM projects WHERE id = $1 AND deleted_at IS NULL)`, projectID,
+	).Scan(&live); err != nil {
+		return false, fmt.Errorf("cannot read project %s: %w", projectID, err)
+	}
+	return live, nil
 }
 
 func findConfigDevice(ctx context.Context, tx *sql.Tx, projectID, rawDeviceID uuid.UUID) (runtimeapp.DeviceConfigDevice, error) {
