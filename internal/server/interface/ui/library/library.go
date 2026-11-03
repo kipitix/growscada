@@ -28,9 +28,9 @@ type Library struct {
 	libraryID         uuid.UUID
 	// libraryClient is the client of the library libraryID, nil if none: the
 	// key of its lists' loads.
-	libraryClient *apiclient.LibraryClient
-	releases          []apiv0.LibraryReleaseResponse
-	releasesReloader  uiutil.Reloader
+	libraryClient    *apiclient.LibraryClient
+	releases         []apiv0.LibraryReleaseResponse
+	releasesReloader uiutil.Reloader
 	// viewing is the number of the release shown, read-only, in place of the
 	// Draft; 0 for the Draft.
 	viewing     int

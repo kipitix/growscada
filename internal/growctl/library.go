@@ -44,7 +44,9 @@ func (s WidgetTypeStep) Name() string {
 }
 
 // IsChange reports whether executing the step modifies the server.
-func (s WidgetTypeStep) IsChange() bool { return s.Action != ActionUnchanged && s.Action != ActionNotFound }
+func (s WidgetTypeStep) IsChange() bool {
+	return s.Action != ActionUnchanged && s.Action != ActionNotFound
+}
 
 // PinStep is one planned Library Pin of a project: ActionCreate adds it,
 // ActionUpdate switches it from release From, ActionUnchanged leaves it.

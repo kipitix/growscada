@@ -166,4 +166,3 @@ func hasPin(list apiv0.GetLibraryPinsResponse, libraryID uuid.UUID, release int)
 	}
 	return false
 }
-

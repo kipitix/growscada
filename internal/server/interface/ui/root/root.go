@@ -39,7 +39,7 @@ type Root struct {
 	currentMode Mode
 	themeMode   string // "auto" | "light" | "dark"
 	// client is the one client of the REST API, given to every mode.
-	client *apiclient.Client
+	client    *apiclient.Client
 	project   *project.Project
 	operation *operation.Operation
 	// bar follows the event stream of the project of the mode shown (the

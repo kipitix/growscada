@@ -678,11 +678,11 @@ func TestMigrationLibraries_PutsExistingWidgetTypesIntoMain(t *testing.T) {
 	mustExec(`INSERT INTO outbox (type, payload) VALUES ('widget_type_updated', $1)`,
 		`{"timestamp":"2026-10-27T12:00:00Z","id":"`+first.String()+`"}`)
 	mustExec(`INSERT INTO policy_jobs (policy, job_key) VALUES
-	          ('reconcile_widgets_with_widget_type', 'widget_type:`+first.String()+`'),
-	          ('reconcile_widgets_with_widget_type', 'widget_type:`+second.String()+`'),
-	          ('reconcile_widgets_with_widget_type', 'widget_type:`+taken.String()+`'),
-	          ('reconcile_widgets_with_widget_type', 'widget_type:`+first.String()+`/project:`+main+`/scene:`+sceneID.String()+`'),
-	          ('reconcile_widgets_with_widget_type', 'widget_type:`+second.String()+`/project:`+main+`/scene:`+sceneID.String()+`')`)
+	          ('reconcile_widgets_with_widget_type', 'widget_type:` + first.String() + `'),
+	          ('reconcile_widgets_with_widget_type', 'widget_type:` + second.String() + `'),
+	          ('reconcile_widgets_with_widget_type', 'widget_type:` + taken.String() + `'),
+	          ('reconcile_widgets_with_widget_type', 'widget_type:` + first.String() + `/project:` + main + `/scene:` + sceneID.String() + `'),
+	          ('reconcile_widgets_with_widget_type', 'widget_type:` + second.String() + `/project:` + main + `/scene:` + sceneID.String() + `')`)
 
 	provider, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS(filepath.Join(dir, "..", "engineering")),
 		goose.WithTableName("engineering.goose_db_version"))
