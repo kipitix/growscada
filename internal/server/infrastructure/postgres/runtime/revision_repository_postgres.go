@@ -24,7 +24,8 @@ import (
 // (task 35): runtime.revisions, whose config column is the truth about what
 // the Project is running. The copies of the Tag definitions, the Devices, the
 // Environments and their pairs are derived data, rebuilt from the Revision in
-// the transaction that creates it (ADR 0011, amendment 2026-11-03).
+// the transaction that creates it (ADR 0011; the amendment recording the
+// Revision lands with task 35, part 5).
 type revisionRepositoryPostgres struct {
 	db *sql.DB
 }

@@ -165,7 +165,7 @@ func TestCreateRevision_ConcurrentDeploysTakeDistinctNumbers(t *testing.T) {
 	}
 }
 
-func TestCreateRevision_RefusesARevisionNumberTaken(t *testing.T) {
+func TestCreateRevision_TheUniqueKeyIsTheSafetyNet(t *testing.T) {
 	projectID, _ := newProject(t)
 	repo := runtimepg.NewRevisionRepositoryPostgres(postgres.DB(t))
 	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID), time.Now())
@@ -460,6 +460,76 @@ func TestCreateRevision_TheProjectTakesItsRevisionsAlong(t *testing.T) {
 	}
 	if got := countRows(t, `SELECT count(*) FROM runtime.revisions WHERE project_id = $1`, projectID.UUID()); got != 0 {
 		t.Errorf("revisions of the deleted project: %d, want none", got)
+	}
+}
+
+func TestCreateRevision_CopiesTheSupplyingDeviceOfATag(t *testing.T) {
+	projectID, _ := newProject(t)
+	db := postgres.DB(t)
+	repo := runtimepg.NewRevisionRepositoryPostgres(db)
+	deviceID, tagID := uuid.New(), uuid.New()
+
+	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+		withDevices(projectv0.Device{ID: deviceID, Name: "meter", Protocol: "simulation"}),
+		withTags(projectv0.TagDefinition{ID: tagID, Name: "speed", Type: "integer", SupplierDeviceID: &deviceID}),
+	), time.Now())
+
+	var supplier *uuid.UUID
+	if err := db.QueryRowContext(context.Background(), `SELECT device_id FROM runtime.tags WHERE id = $1`, tagID).Scan(&supplier); err != nil {
+		t.Fatalf("read the supplier of the tag: %v", err)
+	}
+	if supplier == nil || *supplier != deviceID {
+		t.Errorf("the supplying device of the tag is %v, want %s: the Runtime node refuses a write by any other", supplier, deviceID)
+	}
+}
+
+func TestCreateRevision_UpdatesTheCopiesOfAKnownDeviceAndEnvironment(t *testing.T) {
+	projectID, _ := newProject(t)
+	db := postgres.DB(t)
+	repo := runtimepg.NewRevisionRepositoryPostgres(db)
+	deviceID, environmentID := uuid.New(), uuid.New()
+	ctx := context.Background()
+
+	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+		withDevices(projectv0.Device{ID: deviceID, Name: "meter", Comment: "old", Protocol: "simulation", Config: projectv0.JSONObject(`{"host": "a"}`)}),
+		withEnvironments(projectv0.Environment{ID: environmentID, Name: "bench", Comment: "old"}),
+	), time.Now())
+
+	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+		withDevices(projectv0.Device{ID: deviceID, Name: "meter-2", Comment: "new", Protocol: "modbus", Config: projectv0.JSONObject(`{"host": "b"}`)}),
+		withEnvironments(projectv0.Environment{ID: environmentID, Name: "lab", Comment: "new"}),
+	), time.Now())
+
+	var name, comment, protocol string
+	var config []byte
+	if err := db.QueryRowContext(ctx,
+		`SELECT name, comment, protocol, config FROM runtime.devices WHERE id = $1`, deviceID,
+	).Scan(&name, &comment, &protocol, &config); err != nil {
+		t.Fatalf("read the device copy: %v", err)
+	}
+	if name != "meter-2" || comment != "new" || protocol != "modbus" || !strings.Contains(string(config), `"b"`) {
+		t.Errorf("the device copy is %s/%s/%s/%s, want the values of the new revision", name, comment, protocol, config)
+	}
+	var environmentName, environmentComment string
+	if err := db.QueryRowContext(ctx,
+		`SELECT name, comment FROM runtime.environments WHERE id = $1`, environmentID,
+	).Scan(&environmentName, &environmentComment); err != nil {
+		t.Fatalf("read the environment copy: %v", err)
+	}
+	if environmentName != "lab" || environmentComment != "new" {
+		t.Errorf("the environment copy is %s/%s, want the values of the new revision", environmentName, environmentComment)
+	}
+}
+
+func TestCreateRevision_RefusesADocumentOfAnotherProject(t *testing.T) {
+	projectID, _ := newProject(t)
+	repo := runtimepg.NewRevisionRepositoryPostgres(postgres.DB(t))
+	otherID := id.NewID[project.Project]()
+
+	if _, err := repo.CreateRevision(context.Background(), projectID.UUID(), documentOf(otherID), time.Now()); err == nil {
+		t.Fatal("the document of another project was stored")
+	} else if !strings.Contains(err.Error(), "document of project") {
+		t.Errorf("error %v, want a refusal naming the document's project", err)
 	}
 }
 

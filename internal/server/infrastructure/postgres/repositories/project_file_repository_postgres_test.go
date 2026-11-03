@@ -130,6 +130,17 @@ func TestProjectFileRepository_SavesAndFindsTheLastProjectFile(t *testing.T) {
 	}
 }
 
+func TestProjectFileRepository_RefusesTheFileOfAnotherProject(t *testing.T) {
+	cleanProjects(t)
+	project := mustCreateProject(t, repositories.NewProjectRepositoryPostgres(testDB), "Mismatched")
+	repo := repositories.NewProjectFileRepositoryPostgres(testDB)
+
+	file := projectFileOf(uuid.New())
+	if err := repo.Save(context.Background(), project.ID().UUID(), appdto.Revision{Number: 1, DeployedAt: time.Now(), Content: file}); err == nil {
+		t.Fatal("the project file of another project was stored")
+	}
+}
+
 func TestProjectFileRepository_AnOlderDeployChangesNothing(t *testing.T) {
 	cleanProjects(t)
 	project := mustCreateProject(t, repositories.NewProjectRepositoryPostgres(testDB), "Racing")

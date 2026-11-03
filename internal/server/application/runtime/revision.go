@@ -13,7 +13,7 @@ import (
 // snapshot of a Project's configuration, created by a Deploy (task 35). Its
 // Content is the ProjectFile as it was delivered; the Runtime node rebuilds
 // its copies of the Tag definitions, the Devices and the Environments from it
-// and keeps the Tag states as they are.
+// and keeps the Tag states of the Tags that stay unchanged.
 //
 // The Engineering node has its own appdto.Revision for the same document: the
 // roles never share their packages (ADR 0011), and the composition of the two
