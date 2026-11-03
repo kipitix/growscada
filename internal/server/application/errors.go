@@ -30,3 +30,19 @@ func invalidInput(err error) error {
 // (retryOnRace). The error also matches the aggregate's conflict; unlike an
 // edit conflict there is nothing for the caller to reload, only to retry later.
 var ErrRaceLost = errors.New("write race lost on every attempt")
+
+// ErrNothingToDeploy matches (errors.Is) a Deploy refused because the Draft is
+// the Revision the Project runs unchanged (task 35, Q9), as
+// library.ErrDraftChanged refuses an unchanged Release.
+var ErrNothingToDeploy = errors.New("nothing to deploy")
+
+// ErrRevisionCopyNotSaved matches (errors.Is) a Deploy whose Revision the
+// Runtime node created but whose copy the Engineering node failed to save
+// (task 35, Q8): the Revision is active and the Project runs it; only the
+// Engineering node's copy — a cache for the UI — is missing, and the next
+// Deploy compares with the Revision, not the copy.
+var ErrRevisionCopyNotSaved = errors.New("revision is active, its copy is not saved")
+
+// ErrNoRevisionToDiscard matches (errors.Is) a Discard refused because the
+// Project has no Revision to reset its Draft to (task 35, Q10).
+var ErrNoRevisionToDiscard = errors.New("nothing to discard: the project runs no revision")

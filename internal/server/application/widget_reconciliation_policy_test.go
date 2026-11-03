@@ -96,7 +96,7 @@ func newReconciliation(t *testing.T, wiring reconciliationWiring) *reconciliatio
 				repositories.NewLibraryReleaseRepositoryPostgres(testDB), repositories.NewWidgetTypeRepositories(testDB)),
 			application.NewUnbindDeletedTagPolicy(projects, policyScopes),
 			application.NewProjectCleanupPolicy(projects, policyScopes, runtimeNode),
-			application.NewRuntimeTagDefinitionsPolicy(policyScopes, runtimeNode),
+			application.NewDiscardProjectPolicy(projects, policyScopes, repositories.NewLibraryReleaseRepositoryPostgres(testDB), runtimeNode),
 		},
 		outbox.WithRetryPause(time.Hour, time.Hour))
 	r.dispatcher = outbox.NewDispatcher(testDB, func(e event.Event) { r.delivered = append(r.delivered, e) },

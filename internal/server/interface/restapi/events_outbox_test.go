@@ -2,11 +2,13 @@ package restapi_test
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
@@ -38,14 +40,30 @@ func TestEventsHandlers_GetProjectEvents_DeliversCommittedChangesInCommitOrder(t
 	services := newServicesPublishingTo(bus.Publish, onCommit)
 	tagSvc, sceneSvc := services.tags, services.scenes
 
+	created, err := tagSvc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "level", Type: "integer"})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	// The values below are the Runtime node's: they need a Deploy first
+	// (task 35, Q4). It publishes revision_created, before the stream opens.
+	if _, err := services.deploy.Deploy(ctx, mainProject); err != nil && !errors.Is(err, application.ErrNothingToDeploy) {
+		t.Fatalf("deploy: %v", err)
+	}
+	// Drain what was committed before the stream opens: its events are not
+	// this test's sequence.
+	if _, err := dispatcher.DrainOnce(ctx); err != nil {
+		t.Fatalf("DrainOnce: %v", err)
+	}
+
 	h := restapi.NewEventsHandler(bus, services.projects, 100)
 	rec := newSyncRecorder()
 	cancel, done := runProjectEventsHandler(t, h, rec, mainProject)
 	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), ": connected") })
 
-	created, err := tagSvc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "level", Type: "integer"})
-	if err != nil {
-		t.Fatalf("CreateTag: %v", err)
+	// A Tag created after the Deploy fills the stream with tag_created; the
+	// values below are the deployed one's.
+	if _, err := tagSvc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "extra", Type: "integer"}); err != nil {
+		t.Fatalf("CreateTag(extra): %v", err)
 	}
 	sc, err := sceneSvc.CreateScene(ctx, mainProject, appdto.SceneInput{Name: "ordered", Width: 800, Height: 600})
 	if err != nil {

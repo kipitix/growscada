@@ -37,6 +37,8 @@ type testServices struct {
 	tags         application.TagService
 	states       runtimeapp.TagStateService
 	revisions    runtimeapp.RevisionService
+	deploy       application.DeployService
+	discard      application.DiscardService
 	libraries    application.LibraryService
 	widgetTypes  application.WidgetTypeService
 	pins         application.LibraryPinService
@@ -69,11 +71,18 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 	states := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, publish)
 	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(db), publish)
 	deviceTokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(db))
+	runtimeNode := inprocess.NewRuntimeNode(states, deviceTokens, revisions)
 	return testServices{
 		projects:     application.NewProjectService(projectRepo, orgID),
-		tags:         application.NewTagService(content, inprocess.NewRuntimeNode(states, deviceTokens, revisions)),
+		tags:         application.NewTagService(content, runtimeNode),
 		states:       states,
 		revisions:    revisions,
+		deploy: application.NewDeployService(
+			application.NewProjectFileBuilder(content),
+			repositories.NewProjectFileRepositoryPostgres(db),
+			runtimeNode,
+		),
+		discard:      application.NewDiscardService(content, runtimeNode),
 		libraries:    application.NewLibraryService(libraries, releases, widgetTypes, orgID),
 		widgetTypes:  application.NewWidgetTypeService(libraries, widgetTypes, orgID),
 		pins:         application.NewLibraryPinService(content, libraries, releases),
