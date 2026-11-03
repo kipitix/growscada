@@ -63,17 +63,24 @@ func IsTransient(err error) bool {
 }
 
 // IsNoPermission reports whether the server refused the Device: its token is
-// unknown or revoked (401), or the Device may not do what it asked (403: it is
-// not the Tag's supplier, or it is not in the running configuration). A
-// Gateway cannot fix either: a 401 ends it, a 403 at a write stops that Tag.
+// unknown or revoked (401), or the Device may not do what it asked (403).
 func IsNoPermission(err error) bool {
-	return IsUnauthenticated(err) || hasStatus(err, http.StatusForbidden)
+	return IsUnauthenticated(err) || IsForbidden(err)
 }
 
 // IsUnauthenticated reports whether the server refused the Device's token:
-// it is unknown or revoked (401). Nothing the Gateway retries brings it back.
+// it is unknown or revoked (401). Nothing the Gateway retries brings it back,
+// so a Gateway ends.
 func IsUnauthenticated(err error) bool {
 	return hasStatus(err, http.StatusUnauthorized)
+}
+
+// IsForbidden reports whether the server refused the Device's request: it may
+// not do what it asked (403) — it is not the Tag's supplier, or it is not in
+// the configuration it asked about. A Gateway stops writing what a write
+// refusal names, and waits for a configuration refusal to pass.
+func IsForbidden(err error) bool {
+	return hasStatus(err, http.StatusForbidden)
 }
 
 func hasStatus(err error, status int) bool {

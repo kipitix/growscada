@@ -130,15 +130,17 @@ func main() {
 // exitCode maps a Device error to the process's exit code (task 34, part A,
 // "Коды выхода"):
 //
-//   - a token the server refuses (401) or a request it forbids (403) is
-//     ExitNoPerm: the Gateway cannot fix its credentials;
+//   - a token the server refuses (401) is ExitNoPerm: the Gateway cannot fix
+//     its credentials. A 403 never gets here — a refused configuration is
+//     waited for and a refused write stops that Tag (ADR 0004);
 //   - a local config the server's configuration cannot satisfy — a Tag the
 //     Device does not supply, a pattern that does not fit its Tag, an
 //     Environment the project does not have — is ExitConfig;
 //   - anything else (a TLS or URL scheme error, another 4xx) is a protocol
 //     error.
 //
-// Transient failures (network, 5xx) never get here: the Device retries them.
+// Transient failures (network, 5xx) are retried before they get here; the
+// mapping keeps one that escapes from reading as a protocol error.
 func exitCode(err error) int {
 	switch {
 	case devicelink.IsNoPermission(err):

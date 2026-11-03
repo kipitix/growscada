@@ -162,18 +162,20 @@ func (d *Device) connect(ctx context.Context) error {
 }
 
 // fetchConfiguration asks the server for the Device's configuration,
-// retrying while the server is unreachable or failing.
+// retrying while the server is unreachable or failing, and while it says the
+// Device is not in the configuration the Gateway asks about (403): a Deploy or
+// an operator brings it back.
 func (d *Device) fetchConfiguration(ctx context.Context) (apiv0.DeviceConfigResponse, error) {
 	for warned := false; ; {
 		cfg, err := d.source.Configuration(ctx)
 		if err == nil {
 			return cfg, nil
 		}
-		if !devicelink.IsTransient(err) {
+		if !devicelink.IsTransient(err) && !devicelink.IsForbidden(err) {
 			return apiv0.DeviceConfigResponse{}, err
 		}
 		if !warned {
-			d.logger.Warn("server unavailable, waiting for it", "error", err)
+			d.logger.Warn("cannot read the device's configuration yet, waiting", "error", err)
 			warned = true
 		}
 		select {
@@ -287,9 +289,9 @@ func (t *simTag) poke() {
 // Device is running, until ctx is done. The Device's configuration is kept
 // current in the background: on the Gateway's configuration events and, as a
 // fallback, on a timer. It returns an error only if connecting fails for a
-// reason other than ctx being done, or the server refuses the Device while
-// running (a revoked token, a Device that left the configuration): a Gateway
-// cannot fix either.
+// reason other than ctx being done, or the server refuses the Device's token
+// while running (a revoked one): a Gateway cannot fix either. A server that
+// merely refuses the configuration (the Device is not in it) is waited for.
 func (d *Device) Run(ctx context.Context) error {
 	if err := d.connect(ctx); err != nil {
 		if ctx.Err() != nil {
@@ -360,7 +362,8 @@ func (d *Device) runTag(ctx context.Context, t *simTag) error {
 
 // write generates the tag's next value and delivers it, if the Device is
 // running and the Device still supplies the tag. A kicked write repeats the
-// last value unless the pattern has changed since.
+// last value unless the pattern has changed since. A tag the server refuses to
+// write (403) is no longer simulated until the configuration is read again.
 func (d *Device) write(ctx context.Context, t *simTag, kicked bool) error {
 	d.mu.Lock()
 	if !d.running || t.lost || t.gen == nil {
@@ -379,8 +382,9 @@ func (d *Device) write(ctx context.Context, t *simTag, kicked bool) error {
 	err := d.link.Write(ctx, t.tag, value, quality)
 
 	d.mu.Lock()
-	lost := err != nil && ctx.Err() == nil && errors.Is(err, devicelink.ErrTagNotFound)
-	t.lost = t.lost || lost
+	gone := err != nil && ctx.Err() == nil && errors.Is(err, devicelink.ErrTagNotFound)
+	refused := err != nil && ctx.Err() == nil && devicelink.IsForbidden(err)
+	t.lost = t.lost || gone || refused
 	d.inFlight--
 	if d.inFlight == 0 {
 		d.idle.Broadcast()
@@ -389,8 +393,10 @@ func (d *Device) write(ctx context.Context, t *simTag, kicked bool) error {
 
 	switch {
 	case err == nil, ctx.Err() != nil:
-	case lost:
+	case gone:
 		d.logger.Warn("tag deleted on the server, no longer simulated", "tag", t.tag.Name, "error", err)
+	case refused:
+		d.logger.Warn("the server refuses writes of the tag, no longer simulated", "tag", t.tag.Name, "error", err)
 	default:
 		d.logger.Warn("write failed, will retry on the next tick", "tag", t.tag.Name, "error", err)
 	}
@@ -399,8 +405,8 @@ func (d *Device) write(ctx context.Context, t *simTag, kicked bool) error {
 
 // watch keeps the Device's configuration current: it follows the Gateway's
 // configuration event stream, and rereads the configuration on a timer as a
-// fallback. A server that refuses the Device, and a configuration the local
-// one cannot run against, are fatal.
+// fallback. A token the server refuses is fatal; a configuration the server
+// refuses to serve (403) is waited for.
 func (d *Device) watch(ctx context.Context, fatal chan<- error) {
 	kick := make(chan struct{}, 1)
 	poke := func() {
@@ -432,7 +438,7 @@ func (d *Device) followEvents(ctx context.Context, poke func(), fatal chan<- err
 		if ctx.Err() != nil {
 			return
 		}
-		if devicelink.IsNoPermission(err) {
+		if devicelink.IsUnauthenticated(err) {
 			fatal <- fmt.Errorf("the server refused the device: %w", err)
 			return
 		}
@@ -461,9 +467,14 @@ func (d *Device) reloadOnSchedule(ctx context.Context, kick <-chan struct{}, fat
 		err := d.reload(ctx)
 		switch {
 		case err == nil, ctx.Err() != nil:
-		case devicelink.IsNoPermission(err), errors.Is(err, ErrConfig):
+		case devicelink.IsUnauthenticated(err):
 			fatal <- err
 			return
+		case devicelink.IsForbidden(err):
+			// The Device is not in the configuration the Gateway asked about:
+			// its Device may come back, so the refusal is waited for, as on the
+			// first read.
+			d.logger.Warn("the server refuses the device's configuration, waiting", "error", err)
 		default:
 			d.logger.Warn("configuration reload failed, will retry", "error", err)
 		}

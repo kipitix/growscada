@@ -17,14 +17,21 @@ import (
 	"github.com/google/uuid"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/devicelink"
 )
+
+// forbidden is the server's refusal of a request the Device may not make.
+func forbidden() error {
+	return &apiclient.StatusError{Method: http.MethodPost, Problem: apiv0.Problem{Status: http.StatusForbidden}}
+}
 
 // fakeLink is an in-memory devicelink.Link recording every write.
 type fakeLink struct {
 	mu        sync.Mutex
 	writes    []write
 	missing   bool // Write reports the tag as deleted
+	forbidden bool // Write reports the tag as one the Device may not write
 	writeErrs int
 	// block, if set, holds every Write until it is closed.
 	block chan struct{}
@@ -45,6 +52,7 @@ type fakeSource struct {
 	tags       map[string]devicelink.TagType
 	ids        map[string]uuid.UUID
 	failures   int // Configuration fails transiently this many times
+	refusals   int // Configuration is refused (403) this many times
 	configs    int
 	deviceName string
 	notify     func(apiv0.Event) // set once Events is followed
@@ -63,6 +71,10 @@ func (s *fakeSource) Configuration(context.Context) (apiv0.DeviceConfigResponse,
 	if s.failures > 0 {
 		s.failures--
 		return apiv0.DeviceConfigResponse{}, &net503{}
+	}
+	if s.refusals > 0 {
+		s.refusals--
+		return apiv0.DeviceConfigResponse{}, forbidden()
 	}
 	config := apiv0.DeviceConfigResponse{
 		Device:      apiv0.DeviceConfigDeviceResponse{Name: s.deviceName, Protocol: "simulation"},
@@ -100,11 +112,19 @@ func (s *fakeSource) change(tags map[string]devicelink.TagType, deviceName strin
 	}
 }
 
-// forget makes the next Configuration call fail transiently, as an
+// fail makes the next Configuration call fail transiently, as an
 // unreachable server would.
 func (s *fakeSource) fail(times int) {
 	s.mu.Lock()
 	s.failures = times
+	s.mu.Unlock()
+}
+
+// refuse makes the next Configuration calls refused (403), as a server does
+// when the Device is not in the configuration the Gateway asks about.
+func (s *fakeSource) refuse(times int) {
+	s.mu.Lock()
+	s.refusals = times
 	s.mu.Unlock()
 }
 
@@ -133,6 +153,10 @@ func (l *fakeLink) Write(_ context.Context, tag devicelink.Tag, value string, qu
 	if l.missing {
 		l.writeErrs++
 		return devicelink.ErrTagNotFound
+	}
+	if l.forbidden {
+		l.writeErrs++
+		return forbidden()
 	}
 	l.writes = append(l.writes, write{tag.Name, value, quality.String()})
 	return nil
@@ -600,6 +624,50 @@ func TestRun_DeletedTagIsNoLongerWritten(t *testing.T) {
 	defer link.mu.Unlock()
 	if link.writeErrs != 1 {
 		t.Errorf("writes of a deleted tag: got %d, want 1", link.writeErrs)
+	}
+}
+
+// TestRun_ForbiddenWriteStopsTheTag: a write the server refuses (403: the
+// Device is not the Tag's supplier, or has left the configuration) stops the
+// tag instead of being retried every tick.
+func TestRun_ForbiddenWriteStopsTheTag(t *testing.T) {
+	link, source := fakeDevice(map[string]devicelink.TagType{"counter": devicelink.TagTypeInteger})
+	link.forbidden = true
+	d := startDevice(t, testConfig(t, rampConfig), link, source)
+
+	eventually(t, "the tag to be lost", func() bool { return d.Status().Tags[0].Lost })
+	time.Sleep(50 * time.Millisecond)
+	link.mu.Lock()
+	defer link.mu.Unlock()
+	if link.writeErrs != 1 {
+		t.Errorf("writes of a refused tag: got %d, want 1", link.writeErrs)
+	}
+}
+
+// TestRun_ConfigRefusalIsWaitedFor: a 403 of the configuration read means the
+// Device is not in the configuration the Gateway asks about. The Gateway goes
+// on writing and picks the configuration up when the server serves it again.
+func TestRun_ConfigRefusalIsWaitedFor(t *testing.T) {
+	link, source := fakeDevice(map[string]devicelink.TagType{"counter": devicelink.TagTypeInteger})
+	d := runDevice(t, testConfig(t, rampConfig), link, source, Options{ConfigReload: 20 * time.Millisecond})
+	eventually(t, "a write", func() bool { return len(link.snapshot()) > 0 })
+
+	configs, _ := source.snapshot()
+	source.refuse(2)
+	eventually(t, "the refused reads", func() bool {
+		c, _ := source.snapshot()
+		return c >= configs+2
+	})
+
+	// The refusals are behind and writes go on: Run has not ended (its cleanup
+	// would report the error) and the Device is still connected.
+	before := len(link.snapshot())
+	time.Sleep(50 * time.Millisecond)
+	if got := len(link.snapshot()); got <= before {
+		t.Errorf("writes after a refused configuration: %d → %d", before, got)
+	}
+	if d.Status().State != StateConnected {
+		t.Errorf("state after a refused configuration: got %q, want connected", d.Status().State)
 	}
 }
 
