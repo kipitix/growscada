@@ -21,7 +21,7 @@ All primary workflows go through `make`. **Always prefer `make <target>` over ru
 | `make build_server` | Compiles WASM frontend (`app.wasm`) and server binary to `bin/growscada_combined_server/` |
 | `make build_growctl` | Compiles the `growctl` CLI (declarative project and tag manifests, kubectl-style) to `bin/growctl/` |
 | `make build_simulator` | Compiles the device simulator to `bin/growscada_device_simulator/` |
-| `make run_simulator` | `build_simulator` + runs it with `tests/device_simulator/example.yaml` (needs a running server and the tags from `tests/manifests/example_tags.yaml` in project `Main`) |
+| `make run_simulator` | `build_simulator` + runs it with `tests/device_simulator/example.yaml`: the seeded Device `sim`, its Environment `bench` and its token drive the seeded `device.speed` tag (needs a running server) |
 | `make run_simulator_dashboard` | `build_simulator` + runs it with `tests/device_simulator/seed_dashboard.yaml`: drives the seeded tags bound to the "Main Dashboard" scene, visible in Operation right after `make db_up` / `make full_restart` |
 | `make run` | `build_server` + starts server + opens Chromium at `localhost:8080` |
 | `make db_up` | Starts the dev PostgreSQL container via Docker Compose; applies migrations and seeds automatically |

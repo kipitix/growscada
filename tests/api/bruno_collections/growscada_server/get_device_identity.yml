@@ -1,0 +1,39 @@
+info:
+  name: get device identity (gateway)
+  type: http
+  seq: 62
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/device
+  headers:
+    - name: Authorization
+      value: Bearer {{DEVICE_TOKEN}}
+  auth: inherit
+
+docs: |
+  What a Device Token acts for: the Device and the Project that owns it.
+  A Gateway reads it first, because every write names its Project in the path
+  and the token is the only thing that names the Project.
+
+  An unknown or revoked token is `401`, as on every route of the Gateway.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.project_id'
+      operator: eq
+      value: '"{{PROJECT_ID}}"'
+    - expression: 'res.body.device_id'
+      operator: eq
+      value: '"{{DEVICE_ID}}"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

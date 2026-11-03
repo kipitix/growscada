@@ -11,7 +11,8 @@ import (
 
 func TestReadConfig_FillsDefaults(t *testing.T) {
 	cfg, err := ReadConfig(strings.NewReader(`
-project: Main
+token: gsc_dev_test
+environment: bench
 tags:
   - tag: pump.speed
     pattern:
@@ -33,7 +34,8 @@ tags:
 func TestReadConfig_FullExample(t *testing.T) {
 	cfg, err := ReadConfig(strings.NewReader(`
 server: http://scada:9090
-project: Line 1
+token: gsc_dev_test
+environment: bench
 control: 127.0.0.1:9999
 autostart: false
 defaultInterval: 2s
@@ -48,7 +50,7 @@ tags:
 	if err != nil {
 		t.Fatalf("ReadConfig: %v", err)
 	}
-	if cfg.Server != "http://scada:9090" || cfg.Project != "Line 1" || cfg.Control != "127.0.0.1:9999" || *cfg.Autostart {
+	if cfg.Server != "http://scada:9090" || cfg.Token != "gsc_dev_test" || cfg.Environment != "bench" || cfg.Control != "127.0.0.1:9999" || *cfg.Autostart {
 		t.Errorf("device: got %+v", cfg)
 	}
 	if a := cfg.Tags[0]; a.Interval.D != 500*time.Millisecond || a.Quality != devicelink.QualityUncertain || a.Pattern.Period.D != 10*time.Second {
@@ -64,16 +66,17 @@ func TestReadConfig_Rejects(t *testing.T) {
 		name, yaml, wantErr string
 	}{
 		{"empty", "", "config is empty"},
-		{"no project", "tags: [{tag: a, pattern: {kind: constant, value: 1}}]", "project (the project name) is required"},
-		{"unknown field", "project: P\ntagz: []", "field tagz not found"},
-		{"unknown pattern field", "project: P\ntags: [{tag: a, pattern: {kind: constant, value: 1, colour: red}}]", "field colour not found"},
-		{"no tags", "project: P\nserver: http://x", "at least one tag"},
-		{"no tag name", "project: P\ntags: [{pattern: {kind: constant, value: 1}}]", "tag (the tag name) is required"},
-		{"duplicate tag", "project: P\ntags: [{tag: a, pattern: {kind: constant, value: 1}}, {tag: a, pattern: {kind: constant, value: 2}}]", `tag "a" is listed twice`},
-		{"bad quality", "project: P\ntags: [{tag: a, quality: great, pattern: {kind: constant, value: 1}}]", `unknown quality "great"`},
-		{"bad interval", "project: P\ntags: [{tag: a, interval: soon, pattern: {kind: constant, value: 1}}]", "invalid duration"},
-		{"zero interval", "project: P\ntags: [{tag: a, interval: 0s, pattern: {kind: constant, value: 1}}]", "interval must be positive"},
-		{"bad pattern", "project: P\ntags: [{tag: a, pattern: {kind: ramp}}]", `tag "a": pattern ramp: start is required`},
+		{"no token", "environment: bench\ntags: [{tag: a, pattern: {kind: constant, value: 1}}]", "token (the Device Token) is required"},
+		{"no environment", "token: gsc_dev_t\ntags: [{tag: a, pattern: {kind: constant, value: 1}}]", "environment (the Environment name or ID) is required"},
+		{"unknown field", "token: gsc_dev_t\nenvironment: bench\ntagz: []", "field tagz not found"},
+		{"unknown pattern field", "token: gsc_dev_t\nenvironment: bench\ntags: [{tag: a, pattern: {kind: constant, value: 1, colour: red}}]", "field colour not found"},
+		{"no tags", "token: gsc_dev_t\nenvironment: bench\nserver: http://x", "at least one tag"},
+		{"no tag name", "token: gsc_dev_t\nenvironment: bench\ntags: [{pattern: {kind: constant, value: 1}}]", "tag (the tag name) is required"},
+		{"duplicate tag", "token: gsc_dev_t\nenvironment: bench\ntags: [{tag: a, pattern: {kind: constant, value: 1}}, {tag: a, pattern: {kind: constant, value: 2}}]", `tag "a" is listed twice`},
+		{"bad quality", "token: gsc_dev_t\nenvironment: bench\ntags: [{tag: a, quality: great, pattern: {kind: constant, value: 1}}]", `unknown quality "great"`},
+		{"bad interval", "token: gsc_dev_t\nenvironment: bench\ntags: [{tag: a, interval: soon, pattern: {kind: constant, value: 1}}]", "invalid duration"},
+		{"zero interval", "token: gsc_dev_t\nenvironment: bench\ntags: [{tag: a, interval: 0s, pattern: {kind: constant, value: 1}}]", "interval must be positive"},
+		{"bad pattern", "token: gsc_dev_t\nenvironment: bench\ntags: [{tag: a, pattern: {kind: ramp}}]", `tag "a": pattern ramp: start is required`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

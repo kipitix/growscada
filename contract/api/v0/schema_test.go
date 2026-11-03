@@ -22,6 +22,7 @@ func TestSchemaIsCommitted(t *testing.T) {
 			EnvironmentDeviceResponse{}, GetEnvironmentDevicesResponse{}, UpdateEnvironmentDeviceRequest{},
 			DeviceTokenResponse{}, DeviceTokenMetadataResponse{},
 			DeviceConfigResponse{}, DeviceConfigDeviceResponse{}, DeviceConfigEnvironmentResponse{}, DeviceConfigConnectionResponse{}, DeviceConfigTagResponse{},
+			DeviceIdentityResponse{},
 			Event{}, Problem{},
 		},
 	})

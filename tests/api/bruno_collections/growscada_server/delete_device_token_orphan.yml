@@ -1,7 +1,7 @@
 info:
   name: delete the orphan device token
   type: http
-  seq: 89
+  seq: 90
 
 http:
   method: DELETE

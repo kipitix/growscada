@@ -2,6 +2,7 @@ package devicesim_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -13,6 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/devicelink"
 	"github.com/kipitix/growscada/internal/devicesim"
@@ -31,8 +35,11 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// e2eConfig is the simulator's config; the token and the environment name
+// are replaced by the seeded Device's.
 const e2eConfig = `
-project: Main
+token: gsc_dev_placeholder
+environment: placeholder
 defaultInterval: 20ms
 tags:
   - tag: sim.speed
@@ -44,20 +51,24 @@ tags:
     pattern: {kind: constant, value: auto}
 `
 
-// simulator is a running simulator against the real REST API over Postgres.
+// simulator is a running Device Gateway against the real REST API over
+// Postgres, acting for one seeded Device.
 type simulator struct {
 	svc     application.TagService
-	api     *apiclient.ProjectClient // of the project Main, for writes of others
+	api     *apiclient.Client // of the same server, for requests of others
 	control *httptest.Server
-	tags    map[string]appdto.Tag // as created
+	tags    map[string]appdto.Tag // as created; the Device supplies them
+	device  servertest.Device
 }
 
 // startSimulator seeds the config's tags on a fresh server (as growctl apply
-// would) and runs the simulator over the REST API until the test ends.
+// would), creates the Device that supplies them and its Environment and runs
+// the simulator with the Device's token until the test ends.
 func startSimulator(t *testing.T, yaml string, tagTypes map[string]string) *simulator {
 	t.Helper()
-	api, svc := servertest.StartAPI(t, postgres.DB(t))
-	s := &simulator{svc: svc, api: apiclient.New(api.URL, api.Client()).Project(servertest.MainProject), tags: make(map[string]appdto.Tag)}
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
+	s := &simulator{svc: svc, api: apiclient.New(srv.URL, srv.Client()), tags: make(map[string]appdto.Tag)}
+	tagIDs := make([]uuid.UUID, 0, len(tagTypes))
 	for name, tagType := range tagTypes {
 		created, err := svc.CreateTag(context.Background(), servertest.MainProject, appdto.CreateTagInput{
 			Name: name, Type: tagType,
@@ -66,18 +77,26 @@ func startSimulator(t *testing.T, yaml string, tagTypes map[string]string) *simu
 			t.Fatalf("seed %s: %v", name, err)
 		}
 		s.tags[name] = created
+		tagIDs = append(tagIDs, created.ID)
 	}
+	s.device = servertest.NewDevice(t, srv, postgres.DB(t), "sim", tagIDs...)
 
 	cfg, err := devicesim.ReadConfig(strings.NewReader(yaml))
 	if err != nil {
 		t.Fatalf("ReadConfig: %v", err)
 	}
-	cfg.Server = api.URL
-	link := devicelink.NewRESTLink(apiclient.New(cfg.Server, api.Client()), cfg.Project)
-	device := devicesim.New(cfg, link, devicesim.Options{
+	cfg.Server = srv.URL
+	cfg.Token = s.device.Token
+	cfg.Environment = s.device.EnvironmentName
+
+	client := apiclient.New(cfg.Server, srv.Client()).WithDeviceToken(cfg.Token)
+	link := devicelink.NewRESTLink(client, cfg.Token)
+	gateway := devicesim.NewGateway(client, cfg.Environment)
+	device := devicesim.New(cfg, link, gateway, devicesim.Options{
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 	s.control = httptest.NewServer(device.Handler())
+	t.Cleanup(s.control.Close)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -87,15 +106,10 @@ func startSimulator(t *testing.T, yaml string, tagTypes map[string]string) *simu
 		if err := <-done; err != nil {
 			t.Errorf("Run: %v", err)
 		}
-		s.control.Close()
 	})
-	deadline := time.Now().Add(10 * time.Second)
-	for device.Status().State != devicesim.StateConnected {
-		if time.Now().After(deadline) {
-			t.Fatal("timed out waiting for the simulator to connect")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	eventually(t, "the simulator to connect", func() bool {
+		return device.Status().State == devicesim.StateConnected
+	})
 	return s
 }
 
@@ -112,17 +126,12 @@ func (s *simulator) get(t *testing.T, name string) appdto.Tag {
 // eventually polls the tag until cond holds or the deadline passes.
 func (s *simulator) eventually(t *testing.T, name, what string, cond func(appdto.Tag) bool) appdto.Tag {
 	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		got := s.get(t, name)
-		if cond(got) {
-			return got
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("%s: timed out waiting for %s; last %+v", name, what, got)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	var got appdto.Tag
+	eventually(t, what, func() bool {
+		got = s.get(t, name)
+		return cond(got)
+	})
+	return got
 }
 
 // call calls the control API and fails the test unless it answers 200.
@@ -140,6 +149,18 @@ func (s *simulator) call(t *testing.T, method, path, body string) {
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("%s %s: %s %s", method, path, resp.Status, b)
+	}
+}
+
+// eventually polls cond until it holds or the deadline passes.
+func eventually(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -190,26 +211,6 @@ func TestE2E_ValuesAndSeqsFollowPatterns(t *testing.T) {
 	s.eventually(t, "sim.mode", "rewrites", func(tag appdto.Tag) bool { return written(tag, mode, 2) })
 }
 
-// TestE2E_AnotherWriter_TheLatestWriteWins: another writer (an operator, a
-// second Device) writes the tag; no write states a version (ADR 0011), so
-// nobody gets a conflict, and the simulator's next writes win again.
-func TestE2E_AnotherWriter_TheLatestWriteWins(t *testing.T) {
-	s := startSimulator(t, e2eConfig, e2eTags)
-	s.eventually(t, "sim.speed", "a write", func(tag appdto.Tag) bool { return tag.Quality == "good" })
-
-	theirs, err := s.api.SetTagValue(context.Background(), s.tags["sim.speed"].ID, "-1000", "bad")
-	if err != nil {
-		t.Fatalf("another writer's write: %v", err)
-	}
-
-	got := s.eventually(t, "sim.speed", "the simulator to take over again", func(tag appdto.Tag) bool {
-		return tag.Seq > theirs+2 && tag.Quality == "good"
-	})
-	if atoi(t, got.Value) < 0 {
-		t.Errorf("value: got %s, want the ramp's again", got.Value)
-	}
-}
-
 func TestE2E_ControlAPI(t *testing.T) {
 	s := startSimulator(t, e2eConfig, e2eTags)
 	s.eventually(t, "sim.speed", "a write", func(tag appdto.Tag) bool { return tag.Quality == "good" })
@@ -242,32 +243,148 @@ func TestE2E_ControlAPI(t *testing.T) {
 	s.eventually(t, "sim.mode", "writes after start", func(tag appdto.Tag) bool { return written(tag, frozen, 1) })
 }
 
-func TestE2E_RunFailsOnMissingTag(t *testing.T) {
-	api, _ := servertest.StartAPI(t, postgres.DB(t))
+// TestE2E_AnotherWriter_TheLatestWriteWins: a person writes the Tag of a
+// Device — refused, the Device is its supplier — while another writer's write
+// to a Tag of its own does not disturb the patterns.
+func TestE2E_AnotherWriter_CannotWriteTheDevicesTag(t *testing.T) {
+	s := startSimulator(t, e2eConfig, e2eTags)
+	s.eventually(t, "sim.speed", "a write", func(tag appdto.Tag) bool { return tag.Quality == "good" })
+
+	_, err := s.api.Project(servertest.MainProject).SetTagValue(context.Background(), s.tags["sim.speed"].ID, "-1000", "bad")
+
+	if err == nil {
+		t.Errorf("a person wrote a Device's Tag: want a refusal, got %+v", s.get(t, "sim.speed"))
+	}
+	if got := s.get(t, "sim.speed"); atoi(t, got.Value) < 0 {
+		t.Errorf("value: got %+v, want the ramp's", got)
+	}
+}
+
+// TestE2E_MissingTagIsAConfigError: a local config names a Tag the Device does
+// not supply; the Gateway cannot run (ExitConfig of the command).
+func TestE2E_MissingTagIsAConfigError(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+	cfg := simulatorConfig(t, srv.URL, servertest.NewDevice(t, srv, postgres.DB(t), "sim"))
+	// The Device supplies no Tag at all.
+	client := apiclient.New(srv.URL, srv.Client()).WithDeviceToken(cfg.Token)
+	link := devicelink.NewRESTLink(client, cfg.Token)
+
+	err := devicesim.New(cfg, link, devicesim.NewGateway(client, cfg.Environment), devicesim.Options{}).Run(context.Background())
+
+	if !errors.Is(err, devicesim.ErrConfig) || !strings.Contains(err.Error(), `"sim.speed"`) {
+		t.Errorf("got %v, want ErrConfig naming the missing tag", err)
+	}
+}
+
+// TestE2E_UnknownTokenIsNoPermission: a token the server does not know stops
+// the Gateway (ExitNoPerm of the command).
+func TestE2E_UnknownTokenIsNoPermission(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
 	cfg, err := devicesim.ReadConfig(strings.NewReader(e2eConfig))
 	if err != nil {
 		t.Fatalf("ReadConfig: %v", err)
 	}
-	link := devicelink.NewRESTLink(apiclient.New(api.URL, api.Client()), cfg.Project)
+	cfg.Server = srv.URL
+	cfg.Token = "gsc_dev_0000000000000000000000000000000000000000000000000000000000000000"
+	cfg.Environment = "nowhere"
+	client := apiclient.New(srv.URL, srv.Client()).WithDeviceToken(cfg.Token)
 
-	err = devicesim.New(cfg, link, devicesim.Options{}).Run(context.Background())
+	err = devicesim.New(cfg, devicelink.NewRESTLink(client, cfg.Token),
+		devicesim.NewGateway(client, cfg.Environment), devicesim.Options{}).Run(context.Background())
 
-	if err == nil || !strings.Contains(err.Error(), `"sim.speed"`) {
-		t.Errorf("got %v, want an error naming the missing tag", err)
+	if !devicelink.IsNoPermission(err) {
+		t.Errorf("got %v, want no permission", err)
 	}
 }
 
-func TestE2E_RunFailsOnMissingProject(t *testing.T) {
-	api, _ := servertest.StartAPI(t, postgres.DB(t))
-	cfg, err := devicesim.ReadConfig(strings.NewReader(strings.Replace(e2eConfig, "project: Main", "project: Nowhere", 1)))
+// TestE2E_RevokedTokenStopsTheGateway: revocation has no event, so the Gateway
+// learns of it on its next write (401): it stops rather than retrying.
+func TestE2E_RevokedTokenStopsTheGateway(t *testing.T) {
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
+	created, err := svc.CreateTag(context.Background(), servertest.MainProject, appdto.CreateTagInput{
+		Name: "sim.speed", Type: "integer",
+	})
+	if err != nil {
+		t.Fatalf("create tag: %v", err)
+	}
+	device := servertest.NewDevice(t, srv, postgres.DB(t), "sim", created.ID)
+	cfg := simulatorConfigOf(t, singleTagConfig, srv.URL, device)
+	client := apiclient.New(srv.URL, srv.Client()).WithDeviceToken(cfg.Token)
+	d := devicesim.New(cfg, devicelink.NewRESTLink(client, cfg.Token),
+		devicesim.NewGateway(client, cfg.Environment),
+		devicesim.Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), RetryDelay: 10 * time.Millisecond})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- d.Run(ctx) }()
+	eventually(t, "the simulator to connect", func() bool { return d.Status().State == devicesim.StateConnected })
+
+	revokeToken(t, srv, cfg.Token)
+
+	select {
+	case err := <-done:
+		if !devicelink.IsNoPermission(err) {
+			t.Errorf("Run after revocation: got %v, want no permission", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the gateway kept running with a revoked token")
+	}
+}
+
+// singleTagConfig is the simulator's config of one Tag, for the tests that
+// seed a Device with one Tag only.
+const singleTagConfig = `
+token: gsc_dev_placeholder
+environment: placeholder
+defaultInterval: 20ms
+tags:
+  - tag: sim.speed
+    pattern: {kind: ramp, start: 0, rate: 100}
+`
+
+// simulatorConfig is the e2e config for a Device, pointed at srv.
+func simulatorConfig(t *testing.T, serverURL string, device servertest.Device) devicesim.Config {
+	t.Helper()
+	return simulatorConfigOf(t, e2eConfig, serverURL, device)
+}
+
+// simulatorConfigOf is simulatorConfig over the given YAML.
+func simulatorConfigOf(t *testing.T, yaml, serverURL string, device servertest.Device) devicesim.Config {
+	t.Helper()
+	cfg, err := devicesim.ReadConfig(strings.NewReader(yaml))
 	if err != nil {
 		t.Fatalf("ReadConfig: %v", err)
 	}
-	link := devicelink.NewRESTLink(apiclient.New(api.URL, api.Client()), cfg.Project)
+	cfg.Server = serverURL
+	cfg.Token = device.Token
+	cfg.Environment = device.EnvironmentName
+	return cfg
+}
 
-	err = devicesim.New(cfg, link, devicesim.Options{}).Run(context.Background())
-
-	if !errors.Is(err, devicelink.ErrProjectNotFound) || !strings.Contains(err.Error(), `"Nowhere"`) {
-		t.Errorf("got %v, want ErrProjectNotFound naming the project", err)
+// revokeToken revokes the token of the Device by naming it in a delete of the
+// token route: the seeded Device of the test is the only one with a token.
+func revokeToken(t *testing.T, srv *httptest.Server, token string) {
+	t.Helper()
+	var identity apiv0.DeviceIdentityResponse
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+apiv0.PathPrefix+"/device", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatalf("identity: %v", err)
+	}
+	defer resp.Body.Close()
+	if err := json.NewDecoder(resp.Body).Decode(&identity); err != nil {
+		t.Fatalf("identity: %v", err)
+	}
+	req, _ = http.NewRequest(http.MethodDelete,
+		srv.URL+apiv0.PathPrefix+apiv0.ProjectPath(identity.ProjectID.String())+"/devices/"+identity.DeviceID.String()+"/token", nil)
+	resp2, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+	defer resp2.Body.Close()
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("revoke: %s", resp2.Status)
 	}
 }

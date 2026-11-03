@@ -1,7 +1,7 @@
 info:
   name: get device events (SSE stream, gateway)
   type: http
-  seq: 64
+  seq: 65
   tags:
     - manual
 

@@ -23,7 +23,8 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// setup serves the real REST API over Postgres with one integer tag.
+// setup serves the real REST API over Postgres with one integer tag supplied
+// by one Device, and returns a link acting with that Device's token.
 func setup(t *testing.T) (*devicelink.RESTLink, application.TagService, appdto.Tag) {
 	t.Helper()
 	srv, svc := servertest.StartAPI(t, postgres.DB(t))
@@ -33,7 +34,8 @@ func setup(t *testing.T) (*devicelink.RESTLink, application.TagService, appdto.T
 	if err != nil {
 		t.Fatalf("create tag: %v", err)
 	}
-	return devicelink.NewRESTLink(apiclient.New(srv.URL, srv.Client()), servertest.MainProjectName), svc, created
+	device := servertest.NewDevice(t, srv, postgres.DB(t), "pump", created.ID)
+	return devicelink.NewRESTLink(apiclient.New(srv.URL, srv.Client()), device.Token), svc, created
 }
 
 func current(t *testing.T, svc application.TagService, tag appdto.Tag) appdto.Tag {
@@ -60,28 +62,31 @@ func TestResolve_MissingTag(t *testing.T) {
 
 	_, err := link.Resolve(context.Background(), "nope")
 
-	if !errors.Is(err, devicelink.ErrTagNotFound) {
-		t.Errorf("got %v, want ErrTagNotFound", err)
+	if !errors.Is(err, devicelink.ErrTagNotFound) || devicelink.IsTransient(err) {
+		t.Errorf("got %v, want ErrTagNotFound, not transient", err)
 	}
 }
 
-func TestResolve_MissingProject(t *testing.T) {
+// TestResolve_UnknownToken: a token the server does not know is refused, and
+// the Gateway cannot fix it (401, not transient).
+func TestResolve_UnknownToken(t *testing.T) {
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
-	link := devicelink.NewRESTLink(apiclient.New(srv.URL, srv.Client()), "nope")
+	link := devicelink.NewRESTLink(apiclient.New(srv.URL, srv.Client()), "gsc_dev_0000000000000000000000000000000000000000000000000000000000000000")
 
 	_, err := link.Resolve(context.Background(), "pump.speed")
 
-	if !errors.Is(err, devicelink.ErrProjectNotFound) || devicelink.IsTransient(err) {
-		t.Errorf("got %v, want ErrProjectNotFound, not transient", err)
+	if !devicelink.IsNoPermission(err) || devicelink.IsTransient(err) {
+		t.Errorf("got %v, want no permission, not transient", err)
 	}
 }
 
-// TestResolve_TagsOfTheConfiguredProjectOnly: a tag of the same name in
-// another project is not the Device's.
-func TestResolve_TagsOfTheConfiguredProjectOnly(t *testing.T) {
+// TestResolve_TagsOfTheTokensProjectOnly: a tag of the same name in another
+// project is not the Device's; the token names the project.
+func TestResolve_TagsOfTheTokensProjectOnly(t *testing.T) {
 	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 	ctx := context.Background()
-	if _, err := svc.CreateTag(ctx, servertest.MainProject, appdto.CreateTagInput{Name: "pump.speed", Type: "integer"}); err != nil {
+	inMain, err := svc.CreateTag(ctx, servertest.MainProject, appdto.CreateTagInput{Name: "pump.speed", Type: "integer"})
+	if err != nil {
 		t.Fatalf("create tag in Main: %v", err)
 	}
 	client := apiclient.New(srv.URL, srv.Client())
@@ -93,26 +98,21 @@ func TestResolve_TagsOfTheConfiguredProjectOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create tag in Line 1: %v", err)
 	}
+	device := servertest.NewDeviceInProject(t, srv, postgres.DB(t), line.ID, "line-pump", inLine.ID)
 
-	got, err := devicelink.NewRESTLink(client, "Line 1").Resolve(ctx, "pump.speed")
+	got, err := devicelink.NewRESTLink(client, device.Token).Resolve(ctx, "pump.speed")
 
 	if err != nil || got != (devicelink.Tag{ID: inLine.ID, Name: "pump.speed", Type: devicelink.TagTypeBoolean}) {
-		t.Errorf("got %+v, %v; want the tag of project Line 1", got, err)
+		t.Errorf("got %+v, %v; want the tag of project Line 1 (Main's is %s)", got, err, inMain.ID)
 	}
 }
 
 // TestWrite_StatesNoVersion: each write is the latest, whatever was written
-// before it, by the link or by anyone else (ADR 0011); the server numbers
-// them in order.
+// before it (ADR 0011); the server numbers them in order and the Tag
+// definition's version is untouched.
 func TestWrite_StatesNoVersion(t *testing.T) {
-	srv, svc := servertest.StartAPI(t, postgres.DB(t))
+	link, svc, created := setup(t)
 	ctx := context.Background()
-	created, err := svc.CreateTag(ctx, servertest.MainProject, appdto.CreateTagInput{Name: "pump.speed", Type: "integer"})
-	if err != nil {
-		t.Fatalf("create tag: %v", err)
-	}
-	client := apiclient.New(srv.URL, srv.Client())
-	link := devicelink.NewRESTLink(client, servertest.MainProjectName)
 	tag, err := link.Resolve(ctx, "pump.speed")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
@@ -123,19 +123,39 @@ func TestWrite_StatesNoVersion(t *testing.T) {
 			t.Fatalf("Write %s: %v", v, err)
 		}
 	}
-	// Someone else writes the tag meanwhile: the link's next write still goes.
-	theirs, err := client.Project(servertest.MainProject).SetTagValue(ctx, created.ID, "99", "bad")
-	if err != nil {
-		t.Fatalf("concurrent write: %v", err)
-	}
+	first := current(t, svc, created)
 	if err := link.Write(ctx, tag, "5", devicelink.QualityGood); err != nil {
-		t.Fatalf("Write after someone else's: %v", err)
+		t.Fatalf("Write after the earlier ones: %v", err)
 	}
 
 	got := current(t, svc, created)
-	if got.Value != "5" || got.Quality != "good" || got.Seq <= theirs || got.Version != created.Version {
+	if got.Value != "5" || got.Quality != "good" || got.Seq <= first.Seq || got.Version != created.Version {
 		t.Errorf("got value %q quality %q seq %d version %d, want 5/good above seq %d, the definition's version %d",
-			got.Value, got.Quality, got.Seq, got.Version, theirs, created.Version)
+			got.Value, got.Quality, got.Seq, got.Version, first.Seq, created.Version)
+	}
+}
+
+// TestWrite_TagOfAnotherDevice: a Device writes its own Tags alone: another
+// Device's Tag is 403, not retried.
+func TestWrite_TagOfAnotherDevice(t *testing.T) {
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
+	ctx := context.Background()
+	ours, err := svc.CreateTag(ctx, servertest.MainProject, appdto.CreateTagInput{Name: "pump.speed", Type: "integer"})
+	if err != nil {
+		t.Fatalf("create tag: %v", err)
+	}
+	theirs, err := svc.CreateTag(ctx, servertest.MainProject, appdto.CreateTagInput{Name: "valve.state", Type: "integer"})
+	if err != nil {
+		t.Fatalf("create tag: %v", err)
+	}
+	device := servertest.NewDevice(t, srv, postgres.DB(t), "pump", ours.ID)
+	servertest.NewDevice(t, srv, postgres.DB(t), "valve", theirs.ID)
+	link := devicelink.NewRESTLink(apiclient.New(srv.URL, srv.Client()), device.Token)
+
+	err = link.Write(ctx, devicelink.Tag{ID: theirs.ID, Name: "valve.state", Type: devicelink.TagTypeInteger}, "1", devicelink.QualityGood)
+
+	if !devicelink.IsNoPermission(err) || devicelink.IsTransient(err) {
+		t.Errorf("got %v, want no permission, not transient", err)
 	}
 }
 
@@ -156,95 +176,36 @@ func TestWrite_DeletedTag(t *testing.T) {
 	}
 }
 
-// projectLink is a link to project Main, resolved once, and a client of the
-// same server for changing its projects.
-func projectLink(t *testing.T) (*devicelink.RESTLink, *apiclient.Client, devicelink.Tag) {
-	t.Helper()
+// TestResolve_ProjectDeletedAfterItWasFound: deleting the project revokes its
+// tokens; the link's next request is refused and the lookup asks the server
+// again rather than trusting the project found earlier.
+func TestResolve_ProjectDeletedAfterItWasFound(t *testing.T) {
 	srv, svc := servertest.StartAPI(t, postgres.DB(t))
-	if _, err := svc.CreateTag(context.Background(), servertest.MainProject, appdto.CreateTagInput{
+	created, err := svc.CreateTag(context.Background(), servertest.MainProject, appdto.CreateTagInput{
 		Name: "pump.speed", Type: "integer",
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("create tag: %v", err)
 	}
 	client := apiclient.New(srv.URL, srv.Client())
-	link := devicelink.NewRESTLink(client, servertest.MainProjectName)
-	tag, err := link.Resolve(context.Background(), "pump.speed")
-	if err != nil {
+	device := servertest.NewDevice(t, srv, postgres.DB(t), "pump", created.ID)
+	link := devicelink.NewRESTLink(client, device.Token)
+	if _, err := link.Resolve(context.Background(), "pump.speed"); err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	return link, client, tag
-}
-
-func TestResolve_ProjectDeletedAfterItWasFound(t *testing.T) {
-	link, client, _ := projectLink(t)
 	if _, err := client.DeleteProject(context.Background(), servertest.MainProject); err != nil {
 		t.Fatalf("delete project: %v", err)
 	}
 
-	_, err := link.Resolve(context.Background(), "pump.speed")
+	_, err = link.Resolve(context.Background(), "pump.speed")
 
-	if !errors.Is(err, devicelink.ErrProjectNotFound) || devicelink.IsTransient(err) {
-		t.Errorf("got %v, want ErrProjectNotFound, not transient", err)
-	}
-}
-
-// TestProjectCreatedAnew_IsFoundByName: the tags of a project deleted and
-// created anew under the name are lost (new IDs), but resolving them again
-// finds them in the new project.
-func TestProjectCreatedAnew_IsFoundByName(t *testing.T) {
-	link, client, old := projectLink(t)
-	ctx := context.Background()
-	if _, err := client.DeleteProject(ctx, servertest.MainProject); err != nil {
-		t.Fatalf("delete project: %v", err)
-	}
-	anew, err := client.CreateProject(ctx, apiv0.CreateProjectRequest{Name: servertest.MainProjectName})
-	if err != nil {
-		t.Fatalf("create project anew: %v", err)
-	}
-	created, err := client.Project(anew.ID).CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.speed", Type: "integer"})
-	if err != nil {
-		t.Fatalf("create tag anew: %v", err)
-	}
-
-	if err := link.Write(ctx, old, "1", devicelink.QualityGood); !errors.Is(err, devicelink.ErrTagNotFound) {
-		t.Errorf("write of the old tag: got %v, want ErrTagNotFound", err)
-	}
-	tag, err := link.Resolve(ctx, "pump.speed")
-	if err != nil || tag.ID != created.ID {
-		t.Fatalf("Resolve: got %+v, %v; want the tag of the new project", tag, err)
-	}
-	if err := link.Write(ctx, tag, "7", devicelink.QualityGood); err != nil {
-		t.Fatalf("write of the new tag: %v", err)
-	}
-	if got, err := client.Project(anew.ID).GetTag(ctx, created.ID); err != nil || got.Value != "7" {
-		t.Errorf("new tag: %+v, %v; want value 7", got, err)
-	}
-}
-
-func TestResolve_ProjectCreatedAnewBeforeAnyWrite(t *testing.T) {
-	link, client, _ := projectLink(t)
-	ctx := context.Background()
-	if _, err := client.DeleteProject(ctx, servertest.MainProject); err != nil {
-		t.Fatalf("delete project: %v", err)
-	}
-	anew, err := client.CreateProject(ctx, apiv0.CreateProjectRequest{Name: servertest.MainProjectName})
-	if err != nil {
-		t.Fatalf("create project anew: %v", err)
-	}
-	created, err := client.Project(anew.ID).CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.speed", Type: "integer"})
-	if err != nil {
-		t.Fatalf("create tag anew: %v", err)
-	}
-
-	tag, err := link.Resolve(ctx, "pump.speed")
-
-	if err != nil || tag.ID != created.ID {
-		t.Errorf("got %+v, %v; want the tag of the new project", tag, err)
+	if !devicelink.IsNoPermission(err) && !errors.Is(err, devicelink.ErrTagNotFound) {
+		t.Errorf("got %v, want the project gone or the token revoked", err)
 	}
 }
 
 func TestIsTransient(t *testing.T) {
-	link := devicelink.NewRESTLink(apiclient.New("http://127.0.0.1:1", http.DefaultClient), "Main")
+	link := devicelink.NewRESTLink(apiclient.New("http://127.0.0.1:1", http.DefaultClient), "gsc_dev_x")
 
 	_, err := link.Resolve(context.Background(), "x")
 
@@ -257,11 +218,14 @@ func TestIsTransient(t *testing.T) {
 }
 
 func TestIsTransient_BadURLIsNot(t *testing.T) {
-	link := devicelink.NewRESTLink(apiclient.New("localhost:9090", http.DefaultClient), "Main") // no scheme
+	link := devicelink.NewRESTLink(apiclient.New("localhost:9090", http.DefaultClient), "gsc_dev_x") // no scheme
 
 	_, err := link.Resolve(context.Background(), "x")
 
 	if err == nil || devicelink.IsTransient(err) {
 		t.Errorf("unsupported scheme: %v must not be transient", err)
+	}
+	if devicelink.IsNoPermission(err) {
+		t.Errorf("unsupported scheme: %v must not read as no permission", err)
 	}
 }

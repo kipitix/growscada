@@ -308,6 +308,32 @@ func TestDeviceTokens_IssueRotateRevoke(t *testing.T) {
 	}
 }
 
+// TestDeviceIdentity: a Gateway reads what its token acts for — the Device and
+// its Project — before anything else; nothing else of the request is read.
+func TestDeviceIdentity(t *testing.T) {
+	cleanDevicesRest(t)
+	router := newServices().router()
+	device := createDeviceRest(t, router, "sim")
+	token := issueTokenRest(t, router, device.ID)
+
+	rec := serveAs(router, http.MethodGet, apiv0.PathPrefix+"/device", nil, "Bearer "+token)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET device: %d %s", rec.Code, rec.Body)
+	}
+	identity := decodeBody[apiv0.DeviceIdentityResponse](t, rec)
+	if identity.ProjectID != mainProject || identity.DeviceID != device.ID {
+		t.Errorf("identity = %+v, want project %s and device %s", identity, mainProject, device.ID)
+	}
+
+	if rec := serveAs(router, http.MethodGet, apiv0.PathPrefix+"/device", nil, "Bearer gsc_dev_unknown"); rec.Code != http.StatusUnauthorized {
+		t.Errorf("GET device with an unknown token: %d, want 401", rec.Code)
+	}
+	if rec := serveAs(router, http.MethodGet, apiv0.PathPrefix+"/device", nil, ""); rec.Code != http.StatusUnauthorized {
+		t.Errorf("GET device without a token: %d, want 401", rec.Code)
+	}
+}
+
 // TestDeviceTokens_OrphanTokenStaysVisibleAndRevocable: a token outlives its
 // Device — a Deploy can take the Device out of the running Revision, the Draft
 // can forget it — and an orphaned one must still be readable and revocable

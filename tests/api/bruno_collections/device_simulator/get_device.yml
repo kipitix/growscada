@@ -9,12 +9,14 @@ http:
   auth: inherit
 
 docs: |
-  Snapshot of the simulated device: state ("connecting" until its tags are
-  resolved on the server, then "connected"), running flag and, per tag, its
+  Snapshot of the simulated Device: state ("connecting" until its
+  configuration is read on the server, then "connected"), the Device and
+  Environment the token and the config name, running flag and, per tag, its
   type (empty while connecting), interval, current quality (overridden or
-  configured), the "overridden" flag, pattern and "lost" (deleted on the
-  server). The control API is up from the start, before the
-  server is reachable.
+  configured), the "overridden" flag, pattern and "lost" (the Device no longer
+  supplies the tag: it was deleted on the server or taken out of the Device's
+  configuration). The control API is up from the start, before the server is
+  reachable.
 
 runtime:
   assertions:
@@ -24,6 +26,12 @@ runtime:
     - expression: 'res.body.state'
       operator: eq
       value: '"connected"'
+    - expression: 'res.body.device_name'
+      operator: eq
+      value: '"gateway"'
+    - expression: 'res.body.environment'
+      operator: eq
+      value: '"lab"'
 
 settings:
   encodeUrl: true

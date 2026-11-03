@@ -4,10 +4,15 @@
 package servertest
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync"
 	"testing"
 
@@ -17,6 +22,7 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/migrations"
@@ -95,6 +101,104 @@ var MainProject = uuid.MustParse("b0000000-0000-4000-8000-000000000001")
 
 // MainProjectName is the name of MainProject.
 const MainProjectName = "Main"
+
+// Device is a Device of the Main project, the Environment it stands in and
+// the token it acts with, created through the real API.
+type Device struct {
+	ID              uuid.UUID
+	Name            string
+	EnvironmentID   uuid.UUID
+	EnvironmentName string
+	Token           string
+}
+
+// NewDevice creates a Device of the Main project and an Environment it stands
+// in, through the real API, makes the given Tags the Device's suppliers and
+// issues the Device's token. The API has no way to change a Tag's supplier
+// yet (task 68), so the supplier is set in the database: the Engineering
+// node's row and the Runtime node's copy of the definition.
+func NewDevice(t *testing.T, srv *httptest.Server, db *sql.DB, name string, tagIDs ...uuid.UUID) Device {
+	t.Helper()
+	return NewDeviceInProject(t, srv, db, MainProject, name, tagIDs...)
+}
+
+// NewDeviceInProject is NewDevice for a Device of the given project.
+func NewDeviceInProject(t *testing.T, srv *httptest.Server, db *sql.DB, projectID uuid.UUID, name string, tagIDs ...uuid.UUID) Device {
+	t.Helper()
+	ctx := context.Background()
+	projectPath := apiv0.ProjectPath(projectID.String())
+	device := postJSON[apiv0.CreateDeviceResponse](t, srv, projectPath+"/devices",
+		apiv0.CreateDeviceRequest{Name: name, Protocol: "simulation", Config: apiv0.JSONObject(`{}`)})
+	environment := postJSON[apiv0.CreateEnvironmentResponse](t, srv, projectPath+"/environments",
+		apiv0.CreateEnvironmentRequest{Name: name + "-env"})
+	putJSON[apiv0.EnvironmentDeviceResponse](t, srv,
+		projectPath+"/environments/"+environment.ID.String()+"/devices/"+device.ID.String(),
+		apiv0.UpdateEnvironmentDeviceRequest{Params: apiv0.JSONObject(`{"address":"127.0.0.1:1502"}`)})
+	for _, tagID := range tagIDs {
+		if _, err := db.ExecContext(ctx, "UPDATE engineering.tags SET device_id = $1 WHERE id = $2", device.ID, tagID); err != nil {
+			t.Fatalf("supply tag %s: %v", tagID, err)
+		}
+		if _, err := db.ExecContext(ctx,
+			"INSERT INTO runtime.tags (id, project_id, name, type, version, device_id) "+
+				"SELECT id, project_id, name, type, version, device_id FROM engineering.tags WHERE id = $1 "+
+				"ON CONFLICT (id) DO UPDATE SET device_id = EXCLUDED.device_id", tagID); err != nil {
+			t.Fatalf("supply tag %s in the Runtime node: %v", tagID, err)
+		}
+	}
+	token := postJSON[apiv0.DeviceTokenResponse](t, srv, projectPath+"/devices/"+device.ID.String()+"/token", nil)
+	return Device{
+		ID:              device.ID,
+		Name:            name,
+		EnvironmentID:   environment.ID,
+		EnvironmentName: name + "-env",
+		Token:           token.Token,
+	}
+}
+
+// postJSON sends body (if any) as JSON to path and decodes the 201 response.
+func postJSON[T any](t *testing.T, srv *httptest.Server, path string, body any) T {
+	t.Helper()
+	return sendJSON[T](t, srv, http.MethodPost, path, body, http.StatusCreated)
+}
+
+// putJSON sends body as JSON to path and decodes the response: 200 for an
+// update, 201 when the request created what it named (the pair of an
+// Environment and a Device).
+func putJSON[T any](t *testing.T, srv *httptest.Server, path string, body any) T {
+	t.Helper()
+	return sendJSON[T](t, srv, http.MethodPut, path, body, http.StatusOK, http.StatusCreated)
+}
+
+func sendJSON[T any](t *testing.T, srv *httptest.Server, method, path string, body any, wantStatuses ...int) T {
+	t.Helper()
+	var reader io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("%s %s: %v", method, path, err)
+		}
+		reader = bytes.NewReader(data)
+	}
+	req, err := http.NewRequest(method, srv.URL+apiv0.PathPrefix+path, reader)
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, path, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, path, err)
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(resp.Body)
+	if !slices.Contains(wantStatuses, resp.StatusCode) {
+		t.Fatalf("%s %s: %s: %s", method, path, resp.Status, data)
+	}
+	var out T
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("%s %s: cannot decode %s: %v", method, path, data, err)
+	}
+	return out
+}
 
 // StartAPI cleans every table (the Tag states, tags, widgets, scenes, Library
 // Pins, libraries with their WidgetTypes and releases, projects but

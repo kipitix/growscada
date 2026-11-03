@@ -1,7 +1,7 @@
 info:
   name: post environment duplicate name
   type: http
-  seq: 69
+  seq: 70
 
 http:
   method: POST

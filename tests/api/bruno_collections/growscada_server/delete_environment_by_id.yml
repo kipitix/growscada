@@ -1,7 +1,7 @@
 info:
   name: delete environment by id
   type: http
-  seq: 87
+  seq: 88
 
 http:
   method: DELETE

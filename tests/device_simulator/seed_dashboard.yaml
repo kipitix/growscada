@@ -2,7 +2,11 @@
 # tags its widgets are bound to, so the result is visible in Operation right
 # after `make db_up` / `make full_restart` (no growctl apply needed).
 #   make run_simulator_dashboard
-project: Main                   # the seeded project
+# The token names the seeded Device `gateway`, which supplies these Tags;
+# `lab` is the Environment it stands in (a name or an ID).
+server: http://localhost:9090   # overridden by --server / DEVSIM_SERVER
+token: gsc_dev_2222222222222222222222222222222222222222222222222222222222222222
+environment: lab
 defaultInterval: 500ms
 tags:
   - tag: max_connections        # speedometer, 0..100

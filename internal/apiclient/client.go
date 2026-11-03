@@ -66,6 +66,9 @@ type Client struct {
 	baseURL         string
 	httpClient      *http.Client
 	onServerVersion func(contract.SchemaVersion)
+	// deviceToken, when set, is sent as Authorization: Bearer <token> on every
+	// request: the client acts as the Device the token names.
+	deviceToken string
 }
 
 // Option configures a Client.
@@ -97,6 +100,17 @@ func New(baseURL string, httpClient *http.Client, opts ...Option) *Client {
 		opt(c)
 	}
 	return c
+}
+
+// WithDeviceToken returns a client of the same server whose every request
+// authenticates as the Device the Device Token names
+// (Authorization: Bearer gsc_dev_…). An empty token is no token: the returned
+// client sends none. The receiver is left as it is, so the UI and growctl can
+// share one client with the Gateway's.
+func (c *Client) WithDeviceToken(token string) *Client {
+	gateway := *c
+	gateway.deviceToken = token
+	return &gateway
 }
 
 // ── Projects ─────────────────────────────────────────────────────────────────
@@ -598,6 +612,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any, wantStat
 		// a custom header would also cost a browser a CORS preflight.
 		req.Header.Set(contract.SchemaVersionHeader, apiv0.SchemaVersion().String())
 	}
+	c.authenticate(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -632,6 +647,13 @@ func (c *Client) do(ctx context.Context, method, path string, body any, wantStat
 func drainAndClose(body io.ReadCloser) {
 	_, _ = io.Copy(io.Discard, io.LimitReader(body, maxDrain))
 	_ = body.Close()
+}
+
+// authenticate adds the Device Token of the client, if it has one.
+func (c *Client) authenticate(req *http.Request) {
+	if c.deviceToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.deviceToken)
+	}
 }
 
 func (c *Client) reportServerVersion(resp *http.Response) {

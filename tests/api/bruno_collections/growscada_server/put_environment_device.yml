@@ -1,7 +1,7 @@
 info:
   name: put environment device
   type: http
-  seq: 71
+  seq: 72
 
 http:
   method: PUT

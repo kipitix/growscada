@@ -1,7 +1,7 @@
 info:
   name: delete environment device
   type: http
-  seq: 80
+  seq: 81
 
 http:
   method: DELETE

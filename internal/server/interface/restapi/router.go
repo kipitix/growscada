@@ -25,6 +25,7 @@ type APIRouter struct {
 	environmentsHandlers *EnvironmentsHandlers
 	deviceTokensHandlers *DeviceTokensHandlers
 	deviceConfigHandlers *DeviceConfigHandlers
+	deviceWhoAmIHandlers *DeviceIdentityHandlers
 	eventsHandlers       *EventsHandlers
 }
 
@@ -96,6 +97,7 @@ func NewRouter(services Services, eventBus eventbus.EventBus, maxSSEClients int)
 		environmentsHandlers: NewEnvironmentsHandler(services.Environments),
 		deviceTokensHandlers: NewDeviceTokensHandler(services.DeviceTokens, services.Devices),
 		deviceConfigHandlers: NewDeviceConfigHandler(services.DeviceConfig, services.DeviceTokens),
+		deviceWhoAmIHandlers: NewDeviceIdentityHandler(services.DeviceTokens),
 		eventsHandlers:       NewEventsHandler(eventBus, projectService, maxSSEClients, WithDeviceTokens(services.DeviceTokens)),
 	}
 	for _, rt := range router.routes() {
@@ -187,6 +189,7 @@ func (r *APIRouter) routes() []route {
 		{"PUT " + pp + "/environments/" + environmentResource.wildcard() + "/devices/" + deviceResource.wildcard(), environments.PutEnvironmentDevice},
 		{"DELETE " + pp + "/environments/" + environmentResource.wildcard() + "/devices/" + deviceResource.wildcard(), environments.DeleteEnvironmentDevice},
 
+		{"GET " + p + "/device", r.deviceWhoAmIHandlers.GetDeviceIdentity},
 		{"GET " + p + "/device/config", config.GetDeviceConfig},
 		{"GET " + p + "/device/events", r.eventsHandlers.GetDeviceEvents},
 

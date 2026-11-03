@@ -1,32 +1,30 @@
 # Example device simulator config: one virtual pump.
-# Seed its tags first, then run the simulator against a running server:
-#   bin/growctl/growctl apply -f tests/manifests/example_tags.yaml --project Main
+# The simulator is a Device Gateway: the token names its Device and project,
+# the environment says where it stands, and the server tells it which Tags the
+# Device supplies. The seeded Device `sim` supplies `device.speed`, so this
+# config runs right after `make db_up`:
 #   make run_simulator
-# Tags are referenced by name within the project; the simulator never creates
-# or deletes them.
+# Tags are referenced by name within the Device's project; the simulator never
+# creates or deletes them. A Tag it is configured with but the Device does not
+# supply is a configuration error (exit code 78).
 server: http://localhost:9090   # overridden by --server / DEVSIM_SERVER
-project: Main                   # required: the project whose tags are written
+token: gsc_dev_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+                                # the seeded Device's token (not a secret: test data)
+environment: bench              # the Environment the Gateway serves; name or ID
 control: :9191                  # control API, overridden by --control
 autostart: true                 # false: wait for POST /control/device/start
 defaultInterval: 1s             # write interval of tags that set none
 tags:
-  - tag: sim.pump1.speed
+  - tag: device.speed
     interval: 500ms
     pattern:
       kind: sine                # offset, amplitude, period
       offset: 1500
       amplitude: 300
       period: 20s
-  - tag: sim.pump1.running
-    quality: good               # good (default), uncertain or bad
-    pattern:
-      kind: step                # values in turn, each held for hold
-      values: [true, false]
-      hold: 15s
-  - tag: sim.pump1.mode
-    pattern:
-      kind: constant            # value
-      value: auto
-# Other patterns (integer tags only):
+# Other patterns (integer tags only, and a boolean or a string tag takes
+# constant or step instead):
 #   {kind: ramp, start: 0, rate: 2, max: 1000}          # rate per second; back to start at max (optional)
 #   {kind: random_walk, start: 20, step: 1, min: 0, max: 100}  # at most ±step per tick
+#   {kind: step, values: [true, false], hold: 15s}
+#   {kind: constant, value: auto}

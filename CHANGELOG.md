@@ -1,5 +1,25 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.55] - 2026-11-03
+
+### Added
+
+- **Симулятор как Device Gateway: токен, окружение, коды выхода** (задача 34, часть 5; ADR 0004, поправка 2026-11-03)
+  - **REST API 0.9** (MINOR, пока MAJOR = 0): `DeviceIdentityResponse` и `GET /api/v0/device` — что означает токен Gateway'а: его Device и проект. Gateway читает это первым: проект входит в путь каждой записи, и назвать его может только токен. Схема `schemas/api/0.9.json`
+  - `devicelink.NewRESTLink(client, token)` — вместо имени проекта токен: каждый запрос несёт `Authorization: Bearer gsc_dev_…`, проект берётся из `/api/v0/device` и кэшируется (при 404 переспрашивается), `Resolve` и `Write` идут прежними путями REST. `IsUnauthenticated` (401) и `IsNoPermission` (401/403) различают отказ сервера от временной ошибки
+  - Конфиг симулятора: вместо `project:` — `token:` и `environment:` (имя или ID; имя резолвится среди окружений проекта); `server`, `control`, `autostart`, `defaultInterval`, `tags` прежние. `--token`/`DEVSIM_TOKEN` переопределяют токен
+  - Симулятор **читает конфигурацию у сервера** (`GET /api/v0/device/config?environment=…`): Device, окружение, параметры связи и Tag'и, которые Device поставляет; локальный конфиг задаёт только, что и как писать. Tag, которого Device не поставляет, и несовместимый паттерн — ошибка конфигурации
+  - **Перечитывание конфигурации**: подписка на `GET /api/v0/device/events` (SSE по токену) с переподключением и перечитыванием, плюс таймер как fallback; при изменении состава Tag'ов и их типов симулятор останавливает или возобновляет запись. В статусе control API — Device, окружение и протокол
+  - **Коды выхода** `cmd/device_simulator` разведены: 401/403 → `ExitNoPerm` (77), прочие 4xx, ошибки TLS и схемы URL → `ExitProtocol` (76), тег не найден / несовместимый паттерн / ошибка конфига → `ExitConfig` (78), нет файла конфига → `ExitNoInput` (66); транзиентные ошибки по-прежнему повторяются
+  - `apiclient`: `WithDeviceToken`, `DeviceIdentity`, `DeviceConfig`, `ListEnvironments`, `DeviceEvents` (разбор SSE, ошибка `ErrStreamClosed`); поток не ограничен таймаутом клиента
+  - Seed-данные: Device `gateway` и окружение `lab` с fixture-токеном для dashboard-симулятора; Device `sim` (`bench`) остаётся fixture-устройством Bruno — у него своя судьба (Bruno отзывает его токен и удаляет его Tag), поэтому они разведены. Dashboard-теги поставляет `gateway`
+  - Bruno: запрос `get_device_identity`, `get_device` симулятора проверяет Device и окружение; обе коллекции проходят
+- Тесты: e2e `internal/devicesim` против настоящего API (значения по паттернам, control API, отсутствующий Tag → `ErrConfig`, неизвестный токен, отзыв токена останавливает Gateway), unit — перечитывание конфигурации по событию и по таймеру; `apiclient` — токен, `/device`, `/device/config`, разбор SSE и 401; `restapi` — `/device`; `cmd/device_simulator` — таблица кодов выхода
+
+### Changed
+
+- `internal/devicesim.Device` получает конфигурацию через `Source` (реализация — `devicesim.Gateway` поверх REST API), а не ищет Tag'и сам; `devicelink.Link` (`Resolve` + `Write`) не менялся (ADR 0004). `make run_simulator` и `make run_simulator_dashboard` работают на seed-данных без `growctl apply`
+
 ## [0.0.54] - 2026-11-03
 
 ### Added

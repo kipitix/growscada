@@ -26,10 +26,14 @@ var DefaultQuality = devicelink.QualityGood
 type Config struct {
 	// Server is the GrowSCADA REST API URL.
 	Server string `yaml:"server"`
-	// Project is the name of the project whose Tags the Device writes;
-	// required. Until Device Tokens exist (task 34) the configuration names
-	// it; the simulator looks it up when it starts.
-	Project string `yaml:"project"`
+	// Token is the Device Token the Gateway acts with (gsc_dev_…); required.
+	// It names the Device and so the project: the simulator never names the
+	// project itself.
+	Token string `yaml:"token"`
+	// Environment is the name or ID of the Environment the Gateway serves;
+	// required. The Device's connection parameters and the Tags it supplies
+	// come from it.
+	Environment string `yaml:"environment"`
 	// Control is the listen address of the control API.
 	Control string `yaml:"control"`
 	// Autostart starts generating right away; otherwise on POST /control/device/start.
@@ -97,11 +101,14 @@ func (c *Config) applyDefaults() {
 }
 
 // Validate checks the config after defaults are filled in. The tag types are
-// not known yet: the pattern/type compatibility is checked when the tags are
-// resolved on the server.
+// not known yet: the pattern/type compatibility is checked when the Device's
+// configuration is read from the server.
 func (c Config) Validate() error {
-	if c.Project == "" {
-		return errors.New("project (the project name) is required")
+	if c.Token == "" {
+		return errors.New("token (the Device Token) is required")
+	}
+	if c.Environment == "" {
+		return errors.New("environment (the Environment name or ID) is required")
 	}
 	if c.DefaultInterval.D <= 0 {
 		return errors.New("defaultInterval must be positive")

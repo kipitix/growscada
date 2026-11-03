@@ -20,10 +20,6 @@ import (
 // or the tag (or the project) was deleted while the Device was writing it.
 var ErrTagNotFound = errors.New("tag not found")
 
-// ErrProjectNotFound means the server has no project of the name the Device
-// is configured with.
-var ErrProjectNotFound = errors.New("project not found")
-
 // Tag is a server tag a Device writes: its identity and TagType.
 type Tag struct {
 	ID   uuid.UUID
@@ -32,11 +28,10 @@ type Tag struct {
 }
 
 // Link delivers Tag values to the server, to the Tags of the Device's
-// project.
+// project: the project a Device Token names (ADR 0004, amendment 2026-11-03).
 type Link interface {
 	// Resolve looks a tag up by its name, unique in the project (ADR 0003).
-	// The error matches ErrTagNotFound if there is none, ErrProjectNotFound
-	// if the project does not exist.
+	// The error matches ErrTagNotFound if there is none.
 	Resolve(ctx context.Context, name string) (Tag, error)
 	// Write sets a tag's value and quality. The Device is the source of truth:
 	// the Link resolves optimistic-locking conflicts itself. The error matches
@@ -65,4 +60,23 @@ func IsTransient(err error) bool {
 		return statusErr.Problem.Status >= http.StatusInternalServerError
 	}
 	return false
+}
+
+// IsNoPermission reports whether the server refused the Device: its token is
+// unknown or revoked (401), or the Device may not do what it asked (403: it is
+// not the Tag's supplier, or it is not in the running configuration). A
+// Gateway cannot fix either: a 401 ends it, a 403 at a write stops that Tag.
+func IsNoPermission(err error) bool {
+	return IsUnauthenticated(err) || hasStatus(err, http.StatusForbidden)
+}
+
+// IsUnauthenticated reports whether the server refused the Device's token:
+// it is unknown or revoked (401). Nothing the Gateway retries brings it back.
+func IsUnauthenticated(err error) bool {
+	return hasStatus(err, http.StatusUnauthorized)
+}
+
+func hasStatus(err error, status int) bool {
+	var statusErr *apiclient.StatusError
+	return errors.As(err, &statusErr) && statusErr.Problem.Status == status
 }

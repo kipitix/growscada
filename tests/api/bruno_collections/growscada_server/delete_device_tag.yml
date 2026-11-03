@@ -1,7 +1,7 @@
 info:
   name: delete the device tag
   type: http
-  seq: 84
+  seq: 85
 
 http:
   method: DELETE

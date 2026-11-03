@@ -1,6 +1,7 @@
-// Package devicesim simulates one lower-level Device: it generates Tag values
-// by patterns and delivers them to the server through a devicelink.Link, with
-// a control API to start/stop it and change patterns and qualities at runtime.
+// Package devicesim simulates one lower-level Device: it reads the
+// configuration of the Device a Device Token names, generates Tag values by
+// patterns and delivers them to the server through a devicelink.Link, with a
+// control API to start/stop it and change patterns and qualities at runtime.
 package devicesim
 
 import (
@@ -12,15 +13,22 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/devicelink"
 )
 
 var (
 	// ErrUnknownTag means the Device does not simulate a tag with that name.
 	ErrUnknownTag = errors.New("tag is not simulated by this device")
-	// ErrConnecting means the Device has not resolved its tags on the server
-	// yet, so their types — and which patterns fit them — are unknown.
+	// ErrConnecting means the Device has not read its configuration on the
+	// server yet, so their types — and which patterns fit them — are unknown.
 	ErrConnecting = errors.New("device is still connecting to the server")
+	// ErrConfig means the local config cannot be run against the server's
+	// configuration of the Device: a Tag it does not supply, a TagType that is
+	// not known, or a pattern that does not fit its Tag.
+	ErrConfig = errors.New("device configuration error")
 )
 
 // Device states, as reported by Status.
@@ -29,28 +37,44 @@ const (
 	StateConnected  = "connected"
 )
 
+// DefaultConfigReload is how often a Device rereads its configuration when
+// the event stream says nothing.
+const DefaultConfigReload = 30 * time.Second
+
 // Options tune a Device.
 type Options struct {
 	// Logger receives warnings about failed writes; default slog.Default().
 	Logger *slog.Logger
 	// RetryDelay is the pause between attempts to reach the server while
-	// connecting; default 1s.
+	// connecting, and between reconnections of the event stream; default 1s.
 	RetryDelay time.Duration
+	// ConfigReload is the fallback interval of rereading the Device's
+	// configuration, besides the Gateway's event stream; default
+	// DefaultConfigReload.
+	ConfigReload time.Duration
 }
 
-// Device is one simulated Device. Its methods are safe for concurrent use.
+// Device is one simulated Device, the Device Gateway of one Environment. Its
+// methods are safe for concurrent use.
 type Device struct {
-	link       devicelink.Link
-	logger     *slog.Logger
-	retryDelay time.Duration
+	link         devicelink.Link
+	source       Source
+	logger       *slog.Logger
+	retryDelay   time.Duration
+	configReload time.Duration
 
 	mu        sync.Mutex
-	connected bool // tags resolved: types and generators are known
+	connected bool // configuration read: types and generators are known
 	running   bool
 	// inFlight counts writes on their way to the server; Stop waits on idle
 	// until they are done.
 	inFlight int
 	idle     *sync.Cond
+	// The server's configuration of the Device, as last read.
+	deviceID    uuid.UUID
+	deviceName  string
+	protocol    string
+	environment string
 	// Pattern time runs only while the Device is running: runTotal is the
 	// running time before resumedAt, the moment of the last start.
 	runTotal  time.Duration
@@ -61,7 +85,7 @@ type Device struct {
 
 // simTag is one simulated tag; its fields are guarded by Device.mu.
 type simTag struct {
-	tag      devicelink.Tag // only the name until the Device is connected
+	tag      devicelink.Tag // only the name until the configuration is read
 	interval time.Duration
 	quality  devicelink.Quality  // from the config
 	override *devicelink.Quality // set by OverrideQuality, nil if none
@@ -69,7 +93,7 @@ type simTag struct {
 	gen      generator     // nil until the Device is connected
 	setAt    time.Duration // Device running time when the pattern was set
 	rnd      *rand.Rand
-	lost     bool          // deleted on the server: no longer written
+	lost     bool          // not supplied by the Device any more: not written
 	kick     chan struct{} // write now instead of waiting for the tick
 	// A kick repeats the last value (a random_walk must not take an extra
 	// step), unless regen asks for a fresh one after a pattern change.
@@ -80,20 +104,25 @@ type simTag struct {
 
 // New creates the Device of a config. It does not talk to the server: Run
 // connects first, so the control API can serve the Device right away.
-func New(cfg Config, link devicelink.Link, opts Options) *Device {
+func New(cfg Config, link devicelink.Link, source Source, opts Options) *Device {
 	if opts.Logger == nil {
 		opts.Logger = slog.Default()
 	}
 	if opts.RetryDelay <= 0 {
 		opts.RetryDelay = time.Second
 	}
+	if opts.ConfigReload <= 0 {
+		opts.ConfigReload = DefaultConfigReload
+	}
 	d := &Device{
-		link:       link,
-		logger:     opts.Logger,
-		retryDelay: opts.RetryDelay,
-		running:    *cfg.Autostart,
-		resumedAt:  time.Now(),
-		byName:     make(map[string]*simTag, len(cfg.Tags)),
+		link:         link,
+		source:       source,
+		logger:       opts.Logger,
+		retryDelay:   opts.RetryDelay,
+		configReload: opts.ConfigReload,
+		running:      *cfg.Autostart,
+		resumedAt:    time.Now(),
+		byName:       make(map[string]*simTag, len(cfg.Tags)),
 	}
 	d.idle = sync.NewCond(&d.mu)
 	for _, tc := range cfg.Tags {
@@ -111,53 +140,117 @@ func New(cfg Config, link devicelink.Link, opts Options) *Device {
 	return d
 }
 
-// connect resolves the tags on the server and checks each pattern against the
-// tag's type. An unreachable or failing server is waited for without limit, as
-// a real Device would; a missing tag or an incompatible pattern is an error.
+// connect reads the Device's configuration on the server and checks each
+// simulated tag against it: the tag must be one the Device supplies, and its
+// pattern must fit the tag's type. An unreachable or failing server is waited
+// for without limit, as a real Device would; a token the server refuses, a
+// missing tag or an incompatible pattern is an error.
 func (d *Device) connect(ctx context.Context) error {
-	resolved := make([]devicelink.Tag, len(d.tags))
-	for i, t := range d.tags {
-		tag, err := d.resolve(ctx, t.tag.Name)
-		if err != nil {
-			return err
-		}
-		resolved[i] = tag
+	cfg, err := d.fetchConfiguration(ctx)
+	if err != nil {
+		return err
 	}
-
+	if err := d.applyConfiguration(cfg, true); err != nil {
+		return err
+	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	for i, t := range d.tags {
-		t.tag = resolved[i]
-		if err := t.setPattern(t.pattern, 0); err != nil {
-			return fmt.Errorf("tag %q: %w", t.tag.Name, err)
-		}
-	}
 	d.connected = true
 	// Pattern time starts now, not while waiting for the server.
 	d.runTotal, d.resumedAt = 0, time.Now()
 	return nil
 }
 
-// resolve looks a tag up, retrying while the server is unreachable or failing.
-func (d *Device) resolve(ctx context.Context, name string) (devicelink.Tag, error) {
+// fetchConfiguration asks the server for the Device's configuration,
+// retrying while the server is unreachable or failing.
+func (d *Device) fetchConfiguration(ctx context.Context) (apiv0.DeviceConfigResponse, error) {
 	for warned := false; ; {
-		tag, err := d.link.Resolve(ctx, name)
+		cfg, err := d.source.Configuration(ctx)
 		if err == nil {
-			return tag, nil
+			return cfg, nil
 		}
 		if !devicelink.IsTransient(err) {
-			return devicelink.Tag{}, err
+			return apiv0.DeviceConfigResponse{}, err
 		}
 		if !warned {
-			d.logger.Warn("server unavailable, waiting for it", "tag", name, "error", err)
+			d.logger.Warn("server unavailable, waiting for it", "error", err)
 			warned = true
 		}
 		select {
 		case <-ctx.Done():
-			return devicelink.Tag{}, fmt.Errorf("tag %q: %w", name, ctx.Err())
+			return apiv0.DeviceConfigResponse{}, ctx.Err()
 		case <-time.After(d.retryDelay):
 		}
 	}
+}
+
+// applyConfiguration brings the simulated tags in line with the Device's
+// configuration on the server: the Tag each simulated tag writes, its type and
+// whether the Device supplies it at all. At connect (strict) a tag the Device
+// does not supply, or a pattern that does not fit its type, is an error; on a
+// reload the same stops the tag from being written, so the Device keeps
+// running whatever its configuration became.
+func (d *Device) applyConfiguration(cfg apiv0.DeviceConfigResponse, strict bool) error {
+	supplied := make(map[string]apiv0.DeviceConfigTagResponse, len(cfg.Tags))
+	for _, tag := range cfg.Tags {
+		supplied[tag.Name] = tag
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.deviceID, d.deviceName, d.protocol = cfg.Device.ID, cfg.Device.Name, cfg.Device.Protocol
+	d.environment = cfg.Environment.Name
+	// Pattern time is counted from the moment the Device connects: before
+	// that, the time spent waiting for the server does not move the patterns.
+	at := d.runningTime()
+	if !d.connected {
+		at = 0
+	}
+
+	for _, t := range d.tags {
+		name := t.tag.Name
+		definition, ok := supplied[name]
+		if !ok {
+			if strict {
+				return fmt.Errorf("%w: tag %q is not supplied by the device", ErrConfig, name)
+			}
+			if !t.lost {
+				d.logger.Warn("tag is not supplied by the device any more, no longer simulated", "tag", name)
+			}
+			t.lost = true
+			continue
+		}
+		tagType, err := devicelink.ParseTagType(definition.Type)
+		if err != nil {
+			if strict {
+				return fmt.Errorf("%w: tag %q: %w", ErrConfig, name, err)
+			}
+			d.logger.Warn("tag has an unknown type, no longer simulated", "tag", name, "error", err)
+			t.lost = true
+			continue
+		}
+		if t.tag.ID == definition.ID && t.tag.Type == tagType {
+			t.lost = false // supplied again, or never lost
+			continue
+		}
+		t.tag = devicelink.Tag{ID: definition.ID, Name: name, Type: tagType}
+		if err := t.setPattern(t.pattern, at); err != nil {
+			if strict {
+				return fmt.Errorf("%w: tag %q: %w", ErrConfig, name, err)
+			}
+			d.logger.Warn("pattern does not fit the tag, no longer simulated", "tag", name, "error", err)
+			t.lost = true
+			continue
+		}
+		t.lost = false
+		if d.connected {
+			// A reload: the tag's identity or type changed, so its next value
+			// is fresh rather than the last one again.
+			t.regen = true
+			t.poke()
+		}
+	}
+	return nil
 }
 
 func (t *simTag) setPattern(p PatternSpec, at time.Duration) error {
@@ -184,9 +277,12 @@ func (t *simTag) poke() {
 }
 
 // Run connects to the server, then writes every tag at its interval while the
-// Device is running, until ctx is done. Each tag is written right away, then
-// on every tick. It returns an error only if connecting fails for a reason
-// other than ctx being done (a missing tag, an incompatible pattern).
+// Device is running, until ctx is done. The Device's configuration is kept
+// current in the background: on the Gateway's configuration events and, as a
+// fallback, on a timer. It returns an error only if connecting fails for a
+// reason other than ctx being done, or the server refuses the Device while
+// running (a revoked token, a Device that left the configuration): a Gateway
+// cannot fix either.
 func (d *Device) Run(ctx context.Context) error {
 	if err := d.connect(ctx); err != nil {
 		if ctx.Err() != nil {
@@ -194,29 +290,59 @@ func (d *Device) Run(ctx context.Context) error {
 		}
 		return err
 	}
-	d.logger.Info("connected to the server", "tags", len(d.tags))
+	d.mu.Lock()
+	device, environment := d.deviceName, d.environment
+	d.mu.Unlock()
+	d.logger.Info("connected to the server", "device", device, "environment", environment, "tags", len(d.tags))
 
+	runCtx, stop := context.WithCancel(ctx)
+	defer stop()
 	var wg sync.WaitGroup
+	fatal := make(chan error, 1)
 	for _, t := range d.tags {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			d.runTag(ctx, t)
+			if err := d.runTag(runCtx, t); err != nil {
+				select {
+				case fatal <- err:
+				default: // the first fatal error is the one reported
+				}
+			}
 		}()
 	}
-	wg.Wait()
-	return nil
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		d.watch(runCtx, fatal)
+	}()
+
+	select {
+	case <-ctx.Done():
+		stop()
+		wg.Wait()
+		return nil
+	case err := <-fatal:
+		stop()
+		wg.Wait()
+		return err
+	}
 }
 
-func (d *Device) runTag(ctx context.Context, t *simTag) {
+// runTag writes the tag every interval until ctx is done. A token the server
+// refuses is returned: the Gateway ends rather than retrying.
+func (d *Device) runTag(ctx context.Context, t *simTag) error {
 	ticker := time.NewTicker(t.interval)
 	defer ticker.Stop()
 	kicked := false
 	for {
-		d.write(ctx, t, kicked)
+		err := d.write(ctx, t, kicked)
+		if devicelink.IsUnauthenticated(err) {
+			return fmt.Errorf("tag %q: %w", t.tag.Name, err)
+		}
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case <-ticker.C:
 			kicked = false
 		case <-t.kick:
@@ -226,13 +352,13 @@ func (d *Device) runTag(ctx context.Context, t *simTag) {
 }
 
 // write generates the tag's next value and delivers it, if the Device is
-// running and the tag still exists. A kicked write repeats the last value
-// unless the pattern has changed since.
-func (d *Device) write(ctx context.Context, t *simTag, kicked bool) {
+// running and the Device still supplies the tag. A kicked write repeats the
+// last value unless the pattern has changed since.
+func (d *Device) write(ctx context.Context, t *simTag, kicked bool) error {
 	d.mu.Lock()
 	if !d.running || t.lost {
 		d.mu.Unlock()
-		return
+		return nil
 	}
 	if !kicked || t.regen || !t.written {
 		t.last, t.written = t.gen.next(d.runningTime()-t.setAt), true
@@ -261,6 +387,93 @@ func (d *Device) write(ctx context.Context, t *simTag, kicked bool) {
 	default:
 		d.logger.Warn("write failed, will retry on the next tick", "tag", t.tag.Name, "error", err)
 	}
+	return err
+}
+
+// watch keeps the Device's configuration current: it follows the Gateway's
+// configuration event stream, and rereads the configuration on a timer as a
+// fallback. A server that refuses the Device, and a configuration the local
+// one cannot run against, are fatal.
+func (d *Device) watch(ctx context.Context, fatal chan<- error) {
+	kick := make(chan struct{}, 1)
+	poke := func() {
+		select {
+		case kick <- struct{}{}:
+		default: // a reload is already pending
+		}
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		d.followEvents(ctx, poke, fatal)
+	}()
+	go func() {
+		defer wg.Done()
+		d.reloadOnSchedule(ctx, kick, fatal)
+	}()
+	wg.Wait()
+}
+
+// followEvents subscribes to the Gateway's configuration events, reconnecting
+// after a break and rereading the configuration then: the stream replays
+// nothing, so the configuration may have changed while it was down.
+func (d *Device) followEvents(ctx context.Context, poke func(), fatal chan<- error) {
+	for {
+		err := d.source.Events(ctx, func(apiv0.Event) { poke() })
+		if ctx.Err() != nil {
+			return
+		}
+		if devicelink.IsNoPermission(err) {
+			fatal <- fmt.Errorf("the server refused the device: %w", err)
+			return
+		}
+		d.logger.Warn("configuration event stream ended, reconnecting", "error", err)
+		poke()
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(d.retryDelay):
+		}
+	}
+}
+
+// reloadOnSchedule rereads the configuration when the event stream asks for
+// it and, as a fallback, every ConfigReload.
+func (d *Device) reloadOnSchedule(ctx context.Context, kick <-chan struct{}, fatal chan<- error) {
+	ticker := time.NewTicker(d.configReload)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		case <-kick:
+		}
+		err := d.reload(ctx)
+		switch {
+		case err == nil, ctx.Err() != nil:
+		case devicelink.IsNoPermission(err), errors.Is(err, ErrConfig):
+			fatal <- err
+			return
+		default:
+			d.logger.Warn("configuration reload failed, will retry", "error", err)
+		}
+	}
+}
+
+// reload rereads the Device's configuration and applies it.
+func (d *Device) reload(ctx context.Context) error {
+	cfg, err := d.source.Configuration(ctx)
+	if err != nil {
+		return err
+	}
+	if err := d.applyConfiguration(cfg, false); err != nil {
+		return err
+	}
+	d.logger.Info("configuration reloaded", "device", cfg.Device.Name, "environment", cfg.Environment.Name, "tags", len(cfg.Tags))
+	return nil
 }
 
 // runningTime is how long the Device has been running in total; d.mu held.
@@ -355,10 +568,16 @@ func (d *Device) tagLocked(name string) (*simTag, error) {
 
 // Status is a snapshot of the Device.
 type Status struct {
-	// State is StateConnecting until the tags are resolved on the server.
-	State   string      `json:"state"`
-	Running bool        `json:"running"`
-	Tags    []TagStatus `json:"tags"`
+	// State is StateConnecting until the configuration is read on the server.
+	State string `json:"state"`
+	// DeviceID, DeviceName, Protocol and Environment are the server's
+	// configuration of the Device; empty until it is read.
+	DeviceID    uuid.UUID   `json:"device_id"`
+	DeviceName  string      `json:"device_name"`
+	Protocol    string      `json:"protocol"`
+	Environment string      `json:"environment"`
+	Running     bool        `json:"running"`
+	Tags        []TagStatus `json:"tags"`
 }
 
 // TagStatus is a snapshot of one simulated tag.
@@ -371,7 +590,8 @@ type TagStatus struct {
 	// Overridden is set while OverrideQuality holds the quality.
 	Overridden bool        `json:"overridden"`
 	Pattern    PatternSpec `json:"pattern"`
-	// Lost is set once the tag was deleted on the server.
+	// Lost is set once the Device no longer supplies the tag: it was deleted
+	// on the server or taken out of the Device's configuration.
 	Lost bool `json:"lost"`
 }
 
@@ -379,7 +599,15 @@ type TagStatus struct {
 func (d *Device) Status() Status {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	s := Status{State: StateConnecting, Running: d.running, Tags: make([]TagStatus, len(d.tags))}
+	s := Status{
+		State:       StateConnecting,
+		DeviceID:    d.deviceID,
+		DeviceName:  d.deviceName,
+		Protocol:    d.protocol,
+		Environment: d.environment,
+		Running:     d.running,
+		Tags:        make([]TagStatus, len(d.tags)),
+	}
 	if d.connected {
 		s.State = StateConnected
 	}
