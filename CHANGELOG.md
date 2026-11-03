@@ -1,5 +1,17 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.57] - 2026-11-04
+
+### Added
+
+- **Хранение Revision: `runtime.revisions` и `engineering.project_files`** (задача 35, часть 2; ADR 0011, ADR 0005)
+  - `runtime.revisions(pk_id, project_id, n, deployed_at, config jsonb)`: неизменяемый номерной снимок ProjectFile — истина о том, что проект выполняет; `UNIQUE (project_id, n)` и нумерует, и страхует гонку, строка уходит с Project каскадом, отдельного индекса под чтение текущей ревизии нет. `engineering.project_files(project_id PK, revision_n, deployed_at, config jsonb)` — вторичная копия последнего отправленного ProjectFile: бейдж «Revision N · deployed at T» и признак неразвёрнутых изменений
+  - `postgres/runtime.NewRevisionRepositoryPostgres`: `CreateRevision` — одна транзакция (advisory lock по проекту → `n = max+1` → вставка документа → пересборка копий). Копии `runtime.tags`, `runtime.devices`, `runtime.environments`, `runtime.environment_devices` пересобираются **диффом** (upsert по ID, удаление исчезнувших), а не сносом: `tag_states` и `device_tokens` переживают Deploy. Новый Tag получает initial, смена TagType — сброс в initial, неизменённый сохраняет записанное значение, копия без состояния получает его назад; `FindCurrent` отдаёт текущую ревизию. `postgres.NewProjectFileRepositoryPostgres` — upsert копии у Engineering, где запись более старой ревизии ничего не меняет: два одновременных Deploy не откатывают бейдж назад
+  - Миграция `20261103000002_deferrable_environment_names`: уникальность имени Environment в проекте стала `DEFERRABLE`, транзакция ревизии откладывает проверку до коммита — Deploy, в котором два Environment меняются именами, больше не падает на дубле, а документ с настоящим дублем по-прежнему отклоняется
+  - `appdto.Revision` и `application/runtime.Revision` — по одному на каждую роль (ADR 0011): номер, время и документ; `application/runtime.RevisionRepository` — порт хранения
+  - Тесты (testcontainers): нумерация 1, 2, 3 и восемь параллельных Deploy без дублей; `UNIQUE` как страховка; сохранение значений Tag и токенов; каскад исчезнувших копий; сброс при смене TagType; лечение пропавшего состояния; обновление существующих копий Device и Environment; поставщик Tag'а; пустые `config`/`params` записываются как `{}`, а не NULL; пара чужого проекта отклоняется, не трогая его `params`; обмен именами и настоящий дубль; удаление Project уносит ревизии и копию ProjectFile
+  - Проверка ролей признаёт контракты общими (ADR 0005): пакеты роли вправе называть `contract/project/v0`, и `TestRoles_DoNotImportEachOther` снова зелёный
+
 ## [0.0.56] - 2026-11-03
 
 ### Added
