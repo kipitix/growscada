@@ -478,6 +478,39 @@ func TestProjectCleanup_StateUpsertedAfterTheStatesAreRemoved_IsRemovedOnTheNext
 	}
 }
 
+// TestProjectCleanup_ForgetsTheDeviceTokensOfTheRemovedProject: the Runtime
+// node resolves Device Tokens in memory, so the removal of the Project's rows
+// is not enough — the cleanup has to tell it to forget them, or a token of
+// the removed Project keeps authenticating.
+func TestProjectCleanup_ForgetsTheDeviceTokensOfTheRemovedProject(t *testing.T) {
+	r := newReconciliation(t, reconciliationWiring{})
+	ctx := context.Background()
+	p := r.createProject(t, "Line 1")
+	if _, err := r.projectSvc.DeleteProjectByID(ctx, p); err != nil {
+		t.Fatalf("DeleteProjectByID: %v", err)
+	}
+	node := &forgottenTokens{RuntimeNode: newRuntimeNode()}
+	policy := application.NewProjectCleanupPolicy(repositories.NewProjectRepositoryPostgres(testDB), newScopes(), node)
+	if err := policy.Run(ctx, "project:"+p.String()); err != nil {
+		t.Fatalf("the run: %v", err)
+	}
+	if node.projectID != p {
+		t.Errorf("the Device Tokens of %v were not forgotten: %v", p, node.projectID)
+	}
+}
+
+// forgottenTokens records the Project whose Device Tokens the cleanup forgot
+// and removes them through the Runtime node, as the server does.
+type forgottenTokens struct {
+	application.RuntimeNode
+	projectID uuid.UUID
+}
+
+func (n *forgottenTokens) RemoveProjectDeviceTokens(ctx context.Context, projectID uuid.UUID) error {
+	n.projectID = projectID
+	return n.RuntimeNode.RemoveProjectDeviceTokens(ctx, projectID)
+}
+
 // stateUpsertingAfterRemoval removes the Project's states, then upserts
 // the definition of tagID again, as a late call does.
 type stateUpsertingAfterRemoval struct {

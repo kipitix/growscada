@@ -11,6 +11,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/devicetoken"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 )
 
 // DeviceToken is a Device Token as the Runtime node hands it out: the Device
@@ -53,14 +54,20 @@ type DeviceTokenService interface {
 	// FindToken returns the metadata of the Device's token, its secret never
 	// included (devicetoken.ErrTokenNotFound if it has none).
 	FindToken(ctx context.Context, projectID, deviceID uuid.UUID) (DeviceToken, error)
+	// RemoveProjectTokens removes every token of the Project and forgets the
+	// ones already resolved in memory. A Project without tokens is not an
+	// error. The cleanup of a deleted Project calls it: its token rows go
+	// with its row, and a token kept in memory would authenticate a Project
+	// that no longer exists.
+	RemoveProjectTokens(ctx context.Context, projectID uuid.UUID) error
 }
 
 type deviceTokenServiceImpl struct {
 	tokens devicetoken.Repository
-	// cache keeps the tokens already resolved by hash: a token changes only
-	// when it is rotated or revoked, and then the cache is cleared. It makes
-	// authentication — the check of every Gateway request — one map read on
-	// the hot path.
+	// cache keeps the tokens already resolved by hash: a token changes when
+	// it is rotated, revoked or removed with its Project, and every one of
+	// them clears it. It makes authentication — the check of every Gateway
+	// request — one map read on the hot path.
 	cache *tokenCache
 	now   func() time.Time
 }
@@ -81,11 +88,15 @@ func (s deviceTokenServiceImpl) Authenticate(ctx context.Context, secret string)
 	if found, ok := s.cache.get(hash); ok {
 		return newDeviceToken(found), nil
 	}
+	// The generation is read before the lookup: a rotation, a revocation or a
+	// Project's removal between the lookup and the cache write bumps it, and
+	// the write is dropped instead of caching a token that just changed.
+	generation := s.cache.currentGeneration()
 	found, err := s.tokens.FindByHash(ctx, hash)
 	if err != nil {
 		return DeviceToken{}, fmt.Errorf("cannot authenticate device token: %w", err)
 	}
-	s.cache.put(hash, found)
+	s.cache.put(hash, found, generation)
 	return newDeviceToken(found), nil
 }
 
@@ -140,6 +151,15 @@ func (s deviceTokenServiceImpl) FindToken(ctx context.Context, rawProjectID, raw
 	return newDeviceToken(found), nil
 }
 
+func (s deviceTokenServiceImpl) RemoveProjectTokens(ctx context.Context, rawProjectID uuid.UUID) error {
+	projectID := projectIDOf(rawProjectID)
+	if err := s.tokens.DeleteByProject(ctx, projectID); err != nil {
+		return fmt.Errorf("cannot remove the device tokens: %w", err)
+	}
+	s.cache.forgetProject(projectID)
+	return nil
+}
+
 // newToken makes the record of a fresh token and its secret.
 func (s deviceTokenServiceImpl) newToken(rawProjectID, rawDeviceID uuid.UUID) (devicetoken.Token, devicetoken.Secret, error) {
 	secret, err := devicetoken.NewSecret()
@@ -169,8 +189,9 @@ func deviceIDOf(raw uuid.UUID) id.ID[device.Device] {
 
 // tokenCache keeps the tokens resolved by authentication, by their hash.
 type tokenCache struct {
-	mu     sync.RWMutex
-	byHash map[string]devicetoken.Token
+	mu         sync.RWMutex
+	byHash     map[string]devicetoken.Token
+	generation uint64
 }
 
 func newTokenCache() *tokenCache {
@@ -184,9 +205,24 @@ func (c *tokenCache) get(hash string) (devicetoken.Token, bool) {
 	return found, ok
 }
 
-func (c *tokenCache) put(hash string, token devicetoken.Token) {
+// currentGeneration is the number of the changes the cache has seen. An
+// authentication that started before a change must not write its result
+// after it.
+func (c *tokenCache) currentGeneration() uint64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.generation
+}
+
+// put stores the token unless the cache changed since generation was read: a
+// token resolved before a rotation, a revocation or a Project's removal is
+// never cached after it.
+func (c *tokenCache) put(hash string, token devicetoken.Token, generation uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.generation != generation {
+		return
+	}
 	c.byHash[hash] = token
 }
 
@@ -196,4 +232,18 @@ func (c *tokenCache) clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	clear(c.byHash)
+	c.generation++
+}
+
+// forgetProject forgets the resolved tokens of the Project: the ones whose
+// rows the removal of the Project took with it.
+func (c *tokenCache) forgetProject(projectID id.ID[project.Project]) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for hash, token := range c.byHash {
+		if token.ProjectID == projectID {
+			delete(c.byHash, hash)
+		}
+	}
+	c.generation++
 }

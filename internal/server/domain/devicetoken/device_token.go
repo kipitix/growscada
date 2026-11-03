@@ -144,4 +144,9 @@ type Repository interface {
 	// Delete removes the token of the Device of the Project.
 	// Returns ErrTokenNotFound if there is none.
 	Delete(context.Context, id.ID[device.Device], id.ID[project.Project]) error
+	// DeleteByProject removes every token of the Project; a Project without
+	// tokens is not an error. The row of the Project takes its tokens with it
+	// (the foreign key cascades), so this only matters to a Runtime node of
+	// its own (task 52); it makes the removal idempotent either way.
+	DeleteByProject(context.Context, id.ID[project.Project]) error
 }

@@ -64,9 +64,10 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 	releases := repositories.NewLibraryReleaseRepositoryPostgres(db, opts...)
 	widgetTypes := repositories.NewWidgetTypeRepositories(db, opts...)
 	states := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, publish)
+	deviceTokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(db))
 	return testServices{
 		projects:     application.NewProjectService(projectRepo, orgID),
-		tags:         application.NewTagService(content, inprocess.NewRuntimeNode(states)),
+		tags:         application.NewTagService(content, inprocess.NewRuntimeNode(states, deviceTokens)),
 		states:       states,
 		libraries:    application.NewLibraryService(libraries, releases, widgetTypes, orgID),
 		widgetTypes:  application.NewWidgetTypeService(libraries, widgetTypes, orgID),
@@ -75,7 +76,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		devices:      application.NewDeviceService(content),
 		environments: application.NewEnvironmentService(content),
 		deviceConfig: application.NewDeviceConfigService(content),
-		deviceTokens: runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(db)),
+		deviceTokens: deviceTokens,
 	}
 }
 

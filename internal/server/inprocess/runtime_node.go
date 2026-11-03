@@ -17,14 +17,16 @@ import (
 
 type runtimeNode struct {
 	states runtimeapp.TagStateService
+	tokens runtimeapp.DeviceTokenService
 }
 
 var _ application.RuntimeNode = (*runtimeNode)(nil)
 
-// NewRuntimeNode returns the RuntimeNode calling the Runtime node's service
-// of Tag states in the same process.
-func NewRuntimeNode(someStates runtimeapp.TagStateService) application.RuntimeNode {
-	return &runtimeNode{states: someStates}
+// NewRuntimeNode returns the RuntimeNode calling the Runtime node's services
+// of Tag states and of Device Tokens in the same process. A nil tokens is a
+// Runtime node that serves no Device Tokens: its removal is a no-op.
+func NewRuntimeNode(someStates runtimeapp.TagStateService, someTokens runtimeapp.DeviceTokenService) application.RuntimeNode {
+	return &runtimeNode{states: someStates, tokens: someTokens}
 }
 
 func (n runtimeNode) UpsertTagDefinitions(ctx context.Context, projectID uuid.UUID, defs []appdto.TagDefinition) error {
@@ -41,6 +43,13 @@ func (n runtimeNode) RemoveTagStates(ctx context.Context, projectID uuid.UUID, t
 
 func (n runtimeNode) RemoveProjectTagStates(ctx context.Context, projectID uuid.UUID) error {
 	return n.states.RemoveProjectTagStates(ctx, projectID)
+}
+
+func (n runtimeNode) RemoveProjectDeviceTokens(ctx context.Context, projectID uuid.UUID) error {
+	if n.tokens == nil {
+		return nil
+	}
+	return n.tokens.RemoveProjectTokens(ctx, projectID)
 }
 
 func (n runtimeNode) FindTagStates(ctx context.Context, projectID uuid.UUID, tagIDs []uuid.UUID) ([]appdto.TagState, error) {

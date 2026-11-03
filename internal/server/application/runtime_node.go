@@ -28,6 +28,11 @@ type RuntimeNode interface {
 	RemoveTagStates(ctx context.Context, projectID uuid.UUID, tagIDs []uuid.UUID) error
 	// RemoveProjectTagStates removes the states of every Tag of the Project.
 	RemoveProjectTagStates(ctx context.Context, projectID uuid.UUID) error
+	// RemoveProjectDeviceTokens removes every Device Token of the Project,
+	// and the ones already resolved in memory with it: the Project's tokens
+	// go when its row goes, and a token of a removed Project must not
+	// authenticate.
+	RemoveProjectDeviceTokens(ctx context.Context, projectID uuid.UUID) error
 	// FindTagStates returns the states of the Tags with the given IDs; a Tag
 	// without a state is left out.
 	FindTagStates(ctx context.Context, projectID uuid.UUID, tagIDs []uuid.UUID) ([]appdto.TagState, error)

@@ -24,9 +24,11 @@ const ProjectCleanupPolicyName = "remove_deleted_project"
 // node (ADR 0011), and the Project's row last; a project_deleted event's job
 // does it. The Runtime node's copies of the Project's Devices and
 // Environments are derived data and go with its row (their foreign keys
-// cascade), while its Tag copies are removed before it through RuntimeNode.
-// Nothing of the Project is created once it is marked: the repositories lock
-// its row, live, for a creation. For a live Project the job does nothing.
+// cascade), while its Tag copies are removed before it through RuntimeNode,
+// and its Device Tokens are forgotten through it after the row went (they
+// cascade, but a Gateway must not keep authenticating with one). Nothing of
+// the Project is created once it is marked: the repositories lock its row,
+// live, for a creation. For a live Project the job does nothing.
 type projectCleanupPolicy struct {
 	projects project.ProjectRepository
 	scopes   ProjectScopes
@@ -101,6 +103,12 @@ func (p projectCleanupPolicy) Run(ctx context.Context, key string) error {
 		return fmt.Errorf("cannot empty project %s: %w", projectID, err)
 	}
 	if err := p.projects.Delete(ctx, deleted); err != nil && !errors.Is(err, project.ErrProjectNotFound) {
+		return fmt.Errorf("cannot remove project %s: %w", projectID, err)
+	}
+	// The Project's token rows went with its row (the foreign key cascades),
+	// but the Runtime node may hold the tokens it resolved in memory: a token
+	// of the removed Project must not authenticate any more.
+	if err := p.runtime.RemoveProjectDeviceTokens(ctx, projectID.UUID()); err != nil {
 		return fmt.Errorf("cannot remove project %s: %w", projectID, err)
 	}
 	return nil

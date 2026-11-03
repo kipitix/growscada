@@ -147,11 +147,12 @@ func newRuntimeNode() application.RuntimeNode {
 	return node
 }
 
-// newRuntime returns the Runtime node's service of Tag states over the test
-// database and the RuntimeNode port over it.
+// newRuntime returns the Runtime node's services over the test database and
+// the RuntimeNode port over them.
 func newRuntime() (runtimeapp.TagStateService, application.RuntimeNode) {
 	states := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(testDB), soleOrganization(), func(event.Event) {})
-	return states, inprocess.NewRuntimeNode(states)
+	tokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(testDB))
+	return states, inprocess.NewRuntimeNode(states, tokens)
 }
 
 // newServiceWithStates returns the tag service and the Runtime node's

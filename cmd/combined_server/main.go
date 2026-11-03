@@ -134,7 +134,7 @@ func main() {
 	// The Device Tokens are the Runtime node's too: a Gateway authenticates
 	// with one, and its management (issue, rotate, revoke) lives here
 	deviceTokenService := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(sqlDB))
-	runtimeNode := inprocess.NewRuntimeNode(tagStateService)
+	runtimeNode := inprocess.NewRuntimeNode(tagStateService, deviceTokenService)
 	// Registry of the policies: changes spanning aggregates, run as jobs
 	// apart from event delivery (ADR 0008)
 	policyRunner := outbox.NewPolicyRunner(sqlDB, []application.Policy{

@@ -102,6 +102,16 @@ func (r deviceTokenRepositoryPostgres) Delete(ctx context.Context, deviceID id.I
 	return nil
 }
 
+func (r deviceTokenRepositoryPostgres) DeleteByProject(ctx context.Context, projectID id.ID[project.Project]) error {
+	if _, err := r.db.ExecContext(ctx,
+		`DELETE FROM runtime.device_tokens WHERE project_id = $1`,
+		projectID.UUID(),
+	); err != nil {
+		return fmt.Errorf("cannot delete the tokens of project %s: %w", projectID, err)
+	}
+	return nil
+}
+
 // scanDeviceToken reads a row of selectDeviceTokenColumns; no row is
 // ErrTokenNotFound.
 func scanDeviceToken(scan func(...any) error) (devicetoken.Token, error) {

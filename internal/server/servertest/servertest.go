@@ -132,7 +132,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	tagUpdates := eventbus.NewAsyncPublisher(bus, 1024)
 	tagStateSvc := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, tagUpdates.Publish)
 	deviceTokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(db))
-	runtimeNode := inprocess.NewRuntimeNode(tagStateSvc)
+	runtimeNode := inprocess.NewRuntimeNode(tagStateSvc, deviceTokens)
 	tagSvc := application.NewTagService(content, runtimeNode)
 	libraries := repositories.NewLibraryRepositoryPostgres(db, onCommit)
 	releases := repositories.NewLibraryReleaseRepositoryPostgres(db, onCommit)

@@ -90,6 +90,18 @@ func (m *memoryTokens) Delete(_ context.Context, deviceID id.ID[device.Device], 
 	return nil
 }
 
+func (m *memoryTokens) DeleteByProject(_ context.Context, projectID id.ID[project.Project]) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for hash, t := range m.byHash {
+		if t.ProjectID == projectID {
+			delete(m.byHash, hash)
+			delete(m.byDev, t.DeviceID)
+		}
+	}
+	return nil
+}
+
 // forget drops the stored token without telling the service: the tests see
 // what the cache still answers.
 func (m *memoryTokens) forget() {
@@ -245,5 +257,82 @@ func TestDeviceTokenService_RevokeAndFindToken(t *testing.T) {
 	}
 	if _, err := service.Revoke(ctx, projectID, deviceID); !errors.Is(err, devicetoken.ErrTokenNotFound) {
 		t.Errorf("second Revoke error = %v, want ErrTokenNotFound", err)
+	}
+}
+
+func TestDeviceTokenService_RemoveProjectTokens_ForgetsTheProjectsTokens(t *testing.T) {
+	service, repo, projectID, deviceID := newTokenService()
+	ctx := context.Background()
+	otherProjectID, otherDeviceID := uuid.New(), uuid.New()
+	removed, err := service.Issue(ctx, projectID, deviceID)
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+	kept, err := service.Issue(ctx, otherProjectID, otherDeviceID)
+	if err != nil {
+		t.Fatalf("Issue of the other project: %v", err)
+	}
+	if _, err := service.Authenticate(ctx, removed.Secret); err != nil {
+		t.Fatalf("Authenticate: %v", err)
+	}
+	if _, err := service.Authenticate(ctx, kept.Secret); err != nil {
+		t.Fatalf("Authenticate of the other project: %v", err)
+	}
+
+	// The rows are gone without telling the service, as the cascade of a
+	// Project's removal does; only the cache can keep them alive.
+	repo.forget()
+	if err := service.RemoveProjectTokens(ctx, projectID); err != nil {
+		t.Fatalf("RemoveProjectTokens: %v", err)
+	}
+	if _, err := service.Authenticate(ctx, removed.Secret); !errors.Is(err, devicetoken.ErrTokenNotFound) {
+		t.Errorf("a token of the removed project still authenticates: %v", err)
+	}
+	if _, err := service.Authenticate(ctx, kept.Secret); err != nil {
+		t.Errorf("a token of another project was forgotten too: %v", err)
+	}
+}
+
+// rotatingTokens rotates the Device's token while a lookup runs: the race of
+// an authentication and a rotation, seen from the cache.
+type rotatingTokens struct {
+	*memoryTokens
+	once   sync.Once
+	rotate func()
+}
+
+func (m *rotatingTokens) FindByHash(ctx context.Context, hash string) (devicetoken.Token, error) {
+	found, err := m.memoryTokens.FindByHash(ctx, hash)
+	if err == nil {
+		// The lookup has the old token; the rotation commits before the
+		// authentication writes its result to the cache.
+		m.once.Do(m.rotate)
+	}
+	return found, err
+}
+
+func TestDeviceTokenService_RotationDuringAuthentication_IsNotUndoneByTheCache(t *testing.T) {
+	repo := newMemoryTokens()
+	rotating := &rotatingTokens{memoryTokens: repo}
+	service := runtimeapp.NewDeviceTokenService(rotating)
+	ctx := context.Background()
+	projectID, deviceID := uuid.New(), uuid.New()
+	issued, err := service.Issue(ctx, projectID, deviceID)
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+	rotating.rotate = func() {
+		if _, err := service.Rotate(ctx, projectID, deviceID); err != nil {
+			t.Errorf("Rotate: %v", err)
+		}
+	}
+
+	// The old token is what the in-flight lookup read, but the rotation
+	// cleared the cache afterwards: the authentication must not put it back.
+	if _, err := service.Authenticate(ctx, issued.Secret); err != nil {
+		t.Fatalf("the in-flight authentication: %v", err)
+	}
+	if _, err := service.Authenticate(ctx, issued.Secret); !errors.Is(err, devicetoken.ErrTokenNotFound) {
+		t.Errorf("the rotated-away token still authenticates from the cache: %v", err)
 	}
 }

@@ -53,7 +53,7 @@ func TestRuntimeNode_UpsertTagDefinitions_HandsOverEveryField(t *testing.T) {
 	project := uuid.New()
 	first, second := uuid.New(), uuid.New()
 
-	err := inprocess.NewRuntimeNode(states).UpsertTagDefinitions(context.Background(), project, []appdto.TagDefinition{
+	err := inprocess.NewRuntimeNode(states, nil).UpsertTagDefinitions(context.Background(), project, []appdto.TagDefinition{
 		{ID: first, Name: "pressure", Type: "integer", Version: 1},
 		{ID: second, Name: "running", Type: "boolean", Version: 3},
 	})
@@ -78,7 +78,7 @@ func TestRuntimeNode_FindTagStates_HandsOverTheStatesInOrder(t *testing.T) {
 		{ID: first, Name: "pressure", Type: "integer", Version: 1, Value: "0", Quality: "bad"},
 	}}
 
-	got, err := inprocess.NewRuntimeNode(states).FindTagStates(context.Background(), project, []uuid.UUID{second, first})
+	got, err := inprocess.NewRuntimeNode(states, nil).FindTagStates(context.Background(), project, []uuid.UUID{second, first})
 	if err != nil {
 		t.Fatalf("FindTagStates: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestRuntimeNode_RemoveTagStates_HandsOverTheTags(t *testing.T) {
 	states := &recordingStates{}
 	project, tagID := uuid.New(), uuid.New()
 
-	if err := inprocess.NewRuntimeNode(states).RemoveTagStates(context.Background(), project, []uuid.UUID{tagID}); err != nil {
+	if err := inprocess.NewRuntimeNode(states, nil).RemoveTagStates(context.Background(), project, []uuid.UUID{tagID}); err != nil {
 		t.Fatalf("RemoveTagStates: %v", err)
 	}
 	if states.projectID != project || !reflect.DeepEqual(states.tagIDs, []uuid.UUID{tagID}) {
@@ -111,7 +111,7 @@ func TestRuntimeNode_RemoveProjectTagStates_HandsOverTheProject(t *testing.T) {
 	states := &recordingStates{}
 	project := uuid.New()
 
-	if err := inprocess.NewRuntimeNode(states).RemoveProjectTagStates(context.Background(), project); err != nil {
+	if err := inprocess.NewRuntimeNode(states, nil).RemoveProjectTagStates(context.Background(), project); err != nil {
 		t.Fatalf("RemoveProjectTagStates: %v", err)
 	}
 	if !states.removeAll || states.projectID != project {
@@ -119,10 +119,45 @@ func TestRuntimeNode_RemoveProjectTagStates_HandsOverTheProject(t *testing.T) {
 	}
 }
 
+// TestRuntimeNode_RemoveProjectDeviceTokens_HandsOverTheProject: the removal
+// of a Project's Device Tokens is the Runtime node's, so a token resolved in
+// its memory is forgotten with the rows.
+type recordingTokens struct {
+	runtimeapp.DeviceTokenService
+
+	projectID uuid.UUID
+	err       error
+}
+
+func (t *recordingTokens) RemoveProjectTokens(_ context.Context, projectID uuid.UUID) error {
+	t.projectID = projectID
+	return t.err
+}
+
+func TestRuntimeNode_RemoveProjectDeviceTokens_HandsOverTheProject(t *testing.T) {
+	tokens := &recordingTokens{}
+	project := uuid.New()
+
+	if err := inprocess.NewRuntimeNode(&recordingStates{}, tokens).RemoveProjectDeviceTokens(context.Background(), project); err != nil {
+		t.Fatalf("RemoveProjectDeviceTokens: %v", err)
+	}
+	if tokens.projectID != project {
+		t.Errorf("forgot the tokens of %v, want %v", tokens.projectID, project)
+	}
+}
+
+// TestRuntimeNode_RemoveProjectDeviceTokens_WithoutTokens: a Runtime node
+// without Device Tokens has nothing to forget.
+func TestRuntimeNode_RemoveProjectDeviceTokens_WithoutTokens(t *testing.T) {
+	if err := inprocess.NewRuntimeNode(&recordingStates{}, nil).RemoveProjectDeviceTokens(context.Background(), uuid.New()); err != nil {
+		t.Errorf("RemoveProjectDeviceTokens without tokens: %v", err)
+	}
+}
+
 // TestRuntimeNode_ReturnsTheRuntimeNodesErrors: the Engineering node sees
 // the Runtime node's error itself (errors.Is), not a translation of it.
 func TestRuntimeNode_ReturnsTheRuntimeNodesErrors(t *testing.T) {
-	node := inprocess.NewRuntimeNode(&recordingStates{err: errRuntime})
+	node := inprocess.NewRuntimeNode(&recordingStates{err: errRuntime}, nil)
 	ctx, project := context.Background(), uuid.New()
 
 	calls := map[string]error{

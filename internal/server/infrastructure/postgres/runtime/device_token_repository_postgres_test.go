@@ -129,6 +129,36 @@ func TestDeviceToken_DeleteOfTheProjectOnly(t *testing.T) {
 	}
 }
 
+func TestDeviceToken_DeleteByProject_RemovesOnlyItsTokens(t *testing.T) {
+	projectID := newTokenProject(t)
+	otherProjectID, _ := newProject(t)
+	repo := runtimepg.NewDeviceTokenRepositoryPostgres(postgres.DB(t))
+	ctx := context.Background()
+	removed, removedHash := newToken(t, projectID)
+	kept, keptHash := newToken(t, otherProjectID)
+	for _, token := range []struct {
+		t    devicetoken.Token
+		hash string
+	}{{removed, removedHash}, {kept, keptHash}} {
+		if err := repo.Insert(ctx, token.t, token.hash); err != nil {
+			t.Fatalf("Insert: %v", err)
+		}
+	}
+
+	if err := repo.DeleteByProject(ctx, projectID); err != nil {
+		t.Fatalf("DeleteByProject: %v", err)
+	}
+	if _, err := repo.FindByHash(ctx, removedHash); !errors.Is(err, devicetoken.ErrTokenNotFound) {
+		t.Errorf("a token of the removed project is still stored: %v", err)
+	}
+	if _, err := repo.FindByHash(ctx, keptHash); err != nil {
+		t.Errorf("a token of another project was removed: %v", err)
+	}
+	if err := repo.DeleteByProject(ctx, projectID); err != nil {
+		t.Errorf("DeleteByProject of a project without tokens: %v", err)
+	}
+}
+
 func TestDeviceToken_GoesWithItsProject(t *testing.T) {
 	projectID := newTokenProject(t)
 	repo := runtimepg.NewDeviceTokenRepositoryPostgres(postgres.DB(t))
