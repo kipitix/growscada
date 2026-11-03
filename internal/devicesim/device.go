@@ -85,6 +85,9 @@ type Device struct {
 
 // simTag is one simulated tag; its fields are guarded by Device.mu.
 type simTag struct {
+	// name is the tag's name in the project, unique there: it is the one thing
+	// about a tag that never changes, so it is read without the lock.
+	name     string
 	tag      devicelink.Tag // only the name until the configuration is read
 	interval time.Duration
 	quality  devicelink.Quality  // from the config
@@ -127,6 +130,7 @@ func New(cfg Config, link devicelink.Link, source Source, opts Options) *Device 
 	d.idle = sync.NewCond(&d.mu)
 	for _, tc := range cfg.Tags {
 		t := &simTag{
+			name:     tc.Tag,
 			tag:      devicelink.Tag{Name: tc.Tag},
 			interval: tc.Interval.D,
 			quality:  tc.Quality,
@@ -191,8 +195,26 @@ func (d *Device) fetchConfiguration(ctx context.Context) (apiv0.DeviceConfigResp
 // whether the Device supplies it at all. At connect (strict) a tag the Device
 // does not supply, or a pattern that does not fit its type, is an error; on a
 // reload the same stops the tag from being written, so the Device keeps
-// running whatever its configuration became.
+// running whatever its configuration became. The warnings it raises are
+// logged once the lock is dropped: a reload runs often, and the logger has no
+// business under the Device's mutex.
 func (d *Device) applyConfiguration(cfg apiv0.DeviceConfigResponse, strict bool) error {
+	warnings, err := d.applyConfigurationLocked(cfg, strict)
+	for _, w := range warnings {
+		d.logger.Warn(w.message, w.args...)
+	}
+	return err
+}
+
+// warning is one message applyConfiguration raises: the text and the
+// structured attributes of a log line, kept until the lock is dropped.
+type warning struct {
+	message string
+	args    []any
+}
+
+// applyConfigurationLocked does applyConfiguration's work; d.mu held.
+func (d *Device) applyConfigurationLocked(cfg apiv0.DeviceConfigResponse, strict bool) ([]warning, error) {
 	supplied := make(map[string]apiv0.DeviceConfigTagResponse, len(cfg.Tags))
 	for _, tag := range cfg.Tags {
 		supplied[tag.Name] = tag
@@ -209,15 +231,16 @@ func (d *Device) applyConfiguration(cfg apiv0.DeviceConfigResponse, strict bool)
 		at = 0
 	}
 
+	var warnings []warning
 	for _, t := range d.tags {
-		name := t.tag.Name
+		name := t.name
 		definition, ok := supplied[name]
 		if !ok {
 			if strict {
-				return fmt.Errorf("%w: tag %q is not supplied by the device", ErrConfig, name)
+				return warnings, fmt.Errorf("%w: tag %q is not supplied by the device", ErrConfig, name)
 			}
-			if !t.lost {
-				d.logger.Warn("tag is not supplied by the device any more, no longer simulated", "tag", name)
+			if !t.lost { // news: a reload of the same configuration says nothing
+				warnings = append(warnings, warning{"tag is not supplied by the device any more, no longer simulated", []any{"tag", name}})
 			}
 			t.lost = true
 			continue
@@ -225,9 +248,11 @@ func (d *Device) applyConfiguration(cfg apiv0.DeviceConfigResponse, strict bool)
 		tagType, err := devicelink.ParseTagType(definition.Type)
 		if err != nil {
 			if strict {
-				return fmt.Errorf("%w: tag %q: %w", ErrConfig, name, err)
+				return warnings, fmt.Errorf("%w: tag %q: %w", ErrConfig, name, err)
 			}
-			d.logger.Warn("tag has an unknown type, no longer simulated", "tag", name, "error", err)
+			if !t.lost {
+				warnings = append(warnings, warning{"tag has an unknown type, no longer simulated", []any{"tag", name, "error", err}})
+			}
 			t.lost = true
 			continue
 		}
@@ -244,9 +269,11 @@ func (d *Device) applyConfiguration(cfg apiv0.DeviceConfigResponse, strict bool)
 		if err != nil {
 			t.gen = nil
 			if strict {
-				return fmt.Errorf("%w: tag %q: %w", ErrConfig, name, err)
+				return warnings, fmt.Errorf("%w: tag %q: %w", ErrConfig, name, err)
 			}
-			d.logger.Warn("pattern does not fit the tag, no longer simulated", "tag", name, "error", err)
+			if !t.lost {
+				warnings = append(warnings, warning{"pattern does not fit the tag, no longer simulated", []any{"tag", name, "error", err}})
+			}
 			t.lost = true
 			continue
 		}
@@ -259,7 +286,7 @@ func (d *Device) applyConfiguration(cfg apiv0.DeviceConfigResponse, strict bool)
 			t.poke()
 		}
 	}
-	return nil
+	return warnings, nil
 }
 
 func (t *simTag) setPattern(p PatternSpec, at time.Duration) error {
@@ -313,10 +340,7 @@ func (d *Device) Run(ctx context.Context) error {
 		go func() {
 			defer wg.Done()
 			if err := d.runTag(runCtx, t); err != nil {
-				select {
-				case fatal <- err:
-				default: // the first fatal error is the one reported
-				}
+				reportFatal(runCtx, fatal, err)
 			}
 		}()
 	}
@@ -338,6 +362,17 @@ func (d *Device) Run(ctx context.Context) error {
 	}
 }
 
+// reportFatal hands err to Run, which reports it and stops the Device. It
+// gives up when ctx is done: once Run has stopped waiting, a report nobody
+// reads must not hold the goroutine — and Run's wait for the goroutines to
+// end — forever.
+func reportFatal(ctx context.Context, fatal chan<- error, err error) {
+	select {
+	case fatal <- err:
+	case <-ctx.Done():
+	}
+}
+
 // runTag writes the tag every interval until ctx is done. A token the server
 // refuses is returned: the Gateway ends rather than retrying.
 func (d *Device) runTag(ctx context.Context, t *simTag) error {
@@ -347,7 +382,7 @@ func (d *Device) runTag(ctx context.Context, t *simTag) error {
 	for {
 		err := d.write(ctx, t, kicked)
 		if devicelink.IsUnauthenticated(err) {
-			return fmt.Errorf("tag %q: %w", t.tag.Name, err)
+			return fmt.Errorf("tag %q: %w", t.name, err)
 		}
 		select {
 		case <-ctx.Done():
@@ -374,12 +409,16 @@ func (d *Device) write(ctx context.Context, t *simTag, kicked bool) error {
 		t.last, t.written = t.gen.next(d.runningTime()-t.setAt), true
 	}
 	t.regen = false
+	// A reload may replace the tag's identity while the value is on its way:
+	// it is taken under the lock, and the write goes to the identity the value
+	// was generated for.
+	tag := t.tag
 	value := t.last
 	quality := t.currentQuality()
 	d.inFlight++
 	d.mu.Unlock()
 
-	err := d.link.Write(ctx, t.tag, value, quality)
+	err := d.link.Write(ctx, tag, value, quality)
 
 	d.mu.Lock()
 	gone := err != nil && ctx.Err() == nil && errors.Is(err, devicelink.ErrTagNotFound)
@@ -394,11 +433,11 @@ func (d *Device) write(ctx context.Context, t *simTag, kicked bool) error {
 	switch {
 	case err == nil, ctx.Err() != nil:
 	case gone:
-		d.logger.Warn("tag deleted on the server, no longer simulated", "tag", t.tag.Name, "error", err)
+		d.logger.Warn("tag deleted on the server, no longer simulated", "tag", t.name, "error", err)
 	case refused:
-		d.logger.Warn("the server refuses writes of the tag, no longer simulated", "tag", t.tag.Name, "error", err)
+		d.logger.Warn("the server refuses writes of the tag, no longer simulated", "tag", t.name, "error", err)
 	default:
-		d.logger.Warn("write failed, will retry on the next tick", "tag", t.tag.Name, "error", err)
+		d.logger.Warn("write failed, will retry on the next tick", "tag", t.name, "error", err)
 	}
 	return err
 }
@@ -439,7 +478,7 @@ func (d *Device) followEvents(ctx context.Context, poke func(), fatal chan<- err
 			return
 		}
 		if devicelink.IsUnauthenticated(err) {
-			fatal <- fmt.Errorf("the server refused the device: %w", err)
+			reportFatal(ctx, fatal, fmt.Errorf("the server refused the device: %w", err))
 			return
 		}
 		d.logger.Warn("configuration event stream ended, reconnecting", "error", err)
@@ -468,7 +507,7 @@ func (d *Device) reloadOnSchedule(ctx context.Context, kick <-chan struct{}, fat
 		switch {
 		case err == nil, ctx.Err() != nil:
 		case devicelink.IsUnauthenticated(err):
-			fatal <- err
+			reportFatal(ctx, fatal, err)
 			return
 		case devicelink.IsForbidden(err):
 			// The Device is not in the configuration the Gateway asked about:
@@ -631,7 +670,7 @@ func (d *Device) Status() Status {
 	}
 	for i, t := range d.tags {
 		s.Tags[i] = TagStatus{
-			Name:       t.tag.Name,
+			Name:       t.name,
 			Interval:   Duration{D: t.interval},
 			Quality:    t.currentQuality(),
 			Overridden: t.override != nil,

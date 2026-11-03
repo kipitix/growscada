@@ -112,6 +112,14 @@ func (s *fakeSource) change(tags map[string]devicelink.TagType, deviceName strin
 	}
 }
 
+// reidentify gives the tag a new ID on the server, as a Tag deleted and
+// created again under the same name would; change then tells the Device.
+func (s *fakeSource) reidentify(name string) {
+	s.mu.Lock()
+	s.ids[name] = uuid.New()
+	s.mu.Unlock()
+}
+
 // fail makes the next Configuration call fail transiently, as an
 // unreachable server would.
 func (s *fakeSource) fail(times int) {
@@ -359,6 +367,30 @@ func TestRun_ReloadsConfigurationOnEvent(t *testing.T) {
 	if d.Status().Tags[0].Lost {
 		t.Error("the tag supplied again must be written again")
 	}
+}
+
+// TestRun_ReloadWhileWriting: a reload that gives a tag a new identity while
+// the Device is writing it keeps the tag written, under the new identity. The
+// writer takes the identity under the Device's lock, so a write in flight
+// carries the one its value was generated for.
+func TestRun_ReloadWhileWriting(t *testing.T) {
+	link, source := fakeDevice(map[string]devicelink.TagType{"counter": devicelink.TagTypeInteger})
+	d := startDevice(t, testConfig(t, rampConfig), link, source)
+	waitEvents(t, source)
+	eventually(t, "a write", func() bool { return len(link.snapshot()) > 0 })
+
+	_, tags := source.snapshot()
+	for range 25 {
+		source.reidentify("counter")
+		source.change(tags, "sim")
+		time.Sleep(time.Millisecond)
+	}
+
+	if d.Status().Tags[0].Lost {
+		t.Error("a tag whose identity changed must be written under the new one")
+	}
+	written := len(link.snapshot())
+	eventually(t, "writes under the new identity", func() bool { return len(link.snapshot()) > written })
 }
 
 // TestRun_ChangedTypeKeepsTheTagStopped: a tag whose type changed to one its
