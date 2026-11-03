@@ -340,6 +340,32 @@ func TestCreateRevision_RefusesAPairWhoseCopiesAreOfAnotherProject(t *testing.T)
 	}
 }
 
+func TestCreateRevision_HealsACopyThatLostItsState(t *testing.T) {
+	projectID, _ := newProject(t)
+	db := postgres.DB(t)
+	repo := runtimepg.NewRevisionRepositoryPostgres(db)
+	states := runtimepg.NewTagStateRepositoryPostgres(db)
+	tagID := uuid.New()
+	file := documentOf(projectID, withTags(projectv0.TagDefinition{ID: tagID, Name: "counter", Type: "integer"}))
+
+	mustCreateRevision(t, repo, projectID.UUID(), file, time.Now())
+	if _, err := db.ExecContext(context.Background(), `DELETE FROM runtime.tag_states WHERE tag_id = $1`, tagID); err != nil {
+		t.Fatalf("drop the state: %v", err)
+	}
+	if _, ok := stateOf(t, states, projectID, tagID); ok {
+		t.Fatal("the state survives its deletion")
+	}
+
+	mustCreateRevision(t, repo, projectID.UUID(), file, time.Now())
+	state, ok := stateOf(t, states, projectID, tagID)
+	if !ok {
+		t.Fatal("the deploy of an unchanged document did not give the copy its state back")
+	}
+	if state.Value().String() != "0" || state.Quality().String() != "bad" {
+		t.Errorf("the healed state is %q/%s, want the initial state of an integer tag", state.Value().String(), state.Quality().String())
+	}
+}
+
 func TestCreateRevision_ResetsTheStateOfAChangedTagTypeAndKeepsTheOthers(t *testing.T) {
 	projectID, _ := newProject(t)
 	db := postgres.DB(t)

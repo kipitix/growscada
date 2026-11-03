@@ -309,9 +309,6 @@ func refreshTags(ctx context.Context, tx *sql.Tx, projectID uuid.UUID, defs []pr
 			return fmt.Errorf("cannot upsert tag definition %s: %w", d.ID, err)
 		}
 		storedType, known := existing[d.ID]
-		if known && storedType == tagType.String() {
-			continue
-		}
 		initial, err := tagstate.Initial(tagstate.Definition{
 			TagID:     id.NewID(id.IDWithUUID[tag.Tag](d.ID)),
 			ProjectID: id.NewID(id.IDWithUUID[project.Project](projectID)),
@@ -323,10 +320,20 @@ func refreshTags(ctx context.Context, tx *sql.Tx, projectID uuid.UUID, defs []pr
 		if err != nil {
 			return fmt.Errorf("cannot create the initial state of tag %s: %w", d.ID, err)
 		}
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO runtime.tag_states (tag_id, value, quality)
-			 VALUES ($1, $2, $3)
-			 ON CONFLICT (tag_id) DO UPDATE SET value = EXCLUDED.value, quality = EXCLUDED.quality`,
+		// A state is replaced when the Tag appeared or changed its TagType: it is
+		// then the initial state of the new TagType. A state written to an
+		// unchanged Tag survives the Deploy, but a copy that lost its state gets
+		// one back: every read joins the two tables, so a copy without a state is
+		// invisible and refuses writes.
+		writeState := `INSERT INTO runtime.tag_states (tag_id, value, quality)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (tag_id) DO UPDATE SET value = EXCLUDED.value, quality = EXCLUDED.quality`
+		if known && storedType == tagType.String() {
+			writeState = `INSERT INTO runtime.tag_states (tag_id, value, quality)
+				VALUES ($1, $2, $3)
+				ON CONFLICT (tag_id) DO NOTHING`
+		}
+		if _, err := tx.ExecContext(ctx, writeState,
 			d.ID, initial.Value().String(), initial.Quality().String(),
 		); err != nil {
 			return fmt.Errorf("cannot set the initial state of tag %s: %w", d.ID, err)
