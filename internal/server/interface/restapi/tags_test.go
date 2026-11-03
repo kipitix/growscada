@@ -101,7 +101,7 @@ func startTestDB() {
 
 func cleanTags(t *testing.T) {
 	t.Helper()
-	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
+	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.project_files; DELETE FROM engineering.tags"); err != nil {
 		t.Fatalf("cleanTags: %v", err)
 	}
 }
@@ -110,14 +110,18 @@ func newRouter() *restapi.APIRouter {
 	return newServices().router()
 }
 
-// createTagViaService creates a tag and writes its state, value and quality,
-// as its supplier would; it returns the tag with that state.
+// createTagViaService creates a tag, deploys it and writes its state, value and
+// quality, as its supplier would; it returns the tag with that state. Nothing
+// of the Draft reaches the Runtime node before a Deploy (task 35, Q4).
 func createTagViaService(t *testing.T, name, tagType, value, quality string) appdto.Tag {
 	t.Helper()
 	services := newServices()
 	resp, err := services.tags.CreateTag(context.Background(), mainProject, appdto.CreateTagInput{Name: name, Type: tagType})
 	if err != nil {
 		t.Fatalf("createTagViaService(%q): %v", name, err)
+	}
+	if _, err := services.deploy.Deploy(context.Background(), mainProject); err != nil {
+		t.Fatalf("createTagViaService(%q): deploy: %v", name, err)
 	}
 	written, err := services.states.SetTagValue(context.Background(), mainProject, runtimeapp.SetTagValueInput{TagID: resp.ID, Value: value, Quality: quality})
 	if err != nil {

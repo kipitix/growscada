@@ -149,6 +149,8 @@ func TestApply_Twice_IsIdempotentAndKeepsCurrentValue(t *testing.T) {
 		t.Fatalf("first apply: %v", err)
 	}
 	running := tagsByName(t, svc)["pump1.running"]
+	// The value below is the Runtime node's: it needs a Deploy first (task 35).
+	servertest.DeployProject(t, postgres.DB(t), servertest.MainProject)
 	if _, err := apiclient.New(srv.URL, srv.Client()).Project(servertest.MainProject).SetTagValue(context.Background(), running.ID, "true", "good"); err != nil {
 		t.Fatalf("SetTagValue: %v", err)
 	}

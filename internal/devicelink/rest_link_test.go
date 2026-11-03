@@ -35,6 +35,9 @@ func setup(t *testing.T) (*devicelink.RESTLink, application.TagService, appdto.T
 		t.Fatalf("create tag: %v", err)
 	}
 	device := servertest.NewDevice(t, srv, postgres.DB(t), "pump", created.ID)
+	// The Tag's state is the Runtime node's: the writes below need a Deploy
+	// first (task 35).
+	servertest.DeployProject(t, postgres.DB(t), servertest.MainProject)
 	return devicelink.NewRESTLink(apiclient.New(srv.URL, srv.Client()), device.Token), svc, created
 }
 
@@ -150,6 +153,7 @@ func TestWrite_TagOfAnotherDevice(t *testing.T) {
 	}
 	device := servertest.NewDevice(t, srv, postgres.DB(t), "pump", ours.ID)
 	servertest.NewDevice(t, srv, postgres.DB(t), "valve", theirs.ID)
+	servertest.DeployProject(t, postgres.DB(t), servertest.MainProject)
 	link := devicelink.NewRESTLink(apiclient.New(srv.URL, srv.Client()), device.Token)
 
 	err = link.Write(ctx, devicelink.Tag{ID: theirs.ID, Name: "valve.state", Type: devicelink.TagTypeInteger}, "1", devicelink.QualityGood)
@@ -168,6 +172,8 @@ func TestWrite_DeletedTag(t *testing.T) {
 	if _, err := svc.DeleteTagByID(context.Background(), servertest.MainProject, created.ID); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
+	// The running Revision still holds the Tag: the next Deploy drops it.
+	servertest.DeployProject(t, postgres.DB(t), servertest.MainProject)
 
 	err = link.Write(context.Background(), tag, "1", devicelink.QualityGood)
 

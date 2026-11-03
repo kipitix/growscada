@@ -71,7 +71,7 @@ func TestMain(m *testing.M) {
 // cleanTags removes the Tag definitions and the Tag states.
 func cleanTags(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
+	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.project_files; DELETE FROM engineering.tags"); err != nil {
 		t.Fatalf("cleanTags: %v", err)
 	}
 }
@@ -299,23 +299,34 @@ func TestDeleteTag_NotFound_ReturnsWrappedErrTagNotFound(t *testing.T) {
 
 // --- States from the Runtime node ---
 
-func TestCreateTag_StateIsInitialAndAcceptsValuesAtOnce(t *testing.T) {
+// TestCreateTag_TheRuntimeNodeHearsOfItAtTheNextDeploy: nothing of the Draft
+// reaches the Runtime node before a Deploy (task 35, Q4): a Tag created now
+// accepts no value until the Project is deployed, and then accepts them.
+func TestCreateTag_TheRuntimeNodeHearsOfItAtTheNextDeploy(t *testing.T) {
 	cleanTags(t)
 	svc, states := newServiceWithStates()
 	ctx := context.Background()
 
+	created := make(map[string]appdto.Tag)
 	for tagType, zero := range map[string]string{"integer": "0", "boolean": "false", "string": ""} {
-		created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "t_" + tagType, Type: tagType})
+		newTag, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "t_" + tagType, Type: tagType})
 		if err != nil {
 			t.Fatalf("CreateTag(%s): %v", tagType, err)
 		}
-		if created.Value != zero || created.Quality != "bad" || created.Seq != 0 || created.Version != 1 {
-			t.Errorf("%s: created %+v, want the zero value %q, bad, no seq, version 1", tagType, created, zero)
+		if newTag.Value != zero || newTag.Quality != "bad" || newTag.Seq != 0 || newTag.Version != 1 {
+			t.Errorf("%s: created %+v, want the zero value %q, bad, no seq, version 1", tagType, newTag, zero)
 		}
-		// No policy runs here: the creation gave the Runtime node the
-		// definition itself.
-		if _, err := states.SetTagValue(ctx, mainProject, runtimeapp.SetTagValueInput{TagID: created.ID, Value: zero, Quality: "good"}); err != nil {
-			t.Errorf("%s: a value written right after the creation: %v", tagType, err)
+		if _, err := states.SetTagValue(ctx, mainProject, runtimeapp.SetTagValueInput{TagID: newTag.ID, Value: zero, Quality: "good"}); !errors.Is(err, tag.ErrTagNotFound) {
+			t.Errorf("%s: a value written before the Deploy: %v, want ErrTagNotFound", tagType, err)
+		}
+		created[tagType] = newTag
+	}
+
+	deployProject(t, mainProject)
+
+	for tagType, zero := range map[string]string{"integer": "0", "boolean": "false", "string": ""} {
+		if _, err := states.SetTagValue(ctx, mainProject, runtimeapp.SetTagValueInput{TagID: created[tagType].ID, Value: zero, Quality: "good"}); err != nil {
+			t.Errorf("%s: a value written after the Deploy: %v", tagType, err)
 		}
 	}
 }
@@ -329,6 +340,7 @@ func TestFindTags_CarryTheWrittenState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
+	deployProject(t, mainProject)
 	written, err := states.SetTagValue(ctx, mainProject, runtimeapp.SetTagValueInput{TagID: created.ID, Value: "42", Quality: "uncertain"})
 	if err != nil {
 		t.Fatalf("SetTagValue: %v", err)
@@ -353,16 +365,16 @@ func TestFindTags_CarryTheWrittenState(t *testing.T) {
 	}
 }
 
-// TestFindTags_WithoutAStateShowTheInitialOne: a definition the Runtime node
-// has not been given yet (its upsert failed, the policy has not run) reads
-// with its initial state.
+// TestFindTags_WithoutAStateShowTheInitialOne: a definition no Deploy has
+// given the Runtime node reads with its initial state, though the Runtime node
+// is unreachable.
 func TestFindTags_WithoutAStateShowTheInitialOne(t *testing.T) {
 	cleanTags(t)
 	svc := application.NewTagService(contentOver(newScopes()), failingRuntimeNode{RuntimeNode: newRuntimeNode()})
 	ctx := context.Background()
 
-	if _, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "flag", Type: "boolean"}); !errors.Is(err, errRuntimeDown) {
-		t.Fatalf("CreateTag with the Runtime node failing: %v, want its error", err)
+	if _, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "flag", Type: "boolean"}); err != nil {
+		t.Fatalf("CreateTag: %v", err)
 	}
 	found, err := svc.FindTagByName(ctx, mainProject, "flag")
 	if err != nil {
@@ -413,7 +425,10 @@ func TestTags_RuntimeNodeUnreadable_ReadAndDeleteWithInitialStates(t *testing.T)
 	}
 }
 
-func TestDeleteTag_RemovesItsStateAtOnce(t *testing.T) {
+// TestDeleteTag_LeavesItsStateUntilTheNextDeploy: the Draft's deletion is not
+// the Runtime node's business; the running Revision still holds the Tag, and
+// the next Deploy removes it with its state (task 35, Q4).
+func TestDeleteTag_LeavesItsStateUntilTheNextDeploy(t *testing.T) {
 	cleanTags(t)
 	svc, states := newServiceWithStates()
 	ctx := context.Background()
@@ -422,6 +437,7 @@ func TestDeleteTag_RemovesItsStateAtOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
+	deployProject(t, mainProject)
 	if _, err := states.SetTagValue(ctx, mainProject, runtimeapp.SetTagValueInput{TagID: created.ID, Value: "true", Quality: "good"}); err != nil {
 		t.Fatalf("SetTagValue: %v", err)
 	}
@@ -433,9 +449,14 @@ func TestDeleteTag_RemovesItsStateAtOnce(t *testing.T) {
 	if deleted.Value != "true" || deleted.Quality != "good" {
 		t.Errorf("deleted %+v, want its last state true, good", deleted)
 	}
+	if _, err := states.SetTagValue(ctx, mainProject, runtimeapp.SetTagValueInput{TagID: created.ID, Value: "false", Quality: "good"}); err != nil {
+		t.Errorf("a value written while the running revision still holds the tag: %v", err)
+	}
+
+	deployProject(t, mainProject)
 	_, err = states.SetTagValue(ctx, mainProject, runtimeapp.SetTagValueInput{TagID: created.ID, Value: "false", Quality: "good"})
 	if !errors.Is(err, tag.ErrTagNotFound) {
-		t.Errorf("a value written after the deletion: %v, want ErrTagNotFound", err)
+		t.Errorf("a value written after the deploy that dropped it: %v, want ErrTagNotFound", err)
 	}
 }
 

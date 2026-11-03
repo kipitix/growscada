@@ -161,12 +161,16 @@ func createWidgetType(t *testing.T, api *testAPI, name string, ports ...apiv0.In
 	return created.ID
 }
 
+// createTag creates a Tag and deploys the Draft, so that its value can be
+// written: nothing of the Draft reaches the Runtime node before a Deploy
+// (task 35, Q4).
 func createTag(t *testing.T, api *testAPI, name, tagType string) uuid.UUID {
 	t.Helper()
 	created, err := api.CreateTag(context.Background(), apiv0.CreateTagRequest{Name: name, Type: tagType})
 	if err != nil {
 		t.Fatalf("create tag: %v", err)
 	}
+	servertest.DeployProject(t, postgres.DB(t), servertest.MainProject)
 	return created.ID
 }
 

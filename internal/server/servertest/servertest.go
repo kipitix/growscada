@@ -116,7 +116,8 @@ type Device struct {
 // in, through the real API, makes the given Tags the Device's suppliers and
 // issues the Device's token. The API has no way to change a Tag's supplier
 // yet (task 68), so the supplier is set in the database: the Engineering
-// node's row and the Runtime node's copy of the definition.
+// node's row. A Deploy copies it to the Runtime node with the rest of the
+// Draft.
 func NewDevice(t *testing.T, srv *httptest.Server, db *sql.DB, name string, tagIDs ...uuid.UUID) Device {
 	t.Helper()
 	return NewDeviceInProject(t, srv, db, MainProject, name, tagIDs...)
@@ -137,12 +138,6 @@ func NewDeviceInProject(t *testing.T, srv *httptest.Server, db *sql.DB, projectI
 	for _, tagID := range tagIDs {
 		if _, err := db.ExecContext(ctx, "UPDATE engineering.tags SET device_id = $1 WHERE id = $2", device.ID, tagID); err != nil {
 			t.Fatalf("supply tag %s: %v", tagID, err)
-		}
-		if _, err := db.ExecContext(ctx,
-			"INSERT INTO runtime.tags (id, project_id, name, type, version, device_id) "+
-				"SELECT id, project_id, name, type, version, device_id FROM engineering.tags WHERE id = $1 "+
-				"ON CONFLICT (id) DO UPDATE SET device_id = EXCLUDED.device_id", tagID); err != nil {
-			t.Fatalf("supply tag %s in the Runtime node: %v", tagID, err)
 		}
 	}
 	token := postJSON[apiv0.DeviceTokenResponse](t, srv, projectPath+"/devices/"+device.ID.String()+"/token", nil)
@@ -214,7 +209,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	t.Helper()
 	if _, err := db.ExecContext(context.Background(), "DELETE FROM runtime.revisions; DELETE FROM runtime.device_tokens; DELETE FROM runtime.tags; "+
 		"DELETE FROM runtime.environment_devices; DELETE FROM runtime.devices; DELETE FROM runtime.environments; "+
-		"DELETE FROM engineering.tags; "+
+		"DELETE FROM engineering.project_files; DELETE FROM engineering.tags; "+
 		"DELETE FROM engineering.environment_devices; DELETE FROM engineering.devices; DELETE FROM engineering.environments; "+
 		"DELETE FROM engineering.widgets; "+
 		"DELETE FROM engineering.scenes; DELETE FROM engineering.library_pins; DELETE FROM engineering.libraries; "+
@@ -252,7 +247,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 		application.NewDiscardLibraryPolicy(libraries, releases, widgetTypes),
 		application.NewUnbindDeletedTagPolicy(projectRepo, scopes),
 		application.NewProjectCleanupPolicy(projectRepo, scopes, runtimeNode),
-		application.NewRuntimeTagDefinitionsPolicy(scopes, runtimeNode),
+		application.NewDiscardProjectPolicy(projectRepo, scopes, releases, runtimeNode),
 	})
 	dispatcher.SetPolicyRunner(runner)
 	ctx, stop := context.WithCancel(context.Background())

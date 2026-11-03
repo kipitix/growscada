@@ -16,16 +16,14 @@ import (
 //
 // A Deploy hands the Runtime node the whole ProjectFile, which it stores as a
 // numbered Revision and from which it rebuilds its copies of the Tag
-// definitions, the Devices and the Environments. Until the Engineering node
-// deploys (task 35, part 4) the bridge of UpsertTagDefinitions still gives the
-// Runtime node the Tag definitions of the Draft; once a Project has a
-// Revision, the copies come from it alone.
+// definitions, the Devices and the Environments. The copies are the running
+// Revision's alone: nothing of the Draft reaches this port (task 35, part 4).
 type RuntimeNode interface {
 	// UpsertTagDefinitions gives the Runtime node the definitions of Tags: a
 	// Tag without a state gets its initial one, a Tag with one keeps it.
 	// Idempotent. A state stored of another Project or TagType is an
-	// error. The bridge of the Draft writes nothing once the Project has a
-	// Revision: from then on the copies are the running Revision's.
+	// error. Nothing of the Draft calls it any more: the copies are the
+	// running Revision's, and once a Project has one this writes nothing.
 	UpsertTagDefinitions(ctx context.Context, projectID uuid.UUID, defs []appdto.TagDefinition) error
 	// RemoveTagStates removes the states of the Tags; one without a state is
 	// skipped.

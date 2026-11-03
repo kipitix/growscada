@@ -145,7 +145,7 @@ func main() {
 		application.NewDiscardLibraryPolicy(libraryRepository, releaseRepository, widgetTypeRepositories),
 		application.NewUnbindDeletedTagPolicy(projectRepository, projectScopes),
 		application.NewProjectCleanupPolicy(projectRepository, projectScopes, runtimeNode),
-		application.NewRuntimeTagDefinitionsPolicy(projectScopes, runtimeNode),
+		application.NewDiscardProjectPolicy(projectRepository, projectScopes, releaseRepository, runtimeNode),
 	})
 	dispatcher.SetPolicyRunner(policyRunner)
 	dispatcherCtx, stopDispatcher := context.WithCancel(context.Background())

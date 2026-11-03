@@ -2,10 +2,8 @@ package application
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
@@ -186,11 +184,9 @@ func (t tagServiceImpl) findTagsMatching(ctx context.Context, rawProjectID uuid.
 
 // CreateTag creates a new tag in the project and returns the created tag DTO,
 // with its initial state. A project deleted just after it was read here is
-// not found by the save. Right after commit it gives the Runtime node the
-// tag's definition (giveRuntimeDefinition), so the tag accepts values once
-// this returns; if that fails, CreateTag returns the error although the tag
-// is created, and NewRuntimeTagDefinitionsPolicy gives the definition on
-// tag_created.
+// not found by the save. The definition reaches the Runtime node with the next
+// Deploy: until then the Tag runs no state, and a write of its value is not
+// found (ADR 0011, task 35).
 func (t tagServiceImpl) CreateTag(ctx context.Context, rawProjectID uuid.UUID, newTagData appdto.CreateTagInput) (appdto.Tag, error) {
 	projectID, scope, err := t.content.open(ctx, rawProjectID)
 	if err != nil {
@@ -219,48 +215,15 @@ func (t tagServiceImpl) CreateTag(ctx context.Context, rawProjectID uuid.UUID, n
 		return appdto.Tag{}, fmt.Errorf("cannot save tag: %w", err)
 	}
 
-	if err := t.giveRuntimeDefinition(ctx, rawProjectID, repo, newTag); err != nil {
-		return appdto.Tag{}, fmt.Errorf("tag %s created, but not given to the runtime node yet: %w", newTag.ID(), err)
-	}
-
 	return appdto.NewTag(newTag, appdto.InitialTagState(newTag)), nil
-}
-
-// runtimeCallTimeout bounds a call to the Runtime node made after commit.
-const runtimeCallTimeout = 10 * time.Second
-
-// giveRuntimeDefinition upserts the definition of a tag just created into
-// the Runtime node, then reads the tag from the Draft again: if it has been
-// deleted meanwhile, its state is removed. The deletion's own removal and the
-// job of NewRuntimeTagDefinitionsPolicy may both have run before the upsert,
-// and nothing would remove the state left by it. A deletion committed after
-// the read removes the state itself, after the upsert. The calls run apart
-// from the caller's cancellation: the tag is committed already.
-func (t tagServiceImpl) giveRuntimeDefinition(ctx context.Context, rawProjectID uuid.UUID, repo tag.TagRepository, created tag.Tag) error {
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), runtimeCallTimeout)
-	defer cancel()
-
-	if err := t.runtime.UpsertTagDefinitions(ctx, rawProjectID, []appdto.TagDefinition{appdto.NewTagDefinition(created)}); err != nil {
-		return err
-	}
-	_, err := repo.FindByID(ctx, created.ID())
-	if errors.Is(err, tag.ErrTagNotFound) {
-		if err := t.runtime.RemoveTagStates(ctx, rawProjectID, []uuid.UUID{created.ID().UUID()}); err != nil {
-			return fmt.Errorf("cannot remove the state of tag deleted meanwhile: %w", err)
-		}
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("cannot read tag back: %w", err)
-	}
-	return nil
 }
 
 // DeleteTagByID deletes a tag by its identifier and returns the deleted tag,
 // as it was read, with its last state. It expects no Version, and the
-// repository deletes the tag whatever its stored Version. Right after commit
-// it removes the tag's state from the Runtime node; if that fails,
-// NewRuntimeTagDefinitionsPolicy removes it on tag_deleted.
+// repository deletes the tag whatever its stored Version. The Runtime node's
+// copy of the definition stays until the next Deploy removes it with the
+// Revision it came from (ADR 0011, task 35): nothing of the Draft writes
+// there.
 func (t tagServiceImpl) DeleteTagByID(ctx context.Context, rawProjectID, rawID uuid.UUID) (appdto.Tag, error) {
 	repo, err := t.tags(ctx, rawProjectID)
 	if err != nil {
@@ -275,11 +238,6 @@ func (t tagServiceImpl) DeleteTagByID(ctx context.Context, rawProjectID, rawID u
 	last := t.withState(ctx, rawProjectID, found)
 	if err := repo.Delete(ctx, found.Delete()); err != nil {
 		return appdto.Tag{}, fmt.Errorf("cannot delete tag: %w", err)
-	}
-
-	if err := t.runtime.RemoveTagStates(ctx, rawProjectID, []uuid.UUID{rawID}); err != nil {
-		slog.Warn("Tag state not removed from the runtime node; the policy on tag_deleted removes it",
-			"project", rawProjectID, "tag", rawID, "error", err)
 	}
 
 	return last, nil

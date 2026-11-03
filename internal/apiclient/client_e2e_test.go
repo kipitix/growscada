@@ -36,6 +36,8 @@ func TestTags_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
+	// The value below is the Runtime node's: it needs a Deploy first (task 35).
+	servertest.DeployProject(t, postgres.DB(t), servertest.MainProject)
 	got, err := client.Project(servertest.MainProject).GetTag(ctx, created.ID)
 	if err != nil || got.Name != "pump.speed" || got.Value != "0" || got.Quality != "bad" || got.Seq != 0 {
 		t.Fatalf("GetTag: %+v, %v; want the initial state 0, bad", got, err)
