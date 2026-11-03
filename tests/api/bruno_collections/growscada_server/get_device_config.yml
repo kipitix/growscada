@@ -17,10 +17,10 @@ docs: |
   the connection parameters of the pair and the Tags the Device supplies.
 
   The Device is named by the token alone (`Authorization: Bearer gsc_dev_…`), so
-  the Project is too. Until Deploy exists (task 35) the configuration comes from
-  the Draft. A token whose Device is not in the project's configuration — a
-  token that outlived a Deploy — is `403`: the Gateway waits, the token is not
-  revoked.
+  the Project is too. The configuration is the project's running configuration —
+  the Runtime node's copies, which a Deploy fills from its Revision — never the
+  Draft. A token whose Device is not in it — a token that outlived a Deploy — is
+  `403`: the Gateway waits, the token is not revoked.
 
   The seeded Device `sim` supplies the Tag `device.speed` and stands in `bench`.
 
