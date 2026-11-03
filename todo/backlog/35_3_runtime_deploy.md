@@ -21,6 +21,11 @@ Blocked by: 35_2
 - `inprocess.NewRuntimeNode` получает методы; `main.go` прокидывает сервис (пока без REST).
 - Правила состояний Tag (Q4) реализуются репозиторием из части 2 и проверяются тестами сервиса: новый Tag — initial, оставшийся — значение сохраняется, исчезнувший — удаляется, смена TagType — initial.
 
+### Мост Draft→Runtime и Deploy пишут одни и те же копии
+
+- Advisory-lock берёт только `CreateRevision` (часть 2), а мост (`UpsertDefinitions` в `CreateTag`, `Delete` у `DeleteTagByID`, policy `sync_runtime_tag_definitions`) и `SetTagValue` его не берут. Лок и не закрывает гонку: Tag, созданный мостом сразу после коммита Deploy, остаётся копией вне работающей Revision, а его значения Operation не увидит.
+- Решить здесь, а не оставлять на часть 4/5: либо `Deploy` сверяет документ с Draft через порт после коммита (Tag, созданный во время Deploy, попадает в следующую ревизию, а запись значения до неё — 404), либо мост перестаёт писать копии в этой части. Решение записать в ADR 0013 (часть 5) и в этот пункт, с тестом на тег, созданный во время Deploy.
+
 ### Событие `revision_created`
 
 - Новый `event.EventType` (`revision_created`), ContentEvent проекта: несёт `project_id`, номер ревизии и `deployed_at`.
