@@ -140,6 +140,56 @@ func TestDelete_AfterARevision_KeepsTheRunningCopy(t *testing.T) {
 	}
 }
 
+// TestUpsertDefinitions_ConcurrentWithADeploy_WritesNoCopyOutsideIt: whichever
+// way a bridge write and a Deploy interleave, the bridge leaves no copy outside
+// the running Revision (task 35, Q4). Both take the same advisory lock, so the
+// bridge either writes before the Revision exists — and the Deploy's diff
+// removes a copy the document does not name — or finds the Revision and writes
+// nothing.
+func TestUpsertDefinitions_ConcurrentWithADeploy_WritesNoCopyOutsideIt(t *testing.T) {
+	ctx := context.Background()
+	db := postgres.DB(t)
+	for round := 0; round < 10; round++ {
+		projectID, _ := newProject(t)
+		late := definition(t, projectID, "late", tag.TagTypeInteger)
+		document := documentOf(projectID)
+		revisions := runtimepg.NewRevisionRepositoryPostgres(db)
+		states := runtimepg.NewTagStateRepositoryPostgres(db)
+
+		start := make(chan struct{})
+		errs := make(chan error, 2)
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, err := revisions.CreateRevision(ctx, projectID.UUID(), document, time.Now())
+			errs <- err
+		}()
+		go func() {
+			defer wg.Done()
+			<-start
+			errs <- states.UpsertDefinitions(ctx, projectID, []tagstate.Definition{late})
+		}()
+		close(start)
+		wg.Wait()
+		close(errs)
+		for err := range errs {
+			if err != nil {
+				t.Fatalf("round %d: %v", round, err)
+			}
+		}
+
+		found, err := states.FindByIDs(ctx, projectID, []id.ID[tag.Tag]{late.TagID})
+		if err != nil {
+			t.Fatalf("round %d: FindByIDs: %v", round, err)
+		}
+		if _, ok := found[late.TagID]; ok {
+			t.Fatalf("round %d: the bridge left a copy outside the running revision", round)
+		}
+	}
+}
+
 func TestUpsertDefinitions_OfAnotherProject_IsAnError(t *testing.T) {
 	projectID, _ := newProject(t)
 	other, _ := newProject(t)
