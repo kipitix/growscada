@@ -1,5 +1,15 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.56] - 2026-11-03
+
+### Added
+
+- **Контракт ProjectFile: формат `project/v0`** (задача 35, часть 1; ADR 0005, ADR 0007)
+  - `contract/project/v0`: `Header {schema_version, project_id}` (имени проекта нет — переименование не требует Deploy) и `ProjectFile` — полный снимок Draft: определения Tag'ов с поставщиком, Devices с конфигурацией под протокол, Environments и пары `(Environment, Device)` с параметрами связи, Scenes с Widgets (геометрия, labels, port_bindings, type_id), копии только используемых WidgetType из закреплённых Release и Library Pins как провенанс. Без состояний Tag, Device Tokens, версий агрегатов, трансформ-матрицы и истории
+  - `JSONObject` — JSON-объект, перевозимый как есть (`config`, `params`): нулевое значение — `{}`, не-объект — ошибка чтения. Копия `apiv0.JSONObject`, чтобы контракты оставались независимыми (ADR 0005)
+  - **Формат проекта 0.2** (MINOR, пока MAJOR = 0; обязательный `project_id` делает документы 0.1 нечитаемыми новым типом — ADR 0005 разрешает до 1.0): схема `schemas/project/0.2.json`, `0.1.json` заморожен в `frozen.sha256`
+  - Тесты: типы и закоммиченная схема совпадают; `JSONObject` отвергает не-объекты и пишет `{}` для нулевого значения
+
 ## [0.0.55] - 2026-11-03
 
 ### Added
