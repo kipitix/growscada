@@ -6,6 +6,7 @@ import (
 	"errors"
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -289,6 +290,53 @@ func TestCreateRevision_AnEmptyConfigAndParamsAreTheEmptyObject(t *testing.T) {
 	}
 	if string(params) != "{}" {
 		t.Errorf("the params of a pair that carries none are %s, want {}", params)
+	}
+}
+
+func TestCreateRevision_RefusesAPairWhoseCopiesAreOfAnotherProject(t *testing.T) {
+	projectID, orgID := newProject(t)
+	db := postgres.DB(t)
+	repo := runtimepg.NewRevisionRepositoryPostgres(db)
+	ctx := context.Background()
+
+	otherID := id.NewID[project.Project]()
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO projects (id, organization_id, name, version) VALUES ($1, $2, $3, 1)`,
+		otherID.UUID(), orgID.UUID(), "p-"+otherID.String()); err != nil {
+		t.Fatalf("insert the other project: %v", err)
+	}
+	deviceID, environmentID := uuid.New(), uuid.New()
+	mustCreateRevision(t, repo, otherID.UUID(), documentOf(otherID,
+		withDevices(projectv0.Device{ID: deviceID, Name: "meter", Protocol: "simulation", Config: projectv0.JSONObject(`{"host": "meter"}`)}),
+		withEnvironments(projectv0.Environment{ID: environmentID, Name: "bench"}),
+		withEnvironmentDevices(projectv0.EnvironmentDevice{
+			EnvironmentID: environmentID, DeviceID: deviceID,
+			Params: projectv0.JSONObject(`{"address": "10.0.0.1"}`),
+		}),
+	), time.Now())
+
+	_, err := repo.CreateRevision(ctx, projectID.UUID(), documentOf(projectID,
+		withEnvironmentDevices(projectv0.EnvironmentDevice{
+			EnvironmentID: environmentID, DeviceID: deviceID,
+			Params: projectv0.JSONObject(`{"address": "10.9.9.9"}`),
+		}),
+	), time.Now())
+	if err == nil {
+		t.Fatal("the pair of another project was taken")
+	}
+	if !strings.Contains(err.Error(), "not of project") {
+		t.Errorf("error %v, want a refusal naming the project", err)
+	}
+
+	var params []byte
+	if err := db.QueryRowContext(ctx,
+		`SELECT params FROM runtime.environment_devices WHERE environment_id = $1 AND device_id = $2`,
+		environmentID, deviceID,
+	).Scan(&params); err != nil {
+		t.Fatalf("read the pair params: %v", err)
+	}
+	if !strings.Contains(string(params), "10.0.0.1") {
+		t.Errorf("the params of the other project's pair are %s, want them untouched", params)
 	}
 }
 

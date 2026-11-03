@@ -247,13 +247,25 @@ func refreshEnvironmentDevices(ctx context.Context, tx *sql.Tx, projectID uuid.U
 		if err != nil {
 			return fmt.Errorf("cannot encode the params of environment %s and device %s: %w", p.EnvironmentID, p.DeviceID, err)
 		}
-		if _, err := tx.ExecContext(ctx,
+		// The pair is written only when both of its copies are of this Project:
+		// an ID is unique across Projects, so a foreign one would pass the
+		// foreign keys and rewrite the params of another Project's pair.
+		touched, err := tx.ExecContext(ctx,
 			`INSERT INTO runtime.environment_devices (environment_id, device_id, params)
-			 VALUES ($1, $2, $3)
+			 SELECT e.id, d.id, $3
+			 FROM runtime.environments e
+			 JOIN runtime.devices d ON d.id = $2
+			 WHERE e.id = $1 AND e.project_id = $4 AND d.project_id = $4
 			 ON CONFLICT (environment_id, device_id) DO UPDATE SET params = EXCLUDED.params`,
-			p.EnvironmentID, p.DeviceID, params,
-		); err != nil {
+			p.EnvironmentID, p.DeviceID, params, projectID,
+		)
+		if err != nil {
 			return fmt.Errorf("cannot upsert the pair of environment %s and device %s: %w", p.EnvironmentID, p.DeviceID, err)
+		}
+		if affected, err := touched.RowsAffected(); err != nil {
+			return fmt.Errorf("cannot read the result of the pair of environment %s and device %s: %w", p.EnvironmentID, p.DeviceID, err)
+		} else if affected == 0 {
+			return fmt.Errorf("cannot upsert the pair of environment %s and device %s: their copies are not of project %s", p.EnvironmentID, p.DeviceID, projectID)
 		}
 	}
 	return nil
