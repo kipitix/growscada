@@ -16,6 +16,10 @@ A Device's supplying relation is part of the Tag definition and is copied with i
 
 The packages both roles build on include `internal/server/domain/device` — the Device, Environment and EnvironmentDevice aggregates, which are the Engineering node's — because the shared `domain/tag` names a Tag's supplier as `id.ID[device.Device]`, and the Runtime node compiles `domain/tag` together with it. The isolation stays where it matters: the Runtime node's code uses no Device aggregate, and a test checks that no package of a role imports one of the other role, the shared packages included.
 
+## Amendment 2026-11-04: the Runtime copies belong to the running Revision
+
+The Runtime node deploys a ProjectFile into a numbered Revision and rebuilds its copies — `runtime.tags` with the supplying Device, `runtime.devices`, `runtime.environments`, `runtime.environment_devices` — from that document in the Deploy's transaction, keeping the Tag states and the Device Tokens, and publishes `revision_created` after the commit, at-most-once, beside `tag_updated`. From the first Revision on the copies are the Revision's alone: the bridge's upsert and delete take the same advisory lock `CreateRevision` takes and check for a Revision in the same transaction, so they write nothing once one exists. A Tag created in the Draft meanwhile gets no copy, and its value is `404` until the next Deploy names it; a Draft deletion reaches the Runtime node the same way. So what is said above about a Tag accepting values as soon as `POST /tags` answers, and about deleting a Tag removing its state at once, holds only for a Project that has no Revision yet.
+
 ## Considered Options
 
 - Two schemas only, Projects and the outbox in `engineering`: rejected. The Runtime node needs to know the Projects too, and copying them into `runtime` would make every Project deletion a cleanup in two places.
