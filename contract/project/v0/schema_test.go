@@ -11,6 +11,6 @@ func TestSchemaIsCommitted(t *testing.T) {
 		ID:    "https://github.com/kipitix/growscada/schemas/project/" + SchemaVersion().String() + ".json",
 		Title: "GrowSCADA project format " + SchemaVersion().String(),
 		Tag:   "json",
-		Roots: []any{Header{}},
+		Roots: []any{ProjectFile{}, Header{}},
 	})
 }

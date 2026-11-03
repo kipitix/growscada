@@ -71,6 +71,11 @@ func def(t *testing.T, doc map[string]any, name string) map[string]any {
 	return d
 }
 
+type rawDocument struct {
+	Config json.RawMessage `json:"config"`
+	Params json.RawMessage `json:"params,omitempty"`
+}
+
 func TestGenerateJSON(t *testing.T) {
 	doc := generate(t, "json", shape{})
 	s := def(t, doc, "shape")
@@ -103,6 +108,20 @@ func TestGenerateJSON(t *testing.T) {
 	required := strings.Join(stringList(s["required"]), ",")
 	if required != "id,name,points,tags,forced,meta" {
 		t.Errorf("required = %s", required)
+	}
+}
+
+func TestGenerateRawMessage(t *testing.T) {
+	doc := generate(t, "json", rawDocument{})
+	props := def(t, doc, "rawDocument")["properties"].(map[string]any)
+	for _, name := range []string{"config", "params"} {
+		schema, ok := props[name].(map[string]any)
+		if !ok || schema["type"] != "object" {
+			t.Errorf("%s = %v, want an object", name, props[name])
+		}
+	}
+	if _, ok := doc["$defs"].(map[string]any)["RawMessage"]; ok {
+		t.Error("json.RawMessage must be inlined, not become a $defs entry")
 	}
 }
 

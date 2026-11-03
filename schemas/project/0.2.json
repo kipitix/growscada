@@ -1,0 +1,428 @@
+{
+  "$defs": {
+    "Device": {
+      "properties": {
+        "comment": {
+          "type": "string"
+        },
+        "config": {
+          "type": "object"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "comment",
+        "protocol",
+        "config"
+      ],
+      "type": "object"
+    },
+    "Environment": {
+      "properties": {
+        "comment": {
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "comment"
+      ],
+      "type": "object"
+    },
+    "EnvironmentDevice": {
+      "properties": {
+        "device_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "environment_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "params": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "environment_id",
+        "device_id",
+        "params"
+      ],
+      "type": "object"
+    },
+    "Header": {
+      "properties": {
+        "project_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "InputPort": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type_hint": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "type_hint"
+      ],
+      "type": "object"
+    },
+    "LibraryPin": {
+      "properties": {
+        "library_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "release": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "library_id",
+        "release"
+      ],
+      "type": "object"
+    },
+    "Origin": {
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "PortBinding": {
+      "properties": {
+        "port_name": {
+          "type": "string"
+        },
+        "tag_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "port_name",
+        "tag_id"
+      ],
+      "type": "object"
+    },
+    "Position": {
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "z": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "type": "object"
+    },
+    "ProjectFile": {
+      "properties": {
+        "devices": {
+          "items": {
+            "$ref": "#/$defs/Device"
+          },
+          "type": "array"
+        },
+        "environment_devices": {
+          "items": {
+            "$ref": "#/$defs/EnvironmentDevice"
+          },
+          "type": "array"
+        },
+        "environments": {
+          "items": {
+            "$ref": "#/$defs/Environment"
+          },
+          "type": "array"
+        },
+        "library_pins": {
+          "items": {
+            "$ref": "#/$defs/LibraryPin"
+          },
+          "type": "array"
+        },
+        "project_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "scenes": {
+          "items": {
+            "$ref": "#/$defs/Scene"
+          },
+          "type": "array"
+        },
+        "schema_version": {
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "$ref": "#/$defs/TagDefinition"
+          },
+          "type": "array"
+        },
+        "widget_types": {
+          "items": {
+            "$ref": "#/$defs/WidgetType"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema_version",
+        "project_id",
+        "tags",
+        "devices",
+        "environments",
+        "environment_devices",
+        "scenes",
+        "widget_types",
+        "library_pins"
+      ],
+      "type": "object"
+    },
+    "Rotation": {
+      "properties": {
+        "degrees": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "degrees"
+      ],
+      "type": "object"
+    },
+    "Scene": {
+      "properties": {
+        "background_html": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "widgets": {
+          "items": {
+            "$ref": "#/$defs/Widget"
+          },
+          "type": "array"
+        },
+        "width": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "width",
+        "height",
+        "background_html",
+        "widgets"
+      ],
+      "type": "object"
+    },
+    "Size": {
+      "properties": {
+        "height": {
+          "type": "integer"
+        },
+        "width": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width",
+        "height"
+      ],
+      "type": "object"
+    },
+    "TagDefinition": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "supplier_device_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "type"
+      ],
+      "type": "object"
+    },
+    "Widget": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "labels": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "port_bindings": {
+          "items": {
+            "$ref": "#/$defs/PortBinding"
+          },
+          "type": "array"
+        },
+        "position": {
+          "$ref": "#/$defs/Position"
+        },
+        "rotation": {
+          "$ref": "#/$defs/Rotation"
+        },
+        "size": {
+          "$ref": "#/$defs/Size"
+        },
+        "type_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "position",
+        "size",
+        "origin",
+        "rotation",
+        "type_id",
+        "labels",
+        "port_bindings"
+      ],
+      "type": "object"
+    },
+    "WidgetType": {
+      "properties": {
+        "default_height": {
+          "type": "integer"
+        },
+        "default_width": {
+          "type": "integer"
+        },
+        "html_template": {
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "input_ports": {
+          "items": {
+            "$ref": "#/$defs/InputPort"
+          },
+          "type": "array"
+        },
+        "library_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "script": {
+          "type": "string"
+        },
+        "script_language": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "library_id",
+        "name",
+        "html_template",
+        "script",
+        "script_language",
+        "default_width",
+        "default_height",
+        "input_ports"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/kipitix/growscada/schemas/project/0.2.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GrowSCADA project format 0.2"
+}

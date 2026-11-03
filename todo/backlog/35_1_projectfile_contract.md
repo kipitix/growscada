@@ -37,3 +37,7 @@ Blocked by: 33
 
 - `contract/api/v0` (эндпоинты и событие `revision_created`) — часть 5.
 - Миграции и репозитории — часть 2; поведение Deploy — части 3–4.
+
+## Comments
+
+- 2026-11-03 (реализация): `id` и `project_id` — `uuid.UUID`, как в `contract/api/v0`: идентичность Project глобальна по UUID (ADR 0006), схема получает `format: uuid`. Поэтому `contract/project/v0` импортирует ещё `github.com/google/uuid`; проверка «только `contract` и `encoding/json`» читается как запрет импортов `internal/` и `domain/`.
