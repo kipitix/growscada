@@ -104,6 +104,13 @@ func isIn(path string, role []string) bool {
 	return false
 }
 
+// isContract tells whether the package is one of the public contracts
+// (ADR 0005): every side may import them, so both roles build on them. The
+// contracts are not listed one by one: a new one is public by definition.
+func isContract(path string) bool {
+	return path == "contract" || strings.HasPrefix(path, "contract/")
+}
+
 func TestRoles_DoNotImportEachOther(t *testing.T) {
 	listed := listPackages(t, patterns(runtimeRole, engineeringRole, sharedDomain)...)
 	if len(listed) != len(runtimeRole)+len(engineeringRole)+len(sharedDomain) {
@@ -118,9 +125,9 @@ func TestRoles_DoNotImportEachOther(t *testing.T) {
 			switch {
 			case isIn(path, engineeringRole) && isIn(dep, runtimeRole):
 				t.Errorf("%s (Engineering node) imports %s (Runtime node): reach it through application.RuntimeNode", path, dep)
-			case isIn(path, runtimeRole) && !isIn(dep, runtimeRole) && !isIn(dep, sharedDomain):
+			case isIn(path, runtimeRole) && !isIn(dep, runtimeRole) && !isIn(dep, sharedDomain) && !isContract(dep):
 				t.Errorf("%s (Runtime node) imports %s, neither the Runtime node's nor the shared domain", path, dep)
-			case isIn(path, sharedDomain) && !isIn(dep, sharedDomain):
+			case isIn(path, sharedDomain) && !isIn(dep, sharedDomain) && !isContract(dep):
 				t.Errorf("%s (shared domain) imports %s, a package of one role: the shared domain builds on itself alone", path, dep)
 			}
 		}
