@@ -27,17 +27,25 @@ type deviceRepositoryPostgresImpl struct {
 var _ device.DeviceRepository = (*deviceRepositoryPostgresImpl)(nil)
 
 // NewDeviceRepositoryPostgres returns the repository of the Devices of the
-// Project aProjectID (ProjectScopes.ForProject is how the server opens one).
+// Project aProjectID (ProjectScopes.ForProject is how the server opens one),
+// whose writes are refused while a Discard of the Project is under way.
 func NewDeviceRepositoryPostgres(aDb *sql.DB, aProjectID id.ID[project.Project], opts ...Option) device.DeviceRepository {
+	return newDeviceRepository(aDb, aProjectID, false, opts...)
+}
+
+// newDeviceRepository returns the repository of the Devices of the Project
+// aProjectID; discard makes its writes a Discard's, made only while one is
+// under way.
+func newDeviceRepository(aDb *sql.DB, aProjectID id.ID[project.Project], discard bool, opts ...Option) *deviceRepositoryPostgresImpl {
 	o := newOptions(opts)
 	return &deviceRepositoryPostgresImpl{
 		db:      aDb,
 		project: aProjectID,
 		store: aggregateStore[device.Device]{
-			db: aDb, table: tableNameDevices, project: &aProjectID,
+			db: aDb, table: tableNameDevices, project: &aProjectID, discard: discard,
 			notFound: device.ErrDeviceNotFound, conflict: device.ErrDeviceConflict,
 			onCommit: o.onCommit,
-		},
+		}.withProjectLock(),
 	}
 }
 

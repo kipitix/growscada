@@ -30,14 +30,21 @@ var _ librarypin.Repository = (*libraryPinRepositoryPostgresImpl)(nil)
 
 // NewLibraryPinRepositoryPostgres returns the repository of the Library Pins
 // of the Project aProjectID (ProjectScopes.ForProject is how the server opens
-// one).
+// one), whose writes are refused while a Discard of the Project is under way.
 func NewLibraryPinRepositoryPostgres(aDb *sql.DB, aProjectID id.ID[project.Project], opts ...Option) librarypin.Repository {
+	return newLibraryPinRepository(aDb, aProjectID, false, opts...)
+}
+
+// newLibraryPinRepository returns the repository of the Library Pins of the
+// Project aProjectID; discard makes its writes a Discard's, made only while
+// one is under way.
+func newLibraryPinRepository(aDb *sql.DB, aProjectID id.ID[project.Project], discard bool, opts ...Option) *libraryPinRepositoryPostgresImpl {
 	o := newOptions(opts)
 	return &libraryPinRepositoryPostgresImpl{
 		db:      aDb,
 		project: aProjectID,
 		store: aggregateStore[librarypin.LibraryPin]{
-			db: aDb, table: tableNameLibraryPins, project: &aProjectID,
+			db: aDb, table: tableNameLibraryPins, project: &aProjectID, discard: discard,
 			notFound: librarypin.ErrLibraryPinNotFound, conflict: librarypin.ErrLibraryPinConflict,
 			onCommit: o.onCommit,
 		},
@@ -67,6 +74,9 @@ func (r libraryPinRepositoryPostgresImpl) Save(ctx context.Context, pin libraryp
 	}
 
 	err := r.store.inTx(ctx, pin.PendingEvents(), func(tx *sql.Tx) error {
+		if err := r.store.lockProject(ctx, tx); err != nil {
+			return err
+		}
 		if current == version.Initial[librarypin.LibraryPin]() {
 			if err := r.store.lockLiveProject(ctx, tx); err != nil {
 				return err
@@ -105,6 +115,9 @@ func (r libraryPinRepositoryPostgresImpl) Delete(ctx context.Context, pin librar
 	}
 	current := pin.Version()
 	return r.store.inTx(ctx, pin.PendingEvents(), func(tx *sql.Tx) error {
+		if err := r.store.lockProject(ctx, tx); err != nil {
+			return err
+		}
 		if err := r.lockForChange(ctx, tx, pin.LibraryID(), current, check); err != nil {
 			return err
 		}

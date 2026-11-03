@@ -57,6 +57,8 @@ var (
 	EventTypeEnvironmentDeviceDeleted = EventType{eventType: 35}
 
 	EventTypeRevisionCreated = EventType{eventType: 36}
+
+	EventTypeProjectDiscardStarted = EventType{eventType: 37}
 )
 
 // eventTypeNames is the single source of truth for known event types:
@@ -102,6 +104,7 @@ var eventTypeNames = []struct {
 	{EventTypeEnvironmentDeviceUpdated, "environment_device_updated"},
 	{EventTypeEnvironmentDeviceDeleted, "environment_device_deleted"},
 	{EventTypeRevisionCreated, "revision_created"},
+	{EventTypeProjectDiscardStarted, "project_discard_started"},
 }
 
 // AllEventTypes returns every known EventType.

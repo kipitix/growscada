@@ -49,7 +49,10 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 		return serverTargets
 	case EventProjectResync:
 		return projectTargets
-	case apiv0.EventProjectCreated, apiv0.EventProjectUpdated, apiv0.EventProjectDeleted:
+	case apiv0.EventProjectCreated, apiv0.EventProjectUpdated, apiv0.EventProjectDeleted,
+		apiv0.EventProjectDiscardStarted:
+		// The Draft of a Project being discarded is read-only: the Project
+		// mode shows it, task 35, part 5.
 		return ReloadTargets{Projects: true}
 	case apiv0.EventWidgetTypeCreated, apiv0.EventWidgetTypeUpdated, apiv0.EventWidgetTypeDeleted:
 		// A change of the Draft changes whether its library has changes

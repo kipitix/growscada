@@ -302,6 +302,7 @@ var domainSentinels = map[string]error{
 	"project.ErrProjectConflict":          project.ErrProjectConflict,
 	"project.ErrProjectNameTaken":         project.ErrProjectNameTaken,
 	"project.ErrProjectNotEmpty":          project.ErrProjectNotEmpty,
+	"project.ErrProjectDiscarding":        project.ErrProjectDiscarding,
 	"library.ErrWidgetTypeNotFound":       library.ErrWidgetTypeNotFound,
 	"library.ErrWidgetTypeConflict":       library.ErrWidgetTypeConflict,
 	"library.ErrWidgetTypeNameTaken":      library.ErrWidgetTypeNameTaken,

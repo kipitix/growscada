@@ -28,17 +28,24 @@ var _ device.EnvironmentRepository = (*environmentRepositoryPostgresImpl)(nil)
 
 // NewEnvironmentRepositoryPostgres returns the repository of the Environments
 // of the Project aProjectID (ProjectScopes.ForProject is how the server opens
-// one).
+// one), whose writes are refused while a Discard of the Project is under way.
 func NewEnvironmentRepositoryPostgres(aDb *sql.DB, aProjectID id.ID[project.Project], opts ...Option) device.EnvironmentRepository {
+	return newEnvironmentRepository(aDb, aProjectID, false, opts...)
+}
+
+// newEnvironmentRepository returns the repository of the Environments of the
+// Project aProjectID; discard makes its writes a Discard's, made only while
+// one is under way.
+func newEnvironmentRepository(aDb *sql.DB, aProjectID id.ID[project.Project], discard bool, opts ...Option) *environmentRepositoryPostgresImpl {
 	o := newOptions(opts)
 	return &environmentRepositoryPostgresImpl{
 		db:      aDb,
 		project: aProjectID,
 		store: aggregateStore[device.Environment]{
-			db: aDb, table: tableNameEnvironments, project: &aProjectID,
+			db: aDb, table: tableNameEnvironments, project: &aProjectID, discard: discard,
 			notFound: device.ErrEnvironmentNotFound, conflict: device.ErrEnvironmentConflict,
 			onCommit: o.onCommit,
-		},
+		}.withProjectLock(),
 	}
 }
 

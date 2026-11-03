@@ -106,6 +106,8 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 			apiv0.Event{Type: "project_updated", ID: projectID.String()}},
 		event.EventTypeProjectDeleted: {project.NewProjectDeletedEvent(projectID, ts),
 			apiv0.Event{Type: "project_deleted", ID: projectID.String()}},
+		event.EventTypeProjectDiscardStarted: {project.NewProjectDiscardStartedEvent(projectID, ts),
+			apiv0.Event{Type: "project_discard_started", ID: projectID.String()}},
 		event.EventTypeDeviceCreated: {device.NewDeviceCreatedEvent(deviceID, projectID, ts),
 			apiv0.Event{Type: "device_created", ID: deviceID.String()}},
 		event.EventTypeDeviceUpdated: {device.NewDeviceUpdatedEvent(deviceID, projectID, ts),

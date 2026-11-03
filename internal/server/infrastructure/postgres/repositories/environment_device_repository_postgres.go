@@ -30,14 +30,22 @@ var _ device.EnvironmentDeviceRepository = (*environmentDeviceRepositoryPostgres
 
 // NewEnvironmentDeviceRepositoryPostgres returns the repository of the
 // EnvironmentDevices of the Project aProjectID (ProjectScopes.ForProject is
-// how the server opens one).
+// how the server opens one), whose writes are refused while a Discard of the
+// Project is under way.
 func NewEnvironmentDeviceRepositoryPostgres(aDb *sql.DB, aProjectID id.ID[project.Project], opts ...Option) device.EnvironmentDeviceRepository {
+	return newEnvironmentDeviceRepository(aDb, aProjectID, false, opts...)
+}
+
+// newEnvironmentDeviceRepository returns the repository of the
+// EnvironmentDevices of the Project aProjectID; discard makes its writes a
+// Discard's, made only while one is under way.
+func newEnvironmentDeviceRepository(aDb *sql.DB, aProjectID id.ID[project.Project], discard bool, opts ...Option) *environmentDeviceRepositoryPostgresImpl {
 	o := newOptions(opts)
 	return &environmentDeviceRepositoryPostgresImpl{
 		db:      aDb,
 		project: aProjectID,
 		store: aggregateStore[device.EnvironmentDevice]{
-			db: aDb, table: tableNameEnvironmentDevices, project: &aProjectID,
+			db: aDb, table: tableNameEnvironmentDevices, project: &aProjectID, discard: discard,
 			notFound: device.ErrEnvironmentDeviceNotFound, conflict: device.ErrEnvironmentDeviceConflict,
 			onCommit: o.onCommit,
 		},
@@ -60,6 +68,9 @@ func (r environmentDeviceRepositoryPostgresImpl) Save(ctx context.Context, aPair
 	}
 
 	err := r.store.inTx(ctx, aPair.PendingEvents(), func(tx *sql.Tx) error {
+		if err := r.store.lockProject(ctx, tx); err != nil {
+			return err
+		}
 		if current == version.Initial[device.EnvironmentDevice]() {
 			if err := r.store.lockLiveProject(ctx, tx); err != nil {
 				return err
@@ -165,6 +176,9 @@ func (r environmentDeviceRepositoryPostgresImpl) Delete(ctx context.Context, aPa
 		return err
 	}
 	return r.store.inTx(ctx, aPair.PendingEvents(), func(tx *sql.Tx) error {
+		if err := r.store.lockProject(ctx, tx); err != nil {
+			return err
+		}
 		res, err := tx.ExecContext(ctx,
 			`DELETE FROM engineering.environment_devices ed
 			 WHERE ed.environment_id = $1 AND ed.device_id = $2 AND ed.version = $3

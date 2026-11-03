@@ -68,6 +68,7 @@ func sampleEvents(t *testing.T) []event.Event {
 		project.NewProjectCreatedEvent(projectID, ts),
 		project.NewProjectUpdatedEvent(projectID, ts),
 		project.NewProjectDeletedEvent(projectID, ts),
+		project.NewProjectDiscardStartedEvent(projectID, ts),
 		device.NewDeviceCreatedEvent(deviceID, projectID, ts),
 		device.NewDeviceUpdatedEvent(deviceID, projectID, ts),
 		device.NewDeviceDeletedEvent(deviceID, projectID, ts),

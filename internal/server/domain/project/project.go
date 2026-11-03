@@ -18,6 +18,10 @@ import (
 // Deleting a Project only marks it deleted: from then on it does not exist
 // for anyone but the policy that empties it, which removes it last.
 //
+// A Discard marks the Project as being reset to the Revision it runs; a
+// policy brings the Draft back and clears the mark last (task 35, Q10).
+// While the mark stands the Draft is read-only.
+//
 // Project is immutable: every change returns a new Project that also records
 // the change's event. A change keeps the Version; the repository raises it
 // once when it saves the result.
@@ -28,6 +32,9 @@ type Project interface {
 	Version() version.Version[Project]
 	// IsDeleted reports whether the project is marked deleted (Delete).
 	IsDeleted() bool
+	// IsDiscarding reports whether the project is marked as being reset to
+	// the Revision it runs (StartDiscard).
+	IsDiscarding() bool
 
 	// CheckVersion reports an edit conflict: the caller changes the project
 	// having seen it at a Version other than the current one.
@@ -37,6 +44,16 @@ type Project interface {
 	// Rename changes the project's name and records a ProjectUpdatedEvent.
 	// Returns ErrProjectConflict if expected is not the Version.
 	Rename(expected version.Version[Project], aName ProjectName) (Project, error)
+
+	// StartDiscard marks the project as being reset to the Revision it runs
+	// and records a ProjectDiscardStartedEvent. It expects no Version, as a
+	// removal: it rests on no state a client saw.
+	// Returns ErrProjectDiscarding if a Discard is already under way.
+	StartDiscard() (Project, error)
+
+	// FinishDiscard clears the mark of StartDiscard and records a
+	// ProjectUpdatedEvent; a project not being reset is returned as it is.
+	FinishDiscard() Project
 
 	// Delete marks the project deleted and records a ProjectDeletedEvent;
 	// saving it frees its name. Like removing any aggregate, it expects no
@@ -53,6 +70,7 @@ type projectImpl struct {
 	organizationID id.ID[organization.Organization]
 	name           ProjectName
 	deleted        bool
+	discarding     bool
 	version        version.Version[Project]
 	pending        []event.Event
 }
@@ -78,6 +96,7 @@ func ReconstituteProject(
 	anOrganizationID id.ID[organization.Organization],
 	aName ProjectName,
 	deleted bool,
+	discarding bool,
 	aVersion version.Version[Project],
 ) Project {
 	return &projectImpl{
@@ -85,6 +104,7 @@ func ReconstituteProject(
 		organizationID: anOrganizationID,
 		name:           aName,
 		deleted:        deleted,
+		discarding:     discarding,
 		version:        aVersion,
 	}
 }
@@ -94,6 +114,7 @@ func (p *projectImpl) OrganizationID() id.ID[organization.Organization] { return
 func (p *projectImpl) Name() ProjectName                                { return p.name }
 func (p *projectImpl) Version() version.Version[Project]                { return p.version }
 func (p *projectImpl) IsDeleted() bool                                  { return p.deleted }
+func (p *projectImpl) IsDiscarding() bool                               { return p.discarding }
 
 func (p *projectImpl) CheckVersion(expected version.Version[Project]) error {
 	if expected != p.version {
@@ -119,11 +140,31 @@ func (p *projectImpl) Delete() Project {
 	return &deleted
 }
 
+func (p *projectImpl) StartDiscard() (Project, error) {
+	if p.discarding {
+		return nil, fmt.Errorf("cannot discard project %s: %w", p.id, ErrProjectDiscarding)
+	}
+	marked := *p
+	marked.discarding = true
+	marked.pending = append(slices.Clone(p.pending), NewProjectDiscardStartedEvent(p.id))
+	return &marked, nil
+}
+
+func (p *projectImpl) FinishDiscard() Project {
+	if !p.discarding {
+		return p
+	}
+	done := *p
+	done.discarding = false
+	done.pending = append(slices.Clone(p.pending), NewProjectUpdatedEvent(p.id))
+	return &done
+}
+
 func (p *projectImpl) PendingEvents() []event.Event {
 	return slices.Clone(p.pending)
 }
 
 // String implements [fmt.Stringer].
 func (p *projectImpl) String() string {
-	return fmt.Sprintf("Project: %s, Organization: %s, Deleted: %t, Version: %s", p.name, p.organizationID, p.deleted, p.version)
+	return fmt.Sprintf("Project: %s, Organization: %s, Deleted: %t, Discarding: %t, Version: %s", p.name, p.organizationID, p.deleted, p.discarding, p.version)
 }

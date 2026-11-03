@@ -23,6 +23,10 @@ var (
 	// ErrProjectNotEmpty is returned by Delete while Tags or Scenes still
 	// belong to the project.
 	ErrProjectNotEmpty = errors.New("project still has content")
+	// ErrProjectDiscarding is returned by StartDiscard while a Discard is
+	// already under way, and by a write of the Project's Draft while one is:
+	// the Draft is read-only until the mark is cleared.
+	ErrProjectDiscarding = errors.New("project is being discarded")
 )
 
 // ProjectRepository - repository interface for storing and managing projects.

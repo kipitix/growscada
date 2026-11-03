@@ -36,6 +36,11 @@ type ProjectScope interface {
 // Project's state: whoever opens a scope for the API first checks that the
 // Project is live.
 type ProjectScopes interface {
-	// ForProject returns the repositories of the Project's content.
+	// ForProject returns the repositories of the Project's content, whose
+	// writes are refused while a Discard of the Project is under way.
 	ForProject(id.ID[project.Project]) ProjectScope
+	// ForDiscard returns the repositories of the Project's content whose
+	// writes are a Discard's: made only while one is under way (task 35,
+	// Q10).
+	ForDiscard(id.ID[project.Project]) ProjectScope
 }

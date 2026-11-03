@@ -68,6 +68,7 @@ var errorMappings = []errorMapping{
 	{project.ErrProjectNotFound, http.StatusNotFound, projectResource, ""},
 	{project.ErrProjectConflict, http.StatusConflict, projectResource, "Project was changed concurrently; reload it and retry"},
 	{project.ErrProjectNameTaken, http.StatusConflict, projectResource, "Project name is already taken"},
+	{project.ErrProjectDiscarding, http.StatusConflict, projectResource, "Project is being discarded; its Draft is read-only until the Discard ends"},
 	{tag.ErrTagNotFound, http.StatusNotFound, tagResource, ""},
 	{tag.ErrTagConflict, http.StatusConflict, tagResource, "Tag was changed concurrently; reload it and retry"},
 	{tag.ErrTagNameTaken, http.StatusConflict, tagResource, "Tag name is already taken in the project"},

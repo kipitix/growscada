@@ -28,17 +28,25 @@ type tagRepositoryPostgresImpl struct {
 var _ tag.TagRepository = (*tagRepositoryPostgresImpl)(nil)
 
 // NewTagRepositoryPostgres returns the repository of the tags of the Project
-// aProjectID (ProjectScopes.ForProject is how the server opens one).
+// aProjectID (ProjectScopes.ForProject is how the server opens one), whose
+// writes are refused while a Discard of the Project is under way.
 func NewTagRepositoryPostgres(aDb *sql.DB, aProjectID id.ID[project.Project], opts ...Option) tag.TagRepository {
+	return newTagRepository(aDb, aProjectID, false, opts...)
+}
+
+// newTagRepository returns the repository of the tags of the Project
+// aProjectID; discard makes its writes a Discard's, made only while one is
+// under way.
+func newTagRepository(aDb *sql.DB, aProjectID id.ID[project.Project], discard bool, opts ...Option) *tagRepositoryPostgresImpl {
 	o := newOptions(opts)
 	return &tagRepositoryPostgresImpl{
 		db:      aDb,
 		project: aProjectID,
 		store: aggregateStore[tag.Tag]{
-			db: aDb, table: tableNameTags, project: &aProjectID,
+			db: aDb, table: tableNameTags, project: &aProjectID, discard: discard,
 			notFound: tag.ErrTagNotFound, conflict: tag.ErrTagConflict,
 			onCommit: o.onCommit,
-		},
+		}.withProjectLock(),
 	}
 }
 

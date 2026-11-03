@@ -29,17 +29,25 @@ type sceneRepositoryPostgresImpl struct {
 var _ scene.SceneRepository = (*sceneRepositoryPostgresImpl)(nil)
 
 // NewSceneRepositoryPostgres returns the repository of the scenes of the
-// Project aProjectID (ProjectScopes.ForProject is how the server opens one).
+// Project aProjectID (ProjectScopes.ForProject is how the server opens one),
+// whose writes are refused while a Discard of the Project is under way.
 func NewSceneRepositoryPostgres(aDb *sql.DB, aProjectID id.ID[project.Project], opts ...Option) scene.SceneRepository {
+	return newSceneRepository(aDb, aProjectID, false, opts...)
+}
+
+// newSceneRepository returns the repository of the scenes of the Project
+// aProjectID; discard makes its writes a Discard's, made only while one is
+// under way.
+func newSceneRepository(aDb *sql.DB, aProjectID id.ID[project.Project], discard bool, opts ...Option) *sceneRepositoryPostgresImpl {
 	o := newOptions(opts)
 	return &sceneRepositoryPostgresImpl{
 		db:      aDb,
 		project: aProjectID,
 		store: aggregateStore[scene.Scene]{
-			db: aDb, table: tableNameScenes, project: &aProjectID,
+			db: aDb, table: tableNameScenes, project: &aProjectID, discard: discard,
 			notFound: scene.ErrSceneNotFound, conflict: scene.ErrSceneConflict,
 			onCommit: o.onCommit,
-		},
+		}.withProjectLock(),
 	}
 }
 
