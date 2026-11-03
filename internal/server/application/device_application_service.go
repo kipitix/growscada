@@ -116,14 +116,16 @@ func (s deviceServiceImpl) UpdateDevice(ctx context.Context, rawProjectID, rawDe
 	if err != nil {
 		return appdto.Device{}, err
 	}
+	// The stated Version is the caller's input: a negative one is no version at
+	// all, answered before the Device is read.
+	expected, err := deviceVersion(rawExpectedVersion)
+	if err != nil {
+		return appdto.Device{}, err
+	}
 	repo := scope.Devices()
 	found, err := repo.FindByID(ctx, id.NewID(id.IDWithUUID[device.Device](rawDeviceID)))
 	if err != nil {
 		return appdto.Device{}, fmt.Errorf("error on find device by id in repository: %w", err)
-	}
-	expected, err := deviceVersion(rawExpectedVersion)
-	if err != nil {
-		return appdto.Device{}, err
 	}
 	// A stale write is a conflict whatever it sends.
 	if err := found.CheckVersion(expected); err != nil {

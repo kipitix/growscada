@@ -20,6 +20,7 @@
 ### Changed
 
 - `internal/devicesim.Device` получает конфигурацию через `Source` (реализация — `devicesim.Gateway` поверх REST API), а не ищет Tag'и сам; `devicelink.Link` (`Resolve` + `Write`) не менялся (ADR 0004). `make run_simulator` и `make run_simulator_dashboard` работают на seed-данных без `growctl apply`
+- `PUT …/devices/{id}` и `PUT …/environments/{id}` разбирают `version` до чтения агрегата, как это уже делает `PUT …/environments/{id}/devices/{device_id}`: отрицательная версия — 400 клиента, а не 404 устройства или окружения, которого нет
 
 ### Fixed
 

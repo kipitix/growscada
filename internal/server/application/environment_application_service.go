@@ -128,14 +128,16 @@ func (s environmentServiceImpl) UpdateEnvironment(ctx context.Context, rawProjec
 	if err != nil {
 		return appdto.Environment{}, err
 	}
+	// The stated Version is the caller's input: a negative one is no version at
+	// all, answered before the Environment is read.
+	expected, err := environmentVersion(rawExpectedVersion)
+	if err != nil {
+		return appdto.Environment{}, err
+	}
 	repo := scope.Environments()
 	found, err := repo.FindByID(ctx, id.NewID(id.IDWithUUID[device.Environment](rawEnvironmentID)))
 	if err != nil {
 		return appdto.Environment{}, fmt.Errorf("error on find environment by id in repository: %w", err)
-	}
-	expected, err := environmentVersion(rawExpectedVersion)
-	if err != nil {
-		return appdto.Environment{}, err
 	}
 	// A stale write is a conflict whatever it sends.
 	if err := found.CheckVersion(expected); err != nil {
