@@ -262,6 +262,36 @@ func TestCreateRevision_KeepsStatesAndTokensAndDropsAbsentCopies(t *testing.T) {
 	}
 }
 
+func TestCreateRevision_AnEmptyConfigAndParamsAreTheEmptyObject(t *testing.T) {
+	projectID, _ := newProject(t)
+	db := postgres.DB(t)
+	repo := runtimepg.NewRevisionRepositoryPostgres(db)
+	deviceID, environmentID := uuid.New(), uuid.New()
+
+	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+		withDevices(projectv0.Device{ID: deviceID, Name: "meter", Protocol: "simulation"}),
+		withEnvironments(projectv0.Environment{ID: environmentID, Name: "bench"}),
+		withEnvironmentDevices(projectv0.EnvironmentDevice{EnvironmentID: environmentID, DeviceID: deviceID}),
+	), time.Now())
+
+	ctx := context.Background()
+	var config, params []byte
+	if err := db.QueryRowContext(ctx, `SELECT config FROM runtime.devices WHERE id = $1`, deviceID).Scan(&config); err != nil {
+		t.Fatalf("read the device config: %v", err)
+	}
+	if string(config) != "{}" {
+		t.Errorf("the config of a device that carries none is %s, want {}", config)
+	}
+	if err := db.QueryRowContext(ctx,
+		`SELECT params FROM runtime.environment_devices WHERE device_id = $1`, deviceID,
+	).Scan(&params); err != nil {
+		t.Fatalf("read the pair params: %v", err)
+	}
+	if string(params) != "{}" {
+		t.Errorf("the params of a pair that carries none are %s, want {}", params)
+	}
+}
+
 func TestCreateRevision_ResetsTheStateOfAChangedTagTypeAndKeepsTheOthers(t *testing.T) {
 	projectID, _ := newProject(t)
 	db := postgres.DB(t)

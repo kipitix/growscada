@@ -168,15 +168,21 @@ func removeAbsentCopies(ctx context.Context, tx *sql.Tx, projectID uuid.UUID, fi
 // derived data: its Version stays as it is, Deploy does not edit an aggregate.
 func upsertDevices(ctx context.Context, tx *sql.Tx, projectID uuid.UUID, devices []projectv0.Device) error {
 	for _, d := range devices {
+		// json.Marshal, not []byte: the zero value of JSONObject is the empty
+		// object, while a nil slice would reach the NOT NULL column as NULL.
+		config, err := json.Marshal(d.Config)
+		if err != nil {
+			return fmt.Errorf("cannot encode the config of device %s: %w", d.ID, err)
+		}
 		var touched int
-		err := tx.QueryRowContext(ctx,
+		err = tx.QueryRowContext(ctx,
 			`INSERT INTO runtime.devices (id, project_id, name, comment, protocol, config, version)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7)
 			 ON CONFLICT (id) DO UPDATE
 			 SET name = EXCLUDED.name, comment = EXCLUDED.comment, protocol = EXCLUDED.protocol, config = EXCLUDED.config
 			 WHERE runtime.devices.project_id = EXCLUDED.project_id
 			 RETURNING 1`,
-			d.ID, projectID, d.Name, d.Comment, d.Protocol, []byte(d.Config), 0,
+			d.ID, projectID, d.Name, d.Comment, d.Protocol, config, 0,
 		).Scan(&touched)
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("cannot upsert device %s: its copy is of another project than %s", d.ID, projectID)
@@ -236,11 +242,16 @@ func refreshEnvironmentDevices(ctx context.Context, tx *sql.Tx, projectID uuid.U
 		return fmt.Errorf("cannot remove the environment pairs absent from the document of project %s: %w", projectID, err)
 	}
 	for _, p := range pairs {
+		// json.Marshal, not []byte: a nil JSONObject is the empty object.
+		params, err := json.Marshal(p.Params)
+		if err != nil {
+			return fmt.Errorf("cannot encode the params of environment %s and device %s: %w", p.EnvironmentID, p.DeviceID, err)
+		}
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO runtime.environment_devices (environment_id, device_id, params)
 			 VALUES ($1, $2, $3)
 			 ON CONFLICT (environment_id, device_id) DO UPDATE SET params = EXCLUDED.params`,
-			p.EnvironmentID, p.DeviceID, []byte(p.Params),
+			p.EnvironmentID, p.DeviceID, params,
 		); err != nil {
 			return fmt.Errorf("cannot upsert the pair of environment %s and device %s: %w", p.EnvironmentID, p.DeviceID, err)
 		}
