@@ -256,6 +256,17 @@ Browser automation. Use for verifying UI changes in the running PWA (port 8080):
 
 10. **Rebuild the codegraph index on a new dev host.** `.codegraph/` is gitignored, so a fresh clone or a new machine has no index: the MCP server starts without a default project and every codegraph call returns nothing until you index. Check once, early in the work — `test -d .codegraph`, or `codegraph status` (`⚠ Not initialized`) — and if it is missing, tell the user plainly that codegraph is not indexed here and that you will fall back to grep/Read until it is, then offer to run `codegraph init -y` in the repository root (about a second; it creates only the gitignored `.codegraph/`). Keep the index current with `codegraph sync` after a pull or a branch switch, and rebuild with `codegraph index` when results look stale.
 
+11. **Notify the user when a turn ends.** There is no notification hook: the agent sends the push itself through [ntfy](https://ntfy.sh) to the topic `kipitix_growscada`, just before the final message of a turn:
+
+```bash
+curl -sS -X POST https://ntfy.sh/kipitix_growscada \
+  -H "Title: GrowSCADA: <что сделано>" \
+  -H "Tags: white_check_mark" \
+  -d "<одна-две строки: что сделано и что осталось>"
+```
+
+The title and the message are short and in Russian. The topic is public: anyone who knows its name can read it, so put no secrets, tokens, credentials or file contents in the message. A failed request (offline, ntfy unavailable) is not a failure of the task — report it in one line and finish. When the user names another topic, use it for the rest of the session.
+
 ## Agent skills
 
 ### Issue tracker
