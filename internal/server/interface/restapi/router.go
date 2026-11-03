@@ -62,10 +62,11 @@ func corsMiddleware(next http.Handler) http.Handler {
 }
 
 // Services are the services the server API serves: the Engineering node's,
-// and the Runtime node's TagStates, which writes the tags' states, and
-// DeviceTokens, which authenticates Devices and manages their tokens (ADR
-// 0011). A Device token service that is nil is a server without the Runtime
-// node: token management answers 404.
+// and the Runtime node's TagStates, which writes the tags' states,
+// DeviceTokens, which authenticates Devices and manages their tokens, and
+// DeviceConfig, which reads the running Revision's copies (ADR 0011). A
+// Device token service that is nil is a server without the Runtime node:
+// token management answers 404.
 type Services struct {
 	Projects     application.ProjectService
 	Tags         application.TagService
@@ -76,7 +77,7 @@ type Services struct {
 	Scenes       application.SceneService
 	Devices      application.DeviceService
 	Environments application.EnvironmentService
-	DeviceConfig application.DeviceConfigService
+	DeviceConfig runtimeapp.DeviceConfigService
 	DeviceTokens runtimeapp.DeviceTokenService
 }
 

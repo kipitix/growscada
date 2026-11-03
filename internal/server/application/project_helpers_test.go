@@ -152,7 +152,8 @@ func newRuntimeNode() application.RuntimeNode {
 func newRuntime() (runtimeapp.TagStateService, application.RuntimeNode) {
 	states := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(testDB), soleOrganization(), func(event.Event) {})
 	tokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(testDB))
-	return states, inprocess.NewRuntimeNode(states, tokens)
+	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(testDB), func(event.Event) {})
+	return states, inprocess.NewRuntimeNode(states, tokens, revisions)
 }
 
 // newServiceWithStates returns the tag service and the Runtime node's

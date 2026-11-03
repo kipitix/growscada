@@ -21,7 +21,7 @@ import (
 func cleanDevices(t *testing.T) {
 	t.Helper()
 	if _, err := testDB.ExecContext(context.Background(),
-		`DELETE FROM runtime.tags; DELETE FROM engineering.tags;
+		`DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.tags;
 		 DELETE FROM engineering.environment_devices; DELETE FROM engineering.devices; DELETE FROM engineering.environments`); err != nil {
 		t.Fatalf("cleanDevices: %v", err)
 	}

@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
-	"github.com/kipitix/growscada/internal/server/application"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -17,13 +16,13 @@ import (
 // Device. The Device is named by the token the request carries, the
 // Environment by the query; the Project is the token's.
 type DeviceConfigHandlers struct {
-	service application.DeviceConfigService
+	service runtimeapp.DeviceConfigService
 	tokens  runtimeapp.DeviceTokenService
 }
 
 // NewDeviceConfigHandler creates a new handler for the Gateways'
 // configuration.
-func NewDeviceConfigHandler(s application.DeviceConfigService, tokens runtimeapp.DeviceTokenService) *DeviceConfigHandlers {
+func NewDeviceConfigHandler(s runtimeapp.DeviceConfigService, tokens runtimeapp.DeviceTokenService) *DeviceConfigHandlers {
 	return &DeviceConfigHandlers{service: s, tokens: tokens}
 }
 

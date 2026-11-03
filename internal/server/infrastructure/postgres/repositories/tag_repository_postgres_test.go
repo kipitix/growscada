@@ -80,7 +80,7 @@ func TestMain(m *testing.M) {
 
 func cleanTags(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
+	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
 		t.Fatalf("cleanTags: %v", err)
 	}
 }
@@ -367,7 +367,7 @@ func TestDelete_NotFound_ReturnsErrTagNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	saved := mustSaveTag(t, repo, makeTag(t, "valve", repo))
-	if _, err := testDB.ExecContext(ctx, "DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
+	if _, err := testDB.ExecContext(ctx, "DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
 		t.Fatalf("clean: %v", err)
 	}
 	err := repo.Delete(ctx, saved.Delete())

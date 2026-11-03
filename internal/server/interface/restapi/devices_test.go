@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	projectv0 "github.com/kipitix/growscada/contract/project/v0"
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/devicetoken"
 	"github.com/kipitix/growscada/internal/server/domain/id"
@@ -27,7 +28,9 @@ import (
 func cleanDevicesRest(t *testing.T) {
 	t.Helper()
 	if _, err := testDB().ExecContext(context.Background(),
-		"DELETE FROM runtime.device_tokens; DELETE FROM runtime.tags; DELETE FROM engineering.tags; "+
+		"DELETE FROM runtime.revisions; DELETE FROM runtime.device_tokens; DELETE FROM runtime.tags; "+
+			"DELETE FROM runtime.environment_devices; DELETE FROM runtime.devices; DELETE FROM runtime.environments; "+
+			"DELETE FROM engineering.tags; "+
 			"DELETE FROM engineering.environment_devices; DELETE FROM engineering.devices; DELETE FROM engineering.environments"); err != nil {
 		t.Fatalf("cleanDevicesRest: %v", err)
 	}
@@ -377,7 +380,8 @@ func TestDeviceTokens_OrphanTokenStaysVisibleAndRevocable(t *testing.T) {
 
 func TestDeviceConfig(t *testing.T) {
 	cleanDevicesRest(t)
-	router := newServices().router()
+	services := newServices()
+	router := services.router()
 	device := createDeviceRest(t, router, "sim")
 	environment := createEnvironmentRest(t, router, "bench")
 	token := issueTokenRest(t, router, device.ID)
@@ -389,6 +393,23 @@ func TestDeviceConfig(t *testing.T) {
 	}); rec.Code != http.StatusCreated {
 		t.Fatalf("PUT pair: %d %s", rec.Code, rec.Body)
 	}
+
+	// The Gateway's configuration is the running Revision's, never the Draft's.
+	fullDocument := projectv0.ProjectFile{
+		Header: projectv0.Header{SchemaVersion: projectv0.SchemaVersion(), ProjectID: mainProject},
+		Tags: []projectv0.TagDefinition{{
+			ID: tagID, Name: "device.speed", Type: "integer", SupplierDeviceID: &device.ID,
+		}},
+		Devices: []projectv0.Device{{
+			ID: device.ID, Name: "sim", Protocol: "simulation", Config: projectv0.JSONObject(testDeviceConfig),
+		}},
+		Environments: []projectv0.Environment{{ID: environment.ID, Name: "bench"}},
+		EnvironmentDevices: []projectv0.EnvironmentDevice{{
+			EnvironmentID: environment.ID, DeviceID: device.ID,
+			Params: projectv0.JSONObject(`{"address":"10.0.0.1:502"}`),
+		}},
+	}
+	deployRevision(t, services.revisions, fullDocument)
 
 	configPath := apiv0.PathPrefix + "/device/config?" + apiv0.DeviceConfigQueryEnvironment + "=" + environment.ID.String()
 	rec := serveAs(router, http.MethodGet, configPath, nil, "Bearer "+token)
@@ -407,6 +428,17 @@ func TestDeviceConfig(t *testing.T) {
 	}
 	if len(config.Tags) != 1 || config.Tags[0].Name != "device.speed" || config.Tags[0].Type != "integer" {
 		t.Errorf("config.Tags = %+v", config.Tags)
+	}
+
+	// A Draft change is invisible until the next Deploy.
+	if _, err := testDB().ExecContext(context.Background(),
+		`UPDATE engineering.devices SET name = 'draft-only' WHERE id = $1`, device.ID); err != nil {
+		t.Fatalf("change the device in the Draft: %v", err)
+	}
+	if rec := serveAs(router, http.MethodGet, configPath, nil, "Bearer "+token); rec.Code != http.StatusOK {
+		t.Fatalf("GET device/config after a Draft change: %d %s", rec.Code, rec.Body)
+	} else if got := decodeBody[apiv0.DeviceConfigResponse](t, rec); got.Device.Name != "sim" {
+		t.Errorf("the Gateway sees the Draft: device name %q, want sim", got.Device.Name)
 	}
 
 	if rec := serve(router, http.MethodGet, configPath, nil); rec.Code != http.StatusUnauthorized {
@@ -432,18 +464,23 @@ func TestDeviceConfig(t *testing.T) {
 		t.Errorf("a missing environment: %d, want 404", rec.Code)
 	}
 
-	// The Device leaves the Draft: its token sleeps, and the Gateway waits.
-	if rec := serve(router, http.MethodDelete, pairPath, nil); rec.Code != http.StatusOK {
-		t.Fatalf("DELETE pair: %d %s", rec.Code, rec.Body)
+	// The Environment leaves the Revision: the Device is there, its place is not.
+	deployRevision(t, services.revisions, projectv0.ProjectFile{
+		Header:  fullDocument.Header,
+		Devices: fullDocument.Devices,
+	})
+	if rec := serveAs(router, http.MethodGet, configPath, nil, "Bearer "+token); rec.Code != http.StatusNotFound {
+		t.Errorf("an environment outside the Revision: %d, want 404", rec.Code)
 	}
-	if rec := serve(router, http.MethodDelete, mainPath+"/tags/"+tagID.String(), nil); rec.Code != http.StatusOK {
-		t.Fatalf("DELETE the device's tag: %d %s", rec.Code, rec.Body)
-	}
-	if rec := serve(router, http.MethodDelete, mainPath+"/devices/"+device.ID.String(), nil); rec.Code != http.StatusOK {
-		t.Fatalf("DELETE device: %d %s", rec.Code, rec.Body)
-	}
+
+	// The Device leaves the Revision: its token sleeps, and the Gateway waits.
+	deployRevision(t, services.revisions, projectv0.ProjectFile{Header: fullDocument.Header})
 	if rec := serveAs(router, http.MethodGet, configPath, nil, "Bearer "+token); rec.Code != http.StatusForbidden {
 		t.Errorf("a dormant token: %d, want 403", rec.Code)
+	}
+	// The token itself is outside the Revision: it stays, and is still revocable.
+	if rec := serve(router, http.MethodGet, mainPath+"/devices/"+device.ID.String()+"/token", nil); rec.Code != http.StatusOK {
+		t.Errorf("the dormant token's metadata: %d, want 200", rec.Code)
 	}
 }
 

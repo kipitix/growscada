@@ -6,6 +6,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/id"
@@ -94,6 +95,48 @@ func TestUpsertDefinitions_InsertsTheInitialStateAndKeepsAWrittenOne(t *testing.
 	}
 	if again := mustFind(t, repo, projectID, speed.TagID); again.Value().String() != "42" || again.Seq() != stored.Seq() {
 		t.Errorf("the upsert again changed the state: %s", again)
+	}
+}
+
+// TestUpsertDefinitions_AfterARevision_WritesNoCopyOutsideIt: once a Project
+// has a Revision, the bridge is silent — a Tag created after the Deploy commits
+// is no copy of the running Revision, so a value write is 404 until the next
+// Deploy (task 35, Q4).
+func TestUpsertDefinitions_AfterARevision_WritesNoCopyOutsideIt(t *testing.T) {
+	projectID, _ := newProject(t)
+	db := postgres.DB(t)
+	ctx := context.Background()
+	mustCreateRevision(t, runtimepg.NewRevisionRepositoryPostgres(db), projectID.UUID(), documentOf(projectID), time.Now())
+
+	repo := runtimepg.NewTagStateRepositoryPostgres(db)
+	late := definition(t, projectID, "late", tag.TagTypeInteger)
+	if err := repo.UpsertDefinitions(ctx, projectID, []tagstate.Definition{late}); err != nil {
+		t.Fatalf("UpsertDefinitions: %v", err)
+	}
+	found, err := repo.FindByIDs(ctx, projectID, []id.ID[tag.Tag]{late.TagID})
+	if err != nil {
+		t.Fatalf("FindByIDs: %v", err)
+	}
+	if _, ok := found[late.TagID]; ok {
+		t.Error("the bridge copied a tag outside the running revision")
+	}
+}
+
+// TestDelete_AfterARevision_KeepsTheRunningCopy: a Draft deletion reaches the
+// Runtime node with the next Deploy; while the Revision runs, its copy stays.
+func TestDelete_AfterARevision_KeepsTheRunningCopy(t *testing.T) {
+	projectID, _ := newProject(t)
+	db := postgres.DB(t)
+	ctx := context.Background()
+	speed := definition(t, projectID, "speed", tag.TagTypeInteger)
+	mustCreateRevision(t, runtimepg.NewRevisionRepositoryPostgres(db), projectID.UUID(), documentOf(projectID, withTags(documentTag(speed))), time.Now())
+
+	repo := runtimepg.NewTagStateRepositoryPostgres(db)
+	if err := repo.Delete(ctx, projectID, []id.ID[tag.Tag]{speed.TagID}); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if stored := mustFind(t, repo, projectID, speed.TagID); stored.Definition().TagID != speed.TagID || stored.Definition().Type != speed.Type {
+		t.Errorf("a Draft deletion changed the running copy: %v", stored.Definition())
 	}
 }
 

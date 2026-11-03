@@ -31,9 +31,9 @@ import (
 // otherwise (PUBLIC_API_URL).
 const apiPort = "9090"
 
-// tagUpdatesQueueSize is how many tag_updated wait for the SSE fan-out
-// before a Device's write waits for room.
-const tagUpdatesQueueSize = 1024
+// runtimeEventsQueueSize is how many tag_updated and revision_created wait
+// for the SSE fan-out before the Runtime node's write waits for room.
+const runtimeEventsQueueSize = 1024
 
 // iconSmall and iconLarge are the PWA icons served from web/; the Makefile and
 // the Dockerfile copy the same files.
@@ -119,22 +119,24 @@ func main() {
 		slog.Error("Organization error", "error", err)
 		emergencyExit(gracedownManager, gracedown.ExitConfig)
 	}
-	// The Runtime node, in this process: the Tag states (ADR 0011). It
-	// publishes tag_updated to the event bus itself, bypassing the outbox,
-	// through a queue: a Device's write does not wait for the SSE fan-out.
-	// The Engineering node reaches it only through the RuntimeNode port
-	tagUpdates := eventbus.NewAsyncPublisher(eventBus, tagUpdatesQueueSize)
-	tagUpdatesCtx, stopTagUpdates := context.WithCancel(context.Background())
-	tagUpdatesDone := make(chan struct{})
+	// The Runtime node, in this process: the Tag states, the Revisions and
+	// the Device Tokens (ADR 0011). It publishes tag_updated and
+	// revision_created to the event bus itself, bypassing the outbox, through
+	// a queue: a Device's write or a Deploy does not wait for the SSE fan-out.
+	// The Engineering node reaches it only through the RuntimeNode port.
+	runtimeEvents := eventbus.NewAsyncPublisher(eventBus, runtimeEventsQueueSize)
+	runtimeEventsCtx, stopRuntimeEvents := context.WithCancel(context.Background())
+	runtimeEventsDone := make(chan struct{})
 	go func() {
-		tagUpdates.Run(tagUpdatesCtx)
-		close(tagUpdatesDone)
+		runtimeEvents.Run(runtimeEventsCtx)
+		close(runtimeEventsDone)
 	}()
-	tagStateService := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(sqlDB), organizationID, tagUpdates.Publish)
+	tagStateService := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(sqlDB), organizationID, runtimeEvents.Publish)
+	revisionService := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(sqlDB), runtimeEvents.Publish)
 	// The Device Tokens are the Runtime node's too: a Gateway authenticates
 	// with one, and its management (issue, rotate, revoke) lives here
 	deviceTokenService := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(sqlDB))
-	runtimeNode := inprocess.NewRuntimeNode(tagStateService, deviceTokenService)
+	runtimeNode := inprocess.NewRuntimeNode(tagStateService, deviceTokenService, revisionService)
 	// Registry of the policies: changes spanning aggregates, run as jobs
 	// apart from event delivery (ADR 0008)
 	policyRunner := outbox.NewPolicyRunner(sqlDB, []application.Policy{
@@ -201,7 +203,7 @@ func main() {
 		Scenes:       application.NewSceneService(projectContent),
 		Devices:      application.NewDeviceService(projectContent),
 		Environments: application.NewEnvironmentService(projectContent),
-		DeviceConfig: application.NewDeviceConfigService(projectContent),
+		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(sqlDB)),
 		DeviceTokens: deviceTokenService,
 	}, eventBus, cliArgs.MaxSSEClients)
 	// Register the event hub shutdown handler. The outbox is drained first,
@@ -219,11 +221,11 @@ func main() {
 		drainCtx, cancel := context.WithTimeout(ctx, outboxDrainTimeout)
 		defer cancel()
 		stopOutbox(drainCtx)
-		stopTagUpdates()
+		stopRuntimeEvents()
 		select {
-		case <-tagUpdatesDone:
+		case <-runtimeEventsDone:
 		case <-drainCtx.Done():
-			slog.Error("Tag updates not delivered on shutdown", "error", drainCtx.Err())
+			slog.Error("Runtime events not delivered on shutdown", "error", drainCtx.Err())
 		}
 		apiRouter.Close()
 		return nil

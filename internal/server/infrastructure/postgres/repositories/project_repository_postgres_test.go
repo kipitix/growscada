@@ -21,7 +21,7 @@ func cleanProjects(t *testing.T) {
 	t.Helper()
 	main := "'" + mainProject.String() + "'"
 	if _, err := testDB.ExecContext(context.Background(),
-		`DELETE FROM runtime.tags; DELETE FROM engineering.tags; DELETE FROM engineering.scenes; DELETE FROM engineering.library_pins;
+		`DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.tags; DELETE FROM engineering.scenes; DELETE FROM engineering.library_pins;
 		 DELETE FROM engineering.environment_devices ed USING engineering.environments e
 		 WHERE ed.environment_id = e.id AND e.project_id <> `+main+`;
 		 DELETE FROM engineering.devices WHERE project_id <> `+main+`;

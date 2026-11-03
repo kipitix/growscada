@@ -5,6 +5,8 @@ import (
 	"time"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	projectv0 "github.com/kipitix/growscada/contract/project/v0"
+	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/client"
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/event"
@@ -122,6 +124,12 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 			apiv0.Event{Type: "environment_device_updated", ID: environmentID.String(), EnvironmentID: environmentID.String(), DeviceID: deviceID.String()}},
 		event.EventTypeEnvironmentDeviceDeleted: {device.NewEnvironmentDeviceDeletedEvent(environmentID, deviceID, projectID, ts),
 			apiv0.Event{Type: "environment_device_deleted", ID: environmentID.String(), EnvironmentID: environmentID.String(), DeviceID: deviceID.String()}},
+		event.EventTypeRevisionCreated: {runtimeapp.NewRevisionCreatedEvent(runtimeapp.Revision{
+			Number:     3,
+			DeployedAt: at,
+			Content:    projectv0.ProjectFile{Header: projectv0.Header{ProjectID: projectID.UUID()}},
+		}, ts),
+			apiv0.Event{Type: "revision_created", ID: projectID.String(), Revision: 3, DeployedAt: timestamp}},
 	}
 
 	for _, et := range event.AllEventTypes() {

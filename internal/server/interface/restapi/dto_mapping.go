@@ -179,7 +179,7 @@ func newDeviceTokenMetadataResponse(t runtimeapp.DeviceToken) apiv0.DeviceTokenM
 	}
 }
 
-func newDeviceConfigResponse(c appdto.DeviceConfig) apiv0.DeviceConfigResponse {
+func newDeviceConfigResponse(c runtimeapp.DeviceConfig) apiv0.DeviceConfigResponse {
 	tags := make([]apiv0.DeviceConfigTagResponse, len(c.Tags))
 	for i, t := range c.Tags {
 		tags[i] = apiv0.DeviceConfigTagResponse{ID: t.ID, Name: t.Name, Type: t.Type}

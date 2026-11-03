@@ -2,10 +2,12 @@ package restapi_test
 
 import (
 	"context"
+	"testing"
 
 	"github.com/google/uuid"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	projectv0 "github.com/kipitix/growscada/contract/project/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
@@ -34,13 +36,14 @@ type testServices struct {
 	projects     application.ProjectService
 	tags         application.TagService
 	states       runtimeapp.TagStateService
+	revisions    runtimeapp.RevisionService
 	libraries    application.LibraryService
 	widgetTypes  application.WidgetTypeService
 	pins         application.LibraryPinService
 	scenes       application.SceneService
 	devices      application.DeviceService
 	environments application.EnvironmentService
-	deviceConfig application.DeviceConfigService
+	deviceConfig runtimeapp.DeviceConfigService
 	deviceTokens runtimeapp.DeviceTokenService
 }
 
@@ -64,18 +67,20 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 	releases := repositories.NewLibraryReleaseRepositoryPostgres(db, opts...)
 	widgetTypes := repositories.NewWidgetTypeRepositories(db, opts...)
 	states := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, publish)
+	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(db), publish)
 	deviceTokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(db))
 	return testServices{
 		projects:     application.NewProjectService(projectRepo, orgID),
-		tags:         application.NewTagService(content, inprocess.NewRuntimeNode(states, deviceTokens)),
+		tags:         application.NewTagService(content, inprocess.NewRuntimeNode(states, deviceTokens, revisions)),
 		states:       states,
+		revisions:    revisions,
 		libraries:    application.NewLibraryService(libraries, releases, widgetTypes, orgID),
 		widgetTypes:  application.NewWidgetTypeService(libraries, widgetTypes, orgID),
 		pins:         application.NewLibraryPinService(content, libraries, releases),
 		scenes:       application.NewSceneService(content),
 		devices:      application.NewDeviceService(content),
 		environments: application.NewEnvironmentService(content),
-		deviceConfig: application.NewDeviceConfigService(content),
+		deviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(db)),
 		deviceTokens: deviceTokens,
 	}
 }
@@ -92,6 +97,15 @@ func (s testServices) services() restapi.Services {
 // router returns the API router over the services.
 func (s testServices) router() *restapi.APIRouter {
 	return restapi.NewRouter(s.services(), eventbus.NewEventBus(), 100)
+}
+
+// deployRevision deploys file to mainProject through the Runtime node's
+// service, as the Engineering node's DeployService will (task 35, part 4).
+func deployRevision(t *testing.T, service runtimeapp.RevisionService, file projectv0.ProjectFile) {
+	t.Helper()
+	if _, err := service.Deploy(context.Background(), mainProject, file); err != nil {
+		t.Fatalf("deploy: %v", err)
+	}
 }
 
 // anyProjects is a ProjectService that finds every project, for the event

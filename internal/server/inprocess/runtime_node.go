@@ -7,26 +7,30 @@ package inprocess
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 
+	projectv0 "github.com/kipitix/growscada/contract/project/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 )
 
 type runtimeNode struct {
-	states runtimeapp.TagStateService
-	tokens runtimeapp.DeviceTokenService
+	states    runtimeapp.TagStateService
+	tokens    runtimeapp.DeviceTokenService
+	revisions runtimeapp.RevisionService
 }
 
 var _ application.RuntimeNode = (*runtimeNode)(nil)
 
 // NewRuntimeNode returns the RuntimeNode calling the Runtime node's services
-// of Tag states and of Device Tokens in the same process. A nil tokens is a
-// Runtime node that serves no Device Tokens: its removal is a no-op.
-func NewRuntimeNode(someStates runtimeapp.TagStateService, someTokens runtimeapp.DeviceTokenService) application.RuntimeNode {
-	return &runtimeNode{states: someStates, tokens: someTokens}
+// of Tag states, of Device Tokens and of Revisions in the same process. A nil
+// tokens is a Runtime node that serves no Device Tokens: its removal is a
+// no-op; a nil revisions is one that cannot deploy.
+func NewRuntimeNode(someStates runtimeapp.TagStateService, someTokens runtimeapp.DeviceTokenService, someRevisions runtimeapp.RevisionService) application.RuntimeNode {
+	return &runtimeNode{states: someStates, tokens: someTokens, revisions: someRevisions}
 }
 
 func (n runtimeNode) UpsertTagDefinitions(ctx context.Context, projectID uuid.UUID, defs []appdto.TagDefinition) error {
@@ -62,4 +66,26 @@ func (n runtimeNode) FindTagStates(ctx context.Context, projectID uuid.UUID, tag
 		states[i] = appdto.TagState{ID: s.ID, Value: s.Value, Quality: s.Quality, Seq: s.Seq}
 	}
 	return states, nil
+}
+
+func (n runtimeNode) Deploy(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile) (appdto.Revision, error) {
+	if n.revisions == nil {
+		return appdto.Revision{}, fmt.Errorf("runtime node serves no revisions")
+	}
+	revision, err := n.revisions.Deploy(ctx, projectID, file)
+	if err != nil {
+		return appdto.Revision{}, err
+	}
+	return appdto.Revision{Number: revision.Number, DeployedAt: revision.DeployedAt, Content: revision.Content}, nil
+}
+
+func (n runtimeNode) FindCurrentRevision(ctx context.Context, projectID uuid.UUID) (appdto.Revision, bool, error) {
+	if n.revisions == nil {
+		return appdto.Revision{}, false, fmt.Errorf("runtime node serves no revisions")
+	}
+	revision, ok, err := n.revisions.FindCurrent(ctx, projectID)
+	if err != nil {
+		return appdto.Revision{}, false, err
+	}
+	return appdto.Revision{Number: revision.Number, DeployedAt: revision.DeployedAt, Content: revision.Content}, ok, nil
 }

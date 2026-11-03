@@ -59,7 +59,8 @@ func isProjectContent(eventType string) bool {
 	case apiv0.EventLibraryPinCreated, apiv0.EventLibraryPinUpdated, apiv0.EventLibraryPinDeleted,
 		apiv0.EventDeviceCreated, apiv0.EventDeviceUpdated, apiv0.EventDeviceDeleted,
 		apiv0.EventEnvironmentCreated, apiv0.EventEnvironmentUpdated, apiv0.EventEnvironmentDeleted,
-		apiv0.EventEnvironmentDeviceCreated, apiv0.EventEnvironmentDeviceUpdated, apiv0.EventEnvironmentDeviceDeleted:
+		apiv0.EventEnvironmentDeviceCreated, apiv0.EventEnvironmentDeviceUpdated, apiv0.EventEnvironmentDeviceDeleted,
+		apiv0.EventRevisionCreated:
 		return true
 	}
 	switch eventTypeInfoByType[eventType].category {
@@ -123,6 +124,8 @@ var eventTypeInfoByType = map[string]eventTypeInfo{
 	apiv0.EventEnvironmentDeviceCreated: {categoryOther, "EnvironmentDevice %s created"},
 	apiv0.EventEnvironmentDeviceUpdated: {categoryOther, "EnvironmentDevice %s updated"},
 	apiv0.EventEnvironmentDeviceDeleted: {categoryOther, "EnvironmentDevice %s deleted"},
+
+	apiv0.EventRevisionCreated: {categoryProject, "Project deployed"},
 }
 
 // describe is the log text of an event of this type with the given id.

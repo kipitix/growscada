@@ -58,13 +58,15 @@ var apiEventTypes = map[event.EventType]string{
 	event.EventTypeEnvironmentDeviceCreated: apiv0.EventEnvironmentDeviceCreated,
 	event.EventTypeEnvironmentDeviceUpdated: apiv0.EventEnvironmentDeviceUpdated,
 	event.EventTypeEnvironmentDeviceDeleted: apiv0.EventEnvironmentDeviceDeleted,
+	event.EventTypeRevisionCreated:          apiv0.EventRevisionCreated,
 }
 
 // newAPIEvent translates a domain (or delivery) event into the event stream's
 // message: its type through apiEventTypes, and the fields its family carries
 // — the affected aggregate's (or connection's) ID, the Scene of a Widget, the
 // Library of a WidgetType, the number of a new release, the pair of an
-// EnvironmentDevice, the Tag's new state of tag_updated. An event type missing from the table gives
+// EnvironmentDevice, the Tag's new state of tag_updated, the number and time
+// of a new Revision. An event type missing from the table gives
 // an empty Type; such an event is not sent.
 func newAPIEvent(e event.Event) apiv0.Event {
 	ev := apiv0.Event{
@@ -99,6 +101,10 @@ func newAPIEvent(e event.Event) apiv0.Event {
 		ev.ID = e.DeviceID().String()
 	case device.EnvironmentEvent:
 		ev.ID = e.EnvironmentID().String()
+	case runtimeapp.RevisionCreatedEvent:
+		ev.ID = e.ProjectID().String()
+		ev.Revision = e.Number()
+		ev.DeployedAt = e.DeployedAt().UTC().Format(time.RFC3339)
 	case scene.SceneEvent:
 		ev.ID = e.SceneID().String()
 	case project.ProjectEvent:

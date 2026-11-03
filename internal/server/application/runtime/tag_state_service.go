@@ -1,7 +1,9 @@
 // Package runtime holds the use-case services of the Runtime node
-// (ADR 0011): the Tag states. It never imports the Engineering node's
-// packages, nor do they import it: the Engineering node reaches it through its
-// RuntimeNode port, which the server wires to TagStateService in-process.
+// (ADR 0011): the Tag states, the Revisions a Deploy creates, the Device
+// Tokens and the configuration of the Device Gateways. It never imports the
+// Engineering node's packages, nor do they import it: the Engineering node
+// reaches it through its RuntimeNode port, which the server wires to these
+// services in-process.
 package runtime
 
 import (

@@ -21,10 +21,11 @@ const RuntimeTagDefinitionsPolicyName = "sync_runtime_tag_definitions"
 // runtimeTagDefinitionsPolicy brings the Runtime node's copy of a Project's
 // Tag definitions into line with the Draft (ADR 0011), Tag by Tag: a
 // tag_created or tag_deleted event's job upserts the Tag's definition if the
-// Draft holds it and removes its state if not. It is the bridge until Deploy
-// exists (task 35), which then gives the Runtime node the definitions of the
-// running Revision. The Tag creation and deletion do the same right after
-// commit; the job makes up for a call that failed.
+// Draft holds it and removes its state if not. It is the bridge until the
+// Engineering node deploys (task 35, part 4); once a Project has a Revision,
+// UpsertTagDefinitions writes nothing and the copies come from it alone. The
+// Tag creation and deletion do the same right after commit; the job makes up
+// for a call that failed.
 type runtimeTagDefinitionsPolicy struct {
 	scopes  ProjectScopes
 	runtime RuntimeNode

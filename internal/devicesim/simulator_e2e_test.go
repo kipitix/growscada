@@ -80,6 +80,7 @@ func startSimulator(t *testing.T, yaml string, tagTypes map[string]string) *simu
 		tagIDs = append(tagIDs, created.ID)
 	}
 	s.device = servertest.NewDevice(t, srv, postgres.DB(t), "sim", tagIDs...)
+	servertest.DeployProject(t, postgres.DB(t), servertest.MainProject)
 
 	cfg, err := devicesim.ReadConfig(strings.NewReader(yaml))
 	if err != nil {
@@ -265,6 +266,7 @@ func TestE2E_AnotherWriter_CannotWriteTheDevicesTag(t *testing.T) {
 func TestE2E_MissingTagIsAConfigError(t *testing.T) {
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
 	cfg := simulatorConfig(t, srv.URL, servertest.NewDevice(t, srv, postgres.DB(t), "sim"))
+	servertest.DeployProject(t, postgres.DB(t), servertest.MainProject)
 	// The Device supplies no Tag at all.
 	client := apiclient.New(srv.URL, srv.Client()).WithDeviceToken(cfg.Token)
 	link := devicelink.NewRESTLink(client, cfg.Token)
@@ -308,6 +310,7 @@ func TestE2E_RevokedTokenStopsTheGateway(t *testing.T) {
 		t.Fatalf("create tag: %v", err)
 	}
 	device := servertest.NewDevice(t, srv, postgres.DB(t), "sim", created.ID)
+	servertest.DeployProject(t, postgres.DB(t), servertest.MainProject)
 	cfg := simulatorConfigOf(t, singleTagConfig, srv.URL, device)
 	client := apiclient.New(srv.URL, srv.Client()).WithDeviceToken(cfg.Token)
 	d := devicesim.New(cfg, devicelink.NewRESTLink(client, cfg.Token),

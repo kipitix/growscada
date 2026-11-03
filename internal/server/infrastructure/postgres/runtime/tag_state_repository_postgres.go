@@ -152,6 +152,15 @@ func (r tagStateRepositoryPostgres) writeMissReason(ctx context.Context, aState 
 // copied keeps the state written to it. A copy of another Project or TagType
 // is not changed: the call fails, so a policy job retries it instead of
 // taking it as done.
+//
+// A Project with a Revision has its copies owned by the running Revision: the
+// upsert writes nothing, and neither does Delete. The check takes the
+// advisory lock CreateRevision takes, so a Deploy and a bridge write never
+// interleave: a Tag created during a Deploy either precedes it — and the
+// Deploy's diff removes the copy the document does not name — or follows it
+// — and the bridge finds the Revision and writes nothing. Either way no copy
+// outside the Revision exists, so writing a value to such a Tag is 404 until
+// the next Deploy (task 35, Q4).
 func (r tagStateRepositoryPostgres) UpsertDefinitions(ctx context.Context, projectID id.ID[project.Project], defs []tagstate.Definition) error {
 	if len(defs) == 0 {
 		return nil
@@ -161,6 +170,13 @@ func (r tagStateRepositoryPostgres) UpsertDefinitions(ctx context.Context, proje
 		return fmt.Errorf("cannot begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	deployed, err := lockDeployAndFindRevision(ctx, tx, projectID)
+	if err != nil {
+		return err
+	}
+	if deployed {
+		return nil
+	}
 	for _, def := range defs {
 		if def.ProjectID != projectID {
 			return fmt.Errorf("cannot upsert tag %s of project %s into project %s", def.TagID, def.ProjectID, projectID)
@@ -204,18 +220,52 @@ func (r tagStateRepositoryPostgres) UpsertDefinitions(ctx context.Context, proje
 
 // Delete removes the copy of the Tag definitions of the Project with the
 // given IDs; the states go with them (ON DELETE CASCADE), and one without a
-// copy is skipped.
+// copy is skipped. A Project with a Revision keeps its copies: they are the
+// running Revision's, and a Draft deletion reaches the Runtime node with the
+// next Deploy (see UpsertDefinitions).
 func (r tagStateRepositoryPostgres) Delete(ctx context.Context, projectID id.ID[project.Project], tagIDs []id.ID[tag.Tag]) error {
 	if len(tagIDs) == 0 {
 		return nil
 	}
-	if _, err := r.db.ExecContext(ctx,
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("cannot begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	deployed, err := lockDeployAndFindRevision(ctx, tx, projectID)
+	if err != nil {
+		return err
+	}
+	if deployed {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM runtime.tags WHERE id = ANY($1::uuid[]) AND project_id = $2`,
 		pq.Array(rawIDs(tagIDs)), projectID.UUID(),
 	); err != nil {
 		return fmt.Errorf("cannot delete tag states: %w", err)
 	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("cannot commit tag definitions: %w", err)
+	}
 	return nil
+}
+
+// lockDeployAndFindRevision takes the advisory lock CreateRevision takes for
+// the Project and reports whether the Project has a Revision at all. Called
+// in a transaction, it serializes a bridge write with a Deploy.
+func lockDeployAndFindRevision(ctx context.Context, tx *sql.Tx, projectID id.ID[project.Project]) (bool, error) {
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, projectID.String()); err != nil {
+		return false, fmt.Errorf("cannot lock project %s for a tag definition change: %w", projectID, err)
+	}
+	var deployed bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS (SELECT 1 FROM runtime.revisions WHERE project_id = $1)`,
+		projectID.UUID(),
+	).Scan(&deployed); err != nil {
+		return false, fmt.Errorf("cannot check the revisions of project %s: %w", projectID, err)
+	}
+	return deployed, nil
 }
 
 func (r tagStateRepositoryPostgres) DeleteAllOfProject(ctx context.Context, projectID id.ID[project.Project]) error {

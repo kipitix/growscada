@@ -57,8 +57,9 @@ func TestReloadTargetsFor(t *testing.T) {
 }
 
 // notShownYet are the event types of the content the UI does not show yet:
-// Devices, Environments and their pairs are API only until task 66, so no
-// list is stale on their events.
+// Devices, Environments and their pairs are API only until task 66, and the
+// running Revision is shown by the Operation and Project modes in task 35,
+// part 5; until then no list is stale on their events.
 var notShownYet = map[string]bool{
 	apiv0.EventDeviceCreated:            true,
 	apiv0.EventDeviceUpdated:            true,
@@ -69,6 +70,7 @@ var notShownYet = map[string]bool{
 	apiv0.EventEnvironmentDeviceCreated: true,
 	apiv0.EventEnvironmentDeviceUpdated: true,
 	apiv0.EventEnvironmentDeviceDeleted: true,
+	apiv0.EventRevisionCreated:          true,
 }
 
 // TestReloadTargetsFor_CoversEveryKnownEvent guards the table against a new
