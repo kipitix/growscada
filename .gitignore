@@ -1,7 +1,5 @@
 bin/
 .venv/
-.claude/*
-!.claude/settings.json
 .idea/
 .kiro/
 .vscode/

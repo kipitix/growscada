@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This file provides guidance to AI coding agents (Claude Code, Codex, etc.) working in this repository.
+This file provides guidance to AI coding agents working in this repository.
 
 ## Language
 
@@ -195,17 +195,17 @@ Tests of the tools that talk to the server (`internal/devicelink`, `internal/dev
 Manual/exploratory API tests are maintained as [Bruno](https://www.usebruno.com/) collections in `tests/api/bruno_collections/`: `growscada_server/` for the server REST API (the `localhost` environment points to `http://localhost:9090`) and `device_simulator/` for the simulator's control API (`localhost:9191`, `TAG_NAME` is the seed tag `max_connections` driven by `tests/device_simulator/seed_dashboard.yaml`). The main automated tests are Go tests; two checks keep the collections from falling behind the API:
 
 - **Static check** (`TestBrunoCollection` in `restapi` and `devicesim`, part of `make test`, no Docker): via `internal/brunotest`, every request must hit a route of the `routes()` table, every route must be covered by a request, and every body must decode strictly into the type that `requestBodies` (in the test) maps to its route.
-- **Run** (`make bruno_test`, outside `make test`: GitHub CI and the end of every task, rule 10): both collections against the application in containers on a fresh seeded database, in `seq` order. Each request asserts its status, the `GrowSCADA-Schema-Version` header (server), `application/problem+json` on errors and one or two key fields on reads.
+- **Run** (`make bruno_test`, outside `make test`: GitHub CI and the end of every task, rule 9): both collections against the application in containers on a fresh seeded database, in `seq` order. Each request asserts its status, the `GrowSCADA-Schema-Version` header (server), `application/problem+json` on errors and one or two key fields on reads.
 
 Bruno tags: `manual` — left out of the run (`get_events`, `get_project_events`: the SSE streams never end); `invalid-body` — a body meant to be rejected, skipped by the body check (it still has to cover its route).
 
 ## MCP Servers
 
-Three MCP servers are available (via `.mcp.json` for Claude Code and `opencode.json` for OpenCode — the same three servers) and should be used during development. Keep `opencode.json` plain JSON with no comments and no trailing commas: the `rtk` OpenCode plugin parses it strictly to honour `permissions`, and a JSONC comment only earns a `failed to parse permissions` warning on every shell call.
+Three MCP servers are available (via `opencode.json`) and should be used during development. Keep `opencode.json` plain JSON with no comments and no trailing commas: the `rtk` OpenCode plugin parses it strictly to honour `permissions`, and a JSONC comment only earns a `failed to parse permissions` warning on every shell call.
 
 ### codegraph
 
-**Use codegraph BEFORE grep/find or reading files** when you need to understand or locate code. The index is a pre-built SQLite knowledge graph of every symbol, call edge, and file in the workspace — sub-millisecond reads, updated within ~1s of file changes. It lives in `.codegraph/` and is **gitignored**: a new dev host has none until `codegraph init -y` runs there (rule 11).
+**Use codegraph BEFORE grep/find or reading files** when you need to understand or locate code. The index is a pre-built SQLite knowledge graph of every symbol, call edge, and file in the workspace — sub-millisecond reads, updated within ~1s of file changes. It lives in `.codegraph/` and is **gitignored**: a new dev host has none until `codegraph init -y` runs there (rule 10).
 
 - `codegraph_explore` — PRIMARY tool. Pass a natural-language question or a bag of symbol/file names; returns the verbatim source of all relevant symbols grouped by file, plus call paths between them. Equivalent to running Read on multiple files at once — treat returned source as already read. Most questions need only this one call.
 - `codegraph_node` — Read a single file (pass `file` only) or look up one named symbol (pass `symbol`). Returns source with line numbers + caller/callee trail so you see the blast radius before editing.
@@ -246,17 +246,15 @@ Browser automation. Use for verifying UI changes in the running PWA (port 8080):
 
 5. **Keep Bruno collections in sync.** When any REST API endpoint is added, removed, or modified (URL, method, request/response shape), update the corresponding Bruno collection in `tests/api/bruno_collections/` to reflect the change: every new request has assertions (status, schema header, error content type, key fields), the `seq` order holds (reads, then changes, deletes last; IDs and versions in the bodies follow that order on the seed data), and a new route that takes a body needs an entry in the test's `requestBodies`.
 
-6. **Completion notification is automatic — no action needed.** A `Stop` hook (`.claude/settings.json`) fires a desktop notification (`notify-send`) whenever a turn ends. It's a no-op if `notify-send` isn't installed (e.g. non-Linux, or a Linux desktop without a notification daemon), so it's safe on any machine. Don't try to send an e-mail or otherwise notify the user yourself — the old `mail-mcp`-based e-mail step has been removed.
+6. **Start the test environment before debugging.** Before any debugging session or manual API testing, ensure the dev database is running with `make db_up`. If the database state looks stale or you hit unexpected data errors, use `make full_restart` to get a clean slate. Never run the server or hit the API endpoints without first confirming the DB container is up.
 
-7. **Start the test environment before debugging.** Before any debugging session or manual API testing, ensure the dev database is running with `make db_up`. If the database state looks stale or you hit unexpected data errors, use `make full_restart` to get a clean slate. Never run the server or hit the API endpoints without first confirming the DB container is up.
+7. **Ask questions one at a time, interactively.** When interviewing the user (grilling, design sessions, clarifications), ask exactly one question per turn via the interactive question tool (`AskUserQuestion`), with a recommended option first. This overrides any skill instruction to batch several questions into one round.
 
-8. **Ask questions one at a time, interactively.** When interviewing the user (grilling, design sessions, clarifications), ask exactly one question per turn via the interactive question tool (`AskUserQuestion`), with a recommended option first. This overrides any skill instruction to batch several questions into one round.
+8. **Audit grilling decisions against DDD.** When a grilling round ends, check every decision it produced against the domain model: aggregate boundaries and invariants, one transaction per aggregate with policies across aggregates (ADR 0008), the layer and role dependencies above (ADR 0011), and the terms of `GLOSSARY.md` and `docs/adr/`. Each mismatch opens another grilling round on that decision (rule 7 applies). The grilling is done when an audit finds no mismatch.
 
-9. **Audit grilling decisions against DDD.** When a grilling round ends, check every decision it produced against the domain model: aggregate boundaries and invariants, one transaction per aggregate with policies across aggregates (ADR 0008), the layer and role dependencies above (ADR 0011), and the terms of `GLOSSARY.md` and `docs/adr/`. Each mismatch opens another grilling round on that decision (rule 8 applies). The grilling is done when an audit finds no mismatch.
+9. **Verify a finished task in the browser and with Bruno.** Once `make build` and `make test` pass (rule 3), bring up the environment (rule 6), run the server and walk every UI flow the task touches in the PWA through `chrome-devtools` (screenshots, console free of errors), then run `make bruno_test`. A task is done when both checks pass; report what each one showed.
 
-10. **Verify a finished task in the browser and with Bruno.** Once `make build` and `make test` pass (rule 3), bring up the environment (rule 7), run the server and walk every UI flow the task touches in the PWA through `chrome-devtools` (screenshots, console free of errors), then run `make bruno_test`. A task is done when both checks pass; report what each one showed.
-
-11. **Rebuild the codegraph index on a new dev host.** `.codegraph/` is gitignored, so a fresh clone or a new machine has no index: the MCP server starts without a default project and every codegraph call returns nothing until you index. Check once, early in the work — `test -d .codegraph`, or `codegraph status` (`⚠ Not initialized`) — and if it is missing, tell the user plainly that codegraph is not indexed here and that you will fall back to grep/Read until it is, then offer to run `codegraph init -y` in the repository root (about a second; it creates only the gitignored `.codegraph/`). Keep the index current with `codegraph sync` after a pull or a branch switch, and rebuild with `codegraph index` when results look stale.
+10. **Rebuild the codegraph index on a new dev host.** `.codegraph/` is gitignored, so a fresh clone or a new machine has no index: the MCP server starts without a default project and every codegraph call returns nothing until you index. Check once, early in the work — `test -d .codegraph`, or `codegraph status` (`⚠ Not initialized`) — and if it is missing, tell the user plainly that codegraph is not indexed here and that you will fall back to grep/Read until it is, then offer to run `codegraph init -y` in the repository root (about a second; it creates only the gitignored `.codegraph/`). Keep the index current with `codegraph sync` after a pull or a branch switch, and rebuild with `codegraph index` when results look stale.
 
 ## Agent skills
 
