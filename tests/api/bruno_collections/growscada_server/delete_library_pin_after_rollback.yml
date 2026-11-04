@@ -13,6 +13,10 @@ docs: |
   the pin the Deploy before added goes, so the next requests of the
   collection see the project as it was before this section.
 
+  This DELETE sits in the middle of the collection, not with the deletes at
+  the end: the requests after it read the restored Draft, and `post discard`
+  (seq 63) would already have cleared the pin.
+
 runtime:
   assertions:
     - expression: 'res.status'

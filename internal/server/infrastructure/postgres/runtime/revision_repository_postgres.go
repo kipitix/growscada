@@ -170,7 +170,7 @@ func prepareRevisionTx(ctx context.Context, tx *sql.Tx, projectID uuid.UUID) err
 	}
 	var discarding bool
 	err := tx.QueryRowContext(ctx,
-		`SELECT discarding FROM public.projects WHERE id = $1 AND deleted_at IS NULL FOR SHARE`, projectID,
+		`SELECT discarding FROM projects WHERE id = $1 AND deleted_at IS NULL FOR SHARE`, projectID,
 	).Scan(&discarding)
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("%w: %s", project.ErrProjectNotFound, projectID)
@@ -333,11 +333,9 @@ type rowQuerier interface {
 // a deleted Project keeps its rows until its cleanup removes them, and they
 // are not its Revisions to serve any more.
 func liveProject(ctx context.Context, q rowQuerier, projectID uuid.UUID) error {
-	var live bool
-	if err := q.QueryRowContext(ctx,
-		`SELECT EXISTS (SELECT 1 FROM projects WHERE id = $1 AND deleted_at IS NULL)`, projectID,
-	).Scan(&live); err != nil {
-		return fmt.Errorf("cannot read project %s: %w", projectID, err)
+	live, err := projectIsLive(ctx, q, projectID)
+	if err != nil {
+		return err
 	}
 	if !live {
 		return fmt.Errorf("%w: %s", project.ErrProjectNotFound, projectID)

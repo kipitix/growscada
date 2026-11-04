@@ -64,13 +64,7 @@ func (n runtimeNode) Deploy(ctx context.Context, projectID uuid.UUID, file proje
 	if err != nil {
 		return appdto.Revision{}, err
 	}
-	return appdto.Revision{
-		Number:         revision.Number,
-		DeployedAt:     revision.DeployedAt,
-		Cause:          string(revision.Cause),
-		RolledBackFrom: revision.RolledBackFrom,
-		Content:        revision.Content,
-	}, nil
+	return toAppdtoRevision(revision), nil
 }
 
 func (n runtimeNode) FindCurrentRevision(ctx context.Context, projectID uuid.UUID) (appdto.Revision, bool, error) {
@@ -81,11 +75,18 @@ func (n runtimeNode) FindCurrentRevision(ctx context.Context, projectID uuid.UUI
 	if err != nil {
 		return appdto.Revision{}, false, err
 	}
+	return toAppdtoRevision(revision), ok, nil
+}
+
+// toAppdtoRevision is the Runtime node's Revision as the Engineering node's
+// appdto.Revision: the roles keep their own types, and the composition in one
+// process is where the two meet (ADR 0011).
+func toAppdtoRevision(revision runtimeapp.Revision) appdto.Revision {
 	return appdto.Revision{
 		Number:         revision.Number,
 		DeployedAt:     revision.DeployedAt,
 		Cause:          string(revision.Cause),
 		RolledBackFrom: revision.RolledBackFrom,
 		Content:        revision.Content,
-	}, ok, nil
+	}
 }

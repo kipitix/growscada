@@ -541,26 +541,31 @@ func newDeployResponse(revision appdto.Revision) apiv0.DeployResponse {
 }
 
 func newRevisionSummaryResponse(revision appdto.Revision) apiv0.RevisionSummaryResponse {
-	return newRevisionSummary(revision.Number, revision.DeployedAt, revision.Cause, revision.RolledBackFrom)
+	return newRevisionSummary(runtimeapp.RevisionSummary{
+		Number:         revision.Number,
+		DeployedAt:     revision.DeployedAt,
+		Cause:          runtimeapp.RevisionCause(revision.Cause),
+		RolledBackFrom: revision.RolledBackFrom,
+	})
 }
 
 func newRollbackResponse(revision runtimeapp.Revision) apiv0.RevisionSummaryResponse {
-	return newRevisionSummary(revision.Number, revision.DeployedAt, string(revision.Cause), revision.RolledBackFrom)
+	return newRevisionSummary(revision.Summary())
 }
 
-func newRevisionSummary(number int, deployedAtTime time.Time, cause string, rolledBackFrom *int) apiv0.RevisionSummaryResponse {
+func newRevisionSummary(summary runtimeapp.RevisionSummary) apiv0.RevisionSummaryResponse {
 	return apiv0.RevisionSummaryResponse{
-		Number:         number,
-		DeployedAt:     deployedAt(deployedAtTime),
-		Cause:          apiv0.RevisionCause(cause),
-		RolledBackFrom: rolledBackFrom,
+		Number:         summary.Number,
+		DeployedAt:     deployedAt(summary.DeployedAt),
+		Cause:          apiv0.RevisionCause(summary.Cause),
+		RolledBackFrom: summary.RolledBackFrom,
 	}
 }
 
 func newListRevisionsResponse(summaries []runtimeapp.RevisionSummary) apiv0.ListRevisionsResponse {
 	resp := apiv0.ListRevisionsResponse{Revisions: make([]apiv0.RevisionSummaryResponse, len(summaries))}
 	for i, summary := range summaries {
-		resp.Revisions[i] = newRevisionSummary(summary.Number, summary.DeployedAt, string(summary.Cause), summary.RolledBackFrom)
+		resp.Revisions[i] = newRevisionSummary(summary)
 	}
 	return resp
 }

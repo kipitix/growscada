@@ -58,7 +58,8 @@ type RevisionSummary struct {
 	RolledBackFrom *int
 }
 
-// Summary returns the Revision without its document.
+// Summary returns the Revision without its document: what a list of Revisions
+// carries.
 func (r Revision) Summary() RevisionSummary {
 	return RevisionSummary{
 		Number:         r.Number,

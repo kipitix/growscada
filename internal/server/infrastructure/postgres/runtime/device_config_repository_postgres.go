@@ -44,7 +44,7 @@ func (r deviceConfigRepositoryPostgres) FindConfig(ctx context.Context, projectI
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	live, err := isLiveProject(ctx, tx, projectID)
+	live, err := projectIsLive(ctx, tx, projectID)
 	if err != nil {
 		return runtimeapp.DeviceConfig{}, err
 	}
@@ -75,12 +75,12 @@ func (r deviceConfigRepositoryPostgres) FindConfig(ctx context.Context, projectI
 	}, nil
 }
 
-// isLiveProject reports whether the Project is live: a Device Gateway asks for
-// the configuration of a Project that may be on its way out, and its content
-// stops being served as soon as it is marked deleted.
-func isLiveProject(ctx context.Context, tx *sql.Tx, projectID uuid.UUID) (bool, error) {
+// projectIsLive reports whether the Project is live: its content stops being
+// served as soon as it is marked deleted. Callers that serve the Project's
+// rows wrap a false into the error their port answers.
+func projectIsLive(ctx context.Context, q rowQuerier, projectID uuid.UUID) (bool, error) {
 	var live bool
-	if err := tx.QueryRowContext(ctx,
+	if err := q.QueryRowContext(ctx,
 		`SELECT EXISTS (SELECT 1 FROM projects WHERE id = $1 AND deleted_at IS NULL)`, projectID,
 	).Scan(&live); err != nil {
 		return false, fmt.Errorf("cannot read project %s: %w", projectID, err)

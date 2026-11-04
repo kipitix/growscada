@@ -516,12 +516,20 @@ func (p *Project) renderRevisionSummary() app.UI {
 }
 
 // revisionCauseText renders why a Revision exists: a Deploy, or a Rollback
-// naming the Revision it copied.
+// naming the Revision it copied. A cause this build does not know is shown as
+// it came rather than passed off as a Deploy.
 func revisionCauseText(cause apiv0.RevisionCause, rolledBackFrom *int) string {
-	if cause == apiv0.RevisionCauseRollback && rolledBackFrom != nil {
-		return fmt.Sprintf("Rolled back from #%d", *rolledBackFrom)
+	switch cause {
+	case apiv0.RevisionCauseDeploy:
+		return "Deployed"
+	case apiv0.RevisionCauseRollback:
+		if rolledBackFrom != nil {
+			return fmt.Sprintf("Rolled back from #%d", *rolledBackFrom)
+		}
+		return "Rolled back"
+	default:
+		return string(cause)
 	}
-	return "Deployed"
 }
 
 // formatDeployedAt renders the deployment time of the contract (RFC 3339) for

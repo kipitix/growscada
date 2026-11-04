@@ -6,6 +6,8 @@ The list of Revisions is the Runtime node's, newest first, with each Revision's 
 
 Rollback is also why the Engineering node keeps no copy of the last ProjectFile it sent. That copy could no longer mean "the Revision the Project runs" once a Rollback happens elsewhere, and its only remaining readers were a dead `State` and the repair path of a failed copy write; Project mode reads `deploy/preview`, which compares the Draft with the Revision through `RuntimeNode` already. The copy, its repository, `DeployService.State`, `ErrRevisionCopyNotSaved` and the 500 that carried it are removed: a Deploy of a Draft equal to the running Revision is always `409 nothing_to_deploy`. See the amendment to ADR 0013.
 
+A Rollback is an operational act and belongs in the Journal, but the Journal does not exist yet: recording it is task 42, and this task only notes it. The Revision's `cause` and `rolled_back_from` are what task 42 will read.
+
 ## Considered Options
 
 - A separate `revision_rolled_back` event: rejected. Consumers do one thing on `revision_created` — reload the running configuration — and the cause is available in the list, so a second type would only multiply the branches without a reader.
