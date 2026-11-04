@@ -134,7 +134,10 @@ func (g *generator) ref(t reflect.Type, schema func(reflect.Type) (map[string]an
 	}
 	name := g.defName(t)
 	ref := map[string]any{"$ref": "#/$defs/" + name}
-	if _, ok := g.types[name]; ok {
+	if seen, ok := g.types[name]; ok {
+		if seen != t {
+			return nil, fmt.Errorf("two types are named %s: %v and %v", name, seen, t)
+		}
 		return ref, nil
 	}
 	g.types[name] = t // before recursing, so recursive types terminate

@@ -341,6 +341,20 @@ func TestGenerateQualifiesNameClash(t *testing.T) {
 	}
 }
 
+// TestGenerateRejectsATwinQualifiedName: a third type of the same name in the
+// same package would get the same qualified name as the second; the generator
+// refuses rather than silently reusing its $defs entry.
+func TestGenerateRejectsATwinQualifiedName(t *testing.T) {
+	type point struct{ Z int }
+	second := point{}
+	{
+		type point struct{ W int }
+		if _, err := Generate(Document{Tag: "json", Roots: []any{shape{}, second, point{}}}); err == nil {
+			t.Fatal("three types named point: want an error")
+		}
+	}
+}
+
 func schemaOf(t *testing.T, s string) map[string]any {
 	t.Helper()
 	var doc map[string]any
