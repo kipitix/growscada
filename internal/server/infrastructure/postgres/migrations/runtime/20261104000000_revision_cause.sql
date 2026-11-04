@@ -22,10 +22,16 @@ ALTER TABLE runtime.revisions
     ADD CONSTRAINT fk_runtime_revisions_rolled_back_from
     FOREIGN KEY (project_id, rolled_back_from)
     REFERENCES runtime.revisions (project_id, n) ON DELETE CASCADE;
+-- Deleting a Revision makes the cascade look for the rows that copied it: the
+-- referencing columns need an index, or every removed Revision scans the
+-- whole table (a Project's cleanup removes all of its Revisions at once).
+CREATE INDEX idx_runtime_revisions_rolled_back_from
+    ON runtime.revisions (project_id, rolled_back_from);
 -- +goose StatementEnd
 
 -- +goose Down
 -- +goose StatementBegin
+DROP INDEX runtime.idx_runtime_revisions_rolled_back_from;
 ALTER TABLE runtime.revisions DROP CONSTRAINT fk_runtime_revisions_rolled_back_from;
 ALTER TABLE runtime.revisions DROP CONSTRAINT ck_runtime_revisions_rolled_back_from;
 ALTER TABLE runtime.revisions DROP CONSTRAINT ck_runtime_revisions_cause;
