@@ -295,3 +295,51 @@ func TestProjects_RoundTrip(t *testing.T) {
 		t.Errorf("the content of a deleted project: %v, want ErrNotFound", err)
 	}
 }
+
+// TestRevisions_ListDetailAndRollback: the client lists the Revisions, reads
+// one by number and rolls the running configuration back to an earlier one.
+func TestRevisions_ListDetailAndRollback(t *testing.T) {
+	client := startClient(t)
+	ctx := context.Background()
+	project := client.Project(servertest.MainProject)
+
+	if list, err := project.Revisions(ctx); err != nil || len(list) != 0 {
+		t.Fatalf("Revisions before the Deploy: %+v, %v; want none", list, err)
+	}
+	if _, err := project.CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.speed", Type: "integer"}); err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	servertest.DeployProject(t, postgres.DB(t), servertest.MainProject)
+
+	list, err := project.Revisions(ctx)
+	if err != nil || len(list) != 1 || list[0].Number != 1 || list[0].Cause != apiv0.RevisionCauseDeploy {
+		t.Fatalf("Revisions after the Deploy: %+v, %v", list, err)
+	}
+	one, err := project.RevisionByNumber(ctx, 1)
+	if err != nil || one.Number != 1 || one.Content.ProjectID != servertest.MainProject {
+		t.Fatalf("RevisionByNumber: %+v, %v", one, err)
+	}
+
+	if _, err := project.CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.flow", Type: "integer"}); err != nil {
+		t.Fatalf("the second CreateTag: %v", err)
+	}
+	servertest.DeployProject(t, postgres.DB(t), servertest.MainProject)
+	if _, err := project.Rollback(ctx, 2); !errors.Is(err, apiclient.ErrConflict) {
+		t.Errorf("Rollback to the running revision: %v, want ErrConflict", err)
+	}
+
+	rolled, err := project.Rollback(ctx, 1)
+	if err != nil {
+		t.Fatalf("Rollback: %v", err)
+	}
+	if rolled.Number != 3 || rolled.Cause != apiv0.RevisionCauseRollback || rolled.RolledBackFrom == nil || *rolled.RolledBackFrom != 1 {
+		t.Errorf("the rolled-back revision: %+v", rolled)
+	}
+	running, err := project.Revision(ctx)
+	if err != nil || !running.Deployed || running.Revision.Number != 3 || running.Revision.Cause != apiv0.RevisionCauseRollback {
+		t.Errorf("the running revision after the Rollback: %+v, %v", running, err)
+	}
+	if _, err := project.RevisionByNumber(ctx, 99); !errors.Is(err, apiclient.ErrNotFound) {
+		t.Errorf("RevisionByNumber of a missing one: %v, want ErrNotFound", err)
+	}
+}

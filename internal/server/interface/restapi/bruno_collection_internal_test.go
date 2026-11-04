@@ -41,6 +41,7 @@ var requestBodies = map[string]any{
 	"PUT " + projectPrefix + "/environments/" + environmentResource.wildcard():                                           apiv0.UpdateEnvironmentRequest{},
 	"PUT " + projectPrefix + "/environments/" + environmentResource.wildcard() + "/devices/" + deviceResource.wildcard(): apiv0.UpdateEnvironmentDeviceRequest{},
 	"POST " + projectPrefix + "/deploy":                                                                                  nil,
+	"POST " + projectPrefix + "/revisions/" + revisionResource.wildcard() + "/rollback":                                  nil,
 	"POST " + projectPrefix + "/discard":                                                                                 nil,
 }
 

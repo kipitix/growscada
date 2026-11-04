@@ -1,0 +1,33 @@
+info:
+  name: post deploy second
+  type: http
+  seq: 49
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/deploy
+  auth: inherit
+
+docs: |
+  The Draft of the project changed since its first Revision (a Library Pin
+  was added), so this Deploy makes Revision 2. It is the Revision a Rollback
+  can then leave behind.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '2'
+    - expression: 'res.body.deployed_at'
+      operator: isDefined
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

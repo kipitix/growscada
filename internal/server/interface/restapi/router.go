@@ -196,6 +196,9 @@ func (r *APIRouter) routes() []route {
 		{"DELETE " + pp + "/environments/" + environmentResource.wildcard() + "/devices/" + deviceResource.wildcard(), environments.DeleteEnvironmentDevice},
 
 		{"GET " + pp + "/revision", deploy.GetRevision},
+		{"GET " + pp + "/revisions", deploy.GetRevisions},
+		{"GET " + pp + "/revisions/" + revisionResource.wildcard(), deploy.GetRevisionsByNumber},
+		{"POST " + pp + "/revisions/" + revisionResource.wildcard() + "/rollback", deploy.PostRollback},
 		{"GET " + pp + "/tag-states", deploy.GetTagStates},
 		{"GET " + pp + "/deploy/preview", deploy.GetDeployPreview},
 		{"POST " + pp + "/deploy", deploy.PostDeploy},

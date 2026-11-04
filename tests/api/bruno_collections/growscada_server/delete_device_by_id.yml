@@ -1,7 +1,7 @@
 info:
   name: delete device by id
   type: http
-  seq: 95
+  seq: 105
 
 http:
   method: DELETE

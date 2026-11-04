@@ -6,22 +6,44 @@ import (
 	projectv0 "github.com/kipitix/growscada/contract/project/v0"
 )
 
+// RevisionCause is why a Revision exists (task 36, ADR 0014): a Deploy made it
+// from the Draft, or a Rollback copied an earlier one.
+type RevisionCause string
+
+const (
+	RevisionCauseDeploy   RevisionCause = "deploy"
+	RevisionCauseRollback RevisionCause = "rollback"
+)
+
 // RevisionResponse is the Revision a Project runs: its number, when it was
-// deployed and the ProjectFile it holds (task 35). GET
+// deployed, why it exists and the ProjectFile it holds (task 35). GET
 // /projects/{id}/revision answers 404 until the Project's first Deploy.
-// Nothing of the Draft is part of it: Operation reads this document alone.
+// RolledBackFrom names the Revision a Rollback copied and is absent for a
+// Deploy. Nothing of the Draft is part of it: Operation reads this document
+// alone.
 type RevisionResponse struct {
-	Number     int                   `json:"number"`
-	DeployedAt string                `json:"deployed_at"`
-	Content    projectv0.ProjectFile `json:"content"`
+	Number         int                   `json:"number"`
+	DeployedAt     string                `json:"deployed_at"`
+	Cause          RevisionCause         `json:"cause"`
+	RolledBackFrom *int                  `json:"rolled_back_from,omitempty"`
+	Content        projectv0.ProjectFile `json:"content"`
 }
 
 // RevisionSummaryResponse names a Revision without carrying its document: the
-// number and the time it was deployed.
+// number, the time it was deployed and why it exists.
 type RevisionSummaryResponse struct {
-	Number     int    `json:"number"`
-	DeployedAt string `json:"deployed_at"`
+	Number         int           `json:"number"`
+	DeployedAt     string        `json:"deployed_at"`
+	Cause          RevisionCause `json:"cause"`
+	RolledBackFrom *int          `json:"rolled_back_from,omitempty"`
 }
+
+// ListRevisionsResponse is the Project's Revisions, newest first (task 36). A
+// Project without a Revision answers an empty list, not 404.
+type ListRevisionsResponse struct {
+	Revisions []RevisionSummaryResponse `json:"revisions"`
+}
+
 
 // DroppedWidgetResponse names a Widget of the running Revision that a Deploy
 // would drop, because its Scene or its WidgetType is gone from the Draft

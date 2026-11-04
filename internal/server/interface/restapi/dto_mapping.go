@@ -528,9 +528,11 @@ func deployedAt(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 
 func newRevisionResponse(revision runtimeapp.Revision) apiv0.RevisionResponse {
 	return apiv0.RevisionResponse{
-		Number:     revision.Number,
-		DeployedAt: deployedAt(revision.DeployedAt),
-		Content:    revision.Content,
+		Number:         revision.Number,
+		DeployedAt:     deployedAt(revision.DeployedAt),
+		Cause:          apiv0.RevisionCause(revision.Cause),
+		RolledBackFrom: revision.RolledBackFrom,
+		Content:        revision.Content,
 	}
 }
 
@@ -539,7 +541,28 @@ func newDeployResponse(revision appdto.Revision) apiv0.DeployResponse {
 }
 
 func newRevisionSummaryResponse(revision appdto.Revision) apiv0.RevisionSummaryResponse {
-	return apiv0.RevisionSummaryResponse{Number: revision.Number, DeployedAt: deployedAt(revision.DeployedAt)}
+	return newRevisionSummary(revision.Number, revision.DeployedAt, revision.Cause, revision.RolledBackFrom)
+}
+
+func newRollbackResponse(revision runtimeapp.Revision) apiv0.RevisionSummaryResponse {
+	return newRevisionSummary(revision.Number, revision.DeployedAt, string(revision.Cause), revision.RolledBackFrom)
+}
+
+func newRevisionSummary(number int, deployedAtTime time.Time, cause string, rolledBackFrom *int) apiv0.RevisionSummaryResponse {
+	return apiv0.RevisionSummaryResponse{
+		Number:         number,
+		DeployedAt:     deployedAt(deployedAtTime),
+		Cause:          apiv0.RevisionCause(cause),
+		RolledBackFrom: rolledBackFrom,
+	}
+}
+
+func newListRevisionsResponse(summaries []runtimeapp.RevisionSummary) apiv0.ListRevisionsResponse {
+	resp := apiv0.ListRevisionsResponse{Revisions: make([]apiv0.RevisionSummaryResponse, len(summaries))}
+	for i, summary := range summaries {
+		resp.Revisions[i] = newRevisionSummary(summary.Number, summary.DeployedAt, string(summary.Cause), summary.RolledBackFrom)
+	}
+	return resp
 }
 
 func newDeployPreviewResponse(preview appdto.DeployPreview) apiv0.DeployPreviewResponse {

@@ -1,7 +1,7 @@
 info:
   name: put library pin
   type: http
-  seq: 44
+  seq: 48
 
 http:
   method: PUT

@@ -625,6 +625,34 @@ func (p *ProjectClient) Discard(ctx context.Context) (apiv0.DiscardProjectRespon
 	return resp, err
 }
 
+// Revisions returns the Revisions of the Project, newest first, without their
+// documents; a Project without a Revision has an empty list.
+func (p *ProjectClient) Revisions(ctx context.Context) ([]apiv0.RevisionSummaryResponse, error) {
+	var resp apiv0.ListRevisionsResponse
+	err := p.do(ctx, http.MethodGet, "/revisions", nil, http.StatusOK, &resp)
+	return resp.Revisions, err
+}
+
+// RevisionByNumber returns one Revision with its ProjectFile. The error
+// matches ErrNotFound if the Project has no such Revision.
+func (p *ProjectClient) RevisionByNumber(ctx context.Context, number int) (apiv0.RevisionResponse, error) {
+	var resp apiv0.RevisionResponse
+	err := p.do(ctx, http.MethodGet, revisionPath(number), nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+// Rollback makes the Revision's document the Project's new Revision and
+// returns its summary. The error matches ErrConflict if its document is the
+// running one or a Discard is under way, ErrNotFound if the Project has no
+// such Revision.
+func (p *ProjectClient) Rollback(ctx context.Context, number int) (apiv0.RevisionSummaryResponse, error) {
+	var resp apiv0.RevisionSummaryResponse
+	err := p.do(ctx, http.MethodPost, revisionPath(number)+"/rollback", nil, http.StatusCreated, &resp)
+	return resp, err
+}
+
+func revisionPath(number int) string { return "/revisions/" + strconv.Itoa(number) }
+
 // ── Transport ────────────────────────────────────────────────────────────────
 
 // maxProblemBody caps how much of an error response is read.

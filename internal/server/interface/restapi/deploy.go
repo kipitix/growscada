@@ -58,6 +58,63 @@ func (h DeployHandlers) GetRevision(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusOK, newRevisionResponse(revision))
 }
 
+// GetRevisions handles GET /projects/{project_id}/revisions: the Revisions of
+// the Project, newest first, without their documents (task 36). A Project
+// without a Revision answers an empty list; a deleted one, 404.
+func (h DeployHandlers) GetRevisions(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := pathUUID(w, r, projectResource)
+	if !ok {
+		return
+	}
+	summaries, err := h.revisions.List(r.Context(), projectID)
+	if err != nil {
+		sendError(w, r, err)
+		return
+	}
+	sendJSONResponse(w, http.StatusOK, newListRevisionsResponse(summaries))
+}
+
+// GetRevisionsByNumber handles GET /projects/{project_id}/revisions/{revision_number}:
+// one Revision with its ProjectFile, as GET …/revision serves the running one.
+func (h DeployHandlers) GetRevisionsByNumber(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := pathUUID(w, r, projectResource)
+	if !ok {
+		return
+	}
+	number, ok := pathInt(w, r, revisionResource)
+	if !ok {
+		return
+	}
+	revision, err := h.revisions.Find(r.Context(), projectID, number)
+	if err != nil {
+		sendError(w, r, err)
+		return
+	}
+	sendJSONResponse(w, http.StatusOK, newRevisionResponse(revision))
+}
+
+// PostRollback handles POST /projects/{project_id}/revisions/{revision_number}/rollback:
+// the Revision's document becomes a new Revision, without the Draft. 201 with
+// the new Revision's summary; 404 for a number the Project does not have; 409
+// nothing_to_rollback when its document is the running one, and
+// project_discarding while a Discard runs.
+func (h DeployHandlers) PostRollback(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := pathUUID(w, r, projectResource)
+	if !ok {
+		return
+	}
+	number, ok := pathInt(w, r, revisionResource)
+	if !ok {
+		return
+	}
+	revision, err := h.revisions.Rollback(r.Context(), projectID, number)
+	if err != nil {
+		sendError(w, r, err)
+		return
+	}
+	sendJSONResponse(w, http.StatusCreated, newRollbackResponse(revision))
+}
+
 // GetTagStates handles GET /projects/{project_id}/tag-states: the states of
 // the Tags of the running Revision, by Tag ID — the snapshot Operation renders
 // before tag_updated arrives. 404 until the Project's first Deploy.

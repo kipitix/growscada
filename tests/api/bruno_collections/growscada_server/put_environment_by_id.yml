@@ -1,7 +1,7 @@
 info:
   name: put environment by id
   type: http
-  seq: 79
+  seq: 89
 
 http:
   method: PUT

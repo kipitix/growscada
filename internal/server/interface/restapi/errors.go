@@ -45,6 +45,8 @@ var (
 	environmentDeviceResource = resource{name: "EnvironmentDevice", pathParam: "device_id"}
 	// A Device Token is named by its Device: there is one per Device.
 	deviceTokenResource = resource{name: "DeviceToken", pathParam: "device_id"}
+	// A Revision is named by its number within its Project.
+	revisionResource = resource{name: "Revision", pathParam: "revision_number"}
 )
 
 // wildcard is the router pattern segment that carries the resource's ID.
@@ -72,6 +74,9 @@ var errorMappings = []errorMapping{
 		"Nothing to discard: the project runs no revision"},
 	{application.ErrRevisionCopyNotSaved, http.StatusInternalServerError, projectResource,
 		"The Revision is active, but the copy of it was not saved; retry the Deploy"},
+	{runtimeapp.ErrNothingToRollback, http.StatusConflict, revisionResource,
+		"Nothing to rollback: the revision holds the document the project runs"},
+	{runtimeapp.ErrRevisionNotFound, http.StatusNotFound, revisionResource, ""},
 	{project.ErrProjectNotFound, http.StatusNotFound, projectResource, ""},
 	{project.ErrProjectConflict, http.StatusConflict, projectResource, "Project was changed concurrently; reload it and retry"},
 	{project.ErrProjectNameTaken, http.StatusConflict, projectResource, "Project name is already taken"},

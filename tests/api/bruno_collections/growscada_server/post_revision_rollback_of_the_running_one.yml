@@ -1,0 +1,31 @@
+info:
+  name: post revision rollback of the running one
+  type: http
+  seq: 50
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/revisions/2/rollback
+  auth: inherit
+
+docs: |
+  Revision 2 is the one the project runs, so its document is the running
+  document unchanged: a Rollback would change nothing and is refused `409
+  nothing_to_rollback`; no Revision is appended.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '409'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: '"application/problem+json"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

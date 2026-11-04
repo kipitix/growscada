@@ -1,0 +1,40 @@
+info:
+  name: get revision after rollback
+  type: http
+  seq: 53
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/revision
+  auth: inherit
+
+docs: |
+  The Revision the project runs is the one the Rollback appended: its
+  document is the copy of Revision 1, and the cause tells a reader it was a
+  Rollback and what it copied.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '3'
+    - expression: 'res.body.cause'
+      operator: eq
+      value: '"rollback"'
+    - expression: 'res.body.rolled_back_from'
+      operator: eq
+      value: '1'
+    - expression: 'res.body.content.project_id'
+      operator: eq
+      value: '"{{OTHER_PROJECT_ID}}"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
