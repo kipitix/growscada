@@ -145,7 +145,7 @@ The act of turning a Library's Draft into a new Library Release. The Library cou
 _Avoid_: publish, tag, version
 
 **Revision**:
-An immutable, numbered snapshot of the project configuration produced by Deploy. Operation always runs exactly one Revision.
+An immutable, numbered snapshot of the project configuration produced by Deploy or by Rollback. Operation always runs exactly one Revision.
 _Avoid_: release, build, version (the concurrency counter)
 
 **Origin**:
@@ -157,7 +157,7 @@ Taking a Runtime-origin Tag or Widget into the Draft, keeping its identity.
 _Avoid_: import, promote, claim
 
 **Rollback**:
-Making an earlier Revision operational again, performed on the Runtime node alone; it produces a new Revision with the earlier content, never rewrites history.
+Making an earlier Revision operational again, performed on the Runtime node alone; it produces a new Revision with the earlier content that records the one it copied, never rewrites history.
 _Avoid_: revert, undo
 
 **ProjectFile**:
