@@ -850,6 +850,20 @@
       ],
       "type": "object"
     },
+    "ListRevisionsResponse": {
+      "properties": {
+        "revisions": {
+          "items": {
+            "$ref": "#/$defs/RevisionSummaryResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "revisions"
+      ],
+      "type": "object"
+    },
     "Origin": {
       "properties": {
         "x": {
