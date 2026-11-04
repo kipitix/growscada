@@ -1,5 +1,23 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.61] - 2026-11-04
+
+### Added
+
+- **Rollback и список Revisions на Runtime-ноде** (задача 36; ADR 0014, поправка к ADR 0013)
+  - Миграция `runtime.20261104000000_revision_cause`: `runtime.revisions` получает `cause` (`deploy` | `rollback`, NOT NULL без default) и `rolled_back_from` — самоссылочный FK `(project_id, rolled_back_from) → runtime.revisions(project_id, n)` с `ON DELETE CASCADE`; CHECK'и не дают неизвестную причину и откат без скопированной Revision
+  - `application/runtime.Revision` несёт `Cause` и `RolledBackFrom`; `RevisionRepository` — `FindAll` (сводки новыми первыми, без документов), `FindByNumber` (полный документ, `ErrRevisionNotFound`), `Rollback`: одна транзакция с тем же advisory-lock и блокировкой строки проекта, что Deploy, сравнение `jsonb` целевого документа с работающим (`ErrNothingToRollback`), запись `max(n)+1` с причиной `rollback` и копией документа без изменений, пересборка производных копий тем же диффом (состояния неизменённых Tag'ов и все Device Tokens живут, исчезнувшие состояния уходят, новые/со сменённым TagType — initial). Удалённый проект — `project.ErrProjectNotFound`, идущий Discard — `project.ErrProjectDiscarding`
+  - `RevisionService.List`/`Find`/`Rollback`; после коммита откат публикует тот же `revision_created` (без outbox и без новых полей)
+  - REST API **0.13**: `GET …/revisions` (200 `{revisions: [{number, deployed_at, cause, rolled_back_from?}]}`, новыми первыми, `[]` без Revision, 404 удалённого проекта), `GET …/revisions/{n}` (форма работающей Revision плюс причина и `content`; 404, 400 на нечисловой номер), `POST …/revisions/{n}/rollback` (201 со сводкой, 404, 409 `nothing_to_rollback` / `project_discarding`). Контракт `api/v0` — `RevisionCause`, поля причины в `RevisionSummaryResponse` и `RevisionResponse`, `ListRevisionsResponse`; схемы перегенерированы
+  - `apiclient.ProjectClient`: `Revisions`, `RevisionByNumber`, `Rollback`
+  - PWA, Project-режим: кнопка `Revisions` в deploy-полосе (всегда доступна), диалог — список новыми первыми с причиной («Deployed» / «Rolled back from #N»), текущая Revision помечена и не откатывается; выбор строки подгружает документ и показывает счётчики Scenes/Widgets/Tags/Devices/Environments, `Roll back` подтверждается, успех закрывает диалог и перезагружает preview и список, отказы — toast; список перезагружается на `revision_created` и resync
+  - Тесты: нумерация и `cause`/`rolled_back_from`, сохранение состояний и токенов, сброс состояния исчезнувшего Tag и смена типа, отказ при равном содержимом, 404 чужого/несуществующего номера, отказ при Discard, сериализация параллельных Rollback/Deploy; сервис публикует событие только после коммита; REST — три маршрута, `200 []`, 404, 400, 409; UI — пустой список, список после Deploy, откат и бейдж, 409 как toast, перезагрузка на `revision_created`
+  - Bruno: `GET …/revisions`, `GET …/revisions/{n}` (с документом), 404 и 400, `POST …/rollback` — 409 на работающую Revision и успешный откат после второго Deploy; Draft проекта возвращается в исходное состояние, номера `seq` последующих запросов сдвинуты
+
+### Removed
+
+- **Копия ProjectFile у Engineering-ноды** (ADR 0014, поправка к ADR 0013): миграция `engineering.20261104000000_drop_project_files`, `ProjectFileCopies`, `ProjectFileRepositoryPostgres`, `appdto.DeployState`, `DeployService.State`, `ErrRevisionCopyNotSaved` и его 500-маппинг. Повторный Deploy неизменённого Draft — всегда 409 `nothing_to_deploy`, «починки копии» больше нет; Project-режим берёт Revision и признак неразвёрнутых изменений из `deploy/preview`
+
 ## [0.0.60] - 2026-11-04
 
 ### Added

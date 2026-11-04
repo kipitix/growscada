@@ -61,6 +61,18 @@ type Project struct {
 	deployDialog bool
 	deploying    bool
 	discarding   bool
+	// revisions is the list the Revisions dialog shows, newest first,
+	// loaded when it opens and reloaded on revision_created while it is open.
+	// selectedRevision is the row whose document is shown (0: none) as
+	// revisionDetail, once revisionDetailLoaded; rollingBack marks a Rollback
+	// in flight.
+	revisions            []apiv0.RevisionSummaryResponse
+	revisionsLoaded      bool
+	revisionsDialog      bool
+	selectedRevision     int
+	revisionDetail       apiv0.RevisionResponse
+	revisionDetailLoaded bool
+	rollingBack          bool
 	// sceneVersions holds the version each write of a Scene or its Widgets
 	// states; the Version and SceneVersion of the lists above are not read.
 	// The selected Scene's is learned with its Widgets (observeSceneVersion).
@@ -78,6 +90,7 @@ type Project struct {
 	widgetsReloader     uiutil.Reloader
 	tagsReloader        uiutil.Reloader
 	deployReloader      uiutil.Reloader
+	revisionsReloader   uiutil.Reloader
 	// staleScenes are the Scenes to reread (loadScene) once the reread in
 	// flight on staleScenesReloader is done.
 	staleScenes         map[uuid.UUID]struct{}
@@ -242,6 +255,9 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.deployPreview, p.deployLoaded = apiv0.DeployPreviewResponse{}, false
 	p.dialogPreview = apiv0.DeployPreviewResponse{}
 	p.deployDialog, p.deploying, p.discarding = false, false, false
+	p.revisions, p.revisionsLoaded = nil, false
+	p.revisionsDialog, p.selectedRevision, p.rollingBack = false, 0, false
+	p.revisionDetail, p.revisionDetailLoaded = apiv0.RevisionResponse{}, false
 	p.sceneVersions.Forget()
 	p.sceneStates.Forget()
 	clear(p.staleScenes)
