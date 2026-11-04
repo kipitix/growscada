@@ -1,5 +1,22 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.59] - 2026-11-04
+
+### Added
+
+- **Engineering-нода: сборка ProjectFile, Deploy, preview и Discard** (задача 35, часть 4; ADR 0006, ADR 0008, ADR 0011, ADR 0012)
+  - `application.ProjectFileBuilder` — один сборщик над `ProjectScope` и пинами: Tags с поставщиком, Devices, Environments и пары, Scenes с Widgets, копии **только используемых** WidgetType из закреплённых Release и список пинов как провенанс. Документ канонизируется (списки по ID, ключи JSON отсортированы), поэтому один Draft даёт байт-в-байт одинаковый ProjectFile. Висячие ссылки — ошибка сборки, а не пропуск: Widget типа, которого нет в закреплённом Release, Tag с поставщиком не из Devices проекта, PortBinding на Tag, которого в Draft нет
+  - `application.DeployService`: `Deploy` сравнивает собранный документ с Revision, которую выполняет Runtime-нода (совпал — 409 `ErrNothingToDeploy`), иначе `RuntimeNode.Deploy` → копия в `engineering.project_files`; сбой записи копии — `ErrRevisionCopyNotSaved` при **активной** Revision, а повторный Deploy того же Draft не отклоняется, а дописывает копию. `Preview` (`current_revision`, `unchanged`, `dropped_widgets` — пуст до задачи 48) и `State` (`deployed`, `differs`) отдают Project-режиму то, что он показывает
+  - `application.DiscardService`, `domain/project.StartDiscard`/`FinishDiscard`/`IsDiscarding` и `ProjectDiscardStartedEvent`: `Discard` помечает проект (409 `ErrNoRevisionToDiscard`, если Revision нет) и сразу отвечает; `NewDiscardProjectPolicy` (ключ `project:<id>`) возвращает Draft к работающей Revision — сначала убирает то, чего она не называет, в обратном порядке ссылок (Scenes, пины, Tags, пары, Environments, Devices), затем восстанавливает в прямом (пины → Devices → Environments → пары → Tags → Scenes), по одному агрегату на транзакцию, восстанавливая недостающее под теми же ID; пины — штатными методами без `ImpactOf` и без ожидаемой версии, пометка снимается последней. Состояния Tag и Device Tokens — Runtime-ноды, Discard их не трогает
+  - Пока пометка стоит, Draft read-only: каждая запись его агрегатов проходит `aggregateStore.lockProject` и отвечает 409 `ErrProjectDiscarding`, Deploy отказывает и на Engineering-ноде (`ProjectContent.openNotDiscarding`), и в транзакции `CreateRevision`, которая берёт строку проекта `FOR SHARE`
+  - `projects.discarding` — миграция `20261104000000_project_discard` (схема public); `project_discard_started` в контракте — **REST API 0.11** (MINOR, пока MAJOR = 0), схема `schemas/api/0.11.json`; `appdto.Project` несёт пометку
+  - Тесты: Deploy создаёт Revision и копию; повторный Deploy без правок — 409; правка Widget — `differs` и Revision N+1; сбой копии — Revision активна, повтор дописывает копию; Discard возвращает удалённые Scene/Widget/Tag/Device/пин с теми же ID и удаляет добавленные, включая Device и Environment, которые держат Tag и пара, не трогая состояния Tag; запись в Draft и Deploy во время Discard — 409; Discard без Revision — 409
+
+### Changed
+
+- **Мост Draft→Runtime умер** (ADR 0011, поправка 2026-11-04): `CreateTag` больше не upsert'ит определение после коммита, `DeleteTagByID` не удаляет состояние, policy `sync_runtime_tag_definitions` и её регистрация удалены, а `UpsertTagDefinitions`/`RemoveTagStates` ушли из порта `RuntimeNode`. Копии Runtime-ноды — принадлежность работающей Revision: Tag, созданный в Draft, получает значение только после Deploy (404), удалённый теряет состояние со следующей Revision
+- `AGENTS.md` описывает сборщик, Deploy, preview, Discard и пометку; `servertest` деплоит через `DeployService` и больше не пишет копии Runtime-ноды в обход Draft
+
 ## [0.0.58] - 2026-11-04
 
 ### Added
