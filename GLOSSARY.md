@@ -98,7 +98,7 @@ _Avoid_: library version, snapshot
 The choice, in a Project's Draft, of one Library Release of one Library. Switching or removing it is refused while Widgets would be left without their WidgetType.
 _Avoid_: dependency, import, reference, subscription
 
-### Roles
+### Roles and clients
 
 **Engineer**:
 The role that builds the project: edits the Library, Scenes, Tag definitions, Devices and Environments in the Draft, and deploys it. A role, not an account.
@@ -107,6 +107,10 @@ _Avoid_: designer, developer, admin
 **Operator**:
 The role that works on site in Operation mode: watches and controls the process. A role, not an account.
 _Avoid_: user
+
+**Client**:
+A browser tab following the server's events over one SSE connection: the holder of an EditLock until Users exist (task 49). It is identified by a key the tab keeps for itself.
+_Avoid_: user, session, account
 
 ### Nodes
 
@@ -121,8 +125,16 @@ _Avoid_: production server, station, runtime (unqualified)
 ### Project lifecycle
 
 **EditLock**:
-The marker that one Engineer currently holds one Draft for editing. Without it the Draft is read-only.
+The marker that one holder — today a Client, later a User — currently holds one Draft for editing. Without it the Draft is read-only.
 _Avoid_: lock (unqualified); acquire/release
+
+**Check out**:
+Taking the EditLock of a Draft for editing, declaring the holder's name.
+_Avoid_: acquire, lock, grab
+
+**Check in**:
+Giving the EditLock of a Draft back, leaving the Draft and its DraftChanges as they are.
+_Avoid_: release, unlock
 
 **Draft**:
 The working state of a Project or of a Library as it is being edited. A Project's Draft holds Scenes with their Widgets, Tag definitions, Devices, Environments and the pinned Library Releases.
