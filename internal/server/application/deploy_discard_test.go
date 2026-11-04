@@ -198,18 +198,31 @@ func TestDeploy_CopyNotSaved_TheRevisionIsActive(t *testing.T) {
 		t.Fatalf("the revision of the failed copy: %+v, %v, %v; want it active", current, ok, err)
 	}
 
-	// The copy is a cache: the Project mode sees nothing deployed, and the
-	// next change deploys the Revision after it.
+	// The copy is a cache: the Project mode sees nothing deployed, and a
+	// repeated Deploy of the same Draft is not refused as unchanged (Q8): it
+	// saves the copy of the Revision the Project runs.
 	state, err := deploy.State(ctx, mainProject)
 	if err != nil || state.Deployed != nil || !state.Differs {
 		t.Errorf("State without a copy: %+v, %v, want no Revision and a difference", state, err)
 	}
-	if _, err := newService().CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "flow", Type: "integer"}); err != nil {
-		t.Fatalf("CreateTag: %v", err)
-	}
 	healthy, _ := newDeployService()
-	if _, err := healthy.Deploy(ctx, mainProject); err != nil {
-		t.Fatalf("the Deploy after the failed copy: %v", err)
+	repeated, err := healthy.Deploy(ctx, mainProject)
+	if err != nil {
+		t.Fatalf("the Deploy after the failed copy: %v, want the running revision, its copy saved", err)
+	}
+	if repeated.Number != 1 {
+		t.Errorf("the Deploy after the failed copy made revision %d, want the running 1", repeated.Number)
+	}
+	copied, ok, err := repositories.NewProjectFileRepositoryPostgres(testDB).FindByProject(ctx, mainProject)
+	if err != nil || !ok || copied.Number != 1 {
+		t.Fatalf("the copy after the repeated Deploy: %+v, %v, %v; want revision 1", copied, ok, err)
+	}
+	if state, err := healthy.State(ctx, mainProject); err != nil || state.Differs {
+		t.Errorf("State with the copy repaired: %+v, %v, want no difference", state, err)
+	}
+	// Now the Draft and its copy are the Revision, so another Deploy is refused.
+	if _, err := healthy.Deploy(ctx, mainProject); !errors.Is(err, application.ErrNothingToDeploy) {
+		t.Fatalf("the Deploy of the unchanged Draft: %v, want ErrNothingToDeploy", err)
 	}
 }
 

@@ -6,7 +6,6 @@ import (
 
 	"github.com/google/uuid"
 
-	projectv0 "github.com/kipitix/growscada/contract/project/v0"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 )
 
@@ -72,12 +71,18 @@ func (s deployServiceImpl) Deploy(ctx context.Context, projectID uuid.UUID) (app
 	if err != nil {
 		return appdto.Revision{}, err
 	}
-	unchanged, err := s.unchanged(ctx, projectID, file)
+	current, ok, err := s.runtime.FindCurrentRevision(ctx, projectID)
 	if err != nil {
-		return appdto.Revision{}, err
+		return appdto.Revision{}, fmt.Errorf("cannot read the current revision of project %s: %w", projectID, err)
 	}
-	if unchanged {
-		return appdto.Revision{}, fmt.Errorf("%w: the draft of project %s is the revision it runs", ErrNothingToDeploy, projectID)
+	if ok {
+		unchanged, err := sameProjectFile(file, current.Content)
+		if err != nil {
+			return appdto.Revision{}, err
+		}
+		if unchanged {
+			return s.nothingToDeploy(ctx, projectID, current)
+		}
 	}
 
 	revision, err := s.runtime.Deploy(ctx, projectID, file)
@@ -132,17 +137,30 @@ func (s deployServiceImpl) State(ctx context.Context, projectID uuid.UUID) (appd
 	return appdto.DeployState{Deployed: &copied, Differs: !unchanged}, nil
 }
 
-// unchanged reports whether file is the Revision the Project runs. It compares
-// with what the Runtime node holds, not with the Engineering node's copy
-// (Q8): the copy may be missing after a Deploy whose write failed, and the
-// Draft then must not pass for unchanged.
-func (s deployServiceImpl) unchanged(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile) (bool, error) {
-	current, ok, err := s.runtime.FindCurrentRevision(ctx, projectID)
+// nothingToDeploy answers a Deploy whose document is the Revision the Project
+// runs, compared with what the Runtime node holds rather than with the
+// Engineering node's copy (Q8): the copy may be missing after a Deploy whose
+// write failed, and the Draft then must not pass for unchanged. The copy of the
+// running Revision is saved, so that the retry is not refused as unchanged
+// either (Q8) and the next Deploy of the same Draft is. Returns
+// ErrNothingToDeploy when the copy is that Revision already.
+func (s deployServiceImpl) nothingToDeploy(ctx context.Context, projectID uuid.UUID, current appdto.Revision) (appdto.Revision, error) {
+	copied, ok, err := s.files.FindByProject(ctx, projectID)
 	if err != nil {
-		return false, fmt.Errorf("cannot read the current revision of project %s: %w", projectID, err)
+		return appdto.Revision{}, fmt.Errorf("cannot read the project file copy of %s: %w", projectID, err)
 	}
-	if !ok {
-		return false, nil
+	if ok {
+		same, err := sameProjectFile(copied.Content, current.Content)
+		if err != nil {
+			return appdto.Revision{}, err
+		}
+		if same {
+			return appdto.Revision{}, fmt.Errorf("%w: the draft of project %s is the revision it runs", ErrNothingToDeploy, projectID)
+		}
 	}
-	return sameProjectFile(file, current.Content)
+	if err := s.files.Save(ctx, projectID, current); err != nil {
+		return appdto.Revision{}, fmt.Errorf("%w: revision %d of project %s is active: %w",
+			ErrRevisionCopyNotSaved, current.Number, projectID, err)
+	}
+	return current, nil
 }
