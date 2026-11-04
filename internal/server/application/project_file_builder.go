@@ -96,7 +96,9 @@ func (b projectFileBuilder) Build(ctx context.Context, rawProjectID uuid.UUID) (
 		deviceIDs[d.ID().UUID()] = struct{}{}
 		file.Devices = append(file.Devices, newProjectFileDevice(d))
 	}
+	tagIDs := make(map[uuid.UUID]struct{}, len(tags))
 	for _, t := range tags {
+		tagIDs[t.ID().UUID()] = struct{}{}
 		if supplier := t.Supplier(); supplier.HasDevice() {
 			if _, ok := deviceIDs[supplier.DeviceID().UUID()]; !ok {
 				return projectv0.ProjectFile{}, fmt.Errorf(
@@ -148,6 +150,13 @@ func (b projectFileBuilder) Build(ctx context.Context, rawProjectID uuid.UUID) (
 				}
 				file.WidgetTypes = append(file.WidgetTypes, newProjectFileWidgetType(pinned))
 				usedTypes[typeID] = struct{}{}
+			}
+			for _, binding := range w.PortBindings() {
+				if _, ok := tagIDs[binding.TagID().UUID()]; !ok {
+					return projectv0.ProjectFile{}, fmt.Errorf(
+						"cannot build the project file of %s: widget %s of scene %s binds port %s to tag %s, which is not of the project",
+						projectID, w.ID(), sc.ID(), binding.PortName(), binding.TagID())
+				}
 			}
 			fileScene.Widgets = append(fileScene.Widgets, newProjectFileWidget(w))
 		}

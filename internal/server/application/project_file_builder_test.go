@@ -94,6 +94,41 @@ func TestBuild_CarriesOnlyTheWidgetTypesItsWidgetsUse(t *testing.T) {
 	}
 }
 
+func TestBuild_AWidgetBoundToATagTheDraftLacks_IsAnError(t *testing.T) {
+	cleanDevices(t)
+	cleanScenes(t)
+	cleanPins(t)
+	ctx := context.Background()
+
+	wt, _ := pinNewWidgetType(t, mainProject, appdto.WidgetTypeInput{
+		Name: "gauge", InputPorts: []appdto.InputPort{{Name: "value", TypeHint: "integer"}},
+	})
+	speed := mustCreateTag(t, "speed", "integer")
+	scenes := newSceneService()
+	scene := mustCreateScene(t, scenes)
+	input := testCreateWidgetInput
+	input.TypeID = wt.ID
+	input.PortBindings = []appdto.PortBinding{{PortName: "value", TagID: speed.ID}}
+	if _, err := scenes.CreateWidget(ctx, mainProject, scene.ID, scene.Version, input); err != nil {
+		t.Fatalf("CreateWidget: %v", err)
+	}
+	// The Tag goes behind the service's back: the Widget keeps its binding.
+	if _, err := testDB.ExecContext(ctx, "DELETE FROM engineering.tags WHERE id = $1", speed.ID); err != nil {
+		t.Fatalf("delete tag: %v", err)
+	}
+	// The Scene goes too, so the next test starts from a Draft that builds.
+	t.Cleanup(func() {
+		if _, err := testDB.ExecContext(context.Background(),
+			"DELETE FROM engineering.scenes WHERE id = $1", scene.ID); err != nil {
+			t.Fatalf("clean the scene: %v", err)
+		}
+	})
+
+	if _, err := application.NewProjectFileBuilder(contentOver(newScopes())).Build(ctx, mainProject); err == nil {
+		t.Error("a widget bound to a tag the draft lacks: the build passed, want an error")
+	}
+}
+
 func TestBuild_AWidgetOfANoLongerPinnedType_IsAnError(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
