@@ -1,7 +1,7 @@
 info:
   name: get device config without a token
   type: http
-  seq: 64
+  seq: 71
 
 http:
   method: GET

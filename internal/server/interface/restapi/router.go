@@ -26,6 +26,7 @@ type APIRouter struct {
 	deviceTokensHandlers *DeviceTokensHandlers
 	deviceConfigHandlers *DeviceConfigHandlers
 	deviceWhoAmIHandlers *DeviceIdentityHandlers
+	deployHandlers       *DeployHandlers
 	eventsHandlers       *EventsHandlers
 }
 
@@ -63,10 +64,10 @@ func corsMiddleware(next http.Handler) http.Handler {
 
 // Services are the services the server API serves: the Engineering node's,
 // and the Runtime node's TagStates, which writes the tags' states,
-// DeviceTokens, which authenticates Devices and manages their tokens, and
-// DeviceConfig, which reads the running Revision's copies (ADR 0011). A
-// Device token service that is nil is a server without the Runtime node:
-// token management answers 404.
+// DeviceTokens, which authenticates Devices and manages their tokens,
+// Revisions, which reads the running Revision, and DeviceConfig, which reads
+// the running Revision's copies (ADR 0011). A Device token service that is nil
+// is a server without the Runtime node: token management answers 404.
 type Services struct {
 	Projects     application.ProjectService
 	Tags         application.TagService
@@ -77,6 +78,9 @@ type Services struct {
 	Scenes       application.SceneService
 	Devices      application.DeviceService
 	Environments application.EnvironmentService
+	Deploy       application.DeployService
+	Discard      application.DiscardService
+	Revisions    runtimeapp.RevisionService
 	DeviceConfig runtimeapp.DeviceConfigService
 	DeviceTokens runtimeapp.DeviceTokenService
 }
@@ -99,6 +103,7 @@ func NewRouter(services Services, eventBus eventbus.EventBus, maxSSEClients int)
 		deviceTokensHandlers: NewDeviceTokensHandler(services.DeviceTokens, services.Devices),
 		deviceConfigHandlers: NewDeviceConfigHandler(services.DeviceConfig, services.DeviceTokens),
 		deviceWhoAmIHandlers: NewDeviceIdentityHandler(services.DeviceTokens),
+		deployHandlers:       NewDeployHandler(services.Deploy, services.Discard, services.Revisions, services.TagStates),
 		eventsHandlers:       NewEventsHandler(eventBus, projectService, maxSSEClients, WithDeviceTokens(services.DeviceTokens)),
 	}
 	for _, rt := range router.routes() {
@@ -124,6 +129,7 @@ func (r *APIRouter) routes() []route {
 	libraries, pins := r.librariesHandlers, r.libraryPinsHandlers
 	devices, environments := r.devicesHandlers, r.environmentsHandlers
 	tokens, config := r.deviceTokensHandlers, r.deviceConfigHandlers
+	deploy := r.deployHandlers
 	return []route{
 		{"GET " + p + "/projects", projects.GetProjects},
 		{"GET " + pp, projects.GetProjectsByID},
@@ -181,14 +187,19 @@ func (r *APIRouter) routes() []route {
 		{"DELETE " + pp + "/devices/" + deviceResource.wildcard() + "/token", tokens.DeleteDeviceToken},
 		{"POST " + pp + "/devices/" + deviceResource.wildcard() + "/token/rotate", tokens.PostDeviceTokenRotate},
 
-		{"GET " + pp + "/environments", environments.GetEnvironments},
-		{"GET " + pp + "/environments/" + environmentResource.wildcard(), environments.GetEnvironmentsByID},
+		{"GET " + pp + "/environments", environments.GetEnvironments}, {"GET " + pp + "/environments/" + environmentResource.wildcard(), environments.GetEnvironmentsByID},
 		{"POST " + pp + "/environments", environments.PostEnvironments},
 		{"PUT " + pp + "/environments/" + environmentResource.wildcard(), environments.PutEnvironmentsByID},
 		{"DELETE " + pp + "/environments/" + environmentResource.wildcard(), environments.DeleteEnvironmentsByID},
 		{"GET " + pp + "/environments/" + environmentResource.wildcard() + "/devices", environments.GetEnvironmentDevices},
 		{"PUT " + pp + "/environments/" + environmentResource.wildcard() + "/devices/" + deviceResource.wildcard(), environments.PutEnvironmentDevice},
 		{"DELETE " + pp + "/environments/" + environmentResource.wildcard() + "/devices/" + deviceResource.wildcard(), environments.DeleteEnvironmentDevice},
+
+		{"GET " + pp + "/revision", deploy.GetRevision},
+		{"GET " + pp + "/tag-states", deploy.GetTagStates},
+		{"GET " + pp + "/deploy/preview", deploy.GetDeployPreview},
+		{"POST " + pp + "/deploy", deploy.PostDeploy},
+		{"POST " + pp + "/discard", deploy.PostDiscard},
 
 		{"GET " + p + "/device", r.deviceWhoAmIHandlers.GetDeviceIdentity},
 		{"GET " + p + "/device/config", config.GetDeviceConfig},

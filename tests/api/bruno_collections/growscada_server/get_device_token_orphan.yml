@@ -1,7 +1,7 @@
 info:
   name: get the orphan device token
   type: http
-  seq: 89
+  seq: 96
 
 http:
   method: GET

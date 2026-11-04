@@ -23,6 +23,8 @@ func TestSchemaIsCommitted(t *testing.T) {
 			DeviceTokenResponse{}, DeviceTokenMetadataResponse{},
 			DeviceConfigResponse{}, DeviceConfigDeviceResponse{}, DeviceConfigEnvironmentResponse{}, DeviceConfigConnectionResponse{}, DeviceConfigTagResponse{},
 			DeviceIdentityResponse{},
+			RevisionResponse{}, RevisionSummaryResponse{}, DroppedWidgetResponse{}, DeployPreviewResponse{},
+			DeployResponse{}, DiscardProjectResponse{}, TagStateResponse{}, GetTagStatesResponse{},
 			Event{}, Problem{},
 		},
 	})

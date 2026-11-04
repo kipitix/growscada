@@ -1,7 +1,7 @@
 info:
   name: post device token rotate
   type: http
-  seq: 76
+  seq: 83
 
 http:
   method: POST

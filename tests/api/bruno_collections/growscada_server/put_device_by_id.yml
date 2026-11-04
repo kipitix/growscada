@@ -1,7 +1,7 @@
 info:
   name: put device by id
   type: http
-  seq: 68
+  seq: 75
 
 http:
   method: PUT

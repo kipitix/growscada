@@ -100,7 +100,9 @@ func (s testServices) services() restapi.Services {
 	return restapi.Services{
 		Projects: s.projects, Tags: s.tags, TagStates: s.states,
 		Libraries: s.libraries, WidgetTypes: s.widgetTypes, LibraryPins: s.pins, Scenes: s.scenes,
-		Devices: s.devices, Environments: s.environments, DeviceConfig: s.deviceConfig, DeviceTokens: s.deviceTokens,
+		Devices: s.devices, Environments: s.environments,
+		Deploy: s.deploy, Discard: s.discard, Revisions: s.revisions,
+		DeviceConfig: s.deviceConfig, DeviceTokens: s.deviceTokens,
 	}
 }
 

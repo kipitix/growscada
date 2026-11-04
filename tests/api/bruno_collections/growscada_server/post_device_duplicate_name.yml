@@ -1,7 +1,7 @@
 info:
   name: post device duplicate name
   type: http
-  seq: 67
+  seq: 74
 
 http:
   method: POST

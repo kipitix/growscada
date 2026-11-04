@@ -86,13 +86,25 @@ services:
       timeout: 5s
       retries: 15
 
+  # A Deploy before anything writes a Tag value or connects a Device: the seed
+  # creates no Revision, and a Runtime node copy of a Tag or a Device exists
+  # only once a Deploy has named it (task 35). The project "Main" holds the
+  # simulator's Device and the dashboard's Tags.
+  deploy:
+    image: curlimages/curl:8.10.1
+    depends_on:
+      server:
+        condition: service_healthy
+    command: ["-fsS", "-X", "POST", "http://server:9090/api/v0/projects/b0000000-0000-4000-8000-000000000001/deploy"]
+    restart: "no"
+
   simulator:
     build:
       context: ../..
       target: simulator
     depends_on:
-      server:
-        condition: service_healthy
+      deploy:
+        condition: service_completed_successfully
     environment:
       DEVSIM_SERVER: "http://server:9090"
     volumes:

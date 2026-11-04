@@ -329,10 +329,15 @@ func TestGenerateNamedNonStructField(t *testing.T) {
 	}
 }
 
-func TestGenerateRejectsNameClash(t *testing.T) {
+func TestGenerateQualifiesNameClash(t *testing.T) {
 	type point struct{ Z int }
-	if _, err := Generate(Document{Tag: "json", Roots: []any{shape{}, point{}}}); err == nil {
-		t.Fatal("two types named point: want error")
+	doc := generate(t, "json", shape{}, point{})
+	defs := doc["$defs"].(map[string]any)
+	if _, ok := defs["point"]; !ok {
+		t.Errorf("the first point has no $defs/point: %v", defs)
+	}
+	if _, ok := defs["internal.jsonschema.point"]; !ok {
+		t.Errorf("the second point is not under a qualified name: %v", defs)
 	}
 }
 

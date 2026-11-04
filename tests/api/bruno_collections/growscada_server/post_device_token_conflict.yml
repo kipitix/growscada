@@ -1,7 +1,7 @@
 info:
   name: post device token conflict
   type: http
-  seq: 75
+  seq: 82
 
 http:
   method: POST

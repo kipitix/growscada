@@ -1,0 +1,31 @@
+info:
+  name: post discard
+  type: http
+  seq: 36
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/discard
+  auth: inherit
+
+docs: |
+  Resets the Draft to the Revision the project runs: the answer is at once
+  (`202`, `discarding: true`) and the Draft is read-only until the policy
+  ends. A project that was never deployed answers `409`.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '202'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.discarding'
+      operator: eq
+      value: 'true'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

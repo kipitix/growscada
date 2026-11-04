@@ -192,6 +192,13 @@ func main() {
 	projectContent := application.NewProjectContent(projectRepository, projectScopes, organizationID)
 	projectService := application.NewProjectService(projectRepository, organizationID)
 	tagService := application.NewTagService(projectContent, runtimeNode)
+	// Deploy and Discard (task 35): the Engineering node assembles the Draft's
+	// ProjectFile and hands it to the Runtime node, keeping its own copy of
+	// what it sent.
+	projectFileBuilder := application.NewProjectFileBuilder(projectContent)
+	deployService := application.NewDeployService(
+		projectContent, projectFileBuilder, repositories.NewProjectFileRepositoryPostgres(sqlDB), runtimeNode)
+	discardService := application.NewDiscardService(projectContent, runtimeNode)
 	// Create router
 	apiRouter := restapi.NewRouter(restapi.Services{
 		Projects:     projectService,
@@ -203,6 +210,9 @@ func main() {
 		Scenes:       application.NewSceneService(projectContent),
 		Devices:      application.NewDeviceService(projectContent),
 		Environments: application.NewEnvironmentService(projectContent),
+		Deploy:       deployService,
+		Discard:      discardService,
+		Revisions:    revisionService,
 		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(sqlDB)),
 		DeviceTokens: deviceTokenService,
 	}, eventBus, cliArgs.MaxSSEClients)

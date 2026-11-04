@@ -1,7 +1,7 @@
 info:
   name: patch tag value as the device
   type: http
-  seq: 77
+  seq: 84
 
 http:
   method: PATCH

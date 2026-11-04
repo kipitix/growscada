@@ -1,7 +1,7 @@
 info:
   name: delete library pin
   type: http
-  seq: 50
+  seq: 57
 
 http:
   method: DELETE

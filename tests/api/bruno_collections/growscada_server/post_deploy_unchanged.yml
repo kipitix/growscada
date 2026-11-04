@@ -1,0 +1,29 @@
+info:
+  name: post deploy unchanged
+  type: http
+  seq: 35
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/deploy
+  auth: inherit
+
+docs: |
+  Deploying the Draft that is the running Revision unchanged is refused:
+  `409 Conflict` `nothing_to_deploy`, as releasing an unchanged Library
+  Draft is.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '409'
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: '"application/problem+json"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

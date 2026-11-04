@@ -1,7 +1,7 @@
 info:
   name: post device
   type: http
-  seq: 66
+  seq: 73
 
 http:
   method: POST

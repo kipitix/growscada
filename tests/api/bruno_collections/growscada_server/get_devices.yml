@@ -1,7 +1,7 @@
 info:
   name: get devices
   type: http
-  seq: 56
+  seq: 63
 
 http:
   method: GET

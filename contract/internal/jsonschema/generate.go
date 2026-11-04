@@ -123,16 +123,18 @@ func (g *generator) schemaOf(t reflect.Type) (map[string]any, error) {
 
 // ref inlines the schema of an anonymous type and turns a named one into a
 // $ref to its $defs entry, generating the entry with schema on first use.
+//
+// Two distinct types may share a name (projectv0.PortBinding and an
+// apiv0.PortBinding in one document, e.g. a Revision carries a ProjectFile):
+// the first takes the bare name, the next one a name qualified by its package,
+// so the same Go type always gets the same entry.
 func (g *generator) ref(t reflect.Type, schema func(reflect.Type) (map[string]any, error)) (map[string]any, error) {
 	if t.Name() == "" {
 		return schema(t)
 	}
-	name := t.Name()
+	name := g.defName(t)
 	ref := map[string]any{"$ref": "#/$defs/" + name}
-	if seen, ok := g.types[name]; ok {
-		if seen != t {
-			return nil, fmt.Errorf("two types are named %s: %v and %v", name, seen, t)
-		}
+	if _, ok := g.types[name]; ok {
 		return ref, nil
 	}
 	g.types[name] = t // before recursing, so recursive types terminate
@@ -142,6 +144,20 @@ func (g *generator) ref(t reflect.Type, schema func(reflect.Type) (map[string]an
 	}
 	g.defs[name] = def
 	return ref, nil
+}
+
+// defName is the $defs name of t: its Go name, or, when another type claimed
+// that name already, one qualified by the last two elements of its package
+// path ("project.v0.PortBinding").
+func (g *generator) defName(t reflect.Type) string {
+	if seen, ok := g.types[t.Name()]; !ok || seen == t {
+		return t.Name()
+	}
+	parts := strings.Split(t.PkgPath(), "/")
+	if len(parts) > 2 {
+		parts = parts[len(parts)-2:]
+	}
+	return strings.Join(parts, ".") + "." + t.Name()
 }
 
 func (g *generator) arraySchema(t reflect.Type) (map[string]any, error) {

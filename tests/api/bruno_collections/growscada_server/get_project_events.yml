@@ -1,7 +1,7 @@
 info:
   name: get project events (SSE stream)
   type: http
-  seq: 55
+  seq: 62
   tags:
     - manual
 

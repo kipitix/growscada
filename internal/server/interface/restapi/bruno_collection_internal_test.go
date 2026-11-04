@@ -40,6 +40,8 @@ var requestBodies = map[string]any{
 	"POST " + projectPrefix + "/environments":                                                                            apiv0.CreateEnvironmentRequest{},
 	"PUT " + projectPrefix + "/environments/" + environmentResource.wildcard():                                           apiv0.UpdateEnvironmentRequest{},
 	"PUT " + projectPrefix + "/environments/" + environmentResource.wildcard() + "/devices/" + deviceResource.wildcard(): apiv0.UpdateEnvironmentDeviceRequest{},
+	"POST " + projectPrefix + "/deploy":                                                                                  nil,
+	"POST " + projectPrefix + "/discard":                                                                                 nil,
 }
 
 // TestBrunoCollection checks that the growscada_server Bruno collection

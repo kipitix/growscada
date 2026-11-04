@@ -1,7 +1,7 @@
 info:
   name: delete widget by id
   type: http
-  seq: 46
+  seq: 53
 
 http:
   method: DELETE

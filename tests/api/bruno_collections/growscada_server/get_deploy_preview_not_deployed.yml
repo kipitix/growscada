@@ -1,0 +1,33 @@
+info:
+  name: get deploy preview of a never deployed project
+  type: http
+  seq: 30
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/deploy/preview
+  auth: inherit
+
+docs: |
+  What a Deploy of the Draft would do. The project has no Revision yet, so
+  `current_revision` is absent, `unchanged` is false and `dropped_widgets`
+  is empty until runtime entities exist (task 48).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.unchanged'
+      operator: eq
+      value: 'false'
+    - expression: 'res.body.dropped_widgets'
+      operator: isArray
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

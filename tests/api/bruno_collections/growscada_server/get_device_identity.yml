@@ -1,7 +1,7 @@
 info:
   name: get device identity (gateway)
   type: http
-  seq: 62
+  seq: 69
 
 http:
   method: GET

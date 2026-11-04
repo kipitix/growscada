@@ -1,7 +1,7 @@
 info:
   name: put library by id
   type: http
-  seq: 44
+  seq: 51
 
 http:
   method: PUT

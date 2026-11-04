@@ -1,7 +1,7 @@
 info:
   name: get environment by id
   type: http
-  seq: 59
+  seq: 66
 
 http:
   method: GET

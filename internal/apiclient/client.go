@@ -570,6 +570,61 @@ func widgetPath(sceneID, widgetID uuid.UUID) string {
 	return scenePath(sceneID) + "/widgets/" + widgetID.String()
 }
 
+// ── Deploy and Revision ──────────────────────────────────────────────────────
+
+// RevisionState is one Project's running Revision, with its ProjectFile.
+// Deployed is false until the Project's first Deploy: the call then matched a
+// 404, which here means "no Revision", not "no Project" (a Project that is
+// gone makes the loads of its content fail as well).
+type RevisionState struct {
+	Revision apiv0.RevisionResponse
+	Deployed bool
+}
+
+// Revision returns the Revision the project runs. Deployed is false when the
+// project was never deployed; an error matching ErrNotFound is not used for
+// that.
+func (p *ProjectClient) Revision(ctx context.Context) (RevisionState, error) {
+	var resp apiv0.RevisionResponse
+	err := p.do(ctx, http.MethodGet, "/revision", nil, http.StatusOK, &resp)
+	if errors.Is(err, ErrNotFound) {
+		return RevisionState{}, nil
+	}
+	return RevisionState{Revision: resp, Deployed: err == nil}, err
+}
+
+// TagStates returns the states of the Tags of the running Revision, by Tag ID
+// (their string form): the snapshot Operation renders before tag_updated.
+func (p *ProjectClient) TagStates(ctx context.Context) (map[string]apiv0.TagStateResponse, error) {
+	var resp apiv0.GetTagStatesResponse
+	err := p.do(ctx, http.MethodGet, "/tag-states", nil, http.StatusOK, &resp)
+	return resp.TagStates, err
+}
+
+// DeployPreview reports what a Deploy of the Draft would do.
+func (p *ProjectClient) DeployPreview(ctx context.Context) (apiv0.DeployPreviewResponse, error) {
+	var resp apiv0.DeployPreviewResponse
+	err := p.do(ctx, http.MethodGet, "/deploy/preview", nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+// Deploy makes the Draft the Project's new Revision. The error matches
+// ErrConflict if the Draft is the Revision the Project runs unchanged.
+func (p *ProjectClient) Deploy(ctx context.Context) (apiv0.DeployResponse, error) {
+	var resp apiv0.DeployResponse
+	err := p.do(ctx, http.MethodPost, "/deploy", nil, http.StatusCreated, &resp)
+	return resp, err
+}
+
+// Discard starts resetting the Draft to the Revision the Project runs and
+// returns its answer at once. The error matches ErrConflict if the Project
+// runs no Revision or a Discard is already under way.
+func (p *ProjectClient) Discard(ctx context.Context) (apiv0.DiscardProjectResponse, error) {
+	var resp apiv0.DiscardProjectResponse
+	err := p.do(ctx, http.MethodPost, "/discard", nil, http.StatusAccepted, &resp)
+	return resp, err
+}
+
 // ── Transport ────────────────────────────────────────────────────────────────
 
 // maxProblemBody caps how much of an error response is read.

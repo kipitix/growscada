@@ -1,7 +1,7 @@
 info:
   name: delete device token missing
   type: http
-  seq: 84
+  seq: 91
 
 http:
   method: DELETE
