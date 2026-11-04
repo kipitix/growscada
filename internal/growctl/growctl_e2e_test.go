@@ -18,6 +18,7 @@ import (
 	"github.com/kipitix/growscada/internal/growctl"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/servertest"
 )
 
@@ -71,7 +72,7 @@ func execGrowctlBare(t *testing.T, srv *httptest.Server, stdin string, args ...s
 
 func tagsByName(t *testing.T, svc application.TagService) map[string]appdto.Tag {
 	t.Helper()
-	tags, err := svc.FindAllTags(context.Background(), servertest.MainProject)
+	tags, err := svc.FindAllTags(editlock.System(context.Background()), servertest.MainProject)
 	if err != nil {
 		t.Fatalf("FindAllTags: %v", err)
 	}
@@ -333,7 +334,7 @@ func TestUsageError_ExitCode2(t *testing.T) {
 
 func createTag(t *testing.T, svc application.TagService, name, tagType string) {
 	t.Helper()
-	if _, err := svc.CreateTag(context.Background(), servertest.MainProject, appdto.CreateTagInput{
+	if _, err := svc.CreateTag(editlock.System(context.Background()), servertest.MainProject, appdto.CreateTagInput{
 		Name: name, Type: tagType,
 	}); err != nil {
 		t.Fatalf("CreateTag(%q): %v", name, err)
@@ -1003,5 +1004,98 @@ func TestGetProjects_TableAndYAML(t *testing.T) {
 	manifests, err := growctl.ParseManifests([]byte(exported))
 	if err != nil || len(manifests.Projects) != 2 || manifests.Projects[1].Name != "Line 1" {
 		t.Errorf("exported projects: %+v, %v\n%s", manifests, err, exported)
+	}
+}
+
+// ── The EditLock of the Draft (ADR 0015) ─────────────────────────────────────
+
+// editLockState reads the Main project's lock with a client of its own: the
+// lock routes need no key to be read.
+func editLockState(t *testing.T, srv *httptest.Server) (apiv0.EditLockResponse, error) {
+	t.Helper()
+	return apiclient.New(srv.URL, srv.Client()).Project(servertest.MainProject).StateEditLock(context.Background())
+}
+
+func TestApply_ChecksTheDraftOutAndIn(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+
+	if _, err := runGrowctl(t, srv, twoTags, "apply"); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	// The run gave the Draft back: the lock is free, its version raised by
+	// the Check out and the Check in.
+	state, err := editLockState(t, srv)
+	if err != nil {
+		t.Fatalf("read the lock: %v", err)
+	}
+	if state.Held {
+		t.Errorf("the lock growctl took is still held: %+v", state)
+	}
+	if state.Version < 2 {
+		t.Errorf("lock version %d, want the Check out and the Check in", state.Version)
+	}
+}
+
+func TestApply_HeldLock_IsAnErrorNamingTheHolder(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+	servertest.EnsureEditLock(t, srv, servertest.MainProject)
+
+	_, err := runGrowctl(t, srv, twoTags, "apply")
+
+	if err == nil {
+		t.Fatal("apply of a held Draft succeeded")
+	}
+	if !strings.Contains(err.Error(), servertest.ClientName) || !strings.Contains(err.Error(), "--take-over") {
+		t.Errorf("the refusal does not name the holder and the way out: %v", err)
+	}
+}
+
+func TestApply_TakeOver_TakesTheDraftFromItsHolder(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+	servertest.EnsureEditLock(t, srv, servertest.MainProject)
+
+	if _, err := runGrowctl(t, srv, twoTags, "apply", "--take-over"); err != nil {
+		t.Fatalf("apply --take-over: %v", err)
+	}
+}
+
+func TestApply_NothingToChange_TakesNoLock(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+	if _, err := runGrowctl(t, srv, twoTags, "apply"); err != nil {
+		t.Fatalf("first apply: %v", err)
+	}
+	held := servertest.EnsureEditLock(t, srv, servertest.MainProject)
+
+	// The Draft is the manifest already: the run writes nothing, so the lock
+	// someone else holds does not stop it, and it is not taken over.
+	out, err := runGrowctl(t, srv, twoTags, "apply")
+	if err != nil {
+		t.Fatalf("apply of an unchanged Draft: %v", err)
+	}
+	if !strings.Contains(out, "unchanged") {
+		t.Errorf("output %q, want the unchanged tags", out)
+	}
+	state, err := editLockState(t, srv)
+	if err != nil {
+		t.Fatalf("read the lock: %v", err)
+	}
+	if state.Version != held.Version {
+		t.Errorf("the lock was taken (version %d, was %d) by a run that changed nothing", state.Version, held.Version)
+	}
+}
+
+func TestDelete_HeldLock_IsAnErrorNamingTheHolder(t *testing.T) {
+	srv, svc := servertest.StartAPI(t, postgres.DB(t))
+	createTag(t, svc, "gone", "integer")
+	servertest.EnsureEditLock(t, srv, servertest.MainProject)
+
+	_, _, err := execGrowctl(t, srv, "", "delete", "--pattern", "gone", "--yes")
+
+	if err == nil || !strings.Contains(err.Error(), servertest.ClientName) {
+		t.Errorf("delete of a held Draft: %v, want the holder named", err)
+	}
+	if _, ok := tagsByName(t, svc)["gone"]; !ok {
+		t.Error("the tag was deleted from a held Draft")
 	}
 }

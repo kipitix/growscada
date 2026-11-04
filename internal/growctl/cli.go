@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
@@ -53,11 +54,18 @@ type settings struct {
 	// project is --project, "" when not given (see projectFor).
 	project string
 	errOut  io.Writer
+	// clientName is --client-name: the name growctl declares when it checks a
+	// Draft out. takeOver is --take-over: take the lock from its holder.
+	clientName string
+	takeOver   bool
+	// runKey is the client key of this run (key).
+	runKey string
 }
 
 // client returns a client of the server for one run.
 func (s *settings) client() *Client {
-	return NewClient(s.server, &http.Client{Timeout: 30 * time.Second}, s.errOut)
+	client := NewClient(s.server, &http.Client{Timeout: 30 * time.Second}, s.errOut)
+	return &Client{Client: client.WithClientKey(s.key())}
 }
 
 // NewRootCommand builds the growctl command tree. Output goes to the command's
@@ -87,6 +95,10 @@ func NewRootCommand() *cobra.Command {
 		"GrowSCADA REST API URL (env "+ServerEnv+")")
 	root.PersistentFlags().StringVar(&s.project, "project", "",
 		"project to work in (default: the manifests' metadata.project, else the context's, see growctl config use-project)")
+	root.PersistentFlags().StringVar(&s.clientName, "client-name", defaultClientName(),
+		"name declared when growctl checks a Draft out for editing")
+	root.PersistentFlags().BoolVar(&s.takeOver, "take-over", false,
+		"take the Draft's EditLock from the client that holds it")
 
 	root.AddCommand(
 		newApplyCommand(s),
@@ -190,7 +202,7 @@ func newApplyCommand(s *settings) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return executeApply(ctx, client, plan, cmd.OutOrStdout())
+			return executeApply(ctx, client, plan, s, cmd.OutOrStdout())
 		},
 	}
 	addFileFlag(cmd, &files)
@@ -276,11 +288,11 @@ func newDeleteCommand(s *settings) *cobra.Command {
 			case filter.IsSet() && len(files) > 0:
 				return usageError(errors.New("use either -f or --pattern/--regex, not both"))
 			case filter.IsSet():
-				return deleteMatching(cmd, s.client(), s.project, filter, yes)
+				return deleteMatching(cmd, s, s.client(), s.project, filter, yes)
 			case len(files) == 0:
 				return usageError(errors.New("nothing to delete: use -f <file|directory|-> or --pattern/--regex"))
 			}
-			return deleteManifests(cmd, s.client(), s.project, files, yes)
+			return deleteManifests(cmd, s, s.client(), s.project, files, yes)
 		},
 	}
 	addFileFlag(cmd, &files)
@@ -293,7 +305,7 @@ func newDeleteCommand(s *settings) *cobra.Command {
 // works in, then their projects. Projects that exist go with all their
 // content, so they are deleted only after the user confirms the list (see
 // confirm) unless yes; nothing is deleted without it.
-func deleteManifests(cmd *cobra.Command, client *Client, projectFlag string, files []string, yes bool) error {
+func deleteManifests(cmd *cobra.Command, s *settings, client *Client, projectFlag string, files []string, yes bool) error {
 	ctx := cmd.Context()
 	manifests, err := ReadManifests(files, cmd.InOrStdin())
 	if err != nil {
@@ -354,6 +366,13 @@ func deleteManifests(cmd *cobra.Command, client *Client, projectFlag string, fil
 			return nil
 		}
 	}
+	if tags != nil && slices.ContainsFunc(tagSteps, func(step Step) bool { return step.Action == ActionDelete }) {
+		unlock, err := s.lockProject(ctx, client, tags.ProjectClient.ID())
+		if err != nil {
+			return err
+		}
+		defer unlock()
+	}
 	if err := executeDelete(ctx, tags, tagSteps, cmd.OutOrStdout()); err != nil {
 		return err
 	}
@@ -383,7 +402,7 @@ func confirm(cmd *cobra.Command, header string, items []string, question string)
 // deleteMatching deletes the tags of the project growctl works in selected by
 // the filter, after the user confirms the list (prompt on stderr, answer from
 // stdin) unless yes.
-func deleteMatching(cmd *cobra.Command, client *Client, projectFlag string, filter NameFilter, yes bool) error {
+func deleteMatching(cmd *cobra.Command, s *settings, client *Client, projectFlag string, filter NameFilter, yes bool) error {
 	ctx := cmd.Context()
 	name, err := projectFor(projectFlag, Manifests{})
 	if err != nil {
@@ -418,7 +437,55 @@ func deleteMatching(cmd *cobra.Command, client *Client, projectFlag string, filt
 	for i, t := range matched {
 		steps[i] = Step{Action: ActionDelete, Server: t}
 	}
+	unlock, err := s.lockProject(ctx, client, tags.ProjectClient.ID())
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	return executeDelete(ctx, tags, steps, cmd.OutOrStdout())
+}
+
+// lockDraftsOf checks the Drafts the plan writes out: the project of its tags
+// and those of its pins. A plan that changes nothing takes no lock.
+func (p applyPlan) lockDraftsOf(ctx context.Context, client *Client, s *settings, created map[string]apiv0.ProjectResponse) (func(), error) {
+	// The tags are planned on one project, identified when it was planned: a
+	// project renamed or re-created under the same name meanwhile is not it.
+	var tagProject uuid.UUID
+	if p.tagsOf != nil {
+		tagProject = p.tagsOf.ProjectClient.ID()
+	}
+	names := map[string]bool{}
+	if slices.ContainsFunc(p.tags, func(step Step) bool { return step.Action == ActionCreate || step.Action == ActionPrune }) {
+		names[p.project] = true
+	}
+	for _, pin := range p.libraries.pins {
+		if pin.Action != ActionUnchanged {
+			names[pin.Project] = true
+		}
+	}
+	var ids []uuid.UUID
+	if names[p.project] && tagProject != uuid.Nil {
+		delete(names, p.project)
+		ids = append(ids, tagProject)
+	}
+	for name := range names {
+		if name == "" {
+			continue
+		}
+		if project, ok := created[name]; ok {
+			ids = append(ids, project.ID)
+			continue
+		}
+		found, ok, err := client.FindProjectByName(ctx, name)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, fmt.Errorf("project/%s not found", name)
+		}
+		ids = append(ids, found.ID)
+	}
+	return s.lockProjects(ctx, client, ids)
 }
 
 // executeDelete runs delete steps on tags, printing each once it is done; a
@@ -601,11 +668,18 @@ func fetchServerTags(ctx context.Context, tags *Tags, manifests []TagManifest, p
 // executeApply runs the plan, printing each step once it is done: the
 // projects, then the tags. It stops at the first failure; apply is
 // idempotent, so rerunning finishes the job.
-func executeApply(ctx context.Context, client *Client, plan applyPlan, out io.Writer) error {
+func executeApply(ctx context.Context, client *Client, plan applyPlan, s *settings, out io.Writer) error {
 	created, err := executeProjects(ctx, client, plan.projects, out)
 	if err != nil {
 		return err
 	}
+	// The Drafts this run writes are checked out first (ADR 0015): an
+	// unchanged plan takes no lock and needs none.
+	unlock, err := plan.lockDraftsOf(ctx, client, s, created)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	if err := executeLibraries(ctx, client, plan.libraries, out); err != nil {
 		return err
 	}
