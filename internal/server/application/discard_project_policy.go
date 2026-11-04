@@ -30,12 +30,17 @@ const DiscardProjectPolicyName = "discard_project"
 // its IDs — one aggregate per transaction, and clears the mark of
 // Project.StartDiscard last; a project_discard_started event's job does it.
 //
-// The order is the one the Draft's references allow: the Library Pins first
-// (restoring a Scene passes the check of its Widgets against them), then the
-// Devices, the Environments, the pairs, the Tag definitions and the Scenes
-// with their Widgets. While the mark stands no one else writes the Draft, so a
-// run that failed half-way is run again from the Draft as it is: every step
-// compares what is stored with the Revision before it writes.
+// The order is the one the Draft's references allow: what the Revision does
+// not name goes first (prune), in the reverse of it — the Scenes before the
+// pins they hold, the Tags before the Devices that supply them, the pairs
+// before the Environments and the Devices they join — for a Device and an
+// Environment refuse to be removed while something names them; what stays is
+// then brought to the Revision (restore): the Library Pins first (restoring a
+// Scene passes the check of its Widgets against them), then the Devices, the
+// Environments, the pairs, the Tag definitions and the Scenes with their
+// Widgets. While the mark stands no one else writes the Draft, so a run that
+// failed half-way is run again from the Draft as it is: every step compares
+// what is stored with the Revision before it writes.
 //
 // The Runtime node is left alone: the Tag states and the Device Tokens are its
 // own, and a Discard changes configuration only. For a Project not being
@@ -97,6 +102,9 @@ func (p discardProjectPolicy) Run(ctx context.Context, key string) error {
 	file := revision.Content
 
 	scope := p.scopes.ForDiscard(projectID)
+	if err := p.prune(ctx, scope, file); err != nil {
+		return fmt.Errorf("cannot discard project %s: %w", projectID, err)
+	}
 	if err := p.restorePins(ctx, scope, file.LibraryPins); err != nil {
 		return fmt.Errorf("cannot discard project %s: %w", projectID, err)
 	}
@@ -128,6 +136,53 @@ func (p discardProjectPolicy) Run(ctx context.Context, key string) error {
 	})
 }
 
+// prune removes what the Revision does not name, in the reverse of the order
+// the Draft's references allow: a Scene before the pins its Widgets may hold,
+// a Tag before the Device that supplies it, a pair before the Environment and
+// the Device it joins. A Device and an Environment refuse to be removed while
+// something names them (ErrDeviceInUse, ErrEnvironmentInUse), so the restores
+// below would meet the leftovers of the Draft as references; removing them
+// first also frees the names the restores may need.
+func (p discardProjectPolicy) prune(ctx context.Context, scope ProjectScope, file projectv0.ProjectFile) error {
+	if err := pruneScenes(ctx, scope.Scenes(), file.Scenes); err != nil {
+		return err
+	}
+	if err := prunePins(ctx, scope.LibraryPins(), file.LibraryPins); err != nil {
+		return err
+	}
+	if err := pruneTags(ctx, scope.Tags(), file.Tags); err != nil {
+		return err
+	}
+	if err := prunePairs(ctx, scope.EnvironmentDevices(), file.EnvironmentDevices); err != nil {
+		return err
+	}
+	if err := pruneEnvironments(ctx, scope.Environments(), file.Environments); err != nil {
+		return err
+	}
+	return pruneDevices(ctx, scope.Devices(), file.Devices)
+}
+
+// prunePins removes the Library Pins the document does not name.
+func prunePins(ctx context.Context, repo librarypin.Repository, targets []projectv0.LibraryPin) error {
+	current, err := repo.FindAll(ctx)
+	if err != nil {
+		return fmt.Errorf("cannot list library pins: %w", err)
+	}
+	wanted := make(map[uuid.UUID]struct{}, len(targets))
+	for _, t := range targets {
+		wanted[t.LibraryID] = struct{}{}
+	}
+	for _, pin := range current {
+		if _, ok := wanted[pin.LibraryID().UUID()]; ok {
+			continue
+		}
+		if err := repo.Delete(ctx, pin, nil); err != nil && !errors.Is(err, librarypin.ErrLibraryPinNotFound) {
+			return fmt.Errorf("cannot remove library pin of %s: %w", pin.LibraryID(), err)
+		}
+	}
+	return nil
+}
+
 // restorePins brings the Project's Library Pins to the ones the document names.
 // A pin is set through the aggregate's own methods, but without Impact (no
 // Widget is orphaned by a Discard, by construction) and with the Version the pin
@@ -138,23 +193,9 @@ func (p discardProjectPolicy) restorePins(ctx context.Context, scope ProjectScop
 	if err != nil {
 		return fmt.Errorf("cannot list library pins: %w", err)
 	}
-	wanted := make(map[uuid.UUID]projectv0.LibraryPin, len(targets))
-	for _, t := range targets {
-		wanted[t.LibraryID] = t
-	}
 	byLibrary := make(map[uuid.UUID]librarypin.LibraryPin, len(current))
 	for _, pin := range current {
 		byLibrary[pin.LibraryID().UUID()] = pin
-	}
-
-	for _, pin := range current {
-		if _, ok := wanted[pin.LibraryID().UUID()]; ok {
-			continue
-		}
-		if err := repo.Delete(ctx, pin, nil); err != nil && !errors.Is(err, librarypin.ErrLibraryPinNotFound) {
-			return fmt.Errorf("cannot remove library pin of %s: %w", pin.LibraryID(), err)
-		}
-		delete(byLibrary, pin.LibraryID().UUID())
 	}
 
 	for _, target := range targets {
@@ -237,19 +278,17 @@ func asideName(name string, anID uuid.UUID) string {
 	return fmt.Sprintf("%s (%s)", name, anID)
 }
 
-// restoreDevices brings the Project's Devices to the ones the document names.
-func restoreDevices(ctx context.Context, repo device.DeviceRepository, projectID id.ID[project.Project], targets []projectv0.Device) error {
+// pruneDevices removes the Devices the document does not name. A Device a Tag
+// or a pair still names refuses to go, so this runs after pruneTags and
+// prunePairs.
+func pruneDevices(ctx context.Context, repo device.DeviceRepository, targets []projectv0.Device) error {
 	stored, err := repo.FindAll(ctx)
 	if err != nil {
 		return fmt.Errorf("cannot list devices: %w", err)
 	}
-	wanted := make(map[uuid.UUID]projectv0.Device, len(targets))
+	wanted := make(map[uuid.UUID]struct{}, len(targets))
 	for _, t := range targets {
-		wanted[t.ID] = t
-	}
-	byID := make(map[uuid.UUID]device.Device, len(stored))
-	for _, d := range stored {
-		byID[d.ID().UUID()] = d
+		wanted[t.ID] = struct{}{}
 	}
 	for _, d := range stored {
 		if _, ok := wanted[d.ID().UUID()]; ok {
@@ -258,7 +297,19 @@ func restoreDevices(ctx context.Context, repo device.DeviceRepository, projectID
 		if err := repo.Delete(ctx, d.Delete()); err != nil && !errors.Is(err, device.ErrDeviceNotFound) {
 			return fmt.Errorf("cannot remove device %s: %w", d.ID(), err)
 		}
-		delete(byID, d.ID().UUID())
+	}
+	return nil
+}
+
+// restoreDevices brings the Project's Devices to the ones the document names.
+func restoreDevices(ctx context.Context, repo device.DeviceRepository, projectID id.ID[project.Project], targets []projectv0.Device) error {
+	stored, err := repo.FindAll(ctx)
+	if err != nil {
+		return fmt.Errorf("cannot list devices: %w", err)
+	}
+	byID := make(map[uuid.UUID]device.Device, len(stored))
+	for _, d := range stored {
+		byID[d.ID().UUID()] = d
 	}
 
 	var ops []restoreOp
@@ -352,20 +403,16 @@ func sameDevice(d device.Device, target projectv0.Device) bool {
 		sameJSONObject(d.Config().Bytes(), target.Config)
 }
 
-// restoreEnvironments brings the Project's Environments to the ones the
-// document names.
-func restoreEnvironments(ctx context.Context, repo device.EnvironmentRepository, projectID id.ID[project.Project], targets []projectv0.Environment) error {
+// pruneEnvironments removes the Environments the document does not name. An
+// Environment that holds a pair refuses to go, so this runs after prunePairs.
+func pruneEnvironments(ctx context.Context, repo device.EnvironmentRepository, targets []projectv0.Environment) error {
 	stored, err := repo.FindAll(ctx)
 	if err != nil {
 		return fmt.Errorf("cannot list environments: %w", err)
 	}
-	wanted := make(map[uuid.UUID]projectv0.Environment, len(targets))
+	wanted := make(map[uuid.UUID]struct{}, len(targets))
 	for _, t := range targets {
-		wanted[t.ID] = t
-	}
-	byID := make(map[uuid.UUID]device.Environment, len(stored))
-	for _, e := range stored {
-		byID[e.ID().UUID()] = e
+		wanted[t.ID] = struct{}{}
 	}
 	for _, e := range stored {
 		if _, ok := wanted[e.ID().UUID()]; ok {
@@ -374,7 +421,20 @@ func restoreEnvironments(ctx context.Context, repo device.EnvironmentRepository,
 		if err := repo.Delete(ctx, e.Delete()); err != nil && !errors.Is(err, device.ErrEnvironmentNotFound) {
 			return fmt.Errorf("cannot remove environment %s: %w", e.ID(), err)
 		}
-		delete(byID, e.ID().UUID())
+	}
+	return nil
+}
+
+// restoreEnvironments brings the Project's Environments to the ones the
+// document names.
+func restoreEnvironments(ctx context.Context, repo device.EnvironmentRepository, projectID id.ID[project.Project], targets []projectv0.Environment) error {
+	stored, err := repo.FindAll(ctx)
+	if err != nil {
+		return fmt.Errorf("cannot list environments: %w", err)
+	}
+	byID := make(map[uuid.UUID]device.Environment, len(stored))
+	for _, e := range stored {
+		byID[e.ID().UUID()] = e
 	}
 
 	var ops []restoreOp
@@ -452,6 +512,30 @@ func (r *environmentRestore) aside(ctx context.Context) error {
 	return nil
 }
 
+// prunePairs removes the EnvironmentDevices the document does not name. A pair
+// is what keeps its Environment and its Device from being removed, so it goes
+// before both.
+func prunePairs(ctx context.Context, repo device.EnvironmentDeviceRepository, targets []projectv0.EnvironmentDevice) error {
+	stored, err := repo.FindAll(ctx)
+	if err != nil {
+		return fmt.Errorf("cannot list environment devices: %w", err)
+	}
+	type pairKey struct{ environment, device uuid.UUID }
+	wanted := make(map[pairKey]struct{}, len(targets))
+	for _, t := range targets {
+		wanted[pairKey{t.EnvironmentID, t.DeviceID}] = struct{}{}
+	}
+	for _, pair := range stored {
+		if _, ok := wanted[pairKey{pair.EnvironmentID().UUID(), pair.DeviceID().UUID()}]; ok {
+			continue
+		}
+		if err := repo.Delete(ctx, pair.Delete()); err != nil && !errors.Is(err, device.ErrEnvironmentDeviceNotFound) {
+			return fmt.Errorf("cannot remove the pair of environment %s device %s: %w", pair.EnvironmentID(), pair.DeviceID(), err)
+		}
+	}
+	return nil
+}
+
 // restorePairs brings the Project's EnvironmentDevices to the ones the document
 // names.
 func restorePairs(ctx context.Context, repo device.EnvironmentDeviceRepository, projectID id.ID[project.Project], targets []projectv0.EnvironmentDevice) error {
@@ -460,23 +544,9 @@ func restorePairs(ctx context.Context, repo device.EnvironmentDeviceRepository, 
 		return fmt.Errorf("cannot list environment devices: %w", err)
 	}
 	type pairKey struct{ environment, device uuid.UUID }
-	wanted := make(map[pairKey]projectv0.EnvironmentDevice, len(targets))
-	for _, t := range targets {
-		wanted[pairKey{t.EnvironmentID, t.DeviceID}] = t
-	}
 	byKey := make(map[pairKey]device.EnvironmentDevice, len(stored))
 	for _, pair := range stored {
 		byKey[pairKey{pair.EnvironmentID().UUID(), pair.DeviceID().UUID()}] = pair
-	}
-
-	for _, pair := range stored {
-		if _, ok := wanted[pairKey{pair.EnvironmentID().UUID(), pair.DeviceID().UUID()}]; ok {
-			continue
-		}
-		if err := repo.Delete(ctx, pair.Delete()); err != nil && !errors.Is(err, device.ErrEnvironmentDeviceNotFound) {
-			return fmt.Errorf("cannot remove the pair of environment %s device %s: %w", pair.EnvironmentID(), pair.DeviceID(), err)
-		}
-		delete(byKey, pairKey{pair.EnvironmentID().UUID(), pair.DeviceID().UUID()})
 	}
 
 	for _, target := range targets {
@@ -510,6 +580,26 @@ func restorePairs(ctx context.Context, repo device.EnvironmentDeviceRepository, 
 	return nil
 }
 
+// pruneTags removes the Tag definitions the document does not name, and those
+// it names differently: a Tag has no change of its own, so one whose definition
+// differs is removed and created again after. Its state is the Runtime node's
+// and stays: the next Deploy drops it, not the Discard.
+func pruneTags(ctx context.Context, repo tag.TagRepository, targets []projectv0.TagDefinition) error {
+	stored, err := repo.FindAll(ctx)
+	if err != nil {
+		return fmt.Errorf("cannot list tags: %w", err)
+	}
+	for _, current := range stored {
+		if target, ok := tagTargetOf(targets, current.ID().UUID()); ok && sameTag(current, target) {
+			continue
+		}
+		if err := repo.Delete(ctx, current.Delete()); err != nil && !errors.Is(err, tag.ErrTagNotFound) {
+			return fmt.Errorf("cannot remove tag %s: %w", current.ID(), err)
+		}
+	}
+	return nil
+}
+
 // restoreTags brings the Project's Tag definitions to the ones the document
 // names. A Tag has no change of its own: one whose definition differs is
 // removed and created again under its ID, as one added since is. Its state is
@@ -523,10 +613,6 @@ func restoreTags(ctx context.Context, repo tag.TagRepository, projectID id.ID[pr
 	for _, current := range stored {
 		if target, ok := tagTargetOf(targets, current.ID().UUID()); ok && sameTag(current, target) {
 			kept[current.ID().UUID()] = struct{}{}
-			continue
-		}
-		if err := repo.Delete(ctx, current.Delete()); err != nil && !errors.Is(err, tag.ErrTagNotFound) {
-			return fmt.Errorf("cannot remove tag %s: %w", current.ID(), err)
 		}
 	}
 
@@ -588,6 +674,28 @@ func sameTag(t tag.Tag, target projectv0.TagDefinition) bool {
 	return supplier.HasDevice() && supplier.DeviceID().UUID() == *target.SupplierDeviceID
 }
 
+// pruneScenes removes the Scenes the document does not name, with their
+// Widgets. A Scene goes before the pins its Widgets may hold.
+func pruneScenes(ctx context.Context, repo scene.SceneRepository, targets []projectv0.Scene) error {
+	stored, err := repo.FindAll(ctx)
+	if err != nil {
+		return fmt.Errorf("cannot list scenes: %w", err)
+	}
+	wanted := make(map[uuid.UUID]struct{}, len(targets))
+	for _, t := range targets {
+		wanted[t.ID] = struct{}{}
+	}
+	for _, s := range stored {
+		if _, ok := wanted[s.ID().UUID()]; ok {
+			continue
+		}
+		if err := repo.Delete(ctx, s.Delete()); err != nil && !errors.Is(err, scene.ErrSceneNotFound) {
+			return fmt.Errorf("cannot remove scene %s: %w", s.ID(), err)
+		}
+	}
+	return nil
+}
+
 // restoreScenes brings the Project's Scenes, with their Widgets, to the ones
 // the document names. A Scene is set through the aggregate's own methods, so
 // its Widgets pass the check against the pinned Releases (the pins were
@@ -598,22 +706,9 @@ func (p discardProjectPolicy) restoreScenes(ctx context.Context, scope ProjectSc
 	if err != nil {
 		return fmt.Errorf("cannot list scenes: %w", err)
 	}
-	wanted := make(map[uuid.UUID]projectv0.Scene, len(targets))
-	for _, t := range targets {
-		wanted[t.ID] = t
-	}
 	byID := make(map[uuid.UUID]scene.Scene, len(stored))
 	for _, s := range stored {
 		byID[s.ID().UUID()] = s
-	}
-	for _, s := range stored {
-		if _, ok := wanted[s.ID().UUID()]; ok {
-			continue
-		}
-		if err := repo.Delete(ctx, s.Delete()); err != nil && !errors.Is(err, scene.ErrSceneNotFound) {
-			return fmt.Errorf("cannot remove scene %s: %w", s.ID(), err)
-		}
-		delete(byID, s.ID().UUID())
 	}
 
 	for _, target := range targets {

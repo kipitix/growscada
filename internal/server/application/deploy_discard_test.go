@@ -362,6 +362,56 @@ func TestDiscard_RestoresTheDraft(t *testing.T) {
 	}
 }
 
+// TestDiscard_RemovesADeviceAndAnEnvironmentOfTheDraft: a Device and an
+// Environment added since the Deploy go, with the pair that joins them and the
+// Tag the Device supplies, though the Tag and the pair name them and a removal
+// of either is refused while something does.
+func TestDiscard_RemovesADeviceAndAnEnvironmentOfTheDraft(t *testing.T) {
+	cleanDevices(t)
+	cleanScenes(t)
+	cleanPins(t)
+	ctx := context.Background()
+
+	deploy, _ := newDeployService()
+	if _, err := deploy.Deploy(ctx, mainProject); err != nil {
+		t.Fatalf("Deploy: %v", err)
+	}
+
+	devices := newDeviceService()
+	added, err := devices.CreateDevice(ctx, mainProject, appdto.DeviceInput{
+		Name: "added-" + uuid.NewString(), Protocol: "simulation", Config: []byte(`{"pattern":"ramp"}`),
+	})
+	if err != nil {
+		t.Fatalf("CreateDevice: %v", err)
+	}
+	environments := newEnvironmentService()
+	environment, err := environments.CreateEnvironment(ctx, mainProject, appdto.EnvironmentInput{Name: "added-" + uuid.NewString()})
+	if err != nil {
+		t.Fatalf("CreateEnvironment: %v", err)
+	}
+	if _, _, err := environments.PutEnvironmentDevice(ctx, mainProject, environment.ID, added.ID, 0,
+		appdto.EnvironmentDeviceInput{Params: []byte(`{"timeout":1}`)}); err != nil {
+		t.Fatalf("PutEnvironmentDevice: %v", err)
+	}
+	supplied := mustCreateTag(t, "supplied", "integer")
+	if _, err := testDB.ExecContext(ctx,
+		"UPDATE engineering.tags SET device_id = $1 WHERE id = $2", added.ID, supplied.ID); err != nil {
+		t.Fatalf("supply tag %s: %v", supplied.ID, err)
+	}
+
+	runDiscard(t, mainProject)
+
+	if all, err := devices.FindAllDevices(ctx, mainProject); err != nil || len(all) != 0 {
+		t.Errorf("the devices after the Discard: %+v, %v, want none", all, err)
+	}
+	if all, err := environments.FindAllEnvironments(ctx, mainProject); err != nil || len(all) != 0 {
+		t.Errorf("the environments after the Discard: %+v, %v, want none", all, err)
+	}
+	if all, err := newService().FindAllTags(ctx, mainProject); err != nil || len(all) != 0 {
+		t.Errorf("the tags after the Discard: %+v, %v, want none", all, err)
+	}
+}
+
 // TestDiscard_OfAPinnedLibraryRestoresThePin: the pin of a Library the Draft
 // dropped comes back, at the release the Revision names, without the check of
 // the Widgets a switch runs.
