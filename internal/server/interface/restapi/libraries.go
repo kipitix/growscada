@@ -2,7 +2,6 @@ package restapi
 
 import (
 	"net/http"
-	"strconv"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
@@ -174,16 +173,4 @@ func (h LibrariesHandlers) PostDiscard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sendJSONResponse(w, http.StatusAccepted, newLibraryResponse(marked))
-}
-
-// pathInt parses the number of res from the request path. On failure it has
-// already sent a 400 and returns false.
-func pathInt(w http.ResponseWriter, r *http.Request, res resource) (int, bool) {
-	raw := r.PathValue(res.pathParam)
-	n, err := strconv.Atoi(raw)
-	if err != nil {
-		sendProblem(w, NewBadRequest(res.pathParam+": '"+raw+"' is not a number", r.URL.Path))
-		return 0, false
-	}
-	return n, true
 }

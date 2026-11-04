@@ -27,6 +27,7 @@ type APIRouter struct {
 	deviceConfigHandlers *DeviceConfigHandlers
 	deviceWhoAmIHandlers *DeviceIdentityHandlers
 	deployHandlers       *DeployHandlers
+	revisionsHandlers    *RevisionHandlers
 	eventsHandlers       *EventsHandlers
 }
 
@@ -104,6 +105,7 @@ func NewRouter(services Services, eventBus eventbus.EventBus, maxSSEClients int)
 		deviceConfigHandlers: NewDeviceConfigHandler(services.DeviceConfig, services.DeviceTokens),
 		deviceWhoAmIHandlers: NewDeviceIdentityHandler(services.DeviceTokens),
 		deployHandlers:       NewDeployHandler(services.Deploy, services.Discard, services.Revisions, services.TagStates),
+		revisionsHandlers:    NewRevisionHandler(services.Revisions),
 		eventsHandlers:       NewEventsHandler(eventBus, projectService, maxSSEClients, WithDeviceTokens(services.DeviceTokens)),
 	}
 	for _, rt := range router.routes() {
@@ -130,6 +132,7 @@ func (r *APIRouter) routes() []route {
 	devices, environments := r.devicesHandlers, r.environmentsHandlers
 	tokens, config := r.deviceTokensHandlers, r.deviceConfigHandlers
 	deploy := r.deployHandlers
+	revisions := r.revisionsHandlers
 	return []route{
 		{"GET " + p + "/projects", projects.GetProjects},
 		{"GET " + pp, projects.GetProjectsByID},
@@ -196,9 +199,9 @@ func (r *APIRouter) routes() []route {
 		{"DELETE " + pp + "/environments/" + environmentResource.wildcard() + "/devices/" + deviceResource.wildcard(), environments.DeleteEnvironmentDevice},
 
 		{"GET " + pp + "/revision", deploy.GetRevision},
-		{"GET " + pp + "/revisions", deploy.GetRevisions},
-		{"GET " + pp + "/revisions/" + revisionResource.wildcard(), deploy.GetRevisionsByNumber},
-		{"POST " + pp + "/revisions/" + revisionResource.wildcard() + "/rollback", deploy.PostRollback},
+		{"GET " + pp + "/revisions", revisions.GetRevisions},
+		{"GET " + pp + "/revisions/" + revisionResource.wildcard(), revisions.GetRevisionByNumber},
+		{"POST " + pp + "/revisions/" + revisionResource.wildcard() + "/rollback", revisions.PostRollback},
 		{"GET " + pp + "/tag-states", deploy.GetTagStates},
 		{"GET " + pp + "/deploy/preview", deploy.GetDeployPreview},
 		{"POST " + pp + "/deploy", deploy.PostDeploy},

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/kipitix/growscada/internal/server/application"
@@ -212,6 +213,8 @@ func isNotFound(err error, res resource) bool {
 
 // pathUUID parses the ID of res from the request path. On failure it has
 // already sent a 400 and returns false.
+// pathUUID parses the ID of res from the request path. On failure it has
+// already sent a 400 and returns false.
 func pathUUID(w http.ResponseWriter, r *http.Request, res resource) (uuid.UUID, bool) {
 	raw := r.PathValue(res.pathParam)
 	id, err := uuid.Parse(raw)
@@ -220,6 +223,18 @@ func pathUUID(w http.ResponseWriter, r *http.Request, res resource) (uuid.UUID, 
 		return uuid.Nil, false
 	}
 	return id, true
+}
+
+// pathInt parses the number of res from the request path. On failure it has
+// already sent a 400 and returns false.
+func pathInt(w http.ResponseWriter, r *http.Request, res resource) (int, bool) {
+	raw := r.PathValue(res.pathParam)
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		sendProblem(w, NewBadRequest(res.pathParam+": '"+raw+"' is not a number", r.URL.Path))
+		return 0, false
+	}
+	return n, true
 }
 
 // sendInternalError logs the full error and sends a generic 500 to the client.
