@@ -11,6 +11,9 @@ type Project struct {
 	ID      uuid.UUID
 	Name    string
 	Version int
+	// Discarding reports that the Project's Draft is being reset to the
+	// Revision it runs, and so is read-only until that ends (task 35, Q10).
+	Discarding bool
 }
 
 // ProjectInput holds the fields of a project a client creates or renames.
@@ -22,9 +25,10 @@ type ProjectInput struct {
 // NewProject creates a Project DTO from the domain aggregate.
 func NewProject(p project.Project) Project {
 	return Project{
-		ID:      p.ID().UUID(),
-		Name:    p.Name().String(),
-		Version: p.Version().Number(),
+		ID:         p.ID().UUID(),
+		Name:       p.Name().String(),
+		Version:    p.Version().Number(),
+		Discarding: p.IsDiscarding(),
 	}
 }
 

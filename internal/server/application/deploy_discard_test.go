@@ -308,8 +308,8 @@ func TestDiscard_TheDraftIsReadOnlyWhileItRuns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Discard: %v", err)
 	}
-	if marked.ID != mainProject {
-		t.Errorf("the marked project: %s, want %s", marked.ID, mainProject)
+	if marked.ID != mainProject || !marked.Discarding {
+		t.Errorf("the marked project: %+v, want %s marked as being discarded", marked, mainProject)
 	}
 
 	if _, err := newService().CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "flow", Type: "integer"}); !errors.Is(err, project.ErrProjectDiscarding) {
