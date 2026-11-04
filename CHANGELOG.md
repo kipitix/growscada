@@ -1,5 +1,23 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.60] - 2026-11-04
+
+### Added
+
+- **REST, PWA и документация Deploy/Revision/Discard** (задача 35, часть 5; ADR 0007, ADR 0008, ADR 0011, ADR 0013)
+  - REST API 0.12: `GET /projects/{id}/revision` (текущая Revision с ProjectFile; 404 до первого Deploy), `GET …/tag-states` (снимок состояний Tag'ов Revision по ID), `GET …/deploy/preview` (`current_revision`, `unchanged`, `dropped_widgets`), `POST …/deploy` (201 `{number, deployed_at}`, 409 `nothing_to_deploy`, 500 при несохранённой копии у Engineering) и `POST …/discard` (202 `{discarding: true}`, 409 без Revision). Revision и состояния Tag — Runtime-ноды, Deploy и Discard — Engineering-ноды; `revision_created` уже в потоке событий проекта
+  - `apiclient.ProjectClient`: `Revision` (404 — «не развёрнут», не ошибка), `TagStates`, `DeployPreview`, `Deploy`, `Discard`
+  - PWA, Project-режим: полоса над сценами — бейдж «Revision N · deployed T» или «Not deployed», индикатор «Unreleased changes», кнопка Deploy (диалог по свежему preview: текущая Revision, предупреждение о выпадающих Widgets, подтверждение; отказ сервера — toast) и Discard (подтверждение; 409 без Revision — toast). Состояние развёртывания перезагружается на content-события Draft и `revision_created`
+  - PWA, Operation: читает только `GET …/revision` и `GET …/tag-states`, показывает сцены, Widget и WidgetType'ы из Revision, значения Tag — из снимка и `tag_updated`; пустое состояние «Project is not deployed»; Draft- и `library_*`-события больше не перезагружают вид, `revision_created` и resync — перезагружают
+  - UI-тесты: Project показывает бейдж, диалог preview и Revision 1 после Deploy, «Nothing to deploy» для неизменённого Draft, «Unreleased changes» после правки; Operation показывает пустое состояние, сцены и значения Revision, игнорирует сцену Draft и перезагружается на `revision_created`
+  - Bruno: раздел `deploy` (preview до Deploy → deploy → revision → tag-states → preview неизменённого → повторный 409 → discard) **до** первой записи значения Tag, на пустом проекте Line 2; `docker-compose.yaml` коллекций делает Deploy проекта Main перед стартом симулятора — без Revision его Device и Tags не существуют на Runtime-ноде
+  - Документация: ADR 0013 «Deploy делает неизменяемую Revision; Discard сбрасывает Draft»; поправки в ADR 0007 (пины в ProjectFile как провенанс), ADR 0008 (Discard — policy) и ADR 0011 (мост удалён, копии — только из Revision); `AGENTS.md` описывает маршруты, Project-полосу, Operation по Revision и Deploy перед симулятором
+
+### Changed
+
+- Генератор JSON-схем различает одноимённые типы из разных пакетов: второй получает имя с пакетом (`project.v0.PortBinding`), а не отказ — Revision в контракте API несёт ProjectFile
+- `restapi.Services` получил `Deploy`, `Discard` и `Revisions`; `main.go` и `servertest` собирают те же сервисы
+
 ## [0.0.59] - 2026-11-04
 
 ### Added

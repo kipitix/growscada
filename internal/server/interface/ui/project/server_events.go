@@ -32,6 +32,9 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 			p.sceneStates.Forget()
 		}
 		targets := eventlog.ReloadTargetsFor(ev)
+		if targets.Deploy {
+			p.loadDeploy(ctx)
+		}
 		if targets.Libraries {
 			p.loadLibraries(ctx)
 		}

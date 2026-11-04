@@ -1,10 +1,9 @@
-// Package operation is the Operator's runtime view: the Scenes with live Tag
-// values, read-only. It loads the configuration and Tags from the REST API,
-// follows server events and applies tag_updated values directly; rendering is
-// left to livescene.View.
-//
-// For now it follows the current configuration live, like Project; once
-// Deploy exists it will follow the running Revision only.
+// Package operation is the Operator's runtime view: the Scenes of the
+// Revision the Project runs, with live Tag values, read-only. It reads the
+// Revision and the snapshot of the Tag states from the REST API and follows
+// server events, applying tag_updated values directly; rendering is left to
+// livescene.View. The Draft and Library changes are invisible here until a
+// Deploy makes a new Revision, whose revision_created reloads it.
 package operation
 
 import (
@@ -30,25 +29,28 @@ type Operation struct {
 	ThemeMode string // exported so go-app detects theme changes and re-renders
 	client    *apiclient.Client
 	// projectID is the project shown, uuid.Nil if none; content is the client
-	// of its content, nil if none (SetProject). WidgetTypes are the server's.
+	// of its content, nil if none (SetProject). The Scene and the WidgetTypes
+	// come from the Revision the project runs, never from the Draft.
 	projectID uuid.UUID
 	content   *apiclient.ProjectClient
 
-	scenes      []apiv0.SceneResponse
+	// deployed is false until the project's first Deploy: the view then says
+	// so, and nothing of the Draft is shown in its place.
+	deployed bool
+	revision apiv0.RevisionResponse
+	scenes   []apiv0.SceneResponse
+	// widgetTypes is the copy of each WidgetType the Revision holds, by ID.
 	widgetTypes map[uuid.UUID]apiv0.ReleasedWidgetTypeResponse
-	widgets     []apiv0.WidgetResponse
-	tags        tagstate.Tags
+	// widgets are those of the selected Scene of the Revision.
+	widgets []apiv0.WidgetResponse
+	tags    tagstate.Tags
 
 	selectedSceneID uuid.UUID
-	// widgetsSceneID is the Scene o.widgets belong to.
-	widgetsSceneID uuid.UUID
-	disconnected   bool
+	disconnected    bool
 
 	// Coalesce reloads of each server-backed list.
-	widgetTypesReloader uiutil.Reloader
-	scenesReloader      uiutil.Reloader
-	widgetsReloader     uiutil.Reloader
-	tagsReloader        uiutil.Reloader
+	revisionReloader  uiutil.Reloader
+	tagStatesReloader uiutil.Reloader
 }
 
 func NewOperation(client *apiclient.Client) *Operation {
@@ -96,8 +98,10 @@ func (o *Operation) SetProject(id uuid.UUID) {
 	if !o.mounted {
 		return
 	}
-	o.scenes, o.widgets, o.widgetsSceneID, o.tags = nil, nil, uuid.Nil, tagstate.Tags{}
+	o.scenes, o.widgets = nil, nil
 	o.widgetTypes = map[uuid.UUID]apiv0.ReleasedWidgetTypeResponse{}
+	o.tags = tagstate.Tags{}
+	o.revision, o.deployed = apiv0.RevisionResponse{}, false
 	o.selectedSceneID = uiutil.LoadID(o.compoCtx, o.sceneKey())
 	// Root calls it, so nothing marks this component for an update.
 	o.compoCtx.Update()
@@ -108,19 +112,10 @@ func (o *Operation) SetProject(id uuid.UUID) {
 func (o *Operation) sceneKey() string { return sceneStorageKey + ":" + o.projectID.String() }
 
 func (o *Operation) reload(ctx app.Context, targets eventlog.ReloadTargets) {
-	if targets.LibraryPins {
-		o.loadWidgetTypes(ctx)
-	}
-	if targets.Scenes {
-		o.loadScenes(ctx)
-	}
-	// Only the selected Scene's Widgets are shown; a Scene's own state does
-	// not change with its Widgets'.
-	if targets.WidgetsOf(o.selectedSceneID) {
-		o.loadWidgets(ctx)
-	}
-	if targets.Tags {
-		o.loadTags(ctx)
+	// Only the running Revision is read here: a Draft or Library event changes
+	// nothing until a Deploy makes a Revision (task 35, Q1/Q3).
+	if targets.Revision {
+		o.loadRevision(ctx)
 	}
 }
 
@@ -130,12 +125,15 @@ func (o *Operation) selectScene(ctx app.Context, sceneID uuid.UUID) {
 	}
 	o.selectedSceneID = sceneID
 	uiutil.StoreID(ctx, o.sceneKey(), sceneID)
-	o.loadWidgets(ctx)
+	o.loadWidgets()
 }
 
 func (o *Operation) Render() app.UI {
 	if o.content == nil {
 		return uiutil.NoProject()
+	}
+	if !o.deployed {
+		return renderNotDeployed()
 	}
 	return app.Div().
 		Style("display", "flex").
@@ -207,7 +205,7 @@ func (o *Operation) renderScene() app.UI {
 	}
 
 	var widgets []apiv0.WidgetResponse
-	if o.widgetsSceneID == sc.ID {
+	if o.selectedSceneID == sc.ID {
 		widgets = o.widgets
 	}
 	return &livescene.View{
@@ -222,4 +220,28 @@ func (o *Operation) renderScene() app.UI {
 
 func (o *Operation) findScene(id uuid.UUID) (apiv0.SceneResponse, bool) {
 	return uiutil.FindByID(o.scenes, id, uiutil.SceneID)
+}
+
+// renderNotDeployed is Operation's empty state: the Project runs no Revision,
+// so there is no configuration to show. The Draft is deliberately not shown in
+// its place: it is not what the plant runs.
+func renderNotDeployed() app.UI {
+	return app.Div().
+		Attr("data-operation-not-deployed", "true").
+		Style("flex", "1").
+		Style("display", "flex").
+		Style("flex-direction", "column").
+		Style("align-items", "center").
+		Style("justify-content", "center").
+		Style("gap", "6px").
+		Style("color", "var(--text-muted)").
+		Body(
+			app.Div().
+				Style("font-size", "15px").
+				Style("font-weight", "600").
+				Text("Project is not deployed"),
+			app.Div().
+				Style("font-size", "13px").
+				Text("Deploy its Draft from the Project mode to see its scenes here."),
+		)
 }

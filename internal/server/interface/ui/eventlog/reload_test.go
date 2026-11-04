@@ -20,29 +20,31 @@ func TestReloadTargetsFor(t *testing.T) {
 		{apiv0.Event{Type: apiv0.EventWidgetTypeDeleted}, ReloadTargets{WidgetTypes: true, Libraries: true}},
 		{apiv0.Event{Type: apiv0.EventLibraryReleased}, ReloadTargets{WidgetTypes: true, Libraries: true}},
 		{apiv0.Event{Type: apiv0.EventLibraryUpdated}, ReloadTargets{WidgetTypes: true, Libraries: true}},
-		{apiv0.Event{Type: apiv0.EventLibraryPinUpdated}, ReloadTargets{LibraryPins: true}},
-		{apiv0.Event{Type: apiv0.EventSceneCreated}, ReloadTargets{Scenes: true}},
-		{apiv0.Event{Type: apiv0.EventSceneUpdated}, ReloadTargets{Scenes: true}},
-		{apiv0.Event{Type: apiv0.EventSceneDeleted}, ReloadTargets{Scenes: true}},
-		{apiv0.Event{Type: apiv0.EventWidgetCreated, SceneID: sceneID.String()}, ReloadTargets{Scene: sceneID}},
-		{apiv0.Event{Type: apiv0.EventWidgetUpdated, SceneID: sceneID.String()}, ReloadTargets{Scene: sceneID}},
-		{apiv0.Event{Type: apiv0.EventWidgetDeleted, SceneID: sceneID.String()}, ReloadTargets{Scene: sceneID}},
+		{apiv0.Event{Type: apiv0.EventLibraryPinUpdated}, ReloadTargets{LibraryPins: true, Deploy: true}},
+		{apiv0.Event{Type: apiv0.EventSceneCreated}, ReloadTargets{Scenes: true, Deploy: true}},
+		{apiv0.Event{Type: apiv0.EventSceneUpdated}, ReloadTargets{Scenes: true, Deploy: true}},
+		{apiv0.Event{Type: apiv0.EventSceneDeleted}, ReloadTargets{Scenes: true, Deploy: true}},
+		{apiv0.Event{Type: apiv0.EventWidgetCreated, SceneID: sceneID.String()}, ReloadTargets{Scene: sceneID, Deploy: true}},
+		{apiv0.Event{Type: apiv0.EventWidgetUpdated, SceneID: sceneID.String()}, ReloadTargets{Scene: sceneID, Deploy: true}},
+		{apiv0.Event{Type: apiv0.EventWidgetDeleted, SceneID: sceneID.String()}, ReloadTargets{Scene: sceneID, Deploy: true}},
 		// Without its Scene (an older server) or with one that does not parse.
-		{apiv0.Event{Type: apiv0.EventWidgetUpdated}, ReloadTargets{Scenes: true, Widgets: true}},
-		{apiv0.Event{Type: apiv0.EventWidgetDeleted, SceneID: "not-a-uuid"}, ReloadTargets{Scenes: true, Widgets: true}},
-		{apiv0.Event{Type: apiv0.EventTagCreated}, ReloadTargets{Tags: true}},
+		{apiv0.Event{Type: apiv0.EventWidgetUpdated}, ReloadTargets{Scenes: true, Widgets: true, Deploy: true}},
+		{apiv0.Event{Type: apiv0.EventWidgetDeleted, SceneID: "not-a-uuid"}, ReloadTargets{Scenes: true, Widgets: true, Deploy: true}},
+		{apiv0.Event{Type: apiv0.EventTagCreated}, ReloadTargets{Tags: true, Deploy: true}},
 		{apiv0.Event{Type: apiv0.EventTagUpdated, Tag: &apiv0.TagResponse{ID: sceneID}}, ReloadTargets{}},
 		{apiv0.Event{Type: apiv0.EventTagUpdated}, ReloadTargets{Tags: true}},
-		{apiv0.Event{Type: apiv0.EventTagDeleted}, ReloadTargets{Tags: true}},
+		{apiv0.Event{Type: apiv0.EventTagDeleted}, ReloadTargets{Tags: true, Deploy: true}},
 		{apiv0.Event{Type: EventResync}, ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true}},
-		{apiv0.Event{Type: EventProjectResync}, ReloadTargets{LibraryPins: true, Scenes: true, Widgets: true, Tags: true}},
-		{apiv0.Event{Type: apiv0.EventProjectCreated}, ReloadTargets{Projects: true}},
-		{apiv0.Event{Type: apiv0.EventProjectUpdated}, ReloadTargets{Projects: true}},
-		{apiv0.Event{Type: apiv0.EventProjectDeleted}, ReloadTargets{Projects: true}},
-		// The UI shows no Devices, Environments and pairs yet (task 66).
-		{apiv0.Event{Type: apiv0.EventDeviceCreated}, ReloadTargets{}},
-		{apiv0.Event{Type: apiv0.EventEnvironmentUpdated}, ReloadTargets{}},
-		{apiv0.Event{Type: apiv0.EventEnvironmentDeviceDeleted}, ReloadTargets{}},
+		{apiv0.Event{Type: EventProjectResync}, ReloadTargets{LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Revision: true}},
+		{apiv0.Event{Type: apiv0.EventProjectCreated}, ReloadTargets{Projects: true, Deploy: true}},
+		{apiv0.Event{Type: apiv0.EventProjectUpdated}, ReloadTargets{Projects: true, Deploy: true}},
+		{apiv0.Event{Type: apiv0.EventProjectDeleted}, ReloadTargets{Projects: true, Deploy: true}},
+		// The UI shows no Devices, Environments and pairs yet (task 66), but
+		// they are part of the ProjectFile: the deployment state is stale.
+		{apiv0.Event{Type: apiv0.EventDeviceCreated}, ReloadTargets{Deploy: true}},
+		{apiv0.Event{Type: apiv0.EventEnvironmentUpdated}, ReloadTargets{Deploy: true}},
+		{apiv0.Event{Type: apiv0.EventEnvironmentDeviceDeleted}, ReloadTargets{Deploy: true}},
+		{apiv0.Event{Type: apiv0.EventRevisionCreated}, ReloadTargets{Revision: true, Deploy: true}},
 		{apiv0.Event{Type: apiv0.EventClientConnected}, ReloadTargets{}},
 
 		{apiv0.Event{Type: apiv0.EventSystemReady}, ReloadTargets{}},
@@ -56,22 +58,11 @@ func TestReloadTargetsFor(t *testing.T) {
 	}
 }
 
-// notShownYet are the event types of the content the UI does not show yet:
-// Devices, Environments and their pairs are API only until task 66, and the
-// running Revision is shown by the Operation and Project modes in task 35,
-// part 5; until then no list is stale on their events.
-var notShownYet = map[string]bool{
-	apiv0.EventDeviceCreated:            true,
-	apiv0.EventDeviceUpdated:            true,
-	apiv0.EventDeviceDeleted:            true,
-	apiv0.EventEnvironmentCreated:       true,
-	apiv0.EventEnvironmentUpdated:       true,
-	apiv0.EventEnvironmentDeleted:       true,
-	apiv0.EventEnvironmentDeviceCreated: true,
-	apiv0.EventEnvironmentDeviceUpdated: true,
-	apiv0.EventEnvironmentDeviceDeleted: true,
-	apiv0.EventRevisionCreated:          true,
-}
+// notShownYet are the event types that change no server-backed list of the
+// UI: the modes apply them themselves (the running Revision is reloaded by
+// Operation on revision_created), or they belong to content it does not show
+// yet (task 66 shows Devices, Environments and their pairs).
+var notShownYet = map[string]bool{}
 
 // TestReloadTargetsFor_CoversEveryKnownEvent guards the table against a new
 // aggregate event type added to the event log but not routed.

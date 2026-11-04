@@ -2,6 +2,10 @@
 
 A Library (WidgetTypes, later ComputationTypes and Themes) belongs to an Organization, lives outside any Project and may be public to the whole server. It is edited in its own Draft, with the same EditLock and DraftChange mechanics as a Project's Draft, and becomes usable only through Release, which produces an immutable, numbered Library Release. A Project's Draft pins at most one Library Release per Library, for any number of Libraries. On Deploy, the content the Project actually uses is copied from the pinned releases into the Revision and the ProjectFile, so a Runtime node and History never depend on a Library. We chose release-level versioning over versioning each WidgetType, so that one Project never mixes two versions of one type and a release can be reviewed as a whole. We chose to copy into the Revision rather than reference it, so that the ProjectFile stays portable and a Rollback or playback cannot be broken by later Library changes.
 
+## Amendment 2026-11-04: the ProjectFile also names the pins
+
+The ProjectFile carries the list of Library Pins the Draft used — the Library and the release number — beside the WidgetType copies. The pins are provenance, not configuration a Runtime node reads: they let a Discard restore the Project's pins to the Revision it runs, and they say from which release each copy came. A ProjectFile with no pins is legitimate: a Project may use no Library.
+
 ## Considered Options
 
 - Library inside each Project (copy on import): rejected. No reuse; fixing a WidgetType means editing every Project by hand.

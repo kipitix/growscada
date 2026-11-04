@@ -47,6 +47,16 @@ type Project struct {
 	scenes      []apiv0.SceneResponse
 	widgets     []apiv0.WidgetResponse
 	tags        tagstate.Tags
+	// deployPreview is the deployment state of the project: the Revision it
+	// runs and whether the Draft differs from it. deployLoaded is false until
+	// the first answer, so nothing is shown before it.
+	deployPreview apiv0.DeployPreviewResponse
+	deployLoaded  bool
+	// deployDialog is true while the Deploy confirmation is open; deploying
+	// and discarding mark the request in flight.
+	deployDialog bool
+	deploying    bool
+	discarding   bool
 	// sceneVersions holds the version each write of a Scene or its Widgets
 	// states; the Version and SceneVersion of the lists above are not read.
 	// The selected Scene's is learned with its Widgets (observeSceneVersion).
@@ -63,6 +73,7 @@ type Project struct {
 	scenesReloader      uiutil.Reloader
 	widgetsReloader     uiutil.Reloader
 	tagsReloader        uiutil.Reloader
+	deployReloader      uiutil.Reloader
 	// staleScenes are the Scenes to reread (loadScene) once the reread in
 	// flight on staleScenesReloader is done.
 	staleScenes         map[uuid.UUID]struct{}
@@ -190,6 +201,7 @@ func (p *Project) OnMount(ctx app.Context) {
 		p.loadWidgets(ctx) // load widgets for the restored scene immediately
 	}
 	p.loadTags(ctx)
+	p.loadDeploy(ctx)
 
 	p.handleServerEvents(ctx)
 }
@@ -223,6 +235,8 @@ func (p *Project) SetProject(id uuid.UUID) {
 	ctx := p.compoCtx
 	p.scenes, p.widgets, p.tags = nil, nil, tagstate.Tags{}
 	p.widgetTypes, p.pins = nil, nil
+	p.deployPreview, p.deployLoaded = apiv0.DeployPreviewResponse{}, false
+	p.deployDialog, p.deploying, p.discarding = false, false, false
 	p.sceneVersions.Forget()
 	p.sceneStates.Forget()
 	clear(p.staleScenes)
@@ -318,6 +332,7 @@ func (p *Project) Render() app.UI {
 		Style("min-height", "0").
 		Style("overflow", "hidden").
 		Body(
+			p.renderDeployBar(),
 			p.renderSubTabs(),
 			app.If(p.activeSubTab == subTabScenes, func() app.UI {
 				return p.renderScenesContent()
