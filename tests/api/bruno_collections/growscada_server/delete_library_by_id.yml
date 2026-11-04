@@ -1,7 +1,7 @@
 info:
   name: delete library by id
   type: http
-  seq: 60
+  seq: 61
 
 http:
   method: DELETE

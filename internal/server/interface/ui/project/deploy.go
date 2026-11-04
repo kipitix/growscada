@@ -161,7 +161,7 @@ func (p *Project) deployButton(label, title string, enabled bool, onClick func(a
 		Style("background", "var(--bg)").
 		Style("color", "var(--text)").
 		Text(label).
-		OnClick(func(ctx app.Context, e app.Event) { onClick(ctx) })
+		OnClick(func(ctx app.Context, e app.Event) { onClick(ctx) }, app.EventScope(label))
 }
 
 // renderDeployDialog is the confirmation over the deploy bar: what the Deploy

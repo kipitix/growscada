@@ -1,7 +1,7 @@
 info:
   name: get device config (gateway)
   type: http
-  seq: 70
+  seq: 71
 
 http:
   method: GET

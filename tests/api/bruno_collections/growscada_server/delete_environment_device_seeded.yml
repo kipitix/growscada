@@ -1,7 +1,7 @@
 info:
   name: delete the seeded environment device
   type: http
-  seq: 93
+  seq: 94
 
 http:
   method: DELETE

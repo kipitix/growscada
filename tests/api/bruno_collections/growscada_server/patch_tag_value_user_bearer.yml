@@ -1,7 +1,7 @@
 info:
   name: patch tag value with a user bearer
   type: http
-  seq: 87
+  seq: 88
 
 http:
   method: PATCH

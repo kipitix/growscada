@@ -1,7 +1,7 @@
 info:
   name: patch tag value with an unknown token
   type: http
-  seq: 86
+  seq: 87
 
 http:
   method: PATCH

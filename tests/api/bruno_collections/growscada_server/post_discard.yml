@@ -1,7 +1,7 @@
 info:
   name: post discard
   type: http
-  seq: 36
+  seq: 53
 
 http:
   method: POST

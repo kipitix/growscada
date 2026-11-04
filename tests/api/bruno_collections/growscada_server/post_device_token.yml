@@ -1,7 +1,7 @@
 info:
   name: post device token
   type: http
-  seq: 81
+  seq: 82
 
 http:
   method: POST

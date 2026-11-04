@@ -1,7 +1,7 @@
 info:
   name: get device token
   type: http
-  seq: 68
+  seq: 69
 
 http:
   method: GET
