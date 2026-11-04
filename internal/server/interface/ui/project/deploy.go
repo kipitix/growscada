@@ -73,8 +73,11 @@ func (p *Project) selectRevision(ctx app.Context, number int) {
 }
 
 // isCurrentRevision reports whether number is the Revision the project runs.
+// It is the newest of the list the dialog shows: the list is where the row is
+// read from, so the mark and the offer to roll back agree even before the
+// Deploy preview has answered.
 func (p *Project) isCurrentRevision(number int) bool {
-	return p.deployPreview.CurrentRevision != nil && p.deployPreview.CurrentRevision.Number == number
+	return len(p.revisions) > 0 && p.revisions[0].Number == number
 }
 
 // rollbackRevision confirms rolling the project back to the selected Revision
@@ -156,7 +159,7 @@ func (p *Project) closeDeployDialog() {
 // deploy confirms the open dialog: it makes the Draft the new Revision. The
 // server's refusal (nothing to deploy, the Draft being discarded) is a toast.
 func (p *Project) deploy(ctx app.Context) {
-	if p.content == nil || p.deploying || p.discarding {
+	if p.content == nil || p.deploying || p.discarding || p.rollingBack {
 		return
 	}
 	p.deploying = true
@@ -185,7 +188,7 @@ func (p *Project) deploy(ctx app.Context) {
 // browser's confirmation. Without a Revision the server refuses (409), which
 // is the toast.
 func (p *Project) discard(ctx app.Context) {
-	if p.content == nil || p.discarding || p.deploying {
+	if p.content == nil || p.discarding || p.deploying || p.rollingBack {
 		return
 	}
 	message := "Discard the Draft of this project and restore it to the Revision it runs?"
@@ -237,10 +240,10 @@ func (p *Project) renderDeployBar() app.UI {
 		p.deployButton("Revisions", "The Revisions of the project", !p.deploying && !p.discarding && !p.rollingBack, func(ctx app.Context) {
 			p.openRevisionsDialog(ctx)
 		}),
-		p.deployButton("Deploy", "Deploy the Draft as a new Revision", !p.deploying && !p.discarding, func(ctx app.Context) {
+		p.deployButton("Deploy", "Deploy the Draft as a new Revision", !p.deploying && !p.discarding && !p.rollingBack, func(ctx app.Context) {
 			p.openDeployDialog(ctx)
 		}),
-		p.deployButton("Discard", "Reset the Draft to the Revision the project runs", !p.discarding && !p.deploying, func(ctx app.Context) {
+		p.deployButton("Discard", "Reset the Draft to the Revision the project runs", !p.discarding && !p.deploying && !p.rollingBack, func(ctx app.Context) {
 			p.discard(ctx)
 		}),
 	)
@@ -332,7 +335,7 @@ func (p *Project) renderDeployDialog() app.UI {
 	if !preview.Unchanged {
 		buttons = append(buttons, app.Button().
 			Attr("data-deploy-confirm", "true").
-			Disabled(p.deploying).
+			Disabled(p.deploying || p.rollingBack).
 			Style("padding", "4px 12px").
 			Style("font-size", "13px").
 			Style("cursor", "pointer").

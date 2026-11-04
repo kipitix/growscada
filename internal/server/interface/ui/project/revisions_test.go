@@ -166,3 +166,18 @@ func TestRevisionsDialog_ReloadsOnRevisionCreated(t *testing.T) {
 		t.Errorf("the open list did not pick up the new Revision: %s", html)
 	}
 }
+
+// TestDeploy_IsRefusedWhileARollbackRuns: the bar disables Deploy during a
+// Rollback, and the handler refuses it too, so the two writes of the running
+// configuration never race.
+func TestDeploy_IsRefusedWhileARollbackRuns(t *testing.T) {
+	url, api := newServer(t)
+	deployTwice(t, api)
+	f := mount(t, url, api)
+
+	f.p.rollingBack = true
+	f.p.deploy(f.p.compoCtx)
+	if f.p.deploying {
+		t.Error("a Deploy started while a Rollback was running")
+	}
+}
