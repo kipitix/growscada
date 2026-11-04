@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -21,7 +22,7 @@ import (
 
 func cleanOutbox(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM outbox"); err != nil {
+	if _, err := testDB.ExecContext(editlock.System(context.Background()), "DELETE FROM outbox"); err != nil {
 		t.Fatalf("cleanOutbox: %v", err)
 	}
 }
@@ -29,7 +30,7 @@ func cleanOutbox(t *testing.T) {
 // outboxTypes returns the types of the events in the outbox, oldest first.
 func outboxTypes(t *testing.T) []string {
 	t.Helper()
-	rows, err := testDB.QueryContext(context.Background(), "SELECT type FROM outbox ORDER BY seq")
+	rows, err := testDB.QueryContext(editlock.System(context.Background()), "SELECT type FROM outbox ORDER BY seq")
 	if err != nil {
 		t.Fatalf("read outbox: %v", err)
 	}
@@ -81,7 +82,7 @@ func TestSave_WritesRecordedEventsToOutbox(t *testing.T) {
 	cleanTags(t)
 	cleanOutbox(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	saved := mustSaveTag(t, repo, createTag(t, repo, "level"))
 	if len(saved.PendingEvents()) != 0 {
@@ -103,7 +104,7 @@ func TestSave_WritesRecordedEventsToOutbox(t *testing.T) {
 func TestAppend_RowOfContentEventNamesItsProject(t *testing.T) {
 	cleanTags(t)
 	cleanOutbox(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	tags := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	if _, err := tags.Save(ctx, createTag(t, tags, "pressure")); err != nil {
 		t.Fatalf("Save tag: %v", err)
@@ -145,7 +146,7 @@ func TestSave_RolledBack_LeavesNothingInOutboxAndDeliversNothing(t *testing.T) {
 	cleanTags(t)
 	cleanScenes(t)
 	cleanOutbox(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
 	mustSaveTag(t, tagRepo, makeTag(t, "taken", tagRepo))
@@ -190,7 +191,7 @@ func TestSave_RolledBack_LeavesNothingInOutboxAndDeliversNothing(t *testing.T) {
 func TestDispatcher_DrainOnce_DeliversInCommitOrderAndEmptiesOutbox(t *testing.T) {
 	cleanTags(t)
 	cleanOutbox(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 
 	a := mustSaveTag(t, repo, createTag(t, repo, "a"))
@@ -228,7 +229,7 @@ func TestDispatcher_DrainOnce_DeliversInCommitOrderAndEmptiesOutbox(t *testing.T
 func TestDispatcher_Run_DeliversOnNotify(t *testing.T) {
 	cleanTags(t)
 	cleanOutbox(t)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(editlock.System(context.Background()))
 	defer cancel()
 
 	var delivered recorder
@@ -254,7 +255,7 @@ func TestDispatcher_Run_DeliversOnNotify(t *testing.T) {
 func TestDispatcher_UndecodableRow_IsDroppedAndDoesNotBlock(t *testing.T) {
 	cleanTags(t)
 	cleanOutbox(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	if _, err := testDB.ExecContext(ctx, `INSERT INTO outbox (type, payload) VALUES ('no_such_event', '{}')`); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
@@ -277,7 +278,7 @@ func TestDispatcher_UndecodableRow_IsDroppedAndDoesNotBlock(t *testing.T) {
 // write would.
 func beginWithID(t *testing.T) *sql.Tx {
 	t.Helper()
-	tx, err := testDB.BeginTx(context.Background(), nil)
+	tx, err := testDB.BeginTx(editlock.System(context.Background()), nil)
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}
@@ -297,7 +298,7 @@ func appendDeleted(t *testing.T, ctx context.Context, tx *sql.Tx, tagID id.ID[ta
 
 func TestAppend_WritersDoNotWaitForEachOther(t *testing.T) {
 	cleanOutbox(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	open := beginWithID(t)
 	appendDeleted(t, ctx, open, id.NewID[tag.Tag]())
@@ -318,7 +319,7 @@ func TestAppend_WritersDoNotWaitForEachOther(t *testing.T) {
 
 func TestDispatcher_HoldsBackRowsUntilOlderTransactionsEnd(t *testing.T) {
 	cleanOutbox(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	first, second := id.NewID[tag.Tag](), id.NewID[tag.Tag]()
 
 	older := beginWithID(t)
@@ -353,7 +354,7 @@ func TestDispatcher_HoldsBackRowsUntilOlderTransactionsEnd(t *testing.T) {
 func TestDispatcher_Run_DeliversHeldBackRowsWhenOlderTransactionRollsBack(t *testing.T) {
 	cleanTags(t)
 	cleanOutbox(t)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(editlock.System(context.Background()))
 	defer cancel()
 
 	var delivered recorder
@@ -390,7 +391,7 @@ func TestDispatcher_DrainOnce_StoppedMidBatch_DeletesDeliveredRowAndStops(t *tes
 		mustSaveTag(t, repo, createTag(t, repo, name))
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(editlock.System(context.Background()))
 	var delivered recorder
 	n, err := outbox.NewDispatcher(testDB, func(e event.Event) {
 		delivered.deliver(e)
@@ -403,7 +404,7 @@ func TestDispatcher_DrainOnce_StoppedMidBatch_DeletesDeliveredRowAndStops(t *tes
 		t.Fatalf("outbox %v, want the 2 undelivered rows", got)
 	}
 
-	n, err = outbox.NewDispatcher(testDB, delivered.deliver).DrainOnce(context.Background())
+	n, err = outbox.NewDispatcher(testDB, delivered.deliver).DrainOnce(editlock.System(context.Background()))
 	if err != nil || n != 2 {
 		t.Fatalf("second DrainOnce delivered %d (err %v), want 2", n, err)
 	}
@@ -414,7 +415,7 @@ func TestDispatcher_DrainOnce_StoppedMidBatch_DeletesDeliveredRowAndStops(t *tes
 
 func TestDispatcher_DrainOnce_DeliversMoreThanOneBatch(t *testing.T) {
 	cleanOutbox(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	const total = 250 // more than two batches of the dispatcher
 
 	tx, err := testDB.BeginTx(ctx, nil)

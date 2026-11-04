@@ -1,11 +1,14 @@
 info:
   name: delete widget type by id
   type: http
-  seq: 66
+  seq: 76
 
 http:
   method: DELETE
   url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/widget-types/{{WIDGET_TYPE_ID}}
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
   auth: inherit
 
 docs: |

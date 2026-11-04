@@ -1,0 +1,50 @@
+info:
+  name: post edit lock (check out)
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/edit-lock
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{OTHER_CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "bruno"
+      }
+  auth: inherit
+
+docs: |
+  Check out: takes the Draft's EditLock for the client named by the
+  X-GrowSCADA-Client header, under the declared name (ADR 0015). 201 with the
+  new lock and its version. The lock is coordination, not authentication: the
+  name is not checked, and any client may take the lock over.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.held'
+      operator: eq
+      value: 'true'
+    - expression: 'res.body.holder.name'
+      operator: eq
+      value: '"bruno"'
+    - expression: 'res.body.holder.key'
+      operator: eq
+      value: '"{{OTHER_CLIENT_KEY}}"'
+    - expression: 'res.body.version'
+      operator: eq
+      value: '1'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

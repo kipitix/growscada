@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -55,7 +56,7 @@ func TestWidgetTypeNextID_ReturnsUniqueIDs(t *testing.T) {
 func TestWidgetTypeSave_NewWidgetType_InsertsSuccessfully(t *testing.T) {
 	cleanWidgetTypes(t)
 	repo := newWidgetTypeRepo(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	wt := makeWidgetType(t, "gauge", nil, repo)
 	_, err := repo.Save(ctx, wt)
@@ -67,7 +68,7 @@ func TestWidgetTypeSave_NewWidgetType_InsertsSuccessfully(t *testing.T) {
 func TestWidgetTypeSave_NewWidgetType_ReturnsCommittedVersion(t *testing.T) {
 	cleanWidgetTypes(t)
 	repo := newWidgetTypeRepo(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	wt := makeWidgetType(t, "gauge", nil, repo)
 	saved, err := repo.Save(ctx, wt)
@@ -82,7 +83,7 @@ func TestWidgetTypeSave_NewWidgetType_ReturnsCommittedVersion(t *testing.T) {
 func TestWidgetTypeSave_DuplicateID_ReturnsError(t *testing.T) {
 	cleanWidgetTypes(t)
 	repo := newWidgetTypeRepo(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	wt := makeWidgetType(t, "gauge", nil, repo)
 	if _, err := repo.Save(ctx, wt); err != nil {
@@ -103,7 +104,7 @@ func TestWidgetTypeSave_DuplicateID_ReturnsError(t *testing.T) {
 func TestWidgetTypeSave_ExistingWidgetType_VersionIsIncremented(t *testing.T) {
 	cleanWidgetTypes(t)
 	repo := newWidgetTypeRepo(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	wt := makeWidgetType(t, "gauge", nil, repo)
 	saved, _ := repo.Save(ctx, wt)
@@ -128,7 +129,7 @@ func TestWidgetTypeSave_ExistingWidgetType_VersionIsIncremented(t *testing.T) {
 func TestWidgetTypeFindByID_NotFound_ReturnsErrWidgetTypeNotFound(t *testing.T) {
 	cleanWidgetTypes(t)
 	repo := newWidgetTypeRepo(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	nonExistentID := id.NewID(id.IDWithUUID[library.WidgetType](uuid.New()))
 	_, err := repo.FindByID(ctx, nonExistentID)
@@ -142,7 +143,7 @@ func TestWidgetTypeFindByID_NotFound_ReturnsErrWidgetTypeNotFound(t *testing.T) 
 func TestWidgetTypeSave_WithInputPorts_RoundTripsCorrectly(t *testing.T) {
 	cleanWidgetTypes(t)
 	repo := newWidgetTypeRepo(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	p1Name, _ := library.NewInputPortName("temperature")
 	p2Name, _ := library.NewInputPortName("pressure")
@@ -189,7 +190,7 @@ func TestWidgetTypeSave_WithInputPorts_RoundTripsCorrectly(t *testing.T) {
 func TestWidgetTypeSave_EmptyInputPorts_RoundTripsCorrectly(t *testing.T) {
 	cleanWidgetTypes(t)
 	repo := newWidgetTypeRepo(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	wt := makeWidgetType(t, "simple", nil, repo)
 	saved, err := repo.Save(ctx, wt)
@@ -209,7 +210,7 @@ func TestWidgetTypeSave_EmptyInputPorts_RoundTripsCorrectly(t *testing.T) {
 func TestWidgetTypeSave_InputPortsAreUpdated(t *testing.T) {
 	cleanWidgetTypes(t)
 	repo := newWidgetTypeRepo(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	wt := makeWidgetType(t, "updatable", nil, repo)
 	saved, _ := repo.Save(ctx, wt)
@@ -247,7 +248,7 @@ func TestWidgetTypeSave_InputPortsAreUpdated(t *testing.T) {
 func TestWidgetTypeDelete_NotFound_ReturnsErrWidgetTypeNotFound(t *testing.T) {
 	cleanWidgetTypes(t)
 	repo := newWidgetTypeRepo(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	wt := makeWidgetType(t, "never-saved", nil, repo)
 	committed, _ := library.ReconstituteWidgetType(wt.ID(), wt.LibraryID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.DefaultSize(), nil, version.Committed[library.WidgetType]())
@@ -260,7 +261,7 @@ func TestWidgetTypeDelete_NotFound_ReturnsErrWidgetTypeNotFound(t *testing.T) {
 func TestWidgetTypeDelete_Existing_RemovesIt(t *testing.T) {
 	cleanWidgetTypes(t)
 	repo := newWidgetTypeRepo(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	saved, err := repo.Save(ctx, makeWidgetType(t, "temp-gauge", nil, repo))
 	if err != nil {
@@ -278,7 +279,7 @@ func TestWidgetTypeDelete_Existing_RemovesIt(t *testing.T) {
 func TestWidgetTypeDelete_StaleVersion_ReturnsConflict(t *testing.T) {
 	cleanWidgetTypes(t)
 	repo := newWidgetTypeRepo(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	stale, err := repo.Save(ctx, makeWidgetType(t, "temp-gauge", nil, repo))
 	if err != nil {
@@ -298,7 +299,7 @@ func TestWidgetTypeFindAll_CreationOrderEvenAfterUpdates(t *testing.T) {
 	// row; the Library must keep the creation order however often types change.
 	cleanWidgetTypes(t)
 	repo := newWidgetTypeRepo(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	var created []library.WidgetType
 	for _, name := range []string{"charlie", "alpha", "bravo"} {
@@ -346,7 +347,7 @@ func TestWidgetTypeDelete_UsedByWidget_RemovesIt(t *testing.T) {
 	cleanScenes(t)
 	cleanWidgetTypes(t)
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	w := makeWidget(t, sceneRepo, "w1")
 	sc := mustSave(t, sceneRepo, withWidgets(makeScene(t, sceneRepo, "scene-1"), w))
@@ -372,7 +373,7 @@ func TestWidgetTypeSave_NameTakenInTheLibrary_ReturnsErrWidgetTypeNameTaken(t *t
 	cleanWidgetTypes(t)
 	repo := newWidgetTypeRepo(t)
 	other := newWidgetTypeRepo(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	if _, err := repo.Save(ctx, makeWidgetType(t, "gauge", nil, repo)); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -391,7 +392,7 @@ func TestWidgetTypeSave_NameTakenInTheLibrary_ReturnsErrWidgetTypeNameTaken(t *t
 // only then; the reads of a repository see its library's types alone.
 func TestWidgetTypeWrites_FollowTheLibrary(t *testing.T) {
 	cleanWidgetTypes(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	repo := newWidgetTypeRepo(t)
 	saved, err := repo.Save(ctx, makeWidgetType(t, "gauge", nil, repo))
 	if err != nil {

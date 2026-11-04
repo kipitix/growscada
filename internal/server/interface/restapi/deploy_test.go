@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 )
 
 func TestDeploy_RevisionPreviewAndTagStates(t *testing.T) {
@@ -187,12 +188,12 @@ func TestRevisions_OfADeletedProject_Are404(t *testing.T) {
 	if rec := serve(router, http.MethodPost, mainPath+"/deploy", nil); rec.Code != http.StatusCreated {
 		t.Fatalf("POST deploy: %d %s", rec.Code, rec.Body)
 	}
-	if _, err := testDB().ExecContext(context.Background(),
+	if _, err := testDB().ExecContext(editlock.System(context.Background()),
 		"UPDATE projects SET deleted_at = now() WHERE id = '"+mainProject.String()+"'"); err != nil {
 		t.Fatalf("mark the project deleted: %v", err)
 	}
 	t.Cleanup(func() {
-		if _, err := testDB().ExecContext(context.Background(),
+		if _, err := testDB().ExecContext(editlock.System(context.Background()),
 			"UPDATE projects SET deleted_at = NULL WHERE id = '"+mainProject.String()+"'"); err != nil {
 			t.Errorf("clear the deletion mark: %v", err)
 		}
@@ -212,7 +213,7 @@ func TestRevisions_OfADeletedProject_Are404(t *testing.T) {
 func TestDeploy_Discard(t *testing.T) {
 	cleanProjectsRest(t)
 	t.Cleanup(func() {
-		if _, err := testDB().ExecContext(context.Background(),
+		if _, err := testDB().ExecContext(editlock.System(context.Background()),
 			"UPDATE projects SET discarding = FALSE WHERE id = '"+mainProject.String()+"'"); err != nil {
 			t.Errorf("clear the Discard mark: %v", err)
 		}

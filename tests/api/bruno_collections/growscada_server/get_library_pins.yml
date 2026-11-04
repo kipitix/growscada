@@ -1,7 +1,7 @@
 info:
   name: get library pins
   type: http
-  seq: 16
+  seq: 26
 
 http:
   method: GET

@@ -1,7 +1,7 @@
 info:
   name: get widget by id
   type: http
-  seq: 22
+  seq: 32
 
 http:
   method: GET

@@ -1,11 +1,14 @@
 info:
   name: post library discard
   type: http
-  seq: 67
+  seq: 77
 
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/discard
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
   auth: inherit
 
 docs: |

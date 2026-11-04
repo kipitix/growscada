@@ -41,6 +41,12 @@ type Event struct {
 	// the stream of a Project carries the event to that Project's readers.
 	Revision   int    `json:"revision,omitempty"`
 	DeployedAt string `json:"deployed_at,omitempty"`
+	// EditLock is the state of the Draft's EditLock on edit_lock_acquired,
+	// edit_lock_released, edit_lock_taken_over and edit_lock_expired: who
+	// holds it now, since when, and its new Version. Those events go to the
+	// stream of the Project whose Draft it is (or to the server's, for a
+	// Library's) and ID is that Project's.
+	EditLock *EditLockResponse `json:"edit_lock,omitempty"`
 }
 
 // The types of Event: the names the event stream publishes (ADR 0009).
@@ -87,6 +93,13 @@ const (
 	EventEnvironmentDeviceDeleted = "environment_device_deleted"
 
 	EventRevisionCreated = "revision_created"
+
+	// The EditLock's events (ADR 0015): a Check out, a Check in, a takeover,
+	// and the reaper freeing a lock whose holder stopped being seen.
+	EventEditLockAcquired  = "edit_lock_acquired"
+	EventEditLockReleased  = "edit_lock_released"
+	EventEditLockTakenOver = "edit_lock_taken_over"
+	EventEditLockExpired   = "edit_lock_expired"
 )
 
 // EventTypes returns every type of Event of this version of the contract.
@@ -105,5 +118,6 @@ func EventTypes() []string {
 		EventEnvironmentCreated, EventEnvironmentUpdated, EventEnvironmentDeleted,
 		EventEnvironmentDeviceCreated, EventEnvironmentDeviceUpdated, EventEnvironmentDeviceDeleted,
 		EventRevisionCreated,
+		EventEditLockAcquired, EventEditLockReleased, EventEditLockTakenOver, EventEditLockExpired,
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
@@ -23,6 +24,7 @@ func newDeployService() (application.DeployService, application.RuntimeNode) {
 		content,
 		application.NewProjectFileBuilder(content),
 		node,
+		application.NewEditLockService(content, repositories.NewEditLockRepositoryPostgres(testDB)),
 	), node
 }
 
@@ -47,7 +49,7 @@ func newDiscardPolicy() application.Policy {
 // the dispatcher and the runner would.
 func runDiscard(t *testing.T, projectID uuid.UUID) {
 	t.Helper()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	if _, err := newDiscardService().Discard(ctx, projectID); err != nil {
 		t.Fatalf("Discard: %v", err)
 	}
@@ -60,7 +62,7 @@ func runDiscard(t *testing.T, projectID uuid.UUID) {
 // starts from none. The Libraries and their releases stay.
 func cleanPins(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(),
+	if _, err := testDB.ExecContext(editlock.System(context.Background()),
 		"DELETE FROM engineering.library_pins WHERE project_id = $1", mainProject); err != nil {
 		t.Fatalf("cleanPins: %v", err)
 	}
@@ -69,7 +71,7 @@ func cleanPins(t *testing.T) {
 // mustCreateTag creates a Tag through the service.
 func mustCreateTag(t *testing.T, name, tagType string) appdto.Tag {
 	t.Helper()
-	created, err := newService().CreateTag(context.Background(), mainProject, appdto.CreateTagInput{Name: name, Type: tagType})
+	created, err := newService().CreateTag(editlock.System(context.Background()), mainProject, appdto.CreateTagInput{Name: name, Type: tagType})
 	if err != nil {
 		t.Fatalf("CreateTag(%s): %v", name, err)
 	}
@@ -81,7 +83,7 @@ func mustCreateTag(t *testing.T, name, tagType string) appdto.Tag {
 func TestDeploy_CreatesARevision(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	created := mustCreateTag(t, "speed", "integer")
 
 	deploy, node := newDeployService()
@@ -110,7 +112,7 @@ func TestDeploy_CreatesARevision(t *testing.T) {
 func TestDeploy_UnchangedDraft_IsRefused(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	mustCreateTag(t, "speed", "integer")
 
 	deploy, _ := newDeployService()
@@ -125,7 +127,7 @@ func TestDeploy_UnchangedDraft_IsRefused(t *testing.T) {
 func TestDeploy_AChangedWidget_IsANewRevision(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	scenes := newSceneService()
 	scene := mustCreateScene(t, scenes)
 	widget, err := scenes.CreateWidget(ctx, mainProject, scene.ID, scene.Version, testCreateWidgetInput)
@@ -168,7 +170,7 @@ func TestDeploy_WhileADiscardRuns_IsRefused(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	cleanPins(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	mustCreateTag(t, "speed", "integer")
 
 	deploy, _ := newDeployService()
@@ -181,7 +183,7 @@ func TestDeploy_WhileADiscardRuns_IsRefused(t *testing.T) {
 	// The mark is what refuses the Deploy; the policy clears it, so a failed
 	// assertion does not leave the Project marked for the tests after this one.
 	t.Cleanup(func() {
-		if err := newDiscardPolicy().Run(context.Background(), "project:"+mainProject.String()); err != nil {
+		if err := newDiscardPolicy().Run(editlock.System(context.Background()), "project:"+mainProject.String()); err != nil {
 			t.Errorf("the discard policy: %v", err)
 		}
 	})
@@ -194,7 +196,7 @@ func TestDeploy_WhileADiscardRuns_IsRefused(t *testing.T) {
 func TestDeployPreview_ReportsTheCurrentRevisionAndTheDraft(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	mustCreateTag(t, "speed", "integer")
 
 	deploy, _ := newDeployService()
@@ -224,7 +226,7 @@ func TestDiscard_WithoutARevision_IsRefused(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 
-	if _, err := newDiscardService().Discard(context.Background(), mainProject); !errors.Is(err, application.ErrNoRevisionToDiscard) {
+	if _, err := newDiscardService().Discard(editlock.System(context.Background()), mainProject); !errors.Is(err, application.ErrNoRevisionToDiscard) {
 		t.Errorf("Discard of a project never deployed: %v, want ErrNoRevisionToDiscard", err)
 	}
 }
@@ -232,7 +234,7 @@ func TestDiscard_WithoutARevision_IsRefused(t *testing.T) {
 func TestDiscard_TheDraftIsReadOnlyWhileItRuns(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	mustCreateTag(t, "speed", "integer")
 
 	deploy, _ := newDeployService()
@@ -268,7 +270,7 @@ func TestDiscard_TheDraftIsReadOnlyWhileItRuns(t *testing.T) {
 func TestDiscard_RestoresTheDraft(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	tag := mustCreateTag(t, "speed", "integer")
 	devices := newDeviceService()
@@ -352,7 +354,7 @@ func TestDiscard_RemovesADeviceAndAnEnvironmentOfTheDraft(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	cleanPins(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	deploy, _ := newDeployService()
 	if _, err := deploy.Deploy(ctx, mainProject); err != nil {
@@ -401,7 +403,7 @@ func TestDiscard_OfAPinnedLibraryRestoresThePin(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	cleanPins(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	_, lib := pinNewWidgetType(t, mainProject, appdto.WidgetTypeInput{Name: "gauge"})
 

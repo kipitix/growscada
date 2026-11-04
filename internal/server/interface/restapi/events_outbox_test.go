@@ -11,6 +11,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
@@ -27,10 +28,10 @@ import (
 // outbox's events.
 func TestEventsHandlers_GetProjectEvents_DeliversCommittedChangesInCommitOrder(t *testing.T) {
 	cleanTags(t)
-	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM outbox"); err != nil {
+	if _, err := testDB().ExecContext(editlock.System(context.Background()), "DELETE FROM outbox"); err != nil {
 		t.Fatalf("clean outbox: %v", err)
 	}
-	ctx, stop := context.WithCancel(context.Background())
+	ctx, stop := context.WithCancel(editlock.System(context.Background()))
 	defer stop()
 
 	bus := eventbus.NewEventBus()

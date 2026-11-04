@@ -1,7 +1,7 @@
 info:
   name: get tags by name
   type: http
-  seq: 5
+  seq: 15
 
 http:
   method: GET

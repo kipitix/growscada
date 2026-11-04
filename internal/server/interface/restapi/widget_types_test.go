@@ -13,6 +13,7 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
@@ -27,7 +28,7 @@ var (
 
 func cleanWidgetTypes(t *testing.T) {
 	t.Helper()
-	created, err := newServices().libraries.CreateLibrary(context.Background(), appdto.LibraryInput{Name: "lib-" + uuid.NewString()})
+	created, err := newServices().libraries.CreateLibrary(editlock.System(context.Background()), appdto.LibraryInput{Name: "lib-" + uuid.NewString()})
 	if err != nil {
 		t.Fatalf("cleanWidgetTypes: %v", err)
 	}
@@ -35,13 +36,13 @@ func cleanWidgetTypes(t *testing.T) {
 	wtPath = apiv0.PathPrefix + apiv0.LibraryPath(wtLibrary.String()) + "/widget-types"
 }
 
-func newRouterWithWidgetTypes() *restapi.APIRouter {
+func newRouterWithWidgetTypes() testRouter {
 	return newServices().router()
 }
 
 func createWidgetTypeViaService(t *testing.T, input appdto.WidgetTypeInput) appdto.WidgetType {
 	t.Helper()
-	resp, err := newServices().widgetTypes.CreateWidgetType(context.Background(), wtLibrary, input)
+	resp, err := newServices().widgetTypes.CreateWidgetType(editlock.System(context.Background()), wtLibrary, input)
 	if err != nil {
 		t.Fatalf("createWidgetTypeViaService: %v", err)
 	}

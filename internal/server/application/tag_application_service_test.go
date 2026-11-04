@@ -16,6 +16,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/migrations"
@@ -25,7 +26,7 @@ import (
 var testDB *sql.DB
 
 func TestMain(m *testing.M) {
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	pgContainer, err := tcpostgres.Run(ctx,
 		"postgres:16-alpine",
@@ -71,7 +72,7 @@ func TestMain(m *testing.M) {
 // cleanTags removes the Tag definitions and the Tag states.
 func cleanTags(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
+	if _, err := testDB.ExecContext(editlock.System(context.Background()), "DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
 		t.Fatalf("cleanTags: %v", err)
 	}
 }
@@ -94,7 +95,7 @@ func mustNewTagID() uuid.UUID {
 func TestCreateTag_ValidIntegerTag_ReturnsID(t *testing.T) {
 	cleanTags(t)
 	svc := newService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	req := appdto.CreateTagInput{Name: "temperature", Type: "integer"}
 	resp, err := svc.CreateTag(ctx, mainProject, req)
@@ -110,7 +111,7 @@ func TestCreateTag_ValidIntegerTag_ReturnsID(t *testing.T) {
 func TestCreateTag_ValidStringTag_ReturnsID(t *testing.T) {
 	cleanTags(t)
 	svc := newService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	req := appdto.CreateTagInput{Name: "label", Type: "string"}
 	resp, err := svc.CreateTag(ctx, mainProject, req)
@@ -126,7 +127,7 @@ func TestCreateTag_ValidStringTag_ReturnsID(t *testing.T) {
 func TestCreateTag_ValidBooleanTag_ReturnsID(t *testing.T) {
 	cleanTags(t)
 	svc := newService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	req := appdto.CreateTagInput{Name: "enabled", Type: "boolean"}
 	resp, err := svc.CreateTag(ctx, mainProject, req)
@@ -142,7 +143,7 @@ func TestCreateTag_ValidBooleanTag_ReturnsID(t *testing.T) {
 func TestCreateTag_InvalidType_ReturnsError(t *testing.T) {
 	cleanTags(t)
 	svc := newService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	req := appdto.CreateTagInput{Name: "temperature", Type: "unknown"}
 	_, err := svc.CreateTag(ctx, mainProject, req)
@@ -157,7 +158,7 @@ func TestCreateTag_InvalidType_ReturnsError(t *testing.T) {
 func TestFindAllTags_EmptyDB_ReturnsEmptyList(t *testing.T) {
 	cleanTags(t)
 	svc := newService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	resp, err := svc.FindAllTags(ctx, mainProject)
 
@@ -172,7 +173,7 @@ func TestFindAllTags_EmptyDB_ReturnsEmptyList(t *testing.T) {
 func TestFindAllTags_MultipleTags_ReturnsAll(t *testing.T) {
 	cleanTags(t)
 	svc := newService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	req1 := appdto.CreateTagInput{Name: "temperature", Type: "integer"}
 	req2 := appdto.CreateTagInput{Name: "pressure", Type: "integer"}
@@ -198,7 +199,7 @@ func TestFindAllTags_MultipleTags_ReturnsAll(t *testing.T) {
 func TestFindTagByID_ExistingTag_ReturnsTag(t *testing.T) {
 	cleanTags(t)
 	svc := newService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	req := appdto.CreateTagInput{Name: "humidity", Type: "integer"}
 	createResp, err := svc.CreateTag(ctx, mainProject, req)
@@ -225,7 +226,7 @@ func TestFindTagByID_ExistingTag_ReturnsTag(t *testing.T) {
 func TestFindTagByID_NotFound_ReturnsWrappedErrTagNotFound(t *testing.T) {
 	cleanTags(t)
 	svc := newService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	_, err := svc.FindTagByID(ctx, mainProject, mustNewTagID())
 
@@ -242,7 +243,7 @@ func TestFindTagByID_NotFound_ReturnsWrappedErrTagNotFound(t *testing.T) {
 func TestDeleteTag_ExistingTag_ReturnsDeletedTag(t *testing.T) {
 	cleanTags(t)
 	svc := newService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "sensor", Type: "integer"})
 	if err != nil {
@@ -265,7 +266,7 @@ func TestDeleteTag_ExistingTag_ReturnsDeletedTag(t *testing.T) {
 func TestDeleteTag_ExistingTag_TagIsRemovedFromDB(t *testing.T) {
 	cleanTags(t)
 	svc := newService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "valve", Type: "boolean"})
 	if err != nil {
@@ -285,7 +286,7 @@ func TestDeleteTag_ExistingTag_TagIsRemovedFromDB(t *testing.T) {
 func TestDeleteTag_NotFound_ReturnsWrappedErrTagNotFound(t *testing.T) {
 	cleanTags(t)
 	svc := newService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	_, err := svc.DeleteTagByID(ctx, mainProject, mustNewTagID())
 
@@ -305,7 +306,7 @@ func TestDeleteTag_NotFound_ReturnsWrappedErrTagNotFound(t *testing.T) {
 func TestCreateTag_TheRuntimeNodeHearsOfItAtTheNextDeploy(t *testing.T) {
 	cleanTags(t)
 	svc, states := newServiceWithStates()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	created := make(map[string]appdto.Tag)
 	for tagType, zero := range map[string]string{"integer": "0", "boolean": "false", "string": ""} {
@@ -334,7 +335,7 @@ func TestCreateTag_TheRuntimeNodeHearsOfItAtTheNextDeploy(t *testing.T) {
 func TestFindTags_CarryTheWrittenState(t *testing.T) {
 	cleanTags(t)
 	svc, states := newServiceWithStates()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "flow", Type: "integer"})
 	if err != nil {
@@ -371,7 +372,7 @@ func TestFindTags_CarryTheWrittenState(t *testing.T) {
 func TestFindTags_WithoutAStateShowTheInitialOne(t *testing.T) {
 	cleanTags(t)
 	svc := application.NewTagService(contentOver(newScopes()), unreadableRuntimeNode{RuntimeNode: newRuntimeNode()})
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	if _, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "flag", Type: "boolean"}); err != nil {
 		t.Fatalf("CreateTag: %v", err)
@@ -399,7 +400,7 @@ func (unreadableRuntimeNode) FindTagStates(context.Context, uuid.UUID, []uuid.UU
 // states.
 func TestTags_RuntimeNodeUnreadable_ReadAndDeleteWithInitialStates(t *testing.T) {
 	cleanTags(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	created, err := newService().CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "level", Type: "integer"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
@@ -431,7 +432,7 @@ func TestTags_RuntimeNodeUnreadable_ReadAndDeleteWithInitialStates(t *testing.T)
 func TestDeleteTag_LeavesItsStateUntilTheNextDeploy(t *testing.T) {
 	cleanTags(t)
 	svc, states := newServiceWithStates()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "valve", Type: "boolean"})
 	if err != nil {
@@ -465,7 +466,7 @@ func TestDeleteTag_LeavesItsStateUntilTheNextDeploy(t *testing.T) {
 func TestCreateTag_Success_PublishesTagCreatedEvent(t *testing.T) {
 	cleanTags(t)
 	svc, bus := newServiceWithBus(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	var received []event.Event
 	bus.Subscribe(event.EventTypeTagCreated, func(e event.Event) {
@@ -492,7 +493,7 @@ func TestCreateTag_Success_PublishesTagCreatedEvent(t *testing.T) {
 func TestCreateTag_InvalidRequest_NoEventPublished(t *testing.T) {
 	cleanTags(t)
 	svc, bus := newServiceWithBus(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	var received []event.Event
 	bus.Subscribe(event.EventTypeTagCreated, func(e event.Event) {
@@ -509,7 +510,7 @@ func TestCreateTag_InvalidRequest_NoEventPublished(t *testing.T) {
 func TestDeleteTagByID_Success_PublishesTagDeletedEvent(t *testing.T) {
 	cleanTags(t)
 	svc, bus := newServiceWithBus(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "valve", Type: "boolean"})
 	if err != nil {
@@ -540,7 +541,7 @@ func TestDeleteTagByID_Success_PublishesTagDeletedEvent(t *testing.T) {
 func TestDeleteTagByID_NotFound_NoEventPublished(t *testing.T) {
 	cleanTags(t)
 	svc, bus := newServiceWithBus(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	var received []event.Event
 	bus.Subscribe(event.EventTypeTagDeleted, func(e event.Event) {
@@ -559,7 +560,7 @@ func TestDeleteTagByID_NotFound_NoEventPublished(t *testing.T) {
 func TestFindTagByName_ExistingTag_ReturnsTag(t *testing.T) {
 	cleanTags(t)
 	svc := newService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	created, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "temperature", Type: "integer"})
 	if err != nil {
@@ -580,7 +581,7 @@ func TestFindTagByName_NotFound_ReturnsWrappedErrTagNotFound(t *testing.T) {
 	cleanTags(t)
 	svc := newService()
 
-	_, err := svc.FindTagByName(context.Background(), mainProject, "missing")
+	_, err := svc.FindTagByName(editlock.System(context.Background()), mainProject, "missing")
 
 	if !errors.Is(err, tag.ErrTagNotFound) {
 		t.Errorf("expected wrapped ErrTagNotFound, got: %v", err)
@@ -590,7 +591,7 @@ func TestFindTagByName_NotFound_ReturnsWrappedErrTagNotFound(t *testing.T) {
 func TestCreateTag_DuplicateName_ReturnsWrappedErrTagNameTaken(t *testing.T) {
 	cleanTags(t)
 	svc, bus := newServiceWithBus(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	req := appdto.CreateTagInput{Name: "temperature", Type: "integer"}
 	if _, err := svc.CreateTag(ctx, mainProject, req); err != nil {
@@ -614,7 +615,7 @@ func TestCreateTag_DuplicateName_ReturnsWrappedErrTagNameTaken(t *testing.T) {
 func createTags(t *testing.T, svc application.TagService, names ...string) {
 	t.Helper()
 	for _, name := range names {
-		if _, err := svc.CreateTag(context.Background(), mainProject, appdto.CreateTagInput{Name: name, Type: "integer"}); err != nil {
+		if _, err := svc.CreateTag(editlock.System(context.Background()), mainProject, appdto.CreateTagInput{Name: name, Type: "integer"}); err != nil {
 			t.Fatalf("CreateTag(%q): %v", name, err)
 		}
 	}
@@ -633,7 +634,7 @@ func TestFindTagsByNamePattern_ReturnsMatchingTags(t *testing.T) {
 	svc := newService()
 	createTags(t, svc, "pump1.speed", "pump2.speed", "pump12.speed", "valve1.state")
 
-	got, err := svc.FindTagsByNamePattern(context.Background(), mainProject, "pump?.speed")
+	got, err := svc.FindTagsByNamePattern(editlock.System(context.Background()), mainProject, "pump?.speed")
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -649,7 +650,7 @@ func TestFindTagsByNameRegex_ReturnsMatchingTags(t *testing.T) {
 	svc := newService()
 	createTags(t, svc, "pump1.speed", "pump12.speed", "valve1.state")
 
-	got, err := svc.FindTagsByNameRegex(context.Background(), mainProject, `^pump\d+\.`)
+	got, err := svc.FindTagsByNameRegex(editlock.System(context.Background()), mainProject, `^pump\d+\.`)
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -663,7 +664,7 @@ func TestFindTagsByNameRegex_ReturnsMatchingTags(t *testing.T) {
 func TestFindTagsByNameRegex_Invalid_ReturnsErrInvalidTagNameMatcher(t *testing.T) {
 	svc := newService()
 
-	_, err := svc.FindTagsByNameRegex(context.Background(), mainProject, `pump(`)
+	_, err := svc.FindTagsByNameRegex(editlock.System(context.Background()), mainProject, `pump(`)
 
 	if !errors.Is(err, tag.ErrInvalidTagNameMatcher) {
 		t.Errorf("expected ErrInvalidTagNameMatcher, got %v", err)

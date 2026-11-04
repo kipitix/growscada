@@ -9,6 +9,7 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
@@ -32,7 +33,7 @@ func (c *countingProjects) FindByID(ctx context.Context, projectID id.ID[project
 // is found, to tell a missing or deleted Project from an empty one.
 func TestHotLists_ReadTheProjectOnlyToTellWhyNothingIsFound(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	p := r.createProject(t, "Line 1")
 	projects := &countingProjects{ProjectRepository: repositories.NewProjectRepositoryPostgres(testDB)}
 	content := application.NewProjectContent(projects, newScopes(), soleOrganization())

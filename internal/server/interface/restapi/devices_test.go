@@ -16,6 +16,7 @@ import (
 	projectv0 "github.com/kipitix/growscada/contract/project/v0"
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/devicetoken"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -27,7 +28,7 @@ import (
 // project, and with them the tags that referenced a Device.
 func cleanDevicesRest(t *testing.T) {
 	t.Helper()
-	if _, err := testDB().ExecContext(context.Background(),
+	if _, err := testDB().ExecContext(editlock.System(context.Background()),
 		"DELETE FROM runtime.revisions; DELETE FROM runtime.device_tokens; DELETE FROM runtime.tags; "+
 			"DELETE FROM runtime.environment_devices; DELETE FROM runtime.devices; DELETE FROM runtime.environments; "+
 			"DELETE FROM engineering.tags; "+
@@ -37,7 +38,7 @@ func cleanDevicesRest(t *testing.T) {
 }
 
 // serveAs is serve with an Authorization header (empty: none).
-func serveAs(router *restapi.APIRouter, method, path string, body any, authorization string) *httptest.ResponseRecorder {
+func serveAs(router servingRouter, method, path string, body any, authorization string) *httptest.ResponseRecorder {
 	var reader *bytes.Reader
 	if body != nil {
 		data, _ := json.Marshal(body)
@@ -58,7 +59,7 @@ func serveAs(router *restapi.APIRouter, method, path string, body any, authoriza
 var testDeviceConfig = apiv0.JSONObject(`{"patterns":[{"tag":"speed","kind":"sine"}]}`)
 
 // createDeviceRest creates a Device through the API.
-func createDeviceRest(t *testing.T, router *restapi.APIRouter, name string) apiv0.CreateDeviceResponse {
+func createDeviceRest(t *testing.T, router servingRouter, name string) apiv0.CreateDeviceResponse {
 	t.Helper()
 	rec := serve(router, http.MethodPost, mainPath+"/devices", apiv0.CreateDeviceRequest{
 		Name: name, Protocol: "simulation", Config: testDeviceConfig,
@@ -70,7 +71,7 @@ func createDeviceRest(t *testing.T, router *restapi.APIRouter, name string) apiv
 }
 
 // createEnvironmentRest creates an Environment through the API.
-func createEnvironmentRest(t *testing.T, router *restapi.APIRouter, name string) apiv0.CreateEnvironmentResponse {
+func createEnvironmentRest(t *testing.T, router servingRouter, name string) apiv0.CreateEnvironmentResponse {
 	t.Helper()
 	rec := serve(router, http.MethodPost, mainPath+"/environments", apiv0.CreateEnvironmentRequest{Name: name})
 	if rec.Code != http.StatusCreated {
@@ -80,7 +81,7 @@ func createEnvironmentRest(t *testing.T, router *restapi.APIRouter, name string)
 }
 
 // issueTokenRest issues the Device's token through the API.
-func issueTokenRest(t *testing.T, router *restapi.APIRouter, deviceID uuid.UUID) string {
+func issueTokenRest(t *testing.T, router servingRouter, deviceID uuid.UUID) string {
 	t.Helper()
 	rec := serve(router, http.MethodPost, mainPath+"/devices/"+deviceID.String()+"/token", nil)
 	if rec.Code != http.StatusCreated {
@@ -95,7 +96,7 @@ func issueTokenRest(t *testing.T, router *restapi.APIRouter, deviceID uuid.UUID)
 func seedSuppliedTag(t *testing.T, deviceID uuid.UUID, name, tagType string) uuid.UUID {
 	t.Helper()
 	tagID := uuid.New()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	if _, err := testDB().ExecContext(ctx,
 		`INSERT INTO engineering.tags (id, project_id, name, type, version, device_id) VALUES ($1, $2, $3, $4, 1, $5)`,
 		tagID, mainProject, name, tagType, deviceID); err != nil {
@@ -431,7 +432,7 @@ func TestDeviceConfig(t *testing.T) {
 	}
 
 	// A Draft change is invisible until the next Deploy.
-	if _, err := testDB().ExecContext(context.Background(),
+	if _, err := testDB().ExecContext(editlock.System(context.Background()),
 		`UPDATE engineering.devices SET name = 'draft-only' WHERE id = $1`, device.ID); err != nil {
 		t.Fatalf("change the device in the Draft: %v", err)
 	}
@@ -532,7 +533,7 @@ func TestPatchTagValue_TokenOfAnotherProject(t *testing.T) {
 	}
 	otherProject := decodeBody[apiv0.CreateProjectResponse](t, rec)
 	t.Cleanup(func() {
-		if _, err := testDB().ExecContext(context.Background(),
+		if _, err := testDB().ExecContext(editlock.System(context.Background()),
 			`DELETE FROM engineering.environment_devices WHERE device_id IN (SELECT id FROM engineering.devices WHERE project_id = $1);
 			 DELETE FROM engineering.devices WHERE project_id = $1;
 			 DELETE FROM projects WHERE id = $1`, otherProject.ID); err != nil {

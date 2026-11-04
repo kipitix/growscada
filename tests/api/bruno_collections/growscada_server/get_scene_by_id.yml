@@ -1,7 +1,7 @@
 info:
   name: get scene by id
   type: http
-  seq: 20
+  seq: 30
 
 http:
   method: GET

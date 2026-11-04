@@ -14,6 +14,7 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -34,7 +35,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	pgContainer, err := tcpostgres.Run(ctx,
 		"postgres:16-alpine",
@@ -80,7 +81,7 @@ func TestMain(m *testing.M) {
 
 func cleanTags(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
+	if _, err := testDB.ExecContext(editlock.System(context.Background()), "DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
 		t.Fatalf("cleanTags: %v", err)
 	}
 }
@@ -113,7 +114,7 @@ func TestNextID_ReturnsUniqueIDs(t *testing.T) {
 func TestSave_NewTag_InsertsSuccessfully(t *testing.T) {
 	cleanTags(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	newTag := makeTag(t, "temperature", repo)
 
@@ -127,7 +128,7 @@ func TestSave_NewTag_InsertsSuccessfully(t *testing.T) {
 func TestSave_DuplicateID_ReturnsError(t *testing.T) {
 	cleanTags(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	newTag := makeTag(t, "temperature", repo)
 	if _, err := repo.Save(ctx, newTag); err != nil {
@@ -145,7 +146,7 @@ func TestSave_DuplicateID_ReturnsError(t *testing.T) {
 func TestSave_ExistingTag_RaisesItsVersion(t *testing.T) {
 	cleanTags(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	newTag := makeTag(t, "temperature", repo)
 	if _, err := repo.Save(ctx, newTag); err != nil {
@@ -176,7 +177,7 @@ func TestSave_ExistingTag_RaisesItsVersion(t *testing.T) {
 func TestSave_StaleVersion_ReturnsError(t *testing.T) {
 	cleanTags(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	newTag := makeTag(t, "temperature", repo)
 	if _, err := repo.Save(ctx, newTag); err != nil {
@@ -196,7 +197,7 @@ func TestSave_StaleVersion_ReturnsError(t *testing.T) {
 func TestFindByID_ExistingTag_ReturnsTag(t *testing.T) {
 	cleanTags(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	newTag := makeTag(t, "pressure", repo)
 	savedTag, err := repo.Save(ctx, newTag)
@@ -226,7 +227,7 @@ func TestFindByID_ExistingTag_ReturnsTag(t *testing.T) {
 func TestFindByID_NotFound_ReturnsErrTagNotFound(t *testing.T) {
 	cleanTags(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	nonExistentID := repo.NextID()
 	_, err := repo.FindByID(ctx, nonExistentID)
@@ -239,7 +240,7 @@ func TestFindByID_NotFound_ReturnsErrTagNotFound(t *testing.T) {
 func TestFindAll_EmptyDB_ReturnsEmptySlice(t *testing.T) {
 	cleanTags(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	tags, err := repo.FindAll(ctx)
 
@@ -254,7 +255,7 @@ func TestFindAll_EmptyDB_ReturnsEmptySlice(t *testing.T) {
 func TestFindAll_MultipleTags_ReturnsAll(t *testing.T) {
 	cleanTags(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	tag1 := makeTag(t, "temperature", repo)
 	tag2 := makeTag(t, "pressure", repo)
@@ -280,7 +281,7 @@ func TestFindAll_SortedByNameEvenAfterUpdates(t *testing.T) {
 	// row; the list must not reshuffle when tags are saved again.
 	cleanTags(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	for _, name := range []string{"charlie", "alpha", "bravo"} {
 		if _, err := repo.Save(ctx, makeTag(t, name, repo)); err != nil {
@@ -319,7 +320,7 @@ func TestFindAll_SortedByNameEvenAfterUpdates(t *testing.T) {
 // mustSaveTag saves aTag and returns it as stored.
 func mustSaveTag(t *testing.T, repo tag.TagRepository, aTag tag.Tag) tag.Tag {
 	t.Helper()
-	saved, err := repo.Save(context.Background(), aTag)
+	saved, err := repo.Save(editlock.System(context.Background()), aTag)
 	if err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
@@ -329,7 +330,7 @@ func mustSaveTag(t *testing.T, repo tag.TagRepository, aTag tag.Tag) tag.Tag {
 func TestDelete_ExistingTag_TagIsRemovedFromDB(t *testing.T) {
 	cleanTags(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	saved := mustSaveTag(t, repo, makeTag(t, "pump", repo))
 	if err := repo.Delete(ctx, saved.Delete()); err != nil {
@@ -346,7 +347,7 @@ func TestDelete_ExistingTag_TagIsRemovedFromDB(t *testing.T) {
 func TestDelete_ExistingTag_OtherTagsAreUnaffected(t *testing.T) {
 	cleanTags(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	tag1 := mustSaveTag(t, repo, makeTag(t, "temperature", repo))
 	tag2 := mustSaveTag(t, repo, makeTag(t, "pressure", repo))
@@ -364,7 +365,7 @@ func TestDelete_ExistingTag_OtherTagsAreUnaffected(t *testing.T) {
 func TestDelete_NotFound_ReturnsErrTagNotFound(t *testing.T) {
 	cleanTags(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	saved := mustSaveTag(t, repo, makeTag(t, "valve", repo))
 	if _, err := testDB.ExecContext(ctx, "DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
@@ -380,7 +381,7 @@ func TestDelete_NotFound_ReturnsErrTagNotFound(t *testing.T) {
 func TestDelete_StaleVersion_DeletesTag(t *testing.T) {
 	cleanTags(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	stale := mustSaveTag(t, repo, makeTag(t, "valve", repo))
 	mustSaveTag(t, repo, stale) // the stored version moves on
@@ -397,7 +398,7 @@ func TestDelete_StaleVersion_DeletesTag(t *testing.T) {
 func TestSave_DuplicateName_ReturnsErrTagNameTaken(t *testing.T) {
 	cleanTags(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	if _, err := repo.Save(ctx, makeTag(t, "temperature", repo)); err != nil {
 		t.Fatalf("first Save failed: %v", err)
@@ -413,7 +414,7 @@ func TestSave_DuplicateName_ReturnsErrTagNameTaken(t *testing.T) {
 func TestFindByName_ExistingTag_ReturnsTag(t *testing.T) {
 	cleanTags(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	newTag := makeTag(t, "temperature", repo)
 	if _, err := repo.Save(ctx, newTag); err != nil {
@@ -438,7 +439,7 @@ func TestFindByName_NotFound_ReturnsErrTagNotFound(t *testing.T) {
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	name, _ := tag.NewTagName("missing")
 
-	_, err := repo.FindByName(context.Background(), name)
+	_, err := repo.FindByName(editlock.System(context.Background()), name)
 
 	if !errors.Is(err, tag.ErrTagNotFound) {
 		t.Errorf("expected ErrTagNotFound, got %v", err)

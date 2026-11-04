@@ -27,24 +27,41 @@ type DeployService interface {
 	Preview(ctx context.Context, projectID uuid.UUID) (appdto.DeployPreview, error)
 }
 
+// EditLockGate refuses a write of a Project's Draft whose EditLock the request
+// does not hold (ADR 0015).
+type EditLockGate interface {
+	// CheckHeld returns editlock.ErrNoClient when the request names no client,
+	// and editlock.ErrEditLockNotHeld when the lock is free or another
+	// client's. The server's own writes pass.
+	CheckHeld(ctx context.Context, projectID uuid.UUID) error
+}
+
 type deployServiceImpl struct {
 	content ProjectContent
 	builder ProjectFileBuilder
 	runtime RuntimeNode
+	locks   EditLockGate
 }
 
 var _ DeployService = (*deployServiceImpl)(nil)
 
 // NewDeployService returns the DeployService over the content of the live
-// Projects aContent, the builder aBuilder and the Runtime node aRuntime.
-func NewDeployService(aContent ProjectContent, aBuilder ProjectFileBuilder, aRuntime RuntimeNode) DeployService {
-	return &deployServiceImpl{content: aContent, builder: aBuilder, runtime: aRuntime}
+// Projects aContent, the builder aBuilder, the Runtime node aRuntime and the
+// EditLocks of the Drafts aGate.
+func NewDeployService(aContent ProjectContent, aBuilder ProjectFileBuilder, aRuntime RuntimeNode, aGate EditLockGate) DeployService {
+	return &deployServiceImpl{content: aContent, builder: aBuilder, runtime: aRuntime, locks: aGate}
 }
 
 func (s deployServiceImpl) Deploy(ctx context.Context, projectID uuid.UUID) (appdto.Revision, error) {
 	// The Draft is read-only while a Discard runs: half restored, it would go
 	// into a Revision the policy of that Discard knows nothing of (Q10).
 	if _, _, err := s.content.openNotDiscarding(ctx, projectID); err != nil {
+		return appdto.Revision{}, err
+	}
+	// A Deploy is an act over the Draft as a whole: it needs the lock, checked
+	// before the build, which spans several queries and has no single
+	// transaction to check it in (ADR 0015).
+	if err := s.locks.CheckHeld(ctx, projectID); err != nil {
 		return appdto.Revision{}, err
 	}
 	file, err := s.builder.Build(ctx, projectID)

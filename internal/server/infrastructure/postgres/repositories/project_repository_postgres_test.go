@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -20,7 +21,7 @@ import (
 func cleanProjects(t *testing.T) {
 	t.Helper()
 	main := "'" + mainProject.String() + "'"
-	if _, err := testDB.ExecContext(context.Background(),
+	if _, err := testDB.ExecContext(editlock.System(context.Background()),
 		`DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.tags; DELETE FROM engineering.scenes; DELETE FROM engineering.library_pins;
 		 DELETE FROM engineering.environment_devices ed USING engineering.environments e
 		 WHERE ed.environment_id = e.id AND e.project_id <> `+main+`;
@@ -33,7 +34,7 @@ func cleanProjects(t *testing.T) {
 
 func soleOrganization(t *testing.T) id.ID[organization.Organization] {
 	t.Helper()
-	orgID, err := repositories.FindSoleOrganization(context.Background(), testDB)
+	orgID, err := repositories.FindSoleOrganization(editlock.System(context.Background()), testDB)
 	if err != nil {
 		t.Fatalf("FindSoleOrganization: %v", err)
 	}
@@ -52,7 +53,7 @@ func mustProjectName(t *testing.T, s string) project.ProjectName {
 // mustCreateProject stores a new project of the sole organization.
 func mustCreateProject(t *testing.T, repo project.ProjectRepository, name string) project.Project {
 	t.Helper()
-	saved, err := repo.Save(context.Background(), project.CreateProject(repo.NextID(), soleOrganization(t), mustProjectName(t, name)))
+	saved, err := repo.Save(editlock.System(context.Background()), project.CreateProject(repo.NextID(), soleOrganization(t), mustProjectName(t, name)))
 	if err != nil {
 		t.Fatalf("Save project %q: %v", name, err)
 	}
@@ -63,7 +64,7 @@ func TestFindSoleOrganization_IsTheOneTheMigrationsCreate(t *testing.T) {
 	if got := soleOrganization(t).String(); got != "a0000000-0000-4000-8000-000000000001" {
 		t.Errorf("organization %s", got)
 	}
-	main, err := repositories.NewProjectRepositoryPostgres(testDB).FindByID(context.Background(), mainProject)
+	main, err := repositories.NewProjectRepositoryPostgres(testDB).FindByID(editlock.System(context.Background()), mainProject)
 	if err != nil {
 		t.Fatalf("the migrations' project Main: %v", err)
 	}
@@ -75,7 +76,7 @@ func TestFindSoleOrganization_IsTheOneTheMigrationsCreate(t *testing.T) {
 func TestProjectSave_NewProject_IsFoundByIDAndName(t *testing.T) {
 	cleanProjects(t)
 	repo := repositories.NewProjectRepositoryPostgres(testDB)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	saved := mustCreateProject(t, repo, "Line 1")
 
@@ -97,7 +98,7 @@ func TestProjectSave_TakenName_ReturnsErrProjectNameTaken(t *testing.T) {
 	repo := repositories.NewProjectRepositoryPostgres(testDB)
 	mustCreateProject(t, repo, "Line 1")
 
-	_, err := repo.Save(context.Background(), project.CreateProject(repo.NextID(), soleOrganization(t), mustProjectName(t, "Line 1")))
+	_, err := repo.Save(editlock.System(context.Background()), project.CreateProject(repo.NextID(), soleOrganization(t), mustProjectName(t, "Line 1")))
 
 	if !errors.Is(err, project.ErrProjectNameTaken) {
 		t.Errorf("expected ErrProjectNameTaken, got %v", err)
@@ -107,7 +108,7 @@ func TestProjectSave_TakenName_ReturnsErrProjectNameTaken(t *testing.T) {
 func TestProjectSave_Rename_RaisesVersionAndStaleOneConflicts(t *testing.T) {
 	cleanProjects(t)
 	repo := repositories.NewProjectRepositoryPostgres(testDB)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	saved := mustCreateProject(t, repo, "Line 1")
 
 	renamed, err := saved.Rename(saved.Version(), mustProjectName(t, "Line 2"))
@@ -127,7 +128,7 @@ func TestProjectSave_Rename_RaisesVersionAndStaleOneConflicts(t *testing.T) {
 func TestProjectSave_Deleted_IsGoneForReadsAndFreesTheName(t *testing.T) {
 	cleanProjects(t)
 	repo := repositories.NewProjectRepositoryPostgres(testDB)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	saved := mustCreateProject(t, repo, "Line 1")
 
 	if _, err := repo.Save(ctx, saved.Delete()); err != nil {
@@ -165,7 +166,7 @@ func TestProjectFindAll_LiveProjectsInCreationOrder(t *testing.T) {
 	b := mustCreateProject(t, repo, "B")
 	a := mustCreateProject(t, repo, "A")
 
-	all, err := repo.FindAll(context.Background(), soleOrganization(t))
+	all, err := repo.FindAll(editlock.System(context.Background()), soleOrganization(t))
 
 	if err != nil {
 		t.Fatalf("FindAll: %v", err)
@@ -178,7 +179,7 @@ func TestProjectFindAll_LiveProjectsInCreationOrder(t *testing.T) {
 	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
 		t.Errorf("FindAll: got %v, want %v", got, want)
 	}
-	other, err := repo.FindAll(context.Background(), id.NewID[organization.Organization]())
+	other, err := repo.FindAll(editlock.System(context.Background()), id.NewID[organization.Organization]())
 	if err != nil || len(other) != 0 {
 		t.Errorf("FindAll of another organization: %v, %v", other, err)
 	}
@@ -187,7 +188,7 @@ func TestProjectFindAll_LiveProjectsInCreationOrder(t *testing.T) {
 func TestProjectDelete_RefusedWhileContentRemains(t *testing.T) {
 	cleanProjects(t)
 	repo := repositories.NewProjectRepositoryPostgres(testDB)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	p := mustCreateProject(t, repo, "Line 1")
 	tags := repositories.NewTagRepositoryPostgres(testDB, p.ID())
 	created := createTagIn(t, tags, p.ID(), "speed")
@@ -218,7 +219,7 @@ func TestProjectDelete_LiveProject_IsNotRemoved(t *testing.T) {
 	repo := repositories.NewProjectRepositoryPostgres(testDB)
 	p := mustCreateProject(t, repo, "Line 1")
 
-	if err := repo.Delete(context.Background(), p); !errors.Is(err, project.ErrProjectNotFound) {
+	if err := repo.Delete(editlock.System(context.Background()), p); !errors.Is(err, project.ErrProjectNotFound) {
 		t.Errorf("Delete of a live project: expected ErrProjectNotFound, got %v", err)
 	}
 }
@@ -233,7 +234,7 @@ func createTagIn(t *testing.T, repo tag.TagRepository, projectID id.ID[project.P
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
-	saved, err := repo.Save(context.Background(), created)
+	saved, err := repo.Save(editlock.System(context.Background()), created)
 	if err != nil {
 		t.Fatalf("Save tag %q: %v", name, err)
 	}
@@ -245,7 +246,7 @@ func TestTagRepository_TagsOfProjectsAreApart(t *testing.T) {
 	other := mustCreateProject(t, repositories.NewProjectRepositoryPostgres(testDB), "Line 1")
 	mainTags := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	otherTags := repositories.NewTagRepositoryPostgres(testDB, other.ID())
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	inMain := createTagIn(t, mainTags, mainProject, "speed")
 	inOther := createTagIn(t, otherTags, other.ID(), "speed") // the same name in another project
@@ -282,13 +283,13 @@ func TestTagRepository_SaveInARemovedProject_IsProjectNotFound(t *testing.T) {
 	tagName, _ := tag.NewTagName("speed")
 	created, _ := tag.CreateTag(repo.NextID(), gone, tagName, tag.TagTypeInteger, tag.NoSupplier())
 
-	if _, err := repo.Save(context.Background(), created); !errors.Is(err, project.ErrProjectNotFound) {
+	if _, err := repo.Save(editlock.System(context.Background()), created); !errors.Is(err, project.ErrProjectNotFound) {
 		t.Errorf("expected ErrProjectNotFound, got %v", err)
 	}
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB, gone)
 	name, _ := scene.NewSceneName("s")
 	size, _ := scene.NewSceneSize(10, 10)
-	if _, err := sceneRepo.Save(context.Background(), scene.CreateScene(sceneRepo.NextID(), gone, name, size, scene.NewBackgroundHTML(""))); !errors.Is(err, project.ErrProjectNotFound) {
+	if _, err := sceneRepo.Save(editlock.System(context.Background()), scene.CreateScene(sceneRepo.NextID(), gone, name, size, scene.NewBackgroundHTML(""))); !errors.Is(err, project.ErrProjectNotFound) {
 		t.Errorf("scene: expected ErrProjectNotFound, got %v", err)
 	}
 }
@@ -298,7 +299,7 @@ func TestSceneRepository_ScenesOfProjectsAreApart(t *testing.T) {
 	other := mustCreateProject(t, repositories.NewProjectRepositoryPostgres(testDB), "Line 1")
 	mainScenes := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
 	otherScenes := repositories.NewSceneRepositoryPostgres(testDB, other.ID())
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	inMain := mustSaveScene(t, mainScenes, "overview")
 	name, _ := scene.NewSceneName("overview")
@@ -340,7 +341,7 @@ func TestProjectDelete_PinsHoldTheRow(t *testing.T) {
 	cleanProjects(t)
 	projects := repositories.NewProjectRepositoryPostgres(testDB)
 	other := mustCreateProject(t, projects, "Line 1")
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	mustPinWidgetType(t, other.ID())
 	if _, err := projects.Save(ctx, other.Delete()); err != nil {
 		t.Fatalf("mark the project deleted: %v", err)
@@ -373,7 +374,7 @@ func TestInLiveProjectLists_CheckTheProject(t *testing.T) {
 	line := mustCreateProject(t, projects, "Line 1")
 	scopes := repositories.NewProjectScopes(testDB)
 	tags, scenes := scopes.ForProject(line.ID()).Tags(), scopes.ForProject(line.ID()).Scenes()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	createTagIn(t, tags, line.ID(), "speed")
 	name, _ := scene.NewSceneName("s")
 	size, _ := scene.NewSceneSize(100, 100)

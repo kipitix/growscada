@@ -1,7 +1,7 @@
 info:
   name: get tags
   type: http
-  seq: 4
+  seq: 14
 
 http:
   method: GET

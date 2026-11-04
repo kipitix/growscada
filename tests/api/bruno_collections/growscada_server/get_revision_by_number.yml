@@ -1,7 +1,7 @@
 info:
   name: get revision by number
   type: http
-  seq: 37
+  seq: 47
 
 http:
   method: GET

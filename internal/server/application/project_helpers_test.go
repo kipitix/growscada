@@ -11,6 +11,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/device"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
@@ -99,7 +100,7 @@ func (s testScope) EnvironmentDevices() device.EnvironmentDeviceRepository {
 
 // soleOrganization is the organization the migrations create.
 func soleOrganization() id.ID[organization.Organization] {
-	orgID, err := repositories.FindSoleOrganization(context.Background(), testDB)
+	orgID, err := repositories.FindSoleOrganization(editlock.System(context.Background()), testDB)
 	if err != nil {
 		panic("organization: " + err.Error())
 	}
@@ -111,7 +112,7 @@ func soleOrganization() id.ID[organization.Organization] {
 func cleanProjects(t *testing.T) {
 	t.Helper()
 	main := "'" + mainProject.String() + "'"
-	if _, err := testDB.ExecContext(context.Background(),
+	if _, err := testDB.ExecContext(editlock.System(context.Background()),
 		`DELETE FROM engineering.environment_devices ed USING engineering.environments e
 		 WHERE ed.environment_id = e.id AND e.project_id <> `+main+`;
 		 DELETE FROM engineering.devices WHERE project_id <> `+main+`;
@@ -165,8 +166,9 @@ func deployProject(t *testing.T, projectID uuid.UUID) {
 		content,
 		application.NewProjectFileBuilder(content),
 		newRuntimeNode(),
+		application.NewEditLockService(content, repositories.NewEditLockRepositoryPostgres(testDB)),
 	)
-	if _, err := service.Deploy(context.Background(), projectID); err != nil && !errors.Is(err, application.ErrNothingToDeploy) {
+	if _, err := service.Deploy(editlock.System(context.Background()), projectID); err != nil && !errors.Is(err, application.ErrNothingToDeploy) {
 		t.Fatalf("deploy project %s: %v", projectID, err)
 	}
 }
@@ -186,7 +188,7 @@ var errRuntimeDown = errors.New("runtime node down")
 func tagStateCount(t *testing.T, projectID uuid.UUID) int {
 	t.Helper()
 	var n int
-	if err := testDB.QueryRowContext(context.Background(), `SELECT count(*) FROM runtime.tags WHERE project_id = $1`, projectID).Scan(&n); err != nil {
+	if err := testDB.QueryRowContext(editlock.System(context.Background()), `SELECT count(*) FROM runtime.tags WHERE project_id = $1`, projectID).Scan(&n); err != nil {
 		t.Fatalf("count tag states: %v", err)
 	}
 	return n

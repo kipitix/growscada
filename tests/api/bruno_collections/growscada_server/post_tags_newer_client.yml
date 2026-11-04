@@ -1,7 +1,7 @@
 info:
   name: post tags newer client
   type: http
-  seq: 28
+  seq: 38
   tags:
     - invalid-body
 
@@ -9,6 +9,8 @@ http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/tags
   headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
     - name: GrowSCADA-Schema-Version
       value: "0.99"
   body:

@@ -13,6 +13,7 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
@@ -21,7 +22,7 @@ func cleanWidgetsRest(t *testing.T) {
 	t.Helper()
 	// ON DELETE CASCADE removes widgets with their scene, which is fine here —
 	// each test creates the scene(s) it needs.
-	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM engineering.scenes"); err != nil {
+	if _, err := testDB().ExecContext(editlock.System(context.Background()), "DELETE FROM engineering.scenes"); err != nil {
 		t.Fatalf("cleanWidgetsRest: %v", err)
 	}
 	ensureTestWidgetType(t)
@@ -56,7 +57,7 @@ func ensureTestWidgetType(t *testing.T) {
 		{`INSERT INTO engineering.library_pins (project_id, library_id, release_number, version)
 		 VALUES ($1, $2, 1, 1) ON CONFLICT DO NOTHING`, []any{mainProject, testLibrary}},
 	} {
-		if _, err := testDB().ExecContext(context.Background(), q.query, q.args...); err != nil {
+		if _, err := testDB().ExecContext(editlock.System(context.Background()), q.query, q.args...); err != nil {
 			t.Fatalf("ensureTestWidgetType: %v", err)
 		}
 	}
@@ -66,7 +67,7 @@ func ensureTestWidgetType(t *testing.T) {
 // mainProject, in place of the release pinned so far.
 func releaseAndPin(t *testing.T, libraryID uuid.UUID) appdto.LibraryRelease {
 	t.Helper()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	services := newServices()
 	lib, err := services.libraries.FindLibraryByID(ctx, libraryID)
 	if err != nil {
@@ -92,14 +93,14 @@ func releaseAndPin(t *testing.T, libraryID uuid.UUID) appdto.LibraryRelease {
 	return release
 }
 
-func newRouterWithWidgets() *restapi.APIRouter {
+func newRouterWithWidgets() testRouter {
 	return newServices().router()
 }
 
 func createSceneViaSceneService(t *testing.T) appdto.Scene {
 	t.Helper()
 	ensureTestWidgetType(t)
-	resp, err := newServices().scenes.CreateScene(context.Background(), mainProject, appdto.SceneInput{
+	resp, err := newServices().scenes.CreateScene(editlock.System(context.Background()), mainProject, appdto.SceneInput{
 		Name: "test-scene-" + uuid.New().String(), Width: 1920, Height: 1080,
 	})
 	if err != nil {
@@ -110,7 +111,7 @@ func createSceneViaSceneService(t *testing.T) appdto.Scene {
 
 func createWidgetViaService(t *testing.T, sceneID uuid.UUID, sceneVersion int, input appdto.WidgetInput) appdto.Widget {
 	t.Helper()
-	resp, err := newServices().scenes.CreateWidget(context.Background(), mainProject, sceneID, sceneVersion, input)
+	resp, err := newServices().scenes.CreateWidget(editlock.System(context.Background()), mainProject, sceneID, sceneVersion, input)
 	if err != nil {
 		t.Fatalf("createWidgetViaService: %v", err)
 	}

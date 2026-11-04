@@ -1,7 +1,7 @@
 info:
   name: get environment devices
   type: http
-  seq: 78
+  seq: 88
 
 http:
   method: GET

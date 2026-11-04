@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/kipitix/growscada/internal/server/domain/device"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -65,6 +66,8 @@ func (p projectCleanupPolicy) JobKey(e event.Event) (string, bool) {
 // removed (a creation's call, a bridge job running late): the row's removal
 // fails while the state holds it, and the next run removes the state.
 func (p projectCleanupPolicy) Run(ctx context.Context, key string) error {
+	// A policy writes as the server: it passes no EditLock check (ADR 0015).
+	ctx = editlock.System(ctx)
 	projectID, rest, err := cutProjectKey(key)
 	if err != nil {
 		return err

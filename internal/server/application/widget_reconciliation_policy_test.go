@@ -13,6 +13,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -25,7 +26,7 @@ import (
 
 func cleanPolicyJobs(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM policy_jobs"); err != nil {
+	if _, err := testDB.ExecContext(editlock.System(context.Background()), "DELETE FROM policy_jobs"); err != nil {
 		t.Fatalf("cleanPolicyJobs: %v", err)
 	}
 }
@@ -106,14 +107,14 @@ func newReconciliation(t *testing.T, wiring reconciliationWiring) *reconciliatio
 
 func (r *reconciliation) drain(t *testing.T) {
 	t.Helper()
-	if _, err := r.dispatcher.DrainOnce(context.Background()); err != nil {
+	if _, err := r.dispatcher.DrainOnce(editlock.System(context.Background())); err != nil {
 		t.Fatalf("DrainOnce: %v", err)
 	}
 }
 
 func (r *reconciliation) runDue(t *testing.T) int {
 	t.Helper()
-	n, err := r.runner.RunDueOnce(context.Background())
+	n, err := r.runner.RunDueOnce(editlock.System(context.Background()))
 	if err != nil {
 		t.Fatalf("RunDueOnce: %v", err)
 	}
@@ -171,7 +172,7 @@ func (r *reconciliation) createTypeIn(t *testing.T, projectID uuid.UUID, ports .
 // releases its library and switches the pin of mainProject to the release.
 func (r *reconciliation) keepPorts(t *testing.T, wt appdto.WidgetType, ports ...string) appdto.WidgetType {
 	t.Helper()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	input := appdto.WidgetTypeInput{
 		Name: wt.Name, HtmlTemplate: wt.HtmlTemplate, Script: wt.Script, ScriptLanguage: wt.ScriptLanguage,
 		DefaultWidth: wt.DefaultWidth, DefaultHeight: wt.DefaultHeight, InputPorts: inputPorts(ports),
@@ -187,7 +188,7 @@ func (r *reconciliation) keepPorts(t *testing.T, wt appdto.WidgetType, ports ...
 // switchPin pins release of the library of the type typeID in mainProject.
 func (r *reconciliation) switchPin(t *testing.T, typeID uuid.UUID, release int) {
 	t.Helper()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	pins, err := r.pinSvc.FindLibraryPins(ctx, mainProject)
 	if err != nil {
 		t.Fatalf("FindLibraryPins: %v", err)
@@ -205,7 +206,7 @@ func (r *reconciliation) switchPin(t *testing.T, typeID uuid.UUID, release int) 
 
 func (r *reconciliation) createScene(t *testing.T, name string) appdto.Scene {
 	t.Helper()
-	sc, err := r.sceneSvc.CreateScene(context.Background(), mainProject, appdto.SceneInput{Name: name, Width: 800, Height: 600})
+	sc, err := r.sceneSvc.CreateScene(editlock.System(context.Background()), mainProject, appdto.SceneInput{Name: name, Width: 800, Height: 600})
 	if err != nil {
 		t.Fatalf("CreateScene: %v", err)
 	}
@@ -215,7 +216,7 @@ func (r *reconciliation) createScene(t *testing.T, name string) appdto.Scene {
 // createTag creates a Tag of the given type and returns its ID.
 func (r *reconciliation) createTag(t *testing.T, tagType string) uuid.UUID {
 	t.Helper()
-	created, err := r.tagSvc.CreateTag(context.Background(), mainProject, appdto.CreateTagInput{
+	created, err := r.tagSvc.CreateTag(editlock.System(context.Background()), mainProject, appdto.CreateTagInput{
 		Name: "tag_" + strings.ReplaceAll(uuid.NewString(), "-", ""), Type: tagType,
 	})
 	if err != nil {
@@ -226,7 +227,7 @@ func (r *reconciliation) createTag(t *testing.T, tagType string) uuid.UUID {
 
 func (r *reconciliation) deleteTag(t *testing.T, tagID uuid.UUID) {
 	t.Helper()
-	if _, err := r.tagSvc.DeleteTagByID(context.Background(), mainProject, tagID); err != nil {
+	if _, err := r.tagSvc.DeleteTagByID(editlock.System(context.Background()), mainProject, tagID); err != nil {
 		t.Fatalf("DeleteTagByID: %v", err)
 	}
 }
@@ -249,7 +250,7 @@ func (r *reconciliation) addWidgetBound(t *testing.T, sceneID uuid.UUID, sceneVe
 		Name: "widget", Width: 100, Height: 100, OriginX: 0.5, OriginY: 0.5, TypeID: wt.ID,
 		PortBindings: bindings,
 	}
-	w, err := r.sceneSvc.CreateWidget(context.Background(), mainProject, sceneID, sceneVersion, input)
+	w, err := r.sceneSvc.CreateWidget(editlock.System(context.Background()), mainProject, sceneID, sceneVersion, input)
 	if err != nil {
 		t.Fatalf("CreateWidget: %v", err)
 	}
@@ -259,7 +260,7 @@ func (r *reconciliation) addWidgetBound(t *testing.T, sceneID uuid.UUID, sceneVe
 // boundPorts returns the ports the widget is bound to now.
 func (r *reconciliation) boundPorts(t *testing.T, sceneID, widgetID uuid.UUID) []string {
 	t.Helper()
-	w, err := r.sceneSvc.FindWidgetByID(context.Background(), mainProject, sceneID, widgetID)
+	w, err := r.sceneSvc.FindWidgetByID(editlock.System(context.Background()), mainProject, sceneID, widgetID)
 	if err != nil {
 		t.Fatalf("FindWidgetByID: %v", err)
 	}
@@ -272,7 +273,7 @@ func (r *reconciliation) boundPorts(t *testing.T, sceneID, widgetID uuid.UUID) [
 
 func (r *reconciliation) sceneVersion(t *testing.T, sceneID uuid.UUID) int {
 	t.Helper()
-	sc, err := r.sceneSvc.FindSceneByID(context.Background(), mainProject, sceneID)
+	sc, err := r.sceneSvc.FindSceneByID(editlock.System(context.Background()), mainProject, sceneID)
 	if err != nil {
 		t.Fatalf("FindSceneByID: %v", err)
 	}
@@ -306,7 +307,7 @@ func policyJobs(t *testing.T) []policyJobRow {
 
 func jobsOf(t *testing.T, policy string) []policyJobRow {
 	t.Helper()
-	rows, err := testDB.QueryContext(context.Background(),
+	rows, err := testDB.QueryContext(editlock.System(context.Background()),
 		`SELECT job_key, generation, attempts, coalesce(last_error, '') FROM policy_jobs WHERE policy = $1 ORDER BY job_key`,
 		policy)
 	if err != nil {
@@ -327,7 +328,7 @@ func jobsOf(t *testing.T, policy string) []policyJobRow {
 // makeJobsDue ends the pause of every waiting job.
 func makeJobsDue(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(), `UPDATE policy_jobs SET next_attempt_at = now()`); err != nil {
+	if _, err := testDB.ExecContext(editlock.System(context.Background()), `UPDATE policy_jobs SET next_attempt_at = now()`); err != nil {
 		t.Fatalf("make policy jobs due: %v", err)
 	}
 }
@@ -445,7 +446,7 @@ func TestWidgetReconciliation_SceneChangedMeanwhile_CleansBindingsKeepsChange(t 
 	w := r.addWidget(t, sc.ID, sc.Version, wt, "value")
 	r.settle(t)
 	racing.race = func() {
-		if _, err := r.sceneSvc.UpdateScene(context.Background(), mainProject, sc.ID, r.sceneVersion(t, sc.ID), appdto.SceneInput{Name: "renamed", Width: 800, Height: 600}); err != nil {
+		if _, err := r.sceneSvc.UpdateScene(editlock.System(context.Background()), mainProject, sc.ID, r.sceneVersion(t, sc.ID), appdto.SceneInput{Name: "renamed", Width: 800, Height: 600}); err != nil {
 			t.Fatalf("concurrent UpdateScene: %v", err)
 		}
 	}
@@ -453,7 +454,7 @@ func TestWidgetReconciliation_SceneChangedMeanwhile_CleansBindingsKeepsChange(t 
 	r.keepPorts(t, wt)
 	r.settle(t)
 
-	found, err := r.sceneSvc.FindSceneByID(context.Background(), mainProject, sc.ID)
+	found, err := r.sceneSvc.FindSceneByID(editlock.System(context.Background()), mainProject, sc.ID)
 	if err != nil {
 		t.Fatalf("FindSceneByID: %v", err)
 	}
@@ -487,7 +488,7 @@ func TestWidgetReconciliation_PortAddedAndBoundWhileJobRuns_KeepsBinding(t *test
 			Name: "widget", Width: 100, Height: 100, OriginX: 0.5, OriginY: 0.5, TypeID: wt.ID,
 			PortBindings: []appdto.PortBinding{{PortName: "value", TagID: r.createTag(t, "integer")}, {PortName: "alarm", TagID: r.createTag(t, "integer")}},
 		}
-		if _, err := r.sceneSvc.UpdateWidget(context.Background(), mainProject, sc.ID, w.ID, r.sceneVersion(t, sc.ID), input); err != nil {
+		if _, err := r.sceneSvc.UpdateWidget(editlock.System(context.Background()), mainProject, sc.ID, w.ID, r.sceneVersion(t, sc.ID), input); err != nil {
 			t.Fatalf("concurrent UpdateWidget: %v", err)
 		}
 	}
@@ -534,7 +535,7 @@ func TestWidgetReconciliation_WidgetEdited_ReconcilesOnlyItsScene(t *testing.T) 
 	}
 	// The tag the widget binds was created too: its job of the project's
 	// cleanup has nothing to do here.
-	if _, err := testDB.ExecContext(context.Background(), `DELETE FROM policy_jobs WHERE policy <> $1`, application.WidgetReconciliationPolicyName); err != nil {
+	if _, err := testDB.ExecContext(editlock.System(context.Background()), `DELETE FROM policy_jobs WHERE policy <> $1`, application.WidgetReconciliationPolicyName); err != nil {
 		t.Fatal(err)
 	}
 	if ran := r.runDue(t); ran != 1 || counting.listings != 0 {
@@ -786,7 +787,7 @@ func TestWidgetReconciliation_PinRemovedBeforeJobRuns_JobIsDone(t *testing.T) {
 	wt := r.createType(t, "value")
 	r.keepPorts(t, wt)
 	r.drain(t)
-	if _, err := r.pinSvc.DeleteLibraryPin(context.Background(), mainProject, r.libraries[wt.ID]); err != nil {
+	if _, err := r.pinSvc.DeleteLibraryPin(editlock.System(context.Background()), mainProject, r.libraries[wt.ID]); err != nil {
 		t.Fatalf("DeleteLibraryPin: %v", err)
 	}
 
@@ -885,7 +886,7 @@ func TestUnbindDeletedTag_TagExistsWhenJobRuns_KeepsBindings(t *testing.T) {
 
 	// A job of a tag_deleted event for a Tag that exists again, e.g. created
 	// anew with the same ID.
-	if err := policy.Run(context.Background(), "project:"+mainProject.String()+"/tag:"+tagID.String()); err != nil {
+	if err := policy.Run(editlock.System(context.Background()), "project:"+mainProject.String()+"/tag:"+tagID.String()); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 
@@ -899,7 +900,7 @@ func TestUnbindDeletedTag_TagExistsWhenJobRuns_KeepsBindings(t *testing.T) {
 // the cleanup's own tag_deleted jobs cost one lookup each.
 func TestUnbindDeletedTag_ProjectMarkedDeleted_LeavesItsScenesToTheCleanup(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	p := r.createProject(t, "Line 1")
 	wt := r.createTypeIn(t, p, "value")
 	sc, err := r.sceneSvc.CreateScene(ctx, p, appdto.SceneInput{Name: "s", Width: 100, Height: 100})
@@ -975,7 +976,7 @@ func TestUpdateWidget_KeepsBindingBrokenSinceItWasMade_PolicyRemovesIt(t *testin
 		Name: "moved", X: 10, Width: 100, Height: 100, OriginX: 0.5, OriginY: 0.5, TypeID: wt.ID,
 		PortBindings: []appdto.PortBinding{stale, {PortName: "alarm", TagID: r.createTag(t, "integer")}},
 	}
-	if _, err := r.sceneSvc.UpdateWidget(context.Background(), mainProject, sc.ID, w.ID, r.sceneVersion(t, sc.ID), input); err != nil {
+	if _, err := r.sceneSvc.UpdateWidget(editlock.System(context.Background()), mainProject, sc.ID, w.ID, r.sceneVersion(t, sc.ID), input); err != nil {
 		t.Fatalf("UpdateWidget carrying the binding it already held: %v", err)
 	}
 	r.settle(t)

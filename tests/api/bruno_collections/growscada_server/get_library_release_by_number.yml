@@ -1,7 +1,7 @@
 info:
   name: get library release by number
   type: http
-  seq: 15
+  seq: 25
 
 http:
   method: GET

@@ -66,7 +66,24 @@ func (r projectRepositoryPostgresImpl) NextID() id.ID[project.Project] {
 // Save writes the projects row. The CAS on update matches only a live row,
 // and a row it does not match is classified by whether a live one is there.
 func (r projectRepositoryPostgresImpl) Save(ctx context.Context, p project.Project) (project.Project, error) {
-	saved, err := r.store.save(ctx, p.ID(), p.Version(), p.PendingEvents(), rowWrite[project.Project]{
+	return r.save(ctx, p, r.store)
+}
+
+// SaveDiscarding writes the projects row of a Project marked by StartDiscard,
+// checking in the same transaction that the request holds the Project's
+// EditLock: starting a Discard is a gated act over the Draft as a whole
+// (ADR 0015). Anything else a Project changes is not gated.
+func (r projectRepositoryPostgresImpl) SaveDiscarding(ctx context.Context, p project.Project) (project.Project, error) {
+	store := r.store
+	store.lock = func(ctx context.Context, tx *sql.Tx) error {
+		return checkProjectEditLock(ctx, tx, p.ID())
+	}
+	return r.save(ctx, p, store)
+}
+
+// save writes p through store, with the write's own transaction.
+func (r projectRepositoryPostgresImpl) save(ctx context.Context, p project.Project, store aggregateStore[project.Project]) (project.Project, error) {
+	saved, err := store.save(ctx, p.ID(), p.Version(), p.PendingEvents(), rowWrite[project.Project]{
 		insert: func(tx *sql.Tx, next version.Version[project.Project]) error {
 			_, err := tx.ExecContext(ctx,
 				`INSERT INTO projects (id, organization_id, name, version, deleted_at, discarding)

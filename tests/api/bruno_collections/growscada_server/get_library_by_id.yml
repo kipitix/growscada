@@ -1,7 +1,7 @@
 info:
   name: get library by id
   type: http
-  seq: 11
+  seq: 21
 
 http:
   method: GET

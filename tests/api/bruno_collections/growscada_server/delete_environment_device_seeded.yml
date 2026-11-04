@@ -1,11 +1,14 @@
 info:
   name: delete the seeded environment device
   type: http
-  seq: 104
+  seq: 114
 
 http:
   method: DELETE
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/environments/{{ENVIRONMENT_ID}}/devices/{{DEVICE_ID}}
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
   auth: inherit
 
 docs: |

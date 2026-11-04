@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/kipitix/growscada/internal/server/domain/device"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -44,6 +45,11 @@ func sampleEvents(t *testing.T) []event.Event {
 	deviceID := id.NewID[device.Device]()
 	environmentID := id.NewID[device.Environment]()
 	release, _ := library.NewReleaseNumber(3)
+	lockKey := editlock.NewKey()
+	lockHolder, _ := editlock.NewHolder(lockKey, "alice")
+	heldAt := time.Date(2026, 10, 6, 12, 30, 0, 0, time.UTC)
+	held := editlock.Snapshot{Held: true, Holder: lockHolder, Since: heldAt, LastSeen: heldAt, Version: 2}
+	free := editlock.Snapshot{Version: 3}
 	return []event.Event{
 		tag.NewTagCreatedEvent(tagID, projectID, ts),
 		tag.NewTagDeletedEvent(tagID, projectID, ts),
@@ -78,6 +84,10 @@ func sampleEvents(t *testing.T) []event.Event {
 		device.NewEnvironmentDeviceCreatedEvent(environmentID, deviceID, projectID, ts),
 		device.NewEnvironmentDeviceUpdatedEvent(environmentID, deviceID, projectID, ts),
 		device.NewEnvironmentDeviceDeletedEvent(environmentID, deviceID, projectID, ts),
+		editlock.NewEditLockAcquiredEvent(editlock.ProjectScope(projectID), held, ts),
+		editlock.NewEditLockReleasedEvent(editlock.ProjectScope(projectID), free, ts),
+		editlock.NewEditLockTakenOverEvent(editlock.ProjectScope(projectID), held, lockHolder, ts),
+		editlock.NewEditLockExpiredEvent(editlock.ProjectScope(projectID), free, ts),
 	}
 }
 
@@ -171,6 +181,22 @@ func assertSameSubject(t *testing.T, original, decoded event.Event) {
 		got, ok := decoded.(device.EnvironmentDeviceEvent)
 		if !ok || got.EnvironmentID() != want.EnvironmentID() || got.DeviceID() != want.DeviceID() {
 			t.Errorf("decoded %T, want the pair (%s, %s)", decoded, want.EnvironmentID(), want.DeviceID())
+		}
+	case editlock.Event:
+		got, ok := decoded.(editlock.Event)
+		if !ok || got.Scope() != want.Scope() || got.State().Version != want.State().Version ||
+			got.State().Held != want.State().Held {
+			t.Errorf("decoded %T, want the lock of %s at version %d", decoded, want.Scope(), want.State().Version)
+			break
+		}
+		if want.State().Held && got.State().Holder != want.State().Holder {
+			t.Errorf("holder %s, want %s", got.State().Holder, want.State().Holder)
+		}
+		if takenWant, ok := want.(editlock.EditLockTakenOverEvent); ok {
+			got, ok := decoded.(editlock.EditLockTakenOverEvent)
+			if !ok || got.Previous() != takenWant.Previous() {
+				t.Errorf("decoded %T, want a takeover from %s", decoded, takenWant.Previous())
+			}
 		}
 	case device.DeviceEvent:
 		if got, ok := decoded.(device.DeviceEvent); !ok || got.DeviceID() != want.DeviceID() {

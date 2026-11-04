@@ -1,7 +1,7 @@
 info:
   name: get library pin impact
   type: http
-  seq: 18
+  seq: 28
 
 http:
   method: GET

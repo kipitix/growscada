@@ -12,6 +12,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -22,7 +23,7 @@ import (
 
 func (r *reconciliation) createProject(t *testing.T, name string) uuid.UUID {
 	t.Helper()
-	created, err := r.projectSvc.CreateProject(context.Background(), appdto.ProjectInput{Name: name})
+	created, err := r.projectSvc.CreateProject(editlock.System(context.Background()), appdto.ProjectInput{Name: name})
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
@@ -33,7 +34,7 @@ func (r *reconciliation) createProject(t *testing.T, name string) uuid.UUID {
 func countRows(t *testing.T, table string, projectID uuid.UUID) int {
 	t.Helper()
 	var n int
-	if err := testDB.QueryRowContext(context.Background(), `SELECT count(*) FROM `+table+` WHERE project_id = $1`, projectID).Scan(&n); err != nil {
+	if err := testDB.QueryRowContext(editlock.System(context.Background()), `SELECT count(*) FROM `+table+` WHERE project_id = $1`, projectID).Scan(&n); err != nil {
 		t.Fatalf("count %s: %v", table, err)
 	}
 	return n
@@ -42,7 +43,7 @@ func countRows(t *testing.T, table string, projectID uuid.UUID) int {
 func TestProjectService_CreateFindRename(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	svc := r.projectSvc
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	created, err := svc.CreateProject(ctx, appdto.ProjectInput{Name: "Line 1"})
 	if err != nil || created.Name != "Line 1" || created.Version != 1 {
@@ -78,7 +79,7 @@ func TestProjectService_CreateFindRename(t *testing.T) {
 
 func TestProjectService_Delete_ProjectIsGoneAtOnceAndItsNameFree(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	p := r.createProject(t, "Line 1")
 
 	deleted, err := r.projectSvc.DeleteProjectByID(ctx, p)
@@ -105,7 +106,7 @@ func TestProjectContent_UnknownProject_IsNotFound(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	unknown := uuid.New()
 
-	_, err := r.tagSvc.CreateTag(context.Background(), unknown, appdto.CreateTagInput{Name: "t", Type: "integer"})
+	_, err := r.tagSvc.CreateTag(editlock.System(context.Background()), unknown, appdto.CreateTagInput{Name: "t", Type: "integer"})
 
 	var nf id.NotFoundError
 	if !errors.Is(err, project.ErrProjectNotFound) || !errors.As(err, &nf) || nf.ID != unknown {
@@ -115,7 +116,7 @@ func TestProjectContent_UnknownProject_IsNotFound(t *testing.T) {
 
 func TestProjectContent_ProjectsAreApart(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	other := r.createProject(t, "Line 1")
 	input := appdto.CreateTagInput{Name: "speed", Type: "integer"}
 	inMain, err := r.tagSvc.CreateTag(ctx, mainProject, input)
@@ -176,7 +177,7 @@ func TestProjectCleanupPolicy_JobKey(t *testing.T) {
 
 func TestProjectCleanup_RemovesScenesThenTagsThenTheProject(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	p := r.createProject(t, "Line 1")
 	wt := r.createTypeIn(t, p, "value")
 	sc, err := r.sceneSvc.CreateScene(ctx, p, appdto.SceneInput{Name: "s", Width: 100, Height: 100})
@@ -235,7 +236,7 @@ func TestProjectCleanup_RemovesScenesThenTagsThenTheProject(t *testing.T) {
 // (ADR 0011); Deploy (task 35) is what fills them.
 func TestProjectCleanup_RuntimeCopiesGoWithTheProject(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	p := r.createProject(t, "Line 1")
 
 	deviceID, environmentID := uuid.New(), uuid.New()
@@ -282,7 +283,7 @@ func TestProjectCleanup_RuntimeCopiesGoWithTheProject(t *testing.T) {
 func TestProjectCleanup_RemovesDevicesAndEnvironments(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	cleanDevices(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	p := r.createProject(t, "Line 1")
 
 	devices, environments := newDeviceService(), newEnvironmentService()
@@ -336,7 +337,7 @@ func TestProjectCleanup_RemovesDevicesAndEnvironments(t *testing.T) {
 
 func TestProjectCleanup_TagSavedAfterTheProjectIsRemoved_IsProjectNotFound(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	p := r.createProject(t, "Line 1")
 	if _, err := r.projectSvc.DeleteProjectByID(ctx, p); err != nil {
 		t.Fatalf("DeleteProjectByID: %v", err)
@@ -370,7 +371,7 @@ func lateTag(t *testing.T, p uuid.UUID) (tag.TagRepository, tag.Tag) {
 
 func TestProjectCleanup_TagSavedAfterTheProjectIsMarked_IsProjectNotFound(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	p := r.createProject(t, "Line 1")
 	// The project is marked deleted; its cleanup job is not run yet.
 	if _, err := r.projectSvc.DeleteProjectByID(ctx, p); err != nil {
@@ -388,7 +389,7 @@ func TestProjectCleanup_TagSavedAfterTheProjectIsMarked_IsProjectNotFound(t *tes
 
 func TestProjectCleanup_TagSavedWhileTheProjectIsBeingMarked_WaitsAndIsProjectNotFound(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	p := r.createProject(t, "Line 1")
 	// The transaction marking the project holds its row, not committed yet.
 	tx, err := testDB.BeginTx(ctx, nil)
@@ -425,7 +426,7 @@ func TestProjectCleanup_TagSavedWhileTheProjectIsBeingMarked_WaitsAndIsProjectNo
 
 func TestSetTagValue_TagOfADeletedProject_IsProjectNotFound(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	p := r.createProject(t, "Line 1")
 	speed, err := r.tagSvc.CreateTag(ctx, p, appdto.CreateTagInput{Name: "speed", Type: "integer"})
 	if err != nil {
@@ -451,7 +452,7 @@ func TestSetTagValue_TagOfADeletedProject_IsProjectNotFound(t *testing.T) {
 // cleanup fails, and its next run removes the state, then the row.
 func TestProjectCleanup_StateUpsertedAfterTheStatesAreRemoved_IsRemovedOnTheNextRun(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	p := r.createProject(t, "Line 1")
 	if _, err := r.projectSvc.DeleteProjectByID(ctx, p); err != nil {
 		t.Fatalf("DeleteProjectByID: %v", err)
@@ -484,7 +485,7 @@ func TestProjectCleanup_StateUpsertedAfterTheStatesAreRemoved_IsRemovedOnTheNext
 // the removed Project keeps authenticating.
 func TestProjectCleanup_ForgetsTheDeviceTokensOfTheRemovedProject(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	p := r.createProject(t, "Line 1")
 	if _, err := r.projectSvc.DeleteProjectByID(ctx, p); err != nil {
 		t.Fatalf("DeleteProjectByID: %v", err)
@@ -532,7 +533,7 @@ func (n stateUpsertingAfterRemoval) RemoveProjectTagStates(ctx context.Context, 
 // Project pinning the older one keeps its bindings until it switches too.
 func TestWidgetReconciliation_PinSwitch_ReconcilesOnlyItsProject(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	other := r.createProject(t, "Line 1")
 	wt := r.createType(t, "value", "alarm")
 	if _, _, err := r.pinSvc.PutLibraryPin(ctx, other, r.libraries[wt.ID], 1, 0); err != nil {

@@ -1,7 +1,7 @@
 info:
   name: get tag by id
   type: http
-  seq: 8
+  seq: 18
 
 http:
   method: GET

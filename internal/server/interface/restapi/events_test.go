@@ -17,6 +17,7 @@ import (
 
 	projectv0 "github.com/kipitix/growscada/contract/project/v0"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -691,7 +692,7 @@ func TestEventsHandlers_Close_LetsServerShutdown(t *testing.T) {
 		t.Fatalf("expected the connected comment, got %q, %v", line, err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(editlock.System(context.Background()), 5*time.Second)
 	defer cancel()
 	shutdownErr := make(chan error, 1)
 	go func() { shutdownErr <- srv.Config.Shutdown(ctx) }()

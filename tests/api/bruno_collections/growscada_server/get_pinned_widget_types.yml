@@ -1,7 +1,7 @@
 info:
   name: get pinned widget types
   type: http
-  seq: 17
+  seq: 27
 
 http:
   method: GET

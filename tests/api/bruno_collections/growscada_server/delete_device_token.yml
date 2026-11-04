@@ -1,11 +1,14 @@
 info:
   name: delete device token
   type: http
-  seq: 101
+  seq: 111
 
 http:
   method: DELETE
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/devices/{{OTHER_DEVICE_ID}}/token
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
   auth: inherit
 
 docs: |

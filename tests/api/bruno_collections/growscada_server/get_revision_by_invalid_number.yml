@@ -1,7 +1,7 @@
 info:
   name: get revision by invalid number
   type: http
-  seq: 39
+  seq: 49
 
 http:
   method: GET

@@ -1,7 +1,7 @@
 info:
   name: get revision after rollback
   type: http
-  seq: 53
+  seq: 63
 
 http:
   method: GET

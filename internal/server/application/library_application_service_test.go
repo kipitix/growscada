@@ -10,12 +10,13 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 )
 
 func TestLibraryService_ReleaseNumbersAndRefusesAnUnchangedDraft(t *testing.T) {
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	svc := newLibraryService()
 	lib := mustCreateLibrary(t)
 	if !lib.HasUnreleasedChanges || lib.LatestRelease != 0 {
@@ -68,7 +69,7 @@ func TestLibraryService_ReleaseNumbersAndRefusesAnUnchangedDraft(t *testing.T) {
 
 func TestLibraryService_DeleteRefusedWhileALiveProjectPinsIt(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	wt := r.createType(t, "value")
 	libraryID := r.libraries[wt.ID]
 
@@ -107,7 +108,7 @@ func TestLibraryService_DeleteRefusedWhileALiveProjectPinsIt(t *testing.T) {
 // read-only until the policy has run.
 func TestDiscard_ResetsTheDraftToTheLatestRelease(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	lib := mustCreateLibrary(t)
 	if _, err := r.libSvc.Discard(ctx, lib.ID); !errors.Is(err, library.ErrNoRelease) {
 		t.Errorf("a library never released: expected ErrNoRelease, got %v", err)
@@ -196,7 +197,7 @@ func TestDiscard_ResetsTheDraftToTheLatestRelease(t *testing.T) {
 // naming them, and the preview names them and the bindings it would break.
 func TestLibraryPin_SwitchOrphaningWidgetsIsRefused_PreviewNamesThem(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	kept := r.createType(t, "value")
 	libraryID := r.libraries[kept.ID]
 	dropped, err := r.wtSvc.CreateWidgetType(ctx, libraryID, appdto.WidgetTypeInput{
@@ -282,7 +283,7 @@ func TestLibraryPin_SwitchOrphaningWidgetsIsRefused_PreviewNamesThem(t *testing.
 }
 
 func TestLibraryPin_AddRequiresAReleaseAndPinsOnce(t *testing.T) {
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	svc := newLibraryPinService()
 	lib := mustCreateLibrary(t)
 	if _, _, err := svc.PutLibraryPin(ctx, mainProject, lib.ID, 1, 0); !errors.Is(err, application.ErrInvalidInput) || !errors.Is(err, library.ErrReleaseNotFound) {

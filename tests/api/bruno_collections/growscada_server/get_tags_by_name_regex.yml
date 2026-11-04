@@ -1,7 +1,7 @@
 info:
   name: get tags by name regex
   type: http
-  seq: 7
+  seq: 17
 
 http:
   method: GET

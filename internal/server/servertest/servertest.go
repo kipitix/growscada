@@ -128,6 +128,7 @@ func NewDeviceInProject(t *testing.T, srv *httptest.Server, db *sql.DB, projectI
 	t.Helper()
 	ctx := context.Background()
 	projectPath := apiv0.ProjectPath(projectID.String())
+	EnsureEditLock(t, srv, projectID)
 	device := postJSON[apiv0.CreateDeviceResponse](t, srv, projectPath+"/devices",
 		apiv0.CreateDeviceRequest{Name: name, Protocol: "simulation", Config: apiv0.JSONObject(`{}`)})
 	environment := postJSON[apiv0.CreateEnvironmentResponse](t, srv, projectPath+"/environments",
@@ -179,6 +180,7 @@ func sendJSON[T any](t *testing.T, srv *httptest.Server, method, path string, bo
 		t.Fatalf("%s %s: %v", method, path, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(apiv0.ClientHeader, ClientKey.String())
 	resp, err := srv.Client().Do(req)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
@@ -207,7 +209,8 @@ func sendJSON[T any](t *testing.T, srv *httptest.Server, method, path string, bo
 // tag's state is written through the API.
 func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagService) {
 	t.Helper()
-	if _, err := db.ExecContext(context.Background(), "DELETE FROM runtime.revisions; DELETE FROM runtime.device_tokens; DELETE FROM runtime.tags; "+
+	if _, err := db.ExecContext(context.Background(), "DELETE FROM engineering.edit_locks; "+
+		"DELETE FROM runtime.revisions; DELETE FROM runtime.device_tokens; DELETE FROM runtime.tags; "+
 		"DELETE FROM runtime.environment_devices; DELETE FROM runtime.devices; DELETE FROM runtime.environments; "+
 		"DELETE FROM engineering.tags; "+
 		"DELETE FROM engineering.environment_devices; DELETE FROM engineering.devices; DELETE FROM engineering.environments; "+
@@ -232,6 +235,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	projectRepo := repositories.NewProjectRepositoryPostgres(db, onCommit)
 	scopes := repositories.NewProjectScopes(db, onCommit)
 	content := application.NewProjectContent(projectRepo, scopes, orgID)
+	editLocks := application.NewEditLockService(content, repositories.NewEditLockRepositoryPostgres(db, onCommit))
 	runtimeEvents := eventbus.NewAsyncPublisher(bus, 1024)
 	tagStateSvc := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, runtimeEvents.Publish)
 	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(db), runtimeEvents.Publish)
@@ -252,10 +256,11 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	dispatcher.SetPolicyRunner(runner)
 	ctx, stop := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wg.Add(4)
 	go func() { defer wg.Done(); dispatcher.Run(ctx) }()
 	go func() { defer wg.Done(); runtimeEvents.Run(ctx) }()
 	go func() { defer wg.Done(); runner.Run(ctx) }()
+	go func() { defer wg.Done(); application.RunEditLockReaper(ctx, editLocks) }()
 	t.Cleanup(func() {
 		stop()
 		wg.Wait()
@@ -272,11 +277,12 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 		Devices:      application.NewDeviceService(content),
 		Environments: application.NewEnvironmentService(content),
 		Deploy: application.NewDeployService(
-			content, application.NewProjectFileBuilder(content), runtimeNode),
+			content, application.NewProjectFileBuilder(content), runtimeNode, editLocks),
 		Discard:      application.NewDiscardService(content, runtimeNode),
 		Revisions:    revisions,
 		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(db)),
 		DeviceTokens: deviceTokens,
+		EditLocks:    editLocks,
 	}, bus, 100)
 
 	srv := httptest.NewServer(router.ServeMux())

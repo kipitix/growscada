@@ -22,6 +22,7 @@ import (
 	"github.com/kipitix/growscada/internal/devicesim"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/servertest"
 )
 
@@ -70,7 +71,7 @@ func startSimulator(t *testing.T, yaml string, tagTypes map[string]string) *simu
 	s := &simulator{svc: svc, api: apiclient.New(srv.URL, srv.Client()), tags: make(map[string]appdto.Tag)}
 	tagIDs := make([]uuid.UUID, 0, len(tagTypes))
 	for name, tagType := range tagTypes {
-		created, err := svc.CreateTag(context.Background(), servertest.MainProject, appdto.CreateTagInput{
+		created, err := svc.CreateTag(editlock.System(context.Background()), servertest.MainProject, appdto.CreateTagInput{
 			Name: name, Type: tagType,
 		})
 		if err != nil {
@@ -303,7 +304,7 @@ func TestE2E_UnknownTokenIsNoPermission(t *testing.T) {
 // learns of it on its next write (401): it stops rather than retrying.
 func TestE2E_RevokedTokenStopsTheGateway(t *testing.T) {
 	srv, svc := servertest.StartAPI(t, postgres.DB(t))
-	created, err := svc.CreateTag(context.Background(), servertest.MainProject, appdto.CreateTagInput{
+	created, err := svc.CreateTag(editlock.System(context.Background()), servertest.MainProject, appdto.CreateTagInput{
 		Name: "sim.speed", Type: "integer",
 	})
 	if err != nil {

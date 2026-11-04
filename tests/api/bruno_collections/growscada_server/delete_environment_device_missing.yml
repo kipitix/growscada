@@ -1,11 +1,14 @@
 info:
   name: delete environment device missing
   type: http
-  seq: 100
+  seq: 110
 
 http:
   method: DELETE
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/environments/{{ENVIRONMENT_ID}}/devices/{{OTHER_DEVICE_ID}}
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
   auth: inherit
 
 docs: |

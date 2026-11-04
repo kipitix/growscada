@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/server/domain/device"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -20,7 +21,7 @@ import (
 // of every Project: the pairs first, then the rows they refer to.
 func cleanDevices(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(),
+	if _, err := testDB.ExecContext(editlock.System(context.Background()),
 		`DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.tags;
 		 DELETE FROM engineering.environment_devices; DELETE FROM engineering.devices; DELETE FROM engineering.environments`); err != nil {
 		t.Fatalf("cleanDevices: %v", err)
@@ -53,7 +54,7 @@ func mustSaveDevice(t *testing.T, repo device.DeviceRepository, projectID id.ID[
 	if err != nil {
 		t.Fatalf("CreateDevice: %v", err)
 	}
-	saved, err := repo.Save(context.Background(), created)
+	saved, err := repo.Save(editlock.System(context.Background()), created)
 	if err != nil {
 		t.Fatalf("Save device: %v", err)
 	}
@@ -67,7 +68,7 @@ func mustSaveEnvironment(t *testing.T, repo device.EnvironmentRepository, projec
 	if err != nil {
 		t.Fatalf("CreateEnvironment: %v", err)
 	}
-	saved, err := repo.Save(context.Background(), created)
+	saved, err := repo.Save(editlock.System(context.Background()), created)
 	if err != nil {
 		t.Fatalf("Save environment: %v", err)
 	}
@@ -80,7 +81,7 @@ func mustSavePair(t *testing.T, repo device.EnvironmentDeviceRepository, project
 	if err != nil {
 		t.Fatalf("NewEnvironmentDeviceParams: %v", err)
 	}
-	saved, err := repo.Save(context.Background(), device.CreateEnvironmentDevice(projectID, environmentID, deviceID, params))
+	saved, err := repo.Save(editlock.System(context.Background()), device.CreateEnvironmentDevice(projectID, environmentID, deviceID, params))
 	if err != nil {
 		t.Fatalf("Save pair: %v", err)
 	}
@@ -89,7 +90,7 @@ func mustSavePair(t *testing.T, repo device.EnvironmentDeviceRepository, project
 
 func TestDeviceRepository_CRUDAndProjectScope(t *testing.T) {
 	cleanDevices(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	projects := repositories.NewProjectRepositoryPostgres(testDB)
 	other := mustCreateProject(t, projects, "Devices Other "+uuid.NewString())
 	repo := repositories.NewDeviceRepositoryPostgres(testDB, mainProject)
@@ -150,7 +151,7 @@ func TestDeviceRepository_CRUDAndProjectScope(t *testing.T) {
 
 func TestDeviceRepository_DeleteRefusesAReferencedDevice(t *testing.T) {
 	cleanDevices(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	repo := repositories.NewDeviceRepositoryPostgres(testDB, mainProject)
 	envRepo := repositories.NewEnvironmentRepositoryPostgres(testDB, mainProject)
 	pairs := repositories.NewEnvironmentDeviceRepositoryPostgres(testDB, mainProject)
@@ -200,7 +201,7 @@ func TestDeviceRepository_DeleteRefusesAReferencedDevice(t *testing.T) {
 
 func TestEnvironmentRepository_CRUDAndInUse(t *testing.T) {
 	cleanDevices(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	repo := repositories.NewEnvironmentRepositoryPostgres(testDB, mainProject)
 	devices := repositories.NewDeviceRepositoryPostgres(testDB, mainProject)
 	pairs := repositories.NewEnvironmentDeviceRepositoryPostgres(testDB, mainProject)
@@ -250,7 +251,7 @@ func TestEnvironmentRepository_CRUDAndInUse(t *testing.T) {
 
 func TestEnvironmentDeviceRepository_CRUDAndProjectScope(t *testing.T) {
 	cleanDevices(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	devices := repositories.NewDeviceRepositoryPostgres(testDB, mainProject)
 	environments := repositories.NewEnvironmentRepositoryPostgres(testDB, mainProject)
 	repo := repositories.NewEnvironmentDeviceRepositoryPostgres(testDB, mainProject)
@@ -321,7 +322,7 @@ func TestEnvironmentDeviceRepository_CRUDAndProjectScope(t *testing.T) {
 
 func TestTagRepository_SupplierMustBeOfTheProject(t *testing.T) {
 	cleanDevices(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	tags := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	other := mustCreateProject(t, repositories.NewProjectRepositoryPostgres(testDB), "Tags Other "+uuid.NewString())
 	foreign := mustSaveDevice(t, repositories.NewDeviceRepositoryPostgres(testDB, other.ID()), other.ID())

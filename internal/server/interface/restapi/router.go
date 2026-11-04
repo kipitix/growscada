@@ -9,6 +9,7 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 )
 
@@ -24,6 +25,7 @@ type APIRouter struct {
 	devicesHandlers      *DevicesHandlers
 	environmentsHandlers *EnvironmentsHandlers
 	deviceTokensHandlers *DeviceTokensHandlers
+	editLockHandlers     *EditLockHandlers
 	deviceConfigHandlers *DeviceConfigHandlers
 	deviceWhoAmIHandlers *DeviceIdentityHandlers
 	deployHandlers       *DeployHandlers
@@ -32,7 +34,27 @@ type APIRouter struct {
 }
 
 func (r APIRouter) ServeMux() http.Handler {
-	return schemaVersionMiddleware(corsMiddleware(r.serveMux))
+	return schemaVersionMiddleware(corsMiddleware(clientKeyMiddleware(r.serveMux)))
+}
+
+// clientKeyMiddleware reads the client key of a request (X-GrowSCADA-Client,
+// ADR 0015) and puts the request's identity in its context: the client that
+// holds it, or no client at all. A header that is not a UUID is 400: a client
+// that names itself must name itself properly.
+func clientKeyMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw := r.Header.Get(apiv0.ClientHeader)
+		if raw == "" {
+			next.ServeHTTP(w, r.WithContext(editlock.WithoutClient(r.Context())))
+			return
+		}
+		key, err := editlock.ParseKey(raw)
+		if err != nil {
+			sendProblem(w, NewBadRequest("client: '"+raw+"' is not a valid UUID", r.URL.Path))
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(editlock.WithClient(r.Context(), key)))
+	})
 }
 
 // Close prepares the router for graceful shutdown: the SSE event hub leaves
@@ -50,7 +72,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, "+contract.SchemaVersionHeader)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, "+contract.SchemaVersionHeader+", "+apiv0.ClientHeader)
 		w.Header().Set("Access-Control-Expose-Headers", contract.SchemaVersionHeader)
 		// Lets the browser reuse a preflight instead of repeating it before every
 		// POST/PUT/PATCH/DELETE; browsers cap the value (Chromium at 2 hours).
@@ -84,6 +106,7 @@ type Services struct {
 	Revisions    runtimeapp.RevisionService
 	DeviceConfig runtimeapp.DeviceConfigService
 	DeviceTokens runtimeapp.DeviceTokenService
+	EditLocks    application.EditLockService
 }
 
 // NewRouter returns the server API over the services of both roles.
@@ -105,8 +128,9 @@ func NewRouter(services Services, eventBus eventbus.EventBus, maxSSEClients int)
 		deviceConfigHandlers: NewDeviceConfigHandler(services.DeviceConfig, services.DeviceTokens),
 		deviceWhoAmIHandlers: NewDeviceIdentityHandler(services.DeviceTokens),
 		deployHandlers:       NewDeployHandler(services.Deploy, services.Discard, services.Revisions, services.TagStates),
+		editLockHandlers:     NewEditLockHandler(services.EditLocks),
 		revisionsHandlers:    NewRevisionHandler(services.Revisions),
-		eventsHandlers:       NewEventsHandler(eventBus, projectService, maxSSEClients, WithDeviceTokens(services.DeviceTokens)),
+		eventsHandlers:       NewEventsHandler(eventBus, projectService, maxSSEClients, WithDeviceTokens(services.DeviceTokens), WithEditLocks(services.EditLocks)),
 	}
 	for _, rt := range router.routes() {
 		router.serveMux.HandleFunc(rt.pattern, rt.handler)
@@ -133,6 +157,7 @@ func (r *APIRouter) routes() []route {
 	tokens, config := r.deviceTokensHandlers, r.deviceConfigHandlers
 	deploy := r.deployHandlers
 	revisions := r.revisionsHandlers
+	locks := r.editLockHandlers
 	return []route{
 		{"GET " + p + "/projects", projects.GetProjects},
 		{"GET " + pp, projects.GetProjectsByID},
@@ -206,6 +231,11 @@ func (r *APIRouter) routes() []route {
 		{"GET " + pp + "/deploy/preview", deploy.GetDeployPreview},
 		{"POST " + pp + "/deploy", deploy.PostDeploy},
 		{"POST " + pp + "/discard", deploy.PostDiscard},
+
+		{"GET " + pp + apiv0.EditLockPath, locks.GetEditLock},
+		{"POST " + pp + apiv0.EditLockPath, locks.PostEditLock},
+		{"DELETE " + pp + apiv0.EditLockPath, locks.DeleteEditLock},
+		{"POST " + pp + apiv0.EditLockPath + "/takeover", locks.PostEditLockTakeOver},
 
 		{"GET " + p + "/device", r.deviceWhoAmIHandlers.GetDeviceIdentity},
 		{"GET " + p + "/device/config", config.GetDeviceConfig},

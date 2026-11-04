@@ -1,5 +1,24 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.62] - 2026-11-05
+
+### Added
+
+- **EditLock: Draft проекта правит один клиент** (задача 37, часть 1; ADR 0015)
+  - Миграция `engineering.20261105000000_edit_locks`: `engineering.edit_locks` — одна строка на Draft, две nullable FK (`project_id → projects`, `library_id → engineering.libraries`, обе `ON DELETE CASCADE`), CHECK «ровно одна область», CHECK «держатель целиком или никак», частичные уникальные индексы по каждой области и индекс по `last_seen` для реапера. Строка остаётся при свободном замке: `version` растёт монотонно (взятие, отдача, перехват, истечение), `last_seen` версию не поднимает
+  - `domain/editlock`: `Scope` (Project или Library), `Key` (UUID вкладки), `Holder` (ключ + добровольно указанное имя), агрегат `EditLock` (`Acquire`, `Release`, `TakeOver(expectedVersion)`, `Expire`, `Seen`), ошибки `ErrEditLockHeld`, `ErrEditLockFree`, `ErrEditLockNotHeld`, `ErrEditLockVersionStale`, `ErrEditLockNameEmpty`, `ErrEditLockExists`, `ErrNoClient`; события `edit_lock_acquired`/`_released`/`_taken_over`/`_expired` несут `Scope()` и новое состояние и идут через outbox; `domain/editlock` — пакет инженерной ноды
+  - `EditLockRepository` и его postgres-реализация: `Find`, `Create`, `Save` (CAS по `version`), `FindAllHeld`, `Touch` (только `last_seen`, без версии и событий)
+  - Гейт в транзакции записи: `aggregateStore` каждой области проекта читает строку замка `FOR SHARE` и сверяет ключ из context; чужой/свободный — `ErrEditLockNotHeld` с держателем, запрос без клиента — `ErrNoClient` (400), контекст без идентичности отказывает; политики и очистка пишут как `editlock.System` и проверку не проходят. Запись держателя поднимает `last_seen`, поэтому клиент без SSE (growctl, Bruno) живёт записями
+  - `application.EditLockService` (`State`, `CheckOut`, `CheckIn`, `TakeOver`, `CheckHeld`, `Attach`, `Detach`, `ReapOnce`) с presence ключ → число SSE-соединений; реапер `RunEditLockReaper` раз в 30 с обновляет `last_seen` присутствующим и освобождает отсутствующих после `EditLockTTL = 5 мин` с `edit_lock_expired`; запущен в `main.go` и в `servertest`, останавливается по context
+  - Deploy проверяет замок перед сборкой ProjectFile; Discard — в транзакции пометки (`ProjectRepository.SaveDiscarding`); Check out при идущем Discard — 409 `project_discarding`
+  - REST API **0.14** (MINOR): заголовок `X-GrowSCADA-Client` (и в `Access-Control-Allow-Headers`), параметр `?client=` SSE-потоков, `EditLockResponse`, `EditLockHolderResponse`, `CheckOutEditLockRequest`, `TakeOverEditLockRequest`, поле `edit_lock` в `Problem` и в `Event`; маршруты `GET`/`POST`/`DELETE …/projects/{id}/edit-lock` и `POST …/edit-lock/takeover`; заголовок читает middleware и кладёт идентичность в context каждого запроса; SSE-обработчик при открытии делает `Attach`, при закрытии — `Detach`
+  - `apiclient.WithClientKey` (заголовок на каждом запросе), `StateEditLock`, `CheckOutEditLock` (201 или 200), `CheckInEditLock`, `TakeOverEditLock`
+  - PWA, Project-режим: ключ вкладки — UUID в `sessionStorage` (`editlock:client`), имя — в `LocalStorage` (`editlock:name`), создаются в `root` и уходят в клиент и в `eventlog.Bar` (`?client=`); строка замка в шапке — `Check out` (спрашивает имя один раз), `Editing as <name> — Check in`, `<name> is editing since HH:MM — Take over`; без замка Draft и Deploy/Discard только для чтения с подсказкой; перехват — подтверждение с держателем и его временем, затем POST с `version` и перезагрузка содержимого; потеря замка — toast и read-only; переключение проекта и уход из Project-режима сначала шлют Check in прежнему
+  - growctl: `--client-name` (по умолчанию имя пользователя ОС) и `--take-over`; мутирующие команды проекта берут Check out с ключом на запуск и Check in в конце, занятый замок — ошибка с именем держателя, `apply` без изменений замок не берёт
+  - Bruno: setup — Check out проекта Main заголовком клиента, teardown — Check in, заголовок у всех мутирующих запросов, новые запросы маршрутов замка (свободный, взятие, повтор, 409 с держателем, перехват, Check in), порядок `seq` сдвинут
+  - Тесты: домен (взятие, отказ чужому, идемпотентность, перехват с устаревшей версией, истечение, `Seen` без версии), репозиторий (CAS, `FindAllHeld`, `Touch`, CASCADE строки проекта, гейт записи), сервис (Check out/in/перехват, `CheckHeld`, реапер с presence и TTL, Deploy/Discard без замка), REST (четыре маршрута, 409 с держателем, 400 без ключа и с кривым заголовком, 404, гейт записи), UI (строка свободен/мой/чужой, read-only, Check out с именем, Check in, перехват с подтверждением, toast потери, Check in при переключении и уходе из режима), growctl (замок берётся и отдаётся, занятый — ошибка, `--take-over`, неизменный apply замок не берёт)
+  - Документация: `AGENTS.md` описывает маршруты замка, таблицу, гейт, сервис, реапер и read-only Project-режим
+
 ## [0.0.61] - 2026-11-04
 
 ### Added

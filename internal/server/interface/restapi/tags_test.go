@@ -21,6 +21,7 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/migrations"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
@@ -46,7 +47,7 @@ func stopTestDB() {
 		testDBConn.Close()
 	}
 	if pgContainer != nil {
-		pgContainer.Terminate(context.Background())
+		pgContainer.Terminate(editlock.System(context.Background()))
 	}
 }
 
@@ -65,7 +66,7 @@ func testDB() *sql.DB {
 }
 
 func startTestDB() {
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	container, err := tcpostgres.Run(ctx,
 		"postgres:16-alpine",
@@ -101,12 +102,12 @@ func startTestDB() {
 
 func cleanTags(t *testing.T) {
 	t.Helper()
-	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
+	if _, err := testDB().ExecContext(editlock.System(context.Background()), "DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
 		t.Fatalf("cleanTags: %v", err)
 	}
 }
 
-func newRouter() *restapi.APIRouter {
+func newRouter() testRouter {
 	return newServices().router()
 }
 
@@ -116,14 +117,14 @@ func newRouter() *restapi.APIRouter {
 func createTagViaService(t *testing.T, name, tagType, value, quality string) appdto.Tag {
 	t.Helper()
 	services := newServices()
-	resp, err := services.tags.CreateTag(context.Background(), mainProject, appdto.CreateTagInput{Name: name, Type: tagType})
+	resp, err := services.tags.CreateTag(editlock.System(context.Background()), mainProject, appdto.CreateTagInput{Name: name, Type: tagType})
 	if err != nil {
 		t.Fatalf("createTagViaService(%q): %v", name, err)
 	}
-	if _, err := services.deploy.Deploy(context.Background(), mainProject); err != nil {
+	if _, err := services.deploy.Deploy(editlock.System(context.Background()), mainProject); err != nil {
 		t.Fatalf("createTagViaService(%q): deploy: %v", name, err)
 	}
-	written, err := services.states.SetTagValue(context.Background(), mainProject, runtimeapp.SetTagValueInput{TagID: resp.ID, Value: value, Quality: quality})
+	written, err := services.states.SetTagValue(editlock.System(context.Background()), mainProject, runtimeapp.SetTagValueInput{TagID: resp.ID, Value: value, Quality: quality})
 	if err != nil {
 		t.Fatalf("createTagViaService(%q): write its state: %v", name, err)
 	}
@@ -220,7 +221,7 @@ func TestGetTags_NameFilter_NoMatch_Returns200WithEmptyList(t *testing.T) {
 	}
 }
 
-func getTagNames(t *testing.T, router *restapi.APIRouter, query string) (int, map[string]bool) {
+func getTagNames(t *testing.T, router servingRouter, query string) (int, map[string]bool) {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, mainPath+"/tags?"+query, nil)
 	rec := httptest.NewRecorder()
@@ -333,7 +334,7 @@ func TestGetTagsByID_ExistingTag_Returns200WithTag(t *testing.T) {
 // seq 0 in the body.
 func TestGetTagsByID_NotWrittenYet_IsTheInitialStateWithSeqZero(t *testing.T) {
 	cleanTags(t)
-	created, err := newServices().tags.CreateTag(context.Background(), mainProject, appdto.CreateTagInput{Name: "fresh", Type: "boolean"})
+	created, err := newServices().tags.CreateTag(editlock.System(context.Background()), mainProject, appdto.CreateTagInput{Name: "fresh", Type: "boolean"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -602,7 +603,7 @@ func TestDeleteTagByID_InvalidUUID_Returns400WithProblemDetails(t *testing.T) {
 // --- PATCH /api/v0/tags/{id}/value ---
 
 // patchValue sends PATCH /tags/{id}/value with body.
-func patchValue(router *restapi.APIRouter, tagID uuid.UUID, body any) *httptest.ResponseRecorder {
+func patchValue(router servingRouter, tagID uuid.UUID, body any) *httptest.ResponseRecorder {
 	raw, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPatch, mainPath+"/tags/"+tagID.String()+"/value", bytes.NewReader(raw))
 	req.Header.Set("Content-Type", "application/json")

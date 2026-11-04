@@ -1,0 +1,30 @@
+info:
+  name: delete edit lock teardown (project Main)
+  type: http
+  seq: 300
+
+http:
+  method: DELETE
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/edit-lock
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  auth: inherit
+
+docs: |
+  Teardown of the collection: the client that wrote the Draft of the project
+  Main gives its EditLock back, leaving the Draft as it is (ADR 0015).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: in
+      value: '[200, 404]'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

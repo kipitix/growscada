@@ -1,12 +1,14 @@
 info:
   name: patch tag value as the device
   type: http
-  seq: 95
+  seq: 105
 
 http:
   method: PATCH
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/tags/{{DEVICE_TAG_ID}}/value
   headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
     - name: Authorization
       value: Bearer {{DEVICE_TOKEN}}
   body:

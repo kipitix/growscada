@@ -1,0 +1,48 @@
+info:
+  name: post edit lock takeover
+  type: http
+  seq: 5
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/edit-lock/takeover
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "alice",
+        "version": 1
+      }
+  auth: inherit
+
+docs: |
+  Take over a lock another client holds, stating the version observed
+  (ADR 0015). A stale version is `409`: the client rereads the lock and retries.
+  The new holder's event reaches the former holder's stream as
+  edit_lock_taken_over, and its UI turns read-only.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.held'
+      operator: eq
+      value: 'true'
+    - expression: 'res.body.holder.name'
+      operator: eq
+      value: '"alice"'
+    - expression: 'res.body.version'
+      operator: eq
+      value: '2'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

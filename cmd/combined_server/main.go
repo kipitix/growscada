@@ -113,6 +113,8 @@ func main() {
 	// The repositories of a Project's content (Tags, Scenes, Library Pins) are opened per
 	// Project (ADR 0006)
 	projectScopes := repositories.NewProjectScopes(sqlDB, notifyDispatcher)
+	// The EditLocks of the Drafts (ADR 0015): one editor per Draft
+	editLockRepository := repositories.NewEditLockRepositoryPostgres(sqlDB, notifyDispatcher)
 	// The one Organization the server runs with until Users exist
 	organizationID, err := repositories.FindSoleOrganization(context.Background(), sqlDB)
 	if err != nil {
@@ -190,13 +192,14 @@ func main() {
 	// API server
 	// Create services
 	projectContent := application.NewProjectContent(projectRepository, projectScopes, organizationID)
+	editLockService := application.NewEditLockService(projectContent, editLockRepository)
 	projectService := application.NewProjectService(projectRepository, organizationID)
 	tagService := application.NewTagService(projectContent, runtimeNode)
 	// Deploy and Discard (task 35): the Engineering node assembles the Draft's
 	// ProjectFile and hands it to the Runtime node, which stores it as a
 	// Revision; the Engineering node keeps no copy of what it sent (ADR 0014).
 	projectFileBuilder := application.NewProjectFileBuilder(projectContent)
-	deployService := application.NewDeployService(projectContent, projectFileBuilder, runtimeNode)
+	deployService := application.NewDeployService(projectContent, projectFileBuilder, runtimeNode, editLockService)
 	discardService := application.NewDiscardService(projectContent, runtimeNode)
 	// Create router
 	apiRouter := restapi.NewRouter(restapi.Services{
@@ -214,7 +217,26 @@ func main() {
 		Revisions:    revisionService,
 		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(sqlDB)),
 		DeviceTokens: deviceTokenService,
+		EditLocks:    editLockService,
 	}, eventBus, cliArgs.MaxSSEClients)
+	// The reaper of the EditLocks: every 30 s it refreshes the last_seen of the
+	// holders present over SSE and frees a lock whose holder stopped being
+	// seen for EditLockTTL (ADR 0015).
+	reaperCtx, stopReaper := context.WithCancel(context.Background())
+	reaperDone := make(chan struct{})
+	go func() {
+		application.RunEditLockReaper(reaperCtx, editLockService)
+		close(reaperDone)
+	}()
+	gracedownManager.RegisterInterface("EditLock Reaper", 5*time.Second, func(ctx context.Context) error {
+		stopReaper()
+		select {
+		case <-reaperDone:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	})
 	// Register the event hub shutdown handler. The outbox is drained first,
 	// while SSE clients are still connected, so what is left in it reaches
 	// them; a change committed after the drain (the API server stops

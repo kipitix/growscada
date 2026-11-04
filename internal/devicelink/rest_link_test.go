@@ -12,6 +12,7 @@ import (
 	"github.com/kipitix/growscada/internal/devicelink"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/servertest"
 )
 
@@ -28,7 +29,7 @@ func TestMain(m *testing.M) {
 func setup(t *testing.T) (*devicelink.RESTLink, application.TagService, appdto.Tag) {
 	t.Helper()
 	srv, svc := servertest.StartAPI(t, postgres.DB(t))
-	created, err := svc.CreateTag(context.Background(), servertest.MainProject, appdto.CreateTagInput{
+	created, err := svc.CreateTag(editlock.System(context.Background()), servertest.MainProject, appdto.CreateTagInput{
 		Name: "pump.speed", Type: "integer",
 	})
 	if err != nil {
@@ -88,15 +89,16 @@ func TestResolve_UnknownToken(t *testing.T) {
 func TestResolve_TagsOfTheTokensProjectOnly(t *testing.T) {
 	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 	ctx := context.Background()
-	inMain, err := svc.CreateTag(ctx, servertest.MainProject, appdto.CreateTagInput{Name: "pump.speed", Type: "integer"})
+	inMain, err := svc.CreateTag(editlock.System(ctx), servertest.MainProject, appdto.CreateTagInput{Name: "pump.speed", Type: "integer"})
 	if err != nil {
 		t.Fatalf("create tag in Main: %v", err)
 	}
-	client := apiclient.New(srv.URL, srv.Client())
+	client := apiclient.New(srv.URL, srv.Client()).WithClientKey(servertest.ClientKey.String())
 	line, err := client.CreateProject(ctx, apiv0.CreateProjectRequest{Name: "Line 1"})
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}
+	servertest.EnsureEditLockWithClient(t, client, line.ID)
 	inLine, err := client.Project(line.ID).CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.speed", Type: "boolean"})
 	if err != nil {
 		t.Fatalf("create tag in Line 1: %v", err)
@@ -143,11 +145,11 @@ func TestWrite_StatesNoVersion(t *testing.T) {
 func TestWrite_TagOfAnotherDevice(t *testing.T) {
 	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 	ctx := context.Background()
-	ours, err := svc.CreateTag(ctx, servertest.MainProject, appdto.CreateTagInput{Name: "pump.speed", Type: "integer"})
+	ours, err := svc.CreateTag(editlock.System(ctx), servertest.MainProject, appdto.CreateTagInput{Name: "pump.speed", Type: "integer"})
 	if err != nil {
 		t.Fatalf("create tag: %v", err)
 	}
-	theirs, err := svc.CreateTag(ctx, servertest.MainProject, appdto.CreateTagInput{Name: "valve.state", Type: "integer"})
+	theirs, err := svc.CreateTag(editlock.System(ctx), servertest.MainProject, appdto.CreateTagInput{Name: "valve.state", Type: "integer"})
 	if err != nil {
 		t.Fatalf("create tag: %v", err)
 	}
@@ -169,7 +171,7 @@ func TestWrite_DeletedTag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if _, err := svc.DeleteTagByID(context.Background(), servertest.MainProject, created.ID); err != nil {
+	if _, err := svc.DeleteTagByID(editlock.System(context.Background()), servertest.MainProject, created.ID); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 	// The running Revision still holds the Tag: the next Deploy drops it.
@@ -187,7 +189,7 @@ func TestWrite_DeletedTag(t *testing.T) {
 // again rather than trusting the project found earlier.
 func TestResolve_ProjectDeletedAfterItWasFound(t *testing.T) {
 	srv, svc := servertest.StartAPI(t, postgres.DB(t))
-	created, err := svc.CreateTag(context.Background(), servertest.MainProject, appdto.CreateTagInput{
+	created, err := svc.CreateTag(editlock.System(context.Background()), servertest.MainProject, appdto.CreateTagInput{
 		Name: "pump.speed", Type: "integer",
 	})
 	if err != nil {

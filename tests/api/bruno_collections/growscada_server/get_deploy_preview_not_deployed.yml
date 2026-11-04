@@ -1,7 +1,7 @@
 info:
   name: get deploy preview of a never deployed project
   type: http
-  seq: 30
+  seq: 40
 
 http:
   method: GET

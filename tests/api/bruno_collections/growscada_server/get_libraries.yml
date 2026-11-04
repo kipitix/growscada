@@ -1,7 +1,7 @@
 info:
   name: get libraries
   type: http
-  seq: 9
+  seq: 19
 
 http:
   method: GET

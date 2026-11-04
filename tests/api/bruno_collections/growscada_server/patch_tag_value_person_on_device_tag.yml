@@ -1,11 +1,14 @@
 info:
   name: patch tag value of a device tag by people
   type: http
-  seq: 96
+  seq: 106
 
 http:
   method: PATCH
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/tags/{{DEVICE_TAG_ID}}/value
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
   body:
     type: json
     data: |-

@@ -1,11 +1,14 @@
 info:
   name: post widget types
   type: http
-  seq: 45
+  seq: 55
 
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/widget-types
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
   body:
     type: json
     data: |-

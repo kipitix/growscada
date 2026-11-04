@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pressly/goose/v3"
 
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/migrations"
 )
 
@@ -64,7 +65,7 @@ func rollRolesBackToBaseline(t *testing.T, ctx context.Context, db *sql.DB, dir 
 }
 
 func TestMigrationWidgetsTypeIDForeignKey_BumpsVersionOfScenesThatLoseWidgets(t *testing.T) {
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	db, dir := migrationDB(t)
 	if err := goose.UpToContext(ctx, db, dir, 20260926000000); err != nil {
 		t.Fatalf("migrate to the previous version: %v", err)
@@ -113,7 +114,7 @@ func TestMigrationWidgetsTypeIDForeignKey_BumpsVersionOfScenesThatLoseWidgets(t 
 }
 
 func TestMigrationOrganizationsAndProjects_PutsExistingContentIntoMain(t *testing.T) {
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	db, dir := migrationDB(t)
 	if err := goose.UpToContext(ctx, db, dir, 20261019000001); err != nil {
 		t.Fatalf("migrate to the previous version: %v", err)
@@ -199,7 +200,7 @@ func TestMigrationOrganizationsAndProjects_PutsExistingContentIntoMain(t *testin
 // content of a project deleted but not cleaned up yet does not come back
 // merged into the one set, nor do its jobs or the events of projects.
 func TestMigrationOrganizationsAndProjects_Down_LeavesOutDeletedProjects(t *testing.T) {
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	db, dir := migrationDB(t)
 	if err := goose.UpToContext(ctx, db, dir, 20261025000000); err != nil {
 		t.Fatalf("migrate: %v", err)
@@ -279,7 +280,7 @@ func TestMigrationOrganizationsAndProjects_Down_LeavesOutDeletedProjects(t *test
 // make bruno_test in step with the migrations: the demo content in the
 // project Main, every Tag with its state, and the empty project Line 2.
 func TestSeedData_AppliesOnTheMigratedSchema(t *testing.T) {
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	db, dir := migrationDB(t)
 	if err := migrations.Up(ctx, db); err != nil {
 		t.Fatalf("migrate: %v", err)
@@ -349,7 +350,7 @@ func TestSeedData_AppliesOnTheMigratedSchema(t *testing.T) {
 // were created, tag_updated leaves the outbox, and the chains of the two
 // schemas start at their baseline (ADR 0011).
 func TestMigrationEngineeringAndRuntimeSchemas_MovesTablesAndSplitsTags(t *testing.T) {
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	db, dir := migrationDB(t)
 	if err := goose.UpToContext(ctx, db, dir, 20261025000000); err != nil {
 		t.Fatalf("migrate to the previous version: %v", err)
@@ -455,7 +456,7 @@ func TestMigrationEngineeringAndRuntimeSchemas_MovesTablesAndSplitsTags(t *testi
 // migration goes back only from the baseline of the roles' chains, so they
 // are rolled back to it first (ADR 0011).
 func TestMigrationEngineeringAndRuntimeSchemas_Down_PutsTheStatesBack(t *testing.T) {
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	db, dir := migrationDB(t)
 	if err := migrations.Up(ctx, db); err != nil {
 		t.Fatalf("migrate: %v", err)
@@ -510,7 +511,7 @@ func TestMigrationEngineeringAndRuntimeSchemas_Down_PutsTheStatesBack(t *testing
 // Draft and a copy in the Runtime schema (task 34, ADR 0011 amendment
 // 2026-11-01).
 func TestMigrationTagStatesAndDevices_SplitsTheStateAndAddsDevices(t *testing.T) {
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	db, dir := migrationDB(t)
 	const main = "b0000000-0000-4000-8000-000000000001"
 	if err := goose.UpToContext(ctx, db, dir, rolesBaseline); err != nil {
@@ -655,7 +656,7 @@ func TestMigrationTagStatesAndDevices_SplitsTheStateAndAddsDevices(t *testing.T)
 // Scene of a WidgetType become jobs of the Projects holding a Widget of it
 // (ADR 0007).
 func TestMigrationLibraries_PutsExistingWidgetTypesIntoMain(t *testing.T) {
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	db, dir := migrationDB(t)
 	if err := goose.UpToContext(ctx, db, dir, 20261026000000); err != nil {
 		t.Fatalf("migrate public: %v", err)

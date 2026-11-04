@@ -90,13 +90,27 @@ services:
   # are inserted by test_data directly, so the stack would run on fixtures
   # alone. Deploy "Main" (the simulator's Device and the dashboard's Tags)
   # once, as a real deployment would, before anything writes a Tag value or
-  # connects a Device (task 35).
+  # connects a Device (task 35). The Deploy is an act over the Draft, so it
+  # checks the Draft's EditLock out first (ADR 0015).
   deploy:
     image: curlimages/curl:8.10.1
     depends_on:
       server:
         condition: service_healthy
-    command: ["-fsS", "-X", "POST", "http://server:9090/api/v0/projects/b0000000-0000-4000-8000-000000000001/deploy"]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        curl -fsS -X POST \
+          -H "X-GrowSCADA-Client: b0000000-0000-4000-8000-00000000de91" \
+          -H "Content-Type: application/json" \
+          -d '{"name":"bruno-deploy"}' \
+          http://server:9090/api/v0/projects/b0000000-0000-4000-8000-000000000001/edit-lock &&
+        curl -fsS -X POST \
+          -H "X-GrowSCADA-Client: b0000000-0000-4000-8000-00000000de91" \
+          http://server:9090/api/v0/projects/b0000000-0000-4000-8000-000000000001/deploy &&
+        curl -fsS -X DELETE \
+          -H "X-GrowSCADA-Client: b0000000-0000-4000-8000-00000000de91" \
+          http://server:9090/api/v0/projects/b0000000-0000-4000-8000-000000000001/edit-lock
     restart: "no"
 
   simulator:

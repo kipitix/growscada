@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -69,6 +70,8 @@ func (p unbindDeletedTagPolicy) JobKey(e event.Event) (string, bool) {
 // the others: Run returns the errors of all that failed, and the job is run
 // again, the Scenes already unbound then no longer found.
 func (p unbindDeletedTagPolicy) Run(ctx context.Context, key string) error {
+	// A policy writes as the server: it passes no EditLock check (ADR 0015).
+	ctx = editlock.System(ctx)
 	projectID, rest, err := cutProjectKey(key)
 	if err != nil {
 		return err

@@ -1,11 +1,14 @@
 info:
   name: post revision rollback of the running one
   type: http
-  seq: 50
+  seq: 60
 
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/revisions/2/rollback
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
   auth: inherit
 
 docs: |

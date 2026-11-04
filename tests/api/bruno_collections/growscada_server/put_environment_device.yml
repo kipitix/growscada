@@ -1,11 +1,14 @@
 info:
   name: put environment device
   type: http
-  seq: 90
+  seq: 100
 
 http:
   method: PUT
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/environments/{{ENVIRONMENT_ID}}/devices/{{OTHER_DEVICE_ID}}
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
   body:
     type: json
     data: |-

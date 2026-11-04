@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/server/domain/device"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -52,6 +53,22 @@ type payload struct {
 	// event, whose ID is its Environment's.
 	EnvironmentID *uuid.UUID `json:"environment_id,omitempty"`
 	DeviceID      *uuid.UUID `json:"device_id,omitempty"`
+	// EditLock is the state an edit_lock_* event announces (ADR 0015): its
+	// holder (absent while free), the times, and the version. PreviousKey and
+	// PreviousName are the holder an edit_lock_taken_over displaced.
+	EditLock     *editLockPayload `json:"edit_lock,omitempty"`
+	PreviousKey  *uuid.UUID       `json:"previous_key,omitempty"`
+	PreviousName string           `json:"previous_name,omitempty"`
+}
+
+// editLockPayload is the state of an EditLock an event carries.
+type editLockPayload struct {
+	Held     bool       `json:"held"`
+	Key      *uuid.UUID `json:"key,omitempty"`
+	Name     string     `json:"name,omitempty"`
+	Since    *time.Time `json:"since,omitempty"`
+	LastSeen *time.Time `json:"last_seen,omitempty"`
+	Version  int        `json:"version"`
 }
 
 // Encode returns the stored form of a domain event. Events of delivery
@@ -105,6 +122,28 @@ func Encode(e event.Event) ([]byte, error) {
 		p.ID = ev.SceneID().UUID()
 	case project.ProjectEvent:
 		p.ID = ev.ProjectID().UUID()
+	case editlock.Event:
+		if ev.Scope().IsLibrary() {
+			rawLibraryID := ev.Scope().LibraryID().UUID()
+			p.ID = rawLibraryID
+			p.LibraryID = &rawLibraryID
+		} else {
+			rawProjectID := ev.Scope().ProjectID().UUID()
+			p.ID = rawProjectID
+			p.ProjectID = &rawProjectID
+		}
+		state := ev.State()
+		p.EditLock = &editLockPayload{Held: state.Held, Name: state.Holder.Name(),
+			Version: state.Version}
+		if state.Held {
+			key := state.Holder.Key().UUID()
+			since, lastSeen := state.Since, state.LastSeen
+			p.EditLock.Key, p.EditLock.Since, p.EditLock.LastSeen = &key, &since, &lastSeen
+		}
+		if taken, ok := ev.(editlock.EditLockTakenOverEvent); ok && !taken.Previous().IsZero() {
+			key := taken.Previous().Key().UUID()
+			p.PreviousKey, p.PreviousName = &key, taken.Previous().Name()
+		}
 	default:
 		return nil, fmt.Errorf("cannot encode event %s: not a domain event", e.Type())
 	}
@@ -165,6 +204,9 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 		return project.NewProjectDeletedEvent(projectOfEvent, ts), nil
 	case event.EventTypeProjectDiscardStarted:
 		return project.NewProjectDiscardStartedEvent(projectOfEvent, ts), nil
+	case event.EventTypeEditLockAcquired, event.EventTypeEditLockReleased,
+		event.EventTypeEditLockTakenOver, event.EventTypeEditLockExpired:
+		return decodeEditLockEvent(eventType, p, ts)
 	}
 
 	// Events of a Project's content: the Project is stored beside them.
@@ -241,6 +283,56 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 		return scene.NewWidgetDeletedEvent(widgetID, holder, projectID, ts), nil
 	}
 	return nil, fmt.Errorf("cannot decode event of type %s: not a domain event", eventType)
+}
+
+// decodeEditLockEvent rebuilds an edit_lock_* event from its payload: the
+// scope from the Project or Library it names, the state from its lock block.
+func decodeEditLockEvent(eventType event.EventType, p payload, ts event.EventOption) (event.Event, error) {
+	if p.EditLock == nil {
+		return nil, fmt.Errorf("cannot decode %s payload: no edit_lock", eventType)
+	}
+	var scope editlock.Scope
+	switch {
+	case p.ProjectID != nil && p.LibraryID == nil:
+		scope = editlock.ProjectScope(id.NewID(id.IDWithUUID[project.Project](*p.ProjectID)))
+	case p.LibraryID != nil && p.ProjectID == nil:
+		scope = editlock.LibraryScope(id.NewID(id.IDWithUUID[library.Library](*p.LibraryID)))
+	default:
+		return nil, fmt.Errorf("cannot decode %s payload: no single scope", eventType)
+	}
+	state := editlock.Snapshot{Version: p.EditLock.Version}
+	if p.EditLock.Held {
+		if p.EditLock.Key == nil || p.EditLock.Since == nil || p.EditLock.LastSeen == nil {
+			return nil, fmt.Errorf("cannot decode %s payload: a held lock needs key and times", eventType)
+		}
+		key, err := editlock.ParseKey(p.EditLock.Key.String())
+		if err != nil {
+			return nil, fmt.Errorf("cannot decode %s payload: %w", eventType, err)
+		}
+		holder, err := editlock.NewHolder(key, p.EditLock.Name)
+		if err != nil {
+			return nil, fmt.Errorf("cannot decode %s payload: %w", eventType, err)
+		}
+		state.Held, state.Holder = true, holder
+		state.Since, state.LastSeen = *p.EditLock.Since, *p.EditLock.LastSeen
+	}
+	switch eventType {
+	case event.EventTypeEditLockAcquired:
+		return editlock.NewEditLockAcquiredEvent(scope, state, ts), nil
+	case event.EventTypeEditLockReleased:
+		return editlock.NewEditLockReleasedEvent(scope, state, ts), nil
+	case event.EventTypeEditLockTakenOver:
+		var previous editlock.Holder
+		if p.PreviousKey != nil {
+			key, err := editlock.ParseKey(p.PreviousKey.String())
+			if err == nil {
+				previous, _ = editlock.NewHolder(key, p.PreviousName)
+			}
+		}
+		return editlock.NewEditLockTakenOverEvent(scope, state, previous, ts), nil
+	default:
+		return editlock.NewEditLockExpiredEvent(scope, state, ts), nil
+	}
 }
 
 // untypedWidgetEvent is a widget_created or widget_updated event read back

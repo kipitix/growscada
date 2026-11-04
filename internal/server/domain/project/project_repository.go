@@ -48,6 +48,11 @@ type ProjectRepository interface {
 	// name, or an error on failure.
 	Save(context.Context, Project) (Project, error)
 
+	// SaveDiscarding is Save for a Project marked by StartDiscard: it checks,
+	// in the same transaction, that the request holds the Project's EditLock
+	// (ErrEditLockNotHeld or ErrNoClient otherwise).
+	SaveDiscarding(context.Context, Project) (Project, error)
+
 	// FindByID returns the live project with the given ID.
 	// Returns ErrProjectNotFound if there is none.
 	FindByID(context.Context, id.ID[Project]) (Project, error)

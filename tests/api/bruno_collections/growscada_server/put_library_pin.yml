@@ -1,11 +1,14 @@
 info:
   name: put library pin
   type: http
-  seq: 48
+  seq: 58
 
 http:
   method: PUT
   url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/library-pins/{{OTHER_LIBRARY_ID}}
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
   body:
     type: json
     data: |-

@@ -9,6 +9,7 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -21,7 +22,7 @@ import (
 func cleanScenes(t *testing.T) {
 	t.Helper()
 	// widgets cascade-delete with their scene (ON DELETE CASCADE on scene_id).
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM engineering.scenes"); err != nil {
+	if _, err := testDB.ExecContext(editlock.System(context.Background()), "DELETE FROM engineering.scenes"); err != nil {
 		t.Fatalf("cleanScenes: %v", err)
 	}
 	ensureTestWidgetType(t)
@@ -54,7 +55,7 @@ var testCreateSceneInput = appdto.SceneInput{
 // its DTO (ID and initial committed version).
 func mustCreateScene(t *testing.T, svc application.SceneService) appdto.Scene {
 	t.Helper()
-	created, err := svc.CreateScene(context.Background(), mainProject, testCreateSceneInput)
+	created, err := svc.CreateScene(editlock.System(context.Background()), mainProject, testCreateSceneInput)
 	if err != nil {
 		t.Fatalf("CreateScene: %v", err)
 	}
@@ -82,7 +83,7 @@ func TestCreateScene_Valid_ReturnsID(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
 
-	resp, err := svc.CreateScene(context.Background(), mainProject, testCreateSceneInput)
+	resp, err := svc.CreateScene(editlock.System(context.Background()), mainProject, testCreateSceneInput)
 
 	if err != nil {
 		t.Fatalf("CreateScene returned unexpected error: %v", err)
@@ -98,7 +99,7 @@ func TestCreateScene_InvalidSize_ReturnsError(t *testing.T) {
 
 	input := testCreateSceneInput
 	input.Width = -1
-	_, err := svc.CreateScene(context.Background(), mainProject, input)
+	_, err := svc.CreateScene(editlock.System(context.Background()), mainProject, input)
 
 	if !errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("expected ErrInvalidInput for invalid width, got: %v", err)
@@ -109,7 +110,7 @@ func TestFindAllScenes_EmptyDB_ReturnsEmptyList(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
 
-	resp, err := svc.FindAllScenes(context.Background(), mainProject)
+	resp, err := svc.FindAllScenes(editlock.System(context.Background()), mainProject)
 
 	if err != nil {
 		t.Fatalf("FindAllScenes: %v", err)
@@ -122,7 +123,7 @@ func TestFindAllScenes_EmptyDB_ReturnsEmptyList(t *testing.T) {
 func TestFindAllScenes_Multiple_ReturnsAll(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	input2 := testCreateSceneInput
 	input2.Name = "second-scene"
@@ -146,7 +147,7 @@ func TestFindAllScenes_Multiple_ReturnsAll(t *testing.T) {
 func TestFindSceneByID_Existing_ReturnsCorrectFields(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	created := mustCreateScene(t, svc)
 
@@ -164,7 +165,7 @@ func TestFindSceneByID_NotFound_ReturnsWrappedError(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
 
-	_, err := svc.FindSceneByID(context.Background(), mainProject, uuid.New())
+	_, err := svc.FindSceneByID(editlock.System(context.Background()), mainProject, uuid.New())
 
 	if !errors.Is(err, scene.ErrSceneNotFound) {
 		t.Errorf("expected wrapped ErrSceneNotFound, got: %v", err)
@@ -174,7 +175,7 @@ func TestFindSceneByID_NotFound_ReturnsWrappedError(t *testing.T) {
 func TestUpdateScene_Valid_ReturnsIncrementedVersion(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	created := mustCreateScene(t, svc)
 
@@ -193,7 +194,7 @@ func TestUpdateScene_Valid_ReturnsIncrementedVersion(t *testing.T) {
 func TestUpdateScene_StaleVersion_ReturnsConflict(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	created := mustCreateScene(t, svc)
 
@@ -209,7 +210,7 @@ func TestUpdateScene_StaleVersion_ReturnsConflict(t *testing.T) {
 func TestDeleteScene_Existing_ReturnsDeletedItem(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	created := mustCreateScene(t, svc)
 
@@ -227,7 +228,7 @@ func TestDeleteScene_NotFound_ReturnsWrappedError(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
 
-	_, err := svc.DeleteSceneByID(context.Background(), mainProject, uuid.New())
+	_, err := svc.DeleteSceneByID(editlock.System(context.Background()), mainProject, uuid.New())
 
 	if !errors.Is(err, scene.ErrSceneNotFound) {
 		t.Errorf("expected wrapped ErrSceneNotFound, got: %v", err)
@@ -239,7 +240,7 @@ func TestDeleteScene_NotFound_ReturnsWrappedError(t *testing.T) {
 func TestCreateWidget_Valid_ReturnsNonNilID(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	sc := mustCreateScene(t, svc)
 
 	input := testCreateWidgetInput
@@ -256,7 +257,7 @@ func TestCreateWidget_Valid_ReturnsNonNilID(t *testing.T) {
 func TestCreateWidget_Valid_BumpsSceneVersion(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	sc := mustCreateScene(t, svc)
 
 	input := testCreateWidgetInput
@@ -280,7 +281,7 @@ func TestCreateWidget_Valid_BumpsSceneVersion(t *testing.T) {
 func TestCreateWidget_StaleSceneVersion_ReturnsConflict(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	sc := mustCreateScene(t, svc)
 
 	input := testCreateWidgetInput
@@ -300,7 +301,7 @@ func TestCreateWidget_StaleSceneVersionAndUnknownType_ReturnsConflict(t *testing
 
 	input := testCreateWidgetInput
 	input.TypeID = uuid.New()
-	_, err := svc.CreateWidget(context.Background(), mainProject, sc.ID, sc.Version+99, input)
+	_, err := svc.CreateWidget(editlock.System(context.Background()), mainProject, sc.ID, sc.Version+99, input)
 
 	if !errors.Is(err, scene.ErrSceneConflict) {
 		t.Errorf("expected wrapped ErrSceneConflict, got: %v", err)
@@ -312,7 +313,7 @@ func TestCreateWidget_UnknownScene_ReturnsNotFound(t *testing.T) {
 	svc := newSceneService()
 
 	input := testCreateWidgetInput
-	_, err := svc.CreateWidget(context.Background(), mainProject, uuid.New(), 1, input)
+	_, err := svc.CreateWidget(editlock.System(context.Background()), mainProject, uuid.New(), 1, input)
 
 	if !errors.Is(err, scene.ErrSceneNotFound) {
 		t.Errorf("expected wrapped ErrSceneNotFound, got: %v", err)
@@ -322,7 +323,7 @@ func TestCreateWidget_UnknownScene_ReturnsNotFound(t *testing.T) {
 func TestCreateWidget_EmptyName_ReturnsError(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	sc := mustCreateScene(t, svc)
 
 	input := testCreateWidgetInput
@@ -337,7 +338,7 @@ func TestCreateWidget_EmptyName_ReturnsError(t *testing.T) {
 func TestCreateWidget_InvalidOrigin_ReturnsError(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	sc := mustCreateScene(t, svc)
 
 	input := testCreateWidgetInput
@@ -352,7 +353,7 @@ func TestCreateWidget_InvalidOrigin_ReturnsError(t *testing.T) {
 func TestFindWidgetsBySceneID_EmptyScene_ReturnsEmptyList(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	sc := mustCreateScene(t, svc)
 
 	resp, err := svc.FindWidgetsBySceneID(ctx, mainProject, sc.ID)
@@ -368,7 +369,7 @@ func TestFindWidgetsBySceneID_EmptyScene_ReturnsEmptyList(t *testing.T) {
 func TestFindWidgetsBySceneID_MultipleWidgets_ReturnsOnlyThoseInScene(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	target := mustCreateScene(t, svc)
 	other := mustCreateScene(t, svc)
 
@@ -403,7 +404,7 @@ func TestFindWidgetsBySceneID_MultipleWidgets_ReturnsOnlyThoseInScene(t *testing
 func TestFindWidgetByID_Existing_ReturnsCorrectFields(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	sc := mustCreateScene(t, svc)
 
 	input := testCreateWidgetInput
@@ -428,7 +429,7 @@ func TestFindWidgetByID_Existing_ReturnsCorrectFields(t *testing.T) {
 func TestFindWidgetByID_NotFound_ReturnsWrappedError(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	sc := mustCreateScene(t, svc)
 
 	_, err := svc.FindWidgetByID(ctx, mainProject, sc.ID, uuid.New())
@@ -441,7 +442,7 @@ func TestFindWidgetByID_NotFound_ReturnsWrappedError(t *testing.T) {
 func TestUpdateWidget_Valid_BumpsSceneVersion(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	sc := mustCreateScene(t, svc)
 
 	input := testCreateWidgetInput
@@ -470,7 +471,7 @@ func TestUpdateWidget_Valid_BumpsSceneVersion(t *testing.T) {
 func TestUpdateWidget_StaleSceneVersion_ReturnsConflict(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	sc := mustCreateScene(t, svc)
 
 	input := testCreateWidgetInput
@@ -492,7 +493,7 @@ func TestUpdateWidget_StaleSceneVersion_ReturnsConflict(t *testing.T) {
 func TestUpdateWidget_StaleSceneVersionAndUnknownType_ReturnsConflict(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	sc := mustCreateScene(t, svc)
 	created, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, testCreateWidgetInput)
 	if err != nil {
@@ -511,7 +512,7 @@ func TestUpdateWidget_StaleSceneVersionAndUnknownType_ReturnsConflict(t *testing
 func TestUpdateWidget_NotFound_ReturnsWrappedError(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	sc := mustCreateScene(t, svc)
 
 	_, err := svc.UpdateWidget(ctx, mainProject, sc.ID, uuid.New(), sc.Version, appdto.WidgetInput{
@@ -527,7 +528,7 @@ func TestUpdateWidget_NotFound_ReturnsWrappedError(t *testing.T) {
 func TestDeleteWidget_Existing_RemovedFromDB(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	sc := mustCreateScene(t, svc)
 
 	input := testCreateWidgetInput
@@ -549,7 +550,7 @@ func TestDeleteWidget_Existing_RemovedFromDB(t *testing.T) {
 func TestDeleteWidget_NotFound_ReturnsWrappedError(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	sc := mustCreateScene(t, svc)
 
 	_, err := svc.DeleteWidgetByID(ctx, mainProject, sc.ID, uuid.New())
@@ -564,7 +565,7 @@ func TestDeleteWidget_NotFound_ReturnsWrappedError(t *testing.T) {
 func TestDeleteSceneByID_WithWidgets_CascadesInDB(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	sc := mustCreateScene(t, svc)
 
 	input := testCreateWidgetInput
@@ -590,7 +591,7 @@ func TestDeleteSceneByID_WithWidgets_CascadesInDB(t *testing.T) {
 func TestDeleteSceneByID_WithWidgets_PublishesWidgetDeletedPerWidget(t *testing.T) {
 	cleanScenes(t)
 	svc, bus := newSceneServiceWithBus(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	sc := mustCreateScene(t, svc)
 
 	firstInput := testCreateWidgetInput
@@ -643,7 +644,7 @@ func TestDeleteSceneByID_WithWidgets_PublishesWidgetDeletedPerWidget(t *testing.
 func TestDeleteSceneByID_EmptyScene_PublishesOnlySceneDeletedEvent(t *testing.T) {
 	cleanScenes(t)
 	svc, bus := newSceneServiceWithBus(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	sc := mustCreateScene(t, svc)
 
 	var widgetDeleted []event.Event
@@ -667,7 +668,7 @@ func TestCreateWidget_UnknownType_ReturnsInvalidInput(t *testing.T) {
 
 	input := testCreateWidgetInput
 	input.TypeID = uuid.New()
-	_, err := svc.CreateWidget(context.Background(), mainProject, sc.ID, sc.Version, input)
+	_, err := svc.CreateWidget(editlock.System(context.Background()), mainProject, sc.ID, sc.Version, input)
 
 	if !errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("expected ErrInvalidInput, got: %v", err)
@@ -677,7 +678,7 @@ func TestCreateWidget_UnknownType_ReturnsInvalidInput(t *testing.T) {
 func TestUpdateWidget_UnknownType_ReturnsInvalidInput(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	sc := mustCreateScene(t, svc)
 	input := testCreateWidgetInput
 	created, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, input)
@@ -702,7 +703,7 @@ func TestCreateWidget_UnknownSceneAndType_ReturnsSceneNotFound(t *testing.T) {
 	input := testCreateWidgetInput
 	input.TypeID = uuid.New()
 	input.PortBindings = []appdto.PortBinding{{PortName: "value", TagID: uuid.New()}}
-	_, err := svc.CreateWidget(context.Background(), mainProject, uuid.New(), 1, input)
+	_, err := svc.CreateWidget(editlock.System(context.Background()), mainProject, uuid.New(), 1, input)
 
 	if !errors.Is(err, scene.ErrSceneNotFound) {
 		t.Errorf("expected wrapped ErrSceneNotFound, got: %v", err)
@@ -717,7 +718,7 @@ func TestUpdateWidget_UnknownWidgetAndType_ReturnsWidgetNotFound(t *testing.T) {
 	svc := newSceneService()
 	sc := mustCreateScene(t, svc)
 
-	_, err := svc.UpdateWidget(context.Background(), mainProject, sc.ID, uuid.New(), sc.Version, appdto.WidgetInput{
+	_, err := svc.UpdateWidget(editlock.System(context.Background()), mainProject, sc.ID, uuid.New(), sc.Version, appdto.WidgetInput{
 		Name: "x", TypeID: uuid.New(), OriginX: 0.5, OriginY: 0.5,
 		Width: 100, Height: 100,
 	})
@@ -738,7 +739,7 @@ func TestCreateWidget_UnknownTypeWithBindings_ReturnsInvalidInput(t *testing.T) 
 	input := testCreateWidgetInput
 	input.TypeID = uuid.New()
 	input.PortBindings = []appdto.PortBinding{{PortName: "value", TagID: uuid.New()}}
-	_, err := svc.CreateWidget(context.Background(), mainProject, sc.ID, sc.Version, input)
+	_, err := svc.CreateWidget(editlock.System(context.Background()), mainProject, sc.ID, sc.Version, input)
 
 	if !errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("expected ErrInvalidInput, got: %v", err)
@@ -752,7 +753,7 @@ func TestCreateWidget_UndeclaredPort_ReturnsInvalidInput(t *testing.T) {
 
 	input := testCreateWidgetInput
 	input.PortBindings = []appdto.PortBinding{{PortName: "missing", TagID: uuid.New()}}
-	_, err := svc.CreateWidget(context.Background(), mainProject, sc.ID, sc.Version, input)
+	_, err := svc.CreateWidget(editlock.System(context.Background()), mainProject, sc.ID, sc.Version, input)
 
 	if !errors.Is(err, application.ErrInvalidInput) || !errors.Is(err, scene.ErrPortNotDeclared) {
 		t.Errorf("expected ErrInvalidInput wrapping ErrPortNotDeclared, got: %v", err)
@@ -773,7 +774,7 @@ func newBindingFixture(t *testing.T, svc application.SceneService) bindingFixtur
 	t.Helper()
 	cleanScenes(t)
 	cleanTags(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	wt, _ := pinNewWidgetType(t, mainProject, appdto.WidgetTypeInput{
 		Name: "typed", HtmlTemplate: "<div></div>",
 		InputPorts: []appdto.InputPort{{Name: "value", TypeHint: "integer"}},
@@ -816,7 +817,7 @@ func TestWidgetWrites_CheckBoundTags(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			svc := newSceneService()
-			ctx := context.Background()
+			ctx := editlock.System(context.Background())
 
 			f := newBindingFixture(t, svc)
 			_, createErr := svc.CreateWidget(ctx, mainProject, f.scene.ID, f.widget.SceneVersion, f.input(tt.tag(f)))
@@ -838,7 +839,7 @@ func TestWidgetWrites_CheckBoundTags(t *testing.T) {
 func TestDeleteWidget_Existing_BumpsSceneVersionOnce(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	sc := mustCreateScene(t, svc)
 	created, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, testCreateWidgetInput)
 	if err != nil {
@@ -882,7 +883,7 @@ func (r *racingSceneRepository) FindByID(ctx context.Context, sceneID id.ID[scen
 // renameScene returns a race that renames the scene, as another client would.
 func renameScene(t *testing.T, svc application.SceneService, sceneID uuid.UUID) func() {
 	return func() {
-		ctx := context.Background()
+		ctx := editlock.System(context.Background())
 		current, err := svc.FindSceneByID(ctx, mainProject, sceneID)
 		if err != nil {
 			t.Fatalf("FindSceneByID: %v", err)
@@ -896,7 +897,7 @@ func renameScene(t *testing.T, svc application.SceneService, sceneID uuid.UUID) 
 func TestDeleteWidget_SceneChangedMeanwhile_RereadsAndKeepsChange(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	sc := mustCreateScene(t, svc)
 	created, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, testCreateWidgetInput)
 	if err != nil {
@@ -927,7 +928,7 @@ func TestDeleteWidget_SceneChangedMeanwhile_RereadsAndKeepsChange(t *testing.T) 
 func TestDeleteWidget_LosesRaceThreeTimes_ReturnsConflictKeepsWidget(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	sc := mustCreateScene(t, svc)
 	created, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, testCreateWidgetInput)
 	if err != nil {
@@ -951,7 +952,7 @@ func TestDeleteScene_WidgetAddedMeanwhile_DeliversWidgetDeletedForIt(t *testing.
 	cleanScenes(t)
 	bus, onCommit := deliveredOnCommit(t)
 	svc := sceneServiceOver(newScopes(onCommit))
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	sc := mustCreateScene(t, svc)
 
 	var added appdto.Widget
@@ -1009,7 +1010,7 @@ func newServiceDeletingRacingType(t *testing.T) application.SceneService {
 	scopes := newScopes()
 	scopes.pins = func(inner librarypin.Repository) librarypin.Repository {
 		return &racingPins{Repository: inner, race: func() {
-			if _, err := testDB.ExecContext(context.Background(), "DELETE FROM engineering.library_pins WHERE library_id = $1", racingLibrary); err != nil {
+			if _, err := testDB.ExecContext(editlock.System(context.Background()), "DELETE FROM engineering.library_pins WHERE library_id = $1", racingLibrary); err != nil {
 				t.Fatalf("concurrent unpin: %v", err)
 			}
 		}}
@@ -1025,7 +1026,7 @@ func TestCreateWidget_TypeUnpinnedMeanwhile_ReturnsInvalidInput(t *testing.T) {
 
 	input := testCreateWidgetInput
 	input.TypeID = racingTypeID
-	_, err := svc.CreateWidget(context.Background(), mainProject, sc.ID, sc.Version, input)
+	_, err := svc.CreateWidget(editlock.System(context.Background()), mainProject, sc.ID, sc.Version, input)
 
 	if !errors.Is(err, application.ErrInvalidInput) || !errors.Is(err, library.ErrWidgetTypeNotFound) {
 		t.Errorf("expected ErrInvalidInput wrapping ErrWidgetTypeNotFound, got: %v", err)
@@ -1036,7 +1037,7 @@ func TestUpdateWidget_TypeUnpinnedMeanwhile_ReturnsInvalidInput(t *testing.T) {
 	cleanScenes(t)
 	insertRacingWidgetType(t)
 	plain := newSceneService()
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	sc := mustCreateScene(t, plain)
 	created, err := plain.CreateWidget(ctx, mainProject, sc.ID, sc.Version, testCreateWidgetInput)
 	if err != nil {

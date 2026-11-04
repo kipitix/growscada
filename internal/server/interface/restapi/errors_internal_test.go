@@ -21,6 +21,7 @@ import (
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/devicetoken"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
@@ -357,6 +358,13 @@ var domainSentinels = map[string]error{
 	"tag.ErrSupplierOfAnotherProject":     tag.ErrSupplierOfAnotherProject,
 	"tag.ErrTagNotSuppliedByDevice":       tag.ErrTagNotSuppliedByDevice,
 	"tag.ErrInvalidTagNameMatcher":        tag.ErrInvalidTagNameMatcher,
+	"editlock.ErrEditLockHeld":            editlock.ErrEditLockHeld,
+	"editlock.ErrEditLockNotHeld":         editlock.ErrEditLockNotHeld,
+	"editlock.ErrEditLockFree":            editlock.ErrEditLockFree,
+	"editlock.ErrEditLockVersionStale":    editlock.ErrEditLockVersionStale,
+	"editlock.ErrEditLockNameEmpty":       editlock.ErrEditLockNameEmpty,
+	"editlock.ErrNoClient":                editlock.ErrNoClient,
+	"editlock.ErrEditLockExists":          editlock.ErrEditLockExists,
 	"devicetoken.ErrTokenNotFound":        devicetoken.ErrTokenNotFound,
 	"devicetoken.ErrTokenExists":          devicetoken.ErrTokenExists,
 	"devicetoken.ErrNotADeviceToken":      devicetoken.ErrNotADeviceToken,
@@ -377,6 +385,9 @@ var unmappedSentinels = map[string]string{
 	"scene.ErrTagTypesOfAnotherProject": "500: the service reads the TagTypes through the Scene's own Project",
 	"tag.ErrSupplierOfAnotherProject":   "500: the Tag API names no supplier yet (task 68); the repository refuses a Device of another Project as the last line",
 	"devicetoken.ErrNotADeviceToken":    "401: the REST layer refuses a bearer without the Device Token prefix before any lookup",
+	"editlock.ErrEditLockNameEmpty":     "400: the service marks it invalid input (the holder's name)",
+	"editlock.ErrNoClient":              "400: a request that names no client cannot write a Draft",
+	"editlock.ErrEditLockExists":        "500: the service retries the race of two creations of one lock row",
 }
 
 // TestDomainSentinels_AreListed reads the domain sources, so a new sentinel

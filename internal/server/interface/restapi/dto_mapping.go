@@ -9,6 +9,7 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 )
 
 // Conversions between the server API contract (apiv0) and the application
@@ -595,4 +596,21 @@ func newGetTagStatesResponse(states []runtimeapp.TagState) apiv0.GetTagStatesRes
 		}
 	}
 	return resp
+}
+
+func newEditLockResponse(state appdto.EditLock) apiv0.EditLockResponse {
+	resp := apiv0.EditLockResponse{Held: state.Held, Version: state.Version}
+	if state.Holder != nil {
+		resp.Holder = &apiv0.EditLockHolderResponse{
+			Key:   state.Holder.Key,
+			Name:  state.Holder.Name,
+			Since: state.Holder.Since.UTC().Format(time.RFC3339),
+		}
+	}
+	return resp
+}
+
+// newEditLockResponseOfEvent is the lock state an edit_lock_* event announces.
+func newEditLockResponseOfEvent(state editlock.Snapshot) apiv0.EditLockResponse {
+	return newEditLockResponse(appdto.NewEditLock(state))
 }

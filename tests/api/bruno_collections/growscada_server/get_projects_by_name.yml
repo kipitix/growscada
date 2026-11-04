@@ -1,7 +1,7 @@
 info:
   name: get projects by name
   type: http
-  seq: 2
+  seq: 12
 
 http:
   method: GET

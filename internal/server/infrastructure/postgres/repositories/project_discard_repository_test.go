@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -30,7 +31,7 @@ func makeTagOf(t *testing.T, name string, projectID id.ID[project.Project], repo
 // travels with the Project's row, and clearing it does the same.
 func TestProjectSave_DiscardMark_IsStoredAndCleared(t *testing.T) {
 	cleanProjects(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	repo := repositories.NewProjectRepositoryPostgres(testDB)
 	line := mustCreateProject(t, repo, "Line 1")
 
@@ -72,7 +73,7 @@ func TestProjectSave_DiscardMark_IsStoredAndCleared(t *testing.T) {
 func TestDraftWrites_WhileADiscardRuns_AreRefused(t *testing.T) {
 	cleanProjects(t)
 	cleanTags(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	repo := repositories.NewProjectRepositoryPostgres(testDB)
 	line := mustCreateProject(t, repo, "Line 1")
 	tags := repositories.NewTagRepositoryPostgres(testDB, line.ID())

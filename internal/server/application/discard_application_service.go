@@ -56,7 +56,7 @@ func (s discardServiceImpl) Discard(ctx context.Context, rawProjectID uuid.UUID)
 		if err != nil {
 			return fmt.Errorf("cannot discard project %s: %w", projectID, err)
 		}
-		saved, err := s.content.projects.Save(ctx, marked)
+		saved, err := s.content.projects.SaveDiscarding(ctx, marked)
 		if err != nil {
 			return fmt.Errorf("cannot save project %s: %w", projectID, err)
 		}

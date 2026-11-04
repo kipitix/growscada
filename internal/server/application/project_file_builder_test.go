@@ -7,12 +7,13 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 )
 
 // buildProjectFile builds the ProjectFile of mainProject, as a Deploy does.
 func buildProjectFile(t *testing.T) string {
 	t.Helper()
-	file, err := application.NewProjectFileBuilder(contentOver(newScopes())).Build(context.Background(), mainProject)
+	file, err := application.NewProjectFileBuilder(contentOver(newScopes())).Build(editlock.System(context.Background()), mainProject)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -27,7 +28,7 @@ func TestBuild_IsCanonical(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	cleanPins(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	mustCreateTag(t, "b-tag", "integer")
 	mustCreateTag(t, "a-tag", "boolean")
@@ -69,7 +70,7 @@ func TestBuild_CarriesOnlyTheWidgetTypesItsWidgetsUse(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	cleanPins(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	used, _ := pinNewWidgetType(t, mainProject, appdto.WidgetTypeInput{Name: "used"})
 	pinNewWidgetType(t, mainProject, appdto.WidgetTypeInput{Name: "unused"})
@@ -98,7 +99,7 @@ func TestBuild_AWidgetBoundToATagTheDraftLacks_IsAnError(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	cleanPins(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	wt, _ := pinNewWidgetType(t, mainProject, appdto.WidgetTypeInput{
 		Name: "gauge", InputPorts: []appdto.InputPort{{Name: "value", TypeHint: "integer"}},
@@ -118,7 +119,7 @@ func TestBuild_AWidgetBoundToATagTheDraftLacks_IsAnError(t *testing.T) {
 	}
 	// The Scene goes too, so the next test starts from a Draft that builds.
 	t.Cleanup(func() {
-		if _, err := testDB.ExecContext(context.Background(),
+		if _, err := testDB.ExecContext(editlock.System(context.Background()),
 			"DELETE FROM engineering.scenes WHERE id = $1", scene.ID); err != nil {
 			t.Fatalf("clean the scene: %v", err)
 		}
@@ -133,7 +134,7 @@ func TestBuild_AWidgetOfANoLongerPinnedType_IsAnError(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	cleanPins(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	// The Draft keeps a Widget of a type no pinned release holds, so the Scene
 	// and the pins go with the test: the next one starts from a buildable Draft.
 	t.Cleanup(func() {

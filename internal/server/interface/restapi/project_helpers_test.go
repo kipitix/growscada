@@ -11,6 +11,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -38,6 +39,7 @@ type testServices struct {
 	states       runtimeapp.TagStateService
 	revisions    runtimeapp.RevisionService
 	deploy       application.DeployService
+	editLocks    application.EditLockService
 	discard      application.DiscardService
 	libraries    application.LibraryService
 	widgetTypes  application.WidgetTypeService
@@ -59,12 +61,13 @@ func newServices(opts ...repositories.Option) testServices {
 // Runtime node publishing its tag_updated to publish.
 func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Option) testServices {
 	db := testDB()
-	orgID, err := repositories.FindSoleOrganization(context.Background(), db)
+	orgID, err := repositories.FindSoleOrganization(editlock.System(context.Background()), db)
 	if err != nil {
 		panic("organization: " + err.Error())
 	}
 	projectRepo := repositories.NewProjectRepositoryPostgres(db, opts...)
 	content := application.NewProjectContent(projectRepo, repositories.NewProjectScopes(db, opts...), orgID)
+	editLocks := application.NewEditLockService(content, repositories.NewEditLockRepositoryPostgres(db, opts...))
 	libraries := repositories.NewLibraryRepositoryPostgres(db, opts...)
 	releases := repositories.NewLibraryReleaseRepositoryPostgres(db, opts...)
 	widgetTypes := repositories.NewWidgetTypeRepositories(db, opts...)
@@ -77,7 +80,8 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		tags:         application.NewTagService(content, runtimeNode),
 		states:       states,
 		revisions:    revisions,
-		deploy:       application.NewDeployService(content, application.NewProjectFileBuilder(content), runtimeNode),
+		deploy:       application.NewDeployService(content, application.NewProjectFileBuilder(content), runtimeNode, editLocks),
+		editLocks:    editLocks,
 		discard:      application.NewDiscardService(content, runtimeNode),
 		libraries:    application.NewLibraryService(libraries, releases, widgetTypes, orgID),
 		widgetTypes:  application.NewWidgetTypeService(libraries, widgetTypes, orgID),
@@ -97,20 +101,21 @@ func (s testServices) services() restapi.Services {
 		Libraries: s.libraries, WidgetTypes: s.widgetTypes, LibraryPins: s.pins, Scenes: s.scenes,
 		Devices: s.devices, Environments: s.environments,
 		Deploy: s.deploy, Discard: s.discard, Revisions: s.revisions,
-		DeviceConfig: s.deviceConfig, DeviceTokens: s.deviceTokens,
+		DeviceConfig: s.deviceConfig, DeviceTokens: s.deviceTokens, EditLocks: s.editLocks,
 	}
 }
 
-// router returns the API router over the services.
-func (s testServices) router() *restapi.APIRouter {
-	return restapi.NewRouter(s.services(), eventbus.NewEventBus(), 100)
+// router returns the API router over the services, with the test client's key
+// on every request: the tests write the Draft, which needs the EditLock.
+func (s testServices) router() testRouter {
+	return testRouter{APIRouter: restapi.NewRouter(s.services(), eventbus.NewEventBus(), 100)}
 }
 
 // deployRevision deploys file to mainProject through the Runtime node's
 // service, as the Engineering node's DeployService will (task 35, part 4).
 func deployRevision(t *testing.T, service runtimeapp.RevisionService, file projectv0.ProjectFile) {
 	t.Helper()
-	if _, err := service.Deploy(context.Background(), mainProject, file); err != nil {
+	if _, err := service.Deploy(editlock.System(context.Background()), mainProject, file); err != nil {
 		t.Fatalf("deploy: %v", err)
 	}
 }

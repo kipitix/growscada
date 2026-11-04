@@ -1,0 +1,43 @@
+info:
+  name: post edit lock (again, same client)
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/edit-lock
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{OTHER_CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "bruno"
+      }
+  auth: inherit
+
+docs: |
+  A Check out of a Draft this client holds already is the lock as it is: 200,
+  no new version, no event. Checking a held lock out is how an idempotent run
+  starts (ADR 0015).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.held'
+      operator: eq
+      value: 'true'
+    - expression: 'res.body.version'
+      operator: eq
+      value: '1'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

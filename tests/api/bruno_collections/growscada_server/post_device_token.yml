@@ -1,11 +1,14 @@
 info:
   name: post device token
   type: http
-  seq: 92
+  seq: 102
 
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/devices/{{OTHER_DEVICE_ID}}/token
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
   auth: inherit
 
 docs: |

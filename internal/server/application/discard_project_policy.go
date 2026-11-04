@@ -11,6 +11,7 @@ import (
 
 	projectv0 "github.com/kipitix/growscada/contract/project/v0"
 	"github.com/kipitix/growscada/internal/server/domain/device"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -74,6 +75,8 @@ func (p discardProjectPolicy) JobKey(e event.Event) (string, bool) {
 }
 
 func (p discardProjectPolicy) Run(ctx context.Context, key string) error {
+	// A policy writes as the server: it passes no EditLock check (ADR 0015).
+	ctx = editlock.System(ctx)
 	projectID, rest, err := cutProjectKey(key)
 	if err != nil {
 		return err

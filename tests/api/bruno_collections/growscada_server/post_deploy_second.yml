@@ -1,11 +1,14 @@
 info:
   name: post deploy second
   type: http
-  seq: 49
+  seq: 59
 
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/deploy
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
   auth: inherit
 
 docs: |

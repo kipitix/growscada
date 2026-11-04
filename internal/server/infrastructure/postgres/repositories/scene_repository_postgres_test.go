@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
@@ -24,7 +25,7 @@ import (
 func cleanScenes(t *testing.T) {
 	t.Helper()
 	// widgets cascade-delete with their scene (ON DELETE CASCADE on scene_id).
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM engineering.scenes"); err != nil {
+	if _, err := testDB.ExecContext(editlock.System(context.Background()), "DELETE FROM engineering.scenes"); err != nil {
 		t.Fatalf("cleanScenes: %v", err)
 	}
 }
@@ -45,7 +46,7 @@ func makeScene(t *testing.T, repo scene.SceneRepository, name string) scene.Scen
 
 func mustSaveScene(t *testing.T, repo scene.SceneRepository, name string) scene.Scene {
 	t.Helper()
-	saved, err := repo.Save(context.Background(), makeScene(t, repo, name))
+	saved, err := repo.Save(editlock.System(context.Background()), makeScene(t, repo, name))
 	if err != nil {
 		t.Fatalf("Save scene %q: %v", name, err)
 	}
@@ -101,7 +102,7 @@ func TestSceneSave_NewScene_ReturnsCommittedVersion(t *testing.T) {
 func TestSceneSave_ExistingScene_VersionIsIncremented(t *testing.T) {
 	cleanScenes(t)
 	repo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	saved := mustSaveScene(t, repo, "scene-1")
 	newName, _ := scene.NewSceneName("scene-1-renamed")
@@ -120,7 +121,7 @@ func TestSceneSave_ExistingScene_VersionIsIncremented(t *testing.T) {
 func TestSceneSave_StaleVersion_ReturnsConflict(t *testing.T) {
 	cleanScenes(t)
 	repo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	saved := mustSaveScene(t, repo, "scene-1")
 	badVersion, _ := version.New[scene.Scene](version.WithNumber[scene.Scene](100))
@@ -136,7 +137,7 @@ func TestSceneSave_StaleVersion_ReturnsConflict(t *testing.T) {
 func TestSceneFindByID_Existing_ReturnsScene(t *testing.T) {
 	cleanScenes(t)
 	repo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	saved := mustSaveScene(t, repo, "scene-1")
 
@@ -157,7 +158,7 @@ func TestSceneFindByID_NotFound_ReturnsErrSceneNotFound(t *testing.T) {
 	cleanScenes(t)
 	repo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
 
-	_, err := repo.FindByID(context.Background(), repo.NextID())
+	_, err := repo.FindByID(editlock.System(context.Background()), repo.NextID())
 
 	if !errors.Is(err, scene.ErrSceneNotFound) {
 		t.Errorf("expected ErrSceneNotFound, got %v", err)
@@ -171,7 +172,7 @@ func TestSceneFindAll_MultipleScenes_ReturnsAll(t *testing.T) {
 	mustSaveScene(t, repo, "scene-a")
 	mustSaveScene(t, repo, "scene-b")
 
-	all, err := repo.FindAll(context.Background())
+	all, err := repo.FindAll(editlock.System(context.Background()))
 
 	if err != nil {
 		t.Fatalf("FindAll: %v", err)
@@ -185,7 +186,7 @@ func TestSceneDelete_NotFound_ReturnsErrSceneNotFound(t *testing.T) {
 	cleanScenes(t)
 	repo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
 
-	err := repo.Delete(context.Background(), withVersion(makeScene(t, repo, "never-saved"), 1).Delete())
+	err := repo.Delete(editlock.System(context.Background()), withVersion(makeScene(t, repo, "never-saved"), 1).Delete())
 
 	if !errors.Is(err, scene.ErrSceneNotFound) {
 		t.Errorf("expected ErrSceneNotFound, got %v", err)
@@ -201,7 +202,7 @@ func withWidgets(sc scene.Scene, someWidgets ...scene.Widget) scene.Scene {
 
 func mustSave(t *testing.T, repo scene.SceneRepository, sc scene.Scene) scene.Scene {
 	t.Helper()
-	saved, err := repo.Save(context.Background(), sc)
+	saved, err := repo.Save(editlock.System(context.Background()), sc)
 	if err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -210,7 +211,7 @@ func mustSave(t *testing.T, repo scene.SceneRepository, sc scene.Scene) scene.Sc
 
 func mustFindByID(t *testing.T, repo scene.SceneRepository, sceneID id.ID[scene.Scene]) scene.Scene {
 	t.Helper()
-	found, err := repo.FindByID(context.Background(), sceneID)
+	found, err := repo.FindByID(editlock.System(context.Background()), sceneID)
 	if err != nil {
 		t.Fatalf("FindByID: %v", err)
 	}
@@ -280,7 +281,7 @@ func TestSceneSave_UnknownScene_ReturnsNotFound(t *testing.T) {
 	repo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
 
 	sc := makeScene(t, repo, "never-saved")
-	_, err := repo.Save(context.Background(), scene.ReconstituteScene(sc.ID(), sc.ProjectID(), sc.Name(), sc.Size(), sc.BackgroundHTML(), nil, version.Committed[scene.Scene]()))
+	_, err := repo.Save(editlock.System(context.Background()), scene.ReconstituteScene(sc.ID(), sc.ProjectID(), sc.Name(), sc.Size(), sc.BackgroundHTML(), nil, version.Committed[scene.Scene]()))
 
 	if !errors.Is(err, scene.ErrSceneNotFound) {
 		t.Errorf("expected ErrSceneNotFound, got %v", err)
@@ -292,7 +293,7 @@ func TestSceneSave_UnknownScene_ReturnsNotFound(t *testing.T) {
 func TestSceneSave_WriteRace_ReturnsConflictAndKeepsOtherWrite(t *testing.T) {
 	cleanScenes(t)
 	repo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	w1 := makeWidget(t, repo, "gauge-1")
 	sc := mustSave(t, repo, withWidgets(makeScene(t, repo, "scene-1"), w1))
@@ -318,7 +319,7 @@ func TestSceneSave_WriteRace_ReturnsConflictAndKeepsOtherWrite(t *testing.T) {
 func TestSceneSave_ConcurrentSaves_OneWins(t *testing.T) {
 	cleanScenes(t)
 	repo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	sc := mustSaveScene(t, repo, "scene-1")
 	const writers = 8
@@ -365,7 +366,7 @@ func TestSceneSave_ConcurrentSaves_OneWins(t *testing.T) {
 func TestSceneSave_UnpinnedWidgetType_ReturnsErrWidgetTypeNotFound(t *testing.T) {
 	cleanScenes(t)
 	repo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	w := makeWidget(t, repo, "w1")
 	sc := mustSave(t, repo, withWidgets(makeScene(t, repo, "scene-1"), w))
@@ -399,7 +400,7 @@ func TestSceneSave_UnpinnedWidgetType_ReturnsErrWidgetTypeNotFound(t *testing.T)
 // against the release switched to, which holds the type too.
 func TestSceneSave_WaitsForASwitchOfThePin_TypeInBothReleases(t *testing.T) {
 	cleanScenes(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	repo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
 	types := newWidgetTypeRepo(t)
 	wt, err := types.Save(ctx, makeWidgetType(t, "gauge", nil, types))
@@ -469,7 +470,7 @@ func TestSceneFindAll_ReturnsWidgetsOfEachScene(t *testing.T) {
 	mustSave(t, repo, withWidgets(makeScene(t, repo, "second"), w2))
 	mustSaveScene(t, repo, "empty")
 
-	all, err := repo.FindAll(context.Background())
+	all, err := repo.FindAll(editlock.System(context.Background()))
 
 	if err != nil {
 		t.Fatalf("FindAll: %v", err)
@@ -489,7 +490,7 @@ func TestSceneFindAll_ReturnsWidgetsOfEachScene(t *testing.T) {
 func TestSceneDelete_WithWidgets_CascadesWidgetRowsInDB(t *testing.T) {
 	cleanScenes(t)
 	repo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	sc := mustSave(t, repo, withWidgets(makeScene(t, repo, "scene-1"), makeWidget(t, repo, "widget-1")))
 
@@ -512,7 +513,7 @@ func TestSceneDelete_WithWidgets_CascadesWidgetRowsInDB(t *testing.T) {
 func TestSceneDelete_StaleVersion_ReturnsConflictAndKeepsScene(t *testing.T) {
 	cleanScenes(t)
 	repo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	stale := mustSave(t, repo, makeScene(t, repo, "scene-1"))
 	mustSave(t, repo, withWidgets(stale, makeWidget(t, repo, "added meanwhile")))
@@ -538,7 +539,7 @@ func withVersion(sc scene.Scene, number int) scene.Scene {
 func TestSceneFindByTagID_ReturnsScenesBoundToTheTagWithAllTheirWidgets(t *testing.T) {
 	cleanScenes(t)
 	repo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	typeID := mustSaveWidgetType(t)
 	tagID, otherTagID := id.NewID[tag.Tag](), id.NewID[tag.Tag]()
@@ -628,7 +629,7 @@ func TestSceneSave_WidgetWithPortBindings_RoundTripsCorrectly(t *testing.T) {
 func TestSceneFindAll_CreationOrderEvenAfterUpdates(t *testing.T) {
 	cleanScenes(t)
 	repo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 
 	var created []scene.Scene
 	for _, name := range []string{"charlie", "alpha", "bravo"} {
@@ -690,7 +691,7 @@ func TestSceneFindByID_WidgetsInCreationOrderEvenAfterUpdates(t *testing.T) {
 // order included.
 func TestSceneSave_ReturnsWhatALaterReadReturns(t *testing.T) {
 	cleanScenes(t)
-	ctx := context.Background()
+	ctx := editlock.System(context.Background())
 	repo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
 	pins := repositories.NewLibraryPinRepositoryPostgres(testDB, mainProject)
 

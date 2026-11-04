@@ -24,8 +24,17 @@ func TestMain(m *testing.M) {
 
 func startClient(t *testing.T) *apiclient.Client {
 	t.Helper()
+	return startClientAndServer(t)
+}
+
+// startClientAndServer starts the API and returns a client of it acting as
+// servertest.ClientKey, the holder of the Main project's EditLock: the tests
+// write the Draft, which needs the lock (ADR 0015).
+func startClientAndServer(t *testing.T) *apiclient.Client {
+	t.Helper()
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
-	return apiclient.New(srv.URL, srv.Client())
+	servertest.EnsureEditLock(t, srv, servertest.MainProject)
+	return apiclient.New(srv.URL, srv.Client()).WithClientKey(servertest.ClientKey.String())
 }
 
 func TestTags_RoundTrip(t *testing.T) {
@@ -278,6 +287,7 @@ func TestProjects_RoundTrip(t *testing.T) {
 	if content.ID() != created.ID {
 		t.Errorf("ProjectClient.ID: %s", content.ID())
 	}
+	servertest.EnsureEditLockWithClient(t, client, created.ID)
 	if _, err := content.CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.speed", Type: "integer"}); err != nil {
 		t.Fatalf("CreateTag in the new project: %v", err)
 	}
