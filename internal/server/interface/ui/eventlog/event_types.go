@@ -61,7 +61,9 @@ func isProjectContent(eventType string) bool {
 		apiv0.EventDeviceCreated, apiv0.EventDeviceUpdated, apiv0.EventDeviceDeleted,
 		apiv0.EventEnvironmentCreated, apiv0.EventEnvironmentUpdated, apiv0.EventEnvironmentDeleted,
 		apiv0.EventEnvironmentDeviceCreated, apiv0.EventEnvironmentDeviceUpdated, apiv0.EventEnvironmentDeviceDeleted,
-		apiv0.EventRevisionCreated:
+		apiv0.EventRevisionCreated,
+		apiv0.EventEditLockAcquired, apiv0.EventEditLockReleased,
+		apiv0.EventEditLockTakenOver, apiv0.EventEditLockExpired:
 		return true
 	}
 	switch eventTypeInfoByType[eventType].category {
@@ -128,6 +130,11 @@ var eventTypeInfoByType = map[string]eventTypeInfo{
 	apiv0.EventEnvironmentDeviceDeleted: {categoryOther, "EnvironmentDevice %s deleted"},
 
 	apiv0.EventRevisionCreated: {categoryProject, "Project deployed"},
+
+	apiv0.EventEditLockAcquired:  {categoryProject, "Draft %s checked out"},
+	apiv0.EventEditLockReleased:  {categoryProject, "Draft %s checked in"},
+	apiv0.EventEditLockTakenOver: {categoryProject, "Draft %s taken over"},
+	apiv0.EventEditLockExpired:   {categoryProject, "Draft %s lock expired"},
 }
 
 // describe is the log text of an event of this type with the given id.

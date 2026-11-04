@@ -18,6 +18,9 @@ import (
 // createWidget places a Widget of the WidgetType typeID at (x, y) on the
 // selected Scene and selects it.
 func (p *Project) createWidget(ctx app.Context, typeID uuid.UUID, x, y float64) {
+	if p.refuseReadOnly(ctx) {
+		return
+	}
 	sceneID := p.selectedSceneID
 	if sceneID == uuid.Nil {
 		return
@@ -58,6 +61,9 @@ func (p *Project) createWidget(ctx app.Context, typeID uuid.UUID, x, y float64) 
 // client could not read) leaves it unknown, so the known one, now stale, is
 // forgotten and the Scenes are reread.
 func (p *Project) deleteWidget(ctx app.Context, widgetID uuid.UUID) {
+	if p.refuseReadOnly(ctx) {
+		return
+	}
 	sceneID := p.selectedSceneID
 	mark := p.sceneVersions.Mark()
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.WidgetResponse, error) {
@@ -83,6 +89,9 @@ func (p *Project) deleteWidget(ctx app.Context, widgetID uuid.UUID) {
 }
 
 func (p *Project) saveWidgetName(ctx app.Context) {
+	if p.refuseReadOnly(ctx) {
+		return
+	}
 	if strings.TrimSpace(p.widgetEdit.name) == "" {
 		return
 	}
@@ -95,6 +104,9 @@ func (p *Project) saveWidgetName(ctx app.Context) {
 }
 
 func (p *Project) saveWidgetGeometry(ctx app.Context) {
+	if p.refuseReadOnly(ctx) {
+		return
+	}
 	idx := p.selectedWidgetIdx()
 	if idx < 0 {
 		return
@@ -126,6 +138,9 @@ func (p *Project) saveWidgetGeometry(ctx app.Context) {
 }
 
 func (p *Project) bindPort(ctx app.Context, portName string, tagID uuid.UUID) {
+	if p.refuseReadOnly(ctx) {
+		return
+	}
 	if p.selectedWidgetID == uuid.Nil || portName == "" || tagID == uuid.Nil {
 		return
 	}
@@ -151,6 +166,9 @@ func (p *Project) bindPort(ctx app.Context, portName string, tagID uuid.UUID) {
 }
 
 func (p *Project) unbindPort(ctx app.Context, portName string) {
+	if p.refuseReadOnly(ctx) {
+		return
+	}
 	idx := p.selectedWidgetIdx()
 	if idx < 0 {
 		return
@@ -167,6 +185,9 @@ func (p *Project) unbindPort(ctx app.Context, portName string) {
 
 // putWidget saves w on the selected Scene at the Scene's known version.
 func (p *Project) putWidget(ctx app.Context, w apiv0.WidgetResponse) {
+	if p.refuseReadOnly(ctx) {
+		return
+	}
 	sceneID := p.selectedSceneID
 	req := apiv0.UpdateWidgetRequest(widgetRequest(w, p.sceneVersions.Of(sceneID)))
 	mark := p.sceneVersions.Mark()

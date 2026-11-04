@@ -122,7 +122,8 @@ func (p *Project) renderSceneTabs() app.UI {
 		)
 	}
 
-	tabs = append(tabs, app.Div().
+	addScene := app.Div().
+		Attr("data-scene-add", "true").
 		Style("display", "flex").
 		Style("align-items", "center").
 		Style("padding", "6px 10px").
@@ -131,8 +132,14 @@ func (p *Project) renderSceneTabs() app.UI {
 		Style("color", "var(--accent)").
 		Style("line-height", "1").
 		Text("+").
-		OnClick(func(ctx app.Context, e app.Event) { p.createScene(ctx) }),
-	)
+		OnClick(func(ctx app.Context, e app.Event) { p.createScene(ctx) })
+	if p.readOnly() {
+		addScene = addScene.
+			Attr("title", readOnlyHint).
+			Style("color", "var(--text-muted)").
+			Style("cursor", "not-allowed")
+	}
+	tabs = append(tabs, addScene)
 
 	return app.Div().
 		Style("display", "flex").
@@ -306,6 +313,9 @@ func (p *Project) renderWidget(w apiv0.WidgetResponse, textMuted string) app.UI 
 					e.Call("stopPropagation")
 					e.PreventDefault()
 					p.selectWidget(ctx, wid)
+					if p.refuseReadOnly(ctx) {
+						return
+					}
 					p.draggingWidgetID = wid
 					p.dragStartCliX = e.Get("clientX").Float()
 					p.dragStartCliY = e.Get("clientY").Float()
@@ -362,6 +372,9 @@ func (p *Project) renderWidget(w apiv0.WidgetResponse, textMuted string) app.UI 
 			OnMouseDown(func(ctx app.Context, e app.Event) {
 				e.Call("stopPropagation")
 				e.PreventDefault()
+				if p.refuseReadOnly(ctx) {
+					return
+				}
 
 				cur, ok := p.findWidget(wid)
 				if !ok {
@@ -407,6 +420,9 @@ func (p *Project) renderWidget(w apiv0.WidgetResponse, textMuted string) app.UI 
 				e.Call("stopPropagation")
 				e.PreventDefault()
 				p.selectWidget(ctx, wid)
+				if p.refuseReadOnly(ctx) {
+					return
+				}
 				p.draggingOriginID = wid
 				p.originCliX = e.Get("clientX").Float()
 				p.originCliY = e.Get("clientY").Float()
@@ -436,6 +452,9 @@ func (p *Project) renderWidget(w apiv0.WidgetResponse, textMuted string) app.UI 
 			OnMouseDown(func(ctx app.Context, e app.Event) {
 				e.Call("stopPropagation")
 				e.PreventDefault()
+				if p.refuseReadOnly(ctx) {
+					return
+				}
 				p.resizingWidgetID = wid
 				p.resizeStartCliX = e.Get("clientX").Float()
 				p.resizeStartCliY = e.Get("clientY").Float()

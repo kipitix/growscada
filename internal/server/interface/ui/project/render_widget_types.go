@@ -118,6 +118,10 @@ func (p *Project) renderWidgetTypePanel() app.UI {
 			).
 			Draggable(true).
 			OnDragStart(func(ctx app.Context, e app.Event) {
+				if p.readOnly() {
+					e.PreventDefault()
+					return
+				}
 				p.draggedTypeID = id
 				e.Get("dataTransfer").Call("setData", "text/plain", id.String())
 				e.Get("dataTransfer").Set("effectAllowed", "copy")

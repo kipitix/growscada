@@ -31,6 +31,15 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 			p.sceneVersions.Forget()
 			p.sceneStates.Forget()
 		}
+		// The Draft's lock changes with a Check out, a Check in, a takeover or
+		// an expiry; the event carries its new state, the toast of a lost lock
+		// included (ADR 0015). An event without it (a resync) rereads it.
+		switch {
+		case ev.EditLock != nil:
+			p.applyEditLock(ctx, *ev.EditLock)
+		case eventlog.ReloadTargetsFor(ev).EditLock:
+			p.loadEditLock(ctx)
+		}
 		targets := eventlog.ReloadTargetsFor(ev)
 		if targets.Deploy {
 			p.loadDeploy(ctx)

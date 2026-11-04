@@ -1,6 +1,8 @@
 package root
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
@@ -19,6 +21,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/project"
 	"github.com/kipitix/growscada/internal/server/interface/ui/projects"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
+	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
 type Mode string
@@ -67,6 +70,34 @@ type Root struct {
 	// reloadOnAppUpdate is set by the banner's Reload while the service
 	// worker fetches the new app (see reloadApp).
 	reloadOnAppUpdate bool
+	// clientKey is the key of this tab, the identity it edits Drafts under
+	// (ADR 0015); it is kept in sessionStorage.
+	clientKey uuid.UUID
+	// mounted is false until OnMount, whose context checkInEditLock needs.
+	mounted bool
+}
+
+// tabClientKey and tabClientKeyPath are the sessionStorage entry of the tab's
+// client key (ADR 0015).
+const tabClientKeyPath = "editlock:client"
+
+// tabKey is the key of this tab: the one sessionStorage holds, or a new one,
+// stored at once. A store the browser does not offer (a test engine on the
+// host) gives a fresh key that is simply not kept.
+func tabKey() uuid.UUID {
+	storage := app.Window().Get("sessionStorage")
+	if storage.Truthy() {
+		if raw := storage.Call("getItem", tabClientKeyPath).String(); raw != "" {
+			if parsed, err := uuid.Parse(raw); err == nil {
+				return parsed
+			}
+		}
+	}
+	key := uuid.New()
+	if storage.Truthy() {
+		storage.Call("setItem", tabClientKeyPath, key.String())
+	}
+	return key
 }
 
 func NewRoot(anAPIServerURL string) *Root {
@@ -74,10 +105,15 @@ func NewRoot(anAPIServerURL string) *Root {
 		currentMode: ModeLibrary,
 		themeMode:   "auto",
 	}
-	r.client = apiclient.New(anAPIServerURL, http.DefaultClient, apiclient.OnServerVersion(r.observeServerVersion))
+	// The key of the tab, the holder of every EditLock this tab takes
+	// (ADR 0015): one per tab, surviving a reload, kept in sessionStorage. It
+	// is coordination, not authentication: no secret is in it.
+	r.clientKey = tabKey()
+	r.client = apiclient.New(anAPIServerURL, http.DefaultClient, apiclient.OnServerVersion(r.observeServerVersion)).
+		WithClientKey(r.clientKey.String())
 	r.project = project.NewProject(r.client)
 	r.operation = operation.NewOperation(r.client)
-	r.bar = eventlog.NewBar(anAPIServerURL)
+	r.bar = eventlog.NewBar(anAPIServerURL).WithClientKey(r.clientKey.String())
 	r.modes = []modeView{
 		{mode: ModeLibrary, ui: library.NewLibrary(r.client)},
 		{mode: ModeProject, ui: r.project, switcher: r.newSwitcher(ModeProject)},
@@ -90,7 +126,7 @@ func NewRoot(anAPIServerURL string) *Root {
 }
 
 func (r *Root) OnMount(ctx app.Context) {
-	r.compoCtx = ctx
+	r.compoCtx, r.mounted = ctx, true
 	ctx.Page().SetTitle("GrowSCADA")
 
 	injectToastCSS()
@@ -139,7 +175,13 @@ func (r *Root) newSelector(mode Mode) *projects.Switcher {
 // already, it resyncs now; else, if mode is shown, the Bar follows it, its
 // stream resyncing as it opens; else mode loads it once shown (SetMode).
 func (r *Root) selectProject(mode Mode, id uuid.UUID) {
+	previous := r.selected[mode]
 	r.selected[mode] = id
+	if mode == ModeProject && previous != id {
+		// The Draft of the project left is given back before another one is
+		// shown (ADR 0015): a tab edits one Draft at a time.
+		r.checkInEditLock(previous)
+	}
 	switch mode {
 	case ModeProject:
 		r.project.SetProject(id)
@@ -576,10 +618,39 @@ func (r *Root) renderThemeToggle() app.UI {
 		})
 }
 
+// editLockCheckInTimeout bounds the Check in a switch of project sends to the
+// Draft left: the switch does not wait for it.
+const editLockCheckInTimeout = 3 * time.Second
+
+// checkInEditLock sends a Check in for the project id (uuid.Nil: none) in the
+// background: a refusal or a network failure is a toast, and the switch goes
+// on. A lock another client holds is not a failure: this tab had lost it
+// already.
+func (r *Root) checkInEditLock(id uuid.UUID) {
+	if id == uuid.Nil || !r.mounted {
+		return
+	}
+	content := r.client.Project(id)
+	uiutil.Do(r.compoCtx, func(c context.Context) (struct{}, error) {
+		ctx, cancel := context.WithTimeout(c, editLockCheckInTimeout)
+		defer cancel()
+		_, err := content.CheckInEditLock(ctx)
+		return struct{}{}, err
+	}, func(ctx app.Context, _ struct{}, err error) {
+		if err != nil && !errors.Is(err, apiclient.ErrConflict) {
+			uiutil.ShowError(ctx, err)
+		}
+	})
+}
+
 // SetMode shows mode, opening it if it was not yet. The Bar follows the
 // project of a mode that shows one, from its switcher's announcement on
 // (selectProject); Library leaves it as it is.
 func (r *Root) SetMode(mode Mode) {
+	if r.currentMode == ModeProject && mode != ModeProject {
+		// Leaving the Project mode gives the Draft back (ADR 0015).
+		r.checkInEditLock(r.selected[ModeProject])
+	}
 	r.currentMode = mode
 	r.opened[mode] = true
 	if id, ok := r.selected[mode]; ok {

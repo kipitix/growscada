@@ -18,7 +18,7 @@ import (
 // Revision it runs and whether the Draft differs from it); Revision is the
 // running Revision itself, which Operation reads.
 type ReloadTargets struct {
-	Projects, Libraries, WidgetTypes, LibraryPins, Scenes, Widgets, Tags, Deploy, Revision bool
+	Projects, Libraries, WidgetTypes, LibraryPins, Scenes, Widgets, Tags, Deploy, Revision, EditLock bool
 	// Scene is the one Scene whose own state and Widgets are stale (a Widget
 	// of it changed, which bumps its version without a scene event); uuid.Nil
 	// if none. The list of Scenes is not: only scene events and a resync
@@ -33,13 +33,13 @@ func (t ReloadTargets) WidgetsOf(selected uuid.UUID) bool {
 }
 
 // AllTargets is every list.
-var AllTargets = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Revision: true}
+var AllTargets = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Revision: true, EditLock: true}
 
 // The lists of each stream: what its resync reloads, since the events it
 // published while disconnected are lost.
 var (
 	serverTargets  = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true}
-	projectTargets = ReloadTargets{LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Revision: true}
+	projectTargets = ReloadTargets{LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Revision: true, EditLock: true}
 )
 
 // ReloadTargetsFor routes an event of the streams (or EventResync,
@@ -51,6 +51,11 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 		return serverTargets
 	case EventProjectResync:
 		return projectTargets
+	case apiv0.EventEditLockAcquired, apiv0.EventEditLockReleased,
+		apiv0.EventEditLockTakenOver, apiv0.EventEditLockExpired:
+		// The event carries the new state (ADR 0015); a reader that dropped
+		// it rereads the lock.
+		return ReloadTargets{EditLock: true}
 	case apiv0.EventRevisionCreated:
 		// The Revision the Project runs changed: Operation rereads it, Project
 		// refreshes its badge; nothing of the Draft is touched.

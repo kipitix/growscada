@@ -16,6 +16,9 @@ import (
 // ── Scene CRUD ────────────────────────────────────────────────────────────────
 
 func (p *Project) createScene(ctx app.Context) {
+	if p.refuseReadOnly(ctx) {
+		return
+	}
 	req := apiv0.CreateSceneRequest{Name: "New Scene", Width: 1920, Height: 1080}
 	mark := p.markScenes()
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.CreateSceneResponse, error) {
@@ -67,6 +70,9 @@ func (p *Project) confirmDeleteScene(ctx app.Context, sceneID uuid.UUID, sceneNa
 }
 
 func (p *Project) deleteScene(ctx app.Context, sceneID uuid.UUID) {
+	if p.refuseReadOnly(ctx) {
+		return
+	}
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.SceneResponse, error) {
 		return content.DeleteScene(c, sceneID)
 	}, func(ctx app.Context, _ apiv0.SceneResponse) {
@@ -85,6 +91,9 @@ func (p *Project) selectScene(ctx app.Context, id uuid.UUID) {
 
 func (p *Project) saveSceneProperties(ctx app.Context) {
 	ctx = p.compoCtx
+	if p.refuseReadOnly(ctx) {
+		return
+	}
 	idx := p.sceneIdx(p.selectedSceneID)
 	if idx < 0 {
 		return
@@ -116,6 +125,9 @@ func (p *Project) startEditingScene(id uuid.UUID, name string) {
 }
 
 func (p *Project) commitSceneEdit(ctx app.Context) {
+	if p.refuseReadOnly(ctx) {
+		return
+	}
 	if p.editingSceneID == uuid.Nil {
 		return
 	}
@@ -137,6 +149,9 @@ func (p *Project) commitSceneEdit(ctx app.Context) {
 
 // putScene saves the Scene's properties at its known version.
 func (p *Project) putScene(sc apiv0.SceneResponse) {
+	if p.readOnly() {
+		return
+	}
 	req := apiv0.UpdateSceneRequest{
 		Name:           sc.Name,
 		Width:          sc.Width,

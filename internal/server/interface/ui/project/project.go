@@ -73,6 +73,20 @@ type Project struct {
 	revisionDetail       apiv0.RevisionResponse
 	revisionDetailLoaded bool
 	rollingBack          bool
+	// ── EditLock of the Draft (ADR 0015) ────────────────────────────────────
+	// tabKey is the key of this tab: the client the API client acts as.
+	// editLock is the state of the Draft's lock, read on mount and on the
+	// project's resync and applied from its events; lockLoaded is false until
+	// the first answer. Without the lock (readOnly) the Draft is not edited.
+	tabKey         uuid.UUID
+	editLock       apiv0.EditLockResponse
+	lockLoaded     bool
+	lockName       string // the name declared once, from LocalStorage
+	lockNameInput  string
+	askingName     bool
+	takeOverDialog bool
+	checkingOut    bool
+
 	// sceneVersions holds the version each write of a Scene or its Widgets
 	// states; the Version and SceneVersion of the lists above are not read.
 	// The selected Scene's is learned with its Widgets (observeSceneVersion).
@@ -204,6 +218,9 @@ func (p *Project) OnMount(ctx app.Context) {
 	ctx.LocalStorage().Get("project:widgetTypeWidth", &p.widgetTypeWidth)
 	ctx.LocalStorage().Get("project:propertiesWidth", &p.propertiesWidth)
 
+	p.tabKey = tabKeyOf(p.client)
+	ctx.LocalStorage().Get(editLockNameKey, &p.lockName)
+
 	var savedTab string
 	ctx.LocalStorage().Get("project:subTab", &savedTab)
 	if savedTab != "" {
@@ -219,6 +236,7 @@ func (p *Project) OnMount(ctx app.Context) {
 	}
 	p.loadTags(ctx)
 	p.loadDeploy(ctx)
+	p.loadEditLock(ctx)
 
 	p.handleServerEvents(ctx)
 }
@@ -255,6 +273,8 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.deployPreview, p.deployLoaded = apiv0.DeployPreviewResponse{}, false
 	p.dialogPreview = apiv0.DeployPreviewResponse{}
 	p.deployDialog, p.deploying, p.discarding = false, false, false
+	p.editLock, p.lockLoaded = apiv0.EditLockResponse{}, false
+	p.lockNameInput, p.askingName, p.takeOverDialog, p.checkingOut = "", false, false, false
 	p.revisions, p.revisionsLoaded = nil, false
 	p.revisionsDialog, p.selectedRevision, p.rollingBack = false, 0, false
 	p.revisionDetail, p.revisionDetailLoaded = apiv0.RevisionResponse{}, false

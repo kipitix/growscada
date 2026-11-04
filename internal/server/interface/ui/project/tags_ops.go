@@ -12,6 +12,9 @@ import (
 )
 
 func (p *Project) createTag(ctx app.Context) {
+	if p.refuseReadOnly(ctx) {
+		return
+	}
 	req := apiv0.CreateTagRequest{Name: p.newTagName, Type: p.newTagType}
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.CreateTagResponse, error) {
 		return content.CreateTag(c, req)
@@ -27,6 +30,9 @@ func (p *Project) createTag(ctx app.Context) {
 }
 
 func (p *Project) deleteTag(ctx app.Context) {
+	if p.refuseReadOnly(ctx) {
+		return
+	}
 	deletedID := p.selectedTagID
 	if deletedID == uuid.Nil {
 		return

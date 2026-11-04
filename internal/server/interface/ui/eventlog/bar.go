@@ -9,6 +9,7 @@ package eventlog
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"slices"
 	"time"
 
@@ -86,6 +87,9 @@ type Bar struct {
 	app.Compo
 
 	apiServerURL string
+	// clientKey is the key of the tab, sent as the client parameter of the
+	// stream: presence while it is open (ADR 0015).
+	clientKey string
 	// compoCtx is the component's own context, set with mounted in OnMount.
 	compoCtx app.Context
 	mounted  bool
@@ -130,6 +134,14 @@ type eventStream struct {
 
 func NewBar(apiServerURL string) *Bar {
 	return &Bar{apiServerURL: apiServerURL}
+}
+
+// WithClientKey makes the Bar name the client key in its stream (client), so
+// the server counts the tab as present while the stream is open: its
+// EditLock is alive without requests (ADR 0015). An empty key is none.
+func (b *Bar) WithClientKey(key string) *Bar {
+	b.clientKey = key
+	return b
 }
 
 func (b *Bar) OnMount(ctx app.Context) {
@@ -199,13 +211,20 @@ func (b *Bar) SetProject(id uuid.UUID) {
 // connectStream connects to the server's events joined by those of the
 // project selected, if any.
 func (b *Bar) connectStream(ctx app.Context) *eventStream {
-	url := b.apiServerURL + apiv0.PathPrefix + "/events"
+	streamURL := b.apiServerURL + apiv0.PathPrefix + "/events"
 	resyncs := []string{EventResync}
+	params := url.Values{}
 	if b.projectID != uuid.Nil {
-		url += "?" + apiv0.EventsQueryProject + "=" + b.projectID.String()
+		params.Set(apiv0.EventsQueryProject, b.projectID.String())
 		resyncs = append(resyncs, EventProjectResync)
 	}
-	st := b.connect(ctx, url, resyncs)
+	if b.clientKey != "" {
+		params.Set(apiv0.EventsQueryClient, b.clientKey)
+	}
+	if len(params) > 0 {
+		streamURL += "?" + params.Encode()
+	}
+	st := b.connect(ctx, streamURL, resyncs)
 	st.projectID = b.projectID
 	return st
 }

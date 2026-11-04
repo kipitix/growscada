@@ -71,7 +71,8 @@ func TestNotDeployed_ShowsTheEmptyState(t *testing.T) {
 // Scenes, its WidgetTypes and the Tag states snapshot.
 func TestRevision_ShowsScenesAndTagStates(t *testing.T) {
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
-	api := apiclient.New(srv.URL, srv.Client())
+	api := apiclient.New(srv.URL, srv.Client()).WithClientKey(servertest.ClientKey.String())
+	servertest.EnsureEditLock(t, srv, servertest.MainProject)
 	project := api.Project(servertest.MainProject)
 	ctx := context.Background()
 
@@ -107,7 +108,8 @@ func TestRevision_ShowsScenesAndTagStates(t *testing.T) {
 // nothing; only revision_created reloads the running Revision.
 func TestRevision_DraftChangesAreInvisible(t *testing.T) {
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
-	api := apiclient.New(srv.URL, srv.Client())
+	api := apiclient.New(srv.URL, srv.Client()).WithClientKey(servertest.ClientKey.String())
+	servertest.EnsureEditLock(t, srv, servertest.MainProject)
 	project := api.Project(servertest.MainProject)
 	ctx := context.Background()
 

@@ -162,6 +162,9 @@ func (p *Project) deploy(ctx app.Context) {
 	if p.content == nil || p.deploying || p.discarding || p.rollingBack {
 		return
 	}
+	if p.refuseReadOnly(ctx) {
+		return
+	}
 	p.deploying = true
 	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DeployResponse, error) {
 		return pc.Deploy(c)
@@ -189,6 +192,9 @@ func (p *Project) deploy(ctx app.Context) {
 // is the toast.
 func (p *Project) discard(ctx app.Context) {
 	if p.content == nil || p.discarding || p.deploying || p.rollingBack {
+		return
+	}
+	if p.refuseReadOnly(ctx) {
 		return
 	}
 	message := "Discard the Draft of this project and restore it to the Revision it runs?"
@@ -221,6 +227,8 @@ func (p *Project) renderDeployBar() app.UI {
 	}
 
 	body := []app.UI{
+		p.renderEditLockBar(),
+		app.Div().Style("width", "1px").Style("height", "18px").Style("background", "var(--border)"),
 		app.Span().
 			Attr("data-deploy-revision", "true").
 			Style("font-size", "12px").
@@ -240,12 +248,14 @@ func (p *Project) renderDeployBar() app.UI {
 		p.deployButton("Revisions", "The Revisions of the project", !p.deploying && !p.discarding && !p.rollingBack, func(ctx app.Context) {
 			p.openRevisionsDialog(ctx)
 		}),
-		p.deployButton("Deploy", "Deploy the Draft as a new Revision", !p.deploying && !p.discarding && !p.rollingBack, func(ctx app.Context) {
-			p.openDeployDialog(ctx)
-		}),
-		p.deployButton("Discard", "Reset the Draft to the Revision the project runs", !p.discarding && !p.deploying && !p.rollingBack, func(ctx app.Context) {
-			p.discard(ctx)
-		}),
+		p.deployButton("Deploy", deployTitle(p.readOnly(), "Deploy the Draft as a new Revision"),
+			!p.readOnly() && !p.deploying && !p.discarding && !p.rollingBack, func(ctx app.Context) {
+				p.openDeployDialog(ctx)
+			}),
+		p.deployButton("Discard", deployTitle(p.readOnly(), "Reset the Draft to the Revision the project runs"),
+			!p.readOnly() && !p.discarding && !p.deploying && !p.rollingBack, func(ctx app.Context) {
+				p.discard(ctx)
+			}),
 	)
 
 	if p.deployDialog {
@@ -265,6 +275,15 @@ func (p *Project) renderDeployBar() app.UI {
 		Style("border-bottom", "1px solid var(--border)").
 		Style("background", "var(--bg-elevated)").
 		Body(body...)
+}
+
+// deployTitle is the hover text of a Deploy or Discard: the read-only reason
+// when the Draft is not held (ADR 0015).
+func deployTitle(readOnly bool, title string) string {
+	if readOnly {
+		return readOnlyHint
+	}
+	return title
 }
 
 func (p *Project) deployButton(label, title string, enabled bool, onClick func(app.Context)) app.UI {
