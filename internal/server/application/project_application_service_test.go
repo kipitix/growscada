@@ -457,12 +457,12 @@ func TestProjectCleanup_StateUpsertedAfterTheStatesAreRemoved_IsRemovedOnTheNext
 		t.Fatalf("DeleteProjectByID: %v", err)
 	}
 	late := uuid.New()
-	if err := newRuntimeNode().UpsertTagDefinitions(ctx, p, []appdto.TagDefinition{{ID: late, Name: "late", Type: "integer", Version: 1}}); err != nil {
+	if err := r.states.UpsertTagDefinitions(ctx, p, []runtimeapp.TagDefinition{{ID: late, Name: "late", Type: "integer", Version: 1}}); err != nil {
 		t.Fatalf("UpsertTagDefinitions: %v", err)
 	}
 
 	policy := application.NewProjectCleanupPolicy(repositories.NewProjectRepositoryPostgres(testDB), newScopes(),
-		stateUpsertingAfterRemoval{RuntimeNode: newRuntimeNode(), project: p, tagID: late})
+		stateUpsertingAfterRemoval{RuntimeNode: newRuntimeNode(), states: r.states, project: p, tagID: late})
 	if err := policy.Run(ctx, "project:"+p.String()); !errors.Is(err, project.ErrProjectNotEmpty) {
 		t.Fatalf("the run removing the states before the upsert: expected ErrProjectNotEmpty, got %v", err)
 	}
@@ -515,6 +515,7 @@ func (n *forgottenTokens) RemoveProjectDeviceTokens(ctx context.Context, project
 // the definition of tagID again, as a late call does.
 type stateUpsertingAfterRemoval struct {
 	application.RuntimeNode
+	states  runtimeapp.TagStateService
 	project uuid.UUID
 	tagID   uuid.UUID
 }
@@ -523,7 +524,7 @@ func (n stateUpsertingAfterRemoval) RemoveProjectTagStates(ctx context.Context, 
 	if err := n.RuntimeNode.RemoveProjectTagStates(ctx, projectID); err != nil {
 		return err
 	}
-	return n.RuntimeNode.UpsertTagDefinitions(ctx, n.project, []appdto.TagDefinition{{ID: n.tagID, Name: "late", Type: "integer", Version: 1}})
+	return n.states.UpsertTagDefinitions(ctx, n.project, []runtimeapp.TagDefinition{{ID: n.tagID, Name: "late", Type: "integer", Version: 1}})
 }
 
 // TestWidgetReconciliation_PinSwitch_ReconcilesOnlyItsProject: a release

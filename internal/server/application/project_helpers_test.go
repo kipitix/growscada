@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/server/application"
-	"github.com/kipitix/growscada/internal/server/application/appdto"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/event"
@@ -180,26 +179,8 @@ func newServiceWithStates() (application.TagService, runtimeapp.TagStateService)
 	return application.NewTagService(contentOver(newScopes()), node), states
 }
 
-// errRuntimeDown is the error of failingRuntimeNode.
+// errRuntimeDown is the error of unreadableRuntimeNode.
 var errRuntimeDown = errors.New("runtime node down")
-
-// failingRuntimeNode is a Runtime node whose upserts and removals fail; its
-// reads go to the RuntimeNode it wraps.
-type failingRuntimeNode struct {
-	application.RuntimeNode
-}
-
-func (failingRuntimeNode) UpsertTagDefinitions(context.Context, uuid.UUID, []appdto.TagDefinition) error {
-	return errRuntimeDown
-}
-
-func (failingRuntimeNode) RemoveTagStates(context.Context, uuid.UUID, []uuid.UUID) error {
-	return errRuntimeDown
-}
-
-func (failingRuntimeNode) RemoveProjectTagStates(context.Context, uuid.UUID) error {
-	return errRuntimeDown
-}
 
 // tagStateCount returns how many Tag states the Runtime node holds of the
 // Project.

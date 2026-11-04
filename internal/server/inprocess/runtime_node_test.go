@@ -21,21 +21,10 @@ type recordingStates struct {
 	runtimeapp.TagStateService
 
 	projectID uuid.UUID
-	defs      []runtimeapp.TagDefinition
 	tagIDs    []uuid.UUID
 	removeAll bool
 	found     []runtimeapp.TagState
 	err       error
-}
-
-func (s *recordingStates) UpsertTagDefinitions(_ context.Context, projectID uuid.UUID, defs []runtimeapp.TagDefinition) error {
-	s.projectID, s.defs = projectID, defs
-	return s.err
-}
-
-func (s *recordingStates) RemoveTagStates(_ context.Context, projectID uuid.UUID, tagIDs []uuid.UUID) error {
-	s.projectID, s.tagIDs = projectID, tagIDs
-	return s.err
 }
 
 func (s *recordingStates) RemoveProjectTagStates(_ context.Context, projectID uuid.UUID) error {
@@ -49,28 +38,6 @@ func (s *recordingStates) FindTagStates(_ context.Context, projectID uuid.UUID, 
 }
 
 var errRuntime = errors.New("runtime node down")
-
-func TestRuntimeNode_UpsertTagDefinitions_HandsOverEveryField(t *testing.T) {
-	states := &recordingStates{}
-	project := uuid.New()
-	first, second := uuid.New(), uuid.New()
-
-	err := inprocess.NewRuntimeNode(states, nil, nil).UpsertTagDefinitions(context.Background(), project, []appdto.TagDefinition{
-		{ID: first, Name: "pressure", Type: "integer", Version: 1},
-		{ID: second, Name: "running", Type: "boolean", Version: 3},
-	})
-	if err != nil {
-		t.Fatalf("UpsertTagDefinitions: %v", err)
-	}
-
-	want := []runtimeapp.TagDefinition{
-		{ID: first, Name: "pressure", Type: "integer", Version: 1},
-		{ID: second, Name: "running", Type: "boolean", Version: 3},
-	}
-	if states.projectID != project || !reflect.DeepEqual(states.defs, want) {
-		t.Errorf("upserted %v of project %v, want %v of %v", states.defs, states.projectID, want, project)
-	}
-}
 
 func TestRuntimeNode_FindTagStates_HandsOverTheStatesInOrder(t *testing.T) {
 	project := uuid.New()
@@ -94,18 +61,6 @@ func TestRuntimeNode_FindTagStates_HandsOverTheStatesInOrder(t *testing.T) {
 	}
 	if states.projectID != project || !reflect.DeepEqual(states.tagIDs, []uuid.UUID{second, first}) {
 		t.Errorf("asked for %v of project %v, want %v of %v", states.tagIDs, states.projectID, []uuid.UUID{second, first}, project)
-	}
-}
-
-func TestRuntimeNode_RemoveTagStates_HandsOverTheTags(t *testing.T) {
-	states := &recordingStates{}
-	project, tagID := uuid.New(), uuid.New()
-
-	if err := inprocess.NewRuntimeNode(states, nil, nil).RemoveTagStates(context.Background(), project, []uuid.UUID{tagID}); err != nil {
-		t.Fatalf("RemoveTagStates: %v", err)
-	}
-	if states.projectID != project || !reflect.DeepEqual(states.tagIDs, []uuid.UUID{tagID}) {
-		t.Errorf("removed %v of project %v, want [%v] of %v", states.tagIDs, states.projectID, tagID, project)
 	}
 }
 
@@ -163,8 +118,6 @@ func TestRuntimeNode_ReturnsTheRuntimeNodesErrors(t *testing.T) {
 	ctx, project := context.Background(), uuid.New()
 
 	calls := map[string]error{
-		"UpsertTagDefinitions":   node.UpsertTagDefinitions(ctx, project, []appdto.TagDefinition{{ID: uuid.New()}}),
-		"RemoveTagStates":        node.RemoveTagStates(ctx, project, []uuid.UUID{uuid.New()}),
 		"RemoveProjectTagStates": node.RemoveProjectTagStates(ctx, project),
 	}
 	states, err := node.FindTagStates(ctx, project, []uuid.UUID{uuid.New()})

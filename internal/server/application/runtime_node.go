@@ -19,15 +19,6 @@ import (
 // definitions, the Devices and the Environments. The copies are the running
 // Revision's alone: nothing of the Draft reaches this port (task 35, part 4).
 type RuntimeNode interface {
-	// UpsertTagDefinitions gives the Runtime node the definitions of Tags: a
-	// Tag without a state gets its initial one, a Tag with one keeps it.
-	// Idempotent. A state stored of another Project or TagType is an
-	// error. Nothing of the Draft calls it any more: the copies are the
-	// running Revision's, and once a Project has one this writes nothing.
-	UpsertTagDefinitions(ctx context.Context, projectID uuid.UUID, defs []appdto.TagDefinition) error
-	// RemoveTagStates removes the states of the Tags; one without a state is
-	// skipped.
-	RemoveTagStates(ctx context.Context, projectID uuid.UUID, tagIDs []uuid.UUID) error
 	// RemoveProjectTagStates removes the states of every Tag of the Project.
 	RemoveProjectTagStates(ctx context.Context, projectID uuid.UUID) error
 	// RemoveProjectDeviceTokens removes every Device Token of the Project,

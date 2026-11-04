@@ -33,18 +33,6 @@ func NewRuntimeNode(someStates runtimeapp.TagStateService, someTokens runtimeapp
 	return &runtimeNode{states: someStates, tokens: someTokens, revisions: someRevisions}
 }
 
-func (n runtimeNode) UpsertTagDefinitions(ctx context.Context, projectID uuid.UUID, defs []appdto.TagDefinition) error {
-	converted := make([]runtimeapp.TagDefinition, len(defs))
-	for i, d := range defs {
-		converted[i] = runtimeapp.TagDefinition{ID: d.ID, Name: d.Name, Type: d.Type, DeviceID: d.DeviceID, Version: d.Version}
-	}
-	return n.states.UpsertTagDefinitions(ctx, projectID, converted)
-}
-
-func (n runtimeNode) RemoveTagStates(ctx context.Context, projectID uuid.UUID, tagIDs []uuid.UUID) error {
-	return n.states.RemoveTagStates(ctx, projectID, tagIDs)
-}
-
 func (n runtimeNode) RemoveProjectTagStates(ctx context.Context, projectID uuid.UUID) error {
 	return n.states.RemoveProjectTagStates(ctx, projectID)
 }

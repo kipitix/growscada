@@ -370,7 +370,7 @@ func TestFindTags_CarryTheWrittenState(t *testing.T) {
 // is unreachable.
 func TestFindTags_WithoutAStateShowTheInitialOne(t *testing.T) {
 	cleanTags(t)
-	svc := application.NewTagService(contentOver(newScopes()), failingRuntimeNode{RuntimeNode: newRuntimeNode()})
+	svc := application.NewTagService(contentOver(newScopes()), unreadableRuntimeNode{RuntimeNode: newRuntimeNode()})
 	ctx := context.Background()
 
 	if _, err := svc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "flag", Type: "boolean"}); err != nil {
