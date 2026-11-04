@@ -18,8 +18,10 @@ import (
 // database, as the server wires it, and the RuntimeNode behind it.
 func newDeployService() (application.DeployService, application.RuntimeNode) {
 	node := newRuntimeNode()
+	content := contentOver(newScopes())
 	return application.NewDeployService(
-		application.NewProjectFileBuilder(contentOver(newScopes())),
+		content,
+		application.NewProjectFileBuilder(content),
 		repositories.NewProjectFileRepositoryPostgres(testDB),
 		node,
 	), node
@@ -182,8 +184,10 @@ func TestDeploy_CopyNotSaved_TheRevisionIsActive(t *testing.T) {
 	mustCreateTag(t, "speed", "integer")
 
 	node := newRuntimeNode()
+	content := contentOver(newScopes())
 	deploy := application.NewDeployService(
-		application.NewProjectFileBuilder(contentOver(newScopes())),
+		content,
+		application.NewProjectFileBuilder(content),
 		failingCopies{ProjectFileCopies: repositories.NewProjectFileRepositoryPostgres(testDB)},
 		node,
 	)
@@ -206,6 +210,36 @@ func TestDeploy_CopyNotSaved_TheRevisionIsActive(t *testing.T) {
 	healthy, _ := newDeployService()
 	if _, err := healthy.Deploy(ctx, mainProject); err != nil {
 		t.Fatalf("the Deploy after the failed copy: %v", err)
+	}
+}
+
+// TestDeploy_WhileADiscardRuns_IsRefused: the Draft of a Discard is read-only
+// and half restored; a Deploy of it would put it into a Revision the policy of
+// that Discard knows nothing of.
+func TestDeploy_WhileADiscardRuns_IsRefused(t *testing.T) {
+	cleanDevices(t)
+	cleanScenes(t)
+	cleanPins(t)
+	ctx := context.Background()
+	mustCreateTag(t, "speed", "integer")
+
+	deploy, _ := newDeployService()
+	if _, err := deploy.Deploy(ctx, mainProject); err != nil {
+		t.Fatalf("Deploy: %v", err)
+	}
+	if _, err := newDiscardService().Discard(ctx, mainProject); err != nil {
+		t.Fatalf("Discard: %v", err)
+	}
+	// The mark is what refuses the Deploy; the policy clears it, so a failed
+	// assertion does not leave the Project marked for the tests after this one.
+	t.Cleanup(func() {
+		if err := newDiscardPolicy().Run(context.Background(), "project:"+mainProject.String()); err != nil {
+			t.Errorf("the discard policy: %v", err)
+		}
+	})
+
+	if _, err := deploy.Deploy(ctx, mainProject); !errors.Is(err, project.ErrProjectDiscarding) {
+		t.Fatalf("Deploy while the Project is being discarded: %v, want ErrProjectDiscarding", err)
 	}
 }
 

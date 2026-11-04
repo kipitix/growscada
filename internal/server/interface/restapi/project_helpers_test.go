@@ -78,6 +78,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		states:       states,
 		revisions:    revisions,
 		deploy: application.NewDeployService(
+			content,
 			application.NewProjectFileBuilder(content),
 			repositories.NewProjectFileRepositoryPostgres(db),
 			runtimeNode,

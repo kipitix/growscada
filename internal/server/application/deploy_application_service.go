@@ -33,8 +33,9 @@ type DeployService interface {
 	// Revision the Runtime node created.
 	// Returns ErrNothingToDeploy if the Draft is the current Revision
 	// unchanged, ErrRevisionCopyNotSaved if the Revision is created but its
-	// copy is not saved, and an error wrapping project.ErrProjectNotFound if
-	// the Project is not live.
+	// copy is not saved, an error wrapping project.ErrProjectDiscarding while
+	// a Discard of the Project runs, and an error wrapping
+	// project.ErrProjectNotFound if the Project is not live.
 	Deploy(ctx context.Context, projectID uuid.UUID) (appdto.Revision, error)
 	// Preview reports what Deploy would do, without deploying: the current
 	// Revision (absent until the first Deploy), whether the Draft is it
@@ -46,6 +47,7 @@ type DeployService interface {
 }
 
 type deployServiceImpl struct {
+	content ProjectContent
 	builder ProjectFileBuilder
 	files   ProjectFileCopies
 	runtime RuntimeNode
@@ -53,13 +55,19 @@ type deployServiceImpl struct {
 
 var _ DeployService = (*deployServiceImpl)(nil)
 
-// NewDeployService returns the DeployService over aBuilder, the copies
-// aFiles and the Runtime node aRuntime.
-func NewDeployService(aBuilder ProjectFileBuilder, aFiles ProjectFileCopies, aRuntime RuntimeNode) DeployService {
-	return &deployServiceImpl{builder: aBuilder, files: aFiles, runtime: aRuntime}
+// NewDeployService returns the DeployService over the content of the live
+// Projects aContent, the builder aBuilder, the copies aFiles and the Runtime
+// node aRuntime.
+func NewDeployService(aContent ProjectContent, aBuilder ProjectFileBuilder, aFiles ProjectFileCopies, aRuntime RuntimeNode) DeployService {
+	return &deployServiceImpl{content: aContent, builder: aBuilder, files: aFiles, runtime: aRuntime}
 }
 
 func (s deployServiceImpl) Deploy(ctx context.Context, projectID uuid.UUID) (appdto.Revision, error) {
+	// The Draft is read-only while a Discard runs: half restored, it would go
+	// into a Revision the policy of that Discard knows nothing of (Q10).
+	if _, _, err := s.content.openNotDiscarding(ctx, projectID); err != nil {
+		return appdto.Revision{}, err
+	}
 	file, err := s.builder.Build(ctx, projectID)
 	if err != nil {
 		return appdto.Revision{}, err

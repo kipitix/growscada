@@ -34,6 +34,7 @@ func DeployProject(t *testing.T, db *sql.DB, projectID uuid.UUID) {
 		repositories.NewProjectRepositoryPostgres(db), repositories.NewProjectScopes(db), orgID)
 	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(db), func(event.Event) {})
 	service := application.NewDeployService(
+		content,
 		application.NewProjectFileBuilder(content),
 		repositories.NewProjectFileRepositoryPostgres(db),
 		inprocess.NewRuntimeNode(nil, nil, revisions),

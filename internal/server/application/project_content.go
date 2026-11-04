@@ -37,6 +37,23 @@ func (c ProjectContent) open(ctx context.Context, rawProjectID uuid.UUID) (id.ID
 	return projectID, c.scopes.ForProject(projectID), nil
 }
 
+// openNotDiscarding is open, refused while a Discard of the Project is under
+// way: the Draft is read-only until the mark clears (task 35, Q10). It is for a
+// service whose write is not a write of the Draft and so passes no repository
+// lockProject — a Deploy puts the Draft into a Revision, and the Draft of a
+// Discard under way may be half restored.
+func (c ProjectContent) openNotDiscarding(ctx context.Context, rawProjectID uuid.UUID) (id.ID[project.Project], ProjectScope, error) {
+	projectID := id.NewID(id.IDWithUUID[project.Project](rawProjectID))
+	found, err := findOwnProject(ctx, c.projects, c.organization, projectID)
+	if err != nil {
+		return projectID, nil, err
+	}
+	if found.IsDiscarding() {
+		return projectID, nil, fmt.Errorf("%w: %s", project.ErrProjectDiscarding, projectID)
+	}
+	return projectID, c.scopes.ForProject(projectID), nil
+}
+
 // openUnchecked returns the ID and the repositories of the Project
 // rawProjectID without checking it: for a query that checks the Project
 // itself (and open on a miss, for the error).

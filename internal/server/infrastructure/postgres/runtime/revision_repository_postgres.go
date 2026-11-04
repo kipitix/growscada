@@ -66,6 +66,24 @@ func (r revisionRepositoryPostgres) CreateRevision(ctx context.Context, projectI
 	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, projectID.String()); err != nil {
 		return runtimeapp.Revision{}, fmt.Errorf("cannot lock project %s for a deploy: %w", projectID, err)
 	}
+	// The Draft is read-only while a Discard of its Project runs: the Revision
+	// of a half-restored Draft would be a configuration nobody asked for. The
+	// row is locked for share, so a Discard that starts after this point waits
+	// for the Revision and its policy, which reads the current Revision when it
+	// runs, sees this one (task 35, Q10).
+	var discarding bool
+	err = tx.QueryRowContext(ctx,
+		`SELECT discarding FROM public.projects WHERE id = $1 FOR SHARE`, projectID,
+	).Scan(&discarding)
+	if errors.Is(err, sql.ErrNoRows) {
+		return runtimeapp.Revision{}, fmt.Errorf("%w: %s", project.ErrProjectNotFound, projectID)
+	}
+	if err != nil {
+		return runtimeapp.Revision{}, fmt.Errorf("cannot lock project %s for a deploy: %w", projectID, err)
+	}
+	if discarding {
+		return runtimeapp.Revision{}, fmt.Errorf("%w: %s", project.ErrProjectDiscarding, projectID)
+	}
 	var number int
 	if err := tx.QueryRowContext(ctx,
 		`SELECT COALESCE(MAX(n), 0) + 1 FROM runtime.revisions WHERE project_id = $1`,

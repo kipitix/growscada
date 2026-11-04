@@ -449,6 +449,23 @@ func TestCreateRevision_ResetsTheStateOfAChangedTagTypeAndKeepsTheOthers(t *test
 	}
 }
 
+func TestCreateRevision_RefusesAProjectBeingDiscarded(t *testing.T) {
+	projectID, _ := newProject(t)
+	db := postgres.DB(t)
+	repo := runtimepg.NewRevisionRepositoryPostgres(db)
+	ctx := context.Background()
+	if _, err := db.ExecContext(ctx, `UPDATE projects SET discarding = true WHERE id = $1`, projectID.UUID()); err != nil {
+		t.Fatalf("mark the project as being discarded: %v", err)
+	}
+
+	if _, err := repo.CreateRevision(ctx, projectID.UUID(), documentOf(projectID), time.Now()); !errors.Is(err, project.ErrProjectDiscarding) {
+		t.Fatalf("CreateRevision of a project being discarded: %v, want ErrProjectDiscarding", err)
+	}
+	if got := countRows(t, `SELECT count(*) FROM runtime.revisions WHERE project_id = $1`, projectID.UUID()); got != 0 {
+		t.Errorf("revisions of the project being discarded: %d, want none", got)
+	}
+}
+
 func TestCreateRevision_TheProjectTakesItsRevisionsAlong(t *testing.T) {
 	projectID, _ := newProject(t)
 	db := postgres.DB(t)

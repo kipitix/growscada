@@ -162,8 +162,10 @@ func newRuntime() (runtimeapp.TagStateService, application.RuntimeNode) {
 // writes a Tag value deploys first, or the Tag has no state to write.
 func deployProject(t *testing.T, projectID uuid.UUID) {
 	t.Helper()
+	content := contentOver(newScopes())
 	service := application.NewDeployService(
-		application.NewProjectFileBuilder(contentOver(newScopes())),
+		content,
+		application.NewProjectFileBuilder(content),
 		repositories.NewProjectFileRepositoryPostgres(testDB),
 		newRuntimeNode(),
 	)
