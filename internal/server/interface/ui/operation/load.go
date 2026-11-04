@@ -9,6 +9,7 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	projectv0 "github.com/kipitix/growscada/contract/project/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
+	"github.com/kipitix/growscada/internal/server/interface/ui/livescene"
 	"github.com/kipitix/growscada/internal/server/interface/ui/tagstate"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
@@ -156,7 +157,13 @@ func revisionWidgetType(widgetType projectv0.WidgetType) apiv0.ReleasedWidgetTyp
 func revisionTags(definitions []projectv0.TagDefinition, states map[string]apiv0.TagStateResponse) []apiv0.TagResponse {
 	tags := make([]apiv0.TagResponse, len(definitions))
 	for i, definition := range definitions {
-		state := states[definition.ID.String()]
+		state, ok := states[definition.ID.String()]
+		if !ok {
+			state = apiv0.TagStateResponse{
+				Value:   zeroValueOf(definition.Type),
+				Quality: string(livescene.QualityBad),
+			}
+		}
 		tags[i] = apiv0.TagResponse{
 			ID:      definition.ID,
 			Name:    definition.Name,
@@ -165,9 +172,19 @@ func revisionTags(definitions []projectv0.TagDefinition, states map[string]apiv0
 			Quality: state.Quality,
 			Seq:     state.Seq,
 		}
-		if tags[i].Quality == "" {
-			tags[i].Quality = "bad"
-		}
 	}
 	return tags
+}
+
+// zeroValueOf is the TagType's zero value as a Tag's value is spelled: a Tag
+// of the Revision the Runtime node holds no state for still renders its type.
+func zeroValueOf(tagType string) string {
+	switch tagType {
+	case "boolean":
+		return "false"
+	case "integer":
+		return "0"
+	default:
+		return ""
+	}
 }

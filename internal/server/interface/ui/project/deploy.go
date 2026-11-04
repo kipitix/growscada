@@ -66,8 +66,12 @@ func (p *Project) deploy(ctx app.Context) {
 		p.loadDeploy(ctx)
 		ctx.Update()
 	}, func(ctx app.Context, err error) {
+		// The dialog goes: its preview is what failed (the Draft may have
+		// been deployed meanwhile), and the reloaded bar shows the truth.
 		p.deploying = false
+		p.deployDialog = false
 		uiutil.ShowError(ctx, err)
+		p.loadDeploy(ctx)
 		ctx.Update()
 	})
 }

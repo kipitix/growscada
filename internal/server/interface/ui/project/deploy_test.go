@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -98,5 +99,32 @@ func TestDeployBar_DraftChangeShowsUnreleasedChanges(t *testing.T) {
 	}
 	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, "Unreleased changes") {
 		t.Errorf("the bar does not show the unreleased changes: %s", html)
+	}
+}
+
+// TestDeploy_ServerRefusalIsAToast: the dialog was previewed against a changed
+// Draft, and another user deployed it before the confirmation. The server's
+// 409 must reach the user as a toast, not as a silent failure.
+func TestDeploy_ServerRefusalIsAToast(t *testing.T) {
+	url, api := newServer(t)
+	f := mount(t, url, api)
+
+	f.p.openDeployDialog(f.p.compoCtx)
+	f.run()
+	if f.p.dialogPreview.Unchanged {
+		t.Fatalf("the dialog previews an unchanged Draft: %+v", f.p.dialogPreview)
+	}
+
+	if _, err := api.Deploy(context.Background()); err != nil {
+		t.Fatalf("deploy from another user: %v", err)
+	}
+	f.p.deploy(f.p.compoCtx)
+	f.run()
+
+	if f.p.deployDialog {
+		t.Error("the dialog is still open after the server refused the Deploy")
+	}
+	if got := f.oneToast(); got.Status != http.StatusConflict || !strings.Contains(got.Detail, "Nothing to deploy") {
+		t.Errorf("the refusal is not a toast: %+v", got)
 	}
 }

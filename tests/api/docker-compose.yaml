@@ -86,10 +86,11 @@ services:
       timeout: 5s
       retries: 15
 
-  # A Deploy before anything writes a Tag value or connects a Device: the seed
-  # creates no Revision, and a Runtime node copy of a Tag or a Device exists
-  # only once a Deploy has named it (task 35). The project "Main" holds the
-  # simulator's Device and the dashboard's Tags.
+  # The seed creates no Revision: its Runtime copies of the Tags and Devices
+  # are inserted by test_data directly, so the stack would run on fixtures
+  # alone. Deploy "Main" (the simulator's Device and the dashboard's Tags)
+  # once, as a real deployment would, before anything writes a Tag value or
+  # connects a Device (task 35).
   deploy:
     image: curlimages/curl:8.10.1
     depends_on:

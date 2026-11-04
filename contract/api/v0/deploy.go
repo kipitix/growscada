@@ -7,7 +7,7 @@ import (
 )
 
 // RevisionResponse is the Revision a Project runs: its number, when it was
-// deployed and the ProjectFile it holds (scene 35). GET
+// deployed and the ProjectFile it holds (task 35). GET
 // /projects/{id}/revision answers 404 until the Project's first Deploy.
 // Nothing of the Draft is part of it: Operation reads this document alone.
 type RevisionResponse struct {
