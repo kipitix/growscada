@@ -253,6 +253,14 @@ func TestSendError(t *testing.T) {
 	}
 }
 
+// TestSendError_RevisionCopyNotSaved_IsAHonest500: a Deploy whose Revision is
+// active but whose copy failed says so, instead of the generic internal error.
+func TestSendError_RevisionCopyNotSaved_IsAHonest500(t *testing.T) {
+	err := fmt.Errorf("%w: revision 3 of project x is active", application.ErrRevisionCopyNotSaved)
+	assertProblem(t, err, nil, http.StatusInternalServerError, "Internal Server Error",
+		"The Revision is active, but the copy of it was not saved; retry the Deploy")
+}
+
 func TestSendError_MappingWithUnhandledStatus_Is500(t *testing.T) {
 	sentinel := errors.New("gone")
 	saved := errorMappings

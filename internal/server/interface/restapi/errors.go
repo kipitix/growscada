@@ -70,6 +70,8 @@ var errorMappings = []errorMapping{
 		"Nothing to deploy: the Draft of the project is the revision it runs"},
 	{application.ErrNoRevisionToDiscard, http.StatusConflict, projectResource,
 		"Nothing to discard: the project runs no revision"},
+	{application.ErrRevisionCopyNotSaved, http.StatusInternalServerError, projectResource,
+		"The Revision is active, but the copy of it was not saved; retry the Deploy"},
 	{project.ErrProjectNotFound, http.StatusNotFound, projectResource, ""},
 	{project.ErrProjectConflict, http.StatusConflict, projectResource, "Project was changed concurrently; reload it and retry"},
 	{project.ErrProjectNameTaken, http.StatusConflict, projectResource, "Project name is already taken"},
@@ -163,6 +165,11 @@ func sendError(w http.ResponseWriter, r *http.Request, err error) {
 				}
 			}
 			sendProblem(w, problem)
+		case http.StatusInternalServerError:
+			// A fault the client cannot fix, with an honest detail that says
+			// what state the server is in; the wrapping error goes to the log.
+			slog.Error("internal server error", "path", r.URL.Path, "method", r.Method, "error", err)
+			sendProblem(w, NewInternalError(m.detail, r.URL.Path))
 		default:
 			sendInternalError(w, r, fmt.Errorf("error mapping for %d has no response: %w", m.status, err))
 		}
