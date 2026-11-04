@@ -2,13 +2,11 @@ package restapi
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/google/uuid"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
-	"github.com/kipitix/growscada/internal/server/application/appdto"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 )
 
@@ -30,6 +28,22 @@ func NewDeployHandler(deploy application.DeployService, discard application.Disc
 	return &DeployHandlers{deploy: deploy, discard: discard, revisions: revisions, states: states}
 }
 
+// currentRevision returns the Revision the Project runs, answering 404 itself
+// when it runs none. A failed read is answered as well, so the caller returns
+// on ok == false.
+func (h DeployHandlers) currentRevision(w http.ResponseWriter, r *http.Request, projectID uuid.UUID) (runtimeapp.Revision, bool) {
+	revision, deployed, err := h.revisions.FindCurrent(r.Context(), projectID)
+	if err != nil {
+		sendError(w, r, err)
+		return runtimeapp.Revision{}, false
+	}
+	if !deployed {
+		sendProblem(w, NewNotFound("Revision of project", projectID.String(), r.URL.Path))
+		return runtimeapp.Revision{}, false
+	}
+	return revision, true
+}
+
 // GetRevision handles GET /projects/{project_id}/revision: the Revision the
 // Project runs, with its ProjectFile. 404 until the Project's first Deploy.
 func (h DeployHandlers) GetRevision(w http.ResponseWriter, r *http.Request) {
@@ -37,13 +51,8 @@ func (h DeployHandlers) GetRevision(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	revision, deployed, err := h.revisions.FindCurrent(r.Context(), projectID)
-	if err != nil {
-		sendError(w, r, err)
-		return
-	}
-	if !deployed {
-		sendProblem(w, NewNotFound("Revision of project", projectID.String(), r.URL.Path))
+	revision, ok := h.currentRevision(w, r, projectID)
+	if !ok {
 		return
 	}
 	sendJSONResponse(w, http.StatusOK, newRevisionResponse(revision))
@@ -57,13 +66,8 @@ func (h DeployHandlers) GetTagStates(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	revision, deployed, err := h.revisions.FindCurrent(r.Context(), projectID)
-	if err != nil {
-		sendError(w, r, err)
-		return
-	}
-	if !deployed {
-		sendProblem(w, NewNotFound("Revision of project", projectID.String(), r.URL.Path))
+	revision, ok := h.currentRevision(w, r, projectID)
+	if !ok {
 		return
 	}
 	tagIDs := make([]uuid.UUID, len(revision.Content.Tags))
@@ -124,50 +128,4 @@ func (h DeployHandlers) PostDiscard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sendJSONResponse(w, http.StatusAccepted, apiv0.DiscardProjectResponse{Discarding: true})
-}
-
-// deployedAt formats a time as the contract states it: RFC 3339 in UTC.
-func deployedAt(t time.Time) string { return t.UTC().Format(time.RFC3339) }
-
-func newRevisionResponse(revision runtimeapp.Revision) apiv0.RevisionResponse {
-	return apiv0.RevisionResponse{
-		Number:     revision.Number,
-		DeployedAt: deployedAt(revision.DeployedAt),
-		Content:    revision.Content,
-	}
-}
-
-func newDeployResponse(revision appdto.Revision) apiv0.DeployResponse {
-	return apiv0.DeployResponse{Number: revision.Number, DeployedAt: deployedAt(revision.DeployedAt)}
-}
-
-func newRevisionSummaryResponse(revision appdto.Revision) apiv0.RevisionSummaryResponse {
-	return apiv0.RevisionSummaryResponse{Number: revision.Number, DeployedAt: deployedAt(revision.DeployedAt)}
-}
-
-func newDeployPreviewResponse(preview appdto.DeployPreview) apiv0.DeployPreviewResponse {
-	resp := apiv0.DeployPreviewResponse{
-		Unchanged:      preview.Unchanged,
-		DroppedWidgets: make([]apiv0.DroppedWidgetResponse, len(preview.DroppedWidgets)),
-	}
-	if preview.CurrentRevision != nil {
-		summary := newRevisionSummaryResponse(*preview.CurrentRevision)
-		resp.CurrentRevision = &summary
-	}
-	for i, dropped := range preview.DroppedWidgets {
-		resp.DroppedWidgets[i] = apiv0.DroppedWidgetResponse{
-			SceneID: dropped.SceneID, WidgetID: dropped.WidgetID, Name: dropped.Name,
-		}
-	}
-	return resp
-}
-
-func newGetTagStatesResponse(states []runtimeapp.TagState) apiv0.GetTagStatesResponse {
-	resp := apiv0.GetTagStatesResponse{TagStates: make(map[string]apiv0.TagStateResponse, len(states))}
-	for _, state := range states {
-		resp.TagStates[state.ID.String()] = apiv0.TagStateResponse{
-			Value: state.Value, Quality: state.Quality, Seq: state.Seq,
-		}
-	}
-	return resp
 }

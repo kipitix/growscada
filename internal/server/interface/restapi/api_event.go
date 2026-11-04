@@ -106,7 +106,7 @@ func newAPIEvent(e event.Event) apiv0.Event {
 	case runtimeapp.RevisionCreatedEvent:
 		ev.ID = e.ProjectID().String()
 		ev.Revision = e.Number()
-		ev.DeployedAt = e.DeployedAt().UTC().Format(time.RFC3339)
+		ev.DeployedAt = deployedAt(e.DeployedAt())
 	case scene.SceneEvent:
 		ev.ID = e.SceneID().String()
 	case project.ProjectEvent:
