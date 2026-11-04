@@ -33,17 +33,17 @@ func (p *Project) loadDeploy(ctx app.Context) {
 }
 
 // openDeployDialog reads the preview afresh and opens the confirmation with
-// it: what the Deploy would do, not what was last seen.
+// it: what the Deploy would do, not what was last seen. The dialog keeps that
+// preview (dialogPreview), so a reload of the bar that lands meanwhile does
+// not rewrite it.
 func (p *Project) openDeployDialog(ctx app.Context) {
-	if p.content == nil {
-		return
-	}
-	uiutil.Call(p.compoCtx, p.content.DeployPreview,
-		func(ctx app.Context, preview apiv0.DeployPreviewResponse) {
-			p.deployPreview, p.deployLoaded = preview, true
-			p.deployDialog = true
-			ctx.Update()
-		}, nil)
+	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DeployPreviewResponse, error) {
+		return pc.DeployPreview(c)
+	}, func(ctx app.Context, preview apiv0.DeployPreviewResponse) {
+		p.dialogPreview = preview
+		p.deployDialog = true
+		ctx.Update()
+	}, nil)
 }
 
 // closeDeployDialog closes the confirmation without deploying.
@@ -54,29 +54,29 @@ func (p *Project) closeDeployDialog() {
 // deploy confirms the open dialog: it makes the Draft the new Revision. The
 // server's refusal (nothing to deploy, the Draft being discarded) is a toast.
 func (p *Project) deploy(ctx app.Context) {
-	if p.content == nil || p.deploying {
+	if p.content == nil || p.deploying || p.discarding {
 		return
 	}
 	p.deploying = true
-	uiutil.Call(p.compoCtx, p.content.Deploy,
-		func(ctx app.Context, _ apiv0.DeployResponse) {
-			p.deploying = false
-			p.deployDialog = false
-			p.loadDeploy(ctx)
-			ctx.Update()
-		},
-		func(ctx app.Context, err error) {
-			p.deploying = false
-			uiutil.ShowError(ctx, err)
-			ctx.Update()
-		})
+	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DeployResponse, error) {
+		return pc.Deploy(c)
+	}, func(ctx app.Context, _ apiv0.DeployResponse) {
+		p.deploying = false
+		p.deployDialog = false
+		p.loadDeploy(ctx)
+		ctx.Update()
+	}, func(ctx app.Context, err error) {
+		p.deploying = false
+		uiutil.ShowError(ctx, err)
+		ctx.Update()
+	})
 }
 
 // discard resets the Draft to the Revision the project runs, after the
 // browser's confirmation. Without a Revision the server refuses (409), which
 // is the toast.
 func (p *Project) discard(ctx app.Context) {
-	if p.content == nil || p.discarding {
+	if p.content == nil || p.discarding || p.deploying {
 		return
 	}
 	message := "Discard the Draft of this project and restore it to the Revision it runs?"
@@ -84,17 +84,17 @@ func (p *Project) discard(ctx app.Context) {
 		return
 	}
 	p.discarding = true
-	uiutil.Call(p.compoCtx, p.content.Discard,
-		func(ctx app.Context, _ apiv0.DiscardProjectResponse) {
-			p.discarding = false
-			p.loadDeploy(ctx)
-			ctx.Update()
-		},
-		func(ctx app.Context, err error) {
-			p.discarding = false
-			uiutil.ShowError(ctx, err)
-			ctx.Update()
-		})
+	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DiscardProjectResponse, error) {
+		return pc.Discard(c)
+	}, func(ctx app.Context, _ apiv0.DiscardProjectResponse) {
+		p.discarding = false
+		p.loadDeploy(ctx)
+		ctx.Update()
+	}, func(ctx app.Context, err error) {
+		p.discarding = false
+		uiutil.ShowError(ctx, err)
+		ctx.Update()
+	})
 }
 
 // renderDeployBar is the project's header: the Revision it runs (or "Not
@@ -125,10 +125,10 @@ func (p *Project) renderDeployBar() app.UI {
 	}
 	body = append(body,
 		app.Div().Style("flex", "1"),
-		p.deployButton("Deploy", "Deploy the Draft as a new Revision", !p.deploying, func(ctx app.Context) {
+		p.deployButton("Deploy", "Deploy the Draft as a new Revision", !p.deploying && !p.discarding, func(ctx app.Context) {
 			p.openDeployDialog(ctx)
 		}),
-		p.deployButton("Discard", "Reset the Draft to the Revision the project runs", !p.discarding, func(ctx app.Context) {
+		p.deployButton("Discard", "Reset the Draft to the Revision the project runs", !p.discarding && !p.deploying, func(ctx app.Context) {
 			p.discard(ctx)
 		}),
 	)
@@ -167,7 +167,7 @@ func (p *Project) deployButton(label, title string, enabled bool, onClick func(a
 // renderDeployDialog is the confirmation over the deploy bar: what the Deploy
 // would make, and a warning for what it would drop.
 func (p *Project) renderDeployDialog() app.UI {
-	preview := p.deployPreview
+	preview := p.dialogPreview
 
 	lines := []app.UI{}
 	if preview.CurrentRevision != nil {

@@ -29,6 +29,17 @@ func TestDeployBar_ShowsTheRevisionAndDeploys(t *testing.T) {
 		t.Errorf("the dialog does not preview the first Deploy: %s", html)
 	}
 
+	// A reload of the bar that lands while the dialog is open must not rewrite
+	// it: the dialog keeps the preview it was opened with.
+	f.p.deployPreview = apiv0.DeployPreviewResponse{
+		CurrentRevision: &apiv0.RevisionSummaryResponse{Number: 7, DeployedAt: "2026-11-04T10:00:00Z"},
+		Unchanged:       true,
+	}
+	html = app.HTMLString(f.p.Render())
+	if !strings.Contains(html, "Revision 7") || !strings.Contains(html, "not been deployed yet") {
+		t.Errorf("the bar's reload rewrote the open dialog: %s", html)
+	}
+
 	f.p.deploy(f.p.compoCtx)
 	f.run()
 	f.noToasts()

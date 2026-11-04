@@ -52,8 +52,12 @@ type Project struct {
 	// the first answer, so nothing is shown before it.
 	deployPreview apiv0.DeployPreviewResponse
 	deployLoaded  bool
+	// dialogPreview is the preview the open Deploy dialog was built from: the
+	// dialog keeps it even if a reload of deployPreview lands meanwhile.
+	dialogPreview apiv0.DeployPreviewResponse
 	// deployDialog is true while the Deploy confirmation is open; deploying
-	// and discarding mark the request in flight.
+	// and discarding mark the request in flight, and neither starts while the
+	// other runs.
 	deployDialog bool
 	deploying    bool
 	discarding   bool
@@ -236,6 +240,7 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.scenes, p.widgets, p.tags = nil, nil, tagstate.Tags{}
 	p.widgetTypes, p.pins = nil, nil
 	p.deployPreview, p.deployLoaded = apiv0.DeployPreviewResponse{}, false
+	p.dialogPreview = apiv0.DeployPreviewResponse{}
 	p.deployDialog, p.deploying, p.discarding = false, false, false
 	p.sceneVersions.Forget()
 	p.sceneStates.Forget()
