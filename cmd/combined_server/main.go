@@ -193,11 +193,10 @@ func main() {
 	projectService := application.NewProjectService(projectRepository, organizationID)
 	tagService := application.NewTagService(projectContent, runtimeNode)
 	// Deploy and Discard (task 35): the Engineering node assembles the Draft's
-	// ProjectFile and hands it to the Runtime node, keeping its own copy of
-	// what it sent.
+	// ProjectFile and hands it to the Runtime node, which stores it as a
+	// Revision; the Engineering node keeps no copy of what it sent (ADR 0014).
 	projectFileBuilder := application.NewProjectFileBuilder(projectContent)
-	deployService := application.NewDeployService(
-		projectContent, projectFileBuilder, repositories.NewProjectFileRepositoryPostgres(sqlDB), runtimeNode)
+	deployService := application.NewDeployService(projectContent, projectFileBuilder, runtimeNode)
 	discardService := application.NewDiscardService(projectContent, runtimeNode)
 	// Create router
 	apiRouter := restapi.NewRouter(restapi.Services{

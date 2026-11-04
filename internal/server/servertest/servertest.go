@@ -209,7 +209,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	t.Helper()
 	if _, err := db.ExecContext(context.Background(), "DELETE FROM runtime.revisions; DELETE FROM runtime.device_tokens; DELETE FROM runtime.tags; "+
 		"DELETE FROM runtime.environment_devices; DELETE FROM runtime.devices; DELETE FROM runtime.environments; "+
-		"DELETE FROM engineering.project_files; DELETE FROM engineering.tags; "+
+		"DELETE FROM engineering.tags; "+
 		"DELETE FROM engineering.environment_devices; DELETE FROM engineering.devices; DELETE FROM engineering.environments; "+
 		"DELETE FROM engineering.widgets; "+
 		"DELETE FROM engineering.scenes; DELETE FROM engineering.library_pins; DELETE FROM engineering.libraries; "+
@@ -272,8 +272,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 		Devices:      application.NewDeviceService(content),
 		Environments: application.NewEnvironmentService(content),
 		Deploy: application.NewDeployService(
-			content, application.NewProjectFileBuilder(content),
-			repositories.NewProjectFileRepositoryPostgres(db), runtimeNode),
+			content, application.NewProjectFileBuilder(content), runtimeNode),
 		Discard:      application.NewDiscardService(content, runtimeNode),
 		Revisions:    revisions,
 		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(db)),

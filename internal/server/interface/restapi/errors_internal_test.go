@@ -18,6 +18,7 @@ import (
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
+	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/devicetoken"
 	"github.com/kipitix/growscada/internal/server/domain/id"
@@ -253,12 +254,12 @@ func TestSendError(t *testing.T) {
 	}
 }
 
-// TestSendError_RevisionCopyNotSaved_IsAHonest500: a Deploy whose Revision is
-// active but whose copy failed says so, instead of the generic internal error.
-func TestSendError_RevisionCopyNotSaved_IsAHonest500(t *testing.T) {
-	err := fmt.Errorf("%w: revision 3 of project x is active", application.ErrRevisionCopyNotSaved)
-	assertProblem(t, err, nil, http.StatusInternalServerError, "Internal Server Error",
-		"The Revision is active, but the copy of it was not saved; retry the Deploy")
+// TestSendError_NothingToRollback_IsAConflict: a Rollback to the running
+// document names the Revision of the path and says there is nothing to do.
+func TestSendError_NothingToRollback_IsAConflict(t *testing.T) {
+	err := fmt.Errorf("%w: revision 3 of project x is the one it runs", runtimeapp.ErrNothingToRollback)
+	assertProblem(t, err, map[string]string{"revision_number": "3"}, http.StatusConflict,
+		"Conflict: Revision", "Nothing to rollback: the revision holds the document the project runs")
 }
 
 func TestSendError_MappingWithUnhandledStatus_Is500(t *testing.T) {

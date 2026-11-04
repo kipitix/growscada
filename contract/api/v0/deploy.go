@@ -44,7 +44,6 @@ type ListRevisionsResponse struct {
 	Revisions []RevisionSummaryResponse `json:"revisions"`
 }
 
-
 // DroppedWidgetResponse names a Widget of the running Revision that a Deploy
 // would drop, because its Scene or its WidgetType is gone from the Draft
 // (task 48 fills the list; until then it is always empty).

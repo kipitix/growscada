@@ -164,7 +164,6 @@ func deployProject(t *testing.T, projectID uuid.UUID) {
 	service := application.NewDeployService(
 		content,
 		application.NewProjectFileBuilder(content),
-		repositories.NewProjectFileRepositoryPostgres(testDB),
 		newRuntimeNode(),
 	)
 	if _, err := service.Deploy(context.Background(), projectID); err != nil && !errors.Is(err, application.ErrNothingToDeploy) {

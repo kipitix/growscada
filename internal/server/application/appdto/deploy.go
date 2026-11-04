@@ -24,13 +24,3 @@ type DroppedWidget struct {
 	WidgetID uuid.UUID
 	Name     string
 }
-
-// DeployState is the Project mode's view of the deployment of a Project (task
-// 35, Q6): the Revision the Engineering node's copy of the last ProjectFile
-// names — absent until a Deploy saved one — and whether the Draft differs from
-// that copy. Nothing reports a dirty flag: the Draft is compared byte for
-// byte, canonicalized, with the copy.
-type DeployState struct {
-	Deployed *Revision
-	Differs  bool
-}

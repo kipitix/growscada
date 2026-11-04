@@ -101,7 +101,7 @@ func startTestDB() {
 
 func cleanTags(t *testing.T) {
 	t.Helper()
-	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.project_files; DELETE FROM engineering.tags"); err != nil {
+	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
 		t.Fatalf("cleanTags: %v", err)
 	}
 }

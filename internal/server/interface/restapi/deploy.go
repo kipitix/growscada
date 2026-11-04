@@ -157,8 +157,7 @@ func (h DeployHandlers) GetDeployPreview(w http.ResponseWriter, r *http.Request)
 
 // PostDeploy handles POST /projects/{project_id}/deploy: it makes the Draft
 // the new Revision of the Project. 201 with the new Revision; 409
-// nothing_to_deploy when the Draft is the Revision the Project runs; 500 when
-// the Revision was made but the Engineering node's copy of it was not saved.
+// nothing_to_deploy when the Draft is the Revision the Project runs.
 func (h DeployHandlers) PostDeploy(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := pathUUID(w, r, projectResource)
 	if !ok {

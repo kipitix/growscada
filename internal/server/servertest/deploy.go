@@ -38,7 +38,6 @@ func DeployProject(t *testing.T, db *sql.DB, projectID uuid.UUID) {
 	service := application.NewDeployService(
 		content,
 		application.NewProjectFileBuilder(content),
-		repositories.NewProjectFileRepositoryPostgres(db),
 		inprocess.NewRuntimeNode(states, tokens, revisions),
 	)
 	if _, err := service.Deploy(ctx, projectID); err != nil {

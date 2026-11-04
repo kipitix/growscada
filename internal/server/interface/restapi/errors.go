@@ -72,8 +72,6 @@ var errorMappings = []errorMapping{
 		"Nothing to deploy: the Draft of the project is the revision it runs"},
 	{application.ErrNoRevisionToDiscard, http.StatusConflict, projectResource,
 		"Nothing to discard: the project runs no revision"},
-	{application.ErrRevisionCopyNotSaved, http.StatusInternalServerError, projectResource,
-		"The Revision is active, but the copy of it was not saved; retry the Deploy"},
 	{runtimeapp.ErrNothingToRollback, http.StatusConflict, revisionResource,
 		"Nothing to rollback: the revision holds the document the project runs"},
 	{runtimeapp.ErrRevisionNotFound, http.StatusNotFound, revisionResource, ""},

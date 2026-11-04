@@ -22,7 +22,6 @@ func newDeployService() (application.DeployService, application.RuntimeNode) {
 	return application.NewDeployService(
 		content,
 		application.NewProjectFileBuilder(content),
-		repositories.NewProjectFileRepositoryPostgres(testDB),
 		node,
 	), node
 }
@@ -79,7 +78,7 @@ func mustCreateTag(t *testing.T, name, tagType string) appdto.Tag {
 
 // --- Deploy ---
 
-func TestDeploy_CreatesARevisionAndItsCopy(t *testing.T) {
+func TestDeploy_CreatesARevision(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	ctx := context.Background()
@@ -93,20 +92,15 @@ func TestDeploy_CreatesARevisionAndItsCopy(t *testing.T) {
 	if revision.Number != 1 || revision.DeployedAt.IsZero() {
 		t.Errorf("revision %+v, want number 1 and a time", revision)
 	}
+	if revision.Cause != "deploy" || revision.RolledBackFrom != nil {
+		t.Errorf("the cause of the Revision is %q from %v, want a deploy", revision.Cause, revision.RolledBackFrom)
+	}
 	current, ok, err := node.FindCurrentRevision(ctx, mainProject)
 	if err != nil || !ok || current.Number != 1 {
 		t.Fatalf("FindCurrentRevision: %+v, %v, %v", current, ok, err)
 	}
 	if len(current.Content.Tags) != 1 || current.Content.Tags[0].ID != created.ID {
 		t.Errorf("the revision carries %+v, want the tag %s", current.Content.Tags, created.ID)
-	}
-
-	copied, ok, err := repositories.NewProjectFileRepositoryPostgres(testDB).FindByProject(ctx, mainProject)
-	if err != nil || !ok || copied.Number != 1 {
-		t.Fatalf("the copy at Engineering: %+v, %v, %v", copied, ok, err)
-	}
-	if len(copied.Content.Tags) != 1 || copied.Content.Tags[0].ID != created.ID {
-		t.Errorf("the copy carries %+v, want the tag %s", copied.Content.Tags, created.ID)
 	}
 	if n := tagStateCount(t, mainProject); n != 1 {
 		t.Errorf("tag states at the Runtime node: %d, want the deployed one", n)
@@ -143,9 +137,9 @@ func TestDeploy_AChangedWidget_IsANewRevision(t *testing.T) {
 	if _, err := deploy.Deploy(ctx, mainProject); err != nil {
 		t.Fatalf("Deploy: %v", err)
 	}
-	state, err := deploy.State(ctx, mainProject)
-	if err != nil || state.Deployed == nil || state.Differs {
-		t.Fatalf("State after the Deploy: %+v, %v, want the copy and no difference", state, err)
+	preview, err := deploy.Preview(ctx, mainProject)
+	if err != nil || preview.CurrentRevision == nil || !preview.Unchanged {
+		t.Fatalf("Preview after the Deploy: %+v, %v, want revision 1 unchanged", preview, err)
 	}
 
 	changed := testCreateWidgetInput
@@ -153,9 +147,9 @@ func TestDeploy_AChangedWidget_IsANewRevision(t *testing.T) {
 	if _, err := scenes.UpdateWidget(ctx, mainProject, scene.ID, widget.ID, widget.SceneVersion, changed); err != nil {
 		t.Fatalf("UpdateWidget: %v", err)
 	}
-	state, err = deploy.State(ctx, mainProject)
-	if err != nil || !state.Differs {
-		t.Fatalf("State after the change: %+v, %v, want a difference", state, err)
+	preview, err = deploy.Preview(ctx, mainProject)
+	if err != nil || preview.Unchanged {
+		t.Fatalf("Preview after the change: %+v, %v, want a difference", preview, err)
 	}
 
 	revision, err := deploy.Deploy(ctx, mainProject)
@@ -164,65 +158,6 @@ func TestDeploy_AChangedWidget_IsANewRevision(t *testing.T) {
 	}
 	if revision.Number != 2 {
 		t.Errorf("the second revision: %d, want 2", revision.Number)
-	}
-}
-
-// failingCopies is the Engineering node's copies whose writes fail: the
-// Revision is created and its copy is not.
-type failingCopies struct {
-	application.ProjectFileCopies
-}
-
-var errCopyDown = errors.New("the copies' table is down")
-
-func (failingCopies) Save(context.Context, uuid.UUID, appdto.Revision) error { return errCopyDown }
-
-func TestDeploy_CopyNotSaved_TheRevisionIsActive(t *testing.T) {
-	cleanDevices(t)
-	cleanScenes(t)
-	ctx := context.Background()
-	mustCreateTag(t, "speed", "integer")
-
-	node := newRuntimeNode()
-	content := contentOver(newScopes())
-	deploy := application.NewDeployService(
-		content,
-		application.NewProjectFileBuilder(content),
-		failingCopies{ProjectFileCopies: repositories.NewProjectFileRepositoryPostgres(testDB)},
-		node,
-	)
-	if _, err := deploy.Deploy(ctx, mainProject); !errors.Is(err, application.ErrRevisionCopyNotSaved) || !errors.Is(err, errCopyDown) {
-		t.Fatalf("Deploy with the copy failing: %v, want ErrRevisionCopyNotSaved", err)
-	}
-	if current, ok, err := node.FindCurrentRevision(ctx, mainProject); err != nil || !ok || current.Number != 1 {
-		t.Fatalf("the revision of the failed copy: %+v, %v, %v; want it active", current, ok, err)
-	}
-
-	// The copy is a cache: the Project mode sees nothing deployed, and a
-	// repeated Deploy of the same Draft is not refused as unchanged (Q8): it
-	// saves the copy of the Revision the Project runs.
-	state, err := deploy.State(ctx, mainProject)
-	if err != nil || state.Deployed != nil || !state.Differs {
-		t.Errorf("State without a copy: %+v, %v, want no Revision and a difference", state, err)
-	}
-	healthy, _ := newDeployService()
-	repeated, err := healthy.Deploy(ctx, mainProject)
-	if err != nil {
-		t.Fatalf("the Deploy after the failed copy: %v, want the running revision, its copy saved", err)
-	}
-	if repeated.Number != 1 {
-		t.Errorf("the Deploy after the failed copy made revision %d, want the running 1", repeated.Number)
-	}
-	copied, ok, err := repositories.NewProjectFileRepositoryPostgres(testDB).FindByProject(ctx, mainProject)
-	if err != nil || !ok || copied.Number != 1 {
-		t.Fatalf("the copy after the repeated Deploy: %+v, %v, %v; want revision 1", copied, ok, err)
-	}
-	if state, err := healthy.State(ctx, mainProject); err != nil || state.Differs {
-		t.Errorf("State with the copy repaired: %+v, %v, want no difference", state, err)
-	}
-	// Now the Draft and its copy are the Revision, so another Deploy is refused.
-	if _, err := healthy.Deploy(ctx, mainProject); !errors.Is(err, application.ErrNothingToDeploy) {
-		t.Fatalf("the Deploy of the unchanged Draft: %v, want ErrNothingToDeploy", err)
 	}
 }
 
