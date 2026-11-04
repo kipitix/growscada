@@ -14,15 +14,22 @@ import (
 )
 
 // fakeRevisions is a RevisionRepository numbering the Revisions it is given
-// and handing back the current one.
+// and handing back the current one, its list and single ones.
 type fakeRevisions struct {
-	created    []uuid.UUID
-	documents  []projectv0.ProjectFile
-	times      []time.Time
-	createErr  error
-	current    runtimeapp.Revision
-	hasCurrent bool
-	findErr    error
+	created        []uuid.UUID
+	documents      []projectv0.ProjectFile
+	times          []time.Time
+	createErr      error
+	current        runtimeapp.Revision
+	hasCurrent     bool
+	findErr        error
+	summaries      []runtimeapp.RevisionSummary
+	listErr        error
+	byNumber       runtimeapp.Revision
+	findByErr      error
+	rolledBack     bool
+	rollbackErr    error
+	rollbackNumber int
 }
 
 func (r *fakeRevisions) CreateRevision(_ context.Context, projectID uuid.UUID, file projectv0.ProjectFile, now time.Time) (runtimeapp.Revision, error) {
@@ -32,11 +39,35 @@ func (r *fakeRevisions) CreateRevision(_ context.Context, projectID uuid.UUID, f
 	r.created = append(r.created, projectID)
 	r.documents = append(r.documents, file)
 	r.times = append(r.times, now)
-	return runtimeapp.Revision{Number: len(r.created), DeployedAt: now, Content: file}, nil
+	return runtimeapp.Revision{Number: len(r.created), DeployedAt: now, Cause: runtimeapp.RevisionCauseDeploy, Content: file}, nil
 }
 
 func (r *fakeRevisions) FindCurrent(context.Context, uuid.UUID) (runtimeapp.Revision, bool, error) {
 	return r.current, r.hasCurrent, r.findErr
+}
+
+func (r *fakeRevisions) FindAll(context.Context, uuid.UUID) ([]runtimeapp.RevisionSummary, error) {
+	return r.summaries, r.listErr
+}
+
+func (r *fakeRevisions) FindByNumber(context.Context, uuid.UUID, int) (runtimeapp.Revision, error) {
+	return r.byNumber, r.findByErr
+}
+
+func (r *fakeRevisions) Rollback(_ context.Context, projectID uuid.UUID, n int, now time.Time) (runtimeapp.Revision, error) {
+	if r.rollbackErr != nil {
+		return runtimeapp.Revision{}, r.rollbackErr
+	}
+	r.rolledBack = true
+	r.rollbackNumber = n
+	rolledBackFrom := n
+	return runtimeapp.Revision{
+		Number:         len(r.created) + 1,
+		DeployedAt:     now,
+		Cause:          runtimeapp.RevisionCauseRollback,
+		RolledBackFrom: &rolledBackFrom,
+		Content:        projectv0.ProjectFile{Header: projectv0.Header{ProjectID: projectID}},
+	}, nil
 }
 
 // recordingPublish keeps the events a service publishes.
@@ -152,5 +183,90 @@ func TestRevisionService_FindCurrent(t *testing.T) {
 	repo.findErr = errors.New("database is down")
 	if _, _, err := service.FindCurrent(context.Background(), projectID); err == nil {
 		t.Error("a failed read returned no error")
+	}
+}
+
+func TestRevisionService_ListAndFind(t *testing.T) {
+	projectID := uuid.New()
+	rolledBackFrom := 1
+	repo := &fakeRevisions{
+		summaries: []runtimeapp.RevisionSummary{
+			{Number: 2, Cause: runtimeapp.RevisionCauseRollback, RolledBackFrom: &rolledBackFrom},
+			{Number: 1, Cause: runtimeapp.RevisionCauseDeploy},
+		},
+		byNumber: runtimeapp.Revision{Number: 1, Cause: runtimeapp.RevisionCauseDeploy},
+	}
+	service := runtimeapp.NewRevisionService(repo, func(event.Event) {})
+	ctx := context.Background()
+
+	summaries, err := service.List(ctx, projectID)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(summaries) != 2 || summaries[0].Number != 2 || summaries[0].Cause != runtimeapp.RevisionCauseRollback {
+		t.Errorf("List = %+v, want the newest first with its cause", summaries)
+	}
+
+	found, err := service.Find(ctx, projectID, 1)
+	if err != nil || found.Number != 1 || found.Cause != runtimeapp.RevisionCauseDeploy {
+		t.Errorf("Find = %+v, %v", found, err)
+	}
+
+	repo.listErr = errors.New("database is down")
+	if _, err := service.List(ctx, projectID); err == nil {
+		t.Error("a failed list returned no error")
+	}
+	repo.findByErr = runtimeapp.ErrRevisionNotFound
+	if _, err := service.Find(ctx, projectID, 9); !errors.Is(err, runtimeapp.ErrRevisionNotFound) {
+		t.Errorf("Find of a missing revision: %v, want ErrRevisionNotFound", err)
+	}
+}
+
+func TestRevisionService_Rollback_PublishesAfterTheCommit(t *testing.T) {
+	projectID := uuid.New()
+	repo := &fakeRevisions{}
+	var published []event.Event
+	service := runtimeapp.NewRevisionService(repo, recordingPublish(&published))
+	ctx := context.Background()
+
+	revision, err := service.Rollback(ctx, projectID, 2)
+	if err != nil {
+		t.Fatalf("Rollback: %v", err)
+	}
+	if !repo.rolledBack || repo.rollbackNumber != 2 {
+		t.Errorf("the repository was asked to roll back %d, called %v", repo.rollbackNumber, repo.rolledBack)
+	}
+	if revision.Cause != runtimeapp.RevisionCauseRollback || revision.RolledBackFrom == nil || *revision.RolledBackFrom != 2 {
+		t.Errorf("the rolled-back revision: %+v", revision)
+	}
+	if len(published) != 1 {
+		t.Fatalf("published %d events, want 1", len(published))
+	}
+	ev, ok := published[0].(runtimeapp.RevisionCreatedEvent)
+	if !ok {
+		t.Fatalf("published a %T, not a RevisionCreatedEvent", published[0])
+	}
+	if ev.Number() != revision.Number || ev.ProjectID().UUID() != projectID {
+		t.Errorf("the event names revision %d of project %s", ev.Number(), ev.ProjectID())
+	}
+}
+
+func TestRevisionService_Rollback_OfARefusedOne_PublishesNothing(t *testing.T) {
+	for name, target := range map[string]error{
+		"nothing to rollback": runtimeapp.ErrNothingToRollback,
+		"missing revision":    runtimeapp.ErrRevisionNotFound,
+	} {
+		t.Run(name, func(t *testing.T) {
+			repo := &fakeRevisions{rollbackErr: target}
+			var published []event.Event
+			service := runtimeapp.NewRevisionService(repo, recordingPublish(&published))
+
+			if _, err := service.Rollback(context.Background(), uuid.New(), 1); !errors.Is(err, target) {
+				t.Fatalf("Rollback: %v, want %v", err, target)
+			}
+			if len(published) != 0 {
+				t.Errorf("a refused rollback published %d events", len(published))
+			}
+		})
 	}
 }

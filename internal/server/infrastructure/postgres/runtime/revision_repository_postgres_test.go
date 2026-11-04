@@ -171,7 +171,7 @@ func TestCreateRevision_TheUniqueKeyIsTheSafetyNet(t *testing.T) {
 	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID), time.Now())
 
 	_, err := postgres.DB(t).ExecContext(context.Background(),
-		`INSERT INTO runtime.revisions (project_id, n, deployed_at, config) VALUES ($1, 1, now(), '{}')`,
+		`INSERT INTO runtime.revisions (project_id, n, deployed_at, cause, config) VALUES ($1, 1, now(), 'deploy', '{}')`,
 		projectID.UUID(),
 	)
 	var pqErr *pq.Error
@@ -547,6 +547,301 @@ func TestCreateRevision_RefusesADocumentOfAnotherProject(t *testing.T) {
 		t.Fatal("the document of another project was stored")
 	} else if !strings.Contains(err.Error(), "document of project") {
 		t.Errorf("error %v, want a refusal naming the document's project", err)
+	}
+}
+
+// TestRollback_AppendsARevisionWithTheCopiedDocument: a Rollback copies the
+// document of an earlier Revision into a new number, records the cause and the
+// number it copied, and leaves the history as it was (ADR 0014).
+func TestRollback_AppendsARevisionWithTheCopiedDocument(t *testing.T) {
+	projectID, _ := newProject(t)
+	db := postgres.DB(t)
+	repo := runtimepg.NewRevisionRepositoryPostgres(db)
+	states := runtimepg.NewTagStateRepositoryPostgres(db)
+	ctx := context.Background()
+
+	keptTag, addedTag := uuid.New(), uuid.New()
+	first := documentOf(projectID, withTags(projectv0.TagDefinition{ID: keptTag, Name: "speed", Type: "integer"}))
+	start := time.Date(2026, 11, 4, 10, 0, 0, 0, time.UTC)
+	mustCreateRevision(t, repo, projectID.UUID(), first, start)
+	writeValue(t, states, projectID, keptTag, 42)
+
+	second := documentOf(projectID, withTags(
+		projectv0.TagDefinition{ID: keptTag, Name: "speed", Type: "integer"},
+		projectv0.TagDefinition{ID: addedTag, Name: "flow", Type: "integer"},
+	))
+	mustCreateRevision(t, repo, projectID.UUID(), second, start.Add(time.Minute))
+
+	rolled, err := repo.Rollback(ctx, projectID.UUID(), 1, start.Add(2*time.Minute))
+	if err != nil {
+		t.Fatalf("Rollback: %v", err)
+	}
+	if rolled.Number != 3 {
+		t.Errorf("the rolled-back revision is %d, want 3", rolled.Number)
+	}
+	if rolled.Cause != runtimeapp.RevisionCauseRollback {
+		t.Errorf("the cause is %q, want rollback", rolled.Cause)
+	}
+	if rolled.RolledBackFrom == nil || *rolled.RolledBackFrom != 1 {
+		t.Errorf("rolled_back_from is %v, want 1", rolled.RolledBackFrom)
+	}
+	if !reflect.DeepEqual(rolled.Content, first) {
+		t.Errorf("the rolled-back document %+v, want the document of revision 1", rolled.Content)
+	}
+
+	var cause string
+	var rolledBackFrom *int
+	if err := db.QueryRowContext(ctx,
+		`SELECT cause, rolled_back_from FROM runtime.revisions WHERE project_id = $1 AND n = 3`,
+		projectID.UUID(),
+	).Scan(&cause, &rolledBackFrom); err != nil {
+		t.Fatalf("read the stored revision: %v", err)
+	}
+	if cause != "rollback" || rolledBackFrom == nil || *rolledBackFrom != 1 {
+		t.Errorf("the stored revision is %q from %v, want rollback from 1", cause, rolledBackFrom)
+	}
+
+	// The copies follow the copied document: the Tag it does not have goes
+	// with its state, the one it has keeps its value.
+	if got := countRows(t, `SELECT count(*) FROM runtime.tags WHERE id = $1`, addedTag); got != 0 {
+		t.Errorf("the copy of the tag the copied revision lacks is still stored")
+	}
+	if got := countRows(t, `SELECT count(*) FROM runtime.tag_states WHERE tag_id = $1`, addedTag); got != 0 {
+		t.Errorf("the state of the tag the copied revision lacks is still stored")
+	}
+	if got := findValue(t, states, projectID, keptTag); got != "42" {
+		t.Errorf("the state of the kept tag is %q, want 42", got)
+	}
+
+	// History is not rewritten: revision 1 is still there, intact.
+	firstCopy, err := repo.FindByNumber(ctx, projectID.UUID(), 1)
+	if err != nil {
+		t.Fatalf("FindByNumber 1: %v", err)
+	}
+	if firstCopy.Cause != runtimeapp.RevisionCauseDeploy || firstCopy.RolledBackFrom != nil {
+		t.Errorf("revision 1 is %q from %v, want a deploy", firstCopy.Cause, firstCopy.RolledBackFrom)
+	}
+	if !reflect.DeepEqual(firstCopy.Content, first) {
+		t.Errorf("revision 1 changed: %+v", firstCopy.Content)
+	}
+	if current, ok := mustFindCurrent(t, repo, projectID.UUID()); !ok || current.Number != 3 {
+		t.Errorf("the running revision is %d (%v), want 3", current.Number, ok)
+	}
+}
+
+// TestRollback_OfTheRunningContent_IsRefused: the numbers differ, the
+// documents do not, and no Revision is appended (ADR 0014).
+func TestRollback_OfTheRunningContent_IsRefused(t *testing.T) {
+	projectID, _ := newProject(t)
+	repo := runtimepg.NewRevisionRepositoryPostgres(postgres.DB(t))
+	ctx := context.Background()
+
+	file := documentOf(projectID, withTags(projectv0.TagDefinition{ID: uuid.New(), Name: "speed", Type: "integer"}))
+	mustCreateRevision(t, repo, projectID.UUID(), file, time.Now())
+
+	if _, err := repo.Rollback(ctx, projectID.UUID(), 1, time.Now()); !errors.Is(err, runtimeapp.ErrNothingToRollback) {
+		t.Fatalf("Rollback to the running revision: %v, want ErrNothingToRollback", err)
+	}
+	if got := countRows(t, `SELECT count(*) FROM runtime.revisions WHERE project_id = $1`, projectID.UUID()); got != 1 {
+		t.Errorf("stored revisions %d, want 1", got)
+	}
+}
+
+// TestRollback_OfARevisionTheProjectDoesNotHave: a number the Project has no
+// Revision for, a number of another Project, and a Project without any
+// Revision are all a not-found.
+func TestRollback_OfARevisionTheProjectDoesNotHave(t *testing.T) {
+	projectID, _ := newProject(t)
+	repo := runtimepg.NewRevisionRepositoryPostgres(postgres.DB(t))
+	ctx := context.Background()
+
+	if _, err := repo.Rollback(ctx, projectID.UUID(), 1, time.Now()); !errors.Is(err, runtimeapp.ErrRevisionNotFound) {
+		t.Errorf("Rollback of a project without revisions: %v, want ErrRevisionNotFound", err)
+	}
+	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID), time.Now())
+	if _, err := repo.Rollback(ctx, projectID.UUID(), 7, time.Now()); !errors.Is(err, runtimeapp.ErrRevisionNotFound) {
+		t.Errorf("Rollback of a missing number: %v, want ErrRevisionNotFound", err)
+	}
+	if _, err := repo.FindByNumber(ctx, projectID.UUID(), 7); !errors.Is(err, runtimeapp.ErrRevisionNotFound) {
+		t.Errorf("FindByNumber of a missing number: %v, want ErrRevisionNotFound", err)
+	}
+
+	otherID := id.NewID[project.Project]()
+	if _, err := repo.Rollback(ctx, otherID.UUID(), 1, time.Now()); !errors.Is(err, project.ErrProjectNotFound) {
+		t.Errorf("Rollback of a missing project: %v, want ErrProjectNotFound", err)
+	}
+}
+
+// TestRevisionReads_OfADeletedProject_AreANotFound: the rows of a deleted
+// Project are not its Revisions to serve until its cleanup removes them.
+func TestRevisionReads_OfADeletedProject_AreANotFound(t *testing.T) {
+	projectID, _ := newProject(t)
+	db := postgres.DB(t)
+	repo := runtimepg.NewRevisionRepositoryPostgres(db)
+	ctx := context.Background()
+	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID), time.Now())
+
+	if _, err := db.ExecContext(ctx, `UPDATE projects SET deleted_at = now() WHERE id = $1`, projectID.UUID()); err != nil {
+		t.Fatalf("mark the project deleted: %v", err)
+	}
+	if _, err := repo.FindAll(ctx, projectID.UUID()); !errors.Is(err, project.ErrProjectNotFound) {
+		t.Errorf("FindAll of a deleted project: %v, want ErrProjectNotFound", err)
+	}
+	if _, err := repo.FindByNumber(ctx, projectID.UUID(), 1); !errors.Is(err, project.ErrProjectNotFound) {
+		t.Errorf("FindByNumber of a deleted project: %v, want ErrProjectNotFound", err)
+	}
+	if _, err := repo.Rollback(ctx, projectID.UUID(), 1, time.Now()); !errors.Is(err, project.ErrProjectNotFound) {
+		t.Errorf("Rollback of a deleted project: %v, want ErrProjectNotFound", err)
+	}
+}
+
+// TestRollback_WhileADiscardRuns_IsRefused: the Discard policy reads the
+// running Revision, so a Rollback must not change it meanwhile (ADR 0014).
+func TestRollback_WhileADiscardRuns_IsRefused(t *testing.T) {
+	projectID, _ := newProject(t)
+	db := postgres.DB(t)
+	repo := runtimepg.NewRevisionRepositoryPostgres(db)
+	ctx := context.Background()
+	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID), time.Now())
+	if _, err := db.ExecContext(ctx, `UPDATE projects SET discarding = true WHERE id = $1`, projectID.UUID()); err != nil {
+		t.Fatalf("mark the project as being discarded: %v", err)
+	}
+
+	if _, err := repo.Rollback(ctx, projectID.UUID(), 1, time.Now()); !errors.Is(err, project.ErrProjectDiscarding) {
+		t.Fatalf("Rollback of a project being discarded: %v, want ErrProjectDiscarding", err)
+	}
+	if got := countRows(t, `SELECT count(*) FROM runtime.revisions WHERE project_id = $1`, projectID.UUID()); got != 1 {
+		t.Errorf("stored revisions %d, want the one it had", got)
+	}
+}
+
+// TestRollback_AndADeploy_Serialize: one writer takes the advisory lock and
+// the other waits, so the numbers never collide.
+func TestRollback_AndADeploy_Serialize(t *testing.T) {
+	projectID, _ := newProject(t)
+	repo := runtimepg.NewRevisionRepositoryPostgres(postgres.DB(t))
+	ctx := context.Background()
+
+	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+		withTags(projectv0.TagDefinition{ID: uuid.New(), Name: "first", Type: "integer"})), time.Now())
+	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+		withTags(projectv0.TagDefinition{ID: uuid.New(), Name: "second", Type: "integer"})), time.Now())
+
+	numbers := make(chan int, 2)
+	errs := make(chan error, 2)
+	go func() {
+		revision, err := repo.Rollback(ctx, projectID.UUID(), 1, time.Now())
+		numbers <- revision.Number
+		errs <- err
+	}()
+	go func() {
+		revision, err := repo.CreateRevision(ctx, projectID.UUID(), documentOf(projectID,
+			withTags(projectv0.TagDefinition{ID: uuid.New(), Name: "third", Type: "integer"})), time.Now())
+		numbers <- revision.Number
+		errs <- err
+	}()
+	got := []int{}
+	for i := 0; i < 2; i++ {
+		if err := <-errs; err != nil {
+			t.Fatalf("concurrent writer: %v", err)
+		}
+		got = append(got, <-numbers)
+	}
+	sort.Ints(got)
+	if !reflect.DeepEqual(got, []int{3, 4}) {
+		t.Errorf("the two writers took numbers %v, want 3 and 4", got)
+	}
+	if n := countRows(t, `SELECT count(*) FROM runtime.revisions WHERE project_id = $1`, projectID.UUID()); n != 4 {
+		t.Errorf("stored revisions %d, want 4", n)
+	}
+}
+
+// TestFindAll_IsNewestFirstAndWithoutDocuments: the list carries the summaries
+// only, and a Project without a Revision has an empty one.
+func TestFindAll_IsNewestFirstAndWithoutDocuments(t *testing.T) {
+	projectID, _ := newProject(t)
+	repo := runtimepg.NewRevisionRepositoryPostgres(postgres.DB(t))
+	ctx := context.Background()
+
+	empty, err := repo.FindAll(ctx, projectID.UUID())
+	if err != nil {
+		t.Fatalf("FindAll of a project without revisions: %v", err)
+	}
+	if empty == nil || len(empty) != 0 {
+		t.Errorf("FindAll of a project without revisions = %+v, want an empty list", empty)
+	}
+
+	tagID := uuid.New()
+	start := time.Date(2026, 11, 4, 9, 0, 0, 0, time.UTC)
+	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+		withTags(projectv0.TagDefinition{ID: tagID, Name: "speed", Type: "integer"})), start)
+	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+		withTags(
+			projectv0.TagDefinition{ID: tagID, Name: "speed", Type: "integer"},
+			projectv0.TagDefinition{ID: uuid.New(), Name: "flow", Type: "integer"},
+		)), start.Add(time.Minute))
+	if _, err := repo.Rollback(ctx, projectID.UUID(), 1, start.Add(2*time.Minute)); err != nil {
+		t.Fatalf("Rollback: %v", err)
+	}
+
+	summaries, err := repo.FindAll(ctx, projectID.UUID())
+	if err != nil {
+		t.Fatalf("FindAll: %v", err)
+	}
+	if len(summaries) != 3 {
+		t.Fatalf("FindAll returned %d summaries, want 3", len(summaries))
+	}
+	for i, want := range []struct {
+		number int
+		cause  runtimeapp.RevisionCause
+		from   *int
+	}{
+		{3, runtimeapp.RevisionCauseRollback, ptr(1)},
+		{2, runtimeapp.RevisionCauseDeploy, nil},
+		{1, runtimeapp.RevisionCauseDeploy, nil},
+	} {
+		got := summaries[i]
+		if got.Number != want.number || got.Cause != want.cause {
+			t.Errorf("summary %d = %+v, want #%d %s", i, got, want.number, want.cause)
+		}
+		if (got.RolledBackFrom == nil) != (want.from == nil) || (want.from != nil && *got.RolledBackFrom != *want.from) {
+			t.Errorf("summary %d rolled back from %v, want %v", i, got.RolledBackFrom, want.from)
+		}
+		if got.DeployedAt.IsZero() {
+			t.Errorf("summary %d has no time", i)
+		}
+	}
+}
+
+func ptr(n int) *int { return &n }
+
+// TestRevisionCause_Constraints: the store refuses a cause it does not know
+// and a rollback that does not name the Revision it copied.
+func TestRevisionCause_Constraints(t *testing.T) {
+	projectID, _ := newProject(t)
+	db := postgres.DB(t)
+	repo := runtimepg.NewRevisionRepositoryPostgres(db)
+	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID), time.Now())
+
+	for name, insert := range map[string]struct {
+		cause string
+		from  *int
+	}{
+		"unknown cause":         {"reset", nil},
+		"rollback without":      {"rollback", nil},
+		"deploy with one":       {"deploy", ptr(1)},
+		"rollback from nothing": {"rollback", ptr(9)},
+	} {
+		_, err := db.ExecContext(context.Background(),
+			`INSERT INTO runtime.revisions (project_id, n, deployed_at, cause, rolled_back_from, config)
+			 VALUES ($1, 2, now(), $2, $3, '{}')`,
+			projectID.UUID(), insert.cause, insert.from,
+		)
+		if err == nil {
+			t.Errorf("%s: the row was taken", name)
+			_, _ = db.ExecContext(context.Background(),
+				`DELETE FROM runtime.revisions WHERE project_id = $1 AND n = 2`, projectID.UUID())
+		}
 	}
 }
 

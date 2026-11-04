@@ -57,45 +57,12 @@ func (r revisionRepositoryPostgres) CreateRevision(ctx context.Context, projectI
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Two Environments may swap their names in one Deploy, so the uniqueness of
-	// the copies' names is checked at the commit rather than row by row
-	// (runtime.environments, migration 20261103000002).
-	if _, err := tx.ExecContext(ctx, `SET CONSTRAINTS runtime.uq_runtime_environments_project_name DEFERRED`); err != nil {
-		return runtimeapp.Revision{}, fmt.Errorf("cannot defer the name uniqueness of project %s: %w", projectID, err)
+	if err := prepareRevisionTx(ctx, tx, projectID); err != nil {
+		return runtimeapp.Revision{}, err
 	}
-	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, projectID.String()); err != nil {
-		return runtimeapp.Revision{}, fmt.Errorf("cannot lock project %s for a deploy: %w", projectID, err)
-	}
-	// The Draft is read-only while a Discard of its Project runs: the Revision
-	// of a half-restored Draft would be a configuration nobody asked for. The
-	// row is locked for share, so a Discard that starts after this point waits
-	// for the Revision and its policy, which reads the current Revision when it
-	// runs, sees this one (task 35, Q10).
-	var discarding bool
-	err = tx.QueryRowContext(ctx,
-		`SELECT discarding FROM public.projects WHERE id = $1 FOR SHARE`, projectID,
-	).Scan(&discarding)
-	if errors.Is(err, sql.ErrNoRows) {
-		return runtimeapp.Revision{}, fmt.Errorf("%w: %s", project.ErrProjectNotFound, projectID)
-	}
+	number, err := insertRevision(ctx, tx, projectID, config, runtimeapp.RevisionCauseDeploy, nil, now)
 	if err != nil {
-		return runtimeapp.Revision{}, fmt.Errorf("cannot lock project %s for a deploy: %w", projectID, err)
-	}
-	if discarding {
-		return runtimeapp.Revision{}, fmt.Errorf("%w: %s", project.ErrProjectDiscarding, projectID)
-	}
-	var number int
-	if err := tx.QueryRowContext(ctx,
-		`SELECT COALESCE(MAX(n), 0) + 1 FROM runtime.revisions WHERE project_id = $1`,
-		projectID,
-	).Scan(&number); err != nil {
-		return runtimeapp.Revision{}, fmt.Errorf("cannot number the revision of project %s: %w", projectID, err)
-	}
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO runtime.revisions (project_id, n, deployed_at, config) VALUES ($1, $2, $3, $4)`,
-		projectID, number, now, config,
-	); err != nil {
-		return runtimeapp.Revision{}, fmt.Errorf("cannot insert revision %d of project %s: %w", number, projectID, err)
+		return runtimeapp.Revision{}, err
 	}
 	if err := refreshCopies(ctx, tx, projectID, file); err != nil {
 		return runtimeapp.Revision{}, err
@@ -103,33 +70,279 @@ func (r revisionRepositoryPostgres) CreateRevision(ctx context.Context, projectI
 	if err := tx.Commit(); err != nil {
 		return runtimeapp.Revision{}, fmt.Errorf("cannot commit revision %d of project %s: %w", number, projectID, err)
 	}
-	return runtimeapp.Revision{Number: number, DeployedAt: now.UTC(), Content: file}, nil
+	return runtimeapp.Revision{
+		Number:     number,
+		DeployedAt: now.UTC(),
+		Cause:      runtimeapp.RevisionCauseDeploy,
+		Content:    file,
+	}, nil
+}
+
+// Rollback copies the Revision n of the Project into a new one: the same
+// transaction as a Deploy — the advisory lock, the lock of the Project's row
+// and the numbering — plus the read and the comparison of the documents
+// (ADR 0014). The copied document is stored as it is, and the derived copies
+// are rebuilt by the same diff a Deploy runs.
+func (r revisionRepositoryPostgres) Rollback(ctx context.Context, projectID uuid.UUID, n int, now time.Time) (runtimeapp.Revision, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return runtimeapp.Revision{}, fmt.Errorf("cannot begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := prepareRevisionTx(ctx, tx, projectID); err != nil {
+		return runtimeapp.Revision{}, err
+	}
+	var currentConfig []byte
+	err = tx.QueryRowContext(ctx,
+		`SELECT config FROM runtime.revisions WHERE project_id = $1 ORDER BY n DESC LIMIT 1`,
+		projectID,
+	).Scan(&currentConfig)
+	if errors.Is(err, sql.ErrNoRows) {
+		// A Project that runs no Revision has none to name.
+		return runtimeapp.Revision{}, fmt.Errorf("%w: revision %d of project %s", runtimeapp.ErrRevisionNotFound, n, projectID)
+	}
+	if err != nil {
+		return runtimeapp.Revision{}, fmt.Errorf("cannot read the running revision of project %s: %w", projectID, err)
+	}
+	var targetConfig []byte
+	err = tx.QueryRowContext(ctx,
+		`SELECT config FROM runtime.revisions WHERE project_id = $1 AND n = $2`,
+		projectID, n,
+	).Scan(&targetConfig)
+	if errors.Is(err, sql.ErrNoRows) {
+		return runtimeapp.Revision{}, fmt.Errorf("%w: revision %d of project %s", runtimeapp.ErrRevisionNotFound, n, projectID)
+	}
+	if err != nil {
+		return runtimeapp.Revision{}, fmt.Errorf("cannot read revision %d of project %s: %w", n, projectID, err)
+	}
+	// jsonb equality, not the bytes: the same document written by another
+	// path may reach the column with its keys in another order.
+	var same bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT $1::jsonb = $2::jsonb`, string(currentConfig), string(targetConfig),
+	).Scan(&same); err != nil {
+		return runtimeapp.Revision{}, fmt.Errorf("cannot compare revision %d of project %s with the running one: %w", n, projectID, err)
+	}
+	if same {
+		return runtimeapp.Revision{}, fmt.Errorf("%w: revision %d of project %s holds the document it runs", runtimeapp.ErrNothingToRollback, n, projectID)
+	}
+	var file projectv0.ProjectFile
+	if err := json.Unmarshal(targetConfig, &file); err != nil {
+		return runtimeapp.Revision{}, fmt.Errorf("cannot decode revision %d of project %s: %w", n, projectID, err)
+	}
+	rolledBackFrom := n
+	number, err := insertRevision(ctx, tx, projectID, targetConfig, runtimeapp.RevisionCauseRollback, &rolledBackFrom, now)
+	if err != nil {
+		return runtimeapp.Revision{}, err
+	}
+	if err := refreshCopies(ctx, tx, projectID, file); err != nil {
+		return runtimeapp.Revision{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return runtimeapp.Revision{}, fmt.Errorf("cannot commit revision %d of project %s: %w", number, projectID, err)
+	}
+	return runtimeapp.Revision{
+		Number:         number,
+		DeployedAt:     now.UTC(),
+		Cause:          runtimeapp.RevisionCauseRollback,
+		RolledBackFrom: &rolledBackFrom,
+		Content:        file,
+	}, nil
+}
+
+// prepareRevisionTx readies a transaction that writes a Revision: two
+// Environments may swap their names in one document, so the uniqueness of the
+// copies' names is checked at the commit rather than row by row
+// (runtime.environments, migration 20261103000002), the advisory lock on the
+// Project serializes concurrent writers, and the Project's row is locked for
+// share. The Draft is read-only while a Discard of its Project runs: a
+// Revision of a half-restored Draft would be a configuration nobody asked
+// for, and the lock makes a Discard that starts after this point wait for the
+// Revision and its policy, which reads the current Revision when it runs, see
+// this one (task 35, Q10; ADR 0014).
+func prepareRevisionTx(ctx context.Context, tx *sql.Tx, projectID uuid.UUID) error {
+	if _, err := tx.ExecContext(ctx, `SET CONSTRAINTS runtime.uq_runtime_environments_project_name DEFERRED`); err != nil {
+		return fmt.Errorf("cannot defer the name uniqueness of project %s: %w", projectID, err)
+	}
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, projectID.String()); err != nil {
+		return fmt.Errorf("cannot lock project %s: %w", projectID, err)
+	}
+	var discarding bool
+	err := tx.QueryRowContext(ctx,
+		`SELECT discarding FROM public.projects WHERE id = $1 AND deleted_at IS NULL FOR SHARE`, projectID,
+	).Scan(&discarding)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("%w: %s", project.ErrProjectNotFound, projectID)
+	}
+	if err != nil {
+		return fmt.Errorf("cannot lock project %s: %w", projectID, err)
+	}
+	if discarding {
+		return fmt.Errorf("%w: %s", project.ErrProjectDiscarding, projectID)
+	}
+	return nil
+}
+
+// insertRevision numbers and stores a Revision in the caller's transaction:
+// the number is the greatest stored plus one, the unique key being the safety
+// net of a writer that bypassed the advisory lock.
+func insertRevision(ctx context.Context, tx *sql.Tx, projectID uuid.UUID, config []byte,
+	cause runtimeapp.RevisionCause, rolledBackFrom *int, now time.Time) (int, error) {
+	var number int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT COALESCE(MAX(n), 0) + 1 FROM runtime.revisions WHERE project_id = $1`,
+		projectID,
+	).Scan(&number); err != nil {
+		return 0, fmt.Errorf("cannot number the revision of project %s: %w", projectID, err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO runtime.revisions (project_id, n, deployed_at, cause, rolled_back_from, config)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		projectID, number, now, string(cause), rolledBackFrom, config,
+	); err != nil {
+		return 0, fmt.Errorf("cannot insert revision %d of project %s: %w", number, projectID, err)
+	}
+	return number, nil
 }
 
 func (r revisionRepositoryPostgres) FindCurrent(ctx context.Context, projectID uuid.UUID) (runtimeapp.Revision, bool, error) {
 	var (
-		number     int
-		deployedAt time.Time
-		config     []byte
+		number         int
+		deployedAt     time.Time
+		cause          string
+		rolledBackFrom sql.NullInt64
+		config         []byte
 	)
 	err := r.db.QueryRowContext(ctx,
-		`SELECT n, deployed_at, config FROM runtime.revisions
+		`SELECT n, deployed_at, cause, rolled_back_from, config FROM runtime.revisions
 		 WHERE project_id = $1
 		 ORDER BY n DESC
 		 LIMIT 1`,
 		projectID,
-	).Scan(&number, &deployedAt, &config)
+	).Scan(&number, &deployedAt, &cause, &rolledBackFrom, &config)
 	if errors.Is(err, sql.ErrNoRows) {
 		return runtimeapp.Revision{}, false, nil
 	}
 	if err != nil {
 		return runtimeapp.Revision{}, false, fmt.Errorf("cannot read the revision of project %s: %w", projectID, err)
 	}
+	revision, err := newRevision(number, deployedAt, cause, rolledBackFrom, config)
+	if err != nil {
+		return runtimeapp.Revision{}, false, fmt.Errorf("revision %d of project %s: %w", number, projectID, err)
+	}
+	return revision, true, nil
+}
+
+func (r revisionRepositoryPostgres) FindAll(ctx context.Context, projectID uuid.UUID) ([]runtimeapp.RevisionSummary, error) {
+	if err := liveProject(ctx, r.db, projectID); err != nil {
+		return nil, err
+	}
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT n, deployed_at, cause, rolled_back_from FROM runtime.revisions
+		 WHERE project_id = $1
+		 ORDER BY n DESC`,
+		projectID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("cannot read the revisions of project %s: %w", projectID, err)
+	}
+	defer rows.Close()
+	summaries := make([]runtimeapp.RevisionSummary, 0)
+	for rows.Next() {
+		var (
+			number         int
+			deployedAt     time.Time
+			cause          string
+			rolledBackFrom sql.NullInt64
+		)
+		if err := rows.Scan(&number, &deployedAt, &cause, &rolledBackFrom); err != nil {
+			return nil, fmt.Errorf("cannot scan a revision of project %s: %w", projectID, err)
+		}
+		summaries = append(summaries, runtimeapp.RevisionSummary{
+			Number:         number,
+			DeployedAt:     deployedAt.UTC(),
+			Cause:          runtimeapp.RevisionCause(cause),
+			RolledBackFrom: nullableInt(rolledBackFrom),
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("cannot iterate over the revisions of project %s: %w", projectID, err)
+	}
+	return summaries, nil
+}
+
+func (r revisionRepositoryPostgres) FindByNumber(ctx context.Context, projectID uuid.UUID, n int) (runtimeapp.Revision, error) {
+	if err := liveProject(ctx, r.db, projectID); err != nil {
+		return runtimeapp.Revision{}, err
+	}
+	var (
+		deployedAt     time.Time
+		cause          string
+		rolledBackFrom sql.NullInt64
+		config         []byte
+	)
+	err := r.db.QueryRowContext(ctx,
+		`SELECT deployed_at, cause, rolled_back_from, config FROM runtime.revisions
+		 WHERE project_id = $1 AND n = $2`,
+		projectID, n,
+	).Scan(&deployedAt, &cause, &rolledBackFrom, &config)
+	if errors.Is(err, sql.ErrNoRows) {
+		return runtimeapp.Revision{}, fmt.Errorf("%w: revision %d of project %s", runtimeapp.ErrRevisionNotFound, n, projectID)
+	}
+	if err != nil {
+		return runtimeapp.Revision{}, fmt.Errorf("cannot read revision %d of project %s: %w", n, projectID, err)
+	}
+	revision, err := newRevision(n, deployedAt, cause, rolledBackFrom, config)
+	if err != nil {
+		return runtimeapp.Revision{}, fmt.Errorf("revision %d of project %s: %w", n, projectID, err)
+	}
+	return revision, nil
+}
+
+// newRevision assembles a Revision read from the store.
+func newRevision(number int, deployedAt time.Time, cause string, rolledBackFrom sql.NullInt64, config []byte) (runtimeapp.Revision, error) {
 	var file projectv0.ProjectFile
 	if err := json.Unmarshal(config, &file); err != nil {
-		return runtimeapp.Revision{}, false, fmt.Errorf("cannot decode revision %d of project %s: %w", number, projectID, err)
+		return runtimeapp.Revision{}, fmt.Errorf("cannot decode the document: %w", err)
 	}
-	return runtimeapp.Revision{Number: number, DeployedAt: deployedAt.UTC(), Content: file}, true, nil
+	return runtimeapp.Revision{
+		Number:         number,
+		DeployedAt:     deployedAt.UTC(),
+		Cause:          runtimeapp.RevisionCause(cause),
+		RolledBackFrom: nullableInt(rolledBackFrom),
+		Content:        file,
+	}, nil
+}
+
+func nullableInt(value sql.NullInt64) *int {
+	if !value.Valid {
+		return nil
+	}
+	n := int(value.Int64)
+	return &n
+}
+
+// rowQuerier is what reads the Project's row in either a transaction or a
+// plain connection.
+type rowQuerier interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// liveProject refuses a read of the Revisions of a Project that is not live:
+// a deleted Project keeps its rows until its cleanup removes them, and they
+// are not its Revisions to serve any more.
+func liveProject(ctx context.Context, q rowQuerier, projectID uuid.UUID) error {
+	var live bool
+	if err := q.QueryRowContext(ctx,
+		`SELECT EXISTS (SELECT 1 FROM projects WHERE id = $1 AND deleted_at IS NULL)`, projectID,
+	).Scan(&live); err != nil {
+		return fmt.Errorf("cannot read project %s: %w", projectID, err)
+	}
+	if !live {
+		return fmt.Errorf("%w: %s", project.ErrProjectNotFound, projectID)
+	}
+	return nil
 }
 
 // refreshCopies rebuilds the Runtime node's derived copies from the document

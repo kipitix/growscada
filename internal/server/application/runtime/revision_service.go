@@ -12,9 +12,11 @@ import (
 )
 
 // RevisionService is the Runtime node's service of Revisions: the Deploy that
-// creates one, and the read of the current one (task 35, Q8, Q11). The number
-// and the time of a Revision are the Runtime node's to assign; the Engineering
-// node reaches the service through its RuntimeNode port.
+// creates one, the reads of the current one and of the list and a single
+// Revision, and the Rollback that makes an earlier one operational again
+// (task 35, ADR 0014). The number and the time of a Revision are the Runtime
+// node's to assign; the Engineering node reaches the service through its
+// RuntimeNode port.
 type RevisionService interface {
 	// Deploy stores file as the new Revision of the Project and publishes
 	// revision_created once the Revision is committed. The document must name
@@ -23,6 +25,20 @@ type RevisionService interface {
 	// FindCurrent returns the latest Revision of the Project, and whether the
 	// Project has one at all: a Project is not deployed until it does.
 	FindCurrent(ctx context.Context, projectID uuid.UUID) (Revision, bool, error)
+	// List returns the Project's Revisions, newest first, without their
+	// documents. A Project without a Revision has an empty list.
+	// project.ErrProjectNotFound if the Project is not live.
+	List(ctx context.Context, projectID uuid.UUID) ([]RevisionSummary, error)
+	// Find returns the Revision n of the Project with its document.
+	// ErrRevisionNotFound if there is none, project.ErrProjectNotFound if the
+	// Project is not live.
+	Find(ctx context.Context, projectID uuid.UUID, n int) (Revision, error)
+	// Rollback copies the Revision n into a new one and publishes
+	// revision_created once it is committed. ErrRevisionNotFound if the
+	// Project has no such Revision, ErrNothingToRollback if its document is
+	// the running one, project.ErrProjectDiscarding while a Discard runs and
+	// project.ErrProjectNotFound if the Project is not live.
+	Rollback(ctx context.Context, projectID uuid.UUID, n int) (Revision, error)
 }
 
 type revisionServiceImpl struct {
@@ -60,4 +76,29 @@ func (s revisionServiceImpl) FindCurrent(ctx context.Context, rawProjectID uuid.
 		return Revision{}, false, fmt.Errorf("cannot read the current revision of project %s: %w", rawProjectID, err)
 	}
 	return found, ok, nil
+}
+
+func (s revisionServiceImpl) List(ctx context.Context, rawProjectID uuid.UUID) ([]RevisionSummary, error) {
+	summaries, err := s.revisions.FindAll(ctx, rawProjectID)
+	if err != nil {
+		return nil, fmt.Errorf("cannot read the revisions of project %s: %w", rawProjectID, err)
+	}
+	return summaries, nil
+}
+
+func (s revisionServiceImpl) Find(ctx context.Context, rawProjectID uuid.UUID, n int) (Revision, error) {
+	found, err := s.revisions.FindByNumber(ctx, rawProjectID, n)
+	if err != nil {
+		return Revision{}, fmt.Errorf("cannot read revision %d of project %s: %w", n, rawProjectID, err)
+	}
+	return found, nil
+}
+
+func (s revisionServiceImpl) Rollback(ctx context.Context, rawProjectID uuid.UUID, n int) (Revision, error) {
+	revision, err := s.revisions.Rollback(ctx, rawProjectID, n, s.now())
+	if err != nil {
+		return Revision{}, fmt.Errorf("cannot roll project %s back to revision %d: %w", rawProjectID, n, err)
+	}
+	s.publish(NewRevisionCreatedEvent(revision))
+	return revision, nil
 }

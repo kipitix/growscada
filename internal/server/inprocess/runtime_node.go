@@ -64,7 +64,13 @@ func (n runtimeNode) Deploy(ctx context.Context, projectID uuid.UUID, file proje
 	if err != nil {
 		return appdto.Revision{}, err
 	}
-	return appdto.Revision{Number: revision.Number, DeployedAt: revision.DeployedAt, Content: revision.Content}, nil
+	return appdto.Revision{
+		Number:         revision.Number,
+		DeployedAt:     revision.DeployedAt,
+		Cause:          string(revision.Cause),
+		RolledBackFrom: revision.RolledBackFrom,
+		Content:        revision.Content,
+	}, nil
 }
 
 func (n runtimeNode) FindCurrentRevision(ctx context.Context, projectID uuid.UUID) (appdto.Revision, bool, error) {
@@ -75,5 +81,11 @@ func (n runtimeNode) FindCurrentRevision(ctx context.Context, projectID uuid.UUI
 	if err != nil {
 		return appdto.Revision{}, false, err
 	}
-	return appdto.Revision{Number: revision.Number, DeployedAt: revision.DeployedAt, Content: revision.Content}, ok, nil
+	return appdto.Revision{
+		Number:         revision.Number,
+		DeployedAt:     revision.DeployedAt,
+		Cause:          string(revision.Cause),
+		RolledBackFrom: revision.RolledBackFrom,
+		Content:        revision.Content,
+	}, ok, nil
 }
