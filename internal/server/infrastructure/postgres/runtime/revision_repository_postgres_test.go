@@ -629,6 +629,68 @@ func TestRollback_AppendsARevisionWithTheCopiedDocument(t *testing.T) {
 	}
 }
 
+// TestRollback_KeepsTokensAndResetsAChangedTagType: the copies follow the
+// copied document through the same diff a Deploy runs — a Tag whose TagType
+// changed since the target Revision starts from the target type's zero value,
+// and a Device Token outlives the Device the target document does not have
+// (task 36, Q6).
+func TestRollback_KeepsTokensAndResetsAChangedTagType(t *testing.T) {
+	projectID, _ := newProject(t)
+	db := postgres.DB(t)
+	repo := runtimepg.NewRevisionRepositoryPostgres(db)
+	states := runtimepg.NewTagStateRepositoryPostgres(db)
+	ctx := context.Background()
+
+	retyped, kept := uuid.New(), uuid.New()
+	deviceID := uuid.New()
+	first := documentOf(projectID,
+		withTags(
+			projectv0.TagDefinition{ID: retyped, Name: "counter", Type: "integer"},
+			projectv0.TagDefinition{ID: kept, Name: "plain", Type: "integer"},
+		),
+	)
+	mustCreateRevision(t, repo, projectID.UUID(), first, time.Now())
+	writeValue(t, states, projectID, retyped, 42)
+	writeValue(t, states, projectID, kept, 7)
+
+	second := documentOf(projectID,
+		withTags(
+			projectv0.TagDefinition{ID: retyped, Name: "counter", Type: "string"},
+			projectv0.TagDefinition{ID: kept, Name: "plain", Type: "integer"},
+		),
+		withDevices(projectv0.Device{ID: deviceID, Name: "meter", Protocol: "simulation", Config: projectv0.JSONObject(`{"host": "meter"}`)}),
+	)
+	mustCreateRevision(t, repo, projectID.UUID(), second, time.Now())
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO runtime.device_tokens (device_id, project_id, token_hash, fingerprint, issued_at)
+		 VALUES ($1, $2, $3, 'gsc_dev_…', now())`,
+		deviceID, projectID.UUID(), uuid.NewString(),
+	); err != nil {
+		t.Fatalf("insert token: %v", err)
+	}
+
+	if _, err := repo.Rollback(ctx, projectID.UUID(), 1, time.Now()); err != nil {
+		t.Fatalf("Rollback: %v", err)
+	}
+
+	state, ok := stateOf(t, states, projectID, retyped)
+	if !ok {
+		t.Fatal("the state of the retyped tag is gone")
+	}
+	if state.Value().String() != "0" || state.Quality().String() != "bad" {
+		t.Errorf("the retyped tag is %q/%s, want the initial state of an integer tag", state.Value().String(), state.Quality().String())
+	}
+	if got := findValue(t, states, projectID, kept); got != "7" {
+		t.Errorf("the state of the unchanged tag is %q, want 7", got)
+	}
+	if got := countRows(t, `SELECT count(*) FROM runtime.devices WHERE id = $1`, deviceID); got != 0 {
+		t.Errorf("the copy of the device the copied revision lacks is still stored")
+	}
+	if got := countRows(t, `SELECT count(*) FROM runtime.device_tokens WHERE device_id = $1`, deviceID); got != 1 {
+		t.Errorf("the token of the dropped device is gone: a token outlives a rollback")
+	}
+}
+
 // TestRollback_OfTheRunningContent_IsRefused: the numbers differ, the
 // documents do not, and no Revision is appended (ADR 0014).
 func TestRollback_OfTheRunningContent_IsRefused(t *testing.T) {
@@ -669,6 +731,17 @@ func TestRollback_OfARevisionTheProjectDoesNotHave(t *testing.T) {
 	otherID := id.NewID[project.Project]()
 	if _, err := repo.Rollback(ctx, otherID.UUID(), 1, time.Now()); !errors.Is(err, project.ErrProjectNotFound) {
 		t.Errorf("Rollback of a missing project: %v, want ErrProjectNotFound", err)
+	}
+
+	// A number another Project has is not this Project's.
+	anotherID, _ := newProject(t)
+	mustCreateRevision(t, repo, anotherID.UUID(), documentOf(anotherID), time.Now())
+	mustCreateRevision(t, repo, anotherID.UUID(), documentOf(anotherID), time.Now())
+	if _, err := repo.Rollback(ctx, projectID.UUID(), 2, time.Now()); !errors.Is(err, runtimeapp.ErrRevisionNotFound) {
+		t.Errorf("Rollback to a number only another project has: %v, want ErrRevisionNotFound", err)
+	}
+	if _, err := repo.FindByNumber(ctx, projectID.UUID(), 2); !errors.Is(err, runtimeapp.ErrRevisionNotFound) {
+		t.Errorf("FindByNumber of a number only another project has: %v, want ErrRevisionNotFound", err)
 	}
 }
 
@@ -753,6 +826,44 @@ func TestRollback_AndADeploy_Serialize(t *testing.T) {
 	}
 	if n := countRows(t, `SELECT count(*) FROM runtime.revisions WHERE project_id = $1`, projectID.UUID()); n != 4 {
 		t.Errorf("stored revisions %d, want 4", n)
+	}
+}
+
+// TestRollback_TwoConcurrent_Serialize: two Rollbacks take the advisory lock
+// in turn, so both append a Revision and the numbers never collide.
+func TestRollback_TwoConcurrent_Serialize(t *testing.T) {
+	projectID, _ := newProject(t)
+	repo := runtimepg.NewRevisionRepositoryPostgres(postgres.DB(t))
+	ctx := context.Background()
+
+	for i, name := range []string{"first", "second", "third"} {
+		mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+			withTags(projectv0.TagDefinition{ID: uuid.New(), Name: name, Type: "integer"})),
+			time.Now().Add(time.Duration(i)*time.Minute))
+	}
+
+	numbers := make(chan int, 2)
+	errs := make(chan error, 2)
+	for _, target := range []int{1, 2} {
+		go func() {
+			revision, err := repo.Rollback(ctx, projectID.UUID(), target, time.Now())
+			numbers <- revision.Number
+			errs <- err
+		}()
+	}
+	got := []int{}
+	for i := 0; i < 2; i++ {
+		if err := <-errs; err != nil {
+			t.Fatalf("concurrent rollback: %v", err)
+		}
+		got = append(got, <-numbers)
+	}
+	sort.Ints(got)
+	if !reflect.DeepEqual(got, []int{4, 5}) {
+		t.Errorf("the two rollbacks took numbers %v, want 4 and 5", got)
+	}
+	if n := countRows(t, `SELECT count(*) FROM runtime.revisions WHERE project_id = $1`, projectID.UUID()); n != 5 {
+		t.Errorf("stored revisions %d, want 5", n)
 	}
 }
 
