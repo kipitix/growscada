@@ -46,7 +46,7 @@ var _ ProjectFileBuilder = (*projectFileBuilder)(nil)
 // NewProjectFileBuilder returns the builder of the ProjectFiles of the live
 // Projects the ProjectContent serves.
 func NewProjectFileBuilder(aContent ProjectContent) ProjectFileBuilder {
-	return projectFileBuilder{content: aContent}
+	return &projectFileBuilder{content: aContent}
 }
 
 func (b projectFileBuilder) Build(ctx context.Context, rawProjectID uuid.UUID) (projectv0.ProjectFile, error) {

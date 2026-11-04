@@ -63,8 +63,13 @@ type errorMapping struct {
 	detail   string // for 409
 }
 
-// errorMappings is the only place the restapi knows the domain sentinel errors.
+// errorMappings is the only place the restapi knows the domain and the
+// application sentinel errors.
 var errorMappings = []errorMapping{
+	{application.ErrNothingToDeploy, http.StatusConflict, projectResource,
+		"Nothing to deploy: the Draft of the project is the revision it runs"},
+	{application.ErrNoRevisionToDiscard, http.StatusConflict, projectResource,
+		"Nothing to discard: the project runs no revision"},
 	{project.ErrProjectNotFound, http.StatusNotFound, projectResource, ""},
 	{project.ErrProjectConflict, http.StatusConflict, projectResource, "Project was changed concurrently; reload it and retry"},
 	{project.ErrProjectNameTaken, http.StatusConflict, projectResource, "Project name is already taken"},

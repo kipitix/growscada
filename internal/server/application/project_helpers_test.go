@@ -155,7 +155,6 @@ func newRuntime() (runtimeapp.TagStateService, application.RuntimeNode) {
 	return states, inprocess.NewRuntimeNode(states, tokens, revisions)
 }
 
-// newServiceWithStates returns the tag service and the Runtime node's
 // deployProject deploys the Draft of the project through the Engineering
 // node's DeployService, as the server does (task 35, part 4): a test that
 // writes a Tag value deploys first, or the Tag has no state to write.
@@ -173,7 +172,8 @@ func deployProject(t *testing.T, projectID uuid.UUID) {
 	}
 }
 
-// service of Tag states behind it.
+// newServiceWithStates returns the tag service and the Runtime node's service
+// of Tag states behind it.
 func newServiceWithStates() (application.TagService, runtimeapp.TagStateService) {
 	states, node := newRuntime()
 	return application.NewTagService(contentOver(newScopes()), node), states

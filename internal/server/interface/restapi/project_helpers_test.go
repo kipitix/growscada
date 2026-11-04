@@ -73,10 +73,10 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 	deviceTokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(db))
 	runtimeNode := inprocess.NewRuntimeNode(states, deviceTokens, revisions)
 	return testServices{
-		projects:     application.NewProjectService(projectRepo, orgID),
-		tags:         application.NewTagService(content, runtimeNode),
-		states:       states,
-		revisions:    revisions,
+		projects:  application.NewProjectService(projectRepo, orgID),
+		tags:      application.NewTagService(content, runtimeNode),
+		states:    states,
+		revisions: revisions,
 		deploy: application.NewDeployService(
 			content,
 			application.NewProjectFileBuilder(content),

@@ -32,12 +32,14 @@ func DeployProject(t *testing.T, db *sql.DB, projectID uuid.UUID) {
 	}
 	content := application.NewProjectContent(
 		repositories.NewProjectRepositoryPostgres(db), repositories.NewProjectScopes(db), orgID)
+	states := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, func(event.Event) {})
+	tokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(db))
 	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(db), func(event.Event) {})
 	service := application.NewDeployService(
 		content,
 		application.NewProjectFileBuilder(content),
 		repositories.NewProjectFileRepositoryPostgres(db),
-		inprocess.NewRuntimeNode(nil, nil, revisions),
+		inprocess.NewRuntimeNode(states, tokens, revisions),
 	)
 	if _, err := service.Deploy(ctx, projectID); err != nil {
 		// A test that deploys twice without changing the Draft asks for

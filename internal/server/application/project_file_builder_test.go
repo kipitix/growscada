@@ -134,6 +134,12 @@ func TestBuild_AWidgetOfANoLongerPinnedType_IsAnError(t *testing.T) {
 	cleanScenes(t)
 	cleanPins(t)
 	ctx := context.Background()
+	// The Draft keeps a Widget of a type no pinned release holds, so the Scene
+	// and the pins go with the test: the next one starts from a buildable Draft.
+	t.Cleanup(func() {
+		cleanScenes(t)
+		cleanPins(t)
+	})
 
 	// The pin goes behind the service's back: the Draft keeps a Widget of a
 	// type no pinned release holds.

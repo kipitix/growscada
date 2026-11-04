@@ -753,12 +753,12 @@ func (p discardProjectPolicy) sceneOf(ctx context.Context, scope ProjectScope, p
 		changed = true
 	}
 
-	targets := make(map[uuid.UUID]projectv0.Widget, len(target.Widgets))
+	wantedWidgets := make(map[uuid.UUID]projectv0.Widget, len(target.Widgets))
 	for _, w := range target.Widgets {
-		targets[w.ID] = w
+		wantedWidgets[w.ID] = w
 	}
 	for _, w := range current.Widgets() {
-		if _, ok := targets[w.ID().UUID()]; ok {
+		if _, ok := wantedWidgets[w.ID().UUID()]; ok {
 			continue
 		}
 		current, _, err = current.RemoveWidget(w.ID())
