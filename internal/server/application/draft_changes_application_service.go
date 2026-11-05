@@ -58,7 +58,7 @@ func (s draftChangesServiceImpl) Undo(ctx context.Context, scope editlock.Scope,
 	if err != nil {
 		return appdto.DraftChanges{}, err
 	}
-	if _, err := s.projects.Drafts().Undo(ctx, scope, expected); err != nil {
+	if _, err := s.drafts(scope).Undo(ctx, scope, expected); err != nil {
 		return appdto.DraftChanges{}, fmt.Errorf("cannot undo the draft of %s: %w", scope, err)
 	}
 	return s.state(ctx, scope)
@@ -72,7 +72,7 @@ func (s draftChangesServiceImpl) Redo(ctx context.Context, scope editlock.Scope,
 	if err != nil {
 		return appdto.DraftChanges{}, err
 	}
-	if _, err := s.projects.Drafts().Redo(ctx, scope, expected); err != nil {
+	if _, err := s.drafts(scope).Redo(ctx, scope, expected); err != nil {
 		return appdto.DraftChanges{}, fmt.Errorf("cannot redo the draft of %s: %w", scope, err)
 	}
 	return s.state(ctx, scope)
@@ -93,11 +93,21 @@ func (s draftChangesServiceImpl) open(ctx context.Context, scope editlock.Scope)
 	}
 }
 
+// drafts is the repository of the Drafts of the scope's own kind: a Library's
+// Draft is read and written through the Library content it was opened with, a
+// Project's through its own (ADR 0016).
+func (s draftChangesServiceImpl) drafts(scope editlock.Scope) draft.Repository {
+	if scope.IsLibrary() {
+		return s.libraries.Drafts()
+	}
+	return s.projects.Drafts()
+}
+
 // state reads the stack of a Draft already checked to be live. A Draft never
 // written has no row and no changes: it is the fresh Draft at the Version its
 // first write states.
 func (s draftChangesServiceImpl) state(ctx context.Context, scope editlock.Scope) (appdto.DraftChanges, error) {
-	stack, ok, err := s.projects.Drafts().Stack(ctx, scope)
+	stack, ok, err := s.drafts(scope).Stack(ctx, scope)
 	if err != nil {
 		return appdto.DraftChanges{}, fmt.Errorf("cannot read the draft changes of %s: %w", scope, err)
 	}
