@@ -272,3 +272,30 @@ func TestShortcut_EmptyStack_SendsNothing(t *testing.T) {
 		t.Errorf("requests of an empty stack: %v, want none", got)
 	}
 }
+
+// TestShortcut_DialogOpen_SendsNothing: an undo behind the Deploy confirmation
+// would change the Draft the dialog shows.
+func TestShortcut_DialogOpen_SendsNothing(t *testing.T) {
+	url, api := newServer(t)
+	createScene(t, api, "One")
+	f, log := mountLogged(t, url, api)
+	f.reloadChanges()
+	f.e.TakeToasts()
+	log.take()
+
+	f.p.deployDialog = true
+	f.p.applyKeyAction(f.p.compoCtx, uiutil.KeyUndo)
+	f.run()
+
+	f.noToasts()
+	if got := log.take(); len(got) != 0 {
+		t.Errorf("requests behind the dialog: %v, want none", got)
+	}
+	state, err := f.api.DraftChanges(context.Background())
+	if err != nil {
+		t.Fatalf("read the stack: %v", err)
+	}
+	if !state.CanUndo {
+		t.Errorf("the Draft was undone behind the dialog: %+v", state)
+	}
+}

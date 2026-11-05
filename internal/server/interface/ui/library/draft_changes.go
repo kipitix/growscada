@@ -181,7 +181,7 @@ func (l *Library) listenShortcuts() {
 		}
 		ev := args[0]
 		action := uiutil.KeyEventAction(ev)
-		if action == uiutil.KeyNone || !l.shown() {
+		if action == uiutil.KeyNone || !l.shown() || !l.keyActionAllowed() {
 			return nil
 		}
 		ev.Call("preventDefault") // the browser's own undo of the page
@@ -205,12 +205,22 @@ func (l *Library) noKeyDown() {
 // shortcut is refused exactly as they are (the lock, a release shown, a command
 // in flight).
 func (l *Library) applyKeyAction(ctx app.Context, action uiutil.KeyAction) {
+	if !l.keyActionAllowed() {
+		return
+	}
 	switch action {
 	case uiutil.KeyUndo:
 		l.undoDraftChange(ctx)
 	case uiutil.KeyRedo:
 		l.redoDraftChange(ctx)
 	}
+}
+
+// keyActionAllowed reports whether a shortcut may act now: no dialog of the
+// mode is open. An undo behind the name of a Check out or a takeover would act
+// on a Draft the user is only about to take.
+func (l *Library) keyActionAllowed() bool {
+	return !l.askingName && !l.takeOverDialog
 }
 
 // shown reports whether the Library mode is the one displayed. Root keeps every

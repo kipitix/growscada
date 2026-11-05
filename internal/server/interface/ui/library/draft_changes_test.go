@@ -280,3 +280,27 @@ func TestSwitchLibrary_ResetsTheStack(t *testing.T) {
 		t.Errorf("the Version of the Draft left survived: %d", f.l.draftVersion())
 	}
 }
+
+// TestShortcut_DialogOpen_SendsNothing: an undo behind the takeover or Check
+// out dialog would act on a Draft the user is only about to take.
+func TestShortcut_DialogOpen_SendsNothing(t *testing.T) {
+	url, api := newServer(t)
+	f := mount(t, url, api)
+	f.l.createItem(f.l.compoCtx)
+	f.run()
+	f.reloadChanges()
+	f.noToasts()
+
+	f.l.takeOverDialog = true
+	f.l.applyKeyAction(f.l.compoCtx, uiutil.KeyUndo)
+	f.run()
+
+	f.noToasts()
+	state, err := api.DraftChanges(context.Background())
+	if err != nil {
+		t.Fatalf("read the stack: %v", err)
+	}
+	if !state.CanUndo {
+		t.Errorf("the Draft was undone behind the dialog: %+v", state)
+	}
+}

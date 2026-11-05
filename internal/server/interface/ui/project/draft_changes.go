@@ -183,7 +183,7 @@ func (p *Project) listenShortcuts() {
 		}
 		ev := args[0]
 		action := uiutil.KeyEventAction(ev)
-		if action == uiutil.KeyNone || !p.shown() {
+		if action == uiutil.KeyNone || !p.shown() || !p.keyActionAllowed() {
 			return nil
 		}
 		ev.Call("preventDefault") // the browser's own undo of the page
@@ -206,12 +206,23 @@ func (p *Project) noKeyDown() {
 // applyKeyAction runs the command a keydown asked for: the buttons' own, so a
 // shortcut is refused exactly as they are (the lock, a command in flight).
 func (p *Project) applyKeyAction(ctx app.Context, action uiutil.KeyAction) {
+	if !p.keyActionAllowed() {
+		return
+	}
 	switch action {
 	case uiutil.KeyUndo:
 		p.undoDraftChange(ctx)
 	case uiutil.KeyRedo:
 		p.redoDraftChange(ctx)
 	}
+}
+
+// keyActionAllowed reports whether a shortcut may act now: no dialog of the
+// mode is open. An undo behind the Deploy confirmation would change the Draft
+// the dialog shows, and behind the name of a Check out or a takeover it would
+// act on a Draft the user is only about to take.
+func (p *Project) keyActionAllowed() bool {
+	return !p.deployDialog && !p.revisionsDialog && !p.askingName && !p.takeOverDialog
 }
 
 // shown reports whether the Project mode is the one displayed. Root keeps every

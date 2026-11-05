@@ -9,26 +9,34 @@ import (
 func TestUndoRedoKey(t *testing.T) {
 	tests := []struct {
 		name                      string
-		key                       string
+		key, code                 string
 		ctrl, meta, shift, typing bool
 		want                      KeyAction
 	}{
-		{name: "ctrl+z undoes", key: "z", ctrl: true, want: KeyUndo},
-		{name: "cmd+z undoes", key: "z", meta: true, want: KeyUndo},
-		{name: "ctrl+shift+z redoes", key: "z", ctrl: true, shift: true, want: KeyRedo},
-		{name: "cmd+shift+z redoes", key: "z", meta: true, shift: true, want: KeyRedo},
-		{name: "the upper case key", key: "Z", ctrl: true, want: KeyUndo},
-		{name: "z alone types", key: "z"},
-		{name: "shift+z types a capital", key: "Z", shift: true},
-		{name: "another key with ctrl", key: "y", ctrl: true},
-		{name: "a field keeps the browser's undo", key: "z", ctrl: true, typing: true},
-		{name: "a field keeps the browser's redo", key: "z", ctrl: true, shift: true, typing: true},
+		{name: "ctrl+z undoes", key: "z", code: "KeyZ", ctrl: true, want: KeyUndo},
+		{name: "cmd+z undoes", key: "z", code: "KeyZ", meta: true, want: KeyUndo},
+		{name: "ctrl+shift+z redoes", key: "z", code: "KeyZ", ctrl: true, shift: true, want: KeyRedo},
+		{name: "cmd+shift+z redoes", key: "z", code: "KeyZ", meta: true, shift: true, want: KeyRedo},
+		{name: "the upper case key", key: "Z", code: "KeyZ", ctrl: true, want: KeyUndo},
+		// The physical key saves the shortcut on a Cyrillic layout, where
+		// Ctrl+Z states the letter "я" and no "z" at all.
+		{name: "ctrl+z on a Cyrillic layout", key: "я", code: "KeyZ", ctrl: true, want: KeyUndo},
+		{name: "ctrl+shift+z on a Cyrillic layout", key: "Я", code: "KeyZ", ctrl: true, shift: true, want: KeyRedo},
+		// And the key saves it on a layout whose z stands at another code
+		// (AZERTY, QWERTZ).
+		{name: "ctrl+z on AZERTY", key: "z", code: "KeyW", ctrl: true, want: KeyUndo},
+		{name: "z alone types", key: "z", code: "KeyZ"},
+		{name: "shift+z types a capital", key: "Z", code: "KeyZ", shift: true},
+		{name: "another key with ctrl", key: "y", code: "KeyY", ctrl: true},
+		{name: "a field keeps the browser's undo", key: "z", code: "KeyZ", ctrl: true, typing: true},
+		{name: "a field keeps the browser's redo", key: "z", code: "KeyZ", ctrl: true, shift: true, typing: true},
+		{name: "a Cyrillic key of another code", key: "я", code: "KeyQ", ctrl: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := UndoRedoKey(tt.key, tt.ctrl, tt.meta, tt.shift, tt.typing); got != tt.want {
-				t.Errorf("UndoRedoKey(%q, ctrl %t, meta %t, shift %t, typing %t) = %v, want %v",
-					tt.key, tt.ctrl, tt.meta, tt.shift, tt.typing, got, tt.want)
+			if got := UndoRedoKey(tt.key, tt.code, tt.ctrl, tt.meta, tt.shift, tt.typing); got != tt.want {
+				t.Errorf("UndoRedoKey(%q, %q, ctrl %t, meta %t, shift %t, typing %t) = %v, want %v",
+					tt.key, tt.code, tt.ctrl, tt.meta, tt.shift, tt.typing, got, tt.want)
 			}
 		})
 	}
