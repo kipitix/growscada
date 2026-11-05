@@ -320,6 +320,12 @@ func (p *Project) SetProject(id uuid.UUID) {
 	if id == p.projectID {
 		return
 	}
+	// A series of arrow moves belongs to the project left: it is sent before
+	// its content is dropped, while the selection and the Version still say
+	// what to send.
+	if p.mounted {
+		p.flushMovesBeforeProjectChange(p.compoCtx)
+	}
 	p.projectID, p.content = id, nil
 	if id != uuid.Nil {
 		p.content = p.client.Project(id)
@@ -328,10 +334,6 @@ func (p *Project) SetProject(id uuid.UUID) {
 		return
 	}
 	ctx := p.compoCtx
-	// A series of arrow moves belongs to the project left: it is sent before
-	// its content is dropped, while the selection and the Version still say
-	// what to send.
-	p.flushMovesBeforeProjectChange(ctx)
 	p.scenes, p.widgets, p.tags = nil, nil, tagstate.Tags{}
 	p.widgetTypes, p.pins = nil, nil
 	p.deployPreview, p.deployLoaded = apiv0.DeployPreviewResponse{}, false

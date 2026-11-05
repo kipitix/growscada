@@ -279,3 +279,22 @@ func TestMovedFrom_SkipsUnchanged(t *testing.T) {
 		t.Errorf("moves: %+v", moves)
 	}
 }
+
+// A series of arrow moves belongs to the project left: SetProject sends it
+// before the content and the Version it was built from are dropped.
+func TestSetProject_SendsTheSeriesToTheProjectLeft(t *testing.T) {
+	f, sceneID, ids, counter := moveFixture(t, 1)
+	f.p.selectOnly(f.p.compoCtx, ids[0])
+
+	f.p.beginArrowMove(f.p.compoCtx, 7, 0)
+	f.p.SetProject(uuid.Nil)
+	f.run()
+
+	f.noToasts()
+	if got := counter.patches(); got != 1 {
+		t.Errorf("%d PATCHes: the series of the project left was not sent", got)
+	}
+	if w := f.widget(sceneID, ids[0]); w.Position.X != 17 {
+		t.Errorf("position x %v: want 17", w.Position.X)
+	}
+}
