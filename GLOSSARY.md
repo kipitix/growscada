@@ -137,11 +137,11 @@ Giving the EditLock of a Draft back, leaving the Draft and its DraftChanges as t
 _Avoid_: release, unlock
 
 **Draft**:
-The working state of a Project or of a Library as it is being edited. A Project's Draft holds Scenes with their Widgets, Tag definitions, Devices, Environments and the pinned Library Releases.
+The working state of a Project or of a Library as it is being edited, and the unit of consistency: every change to it is one DraftChange. A Project's Draft holds Scenes with their Widgets, Tag definitions, Devices, Environments and the pinned Library Releases; a Library's holds its WidgetTypes.
 _Avoid_: working copy, unsaved changes
 
 **DraftChange**:
-One Engineer intent applied to the Draft — possibly touching several parts of the Draft at once — and the unit of undo/redo.
+One Engineer intent applied to the Draft — possibly touching several parts of the Draft at once — and the unit of undo/redo. The Draft keeps the stack of them; Deploy, Release and Discard clear it.
 _Avoid_: edit, step, command, operation
 
 **Discard**:
@@ -197,7 +197,7 @@ _Avoid_: viewer, replayer
 ### Cross-cutting
 
 **Version**:
-The optimistic-concurrency counter carried by every aggregate edited by people — not by Tag state, whose writes are numbered instead.
+The optimistic-concurrency counter carried by every aggregate edited by people — not by Tag state, whose writes are numbered instead. A Draft's content is versioned as a whole: its entities carry no Version of their own.
 _Avoid_: etag, stale client, base version
 
 **SchemaVersion**:
