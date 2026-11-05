@@ -409,6 +409,16 @@ func validateProjectFileShape(file projectv0.ProjectFile, problems *fileProblems
 				problems.add(widgetPath+".type_id",
 					"widget type %s is of library %s, which library_pins does not name", w.TypeID, copied.LibraryID)
 			}
+			// A binding is only valid to a port the WidgetType declares, whose
+			// hint accepts the bound Tag's type: the invariant the domain
+			// checks on every Widget write (scene.checkBinding, ADR 0018).
+			var declaredPorts map[string]projectv0.InputPort
+			if ok {
+				declaredPorts = make(map[string]projectv0.InputPort, len(copied.InputPorts))
+				for _, port := range copied.InputPorts {
+					declaredPorts[port.Name] = port
+				}
+			}
 			portNames := make(map[string]struct{}, len(w.PortBindings))
 			for k, binding := range w.PortBindings {
 				bindingPath := fmt.Sprintf("%s.port_bindings[%d]", widgetPath, k)
@@ -419,8 +429,28 @@ func validateProjectFileShape(file projectv0.ProjectFile, problems *fileProblems
 					problems.add(bindingPath+".port_name", "the port name %q is bound more than once", binding.PortName)
 				}
 				portNames[binding.PortName] = struct{}{}
-				if _, ok := shape.tags[binding.TagID]; !ok {
+				boundTag, known := shape.tags[binding.TagID]
+				if !known {
 					problems.add(bindingPath+".tag_id", "tag %s is not in the file", binding.TagID)
+					continue
+				}
+				if !ok {
+					// The Widget's type is missing or unpinned; that problem is
+					// already reported, and there is no port to check against.
+					continue
+				}
+				port, declared := declaredPorts[binding.PortName]
+				if !declared {
+					problems.add(bindingPath+".port_name",
+						"widget type %s does not declare the port %q", w.TypeID, binding.PortName)
+					continue
+				}
+				hint, hintErr := library.NewPortTypeHint(port.TypeHint)
+				tagType, typeErr := tag.NewTagType(boundTag.Type)
+				if hintErr == nil && typeErr == nil && !hint.Accepts(tagType) {
+					problems.add(bindingPath+".tag_id",
+						"port %q of widget type %s accepts %s, tag %s is %s",
+						binding.PortName, w.TypeID, hint, binding.TagID, tagType)
 				}
 			}
 		}

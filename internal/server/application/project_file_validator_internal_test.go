@@ -157,6 +157,58 @@ func TestValidateProjectFile_RefusesTwoScenesOfOneID(t *testing.T) {
 	wantIssue(t, issues, "scenes[1].id", "appears more than once")
 }
 
+// portFile is a document of one Scene with one Widget of a WidgetType that
+// declares ports, the Widget binding boundPort to a Tag of tagType.
+func portFile(t *testing.T, projectID uuid.UUID, tagType string, ports []projectv0.InputPort, boundPort string) projectv0.ProjectFile {
+	t.Helper()
+	libraryID, typeID, tagID := uuid.New(), uuid.New(), uuid.New()
+	file := emptyFile(projectID)
+	file.Tags = []projectv0.TagDefinition{{ID: tagID, Name: "speed", Type: tagType}}
+	file.LibraryPins = []projectv0.LibraryPin{{LibraryID: libraryID, Release: 1}}
+	file.WidgetTypes = []projectv0.WidgetType{{
+		ID: typeID, LibraryID: libraryID, Name: "gauge", ScriptLanguage: "javascript",
+		DefaultWidth: 10, DefaultHeight: 10, InputPorts: ports,
+	}}
+	file.Scenes = []projectv0.Scene{{
+		ID: uuid.New(), Name: "Main", Width: 100, Height: 100,
+		Widgets: []projectv0.Widget{{
+			ID: uuid.New(), Name: "gauge", Size: projectv0.Size{Width: 10, Height: 10},
+			Origin: projectv0.Origin{X: 0.5, Y: 0.5}, TypeID: typeID,
+			PortBindings: []projectv0.PortBinding{{PortName: boundPort, TagID: tagID}},
+		}},
+	}}
+	return file
+}
+
+// TestValidateProjectFile_RefusesAPortItsWidgetTypeDoesNotDeclare: the domain
+// accepts a binding only to a port the WidgetType declares (ADR 0018).
+func TestValidateProjectFile_RefusesAPortItsWidgetTypeDoesNotDeclare(t *testing.T) {
+	projectID := uuid.New()
+	issues := fileIssues(t, validateFile(t, projectID, portFile(t, projectID, "integer", nil, "missing")))
+	wantIssue(t, issues, "scenes[0].widgets[0].port_bindings[0].port_name", "does not declare")
+}
+
+// TestValidateProjectFile_RefusesABindingOfTheWrongTagType: a port's hint must
+// accept the bound Tag's TagType, as every Widget write checks (ADR 0018).
+func TestValidateProjectFile_RefusesABindingOfTheWrongTagType(t *testing.T) {
+	projectID := uuid.New()
+	file := portFile(t, projectID, "boolean",
+		[]projectv0.InputPort{{Name: "value", TypeHint: "integer"}}, "value")
+	issues := fileIssues(t, validateFile(t, projectID, file))
+	wantIssue(t, issues, "scenes[0].widgets[0].port_bindings[0].tag_id", "accepts integer")
+}
+
+// TestValidateProjectFile_AcceptsADeclaredPortOfTheRightType is the control of
+// the two refusals above.
+func TestValidateProjectFile_AcceptsADeclaredPortOfTheRightType(t *testing.T) {
+	projectID := uuid.New()
+	file := portFile(t, projectID, "integer",
+		[]projectv0.InputPort{{Name: "value", TypeHint: "integer"}}, "value")
+	if err := validateFile(t, projectID, file); err != nil {
+		t.Fatalf("a declared port with a matching tag: %v", err)
+	}
+}
+
 func TestValidateProjectFile_RefusesDanglingReferences(t *testing.T) {
 	projectID := uuid.New()
 	file := emptyFile(projectID)
@@ -270,10 +322,15 @@ func pinnedFile(t *testing.T, projectID, libraryID uuid.UUID) (projectv0.Project
 	if err != nil {
 		t.Fatalf("script: %v", err)
 	}
+	portName, err := library.NewInputPortName("value")
+	if err != nil {
+		t.Fatalf("port name: %v", err)
+	}
 	released, err := library.NewReleasedWidgetType(
 		id.NewID(id.IDWithUUID[library.WidgetType](typeID)),
 		id.NewID(id.IDWithUUID[library.Library](libraryID)),
-		name, html, script, library.ScriptLanguageJavaScript, library.DefaultSize(), nil,
+		name, html, script, library.ScriptLanguageJavaScript, library.DefaultSize(),
+		[]library.InputPort{library.NewInputPort(portName, "", library.AnyTypeHint())},
 	)
 	if err != nil {
 		t.Fatalf("released widget type: %v", err)
@@ -291,6 +348,7 @@ func pinnedFile(t *testing.T, projectID, libraryID uuid.UUID) (projectv0.Project
 	file.WidgetTypes = []projectv0.WidgetType{{
 		ID: typeID, LibraryID: libraryID, Name: "gauge", ScriptLanguage: "javascript",
 		DefaultWidth: 100, DefaultHeight: 100,
+		InputPorts: []projectv0.InputPort{{Name: "value"}},
 	}}
 	file.Scenes = []projectv0.Scene{{
 		ID: uuid.New(), Name: "Main", Width: 100, Height: 100,
