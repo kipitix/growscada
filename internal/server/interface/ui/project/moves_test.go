@@ -359,3 +359,20 @@ func TestWidgetDrag_ReadOnlySendsNothing(t *testing.T) {
 	}
 	f.noToasts()
 }
+
+// Read-only: a plain press selects the Widget alone, even one of a group —
+// selection is read-only work, and no drag follows the press.
+func TestWidgetPress_ReadOnlySelectsAlone(t *testing.T) {
+	f, _, ids := selectionFixture(t, 3)
+	f.p.editLock = apiv0.EditLockResponse{} // no lock: read-only
+	f.p.selectAllWidgets(f.p.compoCtx)
+
+	f.p.pressWidget(f.p.compoCtx, app.Event{}, ids[1])
+
+	if got := f.selection(); len(got) != 1 || got[0] != ids[1] {
+		t.Errorf("read-only press: %v, want %v alone", got, ids[1])
+	}
+	if f.p.draggingWidgetID != uuid.Nil {
+		t.Error("read-only press began a drag")
+	}
+}

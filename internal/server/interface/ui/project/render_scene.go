@@ -330,22 +330,12 @@ func (p *Project) renderWidget(w apiv0.WidgetResponse, textMuted string) app.UI 
 					e.Call("stopPropagation")
 					e.PreventDefault()
 					// Shift/Ctrl/Cmd adds or removes the Widget without
-					// dragging anything; a plain press on an unselected one
-					// replaces the selection before its drag may begin.
+					// dragging anything.
 					if e.Get("shiftKey").Bool() || e.Get("ctrlKey").Bool() || e.Get("metaKey").Bool() {
 						p.toggleWidgetSelection(ctx, wid)
 						return
 					}
-					if !p.isWidgetSelected(wid) {
-						p.selectOnly(ctx, wid)
-					}
-					// The Draft is read-only: selection works, movement does
-					// not, and a click is not a refused write (the lock row
-					// already says why).
-					if p.readOnly() {
-						return
-					}
-					p.beginWidgetDrag(ctx, e, wid)
+					p.pressWidget(ctx, e, wid)
 				}, app.EventScope(scope)).
 				OnClick(func(ctx app.Context, e app.Event) {
 					e.Call("stopPropagation")

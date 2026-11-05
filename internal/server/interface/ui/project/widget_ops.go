@@ -242,6 +242,21 @@ func widgetRequest(w apiv0.WidgetResponse, sceneVersion int) apiv0.UpdateWidgetR
 
 // ── Drag finalisation ─────────────────────────────────────────────────────────
 
+// pressWidget is what a plain (unmodified) press on a Widget does: a read-only
+// Draft selects that Widget alone — no drag follows, and the press is not a
+// refused write; otherwise the selection is replaced with an unselected Widget
+// and the selection begins to move with it.
+func (p *Project) pressWidget(ctx app.Context, e app.Event, id uuid.UUID) {
+	if p.readOnly() {
+		p.selectOnly(ctx, id)
+		return
+	}
+	if !p.isWidgetSelected(id) {
+		p.selectOnly(ctx, id)
+	}
+	p.beginWidgetDrag(ctx, e, id)
+}
+
 // beginWidgetDrag starts moving the selection with the Widget id, recording
 // where every selected Widget is now. A pending arrow series is sent first.
 func (p *Project) beginWidgetDrag(ctx app.Context, e app.Event, id uuid.UUID) {
