@@ -96,6 +96,39 @@ func TestDeploy_CreatesARevision(t *testing.T) {
 	}
 }
 
+// TestDeploy_ClearsTheDraftChangeStack: after a successful Deploy the Draft's
+// stack is empty and at its start (ADR 0017).
+func TestDeploy_ClearsTheDraftChangeStack(t *testing.T) {
+	cleanDevices(t)
+	cleanScenes(t)
+	ctx := editlock.System(context.Background())
+	mustCreateTag(t, "speed", "integer")
+	mustCreateTag(t, "pressure", "integer")
+
+	stackOf := func() (changes, position int) {
+		t.Helper()
+		if err := testDB.QueryRowContext(ctx,
+			`SELECT (SELECT count(*) FROM engineering.draft_changes dc
+			        JOIN engineering.drafts d ON d.id = dc.draft_id WHERE d.project_id = $1),
+			        (SELECT stack_position FROM engineering.drafts WHERE project_id = $1)`,
+			mainProject).Scan(&changes, &position); err != nil {
+			t.Fatalf("read the stack: %v", err)
+		}
+		return changes, position
+	}
+	if changes, position := stackOf(); changes == 0 || position == 0 {
+		t.Fatalf("the Draft before the Deploy: %d changes at %d, want two writes", changes, position)
+	}
+
+	deploy, _ := newDeployService()
+	if _, err := deploy.Deploy(ctx, mainProject); err != nil {
+		t.Fatalf("Deploy: %v", err)
+	}
+	if changes, position := stackOf(); changes != 0 || position != 0 {
+		t.Errorf("the Draft after the Deploy: %d changes at %d, want a cleared stack", changes, position)
+	}
+}
+
 func TestDeploy_UnchangedDraft_IsRefused(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)

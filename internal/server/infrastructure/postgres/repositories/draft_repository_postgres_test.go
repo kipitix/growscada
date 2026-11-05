@@ -11,8 +11,11 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
+	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/draftchange"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
 
@@ -315,5 +318,188 @@ func TestDraftReplace_RemovesThePairsTheRevisionLacks(t *testing.T) {
 	}
 	if len(pairs) != 1 || pairs[0].DeviceID() != one.ID() {
 		t.Errorf("the pairs after the Discard: %+v, want only the Device %s", pairs, one.ID())
+	}
+}
+
+// snapshotOf returns the snapshot of kind and ID on one side of a change.
+func snapshotOf(list []draft.Snapshot, kind draft.Kind, anID uuid.UUID) (draft.Snapshot, bool) {
+	for _, snapshot := range list {
+		if snapshot.Kind == kind && snapshot.ID == anID {
+			return snapshot, true
+		}
+	}
+	return draft.Snapshot{}, false
+}
+
+// lastDraftChange returns the description and the decoded before and after
+// states of the latest DraftChange of a Project.
+func lastDraftChange(t *testing.T, projectID id.ID[project.Project]) (string, []draft.Snapshot, []draft.Snapshot) {
+	t.Helper()
+	var (
+		description           string
+		beforeJSON, afterJSON []byte
+	)
+	err := testDB.QueryRow(
+		`SELECT dc.description, dc.before, dc.after
+		 FROM engineering.draft_changes dc JOIN engineering.drafts d ON d.id = dc.draft_id
+		 WHERE d.project_id = $1 ORDER BY dc.seq DESC LIMIT 1`, projectID.UUID()).
+		Scan(&description, &beforeJSON, &afterJSON)
+	if err != nil {
+		t.Fatalf("read the last draft change: %v", err)
+	}
+	before, err := draftchange.Decode(beforeJSON)
+	if err != nil {
+		t.Fatalf("decode the before of the last draft change: %v", err)
+	}
+	after, err := draftchange.Decode(afterJSON)
+	if err != nil {
+		t.Fatalf("decode the after of the last draft change: %v", err)
+	}
+	return description, before, after
+}
+
+// mustWidgetOf builds a Widget of the released type, bound by each port to the
+// Tag.
+func mustWidgetOf(t *testing.T, repo scene.SceneRepository, released library.ReleasedWidgetType, bindings map[string]tag.Tag) scene.Widget {
+	t.Helper()
+	name, err := scene.NewWidgetName("w-" + uuid.NewString())
+	if err != nil {
+		t.Fatalf("NewWidgetName: %v", err)
+	}
+	ports := make([]scene.PortBinding, 0, len(bindings))
+	for port, bound := range bindings {
+		portName, err := library.NewInputPortName(port)
+		if err != nil {
+			t.Fatalf("NewInputPortName(%q): %v", port, err)
+		}
+		ports = append(ports, scene.NewPortBinding(portName, bound.ID()))
+	}
+	return scene.NewWidget(repo.NextWidgetID(), name, scene.NewPosition(10, 20, 0),
+		library.DefaultSize(), scene.DefaultOrigin(), scene.DefaultRotation(),
+		released.ID(), nil, ports)
+}
+
+// TestDraftDeleteTag_UnbindsItsWidgetsInOneChange: deleting a Tag removes its
+// PortBindings from every Scene in the same DraftChange, whose before side
+// carries the Tag and the Widget bound and whose after side the Widget alone,
+// unbound (ADR 0010, ADR 0017).
+func TestDraftDeleteTag_UnbindsItsWidgetsInOneChange(t *testing.T) {
+	cleanEditLocks(t)
+	cleanWidgetTypes(t)
+	cleanScenes(t)
+	cleanTags(t)
+	ctx := editlock.System(context.Background())
+
+	tagRepo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
+	bound := makeTag(t, "pressure", tagRepo)
+	mustSaveTag(t, tagRepo, bound)
+	portName, err := library.NewInputPortName("value")
+	if err != nil {
+		t.Fatalf("NewInputPortName: %v", err)
+	}
+	released := mustPinWidgetType(t, mainProject, library.NewInputPort(portName, "", library.AnyTypeHint()))
+	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
+	widget := mustWidgetOf(t, sceneRepo, released, map[string]tag.Tag{"value": bound})
+	saved := mustSave(t, sceneRepo, withWidgets(makeScene(t, sceneRepo, "main"), widget))
+
+	mustUpdate(t, mainProject, "Delete tag pressure", func(session *draft.Session) error {
+		_, err := session.DeleteTag(ctx, bound.ID())
+		return err
+	})
+
+	found := mustFindByID(t, sceneRepo, saved.ID())
+	if len(found.Widgets()) != 1 || len(found.Widgets()[0].PortBindings()) != 0 {
+		t.Errorf("the Scene after the deletion: %+v, want the Widget unbound", found.Widgets())
+	}
+	description, before, after := lastDraftChange(t, mainProject)
+	if description != "Delete tag pressure" {
+		t.Errorf("the change: %q", description)
+	}
+	if _, ok := snapshotOf(before, draft.KindTag, bound.ID().UUID()); !ok {
+		t.Errorf("the before side lacks the deleted Tag")
+	}
+	if _, ok := snapshotOf(after, draft.KindTag, bound.ID().UUID()); ok {
+		t.Errorf("the after side still holds the deleted Tag")
+	}
+	old, ok := snapshotOf(before, draft.KindWidget, widget.ID().UUID())
+	if !ok || len(old.State.(draft.WidgetState).PortBindings) != 1 {
+		t.Errorf("the before side of the Widget: %+v, want its binding", old.State)
+	}
+	changed, ok := snapshotOf(after, draft.KindWidget, widget.ID().UUID())
+	if !ok || len(changed.State.(draft.WidgetState).PortBindings) != 0 {
+		t.Errorf("the after side of the Widget: %+v, want it unbound", changed.State)
+	}
+}
+
+// TestDraftPutLibraryPin_SwitchRemovesBrokenBindingsInOneChange: a switch of
+// the pinned Release removes, in its own DraftChange, the PortBindings the new
+// Release no longer declares (ADR 0010, ADR 0012, ADR 0017).
+func TestDraftPutLibraryPin_SwitchRemovesBrokenBindingsInOneChange(t *testing.T) {
+	cleanEditLocks(t)
+	cleanWidgetTypes(t)
+	cleanScenes(t)
+	cleanTags(t)
+	ctx := editlock.System(context.Background())
+
+	typeRepo := newWidgetTypeRepo(t)
+	portName, err := library.NewInputPortName("value")
+	if err != nil {
+		t.Fatalf("NewInputPortName: %v", err)
+	}
+	built, err := typeRepo.Save(ctx, makeWidgetType(t, "gauge", []library.InputPort{
+		library.NewInputPort(portName, "", library.AnyTypeHint()),
+	}, typeRepo))
+	if err != nil {
+		t.Fatalf("Save widget type: %v", err)
+	}
+	first := mustRelease(t, typeRepo.libraryID)
+	mustPin(t, mainProject, first)
+
+	tagRepo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
+	bound := makeTag(t, "speed", tagRepo)
+	mustSaveTag(t, tagRepo, bound)
+	released, ok := first.FindWidgetType(built.ID())
+	if !ok {
+		t.Fatalf("the release lacks the type %s", built.ID())
+	}
+	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
+	widget := mustWidgetOf(t, sceneRepo, released, map[string]tag.Tag{"value": bound})
+	saved := mustSave(t, sceneRepo, withWidgets(makeScene(t, sceneRepo, "main"), widget))
+
+	// The new Release narrows the type: the port goes.
+	current, err := typeRepo.FindByID(ctx, built.ID())
+	if err != nil {
+		t.Fatalf("FindByID: %v", err)
+	}
+	narrowed, err := current.Update(current.Version(), current.Name(), current.HtmlTemplate(),
+		current.Script(), current.ScriptLanguage(), current.DefaultSize(), nil)
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if _, err := typeRepo.Save(ctx, narrowed); err != nil {
+		t.Fatalf("Save the narrowed type: %v", err)
+	}
+	second := mustRelease(t, typeRepo.libraryID)
+
+	mustUpdate(t, mainProject, "Switch pin", func(session *draft.Session) error {
+		_, _, err := session.PutLibraryPin(ctx, typeRepo.libraryID, second.Number())
+		return err
+	})
+
+	found := mustFindByID(t, sceneRepo, saved.ID())
+	if len(found.Widgets()) != 1 || len(found.Widgets()[0].PortBindings()) != 0 {
+		t.Errorf("the Scene after the switch: %+v, want the Widget unbound", found.Widgets())
+	}
+	description, before, after := lastDraftChange(t, mainProject)
+	if description != "Switch pin" {
+		t.Errorf("the change: %q", description)
+	}
+	old, ok := snapshotOf(before, draft.KindWidget, widget.ID().UUID())
+	if !ok || len(old.State.(draft.WidgetState).PortBindings) != 1 {
+		t.Errorf("the before side of the Widget: %+v, want its binding", old.State)
+	}
+	changed, ok := snapshotOf(after, draft.KindWidget, widget.ID().UUID())
+	if !ok || len(changed.State.(draft.WidgetState).PortBindings) != 0 {
+		t.Errorf("the after side of the Widget: %+v, want it unbound", changed.State)
 	}
 }
