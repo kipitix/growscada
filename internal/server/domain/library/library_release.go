@@ -50,14 +50,12 @@ var _ LibraryRelease = (*libraryReleaseImpl)(nil)
 
 // CreateRelease makes the next Library Release of the Library lib from its
 // Draft, draft — the WidgetTypes of lib —, on top of latest, its latest
-// release (nil for none), and records a LibraryReleasedEvent.
-// Returns ErrLibraryDiscarding while a Discard of lib is under way,
-// ErrNothingToRelease if the Draft does not differ from latest, and an error
-// if a WidgetType of draft or latest is of another Library.
+// release (nil for none), and records a LibraryReleasedEvent. The Version the
+// Release states is the Draft's, checked by the transaction that stores it
+// (ADR 0016).
+// Returns ErrNothingToRelease if the Draft does not differ from latest, and an
+// error if a WidgetType of draft or latest is of another Library.
 func CreateRelease(lib Library, draft []WidgetType, latest LibraryRelease, aNote string, at time.Time) (LibraryRelease, error) {
-	if err := lib.CheckEditable(); err != nil {
-		return nil, err
-	}
 	for _, wt := range draft {
 		if wt.LibraryID() != lib.ID() {
 			return nil, fmt.Errorf("cannot release library %s: widget type %s is of library %s", lib.ID(), wt.ID(), wt.LibraryID())

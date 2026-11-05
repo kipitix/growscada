@@ -28,12 +28,24 @@ var (
 	deleteOrder = []draft.Kind{
 		draft.KindWidget, draft.KindScene, draft.KindLibraryPin, draft.KindTag,
 		draft.KindEnvironmentDevice, draft.KindEnvironment, draft.KindDevice,
+		draft.KindWidgetType,
 	}
 	upsertOrder = []draft.Kind{
 		draft.KindDevice, draft.KindEnvironment, draft.KindEnvironmentDevice,
 		draft.KindTag, draft.KindLibraryPin, draft.KindScene, draft.KindWidget,
+		draft.KindWidgetType,
 	}
 )
+
+// kindBelongs reports whether a snapshot of kind is content of the Draft of
+// the scope: a Project's Draft holds no WidgetType, a Library's no Scene, Tag
+// or Device.
+func kindBelongs(scope editlock.Scope, kind draft.Kind) bool {
+	if scope.IsLibrary() {
+		return kind == draft.KindWidgetType
+	}
+	return kind != draft.KindWidgetType
+}
 
 // applySnapshots writes the entities a change touched: those only in before
 // go, those only in after come or change. The order is fixed by kind, not by
@@ -44,6 +56,9 @@ func applySnapshots(ctx context.Context, tx *sql.Tx, scope editlock.Scope, befor
 			if snapshot.Kind != kind || containsSnapshot(after, snapshot) {
 				continue
 			}
+			if !kindBelongs(scope, snapshot.Kind) {
+				return fmt.Errorf("cannot delete %s from the draft of %s", snapshot.Kind, scope)
+			}
 			if err := deleteSnapshot(ctx, tx, scope, snapshot); err != nil {
 				return err
 			}
@@ -53,6 +68,9 @@ func applySnapshots(ctx context.Context, tx *sql.Tx, scope editlock.Scope, befor
 		for _, snapshot := range after {
 			if snapshot.Kind != kind {
 				continue
+			}
+			if !kindBelongs(scope, snapshot.Kind) {
+				return fmt.Errorf("cannot write %s into the draft of %s", snapshot.Kind, scope)
 			}
 			if err := upsertSnapshot(ctx, tx, scope, snapshot); err != nil {
 				return err
@@ -119,6 +137,10 @@ func deleteSnapshot(ctx context.Context, tx *sql.Tx, scope editlock.Scope, snaps
 		_, err := tx.ExecContext(ctx,
 			`DELETE FROM engineering.library_pins WHERE project_id = $1 AND library_id = $2`, projectID, state.LibraryID)
 		return wrapWrite("delete library pin", err)
+	case draft.WidgetTypeState:
+		_, err := tx.ExecContext(ctx,
+			`DELETE FROM engineering.widget_types WHERE id = $1 AND library_id = $2`, snapshot.ID, scope.LibraryID().UUID())
+		return wrapWrite("delete widget type", err)
 	default:
 		return fmt.Errorf("cannot delete a draft entity of unknown state %T", snapshot.State)
 	}
@@ -225,6 +247,31 @@ func upsertSnapshot(ctx context.Context, tx *sql.Tx, scope editlock.Scope, snaps
 			return fmt.Errorf("%w: release %d of library %s", library.ErrReleaseNotFound, state.Release, state.LibraryID)
 		}
 		return wrapWrite("write library pin", err)
+	case draft.WidgetTypeState:
+		ports, err := widgetTypePortsOf(state.InputPorts)
+		if err != nil {
+			return err
+		}
+		portsJSON, err := marshalInputPorts(ports)
+		if err != nil {
+			return fmt.Errorf("cannot serialize input ports: %w", err)
+		}
+		_, err = tx.ExecContext(ctx,
+			`INSERT INTO engineering.widget_types
+			    (id, library_id, name, html_template, script, script_language, default_width, default_height, input_ports)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			 ON CONFLICT (id) DO UPDATE
+			 SET name = EXCLUDED.name, html_template = EXCLUDED.html_template,
+			     script = EXCLUDED.script, script_language = EXCLUDED.script_language,
+			     default_width = EXCLUDED.default_width, default_height = EXCLUDED.default_height,
+			     input_ports = EXCLUDED.input_ports
+			 WHERE engineering.widget_types.library_id = EXCLUDED.library_id`,
+			snapshot.ID, scope.LibraryID().UUID(), state.Name, state.HtmlTemplate, state.Script,
+			state.ScriptLanguage, state.DefaultWidth, state.DefaultHeight, portsJSON)
+		if isUniqueViolation(err, constraintWidgetTypesName) {
+			return library.ErrWidgetTypeNameTaken
+		}
+		return wrapWrite("write widget type", err)
 	default:
 		return fmt.Errorf("cannot write a draft entity of unknown state %T", snapshot.State)
 	}
@@ -235,6 +282,23 @@ func wrapWrite(what string, err error) error {
 		return nil
 	}
 	return fmt.Errorf("cannot %s: %w", what, err)
+}
+
+// widgetTypePortsOf rebuilds the InputPorts of a WidgetType snapshot.
+func widgetTypePortsOf(ports []draft.InputPortState) ([]library.InputPort, error) {
+	result := make([]library.InputPort, len(ports))
+	for i, p := range ports {
+		name, err := library.NewInputPortName(p.Name)
+		if err != nil {
+			return nil, fmt.Errorf("snapshot input port %q: %w", p.Name, err)
+		}
+		hint, err := library.NewPortTypeHint(p.TypeHint)
+		if err != nil {
+			return nil, fmt.Errorf("snapshot input port %q: %w", p.Name, err)
+		}
+		result[i] = library.NewInputPort(name, p.Description, hint)
+	}
+	return result, nil
 }
 
 func marshalSnapshotBindings(bindings []draft.PortBindingState) ([]byte, error) {
@@ -259,7 +323,9 @@ func marshalSnapshotBindings(bindings []draft.PortBindingState) ([]byte, error) 
 // operation touches, always within the Draft's own Project (ADR 0016).
 type draftLoader struct {
 	tx       *sql.Tx
+	scope    editlock.Scope
 	project  id.ID[project.Project]
+	library  id.ID[library.Library]
 	releases library.LibraryReleaseRepository
 }
 
@@ -590,6 +656,27 @@ func (l *draftLoader) AllLibraryPins(ctx context.Context) ([]librarypin.LibraryP
 		found = append(found, librarypin.ReconstituteLibraryPin(l.project, id.NewID(id.IDWithUUID[library.Library](rawLibraryID)), release))
 	}
 	return found, rows.Err()
+}
+
+// WidgetTypes returns every WidgetType of the Draft's Library, in creation
+// order.
+func (l *draftLoader) WidgetTypes(ctx context.Context) ([]library.WidgetType, error) {
+	return findWidgetTypes(ctx, l.tx, l.library)
+}
+
+// WidgetType returns one WidgetType of the Draft's Library.
+func (l *draftLoader) WidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.WidgetType, error) {
+	row := l.tx.QueryRowContext(ctx,
+		"SELECT "+selectWidgetTypeColumns+" FROM engineering.widget_types WHERE id = $1 AND library_id = $2",
+		typeID.UUID(), l.library.UUID())
+	wt, err := scanWidgetType(row.Scan)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, id.NotFound(library.ErrWidgetTypeNotFound, typeID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("cannot read widget type %s: %w", typeID, err)
+	}
+	return wt, nil
 }
 
 func (l *draftLoader) LibraryPin(ctx context.Context, libraryID id.ID[library.Library]) (librarypin.LibraryPin, error) {

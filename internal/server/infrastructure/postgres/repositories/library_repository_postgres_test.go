@@ -6,13 +6,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
 
-func TestLibrarySave_RenameNameTakenAndDiscardMark(t *testing.T) {
+func TestLibrarySave_RenameAndNameTaken(t *testing.T) {
 	cleanLibraries(t)
 	ctx := editlock.System(context.Background())
 	repo := repositories.NewLibraryRepositoryPostgres(testDB)
@@ -33,27 +34,6 @@ func TestLibrarySave_RenameNameTakenAndDiscardMark(t *testing.T) {
 		t.Errorf("a stale write: expected ErrLibraryConflict, got %v", err)
 	}
 
-	// A Discard to a release no longer the latest is a conflict.
-	first := mustRelease(t, lib.ID())
-	wts := libraryRepo{repositories.NewWidgetTypeRepositoryPostgres(testDB, lib.ID()), lib.ID()}
-	if _, err := wts.Save(ctx, makeWidgetType(t, "gauge", nil, wts)); err != nil {
-		t.Fatal(err)
-	}
-	two := mustRelease(t, lib.ID()).Number()
-	found, _ := repo.FindByID(ctx, lib.ID())
-	stale, _ := found.StartDiscard(first.Number())
-	if _, err := repo.Save(ctx, stale); !errors.Is(err, library.ErrLibraryConflict) {
-		t.Errorf("a Discard to release 1 of 2: expected ErrLibraryConflict, got %v", err)
-	}
-	marked, _ := found.StartDiscard(two)
-	saved, err := repo.Save(ctx, marked)
-	if err != nil {
-		t.Fatalf("Save marked: %v", err)
-	}
-	reread, _ := repo.FindByID(ctx, lib.ID())
-	if to, ok := reread.DiscardingTo(); !ok || to != two || reread.Version() != saved.Version() {
-		t.Errorf("the mark: %s", reread)
-	}
 	byName, err := repo.FindByName(ctx, soleOrganization(t), lib.Name())
 	if err != nil || byName.ID() != lib.ID() {
 		t.Errorf("FindByName: %v, %v", byName, err)
@@ -122,10 +102,7 @@ func TestLibraryRelease_SaveAndRead(t *testing.T) {
 	ctx := editlock.System(context.Background())
 	repo := newWidgetTypeRepo(t)
 	port, _ := library.NewInputPortName("value")
-	saved, err := repo.Save(ctx, makeWidgetType(t, "gauge", []library.InputPort{library.NewInputPort(port, "the value", library.AnyTypeHint())}, repo))
-	if err != nil {
-		t.Fatalf("Save widget type: %v", err)
-	}
+	saved := mustStoreWidgetType(t, makeWidgetType(t, "gauge", []library.InputPort{library.NewInputPort(port, "the value", library.AnyTypeHint())}, repo), repo)
 	releases := repositories.NewLibraryReleaseRepositoryPostgres(testDB)
 	if latest, err := releases.FindLatest(ctx, repo.libraryID); err != nil || latest != nil {
 		t.Fatalf("no release yet: %v, %v", latest, err)
@@ -152,14 +129,18 @@ func TestLibraryRelease_SaveAndRead(t *testing.T) {
 
 	lib, _ := repositories.NewLibraryRepositoryPostgres(testDB).FindByID(ctx, repo.libraryID)
 	again, _ := library.CreateRelease(lib, []library.WidgetType{}, nil, "", time.Now())
-	if _, err := releases.Save(ctx, again, lib.Version()); !errors.Is(err, library.ErrReleaseNumberTaken) {
+	if _, err := releases.Save(ctx, again, libraryDraftContentVersionOf(t, repo.libraryID)); !errors.Is(err, library.ErrReleaseNumberTaken) {
 		t.Errorf("number 1 again: expected ErrReleaseNumberTaken, got %v", err)
 	}
-	if err := repo.Delete(ctx, saved); err != nil {
+	if _, err := testDrafts().Update(ctx, editlock.LibraryScope(repo.libraryID), libraryDraftVersionOf(t, repo.libraryID),
+		"Delete widget type gauge", func(session *draft.Session) error {
+			_, err := session.DeleteWidgetType(ctx, saved.ID())
+			return err
+		}); err != nil {
 		t.Fatalf("Delete widget type: %v", err)
 	}
 	second, _ := library.CreateRelease(lib, nil, first, "emptied", time.Now())
-	if _, err := releases.Save(ctx, second, lib.Version()); err != nil {
+	if _, err := releases.Save(ctx, second, libraryDraftContentVersionOf(t, repo.libraryID)); err != nil {
 		t.Fatalf("Save second: %v", err)
 	}
 	all, err := releases.FindAll(ctx, repo.libraryID)
@@ -169,29 +150,16 @@ func TestLibraryRelease_SaveAndRead(t *testing.T) {
 	if latest, _ := releases.FindLatest(ctx, repo.libraryID); latest.Number().Int() != 2 {
 		t.Errorf("FindLatest: %s", latest)
 	}
-
-	marked, _ := lib.StartDiscard(first.Number().Next())
-	markedSaved, err := repositories.NewLibraryRepositoryPostgres(testDB).Save(ctx, marked)
-	if err != nil {
-		t.Fatal(err)
-	}
-	third, _ := library.CreateRelease(lib, nil, nil, "", time.Now())
-	third = library.WithNumber(third, library.FirstRelease().Next().Next())
-	if _, err := releases.Save(ctx, third, lib.Version()); !errors.Is(err, library.ErrLibraryConflict) {
-		t.Errorf("a release of a library changed since it was read: expected ErrLibraryConflict, got %v", err)
-	}
-	if _, err := releases.Save(ctx, third, markedSaved.Version()); !errors.Is(err, library.ErrLibraryDiscarding) {
-		t.Errorf("a release during a Discard: expected ErrLibraryDiscarding, got %v", err)
-	}
 }
 
-func TestLibraryRelease_SaveRefusesADraftChangedSinceItWasRead(t *testing.T) {
+// TestLibraryRelease_SaveRefusesAStaleDraftVersion: the Release states the
+// Version of the Draft the client read; a write since then is a conflict and
+// stores nothing (ADR 0016).
+func TestLibraryRelease_SaveRefusesAStaleDraftVersion(t *testing.T) {
 	cleanLibraries(t)
 	ctx := editlock.System(context.Background())
 	repo := newWidgetTypeRepo(t)
-	if _, err := repo.Save(ctx, makeWidgetType(t, "gauge", nil, repo)); err != nil {
-		t.Fatalf("Save widget type: %v", err)
-	}
+	mustStoreWidgetType(t, makeWidgetType(t, "gauge", nil, repo), repo)
 	releases := repositories.NewLibraryReleaseRepositoryPostgres(testDB)
 	lib, err := repositories.NewLibraryRepositoryPostgres(testDB).FindByID(ctx, repo.libraryID)
 	if err != nil {
@@ -201,30 +169,29 @@ func TestLibraryRelease_SaveRefusesADraftChangedSinceItWasRead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindAll widget types: %v", err)
 	}
+	readVersion := libraryDraftContentVersionOf(t, repo.libraryID)
 	stale, err := library.CreateRelease(lib, read, nil, "", time.Now())
 	if err != nil {
 		t.Fatalf("CreateRelease: %v", err)
 	}
 
-	if _, err := repo.Save(ctx, makeWidgetType(t, "dial", nil, repo)); err != nil {
-		t.Fatalf("Save second widget type: %v", err)
-	}
-	if _, err := releases.Save(ctx, stale, lib.Version()); !errors.Is(err, library.ErrDraftChanged) {
-		t.Fatalf("a release of a Draft read before a change: expected ErrDraftChanged, got %v", err)
+	mustStoreWidgetType(t, makeWidgetType(t, "dial", nil, repo), repo)
+	if _, err := releases.Save(ctx, stale, readVersion); !errors.Is(err, draft.ErrDraftConflict) {
+		t.Fatalf("a release at a stale Draft Version: expected ErrDraftConflict, got %v", err)
 	}
 	if latest, err := releases.FindLatest(ctx, repo.libraryID); err != nil || latest != nil {
 		t.Errorf("the refused release was stored: %v, %v", latest, err)
 	}
 
-	draft, err := repo.FindAll(ctx)
+	draftNow, err := repo.FindAll(ctx)
 	if err != nil {
 		t.Fatalf("FindAll widget types: %v", err)
 	}
-	fresh, err := library.CreateRelease(lib, draft, nil, "", time.Now())
+	fresh, err := library.CreateRelease(lib, draftNow, nil, "", time.Now())
 	if err != nil {
 		t.Fatalf("CreateRelease of the Draft as it is: %v", err)
 	}
-	if _, err := releases.Save(ctx, fresh, lib.Version()); err != nil {
+	if _, err := releases.Save(ctx, fresh, libraryDraftContentVersionOf(t, repo.libraryID)); err != nil {
 		t.Fatalf("Save release of the Draft as it is: %v", err)
 	}
 }
@@ -239,7 +206,7 @@ func TestLibraryReleaseState_OfTheStoredDraftAndRelease(t *testing.T) {
 	releases := repositories.NewLibraryReleaseRepositoryPostgres(testDB)
 	check := func(step string, wantLatest int, wantDiffers bool) {
 		t.Helper()
-		draft, err := repo.FindAll(ctx)
+		draftNow, err := repo.FindAll(ctx)
 		if err != nil {
 			t.Fatalf("%s: FindAll: %v", step, err)
 		}
@@ -247,7 +214,7 @@ func TestLibraryReleaseState_OfTheStoredDraftAndRelease(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: FindLatest: %v", step, err)
 		}
-		if got := library.ReleaseStateOf(draft, latest); got.Latest.Int() != wantLatest || got.DraftDiffers != wantDiffers {
+		if got := library.ReleaseStateOf(draftNow, latest); got.Latest.Int() != wantLatest || got.DraftDiffers != wantDiffers {
 			t.Errorf("%s: %+v, want release %d, differs %t", step, got, wantLatest, wantDiffers)
 		}
 	}
@@ -255,23 +222,18 @@ func TestLibraryReleaseState_OfTheStoredDraftAndRelease(t *testing.T) {
 	check("a new library", 0, true)
 	port, _ := library.NewInputPortName("value")
 	ports := []library.InputPort{library.NewInputPort(port, "the value", library.AnyTypeHint())}
-	gauge, err := repo.Save(ctx, makeWidgetType(t, "gauge", ports, repo))
-	if err != nil {
-		t.Fatal(err)
-	}
+	gauge := mustStoreWidgetType(t, makeWidgetType(t, "gauge", ports, repo), repo)
 	mustRelease(t, repo.libraryID)
 	check("released", 1, false)
 
 	update := func(step string, html string, ports []library.InputPort) {
 		t.Helper()
 		h, _ := library.NewHtmlTemplate(html)
-		changed, err := gauge.Update(gauge.Version(), gauge.Name(), h, gauge.Script(), gauge.ScriptLanguage(), gauge.DefaultSize(), ports)
+		changed, err := gauge.Update(gauge.Name(), h, gauge.Script(), gauge.ScriptLanguage(), gauge.DefaultSize(), ports)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if gauge, err = repo.Save(ctx, changed); err != nil {
-			t.Fatalf("%s: %v", step, err)
-		}
+		gauge = mustUpdateLibraryWidgetType(t, repo.libraryID, changed)
 	}
 	update("html", "<p></p>", ports)
 	check("html changed", 1, true)
@@ -283,17 +245,16 @@ func TestLibraryReleaseState_OfTheStoredDraftAndRelease(t *testing.T) {
 	mustRelease(t, repo.libraryID)
 	check("released again", 2, false)
 
-	extra, err := repo.Save(ctx, makeWidgetType(t, "extra", nil, repo))
-	if err != nil {
-		t.Fatal(err)
-	}
+	extra := mustStoreWidgetType(t, makeWidgetType(t, "extra", nil, repo), repo)
 	check("a WidgetType added", 2, true)
-	if err := repo.Delete(ctx, extra.Delete()); err != nil {
-		t.Fatal(err)
-	}
+	mustUpdateLibrary(t, repo.libraryID, "Delete widget type extra", func(session *draft.Session) error {
+		_, err := session.DeleteWidgetType(ctx, extra.ID())
+		return err
+	})
 	check("the added one removed", 2, false)
-	if err := repo.Delete(ctx, gauge.Delete()); err != nil {
-		t.Fatal(err)
-	}
+	mustUpdateLibrary(t, repo.libraryID, "Delete widget type gauge", func(session *draft.Session) error {
+		_, err := session.DeleteWidgetType(ctx, gauge.ID())
+		return err
+	})
 	check("a released WidgetType removed", 2, true)
 }

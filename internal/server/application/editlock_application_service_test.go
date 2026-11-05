@@ -30,8 +30,7 @@ func cleanEditLocksApp(t *testing.T) {
 // time from now unless an option says otherwise.
 func editLockServiceOver(opts ...application.EditLockOption) application.EditLockService {
 	content := contentOver(newScopes())
-	return application.NewEditLockService(content,
-		application.NewLibraryContent(repositories.NewLibraryRepositoryPostgres(testDB), soleOrganization()),
+	return application.NewEditLockService(content, newLibraryContent(),
 		repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB)), opts...)
 }
 
@@ -259,20 +258,6 @@ func TestEditLockService_LibraryDraft(t *testing.T) {
 func TestEditLockService_State_UnknownLibrary_IsNotFound(t *testing.T) {
 	if _, err := editLockServiceOver().State(editlock.System(context.Background()), libraryScope(uuid.New())); !errors.Is(err, library.ErrLibraryNotFound) {
 		t.Errorf("state of an unknown library: %v", err)
-	}
-}
-
-func TestEditLockService_CheckOut_LibraryDiscarding_IsRefused(t *testing.T) {
-	cleanEditLocksApp(t)
-	lib := mustCreateLibrary(t)
-	if _, err := testDB.ExecContext(editlock.System(context.Background()),
-		`UPDATE engineering.libraries SET discarding_to = 1 WHERE id = $1`, lib.ID); err != nil {
-		t.Fatalf("mark discarding: %v", err)
-	}
-
-	_, _, err := editLockServiceOver().CheckOut(clientContext(editlock.NewKey()), libraryScope(lib.ID), "alice")
-	if !errors.Is(err, library.ErrLibraryDiscarding) {
-		t.Errorf("check out of a discarding library: %v, want ErrLibraryDiscarding", err)
 	}
 }
 

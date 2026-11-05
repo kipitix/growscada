@@ -89,15 +89,12 @@ var errorMappings = []errorMapping{
 	{tag.ErrTagNotFound, http.StatusNotFound, tagResource, ""},
 	{tag.ErrTagNameTaken, http.StatusConflict, tagResource, "Tag name is already taken in the project"},
 	{library.ErrLibraryNotFound, http.StatusNotFound, libraryResource, ""},
-	{library.ErrWidgetTypeConflict, http.StatusConflict, widgetTypeResource, "WidgetType was changed concurrently; reload it and retry"},
 	{library.ErrLibraryConflict, http.StatusConflict, libraryResource, "Library was changed concurrently; reload it and retry"},
 	{library.ErrLibraryNameTaken, http.StatusConflict, libraryResource, "Library name is already taken"},
 	{library.ErrLibraryPinned, http.StatusConflict, libraryResource, "Library is pinned by Projects; unpin it first"},
-	{library.ErrLibraryDiscarding, http.StatusConflict, libraryResource, "Library is being discarded; its Draft is read-only until the Discard ends"},
 	{library.ErrNoRelease, http.StatusConflict, libraryResource, "Library has never been released: there is nothing to discard to"},
 	{library.ErrNothingToRelease, http.StatusConflict, libraryResource, "Library's Draft has not changed since its latest release"},
 	{library.ErrReleaseNumberTaken, http.StatusConflict, libraryResource, "Library was released concurrently; retry"},
-	{library.ErrDraftChanged, http.StatusConflict, libraryResource, "Library's Draft changed while it was released; retry"},
 	{library.ErrReleaseNotFound, http.StatusNotFound, releaseResource, ""},
 	{library.ErrWidgetTypeNotFound, http.StatusNotFound, widgetTypeResource, ""},
 	{library.ErrWidgetTypeNameTaken, http.StatusConflict, widgetTypeResource, "WidgetType name is already taken in the library"},
@@ -178,7 +175,11 @@ func sendError(w http.ResponseWriter, r *http.Request, err error) {
 			var conflict draft.ConflictError
 			if errors.As(err, &conflict) {
 				// The client states the Version it read; a newer one lets it
-				// retry without rereading the Draft (ADR 0016).
+				// retry without rereading the Draft (ADR 0016). A Library's
+				// Draft names the Library, a Project's the Project.
+				if conflict.Scope.IsLibrary() {
+					problem.Title = "Conflict: " + libraryResource.name
+				}
 				problem.Draft = &apiv0.DraftStateResponse{Version: conflict.Current}
 			}
 			var orphans librarypin.OrphansError

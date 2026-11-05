@@ -81,7 +81,7 @@ func (l *Library) release() {
 		return
 	}
 	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.LibraryReleaseResponse, error) {
-		return l.client.Library(lib.ID).Release(c, apiv0.CreateReleaseRequest{Note: note, Version: lib.Version})
+		return l.client.Library(lib.ID).Release(c, apiv0.CreateReleaseRequest{Note: note, Version: l.versions.Of(l.libraryID)})
 	}, func(ctx app.Context, _ apiv0.LibraryReleaseResponse) {
 		l.loadLibraries(ctx)
 		l.loadReleases(ctx)
@@ -89,21 +89,21 @@ func (l *Library) release() {
 }
 
 // discard resets the selected library's Draft to its latest release after a
-// confirmation; the server does it after the call, the Draft read-only
-// meanwhile.
+// confirmation; the server does it in one transaction and answers its state.
 func (l *Library) discard() {
 	lib, ok := l.selectedLibrary()
 	if !ok || !app.Window().Call("confirm",
 		"Discard every change of "+lib.Name+" since release "+itoa(lib.LatestRelease)+"? The Draft goes back to that release.").Bool() {
 		return
 	}
-	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.LibraryResponse, error) {
+	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.DiscardLibraryResponse, error) {
 		return l.client.Library(lib.ID).Discard(c)
-	}, func(ctx app.Context, marked apiv0.LibraryResponse) {
-		if i := uiutil.IdxByID(l.libraries, marked.ID, uiutil.LibraryID); i >= 0 {
-			l.libraries[i] = marked
-		}
+	}, func(ctx app.Context, state apiv0.DiscardLibraryResponse) {
+		l.versions.Forget()
+		l.versions.Observe(l.versions.Mark(), l.libraryID, state.Version)
+		l.loadList(ctx)
 		l.loadLibraries(ctx)
+		l.loadReleases(ctx)
 	}, l.reloadOnConflict)
 }
 

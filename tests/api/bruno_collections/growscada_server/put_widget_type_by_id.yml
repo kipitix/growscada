@@ -23,14 +23,15 @@ http:
           { "name": "pressure", "description": "Line pressure in bar", "type_hint": "integer" },
           { "name": "temperature", "description": "Fluid temperature", "type_hint": "integer" }
         ],
-        "version": 1
+        "version": 2
       }
   auth: inherit
 
 docs: |
-  `version` is the widget type version the edit is based on. A version other than
-  the stored one returns `409 Conflict` (reload and retry); a negative one is
-  no version at all and returns `400 Bad Request` naming `version`.
+  `version` is the Version of the library's Draft the edit is based on
+  (ADR 0016). A version other than the stored one returns `409 Conflict` with
+  the Draft's current version (reload and retry); a negative one is no version
+  at all and returns `400 Bad Request` naming `version`.
 
 runtime:
   assertions:
@@ -41,7 +42,7 @@ runtime:
       operator: isDefined
     - expression: 'res.body.version'
       operator: eq
-      value: '2'
+      value: '3'
 
 settings:
   encodeUrl: true

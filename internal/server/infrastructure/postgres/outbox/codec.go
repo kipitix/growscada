@@ -188,8 +188,6 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 		return library.NewLibraryUpdatedEvent(libraryOfEvent, ts), nil
 	case event.EventTypeLibraryDeleted:
 		return library.NewLibraryDeletedEvent(libraryOfEvent, ts), nil
-	case event.EventTypeLibraryDiscardStarted:
-		return library.NewLibraryDiscardStartedEvent(libraryOfEvent, ts), nil
 	case event.EventTypeLibraryReleased:
 		release, err := library.NewReleaseNumber(p.Release)
 		if err != nil {

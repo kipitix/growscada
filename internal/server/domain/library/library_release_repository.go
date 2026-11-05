@@ -15,25 +15,27 @@ var (
 	// ErrReleaseNumberTaken is returned by Save when the Library already has
 	// a release with the number: another Release won the race for it.
 	ErrReleaseNumberTaken = errors.New("library release number already taken")
-	// ErrDraftChanged is returned by Save when the Draft differs from the
-	// release's copies at the time of the write: a WidgetType was changed
-	// after the Draft was read for the release.
-	ErrDraftChanged = errors.New("library draft changed while it was released")
 )
+
+// DraftContent is the phantom type of the Version of a Library's Draft: the
+// one token every write of its content states (ADR 0016). The Draft aggregate
+// is draft.Draft, which composes this package; the marker keeps the Version of
+// the Library's own lifecycle (rename, deletion) from being stated in its
+// place.
+type DraftContent struct{}
 
 // LibraryReleaseRepository - repository interface for storing and reading
 // Library Releases. A release is only ever added, never changed nor removed
 // but with its Library.
 type LibraryReleaseRepository interface {
 	// Save stores a new release and the events it recorded, in one
-	// transaction, while its Library is live, still at the expected Version
-	// and no Discard of it is under way.
+	// transaction, while its Library is live and its Draft is still at the
+	// expected Version.
 	// Returns ErrLibraryNotFound if the Library is not live,
-	// ErrLibraryConflict if it is not at expected,
-	// ErrLibraryDiscarding while a Discard is under way,
+	// draft.ErrDraftConflict if the Draft is not at expected, and
 	// ErrReleaseNumberTaken if the Library already has a release of its
-	// number, ErrDraftChanged if its Draft is not the one the release copies.
-	Save(ctx context.Context, release LibraryRelease, expected version.Version[Library]) (LibraryRelease, error)
+	// number.
+	Save(ctx context.Context, release LibraryRelease, expected version.Version[DraftContent]) (LibraryRelease, error)
 
 	// FindLatest returns the latest release of the Library, nil if it has
 	// none.

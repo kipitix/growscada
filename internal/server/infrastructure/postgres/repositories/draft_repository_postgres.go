@@ -109,10 +109,10 @@ func (r draftRepositoryPostgres) Update(ctx context.Context, scope editlock.Scop
 			return nil, err
 		}
 		if expected.Number() != row.version {
-			return nil, draft.ConflictError{Expected: expected.Number(), Current: row.version}
+			return nil, draft.ConflictError{Expected: expected.Number(), Current: row.version, Scope: scope}
 		}
 		current := draftOf(*row, scope)
-		loader := &draftLoader{tx: tx, project: scope.ProjectID(), releases: r.releases}
+		loader := &draftLoader{tx: tx, scope: scope, project: scope.ProjectID(), library: scope.LibraryID(), releases: r.releases}
 		session := draft.NewSession(current, loader)
 		if err := change(session); err != nil {
 			return nil, err
@@ -150,10 +150,19 @@ func (r draftRepositoryPostgres) Replace(ctx context.Context, scope editlock.Sco
 			return nil, err
 		}
 		current := draftOf(*row, scope)
-		loader := &draftLoader{tx: tx, project: scope.ProjectID(), releases: r.releases}
+		loader := &draftLoader{tx: tx, scope: scope, project: scope.ProjectID(), library: scope.LibraryID(), releases: r.releases}
 		session := draft.NewSession(current, loader)
 		if err := change(session); err != nil {
 			return nil, err
+		}
+		// A Library's Discard puts the released names back, and a name may be
+		// another WidgetType's at the moment: the Draft's rows go first, so
+		// the released ones are inserted with their final names.
+		if scope.IsLibrary() {
+			if _, err := tx.ExecContext(ctx,
+				`DELETE FROM engineering.widget_types WHERE library_id = $1`, scope.LibraryID().UUID()); err != nil {
+				return nil, fmt.Errorf("cannot clear the widget types of %s: %w", scope, err)
+			}
 		}
 		before, after := session.Changes()
 		if err := applySnapshots(ctx, tx, scope, before, after); err != nil {
@@ -191,7 +200,7 @@ func (r draftRepositoryPostgres) Purge(ctx context.Context, scope editlock.Scope
 			return nil, err
 		}
 		current := draftOf(*row, scope)
-		loader := &draftLoader{tx: tx, project: scope.ProjectID(), releases: r.releases}
+		loader := &draftLoader{tx: tx, scope: scope, project: scope.ProjectID(), library: scope.LibraryID(), releases: r.releases}
 		session := draft.NewSession(current, loader)
 		if err := session.Purge(ctx); err != nil {
 			return nil, err
@@ -291,15 +300,28 @@ func lockDraftRow(ctx context.Context, tx *sql.Tx, scope editlock.Scope, create,
 	if err != nil {
 		return nil, fmt.Errorf("cannot lock the draft of %s: %w", scope, err)
 	}
-	if scope.IsProject() && mustBeLive {
-		var live bool
-		err := tx.QueryRowContext(ctx,
-			`SELECT deleted_at IS NULL FROM projects WHERE id = $1`, scope.ProjectID().UUID()).Scan(&live)
-		if errors.Is(err, sql.ErrNoRows) || (err == nil && !live) {
-			return nil, id.NotFound(project.ErrProjectNotFound, scope.ProjectID())
-		}
-		if err != nil {
-			return nil, fmt.Errorf("cannot check the project of %s: %w", scope, err)
+	if mustBeLive {
+		switch {
+		case scope.IsProject():
+			var live bool
+			err := tx.QueryRowContext(ctx,
+				`SELECT deleted_at IS NULL FROM projects WHERE id = $1`, scope.ProjectID().UUID()).Scan(&live)
+			if errors.Is(err, sql.ErrNoRows) || (err == nil && !live) {
+				return nil, id.NotFound(project.ErrProjectNotFound, scope.ProjectID())
+			}
+			if err != nil {
+				return nil, fmt.Errorf("cannot check the project of %s: %w", scope, err)
+			}
+		case scope.IsLibrary():
+			var live bool
+			err := tx.QueryRowContext(ctx,
+				`SELECT deleted_at IS NULL FROM engineering.libraries WHERE id = $1`, scope.LibraryID().UUID()).Scan(&live)
+			if errors.Is(err, sql.ErrNoRows) || (err == nil && !live) {
+				return nil, id.NotFound(library.ErrLibraryNotFound, scope.LibraryID())
+			}
+			if err != nil {
+				return nil, fmt.Errorf("cannot check the library of %s: %w", scope, err)
+			}
 		}
 	}
 	return found, nil

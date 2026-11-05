@@ -24,16 +24,13 @@ func mustLibraryName(t *testing.T, s string) LibraryName {
 func makeStoredLibrary(t *testing.T) Library {
 	t.Helper()
 	ver, _ := version.New(version.WithNumber[Library](2))
-	return ReconstituteLibrary(testLibraryID, id.NewID[organization.Organization](), mustLibraryName(t, "Main"), false, ReleaseNumber{}, ver)
+	return ReconstituteLibrary(testLibraryID, id.NewID[organization.Organization](), mustLibraryName(t, "Main"), false, ver)
 }
 
 func TestCreateLibrary_RecordsCreatedEventAtInitialVersion(t *testing.T) {
 	lib := CreateLibrary(testLibraryID, id.NewID[organization.Organization](), mustLibraryName(t, "Main"))
 	if lib.Version() != version.Initial[Library]() || lib.IsDeleted() {
 		t.Errorf("expected a live library at the initial version, got %s", lib)
-	}
-	if _, discarding := lib.DiscardingTo(); discarding {
-		t.Error("a new library is not being discarded")
 	}
 	if got := pendingTypes(lib); len(got) != 1 || got[0] != event.EventTypeLibraryCreated {
 		t.Errorf("expected [library_created], got %v", got)
@@ -51,41 +48,6 @@ func TestLibraryRename_StaleVersionIsConflict(t *testing.T) {
 	}
 	if got := pendingTypes(renamed); len(got) != 1 || got[0] != event.EventTypeLibraryUpdated {
 		t.Errorf("expected [library_updated], got %v", got)
-	}
-}
-
-func TestLibraryStartDiscard_MarksUntilFinished(t *testing.T) {
-	lib := makeStoredLibrary(t)
-	if _, err := lib.StartDiscard(ReleaseNumber{}); !errors.Is(err, ErrNoRelease) {
-		t.Errorf("a library never released: expected ErrNoRelease, got %v", err)
-	}
-	two, _ := NewReleaseNumber(2)
-	marked, err := lib.StartDiscard(two)
-	if err != nil {
-		t.Fatalf("StartDiscard: %v", err)
-	}
-	if to, ok := marked.DiscardingTo(); !ok || to != two {
-		t.Errorf("DiscardingTo = %s, %t; want 2, true", to, ok)
-	}
-	if !errors.Is(marked.CheckEditable(), ErrLibraryDiscarding) {
-		t.Error("the Draft of a library being discarded is read-only")
-	}
-	if _, err := marked.StartDiscard(two); !errors.Is(err, ErrLibraryDiscarding) {
-		t.Errorf("a second Discard: expected ErrLibraryDiscarding, got %v", err)
-	}
-	if got := pendingTypes(marked); len(got) != 1 || got[0] != event.EventTypeLibraryDiscardStarted {
-		t.Errorf("expected [library_discard_started], got %v", got)
-	}
-
-	done := marked.FinishDiscard()
-	if _, ok := done.DiscardingTo(); ok || done.CheckEditable() != nil {
-		t.Errorf("FinishDiscard left the mark: %s", done)
-	}
-	if got := pendingTypes(done); len(got) != 2 || got[1] != event.EventTypeLibraryUpdated {
-		t.Errorf("expected [library_discard_started library_updated], got %v", got)
-	}
-	if lib.FinishDiscard() != lib {
-		t.Error("FinishDiscard of a library not being discarded must change nothing")
 	}
 }
 
@@ -120,18 +82,13 @@ func TestCreateRelease_NumbersAndRefusesAnUnchangedDraft(t *testing.T) {
 		t.Errorf("an unchanged Draft: expected ErrNothingToRelease, got %v", err)
 	}
 
-	changed, err := draft[0].Update(draft[0].Version(), mustName(t, "thermometer"), draft[0].HtmlTemplate(), draft[0].Script(), draft[0].ScriptLanguage(), draft[0].DefaultSize(), nil)
+	changed, err := draft[0].Update(mustName(t, "thermometer"), draft[0].HtmlTemplate(), draft[0].Script(), draft[0].ScriptLanguage(), draft[0].DefaultSize(), nil)
 	if err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 	second, err := CreateRelease(lib, []WidgetType{changed}, first, "", at)
 	if err != nil || second.Number().Int() != 2 {
 		t.Fatalf("second release: %v, %v", second, err)
-	}
-
-	marked, _ := lib.StartDiscard(first.Number())
-	if _, err := CreateRelease(marked, []WidgetType{changed}, first, "", at); !errors.Is(err, ErrLibraryDiscarding) {
-		t.Errorf("a Release during a Discard: expected ErrLibraryDiscarding, got %v", err)
 	}
 }
 
@@ -142,21 +99,20 @@ func TestDraftDiffers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateRelease: %v", err)
 	}
-	renamed, _ := wt.Update(wt.Version(), mustName(t, "other"), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.DefaultSize(), nil)
+	renamed, _ := wt.Update(mustName(t, "other"), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.DefaultSize(), nil)
 	port, _ := NewInputPortName("value")
-	withPort, _ := wt.Update(wt.Version(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.DefaultSize(),
+	withPort, _ := wt.Update(wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.DefaultSize(),
 		[]InputPort{NewInputPort(port, "", AnyTypeHint())})
 
 	cases := map[string]struct {
 		draft []WidgetType
 		want  bool
 	}{
-		"same":                    {[]WidgetType{wt}, false},
-		"same at a newer version": {[]WidgetType{reconstituteAt(t, wt, 5)}, false},
-		"renamed":                 {[]WidgetType{renamed}, true},
-		"port added":              {[]WidgetType{withPort}, true},
-		"removed":                 {nil, true},
-		"added":                   {[]WidgetType{wt, makeCommittedWidgetType(t)}, true},
+		"same":       {[]WidgetType{wt}, false},
+		"renamed":    {[]WidgetType{renamed}, true},
+		"port added": {[]WidgetType{withPort}, true},
+		"removed":    {nil, true},
+		"added":      {[]WidgetType{wt, makeCommittedWidgetType(t)}, true},
 	}
 	for name, tc := range cases {
 		if got := DraftDiffers(tc.draft, release); got != tc.want {
@@ -189,9 +145,14 @@ func TestReleaseStateOf(t *testing.T) {
 func TestWidgetTypeResetTo_RestoresTheReleasedDefinition(t *testing.T) {
 	wt := makeCommittedWidgetType(t)
 	released := ReleasedFrom(wt)
-	changed, _ := wt.Update(wt.Version(), mustName(t, "other"), wt.HtmlTemplate(), wt.Script(), ScriptLanguageLua, wt.DefaultSize(), nil)
+	changed, _ := wt.Update(mustName(t, "other"), wt.HtmlTemplate(), wt.Script(), ScriptLanguageLua, wt.DefaultSize(), nil)
 
-	reset, err := reconstituteAt(t, changed, 3).ResetTo(released)
+	stored, err := ReconstituteWidgetType(changed.ID(), changed.LibraryID(), changed.Name(), changed.HtmlTemplate(),
+		changed.Script(), changed.ScriptLanguage(), changed.DefaultSize(), changed.InputPorts())
+	if err != nil {
+		t.Fatalf("ReconstituteWidgetType: %v", err)
+	}
+	reset, err := stored.ResetTo(released)
 	if err != nil {
 		t.Fatalf("ResetTo: %v", err)
 	}
@@ -221,15 +182,4 @@ func mustName(t *testing.T, s string) WidgetTypeName {
 		t.Fatalf("NewWidgetTypeName(%q): %v", s, err)
 	}
 	return name
-}
-
-// reconstituteAt returns wt as stored at version n.
-func reconstituteAt(t *testing.T, wt WidgetType, n int) WidgetType {
-	t.Helper()
-	ver, _ := version.New(version.WithNumber[WidgetType](n))
-	stored, err := ReconstituteWidgetType(wt.ID(), wt.LibraryID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.DefaultSize(), wt.InputPorts(), ver)
-	if err != nil {
-		t.Fatalf("ReconstituteWidgetType: %v", err)
-	}
-	return stored
 }

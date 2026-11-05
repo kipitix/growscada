@@ -68,8 +68,7 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 		// not released.
 		return ReloadTargets{WidgetTypes: true, Libraries: true}
 	case apiv0.EventLibraryCreated, apiv0.EventLibraryUpdated, apiv0.EventLibraryDeleted,
-		apiv0.EventLibraryDiscardStarted, apiv0.EventLibraryReleased:
-		// The end of a Discard (library_updated) changed the Draft.
+		apiv0.EventLibraryReleased:
 		return ReloadTargets{Libraries: true, WidgetTypes: true}
 	case apiv0.EventLibraryPinCreated, apiv0.EventLibraryPinUpdated, apiv0.EventLibraryPinDeleted:
 		return ReloadTargets{LibraryPins: true, Deploy: true}

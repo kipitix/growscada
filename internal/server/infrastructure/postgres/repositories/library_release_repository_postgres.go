@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 
+	"github.com/kipitix/growscada/internal/server/domain/draft"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/version"
@@ -30,28 +32,26 @@ func NewLibraryReleaseRepositoryPostgres(aDb *sql.DB, opts ...Option) library.Li
 }
 
 // Save inserts the release with the copies of its WidgetTypes. It locks the
-// Library's row for update, which the writes of its Draft wait for, and checks
-// its version there: a Discard marked or a rename made meanwhile waits for it,
-// or it for them and is refused (ADR 0012). Under that lock it reads the Draft
-// again and refuses the release if the Draft is not the one it copies
-// (ErrDraftChanged): the release was made from a Draft read before.
-func (r libraryReleaseRepositoryPostgresImpl) Save(ctx context.Context, release library.LibraryRelease, expected version.Version[library.Library]) (library.LibraryRelease, error) {
+// Library's Draft row, which every write of its content locks too, and checks
+// the Draft's Version there: a write made after the client read the Draft
+// waits for it, or it for them and is refused (ADR 0016). Under that lock it
+// reads the Draft again and refuses an unchanged one.
+func (r libraryReleaseRepositoryPostgresImpl) Save(ctx context.Context, release library.LibraryRelease, expected version.Version[library.DraftContent]) (library.LibraryRelease, error) {
 	libraryID := release.LibraryID()
+	scope := editlock.LibraryScope(libraryID)
 	var createdAt time.Time // as stored, to the column's precision
 	err := r.store.inTx(ctx, release.PendingEvents(), func(tx *sql.Tx) error {
-		// A Release is an act over the whole Draft: the client must hold its
-		// EditLock, checked in the transaction of the release rows (ADR 0015).
-		if err := checkLibraryEditLock(ctx, tx, libraryID); err != nil {
+		row, err := lockDraftRow(ctx, tx, scope, true, true)
+		if err != nil {
 			return err
 		}
-		row, err := lockLibraryRowExclusive(ctx, tx, libraryID)
-		switch {
-		case err != nil:
+		// A Release is an act over the whole Draft: the client must hold its
+		// EditLock, checked in the transaction of the release rows (ADR 0015).
+		if err := gateDraft(ctx, tx, row, scope); err != nil {
 			return err
-		case row.version != expected.Number():
-			return fmt.Errorf("%w: expected version %s, current %d", library.ErrLibraryConflict, expected, row.version)
-		case row.discardingTo.Valid:
-			return fmt.Errorf("%w: %s", library.ErrLibraryDiscarding, libraryID)
+		}
+		if row.version != expected.Number() {
+			return draft.ConflictError{Expected: expected.Number(), Current: row.version, Scope: scope}
 		}
 		if err := tx.QueryRowContext(ctx,
 			`INSERT INTO engineering.library_releases (library_id, number, note, created_at) VALUES ($1, $2, $3, $4) RETURNING created_at`,
@@ -67,7 +67,7 @@ func (r libraryReleaseRepositoryPostgresImpl) Save(ctx context.Context, release 
 			return fmt.Errorf("cannot read draft: %w", err)
 		}
 		if library.DraftDiffers(draft, release) {
-			return fmt.Errorf("%w: %s", library.ErrDraftChanged, libraryID)
+			return fmt.Errorf("%w: %s", library.ErrNothingToRelease, libraryID)
 		}
 		for _, wt := range release.WidgetTypes() {
 			portsJSON, err := marshalInputPorts(wt.InputPorts())

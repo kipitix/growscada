@@ -118,7 +118,7 @@ func TestUpdate_NegativeVersion_IsInvalidInput(t *testing.T) {
 
 	cleanWidgetTypes(t)
 	wtSvc := newWidgetTypeService()
-	wt, err := wtSvc.CreateWidgetType(ctx, wtLibrary, testCreateWidgetTypeInput)
+	wt, err := wtSvc.CreateWidgetType(ctx, wtLibrary, libraryDraftVersionOf(t, wtLibrary), testCreateWidgetTypeInput)
 	if err != nil {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
@@ -146,14 +146,14 @@ func TestWidgetTypeInput_InvalidField_IsInvalidInputOnCreateAndUpdate(t *testing
 			cleanWidgetTypes(t)
 			svc := newWidgetTypeService()
 			ctx := editlock.System(context.Background())
-			created, err := svc.CreateWidgetType(ctx, wtLibrary, testCreateWidgetTypeInput)
+			created, err := svc.CreateWidgetType(ctx, wtLibrary, libraryDraftVersionOf(t, wtLibrary), testCreateWidgetTypeInput)
 			if err != nil {
 				t.Fatalf("CreateWidgetType: %v", err)
 			}
 			input := testCreateWidgetTypeInput
 			tc.modify(&input)
 
-			_, err = svc.CreateWidgetType(ctx, wtLibrary, input)
+			_, err = svc.CreateWidgetType(ctx, wtLibrary, libraryDraftVersionOf(t, wtLibrary), input)
 			assertInvalidField(t, err, tc.field)
 
 			_, err = svc.UpdateWidgetType(ctx, wtLibrary, created.ID, created.Version, input)
@@ -166,14 +166,14 @@ func TestWidgetTypeInput_DuplicatePortNames_IsInvalidInputOnCreateAndUpdate(t *t
 	cleanWidgetTypes(t)
 	svc := newWidgetTypeService()
 	ctx := editlock.System(context.Background())
-	created, err := svc.CreateWidgetType(ctx, wtLibrary, testCreateWidgetTypeInput)
+	created, err := svc.CreateWidgetType(ctx, wtLibrary, libraryDraftVersionOf(t, wtLibrary), testCreateWidgetTypeInput)
 	if err != nil {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
 	input := testCreateWidgetTypeInput
 	input.InputPorts = []appdto.InputPort{{Name: "value"}, {Name: "value"}}
 
-	_, err = svc.CreateWidgetType(ctx, wtLibrary, input)
+	_, err = svc.CreateWidgetType(ctx, wtLibrary, libraryDraftVersionOf(t, wtLibrary), input)
 	if !errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("CreateWidgetType: expected ErrInvalidInput, got: %v", err)
 	}

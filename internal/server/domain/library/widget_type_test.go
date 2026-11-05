@@ -4,17 +4,11 @@ import (
 	"testing"
 
 	"github.com/kipitix/growscada/internal/server/domain/id"
-	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 func mustWidgetTypeID(t *testing.T) id.ID[WidgetType] {
 	t.Helper()
 	return id.NewID[WidgetType]()
-}
-
-func mustWidgetTypeVersion(t *testing.T) version.Version[WidgetType] {
-	t.Helper()
-	return version.Initial[WidgetType]()
 }
 
 func makeTestWidgetType(t *testing.T) WidgetType {
@@ -24,7 +18,7 @@ func makeTestWidgetType(t *testing.T) WidgetType {
 	htmlTemplate, _ := NewHtmlTemplate("<div class='gauge'></div>")
 	script, _ := NewScript("function render(value) { return value; }")
 	lang := ScriptLanguageJavaScript
-	wt, err := ReconstituteWidgetType(anID, testLibraryID, name, htmlTemplate, script, lang, DefaultSize(), nil, version.Initial[WidgetType]())
+	wt, err := ReconstituteWidgetType(anID, testLibraryID, name, htmlTemplate, script, lang, DefaultSize(), nil)
 	if err != nil {
 		t.Fatalf("makeTestWidgetType: %v", err)
 	}
@@ -38,9 +32,8 @@ func TestReconstituteWidgetType_FieldsAreSet(t *testing.T) {
 	script, _ := NewScript("function draw() {}")
 	lang := ScriptLanguagePython
 	size, _ := NewSize(120, 80)
-	ver, _ := version.New[WidgetType](version.WithNumber[WidgetType](3))
 
-	wt, err := ReconstituteWidgetType(anID, testLibraryID, name, htmlTemplate, script, lang, size, nil, ver)
+	wt, err := ReconstituteWidgetType(anID, testLibraryID, name, htmlTemplate, script, lang, size, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -63,15 +56,8 @@ func TestReconstituteWidgetType_FieldsAreSet(t *testing.T) {
 	if wt.DefaultSize() != size {
 		t.Errorf("DefaultSize mismatch: expected %v, got %v", size, wt.DefaultSize())
 	}
-	if wt.Version() != ver {
-		t.Errorf("Version mismatch: expected %d, got %d", ver, wt.Version())
-	}
-}
-
-func TestReconstituteWidgetType_InitialVersion(t *testing.T) {
-	wt := makeTestWidgetType(t)
-	if wt.Version() != version.Initial[WidgetType]() {
-		t.Errorf("expected initial version %d, got %d", version.Initial[WidgetType](), wt.Version())
+	if wt.LibraryID() != testLibraryID {
+		t.Errorf("LibraryID mismatch: expected %v, got %v", testLibraryID, wt.LibraryID())
 	}
 }
 
@@ -87,7 +73,7 @@ func TestReconstituteWidgetType_InvalidScriptLanguage_ReturnsError(t *testing.T)
 	htmlTemplate, _ := NewHtmlTemplate("<div></div>")
 	script, _ := NewScript("function update(){}")
 
-	_, err := ReconstituteWidgetType(id.NewID[WidgetType](), testLibraryID, name, htmlTemplate, script, ScriptLanguage{}, DefaultSize(), nil, version.Initial[WidgetType]())
+	_, err := ReconstituteWidgetType(id.NewID[WidgetType](), testLibraryID, name, htmlTemplate, script, ScriptLanguage{}, DefaultSize(), nil)
 	if err == nil {
 		t.Error("expected error for invalid script language, got nil")
 	}

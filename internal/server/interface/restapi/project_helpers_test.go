@@ -14,6 +14,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 	runtimepg "github.com/kipitix/growscada/internal/server/infrastructure/postgres/runtime"
@@ -70,10 +71,9 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 	releases := repositories.NewLibraryReleaseRepositoryPostgres(db, opts...)
 	drafts := repositories.NewDraftRepositoryPostgres(db, releases, opts...)
 	content := application.NewProjectContent(projectRepo, repositories.NewProjectScopes(db, opts...), drafts, orgID)
-	editLocks := application.NewEditLockService(content,
-		application.NewLibraryContent(repositories.NewLibraryRepositoryPostgres(db, opts...), orgID),
-		drafts)
 	libraries := repositories.NewLibraryRepositoryPostgres(db, opts...)
+	libraryContent := application.NewLibraryContent(libraries, drafts, orgID)
+	editLocks := application.NewEditLockService(content, libraryContent, drafts)
 	widgetTypes := repositories.NewWidgetTypeRepositories(db, opts...)
 	states := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, publish)
 	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(db), publish)
@@ -88,8 +88,8 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		editLocks:    editLocks,
 		discard:      application.NewDiscardService(content, runtimeNode),
 		draft:        application.NewDraftService(content),
-		libraries:    application.NewLibraryService(libraries, releases, widgetTypes, orgID),
-		widgetTypes:  application.NewWidgetTypeService(libraries, widgetTypes, orgID),
+		libraries:    application.NewLibraryService(libraryContent, libraries, releases, widgetTypes),
+		widgetTypes:  application.NewWidgetTypeService(libraryContent, widgetTypes),
 		pins:         application.NewLibraryPinService(content, libraries, releases),
 		scenes:       application.NewSceneService(content),
 		devices:      application.NewDeviceService(content),
@@ -148,6 +148,22 @@ func (s testServices) draftVersion(t *testing.T) int {
 
 // testDraftVersion returns the Version of the Draft of projectID: what a
 // write of its content states (ADR 0016).
+// testLibraryDraftVersion returns the Version of a Library's Draft, 1 for a
+// Draft never written.
+func testLibraryDraftVersion(t *testing.T, libraryID uuid.UUID) int {
+	t.Helper()
+	drafts := repositories.NewDraftRepositoryPostgres(testDB(), nil)
+	found, ok, err := drafts.Read(editlock.System(context.Background()),
+		editlock.LibraryScope(id.NewID(id.IDWithUUID[library.Library](libraryID))))
+	if err != nil {
+		t.Fatalf("read the draft of library %s: %v", libraryID, err)
+	}
+	if !ok {
+		return 1
+	}
+	return found.Version().Number()
+}
+
 func testDraftVersion(t *testing.T, projectID uuid.UUID) int {
 	t.Helper()
 	drafts := repositories.NewDraftRepositoryPostgres(testDB(), nil)

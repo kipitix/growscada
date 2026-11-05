@@ -75,7 +75,9 @@ func (l *Library) loadReleases(ctx app.Context) {
 func (l *Library) setWidgetTypes(ctx app.Context, mark uiutil.Mark, items []apiv0.WidgetTypeResponse) {
 	old, known := l.findItem(l.selectedID)
 	for _, it := range items {
-		l.versions.Observe(mark, it.ID, it.Version)
+		// Every DTO of the Draft carries its one Version (ADR 0016): the
+		// writes state it under the Library, not under a WidgetType.
+		l.versions.Observe(mark, l.libraryID, it.Version)
 	}
 	l.widgetTypes = items
 	if l.selectedID == uuid.Nil || l.viewing != 0 {

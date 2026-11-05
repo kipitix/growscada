@@ -10,9 +10,9 @@ http:
 
 docs: |
   `latest_release` is the number of the latest Library Release (0 for none);
-  `has_unreleased_changes` tells whether the Draft differs from it;
-  `discarding_to`, present only while a Discard is under way, the release the
-  Draft is being reset to.
+  `has_unreleased_changes` tells whether the Draft differs from it. `version`
+  is the Library's own (rename and deletion); the Version of its Draft is
+  GET /libraries/{id}/draft.
 
 runtime:
   assertions:

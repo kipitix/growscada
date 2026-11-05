@@ -1,5 +1,21 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.65] - 2026-11-05
+
+### Added
+
+- **Draft Library на Draft-агрегате** (задача 38, часть 2; ADR 0016, ADR 0017)
+  - Схема `engineering/20261105000002_library_draft`: удалены `engineering.widget_types.version` и `libraries.discarding_to`, сняты задания политики `discard_library` и события `library_discard_started`; строка Draft'а Library уже бэкфиллена в 38_1
+  - Домен: операции Draft библиотеки `CreateWidgetType`, `UpdateWidgetType`, `DeleteWidgetType` и `ReplaceWidgetTypes` (Discard) со снимками `draft.KindWidgetType`; `WidgetType` теряет `Version()`/`CheckVersion`/`expected` (версию проверяет Draft), `Library` теряет `DiscardingTo`/`StartDiscard`/`FinishDiscard`/`CheckEditable`; `LibraryRelease` проверяет Version Draft, событие `library_discard_started` и ошибки `ErrLibraryDiscarding`/`ErrDraftChanged` удалены
+  - Репозитории: `draftRepositoryPostgres` пишет WidgetType'ы Library (CAS по `drafts.version`, DraftChange, гейт EditLock, `Replace` очищает строки перед вставкой релиза); `WidgetTypeRepository` стал только читающим (`NextID`, `FindByID`, `FindAll`), `ForDiscard` удалён; `LibraryReleaseRepository.Save` принимает Version Draft, блокирует строку Draft и проверяет её; `LibraryRepository` больше не хранит пометку Discard
+  - Приватность: `WidgetTypeService` принимает Version Draft во всех записях, `LibraryService.Release` — Version Draft и чистит стек после успеха, `LibraryService.Discard` синхронный (`ReplaceWidgetTypes`) и отвечает `{version}`, `GET …/libraries/{id}/draft` отдаёт Version Draft; `NewDiscardLibraryPolicy` удалён
+  - REST: create/delete WidgetType с версией (DELETE `?version=`), Release с версией Draft, Discard 200 `{version}`, поле `discarding_to` убрано; `api/v0` **0.17** (MINOR), `make schemas`
+  - apiclient/growctl: `LibraryClient.DraftState`, автоматическое заполнение Version Draft в create/update/delete/Release, Discard возвращает состояние Draft; growctl читает Draft Version для Release и печатает `discarded: version N`
+  - UI Library-режима: одна Version Draft на библиотеку (`uiutil.Versions` по ID библиотеки), Discard 200, удалены `discarding_to` и ожидание конца политики; кнопки undo — в 38_4
+  - Bruno: `GET …/draft`, версии Draft в телах WidgetType/Release, `?version=` у DELETE WidgetType, Discard 200
+  - AGENTS.md: Draft Library, Release и Discard, удалённые политика и пометка
+  - Тесты: домен Library (Release/Discard-операции, ResetTo/Recreate), репозиторий Draft Library (одна DraftChange на запись, CAS, `Replace` с перестановкой имён и очисткой стека), сервисы (Version Draft, Discard одной транзакцией, публикация событий), REST (версии, Discard 200, `GET …/draft`), UI, growctl, apiclient, seed-данные
+
 ## [0.0.64] - 2026-11-05
 
 ### Added

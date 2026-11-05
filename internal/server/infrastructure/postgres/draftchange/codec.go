@@ -85,6 +85,8 @@ func decodeState(kind draft.Kind, data []byte) (draft.State, error) {
 		state = &draft.EnvironmentDeviceState{}
 	case draft.KindLibraryPin:
 		state = &draft.LibraryPinState{}
+	case draft.KindWidgetType:
+		state = &draft.WidgetTypeState{}
 	default:
 		return nil, fmt.Errorf("unknown kind %q", kind)
 	}
@@ -106,6 +108,8 @@ func decodeState(kind draft.Kind, data []byte) (draft.State, error) {
 	case *draft.EnvironmentDeviceState:
 		return *typed, nil
 	case *draft.LibraryPinState:
+		return *typed, nil
+	case *draft.WidgetTypeState:
 		return *typed, nil
 	}
 	return nil, fmt.Errorf("unknown state for kind %q", kind)

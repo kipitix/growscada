@@ -38,20 +38,15 @@ func newLibraryEvent(anEventType event.EventType, anID id.ID[Library], opts ...e
 // LibraryCreatedEvent is recorded by CreateLibrary.
 type LibraryCreatedEvent interface{ LibraryEvent }
 
-// LibraryUpdatedEvent is recorded by Library.Rename and Library.FinishDiscard.
+// LibraryUpdatedEvent is recorded by Library.Rename.
 type LibraryUpdatedEvent interface{ LibraryEvent }
 
 // LibraryDeletedEvent is recorded by Library.Delete.
 type LibraryDeletedEvent interface{ LibraryEvent }
 
-// LibraryDiscardStartedEvent is recorded by Library.StartDiscard: the
-// policy resetting the Draft keys its job by it.
-type LibraryDiscardStartedEvent interface{ LibraryEvent }
-
 type libraryCreatedEventImpl struct{ libraryEventImpl }
 type libraryUpdatedEventImpl struct{ libraryEventImpl }
 type libraryDeletedEventImpl struct{ libraryEventImpl }
-type libraryDiscardStartedEventImpl struct{ libraryEventImpl }
 
 func NewLibraryCreatedEvent(anID id.ID[Library], opts ...event.EventOption) LibraryCreatedEvent {
 	return &libraryCreatedEventImpl{newLibraryEvent(event.EventTypeLibraryCreated, anID, opts...)}
@@ -63,10 +58,6 @@ func NewLibraryUpdatedEvent(anID id.ID[Library], opts ...event.EventOption) Libr
 
 func NewLibraryDeletedEvent(anID id.ID[Library], opts ...event.EventOption) LibraryDeletedEvent {
 	return &libraryDeletedEventImpl{newLibraryEvent(event.EventTypeLibraryDeleted, anID, opts...)}
-}
-
-func NewLibraryDiscardStartedEvent(anID id.ID[Library], opts ...event.EventOption) LibraryDiscardStartedEvent {
-	return &libraryDiscardStartedEventImpl{newLibraryEvent(event.EventTypeLibraryDiscardStarted, anID, opts...)}
 }
 
 // LibraryReleasedEvent is recorded by CreateRelease: a new Library Release

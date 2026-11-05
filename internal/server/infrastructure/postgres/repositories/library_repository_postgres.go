@@ -43,31 +43,21 @@ func (r libraryRepositoryPostgresImpl) NextID() id.ID[library.Library] {
 // the update waits for a pin being added (which locks the row for share) and
 // a pin added later finds the row deleted.
 func (r libraryRepositoryPostgresImpl) Save(ctx context.Context, l library.Library) (library.Library, error) {
-	discardingTo := nullableRelease(l.DiscardingTo())
 	saved, err := r.store.save(ctx, l.ID(), l.Version(), l.PendingEvents(), rowWrite[library.Library]{
 		insert: func(tx *sql.Tx, next version.Version[library.Library]) error {
 			_, err := tx.ExecContext(ctx,
-				`INSERT INTO engineering.libraries (id, organization_id, name, discarding_to, version, deleted_at)
-				 VALUES ($1, $2, $3, $4, $5, CASE WHEN $6 THEN now() END)`,
-				l.ID().UUID(), l.OrganizationID().UUID(), l.Name().String(), discardingTo, next.Number(), l.IsDeleted(),
+				`INSERT INTO engineering.libraries (id, organization_id, name, version, deleted_at)
+				 VALUES ($1, $2, $3, $4, CASE WHEN $5 THEN now() END)`,
+				l.ID().UUID(), l.OrganizationID().UUID(), l.Name().String(), next.Number(), l.IsDeleted(),
 			)
 			return libraryWriteError("insert new library", err)
 		},
 		update: func(tx *sql.Tx, current, next version.Version[library.Library]) (bool, error) {
-			// Starting a Discard is an act over the whole Draft: the client
-			// must hold its EditLock, checked in the transaction of the mark
-			// (ADR 0015). Clearing the mark is the Discard policy's, which
-			// writes as the server.
-			if _, discarding := l.DiscardingTo(); discarding {
-				if err := checkLibraryEditLock(ctx, tx, l.ID()); err != nil {
-					return false, err
-				}
-			}
 			res, err := tx.ExecContext(ctx,
 				`UPDATE engineering.libraries
-				 SET name = $1, discarding_to = $2, version = $3, deleted_at = CASE WHEN $4 THEN now() END
-				 WHERE id = $5 AND version = $6 AND deleted_at IS NULL`,
-				l.Name().String(), discardingTo, next.Number(), l.IsDeleted(), l.ID().UUID(), current.Number(),
+				 SET name = $1, version = $2, deleted_at = CASE WHEN $3 THEN now() END
+				 WHERE id = $4 AND version = $5 AND deleted_at IS NULL`,
+				l.Name().String(), next.Number(), l.IsDeleted(), l.ID().UUID(), current.Number(),
 			)
 			if err != nil {
 				return false, libraryWriteError("update library", err)
@@ -79,9 +69,6 @@ func (r libraryRepositoryPostgresImpl) Save(ctx context.Context, l library.Libra
 			if n == 1 {
 				if l.IsDeleted() {
 					return true, r.checkNotPinned(ctx, tx, l.ID())
-				}
-				if release, discarding := l.DiscardingTo(); discarding {
-					return true, r.checkLatestRelease(ctx, tx, l.ID(), release)
 				}
 				return true, nil
 			}
@@ -101,25 +88,7 @@ func (r libraryRepositoryPostgresImpl) Save(ctx context.Context, l library.Libra
 	if err != nil {
 		return nil, err
 	}
-	release, _ := l.DiscardingTo()
-	return library.ReconstituteLibrary(l.ID(), l.OrganizationID(), l.Name(), l.IsDeleted(), release, saved), nil
-}
-
-// checkLatestRelease fails with ErrLibraryConflict unless release is the
-// latest of the library. The row is locked for update by then: a Release
-// committed before is seen, one after finds the Discard's mark (ADR 0012).
-func (r libraryRepositoryPostgresImpl) checkLatestRelease(ctx context.Context, tx *sql.Tx, anID id.ID[library.Library], release library.ReleaseNumber) error {
-	var latest int
-	err := tx.QueryRowContext(ctx,
-		`SELECT COALESCE(max(number), 0) FROM engineering.library_releases WHERE library_id = $1`, anID.UUID(),
-	).Scan(&latest)
-	if err != nil {
-		return fmt.Errorf("cannot find latest release of library %s: %w", anID, err)
-	}
-	if latest != release.Int() {
-		return fmt.Errorf("%w: discarding to %s, latest release %d", library.ErrLibraryConflict, release, latest)
-	}
-	return nil
+	return library.ReconstituteLibrary(l.ID(), l.OrganizationID(), l.Name(), l.IsDeleted(), saved), nil
 }
 
 // checkNotPinned fails with ErrLibraryPinned if a live Project pins the
@@ -138,11 +107,6 @@ func (r libraryRepositoryPostgresImpl) checkNotPinned(ctx context.Context, tx *s
 		return fmt.Errorf("%w: %s", library.ErrLibraryPinned, anID)
 	}
 	return nil
-}
-
-// nullableRelease is the discarding_to column of a Discard's mark.
-func nullableRelease(n library.ReleaseNumber, ok bool) sql.NullInt64 {
-	return sql.NullInt64{Int64: int64(n.Int()), Valid: ok}
 }
 
 // libraryWriteError maps a failed write of a libraries row: a name taken by a
@@ -180,7 +144,7 @@ func (r libraryRepositoryPostgresImpl) Delete(ctx context.Context, l library.Lib
 	})
 }
 
-const selectLibraryColumns = `id, organization_id, name, deleted_at IS NOT NULL, discarding_to, version`
+const selectLibraryColumns = `id, organization_id, name, deleted_at IS NOT NULL, version`
 
 func (r libraryRepositoryPostgresImpl) FindByID(ctx context.Context, anID id.ID[library.Library]) (library.Library, error) {
 	return r.findOne(ctx, anID, `WHERE id = $1 AND deleted_at IS NULL`, anID.UUID())
@@ -247,21 +211,14 @@ func scanLibrary(scan func(...any) error) (library.Library, error) {
 		rawID, rawOrgID uuid.UUID
 		rawName         string
 		deleted         bool
-		discardingTo    sql.NullInt64
 		rawVersion      int
 	)
-	if err := scan(&rawID, &rawOrgID, &rawName, &deleted, &discardingTo, &rawVersion); err != nil {
+	if err := scan(&rawID, &rawOrgID, &rawName, &deleted, &rawVersion); err != nil {
 		return nil, err
 	}
 	name, err := library.NewLibraryName(rawName)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create library name: %w", err)
-	}
-	var release library.ReleaseNumber
-	if discardingTo.Valid {
-		if release, err = library.NewReleaseNumber(int(discardingTo.Int64)); err != nil {
-			return nil, fmt.Errorf("cannot create release number: %w", err)
-		}
 	}
 	ver, err := version.New(version.WithNumber[library.Library](rawVersion))
 	if err != nil {
@@ -270,42 +227,6 @@ func scanLibrary(scan func(...any) error) (library.Library, error) {
 	return library.ReconstituteLibrary(
 		id.NewID(id.IDWithUUID[library.Library](rawID)),
 		id.NewID(id.IDWithUUID[organization.Organization](rawOrgID)),
-		name, deleted, release, ver,
+		name, deleted, ver,
 	), nil
-}
-
-// lockedLibrary is the row of a live Library as read under its lock.
-type lockedLibrary struct {
-	discardingTo sql.NullInt64
-	version      int
-}
-
-// lockLibraryRow locks the row of the live Library libraryID for share in
-// tx and returns it; one marked deleted (or removed) is not found. Every
-// write that depends on a Library's state takes it — a WidgetType of its
-// Draft, a new pin —, so a write of the row itself (a Discard's mark, a
-// rename, the mark of its deletion) waits for them, or they for it (ADR 0012).
-func lockLibraryRow(ctx context.Context, tx *sql.Tx, libraryID id.ID[library.Library]) (lockedLibrary, error) {
-	return lockLibraryRowFor(ctx, tx, libraryID, `FOR SHARE`)
-}
-
-// lockLibraryRowExclusive is lockLibraryRow for update: a release takes it so
-// that the writes of the Draft, which hold it for share, wait for the release
-// or it for them, and the Draft it reads is the one it copies.
-func lockLibraryRowExclusive(ctx context.Context, tx *sql.Tx, libraryID id.ID[library.Library]) (lockedLibrary, error) {
-	return lockLibraryRowFor(ctx, tx, libraryID, `FOR UPDATE`)
-}
-
-func lockLibraryRowFor(ctx context.Context, tx *sql.Tx, libraryID id.ID[library.Library], lock string) (lockedLibrary, error) {
-	var row lockedLibrary
-	err := tx.QueryRowContext(ctx,
-		`SELECT discarding_to, version FROM engineering.libraries WHERE id = $1 AND deleted_at IS NULL `+lock, libraryID.UUID(),
-	).Scan(&row.discardingTo, &row.version)
-	if errors.Is(err, sql.ErrNoRows) {
-		return row, id.NotFound(library.ErrLibraryNotFound, libraryID)
-	}
-	if err != nil {
-		return row, fmt.Errorf("cannot lock library %s: %w", libraryID, err)
-	}
-	return row, nil
 }

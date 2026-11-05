@@ -143,7 +143,6 @@ func main() {
 	// apart from event delivery (ADR 0008)
 	policyRunner := outbox.NewPolicyRunner(sqlDB, []application.Policy{
 		application.NewLibraryCleanupPolicy(libraryRepository),
-		application.NewDiscardLibraryPolicy(libraryRepository, releaseRepository, widgetTypeRepositories),
 		application.NewProjectCleanupPolicy(projectRepository, draftRepository, runtimeNode),
 	})
 	dispatcher.SetPolicyRunner(policyRunner)
@@ -189,7 +188,7 @@ func main() {
 	// API server
 	// Create services
 	projectContent := application.NewProjectContent(projectRepository, projectScopes, draftRepository, organizationID)
-	libraryContent := application.NewLibraryContent(libraryRepository, organizationID)
+	libraryContent := application.NewLibraryContent(libraryRepository, draftRepository, organizationID)
 	editLockService := application.NewEditLockService(projectContent, libraryContent, draftRepository)
 	projectService := application.NewProjectService(projectRepository, organizationID)
 	tagService := application.NewTagService(projectContent, runtimeNode)
@@ -204,8 +203,8 @@ func main() {
 		Projects:     projectService,
 		Tags:         tagService,
 		TagStates:    tagStateService,
-		Libraries:    application.NewLibraryService(libraryRepository, releaseRepository, widgetTypeRepositories, organizationID),
-		WidgetTypes:  application.NewWidgetTypeService(libraryRepository, widgetTypeRepositories, organizationID),
+		Libraries:    application.NewLibraryService(libraryContent, libraryRepository, releaseRepository, widgetTypeRepositories),
+		WidgetTypes:  application.NewWidgetTypeService(libraryContent, widgetTypeRepositories),
 		LibraryPins:  application.NewLibraryPinService(projectContent, libraryRepository, releaseRepository),
 		Scenes:       application.NewSceneService(projectContent),
 		Devices:      application.NewDeviceService(projectContent),

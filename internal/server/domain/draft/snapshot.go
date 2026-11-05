@@ -27,6 +27,7 @@ const (
 	KindEnvironment       Kind = "environment"
 	KindEnvironmentDevice Kind = "environment_device"
 	KindLibraryPin        Kind = "library_pin"
+	KindWidgetType        Kind = "widget_type"
 )
 
 // Snapshot is the full stored state of one entity of a Draft: its kind, its
@@ -121,6 +122,27 @@ type EnvironmentDeviceState struct {
 
 func (EnvironmentDeviceState) kind() Kind { return KindEnvironmentDevice }
 
+// WidgetTypeState is a WidgetType's row of a Library's Draft.
+type WidgetTypeState struct {
+	LibraryID      uuid.UUID        `json:"library_id"`
+	Name           string           `json:"name"`
+	HtmlTemplate   string           `json:"html_template"`
+	Script         string           `json:"script"`
+	ScriptLanguage string           `json:"script_language"`
+	DefaultWidth   int              `json:"default_width"`
+	DefaultHeight  int              `json:"default_height"`
+	InputPorts     []InputPortState `json:"input_ports"`
+}
+
+func (WidgetTypeState) kind() Kind { return KindWidgetType }
+
+// InputPortState is one InputPort of a WidgetType's row.
+type InputPortState struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	TypeHint    string `json:"type_hint"`
+}
+
 // LibraryPinState is a pin's row; its ID is the Library's.
 type LibraryPinState struct {
 	LibraryID uuid.UUID `json:"library_id"`
@@ -196,6 +218,27 @@ func SnapshotOfEnvironmentDevice(p device.EnvironmentDevice) Snapshot {
 		DeviceID:      p.DeviceID().UUID(),
 		Params:        json.RawMessage(p.Params().Bytes()),
 	}}
+}
+
+// SnapshotOfWidgetType is the snapshot of a WidgetType of a Library's Draft.
+func SnapshotOfWidgetType(wt library.WidgetType) Snapshot {
+	ports := wt.InputPorts()
+	state := WidgetTypeState{
+		LibraryID:      wt.LibraryID().UUID(),
+		Name:           wt.Name().String(),
+		HtmlTemplate:   wt.HtmlTemplate().String(),
+		Script:         wt.Script().String(),
+		ScriptLanguage: wt.ScriptLanguage().String(),
+		DefaultWidth:   wt.DefaultSize().Width(),
+		DefaultHeight:  wt.DefaultSize().Height(),
+		InputPorts:     make([]InputPortState, len(ports)),
+	}
+	for i, p := range ports {
+		state.InputPorts[i] = InputPortState{
+			Name: p.Name().String(), Description: p.Description(), TypeHint: p.TypeHint().String(),
+		}
+	}
+	return Snapshot{Kind: KindWidgetType, ID: wt.ID().UUID(), State: state}
 }
 
 // SnapshotOfLibraryPin is the snapshot of a pin; its ID is the Library's.
@@ -278,6 +321,50 @@ func (s Snapshot) EnvironmentDevice(projectID id.ID[project.Project]) (device.En
 		id.NewID(id.IDWithUUID[device.Environment](state.EnvironmentID)),
 		id.NewID(id.IDWithUUID[device.Device](state.DeviceID)),
 		params), nil
+}
+
+// WidgetType returns the WidgetType the snapshot carries, of the Library
+// libraryID. It is how a write of a restored snapshot (and undo, ADR 0017)
+// rebuilds the entity.
+func (s Snapshot) WidgetType(libraryID id.ID[library.Library]) (library.WidgetType, error) {
+	state, ok := s.State.(WidgetTypeState)
+	if !ok {
+		return nil, fmt.Errorf("snapshot of %s carries %T, not a widget type", s.ID, s.State)
+	}
+	name, err := library.NewWidgetTypeName(state.Name)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot of widget type %s: %w", s.ID, err)
+	}
+	html, err := library.NewHtmlTemplate(state.HtmlTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot of widget type %s: %w", s.ID, err)
+	}
+	script, err := library.NewScript(state.Script)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot of widget type %s: %w", s.ID, err)
+	}
+	language, err := library.NewScriptLanguage(state.ScriptLanguage)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot of widget type %s: %w", s.ID, err)
+	}
+	size, err := library.NewSize(state.DefaultWidth, state.DefaultHeight)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot of widget type %s: %w", s.ID, err)
+	}
+	ports := make([]library.InputPort, len(state.InputPorts))
+	for i, p := range state.InputPorts {
+		portName, err := library.NewInputPortName(p.Name)
+		if err != nil {
+			return nil, fmt.Errorf("snapshot of widget type %s: %w", s.ID, err)
+		}
+		hint, err := library.NewPortTypeHint(p.TypeHint)
+		if err != nil {
+			return nil, fmt.Errorf("snapshot of widget type %s: %w", s.ID, err)
+		}
+		ports[i] = library.NewInputPort(portName, p.Description, hint)
+	}
+	return library.ReconstituteWidgetType(id.NewID(id.IDWithUUID[library.WidgetType](s.ID)),
+		libraryID, name, html, script, language, size, ports)
 }
 
 // LibraryPin returns the pin the snapshot carries, at the Project projectID.

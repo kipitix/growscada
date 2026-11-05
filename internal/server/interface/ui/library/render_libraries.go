@@ -76,8 +76,6 @@ func (l *Library) renderLibraryStatus() app.UI {
 	}
 	var status string
 	switch {
-	case lib.DiscardingTo != 0:
-		status = "Discarding to release " + itoa(lib.DiscardingTo) + "… the Draft is read-only."
 	case lib.LatestRelease == 0:
 		status = "Never released."
 	case lib.HasUnreleasedChanges:
@@ -85,7 +83,7 @@ func (l *Library) renderLibraryStatus() app.UI {
 	default:
 		status = "Release " + itoa(lib.LatestRelease) + " · up to date"
 	}
-	editable := lib.DiscardingTo == 0 && l.lockMine()
+	editable := l.lockMine()
 	releaseHint := "Release the Draft as the next Library Release"
 	discardHint := "Reset the Draft to its latest release"
 	if !l.lockMine() {

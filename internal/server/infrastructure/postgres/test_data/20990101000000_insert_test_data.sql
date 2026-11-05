@@ -63,7 +63,7 @@ INSERT INTO runtime.tag_states (tag_id, value, quality, seq) VALUES
 -- input_ports: JSON array of {name, description, type_hint}; type_hint: "" | "string" | "boolean" | "integer"
 -- version: default committed version is 1
 -- library_id: the Library whose Draft holds the type
-INSERT INTO engineering.widget_types (id, library_id, name, html_template, script, script_language, input_ports, default_width, default_height, version) VALUES
+INSERT INTO engineering.widget_types (id, library_id, name, html_template, script, script_language, input_ports, default_width, default_height) VALUES
     (
         'a1b2c3d4-0001-4000-8000-000000000001',
         'd0000000-0000-4000-8000-000000000001',
@@ -73,8 +73,7 @@ INSERT INTO engineering.widget_types (id, library_id, name, html_template, scrip
         'javascript',
         '[{"name":"state","description":"Active state (true = green, false = gray)","type_hint":"boolean"}]',
         80,
-        80,
-        1
+        80
     ),
     (
         'a1b2c3d4-0002-4000-8000-000000000002',
@@ -85,8 +84,7 @@ INSERT INTO engineering.widget_types (id, library_id, name, html_template, scrip
         'javascript',
         '[{"name":"value","description":"Integer value (0-100)","type_hint":"integer"}]',
         120,
-        120,
-        1
+        120
     ),
     (
         'a1b2c3d4-0005-4000-8000-000000000003',
@@ -97,14 +95,13 @@ INSERT INTO engineering.widget_types (id, library_id, name, html_template, scrip
         'javascript',
         '[{"name":"value","description":"String value to display","type_hint":"string"}]',
         280,
-        32,
-        1
+        32
     );
 
 -- A second Library with one WidgetType
 INSERT INTO engineering.libraries (id, organization_id, name, version) VALUES
     ('d0000000-0000-4000-8000-000000000002', 'a0000000-0000-4000-8000-000000000001', 'Extras', 1);
-INSERT INTO engineering.widget_types (id, library_id, name, html_template, script, script_language, input_ports, default_width, default_height, version) VALUES
+INSERT INTO engineering.widget_types (id, library_id, name, html_template, script, script_language, input_ports, default_width, default_height) VALUES
     (
         'a1b2c3d4-0006-4000-8000-000000000006',
         'd0000000-0000-4000-8000-000000000002',
@@ -114,8 +111,7 @@ INSERT INTO engineering.widget_types (id, library_id, name, html_template, scrip
         'javascript',
         '[{"name":"value","description":"Integer value (0-100)","type_hint":"integer"}]',
         160,
-        24,
-        1
+        24
     );
 
 -- The Library Releases: release 1 of Main (made empty by the migrations)

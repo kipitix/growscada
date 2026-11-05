@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/google/uuid"
@@ -42,7 +43,12 @@ func newRouterWithWidgetTypes() testRouter {
 
 func createWidgetTypeViaService(t *testing.T, input appdto.WidgetTypeInput) appdto.WidgetType {
 	t.Helper()
-	resp, err := newServices().widgetTypes.CreateWidgetType(editlock.System(context.Background()), wtLibrary, input)
+	services := newServices()
+	state, err := services.libraries.DraftState(editlock.System(context.Background()), wtLibrary)
+	if err != nil {
+		t.Fatalf("createWidgetTypeViaService: draft state: %v", err)
+	}
+	resp, err := services.widgetTypes.CreateWidgetType(editlock.System(context.Background()), wtLibrary, state.Version, input)
 	if err != nil {
 		t.Fatalf("createWidgetTypeViaService: %v", err)
 	}
@@ -171,6 +177,7 @@ func TestPostWidgetTypes_Valid_Returns201WithID(t *testing.T) {
 	router := newRouterWithWidgetTypes()
 
 	body, _ := json.Marshal(apiv0.CreateWidgetTypeRequest{
+		Version:        1,
 		Name:           "gauge",
 		HtmlTemplate:   "<div class='gauge'></div>",
 		Script:         "render()",
@@ -215,6 +222,7 @@ func TestPostWidgetTypes_InvalidScriptLanguage_Returns400(t *testing.T) {
 	router := newRouterWithWidgetTypes()
 
 	body, _ := json.Marshal(apiv0.CreateWidgetTypeRequest{
+		Version:        1,
 		Name:           "x",
 		HtmlTemplate:   "<div/>",
 		Script:         "x",
@@ -268,7 +276,7 @@ func TestPutWidgetTypesByID_NotFound_Returns404(t *testing.T) {
 	router := newRouterWithWidgetTypes()
 
 	body, _ := json.Marshal(apiv0.UpdateWidgetTypeRequest{
-		Name: "x", HtmlTemplate: "<div/>", Script: "x", ScriptLanguage: "lua",
+		Version: 1, Name: "x", HtmlTemplate: "<div/>", Script: "x", ScriptLanguage: "lua",
 	})
 	req := httptest.NewRequest(http.MethodPut, wtPath+"/"+uuid.New().String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -285,7 +293,7 @@ func TestPutWidgetTypesByID_InvalidUUID_Returns400(t *testing.T) {
 	router := newRouterWithWidgetTypes()
 
 	body, _ := json.Marshal(apiv0.UpdateWidgetTypeRequest{
-		Name: "x", HtmlTemplate: "<div/>", Script: "x", ScriptLanguage: "lua",
+		Version: 1, Name: "x", HtmlTemplate: "<div/>", Script: "x", ScriptLanguage: "lua",
 	})
 	req := httptest.NewRequest(http.MethodPut, wtPath+"/not-a-uuid", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -299,13 +307,13 @@ func TestPutWidgetTypesByID_InvalidUUID_Returns400(t *testing.T) {
 
 func TestPutWidgetTypesByID_Conflict_Returns409(t *testing.T) {
 	cleanWidgetTypes(t)
-	svc := &stubWidgetTypeService{updateErr: library.ErrWidgetTypeConflict}
+	svc := &stubWidgetTypeService{updateErr: library.ErrWidgetTypeNameTaken}
 	services := newServices()
 	services.widgetTypes = svc
 	router := services.router()
 
 	body, _ := json.Marshal(apiv0.UpdateWidgetTypeRequest{
-		Name: "x", HtmlTemplate: "<div/>", Script: "x", ScriptLanguage: "lua",
+		Version: 1, Name: "x", HtmlTemplate: "<div/>", Script: "x", ScriptLanguage: "lua",
 	})
 	req := httptest.NewRequest(http.MethodPut, wtPath+"/"+uuid.New().String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -334,7 +342,7 @@ func TestDeleteWidgetTypesByID_Existing_Returns200WithDeletedItem(t *testing.T) 
 	created := createWidgetTypeViaService(t, testWtInput)
 	router := newRouterWithWidgetTypes()
 
-	req := httptest.NewRequest(http.MethodDelete, wtPath+"/"+created.ID.String(), nil)
+	req := httptest.NewRequest(http.MethodDelete, wtPath+"/"+created.ID.String()+"?version="+strconv.Itoa(created.Version), nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 
@@ -354,7 +362,7 @@ func TestDeleteWidgetTypesByID_NotFound_Returns404(t *testing.T) {
 	cleanWidgetTypes(t)
 	router := newRouterWithWidgetTypes()
 
-	req := httptest.NewRequest(http.MethodDelete, wtPath+"/"+uuid.New().String(), nil)
+	req := httptest.NewRequest(http.MethodDelete, wtPath+"/"+uuid.New().String()+"?version=1", nil)
 	rec := httptest.NewRecorder()
 	router.ServeMux().ServeHTTP(rec, req)
 

@@ -62,7 +62,7 @@ func (h WidgetTypesHandlers) PostWidgetTypes(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	created, err := h.service.CreateWidgetType(r.Context(), libraryID, newCreateWidgetTypeInput(request))
+	created, err := h.service.CreateWidgetType(r.Context(), libraryID, request.Version, newCreateWidgetTypeInput(request))
 	if err != nil {
 		sendError(w, r, err)
 		return
@@ -96,7 +96,8 @@ func (h WidgetTypesHandlers) PutWidgetTypesByID(w http.ResponseWriter, r *http.R
 	sendJSONResponse(w, http.StatusOK, newUpdateWidgetTypeResponse(updated))
 }
 
-// DeleteWidgetTypesByID handles DELETE /libraries/{library_id}/widget-types/{widget_type_id}
+// DeleteWidgetTypesByID handles DELETE /libraries/{library_id}/widget-types/{widget_type_id}?version=<n>,
+// stating the Version of the library's Draft.
 func (h WidgetTypesHandlers) DeleteWidgetTypesByID(w http.ResponseWriter, r *http.Request) {
 	libraryID, ok := pathUUID(w, r, libraryResource)
 	if !ok {
@@ -106,8 +107,12 @@ func (h WidgetTypesHandlers) DeleteWidgetTypesByID(w http.ResponseWriter, r *htt
 	if !ok {
 		return
 	}
+	version, ok := versionQuery(w, r)
+	if !ok {
+		return
+	}
 
-	deleted, err := h.service.DeleteWidgetTypeByID(r.Context(), libraryID, inID)
+	deleted, err := h.service.DeleteWidgetTypeByID(r.Context(), libraryID, inID, version)
 	if err != nil {
 		sendError(w, r, err)
 		return

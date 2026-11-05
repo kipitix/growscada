@@ -101,11 +101,11 @@ func TestWidgetTypes_RoundTrip(t *testing.T) {
 		t.Fatalf("ListWidgetTypes: %+v, %v", list, err)
 	}
 
-	release, err := lib.Release(ctx, apiv0.CreateReleaseRequest{Note: "first", Version: 1})
+	release, err := lib.Release(ctx, apiv0.CreateReleaseRequest{Note: "first", Version: updated.Version})
 	if err != nil || release.Number != 1 || len(release.WidgetTypes) != 1 {
 		t.Fatalf("Release: %+v, %v", release, err)
 	}
-	if _, err := lib.Release(ctx, apiv0.CreateReleaseRequest{Version: 1}); !errors.Is(err, apiclient.ErrConflict) {
+	if _, err := lib.Release(ctx, apiv0.CreateReleaseRequest{Version: updated.Version}); !errors.Is(err, apiclient.ErrConflict) {
 		t.Errorf("Release of an unchanged Draft: %v, want ErrConflict", err)
 	}
 	if releases, err := lib.ListReleases(ctx); err != nil || len(releases) != 1 {
@@ -126,7 +126,7 @@ func TestWidgetTypes_RoundTrip(t *testing.T) {
 	if err != nil || len(palette) != 1 || palette[0].ID != created.ID {
 		t.Errorf("the project's widget types: %+v, %v", palette, err)
 	}
-	if deleted, err := lib.DeleteWidgetType(ctx, created.ID); err != nil || deleted.ID != created.ID {
+	if deleted, err := lib.DeleteWidgetType(ctx, created.ID, updated.Version); err != nil || deleted.ID != created.ID {
 		t.Fatalf("DeleteWidgetType: %+v, %v", deleted, err)
 	}
 	if _, err := lib.GetWidgetType(ctx, created.ID); !errors.Is(err, apiclient.ErrNotFound) {
@@ -141,9 +141,9 @@ func TestWidgetTypes_RoundTrip(t *testing.T) {
 	if _, err := project.UnpinLibrary(ctx, lib.ID(), 0); err != nil {
 		t.Fatalf("UnpinLibrary: %v", err)
 	}
-	discarding, err := lib.Discard(ctx)
-	if err != nil || discarding.DiscardingTo != 1 {
-		t.Errorf("Discard: %+v, %v", discarding, err)
+	discarded, err := lib.Discard(ctx)
+	if err != nil || discarded.Version <= updated.Version {
+		t.Errorf("Discard: %+v, %v", discarded, err)
 	}
 }
 
@@ -172,7 +172,7 @@ func pinnedType(t *testing.T, client *apiclient.Client, req apiv0.CreateWidgetTy
 	if err != nil {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
-	release, err := lib.Release(ctx, apiv0.CreateReleaseRequest{Version: 1})
+	release, err := lib.Release(ctx, apiv0.CreateReleaseRequest{})
 	if err != nil {
 		t.Fatalf("Release: %v", err)
 	}

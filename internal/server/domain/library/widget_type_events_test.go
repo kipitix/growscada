@@ -6,7 +6,6 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
-	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 func makeCommittedWidgetType(t *testing.T) WidgetType {
@@ -14,7 +13,7 @@ func makeCommittedWidgetType(t *testing.T) WidgetType {
 	name, _ := NewWidgetTypeName("gauge")
 	html, _ := NewHtmlTemplate("<div></div>")
 	script, _ := NewScript("")
-	wt, err := ReconstituteWidgetType(id.NewID[WidgetType](), testLibraryID, name, html, script, ScriptLanguageJavaScript, DefaultSize(), nil, version.Committed[WidgetType]())
+	wt, err := ReconstituteWidgetType(id.NewID[WidgetType](), testLibraryID, name, html, script, ScriptLanguageJavaScript, DefaultSize(), nil)
 	if err != nil {
 		t.Fatalf("ReconstituteWidgetType: %v", err)
 	}
@@ -29,7 +28,7 @@ func pendingTypes(r event.Recorder) []event.EventType {
 	return types
 }
 
-func TestCreateWidgetType_RecordsCreatedEventAtInitialVersion(t *testing.T) {
+func TestCreateWidgetType_RecordsCreatedEvent(t *testing.T) {
 	name, _ := NewWidgetTypeName("gauge")
 	html, _ := NewHtmlTemplate("<div></div>")
 	script, _ := NewScript("")
@@ -38,9 +37,6 @@ func TestCreateWidgetType_RecordsCreatedEventAtInitialVersion(t *testing.T) {
 	wt, err := CreateWidgetType(anID, testLibraryID, name, html, script, ScriptLanguageJavaScript, DefaultSize(), nil)
 	if err != nil {
 		t.Fatalf("CreateWidgetType: %v", err)
-	}
-	if wt.Version() != version.Initial[WidgetType]() {
-		t.Errorf("expected initial version, got %s", wt.Version())
 	}
 	events := wt.PendingEvents()
 	if len(events) != 1 {
@@ -65,13 +61,13 @@ func TestWidgetType_Update_ChangesDefinitionAndRecordsUpdated(t *testing.T) {
 	script, _ := NewScript("update()")
 	size, _ := NewSize(40, 120)
 
-	updated, err := wt.Update(wt.Version(), name, html, script, ScriptLanguagePython, size, nil)
+	updated, err := wt.Update(name, html, script, ScriptLanguagePython, size, nil)
 	if err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 
-	if updated.ID() != wt.ID() || updated.Version() != wt.Version() {
-		t.Errorf("Update must keep ID and Version, got %s/%s", updated.ID(), updated.Version())
+	if updated.ID() != wt.ID() {
+		t.Errorf("Update must keep the ID, got %s/%s", updated.ID(), wt.ID())
 	}
 	if updated.Name() != name || updated.HtmlTemplate() != html || updated.Script() != script ||
 		updated.ScriptLanguage() != ScriptLanguagePython || updated.DefaultSize() != size {
@@ -85,15 +81,6 @@ func TestWidgetType_Update_ChangesDefinitionAndRecordsUpdated(t *testing.T) {
 	}
 }
 
-func TestWidgetType_Update_StaleVersion_ReturnsConflict(t *testing.T) {
-	wt := makeCommittedWidgetType(t)
-
-	_, err := wt.Update(version.Initial[WidgetType](), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.DefaultSize(), nil)
-	if !errors.Is(err, ErrWidgetTypeConflict) {
-		t.Errorf("expected ErrWidgetTypeConflict, got %v", err)
-	}
-}
-
 func TestWidgetType_Update_DuplicatePortNames_ReturnsInvalidWidgetType(t *testing.T) {
 	wt := makeCommittedWidgetType(t)
 	portName, _ := NewInputPortName("value")
@@ -102,12 +89,9 @@ func TestWidgetType_Update_DuplicatePortNames_ReturnsInvalidWidgetType(t *testin
 		NewInputPort(portName, "", AnyTypeHint()),
 	}
 
-	_, err := wt.Update(wt.Version(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.DefaultSize(), ports)
+	_, err := wt.Update(wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.DefaultSize(), ports)
 	if !errors.Is(err, ErrDuplicateInputPortName) || !errors.Is(err, ErrInvalidWidgetType) {
 		t.Errorf("expected ErrInvalidWidgetType and ErrDuplicateInputPortName, got %v", err)
-	}
-	if errors.Is(err, ErrWidgetTypeConflict) {
-		t.Errorf("an invalid definition is no conflict: %v", err)
 	}
 }
 

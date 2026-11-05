@@ -13,6 +13,7 @@ http:
     type: json
     data: |-
       {
+        "version": 1,
         "name": "pressure gauge",
         "html_template": "<div class=\"gauge\"><span class=\"value\"></span></div>",
         "script": "function render(inputs) { document.querySelector('.value').textContent = inputs.pressure.value; }",

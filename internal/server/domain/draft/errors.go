@@ -3,6 +3,8 @@ package draft
 import (
 	"errors"
 	"fmt"
+
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
 )
 
 // ErrDraftConflict is the one edit conflict of a Draft's content: the Version
@@ -13,11 +15,13 @@ import (
 var ErrDraftConflict = errors.New("draft version conflict")
 
 // ConflictError is a write that lost ErrDraftConflict, with the Version it
-// stated and the one stored. The API names the current Version in its Problem,
-// so a client can retry without rereading the Draft.
+// stated, the one stored and the Draft it belongs to. The API names the
+// current Version in its Problem, so a client can retry without rereading the
+// Draft.
 type ConflictError struct {
 	Expected int
 	Current  int
+	Scope    editlock.Scope
 }
 
 func (e ConflictError) Error() string {

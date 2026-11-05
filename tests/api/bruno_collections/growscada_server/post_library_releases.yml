@@ -14,13 +14,14 @@ http:
     data: |-
       {
         "note": "with the pressure gauge",
-        "version": 1
+        "version": 2
       }
   auth: inherit
 
 docs: |
   Releases the Draft as it is: the next release of the library, the latest
-  plus one. `version` must be the library's current version.
+  plus one. `version` must be the Version of the library's Draft the client
+  saw (ADR 0016).
 
 runtime:
   assertions:

@@ -37,14 +37,13 @@ var (
 	EventTypeProjectUpdated     = EventType{eventType: 17}
 	EventTypeProjectDeleted     = EventType{eventType: 18}
 
-	EventTypeLibraryCreated        = EventType{eventType: 19}
-	EventTypeLibraryUpdated        = EventType{eventType: 20}
-	EventTypeLibraryDeleted        = EventType{eventType: 21}
-	EventTypeLibraryDiscardStarted = EventType{eventType: 22}
-	EventTypeLibraryReleased       = EventType{eventType: 23}
-	EventTypeLibraryPinCreated     = EventType{eventType: 24}
-	EventTypeLibraryPinUpdated     = EventType{eventType: 25}
-	EventTypeLibraryPinDeleted     = EventType{eventType: 26}
+	EventTypeLibraryCreated    = EventType{eventType: 19}
+	EventTypeLibraryUpdated    = EventType{eventType: 20}
+	EventTypeLibraryDeleted    = EventType{eventType: 21}
+	EventTypeLibraryReleased   = EventType{eventType: 23}
+	EventTypeLibraryPinCreated = EventType{eventType: 24}
+	EventTypeLibraryPinUpdated = EventType{eventType: 25}
+	EventTypeLibraryPinDeleted = EventType{eventType: 26}
 
 	EventTypeDeviceCreated            = EventType{eventType: 27}
 	EventTypeDeviceUpdated            = EventType{eventType: 28}
@@ -92,7 +91,6 @@ var eventTypeNames = []struct {
 	{EventTypeLibraryCreated, "library_created"},
 	{EventTypeLibraryUpdated, "library_updated"},
 	{EventTypeLibraryDeleted, "library_deleted"},
-	{EventTypeLibraryDiscardStarted, "library_discard_started"},
 	{EventTypeLibraryReleased, "library_released"},
 	{EventTypeLibraryPinCreated, "library_pin_created"},
 	{EventTypeLibraryPinUpdated, "library_pin_updated"},

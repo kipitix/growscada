@@ -13,7 +13,7 @@ type InputPort struct {
 }
 
 // WidgetType is the application-layer DTO for widget type data: a
-// WidgetType of a Library's Draft, at its Version.
+// WidgetType of a Library's Draft, at the Draft's Version.
 type WidgetType struct {
 	ID             uuid.UUID
 	LibraryID      uuid.UUID
@@ -40,8 +40,9 @@ type WidgetTypeInput struct {
 	InputPorts     []InputPort
 }
 
-// NewWidgetType creates a WidgetType DTO from the domain aggregate.
-func NewWidgetType(wt library.WidgetType) WidgetType {
+// NewWidgetType creates a WidgetType DTO from the domain aggregate; version
+// is the Version of the Library's Draft.
+func NewWidgetType(wt library.WidgetType, version int) WidgetType {
 	return WidgetType{
 		ID:             wt.ID().UUID(),
 		LibraryID:      wt.LibraryID().UUID(),
@@ -52,7 +53,7 @@ func NewWidgetType(wt library.WidgetType) WidgetType {
 		DefaultWidth:   wt.DefaultSize().Width(),
 		DefaultHeight:  wt.DefaultSize().Height(),
 		InputPorts:     newInputPorts(wt.InputPorts()),
-		Version:        wt.Version().Number(),
+		Version:        version,
 	}
 }
 
@@ -107,11 +108,12 @@ func NewReleasedWidgetTypeList(list []library.ReleasedWidgetType) []ReleasedWidg
 	return result
 }
 
-// NewWidgetTypeList creates a slice of WidgetType DTOs from domain aggregates.
-func NewWidgetTypeList(list []library.WidgetType) []WidgetType {
+// NewWidgetTypeList creates a slice of WidgetType DTOs from domain
+// aggregates, all at the Version of their Library's Draft.
+func NewWidgetTypeList(list []library.WidgetType, version int) []WidgetType {
 	result := make([]WidgetType, len(list))
 	for i, wt := range list {
-		result[i] = NewWidgetType(wt)
+		result[i] = NewWidgetType(wt, version)
 	}
 	return result
 }

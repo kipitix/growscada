@@ -9,6 +9,8 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/editlock"
+	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
 
@@ -44,8 +46,8 @@ func ensurePinnedType(t *testing.T, libraryID uuid.UUID, libraryName string, typ
 		args  []any
 	}{
 		{`INSERT INTO engineering.widget_types
-		    (id, library_id, name, html_template, script, script_language, input_ports, default_width, default_height, version)
-		 VALUES ($2, $1, $3, '<div></div>', 'function update(){}', 'javascript', '[]', 100, 100, 1)
+		    (id, library_id, name, html_template, script, script_language, input_ports, default_width, default_height)
+		 VALUES ($2, $1, $3, '<div></div>', 'function update(){}', 'javascript', '[]', 100, 100)
 		 ON CONFLICT (id) DO NOTHING`, []any{libraryID, typeID, typeName}},
 		{`INSERT INTO engineering.library_releases (library_id, number) VALUES ($1, 1) ON CONFLICT DO NOTHING`, []any{libraryID}},
 		{`INSERT INTO engineering.released_widget_types
@@ -66,9 +68,33 @@ func ensurePinnedType(t *testing.T, libraryID uuid.UUID, libraryName string, typ
 	}
 }
 
+// newLibraryContent opens the Libraries over the test database, their writes
+// through the Drafts.
+func newLibraryContent(opts ...repositories.Option) application.LibraryContent {
+	return application.NewLibraryContent(repositories.NewLibraryRepositoryPostgres(testDB, opts...),
+		repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB, opts...), opts...),
+		soleOrganization())
+}
+
 func newLibraryService() application.LibraryService {
-	return application.NewLibraryService(repositories.NewLibraryRepositoryPostgres(testDB), repositories.NewLibraryReleaseRepositoryPostgres(testDB),
-		repositories.NewWidgetTypeRepositories(testDB), soleOrganization())
+	return application.NewLibraryService(newLibraryContent(), repositories.NewLibraryRepositoryPostgres(testDB),
+		repositories.NewLibraryReleaseRepositoryPostgres(testDB), repositories.NewWidgetTypeRepositories(testDB))
+}
+
+// libraryDraftVersionOf returns the Version of a Library's Draft, 1 for one
+// never written.
+func libraryDraftVersionOf(t *testing.T, libraryID uuid.UUID) int {
+	t.Helper()
+	drafts := repositories.NewDraftRepositoryPostgres(testDB, nil)
+	found, ok, err := drafts.Read(editlock.System(context.Background()),
+		editlock.LibraryScope(id.NewID(id.IDWithUUID[library.Library](libraryID))))
+	if err != nil {
+		t.Fatalf("read the draft of library %s: %v", libraryID, err)
+	}
+	if !ok {
+		return 1
+	}
+	return found.Version().Number()
 }
 
 func newLibraryPinService() application.LibraryPinService {
@@ -89,11 +115,10 @@ func mustCreateLibrary(t *testing.T) appdto.Library {
 func mustReleaseLibrary(t *testing.T, libraryID uuid.UUID) appdto.LibraryRelease {
 	t.Helper()
 	svc := newLibraryService()
-	lib, err := svc.FindLibraryByID(editlock.System(context.Background()), libraryID)
-	if err != nil {
+	if _, err := svc.FindLibraryByID(editlock.System(context.Background()), libraryID); err != nil {
 		t.Fatalf("FindLibraryByID: %v", err)
 	}
-	release, err := svc.Release(editlock.System(context.Background()), libraryID, lib.Version, appdto.ReleaseInput{})
+	release, err := svc.Release(editlock.System(context.Background()), libraryID, libraryDraftVersionOf(t, libraryID), appdto.ReleaseInput{})
 	if err != nil {
 		t.Fatalf("Release: %v", err)
 	}
@@ -116,7 +141,7 @@ func pinNewWidgetType(t *testing.T, projectID uuid.UUID, input appdto.WidgetType
 	if input.DefaultWidth == 0 {
 		input.DefaultWidth, input.DefaultHeight = 100, 100
 	}
-	wt, err := newWidgetTypeService().CreateWidgetType(ctx, lib.ID, input)
+	wt, err := newWidgetTypeService().CreateWidgetType(ctx, lib.ID, libraryDraftVersionOf(t, lib.ID), input)
 	if err != nil {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}

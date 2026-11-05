@@ -14,7 +14,7 @@ http:
     data: |-
       {
         "note": "",
-        "version": 1
+        "version": 2
       }
   auth: inherit
 

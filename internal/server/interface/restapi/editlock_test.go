@@ -241,20 +241,6 @@ func TestGatedWrite_OverREST(t *testing.T) {
 	}
 }
 
-// markDiscarding marks the Main project as being discarded, as a Discard
-// under way does, without needing a Revision.
-func markDiscarding(t *testing.T) {
-	t.Helper()
-	if _, err := testDB().ExecContext(editlock.System(context.Background()),
-		`UPDATE projects SET discarding = true WHERE id = $1`, mainProject); err != nil {
-		t.Fatalf("mark discarding: %v", err)
-	}
-	t.Cleanup(func() {
-		_, _ = testDB().ExecContext(editlock.System(context.Background()),
-			`UPDATE projects SET discarding = false WHERE id = $1`, mainProject)
-	})
-}
-
 // newLockLibrary creates a library through the raw router and returns its
 // path and ID: creation is not gated, so it needs no client.
 func newLockLibrary(t *testing.T, router servingRouter) (string, uuid.UUID) {
@@ -347,7 +333,7 @@ func TestGatedLibraryWrite_OverREST(t *testing.T) {
 	lp, _ := newLockLibrary(t, router)
 
 	wt := apiv0.CreateWidgetTypeRequest{
-		Name: "gated", HtmlTemplate: "<div/>", ScriptLanguage: "javascript", DefaultWidth: 10, DefaultHeight: 10,
+		Version: 1, Name: "gated", HtmlTemplate: "<div/>", ScriptLanguage: "javascript", DefaultWidth: 10, DefaultHeight: 10,
 	}
 	if rec := callAs(t, router, http.MethodPost, lp+"/widget-types", wt, ""); rec.Code != http.StatusBadRequest {
 		t.Errorf("write without a client: %d, want 400", rec.Code)
@@ -373,36 +359,3 @@ func TestGatedLibraryWrite_OverREST(t *testing.T) {
 	}
 }
 
-// TestLibraryCheckOut_WhileDiscarding_Is409: a Discard under way makes the
-// Draft read-only, a Check out included (ADR 0015).
-func TestLibraryCheckOut_WhileDiscarding_Is409(t *testing.T) {
-	cleanEditLocksRest(t)
-	router := lockRouter()
-	lp, libraryID := newLockLibrary(t, router)
-	markLibraryDiscarding(t, libraryID)
-
-	rec := callAs(t, router, http.MethodPost, lp+apiv0.EditLockPath,
-		apiv0.CheckOutEditLockRequest{Name: "alice"}, aliceKey.String())
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("check out while discarding: %d %s, want 409", rec.Code, rec.Body)
-	}
-	var problem apiv0.Problem
-	_ = json.NewDecoder(rec.Body).Decode(&problem)
-	if problem.Detail == "" {
-		t.Errorf("no detail of the refusal")
-	}
-}
-
-// markLibraryDiscarding marks the library as being discarded, as a Discard
-// under way does, without needing a release.
-func markLibraryDiscarding(t *testing.T, libraryID uuid.UUID) {
-	t.Helper()
-	if _, err := testDB().ExecContext(editlock.System(context.Background()),
-		`UPDATE engineering.libraries SET discarding_to = 1 WHERE id = $1`, libraryID); err != nil {
-		t.Fatalf("mark discarding: %v", err)
-	}
-	t.Cleanup(func() {
-		_, _ = testDB().ExecContext(editlock.System(context.Background()),
-			`UPDATE engineering.libraries SET discarding_to = NULL WHERE id = $1`, libraryID)
-	})
-}

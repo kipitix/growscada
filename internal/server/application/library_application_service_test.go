@@ -23,22 +23,22 @@ func TestLibraryService_ReleaseNumbersAndRefusesAnUnchangedDraft(t *testing.T) {
 	if !lib.HasUnreleasedChanges || lib.LatestRelease != 0 {
 		t.Errorf("a new library: %+v, want unreleased changes and no release", lib)
 	}
-	if _, err := svc.Release(ctx, lib.ID, lib.Version+1, appdto.ReleaseInput{}); !errors.Is(err, library.ErrLibraryConflict) {
+	if _, err := svc.Release(ctx, lib.ID, libraryDraftVersionOf(t, lib.ID)+1, appdto.ReleaseInput{}); !errors.Is(err, draft.ErrDraftConflict) {
 		t.Errorf("a stale version: expected ErrLibraryConflict, got %v", err)
 	}
-	wt, err := newWidgetTypeService().CreateWidgetType(ctx, lib.ID, testCreateWidgetTypeInput)
+	wt, err := newWidgetTypeService().CreateWidgetType(ctx, lib.ID, libraryDraftVersionOf(t, lib.ID), testCreateWidgetTypeInput)
 	if err != nil {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
 
-	first, err := svc.Release(ctx, lib.ID, lib.Version, appdto.ReleaseInput{Note: "first"})
+	first, err := svc.Release(ctx, lib.ID, libraryDraftVersionOf(t, lib.ID), appdto.ReleaseInput{Note: "first"})
 	if err != nil {
 		t.Fatalf("Release: %v", err)
 	}
 	if first.Number != 1 || first.Note != "first" || len(first.WidgetTypes) != 1 || first.WidgetTypes[0].ID != wt.ID {
 		t.Errorf("release 1: %+v", first)
 	}
-	if _, err := svc.Release(ctx, lib.ID, lib.Version, appdto.ReleaseInput{}); !errors.Is(err, library.ErrNothingToRelease) {
+	if _, err := svc.Release(ctx, lib.ID, libraryDraftVersionOf(t, lib.ID), appdto.ReleaseInput{}); !errors.Is(err, library.ErrNothingToRelease) {
 		t.Errorf("an unchanged Draft: expected ErrNothingToRelease, got %v", err)
 	}
 	found, err := svc.FindLibraryByID(ctx, lib.ID)
@@ -46,13 +46,13 @@ func TestLibraryService_ReleaseNumbersAndRefusesAnUnchangedDraft(t *testing.T) {
 		t.Errorf("after the release: %+v, %v", found, err)
 	}
 
-	if _, err := newWidgetTypeService().DeleteWidgetTypeByID(ctx, lib.ID, wt.ID); err != nil {
+	if _, err := newWidgetTypeService().DeleteWidgetTypeByID(ctx, lib.ID, wt.ID, libraryDraftVersionOf(t, lib.ID)); err != nil {
 		t.Fatal(err)
 	}
 	if found, _ := svc.FindLibraryByID(ctx, lib.ID); !found.HasUnreleasedChanges {
 		t.Error("a removed WidgetType is a change not released")
 	}
-	second, err := svc.Release(ctx, lib.ID, lib.Version, appdto.ReleaseInput{})
+	second, err := svc.Release(ctx, lib.ID, libraryDraftVersionOf(t, lib.ID), appdto.ReleaseInput{})
 	if err != nil || second.Number != 2 || len(second.WidgetTypes) != 0 {
 		t.Fatalf("release 2: %+v, %v", second, err)
 	}
@@ -103,10 +103,9 @@ func TestLibraryService_DeleteRefusedWhileALiveProjectPinsIt(t *testing.T) {
 	}
 }
 
-// TestDiscard_ResetsTheDraftToTheLatestRelease: the WidgetTypes added since
-// go, the changed ones are restored, the removed ones come back under their
-// IDs — two names swapped since the release included —; the Draft is
-// read-only until the policy has run.
+// TestDiscard_ResetsTheDraftToTheLatestRelease: one transaction brings the
+// WidgetTypes added since go, the changed ones restored and the removed ones
+// back under their IDs — two names swapped since the release included.
 func TestDiscard_ResetsTheDraftToTheLatestRelease(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	ctx := editlock.System(context.Background())
@@ -118,7 +117,7 @@ func TestDiscard_ResetsTheDraftToTheLatestRelease(t *testing.T) {
 		t.Helper()
 		input := testCreateWidgetTypeInput
 		input.Name = name
-		wt, err := r.wtSvc.CreateWidgetType(ctx, lib.ID, input)
+		wt, err := r.wtSvc.CreateWidgetType(ctx, lib.ID, libraryDraftVersionOf(t, lib.ID), input)
 		if err != nil {
 			t.Fatalf("CreateWidgetType %s: %v", name, err)
 		}
@@ -128,7 +127,7 @@ func TestDiscard_ResetsTheDraftToTheLatestRelease(t *testing.T) {
 		t.Helper()
 		input := testCreateWidgetTypeInput
 		input.Name = name
-		updated, err := r.wtSvc.UpdateWidgetType(ctx, lib.ID, wt.ID, wt.Version, input)
+		updated, err := r.wtSvc.UpdateWidgetType(ctx, lib.ID, wt.ID, libraryDraftVersionOf(t, lib.ID), input)
 		if err != nil {
 			t.Fatalf("UpdateWidgetType %s: %v", name, err)
 		}
@@ -137,7 +136,7 @@ func TestDiscard_ResetsTheDraftToTheLatestRelease(t *testing.T) {
 	a, b, removed := create("a"), create("b"), create("removed")
 	mustReleaseLibrary(t, lib.ID)
 
-	if _, err := r.wtSvc.DeleteWidgetTypeByID(ctx, lib.ID, removed.ID); err != nil {
+	if _, err := r.wtSvc.DeleteWidgetTypeByID(ctx, lib.ID, removed.ID, libraryDraftVersionOf(t, lib.ID)); err != nil {
 		t.Fatal(err)
 	}
 	a = rename(a, "tmp")
@@ -145,28 +144,16 @@ func TestDiscard_ResetsTheDraftToTheLatestRelease(t *testing.T) {
 	rename(a, "b")
 	create("added")
 
-	marked, err := r.libSvc.Discard(ctx, lib.ID)
+	state, err := r.libSvc.Discard(ctx, lib.ID)
 	if err != nil {
 		t.Fatalf("Discard: %v", err)
 	}
-	if marked.DiscardingTo != 1 {
-		t.Errorf("the mark: %+v", marked)
-	}
-	if _, err := r.libSvc.Discard(ctx, lib.ID); !errors.Is(err, library.ErrLibraryDiscarding) {
-		t.Errorf("a second Discard: expected ErrLibraryDiscarding, got %v", err)
-	}
-	if _, err := r.wtSvc.CreateWidgetType(ctx, lib.ID, testCreateWidgetTypeInput); !errors.Is(err, library.ErrLibraryDiscarding) {
-		t.Errorf("an edit during the Discard: expected ErrLibraryDiscarding, got %v", err)
-	}
-	if _, err := r.libSvc.Release(ctx, lib.ID, marked.Version, appdto.ReleaseInput{}); !errors.Is(err, library.ErrLibraryDiscarding) {
-		t.Errorf("a Release during the Discard: expected ErrLibraryDiscarding, got %v", err)
-	}
-
-	r.settle(t)
-
 	after, err := r.libSvc.FindLibraryByID(ctx, lib.ID)
-	if err != nil || after.DiscardingTo != 0 || after.HasUnreleasedChanges {
+	if err != nil || after.HasUnreleasedChanges {
 		t.Errorf("after the Discard: %+v, %v", after, err)
+	}
+	if state.Version <= 0 {
+		t.Errorf("the Draft state after the Discard: %+v", state)
 	}
 	draft, err := r.wtSvc.FindAllWidgetTypes(ctx, lib.ID)
 	if err != nil {
@@ -185,12 +172,8 @@ func TestDiscard_ResetsTheDraftToTheLatestRelease(t *testing.T) {
 			t.Errorf("type %s: named %q, want %q", id, byID[id], name)
 		}
 	}
-	if jobs := jobsOf(t, application.DiscardLibraryPolicyName); len(jobs) != 0 {
-		t.Errorf("jobs left: %+v", jobs)
-	}
-	if _, err := r.wtSvc.CreateWidgetType(ctx, lib.ID, testCreateWidgetTypeInput); err != nil {
-		t.Errorf("an edit after the Discard: %v", err)
-	}
+	// The Draft is editable again at once: one transaction, no mark.
+	create("after-discard")
 }
 
 // TestLibraryPin_SwitchOrphaningWidgetsIsRefused_PreviewNamesThem: a switch
@@ -201,7 +184,7 @@ func TestLibraryPin_SwitchOrphaningWidgetsIsRefused_PreviewNamesThem(t *testing.
 	ctx := editlock.System(context.Background())
 	kept := r.createType(t, "value")
 	libraryID := r.libraries[kept.ID]
-	dropped, err := r.wtSvc.CreateWidgetType(ctx, libraryID, appdto.WidgetTypeInput{
+	dropped, err := r.wtSvc.CreateWidgetType(ctx, libraryID, libraryDraftVersionOf(t, libraryID), appdto.WidgetTypeInput{
 		Name: "dropped", HtmlTemplate: "<div></div>", ScriptLanguage: "javascript", DefaultWidth: 10, DefaultHeight: 10,
 	})
 	if err != nil {
@@ -213,10 +196,10 @@ func TestLibraryPin_SwitchOrphaningWidgetsIsRefused_PreviewNamesThem(t *testing.
 	onKept := r.addWidget(t, sc.ID, sc.Version, kept, "value")
 	orphan := r.addWidget(t, sc.ID, onKept.Version, dropped)
 
-	if _, err := r.wtSvc.DeleteWidgetTypeByID(ctx, libraryID, dropped.ID); err != nil {
+	if _, err := r.wtSvc.DeleteWidgetTypeByID(ctx, libraryID, dropped.ID, libraryDraftVersionOf(t, libraryID)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.wtSvc.UpdateWidgetType(ctx, libraryID, kept.ID, kept.Version, appdto.WidgetTypeInput{
+	if _, err := r.wtSvc.UpdateWidgetType(ctx, libraryID, kept.ID, libraryDraftVersionOf(t, libraryID), appdto.WidgetTypeInput{
 		Name: kept.Name, HtmlTemplate: kept.HtmlTemplate, ScriptLanguage: kept.ScriptLanguage,
 		DefaultWidth: kept.DefaultWidth, DefaultHeight: kept.DefaultHeight,
 	}); err != nil {

@@ -459,7 +459,6 @@ func newLibraryResponse(l appdto.Library) apiv0.LibraryResponse {
 		Name:                 l.Name,
 		Version:              l.Version,
 		LatestRelease:        l.LatestRelease,
-		DiscardingTo:         l.DiscardingTo,
 		HasUnreleasedChanges: l.HasUnreleasedChanges,
 	}
 }

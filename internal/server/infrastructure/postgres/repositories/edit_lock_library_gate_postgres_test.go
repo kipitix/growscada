@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -21,7 +22,7 @@ func TestGatedLibraryWrite_NoClient_IsRefused(t *testing.T) {
 	cleanEditLocks(t)
 	repo := newWidgetTypeRepo(t)
 
-	_, err := repo.Save(context.Background(), makeWidgetType(t, "gated", nil, repo))
+	err := gatedWidgetTypeWrite(t, repo, context.Background())
 	if !errors.Is(err, editlock.ErrNoClient) {
 		t.Fatalf("write without a client: %v, want ErrNoClient", err)
 	}
@@ -32,7 +33,7 @@ func TestGatedLibraryWrite_FreeLock_IsRefused(t *testing.T) {
 	repo := newWidgetTypeRepo(t)
 
 	ctx := editlock.WithClient(context.Background(), editlock.NewKey())
-	_, err := repo.Save(ctx, makeWidgetType(t, "gated", nil, repo))
+	err := gatedWidgetTypeWrite(t, repo, ctx)
 	if !errors.Is(err, editlock.ErrEditLockNotHeld) {
 		t.Fatalf("write of a free Draft: %v, want ErrEditLockNotHeld", err)
 	}
@@ -50,7 +51,7 @@ func TestGatedLibraryWrite_AnotherHolder_NamesTheHolder(t *testing.T) {
 	}
 
 	ctx := editlock.WithClient(context.Background(), editlock.NewKey())
-	_, err := repo.Save(ctx, makeWidgetType(t, "gated", nil, repo))
+	err := gatedWidgetTypeWrite(t, repo, ctx)
 	if !errors.Is(err, editlock.ErrEditLockNotHeld) {
 		t.Fatalf("write of another client's Draft: %v, want ErrEditLockNotHeld", err)
 	}
@@ -70,7 +71,7 @@ func TestGatedLibraryWrite_TheHolder_Writes(t *testing.T) {
 	}
 
 	ctx := editlock.WithClient(context.Background(), lock.Holder().Key())
-	if _, err := repo.Save(ctx, makeWidgetType(t, "gated", nil, repo)); err != nil {
+	if err := gatedWidgetTypeWrite(t, repo, ctx); err != nil {
 		t.Fatalf("the holder's write: %v", err)
 	}
 	found, _, err := editLockRepo().Find(editlock.System(context.Background()), lock.Scope())
@@ -85,9 +86,7 @@ func TestGatedLibraryWrite_TheHolder_Writes(t *testing.T) {
 func TestGatedLibraryRelease_NeedsTheLock(t *testing.T) {
 	cleanEditLocks(t)
 	repo := newWidgetTypeRepo(t)
-	if _, err := repo.Save(editlock.System(context.Background()), makeWidgetType(t, "type", nil, repo)); err != nil {
-		t.Fatalf("save widget type: %v", err)
-	}
+	mustStoreWidgetType(t, makeWidgetType(t, "type", nil, repo), repo)
 	release := newReleaseOf(t, repo.libraryID)
 
 	if _, err := repositories.NewLibraryReleaseRepositoryPostgres(testDB).Save(context.Background(), release, versionCommitted(t, repo.libraryID)); !errors.Is(err, editlock.ErrNoClient) {
@@ -106,37 +105,6 @@ func TestGatedLibraryRelease_NeedsTheLock(t *testing.T) {
 	holder := editlock.WithClient(context.Background(), lock.Holder().Key())
 	if _, err := repositories.NewLibraryReleaseRepositoryPostgres(testDB).Save(holder, release, versionCommitted(t, repo.libraryID)); err != nil {
 		t.Errorf("the holder's release: %v", err)
-	}
-}
-
-func TestGatedLibraryDiscard_NeedsTheLock(t *testing.T) {
-	cleanEditLocks(t)
-	lib := mustSaveLibrary(t)
-	libraries := repositories.NewLibraryRepositoryPostgres(testDB)
-	// A Discard needs a release to reset the Draft to; its number is not read
-	// by the gate, which runs before the mark is written.
-	marked, err := lib.StartDiscard(releaseNumber(t, 0))
-	if err != nil {
-		t.Fatalf("start discard: %v", err)
-	}
-
-	if _, err := libraries.Save(context.Background(), marked); !errors.Is(err, editlock.ErrNoClient) {
-		t.Errorf("discard without a client: %v, want ErrNoClient", err)
-	}
-	ctx := editlock.WithClient(context.Background(), editlock.NewKey())
-	if _, err := libraries.Save(ctx, marked); !errors.Is(err, editlock.ErrEditLockNotHeld) {
-		t.Errorf("discard of a free Draft: %v, want ErrEditLockNotHeld", err)
-	}
-
-	lock, err := editLockRepo().Create(editlock.System(context.Background()), createHeldLockOf(t, editlock.LibraryScope(lib.ID())))
-	if err != nil {
-		t.Fatalf("hold the lock: %v", err)
-	}
-	holder := editlock.WithClient(context.Background(), lock.Holder().Key())
-	// The gate passes; the mark's own check (the latest release) is the
-	// repository's business and may refuse here, which is not the lock's.
-	if _, err := libraries.Save(holder, marked); errors.Is(err, editlock.ErrEditLockNotHeld) {
-		t.Errorf("the holder's discard is refused by the gate")
 	}
 }
 
@@ -164,25 +132,33 @@ func newReleaseOf(t *testing.T, libraryID id.ID[library.Library]) library.Librar
 	return release
 }
 
-// versionCommitted is the stored Version of the library.
-func versionCommitted(t *testing.T, libraryID id.ID[library.Library]) version.Version[library.Library] {
+// versionCommitted is the stored Version of the library's Draft.
+func versionCommitted(t *testing.T, libraryID id.ID[library.Library]) version.Version[library.DraftContent] {
 	t.Helper()
-	lib, err := repositories.NewLibraryRepositoryPostgres(testDB).FindByID(editlock.System(context.Background()), libraryID)
+	found, ok, err := testDrafts().Read(editlock.System(context.Background()), editlock.LibraryScope(libraryID))
 	if err != nil {
-		t.Fatalf("FindByID: %v", err)
+		t.Fatalf("read draft: %v", err)
 	}
-	return lib.Version()
+	number := 1
+	if ok {
+		number = found.Version().Number()
+	}
+	ver, err := version.New(version.WithNumber[library.DraftContent](number))
+	if err != nil {
+		t.Fatalf("Version: %v", err)
+	}
+	return ver
 }
 
-// releaseNumber is a ReleaseNumber of n (n > 0).
-func releaseNumber(t *testing.T, n int) library.ReleaseNumber {
+// gatedWidgetTypeWrite creates a WidgetType through the Draft, as a client
+// write does, and returns the gate's error.
+func gatedWidgetTypeWrite(t *testing.T, repo libraryRepo, ctx context.Context) error {
 	t.Helper()
-	if n == 0 {
-		n = 1
-	}
-	number, err := library.NewReleaseNumber(n)
-	if err != nil {
-		t.Fatalf("ReleaseNumber: %v", err)
-	}
-	return number
+	wt := makeWidgetType(t, "gated", nil, repo)
+	_, err := testDrafts().Update(ctx, editlock.LibraryScope(repo.libraryID), libraryDraftVersionOf(t, repo.libraryID),
+		"Create widget type gated", func(session *draft.Session) error {
+			session.CreateWidgetType(ctx, wt)
+			return nil
+		})
+	return err
 }

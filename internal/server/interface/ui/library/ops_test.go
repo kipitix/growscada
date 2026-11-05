@@ -155,7 +155,7 @@ func TestApplyChanges_RightAfterCreate_SavesTheEdit(t *testing.T) {
 func TestApplyChanges_ListReadBeforeAConflict_DoesNotRestoreTheOldVersion(t *testing.T) {
 	f, id := selected(t)
 	inFlight, mark := f.l.widgetTypes, f.l.versions.Mark() // read before the conflict
-	f.l.versions.Observe(mark, id, 15)                     // the server's database was recreated since
+	f.l.versions.Observe(mark, f.l.libraryID, 15)          // the server's database was recreated since
 
 	f.l.edit.name = "Mine"
 	f.l.applyChanges(f.l.compoCtx)
@@ -224,8 +224,7 @@ func TestRelease_ReleasesTheDraftAndShowsItInTheHistory(t *testing.T) {
 // its dialog.
 func releaseNow(t *testing.T, f *fixture) {
 	t.Helper()
-	lib, _ := f.l.selectedLibrary()
-	if _, err := f.api.Release(context.Background(), apiv0.CreateReleaseRequest{Version: lib.Version}); err != nil {
+	if _, err := f.api.Release(context.Background(), apiv0.CreateReleaseRequest{Version: 0}); err != nil {
 		t.Fatalf("release: %v", err)
 	}
 	f.l.loadLibraries(f.l.compoCtx)
@@ -234,25 +233,25 @@ func releaseNow(t *testing.T, f *fixture) {
 	f.noToasts()
 }
 
-// TestDiscard_MakesTheDraftReadOnlyWhileUnderWay: once the server marks the
-// Discard, the Draft cannot be edited until it ends.
-func TestDiscard_MakesTheDraftReadOnlyWhileUnderWay(t *testing.T) {
-	f, _ := selected(t)
+// TestDiscard_ResetsTheDraftAtOnce: a Discard is one transaction, so the
+// Draft is back at the latest release as soon as the call returns.
+func TestDiscard_ResetsTheDraftAtOnce(t *testing.T) {
+	f, kept := selected(t)
 	releaseNow(t, f)
 	createWidgetType(t, f.api, "Added")
-	if _, err := f.api.Discard(context.Background()); err != nil {
+	state, err := f.api.Discard(context.Background())
+	if err != nil {
 		t.Fatalf("discard: %v", err)
 	}
-	f.l.loadLibraries(f.l.compoCtx)
-	f.run()
-
-	lib, _ := f.l.selectedLibrary()
-	if lib.DiscardingTo == 0 {
-		// The server may have finished the Discard already.
-		t.Skip("the Discard ended before the library was read")
+	if state.Version <= 0 {
+		t.Errorf("the Draft after the Discard: %+v", state)
 	}
-	if !f.l.discarding() || !f.l.readOnly() {
-		t.Error("a Draft being discarded must be read-only")
+	list, err := f.api.ListWidgetTypes(context.Background())
+	if err != nil {
+		t.Fatalf("list widget types: %v", err)
+	}
+	if len(list) != 1 || list[0].ID != kept {
+		t.Errorf("the Draft after the Discard: %+v, want only the released type", list)
 	}
 }
 
@@ -335,7 +334,7 @@ func TestApplyChanges_SavesTheEditor(t *testing.T) {
 		len(wt.InputPorts) != 2 || wt.DefaultWidth != 150 {
 		t.Errorf("server widget type: %+v", wt)
 	}
-	if got := f.l.versions.Of(id); got != wt.Version {
+	if got := f.l.versions.Of(f.l.libraryID); got != wt.Version {
 		t.Errorf("known version %d, server's %d", got, wt.Version)
 	}
 
@@ -393,7 +392,7 @@ func TestApplyChanges_StaleListAfterTheSave_KeepsTheSavedVersion(t *testing.T) {
 
 func TestApplyChanges_ServerVersionWentBack_RecoversAfterTheConflict(t *testing.T) {
 	f, id := selected(t)
-	f.l.versions.Observe(f.l.versions.Mark(), id, 15) // the server's database was recreated since
+	f.l.versions.Observe(f.l.versions.Mark(), f.l.libraryID, 15) // the server's database was recreated since
 
 	f.l.edit.name = "Mine"
 	f.l.applyChanges(f.l.compoCtx)
@@ -402,7 +401,7 @@ func TestApplyChanges_ServerVersionWentBack_RecoversAfterTheConflict(t *testing.
 	if got := f.oneToast(); got.Status != http.StatusConflict {
 		t.Errorf("toast %+v: want the conflict", got)
 	}
-	if got, want := f.l.versions.Of(id), f.widgetType(id).Version; got != want {
+	if got, want := f.l.versions.Of(f.l.libraryID), f.widgetType(id).Version; got != want {
 		t.Errorf("known version %d, server's %d", got, want)
 	}
 

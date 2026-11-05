@@ -17,9 +17,6 @@ type Library struct {
 	Version int
 	// LatestRelease is the number of the latest Library Release; 0 if none.
 	LatestRelease int
-	// DiscardingTo is the release a Discard under way resets the Draft to;
-	// 0 if none is.
-	DiscardingTo int
 	// HasUnreleasedChanges reports whether the Draft differs from the
 	// latest release (always, for a library never released).
 	HasUnreleasedChanges bool
@@ -39,9 +36,6 @@ func NewLibrary(l library.Library, state library.ReleaseState) Library {
 		Version:              l.Version().Number(),
 		LatestRelease:        state.Latest.Int(),
 		HasUnreleasedChanges: state.DraftDiffers,
-	}
-	if to, ok := l.DiscardingTo(); ok {
-		dto.DiscardingTo = to.Int()
 	}
 	return dto
 }

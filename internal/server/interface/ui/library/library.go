@@ -141,18 +141,10 @@ func (l *Library) selectedLibrary() (apiv0.LibraryResponse, bool) {
 	return uiutil.FindByID(l.libraries, l.libraryID, uiutil.LibraryID)
 }
 
-// discarding reports whether a Discard of the selected library is under way:
-// its Draft is read-only until it ends (ADR 0012).
-func (l *Library) discarding() bool {
-	lib, ok := l.selectedLibrary()
-	return ok && lib.DiscardingTo != 0
-}
-
 // readOnly reports whether the WidgetTypes shown cannot be edited: those of a
-// release, of a Draft being discarded, or of a Draft this tab does not hold
-// the EditLock of (ADR 0015).
+// release, or of a Draft this tab does not hold the EditLock of (ADR 0015).
 func (l *Library) readOnly() bool {
-	return l.viewing != 0 || l.discarding() || l.lockReadOnly()
+	return l.viewing != 0 || l.lockReadOnly()
 }
 
 // shownTypes returns the WidgetTypes shown: those of the release viewed, or

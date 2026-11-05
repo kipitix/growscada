@@ -243,7 +243,8 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	drafts := repositories.NewDraftRepositoryPostgres(db, releases, onCommit)
 	content := application.NewProjectContent(projectRepo, scopes, drafts, orgID)
 	libraries := repositories.NewLibraryRepositoryPostgres(db, onCommit)
-	editLocks := application.NewEditLockService(content, application.NewLibraryContent(libraries, orgID), drafts)
+	libraryContent := application.NewLibraryContent(libraries, drafts, orgID)
+	editLocks := application.NewEditLockService(content, libraryContent, drafts)
 	runtimeEvents := eventbus.NewAsyncPublisher(bus, 1024)
 	tagStateSvc := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, runtimeEvents.Publish)
 	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(db), runtimeEvents.Publish)
@@ -253,7 +254,6 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	widgetTypes := repositories.NewWidgetTypeRepositories(db, onCommit)
 	runner := outbox.NewPolicyRunner(db, []application.Policy{
 		application.NewLibraryCleanupPolicy(libraries),
-		application.NewDiscardLibraryPolicy(libraries, releases, widgetTypes),
 		application.NewProjectCleanupPolicy(projectRepo, drafts, runtimeNode),
 	})
 	dispatcher.SetPolicyRunner(runner)
@@ -273,8 +273,8 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 		Projects:     application.NewProjectService(projectRepo, orgID),
 		Tags:         tagSvc,
 		TagStates:    tagStateSvc,
-		Libraries:    application.NewLibraryService(libraries, releases, widgetTypes, orgID),
-		WidgetTypes:  application.NewWidgetTypeService(libraries, widgetTypes, orgID),
+		Libraries:    application.NewLibraryService(libraryContent, libraries, releases, widgetTypes),
+		WidgetTypes:  application.NewWidgetTypeService(libraryContent, widgetTypes),
 		LibraryPins:  application.NewLibraryPinService(content, libraries, releases),
 		Scenes:       application.NewSceneService(content),
 		Devices:      application.NewDeviceService(content),

@@ -39,7 +39,7 @@ func DeployProject(t *testing.T, db *sql.DB, projectID uuid.UUID) {
 	tokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(db))
 	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(db), func(event.Event) {})
 	locks := application.NewEditLockService(content,
-		application.NewLibraryContent(repositories.NewLibraryRepositoryPostgres(db), orgID),
+		application.NewLibraryContent(repositories.NewLibraryRepositoryPostgres(db), drafts, orgID),
 		drafts)
 	service := application.NewDeployService(
 		content,

@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
@@ -27,15 +28,20 @@ type LibraryService interface {
 	DeleteLibraryByID(context.Context, uuid.UUID) (appdto.Library, error)
 
 	// Release makes a Library Release of the library's Draft, expecting the
-	// library's Version.
+	// Version of that Draft the client saw.
 	Release(ctx context.Context, libraryID uuid.UUID, version int, input appdto.ReleaseInput) (appdto.LibraryRelease, error)
 	FindReleases(ctx context.Context, libraryID uuid.UUID) ([]appdto.LibraryRelease, error)
 	FindRelease(ctx context.Context, libraryID uuid.UUID, number int) (appdto.LibraryRelease, error)
-	// Discard starts resetting the library's Draft to its latest release.
-	Discard(ctx context.Context, libraryID uuid.UUID) (appdto.Library, error)
+	// DraftState is the Version of the library's Draft: what every write of
+	// its content states and every DTO of it carries.
+	DraftState(ctx context.Context, libraryID uuid.UUID) (appdto.DraftState, error)
+	// Discard resets the library's Draft to its latest release in one
+	// transaction over the Draft and answers the Draft's new state.
+	Discard(ctx context.Context, libraryID uuid.UUID) (appdto.DraftState, error)
 }
 
 type libraryServiceImpl struct {
+	content      LibraryContent
 	libraries    library.LibraryRepository
 	releases     library.LibraryReleaseRepository
 	widgetTypes  library.WidgetTypeRepositories
@@ -46,21 +52,23 @@ type libraryServiceImpl struct {
 var _ LibraryService = (*libraryServiceImpl)(nil)
 
 // NewLibraryService returns the service of the libraries of the Organization
-// anOrganizationID. The events of its changes are recorded by the
-// aggregates and saved with them (ADR 0008); a deleted library is removed by
-// the policy of NewLibraryCleanupPolicy, a Discard carried out by the policy
-// of NewDiscardLibraryPolicy.
+// aContent serves. The events of its changes are recorded by the aggregates
+// and saved with them (ADR 0008); a deleted library is removed by the policy
+// of NewLibraryCleanupPolicy. A Release is gated by the Draft's EditLock and
+// clears its DraftChange stack once made; a Discard is one transaction over
+// the Draft (ADR 0016, ADR 0017).
 func NewLibraryService(
+	aContent LibraryContent,
 	someLibraries library.LibraryRepository,
 	someReleases library.LibraryReleaseRepository,
 	someWidgetTypes library.WidgetTypeRepositories,
-	anOrganizationID id.ID[organization.Organization],
 ) LibraryService {
 	return &libraryServiceImpl{
+		content:      aContent,
 		libraries:    someLibraries,
 		releases:     someReleases,
 		widgetTypes:  someWidgetTypes,
-		organization: anOrganizationID,
+		organization: aContent.organization,
 		now:          time.Now,
 	}
 }
@@ -192,6 +200,17 @@ func libraryVersion(raw int) (version.Version[library.Library], error) {
 	return expected, nil
 }
 
+// libraryDraftVersion parses the Version of a Library's Draft a client
+// states; a negative one is no version at all: the client's input, not a
+// conflict.
+func libraryDraftVersion(raw int) (version.Version[library.DraftContent], error) {
+	expected, err := version.New(version.WithNumber[library.DraftContent](raw))
+	if err != nil {
+		return expected, invalidInput(fmt.Errorf("version: %w", err))
+	}
+	return expected, nil
+}
+
 // DeleteLibraryByID marks a library deleted, while no live Project pins it,
 // and returns it as it was read, with its releases: from then on it does not
 // exist for the API. Its Draft and releases are removed later, by the policy
@@ -218,25 +237,24 @@ func (s libraryServiceImpl) DeleteLibraryByID(ctx context.Context, rawID uuid.UU
 }
 
 // Release makes the next Library Release of the library from its Draft as
-// it is now. It is refused if the library is not at the Version the client
-// states, while a Discard is under way, and if the Draft has not changed
-// since the latest release. A Release that loses the race for its number to
-// another is made again on top of it, the Draft reread (ADR 0012).
+// it is now. It is refused if the Draft is not at the Version the client
+// states, and if it has not changed since the latest release. A Release that
+// loses the race for its number to another is made again on top of it, the
+// Draft reread. The DraftChange stack is cleared after the release rows are
+// committed: a failure to clear is reported while the release stands
+// (ADR 0017).
 func (s libraryServiceImpl) Release(ctx context.Context, rawID uuid.UUID, rawExpectedVersion int, input appdto.ReleaseInput) (appdto.LibraryRelease, error) {
 	found, err := s.findOwn(ctx, rawID)
 	if err != nil {
 		return appdto.LibraryRelease{}, err
 	}
-	expected, err := libraryVersion(rawExpectedVersion)
+	expected, err := libraryDraftVersion(rawExpectedVersion)
 	if err != nil {
 		return appdto.LibraryRelease{}, err
 	}
-	if err := found.CheckVersion(expected); err != nil {
-		return appdto.LibraryRelease{}, fmt.Errorf("cannot release library: %w", err)
-	}
 
 	var saved library.LibraryRelease
-	err = retryOnRaces(func() error {
+	err = retryOnRace(library.ErrReleaseNumberTaken, func() error {
 		latest, err := s.releases.FindLatest(ctx, found.ID())
 		if err != nil {
 			return fmt.Errorf("cannot find latest release: %w", err)
@@ -253,9 +271,12 @@ func (s libraryServiceImpl) Release(ctx context.Context, rawID uuid.UUID, rawExp
 			return fmt.Errorf("cannot save release: %w", err)
 		}
 		return nil
-	}, library.ErrReleaseNumberTaken, library.ErrDraftChanged)
+	})
 	if err != nil {
 		return appdto.LibraryRelease{}, err
+	}
+	if err := s.content.Drafts().ClearStack(ctx, s.content.ScopeOf(found.ID())); err != nil {
+		return appdto.LibraryRelease{}, fmt.Errorf("cannot clear the draft stack of released library %s: %w", found.ID(), err)
 	}
 	return appdto.NewLibraryRelease(saved), nil
 }
@@ -289,36 +310,40 @@ func (s libraryServiceImpl) FindRelease(ctx context.Context, rawID uuid.UUID, ra
 	return appdto.NewLibraryRelease(release), nil
 }
 
-// Discard marks the library as being reset to its latest release; the
-// policy of NewDiscardLibraryPolicy resets each WidgetType and clears the
-// mark. It is refused for a library never released and while a Discard is
-// under way. It expects no Version (retryOnRace).
-func (s libraryServiceImpl) Discard(ctx context.Context, rawID uuid.UUID) (appdto.Library, error) {
-	var saved library.Library
-	err := retryOnRace(library.ErrLibraryConflict, func() error {
-		found, err := s.findOwn(ctx, rawID)
-		if err != nil {
-			return err
-		}
-		latest, err := s.releases.FindLatest(ctx, found.ID())
-		if err != nil {
-			return fmt.Errorf("cannot find latest release: %w", err)
-		}
-		var number library.ReleaseNumber
-		if latest != nil {
-			number = latest.Number()
-		}
-		marked, err := found.StartDiscard(number)
-		if err != nil {
-			return fmt.Errorf("cannot discard library: %w", err)
-		}
-		if saved, err = s.libraries.Save(ctx, marked); err != nil {
-			return fmt.Errorf("cannot save library: %w", err)
-		}
-		return nil
+// DraftState returns the Version of the library's Draft.
+func (s libraryServiceImpl) DraftState(ctx context.Context, rawID uuid.UUID) (appdto.DraftState, error) {
+	found, err := s.findOwn(ctx, rawID)
+	if err != nil {
+		return appdto.DraftState{}, err
+	}
+	version, err := s.content.Version(ctx, found.ID().UUID())
+	if err != nil {
+		return appdto.DraftState{}, err
+	}
+	return appdto.DraftState{Version: version}, nil
+}
+
+// Discard resets the Draft of the library to its latest release in one
+// transaction over the Draft: the WidgetTypes added since go, the changed ones
+// are restored and the removed ones brought back, and the DraftChange stack
+// is cleared. A library never released has nothing to go back to.
+func (s libraryServiceImpl) Discard(ctx context.Context, rawID uuid.UUID) (appdto.DraftState, error) {
+	found, err := s.findOwn(ctx, rawID)
+	if err != nil {
+		return appdto.DraftState{}, err
+	}
+	latest, err := s.releases.FindLatest(ctx, found.ID())
+	if err != nil {
+		return appdto.DraftState{}, fmt.Errorf("cannot find latest release: %w", err)
+	}
+	if latest == nil {
+		return appdto.DraftState{}, fmt.Errorf("%w: %s", library.ErrNoRelease, found.ID())
+	}
+	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(found.ID()), func(session *draft.Session) error {
+		return session.ReplaceWidgetTypes(ctx, latest)
 	})
 	if err != nil {
-		return appdto.Library{}, err
+		return appdto.DraftState{}, fmt.Errorf("cannot discard library %s: %w", found.ID(), err)
 	}
-	return s.describe(ctx, saved)
+	return appdto.DraftState{Version: result.Version().Number()}, nil
 }

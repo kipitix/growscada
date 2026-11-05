@@ -74,8 +74,6 @@ func newReconciliation(t *testing.T, _ reconciliationWiring) *reconciliation {
 	r.runner = outbox.NewPolicyRunner(testDB,
 		[]application.Policy{
 			application.NewLibraryCleanupPolicy(repositories.NewLibraryRepositoryPostgres(testDB)),
-			application.NewDiscardLibraryPolicy(repositories.NewLibraryRepositoryPostgres(testDB),
-				releases, repositories.NewWidgetTypeRepositories(testDB)),
 			application.NewProjectCleanupPolicy(projects, drafts, runtimeNode),
 		},
 		outbox.WithRetryPause(time.Hour, time.Hour))
@@ -145,7 +143,7 @@ func (r *reconciliation) keepPorts(t *testing.T, wt appdto.WidgetType, ports ...
 		Name: wt.Name, HtmlTemplate: wt.HtmlTemplate, Script: wt.Script, ScriptLanguage: wt.ScriptLanguage,
 		DefaultWidth: wt.DefaultWidth, DefaultHeight: wt.DefaultHeight, InputPorts: inputPorts(ports),
 	}
-	updated, err := r.wtSvc.UpdateWidgetType(ctx, r.libraries[wt.ID], wt.ID, wt.Version, input)
+	updated, err := r.wtSvc.UpdateWidgetType(ctx, r.libraries[wt.ID], wt.ID, libraryDraftVersionOf(t, r.libraries[wt.ID]), input)
 	if err != nil {
 		t.Fatalf("UpdateWidgetType: %v", err)
 	}

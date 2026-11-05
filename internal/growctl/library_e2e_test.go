@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/servertest"
@@ -118,22 +117,8 @@ func TestLibrary_ApplyReleasePinDiscardDelete(t *testing.T) {
 		t.Fatalf("apply Extra again: %v", err)
 	}
 	out, _, err = execGrowctl(t, srv, "", "discard", "Gauges")
-	if err != nil || out != "library/Gauges discarding to release 2\n" {
+	if err != nil || !strings.HasPrefix(out, "library/Gauges discarded: version ") {
 		t.Fatalf("discard: %q, %v", out, err)
-	}
-	// The Draft is read-only until the policy has reset it.
-	client := apiclient.New(srv.URL, srv.Client())
-	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
-		lib, found, err := client.FindLibraryByName(context.Background(), "Gauges")
-		if err != nil || !found {
-			t.Fatalf("find library Gauges: %t, %v", found, err)
-		}
-		if lib.DiscardingTo == 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("timed out waiting for the Discard to end")
-		}
 	}
 
 	out, _, err = execGrowctl(t, srv, "", "get", "libraries")

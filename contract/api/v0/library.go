@@ -14,16 +14,15 @@ const LibrariesQueryName = "name"
 // responses. The WidgetTypes of its Draft live under
 // /libraries/{id}/widget-types, its releases under /libraries/{id}/releases.
 // LatestRelease is the number of its latest release, 0 if none.
-// DiscardingTo is the release a Discard under way resets the Draft to,
-// absent when none is: until it ends the Draft is read-only.
 // HasUnreleasedChanges reports whether the Draft differs from the latest
-// release (always, for a library never released).
+// release (always, for a library never released). Version is the Library's
+// own (rename and deletion); the Version of its Draft is read from GET
+// /libraries/{id}/draft and carried by the DTOs of its content.
 type LibraryResponse struct {
 	ID                   uuid.UUID `json:"id"`
 	Name                 string    `json:"name"`
 	Version              int       `json:"version"`
 	LatestRelease        int       `json:"latest_release"`
-	DiscardingTo         int       `json:"discarding_to,omitempty"`
 	HasUnreleasedChanges bool      `json:"has_unreleased_changes"`
 }
 
@@ -59,11 +58,16 @@ type UpdateLibraryResponse struct {
 
 // CreateReleaseRequest is the HTTP DTO of POST /libraries/{id}/releases: a
 // Release of the library's Draft as it is, with an optional note. Version
-// must be the library's current version.
+// must be the Version of the library's Draft the client saw (ADR 0016).
 type CreateReleaseRequest struct {
 	Note    string `json:"note"`
 	Version int    `json:"version"`
 }
+
+// DiscardLibraryResponse is the answer of POST /libraries/{id}/discard: the
+// Draft of the library was reset to its latest release in one transaction
+// (ADR 0016).
+type DiscardLibraryResponse = DraftStateResponse
 
 // LibraryReleaseResponse is the HTTP DTO of a Library Release: its number
 // within the library, the time it was made, its note and the copies of the

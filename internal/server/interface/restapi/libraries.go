@@ -60,6 +60,21 @@ func (h LibrariesHandlers) GetLibrariesByID(w http.ResponseWriter, r *http.Reque
 	sendJSONResponse(w, http.StatusOK, newLibraryResponse(found))
 }
 
+// GetDraft handles GET /libraries/{library_id}/draft: the Version of the
+// library's Draft, which every write of its content states.
+func (h LibrariesHandlers) GetDraft(w http.ResponseWriter, r *http.Request) {
+	libraryID, ok := pathUUID(w, r, libraryResource)
+	if !ok {
+		return
+	}
+	state, err := h.service.DraftState(r.Context(), libraryID)
+	if err != nil {
+		sendError(w, r, err)
+		return
+	}
+	sendJSONResponse(w, http.StatusOK, apiv0.DraftStateResponse{Version: state.Version})
+}
+
 // PostLibraries handles POST /libraries
 func (h LibrariesHandlers) PostLibraries(w http.ResponseWriter, r *http.Request) {
 	var request apiv0.CreateLibraryRequest
@@ -159,18 +174,17 @@ func (h LibrariesHandlers) GetReleasesByNumber(w http.ResponseWriter, r *http.Re
 	sendJSONResponse(w, http.StatusOK, newLibraryReleaseResponse(found))
 }
 
-// PostDiscard handles POST /libraries/{library_id}/discard: the Draft is
-// reset to the latest release after the response; until then it is
-// read-only.
+// PostDiscard handles POST /libraries/{library_id}/discard: the Draft is reset
+// to the latest release in one transaction and its new state is answered.
 func (h LibrariesHandlers) PostDiscard(w http.ResponseWriter, r *http.Request) {
 	libraryID, ok := pathUUID(w, r, libraryResource)
 	if !ok {
 		return
 	}
-	marked, err := h.service.Discard(r.Context(), libraryID)
+	state, err := h.service.Discard(r.Context(), libraryID)
 	if err != nil {
 		sendError(w, r, err)
 		return
 	}
-	sendJSONResponse(w, http.StatusAccepted, newLibraryResponse(marked))
+	sendJSONResponse(w, http.StatusOK, apiv0.DiscardLibraryResponse{Version: state.Version})
 }

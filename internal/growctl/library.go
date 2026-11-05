@@ -322,7 +322,7 @@ func executeLibraries(ctx context.Context, client *Client, run *settings, plan l
 				DefaultWidth: d.DefaultWidth, DefaultHeight: d.DefaultHeight, InputPorts: d.InputPorts, Version: s.Server.Version,
 			})
 		case ActionPrune, ActionDelete:
-			if _, err = lib.DeleteWidgetType(ctx, s.Server.ID); errors.Is(err, apiclient.ErrNotFound) {
+			if _, err = lib.DeleteWidgetType(ctx, s.Server.ID, s.Server.Version); errors.Is(err, apiclient.ErrNotFound) {
 				err = nil // already gone — the desired state is reached
 			}
 		}
@@ -480,7 +480,7 @@ func executeDeleteLibraries(ctx context.Context, client *Client, run *settings, 
 				return fmt.Errorf("%s: %w", ref, err)
 			}
 			if ok {
-				_, err = client.Library(lib.ID).DeleteWidgetType(ctx, s.Server.ID)
+				_, err = client.Library(lib.ID).DeleteWidgetType(ctx, s.Server.ID, 0)
 			}
 			if !ok || errors.Is(err, apiclient.ErrNotFound) {
 				s.Action, err = ActionNotFound, nil
@@ -530,7 +530,7 @@ func newReleaseCommand(s *settings) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			client := s.client()
-			lib, found, err := findLibrary(ctx, client, args[0])
+			lib, _, err := findLibrary(ctx, client, args[0])
 			if err != nil {
 				return err
 			}
@@ -541,7 +541,11 @@ func newReleaseCommand(s *settings) *cobra.Command {
 				return err
 			}
 			defer unlock()
-			release, err := lib.Release(ctx, apiv0.CreateReleaseRequest{Note: note, Version: found.Version})
+			state, err := lib.DraftState(ctx)
+			if err != nil {
+				return fmt.Errorf("library/%s: %w", args[0], err)
+			}
+			release, err := lib.Release(ctx, apiv0.CreateReleaseRequest{Note: note, Version: state.Version})
 			if err != nil {
 				return fmt.Errorf("library/%s: %w", args[0], err)
 			}
@@ -559,8 +563,7 @@ func newDiscardCommand(s *settings) *cobra.Command {
 		Short: "Reset the Draft of a library to its latest Library Release",
 		Long: "Reset the Draft of the library to its latest release: the WidgetTypes added\n" +
 			"since are removed, the changed ones restored, the removed ones brought back.\n" +
-			"The server does it after the command returns; until then the Draft is\n" +
-			"read-only.",
+			"The server does it in one transaction and answers the Draft's new state.",
 		Args: exactlyOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -576,11 +579,11 @@ func newDiscardCommand(s *settings) *cobra.Command {
 				return err
 			}
 			defer unlock()
-			marked, err := lib.Discard(ctx)
+			state, err := lib.Discard(ctx)
 			if err != nil {
 				return fmt.Errorf("library/%s: %w", args[0], err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "library/%s discarding to release %d\n", args[0], marked.DiscardingTo)
+			fmt.Fprintf(cmd.OutOrStdout(), "library/%s discarded: version %d\n", args[0], state.Version)
 			return nil
 		},
 	}
@@ -612,13 +615,9 @@ func newGetLibrariesCommand(s *settings) *cobra.Command {
 				return nil
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tRELEASE\tUNRELEASED\tDISCARDING")
+			fmt.Fprintln(w, "NAME\tRELEASE\tUNRELEASED")
 			for _, l := range libraries {
-				discarding := ""
-				if l.DiscardingTo != 0 {
-					discarding = fmt.Sprint(l.DiscardingTo)
-				}
-				fmt.Fprintf(w, "%s\t%d\t%t\t%s\n", l.Name, l.LatestRelease, l.HasUnreleasedChanges, discarding)
+				fmt.Fprintf(w, "%s\t%d\t%t\n", l.Name, l.LatestRelease, l.HasUnreleasedChanges)
 			}
 			return w.Flush()
 		},

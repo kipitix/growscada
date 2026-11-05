@@ -179,6 +179,7 @@ func (r *APIRouter) routes() []route {
 		{"POST " + p + "/libraries", libraries.PostLibraries},
 		{"PUT " + lp, libraries.PutLibrariesByID},
 		{"DELETE " + lp, libraries.DeleteLibrariesByID},
+		{"GET " + lp + "/draft", libraries.GetDraft},
 		{"POST " + lp + "/releases", libraries.PostReleases},
 		{"GET " + lp + "/releases", libraries.GetReleases},
 		{"GET " + lp + "/releases/" + releaseResource.wildcard(), libraries.GetReleasesByNumber},

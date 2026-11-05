@@ -5,7 +5,7 @@ info:
 
 http:
   method: DELETE
-  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/widget-types/{{WIDGET_TYPE_ID}}
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/widget-types/{{WIDGET_TYPE_ID}}?version=3
   headers:
     - name: X-GrowSCADA-Client
       value: "{{CLIENT_KEY}}"
@@ -15,9 +15,8 @@ docs: |
   Removes the WidgetType from the library's Draft. It touches no project:
   their Widgets are of the copies the releases they pin hold.
 
-  The delete states no version: a delete that loses a write race (the
-  resource changed between reading and deleting it) is retried against the
-  fresh state; one that loses it 3 times in a row returns `409 Conflict`.
+  The delete states the Version of the library's Draft the client saw
+  (`?version=`): a stale one returns `409 Conflict` (reload and retry).
 
 runtime:
   assertions:

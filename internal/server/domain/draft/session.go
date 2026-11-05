@@ -521,6 +521,76 @@ func placedWidgets(scenes []scene.Scene) []librarypin.PlacedWidget {
 	return placed
 }
 
+// CreateWidgetType records a new WidgetType of the Draft's Library.
+func (s *Session) CreateWidgetType(_ context.Context, wt library.WidgetType) library.WidgetType {
+	s.recordAfter(SnapshotOfWidgetType(wt))
+	s.recordEvents(wt.PendingEvents()...)
+	return wt
+}
+
+// UpdateWidgetType changes a WidgetType of the Draft's Library: the Draft
+// holds the one Version the write states, so the WidgetType itself checks
+// none (ADR 0016).
+func (s *Session) UpdateWidgetType(
+	ctx context.Context,
+	typeID id.ID[library.WidgetType],
+	name library.WidgetTypeName,
+	html library.HtmlTemplate,
+	script library.Script,
+	language library.ScriptLanguage,
+	size library.Size,
+	ports []library.InputPort,
+) (library.WidgetType, error) {
+	found, err := s.loader.WidgetType(ctx, typeID)
+	if err != nil {
+		return nil, err
+	}
+	updated, err := found.Update(name, html, script, language, size, ports)
+	if err != nil {
+		return nil, err
+	}
+	s.recordBefore(SnapshotOfWidgetType(found))
+	s.recordAfter(SnapshotOfWidgetType(updated))
+	s.recordEvents(updated.PendingEvents()...)
+	return updated, nil
+}
+
+// DeleteWidgetType removes a WidgetType from the Draft's Library. It touches
+// no Scene: Projects see only the copies the releases they pin hold (ADR 0007).
+func (s *Session) DeleteWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.WidgetType, error) {
+	found, err := s.loader.WidgetType(ctx, typeID)
+	if err != nil {
+		return nil, err
+	}
+	s.recordBefore(SnapshotOfWidgetType(found))
+	s.recordEvents(found.Delete().PendingEvents()...)
+	return found, nil
+}
+
+// ReplaceWidgetTypes resets the Draft's Library to release (Discard, ADR 0016):
+// every WidgetType the Draft holds goes, with its events, and every copy the
+// release holds is recreated under its ID, with its events. The stack and the
+// DraftChanges go with the caller's transaction, not here.
+func (s *Session) ReplaceWidgetTypes(ctx context.Context, release library.LibraryRelease) error {
+	stored, err := s.loader.WidgetTypes(ctx)
+	if err != nil {
+		return err
+	}
+	for _, wt := range stored {
+		s.recordBefore(SnapshotOfWidgetType(wt))
+		s.recordEvents(wt.Delete().PendingEvents()...)
+	}
+	for _, released := range release.WidgetTypes() {
+		wt, err := library.RecreateWidgetType(released)
+		if err != nil {
+			return err
+		}
+		s.recordAfter(SnapshotOfWidgetType(wt))
+		s.recordEvents(wt.PendingEvents()...)
+	}
+	return nil
+}
+
 // Content is the whole content of a Project's Draft as a value: what a
 // Discard restores from a Revision and what the cleanup of a deleted Project
 // writes away.
@@ -569,9 +639,21 @@ func (s *Session) Replace(ctx context.Context, content Content) error {
 	return nil
 }
 
-// Purge removes the whole content of the Draft (the cleanup of a deleted
-// Project, ADR 0006), with the events the removal records.
+// Purge removes the whole content of the Draft: the cleanup of a deleted
+// Project (ADR 0006) or of a deleted Library, with the events the removal
+// records.
 func (s *Session) Purge(ctx context.Context) error {
+	if s.draft.Scope().IsLibrary() {
+		stored, err := s.loader.WidgetTypes(ctx)
+		if err != nil {
+			return err
+		}
+		for _, wt := range stored {
+			s.recordBefore(SnapshotOfWidgetType(wt))
+			s.recordEvents(wt.Delete().PendingEvents()...)
+		}
+		return nil
+	}
 	scenes, err := s.loader.Scenes(ctx)
 	if err != nil {
 		return err

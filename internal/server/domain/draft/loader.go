@@ -61,4 +61,10 @@ type Loader interface {
 	AllLibraryPins(ctx context.Context) ([]librarypin.LibraryPin, error)
 	// LibraryPin returns the pin of the Library in the Draft's Project.
 	LibraryPin(ctx context.Context, libraryID id.ID[library.Library]) (librarypin.LibraryPin, error)
+
+	// WidgetTypes returns every WidgetType of the Draft's Library, in
+	// creation order.
+	WidgetTypes(ctx context.Context) ([]library.WidgetType, error)
+	// WidgetType returns one WidgetType of the Draft's Library.
+	WidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.WidgetType, error)
 }

@@ -33,7 +33,9 @@ type GetWidgetTypesResponse struct {
 }
 
 // CreateWidgetTypeRequest is the HTTP DTO for creating a widget type.
+// Version must be the Version of the library's Draft the client saw.
 type CreateWidgetTypeRequest struct {
+	Version        int         `json:"version"`
 	Name           string      `json:"name"`
 	HtmlTemplate   string      `json:"html_template"`
 	Script         string      `json:"script"`
@@ -44,14 +46,14 @@ type CreateWidgetTypeRequest struct {
 }
 
 // CreateWidgetTypeResponse is the HTTP DTO for a creation response.
-// Version is the new widget type's version, the one its first update states.
+// Version is the Draft's new Version, the one its next write states.
 type CreateWidgetTypeResponse struct {
 	ID      uuid.UUID `json:"id"`
 	Version int       `json:"version"`
 }
 
 // UpdateWidgetTypeRequest is the HTTP DTO for updating a widget type.
-// Version must match the current persisted version for optimistic locking.
+// Version must be the Version of the library's Draft the client saw.
 type UpdateWidgetTypeRequest struct {
 	Name           string      `json:"name"`
 	HtmlTemplate   string      `json:"html_template"`
@@ -63,7 +65,8 @@ type UpdateWidgetTypeRequest struct {
 	Version        int         `json:"version"`
 }
 
-// UpdateWidgetTypeResponse is the HTTP DTO for an update response.
+// UpdateWidgetTypeResponse is the HTTP DTO for an update response: the
+// Draft's new Version.
 type UpdateWidgetTypeResponse struct {
 	Version int `json:"version"`
 }

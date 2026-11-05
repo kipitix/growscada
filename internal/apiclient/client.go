@@ -325,40 +325,80 @@ func (l *LibraryClient) GetWidgetType(ctx context.Context, id uuid.UUID) (apiv0.
 	return resp, err
 }
 
+// DraftState returns the Version of the library's Draft: what every write of
+// its content states and every DTO of it carries (ADR 0016).
+func (l *LibraryClient) DraftState(ctx context.Context) (apiv0.DraftStateResponse, error) {
+	var resp apiv0.DraftStateResponse
+	err := l.do(ctx, http.MethodGet, apiv0.DraftPath, nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+// draftVersionOf returns stated, or the Version of the library's Draft when
+// the client states none.
+func (l *LibraryClient) draftVersionOf(ctx context.Context, stated int) (int, error) {
+	if stated != 0 {
+		return stated, nil
+	}
+	state, err := l.DraftState(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return state.Version, nil
+}
+
 // CreateWidgetType creates a WidgetType in the Draft. The error matches
-// ErrConflict if its name is taken in the library, or while a Discard is
-// under way.
+// ErrConflict if its name is taken in the library or req.Version is stale.
 func (l *LibraryClient) CreateWidgetType(ctx context.Context, req apiv0.CreateWidgetTypeRequest) (apiv0.CreateWidgetTypeResponse, error) {
 	var resp apiv0.CreateWidgetTypeResponse
-	err := l.do(ctx, http.MethodPost, "/widget-types", req, http.StatusCreated, &resp)
+	version, err := l.draftVersionOf(ctx, req.Version)
+	if err != nil {
+		return resp, err
+	}
+	req.Version = version
+	err = l.do(ctx, http.MethodPost, "/widget-types", req, http.StatusCreated, &resp)
 	return resp, err
 }
 
 // UpdateWidgetType replaces a WidgetType of the Draft, expecting req.Version
-// to be its current version. The error matches ErrConflict if the version is
-// stale, the name taken, or a Discard under way.
+// to be the Version of the Draft the client saw. The error matches
+// ErrConflict if the version is stale or the name taken.
 func (l *LibraryClient) UpdateWidgetType(ctx context.Context, id uuid.UUID, req apiv0.UpdateWidgetTypeRequest) (apiv0.UpdateWidgetTypeResponse, error) {
 	var resp apiv0.UpdateWidgetTypeResponse
-	err := l.do(ctx, http.MethodPut, widgetTypePath(id), req, http.StatusOK, &resp)
+	version, err := l.draftVersionOf(ctx, req.Version)
+	if err != nil {
+		return resp, err
+	}
+	req.Version = version
+	err = l.do(ctx, http.MethodPut, widgetTypePath(id), req, http.StatusOK, &resp)
 	return resp, err
 }
 
-// DeleteWidgetType removes a WidgetType from the Draft and returns its last
-// state. It touches no project: they use the releases they pin.
-func (l *LibraryClient) DeleteWidgetType(ctx context.Context, id uuid.UUID) (apiv0.WidgetTypeResponse, error) {
+// DeleteWidgetType removes a WidgetType from the Draft, stating the Version of
+// the Draft the client saw, and returns its last state. It touches no project:
+// they use the releases they pin.
+func (l *LibraryClient) DeleteWidgetType(ctx context.Context, id uuid.UUID, version int) (apiv0.WidgetTypeResponse, error) {
 	var resp apiv0.WidgetTypeResponse
-	err := l.do(ctx, http.MethodDelete, widgetTypePath(id), nil, http.StatusOK, &resp)
+	version, err := l.draftVersionOf(ctx, version)
+	if err != nil {
+		return resp, err
+	}
+	err = l.do(ctx, http.MethodDelete, withVersion(widgetTypePath(id), version), nil, http.StatusOK, &resp)
 	return resp, err
 }
 
 func widgetTypePath(id uuid.UUID) string { return "/widget-types/" + id.String() }
 
 // Release makes a release of the library's Draft. The error matches
-// ErrConflict if req.Version is stale, the Draft has not changed since the
-// latest release, or a Discard is under way.
+// ErrConflict if req.Version is stale or the Draft has not changed since the
+// latest release.
 func (l *LibraryClient) Release(ctx context.Context, req apiv0.CreateReleaseRequest) (apiv0.LibraryReleaseResponse, error) {
 	var resp apiv0.LibraryReleaseResponse
-	err := l.do(ctx, http.MethodPost, "/releases", req, http.StatusCreated, &resp)
+	version, err := l.draftVersionOf(ctx, req.Version)
+	if err != nil {
+		return resp, err
+	}
+	req.Version = version
+	err = l.do(ctx, http.MethodPost, "/releases", req, http.StatusCreated, &resp)
 	return resp, err
 }
 
@@ -385,12 +425,12 @@ func (p *ProjectClient) DraftState(ctx context.Context) (apiv0.DraftStateRespons
 	return resp, err
 }
 
-// Discard resets the library's Draft to its latest release and returns the
-// library. The error matches ErrConflict if it was never released or a Discard
-// is already under way.
-func (l *LibraryClient) Discard(ctx context.Context) (apiv0.LibraryResponse, error) {
-	var resp apiv0.LibraryResponse
-	err := l.do(ctx, http.MethodPost, "/discard", nil, http.StatusAccepted, &resp)
+// Discard resets the library's Draft to its latest release in one transaction
+// and returns the Draft's new state. The error matches ErrConflict if the
+// library was never released.
+func (l *LibraryClient) Discard(ctx context.Context) (apiv0.DiscardLibraryResponse, error) {
+	var resp apiv0.DiscardLibraryResponse
+	err := l.do(ctx, http.MethodPost, "/discard", nil, http.StatusOK, &resp)
 	return resp, err
 }
 

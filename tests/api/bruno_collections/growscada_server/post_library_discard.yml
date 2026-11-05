@@ -12,19 +12,19 @@ http:
   auth: inherit
 
 docs: |
-  Resets the Draft to the latest release after the response; until then the
-  Draft is read-only (its edits and a Release return `409`).
+  Resets the Draft to the latest release in one transaction over the Draft and
+  answers the Draft's new state (ADR 0016).
 
 runtime:
   assertions:
     - expression: 'res.status'
       operator: eq
-      value: '202'
+      value: '200'
     - expression: 'res.headers["growscada-schema-version"]'
       operator: isDefined
-    - expression: 'res.body.discarding_to'
+    - expression: 'res.body.version'
       operator: eq
-      value: '2'
+      value: '5'
 
 settings:
   encodeUrl: true

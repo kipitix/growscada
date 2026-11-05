@@ -76,8 +76,6 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 			apiv0.Event{Type: "library_updated", ID: libraryID.String()}},
 		event.EventTypeLibraryDeleted: {library.NewLibraryDeletedEvent(libraryID, ts),
 			apiv0.Event{Type: "library_deleted", ID: libraryID.String()}},
-		event.EventTypeLibraryDiscardStarted: {library.NewLibraryDiscardStartedEvent(libraryID, ts),
-			apiv0.Event{Type: "library_discard_started", ID: libraryID.String()}},
 		event.EventTypeLibraryReleased: {library.NewLibraryReleasedEvent(libraryID, library.FirstRelease().Next(), ts),
 			apiv0.Event{Type: "library_released", ID: libraryID.String(), Release: 2}},
 		event.EventTypeLibraryPinCreated: {librarypin.NewLibraryPinCreatedEvent(libraryID, projectID, ts),

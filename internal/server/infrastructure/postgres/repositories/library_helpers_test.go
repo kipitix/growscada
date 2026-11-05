@@ -31,6 +31,12 @@ func mustSaveLibrary(t *testing.T) library.Library {
 	return saved
 }
 
+// cleanWidgetTypes deletes the libraries, with their Drafts and releases.
+func cleanWidgetTypes(t *testing.T) {
+	t.Helper()
+	cleanLibraries(t)
+}
+
 // libraryRepo is the WidgetTypeRepository of a library, with the library's ID.
 type libraryRepo struct {
 	library.WidgetTypeRepository
@@ -65,7 +71,7 @@ func mustRelease(t *testing.T, libraryID id.ID[library.Library]) library.Library
 	if err != nil {
 		t.Fatalf("CreateRelease: %v", err)
 	}
-	saved, err := releases.Save(ctx, release, lib.Version())
+	saved, err := releases.Save(ctx, release, libraryDraftContentVersionOf(t, libraryID))
 	if err != nil {
 		t.Fatalf("Save release: %v", err)
 	}
@@ -98,10 +104,7 @@ func mustSaveWidgetType(t *testing.T, ports ...library.InputPort) id.ID[library.
 func mustPinWidgetType(t *testing.T, projectID id.ID[project.Project], ports ...library.InputPort) library.ReleasedWidgetType {
 	t.Helper()
 	repo := newWidgetTypeRepo(t)
-	saved, err := repo.Save(editlock.System(context.Background()), makeWidgetType(t, "type", ports, repo))
-	if err != nil {
-		t.Fatalf("Save widget type: %v", err)
-	}
+	saved := mustStoreWidgetType(t, makeWidgetType(t, "type", ports, repo), repo)
 	release := mustRelease(t, repo.libraryID)
 	mustPin(t, projectID, release)
 	released, _ := release.FindWidgetType(saved.ID())

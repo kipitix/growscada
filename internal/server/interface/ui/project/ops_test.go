@@ -157,7 +157,7 @@ func createWidgetType(t *testing.T, api *testAPI, name string, ports ...apiv0.In
 	if err != nil {
 		t.Fatalf("create widget type: %v", err)
 	}
-	if _, err := api.Library(lib.ID).Release(ctx, apiv0.CreateReleaseRequest{Version: lib.Version}); err != nil {
+	if _, err := api.Library(lib.ID).Release(ctx, apiv0.CreateReleaseRequest{}); err != nil {
 		t.Fatalf("release: %v", err)
 	}
 	if _, err := api.PinLibrary(ctx, lib.ID, apiv0.PutLibraryPinRequest{Release: 1}); err != nil {

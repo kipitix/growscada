@@ -6,7 +6,6 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
-	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 // WidgetType - aggregate representing a visual widget type.
@@ -16,8 +15,9 @@ import (
 // Library Releases they pin hold (ReleasedWidgetType).
 //
 // WidgetType is immutable: every change returns a new WidgetType that also
-// records the change's event. A change keeps the Version; the repository
-// raises it once when it saves the result.
+// records the change's event. It carries no Version of its own: it is an
+// entity of its Library's Draft, whose one Version every write states
+// (ADR 0016).
 type WidgetType interface {
 	ID() id.ID[WidgetType]
 	// LibraryID is the Library whose Draft the widget type belongs to; it
@@ -29,21 +29,14 @@ type WidgetType interface {
 	ScriptLanguage() ScriptLanguage
 	DefaultSize() Size
 	InputPorts() []InputPort
-	Version() version.Version[WidgetType]
-
-	// CheckVersion reports an edit conflict: the caller changes the widget
-	// type having seen it at a Version other than the current one.
-	// Returns ErrWidgetTypeConflict if expected is not the Version.
-	CheckVersion(expected version.Version[WidgetType]) error
 
 	// Update replaces the widget type's definition and records a
-	// WidgetTypeUpdatedEvent.
-	// Returns ErrWidgetTypeConflict if expected is not the Version, or
-	// ErrInvalidWidgetType if the definition is invalid: two InputPorts share
-	// a name (also ErrDuplicateInputPortName) or the script language is the
-	// invalid zero value.
+	// WidgetTypeUpdatedEvent. The Version the write states is its Draft's,
+	// checked by the Draft's transaction (ADR 0016).
+	// Returns ErrInvalidWidgetType if the definition is invalid: two
+	// InputPorts share a name (also ErrDuplicateInputPortName) or the script
+	// language is the invalid zero value.
 	Update(
-		expected version.Version[WidgetType],
 		aName WidgetTypeName,
 		anHtmlTemplate HtmlTemplate,
 		aScript Script,
@@ -77,7 +70,6 @@ type widgetTypeImpl struct {
 	scriptLanguage ScriptLanguage
 	defaultSize    Size
 	inputPorts     []InputPort
-	version        version.Version[WidgetType]
 	pending        []event.Event
 }
 
@@ -97,7 +89,7 @@ func CreateWidgetType(
 	aDefaultSize Size,
 	someInputPorts []InputPort,
 ) (WidgetType, error) {
-	wt, err := ReconstituteWidgetType(anID, aLibraryID, aName, anHtmlTemplate, aScript, aScriptLanguage, aDefaultSize, someInputPorts, version.Initial[WidgetType]())
+	wt, err := ReconstituteWidgetType(anID, aLibraryID, aName, anHtmlTemplate, aScript, aScriptLanguage, aDefaultSize, someInputPorts)
 	if err != nil {
 		return nil, err
 	}
@@ -115,8 +107,8 @@ func RecreateWidgetType(released ReleasedWidgetType) (WidgetType, error) {
 		released.Script(), released.ScriptLanguage(), released.DefaultSize(), released.InputPorts())
 }
 
-// ReconstituteWidgetType rebuilds a WidgetType as stored, at the given
-// version; it records no event. For repositories.
+// ReconstituteWidgetType rebuilds a WidgetType as stored; it records no
+// event. For repositories.
 // Returns ErrDuplicateInputPortName if any two InputPorts share the same name,
 // and an error if the script language is the invalid zero value.
 func ReconstituteWidgetType(
@@ -128,7 +120,6 @@ func ReconstituteWidgetType(
 	aScriptLanguage ScriptLanguage,
 	aDefaultSize Size,
 	someInputPorts []InputPort,
-	aVersion version.Version[WidgetType],
 ) (WidgetType, error) {
 	if err := checkDefinition(aScriptLanguage, someInputPorts); err != nil {
 		return nil, err
@@ -146,7 +137,6 @@ func ReconstituteWidgetType(
 		scriptLanguage: aScriptLanguage,
 		defaultSize:    aDefaultSize,
 		inputPorts:     ports,
-		version:        aVersion,
 	}, nil
 }
 
@@ -167,24 +157,15 @@ func checkDefinition(aScriptLanguage ScriptLanguage, someInputPorts []InputPort)
 	return nil
 }
 
-func (wt widgetTypeImpl) ID() id.ID[WidgetType]                { return wt.id }
-func (wt widgetTypeImpl) LibraryID() id.ID[Library]            { return wt.libraryID }
-func (wt widgetTypeImpl) Name() WidgetTypeName                 { return wt.name }
-func (wt widgetTypeImpl) HtmlTemplate() HtmlTemplate           { return wt.htmlTemplate }
-func (wt widgetTypeImpl) Script() Script                       { return wt.script }
-func (wt widgetTypeImpl) ScriptLanguage() ScriptLanguage       { return wt.scriptLanguage }
-func (wt widgetTypeImpl) DefaultSize() Size                    { return wt.defaultSize }
-func (wt widgetTypeImpl) Version() version.Version[WidgetType] { return wt.version }
-
-func (wt *widgetTypeImpl) CheckVersion(expected version.Version[WidgetType]) error {
-	if expected != wt.version {
-		return fmt.Errorf("%w: expected version %s, current %s", ErrWidgetTypeConflict, expected, wt.version)
-	}
-	return nil
-}
+func (wt widgetTypeImpl) ID() id.ID[WidgetType]          { return wt.id }
+func (wt widgetTypeImpl) LibraryID() id.ID[Library]      { return wt.libraryID }
+func (wt widgetTypeImpl) Name() WidgetTypeName           { return wt.name }
+func (wt widgetTypeImpl) HtmlTemplate() HtmlTemplate     { return wt.htmlTemplate }
+func (wt widgetTypeImpl) Script() Script                 { return wt.script }
+func (wt widgetTypeImpl) ScriptLanguage() ScriptLanguage { return wt.scriptLanguage }
+func (wt widgetTypeImpl) DefaultSize() Size              { return wt.defaultSize }
 
 func (wt *widgetTypeImpl) Update(
-	expected version.Version[WidgetType],
 	aName WidgetTypeName,
 	anHtmlTemplate HtmlTemplate,
 	aScript Script,
@@ -192,10 +173,7 @@ func (wt *widgetTypeImpl) Update(
 	aDefaultSize Size,
 	someInputPorts []InputPort,
 ) (WidgetType, error) {
-	if err := wt.CheckVersion(expected); err != nil {
-		return nil, err
-	}
-	updated, err := ReconstituteWidgetType(wt.id, wt.libraryID, aName, anHtmlTemplate, aScript, aScriptLanguage, aDefaultSize, someInputPorts, wt.version)
+	updated, err := ReconstituteWidgetType(wt.id, wt.libraryID, aName, anHtmlTemplate, aScript, aScriptLanguage, aDefaultSize, someInputPorts)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidWidgetType, err)
 	}
@@ -209,7 +187,7 @@ func (wt *widgetTypeImpl) ResetTo(released ReleasedWidgetType) (WidgetType, erro
 		return nil, fmt.Errorf("cannot reset widget type %s of library %s to %s of library %s",
 			wt.id, wt.libraryID, released.ID(), released.LibraryID())
 	}
-	return wt.Update(wt.version, released.Name(), released.HtmlTemplate(), released.Script(),
+	return wt.Update(released.Name(), released.HtmlTemplate(), released.Script(),
 		released.ScriptLanguage(), released.DefaultSize(), released.InputPorts())
 }
 

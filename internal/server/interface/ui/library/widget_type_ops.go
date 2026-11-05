@@ -38,7 +38,7 @@ func (l *Library) createItem(ctx app.Context) {
 	}, func(ctx app.Context, created apiv0.CreateWidgetTypeResponse) {
 		// The new type is the request as the server stored it: listed and
 		// editable at once, before the list is reread.
-		l.versions.Observe(mark, created.ID, created.Version)
+		l.versions.Observe(mark, l.libraryID, created.Version)
 		l.widgetTypes = append(l.widgetTypes, apiv0.WidgetTypeResponse{
 			ID:             created.ID,
 			LibraryID:      draft.ID(),
@@ -64,7 +64,7 @@ func (l *Library) deleteItem(ctx app.Context) {
 	}
 	deletedID := l.selectedID
 	uiutil.Call(ctx, func(c context.Context) (apiv0.WidgetTypeResponse, error) {
-		return draft.DeleteWidgetType(c, deletedID)
+		return draft.DeleteWidgetType(c, deletedID, l.versions.Of(l.libraryID))
 	}, func(ctx app.Context, _ apiv0.WidgetTypeResponse) {
 		if l.selectedID == deletedID {
 			l.clearSelection()
@@ -89,7 +89,7 @@ func (l *Library) applyChanges(ctx app.Context) {
 		DefaultWidth:   current.DefaultWidth,
 		DefaultHeight:  current.DefaultHeight,
 		InputPorts:     portsRequest(l.edit.ports),
-		Version:        l.versions.Of(l.selectedID),
+		Version:        l.versions.Of(l.libraryID),
 	})
 }
 
@@ -123,7 +123,7 @@ func (l *Library) commitEdit(ctx app.Context) {
 		DefaultWidth:   found.DefaultWidth,
 		DefaultHeight:  found.DefaultHeight,
 		InputPorts:     portsRequest(found.InputPorts),
-		Version:        l.versions.Of(id),
+		Version:        l.versions.Of(l.libraryID),
 	})
 }
 
@@ -146,12 +146,12 @@ func (l *Library) updateWidgetType(id uuid.UUID, req apiv0.UpdateWidgetTypeReque
 	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.UpdateWidgetTypeResponse, error) {
 		return draft.UpdateWidgetType(c, id, req)
 	}, func(ctx app.Context, updated apiv0.UpdateWidgetTypeResponse) {
-		l.versions.Observe(mark, id, updated.Version)
+		l.versions.Observe(mark, l.libraryID, updated.Version)
 		l.loadList(ctx)
 	}, func(ctx app.Context, err error) {
 		uiutil.ShowError(ctx, err)
 		if errors.Is(err, apiclient.ErrConflict) {
-			l.versions.ForgetID(id)
+			l.versions.ForgetID(l.libraryID)
 			l.loadList(ctx)
 		}
 	})

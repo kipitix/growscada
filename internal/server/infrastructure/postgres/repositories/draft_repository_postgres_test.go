@@ -446,12 +446,9 @@ func TestDraftPutLibraryPin_SwitchRemovesBrokenBindingsInOneChange(t *testing.T)
 	if err != nil {
 		t.Fatalf("NewInputPortName: %v", err)
 	}
-	built, err := typeRepo.Save(ctx, makeWidgetType(t, "gauge", []library.InputPort{
+	built := mustCreateWidgetType(t, typeRepo.libraryID, makeWidgetType(t, "gauge", []library.InputPort{
 		library.NewInputPort(portName, "", library.AnyTypeHint()),
 	}, typeRepo))
-	if err != nil {
-		t.Fatalf("Save widget type: %v", err)
-	}
 	first := mustRelease(t, typeRepo.libraryID)
 	mustPin(t, mainProject, first)
 
@@ -471,14 +468,12 @@ func TestDraftPutLibraryPin_SwitchRemovesBrokenBindingsInOneChange(t *testing.T)
 	if err != nil {
 		t.Fatalf("FindByID: %v", err)
 	}
-	narrowed, err := current.Update(current.Version(), current.Name(), current.HtmlTemplate(),
+	narrowed, err := current.Update(current.Name(), current.HtmlTemplate(),
 		current.Script(), current.ScriptLanguage(), current.DefaultSize(), nil)
 	if err != nil {
 		t.Fatalf("Update: %v", err)
 	}
-	if _, err := typeRepo.Save(ctx, narrowed); err != nil {
-		t.Fatalf("Save the narrowed type: %v", err)
-	}
+	mustUpdateLibraryWidgetType(t, typeRepo.libraryID, narrowed)
 	second := mustRelease(t, typeRepo.libraryID)
 
 	mustUpdate(t, mainProject, "Switch pin", func(session *draft.Session) error {
@@ -502,4 +497,164 @@ func TestDraftPutLibraryPin_SwitchRemovesBrokenBindingsInOneChange(t *testing.T)
 	if !ok || len(changed.State.(draft.WidgetState).PortBindings) != 0 {
 		t.Errorf("the after side of the Widget: %+v, want it unbound", changed.State)
 	}
+}
+
+// lastLibraryDraftChange returns the description and the decoded before and
+// after states of the latest DraftChange of a Library.
+func lastLibraryDraftChange(t *testing.T, libraryID id.ID[library.Library]) (string, []draft.Snapshot, []draft.Snapshot) {
+	t.Helper()
+	var (
+		description           string
+		beforeJSON, afterJSON []byte
+	)
+	err := testDB.QueryRow(
+		`SELECT dc.description, dc.before, dc.after
+		 FROM engineering.draft_changes dc JOIN engineering.drafts d ON d.id = dc.draft_id
+		 WHERE d.library_id = $1 ORDER BY dc.seq DESC LIMIT 1`, libraryID.UUID()).
+		Scan(&description, &beforeJSON, &afterJSON)
+	if err != nil {
+		t.Fatalf("read the last draft change: %v", err)
+	}
+	before, err := draftchange.Decode(beforeJSON)
+	if err != nil {
+		t.Fatalf("decode the before of the last draft change: %v", err)
+	}
+	after, err := draftchange.Decode(afterJSON)
+	if err != nil {
+		t.Fatalf("decode the after of the last draft change: %v", err)
+	}
+	return description, before, after
+}
+
+// libraryDraftChangeCount returns how many DraftChanges the Library's Draft
+// holds.
+func libraryDraftChangeCount(t *testing.T, libraryID id.ID[library.Library]) int {
+	t.Helper()
+	var count int
+	err := testDB.QueryRow(
+		`SELECT count(*) FROM engineering.draft_changes dc JOIN engineering.drafts d ON d.id = dc.draft_id
+		 WHERE d.library_id = $1`, libraryID.UUID()).Scan(&count)
+	if err != nil {
+		t.Fatalf("count the draft changes: %v", err)
+	}
+	return count
+}
+
+// TestDraftLibrary_OneChangePerWriteAndCAS: a write of a Library's Draft
+// raises its one Version and appends one DraftChange; a stale Version is a
+// conflict that writes nothing (ADR 0016, ADR 0017).
+func TestDraftLibrary_OneChangePerWriteAndCAS(t *testing.T) {
+	cleanWidgetTypes(t)
+	ctx := editlock.System(context.Background())
+	repo := newWidgetTypeRepo(t)
+	scope := editlock.LibraryScope(repo.libraryID)
+	initial := libraryDraftVersionOf(t, repo.libraryID)
+	wt := makeWidgetType(t, "gauge", nil, repo)
+
+	created, err := testDrafts().Update(ctx, scope, initial, "Create widget type gauge", func(session *draft.Session) error {
+		session.CreateWidgetType(ctx, wt)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if created.Version() != initial.Next() {
+		t.Errorf("version %s after the write, want %s", created.Version(), initial.Next())
+	}
+	description, before, after := lastLibraryDraftChange(t, repo.libraryID)
+	if description != "Create widget type gauge" {
+		t.Errorf("the change: %q", description)
+	}
+	if _, ok := snapshotOf(before, draft.KindWidgetType, wt.ID().UUID()); ok {
+		t.Error("the before side of a created type is not empty")
+	}
+	snapshot, ok := snapshotOf(after, draft.KindWidgetType, wt.ID().UUID())
+	if !ok || snapshot.State.(draft.WidgetTypeState).Name != "gauge" {
+		t.Errorf("the after side: %+v", snapshot.State)
+	}
+
+	again := makeWidgetType(t, "dial", nil, repo)
+	_, err = testDrafts().Update(ctx, scope, initial, "Create widget type dial", func(session *draft.Session) error {
+		session.CreateWidgetType(ctx, again)
+		return nil
+	})
+	if !errors.Is(err, draft.ErrDraftConflict) {
+		t.Fatalf("a stale version: %v, want ErrDraftConflict", err)
+	}
+	if count := libraryDraftChangeCount(t, repo.libraryID); count != 1 {
+		t.Errorf("%d changes after the refused write, want 1", count)
+	}
+	if version := libraryDraftVersionOf(t, repo.libraryID); version != created.Version() {
+		t.Errorf("version %s after the refused write, want %s", version, created.Version())
+	}
+	if list, err := repo.FindAll(ctx); err != nil || len(list) != 1 {
+		t.Errorf("the Draft after the refused write: %v, %v", list, err)
+	}
+}
+
+// TestDraftLibrary_ReplaceRestoresTheReleaseAndClearsTheStack: a Discard is
+// one transaction over the Draft: the released names come back even when two
+// were swapped, the Version rises and the DraftChanges go (ADR 0016).
+func TestDraftLibrary_ReplaceRestoresTheReleaseAndClearsTheStack(t *testing.T) {
+	cleanWidgetTypes(t)
+	ctx := editlock.System(context.Background())
+	repo := newWidgetTypeRepo(t)
+	scope := editlock.LibraryScope(repo.libraryID)
+	a := mustStoreWidgetType(t, makeWidgetType(t, "a", nil, repo), repo)
+	b := mustStoreWidgetType(t, makeWidgetType(t, "b", nil, repo), repo)
+	release := mustRelease(t, repo.libraryID)
+
+	rename := func(wt library.WidgetType, name string) {
+		t.Helper()
+		named, err := library.NewWidgetTypeName(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		changed, err := wt.Update(named, wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.DefaultSize(), wt.InputPorts())
+		if err != nil {
+			t.Fatal(err)
+		}
+		mustUpdateLibraryWidgetType(t, repo.libraryID, changed)
+	}
+	rename(a, "tmp")
+	rename(b, "a")
+	rename(mustFindWidgetType(t, repo, a.ID()), "b")
+	if count := libraryDraftChangeCount(t, repo.libraryID); count != 5 {
+		t.Fatalf("%d changes before the Discard, want 5", count)
+	}
+
+	before := libraryDraftVersionOf(t, repo.libraryID)
+	result, err := testDrafts().Replace(ctx, scope, func(session *draft.Session) error {
+		return session.ReplaceWidgetTypes(ctx, release)
+	})
+	if err != nil {
+		t.Fatalf("replace: %v", err)
+	}
+	if result.Version() != before.Next() {
+		t.Errorf("version %s after the Discard, want %s", result.Version(), before.Next())
+	}
+	if count := libraryDraftChangeCount(t, repo.libraryID); count != 0 {
+		t.Errorf("%d changes left after the Discard, want none", count)
+	}
+	names := map[uuid.UUID]string{}
+	list, err := repo.FindAll(ctx)
+	if err != nil {
+		t.Fatalf("FindAll: %v", err)
+	}
+	for _, wt := range list {
+		names[wt.ID().UUID()] = wt.Name().String()
+	}
+	if len(names) != 2 || names[a.ID().UUID()] != "a" || names[b.ID().UUID()] != "b" {
+		t.Errorf("the Draft after the Discard: %v", names)
+	}
+}
+
+// mustFindWidgetType reads a WidgetType of the Library's Draft.
+func mustFindWidgetType(t *testing.T, repo libraryRepo, typeID id.ID[library.WidgetType]) library.WidgetType {
+	t.Helper()
+	found, err := repo.FindByID(editlock.System(context.Background()), typeID)
+	if err != nil {
+		t.Fatalf("FindByID: %v", err)
+	}
+	return found
 }

@@ -46,8 +46,8 @@ func ensureTestWidgetType(t *testing.T) {
 		{`INSERT INTO engineering.libraries (id, organization_id, name, version)
 		     SELECT $1, id, 'test-library', 1 FROM organizations ON CONFLICT (id) DO NOTHING`, []any{testLibrary}},
 		{`INSERT INTO engineering.widget_types
-		    (id, library_id, name, html_template, script, script_language, input_ports, default_width, default_height, version)
-		 VALUES ($2, $1, 'test-type', '<div></div>', 'function update(){}', 'javascript', '[]', 100, 100, 1)
+		    (id, library_id, name, html_template, script, script_language, input_ports, default_width, default_height)
+		 VALUES ($2, $1, 'test-type', '<div></div>', 'function update(){}', 'javascript', '[]', 100, 100)
 		 ON CONFLICT (id) DO NOTHING`, []any{testLibrary, testWidgetTypeID}},
 		{`INSERT INTO engineering.library_releases (library_id, number) VALUES ($1, 1) ON CONFLICT DO NOTHING`, []any{testLibrary}},
 		{`INSERT INTO engineering.released_widget_types
@@ -69,11 +69,11 @@ func releaseAndPin(t *testing.T, libraryID uuid.UUID) appdto.LibraryRelease {
 	t.Helper()
 	ctx := editlock.System(context.Background())
 	services := newServices()
-	lib, err := services.libraries.FindLibraryByID(ctx, libraryID)
+	state, err := services.libraries.DraftState(ctx, libraryID)
 	if err != nil {
-		t.Fatalf("FindLibraryByID: %v", err)
+		t.Fatalf("DraftState: %v", err)
 	}
-	release, err := services.libraries.Release(ctx, libraryID, lib.Version, appdto.ReleaseInput{})
+	release, err := services.libraries.Release(ctx, libraryID, state.Version, appdto.ReleaseInput{})
 	if err != nil {
 		t.Fatalf("Release: %v", err)
 	}

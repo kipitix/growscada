@@ -2,6 +2,7 @@ package restapi_test
 
 import (
 	"net/http"
+	"strconv"
 	"testing"
 
 	"github.com/google/uuid"
@@ -31,14 +32,14 @@ func TestLibraries_DraftReleaseDiscard(t *testing.T) {
 		t.Errorf("a Discard of a library never released: %d, want 409", rec.Code)
 	}
 	rec = serve(router, http.MethodPost, lp+"/widget-types", apiv0.CreateWidgetTypeRequest{
-		Name: "gauge", HtmlTemplate: "<div/>", ScriptLanguage: "javascript", DefaultWidth: 10, DefaultHeight: 10,
+		Version: 1, Name: "gauge", HtmlTemplate: "<div/>", ScriptLanguage: "javascript", DefaultWidth: 10, DefaultHeight: 10,
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("POST widget-types: %d %s", rec.Code, rec.Body)
 	}
 	wt := decodeBody[apiv0.CreateWidgetTypeResponse](t, rec)
 
-	rec = serve(router, http.MethodPost, lp+"/releases", apiv0.CreateReleaseRequest{Note: "first", Version: created.Version})
+	rec = serve(router, http.MethodPost, lp+"/releases", apiv0.CreateReleaseRequest{Note: "first", Version: wt.Version})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("POST releases: %d %s", rec.Code, rec.Body)
 	}
@@ -46,7 +47,7 @@ func TestLibraries_DraftReleaseDiscard(t *testing.T) {
 	if release.Number != 1 || release.Note != "first" || len(release.WidgetTypes) != 1 || release.WidgetTypes[0].ID != wt.ID || release.WidgetTypes[0].LibraryID != created.ID {
 		t.Errorf("release: %+v", release)
 	}
-	if rec := serve(router, http.MethodPost, lp+"/releases", apiv0.CreateReleaseRequest{Version: created.Version}); rec.Code != http.StatusConflict {
+	if rec := serve(router, http.MethodPost, lp+"/releases", apiv0.CreateReleaseRequest{Version: wt.Version}); rec.Code != http.StatusConflict {
 		t.Errorf("an unchanged Draft: %d, want 409", rec.Code)
 	}
 	if rec := serve(router, http.MethodGet, lp+"/releases/1", nil); rec.Code != http.StatusOK {
@@ -72,14 +73,15 @@ func TestLibraries_DraftReleaseDiscard(t *testing.T) {
 	}
 
 	rec = serve(router, http.MethodPost, lp+"/discard", nil)
-	if rec.Code != http.StatusAccepted {
+	if rec.Code != http.StatusOK {
 		t.Fatalf("POST discard: %d %s", rec.Code, rec.Body)
 	}
-	if lib := decodeBody[apiv0.LibraryResponse](t, rec); lib.DiscardingTo != 1 {
-		t.Errorf("the library being discarded: %+v", lib)
+	state := decodeBody[apiv0.DiscardLibraryResponse](t, rec)
+	if state.Version <= wt.Version {
+		t.Errorf("the Draft after the Discard: %+v, want a version newer than %d", state, wt.Version)
 	}
-	if rec := serve(router, http.MethodDelete, lp+"/widget-types/"+wt.ID.String(), nil); rec.Code != http.StatusConflict {
-		t.Errorf("an edit during the Discard: %d, want 409", rec.Code)
+	if list := decodeBody[apiv0.GetWidgetTypesResponse](t, serve(router, http.MethodGet, lp+"/widget-types", nil)); len(list.WidgetTypes) != 1 || list.WidgetTypes[0].ID != wt.ID {
+		t.Errorf("the Draft after the Discard: %+v", list)
 	}
 }
 
@@ -96,7 +98,7 @@ func TestLibraryPins_AddPreviewSwitchRemove(t *testing.T) {
 	if rec := serve(router, http.MethodPut, pins, apiv0.PutLibraryPinRequest{Release: 1}); rec.Code != http.StatusBadRequest {
 		t.Errorf("pinning a release that does not exist: %d, want 400", rec.Code)
 	}
-	serve(router, http.MethodPost, lp+"/releases", apiv0.CreateReleaseRequest{Version: 1})
+	serve(router, http.MethodPost, lp+"/releases", apiv0.CreateReleaseRequest{Version: wt.Version})
 	rec := serve(router, http.MethodPut, pins, apiv0.PutLibraryPinRequest{Release: 1})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("add pin: %d %s", rec.Code, rec.Body)
@@ -116,8 +118,8 @@ func TestLibraryPins_AddPreviewSwitchRemove(t *testing.T) {
 	input.TypeID = wt.ID
 	w := createWidgetViaService(t, sc.ID, sc.Version, input)
 
-	serve(router, http.MethodDelete, lp+"/widget-types/"+wt.ID.String(), nil)
-	serve(router, http.MethodPost, lp+"/releases", apiv0.CreateReleaseRequest{Version: 1})
+	serve(router, http.MethodDelete, lp+"/widget-types/"+wt.ID.String()+"?version="+strconv.Itoa(testLibraryDraftVersion(t, wtLibrary)), nil)
+	serve(router, http.MethodPost, lp+"/releases", apiv0.CreateReleaseRequest{Version: testLibraryDraftVersion(t, wtLibrary)})
 
 	impact := decodeBody[apiv0.PinImpactResponse](t, serve(router, http.MethodGet, pins+"/impact?release=2", nil))
 	if len(impact.OrphanedWidgets) != 1 || impact.OrphanedWidgets[0].WidgetID != w.ID {
