@@ -29,14 +29,18 @@ func (p *Project) draftChangesVersion() int {
 }
 
 // canUndo reports whether the Undo button acts now: the Draft is this tab's to
-// edit and the stack has a change to undo.
+// edit and the stack names the change to undo. A state that offers a step but
+// no description is no step either: the description is what the button shows
+// as its hover text, and an unnamed step is not offered.
 func (p *Project) canUndo() bool {
-	return p.changesLoaded && !p.readOnly() && p.changes.CanUndo && !p.undoing && !p.redoing
+	return p.changesLoaded && !p.readOnly() && p.changes.CanUndo && p.changes.UndoDescription != "" &&
+		!p.undoing && !p.redoing
 }
 
 // canRedo reports whether the Redo button acts now.
 func (p *Project) canRedo() bool {
-	return p.changesLoaded && !p.readOnly() && p.changes.CanRedo && !p.undoing && !p.redoing
+	return p.changesLoaded && !p.readOnly() && p.changes.CanRedo && p.changes.RedoDescription != "" &&
+		!p.undoing && !p.redoing
 }
 
 // undoDraftChange undoes the change at the stack's position.
@@ -53,8 +57,8 @@ func (p *Project) stepDraftChange(ctx app.Context, undo bool) {
 		return
 	}
 	// A command the buttons would not offer is not sent: a shortcut is the
-	// button's own, and an empty stack is no request.
-	if !p.changesLoaded || (undo && !p.changes.CanUndo) || (!undo && !p.changes.CanRedo) {
+	// button's own, and a step the stack does not name is no request.
+	if (undo && !p.canUndo()) || (!undo && !p.canRedo()) {
 		return
 	}
 	version := p.draftChangesVersion()
@@ -83,15 +87,17 @@ func (p *Project) stepDraftChange(ctx app.Context, undo bool) {
 }
 
 // rejectedDraftChange handles a refused undo or redo. A stale Version is what a
-// refused edit is (the Problem names the Draft's state): the Version is
+// refused edit is (the Problem carries the Draft's state): the Version is
 // forgotten and the stack and the content are read as they are now. An empty
-// stack (the 409 carries no Problem.draft: nothing_to_undo or nothing_to_redo)
-// is a toast and a reread of the stack alone, with no claim on the content.
+// stack (nothing_to_undo or nothing_to_redo, whose 409 carries neither the Draft
+// nor the lock) is a toast and a reread of the stack alone, with no claim on the
+// content. A lock that refuses the write (another client took it over since
+// this tab looked) is neither: its Problem carries the lock, which is applied so
+// the Draft turns read-only at once.
 func (p *Project) rejectedDraftChange(ctx app.Context, err error) {
 	var se *apiclient.StatusError
-	conflict := errors.Is(err, apiclient.ErrConflict)
-	emptyStack := conflict && errors.As(err, &se) && se.Problem.Draft == nil
-	if conflict && !emptyStack {
+	problem := errors.Is(err, apiclient.ErrConflict) && errors.As(err, &se)
+	if problem && se.Problem.Draft != nil {
 		p.rejectedDraftWrite(ctx, err, func(ctx app.Context) {
 			p.loadDraftChanges(ctx)
 			p.loadScenes(ctx)
@@ -101,6 +107,11 @@ func (p *Project) rejectedDraftChange(ctx app.Context, err error) {
 			p.loadWidgetTypes(ctx)
 			p.loadDeploy(ctx)
 		})
+		return
+	}
+	if problem && se.Problem.EditLock != nil {
+		p.applyEditLock(ctx, *se.Problem.EditLock)
+		ctx.Update()
 		return
 	}
 	uiutil.ShowError(ctx, err)
@@ -130,7 +141,7 @@ func (p *Project) undoTitle() string {
 		return readOnlyTitle("Undo the last change")
 	case !p.changesLoaded:
 		return "Undo the last change"
-	case !p.changes.CanUndo:
+	case !p.changes.CanUndo || p.changes.UndoDescription == "":
 		return "Nothing to undo"
 	default:
 		return "Undo: " + p.changes.UndoDescription
@@ -144,7 +155,7 @@ func (p *Project) redoTitle() string {
 		return readOnlyTitle("Redo the change undone last")
 	case !p.changesLoaded:
 		return "Redo the change undone last"
-	case !p.changes.CanRedo:
+	case !p.changes.CanRedo || p.changes.RedoDescription == "":
 		return "Nothing to redo"
 	default:
 		return "Redo: " + p.changes.RedoDescription

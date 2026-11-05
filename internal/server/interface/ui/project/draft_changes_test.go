@@ -299,3 +299,67 @@ func TestShortcut_DialogOpen_SendsNothing(t *testing.T) {
 		t.Errorf("the Draft was undone behind the dialog: %+v", state)
 	}
 }
+
+// TestDraftChangesBar_UnnamedStep_IsOff: a step the stack offers but does not
+// name is no step — its description is what the button shows.
+func TestDraftChangesBar_UnnamedStep_IsOff(t *testing.T) {
+	url, api := newServer(t)
+	f, log := mountLogged(t, url, api)
+	createScene(t, api, "One")
+	f.reloadChanges()
+	log.take()
+
+	state, err := api.DraftChanges(context.Background())
+	if err != nil {
+		t.Fatalf("read the stack: %v", err)
+	}
+	f.p.changes = apiv0.DraftChangesResponse{Version: state.Version, CanUndo: true}
+	f.p.changesLoaded = true
+
+	if f.p.canUndo() {
+		t.Error("an unnamed step is offered")
+	}
+	if got, want := f.p.undoTitle(), "Nothing to undo"; got != want {
+		t.Errorf("hover text %q, want %q", got, want)
+	}
+	f.p.applyKeyAction(f.p.compoCtx, uiutil.KeyUndo)
+	f.run()
+	f.noToasts()
+	if got := log.take(); len(got) != 0 {
+		t.Errorf("requests of an unnamed step: %v, want none", got)
+	}
+}
+
+// TestUndo_LockLost_IsNotAnEmptyStack: the 409 of a write the EditLock refuses
+// carries the lock, not the Draft: the Draft turns read-only at once and the
+// stack is left alone.
+func TestUndo_LockLost_IsNotAnEmptyStack(t *testing.T) {
+	url, api := newServer(t)
+	createScene(t, api, "One")
+	f := mount(t, url, api)
+	f.reloadChanges()
+
+	other := otherClient(t, api)
+	if _, err := other.TakeOverEditLock(context.Background(), "bob", f.p.editLock.Version); err != nil {
+		t.Fatalf("take over: %v", err)
+	}
+	f.e.TakeToasts()
+
+	f.p.applyKeyAction(f.p.compoCtx, uiutil.KeyUndo)
+	f.run()
+
+	got := f.oneToast()
+	if !strings.Contains(got.Detail, "no longer hold the lock") {
+		t.Errorf("toast %+v, want the lost lock", got)
+	}
+	if !f.p.readOnly() {
+		t.Error("the Draft is still editable after a refused write")
+	}
+	state, err := api.DraftChanges(context.Background())
+	if err != nil {
+		t.Fatalf("read the stack: %v", err)
+	}
+	if !state.CanUndo {
+		t.Errorf("the stack was taken for empty: %+v", state)
+	}
+}

@@ -304,3 +304,69 @@ func TestShortcut_DialogOpen_SendsNothing(t *testing.T) {
 		t.Errorf("the Draft was undone behind the dialog: %+v", state)
 	}
 }
+
+// TestDraftChangesBar_UnnamedStep_IsOff: a step the stack offers but does not
+// name is no step — its description is what the button shows.
+func TestDraftChangesBar_UnnamedStep_IsOff(t *testing.T) {
+	url, api := newServer(t)
+	f := mount(t, url, api)
+	f.l.createItem(f.l.compoCtx)
+	f.run()
+	f.reloadChanges()
+	f.noToasts()
+
+	state, err := api.DraftChanges(context.Background())
+	if err != nil {
+		t.Fatalf("read the stack: %v", err)
+	}
+	f.l.changes = apiv0.DraftChangesResponse{Version: state.Version, CanUndo: true}
+	f.l.changesLoaded = true
+
+	if f.l.canUndo() {
+		t.Error("an unnamed step is offered")
+	}
+	if got, want := f.l.undoTitle(), "Nothing to undo"; got != want {
+		t.Errorf("hover text %q, want %q", got, want)
+	}
+	f.l.applyKeyAction(f.l.compoCtx, uiutil.KeyUndo)
+	f.run()
+	f.noToasts()
+	if got := f.typeNames(); len(got) != 1 {
+		t.Errorf("widget types after the silent key: %v, want the one created", got)
+	}
+}
+
+// TestUndo_LockLost_IsNotAnEmptyStack: the 409 of a write the EditLock refuses
+// carries the lock, not the Draft: the Draft turns read-only at once and the
+// stack is left alone.
+func TestUndo_LockLost_IsNotAnEmptyStack(t *testing.T) {
+	url, api := newServer(t)
+	f := mount(t, url, api)
+	f.l.createItem(f.l.compoCtx)
+	f.run()
+	f.reloadChanges()
+
+	other := api.Client.WithClientKey(uuid.NewString()).Library(api.LibraryClient.ID())
+	if _, err := other.TakeOverEditLock(context.Background(), "bob", f.l.editLock.Version); err != nil {
+		t.Fatalf("take over: %v", err)
+	}
+	f.e.TakeToasts()
+
+	f.l.applyKeyAction(f.l.compoCtx, uiutil.KeyUndo)
+	f.run()
+
+	got := f.oneToast()
+	if !strings.Contains(got.Detail, "no longer hold the lock") {
+		t.Errorf("toast %+v, want the lost lock", got)
+	}
+	if !f.l.readOnly() {
+		t.Error("the Draft is still editable after a refused write")
+	}
+	state, err := api.DraftChanges(context.Background())
+	if err != nil {
+		t.Fatalf("read the stack: %v", err)
+	}
+	if !state.CanUndo {
+		t.Errorf("the stack was taken for empty: %+v", state)
+	}
+}
