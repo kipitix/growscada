@@ -221,3 +221,32 @@ func TestRestoreSelection_KeepsOnlyThePrimary(t *testing.T) {
 
 // contains is strings.Contains under the name the assertions read best with.
 func contains(s, sub string) bool { return strings.Contains(s, sub) }
+
+// The anchor, rotation and resize handles belong to the one Widget the
+// properties panel edits: a group selection is bordered but has none.
+func TestCanvasHandles_BelongToTheSingleSelection(t *testing.T) {
+	f, _, ids := selectionFixture(t, 2)
+	w, ok := f.p.findWidget(ids[0])
+	if !ok {
+		t.Fatal("the Widget is not loaded")
+	}
+
+	f.p.selectOnly(f.p.compoCtx, ids[0])
+	html := app.HTMLString(f.p.renderWidget(w, ""))
+	for _, handle := range []string{"cursor:alias", "cursor:se-resize"} {
+		if !contains(html, handle) {
+			t.Errorf("the single selection has no %q handle: %s", handle, html)
+		}
+	}
+
+	f.p.selectAllWidgets(f.p.compoCtx)
+	html = app.HTMLString(f.p.renderWidget(w, ""))
+	for _, handle := range []string{"cursor:alias", "cursor:se-resize", "cursor:crosshair"} {
+		if contains(html, handle) {
+			t.Errorf("a group selection shows the %q handle: %s", handle, html)
+		}
+	}
+	if !contains(html, "border:2px solid var(--accent)") {
+		t.Errorf("the selected Widget lost its selection border: %s", html)
+	}
+}

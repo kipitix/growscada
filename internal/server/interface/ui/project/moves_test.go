@@ -5,8 +5,10 @@ import (
 	"net/http"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
@@ -316,4 +318,44 @@ func TestDrag_DeferredReloadHappensWithoutAMove(t *testing.T) {
 	if f.p.widgetsReloadDeferred {
 		t.Error("the deferred reload is still owed")
 	}
+}
+
+// The series of an arrow key ends by itself: 500 ms without a press send its
+// one PATCH.
+func TestArrowMove_TheTimerEndsTheSeries(t *testing.T) {
+	f, sceneID, ids, counter := moveFixture(t, 1)
+	f.p.selectOnly(f.p.compoCtx, ids[0])
+
+	f.p.beginArrowMove(f.p.compoCtx, 4, 3)
+	time.Sleep(2 * arrowSeriesDelay)
+	f.run()
+
+	f.noToasts()
+	if got := counter.patches(); got != 1 {
+		t.Errorf("%d PATCHes after the timer: want one", got)
+	}
+	if w := f.widget(sceneID, ids[0]); w.Position.X != 14 || w.Position.Y != 23 {
+		t.Errorf("position %+v: want (14, 23)", w.Position)
+	}
+	f.knowsVersion(sceneID)
+}
+
+// Read-only: a press on a Widget selects it and begins no drag, so nothing is
+// sent and no toast says the write was refused.
+func TestWidgetDrag_ReadOnlySendsNothing(t *testing.T) {
+	f, _, ids, counter := moveFixture(t, 1)
+	f.p.editLock = apiv0.EditLockResponse{}
+	f.p.selectOnly(f.p.compoCtx, ids[0])
+
+	f.p.beginWidgetDrag(f.p.compoCtx, app.Event{}, ids[0])
+	if f.p.draggingWidgetID != uuid.Nil {
+		t.Error("read-only began a drag")
+	}
+	f.p.finalizeAllDrags(f.p.compoCtx)
+	f.run()
+
+	if got := counter.patches(); got != 0 {
+		t.Errorf("%d PATCHes in read-only", got)
+	}
+	f.noToasts()
 }
