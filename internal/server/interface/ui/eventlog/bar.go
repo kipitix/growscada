@@ -247,7 +247,7 @@ func (b *Bar) ResyncProject() {
 // fire fires ev, received through st, as an ActionServerEvent, tagged with
 // st's project if it is about its content.
 func (b *Bar) fire(ctx app.Context, st *eventStream, ev apiv0.Event) {
-	if st.projectID != uuid.Nil && (ev.Type == EventProjectResync || isProjectContent(ev.Type)) {
+	if st.projectID != uuid.Nil && (ev.Type == EventProjectResync || isProjectContent(ev)) {
 		ctx.NewActionWithValue(ActionServerEvent, ev, app.T(ProjectTag, st.projectID.String()))
 		return
 	}
@@ -347,7 +347,7 @@ func (b *Bar) handleMessage(ctx app.Context, st *eventStream, data string) {
 	b.markConnected(ctx)
 
 	ev, ok := apiclient.ParseEvent(data)
-	if !ok || !forwards(st.successor != nil, ev.Type) {
+	if !ok || !forwards(st.successor != nil, ev) {
 		return
 	}
 	b.addEntry(ev)
@@ -427,11 +427,11 @@ func resyncsOnOpen(resyncs []string, skipServer bool) []string {
 	return slices.DeleteFunc(slices.Clone(resyncs), func(r string) bool { return r == EventResync })
 }
 
-// forwards reports whether an event of the given type a connection received
-// is delivered: a superseded one (its project no longer selected) delivers
-// only the server's events, not those of its project's content.
-func forwards(superseded bool, eventType string) bool {
-	return !superseded || !isProjectContent(eventType)
+// forwards reports whether an event a connection received is delivered: a
+// superseded one (its project no longer selected) delivers only the server's
+// events, not those of its project's content.
+func forwards(superseded bool, ev apiv0.Event) bool {
+	return !superseded || !isProjectContent(ev)
 }
 
 // markConnected leaves the degraded state, announcing the reconnection to

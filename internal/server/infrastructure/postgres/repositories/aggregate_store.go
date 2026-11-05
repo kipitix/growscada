@@ -245,8 +245,13 @@ func (s aggregateStore[T]) inTx(ctx context.Context, events []event.Event, write
 	// The Draft's EditLock gates every write of its content (ADR 0015): the
 	// check reads the lock row in this transaction, so a takeover waits for
 	// this write and this write waits for a takeover.
-	if s.project != nil {
+	switch {
+	case s.project != nil:
 		if err := checkProjectEditLock(ctx, tx, *s.project); err != nil {
+			return err
+		}
+	case s.library != nil:
+		if err := checkLibraryEditLock(ctx, tx, *s.library); err != nil {
 			return err
 		}
 	}

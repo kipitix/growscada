@@ -1,0 +1,35 @@
+info:
+  name: get library edit lock (free)
+  type: http
+  seq: 54
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/libraries/{{OTHER_LIBRARY_ID}}/edit-lock
+  auth: inherit
+
+docs: |
+  The state of a Library's Draft EditLock (ADR 0015): 200 whether it is free
+  or held, so the UI knows what to show without a 404 to read. A Draft never
+  checked out is free at version 0; the row of a checked-out Draft stays when
+  it is free, its version growing monotonically across holders.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.held'
+      operator: eq
+      value: 'false'
+    - expression: 'res.body.version'
+      operator: eq
+      value: '0'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

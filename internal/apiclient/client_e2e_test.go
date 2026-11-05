@@ -148,7 +148,7 @@ func TestWidgetTypes_RoundTrip(t *testing.T) {
 }
 
 // createLibrary creates a library of a name of its own and returns its
-// client.
+// client, the client holding the library's Draft EditLock (ADR 0015).
 func createLibrary(t *testing.T, client *apiclient.Client) *apiclient.LibraryClient {
 	t.Helper()
 	created, err := client.CreateLibrary(context.Background(), apiv0.CreateLibraryRequest{Name: "lib-" + uuid.NewString()})
@@ -158,6 +158,7 @@ func createLibrary(t *testing.T, client *apiclient.Client) *apiclient.LibraryCli
 	if found, ok, err := client.FindLibraryByName(context.Background(), "no such library"); err != nil || ok {
 		t.Fatalf("FindLibraryByName: %+v, %t, %v", found, ok, err)
 	}
+	servertest.EnsureLibraryEditLockWithClient(t, client, created.ID)
 	return client.Library(created.ID)
 }
 

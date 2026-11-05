@@ -35,6 +35,9 @@ func (r testRouter) ServeMux() http.Handler {
 		if projectID := projectIDInPath(req.URL.Path); projectID != uuid.Nil {
 			holdEditLockFor(projectID)
 		}
+		if libraryID := libraryIDInPath(req.URL.Path); libraryID != uuid.Nil {
+			holdLibraryEditLockFor(libraryID)
+		}
 		inner.ServeHTTP(w, req)
 	})
 }
@@ -69,4 +72,32 @@ func projectIDInPath(path string) uuid.UUID {
 		return uuid.Nil
 	}
 	return projectID
+}
+
+// holdLibraryEditLockFor makes testClientKey the holder of the EditLock of the
+// Draft of the library libraryID. A library that does not exist gets no row:
+// the request is answered 404 before any write.
+func holdLibraryEditLockFor(libraryID uuid.UUID) {
+	db := testDB()
+	_, _ = db.Exec(
+		`INSERT INTO engineering.edit_locks (library_id, holder_key, holder_name, since, last_seen, version)
+		 VALUES ($1, $2, 'restapi-test', now(), now(), 1)
+		 ON CONFLICT (library_id) WHERE library_id IS NOT NULL DO UPDATE
+		 SET holder_key = EXCLUDED.holder_key, holder_name = EXCLUDED.holder_name, last_seen = now()`,
+		libraryID, testClientKey,
+	)
+}
+
+// libraryIDInPath is the library a request path names, uuid.Nil if none.
+func libraryIDInPath(path string) uuid.UUID {
+	rest, ok := strings.CutPrefix(path, apiv0.PathPrefix+"/libraries/")
+	if !ok {
+		return uuid.Nil
+	}
+	raw, _, _ := strings.Cut(rest, "/")
+	libraryID, err := uuid.Parse(raw)
+	if err != nil {
+		return uuid.Nil
+	}
+	return libraryID
 }

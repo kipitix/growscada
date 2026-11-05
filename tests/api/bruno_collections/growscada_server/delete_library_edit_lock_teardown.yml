@@ -1,0 +1,31 @@
+info:
+  name: delete library edit lock teardown (library Widgets)
+  type: http
+  seq: 298
+
+http:
+  method: DELETE
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/edit-lock
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  auth: inherit
+
+docs: |
+  Teardown of the library section: the client that wrote the Draft of the
+  library Widgets gives its EditLock back, leaving the Draft as it is
+  (ADR 0015).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: in
+      value: '[200, 404]'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

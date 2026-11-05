@@ -273,3 +273,155 @@ func markDiscarding(t *testing.T) {
 			`UPDATE projects SET discarding = false WHERE id = $1`, mainProject)
 	})
 }
+
+// newLockLibrary creates a library through the raw router and returns its
+// path and ID: creation is not gated, so it needs no client.
+func newLockLibrary(t *testing.T, router servingRouter) (string, uuid.UUID) {
+	t.Helper()
+	rec := callAs(t, router, http.MethodPost, apiv0.PathPrefix+"/libraries",
+		apiv0.CreateLibraryRequest{Name: "lock-" + uuid.NewString()}, "")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create library: %d %s", rec.Code, rec.Body)
+	}
+	created := decodeBody[apiv0.CreateLibraryResponse](t, rec)
+	return apiv0.PathPrefix + apiv0.LibraryPath(created.ID.String()), created.ID
+}
+
+// TestLibraryEditLock_Routes walks the four routes of a Library's Draft lock
+// (ADR 0015): the same semantics as a Project's.
+func TestLibraryEditLock_Routes(t *testing.T) {
+	cleanEditLocksRest(t)
+	router := lockRouter()
+	lp, _ := newLockLibrary(t, router)
+	lockPath := lp + apiv0.EditLockPath
+
+	if rec := callAs(t, router, http.MethodGet, lockPath, nil, ""); rec.Code != http.StatusOK {
+		t.Fatalf("free lock: %d", rec.Code)
+	} else if lock := decodeLock(t, rec); lock.Held || lock.Version != 0 {
+		t.Fatalf("free lock: %+v", lock)
+	}
+	if rec := callAs(t, router, http.MethodPost, lockPath,
+		apiv0.CheckOutEditLockRequest{Name: "alice"}, ""); rec.Code != http.StatusBadRequest {
+		t.Errorf("check out without a client: %d, want 400", rec.Code)
+	}
+	rec := callAs(t, router, http.MethodPost, lockPath, apiv0.CheckOutEditLockRequest{Name: "alice"}, aliceKey.String())
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("check out: %d %s", rec.Code, rec.Body)
+	}
+	lock := decodeLock(t, rec)
+	if !lock.Held || lock.Holder == nil || lock.Holder.Name != "alice" || lock.Holder.Key != aliceKey || lock.Version != 1 {
+		t.Fatalf("checked out: %+v", lock)
+	}
+
+	rec = callAs(t, router, http.MethodPost, lockPath, apiv0.CheckOutEditLockRequest{Name: "bob"}, bobKey.String())
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("check out of a held library: %d, want 409", rec.Code)
+	}
+	var problem apiv0.Problem
+	if err := json.NewDecoder(rec.Body).Decode(&problem); err != nil {
+		t.Fatalf("decode problem: %v", err)
+	}
+	if problem.EditLock == nil || !problem.EditLock.Held || problem.EditLock.Holder.Name != "alice" {
+		t.Errorf("the problem does not name the holder: %+v", problem.EditLock)
+	}
+
+	if rec := callAs(t, router, http.MethodPost, lockPath+"/takeover",
+		apiv0.TakeOverEditLockRequest{Name: "bob", Version: 7}, bobKey.String()); rec.Code != http.StatusConflict {
+		t.Errorf("takeover with a stale version: %d, want 409", rec.Code)
+	}
+	rec = callAs(t, router, http.MethodPost, lockPath+"/takeover",
+		apiv0.TakeOverEditLockRequest{Name: "bob", Version: 1}, bobKey.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("takeover: %d %s", rec.Code, rec.Body)
+	}
+	if lock := decodeLock(t, rec); lock.Holder == nil || lock.Holder.Name != "bob" || lock.Version != 2 {
+		t.Errorf("taken over: %+v", lock)
+	}
+
+	if rec := callAs(t, router, http.MethodDelete, lockPath, nil, aliceKey.String()); rec.Code != http.StatusConflict {
+		t.Errorf("check in of another's lock: %d, want 409", rec.Code)
+	}
+	rec = callAs(t, router, http.MethodDelete, lockPath, nil, bobKey.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("check in: %d", rec.Code)
+	}
+	if lock := decodeLock(t, rec); lock.Held || lock.Version != 3 {
+		t.Errorf("checked in: %+v", lock)
+	}
+}
+
+func TestLibraryEditLock_UnknownLibrary_Is404(t *testing.T) {
+	rec := callAs(t, lockRouter(), http.MethodGet,
+		apiv0.PathPrefix+apiv0.LibraryPath(uuid.NewString())+apiv0.EditLockPath, nil, "")
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status %d, want 404", rec.Code)
+	}
+}
+
+// TestGatedLibraryWrite_OverREST: a write of a Library's Draft is gated the
+// same way, and the Problem carries the lock.
+func TestGatedLibraryWrite_OverREST(t *testing.T) {
+	cleanEditLocksRest(t)
+	router := lockRouter()
+	lp, _ := newLockLibrary(t, router)
+
+	wt := apiv0.CreateWidgetTypeRequest{
+		Name: "gated", HtmlTemplate: "<div/>", ScriptLanguage: "javascript", DefaultWidth: 10, DefaultHeight: 10,
+	}
+	if rec := callAs(t, router, http.MethodPost, lp+"/widget-types", wt, ""); rec.Code != http.StatusBadRequest {
+		t.Errorf("write without a client: %d, want 400", rec.Code)
+	}
+	rec := callAs(t, router, http.MethodPost, lp+"/widget-types", wt, aliceKey.String())
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("write of a free Draft: %d, want 409", rec.Code)
+	}
+	var free apiv0.Problem
+	if err := json.NewDecoder(rec.Body).Decode(&free); err != nil {
+		t.Fatalf("decode problem: %v", err)
+	}
+	if free.EditLock == nil || free.EditLock.Held {
+		t.Errorf("the problem of a free Draft: %+v", free.EditLock)
+	}
+
+	callAs(t, router, http.MethodPost, lp+apiv0.EditLockPath, apiv0.CheckOutEditLockRequest{Name: "alice"}, aliceKey.String())
+	if rec := callAs(t, router, http.MethodPost, lp+"/widget-types", wt, bobKey.String()); rec.Code != http.StatusConflict {
+		t.Errorf("another client's write: %d, want 409", rec.Code)
+	}
+	if rec := callAs(t, router, http.MethodPost, lp+"/widget-types", wt, aliceKey.String()); rec.Code != http.StatusCreated {
+		t.Errorf("the holder's write: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// TestLibraryCheckOut_WhileDiscarding_Is409: a Discard under way makes the
+// Draft read-only, a Check out included (ADR 0015).
+func TestLibraryCheckOut_WhileDiscarding_Is409(t *testing.T) {
+	cleanEditLocksRest(t)
+	router := lockRouter()
+	lp, libraryID := newLockLibrary(t, router)
+	markLibraryDiscarding(t, libraryID)
+
+	rec := callAs(t, router, http.MethodPost, lp+apiv0.EditLockPath,
+		apiv0.CheckOutEditLockRequest{Name: "alice"}, aliceKey.String())
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("check out while discarding: %d %s, want 409", rec.Code, rec.Body)
+	}
+	var problem apiv0.Problem
+	_ = json.NewDecoder(rec.Body).Decode(&problem)
+	if problem.Detail == "" {
+		t.Errorf("no detail of the refusal")
+	}
+}
+
+// markLibraryDiscarding marks the library as being discarded, as a Discard
+// under way does, without needing a release.
+func markLibraryDiscarding(t *testing.T, libraryID uuid.UUID) {
+	t.Helper()
+	if _, err := testDB().ExecContext(editlock.System(context.Background()),
+		`UPDATE engineering.libraries SET discarding_to = 1 WHERE id = $1`, libraryID); err != nil {
+		t.Fatalf("mark discarding: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = testDB().ExecContext(editlock.System(context.Background()),
+			`UPDATE engineering.libraries SET discarding_to = NULL WHERE id = $1`, libraryID)
+	})
+}

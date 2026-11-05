@@ -58,16 +58,23 @@ func TestResyncsOnOpen(t *testing.T) {
 // the server's events until it is closed, never its old project's content.
 func TestForwards(t *testing.T) {
 	for _, et := range apiv0.EventTypes() {
-		if !forwards(false, et) {
+		ev := apiv0.Event{Type: et}
+		if !forwards(false, ev) {
 			t.Errorf("%s from the current connection: not delivered", et)
 		}
 		content := strings.HasPrefix(et, "tag_") || strings.HasPrefix(et, "scene_") ||
 			(strings.HasPrefix(et, "widget_") && !strings.HasPrefix(et, "widget_type_")) ||
 			strings.HasPrefix(et, "library_pin_") || strings.HasPrefix(et, "device_") ||
 			strings.HasPrefix(et, "environment_") || strings.HasPrefix(et, "edit_lock_") || et == apiv0.EventRevisionCreated
-		if got := forwards(true, et); got == content {
+		if got := forwards(true, ev); got == content {
 			t.Errorf("%s from a superseded connection: delivered %t, want %t", et, got, !content)
 		}
+	}
+	// A Library's EditLock is the server's event, not its Project's: it names
+	// the Library (ADR 0015).
+	libraryLock := apiv0.Event{Type: apiv0.EventEditLockAcquired, LibraryID: uuid.NewString()}
+	if !forwards(true, libraryLock) {
+		t.Error("a Library's EditLock from a superseded connection: not delivered")
 	}
 }
 

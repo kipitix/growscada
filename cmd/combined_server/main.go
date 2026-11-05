@@ -192,7 +192,8 @@ func main() {
 	// API server
 	// Create services
 	projectContent := application.NewProjectContent(projectRepository, projectScopes, organizationID)
-	editLockService := application.NewEditLockService(projectContent, editLockRepository)
+	libraryContent := application.NewLibraryContent(libraryRepository, organizationID)
+	editLockService := application.NewEditLockService(projectContent, libraryContent, editLockRepository)
 	projectService := application.NewProjectService(projectRepository, organizationID)
 	tagService := application.NewTagService(projectContent, runtimeNode)
 	// Deploy and Discard (task 35): the Engineering node assembles the Draft's

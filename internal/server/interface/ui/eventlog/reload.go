@@ -38,7 +38,7 @@ var AllTargets = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: tru
 // The lists of each stream: what its resync reloads, since the events it
 // published while disconnected are lost.
 var (
-	serverTargets  = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true}
+	serverTargets  = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, EditLock: true}
 	projectTargets = ReloadTargets{LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Revision: true, EditLock: true}
 )
 

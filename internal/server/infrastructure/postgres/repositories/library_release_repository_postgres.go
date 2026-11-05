@@ -39,6 +39,11 @@ func (r libraryReleaseRepositoryPostgresImpl) Save(ctx context.Context, release 
 	libraryID := release.LibraryID()
 	var createdAt time.Time // as stored, to the column's precision
 	err := r.store.inTx(ctx, release.PendingEvents(), func(tx *sql.Tx) error {
+		// A Release is an act over the whole Draft: the client must hold its
+		// EditLock, checked in the transaction of the release rows (ADR 0015).
+		if err := checkLibraryEditLock(ctx, tx, libraryID); err != nil {
+			return err
+		}
 		row, err := lockLibraryRowExclusive(ctx, tx, libraryID)
 		switch {
 		case err != nil:

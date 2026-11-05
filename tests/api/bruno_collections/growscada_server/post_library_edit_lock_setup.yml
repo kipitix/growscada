@@ -1,0 +1,45 @@
+info:
+  name: post library edit lock setup (library Widgets)
+  type: http
+  seq: 52
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/edit-lock
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "bruno"
+      }
+  auth: inherit
+
+docs: |
+  Setup of the library section: the requests that write the Draft of the
+  library Widgets act as this client, so it checks the Draft's EditLock out
+  first (ADR 0015). Every write names the same key in X-GrowSCADA-Client; the
+  teardown checks it back in. 201 when the lock was free, 200 when a previous
+  run left it to this client.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: in
+      value: '[200, 201]'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.held'
+      operator: eq
+      value: 'true'
+    - expression: 'res.body.holder.key'
+      operator: eq
+      value: '"{{CLIENT_KEY}}"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

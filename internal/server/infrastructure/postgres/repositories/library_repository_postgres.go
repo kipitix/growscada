@@ -54,6 +54,15 @@ func (r libraryRepositoryPostgresImpl) Save(ctx context.Context, l library.Libra
 			return libraryWriteError("insert new library", err)
 		},
 		update: func(tx *sql.Tx, current, next version.Version[library.Library]) (bool, error) {
+			// Starting a Discard is an act over the whole Draft: the client
+			// must hold its EditLock, checked in the transaction of the mark
+			// (ADR 0015). Clearing the mark is the Discard policy's, which
+			// writes as the server.
+			if _, discarding := l.DiscardingTo(); discarding {
+				if err := checkLibraryEditLock(ctx, tx, l.ID()); err != nil {
+					return false, err
+				}
+			}
 			res, err := tx.ExecContext(ctx,
 				`UPDATE engineering.libraries
 				 SET name = $1, discarding_to = $2, version = $3, deleted_at = CASE WHEN $4 THEN now() END

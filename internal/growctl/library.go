@@ -86,6 +86,23 @@ func (p libraryPlan) changed() bool {
 	return false
 }
 
+// changedLibraryNames returns the names of the libraries whose Draft the plan
+// writes, in name order.
+func (p libraryPlan) changedLibraryNames() []string {
+	names := map[string]bool{}
+	for _, step := range p.widgetTypes {
+		if step.IsChange() {
+			names[step.Library] = true
+		}
+	}
+	ordered := make([]string, 0, len(names))
+	for name := range names {
+		ordered = append(ordered, name)
+	}
+	sort.Strings(ordered)
+	return ordered
+}
+
 // sameDefinition reports whether the WidgetType on the server is defined as
 // its manifest declares it.
 func sameDefinition(server apiv0.WidgetTypeResponse, m apiv0.CreateWidgetTypeRequest) bool {
@@ -247,8 +264,10 @@ func printLibraryDiff(out io.Writer, plan libraryPlan) {
 }
 
 // executeLibraries runs the plan's libraries, WidgetTypes and pins, printing
-// each step once it is done. It stops at the first failure.
-func executeLibraries(ctx context.Context, client *Client, plan libraryPlan, out io.Writer) error {
+// each step once it is done. It stops at the first failure. The libraries
+// whose Draft it writes are checked out first (ADR 0015): a plan that writes
+// no WidgetType takes no lock.
+func executeLibraries(ctx context.Context, client *Client, run *settings, plan libraryPlan, out io.Writer) error {
 	ids := map[string]apiv0.LibraryResponse{}
 	for _, s := range plan.libraries {
 		switch s.Action {
@@ -280,6 +299,12 @@ func executeLibraries(ctx context.Context, client *Client, plan libraryPlan, out
 		ids[name] = found
 		return client.Library(found.ID), nil
 	}
+
+	unlock, err := run.lockFoundLibraries(ctx, client, plan.changedLibraryNames())
+	if err != nil {
+		return err
+	}
+	defer unlock()
 
 	for _, s := range plan.widgetTypes {
 		ref := widgetTypeRef(s.Library, s.Name())
@@ -412,8 +437,36 @@ func planDeleteLibraries(ctx context.Context, client *Client, manifests Manifest
 }
 
 // executeDeleteLibraries deletes the WidgetTypes, then the libraries, of a
-// delete -f, printing each step once it is done.
-func executeDeleteLibraries(ctx context.Context, client *Client, types []WidgetTypeStep, libs []LibraryStep, out io.Writer) error {
+// delete -f, printing each step once it is done. The Drafts it writes are
+// checked out first (ADR 0015); a library gone meanwhile is reported as not
+// found, its lock not taken.
+func executeDeleteLibraries(ctx context.Context, client *Client, run *settings, types []WidgetTypeStep, libs []LibraryStep, out io.Writer) error {
+	var names []string
+	seen := map[string]bool{}
+	for _, s := range types {
+		if s.Action == ActionDelete && !seen[s.Library] {
+			seen[s.Library] = true
+			names = append(names, s.Library)
+		}
+	}
+	sort.Strings(names)
+	var unlocks []func()
+	defer func() {
+		for i := len(unlocks) - 1; i >= 0; i-- {
+			unlocks[i]()
+		}
+	}()
+	for _, name := range names {
+		lib, _, err := findLibrary(ctx, client, name)
+		if err != nil {
+			continue // gone: its steps are reported as not found
+		}
+		release, err := run.lockLibrary(ctx, lib, name)
+		if err != nil {
+			return err
+		}
+		unlocks = append(unlocks, release)
+	}
 	for _, s := range types {
 		ref := widgetTypeRef(s.Library, s.Name())
 		if s.Action == ActionDelete {
@@ -471,10 +524,18 @@ func newReleaseCommand(s *settings) *cobra.Command {
 		Args: exactlyOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			lib, found, err := findLibrary(ctx, s.client(), args[0])
+			client := s.client()
+			lib, found, err := findLibrary(ctx, client, args[0])
 			if err != nil {
 				return err
 			}
+			// A Release is an act over the whole Draft: it needs its EditLock
+			// (ADR 0015).
+			unlock, err := s.lockLibrary(ctx, lib, args[0])
+			if err != nil {
+				return err
+			}
+			defer unlock()
 			release, err := lib.Release(ctx, apiv0.CreateReleaseRequest{Note: note, Version: found.Version})
 			if err != nil {
 				return fmt.Errorf("library/%s: %w", args[0], err)
@@ -498,10 +559,18 @@ func newDiscardCommand(s *settings) *cobra.Command {
 		Args: exactlyOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			lib, _, err := findLibrary(ctx, s.client(), args[0])
+			client := s.client()
+			lib, _, err := findLibrary(ctx, client, args[0])
 			if err != nil {
 				return err
 			}
+			// A Discard is an act over the whole Draft: it needs its EditLock
+			// (ADR 0015).
+			unlock, err := s.lockLibrary(ctx, lib, args[0])
+			if err != nil {
+				return err
+			}
+			defer unlock()
 			marked, err := lib.Discard(ctx)
 			if err != nil {
 				return fmt.Errorf("library/%s: %w", args[0], err)

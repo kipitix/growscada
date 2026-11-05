@@ -166,7 +166,9 @@ func deployProject(t *testing.T, projectID uuid.UUID) {
 		content,
 		application.NewProjectFileBuilder(content),
 		newRuntimeNode(),
-		application.NewEditLockService(content, repositories.NewEditLockRepositoryPostgres(testDB)),
+		application.NewEditLockService(content,
+			application.NewLibraryContent(repositories.NewLibraryRepositoryPostgres(testDB), soleOrganization()),
+			repositories.NewEditLockRepositoryPostgres(testDB)),
 	)
 	if _, err := service.Deploy(editlock.System(context.Background()), projectID); err != nil && !errors.Is(err, application.ErrNothingToDeploy) {
 		t.Fatalf("deploy project %s: %v", projectID, err)

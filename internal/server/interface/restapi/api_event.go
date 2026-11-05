@@ -110,7 +110,15 @@ func newAPIEvent(e event.Event) apiv0.Event {
 	case device.EnvironmentEvent:
 		ev.ID = e.EnvironmentID().String()
 	case editlock.Event:
-		ev.ID = e.Scope().ProjectID().String()
+		// The event names the Draft: a Project's lock through the Project's
+		// ID, a Library's through its own, which the server's stream carries
+		// (ADR 0015).
+		if e.Scope().IsLibrary() {
+			ev.ID = e.Scope().LibraryID().String()
+			ev.LibraryID = e.Scope().LibraryID().String()
+		} else {
+			ev.ID = e.Scope().ProjectID().String()
+		}
 		lock := newEditLockResponseOfEvent(e.State())
 		ev.EditLock = &lock
 	case runtimeapp.RevisionCreatedEvent:

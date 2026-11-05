@@ -51,22 +51,26 @@ func defaultFilters() map[category]bool {
 	}
 }
 
-// isProjectContent reports whether events of the type are of a project's
-// content (Tags, their values, Scenes, Widgets, Library Pins, Devices,
-// Environments and their pairs, and the Revision), carried by the stream of
-// that project; anything else is the server's.
-func isProjectContent(eventType string) bool {
-	switch eventType {
+// isProjectContent reports whether an event is of a project's content (Tags,
+// their values, Scenes, Widgets, Library Pins, Devices, Environments and their
+// pairs, the Revision, and the EditLock of the project's Draft), carried by
+// the stream of that project; anything else is the server's. A Library's
+// EditLock is the server's, though its type is a Draft's.
+func isProjectContent(ev apiv0.Event) bool {
+	switch ev.Type {
 	case apiv0.EventLibraryPinCreated, apiv0.EventLibraryPinUpdated, apiv0.EventLibraryPinDeleted,
 		apiv0.EventDeviceCreated, apiv0.EventDeviceUpdated, apiv0.EventDeviceDeleted,
 		apiv0.EventEnvironmentCreated, apiv0.EventEnvironmentUpdated, apiv0.EventEnvironmentDeleted,
 		apiv0.EventEnvironmentDeviceCreated, apiv0.EventEnvironmentDeviceUpdated, apiv0.EventEnvironmentDeviceDeleted,
-		apiv0.EventRevisionCreated,
-		apiv0.EventEditLockAcquired, apiv0.EventEditLockReleased,
-		apiv0.EventEditLockTakenOver, apiv0.EventEditLockExpired:
+		apiv0.EventRevisionCreated:
 		return true
+	case apiv0.EventEditLockAcquired, apiv0.EventEditLockReleased,
+		apiv0.EventEditLockTakenOver, apiv0.EventEditLockExpired:
+		// A Project's lock travels on that Project's stream; a Library's,
+		// which names its library, on the server's (ADR 0015).
+		return ev.LibraryID == ""
 	}
-	switch eventTypeInfoByType[eventType].category {
+	switch eventTypeInfoByType[ev.Type].category {
 	case categoryTag, categoryValue, categoryScene, categoryWidget:
 		return true
 	}

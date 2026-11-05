@@ -34,7 +34,7 @@ func TestReloadTargetsFor(t *testing.T) {
 		{apiv0.Event{Type: apiv0.EventTagUpdated, Tag: &apiv0.TagResponse{ID: sceneID}}, ReloadTargets{}},
 		{apiv0.Event{Type: apiv0.EventTagUpdated}, ReloadTargets{Tags: true}},
 		{apiv0.Event{Type: apiv0.EventTagDeleted}, ReloadTargets{Tags: true, Deploy: true}},
-		{apiv0.Event{Type: EventResync}, ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true}},
+		{apiv0.Event{Type: EventResync}, ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, EditLock: true}},
 		{apiv0.Event{Type: EventProjectResync}, ReloadTargets{LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Revision: true, EditLock: true}},
 		{apiv0.Event{Type: apiv0.EventEditLockAcquired}, ReloadTargets{EditLock: true}},
 		{apiv0.Event{Type: apiv0.EventEditLockTakenOver}, ReloadTargets{EditLock: true}},

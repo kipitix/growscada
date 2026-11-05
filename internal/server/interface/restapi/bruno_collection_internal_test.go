@@ -43,6 +43,8 @@ var requestBodies = map[string]any{
 	"POST " + projectPrefix + "/deploy":                                                                                  nil,
 	"POST " + projectPrefix + "/revisions/" + revisionResource.wildcard() + "/rollback":                                  nil,
 	"POST " + projectPrefix + "/discard":                                                                                 nil,
+	"POST " + libraryPrefix + apiv0.EditLockPath:                                                                         apiv0.CheckOutEditLockRequest{},
+	"POST " + libraryPrefix + apiv0.EditLockPath + "/takeover":                                                           apiv0.TakeOverEditLockRequest{},
 	"POST " + projectPrefix + apiv0.EditLockPath:                                                                         apiv0.CheckOutEditLockRequest{},
 	"POST " + projectPrefix + apiv0.EditLockPath + "/takeover":                                                           apiv0.TakeOverEditLockRequest{},
 }

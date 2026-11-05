@@ -1,0 +1,44 @@
+info:
+  name: post library edit lock takeover
+  type: http
+  seq: 79
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/edit-lock/takeover
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{OTHER_CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "alice",
+        "version": 1
+      }
+  auth: inherit
+
+docs: |
+  A takeover of a Library's Draft states the version the client observed
+  (ADR 0015). A stale version is `409 Conflict`; this one is the fresh state,
+  so the lock changes hands and its version grows.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.holder.key'
+      operator: eq
+      value: '"{{OTHER_CLIENT_KEY}}"'
+    - expression: 'res.body.version'
+      operator: eq
+      value: '2'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -24,7 +24,9 @@ func newDeployService() (application.DeployService, application.RuntimeNode) {
 		content,
 		application.NewProjectFileBuilder(content),
 		node,
-		application.NewEditLockService(content, repositories.NewEditLockRepositoryPostgres(testDB)),
+		application.NewEditLockService(content,
+			application.NewLibraryContent(repositories.NewLibraryRepositoryPostgres(testDB), soleOrganization()),
+			repositories.NewEditLockRepositoryPostgres(testDB)),
 	), node
 }
 

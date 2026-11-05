@@ -187,6 +187,11 @@ func (r *APIRouter) routes() []route {
 		{"PUT " + lp + "/widget-types/" + widgetTypeResource.wildcard(), widgetTypes.PutWidgetTypesByID},
 		{"DELETE " + lp + "/widget-types/" + widgetTypeResource.wildcard(), widgetTypes.DeleteWidgetTypesByID},
 
+		{"GET " + lp + apiv0.EditLockPath, locks.GetLibraryEditLock},
+		{"POST " + lp + apiv0.EditLockPath, locks.PostLibraryEditLock},
+		{"DELETE " + lp + apiv0.EditLockPath, locks.DeleteLibraryEditLock},
+		{"POST " + lp + apiv0.EditLockPath + "/takeover", locks.PostLibraryEditLockTakeOver},
+
 		{"GET " + pp + "/library-pins", pins.GetLibraryPins},
 		{"PUT " + pp + "/library-pins/" + libraryPinResource.wildcard(), pins.PutLibraryPin},
 		{"DELETE " + pp + "/library-pins/" + libraryPinResource.wildcard(), pins.DeleteLibraryPin},

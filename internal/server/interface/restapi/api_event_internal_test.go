@@ -222,6 +222,24 @@ var sampleEditLockKey = editlock.NewKey()
 
 func editLockKey() editlock.Key { return sampleEditLockKey }
 
+// TestNewAPIEvent_LibraryEditLock names the Library of a Library's Draft and
+// not the zero Project of its Scope (ADR 0015): the event is the server's,
+// and the UI tells it from a Project's.
+func TestNewAPIEvent_LibraryEditLock(t *testing.T) {
+	at := time.Date(2026, 10, 15, 12, 30, 0, 0, time.UTC)
+	ts := event.WithTimestamp(event.NewEventTimestamp(event.EventTimestampWithTime(at)))
+	libraryID := id.NewID[library.Library]()
+
+	ev := newAPIEvent(editlock.NewEditLockAcquiredEvent(editlock.LibraryScope(libraryID),
+		editlock.Snapshot{Held: true, Holder: editLockHolder(), Since: at, LastSeen: at, Version: 1}, ts))
+	if ev.ID != libraryID.String() || ev.LibraryID != libraryID.String() {
+		t.Errorf("got ID %q, LibraryID %q; want the library %s", ev.ID, ev.LibraryID, libraryID)
+	}
+	if ev.EditLock == nil || !ev.EditLock.Held {
+		t.Errorf("the event carries no lock state: %+v", ev.EditLock)
+	}
+}
+
 // editLockHolder is the sample holder of the edit_lock_* events.
 func editLockHolder() editlock.Holder {
 	holder, err := editlock.NewHolder(editLockKey(), "alice")

@@ -304,6 +304,12 @@ func (l *LibraryClient) do(ctx context.Context, method, path string, body any, w
 	return l.c.do(ctx, method, l.prefix+path, body, wantStatus, out)
 }
 
+// doOneOf is do for a call that may answer with one of several statuses: the
+// value of out is the same for each.
+func (l *LibraryClient) doOneOf(ctx context.Context, method, path string, body any, out any, wantStatuses ...int) error {
+	return l.c.doOneOf(ctx, method, l.prefix+path, body, out, wantStatuses...)
+}
+
 // ListWidgetTypes returns every WidgetType of the library's Draft.
 func (l *LibraryClient) ListWidgetTypes(ctx context.Context) ([]apiv0.WidgetTypeResponse, error) {
 	var resp apiv0.GetWidgetTypesResponse
@@ -711,6 +717,42 @@ func (p *ProjectClient) CheckInEditLock(ctx context.Context) (apiv0.EditLockResp
 func (p *ProjectClient) TakeOverEditLock(ctx context.Context, name string, version int) (apiv0.EditLockResponse, error) {
 	var resp apiv0.EditLockResponse
 	err := p.do(ctx, http.MethodPost, apiv0.EditLockPath+"/takeover",
+		apiv0.TakeOverEditLockRequest{Name: name, Version: version}, http.StatusOK, &resp)
+	return resp, err
+}
+
+// StateEditLock returns the state of the Library's Draft EditLock, free or
+// held (ADR 0015).
+func (l *LibraryClient) StateEditLock(ctx context.Context) (apiv0.EditLockResponse, error) {
+	var resp apiv0.EditLockResponse
+	err := l.do(ctx, http.MethodGet, apiv0.EditLockPath, nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+// CheckOutEditLock takes the Library's Draft for editing under name. The error
+// matches ErrConflict if another client holds it; holding it already is not a
+// conflict.
+func (l *LibraryClient) CheckOutEditLock(ctx context.Context, name string) (apiv0.EditLockResponse, error) {
+	var resp apiv0.EditLockResponse
+	err := l.doOneOf(ctx, http.MethodPost, apiv0.EditLockPath,
+		apiv0.CheckOutEditLockRequest{Name: name}, &resp, http.StatusCreated, http.StatusOK)
+	return resp, err
+}
+
+// CheckInEditLock gives the Library's Draft back. A free lock is not an
+// error; another client's is (ErrConflict).
+func (l *LibraryClient) CheckInEditLock(ctx context.Context) (apiv0.EditLockResponse, error) {
+	var resp apiv0.EditLockResponse
+	err := l.do(ctx, http.MethodDelete, apiv0.EditLockPath, nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+// TakeOverEditLock takes the Library's Draft from its holder, stating the
+// version observed. The error matches ErrConflict if the version is stale
+// (reload the state and retry) or the lock is free.
+func (l *LibraryClient) TakeOverEditLock(ctx context.Context, name string, version int) (apiv0.EditLockResponse, error) {
+	var resp apiv0.EditLockResponse
+	err := l.do(ctx, http.MethodPost, apiv0.EditLockPath+"/takeover",
 		apiv0.TakeOverEditLockRequest{Name: name, Version: version}, http.StatusOK, &resp)
 	return resp, err
 }

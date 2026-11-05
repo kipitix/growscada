@@ -67,7 +67,9 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 	}
 	projectRepo := repositories.NewProjectRepositoryPostgres(db, opts...)
 	content := application.NewProjectContent(projectRepo, repositories.NewProjectScopes(db, opts...), orgID)
-	editLocks := application.NewEditLockService(content, repositories.NewEditLockRepositoryPostgres(db, opts...))
+	editLocks := application.NewEditLockService(content,
+		application.NewLibraryContent(repositories.NewLibraryRepositoryPostgres(db, opts...), orgID),
+		repositories.NewEditLockRepositoryPostgres(db, opts...))
 	libraries := repositories.NewLibraryRepositoryPostgres(db, opts...)
 	releases := repositories.NewLibraryReleaseRepositoryPostgres(db, opts...)
 	widgetTypes := repositories.NewWidgetTypeRepositories(db, opts...)

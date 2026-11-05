@@ -7,12 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/editlock"
-	"github.com/kipitix/growscada/internal/server/domain/id"
-	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
@@ -29,32 +25,33 @@ const (
 )
 
 // EditLockService is the Engineering node's EditLock (ADR 0015): the one
-// editor of a Draft, identified by the key of the client that holds it.
-// Presence — the keys with an open SSE stream — is kept in memory of this
-// node, like the event bus.
+// editor of a Draft — a Project's or a Library's — identified by the key of
+// the client that holds it. Presence — the keys with an open SSE stream — is
+// kept in memory of this node, like the event bus.
 type EditLockService interface {
-	// State is the lock of the live Project's Draft, free or held. A Project
+	// State is the lock of the live Draft's scope, free or held. A Draft
 	// never checked out is free at version 0.
-	State(ctx context.Context, projectID uuid.UUID) (appdto.EditLock, error)
+	State(ctx context.Context, scope editlock.Scope) (appdto.EditLock, error)
 	// CheckOut takes the lock for the client of the context under the
 	// declared name, and reports whether it took it now (false: this client
-	// held it already). A held lock is editlock.ErrEditLockHeld, a Project
-	// being discarded is project.ErrProjectDiscarding.
-	CheckOut(ctx context.Context, projectID uuid.UUID, name string) (appdto.EditLock, bool, error)
+	// held it already). A held lock is editlock.ErrEditLockHeld, a Draft
+	// being discarded is project.ErrProjectDiscarding or
+	// library.ErrLibraryDiscarding.
+	CheckOut(ctx context.Context, scope editlock.Scope, name string) (appdto.EditLock, bool, error)
 	// CheckIn gives the lock back to the Draft as it is. A free lock is no
 	// error; another client's lock is editlock.ErrEditLockNotHeld.
-	CheckIn(ctx context.Context, projectID uuid.UUID) (appdto.EditLock, error)
+	CheckIn(ctx context.Context, scope editlock.Scope) (appdto.EditLock, error)
 	// TakeOver takes a held lock over, stating the version the client
 	// observed: a stale one is editlock.ErrEditLockVersionStale, a free lock
 	// editlock.ErrEditLockFree.
-	TakeOver(ctx context.Context, projectID uuid.UUID, name string, expectedVersion int) (appdto.EditLock, error)
+	TakeOver(ctx context.Context, scope editlock.Scope, name string, expectedVersion int) (appdto.EditLock, error)
 
-	// CheckHeld refuses a write of the Project's Draft that the client of the
-	// context may not make: the lock is free or another client's
+	// CheckHeld refuses a write of the Draft that the client of the context
+	// may not make: the lock is free or another client's
 	// (editlock.ErrEditLockNotHeld), or the context names no client
 	// (editlock.ErrNoClient). The server's own writes pass. Deploy, whose
 	// build has no single transaction, checks it before it builds.
-	CheckHeld(ctx context.Context, projectID uuid.UUID) error
+	CheckHeld(ctx context.Context, scope editlock.Scope) error
 
 	// Attach counts an SSE stream of the client key as open: while one is,
 	// the lock of that client is alive.
@@ -68,9 +65,10 @@ type EditLockService interface {
 }
 
 type editLockServiceImpl struct {
-	content ProjectContent
-	locks   editlock.Repository
-	now     func() time.Time
+	content   ProjectContent
+	libraries LibraryContent
+	locks     editlock.Repository
+	now       func() time.Time
 
 	mu       sync.Mutex
 	presence map[editlock.Key]int
@@ -88,13 +86,14 @@ func WithEditLockClock(now func() time.Time) EditLockOption {
 }
 
 // NewEditLockService returns the EditLockService over the content of the live
-// Projects aContent and the stored locks.
-func NewEditLockService(aContent ProjectContent, locks editlock.Repository, opts ...EditLockOption) EditLockService {
+// Projects aContent, the Libraries aLibraries and the stored locks.
+func NewEditLockService(aContent ProjectContent, aLibraries LibraryContent, locks editlock.Repository, opts ...EditLockOption) EditLockService {
 	s := &editLockServiceImpl{
-		content:  aContent,
-		locks:    locks,
-		now:      time.Now,
-		presence: make(map[editlock.Key]int),
+		content:   aContent,
+		libraries: aLibraries,
+		locks:     locks,
+		now:       time.Now,
+		presence:  make(map[editlock.Key]int),
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -102,16 +101,40 @@ func NewEditLockService(aContent ProjectContent, locks editlock.Repository, opts
 	return s
 }
 
-func (s *editLockServiceImpl) State(ctx context.Context, rawProjectID uuid.UUID) (appdto.EditLock, error) {
-	projectID, _, err := s.content.open(ctx, rawProjectID)
-	if err != nil {
+func (s *editLockServiceImpl) State(ctx context.Context, scope editlock.Scope) (appdto.EditLock, error) {
+	if _, err := s.open(ctx, scope, false); err != nil {
 		return appdto.EditLock{}, err
 	}
-	return s.stateOf(ctx, projectID)
+	return s.stateOf(ctx, scope)
 }
 
-func (s *editLockServiceImpl) stateOf(ctx context.Context, projectID id.ID[project.Project]) (appdto.EditLock, error) {
-	lock, found, err := s.locks.Find(ctx, editlock.ProjectScope(projectID))
+// open checks that the Draft the scope names exists, is live and is not being
+// discarded when notDiscarding is set, and returns the scope as it is.
+func (s *editLockServiceImpl) open(ctx context.Context, scope editlock.Scope, notDiscarding bool) (editlock.Scope, error) {
+	switch {
+	case scope.IsProject():
+		var err error
+		if notDiscarding {
+			_, _, err = s.content.openNotDiscarding(ctx, scope.ProjectID().UUID())
+		} else {
+			_, _, err = s.content.open(ctx, scope.ProjectID().UUID())
+		}
+		return scope, err
+	case scope.IsLibrary():
+		var err error
+		if notDiscarding {
+			_, err = s.libraries.openNotDiscarding(ctx, scope.LibraryID().UUID())
+		} else {
+			_, err = s.libraries.open(ctx, scope.LibraryID().UUID())
+		}
+		return scope, err
+	default:
+		return scope, fmt.Errorf("edit lock: the scope names no Draft")
+	}
+}
+
+func (s *editLockServiceImpl) stateOf(ctx context.Context, scope editlock.Scope) (appdto.EditLock, error) {
+	lock, found, err := s.locks.Find(ctx, scope)
 	if err != nil {
 		return appdto.EditLock{}, err
 	}
@@ -121,9 +144,8 @@ func (s *editLockServiceImpl) stateOf(ctx context.Context, projectID id.ID[proje
 	return appdto.NewEditLock(lock.Snapshot()), nil
 }
 
-func (s *editLockServiceImpl) CheckOut(ctx context.Context, rawProjectID uuid.UUID, name string) (appdto.EditLock, bool, error) {
-	projectID, _, err := s.content.openNotDiscarding(ctx, rawProjectID)
-	if err != nil {
+func (s *editLockServiceImpl) CheckOut(ctx context.Context, scope editlock.Scope, name string) (appdto.EditLock, bool, error) {
+	if _, err := s.open(ctx, scope, true); err != nil {
 		return appdto.EditLock{}, false, err
 	}
 	holder, err := s.holderOf(ctx, name)
@@ -133,12 +155,12 @@ func (s *editLockServiceImpl) CheckOut(ctx context.Context, rawProjectID uuid.UU
 	var state appdto.EditLock
 	took := false
 	err = retryOnRaces(func() error {
-		lock, found, err := s.locks.Find(ctx, editlock.ProjectScope(projectID))
+		lock, found, err := s.locks.Find(ctx, scope)
 		if err != nil {
 			return err
 		}
 		if !found {
-			lock = editlock.CreateEditLock(editlock.ProjectScope(projectID))
+			lock = editlock.CreateEditLock(scope)
 		}
 		acquired, err := lock.Acquire(holder, s.now())
 		if err != nil {
@@ -173,9 +195,8 @@ func (s *editLockServiceImpl) CheckOut(ctx context.Context, rawProjectID uuid.UU
 	return state, took, nil
 }
 
-func (s *editLockServiceImpl) CheckIn(ctx context.Context, rawProjectID uuid.UUID) (appdto.EditLock, error) {
-	projectID, _, err := s.content.open(ctx, rawProjectID)
-	if err != nil {
+func (s *editLockServiceImpl) CheckIn(ctx context.Context, scope editlock.Scope) (appdto.EditLock, error) {
+	if _, err := s.open(ctx, scope, false); err != nil {
 		return appdto.EditLock{}, err
 	}
 	key, err := s.clientKey(ctx)
@@ -184,7 +205,7 @@ func (s *editLockServiceImpl) CheckIn(ctx context.Context, rawProjectID uuid.UUI
 	}
 	var state appdto.EditLock
 	err = retryOnRace(editlock.ErrEditLockVersionStale, func() error {
-		lock, found, err := s.locks.Find(ctx, editlock.ProjectScope(projectID))
+		lock, found, err := s.locks.Find(ctx, scope)
 		if err != nil {
 			return err
 		}
@@ -213,9 +234,8 @@ func (s *editLockServiceImpl) CheckIn(ctx context.Context, rawProjectID uuid.UUI
 	return state, nil
 }
 
-func (s *editLockServiceImpl) TakeOver(ctx context.Context, rawProjectID uuid.UUID, name string, expectedVersion int) (appdto.EditLock, error) {
-	projectID, _, err := s.content.openNotDiscarding(ctx, rawProjectID)
-	if err != nil {
+func (s *editLockServiceImpl) TakeOver(ctx context.Context, scope editlock.Scope, name string, expectedVersion int) (appdto.EditLock, error) {
+	if _, err := s.open(ctx, scope, true); err != nil {
 		return appdto.EditLock{}, err
 	}
 	holder, err := s.holderOf(ctx, name)
@@ -226,7 +246,7 @@ func (s *editLockServiceImpl) TakeOver(ctx context.Context, rawProjectID uuid.UU
 	if err != nil {
 		return appdto.EditLock{}, invalidInput(err)
 	}
-	lock, found, err := s.locks.Find(ctx, editlock.ProjectScope(projectID))
+	lock, found, err := s.locks.Find(ctx, scope)
 	if err != nil {
 		return appdto.EditLock{}, err
 	}
@@ -247,7 +267,7 @@ func (s *editLockServiceImpl) TakeOver(ctx context.Context, rawProjectID uuid.UU
 	return appdto.NewEditLock(saved.Snapshot()), nil
 }
 
-func (s *editLockServiceImpl) CheckHeld(ctx context.Context, rawProjectID uuid.UUID) error {
+func (s *editLockServiceImpl) CheckHeld(ctx context.Context, scope editlock.Scope) error {
 	var key editlock.Key
 	switch editlock.IdentityFrom(ctx) {
 	case editlock.IdentitySystem:
@@ -261,8 +281,7 @@ func (s *editLockServiceImpl) CheckHeld(ctx context.Context, rawProjectID uuid.U
 	default:
 		return editlock.ErrNoClient
 	}
-	projectID := id.NewID(id.IDWithUUID[project.Project](rawProjectID))
-	lock, found, err := s.locks.Find(ctx, editlock.ProjectScope(projectID))
+	lock, found, err := s.locks.Find(ctx, scope)
 	if err != nil {
 		return err
 	}
@@ -272,7 +291,7 @@ func (s *editLockServiceImpl) CheckHeld(ctx context.Context, rawProjectID uuid.U
 	if lock.Holder().Key() != key {
 		return editlock.NotHeldError(lock.Snapshot())
 	}
-	return s.locks.Touch(ctx, editlock.ProjectScope(projectID), key, s.now())
+	return s.locks.Touch(ctx, scope, key, s.now())
 }
 
 func (s *editLockServiceImpl) Attach(key editlock.Key) {

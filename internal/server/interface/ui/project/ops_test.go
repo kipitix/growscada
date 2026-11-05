@@ -142,12 +142,14 @@ func createWidgetType(t *testing.T, api *testAPI, name string, ports ...apiv0.In
 		ports = []apiv0.InputPort{}
 	}
 	// In a library of its own, released and pinned in Main: the project's
-	// Widgets are of the releases it pins.
+	// Widgets are of the releases it pins. The Draft of the library is
+	// checked out to this client first (ADR 0015).
 	ctx := context.Background()
 	lib, err := api.CreateLibrary(ctx, apiv0.CreateLibraryRequest{Name: "lib-" + uuid.NewString()})
 	if err != nil {
 		t.Fatalf("create library: %v", err)
 	}
+	servertest.EnsureLibraryEditLockWithClient(t, api.Client, lib.ID)
 	created, err := api.Library(lib.ID).CreateWidgetType(ctx, apiv0.CreateWidgetTypeRequest{
 		Name: name, HtmlTemplate: "<div></div>", ScriptLanguage: "javascript",
 		DefaultWidth: 150, DefaultHeight: 70, InputPorts: ports,

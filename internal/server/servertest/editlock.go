@@ -65,3 +65,45 @@ func EnsureEditLockWithClient(t *testing.T, client *apiclient.Client, projectID 
 		t.Fatalf("check the edit lock of project %s out: %v", projectID, err)
 	}
 }
+
+// EnsureLibraryEditLock makes ClientKey the holder of the EditLock of the
+// Library's Draft, taking it over from whoever holds it: a test that arranges
+// the Draft must be able to write it (ADR 0015).
+func EnsureLibraryEditLock(t *testing.T, srv *httptest.Server, libraryID uuid.UUID) editLockState {
+	t.Helper()
+	path := apiv0.LibraryPath(libraryID.String()) + apiv0.EditLockPath
+	state := sendJSON[apiv0.EditLockResponse](t, srv, http.MethodGet, path, nil, http.StatusOK)
+	if state.Held && state.Holder != nil && state.Holder.Key == ClientKey {
+		return editLockState{state}
+	}
+	if state.Held {
+		return editLockState{sendJSON[apiv0.EditLockResponse](t, srv, http.MethodPost, path+"/takeover",
+			apiv0.TakeOverEditLockRequest{Name: ClientName, Version: state.Version}, http.StatusOK)}
+	}
+	return editLockState{sendJSON[apiv0.EditLockResponse](t, srv, http.MethodPost, path,
+		apiv0.CheckOutEditLockRequest{Name: ClientName}, http.StatusCreated, http.StatusOK)}
+}
+
+// EnsureLibraryEditLockWithClient is EnsureLibraryEditLock through an API
+// client that acts as ClientKey.
+func EnsureLibraryEditLockWithClient(t *testing.T, client *apiclient.Client, libraryID uuid.UUID) {
+	t.Helper()
+	ctx := context.Background()
+	content := client.Library(libraryID)
+	state, err := content.StateEditLock(ctx)
+	if err != nil {
+		t.Fatalf("edit lock of library %s: %v", libraryID, err)
+	}
+	if state.Held && state.Holder != nil && state.Holder.Key == ClientKey {
+		return
+	}
+	if state.Held {
+		if _, err := content.TakeOverEditLock(ctx, ClientName, state.Version); err != nil {
+			t.Fatalf("take the edit lock of library %s: %v", libraryID, err)
+		}
+		return
+	}
+	if _, err := content.CheckOutEditLock(ctx, ClientName); err != nil {
+		t.Fatalf("check the edit lock of library %s out: %v", libraryID, err)
+	}
+}

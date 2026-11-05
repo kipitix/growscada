@@ -379,7 +379,7 @@ func deleteManifests(cmd *cobra.Command, s *settings, client *Client, projectFla
 	if _, err = executeProjects(ctx, client, projectSteps, cmd.OutOrStdout()); err != nil {
 		return err
 	}
-	return executeDeleteLibraries(ctx, client, typeSteps, librarySteps, cmd.OutOrStdout())
+	return executeDeleteLibraries(ctx, client, s, typeSteps, librarySteps, cmd.OutOrStdout())
 }
 
 // confirm lists the items under the header and asks the question on stderr,
@@ -680,7 +680,7 @@ func executeApply(ctx context.Context, client *Client, plan applyPlan, s *settin
 		return err
 	}
 	defer unlock()
-	if err := executeLibraries(ctx, client, plan.libraries, out); err != nil {
+	if err := executeLibraries(ctx, client, s, plan.libraries, out); err != nil {
 		return err
 	}
 	if plan.project == "" {
