@@ -332,7 +332,12 @@ func (p *Project) finalizeAllDrags(ctx app.Context) {
 	}
 	p.dragDidMove = false
 	if p.widgetsReloadDeferred {
-		p.waitMoves(ctx, p.loadWidgets)
+		// The reload the interaction held back is still owed: it waits for a
+		// move the drag sent, or runs now when the drag sent none.
+		p.widgetsReloadDeferred = false
+		if !p.waitMoves(ctx, p.loadWidgets) {
+			p.loadWidgets(ctx)
+		}
 	}
 }
 

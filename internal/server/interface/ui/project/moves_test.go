@@ -298,3 +298,22 @@ func TestSetProject_SendsTheSeriesToTheProjectLeft(t *testing.T) {
 		t.Errorf("position x %v: want 17", w.Position.X)
 	}
 }
+
+// A drag whose reload was held back still reads the Widgets when it ends
+// without sending a move.
+func TestDrag_DeferredReloadHappensWithoutAMove(t *testing.T) {
+	f, sceneID, ids, _ := moveFixture(t, 1)
+	want := f.widget(sceneID, ids[0])
+	f.p.widgets[0].Name = "stale"
+	f.p.widgetsReloadDeferred = true
+
+	f.p.finalizeAllDrags(f.p.compoCtx)
+	f.run()
+
+	if got := f.p.widgets[0].Name; got != want.Name {
+		t.Errorf("the deferred reload did not happen: name %q, want %q", got, want.Name)
+	}
+	if f.p.widgetsReloadDeferred {
+		t.Error("the deferred reload is still owed")
+	}
+}
