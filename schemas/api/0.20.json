@@ -987,6 +987,35 @@
       ],
       "type": "object"
     },
+    "MoveWidgetsRequest": {
+      "properties": {
+        "moves": {
+          "items": {
+            "$ref": "#/$defs/WidgetMoveRequest"
+          },
+          "type": "array"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version",
+        "moves"
+      ],
+      "type": "object"
+    },
+    "MoveWidgetsResponse": {
+      "properties": {
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    },
     "Origin": {
       "properties": {
         "x": {
@@ -1917,6 +1946,26 @@
         "type_id",
         "labels",
         "port_bindings"
+      ],
+      "type": "object"
+    },
+    "WidgetMoveRequest": {
+      "properties": {
+        "widget_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "widget_id",
+        "x",
+        "y"
       ],
       "type": "object"
     },

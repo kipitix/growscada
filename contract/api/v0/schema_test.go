@@ -15,6 +15,7 @@ func TestSchemaIsCommitted(t *testing.T) {
 			TagResponse{}, GetTagsResponse{}, CreateTagRequest{}, CreateTagResponse{}, UpdateTagRequest{}, UpdateTagResponse{},
 			SceneResponse{}, GetScenesResponse{}, CreateSceneRequest{}, CreateSceneResponse{}, UpdateSceneRequest{}, UpdateSceneResponse{},
 			WidgetResponse{}, GetWidgetsResponse{}, CreateWidgetRequest{}, CreateWidgetResponse{}, UpdateWidgetRequest{}, UpdateWidgetResponse{},
+			MoveWidgetsRequest{}, WidgetMoveRequest{}, MoveWidgetsResponse{},
 			WidgetTypeResponse{}, GetWidgetTypesResponse{}, CreateWidgetTypeRequest{}, CreateWidgetTypeResponse{}, UpdateWidgetTypeRequest{}, UpdateWidgetTypeResponse{},
 			ProjectResponse{}, GetProjectsResponse{}, CreateProjectRequest{}, CreateProjectResponse{}, UpdateProjectRequest{}, UpdateProjectResponse{},
 			DeviceResponse{}, GetDevicesResponse{}, CreateDeviceRequest{}, CreateDeviceResponse{}, UpdateDeviceRequest{}, UpdateDeviceResponse{},
