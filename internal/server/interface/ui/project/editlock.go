@@ -81,11 +81,12 @@ func (p *Project) loadEditLock(ctx app.Context) {
 
 // applyEditLock stores the state and tells when this tab lost the lock it
 // held: a takeover by another client, or its expiry. The Draft becomes
-// read-only with the toast.
+// read-only with the toast. A Check in of this tab raises no toast: its event
+// may arrive before the answer to the request, and the loss is the tab's own.
 func (p *Project) applyEditLock(ctx app.Context, state apiv0.EditLockResponse) {
 	wasMine := p.lockMine()
 	p.editLock, p.lockLoaded = state, true
-	if !wasMine || p.lockMine() {
+	if !wasMine || p.lockMine() || p.checkingOut {
 		return
 	}
 	ctx.NewActionWithValue(toast.ActionAdd, toast.ClientError(errors.New(

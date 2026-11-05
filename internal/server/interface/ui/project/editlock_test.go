@@ -220,6 +220,29 @@ func TestLostLock_IsAToastAndReadOnly(t *testing.T) {
 	}
 }
 
+// TestOwnCheckIn_IsNoLossToast: the release event of this tab's own Check in
+// may reach the stream before the answer to the request. It is not a loss of
+// the lock, so the tab raises no toast (ADR 0015).
+func TestOwnCheckIn_IsNoLossToast(t *testing.T) {
+	f := startProject(t)
+	f.reloadLock()
+	f.e.TakeToasts()
+
+	f.p.checkingOut = true // the Check in is in flight
+	f.event(apiv0.Event{
+		Type:     apiv0.EventEditLockReleased,
+		ID:       servertest.MainProject.String(),
+		EditLock: lockResponse(apiv0.EditLockResponse{Held: false, Version: 2}),
+	})
+
+	if toasts := f.e.TakeToasts(); len(toasts) != 0 {
+		t.Errorf("the tab's own Check in raised a toast: %+v", toasts)
+	}
+	if !f.p.readOnly() {
+		t.Error("the Draft is editable after the release event")
+	}
+}
+
 func TestEditLockEvent_AppliesTheStateWithoutAReread(t *testing.T) {
 	f := startProject(t)
 	state, err := f.api.StateEditLock(context.Background())
