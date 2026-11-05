@@ -176,6 +176,14 @@ _Avoid_: revert, undo
 A portable file holding one project configuration (the content of a Revision) and no operational history.
 _Avoid_: export, package, backup
 
+**Open a ProjectFile**:
+Replacing the whole content of a Project's Draft with a ProjectFile — one DraftChange that undo reverses — after checking that the file names the Project and that its pinned Library Releases exist locally. Requires the EditLock.
+_Avoid_: import, upload, load, restore
+
+**Deploy a file**:
+Making a valid ProjectFile the new Revision of a Project on the Runtime node, without touching the Draft and without the EditLock; the Revision's cause is `file`.
+_Avoid_: import, upload, restore
+
 ### Operation and History
 
 **PlaybackFile**:

@@ -12,6 +12,10 @@ A Rollback (task 36) makes an earlier Revision operational on the Runtime node a
 
 A Rollback is a second way a Revision comes to be: the Runtime node copies an earlier Revision's document into a new numbered one, rebuilds its derived copies by the same diff as a Deploy (Tag states of unchanged Tags and every Device Token survive), and publishes `revision_created`. History is never rewritten. The API, the guards and the UI are in ADR 0014.
 
+## Amendment 2026-11-05: a third way a Revision comes to be
+
+A Deploy of the Draft (ADR 0014's Rollback was the second) is no longer the only way a Revision is made: a ProjectFile can be validated and deployed as a Revision directly, without the Draft and without an EditLock, its `cause` being `file`. The document is the same one this ADR describes, self-contained with the WidgetType copies, and the Runtime node stores it and rebuilds its derived copies by the same diff. The Engineering node's Deploy — the whole Draft as a ProjectFile — is unchanged, and a Draft whose document equals the running Revision is still refused `409 nothing_to_deploy`. The rest of the decision — open, export and the local-Library check — is ADR 0018.
+
 ## Considered Options
 
 - Live editing of the running configuration (a Draft and Operation sharing the aggregate): rejected. It gives no atomic switch of what Operation runs, no review before the plant changes, and no history of what was running.
