@@ -187,7 +187,7 @@ func (p *Project) renderProjectFileDialog() app.UI {
 			Body(
 				p.projectFileButton("Download Draft", "Save the Draft as a project file", !p.projectFileBusy,
 					func(ctx app.Context) { p.downloadDraftProjectFile(ctx) }),
-				p.projectFilePickButton("Open a file…", readOnlyTitle("Replace the whole Draft with a file; can be undone"),
+				p.projectFilePickButton("Open a file…", p.projectFileOpenTitle(),
 					!p.readOnly() && !p.projectFileBusy, "open"),
 				p.projectFilePickButton("Deploy a file…", "Make a file the Project's new Revision; the Draft does not change",
 					!p.projectFileBusy, "deploy"),
@@ -349,6 +349,16 @@ func (p *Project) renderProjectFileIssues() app.UI {
 				Text(p.projectFileDetail),
 			app.Ul().Style("margin", "0").Style("padding-left", "18px").Body(rows...),
 		)
+}
+
+// projectFileOpenTitle is the hover text of the open action: what it does, and
+// why it is off without the EditLock.
+func (p *Project) projectFileOpenTitle() string {
+	const title = "Replace the whole Draft with a file; can be undone"
+	if p.readOnly() {
+		return readOnlyTitle(title)
+	}
+	return title
 }
 
 func (p *Project) projectFileButton(label, title string, enabled bool, onClick func(app.Context)) app.UI {
