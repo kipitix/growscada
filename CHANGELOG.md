@@ -1,5 +1,19 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.69] - 2026-11-06
+
+### Added
+
+- **Групповой перенос виджетов: домен, application и REST** (задача 40, часть 1; ADR 0010, ADR 0016, ADR 0017)
+  - Домен: `scene.WidgetMove` (ID виджета и новые x/y) и `Scene.MoveWidgets(moves)`: перенос меняет только `Position.X/Y`, `z` и все прочие поля (имя, размер, origin, поворот, WidgetType, метки, PortBindings) сохраняются; `WidgetType` и `TagTypes` не читаются и привязки не перепроверяются — сломанный биндинг не отказывает в переносе (ADR 0010); на каждый фактически сдвинутый виджет — `WidgetUpdatedEvent` в порядке `moves`, виджет на своей позиции пропускается без события; повтор ID — `ErrWidgetMovedTwice`, неизвестный ID — `ErrWidgetNotFound`, ни одного сдвига — `ErrNothingToMove`; возвращаются новая Scene и список сдвинутых виджетов
+  - Draft: `Session.MoveWidgets` загружает Scene один раз, вызывает домен и пишет before/after снимок каждого сдвинутого виджета (несдвинутые в изменение не попадают), события — `PendingEvents` результата; undo возвращает все позиции группы одной операцией
+  - Application: `SceneService.MoveWidgets(ctx, projectID, sceneID, version, moves)` и `appdto.WidgetMove{WidgetID, X, Y}` — один `DraftChange` «Move N widgets», Version +1; пустой список и повтор `widget_id` (и `scene.ErrWidgetMovedTwice` из домена) — invalid input (400), чужой виджет/Scene — 404, `nothing_to_move` — 409; гейт EditLock, `X-GrowSCADA-Client` и `draft_conflict` — общие для записи Draft
+  - REST: `PATCH /api/v0/projects/{project_id}/scenes/{scene_id}/widgets` с `{version, moves: [{widget_id, x, y}]}`, ответ 200 `{version}`; 400 (пусто, повтор, незнакомое поле), 404 для виджета, названного телом запроса (не путём — `notFoundInPath` берёт ID из ошибки, когда в пути параметра нет), 409 `nothing_to_move` с деталью «Nothing to move: the widgets already hold these positions»
+  - Контракт `api/v0` **0.20** (MINOR): `MoveWidgetsRequest`, `WidgetMoveRequest`, `MoveWidgetsResponse`; `make schemas`; `project/v0` без изменений, новых событий нет
+  - Bruno: самодостаточный блок после `post_projectfile_open_invalid` — Scene и два виджета создаются заново (ID берутся из ответов через `bru.setVar` в `after-response`, имена объявлены в окружении `localhost` плейсхолдерами для статической проверки), затем перенос группы (200 `{version: 29}`), повтор позиций (`nothing_to_move`), устаревшая Version (`draft_conflict`), пустой `moves` (400) и виджет не из Scene (404); новый маршрут в `requestBodies`
+  - AGENTS.md: `Scene.MoveWidgets`/`WidgetMove`, `SceneService.MoveWidgets`, маршрут и его отказы, соглашение о ID из ответа в Bruno
+  - Тесты: домен (перенос только указанных, сохранение полей и `z`, порядок событий, пропуск несдвинутых, `ErrNothingToMove`, повтор и неизвестный ID), application (одна DraftChange с N снимками и описанием, Version +1, пусто/повтор, чужая Scene и чужой виджет, stale Version, `nothing_to_move` без записи, гейт замка), репозиторий (одна строка `draft_changes`, before/after каждого виджета, undo всех позиций и `widget_updated` по каждому), REST (200 и `{version}`, 400, 404 по ID из тела, 409 `nothing_to_move`/`draft_conflict`/`edit_lock`, заголовок схемы)
+
 ## [0.0.68] - 2026-11-05
 
 ### Added

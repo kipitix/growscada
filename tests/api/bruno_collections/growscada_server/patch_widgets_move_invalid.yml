@@ -1,0 +1,43 @@
+info:
+  name: move no widgets
+  type: http
+  seq: 152
+
+http:
+  method: PATCH
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/scenes/{{MOVE_SCENE_ID}}/widgets
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "version": 30,
+        "moves": []
+      }
+  auth: inherit
+
+docs: |
+  An empty `moves` is invalid input: `400` naming the field, before the Draft
+  is written.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '400'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: application/problem+json
+    - expression: 'res.body.detail'
+      operator: contains
+      value: moves
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

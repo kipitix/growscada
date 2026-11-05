@@ -1,0 +1,45 @@
+info:
+  name: pin the library for the group move
+  type: http
+  seq: 145
+
+http:
+  method: PUT
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/library-pins/{{LIBRARY_ID}}
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "release": 2,
+        "version": 25
+      }
+  auth: inherit
+
+docs: |
+  Opening a project file replaced the whole Draft, the Library Pins included,
+  so a Widget needs its Library pinned again before it can be created: the
+  request adds the pin (`201`) and raises the Draft's Version (ADR 0007,
+  ADR 0016).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.library_id'
+      operator: eq
+      value: '"{{LIBRARY_ID}}"'
+    - expression: 'res.body.release'
+      operator: eq
+      value: '2'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

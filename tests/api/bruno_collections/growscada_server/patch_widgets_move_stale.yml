@@ -1,0 +1,45 @@
+info:
+  name: move widgets with a stale version
+  type: http
+  seq: 151
+
+http:
+  method: PATCH
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/scenes/{{MOVE_SCENE_ID}}/widgets
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "version": 24,
+        "moves": [
+          { "widget_id": "{{MOVE_WIDGET_ID_1}}", "x": 1.0, "y": 2.0 }
+        ]
+      }
+  auth: inherit
+
+docs: |
+  A move states the Version of the Draft the client saw; a stale one is `409
+  draft_conflict` carrying the current Version in `draft.version` (ADR 0016).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '409'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: application/problem+json
+    - expression: 'res.body.draft.version'
+      operator: eq
+      value: '30'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

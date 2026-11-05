@@ -1,0 +1,46 @@
+info:
+  name: move widgets that already hold these positions
+  type: http
+  seq: 150
+
+http:
+  method: PATCH
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/scenes/{{MOVE_SCENE_ID}}/widgets
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "version": 30,
+        "moves": [
+          { "widget_id": "{{MOVE_WIDGET_ID_1}}", "x": 100.0, "y": 200.0 },
+          { "widget_id": "{{MOVE_WIDGET_ID_2}}", "x": 300.0, "y": 400.0 }
+        ]
+      }
+  auth: inherit
+
+docs: |
+  Every widget the request names already holds its position: `409
+  nothing_to_move`, no DraftChange and no new Version.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '409'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: application/problem+json
+    - expression: 'res.body.detail'
+      operator: contains
+      value: Nothing to move
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

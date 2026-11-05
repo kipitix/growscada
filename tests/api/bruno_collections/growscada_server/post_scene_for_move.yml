@@ -1,0 +1,50 @@
+info:
+  name: create a scene for the group move
+  type: http
+  seq: 146
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/scenes
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "move scene",
+        "width": 1920,
+        "height": 1080,
+        "background_html": "",
+        "version": 26
+      }
+  auth: inherit
+
+docs: |
+  The Draft was opened from an empty project file, so the group move needs a
+  scene of its own. `version` is the Draft's Version the client saw (ADR 0016);
+  `MOVE_SCENE_ID` carries the created ID to the requests that follow.
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("MOVE_SCENE_ID", res.body.id);
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.id'
+      operator: isString
+    - expression: 'res.body.version'
+      operator: eq
+      value: '27'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

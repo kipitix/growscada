@@ -21,6 +21,15 @@ variables:
     value: c1d2e3f4-0001-4000-8000-000000000001
   - name: WIDGET_ID
     value: b1c2d3e4-0001-4000-8000-000000000001
+  # The scene and widgets the group-move block creates (task 40): the requests
+  # set them from their responses; the values here are what the static check
+  # substitutes.
+  - name: MOVE_SCENE_ID
+    value: c1d2e3f4-0001-4000-8000-0000000000f1
+  - name: MOVE_WIDGET_ID_1
+    value: b1c2d3e4-0001-4000-8000-0000000000f1
+  - name: MOVE_WIDGET_ID_2
+    value: b1c2d3e4-0001-4000-8000-0000000000f2
   - name: DEVICE_ID
     value: e0000000-0000-4000-8000-000000000001
   - name: OTHER_DEVICE_ID

@@ -1,0 +1,45 @@
+info:
+  name: move a widget that is not in the scene
+  type: http
+  seq: 153
+
+http:
+  method: PATCH
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/scenes/{{MOVE_SCENE_ID}}/widgets
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "version": 30,
+        "moves": [
+          { "widget_id": "00000000-0000-4000-8000-0000000000ff", "x": 1.0, "y": 2.0 }
+        ]
+      }
+  auth: inherit
+
+docs: |
+  The widget is named in the body, not the path, so the `404` names it from
+  the error: nothing is moved, and the whole request is refused.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '404'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: application/problem+json
+    - expression: 'res.body.detail'
+      operator: contains
+      value: 00000000-0000-4000-8000-0000000000ff
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

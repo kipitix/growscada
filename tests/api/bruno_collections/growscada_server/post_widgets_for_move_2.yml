@@ -1,0 +1,53 @@
+info:
+  name: create the second widget for the group move
+  type: http
+  seq: 148
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/scenes/{{MOVE_SCENE_ID}}/widgets
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "move-gauge-2",
+        "position": { "x": 30.0, "y": 40.0, "z": 0 },
+        "size": { "width": 80, "height": 80 },
+        "origin": { "x": 0.5, "y": 0.5 },
+        "rotation": { "degrees": 0.0 },
+        "type_id": "{{WIDGET_TYPE_ID}}",
+        "labels": ["move"],
+        "port_bindings": [],
+        "version": 28
+      }
+  auth: inherit
+
+docs: |
+  The second widget of the group move: `MOVE_WIDGET_ID_2` carries its ID.
+  Both widgets are created before the move, so one PATCH moves the two.
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("MOVE_WIDGET_ID_2", res.body.id);
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.id'
+      operator: isString
+    - expression: 'res.body.version'
+      operator: eq
+      value: '29'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

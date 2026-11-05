@@ -1,0 +1,43 @@
+info:
+  name: move two widgets at once
+  type: http
+  seq: 149
+
+http:
+  method: PATCH
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/scenes/{{MOVE_SCENE_ID}}/widgets
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "version": 29,
+        "moves": [
+          { "widget_id": "{{MOVE_WIDGET_ID_1}}", "x": 100.0, "y": 200.0 },
+          { "widget_id": "{{MOVE_WIDGET_ID_2}}", "x": 300.0, "y": 400.0 }
+        ]
+      }
+  auth: inherit
+
+docs: |
+  One PATCH moves a whole group: the whole change is one DraftChange, and the
+  answer is the Version of the Draft after it (ADR 0010, ADR 0017).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.version'
+      operator: eq
+      value: '30'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
