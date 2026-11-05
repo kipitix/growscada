@@ -76,6 +76,10 @@ type errorMapping struct {
 var errorMappings = []errorMapping{
 	{draft.ErrDraftConflict, http.StatusConflict, projectResource,
 		"Draft was changed concurrently; reload it and retry"},
+	{draft.ErrNothingToUndo, http.StatusConflict, projectResource,
+		"Nothing to undo: the Draft has no change at the stack's position"},
+	{draft.ErrNothingToRedo, http.StatusConflict, projectResource,
+		"Nothing to redo: nothing was undone, or a new change replaced the redo tail"},
 	{application.ErrNothingToDeploy, http.StatusConflict, projectResource,
 		"Nothing to deploy: the Draft of the project is the revision it runs"},
 	{application.ErrNoRevisionToDiscard, http.StatusConflict, projectResource,
@@ -181,6 +185,10 @@ func sendError(w http.ResponseWriter, r *http.Request, err error) {
 					problem.Title = "Conflict: " + libraryResource.name
 				}
 				problem.Draft = &apiv0.DraftStateResponse{Version: conflict.Current}
+			}
+			var nothingToStep draft.NothingToStepError
+			if errors.As(err, &nothingToStep) && nothingToStep.Scope.IsLibrary() {
+				problem.Title = "Conflict: " + libraryResource.name
 			}
 			var orphans librarypin.OrphansError
 			if errors.As(err, &orphans) {

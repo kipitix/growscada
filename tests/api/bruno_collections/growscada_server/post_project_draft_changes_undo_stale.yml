@@ -1,0 +1,43 @@
+info:
+  name: post project draft changes undo with a stale version
+  type: http
+  seq: 125
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/draft-changes/undo
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "version": 22
+      }
+  auth: inherit
+
+docs: |
+  An undo states the Version of the Draft the client saw; a stale one is `409
+  Conflict`, its Problem carrying the current Version in `draft.version`, so
+  the client retries without rereading the Draft (ADR 0016, ADR 0017).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '409'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: 'application/problem+json'
+    - expression: 'res.body.draft.version'
+      operator: eq
+      value: '24'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

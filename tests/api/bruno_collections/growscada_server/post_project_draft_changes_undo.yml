@@ -1,0 +1,54 @@
+info:
+  name: post project draft changes undo
+  type: http
+  seq: 120
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/draft-changes/undo
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "version": 22
+      }
+  auth: inherit
+
+docs: |
+  Undo applies the before states of the change at the stack's position: the
+  removed Environment comes back, the Draft's Version is raised and the
+  position steps back (ADR 0017). The answer is the state after the undo, so
+  the next undo names the change before it and the redo names the one just
+  undone.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.version'
+      operator: eq
+      value: '23'
+    - expression: 'res.body.can_undo'
+      operator: eq
+      value: 'true'
+    - expression: 'res.body.can_redo'
+      operator: eq
+      value: 'true'
+    - expression: 'res.body.undo_description'
+      operator: eq
+      value: '"Delete device"'
+    - expression: 'res.body.redo_description'
+      operator: eq
+      value: '"Delete environment"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

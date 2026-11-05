@@ -1,0 +1,45 @@
+info:
+  name: post project draft changes redo on an empty tail
+  type: http
+  seq: 124
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/draft-changes/redo
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "version": 24
+      }
+  auth: inherit
+
+docs: |
+  The stack is at its end: a redo has nothing to apply and answers `409
+  Conflict` as Problem Details (ADR 0017).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '409'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: 'application/problem+json'
+    - expression: 'res.body.status'
+      operator: eq
+      value: '409'
+    - expression: 'res.body.detail'
+      operator: contains
+      value: 'Nothing to redo'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

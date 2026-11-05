@@ -164,3 +164,31 @@ func TestPlanProjects(t *testing.T) {
 		t.Error("only create and delete change the server")
 	}
 }
+
+// TestPlanApply_IgnoresEntityVersions: a plan is made by name and type only.
+// Since the Draft is one aggregate (ADR 0016), the Version of a content DTO is
+// the Draft's, not the Tag's, and it changes with every write of the Draft: a
+// planner that read it would plan differently for the same content. The
+// versions of two identical server tags do not change the steps.
+func TestPlanApply_IgnoresEntityVersions(t *testing.T) {
+	manifests := []growctl.TagManifest{manifest("a", "integer"), manifest("b", "integer")}
+	older := []growctl.ServerTag{serverTag("a", "integer"), serverTag("z", "string")}
+	newer := []growctl.ServerTag{serverTag("a", "integer"), serverTag("z", "string")}
+	older[0].Version, older[1].Version = 7, 7
+	newer[0].Version, newer[1].Version = 42, 42
+
+	first, err := growctl.PlanApply(manifests, older, true)
+	if err != nil {
+		t.Fatalf("PlanApply: %v", err)
+	}
+	second, err := growctl.PlanApply(manifests, newer, true)
+	if err != nil {
+		t.Fatalf("PlanApply: %v", err)
+	}
+	if !reflect.DeepEqual(summary(first), summary(second)) {
+		t.Errorf("the plan of version 7 is %v, of version 42 %v", summary(first), summary(second))
+	}
+	if got, want := summary(first), []string{"unchanged:a", "create:b", "prune:z"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("the plan is %v, want %v", got, want)
+	}
+}

@@ -1,0 +1,45 @@
+info:
+  name: post library draft changes redo
+  type: http
+  seq: 131
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/draft-changes/redo
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "version": 7
+      }
+  auth: inherit
+
+docs: |
+  The redo brings the WidgetType back with its identity, raising the library's
+  Version again (ADR 0017).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.version'
+      operator: eq
+      value: '8'
+    - expression: 'res.body.can_undo'
+      operator: eq
+      value: 'true'
+    - expression: 'res.body.can_redo'
+      operator: eq
+      value: 'false'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

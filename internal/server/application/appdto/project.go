@@ -19,6 +19,17 @@ type DraftState struct {
 	Version int
 }
 
+// DraftChanges is the state of a Draft's DraftChange stack (ADR 0017): the
+// Draft's Version and what an undo and a redo would apply. A description is
+// empty exactly when its command has nothing to apply.
+type DraftChanges struct {
+	Version         int
+	CanUndo         bool
+	CanRedo         bool
+	UndoDescription string
+	RedoDescription string
+}
+
 // ProjectInput holds the fields of a project a client creates or renames.
 // The project's ID and the version a rename expects are passed separately.
 type ProjectInput struct {

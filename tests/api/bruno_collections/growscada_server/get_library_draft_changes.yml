@@ -1,0 +1,39 @@
+info:
+  name: get library draft changes
+  type: http
+  seq: 127
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/draft-changes
+  auth: inherit
+
+docs: |
+  The state of the library's DraftChange stack (ADR 0017). The library was
+  discarded above, which cleared the stack: nothing to undo and nothing to
+  redo, and no descriptions.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.version'
+      operator: eq
+      value: '5'
+    - expression: 'res.body.can_undo'
+      operator: eq
+      value: 'false'
+    - expression: 'res.body.can_redo'
+      operator: eq
+      value: 'false'
+    - expression: 'res.body.undo_description'
+      operator: isUndefined
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -333,6 +333,35 @@ func (l *LibraryClient) DraftState(ctx context.Context) (apiv0.DraftStateRespons
 	return resp, err
 }
 
+// DraftChanges returns the state of the library's DraftChange stack (ADR
+// 0017), as the project's does.
+func (l *LibraryClient) DraftChanges(ctx context.Context) (apiv0.DraftChangesResponse, error) {
+	var resp apiv0.DraftChangesResponse
+	err := l.do(ctx, http.MethodGet, apiv0.DraftChangesPath, nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+// UndoDraftChange undoes the change at the stack's position, stating version
+// (0: the Version of the Draft the client reads now).
+func (l *LibraryClient) UndoDraftChange(ctx context.Context, version int) (apiv0.DraftChangesResponse, error) {
+	return l.draftChangeCommand(ctx, apiv0.DraftChangesUndoPath, version)
+}
+
+// RedoDraftChange redoes the change after the stack's position.
+func (l *LibraryClient) RedoDraftChange(ctx context.Context, version int) (apiv0.DraftChangesResponse, error) {
+	return l.draftChangeCommand(ctx, apiv0.DraftChangesRedoPath, version)
+}
+
+func (l *LibraryClient) draftChangeCommand(ctx context.Context, path string, stated int) (apiv0.DraftChangesResponse, error) {
+	var resp apiv0.DraftChangesResponse
+	version, err := l.draftVersionOf(ctx, stated)
+	if err != nil {
+		return resp, err
+	}
+	err = l.do(ctx, http.MethodPost, path, apiv0.DraftChangeCommandRequest{Version: version}, http.StatusOK, &resp)
+	return resp, err
+}
+
 // draftVersionOf returns stated, or the Version of the library's Draft when
 // the client states none.
 func (l *LibraryClient) draftVersionOf(ctx context.Context, stated int) (int, error) {
@@ -422,6 +451,38 @@ func (l *LibraryClient) GetRelease(ctx context.Context, n int) (apiv0.LibraryRel
 func (p *ProjectClient) DraftState(ctx context.Context) (apiv0.DraftStateResponse, error) {
 	var resp apiv0.DraftStateResponse
 	err := p.do(ctx, http.MethodGet, apiv0.DraftPath, nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+// DraftChanges returns the state of the project's DraftChange stack (ADR 0017):
+// its Version, whether an undo and a redo are possible and the description of
+// each step.
+func (p *ProjectClient) DraftChanges(ctx context.Context) (apiv0.DraftChangesResponse, error) {
+	var resp apiv0.DraftChangesResponse
+	err := p.do(ctx, http.MethodGet, apiv0.DraftChangesPath, nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+// UndoDraftChange undoes the change at the stack's position and returns the
+// state after it, stating version (0: the Version of the Draft the client
+// reads now). The error matches ErrConflict for an empty stack or a stale
+// Version.
+func (p *ProjectClient) UndoDraftChange(ctx context.Context, version int) (apiv0.DraftChangesResponse, error) {
+	return p.draftChangeCommand(ctx, apiv0.DraftChangesUndoPath, version)
+}
+
+// RedoDraftChange redoes the change after the stack's position.
+func (p *ProjectClient) RedoDraftChange(ctx context.Context, version int) (apiv0.DraftChangesResponse, error) {
+	return p.draftChangeCommand(ctx, apiv0.DraftChangesRedoPath, version)
+}
+
+func (p *ProjectClient) draftChangeCommand(ctx context.Context, path string, stated int) (apiv0.DraftChangesResponse, error) {
+	var resp apiv0.DraftChangesResponse
+	version, err := p.draftVersionOf(ctx, stated)
+	if err != nil {
+		return resp, err
+	}
+	err = p.do(ctx, http.MethodPost, path, apiv0.DraftChangeCommandRequest{Version: version}, http.StatusOK, &resp)
 	return resp, err
 }
 

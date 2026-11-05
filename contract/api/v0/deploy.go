@@ -86,6 +86,37 @@ type DraftStateResponse struct {
 // (ADR 0016).
 type DiscardProjectResponse = DraftStateResponse
 
+// DraftChangesPath is the path, under a Project's and a Library's path, of the
+// state of the Draft's DraftChange stack (ADR 0017): what an undo and a redo
+// would apply and the descriptions of those steps.
+const DraftChangesPath = "/draft-changes"
+
+// DraftChangesUndoPath and DraftChangesRedoPath are the commands of the stack:
+// each applies one DraftChange and answers the state after it. Both state the
+// Version of the Draft the client saw and are gated by its EditLock.
+const (
+	DraftChangesUndoPath = DraftChangesPath + "/undo"
+	DraftChangesRedoPath = DraftChangesPath + "/redo"
+)
+
+// DraftChangesResponse is the state of a Draft's DraftChange stack. A
+// description is absent exactly when its command has nothing to apply; an
+// empty stack answers neither.
+type DraftChangesResponse struct {
+	Version         int    `json:"version"`
+	CanUndo         bool   `json:"can_undo"`
+	CanRedo         bool   `json:"can_redo"`
+	UndoDescription string `json:"undo_description,omitempty"`
+	RedoDescription string `json:"redo_description,omitempty"`
+}
+
+// DraftChangeCommandRequest is the body of POST …/draft-changes/undo and
+// …/draft-changes/redo: the Version of the Draft the client saw. A stale one
+// is 409, and so is an empty stack (nothing_to_undo, nothing_to_redo).
+type DraftChangeCommandRequest struct {
+	Version int `json:"version"`
+}
+
 // TagStateResponse is one Tag's state in the snapshot: its value, Quality and
 // the seq of its latest write.
 type TagStateResponse struct {

@@ -1,0 +1,48 @@
+info:
+  name: post widget type for undo
+  type: http
+  seq: 129
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/widget-types
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "version": 5,
+        "name": "undo-gauge",
+        "html_template": "<div class=\"gauge\"></div>",
+        "script": "function render(inputs) { return inputs; }",
+        "script_language": "javascript",
+        "default_width": 100,
+        "default_height": 100,
+        "input_ports": []
+      }
+  auth: inherit
+
+docs: |
+  One change of the library's Draft, so that the undo below has something to
+  apply: the WidgetType `undo-gauge` (ADR 0017).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.id'
+      operator: isString
+    - expression: 'res.body.version'
+      operator: eq
+      value: '6'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

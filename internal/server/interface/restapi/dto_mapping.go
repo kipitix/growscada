@@ -613,3 +613,15 @@ func newEditLockResponse(state appdto.EditLock) apiv0.EditLockResponse {
 func newEditLockResponseOfEvent(state editlock.Snapshot) apiv0.EditLockResponse {
 	return newEditLockResponse(appdto.NewEditLock(state))
 }
+
+// newDraftChangesResponse is the state of a Draft's DraftChange stack; a
+// description goes only with its command (ADR 0017).
+func newDraftChangesResponse(state appdto.DraftChanges) apiv0.DraftChangesResponse {
+	return apiv0.DraftChangesResponse{
+		Version:         state.Version,
+		CanUndo:         state.CanUndo,
+		CanRedo:         state.CanRedo,
+		UndoDescription: state.UndoDescription,
+		RedoDescription: state.RedoDescription,
+	}
+}

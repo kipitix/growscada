@@ -1,0 +1,49 @@
+info:
+  name: post library draft changes undo
+  type: http
+  seq: 130
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/draft-changes/undo
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "version": 6
+      }
+  auth: inherit
+
+docs: |
+  Undo of the WidgetType creation: the before side of the change is empty, so
+  the type goes and the library's Version is raised (ADR 0017). The stack is
+  at its start again, so only the redo is left.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.version'
+      operator: eq
+      value: '7'
+    - expression: 'res.body.can_undo'
+      operator: eq
+      value: 'false'
+    - expression: 'res.body.can_redo'
+      operator: eq
+      value: 'true'
+    - expression: 'res.body.redo_description'
+      operator: eq
+      value: '"Create widget type undo-gauge"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

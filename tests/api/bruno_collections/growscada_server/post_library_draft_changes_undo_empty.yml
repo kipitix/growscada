@@ -1,0 +1,45 @@
+info:
+  name: post library draft changes undo on an empty stack
+  type: http
+  seq: 128
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/draft-changes/undo
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "version": 5
+      }
+  auth: inherit
+
+docs: |
+  The library's stack is empty after its Discard: an undo is `409 Conflict`
+  whose Problem names the Library (ADR 0017).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '409'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: 'application/problem+json'
+    - expression: 'res.body.title'
+      operator: eq
+      value: '"Conflict: Library"'
+    - expression: 'res.body.detail'
+      operator: contains
+      value: 'Nothing to undo'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

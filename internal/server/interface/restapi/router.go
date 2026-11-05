@@ -30,6 +30,7 @@ type APIRouter struct {
 	deviceWhoAmIHandlers *DeviceIdentityHandlers
 	deployHandlers       *DeployHandlers
 	draftHandlers        *DraftHandlers
+	draftChangesHandlers *DraftChangesHandlers
 	revisionsHandlers    *RevisionHandlers
 	eventsHandlers       *EventsHandlers
 }
@@ -103,6 +104,7 @@ type Services struct {
 	Devices      application.DeviceService
 	Environments application.EnvironmentService
 	Draft        application.DraftService
+	DraftChanges application.DraftChangesService
 	Deploy       application.DeployService
 	Discard      application.DiscardService
 	Revisions    runtimeapp.RevisionService
@@ -131,6 +133,7 @@ func NewRouter(services Services, eventBus eventbus.EventBus, maxSSEClients int)
 		deviceWhoAmIHandlers: NewDeviceIdentityHandler(services.DeviceTokens),
 		deployHandlers:       NewDeployHandler(services.Deploy, services.Discard, services.Revisions, services.TagStates),
 		draftHandlers:        NewDraftHandler(services.Draft),
+		draftChangesHandlers: NewDraftChangesHandler(services.DraftChanges),
 		editLockHandlers:     NewEditLockHandler(services.EditLocks),
 		revisionsHandlers:    NewRevisionHandler(services.Revisions),
 		eventsHandlers:       NewEventsHandler(eventBus, projectService, maxSSEClients, WithDeviceTokens(services.DeviceTokens), WithEditLocks(services.EditLocks)),
@@ -160,6 +163,7 @@ func (r *APIRouter) routes() []route {
 	tokens, config := r.deviceTokensHandlers, r.deviceConfigHandlers
 	deploy := r.deployHandlers
 	revisions := r.revisionsHandlers
+	changes := r.draftChangesHandlers
 	locks := r.editLockHandlers
 	return []route{
 		{"GET " + p + "/projects", projects.GetProjects},
@@ -184,6 +188,9 @@ func (r *APIRouter) routes() []route {
 		{"GET " + lp + "/releases", libraries.GetReleases},
 		{"GET " + lp + "/releases/" + releaseResource.wildcard(), libraries.GetReleasesByNumber},
 		{"POST " + lp + "/discard", libraries.PostDiscard},
+		{"GET " + lp + apiv0.DraftChangesPath, changes.GetLibraryDraftChanges},
+		{"POST " + lp + apiv0.DraftChangesUndoPath, changes.PostLibraryDraftChangesUndo},
+		{"POST " + lp + apiv0.DraftChangesRedoPath, changes.PostLibraryDraftChangesRedo},
 
 		{"GET " + lp + "/widget-types", widgetTypes.GetWidgetTypes},
 		{"GET " + lp + "/widget-types/" + widgetTypeResource.wildcard(), widgetTypes.GetWidgetTypesByID},
@@ -233,6 +240,9 @@ func (r *APIRouter) routes() []route {
 		{"DELETE " + pp + "/environments/" + environmentResource.wildcard() + "/devices/" + deviceResource.wildcard(), environments.DeleteEnvironmentDevice},
 
 		{"GET " + pp + apiv0.DraftPath, r.draftHandlers.GetDraft},
+		{"GET " + pp + apiv0.DraftChangesPath, changes.GetProjectDraftChanges},
+		{"POST " + pp + apiv0.DraftChangesUndoPath, changes.PostProjectDraftChangesUndo},
+		{"POST " + pp + apiv0.DraftChangesRedoPath, changes.PostProjectDraftChangesRedo},
 		{"GET " + pp + "/revision", deploy.GetRevision},
 		{"GET " + pp + "/revisions", revisions.GetRevisions},
 		{"GET " + pp + "/revisions/" + revisionResource.wildcard(), revisions.GetRevisionByNumber},

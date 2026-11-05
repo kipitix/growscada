@@ -1,0 +1,41 @@
+info:
+  name: get project draft changes
+  type: http
+  seq: 119
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/draft-changes
+  auth: inherit
+
+docs: |
+  The state of the project's DraftChange stack (ADR 0017): the Draft's
+  `version`, whether an undo and a redo are possible and the description of
+  the change each would apply. The last change of the collection removed the
+  Environment `bench`, so the undo names it and there is nothing to redo.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.version'
+      operator: eq
+      value: '22'
+    - expression: 'res.body.can_undo'
+      operator: eq
+      value: 'true'
+    - expression: 'res.body.can_redo'
+      operator: eq
+      value: 'false'
+    - expression: 'res.body.undo_description'
+      operator: eq
+      value: '"Delete environment"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

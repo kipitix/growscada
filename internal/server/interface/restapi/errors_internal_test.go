@@ -348,6 +348,8 @@ var domainSentinels = map[string]error{
 	"devicetoken.ErrNotADeviceToken":      devicetoken.ErrNotADeviceToken,
 	"draft.ErrDraftConflict":              draft.ErrDraftConflict,
 	"draft.ErrDraftNotFound":              draft.ErrDraftNotFound,
+	"draft.ErrNothingToUndo":              draft.ErrNothingToUndo,
+	"draft.ErrNothingToRedo":              draft.ErrNothingToRedo,
 }
 
 // unmappedSentinels are the domain sentinels errorMappings leaves out on

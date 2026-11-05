@@ -51,6 +51,7 @@ type testServices struct {
 	deviceConfig runtimeapp.DeviceConfigService
 	deviceTokens runtimeapp.DeviceTokenService
 	draft        application.DraftService
+	draftChanges application.DraftChangesService
 }
 
 // newServices returns the services over the test database; the Runtime
@@ -88,6 +89,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		editLocks:    editLocks,
 		discard:      application.NewDiscardService(content, runtimeNode),
 		draft:        application.NewDraftService(content),
+		draftChanges: application.NewDraftChangesService(content, libraryContent),
 		libraries:    application.NewLibraryService(libraryContent, libraries, releases, widgetTypes),
 		widgetTypes:  application.NewWidgetTypeService(libraryContent, widgetTypes),
 		pins:         application.NewLibraryPinService(content, libraries, releases),
@@ -105,7 +107,8 @@ func (s testServices) services() restapi.Services {
 		Projects: s.projects, Tags: s.tags, TagStates: s.states,
 		Libraries: s.libraries, WidgetTypes: s.widgetTypes, LibraryPins: s.pins, Scenes: s.scenes,
 		Devices: s.devices, Environments: s.environments,
-		Draft: s.draft, Deploy: s.deploy, Discard: s.discard, Revisions: s.revisions,
+		Draft: s.draft, DraftChanges: s.draftChanges,
+		Deploy: s.deploy, Discard: s.discard, Revisions: s.revisions,
 		DeviceConfig: s.deviceConfig, DeviceTokens: s.deviceTokens, EditLocks: s.editLocks,
 	}
 }

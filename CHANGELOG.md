@@ -1,5 +1,19 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.66] - 2026-11-05
+
+### Added
+
+- **Undo/redo: сервис и REST** (задача 38, часть 3; ADR 0016, ADR 0017)
+  - Домен: `Draft.Undo`/`Draft.Redo` применяют `before` изменения на `stack_position` и `after` на `stack_position+1`, поднимают Version и двигают позицию; `draft.Session.Undo`/`Redo` пишут снимки (операция не переигрывается) и публикуют обратные события — `tag_created` для восстановленного Tag, `widget_updated` для Scene, чьи привязки вернулись, `scene_deleted`/`widget_deleted` для отмены создания, `library_pin_updated` для отката смены Pin и так далее по каждому виду; сами undo/redo в лог не пишутся; `draft.StackState` — два изменения, которые клиент откатит и повторит; ошибки `draft.ErrNothingToUndo`, `draft.ErrNothingToRedo`
+  - Репозиторий `draftRepositoryPostgres`: `Stack` (состояние без записи, пустой Draft — версия 1) и `Undo`/`Redo` — одна транзакция над Draft (блокировка строки, гейт EditLock, CAS по `drafts.version`, чтение изменения на позиции, запись снимков, обратные события в outbox, подъём Version и сдвиг позиции, без новой DraftChange); запрос без клиента — 400 до чтения стека, пустой стек — 409, устаревшая Version — 409
+  - `application.DraftChangesService` (`State`, `Undo`, `Redo`) для Project и Library по `editlock.Scope`, с проверкой живого Project/Library (`ProjectContent`/`LibraryContent`); `appdto.DraftChanges{Version, CanUndo, CanRedo, UndoDescription, RedoDescription}`; сервис в `restapi.Services` (`main.go`, `servertest`)
+  - REST: `GET …/draft-changes`, `POST …/draft-changes/undo` и `…/redo` под путём Project и Library; 200 с состоянием после операции, 409 `nothing_to_undo`/`nothing_to_redo` (Problem называет Library для Library), 409 устаревшей Version с `Problem.draft`, 409 без замка с `Problem.edit_lock`, 400 без `X-GrowSCADA-Client`, 404 неживой области; `api/v0` **0.18** (MINOR): `DraftChangesResponse`, `DraftChangeCommandRequest`, константы `DraftChangesPath`/`DraftChangesUndoPath`/`DraftChangesRedoPath`, `make schemas`
+  - apiclient: `DraftChanges`, `UndoDraftChange`, `RedoDraftChange` у `ProjectClient` и `LibraryClient` (Version 0 — текущая Version Draft)
+  - growctl: тест, что планировщик не читает версии сущностей — Version DTO теперь Version Draft (ADR 0016)
+  - Bruno: чтение стека Project и Library, undo/redo обеих областей, восстановление Environment после undo и его отсутствие после redo, пустой стек, устаревшая Version, запрос без клиента, пустой стек Library
+  - Тесты: домен (позиция и Version, отказ при чужом изменении, снимки каждой операции, обратные события каждого вида), репозиторий (восстановление Tag с привязками и события, redo и обрезка redo-хвоста новой правкой, пустой стек и гейт, Library WidgetType, глубина 100), сервис (Project, Library, 404, гейт, устаревшая Version, пустой стек), REST (оба маршрута обеих областей, коды и Problem Details, заголовки), apiclient, growctl
+
 ## [0.0.65] - 2026-11-05
 
 ### Added

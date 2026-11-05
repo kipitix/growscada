@@ -280,6 +280,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 		Devices:      application.NewDeviceService(content),
 		Environments: application.NewEnvironmentService(content),
 		Draft:        application.NewDraftService(content),
+		DraftChanges: application.NewDraftChangesService(content, libraryContent),
 		Deploy: application.NewDeployService(
 			content, application.NewProjectFileBuilder(content), runtimeNode, editLocks),
 		Discard:      application.NewDiscardService(content, runtimeNode),

@@ -341,3 +341,66 @@ func TestResponse_UnknownFields_AreSkipped(t *testing.T) {
 		t.Fatalf("got %+v, %v", tags, err)
 	}
 }
+
+// TestDraftChanges_RoundTrip: the state, undo and redo of a Project's and a
+// Library's Draft are under the scope's path, the commands carrying the
+// Version the client states (ADR 0017).
+func TestDraftChanges_RoundTrip(t *testing.T) {
+	type request struct {
+		method string
+		path   string
+		body   string
+	}
+	var seen []request
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := ""
+		if r.Body != nil {
+			data := make([]byte, 1024)
+			n, _ := r.Body.Read(data)
+			body = string(data[:n])
+		}
+		seen = append(seen, request{method: r.Method, path: r.URL.Path, body: body})
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"version":42,"can_undo":true,"can_redo":true,"undo_description":"Create tag pressure","redo_description":"Delete tag pressure"}`))
+	}))
+	defer srv.Close()
+	client := apiclient.New(srv.URL, srv.Client())
+	ctx := context.Background()
+	libraryID := uuid.MustParse("d0000000-0000-4000-8000-000000000001")
+
+	project := client.Project(testProject)
+	state, err := project.DraftChanges(ctx)
+	if err != nil || state.Version != 42 || !state.CanUndo || state.UndoDescription != "Create tag pressure" {
+		t.Fatalf("DraftChanges: %+v, %v", state, err)
+	}
+	if _, err := project.UndoDraftChange(ctx, 41); err != nil {
+		t.Fatalf("UndoDraftChange: %v", err)
+	}
+	if _, err := project.RedoDraftChange(ctx, 43); err != nil {
+		t.Fatalf("RedoDraftChange: %v", err)
+	}
+	library := client.Library(libraryID)
+	if _, err := library.DraftChanges(ctx); err != nil {
+		t.Fatalf("library DraftChanges: %v", err)
+	}
+	if _, err := library.UndoDraftChange(ctx, 3); err != nil {
+		t.Fatalf("library UndoDraftChange: %v", err)
+	}
+	if _, err := library.RedoDraftChange(ctx, 4); err != nil {
+		t.Fatalf("library RedoDraftChange: %v", err)
+	}
+
+	projectBase := "/api/v0/projects/" + testProject.String() + apiv0.DraftChangesPath
+	libraryBase := apiv0.PathPrefix + apiv0.LibraryPath(libraryID.String()) + apiv0.DraftChangesPath
+	want := []request{
+		{http.MethodGet, projectBase, ""},
+		{http.MethodPost, projectBase + "/undo", `{"version":41}`},
+		{http.MethodPost, projectBase + "/redo", `{"version":43}`},
+		{http.MethodGet, libraryBase, ""},
+		{http.MethodPost, libraryBase + "/undo", `{"version":3}`},
+		{http.MethodPost, libraryBase + "/redo", `{"version":4}`},
+	}
+	if !reflect.DeepEqual(seen, want) {
+		t.Errorf("the client sent %+v, want %+v", seen, want)
+	}
+}

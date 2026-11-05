@@ -1,0 +1,29 @@
+info:
+  name: get environment after redo
+  type: http
+  seq: 123
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/environments/{{ENVIRONMENT_ID}}
+  auth: inherit
+
+docs: |
+  The redo removed the Environment again: it does not exist for the API.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '404'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: 'application/problem+json'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

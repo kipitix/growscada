@@ -198,6 +198,7 @@ func main() {
 	projectFileBuilder := application.NewProjectFileBuilder(projectContent)
 	deployService := application.NewDeployService(projectContent, projectFileBuilder, runtimeNode, editLockService)
 	discardService := application.NewDiscardService(projectContent, runtimeNode)
+	draftChangesService := application.NewDraftChangesService(projectContent, libraryContent)
 	// Create router
 	apiRouter := restapi.NewRouter(restapi.Services{
 		Projects:     projectService,
@@ -210,6 +211,7 @@ func main() {
 		Devices:      application.NewDeviceService(projectContent),
 		Environments: application.NewEnvironmentService(projectContent),
 		Draft:        application.NewDraftService(projectContent),
+		DraftChanges: draftChangesService,
 		Deploy:       deployService,
 		Discard:      discardService,
 		Revisions:    revisionService,
