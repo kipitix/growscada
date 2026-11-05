@@ -862,3 +862,36 @@ func draftChangeCount(t *testing.T, projectID id.ID[project.Project]) int {
 	}
 	return count
 }
+
+// TestDraftUndo_RestoresADeletedSceneWithItsWidgets: the snapshots of a removed
+// Scene carry each of its Widgets, and the undo writes them all back — the
+// rows of the intent, applied together (ADR 0017).
+func TestDraftUndo_RestoresADeletedSceneWithItsWidgets(t *testing.T) {
+	cleanEditLocks(t)
+	cleanWidgetTypes(t)
+	cleanScenes(t)
+	ctx := editlock.System(context.Background())
+	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
+	first := makeWidget(t, sceneRepo, "w1")
+	second := makeWidget(t, sceneRepo, "w2")
+	saved := mustSave(t, sceneRepo, withWidgets(makeScene(t, sceneRepo, "main"), first, second))
+
+	if _, err := testDrafts().Update(ctx, editlock.ProjectScope(mainProject), draftVersionOf(t, mainProject),
+		"Delete scene main", func(session *draft.Session) error {
+			_, err := session.DeleteScene(ctx, saved.ID())
+			return err
+		}); err != nil {
+		t.Fatalf("delete the scene: %v", err)
+	}
+	if _, err := sceneRepo.FindByID(ctx, saved.ID()); !errors.Is(err, scene.ErrSceneNotFound) {
+		t.Fatalf("the scene is still there: %v", err)
+	}
+
+	if _, err := testDrafts().Undo(ctx, editlock.ProjectScope(mainProject), draftVersionOf(t, mainProject)); err != nil {
+		t.Fatalf("Undo: %v", err)
+	}
+	found := mustFindByID(t, sceneRepo, saved.ID())
+	if len(found.Widgets()) != 2 {
+		t.Errorf("the restored scene holds %d widgets, want its 2", len(found.Widgets()))
+	}
+}
