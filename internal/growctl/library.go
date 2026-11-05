@@ -306,24 +306,47 @@ func executeLibraries(ctx context.Context, client *Client, run *settings, plan l
 	}
 	defer unlock()
 
+	// draftVersions is the Version of each library's Draft as the last response
+	// of this run stated: one Version covers every write of the content
+	// (ADR 0016), so a run writing two WidgetTypes of one library states the
+	// newer one for the second.
+	draftVersions := map[uuid.UUID]int{}
+	draftVersionOf := func(lib *apiclient.LibraryClient, planned int) int {
+		if version, ok := draftVersions[lib.ID()]; ok {
+			return version
+		}
+		return planned
+	}
+
 	for _, s := range plan.widgetTypes {
 		ref := widgetTypeRef(s.Library, s.Name())
 		lib, err := libraryOf(s.Library)
 		if err != nil {
 			return fmt.Errorf("%s: %w", ref, err)
 		}
+		version := draftVersionOf(lib, s.Server.Version)
 		switch s.Action {
 		case ActionCreate:
-			_, err = lib.CreateWidgetType(ctx, s.Manifest.Definition)
+			created, createErr := lib.CreateWidgetType(ctx, s.Manifest.Definition)
+			if err = createErr; err == nil {
+				draftVersions[lib.ID()] = created.Version
+			}
 		case ActionUpdate:
 			d := s.Manifest.Definition
-			_, err = lib.UpdateWidgetType(ctx, s.Server.ID, apiv0.UpdateWidgetTypeRequest{
+			updated, updateErr := lib.UpdateWidgetType(ctx, s.Server.ID, apiv0.UpdateWidgetTypeRequest{
 				Name: d.Name, HtmlTemplate: d.HtmlTemplate, Script: d.Script, ScriptLanguage: d.ScriptLanguage,
-				DefaultWidth: d.DefaultWidth, DefaultHeight: d.DefaultHeight, InputPorts: d.InputPorts, Version: s.Server.Version,
+				DefaultWidth: d.DefaultWidth, DefaultHeight: d.DefaultHeight, InputPorts: d.InputPorts, Version: version,
 			})
+			if err = updateErr; err == nil {
+				draftVersions[lib.ID()] = updated.Version
+			}
 		case ActionPrune, ActionDelete:
-			if _, err = lib.DeleteWidgetType(ctx, s.Server.ID, s.Server.Version); errors.Is(err, apiclient.ErrNotFound) {
-				err = nil // already gone — the desired state is reached
+			deleted, deleteErr := lib.DeleteWidgetType(ctx, s.Server.ID, version)
+			if errors.Is(deleteErr, apiclient.ErrNotFound) {
+				deleteErr = nil // already gone — the desired state is reached
+			}
+			if err = deleteErr; err == nil {
+				draftVersions[lib.ID()] = deleted.Version
 			}
 		}
 		if err != nil {

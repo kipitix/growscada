@@ -14,6 +14,49 @@ func mainPins(n string) string {
 	return "---\napiVersion: growscada/v0.4\nkind: Project\nmetadata:\n  name: Main\nspec:\n  libraryPins:\n    Gauges: " + n + "\n"
 }
 
+// TestLibrary_ApplyUpdatesTwoWidgetTypesInOneRun: one Version covers every
+// write of a library's Draft (ADR 0016), so the second WidgetType a run
+// updates states the Version the first response answered, not the one the
+// plan read.
+func TestLibrary_ApplyUpdatesTwoWidgetTypesInOneRun(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+	const two = `apiVersion: growscada/v0.4
+kind: Library
+metadata:
+  name: Gauges
+---
+apiVersion: growscada/v0.4
+kind: WidgetType
+metadata:
+  name: Lamp
+  library: Gauges
+spec:
+  html: <div/>
+  script: ""
+  width: 40
+  height: 40
+---
+apiVersion: growscada/v0.4
+kind: WidgetType
+metadata:
+  name: Dial
+  library: Gauges
+spec:
+  html: <div/>
+  script: ""
+  width: 30
+  height: 30
+`
+	if _, err := runGrowctl(t, srv, two, "apply"); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	edited := strings.Replace(two, "width: 40", "width: 50", 1)
+	edited = strings.Replace(edited, "width: 30", "width: 35", 1)
+	if out, err := runGrowctl(t, srv, edited, "apply"); err != nil {
+		t.Fatalf("apply two edits: %q, %v", out, err)
+	}
+}
+
 // TestLibrary_HeldLock_IsAnErrorNamingTheHolder: a run that writes a library's
 // Draft does not write it for another client; --take-over takes it
 // (ADR 0015).
