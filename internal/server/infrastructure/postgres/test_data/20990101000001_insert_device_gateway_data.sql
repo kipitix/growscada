@@ -13,39 +13,35 @@
 --
 -- The token is a fixture, not a secret: gsc_dev_0123…cdef. Only its SHA-256
 -- and its fingerprint are stored, as the server stores any token.
-INSERT INTO engineering.devices (id, project_id, name, comment, protocol, config, version) VALUES
+INSERT INTO engineering.devices (id, project_id, name, comment, protocol, config) VALUES
     ('e0000000-0000-4000-8000-000000000001',
      'b0000000-0000-4000-8000-000000000001',
      'sim',
      'the seeded Device Gateway fixture',
      'simulation',
-     '{"patterns":[]}',
-     1),
+     '{"patterns":[]}'),
     ('e0000000-0000-4000-8000-000000000002',
      'b0000000-0000-4000-8000-000000000001',
      'sim-2',
      'a second Device, without a token or a tag',
      'simulation',
-     '{}',
-     1);
+     '{}');
 
-INSERT INTO engineering.environments (id, project_id, name, comment, version) VALUES
+INSERT INTO engineering.environments (id, project_id, name, comment) VALUES
     ('e1000000-0000-4000-8000-000000000001',
      'b0000000-0000-4000-8000-000000000001',
      'bench',
-     'the seeded test bench',
-     1);
+     'the seeded test bench');
 
-INSERT INTO engineering.environment_devices (environment_id, device_id, params, version) VALUES
+INSERT INTO engineering.environment_devices (environment_id, device_id, params) VALUES
     ('e1000000-0000-4000-8000-000000000001',
      'e0000000-0000-4000-8000-000000000001',
-     '{"address":"127.0.0.1:1502"}',
-     1);
+     '{"address":"127.0.0.1:1502"}');
 
 -- The Tag the seeded Device supplies, in the Draft and in the Runtime node's
 -- copy of its definition, with a state written by the Device.
-INSERT INTO engineering.tags (id, project_id, name, type, version, device_id) VALUES
-    ('6ba7b820-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'device.speed', 'integer', 1,
+INSERT INTO engineering.tags (id, project_id, name, type, device_id) VALUES
+    ('6ba7b820-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'device.speed', 'integer',
      'e0000000-0000-4000-8000-000000000001');
 INSERT INTO runtime.tags (id, project_id, name, type, version, device_id) VALUES
     ('6ba7b820-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'device.speed', 'integer', 1,

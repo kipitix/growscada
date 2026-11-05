@@ -20,17 +20,17 @@ INSERT INTO projects (id, organization_id, name, version) VALUES
     ('b0000000-0000-4000-8000-000000000002', 'a0000000-0000-4000-8000-000000000001', 'Line 2', 1);
 
 -- Add test data for the Tag definitions (the Draft), all of the project Main
-INSERT INTO engineering.tags (id, project_id, name, type, version) VALUES
-    ('6ba7b810-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_active', 'boolean', 1),
-    ('6ba7b811-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'max_connections', 'integer', 1),
-    ('6ba7b812-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_debug', 'boolean', 1),
-    ('6ba7b813-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'timeout_seconds', 'integer', 1),
-    ('6ba7b814-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'retry_count', 'integer', 1),
-    ('6ba7b815-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_cached', 'boolean', 1),
-    ('6ba7b816-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'pool_size', 'integer', 1),
-    ('6ba7b817-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'enable_tls', 'boolean', 1),
-    ('6ba7b818-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'creator', 'string', 1),
-    ('6ba7b819-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'status_message', 'string', 1);
+INSERT INTO engineering.tags (id, project_id, name, type) VALUES
+    ('6ba7b810-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_active', 'boolean'),
+    ('6ba7b811-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'max_connections', 'integer'),
+    ('6ba7b812-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_debug', 'boolean'),
+    ('6ba7b813-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'timeout_seconds', 'integer'),
+    ('6ba7b814-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'retry_count', 'integer'),
+    ('6ba7b815-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'is_cached', 'boolean'),
+    ('6ba7b816-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'pool_size', 'integer'),
+    ('6ba7b817-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'enable_tls', 'boolean'),
+    ('6ba7b818-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'creator', 'string'),
+    ('6ba7b819-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'status_message', 'string');
 
 -- The Runtime node's copies of their definitions (ADR 0011)
 INSERT INTO runtime.tags (id, project_id, name, type, version) VALUES
@@ -128,21 +128,20 @@ INSERT INTO engineering.released_widget_types
     FROM engineering.widget_types ORDER BY pk_id;
 
 -- The Library Pins: Main pins both Libraries, Line 2 only Main
-INSERT INTO engineering.library_pins (project_id, library_id, release_number, version) VALUES
-    ('b0000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000002', 1, 1),
-    ('b0000000-0000-4000-8000-000000000002', 'd0000000-0000-4000-8000-000000000001', 1, 1);
+INSERT INTO engineering.library_pins (project_id, library_id, release_number) VALUES
+    ('b0000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000002', 1),
+    ('b0000000-0000-4000-8000-000000000002', 'd0000000-0000-4000-8000-000000000001', 1);
 
 -- Add test data for scenes table
 -- version: default committed version is 1
-INSERT INTO engineering.scenes (id, project_id, name, width, height, background_html, version) VALUES
+INSERT INTO engineering.scenes (id, project_id, name, width, height, background_html) VALUES
     (
         'c1d2e3f4-0001-4000-8000-000000000001',
         'b0000000-0000-4000-8000-000000000001',
         'Main Dashboard',
         1920,
         1080,
-        '<div class="background main-dashboard"><svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080"><rect width="100%" height="100%" fill="#1a1a2e"/></svg></div>',
-        1
+        '<div class="background main-dashboard"><svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080"><rect width="100%" height="100%" fill="#1a1a2e"/></svg></div>'
     ),
     (
         'c1d2e3f4-0002-4000-8000-000000000002',
@@ -150,8 +149,7 @@ INSERT INTO engineering.scenes (id, project_id, name, width, height, background_
         'Overview Panel',
         1280,
         720,
-        '<div class="background overview"><svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><rect width="100%" height="100%" fill="#16213e"/></svg></div>',
-        1
+        '<div class="background overview"><svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><rect width="100%" height="100%" fill="#16213e"/></svg></div>'
     );
 
 -- Add test data for widgets table
@@ -198,7 +196,15 @@ INSERT INTO engineering.widgets (id, project_id, name, x, y, z, width, height, o
     );
 -- +goose StatementEnd
 
+-- Every seeded Project and Library gets its Draft row (ADR 0016): the one
+-- Version of its content and its EditLock, free.
+INSERT INTO engineering.drafts (id, project_id)
+    SELECT gen_random_uuid(), id FROM projects WHERE id NOT IN (SELECT project_id FROM engineering.drafts WHERE project_id IS NOT NULL);
+INSERT INTO engineering.drafts (id, library_id)
+    SELECT gen_random_uuid(), id FROM engineering.libraries WHERE id NOT IN (SELECT library_id FROM engineering.drafts WHERE library_id IS NOT NULL);
+
 -- +goose Down
+DELETE FROM engineering.drafts;
 -- +goose StatementBegin
 -- Delete test data for widgets table by their ids
 DELETE FROM engineering.widgets WHERE id IN (

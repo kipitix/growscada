@@ -16,25 +16,22 @@
 -- The token is a fixture, not a secret:
 -- gsc_dev_2222…2222. Only its SHA-256 and its fingerprint are stored, as the
 -- server stores any token.
-INSERT INTO engineering.devices (id, project_id, name, comment, protocol, config, version) VALUES
+INSERT INTO engineering.devices (id, project_id, name, comment, protocol, config) VALUES
     ('e0000000-0000-4000-8000-000000000003',
      'b0000000-0000-4000-8000-000000000001',
      'gateway',
      'the seeded dashboard Device Gateway',
      'simulation',
-     '{}',
-     1);
-INSERT INTO engineering.environments (id, project_id, name, comment, version) VALUES
+     '{}');
+INSERT INTO engineering.environments (id, project_id, name, comment) VALUES
     ('e1000000-0000-4000-8000-000000000002',
      'b0000000-0000-4000-8000-000000000001',
      'lab',
-     'the seeded dashboard test bench',
-     1);
-INSERT INTO engineering.environment_devices (environment_id, device_id, params, version) VALUES
+     'the seeded dashboard test bench');
+INSERT INTO engineering.environment_devices (environment_id, device_id, params) VALUES
     ('e1000000-0000-4000-8000-000000000002',
      'e0000000-0000-4000-8000-000000000003',
-     '{"address":"127.0.0.1:1503"}',
-     1);
+     '{"address":"127.0.0.1:1503"}');
 INSERT INTO runtime.device_tokens (device_id, project_id, token_hash, fingerprint, issued_at) VALUES
     ('e0000000-0000-4000-8000-000000000003',
      'b0000000-0000-4000-8000-000000000001',
