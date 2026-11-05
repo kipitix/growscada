@@ -182,6 +182,34 @@ func TestArrowMove_AnotherWriteWaitsForThePatch(t *testing.T) {
 	f.knowsVersion(sceneID)
 }
 
+// Two writes that wait for the same move PATCH both go out after it, in the
+// order they came: the drain does not put a waiting write back into the queue,
+// where it would wait for itself.
+func TestArrowMove_TwoWritesWaitForThePatch(t *testing.T) {
+	f, sceneID, ids, counter := moveFixture(t, 2)
+	f.p.selectOnly(f.p.compoCtx, ids[0])
+
+	f.p.beginArrowMove(f.p.compoCtx, 5, 0)
+	f.p.deleteWidget(f.p.compoCtx, ids[1])
+	// A write the panel asks for without a port or a Tag: it sends nothing,
+	// but it waits for the move like every other write of the Draft.
+	f.p.bindPort(f.p.compoCtx, "", uuid.Nil)
+	f.run()
+
+	f.noToasts()
+	writes := counter.writes()
+	if len(writes) != 2 || writes[0][:5] != "PATCH" || writes[1][:6] != "DELETE" {
+		t.Fatalf("writes %v: want the move's PATCH, then the delete", writes)
+	}
+	if _, err := f.api.GetWidget(context.Background(), sceneID, ids[1]); err == nil {
+		t.Error("the delete that waited for the move did not happen")
+	}
+	if w := f.widget(sceneID, ids[0]); w.Position.X != 15 {
+		t.Errorf("the moved widget is at %v, want 15", w.Position)
+	}
+	f.knowsVersion(sceneID)
+}
+
 func TestDrag_GroupMovesOnOnePatch(t *testing.T) {
 	f, sceneID, ids, counter := moveFixture(t, 3)
 	f.p.selectAllWidgets(f.p.compoCtx)

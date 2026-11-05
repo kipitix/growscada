@@ -116,7 +116,9 @@ func (p *Project) waitMoves(ctx app.Context, action func(app.Context)) bool {
 		p.flushArrowMoves(ctx)
 		return true
 	}
-	if p.moveSending || len(p.moveQueue) > 0 {
+	// A write run by runMoveQueue runs now: queueing it again would leave it
+	// waiting for itself.
+	if !p.moveDraining && (p.moveSending || len(p.moveQueue) > 0) {
 		p.moveQueue = append(p.moveQueue, action)
 		return true
 	}
@@ -152,30 +154,38 @@ func (p *Project) sendMoves(ctx app.Context, sceneID uuid.UUID, moves []apiv0.Wi
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.MoveWidgetsResponse, error) {
 		return content.MoveWidgets(c, sceneID, req)
 	}, func(ctx app.Context, resp apiv0.MoveWidgetsResponse) {
-		p.moveSending = false
+		// The project was switched while the PATCH was in flight: its flag and
+		// its queue belong to the project shown now, not to this answer.
 		if content != p.content {
 			return
 		}
+		p.moveSending = false
 		p.observeDraftVersion(mark, resp.Version)
 		p.runMoveQueue(ctx)
 	}, func(ctx app.Context, err error) {
-		p.moveSending = false
 		if content != p.content {
 			return
 		}
+		p.moveSending = false
 		p.showRejectedSceneEdit(ctx, err, p.loadWidgets)
 		p.runMoveQueue(ctx)
 	})
 }
 
 // runMoveQueue starts the writes that waited for the move, one after another:
-// a queued move leaves the others waiting for its own answer.
+// a queued move leaves the others waiting for its own answer, while the other
+// writes are simply run — they are what the move held back.
 func (p *Project) runMoveQueue(ctx app.Context) {
+	if p.moveDraining {
+		return
+	}
+	p.moveDraining = true
 	for len(p.moveQueue) > 0 && !p.moveSending && !p.arrowActive {
 		action := p.moveQueue[0]
 		p.moveQueue = p.moveQueue[1:]
 		action(ctx)
 	}
+	p.moveDraining = false
 	if !p.moveSending && !p.arrowActive && p.widgetsReloadDeferred {
 		p.widgetsReloadDeferred = false
 		p.loadWidgets(ctx)

@@ -193,9 +193,12 @@ type Project struct {
 	arrowBase    map[uuid.UUID]apiv0.PositionResponse
 	arrowTimer   *time.Timer
 	// moveSending is true while a move PATCH is in flight; moveQueue holds the
-	// writes that wait for it, so two writes never state the same Version.
-	moveSending bool
-	moveQueue   []func(app.Context)
+	// writes that wait for it, so two writes never state the same Version, and
+	// moveDraining is true while those writes run: they run now, so they are
+	// not queued again.
+	moveSending  bool
+	moveDraining bool
+	moveQueue    []func(app.Context)
 
 	// marquee is the selection rectangle being dragged on empty canvas.
 	marquee marqueeState
