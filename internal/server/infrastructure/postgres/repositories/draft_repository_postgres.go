@@ -247,25 +247,40 @@ func (r draftRepositoryPostgres) ClearStack(ctx context.Context, scope editlock.
 
 // Stack returns the state of the Draft's DraftChange stack (see
 // draft.Repository): the Draft and the changes an undo and a redo would apply.
+// The row and the two changes are read in one snapshot, so a write that lands
+// while the answer is built cannot make it offer an undo or a redo the stack
+// does not hold at the Version it reports.
 func (r draftRepositoryPostgres) Stack(ctx context.Context, scope editlock.Scope) (draft.StackState, bool, error) {
-	current, ok, err := r.Read(ctx, scope)
-	if err != nil || !ok {
-		return draft.StackState{}, false, err
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	if err != nil {
+		return draft.StackState{}, false, fmt.Errorf("cannot begin the read of the draft of %s: %w", scope, err)
 	}
+	defer func() { _ = tx.Rollback() }()
+	cond, args := scopeCondition(scope)
+	row := tx.QueryRowContext(ctx,
+		`SELECT `+selectDraftColumns+` FROM engineering.drafts WHERE `+cond, args...)
+	found, err := scanDraftRow(row.Scan)
+	if errors.Is(err, sql.ErrNoRows) {
+		return draft.StackState{}, false, nil
+	}
+	if err != nil {
+		return draft.StackState{}, false, fmt.Errorf("cannot read the draft of %s: %w", scope, err)
+	}
+	current := draftOf(*found, scope)
 	state := draft.StackState{Draft: current}
 	position := current.StackPosition()
-	undo, found, err := readChange(ctx, r.db, current.ID().UUID(), position)
+	undo, has, err := readChange(ctx, tx, current.ID().UUID(), position)
 	if err != nil {
 		return draft.StackState{}, false, err
 	}
-	if found {
+	if has {
 		state.Undo = &undo
 	}
-	redo, found, err := readChange(ctx, r.db, current.ID().UUID(), position+1)
+	redo, has, err := readChange(ctx, tx, current.ID().UUID(), position+1)
 	if err != nil {
 		return draft.StackState{}, false, err
 	}
-	if found {
+	if has {
 		state.Redo = &redo
 	}
 	return state, true, nil
