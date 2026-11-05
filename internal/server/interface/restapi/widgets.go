@@ -114,6 +114,32 @@ func (h WidgetsHandlers) PutWidgetsByID(w http.ResponseWriter, r *http.Request) 
 	sendJSONResponse(w, http.StatusOK, newUpdateWidgetResponse(updated))
 }
 
+// PatchWidgets handles PATCH /projects/{project_id}/scenes/{scene_id}/widgets
+// — a move of several widgets of the scene as one change of the Draft.
+func (h WidgetsHandlers) PatchWidgets(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := pathUUID(w, r, projectResource)
+	if !ok {
+		return
+	}
+	sceneID, ok := pathUUID(w, r, sceneResource)
+	if !ok {
+		return
+	}
+
+	var request apiv0.MoveWidgetsRequest
+	if !decodeRequest(w, r, &request) {
+		return
+	}
+
+	version, err := h.service.MoveWidgets(r.Context(), projectID, sceneID, request.Version, newMoveWidgetsInput(request))
+	if err != nil {
+		sendError(w, r, err)
+		return
+	}
+
+	sendJSONResponse(w, http.StatusOK, newMoveWidgetsResponse(version))
+}
+
 // DeleteWidgetsByID handles DELETE /projects/{project_id}/scenes/{scene_id}/widgets/{widget_id}
 func (h WidgetsHandlers) DeleteWidgetsByID(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := pathUUID(w, r, projectResource)

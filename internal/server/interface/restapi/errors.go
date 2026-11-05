@@ -61,9 +61,10 @@ func (res resource) wildcard() string {
 }
 
 // errorMapping maps a domain sentinel error to a response. A 404 names the
-// resource and its ID from the path; 401, 403 and 409 carry a fixed detail, so
-// the text of the wrapping errors never reaches the client. A row with another
-// status is a 500 until sendError learns it.
+// resource and its ID from the path, or, for a resource the request names in
+// its body (a batch write), from the error itself; 401, 403 and 409 carry a
+// fixed detail, so the text of the wrapping errors never reaches the client. A
+// row with another status is a 500 until sendError learns it.
 type errorMapping struct {
 	sentinel error
 	status   int
@@ -114,6 +115,8 @@ var errorMappings = []errorMapping{
 		"Widgets of the project would be left without their WidgetType; remove them or change their type first"},
 	{scene.ErrSceneNotFound, http.StatusNotFound, sceneResource, ""},
 	{scene.ErrWidgetNotFound, http.StatusNotFound, widgetResource, ""},
+	{scene.ErrNothingToMove, http.StatusConflict, sceneResource,
+		"Nothing to move: the widgets already hold these positions"},
 	{device.ErrDeviceNotFound, http.StatusNotFound, deviceResource, ""},
 	{device.ErrDeviceNameTaken, http.StatusConflict, deviceResource, "Device name is already taken in the project"},
 	{device.ErrDeviceInUse, http.StatusConflict, deviceResource,
@@ -246,16 +249,23 @@ func sendError(w http.ResponseWriter, r *http.Request, err error) {
 	sendInternalError(w, r, err)
 }
 
-// notFoundInPath returns the path's ID of m's resource if err, a not-found of
-// that resource, is about it. An error that does not say which ID was not
-// found (no id.NotFoundError) is taken to be about the path's.
+// notFoundInPath returns the ID of m's resource if err, a not-found of that
+// resource, is about it. The ID comes from the path; a route that names its
+// resource in the body instead of the path (a batch write) has no such path
+// parameter, and the answer names the ID the error itself carries. An error
+// that does not say which ID was not found (no id.NotFoundError) is taken to
+// be about the path's.
 func notFoundInPath(r *http.Request, m errorMapping, err error) (string, bool) {
+	var nf id.NotFoundError
+	namesID := errors.As(err, &nf) && nf.Err == m.sentinel
 	pathID := r.PathValue(m.resource.pathParam)
 	if pathID == "" {
+		if namesID {
+			return nf.ID.String(), true
+		}
 		return "", false
 	}
-	var nf id.NotFoundError
-	if errors.As(err, &nf) && nf.Err == m.sentinel {
+	if namesID {
 		parsed, perr := uuid.Parse(pathID)
 		if perr != nil || parsed != nf.ID {
 			return "", false

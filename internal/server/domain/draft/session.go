@@ -246,6 +246,30 @@ func (s *Session) UpdateWidget(ctx context.Context, sceneID id.ID[scene.Scene], 
 	return w, nil
 }
 
+// MoveWidgets moves Widgets of a Scene, recording the before and after state of
+// each widget that actually moved (ADR 0017). A move changes only the
+// geometry: the Scene's WidgetType and Tags are not read (ADR 0010).
+func (s *Session) MoveWidgets(ctx context.Context, sceneID id.ID[scene.Scene], moves []scene.WidgetMove) ([]scene.Widget, error) {
+	sc, err := s.loader.Scene(ctx, sceneID)
+	if err != nil {
+		return nil, err
+	}
+	changed, moved, err := sc.MoveWidgets(moves)
+	if err != nil {
+		return nil, err
+	}
+	for _, w := range moved {
+		stored, err := sc.FindWidget(w.ID())
+		if err != nil {
+			return nil, err
+		}
+		s.recordBefore(SnapshotOfWidget(sceneID, stored))
+		s.recordAfter(SnapshotOfWidget(sceneID, w))
+	}
+	s.recordEvents(changed.PendingEvents()...)
+	return moved, nil
+}
+
 // RemoveWidget removes a Widget from its Scene.
 func (s *Session) RemoveWidget(ctx context.Context, sceneID id.ID[scene.Scene], widgetID id.ID[scene.Widget]) (scene.Widget, error) {
 	sc, err := s.loader.Scene(ctx, sceneID)

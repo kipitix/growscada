@@ -67,6 +67,19 @@ type Scene interface {
 	// is not in it as a Tag of the scene's Project does not exist.
 	UpdateWidget(w Widget, wt library.ReleasedWidgetType, tagTypes TagTypes) (Scene, error)
 
+	// MoveWidgets places each widget named by moves at its new position and
+	// records a WidgetUpdatedEvent for each widget that actually moved. Only
+	// the position's x and y change: z, the size, the origin, the rotation,
+	// the WidgetType, the labels and the PortBindings stay as stored, and
+	// neither the WidgetType nor the Tags are read or checked — a broken
+	// binding never refuses a move (ADR 0010).
+	// Returns ErrWidgetNotFound if the scene holds no widget of a move's ID,
+	// ErrWidgetMovedTwice if moves names an ID twice, and ErrNothingToMove if
+	// every widget already holds the position it is moved to; nothing is
+	// changed then. The returned widgets are those that moved, in the order of
+	// moves.
+	MoveWidgets(moves []WidgetMove) (Scene, []Widget, error)
+
 	// RemoveWidget removes the widget with the given ID from the scene,
 	// records a WidgetDeletedEvent and returns the widget too. Like removing
 	// any aggregate, it expects no Version.
@@ -206,6 +219,48 @@ func (s *sceneImpl) UpdateWidget(w Widget, wt library.ReleasedWidgetType, tagTyp
 	widgets := slices.Clone(s.widgets)
 	widgets[i] = w
 	return s.withWidgets(widgets, NewWidgetUpdatedEvent(w.ID(), s.id, s.projectID, w.TypeID())), nil
+}
+
+// MoveWidgets moves the widgets named by moves, keeping everything of each
+// widget but the position's x and y (see Scene).
+func (s *sceneImpl) MoveWidgets(moves []WidgetMove) (Scene, []Widget, error) {
+	indexes := make(map[id.ID[Widget]]int, len(moves))
+	for _, m := range moves {
+		if _, twice := indexes[m.WidgetID()]; twice {
+			return nil, nil, fmt.Errorf("%w: %s", ErrWidgetMovedTwice, m.WidgetID())
+		}
+		i := s.widgetIndex(m.WidgetID())
+		if i < 0 {
+			return nil, nil, id.NotFound(ErrWidgetNotFound, m.WidgetID())
+		}
+		indexes[m.WidgetID()] = i
+	}
+
+	var widgets []Widget // cloned on the first widget that moves
+	var moved []Widget
+	var events []event.Event
+	for _, m := range moves {
+		i := indexes[m.WidgetID()]
+		w := s.widgets[i]
+		position := NewPosition(m.X(), m.Y(), w.Position().Z())
+		if position == w.Position() {
+			continue
+		}
+		if widgets == nil {
+			widgets = slices.Clone(s.widgets)
+		}
+		at := NewWidget(
+			w.ID(), w.Name(), position, w.Size(), w.Origin(), w.Rotation(),
+			w.TypeID(), w.Labels(), w.PortBindings(),
+		)
+		widgets[i] = at
+		moved = append(moved, at)
+		events = append(events, NewWidgetUpdatedEvent(w.ID(), s.id, s.projectID, w.TypeID()))
+	}
+	if len(moved) == 0 {
+		return nil, nil, ErrNothingToMove
+	}
+	return s.withWidgets(widgets, events...), moved, nil
 }
 
 func (s *sceneImpl) RemoveWidget(widgetID id.ID[Widget]) (Scene, Widget, error) {

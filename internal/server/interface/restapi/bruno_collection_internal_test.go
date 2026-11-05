@@ -33,6 +33,7 @@ var requestBodies = map[string]any{
 	"PUT " + libraryPrefix + "/widget-types/" + widgetTypeResource.wildcard():                                            apiv0.UpdateWidgetTypeRequest{},
 	"PUT " + projectPrefix + "/library-pins/" + libraryPinResource.wildcard():                                            apiv0.PutLibraryPinRequest{},
 	"POST " + projectPrefix + "/scenes/" + sceneResource.wildcard() + "/widgets":                                         apiv0.CreateWidgetRequest{},
+	"PATCH " + projectPrefix + "/scenes/" + sceneResource.wildcard() + "/widgets":                                        apiv0.MoveWidgetsRequest{},
 	"PUT " + projectPrefix + "/scenes/" + sceneResource.wildcard() + "/widgets/" + widgetResource.wildcard():             apiv0.UpdateWidgetRequest{},
 	"POST " + projectPrefix + "/scenes":                                                                                  apiv0.CreateSceneRequest{},
 	"PUT " + projectPrefix + "/scenes/" + sceneResource.wildcard():                                                       apiv0.UpdateSceneRequest{},

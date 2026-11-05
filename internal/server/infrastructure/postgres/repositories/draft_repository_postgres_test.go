@@ -988,3 +988,82 @@ func TestDraftUndo_RestoresADeletedSceneWithItsWidgets(t *testing.T) {
 		t.Errorf("the restored scene holds %d widgets, want its 2", len(found.Widgets()))
 	}
 }
+
+// TestDraftMoveWidgets_OneChangeWithBothPositions: a group move is one
+// DraftChange carrying the before and after state of each widget that moved,
+// and its undo puts every position back in one step, publishing widget_updated
+// for each (ADR 0010, ADR 0017). A widget that did not move stays out of the
+// change.
+func TestDraftMoveWidgets_OneChangeWithBothPositions(t *testing.T) {
+	cleanEditLocks(t)
+	cleanWidgetTypes(t)
+	cleanScenes(t)
+	cleanOutbox(t)
+	ctx := editlock.System(context.Background())
+	repo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
+	first := makeWidget(t, repo, "w1")
+	second := makeWidget(t, repo, "w2")
+	staying := makeWidget(t, repo, "w3")
+	saved := mustSave(t, repo, withWidgets(makeScene(t, repo, "main"), first, second, staying))
+	changes := draftChangeCount(t, mainProject)
+	version := draftVersionOf(t, mainProject)
+
+	mustUpdate(t, mainProject, "Move 2 widgets", func(session *draft.Session) error {
+		_, err := session.MoveWidgets(ctx, saved.ID(), []scene.WidgetMove{
+			scene.NewWidgetMove(first.ID(), 100, 200),
+			scene.NewWidgetMove(second.ID(), 300, 400),
+		})
+		return err
+	})
+	cleanOutbox(t)
+
+	if got := draftChangeCount(t, mainProject); got != changes+1 {
+		t.Errorf("the move wrote %d DraftChanges, want one", got-changes)
+	}
+	if draftVersionOf(t, mainProject).Number() != version.Number()+1 {
+		t.Errorf("the move did not raise the Version once")
+	}
+	description, before, after := lastDraftChange(t, mainProject)
+	if description != "Move 2 widgets" {
+		t.Errorf("the change: %q", description)
+	}
+	if len(before) != 2 || len(after) != 2 {
+		t.Errorf("the change holds %d before and %d after snapshots, want 2 and 2", len(before), len(after))
+	}
+	for _, w := range []scene.Widget{first, second} {
+		old, ok := snapshotOf(before, draft.KindWidget, w.ID().UUID())
+		if !ok {
+			t.Fatalf("no before state of %s", w.ID())
+		}
+		if got := old.State.(draft.WidgetState); got.X != w.Position().X() || got.Y != w.Position().Y() {
+			t.Errorf("before %s: (%v, %v), want (%v, %v)", w.ID(), got.X, got.Y, w.Position().X(), w.Position().Y())
+		}
+		moved, ok := snapshotOf(after, draft.KindWidget, w.ID().UUID())
+		if !ok {
+			t.Fatalf("no after state of %s", w.ID())
+		}
+		if moved.State.(draft.WidgetState).X == w.Position().X() {
+			t.Errorf("after %s is where it was", w.ID())
+		}
+	}
+	if _, ok := snapshotOf(after, draft.KindWidget, staying.ID().UUID()); ok {
+		t.Error("the widget that did not move is in the change")
+	}
+
+	if _, err := testDrafts().Undo(ctx, editlock.ProjectScope(mainProject), draftVersionOf(t, mainProject)); err != nil {
+		t.Fatalf("Undo: %v", err)
+	}
+	restored := mustFindByID(t, repo, saved.ID())
+	if len(restored.Widgets()) != 3 {
+		t.Fatalf("the scene after the undo holds %d widgets, want 3", len(restored.Widgets()))
+	}
+	want := scene.NewPosition(10, 20, 0)
+	for _, w := range restored.Widgets() {
+		if w.Position() != want {
+			t.Errorf("widget %s after the undo: %s, want %s", w.ID(), w.Position(), want)
+		}
+	}
+	if got := outboxTypes(t); !slices.Equal(got, []string{"widget_updated", "widget_updated"}) {
+		t.Errorf("the undo published %v, want widget_updated for each moved widget", got)
+	}
+}

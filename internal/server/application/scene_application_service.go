@@ -32,6 +32,7 @@ type SceneService interface {
 	FindWidgetByID(ctx context.Context, projectID, sceneID, widgetID uuid.UUID) (appdto.Widget, error)
 	CreateWidget(ctx context.Context, projectID, sceneID uuid.UUID, version int, input appdto.WidgetInput) (appdto.Widget, error)
 	UpdateWidget(ctx context.Context, projectID, sceneID, widgetID uuid.UUID, version int, input appdto.WidgetInput) (appdto.Widget, error)
+	MoveWidgets(ctx context.Context, projectID, sceneID uuid.UUID, version int, moves []appdto.WidgetMove) (int, error)
 	DeleteWidgetByID(ctx context.Context, projectID, sceneID, widgetID uuid.UUID, version int) (appdto.Widget, error)
 }
 
@@ -313,6 +314,61 @@ func (s sceneServiceImpl) UpdateWidget(ctx context.Context, rawProjectID, rawSce
 		return appdto.Widget{}, widgetSaveError(widgetChangeError(err))
 	}
 	return appdto.NewWidget(updated, rawSceneID, result.Version().Number()), nil
+}
+
+// MoveWidgets moves several widgets of one scene in one DraftChange: only the
+// position's x and y of each named widget change (ADR 0010, ADR 0017). The
+// answer is the Version of the Draft after the change.
+func (s sceneServiceImpl) MoveWidgets(ctx context.Context, rawProjectID, rawSceneID uuid.UUID, rawVersion int, moves []appdto.WidgetMove) (int, error) {
+	projectID, _, err := s.content.open(ctx, rawProjectID)
+	if err != nil {
+		return 0, err
+	}
+	expected, err := draftVersion(rawVersion)
+	if err != nil {
+		return 0, err
+	}
+	domainMoves, err := parseWidgetMoves(moves)
+	if err != nil {
+		return 0, fmt.Errorf("cannot move widgets: %w", invalidInput(err))
+	}
+	sceneID := id.NewID(id.IDWithUUID[scene.Scene](rawSceneID))
+	result, err := s.content.Drafts().Update(ctx, s.content.ScopeOf(projectID), expected,
+		fmt.Sprintf("Move %d widgets", len(moves)),
+		func(session *draft.Session) error {
+			_, err := session.MoveWidgets(ctx, sceneID, domainMoves)
+			return err
+		})
+	if err != nil {
+		if errors.Is(err, scene.ErrWidgetMovedTwice) {
+			return 0, fmt.Errorf("cannot move widgets: %w", invalidInput(err))
+		}
+		return 0, widgetSaveError(err)
+	}
+	return result.Version().Number(), nil
+}
+
+// parseWidgetMoves builds the domain's moves from the client's; each error
+// names the field it comes from. The caller marks the error as invalid input.
+// A repeated widget_id is refused here, before the Draft is read; the domain
+// refuses it too, for callers that do not come through the service.
+func parseWidgetMoves(moves []appdto.WidgetMove) ([]scene.WidgetMove, error) {
+	if len(moves) == 0 {
+		return nil, errors.New("moves: is required")
+	}
+	seen := make(map[uuid.UUID]struct{}, len(moves))
+	parsed := make([]scene.WidgetMove, len(moves))
+	for i, m := range moves {
+		if m.WidgetID == uuid.Nil {
+			return nil, fmt.Errorf("moves[%d].widget_id: is required", i)
+		}
+		if _, twice := seen[m.WidgetID]; twice {
+			return nil, fmt.Errorf("moves[%d].widget_id: is repeated", i)
+		}
+		seen[m.WidgetID] = struct{}{}
+		parsed[i] = scene.NewWidgetMove(id.NewID(id.IDWithUUID[scene.Widget](m.WidgetID)), m.X, m.Y)
+	}
+	return parsed, nil
 }
 
 // parseWidget builds a widget from the client's fields; each error names the

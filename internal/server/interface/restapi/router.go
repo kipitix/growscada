@@ -214,6 +214,7 @@ func (r *APIRouter) routes() []route {
 
 		{"GET " + pp + "/scenes/" + sceneResource.wildcard() + "/widgets", widgets.GetWidgetsBySceneID},
 		{"POST " + pp + "/scenes/" + sceneResource.wildcard() + "/widgets", widgets.PostWidgets},
+		{"PATCH " + pp + "/scenes/" + sceneResource.wildcard() + "/widgets", widgets.PatchWidgets},
 		{"GET " + pp + "/scenes/" + sceneResource.wildcard() + "/widgets/" + widgetResource.wildcard(), widgets.GetWidgetsByID},
 		{"PUT " + pp + "/scenes/" + sceneResource.wildcard() + "/widgets/" + widgetResource.wildcard(), widgets.PutWidgetsByID},
 		{"DELETE " + pp + "/scenes/" + sceneResource.wildcard() + "/widgets/" + widgetResource.wildcard(), widgets.DeleteWidgetsByID},

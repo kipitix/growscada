@@ -54,6 +54,15 @@ type WidgetInput struct {
 	PortBindings     []PortBinding
 }
 
+// WidgetMove is one widget's new place on its scene's canvas: the ID of the
+// entity and the x and y of the position it takes. The layer (z), the size,
+// the origin, the rotation, the type, the labels and the bindings stay as
+// stored (ADR 0010).
+type WidgetMove struct {
+	WidgetID uuid.UUID
+	X, Y     float64
+}
+
 // NewWidget creates a Widget DTO from the domain entity. sceneID and
 // sceneVersion come from the owning Scene, since Widget itself carries neither.
 func NewWidget(w scene.Widget, sceneID uuid.UUID, sceneVersion int) Widget {

@@ -20,4 +20,10 @@ var (
 	// ErrPortTypeMismatch is returned when a widget binds a port to a Tag
 	// whose TagType the port's type hint does not accept.
 	ErrPortTypeMismatch = errors.New("port type hint does not accept tag type")
+	// ErrWidgetMovedTwice is returned when a Scene.MoveWidgets request names
+	// the same widget more than once.
+	ErrWidgetMovedTwice = errors.New("widget is moved twice")
+	// ErrNothingToMove is returned when a Scene.MoveWidgets request moves no
+	// widget: every widget it names already holds the position it is moved to.
+	ErrNothingToMove = errors.New("nothing to move")
 )

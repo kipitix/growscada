@@ -319,6 +319,18 @@ func newUpdateWidgetResponse(w appdto.Widget) apiv0.UpdateWidgetResponse {
 	return apiv0.UpdateWidgetResponse{Version: w.Version}
 }
 
+func newMoveWidgetsInput(r apiv0.MoveWidgetsRequest) []appdto.WidgetMove {
+	moves := make([]appdto.WidgetMove, len(r.Moves))
+	for i, m := range r.Moves {
+		moves[i] = appdto.WidgetMove{WidgetID: m.WidgetID, X: m.X, Y: m.Y}
+	}
+	return moves
+}
+
+func newMoveWidgetsResponse(version int) apiv0.MoveWidgetsResponse {
+	return apiv0.MoveWidgetsResponse{Version: version}
+}
+
 func newCreateWidgetInput(r apiv0.CreateWidgetRequest) appdto.WidgetInput {
 	return appdto.WidgetInput{
 		Name:            r.Name,

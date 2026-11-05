@@ -139,3 +139,25 @@ type UpdateWidgetRequest struct {
 type UpdateWidgetResponse struct {
 	Version int `json:"version"`
 }
+
+// MoveWidgetsRequest is the HTTP DTO for moving several widgets of one scene at
+// once, as one change of the Draft (ADR 0010). Version must be the Draft's
+// current Version (ADR 0016).
+type MoveWidgetsRequest struct {
+	Version int                 `json:"version"`
+	Moves   []WidgetMoveRequest `json:"moves"`
+}
+
+// WidgetMoveRequest is one widget of a MoveWidgetsRequest: the widget's ID and
+// the position it takes. The layer (z) stays as stored.
+type WidgetMoveRequest struct {
+	WidgetID uuid.UUID `json:"widget_id"`
+	X        float64   `json:"x"`
+	Y        float64   `json:"y"`
+}
+
+// MoveWidgetsResponse is the answer to a move: the Version of the Draft after
+// the change.
+type MoveWidgetsResponse struct {
+	Version int `json:"version"`
+}
