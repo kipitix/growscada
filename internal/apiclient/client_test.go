@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -355,9 +356,8 @@ func TestDraftChanges_RoundTrip(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body := ""
 		if r.Body != nil {
-			data := make([]byte, 1024)
-			n, _ := r.Body.Read(data)
-			body = string(data[:n])
+			data, _ := io.ReadAll(r.Body)
+			body = string(data)
 		}
 		seen = append(seen, request{method: r.Method, path: r.URL.Path, body: body})
 		w.Header().Set("Content-Type", "application/json")
