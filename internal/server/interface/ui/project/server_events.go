@@ -26,10 +26,12 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 			return
 		}
 		p.tags = eventlog.ApplyToTags(p.tags, ev)
-		if ev.Type == eventlog.EventProjectResync {
-			// Events of the project were lost: the server may have gone back.
+		if ev.Type == eventlog.EventResync || ev.Type == eventlog.EventProjectResync {
+			// Events were lost: the server may have gone back.
 			p.sceneVersions.Forget()
 			p.sceneStates.Forget()
+			p.draftVersions.Forget()
+			p.loadDraftState(ctx)
 		}
 		// The Draft's lock changes with a Check out, a Check in, a takeover or
 		// an expiry; the event carries its new state, the toast of a lost lock

@@ -87,13 +87,16 @@ type Project struct {
 	takeOverDialog bool
 	checkingOut    bool
 
-	// draftVersion is the Version of the Draft: every write of its content
-	// states it and every content response carries it (ADR 0016).
-	draftVersion int
+	// draftVersions holds the Version of the Draft: every write of its content
+	// states it and every content response carries it (ADR 0016). Like the
+	// other Versions it is forgotten when the server may have gone back (a
+	// resync) and on a conflict, and a response sent before that does not
+	// bring the old one back (uiutil.Versions).
+	draftVersions uiutil.Versions
 
 	// sceneVersions holds the version each write of a Scene or its Widgets
-	// states; the Version and SceneVersion of the lists above are not read.
-	// The selected Scene's is learned with its Widgets (observeSceneVersion).
+	// states; the Version of the lists above is not read. The selected
+	// Scene's is learned with its Widgets (observeSceneVersion).
 	sceneVersions uiutil.Versions
 	// sceneStates holds the version of each Scene's properties in p.scenes:
 	// a reread replaces them only with a newer state (sceneVersions also
@@ -286,6 +289,7 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.revisionDetail, p.revisionDetailLoaded = apiv0.RevisionResponse{}, false
 	p.sceneVersions.Forget()
 	p.sceneStates.Forget()
+	p.draftVersions.Forget()
 	clear(p.staleScenes)
 	p.widgetsReloadDeferred = false
 	p.restoreSelection(ctx)

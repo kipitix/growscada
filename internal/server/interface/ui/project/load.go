@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
@@ -12,11 +13,36 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
-// observeDraftVersion records a Version of the Draft seen in a response. The
-// Version never goes back, so a response read earlier cannot lower it.
-func (p *Project) observeDraftVersion(version int) {
-	if version > p.draftVersion {
-		p.draftVersion = version
+// draftVersion is the Version of the Draft every write of its content states
+// (ADR 0016): what the responses seen so far knew. 0 asks the client to read
+// it.
+func (p *Project) draftVersion() int { return p.draftVersions.Of(p.projectID) }
+
+// markDraft is the moment a request carrying the Draft's Version is sent; its
+// response observes the version with it (observeDraftVersion).
+func (p *Project) markDraft() uiutil.Mark { return p.draftVersions.Mark() }
+
+// observeDraftVersion records version of the Draft stated by a response to a
+// request sent at mark. A response sent before a forget does not bring the
+// forgotten version back, and a version never goes back on its own
+// (uiutil.Versions): the next reread sets it after a resync or a conflict.
+func (p *Project) observeDraftVersion(mark uiutil.Mark, version int) {
+	p.draftVersions.Observe(mark, p.projectID, version)
+}
+
+// forgetDraftVersion forgets the Draft's Version, which the server may have
+// taken back: a conflict showed this client an older one, or the stream
+// resynced. The next response sets it anew.
+func (p *Project) forgetDraftVersion() { p.draftVersions.ForgetID(p.projectID) }
+
+// rejectedDraftVersion is the error handler of a write that states the Draft's
+// Version: the toast, and on a conflict the Version dropped and reread, so the
+// next try states the server's one.
+func (p *Project) rejectedDraftVersion(ctx app.Context, err error) {
+	uiutil.ShowError(ctx, err)
+	if errors.Is(err, apiclient.ErrConflict) {
+		p.forgetDraftVersion()
+		p.loadDraftState(ctx)
 	}
 }
 
@@ -24,15 +50,15 @@ func (p *Project) observeDraftVersion(version int) {
 // states (ADR 0016).
 func (p *Project) loadDraftState(ctx app.Context) {
 	if p.content == nil {
-		p.draftVersion = 0
 		return
 	}
+	mark := p.markDraft()
 	uiutil.LoadOfProject(p.compoCtx, &p.draftReloader, p.projectContent,
 		func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DraftStateResponse, error) {
 			return pc.DraftState(c)
 		},
 		func(ctx app.Context, state apiv0.DraftStateResponse) {
-			p.observeDraftVersion(state.Version)
+			p.observeDraftVersion(mark, state.Version)
 		}, p.loadDraftState)
 }
 
@@ -60,14 +86,15 @@ func (p *Project) loadPins(ctx app.Context) {
 		p.pins = nil
 		return
 	}
+	mark := p.markDraft()
 	uiutil.LoadOfProject(p.compoCtx, &p.pinsReloader, p.projectContent,
 		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.LibraryPinResponse, error) {
 			return pc.ListLibraryPins(c)
 		},
 		func(ctx app.Context, pins []apiv0.LibraryPinResponse) {
 			p.pins = pins
-			if len(pins) > 0 {
-				p.observeDraftVersion(pins[0].Version)
+			for _, pin := range pins {
+				p.observeDraftVersion(mark, pin.Version)
 			}
 		}, p.loadPins)
 }
@@ -122,10 +149,8 @@ func (p *Project) setScenes(ctx app.Context, mark sceneMark, scenes []apiv0.Scen
 		merged[i] = sc
 	}
 	p.scenes = merged
-	for i, sc := range scenes {
-		if i == 0 {
-			p.observeDraftVersion(sc.Version)
-		}
+	for _, sc := range scenes {
+		p.observeDraftVersion(mark.draft, sc.Version)
 		p.observeSceneVersion(ctx, mark.versions, sc.ID, sc.Version)
 	}
 
@@ -172,6 +197,7 @@ func (p *Project) loadWidgets(ctx app.Context) {
 		return
 	}
 	mark := p.sceneVersions.Mark()
+	draftMark := p.markDraft()
 	uiutil.LoadFor(ctx, &p.widgetsReloader,
 		func() uiutil.SceneOfProject {
 			return uiutil.SceneOfProject{Content: p.content, SceneID: p.selectedSceneID}
@@ -182,22 +208,21 @@ func (p *Project) loadWidgets(ctx app.Context) {
 				p.widgetsReloadDeferred = true
 				return
 			}
-			p.setWidgets(ctx, mark, k.SceneID, widgets)
+			p.setWidgets(ctx, mark, draftMark, k.SceneID, widgets)
 		}, p.loadWidgets)
 }
 
 // setWidgets replaces the selected scene's widgets and merges the widget
-// properties editor. mark is the moment the list was requested.
-func (p *Project) setWidgets(ctx app.Context, mark uiutil.Mark, sceneID uuid.UUID, widgets []apiv0.WidgetResponse) {
+// properties editor. mark is the moment the list was requested, draftMark
+// that of its Draft Version.
+func (p *Project) setWidgets(ctx app.Context, mark, draftMark uiutil.Mark, sceneID uuid.UUID, widgets []apiv0.WidgetResponse) {
 	old, known := p.findWidget(p.selectedWidgetID)
 	p.widgets = widgets
 
-	// Widgets carry their Scene's version; with none, the Scene is reread
-	// for it.
-	for i, w := range widgets {
-		if i == 0 {
-			p.observeDraftVersion(w.Version)
-		}
+	// Widgets carry the Draft's Version; with none, the Scene is reread for
+	// it.
+	for _, w := range widgets {
+		p.observeDraftVersion(draftMark, w.Version)
 		p.sceneVersions.Observe(mark, sceneID, w.Version)
 	}
 	if len(widgets) == 0 {
@@ -226,6 +251,7 @@ func (p *Project) loadTags(ctx app.Context) {
 		return
 	}
 	mark := p.tags.Mark()
+	draftMark := p.markDraft()
 	p.tagLists++
 	n := p.tagLists
 	uiutil.LoadOfProject(p.compoCtx, &p.tagsReloader, p.projectContent,
@@ -233,18 +259,19 @@ func (p *Project) loadTags(ctx app.Context) {
 			return pc.ListTags(c)
 		},
 		func(ctx app.Context, tags []apiv0.TagResponse) {
-			p.setTags(ctx, mark, n, tags)
+			p.setTags(ctx, mark, draftMark, n, tags)
 		}, p.loadTags)
 }
 
 // setTags merges the loaded tag list into the known Tags (a newer state from
 // a tag_updated wins) and drops the selection if its tag is gone. mark is the
-// moment the list was requested, n its number (tagLists): a list sent before
-// the selected Tag was created leaves the selection to the next one.
-func (p *Project) setTags(ctx app.Context, mark tagstate.Mark, n uint64, tags []apiv0.TagResponse) {
+// moment the list was requested, draftMark that of its Draft Version, n its
+// number (tagLists): a list sent before the selected Tag was created leaves
+// the selection to the next one.
+func (p *Project) setTags(ctx app.Context, mark tagstate.Mark, draftMark uiutil.Mark, n uint64, tags []apiv0.TagResponse) {
 	p.tags = p.tags.Merge(mark, tags)
-	if len(tags) > 0 {
-		p.observeDraftVersion(tags[0].Version)
+	for _, found := range tags {
+		p.observeDraftVersion(draftMark, found.Version)
 	}
 	if _, ok := p.tags.Find(p.selectedTagID); ok || p.selectedTagID == uuid.Nil || n <= p.tagCreated {
 		return

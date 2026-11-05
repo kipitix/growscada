@@ -215,6 +215,29 @@ func TestCreateScene_SelectsTheNewScene(t *testing.T) {
 	f.knowsVersion(scenes[0].ID)
 }
 
+// The last Scene deleted: the list that comes back is empty, so only the
+// delete's own response states the new Version of the Draft; a create that
+// states the old one would be refused for good.
+func TestDeleteTheLastScene_NextCreateStatesTheNewVersion(t *testing.T) {
+	url, api := newServer(t)
+	sceneID := createScene(t, api, "Main")
+	f := mount(t, url, api)
+	f.run()
+
+	f.p.deleteScene(f.p.compoCtx, sceneID)
+	f.run()
+	f.noToasts()
+
+	f.p.createScene(f.p.compoCtx)
+	f.run()
+	f.noToasts()
+
+	scenes, err := api.ListScenes(context.Background())
+	if err != nil || len(scenes) != 1 {
+		t.Fatalf("server scenes after the delete and the create: %+v, %v", scenes, err)
+	}
+}
+
 func TestSaveSceneProperties_RightAfterCreate_SavesTheEdit(t *testing.T) {
 	f := startProject(t)
 	f.p.scenesReloader.Start() // a list read in flight, which never lists the new scene
@@ -334,6 +357,36 @@ func TestSaveSceneProperties_SceneChangedMeanwhile_ReloadsAndAsksToRepeat(t *tes
 	}
 	if f.p.scenes[0].Name != "Theirs" || f.p.sceneEdit.name != "Theirs" {
 		t.Errorf("not reloaded: scene %q, editor %q", f.p.scenes[0].Name, f.p.sceneEdit.name)
+	}
+	f.knowsVersion(sceneID)
+
+	f.p.sceneEdit.name = "Mine"
+	f.p.saveSceneProperties(f.p.compoCtx)
+	f.run()
+
+	f.noToasts()
+	if name := f.scene(sceneID).Name; name != "Mine" {
+		t.Errorf("repeated edit: server name %q", name)
+	}
+}
+
+// The server's Version went back (its database was recreated since): the write
+// is refused, the Draft's Version is dropped with the Scene's, reread, and the
+// repeated edit goes through. A version kept here that the server no longer
+// has would be refused forever (uiutil.Versions).
+func TestSaveSceneProperties_ServerVersionWentBack_RecoversAfterTheConflict(t *testing.T) {
+	url, api := newServer(t)
+	sceneID := createScene(t, api, "Main")
+	f := mount(t, url, api)
+	f.p.draftVersions.Observe(f.p.draftVersions.Mark(), f.p.projectID, 15)
+	f.p.sceneVersions.Observe(f.p.sceneVersions.Mark(), sceneID, 15)
+
+	f.p.sceneEdit.name = "Mine"
+	f.p.saveSceneProperties(f.p.compoCtx)
+	f.run()
+
+	if got := f.oneToast(); got.Status != http.StatusConflict {
+		t.Errorf("toast %+v: want the conflict", got)
 	}
 	f.knowsVersion(sceneID)
 

@@ -202,10 +202,12 @@ func (p *Project) discard(ctx app.Context) {
 		return
 	}
 	p.discarding = true
+	mark := p.markDraft()
 	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DiscardProjectResponse, error) {
 		return pc.Discard(c)
-	}, func(ctx app.Context, _ apiv0.DiscardProjectResponse) {
+	}, func(ctx app.Context, discarded apiv0.DiscardProjectResponse) {
 		p.discarding = false
+		p.observeDraftVersion(mark, discarded.Version)
 		p.loadDeploy(ctx)
 		ctx.Update()
 	}, func(ctx app.Context, err error) {

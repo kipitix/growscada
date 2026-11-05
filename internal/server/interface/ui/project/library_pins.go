@@ -53,13 +53,14 @@ func (p *Project) addPin(libraryID uuid.UUID) {
 		return
 	}
 	content := p.content
+	mark := p.markDraft()
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.LibraryPinResponse, error) {
 		return content.PinLibrary(c, libraryID, apiv0.PutLibraryPinRequest{Release: lib.LatestRelease})
 	}, func(ctx app.Context, saved apiv0.LibraryPinResponse) {
-		p.observeDraftVersion(saved.Version)
+		p.observeDraftVersion(mark, saved.Version)
 		p.loadPins(ctx)
 		p.loadWidgetTypes(ctx)
-	}, nil)
+	}, p.rejectedDraftVersion)
 }
 
 // changePin switches the pin of the library to release, or removes it for
@@ -95,7 +96,7 @@ func (p *Project) changePin(libraryID uuid.UUID, release int) {
 				return
 			}
 		}
-		p.savePin(content, libraryID, release, p.draftVersion)
+		p.savePin(content, libraryID, release, p.draftVersion())
 	}, nil)
 }
 
@@ -104,13 +105,14 @@ func (p *Project) savePin(content *apiclient.ProjectClient, libraryID uuid.UUID,
 	if p.refuseReadOnly(p.compoCtx) {
 		return
 	}
+	mark := p.markDraft()
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.LibraryPinResponse, error) {
 		if release == 0 {
 			return content.UnpinLibrary(c, libraryID, version)
 		}
 		return content.PinLibrary(c, libraryID, apiv0.PutLibraryPinRequest{Release: release, Version: version})
 	}, func(ctx app.Context, saved apiv0.LibraryPinResponse) {
-		p.observeDraftVersion(saved.Version)
+		p.observeDraftVersion(mark, saved.Version)
 		p.loadPins(ctx)
 		p.loadWidgetTypes(ctx)
 	}, func(ctx app.Context, err error) {
@@ -120,6 +122,10 @@ func (p *Project) savePin(content *apiclient.ProjectClient, libraryID uuid.UUID,
 			p.showOrphaned(ctx, "change the pin", se.Problem.OrphanedWidgets)
 		} else {
 			uiutil.ShowError(ctx, err)
+		}
+		if errors.Is(err, apiclient.ErrConflict) {
+			p.forgetDraftVersion()
+			p.loadDraftState(ctx)
 		}
 		p.loadPins(ctx)
 	})

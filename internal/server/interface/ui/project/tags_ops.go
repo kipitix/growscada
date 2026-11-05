@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
@@ -27,7 +28,7 @@ func (p *Project) createTag(ctx app.Context) {
 		uiutil.StoreID(ctx, p.selectionKey(tagIDKey), created.ID)
 		p.loadTags(ctx)
 		p.loadDraftState(ctx)
-	}, nil)
+	}, p.rejectedTagEdit)
 }
 
 func (p *Project) deleteTag(ctx app.Context) {
@@ -38,14 +39,27 @@ func (p *Project) deleteTag(ctx app.Context) {
 	if deletedID == uuid.Nil {
 		return
 	}
+	mark := p.markDraft()
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.TagResponse, error) {
-		return content.DeleteTag(c, deletedID, p.draftVersion)
+		return content.DeleteTag(c, deletedID, p.draftVersion())
 	}, func(ctx app.Context, deleted apiv0.TagResponse) {
-		p.observeDraftVersion(deleted.Version)
+		p.observeDraftVersion(mark, deleted.Version)
 		if p.selectedTagID == deletedID {
 			p.selectedTagID = uuid.Nil
 			uiutil.StoreID(ctx, p.selectionKey(tagIDKey), uuid.Nil)
 		}
 		p.loadTags(ctx)
-	}, nil)
+	}, p.rejectedTagEdit)
+}
+
+// rejectedTagEdit is the error handler of a write of a Tag: the toast, and on
+// a conflict the Draft's Version dropped and reread with the Tag list, which
+// another write has made stale.
+func (p *Project) rejectedTagEdit(ctx app.Context, err error) {
+	uiutil.ShowError(ctx, err)
+	if errors.Is(err, apiclient.ErrConflict) {
+		p.forgetDraftVersion()
+		p.loadDraftState(ctx)
+		p.loadTags(ctx)
+	}
 }

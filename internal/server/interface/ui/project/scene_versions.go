@@ -15,12 +15,12 @@ import (
 
 // ── Scene versions and states ─────────────────────────────────────────────────
 
-// sceneMark is the moment a request of Scenes was sent, for both
-// sceneVersions and sceneStates.
-type sceneMark struct{ versions, states uiutil.Mark }
+// sceneMark is the moment a request of Scenes was sent, for sceneVersions,
+// sceneStates and the Draft's Version.
+type sceneMark struct{ versions, states, draft uiutil.Mark }
 
 func (p *Project) markScenes() sceneMark {
-	return sceneMark{versions: p.sceneVersions.Mark(), states: p.sceneStates.Mark()}
+	return sceneMark{versions: p.sceneVersions.Mark(), states: p.sceneStates.Mark(), draft: p.markDraft()}
 }
 
 // observeSceneVersion records version of the Scene id, stated by a response
@@ -101,7 +101,7 @@ func (p *Project) loadStaleScenes(ctx app.Context) {
 // an older state of it, puts sc in its place and merges the scene properties
 // editor when it is the selected one. mark is the moment it was requested.
 func (p *Project) setScene(ctx app.Context, mark sceneMark, sc apiv0.SceneResponse) {
-	p.observeDraftVersion(sc.Version)
+	p.observeDraftVersion(mark.draft, sc.Version)
 	p.observeSceneVersion(ctx, mark.versions, sc.ID, sc.Version)
 	i := uiutil.IdxByID(p.scenes, sc.ID, uiutil.SceneID)
 	if i < 0 || !p.sceneStates.Advance(mark.states, sc.ID, sc.Version) {

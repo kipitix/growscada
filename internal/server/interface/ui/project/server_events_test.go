@@ -289,7 +289,7 @@ func TestCreateTag_AListSentBefore_KeepsTheSelection(t *testing.T) {
 	f.p.createTag(f.p.compoCtx)
 	f.run()
 	created := f.p.selectedTagID
-	f.p.setTags(f.p.compoCtx, mark, n, stale)
+	f.p.setTags(f.p.compoCtx, mark, f.p.markDraft(), n, stale)
 
 	if f.p.selectedTagID != created || created == uuid.Nil {
 		t.Errorf("selected %v, want the new Tag %v", f.p.selectedTagID, created)

@@ -42,12 +42,13 @@ func (p *Project) createWidget(ctx app.Context, typeID uuid.UUID, x, y float64) 
 			w.Size.Height = wt.DefaultHeight
 		}
 	}
-	req := apiv0.CreateWidgetRequest(widgetRequest(w, p.draftVersion))
+	req := apiv0.CreateWidgetRequest(widgetRequest(w, p.draftVersion()))
 	mark := p.sceneVersions.Mark()
+	draftMark := p.markDraft()
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.CreateWidgetResponse, error) {
 		return content.CreateWidget(c, sceneID, req)
 	}, func(ctx app.Context, created apiv0.CreateWidgetResponse) {
-		p.observeDraftVersion(created.Version)
+		p.observeDraftVersion(draftMark, created.Version)
 		p.sceneVersions.Observe(mark, sceneID, created.Version)
 		w.ID = created.ID
 		p.selectedWidgetID = created.ID
@@ -67,11 +68,12 @@ func (p *Project) deleteWidget(ctx app.Context, widgetID uuid.UUID) {
 	}
 	sceneID := p.selectedSceneID
 	mark := p.sceneVersions.Mark()
+	draftMark := p.markDraft()
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.WidgetResponse, error) {
-		return content.DeleteWidget(c, sceneID, widgetID, p.draftVersion)
+		return content.DeleteWidget(c, sceneID, widgetID, p.draftVersion())
 	}, func(ctx app.Context, deleted apiv0.WidgetResponse) {
 		if deleted.Version > 0 {
-			p.observeDraftVersion(deleted.Version)
+			p.observeDraftVersion(draftMark, deleted.Version)
 			p.sceneVersions.Observe(mark, sceneID, deleted.Version)
 		} else {
 			p.sceneVersions.ForgetID(sceneID)
@@ -191,12 +193,13 @@ func (p *Project) putWidget(ctx app.Context, w apiv0.WidgetResponse) {
 		return
 	}
 	sceneID := p.selectedSceneID
-	req := apiv0.UpdateWidgetRequest(widgetRequest(w, p.draftVersion))
+	req := apiv0.UpdateWidgetRequest(widgetRequest(w, p.draftVersion()))
 	mark := p.sceneVersions.Mark()
+	draftMark := p.markDraft()
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.UpdateWidgetResponse, error) {
 		return content.UpdateWidget(c, sceneID, w.ID, req)
 	}, func(ctx app.Context, updated apiv0.UpdateWidgetResponse) {
-		p.observeDraftVersion(updated.Version)
+		p.observeDraftVersion(draftMark, updated.Version)
 		p.sceneVersions.Observe(mark, sceneID, updated.Version)
 	}, p.rejectedSceneEdit(sceneID, p.loadWidgets))
 }
