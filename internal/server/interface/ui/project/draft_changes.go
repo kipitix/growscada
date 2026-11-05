@@ -3,6 +3,7 @@ package project
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
@@ -59,6 +60,11 @@ func (p *Project) stepDraftChange(ctx app.Context, undo bool) {
 	// A command the buttons would not offer is not sent: a shortcut is the
 	// button's own, and a step the stack does not name is no request.
 	if (undo && !p.canUndo()) || (!undo && !p.canRedo()) {
+		return
+	}
+	// A pending arrow series holds the Draft's Version: the undo states the
+	// one it settles at.
+	if p.waitMoves(ctx, func(ctx app.Context) { p.stepDraftChange(ctx, undo) }) {
 		return
 	}
 	version := p.draftChangesVersion()
@@ -192,26 +198,114 @@ func (p *Project) listenShortcuts() {
 		if len(args) == 0 {
 			return nil
 		}
-		ev := args[0]
-		action := uiutil.KeyEventAction(ev)
-		if action == uiutil.KeyNone || !p.shown() || !p.keyActionAllowed() {
+		p.handleKeyDown(args[0])
+		return nil
+	})
+	p.onKeyUp = app.FuncOf(func(this app.Value, args []app.Value) any {
+		if len(args) == 0 {
 			return nil
 		}
-		ev.Call("preventDefault") // the browser's own undo of the page
-		p.compoCtx.Dispatch(func(ctx app.Context) { p.applyKeyAction(ctx, action) })
+		p.handleKeyUp(args[0])
+		return nil
+	})
+	p.onBlur = app.FuncOf(func(this app.Value, args []app.Value) any {
+		// The Alt+Tab that leaves the window also ends the series: its
+		// keyup may never arrive here.
+		if p.arrowActive && p.mounted {
+			p.compoCtx.Dispatch(func(ctx app.Context) { p.flushArrowMoves(ctx) })
+		}
 		return nil
 	})
 	app.Window().Call("addEventListener", "keydown", p.onKeyDown)
+	app.Window().Call("addEventListener", "keyup", p.onKeyUp)
+	app.Window().Call("addEventListener", "blur", p.onBlur)
 }
 
-// noKeyDown releases the listener (OnDismount).
+// noKeyDown releases the listeners (OnDismount).
 func (p *Project) noKeyDown() {
-	if p.onKeyDown == nil {
+	p.stopArrowTimer()
+	for _, l := range []struct {
+		event string
+		fn    *app.Func
+	}{{"keydown", &p.onKeyDown}, {"keyup", &p.onKeyUp}, {"blur", &p.onBlur}} {
+		if *l.fn == nil {
+			continue
+		}
+		app.Window().Call("removeEventListener", l.event, *l.fn)
+		(*l.fn).Release()
+		*l.fn = nil
+	}
+}
+
+// handleKeyDown answers the keyboard of the shown mode: Ctrl/Cmd+A selects
+// every Widget of the Scene, Esc drops the selection (and a rectangle being
+// dragged), the arrows move the selection, and Ctrl+Z / Ctrl+Shift+Z undo and
+// redo the Draft. All of them are ignored in a field the user types in, behind
+// a dialog of the mode and while another mode is shown.
+func (p *Project) handleKeyDown(ev app.Value) {
+	if !p.shown() || !p.keyActionAllowed() || uiutil.KeyEventTyping(ev) {
 		return
 	}
-	app.Window().Call("removeEventListener", "keydown", p.onKeyDown)
-	p.onKeyDown.Release()
-	p.onKeyDown = nil
+	ctrl := ev.Get("ctrlKey").Bool() || ev.Get("metaKey").Bool()
+	key := ev.Get("key").String()
+	code := ev.Get("code").String()
+	switch {
+	case ctrl && (strings.EqualFold(key, "a") || code == "KeyA"):
+		ev.Call("preventDefault")
+		p.compoCtx.Dispatch(func(ctx app.Context) { p.selectAllWidgets(ctx) })
+		return
+	case key == "Escape":
+		ev.Call("preventDefault")
+		p.compoCtx.Dispatch(func(ctx app.Context) { p.escapeSelection(ctx) })
+		return
+	}
+	if dx, dy, arrow := arrowStep(key, ev.Get("shiftKey").Bool()); arrow {
+		ev.Call("preventDefault") // the page does not scroll under the selection
+		if p.readOnly() {
+			return // selection is read-only work too, moving is not
+		}
+		p.compoCtx.Dispatch(func(ctx app.Context) { p.beginArrowMove(ctx, dx, dy) })
+		return
+	}
+	action := uiutil.KeyEventAction(ev)
+	if action == uiutil.KeyNone {
+		return
+	}
+	ev.Call("preventDefault") // the browser's own undo of the page
+	p.compoCtx.Dispatch(func(ctx app.Context) { p.applyKeyAction(ctx, action) })
+}
+
+// handleKeyUp ends an arrow series when its arrow is released.
+func (p *Project) handleKeyUp(ev app.Value) {
+	if _, _, arrow := arrowStep(ev.Get("key").String(), false); !arrow || !p.arrowActive {
+		return
+	}
+	p.compoCtx.Dispatch(func(ctx app.Context) { p.flushArrowMoves(ctx) })
+}
+
+// arrowStep is the move an arrow key asks for: 1 px, or 10 px with Shift.
+func arrowStep(key string, shift bool) (dx, dy float64, ok bool) {
+	step := 1.0
+	if shift {
+		step = 10
+	}
+	switch key {
+	case "ArrowLeft":
+		return -step, 0, true
+	case "ArrowRight":
+		return step, 0, true
+	case "ArrowUp":
+		return 0, -step, true
+	case "ArrowDown":
+		return 0, step, true
+	}
+	return 0, 0, false
+}
+
+// escapeSelection drops the selection and a rectangle being dragged with it.
+func (p *Project) escapeSelection(ctx app.Context) {
+	p.cancelMarquee()
+	p.clearWidgetSelection(ctx)
 }
 
 // applyKeyAction runs the command a keydown asked for: the buttons' own, so a
@@ -233,7 +327,7 @@ func (p *Project) applyKeyAction(ctx app.Context, action uiutil.KeyAction) {
 // the dialog shows, and behind the name of a Check out or a takeover it would
 // act on a Draft the user is only about to take.
 func (p *Project) keyActionAllowed() bool {
-	return !p.deployDialog && !p.revisionsDialog && !p.askingName && !p.takeOverDialog
+	return !p.deployDialog && !p.revisionsDialog && !p.askingName && !p.takeOverDialog && !p.projectFileDialog
 }
 
 // shown reports whether the Project mode is the one displayed. Root keeps every

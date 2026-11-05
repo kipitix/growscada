@@ -137,9 +137,13 @@ func (p *Project) doCheckOut(ctx app.Context, name string) {
 	})
 }
 
-// checkIn gives the Draft back, leaving it as it is.
+// checkIn gives the Draft back, leaving it as it is. A pending arrow series is
+// sent first: it is this tab's last write.
 func (p *Project) checkIn(ctx app.Context) {
 	if p.checkingOut || p.content == nil {
+		return
+	}
+	if p.waitMoves(ctx, func(ctx app.Context) { p.checkIn(ctx) }) {
 		return
 	}
 	p.checkingOut = true

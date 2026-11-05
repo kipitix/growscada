@@ -750,6 +750,21 @@ func (p *ProjectClient) DeleteWidget(ctx context.Context, sceneID, widgetID uuid
 	return resp, err
 }
 
+// MoveWidgets moves several Widgets of one Scene at once — one change of the
+// Draft (ADR 0010, ADR 0017) — expecting req.Version to be the Draft's current
+// Version. The answer is the Version after the change; the error matches
+// ErrConflict if the stated Version is stale.
+func (p *ProjectClient) MoveWidgets(ctx context.Context, sceneID uuid.UUID, req apiv0.MoveWidgetsRequest) (apiv0.MoveWidgetsResponse, error) {
+	var resp apiv0.MoveWidgetsResponse
+	version, err := p.draftVersionOf(ctx, req.Version)
+	if err != nil {
+		return resp, err
+	}
+	req.Version = version
+	err = p.do(ctx, http.MethodPatch, scenePath(sceneID)+"/widgets", req, http.StatusOK, &resp)
+	return resp, err
+}
+
 // withVersion states the Version of the Draft on a DELETE (ADR 0016).
 func withVersion(path string, version int) string {
 	return path + "?" + apiv0.VersionQuery + "=" + strconv.Itoa(version)

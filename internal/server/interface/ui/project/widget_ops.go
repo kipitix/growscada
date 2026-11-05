@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -19,6 +20,9 @@ import (
 // selected Scene and selects it.
 func (p *Project) createWidget(ctx app.Context, typeID uuid.UUID, x, y float64) {
 	if p.refuseReadOnly(ctx) {
+		return
+	}
+	if p.waitMoves(ctx, func(ctx app.Context) { p.createWidget(ctx, typeID, x, y) }) {
 		return
 	}
 	sceneID := p.selectedSceneID
@@ -49,7 +53,7 @@ func (p *Project) createWidget(ctx app.Context, typeID uuid.UUID, x, y float64) 
 	}, func(ctx app.Context, created apiv0.CreateWidgetResponse) {
 		p.observeDraftVersion(mark, created.Version)
 		w.ID = created.ID
-		p.selectedWidgetID = created.ID
+		p.selectedWidgetIDs = []uuid.UUID{created.ID}
 		uiutil.StoreID(ctx, p.selectionKey(widgetIDKey), created.ID)
 		p.syncEditingFields(w)
 		p.loadWidgets(ctx)
@@ -64,6 +68,9 @@ func (p *Project) deleteWidget(ctx app.Context, widgetID uuid.UUID) {
 	if p.refuseReadOnly(ctx) {
 		return
 	}
+	if p.waitMoves(ctx, func(ctx app.Context) { p.deleteWidget(ctx, widgetID) }) {
+		return
+	}
 	sceneID := p.selectedSceneID
 	mark := p.markDraft()
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.WidgetResponse, error) {
@@ -75,8 +82,8 @@ func (p *Project) deleteWidget(ctx app.Context, widgetID uuid.UUID) {
 			p.forgetDraftVersion()
 			p.loadScenes(ctx)
 		}
-		if p.selectedWidgetID == widgetID {
-			p.clearWidgetSelection(ctx)
+		if p.isWidgetSelected(widgetID) {
+			p.removeWidgetFromSelection(ctx, widgetID)
 		}
 		filtered := p.widgets[:0]
 		for _, w := range p.widgets {
@@ -92,6 +99,9 @@ func (p *Project) saveWidgetName(ctx app.Context) {
 	if p.refuseReadOnly(ctx) {
 		return
 	}
+	if p.waitMoves(ctx, func(ctx app.Context) { p.saveWidgetName(ctx) }) {
+		return
+	}
 	if strings.TrimSpace(p.widgetEdit.name) == "" {
 		return
 	}
@@ -105,6 +115,9 @@ func (p *Project) saveWidgetName(ctx app.Context) {
 
 func (p *Project) saveWidgetGeometry(ctx app.Context) {
 	if p.refuseReadOnly(ctx) {
+		return
+	}
+	if p.waitMoves(ctx, func(ctx app.Context) { p.saveWidgetGeometry(ctx) }) {
 		return
 	}
 	idx := p.selectedWidgetIdx()
@@ -141,7 +154,10 @@ func (p *Project) bindPort(ctx app.Context, portName string, tagID uuid.UUID) {
 	if p.refuseReadOnly(ctx) {
 		return
 	}
-	if p.selectedWidgetID == uuid.Nil || portName == "" || tagID == uuid.Nil {
+	if p.waitMoves(ctx, func(ctx app.Context) { p.bindPort(ctx, portName, tagID) }) {
+		return
+	}
+	if _, single := p.singleSelected(); !single || portName == "" || tagID == uuid.Nil {
 		return
 	}
 	idx := p.selectedWidgetIdx()
@@ -169,6 +185,9 @@ func (p *Project) unbindPort(ctx app.Context, portName string) {
 	if p.refuseReadOnly(ctx) {
 		return
 	}
+	if p.waitMoves(ctx, func(ctx app.Context) { p.unbindPort(ctx, portName) }) {
+		return
+	}
 	idx := p.selectedWidgetIdx()
 	if idx < 0 {
 		return
@@ -186,6 +205,9 @@ func (p *Project) unbindPort(ctx app.Context, portName string) {
 // putWidget saves w on the selected Scene at the Scene's known version.
 func (p *Project) putWidget(ctx app.Context, w apiv0.WidgetResponse) {
 	if p.refuseReadOnly(ctx) {
+		return
+	}
+	if p.waitMoves(ctx, func(ctx app.Context) { p.putWidget(ctx, w) }) {
 		return
 	}
 	sceneID := p.selectedSceneID
@@ -220,6 +242,28 @@ func widgetRequest(w apiv0.WidgetResponse, sceneVersion int) apiv0.UpdateWidgetR
 
 // ── Drag finalisation ─────────────────────────────────────────────────────────
 
+// beginWidgetDrag starts moving the selection with the Widget id, recording
+// where every selected Widget is now. A pending arrow series is sent first.
+func (p *Project) beginWidgetDrag(ctx app.Context, e app.Event, id uuid.UUID) {
+	if p.readOnly() || p.selectedSceneID == uuid.Nil {
+		return
+	}
+	p.endArrowSeries(ctx)
+	p.dragSceneID = p.selectedSceneID
+	p.dragGroup = slices.Clone(p.selectedWidgetIDs)
+	if !slices.Contains(p.dragGroup, id) {
+		p.dragGroup = []uuid.UUID{id}
+	}
+	p.dragStartPositions = p.positionsOf(p.dragGroup)
+	p.draggingWidgetID = id
+	p.dragStartCliX = e.Get("clientX").Float()
+	p.dragStartCliY = e.Get("clientY").Float()
+	if w, ok := p.findWidget(id); ok {
+		p.dragStartGeometry = geometryOf(w)
+	}
+	p.dragDidMove = false
+}
+
 // widgetGeometry is the part of a widget a canvas drag changes.
 type widgetGeometry struct {
 	Position apiv0.PositionResponse
@@ -251,9 +295,27 @@ func (p *Project) dragChangedWidget(w apiv0.WidgetResponse) bool {
 }
 
 func (p *Project) finalizeAllDrags(ctx app.Context) {
+	groupDidMove := false
+	if p.draggingWidgetID != uuid.Nil {
+		id := p.draggingWidgetID
+		p.draggingWidgetID = uuid.Nil
+		groupDidMove = p.dragDidMove
+		if groupDidMove {
+			// One PATCH for the whole group, even for a single Widget; a drag
+			// that came back to the start sends nothing.
+			moves := p.movedFrom(p.dragStartPositions, p.dragGroup)
+			p.patchWidgets(ctx, p.dragSceneID, moves)
+			p.syncMovedEditingFields()
+		} else {
+			// A plain click on a selected Widget: now that no drag follows,
+			// the selection is that Widget alone.
+			p.selectOnly(ctx, id)
+		}
+		p.dragGroup, p.dragStartPositions, p.dragSceneID = nil, nil, uuid.Nil
+	}
+
 	anyDrag := false
 	for _, idPtr := range []*uuid.UUID{
-		&p.draggingWidgetID,
 		&p.draggingOriginID,
 		&p.rotatingWidgetID,
 		&p.resizingWidgetID,
@@ -265,13 +327,12 @@ func (p *Project) finalizeAllDrags(ctx app.Context) {
 			p.saveDraggedWidget(ctx, id)
 		}
 	}
-	if anyDrag {
+	if groupDidMove || anyDrag {
 		p.dragJustEnded = p.dragDidMove
-		p.dragDidMove = false
 	}
+	p.dragDidMove = false
 	if p.widgetsReloadDeferred {
-		p.widgetsReloadDeferred = false
-		p.loadWidgets(ctx)
+		p.waitMoves(ctx, p.loadWidgets)
 	}
 }
 
@@ -281,7 +342,7 @@ func (p *Project) saveDraggedWidget(ctx app.Context, id uuid.UUID) {
 			if !p.dragChangedWidget(p.widgets[i]) {
 				break
 			}
-			if p.selectedWidgetID == id {
+			if sid, single := p.singleSelected(); single && sid == id {
 				p.syncEditingFields(p.widgets[i])
 			}
 			p.putWidget(ctx, p.widgets[i])

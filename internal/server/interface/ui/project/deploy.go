@@ -106,6 +106,9 @@ func (p *Project) doRollback(ctx app.Context, number int) {
 	if p.content == nil || p.rollingBack {
 		return
 	}
+	if p.waitMoves(ctx, func(ctx app.Context) { p.doRollback(ctx, number) }) {
+		return
+	}
 	p.rollingBack = true
 	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.RevisionSummaryResponse, error) {
 		return pc.Rollback(c, number)
@@ -165,6 +168,9 @@ func (p *Project) deploy(ctx app.Context) {
 	if p.refuseReadOnly(ctx) {
 		return
 	}
+	if p.waitMoves(ctx, func(ctx app.Context) { p.deploy(ctx) }) {
+		return
+	}
 	p.deploying = true
 	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DeployResponse, error) {
 		return pc.Deploy(c)
@@ -196,6 +202,9 @@ func (p *Project) discard(ctx app.Context) {
 		return
 	}
 	if p.refuseReadOnly(ctx) {
+		return
+	}
+	if p.waitMoves(ctx, func(ctx app.Context) { p.discard(ctx) }) {
 		return
 	}
 	message := "Discard the Draft of this project and restore it to the Revision it runs?"

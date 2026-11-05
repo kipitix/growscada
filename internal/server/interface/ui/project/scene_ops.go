@@ -19,6 +19,9 @@ func (p *Project) createScene(ctx app.Context) {
 	if p.refuseReadOnly(ctx) {
 		return
 	}
+	if p.waitMoves(ctx, func(ctx app.Context) { p.createScene(ctx) }) {
+		return
+	}
 	req := apiv0.CreateSceneRequest{Name: "New Scene", Width: 1920, Height: 1080, Version: p.draftVersion()}
 	mark := p.markDraft()
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.CreateSceneResponse, error) {
@@ -72,6 +75,9 @@ func (p *Project) deleteScene(ctx app.Context, sceneID uuid.UUID) {
 	if p.refuseReadOnly(ctx) {
 		return
 	}
+	if p.waitMoves(ctx, func(ctx app.Context) { p.deleteScene(ctx, sceneID) }) {
+		return
+	}
 	mark := p.markDraft()
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.SceneResponse, error) {
 		return content.DeleteScene(c, sceneID, p.draftVersion())
@@ -83,6 +89,9 @@ func (p *Project) deleteScene(ctx app.Context, sceneID uuid.UUID) {
 
 // selectScene shows the Scene id, as a click on its tab does.
 func (p *Project) selectScene(ctx app.Context, id uuid.UUID) {
+	// A pending arrow series belongs to the Scene being left: it is sent
+	// before the shown Widgets change.
+	p.endArrowSeries(ctx)
 	p.selectedSceneID = id
 	uiutil.StoreID(ctx, p.selectionKey(sceneIDKey), id)
 	p.clearWidgetSelection(ctx)
@@ -93,6 +102,9 @@ func (p *Project) selectScene(ctx app.Context, id uuid.UUID) {
 func (p *Project) saveSceneProperties(ctx app.Context) {
 	ctx = p.compoCtx
 	if p.refuseReadOnly(ctx) {
+		return
+	}
+	if p.waitMoves(ctx, func(ctx app.Context) { p.saveSceneProperties(ctx) }) {
 		return
 	}
 	idx := p.sceneIdx(p.selectedSceneID)
@@ -129,6 +141,9 @@ func (p *Project) commitSceneEdit(ctx app.Context) {
 	if p.refuseReadOnly(ctx) {
 		return
 	}
+	if p.waitMoves(ctx, func(ctx app.Context) { p.commitSceneEdit(ctx) }) {
+		return
+	}
 	if p.editingSceneID == uuid.Nil {
 		return
 	}
@@ -151,6 +166,9 @@ func (p *Project) commitSceneEdit(ctx app.Context) {
 // putScene saves the Scene's properties at its known version.
 func (p *Project) putScene(sc apiv0.SceneResponse) {
 	if p.readOnly() {
+		return
+	}
+	if p.waitMoves(p.compoCtx, func(ctx app.Context) { p.putScene(sc) }) {
 		return
 	}
 	req := apiv0.UpdateSceneRequest{

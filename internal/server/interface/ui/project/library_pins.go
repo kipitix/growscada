@@ -48,6 +48,9 @@ func (p *Project) addPin(libraryID uuid.UUID) {
 	if p.refuseReadOnly(p.compoCtx) {
 		return
 	}
+	if p.waitMoves(p.compoCtx, func(ctx app.Context) { p.addPin(libraryID) }) {
+		return
+	}
 	lib, ok := uiutil.FindByID(p.libraries, libraryID, uiutil.LibraryID)
 	if !ok || lib.LatestRelease == 0 || p.content == nil {
 		return
@@ -68,6 +71,9 @@ func (p *Project) addPin(libraryID uuid.UUID) {
 // are confirmed.
 func (p *Project) changePin(libraryID uuid.UUID, release int) {
 	if p.refuseReadOnly(p.compoCtx) {
+		return
+	}
+	if p.waitMoves(p.compoCtx, func(ctx app.Context) { p.changePin(libraryID, release) }) {
 		return
 	}
 	pin, ok := p.pinOf(libraryID)

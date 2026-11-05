@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uitest"
+	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 	"github.com/kipitix/growscada/internal/server/servertest"
 )
 
@@ -431,7 +433,7 @@ func widgetFixture(t *testing.T, ports ...apiv0.InputPort) (*fixture, uuid.UUID,
 	typeID := createWidgetType(t, api, "Gauge", ports...)
 	widgetID := createWidget(t, api, sceneID, typeID, "gauge1")
 	f := mount(t, url, api)
-	f.p.selectWidget(f.p.compoCtx, widgetID)
+	f.p.selectOnly(f.p.compoCtx, widgetID)
 	if f.p.selectedWidgetIdx() < 0 {
 		t.Fatal("the widget is not loaded")
 	}
@@ -457,8 +459,8 @@ func TestCreateWidget_PlacesTheWidgetTypeAndSelectsIt(t *testing.T) {
 		w.Position.X != 30 || w.Position.Y != 40 || w.Origin != (apiv0.OriginResponse{X: 0.5, Y: 0.5}) {
 		t.Errorf("server widget: %+v", w)
 	}
-	if f.p.selectedWidgetID != w.ID || len(f.p.widgets) != 1 {
-		t.Errorf("selected %v of %d widgets, want the new %v", f.p.selectedWidgetID, len(f.p.widgets), w.ID)
+	if f.p.primaryWidgetID() != w.ID || len(f.p.selectedWidgetIDs) != 1 || len(f.p.widgets) != 1 {
+		t.Errorf("selection %v of %d widgets, want the new %v", f.p.selectedWidgetIDs, len(f.p.widgets), w.ID)
 	}
 	if got := f.p.widgetEdit; got != widgetEditFieldsOf(w) {
 		t.Errorf("editor %+v, want %+v", got, widgetEditFieldsOf(w))
@@ -504,8 +506,8 @@ func TestDeleteWidget_RemovesItAndTheSelection(t *testing.T) {
 	if _, err := f.api.GetWidget(context.Background(), sceneID, widgetID); err == nil {
 		t.Error("the widget is still on the server")
 	}
-	if len(f.p.widgets) != 0 || f.p.selectedWidgetID != uuid.Nil {
-		t.Errorf("widgets %+v, selected %v: want none", f.p.widgets, f.p.selectedWidgetID)
+	if len(f.p.widgets) != 0 || len(f.p.selectedWidgetIDs) != 0 {
+		t.Errorf("widgets %+v, selection %v: want none", f.p.widgets, f.p.selectedWidgetIDs)
 	}
 	f.knowsVersion(sceneID)
 }
@@ -618,19 +620,31 @@ func TestBindPortAndUnbindPort(t *testing.T) {
 	f.knowsVersion(sceneID)
 }
 
-// drag moves the widget as a canvas drag would, then ends the drag.
+// drag moves the selection as a canvas drag would, then ends the drag.
 func (f *fixture) drag(widgetID uuid.UUID, dx, dy float64) {
-	f.p.draggingWidgetID = widgetID
-	w, _ := f.p.findWidget(widgetID)
-	f.p.dragStartGeometry = geometryOf(w)
-	f.p.dragDidMove = dx != 0 || dy != 0
-	for i := range f.p.widgets {
-		if f.p.widgets[i].ID == widgetID {
-			f.p.widgets[i].Position.X += dx
-			f.p.widgets[i].Position.Y += dy
-		}
+	p := f.p
+	p.endArrowSeries(p.compoCtx)
+	p.dragSceneID = p.selectedSceneID
+	p.dragGroup = slices.Clone(p.selectedWidgetIDs)
+	if !slices.Contains(p.dragGroup, widgetID) {
+		p.dragGroup = []uuid.UUID{widgetID}
 	}
-	f.p.finalizeAllDrags(f.p.compoCtx)
+	p.dragStartPositions = p.positionsOf(p.dragGroup)
+	p.draggingWidgetID = widgetID
+	p.dragStartCliX, p.dragStartCliY = 0, 0
+	if w, ok := p.findWidget(widgetID); ok {
+		p.dragStartGeometry = geometryOf(w)
+	}
+	p.dragDidMove = dx != 0 || dy != 0
+	for _, id := range p.dragGroup {
+		i := uiutil.IdxByID(p.widgets, id, uiutil.WidgetID)
+		if i < 0 {
+			continue
+		}
+		p.widgets[i].Position.X += dx
+		p.widgets[i].Position.Y += dy
+	}
+	p.finalizeAllDrags(p.compoCtx)
 	f.run()
 }
 
@@ -653,7 +667,7 @@ func TestDrag_WithoutAMove_SavesNothing(t *testing.T) {
 	f, sceneID, _ := widgetFixture(t)
 	before := f.scene(sceneID).Version
 
-	f.drag(f.p.selectedWidgetID, 0, 0)
+	f.drag(f.p.primaryWidgetID(), 0, 0)
 
 	f.noToasts()
 	if after := f.scene(sceneID).Version; after != before {

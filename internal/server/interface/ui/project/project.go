@@ -2,6 +2,7 @@ package project
 
 import (
 	"math"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
@@ -128,8 +129,11 @@ type Project struct {
 	deployReloader      uiutil.Reloader
 	revisionsReloader   uiutil.Reloader
 	// onKeyDown listens for Ctrl+Z and Ctrl+Shift+Z while the mode is shown;
-	// it is released with the component (noKeyDown).
+	// it is released with the component (noKeyDown). onKeyUp and onBlur end a
+	// series of arrow moves at the keyboard or when the window loses focus.
 	onKeyDown app.Func
+	onKeyUp   app.Func
+	onBlur    app.Func
 	// staleScenes are the Scenes to reread (loadScene) once the reread in
 	// flight on staleScenesReloader is done.
 	staleScenes         map[uuid.UUID]struct{}
@@ -149,8 +153,12 @@ type Project struct {
 	newTagName  string
 	newTagType  string
 
-	selectedSceneID  uuid.UUID
-	selectedWidgetID uuid.UUID
+	selectedSceneID uuid.UUID
+	// selectedWidgetIDs is the ordered selection of the Scene's Widgets; the
+	// primary — the one the properties panel edits and LocalStorage keeps — is
+	// its last element (task 40). A marquee selects in the order of p.widgets,
+	// so its primary is the last one it caught.
+	selectedWidgetIDs []uuid.UUID
 
 	editingSceneID   uuid.UUID
 	editingSceneName string
@@ -166,11 +174,31 @@ type Project struct {
 	dragStartGeometry widgetGeometry
 
 	// ── Drag: move widget body ──────────────────────────────────────────────
-	draggingWidgetID uuid.UUID
-	dragStartCliX    float64
-	dragStartCliY    float64
-	dragStartPosX    float64
-	dragStartPosY    float64
+	// A body drag moves the whole selection: dragGroup is the selection as it
+	// was when the drag began, dragStartPositions its positions then.
+	draggingWidgetID   uuid.UUID
+	dragSceneID        uuid.UUID
+	dragGroup          []uuid.UUID
+	dragStartPositions map[uuid.UUID]apiv0.PositionResponse
+	dragStartCliX      float64
+	dragStartCliY      float64
+
+	// ── Arrow-key move series (task 40) ─────────────────────────────────────
+	// arrowActive is true from the first arrow keydown until the series is
+	// flushed: by an arrow keyup, 500 ms without a press, or any other write
+	// of the Draft. arrowBase holds the positions the series started from;
+	// one PATCH sends the positions it reached.
+	arrowActive  bool
+	arrowSceneID uuid.UUID
+	arrowBase    map[uuid.UUID]apiv0.PositionResponse
+	arrowTimer   *time.Timer
+	// moveSending is true while a move PATCH is in flight; moveQueue holds the
+	// writes that wait for it, so two writes never state the same Version.
+	moveSending bool
+	moveQueue   []func(app.Context)
+
+	// marquee is the selection rectangle being dragged on empty canvas.
+	marquee marqueeState
 
 	// ── Drag: move origin anchor ────────────────────────────────────────────
 	// The anchor is moved within the widget in local space; the widget
@@ -297,6 +325,10 @@ func (p *Project) SetProject(id uuid.UUID) {
 		return
 	}
 	ctx := p.compoCtx
+	// A series of arrow moves belongs to the project left: it is sent before
+	// its content is dropped, while the selection and the Version still say
+	// what to send.
+	p.flushMovesBeforeProjectChange(ctx)
 	p.scenes, p.widgets, p.tags = nil, nil, tagstate.Tags{}
 	p.widgetTypes, p.pins = nil, nil
 	p.deployPreview, p.deployLoaded = apiv0.DeployPreviewResponse{}, false
@@ -332,7 +364,12 @@ func (p *Project) selectionKey(base string) string { return base + ":" + p.proje
 // LocalStorage.
 func (p *Project) restoreSelection(ctx app.Context) {
 	p.selectedSceneID = uiutil.LoadID(ctx, p.selectionKey(sceneIDKey))
-	p.selectedWidgetID = uiutil.LoadID(ctx, p.selectionKey(widgetIDKey))
+	p.selectedWidgetIDs = nil
+	// LocalStorage keeps the primary alone: after a reload one Widget is
+	// selected (task 40).
+	if id := uiutil.LoadID(ctx, p.selectionKey(widgetIDKey)); id != uuid.Nil {
+		p.selectedWidgetIDs = []uuid.UUID{id}
+	}
 	p.selectedTagID = uiutil.LoadID(ctx, p.selectionKey(tagIDKey))
 }
 
@@ -347,23 +384,9 @@ func (p *Project) setSimInput(wid uuid.UUID, port, value string) {
 }
 
 // ── Widget selection helpers ──────────────────────────────────────────────────
-
-func (p *Project) selectWidget(ctx app.Context, id uuid.UUID) {
-	p.selectedWidgetID = id
-	uiutil.StoreID(ctx, p.selectionKey(widgetIDKey), id)
-	for _, w := range p.widgets {
-		if w.ID == id {
-			p.syncEditingFields(w)
-			break
-		}
-	}
-}
-
-func (p *Project) clearWidgetSelection(ctx app.Context) {
-	p.selectedWidgetID = uuid.Nil
-	p.widgetEdit = widgetEditFields{}
-	uiutil.StoreID(ctx, p.selectionKey(widgetIDKey), uuid.Nil)
-}
+//
+// The selection is an ordered set of IDs whose last element is primary (see
+// Project.selectedWidgetIDs); selection.go holds its operations.
 
 // ── Lookups ───────────────────────────────────────────────────────────────────
 
@@ -374,7 +397,10 @@ func (p *Project) findScene(id uuid.UUID) (apiv0.SceneResponse, bool) {
 }
 
 func (p *Project) selectedWidgetIdx() int {
-	return uiutil.IdxByID(p.widgets, p.selectedWidgetID, uiutil.WidgetID)
+	if id, ok := p.singleSelected(); ok {
+		return uiutil.IdxByID(p.widgets, id, uiutil.WidgetID)
+	}
+	return -1
 }
 
 // findWidget returns the current live widget data by ID. Use it inside event
@@ -484,6 +510,19 @@ func (p *Project) renderScenesContent() app.UI {
 		// Previously these were on the canvas div, which caused drag to break
 		// on smaller scenes (e.g. 1280×720) when the mouse left the canvas.
 		OnMouseMove(func(ctx app.Context, e app.Event) {
+			// A selection rectangle follows the pointer over the whole panel,
+			// also outside the canvas; the released button ends it.
+			if p.marquee.active {
+				if e.Get("buttons").Int() == 0 {
+					if p.finishMarquee(ctx) {
+						p.dragJustEnded = true
+					}
+				} else {
+					e.PreventDefault()
+					p.updateMarquee(e)
+				}
+				return
+			}
 			anyDrag := p.isInteracting() || p.resizingPanelSide != ""
 			if !anyDrag {
 				return
@@ -537,21 +576,24 @@ func (p *Project) renderScenesContent() app.UI {
 				p.dragDidMove = true
 			}
 
-			// Move widget body
+			// Move widget body: the whole selection rides on the same delta,
+			// each Widget from the position it had when the drag began.
 			if p.draggingWidgetID != uuid.Nil {
 				dx := clientX - p.dragStartCliX
 				dy := clientY - p.dragStartCliY
-				for i := range p.widgets {
-					if p.widgets[i].ID == p.draggingWidgetID {
-						p.widgets[i].Position.X = p.dragStartPosX + dx
-						p.widgets[i].Position.Y = p.dragStartPosY + dy
-						if p.selectedWidgetID == p.draggingWidgetID {
-							f := widgetEditFieldsOf(p.widgets[i])
-							p.widgetEdit.posX, p.widgetEdit.posY = f.posX, f.posY
-						}
-						break
+				for _, id := range p.dragGroup {
+					start, ok := p.dragStartPositions[id]
+					if !ok {
+						continue
 					}
+					i := uiutil.IdxByID(p.widgets, id, uiutil.WidgetID)
+					if i < 0 {
+						continue
+					}
+					p.widgets[i].Position.X = start.X + dx
+					p.widgets[i].Position.Y = start.Y + dy
 				}
+				p.syncMovedEditingFields()
 			}
 
 			// Move origin anchor; compensate position to keep widget visually stationary.
@@ -579,7 +621,7 @@ func (p *Project) renderScenesContent() app.UI {
 						p.widgets[i].Origin.Y = newOY
 						p.widgets[i].Position.X = newPosX
 						p.widgets[i].Position.Y = newPosY
-						if p.selectedWidgetID == p.draggingOriginID {
+						if id, single := p.singleSelected(); single && id == p.draggingOriginID {
 							f := widgetEditFieldsOf(p.widgets[i])
 							p.widgetEdit.originX, p.widgetEdit.originY = f.originX, f.originY
 							p.widgetEdit.posX, p.widgetEdit.posY = f.posX, f.posY
@@ -602,7 +644,7 @@ func (p *Project) renderScenesContent() app.UI {
 				for i := range p.widgets {
 					if p.widgets[i].ID == p.rotatingWidgetID {
 						p.widgets[i].Rotation.Degrees = newDeg
-						if p.selectedWidgetID == p.rotatingWidgetID {
+						if id, single := p.singleSelected(); single && id == p.rotatingWidgetID {
 							p.widgetEdit.rotation = widgetEditFieldsOf(p.widgets[i]).rotation
 						}
 						break
@@ -643,7 +685,7 @@ func (p *Project) renderScenesContent() app.UI {
 						p.widgets[i].Size.Height = newH
 						p.widgets[i].Position.X = newPosX
 						p.widgets[i].Position.Y = newPosY
-						if p.selectedWidgetID == p.resizingWidgetID {
+						if id, single := p.singleSelected(); single && id == p.resizingWidgetID {
 							f := widgetEditFieldsOf(p.widgets[i])
 							p.widgetEdit.width, p.widgetEdit.height = f.width, f.height
 							p.widgetEdit.posX, p.widgetEdit.posY = f.posX, f.posY
@@ -654,6 +696,12 @@ func (p *Project) renderScenesContent() app.UI {
 			}
 		}).
 		OnMouseUp(func(ctx app.Context, e app.Event) {
+			if p.marquee.active {
+				if p.finishMarquee(ctx) {
+					p.dragJustEnded = true
+				}
+				return
+			}
 			if p.resizingPanelSide == "left" {
 				ctx.LocalStorage().Set("project:widgetTypeWidth", p.widgetTypeWidth)
 			} else if p.resizingPanelSide == "right" {

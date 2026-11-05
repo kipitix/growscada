@@ -237,10 +237,11 @@ func (p *Project) setScenes(ctx app.Context, mark uiutil.Mark, scenes []apiv0.Sc
 
 // ── Widgets ───────────────────────────────────────────────────────────────────
 
-// isInteracting reports whether a widget is being dragged, rotated or resized
-// on the canvas; replacing p.widgets then would make it jump under the cursor.
+// isInteracting reports whether the canvas is changing a Widget — a body,
+// anchor, rotation or resize drag, or an arrow series that has not been sent
+// yet; replacing p.widgets then would make it jump under the cursor.
 func (p *Project) isInteracting() bool {
-	return p.draggedWidgetID() != uuid.Nil
+	return p.draggedWidgetID() != uuid.Nil || p.arrowActive || p.moveSending
 }
 
 // loadWidgets (re)loads the widgets of the selected scene. During a canvas
@@ -270,10 +271,17 @@ func (p *Project) loadWidgets(ctx app.Context) {
 		}, p.loadWidgets)
 }
 
-// setWidgets replaces the selected scene's widgets and merges the widget
-// properties editor. mark is the moment the list was requested.
+// setWidgets replaces the selected scene's widgets, prunes the selection of
+// the IDs that are gone and merges the widget properties editor for the single
+// selected Widget. mark is the moment the list was requested.
 func (p *Project) setWidgets(ctx app.Context, mark uiutil.Mark, sceneID uuid.UUID, widgets []apiv0.WidgetResponse) {
-	old, known := p.findWidget(p.selectedWidgetID)
+	oldID, oldSingle := p.singleSelected()
+	var old apiv0.WidgetResponse
+	var known bool
+	if oldSingle {
+		old, known = p.findWidget(oldID)
+	}
+	sceneChanged := len(p.widgets) > 0 && p.widgets[0].SceneID != sceneID
 	p.widgets = widgets
 
 	// Widgets carry the Draft's Version; with none, the Scene is reread for
@@ -285,18 +293,24 @@ func (p *Project) setWidgets(ctx app.Context, mark uiutil.Mark, sceneID uuid.UUI
 		p.loadScene(ctx, sceneID)
 	}
 
-	if p.selectedWidgetID == uuid.Nil {
+	// A response of another Scene says nothing about this Scene's selection.
+	if sceneChanged {
 		return
 	}
-	current, exists := p.findWidget(p.selectedWidgetID)
-	switch {
-	case !exists:
-		p.clearWidgetSelection(ctx)
-	case !known:
-		p.syncEditingFields(current)
-	default:
-		p.mergeWidgetEditingFields(old, current)
+	p.pruneSelection(ctx)
+	id, single := p.singleSelected()
+	if !single {
+		return
 	}
+	current, exists := p.findWidget(id)
+	if !exists {
+		return
+	}
+	if oldSingle && oldID == id && known {
+		p.mergeWidgetEditingFields(old, current)
+		return
+	}
+	p.syncEditingFields(current)
 }
 
 // ── Tags ──────────────────────────────────────────────────────────────────────

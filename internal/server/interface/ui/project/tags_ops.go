@@ -15,6 +15,9 @@ func (p *Project) createTag(ctx app.Context) {
 	if p.refuseReadOnly(ctx) {
 		return
 	}
+	if p.waitMoves(ctx, func(ctx app.Context) { p.createTag(ctx) }) {
+		return
+	}
 	req := apiv0.CreateTagRequest{Name: p.newTagName, Type: p.newTagType}
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.CreateTagResponse, error) {
 		return content.CreateTag(c, req)
@@ -32,6 +35,9 @@ func (p *Project) createTag(ctx app.Context) {
 
 func (p *Project) deleteTag(ctx app.Context) {
 	if p.refuseReadOnly(ctx) {
+		return
+	}
+	if p.waitMoves(ctx, func(ctx app.Context) { p.deleteTag(ctx) }) {
 		return
 	}
 	deletedID := p.selectedTagID

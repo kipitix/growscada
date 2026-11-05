@@ -226,6 +226,12 @@ func (p *Project) renderSceneCanvas() app.UI {
 			// Any intentional mousedown on the canvas clears the post-drag
 			// suppression flag so the subsequent click correctly deselects.
 			p.dragJustEnded = false
+			// A left press on the empty canvas starts a selection rectangle;
+			// a Widget's overlay stops its own mousedown before this.
+			if e.Get("button").Int() == 0 {
+				e.PreventDefault()
+				p.startMarquee(ctx, e)
+			}
 		}).
 		OnClick(func(ctx app.Context, e app.Event) {
 			if p.dragJustEnded {
@@ -247,18 +253,23 @@ func (p *Project) renderSceneCanvas() app.UI {
 
 // canvasLayers are the canvas's layers bottom to top: the Scene's background
 // (the canvas's own colour when it has none), the editor's dot grid, the
-// Widgets. The background and the grid let mouse events through to the canvas.
+// Widgets, and the selection rectangle being dragged. The background and the
+// grid let mouse events through to the canvas.
 func (p *Project) canvasLayers(backgroundHTML string) []app.UI {
 	textMuted := uiutil.IframeTextMuted()
 	widgets := make([]app.UI, 0, len(p.widgets))
 	for _, w := range p.widgets {
 		widgets = append(widgets, p.renderWidget(w, textMuted))
 	}
-	return []app.UI{
+	layers := []app.UI{
 		&uiutil.SceneBackground{HTML: backgroundHTML},
 		renderCanvasGrid(),
 		uiutil.SceneWidgetLayer(widgets),
 	}
+	if p.marquee.active {
+		layers = append(layers, p.renderMarquee())
+	}
+	return layers
 }
 
 // renderCanvasGrid renders the editor's dot grid over the Scene's background,
@@ -280,7 +291,10 @@ func renderCanvasGrid() app.UI {
 func (p *Project) renderWidget(w apiv0.WidgetResponse, textMuted string) app.UI {
 	wid := w.ID
 	scope := wid.String() // go-app event scope
-	isSelected := p.selectedWidgetID == wid
+	isSelected := p.isWidgetSelected(wid)
+	// The anchor, rotation and resize handles belong to the one Widget the
+	// properties panel edits: a group has none (task 40).
+	_, single := p.singleSelected()
 
 	// Local pixel position of the origin anchor within the widget.
 	ox := w.Origin.X * float64(w.Size.Width)
@@ -315,19 +329,23 @@ func (p *Project) renderWidget(w apiv0.WidgetResponse, textMuted string) app.UI 
 				OnMouseDown(func(ctx app.Context, e app.Event) {
 					e.Call("stopPropagation")
 					e.PreventDefault()
-					p.selectWidget(ctx, wid)
-					if p.refuseReadOnly(ctx) {
+					// Shift/Ctrl/Cmd adds or removes the Widget without
+					// dragging anything; a plain press on an unselected one
+					// replaces the selection before its drag may begin.
+					if e.Get("shiftKey").Bool() || e.Get("ctrlKey").Bool() || e.Get("metaKey").Bool() {
+						p.toggleWidgetSelection(ctx, wid)
 						return
 					}
-					p.draggingWidgetID = wid
-					p.dragStartCliX = e.Get("clientX").Float()
-					p.dragStartCliY = e.Get("clientY").Float()
-					// Read position from live p.widgets — the closure-captured
-					// w.Position may be stale after a drag without handler reattachment.
-					if cur, ok := p.findWidget(wid); ok {
-						p.dragStartPosX = cur.Position.X
-						p.dragStartPosY = cur.Position.Y
+					if !p.isWidgetSelected(wid) {
+						p.selectOnly(ctx, wid)
 					}
+					// The Draft is read-only: selection works, movement does
+					// not, and a click is not a refused write (the lock row
+					// already says why).
+					if p.readOnly() {
+						return
+					}
+					p.beginWidgetDrag(ctx, e, wid)
 				}, app.EventScope(scope)).
 				OnClick(func(ctx app.Context, e app.Event) {
 					e.Call("stopPropagation")
@@ -345,8 +363,8 @@ func (p *Project) renderWidget(w apiv0.WidgetResponse, textMuted string) app.UI 
 
 	bodyItems := []app.UI{content}
 
-	// ── Selection handles (only when selected) ──────────────────────────────
-	if isSelected {
+	// ── Selection handles (only when this one Widget is selected) ───────────
+	if single && isSelected {
 		// Rotation arm: vertical line from origin toward the rotation handle
 		const rotHandleDist = 40.0 // px above origin in local space
 		rotLine := app.Div().
@@ -422,7 +440,7 @@ func (p *Project) renderWidget(w apiv0.WidgetResponse, textMuted string) app.UI 
 			OnMouseDown(func(ctx app.Context, e app.Event) {
 				e.Call("stopPropagation")
 				e.PreventDefault()
-				p.selectWidget(ctx, wid)
+				p.selectOnly(ctx, wid)
 				if p.refuseReadOnly(ctx) {
 					return
 				}

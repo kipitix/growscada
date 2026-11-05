@@ -15,7 +15,8 @@ import (
 
 func (p *Project) renderPropertiesPanel() app.UI {
 	var content app.UI
-	if p.selectedWidgetID == uuid.Nil {
+	switch {
+	case len(p.selectedWidgetIDs) == 0:
 		if p.selectedSceneID == uuid.Nil {
 			content = app.Div().
 				Style("font-size", "13px").
@@ -25,8 +26,10 @@ func (p *Project) renderPropertiesPanel() app.UI {
 		} else {
 			content = p.renderSceneProperties()
 		}
-	} else {
-		if found, ok := p.findWidget(p.selectedWidgetID); ok {
+	case len(p.selectedWidgetIDs) > 1:
+		content = p.renderMultiSelectionProperties()
+	default:
+		if found, ok := p.findWidget(p.selectedWidgetIDs[0]); ok {
 			content = p.renderWidgetProperties(found)
 		} else {
 			content = app.Div().Style("font-size", "13px").Style("color", "var(--text-muted)").Text("Widget not found.")
@@ -193,6 +196,27 @@ func (p *Project) renderSceneProperties() app.UI {
 		)
 
 	return app.Div().Body(nameSection, sizeSection, bgSection)
+}
+
+// renderMultiSelectionProperties is the panel with several Widgets selected:
+// what is selected, and why there are no editors — a group has no single name,
+// position or binding, and group edits are out of task 40.
+func (p *Project) renderMultiSelectionProperties() app.UI {
+	n := len(p.selectedWidgetIDs)
+	return app.Div().
+		Attr("data-multi-selection", "true").
+		Body(
+			app.Div().
+				Style("font-size", "13px").
+				Style("font-weight", "600").
+				Style("color", "var(--text)").
+				Text(fmt.Sprintf("%d widgets selected", n)),
+			app.Div().
+				Style("font-size", "12px").
+				Style("color", "var(--text-muted)").
+				Style("margin-top", "6px").
+				Text("Drag them to move them together. Select one Widget to edit its properties."),
+		)
 }
 
 func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {

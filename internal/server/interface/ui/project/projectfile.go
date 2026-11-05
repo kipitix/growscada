@@ -116,6 +116,9 @@ func (p *Project) doOpenProjectFile(ctx app.Context, pending *pendingProjectFile
 	if p.readOnly() {
 		return
 	}
+	if p.waitMoves(ctx, func(ctx app.Context) { p.doOpenProjectFile(ctx, pending) }) {
+		return
+	}
 	p.projectFileBusy = true
 	mark := p.markDraft()
 	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DraftStateResponse, error) {
@@ -140,6 +143,9 @@ func (p *Project) doOpenProjectFile(ctx app.Context, pending *pendingProjectFile
 // doDeployProjectFile makes the file a Revision without the Draft: Operation
 // switches to it and the Draft stays as it is.
 func (p *Project) doDeployProjectFile(ctx app.Context, pending *pendingProjectFile) {
+	if p.waitMoves(ctx, func(ctx app.Context) { p.doDeployProjectFile(ctx, pending) }) {
+		return
+	}
 	p.projectFileBusy = true
 	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DeployResponse, error) {
 		return pc.DeployProjectFile(c, pending.data)
