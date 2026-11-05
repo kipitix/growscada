@@ -221,8 +221,20 @@ func TestGatedWrite_OverREST(t *testing.T) {
 	}
 
 	callAs(t, router, http.MethodPost, lockPath(), apiv0.CheckOutEditLockRequest{Name: "alice"}, aliceKey.String())
-	if rec := callAs(t, router, http.MethodPost, mainPath+"/tags", tag, bobKey.String()); rec.Code != http.StatusConflict {
-		t.Errorf("write of another client's Draft: %d, want 409", rec.Code)
+	rec := callAs(t, router, http.MethodPost, mainPath+"/tags", tag, bobKey.String())
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("write of another client's Draft: %d, want 409", rec.Code)
+	}
+	var heldProblem apiv0.Problem
+	if err := json.NewDecoder(rec.Body).Decode(&heldProblem); err != nil {
+		t.Fatalf("decode problem: %v", err)
+	}
+	// The Problem carries the lock as it is, so a client can name its holder
+	// and offer a takeover with the Version it saw.
+	if heldProblem.EditLock == nil || !heldProblem.EditLock.Held || heldProblem.EditLock.Holder == nil ||
+		heldProblem.EditLock.Holder.Name != "alice" || heldProblem.EditLock.Version == 0 ||
+		heldProblem.EditLock.Holder.Since == "" {
+		t.Errorf("the problem of another client's Draft: %+v", heldProblem.EditLock)
 	}
 	if rec := callAs(t, router, http.MethodPost, mainPath+"/tags", tag, aliceKey.String()); rec.Code != http.StatusCreated {
 		t.Errorf("the holder's write: %d %s", rec.Code, rec.Body)

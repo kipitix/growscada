@@ -3,6 +3,8 @@ package repositories_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -10,6 +12,7 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/project"
+	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
 
@@ -216,6 +219,52 @@ func TestGatedWrite_AnotherHolder_NamesTheHolder(t *testing.T) {
 	state, ok := editlock.StateOf(err)
 	if !ok || !state.Held || state.Holder.Name() == "" {
 		t.Errorf("the error does not name the holder: %+v", state)
+	}
+	// The state is the lock's, not a bare holder: the Version lets a client
+	// offer a takeover, and the times say since when.
+	if state.Version == 0 || state.Since.IsZero() || state.LastSeen.IsZero() {
+		t.Errorf("the error carries no usable lock state: %+v", state)
+	}
+}
+
+// TestGatedWrite_TheHolder_WritesConcurrently runs the holder's writes at the
+// same time: the gate serializes them on its lock row, so none of them fails.
+// (The gate once read the row FOR SHARE and then updated it, which deadlocked
+// two of the holder's writes against each other.)
+func TestGatedWrite_TheHolder_WritesConcurrently(t *testing.T) {
+	cleanTags(t)
+	cleanEditLocks(t)
+	lock, err := editLockRepo().Create(editlock.System(context.Background()), createHeldLock(t))
+	if err != nil {
+		t.Fatalf("hold the lock: %v", err)
+	}
+	ctx := editlock.WithClient(context.Background(), lock.Holder().Key())
+
+	const writers = 8
+	// The aggregates are made here: the goroutines only write.
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
+	tags := make([]tag.Tag, writers)
+	for i := range tags {
+		tags[i] = makeTag(t, fmt.Sprintf("gated.%d", i), repo)
+	}
+
+	errs := make(chan error, writers)
+	var wg sync.WaitGroup
+	for i := range tags {
+		wg.Add(1)
+		go func(one tag.Tag) {
+			defer wg.Done()
+			writer := repositories.NewTagRepositoryPostgres(testDB, mainProject)
+			_, err := writer.Save(ctx, one)
+			errs <- err
+		}(tags[i])
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Errorf("a write of the holder: %v", err)
+		}
 	}
 }
 
