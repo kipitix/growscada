@@ -54,6 +54,34 @@ func (l *Library) readOnlyReason() string {
 	return "Read-only: check the Draft out to edit it."
 }
 
+// callDraft runs call against the selected library's Draft and hands the
+// answer to onOK only while that Draft is still the one shown: a switch of
+// library in the meantime drops the answer of the Draft left, which would
+// otherwise land in the lock state of the new one. It is the library mode's
+// [project.callContent].
+func callDraft[T any](l *Library, call func(context.Context, *apiclient.LibraryClient) (T, error), onOK func(app.Context, T), onErr func(app.Context, error)) {
+	draft := l.draft()
+	if draft == nil {
+		return // no library shown
+	}
+	uiutil.Call(l.compoCtx, func(c context.Context) (T, error) {
+		return call(c, draft)
+	}, func(ctx app.Context, v T) {
+		if draft == l.draft() && onOK != nil {
+			onOK(ctx, v)
+		}
+	}, func(ctx app.Context, err error) {
+		if draft != l.draft() {
+			return // the Draft left: its failure is not this one's
+		}
+		if onErr != nil {
+			onErr(ctx, err)
+			return
+		}
+		uiutil.ShowError(ctx, err)
+	})
+}
+
 // loadEditLock reads the state of the selected library's EditLock. A failed
 // read is not a toast: the lock is coordination, and the row keeps what it
 // showed; a Check out, or the next event, brings the truth.
@@ -62,8 +90,7 @@ func (l *Library) loadEditLock(ctx app.Context) {
 		l.editLock, l.lockLoaded = apiv0.EditLockResponse{}, false
 		return
 	}
-	lib := l.draft()
-	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.EditLockResponse, error) {
+	callDraft(l, func(c context.Context, lib *apiclient.LibraryClient) (apiv0.EditLockResponse, error) {
 		return lib.StateEditLock(c)
 	}, func(ctx app.Context, state apiv0.EditLockResponse) {
 		l.applyEditLock(ctx, state)
@@ -111,14 +138,13 @@ func (l *Library) confirmLockName(ctx app.Context) {
 }
 
 func (l *Library) doCheckOut(ctx app.Context, name string) {
-	lib := l.draft()
-	if lib == nil {
+	if l.draft() == nil {
 		return
 	}
 	l.checkingOut = true
 	l.lockName = name
 	ctx.LocalStorage().Set(editLockNameKey, name)
-	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.EditLockResponse, error) {
+	callDraft(l, func(c context.Context, lib *apiclient.LibraryClient) (apiv0.EditLockResponse, error) {
 		return lib.CheckOutEditLock(c, name)
 	}, func(ctx app.Context, state apiv0.EditLockResponse) {
 		l.checkingOut = false
@@ -134,12 +160,11 @@ func (l *Library) doCheckOut(ctx app.Context, name string) {
 
 // checkIn gives the Draft back, leaving it as it is.
 func (l *Library) checkIn(ctx app.Context) {
-	lib := l.draft()
-	if l.checkingOut || lib == nil {
+	if l.checkingOut || l.draft() == nil {
 		return
 	}
 	l.checkingOut = true
-	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.EditLockResponse, error) {
+	callDraft(l, func(c context.Context, lib *apiclient.LibraryClient) (apiv0.EditLockResponse, error) {
 		return lib.CheckInEditLock(c)
 	}, func(ctx app.Context, state apiv0.EditLockResponse) {
 		l.checkingOut = false
@@ -204,7 +229,7 @@ func (l *Library) doTakeOver(ctx app.Context) {
 	l.askingName = false
 	l.lockName = name
 	ctx.LocalStorage().Set(editLockNameKey, name)
-	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.EditLockResponse, error) {
+	callDraft(l, func(c context.Context, lib *apiclient.LibraryClient) (apiv0.EditLockResponse, error) {
 		return lib.TakeOverEditLock(c, name, version)
 	}, func(ctx app.Context, state apiv0.EditLockResponse) {
 		l.checkingOut = false

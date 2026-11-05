@@ -9,6 +9,7 @@ import (
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
 )
 
@@ -219,6 +220,30 @@ func TestOwnCheckIn_IsNoLossToast(t *testing.T) {
 	}
 	if !f.l.readOnly() {
 		t.Error("the Draft is editable after the release event")
+	}
+}
+
+// TestCallDraft_DropsTheAnswerOfTheDraftLeft: a switch of library while a lock
+// request is in flight drops its answer: the new Draft must not be shown the
+// old one's lock (ADR 0015).
+func TestCallDraft_DropsTheAnswerOfTheDraftLeft(t *testing.T) {
+	f, _ := selected(t)
+	old := f.l.libraryID
+	applied := false
+
+	callDraft(f.l, func(_ context.Context, draft *apiclient.LibraryClient) (apiv0.EditLockResponse, error) {
+		if draft.ID() != old {
+			t.Errorf("the call names the Draft %s, want %s", draft.ID(), old)
+		}
+		f.l.libraryID = uuid.New() // the user switches library meanwhile
+		return apiv0.EditLockResponse{Held: true}, nil
+	}, func(app.Context, apiv0.EditLockResponse) {
+		applied = true
+	}, nil)
+	f.run()
+
+	if applied {
+		t.Error("the answer of the Draft left was applied to the new one")
 	}
 }
 
