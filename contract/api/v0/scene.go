@@ -19,23 +19,26 @@ type GetScenesResponse struct {
 	Scenes []SceneResponse `json:"scenes"`
 }
 
-// CreateSceneRequest is the HTTP DTO for creating a scene.
+// CreateSceneRequest is the HTTP DTO for creating a scene. Version is the
+// Version of the Draft the client saw (ADR 0016).
 type CreateSceneRequest struct {
 	Name           string `json:"name"`
+	Version        int    `json:"version"`
 	Width          int    `json:"width"`
 	Height         int    `json:"height"`
 	BackgroundHTML string `json:"background_html"`
 }
 
 // CreateSceneResponse is the HTTP DTO for a scene creation response.
-// Version is the new scene's version, the one its first update states.
+// Version is the Draft's Version after the write, the one its next write
+// states.
 type CreateSceneResponse struct {
 	ID      uuid.UUID `json:"id"`
 	Version int       `json:"version"`
 }
 
 // UpdateSceneRequest is the HTTP DTO for updating a scene.
-// Version must match the current persisted version for optimistic locking.
+// Version must be the Draft's current Version (ADR 0016).
 type UpdateSceneRequest struct {
 	Name           string `json:"name"`
 	Width          int    `json:"width"`

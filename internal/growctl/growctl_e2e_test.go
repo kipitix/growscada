@@ -334,7 +334,7 @@ func TestUsageError_ExitCode2(t *testing.T) {
 
 func createTag(t *testing.T, svc application.TagService, name, tagType string) {
 	t.Helper()
-	if _, err := svc.CreateTag(editlock.System(context.Background()), servertest.MainProject, appdto.CreateTagInput{
+	if _, err := svc.CreateTag(editlock.System(context.Background()), servertest.MainProject, appdto.CreateTagInput{Version: servertest.DraftVersion(t, postgres.DB(t), servertest.MainProject),
 		Name: name, Type: tagType,
 	}); err != nil {
 		t.Fatalf("CreateTag(%q): %v", name, err)

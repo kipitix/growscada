@@ -98,7 +98,7 @@ func seedSuppliedTag(t *testing.T, deviceID uuid.UUID, name, tagType string) uui
 	tagID := uuid.New()
 	ctx := editlock.System(context.Background())
 	if _, err := testDB().ExecContext(ctx,
-		`INSERT INTO engineering.tags (id, project_id, name, type, version, device_id) VALUES ($1, $2, $3, $4, 1, $5)`,
+		`INSERT INTO engineering.tags (id, project_id, name, type, device_id) VALUES ($1, $2, $3, $4, $5)`,
 		tagID, mainProject, name, tagType, deviceID); err != nil {
 		t.Fatalf("seed engineering tag: %v", err)
 	}

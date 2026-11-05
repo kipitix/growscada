@@ -5,7 +5,7 @@ info:
 
 http:
   method: DELETE
-  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/environments/{{ENVIRONMENT_ID}}/devices/{{DEVICE_ID}}
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/environments/{{ENVIRONMENT_ID}}/devices/{{DEVICE_ID}}?version=19
   headers:
     - name: X-GrowSCADA-Client
       value: "{{CLIENT_KEY}}"

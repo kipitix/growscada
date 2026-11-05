@@ -495,7 +495,7 @@ func TestDeleteWidgetType_UsedByWidget_TouchesNoScene(t *testing.T) {
 	}
 
 	after, err := sceneSvc.FindSceneByID(ctx, mainProject, sc.ID)
-	if err != nil || after.Version != w.SceneVersion {
+	if err != nil || after.Version != w.Version {
 		t.Errorf("the scene changed: %+v, %v", after, err)
 	}
 	if _, err := sceneSvc.CreateWidget(ctx, mainProject, sc.ID, after.Version, input); err != nil {

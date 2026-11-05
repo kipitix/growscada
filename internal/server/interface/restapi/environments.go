@@ -61,7 +61,7 @@ func (h EnvironmentsHandlers) PostEnvironments(w http.ResponseWriter, r *http.Re
 	if !decodeRequest(w, r, &request) {
 		return
 	}
-	created, err := h.service.CreateEnvironment(r.Context(), projectID, newCreateEnvironmentInput(request))
+	created, err := h.service.CreateEnvironment(r.Context(), projectID, request.Version, newCreateEnvironmentInput(request))
 	if err != nil {
 		sendError(w, r, err)
 		return
@@ -104,7 +104,11 @@ func (h EnvironmentsHandlers) DeleteEnvironmentsByID(w http.ResponseWriter, r *h
 	if !ok {
 		return
 	}
-	deleted, err := h.service.DeleteEnvironmentByID(r.Context(), projectID, environmentID)
+	version, ok := versionQuery(w, r)
+	if !ok {
+		return
+	}
+	deleted, err := h.service.DeleteEnvironmentByID(r.Context(), projectID, environmentID, version)
 	if err != nil {
 		sendError(w, r, err)
 		return
@@ -178,7 +182,11 @@ func (h EnvironmentsHandlers) DeleteEnvironmentDevice(w http.ResponseWriter, r *
 	if !ok {
 		return
 	}
-	deleted, err := h.service.DeleteEnvironmentDevice(r.Context(), projectID, environmentID, deviceID)
+	version, ok := versionQuery(w, r)
+	if !ok {
+		return
+	}
+	deleted, err := h.service.DeleteEnvironmentDevice(r.Context(), projectID, environmentID, deviceID, version)
 	if err != nil {
 		sendError(w, r, err)
 		return

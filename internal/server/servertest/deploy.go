@@ -31,14 +31,16 @@ func DeployProject(t *testing.T, db *sql.DB, projectID uuid.UUID) {
 	if err != nil {
 		t.Fatalf("organization: %v", err)
 	}
+	releases := repositories.NewLibraryReleaseRepositoryPostgres(db)
+	drafts := repositories.NewDraftRepositoryPostgres(db, releases)
 	content := application.NewProjectContent(
-		repositories.NewProjectRepositoryPostgres(db), repositories.NewProjectScopes(db), orgID)
+		repositories.NewProjectRepositoryPostgres(db), repositories.NewProjectScopes(db), drafts, orgID)
 	states := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, func(event.Event) {})
 	tokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(db))
 	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(db), func(event.Event) {})
 	locks := application.NewEditLockService(content,
 		application.NewLibraryContent(repositories.NewLibraryRepositoryPostgres(db), orgID),
-		repositories.NewEditLockRepositoryPostgres(db))
+		drafts)
 	service := application.NewDeployService(
 		content,
 		application.NewProjectFileBuilder(content),

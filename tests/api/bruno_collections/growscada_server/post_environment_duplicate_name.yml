@@ -14,7 +14,8 @@ http:
     data: |-
       {
         "name": "bench",
-        "comment": ""
+        "comment": "",
+        "version": 14
       }
   auth: inherit
 

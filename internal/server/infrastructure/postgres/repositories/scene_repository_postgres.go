@@ -3,8 +3,8 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
-	"slices"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
@@ -15,40 +15,22 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
-	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
-// sceneRepositoryPostgresImpl is the SceneRepository of one Project: every
-// query names project_id.
+// sceneRepositoryPostgresImpl reads the scenes of one Project: every query
+// names project_id. The scenes are entities of the Project's Draft (ADR 0016):
+// their writes go through draftRepositoryPostgres.
 type sceneRepositoryPostgresImpl struct {
 	db      *sql.DB
 	project id.ID[project.Project]
-	store   aggregateStore[scene.Scene]
 }
 
 var _ scene.SceneRepository = (*sceneRepositoryPostgresImpl)(nil)
 
 // NewSceneRepositoryPostgres returns the repository of the scenes of the
-// Project aProjectID (ProjectScopes.ForProject is how the server opens one),
-// whose writes are refused while a Discard of the Project is under way.
-func NewSceneRepositoryPostgres(aDb *sql.DB, aProjectID id.ID[project.Project], opts ...Option) scene.SceneRepository {
-	return newSceneRepository(aDb, aProjectID, false, opts...)
-}
-
-// newSceneRepository returns the repository of the scenes of the Project
-// aProjectID; discard makes its writes a Discard's, made only while one is
-// under way.
-func newSceneRepository(aDb *sql.DB, aProjectID id.ID[project.Project], discard bool, opts ...Option) *sceneRepositoryPostgresImpl {
-	o := newOptions(opts)
-	return &sceneRepositoryPostgresImpl{
-		db:      aDb,
-		project: aProjectID,
-		store: aggregateStore[scene.Scene]{
-			db: aDb, table: tableNameScenes, project: &aProjectID, discard: discard,
-			notFound: scene.ErrSceneNotFound, conflict: scene.ErrSceneConflict,
-			onCommit: o.onCommit,
-		}.withProjectLock(),
-	}
+// Project aProjectID (ProjectScopes.ForProject is how the server opens one).
+func NewSceneRepositoryPostgres(aDb *sql.DB, aProjectID id.ID[project.Project], _ ...Option) scene.SceneRepository {
+	return &sceneRepositoryPostgresImpl{db: aDb, project: aProjectID}
 }
 
 func (r sceneRepositoryPostgresImpl) NextID() id.ID[scene.Scene] {
@@ -57,169 +39,6 @@ func (r sceneRepositoryPostgresImpl) NextID() id.ID[scene.Scene] {
 
 func (r sceneRepositoryPostgresImpl) NextWidgetID() id.ID[scene.Widget] {
 	return id.NewID[scene.Widget]()
-}
-
-// Save writes the scene row and its widgets in one transaction. On update the
-// CAS on the scenes row comes first: it locks the row, so concurrent Saves of
-// the same scene are serialized and the widgets read after it are the ones
-// the stored version describes.
-//
-// The widgets are not read back: every column stores its value exactly, and
-// a later read returns them in insertion order, which is the scene's order
-// (a new widget is appended to it).
-func (r sceneRepositoryPostgresImpl) Save(ctx context.Context, s scene.Scene) (scene.Scene, error) {
-	if err := r.store.checkProject(s.ProjectID()); err != nil {
-		return nil, err
-	}
-	newVersion, err := r.store.save(ctx, s.ID(), s.Version(), s.PendingEvents(), rowWrite[scene.Scene]{
-		insert: func(tx *sql.Tx, next version.Version[scene.Scene]) error {
-			if _, err := tx.ExecContext(ctx,
-				`INSERT INTO engineering.scenes (id, project_id, name, width, height, background_html, version)
-				VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-				s.ID().UUID(), r.project.UUID(), s.Name().String(),
-				s.Size().Width(), s.Size().Height(),
-				s.BackgroundHTML().Content(),
-				next.Number(),
-			); err != nil {
-				return fmt.Errorf("cannot insert new scene: %w", err)
-			}
-			return saveWidgets(ctx, tx, r.project, s.ID(), nil, s.Widgets())
-		},
-		update: func(tx *sql.Tx, current, next version.Version[scene.Scene]) (bool, error) {
-			res, err := tx.ExecContext(ctx,
-				`UPDATE engineering.scenes
-				 SET name = $1, width = $2, height = $3, background_html = $4, version = $5
-				 WHERE id = $6 AND version = $7 AND project_id = $8`,
-				s.Name().String(),
-				s.Size().Width(), s.Size().Height(),
-				s.BackgroundHTML().Content(),
-				next.Number(),
-				s.ID().UUID(), current.Number(), r.project.UUID(),
-			)
-			if err != nil {
-				return false, fmt.Errorf("cannot update scene: %w", err)
-			}
-			n, err := res.RowsAffected()
-			if err != nil {
-				return false, fmt.Errorf("cannot get rows affected on update: %w", err)
-			}
-			if n != 1 {
-				return false, nil
-			}
-			byScene, err := findWidgetsBySceneIDs(ctx, tx, []uuid.UUID{s.ID().UUID()})
-			if err != nil {
-				return false, err
-			}
-			return true, saveWidgets(ctx, tx, r.project, s.ID(), byScene[s.ID().UUID()], s.Widgets())
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-	return scene.ReconstituteScene(s.ID(), r.project, s.Name(), s.Size(), s.BackgroundHTML(), s.Widgets(), newVersion), nil
-}
-
-// Delete removes the scene row if it is still at the scene's version; its
-// widgets go by ON DELETE CASCADE. The CAS makes them the widgets the scene
-// holds, so Scene.Delete recorded a WidgetDeletedEvent for each.
-func (r sceneRepositoryPostgresImpl) Delete(ctx context.Context, s scene.Scene) error {
-	if err := r.store.checkProject(s.ProjectID()); err != nil {
-		return err
-	}
-	return r.store.delete(ctx, s.ID(), s.Version(), s.PendingEvents())
-}
-
-// saveWidgets brings the scene's widget rows from stored to wanted: inserts
-// the new widgets, of the scene's Project projectID, updates the changed ones
-// and deletes those that are gone. A new widget, or one whose WidgetType
-// changed, must be of a WidgetType a release the Project pins holds: the pin
-// is locked for share and checked in the transaction (checkPinned, ADR 0012).
-func saveWidgets(ctx context.Context, tx *sql.Tx, projectID id.ID[project.Project], sceneID id.ID[scene.Scene], stored, wanted []scene.Widget) error {
-	storedByID := make(map[id.ID[scene.Widget]]scene.Widget, len(stored))
-	for _, w := range stored {
-		storedByID[w.ID()] = w
-	}
-	wantedIDs := make(map[id.ID[scene.Widget]]struct{}, len(wanted))
-	for _, w := range wanted {
-		wantedIDs[w.ID()] = struct{}{}
-	}
-
-	for _, w := range stored {
-		if _, ok := wantedIDs[w.ID()]; ok {
-			continue
-		}
-		if _, err := tx.ExecContext(ctx,
-			`DELETE FROM engineering.widgets WHERE id = $1 AND scene_id = $2`,
-			w.ID().UUID(), sceneID.UUID(),
-		); err != nil {
-			return fmt.Errorf("cannot delete widget %s: %w", w.ID(), err)
-		}
-	}
-
-	pinned := map[id.ID[library.WidgetType]]struct{}{}
-	for _, w := range wanted {
-		old, exists := storedByID[w.ID()]
-		if exists && sameWidget(old, w) {
-			continue
-		}
-		if _, checked := pinned[w.TypeID()]; !checked && (!exists || old.TypeID() != w.TypeID()) {
-			if err := checkPinned(ctx, tx, projectID, w.TypeID()); err != nil {
-				return err
-			}
-			pinned[w.TypeID()] = struct{}{}
-		}
-		portBindingsJSON, err := marshalPortBindings(w.PortBindings())
-		if err != nil {
-			return fmt.Errorf("cannot serialize port bindings: %w", err)
-		}
-		if exists {
-			_, err = tx.ExecContext(ctx,
-				`UPDATE engineering.widgets
-				 SET name = $1, x = $2, y = $3, z = $4, width = $5, height = $6,
-				     origin_x = $7, origin_y = $8, rotation_degrees = $9,
-				     type_id = $10, labels = $11, port_bindings = $12
-				 WHERE id = $13 AND scene_id = $14`,
-				w.Name().String(),
-				w.Position().X(), w.Position().Y(), w.Position().Z(),
-				w.Size().Width(), w.Size().Height(),
-				w.Origin().X(), w.Origin().Y(),
-				w.Rotation().Degrees(),
-				w.TypeID().UUID(),
-				pq.Array(w.Labels()), portBindingsJSON,
-				w.ID().UUID(), sceneID.UUID(),
-			)
-		} else {
-			_, err = tx.ExecContext(ctx,
-				`INSERT INTO engineering.widgets
-				    (id, name, x, y, z, width, height, origin_x, origin_y, rotation_degrees,
-				     type_id, scene_id, labels, port_bindings, project_id)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
-				w.ID().UUID(), w.Name().String(),
-				w.Position().X(), w.Position().Y(), w.Position().Z(),
-				w.Size().Width(), w.Size().Height(),
-				w.Origin().X(), w.Origin().Y(),
-				w.Rotation().Degrees(),
-				w.TypeID().UUID(), sceneID.UUID(),
-				pq.Array(w.Labels()), portBindingsJSON, projectID.UUID(),
-			)
-		}
-		if err != nil {
-			return fmt.Errorf("cannot save widget %s: %w", w.ID(), err)
-		}
-	}
-	return nil
-}
-
-// sameWidget reports whether a and b would be stored as the same row.
-func sameWidget(a, b scene.Widget) bool {
-	return a.Name() == b.Name() &&
-		a.Position() == b.Position() &&
-		a.Size() == b.Size() &&
-		a.Origin() == b.Origin() &&
-		a.Rotation() == b.Rotation() &&
-		a.TypeID() == b.TypeID() &&
-		slices.Equal(a.Labels(), b.Labels()) &&
-		slices.Equal(a.PortBindings(), b.PortBindings())
 }
 
 func (r sceneRepositoryPostgresImpl) FindByID(ctx context.Context, sceneID id.ID[scene.Scene]) (scene.Scene, error) {
@@ -271,7 +90,7 @@ func (r sceneRepositoryPostgresImpl) FindByTagID(ctx context.Context, tagID id.I
 
 // selectSceneColumns lists the scenes columns read by every SELECT in this
 // file; the order matches rawSceneRow.dest.
-const selectSceneColumns = `id, name, width, height, background_html, version`
+const selectSceneColumns = `id, name, width, height, background_html`
 
 // rawSceneRow holds the raw column values read from a scenes row before domain validation.
 type rawSceneRow struct {
@@ -279,18 +98,17 @@ type rawSceneRow struct {
 	name           string
 	width, height  int
 	backgroundHTML string
-	version        int
 }
 
 func (row *rawSceneRow) dest() []any {
-	return []any{&row.id, &row.name, &row.width, &row.height, &row.backgroundHTML, &row.version}
+	return []any{&row.id, &row.name, &row.width, &row.height, &row.backgroundHTML}
 }
 
 // readScenes reads the scenes of the Project matching and, a further
 // condition whose arguments are numbered from $2, in creation order, with
 // their widgets. Both queries run in one read-only REPEATABLE READ
 // transaction, so they see the database at the same moment: a scene and its
-// widgets always belong to one version.
+// widgets always belong to one write.
 func (r sceneRepositoryPostgresImpl) readScenes(ctx context.Context, and string, args ...any) ([]scene.Scene, error) {
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
@@ -390,10 +208,30 @@ func reconstructScene(projectID id.ID[project.Project], row rawSceneRow, someWid
 		return nil, fmt.Errorf("cannot create scene size: %w", err)
 	}
 
-	newVersion, err := version.New(version.WithNumber[scene.Scene](row.version))
-	if err != nil {
-		return nil, fmt.Errorf("cannot create scene version: %w", err)
-	}
-
-	return scene.ReconstituteScene(newID, projectID, newName, newSize, scene.NewBackgroundHTML(row.backgroundHTML), someWidgets, newVersion), nil
+	return scene.ReconstituteScene(newID, projectID, newName, newSize, scene.NewBackgroundHTML(row.backgroundHTML), someWidgets), nil
 }
+
+// checkPinned reports whether the WidgetType typeID is held by a Library
+// Release the Project projectID pins: what a write of a Scene checks in the
+// Draft's transaction (ADR 0012).
+func checkPinned(ctx context.Context, q rowQuerier, projectID id.ID[project.Project], typeID id.ID[library.WidgetType]) error {
+	var pinned bool
+	err := q.QueryRowContext(ctx,
+		`SELECT EXISTS (
+		   SELECT 1 FROM engineering.library_pins lp
+		   JOIN engineering.released_widget_types r
+		     ON r.library_id = lp.library_id AND r.release_number = lp.release_number
+		   WHERE lp.project_id = $1 AND r.id = $2)`,
+		projectID.UUID(), typeID.UUID(),
+	).Scan(&pinned)
+	if err != nil {
+		return fmt.Errorf("cannot check the pin of widget type %s: %w", typeID, err)
+	}
+	if !pinned {
+		return id.NotFound(library.ErrWidgetTypeNotFound, typeID)
+	}
+	return nil
+}
+
+// errUnused keeps errors imported for the writes of this file's former Save.
+var _ = errors.Is

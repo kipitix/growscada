@@ -21,6 +21,7 @@ import (
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/devicetoken"
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -84,14 +85,6 @@ func TestSendError(t *testing.T) {
 			wantStatus: http.StatusNotFound,
 			wantTitle:  "Resource Not Found",
 			wantDetail: "Tag with ID '" + errorsTestID + "' not found",
-		},
-		{
-			name:       "tag conflict",
-			err:        wrapped(tag.ErrTagConflict),
-			pathParams: map[string]string{"tag_id": errorsTestID},
-			wantStatus: http.StatusConflict,
-			wantTitle:  "Conflict: Tag",
-			wantDetail: "Tag was changed concurrently; reload it and retry",
 		},
 		{
 			name:       "tag name taken",
@@ -184,20 +177,12 @@ func TestSendError(t *testing.T) {
 			wantDetail: "Scene with ID '" + errorsTestID + "' not found",
 		},
 		{
-			name:       "scene conflict",
-			err:        wrapped(scene.ErrSceneConflict),
-			pathParams: map[string]string{"scene_id": errorsTestID},
+			name:       "draft conflict",
+			err:        wrapped(draft.ErrDraftConflict),
+			pathParams: map[string]string{"project_id": errorsTestID},
 			wantStatus: http.StatusConflict,
-			wantTitle:  "Conflict: Scene",
-			wantDetail: "Scene was changed concurrently; reload it and retry",
-		},
-		{
-			name:       "scene race lost on a request without a version",
-			err:        fmt.Errorf("%w: %w", application.ErrRaceLost, wrapped(scene.ErrSceneConflict)),
-			pathParams: map[string]string{"scene_id": errorsTestID},
-			wantStatus: http.StatusConflict,
-			wantTitle:  "Conflict: Scene",
-			wantDetail: "Scene kept changing while the request ran; retry it later",
+			wantTitle:  "Conflict: Project",
+			wantDetail: "Draft was changed concurrently; reload it and retry",
 		},
 		{
 			name:       "widget not found names the widget, not the scene",
@@ -312,7 +297,6 @@ var domainSentinels = map[string]error{
 	"project.ErrProjectConflict":          project.ErrProjectConflict,
 	"project.ErrProjectNameTaken":         project.ErrProjectNameTaken,
 	"project.ErrProjectNotEmpty":          project.ErrProjectNotEmpty,
-	"project.ErrProjectDiscarding":        project.ErrProjectDiscarding,
 	"library.ErrWidgetTypeNotFound":       library.ErrWidgetTypeNotFound,
 	"library.ErrWidgetTypeConflict":       library.ErrWidgetTypeConflict,
 	"library.ErrWidgetTypeNameTaken":      library.ErrWidgetTypeNameTaken,
@@ -327,13 +311,11 @@ var domainSentinels = map[string]error{
 	"library.ErrReleaseNumberTaken":       library.ErrReleaseNumberTaken,
 	"library.ErrDraftChanged":             library.ErrDraftChanged,
 	"librarypin.ErrLibraryPinNotFound":    librarypin.ErrLibraryPinNotFound,
-	"librarypin.ErrLibraryPinConflict":    librarypin.ErrLibraryPinConflict,
 	"librarypin.ErrLibraryPinExists":      librarypin.ErrLibraryPinExists,
 	"librarypin.ErrWidgetsOrphaned":       librarypin.ErrWidgetsOrphaned,
 	"library.ErrInvalidWidgetType":        library.ErrInvalidWidgetType,
 	"library.ErrDuplicateInputPortName":   library.ErrDuplicateInputPortName,
 	"scene.ErrSceneNotFound":              scene.ErrSceneNotFound,
-	"scene.ErrSceneConflict":              scene.ErrSceneConflict,
 	"scene.ErrWidgetNotFound":             scene.ErrWidgetNotFound,
 	"scene.ErrWidgetAlreadyExists":        scene.ErrWidgetAlreadyExists,
 	"scene.ErrWidgetTypeMismatch":         scene.ErrWidgetTypeMismatch,
@@ -342,18 +324,14 @@ var domainSentinels = map[string]error{
 	"scene.ErrPortTypeMismatch":           scene.ErrPortTypeMismatch,
 	"scene.ErrTagTypesOfAnotherProject":   scene.ErrTagTypesOfAnotherProject,
 	"device.ErrDeviceNotFound":            device.ErrDeviceNotFound,
-	"device.ErrDeviceConflict":            device.ErrDeviceConflict,
 	"device.ErrDeviceNameTaken":           device.ErrDeviceNameTaken,
 	"device.ErrDeviceInUse":               device.ErrDeviceInUse,
 	"device.ErrEnvironmentNotFound":       device.ErrEnvironmentNotFound,
-	"device.ErrEnvironmentConflict":       device.ErrEnvironmentConflict,
 	"device.ErrEnvironmentNameTaken":      device.ErrEnvironmentNameTaken,
 	"device.ErrEnvironmentInUse":          device.ErrEnvironmentInUse,
 	"device.ErrEnvironmentDeviceNotFound": device.ErrEnvironmentDeviceNotFound,
-	"device.ErrEnvironmentDeviceConflict": device.ErrEnvironmentDeviceConflict,
 	"device.ErrEnvironmentDeviceExists":   device.ErrEnvironmentDeviceExists,
 	"tag.ErrTagNotFound":                  tag.ErrTagNotFound,
-	"tag.ErrTagConflict":                  tag.ErrTagConflict,
 	"tag.ErrTagNameTaken":                 tag.ErrTagNameTaken,
 	"tag.ErrSupplierOfAnotherProject":     tag.ErrSupplierOfAnotherProject,
 	"tag.ErrTagNotSuppliedByDevice":       tag.ErrTagNotSuppliedByDevice,
@@ -368,6 +346,8 @@ var domainSentinels = map[string]error{
 	"devicetoken.ErrTokenNotFound":        devicetoken.ErrTokenNotFound,
 	"devicetoken.ErrTokenExists":          devicetoken.ErrTokenExists,
 	"devicetoken.ErrNotADeviceToken":      devicetoken.ErrNotADeviceToken,
+	"draft.ErrDraftConflict":              draft.ErrDraftConflict,
+	"draft.ErrDraftNotFound":              draft.ErrDraftNotFound,
 }
 
 // unmappedSentinels are the domain sentinels errorMappings leaves out on
@@ -388,6 +368,7 @@ var unmappedSentinels = map[string]string{
 	"editlock.ErrEditLockNameEmpty":     "400: the service marks it invalid input (the holder's name)",
 	"editlock.ErrNoClient":              "400: a request that names no client cannot write a Draft",
 	"editlock.ErrEditLockExists":        "500: the service retries the race of two creations of one lock row",
+	"draft.ErrDraftNotFound":            "500: only the repository creates a draft's row, and its Project or Library exists",
 }
 
 // TestDomainSentinels_AreListed reads the domain sources, so a new sentinel

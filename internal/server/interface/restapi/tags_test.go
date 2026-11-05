@@ -117,7 +117,7 @@ func newRouter() testRouter {
 func createTagViaService(t *testing.T, name, tagType, value, quality string) appdto.Tag {
 	t.Helper()
 	services := newServices()
-	resp, err := services.tags.CreateTag(editlock.System(context.Background()), mainProject, appdto.CreateTagInput{Name: name, Type: tagType})
+	resp, err := services.tags.CreateTag(editlock.System(context.Background()), mainProject, appdto.CreateTagInput{Version: testDraftVersion(t, mainProject), Name: name, Type: tagType})
 	if err != nil {
 		t.Fatalf("createTagViaService(%q): %v", name, err)
 	}
@@ -334,7 +334,7 @@ func TestGetTagsByID_ExistingTag_Returns200WithTag(t *testing.T) {
 // seq 0 in the body.
 func TestGetTagsByID_NotWrittenYet_IsTheInitialStateWithSeqZero(t *testing.T) {
 	cleanTags(t)
-	created, err := newServices().tags.CreateTag(editlock.System(context.Background()), mainProject, appdto.CreateTagInput{Name: "fresh", Type: "boolean"})
+	created, err := newServices().tags.CreateTag(editlock.System(context.Background()), mainProject, appdto.CreateTagInput{Version: testDraftVersion(t, mainProject), Name: "fresh", Type: "boolean"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}

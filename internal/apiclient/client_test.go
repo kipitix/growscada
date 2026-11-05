@@ -98,7 +98,7 @@ func TestRequests_StateSchemaVersionOnlyWithBody(t *testing.T) {
 	if _, err := client.Project(testProject).SetTagValue(ctx, uuid.New(), "1", "good"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := client.Project(testProject).DeleteTag(ctx, uuid.New()); err != nil {
+	if _, err := client.Project(testProject).DeleteTag(ctx, uuid.New(), 1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -126,7 +126,7 @@ func TestStatusError_CarriesTheProblem(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := apiclient.New(srv.URL, srv.Client()).Project(testProject).UpdateScene(context.Background(), uuid.New(), apiv0.UpdateSceneRequest{})
+	_, err := apiclient.New(srv.URL, srv.Client()).Project(testProject).UpdateScene(context.Background(), uuid.New(), apiv0.UpdateSceneRequest{Version: 1})
 
 	var se *apiclient.StatusError
 	if !errors.As(err, &se) {
@@ -201,7 +201,7 @@ func TestDelete_EmptyBody_Succeeds(t *testing.T) {
 	defer srv.Close()
 	client := apiclient.New(srv.URL, srv.Client())
 
-	if _, err := client.Project(testProject).DeleteTag(context.Background(), uuid.New()); err != nil {
+	if _, err := client.Project(testProject).DeleteTag(context.Background(), uuid.New(), 1); err != nil {
 		t.Errorf("delete: %v", err)
 	}
 	if _, err := client.Project(testProject).GetTag(context.Background(), uuid.New()); err == nil {
@@ -216,7 +216,7 @@ func TestDelete_BodyNotJSON_Succeeds(t *testing.T) {
 	defer srv.Close()
 	client := apiclient.New(srv.URL, srv.Client())
 
-	if _, err := client.Project(testProject).DeleteTag(context.Background(), uuid.New()); err != nil {
+	if _, err := client.Project(testProject).DeleteTag(context.Background(), uuid.New(), 1); err != nil {
 		t.Errorf("delete: %v", err)
 	}
 }
@@ -228,12 +228,12 @@ func TestDelete_BodyCutShort_LeavesZero(t *testing.T) {
 	defer srv.Close()
 	client := apiclient.New(srv.URL, srv.Client())
 
-	deleted, err := client.Project(testProject).DeleteWidget(context.Background(), uuid.New(), uuid.New())
+	deleted, err := client.Project(testProject).DeleteWidget(context.Background(), uuid.New(), uuid.New(), 1)
 	if err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if deleted.SceneVersion != 0 {
-		t.Errorf("SceneVersion: got %d, want 0 (unknown), not a half-read value", deleted.SceneVersion)
+	if deleted.Version != 0 {
+		t.Errorf("Version: got %d, want 0 (unknown), not a half-read value", deleted.Version)
 	}
 }
 

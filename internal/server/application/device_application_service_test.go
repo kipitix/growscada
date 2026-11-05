@@ -10,6 +10,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/device"
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
@@ -39,7 +40,7 @@ func newEnvironmentService() application.EnvironmentService {
 func newDevices(t *testing.T) (application.DeviceService, appdto.Device) {
 	t.Helper()
 	svc := newDeviceService()
-	created, err := svc.CreateDevice(editlock.System(context.Background()), mainProject, appdto.DeviceInput{
+	created, err := svc.CreateDevice(editlock.System(context.Background()), mainProject, draftVersionOf(t, mainProject), appdto.DeviceInput{
 		Name: "device-" + uuid.NewString(), Comment: "the pump", Protocol: "simulation", Config: []byte(`{"pattern":"ramp"}`),
 	})
 	if err != nil {
@@ -53,7 +54,7 @@ func TestDeviceService_CRUD(t *testing.T) {
 	ctx := editlock.System(context.Background())
 	svc, created := newDevices(t)
 
-	if created.Version != 1 || created.Protocol != "simulation" {
+	if created.Version == 0 || created.Protocol != "simulation" {
 		t.Errorf("created %+v", created)
 	}
 	if all, err := svc.FindAllDevices(ctx, mainProject); err != nil || len(all) != 1 || all[0].ID != created.ID {
@@ -69,20 +70,20 @@ func TestDeviceService_CRUD(t *testing.T) {
 	updated, err := svc.UpdateDevice(ctx, mainProject, created.ID, created.Version, appdto.DeviceInput{
 		Name: created.Name, Comment: "renamed", Protocol: "simulation", Config: []byte(`{"pattern":"sine"}`),
 	})
-	if err != nil || updated.Version != 2 || updated.Comment != "renamed" {
+	if err != nil || updated.Version != created.Version+1 || updated.Comment != "renamed" {
 		t.Fatalf("UpdateDevice: %+v, %v", updated, err)
 	}
-	if _, err := svc.UpdateDevice(ctx, mainProject, created.ID, created.Version, appdto.DeviceInput{Name: created.Name, Protocol: "simulation"}); !errors.Is(err, device.ErrDeviceConflict) {
+	if _, err := svc.UpdateDevice(ctx, mainProject, created.ID, created.Version, appdto.DeviceInput{Name: created.Name, Protocol: "simulation"}); !errors.Is(err, draft.ErrDraftConflict) {
 		t.Errorf("a stale update: %v, want ErrDeviceConflict", err)
 	}
-	if _, err := svc.CreateDevice(ctx, mainProject, appdto.DeviceInput{Name: created.Name, Protocol: "simulation"}); !errors.Is(err, device.ErrDeviceNameTaken) {
+	if _, err := svc.CreateDevice(ctx, mainProject, draftVersionOf(t, mainProject), appdto.DeviceInput{Name: created.Name, Protocol: "simulation"}); !errors.Is(err, device.ErrDeviceNameTaken) {
 		t.Errorf("a taken name: %v, want ErrDeviceNameTaken", err)
 	}
-	if _, err := svc.CreateDevice(ctx, mainProject, appdto.DeviceInput{Name: "bad-protocol-" + uuid.NewString(), Protocol: "modbus"}); !errors.Is(err, application.ErrInvalidInput) {
+	if _, err := svc.CreateDevice(ctx, mainProject, draftVersionOf(t, mainProject), appdto.DeviceInput{Name: "bad-protocol-" + uuid.NewString(), Protocol: "modbus"}); !errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("an unknown protocol: %v, want ErrInvalidInput", err)
 	}
 
-	if _, err := svc.DeleteDeviceByID(ctx, mainProject, created.ID); err != nil {
+	if _, err := svc.DeleteDeviceByID(ctx, mainProject, created.ID, draftVersionOf(t, mainProject)); err != nil {
 		t.Fatalf("DeleteDeviceByID: %v", err)
 	}
 	if _, err := svc.FindDeviceByID(ctx, mainProject, created.ID); !errors.Is(err, device.ErrDeviceNotFound) {
@@ -96,7 +97,7 @@ func TestEnvironmentService_CRUDAndPairs(t *testing.T) {
 	devices, created := newDevices(t)
 	environments := newEnvironmentService()
 
-	environment, err := environments.CreateEnvironment(ctx, mainProject, appdto.EnvironmentInput{Name: "bench-" + uuid.NewString(), Comment: "the bench"})
+	environment, err := environments.CreateEnvironment(ctx, mainProject, draftVersionOf(t, mainProject), appdto.EnvironmentInput{Name: "bench-" + uuid.NewString(), Comment: "the bench"})
 	if err != nil {
 		t.Fatalf("CreateEnvironment: %v", err)
 	}
@@ -104,27 +105,27 @@ func TestEnvironmentService_CRUDAndPairs(t *testing.T) {
 		t.Errorf("FindAllEnvironments: %v, %v", all, err)
 	}
 	renamed, err := environments.UpdateEnvironment(ctx, mainProject, environment.ID, environment.Version, appdto.EnvironmentInput{Name: environment.Name, Comment: "renamed"})
-	if err != nil || renamed.Version != 2 {
+	if err != nil || renamed.Version != environment.Version+1 {
 		t.Fatalf("UpdateEnvironment: %+v, %v", renamed, err)
 	}
 
-	pair, added, err := environments.PutEnvironmentDevice(ctx, mainProject, environment.ID, created.ID, 0, appdto.EnvironmentDeviceInput{Params: []byte(`{"host":"localhost"}`)})
-	if err != nil || !added || pair.Version != 1 {
+	pair, added, err := environments.PutEnvironmentDevice(ctx, mainProject, environment.ID, created.ID, draftVersionOf(t, mainProject), appdto.EnvironmentDeviceInput{Params: []byte(`{"host":"localhost"}`)})
+	if err != nil || !added || pair.Version == 0 {
 		t.Fatalf("PutEnvironmentDevice add: %+v, %v, %v", pair, added, err)
 	}
 	if list, err := environments.FindEnvironmentDevices(ctx, mainProject, environment.ID); err != nil || len(list) != 1 || list[0].DeviceID != created.ID {
 		t.Errorf("FindEnvironmentDevices: %v, %v", list, err)
 	}
 	changed, added, err := environments.PutEnvironmentDevice(ctx, mainProject, environment.ID, created.ID, pair.Version, appdto.EnvironmentDeviceInput{Params: []byte(`{"host":"10.0.0.1"}`)})
-	if err != nil || added || changed.Version != 2 {
+	if err != nil || added || changed.Version != pair.Version+1 {
 		t.Fatalf("PutEnvironmentDevice change: %+v, %v, %v", changed, added, err)
 	}
-	if _, _, err := environments.PutEnvironmentDevice(ctx, mainProject, environment.ID, created.ID, pair.Version, appdto.EnvironmentDeviceInput{}); !errors.Is(err, device.ErrEnvironmentDeviceConflict) {
+	if _, _, err := environments.PutEnvironmentDevice(ctx, mainProject, environment.ID, created.ID, pair.Version, appdto.EnvironmentDeviceInput{}); !errors.Is(err, draft.ErrDraftConflict) {
 		t.Errorf("a stale pair write: %v, want ErrEnvironmentDeviceConflict", err)
 	}
 	// A stale write is a conflict whatever it sends, as for a Device or an
 	// Environment; the params are parsed only once the Version is current.
-	if _, _, err := environments.PutEnvironmentDevice(ctx, mainProject, environment.ID, created.ID, pair.Version, appdto.EnvironmentDeviceInput{Params: []byte(`[]`)}); !errors.Is(err, device.ErrEnvironmentDeviceConflict) {
+	if _, _, err := environments.PutEnvironmentDevice(ctx, mainProject, environment.ID, created.ID, pair.Version, appdto.EnvironmentDeviceInput{Params: []byte(`[]`)}); !errors.Is(err, draft.ErrDraftConflict) {
 		t.Errorf("a stale pair write with invalid params: %v, want ErrEnvironmentDeviceConflict", err)
 	}
 	if _, _, err := environments.PutEnvironmentDevice(ctx, mainProject, environment.ID, created.ID, changed.Version, appdto.EnvironmentDeviceInput{Params: []byte(`[]`)}); !errors.Is(err, application.ErrInvalidInput) {
@@ -132,19 +133,19 @@ func TestEnvironmentService_CRUDAndPairs(t *testing.T) {
 	}
 
 	// A pair refuses removing its Environment and its Device; without one both go.
-	if _, err := environments.DeleteEnvironmentByID(ctx, mainProject, environment.ID); !errors.Is(err, device.ErrEnvironmentInUse) {
+	if _, err := environments.DeleteEnvironmentByID(ctx, mainProject, environment.ID, draftVersionOf(t, mainProject)); !errors.Is(err, device.ErrEnvironmentInUse) {
 		t.Errorf("an environment holding a pair: %v, want ErrEnvironmentInUse", err)
 	}
-	if _, err := devices.DeleteDeviceByID(ctx, mainProject, created.ID); !errors.Is(err, device.ErrDeviceInUse) {
+	if _, err := devices.DeleteDeviceByID(ctx, mainProject, created.ID, draftVersionOf(t, mainProject)); !errors.Is(err, device.ErrDeviceInUse) {
 		t.Errorf("a device in a pair: %v, want ErrDeviceInUse", err)
 	}
-	if _, err := environments.DeleteEnvironmentDevice(ctx, mainProject, environment.ID, created.ID); err != nil {
+	if _, err := environments.DeleteEnvironmentDevice(ctx, mainProject, environment.ID, created.ID, draftVersionOf(t, mainProject)); err != nil {
 		t.Fatalf("DeleteEnvironmentDevice: %v", err)
 	}
-	if _, err := environments.DeleteEnvironmentByID(ctx, mainProject, environment.ID); err != nil {
+	if _, err := environments.DeleteEnvironmentByID(ctx, mainProject, environment.ID, draftVersionOf(t, mainProject)); err != nil {
 		t.Errorf("DeleteEnvironmentByID after the pair: %v", err)
 	}
-	if _, err := devices.DeleteDeviceByID(ctx, mainProject, created.ID); err != nil {
+	if _, err := devices.DeleteDeviceByID(ctx, mainProject, created.ID, draftVersionOf(t, mainProject)); err != nil {
 		t.Errorf("DeleteDeviceByID after the pair: %v", err)
 	}
 }
@@ -170,11 +171,11 @@ func TestDeviceService_ProjectScope(t *testing.T) {
 	// The lists are read with the check of their Project in one query, as the
 	// Tags and the Scenes are; an empty list still tells a missing Project
 	// from an empty one.
-	otherDevice, err := newDeviceService().CreateDevice(ctx, other.ID, appdto.DeviceInput{Name: "other-" + uuid.NewString(), Protocol: "simulation"})
+	otherDevice, err := newDeviceService().CreateDevice(ctx, other.ID, draftVersionOf(t, other.ID), appdto.DeviceInput{Name: "other-" + uuid.NewString(), Protocol: "simulation"})
 	if err != nil {
 		t.Fatalf("CreateDevice in the other project: %v", err)
 	}
-	if _, err := newEnvironmentService().CreateEnvironment(ctx, other.ID, appdto.EnvironmentInput{Name: "other-" + uuid.NewString()}); err != nil {
+	if _, err := newEnvironmentService().CreateEnvironment(ctx, other.ID, draftVersionOf(t, other.ID), appdto.EnvironmentInput{Name: "other-" + uuid.NewString()}); err != nil {
 		t.Fatalf("CreateEnvironment in the other project: %v", err)
 	}
 	if list, err := newDeviceService().FindAllDevices(ctx, other.ID); err != nil || len(list) != 1 || list[0].ID != otherDevice.ID {

@@ -7,11 +7,7 @@ import (
 	"time"
 
 	"github.com/kipitix/growscada/internal/server/domain/editlock"
-	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
-	"github.com/kipitix/growscada/internal/server/domain/librarypin"
-	"github.com/kipitix/growscada/internal/server/domain/project"
-	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
@@ -230,102 +226,6 @@ func TestLibraryRelease_SaveRefusesADraftChangedSinceItWasRead(t *testing.T) {
 	}
 	if _, err := releases.Save(ctx, fresh, lib.Version()); err != nil {
 		t.Fatalf("Save release of the Draft as it is: %v", err)
-	}
-}
-
-func TestLibraryPin_AddSwitchRemove(t *testing.T) {
-	cleanScenes(t)
-	cleanLibraries(t)
-	ctx := editlock.System(context.Background())
-	repo := newWidgetTypeRepo(t)
-	saved, err := repo.Save(ctx, makeWidgetType(t, "gauge", nil, repo))
-	if err != nil {
-		t.Fatal(err)
-	}
-	first := mustRelease(t, repo.libraryID)
-	pins := repositories.NewLibraryPinRepositoryPostgres(testDB, mainProject)
-
-	missing := library.ReconstituteRelease(repo.libraryID, first.Number().Next(), "", time.Now(), nil)
-	if _, err := pins.Save(ctx, librarypin.CreateLibraryPin(mainProject, missing), nil); !errors.Is(err, library.ErrReleaseNotFound) {
-		t.Errorf("a missing release: expected ErrReleaseNotFound, got %v", err)
-	}
-	pin, err := pins.Save(ctx, librarypin.CreateLibraryPin(mainProject, first), nil)
-	if err != nil {
-		t.Fatalf("Save pin: %v", err)
-	}
-	if _, err := pins.Save(ctx, librarypin.CreateLibraryPin(mainProject, first), nil); !errors.Is(err, librarypin.ErrLibraryPinExists) {
-		t.Errorf("pinned twice: expected ErrLibraryPinExists, got %v", err)
-	}
-	types, err := pins.FindPinnedWidgetTypes(ctx)
-	if err != nil || len(types) != 1 || types[0].ID() != saved.ID() {
-		t.Errorf("FindPinnedWidgetTypes: %v, %v", types, err)
-	}
-	unpinned := repo.NextID()
-	if types, err := pins.FindPinnedWidgetTypesByID(ctx, []id.ID[library.WidgetType]{unpinned, saved.ID()}); err != nil || len(types) != 1 || types[0].ID() != saved.ID() {
-		t.Errorf("FindPinnedWidgetTypesByID: %v, %v; want the pinned one only", types, err)
-	}
-	if types, err := pins.FindPinnedWidgetTypesByID(ctx, []id.ID[library.WidgetType]{unpinned}); err != nil || len(types) != 0 {
-		t.Errorf("FindPinnedWidgetTypesByID of an unpinned type: %v, %v", types, err)
-	}
-
-	// A widget of the pinned type; the switch's check sees it.
-	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
-	name, _ := scene.NewWidgetName("w")
-	w := scene.NewWidget(sceneRepo.NextWidgetID(), name, scene.NewPosition(0, 0, 0), library.DefaultSize(), scene.DefaultOrigin(), scene.DefaultRotation(), saved.ID(), nil, nil)
-	sc := mustSave(t, sceneRepo, withWidgets(makeScene(t, sceneRepo, "s"), w))
-
-	if err := repo.Delete(ctx, saved.Delete()); err != nil {
-		t.Fatal(err)
-	}
-	second := mustRelease(t, repo.libraryID)
-	switched, _ := pin.Switch(pin.Version(), second)
-	var seen []librarypin.PlacedWidget
-	refuse := errors.New("refused")
-	if _, err := pins.Save(ctx, switched, func(ws []librarypin.PlacedWidget) error { seen = ws; return refuse }); !errors.Is(err, refuse) {
-		t.Errorf("the check's error: got %v", err)
-	}
-	if len(seen) != 1 || seen[0].Widget.ID() != w.ID() || seen[0].SceneID != sc.ID() {
-		t.Errorf("the check saw %v", seen)
-	}
-	if got, _ := pins.FindByLibrary(ctx, repo.libraryID); got.Release() != first.Number() {
-		t.Errorf("a refused switch changed the pin: %s", got)
-	}
-	if _, err := pins.Save(ctx, switched, nil); err != nil {
-		t.Fatalf("switch: %v", err)
-	}
-	if _, err := pins.Save(ctx, switched, nil); !errors.Is(err, librarypin.ErrLibraryPinConflict) {
-		t.Errorf("a stale switch: expected ErrLibraryPinConflict, got %v", err)
-	}
-	// A removal checked against the release pinned before the switch is stale.
-	if err := pins.Delete(ctx, switched.Delete(), nil); !errors.Is(err, librarypin.ErrLibraryPinConflict) {
-		t.Errorf("a stale removal: expected ErrLibraryPinConflict, got %v", err)
-	}
-	current, err := pins.FindByLibrary(ctx, repo.libraryID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := pins.Delete(ctx, current.Delete(), func([]librarypin.PlacedWidget) error { return refuse }); !errors.Is(err, refuse) {
-		t.Errorf("a refused removal: got %v", err)
-	}
-	if err := pins.Delete(ctx, current.Delete(), nil); err != nil {
-		t.Fatalf("Delete: %v", err)
-	}
-	if _, err := pins.FindByLibrary(ctx, repo.libraryID); !errors.Is(err, librarypin.ErrLibraryPinNotFound) {
-		t.Errorf("after removal: expected ErrLibraryPinNotFound, got %v", err)
-	}
-
-	gone := mustSaveLibrary(t)
-	libraries := repositories.NewLibraryRepositoryPostgres(testDB)
-	goneRelease := mustRelease(t, gone.ID())
-	if _, err := libraries.Save(ctx, gone.Delete()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := pins.Save(ctx, librarypin.CreateLibraryPin(mainProject, goneRelease), nil); !errors.Is(err, library.ErrLibraryNotFound) {
-		t.Errorf("a deleted library: expected ErrLibraryNotFound, got %v", err)
-	}
-	otherProject := id.NewID[project.Project]()
-	if _, err := pins.Save(ctx, librarypin.CreateLibraryPin(otherProject, first), nil); err == nil {
-		t.Error("a pin of another project through Main's repository must fail")
 	}
 }
 

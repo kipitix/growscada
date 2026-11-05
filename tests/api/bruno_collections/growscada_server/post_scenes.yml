@@ -16,7 +16,8 @@ http:
         "name": "pump room",
         "width": 1920,
         "height": 1080,
-        "background_html": "<div class=\"background pump-room\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1920\" height=\"1080\"><rect width=\"100%\" height=\"100%\" fill=\"#1a1a2e\"/></svg></div>"
+        "background_html": "<div class=\"background pump-room\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1920\" height=\"1080\"><rect width=\"100%\" height=\"100%\" fill=\"#1a1a2e\"/></svg></div>",
+        "version": 3
       }
   auth: inherit
 

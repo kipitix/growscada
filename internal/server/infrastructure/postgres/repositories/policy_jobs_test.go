@@ -112,10 +112,12 @@ func TestPolicyRunner_FailedJob_RetriedAfterPause_DeliveryNotHeldBack(t *testing
 	repo = repositories.NewTagRepositoryPostgres(testDB, mainProject, repositories.NotifyOnCommit(d.Notify))
 
 	mustSaveTag(t, repo, first)
+	d.Notify()
 	waitFor(t, "the first attempt", func() bool { return len(policy.runsOf(firstKey)) == 1 })
 	failedAt := policy.runsOf(firstKey)[0]
 
 	mustSaveTag(t, repo, second)
+	d.Notify()
 	waitFor(t, "the second event", func() bool { return len(delivered.types()) == 2 })
 	if waited := time.Since(failedAt); waited >= pause {
 		t.Errorf("the next event was delivered %s after the failure, not before the pause %s", waited, pause)

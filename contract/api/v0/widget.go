@@ -76,9 +76,9 @@ type PortBinding struct {
 
 // --- Widget request / response types ---
 
-// WidgetResponse is the HTTP DTO for representing a widget instance in API responses.
-// Widget has no version of its own — SceneVersion is the owning scene's current
-// version, the sole optimistic-lock boundary for the scene and all its widgets.
+// WidgetResponse is the HTTP DTO for representing a widget instance in API
+// responses. Version is the Version of the Project's Draft, the same in every
+// content entity of one response (ADR 0016).
 type WidgetResponse struct {
 	ID              uuid.UUID               `json:"id"`
 	Name            string                  `json:"name"`
@@ -89,7 +89,7 @@ type WidgetResponse struct {
 	TransformMatrix TransformMatrixResponse `json:"transform_matrix"`
 	TypeID          uuid.UUID               `json:"type_id"`
 	SceneID         uuid.UUID               `json:"scene_id"`
-	SceneVersion    int                     `json:"scene_version"`
+	Version         int                     `json:"version"`
 	Labels          []string                `json:"labels"`
 	PortBindings    []PortBinding           `json:"port_bindings"`
 }
@@ -100,8 +100,8 @@ type GetWidgetsResponse struct {
 }
 
 // CreateWidgetRequest is the HTTP DTO for creating a widget instance.
-// The owning scene is taken from the URL path. SceneVersion must equal the
-// scene's current persisted version for optimistic locking.
+// The owning scene is taken from the URL path. Version is the Version of the
+// Draft the client saw (ADR 0016).
 type CreateWidgetRequest struct {
 	Name         string          `json:"name"`
 	Position     PositionRequest `json:"position"`
@@ -109,20 +109,20 @@ type CreateWidgetRequest struct {
 	Origin       OriginRequest   `json:"origin"`
 	Rotation     RotationRequest `json:"rotation"`
 	TypeID       uuid.UUID       `json:"type_id"`
-	SceneVersion int             `json:"scene_version"`
+	Version      int             `json:"version"`
 	Labels       []string        `json:"labels"`
 	PortBindings []PortBinding   `json:"port_bindings"`
 }
 
 // CreateWidgetResponse is the HTTP DTO for a widget creation response.
+// Version is the Draft's Version after the write.
 type CreateWidgetResponse struct {
-	ID           uuid.UUID `json:"id"`
-	SceneVersion int       `json:"scene_version"`
+	ID      uuid.UUID `json:"id"`
+	Version int       `json:"version"`
 }
 
 // UpdateWidgetRequest is the HTTP DTO for updating a widget instance.
-// SceneVersion must equal the owning scene's current persisted version for
-// optimistic locking.
+// Version must be the Draft's current Version (ADR 0016).
 type UpdateWidgetRequest struct {
 	Name         string          `json:"name"`
 	Position     PositionRequest `json:"position"`
@@ -130,12 +130,12 @@ type UpdateWidgetRequest struct {
 	Origin       OriginRequest   `json:"origin"`
 	Rotation     RotationRequest `json:"rotation"`
 	TypeID       uuid.UUID       `json:"type_id"`
-	SceneVersion int             `json:"scene_version"`
+	Version      int             `json:"version"`
 	Labels       []string        `json:"labels"`
 	PortBindings []PortBinding   `json:"port_bindings"`
 }
 
 // UpdateWidgetResponse is the HTTP DTO for a widget update response.
 type UpdateWidgetResponse struct {
-	SceneVersion int `json:"scene_version"`
+	Version int `json:"version"`
 }

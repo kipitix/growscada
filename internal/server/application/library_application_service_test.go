@@ -10,6 +10,7 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
@@ -76,7 +77,7 @@ func TestLibraryService_DeleteRefusedWhileALiveProjectPinsIt(t *testing.T) {
 	if _, err := r.libSvc.DeleteLibraryByID(ctx, libraryID); !errors.Is(err, library.ErrLibraryPinned) {
 		t.Fatalf("pinned: expected ErrLibraryPinned, got %v", err)
 	}
-	if _, err := r.pinSvc.DeleteLibraryPin(ctx, mainProject, libraryID); err != nil {
+	if _, err := r.pinSvc.DeleteLibraryPin(ctx, mainProject, libraryID, draftVersionOf(t, mainProject)); err != nil {
 		t.Fatalf("DeleteLibraryPin: %v", err)
 	}
 	deleted, err := r.libSvc.DeleteLibraryByID(ctx, libraryID)
@@ -210,7 +211,7 @@ func TestLibraryPin_SwitchOrphaningWidgetsIsRefused_PreviewNamesThem(t *testing.
 	r.switchPin(t, kept.ID, two.Number)
 	sc := r.createScene(t, "scene")
 	onKept := r.addWidget(t, sc.ID, sc.Version, kept, "value")
-	orphan := r.addWidget(t, sc.ID, onKept.SceneVersion, dropped)
+	orphan := r.addWidget(t, sc.ID, onKept.Version, dropped)
 
 	if _, err := r.wtSvc.DeleteWidgetTypeByID(ctx, libraryID, dropped.ID); err != nil {
 		t.Fatal(err)
@@ -248,15 +249,15 @@ func TestLibraryPin_SwitchOrphaningWidgetsIsRefused_PreviewNamesThem(t *testing.
 		t.Fatal("the library is not pinned")
 	}
 	pin := pins[i]
-	_, _, err = r.pinSvc.PutLibraryPin(ctx, mainProject, libraryID, three.Number, pin.Version)
+	_, _, err = r.pinSvc.PutLibraryPin(ctx, mainProject, libraryID, three.Number, draftVersionOf(t, mainProject))
 	var orphans librarypin.OrphansError
 	if !errors.As(err, &orphans) || len(orphans.Widgets) != 1 || orphans.Widgets[0].Widget.ID().UUID() != orphan.ID {
 		t.Errorf("the switch: expected an OrphansError naming the widget, got %v", err)
 	}
-	if _, err := r.pinSvc.DeleteLibraryPin(ctx, mainProject, libraryID); !errors.Is(err, librarypin.ErrWidgetsOrphaned) {
+	if _, err := r.pinSvc.DeleteLibraryPin(ctx, mainProject, libraryID, draftVersionOf(t, mainProject)); !errors.Is(err, librarypin.ErrWidgetsOrphaned) {
 		t.Errorf("the removal: expected ErrWidgetsOrphaned, got %v", err)
 	}
-	if _, _, err := r.pinSvc.PutLibraryPin(ctx, mainProject, libraryID, three.Number, pin.Version-1); !errors.Is(err, librarypin.ErrLibraryPinConflict) {
+	if _, _, err := r.pinSvc.PutLibraryPin(ctx, mainProject, libraryID, three.Number, draftVersionOf(t, mainProject)-1); !errors.Is(err, draft.ErrDraftConflict) {
 		t.Errorf("a stale switch: expected ErrLibraryPinConflict, got %v", err)
 	}
 	if _, _, err := r.pinSvc.PutLibraryPin(ctx, mainProject, libraryID, 9, pin.Version); !errors.Is(err, application.ErrInvalidInput) {
@@ -265,10 +266,10 @@ func TestLibraryPin_SwitchOrphaningWidgetsIsRefused_PreviewNamesThem(t *testing.
 
 	// Once the orphan is gone, the switch passes and the policy removes the
 	// broken binding.
-	if _, err := r.sceneSvc.DeleteWidgetByID(ctx, mainProject, sc.ID, orphan.ID); err != nil {
+	if _, err := r.sceneSvc.DeleteWidgetByID(ctx, mainProject, sc.ID, orphan.ID, draftVersionOf(t, mainProject)); err != nil {
 		t.Fatal(err)
 	}
-	switched, created, err := r.pinSvc.PutLibraryPin(ctx, mainProject, libraryID, three.Number, pin.Version)
+	switched, created, err := r.pinSvc.PutLibraryPin(ctx, mainProject, libraryID, three.Number, draftVersionOf(t, mainProject))
 	if err != nil || created || switched.Release != three.Number {
 		t.Fatalf("switch: %+v, %t, %v", switched, created, err)
 	}
@@ -286,24 +287,24 @@ func TestLibraryPin_AddRequiresAReleaseAndPinsOnce(t *testing.T) {
 	ctx := editlock.System(context.Background())
 	svc := newLibraryPinService()
 	lib := mustCreateLibrary(t)
-	if _, _, err := svc.PutLibraryPin(ctx, mainProject, lib.ID, 1, 0); !errors.Is(err, application.ErrInvalidInput) || !errors.Is(err, library.ErrReleaseNotFound) {
+	if _, _, err := svc.PutLibraryPin(ctx, mainProject, lib.ID, 1, draftVersionOf(t, mainProject)); !errors.Is(err, application.ErrInvalidInput) || !errors.Is(err, library.ErrReleaseNotFound) {
 		t.Errorf("a library never released: expected invalid input of a missing release, got %v", err)
 	}
 	mustReleaseLibrary(t, lib.ID)
-	pin, created, err := svc.PutLibraryPin(ctx, mainProject, lib.ID, 1, 0)
-	if err != nil || !created || pin.Release != 1 || pin.Version != 1 {
+	pin, created, err := svc.PutLibraryPin(ctx, mainProject, lib.ID, 1, draftVersionOf(t, mainProject))
+	if err != nil || !created || pin.Release != 1 || pin.Version == 0 {
 		t.Fatalf("add: %+v, %t, %v", pin, created, err)
 	}
-	if _, _, err := svc.PutLibraryPin(ctx, mainProject, lib.ID, 1, 0); !errors.Is(err, librarypin.ErrLibraryPinConflict) {
-		t.Errorf("adding again: expected ErrLibraryPinConflict, got %v", err)
+	if again, added, err := svc.PutLibraryPin(ctx, mainProject, lib.ID, 1, draftVersionOf(t, mainProject)); err != nil || added || again.Release != 1 {
+		t.Errorf("pinning the same release again: %+v, %t, %v; want the pin as it is", again, added, err)
 	}
-	if _, _, err := svc.PutLibraryPin(ctx, mainProject, uuid.New(), 1, 0); !errors.Is(err, library.ErrLibraryNotFound) {
+	if _, _, err := svc.PutLibraryPin(ctx, mainProject, uuid.New(), 1, draftVersionOf(t, mainProject)); !errors.Is(err, library.ErrLibraryNotFound) {
 		t.Errorf("a missing library: expected ErrLibraryNotFound, got %v", err)
 	}
-	if _, err := svc.DeleteLibraryPin(ctx, mainProject, lib.ID); err != nil {
+	if _, err := svc.DeleteLibraryPin(ctx, mainProject, lib.ID, draftVersionOf(t, mainProject)); err != nil {
 		t.Fatalf("remove: %v", err)
 	}
-	if _, err := svc.DeleteLibraryPin(ctx, mainProject, lib.ID); !errors.Is(err, librarypin.ErrLibraryPinNotFound) {
+	if _, err := svc.DeleteLibraryPin(ctx, mainProject, lib.ID, draftVersionOf(t, mainProject)); !errors.Is(err, librarypin.ErrLibraryPinNotFound) {
 		t.Errorf("removing again: expected ErrLibraryPinNotFound, got %v", err)
 	}
 }

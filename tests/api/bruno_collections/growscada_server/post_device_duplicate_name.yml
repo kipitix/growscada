@@ -16,7 +16,8 @@ http:
         "name": "sim",
         "comment": "",
         "protocol": "simulation",
-        "config": {}
+        "config": {},
+        "version": 12
       }
   auth: inherit
 

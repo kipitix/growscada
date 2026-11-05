@@ -87,6 +87,10 @@ type Project struct {
 	takeOverDialog bool
 	checkingOut    bool
 
+	// draftVersion is the Version of the Draft: every write of its content
+	// states it and every content response carries it (ADR 0016).
+	draftVersion int
+
 	// sceneVersions holds the version each write of a Scene or its Widgets
 	// states; the Version and SceneVersion of the lists above are not read.
 	// The selected Scene's is learned with its Widgets (observeSceneVersion).
@@ -98,6 +102,7 @@ type Project struct {
 
 	// Coalesce reloads of each server-backed list (see load.go).
 	widgetTypesReloader uiutil.Reloader
+	draftReloader       uiutil.Reloader
 	librariesReloader   uiutil.Reloader
 	pinsReloader        uiutil.Reloader
 	scenesReloader      uiutil.Reloader
@@ -236,6 +241,7 @@ func (p *Project) OnMount(ctx app.Context) {
 	}
 	p.loadTags(ctx)
 	p.loadDeploy(ctx)
+	p.loadDraftState(ctx)
 	p.loadEditLock(ctx)
 
 	p.handleServerEvents(ctx)

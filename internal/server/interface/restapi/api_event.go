@@ -41,8 +41,6 @@ var apiEventTypes = map[event.EventType]string{
 	event.EventTypeProjectUpdated:     apiv0.EventProjectUpdated,
 	event.EventTypeProjectDeleted:     apiv0.EventProjectDeleted,
 
-	event.EventTypeProjectDiscardStarted: apiv0.EventProjectDiscardStarted,
-
 	event.EventTypeLibraryCreated:        apiv0.EventLibraryCreated,
 	event.EventTypeLibraryUpdated:        apiv0.EventLibraryUpdated,
 	event.EventTypeLibraryDeleted:        apiv0.EventLibraryDeleted,

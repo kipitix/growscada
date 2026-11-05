@@ -76,7 +76,7 @@ func (h WidgetsHandlers) PostWidgets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := h.service.CreateWidget(r.Context(), projectID, sceneID, request.SceneVersion, newCreateWidgetInput(request))
+	created, err := h.service.CreateWidget(r.Context(), projectID, sceneID, request.Version, newCreateWidgetInput(request))
 	if err != nil {
 		sendError(w, r, err)
 		return
@@ -105,7 +105,7 @@ func (h WidgetsHandlers) PutWidgetsByID(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	updated, err := h.service.UpdateWidget(r.Context(), projectID, sceneID, widgetID, request.SceneVersion, newUpdateWidgetInput(request))
+	updated, err := h.service.UpdateWidget(r.Context(), projectID, sceneID, widgetID, request.Version, newUpdateWidgetInput(request))
 	if err != nil {
 		sendError(w, r, err)
 		return
@@ -128,8 +128,12 @@ func (h WidgetsHandlers) DeleteWidgetsByID(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
+	version, ok := versionQuery(w, r)
+	if !ok {
+		return
+	}
 
-	deleted, err := h.service.DeleteWidgetByID(r.Context(), projectID, sceneID, widgetID)
+	deleted, err := h.service.DeleteWidgetByID(r.Context(), projectID, sceneID, widgetID, version)
 	if err != nil {
 		sendError(w, r, err)
 		return

@@ -14,7 +14,8 @@ http:
     data: |-
       {
         "name": "bench-extra",
-        "comment": "created by the Bruno collection"
+        "comment": "created by the Bruno collection",
+        "version": 13
       }
   auth: inherit
 
@@ -34,7 +35,7 @@ runtime:
       operator: isString
     - expression: 'res.body.version'
       operator: eq
-      value: '1'
+      value: '14'
 
 settings:
   encodeUrl: true

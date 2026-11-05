@@ -1,14 +1,12 @@
 package device_test
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
-	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 // testProject is the Project of the aggregates the tests build.
@@ -63,9 +61,6 @@ func TestCreateDevice_FieldsAndEvent(t *testing.T) {
 		d.Config().String() != `{"patterns":{"pressure":{"min":1,"max":2}}}` {
 		t.Fatalf("unexpected device %s", d)
 	}
-	if d.Version() != version.Initial[device.Device]() {
-		t.Errorf("Version = %s, want the initial one", d.Version())
-	}
 
 	events := d.PendingEvents()
 	if len(events) != 1 {
@@ -82,7 +77,7 @@ func TestCreateDevice_FieldsAndEvent(t *testing.T) {
 
 func TestReconstituteDevice_RecordsNothing(t *testing.T) {
 	d, err := device.ReconstituteDevice(id.NewID[device.Device](), testProject, deviceName(t, "sim-1"), "",
-		device.ProtocolSimulation, device.EmptyDeviceConfig(), version.Committed[device.Device]())
+		device.ProtocolSimulation, device.EmptyDeviceConfig())
 	if err != nil {
 		t.Fatalf("ReconstituteDevice: %v", err)
 	}
@@ -93,16 +88,12 @@ func TestReconstituteDevice_RecordsNothing(t *testing.T) {
 
 func TestDevice_Update(t *testing.T) {
 	stored, err := device.ReconstituteDevice(id.NewID[device.Device](), testProject, deviceName(t, "sim-1"), "old",
-		device.ProtocolSimulation, config(t, `{"a":1}`), version.Committed[device.Device]())
+		device.ProtocolSimulation, config(t, `{"a":1}`))
 	if err != nil {
 		t.Fatalf("ReconstituteDevice: %v", err)
 	}
 
-	if _, err := stored.Update(version.Initial[device.Device](), deviceName(t, "sim-2"), "", device.ProtocolSimulation, device.EmptyDeviceConfig()); !errors.Is(err, device.ErrDeviceConflict) {
-		t.Errorf("stale update: %v, want ErrDeviceConflict", err)
-	}
-
-	updated, err := stored.Update(stored.Version(), deviceName(t, "sim-2"), "new", device.ProtocolSimulation, config(t, `{"b":2}`))
+	updated, err := stored.Update(deviceName(t, "sim-2"), "new", device.ProtocolSimulation, config(t, `{"b":2}`))
 	if err != nil {
 		t.Fatalf("Update: %v", err)
 	}
@@ -118,14 +109,11 @@ func TestDevice_Update(t *testing.T) {
 	if got := stored.PendingEvents(); len(got) != 0 {
 		t.Errorf("the stored device recorded %v", got)
 	}
-	if err := stored.CheckVersion(stored.Version()); err != nil {
-		t.Errorf("CheckVersion of the current version: %v", err)
-	}
 }
 
 func TestDevice_Delete(t *testing.T) {
 	stored, err := device.ReconstituteDevice(id.NewID[device.Device](), testProject, deviceName(t, "sim-1"), "",
-		device.ProtocolSimulation, device.EmptyDeviceConfig(), version.Committed[device.Device]())
+		device.ProtocolSimulation, device.EmptyDeviceConfig())
 	if err != nil {
 		t.Fatalf("ReconstituteDevice: %v", err)
 	}
@@ -155,21 +143,20 @@ func TestDevice_RejectsInvalidValueObjects(t *testing.T) {
 		if _, err := device.CreateDevice(anID, testProject, tc.name, "", tc.protocol, device.EmptyDeviceConfig()); err == nil {
 			t.Errorf("%s: CreateDevice took an invalid value object", tc.name)
 		}
-		if _, err := device.ReconstituteDevice(anID, testProject, tc.name, "", tc.protocol, device.EmptyDeviceConfig(),
-			version.Committed[device.Device]()); err == nil {
+		if _, err := device.ReconstituteDevice(anID, testProject, tc.name, "", tc.protocol, device.EmptyDeviceConfig()); err == nil {
 			t.Errorf("%s: ReconstituteDevice took an invalid value object", tc.name)
 		}
 	}
 
 	stored, err := device.ReconstituteDevice(anID, testProject, name, "", device.ProtocolSimulation,
-		device.EmptyDeviceConfig(), version.Committed[device.Device]())
+		device.EmptyDeviceConfig())
 	if err != nil {
 		t.Fatalf("ReconstituteDevice: %v", err)
 	}
-	if _, err := stored.Update(stored.Version(), device.DeviceName{}, "", device.ProtocolSimulation, device.EmptyDeviceConfig()); err == nil {
+	if _, err := stored.Update(device.DeviceName{}, "", device.ProtocolSimulation, device.EmptyDeviceConfig()); err == nil {
 		t.Error("Update took an invalid name")
 	}
-	if _, err := stored.Update(stored.Version(), name, "", device.DeviceProtocol{}, device.EmptyDeviceConfig()); err == nil {
+	if _, err := stored.Update(name, "", device.DeviceProtocol{}, device.EmptyDeviceConfig()); err == nil {
 		t.Error("Update took an invalid protocol")
 	}
 	if got := stored.PendingEvents(); len(got) != 0 {

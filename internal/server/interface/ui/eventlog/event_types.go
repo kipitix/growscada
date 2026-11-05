@@ -88,10 +88,9 @@ type eventTypeInfo struct {
 var eventTypeInfoByType = map[string]eventTypeInfo{
 	apiv0.EventSystemReady: {categoryOther, "Server ready"},
 
-	apiv0.EventProjectCreated:        {categoryProject, "Project %s created"},
-	apiv0.EventProjectUpdated:        {categoryProject, "Project %s updated"},
-	apiv0.EventProjectDeleted:        {categoryProject, "Project %s deleted"},
-	apiv0.EventProjectDiscardStarted: {categoryProject, "Project %s being discarded"},
+	apiv0.EventProjectCreated: {categoryProject, "Project %s created"},
+	apiv0.EventProjectUpdated: {categoryProject, "Project %s updated"},
+	apiv0.EventProjectDeleted: {categoryProject, "Project %s deleted"},
 
 	apiv0.EventTagCreated: {categoryTag, "Tag %s created"},
 	apiv0.EventTagUpdated: {categoryValue, "Tag %s value updated"},

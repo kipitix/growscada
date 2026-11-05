@@ -6,7 +6,6 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
-	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 func makeCreatedTag(t *testing.T) Tag {
@@ -19,12 +18,9 @@ func makeCreatedTag(t *testing.T) Tag {
 	return aTag
 }
 
-func TestCreateTag_RecordsCreatedEventAtInitialVersion(t *testing.T) {
+func TestCreateTag_RecordsCreatedEvent(t *testing.T) {
 	aTag := makeCreatedTag(t)
 
-	if aTag.Version() != version.Initial[Tag]() {
-		t.Errorf("expected initial version, got %s", aTag.Version())
-	}
 	events := aTag.PendingEvents()
 	if len(events) != 1 {
 		t.Fatalf("expected 1 pending event, got %d", len(events))

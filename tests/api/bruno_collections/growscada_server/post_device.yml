@@ -16,7 +16,8 @@ http:
         "name": "sim-extra",
         "comment": "created by the Bruno collection",
         "protocol": "simulation",
-        "config": {"patterns": []}
+        "config": {"patterns": []},
+        "version": 11
       }
   auth: inherit
 
@@ -38,7 +39,7 @@ runtime:
       operator: isString
     - expression: 'res.body.version'
       operator: eq
-      value: '1'
+      value: '12'
 
 settings:
   encodeUrl: true

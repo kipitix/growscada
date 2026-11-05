@@ -29,7 +29,7 @@ func TestMain(m *testing.M) {
 func setup(t *testing.T) (*devicelink.RESTLink, application.TagService, appdto.Tag) {
 	t.Helper()
 	srv, svc := servertest.StartAPI(t, postgres.DB(t))
-	created, err := svc.CreateTag(editlock.System(context.Background()), servertest.MainProject, appdto.CreateTagInput{
+	created, err := svc.CreateTag(editlock.System(context.Background()), servertest.MainProject, appdto.CreateTagInput{Version: servertest.DraftVersion(t, postgres.DB(t), servertest.MainProject),
 		Name: "pump.speed", Type: "integer",
 	})
 	if err != nil {
@@ -89,7 +89,7 @@ func TestResolve_UnknownToken(t *testing.T) {
 func TestResolve_TagsOfTheTokensProjectOnly(t *testing.T) {
 	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 	ctx := context.Background()
-	inMain, err := svc.CreateTag(editlock.System(ctx), servertest.MainProject, appdto.CreateTagInput{Name: "pump.speed", Type: "integer"})
+	inMain, err := svc.CreateTag(editlock.System(ctx), servertest.MainProject, appdto.CreateTagInput{Version: servertest.DraftVersion(t, postgres.DB(t), servertest.MainProject), Name: "pump.speed", Type: "integer"})
 	if err != nil {
 		t.Fatalf("create tag in Main: %v", err)
 	}
@@ -134,9 +134,9 @@ func TestWrite_StatesNoVersion(t *testing.T) {
 	}
 
 	got := current(t, svc, created)
-	if got.Value != "5" || got.Quality != "good" || got.Seq <= first.Seq || got.Version != created.Version {
-		t.Errorf("got value %q quality %q seq %d version %d, want 5/good above seq %d, the definition's version %d",
-			got.Value, got.Quality, got.Seq, got.Version, first.Seq, created.Version)
+	if got.Value != "5" || got.Quality != "good" || got.Seq <= first.Seq || got.Version == 0 {
+		t.Errorf("got value %q quality %q seq %d version %d, want 5/good above seq %d and a draft version",
+			got.Value, got.Quality, got.Seq, got.Version, first.Seq)
 	}
 }
 
@@ -145,11 +145,11 @@ func TestWrite_StatesNoVersion(t *testing.T) {
 func TestWrite_TagOfAnotherDevice(t *testing.T) {
 	srv, svc := servertest.StartAPI(t, postgres.DB(t))
 	ctx := context.Background()
-	ours, err := svc.CreateTag(editlock.System(ctx), servertest.MainProject, appdto.CreateTagInput{Name: "pump.speed", Type: "integer"})
+	ours, err := svc.CreateTag(editlock.System(ctx), servertest.MainProject, appdto.CreateTagInput{Version: servertest.DraftVersion(t, postgres.DB(t), servertest.MainProject), Name: "pump.speed", Type: "integer"})
 	if err != nil {
 		t.Fatalf("create tag: %v", err)
 	}
-	theirs, err := svc.CreateTag(editlock.System(ctx), servertest.MainProject, appdto.CreateTagInput{Name: "valve.state", Type: "integer"})
+	theirs, err := svc.CreateTag(editlock.System(ctx), servertest.MainProject, appdto.CreateTagInput{Version: servertest.DraftVersion(t, postgres.DB(t), servertest.MainProject), Name: "valve.state", Type: "integer"})
 	if err != nil {
 		t.Fatalf("create tag: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestWrite_DeletedTag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if _, err := svc.DeleteTagByID(editlock.System(context.Background()), servertest.MainProject, created.ID); err != nil {
+	if _, err := svc.DeleteTagByID(editlock.System(context.Background()), servertest.MainProject, created.ID, servertest.DraftVersion(t, postgres.DB(t), servertest.MainProject)); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 	// The running Revision still holds the Tag: the next Deploy drops it.
@@ -189,7 +189,7 @@ func TestWrite_DeletedTag(t *testing.T) {
 // again rather than trusting the project found earlier.
 func TestResolve_ProjectDeletedAfterItWasFound(t *testing.T) {
 	srv, svc := servertest.StartAPI(t, postgres.DB(t))
-	created, err := svc.CreateTag(editlock.System(context.Background()), servertest.MainProject, appdto.CreateTagInput{
+	created, err := svc.CreateTag(editlock.System(context.Background()), servertest.MainProject, appdto.CreateTagInput{Version: servertest.DraftVersion(t, postgres.DB(t), servertest.MainProject),
 		Name: "pump.speed", Type: "integer",
 	})
 	if err != nil {

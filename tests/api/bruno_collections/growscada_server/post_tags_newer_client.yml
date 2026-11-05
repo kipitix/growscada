@@ -19,7 +19,8 @@ http:
       {
         "name": "newer_client_tag",
         "type": "integer",
-        "unit": "rpm"
+        "unit": "rpm",
+        "version": 2
       }
   auth: inherit
 

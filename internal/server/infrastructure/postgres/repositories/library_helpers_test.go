@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -71,13 +72,16 @@ func mustRelease(t *testing.T, libraryID id.ID[library.Library]) library.Library
 	return saved
 }
 
-// mustPin pins release in the project.
+// mustPin pins release in the project through the project's Draft.
 func mustPin(t *testing.T, projectID id.ID[project.Project], release library.LibraryRelease) librarypin.LibraryPin {
 	t.Helper()
-	saved, err := repositories.NewLibraryPinRepositoryPostgres(testDB, projectID).Save(editlock.System(context.Background()), librarypin.CreateLibraryPin(projectID, release), nil)
-	if err != nil {
-		t.Fatalf("Save pin: %v", err)
-	}
+	ctx := editlock.System(context.Background())
+	var saved librarypin.LibraryPin
+	mustUpdate(t, projectID, "test pin", func(session *draft.Session) error {
+		var err error
+		saved, _, err = session.PutLibraryPin(ctx, release.LibraryID(), release.Number())
+		return err
+	})
 	return saved
 }
 

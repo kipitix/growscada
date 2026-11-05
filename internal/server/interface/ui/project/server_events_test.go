@@ -103,7 +103,7 @@ func TestWidgetEvent_SceneNotShown_RereadsThatSceneOnly(t *testing.T) {
 	if got, want := log.take(), []string{deployPath, scenePath(other)}; !slices.Equal(got, want) {
 		t.Errorf("requests: %v, want %v", got, want)
 	}
-	f.knowsSceneVersion(other)
+	f.knowsVersion(other)
 	if sc, _ := uiutil.FindByID(f.p.scenes, other, uiutil.SceneID); sc.Version != f.scene(other).Version {
 		t.Errorf("the listed Scene: %+v, want the server's", sc)
 	}
@@ -124,7 +124,7 @@ func TestWidgetEvent_SceneShown_RereadsItsWidgetsOnly(t *testing.T) {
 	if len(f.p.widgets) != 1 || f.p.widgets[0].ID != widgetID {
 		t.Errorf("widgets: %+v, want the new one", f.p.widgets)
 	}
-	f.knowsSceneVersion(shown)
+	f.knowsVersion(shown)
 }
 
 func TestWidgetEvent_SceneNotListed_IsIgnored(t *testing.T) {
@@ -146,7 +146,7 @@ func TestWidgetEvent_LastWidgetOfSceneNotShownDeleted_ItsPropertiesSaveWithoutCo
 	f, _, _, other, typeID := twoScenes(t)
 	widgetID := createWidget(t, f.api, other, typeID, "w")
 	f.event(apiv0.Event{Type: apiv0.EventWidgetCreated, ID: widgetID.String(), SceneID: other.String()})
-	if _, err := f.api.DeleteWidget(context.Background(), other, widgetID); err != nil {
+	if _, err := f.api.DeleteWidget(context.Background(), other, widgetID, 0); err != nil {
 		t.Fatalf("delete widget: %v", err)
 	}
 
@@ -225,7 +225,7 @@ func TestWidgetEvent_SceneNotListedYet_ItsVersionIsKept(t *testing.T) {
 	added := createScene(t, f.api, "C")
 	listed, mark := append(slices.Clone(f.p.scenes), f.scene(added)), f.p.markScenes() // a list read now, answered late
 	widgetID := createWidget(t, f.api, added, typeID, "w")
-	if _, err := f.api.DeleteWidget(context.Background(), added, widgetID); err != nil {
+	if _, err := f.api.DeleteWidget(context.Background(), added, widgetID, 0); err != nil {
 		t.Fatalf("delete widget: %v", err)
 	}
 
@@ -315,7 +315,7 @@ func TestWidgetEvents_InSeveralScenesNotShown_RereadTheListOnce(t *testing.T) {
 		t.Errorf("requests: %v, want %v", got, want)
 	}
 	for _, sceneID := range more {
-		f.knowsSceneVersion(sceneID)
+		f.knowsVersion(sceneID)
 	}
 }
 

@@ -1,5 +1,21 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.64] - 2026-11-05
+
+### Added
+
+- **Draft: один агрегат на область, DraftChange и Draft проекта** (задача 38, часть 1; ADR 0016, ADR 0017)
+  - Схема: `public/20261105000001_drop_project_discard` убирает `projects.discarding`; `engineering/20261105000001_drafts` создаёт `engineering.drafts` (одна строка на Project или Library, две nullable FK с `ON DELETE CASCADE`, CHECK «ровно одна область», `version`, `lock_version`, поля держателя замка, `stack_position`) и `engineering.draft_changes` (`draft_id → drafts ON DELETE CASCADE`, `seq`, `description`, `before`/`after` `jsonb`), наполняет `drafts` существующими Project и Library, удаляет `engineering.edit_locks` и колонки `version` у Tag, Scene, Device, Environment, пары и Library Pin
+  - Домен `domain/draft`: `Draft` (`Scope`, одна `Version` содержимого, встроенный EditLock с отдельным `lock_version`, `StackPosition`, `Replace`, `Purge`), `draft.Session` — одна запись в транзакции Draft с загрузчиком только нужных сущностей (`CreateTag`, `DeleteTag` со снятием привязок, Scenes, Widgets с проверкой закреплённого релиза, Devices, Environments, пары, `PutLibraryPin`/`DeleteLibraryPin` с `ImpactOf` и чисткой сломанных привязок в том же изменении), `draft.Snapshot` — полное состояние строки до/после; внутренний кодек `postgres/draftchange` со своей версией формата
+  - Репозиторий `draftRepositoryPostgres`: одна транзакция на запись (строка Draft `FOR UPDATE`, гейт EditLock, CAS по `drafts.version`, выборочная загрузка, запись затронутых строк и outbox, одна строка `draft_changes`, подъём Version и позиции стека, обрезка redo-хвоста и глубины 100); `Replace` (Discard), `Purge` (удалённый Project), `ClearStack` (после Deploy/Release); он же — хранилище EditLock (`Find`, `Create`, `Save` по `lock_version`, `FindAllHeld`, `Touch`)
+  - Записи содержимого Draft проекта переведены на Draft: `TagService`, `SceneService`, `DeviceService`, `EnvironmentService`, `LibraryPinService` принимают Version Draft (create-тела и DELETE `?version=`), устаревшая — 409 `draft.ErrDraftConflict`; DTO содержимого несут одну и ту же Version Draft; `GET …/projects/{id}/draft` отдаёт её состояние
+  - Discard проекта синхронный: читает текущую Revision и одной транзакцией Draft заменяет содержимое, чистит стек и отвечает 200 `{version}`; `StartDiscard`/`FinishDiscard`, `project_discarding`, `project_discard_started`, `SaveDiscarding`, `NewDiscardProjectPolicy` и политика удаления привязок удалены; `NewUnbindDeletedTagPolicy` и `NewWidgetReconciliationPolicy` удалены — их работу делает DraftChange; cleanup проекта пишет `Purge` как `editlock.System`
+  - Deploy после успешной Revision чистит стек отдельной транзакцией; `ProjectFileBuilder` не изменился
+  - Контракт `api/v0` **0.15** (MINOR): `version` в create-телах Tag/Scene/Device/Environment/Widget, `scene_version` виджета переименован в `version`, `?version=` у DELETE, `DiscardProjectResponse` — `{version}`, `EventProjectDiscardStarted` удалён, `GET …/draft`; `make schemas`
+  - Bruno: `GET …/draft`, версии в телах create/update по порядку `seq`, `?version=` у DELETE, Discard 200 `{version}`; apiclient заполняет Version из `GET …/draft`, когда клиент её не указал, growctl и UI читают её явно
+  - UI Project-режима: одна Version Draft вместо версий Scene (обновляется из ответов, монотонно), запросы учтённой версии, Discard 200; кнопки undo/redo — часть 38_4
+  - Тесты: домен Draft и кодек, репозиторий Draft (CAS, `draft_changes`, гейт замка, сохранение виджетов при правке Scene, CASCADE, Purge), сервисы (Version Draft, Discard одной транзакцией, Deploy чистит стек, cleanup как System), REST (version в create/delete, 409, Discard 200, `GET …/draft`, отсутствие `discarding`), seed-данные и миграции
+
 ## [0.0.63] - 2026-11-05
 
 ### Added

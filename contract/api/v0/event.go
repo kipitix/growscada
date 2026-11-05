@@ -69,9 +69,6 @@ const (
 	EventProjectCreated     = "project_created"
 	EventProjectUpdated     = "project_updated"
 	EventProjectDeleted     = "project_deleted"
-	// EventProjectDiscardStarted announces that the Draft is being reset to
-	// the running Revision; the Draft is read-only until it is done.
-	EventProjectDiscardStarted = "project_discard_started"
 
 	EventLibraryCreated        = "library_created"
 	EventLibraryUpdated        = "library_updated"
@@ -111,7 +108,7 @@ func EventTypes() []string {
 		EventWidgetCreated, EventWidgetUpdated, EventWidgetDeleted,
 		EventSceneCreated, EventSceneUpdated, EventSceneDeleted,
 		EventClientConnected, EventClientDisconnected,
-		EventProjectCreated, EventProjectUpdated, EventProjectDeleted, EventProjectDiscardStarted,
+		EventProjectCreated, EventProjectUpdated, EventProjectDeleted,
 		EventLibraryCreated, EventLibraryUpdated, EventLibraryDeleted, EventLibraryDiscardStarted, EventLibraryReleased,
 		EventLibraryPinCreated, EventLibraryPinUpdated, EventLibraryPinDeleted,
 		EventDeviceCreated, EventDeviceUpdated, EventDeviceDeleted,

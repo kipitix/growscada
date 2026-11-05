@@ -49,10 +49,7 @@ type aggregateStore[T any] struct {
 	library *id.ID[library.Library]
 	// lock, if set, runs first in the transaction of every write: it locks
 	// and checks what the write rests on (e.g. the row of its Library).
-	lock func(ctx context.Context, tx *sql.Tx) error
-	// discard marks the store of a Project's Draft opened by a Discard: its
-	// writes are made only while one is under way (lockProject).
-	discard  bool
+	lock     func(ctx context.Context, tx *sql.Tx) error
 	notFound error
 	conflict error
 	onCommit func()
@@ -114,11 +111,6 @@ func (s aggregateStore[T]) save(ctx context.Context, anID id.ID[T], current vers
 			}
 		}
 		if current == version.Initial[T]() {
-			if s.project != nil {
-				if err := s.lockLiveProject(ctx, tx); err != nil {
-					return err
-				}
-			}
 			return w.insert(tx, next)
 		}
 		found, err := w.update(tx, current, next)
@@ -131,63 +123,6 @@ func (s aggregateStore[T]) save(ctx context.Context, anID id.ID[T], current vers
 		return nil
 	})
 	return next, err
-}
-
-// withProjectLock returns the store of a Project's content whose every write
-// first locks the Project's row and checks it (lockProject).
-func (s aggregateStore[T]) withProjectLock() aggregateStore[T] {
-	s.lock = s.lockProject
-	return s
-}
-
-// errNotDiscardingProject refuses a write of a Discard's repository once no
-// Discard of its Project is under way.
-var errNotDiscardingProject = errors.New("project is not being discarded")
-
-// lockLiveProject locks the row of the store's Project for share in tx, the
-// transaction of a creation of its content; a Project marked deleted (or
-// removed) is not found. Marking the Project deleted locks its row too, so it
-// waits for the creation, or the creation for it: no content is created in a
-// Project once its cleanup may run (ADR 0006).
-func (s aggregateStore[T]) lockLiveProject(ctx context.Context, tx *sql.Tx) error {
-	var deleted bool
-	err := tx.QueryRowContext(ctx,
-		`SELECT deleted_at IS NOT NULL FROM projects WHERE id = $1 FOR SHARE`, s.project.UUID(),
-	).Scan(&deleted)
-	if errors.Is(err, sql.ErrNoRows) || (err == nil && deleted) {
-		return id.NotFound(project.ErrProjectNotFound, *s.project)
-	}
-	if err != nil {
-		return fmt.Errorf("cannot lock project %s: %w", *s.project, err)
-	}
-	return nil
-}
-
-// lockProject locks the row of the store's Project for share in tx, the
-// transaction of a write of its content, and checks the Discard mark: a write
-// of the Draft is refused while one is under way, and a Discard's own is
-// refused once none is (task 35, Q10). A Project marked deleted takes no
-// write of the Draft — lockLiveProject refuses a creation, and the cleanup's
-// removals are its business — but the mark of a Discard goes with it: nothing
-// will clear it, so it no longer keeps the cleanup out.
-func (s aggregateStore[T]) lockProject(ctx context.Context, tx *sql.Tx) error {
-	var deleted, discarding bool
-	err := tx.QueryRowContext(ctx,
-		`SELECT deleted_at IS NOT NULL, discarding FROM projects WHERE id = $1 FOR SHARE`, s.project.UUID(),
-	).Scan(&deleted, &discarding)
-	if errors.Is(err, sql.ErrNoRows) {
-		return id.NotFound(project.ErrProjectNotFound, *s.project)
-	}
-	if err != nil {
-		return fmt.Errorf("cannot lock project %s: %w", *s.project, err)
-	}
-	switch {
-	case discarding && !deleted && !s.discard:
-		return fmt.Errorf("%w: %s", project.ErrProjectDiscarding, *s.project)
-	case !discarding && s.discard:
-		return fmt.Errorf("%w: %s", errNotDiscardingProject, *s.project)
-	}
-	return nil
 }
 
 // delete removes an aggregate read at current (CAS), with the events it
@@ -245,12 +180,7 @@ func (s aggregateStore[T]) inTx(ctx context.Context, events []event.Event, write
 	// The Draft's EditLock gates every write of its content (ADR 0015): the
 	// check reads the lock row in this transaction, so a takeover waits for
 	// this write and this write waits for a takeover.
-	switch {
-	case s.project != nil:
-		if err := checkProjectEditLock(ctx, tx, *s.project); err != nil {
-			return err
-		}
-	case s.library != nil:
+	if s.library != nil {
 		if err := checkLibraryEditLock(ctx, tx, *s.library); err != nil {
 			return err
 		}

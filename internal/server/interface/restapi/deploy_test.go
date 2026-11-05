@@ -212,12 +212,6 @@ func TestRevisions_OfADeletedProject_Are404(t *testing.T) {
 
 func TestDeploy_Discard(t *testing.T) {
 	cleanProjectsRest(t)
-	t.Cleanup(func() {
-		if _, err := testDB().ExecContext(editlock.System(context.Background()),
-			"UPDATE projects SET discarding = FALSE WHERE id = '"+mainProject.String()+"'"); err != nil {
-			t.Errorf("clear the Discard mark: %v", err)
-		}
-	})
 	router := newServices().router()
 
 	if rec := serve(router, http.MethodPost, mainPath+"/discard", nil); rec.Code != http.StatusConflict {
@@ -228,11 +222,11 @@ func TestDeploy_Discard(t *testing.T) {
 	}
 
 	rec := serve(router, http.MethodPost, mainPath+"/discard", nil)
-	if rec.Code != http.StatusAccepted {
+	if rec.Code != http.StatusOK {
 		t.Fatalf("POST discard: %d %s", rec.Code, rec.Body)
 	}
 	discarded := decodeBody[apiv0.DiscardProjectResponse](t, rec)
-	if !discarded.Discarding {
-		t.Errorf("POST discard: %+v", discarded)
+	if discarded.Version == 0 {
+		t.Errorf("POST discard states no draft version: %+v", discarded)
 	}
 }

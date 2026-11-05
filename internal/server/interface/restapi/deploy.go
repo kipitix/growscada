@@ -122,9 +122,10 @@ func (h DeployHandlers) PostDiscard(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if _, err := h.discard.Discard(r.Context(), projectID); err != nil {
+	state, err := h.discard.Discard(r.Context(), projectID)
+	if err != nil {
 		sendError(w, r, err)
 		return
 	}
-	sendJSONResponse(w, http.StatusAccepted, apiv0.DiscardProjectResponse{Discarding: true})
+	sendJSONResponse(w, http.StatusOK, apiv0.DiscardProjectResponse{Version: state.Version})
 }

@@ -1,14 +1,12 @@
 package device_test
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
-	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 func TestCreateEnvironmentDevice_FieldsAndEvent(t *testing.T) {
@@ -20,9 +18,6 @@ func TestCreateEnvironmentDevice_FieldsAndEvent(t *testing.T) {
 	if pair.ProjectID() != testProject || pair.EnvironmentID() != environmentID ||
 		pair.DeviceID() != deviceID || pair.Params().String() != `{"address":"10.0.0.1"}` {
 		t.Fatalf("unexpected pair %s", pair)
-	}
-	if pair.Version() != version.Initial[device.EnvironmentDevice]() {
-		t.Errorf("Version = %s, want the initial one", pair.Version())
 	}
 
 	events := pair.PendingEvents()
@@ -44,13 +39,9 @@ func TestEnvironmentDevice_UpdateParams(t *testing.T) {
 	environmentID := id.NewID[device.Environment]()
 	deviceID := id.NewID[device.Device]()
 	stored := device.ReconstituteEnvironmentDevice(testProject,
-		environmentID, deviceID, params(t, `{"port":1}`), version.Committed[device.EnvironmentDevice]())
+		environmentID, deviceID, params(t, `{"port":1}`))
 
-	if _, err := stored.UpdateParams(version.Initial[device.EnvironmentDevice](), params(t, `{"port":2}`)); !errors.Is(err, device.ErrEnvironmentDeviceConflict) {
-		t.Errorf("stale update: %v, want ErrEnvironmentDeviceConflict", err)
-	}
-
-	updated, err := stored.UpdateParams(stored.Version(), params(t, `{"port":2}`))
+	updated, err := stored.UpdateParams(params(t, `{"port":2}`))
 	if err != nil {
 		t.Fatalf("UpdateParams: %v", err)
 	}
@@ -76,8 +67,7 @@ func TestEnvironmentDevice_Delete(t *testing.T) {
 	environmentID := id.NewID[device.Environment]()
 	deviceID := id.NewID[device.Device]()
 	stored := device.ReconstituteEnvironmentDevice(testProject,
-		environmentID, deviceID, device.EmptyEnvironmentDeviceParams(),
-		version.Committed[device.EnvironmentDevice]())
+		environmentID, deviceID, device.EmptyEnvironmentDeviceParams())
 
 	events := stored.Delete().PendingEvents()
 	if len(events) != 1 {

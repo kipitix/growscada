@@ -23,10 +23,6 @@ var (
 	// ErrProjectNotEmpty is returned by Delete while Tags or Scenes still
 	// belong to the project.
 	ErrProjectNotEmpty = errors.New("project still has content")
-	// ErrProjectDiscarding is returned by StartDiscard while a Discard is
-	// already under way, and by a write of the Project's Draft while one is:
-	// the Draft is read-only until the mark is cleared.
-	ErrProjectDiscarding = errors.New("project is being discarded")
 )
 
 // ProjectRepository - repository interface for storing and managing projects.
@@ -47,11 +43,6 @@ type ProjectRepository interface {
 	// ErrProjectNameTaken if another live project of its Organization has the
 	// name, or an error on failure.
 	Save(context.Context, Project) (Project, error)
-
-	// SaveDiscarding is Save for a Project marked by StartDiscard: it checks,
-	// in the same transaction, that the request holds the Project's EditLock
-	// (ErrEditLockNotHeld or ErrNoClient otherwise).
-	SaveDiscarding(context.Context, Project) (Project, error)
 
 	// FindByID returns the live project with the given ID.
 	// Returns ErrProjectNotFound if there is none.

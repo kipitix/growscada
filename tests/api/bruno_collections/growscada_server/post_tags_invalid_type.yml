@@ -14,7 +14,8 @@ http:
     data: |-
       {
         "name": "invalid_type",
-        "type": "float"
+        "type": "float",
+        "version": 3
       }
   auth: inherit
 

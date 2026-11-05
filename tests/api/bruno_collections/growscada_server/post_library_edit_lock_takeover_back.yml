@@ -14,7 +14,7 @@ http:
     data: |-
       {
         "name": "bruno",
-        "version": 2
+        "version": 3
       }
   auth: inherit
 
@@ -35,7 +35,7 @@ runtime:
       value: '"{{CLIENT_KEY}}"'
     - expression: 'res.body.version'
       operator: eq
-      value: '3'
+      value: '4'
 
 settings:
   encodeUrl: true

@@ -69,12 +69,22 @@ type DeployResponse struct {
 	DeployedAt string `json:"deployed_at"`
 }
 
-// DiscardProjectResponse is the answer of POST /projects/{id}/discard: the
-// Project is being reset to the Revision it runs, its Draft read-only until
-// the Discard ends.
-type DiscardProjectResponse struct {
-	Discarding bool `json:"discarding"`
+// DraftPath is the path, under a Project's path, of its Draft's state: the
+// Version every content DTO of the Project carries and every content write
+// states (ADR 0016).
+const DraftPath = "/draft"
+
+// DraftStateResponse is the state of a Project's Draft: its Version. GET
+// /projects/{id}/draft answers it, and POST /projects/{id}/discard answers it
+// after the reset to the Revision the Project runs.
+type DraftStateResponse struct {
+	Version int `json:"version"`
 }
+
+// DiscardProjectResponse is the answer of POST /projects/{id}/discard: the
+// Draft of the Project was reset to the Revision it runs in one transaction
+// (ADR 0016).
+type DiscardProjectResponse = DraftStateResponse
 
 // TagStateResponse is one Tag's state in the snapshot: its value, Quality and
 // the seq of its latest write.

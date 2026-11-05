@@ -6,31 +6,33 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
-	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 // SceneService is the service interface for working with the scenes of a
-// project and their widgets. Widget, as an entity of the Scene aggregate, has
-// no service of its own: every widget operation is reached through a scene.
-// Every method takes the project first; a project that does not exist (or is
+// project and their widgets. Widget, as an entity of the Scene, has no
+// service of its own: every widget operation is reached through a scene.
+// Every write states the Version of the Project's Draft (ADR 0016). Every
+// method takes the project first; a project that does not exist (or is
 // deleted) is an error wrapping project.ErrProjectNotFound.
 type SceneService interface {
 	FindAllScenes(ctx context.Context, projectID uuid.UUID) ([]appdto.Scene, error)
 	FindSceneByID(ctx context.Context, projectID, sceneID uuid.UUID) (appdto.Scene, error)
-	CreateScene(ctx context.Context, projectID uuid.UUID, input appdto.SceneInput) (appdto.Scene, error)
+	CreateScene(ctx context.Context, projectID uuid.UUID, version int, input appdto.SceneInput) (appdto.Scene, error)
 	UpdateScene(ctx context.Context, projectID, sceneID uuid.UUID, version int, input appdto.SceneInput) (appdto.Scene, error)
-	DeleteSceneByID(ctx context.Context, projectID, sceneID uuid.UUID) (appdto.Scene, error)
+	DeleteSceneByID(ctx context.Context, projectID, sceneID uuid.UUID, version int) (appdto.Scene, error)
 
 	FindWidgetsBySceneID(ctx context.Context, projectID, sceneID uuid.UUID) ([]appdto.Widget, error)
 	FindWidgetByID(ctx context.Context, projectID, sceneID, widgetID uuid.UUID) (appdto.Widget, error)
-	CreateWidget(ctx context.Context, projectID, sceneID uuid.UUID, sceneVersion int, input appdto.WidgetInput) (appdto.Widget, error)
-	UpdateWidget(ctx context.Context, projectID, sceneID, widgetID uuid.UUID, sceneVersion int, input appdto.WidgetInput) (appdto.Widget, error)
-	DeleteWidgetByID(ctx context.Context, projectID, sceneID, widgetID uuid.UUID) (appdto.Widget, error)
+	CreateWidget(ctx context.Context, projectID, sceneID uuid.UUID, version int, input appdto.WidgetInput) (appdto.Widget, error)
+	UpdateWidget(ctx context.Context, projectID, sceneID, widgetID uuid.UUID, version int, input appdto.WidgetInput) (appdto.Widget, error)
+	DeleteWidgetByID(ctx context.Context, projectID, sceneID, widgetID uuid.UUID, version int) (appdto.Widget, error)
 }
 
 type sceneServiceImpl struct {
@@ -40,13 +42,14 @@ type sceneServiceImpl struct {
 var _ SceneService = (*sceneServiceImpl)(nil)
 
 // NewSceneService returns the scene service. The events of its changes are
-// recorded by the Scene and saved with it (ADR 0008). A Widget's WidgetType
-// is the one a Library Release its Project pins holds (ADR 0007).
+// recorded by the Scene and saved with its Draft (ADR 0008, ADR 0016). A
+// Widget's WidgetType is the one a Library Release its Project pins holds
+// (ADR 0007).
 func NewSceneService(aContent ProjectContent) SceneService {
 	return &sceneServiceImpl{content: aContent}
 }
 
-// scenes returns the scene repository of the live project rawProjectID.
+// scenes returns the scene read repository of the live project rawProjectID.
 func (s sceneServiceImpl) scenes(ctx context.Context, rawProjectID uuid.UUID) (scene.SceneRepository, error) {
 	_, scope, err := s.content.open(ctx, rawProjectID)
 	if err != nil {
@@ -64,33 +67,6 @@ func loadScene(ctx context.Context, repo scene.SceneRepository, sceneID id.ID[sc
 	return found, nil
 }
 
-// loadWidgetType finds the WidgetType a widget from the caller names among
-// those of the releases scope's Project pins; a missing one is invalid
-// input.
-func loadWidgetType(ctx context.Context, scope ProjectScope, typeID id.ID[library.WidgetType]) (library.ReleasedWidgetType, error) {
-	wt, err := scope.LibraryPins().FindPinnedWidgetType(ctx, typeID)
-	if errors.Is(err, library.ErrWidgetTypeNotFound) {
-		return wt, fmt.Errorf("type_id: %w", invalidInput(err))
-	}
-	if err != nil {
-		return wt, fmt.Errorf("cannot find widget type: %w", err)
-	}
-	return wt, nil
-}
-
-// loadTagTypes reads, in one query, the TagTypes of the Tags with the given
-// IDs of scope's Project, through its tag repository: the Project of the
-// TagTypes is the one the repository read; a Tag that does not exist there
-// is left out, for the Scene to judge the binding to it. A Tag deleted after
-// it was read is unbound by policies (ADR 0010).
-func loadTagTypes(ctx context.Context, scope ProjectScope, tagIDs []id.ID[tag.Tag]) (scene.TagTypes, error) {
-	types, err := scope.Tags().FindTypesByIDs(ctx, tagIDs)
-	if err != nil {
-		return scene.TagTypes{}, fmt.Errorf("cannot read tag types: %w", err)
-	}
-	return scene.NewTagTypes(scope.ProjectID(), types), nil
-}
-
 // widgetChangeError marks a widget the Scene rejected as invalid input when
 // the rejection is about what the caller sent: the ports it binds and the
 // Tags it binds them to.
@@ -103,9 +79,10 @@ func widgetChangeError(err error) error {
 	return err
 }
 
-// widgetSaveError marks a failed save of a scene with a new or changed widget
-// as invalid input when the widget's type was unpinned after loadWidgetType
-// found it: the save checks the pin in its transaction (ADR 0012).
+// widgetSaveError marks a failed write of a scene with a new or changed
+// widget as invalid input when the widget's type is not in a release the
+// Project pins: the Draft's transaction checks the pin while it writes
+// (ADR 0012).
 func widgetSaveError(err error) error {
 	if errors.Is(err, library.ErrWidgetTypeNotFound) {
 		return fmt.Errorf("cannot save scene: type_id: %w", invalidInput(err))
@@ -128,7 +105,11 @@ func (s sceneServiceImpl) FindAllScenes(ctx context.Context, rawProjectID uuid.U
 			return nil, err
 		}
 	}
-	return appdto.NewSceneList(list), nil
+	version, err := s.content.Version(ctx, rawProjectID)
+	if err != nil {
+		return nil, err
+	}
+	return appdto.NewSceneList(list, version), nil
 }
 
 func (s sceneServiceImpl) FindSceneByID(ctx context.Context, rawProjectID, rawID uuid.UUID) (appdto.Scene, error) {
@@ -141,67 +122,65 @@ func (s sceneServiceImpl) FindSceneByID(ctx context.Context, rawProjectID, rawID
 	if err != nil {
 		return appdto.Scene{}, fmt.Errorf("error on find scene by id in repository: %w", err)
 	}
-	return appdto.NewScene(found), nil
-}
-
-// CreateScene creates a new scene in the project. A project deleted just
-// after it was read here is not found by the save.
-func (s sceneServiceImpl) CreateScene(ctx context.Context, rawProjectID uuid.UUID, input appdto.SceneInput) (appdto.Scene, error) {
-	projectID, scope, err := s.content.open(ctx, rawProjectID)
+	version, err := s.content.Version(ctx, rawProjectID)
 	if err != nil {
 		return appdto.Scene{}, err
 	}
-	repo := scope.Scenes()
-	newID := repo.NextID()
+	return appdto.NewScene(found, version), nil
+}
 
+// CreateScene creates a new scene in the project, stating the Version of the
+// Draft the client saw.
+func (s sceneServiceImpl) CreateScene(ctx context.Context, rawProjectID uuid.UUID, rawVersion int, input appdto.SceneInput) (appdto.Scene, error) {
+	projectID, _, err := s.content.open(ctx, rawProjectID)
+	if err != nil {
+		return appdto.Scene{}, err
+	}
+	expected, err := draftVersion(rawVersion)
+	if err != nil {
+		return appdto.Scene{}, err
+	}
 	name, size, background, err := parseSceneFields(input)
 	if err != nil {
 		return appdto.Scene{}, fmt.Errorf("cannot create scene: %w", invalidInput(err))
 	}
-	newScene := scene.CreateScene(newID, projectID, name, size, background)
-
-	saved, err := repo.Save(ctx, newScene)
+	newScene := scene.CreateScene(id.NewID[scene.Scene](), projectID, name, size, background)
+	result, err := s.content.Drafts().Update(ctx, s.content.ScopeOf(projectID), expected, "Create scene "+name.String(),
+		func(session *draft.Session) error {
+			session.CreateScene(ctx, newScene)
+			return nil
+		})
 	if err != nil {
 		return appdto.Scene{}, fmt.Errorf("cannot save scene: %w", err)
 	}
-
-	return appdto.NewScene(saved), nil
+	return appdto.NewScene(newScene, result.Version().Number()), nil
 }
 
-func (s sceneServiceImpl) UpdateScene(ctx context.Context, rawProjectID, rawID uuid.UUID, rawExpectedVersion int, input appdto.SceneInput) (appdto.Scene, error) {
-	repo, err := s.scenes(ctx, rawProjectID)
+func (s sceneServiceImpl) UpdateScene(ctx context.Context, rawProjectID, rawID uuid.UUID, rawVersion int, input appdto.SceneInput) (appdto.Scene, error) {
+	projectID, _, err := s.content.open(ctx, rawProjectID)
 	if err != nil {
 		return appdto.Scene{}, err
 	}
-	sceneID := id.NewID(id.IDWithUUID[scene.Scene](rawID))
-
-	found, err := loadScene(ctx, repo, sceneID)
+	expected, err := draftVersion(rawVersion)
 	if err != nil {
 		return appdto.Scene{}, err
 	}
-
-	// A negative version is no version at all: the client's input, not a conflict.
-	expectedVersion, err := version.New(version.WithNumber[scene.Scene](rawExpectedVersion))
-	if err != nil {
-		return appdto.Scene{}, invalidInput(fmt.Errorf("version: %w", err))
-	}
-
 	name, size, background, err := parseSceneFields(input)
 	if err != nil {
 		return appdto.Scene{}, fmt.Errorf("cannot update scene: %w", invalidInput(err))
 	}
-
-	updated, err := found.Update(expectedVersion, name, size, background)
+	sceneID := id.NewID(id.IDWithUUID[scene.Scene](rawID))
+	var updated scene.Scene
+	result, err := s.content.Drafts().Update(ctx, s.content.ScopeOf(projectID), expected, "Update scene "+name.String(),
+		func(session *draft.Session) error {
+			var err error
+			updated, err = session.UpdateScene(ctx, sceneID, name, size, background)
+			return err
+		})
 	if err != nil {
 		return appdto.Scene{}, fmt.Errorf("cannot update scene: %w", err)
 	}
-
-	saved, err := repo.Save(ctx, updated)
-	if err != nil {
-		return appdto.Scene{}, fmt.Errorf("cannot save scene: %w", err)
-	}
-
-	return appdto.NewScene(saved), nil
+	return appdto.NewScene(updated, result.Version().Number()), nil
 }
 
 // parseSceneFields parses the scene's own fields from the client; each error
@@ -218,39 +197,29 @@ func parseSceneFields(input appdto.SceneInput) (scene.SceneName, scene.SceneSize
 	return name, size, scene.NewBackgroundHTML(input.BackgroundHTML), nil
 }
 
-// DeleteSceneByID deletes a scene together with all of its widgets (the
-// widgets are removed in the DB via ON DELETE CASCADE). The Scene records a
-// WidgetDeletedEvent for each widget it holds, and the delete's CAS makes
-// them the widgets the cascade removes: a widget added meanwhile makes the
-// delete lose the race, and the scene is reread with it (retryOnRace).
-func (s sceneServiceImpl) DeleteSceneByID(ctx context.Context, rawProjectID, rawID uuid.UUID) (appdto.Scene, error) {
-	repo, err := s.scenes(ctx, rawProjectID)
+// DeleteSceneByID deletes a scene together with all of its widgets, in one
+// DraftChange that records every Widget before it goes (ADR 0017).
+func (s sceneServiceImpl) DeleteSceneByID(ctx context.Context, rawProjectID, rawID uuid.UUID, rawVersion int) (appdto.Scene, error) {
+	projectID, _, err := s.content.open(ctx, rawProjectID)
 	if err != nil {
 		return appdto.Scene{}, err
 	}
-	deleted, err := deleteScene(ctx, repo, id.NewID(id.IDWithUUID[scene.Scene](rawID)))
+	expected, err := draftVersion(rawVersion)
 	if err != nil {
 		return appdto.Scene{}, err
 	}
-	return appdto.NewScene(deleted), nil
-}
-
-// deleteScene deletes the scene sceneID through repo and returns it as it
-// was read (see DeleteSceneByID).
-func deleteScene(ctx context.Context, repo scene.SceneRepository, sceneID id.ID[scene.Scene]) (scene.Scene, error) {
+	sceneID := id.NewID(id.IDWithUUID[scene.Scene](rawID))
 	var deleted scene.Scene
-	err := retryOnRace(scene.ErrSceneConflict, func() error {
-		found, err := loadScene(ctx, repo, sceneID)
-		if err != nil {
+	result, err := s.content.Drafts().Update(ctx, s.content.ScopeOf(projectID), expected, "Delete scene",
+		func(session *draft.Session) error {
+			var err error
+			deleted, err = session.DeleteScene(ctx, sceneID)
 			return err
-		}
-		if err := repo.Delete(ctx, found.Delete()); err != nil {
-			return fmt.Errorf("cannot delete scene: %w", err)
-		}
-		deleted = found
-		return nil
-	})
-	return deleted, err
+		})
+	if err != nil {
+		return appdto.Scene{}, fmt.Errorf("cannot delete scene: %w", err)
+	}
+	return appdto.NewScene(deleted, result.Version().Number()), nil
 }
 
 // FindWidgetsBySceneID returns the widgets of a scene. The UI reloads them
@@ -268,7 +237,11 @@ func (s sceneServiceImpl) FindWidgetsBySceneID(ctx context.Context, rawProjectID
 	if err != nil {
 		return nil, fmt.Errorf("error on find scene by id in repository: %w", err)
 	}
-	return appdto.NewWidgetList(sc.Widgets(), rawSceneID, sc.Version().Number()), nil
+	version, err := s.content.Version(ctx, rawProjectID)
+	if err != nil {
+		return nil, err
+	}
+	return appdto.NewWidgetList(sc.Widgets(), rawSceneID, version), nil
 }
 
 func (s sceneServiceImpl) FindWidgetByID(ctx context.Context, rawProjectID, rawSceneID, rawWidgetID uuid.UUID) (appdto.Widget, error) {
@@ -284,125 +257,62 @@ func (s sceneServiceImpl) FindWidgetByID(ctx context.Context, rawProjectID, rawS
 	if err != nil {
 		return appdto.Widget{}, fmt.Errorf("error on find widget by id: %w", err)
 	}
-	return appdto.NewWidget(w, rawSceneID, sc.Version().Number()), nil
-}
-
-func (s sceneServiceImpl) CreateWidget(ctx context.Context, rawProjectID, rawSceneID uuid.UUID, rawSceneVersion int, input appdto.WidgetInput) (appdto.Widget, error) {
-	_, scope, err := s.content.open(ctx, rawProjectID)
+	version, err := s.content.Version(ctx, rawProjectID)
 	if err != nil {
 		return appdto.Widget{}, err
 	}
-	repo := scope.Scenes()
+	return appdto.NewWidget(w, rawSceneID, version), nil
+}
+
+func (s sceneServiceImpl) CreateWidget(ctx context.Context, rawProjectID, rawSceneID uuid.UUID, rawVersion int, input appdto.WidgetInput) (appdto.Widget, error) {
+	projectID, _, err := s.content.open(ctx, rawProjectID)
+	if err != nil {
+		return appdto.Widget{}, err
+	}
+	expected, err := draftVersion(rawVersion)
+	if err != nil {
+		return appdto.Widget{}, err
+	}
+	newWidget, err := parseWidget(id.NewID[scene.Widget](), input)
+	if err != nil {
+		return appdto.Widget{}, fmt.Errorf("cannot create widget: %w", invalidInput(err))
+	}
 	sceneID := id.NewID(id.IDWithUUID[scene.Scene](rawSceneID))
-	newID := repo.NextWidgetID()
-
-	newWidget, expectedVersion, err := parseWidgetWrite(newID, rawSceneVersion, input)
+	result, err := s.content.Drafts().Update(ctx, s.content.ScopeOf(projectID), expected, "Create widget "+newWidget.Name().String(),
+		func(session *draft.Session) error {
+			_, err := session.AddWidget(ctx, sceneID, newWidget)
+			return err
+		})
 	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot create widget: %w", err)
+		return appdto.Widget{}, widgetSaveError(widgetChangeError(err))
 	}
-
-	sc, err := loadScene(ctx, repo, sceneID)
-	if err != nil {
-		return appdto.Widget{}, err
-	}
-	// A stale write is a conflict whatever type it names.
-	if err := sc.CheckVersion(expectedVersion); err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot create widget: %w", err)
-	}
-	wt, err := loadWidgetType(ctx, scope, newWidget.TypeID())
-	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot create widget: %w", err)
-	}
-	tagTypes, err := loadTagTypes(ctx, scope, scene.BoundTagIDs(newWidget))
-	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot create widget: %w", err)
-	}
-
-	changed, err := sc.AddWidget(expectedVersion, newWidget, wt, tagTypes)
-	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot create widget: %w", widgetChangeError(err))
-	}
-
-	saved, err := repo.Save(ctx, changed)
-	if err != nil {
-		return appdto.Widget{}, widgetSaveError(err)
-	}
-
-	return savedWidget(saved, newID, rawSceneID)
+	return appdto.NewWidget(newWidget, rawSceneID, result.Version().Number()), nil
 }
 
-func (s sceneServiceImpl) UpdateWidget(ctx context.Context, rawProjectID, rawSceneID, rawWidgetID uuid.UUID, rawSceneVersion int, input appdto.WidgetInput) (appdto.Widget, error) {
-	_, scope, err := s.content.open(ctx, rawProjectID)
+func (s sceneServiceImpl) UpdateWidget(ctx context.Context, rawProjectID, rawSceneID, rawWidgetID uuid.UUID, rawVersion int, input appdto.WidgetInput) (appdto.Widget, error) {
+	projectID, _, err := s.content.open(ctx, rawProjectID)
 	if err != nil {
 		return appdto.Widget{}, err
 	}
-	repo := scope.Scenes()
+	expected, err := draftVersion(rawVersion)
+	if err != nil {
+		return appdto.Widget{}, err
+	}
 	sceneID := id.NewID(id.IDWithUUID[scene.Scene](rawSceneID))
 	widgetID := id.NewID(id.IDWithUUID[scene.Widget](rawWidgetID))
-
-	updated, expectedVersion, err := parseWidgetWrite(widgetID, rawSceneVersion, input)
+	updated, err := parseWidget(widgetID, input)
 	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot update widget: %w", err)
+		return appdto.Widget{}, fmt.Errorf("cannot update widget: %w", invalidInput(err))
 	}
-
-	sc, err := loadScene(ctx, repo, sceneID)
+	result, err := s.content.Drafts().Update(ctx, s.content.ScopeOf(projectID), expected, "Update widget "+updated.Name().String(),
+		func(session *draft.Session) error {
+			_, err := session.UpdateWidget(ctx, sceneID, updated)
+			return err
+		})
 	if err != nil {
-		return appdto.Widget{}, err
+		return appdto.Widget{}, widgetSaveError(widgetChangeError(err))
 	}
-	// A stale write is a conflict, and the widget named in the URL is checked
-	// before the type named in the body: a missing widget is 404 whatever
-	// the body says.
-	if err := sc.CheckVersion(expectedVersion); err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot update widget: %w", err)
-	}
-	if _, err := sc.FindWidget(widgetID); err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot update widget: %w", err)
-	}
-	wt, err := loadWidgetType(ctx, scope, updated.TypeID())
-	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot update widget: %w", err)
-	}
-	tagTypes, err := loadTagTypes(ctx, scope, scene.BoundTagIDs(updated))
-	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot update widget: %w", err)
-	}
-
-	changed, err := sc.UpdateWidget(expectedVersion, updated, wt, tagTypes)
-	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("cannot update widget: %w", widgetChangeError(err))
-	}
-
-	saved, err := repo.Save(ctx, changed)
-	if err != nil {
-		return appdto.Widget{}, widgetSaveError(err)
-	}
-
-	return savedWidget(saved, widgetID, rawSceneID)
-}
-
-// savedWidget returns the widget as the repository stored it in saved, the
-// scene Save returned.
-func savedWidget(saved scene.Scene, widgetID id.ID[scene.Widget], rawSceneID uuid.UUID) (appdto.Widget, error) {
-	w, err := saved.FindWidget(widgetID)
-	if err != nil {
-		return appdto.Widget{}, fmt.Errorf("saved scene lacks widget %s: %w", widgetID, err)
-	}
-	return appdto.NewWidget(w, rawSceneID, saved.Version().Number()), nil
-}
-
-// parseWidgetWrite checks what CreateWidget and UpdateWidget receive from the
-// client: the widget's fields and the scene version the write expects, both
-// invalid input on failure.
-func parseWidgetWrite(widgetID id.ID[scene.Widget], rawSceneVersion int, input appdto.WidgetInput) (scene.Widget, version.Version[scene.Scene], error) {
-	w, err := parseWidget(widgetID, input)
-	if err != nil {
-		return nil, version.Version[scene.Scene]{}, invalidInput(err)
-	}
-	expectedVersion, err := version.New(version.WithNumber[scene.Scene](rawSceneVersion))
-	if err != nil {
-		return nil, version.Version[scene.Scene]{}, invalidInput(fmt.Errorf("scene_version: %w", err))
-	}
-	return w, expectedVersion, nil
+	return appdto.NewWidget(updated, rawSceneID, result.Version().Number()), nil
 }
 
 // parseWidget builds a widget from the client's fields; each error names the
@@ -437,39 +347,30 @@ func parseWidget(widgetID id.ID[scene.Widget], input appdto.WidgetInput) (scene.
 	), nil
 }
 
-// DeleteWidgetByID removes a widget from its scene. Like deleting any
-// aggregate it expects no scene version: a scene changed since it was read is
-// reread and the widget removed from it as it is now (retryOnRace).
-func (s sceneServiceImpl) DeleteWidgetByID(ctx context.Context, rawProjectID, rawSceneID, rawWidgetID uuid.UUID) (appdto.Widget, error) {
-	repo, err := s.scenes(ctx, rawProjectID)
+// DeleteWidgetByID removes a widget from its scene, stating the Version of
+// the Draft the client saw.
+func (s sceneServiceImpl) DeleteWidgetByID(ctx context.Context, rawProjectID, rawSceneID, rawWidgetID uuid.UUID, rawVersion int) (appdto.Widget, error) {
+	projectID, _, err := s.content.open(ctx, rawProjectID)
+	if err != nil {
+		return appdto.Widget{}, err
+	}
+	expected, err := draftVersion(rawVersion)
 	if err != nil {
 		return appdto.Widget{}, err
 	}
 	sceneID := id.NewID(id.IDWithUUID[scene.Scene](rawSceneID))
 	widgetID := id.NewID(id.IDWithUUID[scene.Widget](rawWidgetID))
-
 	var deleted scene.Widget
-	var saved scene.Scene
-	err = retryOnRace(scene.ErrSceneConflict, func() error {
-		sc, err := loadScene(ctx, repo, sceneID)
-		if err != nil {
+	result, err := s.content.Drafts().Update(ctx, s.content.ScopeOf(projectID), expected, "Delete widget",
+		func(session *draft.Session) error {
+			var err error
+			deleted, err = session.RemoveWidget(ctx, sceneID, widgetID)
 			return err
-		}
-		changed, w, err := sc.RemoveWidget(widgetID)
-		if err != nil {
-			return fmt.Errorf("cannot delete widget: %w", err)
-		}
-		if saved, err = repo.Save(ctx, changed); err != nil {
-			return fmt.Errorf("cannot save scene: %w", err)
-		}
-		deleted = w
-		return nil
-	})
+		})
 	if err != nil {
-		return appdto.Widget{}, err
+		return appdto.Widget{}, fmt.Errorf("cannot delete widget: %w", err)
 	}
-
-	return appdto.NewWidget(deleted, rawSceneID, saved.Version().Number()), nil
+	return appdto.NewWidget(deleted, rawSceneID, result.Version().Number()), nil
 }
 
 // dtoPortBindingsToDomain converts appdto.PortBinding slice to domain PortBinding slice.

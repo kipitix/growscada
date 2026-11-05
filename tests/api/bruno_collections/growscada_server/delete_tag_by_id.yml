@@ -5,14 +5,15 @@ info:
 
 http:
   method: DELETE
-  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/tags/{{TAG_ID}}
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/tags/{{TAG_ID}}?version=10
   headers:
     - name: X-GrowSCADA-Client
       value: "{{CLIENT_KEY}}"
   auth: inherit
 
 docs: |
-  The delete states no version and never returns `409 Conflict`: the tag is
+  The delete states the Version of the Draft in `?version=`: a stale one returns
+  `409 Conflict`, a Tag already gone `404`. The tag is
   deleted whatever value was written to it meanwhile. The response carries
   the tag as it was read just before the delete, with its last state; the
   state goes with it, so a value written after the delete is `404`.

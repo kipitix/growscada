@@ -12,7 +12,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
-	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 var (
@@ -109,22 +108,19 @@ func TestImpactOf_OrphanedAndBroken(t *testing.T) {
 func TestLibraryPin_SwitchAndDelete(t *testing.T) {
 	first, second := release(1), release(2)
 	pin := librarypin.CreateLibraryPin(testProject, first)
-	if pin.LibraryID() != testLibrary || pin.Release() != first.Number() || pin.Version() != version.Initial[librarypin.LibraryPin]() {
+	if pin.LibraryID() != testLibrary || pin.Release() != first.Number() {
 		t.Fatalf("unexpected pin %s", pin)
 	}
 	if ev, ok := pin.PendingEvents()[0].(librarypin.LibraryPinEvent); !ok || ev.Type() != event.EventTypeLibraryPinCreated || ev.ProjectID() != testProject || ev.LibraryID() != testLibrary {
 		t.Errorf("expected library_pin_created of the pin, got %v", pin.PendingEvents())
 	}
 
-	stored := librarypin.ReconstituteLibraryPin(testProject, testLibrary, first.Number(), version.Committed[librarypin.LibraryPin]())
-	if _, err := stored.Switch(version.Initial[librarypin.LibraryPin](), second); !errors.Is(err, librarypin.ErrLibraryPinConflict) {
-		t.Errorf("stale switch: expected ErrLibraryPinConflict, got %v", err)
-	}
+	stored := librarypin.ReconstituteLibraryPin(testProject, testLibrary, first.Number())
 	other := library.ReconstituteRelease(id.NewID[library.Library](), second.Number(), "", time.Now(), nil)
-	if _, err := stored.Switch(stored.Version(), other); err == nil {
+	if _, err := stored.Switch(other); err == nil {
 		t.Error("a release of another Library cannot be pinned in place")
 	}
-	switched, err := stored.Switch(stored.Version(), second)
+	switched, err := stored.Switch(second)
 	if err != nil || switched.Release() != second.Number() || stored.Release() != first.Number() {
 		t.Fatalf("Switch: %v, %s", err, switched)
 	}

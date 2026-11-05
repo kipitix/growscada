@@ -111,10 +111,10 @@ func main() {
 	releaseRepository := repositories.NewLibraryReleaseRepositoryPostgres(sqlDB, notifyDispatcher)
 	widgetTypeRepositories := repositories.NewWidgetTypeRepositories(sqlDB, notifyDispatcher)
 	// The repositories of a Project's content (Tags, Scenes, Library Pins) are opened per
-	// Project (ADR 0006)
+	// Project (ADR 0006) for reads; every write goes through the Drafts
+	// (ADR 0016), whose rows also carry the EditLocks (ADR 0015).
 	projectScopes := repositories.NewProjectScopes(sqlDB, notifyDispatcher)
-	// The EditLocks of the Drafts (ADR 0015): one editor per Draft
-	editLockRepository := repositories.NewEditLockRepositoryPostgres(sqlDB, notifyDispatcher)
+	draftRepository := repositories.NewDraftRepositoryPostgres(sqlDB, releaseRepository, notifyDispatcher)
 	// The one Organization the server runs with until Users exist
 	organizationID, err := repositories.FindSoleOrganization(context.Background(), sqlDB)
 	if err != nil {
@@ -142,12 +142,9 @@ func main() {
 	// Registry of the policies: changes spanning aggregates, run as jobs
 	// apart from event delivery (ADR 0008)
 	policyRunner := outbox.NewPolicyRunner(sqlDB, []application.Policy{
-		application.NewWidgetReconciliationPolicy(projectScopes),
 		application.NewLibraryCleanupPolicy(libraryRepository),
 		application.NewDiscardLibraryPolicy(libraryRepository, releaseRepository, widgetTypeRepositories),
-		application.NewUnbindDeletedTagPolicy(projectRepository, projectScopes),
-		application.NewProjectCleanupPolicy(projectRepository, projectScopes, runtimeNode),
-		application.NewDiscardProjectPolicy(projectRepository, projectScopes, releaseRepository, runtimeNode),
+		application.NewProjectCleanupPolicy(projectRepository, draftRepository, runtimeNode),
 	})
 	dispatcher.SetPolicyRunner(policyRunner)
 	dispatcherCtx, stopDispatcher := context.WithCancel(context.Background())
@@ -191,9 +188,9 @@ func main() {
 	// INTERFACE COMPONENTS
 	// API server
 	// Create services
-	projectContent := application.NewProjectContent(projectRepository, projectScopes, organizationID)
+	projectContent := application.NewProjectContent(projectRepository, projectScopes, draftRepository, organizationID)
 	libraryContent := application.NewLibraryContent(libraryRepository, organizationID)
-	editLockService := application.NewEditLockService(projectContent, libraryContent, editLockRepository)
+	editLockService := application.NewEditLockService(projectContent, libraryContent, draftRepository)
 	projectService := application.NewProjectService(projectRepository, organizationID)
 	tagService := application.NewTagService(projectContent, runtimeNode)
 	// Deploy and Discard (task 35): the Engineering node assembles the Draft's
@@ -213,6 +210,7 @@ func main() {
 		Scenes:       application.NewSceneService(projectContent),
 		Devices:      application.NewDeviceService(projectContent),
 		Environments: application.NewEnvironmentService(projectContent),
+		Draft:        application.NewDraftService(projectContent),
 		Deploy:       deployService,
 		Discard:      discardService,
 		Revisions:    revisionService,

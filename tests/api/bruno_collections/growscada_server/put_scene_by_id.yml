@@ -17,18 +17,18 @@ http:
         "width": 2560,
         "height": 1440,
         "background_html": "<div class=\"background pump-room updated\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"2560\" height=\"1440\"><rect width=\"100%\" height=\"100%\" fill=\"#0f3460\"/></svg></div>",
-        "version": 3
+        "version": 6
       }
   auth: inherit
 
 docs: |
-  `version` is the scene version the edit is based on. A version other than
-  the stored one returns `409 Conflict` (reload and retry); a negative one is
-  no version at all and returns `400 Bad Request` naming `version`.
+  `version` is the Version of the Project's Draft the edit is based on. A
+  version other than the current one returns `409 Conflict` (reload and
+  retry); a negative one is no version at all and returns `400 Bad Request`
+  naming `version`.
 
   The versions in this collection's bodies follow its run order (`seq`) on
-  the seed data: each Widget change raises its Scene's version (1 → post
-  widgets → 2 → put widget → 3 → put scene → 4).
+  the seed data.
 
 runtime:
   assertions:
@@ -39,7 +39,7 @@ runtime:
       operator: isDefined
     - expression: 'res.body.version'
       operator: eq
-      value: '4'
+      value: '7'
 
 settings:
   encodeUrl: true

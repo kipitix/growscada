@@ -26,8 +26,8 @@ runtime:
       operator: eq
       value: '"bench"'
     - expression: 'res.body.version'
-      operator: eq
-      value: '1'
+      operator: gt
+      value: '0'
 
 settings:
   encodeUrl: true

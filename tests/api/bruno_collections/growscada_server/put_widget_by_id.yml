@@ -23,14 +23,14 @@ http:
         "port_bindings": [
           { "port_name": "state", "tag_id": "{{BOOLEAN_TAG_ID}}" }
         ],
-        "scene_version": 2
+        "version": 5
       }
   auth: inherit
 
 docs: |
-  The versions in this collection's bodies follow its run order (`seq`) on
-  the seed data: each Widget change raises its Scene's version (1 → post
-  widgets → 2 → put widget → 3 → put scene → 4).
+  `version` is the Version of the Project's Draft (ADR 0016): every write of
+  the Draft's content states it and raises it by one, and the collection's
+  bodies follow its run order (`seq`) on the seed data.
 
 runtime:
   assertions:
@@ -39,9 +39,9 @@ runtime:
       value: '200'
     - expression: 'res.headers["growscada-schema-version"]'
       operator: isDefined
-    - expression: 'res.body.scene_version'
+    - expression: 'res.body.version'
       operator: eq
-      value: '3'
+      value: '6'
 
 settings:
   encodeUrl: true

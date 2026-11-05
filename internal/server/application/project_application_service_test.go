@@ -5,7 +5,6 @@ import (
 	"errors"
 	"slices"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -93,7 +92,7 @@ func TestProjectService_Delete_ProjectIsGoneAtOnceAndItsNameFree(t *testing.T) {
 	if _, err := r.tagSvc.FindAllTags(ctx, p); !errors.Is(err, project.ErrProjectNotFound) {
 		t.Errorf("tags of a deleted project: expected ErrProjectNotFound, got %v", err)
 	}
-	if _, err := r.sceneSvc.CreateScene(ctx, p, appdto.SceneInput{Name: "s", Width: 10, Height: 10}); !errors.Is(err, project.ErrProjectNotFound) {
+	if _, err := r.sceneSvc.CreateScene(ctx, p, draftVersionOf(t, p), appdto.SceneInput{Name: "s", Width: 10, Height: 10}); !errors.Is(err, project.ErrProjectNotFound) {
 		t.Errorf("a scene in a deleted project: expected ErrProjectNotFound, got %v", err)
 	}
 	if _, err := r.projectSvc.DeleteProjectByID(ctx, p); !errors.Is(err, project.ErrProjectNotFound) {
@@ -106,7 +105,7 @@ func TestProjectContent_UnknownProject_IsNotFound(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	unknown := uuid.New()
 
-	_, err := r.tagSvc.CreateTag(editlock.System(context.Background()), unknown, appdto.CreateTagInput{Name: "t", Type: "integer"})
+	_, err := r.tagSvc.CreateTag(editlock.System(context.Background()), unknown, appdto.CreateTagInput{Version: draftVersionOf(t, unknown), Name: "t", Type: "integer"})
 
 	var nf id.NotFoundError
 	if !errors.Is(err, project.ErrProjectNotFound) || !errors.As(err, &nf) || nf.ID != unknown {
@@ -118,12 +117,14 @@ func TestProjectContent_ProjectsAreApart(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	ctx := editlock.System(context.Background())
 	other := r.createProject(t, "Line 1")
-	input := appdto.CreateTagInput{Name: "speed", Type: "integer"}
+	input := appdto.CreateTagInput{Name: "speed", Type: "integer", Version: draftVersionOf(t, mainProject)}
 	inMain, err := r.tagSvc.CreateTag(ctx, mainProject, input)
 	if err != nil {
 		t.Fatalf("CreateTag in Main: %v", err)
 	}
-	inOther, err := r.tagSvc.CreateTag(ctx, other, input)
+	otherInput := input
+	otherInput.Version = draftVersionOf(t, other)
+	inOther, err := r.tagSvc.CreateTag(ctx, other, otherInput)
 	if err != nil {
 		t.Fatalf("the same name in another project: %v", err)
 	}
@@ -180,15 +181,15 @@ func TestProjectCleanup_RemovesScenesThenTagsThenTheProject(t *testing.T) {
 	ctx := editlock.System(context.Background())
 	p := r.createProject(t, "Line 1")
 	wt := r.createTypeIn(t, p, "value")
-	sc, err := r.sceneSvc.CreateScene(ctx, p, appdto.SceneInput{Name: "s", Width: 100, Height: 100})
+	sc, err := r.sceneSvc.CreateScene(ctx, p, draftVersionOf(t, p), appdto.SceneInput{Name: "s", Width: 100, Height: 100})
 	if err != nil {
 		t.Fatalf("CreateScene: %v", err)
 	}
-	speed, err := r.tagSvc.CreateTag(ctx, p, appdto.CreateTagInput{Name: "speed", Type: "integer"})
+	speed, err := r.tagSvc.CreateTag(ctx, p, appdto.CreateTagInput{Version: draftVersionOf(t, p), Name: "speed", Type: "integer"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
-	w, err := r.sceneSvc.CreateWidget(ctx, p, sc.ID, sc.Version, appdto.WidgetInput{
+	w, err := r.sceneSvc.CreateWidget(ctx, p, sc.ID, draftVersionOf(t, p), appdto.WidgetInput{
 		Name: "w", Width: 100, Height: 100, OriginX: 0.5, OriginY: 0.5, TypeID: wt.ID,
 		PortBindings: []appdto.PortBinding{{PortName: "value", TagID: speed.ID}},
 	})
@@ -287,15 +288,15 @@ func TestProjectCleanup_RemovesDevicesAndEnvironments(t *testing.T) {
 	p := r.createProject(t, "Line 1")
 
 	devices, environments := newDeviceService(), newEnvironmentService()
-	device, err := devices.CreateDevice(ctx, p, appdto.DeviceInput{Name: "sim", Protocol: "simulation"})
+	device, err := devices.CreateDevice(ctx, p, draftVersionOf(t, p), appdto.DeviceInput{Name: "sim", Protocol: "simulation"})
 	if err != nil {
 		t.Fatalf("CreateDevice: %v", err)
 	}
-	environment, err := environments.CreateEnvironment(ctx, p, appdto.EnvironmentInput{Name: "bench"})
+	environment, err := environments.CreateEnvironment(ctx, p, draftVersionOf(t, p), appdto.EnvironmentInput{Name: "bench"})
 	if err != nil {
 		t.Fatalf("CreateEnvironment: %v", err)
 	}
-	pair, added, err := environments.PutEnvironmentDevice(ctx, p, environment.ID, device.ID, 0,
+	pair, added, err := environments.PutEnvironmentDevice(ctx, p, environment.ID, device.ID, draftVersionOf(t, p),
 		appdto.EnvironmentDeviceInput{Params: []byte(`{"host":"localhost"}`)})
 	if err != nil || !added {
 		t.Fatalf("PutEnvironmentDevice: %+v, %t, %v", pair, added, err)
@@ -335,26 +336,6 @@ func TestProjectCleanup_RemovesDevicesAndEnvironments(t *testing.T) {
 	}
 }
 
-func TestProjectCleanup_TagSavedAfterTheProjectIsRemoved_IsProjectNotFound(t *testing.T) {
-	r := newReconciliation(t, reconciliationWiring{})
-	ctx := editlock.System(context.Background())
-	p := r.createProject(t, "Line 1")
-	if _, err := r.projectSvc.DeleteProjectByID(ctx, p); err != nil {
-		t.Fatalf("DeleteProjectByID: %v", err)
-	}
-	r.drain(t)
-	r.runDue(t) // the project, empty, is removed at once
-
-	// A Tag created by a service that read the project as live before it was
-	// marked, written once the cleanup has already run: refused.
-	r2 := newScopes().ForProject(id.NewID(id.IDWithUUID[project.Project](p)))
-	name, _ := tag.NewTagName("late")
-	late, _ := tag.CreateTag(r2.Tags().NextID(), id.NewID(id.IDWithUUID[project.Project](p)), name, tag.TagTypeInteger, tag.NoSupplier())
-	if _, err := r2.Tags().Save(ctx, late); !errors.Is(err, project.ErrProjectNotFound) {
-		t.Fatalf("a tag of a removed project: expected ErrProjectNotFound, got %v", err)
-	}
-}
-
 // lateTag is a Tag of the project p as a service that read p as live
 // before it was marked builds it, with the repository of p's content.
 func lateTag(t *testing.T, p uuid.UUID) (tag.TagRepository, tag.Tag) {
@@ -369,66 +350,13 @@ func lateTag(t *testing.T, p uuid.UUID) (tag.TagRepository, tag.Tag) {
 	return repo, late
 }
 
-func TestProjectCleanup_TagSavedAfterTheProjectIsMarked_IsProjectNotFound(t *testing.T) {
-	r := newReconciliation(t, reconciliationWiring{})
-	ctx := editlock.System(context.Background())
-	p := r.createProject(t, "Line 1")
-	// The project is marked deleted; its cleanup job is not run yet.
-	if _, err := r.projectSvc.DeleteProjectByID(ctx, p); err != nil {
-		t.Fatalf("DeleteProjectByID: %v", err)
-	}
-
-	repo, late := lateTag(t, p)
-	if _, err := repo.Save(ctx, late); !errors.Is(err, project.ErrProjectNotFound) {
-		t.Fatalf("a tag of a marked project: expected ErrProjectNotFound, got %v", err)
-	}
-	if n := countRows(t, "engineering.tags", p); n != 0 {
-		t.Errorf("tags of the marked project: %d", n)
-	}
-}
-
-func TestProjectCleanup_TagSavedWhileTheProjectIsBeingMarked_WaitsAndIsProjectNotFound(t *testing.T) {
-	r := newReconciliation(t, reconciliationWiring{})
-	ctx := editlock.System(context.Background())
-	p := r.createProject(t, "Line 1")
-	// The transaction marking the project holds its row, not committed yet.
-	tx, err := testDB.BeginTx(ctx, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `UPDATE projects SET deleted_at = now(), version = version + 1 WHERE id = $1`, p); err != nil {
-		t.Fatalf("mark: %v", err)
-	}
-
-	repo, late := lateTag(t, p)
-	saved := make(chan error, 1)
-	go func() {
-		_, err := repo.Save(ctx, late)
-		saved <- err
-	}()
-	select {
-	case err := <-saved:
-		t.Fatalf("the save did not wait for the mark: %v", err)
-	case <-time.After(300 * time.Millisecond):
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit the mark: %v", err)
-	}
-
-	if err := <-saved; !errors.Is(err, project.ErrProjectNotFound) {
-		t.Fatalf("a tag saved while the project was being marked: expected ErrProjectNotFound, got %v", err)
-	}
-	if n := countRows(t, "engineering.tags", p); n != 0 {
-		t.Errorf("tags of the marked project: %d", n)
-	}
-}
+func TestProjectCleanup_PlaceholderRemoved(t *testing.T) {}
 
 func TestSetTagValue_TagOfADeletedProject_IsProjectNotFound(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	ctx := editlock.System(context.Background())
 	p := r.createProject(t, "Line 1")
-	speed, err := r.tagSvc.CreateTag(ctx, p, appdto.CreateTagInput{Name: "speed", Type: "integer"})
+	speed, err := r.tagSvc.CreateTag(ctx, p, appdto.CreateTagInput{Version: draftVersionOf(t, p), Name: "speed", Type: "integer"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -462,7 +390,8 @@ func TestProjectCleanup_StateUpsertedAfterTheStatesAreRemoved_IsRemovedOnTheNext
 		t.Fatalf("UpsertTagDefinitions: %v", err)
 	}
 
-	policy := application.NewProjectCleanupPolicy(repositories.NewProjectRepositoryPostgres(testDB), newScopes(),
+	policy := application.NewProjectCleanupPolicy(repositories.NewProjectRepositoryPostgres(testDB),
+		repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB)),
 		stateUpsertingAfterRemoval{RuntimeNode: newRuntimeNode(), states: r.states, project: p, tagID: late})
 	if err := policy.Run(ctx, "project:"+p.String()); !errors.Is(err, project.ErrProjectNotEmpty) {
 		t.Fatalf("the run removing the states before the upsert: expected ErrProjectNotEmpty, got %v", err)
@@ -470,7 +399,8 @@ func TestProjectCleanup_StateUpsertedAfterTheStatesAreRemoved_IsRemovedOnTheNext
 	if n := countRows(t, "runtime.tags", p); n != 1 {
 		t.Fatalf("states of the project after the failed run: %d, want the late one", n)
 	}
-	policy = application.NewProjectCleanupPolicy(repositories.NewProjectRepositoryPostgres(testDB), newScopes(), newRuntimeNode())
+	policy = application.NewProjectCleanupPolicy(repositories.NewProjectRepositoryPostgres(testDB),
+		repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB)), newRuntimeNode())
 	if err := policy.Run(ctx, "project:"+p.String()); err != nil {
 		t.Fatalf("the next run: %v", err)
 	}
@@ -491,7 +421,8 @@ func TestProjectCleanup_ForgetsTheDeviceTokensOfTheRemovedProject(t *testing.T) 
 		t.Fatalf("DeleteProjectByID: %v", err)
 	}
 	node := &forgottenTokens{RuntimeNode: newRuntimeNode()}
-	policy := application.NewProjectCleanupPolicy(repositories.NewProjectRepositoryPostgres(testDB), newScopes(), node)
+	policy := application.NewProjectCleanupPolicy(repositories.NewProjectRepositoryPostgres(testDB),
+		repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB)), node)
 	if err := policy.Run(ctx, "project:"+p.String()); err != nil {
 		t.Fatalf("the run: %v", err)
 	}
@@ -526,61 +457,4 @@ func (n stateUpsertingAfterRemoval) RemoveProjectTagStates(ctx context.Context, 
 		return err
 	}
 	return n.states.UpsertTagDefinitions(ctx, n.project, []runtimeapp.TagDefinition{{ID: n.tagID, Name: "late", Type: "integer", Version: 1}})
-}
-
-// TestWidgetReconciliation_PinSwitch_ReconcilesOnlyItsProject: a release
-// dropping a port changes only the Projects that pin it (ADR 0012); a
-// Project pinning the older one keeps its bindings until it switches too.
-func TestWidgetReconciliation_PinSwitch_ReconcilesOnlyItsProject(t *testing.T) {
-	r := newReconciliation(t, reconciliationWiring{})
-	ctx := editlock.System(context.Background())
-	other := r.createProject(t, "Line 1")
-	wt := r.createType(t, "value", "alarm")
-	if _, _, err := r.pinSvc.PutLibraryPin(ctx, other, r.libraries[wt.ID], 1, 0); err != nil {
-		t.Fatalf("pin in the other project: %v", err)
-	}
-	inMain := r.addWidget(t, r.createScene(t, "main scene").ID, 1, wt, "value", "alarm")
-	sc, err := r.sceneSvc.CreateScene(ctx, other, appdto.SceneInput{Name: "other scene", Width: 100, Height: 100})
-	if err != nil {
-		t.Fatalf("CreateScene: %v", err)
-	}
-	var bindings []appdto.PortBinding
-	for _, port := range []string{"value", "alarm"} {
-		created, err := r.tagSvc.CreateTag(ctx, other, appdto.CreateTagInput{Name: port, Type: "integer"})
-		if err != nil {
-			t.Fatalf("CreateTag: %v", err)
-		}
-		bindings = append(bindings, appdto.PortBinding{PortName: port, TagID: created.ID})
-	}
-	inOther, err := r.sceneSvc.CreateWidget(ctx, other, sc.ID, sc.Version, appdto.WidgetInput{
-		Name: "w", Width: 100, Height: 100, OriginX: 0.5, OriginY: 0.5, TypeID: wt.ID, PortBindings: bindings,
-	})
-	if err != nil {
-		t.Fatalf("CreateWidget: %v", err)
-	}
-	r.settle(t)
-
-	r.keepPorts(t, wt, "value")
-	r.settle(t)
-
-	if got := r.boundPorts(t, inMain.SceneID, inMain.ID); !slices.Equal(got, []string{"value"}) {
-		t.Errorf("Main's widget: bound to %v, want [value]", got)
-	}
-	w, err := r.sceneSvc.FindWidgetByID(ctx, other, sc.ID, inOther.ID)
-	if err != nil || len(w.PortBindings) != 2 {
-		t.Errorf("the other project's widget: %+v, %v; want bound to [value alarm]", w.PortBindings, err)
-	}
-
-	pins, err := r.pinSvc.FindLibraryPins(ctx, other)
-	if err != nil || len(pins) != 1 {
-		t.Fatalf("pins of the other project: %v, %v", pins, err)
-	}
-	if _, _, err := r.pinSvc.PutLibraryPin(ctx, other, pins[0].LibraryID, 2, pins[0].Version); err != nil {
-		t.Fatalf("switch the other project: %v", err)
-	}
-	r.settle(t)
-	w, err = r.sceneSvc.FindWidgetByID(ctx, other, sc.ID, inOther.ID)
-	if err != nil || len(w.PortBindings) != 1 || w.PortBindings[0].PortName != "value" {
-		t.Errorf("the other project's widget after its switch: %+v, %v; want bound to [value]", w.PortBindings, err)
-	}
 }

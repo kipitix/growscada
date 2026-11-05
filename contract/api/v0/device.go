@@ -25,11 +25,13 @@ type GetDevicesResponse struct {
 
 // CreateDeviceRequest is the HTTP DTO for creating a Device. Config is the
 // configuration read under Protocol; an omitted one is the empty object.
+// Version is the Version of the Draft the client saw (ADR 0016).
 type CreateDeviceRequest struct {
 	Name     string     `json:"name"`
 	Comment  string     `json:"comment"`
 	Protocol string     `json:"protocol"`
 	Config   JSONObject `json:"config"`
+	Version  int        `json:"version"`
 }
 
 // CreateDeviceResponse is the HTTP DTO for a Device creation response.
@@ -40,7 +42,7 @@ type CreateDeviceResponse struct {
 }
 
 // UpdateDeviceRequest is the HTTP DTO for changing a Device.
-// Version must match the current persisted version for optimistic locking.
+// Version must be the Draft's current Version (ADR 0016).
 type UpdateDeviceRequest struct {
 	Name     string     `json:"name"`
 	Comment  string     `json:"comment"`

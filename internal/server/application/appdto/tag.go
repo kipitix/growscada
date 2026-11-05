@@ -20,11 +20,13 @@ type Tag struct {
 	Seq int64
 }
 
-// CreateTagInput holds the input data for creating a tag: its definition.
-// Its state starts as its TagType's zero value with Quality bad.
+// CreateTagInput holds the input data for creating a tag: its definition and
+// the Version of the Draft the client saw. Its state starts as its TagType's
+// zero value with Quality bad.
 type CreateTagInput struct {
-	Name string
-	Type string
+	Name    string
+	Type    string
+	Version int
 }
 
 // TagDefinition is a Tag definition as the Runtime node is given it
@@ -47,13 +49,13 @@ type TagState struct {
 }
 
 // NewTagDefinition returns the definition of aTag for the Runtime node.
-func NewTagDefinition(aTag tag.Tag) TagDefinition {
+func NewTagDefinition(aTag tag.Tag, version int) TagDefinition {
 	return TagDefinition{
 		ID:       aTag.ID().UUID(),
 		Name:     aTag.Name().String(),
 		Type:     aTag.Type().String(),
 		DeviceID: aTag.Supplier().DeviceID().UUID(),
-		Version:  aTag.Version().Number(),
+		Version:  version,
 	}
 }
 
@@ -68,12 +70,12 @@ func InitialTagState(aTag tag.Tag) TagState {
 }
 
 // NewTag creates a Tag DTO from the tag.Tag domain aggregate and its state.
-func NewTag(aTag tag.Tag, aState TagState) Tag {
+func NewTag(aTag tag.Tag, aState TagState, version int) Tag {
 	return Tag{
 		ID:      aTag.ID().UUID(),
 		Name:    aTag.Name().String(),
 		Type:    aTag.Type().String(),
-		Version: aTag.Version().Number(),
+		Version: version,
 		Value:   aState.Value,
 		Quality: aState.Quality,
 		Seq:     aState.Seq,

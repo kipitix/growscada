@@ -10,7 +10,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
-	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
@@ -97,13 +96,7 @@ func makeStoredScene(t *testing.T, someWidgets ...Widget) Scene {
 	t.Helper()
 	name, _ := NewSceneName("boiler_room")
 	size, _ := NewSceneSize(1920, 1080)
-	ver, _ := version.New(version.WithNumber[Scene](3))
-	return ReconstituteScene(id.NewID[Scene](), testProject, name, size, NewBackgroundHTML(""), someWidgets, ver)
-}
-
-func staleVersion(sc Scene) version.Version[Scene] {
-	ver, _ := version.New(version.WithNumber[Scene](sc.Version().Number() - 1))
-	return ver
+	return ReconstituteScene(id.NewID[Scene](), testProject, name, size, NewBackgroundHTML(""), someWidgets)
 }
 
 func ids(ws []Widget) []id.ID[Widget] {
@@ -124,14 +117,14 @@ func assertUnchanged(t *testing.T, sc Scene, wantWidgets []Widget) {
 
 // ── Update ──────────────────────────────────────────────────────────────────
 
-func TestSceneUpdate_ChangesFieldsKeepsWidgetsAndVersion(t *testing.T) {
+func TestSceneUpdate_ChangesFieldsKeepsWidgets(t *testing.T) {
 	wt := makeWidgetType(t)
 	w := makeWidgetOf(t, wt, "w1")
 	sc := makeStoredScene(t, w)
 	name, _ := NewSceneName("renamed")
 	size, _ := NewSceneSize(800, 600)
 
-	after, err := sc.Update(sc.Version(), name, size, NewBackgroundHTML("<svg/>"))
+	after, err := sc.Update(name, size, NewBackgroundHTML("<svg/>"))
 
 	if err != nil {
 		t.Fatalf("Update: %v", err)
@@ -139,24 +132,11 @@ func TestSceneUpdate_ChangesFieldsKeepsWidgetsAndVersion(t *testing.T) {
 	if after.Name() != name || after.Size() != size || after.BackgroundHTML().Content() != "<svg/>" {
 		t.Errorf("fields not changed: %s", after)
 	}
-	if after.Version() != sc.Version() {
-		t.Errorf("Version: a change keeps it (%d), got %d", sc.Version().Number(), after.Version().Number())
-	}
 	if !slices.Equal(after.Widgets(), []Widget{w}) {
 		t.Errorf("widgets: expected %v, got %v", ids([]Widget{w}), ids(after.Widgets()))
 	}
 	if sc.Name().String() != "boiler_room" {
 		t.Errorf("original scene renamed to %q", sc.Name())
-	}
-}
-
-func TestSceneUpdate_StaleVersion_ReturnsConflict(t *testing.T) {
-	sc := makeStoredScene(t)
-
-	_, err := sc.Update(staleVersion(sc), sc.Name(), sc.Size(), sc.BackgroundHTML())
-
-	if !errors.Is(err, ErrSceneConflict) {
-		t.Errorf("expected ErrSceneConflict, got %v", err)
 	}
 }
 
@@ -168,16 +148,13 @@ func TestSceneAddWidget_Valid_AppendsWidgetLeavesOriginal(t *testing.T) {
 	sc := makeStoredScene(t, existing)
 	added := makeWidgetOf(t, wt, "w2", "value")
 
-	after, err := sc.AddWidget(sc.Version(), added, wt, tagTypesOf(added))
+	after, err := sc.AddWidget(added, wt, tagTypesOf(added))
 
 	if err != nil {
 		t.Fatalf("AddWidget: %v", err)
 	}
 	if got, want := ids(after.Widgets()), ids([]Widget{existing, added}); !slices.Equal(got, want) {
 		t.Errorf("widgets: expected %v, got %v", want, got)
-	}
-	if after.Version() != sc.Version() {
-		t.Errorf("Version: a change keeps it (%d), got %d", sc.Version().Number(), after.Version().Number())
 	}
 	assertUnchanged(t, sc, []Widget{existing})
 }
@@ -188,20 +165,17 @@ func TestSceneAddWidget_Rejected(t *testing.T) {
 	sc := makeStoredScene(t, existing)
 
 	tests := map[string]struct {
-		expected version.Version[Scene]
-		widget   Widget
-		wt       library.ReleasedWidgetType
-		want     error
+		widget Widget
+		wt     library.ReleasedWidgetType
+		want   error
 	}{
-		"stale version":       {staleVersion(sc), makeWidgetOf(t, wt, "w2"), wt, ErrSceneConflict},
-		"widget ID taken":     {sc.Version(), existing, wt, ErrWidgetAlreadyExists},
-		"other widget type":   {sc.Version(), makeWidgetOf(t, wt, "w2"), makeWidgetType(t, "value"), ErrWidgetTypeMismatch},
-		"undeclared port":     {sc.Version(), makeWidgetOf(t, wt, "w2", "value", "missing"), wt, ErrPortNotDeclared},
-		"conflict goes first": {staleVersion(sc), makeWidgetOf(t, wt, "w2", "missing"), wt, ErrSceneConflict},
+		"widget ID taken":   {existing, wt, ErrWidgetAlreadyExists},
+		"other widget type": {makeWidgetOf(t, wt, "w2"), makeWidgetType(t, "value"), ErrWidgetTypeMismatch},
+		"undeclared port":   {makeWidgetOf(t, wt, "w2", "value", "missing"), wt, ErrPortNotDeclared},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			_, err := sc.AddWidget(tt.expected, tt.widget, tt.wt, tagTypesOf(tt.widget))
+			_, err := sc.AddWidget(tt.widget, tt.wt, tagTypesOf(tt.widget))
 			if !errors.Is(err, tt.want) {
 				t.Errorf("expected %v, got %v", tt.want, err)
 			}
@@ -221,7 +195,7 @@ func TestSceneUpdateWidget_Valid_ReplacesWidgetInPlaceLeavesOriginal(t *testing.
 	changed := NewWidget(w1.ID(), newName, NewPosition(5, 5, 0), w1.Size(), w1.Origin(), w1.Rotation(),
 		w1.TypeID(), nil, []PortBinding{NewPortBinding(mustPortName(t, "value"), id.NewID[tag.Tag]())})
 
-	after, err := sc.UpdateWidget(sc.Version(), changed, wt, tagTypesOf(changed))
+	after, err := sc.UpdateWidget(changed, wt, tagTypesOf(changed))
 
 	if err != nil {
 		t.Fatalf("UpdateWidget: %v", err)
@@ -246,19 +220,17 @@ func TestSceneUpdateWidget_Rejected(t *testing.T) {
 	}
 
 	tests := map[string]struct {
-		expected version.Version[Scene]
-		widget   Widget
-		wt       library.ReleasedWidgetType
-		want     error
+		widget Widget
+		wt     library.ReleasedWidgetType
+		want   error
 	}{
-		"stale version":     {staleVersion(sc), withPorts(), wt, ErrSceneConflict},
-		"unknown widget":    {sc.Version(), makeWidgetOf(t, wt, "ghost"), wt, ErrWidgetNotFound},
-		"other widget type": {sc.Version(), withPorts(), makeWidgetType(t, "value"), ErrWidgetTypeMismatch},
-		"undeclared port":   {sc.Version(), withPorts("missing"), wt, ErrPortNotDeclared},
+		"unknown widget":    {makeWidgetOf(t, wt, "ghost"), wt, ErrWidgetNotFound},
+		"other widget type": {withPorts(), makeWidgetType(t, "value"), ErrWidgetTypeMismatch},
+		"undeclared port":   {withPorts("missing"), wt, ErrPortNotDeclared},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			_, err := sc.UpdateWidget(tt.expected, tt.widget, tt.wt, tagTypesOf(tt.widget))
+			_, err := sc.UpdateWidget(tt.widget, tt.wt, tagTypesOf(tt.widget))
 			if !errors.Is(err, tt.want) {
 				t.Errorf("expected %v, got %v", tt.want, err)
 			}
@@ -305,8 +277,8 @@ func TestSceneWidgetChanges_CheckBoundTagTypes(t *testing.T) {
 			existing := makeWidgetOf(t, wt, "w1")
 			sc := makeStoredScene(t, existing)
 
-			_, addErr := sc.AddWidget(sc.Version(), bindValue(t, wt, tt.tagID), wt, tagTypes)
-			_, updateErr := sc.UpdateWidget(sc.Version(), bindValue(t, wt, tt.tagID, existing), wt, tagTypes)
+			_, addErr := sc.AddWidget(bindValue(t, wt, tt.tagID), wt, tagTypes)
+			_, updateErr := sc.UpdateWidget(bindValue(t, wt, tt.tagID, existing), wt, tagTypes)
 
 			for op, err := range map[string]error{"AddWidget": addErr, "UpdateWidget": updateErr} {
 				if tt.want == nil && err != nil {
@@ -341,8 +313,8 @@ func TestSceneWidgetChanges_BindOnlyTagsOfTheScenesProject(t *testing.T) {
 	existing := makeWidgetOf(t, wt, "w1")
 	sc := makeStoredScene(t, existing)
 
-	_, addErr := sc.AddWidget(sc.Version(), bindValue(t, wt, foreignTag), wt, ofOtherProject)
-	_, updateErr := sc.UpdateWidget(sc.Version(), bindValue(t, wt, foreignTag, existing), wt, ofOtherProject)
+	_, addErr := sc.AddWidget(bindValue(t, wt, foreignTag), wt, ofOtherProject)
+	_, updateErr := sc.UpdateWidget(bindValue(t, wt, foreignTag, existing), wt, ofOtherProject)
 
 	for op, err := range map[string]error{"AddWidget": addErr, "UpdateWidget": updateErr} {
 		if !errors.Is(err, ErrTagTypesOfAnotherProject) {
@@ -355,23 +327,10 @@ func TestSceneAddWidget_UndeclaredPortGoesBeforeMissingTag(t *testing.T) {
 	wt := makeWidgetType(t, "value")
 	sc := makeStoredScene(t)
 
-	_, err := sc.AddWidget(sc.Version(), makeWidgetOf(t, wt, "w1", "missing"), wt, NewTagTypes(testProject, nil))
+	_, err := sc.AddWidget(makeWidgetOf(t, wt, "w1", "missing"), wt, NewTagTypes(testProject, nil))
 
 	if !errors.Is(err, ErrPortNotDeclared) {
 		t.Errorf("expected ErrPortNotDeclared, got %v", err)
-	}
-}
-
-// ── CheckVersion ────────────────────────────────────────────────────────────
-
-func TestSceneCheckVersion(t *testing.T) {
-	sc := makeStoredScene(t)
-
-	if err := sc.CheckVersion(sc.Version()); err != nil {
-		t.Errorf("current version: expected no error, got %v", err)
-	}
-	if err := sc.CheckVersion(staleVersion(sc)); !errors.Is(err, ErrSceneConflict) {
-		t.Errorf("stale version: expected ErrSceneConflict, got %v", err)
 	}
 }
 
@@ -394,9 +353,6 @@ func TestSceneRemoveWidget_Existing_RemovesItLeavesOriginal(t *testing.T) {
 	}
 	if got, want := ids(after.Widgets()), ids([]Widget{w1, w3}); !slices.Equal(got, want) {
 		t.Errorf("widgets: expected %v, got %v", want, got)
-	}
-	if after.Version() != sc.Version() {
-		t.Errorf("Version: a change keeps it (%d), got %d", sc.Version().Number(), after.Version().Number())
 	}
 	assertUnchanged(t, sc, []Widget{w1, w2, w3})
 }
@@ -446,9 +402,6 @@ func TestSceneReconcileWith_RemovesBindingsOfUndeclaredPortsOnly(t *testing.T) {
 	}
 	if got[1] != untouched {
 		t.Error("a widget of another type must not change")
-	}
-	if reconciled.Version() != sc.Version() {
-		t.Errorf("Version: a change keeps it (%d), got %d", sc.Version().Number(), reconciled.Version().Number())
 	}
 	assertUnchanged(t, sc, []Widget{w, untouched})
 	if len(w.PortBindings()) != 2 {
@@ -559,10 +512,10 @@ func TestSceneUpdateWidget_ChecksOnlyBindingsTheWidgetDidNotHold(t *testing.T) {
 	updated := NewWidget(stored.ID(), stored.Name(), NewPosition(10, 0, 0), stored.Size(), stored.Origin(), stored.Rotation(),
 		wt.ID(), nil, []PortBinding{held, added})
 
-	if _, err := sc.UpdateWidget(sc.Version(), updated, wt, NewTagTypes(testProject, map[id.ID[tag.Tag]]tag.TagType{added.TagID(): tag.TagTypeInteger})); err != nil {
+	if _, err := sc.UpdateWidget(updated, wt, NewTagTypes(testProject, map[id.ID[tag.Tag]]tag.TagType{added.TagID(): tag.TagTypeInteger})); err != nil {
 		t.Errorf("held binding broken since: expected no error, got %v", err)
 	}
-	if _, err := sc.UpdateWidget(sc.Version(), updated, wt, NewTagTypes(testProject, nil)); !errors.Is(err, ErrBoundTagNotFound) {
+	if _, err := sc.UpdateWidget(updated, wt, NewTagTypes(testProject, nil)); !errors.Is(err, ErrBoundTagNotFound) {
 		t.Errorf("new binding to a missing tag: expected ErrBoundTagNotFound, got %v", err)
 	}
 }

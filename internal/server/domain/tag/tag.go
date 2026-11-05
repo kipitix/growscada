@@ -7,7 +7,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
-	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 // Tag - interface representing a Tag definition: the Tag's name and TagType,
@@ -15,7 +14,9 @@ import (
 // value and Quality are its Tag state, held by the Runtime node
 // (tagstate.TagState). It belongs to exactly one Project, fixed at creation
 // (ADR 0006).
-// Immutable aggregate: Delete returns a new Tag.
+// Immutable entity of its Project's Draft (ADR 0016), which carries the one
+// Version of the Draft's content: named and typed at creation, deleted as it
+// is, a Tag has no Version of its own.
 type Tag interface {
 	ID() id.ID[Tag]
 	// ProjectID is the Project the tag belongs to; it never changes.
@@ -26,10 +27,9 @@ type Tag interface {
 	// definition; NoSupplier when people write the Tag. At most one Device
 	// supplies a Tag.
 	Supplier() Supplier
-	Version() version.Version[Tag]
 
-	// Delete returns the Tag with a TagDeletedEvent recorded; the
-	// repository's Delete removes it.
+	// Delete returns the Tag with a TagDeletedEvent recorded; the Draft's
+	// write removes it and unbinds it from the fail's Widgets.
 	Delete() Tag
 
 	event.Recorder
@@ -43,7 +43,6 @@ type tagImpl struct {
 	name      TagName
 	tagType   TagType
 	supplier  Supplier
-	version   version.Version[Tag]
 	pending   []event.Event
 }
 
@@ -55,7 +54,7 @@ var _ Tag = (*tagImpl)(nil)
 // TagType's zero value with Quality Bad (tagstate.Initial).
 // Returns an error if the type is the invalid zero value.
 func CreateTag(anID id.ID[Tag], aProjectID id.ID[project.Project], aName TagName, aType TagType, aSupplier Supplier) (Tag, error) {
-	t, err := ReconstituteTag(anID, aProjectID, aName, aType, aSupplier, version.Initial[Tag]())
+	t, err := ReconstituteTag(anID, aProjectID, aName, aType, aSupplier)
 	if err != nil {
 		return nil, err
 	}
@@ -64,11 +63,11 @@ func CreateTag(anID id.ID[Tag], aProjectID id.ID[project.Project], aName TagName
 	return impl, nil
 }
 
-// ReconstituteTag rebuilds a tag as stored, at the given version; it records
-// no event. For repositories. aSupplier is the Tag's supplier, NoSupplier
+// ReconstituteTag rebuilds a tag as stored; it records no event. For
+// repositories. aSupplier is the Tag's supplier, NoSupplier
 // when people write it.
 // Returns an error if the type is the invalid zero value.
-func ReconstituteTag(anID id.ID[Tag], aProjectID id.ID[project.Project], aName TagName, aType TagType, aSupplier Supplier, aVersion version.Version[Tag]) (Tag, error) {
+func ReconstituteTag(anID id.ID[Tag], aProjectID id.ID[project.Project], aName TagName, aType TagType, aSupplier Supplier) (Tag, error) {
 	if !aType.IsValid() {
 		return nil, fmt.Errorf("cannot create tag: invalid type")
 	}
@@ -78,7 +77,6 @@ func ReconstituteTag(anID id.ID[Tag], aProjectID id.ID[project.Project], aName T
 		name:      aName,
 		tagType:   aType,
 		supplier:  aSupplier,
-		version:   aVersion,
 	}, nil
 }
 
@@ -87,7 +85,6 @@ func (t tagImpl) ProjectID() id.ID[project.Project] { return t.projectID }
 func (t tagImpl) Name() TagName                     { return t.name }
 func (t tagImpl) Type() TagType                     { return t.tagType }
 func (t tagImpl) Supplier() Supplier                { return t.supplier }
-func (t tagImpl) Version() version.Version[Tag]     { return t.version }
 
 func (t *tagImpl) Delete() Tag {
 	deleted := *t
@@ -101,5 +98,5 @@ func (t tagImpl) PendingEvents() []event.Event {
 
 // String returns a string representation of the tag.
 func (t tagImpl) String() string {
-	return fmt.Sprintf("Tag: %s, Type: %s, Version: %d", t.name, t.tagType, t.version)
+	return fmt.Sprintf("Tag: %s, Type: %s", t.name, t.tagType)
 }

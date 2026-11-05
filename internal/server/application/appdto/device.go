@@ -65,63 +65,63 @@ type EnvironmentDeviceInput struct {
 }
 
 // NewDevice creates a Device DTO from the domain aggregate.
-func NewDevice(aDevice device.Device) Device {
+func NewDevice(aDevice device.Device, version int) Device {
 	return Device{
 		ID:       aDevice.ID().UUID(),
 		Name:     aDevice.Name().String(),
 		Comment:  aDevice.Comment(),
 		Protocol: aDevice.Protocol().String(),
 		Config:   aDevice.Config().Bytes(),
-		Version:  aDevice.Version().Number(),
+		Version:  version,
 	}
 }
 
 // NewDeviceList creates a slice of Device DTOs from domain aggregates.
-func NewDeviceList(list []device.Device) []Device {
+func NewDeviceList(list []device.Device, version int) []Device {
 	result := make([]Device, len(list))
 	for i, d := range list {
-		result[i] = NewDevice(d)
+		result[i] = NewDevice(d, version)
 	}
 	return result
 }
 
 // NewEnvironment creates an Environment DTO from the domain aggregate.
-func NewEnvironment(anEnvironment device.Environment) Environment {
+func NewEnvironment(anEnvironment device.Environment, version int) Environment {
 	return Environment{
 		ID:      anEnvironment.ID().UUID(),
 		Name:    anEnvironment.Name().String(),
 		Comment: anEnvironment.Comment(),
-		Version: anEnvironment.Version().Number(),
+		Version: version,
 	}
 }
 
 // NewEnvironmentList creates a slice of Environment DTOs from domain
 // aggregates.
-func NewEnvironmentList(list []device.Environment) []Environment {
+func NewEnvironmentList(list []device.Environment, version int) []Environment {
 	result := make([]Environment, len(list))
 	for i, e := range list {
-		result[i] = NewEnvironment(e)
+		result[i] = NewEnvironment(e, version)
 	}
 	return result
 }
 
 // NewEnvironmentDevice creates an EnvironmentDevice DTO from the domain
 // aggregate.
-func NewEnvironmentDevice(aPair device.EnvironmentDevice) EnvironmentDevice {
+func NewEnvironmentDevice(aPair device.EnvironmentDevice, version int) EnvironmentDevice {
 	return EnvironmentDevice{
 		EnvironmentID: aPair.EnvironmentID().UUID(),
 		DeviceID:      aPair.DeviceID().UUID(),
 		Params:        aPair.Params().Bytes(),
-		Version:       aPair.Version().Number(),
+		Version:       version,
 	}
 }
 
 // NewEnvironmentDeviceList creates a slice of EnvironmentDevice DTOs from
 // domain aggregates.
-func NewEnvironmentDeviceList(list []device.EnvironmentDevice) []EnvironmentDevice {
+func NewEnvironmentDeviceList(list []device.EnvironmentDevice, version int) []EnvironmentDevice {
 	result := make([]EnvironmentDevice, len(list))
 	for i, p := range list {
-		result[i] = NewEnvironmentDevice(p)
+		result[i] = NewEnvironmentDevice(p, version)
 	}
 	return result
 }

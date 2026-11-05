@@ -25,6 +25,9 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
+	"github.com/kipitix/growscada/internal/server/domain/editlock"
+	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/migrations"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
@@ -130,12 +133,14 @@ func NewDeviceInProject(t *testing.T, srv *httptest.Server, db *sql.DB, projectI
 	projectPath := apiv0.ProjectPath(projectID.String())
 	EnsureEditLock(t, srv, projectID)
 	device := postJSON[apiv0.CreateDeviceResponse](t, srv, projectPath+"/devices",
-		apiv0.CreateDeviceRequest{Name: name, Protocol: "simulation", Config: apiv0.JSONObject(`{}`)})
+		apiv0.CreateDeviceRequest{Name: name, Protocol: "simulation", Config: apiv0.JSONObject(`{}`),
+			Version: DraftVersion(t, db, projectID)})
 	environment := postJSON[apiv0.CreateEnvironmentResponse](t, srv, projectPath+"/environments",
-		apiv0.CreateEnvironmentRequest{Name: name + "-env"})
+		apiv0.CreateEnvironmentRequest{Name: name + "-env", Version: DraftVersion(t, db, projectID)})
 	putJSON[apiv0.EnvironmentDeviceResponse](t, srv,
 		projectPath+"/environments/"+environment.ID.String()+"/devices/"+device.ID.String(),
-		apiv0.UpdateEnvironmentDeviceRequest{Params: apiv0.JSONObject(`{"address":"127.0.0.1:1502"}`)})
+		apiv0.UpdateEnvironmentDeviceRequest{Params: apiv0.JSONObject(`{"address":"127.0.0.1:1502"}`),
+			Version: DraftVersion(t, db, projectID)})
 	for _, tagID := range tagIDs {
 		if _, err := db.ExecContext(ctx, "UPDATE engineering.tags SET device_id = $1 WHERE id = $2", device.ID, tagID); err != nil {
 			t.Fatalf("supply tag %s: %v", tagID, err)
@@ -209,7 +214,7 @@ func sendJSON[T any](t *testing.T, srv *httptest.Server, method, path string, bo
 // tag's state is written through the API.
 func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagService) {
 	t.Helper()
-	if _, err := db.ExecContext(context.Background(), "DELETE FROM engineering.edit_locks; "+
+	if _, err := db.ExecContext(context.Background(), "DELETE FROM engineering.draft_changes; DELETE FROM engineering.drafts; "+
 		"DELETE FROM runtime.revisions; DELETE FROM runtime.device_tokens; DELETE FROM runtime.tags; "+
 		"DELETE FROM runtime.environment_devices; DELETE FROM runtime.devices; DELETE FROM runtime.environments; "+
 		"DELETE FROM engineering.tags; "+
@@ -234,24 +239,22 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	}
 	projectRepo := repositories.NewProjectRepositoryPostgres(db, onCommit)
 	scopes := repositories.NewProjectScopes(db, onCommit)
-	content := application.NewProjectContent(projectRepo, scopes, orgID)
+	releases := repositories.NewLibraryReleaseRepositoryPostgres(db, onCommit)
+	drafts := repositories.NewDraftRepositoryPostgres(db, releases, onCommit)
+	content := application.NewProjectContent(projectRepo, scopes, drafts, orgID)
 	libraries := repositories.NewLibraryRepositoryPostgres(db, onCommit)
-	editLocks := application.NewEditLockService(content, application.NewLibraryContent(libraries, orgID), repositories.NewEditLockRepositoryPostgres(db, onCommit))
+	editLocks := application.NewEditLockService(content, application.NewLibraryContent(libraries, orgID), drafts)
 	runtimeEvents := eventbus.NewAsyncPublisher(bus, 1024)
 	tagStateSvc := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, runtimeEvents.Publish)
 	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(db), runtimeEvents.Publish)
 	deviceTokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(db))
 	runtimeNode := inprocess.NewRuntimeNode(tagStateSvc, deviceTokens, revisions)
 	tagSvc := application.NewTagService(content, runtimeNode)
-	releases := repositories.NewLibraryReleaseRepositoryPostgres(db, onCommit)
 	widgetTypes := repositories.NewWidgetTypeRepositories(db, onCommit)
 	runner := outbox.NewPolicyRunner(db, []application.Policy{
-		application.NewWidgetReconciliationPolicy(scopes),
 		application.NewLibraryCleanupPolicy(libraries),
 		application.NewDiscardLibraryPolicy(libraries, releases, widgetTypes),
-		application.NewUnbindDeletedTagPolicy(projectRepo, scopes),
-		application.NewProjectCleanupPolicy(projectRepo, scopes, runtimeNode),
-		application.NewDiscardProjectPolicy(projectRepo, scopes, releases, runtimeNode),
+		application.NewProjectCleanupPolicy(projectRepo, drafts, runtimeNode),
 	})
 	dispatcher.SetPolicyRunner(runner)
 	ctx, stop := context.WithCancel(context.Background())
@@ -276,6 +279,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 		Scenes:       application.NewSceneService(content),
 		Devices:      application.NewDeviceService(content),
 		Environments: application.NewEnvironmentService(content),
+		Draft:        application.NewDraftService(content),
 		Deploy: application.NewDeployService(
 			content, application.NewProjectFileBuilder(content), runtimeNode, editLocks),
 		Discard:      application.NewDiscardService(content, runtimeNode),
@@ -288,4 +292,21 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	srv := httptest.NewServer(router.ServeMux())
 	t.Cleanup(srv.Close)
 	return srv, tagSvc
+}
+
+// DraftVersion returns the Version of a Project's Draft: what a write of its
+// content states (ADR 0016). A Draft whose row does not exist yet starts at
+// version 1.
+func DraftVersion(t *testing.T, db *sql.DB, projectID uuid.UUID) int {
+	t.Helper()
+	drafts := repositories.NewDraftRepositoryPostgres(db, nil)
+	found, ok, err := drafts.Read(editlock.System(context.Background()),
+		editlock.ProjectScope(id.NewID(id.IDWithUUID[project.Project](projectID))))
+	if err != nil {
+		t.Fatalf("read the draft of %s: %v", projectID, err)
+	}
+	if !ok {
+		return 1
+	}
+	return found.Version().Number()
 }

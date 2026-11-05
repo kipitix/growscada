@@ -13,8 +13,8 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/editlock"
-	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
 
@@ -54,8 +54,8 @@ func ensureTestWidgetType(t *testing.T) {
 		    (library_id, release_number, id, name, html_template, script, script_language, input_ports, default_width, default_height)
 		 VALUES ($1, 1, $2, 'test-type', '<div></div>', 'function update(){}', 'javascript', '[]', 100, 100)
 		 ON CONFLICT DO NOTHING`, []any{testLibrary, testWidgetTypeID}},
-		{`INSERT INTO engineering.library_pins (project_id, library_id, release_number, version)
-		 VALUES ($1, $2, 1, 1) ON CONFLICT DO NOTHING`, []any{mainProject, testLibrary}},
+		{`INSERT INTO engineering.library_pins (project_id, library_id, release_number)
+		 VALUES ($1, $2, 1) ON CONFLICT DO NOTHING`, []any{mainProject, testLibrary}},
 	} {
 		if _, err := testDB().ExecContext(editlock.System(context.Background()), q.query, q.args...); err != nil {
 			t.Fatalf("ensureTestWidgetType: %v", err)
@@ -77,17 +77,7 @@ func releaseAndPin(t *testing.T, libraryID uuid.UUID) appdto.LibraryRelease {
 	if err != nil {
 		t.Fatalf("Release: %v", err)
 	}
-	version := 0
-	pins, err := services.pins.FindLibraryPins(ctx, mainProject)
-	if err != nil {
-		t.Fatalf("FindLibraryPins: %v", err)
-	}
-	for _, p := range pins {
-		if p.LibraryID == libraryID {
-			version = p.Version
-		}
-	}
-	if _, _, err := services.pins.PutLibraryPin(ctx, mainProject, libraryID, release.Number, version); err != nil {
+	if _, _, err := services.pins.PutLibraryPin(ctx, mainProject, libraryID, release.Number, testDraftVersion(t, mainProject)); err != nil {
 		t.Fatalf("PutLibraryPin: %v", err)
 	}
 	return release
@@ -100,7 +90,7 @@ func newRouterWithWidgets() testRouter {
 func createSceneViaSceneService(t *testing.T) appdto.Scene {
 	t.Helper()
 	ensureTestWidgetType(t)
-	resp, err := newServices().scenes.CreateScene(editlock.System(context.Background()), mainProject, appdto.SceneInput{
+	resp, err := newServices().scenes.CreateScene(editlock.System(context.Background()), mainProject, testDraftVersion(t, mainProject), appdto.SceneInput{
 		Name: "test-scene-" + uuid.New().String(), Width: 1920, Height: 1080,
 	})
 	if err != nil {
@@ -176,7 +166,7 @@ func TestGetWidgetsBySceneID_WithItems_Returns200WithAll(t *testing.T) {
 	created := createWidgetViaService(t, sc.ID, sc.Version, input)
 	input2 := testWidgetInput
 	input2.Name = "thermometer"
-	createWidgetViaService(t, sc.ID, created.SceneVersion, input2)
+	createWidgetViaService(t, sc.ID, created.Version, input2)
 	router := newRouterWithWidgets()
 
 	req := httptest.NewRequest(http.MethodGet, mainPath+"/scenes/"+sc.ID.String()+"/widgets", nil)
@@ -214,11 +204,11 @@ func TestGetWidgetsBySceneID_TwoScenes_ReturnsOnlyMatchingScene(t *testing.T) {
 
 	inTarget := testWidgetInput
 	inTarget.Name = "widget-in-target"
-	createWidgetViaService(t, target.ID, target.Version, inTarget)
+	createWidgetViaService(t, target.ID, testDraftVersion(t, mainProject), inTarget)
 
 	inOther := testWidgetInput
 	inOther.Name = "widget-in-other"
-	createWidgetViaService(t, other.ID, other.Version, inOther)
+	createWidgetViaService(t, other.ID, testDraftVersion(t, mainProject), inOther)
 
 	router := newRouterWithWidgets()
 	req := httptest.NewRequest(http.MethodGet, mainPath+"/scenes/"+target.ID.String()+"/widgets", nil)
@@ -322,7 +312,7 @@ func TestPostWidgets_Valid_Returns201WithID(t *testing.T) {
 		Origin:       apiv0.OriginRequest{X: 0.5, Y: 0.5},
 		Rotation:     apiv0.RotationRequest{Degrees: 0},
 		TypeID:       testWidgetTypeID,
-		SceneVersion: sc.Version,
+		Version:      sc.Version,
 		Labels:       []string{"flow"},
 		PortBindings: []apiv0.PortBinding{},
 	})
@@ -341,8 +331,8 @@ func TestPostWidgets_Valid_Returns201WithID(t *testing.T) {
 	if resp.ID == uuid.Nil {
 		t.Error("expected non-zero ID")
 	}
-	if resp.SceneVersion <= sc.Version {
-		t.Errorf("SceneVersion: expected > %d, got %d", sc.Version, resp.SceneVersion)
+	if resp.Version <= sc.Version {
+		t.Errorf("Version: expected > %d, got %d", sc.Version, resp.Version)
 	}
 }
 
@@ -365,12 +355,12 @@ func TestPostWidgets_EmptyName_Returns400(t *testing.T) {
 	router := newRouterWithWidgets()
 
 	body, _ := json.Marshal(apiv0.CreateWidgetRequest{
-		Name:         "",
-		Position:     apiv0.PositionRequest{X: 0, Y: 0, Z: 0},
-		Size:         apiv0.SizeRequest{Width: 100, Height: 100},
-		Origin:       apiv0.OriginRequest{X: 0.5, Y: 0.5},
-		TypeID:       testWidgetTypeID,
-		SceneVersion: sc.Version,
+		Name:     "",
+		Position: apiv0.PositionRequest{X: 0, Y: 0, Z: 0},
+		Size:     apiv0.SizeRequest{Width: 100, Height: 100},
+		Origin:   apiv0.OriginRequest{X: 0.5, Y: 0.5},
+		TypeID:   testWidgetTypeID,
+		Version:  sc.Version,
 	})
 	req := httptest.NewRequest(http.MethodPost, mainPath+"/scenes/"+sc.ID.String()+"/widgets", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -382,18 +372,18 @@ func TestPostWidgets_EmptyName_Returns400(t *testing.T) {
 	}
 }
 
-func TestPostWidgets_StaleSceneVersion_Returns409(t *testing.T) {
+func TestPostWidgets_StaleVersion_Returns409(t *testing.T) {
 	cleanWidgetsRest(t)
 	sc := createSceneViaSceneService(t)
 	router := newRouterWithWidgets()
 
 	body, _ := json.Marshal(apiv0.CreateWidgetRequest{
-		Name:         "flow-meter",
-		Position:     apiv0.PositionRequest{X: 5, Y: 10, Z: 0},
-		Size:         apiv0.SizeRequest{Width: 100, Height: 100},
-		Origin:       apiv0.OriginRequest{X: 0.5, Y: 0.5},
-		TypeID:       testWidgetTypeID,
-		SceneVersion: sc.Version + 99,
+		Name:     "flow-meter",
+		Position: apiv0.PositionRequest{X: 5, Y: 10, Z: 0},
+		Size:     apiv0.SizeRequest{Width: 100, Height: 100},
+		Origin:   apiv0.OriginRequest{X: 0.5, Y: 0.5},
+		TypeID:   testWidgetTypeID,
+		Version:  sc.Version + 99,
 	})
 	req := httptest.NewRequest(http.MethodPost, mainPath+"/scenes/"+sc.ID.String()+"/widgets", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -407,7 +397,7 @@ func TestPostWidgets_StaleSceneVersion_Returns409(t *testing.T) {
 
 // --- PUT /api/v0/scenes/{scene_id}/widgets/{widget_id} ---
 
-func TestPutWidgetsByID_Valid_Returns200WithIncrementedSceneVersion(t *testing.T) {
+func TestPutWidgetsByID_Valid_Returns200WithIncrementedVersion(t *testing.T) {
 	cleanWidgetsRest(t)
 	sc := createSceneViaSceneService(t)
 	input := testWidgetInput
@@ -423,7 +413,7 @@ func TestPutWidgetsByID_Valid_Returns200WithIncrementedSceneVersion(t *testing.T
 		TypeID:       testWidgetTypeID,
 		Labels:       []string{"updated"},
 		PortBindings: []apiv0.PortBinding{},
-		SceneVersion: created.SceneVersion,
+		Version:      created.Version,
 	})
 	req := httptest.NewRequest(http.MethodPut, mainPath+"/scenes/"+sc.ID.String()+"/widgets/"+created.ID.String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -437,8 +427,8 @@ func TestPutWidgetsByID_Valid_Returns200WithIncrementedSceneVersion(t *testing.T
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.SceneVersion <= created.SceneVersion {
-		t.Errorf("SceneVersion: expected > %d, got %d", created.SceneVersion, resp.SceneVersion)
+	if resp.Version <= created.Version {
+		t.Errorf("Version: expected > %d, got %d", created.Version, resp.Version)
 	}
 }
 
@@ -448,11 +438,11 @@ func TestPutWidgetsByID_NotFound_Returns404(t *testing.T) {
 	router := newRouterWithWidgets()
 
 	body, _ := json.Marshal(apiv0.UpdateWidgetRequest{
-		Name:         "x",
-		TypeID:       testWidgetTypeID,
-		Origin:       apiv0.OriginRequest{X: 0.5, Y: 0.5},
-		Size:         apiv0.SizeRequest{Width: 100, Height: 100},
-		SceneVersion: sc.Version,
+		Name:    "x",
+		TypeID:  testWidgetTypeID,
+		Origin:  apiv0.OriginRequest{X: 0.5, Y: 0.5},
+		Size:    apiv0.SizeRequest{Width: 100, Height: 100},
+		Version: sc.Version,
 	})
 	req := httptest.NewRequest(http.MethodPut, mainPath+"/scenes/"+sc.ID.String()+"/widgets/"+uuid.New().String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -484,7 +474,7 @@ func TestPutWidgetsByID_InvalidUUID_Returns400(t *testing.T) {
 }
 
 func TestPutWidgetsByID_Conflict_Returns409(t *testing.T) {
-	svc := &stubSceneServiceForWidgets{updateErr: scene.ErrSceneConflict}
+	svc := &stubSceneServiceForWidgets{updateErr: draft.ErrDraftConflict}
 	services := newServices()
 	services.scenes = svc
 	router := services.router()
@@ -517,7 +507,7 @@ func (s *stubSceneServiceForWidgets) UpdateWidget(_ context.Context, _, _, _ uui
 	return appdto.Widget{}, s.updateErr
 }
 
-func (s *stubSceneServiceForWidgets) DeleteWidgetByID(_ context.Context, _, _, _ uuid.UUID) (appdto.Widget, error) {
+func (s *stubSceneServiceForWidgets) DeleteWidgetByID(_ context.Context, _, _, _ uuid.UUID, _ int) (appdto.Widget, error) {
 	return appdto.Widget{}, s.deleteErr
 }
 
@@ -526,7 +516,7 @@ func (s *stubSceneServiceForWidgets) DeleteWidgetByID(_ context.Context, _, _, _
 // A concurrent change to the scene between loading and saving it surfaces as
 // ErrSceneConflict: the client is told to reload, not given a 500.
 func TestDeleteWidgetsByID_Conflict_Returns409(t *testing.T) {
-	svc := &stubSceneServiceForWidgets{deleteErr: scene.ErrSceneConflict}
+	svc := &stubSceneServiceForWidgets{deleteErr: draft.ErrDraftConflict}
 	services := newServices()
 	services.scenes = svc
 	router := services.router()
@@ -653,7 +643,7 @@ func TestPostWidgets_InvalidInput_Returns400(t *testing.T) {
 		"missing type_id":        func(r *apiv0.CreateWidgetRequest) { r.TypeID = uuid.Nil },
 		"zero size":              func(r *apiv0.CreateWidgetRequest) { r.Size.Width = 0 },
 		"origin out of 0…1":      func(r *apiv0.CreateWidgetRequest) { r.Origin.X = 2 },
-		"negative scene version": func(r *apiv0.CreateWidgetRequest) { r.SceneVersion = -1 },
+		"negative scene version": func(r *apiv0.CreateWidgetRequest) { r.Version = -1 },
 		"undeclared port": func(r *apiv0.CreateWidgetRequest) {
 			r.PortBindings = []apiv0.PortBinding{{PortName: "missing", TagID: uuid.New()}}
 		},
@@ -674,11 +664,11 @@ func TestPostWidgets_InvalidInput_Returns400(t *testing.T) {
 			cleanWidgetsRest(t)
 			sc := createSceneViaSceneService(t)
 			request := apiv0.CreateWidgetRequest{
-				Name:         "gauge-1",
-				Size:         apiv0.SizeRequest{Width: 100, Height: 100},
-				Origin:       apiv0.OriginRequest{X: 0.5, Y: 0.5},
-				TypeID:       wt.ID,
-				SceneVersion: sc.Version,
+				Name:    "gauge-1",
+				Size:    apiv0.SizeRequest{Width: 100, Height: 100},
+				Origin:  apiv0.OriginRequest{X: 0.5, Y: 0.5},
+				TypeID:  wt.ID,
+				Version: sc.Version,
 			}
 			mutate(&request)
 			body, _ := json.Marshal(request)

@@ -58,8 +58,8 @@ func ensurePinnedType(t *testing.T, libraryID uuid.UUID, libraryName string, typ
 		}
 	}
 	if _, err := testDB.ExecContext(editlock.System(context.Background()),
-		`INSERT INTO engineering.library_pins (project_id, library_id, release_number, version)
-		 VALUES ($1, $2, 1, 1) ON CONFLICT DO NOTHING`,
+		`INSERT INTO engineering.library_pins (project_id, library_id, release_number)
+		 VALUES ($1, $2, 1) ON CONFLICT DO NOTHING`,
 		projectID, libraryID,
 	); err != nil {
 		t.Fatalf("ensurePinnedType: pin: %v", err)
@@ -121,7 +121,7 @@ func pinNewWidgetType(t *testing.T, projectID uuid.UUID, input appdto.WidgetType
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
 	release := mustReleaseLibrary(t, lib.ID)
-	if _, _, err := newLibraryPinService().PutLibraryPin(ctx, projectID, lib.ID, release.Number, 0); err != nil {
+	if _, _, err := newLibraryPinService().PutLibraryPin(ctx, projectID, lib.ID, release.Number, draftVersionOf(t, projectID)); err != nil {
 		t.Fatalf("PutLibraryPin: %v", err)
 	}
 	return wt, lib

@@ -14,7 +14,7 @@ http:
     data: |-
       {
         "params": {"address": "10.0.0.3:502"},
-        "version": 1
+        "version": 16
       }
   auth: inherit
 
@@ -34,7 +34,7 @@ runtime:
       value: '"{{OTHER_DEVICE_ID}}"'
     - expression: 'res.body.version'
       operator: eq
-      value: '2'
+      value: '17'
     - expression: 'res.body.params.address'
       operator: eq
       value: '"10.0.0.3:502"'

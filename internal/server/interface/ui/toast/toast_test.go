@@ -23,7 +23,7 @@ func TestFromError_ServersProblem(t *testing.T) {
 			"detail":"Tag with ID 'x' not found","instance":"/api/v0/tags/x"}`))
 	}))
 	defer srv.Close()
-	_, err := apiclient.New(srv.URL, srv.Client()).Project(uuid.New()).DeleteTag(context.Background(), uuid.New())
+	_, err := apiclient.New(srv.URL, srv.Client()).Project(uuid.New()).DeleteTag(context.Background(), uuid.New(), 1)
 
 	// Wrapped, as a caller may do.
 	got := FromError(fmt.Errorf("delete: %w", err))

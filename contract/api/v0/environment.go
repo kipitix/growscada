@@ -21,9 +21,11 @@ type GetEnvironmentsResponse struct {
 }
 
 // CreateEnvironmentRequest is the HTTP DTO for creating an Environment.
+// Version is the Version of the Draft the client saw (ADR 0016).
 type CreateEnvironmentRequest struct {
 	Name    string `json:"name"`
 	Comment string `json:"comment"`
+	Version int    `json:"version"`
 }
 
 // CreateEnvironmentResponse is the HTTP DTO for an Environment creation
@@ -35,7 +37,7 @@ type CreateEnvironmentResponse struct {
 }
 
 // UpdateEnvironmentRequest is the HTTP DTO for changing an Environment.
-// Version must match the current persisted version for optimistic locking.
+// Version must be the Draft's current Version (ADR 0016).
 type UpdateEnvironmentRequest struct {
 	Name    string `json:"name"`
 	Comment string `json:"comment"`

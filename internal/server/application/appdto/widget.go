@@ -18,7 +18,7 @@ type PortBinding struct {
 	TagID    uuid.UUID
 }
 
-// Widget is the application-layer DTO for widget instance data. SceneVersion
+// Widget is the application-layer DTO for widget instance data. Version
 // is the version of the owning scene: Widget has no version of its own, since
 // it is an entity of the Scene aggregate.
 type Widget struct {
@@ -33,7 +33,7 @@ type Widget struct {
 	TransformMatrix  TransformMatrix
 	TypeID           uuid.UUID
 	SceneID          uuid.UUID
-	SceneVersion     int
+	Version          int
 	Labels           []string
 	PortBindings     []PortBinding
 }
@@ -93,7 +93,7 @@ func NewWidget(w scene.Widget, sceneID uuid.UUID, sceneVersion int) Widget {
 		},
 		TypeID:       w.TypeID().UUID(),
 		SceneID:      sceneID,
-		SceneVersion: sceneVersion,
+		Version:      sceneVersion,
 		Labels:       labels,
 		PortBindings: portBindings,
 	}

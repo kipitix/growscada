@@ -60,7 +60,7 @@ func (h DevicesHandlers) PostDevices(w http.ResponseWriter, r *http.Request) {
 	if !decodeRequest(w, r, &request) {
 		return
 	}
-	created, err := h.service.CreateDevice(r.Context(), projectID, newCreateDeviceInput(request))
+	created, err := h.service.CreateDevice(r.Context(), projectID, request.Version, newCreateDeviceInput(request))
 	if err != nil {
 		sendError(w, r, err)
 		return
@@ -102,7 +102,11 @@ func (h DevicesHandlers) DeleteDevicesByID(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	deleted, err := h.service.DeleteDeviceByID(r.Context(), projectID, deviceID)
+	version, ok := versionQuery(w, r)
+	if !ok {
+		return
+	}
+	deleted, err := h.service.DeleteDeviceByID(r.Context(), projectID, deviceID, version)
 	if err != nil {
 		sendError(w, r, err)
 		return

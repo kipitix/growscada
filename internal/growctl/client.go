@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/google/uuid"
+
 	"github.com/kipitix/growscada/contract"
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
@@ -73,8 +75,22 @@ func (t *Tags) ListTagsMatching(ctx context.Context, f NameFilter) ([]ServerTag,
 	return matched, nil
 }
 
-// CreateTag creates a tag from its manifest.
+// CreateTag creates a tag from its manifest, stating the Version of the
+// Draft it read.
 func (t *Tags) CreateTag(ctx context.Context, m TagManifest) error {
-	_, err := t.ProjectClient.CreateTag(ctx, apiv0.CreateTagRequest{Name: m.Name, Type: m.Type})
+	state, err := t.DraftState(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = t.ProjectClient.CreateTag(ctx, apiv0.CreateTagRequest{Name: m.Name, Type: m.Type, Version: state.Version})
 	return err
+}
+
+// DeleteTag deletes a tag, stating the Version of the Draft it read.
+func (t *Tags) DeleteTag(ctx context.Context, id uuid.UUID) (apiv0.TagResponse, error) {
+	state, err := t.DraftState(ctx)
+	if err != nil {
+		return apiv0.TagResponse{}, err
+	}
+	return t.ProjectClient.DeleteTag(ctx, id, state.Version)
 }

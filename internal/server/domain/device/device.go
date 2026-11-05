@@ -14,7 +14,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
-	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 // Device - aggregate of a Project's Draft: a piece of equipment that supplies
@@ -25,8 +24,8 @@ import (
 // a Tag's Quality.
 //
 // Device is immutable: every change returns a new Device that also records
-// the change's event. A change keeps the Version; the repository raises it
-// once when it saves the result.
+// the change's event. A Device is an entity of its Project's Draft, which
+// carries the one Version of the Draft's content (ADR 0016).
 type Device interface {
 	ID() id.ID[Device]
 	// ProjectID is the Project whose Draft holds the Device; it never
@@ -40,18 +39,11 @@ type Device interface {
 	// Config is the configuration read under Protocol: for ProtocolSimulation,
 	// the patterns of what to write.
 	Config() DeviceConfig
-	Version() version.Version[Device]
-
-	// CheckVersion reports an edit conflict: the caller changes the Device
-	// having seen it at a Version other than the current one.
-	// Returns ErrDeviceConflict if expected is not the Version.
-	CheckVersion(expected version.Version[Device]) error
 
 	// Update changes the Device's name, comment, protocol and configuration
 	// and records a DeviceUpdatedEvent.
-	// Returns ErrDeviceConflict if expected is not the Version, and an error
-	// if the name or the protocol is the invalid zero value.
-	Update(expected version.Version[Device], aName DeviceName, aComment string, aProtocol DeviceProtocol, aConfig DeviceConfig) (Device, error)
+	// Returns an error if the name or the protocol is the invalid zero value.
+	Update(aName DeviceName, aComment string, aProtocol DeviceProtocol, aConfig DeviceConfig) (Device, error)
 
 	// Delete records a DeviceDeletedEvent; the repository's Delete removes
 	// the Device, and is refused while the Device still supplies a Tag.
@@ -69,7 +61,6 @@ type deviceImpl struct {
 	comment   string
 	protocol  DeviceProtocol
 	config    DeviceConfig
-	version   version.Version[Device]
 	pending   []event.Event
 }
 
@@ -79,7 +70,7 @@ var _ Device = (*deviceImpl)(nil)
 // aProjectID and records a DeviceCreatedEvent.
 // Returns an error if the name or the protocol is the invalid zero value.
 func CreateDevice(anID id.ID[Device], aProjectID id.ID[project.Project], aName DeviceName, aComment string, aProtocol DeviceProtocol, aConfig DeviceConfig) (Device, error) {
-	created, err := ReconstituteDevice(anID, aProjectID, aName, aComment, aProtocol, aConfig, version.Initial[Device]())
+	created, err := ReconstituteDevice(anID, aProjectID, aName, aComment, aProtocol, aConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -88,10 +79,10 @@ func CreateDevice(anID id.ID[Device], aProjectID id.ID[project.Project], aName D
 	return impl, nil
 }
 
-// ReconstituteDevice rebuilds a Device as stored, at the given version; it
-// records no event. For repositories.
+// ReconstituteDevice rebuilds a Device as stored; it records no event. For
+// repositories.
 // Returns an error if the name or the protocol is the invalid zero value.
-func ReconstituteDevice(anID id.ID[Device], aProjectID id.ID[project.Project], aName DeviceName, aComment string, aProtocol DeviceProtocol, aConfig DeviceConfig, aVersion version.Version[Device]) (Device, error) {
+func ReconstituteDevice(anID id.ID[Device], aProjectID id.ID[project.Project], aName DeviceName, aComment string, aProtocol DeviceProtocol, aConfig DeviceConfig) (Device, error) {
 	if !aName.IsValid() {
 		return nil, fmt.Errorf("cannot create device: invalid name")
 	}
@@ -105,7 +96,6 @@ func ReconstituteDevice(anID id.ID[Device], aProjectID id.ID[project.Project], a
 		comment:   aComment,
 		protocol:  aProtocol,
 		config:    aConfig,
-		version:   aVersion,
 	}, nil
 }
 
@@ -115,19 +105,7 @@ func (d *deviceImpl) Name() DeviceName                  { return d.name }
 func (d *deviceImpl) Comment() string                   { return d.comment }
 func (d *deviceImpl) Protocol() DeviceProtocol          { return d.protocol }
 func (d *deviceImpl) Config() DeviceConfig              { return d.config }
-func (d *deviceImpl) Version() version.Version[Device]  { return d.version }
-
-func (d *deviceImpl) CheckVersion(expected version.Version[Device]) error {
-	if expected != d.version {
-		return fmt.Errorf("%w: expected version %s, current %s", ErrDeviceConflict, expected, d.version)
-	}
-	return nil
-}
-
-func (d *deviceImpl) Update(expected version.Version[Device], aName DeviceName, aComment string, aProtocol DeviceProtocol, aConfig DeviceConfig) (Device, error) {
-	if err := d.CheckVersion(expected); err != nil {
-		return nil, err
-	}
+func (d *deviceImpl) Update(aName DeviceName, aComment string, aProtocol DeviceProtocol, aConfig DeviceConfig) (Device, error) {
 	if !aName.IsValid() {
 		return nil, fmt.Errorf("cannot update device: invalid name")
 	}
@@ -155,5 +133,5 @@ func (d *deviceImpl) PendingEvents() []event.Event {
 
 // String implements [fmt.Stringer].
 func (d *deviceImpl) String() string {
-	return fmt.Sprintf("Device: %s, Protocol: %s, Project: %s, Version: %s", d.name, d.protocol, d.projectID, d.version)
+	return fmt.Sprintf("Device: %s, Protocol: %s, Project: %s", d.name, d.protocol, d.projectID)
 }

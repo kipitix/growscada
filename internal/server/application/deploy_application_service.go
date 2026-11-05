@@ -16,11 +16,11 @@ import (
 // sent: the Revision is the only truth (ADR 0014).
 type DeployService interface {
 	// Deploy deploys the Draft of the live Project projectID and returns the
-	// Revision the Runtime node created.
+	// Revision the Runtime node created. After a successful Deploy its
+	// DraftChange stack is cleared (ADR 0017).
 	// Returns ErrNothingToDeploy if the Draft is the current Revision
-	// unchanged, an error wrapping project.ErrProjectDiscarding while a
-	// Discard of the Project runs, and an error wrapping
-	// project.ErrProjectNotFound if the Project is not live.
+	// unchanged, and an error wrapping project.ErrProjectNotFound if the
+	// Project is not live.
 	Deploy(ctx context.Context, projectID uuid.UUID) (appdto.Revision, error)
 	// Preview reports what Deploy would do, without deploying: the current
 	// Revision (absent until the first Deploy), whether the Draft is it
@@ -54,9 +54,7 @@ func NewDeployService(aContent ProjectContent, aBuilder ProjectFileBuilder, aRun
 }
 
 func (s deployServiceImpl) Deploy(ctx context.Context, projectID uuid.UUID) (appdto.Revision, error) {
-	// The Draft is read-only while a Discard runs: half restored, it would go
-	// into a Revision the policy of that Discard knows nothing of (Q10).
-	deployed, _, err := s.content.openNotDiscarding(ctx, projectID)
+	deployed, _, err := s.content.open(ctx, projectID)
 	if err != nil {
 		return appdto.Revision{}, err
 	}
@@ -87,6 +85,12 @@ func (s deployServiceImpl) Deploy(ctx context.Context, projectID uuid.UUID) (app
 	revision, err := s.runtime.Deploy(ctx, projectID, file)
 	if err != nil {
 		return appdto.Revision{}, fmt.Errorf("cannot deploy project %s: %w", projectID, err)
+	}
+	// The Revision stands: the DraftChange stack that made it is cleared in a
+	// transaction of its own, because Deploy crosses to the Runtime node. A
+	// failure to clear is reported while the Revision stands (ADR 0017).
+	if err := s.content.Drafts().ClearStack(ctx, editlock.ProjectScope(deployed)); err != nil {
+		return appdto.Revision{}, fmt.Errorf("cannot clear the draft stack of deployed project %s: %w", projectID, err)
 	}
 	return revision, nil
 }

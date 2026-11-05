@@ -168,18 +168,15 @@ func prepareRevisionTx(ctx context.Context, tx *sql.Tx, projectID uuid.UUID) err
 	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, projectID.String()); err != nil {
 		return fmt.Errorf("cannot lock project %s: %w", projectID, err)
 	}
-	var discarding bool
+	var live bool
 	err := tx.QueryRowContext(ctx,
-		`SELECT discarding FROM projects WHERE id = $1 AND deleted_at IS NULL FOR SHARE`, projectID,
-	).Scan(&discarding)
-	if errors.Is(err, sql.ErrNoRows) {
+		`SELECT deleted_at IS NULL FROM projects WHERE id = $1 FOR SHARE`, projectID,
+	).Scan(&live)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && !live) {
 		return fmt.Errorf("%w: %s", project.ErrProjectNotFound, projectID)
 	}
 	if err != nil {
 		return fmt.Errorf("cannot lock project %s: %w", projectID, err)
-	}
-	if discarding {
-		return fmt.Errorf("%w: %s", project.ErrProjectDiscarding, projectID)
 	}
 	return nil
 }

@@ -6,7 +6,6 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
-	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 // testProject is the Project of the scenes the tests build.
@@ -19,7 +18,7 @@ func makeTestScene(t *testing.T) Scene {
 	name, _ := NewSceneName("test_scene")
 	size, _ := NewSceneSize(1024, 768)
 	bg := NewBackgroundHTML("<div></div>")
-	return ReconstituteScene(sceneID, testProject, name, size, bg, nil, version.Initial[Scene]())
+	return ReconstituteScene(sceneID, testProject, name, size, bg, nil)
 }
 
 func TestReconstituteScene_FieldsAreSet(t *testing.T) {
@@ -27,9 +26,7 @@ func TestReconstituteScene_FieldsAreSet(t *testing.T) {
 	name, _ := NewSceneName("boiler_room")
 	size, _ := NewSceneSize(1920, 1080)
 	bg := NewBackgroundHTML("<svg></svg>")
-	ver, _ := version.New[Scene](version.WithNumber[Scene](2))
-
-	s := ReconstituteScene(sceneID, testProject, name, size, bg, nil, ver)
+	s := ReconstituteScene(sceneID, testProject, name, size, bg, nil)
 
 	if s.ID() != sceneID {
 		t.Errorf("ID mismatch: expected %v, got %v", sceneID, s.ID())
@@ -42,16 +39,6 @@ func TestReconstituteScene_FieldsAreSet(t *testing.T) {
 	}
 	if s.BackgroundHTML() != bg {
 		t.Errorf("BackgroundHTML mismatch: expected %v, got %v", bg, s.BackgroundHTML())
-	}
-	if s.Version() != ver {
-		t.Errorf("Version mismatch: expected %v, got %v", ver, s.Version())
-	}
-}
-
-func TestReconstituteScene_InitialVersion(t *testing.T) {
-	s := makeTestScene(t)
-	if s.Version() != version.Initial[Scene]() {
-		t.Errorf("expected initial version %v, got %v", version.Initial[Scene](), s.Version())
 	}
 }
 
@@ -66,7 +53,7 @@ func TestReconstituteScene_String_NonEmpty(t *testing.T) {
 func TestReconstituteScene_String_ContainsNameAndSize(t *testing.T) {
 	name, _ := NewSceneName("overview")
 	size, _ := NewSceneSize(800, 600)
-	s := ReconstituteScene(id.NewID[Scene](), testProject, name, size, NewBackgroundHTML(""), nil, version.Initial[Scene]())
+	s := ReconstituteScene(id.NewID[Scene](), testProject, name, size, NewBackgroundHTML(""), nil)
 
 	str := s.String()
 	if !strings.Contains(str, "overview") {
@@ -81,7 +68,7 @@ func TestReconstituteScene_String_ContainsNameAndSize(t *testing.T) {
 }
 
 func TestReconstituteScene_EmptyBackgroundHTML(t *testing.T) {
-	s := ReconstituteScene(id.NewID[Scene](), testProject, mustSceneName(t, "empty_bg"), mustSceneSize(t, 100, 100), NewBackgroundHTML(""), nil, version.Initial[Scene]())
+	s := ReconstituteScene(id.NewID[Scene](), testProject, mustSceneName(t, "empty_bg"), mustSceneSize(t, 100, 100), NewBackgroundHTML(""), nil)
 	if s.BackgroundHTML().Content() != "" {
 		t.Errorf("expected empty background HTML, got %q", s.BackgroundHTML().Content())
 	}

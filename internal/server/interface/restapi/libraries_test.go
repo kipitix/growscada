@@ -101,7 +101,6 @@ func TestLibraryPins_AddPreviewSwitchRemove(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("add pin: %d %s", rec.Code, rec.Body)
 	}
-	pin := decodeBody[apiv0.LibraryPinResponse](t, rec)
 
 	palette := decodeBody[apiv0.GetPinnedWidgetTypesResponse](t, serve(router, http.MethodGet, mainPath+"/widget-types", nil))
 	found := false
@@ -128,7 +127,7 @@ func TestLibraryPins_AddPreviewSwitchRemove(t *testing.T) {
 		t.Errorf("impact of release x: %d, want 400", rec.Code)
 	}
 
-	rec = serve(router, http.MethodPut, pins, apiv0.PutLibraryPinRequest{Release: 2, Version: pin.Version})
+	rec = serve(router, http.MethodPut, pins, apiv0.PutLibraryPinRequest{Release: 2, Version: testDraftVersion(t, mainProject)})
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("an orphaning switch: %d, want 409", rec.Code)
 	}
@@ -141,7 +140,7 @@ func TestLibraryPins_AddPreviewSwitchRemove(t *testing.T) {
 	}
 
 	serve(router, http.MethodDelete, mainPath+"/scenes/"+sc.ID.String()+"/widgets/"+w.ID.String(), nil)
-	if rec := serve(router, http.MethodPut, pins, apiv0.PutLibraryPinRequest{Release: 2, Version: pin.Version}); rec.Code != http.StatusOK {
+	if rec := serve(router, http.MethodPut, pins, apiv0.PutLibraryPinRequest{Release: 2, Version: testDraftVersion(t, mainProject)}); rec.Code != http.StatusOK {
 		t.Fatalf("switch: %d %s", rec.Code, rec.Body)
 	}
 	if list := decodeBody[apiv0.GetLibraryPinsResponse](t, serve(router, http.MethodGet, mainPath+"/library-pins", nil)); !hasPin(list, wtLibrary, 2) {

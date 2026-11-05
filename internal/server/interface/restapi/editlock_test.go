@@ -22,7 +22,7 @@ import (
 
 func cleanEditLocksRest(t *testing.T) {
 	t.Helper()
-	if _, err := testDB().ExecContext(editlock.System(context.Background()), "DELETE FROM engineering.edit_locks"); err != nil {
+	if _, err := testDB().ExecContext(editlock.System(context.Background()), "DELETE FROM engineering.draft_changes; DELETE FROM engineering.drafts"); err != nil {
 		t.Fatalf("clean edit locks: %v", err)
 	}
 }
@@ -204,7 +204,7 @@ func TestGatedWrite_OverREST(t *testing.T) {
 	cleanEditLocksRest(t)
 	router := lockRouter()
 
-	tag := apiv0.CreateTagRequest{Name: "gated", Type: "string"}
+	tag := apiv0.CreateTagRequest{Name: "gated", Type: "string", Version: testDraftVersion(t, mainProject)}
 	if rec := callAs(t, router, http.MethodPost, mainPath+"/tags", tag, ""); rec.Code != http.StatusBadRequest {
 		t.Errorf("write without a client: %d, want 400", rec.Code)
 	}
@@ -238,25 +238,6 @@ func TestGatedWrite_OverREST(t *testing.T) {
 	}
 	if rec := callAs(t, router, http.MethodPost, mainPath+"/tags", tag, aliceKey.String()); rec.Code != http.StatusCreated {
 		t.Errorf("the holder's write: %d %s", rec.Code, rec.Body)
-	}
-}
-
-func TestCheckOut_WhileDiscarding_Is409(t *testing.T) {
-	cleanEditLocksRest(t)
-	router := lockRouter()
-	// The seeded Main project has no Revision, so no Discard of it can start;
-	// the mark Check out reads is set directly.
-	markDiscarding(t)
-
-	rec := callAs(t, router, http.MethodPost, mainPath+apiv0.EditLockPath,
-		apiv0.CheckOutEditLockRequest{Name: "alice"}, aliceKey.String())
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("check out while discarding: %d %s, want 409", rec.Code, rec.Body)
-	}
-	var problem apiv0.Problem
-	_ = json.NewDecoder(rec.Body).Decode(&problem)
-	if problem.Detail == "" {
-		t.Errorf("no detail of the refusal")
 	}
 }
 

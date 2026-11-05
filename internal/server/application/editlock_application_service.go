@@ -113,10 +113,6 @@ func (s *editLockServiceImpl) State(ctx context.Context, scope editlock.Scope) (
 func (s *editLockServiceImpl) open(ctx context.Context, scope editlock.Scope, notDiscarding bool) error {
 	switch {
 	case scope.IsProject():
-		if notDiscarding {
-			_, _, err := s.content.openNotDiscarding(ctx, scope.ProjectID().UUID())
-			return err
-		}
 		_, _, err := s.content.open(ctx, scope.ProjectID().UUID())
 		return err
 	case scope.IsLibrary():

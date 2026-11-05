@@ -8,7 +8,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/project"
-	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 // recorded describes a pending event as its type and the ID it names: the
@@ -57,14 +56,11 @@ func assertPending(t *testing.T, sc Scene, want ...recorded) {
 	}
 }
 
-func TestCreateScene_RecordsCreatedEventAtInitialVersion(t *testing.T) {
+func TestCreateScene_RecordsCreatedEvent(t *testing.T) {
 	name, _ := NewSceneName("boiler_room")
 	size, _ := NewSceneSize(800, 600)
 	sc := CreateScene(id.NewID[Scene](), testProject, name, size, NewBackgroundHTML(""))
 
-	if sc.Version() != version.Initial[Scene]() {
-		t.Errorf("expected initial version, got %s", sc.Version())
-	}
 	if len(sc.Widgets()) != 0 {
 		t.Errorf("expected no widgets, got %d", len(sc.Widgets()))
 	}
@@ -81,15 +77,15 @@ func TestScene_Changes_RecordTheirEventsInOrder(t *testing.T) {
 	sc := makeStoredScene(t, kept)
 	added := makeWidgetOf(t, wt, "added", "value")
 
-	afterUpdate, err := sc.Update(sc.Version(), sc.Name(), sc.Size(), NewBackgroundHTML("<svg/>"))
+	afterUpdate, err := sc.Update(sc.Name(), sc.Size(), NewBackgroundHTML("<svg/>"))
 	if err != nil {
 		t.Fatalf("Update: %v", err)
 	}
-	afterAdd, err := afterUpdate.AddWidget(sc.Version(), added, wt, tagTypesOf(added))
+	afterAdd, err := afterUpdate.AddWidget(added, wt, tagTypesOf(added))
 	if err != nil {
 		t.Fatalf("AddWidget: %v", err)
 	}
-	afterUpdateWidget, err := afterAdd.UpdateWidget(sc.Version(), added, wt, tagTypesOf(added))
+	afterUpdateWidget, err := afterAdd.UpdateWidget(added, wt, tagTypesOf(added))
 	if err != nil {
 		t.Fatalf("UpdateWidget: %v", err)
 	}
@@ -111,9 +107,6 @@ func TestScene_Changes_RecordTheirEventsInOrder(t *testing.T) {
 func TestScene_RejectedChange_RecordsNothing(t *testing.T) {
 	sc := makeStoredScene(t)
 
-	if _, err := sc.Update(staleVersion(sc), sc.Name(), sc.Size(), sc.BackgroundHTML()); err == nil {
-		t.Fatal("expected conflict")
-	}
 	if _, _, err := sc.RemoveWidget(id.NewID[Widget]()); err == nil {
 		t.Fatal("expected ErrWidgetNotFound")
 	}
@@ -157,7 +150,7 @@ func TestSceneDelete_RecordsWidgetDeletedForEachWidgetThenSceneDeleted(t *testin
 		recorded{event.EventTypeWidgetDeleted, w2.ID().String()},
 		recorded{event.EventTypeSceneDeleted, sc.ID().String()},
 	)
-	if deleted.Version() != sc.Version() || !slices.Equal(deleted.Widgets(), sc.Widgets()) {
+	if !slices.Equal(deleted.Widgets(), sc.Widgets()) {
 		t.Error("Delete must keep the scene's state for the CAS")
 	}
 	assertPending(t, sc)
@@ -197,11 +190,11 @@ func TestSceneEvents_NameTheScenesProject(t *testing.T) {
 	if sc.ProjectID() != testProject {
 		t.Fatalf("ProjectID = %s, want %s", sc.ProjectID(), testProject)
 	}
-	updated, err := sc.Update(sc.Version(), sc.Name(), sc.Size(), sc.BackgroundHTML())
+	updated, err := sc.Update(sc.Name(), sc.Size(), sc.BackgroundHTML())
 	if err != nil {
 		t.Fatalf("Update: %v", err)
 	}
-	added, err := updated.AddWidget(sc.Version(), makeWidgetOf(t, wt, "w2"), wt, tagTypesOf())
+	added, err := updated.AddWidget(makeWidgetOf(t, wt, "w2"), wt, tagTypesOf())
 	if err != nil {
 		t.Fatalf("AddWidget: %v", err)
 	}

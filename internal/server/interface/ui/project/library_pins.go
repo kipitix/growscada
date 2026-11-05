@@ -55,7 +55,8 @@ func (p *Project) addPin(libraryID uuid.UUID) {
 	content := p.content
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.LibraryPinResponse, error) {
 		return content.PinLibrary(c, libraryID, apiv0.PutLibraryPinRequest{Release: lib.LatestRelease})
-	}, func(ctx app.Context, _ apiv0.LibraryPinResponse) {
+	}, func(ctx app.Context, saved apiv0.LibraryPinResponse) {
+		p.observeDraftVersion(saved.Version)
 		p.loadPins(ctx)
 		p.loadWidgetTypes(ctx)
 	}, nil)
@@ -94,7 +95,7 @@ func (p *Project) changePin(libraryID uuid.UUID, release int) {
 				return
 			}
 		}
-		p.savePin(content, libraryID, release, pin.Version)
+		p.savePin(content, libraryID, release, p.draftVersion)
 	}, nil)
 }
 
@@ -105,10 +106,11 @@ func (p *Project) savePin(content *apiclient.ProjectClient, libraryID uuid.UUID,
 	}
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.LibraryPinResponse, error) {
 		if release == 0 {
-			return content.UnpinLibrary(c, libraryID)
+			return content.UnpinLibrary(c, libraryID, version)
 		}
 		return content.PinLibrary(c, libraryID, apiv0.PutLibraryPinRequest{Release: release, Version: version})
-	}, func(ctx app.Context, _ apiv0.LibraryPinResponse) {
+	}, func(ctx app.Context, saved apiv0.LibraryPinResponse) {
+		p.observeDraftVersion(saved.Version)
 		p.loadPins(ctx)
 		p.loadWidgetTypes(ctx)
 	}, func(ctx app.Context, err error) {

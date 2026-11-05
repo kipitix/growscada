@@ -7,7 +7,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
-	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 // Environment - aggregate of a Project's Draft: a named set of the Project's
@@ -17,8 +16,8 @@ import (
 // Device's Tag values are supplied whatever Environment it is described in.
 //
 // Environment is immutable: every change returns a new Environment that also
-// records the change's event. A change keeps the Version; the repository
-// raises it once when it saves the result.
+// records the change's event. It is an entity of its Project's Draft, which
+// carries the one Version of the Draft's content (ADR 0016).
 type Environment interface {
 	ID() id.ID[Environment]
 	// ProjectID is the Project whose Draft holds the Environment; it never
@@ -27,18 +26,11 @@ type Environment interface {
 	Name() EnvironmentName
 	// Comment is descriptive metadata of the Environment — a note for people.
 	Comment() string
-	Version() version.Version[Environment]
-
-	// CheckVersion reports an edit conflict: the caller changes the
-	// Environment having seen it at a Version other than the current one.
-	// Returns ErrEnvironmentConflict if expected is not the Version.
-	CheckVersion(expected version.Version[Environment]) error
 
 	// Update changes the Environment's name and comment and records an
 	// EnvironmentUpdatedEvent.
-	// Returns ErrEnvironmentConflict if expected is not the Version, and an
-	// error if the name is the invalid zero value.
-	Update(expected version.Version[Environment], aName EnvironmentName, aComment string) (Environment, error)
+	// Returns an error if the name is the invalid zero value.
+	Update(aName EnvironmentName, aComment string) (Environment, error)
 
 	// Delete records an EnvironmentDeletedEvent; the repository's Delete
 	// removes the Environment, and is refused while the Environment still has
@@ -55,7 +47,6 @@ type environmentImpl struct {
 	projectID id.ID[project.Project]
 	name      EnvironmentName
 	comment   string
-	version   version.Version[Environment]
 	pending   []event.Event
 }
 
@@ -65,7 +56,7 @@ var _ Environment = (*environmentImpl)(nil)
 // aProjectID and records an EnvironmentCreatedEvent.
 // Returns an error if the name is the invalid zero value.
 func CreateEnvironment(anID id.ID[Environment], aProjectID id.ID[project.Project], aName EnvironmentName, aComment string) (Environment, error) {
-	created, err := ReconstituteEnvironment(anID, aProjectID, aName, aComment, version.Initial[Environment]())
+	created, err := ReconstituteEnvironment(anID, aProjectID, aName, aComment)
 	if err != nil {
 		return nil, err
 	}
@@ -74,10 +65,10 @@ func CreateEnvironment(anID id.ID[Environment], aProjectID id.ID[project.Project
 	return impl, nil
 }
 
-// ReconstituteEnvironment rebuilds an Environment as stored, at the given
-// version; it records no event. For repositories.
+// ReconstituteEnvironment rebuilds an Environment as stored; it records no
+// event. For repositories.
 // Returns an error if the name is the invalid zero value.
-func ReconstituteEnvironment(anID id.ID[Environment], aProjectID id.ID[project.Project], aName EnvironmentName, aComment string, aVersion version.Version[Environment]) (Environment, error) {
+func ReconstituteEnvironment(anID id.ID[Environment], aProjectID id.ID[project.Project], aName EnvironmentName, aComment string) (Environment, error) {
 	if !aName.IsValid() {
 		return nil, fmt.Errorf("cannot create environment: invalid name")
 	}
@@ -86,27 +77,14 @@ func ReconstituteEnvironment(anID id.ID[Environment], aProjectID id.ID[project.P
 		projectID: aProjectID,
 		name:      aName,
 		comment:   aComment,
-		version:   aVersion,
 	}, nil
 }
 
-func (e *environmentImpl) ID() id.ID[Environment]                { return e.id }
-func (e *environmentImpl) ProjectID() id.ID[project.Project]     { return e.projectID }
-func (e *environmentImpl) Name() EnvironmentName                 { return e.name }
-func (e *environmentImpl) Comment() string                       { return e.comment }
-func (e *environmentImpl) Version() version.Version[Environment] { return e.version }
-
-func (e *environmentImpl) CheckVersion(expected version.Version[Environment]) error {
-	if expected != e.version {
-		return fmt.Errorf("%w: expected version %s, current %s", ErrEnvironmentConflict, expected, e.version)
-	}
-	return nil
-}
-
-func (e *environmentImpl) Update(expected version.Version[Environment], aName EnvironmentName, aComment string) (Environment, error) {
-	if err := e.CheckVersion(expected); err != nil {
-		return nil, err
-	}
+func (e *environmentImpl) ID() id.ID[Environment]            { return e.id }
+func (e *environmentImpl) ProjectID() id.ID[project.Project] { return e.projectID }
+func (e *environmentImpl) Name() EnvironmentName             { return e.name }
+func (e *environmentImpl) Comment() string                   { return e.comment }
+func (e *environmentImpl) Update(aName EnvironmentName, aComment string) (Environment, error) {
 	if !aName.IsValid() {
 		return nil, fmt.Errorf("cannot update environment: invalid name")
 	}
@@ -129,5 +107,5 @@ func (e *environmentImpl) PendingEvents() []event.Event {
 
 // String implements [fmt.Stringer].
 func (e *environmentImpl) String() string {
-	return fmt.Sprintf("Environment: %s, Project: %s, Version: %s", e.name, e.projectID, e.version)
+	return fmt.Sprintf("Environment: %s, Project: %s", e.name, e.projectID)
 }

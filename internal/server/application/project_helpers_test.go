@@ -11,6 +11,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/device"
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
@@ -43,11 +44,18 @@ type wrappedScopes struct {
 
 	mu     sync.Mutex
 	opened map[id.ID[project.Project]]application.ProjectScope
+	drafts draft.Repository
 }
 
 func newScopes(opts ...repositories.Option) *wrappedScopes {
-	return &wrappedScopes{ProjectScopes: repositories.NewProjectScopes(testDB, opts...)}
+	return &wrappedScopes{
+		ProjectScopes: repositories.NewProjectScopes(testDB, opts...),
+		drafts:        repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB, opts...), opts...),
+	}
 }
+
+// Drafts is the repository of the Drafts the scopes' services write through.
+func (s *wrappedScopes) Drafts() draft.Repository { return s.drafts }
 
 func (s *wrappedScopes) ForProject(projectID id.ID[project.Project]) application.ProjectScope {
 	s.mu.Lock()
@@ -126,7 +134,12 @@ func cleanProjects(t *testing.T) {
 // contentOver returns the ProjectContent of the projects of the test
 // database's organization, through scopes.
 func contentOver(scopes application.ProjectScopes) application.ProjectContent {
-	return application.NewProjectContent(repositories.NewProjectRepositoryPostgres(testDB), scopes, soleOrganization())
+	drafts, ok := scopes.(interface{ Drafts() draft.Repository })
+	draftRepo := repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB))
+	if ok {
+		draftRepo = drafts.Drafts()
+	}
+	return application.NewProjectContent(repositories.NewProjectRepositoryPostgres(testDB), scopes, draftRepo, soleOrganization())
 }
 
 // sceneServiceOver returns the scene service over scopes.
@@ -168,7 +181,7 @@ func deployProject(t *testing.T, projectID uuid.UUID) {
 		newRuntimeNode(),
 		application.NewEditLockService(content,
 			application.NewLibraryContent(repositories.NewLibraryRepositoryPostgres(testDB), soleOrganization()),
-			repositories.NewEditLockRepositoryPostgres(testDB)),
+			repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB))),
 	)
 	if _, err := service.Deploy(editlock.System(context.Background()), projectID); err != nil && !errors.Is(err, application.ErrNothingToDeploy) {
 		t.Fatalf("deploy project %s: %v", projectID, err)
@@ -194,4 +207,20 @@ func tagStateCount(t *testing.T, projectID uuid.UUID) int {
 		t.Fatalf("count tag states: %v", err)
 	}
 	return n
+}
+
+// draftVersionOf returns the Version of the Project's Draft: what a write of
+// its content states (ADR 0016).
+func draftVersionOf(t *testing.T, projectID uuid.UUID) int {
+	t.Helper()
+	drafts := repositories.NewDraftRepositoryPostgres(testDB, nil)
+	found, ok, err := drafts.Read(editlock.System(context.Background()),
+		editlock.ProjectScope(id.NewID(id.IDWithUUID[project.Project](projectID))))
+	if err != nil {
+		t.Fatalf("read the draft of %s: %v", projectID, err)
+	}
+	if !ok {
+		return 1
+	}
+	return found.Version().Number()
 }

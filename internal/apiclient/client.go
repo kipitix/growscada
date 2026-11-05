@@ -377,6 +377,14 @@ func (l *LibraryClient) GetRelease(ctx context.Context, n int) (apiv0.LibraryRel
 	return resp, err
 }
 
+// DraftState returns the Version of the project's Draft: what every content
+// write states and every content DTO carries (ADR 0016).
+func (p *ProjectClient) DraftState(ctx context.Context) (apiv0.DraftStateResponse, error) {
+	var resp apiv0.DraftStateResponse
+	err := p.do(ctx, http.MethodGet, apiv0.DraftPath, nil, http.StatusOK, &resp)
+	return resp, err
+}
+
 // Discard starts resetting the library's Draft to its latest release and
 // returns the library, marked as being discarded. The error matches
 // ErrConflict if it was never released or a Discard is already under way.
@@ -396,25 +404,31 @@ func (p *ProjectClient) ListLibraryPins(ctx context.Context) ([]apiv0.LibraryPin
 	return resp.LibraryPins, err
 }
 
-// PinLibrary pins release req.Release of the library: req.Version 0 adds the
-// pin, any other switches it. The error matches ErrConflict if the version
-// is stale or the switch would leave Widgets without their WidgetType (the
-// StatusError's Problem names them).
+// PinLibrary pins release req.Release of the library, adding the pin or
+// switching it; req.Version is the Version of the Draft the client saw. The
+// error matches ErrConflict if the version is stale or the switch would leave
+// Widgets without their WidgetType (the StatusError's Problem names them).
 func (p *ProjectClient) PinLibrary(ctx context.Context, libraryID uuid.UUID, req apiv0.PutLibraryPinRequest) (apiv0.LibraryPinResponse, error) {
 	var resp apiv0.LibraryPinResponse
-	want := http.StatusOK
-	if req.Version == 0 {
-		want = http.StatusCreated
+	version, err := p.draftVersionOf(ctx, req.Version)
+	if err != nil {
+		return resp, err
 	}
-	err := p.do(ctx, http.MethodPut, libraryPinPath(libraryID), req, want, &resp)
+	req.Version = version
+	err = p.doOneOf(ctx, http.MethodPut, libraryPinPath(libraryID), req, &resp, http.StatusOK, http.StatusCreated)
 	return resp, err
 }
 
-// UnpinLibrary removes the pin of the library. The error matches ErrConflict
-// while Widgets of the project are of its WidgetTypes.
-func (p *ProjectClient) UnpinLibrary(ctx context.Context, libraryID uuid.UUID) (apiv0.LibraryPinResponse, error) {
+// UnpinLibrary removes the pin of the library, stating the Version of the
+// Draft the client saw. The error matches ErrConflict while Widgets of the
+// project are of its WidgetTypes.
+func (p *ProjectClient) UnpinLibrary(ctx context.Context, libraryID uuid.UUID, version int) (apiv0.LibraryPinResponse, error) {
 	var resp apiv0.LibraryPinResponse
-	err := p.do(ctx, http.MethodDelete, libraryPinPath(libraryID), nil, http.StatusOK, &resp)
+	version, err := p.draftVersionOf(ctx, version)
+	if err != nil {
+		return resp, err
+	}
+	err = p.do(ctx, http.MethodDelete, withVersion(libraryPinPath(libraryID), version), nil, http.StatusOK, &resp)
 	return resp, err
 }
 
@@ -482,7 +496,12 @@ func (p *ProjectClient) GetTag(ctx context.Context, id uuid.UUID) (apiv0.TagResp
 // CreateTag creates a tag.
 func (p *ProjectClient) CreateTag(ctx context.Context, req apiv0.CreateTagRequest) (apiv0.CreateTagResponse, error) {
 	var resp apiv0.CreateTagResponse
-	err := p.do(ctx, http.MethodPost, "/tags", req, http.StatusCreated, &resp)
+	version, err := p.draftVersionOf(ctx, req.Version)
+	if err != nil {
+		return resp, err
+	}
+	req.Version = version
+	err = p.do(ctx, http.MethodPost, "/tags", req, http.StatusCreated, &resp)
 	return resp, err
 }
 
@@ -498,11 +517,16 @@ func (p *ProjectClient) SetTagValue(ctx context.Context, id uuid.UUID, value, qu
 	return resp.Seq, nil
 }
 
-// DeleteTag deletes a tag by ID and returns its last state. The error matches
-// ErrNotFound if it is already gone.
-func (p *ProjectClient) DeleteTag(ctx context.Context, id uuid.UUID) (apiv0.TagResponse, error) {
+// DeleteTag deletes a tag by ID, stating the Version of the Draft the client
+// saw, and returns its last state. The error matches ErrNotFound if it is
+// already gone, ErrConflict if the version is stale.
+func (p *ProjectClient) DeleteTag(ctx context.Context, id uuid.UUID, version int) (apiv0.TagResponse, error) {
 	var resp apiv0.TagResponse
-	err := p.do(ctx, http.MethodDelete, tagPath(id), nil, http.StatusOK, &resp)
+	version, err := p.draftVersionOf(ctx, version)
+	if err != nil {
+		return resp, err
+	}
+	err = p.do(ctx, http.MethodDelete, withVersion(tagPath(id), version), nil, http.StatusOK, &resp)
 	return resp, err
 }
 
@@ -534,7 +558,12 @@ func (p *ProjectClient) GetScene(ctx context.Context, id uuid.UUID) (apiv0.Scene
 // CreateScene creates a Scene.
 func (p *ProjectClient) CreateScene(ctx context.Context, req apiv0.CreateSceneRequest) (apiv0.CreateSceneResponse, error) {
 	var resp apiv0.CreateSceneResponse
-	err := p.do(ctx, http.MethodPost, "/scenes", req, http.StatusCreated, &resp)
+	version, err := p.draftVersionOf(ctx, req.Version)
+	if err != nil {
+		return resp, err
+	}
+	req.Version = version
+	err = p.do(ctx, http.MethodPost, "/scenes", req, http.StatusCreated, &resp)
 	return resp, err
 }
 
@@ -542,14 +571,24 @@ func (p *ProjectClient) CreateScene(ctx context.Context, req apiv0.CreateSceneRe
 // current version. The error matches ErrConflict if the version is stale.
 func (p *ProjectClient) UpdateScene(ctx context.Context, id uuid.UUID, req apiv0.UpdateSceneRequest) (apiv0.UpdateSceneResponse, error) {
 	var resp apiv0.UpdateSceneResponse
-	err := p.do(ctx, http.MethodPut, scenePath(id), req, http.StatusOK, &resp)
+	version, err := p.draftVersionOf(ctx, req.Version)
+	if err != nil {
+		return resp, err
+	}
+	req.Version = version
+	err = p.do(ctx, http.MethodPut, scenePath(id), req, http.StatusOK, &resp)
 	return resp, err
 }
 
-// DeleteScene deletes a Scene with its Widgets and returns its last state.
-func (p *ProjectClient) DeleteScene(ctx context.Context, id uuid.UUID) (apiv0.SceneResponse, error) {
+// DeleteScene deletes a Scene with its Widgets, stating the Version of the
+// Draft the client saw, and returns its last state.
+func (p *ProjectClient) DeleteScene(ctx context.Context, id uuid.UUID, version int) (apiv0.SceneResponse, error) {
 	var resp apiv0.SceneResponse
-	err := p.do(ctx, http.MethodDelete, scenePath(id), nil, http.StatusOK, &resp)
+	version, err := p.draftVersionOf(ctx, version)
+	if err != nil {
+		return resp, err
+	}
+	err = p.do(ctx, http.MethodDelete, withVersion(scenePath(id), version), nil, http.StatusOK, &resp)
 	return resp, err
 }
 
@@ -572,28 +611,62 @@ func (p *ProjectClient) GetWidget(ctx context.Context, sceneID, widgetID uuid.UU
 	return resp, err
 }
 
-// CreateWidget places a Widget on a Scene, expecting req.SceneVersion to be
-// the Scene's current version. The error matches ErrConflict if it is stale.
+// CreateWidget places a Widget on a Scene, expecting req.Version to be the
+// Draft's current Version. The error matches ErrConflict if it is stale.
 func (p *ProjectClient) CreateWidget(ctx context.Context, sceneID uuid.UUID, req apiv0.CreateWidgetRequest) (apiv0.CreateWidgetResponse, error) {
 	var resp apiv0.CreateWidgetResponse
-	err := p.do(ctx, http.MethodPost, scenePath(sceneID)+"/widgets", req, http.StatusCreated, &resp)
+	version, err := p.draftVersionOf(ctx, req.Version)
+	if err != nil {
+		return resp, err
+	}
+	req.Version = version
+	err = p.do(ctx, http.MethodPost, scenePath(sceneID)+"/widgets", req, http.StatusCreated, &resp)
 	return resp, err
 }
 
-// UpdateWidget replaces a Widget, expecting req.SceneVersion to be its
-// Scene's current version. The error matches ErrConflict if it is stale.
+// UpdateWidget replaces a Widget, expecting req.Version to be the Draft's
+// current Version. The error matches ErrConflict if it is stale.
 func (p *ProjectClient) UpdateWidget(ctx context.Context, sceneID, widgetID uuid.UUID, req apiv0.UpdateWidgetRequest) (apiv0.UpdateWidgetResponse, error) {
 	var resp apiv0.UpdateWidgetResponse
-	err := p.do(ctx, http.MethodPut, widgetPath(sceneID, widgetID), req, http.StatusOK, &resp)
+	version, err := p.draftVersionOf(ctx, req.Version)
+	if err != nil {
+		return resp, err
+	}
+	req.Version = version
+	err = p.do(ctx, http.MethodPut, widgetPath(sceneID, widgetID), req, http.StatusOK, &resp)
 	return resp, err
 }
 
-// DeleteWidget removes a Widget from its Scene and returns its last state,
-// with the Scene's new version.
-func (p *ProjectClient) DeleteWidget(ctx context.Context, sceneID, widgetID uuid.UUID) (apiv0.WidgetResponse, error) {
+// DeleteWidget removes a Widget from its Scene, stating the Version of the
+// Draft the client saw, and returns its last state.
+func (p *ProjectClient) DeleteWidget(ctx context.Context, sceneID, widgetID uuid.UUID, version int) (apiv0.WidgetResponse, error) {
 	var resp apiv0.WidgetResponse
-	err := p.do(ctx, http.MethodDelete, widgetPath(sceneID, widgetID), nil, http.StatusOK, &resp)
+	version, err := p.draftVersionOf(ctx, version)
+	if err != nil {
+		return resp, err
+	}
+	err = p.do(ctx, http.MethodDelete, withVersion(widgetPath(sceneID, widgetID), version), nil, http.StatusOK, &resp)
 	return resp, err
+}
+
+// withVersion states the Version of the Draft on a DELETE (ADR 0016).
+func withVersion(path string, version int) string {
+	return path + "?" + apiv0.VersionQuery + "=" + strconv.Itoa(version)
+}
+
+// draftVersionOf returns the Version a write states: the stated one, or the
+// Draft's current one when the caller stated none (0). A caller that read
+// nothing of the Draft yet — an empty Project — states none, and the write
+// takes the version it read a moment before.
+func (p *ProjectClient) draftVersionOf(ctx context.Context, stated int) (int, error) {
+	if stated != 0 {
+		return stated, nil
+	}
+	state, err := p.DraftState(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return state.Version, nil
 }
 
 func widgetPath(sceneID, widgetID uuid.UUID) string {
@@ -651,7 +724,7 @@ func (p *ProjectClient) Deploy(ctx context.Context) (apiv0.DeployResponse, error
 // runs no Revision or a Discard is already under way.
 func (p *ProjectClient) Discard(ctx context.Context) (apiv0.DiscardProjectResponse, error) {
 	var resp apiv0.DiscardProjectResponse
-	err := p.do(ctx, http.MethodPost, "/discard", nil, http.StatusAccepted, &resp)
+	err := p.do(ctx, http.MethodPost, "/discard", nil, http.StatusOK, &resp)
 	return resp, err
 }
 

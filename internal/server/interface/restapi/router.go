@@ -29,6 +29,7 @@ type APIRouter struct {
 	deviceConfigHandlers *DeviceConfigHandlers
 	deviceWhoAmIHandlers *DeviceIdentityHandlers
 	deployHandlers       *DeployHandlers
+	draftHandlers        *DraftHandlers
 	revisionsHandlers    *RevisionHandlers
 	eventsHandlers       *EventsHandlers
 }
@@ -101,6 +102,7 @@ type Services struct {
 	Scenes       application.SceneService
 	Devices      application.DeviceService
 	Environments application.EnvironmentService
+	Draft        application.DraftService
 	Deploy       application.DeployService
 	Discard      application.DiscardService
 	Revisions    runtimeapp.RevisionService
@@ -128,6 +130,7 @@ func NewRouter(services Services, eventBus eventbus.EventBus, maxSSEClients int)
 		deviceConfigHandlers: NewDeviceConfigHandler(services.DeviceConfig, services.DeviceTokens),
 		deviceWhoAmIHandlers: NewDeviceIdentityHandler(services.DeviceTokens),
 		deployHandlers:       NewDeployHandler(services.Deploy, services.Discard, services.Revisions, services.TagStates),
+		draftHandlers:        NewDraftHandler(services.Draft),
 		editLockHandlers:     NewEditLockHandler(services.EditLocks),
 		revisionsHandlers:    NewRevisionHandler(services.Revisions),
 		eventsHandlers:       NewEventsHandler(eventBus, projectService, maxSSEClients, WithDeviceTokens(services.DeviceTokens), WithEditLocks(services.EditLocks)),
@@ -228,6 +231,7 @@ func (r *APIRouter) routes() []route {
 		{"PUT " + pp + "/environments/" + environmentResource.wildcard() + "/devices/" + deviceResource.wildcard(), environments.PutEnvironmentDevice},
 		{"DELETE " + pp + "/environments/" + environmentResource.wildcard() + "/devices/" + deviceResource.wildcard(), environments.DeleteEnvironmentDevice},
 
+		{"GET " + pp + apiv0.DraftPath, r.draftHandlers.GetDraft},
 		{"GET " + pp + "/revision", deploy.GetRevision},
 		{"GET " + pp + "/revisions", revisions.GetRevisions},
 		{"GET " + pp + "/revisions/" + revisionResource.wildcard(), revisions.GetRevisionByNumber},

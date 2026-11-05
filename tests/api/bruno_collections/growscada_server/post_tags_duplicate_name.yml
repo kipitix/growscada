@@ -14,7 +14,8 @@ http:
     data: |-
       {
         "name": "is_active",
-        "type": "boolean"
+        "type": "boolean",
+        "version": 2
       }
   auth: inherit
 

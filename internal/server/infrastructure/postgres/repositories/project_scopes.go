@@ -28,24 +28,14 @@ func NewProjectScopes(aDb *sql.DB, opts ...Option) application.ProjectScopes {
 }
 
 func (s *projectScopes) ForProject(projectID id.ID[project.Project]) application.ProjectScope {
-	return s.scope(projectID, false)
-}
-
-func (s *projectScopes) ForDiscard(projectID id.ID[project.Project]) application.ProjectScope {
-	return s.scope(projectID, true)
-}
-
-// scope opens the repositories of the Project projectID; discard makes their
-// writes a Discard's, made only while one is under way.
-func (s *projectScopes) scope(projectID id.ID[project.Project], discard bool) application.ProjectScope {
 	return projectScope{
 		projectID:          projectID,
-		tags:               newTagRepository(s.db, projectID, discard, s.opts...),
-		scenes:             newSceneRepository(s.db, projectID, discard, s.opts...),
-		pins:               newLibraryPinRepository(s.db, projectID, discard, s.opts...),
-		devices:            newDeviceRepository(s.db, projectID, discard, s.opts...),
-		environments:       newEnvironmentRepository(s.db, projectID, discard, s.opts...),
-		environmentDevices: newEnvironmentDeviceRepository(s.db, projectID, discard, s.opts...),
+		tags:               NewTagRepositoryPostgres(s.db, projectID, s.opts...),
+		scenes:             NewSceneRepositoryPostgres(s.db, projectID, s.opts...),
+		pins:               NewLibraryPinRepositoryPostgres(s.db, projectID, s.opts...),
+		devices:            NewDeviceRepositoryPostgres(s.db, projectID, s.opts...),
+		environments:       NewEnvironmentRepositoryPostgres(s.db, projectID, s.opts...),
+		environmentDevices: NewEnvironmentDeviceRepositoryPostgres(s.db, projectID, s.opts...),
 	}
 }
 

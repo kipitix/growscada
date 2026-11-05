@@ -19,7 +19,8 @@ const (
 
 // TagResponse is the HTTP DTO for representing a tag in API responses: its
 // definition (name, type, version) with its state (value, quality, seq).
-// Version is the Tag definition's; Seq numbers the write of the state, each
+// Version is the Version of the Project's Draft, the same in every content
+// entity of one response (ADR 0016); Seq numbers the write of the state, each
 // write higher than every write before it, so of two states of one tag the
 // one with the greater Seq is the newer. Until a supplier writes, a tag's
 // state is its type's zero value with quality bad, and Seq is 0, below
@@ -40,10 +41,12 @@ type GetTagsResponse struct {
 }
 
 // CreateTagRequest is the HTTP DTO for a tag creation request: the tag's
-// definition. Its state starts as its type's zero value with quality bad.
+// definition and the Version of the Draft the client saw (ADR 0016). Its
+// state starts as its type's zero value with quality bad.
 type CreateTagRequest struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Version int    `json:"version"`
 }
 
 // CreateTagResponse is the HTTP DTO for a tag creation response.

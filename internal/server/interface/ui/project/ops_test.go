@@ -116,9 +116,9 @@ func (f *fixture) widget(sceneID, id uuid.UUID) apiv0.WidgetResponse {
 	return w
 }
 
-// knowsSceneVersion fails unless Project's version of the Scene is the
+// knowsVersion fails unless Project's version of the Scene is the
 // server's.
-func (f *fixture) knowsSceneVersion(id uuid.UUID) {
+func (f *fixture) knowsVersion(id uuid.UUID) {
 	f.t.Helper()
 	if got, want := f.p.sceneVersions.Of(id), f.scene(id).Version; got != want {
 		f.t.Errorf("known version of the Scene: %d, server's: %d", got, want)
@@ -212,7 +212,7 @@ func TestCreateScene_SelectsTheNewScene(t *testing.T) {
 	if f.p.selectedSceneID != scenes[0].ID || len(f.p.scenes) != 1 {
 		t.Errorf("selected %v of %d scenes, want the new %v", f.p.selectedSceneID, len(f.p.scenes), scenes[0].ID)
 	}
-	f.knowsSceneVersion(scenes[0].ID)
+	f.knowsVersion(scenes[0].ID)
 }
 
 func TestSaveSceneProperties_RightAfterCreate_SavesTheEdit(t *testing.T) {
@@ -284,7 +284,7 @@ func TestSaveSceneProperties_SavesTheEditor(t *testing.T) {
 	if sc.Name != "Overview" || sc.Width != 1024 || sc.Height != 768 || sc.BackgroundHTML != "<b>bg</b>" {
 		t.Errorf("server scene: %+v", sc)
 	}
-	f.knowsSceneVersion(sceneID)
+	f.knowsVersion(sceneID)
 }
 
 func TestCommitSceneEdit_RenamesTheScene(t *testing.T) {
@@ -304,7 +304,7 @@ func TestCommitSceneEdit_RenamesTheScene(t *testing.T) {
 	if f.p.editingSceneID != uuid.Nil || f.p.sceneEdit.name != "Renamed" {
 		t.Errorf("editor: editing %v, name %q", f.p.editingSceneID, f.p.sceneEdit.name)
 	}
-	f.knowsSceneVersion(sceneID)
+	f.knowsVersion(sceneID)
 }
 
 // A second client edits the Scene between Project's read and its write: the
@@ -335,32 +335,7 @@ func TestSaveSceneProperties_SceneChangedMeanwhile_ReloadsAndAsksToRepeat(t *tes
 	if f.p.scenes[0].Name != "Theirs" || f.p.sceneEdit.name != "Theirs" {
 		t.Errorf("not reloaded: scene %q, editor %q", f.p.scenes[0].Name, f.p.sceneEdit.name)
 	}
-	f.knowsSceneVersion(sceneID)
-
-	f.p.sceneEdit.name = "Mine"
-	f.p.saveSceneProperties(f.p.compoCtx)
-	f.run()
-
-	f.noToasts()
-	if name := f.scene(sceneID).Name; name != "Mine" {
-		t.Errorf("repeated edit: server name %q", name)
-	}
-}
-
-func TestSaveSceneProperties_ServerVersionWentBack_RecoversAfterTheConflict(t *testing.T) {
-	url, api := newServer(t)
-	sceneID := createScene(t, api, "Main")
-	f := mount(t, url, api)
-	f.p.sceneVersions.Observe(f.p.sceneVersions.Mark(), sceneID, 15) // the server's database was recreated since
-
-	f.p.sceneEdit.name = "Mine"
-	f.p.saveSceneProperties(f.p.compoCtx)
-	f.run()
-
-	if got := f.oneToast(); got.Status != http.StatusConflict {
-		t.Errorf("toast %+v: want the conflict", got)
-	}
-	f.knowsSceneVersion(sceneID)
+	f.knowsVersion(sceneID)
 
 	f.p.sceneEdit.name = "Mine"
 	f.p.saveSceneProperties(f.p.compoCtx)
@@ -436,7 +411,7 @@ func TestCreateWidget_PlacesTheWidgetTypeAndSelectsIt(t *testing.T) {
 	if got := f.p.widgetEdit; got != widgetEditFieldsOf(w) {
 		t.Errorf("editor %+v, want %+v", got, widgetEditFieldsOf(w))
 	}
-	f.knowsSceneVersion(sceneID)
+	f.knowsVersion(sceneID)
 }
 
 func TestCreateWidget_SceneChangedMeanwhile_ReloadsAndAsksToRepeat(t *testing.T) {
@@ -456,7 +431,7 @@ func TestCreateWidget_SceneChangedMeanwhile_ReloadsAndAsksToRepeat(t *testing.T)
 	if len(f.p.widgets) != 1 || f.p.widgets[0].ID != theirs {
 		t.Errorf("widgets not reloaded: %+v", f.p.widgets)
 	}
-	f.knowsSceneVersion(sceneID)
+	f.knowsVersion(sceneID)
 
 	f.p.createWidget(f.p.compoCtx, typeID, 30, 40)
 	f.run()
@@ -480,7 +455,7 @@ func TestDeleteWidget_RemovesItAndTheSelection(t *testing.T) {
 	if len(f.p.widgets) != 0 || f.p.selectedWidgetID != uuid.Nil {
 		t.Errorf("widgets %+v, selected %v: want none", f.p.widgets, f.p.selectedWidgetID)
 	}
-	f.knowsSceneVersion(sceneID)
+	f.knowsVersion(sceneID)
 }
 
 // okOnDelete answers a successful DELETE with a proxy's "OK" in place of the
@@ -509,7 +484,7 @@ func TestDeleteWidget_ResponseWithoutTheVersion_RereadsIt(t *testing.T) {
 	f.run()
 
 	f.noToasts()
-	f.knowsSceneVersion(sceneID)
+	f.knowsVersion(sceneID)
 }
 
 func TestSaveWidgetName_RenamesTheWidget(t *testing.T) {
@@ -523,7 +498,7 @@ func TestSaveWidgetName_RenamesTheWidget(t *testing.T) {
 	if w := f.widget(sceneID, widgetID); w.Name != "pump" || w.Position.X != 10 {
 		t.Errorf("server widget: %+v", w)
 	}
-	f.knowsSceneVersion(sceneID)
+	f.knowsVersion(sceneID)
 }
 
 func TestSaveWidgetGeometry_SavesTheEditor(t *testing.T) {
@@ -542,7 +517,7 @@ func TestSaveWidgetGeometry_SavesTheEditor(t *testing.T) {
 		w.Origin != (apiv0.OriginResponse{X: 0, Y: 1}) || w.Rotation.Degrees != 45 {
 		t.Errorf("server widget: %+v", w)
 	}
-	f.knowsSceneVersion(sceneID)
+	f.knowsVersion(sceneID)
 }
 
 func TestSaveWidgetGeometry_Refused_ShowsTheServersDetailAndPutsItsStateBack(t *testing.T) {
@@ -568,6 +543,7 @@ func TestBindPortAndUnbindPort(t *testing.T) {
 	f, sceneID, widgetID := widgetFixture(t, apiv0.InputPort{Name: "value", TypeHint: "integer"})
 	tagID := createTag(t, f.api, "pump.speed", "integer")
 	f.p.loadTags(f.p.compoCtx)
+	f.p.loadDraftState(f.p.compoCtx)
 	f.run()
 
 	f.p.bindPort(f.p.compoCtx, "value", tagID)
@@ -578,7 +554,7 @@ func TestBindPortAndUnbindPort(t *testing.T) {
 	if w := f.widget(sceneID, widgetID); len(w.PortBindings) != 1 || w.PortBindings[0] != want[0] {
 		t.Errorf("bound: server bindings %+v, want %+v", w.PortBindings, want)
 	}
-	f.knowsSceneVersion(sceneID)
+	f.knowsVersion(sceneID)
 
 	f.p.unbindPort(f.p.compoCtx, "value")
 	f.run()
@@ -587,7 +563,7 @@ func TestBindPortAndUnbindPort(t *testing.T) {
 	if w := f.widget(sceneID, widgetID); len(w.PortBindings) != 0 {
 		t.Errorf("unbound: server bindings %+v", w.PortBindings)
 	}
-	f.knowsSceneVersion(sceneID)
+	f.knowsVersion(sceneID)
 }
 
 // drag moves the widget as a canvas drag would, then ends the drag.
@@ -618,7 +594,7 @@ func TestDrag_SavesTheMovedWidget(t *testing.T) {
 	if f.p.widgetEdit.posX != "15.0" || f.p.widgetEdit.posY != "27.0" {
 		t.Errorf("editor position: %q, %q", f.p.widgetEdit.posX, f.p.widgetEdit.posY)
 	}
-	f.knowsSceneVersion(sceneID)
+	f.knowsVersion(sceneID)
 }
 
 func TestDrag_WithoutAMove_SavesNothing(t *testing.T) {
@@ -703,7 +679,7 @@ func TestNoServer_ShowsNetworkErrors(t *testing.T) {
 	f := mount(t, url, nil)
 
 	toasts := f.e.TakeToasts()
-	if len(toasts) != 6 { // libraries, pins, widget types, scenes, tags, deployment state
+	if len(toasts) != 7 { // libraries, pins, widget types, scenes, tags, deployment state, the Draft
 		t.Fatalf("want a toast per list, got %+v", toasts)
 	}
 	for _, got := range toasts {

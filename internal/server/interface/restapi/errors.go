@@ -14,6 +14,7 @@ import (
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/devicetoken"
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -73,6 +74,8 @@ type errorMapping struct {
 // errorMappings is the only place the restapi knows the domain and the
 // application sentinel errors.
 var errorMappings = []errorMapping{
+	{draft.ErrDraftConflict, http.StatusConflict, projectResource,
+		"Draft was changed concurrently; reload it and retry"},
 	{application.ErrNothingToDeploy, http.StatusConflict, projectResource,
 		"Nothing to deploy: the Draft of the project is the revision it runs"},
 	{application.ErrNoRevisionToDiscard, http.StatusConflict, projectResource,
@@ -83,11 +86,10 @@ var errorMappings = []errorMapping{
 	{project.ErrProjectNotFound, http.StatusNotFound, projectResource, ""},
 	{project.ErrProjectConflict, http.StatusConflict, projectResource, "Project was changed concurrently; reload it and retry"},
 	{project.ErrProjectNameTaken, http.StatusConflict, projectResource, "Project name is already taken"},
-	{project.ErrProjectDiscarding, http.StatusConflict, projectResource, "Project is being discarded; its Draft is read-only until the Discard ends"},
 	{tag.ErrTagNotFound, http.StatusNotFound, tagResource, ""},
-	{tag.ErrTagConflict, http.StatusConflict, tagResource, "Tag was changed concurrently; reload it and retry"},
 	{tag.ErrTagNameTaken, http.StatusConflict, tagResource, "Tag name is already taken in the project"},
 	{library.ErrLibraryNotFound, http.StatusNotFound, libraryResource, ""},
+	{library.ErrWidgetTypeConflict, http.StatusConflict, widgetTypeResource, "WidgetType was changed concurrently; reload it and retry"},
 	{library.ErrLibraryConflict, http.StatusConflict, libraryResource, "Library was changed concurrently; reload it and retry"},
 	{library.ErrLibraryNameTaken, http.StatusConflict, libraryResource, "Library name is already taken"},
 	{library.ErrLibraryPinned, http.StatusConflict, libraryResource, "Library is pinned by Projects; unpin it first"},
@@ -98,28 +100,22 @@ var errorMappings = []errorMapping{
 	{library.ErrDraftChanged, http.StatusConflict, libraryResource, "Library's Draft changed while it was released; retry"},
 	{library.ErrReleaseNotFound, http.StatusNotFound, releaseResource, ""},
 	{library.ErrWidgetTypeNotFound, http.StatusNotFound, widgetTypeResource, ""},
-	{library.ErrWidgetTypeConflict, http.StatusConflict, widgetTypeResource, "WidgetType was changed concurrently; reload it and retry"},
 	{library.ErrWidgetTypeNameTaken, http.StatusConflict, widgetTypeResource, "WidgetType name is already taken in the library"},
 	{librarypin.ErrLibraryPinNotFound, http.StatusNotFound, libraryPinResource, ""},
-	{librarypin.ErrLibraryPinConflict, http.StatusConflict, libraryPinResource, "LibraryPin was changed concurrently; reload it and retry"},
 	{librarypin.ErrLibraryPinExists, http.StatusConflict, libraryPinResource, "Library is already pinned in the project"},
 	{librarypin.ErrWidgetsOrphaned, http.StatusConflict, libraryPinResource,
 		"Widgets of the project would be left without their WidgetType; remove them or change their type first"},
 	{scene.ErrSceneNotFound, http.StatusNotFound, sceneResource, ""},
-	{scene.ErrSceneConflict, http.StatusConflict, sceneResource, "Scene was changed concurrently; reload it and retry"},
 	{scene.ErrWidgetNotFound, http.StatusNotFound, widgetResource, ""},
 	{device.ErrDeviceNotFound, http.StatusNotFound, deviceResource, ""},
-	{device.ErrDeviceConflict, http.StatusConflict, deviceResource, "Device was changed concurrently; reload it and retry"},
 	{device.ErrDeviceNameTaken, http.StatusConflict, deviceResource, "Device name is already taken in the project"},
 	{device.ErrDeviceInUse, http.StatusConflict, deviceResource,
 		"Device is still in use: a Tag is supplied by it, or it stands in an environment"},
 	{device.ErrEnvironmentNotFound, http.StatusNotFound, environmentResource, ""},
-	{device.ErrEnvironmentConflict, http.StatusConflict, environmentResource, "Environment was changed concurrently; reload it and retry"},
 	{device.ErrEnvironmentNameTaken, http.StatusConflict, environmentResource, "Environment name is already taken in the project"},
 	{device.ErrEnvironmentInUse, http.StatusConflict, environmentResource,
 		"Environment still holds devices: remove their pairs first"},
 	{device.ErrEnvironmentDeviceNotFound, http.StatusNotFound, environmentDeviceResource, ""},
-	{device.ErrEnvironmentDeviceConflict, http.StatusConflict, environmentDeviceResource, "EnvironmentDevice was changed concurrently; reload it and retry"},
 	{device.ErrEnvironmentDeviceExists, http.StatusConflict, environmentDeviceResource, "Device is already in the environment"},
 	{tag.ErrTagNotSuppliedByDevice, http.StatusForbidden, tagResource,
 		"Tag is supplied by a Device: only that Device writes its value"},

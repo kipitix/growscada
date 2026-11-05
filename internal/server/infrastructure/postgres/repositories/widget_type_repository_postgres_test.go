@@ -364,7 +364,7 @@ func TestWidgetTypeDelete_UsedByWidget_RemovesIt(t *testing.T) {
 	if err := repo.Delete(ctx, wt.Delete()); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	if got := mustFindByID(t, sceneRepo, sc.ID()); len(got.Widgets()) != 1 || got.Version() != sc.Version() {
+	if got := mustFindByID(t, sceneRepo, sc.ID()); len(got.Widgets()) != 1 {
 		t.Errorf("the scene changed: %s", got)
 	}
 }

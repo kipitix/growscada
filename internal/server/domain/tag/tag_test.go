@@ -6,7 +6,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
-	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 // testProject is the Project of the tags the tests build.
@@ -15,7 +14,7 @@ var testProject = id.NewID[project.Project]()
 func makeTestTag(t *testing.T) Tag {
 	t.Helper()
 	name, _ := NewTagName("temperature")
-	tag, err := ReconstituteTag(id.NewID[Tag](), testProject, name, TagTypeInteger, NoSupplier(), version.Initial[Tag]())
+	tag, err := ReconstituteTag(id.NewID[Tag](), testProject, name, TagTypeInteger, NoSupplier())
 	if err != nil {
 		t.Fatalf("ReconstituteTag returned unexpected error: %v", err)
 	}
@@ -25,12 +24,7 @@ func makeTestTag(t *testing.T) Tag {
 func TestReconstituteTag_FieldsAreSet(t *testing.T) {
 	tagID := id.NewID[Tag]()
 	name, _ := NewTagName("pressure")
-	ver, err := version.New[Tag](version.WithNumber[Tag](3))
-	if err != nil {
-		t.Fatalf("unexpected error creating version: %v", err)
-	}
-
-	tag, err := ReconstituteTag(tagID, testProject, name, TagTypeString, NoSupplier(), ver)
+	tag, err := ReconstituteTag(tagID, testProject, name, TagTypeString, NoSupplier())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -47,24 +41,8 @@ func TestReconstituteTag_FieldsAreSet(t *testing.T) {
 	if tag.Type() != TagTypeString {
 		t.Errorf("Type mismatch: expected %v, got %v", TagTypeString, tag.Type())
 	}
-	if tag.Version() != ver {
-		t.Errorf("Version mismatch: expected %d, got %d", ver, tag.Version())
-	}
 	if tag.Supplier().HasDevice() {
 		t.Errorf("Supplier mismatch: expected no supplier, got %s", tag.Supplier())
-	}
-}
-
-func TestTagVersionInitial_IsZero(t *testing.T) {
-	if version.Initial[Tag]().Number() != 0 {
-		t.Errorf("expected version.Initial to be 0, got %d", version.Initial[Tag]().Number())
-	}
-}
-
-func TestReconstituteTag_InitialVersion(t *testing.T) {
-	tag := makeTestTag(t)
-	if tag.Version() != version.Initial[Tag]() {
-		t.Errorf("expected initial version %d, got %d", version.Initial[Tag](), tag.Version())
 	}
 }
 
@@ -81,7 +59,7 @@ func TestTag_KeepsItsSupplier(t *testing.T) {
 		t.Errorf("Supplier = %s, want the supplier %s", created.Supplier(), supplier)
 	}
 
-	stored, err := ReconstituteTag(id.NewID[Tag](), testProject, name, TagTypeInteger, supplier, version.Committed[Tag]())
+	stored, err := ReconstituteTag(id.NewID[Tag](), testProject, name, TagTypeInteger, supplier)
 	if err != nil {
 		t.Fatalf("ReconstituteTag: %v", err)
 	}
@@ -92,7 +70,7 @@ func TestTag_KeepsItsSupplier(t *testing.T) {
 
 func TestReconstituteTag_InvalidType_ReturnsError(t *testing.T) {
 	name, _ := NewTagName("temperature")
-	if _, err := ReconstituteTag(id.NewID[Tag](), testProject, name, TagType{}, NoSupplier(), version.Initial[Tag]()); err == nil {
+	if _, err := ReconstituteTag(id.NewID[Tag](), testProject, name, TagType{}, NoSupplier()); err == nil {
 		t.Error("expected error, got nil")
 	}
 }

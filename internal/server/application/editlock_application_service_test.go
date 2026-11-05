@@ -21,7 +21,7 @@ import (
 
 func cleanEditLocksApp(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(editlock.System(context.Background()), "DELETE FROM engineering.edit_locks"); err != nil {
+	if _, err := testDB.ExecContext(editlock.System(context.Background()), "DELETE FROM engineering.draft_changes; DELETE FROM engineering.drafts"); err != nil {
 		t.Fatalf("clean edit locks: %v", err)
 	}
 }
@@ -32,7 +32,7 @@ func editLockServiceOver(opts ...application.EditLockOption) application.EditLoc
 	content := contentOver(newScopes())
 	return application.NewEditLockService(content,
 		application.NewLibraryContent(repositories.NewLibraryRepositoryPostgres(testDB), soleOrganization()),
-		repositories.NewEditLockRepositoryPostgres(testDB), opts...)
+		repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB)), opts...)
 }
 
 // projectScope is the Scope of the Draft of the Project projectID.

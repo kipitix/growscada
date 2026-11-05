@@ -41,7 +41,7 @@ func TestEventsHandlers_GetProjectEvents_DeliversCommittedChangesInCommitOrder(t
 	services := newServicesPublishingTo(bus.Publish, onCommit)
 	tagSvc, sceneSvc := services.tags, services.scenes
 
-	created, err := tagSvc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "level", Type: "integer"})
+	created, err := tagSvc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Version: testDraftVersion(t, mainProject), Name: "level", Type: "integer"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
@@ -63,10 +63,10 @@ func TestEventsHandlers_GetProjectEvents_DeliversCommittedChangesInCommitOrder(t
 
 	// A Tag created after the Deploy fills the stream with tag_created; the
 	// values below are the deployed one's.
-	if _, err := tagSvc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "extra", Type: "integer"}); err != nil {
+	if _, err := tagSvc.CreateTag(ctx, mainProject, appdto.CreateTagInput{Version: testDraftVersion(t, mainProject), Name: "extra", Type: "integer"}); err != nil {
 		t.Fatalf("CreateTag(extra): %v", err)
 	}
-	sc, err := sceneSvc.CreateScene(ctx, mainProject, appdto.SceneInput{Name: "ordered", Width: 800, Height: 600})
+	sc, err := sceneSvc.CreateScene(ctx, mainProject, testDraftVersion(t, mainProject), appdto.SceneInput{Name: "ordered", Width: 800, Height: 600})
 	if err != nil {
 		t.Fatalf("CreateScene: %v", err)
 	}
@@ -75,10 +75,10 @@ func TestEventsHandlers_GetProjectEvents_DeliversCommittedChangesInCommitOrder(t
 			t.Fatalf("SetTagValue: %v", err)
 		}
 	}
-	if _, err := sceneSvc.DeleteSceneByID(ctx, mainProject, sc.ID); err != nil {
+	if _, err := sceneSvc.DeleteSceneByID(ctx, mainProject, sc.ID, testDraftVersion(t, mainProject)); err != nil {
 		t.Fatalf("DeleteSceneByID: %v", err)
 	}
-	if _, err := tagSvc.DeleteTagByID(ctx, mainProject, created.ID); err != nil {
+	if _, err := tagSvc.DeleteTagByID(ctx, mainProject, created.ID, testDraftVersion(t, mainProject)); err != nil {
 		t.Fatalf("DeleteTagByID: %v", err)
 	}
 

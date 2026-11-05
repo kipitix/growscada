@@ -42,12 +42,13 @@ func (p *Project) createWidget(ctx app.Context, typeID uuid.UUID, x, y float64) 
 			w.Size.Height = wt.DefaultHeight
 		}
 	}
-	req := apiv0.CreateWidgetRequest(widgetRequest(w, p.sceneVersions.Of(sceneID)))
+	req := apiv0.CreateWidgetRequest(widgetRequest(w, p.draftVersion))
 	mark := p.sceneVersions.Mark()
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.CreateWidgetResponse, error) {
 		return content.CreateWidget(c, sceneID, req)
 	}, func(ctx app.Context, created apiv0.CreateWidgetResponse) {
-		p.sceneVersions.Observe(mark, sceneID, created.SceneVersion)
+		p.observeDraftVersion(created.Version)
+		p.sceneVersions.Observe(mark, sceneID, created.Version)
 		w.ID = created.ID
 		p.selectedWidgetID = created.ID
 		uiutil.StoreID(ctx, p.selectionKey(widgetIDKey), created.ID)
@@ -67,10 +68,11 @@ func (p *Project) deleteWidget(ctx app.Context, widgetID uuid.UUID) {
 	sceneID := p.selectedSceneID
 	mark := p.sceneVersions.Mark()
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.WidgetResponse, error) {
-		return content.DeleteWidget(c, sceneID, widgetID)
+		return content.DeleteWidget(c, sceneID, widgetID, p.draftVersion)
 	}, func(ctx app.Context, deleted apiv0.WidgetResponse) {
-		if deleted.SceneVersion > 0 {
-			p.sceneVersions.Observe(mark, sceneID, deleted.SceneVersion)
+		if deleted.Version > 0 {
+			p.observeDraftVersion(deleted.Version)
+			p.sceneVersions.Observe(mark, sceneID, deleted.Version)
 		} else {
 			p.sceneVersions.ForgetID(sceneID)
 			p.loadScenes(ctx)
@@ -189,12 +191,13 @@ func (p *Project) putWidget(ctx app.Context, w apiv0.WidgetResponse) {
 		return
 	}
 	sceneID := p.selectedSceneID
-	req := apiv0.UpdateWidgetRequest(widgetRequest(w, p.sceneVersions.Of(sceneID)))
+	req := apiv0.UpdateWidgetRequest(widgetRequest(w, p.draftVersion))
 	mark := p.sceneVersions.Mark()
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.UpdateWidgetResponse, error) {
 		return content.UpdateWidget(c, sceneID, w.ID, req)
 	}, func(ctx app.Context, updated apiv0.UpdateWidgetResponse) {
-		p.sceneVersions.Observe(mark, sceneID, updated.SceneVersion)
+		p.observeDraftVersion(updated.Version)
+		p.sceneVersions.Observe(mark, sceneID, updated.Version)
 	}, p.rejectedSceneEdit(sceneID, p.loadWidgets))
 }
 
@@ -212,7 +215,7 @@ func widgetRequest(w apiv0.WidgetResponse, sceneVersion int) apiv0.UpdateWidgetR
 		Origin:       apiv0.OriginRequest(w.Origin),
 		Rotation:     apiv0.RotationRequest(w.Rotation),
 		TypeID:       w.TypeID,
-		SceneVersion: sceneVersion,
+		Version:      sceneVersion,
 		Labels:       labels,
 		PortBindings: bindings,
 	}

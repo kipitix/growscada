@@ -23,7 +23,7 @@ func mustProjectName(t *testing.T, s string) ProjectName {
 func makeStoredProject(t *testing.T) Project {
 	t.Helper()
 	ver, _ := version.New(version.WithNumber[Project](2))
-	return ReconstituteProject(id.NewID[Project](), id.NewID[organization.Organization](), mustProjectName(t, "Line 1"), false, false, ver)
+	return ReconstituteProject(id.NewID[Project](), id.NewID[organization.Organization](), mustProjectName(t, "Line 1"), false, ver)
 }
 
 func TestNewProjectName_RejectsEmpty(t *testing.T) {
@@ -107,67 +107,5 @@ func TestProjectDelete_MarksDeletedAndRecordsDeletedEvent(t *testing.T) {
 	}
 	if ev, ok := events[0].(ProjectEvent); !ok || ev.ProjectID() != p.ID() {
 		t.Errorf("expected ProjectEvent of %s, got %v", p.ID(), events[0])
-	}
-}
-
-func TestProjectStartDiscard_MarksItAndRecordsTheEvent(t *testing.T) {
-	p := makeStoredProject(t)
-
-	marked, err := p.StartDiscard()
-
-	if err != nil {
-		t.Fatalf("StartDiscard: %v", err)
-	}
-	if !marked.IsDiscarding() || marked.Version() != p.Version() {
-		t.Errorf("unexpected marked project %s", marked)
-	}
-	if p.IsDiscarding() {
-		t.Error("StartDiscard must leave the original as it was")
-	}
-	events := marked.PendingEvents()
-	if len(events) != 1 || events[0].Type() != event.EventTypeProjectDiscardStarted {
-		t.Fatalf("expected one project_discard_started, got %v", events)
-	}
-	if ev, ok := events[0].(ProjectEvent); !ok || ev.ProjectID() != p.ID() {
-		t.Errorf("expected ProjectEvent of %s, got %v", p.ID(), events[0])
-	}
-}
-
-func TestProjectStartDiscard_OfADiscardingProject_IsRefused(t *testing.T) {
-	marked, err := makeStoredProject(t).StartDiscard()
-	if err != nil {
-		t.Fatalf("StartDiscard: %v", err)
-	}
-
-	if _, err := marked.StartDiscard(); !errors.Is(err, ErrProjectDiscarding) {
-		t.Errorf("a second StartDiscard: %v, want ErrProjectDiscarding", err)
-	}
-}
-
-func TestProjectFinishDiscard_ClearsTheMarkAndRecordsUpdated(t *testing.T) {
-	marked, err := makeStoredProject(t).StartDiscard()
-	if err != nil {
-		t.Fatalf("StartDiscard: %v", err)
-	}
-
-	done := marked.FinishDiscard()
-
-	if done.IsDiscarding() {
-		t.Errorf("unexpected discarding project %s", done)
-	}
-	events := done.PendingEvents()
-	if len(events) != 2 || events[1].Type() != event.EventTypeProjectUpdated {
-		t.Fatalf("expected project_discard_started and project_updated, got %v", events)
-	}
-}
-
-func TestProjectFinishDiscard_OfAProjectNotBeingDiscarded_IsAnOp(t *testing.T) {
-	p := makeStoredProject(t)
-
-	if done := p.FinishDiscard(); done != p {
-		t.Errorf("FinishDiscard of a project not being discarded: %s, want the same", done)
-	}
-	if len(p.PendingEvents()) != 0 {
-		t.Errorf("expected no pending events, got %v", p.PendingEvents())
 	}
 }

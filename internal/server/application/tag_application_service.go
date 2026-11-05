@@ -6,16 +6,20 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
+	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 // TagService is the service interface for working with the tags of a
 // project: their definitions in the Draft, each read with its state from the
-// Runtime node (ADR 0011); a state is written there, not here. Every method
-// takes the project first; a project that does not exist (or is deleted) is
-// an error wrapping project.ErrProjectNotFound.
+// Runtime node (ADR 0011); a state is written there, not here. Every write of
+// the Draft's content states its Version (ADR 0016). Every method takes the
+// project first; a project that does not exist (or is deleted) is an error
+// wrapping project.ErrProjectNotFound.
 type TagService interface {
 	FindAllTags(ctx context.Context, projectID uuid.UUID) ([]appdto.Tag, error)
 	FindTagByID(ctx context.Context, projectID, tagID uuid.UUID) (appdto.Tag, error)
@@ -23,7 +27,7 @@ type TagService interface {
 	FindTagsByNamePattern(ctx context.Context, projectID uuid.UUID, pattern string) ([]appdto.Tag, error)
 	FindTagsByNameRegex(ctx context.Context, projectID uuid.UUID, expr string) ([]appdto.Tag, error)
 	CreateTag(ctx context.Context, projectID uuid.UUID, input appdto.CreateTagInput) (appdto.Tag, error)
-	DeleteTagByID(ctx context.Context, projectID, tagID uuid.UUID) (appdto.Tag, error)
+	DeleteTagByID(ctx context.Context, projectID, tagID uuid.UUID, version int) (appdto.Tag, error)
 }
 
 // tagServiceImpl is the tag service implementation.
@@ -34,10 +38,9 @@ type tagServiceImpl struct {
 
 var _ TagService = (*tagServiceImpl)(nil)
 
-// NewTagService creates and returns a new tag service instance. The events
-// of its changes are recorded by the Tag and saved with it (ADR 0008); the
-// states of the tags are read from aRuntime.
-// Returns a TagService interface implementation.
+// NewTagService creates and returns a new tag service instance. The events of
+// its changes are recorded by the Tag and saved with the Draft (ADR 0008,
+// ADR 0016); the states of the tags are read from aRuntime.
 func NewTagService(aContent ProjectContent, aRuntime RuntimeNode) TagService {
 	return &tagServiceImpl{content: aContent, runtime: aRuntime}
 }
@@ -46,8 +49,8 @@ func NewTagService(aContent ProjectContent, aRuntime RuntimeNode) TagService {
 // state from the Runtime node, read in one call; a tag the Runtime node has
 // no state of yet (its definition not upserted yet) shows its initial one,
 // and so does every tag when the Runtime node fails to answer: the Draft is
-// read without it.
-func (t tagServiceImpl) withStates(ctx context.Context, projectID uuid.UUID, tags []tag.Tag) []appdto.Tag {
+// read without it. version is the Version of the Project's Draft.
+func (t tagServiceImpl) withStates(ctx context.Context, projectID uuid.UUID, tags []tag.Tag, version int) []appdto.Tag {
 	if len(tags) == 0 {
 		return []appdto.Tag{}
 	}
@@ -70,17 +73,17 @@ func (t tagServiceImpl) withStates(ctx context.Context, projectID uuid.UUID, tag
 		if !ok {
 			st = appdto.InitialTagState(found)
 		}
-		result[i] = appdto.NewTag(found, st)
+		result[i] = appdto.NewTag(found, st, version)
 	}
 	return result
 }
 
 // withState returns the DTO of one tag with its state.
-func (t tagServiceImpl) withState(ctx context.Context, projectID uuid.UUID, found tag.Tag) appdto.Tag {
-	return t.withStates(ctx, projectID, []tag.Tag{found})[0]
+func (t tagServiceImpl) withState(ctx context.Context, projectID uuid.UUID, found tag.Tag, version int) appdto.Tag {
+	return t.withStates(ctx, projectID, []tag.Tag{found}, version)[0]
 }
 
-// tags returns the tag repository of the live project rawProjectID.
+// tags returns the tag read repository of the live project rawProjectID.
 func (t tagServiceImpl) tags(ctx context.Context, rawProjectID uuid.UUID) (tag.TagRepository, error) {
 	_, scope, err := t.content.open(ctx, rawProjectID)
 	if err != nil {
@@ -104,8 +107,11 @@ func (t tagServiceImpl) FindAllTags(ctx context.Context, rawProjectID uuid.UUID)
 			return nil, err
 		}
 	}
-
-	return t.withStates(ctx, rawProjectID, tags), nil
+	version, err := t.content.Version(ctx, rawProjectID)
+	if err != nil {
+		return nil, err
+	}
+	return t.withStates(ctx, rawProjectID, tags, version), nil
 }
 
 // FindTagByID returns a tag by its identifier
@@ -119,8 +125,11 @@ func (t tagServiceImpl) FindTagByID(ctx context.Context, rawProjectID, rawID uui
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("error on find tag by id in repository: %w", err)
 	}
-
-	return t.withState(ctx, rawProjectID, foundTag), nil
+	version, err := t.content.Version(ctx, rawProjectID)
+	if err != nil {
+		return appdto.Tag{}, err
+	}
+	return t.withState(ctx, rawProjectID, foundTag, version), nil
 }
 
 // FindTagByName returns a tag by its name, unique within the project
@@ -138,8 +147,11 @@ func (t tagServiceImpl) FindTagByName(ctx context.Context, rawProjectID uuid.UUI
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("error on find tag by name in repository: %w", err)
 	}
-
-	return t.withState(ctx, rawProjectID, foundTag), nil
+	version, err := t.content.Version(ctx, rawProjectID)
+	if err != nil {
+		return appdto.Tag{}, err
+	}
+	return t.withState(ctx, rawProjectID, foundTag, version), nil
 }
 
 // FindTagsByNamePattern returns the tags whose whole name matches a wildcard
@@ -179,66 +191,90 @@ func (t tagServiceImpl) findTagsMatching(ctx context.Context, rawProjectID uuid.
 			matched = append(matched, found)
 		}
 	}
-	return t.withStates(ctx, rawProjectID, matched), nil
+	version, err := t.content.Version(ctx, rawProjectID)
+	if err != nil {
+		return nil, err
+	}
+	return t.withStates(ctx, rawProjectID, matched, version), nil
 }
 
 // CreateTag creates a new tag in the project and returns the created tag DTO,
-// with its initial state. A project deleted just after it was read here is
-// not found by the save. The definition reaches the Runtime node with the next
-// Deploy: until then the Tag runs no state, and a write of its value is not
-// found (ADR 0011, task 35).
+// with its initial state. The write states the Version of the Draft the
+// client saw: a stale one is draft.ErrDraftConflict. The definition reaches
+// the Runtime node with the next Deploy: until then the Tag runs no state, and
+// a write of its value is not found (ADR 0011, task 35).
 func (t tagServiceImpl) CreateTag(ctx context.Context, rawProjectID uuid.UUID, newTagData appdto.CreateTagInput) (appdto.Tag, error) {
-	projectID, scope, err := t.content.open(ctx, rawProjectID)
+	projectID, _, err := t.content.open(ctx, rawProjectID)
 	if err != nil {
 		return appdto.Tag{}, err
 	}
-	repo := scope.Tags()
-	newTagID := repo.NextID()
-
 	newTagName, err := tag.NewTagName(newTagData.Name)
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("cannot create tag because of name: %w", invalidInput(err))
 	}
-
 	newTagType, err := tag.NewTagType(newTagData.Type)
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("cannot create tag because of type: %w", invalidInput(err))
 	}
-
+	expected, err := draftVersion(newTagData.Version)
+	if err != nil {
+		return appdto.Tag{}, err
+	}
+	newTagID := id.NewID[tag.Tag]()
 	newTag, err := tag.CreateTag(newTagID, projectID, newTagName, newTagType, tag.NoSupplier())
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("cannot create tag: %w", err)
 	}
-
-	newTag, err = repo.Save(ctx, newTag)
+	result, err := t.content.Drafts().Update(ctx, t.content.ScopeOf(projectID), expected, "Create tag "+newTagName.String(),
+		func(session *draft.Session) error {
+			session.CreateTag(ctx, newTag)
+			return nil
+		})
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("cannot save tag: %w", err)
 	}
-
-	return appdto.NewTag(newTag, appdto.InitialTagState(newTag)), nil
+	return appdto.NewTag(newTag, appdto.InitialTagState(newTag), result.Version().Number()), nil
 }
 
 // DeleteTagByID deletes a tag by its identifier and returns the deleted tag,
-// as it was read, with its last state. It expects no Version, and the
-// repository deletes the tag whatever its stored Version. The Runtime node's
-// copy of the definition stays until the next Deploy removes it with the
-// Revision it came from (ADR 0011, task 35): nothing of the Draft writes
-// there.
-func (t tagServiceImpl) DeleteTagByID(ctx context.Context, rawProjectID, rawID uuid.UUID) (appdto.Tag, error) {
-	repo, err := t.tags(ctx, rawProjectID)
+// as it was read, with its last state. The write states the Version of the
+// Draft the client saw and, in the same change, removes the Tag's PortBindings
+// from every Scene of the Project (ADR 0010, ADR 0017). The Runtime node's copy
+// of the definition stays until the next Deploy removes it with the Revision
+// it came from (ADR 0011, task 35): nothing of the Draft writes there.
+func (t tagServiceImpl) DeleteTagByID(ctx context.Context, rawProjectID, rawID uuid.UUID, rawVersion int) (appdto.Tag, error) {
+	projectID, scope, err := t.content.open(ctx, rawProjectID)
 	if err != nil {
 		return appdto.Tag{}, err
 	}
 	tagID := id.NewID(id.IDWithUUID[tag.Tag](rawID))
-
-	found, err := repo.FindByID(ctx, tagID)
+	found, err := scope.Tags().FindByID(ctx, tagID)
 	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("error on find tag by id in repository: %w", err)
 	}
-	last := t.withState(ctx, rawProjectID, found)
-	if err := repo.Delete(ctx, found.Delete()); err != nil {
+	expected, err := draftVersion(rawVersion)
+	if err != nil {
+		return appdto.Tag{}, err
+	}
+	var deleted tag.Tag
+	result, err := t.content.Drafts().Update(ctx, t.content.ScopeOf(projectID), expected, "Delete tag "+found.Name().String(),
+		func(session *draft.Session) error {
+			var err error
+			deleted, err = session.DeleteTag(ctx, tagID)
+			return err
+		})
+	if err != nil {
 		return appdto.Tag{}, fmt.Errorf("cannot delete tag: %w", err)
 	}
+	return t.withState(ctx, rawProjectID, deleted, result.Version().Number()), nil
+}
 
-	return last, nil
+// draftVersion parses the Version of the Draft a client states; a negative
+// one is no version at all: the client's input, not a conflict.
+func draftVersion(raw int) (version.Version[draft.Draft], error) {
+	expected, err := version.New(version.WithNumber[draft.Draft](raw))
+	if err != nil {
+		return expected, invalidInput(fmt.Errorf("version: %w", err))
+	}
+	return expected, nil
 }

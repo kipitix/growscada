@@ -101,6 +101,7 @@ func (p *Project) loadStaleScenes(ctx app.Context) {
 // an older state of it, puts sc in its place and merges the scene properties
 // editor when it is the selected one. mark is the moment it was requested.
 func (p *Project) setScene(ctx app.Context, mark sceneMark, sc apiv0.SceneResponse) {
+	p.observeDraftVersion(sc.Version)
 	p.observeSceneVersion(ctx, mark.versions, sc.ID, sc.Version)
 	i := uiutil.IdxByID(p.scenes, sc.ID, uiutil.SceneID)
 	if i < 0 || !p.sceneStates.Advance(mark.states, sc.ID, sc.Version) {

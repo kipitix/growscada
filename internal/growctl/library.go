@@ -345,7 +345,12 @@ func executeLibraries(ctx context.Context, client *Client, run *settings, plan l
 			if !ok {
 				return fmt.Errorf("project/%s not found", s.Project)
 			}
-			_, err = client.Project(found.ID).PinLibrary(ctx, lib.ID(), apiv0.PutLibraryPinRequest{Release: s.Release, Version: s.Version})
+			project := client.Project(found.ID)
+			state, err := project.DraftState(ctx)
+			if err != nil {
+				return fmt.Errorf("project/%s: %w", s.Project, err)
+			}
+			_, err = project.PinLibrary(ctx, lib.ID(), apiv0.PutLibraryPinRequest{Release: s.Release, Version: state.Version})
 			if err != nil {
 				return fmt.Errorf("project/%s pin library/%s release %d: %w%s", s.Project, s.Library, s.Release, err, orphanedHint(err))
 			}

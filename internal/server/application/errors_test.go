@@ -56,7 +56,7 @@ func TestTagService_CorruptStoredTag_IsNotInvalidInput(t *testing.T) {
 func TestErrInvalidInput_KeepsMessageAndCause(t *testing.T) {
 	svc := newService()
 
-	_, err := svc.CreateTag(editlock.System(context.Background()), mainProject, appdto.CreateTagInput{Name: "t", Type: "bogus"})
+	_, err := svc.CreateTag(editlock.System(context.Background()), mainProject, appdto.CreateTagInput{Version: draftVersionOf(t, mainProject), Name: "t", Type: "bogus"})
 
 	want := `cannot create tag because of type: unknown tag type: "bogus"`
 	if err == nil || err.Error() != want {

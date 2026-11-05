@@ -60,11 +60,8 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 		// The Revision the Project runs changed: Operation rereads it, Project
 		// refreshes its badge; nothing of the Draft is touched.
 		return ReloadTargets{Revision: true, Deploy: true}
-	case apiv0.EventProjectCreated, apiv0.EventProjectUpdated, apiv0.EventProjectDeleted,
-		apiv0.EventProjectDiscardStarted:
-		// The Draft of a Project being discarded is read-only: the Project
-		// mode shows it, and the Discard changes the deployment state once it
-		// ends.
+	case apiv0.EventProjectCreated, apiv0.EventProjectUpdated, apiv0.EventProjectDeleted:
+		// A Project was made, renamed or removed: the mode rereads the list.
 		return ReloadTargets{Projects: true, Deploy: true}
 	case apiv0.EventWidgetTypeCreated, apiv0.EventWidgetTypeUpdated, apiv0.EventWidgetTypeDeleted:
 		// A change of the Draft changes whether its library has changes

@@ -11,7 +11,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/editlock"
-	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
 
@@ -26,7 +25,7 @@ func newDeployService() (application.DeployService, application.RuntimeNode) {
 		node,
 		application.NewEditLockService(content,
 			application.NewLibraryContent(repositories.NewLibraryRepositoryPostgres(testDB), soleOrganization()),
-			repositories.NewEditLockRepositoryPostgres(testDB)),
+			repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB))),
 	), node
 }
 
@@ -36,17 +35,6 @@ func newDiscardService() application.DiscardService {
 	return application.NewDiscardService(contentOver(newScopes()), newRuntimeNode())
 }
 
-// newDiscardPolicy returns the policy carrying out Discards over the test
-// database, as the server registers it.
-func newDiscardPolicy() application.Policy {
-	return application.NewDiscardProjectPolicy(
-		repositories.NewProjectRepositoryPostgres(testDB),
-		newScopes(),
-		repositories.NewLibraryReleaseRepositoryPostgres(testDB),
-		newRuntimeNode(),
-	)
-}
-
 // runDiscard discards the project through the service and runs the policy, as
 // the dispatcher and the runner would.
 func runDiscard(t *testing.T, projectID uuid.UUID) {
@@ -54,9 +42,6 @@ func runDiscard(t *testing.T, projectID uuid.UUID) {
 	ctx := editlock.System(context.Background())
 	if _, err := newDiscardService().Discard(ctx, projectID); err != nil {
 		t.Fatalf("Discard: %v", err)
-	}
-	if err := newDiscardPolicy().Run(ctx, "project:"+projectID.String()); err != nil {
-		t.Fatalf("the discard policy: %v", err)
 	}
 }
 
@@ -73,7 +58,7 @@ func cleanPins(t *testing.T) {
 // mustCreateTag creates a Tag through the service.
 func mustCreateTag(t *testing.T, name, tagType string) appdto.Tag {
 	t.Helper()
-	created, err := newService().CreateTag(editlock.System(context.Background()), mainProject, appdto.CreateTagInput{Name: name, Type: tagType})
+	created, err := newService().CreateTag(editlock.System(context.Background()), mainProject, appdto.CreateTagInput{Version: draftVersionOf(t, mainProject), Name: name, Type: tagType})
 	if err != nil {
 		t.Fatalf("CreateTag(%s): %v", name, err)
 	}
@@ -148,7 +133,7 @@ func TestDeploy_AChangedWidget_IsANewRevision(t *testing.T) {
 
 	changed := testCreateWidgetInput
 	changed.Name = "moved-gauge"
-	if _, err := scenes.UpdateWidget(ctx, mainProject, scene.ID, widget.ID, widget.SceneVersion, changed); err != nil {
+	if _, err := scenes.UpdateWidget(ctx, mainProject, scene.ID, widget.ID, widget.Version, changed); err != nil {
 		t.Fatalf("UpdateWidget: %v", err)
 	}
 	preview, err = deploy.Preview(ctx, mainProject)
@@ -162,36 +147,6 @@ func TestDeploy_AChangedWidget_IsANewRevision(t *testing.T) {
 	}
 	if revision.Number != 2 {
 		t.Errorf("the second revision: %d, want 2", revision.Number)
-	}
-}
-
-// TestDeploy_WhileADiscardRuns_IsRefused: the Draft of a Discard is read-only
-// and half restored; a Deploy of it would put it into a Revision the policy of
-// that Discard knows nothing of.
-func TestDeploy_WhileADiscardRuns_IsRefused(t *testing.T) {
-	cleanDevices(t)
-	cleanScenes(t)
-	cleanPins(t)
-	ctx := editlock.System(context.Background())
-	mustCreateTag(t, "speed", "integer")
-
-	deploy, _ := newDeployService()
-	if _, err := deploy.Deploy(ctx, mainProject); err != nil {
-		t.Fatalf("Deploy: %v", err)
-	}
-	if _, err := newDiscardService().Discard(ctx, mainProject); err != nil {
-		t.Fatalf("Discard: %v", err)
-	}
-	// The mark is what refuses the Deploy; the policy clears it, so a failed
-	// assertion does not leave the Project marked for the tests after this one.
-	t.Cleanup(func() {
-		if err := newDiscardPolicy().Run(editlock.System(context.Background()), "project:"+mainProject.String()); err != nil {
-			t.Errorf("the discard policy: %v", err)
-		}
-	})
-
-	if _, err := deploy.Deploy(ctx, mainProject); !errors.Is(err, project.ErrProjectDiscarding) {
-		t.Fatalf("Deploy while the Project is being discarded: %v, want ErrProjectDiscarding", err)
 	}
 }
 
@@ -233,39 +188,6 @@ func TestDiscard_WithoutARevision_IsRefused(t *testing.T) {
 	}
 }
 
-func TestDiscard_TheDraftIsReadOnlyWhileItRuns(t *testing.T) {
-	cleanDevices(t)
-	cleanScenes(t)
-	ctx := editlock.System(context.Background())
-	mustCreateTag(t, "speed", "integer")
-
-	deploy, _ := newDeployService()
-	if _, err := deploy.Deploy(ctx, mainProject); err != nil {
-		t.Fatalf("Deploy: %v", err)
-	}
-	marked, err := newDiscardService().Discard(ctx, mainProject)
-	if err != nil {
-		t.Fatalf("Discard: %v", err)
-	}
-	if marked.ID != mainProject || !marked.Discarding {
-		t.Errorf("the marked project: %+v, want %s marked as being discarded", marked, mainProject)
-	}
-
-	if _, err := newService().CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "flow", Type: "integer"}); !errors.Is(err, project.ErrProjectDiscarding) {
-		t.Errorf("a Tag created while the Discard runs: %v, want ErrProjectDiscarding", err)
-	}
-	if _, err := newSceneService().CreateScene(ctx, mainProject, testCreateSceneInput); !errors.Is(err, project.ErrProjectDiscarding) {
-		t.Errorf("a Scene created while the Discard runs: %v, want ErrProjectDiscarding", err)
-	}
-
-	if err := newDiscardPolicy().Run(ctx, "project:"+mainProject.String()); err != nil {
-		t.Fatalf("the discard policy: %v", err)
-	}
-	if _, err := newService().CreateTag(ctx, mainProject, appdto.CreateTagInput{Name: "flow", Type: "integer"}); err != nil {
-		t.Errorf("a Tag created after the Discard: %v", err)
-	}
-}
-
 // TestDiscard_RestoresTheDraft: the Draft is brought back to the Revision —
 // the removed Widget, Scene, Tag, Device and pin come back under their IDs,
 // what was added goes, and the Tag states are the Runtime node's, kept.
@@ -276,7 +198,7 @@ func TestDiscard_RestoresTheDraft(t *testing.T) {
 
 	tag := mustCreateTag(t, "speed", "integer")
 	devices := newDeviceService()
-	device, err := devices.CreateDevice(ctx, mainProject, appdto.DeviceInput{
+	device, err := devices.CreateDevice(ctx, mainProject, draftVersionOf(t, mainProject), appdto.DeviceInput{
 		Name: "pump", Comment: "the pump", Protocol: "simulation", Config: []byte(`{"pattern":"ramp"}`),
 	})
 	if err != nil {
@@ -301,13 +223,13 @@ func TestDiscard_RestoresTheDraft(t *testing.T) {
 
 	// Change the Draft: remove the Scene, the Tag and the Device (in the order
 	// the Draft's references allow), and add a Tag and a Device.
-	if _, err := scenes.DeleteSceneByID(ctx, mainProject, scene.ID); err != nil {
+	if _, err := scenes.DeleteSceneByID(ctx, mainProject, scene.ID, draftVersionOf(t, mainProject)); err != nil {
 		t.Fatalf("DeleteSceneByID: %v", err)
 	}
-	if _, err := newService().DeleteTagByID(ctx, mainProject, tag.ID); err != nil {
+	if _, err := newService().DeleteTagByID(ctx, mainProject, tag.ID, draftVersionOf(t, mainProject)); err != nil {
 		t.Fatalf("DeleteTagByID: %v", err)
 	}
-	if _, err := devices.DeleteDeviceByID(ctx, mainProject, device.ID); err != nil {
+	if _, err := devices.DeleteDeviceByID(ctx, mainProject, device.ID, draftVersionOf(t, mainProject)); err != nil {
 		t.Fatalf("DeleteDeviceByID: %v", err)
 	}
 	added := mustCreateTag(t, "added", "boolean")
@@ -364,18 +286,18 @@ func TestDiscard_RemovesADeviceAndAnEnvironmentOfTheDraft(t *testing.T) {
 	}
 
 	devices := newDeviceService()
-	added, err := devices.CreateDevice(ctx, mainProject, appdto.DeviceInput{
+	added, err := devices.CreateDevice(ctx, mainProject, draftVersionOf(t, mainProject), appdto.DeviceInput{
 		Name: "added-" + uuid.NewString(), Protocol: "simulation", Config: []byte(`{"pattern":"ramp"}`),
 	})
 	if err != nil {
 		t.Fatalf("CreateDevice: %v", err)
 	}
 	environments := newEnvironmentService()
-	environment, err := environments.CreateEnvironment(ctx, mainProject, appdto.EnvironmentInput{Name: "added-" + uuid.NewString()})
+	environment, err := environments.CreateEnvironment(ctx, mainProject, draftVersionOf(t, mainProject), appdto.EnvironmentInput{Name: "added-" + uuid.NewString()})
 	if err != nil {
 		t.Fatalf("CreateEnvironment: %v", err)
 	}
-	if _, _, err := environments.PutEnvironmentDevice(ctx, mainProject, environment.ID, added.ID, 0,
+	if _, _, err := environments.PutEnvironmentDevice(ctx, mainProject, environment.ID, added.ID, draftVersionOf(t, mainProject),
 		appdto.EnvironmentDeviceInput{Params: []byte(`{"timeout":1}`)}); err != nil {
 		t.Fatalf("PutEnvironmentDevice: %v", err)
 	}
@@ -413,7 +335,7 @@ func TestDiscard_OfAPinnedLibraryRestoresThePin(t *testing.T) {
 	if _, err := deploy.Deploy(ctx, mainProject); err != nil {
 		t.Fatalf("Deploy: %v", err)
 	}
-	if _, err := newLibraryPinService().DeleteLibraryPin(ctx, mainProject, lib.ID); err != nil {
+	if _, err := newLibraryPinService().DeleteLibraryPin(ctx, mainProject, lib.ID, draftVersionOf(t, mainProject)); err != nil {
 		t.Fatalf("DeleteLibraryPin: %v", err)
 	}
 

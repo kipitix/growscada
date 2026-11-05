@@ -7,10 +7,9 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/organization"
 )
 
-// DeviceRepository - repository interface for storing and managing the
-// Devices of one Project's Draft (ADR 0006): every read sees only the Devices
-// of that Project, and saving or deleting one of another Project is a
-// programming error.
+// DeviceRepository reads the Devices of one Project's Draft (ADR 0006):
+// every read sees only the Devices of that Project. A Device is an entity of
+// the Draft (ADR 0016): its writes go through the Draft's repository.
 type DeviceRepository interface {
 	// NextID returns a new unique identifier for a Device.
 	NextID() id.ID[Device]
@@ -33,25 +32,4 @@ type DeviceRepository interface {
 	// the Project.
 	// Returns ErrDeviceNotFound if there is none.
 	FindByName(context.Context, DeviceName) (Device, error)
-
-	// Save stores a Device and the events it recorded, in one transaction: a
-	// Device of the initial version is inserted, any other replaces the
-	// stored one if the stored version is still the Device's version. The
-	// version is raised once per Save; the returned Device carries the new
-	// one and no events.
-	// Returns ErrDeviceNotFound if the Device does not exist on update,
-	// ErrDeviceConflict if the stored version does not match,
-	// ErrDeviceNameTaken if another Device of the Project has the name, or an
-	// error on failure.
-	Save(context.Context, Device) (Device, error)
-
-	// Delete removes a Device if the stored version is still the Device's
-	// version and stores the events it recorded (see Device.Delete), in one
-	// transaction. A Device still in use is not removed: while a Tag of the
-	// Project is supplied by it, or while it stands in an EnvironmentDevice,
-	// Delete refuses with ErrDeviceInUse (ADR 0008).
-	// Returns ErrDeviceNotFound if the Device does not exist,
-	// ErrDeviceConflict if the stored version does not match,
-	// ErrDeviceInUse if it is still referred to, or an error on failure.
-	Delete(context.Context, Device) error
 }

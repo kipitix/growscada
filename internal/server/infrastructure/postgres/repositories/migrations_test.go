@@ -463,8 +463,8 @@ func TestMigrationEngineeringAndRuntimeSchemas_Down_PutsTheStatesBack(t *testing
 	}
 	const main = "b0000000-0000-4000-8000-000000000001"
 	written, stateless := uuid.New(), uuid.New()
-	if _, err := db.ExecContext(ctx, `INSERT INTO engineering.tags (id, project_id, name, type, version)
-	                                  VALUES ($1, $3, 'speed', 'integer', 1), ($2, $3, 'flag', 'boolean', 1)`, written, stateless, main); err != nil {
+	if _, err := db.ExecContext(ctx, `INSERT INTO engineering.tags (id, project_id, name, type)
+	                                  VALUES ($1, $3, 'speed', 'integer'), ($2, $3, 'flag', 'boolean')`, written, stateless, main); err != nil {
 		t.Fatalf("insert tag definitions: %v", err)
 	}
 	if _, err := db.ExecContext(ctx, `INSERT INTO runtime.tags (id, project_id, name, type, version)
@@ -554,8 +554,8 @@ func TestMigrationTagStatesAndDevices_SplitsTheStateAndAddsDevices(t *testing.T)
 	mustExec(`INSERT INTO engineering.environments (id, project_id, name) VALUES ($1, $2, 'shop')`, environmentID, main)
 	mustExec(`INSERT INTO engineering.environment_devices (environment_id, device_id, params)
 	          VALUES ($1, $2, '{"address":"localhost:9000"}')`, environmentID, deviceID)
-	mustExec(`INSERT INTO engineering.tags (id, project_id, name, type, version, device_id)
-	          VALUES ($1, $2, 'speed', 'integer', 3, $3)`, tagID, main, deviceID)
+	mustExec(`INSERT INTO engineering.tags (id, project_id, name, type, device_id)
+	          VALUES ($1, $2, 'speed', 'integer', $3)`, tagID, main, deviceID)
 	if _, err := db.ExecContext(ctx, `INSERT INTO engineering.environments (id, project_id, name) VALUES ($1, $2, 'shop')`,
 		uuid.New(), main); err == nil {
 		t.Error("an environment name taken twice in the project")

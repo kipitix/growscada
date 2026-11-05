@@ -61,7 +61,7 @@ func (h ScenesHandlers) PostScenes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := h.service.CreateScene(r.Context(), projectID, newCreateSceneInput(request))
+	created, err := h.service.CreateScene(r.Context(), projectID, request.Version, newCreateSceneInput(request))
 	if err != nil {
 		sendError(w, r, err)
 		return
@@ -105,8 +105,12 @@ func (h ScenesHandlers) DeleteScenesByID(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
+	version, ok := versionQuery(w, r)
+	if !ok {
+		return
+	}
 
-	deleted, err := h.service.DeleteSceneByID(r.Context(), projectID, sceneID)
+	deleted, err := h.service.DeleteSceneByID(r.Context(), projectID, sceneID, version)
 	if err != nil {
 		sendError(w, r, err)
 		return

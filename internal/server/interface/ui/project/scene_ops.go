@@ -19,13 +19,14 @@ func (p *Project) createScene(ctx app.Context) {
 	if p.refuseReadOnly(ctx) {
 		return
 	}
-	req := apiv0.CreateSceneRequest{Name: "New Scene", Width: 1920, Height: 1080}
+	req := apiv0.CreateSceneRequest{Name: "New Scene", Width: 1920, Height: 1080, Version: p.draftVersion}
 	mark := p.markScenes()
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.CreateSceneResponse, error) {
 		return content.CreateScene(c, req)
 	}, func(ctx app.Context, created apiv0.CreateSceneResponse) {
 		// The new scene is the request as the server stored it: listed and
 		// editable at once, before the list is reread.
+		p.observeDraftVersion(created.Version)
 		p.sceneVersions.Observe(mark.versions, created.ID, created.Version)
 		p.sceneStates.Observe(mark.states, created.ID, created.Version)
 		p.scenes = append(p.scenes, apiv0.SceneResponse{
@@ -74,7 +75,7 @@ func (p *Project) deleteScene(ctx app.Context, sceneID uuid.UUID) {
 		return
 	}
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.SceneResponse, error) {
-		return content.DeleteScene(c, sceneID)
+		return content.DeleteScene(c, sceneID, p.draftVersion)
 	}, func(ctx app.Context, _ apiv0.SceneResponse) {
 		p.loadScenes(ctx)
 	}, p.rejectedSceneEdit(sceneID, nil))
@@ -157,13 +158,14 @@ func (p *Project) putScene(sc apiv0.SceneResponse) {
 		Width:          sc.Width,
 		Height:         sc.Height,
 		BackgroundHTML: sc.BackgroundHTML,
-		Version:        p.sceneVersions.Of(sc.ID),
+		Version:        p.draftVersion,
 	}
 	mark := p.markScenes()
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.UpdateSceneResponse, error) {
 		return content.UpdateScene(c, sc.ID, req)
 	}, func(ctx app.Context, updated apiv0.UpdateSceneResponse) {
 		// The list holds the properties as saved.
+		p.observeDraftVersion(updated.Version)
 		p.sceneVersions.Observe(mark.versions, sc.ID, updated.Version)
 		p.sceneStates.Observe(mark.states, sc.ID, updated.Version)
 	}, p.rejectedSceneEdit(sc.ID, p.loadScenes))

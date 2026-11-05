@@ -12,20 +12,20 @@ http:
   auth: inherit
 
 docs: |
-  Resets the Draft to the Revision the project runs: the answer is at once
-  (`202`, `discarding: true`) and the Draft is read-only until the policy
-  ends. A project that was never deployed answers `409`.
+  Resets the whole Draft to the Revision the project runs, in one transaction
+  (ADR 0016): the answer is `200` with the Draft's new `version`. A project
+  that was never deployed answers `409`.
 
 runtime:
   assertions:
     - expression: 'res.status'
       operator: eq
-      value: '202'
+      value: '200'
     - expression: 'res.headers["growscada-schema-version"]'
       operator: isDefined
-    - expression: 'res.body.discarding'
+    - expression: 'res.body.version'
       operator: eq
-      value: 'true'
+      value: '4'
 
 settings:
   encodeUrl: true

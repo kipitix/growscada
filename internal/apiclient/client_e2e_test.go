@@ -59,7 +59,7 @@ func TestTags_RoundTrip(t *testing.T) {
 	if err != nil || len(list) != 1 || list[0].Value != "2" || list[0].Quality != "uncertain" || list[0].Seq != seq || list[0].Version != got.Version {
 		t.Fatalf("ListTags: %+v, %v; want the write at seq %d", list, err, seq)
 	}
-	deleted, err := client.Project(servertest.MainProject).DeleteTag(ctx, created.ID)
+	deleted, err := client.Project(servertest.MainProject).DeleteTag(ctx, created.ID, 0)
 	if err != nil || deleted.ID != created.ID {
 		t.Fatalf("DeleteTag: %+v, %v", deleted, err)
 	}
@@ -138,7 +138,7 @@ func TestWidgetTypes_RoundTrip(t *testing.T) {
 	if _, err := client.DeleteLibrary(ctx, lib.ID()); !errors.Is(err, apiclient.ErrConflict) {
 		t.Errorf("DeleteLibrary while pinned: %v, want ErrConflict", err)
 	}
-	if _, err := project.UnpinLibrary(ctx, lib.ID()); err != nil {
+	if _, err := project.UnpinLibrary(ctx, lib.ID(), 0); err != nil {
 		t.Fatalf("UnpinLibrary: %v", err)
 	}
 	discarding, err := lib.Discard(ctx)
@@ -202,40 +202,42 @@ func TestScenesAndWidgets_RoundTrip(t *testing.T) {
 	wt := pinnedType(t, client, apiv0.CreateWidgetTypeRequest{Name: "Lamp", ScriptLanguage: "javascript", DefaultWidth: 10, DefaultHeight: 10, InputPorts: []apiv0.InputPort{}})
 	widgetReq := apiv0.CreateWidgetRequest{
 		Name: "lamp1", Size: apiv0.SizeRequest{Width: 10, Height: 10}, Origin: apiv0.OriginRequest{X: 0.5, Y: 0.5},
-		TypeID: wt.ID, SceneVersion: updatedScene.Version, Labels: []string{}, PortBindings: []apiv0.PortBinding{},
+		TypeID: wt.ID, Version: 0, Labels: []string{}, PortBindings: []apiv0.PortBinding{},
 	}
 	widget, err := client.Project(servertest.MainProject).CreateWidget(ctx, scene.ID, widgetReq)
-	if err != nil || widget.SceneVersion <= updatedScene.Version {
+	if err != nil || widget.Version <= updatedScene.Version {
 		t.Fatalf("CreateWidget: %+v, %v", widget, err)
 	}
-	if _, err := client.Project(servertest.MainProject).CreateWidget(ctx, scene.ID, widgetReq); !errors.Is(err, apiclient.ErrConflict) {
-		t.Errorf("CreateWidget with a stale Scene version: %v, want ErrConflict", err)
+	stale := widgetReq
+	stale.Version = updatedScene.Version
+	if _, err := client.Project(servertest.MainProject).CreateWidget(ctx, scene.ID, stale); !errors.Is(err, apiclient.ErrConflict) {
+		t.Errorf("CreateWidget with a stale Draft version: %v, want ErrConflict", err)
 	}
 	w, err := client.Project(servertest.MainProject).GetWidget(ctx, scene.ID, widget.ID)
-	if err != nil || w.Name != "lamp1" || w.SceneVersion != widget.SceneVersion {
+	if err != nil || w.Name != "lamp1" || w.Version != widget.Version {
 		t.Fatalf("GetWidget: %+v, %v", w, err)
 	}
 	updatedWidget, err := client.Project(servertest.MainProject).UpdateWidget(ctx, scene.ID, widget.ID, apiv0.UpdateWidgetRequest{
 		Name: "lamp2", Size: apiv0.SizeRequest{Width: 10, Height: 10}, Origin: apiv0.OriginRequest{X: 0.5, Y: 0.5},
-		TypeID: wt.ID, SceneVersion: widget.SceneVersion, Labels: []string{}, PortBindings: []apiv0.PortBinding{},
+		TypeID: wt.ID, Version: widget.Version, Labels: []string{}, PortBindings: []apiv0.PortBinding{},
 	})
-	if err != nil || updatedWidget.SceneVersion <= widget.SceneVersion {
+	if err != nil || updatedWidget.Version <= widget.Version {
 		t.Fatalf("UpdateWidget: %+v, %v", updatedWidget, err)
 	}
 	widgets, err := client.Project(servertest.MainProject).ListWidgets(ctx, scene.ID)
 	if err != nil || len(widgets) != 1 || widgets[0].Name != "lamp2" {
 		t.Fatalf("ListWidgets: %+v, %v", widgets, err)
 	}
-	deletedWidget, err := client.Project(servertest.MainProject).DeleteWidget(ctx, scene.ID, widget.ID)
-	if err != nil || deletedWidget.ID != widget.ID || deletedWidget.SceneVersion <= updatedWidget.SceneVersion {
+	deletedWidget, err := client.Project(servertest.MainProject).DeleteWidget(ctx, scene.ID, widget.ID, 0)
+	if err != nil || deletedWidget.ID != widget.ID || deletedWidget.Version <= updatedWidget.Version {
 		t.Fatalf("DeleteWidget: %+v, %v", deletedWidget, err)
 	}
 
 	scenes, err := client.Project(servertest.MainProject).ListScenes(ctx)
-	if err != nil || len(scenes) != 1 || scenes[0].Version != deletedWidget.SceneVersion {
+	if err != nil || len(scenes) != 1 || scenes[0].Version != deletedWidget.Version {
 		t.Fatalf("ListScenes: %+v, %v", scenes, err)
 	}
-	if deleted, err := client.Project(servertest.MainProject).DeleteScene(ctx, scene.ID); err != nil || deleted.ID != scene.ID {
+	if deleted, err := client.Project(servertest.MainProject).DeleteScene(ctx, scene.ID, 0); err != nil || deleted.ID != scene.ID {
 		t.Fatalf("DeleteScene: %+v, %v", deleted, err)
 	}
 	if _, err := client.Project(servertest.MainProject).GetScene(ctx, scene.ID); !errors.Is(err, apiclient.ErrNotFound) {

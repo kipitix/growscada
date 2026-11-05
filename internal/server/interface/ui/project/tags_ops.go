@@ -26,6 +26,7 @@ func (p *Project) createTag(ctx app.Context) {
 		p.tagCreated = p.tagLists
 		uiutil.StoreID(ctx, p.selectionKey(tagIDKey), created.ID)
 		p.loadTags(ctx)
+		p.loadDraftState(ctx)
 	}, nil)
 }
 
@@ -38,8 +39,9 @@ func (p *Project) deleteTag(ctx app.Context) {
 		return
 	}
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.TagResponse, error) {
-		return content.DeleteTag(c, deletedID)
-	}, func(ctx app.Context, _ apiv0.TagResponse) {
+		return content.DeleteTag(c, deletedID, p.draftVersion)
+	}, func(ctx app.Context, deleted apiv0.TagResponse) {
+		p.observeDraftVersion(deleted.Version)
 		if p.selectedTagID == deletedID {
 			p.selectedTagID = uuid.Nil
 			uiutil.StoreID(ctx, p.selectionKey(tagIDKey), uuid.Nil)

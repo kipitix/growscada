@@ -75,7 +75,7 @@ func newUpdateTagResponse(s runtimeapp.TagState) apiv0.UpdateTagResponse {
 
 // newCreateTagInput converts an apiv0.CreateTagRequest DTO to an app-level CreateTagInput DTO.
 func newCreateTagInput(r apiv0.CreateTagRequest) appdto.CreateTagInput {
-	return appdto.CreateTagInput{Name: r.Name, Type: r.Type}
+	return appdto.CreateTagInput{Name: r.Name, Type: r.Type, Version: r.Version}
 }
 
 // newSetTagValueInput converts an apiv0.UpdateTagRequest DTO to the Runtime
@@ -296,7 +296,7 @@ func newWidgetResponse(w appdto.Widget) apiv0.WidgetResponse {
 		},
 		TypeID:       w.TypeID,
 		SceneID:      w.SceneID,
-		SceneVersion: w.SceneVersion,
+		Version:      w.Version,
 		Labels:       labels,
 		PortBindings: portBindings,
 	}
@@ -311,11 +311,11 @@ func newGetWidgetsResponse(list []appdto.Widget) apiv0.GetWidgetsResponse {
 }
 
 func newCreateWidgetResponse(w appdto.Widget) apiv0.CreateWidgetResponse {
-	return apiv0.CreateWidgetResponse{ID: w.ID, SceneVersion: w.SceneVersion}
+	return apiv0.CreateWidgetResponse{ID: w.ID, Version: w.Version}
 }
 
 func newUpdateWidgetResponse(w appdto.Widget) apiv0.UpdateWidgetResponse {
-	return apiv0.UpdateWidgetResponse{SceneVersion: w.SceneVersion}
+	return apiv0.UpdateWidgetResponse{Version: w.Version}
 }
 
 func newCreateWidgetInput(r apiv0.CreateWidgetRequest) appdto.WidgetInput {

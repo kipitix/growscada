@@ -10,9 +10,6 @@ import (
 
 var (
 	ErrTagNotFound = errors.New("tag not found")
-	// ErrTagConflict is returned by Save when the stored version does not
-	// match, indicating a concurrent modification.
-	ErrTagConflict = errors.New("tag version conflict")
 	// ErrTagNameTaken is returned by Save when another tag of the same Project
 	// already has the name. Within its Project a tag's name is its unique
 	// natural key (ADR 0003).
@@ -26,24 +23,13 @@ var (
 	ErrTagNotSuppliedByDevice = errors.New("tag is not supplied by the device")
 )
 
-// TagRepository - repository interface for storing and managing the Tag
-// definitions of one Project (ADR 0006), in the Draft (ADR 0011): every read sees only the tags of that Project, so
-// a tag of another one is not found, and saving or deleting a tag of another
-// Project is a programming error.
+// TagRepository reads the Tag definitions of one Project (ADR 0006), in the
+// Draft (ADR 0011): every read sees only the tags of that Project. A Tag
+// definition is an entity of the Project's Draft (ADR 0016): its writes go
+// through the Draft's repository, never through here.
 type TagRepository interface {
 	// NextID returns a new unique identifier for a tag
 	NextID() id.ID[Tag]
-
-	// Save stores a tag and the events it recorded, in one transaction: a tag
-	// of the initial version is inserted, any other replaces the stored one
-	// if the stored version is still the tag's version. The version is raised
-	// once per Save; the returned tag carries the new one and no events.
-	// Returns ErrTagNotFound if the tag does not exist on update,
-	// ErrTagConflict if the stored version does not match, ErrTagNameTaken if
-	// another tag of the Project already has the same name,
-	// ErrSupplierOfAnotherProject if the supplier is not a Device of the
-	// Project, or an error on failure (a tag of another Project included).
-	Save(context.Context, Tag) (Tag, error)
 
 	// FindByID returns a tag by its identifier.
 	// Returns the tag and nil on success, or nil and an error if not found or on failure.
@@ -57,12 +43,6 @@ type TagRepository interface {
 	// FindByName returns a tag by its name, unique within the Project.
 	// Returns the tag and nil on success, ErrTagNotFound if no tag has that name, or an error on failure.
 	FindByName(context.Context, TagName) (Tag, error)
-
-	// Delete removes a tag, whatever version is stored, and stores the events
-	// it recorded (see Tag.Delete), in one transaction. The version is not
-	// checked: removing the tag does not depend on what it was read at.
-	// Returns ErrTagNotFound if the tag does not exist, or an error on failure.
-	Delete(context.Context, Tag) error
 
 	// FindAll returns all tags, sorted by name, so the order is stable while
 	// tag values change.

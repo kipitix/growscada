@@ -1,14 +1,12 @@
 package device_test
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
-	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 func TestCreateEnvironment_FieldsAndEvent(t *testing.T) {
@@ -20,9 +18,6 @@ func TestCreateEnvironment_FieldsAndEvent(t *testing.T) {
 
 	if env.ID() != anID || env.ProjectID() != testProject || env.Name().String() != "test bench" || env.Comment() != "the lab" {
 		t.Fatalf("unexpected environment %s", env)
-	}
-	if env.Version() != version.Initial[device.Environment]() {
-		t.Errorf("Version = %s, want the initial one", env.Version())
 	}
 
 	events := env.PendingEvents()
@@ -46,16 +41,14 @@ func TestEnvironment_RejectsInvalidName(t *testing.T) {
 	if _, err := device.CreateEnvironment(anID, testProject, device.EnvironmentName{}, ""); err == nil {
 		t.Error("CreateEnvironment took an invalid name")
 	}
-	if _, err := device.ReconstituteEnvironment(anID, testProject, device.EnvironmentName{}, "",
-		version.Committed[device.Environment]()); err == nil {
+	if _, err := device.ReconstituteEnvironment(anID, testProject, device.EnvironmentName{}, ""); err == nil {
 		t.Error("ReconstituteEnvironment took an invalid name")
 	}
-	stored, err := device.ReconstituteEnvironment(anID, testProject, environmentName(t, "test bench"), "",
-		version.Committed[device.Environment]())
+	stored, err := device.ReconstituteEnvironment(anID, testProject, environmentName(t, "test bench"), "")
 	if err != nil {
 		t.Fatalf("ReconstituteEnvironment: %v", err)
 	}
-	if _, err := stored.Update(stored.Version(), device.EnvironmentName{}, ""); err == nil {
+	if _, err := stored.Update(device.EnvironmentName{}, ""); err == nil {
 		t.Error("Update took an invalid name")
 	}
 	if got := stored.PendingEvents(); len(got) != 0 {
@@ -65,16 +58,12 @@ func TestEnvironment_RejectsInvalidName(t *testing.T) {
 
 func TestEnvironment_Update(t *testing.T) {
 	stored, err := device.ReconstituteEnvironment(id.NewID[device.Environment](), testProject,
-		environmentName(t, "test bench"), "the lab", version.Committed[device.Environment]())
+		environmentName(t, "test bench"), "the lab")
 	if err != nil {
 		t.Fatalf("ReconstituteEnvironment: %v", err)
 	}
 
-	if _, err := stored.Update(version.Initial[device.Environment](), environmentName(t, "plant"), "the bench"); !errors.Is(err, device.ErrEnvironmentConflict) {
-		t.Errorf("stale update: %v, want ErrEnvironmentConflict", err)
-	}
-
-	updated, err := stored.Update(stored.Version(), environmentName(t, "plant"), "the bench")
+	updated, err := stored.Update(environmentName(t, "plant"), "the bench")
 	if err != nil {
 		t.Fatalf("Update: %v", err)
 	}
@@ -94,7 +83,7 @@ func TestEnvironment_Update(t *testing.T) {
 
 func TestEnvironment_Delete(t *testing.T) {
 	stored, err := device.ReconstituteEnvironment(id.NewID[device.Environment](), testProject,
-		environmentName(t, "test bench"), "", version.Committed[device.Environment]())
+		environmentName(t, "test bench"), "")
 	if err != nil {
 		t.Fatalf("ReconstituteEnvironment: %v", err)
 	}

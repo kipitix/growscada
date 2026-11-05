@@ -36,7 +36,8 @@ func TestHotLists_ReadTheProjectOnlyToTellWhyNothingIsFound(t *testing.T) {
 	ctx := editlock.System(context.Background())
 	p := r.createProject(t, "Line 1")
 	projects := &countingProjects{ProjectRepository: repositories.NewProjectRepositoryPostgres(testDB)}
-	content := application.NewProjectContent(projects, newScopes(), soleOrganization())
+	content := application.NewProjectContent(projects, newScopes(),
+		repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB)), soleOrganization())
 	tags := application.NewTagService(content, newRuntimeNode())
 	scenes := application.NewSceneService(content)
 	reads := func(when string, want int) {
@@ -58,10 +59,10 @@ func TestHotLists_ReadTheProjectOnlyToTellWhyNothingIsFound(t *testing.T) {
 	}
 	reads("nothing found", 3)
 
-	if _, err := r.tagSvc.CreateTag(ctx, p, appdto.CreateTagInput{Name: "speed", Type: "integer"}); err != nil {
+	if _, err := r.tagSvc.CreateTag(ctx, p, appdto.CreateTagInput{Version: draftVersionOf(t, p), Name: "speed", Type: "integer"}); err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
-	sc, err := r.sceneSvc.CreateScene(ctx, p, appdto.SceneInput{Name: "s", Width: 100, Height: 100})
+	sc, err := r.sceneSvc.CreateScene(ctx, p, draftVersionOf(t, p), appdto.SceneInput{Name: "s", Width: 100, Height: 100})
 	if err != nil {
 		t.Fatalf("CreateScene: %v", err)
 	}

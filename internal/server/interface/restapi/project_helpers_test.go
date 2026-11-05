@@ -49,6 +49,7 @@ type testServices struct {
 	environments application.EnvironmentService
 	deviceConfig runtimeapp.DeviceConfigService
 	deviceTokens runtimeapp.DeviceTokenService
+	draft        application.DraftService
 }
 
 // newServices returns the services over the test database; the Runtime
@@ -66,12 +67,13 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		panic("organization: " + err.Error())
 	}
 	projectRepo := repositories.NewProjectRepositoryPostgres(db, opts...)
-	content := application.NewProjectContent(projectRepo, repositories.NewProjectScopes(db, opts...), orgID)
+	releases := repositories.NewLibraryReleaseRepositoryPostgres(db, opts...)
+	drafts := repositories.NewDraftRepositoryPostgres(db, releases, opts...)
+	content := application.NewProjectContent(projectRepo, repositories.NewProjectScopes(db, opts...), drafts, orgID)
 	editLocks := application.NewEditLockService(content,
 		application.NewLibraryContent(repositories.NewLibraryRepositoryPostgres(db, opts...), orgID),
-		repositories.NewEditLockRepositoryPostgres(db, opts...))
+		drafts)
 	libraries := repositories.NewLibraryRepositoryPostgres(db, opts...)
-	releases := repositories.NewLibraryReleaseRepositoryPostgres(db, opts...)
 	widgetTypes := repositories.NewWidgetTypeRepositories(db, opts...)
 	states := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, publish)
 	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(db), publish)
@@ -85,6 +87,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		deploy:       application.NewDeployService(content, application.NewProjectFileBuilder(content), runtimeNode, editLocks),
 		editLocks:    editLocks,
 		discard:      application.NewDiscardService(content, runtimeNode),
+		draft:        application.NewDraftService(content),
 		libraries:    application.NewLibraryService(libraries, releases, widgetTypes, orgID),
 		widgetTypes:  application.NewWidgetTypeService(libraries, widgetTypes, orgID),
 		pins:         application.NewLibraryPinService(content, libraries, releases),
@@ -102,7 +105,7 @@ func (s testServices) services() restapi.Services {
 		Projects: s.projects, Tags: s.tags, TagStates: s.states,
 		Libraries: s.libraries, WidgetTypes: s.widgetTypes, LibraryPins: s.pins, Scenes: s.scenes,
 		Devices: s.devices, Environments: s.environments,
-		Deploy: s.deploy, Discard: s.discard, Revisions: s.revisions,
+		Draft: s.draft, Deploy: s.deploy, Discard: s.discard, Revisions: s.revisions,
 		DeviceConfig: s.deviceConfig, DeviceTokens: s.deviceTokens, EditLocks: s.editLocks,
 	}
 }
@@ -130,4 +133,31 @@ type anyProjects struct {
 
 func (anyProjects) FindProjectByID(_ context.Context, projectID uuid.UUID) (appdto.Project, error) {
 	return appdto.Project{ID: projectID, Name: "any", Version: 1}, nil
+}
+
+// draftVersion returns the Version of mainProject's Draft: what a write of its
+// content states (ADR 0016).
+func (s testServices) draftVersion(t *testing.T) int {
+	t.Helper()
+	state, err := s.draft.State(editlock.System(context.Background()), mainProject)
+	if err != nil {
+		t.Fatalf("draft state: %v", err)
+	}
+	return state.Version
+}
+
+// testDraftVersion returns the Version of the Draft of projectID: what a
+// write of its content states (ADR 0016).
+func testDraftVersion(t *testing.T, projectID uuid.UUID) int {
+	t.Helper()
+	drafts := repositories.NewDraftRepositoryPostgres(testDB(), nil)
+	found, ok, err := drafts.Read(editlock.System(context.Background()),
+		editlock.ProjectScope(id.NewID(id.IDWithUUID[project.Project](projectID))))
+	if err != nil {
+		t.Fatalf("read the draft of %s: %v", projectID, err)
+	}
+	if !ok {
+		return 1
+	}
+	return found.Version().Number()
 }

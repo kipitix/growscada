@@ -11,7 +11,7 @@ http:
 docs: |
   The state of a Library's Draft EditLock (ADR 0015): 200 whether it is free
   or held, so the UI knows what to show without a 404 to read. A Draft never
-  checked out is free at version 0; the row of a checked-out Draft stays when
+  checked out is free at version 1 (the row exists from the start); the row of a checked-out Draft stays when
   it is free, its version growing monotonically across holders.
 
 runtime:
@@ -26,7 +26,7 @@ runtime:
       value: 'false'
     - expression: 'res.body.version'
       operator: eq
-      value: '0'
+      value: '1'
 
 settings:
   encodeUrl: true

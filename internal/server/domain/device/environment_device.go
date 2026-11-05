@@ -7,7 +7,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
-	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 // EnvironmentDevice - aggregate of a Project's Draft, one per pair
@@ -16,8 +15,9 @@ import (
 // identified by its Library in its Project; it has no identifier of its own.
 //
 // EnvironmentDevice is immutable: every change returns a new
-// EnvironmentDevice that also records the change's event. A change keeps the
-// Version; the repository raises it once when it saves the result.
+// EnvironmentDevice that also records the change's event. It is an entity of
+// its Project's Draft, which carries the one Version of the Draft's content
+// (ADR 0016).
 type EnvironmentDevice interface {
 	// ProjectID is the Project of the Environment and of the Device; it never
 	// changes.
@@ -29,17 +29,10 @@ type EnvironmentDevice interface {
 	// Params are the parameters by which the Device is reached in the
 	// Environment, read under the Device's protocol.
 	Params() EnvironmentDeviceParams
-	Version() version.Version[EnvironmentDevice]
-
-	// CheckVersion reports an edit conflict: the caller changes the pair
-	// having seen it at a Version other than the current one.
-	// Returns ErrEnvironmentDeviceConflict if expected is not the Version.
-	CheckVersion(expected version.Version[EnvironmentDevice]) error
 
 	// UpdateParams changes the parameters of the pair and records an
 	// EnvironmentDeviceUpdatedEvent.
-	// Returns ErrEnvironmentDeviceConflict if expected is not the Version.
-	UpdateParams(expected version.Version[EnvironmentDevice], aParams EnvironmentDeviceParams) (EnvironmentDevice, error)
+	UpdateParams(aParams EnvironmentDeviceParams) (EnvironmentDevice, error)
 
 	// Delete records an EnvironmentDeviceDeletedEvent; the repository's
 	// Delete removes the pair.
@@ -55,7 +48,6 @@ type environmentDeviceImpl struct {
 	environmentID id.ID[Environment]
 	deviceID      id.ID[Device]
 	params        EnvironmentDeviceParams
-	version       version.Version[EnvironmentDevice]
 	pending       []event.Event
 }
 
@@ -70,41 +62,27 @@ func CreateEnvironmentDevice(aProjectID id.ID[project.Project], anEnvironmentID 
 		environmentID: anEnvironmentID,
 		deviceID:      aDeviceID,
 		params:        aParams,
-		version:       version.Initial[EnvironmentDevice](),
 		pending:       []event.Event{NewEnvironmentDeviceCreatedEvent(anEnvironmentID, aDeviceID, aProjectID)},
 	}
 }
 
-// ReconstituteEnvironmentDevice rebuilds a pair as stored, at the given
-// version; it records no event. For repositories, which read the pair within
-// its Project and so name it.
-func ReconstituteEnvironmentDevice(aProjectID id.ID[project.Project], anEnvironmentID id.ID[Environment], aDeviceID id.ID[Device], aParams EnvironmentDeviceParams, aVersion version.Version[EnvironmentDevice]) EnvironmentDevice {
+// ReconstituteEnvironmentDevice rebuilds a pair as stored; it records no
+// event. For repositories, which read the pair within its Project and so name
+// it.
+func ReconstituteEnvironmentDevice(aProjectID id.ID[project.Project], anEnvironmentID id.ID[Environment], aDeviceID id.ID[Device], aParams EnvironmentDeviceParams) EnvironmentDevice {
 	return &environmentDeviceImpl{
 		projectID:     aProjectID,
 		environmentID: anEnvironmentID,
 		deviceID:      aDeviceID,
 		params:        aParams,
-		version:       aVersion,
 	}
 }
 
-func (e *environmentDeviceImpl) ProjectID() id.ID[project.Project]           { return e.projectID }
-func (e *environmentDeviceImpl) EnvironmentID() id.ID[Environment]           { return e.environmentID }
-func (e *environmentDeviceImpl) DeviceID() id.ID[Device]                     { return e.deviceID }
-func (e *environmentDeviceImpl) Params() EnvironmentDeviceParams             { return e.params }
-func (e *environmentDeviceImpl) Version() version.Version[EnvironmentDevice] { return e.version }
-
-func (e *environmentDeviceImpl) CheckVersion(expected version.Version[EnvironmentDevice]) error {
-	if expected != e.version {
-		return fmt.Errorf("%w: expected version %s, current %s", ErrEnvironmentDeviceConflict, expected, e.version)
-	}
-	return nil
-}
-
-func (e *environmentDeviceImpl) UpdateParams(expected version.Version[EnvironmentDevice], aParams EnvironmentDeviceParams) (EnvironmentDevice, error) {
-	if err := e.CheckVersion(expected); err != nil {
-		return nil, err
-	}
+func (e *environmentDeviceImpl) ProjectID() id.ID[project.Project] { return e.projectID }
+func (e *environmentDeviceImpl) EnvironmentID() id.ID[Environment] { return e.environmentID }
+func (e *environmentDeviceImpl) DeviceID() id.ID[Device]           { return e.deviceID }
+func (e *environmentDeviceImpl) Params() EnvironmentDeviceParams   { return e.params }
+func (e *environmentDeviceImpl) UpdateParams(aParams EnvironmentDeviceParams) (EnvironmentDevice, error) {
 	updated := *e
 	updated.params = aParams
 	updated.pending = append(slices.Clone(e.pending),
@@ -125,5 +103,5 @@ func (e *environmentDeviceImpl) PendingEvents() []event.Event {
 
 // String implements [fmt.Stringer].
 func (e *environmentDeviceImpl) String() string {
-	return fmt.Sprintf("EnvironmentDevice: environment %s, device %s, Version: %s", e.environmentID, e.deviceID, e.version)
+	return fmt.Sprintf("EnvironmentDevice: environment %s, device %s", e.environmentID, e.deviceID)
 }

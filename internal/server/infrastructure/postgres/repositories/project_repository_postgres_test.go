@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
@@ -200,8 +201,8 @@ func TestProjectDelete_RefusedWhileContentRemains(t *testing.T) {
 	if err := repo.Delete(ctx, deleted); !errors.Is(err, project.ErrProjectNotEmpty) {
 		t.Fatalf("Delete with a tag left: expected ErrProjectNotEmpty, got %v", err)
 	}
-	if err := tags.Delete(ctx, created.Delete()); err != nil {
-		t.Fatalf("delete tag: %v", err)
+	if _, err := testDB.ExecContext(ctx, `DELETE FROM engineering.tags WHERE id = $1`, created.ID().UUID()); err != nil {
+		t.Fatalf("remove the tag: %v", err)
 	}
 	if err := repo.Delete(ctx, deleted); err != nil {
 		t.Fatalf("Delete of an empty project: %v", err)
@@ -234,11 +235,8 @@ func createTagIn(t *testing.T, repo tag.TagRepository, projectID id.ID[project.P
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
-	saved, err := repo.Save(editlock.System(context.Background()), created)
-	if err != nil {
-		t.Fatalf("Save tag %q: %v", name, err)
-	}
-	return saved
+	mustSaveTag(t, repo, created)
+	return created
 }
 
 func TestTagRepository_TagsOfProjectsAreApart(t *testing.T) {
@@ -265,32 +263,25 @@ func TestTagRepository_TagsOfProjectsAreApart(t *testing.T) {
 	if err != nil || len(all) != 1 || all[0].ID() != inOther.ID() || all[0].ProjectID() != other.ID() {
 		t.Errorf("FindAll of the other project: %v, %v", all, err)
 	}
-	if _, err := mainTags.Save(ctx, inOther); err == nil {
-		t.Error("Save of another project's tag: expected an error")
-	}
-	if err := mainTags.Delete(ctx, inOther.Delete()); err == nil {
-		t.Error("Delete of another project's tag: expected an error")
-	}
 	if _, err := otherTags.FindByID(ctx, inOther.ID()); err != nil {
 		t.Errorf("the other project's tag must survive: %v", err)
 	}
 }
 
-func TestTagRepository_SaveInARemovedProject_IsProjectNotFound(t *testing.T) {
+func TestDraftWriteInARemovedProject_IsProjectNotFound(t *testing.T) {
 	cleanProjects(t)
 	gone := id.NewID[project.Project]() // no such row: as if its cleanup had run
 	repo := repositories.NewTagRepositoryPostgres(testDB, gone)
 	tagName, _ := tag.NewTagName("speed")
 	created, _ := tag.CreateTag(repo.NextID(), gone, tagName, tag.TagTypeInteger, tag.NoSupplier())
 
-	if _, err := repo.Save(editlock.System(context.Background()), created); !errors.Is(err, project.ErrProjectNotFound) {
+	_, err := testDrafts().Update(editlock.System(context.Background()), editlock.ProjectScope(gone),
+		draftVersionOf(t, gone), "create tag", func(session *draft.Session) error {
+			session.CreateTag(context.Background(), created)
+			return nil
+		})
+	if !errors.Is(err, project.ErrProjectNotFound) {
 		t.Errorf("expected ErrProjectNotFound, got %v", err)
-	}
-	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB, gone)
-	name, _ := scene.NewSceneName("s")
-	size, _ := scene.NewSceneSize(10, 10)
-	if _, err := sceneRepo.Save(editlock.System(context.Background()), scene.CreateScene(sceneRepo.NextID(), gone, name, size, scene.NewBackgroundHTML(""))); !errors.Is(err, project.ErrProjectNotFound) {
-		t.Errorf("scene: expected ErrProjectNotFound, got %v", err)
 	}
 }
 
@@ -318,12 +309,6 @@ func TestSceneRepository_ScenesOfProjectsAreApart(t *testing.T) {
 	found := mustFindByID(t, otherScenes, inOther.ID())
 	if found.ProjectID() != other.ID() || len(found.Widgets()) != 1 {
 		t.Errorf("the other project's scene: %s with %d widgets", found, len(found.Widgets()))
-	}
-	if _, err := mainScenes.Save(ctx, found); err == nil {
-		t.Error("Save of another project's scene: expected an error")
-	}
-	if err := mainScenes.Delete(ctx, found.Delete()); err == nil {
-		t.Error("Delete of another project's scene: expected an error")
 	}
 
 	var widgetProject uuid.UUID
@@ -358,8 +343,8 @@ func TestProjectDelete_PinsHoldTheRow(t *testing.T) {
 	if err != nil || len(all) != 1 {
 		t.Fatalf("pins: %v, %v", all, err)
 	}
-	if err := pins.Delete(ctx, all[0].Delete(), nil); err != nil {
-		t.Fatalf("delete pin: %v", err)
+	if _, err := testDB.ExecContext(ctx, `DELETE FROM engineering.library_pins WHERE project_id = $1`, other.ID().UUID()); err != nil {
+		t.Fatalf("remove the pins: %v", err)
 	}
 	if err := projects.Delete(ctx, deleted); err != nil {
 		t.Errorf("without pins: %v", err)

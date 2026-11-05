@@ -88,15 +88,15 @@ type LibraryPin struct {
 }
 
 // NewLibraryPin creates a LibraryPin DTO from the domain aggregate.
-func NewLibraryPin(p librarypin.LibraryPin) LibraryPin {
-	return LibraryPin{LibraryID: p.LibraryID().UUID(), Release: p.Release().Int(), Version: p.Version().Number()}
+func NewLibraryPin(p librarypin.LibraryPin, version int) LibraryPin {
+	return LibraryPin{LibraryID: p.LibraryID().UUID(), Release: p.Release().Int(), Version: version}
 }
 
 // NewLibraryPinList creates a slice of LibraryPin DTOs.
-func NewLibraryPinList(list []librarypin.LibraryPin) []LibraryPin {
+func NewLibraryPinList(list []librarypin.LibraryPin, version int) []LibraryPin {
 	result := make([]LibraryPin, len(list))
 	for i, p := range list {
-		result[i] = NewLibraryPin(p)
+		result[i] = NewLibraryPin(p, version)
 	}
 	return result
 }

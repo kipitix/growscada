@@ -28,7 +28,7 @@ runtime:
       value: 'false'
     - expression: 'res.body.version'
       operator: eq
-      value: '3'
+      value: '4'
 
 settings:
   encodeUrl: true

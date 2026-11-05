@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
-	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
@@ -82,16 +82,13 @@ func TestSave_WritesRecordedEventsToOutbox(t *testing.T) {
 	cleanTags(t)
 	cleanOutbox(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
+	created := createTag(t, repo, "level")
+	mustSaveTag(t, repo, created)
 	ctx := editlock.System(context.Background())
-
-	saved := mustSaveTag(t, repo, createTag(t, repo, "level"))
-	if len(saved.PendingEvents()) != 0 {
-		t.Errorf("the saved tag must record nothing, got %v", saved.PendingEvents())
-	}
-	saved = mustSaveTag(t, repo, saved)
-	if err := repo.Delete(ctx, saved.Delete()); err != nil {
-		t.Fatalf("Delete: %v", err)
-	}
+	mustUpdate(t, mainProject, "delete tag", func(session *draft.Session) error {
+		_, err := session.DeleteTag(ctx, created.ID())
+		return err
+	})
 
 	want := []string{"tag_created", "tag_deleted"}
 	if got := outboxTypes(t); !slices.Equal(got, want) {
@@ -106,9 +103,7 @@ func TestAppend_RowOfContentEventNamesItsProject(t *testing.T) {
 	cleanOutbox(t)
 	ctx := editlock.System(context.Background())
 	tags := repositories.NewTagRepositoryPostgres(testDB, mainProject)
-	if _, err := tags.Save(ctx, createTag(t, tags, "pressure")); err != nil {
-		t.Fatalf("Save tag: %v", err)
-	}
+	mustSaveTag(t, tags, createTag(t, tags, "pressure"))
 	tx, err := testDB.BeginTx(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -151,27 +146,25 @@ func TestSave_RolledBack_LeavesNothingInOutboxAndDeliversNothing(t *testing.T) {
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
 	mustSaveTag(t, tagRepo, makeTag(t, "taken", tagRepo))
 
-	// A taken name fails the insert itself.
-	if _, err := tagRepo.Save(ctx, createTag(t, tagRepo, "taken")); !errors.Is(err, tag.ErrTagNameTaken) {
+	// A taken name fails the write itself.
+	if _, err := testDrafts().Update(ctx, editlock.ProjectScope(mainProject), draftVersionOf(t, mainProject), "taken", func(session *draft.Session) error {
+		late := createTag(t, tagRepo, "taken")
+		session.CreateTag(ctx, late)
+		return nil
+	}); !errors.Is(err, tag.ErrTagNameTaken) {
 		t.Fatalf("expected ErrTagNameTaken, got %v", err)
 	}
-	// A widget of a type no longer pinned fails after the scene row was
-	// written.
+	// A widget of a type no longer pinned fails before anything is written.
 	stored := mustSaveScene(t, sceneRepo, "scene-1")
 	w := makeWidget(t, sceneRepo, "w1")
-	wt, err := repositories.NewLibraryPinRepositoryPostgres(testDB, mainProject).FindPinnedWidgetType(ctx, w.TypeID())
-	if err != nil {
-		t.Fatalf("FindPinnedWidgetType: %v", err)
-	}
 	if _, err := testDB.ExecContext(ctx, "DELETE FROM engineering.library_pins WHERE project_id = $1", mainProject.UUID()); err != nil {
 		t.Fatalf("unpin: %v", err)
 	}
 	cleanOutbox(t) // the events of the library pinned for the widget
-	changed, err := stored.AddWidget(stored.Version(), w, wt, scene.NewTagTypes(mainProject, nil))
-	if err != nil {
-		t.Fatalf("AddWidget: %v", err)
-	}
-	if _, err := sceneRepo.Save(ctx, changed); !errors.Is(err, library.ErrWidgetTypeNotFound) {
+	if _, err := testDrafts().Update(ctx, editlock.ProjectScope(mainProject), draftVersionOf(t, mainProject), "add widget", func(session *draft.Session) error {
+		_, err := session.AddWidget(ctx, stored.ID(), w)
+		return err
+	}); !errors.Is(err, library.ErrWidgetTypeNotFound) {
 		t.Fatalf("expected ErrWidgetTypeNotFound, got %v", err)
 	}
 
@@ -183,8 +176,8 @@ func TestSave_RolledBack_LeavesNothingInOutboxAndDeliversNothing(t *testing.T) {
 	if err != nil || n != 0 || len(delivered.types()) != 0 {
 		t.Errorf("expected nothing delivered, got %d %v (err %v)", n, delivered.types(), err)
 	}
-	if found := mustFindByID(t, sceneRepo, stored.ID()); found.Version() != stored.Version() {
-		t.Errorf("rolled back scene changed version to %s", found.Version())
+	if found := mustFindByID(t, sceneRepo, stored.ID()); len(found.Widgets()) != 0 {
+		t.Errorf("the refused write left widgets: %v", found.Widgets())
 	}
 }
 
@@ -196,9 +189,10 @@ func TestDispatcher_DrainOnce_DeliversInCommitOrderAndEmptiesOutbox(t *testing.T
 
 	a := mustSaveTag(t, repo, createTag(t, repo, "a"))
 	b := mustSaveTag(t, repo, createTag(t, repo, "b"))
-	if err := repo.Delete(ctx, b.Delete()); err != nil {
-		t.Fatalf("Delete: %v", err)
-	}
+	mustUpdate(t, mainProject, "delete tag", func(session *draft.Session) error {
+		_, err := session.DeleteTag(ctx, b.ID())
+		return err
+	})
 
 	var delivered recorder
 	d := outbox.NewDispatcher(testDB, delivered.deliver)
@@ -238,8 +232,13 @@ func TestDispatcher_Run_DeliversOnNotify(t *testing.T) {
 	done := make(chan struct{})
 	go func() { d.Run(ctx); close(done) }()
 
-	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject, repositories.NotifyOnCommit(d.Notify))
-	mustSaveTag(t, repo, createTag(t, repo, "notified"))
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
+	notifying := repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB), repositories.NotifyOnCommit(d.Notify))
+	created := createTag(t, repo, "notified")
+	if _, err := notifying.Update(editlock.System(ctx), editlock.ProjectScope(mainProject), draftVersionOf(t, mainProject), "notified",
+		func(session *draft.Session) error { session.CreateTag(ctx, created); return nil }); err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
 
 	deadline := time.Now().Add(5 * time.Second)
 	for len(delivered.types()) == 0 && time.Now().Before(deadline) {
@@ -367,6 +366,7 @@ func TestDispatcher_Run_DeliversHeldBackRowsWhenOlderTransactionRollsBack(t *tes
 	older := beginWithID(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject, repositories.NotifyOnCommit(d.Notify))
 	mustSaveTag(t, repo, createTag(t, repo, "held"))
+	d.Notify()
 	// The rollback sends no Notify.
 	if err := older.Rollback(); err != nil {
 		t.Fatalf("rollback: %v", err)

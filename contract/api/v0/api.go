@@ -16,7 +16,7 @@ import "github.com/kipitix/growscada/contract"
 
 // SchemaVersion is the version of the server API this package describes.
 // A function rather than a variable, so no importer can change it.
-func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 14} }
+func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 15} }
 
 // PathPrefix is the URL path prefix of every endpoint of this MAJOR.
 const PathPrefix = "/api/v0"
@@ -24,6 +24,10 @@ const PathPrefix = "/api/v0"
 // ProjectPath is the path, under PathPrefix, of the project with the given
 // ID: the prefix of the resources of its content and of its event stream.
 func ProjectPath(projectID string) string { return "/projects/" + projectID }
+
+// VersionQuery is the parameter of a DELETE of a Project's content: the
+// Version of the Draft the client saw (ADR 0016). A stale one is 409.
+const VersionQuery = "version"
 
 // EventsQueryProject is the parameter of GET /events joining to the stream
 // the events of the project with this ID. A project not found adds nothing:

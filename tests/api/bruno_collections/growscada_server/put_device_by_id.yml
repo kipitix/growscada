@@ -17,7 +17,7 @@ http:
         "comment": "renamed by the Bruno collection",
         "protocol": "simulation",
         "config": {"patterns": []},
-        "version": 1
+        "version": 12
       }
   auth: inherit
 
@@ -35,7 +35,7 @@ runtime:
       operator: isDefined
     - expression: 'res.body.version'
       operator: eq
-      value: '2'
+      value: '13'
 
 settings:
   encodeUrl: true

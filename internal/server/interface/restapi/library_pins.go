@@ -72,7 +72,12 @@ func (h LibraryPinsHandlers) DeleteLibraryPin(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	deleted, err := h.service.DeleteLibraryPin(r.Context(), projectID, libraryID)
+	version, ok := versionQuery(w, r)
+	if !ok {
+		return
+	}
+
+	deleted, err := h.service.DeleteLibraryPin(r.Context(), projectID, libraryID, version)
 	if err != nil {
 		sendError(w, r, err)
 		return

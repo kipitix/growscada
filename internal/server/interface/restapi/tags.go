@@ -128,7 +128,12 @@ func (h TagsHandlers) DeleteTagsByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	deletedTag, err := h.service.DeleteTagByID(r.Context(), projectID, tagID)
+	version, ok := versionQuery(w, r)
+	if !ok {
+		return
+	}
+
+	deletedTag, err := h.service.DeleteTagByID(r.Context(), projectID, tagID, version)
 	if err != nil {
 		sendError(w, r, err)
 		return

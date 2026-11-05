@@ -202,8 +202,6 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 		return project.NewProjectUpdatedEvent(projectOfEvent, ts), nil
 	case event.EventTypeProjectDeleted:
 		return project.NewProjectDeletedEvent(projectOfEvent, ts), nil
-	case event.EventTypeProjectDiscardStarted:
-		return project.NewProjectDiscardStartedEvent(projectOfEvent, ts), nil
 	case event.EventTypeEditLockAcquired, event.EventTypeEditLockReleased,
 		event.EventTypeEditLockTakenOver, event.EventTypeEditLockExpired:
 		return decodeEditLockEvent(eventType, p, ts)

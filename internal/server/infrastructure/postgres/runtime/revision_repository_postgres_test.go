@@ -449,23 +449,6 @@ func TestCreateRevision_ResetsTheStateOfAChangedTagTypeAndKeepsTheOthers(t *test
 	}
 }
 
-func TestCreateRevision_RefusesAProjectBeingDiscarded(t *testing.T) {
-	projectID, _ := newProject(t)
-	db := postgres.DB(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(db)
-	ctx := context.Background()
-	if _, err := db.ExecContext(ctx, `UPDATE projects SET discarding = true WHERE id = $1`, projectID.UUID()); err != nil {
-		t.Fatalf("mark the project as being discarded: %v", err)
-	}
-
-	if _, err := repo.CreateRevision(ctx, projectID.UUID(), documentOf(projectID), time.Now()); !errors.Is(err, project.ErrProjectDiscarding) {
-		t.Fatalf("CreateRevision of a project being discarded: %v, want ErrProjectDiscarding", err)
-	}
-	if got := countRows(t, `SELECT count(*) FROM runtime.revisions WHERE project_id = $1`, projectID.UUID()); got != 0 {
-		t.Errorf("revisions of the project being discarded: %d, want none", got)
-	}
-}
-
 func TestCreateRevision_TheProjectTakesItsRevisionsAlong(t *testing.T) {
 	projectID, _ := newProject(t)
 	db := postgres.DB(t)
@@ -765,26 +748,6 @@ func TestRevisionReads_OfADeletedProject_AreANotFound(t *testing.T) {
 	}
 	if _, err := repo.Rollback(ctx, projectID.UUID(), 1, time.Now()); !errors.Is(err, project.ErrProjectNotFound) {
 		t.Errorf("Rollback of a deleted project: %v, want ErrProjectNotFound", err)
-	}
-}
-
-// TestRollback_WhileADiscardRuns_IsRefused: the Discard policy reads the
-// running Revision, so a Rollback must not change it meanwhile (ADR 0014).
-func TestRollback_WhileADiscardRuns_IsRefused(t *testing.T) {
-	projectID, _ := newProject(t)
-	db := postgres.DB(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(db)
-	ctx := context.Background()
-	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID), time.Now())
-	if _, err := db.ExecContext(ctx, `UPDATE projects SET discarding = true WHERE id = $1`, projectID.UUID()); err != nil {
-		t.Fatalf("mark the project as being discarded: %v", err)
-	}
-
-	if _, err := repo.Rollback(ctx, projectID.UUID(), 1, time.Now()); !errors.Is(err, project.ErrProjectDiscarding) {
-		t.Fatalf("Rollback of a project being discarded: %v, want ErrProjectDiscarding", err)
-	}
-	if got := countRows(t, `SELECT count(*) FROM runtime.revisions WHERE project_id = $1`, projectID.UUID()); got != 1 {
-		t.Errorf("stored revisions %d, want the one it had", got)
 	}
 }
 

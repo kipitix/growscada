@@ -5,7 +5,7 @@ info:
 
 http:
   method: DELETE
-  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/library-pins/{{OTHER_LIBRARY_ID}}
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/library-pins/{{OTHER_LIBRARY_ID}}?version=9
   headers:
     - name: X-GrowSCADA-Client
       value: "{{CLIENT_KEY}}"

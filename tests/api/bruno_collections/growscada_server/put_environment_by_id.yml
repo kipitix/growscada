@@ -15,7 +15,7 @@ http:
       {
         "name": "bench",
         "comment": "renamed by the Bruno collection",
-        "version": 1
+        "version": 14
       }
   auth: inherit
 
@@ -33,7 +33,7 @@ runtime:
       operator: isDefined
     - expression: 'res.body.version'
       operator: eq
-      value: '2'
+      value: '15'
 
 settings:
   encodeUrl: true

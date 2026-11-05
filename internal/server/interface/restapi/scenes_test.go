@@ -13,8 +13,8 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/editlock"
-	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
 
@@ -32,7 +32,7 @@ func newRouterWithScenes() testRouter {
 
 func createSceneViaService(t *testing.T, input appdto.SceneInput) appdto.Scene {
 	t.Helper()
-	resp, err := newServices().scenes.CreateScene(editlock.System(context.Background()), mainProject, input)
+	resp, err := newServices().scenes.CreateScene(editlock.System(context.Background()), mainProject, testDraftVersion(t, mainProject), input)
 	if err != nil {
 		t.Fatalf("createSceneViaService: %v", err)
 	}
@@ -306,7 +306,7 @@ func TestPutScenesByID_InvalidUUID_Returns400(t *testing.T) {
 }
 
 func TestPutScenesByID_Conflict_Returns409(t *testing.T) {
-	svc := &stubSceneService{updateErr: scene.ErrSceneConflict}
+	svc := &stubSceneService{updateErr: draft.ErrDraftConflict}
 	services := newServices()
 	services.scenes = svc
 	router := services.router()

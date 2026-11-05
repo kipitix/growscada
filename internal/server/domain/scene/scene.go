@@ -9,7 +9,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
-	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 // Scene - aggregate representing a scene (a mnemonic/synoptic display canvas).
@@ -24,8 +23,8 @@ import (
 // Scene is immutable: every change returns a new Scene and leaves the
 // original as it was, so the original is the state "before" and the result
 // the state "after". The result also records the change's events (see
-// PendingEvents). A change keeps the Version; the repository raises it once
-// when it saves the result.
+// PendingEvents). The Draft the Scene belongs to carries the one Version of
+// its content; the Scene has none of its own.
 type Scene interface {
 	ID() id.ID[Scene]
 	// ProjectID is the Project the scene belongs to; it never changes.
@@ -34,23 +33,14 @@ type Scene interface {
 	Size() SceneSize
 	BackgroundHTML() BackgroundHTML
 	Widgets() []Widget
-	Version() version.Version[Scene]
 
 	// FindWidget returns the scene's widget with the given ID.
 	// Returns ErrWidgetNotFound if the scene has no such widget.
 	FindWidget(id.ID[Widget]) (Widget, error)
 
-	// CheckVersion reports an edit conflict: the caller changes the scene
-	// having seen it at a Version other than the current one. Every change
-	// that expects a Version checks it itself; CheckVersion lets a caller
-	// report the conflict before it loads what the change needs.
-	// Returns ErrSceneConflict if expected is not the scene's Version.
-	CheckVersion(expected version.Version[Scene]) error
-
 	// Update changes the scene's name, size and background and records a
 	// SceneUpdatedEvent.
-	// Returns ErrSceneConflict if expected is not the scene's Version.
-	Update(expected version.Version[Scene], aName SceneName, aSize SceneSize, aBackgroundHTML BackgroundHTML) (Scene, error)
+	Update(aName SceneName, aSize SceneSize, aBackgroundHTML BackgroundHTML) (Scene, error)
 
 	// AddWidget places a new widget of WidgetType wt, as a Library Release the
 	// scene's Project pins holds it (ADR 0007), on the scene and records
@@ -62,12 +52,11 @@ type Scene interface {
 	// ErrPortNotDeclared, ErrBoundTagNotFound or ErrPortTypeMismatch.
 	// tagTypes holds the TagTypes of the Tags the widget binds; a Tag that
 	// is not in it as a Tag of the scene's Project does not exist.
-	AddWidget(expected version.Version[Scene], w Widget, wt library.ReleasedWidgetType, tagTypes TagTypes) (Scene, error)
+	AddWidget(w Widget, wt library.ReleasedWidgetType, tagTypes TagTypes) (Scene, error)
 
 	// UpdateWidget replaces the scene's widget with the same ID by w, of
 	// WidgetType wt, and records a WidgetUpdatedEvent.
-	// Returns ErrSceneConflict if expected is not the scene's Version,
-	// ErrWidgetNotFound if the scene has no widget with its ID,
+	// Returns ErrWidgetNotFound if the scene has no widget with its ID,
 	// ErrWidgetTypeMismatch if wt is not the widget's type, and for a
 	// PortBinding that is not valid (see checkWidgetType)
 	// ErrPortNotDeclared, ErrBoundTagNotFound or ErrPortTypeMismatch.
@@ -76,7 +65,7 @@ type Scene interface {
 	// removed by policies, not a reason to refuse the change (ADR 0010).
 	// tagTypes holds the TagTypes of the Tags the widget binds; a Tag that
 	// is not in it as a Tag of the scene's Project does not exist.
-	UpdateWidget(expected version.Version[Scene], w Widget, wt library.ReleasedWidgetType, tagTypes TagTypes) (Scene, error)
+	UpdateWidget(w Widget, wt library.ReleasedWidgetType, tagTypes TagTypes) (Scene, error)
 
 	// RemoveWidget removes the widget with the given ID from the scene,
 	// records a WidgetDeletedEvent and returns the widget too. Like removing
@@ -106,8 +95,7 @@ type Scene interface {
 	UnbindTag(tagID id.ID[tag.Tag]) (Scene, bool)
 
 	// Delete records a WidgetDeletedEvent for each of the scene's widgets,
-	// then a SceneDeletedEvent; the repository's Delete removes the scene
-	// with its widgets. Like removing any aggregate, it expects no Version.
+	// then a SceneDeletedEvent; the Draft removes the scene with its widgets.
 	Delete() Scene
 
 	event.Recorder
@@ -122,7 +110,6 @@ type sceneImpl struct {
 	size           SceneSize
 	backgroundHTML BackgroundHTML
 	widgets        []Widget
-	version        version.Version[Scene]
 	pending        []event.Event
 }
 
@@ -138,14 +125,12 @@ func CreateScene(anID id.ID[Scene], aProjectID id.ID[project.Project], aName Sce
 		size:           aSize,
 		backgroundHTML: aBackgroundHTML,
 		widgets:        []Widget{},
-		version:        version.Initial[Scene](),
 		pending:        []event.Event{NewSceneCreatedEvent(anID, aProjectID)},
 	}
 }
 
-// ReconstituteScene rebuilds a scene as stored, at the given version; it
-// records no event. For repositories. someWidgets may be nil for a scene
-// without widgets.
+// ReconstituteScene rebuilds a scene as stored; it records no event. For
+// repositories. someWidgets may be nil for a scene without widgets.
 func ReconstituteScene(
 	anID id.ID[Scene],
 	aProjectID id.ID[project.Project],
@@ -153,7 +138,6 @@ func ReconstituteScene(
 	aSize SceneSize,
 	aBackgroundHTML BackgroundHTML,
 	someWidgets []Widget,
-	aVersion version.Version[Scene],
 ) Scene {
 	widgets := make([]Widget, len(someWidgets))
 	copy(widgets, someWidgets)
@@ -165,7 +149,6 @@ func ReconstituteScene(
 		size:           aSize,
 		backgroundHTML: aBackgroundHTML,
 		widgets:        widgets,
-		version:        aVersion,
 	}
 }
 
@@ -174,7 +157,6 @@ func (s *sceneImpl) ProjectID() id.ID[project.Project] { return s.projectID }
 func (s *sceneImpl) Name() SceneName                   { return s.name }
 func (s *sceneImpl) Size() SceneSize                   { return s.size }
 func (s *sceneImpl) BackgroundHTML() BackgroundHTML    { return s.backgroundHTML }
-func (s *sceneImpl) Version() version.Version[Scene]   { return s.version }
 
 func (s *sceneImpl) Widgets() []Widget {
 	out := make([]Widget, len(s.widgets))
@@ -190,10 +172,7 @@ func (s *sceneImpl) FindWidget(widgetID id.ID[Widget]) (Widget, error) {
 	return s.widgets[i], nil
 }
 
-func (s *sceneImpl) Update(expected version.Version[Scene], aName SceneName, aSize SceneSize, aBackgroundHTML BackgroundHTML) (Scene, error) {
-	if err := s.CheckVersion(expected); err != nil {
-		return nil, err
-	}
+func (s *sceneImpl) Update(aName SceneName, aSize SceneSize, aBackgroundHTML BackgroundHTML) (Scene, error) {
 	// The widgets are shared: no Scene ever changes its slice.
 	return &sceneImpl{
 		id:             s.id,
@@ -202,15 +181,11 @@ func (s *sceneImpl) Update(expected version.Version[Scene], aName SceneName, aSi
 		size:           aSize,
 		backgroundHTML: aBackgroundHTML,
 		widgets:        s.widgets,
-		version:        s.version,
 		pending:        s.record(NewSceneUpdatedEvent(s.id, s.projectID)),
 	}, nil
 }
 
-func (s *sceneImpl) AddWidget(expected version.Version[Scene], w Widget, wt library.ReleasedWidgetType, tagTypes TagTypes) (Scene, error) {
-	if err := s.CheckVersion(expected); err != nil {
-		return nil, err
-	}
+func (s *sceneImpl) AddWidget(w Widget, wt library.ReleasedWidgetType, tagTypes TagTypes) (Scene, error) {
 	if s.widgetIndex(w.ID()) >= 0 {
 		return nil, fmt.Errorf("%w: %s", ErrWidgetAlreadyExists, w.ID())
 	}
@@ -220,10 +195,7 @@ func (s *sceneImpl) AddWidget(expected version.Version[Scene], w Widget, wt libr
 	return s.withWidgets(append(slices.Clip(s.widgets), w), NewWidgetCreatedEvent(w.ID(), s.id, s.projectID, w.TypeID())), nil
 }
 
-func (s *sceneImpl) UpdateWidget(expected version.Version[Scene], w Widget, wt library.ReleasedWidgetType, tagTypes TagTypes) (Scene, error) {
-	if err := s.CheckVersion(expected); err != nil {
-		return nil, err
-	}
+func (s *sceneImpl) UpdateWidget(w Widget, wt library.ReleasedWidgetType, tagTypes TagTypes) (Scene, error) {
 	i := s.widgetIndex(w.ID())
 	if i < 0 {
 		return nil, id.NotFound(ErrWidgetNotFound, w.ID())
@@ -312,13 +284,6 @@ func (s *sceneImpl) PendingEvents() []event.Event {
 	return slices.Clone(s.pending)
 }
 
-func (s *sceneImpl) CheckVersion(expected version.Version[Scene]) error {
-	if expected != s.version {
-		return fmt.Errorf("%w: expected version %s, current %s", ErrSceneConflict, expected, s.version)
-	}
-	return nil
-}
-
 func (s *sceneImpl) widgetIndex(widgetID id.ID[Widget]) int {
 	return slices.IndexFunc(s.widgets, func(w Widget) bool { return w.ID() == widgetID })
 }
@@ -334,7 +299,6 @@ func (s *sceneImpl) withWidgets(someWidgets []Widget, someEvents ...event.Event)
 		size:           s.size,
 		backgroundHTML: s.backgroundHTML,
 		widgets:        someWidgets,
-		version:        s.version,
 		pending:        s.record(someEvents...),
 	}
 }

@@ -12,6 +12,30 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
+// observeDraftVersion records a Version of the Draft seen in a response. The
+// Version never goes back, so a response read earlier cannot lower it.
+func (p *Project) observeDraftVersion(version int) {
+	if version > p.draftVersion {
+		p.draftVersion = version
+	}
+}
+
+// loadDraftState (re)loads the Version of the Draft: what every content write
+// states (ADR 0016).
+func (p *Project) loadDraftState(ctx app.Context) {
+	if p.content == nil {
+		p.draftVersion = 0
+		return
+	}
+	uiutil.LoadOfProject(p.compoCtx, &p.draftReloader, p.projectContent,
+		func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DraftStateResponse, error) {
+			return pc.DraftState(c)
+		},
+		func(ctx app.Context, state apiv0.DraftStateResponse) {
+			p.observeDraftVersion(state.Version)
+		}, p.loadDraftState)
+}
+
 // ── Widget types and Library Pins ─────────────────────────────────────────────
 
 // loadWidgetTypes (re)loads the WidgetTypes of the releases the project pins:
@@ -42,6 +66,9 @@ func (p *Project) loadPins(ctx app.Context) {
 		},
 		func(ctx app.Context, pins []apiv0.LibraryPinResponse) {
 			p.pins = pins
+			if len(pins) > 0 {
+				p.observeDraftVersion(pins[0].Version)
+			}
 		}, p.loadPins)
 }
 
@@ -95,7 +122,10 @@ func (p *Project) setScenes(ctx app.Context, mark sceneMark, scenes []apiv0.Scen
 		merged[i] = sc
 	}
 	p.scenes = merged
-	for _, sc := range scenes {
+	for i, sc := range scenes {
+		if i == 0 {
+			p.observeDraftVersion(sc.Version)
+		}
 		p.observeSceneVersion(ctx, mark.versions, sc.ID, sc.Version)
 	}
 
@@ -164,8 +194,11 @@ func (p *Project) setWidgets(ctx app.Context, mark uiutil.Mark, sceneID uuid.UUI
 
 	// Widgets carry their Scene's version; with none, the Scene is reread
 	// for it.
-	for _, w := range widgets {
-		p.sceneVersions.Observe(mark, sceneID, w.SceneVersion)
+	for i, w := range widgets {
+		if i == 0 {
+			p.observeDraftVersion(w.Version)
+		}
+		p.sceneVersions.Observe(mark, sceneID, w.Version)
 	}
 	if len(widgets) == 0 {
 		p.loadScene(ctx, sceneID)
@@ -210,6 +243,9 @@ func (p *Project) loadTags(ctx app.Context) {
 // the selected Tag was created leaves the selection to the next one.
 func (p *Project) setTags(ctx app.Context, mark tagstate.Mark, n uint64, tags []apiv0.TagResponse) {
 	p.tags = p.tags.Merge(mark, tags)
+	if len(tags) > 0 {
+		p.observeDraftVersion(tags[0].Version)
+	}
 	if _, ok := p.tags.Find(p.selectedTagID); ok || p.selectedTagID == uuid.Nil || n <= p.tagCreated {
 		return
 	}

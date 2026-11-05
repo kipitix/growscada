@@ -296,12 +296,11 @@ func TestEventsHandlers_GetProjectEvents_TagUpdatedCarriesTagState(t *testing.T)
 	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), ": connected") })
 
 	name, _ := tag.NewTagName("pressure")
-	aVersion, _ := version.New(version.WithNumber[tag.Tag](7))
-	aTag, err := tag.ReconstituteTag(id.NewID[tag.Tag](), mainProjectID, name, tag.TagTypeInteger, tag.NoSupplier(), aVersion)
+	aTag, err := tag.ReconstituteTag(id.NewID[tag.Tag](), mainProjectID, name, tag.TagTypeInteger, tag.NoSupplier())
 	if err != nil {
 		t.Fatalf("NewTag: %v", err)
 	}
-	state, err := tagstate.Reconstitute(tagstate.Definition{TagID: aTag.ID(), ProjectID: aTag.ProjectID(), Name: aTag.Name(), Type: aTag.Type(), Version: aTag.Version()}, tag.TagValueInteger(42), tag.TagQualityUncertain, 12)
+	state, err := tagstate.Reconstitute(tagstate.Definition{TagID: aTag.ID(), ProjectID: aTag.ProjectID(), Name: aTag.Name(), Type: aTag.Type(), Version: version.Initial[tag.Tag]()}, tag.TagValueInteger(42), tag.TagQualityUncertain, 12)
 	if err != nil {
 		t.Fatalf("Reconstitute: %v", err)
 	}
@@ -334,7 +333,7 @@ func TestEventsHandlers_GetProjectEvents_TagUpdatedCarriesTagState(t *testing.T)
 		"type":    "integer",
 		"value":   "42",
 		"quality": "uncertain",
-		"version": float64(7),
+		"version": float64(0),
 		"seq":     float64(12),
 	}
 	got, ok := updated["tag"].(map[string]any)

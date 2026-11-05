@@ -32,7 +32,7 @@ func TestBuild_IsCanonical(t *testing.T) {
 
 	mustCreateTag(t, "b-tag", "integer")
 	mustCreateTag(t, "a-tag", "boolean")
-	created, err := newDeviceService().CreateDevice(ctx, mainProject, appdto.DeviceInput{
+	created, err := newDeviceService().CreateDevice(ctx, mainProject, draftVersionOf(t, mainProject), appdto.DeviceInput{
 		Name: "pump", Protocol: "simulation", Config: []byte(`{"b": 1, "a": {"y": 2, "x": 3}}`),
 	})
 	if err != nil {

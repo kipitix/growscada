@@ -46,7 +46,7 @@ func TestSceneInput_InvalidField_IsInvalidInputOnCreateAndUpdate(t *testing.T) {
 			input := testCreateSceneInput
 			tc.modify(&input)
 
-			_, err := svc.CreateScene(ctx, mainProject, input)
+			_, err := svc.CreateScene(ctx, mainProject, draftVersionOf(t, mainProject), input)
 			assertInvalidField(t, err, tc.field)
 
 			_, err = svc.UpdateScene(ctx, mainProject, sc.ID, sc.Version, input)
@@ -81,16 +81,16 @@ func TestWidgetInput_InvalidField_IsInvalidInputOnCreateAndUpdate(t *testing.T) 
 			input := testCreateWidgetInput
 			tc.modify(&input)
 
-			_, err = svc.CreateWidget(ctx, mainProject, sc.ID, created.SceneVersion, input)
+			_, err = svc.CreateWidget(ctx, mainProject, sc.ID, created.Version, input)
 			assertInvalidField(t, err, tc.field)
 
-			_, err = svc.UpdateWidget(ctx, mainProject, sc.ID, created.ID, created.SceneVersion, input)
+			_, err = svc.UpdateWidget(ctx, mainProject, sc.ID, created.ID, created.Version, input)
 			assertInvalidField(t, err, tc.field)
 		})
 	}
 }
 
-func TestWidgetInput_NegativeSceneVersion_IsInvalidInputOnCreateAndUpdate(t *testing.T) {
+func TestWidgetInput_NegativeVersion_IsInvalidInputOnCreateAndUpdate(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
 	ctx := editlock.System(context.Background())
@@ -101,10 +101,10 @@ func TestWidgetInput_NegativeSceneVersion_IsInvalidInputOnCreateAndUpdate(t *tes
 	}
 
 	_, err = svc.CreateWidget(ctx, mainProject, sc.ID, -1, testCreateWidgetInput)
-	assertInvalidField(t, err, "scene_version")
+	assertInvalidField(t, err, "version")
 
 	_, err = svc.UpdateWidget(ctx, mainProject, sc.ID, created.ID, -1, testCreateWidgetInput)
-	assertInvalidField(t, err, "scene_version")
+	assertInvalidField(t, err, "version")
 }
 
 func TestUpdate_NegativeVersion_IsInvalidInput(t *testing.T) {
