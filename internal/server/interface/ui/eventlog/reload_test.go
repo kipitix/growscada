@@ -87,8 +87,45 @@ func TestReloadTargetsFor_CoversEveryKnownEvent(t *testing.T) {
 	}
 }
 
-func TestReloadTargets_WidgetsOf(t *testing.T) {
-	selected, other := uuid.New(), uuid.New()
+// TestReloadTargets_DraftChanged: the events that write a Draft's content, a
+// Deploy or a Release clear its stack (ADR 0017), so they ask for a reread of
+// the stack; a Tag's value and the Draft's lock alone do not.
+func TestReloadTargets_DraftChanged(t *testing.T) {
+	changes := []apiv0.Event{
+		{Type: apiv0.EventTagCreated},
+		{Type: apiv0.EventTagDeleted},
+		{Type: apiv0.EventSceneUpdated},
+		{Type: apiv0.EventWidgetCreated},
+		{Type: apiv0.EventLibraryPinDeleted},
+		{Type: apiv0.EventWidgetTypeUpdated},
+		{Type: apiv0.EventDeviceCreated},
+		{Type: apiv0.EventEnvironmentDeviceCreated},
+		{Type: apiv0.EventRevisionCreated}, // a Deploy clears the stack
+		{Type: apiv0.EventLibraryReleased},
+		{Type: EventResync},
+	}
+	for _, ev := range changes {
+		if !ReloadTargetsFor(ev).DraftChanged() {
+			t.Errorf("%q leaves the stack alone", ev.Type)
+		}
+	}
+	unchanged := []apiv0.Event{
+		{Type: apiv0.EventTagUpdated, Tag: &apiv0.TagResponse{}}, // a value, not a DraftChange
+		{Type: apiv0.EventEditLockAcquired},
+		{Type: apiv0.EventEditLockReleased},
+		{Type: apiv0.EventEditLockTakenOver},
+		{Type: apiv0.EventEditLockExpired},
+		{Type: apiv0.EventClientConnected},
+		{Type: apiv0.EventSystemReady},
+	}
+	for _, ev := range unchanged {
+		if ReloadTargetsFor(ev).DraftChanged() {
+			t.Errorf("%q rereads the stack", ev.Type)
+		}
+	}
+}
+
+func TestReloadTargets_WidgetsOf(t *testing.T) {	selected, other := uuid.New(), uuid.New()
 
 	for name, tc := range map[string]struct {
 		targets  ReloadTargets

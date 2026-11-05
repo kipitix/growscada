@@ -89,7 +89,7 @@ func TestUndo_RestoresTheSceneAndRedoBringsItBack(t *testing.T) {
 	if f.p.changes.CanUndo || !f.p.changes.CanRedo {
 		t.Errorf("stack after undo: %+v, want a redo only", f.p.changes)
 	}
-	if f.p.canRedo() == false {
+	if !f.p.canRedo() {
 		t.Error("the Redo button is off after an undo")
 	}
 
