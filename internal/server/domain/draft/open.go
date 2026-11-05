@@ -227,13 +227,11 @@ func (s *Session) openScenes(stored, wanted []scene.Scene) {
 			oldWidgets[w.ID().UUID()] = placedWidget{sceneID: sc.ID().UUID(), widget: w}
 		}
 	}
-	newScenes := make(map[uuid.UUID]scene.Scene, len(wanted))
 	seenScenes := make(map[uuid.UUID]struct{}, len(wanted))
 	seenWidgets := make(map[uuid.UUID]struct{})
 	for _, sc := range wanted {
 		sceneID := sc.ID().UUID()
 		seenScenes[sceneID] = struct{}{}
-		newScenes[sceneID] = sc
 		for _, w := range sc.Widgets() {
 			seenWidgets[w.ID().UUID()] = struct{}{}
 		}
