@@ -1,7 +1,7 @@
 info:
   name: get library draft changes
   type: http
-  seq: 127
+  seq: 128
 
 http:
   method: GET

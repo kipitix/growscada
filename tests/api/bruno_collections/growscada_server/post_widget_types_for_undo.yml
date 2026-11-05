@@ -1,7 +1,7 @@
 info:
   name: post widget type for undo
   type: http
-  seq: 129
+  seq: 130
 
 http:
   method: POST

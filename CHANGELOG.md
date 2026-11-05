@@ -11,7 +11,7 @@
   - REST: `GET …/draft-changes`, `POST …/draft-changes/undo` и `…/redo` под путём Project и Library; 200 с состоянием после операции, 409 `nothing_to_undo`/`nothing_to_redo` (Problem называет Library для Library), 409 устаревшей Version с `Problem.draft`, 409 без замка с `Problem.edit_lock`, 400 без `X-GrowSCADA-Client`, 404 неживой области; `api/v0` **0.18** (MINOR): `DraftChangesResponse`, `DraftChangeCommandRequest`, константы `DraftChangesPath`/`DraftChangesUndoPath`/`DraftChangesRedoPath`, `make schemas`
   - apiclient: `DraftChanges`, `UndoDraftChange`, `RedoDraftChange` у `ProjectClient` и `LibraryClient` (Version 0 — текущая Version Draft)
   - growctl: тест, что планировщик не читает версии сущностей — Version DTO теперь Version Draft (ADR 0016)
-  - Bruno: чтение стека Project и Library, undo/redo обеих областей, восстановление Environment после undo и его отсутствие после redo, пустой стек, устаревшая Version, запрос без клиента, пустой стек Library
+  - Bruno: чтение стека Project и Library, undo/redo обеих областей, восстановление Environment после undo и его отсутствие после redo, пустой стек, устаревшая Version, запрос без клиента, undo без замка (409 `edit_lock`), пустой стек Library
   - Тесты: домен (позиция и Version, отказ при чужом изменении, снимки каждой операции, обратные события каждого вида), репозиторий (восстановление Tag с привязками и события, redo и обрезка redo-хвоста новой правкой, пустой стек и гейт, Library WidgetType, глубина 100), сервис (Project, Library, 404, гейт, устаревшая Version, пустой стек), REST (оба маршрута обеих областей, коды и Problem Details, заголовки), apiclient, growctl
 
 ## [0.0.65] - 2026-11-05
