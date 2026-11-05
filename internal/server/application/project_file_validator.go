@@ -367,10 +367,15 @@ func validateProjectFileShape(file projectv0.ProjectFile, problems *fileProblems
 	}
 
 	sceneNames := make(map[string]struct{}, len(file.Scenes))
+	sceneIDs := make(map[uuid.UUID]struct{}, len(file.Scenes))
 	widgets := make(map[uuid.UUID]string, len(file.Scenes))
 	for i, sc := range file.Scenes {
 		path := fmt.Sprintf("scenes[%d]", i)
 		checkID(sc.ID, path+".id", problems)
+		if _, ok := sceneIDs[sc.ID]; ok && sc.ID != uuid.Nil {
+			problems.add(path+".id", "the ID %s appears more than once", sc.ID)
+		}
+		sceneIDs[sc.ID] = struct{}{}
 		if _, err := scene.NewSceneName(sc.Name); err != nil {
 			problems.add(path+".name", "%s", err)
 		}

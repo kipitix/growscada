@@ -142,6 +142,21 @@ func TestValidateProjectFile_RefusesDuplicateIDsAndNames(t *testing.T) {
 	wantIssue(t, issues, "tags[1].name", "appears more than once")
 }
 
+// TestValidateProjectFile_RefusesTwoScenesOfOneID: a Scene's ID names one
+// Scene in the Project; a second Scene of it would be written over the first
+// instead of being refused (ADR 0018).
+func TestValidateProjectFile_RefusesTwoScenesOfOneID(t *testing.T) {
+	projectID := uuid.New()
+	file := emptyFile(projectID)
+	sceneID := uuid.New()
+	file.Scenes = []projectv0.Scene{
+		{ID: sceneID, Name: "One", Width: 100, Height: 100},
+		{ID: sceneID, Name: "Two", Width: 100, Height: 100},
+	}
+	issues := fileIssues(t, validateFile(t, projectID, file))
+	wantIssue(t, issues, "scenes[1].id", "appears more than once")
+}
+
 func TestValidateProjectFile_RefusesDanglingReferences(t *testing.T) {
 	projectID := uuid.New()
 	file := emptyFile(projectID)
