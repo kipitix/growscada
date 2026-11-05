@@ -250,6 +250,10 @@ func (p *Project) renderDeployBar() app.UI {
 	}
 	body = append(body,
 		app.Div().Style("flex", "1"),
+		p.deployButton("Project file…", "Download the Draft, open a file, or deploy one",
+			!p.deploying && !p.discarding && !p.rollingBack && !p.projectFileBusy, func(ctx app.Context) {
+				p.openProjectFileDialog(ctx)
+			}),
 		p.deployButton("Revisions", "The Revisions of the project", !p.deploying && !p.discarding && !p.rollingBack, func(ctx app.Context) {
 			p.openRevisionsDialog(ctx)
 		}),
@@ -268,6 +272,9 @@ func (p *Project) renderDeployBar() app.UI {
 	}
 	if p.revisionsDialog {
 		body = append(body, p.renderRevisionsDialog())
+	}
+	if p.projectFileDialog {
+		body = append(body, p.renderProjectFileDialog())
 	}
 
 	return app.Div().
@@ -485,6 +492,23 @@ func (p *Project) renderRevisionRow(revision apiv0.RevisionSummaryResponse) app.
 			Style("color", "var(--accent)").
 			Text("current"))
 	}
+	body = append(body, app.Button().
+		Attr("data-revision-download", fmt.Sprint(revision.Number)).
+		Title(fmt.Sprintf("Download revision %d as a project file", revision.Number)).
+		Style("margin-left", "8px").
+		Style("padding", "1px 7px").
+		Style("font-size", "11px").
+		Style("cursor", "pointer").
+		Style("border", "1px solid var(--border-input)").
+		Style("border-radius", "4px").
+		Style("background", "var(--bg)").
+		Style("color", "var(--text)").
+		Text("Download").
+		OnClick(func(ctx app.Context, e app.Event) {
+			e.Call("stopPropagation")
+			e.StopImmediatePropagation()
+			p.downloadRevisionProjectFile(ctx, revision.Number)
+		}))
 	row := app.Div().
 		Attr("data-revision-row", fmt.Sprint(revision.Number)).
 		Style("display", "flex").
@@ -551,6 +575,8 @@ func revisionCauseText(cause apiv0.RevisionCause, rolledBackFrom *int) string {
 			return fmt.Sprintf("Rolled back from #%d", *rolledBackFrom)
 		}
 		return "Rolled back"
+	case apiv0.RevisionCauseFile:
+		return "Deployed from file"
 	default:
 		return string(cause)
 	}

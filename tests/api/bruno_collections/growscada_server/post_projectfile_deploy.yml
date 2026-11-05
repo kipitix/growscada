@@ -32,7 +32,7 @@ runtime:
       operator: isDefined
     - expression: 'res.body.number'
       operator: eq
-      value: '2'
+      value: '3'
 
 settings:
   encodeUrl: true

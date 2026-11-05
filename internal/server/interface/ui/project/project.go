@@ -73,6 +73,16 @@ type Project struct {
 	revisionDetail       apiv0.RevisionResponse
 	revisionDetailLoaded bool
 	rollingBack          bool
+	// ── Project file dialog (task 39, ADR 0018) ─────────────────────────────
+	// projectFileDialog is true while the dialog is open; pendingProjectFile
+	// is the picked file waiting for confirmation, projectFileIssues the
+	// problems the server found in it. projectFileBusy marks a request in
+	// flight.
+	projectFileDialog  bool
+	projectFileBusy    bool
+	pendingProjectFile *pendingProjectFile
+	projectFileIssues  []apiv0.FileIssue
+	projectFileDetail  string
 	// ── EditLock of the Draft (ADR 0015) ────────────────────────────────────
 	// tabKey is the key of this tab: the client the API client acts as.
 	// editLock is the state of the Draft's lock, read on mount and on the
@@ -297,6 +307,9 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.revisions, p.revisionsLoaded = nil, false
 	p.revisionsDialog, p.selectedRevision, p.rollingBack = false, 0, false
 	p.revisionDetail, p.revisionDetailLoaded = apiv0.RevisionResponse{}, false
+	p.projectFileDialog, p.projectFileBusy = false, false
+	p.pendingProjectFile = nil
+	p.projectFileIssues, p.projectFileDetail = nil, ""
 	p.changes, p.changesLoaded = apiv0.DraftChangesResponse{}, false
 	p.undoing, p.redoing = false, false
 	p.draftVersions.Forget()
