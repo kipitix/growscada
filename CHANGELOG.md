@@ -1,5 +1,20 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.63] - 2026-11-05
+
+### Added
+
+- **EditLock: Draft библиотеки правит один клиент** (задача 37, часть 2; ADR 0015)
+  - `EditLockService` работает с `editlock.Scope` обеих областей: `State`, `CheckOut`, `CheckIn`, `TakeOver`, `CheckHeld` берут область Draft'а, проверяют живой Project (`ProjectContent`) или Library (`LibraryContent`, новая обёртка над `LibraryRepository` и организацией) и отказывают `project_discarding` / `library_discarding` при идущем Discard. `EditLockGate` Deploy тоже принимает область
+  - Гейт записей Library-области в транзакции записи: `aggregateStore` библиотечной области (WidgetTypes Draft'а) читает строку замка по `library_id`; Release — в `LibraryReleaseRepository.Save` рядом с блокировкой строки Library и `ErrDraftChanged`; Discard — в транзакции записи пометки (`LibraryRepository.Save`), снятие пометки политикой пишет как `System`. Гейт общий (`checkEditLock`), Project и Library различаются колонкой
+  - REST API: маршруты `GET`/`POST`/`DELETE …/libraries/{id}/edit-lock` и `POST …/edit-lock/takeover` — та же семантика, что у проекта (201/200/409 с держателем, 400 без клиента, 404 удалённой Library, 409 `library_discarding` при Check out во время Discard); `apiclient.LibraryClient` получил `StateEditLock`, `CheckOutEditLock`, `CheckInEditLock`, `TakeOverEditLock`
+  - События `edit_lock_*` области Library идут в серверный поток: `newAPIEvent` называет Library в `id` и `library_id`, `eventlog` не считает их содержимым проекта (иначе тег чужого проекта и потеря события на устаревшем соединении), `ReloadTargetsFor(EventResync)` перечитывает замок
+  - PWA, Library-режим: та же строка замка в шапке (имя — из общего `editlock:name`, ключ вкладки — из клиента `root`); без замка WidgetTypes, Release и Discard только для чтения (кнопки видны и выключены с подсказкой), список/создание/переименование/удаление Library и просмотр релизов остаются доступны; потеря замка — toast и read-only; переключение Library сначала шлёт Check in прежней; состояние читается на `EventResync` и по `edit_lock_*` своей библиотеки
+  - growctl: мутирующий прогон берёт замок и у Library — `apply` (WidgetTypes), `release`, `discard`, `delete -f` (WidgetTypes); занятый замок — ошибка с именем держателя, `--take-over` — форс. Общий `lockDraft` над Project и Library
+  - Bruno: setup/teardown замка библиотеки, заголовок клиента у её мутирующих запросов, запросы свободного состояния, 409 с держателем, перехвата и возврата замка
+  - Тесты: сервис Library-области (взятие/отдача/перехват, `CheckHeld`, 404, Check out при Discard), репозиторий (гейт WidgetType, Release, пометки Discard; запись держателя поднимает `last_seen`), REST (четыре маршрута, 409 с держателем, 400 без ключа, 404, гейт записи, Check out при Discard), UI (свободен/мой/чужой, read-only WidgetType/Release/Discard, Check out с именем, Check in, перехват, toast потери, Check in при переключении Library), growctl (занятый замок и `--take-over` для apply и release), `newAPIEvent` Library-замка
+  - Документация: `AGENTS.md` описывает маршруты Library-замка, гейт Library-области и read-only Library-режима
+
 ## [0.0.62] - 2026-11-05
 
 ### Added
