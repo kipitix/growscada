@@ -556,6 +556,42 @@
       ],
       "type": "object"
     },
+    "DraftChangeCommandRequest": {
+      "properties": {
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    },
+    "DraftChangesResponse": {
+      "properties": {
+        "can_redo": {
+          "type": "boolean"
+        },
+        "can_undo": {
+          "type": "boolean"
+        },
+        "redo_description": {
+          "type": "string"
+        },
+        "undo_description": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version",
+        "can_undo",
+        "can_redo"
+      ],
+      "type": "object"
+    },
     "DraftStateResponse": {
       "properties": {
         "version": {

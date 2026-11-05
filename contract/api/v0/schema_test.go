@@ -25,6 +25,7 @@ func TestSchemaIsCommitted(t *testing.T) {
 			DeviceIdentityResponse{},
 			RevisionResponse{}, RevisionSummaryResponse{}, ListRevisionsResponse{}, DroppedWidgetResponse{}, DeployPreviewResponse{},
 			DeployResponse{}, DiscardProjectResponse{}, TagStateResponse{}, GetTagStatesResponse{},
+			DraftChangesResponse{}, DraftChangeCommandRequest{},
 			EditLockResponse{}, EditLockHolderResponse{}, CheckOutEditLockRequest{}, TakeOverEditLockRequest{},
 			Event{}, Problem{},
 		},
