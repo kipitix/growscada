@@ -7,8 +7,10 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/editlock"
+	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
@@ -234,5 +236,84 @@ func TestDraftPurge_OfADeletedProject(t *testing.T) {
 	}
 	if err := projects.Delete(ctx, marked); err != nil {
 		t.Fatalf("remove the project's row: %v", err)
+	}
+}
+
+// mustDevice builds a new Device of the project Main, with a name of its own.
+func mustDevice(t *testing.T, name string) device.Device {
+	t.Helper()
+	deviceName, err := device.NewDeviceName(name + "-" + uuid.NewString())
+	if err != nil {
+		t.Fatalf("NewDeviceName: %v", err)
+	}
+	config, err := device.NewDeviceConfig([]byte(`{}`))
+	if err != nil {
+		t.Fatalf("NewDeviceConfig: %v", err)
+	}
+	created, err := device.CreateDevice(id.NewID[device.Device](), mainProject, deviceName, "", device.ProtocolSimulation, config)
+	if err != nil {
+		t.Fatalf("CreateDevice: %v", err)
+	}
+	return created
+}
+
+// TestDraftReplace_RemovesThePairsTheRevisionLacks: a pair (Environment,
+// Device) has no ID of its own — its Environment's ID and its Device's ID
+// together name it. A Discard (Replace) drops the pairs the Revision does not
+// hold even while their Environment stays.
+func TestDraftReplace_RemovesThePairsTheRevisionLacks(t *testing.T) {
+	cleanEditLocks(t)
+	ctx := editlock.System(context.Background())
+	if _, err := testDB.ExecContext(ctx,
+		`DELETE FROM engineering.environment_devices; DELETE FROM engineering.devices; DELETE FROM engineering.environments`); err != nil {
+		t.Fatalf("clean devices: %v", err)
+	}
+
+	environmentName, err := device.NewEnvironmentName("bench-" + uuid.NewString())
+	if err != nil {
+		t.Fatalf("NewEnvironmentName: %v", err)
+	}
+	environment, err := device.CreateEnvironment(id.NewID[device.Environment](), mainProject, environmentName, "")
+	if err != nil {
+		t.Fatalf("CreateEnvironment: %v", err)
+	}
+	one, two := mustDevice(t, "one"), mustDevice(t, "two")
+	params, err := device.NewEnvironmentDeviceParams([]byte(`{"address":"127.0.0.1:1502"}`))
+	if err != nil {
+		t.Fatalf("NewEnvironmentDeviceParams: %v", err)
+	}
+	kept := device.CreateEnvironmentDevice(mainProject, environment.ID(), one.ID(), params)
+
+	mustUpdate(t, mainProject, "devices and environment", func(session *draft.Session) error {
+		session.CreateDevice(ctx, one)
+		session.CreateDevice(ctx, two)
+		session.CreateEnvironment(ctx, environment)
+		return nil
+	})
+	mustUpdate(t, mainProject, "pairs", func(session *draft.Session) error {
+		if _, _, err := session.PutEnvironmentDevice(ctx, environment.ID(), one.ID(), params); err != nil {
+			return err
+		}
+		_, _, err := session.PutEnvironmentDevice(ctx, environment.ID(), two.ID(), params)
+		return err
+	})
+
+	// The Revision the Discard restores holds the Environment with one pair.
+	if _, err := testDrafts().Replace(ctx, editlock.ProjectScope(mainProject), func(session *draft.Session) error {
+		return session.Replace(ctx, draft.Content{
+			Devices:            []device.Device{one, two},
+			Environments:       []device.Environment{environment},
+			EnvironmentDevices: []device.EnvironmentDevice{kept},
+		})
+	}); err != nil {
+		t.Fatalf("Replace: %v", err)
+	}
+
+	pairs, err := repositories.NewEnvironmentDeviceRepositoryPostgres(testDB, mainProject).FindByEnvironment(ctx, environment.ID())
+	if err != nil {
+		t.Fatalf("FindByEnvironment: %v", err)
+	}
+	if len(pairs) != 1 || pairs[0].DeviceID() != one.ID() {
+		t.Errorf("the pairs after the Discard: %+v, want only the Device %s", pairs, one.ID())
 	}
 }

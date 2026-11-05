@@ -62,13 +62,24 @@ func applySnapshots(ctx context.Context, tx *sql.Tx, scope editlock.Scope, befor
 	return nil
 }
 
-// containsSnapshot reports whether the same entity — the same kind and ID — is
-// on the other side of the change: it was updated, not created or removed.
+// containsSnapshot reports whether the same stored row — the same kind and
+// identity — is on the other side of the change: it was updated, not created
+// or removed. Most entities are named by their ID alone; a pair (Environment,
+// Device) has no ID of its own, so its Environment's ID and its Device's ID
+// together name it: two pairs of one Environment share the Environment's.
 func containsSnapshot(list []draft.Snapshot, wanted draft.Snapshot) bool {
+	wantedPair, wantedIsPair := wanted.State.(draft.EnvironmentDeviceState)
 	for _, snapshot := range list {
-		if snapshot.Kind == wanted.Kind && snapshot.ID == wanted.ID {
-			return true
+		if snapshot.Kind != wanted.Kind || snapshot.ID != wanted.ID {
+			continue
 		}
+		if wantedIsPair {
+			pair, ok := snapshot.State.(draft.EnvironmentDeviceState)
+			if !ok || pair.DeviceID != wantedPair.DeviceID {
+				continue
+			}
+		}
+		return true
 	}
 	return false
 }
