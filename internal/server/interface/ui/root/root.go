@@ -1,8 +1,6 @@
 package root
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"sync"
@@ -21,7 +19,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/project"
 	"github.com/kipitix/growscada/internal/server/interface/ui/projects"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
-	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
 type Mode string
@@ -179,8 +176,10 @@ func (r *Root) selectProject(mode Mode, id uuid.UUID) {
 	r.selected[mode] = id
 	if mode == ModeProject && previous != id {
 		// The Draft of the project left is given back before another one is
-		// shown (ADR 0015): a tab edits one Draft at a time.
-		r.checkInEditLock(previous)
+		// shown (ADR 0015): a tab edits one Draft at a time. The mode sends
+		// the Check in after the writes it still owes that Draft, so a move of
+		// the last moment is not refused by the lock it gives back.
+		r.giveBackDraft(previous)
 	}
 	switch mode {
 	case ModeProject:
@@ -618,29 +617,15 @@ func (r *Root) renderThemeToggle() app.UI {
 		})
 }
 
-// editLockCheckInTimeout bounds the Check in a switch of project sends to the
-// Draft left: the switch does not wait for it.
-const editLockCheckInTimeout = 3 * time.Second
-
-// checkInEditLock sends a Check in for the project id (uuid.Nil: none) in the
-// background: a refusal or a network failure is a toast, and the switch goes
-// on. A lock another client holds is not a failure: this tab had lost it
-// already.
-func (r *Root) checkInEditLock(id uuid.UUID) {
+// giveBackDraft lets the Project mode give the Draft of the project id back
+// (ADR 0015), after the writes the mode still owes it: nothing to do for a
+// project left that is none, nor for a Root that is not mounted — it has no
+// Check in to send.
+func (r *Root) giveBackDraft(id uuid.UUID) {
 	if id == uuid.Nil || !r.mounted {
 		return
 	}
-	content := r.client.Project(id)
-	uiutil.Do(r.compoCtx, func(c context.Context) (struct{}, error) {
-		ctx, cancel := context.WithTimeout(c, editLockCheckInTimeout)
-		defer cancel()
-		_, err := content.CheckInEditLock(ctx)
-		return struct{}{}, err
-	}, func(ctx app.Context, _ struct{}, err error) {
-		if err != nil && !errors.Is(err, apiclient.ErrConflict) {
-			uiutil.ShowError(ctx, err)
-		}
-	})
+	r.project.GiveBackDraft(r.compoCtx, id)
 }
 
 // SetMode shows mode, opening it if it was not yet. The Bar follows the
@@ -648,8 +633,9 @@ func (r *Root) checkInEditLock(id uuid.UUID) {
 // (selectProject); Library leaves it as it is.
 func (r *Root) SetMode(mode Mode) {
 	if r.currentMode == ModeProject && mode != ModeProject {
-		// Leaving the Project mode gives the Draft back (ADR 0015).
-		r.checkInEditLock(r.selected[ModeProject])
+		// Leaving the Project mode gives the Draft back (ADR 0015), after the
+		// writes the mode still owes it.
+		r.giveBackDraft(r.selected[ModeProject])
 	}
 	r.currentMode = mode
 	r.opened[mode] = true

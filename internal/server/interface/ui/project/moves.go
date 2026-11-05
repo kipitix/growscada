@@ -2,12 +2,14 @@ package project
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -22,6 +24,10 @@ import (
 // arrowSeriesDelay is how long the series waits for another arrow press before
 // sending its PATCH.
 const arrowSeriesDelay = 500 * time.Millisecond
+
+// checkInTimeout bounds the Check in Root asks for when the Project mode is
+// left or its project switched: the switch does not wait for it.
+const checkInTimeout = 3 * time.Second
 
 // beginArrowMove moves the selection by (dx, dy) — the arrows' 1 px or, with
 // Shift, 10 px — starting the series if it is not running. It changes only the
@@ -106,6 +112,57 @@ func (p *Project) flushMovesBeforeProjectChange(ctx app.Context) {
 	p.marquee = marqueeState{}
 }
 
+// GiveBackDraft gives the Draft of the project id back (ADR 0015) once the
+// writes this mode still owes it are answered: a series of arrow moves still
+// running is sent first, and its PATCH — and every move queued behind it —
+// comes before the Check in, so the lock is never released under a move of its
+// own Draft. Root calls it with its own context on a switch of project and on
+// leaving the mode, before the project shown changes, so the Draft is given
+// back even while this mode is not mounted; a mode that owes nothing sends the
+// Check in at once. id names the project, never uuid.Nil: Root checks that.
+func (p *Project) GiveBackDraft(ctx app.Context, id uuid.UUID) {
+	content := p.client.Project(id)
+	checkIn := func() {
+		uiutil.Do(ctx, func(c context.Context) (struct{}, error) {
+			ctx, cancel := context.WithTimeout(c, checkInTimeout)
+			defer cancel()
+			_, err := content.CheckInEditLock(ctx)
+			return struct{}{}, err
+		}, func(ctx app.Context, _ struct{}, err error) {
+			// A lock another client holds is not a failure: this tab had lost it
+			// already.
+			if err != nil && !errors.Is(err, apiclient.ErrConflict) {
+				uiutil.ShowError(ctx, err)
+			}
+		})
+	}
+	if !p.mounted || (!p.arrowActive && !p.moveSending) {
+		checkIn()
+		return
+	}
+	p.checkIns = append(p.checkIns, checkIn)
+	if p.arrowActive {
+		p.flushArrowMoves(p.compoCtx)
+	}
+	// Nothing had to be sent (or the series came back to its start): no answer
+	// will come to send the Check in.
+	p.runCheckIns()
+}
+
+// runCheckIns sends the Check ins that waited for the Draft's last write. A
+// move PATCH still in flight, or a series not sent yet, postpones them: the
+// answer that settles those calls it again.
+func (p *Project) runCheckIns() {
+	if p.moveSending || p.arrowActive || len(p.checkIns) == 0 {
+		return
+	}
+	waiting := p.checkIns
+	p.checkIns = nil
+	for _, checkIn := range waiting {
+		checkIn()
+	}
+}
+
 // waitMoves queues action until the arrow series and any move PATCH are done,
 // reporting whether it queued it — the caller returns then, and the action runs
 // the same method again once the Draft's Version is settled. This is how a
@@ -154,21 +211,22 @@ func (p *Project) sendMoves(ctx app.Context, sceneID uuid.UUID, moves []apiv0.Wi
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.MoveWidgetsResponse, error) {
 		return content.MoveWidgets(c, sceneID, req)
 	}, func(ctx app.Context, resp apiv0.MoveWidgetsResponse) {
-		// The project was switched while the PATCH was in flight: its flag and
-		// its queue belong to the project shown now, not to this answer.
-		if content != p.content {
-			return
+		// The project may have been switched while the PATCH was in flight: its
+		// flag and its queue belong to the project shown now, not to this
+		// answer, while the Check in it waited for belongs to the Draft left.
+		if content == p.content {
+			p.moveSending = false
+			p.observeDraftVersion(mark, resp.Version)
+			p.runMoveQueue(ctx)
 		}
-		p.moveSending = false
-		p.observeDraftVersion(mark, resp.Version)
-		p.runMoveQueue(ctx)
+		p.runCheckIns()
 	}, func(ctx app.Context, err error) {
-		if content != p.content {
-			return
+		if content == p.content {
+			p.moveSending = false
+			p.showRejectedSceneEdit(ctx, err, p.loadWidgets)
+			p.runMoveQueue(ctx)
 		}
-		p.moveSending = false
-		p.showRejectedSceneEdit(ctx, err, p.loadWidgets)
-		p.runMoveQueue(ctx)
+		p.runCheckIns()
 	})
 }
 

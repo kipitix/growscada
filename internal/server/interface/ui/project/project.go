@@ -199,6 +199,10 @@ type Project struct {
 	moveSending  bool
 	moveDraining bool
 	moveQueue    []func(app.Context)
+	// checkIns are the Check ins waiting for the Draft's last write: they run
+	// once no move PATCH is in flight (GiveBackDraft). A project switch drops
+	// the moveQueue, never these — the Draft left is still to be given back.
+	checkIns []func()
 
 	// marquee is the selection rectangle being dragged on empty canvas.
 	marquee marqueeState

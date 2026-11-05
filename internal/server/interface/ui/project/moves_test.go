@@ -3,6 +3,7 @@ package project
 import (
 	"context"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -374,5 +375,27 @@ func TestWidgetPress_ReadOnlySelectsAlone(t *testing.T) {
 	}
 	if f.p.draggingWidgetID != uuid.Nil {
 		t.Error("read-only press began a drag")
+	}
+}
+
+// The Draft of the project left is given back after its last write: a series
+// of arrow moves still running is sent, and its PATCH comes before the Check
+// in, so the server does not refuse the move with the lock it just released.
+func TestGiveBackDraft_SendsTheSeriesBeforeTheCheckIn(t *testing.T) {
+	f, sceneID, ids, counter := moveFixture(t, 1)
+	f.p.selectOnly(f.p.compoCtx, ids[0])
+
+	f.p.beginArrowMove(f.p.compoCtx, 6, 0)
+	f.p.GiveBackDraft(f.p.compoCtx, f.p.projectID)
+	f.p.SetProject(uuid.Nil) // the switch Root does right after
+	f.run()
+
+	f.noToasts()
+	writes := counter.writes()
+	if len(writes) != 2 || writes[0][:5] != "PATCH" || !strings.HasSuffix(writes[1], apiv0.EditLockPath) {
+		t.Fatalf("writes %v: want the series' PATCH, then the Check in", writes)
+	}
+	if w := f.widget(sceneID, ids[0]); w.Position.X != 16 {
+		t.Errorf("position x %v: the move of the Draft left was lost", w.Position.X)
 	}
 }
