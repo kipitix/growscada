@@ -172,6 +172,7 @@ func (p *Project) deploy(ctx app.Context) {
 		p.deploying = false
 		p.deployDialog = false
 		p.loadDeploy(ctx)
+		p.loadDraftChanges(ctx) // a Deploy clears the stack (ADR 0017)
 		if p.revisionsDialog {
 			p.loadRevisions(ctx)
 		}
@@ -209,6 +210,7 @@ func (p *Project) discard(ctx app.Context) {
 		p.discarding = false
 		p.observeDraftVersion(mark, discarded.Version)
 		p.loadDeploy(ctx)
+		p.loadDraftChanges(ctx) // a Discard clears the stack (ADR 0017)
 		ctx.Update()
 	}, func(ctx app.Context, err error) {
 		p.discarding = false
@@ -230,6 +232,7 @@ func (p *Project) renderDeployBar() app.UI {
 
 	body := []app.UI{
 		p.renderEditLockBar(),
+		p.renderDraftChangesBar(),
 		app.Div().Style("width", "1px").Style("height", "18px").Style("background", "var(--border)"),
 		app.Span().
 			Attr("data-deploy-revision", "true").

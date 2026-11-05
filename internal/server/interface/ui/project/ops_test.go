@@ -116,12 +116,12 @@ func (f *fixture) widget(sceneID, id uuid.UUID) apiv0.WidgetResponse {
 	return w
 }
 
-// knowsVersion fails unless Project's version of the Scene is the
-// server's.
+// knowsVersion fails unless the Draft's Version Project knows is the one the
+// server answers for the Scene: one Version serves the whole Draft (ADR 0016).
 func (f *fixture) knowsVersion(id uuid.UUID) {
 	f.t.Helper()
-	if got, want := f.p.sceneVersions.Of(id), f.scene(id).Version; got != want {
-		f.t.Errorf("known version of the Scene: %d, server's: %d", got, want)
+	if got, want := f.p.draftVersion(), f.scene(id).Version; got != want {
+		f.t.Errorf("known version of the Draft: %d, the Scene states: %d", got, want)
 	}
 }
 
@@ -371,15 +371,14 @@ func TestSaveSceneProperties_SceneChangedMeanwhile_ReloadsAndAsksToRepeat(t *tes
 }
 
 // The server's Version went back (its database was recreated since): the write
-// is refused, the Draft's Version is dropped with the Scene's, reread, and the
-// repeated edit goes through. A version kept here that the server no longer
+// is refused, the Draft's Version is dropped and reread, and the repeated edit
+// goes through. A version kept here that the server no longer
 // has would be refused forever (uiutil.Versions).
 func TestSaveSceneProperties_ServerVersionWentBack_RecoversAfterTheConflict(t *testing.T) {
 	url, api := newServer(t)
 	sceneID := createScene(t, api, "Main")
 	f := mount(t, url, api)
 	f.p.draftVersions.Observe(f.p.draftVersions.Mark(), f.p.projectID, 15)
-	f.p.sceneVersions.Observe(f.p.sceneVersions.Mark(), sceneID, 15)
 
 	f.p.sceneEdit.name = "Mine"
 	f.p.saveSceneProperties(f.p.compoCtx)

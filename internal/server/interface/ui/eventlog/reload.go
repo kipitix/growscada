@@ -32,6 +32,15 @@ func (t ReloadTargets) WidgetsOf(selected uuid.UUID) bool {
 	return t.Widgets || (t.Scene != uuid.Nil && t.Scene == selected)
 }
 
+// DraftChanged reports whether the event may have changed a Draft's DraftChange
+// stack (ADR 0017): every write of its content is one change, and a Deploy or
+// a Release clears the stack. Such an event is what the modes reread the stack
+// on, alongside a resync; an event of the Draft's lifecycle alone (a Project or
+// Library renamed or deleted) is not.
+func (t ReloadTargets) DraftChanged() bool {
+	return t.Tags || t.Scenes || t.Widgets || t.LibraryPins || t.WidgetTypes || t.Deploy
+}
+
 // AllTargets is every list.
 var AllTargets = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Revision: true, EditLock: true}
 

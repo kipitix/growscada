@@ -32,13 +32,13 @@ func (l *Library) createItem(ctx app.Context) {
 		DefaultHeight:  60,
 		InputPorts:     []apiv0.InputPort{},
 	}
-	mark := l.versions.Mark()
+	mark := l.markDraft()
 	uiutil.Call(ctx, func(c context.Context) (apiv0.CreateWidgetTypeResponse, error) {
 		return draft.CreateWidgetType(c, req)
 	}, func(ctx app.Context, created apiv0.CreateWidgetTypeResponse) {
 		// The new type is the request as the server stored it: listed and
 		// editable at once, before the list is reread.
-		l.versions.Observe(mark, l.libraryID, created.Version)
+		l.observeDraftVersion(mark, created.Version)
 		l.widgetTypes = append(l.widgetTypes, apiv0.WidgetTypeResponse{
 			ID:             created.ID,
 			LibraryID:      draft.ID(),
@@ -64,7 +64,7 @@ func (l *Library) deleteItem(ctx app.Context) {
 	}
 	deletedID := l.selectedID
 	uiutil.Call(ctx, func(c context.Context) (apiv0.WidgetTypeResponse, error) {
-		return draft.DeleteWidgetType(c, deletedID, l.versions.Of(l.libraryID))
+		return draft.DeleteWidgetType(c, deletedID, l.draftVersion())
 	}, func(ctx app.Context, _ apiv0.WidgetTypeResponse) {
 		if l.selectedID == deletedID {
 			l.clearSelection()
@@ -89,7 +89,7 @@ func (l *Library) applyChanges(ctx app.Context) {
 		DefaultWidth:   current.DefaultWidth,
 		DefaultHeight:  current.DefaultHeight,
 		InputPorts:     portsRequest(l.edit.ports),
-		Version:        l.versions.Of(l.libraryID),
+		Version:        l.draftVersion(),
 	})
 }
 
@@ -123,7 +123,7 @@ func (l *Library) commitEdit(ctx app.Context) {
 		DefaultWidth:   found.DefaultWidth,
 		DefaultHeight:  found.DefaultHeight,
 		InputPorts:     portsRequest(found.InputPorts),
-		Version:        l.versions.Of(l.libraryID),
+		Version:        l.draftVersion(),
 	})
 }
 
@@ -142,16 +142,16 @@ func (l *Library) updateWidgetType(id uuid.UUID, req apiv0.UpdateWidgetTypeReque
 	if draft == nil {
 		return
 	}
-	mark := l.versions.Mark()
+	mark := l.markDraft()
 	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.UpdateWidgetTypeResponse, error) {
 		return draft.UpdateWidgetType(c, id, req)
 	}, func(ctx app.Context, updated apiv0.UpdateWidgetTypeResponse) {
-		l.versions.Observe(mark, l.libraryID, updated.Version)
+		l.observeDraftVersion(mark, updated.Version)
 		l.loadList(ctx)
 	}, func(ctx app.Context, err error) {
 		uiutil.ShowError(ctx, err)
 		if errors.Is(err, apiclient.ErrConflict) {
-			l.versions.ForgetID(l.libraryID)
+			l.forgetDraftVersion()
 			l.loadList(ctx)
 		}
 	})

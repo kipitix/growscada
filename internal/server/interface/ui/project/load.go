@@ -72,6 +72,52 @@ func (p *Project) loadDraftState(ctx app.Context) {
 		}, p.loadDraftState)
 }
 
+// loadDraftChanges (re)loads the state of the Draft's DraftChange stack (ADR
+// 0017): what an undo and a redo would apply, and the Version both state. It
+// is read on mount, on a resync and after each content event; the answer is
+// applied only when it is not behind what is known, so a read answered after a
+// later write does not put an older stack back. A failed read is not a toast:
+// the stack is coordination, and the next event brings the truth.
+func (p *Project) loadDraftChanges(ctx app.Context) {
+	if p.content == nil {
+		p.changes, p.changesLoaded = apiv0.DraftChangesResponse{}, false
+		return
+	}
+	if !p.changesReloader.Start() {
+		return
+	}
+	content := p.content
+	mark := p.markDraft()
+	uiutil.Do(p.compoCtx, func(c context.Context) (apiv0.DraftChangesResponse, error) {
+		return content.DraftChanges(c)
+	}, func(ctx app.Context, state apiv0.DraftChangesResponse, err error) {
+		rerun := p.changesReloader.Done()
+		if content == p.content && err == nil {
+			p.applyDraftChanges(mark, state)
+		}
+		if rerun {
+			p.loadDraftChanges(ctx)
+		}
+	})
+}
+
+// applyDraftChanges stores the state of the stack that a request sent at mark
+// answered, unless it is behind what is known: an answer of a read sent before
+// a later write, or before a resync, would put stale buttons back. The state is
+// read for the buttons and their descriptions only — its Version does not raise
+// the one the shown content was read at, so an edit of a widget being dragged
+// is still refused by the server rather than written over another client's
+// change.
+func (p *Project) applyDraftChanges(mark uiutil.Mark, state apiv0.DraftChangesResponse) {
+	if p.draftVersions.Forgotten(mark, p.projectID) {
+		return
+	}
+	if known := p.draftVersions.Of(p.projectID); known > state.Version {
+		return
+	}
+	p.changes, p.changesLoaded = state, true
+}
+
 // ── Widget types and Library Pins ─────────────────────────────────────────────
 
 // loadWidgetTypes (re)loads the WidgetTypes of the releases the project pins:
@@ -130,7 +176,7 @@ func (p *Project) loadScenes(ctx app.Context) {
 		p.scenes = nil
 		return
 	}
-	mark := p.markScenes()
+	mark := p.markDraft()
 	uiutil.LoadOfProject(p.compoCtx, &p.scenesReloader, p.projectContent,
 		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.SceneResponse, error) {
 			return pc.ListScenes(c)
@@ -142,16 +188,23 @@ func (p *Project) loadScenes(ctx app.Context) {
 
 // setScenes replaces the scene list, keeps a valid selection (falling back to
 // the first scene) and merges the scene properties editor. The list decides
-// which Scenes there are; a Scene's state held is kept unless the list's is
-// newer (it may have been read before a save of it). mark is the moment the
-// list was requested.
-func (p *Project) setScenes(ctx app.Context, mark sceneMark, scenes []apiv0.SceneResponse) {
+// which Scenes there are; one Version serves the whole Draft (ADR 0016), so
+// the list states it once and a list answered before a newer state of it does
+// not replace what is shown. mark is the moment the list was requested.
+func (p *Project) setScenes(ctx app.Context, mark uiutil.Mark, scenes []apiv0.SceneResponse) {
 	old, known := p.findScene(p.selectedSceneID)
 	prevSceneID := p.selectedSceneID
 
+	// A newer Version while the selected Scene's Widgets are shown means they
+	// may have changed: they are read again.
+	fresh := len(scenes) > 0 && p.draftVersions.Advance(mark, p.projectID, scenes[0].Version)
+	if len(scenes) > 0 {
+		p.reloadShownWidgets(ctx, p.selectedSceneID, fresh)
+	}
+
 	merged := make([]apiv0.SceneResponse, len(scenes))
 	for i, sc := range scenes {
-		if !p.sceneStates.Advance(mark.states, sc.ID, sc.Version) {
+		if !fresh {
 			if cur, ok := p.findScene(sc.ID); ok {
 				sc = cur
 			}
@@ -159,10 +212,6 @@ func (p *Project) setScenes(ctx app.Context, mark sceneMark, scenes []apiv0.Scen
 		merged[i] = sc
 	}
 	p.scenes = merged
-	for _, sc := range scenes {
-		p.observeDraftVersion(mark.draft, sc.Version)
-		p.observeSceneVersion(ctx, mark.versions, sc.ID, sc.Version)
-	}
 
 	if _, exists := p.findScene(p.selectedSceneID); p.selectedSceneID != uuid.Nil && !exists {
 		p.selectedSceneID = uuid.Nil
@@ -206,8 +255,7 @@ func (p *Project) loadWidgets(ctx app.Context) {
 		p.widgetsReloadDeferred = true
 		return
 	}
-	mark := p.sceneVersions.Mark()
-	draftMark := p.markDraft()
+	mark := p.markDraft()
 	uiutil.LoadFor(ctx, &p.widgetsReloader,
 		func() uiutil.SceneOfProject {
 			return uiutil.SceneOfProject{Content: p.content, SceneID: p.selectedSceneID}
@@ -218,22 +266,20 @@ func (p *Project) loadWidgets(ctx app.Context) {
 				p.widgetsReloadDeferred = true
 				return
 			}
-			p.setWidgets(ctx, mark, draftMark, k.SceneID, widgets)
+			p.setWidgets(ctx, mark, k.SceneID, widgets)
 		}, p.loadWidgets)
 }
 
 // setWidgets replaces the selected scene's widgets and merges the widget
-// properties editor. mark is the moment the list was requested, draftMark
-// that of its Draft Version.
-func (p *Project) setWidgets(ctx app.Context, mark, draftMark uiutil.Mark, sceneID uuid.UUID, widgets []apiv0.WidgetResponse) {
+// properties editor. mark is the moment the list was requested.
+func (p *Project) setWidgets(ctx app.Context, mark uiutil.Mark, sceneID uuid.UUID, widgets []apiv0.WidgetResponse) {
 	old, known := p.findWidget(p.selectedWidgetID)
 	p.widgets = widgets
 
 	// Widgets carry the Draft's Version; with none, the Scene is reread for
-	// it.
+	// it, which also keeps an empty Scene's state in step.
 	for _, w := range widgets {
-		p.observeDraftVersion(draftMark, w.Version)
-		p.sceneVersions.Observe(mark, sceneID, w.Version)
+		p.observeDraftVersion(mark, w.Version)
 	}
 	if len(widgets) == 0 {
 		p.loadScene(ctx, sceneID)

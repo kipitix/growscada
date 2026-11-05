@@ -27,11 +27,11 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 		}
 		p.tags = eventlog.ApplyToTags(p.tags, ev)
 		if ev.Type == eventlog.EventResync || ev.Type == eventlog.EventProjectResync {
-			// Events were lost: the server may have gone back.
-			p.sceneVersions.Forget()
-			p.sceneStates.Forget()
+			// Events were lost: the server may have gone back, the stack with
+			// it.
 			p.draftVersions.Forget()
 			p.loadDraftState(ctx)
+			p.loadDraftChanges(ctx)
 		}
 		// The Draft's lock changes with a Check out, a Check in, a takeover or
 		// an expiry; the event carries its new state, the toast of a lost lock
@@ -43,6 +43,12 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 			p.loadEditLock(ctx)
 		}
 		targets := eventlog.ReloadTargetsFor(ev)
+		// A write of the Draft's content is one DraftChange, and a Deploy or a
+		// Release clears the stack (ADR 0017): the undo and redo buttons follow
+		// the events, as the counts they show do.
+		if targets.DraftChanged() {
+			p.loadDraftChanges(ctx)
+		}
 		if targets.Deploy {
 			p.loadDeploy(ctx)
 			if p.revisionsDialog {

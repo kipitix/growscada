@@ -13,40 +13,14 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
-// ── Scene versions and states ─────────────────────────────────────────────────
+// ── Scenes and the Draft's one Version ────────────────────────────────────────
+//
+// One Version serves the whole Draft (ADR 0016): a Scene, its Widgets, a Tag,
+// a pin all carry it, and it is the token every write states (load.go). It is
+// therefore also what says whether a reread state is newer than the one shown;
+// there are no per-Scene versions any more.
 
-// sceneMark is the moment a request of Scenes was sent, for sceneVersions,
-// sceneStates and the Draft's Version.
-type sceneMark struct{ versions, states, draft uiutil.Mark }
-
-func (p *Project) markScenes() sceneMark {
-	return sceneMark{versions: p.sceneVersions.Mark(), states: p.sceneStates.Mark(), draft: p.markDraft()}
-}
-
-// observeSceneVersion records version of the Scene id, stated by a response
-// to a request sent at mark that does not carry its Widgets. A write of the
-// selected Scene's Widgets states the version they are shown at, so while
-// some are shown it is taken from them alone: a newer version rereads them
-// (after a drag, see loadWidgets) instead of being recorded over the Widgets
-// it would overwrite.
-func (p *Project) observeSceneVersion(ctx app.Context, mark uiutil.Mark, id uuid.UUID, version int) {
-	if id == p.selectedSceneID && len(p.widgets) > 0 && p.widgets[0].SceneID == id {
-		if version > p.sceneVersions.Of(id) {
-			p.loadWidgets(ctx)
-		}
-		return
-	}
-	p.sceneVersions.Observe(mark, id, version)
-}
-
-// forgetSceneVersion forgets what is known of the Scene id's version, which
-// the server may have taken back.
-func (p *Project) forgetSceneVersion(id uuid.UUID) {
-	p.sceneVersions.ForgetID(id)
-	p.sceneStates.ForgetID(id)
-}
-
-// loadScene rereads the Scene sceneID, whose version a change of one of its
+// loadScene rereads the Scene sceneID, whose state a change of one of its
 // Widgets made stale (loadStaleScenes).
 func (p *Project) loadScene(ctx app.Context, sceneID uuid.UUID) {
 	if p.staleScenes == nil {
@@ -83,7 +57,7 @@ func (p *Project) loadStaleScenes(ctx app.Context) {
 	if content == nil {
 		return
 	}
-	mark := p.markScenes()
+	mark := p.markDraft()
 	uiutil.Load(p.compoCtx, &p.staleScenesReloader, func(c context.Context) (*apiv0.SceneResponse, error) {
 		sc, err := content.GetScene(c, sceneID)
 		if errors.Is(err, apiclient.ErrNotFound) {
@@ -97,14 +71,15 @@ func (p *Project) loadStaleScenes(ctx app.Context) {
 	}, p.loadStaleScenes)
 }
 
-// setScene records the version of the reread Scene sc and, if the list holds
-// an older state of it, puts sc in its place and merges the scene properties
-// editor when it is the selected one. mark is the moment it was requested.
-func (p *Project) setScene(ctx app.Context, mark sceneMark, sc apiv0.SceneResponse) {
-	p.observeDraftVersion(mark.draft, sc.Version)
-	p.observeSceneVersion(ctx, mark.versions, sc.ID, sc.Version)
+// setScene records the reread Scene sc, advancing the Draft's Version by it,
+// and — if the list holds an older state of it — puts sc in its place and
+// merges the scene properties editor when it is the selected one. mark is the
+// moment it was requested.
+func (p *Project) setScene(ctx app.Context, mark uiutil.Mark, sc apiv0.SceneResponse) {
+	fresh := p.draftVersions.Advance(mark, p.projectID, sc.Version)
+	p.reloadShownWidgets(ctx, sc.ID, fresh)
 	i := uiutil.IdxByID(p.scenes, sc.ID, uiutil.SceneID)
-	if i < 0 || !p.sceneStates.Advance(mark.states, sc.ID, sc.Version) {
+	if i < 0 || !fresh {
 		return
 	}
 	old := p.scenes[i]
@@ -114,4 +89,14 @@ func (p *Project) setScene(ctx app.Context, mark sceneMark, sc apiv0.SceneRespon
 	if sc.ID == p.selectedSceneID {
 		p.mergeSceneEditingFields(old, sc)
 	}
+}
+
+// reloadShownWidgets reads the shown Scene's Widgets again when a newer state
+// of the Scene id arrived (fresh): they carry the Version they were read at,
+// and the change may be one of them.
+func (p *Project) reloadShownWidgets(ctx app.Context, id uuid.UUID, fresh bool) {
+	if !fresh || id != p.selectedSceneID || len(p.widgets) == 0 || p.widgets[0].SceneID != id {
+		return
+	}
+	p.loadWidgets(ctx)
 }

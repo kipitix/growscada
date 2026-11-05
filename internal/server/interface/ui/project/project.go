@@ -91,21 +91,25 @@ type Project struct {
 	// states it and every content response carries it (ADR 0016). Like the
 	// other Versions it is forgotten when the server may have gone back (a
 	// resync) and on a conflict, and a response sent before that does not
-	// bring the old one back (uiutil.Versions).
+	// bring the old one back (uiutil.Versions). One number serves the whole
+	// Draft — the Scenes, their Widgets, the Tags, the pins —, so it is also
+	// what says whether a reread state is newer than the one shown.
 	draftVersions uiutil.Versions
 
-	// sceneVersions holds the version each write of a Scene or its Widgets
-	// states; the Version of the lists above is not read. The selected
-	// Scene's is learned with its Widgets (observeSceneVersion).
-	sceneVersions uiutil.Versions
-	// sceneStates holds the version of each Scene's properties in p.scenes:
-	// a reread replaces them only with a newer state (sceneVersions also
-	// follows the Widgets' changes, which leave the properties as they are).
-	sceneStates uiutil.Versions
+	// ── DraftChange stack (ADR 0017) ────────────────────────────────────────
+	// changes is the state of the Draft's undo/redo stack, read on mount, on a
+	// resync, after the content events and after each undo or redo;
+	// changesLoaded is false until the first answer, so the buttons stay
+	// disabled before it. undoing and redoing mark a command in flight.
+	changes       apiv0.DraftChangesResponse
+	changesLoaded bool
+	undoing       bool
+	redoing       bool
 
 	// Coalesce reloads of each server-backed list (see load.go).
 	widgetTypesReloader uiutil.Reloader
 	draftReloader       uiutil.Reloader
+	changesReloader     uiutil.Reloader
 	librariesReloader   uiutil.Reloader
 	pinsReloader        uiutil.Reloader
 	scenesReloader      uiutil.Reloader
@@ -113,6 +117,9 @@ type Project struct {
 	tagsReloader        uiutil.Reloader
 	deployReloader      uiutil.Reloader
 	revisionsReloader   uiutil.Reloader
+	// onKeyDown listens for Ctrl+Z and Ctrl+Shift+Z while the mode is shown;
+	// it is released with the component (noKeyDown).
+	onKeyDown app.Func
 	// staleScenes are the Scenes to reread (loadScene) once the reread in
 	// flight on staleScenesReloader is done.
 	staleScenes         map[uuid.UUID]struct{}
@@ -245,8 +252,10 @@ func (p *Project) OnMount(ctx app.Context) {
 	p.loadTags(ctx)
 	p.loadDeploy(ctx)
 	p.loadDraftState(ctx)
+	p.loadDraftChanges(ctx)
 	p.loadEditLock(ctx)
 
+	p.listenShortcuts()
 	p.handleServerEvents(ctx)
 }
 
@@ -255,6 +264,7 @@ func (p *Project) OnMount(ctx app.Context) {
 // rather than working through the context of an unmounted component.
 func (p *Project) OnDismount() {
 	p.mounted = false
+	p.noKeyDown()
 }
 
 // SetProject shows the project id (uuid.Nil: none). What was shown of
@@ -287,8 +297,8 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.revisions, p.revisionsLoaded = nil, false
 	p.revisionsDialog, p.selectedRevision, p.rollingBack = false, 0, false
 	p.revisionDetail, p.revisionDetailLoaded = apiv0.RevisionResponse{}, false
-	p.sceneVersions.Forget()
-	p.sceneStates.Forget()
+	p.changes, p.changesLoaded = apiv0.DraftChangesResponse{}, false
+	p.undoing, p.redoing = false, false
 	p.draftVersions.Forget()
 	clear(p.staleScenes)
 	p.widgetsReloadDeferred = false

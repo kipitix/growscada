@@ -35,14 +35,26 @@ type Library struct {
 	// Draft; 0 for the Draft.
 	viewing     int
 	widgetTypes []apiv0.WidgetTypeResponse
-	// versions holds the version each write of a WidgetType states; the
-	// Version of widgetTypes is not read.
-	versions uiutil.Versions
-	reloader uiutil.Reloader
+	// draftVersions holds the Version of the selected library's Draft: every
+	// write of its content states it and every content DTO carries it
+	// (ADR 0016). One number serves the whole Draft, so it is also what says
+	// whether a reread list is newer than the one shown (uiutil.Versions).
+	draftVersions uiutil.Versions
+	reloader      uiutil.Reloader
 	// draftStateReloader loads the Draft's Version when the WidgetTypes carry
 	// none: the Draft of a library without one.
 	draftStateReloader uiutil.Reloader
-	selectedID         uuid.UUID
+	// ── DraftChange stack (ADR 0017) ───────────────────────────────────────
+	// changes is the state of the Draft's undo/redo stack, read on mount, on a
+	// resync, after the content events and after each undo or redo;
+	// changesLoaded is false until the first answer, so the buttons stay
+	// disabled before it. undoing and redoing mark a command in flight.
+	changes         apiv0.DraftChangesResponse
+	changesLoaded   bool
+	changesReloader uiutil.Reloader
+	undoing         bool
+	redoing         bool
+	selectedID      uuid.UUID
 	// edit is the editor's state that comes from the server.
 	edit editFields
 	// inputValues[widgetTypeID][portName] = Input Data value of the preview.
@@ -66,6 +78,9 @@ type Library struct {
 	askingName     bool
 	takeOverDialog bool
 	checkingOut    bool
+	// onKeyDown listens for Ctrl+Z and Ctrl+Shift+Z while the mode is shown;
+	// it is released with the component (noKeyDown).
+	onKeyDown app.Func
 }
 
 // selectedIDKey is the LocalStorage key of the selected WidgetType,
@@ -90,7 +105,14 @@ func (l *Library) OnMount(ctx app.Context) {
 	l.loadList(ctx)
 	l.loadReleases(ctx)
 	l.loadEditLock(ctx)
+	l.loadDraftChanges(ctx)
+	l.listenShortcuts()
 	l.handleServerEvents(ctx)
+}
+
+// OnDismount releases the keyboard shortcuts of the Draft left.
+func (l *Library) OnDismount() {
+	l.noKeyDown()
 }
 
 // ── Input Data ────────────────────────────────────────────────────────────────
@@ -186,15 +208,18 @@ func (l *Library) selectLibrary(ctx app.Context, id uuid.UUID) {
 	l.libraryID = id
 	l.viewing = 0
 	l.widgetTypes, l.releases = nil, nil
-	l.versions.Forget()
+	l.draftVersions.Forget()
 	l.clearSelection()
 	l.editLock, l.lockLoaded = apiv0.EditLockResponse{}, false
 	l.lockNameInput, l.askingName, l.takeOverDialog, l.checkingOut = "", false, false, false
+	l.changes, l.changesLoaded = apiv0.DraftChangesResponse{}, false
+	l.undoing, l.redoing = false, false
 	uiutil.StoreID(ctx, libraryIDKey, id)
 	uiutil.StoreID(ctx, selectedIDKey, uuid.Nil)
 	l.loadList(ctx)
 	l.loadReleases(ctx)
 	l.loadEditLock(ctx)
+	l.loadDraftChanges(ctx)
 }
 
 // view shows release n read-only (0: back to the Draft).

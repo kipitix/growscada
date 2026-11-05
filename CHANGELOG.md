@@ -1,5 +1,19 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.67] - 2026-11-05
+
+### Added
+
+- **Undo/redo в PWA** (задача 38, часть 4; ADR 0016, ADR 0017)
+  - Project: кнопки `Undo`/`Redo` в шапке рядом со строкой EditLock; подсказка — `undo_description`/`redo_description` из `GET …/draft-changes` (`Undo: Delete tag pressure`), пустой стек — `Nothing to undo`/`Nothing to redo`, без замка — та же подсказка read-only, кнопки выключены; `Ctrl+Z`/`Cmd+Z` и `Ctrl+Shift+Z`/`Cmd+Shift+Z` — тот же POST, в поле ввода и при скрытом режиме не перехватываются
+  - Library: те же кнопки и клавиши в колонке библиотек, выключены и без замка, и при показе релиза; Release и Discard перечитывают состояние стека
+  - Состояние стека (`loadDraftChanges`) читается при загрузке режима, на `EventResync`/`EventProjectResync`, после каждого события содержимого (`eventlog.ReloadTargets.DraftChanged`: правка Draft, Deploy, Release), после undo/redo и после Deploy/Discard/Release; ответ не подменяет более новое состояние (сравнение с известной Version); undo/redo шлют `{version}` из последнего ответа стека
+  - Отказы: 409 устаревшей Version (`Problem.draft`) — забыть Version и перечитать стек и содержимое, как 409 правки; 409 пустого стека — toast и перечитывание состояния; потеря замка — read-only без потери стека
+  - Одна Version Draft на Draft в обоих режимах: Project свёл `sceneVersions` и `sceneStates` к одной `draftVersions` (номер Scene и её Widgets, Tag, Pin — один и тот же; он же говорит, новее ли перечитанное состояние), Library переименовал свою карту в `draftVersions` с помощниками `draftVersion`/`markDraft`/`observeDraftVersion`/`forgetDraftVersion`; `lock_version` EditLock остаётся отдельным
+  - `uiutil`: `KeyAction` (`KeyNone`/`KeyUndo`/`KeyRedo`), `UndoRedoKey` и `KeyEventAction` — разбор keydown (Ctrl/Cmd+Z, Shift, поле ввода)
+  - AGENTS.md: кнопки и клавиши, чтение состояния стека, одна Version Draft
+  - Тесты: `uiutil` (разбор клавиш), Project (пустой стек и подсказки, описание шага, undo кнопкой и redo клавишей, 409 устаревшей Version и пустого стека, read-only, событие содержимого, переключение проекта, одна Version в записях), Library (то же для WidgetType, Release показан read-only, Release чистит стек, переключение библиотеки)
+
 ## [0.0.66] - 2026-11-05
 
 ### Added

@@ -93,6 +93,10 @@ func scenePath(id uuid.UUID) string { return "GET " + mainContent + "/scenes/" +
 // Draft may make it stale.
 var deployPath = "GET " + mainContent + "/deploy/preview"
 
+// changesPath is the read of the DraftChange stack: every write of the Draft's
+// content is one change (ADR 0017).
+var changesPath = "GET " + mainContent + apiv0.DraftChangesPath
+
 func TestWidgetEvent_SceneNotShown_RereadsThatSceneOnly(t *testing.T) {
 	f, log, _, other, typeID := twoScenes(t)
 	widgetID := createWidget(t, f.api, other, typeID, "w")
@@ -100,7 +104,7 @@ func TestWidgetEvent_SceneNotShown_RereadsThatSceneOnly(t *testing.T) {
 	f.event(apiv0.Event{Type: apiv0.EventWidgetCreated, ID: widgetID.String(), SceneID: other.String()})
 
 	f.noToasts()
-	if got, want := log.take(), []string{deployPath, scenePath(other)}; !slices.Equal(got, want) {
+	if got, want := log.take(), []string{deployPath, changesPath, scenePath(other)}; !slices.Equal(got, want) {
 		t.Errorf("requests: %v, want %v", got, want)
 	}
 	f.knowsVersion(other)
@@ -117,7 +121,7 @@ func TestWidgetEvent_SceneShown_RereadsItsWidgetsOnly(t *testing.T) {
 
 	f.noToasts()
 	// The Widgets carry the Scene's version.
-	want := []string{deployPath, scenePath(shown) + "/widgets"}
+	want := []string{deployPath, changesPath, scenePath(shown) + "/widgets"}
 	if got := log.take(); !slices.Equal(got, want) {
 		t.Errorf("requests: %v, want %v", got, want)
 	}
@@ -134,7 +138,7 @@ func TestWidgetEvent_SceneNotListed_IsIgnored(t *testing.T) {
 	f.event(apiv0.Event{Type: apiv0.EventWidgetDeleted, ID: uuid.NewString(), SceneID: gone.String()})
 
 	f.noToasts() // a 404 is no error: the Scene was deleted meanwhile
-	if got := log.take(); !slices.Equal(got, []string{deployPath, scenePath(gone)}) {
+	if got := log.take(); !slices.Equal(got, []string{deployPath, changesPath, scenePath(gone)}) {
 		t.Errorf("requests: %v", got)
 	}
 	if len(f.p.scenes) != 2 {
@@ -191,14 +195,14 @@ func TestTagUpdated_AppliesTheTagWithoutRereadingTags(t *testing.T) {
 
 	// Without its state, the Tags are reread.
 	f.event(apiv0.Event{Type: apiv0.EventTagUpdated, ID: tagID.String()})
-	if got := log.take(); !slices.Equal(got, []string{"GET " + mainContent + "/tags"}) {
+	if got := log.take(); !slices.Equal(got, []string{changesPath, "GET " + mainContent + "/tags"}) {
 		t.Errorf("requests: %v, want the Tags reread", got)
 	}
 }
 
 func TestSceneReread_RequestedBeforeASave_KeepsTheSave(t *testing.T) {
 	f, _, shown, _, _ := twoScenes(t)
-	stale, mark := f.scene(shown), f.p.markScenes() // a reread answered before the save
+	stale, mark := f.scene(shown), f.p.markDraft() // a reread answered before the save
 
 	f.p.startEditingScene(shown, "Renamed")
 	f.p.commitSceneEdit(f.p.compoCtx)
@@ -223,7 +227,7 @@ func TestSceneReread_RequestedBeforeASave_KeepsTheSave(t *testing.T) {
 func TestWidgetEvent_SceneNotListedYet_ItsVersionIsKept(t *testing.T) {
 	f, _, _, _, typeID := twoScenes(t)
 	added := createScene(t, f.api, "C")
-	listed, mark := append(slices.Clone(f.p.scenes), f.scene(added)), f.p.markScenes() // a list read now, answered late
+	listed, mark := append(slices.Clone(f.p.scenes), f.scene(added)), f.p.markDraft() // a list read now, answered late
 	widgetID := createWidget(t, f.api, added, typeID, "w")
 	if _, err := f.api.DeleteWidget(context.Background(), added, widgetID, 0); err != nil {
 		t.Fatalf("delete widget: %v", err)
@@ -311,7 +315,8 @@ func TestWidgetEvents_InSeveralScenesNotShown_RereadTheListOnce(t *testing.T) {
 
 	f.noToasts()
 	// The first Scene is reread by itself; the others, marked meanwhile, with the list.
-	if got, want := log.take(), []string{deployPath, deployPath, "GET " + mainContent + "/scenes", scenePath(more[0])}; !slices.Equal(got, want) {
+	if got, want := log.take(), []string{deployPath, deployPath, changesPath, changesPath,
+		"GET " + mainContent + "/scenes", scenePath(more[0])}; !slices.Equal(got, want) {
 		t.Errorf("requests: %v, want %v", got, want)
 	}
 	for _, sceneID := range more {
@@ -335,7 +340,7 @@ func TestServerEvents_OfAnotherProject_Dropped(t *testing.T) {
 
 	f.p.compoCtx.NewActionWithValue(eventlog.ActionServerEvent, created, app.T(eventlog.ProjectTag, f.p.projectID.String()))
 	f.run()
-	if got, want := log.take(), []string{deployPath, "GET " + mainContent + "/scenes"}; !slices.Equal(got, want) {
+	if got, want := log.take(), []string{deployPath, changesPath, "GET " + mainContent + "/scenes"}; !slices.Equal(got, want) {
 		t.Errorf("requests on the project's event: %v, want %v", got, want)
 	}
 }

@@ -43,13 +43,11 @@ func (p *Project) createWidget(ctx app.Context, typeID uuid.UUID, x, y float64) 
 		}
 	}
 	req := apiv0.CreateWidgetRequest(widgetRequest(w, p.draftVersion()))
-	mark := p.sceneVersions.Mark()
-	draftMark := p.markDraft()
+	mark := p.markDraft()
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.CreateWidgetResponse, error) {
 		return content.CreateWidget(c, sceneID, req)
 	}, func(ctx app.Context, created apiv0.CreateWidgetResponse) {
-		p.observeDraftVersion(draftMark, created.Version)
-		p.sceneVersions.Observe(mark, sceneID, created.Version)
+		p.observeDraftVersion(mark, created.Version)
 		w.ID = created.ID
 		p.selectedWidgetID = created.ID
 		uiutil.StoreID(ctx, p.selectionKey(widgetIDKey), created.ID)
@@ -59,7 +57,7 @@ func (p *Project) createWidget(ctx app.Context, typeID uuid.UUID, x, y float64) 
 }
 
 // deleteWidget deletes the Widget widgetID of the selected Scene. The
-// response states the Scene's new version; one that does not (a body the
+// response states the Draft's new Version; one that does not (a body the
 // client could not read) leaves it unknown, so the known one, now stale, is
 // forgotten and the Scenes are reread.
 func (p *Project) deleteWidget(ctx app.Context, widgetID uuid.UUID) {
@@ -67,16 +65,14 @@ func (p *Project) deleteWidget(ctx app.Context, widgetID uuid.UUID) {
 		return
 	}
 	sceneID := p.selectedSceneID
-	mark := p.sceneVersions.Mark()
-	draftMark := p.markDraft()
+	mark := p.markDraft()
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.WidgetResponse, error) {
 		return content.DeleteWidget(c, sceneID, widgetID, p.draftVersion())
 	}, func(ctx app.Context, deleted apiv0.WidgetResponse) {
 		if deleted.Version > 0 {
-			p.observeDraftVersion(draftMark, deleted.Version)
-			p.sceneVersions.Observe(mark, sceneID, deleted.Version)
+			p.observeDraftVersion(mark, deleted.Version)
 		} else {
-			p.sceneVersions.ForgetID(sceneID)
+			p.forgetDraftVersion()
 			p.loadScenes(ctx)
 		}
 		if p.selectedWidgetID == widgetID {
@@ -194,13 +190,11 @@ func (p *Project) putWidget(ctx app.Context, w apiv0.WidgetResponse) {
 	}
 	sceneID := p.selectedSceneID
 	req := apiv0.UpdateWidgetRequest(widgetRequest(w, p.draftVersion()))
-	mark := p.sceneVersions.Mark()
-	draftMark := p.markDraft()
+	mark := p.markDraft()
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.UpdateWidgetResponse, error) {
 		return content.UpdateWidget(c, sceneID, w.ID, req)
 	}, func(ctx app.Context, updated apiv0.UpdateWidgetResponse) {
-		p.observeDraftVersion(draftMark, updated.Version)
-		p.sceneVersions.Observe(mark, sceneID, updated.Version)
+		p.observeDraftVersion(mark, updated.Version)
 	}, p.rejectedSceneEdit(sceneID, p.loadWidgets))
 }
 
@@ -251,7 +245,7 @@ func (p *Project) draggedWidgetID() uuid.UUID {
 
 // dragChangedWidget reports whether the drag that is ending changed w: a
 // click (no move) or a drag back to the start leaves nothing to save, and
-// saving it anyway would bump the scene version for every other client.
+// saving it anyway would bump the Draft's Version for every other client.
 func (p *Project) dragChangedWidget(w apiv0.WidgetResponse) bool {
 	return p.dragDidMove && geometryOf(w) != p.dragStartGeometry
 }

@@ -21,7 +21,10 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 			return
 		}
 		if ev.Type == eventlog.EventResync {
-			l.versions.Forget() // events were lost: the server may have gone back
+			// Events were lost: the server may have gone back, the stack with
+			// it.
+			l.draftVersions.Forget()
+			l.loadDraftChanges(ctx)
 		}
 		targets := eventlog.ReloadTargetsFor(ev)
 		// The selected library's lock changes with a Check out, a Check in, a
@@ -36,6 +39,12 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 			}
 		case targets.EditLock:
 			l.loadEditLock(ctx)
+		}
+		// A write of the Draft's content is one DraftChange, and a Release
+		// clears the stack (ADR 0017): the undo and redo buttons follow the
+		// events, as the release state does.
+		if targets.DraftChanged() {
+			l.loadDraftChanges(ctx)
 		}
 		if targets.Libraries {
 			l.loadLibraries(ctx)

@@ -18,24 +18,21 @@ import (
 // it: another client edited it, or the server brought its Widgets into line
 // with a changed WidgetType (ADR 0008). The UI then rereads the Scenes and the
 // Widgets itself, without waiting for the event stream, and asks the user to
-// repeat the edit; it does not reapply it. The Draft's Version and the Scene's
-// are forgotten first: if the server's went back, a newer one kept here would
-// be rejected forever. The other Scenes' versions stay, so their edits go on
-// meanwhile.
-// Any failure also leaves the Scene's properties in the list as the edit put
-// them, at a version the server holds other ones: the reread replaces them.
+// repeat the edit; it does not reapply it. The Draft's Version is forgotten
+// first either way: if the server's went back, a newer one kept here would be
+// rejected forever, and the reread of a refused edit (whose Version the server
+// did not raise) replaces the Scene's properties left as that edit put them.
 func (p *Project) showRejectedSceneEdit(ctx app.Context, sceneID uuid.UUID, err error, reload func(app.Context)) {
 	prob := toast.FromError(err)
 	if errors.Is(err, apiclient.ErrConflict) {
 		ctx.NewActionWithValue(toast.ActionAdd, sceneConflictProblem(prob))
 		p.forgetDraftVersion()
-		p.forgetSceneVersion(sceneID)
 		p.loadScenes(ctx)
 		p.loadWidgets(ctx)
 		return
 	}
 	ctx.NewActionWithValue(toast.ActionAdd, prob)
-	p.sceneStates.ForgetID(sceneID)
+	p.forgetDraftVersion()
 	if reload != nil {
 		reload(ctx)
 	}

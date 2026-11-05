@@ -20,15 +20,13 @@ func (p *Project) createScene(ctx app.Context) {
 		return
 	}
 	req := apiv0.CreateSceneRequest{Name: "New Scene", Width: 1920, Height: 1080, Version: p.draftVersion()}
-	mark := p.markScenes()
+	mark := p.markDraft()
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.CreateSceneResponse, error) {
 		return content.CreateScene(c, req)
 	}, func(ctx app.Context, created apiv0.CreateSceneResponse) {
 		// The new scene is the request as the server stored it: listed and
 		// editable at once, before the list is reread.
-		p.observeDraftVersion(mark.draft, created.Version)
-		p.sceneVersions.Observe(mark.versions, created.ID, created.Version)
-		p.sceneStates.Observe(mark.states, created.ID, created.Version)
+		p.observeDraftVersion(mark, created.Version)
 		p.scenes = append(p.scenes, apiv0.SceneResponse{
 			ID:             created.ID,
 			Name:           req.Name,
@@ -162,13 +160,11 @@ func (p *Project) putScene(sc apiv0.SceneResponse) {
 		BackgroundHTML: sc.BackgroundHTML,
 		Version:        p.draftVersion(),
 	}
-	mark := p.markScenes()
+	mark := p.markDraft()
 	callContent(p, func(c context.Context, content *apiclient.ProjectClient) (apiv0.UpdateSceneResponse, error) {
 		return content.UpdateScene(c, sc.ID, req)
 	}, func(ctx app.Context, updated apiv0.UpdateSceneResponse) {
 		// The list holds the properties as saved.
-		p.observeDraftVersion(mark.draft, updated.Version)
-		p.sceneVersions.Observe(mark.versions, sc.ID, updated.Version)
-		p.sceneStates.Observe(mark.states, sc.ID, updated.Version)
+		p.observeDraftVersion(mark, updated.Version)
 	}, p.rejectedSceneEdit(sc.ID, p.loadScenes))
 }

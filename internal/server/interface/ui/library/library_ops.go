@@ -81,10 +81,11 @@ func (l *Library) release() {
 		return
 	}
 	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.LibraryReleaseResponse, error) {
-		return l.client.Library(lib.ID).Release(c, apiv0.CreateReleaseRequest{Note: note, Version: l.versions.Of(l.libraryID)})
+		return l.client.Library(lib.ID).Release(c, apiv0.CreateReleaseRequest{Note: note, Version: l.draftVersion()})
 	}, func(ctx app.Context, _ apiv0.LibraryReleaseResponse) {
 		l.loadLibraries(ctx)
 		l.loadReleases(ctx)
+		l.loadDraftChanges(ctx) // a Release clears the stack (ADR 0017)
 	}, l.reloadOnConflict)
 }
 
@@ -99,11 +100,12 @@ func (l *Library) discard() {
 	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.DiscardLibraryResponse, error) {
 		return l.client.Library(lib.ID).Discard(c)
 	}, func(ctx app.Context, state apiv0.DiscardLibraryResponse) {
-		l.versions.Forget()
-		l.versions.Observe(l.versions.Mark(), l.libraryID, state.Version)
+		l.draftVersions.Forget()
+		l.observeDraftVersion(l.markDraft(), state.Version)
 		l.loadList(ctx)
 		l.loadLibraries(ctx)
 		l.loadReleases(ctx)
+		l.loadDraftChanges(ctx) // a Discard clears the stack (ADR 0017)
 	}, l.reloadOnConflict)
 }
 

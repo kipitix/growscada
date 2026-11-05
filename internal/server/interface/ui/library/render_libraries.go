@@ -48,6 +48,7 @@ func (l *Library) renderLibrariesColumn() app.UI {
 		Body(
 			app.H3().Style("margin", "0 0 8px 0").Text("Libraries"),
 			l.renderEditLockBar(),
+			l.renderDraftChangesBar(),
 			app.Div().
 				Style("display", "flex").
 				Style("gap", "4px").

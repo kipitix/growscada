@@ -154,8 +154,8 @@ func TestApplyChanges_RightAfterCreate_SavesTheEdit(t *testing.T) {
 
 func TestApplyChanges_ListReadBeforeAConflict_DoesNotRestoreTheOldVersion(t *testing.T) {
 	f, id := selected(t)
-	inFlight, mark := f.l.widgetTypes, f.l.versions.Mark() // read before the conflict
-	f.l.versions.Observe(mark, f.l.libraryID, 15)          // the server's database was recreated since
+	inFlight, mark := f.l.widgetTypes, f.l.markDraft() // read before the conflict
+	f.l.observeDraftVersion(mark, 15)                  // the server's database was recreated since
 
 	f.l.edit.name = "Mine"
 	f.l.applyChanges(f.l.compoCtx)
@@ -201,7 +201,7 @@ func TestDeleteItem_LastType_KeepsTheDraftVersion(t *testing.T) {
 	f.noToasts()
 
 	if _, err := f.api.Release(context.Background(), apiv0.CreateReleaseRequest{
-		Version: f.l.versions.Of(f.l.libraryID),
+		Version: f.l.draftVersion(),
 	}); err != nil {
 		t.Fatalf("release of the emptied Draft at the known version: %v", err)
 	}
@@ -352,7 +352,7 @@ func TestApplyChanges_SavesTheEditor(t *testing.T) {
 		len(wt.InputPorts) != 2 || wt.DefaultWidth != 150 {
 		t.Errorf("server widget type: %+v", wt)
 	}
-	if got := f.l.versions.Of(f.l.libraryID); got != wt.Version {
+	if got := f.l.draftVersion(); got != wt.Version {
 		t.Errorf("known version %d, server's %d", got, wt.Version)
 	}
 
@@ -391,7 +391,7 @@ func TestApplyChanges_ChangedMeanwhile_ShowsTheServersConflict(t *testing.T) {
 
 func TestApplyChanges_StaleListAfterTheSave_KeepsTheSavedVersion(t *testing.T) {
 	f, id := selected(t)
-	stale, mark := f.l.widgetTypes, f.l.versions.Mark() // a list read before the save, answered after it
+	stale, mark := f.l.widgetTypes, f.l.markDraft() // a list read before the save, answered after it
 
 	f.l.edit.name = "Mine"
 	f.l.applyChanges(f.l.compoCtx)
@@ -410,7 +410,7 @@ func TestApplyChanges_StaleListAfterTheSave_KeepsTheSavedVersion(t *testing.T) {
 
 func TestApplyChanges_ServerVersionWentBack_RecoversAfterTheConflict(t *testing.T) {
 	f, id := selected(t)
-	f.l.versions.Observe(f.l.versions.Mark(), f.l.libraryID, 15) // the server's database was recreated since
+	f.l.observeDraftVersion(f.l.markDraft(), 15) // the server's database was recreated since
 
 	f.l.edit.name = "Mine"
 	f.l.applyChanges(f.l.compoCtx)
@@ -419,7 +419,7 @@ func TestApplyChanges_ServerVersionWentBack_RecoversAfterTheConflict(t *testing.
 	if got := f.oneToast(); got.Status != http.StatusConflict {
 		t.Errorf("toast %+v: want the conflict", got)
 	}
-	if got, want := f.l.versions.Of(f.l.libraryID), f.widgetType(id).Version; got != want {
+	if got, want := f.l.draftVersion(), f.widgetType(id).Version; got != want {
 		t.Errorf("known version %d, server's %d", got, want)
 	}
 
