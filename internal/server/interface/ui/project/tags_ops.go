@@ -2,7 +2,6 @@ package project
 
 import (
 	"context"
-	"errors"
 
 	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
@@ -52,14 +51,8 @@ func (p *Project) deleteTag(ctx app.Context) {
 	}, p.rejectedTagEdit)
 }
 
-// rejectedTagEdit is the error handler of a write of a Tag: the toast, and on
-// a conflict the Draft's Version dropped and reread with the Tag list, which
-// another write has made stale.
+// rejectedTagEdit is the error handler of a write of a Tag: on a conflict the
+// Tag list, which another write made stale, is reread with the Draft's Version.
 func (p *Project) rejectedTagEdit(ctx app.Context, err error) {
-	uiutil.ShowError(ctx, err)
-	if errors.Is(err, apiclient.ErrConflict) {
-		p.forgetDraftVersion()
-		p.loadDraftState(ctx)
-		p.loadTags(ctx)
-	}
+	p.rejectedDraftWrite(ctx, err, p.loadTags)
 }

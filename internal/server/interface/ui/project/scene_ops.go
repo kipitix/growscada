@@ -44,7 +44,7 @@ func (p *Project) createScene(ctx app.Context) {
 		p.syncSceneEditingFields()
 		p.loadScenes(ctx)
 		p.loadWidgets(ctx)
-	}, nil)
+	}, func(ctx app.Context, err error) { p.rejectedDraftWrite(ctx, err, p.loadScenes) })
 }
 
 // confirmDeleteScene fetches the scene's widget count so the confirmation

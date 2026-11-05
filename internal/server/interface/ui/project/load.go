@@ -39,10 +39,20 @@ func (p *Project) forgetDraftVersion() { p.draftVersions.ForgetID(p.projectID) }
 // Version: the toast, and on a conflict the Version dropped and reread, so the
 // next try states the server's one.
 func (p *Project) rejectedDraftVersion(ctx app.Context, err error) {
+	p.rejectedDraftWrite(ctx, err, nil)
+}
+
+// rejectedDraftWrite is rejectedDraftVersion with reload, a list the conflict
+// made stale, reread after the Draft's Version.
+func (p *Project) rejectedDraftWrite(ctx app.Context, err error, reload func(app.Context)) {
 	uiutil.ShowError(ctx, err)
-	if errors.Is(err, apiclient.ErrConflict) {
-		p.forgetDraftVersion()
-		p.loadDraftState(ctx)
+	if !errors.Is(err, apiclient.ErrConflict) {
+		return
+	}
+	p.forgetDraftVersion()
+	p.loadDraftState(ctx)
+	if reload != nil {
+		reload(ctx)
 	}
 }
 
