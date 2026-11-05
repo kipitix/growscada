@@ -102,34 +102,32 @@ func NewEditLockService(aContent ProjectContent, aLibraries LibraryContent, lock
 }
 
 func (s *editLockServiceImpl) State(ctx context.Context, scope editlock.Scope) (appdto.EditLock, error) {
-	if _, err := s.open(ctx, scope, false); err != nil {
+	if err := s.open(ctx, scope, false); err != nil {
 		return appdto.EditLock{}, err
 	}
 	return s.stateOf(ctx, scope)
 }
 
 // open checks that the Draft the scope names exists, is live and is not being
-// discarded when notDiscarding is set, and returns the scope as it is.
-func (s *editLockServiceImpl) open(ctx context.Context, scope editlock.Scope, notDiscarding bool) (editlock.Scope, error) {
+// discarded when notDiscarding is set.
+func (s *editLockServiceImpl) open(ctx context.Context, scope editlock.Scope, notDiscarding bool) error {
 	switch {
 	case scope.IsProject():
-		var err error
 		if notDiscarding {
-			_, _, err = s.content.openNotDiscarding(ctx, scope.ProjectID().UUID())
-		} else {
-			_, _, err = s.content.open(ctx, scope.ProjectID().UUID())
+			_, _, err := s.content.openNotDiscarding(ctx, scope.ProjectID().UUID())
+			return err
 		}
-		return scope, err
+		_, _, err := s.content.open(ctx, scope.ProjectID().UUID())
+		return err
 	case scope.IsLibrary():
-		var err error
 		if notDiscarding {
-			_, err = s.libraries.openNotDiscarding(ctx, scope.LibraryID().UUID())
-		} else {
-			_, err = s.libraries.open(ctx, scope.LibraryID().UUID())
+			_, err := s.libraries.openNotDiscarding(ctx, scope.LibraryID().UUID())
+			return err
 		}
-		return scope, err
+		_, err := s.libraries.open(ctx, scope.LibraryID().UUID())
+		return err
 	default:
-		return scope, fmt.Errorf("edit lock: the scope names no Draft")
+		return fmt.Errorf("edit lock: the scope names no Draft")
 	}
 }
 
@@ -145,7 +143,7 @@ func (s *editLockServiceImpl) stateOf(ctx context.Context, scope editlock.Scope)
 }
 
 func (s *editLockServiceImpl) CheckOut(ctx context.Context, scope editlock.Scope, name string) (appdto.EditLock, bool, error) {
-	if _, err := s.open(ctx, scope, true); err != nil {
+	if err := s.open(ctx, scope, true); err != nil {
 		return appdto.EditLock{}, false, err
 	}
 	holder, err := s.holderOf(ctx, name)
@@ -196,7 +194,7 @@ func (s *editLockServiceImpl) CheckOut(ctx context.Context, scope editlock.Scope
 }
 
 func (s *editLockServiceImpl) CheckIn(ctx context.Context, scope editlock.Scope) (appdto.EditLock, error) {
-	if _, err := s.open(ctx, scope, false); err != nil {
+	if err := s.open(ctx, scope, false); err != nil {
 		return appdto.EditLock{}, err
 	}
 	key, err := s.clientKey(ctx)
@@ -235,7 +233,7 @@ func (s *editLockServiceImpl) CheckIn(ctx context.Context, scope editlock.Scope)
 }
 
 func (s *editLockServiceImpl) TakeOver(ctx context.Context, scope editlock.Scope, name string, expectedVersion int) (appdto.EditLock, error) {
-	if _, err := s.open(ctx, scope, true); err != nil {
+	if err := s.open(ctx, scope, true); err != nil {
 		return appdto.EditLock{}, err
 	}
 	holder, err := s.holderOf(ctx, name)

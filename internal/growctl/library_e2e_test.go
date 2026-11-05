@@ -61,7 +61,7 @@ func TestLibraryRelease_HeldLock_IsAnErrorNamingTheHolder(t *testing.T) {
 		t.Errorf("release --take-over: %v", err)
 	}
 }
-// apply creates it with its Draft, release makes release 1, apply pins it in
+
 // TestLibrary_ApplyReleasePinDiscardDelete walks a library through growctl:
 // apply creates it with its Draft, release makes release 1, apply pins it in
 // Main, an edited WidgetType is updated and released again, the pin switched
