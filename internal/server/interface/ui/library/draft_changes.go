@@ -54,6 +54,11 @@ func (l *Library) stepDraftChange(ctx app.Context, undo bool) {
 	if l.draft() == nil || l.undoing || l.redoing || l.readOnly() {
 		return
 	}
+	// A command the buttons would not offer is not sent: a shortcut is the
+	// button's own, and an empty stack is no request.
+	if !l.changesLoaded || (undo && !l.changes.CanUndo) || (!undo && !l.changes.CanRedo) {
+		return
+	}
 	version := l.draftChangesVersion()
 	mark := l.markDraft()
 	if undo {

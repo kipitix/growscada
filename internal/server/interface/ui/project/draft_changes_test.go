@@ -252,3 +252,23 @@ func TestDraftChange_OneVersionForTheDraft(t *testing.T) {
 		t.Errorf("a write at the Version the undo left: %v", err)
 	}
 }
+
+// TestShortcut_EmptyStack_SendsNothing: a shortcut is the button's own, and a
+// button that offers no step sends no request.
+func TestShortcut_EmptyStack_SendsNothing(t *testing.T) {
+	url, api := newServer(t)
+	f, log := mountLogged(t, url, api)
+	f.reloadChanges()
+	f.e.TakeToasts()
+	log.take()
+
+	f.p.applyKeyAction(f.p.compoCtx, uiutil.KeyUndo)
+	f.run()
+	f.p.applyKeyAction(f.p.compoCtx, uiutil.KeyRedo)
+	f.run()
+
+	f.noToasts()
+	if got := log.take(); len(got) != 0 {
+		t.Errorf("requests of an empty stack: %v, want none", got)
+	}
+}
