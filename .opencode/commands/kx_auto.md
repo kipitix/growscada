@@ -15,6 +15,23 @@ description: Автоматически реализовать задачи read
 1. `git status --short`. Дерево грязное — остановись и покажи, что мешает: чужие правки в конвейер не тащи.
 2. `git branch --show-current`. Не `path` — при чистом дереве переключись: `git switch path`. Это точка старта каждого цикла.
 3. Проверь, что `todo/backlog/` и `todo/done/` существуют. Нет — остановись.
+4. Влей спеки. После `/kx_grill`, разбившего задачу на части, родитель-спека и его части живут в ветке задачи, а не в `path`; пока их там нет, очередь видит только старый файл и останавливается. Просмотри локальные ветки:
+
+   ```bash
+   for b in $(git for-each-ref --format='%(refname:short)' refs/heads); do
+     [ "$b" = path ] && continue
+     git merge-base --is-ancestor "$b" path 2>/dev/null && continue      # уже в path
+     if git merge-base --is-ancestor path "$b" 2>/dev/null; then
+       echo "FF   $b"
+     elif git diff --name-only "path...${b}" | grep -qEv '^(todo/|docs/adr/|GLOSSARY\.md|AGENTS\.md|CHANGELOG\.md)'; then
+       echo "CODE $b"                                                    # трогает код — не вливать
+     else
+       echo "SPEC $b"                                                    # только документы — можно ребейзить
+     fi
+   done
+   ```
+
+   `FF` — `git merge --ff-only`. `SPEC` — ветка разошлась с `path`, но меняет только `todo/`, `docs/adr/` и корневые `*.md`: `git rebase path` в ветке, повтори проверку diff'а и `git merge --ff-only`. Это подготовка документов, а не работа над задачей: кода такая ветка не трогает. `CODE` — незакрытая задача с кодом: покажи ветку и остановись, её разбирает человек.
 
 ## Выбор задачи
 
@@ -22,14 +39,21 @@ description: Автоматически реализовать задачи read
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
-blocker_done() {
-  compgen -G "todo/done/$1.md" >/dev/null && return 0
-  compgen -G "todo/done/$1_*.md" >/dev/null && return 0
-  return 1
-}
 for f in $(find todo/backlog -maxdepth 1 -name '*.md' | sort -V); do
+  # Родитель со строкой Parts: — спецификация, а не работа: пропусти и проверь, что части на месте.
   if grep -q '^Parts:' "$f"; then
     echo "SKIP parent: $f"
+    missing=""
+    for p in $(grep -m1 '^Parts:' "$f" | sed 's/^Parts:[[:space:]]*//' | tr ',' ' '); do
+      if compgen -G "todo/backlog/${p}.md" >/dev/null || compgen -G "todo/done/${p}.md" >/dev/null; then
+        :
+      else
+        missing="$missing $p"
+      fi
+    done
+    if [ -n "$missing" ]; then
+      echo "NEXT="; echo "STOP=у родителя $(basename "$f") нет частей:${missing} (спека не влита?)"; exit 0
+    fi
     continue
   fi
   status=$(grep -m1 '^Status:' "$f" | sed 's/^Status:[[:space:]]*//' || true)
@@ -37,21 +61,35 @@ for f in $(find todo/backlog -maxdepth 1 -name '*.md' | sort -V); do
   open_blockers=""
   if [ -n "$blocked" ]; then
     for b in $(echo "$blocked" | tr ',' ' '); do
-      blocker_done "$b" || open_blockers="$open_blockers $b"
+      if compgen -G "todo/done/${b}.md" >/dev/null || compgen -G "todo/done/${b}_*.md" >/dev/null; then
+        :
+      else
+        open_blockers="$open_blockers $b"
+      fi
     done
   fi
+  # Спроектированная версия задачи могла остаться в невлитой ветке: тогда STOP — не приговор, а подсказка.
+  hint=""
+  for br in $(git for-each-ref --format='%(refname:short)' refs/heads); do
+    [ "$br" = path ] && continue
+    git merge-base --is-ancestor "$br" path 2>/dev/null && continue
+    if git show "${br}:${f}" 2>/dev/null | grep -q '^Status: ready-for-agent'; then
+      hint="$hint $br"
+    fi
+  done
+  suffix="${hint:+ (спроектирована в ветке:${hint} — влить)}"
   if [ -n "$open_blockers" ]; then
-    echo "NEXT="; echo "STOP=задача $(basename "$f") заблокирована:$open_blockers"; exit 0
+    echo "NEXT="; echo "STOP=задача $(basename "$f") заблокирована:${open_blockers}${suffix}"; exit 0
   fi
   if [ "$status" != "ready-for-agent" ]; then
-    echo "NEXT="; echo "STOP=задача $(basename "$f") не готова для агента (Status: ${status:-<нет>})"; exit 0
+    echo "NEXT="; echo "STOP=задача $(basename "$f") не готова для агента (Status: ${status:-<нет>})${suffix}"; exit 0
   fi
   echo "NEXT=$f"; exit 0
 done
 echo "NEXT="; echo "STOP=в backlog не осталось задач"
 ```
 
-Родительские файлы со строкой `Parts:` — спецификации, а не работа: пропускай их и работай с частями (`NN_1_…`, `NN_2_…`). Останавливайся именно на первой задаче по номеру: не перескакивай через заблокированную или неготовую к более поздней — порядок и есть очередь.
+Родительские файлы со строкой `Parts:` — спецификации, а не работа: они пропускаются при любом `Status`, а очередь идёт по частям (`NN_1_…`, `NN_2_…`); части без файла в `backlog`/`done` — остановка, это невлитая спека. Останавливайся именно на первой задаче по номеру: не перескакивай через заблокированную или неготовую к более поздней — порядок и есть очередь. Подсказка «спроектирована в ветке» означает, что задача уже прогрилена, но ветка не влита в `path`: влей её по шагу 4 подготовки, а не перескакивай задачу.
 
 `NEXT` пуст — цикл закончен: покажи причину из `STOP` и переходи к итогу.
 
@@ -98,6 +136,7 @@ echo "NEXT="; echo "STOP=в backlog не осталось задач"
 Конвейер останавливается, когда:
 
 - следующая задача не `ready-for-agent` или заблокирована (естественный конец);
+- задача спроектирована в невлитой ветке (`STOP` с подсказкой «спроектирована в ветке») — слияние спек из шага 4 подготовки не удалось само, разбирается человек;
 - задача начиналась, но стадия не смогла довести работу: красные тесты, конфликт, грязное дерево, противоречие ADR, ветка уже существует и т. п.
 
 Не начинай следующую задачу, пока текущая не закрыта и не влита в `path`. Не правь код и не коммить сам: это работа подсессий.
