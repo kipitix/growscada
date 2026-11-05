@@ -175,6 +175,12 @@ func sendError(w http.ResponseWriter, r *http.Request, err error) {
 				detail = m.resource.name + " kept changing while the request ran; retry it later"
 			}
 			problem := NewConflict(m.resource.name, detail, r.URL.Path)
+			var conflict draft.ConflictError
+			if errors.As(err, &conflict) {
+				// The client states the Version it read; a newer one lets it
+				// retry without rereading the Draft (ADR 0016).
+				problem.Draft = &apiv0.DraftStateResponse{Version: conflict.Current}
+			}
 			var orphans librarypin.OrphansError
 			if errors.As(err, &orphans) {
 				for _, pw := range orphans.Widgets {

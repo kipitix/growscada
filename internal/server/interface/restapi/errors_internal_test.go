@@ -248,6 +248,24 @@ func TestSendError_NothingToRollback_IsAConflict(t *testing.T) {
 		"Conflict: Revision", "Nothing to rollback: the revision holds the document the project runs")
 }
 
+// TestSendError_DraftConflict_NamesTheDraft: the 409 of a stale Version of the
+// Draft carries the current Version, so the client can retry without rereading
+// the Draft (ADR 0016).
+func TestSendError_DraftConflict_NamesTheDraft(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/anything", nil)
+	rec := httptest.NewRecorder()
+	sendError(rec, req, fmt.Errorf("cannot save tag: %w",
+		draft.ConflictError{Expected: 2, Current: 7}))
+
+	var prob apiv0.Problem
+	if err := json.NewDecoder(rec.Body).Decode(&prob); err != nil {
+		t.Fatalf("decode problem: %v", err)
+	}
+	if prob.Status != http.StatusConflict || prob.Draft == nil || prob.Draft.Version != 7 {
+		t.Errorf("the conflict Problem: %+v, want status 409 and the Draft at 7", prob)
+	}
+}
+
 func TestSendError_MappingWithUnhandledStatus_Is500(t *testing.T) {
 	sentinel := errors.New("gone")
 	saved := errorMappings

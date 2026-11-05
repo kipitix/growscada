@@ -22,4 +22,7 @@ type Problem struct {
 	// EditLock is, on the 409 of a gated write of a Draft, the lock that made
 	// it impossible: free, or held by another client (ADR 0015).
 	EditLock *EditLockResponse `json:"edit_lock,omitempty"`
+	// Draft is, on the 409 of a write of a Draft's content, the state the
+	// Draft is in: the Version a retry of the write states (ADR 0016).
+	Draft *DraftStateResponse `json:"draft,omitempty"`
 }

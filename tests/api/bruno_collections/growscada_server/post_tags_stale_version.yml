@@ -1,0 +1,46 @@
+info:
+  name: post tags stale version
+  type: http
+  seq: 37
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/tags
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "stale_version_tag",
+        "type": "integer",
+        "version": 1
+      }
+  auth: inherit
+
+docs: |
+  A write of a Project's content states the Version of its Draft (ADR 0016):
+  `post tags` raised it to 2, so version 1 is stale and the write is refused
+  with `409 Conflict`. The Problem carries the Draft's current Version in
+  `draft.version`, so the client can retry without rereading it.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '409'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: '"application/problem+json"'
+    - expression: 'res.body.draft.version'
+      operator: eq
+      value: '2'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

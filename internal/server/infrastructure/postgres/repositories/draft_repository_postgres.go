@@ -109,7 +109,7 @@ func (r draftRepositoryPostgres) Update(ctx context.Context, scope editlock.Scop
 			return nil, err
 		}
 		if expected.Number() != row.version {
-			return nil, fmt.Errorf("%w: expected %d, current %d", draft.ErrDraftConflict, expected.Number(), row.version)
+			return nil, draft.ConflictError{Expected: expected.Number(), Current: row.version}
 		}
 		current := draftOf(*row, scope)
 		loader := &draftLoader{tx: tx, project: scope.ProjectID(), releases: r.releases}
