@@ -144,12 +144,13 @@ var errorMappings = []errorMapping{
 
 // sendError responds to an error from the application layer. Invalid input is
 // a 400 naming the cause and goes first: a reference from the request body to
-// something that does not exist is the caller's input, 404 is only for the
-// resource in the path. Then the rows of errorMappings: 404 naming the
-// resource of the path, 401, 403 and 409 with a fixed detail, so the text of
-// the wrapping errors never reaches the client. Anything else — and a 404 for
-// a resource the path does not name, which is a service fault — is a 500 that
-// logs the error and tells the client nothing internal.
+// something that does not exist is the caller's input, while a 404 answers a
+// resource the request names — in the path, or in the body of a batch write
+// (see notFoundInPath). Then the rows of errorMappings: 404 naming that
+// resource, 401, 403 and 409 with a fixed detail, so the text of
+// the wrapping errors never reaches the client. Anything else — and a 404
+// that does not say which ID was not found, which is a service fault — is a
+// 500 that logs the error and tells the client nothing internal.
 func sendError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, editlock.ErrNoClient) {
 		sendProblem(w, NewBadRequest(
