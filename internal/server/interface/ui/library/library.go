@@ -37,9 +37,12 @@ type Library struct {
 	widgetTypes []apiv0.WidgetTypeResponse
 	// versions holds the version each write of a WidgetType states; the
 	// Version of widgetTypes is not read.
-	versions   uiutil.Versions
-	reloader   uiutil.Reloader
-	selectedID uuid.UUID
+	versions uiutil.Versions
+	reloader uiutil.Reloader
+	// draftStateReloader loads the Draft's Version when the WidgetTypes carry
+	// none: the Draft of a library without one.
+	draftStateReloader uiutil.Reloader
+	selectedID         uuid.UUID
 	// edit is the editor's state that comes from the server.
 	edit editFields
 	// inputValues[widgetTypeID][portName] = Input Data value of the preview.

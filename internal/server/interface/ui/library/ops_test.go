@@ -189,6 +189,24 @@ func TestDeleteItem_RemovesItAndTheSelection(t *testing.T) {
 	}
 }
 
+// TestDeleteItem_LastType_KeepsTheDraftVersion: deleting the last WidgetType
+// leaves no content DTO carrying the Draft's Version, so the mode rereads it
+// (ADR 0016): the next write states the server's one, not the one before the
+// deletion, and is not refused as stale.
+func TestDeleteItem_LastType_KeepsTheDraftVersion(t *testing.T) {
+	f, _ := selected(t)
+	releaseNow(t, f)
+	f.l.deleteItem(f.l.compoCtx)
+	f.run()
+	f.noToasts()
+
+	if _, err := f.api.Release(context.Background(), apiv0.CreateReleaseRequest{
+		Version: f.l.versions.Of(f.l.libraryID),
+	}); err != nil {
+		t.Fatalf("release of the emptied Draft at the known version: %v", err)
+	}
+}
+
 // TestRelease_ReleasesTheDraftAndShowsItInTheHistory: Release makes release
 // 1 of the Draft, shown in the history; viewing it is read-only.
 func TestRelease_ReleasesTheDraftAndShowsItInTheHistory(t *testing.T) {

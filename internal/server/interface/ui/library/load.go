@@ -53,6 +53,23 @@ func (l *Library) loadList(ctx app.Context) {
 		}, l.libraryGone, l.loadList)
 }
 
+// loadDraftState (re)loads the Version of the selected library's Draft: the
+// Draft of a library without a WidgetType carries it in no content DTO, and
+// every write of the Draft states it (ADR 0016).
+func (l *Library) loadDraftState(ctx app.Context) {
+	if l.libraryID == uuid.Nil {
+		return
+	}
+	mark := l.versions.Mark()
+	uiutil.LoadForGone(l.compoCtx, &l.draftStateReloader, l.draft,
+		func(c context.Context, lib *apiclient.LibraryClient) (apiv0.DraftStateResponse, error) {
+			return lib.DraftState(c)
+		},
+		func(ctx app.Context, _ *apiclient.LibraryClient, state apiv0.DraftStateResponse) {
+			l.versions.Observe(mark, l.libraryID, state.Version)
+		}, l.libraryGone, l.loadDraftState)
+}
+
 // loadReleases (re)loads the releases of the selected library.
 func (l *Library) loadReleases(ctx app.Context) {
 	if l.libraryID == uuid.Nil {
@@ -80,6 +97,12 @@ func (l *Library) setWidgetTypes(ctx app.Context, mark uiutil.Mark, items []apiv
 		l.versions.Observe(mark, l.libraryID, it.Version)
 	}
 	l.widgetTypes = items
+	if len(items) == 0 {
+		// No WidgetType carries the Draft's Version, so the list states none:
+		// read it, or the next write would state the one before the change
+		// that emptied the Draft.
+		l.loadDraftState(ctx)
+	}
 	if l.selectedID == uuid.Nil || l.viewing != 0 {
 		return
 	}
