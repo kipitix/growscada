@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -99,6 +100,19 @@ func TestValidateProjectFile_RefusesAnotherMajor(t *testing.T) {
 	wantIssue(t, issues, "schema_version", "newer")
 }
 
+// TestValidateProjectFile_RefusesANewerSchemaBeforeUnknownFields: a newer
+// MINOR is answered as such even when it carries a field this build cannot
+// decode (ADR 0018).
+func TestValidateProjectFile_RefusesANewerSchemaBeforeUnknownFields(t *testing.T) {
+	projectID := uuid.New()
+	document := []byte(`{"schema_version":"0.` + fmt.Sprint(projectv0.SchemaVersion().Minor+1) + `","project_id":"` +
+		projectID.String() + `","surprise":true}`)
+	_, err := (projectFileValidator{}).validate(context.Background(),
+		id.NewID(id.IDWithUUID[project.Project](projectID)), document, false)
+	issues := fileIssues(t, err)
+	wantIssue(t, issues, "schema_version", "newer")
+}
+
 func TestValidateProjectFile_RefusesAnotherProject(t *testing.T) {
 	file := emptyFile(uuid.New())
 	issues := fileIssues(t, validateFile(t, uuid.New(), file))
@@ -182,6 +196,17 @@ func TestValidateProjectFile_RefusesAnExtraWidgetTypeCopy(t *testing.T) {
 		ID: uuid.New(), LibraryID: uuid.New(), Name: "unused", ScriptLanguage: "javascript",
 		DefaultWidth: 10, DefaultHeight: 10,
 	}}
+	issues := fileIssues(t, validateFile(t, projectID, file))
+	wantIssue(t, issues, "", "differs from the Draft it would make")
+}
+
+// TestValidateProjectFile_RefusesADocumentItsOwnRebuildDiffersFrom: a value
+// the domain normalizes (a rotation of 370° is 10°) makes the document differ
+// from the Draft it would make, and the file is refused (ADR 0018).
+func TestValidateProjectFile_RefusesADocumentItsOwnRebuildDiffersFrom(t *testing.T) {
+	projectID, libraryID := uuid.New(), uuid.New()
+	file, _ := pinnedFile(t, projectID, libraryID)
+	file.Scenes[0].Widgets[0].Rotation.Degrees = 370
 	issues := fileIssues(t, validateFile(t, projectID, file))
 	wantIssue(t, issues, "", "differs from the Draft it would make")
 }

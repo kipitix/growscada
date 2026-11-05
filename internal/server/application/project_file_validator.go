@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/kipitix/growscada/contract"
 	projectv0 "github.com/kipitix/growscada/contract/project/v0"
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
@@ -66,13 +67,23 @@ type projectFileValidator struct {
 // requires every pin to name a live Library with that Release here and every
 // copy to match it.
 func (v projectFileValidator) validate(ctx context.Context, projectID id.ID[project.Project], document []byte, checkLibraries bool) (projectFileValidation, error) {
+	// The schema version is read before the strict decode: a file of a newer
+	// MINOR may carry fields this build does not know, and "newer than the
+	// server" is the honest answer to it, not an unknown-field error.
+	header, headerIssues := decodeProjectFileHeader(document)
+	if len(headerIssues) > 0 {
+		return projectFileValidation{}, ProjectFileError{Issues: headerIssues}
+	}
+	var problems fileProblems
+	checkSchemaVersion(header.SchemaVersion, &problems)
+	if len(problems.issues) > 0 {
+		return projectFileValidation{}, ProjectFileError{Issues: problems.issues}
+	}
+
 	file, decodeIssues := decodeProjectFile(document)
 	if len(decodeIssues) > 0 {
 		return projectFileValidation{}, ProjectFileError{Issues: decodeIssues}
 	}
-
-	var problems fileProblems
-	checkSchemaVersion(file, &problems)
 	if file.ProjectID != projectID.UUID() {
 		problems.add("project_id", "the file configures project %s, not %s", file.ProjectID, projectID)
 	}
@@ -121,6 +132,17 @@ func (v projectFileValidator) validate(ctx context.Context, projectID id.ID[proj
 	return projectFileValidation{file: canonical, content: content}, nil
 }
 
+// decodeProjectFileHeader reads the document's header leniently, for the
+// schema version that decides the strict decode: a field of a newer MINOR is
+// not an error yet.
+func decodeProjectFileHeader(document []byte) (projectv0.Header, []FileIssue) {
+	var header projectv0.Header
+	if err := json.Unmarshal(document, &header); err != nil {
+		return header, []FileIssue{{Path: "", Message: err.Error()}}
+	}
+	return header, nil
+}
+
 // decodeProjectFile decodes document strictly (ADR 0005): a field this build
 // does not know is a problem, not something to skip.
 func decodeProjectFile(document []byte) (projectv0.ProjectFile, []FileIssue) {
@@ -156,12 +178,11 @@ func unknownFieldPath(message string) string {
 // checkSchemaVersion applies ADR 0018's rule: the same MAJOR, MINOR not newer
 // than the server's. A newer file is refused with its own message, which is
 // clearer than the unknown-field error of decoding a newer document.
-func checkSchemaVersion(file projectv0.ProjectFile, problems *fileProblems) {
+func checkSchemaVersion(fileVersion contract.SchemaVersion, problems *fileProblems) {
 	server := projectv0.SchemaVersion()
-	fileVersion := file.SchemaVersion
 	switch {
 	case fileVersion.NewerThan(server):
-		problems.add("schema_version", "the file's schema %s is newer than this server's %s, which is the file newer than the server", fileVersion, server)
+		problems.add("schema_version", "the file's schema %s is newer than this server's %s: the file is newer than the server", fileVersion, server)
 	case !fileVersion.SameMajor(server):
 		problems.add("schema_version", "the file's schema %s does not match this server's %s", fileVersion, server)
 	}

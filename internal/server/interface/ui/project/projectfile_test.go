@@ -56,6 +56,24 @@ func TestProjectFileDialog_ShowsTheActionsAndTheConfirmation(t *testing.T) {
 	}
 }
 
+// TestProjectFileDialog_DownloadAsksTheServer: the Download Draft action
+// reads the file from the server; the browser's Blob is a no-op in the test
+// engine, so the check is that the call completes without a refusal.
+func TestProjectFileDialog_DownloadAsksTheServer(t *testing.T) {
+	f := startProject(t)
+	f.p.openProjectFileDialog(f.p.compoCtx)
+	f.p.downloadDraftProjectFile(f.p.compoCtx)
+	f.run()
+	f.noToasts()
+
+	if f.p.projectFileBusy {
+		t.Error("the download is still in flight")
+	}
+	if !f.p.projectFileDialog {
+		t.Error("the dialog closed on a download")
+	}
+}
+
 // TestProjectFileDialog_OpenRestoresTheDraftAndCloses: opening a downloaded
 // file restores what was deleted, reloads the content and the stack, and
 // closes the dialog.
