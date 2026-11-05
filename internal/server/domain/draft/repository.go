@@ -47,4 +47,23 @@ type Repository interface {
 	// ClearStack drops every DraftChange of the Draft and resets its stack
 	// position: what a successful Deploy or Release leaves behind (ADR 0017).
 	ClearStack(ctx context.Context, scope editlock.Scope) error
+
+	// Stack returns the state of the Draft's DraftChange stack without a
+	// write: the Draft, the change an undo would apply and the one a redo
+	// would apply. ok is false for a Draft that was never written: it has no
+	// row and no stack.
+	Stack(ctx context.Context, scope editlock.Scope) (StackState, bool, error)
+
+	// Undo applies the before states of the DraftChange at the stack's
+	// position (ADR 0017): it locks the Draft's row, checks the EditLock of
+	// the context and expected, writes the rows, raises the Version, steps the
+	// position back and appends the inverse events, with no DraftChange of its
+	// own. Returns ErrNothingToUndo when the stack has no change there and a
+	// ConflictError for a stale expected.
+	Undo(ctx context.Context, scope editlock.Scope, expected version.Version[Draft]) (Draft, error)
+
+	// Redo applies the after states of the DraftChange after the stack's
+	// position, as Undo does its before states. Returns ErrNothingToRedo when
+	// nothing was undone.
+	Redo(ctx context.Context, scope editlock.Scope, expected version.Version[Draft]) (Draft, error)
 }

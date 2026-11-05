@@ -3,6 +3,7 @@ package repositories_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -657,4 +658,207 @@ func mustFindWidgetType(t *testing.T, repo libraryRepo, typeID id.ID[library.Wid
 		t.Fatalf("FindByID: %v", err)
 	}
 	return found
+}
+
+// TestDraftUndo_RestoresTheDeletedTagAndItsBindings: the undo of a Tag deletion
+// writes the before states of its DraftChange — the Tag and the Widget bound —
+// raises the Draft's Version, steps the stack back, publishes the inverse
+// events and appends no DraftChange of its own (ADR 0017).
+func TestDraftUndo_RestoresTheDeletedTagAndItsBindings(t *testing.T) {
+	cleanEditLocks(t)
+	cleanWidgetTypes(t)
+	cleanScenes(t)
+	cleanTags(t)
+	cleanOutbox(t)
+	ctx := editlock.System(context.Background())
+
+	tagRepo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
+	bound := makeTag(t, "pressure", tagRepo)
+	mustSaveTag(t, tagRepo, bound)
+	portName, err := library.NewInputPortName("value")
+	if err != nil {
+		t.Fatalf("NewInputPortName: %v", err)
+	}
+	released := mustPinWidgetType(t, mainProject, library.NewInputPort(portName, "", library.AnyTypeHint()))
+	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
+	widget := mustWidgetOf(t, sceneRepo, released, map[string]tag.Tag{"value": bound})
+	saved := mustSave(t, sceneRepo, withWidgets(makeScene(t, sceneRepo, "main"), widget))
+
+	mustUpdate(t, mainProject, "Delete tag pressure", func(session *draft.Session) error {
+		_, err := session.DeleteTag(ctx, bound.ID())
+		return err
+	})
+	cleanOutbox(t)
+	changes := draftChangeCount(t, mainProject)
+	scope := editlock.ProjectScope(mainProject)
+	version := draftVersionOf(t, mainProject)
+
+	stack, ok, err := testDrafts().Stack(ctx, scope)
+	if err != nil || !ok {
+		t.Fatalf("Stack: %v (found %t)", err, ok)
+	}
+	if !stack.CanUndo() || stack.CanRedo() || stack.Undo.Description != "Delete tag pressure" {
+		t.Fatalf("the stack: undo %v, redo %v, undo %q", stack.CanUndo(), stack.CanRedo(), stack.Undo.Description)
+	}
+	position := stack.Draft.StackPosition()
+
+	step, err := testDrafts().Undo(ctx, scope, version)
+	if err != nil {
+		t.Fatalf("Undo: %v", err)
+	}
+	if step.Version().Number() != version.Number()+1 || step.StackPosition() != position-1 {
+		t.Errorf("after the undo: version %d, position %d; want %d, %d",
+			step.Version().Number(), step.StackPosition(), version.Number()+1, position-1)
+	}
+	if _, err := tagRepo.FindByID(ctx, bound.ID()); err != nil {
+		t.Errorf("the Tag did not come back: %v", err)
+	}
+	found := mustFindByID(t, sceneRepo, saved.ID())
+	if len(found.Widgets()) != 1 || len(found.Widgets()[0].PortBindings()) != 1 {
+		t.Errorf("the Scene after the undo: %+v, want the Widget bound again", found.Widgets())
+	}
+	if got := outboxTypes(t); !slices.Equal(got, []string{"tag_created", "widget_updated"}) {
+		t.Errorf("the undo published %v, want tag_created and widget_updated", got)
+	}
+	if after := draftChangeCount(t, mainProject); after != changes {
+		t.Errorf("the undo wrote %d DraftChanges, want none (had %d)", after-changes, changes)
+	}
+}
+
+// TestDraftUndoRedo_RedoReappliesAndANewChangeTrimsTheTail: a redo writes the
+// after states again, and a new change after an undo deletes the redo tail, so
+// the redo has nothing left to apply (ADR 0017).
+func TestDraftUndoRedo_RedoReappliesAndANewChangeTrimsTheTail(t *testing.T) {
+	cleanEditLocks(t)
+	cleanTags(t)
+	cleanOutbox(t)
+	ctx := editlock.System(context.Background())
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
+	scope := editlock.ProjectScope(mainProject)
+
+	first := makeTag(t, "speed", repo)
+	mustSaveTag(t, repo, first)
+	second := makeTag(t, "pressure", repo)
+	mustSaveTag(t, repo, second)
+
+	if _, err := testDrafts().Undo(ctx, scope, draftVersionOf(t, mainProject)); err != nil {
+		t.Fatalf("Undo: %v", err)
+	}
+	if _, err := repo.FindByID(ctx, second.ID()); err == nil {
+		t.Errorf("the undone Tag is still in the Draft")
+	}
+	// A new change after the undo removes the redo tail.
+	third := makeTag(t, "temperature", repo)
+	mustSaveTag(t, repo, third)
+	if _, err := testDrafts().Redo(ctx, scope, draftVersionOf(t, mainProject)); !errors.Is(err, draft.ErrNothingToRedo) {
+		t.Fatalf("Redo after a new change: %v, want ErrNothingToRedo", err)
+	}
+	if _, err := repo.FindByID(ctx, second.ID()); err == nil {
+		t.Errorf("the trimmed redo brought its Tag back")
+	}
+}
+
+// TestDraftUndo_EmptyStackAndItsGate: an undo or redo with nothing to apply is
+// refused, and so is one from a client that does not hold the EditLock or that
+// states a stale Version.
+func TestDraftUndo_EmptyStackAndItsGate(t *testing.T) {
+	cleanEditLocks(t)
+	cleanTags(t)
+	ctx := editlock.System(context.Background())
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
+	scope := editlock.ProjectScope(mainProject)
+	empty := draftVersionOf(t, mainProject)
+
+	if _, err := testDrafts().Undo(ctx, scope, empty); !errors.Is(err, draft.ErrNothingToUndo) {
+		t.Errorf("undo of an empty stack: %v, want ErrNothingToUndo", err)
+	}
+	if _, err := testDrafts().Redo(ctx, scope, empty); !errors.Is(err, draft.ErrNothingToRedo) {
+		t.Errorf("redo of an empty stack: %v, want ErrNothingToRedo", err)
+	}
+
+	created := makeTag(t, "speed", repo)
+	mustSaveTag(t, repo, created)
+	if _, err := testDrafts().Undo(context.Background(), scope, draftVersionOf(t, mainProject)); !errors.Is(err, editlock.ErrNoClient) {
+		t.Errorf("undo with no client: %v, want ErrNoClient", err)
+	}
+	held := createHeldLockOf(t, scope)
+	if _, err := editLockRepo().Create(editlock.System(context.Background()), held); err != nil {
+		t.Fatalf("hold the lock: %v", err)
+	}
+	other := editlock.WithClient(context.Background(), editlock.NewKey())
+	if _, err := testDrafts().Undo(other, scope, draftVersionOf(t, mainProject)); !errors.Is(err, editlock.ErrEditLockNotHeld) {
+		t.Errorf("undo of another client: %v, want ErrEditLockNotHeld", err)
+	}
+	holder := editlock.WithClient(context.Background(), held.Holder().Key())
+	if _, err := testDrafts().Undo(holder, scope, empty); !errors.Is(err, draft.ErrDraftConflict) {
+		t.Errorf("undo with a stale version: %v, want ErrDraftConflict", err)
+	}
+}
+
+// TestDraftUndo_LibraryWidgetType: a Library's Draft undoes the creation of a
+// WidgetType and redoes it, with the events of each side.
+func TestDraftUndo_LibraryWidgetType(t *testing.T) {
+	cleanWidgetTypes(t)
+	cleanEditLocks(t)
+	cleanOutbox(t)
+	ctx := editlock.System(context.Background())
+	repo := newWidgetTypeRepo(t)
+	scope := editlock.LibraryScope(repo.libraryID)
+	saved := mustCreateWidgetType(t, repo.libraryID, makeWidgetType(t, "gauge", nil, repo))
+	cleanOutbox(t)
+
+	if _, err := testDrafts().Undo(ctx, scope, libraryDraftVersionOf(t, repo.libraryID)); err != nil {
+		t.Fatalf("Undo: %v", err)
+	}
+	if _, err := repo.FindByID(ctx, saved.ID()); !errors.Is(err, library.ErrWidgetTypeNotFound) {
+		t.Errorf("the undone WidgetType is still in the Draft: %v", err)
+	}
+	if got := outboxTypes(t); !slices.Equal(got, []string{"widget_type_deleted"}) {
+		t.Errorf("the undo published %v, want widget_type_deleted", got)
+	}
+
+	cleanOutbox(t)
+	if _, err := testDrafts().Redo(ctx, scope, libraryDraftVersionOf(t, repo.libraryID)); err != nil {
+		t.Fatalf("Redo: %v", err)
+	}
+	if _, err := repo.FindByID(ctx, saved.ID()); err != nil {
+		t.Errorf("the redone WidgetType did not come back: %v", err)
+	}
+	if got := outboxTypes(t); !slices.Equal(got, []string{"widget_type_created"}) {
+		t.Errorf("the redo published %v, want widget_type_created", got)
+	}
+}
+
+// TestDraftChanges_KeepTheLatestHundred: the stack is trimmed to its depth,
+// older changes being dropped and no longer undoable (ADR 0017).
+func TestDraftChanges_KeepTheLatestHundred(t *testing.T) {
+	cleanEditLocks(t)
+	cleanTags(t)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
+	for i := 0; i < 101; i++ {
+		mustSaveTag(t, repo, makeTag(t, "tag-"+uuid.NewString(), repo))
+	}
+	var count, minSeq int
+	if err := testDB.QueryRow(
+		`SELECT count(*), min(dc.seq) FROM engineering.draft_changes dc
+		 JOIN engineering.drafts d ON d.id = dc.draft_id WHERE d.project_id = $1`, mainProject.UUID(),
+	).Scan(&count, &minSeq); err != nil {
+		t.Fatalf("read the stack: %v", err)
+	}
+	if count != 100 || minSeq != 2 {
+		t.Errorf("the stack holds %d changes from %d, want 100 from 2", count, minSeq)
+	}
+}
+
+// draftChangeCount is how many DraftChanges the Project's Draft holds.
+func draftChangeCount(t *testing.T, projectID id.ID[project.Project]) int {
+	t.Helper()
+	var count int
+	if err := testDB.QueryRow(
+		`SELECT count(*) FROM engineering.draft_changes dc
+		 JOIN engineering.drafts d ON d.id = dc.draft_id WHERE d.project_id = $1`, projectID.UUID(),
+	).Scan(&count); err != nil {
+		t.Fatalf("count the draft changes: %v", err)
+	}
+	return count
 }

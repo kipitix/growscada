@@ -48,6 +48,17 @@ type Draft interface {
 	// WithLock returns the Draft with lock in place of its EditLock.
 	WithLock(lock editlock.EditLock) Draft
 
+	// Undo returns the Draft after undoing change, the DraftChange at the
+	// stack's position: its Version is raised by one and its position steps
+	// back (ADR 0017). Returns ErrNothingToUndo for a change that is not the
+	// one at the position. The rows and the events are the Session's.
+	Undo(change DraftChange) (Draft, error)
+	// Redo returns the Draft after redoing change, the DraftChange after the
+	// stack's position: its Version is raised by one and its position steps
+	// forward. Returns ErrNothingToRedo for a change that is not the one after
+	// the position.
+	Redo(change DraftChange) (Draft, error)
+
 	// PendingEvents are the events of the EditLock changes recorded since the
 	// Draft was read; the content's events come from its entities.
 	PendingEvents() []event.Event

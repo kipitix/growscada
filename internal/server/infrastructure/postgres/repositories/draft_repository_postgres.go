@@ -245,6 +245,146 @@ func (r draftRepositoryPostgres) ClearStack(ctx context.Context, scope editlock.
 	})
 }
 
+// Stack returns the state of the Draft's DraftChange stack (see
+// draft.Repository): the Draft and the changes an undo and a redo would apply.
+func (r draftRepositoryPostgres) Stack(ctx context.Context, scope editlock.Scope) (draft.StackState, bool, error) {
+	current, ok, err := r.Read(ctx, scope)
+	if err != nil || !ok {
+		return draft.StackState{}, false, err
+	}
+	state := draft.StackState{Draft: current}
+	position := current.StackPosition()
+	undo, found, err := readChange(ctx, r.db, current.ID().UUID(), position)
+	if err != nil {
+		return draft.StackState{}, false, err
+	}
+	if found {
+		state.Undo = &undo
+	}
+	redo, found, err := readChange(ctx, r.db, current.ID().UUID(), position+1)
+	if err != nil {
+		return draft.StackState{}, false, err
+	}
+	if found {
+		state.Redo = &redo
+	}
+	return state, true, nil
+}
+
+// Undo applies the DraftChange at the stack's position (see
+// draft.Repository).
+func (r draftRepositoryPostgres) Undo(ctx context.Context, scope editlock.Scope, expected version.Version[draft.Draft]) (draft.Draft, error) {
+	return r.stepStack(ctx, scope, expected, true)
+}
+
+// Redo applies the DraftChange after the stack's position (see
+// draft.Repository).
+func (r draftRepositoryPostgres) Redo(ctx context.Context, scope editlock.Scope, expected version.Version[draft.Draft]) (draft.Draft, error) {
+	return r.stepStack(ctx, scope, expected, false)
+}
+
+// stepStack writes the change an undo (backwards) or a redo (forwards) names as
+// one transaction over the Draft: the snapshots of the side it restores, the
+// inverse events, the next Version and the moved position, and no DraftChange
+// of its own (ADR 0017).
+func (r draftRepositoryPostgres) stepStack(ctx context.Context, scope editlock.Scope, expected version.Version[draft.Draft], undo bool) (draft.Draft, error) {
+	var result draft.Draft
+	err := r.inTx(ctx, func(tx *sql.Tx) ([]event.Event, error) {
+		// A request that names no client is no write of a Draft at all: it is
+		// refused before the stack is read, so an empty stack does not answer
+		// for it with a conflict.
+		if _, _, err := clientOf(ctx, scope); err != nil {
+			return nil, err
+		}
+		row, err := lockDraftRow(ctx, tx, scope, false, true)
+		if errors.Is(err, draft.ErrDraftNotFound) {
+			return nil, nothingToStep(scope, undo)
+		}
+		if err != nil {
+			return nil, err
+		}
+		if err := gateDraft(ctx, tx, row, scope); err != nil {
+			return nil, err
+		}
+		if expected.Number() != row.version {
+			return nil, draft.ConflictError{Expected: expected.Number(), Current: row.version, Scope: scope}
+		}
+		seq := row.stackPosition
+		if !undo {
+			seq++
+		}
+		change, found, err := readChange(ctx, tx, row.id, seq)
+		if err != nil {
+			return nil, err
+		}
+		if !found {
+			return nil, nothingToStep(scope, undo)
+		}
+		current := draftOf(*row, scope)
+		loader := &draftLoader{tx: tx, scope: scope, project: scope.ProjectID(), library: scope.LibraryID(), releases: r.releases}
+		session := draft.NewSession(current, loader)
+		if undo {
+			err = session.Undo(ctx, change)
+		} else {
+			err = session.Redo(ctx, change)
+		}
+		if err != nil {
+			return nil, err
+		}
+		before, after := session.Changes()
+		if err := applySnapshots(ctx, tx, scope, before, after); err != nil {
+			return nil, err
+		}
+		stepped := session.Draft()
+		if err := updateDraftProgress(ctx, tx, row.id, stepped.Version().Number(), stepped.StackPosition()); err != nil {
+			return nil, err
+		}
+		result = stepped
+		return session.Events(), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func nothingToStep(scope editlock.Scope, undo bool) error {
+	return draft.NothingToStepError{Scope: scope, Undo: undo}
+}
+
+// queryRower is what a DraftChange read needs of *sql.DB and *sql.Tx.
+type queryRower interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// readChange reads one row of the Draft's stack; found is false when the
+// stack has no change at seq.
+func readChange(ctx context.Context, q queryRower, draftID uuid.UUID, seq int) (draft.DraftChange, bool, error) {
+	var (
+		description string
+		beforeJSON  []byte
+		afterJSON   []byte
+	)
+	err := q.QueryRowContext(ctx,
+		`SELECT description, before, after FROM engineering.draft_changes WHERE draft_id = $1 AND seq = $2`,
+		draftID, seq).Scan(&description, &beforeJSON, &afterJSON)
+	if errors.Is(err, sql.ErrNoRows) {
+		return draft.DraftChange{}, false, nil
+	}
+	if err != nil {
+		return draft.DraftChange{}, false, fmt.Errorf("cannot read the draft change %d: %w", seq, err)
+	}
+	before, err := draftchange.Decode(beforeJSON)
+	if err != nil {
+		return draft.DraftChange{}, false, fmt.Errorf("cannot read the before state of change %d: %w", seq, err)
+	}
+	after, err := draftchange.Decode(afterJSON)
+	if err != nil {
+		return draft.DraftChange{}, false, fmt.Errorf("cannot read the after state of change %d: %w", seq, err)
+	}
+	return draft.DraftChange{Seq: seq, Description: description, Before: before, After: after}, true, nil
+}
+
 // inTx runs write in one transaction, appends the events it recorded and
 // signals the dispatcher once committed.
 func (r draftRepositoryPostgres) inTx(ctx context.Context, write func(*sql.Tx) ([]event.Event, error)) error {

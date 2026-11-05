@@ -35,3 +35,37 @@ func (e ConflictError) Is(target error) bool { return target == ErrDraftConflict
 // ErrDraftNotFound is returned by a read of a Draft whose Project or Library
 // does not exist.
 var ErrDraftNotFound = errors.New("draft not found")
+
+// ErrNothingToUndo is an undo with no DraftChange at the stack's position: the
+// stack is empty, or everything on the other side of it was undone already
+// (ADR 0017).
+var ErrNothingToUndo = errors.New("nothing to undo")
+
+// ErrNothingToRedo is a redo with no DraftChange after the stack's position:
+// nothing was undone, or a new change replaced the redo tail (ADR 0017).
+var ErrNothingToRedo = errors.New("nothing to redo")
+
+// NothingToStepError is an undo or a redo the stack has nothing to apply to:
+// it matches ErrNothingToUndo when Undo is set and ErrNothingToRedo otherwise.
+// It names the Draft whose stack is empty, so the API can title the conflict
+// after its Project or Library.
+type NothingToStepError struct {
+	Scope editlock.Scope
+	Undo  bool
+}
+
+func (e NothingToStepError) Error() string {
+	if e.Undo {
+		return fmt.Sprintf("%v: the stack of %s has no change to undo", ErrNothingToUndo, e.Scope)
+	}
+	return fmt.Sprintf("%v: the stack of %s has no change to redo", ErrNothingToRedo, e.Scope)
+}
+
+// Is matches the sentinel of the command, so errors.Is keeps working for the
+// callers that ask which command found the stack empty.
+func (e NothingToStepError) Is(target error) bool {
+	if e.Undo {
+		return target == ErrNothingToUndo
+	}
+	return target == ErrNothingToRedo
+}

@@ -69,6 +69,57 @@ func (s *Session) recordEvents(someEvents ...event.Event) {
 	s.events = append(s.events, someEvents...)
 }
 
+// Undo applies the before states of change, the DraftChange at the stack's
+// position (ADR 0017): the rows the change wrote are removed, the rows it
+// replaced are restored, the Draft's Version is raised and its position steps
+// back. The events it records are the inverse of the change's own, so a stream
+// sees the restoration as the forward edit of the same effect. An undo is not
+// a DraftChange itself.
+func (s *Session) Undo(_ context.Context, change DraftChange) error {
+	next, err := s.draft.Undo(change)
+	if err != nil {
+		return err
+	}
+	events, err := s.restore(change.After, change.Before)
+	if err != nil {
+		return err
+	}
+	s.draft = next
+	s.recordEvents(events...)
+	return nil
+}
+
+// Redo applies the after states of change, the DraftChange after the stack's
+// position (ADR 0017): the rows it wrote come back, the rows it replaced
+// change again, and the Draft's Version is raised with its position stepped
+// forward. Redo is not a DraftChange itself.
+func (s *Session) Redo(_ context.Context, change DraftChange) error {
+	next, err := s.draft.Redo(change)
+	if err != nil {
+		return err
+	}
+	events, err := s.restore(change.Before, change.After)
+	if err != nil {
+		return err
+	}
+	s.draft = next
+	s.recordEvents(events...)
+	return nil
+}
+
+// restore records the write that turns oldSide of a DraftChange into newSide
+// — the snapshots are applied, the operation is never replayed — and returns
+// the events it publishes.
+func (s *Session) restore(oldSide, newSide []Snapshot) ([]event.Event, error) {
+	for _, snapshot := range oldSide {
+		s.recordBefore(snapshot)
+	}
+	for _, snapshot := range newSide {
+		s.recordAfter(snapshot)
+	}
+	return inverseEvents(s.Scope(), oldSide, newSide)
+}
+
 // CreateTag records a new Tag definition.
 func (s *Session) CreateTag(_ context.Context, aTag tag.Tag) tag.Tag {
 	s.recordAfter(SnapshotOfTag(aTag))

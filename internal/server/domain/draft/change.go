@@ -14,3 +14,18 @@ type DraftChange struct {
 	Before      []Snapshot
 	After       []Snapshot
 }
+
+// StackState is a Draft's DraftChange stack as a reader sees it: the Draft,
+// the change an undo would apply and the one a redo would apply. A nil Undo or
+// Redo means the stack has nothing on that side.
+type StackState struct {
+	Draft Draft
+	Undo  *DraftChange
+	Redo  *DraftChange
+}
+
+// CanUndo reports whether the stack has a change at the Draft's position.
+func (s StackState) CanUndo() bool { return s.Undo != nil }
+
+// CanRedo reports whether the stack has a change after the Draft's position.
+func (s StackState) CanRedo() bool { return s.Redo != nil }
