@@ -53,7 +53,7 @@ func (p *Project) createWidget(ctx app.Context, typeID uuid.UUID, x, y float64) 
 		uiutil.StoreID(ctx, p.selectionKey(widgetIDKey), created.ID)
 		p.syncEditingFields(w)
 		p.loadWidgets(ctx)
-	}, p.rejectedSceneEdit(sceneID, nil))
+	}, p.rejectedSceneEdit(nil))
 }
 
 // deleteWidget deletes the Widget widgetID of the selected Scene. The
@@ -85,7 +85,7 @@ func (p *Project) deleteWidget(ctx app.Context, widgetID uuid.UUID) {
 			}
 		}
 		p.widgets = filtered
-	}, p.rejectedSceneEdit(sceneID, nil))
+	}, p.rejectedSceneEdit(nil))
 }
 
 func (p *Project) saveWidgetName(ctx app.Context) {
@@ -195,7 +195,7 @@ func (p *Project) putWidget(ctx app.Context, w apiv0.WidgetResponse) {
 		return content.UpdateWidget(c, sceneID, w.ID, req)
 	}, func(ctx app.Context, updated apiv0.UpdateWidgetResponse) {
 		p.observeDraftVersion(mark, updated.Version)
-	}, p.rejectedSceneEdit(sceneID, p.loadWidgets))
+	}, p.rejectedSceneEdit(p.loadWidgets))
 }
 
 // widgetRequest is the body that writes w at sceneVersion; it converts to

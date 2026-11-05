@@ -78,7 +78,7 @@ func (p *Project) deleteScene(ctx app.Context, sceneID uuid.UUID) {
 	}, func(ctx app.Context, deleted apiv0.SceneResponse) {
 		p.observeDraftVersion(mark, deleted.Version)
 		p.loadScenes(ctx)
-	}, p.rejectedSceneEdit(sceneID, nil))
+	}, p.rejectedSceneEdit(nil))
 }
 
 // selectScene shows the Scene id, as a click on its tab does.
@@ -166,5 +166,5 @@ func (p *Project) putScene(sc apiv0.SceneResponse) {
 	}, func(ctx app.Context, updated apiv0.UpdateSceneResponse) {
 		// The list holds the properties as saved.
 		p.observeDraftVersion(mark, updated.Version)
-	}, p.rejectedSceneEdit(sc.ID, p.loadScenes))
+	}, p.rejectedSceneEdit(p.loadScenes))
 }
