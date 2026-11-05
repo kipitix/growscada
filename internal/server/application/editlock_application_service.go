@@ -34,9 +34,8 @@ type EditLockService interface {
 	State(ctx context.Context, scope editlock.Scope) (appdto.EditLock, error)
 	// CheckOut takes the lock for the client of the context under the
 	// declared name, and reports whether it took it now (false: this client
-	// held it already). A held lock is editlock.ErrEditLockHeld, a Draft
-	// being discarded is project.ErrProjectDiscarding or
-	// library.ErrLibraryDiscarding.
+	// held it already). A held lock is editlock.ErrEditLockHeld, a Library
+	// being discarded is library.ErrLibraryDiscarding.
 	CheckOut(ctx context.Context, scope editlock.Scope, name string) (appdto.EditLock, bool, error)
 	// CheckIn gives the lock back to the Draft as it is. A free lock is no
 	// error; another client's lock is editlock.ErrEditLockNotHeld.

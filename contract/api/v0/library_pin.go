@@ -25,8 +25,9 @@ type GetLibraryPinsResponse struct {
 
 // PutLibraryPinRequest is the HTTP DTO of PUT
 // /projects/{id}/library-pins/{library_id}: pin the release numbered
-// Release. Version 0 adds the pin (the library must not be pinned yet);
-// any other switches it and must match the pin's current version.
+// Release. A Project that pins no release of the library gets the pin, one
+// that pins another switches it; Version is the Version of the Project's
+// Draft the client saw (ADR 0016).
 type PutLibraryPinRequest struct {
 	Release int `json:"release"`
 	Version int `json:"version"`

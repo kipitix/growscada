@@ -56,8 +56,7 @@ func (h RevisionHandlers) GetRevisionByNumber(w http.ResponseWriter, r *http.Req
 // PostRollback handles POST /projects/{project_id}/revisions/{revision_number}/rollback:
 // the Revision's document becomes a new Revision, without the Draft. 201 with
 // the new Revision's summary; 404 for a number the Project does not have; 409
-// nothing_to_rollback when its document is the running one, and
-// project_discarding while a Discard runs.
+// nothing_to_rollback when its document is the running one.
 func (h RevisionHandlers) PostRollback(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := pathUUID(w, r, projectResource)
 	if !ok {

@@ -258,7 +258,7 @@ func TestLibraryPin_SwitchOrphaningWidgetsIsRefused_PreviewNamesThem(t *testing.
 		t.Errorf("the removal: expected ErrWidgetsOrphaned, got %v", err)
 	}
 	if _, _, err := r.pinSvc.PutLibraryPin(ctx, mainProject, libraryID, three.Number, draftVersionOf(t, mainProject)-1); !errors.Is(err, draft.ErrDraftConflict) {
-		t.Errorf("a stale switch: expected ErrLibraryPinConflict, got %v", err)
+		t.Errorf("a stale switch: expected draft.ErrDraftConflict, got %v", err)
 	}
 	if _, _, err := r.pinSvc.PutLibraryPin(ctx, mainProject, libraryID, 9, pin.Version); !errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("a missing release: expected ErrInvalidInput, got %v", err)

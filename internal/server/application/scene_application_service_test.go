@@ -203,7 +203,7 @@ func TestUpdateScene_StaleVersion_ReturnsConflict(t *testing.T) {
 	})
 
 	if !errors.Is(err, draft.ErrDraftConflict) {
-		t.Errorf("expected wrapped ErrSceneConflict, got: %v", err)
+		t.Errorf("expected wrapped draft.ErrDraftConflict, got: %v", err)
 	}
 }
 
@@ -288,7 +288,7 @@ func TestCreateWidget_StaleVersion_ReturnsConflict(t *testing.T) {
 	_, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version+99, input)
 
 	if !errors.Is(err, draft.ErrDraftConflict) {
-		t.Errorf("expected wrapped ErrSceneConflict, got: %v", err)
+		t.Errorf("expected wrapped draft.ErrDraftConflict, got: %v", err)
 	}
 }
 
@@ -304,7 +304,7 @@ func TestCreateWidget_StaleVersionAndUnknownType_ReturnsConflict(t *testing.T) {
 	_, err := svc.CreateWidget(editlock.System(context.Background()), mainProject, sc.ID, sc.Version+99, input)
 
 	if !errors.Is(err, draft.ErrDraftConflict) {
-		t.Errorf("expected wrapped ErrSceneConflict, got: %v", err)
+		t.Errorf("expected wrapped draft.ErrDraftConflict, got: %v", err)
 	}
 }
 
@@ -486,7 +486,7 @@ func TestUpdateWidget_StaleVersion_ReturnsConflict(t *testing.T) {
 	})
 
 	if !errors.Is(err, draft.ErrDraftConflict) {
-		t.Errorf("expected wrapped ErrSceneConflict, got: %v", err)
+		t.Errorf("expected wrapped draft.ErrDraftConflict, got: %v", err)
 	}
 }
 
@@ -505,7 +505,7 @@ func TestUpdateWidget_StaleVersionAndUnknownType_ReturnsConflict(t *testing.T) {
 	_, err = svc.UpdateWidget(ctx, mainProject, sc.ID, created.ID, created.Version+99, input)
 
 	if !errors.Is(err, draft.ErrDraftConflict) {
-		t.Errorf("expected wrapped ErrSceneConflict, got: %v", err)
+		t.Errorf("expected wrapped draft.ErrDraftConflict, got: %v", err)
 	}
 }
 

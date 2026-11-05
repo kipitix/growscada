@@ -214,7 +214,7 @@ func TestEnvironments_CRUD_WithPairs(t *testing.T) {
 		t.Errorf("stale PUT environment: %d, want 409", rec.Code)
 	}
 
-	// The pair: added with version 0, changed with its version.
+	// The pair: added (201) and then changed (200), each stating the Draft's Version.
 	rec = serve(router, http.MethodPut, pairPath, apiv0.UpdateEnvironmentDeviceRequest{
 		Params: apiv0.JSONObject(`{"address":"10.0.0.1:502"}`), Version: 0,
 	})

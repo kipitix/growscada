@@ -74,7 +74,7 @@ func TestDeviceService_CRUD(t *testing.T) {
 		t.Fatalf("UpdateDevice: %+v, %v", updated, err)
 	}
 	if _, err := svc.UpdateDevice(ctx, mainProject, created.ID, created.Version, appdto.DeviceInput{Name: created.Name, Protocol: "simulation"}); !errors.Is(err, draft.ErrDraftConflict) {
-		t.Errorf("a stale update: %v, want ErrDeviceConflict", err)
+		t.Errorf("a stale update: %v, want draft.ErrDraftConflict", err)
 	}
 	if _, err := svc.CreateDevice(ctx, mainProject, draftVersionOf(t, mainProject), appdto.DeviceInput{Name: created.Name, Protocol: "simulation"}); !errors.Is(err, device.ErrDeviceNameTaken) {
 		t.Errorf("a taken name: %v, want ErrDeviceNameTaken", err)
@@ -121,12 +121,12 @@ func TestEnvironmentService_CRUDAndPairs(t *testing.T) {
 		t.Fatalf("PutEnvironmentDevice change: %+v, %v, %v", changed, added, err)
 	}
 	if _, _, err := environments.PutEnvironmentDevice(ctx, mainProject, environment.ID, created.ID, pair.Version, appdto.EnvironmentDeviceInput{}); !errors.Is(err, draft.ErrDraftConflict) {
-		t.Errorf("a stale pair write: %v, want ErrEnvironmentDeviceConflict", err)
+		t.Errorf("a stale pair write: %v, want draft.ErrDraftConflict", err)
 	}
 	// A stale write is a conflict whatever it sends, as for a Device or an
 	// Environment; the params are parsed only once the Version is current.
 	if _, _, err := environments.PutEnvironmentDevice(ctx, mainProject, environment.ID, created.ID, pair.Version, appdto.EnvironmentDeviceInput{Params: []byte(`[]`)}); !errors.Is(err, draft.ErrDraftConflict) {
-		t.Errorf("a stale pair write with invalid params: %v, want ErrEnvironmentDeviceConflict", err)
+		t.Errorf("a stale pair write with invalid params: %v, want draft.ErrDraftConflict", err)
 	}
 	if _, _, err := environments.PutEnvironmentDevice(ctx, mainProject, environment.ID, created.ID, changed.Version, appdto.EnvironmentDeviceInput{Params: []byte(`[]`)}); !errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("a current pair write with invalid params: %v, want ErrInvalidInput", err)

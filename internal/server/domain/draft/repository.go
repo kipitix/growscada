@@ -40,7 +40,8 @@ type Repository interface {
 	Replace(ctx context.Context, scope editlock.Scope, change func(*Session) error) (Draft, error)
 
 	// Purge removes the whole content of the Draft of a deleted Project
-	// (ADR 0006), with no DraftChange and no EditLock check.
+	// (ADR 0006), with no DraftChange: the cleanup writes as the server, so
+	// the EditLock check of the transaction passes.
 	Purge(ctx context.Context, scope editlock.Scope) (Draft, error)
 
 	// ClearStack drops every DraftChange of the Draft and resets its stack

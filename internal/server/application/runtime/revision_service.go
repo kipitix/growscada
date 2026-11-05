@@ -36,8 +36,8 @@ type RevisionService interface {
 	// Rollback copies the Revision n into a new one and publishes
 	// revision_created once it is committed. ErrRevisionNotFound if the
 	// Project has no such Revision, ErrNothingToRollback if its document is
-	// the running one, project.ErrProjectDiscarding while a Discard runs and
-	// project.ErrProjectNotFound if the Project is not live.
+	// the running one and project.ErrProjectNotFound if the Project is not
+	// live.
 	Rollback(ctx context.Context, projectID uuid.UUID, n int) (Revision, error)
 }
 

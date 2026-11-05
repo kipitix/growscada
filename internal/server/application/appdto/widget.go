@@ -18,9 +18,9 @@ type PortBinding struct {
 	TagID    uuid.UUID
 }
 
-// Widget is the application-layer DTO for widget instance data. Version
-// is the version of the owning scene: Widget has no version of its own, since
-// it is an entity of the Scene aggregate.
+// Widget is the application-layer DTO for widget instance data. Version is
+// the Version of the Project's Draft, the same in every entity of one
+// response (ADR 0016): a Widget is an entity of the Draft like its Scene.
 type Widget struct {
 	ID               uuid.UUID
 	Name             string

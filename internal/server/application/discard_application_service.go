@@ -83,14 +83,22 @@ func contentOfRevision(projectID id.ID[project.Project], file projectv0.ProjectF
 		if err != nil {
 			return draft.Content{}, fmt.Errorf("device %s: %w", d.ID, err)
 		}
-		created, err := device.CreateDevice(id.NewID(id.IDWithUUID[device.Device](d.ID)), projectID, deviceName(d.Name), d.Comment, protocol, config)
+		name, err := device.NewDeviceName(d.Name)
+		if err != nil {
+			return draft.Content{}, fmt.Errorf("device %s: %w", d.ID, err)
+		}
+		created, err := device.CreateDevice(id.NewID(id.IDWithUUID[device.Device](d.ID)), projectID, name, d.Comment, protocol, config)
 		if err != nil {
 			return draft.Content{}, err
 		}
 		content.Devices = append(content.Devices, created)
 	}
 	for _, e := range file.Environments {
-		created, err := device.CreateEnvironment(id.NewID(id.IDWithUUID[device.Environment](e.ID)), projectID, environmentName(e.Name), e.Comment)
+		name, err := device.NewEnvironmentName(e.Name)
+		if err != nil {
+			return draft.Content{}, fmt.Errorf("environment %s: %w", e.ID, err)
+		}
+		created, err := device.CreateEnvironment(id.NewID(id.IDWithUUID[device.Environment](e.ID)), projectID, name, e.Comment)
 		if err != nil {
 			return draft.Content{}, err
 		}
@@ -169,27 +177,16 @@ func sceneOfProjectFile(projectID id.ID[project.Project], sc projectv0.Scene) (s
 			}
 			bindings = append(bindings, scene.NewPortBinding(portName, id.NewID(id.IDWithUUID[tag.Tag](b.TagID))))
 		}
+		widgetName, err := scene.NewWidgetName(w.Name)
+		if err != nil {
+			return nil, fmt.Errorf("widget %s: %w", w.ID, err)
+		}
 		widgets = append(widgets, scene.NewWidget(
-			id.NewID(id.IDWithUUID[scene.Widget](w.ID)), sceneNameOf(w.Name),
+			id.NewID(id.IDWithUUID[scene.Widget](w.ID)), widgetName,
 			scene.NewPosition(w.Position.X, w.Position.Y, w.Position.Z),
 			widgetSize, origin, scene.NewRotation(w.Rotation.Degrees),
 			id.NewID(id.IDWithUUID[library.WidgetType](w.TypeID)), w.Labels, bindings))
 	}
 	return scene.ReconstituteScene(id.NewID(id.IDWithUUID[scene.Scene](sc.ID)), projectID, name, size,
 		scene.NewBackgroundHTML(sc.BackgroundHTML), widgets), nil
-}
-
-func deviceName(raw string) device.DeviceName {
-	name, _ := device.NewDeviceName(raw)
-	return name
-}
-
-func environmentName(raw string) device.EnvironmentName {
-	name, _ := device.NewEnvironmentName(raw)
-	return name
-}
-
-func sceneNameOf(raw string) scene.WidgetName {
-	name, _ := scene.NewWidgetName(raw)
-	return name
 }

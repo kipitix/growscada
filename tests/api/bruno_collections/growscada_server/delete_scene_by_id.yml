@@ -13,9 +13,8 @@ http:
 
 docs: |
   The delete states the Version of the Draft in `?version=`: a stale one returns
-  `409 Conflict`. A delete that loses a write race (the
-  resource changed between reading and deleting it) is retried against the
-  fresh state; one that loses it 3 times in a row returns `409 Conflict`.
+  `409 Conflict`, its Problem carrying the Draft's current Version in
+  `draft.version` (ADR 0016).
 
 runtime:
   assertions:

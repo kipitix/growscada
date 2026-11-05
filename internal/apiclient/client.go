@@ -385,9 +385,9 @@ func (p *ProjectClient) DraftState(ctx context.Context) (apiv0.DraftStateRespons
 	return resp, err
 }
 
-// Discard starts resetting the library's Draft to its latest release and
-// returns the library, marked as being discarded. The error matches
-// ErrConflict if it was never released or a Discard is already under way.
+// Discard resets the library's Draft to its latest release and returns the
+// library. The error matches ErrConflict if it was never released or a Discard
+// is already under way.
 func (l *LibraryClient) Discard(ctx context.Context) (apiv0.LibraryResponse, error) {
 	var resp apiv0.LibraryResponse
 	err := l.do(ctx, http.MethodPost, "/discard", nil, http.StatusAccepted, &resp)

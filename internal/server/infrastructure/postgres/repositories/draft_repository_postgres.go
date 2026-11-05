@@ -312,7 +312,7 @@ func gateDraft(ctx context.Context, tx *sql.Tx, row *draftRow, scope editlock.Sc
 	if pass || err != nil {
 		return err
 	}
-	state := stateOfDraftRow(row, scope)
+	state := stateOfDraftRow(row)
 	if !state.Held || state.Holder.Key() != key {
 		return editlock.NotHeldError(state)
 	}
@@ -323,7 +323,7 @@ func gateDraft(ctx context.Context, tx *sql.Tx, row *draftRow, scope editlock.Sc
 	return nil
 }
 
-func stateOfDraftRow(row *draftRow, scope editlock.Scope) editlock.Snapshot {
+func stateOfDraftRow(row *draftRow) editlock.Snapshot {
 	state := editlock.Snapshot{Held: row.holderKey.Valid, Since: row.heldSince.Time, LastSeen: row.lastSeen.Time, Version: row.lockVersion}
 	if !state.Held {
 		return state
@@ -337,7 +337,6 @@ func stateOfDraftRow(row *draftRow, scope editlock.Scope) editlock.Snapshot {
 		return state
 	}
 	state.Holder = holder
-	_ = scope
 	return state
 }
 

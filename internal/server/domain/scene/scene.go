@@ -45,8 +45,8 @@ type Scene interface {
 	// AddWidget places a new widget of WidgetType wt, as a Library Release the
 	// scene's Project pins holds it (ADR 0007), on the scene and records
 	// a WidgetCreatedEvent.
-	// Returns ErrSceneConflict if expected is not the scene's Version,
-	// ErrWidgetAlreadyExists if the scene already holds a widget with its ID,
+	// Returns ErrWidgetAlreadyExists if the scene already holds a widget with
+	// its ID,
 	// ErrWidgetTypeMismatch if wt is not the widget's type, and for a
 	// PortBinding that is not valid (see checkWidgetType)
 	// ErrPortNotDeclared, ErrBoundTagNotFound or ErrPortTypeMismatch.

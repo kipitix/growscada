@@ -3,7 +3,6 @@ package repositories
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -232,6 +231,3 @@ func checkPinned(ctx context.Context, q rowQuerier, projectID id.ID[project.Proj
 	}
 	return nil
 }
-
-// errUnused keeps errors imported for the writes of this file's former Save.
-var _ = errors.Is
