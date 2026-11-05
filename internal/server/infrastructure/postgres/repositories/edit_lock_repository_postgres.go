@@ -209,14 +209,6 @@ func scopeArgs(scope editlock.Scope) []any {
 	return []any{scope.ProjectID().UUID()}
 }
 
-func scopeProject(scope editlock.Scope) *id.ID[project.Project] {
-	if !scope.IsProject() {
-		return nil
-	}
-	projectID := scope.ProjectID()
-	return &projectID
-}
-
 func nullableLibrary(scope editlock.Scope) any {
 	if !scope.IsLibrary() {
 		return nil

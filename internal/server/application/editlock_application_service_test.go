@@ -36,11 +36,6 @@ func clientContext(key editlock.Key) context.Context {
 	return editlock.WithClient(context.Background(), key)
 }
 
-func newHolderKey(name string) editlock.Key {
-	_ = name
-	return editlock.NewKey()
-}
-
 func TestEditLockService_CheckOutAndCheckIn(t *testing.T) {
 	cleanEditLocksApp(t)
 	service := editLockServiceOver()

@@ -92,6 +92,9 @@ func (p *Project) renderSceneTabs() app.UI {
 							p.selectScene(ctx, sc.ID)
 						}, app.EventScope(scope)).
 						OnDblClick(func(ctx app.Context, e app.Event) {
+							if p.refuseReadOnly(ctx) {
+								return
+							}
 							p.startEditingScene(sc.ID, sc.Name)
 						}, app.EventScope(scope)),
 					app.Span().

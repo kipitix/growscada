@@ -9,7 +9,6 @@ import (
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
-	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
 	"github.com/kipitix/growscada/internal/server/servertest"
 )
 
@@ -244,5 +243,3 @@ func TestEditLockEvent_AppliesTheStateWithoutAReread(t *testing.T) {
 func lockResponse(state apiv0.EditLockResponse) *apiv0.EditLockResponse {
 	return &state
 }
-
-var _ = eventlog.EventProjectResync

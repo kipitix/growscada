@@ -246,10 +246,6 @@ func (p *Project) renderEditLockBar() app.UI {
 						p.lockNameInput = ctx.JSSrc().Get("value").String()
 					}),
 				p.lockButton("OK", "Check the Draft out", func(ctx app.Context) {
-					if p.takeOverDialog {
-						p.doTakeOver(ctx)
-						return
-					}
 					p.confirmLockName(ctx)
 				}),
 				p.lockButton("Cancel", "Cancel", func(ctx app.Context) {
@@ -298,9 +294,6 @@ func (p *Project) renderEditLockBar() app.UI {
 			Attr("data-read-only", "true").
 			Style("font-size", "11px").Style("color", "var(--text-muted)").
 			Text(p.readOnlyReason()))
-	}
-	if p.takeOverDialog {
-		body = append(body, p.renderTakeOverDialog())
 	}
 	return app.Div().
 		Attr("data-edit-lock-bar", "true").
