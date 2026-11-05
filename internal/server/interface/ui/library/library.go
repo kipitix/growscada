@@ -51,6 +51,18 @@ type Library struct {
 	newPortName string
 	newPortDesc string
 	newPortType string
+	// ── EditLock of the Draft (ADR 0015) ───────────────────────────────────
+	// editLock is the state of the selected library's lock, read on mount,
+	// on a resync and on every edit_lock_* of it; tabKey is the key this tab
+	// edits under, lockName the name the user declared once.
+	editLock       apiv0.EditLockResponse
+	lockLoaded     bool
+	tabKey         uuid.UUID
+	lockName       string
+	lockNameInput  string
+	askingName     bool
+	takeOverDialog bool
+	checkingOut    bool
 }
 
 // selectedIDKey is the LocalStorage key of the selected WidgetType,
@@ -69,9 +81,12 @@ func (l *Library) OnMount(ctx app.Context) {
 	ctx.ObserveState("theme", &l.ThemeMode)
 	l.selectedID = uiutil.LoadID(ctx, selectedIDKey)
 	l.libraryID = uiutil.LoadID(ctx, libraryIDKey)
+	l.tabKey = tabKeyOf(l.client)
+	ctx.LocalStorage().Get(editLockNameKey, &l.lockName)
 	l.loadLibraries(ctx)
 	l.loadList(ctx)
 	l.loadReleases(ctx)
+	l.loadEditLock(ctx)
 	l.handleServerEvents(ctx)
 }
 
@@ -134,9 +149,10 @@ func (l *Library) discarding() bool {
 }
 
 // readOnly reports whether the WidgetTypes shown cannot be edited: those of a
-// release, or of a Draft being discarded.
+// release, of a Draft being discarded, or of a Draft this tab does not hold
+// the EditLock of (ADR 0015).
 func (l *Library) readOnly() bool {
-	return l.viewing != 0 || l.discarding()
+	return l.viewing != 0 || l.discarding() || l.lockReadOnly()
 }
 
 // shownTypes returns the WidgetTypes shown: those of the release viewed, or
@@ -163,20 +179,27 @@ func (l *Library) shownTypes() []apiv0.WidgetTypeResponse {
 }
 
 // selectLibrary shows the library id's Draft; its WidgetTypes and releases
-// are loaded.
+// are loaded. The Draft left is given back first (ADR 0015): a tab edits one
+// Draft at a time.
 func (l *Library) selectLibrary(ctx app.Context, id uuid.UUID) {
 	if id == l.libraryID {
 		return
+	}
+	if l.lockMine() {
+		l.releaseEditLock(l.libraryID)
 	}
 	l.libraryID = id
 	l.viewing = 0
 	l.widgetTypes, l.releases = nil, nil
 	l.versions.Forget()
 	l.clearSelection()
+	l.editLock, l.lockLoaded = apiv0.EditLockResponse{}, false
+	l.lockNameInput, l.askingName, l.takeOverDialog, l.checkingOut = "", false, false, false
 	uiutil.StoreID(ctx, libraryIDKey, id)
 	uiutil.StoreID(ctx, selectedIDKey, uuid.Nil)
 	l.loadList(ctx)
 	l.loadReleases(ctx)
+	l.loadEditLock(ctx)
 }
 
 // view shows release n read-only (0: back to the Draft).

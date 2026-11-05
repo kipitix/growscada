@@ -47,14 +47,15 @@ func (l *Library) renderLibrariesColumn() app.UI {
 		Style("min-height", "0").
 		Body(
 			app.H3().Style("margin", "0 0 8px 0").Text("Libraries"),
+			l.renderEditLockBar(),
 			app.Div().
 				Style("display", "flex").
 				Style("gap", "4px").
 				Style("margin-bottom", "4px").
 				Body(
-					smallButton("Create", true, "accent", l.createLibrary),
-					smallButton("Rename", l.libraryID != uuid.Nil, "", l.renameLibrary),
-					smallButton("Delete", l.libraryID != uuid.Nil, "error", l.deleteLibrary),
+					smallButton("Create", true, "accent", "Create a library", l.createLibrary),
+					smallButton("Rename", l.libraryID != uuid.Nil, "", "Rename the selected library", l.renameLibrary),
+					smallButton("Delete", l.libraryID != uuid.Nil, "error", "Delete the selected library with its Draft and releases", l.deleteLibrary),
 				),
 			app.Div().
 				Style("flex", "0 1 auto").
@@ -84,7 +85,12 @@ func (l *Library) renderLibraryStatus() app.UI {
 	default:
 		status = "Release " + itoa(lib.LatestRelease) + " · up to date"
 	}
-	editable := lib.DiscardingTo == 0
+	editable := lib.DiscardingTo == 0 && l.lockMine()
+	releaseHint := "Release the Draft as the next Library Release"
+	discardHint := "Reset the Draft to its latest release"
+	if !l.lockMine() {
+		releaseHint, discardHint = readOnlyTitle(releaseHint), readOnlyTitle(discardHint)
+	}
 	return app.Div().
 		Style("margin-top", "8px").
 		Style("padding-top", "8px").
@@ -100,8 +106,8 @@ func (l *Library) renderLibraryStatus() app.UI {
 				Style("display", "flex").
 				Style("gap", "4px").
 				Body(
-					smallButton("Release", editable && lib.HasUnreleasedChanges, "accent", l.release),
-					smallButton("Discard", editable && lib.LatestRelease > 0 && lib.HasUnreleasedChanges, "error", l.discard),
+					smallButton("Release", editable && lib.HasUnreleasedChanges, "accent", releaseHint, l.release),
+					smallButton("Discard", editable && lib.LatestRelease > 0 && lib.HasUnreleasedChanges, "error", discardHint, l.discard),
 				),
 		)
 }
@@ -151,8 +157,8 @@ func (l *Library) renderHistory() app.UI {
 }
 
 // smallButton renders a button of the columns; kind "accent", "error" or ""
-// picks its colours.
-func smallButton(text string, enabled bool, kind string, onClick func()) app.UI {
+// picks its colours, title is its hover text.
+func smallButton(text string, enabled bool, kind, title string, onClick func()) app.UI {
 	border, bg, fg := "var(--border-input)", "var(--bg-hover)", "var(--text)"
 	switch kind {
 	case "accent":
@@ -161,6 +167,7 @@ func smallButton(text string, enabled bool, kind string, onClick func()) app.UI 
 		border, bg, fg = "var(--error-border)", "var(--error-bg)", "var(--error)"
 	}
 	b := app.Button().
+		Title(title).
 		Style("flex", "1").
 		Style("padding", "4px 0").
 		Style("font-size", "13px").

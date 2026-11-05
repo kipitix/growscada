@@ -36,12 +36,17 @@ func (l *Library) listTitle() string {
 }
 
 func (l *Library) renderListButtons() app.UI {
-	if l.readOnly() {
-		return app.Div()
+	editable := !l.readOnly()
+	title := func(title string) string {
+		if editable {
+			return title
+		}
+		return readOnlyTitle(title)
 	}
-	deleteDisabled := l.selectedID == uuid.Nil
+	deleteDisabled := !editable || l.selectedID == uuid.Nil
 
 	deleteBtn := app.Button().
+		Title(title("Delete the selected WidgetType from the Draft")).
 		Style("flex", "1").
 		Style("padding", "4px 0").
 		Style("font-size", "13px").
@@ -64,26 +69,32 @@ func (l *Library) renderListButtons() app.UI {
 			Disabled(true)
 	}
 
+	createBtn := app.Button().
+		Title(title("Create a WidgetType in the Draft")).
+		Style("flex", "1").
+		Style("padding", "4px 0").
+		Style("font-size", "13px").
+		Style("cursor", "pointer").
+		Style("border", "1px solid var(--accent-border)").
+		Style("border-radius", "4px").
+		Style("background", "var(--accent-bg)").
+		Style("color", "var(--accent)").
+		Text("Create").
+		OnClick(func(ctx app.Context, e app.Event) {
+			l.createItem(ctx)
+		})
+	if !editable {
+		createBtn = createBtn.
+			Style("opacity", "0.4").
+			Style("cursor", "default").
+			Disabled(true)
+	}
+
 	return app.Div().
 		Style("display", "flex").
 		Style("gap", "4px").
 		Style("margin-bottom", "4px").
-		Body(
-			app.Button().
-				Style("flex", "1").
-				Style("padding", "4px 0").
-				Style("font-size", "13px").
-				Style("cursor", "pointer").
-				Style("border", "1px solid var(--accent-border)").
-				Style("border-radius", "4px").
-				Style("background", "var(--accent-bg)").
-				Style("color", "var(--accent)").
-				Text("Create").
-				OnClick(func(ctx app.Context, e app.Event) {
-					l.createItem(ctx)
-				}),
-			deleteBtn,
-		)
+		Body(createBtn, deleteBtn)
 }
 
 func (l *Library) renderList() app.UI {
