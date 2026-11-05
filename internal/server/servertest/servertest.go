@@ -251,7 +251,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	deviceTokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(db))
 	runtimeNode := inprocess.NewRuntimeNode(tagStateSvc, deviceTokens, revisions)
 	tagSvc := application.NewTagService(content, runtimeNode)
-	widgetTypes := repositories.NewWidgetTypeRepositories(db, onCommit)
+	widgetTypes := repositories.NewWidgetTypeRepositories(db)
 	runner := outbox.NewPolicyRunner(db, []application.Policy{
 		application.NewLibraryCleanupPolicy(libraries),
 		application.NewProjectCleanupPolicy(projectRepo, drafts, runtimeNode),

@@ -109,7 +109,7 @@ func main() {
 	// Draft, opened per Library (ADR 0007)
 	libraryRepository := repositories.NewLibraryRepositoryPostgres(sqlDB, notifyDispatcher)
 	releaseRepository := repositories.NewLibraryReleaseRepositoryPostgres(sqlDB, notifyDispatcher)
-	widgetTypeRepositories := repositories.NewWidgetTypeRepositories(sqlDB, notifyDispatcher)
+	widgetTypeRepositories := repositories.NewWidgetTypeRepositories(sqlDB)
 	// The repositories of a Project's content (Tags, Scenes, Library Pins) are opened per
 	// Project (ADR 0006) for reads; every write goes through the Drafts
 	// (ADR 0016), whose rows also carry the EditLocks (ADR 0015).

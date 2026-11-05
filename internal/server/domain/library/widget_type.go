@@ -45,13 +45,6 @@ type WidgetType interface {
 		someInputPorts []InputPort,
 	) (WidgetType, error)
 
-	// ResetTo replaces the widget type's definition by the one released, a
-	// copy of the same WidgetType in a Library Release, and records a
-	// WidgetTypeUpdatedEvent: the change of a Discard, which rests on no
-	// Version a client saw. A released copy of another WidgetType is an
-	// error.
-	ResetTo(released ReleasedWidgetType) (WidgetType, error)
-
 	// Delete records a WidgetTypeDeletedEvent; the repository's Delete removes
 	// the widget type. Like removing any aggregate, it expects no Version.
 	Delete() WidgetType
@@ -180,15 +173,6 @@ func (wt *widgetTypeImpl) Update(
 	impl := updated.(*widgetTypeImpl)
 	impl.pending = append(slices.Clone(wt.pending), NewWidgetTypeUpdatedEvent(wt.id, wt.libraryID))
 	return impl, nil
-}
-
-func (wt *widgetTypeImpl) ResetTo(released ReleasedWidgetType) (WidgetType, error) {
-	if released.ID() != wt.id || released.LibraryID() != wt.libraryID {
-		return nil, fmt.Errorf("cannot reset widget type %s of library %s to %s of library %s",
-			wt.id, wt.libraryID, released.ID(), released.LibraryID())
-	}
-	return wt.Update(released.Name(), released.HtmlTemplate(), released.Script(),
-		released.ScriptLanguage(), released.DefaultSize(), released.InputPorts())
 }
 
 func (wt *widgetTypeImpl) Delete() WidgetType {

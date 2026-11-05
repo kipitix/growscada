@@ -33,7 +33,7 @@ var ErrRaceLost = errors.New("write race lost on every attempt")
 
 // ErrNothingToDeploy matches (errors.Is) a Deploy refused because the Draft is
 // the Revision the Project runs unchanged (task 35, Q9), as
-// library.ErrDraftChanged refuses an unchanged Release.
+// library.ErrNothingToRelease refuses an unchanged Release.
 var ErrNothingToDeploy = errors.New("nothing to deploy")
 
 // ErrNoRevisionToDiscard matches (errors.Is) a Discard refused because the

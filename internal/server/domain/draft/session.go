@@ -639,21 +639,9 @@ func (s *Session) Replace(ctx context.Context, content Content) error {
 	return nil
 }
 
-// Purge removes the whole content of the Draft: the cleanup of a deleted
-// Project (ADR 0006) or of a deleted Library, with the events the removal
-// records.
+// Purge removes the whole content of the Draft (the cleanup of a deleted
+// Project, ADR 0006), with the events the removal records.
 func (s *Session) Purge(ctx context.Context) error {
-	if s.draft.Scope().IsLibrary() {
-		stored, err := s.loader.WidgetTypes(ctx)
-		if err != nil {
-			return err
-		}
-		for _, wt := range stored {
-			s.recordBefore(SnapshotOfWidgetType(wt))
-			s.recordEvents(wt.Delete().PendingEvents()...)
-		}
-		return nil
-	}
 	scenes, err := s.loader.Scenes(ctx)
 	if err != nil {
 		return err

@@ -15,8 +15,8 @@ import (
 )
 
 // The gate of a Library's Draft (ADR 0015): the WidgetTypes of its Draft, a
-// Release and the start of a Discard are refused to a client that does not
-// hold the Draft's EditLock, and made by the one that does.
+// Release and a Discard are refused to a client that does not hold the Draft's
+// EditLock, and made by the one that does.
 
 func TestGatedLibraryWrite_NoClient_IsRefused(t *testing.T) {
 	cleanEditLocks(t)
@@ -105,6 +105,40 @@ func TestGatedLibraryRelease_NeedsTheLock(t *testing.T) {
 	holder := editlock.WithClient(context.Background(), lock.Holder().Key())
 	if _, err := repositories.NewLibraryReleaseRepositoryPostgres(testDB).Save(holder, release, versionCommitted(t, repo.libraryID)); err != nil {
 		t.Errorf("the holder's release: %v", err)
+	}
+}
+
+// TestGatedLibraryDiscard_NeedsTheLock: a Discard is one transaction over the
+// Draft (Replace), so its gate refuses a client that does not hold the lock as
+// the writes do (ADR 0015, ADR 0016).
+func TestGatedLibraryDiscard_NeedsTheLock(t *testing.T) {
+	cleanEditLocks(t)
+	repo := newWidgetTypeRepo(t)
+	mustStoreWidgetType(t, makeWidgetType(t, "type", nil, repo), repo)
+	release := mustRelease(t, repo.libraryID)
+	scope := editlock.LibraryScope(repo.libraryID)
+	discard := func(ctx context.Context) error {
+		_, err := testDrafts().Replace(ctx, scope, func(session *draft.Session) error {
+			return session.ReplaceWidgetTypes(ctx, release)
+		})
+		return err
+	}
+
+	if err := discard(context.Background()); !errors.Is(err, editlock.ErrNoClient) {
+		t.Errorf("discard without a client: %v, want ErrNoClient", err)
+	}
+	ctx := editlock.WithClient(context.Background(), editlock.NewKey())
+	if err := discard(ctx); !errors.Is(err, editlock.ErrEditLockNotHeld) {
+		t.Errorf("discard of a free Draft: %v, want ErrEditLockNotHeld", err)
+	}
+
+	lock, err := editLockRepo().Create(editlock.System(context.Background()), createHeldLockOf(t, scope))
+	if err != nil {
+		t.Fatalf("hold the lock: %v", err)
+	}
+	holder := editlock.WithClient(context.Background(), lock.Holder().Key())
+	if err := discard(holder); err != nil {
+		t.Errorf("the holder's discard: %v", err)
 	}
 }
 

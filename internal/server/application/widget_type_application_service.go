@@ -85,7 +85,7 @@ func (s widgetTypeServiceImpl) FindWidgetTypeByID(ctx context.Context, rawLibrar
 }
 
 func (s widgetTypeServiceImpl) CreateWidgetType(ctx context.Context, rawLibraryID uuid.UUID, rawVersion int, input appdto.WidgetTypeInput) (appdto.WidgetType, error) {
-	libraryID, _, err := s.draft(ctx, rawLibraryID)
+	libraryID, repo, err := s.draft(ctx, rawLibraryID)
 	if err != nil {
 		return appdto.WidgetType{}, err
 	}
@@ -97,7 +97,7 @@ func (s widgetTypeServiceImpl) CreateWidgetType(ctx context.Context, rawLibraryI
 	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("cannot create widget type: %w", invalidInput(err))
 	}
-	newID := id.NewID[library.WidgetType]()
+	newID := repo.NextID()
 	newWt, err := library.CreateWidgetType(newID, libraryID, def.name, def.html, def.script, def.lang, def.defaultSize, def.inputPorts)
 	if err != nil {
 		return appdto.WidgetType{}, fmt.Errorf("cannot create widget type: %w", invalidInput(err))

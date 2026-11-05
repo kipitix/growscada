@@ -32,7 +32,7 @@ var _ library.WidgetTypeRepositories = (*widgetTypeRepositories)(nil)
 
 // NewWidgetTypeRepositories returns the WidgetTypeRepositories over the
 // database.
-func NewWidgetTypeRepositories(aDb *sql.DB, _ ...Option) library.WidgetTypeRepositories {
+func NewWidgetTypeRepositories(aDb *sql.DB) library.WidgetTypeRepositories {
 	return &widgetTypeRepositories{db: aDb}
 }
 

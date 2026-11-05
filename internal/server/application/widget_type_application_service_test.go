@@ -32,7 +32,7 @@ func newWidgetTypeService() application.WidgetTypeService {
 
 func newWidgetTypeServiceWithBus(t *testing.T) (application.WidgetTypeService, eventbus.EventBus) {
 	bus, onCommit := deliveredOnCommit(t)
-	return application.NewWidgetTypeService(newLibraryContent(onCommit), repositories.NewWidgetTypeRepositories(testDB, onCommit)), bus
+	return application.NewWidgetTypeService(newLibraryContent(onCommit), repositories.NewWidgetTypeRepositories(testDB)), bus
 }
 
 var testCreateWidgetTypeInput = appdto.WidgetTypeInput{

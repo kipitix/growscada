@@ -74,7 +74,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 	libraries := repositories.NewLibraryRepositoryPostgres(db, opts...)
 	libraryContent := application.NewLibraryContent(libraries, drafts, orgID)
 	editLocks := application.NewEditLockService(content, libraryContent, drafts)
-	widgetTypes := repositories.NewWidgetTypeRepositories(db, opts...)
+	widgetTypes := repositories.NewWidgetTypeRepositories(db)
 	states := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, publish)
 	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(db), publish)
 	deviceTokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(db))

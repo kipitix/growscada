@@ -142,29 +142,9 @@ func TestReleaseStateOf(t *testing.T) {
 	}
 }
 
-func TestWidgetTypeResetTo_RestoresTheReleasedDefinition(t *testing.T) {
+func TestRecreateWidgetType_RestoresTheReleasedDefinition(t *testing.T) {
 	wt := makeCommittedWidgetType(t)
 	released := ReleasedFrom(wt)
-	changed, _ := wt.Update(mustName(t, "other"), wt.HtmlTemplate(), wt.Script(), ScriptLanguageLua, wt.DefaultSize(), nil)
-
-	stored, err := ReconstituteWidgetType(changed.ID(), changed.LibraryID(), changed.Name(), changed.HtmlTemplate(),
-		changed.Script(), changed.ScriptLanguage(), changed.DefaultSize(), changed.InputPorts())
-	if err != nil {
-		t.Fatalf("ReconstituteWidgetType: %v", err)
-	}
-	reset, err := stored.ResetTo(released)
-	if err != nil {
-		t.Fatalf("ResetTo: %v", err)
-	}
-	if !released.Matches(reset) {
-		t.Errorf("ResetTo did not restore the release: %s", reset)
-	}
-	if got := pendingTypes(reset); len(got) != 1 || got[0] != event.EventTypeWidgetTypeUpdated {
-		t.Errorf("expected [widget_type_updated], got %v", got)
-	}
-	if _, err := makeCommittedWidgetType(t).ResetTo(released); err == nil {
-		t.Error("ResetTo the copy of another WidgetType must fail")
-	}
 
 	recreated, err := RecreateWidgetType(released)
 	if err != nil || recreated.ID() != wt.ID() || recreated.LibraryID() != wt.LibraryID() || !released.Matches(recreated) {
