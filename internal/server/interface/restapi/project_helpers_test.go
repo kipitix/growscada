@@ -42,6 +42,7 @@ type testServices struct {
 	deploy       application.DeployService
 	editLocks    application.EditLockService
 	discard      application.DiscardService
+	projectFiles application.ProjectFileService
 	libraries    application.LibraryService
 	widgetTypes  application.WidgetTypeService
 	pins         application.LibraryPinService
@@ -87,7 +88,8 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		revisions:    revisions,
 		deploy:       application.NewDeployService(content, application.NewProjectFileBuilder(content), runtimeNode, editLocks),
 		editLocks:    editLocks,
-		discard:      application.NewDiscardService(content, runtimeNode),
+		discard:      application.NewDiscardService(content, runtimeNode, libraries, releases),
+		projectFiles: application.NewProjectFileService(content, application.NewProjectFileBuilder(content), runtimeNode, libraries, releases),
 		draft:        application.NewDraftService(content),
 		draftChanges: application.NewDraftChangesService(content, libraryContent),
 		libraries:    application.NewLibraryService(libraryContent, libraries, releases, widgetTypes),
@@ -108,7 +110,7 @@ func (s testServices) services() restapi.Services {
 		Libraries: s.libraries, WidgetTypes: s.widgetTypes, LibraryPins: s.pins, Scenes: s.scenes,
 		Devices: s.devices, Environments: s.environments,
 		Draft: s.draft, DraftChanges: s.draftChanges,
-		Deploy: s.deploy, Discard: s.discard, Revisions: s.revisions,
+		Deploy: s.deploy, Discard: s.discard, ProjectFiles: s.projectFiles, Revisions: s.revisions,
 		DeviceConfig: s.deviceConfig, DeviceTokens: s.deviceTokens, EditLocks: s.editLocks,
 	}
 }

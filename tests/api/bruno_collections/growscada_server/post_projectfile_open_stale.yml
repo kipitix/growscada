@@ -1,0 +1,51 @@
+info:
+  name: open a project file with a stale version
+  type: http
+  seq: 139
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/projectfile?version=24
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "schema_version": "0.2",
+        "project_id": "{{PROJECT_ID}}",
+        "tags": [
+          {
+            "id": "6ba7b899-9dad-11d1-80b4-00c04fd430c8",
+            "name": "opened",
+            "type": "integer"
+          }
+        ]
+      }
+  auth: inherit
+
+docs: |
+  The Version the client saw is stale: `409` whose Problem carries the current
+  Draft Version in `draft.version`, the same CAS as every content write
+  (ADR 0016, ADR 0018).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '409'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: application/problem+json
+    - expression: 'res.body.draft.version'
+      operator: eq
+      value: '25'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

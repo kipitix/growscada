@@ -829,6 +829,84 @@ func (p *ProjectClient) Discard(ctx context.Context) (apiv0.DiscardProjectRespon
 	return resp, err
 }
 
+// ProjectFileDownload is a ProjectFile the server sends as an attachment: the
+// document as it is and the name Content-Disposition gives the file (ADR 0018).
+type ProjectFileDownload struct {
+	Data     []byte
+	Filename string
+}
+
+// DraftProjectFile returns the Draft of the Project as a ProjectFile. The
+// error matches ErrConflict when the Draft is not deployable.
+func (p *ProjectClient) DraftProjectFile(ctx context.Context) (ProjectFileDownload, error) {
+	return p.downloadProjectFile(ctx, "/projectfile")
+}
+
+// RevisionProjectFile returns the ProjectFile the Runtime node stored for
+// Revision number. The error matches ErrNotFound if the Project has no such
+// Revision.
+func (p *ProjectClient) RevisionProjectFile(ctx context.Context, number int) (ProjectFileDownload, error) {
+	return p.downloadProjectFile(ctx, revisionPath(number)+"/projectfile")
+}
+
+func (p *ProjectClient) downloadProjectFile(ctx context.Context, path string) (ProjectFileDownload, error) {
+	data, header, err := p.c.doBytes(ctx, http.MethodGet, p.prefix+path, nil, http.StatusOK)
+	if err != nil {
+		return ProjectFileDownload{}, err
+	}
+	return ProjectFileDownload{Data: data, Filename: filenameOf(header)}, nil
+}
+
+// OpenProjectFile replaces the whole Draft with document, stating the Version
+// the client saw: one DraftChange (ADR 0018). The error matches ErrConflict
+// for nothing_to_open and carries the file's problems in its Problem when the
+// document does not validate.
+func (p *ProjectClient) OpenProjectFile(ctx context.Context, version int, document []byte) (apiv0.DraftStateResponse, error) {
+	var resp apiv0.DraftStateResponse
+	err := p.doBytes(ctx, http.MethodPost,
+		"/projectfile?"+apiv0.VersionQuery+"="+strconv.Itoa(version), document, http.StatusOK, &resp)
+	return resp, err
+}
+
+// DeployProjectFile makes document the Project's new Revision without the
+// Draft (ADR 0018). The error matches ErrConflict when the document is the
+// running Revision's.
+func (p *ProjectClient) DeployProjectFile(ctx context.Context, document []byte) (apiv0.DeployResponse, error) {
+	var resp apiv0.DeployResponse
+	err := p.doBytes(ctx, http.MethodPost, "/projectfile/deploy", document, http.StatusCreated, &resp)
+	return resp, err
+}
+
+func (p *ProjectClient) doBytes(ctx context.Context, method, path string, body []byte, wantStatus int, out any) error {
+	data, _, err := p.c.doBytes(ctx, method, p.prefix+path, body, wantStatus)
+	if err != nil {
+		return err
+	}
+	if out == nil {
+		return nil
+	}
+	if err := json.Unmarshal(data, out); err != nil {
+		return fmt.Errorf("%s %s: %w: %w", method, path, ErrBadResponse, err)
+	}
+	return nil
+}
+
+// filenameOf reads the filename of a Content-Disposition attachment, the
+// only form the server sends; an absent or different header has no filename.
+func filenameOf(header http.Header) string {
+	value := header.Get("Content-Disposition")
+	const marker = `filename="`
+	index := strings.Index(value, marker)
+	if index < 0 {
+		return ""
+	}
+	rest := value[index+len(marker):]
+	if end := strings.Index(rest, `"`); end >= 0 {
+		return rest[:end]
+	}
+	return ""
+}
+
 // Revisions returns the Revisions of the Project, newest first, without their
 // documents; a Project without a Revision has an empty list.
 func (p *ProjectClient) Revisions(ctx context.Context) ([]apiv0.RevisionSummaryResponse, error) {
@@ -1005,6 +1083,41 @@ func (c *Client) doOneOf(ctx context.Context, method, path string, body any, out
 	default:
 		return fmt.Errorf("%s %s: %w: %w", method, req.URL, ErrBadResponse, err)
 	}
+}
+
+// doBytes sends a request whose body is already encoded — a project file as
+// it came — and returns the successful response's body and headers. It is the
+// download side of a ProjectFile (ADR 0018); an error is a *StatusError with
+// the Problem Details, its file_issues included.
+func (c *Client) doBytes(ctx context.Context, method, path string, body []byte, wantStatus int) ([]byte, http.Header, error) {
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+apiv0.PathPrefix+path, reader)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%s %s: cannot build request: %v", method, path, err)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set(contract.SchemaVersionHeader, apiv0.SchemaVersion().String())
+	}
+	c.authenticate(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer drainAndClose(resp.Body)
+	c.reportServerVersion(resp)
+	if resp.StatusCode != wantStatus {
+		return nil, nil, newStatusError(req, resp)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp.Header, fmt.Errorf("%s %s: %w: %w", method, req.URL, ErrBadResponse, err)
+	}
+	return data, resp.Header, nil
 }
 
 // drainAndClose reads what is left of body and closes it, so the connection

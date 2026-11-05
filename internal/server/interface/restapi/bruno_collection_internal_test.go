@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	projectv0 "github.com/kipitix/growscada/contract/project/v0"
 	"github.com/kipitix/growscada/internal/brunotest"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 )
@@ -45,6 +46,8 @@ var requestBodies = map[string]any{
 	"POST " + projectPrefix + "/deploy":                                                                                  nil,
 	"POST " + projectPrefix + "/revisions/" + revisionResource.wildcard() + "/rollback":                                  nil,
 	"POST " + projectPrefix + "/discard":                                                                                 nil,
+	"POST " + projectPrefix + "/projectfile":                                                                             projectv0.ProjectFile{},
+	"POST " + projectPrefix + "/projectfile/deploy":                                                                      projectv0.ProjectFile{},
 	"POST " + projectPrefix + apiv0.DraftChangesUndoPath:                                                                 apiv0.DraftChangeCommandRequest{},
 	"POST " + projectPrefix + apiv0.DraftChangesRedoPath:                                                                 apiv0.DraftChangeCommandRequest{},
 	"POST " + libraryPrefix + apiv0.EditLockPath:                                                                         apiv0.CheckOutEditLockRequest{},

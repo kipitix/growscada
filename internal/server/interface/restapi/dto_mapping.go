@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/editlock"
@@ -525,6 +526,19 @@ func newPinImpactResponse(i appdto.PinImpact) apiv0.PinImpactResponse {
 
 // deployedAt formats a time as the contract states it: RFC 3339 in UTC.
 func deployedAt(t time.Time) string { return t.UTC().Format(time.RFC3339) }
+
+// newFileIssues converts the problems of a project file to the contract's
+// list; an empty list stays absent from the Problem.
+func newFileIssues(issues []application.FileIssue) []apiv0.FileIssue {
+	if len(issues) == 0 {
+		return nil
+	}
+	converted := make([]apiv0.FileIssue, len(issues))
+	for i, issue := range issues {
+		converted[i] = apiv0.FileIssue{Path: issue.Path, Message: issue.Message}
+	}
+	return converted
+}
 
 func newRevisionResponse(revision runtimeapp.Revision) apiv0.RevisionResponse {
 	return apiv0.RevisionResponse{

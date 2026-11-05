@@ -10,8 +10,9 @@ import (
 	projectv0 "github.com/kipitix/growscada/contract/project/v0"
 )
 
-// RevisionCause is why a Revision exists: a Deploy made it, or a Rollback
-// copied an earlier one (ADR 0014).
+// RevisionCause is why a Revision exists: a Deploy made it, a Rollback copied
+// an earlier one (ADR 0014), or a project file was deployed as it is
+// (ADR 0018).
 type RevisionCause string
 
 const (
@@ -19,6 +20,9 @@ const (
 	RevisionCauseDeploy RevisionCause = "deploy"
 	// RevisionCauseRollback is a Revision made by copying an earlier one.
 	RevisionCauseRollback RevisionCause = "rollback"
+	// RevisionCauseFile is a Revision made from a project file, without the
+	// Draft (ADR 0018).
+	RevisionCauseFile RevisionCause = "file"
 )
 
 // ErrRevisionNotFound matches (errors.Is) a read or a Rollback of a Revision
@@ -75,13 +79,15 @@ func (r Revision) Summary() RevisionSummary {
 // Project lives.
 type RevisionRepository interface {
 	// CreateRevision numbers and stores the Revision of the Project: one
-	// transaction takes the next number, writes the document with the cause
-	// deploy and brings the Runtime node's copies of the Tag definitions, the
-	// Devices, the Environments and their pairs into line with it. The Tag
-	// states survive it — a new Tag gets its initial one, a Tag whose TagType
-	// changed is reset to it, an unchanged Tag keeps its state — and so do the
-	// Device Tokens. Concurrent Deploys of one Project are serialized.
-	CreateRevision(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile, now time.Time) (Revision, error)
+	// transaction takes the next number, writes the document with cause and
+	// brings the Runtime node's copies of the Tag definitions, the Devices,
+	// the Environments and their pairs into line with it. The cause is deploy
+	// for a Deploy of the Draft and file for a project file (ADR 0018); a
+	// Rollback has its own method. The Tag states survive it — a new Tag gets
+	// its initial one, a Tag whose TagType changed is reset to it, an
+	// unchanged Tag keeps its state — and so do the Device Tokens. Concurrent
+	// Deploys of one Project are serialized.
+	CreateRevision(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile, cause RevisionCause, now time.Time) (Revision, error)
 
 	// Rollback copies the Revision n of the Project into a new one numbered
 	// after the greatest stored: one transaction locks the Project — refusing

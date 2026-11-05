@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
@@ -163,7 +164,7 @@ func TestUpsertDefinitions_ConcurrentWithADeploy_WritesNoCopyOutsideIt(t *testin
 		go func() {
 			defer wg.Done()
 			<-start
-			_, err := revisions.CreateRevision(ctx, projectID.UUID(), document, time.Now())
+			_, err := revisions.CreateRevision(ctx, projectID.UUID(), document, runtimeapp.RevisionCauseDeploy, time.Now())
 			errs <- err
 		}()
 		go func() {

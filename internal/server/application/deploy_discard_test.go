@@ -30,7 +30,8 @@ func newDeployService() (application.DeployService, application.RuntimeNode) {
 // newDiscardService returns the Engineering node's DiscardService over the
 // test database.
 func newDiscardService() application.DiscardService {
-	return application.NewDiscardService(contentOver(newScopes()), newRuntimeNode())
+	return application.NewDiscardService(contentOver(newScopes()), newRuntimeNode(),
+		repositories.NewLibraryRepositoryPostgres(testDB), repositories.NewLibraryReleaseRepositoryPostgres(testDB))
 }
 
 // runDiscard discards the project through the service and runs the policy, as

@@ -1,0 +1,43 @@
+info:
+  name: open the project file the Draft already is
+  type: http
+  seq: 138
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/projectfile?version=25
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "schema_version": "0.2",
+        "project_id": "{{PROJECT_ID}}"
+      }
+  auth: inherit
+
+docs: |
+  The canonical document is the Draft already: `409` with `Nothing to open`,
+  as an unchanged Deploy is `nothing_to_deploy` (ADR 0018).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '409'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: application/problem+json
+    - expression: 'res.body.detail'
+      operator: contains
+      value: Nothing to open
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

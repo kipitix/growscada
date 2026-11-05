@@ -53,7 +53,7 @@ func withEnvironmentDevices(pairs ...projectv0.EnvironmentDevice) func(*projectv
 
 func mustCreateRevision(t *testing.T, repo runtimeapp.RevisionRepository, projectID uuid.UUID, file projectv0.ProjectFile, at time.Time) runtimeapp.Revision {
 	t.Helper()
-	revision, err := repo.CreateRevision(context.Background(), projectID, file, at)
+	revision, err := repo.CreateRevision(context.Background(), projectID, file, runtimeapp.RevisionCauseDeploy, at)
 	if err != nil {
 		t.Fatalf("CreateRevision: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestCreateRevision_NumbersRevisionsAndKeepsTheDocument(t *testing.T) {
 		file := first
 		file.Tags = []projectv0.TagDefinition{{ID: tagID, Name: "speed", Type: "integer"}}
 		at := start.Add(time.Duration(i) * time.Minute)
-		revision, err := repo.CreateRevision(ctx, projectID.UUID(), file, at)
+		revision, err := repo.CreateRevision(ctx, projectID.UUID(), file, runtimeapp.RevisionCauseDeploy, at)
 		if err != nil {
 			t.Fatalf("CreateRevision %d: %v", i, err)
 		}
@@ -140,7 +140,7 @@ func TestCreateRevision_ConcurrentDeploysTakeDistinctNumbers(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			revision, err := repo.CreateRevision(ctx, projectID.UUID(), documentOf(projectID), time.Now())
+			revision, err := repo.CreateRevision(ctx, projectID.UUID(), documentOf(projectID), runtimeapp.RevisionCauseDeploy, time.Now())
 			numbers[i], errs[i] = revision.Number, err
 		}(i)
 	}
@@ -320,7 +320,7 @@ func TestCreateRevision_RefusesAPairWhoseCopiesAreOfAnotherProject(t *testing.T)
 			EnvironmentID: environmentID, DeviceID: deviceID,
 			Params: projectv0.JSONObject(`{"address": "10.9.9.9"}`),
 		}),
-	), time.Now())
+	), runtimeapp.RevisionCauseDeploy, time.Now())
 	if err == nil {
 		t.Fatal("the pair of another project was taken")
 	}
@@ -408,7 +408,7 @@ func TestCreateRevision_RefusesTwoEnvironmentsOfOneName(t *testing.T) {
 			projectv0.Environment{ID: uuid.New(), Name: "bench"},
 			projectv0.Environment{ID: uuid.New(), Name: "bench"},
 		),
-	), time.Now())
+	), runtimeapp.RevisionCauseDeploy, time.Now())
 	if err == nil {
 		t.Fatal("two environments of one name were taken")
 	}
@@ -526,7 +526,7 @@ func TestCreateRevision_RefusesADocumentOfAnotherProject(t *testing.T) {
 	repo := runtimepg.NewRevisionRepositoryPostgres(postgres.DB(t))
 	otherID := id.NewID[project.Project]()
 
-	if _, err := repo.CreateRevision(context.Background(), projectID.UUID(), documentOf(otherID), time.Now()); err == nil {
+	if _, err := repo.CreateRevision(context.Background(), projectID.UUID(), documentOf(otherID), runtimeapp.RevisionCauseDeploy, time.Now()); err == nil {
 		t.Fatal("the document of another project was stored")
 	} else if !strings.Contains(err.Error(), "document of project") {
 		t.Errorf("error %v, want a refusal naming the document's project", err)
@@ -772,7 +772,7 @@ func TestRollback_AndADeploy_Serialize(t *testing.T) {
 	}()
 	go func() {
 		revision, err := repo.CreateRevision(ctx, projectID.UUID(), documentOf(projectID,
-			withTags(projectv0.TagDefinition{ID: uuid.New(), Name: "third", Type: "integer"})), time.Now())
+			withTags(projectv0.TagDefinition{ID: uuid.New(), Name: "third", Type: "integer"})), runtimeapp.RevisionCauseDeploy, time.Now())
 		numbers <- revision.Number
 		errs <- err
 	}()

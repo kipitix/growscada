@@ -1,0 +1,43 @@
+info:
+  name: open a project file as the Draft
+  type: http
+  seq: 137
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/projectfile?version=24
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "schema_version": "0.2",
+        "project_id": "{{PROJECT_ID}}"
+      }
+  auth: inherit
+
+docs: |
+  Opening replaces the whole Draft with the document in one DraftChange: a
+  valid file of an empty project, which differs from the Draft the collection
+  has written. `version` is the Draft's Version the client saw; the answer is
+  the Version after the change (ADR 0018). Undo would restore the previous
+  Draft, which this collection does not need.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.version'
+      operator: eq
+      value: '25'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

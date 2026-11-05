@@ -33,7 +33,15 @@ type RuntimeNode interface {
 	// the number and the time are the Runtime node's to assign. The document
 	// must name the Project it is deployed to.
 	Deploy(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile) (appdto.Revision, error)
+	// DeployFile stores file as the new Revision of the Project with cause
+	// file (ADR 0018): the document needs no Draft and no Library, and the
+	// Revision is published as any Deploy's is. The document must name the
+	// Project it is deployed to.
+	DeployFile(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile) (appdto.Revision, error)
 	// FindCurrentRevision returns the latest Revision of the Project, and
 	// whether it has one at all: a Project is not deployed until it does.
 	FindCurrentRevision(ctx context.Context, projectID uuid.UUID) (appdto.Revision, bool, error)
+	// FindRevision returns the Revision n of the Project with its document:
+	// the Runtime node's stored ProjectFile, as GET …/revisions/{n} serves it.
+	FindRevision(ctx context.Context, projectID uuid.UUID, n int) (appdto.Revision, error)
 }

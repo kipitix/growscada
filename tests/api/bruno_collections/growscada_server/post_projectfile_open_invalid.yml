@@ -1,0 +1,41 @@
+info:
+  name: open an invalid project file
+  type: http
+  seq: 144
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/projectfile?version=25
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {}
+  auth: inherit
+
+docs: |
+  A document without the project's identity does not validate: `400` with
+  every problem as `file_issues`, each naming its path in the document
+  (ADR 0018).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '400'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: application/problem+json
+    - expression: 'res.body.file_issues[0].path'
+      operator: eq
+      value: project_id
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

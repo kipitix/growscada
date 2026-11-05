@@ -22,6 +22,11 @@ type RevisionService interface {
 	// revision_created once the Revision is committed. The document must name
 	// the Project it is deployed to.
 	Deploy(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile) (Revision, error)
+	// DeployFile stores file as the new Revision of the Project with cause
+	// file (ADR 0018): the document is self-contained, so the Runtime node
+	// reads no Draft and no Library. It publishes revision_created as a
+	// Deploy does.
+	DeployFile(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile) (Revision, error)
 	// FindCurrent returns the latest Revision of the Project, and whether the
 	// Project has one at all: a Project is not deployed until it does.
 	FindCurrent(ctx context.Context, projectID uuid.UUID) (Revision, bool, error)
@@ -62,9 +67,21 @@ func (s revisionServiceImpl) Deploy(ctx context.Context, rawProjectID uuid.UUID,
 	if file.ProjectID != rawProjectID {
 		return Revision{}, invalidInput(fmt.Errorf("cannot deploy a document of project %s to project %s", file.ProjectID, rawProjectID))
 	}
-	revision, err := s.revisions.CreateRevision(ctx, rawProjectID, file, s.now())
+	revision, err := s.revisions.CreateRevision(ctx, rawProjectID, file, RevisionCauseDeploy, s.now())
 	if err != nil {
 		return Revision{}, fmt.Errorf("cannot deploy project %s: %w", rawProjectID, err)
+	}
+	s.publish(NewRevisionCreatedEvent(revision))
+	return revision, nil
+}
+
+func (s revisionServiceImpl) DeployFile(ctx context.Context, rawProjectID uuid.UUID, file projectv0.ProjectFile) (Revision, error) {
+	if file.ProjectID != rawProjectID {
+		return Revision{}, invalidInput(fmt.Errorf("cannot deploy a document of project %s to project %s", file.ProjectID, rawProjectID))
+	}
+	revision, err := s.revisions.CreateRevision(ctx, rawProjectID, file, RevisionCauseFile, s.now())
+	if err != nil {
+		return Revision{}, fmt.Errorf("cannot deploy a project file to project %s: %w", rawProjectID, err)
 	}
 	s.publish(NewRevisionCreatedEvent(revision))
 	return revision, nil

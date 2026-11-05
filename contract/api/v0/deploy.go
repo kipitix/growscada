@@ -6,13 +6,15 @@ import (
 	projectv0 "github.com/kipitix/growscada/contract/project/v0"
 )
 
-// RevisionCause is why a Revision exists (task 36, ADR 0014): a Deploy made it
-// from the Draft, or a Rollback copied an earlier one.
+// RevisionCause is why a Revision exists (task 36, ADR 0014; task 39,
+// ADR 0018): a Deploy made it from the Draft, a Rollback copied an earlier
+// one, or a project file was deployed as it is.
 type RevisionCause string
 
 const (
 	RevisionCauseDeploy   RevisionCause = "deploy"
 	RevisionCauseRollback RevisionCause = "rollback"
+	RevisionCauseFile     RevisionCause = "file"
 )
 
 // RevisionResponse is the Revision a Project runs: its number, when it was

@@ -84,6 +84,12 @@ var errorMappings = []errorMapping{
 		"Nothing to deploy: the Draft of the project is the revision it runs"},
 	{application.ErrNoRevisionToDiscard, http.StatusConflict, projectResource,
 		"Nothing to discard: the project runs no revision"},
+	{application.ErrNothingToOpen, http.StatusConflict, projectResource,
+		"Nothing to open: the Draft of the project is the project file"},
+	{application.ErrDraftNotDeployable, http.StatusConflict, projectResource,
+		"The Draft cannot be exported: it is not deployable; repair the Draft first"},
+	{application.ErrRevisionNotDiscardable, http.StatusConflict, revisionResource,
+		"The Revision names Library Releases this server does not have; the Draft is left as it is"},
 	{runtimeapp.ErrNothingToRollback, http.StatusConflict, revisionResource,
 		"Nothing to rollback: the revision holds the document the project runs"},
 	{runtimeapp.ErrRevisionNotFound, http.StatusNotFound, revisionResource, ""},
@@ -145,6 +151,30 @@ func sendError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, editlock.ErrNoClient) {
 		sendProblem(w, NewBadRequest(
 			"The request names no client: send the client key in "+apiv0.ClientHeader, r.URL.Path))
+		return
+	}
+	// A project file that does not validate answers every problem found, not
+	// the first: the 400 carries them as file_issues (ADR 0018).
+	var invalidFile application.ProjectFileError
+	if errors.As(err, &invalidFile) {
+		problem := NewBadRequest(err.Error(), r.URL.Path)
+		problem.FileIssues = newFileIssues(invalidFile.Issues)
+		sendProblem(w, problem)
+		return
+	}
+	// A Draft the builder refuses names its reason in the 409's detail.
+	var notDeployable application.DraftNotDeployableError
+	if errors.As(err, &notDeployable) {
+		sendProblem(w, NewConflict("Draft", notDeployable.Reason, r.URL.Path))
+		return
+	}
+	// A Discard refused for foreign pins names the missing ones as file_issues.
+	var notDiscardable application.RevisionNotDiscardableError
+	if errors.As(err, &notDiscardable) {
+		problem := NewConflict(revisionResource.name,
+			"The Revision names Library Releases this server does not have; the Draft is left as it is", r.URL.Path)
+		problem.FileIssues = newFileIssues(notDiscardable.Issues)
+		sendProblem(w, problem)
 		return
 	}
 	if errors.Is(err, application.ErrInvalidInput) || errors.Is(err, runtimeapp.ErrInvalidInput) {

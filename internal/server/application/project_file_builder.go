@@ -12,7 +12,10 @@ import (
 
 	projectv0 "github.com/kipitix/growscada/contract/project/v0"
 	"github.com/kipitix/growscada/internal/server/domain/device"
+	"github.com/kipitix/growscada/internal/server/domain/draft"
+	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
@@ -80,24 +83,55 @@ func (b projectFileBuilder) Build(ctx context.Context, rawProjectID uuid.UUID) (
 		return projectv0.ProjectFile{}, fmt.Errorf("cannot read the library pins of project %s: %w", projectID, err)
 	}
 
+	return projectFileOfContent(projectID, draft.Content{
+		Tags:               tags,
+		Devices:            devices,
+		Environments:       environments,
+		EnvironmentDevices: pairs,
+		Scenes:             scenes,
+		LibraryPins:        pins,
+	}, func(typeID id.ID[library.WidgetType]) (projectv0.WidgetType, error) {
+		pinned, err := scope.LibraryPins().FindPinnedWidgetType(ctx, typeID)
+		if err != nil {
+			if errors.Is(err, library.ErrWidgetTypeNotFound) {
+				return projectv0.WidgetType{}, err
+			}
+			return projectv0.WidgetType{}, fmt.Errorf("cannot read widget type %s of project %s: %w", typeID, projectID, err)
+		}
+		return newProjectFileWidgetType(pinned), nil
+	})
+}
+
+// widgetTypeResolver returns the copy of a WidgetType a ProjectFile carries:
+// the pinned Release's copy for a Draft, the document's own copy for a file
+// that is validated (task 39, ADR 0018).
+type widgetTypeResolver func(typeID id.ID[library.WidgetType]) (projectv0.WidgetType, error)
+
+// projectFileOfContent assembles the canonical ProjectFile of content, a
+// Draft's content or the content a project file would make: the same build
+// the Deploy sends and the validation compares a file with. A dangling
+// reference — a Tag supplied by a Device outside content, a PortBinding to a
+// Tag outside it, a Widget of a WidgetType the resolver does not hold — is an
+// error: the configuration is not deployable.
+func projectFileOfContent(projectID id.ID[project.Project], content draft.Content, resolve widgetTypeResolver) (projectv0.ProjectFile, error) {
 	file := projectv0.ProjectFile{
 		Header:             projectv0.Header{SchemaVersion: projectv0.SchemaVersion(), ProjectID: projectID.UUID()},
-		Tags:               make([]projectv0.TagDefinition, 0, len(tags)),
-		Devices:            make([]projectv0.Device, 0, len(devices)),
-		Environments:       make([]projectv0.Environment, 0, len(environments)),
-		EnvironmentDevices: make([]projectv0.EnvironmentDevice, 0, len(pairs)),
-		Scenes:             make([]projectv0.Scene, 0, len(scenes)),
+		Tags:               make([]projectv0.TagDefinition, 0, len(content.Tags)),
+		Devices:            make([]projectv0.Device, 0, len(content.Devices)),
+		Environments:       make([]projectv0.Environment, 0, len(content.Environments)),
+		EnvironmentDevices: make([]projectv0.EnvironmentDevice, 0, len(content.EnvironmentDevices)),
+		Scenes:             make([]projectv0.Scene, 0, len(content.Scenes)),
 		WidgetTypes:        []projectv0.WidgetType{},
-		LibraryPins:        make([]projectv0.LibraryPin, 0, len(pins)),
+		LibraryPins:        make([]projectv0.LibraryPin, 0, len(content.LibraryPins)),
 	}
 
-	deviceIDs := make(map[uuid.UUID]struct{}, len(devices))
-	for _, d := range devices {
+	deviceIDs := make(map[uuid.UUID]struct{}, len(content.Devices))
+	for _, d := range content.Devices {
 		deviceIDs[d.ID().UUID()] = struct{}{}
 		file.Devices = append(file.Devices, newProjectFileDevice(d))
 	}
-	tagIDs := make(map[uuid.UUID]struct{}, len(tags))
-	for _, t := range tags {
+	tagIDs := make(map[uuid.UUID]struct{}, len(content.Tags))
+	for _, t := range content.Tags {
 		tagIDs[t.ID().UUID()] = struct{}{}
 		if supplier := t.Supplier(); supplier.HasDevice() {
 			if _, ok := deviceIDs[supplier.DeviceID().UUID()]; !ok {
@@ -108,28 +142,28 @@ func (b projectFileBuilder) Build(ctx context.Context, rawProjectID uuid.UUID) (
 		}
 		file.Tags = append(file.Tags, newProjectFileTag(t))
 	}
-	for _, e := range environments {
+	for _, e := range content.Environments {
 		file.Environments = append(file.Environments, projectv0.Environment{
 			ID: e.ID().UUID(), Name: e.Name().String(), Comment: e.Comment(),
 		})
 	}
-	for _, pair := range pairs {
+	for _, pair := range content.EnvironmentDevices {
 		file.EnvironmentDevices = append(file.EnvironmentDevices, projectv0.EnvironmentDevice{
 			EnvironmentID: pair.EnvironmentID().UUID(),
 			DeviceID:      pair.DeviceID().UUID(),
 			Params:        projectv0.JSONObject(pair.Params().Bytes()),
 		})
 	}
-	for _, pin := range pins {
+	for _, pin := range content.LibraryPins {
 		file.LibraryPins = append(file.LibraryPins, projectv0.LibraryPin{
 			LibraryID: pin.LibraryID().UUID(), Release: pin.Release().Int(),
 		})
 	}
 
-	// usedTypes are the WidgetTypes the Widgets of the Draft are of, taken
-	// from the Releases the Project pins; a copy of one is carried once.
+	// usedTypes are the WidgetTypes the Widgets are of; a copy of one is
+	// carried once.
 	usedTypes := make(map[uuid.UUID]struct{})
-	for _, sc := range scenes {
+	for _, sc := range content.Scenes {
 		fileScene := projectv0.Scene{
 			ID: sc.ID().UUID(), Name: sc.Name().String(),
 			Width: sc.Size().Width(), Height: sc.Size().Height(),
@@ -139,16 +173,16 @@ func (b projectFileBuilder) Build(ctx context.Context, rawProjectID uuid.UUID) (
 		for _, w := range sc.Widgets() {
 			typeID := w.TypeID().UUID()
 			if _, ok := usedTypes[typeID]; !ok {
-				pinned, err := scope.LibraryPins().FindPinnedWidgetType(ctx, w.TypeID())
+				copied, err := resolve(w.TypeID())
 				if err != nil {
 					if errors.Is(err, library.ErrWidgetTypeNotFound) {
 						return projectv0.ProjectFile{}, fmt.Errorf(
 							"cannot build the project file of %s: widget %s of scene %s is of widget type %s, which no pinned release holds",
 							projectID, w.ID(), sc.ID(), w.TypeID())
 					}
-					return projectv0.ProjectFile{}, fmt.Errorf("cannot read widget type %s of project %s: %w", typeID, projectID, err)
+					return projectv0.ProjectFile{}, err
 				}
-				file.WidgetTypes = append(file.WidgetTypes, newProjectFileWidgetType(pinned))
+				file.WidgetTypes = append(file.WidgetTypes, copied)
 				usedTypes[typeID] = struct{}{}
 			}
 			for _, binding := range w.PortBindings() {
@@ -229,13 +263,15 @@ func newProjectFileWidgetType(wt library.ReleasedWidgetType) projectv0.WidgetTyp
 // every carried JSON object canonical (canonicalJSONObject). Marshaling the
 // result is then the same bytes for every Draft of the same configuration.
 func canonicalProjectFile(file projectv0.ProjectFile) projectv0.ProjectFile {
-	file.Tags = slices.Clone(file.Tags)
-	file.Devices = slices.Clone(file.Devices)
-	file.Environments = slices.Clone(file.Environments)
-	file.EnvironmentDevices = slices.Clone(file.EnvironmentDevices)
-	file.Scenes = slices.Clone(file.Scenes)
-	file.WidgetTypes = slices.Clone(file.WidgetTypes)
-	file.LibraryPins = slices.Clone(file.LibraryPins)
+	// A list the document carries as null and one it carries as [] are the
+	// same empty list: the builder always emits [].
+	file.Tags = cloneOrEmpty(file.Tags)
+	file.Devices = cloneOrEmpty(file.Devices)
+	file.Environments = cloneOrEmpty(file.Environments)
+	file.EnvironmentDevices = cloneOrEmpty(file.EnvironmentDevices)
+	file.Scenes = cloneOrEmpty(file.Scenes)
+	file.WidgetTypes = cloneOrEmpty(file.WidgetTypes)
+	file.LibraryPins = cloneOrEmpty(file.LibraryPins)
 
 	slices.SortFunc(file.Tags, func(a, b projectv0.TagDefinition) int { return compareIDs(a.ID, b.ID) })
 	slices.SortFunc(file.Devices, func(a, b projectv0.Device) int { return compareIDs(a.ID, b.ID) })
@@ -257,10 +293,25 @@ func canonicalProjectFile(file projectv0.ProjectFile) projectv0.ProjectFile {
 		file.EnvironmentDevices[i].Params = canonicalJSONObject(file.EnvironmentDevices[i].Params)
 	}
 	for i := range file.Scenes {
-		file.Scenes[i].Widgets = slices.Clone(file.Scenes[i].Widgets)
+		file.Scenes[i].Widgets = cloneOrEmpty(file.Scenes[i].Widgets)
 		slices.SortFunc(file.Scenes[i].Widgets, func(a, b projectv0.Widget) int { return compareIDs(a.ID, b.ID) })
+		for j := range file.Scenes[i].Widgets {
+			file.Scenes[i].Widgets[j].Labels = cloneOrEmpty(file.Scenes[i].Widgets[j].Labels)
+			file.Scenes[i].Widgets[j].PortBindings = cloneOrEmpty(file.Scenes[i].Widgets[j].PortBindings)
+		}
+	}
+	for i := range file.WidgetTypes {
+		file.WidgetTypes[i].InputPorts = cloneOrEmpty(file.WidgetTypes[i].InputPorts)
 	}
 	return file
+}
+
+// cloneOrEmpty returns a copy of list, the empty list for a nil one.
+func cloneOrEmpty[T any](list []T) []T {
+	if list == nil {
+		return []T{}
+	}
+	return slices.Clone(list)
 }
 
 // compareIDs orders two UUIDs.

@@ -1,0 +1,34 @@
+info:
+  name: post deploy for the project file downloads
+  type: http
+  seq: 134
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/deploy
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  auth: inherit
+
+docs: |
+  The project Main gets its first Revision, so its Revisions have a document
+  to download (ADR 0018). The Draft is unchanged by the Deploy and keeps its
+  Version, which the file requests below state.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '1'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

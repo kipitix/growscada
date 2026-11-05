@@ -18,6 +18,7 @@ import (
 type fakeRevisions struct {
 	created        []uuid.UUID
 	documents      []projectv0.ProjectFile
+	causes         []runtimeapp.RevisionCause
 	times          []time.Time
 	createErr      error
 	current        runtimeapp.Revision
@@ -32,14 +33,15 @@ type fakeRevisions struct {
 	rollbackNumber int
 }
 
-func (r *fakeRevisions) CreateRevision(_ context.Context, projectID uuid.UUID, file projectv0.ProjectFile, now time.Time) (runtimeapp.Revision, error) {
+func (r *fakeRevisions) CreateRevision(_ context.Context, projectID uuid.UUID, file projectv0.ProjectFile, cause runtimeapp.RevisionCause, now time.Time) (runtimeapp.Revision, error) {
 	if r.createErr != nil {
 		return runtimeapp.Revision{}, r.createErr
 	}
 	r.created = append(r.created, projectID)
 	r.documents = append(r.documents, file)
+	r.causes = append(r.causes, cause)
 	r.times = append(r.times, now)
-	return runtimeapp.Revision{Number: len(r.created), DeployedAt: now, Cause: runtimeapp.RevisionCauseDeploy, Content: file}, nil
+	return runtimeapp.Revision{Number: len(r.created), DeployedAt: now, Cause: cause, Content: file}, nil
 }
 
 func (r *fakeRevisions) FindCurrent(context.Context, uuid.UUID) (runtimeapp.Revision, bool, error) {
@@ -126,6 +128,48 @@ func TestRevisionService_Deploy_NumbersAndPublishesAfterTheRepositoryCommits(t *
 		if ev.Number() != i+1 {
 			t.Errorf("event %d names revision %d, want %d", i, ev.Number(), i+1)
 		}
+	}
+}
+
+// TestRevisionService_DeployFile_StoresTheCauseFileAndPublishes: a file
+// deploy is a Revision with cause file, and every reader is told of it
+// (ADR 0018).
+func TestRevisionService_DeployFile_StoresTheCauseFileAndPublishes(t *testing.T) {
+	projectID := uuid.New()
+	repo := &fakeRevisions{}
+	var published []event.Event
+	service := runtimeapp.NewRevisionService(repo, recordingPublish(&published))
+	file := projectv0.ProjectFile{Header: projectv0.Header{
+		SchemaVersion: projectv0.SchemaVersion(), ProjectID: projectID,
+	}}
+
+	revision, err := service.DeployFile(context.Background(), projectID, file)
+	if err != nil {
+		t.Fatalf("DeployFile: %v", err)
+	}
+	if revision.Cause != runtimeapp.RevisionCauseFile {
+		t.Errorf("cause %q, want file", revision.Cause)
+	}
+	if len(repo.causes) != 1 || repo.causes[0] != runtimeapp.RevisionCauseFile {
+		t.Errorf("repository causes %v, want one file", repo.causes)
+	}
+	if len(published) != 1 {
+		t.Fatalf("published %d events, want 1", len(published))
+	}
+	if _, ok := published[0].(runtimeapp.RevisionCreatedEvent); !ok {
+		t.Errorf("event is a %T, not a RevisionCreatedEvent", published[0])
+	}
+}
+
+func TestRevisionService_DeployFile_OfAForeignDocument_IsAnError(t *testing.T) {
+	repo := &fakeRevisions{}
+	service := runtimeapp.NewRevisionService(repo, func(event.Event) {})
+	file := projectv0.ProjectFile{Header: projectv0.Header{ProjectID: uuid.New()}}
+	if _, err := service.DeployFile(context.Background(), uuid.New(), file); !errors.Is(err, runtimeapp.ErrInvalidInput) {
+		t.Fatalf("a document of another project: %v, want ErrInvalidInput", err)
+	}
+	if len(repo.created) != 0 {
+		t.Error("the repository was called for a foreign document")
 	}
 }
 

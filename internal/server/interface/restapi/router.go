@@ -32,6 +32,7 @@ type APIRouter struct {
 	draftHandlers        *DraftHandlers
 	draftChangesHandlers *DraftChangesHandlers
 	revisionsHandlers    *RevisionHandlers
+	projectFileHandlers  *ProjectFileHandlers
 	eventsHandlers       *EventsHandlers
 }
 
@@ -75,7 +76,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, "+contract.SchemaVersionHeader+", "+apiv0.ClientHeader)
-		w.Header().Set("Access-Control-Expose-Headers", contract.SchemaVersionHeader)
+		w.Header().Set("Access-Control-Expose-Headers", contract.SchemaVersionHeader+", Content-Disposition")
 		// Lets the browser reuse a preflight instead of repeating it before every
 		// POST/PUT/PATCH/DELETE; browsers cap the value (Chromium at 2 hours).
 		w.Header().Set("Access-Control-Max-Age", corsMaxAge)
@@ -107,6 +108,7 @@ type Services struct {
 	DraftChanges application.DraftChangesService
 	Deploy       application.DeployService
 	Discard      application.DiscardService
+	ProjectFiles application.ProjectFileService
 	Revisions    runtimeapp.RevisionService
 	DeviceConfig runtimeapp.DeviceConfigService
 	DeviceTokens runtimeapp.DeviceTokenService
@@ -136,6 +138,7 @@ func NewRouter(services Services, eventBus eventbus.EventBus, maxSSEClients int)
 		draftChangesHandlers: NewDraftChangesHandler(services.DraftChanges),
 		editLockHandlers:     NewEditLockHandler(services.EditLocks),
 		revisionsHandlers:    NewRevisionHandler(services.Revisions),
+		projectFileHandlers:  NewProjectFileHandler(services.ProjectFiles),
 		eventsHandlers:       NewEventsHandler(eventBus, projectService, maxSSEClients, WithDeviceTokens(services.DeviceTokens), WithEditLocks(services.EditLocks)),
 	}
 	for _, rt := range router.routes() {
@@ -247,6 +250,10 @@ func (r *APIRouter) routes() []route {
 		{"GET " + pp + "/revisions", revisions.GetRevisions},
 		{"GET " + pp + "/revisions/" + revisionResource.wildcard(), revisions.GetRevisionByNumber},
 		{"POST " + pp + "/revisions/" + revisionResource.wildcard() + "/rollback", revisions.PostRollback},
+		{"GET " + pp + "/projectfile", r.projectFileHandlers.GetDraftProjectFile},
+		{"POST " + pp + "/projectfile", r.projectFileHandlers.PostProjectFile},
+		{"POST " + pp + "/projectfile/deploy", r.projectFileHandlers.PostProjectFileDeploy},
+		{"GET " + pp + "/revisions/" + revisionResource.wildcard() + "/projectfile", r.projectFileHandlers.GetRevisionProjectFile},
 		{"GET " + pp + "/tag-states", deploy.GetTagStates},
 		{"GET " + pp + "/deploy/preview", deploy.GetDeployPreview},
 		{"POST " + pp + "/deploy", deploy.PostDeploy},

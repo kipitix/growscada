@@ -530,6 +530,23 @@ func (l *draftLoader) Release(ctx context.Context, libraryID id.ID[library.Libra
 	return l.releases.FindByNumber(ctx, libraryID, number)
 }
 
+// LockLibrary locks the live Library's row FOR SHARE (see draft.Loader): the
+// deletion of the Library waits for the transaction that inserts a pin of it
+// (ADR 0018).
+func (l *draftLoader) LockLibrary(ctx context.Context, libraryID id.ID[library.Library]) error {
+	var live bool
+	err := l.tx.QueryRowContext(ctx,
+		`SELECT deleted_at IS NULL FROM engineering.libraries WHERE id = $1 FOR SHARE`,
+		libraryID.UUID()).Scan(&live)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && !live) {
+		return id.NotFound(library.ErrLibraryNotFound, libraryID)
+	}
+	if err != nil {
+		return fmt.Errorf("cannot lock library %s: %w", libraryID, err)
+	}
+	return nil
+}
+
 func (l *draftLoader) AllDevices(ctx context.Context) ([]device.Device, error) {
 	rows, err := l.tx.QueryContext(ctx,
 		`SELECT id, name, comment, protocol, config FROM engineering.devices WHERE project_id = $1 ORDER BY pk_id`,

@@ -67,6 +67,28 @@ func (n runtimeNode) Deploy(ctx context.Context, projectID uuid.UUID, file proje
 	return toAppdtoRevision(revision), nil
 }
 
+func (n runtimeNode) DeployFile(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile) (appdto.Revision, error) {
+	if n.revisions == nil {
+		return appdto.Revision{}, fmt.Errorf("runtime node serves no revisions")
+	}
+	revision, err := n.revisions.DeployFile(ctx, projectID, file)
+	if err != nil {
+		return appdto.Revision{}, err
+	}
+	return toAppdtoRevision(revision), nil
+}
+
+func (n runtimeNode) FindRevision(ctx context.Context, projectID uuid.UUID, number int) (appdto.Revision, error) {
+	if n.revisions == nil {
+		return appdto.Revision{}, fmt.Errorf("runtime node serves no revisions")
+	}
+	revision, err := n.revisions.Find(ctx, projectID, number)
+	if err != nil {
+		return appdto.Revision{}, err
+	}
+	return toAppdtoRevision(revision), nil
+}
+
 func (n runtimeNode) FindCurrentRevision(ctx context.Context, projectID uuid.UUID) (appdto.Revision, bool, error) {
 	if n.revisions == nil {
 		return appdto.Revision{}, false, fmt.Errorf("runtime node serves no revisions")

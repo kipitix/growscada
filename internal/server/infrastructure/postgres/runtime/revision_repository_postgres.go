@@ -43,7 +43,7 @@ func NewRevisionRepositoryPostgres(aDb *sql.DB) runtimeapp.RevisionRepository {
 // derived copies are brought into line with the document by diff — never by
 // dropping them all first, which would take the Tag states along the cascade
 // and lose the values (task 35, Q5).
-func (r revisionRepositoryPostgres) CreateRevision(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile, now time.Time) (runtimeapp.Revision, error) {
+func (r revisionRepositoryPostgres) CreateRevision(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile, cause runtimeapp.RevisionCause, now time.Time) (runtimeapp.Revision, error) {
 	if file.ProjectID != projectID {
 		return runtimeapp.Revision{}, fmt.Errorf("cannot create revision of project %s from a document of project %s", projectID, file.ProjectID)
 	}
@@ -60,7 +60,7 @@ func (r revisionRepositoryPostgres) CreateRevision(ctx context.Context, projectI
 	if err := prepareRevisionTx(ctx, tx, projectID); err != nil {
 		return runtimeapp.Revision{}, err
 	}
-	number, err := insertRevision(ctx, tx, projectID, config, runtimeapp.RevisionCauseDeploy, nil, now)
+	number, err := insertRevision(ctx, tx, projectID, config, cause, nil, now)
 	if err != nil {
 		return runtimeapp.Revision{}, err
 	}
@@ -73,7 +73,7 @@ func (r revisionRepositoryPostgres) CreateRevision(ctx context.Context, projectI
 	return runtimeapp.Revision{
 		Number:     number,
 		DeployedAt: now.UTC(),
-		Cause:      runtimeapp.RevisionCauseDeploy,
+		Cause:      cause,
 		Content:    file,
 	}, nil
 }

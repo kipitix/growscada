@@ -116,6 +116,91 @@ func TestRequests_StateSchemaVersionOnlyWithBody(t *testing.T) {
 	}
 }
 
+// TestProjectFiles_DownloadOpenAndDeploy: the client downloads a document as
+// bytes with the filename the server gives it, opens one with the Version in
+// the query, and deploys one; a refused file's problems are in the Problem
+// (ADR 0018).
+func TestProjectFiles_DownloadOpenAndDeploy(t *testing.T) {
+	document := []byte(`{"schema_version":"0.2","project_id":"` + testProject.String() + `"}`)
+	var opened, deployed []byte
+	var openQuery, deployPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/projectfile") && !strings.Contains(r.URL.Path, "/revisions/"):
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Content-Disposition", `attachment; filename="Main-draft.json"`)
+			w.Write(document)
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/projectfile"):
+			opened, _ = io.ReadAll(r.Body)
+			openQuery = r.URL.RawQuery
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"version":8}`))
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/projectfile/deploy"):
+			deployed, _ = io.ReadAll(r.Body)
+			deployPath = r.URL.Path
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			w.Write([]byte(`{"number":3,"deployed_at":"2026-11-05T10:00:00Z"}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+	client := apiclient.New(srv.URL, srv.Client())
+	project := client.Project(testProject)
+	ctx := context.Background()
+
+	download, err := project.DraftProjectFile(ctx)
+	if err != nil {
+		t.Fatalf("DraftProjectFile: %v", err)
+	}
+	if !reflect.DeepEqual(download.Data, document) || download.Filename != "Main-draft.json" {
+		t.Errorf("download %+v, want the document and its filename", download)
+	}
+	if _, err := project.RevisionProjectFile(ctx, 2); !errors.Is(err, apiclient.ErrNotFound) {
+		t.Errorf("a missing revision's file: %v, want ErrNotFound", err)
+	}
+
+	state, err := project.OpenProjectFile(ctx, 7, document)
+	if err != nil || state.Version != 8 {
+		t.Fatalf("OpenProjectFile = %+v, %v", state, err)
+	}
+	if openQuery != "version=7" || !reflect.DeepEqual(opened, document) {
+		t.Errorf("open sent %q with %q", opened, openQuery)
+	}
+
+	revision, err := project.DeployProjectFile(ctx, document)
+	if err != nil || revision.Number != 3 {
+		t.Fatalf("DeployProjectFile = %+v, %v", revision, err)
+	}
+	if !reflect.DeepEqual(deployed, document) || deployPath != apiv0.PathPrefix+apiv0.ProjectPath(testProject.String())+"/projectfile/deploy" {
+		t.Errorf("deploy sent %q to %q", deployed, deployPath)
+	}
+}
+
+// TestProjectFile_RefusalCarriesTheFileIssues: a 400 of a project file names
+// every problem in Problem.file_issues.
+func TestProjectFile_RefusalCarriesTheFileIssues(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"type":"t","title":"Bad Request","status":400,"detail":"invalid project file: 1 problem",
+			"file_issues":[{"path":"schema_version","message":"newer"}]}`))
+	}))
+	defer srv.Close()
+	client := apiclient.New(srv.URL, srv.Client())
+
+	_, err := client.Project(testProject).OpenProjectFile(context.Background(), 1, []byte(`{}`))
+	var statusErr *apiclient.StatusError
+	if !errors.As(err, &statusErr) {
+		t.Fatalf("error %v, want a StatusError", err)
+	}
+	want := []apiv0.FileIssue{{Path: "schema_version", Message: "newer"}}
+	if !reflect.DeepEqual(statusErr.Problem.FileIssues, want) {
+		t.Errorf("file_issues %+v, want %+v", statusErr.Problem.FileIssues, want)
+	}
+}
+
 func TestStatusError_CarriesTheProblem(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/problem+json")

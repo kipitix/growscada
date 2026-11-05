@@ -283,7 +283,8 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 		DraftChanges: application.NewDraftChangesService(content, libraryContent),
 		Deploy: application.NewDeployService(
 			content, application.NewProjectFileBuilder(content), runtimeNode, editLocks),
-		Discard:      application.NewDiscardService(content, runtimeNode),
+		Discard:      application.NewDiscardService(content, runtimeNode, libraries, releases),
+		ProjectFiles: application.NewProjectFileService(content, application.NewProjectFileBuilder(content), runtimeNode, libraries, releases),
 		Revisions:    revisions,
 		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(db)),
 		DeviceTokens: deviceTokens,

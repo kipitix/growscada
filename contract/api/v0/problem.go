@@ -25,4 +25,17 @@ type Problem struct {
 	// Draft is, on the 409 of a write of a Draft's content, the state the
 	// Draft is in: the Version a retry of the write states (ADR 0016).
 	Draft *DraftStateResponse `json:"draft,omitempty"`
+	// FileIssues are, on the 400 of a project file that does not validate,
+	// every problem found in it: the path in the document and what is wrong
+	// there (ADR 0018). A Discard refused because the Revision names Library
+	// Releases this server lacks names the missing pins the same way.
+	FileIssues []FileIssue `json:"file_issues,omitempty"`
+}
+
+// FileIssue is one problem of a ProjectFile: where in the document it is and
+// what is wrong there. Path is the document path, e.g. "schema_version" or
+// "scenes[2].widgets[0].type_id".
+type FileIssue struct {
+	Path    string `json:"path"`
+	Message string `json:"message"`
 }

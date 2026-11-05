@@ -38,6 +38,11 @@ type Loader interface {
 	PinnedWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.ReleasedWidgetType, error)
 	// Release returns the Library Release number of the Library.
 	Release(ctx context.Context, libraryID id.ID[library.Library], number library.ReleaseNumber) (library.LibraryRelease, error)
+	// LockLibrary locks the live Library's row FOR SHARE in the Draft's
+	// transaction: a pin of it cannot then be written after its deletion
+	// begins (ADR 0018). A Library that is gone or being deleted is
+	// library.ErrLibraryNotFound.
+	LockLibrary(ctx context.Context, libraryID id.ID[library.Library]) error
 
 	// AllDevices returns every Device of the Draft's Project.
 	AllDevices(ctx context.Context) ([]device.Device, error)

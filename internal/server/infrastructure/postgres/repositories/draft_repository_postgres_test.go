@@ -103,6 +103,99 @@ func TestDraftUpdate_WritesOneDraftChange(t *testing.T) {
 	}
 }
 
+// TestDraftOpen_OneChangeWithOnlyTheDifference: opening a project file writes
+// one DraftChange with the entities that differ, raises the Version, drops the
+// redo tail, and undo restores the previous Draft (task 39, ADR 0018, ADR 0017).
+func TestDraftOpen_OneChangeWithOnlyTheDifference(t *testing.T) {
+	cleanTags(t)
+	cleanScenes(t)
+	cleanEditLocks(t)
+	ctx := editlock.System(context.Background())
+	scope := editlock.ProjectScope(mainProject)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
+	speed := makeTag(t, "speed", repo)
+	pressure := makeTag(t, "pressure", repo)
+
+	mustUpdate(t, mainProject, "Create speed", func(session *draft.Session) error {
+		session.CreateTag(ctx, speed)
+		return nil
+	})
+	mustUpdate(t, mainProject, "Create pressure", func(session *draft.Session) error {
+		session.CreateTag(ctx, pressure)
+		return nil
+	})
+	// Undo the second change: a redo tail the open must drop.
+	if _, err := testDrafts().Undo(ctx, scope, draftVersionOf(t, mainProject)); err != nil {
+		t.Fatalf("undo: %v", err)
+	}
+
+	renamedSpeed, err := tag.NewTagName("speed-2")
+	if err != nil {
+		t.Fatalf("tag name: %v", err)
+	}
+	renamed, err := tag.ReconstituteTag(speed.ID(), mainProject, renamedSpeed, speed.Type(), tag.NoSupplier())
+	if err != nil {
+		t.Fatalf("reconstitute the renamed tag: %v", err)
+	}
+	flowName, err := tag.NewTagName("flow")
+	if err != nil {
+		t.Fatalf("tag name: %v", err)
+	}
+	flow, err := tag.ReconstituteTag(repo.NextID(), mainProject, flowName, tag.TagTypeInteger, tag.NoSupplier())
+	if err != nil {
+		t.Fatalf("reconstitute the new tag: %v", err)
+	}
+
+	before := draftVersionOf(t, mainProject).Number()
+	mustUpdate(t, mainProject, "Open a project file", func(session *draft.Session) error {
+		return session.Open(ctx, draft.Content{Tags: []tag.Tag{renamed, flow}})
+	})
+	if got := draftVersionOf(t, mainProject).Number(); got != before+1 {
+		t.Fatalf("version after open %d, want %d", got, before+1)
+	}
+
+	var (
+		count       int
+		description string
+	)
+	if err := testDB.QueryRowContext(ctx,
+		`SELECT count(*), max(description) FROM engineering.draft_changes dc
+		 JOIN engineering.drafts d ON d.id = dc.draft_id WHERE d.project_id = $1`,
+		mainProject.UUID()).Scan(&count, &description); err != nil {
+		t.Fatalf("read draft changes: %v", err)
+	}
+	if count != 2 || description != "Open a project file" {
+		t.Errorf("draft changes: %d rows, last %q; want the open as one change and the redo tail dropped", count, description)
+	}
+	state, ok, err := testDrafts().Stack(ctx, scope)
+	if err != nil || !ok {
+		t.Fatalf("stack: %+v, %t, %v", state, ok, err)
+	}
+	if state.Undo == nil || state.Undo.Description != "Open a project file" || state.Redo != nil {
+		t.Errorf("stack after open: undo %+v, redo %+v", state.Undo, state.Redo)
+	}
+
+	storedSpeed, err := repo.FindByID(ctx, speed.ID())
+	if err != nil || storedSpeed.Name().String() != "speed-2" {
+		t.Errorf("the renamed tag: %+v, %v", storedSpeed, err)
+	}
+	if _, err := repo.FindByName(ctx, flowName); err != nil {
+		t.Errorf("the added tag: %v", err)
+	}
+
+	// Undo restores the previous Draft: the old name and no new Tag.
+	if _, err := testDrafts().Undo(ctx, scope, draftVersionOf(t, mainProject)); err != nil {
+		t.Fatalf("undo the open: %v", err)
+	}
+	storedSpeed, err = repo.FindByID(ctx, speed.ID())
+	if err != nil || storedSpeed.Name().String() != "speed" {
+		t.Errorf("after undo the tag is %+v, %v; want speed", storedSpeed, err)
+	}
+	if _, err := repo.FindByName(ctx, flowName); !errors.Is(err, tag.ErrTagNotFound) {
+		t.Errorf("the tag of the undone open is still stored: %v", err)
+	}
+}
+
 // TestDraftUpdate_Gate: a write of a Draft is refused to a client that does
 // not hold its EditLock (ADR 0015, ADR 0016), and the holder's write raises
 // last_seen.

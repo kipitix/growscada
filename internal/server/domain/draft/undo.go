@@ -60,21 +60,21 @@ func inverseEvents(scope editlock.Scope, oldSide, newSide []Snapshot) ([]event.E
 			}
 			change = entityUpdated
 		}
-		published, err := snapshotEvent(scope, snapshot, change)
+		published, err := snapshotEvents(scope, snapshot, change)
 		if err != nil {
 			return nil, err
 		}
-		events = append(events, published)
+		events = append(events, published...)
 	}
 	for _, snapshot := range oldSide {
 		if _, ok := findSnapshot(newSide, snapshot); ok {
 			continue
 		}
-		published, err := snapshotEvent(scope, snapshot, entityDeleted)
+		published, err := snapshotEvents(scope, snapshot, entityDeleted)
 		if err != nil {
 			return nil, err
 		}
-		events = append(events, published)
+		events = append(events, published...)
 	}
 	return events, nil
 }
@@ -101,9 +101,11 @@ func findSnapshot(list []Snapshot, wanted Snapshot) (Snapshot, bool) {
 // sameState reports whether two stored states of one entity are the same row.
 func sameState(a, b State) bool { return reflect.DeepEqual(a, b) }
 
-// snapshotEvent is the event publishing snapshot with change: the restored row
-// names the same entity, Scene and WidgetType as the row it replaces.
-func snapshotEvent(scope editlock.Scope, snapshot Snapshot, change entityChange) (event.Event, error) {
+// snapshotEvents is the events publishing snapshot with change: the restored
+// row names the same entity, Scene and WidgetType as the row it replaces. A
+// Tag definition has no update event, so a Tag that changed in place is a
+// deletion and a creation, as the forward write records it.
+func snapshotEvents(scope editlock.Scope, snapshot Snapshot, change entityChange) ([]event.Event, error) {
 	projectID := scope.ProjectID()
 	libraryID := scope.LibraryID()
 	switch state := snapshot.State.(type) {
@@ -111,20 +113,24 @@ func snapshotEvent(scope editlock.Scope, snapshot Snapshot, change entityChange)
 		tagID := id.NewID(id.IDWithUUID[tag.Tag](snapshot.ID))
 		switch change {
 		case entityCreated:
-			return tag.NewTagCreatedEvent(tagID, projectID), nil
+			return []event.Event{tag.NewTagCreatedEvent(tagID, projectID)}, nil
+		case entityUpdated:
+			return []event.Event{
+				tag.NewTagDeletedEvent(tagID, projectID),
+				tag.NewTagCreatedEvent(tagID, projectID),
+			}, nil
 		case entityDeleted:
-			return tag.NewTagDeletedEvent(tagID, projectID), nil
+			return []event.Event{tag.NewTagDeletedEvent(tagID, projectID)}, nil
 		}
-		return nil, fmt.Errorf("a tag %s changed in place: there is no tag update event", snapshot.ID)
 	case SceneState:
 		sceneID := id.NewID(id.IDWithUUID[scene.Scene](snapshot.ID))
 		switch change {
 		case entityCreated:
-			return scene.NewSceneCreatedEvent(sceneID, projectID), nil
+			return []event.Event{scene.NewSceneCreatedEvent(sceneID, projectID)}, nil
 		case entityUpdated:
-			return scene.NewSceneUpdatedEvent(sceneID, projectID), nil
+			return []event.Event{scene.NewSceneUpdatedEvent(sceneID, projectID)}, nil
 		case entityDeleted:
-			return scene.NewSceneDeletedEvent(sceneID, projectID), nil
+			return []event.Event{scene.NewSceneDeletedEvent(sceneID, projectID)}, nil
 		}
 	case WidgetState:
 		widgetID := id.NewID(id.IDWithUUID[scene.Widget](snapshot.ID))
@@ -132,52 +138,52 @@ func snapshotEvent(scope editlock.Scope, snapshot Snapshot, change entityChange)
 		typeID := id.NewID(id.IDWithUUID[library.WidgetType](state.TypeID))
 		switch change {
 		case entityCreated:
-			return scene.NewWidgetCreatedEvent(widgetID, sceneID, projectID, typeID), nil
+			return []event.Event{scene.NewWidgetCreatedEvent(widgetID, sceneID, projectID, typeID)}, nil
 		case entityUpdated:
-			return scene.NewWidgetUpdatedEvent(widgetID, sceneID, projectID, typeID), nil
+			return []event.Event{scene.NewWidgetUpdatedEvent(widgetID, sceneID, projectID, typeID)}, nil
 		case entityDeleted:
-			return scene.NewWidgetDeletedEvent(widgetID, sceneID, projectID), nil
+			return []event.Event{scene.NewWidgetDeletedEvent(widgetID, sceneID, projectID)}, nil
 		}
 	case DeviceState:
 		deviceID := id.NewID(id.IDWithUUID[device.Device](snapshot.ID))
 		switch change {
 		case entityCreated:
-			return device.NewDeviceCreatedEvent(deviceID, projectID), nil
+			return []event.Event{device.NewDeviceCreatedEvent(deviceID, projectID)}, nil
 		case entityUpdated:
-			return device.NewDeviceUpdatedEvent(deviceID, projectID), nil
+			return []event.Event{device.NewDeviceUpdatedEvent(deviceID, projectID)}, nil
 		case entityDeleted:
-			return device.NewDeviceDeletedEvent(deviceID, projectID), nil
+			return []event.Event{device.NewDeviceDeletedEvent(deviceID, projectID)}, nil
 		}
 	case EnvironmentState:
 		environmentID := id.NewID(id.IDWithUUID[device.Environment](snapshot.ID))
 		switch change {
 		case entityCreated:
-			return device.NewEnvironmentCreatedEvent(environmentID, projectID), nil
+			return []event.Event{device.NewEnvironmentCreatedEvent(environmentID, projectID)}, nil
 		case entityUpdated:
-			return device.NewEnvironmentUpdatedEvent(environmentID, projectID), nil
+			return []event.Event{device.NewEnvironmentUpdatedEvent(environmentID, projectID)}, nil
 		case entityDeleted:
-			return device.NewEnvironmentDeletedEvent(environmentID, projectID), nil
+			return []event.Event{device.NewEnvironmentDeletedEvent(environmentID, projectID)}, nil
 		}
 	case EnvironmentDeviceState:
 		environmentID := id.NewID(id.IDWithUUID[device.Environment](state.EnvironmentID))
 		deviceID := id.NewID(id.IDWithUUID[device.Device](state.DeviceID))
 		switch change {
 		case entityCreated:
-			return device.NewEnvironmentDeviceCreatedEvent(environmentID, deviceID, projectID), nil
+			return []event.Event{device.NewEnvironmentDeviceCreatedEvent(environmentID, deviceID, projectID)}, nil
 		case entityUpdated:
-			return device.NewEnvironmentDeviceUpdatedEvent(environmentID, deviceID, projectID), nil
+			return []event.Event{device.NewEnvironmentDeviceUpdatedEvent(environmentID, deviceID, projectID)}, nil
 		case entityDeleted:
-			return device.NewEnvironmentDeviceDeletedEvent(environmentID, deviceID, projectID), nil
+			return []event.Event{device.NewEnvironmentDeviceDeletedEvent(environmentID, deviceID, projectID)}, nil
 		}
 	case LibraryPinState:
 		pinnedID := id.NewID(id.IDWithUUID[library.Library](state.LibraryID))
 		switch change {
 		case entityCreated:
-			return librarypin.NewLibraryPinCreatedEvent(pinnedID, projectID), nil
+			return []event.Event{librarypin.NewLibraryPinCreatedEvent(pinnedID, projectID)}, nil
 		case entityUpdated:
-			return librarypin.NewLibraryPinUpdatedEvent(pinnedID, projectID), nil
+			return []event.Event{librarypin.NewLibraryPinUpdatedEvent(pinnedID, projectID)}, nil
 		case entityDeleted:
-			return librarypin.NewLibraryPinDeletedEvent(pinnedID, projectID), nil
+			return []event.Event{librarypin.NewLibraryPinDeletedEvent(pinnedID, projectID)}, nil
 		}
 	case WidgetTypeState:
 		typeID := id.NewID(id.IDWithUUID[library.WidgetType](snapshot.ID))
@@ -187,11 +193,11 @@ func snapshotEvent(scope editlock.Scope, snapshot Snapshot, change entityChange)
 		}
 		switch change {
 		case entityCreated:
-			return library.NewWidgetTypeCreatedEvent(typeID, ownerID), nil
+			return []event.Event{library.NewWidgetTypeCreatedEvent(typeID, ownerID)}, nil
 		case entityUpdated:
-			return library.NewWidgetTypeUpdatedEvent(typeID, ownerID), nil
+			return []event.Event{library.NewWidgetTypeUpdatedEvent(typeID, ownerID)}, nil
 		case entityDeleted:
-			return library.NewWidgetTypeDeletedEvent(typeID, ownerID), nil
+			return []event.Event{library.NewWidgetTypeDeletedEvent(typeID, ownerID)}, nil
 		}
 	default:
 		return nil, fmt.Errorf("cannot publish a draft entity of unknown state %T", snapshot.State)

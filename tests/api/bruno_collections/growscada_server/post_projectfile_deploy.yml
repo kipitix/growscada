@@ -1,0 +1,41 @@
+info:
+  name: deploy a project file as a Revision
+  type: http
+  seq: 140
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/projectfile/deploy
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "schema_version": "0.2",
+        "project_id": "{{PROJECT_ID}}"
+      }
+  auth: inherit
+
+docs: |
+  A file becomes a new Revision without the Draft and without the EditLock:
+  the Revision's cause is `file`, and its document is the one sent
+  (ADR 0018). The Draft keeps its Version.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '2'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -1,0 +1,47 @@
+info:
+  name: deploy a project file of another server
+  type: http
+  seq: 142
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/projectfile/deploy
+  headers:
+    - name: X-GrowSCADA-Client
+      value: "{{CLIENT_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "schema_version": "0.2",
+        "project_id": "{{PROJECT_ID}}",
+        "library_pins": [
+          {
+            "library_id": "d0000000-0000-4000-8000-0000000000ff",
+            "release": 1
+          }
+        ]
+      }
+  auth: inherit
+
+docs: |
+  A file deployed on a Runtime node that does not have its Libraries: the
+  document is self-contained, so the local Libraries are not checked and the
+  Revision is made (ADR 0018). Its pin is what a Discard cannot write here.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '3'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

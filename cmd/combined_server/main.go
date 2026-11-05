@@ -197,7 +197,9 @@ func main() {
 	// Revision; the Engineering node keeps no copy of what it sent (ADR 0014).
 	projectFileBuilder := application.NewProjectFileBuilder(projectContent)
 	deployService := application.NewDeployService(projectContent, projectFileBuilder, runtimeNode, editLockService)
-	discardService := application.NewDiscardService(projectContent, runtimeNode)
+	discardService := application.NewDiscardService(projectContent, runtimeNode, libraryRepository, releaseRepository)
+	projectFileService := application.NewProjectFileService(projectContent, projectFileBuilder, runtimeNode,
+		libraryRepository, releaseRepository)
 	draftChangesService := application.NewDraftChangesService(projectContent, libraryContent)
 	// Create router
 	apiRouter := restapi.NewRouter(restapi.Services{
@@ -214,6 +216,7 @@ func main() {
 		DraftChanges: draftChangesService,
 		Deploy:       deployService,
 		Discard:      discardService,
+		ProjectFiles: projectFileService,
 		Revisions:    revisionService,
 		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(sqlDB)),
 		DeviceTokens: deviceTokenService,
