@@ -66,3 +66,15 @@ func TestSceneCanvas_ShowsTheSavedBackground(t *testing.T) {
 		t.Errorf("the saved background is not on the canvas: %q", got)
 	}
 }
+
+// The dot grid does not depend on the theme: it is a light core in a dark ring,
+// so one of the two contrasts with any background (task 41).
+func TestCanvasGrid_IsATwoColouredDotIndependentOfTheTheme(t *testing.T) {
+	html := app.HTMLString(renderCanvasGrid())
+	if strings.Contains(html, "--dot-color") {
+		t.Errorf("the grid still follows the theme: %s", html)
+	}
+	if got := strings.Count(html, "radial-gradient"); got != 2 {
+		t.Errorf("the dot has %d gradients, want the core and its ring: %s", got, html)
+	}
+}

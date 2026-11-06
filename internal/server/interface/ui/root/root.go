@@ -377,7 +377,6 @@ func lightVars() string {
 		--input-bg: #ffffff;
 		--widget-bg: rgba(240,240,240,0.85);
 		--widget-sel-bg: rgba(235,245,255,0.92);
-		--dot-color: #cccccc;
 		--toast-bg: rgba(252,252,252,0.98);
 		--toast-shadow: 0 4px 18px rgba(0,0,0,0.12);
 		--toast-text: #222222;
@@ -418,7 +417,6 @@ func darkVars() string {
 		--input-bg: #262626;
 		--widget-bg: rgba(36,36,36,0.92);
 		--widget-sel-bg: rgba(18,38,64,0.95);
-		--dot-color: #282828;
 		--toast-bg: rgba(18,18,18,0.97);
 		--toast-shadow: 0 4px 18px rgba(0,0,0,0.55);
 		--toast-text: #cccccc;

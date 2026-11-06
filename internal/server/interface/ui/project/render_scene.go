@@ -273,12 +273,19 @@ func (p *Project) canvasLayers(backgroundHTML string) []app.UI {
 }
 
 // renderCanvasGrid renders the editor's dot grid over the Scene's background,
-// so that it shows on any background.
+// so that it shows on any background. The dot is two-coloured on purpose (task
+// 41): a light core inside a dark ring, one radial gradient each, so that at
+// least one of the two contrasts with whatever is behind it — the core on a
+// dark background, the ring on a light one. It therefore does not follow the
+// theme, unlike every other colour of the UI.
 func renderCanvasGrid() app.UI {
 	return app.Div().
+		Attr("data-canvas-grid", "true").
 		Style("position", "absolute").
 		Style("inset", "0").
-		Style("background-image", "radial-gradient(circle, var(--dot-color) 1px, transparent 1px)").
+		Style("background-image",
+			"radial-gradient(circle, #f0f0f0 0, #f0f0f0 1px, transparent 1px), "+
+				"radial-gradient(circle, #3c3c3c 0, #3c3c3c 1.75px, transparent 1.75px)").
 		Style("background-size", "24px 24px").
 		Style("pointer-events", "none")
 }
