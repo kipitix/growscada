@@ -165,16 +165,10 @@ func (p *Project) renderSceneCanvas() app.UI {
 			Body(app.Text("Create a scene to get started"))
 	}
 
-	sceneWidth, sceneHeight := 1920, 1080
+	sceneWidth, sceneHeight := p.sceneSize()
 	var backgroundHTML string
 	if sc, ok := p.findScene(p.selectedSceneID); ok {
 		backgroundHTML = sc.BackgroundHTML
-		if sc.Width > 0 {
-			sceneWidth = sc.Width
-		}
-		if sc.Height > 0 {
-			sceneHeight = sc.Height
-		}
 	}
 
 	layers := p.canvasLayers(backgroundHTML)
@@ -194,8 +188,8 @@ func (p *Project) renderSceneCanvas() app.UI {
 
 	canvas := app.Div().
 		Style("position", "relative").
-		Style("width", fmt.Sprintf("%dpx", sceneWidth)).
-		Style("height", fmt.Sprintf("%dpx", sceneHeight)).
+		Style("width", fmt.Sprintf("%.0fpx", sceneWidth)).
+		Style("height", fmt.Sprintf("%.0fpx", sceneHeight)).
 		Style("background-color", "var(--surface)").
 		Style("flex-shrink", "0").
 		Style("cursor", canvasCursor).
@@ -253,8 +247,9 @@ func (p *Project) renderSceneCanvas() app.UI {
 
 // canvasLayers are the canvas's layers bottom to top: the Scene's background
 // (the canvas's own colour when it has none), the editor's dot grid, the
-// Widgets, and the selection rectangle being dragged. The background and the
-// grid let mouse events through to the canvas.
+// Widgets, the alignment guides of a body drag and the selection rectangle
+// being dragged. The background, the grid and the guides let mouse events
+// through to the canvas.
 func (p *Project) canvasLayers(backgroundHTML string) []app.UI {
 	textMuted := uiutil.IframeTextMuted()
 	widgets := make([]app.UI, 0, len(p.widgets))
@@ -266,10 +261,28 @@ func (p *Project) canvasLayers(backgroundHTML string) []app.UI {
 		renderCanvasGrid(),
 		uiutil.SceneWidgetLayer(widgets),
 	}
+	if guides := p.renderDragGuides(); guides != nil {
+		layers = append(layers, guides)
+	}
 	if p.marquee.active {
 		layers = append(layers, p.renderMarquee())
 	}
 	return layers
+}
+
+// sceneSize is the selected Scene's canvas size in pixels: its own, or the
+// canvas's default when the Scene states none.
+func (p *Project) sceneSize() (width, height float64) {
+	width, height = defaultSceneWidth, defaultSceneHeight
+	if sc, ok := p.findScene(p.selectedSceneID); ok {
+		if sc.Width > 0 {
+			width = float64(sc.Width)
+		}
+		if sc.Height > 0 {
+			height = float64(sc.Height)
+		}
+	}
+	return width, height
 }
 
 // renderCanvasGrid renders the editor's dot grid over the Scene's background,
@@ -288,6 +301,47 @@ func renderCanvasGrid() app.UI {
 				"radial-gradient(circle, #3c3c3c 0, #3c3c3c 1.75px, transparent 1.75px)").
 		Style("background-size", "24px 24px").
 		Style("pointer-events", "none")
+}
+
+// renderDragGuides draws the alignment guides of a body drag over the Widgets
+// and under the selection rectangle: one 1 px line per snapped axis, the whole
+// width or height of the canvas (task 41). Nothing is drawn while no axis is
+// snapped, nor while Alt frees the drag.
+func (p *Project) renderDragGuides() app.UI {
+	guides := p.dragGuides
+	if guides.vertical == nil && guides.horizontal == nil {
+		return nil
+	}
+	lines := make([]app.UI, 0, 2)
+	if guides.vertical != nil {
+		lines = append(lines, app.Div().
+			Attr("data-guide", "vertical").
+			Style("position", "absolute").
+			Style("left", fmt.Sprintf("%.1fpx", *guides.vertical)).
+			Style("top", "0").
+			Style("width", "1px").
+			Style("height", "100%").
+			Style("background", "var(--accent)"))
+	}
+	if guides.horizontal != nil {
+		lines = append(lines, app.Div().
+			Attr("data-guide", "horizontal").
+			Style("position", "absolute").
+			Style("top", fmt.Sprintf("%.1fpx", *guides.horizontal)).
+			Style("left", "0").
+			Style("width", "100%").
+			Style("height", "1px").
+			Style("background", "var(--accent)"))
+	}
+	return app.Div().
+		Attr("data-guides", "true").
+		Style("position", "absolute").
+		Style("inset", "0").
+		Style("pointer-events", "none").
+		// Over every Widget (their z-index is the position's z), under the
+		// selection rectangle.
+		Style("z-index", "2147483645").
+		Body(lines...)
 }
 
 // renderWidget renders a single widget element on the canvas using a CSS

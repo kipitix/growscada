@@ -249,6 +249,12 @@ func (p *Project) handleKeyDown(ev app.Value) {
 	ctrl := ev.Get("ctrlKey").Bool() || ev.Get("metaKey").Bool()
 	key := ev.Get("key").String()
 	code := ev.Get("code").String()
+	if key == "Alt" {
+		// Alt of a body drag: it frees the Widgets of snapping and hides the
+		// guides at once, and releasing it snaps them back (task 41).
+		p.compoCtx.Dispatch(func(ctx app.Context) { p.setDragAlt(ctx, true) })
+		return
+	}
 	switch {
 	case ctrl && (strings.EqualFold(key, "a") || code == "KeyA"):
 		ev.Call("preventDefault")
@@ -275,8 +281,13 @@ func (p *Project) handleKeyDown(ev app.Value) {
 	p.compoCtx.Dispatch(func(ctx app.Context) { p.applyKeyAction(ctx, action) })
 }
 
-// handleKeyUp ends an arrow series when its arrow is released.
+// handleKeyUp ends an arrow series when its arrow is released, and gives up Alt
+// of a body drag when Alt is released (task 41).
 func (p *Project) handleKeyUp(ev app.Value) {
+	if ev.Get("key").String() == "Alt" {
+		p.compoCtx.Dispatch(func(ctx app.Context) { p.setDragAlt(ctx, false) })
+		return
+	}
 	if _, _, arrow := arrowStep(ev.Get("key").String(), false); !arrow || !p.arrowActive {
 		return
 	}

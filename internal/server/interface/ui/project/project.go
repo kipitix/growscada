@@ -182,6 +182,14 @@ type Project struct {
 	dragStartPositions map[uuid.UUID]apiv0.PositionResponse
 	dragStartCliX      float64
 	dragStartCliY      float64
+	// dragGuides are the alignment guides of the body drag in flight, and
+	// dragAltHeld is Alt in it: held, the drag is free of snapping (task 41).
+	// dragLastCliX/Y are the pointer's last client position, so pressing or
+	// releasing Alt re-applies the drag without another mousemove.
+	dragGuides   dragGuides
+	dragAltHeld  bool
+	dragLastCliX float64
+	dragLastCliY float64
 
 	// ── Arrow-key move series (task 40) ─────────────────────────────────────
 	// arrowActive is true from the first arrow keydown until the series is
@@ -356,6 +364,7 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.draftVersions.Forget()
 	clear(p.staleScenes)
 	p.widgetsReloadDeferred = false
+	p.dragGuides, p.dragAltHeld = dragGuides{}, false
 	p.restoreSelection(ctx)
 	p.widgetEdit = widgetEditFields{}
 	p.sceneEdit = sceneEditFields{}
@@ -586,23 +595,11 @@ func (p *Project) renderScenesContent() app.UI {
 			}
 
 			// Move widget body: the whole selection rides on the same delta,
-			// each Widget from the position it had when the drag began.
+			// each Widget from the position it had when the drag began. Alt
+			// frees the drag of the alignment guides and their snapping.
 			if p.draggingWidgetID != uuid.Nil {
-				dx := clientX - p.dragStartCliX
-				dy := clientY - p.dragStartCliY
-				for _, id := range p.dragGroup {
-					start, ok := p.dragStartPositions[id]
-					if !ok {
-						continue
-					}
-					i := uiutil.IdxByID(p.widgets, id, uiutil.WidgetID)
-					if i < 0 {
-						continue
-					}
-					p.widgets[i].Position.X = start.X + dx
-					p.widgets[i].Position.Y = start.Y + dy
-				}
-				p.syncMovedEditingFields()
+				p.dragAltHeld = e.Get("altKey").Bool()
+				p.moveWidgetDrag(clientX, clientY)
 			}
 
 			// Move origin anchor; compensate position to keep widget visually stationary.

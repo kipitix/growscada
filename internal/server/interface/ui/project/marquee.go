@@ -3,6 +3,7 @@ package project
 import (
 	"fmt"
 	"math"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
@@ -173,4 +174,133 @@ func widgetBounds(w apiv0.WidgetResponse) bounds {
 		minY, maxY = math.Min(minY, y), math.Max(maxY, y)
 	}
 	return bounds{minX: minX, minY: minY, maxX: maxX, maxY: maxY}
+}
+
+// ── Alignment guides and snapping (task 41) ───────────────────────────────────
+//
+// While a Widget's body is dragged — one Widget or the whole selection — its
+// axis-aligned box is pulled onto the edges and centres of the other Widgets of
+// the Scene and of the Scene itself, within 6 px on each axis independently.
+// One guide line per axis marks the target the box snapped to. The geometry is
+// pure, without DOM, so tables can test it.
+
+// snapThreshold is how far a moving edge may be from a target to be pulled onto
+// it, in canvas pixels.
+const snapThreshold = 6.0
+
+// The Scene sizes assumed when the Scene states none, as the canvas does.
+const (
+	defaultSceneWidth  = 1920.0
+	defaultSceneHeight = 1080.0
+)
+
+// axisTarget is one guide target of an axis: a coordinate and whether it is the
+// Scene's own, which wins a tie with a Widget's.
+type axisTarget struct {
+	pos   float64
+	scene bool
+}
+
+// snapTargets are the guide targets of both axes.
+type snapTargets struct {
+	xs, ys []axisTarget
+}
+
+// dragGuides are the guide lines a snapped body drag draws, one per axis at
+// most; a nil one means that axis is free.
+type dragGuides struct {
+	vertical   *float64
+	horizontal *float64
+}
+
+// snapResult is what a body drag settles on: the delta it applies to the
+// positions the drag started from and the guides to draw.
+type snapResult struct {
+	dx, dy         float64
+	guideX, guideY *float64
+}
+
+// translated returns the box moved by (dx, dy).
+func (b bounds) translated(dx, dy float64) bounds {
+	return bounds{minX: b.minX + dx, minY: b.minY + dy, maxX: b.maxX + dx, maxY: b.maxY + dy}
+}
+
+// unionBounds returns the box that contains both.
+func unionBounds(a, b bounds) bounds {
+	return bounds{
+		minX: math.Min(a.minX, b.minX),
+		minY: math.Min(a.minY, b.minY),
+		maxX: math.Max(a.maxX, b.maxX),
+		maxY: math.Max(a.maxY, b.maxY),
+	}
+}
+
+// boundsTargets are the guide targets of a box: its two edges and its centre.
+func boundsTargets(b bounds) (xs, ys []axisTarget) {
+	return []axisTarget{{pos: b.minX}, {pos: (b.minX + b.maxX) / 2}, {pos: b.maxX}},
+		[]axisTarget{{pos: b.minY}, {pos: (b.minY + b.maxY) / 2}, {pos: b.maxY}}
+}
+
+// sceneSnapTargets are the Scene's own targets: its edges and its centre.
+func sceneSnapTargets(width, height float64) snapTargets {
+	if width <= 0 {
+		width = defaultSceneWidth
+	}
+	if height <= 0 {
+		height = defaultSceneHeight
+	}
+	return snapTargets{
+		xs: []axisTarget{{pos: 0, scene: true}, {pos: width / 2, scene: true}, {pos: width, scene: true}},
+		ys: []axisTarget{{pos: 0, scene: true}, {pos: height / 2, scene: true}, {pos: height, scene: true}},
+	}
+}
+
+// snapTargetsOf collects the targets of the Widgets other than the moving ones
+// and of the Scene.
+func snapTargetsOf(widgets []apiv0.WidgetResponse, moving []uuid.UUID, sceneWidth, sceneHeight float64) snapTargets {
+	targets := sceneSnapTargets(sceneWidth, sceneHeight)
+	for _, w := range widgets {
+		if slices.Contains(moving, w.ID) {
+			continue
+		}
+		xs, ys := boundsTargets(widgetBounds(w))
+		targets.xs = append(targets.xs, xs...)
+		targets.ys = append(targets.ys, ys...)
+	}
+	return targets
+}
+
+// snapMove pulls the box, already moved by (dx, dy), onto the nearest target of
+// each axis. A free axis keeps the delta it was given.
+func snapMove(start bounds, dx, dy float64, targets snapTargets) snapResult {
+	moved := start.translated(dx, dy)
+	adjustX, guideX := snapAxis(moved.minX, (moved.minX+moved.maxX)/2, moved.maxX, targets.xs)
+	adjustY, guideY := snapAxis(moved.minY, (moved.minY+moved.maxY)/2, moved.maxY, targets.ys)
+	return snapResult{dx: dx + adjustX, dy: dy + adjustY, guideX: guideX, guideY: guideY}
+}
+
+// snapAxis picks the nearest target within snapThreshold for the box's two edges
+// and centre, and reports the offset that puts the edge on it and the guide's
+// coordinate. At equal distances the Scene's target wins.
+func snapAxis(min, center, max float64, targets []axisTarget) (float64, *float64) {
+	edges := [3]float64{min, center, max}
+	bestDist := math.Inf(1)
+	bestScene := false
+	var bestDelta float64
+	var best *float64
+	for _, target := range targets {
+		for _, edge := range edges {
+			delta := target.pos - edge
+			dist := math.Abs(delta)
+			if dist > snapThreshold {
+				continue
+			}
+			if dist > bestDist || (dist == bestDist && bestScene) {
+				continue
+			}
+			pos := target.pos
+			bestDist, bestScene, bestDelta, best = dist, target.scene, delta, &pos
+		}
+	}
+	return bestDelta, best
 }

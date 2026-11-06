@@ -273,10 +273,87 @@ func (p *Project) beginWidgetDrag(ctx app.Context, e app.Event, id uuid.UUID) {
 	p.draggingWidgetID = id
 	p.dragStartCliX = e.Get("clientX").Float()
 	p.dragStartCliY = e.Get("clientY").Float()
+	p.dragLastCliX, p.dragLastCliY = p.dragStartCliX, p.dragStartCliY
+	p.dragAltHeld = e.Get("altKey").Bool()
+	p.dragGuides = dragGuides{}
 	if w, ok := p.findWidget(id); ok {
 		p.dragStartGeometry = geometryOf(w)
 	}
 	p.dragDidMove = false
+}
+
+// moveWidgetDrag moves the dragged selection to the pointer: each Widget from
+// the position it had when the drag began, by one common delta. Unless Alt is
+// held, the selection's bounding box — the one Widget's or the group's common
+// one — is snapped to the nearest Widget or Scene target within 6 px on each
+// axis, and the guides of the snapped axes are drawn over the Widgets (task
+// 41). A free axis keeps the raw delta, so positions stay float64.
+func (p *Project) moveWidgetDrag(clientX, clientY float64) {
+	p.dragLastCliX, p.dragLastCliY = clientX, clientY
+	dx, dy := clientX-p.dragStartCliX, clientY-p.dragStartCliY
+	p.dragGuides = dragGuides{}
+	if !p.dragAltHeld {
+		if start, ok := p.dragStartBounds(); ok {
+			width, height := p.sceneSize()
+			snapped := snapMove(start, dx, dy, snapTargetsOf(p.widgets, p.dragGroup, width, height))
+			dx, dy = snapped.dx, snapped.dy
+			p.dragGuides = dragGuides{vertical: snapped.guideX, horizontal: snapped.guideY}
+		}
+	}
+	for _, id := range p.dragGroup {
+		start, ok := p.dragStartPositions[id]
+		if !ok {
+			continue
+		}
+		i := uiutil.IdxByID(p.widgets, id, uiutil.WidgetID)
+		if i < 0 {
+			continue
+		}
+		p.widgets[i].Position.X = start.X + dx
+		p.widgets[i].Position.Y = start.Y + dy
+	}
+	p.syncMovedEditingFields()
+}
+
+// dragStartBounds is the common bounding box of the dragged Widgets where the
+// drag began, so that a group is snapped as one (task 41).
+func (p *Project) dragStartBounds() (bounds, bool) {
+	var box bounds
+	first := true
+	for _, id := range p.dragGroup {
+		w, ok := p.findWidget(id)
+		if !ok {
+			continue
+		}
+		if start, ok := p.dragStartPositions[id]; ok {
+			w.Position = start
+		}
+		b := widgetBounds(w)
+		if first {
+			box, first = b, false
+			continue
+		}
+		box = unionBounds(box, b)
+	}
+	return box, !first
+}
+
+// setDragAlt records Alt of a body drag and re-applies the drag at the pointer's
+// last place: pressing Alt frees the Widgets and hides the guides at once, and
+// releasing it snaps them back, without waiting for the next mousemove (task
+// 41).
+func (p *Project) setDragAlt(ctx app.Context, alt bool) {
+	if p.dragAltHeld == alt {
+		return
+	}
+	p.dragAltHeld = alt
+	if p.draggingWidgetID == uuid.Nil {
+		return
+	}
+	p.moveWidgetDrag(p.dragLastCliX, p.dragLastCliY)
+	if p.mounted {
+		ctx.Update()
+	}
 }
 
 // widgetGeometry is the part of a widget a canvas drag changes.
@@ -310,6 +387,8 @@ func (p *Project) dragChangedWidget(w apiv0.WidgetResponse) bool {
 }
 
 func (p *Project) finalizeAllDrags(ctx app.Context) {
+	// The guides and Alt go with the body drag, whichever drag ends.
+	p.dragGuides, p.dragAltHeld = dragGuides{}, false
 	groupDidMove := false
 	if p.draggingWidgetID != uuid.Nil {
 		id := p.draggingWidgetID
