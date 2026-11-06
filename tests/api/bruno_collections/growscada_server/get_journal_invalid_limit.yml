@@ -1,5 +1,5 @@
 info:
-  name: get journal with an empty page
+  name: get journal with an invalid page size
   type: http
   seq: 54
 

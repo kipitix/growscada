@@ -203,10 +203,22 @@ func (h *EventsHandlers) streamClient(w http.ResponseWriter, r *http.Request) (k
 // writeEvent writes one SSE message within eventWriteTimeout. A writer that
 // cannot take a deadline is written to without one.
 func writeEvent(w http.ResponseWriter, rc *http.ResponseController, payload []byte) error {
+	return writeSSEMessage(w, rc, "", payload)
+}
+
+// writeSSEMessage writes one SSE message within eventWriteTimeout: the id line
+// first when the message has an id (a stream that resumes by position carries
+// one), then the data line and the blank line that ends the message. A writer
+// that cannot take a deadline is written to without one.
+func writeSSEMessage(w http.ResponseWriter, rc *http.ResponseController, messageID string, payload []byte) error {
 	if err := rc.SetWriteDeadline(time.Now().Add(eventWriteTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
 		return err
 	}
-	if _, err := fmt.Fprintf(w, "data: %s\n\n", payload); err != nil {
+	field := "data: "
+	if messageID != "" {
+		field = "id: " + messageID + "\ndata: "
+	}
+	if _, err := fmt.Fprintf(w, "%s%s\n\n", field, payload); err != nil {
 		return err
 	}
 	return rc.Flush()

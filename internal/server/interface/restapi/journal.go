@@ -66,7 +66,7 @@ func (h *JournalHandlers) GetJournal(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	from, ok := journalQueryPosition(w, r, apiv0.JournalQueryFrom, 0)
+	from, _, ok := journalFromParam(w, r)
 	if !ok {
 		return
 	}
@@ -228,37 +228,36 @@ func (h *JournalHandlers) writeJournalEntries(w http.ResponseWriter, entries []r
 		if err != nil {
 			return err
 		}
-		if err := rc.SetWriteDeadline(time.Now().Add(eventWriteTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
-			return err
-		}
-		if _, err := fmt.Fprintf(w, "id: %d\ndata: %s\n\n", entry.Seq, payload); err != nil {
-			return err
-		}
-		if err := rc.Flush(); err != nil {
+		if err := writeSSEMessage(w, rc, strconv.FormatInt(entry.Seq, 10), payload); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// journalQueryPosition reads the position of a Journal read's query
-// parameter: 0 when it is absent. A value that is not a non-negative number is
-// answered with a 400, so the caller returns on ok == false.
-func journalQueryPosition(w http.ResponseWriter, r *http.Request, name string, fallback int64) (int64, bool) {
-	raw := r.URL.Query().Get(name)
+// journalFromParam reads the ?from= parameter of a Journal route: from is the
+// position it names, given whether the request names one at all. A value that
+// is not a non-negative number is answered with a 400, so the caller returns on
+// ok == false.
+func journalFromParam(w http.ResponseWriter, r *http.Request) (from int64, given, ok bool) {
+	raw := r.URL.Query().Get(apiv0.JournalQueryFrom)
 	if raw == "" {
-		return fallback, true
+		return 0, false, true
 	}
-	return parseJournalPosition(w, r, name, raw)
+	position, ok := parseJournalPosition(w, r, apiv0.JournalQueryFrom, raw)
+	return position, true, ok
 }
 
 // journalStreamStart returns where the stream starts: ?from= wins over the
 // Last-Event-ID header; without either the caller reads the Project's current
 // position. A value that is not a non-negative number is a 400.
 func journalStreamStart(w http.ResponseWriter, r *http.Request) (from int64, given, ok bool) {
-	if raw := r.URL.Query().Get(apiv0.JournalQueryFrom); raw != "" {
-		position, ok := parseJournalPosition(w, r, apiv0.JournalQueryFrom, raw)
-		return position, true, ok
+	position, named, ok := journalFromParam(w, r)
+	if !ok {
+		return 0, false, false
+	}
+	if named {
+		return position, true, true
 	}
 	if raw := r.Header.Get(lastEventIDHeader); raw != "" {
 		position, ok := parseJournalPosition(w, r, lastEventIDHeader, raw)

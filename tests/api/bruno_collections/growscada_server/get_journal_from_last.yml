@@ -9,9 +9,9 @@ http:
   auth: inherit
 
 docs: |
-  `from` is exclusive: reading after the last position the previous request
-  saw returns an empty page, not the entry at it (ADR 0019).
-  `JOURNAL_LAST_SEQ` is set by that request from its answer.
+  `from` is exclusive: reading after the last position the Line 2 page held
+  returns an empty page, not the entry at it (ADR 0019).
+  `JOURNAL_LAST_SEQ` is set by `get_journal_line2` from its answer.
 
 runtime:
   assertions:
