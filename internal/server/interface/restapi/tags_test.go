@@ -613,14 +613,16 @@ func patchValue(router servingRouter, tagID uuid.UUID, body any) *httptest.Respo
 }
 
 // TestPatchTagValue_WritesInARow_Return200WithIncreasingSeqs: no version is
-// stated, none is checked; each write takes a seq above the one before.
+// stated, none is checked; each change takes a seq above the one before,
+// while a repeat of the stored value and Quality keeps it and only moves
+// written_at (ADR 0019).
 func TestPatchTagValue_WritesInARow_Return200WithIncreasingSeqs(t *testing.T) {
 	cleanTags(t)
 	created := createTagViaService(t, "temperature", "integer", "10", "bad")
 	router := newRouter()
 
 	last := created.Seq
-	for _, value := range []string{"99", "99", "100"} {
+	for i, value := range []string{"99", "99", "100"} {
 		rec := patchValue(router, created.ID, apiv0.UpdateTagRequest{Value: value, Quality: "good"})
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status: expected 200, got %d\nbody: %s", rec.Code, rec.Body.String())
@@ -629,8 +631,15 @@ func TestPatchTagValue_WritesInARow_Return200WithIncreasingSeqs(t *testing.T) {
 		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 			t.Fatalf("decode response: %v", err)
 		}
-		if resp.Seq <= last {
+		if i == 1 {
+			if resp.Seq != last {
+				t.Errorf("the repeat took seq %d, want the previous %d", resp.Seq, last)
+			}
+		} else if resp.Seq <= last {
 			t.Errorf("seq %d, want above %d", resp.Seq, last)
+		}
+		if resp.WrittenAt == nil {
+			t.Error("no written_at in the answer")
 		}
 		last = resp.Seq
 	}

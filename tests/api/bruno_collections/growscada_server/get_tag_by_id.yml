@@ -23,6 +23,8 @@ runtime:
       value: '"creator"'
     - expression: 'res.body.seq'
       operator: isNumber
+    - expression: 'res.body.written_at'
+      operator: isDefined
 
 settings:
   encodeUrl: true

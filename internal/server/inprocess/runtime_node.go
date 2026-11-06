@@ -51,7 +51,7 @@ func (n runtimeNode) FindTagStates(ctx context.Context, projectID uuid.UUID, tag
 	}
 	states := make([]appdto.TagState, len(found))
 	for i, s := range found {
-		states[i] = appdto.TagState{ID: s.ID, Value: s.Value, Quality: s.Quality, Seq: s.Seq}
+		states[i] = appdto.TagState{ID: s.ID, Value: s.Value, Quality: s.Quality, Seq: s.Seq, WrittenAt: s.WrittenAt}
 	}
 	return states, nil
 }

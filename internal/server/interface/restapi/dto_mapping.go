@@ -31,13 +31,14 @@ func newGetProjectsResponse(list []appdto.Project) apiv0.GetProjectsResponse {
 // newTagResponse converts an app-level Tag DTO to an apiv0.TagResponse DTO.
 func newTagResponse(t appdto.Tag) apiv0.TagResponse {
 	return apiv0.TagResponse{
-		ID:      t.ID,
-		Name:    t.Name,
-		Type:    t.Type,
-		Value:   t.Value,
-		Quality: t.Quality,
-		Version: t.Version,
-		Seq:     t.Seq,
+		ID:        t.ID,
+		Name:      t.Name,
+		Type:      t.Type,
+		Value:     t.Value,
+		Quality:   t.Quality,
+		Version:   t.Version,
+		Seq:       t.Seq,
+		WrittenAt: writtenAt(t.WrittenAt),
 	}
 }
 
@@ -45,13 +46,14 @@ func newTagResponse(t appdto.Tag) apiv0.TagResponse {
 // definition's copy included, to an apiv0.TagResponse DTO.
 func newTagStateResponse(s runtimeapp.TagState) apiv0.TagResponse {
 	return apiv0.TagResponse{
-		ID:      s.ID,
-		Name:    s.Name,
-		Type:    s.Type,
-		Value:   s.Value,
-		Quality: s.Quality,
-		Version: s.Version,
-		Seq:     s.Seq,
+		ID:        s.ID,
+		Name:      s.Name,
+		Type:      s.Type,
+		Value:     s.Value,
+		Quality:   s.Quality,
+		Version:   s.Version,
+		Seq:       s.Seq,
+		WrittenAt: writtenAt(s.WrittenAt),
 	}
 }
 
@@ -71,7 +73,7 @@ func newCreateTagResponse(t appdto.Tag) apiv0.CreateTagResponse {
 
 // newUpdateTagResponse converts the written Tag state to an apiv0.UpdateTagResponse DTO.
 func newUpdateTagResponse(s runtimeapp.TagState) apiv0.UpdateTagResponse {
-	return apiv0.UpdateTagResponse{Seq: s.Seq}
+	return apiv0.UpdateTagResponse{Seq: s.Seq, WrittenAt: writtenAt(s.WrittenAt)}
 }
 
 // newCreateTagInput converts an apiv0.CreateTagRequest DTO to an app-level CreateTagInput DTO.
@@ -539,6 +541,16 @@ func newPinImpactResponse(i appdto.PinImpact) apiv0.PinImpactResponse {
 // deployedAt formats a time as the contract states it: RFC 3339 in UTC.
 func deployedAt(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 
+// writtenAt is when a Tag state was last written, in the RFC 3339 form the
+// API carries; nil (absent) for a state no supplier has written yet.
+func writtenAt(t *time.Time) *string {
+	if t == nil {
+		return nil
+	}
+	formatted := deployedAt(*t)
+	return &formatted
+}
+
 // newFileIssues converts the problems of a project file to the contract's
 // list; an empty list stays absent from the Problem.
 func newFileIssues(issues []application.FileIssue) []apiv0.FileIssue {
@@ -617,7 +629,7 @@ func newGetTagStatesResponse(states []runtimeapp.TagState) apiv0.GetTagStatesRes
 	resp := apiv0.GetTagStatesResponse{TagStates: make(map[string]apiv0.TagStateResponse, len(states))}
 	for _, state := range states {
 		resp.TagStates[state.ID.String()] = apiv0.TagStateResponse{
-			Value: state.Value, Quality: state.Quality, Seq: state.Seq,
+			Value: state.Value, Quality: state.Quality, Seq: state.Seq, WrittenAt: writtenAt(state.WrittenAt),
 		}
 	}
 	return resp

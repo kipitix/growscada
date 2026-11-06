@@ -754,3 +754,87 @@ func TestMigrationLibraries_PutsExistingWidgetTypesIntoMain(t *testing.T) {
 		t.Errorf("down: a widget of a type gone from the Draft must go, %d left (%v)", widgets, err)
 	}
 }
+
+// TestMigrationJournal_KeepsThePositionAboveEveryState: the Journal's
+// sequence continues above every seq already handed out to a Tag state, so a
+// client holding a state of the old numbering does not drop the next change of
+// its Tag as the older one; a state gets its last write moment (NULL for the
+// initial one), and the subscribers' cursors start empty (ADR 0019).
+func TestMigrationJournal_KeepsThePositionAboveEveryState(t *testing.T) {
+	ctx := editlock.System(context.Background())
+	db, dir := migrationDB(t)
+	const main = "b0000000-0000-4000-8000-000000000001"
+	if err := goose.UpToContext(ctx, db, dir, rolesBaseline); err != nil {
+		t.Fatalf("migrate public: %v", err)
+	}
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS(filepath.Join(dir, "..", "runtime")),
+		goose.WithTableName("runtime.goose_db_version"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := provider.UpTo(ctx, 20261105000001); err != nil {
+		t.Fatalf("migrate runtime to the previous version: %v", err)
+	}
+	tagID := uuid.New()
+	if _, err := db.ExecContext(ctx, `INSERT INTO runtime.tags (id, project_id, name, type, version)
+	                                  VALUES ($1, $2, 'speed', 'integer', 1)`, tagID, main); err != nil {
+		t.Fatalf("insert the copy of a tag definition: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO runtime.tag_states (tag_id, value, quality, seq)
+	                                  VALUES ($1, '42', 'good', 42)`, tagID); err != nil {
+		t.Fatalf("insert a tag state: %v", err)
+	}
+
+	if _, err := provider.UpTo(ctx, 20261106000000); err != nil {
+		t.Fatalf("migrate the journal: %v", err)
+	}
+
+	var next int64
+	if err := db.QueryRowContext(ctx, `SELECT nextval('runtime.journal_seq')`).Scan(&next); err != nil {
+		t.Fatalf("next journal position: %v", err)
+	}
+	if next <= 42 {
+		t.Errorf("the first journal position is %d, not above the state's 42", next)
+	}
+	var writtenAt sql.NullTime
+	if err := db.QueryRowContext(ctx, `SELECT last_write_at FROM runtime.tag_states WHERE tag_id = $1`, tagID).Scan(&writtenAt); err != nil {
+		t.Fatalf("read last_write_at: %v", err)
+	}
+	if writtenAt.Valid {
+		t.Errorf("a state written before the journal has a write moment: %s", writtenAt.Time)
+	}
+	var sequences int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+	                                   WHERE n.nspname = 'runtime' AND c.relkind = 'S' AND c.relname IN ('tag_state_seq', 'journal_seq')`).Scan(&sequences); err != nil || sequences != 1 {
+		t.Errorf("the sequences of the runtime schema: %d, %v; want journal_seq alone", sequences, err)
+	}
+	var cursors int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM runtime.journal_cursors`).Scan(&cursors); err != nil || cursors != 0 {
+		t.Errorf("the cursors of the subscribers: %d, %v; want none", cursors, err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO runtime.journal (project_id, ts, type, payload, schema_version)
+	                                  VALUES ($1, now(), 'revision', '{"number":1,"cause":"deploy"}', '0.2')`, main); err != nil {
+		t.Errorf("insert a revision entry: %v", err)
+	}
+
+	// Down: the state's seq is a number of its own sequence again, set above
+	// every stored one; the Journal and the write moment are gone.
+	if _, err := provider.DownTo(ctx, 20261105000001); err != nil {
+		t.Fatalf("migrate the journal down: %v", err)
+	}
+	if err := db.QueryRowContext(ctx, `SELECT nextval('runtime.tag_state_seq')`).Scan(&next); err != nil {
+		t.Fatalf("next state position: %v", err)
+	}
+	if next <= 42 {
+		t.Errorf("the first state position is %d, not above the stored 42", next)
+	}
+	var journalTables, writeMoment int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM pg_tables WHERE schemaname = 'runtime'
+	                                   AND tablename IN ('journal', 'journal_cursors')`).Scan(&journalTables); err != nil || journalTables != 0 {
+		t.Errorf("journal tables left after the down: %d, %v", journalTables, err)
+	}
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM information_schema.columns WHERE table_schema = 'runtime'
+	                                   AND table_name = 'tag_states' AND column_name = 'last_write_at'`).Scan(&writeMoment); err != nil || writeMoment != 0 {
+		t.Errorf("last_write_at left after the down: %d, %v", writeMoment, err)
+	}
+}

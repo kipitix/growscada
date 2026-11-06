@@ -6,6 +6,7 @@ package tagstate
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -13,10 +14,10 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
-// Seq numbers the writes of Tag states: each write takes a number higher
-// than every write before it, of one sequence of the Runtime node, so a
-// reader tells the newer of two states of one Tag. A state no supplier has
-// written yet has none (0).
+// Seq is the Journal position of the latest change of a Tag's state: the
+// number of its entry in the Runtime node's Journal (ADR 0019), so a reader
+// tells the newer of two states of one Tag. A state no supplier has written
+// yet has none (0).
 // Value Object.
 type Seq int64
 
@@ -37,17 +38,20 @@ type Definition struct {
 // TagState is a Tag's current value and Quality, held by the Runtime node,
 // never part of the Draft or a Revision. It has a single writer — the Tag's
 // supplier, or people — so a write states no expected Version: the latest
-// write wins, numbered by its Seq.
+// write wins, numbered by its Seq. WrittenAt is when the state was last
+// written, changed or not; a state nobody has written yet has none (ADR
+// 0019).
 // Immutable aggregate: Write returns a new TagState.
 type TagState struct {
 	definition Definition
 	value      tag.TagValue
 	quality    tag.TagQuality
 	seq        Seq
+	writtenAt  *time.Time
 }
 
 // Initial returns the state of a Tag no supplier has written yet: its
-// TagType's zero value with Quality Bad.
+// TagType's zero value with Quality Bad and no write moment.
 // Returns an error if the definition's TagType is invalid.
 func Initial(aDefinition Definition) (TagState, error) {
 	value, quality, err := aDefinition.Type.InitialState()
@@ -59,15 +63,16 @@ func Initial(aDefinition Definition) (TagState, error) {
 
 // Reconstitute rebuilds a state as stored. For repositories.
 // Returns an error if the quality is the invalid zero value or the value is
-// missing.
-func Reconstitute(aDefinition Definition, aValue tag.TagValue, aQuality tag.TagQuality, aSeq Seq) (TagState, error) {
+// missing. aWrittenAt is nil for the initial state of a Tag no supplier has
+// written yet.
+func Reconstitute(aDefinition Definition, aValue tag.TagValue, aQuality tag.TagQuality, aSeq Seq, aWrittenAt *time.Time) (TagState, error) {
 	if aValue == nil {
 		return TagState{}, fmt.Errorf("cannot create tag state: no value")
 	}
 	if !aQuality.IsValid() {
 		return TagState{}, fmt.Errorf("cannot create tag state: invalid quality")
 	}
-	return TagState{definition: aDefinition, value: aValue, quality: aQuality, seq: aSeq}, nil
+	return TagState{definition: aDefinition, value: aValue, quality: aQuality, seq: aSeq, writtenAt: aWrittenAt}, nil
 }
 
 func (s TagState) Definition() Definition            { return s.definition }
@@ -77,9 +82,14 @@ func (s TagState) Value() tag.TagValue               { return s.value }
 func (s TagState) Quality() tag.TagQuality           { return s.quality }
 func (s TagState) Seq() Seq                          { return s.seq }
 
+// WrittenAt returns when the state was last written, changed or not; nil for
+// a state no supplier has written yet.
+func (s TagState) WrittenAt() *time.Time { return s.writtenAt }
+
 // Write returns the state with the new value and Quality, the value parsed
-// for the Tag's TagType. Its Seq is the one of the state written over: the
-// repository's Write numbers it.
+// for the Tag's TagType. Its Seq and WrittenAt are the ones of the state
+// written over: the repository's Write numbers it, and only when the value or
+// the Quality changed (ADR 0019).
 // Returns an error if the quality is the invalid zero value or the value
 // does not fit the TagType.
 func (s TagState) Write(aValue any, aQuality tag.TagQuality) (TagState, error) {

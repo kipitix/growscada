@@ -46,17 +46,17 @@ INSERT INTO runtime.tags (id, project_id, name, type, version) VALUES
     ('6ba7b819-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'status_message', 'string', 1);
 
 -- Their Tag states (ADR 0011, amendment 2026-11-01: the state is its own table)
-INSERT INTO runtime.tag_states (tag_id, value, quality, seq) VALUES
-    ('6ba7b810-9dad-11d1-80b4-00c04fd430c8', 'true', 'good', nextval('runtime.tag_state_seq')),
-    ('6ba7b811-9dad-11d1-80b4-00c04fd430c8', '100', 'good', nextval('runtime.tag_state_seq')),
-    ('6ba7b812-9dad-11d1-80b4-00c04fd430c8', 'false', 'bad', nextval('runtime.tag_state_seq')),
-    ('6ba7b813-9dad-11d1-80b4-00c04fd430c8', '30', 'uncertain', nextval('runtime.tag_state_seq')),
-    ('6ba7b814-9dad-11d1-80b4-00c04fd430c8', '3', 'good', nextval('runtime.tag_state_seq')),
-    ('6ba7b815-9dad-11d1-80b4-00c04fd430c8', 'true', 'uncertain', nextval('runtime.tag_state_seq')),
-    ('6ba7b816-9dad-11d1-80b4-00c04fd430c8', '20', 'good', nextval('runtime.tag_state_seq')),
-    ('6ba7b817-9dad-11d1-80b4-00c04fd430c8', 'false', 'bad', nextval('runtime.tag_state_seq')),
-    ('6ba7b818-9dad-11d1-80b4-00c04fd430c8', 'Alexander', 'good', nextval('runtime.tag_state_seq')),
-    ('6ba7b819-9dad-11d1-80b4-00c04fd430c8', 'System running normally - all checks passed', 'good', nextval('runtime.tag_state_seq'));
+INSERT INTO runtime.tag_states (tag_id, value, quality, seq, last_write_at) VALUES
+    ('6ba7b810-9dad-11d1-80b4-00c04fd430c8', 'true', 'good', nextval('runtime.journal_seq'), now()),
+    ('6ba7b811-9dad-11d1-80b4-00c04fd430c8', '100', 'good', nextval('runtime.journal_seq'), now()),
+    ('6ba7b812-9dad-11d1-80b4-00c04fd430c8', 'false', 'bad', nextval('runtime.journal_seq'), now()),
+    ('6ba7b813-9dad-11d1-80b4-00c04fd430c8', '30', 'uncertain', nextval('runtime.journal_seq'), now()),
+    ('6ba7b814-9dad-11d1-80b4-00c04fd430c8', '3', 'good', nextval('runtime.journal_seq'), now()),
+    ('6ba7b815-9dad-11d1-80b4-00c04fd430c8', 'true', 'uncertain', nextval('runtime.journal_seq'), now()),
+    ('6ba7b816-9dad-11d1-80b4-00c04fd430c8', '20', 'good', nextval('runtime.journal_seq'), now()),
+    ('6ba7b817-9dad-11d1-80b4-00c04fd430c8', 'false', 'bad', nextval('runtime.journal_seq'), now()),
+    ('6ba7b818-9dad-11d1-80b4-00c04fd430c8', 'Alexander', 'good', nextval('runtime.journal_seq'), now()),
+    ('6ba7b819-9dad-11d1-80b4-00c04fd430c8', 'System running normally - all checks passed', 'good', nextval('runtime.journal_seq'), now());
 
 -- Add test data for widget_types table
 -- script_language: javascript | python | lua

@@ -12,6 +12,7 @@ import (
 	"github.com/lib/pq"
 
 	projectv0 "github.com/kipitix/growscada/contract/project/v0"
+	recordv0 "github.com/kipitix/growscada/contract/record/v0"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -183,7 +184,10 @@ func prepareRevisionTx(ctx context.Context, tx *sql.Tx, projectID uuid.UUID) err
 
 // insertRevision numbers and stores a Revision in the caller's transaction:
 // the number is the greatest stored plus one, the unique key being the safety
-// net of a writer that bypassed the advisory lock.
+// net of a writer that bypassed the advisory lock. The Revision's Journal
+// entry is appended in the same transaction, with the Revision's time: a
+// Revision that never commits leaves no entry, and the entry never carries
+// the document (ADR 0014, ADR 0019).
 func insertRevision(ctx context.Context, tx *sql.Tx, projectID uuid.UUID, config []byte,
 	cause runtimeapp.RevisionCause, rolledBackFrom *int, now time.Time) (int, error) {
 	var number int
@@ -200,7 +204,23 @@ func insertRevision(ctx context.Context, tx *sql.Tx, projectID uuid.UUID, config
 	); err != nil {
 		return 0, fmt.Errorf("cannot insert revision %d of project %s: %w", number, projectID, err)
 	}
+	if _, err := appendJournalEntry(ctx, tx, newRevisionEntry(projectID, now, number, journalCause(cause), rolledBackFrom)); err != nil {
+		return 0, fmt.Errorf("cannot record revision %d of project %s: %w", number, projectID, err)
+	}
 	return number, nil
+}
+
+// journalCause is the Revision cause as the record names it: the record has
+// its own enum and never imports the API's (ADR 0004, ADR 0019).
+func journalCause(cause runtimeapp.RevisionCause) recordv0.RevisionCause {
+	switch cause {
+	case runtimeapp.RevisionCauseRollback:
+		return recordv0.RevisionCauseRollback
+	case runtimeapp.RevisionCauseFile:
+		return recordv0.RevisionCauseFile
+	default:
+		return recordv0.RevisionCauseDeploy
+	}
 }
 
 func (r revisionRepositoryPostgres) FindCurrent(ctx context.Context, projectID uuid.UUID) (runtimeapp.Revision, bool, error) {

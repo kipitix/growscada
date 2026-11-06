@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -64,20 +65,26 @@ func (m *memoryStates) IsProjectLive(_ context.Context, p id.ID[project.Project]
 	return m.live[p] && org == m.org, nil
 }
 
-func (m *memoryStates) Write(_ context.Context, s tagstate.TagState, writer tag.Supplier) (tagstate.TagState, error) {
+func (m *memoryStates) Write(_ context.Context, s tagstate.TagState, writer tag.Supplier) (tagstate.TagState, bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	cur, ok := m.states[s.TagID()]
 	if !ok || cur.ProjectID() != s.ProjectID() {
-		return tagstate.TagState{}, id.NotFound(tag.ErrTagNotFound, s.TagID())
+		return tagstate.TagState{}, false, id.NotFound(tag.ErrTagNotFound, s.TagID())
 	}
 	if cur.Definition().Supplier != writer {
-		return tagstate.TagState{}, fmt.Errorf("%w: tag %s, writer %s", tag.ErrTagNotSuppliedByDevice, s.TagID(), writer)
+		return tagstate.TagState{}, false, fmt.Errorf("%w: tag %s, writer %s", tag.ErrTagNotSuppliedByDevice, s.TagID(), writer)
 	}
-	m.seq++
-	stored, err := tagstate.Reconstitute(s.Definition(), s.Value(), s.Quality(), m.seq)
+	changed := cur.Value().String() != s.Value().String() || cur.Quality().String() != s.Quality().String()
+	seq := cur.Seq()
+	if changed {
+		m.seq++
+		seq = m.seq
+	}
+	writtenAt := time.Now().UTC()
+	stored, err := tagstate.Reconstitute(s.Definition(), s.Value(), s.Quality(), seq, &writtenAt)
 	m.states[s.TagID()] = stored
-	return stored, err
+	return stored, changed, err
 }
 
 func (m *memoryStates) UpsertDefinitions(_ context.Context, p id.ID[project.Project], defs []tagstate.Definition) error {
@@ -181,9 +188,9 @@ type cancellableStates struct {
 	*memoryStates
 }
 
-func (c cancellableStates) Write(ctx context.Context, s tagstate.TagState, writer tag.Supplier) (tagstate.TagState, error) {
+func (c cancellableStates) Write(ctx context.Context, s tagstate.TagState, writer tag.Supplier) (tagstate.TagState, bool, error) {
 	if err := ctx.Err(); err != nil {
-		return tagstate.TagState{}, err
+		return tagstate.TagState{}, false, err
 	}
 	return c.memoryStates.Write(ctx, s, writer)
 }
@@ -327,5 +334,69 @@ func TestSetTagValue_OnlyTheSupplierWrites(t *testing.T) {
 	}
 	if written, err := f.svc.SetTagValue(ctx, f.project, runtimeapp.SetTagValueInput{TagID: open, Value: "2", Quality: "good"}); err != nil || written.Value != "2" {
 		t.Errorf("a person writing a tag nobody supplies: %+v, %v", written, err)
+	}
+}
+
+// TestSetTagValue_Unchanged_PublishesNothingAndKeepsTheSeq: the Journal
+// records changes, not writes — a repeat keeps the previous seq, moves
+// written_at and publishes no tag_updated (ADR 0019).
+func TestSetTagValue_Unchanged_PublishesNothingAndKeepsTheSeq(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	speed := f.define(t, "speed", "integer")
+
+	first, err := f.svc.SetTagValue(ctx, f.project, runtimeapp.SetTagValueInput{TagID: speed, Value: "1", Quality: "good"})
+	if err != nil {
+		t.Fatalf("SetTagValue: %v", err)
+	}
+	if first.WrittenAt == nil {
+		t.Fatal("a written state has no written_at")
+	}
+	repeated, err := f.svc.SetTagValue(ctx, f.project, runtimeapp.SetTagValueInput{TagID: speed, Value: "1", Quality: "good"})
+	if err != nil {
+		t.Fatalf("SetTagValue again: %v", err)
+	}
+	if repeated.Seq != first.Seq {
+		t.Errorf("the repeat took seq %d, want the previous %d", repeated.Seq, first.Seq)
+	}
+	if repeated.WrittenAt == nil || repeated.WrittenAt.Before(*first.WrittenAt) {
+		t.Errorf("the repeat written at %v, before %v", repeated.WrittenAt, first.WrittenAt)
+	}
+	if len(f.published) != 1 {
+		t.Errorf("published %d events, want the first change alone", len(f.published))
+	}
+
+	changed, err := f.svc.SetTagValue(ctx, f.project, runtimeapp.SetTagValueInput{TagID: speed, Value: "1", Quality: "uncertain"})
+	if err != nil {
+		t.Fatalf("SetTagValue with a new quality: %v", err)
+	}
+	if changed.Seq <= first.Seq {
+		t.Errorf("the new quality took seq %d, not above %d", changed.Seq, first.Seq)
+	}
+	if len(f.published) != 2 {
+		t.Errorf("published %d events, want one per change", len(f.published))
+	}
+}
+
+// TestFindTagStates_CarriesTheWriteMoment: an initial state has none, a
+// written one does (ADR 0019).
+func TestFindTagStates_CarriesTheWriteMoment(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	written := f.define(t, "written", "integer")
+	initial := f.define(t, "initial", "boolean")
+	if _, err := f.svc.SetTagValue(ctx, f.project, runtimeapp.SetTagValueInput{TagID: written, Value: "1", Quality: "good"}); err != nil {
+		t.Fatalf("SetTagValue: %v", err)
+	}
+
+	got, err := f.svc.FindTagStates(ctx, f.project, []uuid.UUID{written, initial})
+	if err != nil || len(got) != 2 {
+		t.Fatalf("FindTagStates: %+v, %v", got, err)
+	}
+	if got[0].WrittenAt == nil || got[0].Seq == 0 {
+		t.Errorf("the written state: %+v", got[0])
+	}
+	if got[1].WrittenAt != nil || got[1].Seq != 0 {
+		t.Errorf("the initial state: %+v", got[1])
 	}
 }

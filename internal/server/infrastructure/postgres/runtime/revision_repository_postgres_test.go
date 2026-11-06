@@ -931,7 +931,7 @@ func writeValue(t *testing.T, states tagstate.Repository, projectID id.ID[projec
 	if err != nil {
 		t.Fatalf("write value %d to tag %s: %v", value, tagID, err)
 	}
-	if _, err := states.Write(context.Background(), written, tag.NoSupplier()); err != nil {
+	if _, _, err := states.Write(context.Background(), written, tag.NoSupplier()); err != nil {
 		t.Fatalf("store value of tag %s: %v", tagID, err)
 	}
 }

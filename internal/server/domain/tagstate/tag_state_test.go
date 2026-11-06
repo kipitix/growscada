@@ -66,13 +66,13 @@ func TestWrite_RefusesWhatDoesNotFit(t *testing.T) {
 
 func TestReconstitute_RefusesAnInvalidState(t *testing.T) {
 	def := makeDefinition(t, tag.TagTypeInteger)
-	if _, err := Reconstitute(def, nil, tag.TagQualityGood, 1); err == nil {
+	if _, err := Reconstitute(def, nil, tag.TagQualityGood, 1, nil); err == nil {
 		t.Error("a state without a value")
 	}
-	if _, err := Reconstitute(def, tag.TagValueInteger(1), tag.TagQuality{}, 1); err == nil {
+	if _, err := Reconstitute(def, tag.TagValueInteger(1), tag.TagQuality{}, 1, nil); err == nil {
 		t.Error("a state of the invalid Quality")
 	}
-	s, err := Reconstitute(def, tag.TagValueInteger(1), tag.TagQualityUncertain, 7)
+	s, err := Reconstitute(def, tag.TagValueInteger(1), tag.TagQualityUncertain, 7, nil)
 	if err != nil || s.Seq() != 7 || s.TagID() != def.TagID || s.ProjectID() != def.ProjectID {
 		t.Errorf("Reconstitute = %s, %v", s, err)
 	}

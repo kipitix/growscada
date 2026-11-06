@@ -45,7 +45,7 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 	tagVersion, _ := version.New(version.WithNumber[tag.Tag](7))
 	updatedState, err := tagstate.Reconstitute(
 		tagstate.Definition{TagID: tagID, ProjectID: projectID, Name: name, Type: tag.TagTypeInteger, Version: tagVersion},
-		tag.TagValueInteger(42), tag.TagQualityGood, 31)
+		tag.TagValueInteger(42), tag.TagQualityGood, 31, nil)
 	if err != nil {
 		t.Fatalf("reconstitute tag state: %v", err)
 	}

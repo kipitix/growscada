@@ -46,8 +46,8 @@ INSERT INTO engineering.tags (id, project_id, name, type, device_id) VALUES
 INSERT INTO runtime.tags (id, project_id, name, type, version, device_id) VALUES
     ('6ba7b820-9dad-11d1-80b4-00c04fd430c8', 'b0000000-0000-4000-8000-000000000001', 'device.speed', 'integer', 1,
      'e0000000-0000-4000-8000-000000000001');
-INSERT INTO runtime.tag_states (tag_id, value, quality, seq) VALUES
-    ('6ba7b820-9dad-11d1-80b4-00c04fd430c8', '12', 'good', nextval('runtime.tag_state_seq'));
+INSERT INTO runtime.tag_states (tag_id, value, quality, seq, last_write_at) VALUES
+    ('6ba7b820-9dad-11d1-80b4-00c04fd430c8', '12', 'good', nextval('runtime.journal_seq'), now());
 
 INSERT INTO runtime.device_tokens (device_id, project_id, token_hash, fingerprint, issued_at) VALUES
     ('e0000000-0000-4000-8000-000000000001',

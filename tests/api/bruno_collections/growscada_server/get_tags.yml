@@ -8,6 +8,12 @@ http:
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/tags
   auth: inherit
 
+docs: |
+  A Tag's `seq` is the Journal position of its latest change, and
+  `written_at` (RFC 3339) when the state was last written, changed or not; a
+  state no supplier has written yet has neither (ADR 0019). The seeded states
+  were written, so they carry `written_at`.
+
 runtime:
   assertions:
     - expression: 'res.status'
@@ -17,6 +23,8 @@ runtime:
       operator: isDefined
     - expression: 'res.body.tags'
       operator: isArray
+    - expression: 'res.body.tags[0].written_at'
+      operator: isDefined
 
 settings:
   encodeUrl: true

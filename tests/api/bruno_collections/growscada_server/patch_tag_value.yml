@@ -22,10 +22,11 @@ docs: |
   A write of the tag's state on the Runtime node (ADR 0011). It states no
   version and never returns `409 Conflict`: a tag's state has a single writer
   (its Device, or people), and the latest write wins. The response carries
-  `seq`, the number the write took: each write's is above every one before
-  it, and the `tag_updated` event of the write carries the same, so a reader
-  keeps, of two states of one tag, the one with the greater `seq`. A body
-  with `version` is `400 Bad Request` (unknown field).
+  `seq`, the Journal position of the state: a change takes a position above
+  every one before it and publishes `tag_updated` with the same, while a
+  repeat of the stored value and Quality keeps the previous `seq` and only
+  moves `written_at` (ADR 0019). A body with `version` is `400 Bad Request`
+  (unknown field).
 
 runtime:
   assertions:
@@ -36,6 +37,8 @@ runtime:
       operator: isDefined
     - expression: 'res.body.seq'
       operator: isNumber
+    - expression: 'res.body.written_at'
+      operator: isDefined
 
 settings:
   encodeUrl: true

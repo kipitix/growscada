@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
@@ -25,8 +26,10 @@ import (
 // node's two tables (ADR 0011, amendment 2026-11-01): runtime.tags is the
 // copy of a Tag definition, runtime.tag_states its state. Every read joins
 // them; the state of a Tag whose definition is gone goes with it (ON DELETE
-// CASCADE). A write takes the next number of runtime.tag_state_seq; it is no
-// change of an aggregate edited by people, so it writes no outbox row.
+// CASCADE). A write that changes the value or the Quality appends an entry to
+// runtime.journal and takes its number as the state's seq; a write that
+// changes nothing only moves last_write_at (ADR 0019). It is no change of an
+// aggregate edited by people, so it writes no outbox row.
 type tagStateRepositoryPostgres struct {
 	db *sql.DB
 }
@@ -38,7 +41,7 @@ func NewTagStateRepositoryPostgres(aDb *sql.DB) tagstate.Repository {
 	return &tagStateRepositoryPostgres{db: aDb}
 }
 
-const selectTagStateColumns = `t.id, t.name, t.type, t.device_id, t.version, s.value, s.quality, s.seq`
+const selectTagStateColumns = `t.id, t.name, t.type, t.device_id, t.version, s.value, s.quality, s.seq, s.last_write_at`
 
 func (r tagStateRepositoryPostgres) FindInLiveProject(ctx context.Context, projectID id.ID[project.Project], tagID id.ID[tag.Tag], orgID id.ID[organization.Organization]) (tagstate.TagState, error) {
 	row := r.db.QueryRowContext(ctx,
@@ -100,33 +103,68 @@ func (r tagStateRepositoryPostgres) IsProjectLive(ctx context.Context, projectID
 	return live, nil
 }
 
-// Write numbers the state in the UPDATE itself: concurrent writes of one Tag
-// take their numbers in the order the row lock serializes them, so the state
-// stored is the one with the greatest Seq. The definition's copy is joined,
-// so a write of a Tag whose definition is gone (or is of another Project,
-// TagType or supplier) finds no row; a Tag that exists but is not the
-// writer's is told apart afterwards, on that failure path alone.
-func (r tagStateRepositoryPostgres) Write(ctx context.Context, aState tagstate.TagState, aSupplier tag.Supplier) (tagstate.TagState, error) {
-	var seq int64
-	err := r.db.QueryRowContext(ctx,
-		`UPDATE runtime.tag_states s SET value = $1, quality = $2, seq = nextval('runtime.tag_state_seq')
-		 FROM runtime.tags t
-		 WHERE s.tag_id = t.id AND t.id = $3 AND t.project_id = $4 AND t.type = $5
-		   AND t.device_id IS NOT DISTINCT FROM $6
-		 RETURNING s.seq`,
-		aState.Value().String(), aState.Quality().String(),
+// Write stores the state and, when the value or the Quality differs from the
+// stored one, appends a tag_state entry to the Journal and takes its position
+// as the state's seq (ADR 0019). The Tag's row is locked for the comparison,
+// so two writers of one Tag are serialized by it and take their positions in
+// its order; a write that changes nothing moves last_write_at alone and keeps
+// the position. The definition's copy is joined, so a write of a Tag whose
+// definition is gone (or is of another Project, TagType or supplier) finds no
+// row; a Tag that exists but is not the writer's is told apart afterwards, on
+// that failure path alone.
+func (r tagStateRepositoryPostgres) Write(ctx context.Context, aState tagstate.TagState, aSupplier tag.Supplier) (tagstate.TagState, bool, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return tagstate.TagState{}, false, fmt.Errorf("cannot begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var storedValue, storedQuality string
+	var storedSeq int64
+	err = tx.QueryRowContext(ctx,
+		`SELECT s.value, s.quality, s.seq
+		 FROM runtime.tag_states s
+		 JOIN runtime.tags t ON t.id = s.tag_id
+		 WHERE s.tag_id = $1 AND t.project_id = $2 AND t.type = $3
+		   AND t.device_id IS NOT DISTINCT FROM $4
+		 FOR UPDATE OF s`,
 		aState.TagID().UUID(), aState.ProjectID().UUID(), aState.Definition().Type.String(), supplierValue(aSupplier),
-	).Scan(&seq)
+	).Scan(&storedValue, &storedQuality, &storedSeq)
 	if errors.Is(err, sql.ErrNoRows) {
-		return tagstate.TagState{}, r.writeMissReason(ctx, aState, aSupplier)
+		return tagstate.TagState{}, false, r.writeMissReason(ctx, aState, aSupplier)
 	}
 	if err != nil {
-		return tagstate.TagState{}, fmt.Errorf("cannot write tag state: %w", err)
+		return tagstate.TagState{}, false, fmt.Errorf("cannot lock tag state: %w", err)
 	}
-	return tagstate.Reconstitute(aState.Definition(), aState.Value(), aState.Quality(), tagstate.Seq(seq))
+
+	writtenAt := time.Now().UTC()
+	changed := storedValue != aState.Value().String() || storedQuality != aState.Quality().String()
+	write := `UPDATE runtime.tag_states SET last_write_at = $1 WHERE tag_id = $2`
+	args := []any{writtenAt, aState.TagID().UUID()}
+	if changed {
+		seq, err := appendJournalEntry(ctx, tx, newTagStateEntry(
+			aState.ProjectID().UUID(), writtenAt, aState.TagID().UUID(), aState.Value().String(), aState.Quality().String()))
+		if err != nil {
+			return tagstate.TagState{}, false, err
+		}
+		storedSeq = seq
+		write = `UPDATE runtime.tag_states SET value = $1, quality = $2, seq = $3, last_write_at = $4 WHERE tag_id = $5`
+		args = []any{aState.Value().String(), aState.Quality().String(), storedSeq, writtenAt, aState.TagID().UUID()}
+	}
+	if _, err := tx.ExecContext(ctx, write, args...); err != nil {
+		return tagstate.TagState{}, false, fmt.Errorf("cannot write tag state: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return tagstate.TagState{}, false, fmt.Errorf("cannot commit tag state: %w", err)
+	}
+	stored, err := tagstate.Reconstitute(aState.Definition(), aState.Value(), aState.Quality(), tagstate.Seq(storedSeq), &writtenAt)
+	if err != nil {
+		return tagstate.TagState{}, false, err
+	}
+	return stored, changed, nil
 }
 
-// writeMissReason tells why Write's UPDATE matched no row: the Tag of another
+// writeMissReason tells why Write's SELECT matched no row: the Tag of another
 // supplier (the Tag exists, its values are its supplier's alone) or one that
 // is gone.
 func (r tagStateRepositoryPostgres) writeMissReason(ctx context.Context, aState tagstate.TagState, aSupplier tag.Supplier) error {
@@ -284,8 +322,9 @@ func scanTagState(projectID id.ID[project.Project], scan func(...any) error) (ta
 		rawVersion           int
 		rawValue, rawQuality string
 		seq                  int64
+		writtenAt            *time.Time
 	)
-	if err := scan(&tagUUID, &rawName, &rawType, &rawDeviceID, &rawVersion, &rawValue, &rawQuality, &seq); err != nil {
+	if err := scan(&tagUUID, &rawName, &rawType, &rawDeviceID, &rawVersion, &rawValue, &rawQuality, &seq, &writtenAt); err != nil {
 		return tagstate.TagState{}, err
 	}
 	name, err := tag.NewTagName(rawName)
@@ -316,7 +355,7 @@ func scanTagState(projectID id.ID[project.Project], scan func(...any) error) (ta
 		Supplier:  supplierOf(rawDeviceID),
 		Version:   ver,
 	}
-	return tagstate.Reconstitute(def, value, quality, tagstate.Seq(seq))
+	return tagstate.Reconstitute(def, value, quality, tagstate.Seq(seq), writtenAt)
 }
 
 // supplierOf turns the stored device_id of a Tag (NULL when people supply it)

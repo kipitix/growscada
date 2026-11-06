@@ -52,15 +52,17 @@ type TagDefinition struct {
 }
 
 // TagState is a Tag's state with its definition's copy. Seq 0: written by no
-// supplier yet.
+// supplier yet. WrittenAt is when the state was last written, changed or not;
+// nil for a state nobody has written yet.
 type TagState struct {
-	ID      uuid.UUID
-	Name    string
-	Type    string
-	Version int
-	Value   string
-	Quality string
-	Seq     int64
+	ID        uuid.UUID
+	Name      string
+	Type      string
+	Version   int
+	Value     string
+	Quality   string
+	Seq       int64
+	WrittenAt *time.Time
 }
 
 // SetTagValueInput is a write of a Tag's state; it states no expected
@@ -77,11 +79,13 @@ type SetTagValueInput struct {
 // takes the Project first.
 type TagStateService interface {
 	// SetTagValue writes a Tag's state and, once it is stored, publishes
-	// tag_updated with it (at-most-once). The writer is the supplier the
-	// write is checked against in the same query: a Tag a Device supplies is
-	// written by that Device alone (tag.ErrTagNotSuppliedByDevice otherwise).
-	// A Project that is not live, or of another Organization, is an error
-	// wrapping project.ErrProjectNotFound; a Tag without a state one wrapping
+	// tag_updated with it (at-most-once) — only when the value or the Quality
+	// changed: a repeat keeps the previous seq, moves written_at and publishes
+	// nothing (ADR 0019). The writer is the supplier the write is checked
+	// against in the same query: a Tag a Device supplies is written by that
+	// Device alone (tag.ErrTagNotSuppliedByDevice otherwise). A Project that is
+	// not live, or of another Organization, is an error wrapping
+	// project.ErrProjectNotFound; a Tag without a state one wrapping
 	// tag.ErrTagNotFound.
 	SetTagValue(ctx context.Context, projectID uuid.UUID, input SetTagValueInput) (TagState, error)
 	// FindTagStates returns the states of the Tags with the given IDs; a Tag
@@ -146,11 +150,13 @@ func (s tagStateServiceImpl) SetTagValue(ctx context.Context, rawProjectID uuid.
 	// UPDATE committed would store the state and publish no tag_updated.
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), writeTimeout)
 	defer cancel()
-	stored, err := s.states.Write(writeCtx, written, supplierOf(input.DeviceID))
+	stored, changed, err := s.states.Write(writeCtx, written, supplierOf(input.DeviceID))
 	if err != nil {
 		return TagState{}, fmt.Errorf("cannot write tag state: %w", err)
 	}
-	s.publish(tagstate.NewTagUpdatedEvent(stored))
+	if changed {
+		s.publish(tagstate.NewTagUpdatedEvent(stored))
+	}
 	return NewTagState(stored), nil
 }
 
@@ -260,13 +266,14 @@ func supplierOf(rawDeviceID uuid.UUID) tag.Supplier {
 func NewTagState(s tagstate.TagState) TagState {
 	def := s.Definition()
 	return TagState{
-		ID:      def.TagID.UUID(),
-		Name:    def.Name.String(),
-		Type:    def.Type.String(),
-		Version: def.Version.Number(),
-		Value:   s.Value().String(),
-		Quality: s.Quality().String(),
-		Seq:     int64(s.Seq()),
+		ID:        def.TagID.UUID(),
+		Name:      def.Name.String(),
+		Type:      def.Type.String(),
+		Version:   def.Version.Number(),
+		Value:     s.Value().String(),
+		Quality:   s.Quality().String(),
+		Seq:       int64(s.Seq()),
+		WrittenAt: s.WrittenAt(),
 	}
 }
 

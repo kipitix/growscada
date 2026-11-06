@@ -69,7 +69,7 @@ func TestRevisionService_Deploy_KeepsTheTagStatesOfTheRunningRevision(t *testing
 	if err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	if _, err := states.Write(ctx, written, tag.NoSupplier()); err != nil {
+	if _, _, err := states.Write(ctx, written, tag.NoSupplier()); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
 
@@ -119,7 +119,7 @@ func TestRevisionService_Deploy_KeepsTheTagStatesOfTheRunningRevision(t *testing
 	if err != nil {
 		t.Fatalf("initial state: %v", err)
 	}
-	if _, err := states.Write(ctx, unwritten, tag.NoSupplier()); !errors.Is(err, tag.ErrTagNotFound) {
+	if _, _, err := states.Write(ctx, unwritten, tag.NoSupplier()); !errors.Is(err, tag.ErrTagNotFound) {
 		t.Errorf("writing a tag outside the revision: %v, want ErrTagNotFound", err)
 	}
 
@@ -135,7 +135,7 @@ func TestRevisionService_Deploy_KeepsTheTagStatesOfTheRunningRevision(t *testing
 	if err != nil {
 		t.Fatalf("write the late tag: %v", err)
 	}
-	if _, err := states.Write(ctx, writtenLate, tag.NoSupplier()); err != nil {
+	if _, _, err := states.Write(ctx, writtenLate, tag.NoSupplier()); err != nil {
 		t.Errorf("the deployed tag refuses a write: %v", err)
 	}
 

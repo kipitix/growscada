@@ -30,15 +30,21 @@ type Repository interface {
 	IsProjectLive(context.Context, id.ID[project.Project], id.ID[organization.Organization]) (bool, error)
 
 	// Write stores aState as its Tag's state whatever is stored (the latest
-	// write wins) and returns it with the Seq the write took. It writes only
+	// write wins) and returns it with the Seq and WrittenAt of the write.
+	// The change is recorded in the Journal in the same transaction, and only
+	// when the value or the Quality differs from the stored one: a repeat
+	// writes no entry, keeps the Seq and moves WrittenAt alone (ADR 0019). The
+	// Tag's row is locked for the comparison, so two writers of one Tag are
+	// serialized and take their positions in the lock's order. It writes only
 	// for aSupplier, the writer's Supplier: one that is not the Tag's supplier
 	// is refused in the same query as the Project and TagType checks (ADR
 	// 0011), the hot path paying no extra read.
 	// Returns tag.ErrTagNotFound if the Tag has no state (its definition was
 	// removed), tag.ErrTagNotSuppliedByDevice if aSupplier is not the Tag's
 	// supplier (or names no Device while one supplies it: a Tag a Device
-	// supplies is written by that Device alone), or an error on failure.
-	Write(context.Context, TagState, tag.Supplier) (TagState, error)
+	// supplies is written by that Device alone), or an error on failure. The
+	// bool reports whether the state changed.
+	Write(context.Context, TagState, tag.Supplier) (TagState, bool, error)
 
 	// UpsertDefinitions stores the definitions of the Tags of the Project: a
 	// Tag without a state gets its Initial one, a Tag with one keeps it.

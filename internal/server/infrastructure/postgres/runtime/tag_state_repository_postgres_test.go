@@ -87,7 +87,7 @@ func TestUpsertDefinitions_InsertsTheInitialStateAndKeepsAWrittenOne(t *testing.
 	}
 
 	written, _ := initial.Write("42", tag.TagQualityGood)
-	stored, err := repo.Write(ctx, written, tag.NoSupplier())
+	stored, _, err := repo.Write(ctx, written, tag.NoSupplier())
 	if err != nil {
 		t.Fatalf("Write: %v", err)
 	}
@@ -227,9 +227,9 @@ func TestUpsertDefinitions_OverARowOfAnotherTypeOrProject_IsAnError(t *testing.T
 	}
 }
 
-// TestWrite_NumbersEveryWriteHigher: several writes in a row take
-// increasing seqs, each different (the acceptance of task 32).
-func TestWrite_NumbersEveryWriteHigher(t *testing.T) {
+// TestWrite_NumbersEveryChangeHigher: several changes in a row take
+// increasing Journal positions, each different (the acceptance of task 32).
+func TestWrite_NumbersEveryChangeHigher(t *testing.T) {
 	projectID, _ := newProject(t)
 	repo := runtimepg.NewTagStateRepositoryPostgres(postgres.DB(t))
 	ctx := context.Background()
@@ -240,16 +240,20 @@ func TestWrite_NumbersEveryWriteHigher(t *testing.T) {
 
 	current := mustFind(t, repo, projectID, speed.TagID)
 	var last tagstate.Seq
-	for i, value := range []string{"1", "2", "2", "3"} {
+	for i, value := range []string{"1", "2", "3"} {
 		written, _ := current.Write(value, tag.TagQualityGood)
-		stored, err := repo.Write(ctx, written, tag.NoSupplier())
+		stored, changed, err := repo.Write(ctx, written, tag.NoSupplier())
 		if err != nil {
 			t.Fatalf("Write %d: %v", i, err)
+		}
+		if !changed {
+			t.Errorf("write %d of %s changed nothing", i, value)
 		}
 		if stored.Seq() <= last {
 			t.Errorf("write %d took seq %d, not above %d", i, stored.Seq(), last)
 		}
 		last = stored.Seq()
+		current = stored
 	}
 	if got := mustFind(t, repo, projectID, speed.TagID); got.Value().String() != "3" || got.Seq() != last {
 		t.Errorf("stored %s, want the last write 3 at seq %d", got, last)
@@ -275,7 +279,7 @@ func TestWrite_Concurrent_TheStoredStateHasTheGreatestSeq(t *testing.T) {
 	for i := range writers {
 		wg.Go(func() {
 			written, _ := initial.Write(int64(i), tag.TagQualityGood)
-			stored, err := repo.Write(ctx, written, tag.NoSupplier())
+			stored, _, err := repo.Write(ctx, written, tag.NoSupplier())
 			if err != nil {
 				t.Errorf("Write %d: %v", i, err)
 			}
@@ -298,6 +302,23 @@ func TestWrite_Concurrent_TheStoredStateHasTheGreatestSeq(t *testing.T) {
 	if got := mustFind(t, repo, projectID, speed.TagID); got.Seq() != greatest.Seq() || got.Value() != greatest.Value() {
 		t.Errorf("stored %s, want the write with the greatest seq %s", got, greatest)
 	}
+
+	// Each change took one Journal entry, and its position is the state's
+	// seq: the row lock serialized the writers, so the entries are in the
+	// order the writes happened.
+	entries := journalEntriesOf(t, projectID.UUID())
+	if len(entries) != writers {
+		t.Fatalf("%d journal entries, want one per change (%d)", len(entries), writers)
+	}
+	positions := map[tagstate.Seq]bool{}
+	for _, entry := range entries {
+		positions[tagstate.Seq(entry.Seq)] = true
+	}
+	for seq := range seen {
+		if !positions[seq] {
+			t.Errorf("seq %d of a write has no journal entry", seq)
+		}
+	}
 }
 
 func TestWrite_WithoutAState_IsTagNotFound(t *testing.T) {
@@ -305,7 +326,7 @@ func TestWrite_WithoutAState_IsTagNotFound(t *testing.T) {
 	repo := runtimepg.NewTagStateRepositoryPostgres(postgres.DB(t))
 	never, _ := tagstate.Initial(definition(t, projectID, "never", tag.TagTypeBoolean))
 	written, _ := never.Write("true", tag.TagQualityGood)
-	if _, err := repo.Write(context.Background(), written, tag.NoSupplier()); !errors.Is(err, tag.ErrTagNotFound) {
+	if _, _, err := repo.Write(context.Background(), written, tag.NoSupplier()); !errors.Is(err, tag.ErrTagNotFound) {
 		t.Errorf("a write of a tag without a state: %v, want ErrTagNotFound", err)
 	}
 }
@@ -410,11 +431,11 @@ func TestWrite_OnlyByTheSupplier(t *testing.T) {
 		"another device": tag.SuppliedByDevice(id.NewID[device.Device]()),
 		"a person":       tag.NoSupplier(),
 	} {
-		if _, err := repo.Write(ctx, written, writer); !errors.Is(err, tag.ErrTagNotSuppliedByDevice) {
+		if _, _, err := repo.Write(ctx, written, writer); !errors.Is(err, tag.ErrTagNotSuppliedByDevice) {
 			t.Errorf("%s writing a supplied tag: %v, want ErrTagNotSuppliedByDevice", name, err)
 		}
 	}
-	if stored, err := repo.Write(ctx, written, supplier); err != nil || stored.Value().String() != "1" {
+	if stored, _, err := repo.Write(ctx, written, supplier); err != nil || stored.Value().String() != "1" {
 		t.Errorf("the supplier's write: %v, %v", stored, err)
 	}
 
@@ -423,10 +444,10 @@ func TestWrite_OnlyByTheSupplier(t *testing.T) {
 		t.Fatalf("UpsertDefinitions(open): %v", err)
 	}
 	openWritten, _ := mustFind(t, repo, projectID, open.TagID).Write("2", tag.TagQualityGood)
-	if _, err := repo.Write(ctx, openWritten, tag.SuppliedByDevice(id.NewID[device.Device]())); !errors.Is(err, tag.ErrTagNotSuppliedByDevice) {
+	if _, _, err := repo.Write(ctx, openWritten, tag.SuppliedByDevice(id.NewID[device.Device]())); !errors.Is(err, tag.ErrTagNotSuppliedByDevice) {
 		t.Errorf("a device writing a tag nobody supplies: %v, want ErrTagNotSuppliedByDevice", err)
 	}
-	if _, err := repo.Write(ctx, openWritten, tag.NoSupplier()); err != nil {
+	if _, _, err := repo.Write(ctx, openWritten, tag.NoSupplier()); err != nil {
 		t.Errorf("a person writing a tag nobody supplies: %v", err)
 	}
 }

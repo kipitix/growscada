@@ -208,9 +208,16 @@ func TestE2E_ValuesAndSeqsFollowPatterns(t *testing.T) {
 		t.Errorf("running quality: got %q, want uncertain", got.Quality)
 	}
 
-	// constant: written every tick, so its seq keeps growing too.
+	// constant: written every tick without a change, so the Journal keeps the
+	// position of the first write and only the write moment moves (ADR 0019).
 	mode := s.eventually(t, "sim.mode", "auto", func(tag appdto.Tag) bool { return tag.Value == "auto" })
-	s.eventually(t, "sim.mode", "rewrites", func(tag appdto.Tag) bool { return written(tag, mode, 2) })
+	if mode.WrittenAt == nil {
+		t.Error("the constant pattern has no written_at")
+	}
+	time.Sleep(200 * time.Millisecond)
+	if again := s.get(t, "sim.mode"); again.Seq != mode.Seq {
+		t.Errorf("a repeat of the constant value moved the seq: %d → %d", mode.Seq, again.Seq)
+	}
 }
 
 func TestE2E_ControlAPI(t *testing.T) {
@@ -233,16 +240,24 @@ func TestE2E_ControlAPI(t *testing.T) {
 	s.call(t, "POST", "/control/device/tags/sim.speed/pattern", `{"kind":"constant","value":7}`)
 	s.eventually(t, "sim.speed", "the constant", func(tag appdto.Tag) bool { return tag.Value == "7" })
 
+	// A ramp again: its writes change the value, so a resumed Device is
+	// visible as new Journal positions (a constant pattern would move only
+	// written_at, ADR 0019).
+	s.call(t, "POST", "/control/device/tags/sim.speed/pattern", `{"kind":"ramp","start":0,"rate":100}`)
+	switched := s.get(t, "sim.speed")
+	s.eventually(t, "sim.speed", "the ramp again", func(tag appdto.Tag) bool { return written(tag, switched, 1) })
+
 	// Stop freezes every tag (it answers once the writes in flight are done);
 	// start resumes.
 	s.call(t, "POST", "/control/device/stop", "")
 	frozen := s.get(t, "sim.mode")
+	frozenSpeed := s.get(t, "sim.speed")
 	time.Sleep(150 * time.Millisecond)
 	if got := s.get(t, "sim.mode"); got.Seq != frozen.Seq {
 		t.Fatalf("written while stopped: seq %d → %d", frozen.Seq, got.Seq)
 	}
 	s.call(t, "POST", "/control/device/start", "")
-	s.eventually(t, "sim.mode", "writes after start", func(tag appdto.Tag) bool { return written(tag, frozen, 1) })
+	s.eventually(t, "sim.speed", "writes after start", func(tag appdto.Tag) bool { return written(tag, frozenSpeed, 1) })
 }
 
 // TestE2E_AnotherWriter_TheLatestWriteWins: a person writes the Tag of a

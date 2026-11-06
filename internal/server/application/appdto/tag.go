@@ -1,6 +1,8 @@
 package appdto
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
@@ -16,8 +18,12 @@ type Tag struct {
 	Version int
 	Value   string
 	Quality string
-	// Seq numbers the write of the state; 0 until a supplier writes one.
+	// Seq is the Journal position of the latest change of the state; 0 until
+	// a supplier writes one.
 	Seq int64
+	// WrittenAt is when the state was last written, changed or not; nil until
+	// a supplier writes one.
+	WrittenAt *time.Time
 }
 
 // CreateTagInput holds the input data for creating a tag: its definition and
@@ -42,10 +48,11 @@ type TagDefinition struct {
 
 // TagState is a Tag's state as the Runtime node holds it (RuntimeNode).
 type TagState struct {
-	ID      uuid.UUID
-	Value   string
-	Quality string
-	Seq     int64
+	ID        uuid.UUID
+	Value     string
+	Quality   string
+	Seq       int64
+	WrittenAt *time.Time
 }
 
 // NewTagDefinition returns the definition of aTag for the Runtime node.
@@ -72,12 +79,13 @@ func InitialTagState(aTag tag.Tag) TagState {
 // NewTag creates a Tag DTO from the tag.Tag domain aggregate and its state.
 func NewTag(aTag tag.Tag, aState TagState, version int) Tag {
 	return Tag{
-		ID:      aTag.ID().UUID(),
-		Name:    aTag.Name().String(),
-		Type:    aTag.Type().String(),
-		Version: version,
-		Value:   aState.Value,
-		Quality: aState.Quality,
-		Seq:     aState.Seq,
+		ID:        aTag.ID().UUID(),
+		Name:      aTag.Name().String(),
+		Type:      aTag.Type().String(),
+		Version:   version,
+		Value:     aState.Value,
+		Quality:   aState.Quality,
+		Seq:       aState.Seq,
+		WrittenAt: aState.WrittenAt,
 	}
 }
