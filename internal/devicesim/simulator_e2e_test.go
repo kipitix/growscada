@@ -248,16 +248,17 @@ func TestE2E_ControlAPI(t *testing.T) {
 	s.eventually(t, "sim.speed", "the ramp again", func(tag appdto.Tag) bool { return written(tag, switched, 1) })
 
 	// Stop freezes every tag (it answers once the writes in flight are done);
-	// start resumes.
+	// start resumes. The frozen check reads the ramp: a constant pattern
+	// writes the same value and Quality, so its seq would stay put whether
+	// the Device is stopped or not (ADR 0019).
 	s.call(t, "POST", "/control/device/stop", "")
-	frozen := s.get(t, "sim.mode")
-	frozenSpeed := s.get(t, "sim.speed")
+	frozen := s.get(t, "sim.speed")
 	time.Sleep(150 * time.Millisecond)
-	if got := s.get(t, "sim.mode"); got.Seq != frozen.Seq {
+	if got := s.get(t, "sim.speed"); got.Seq != frozen.Seq {
 		t.Fatalf("written while stopped: seq %d → %d", frozen.Seq, got.Seq)
 	}
 	s.call(t, "POST", "/control/device/start", "")
-	s.eventually(t, "sim.speed", "writes after start", func(tag appdto.Tag) bool { return written(tag, frozenSpeed, 1) })
+	s.eventually(t, "sim.speed", "writes after start", func(tag appdto.Tag) bool { return written(tag, frozen, 1) })
 }
 
 // TestE2E_AnotherWriter_TheLatestWriteWins: a person writes the Tag of a
