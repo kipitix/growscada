@@ -119,12 +119,13 @@ type DraftChangeCommandRequest struct {
 	Version int `json:"version"`
 }
 
-// TagStateResponse is one Tag's state in the snapshot: its value, Quality and
-// the seq of its latest write.
+// TagStateResponse is one Tag's state in the snapshot: its value, Quality,
+// the Journal position of its latest change and when it was last written.
 type TagStateResponse struct {
-	Value   string `json:"value"`
-	Quality string `json:"quality"`
-	Seq     int64  `json:"seq"`
+	Value     string  `json:"value"`
+	Quality   string  `json:"quality"`
+	Seq       int64   `json:"seq"`
+	WrittenAt *string `json:"written_at,omitempty"`
 }
 
 // GetTagStatesResponse is the snapshot of the Tag states of the running

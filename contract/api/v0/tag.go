@@ -18,21 +18,24 @@ const (
 )
 
 // TagResponse is the HTTP DTO for representing a tag in API responses: its
-// definition (name, type, version) with its state (value, quality, seq).
-// Version is the Version of the Project's Draft, the same in every content
-// entity of one response (ADR 0016); Seq numbers the write of the state, each
-// write higher than every write before it, so of two states of one tag the
+// definition (name, type, version) with its state (value, quality, seq,
+// written_at). Version is the Version of the Project's Draft, the same in
+// every content entity of one response (ADR 0016); Seq is the Journal
+// position of the latest change of the state, so of two states of one tag the
 // one with the greater Seq is the newer. Until a supplier writes, a tag's
-// state is its type's zero value with quality bad, and Seq is 0, below
-// every write's.
+// state is its type's zero value with quality bad, Seq is 0, below every
+// change's, and WrittenAt is absent. WrittenAt (RFC 3339) is when the state
+// was last written, changed or not: a Device whose value repeats stays
+// visibly alive without a Journal entry (ADR 0019).
 type TagResponse struct {
-	ID      uuid.UUID `json:"id"`
-	Name    string    `json:"name"`
-	Type    string    `json:"type"`
-	Value   string    `json:"value"`
-	Quality string    `json:"quality"`
-	Version int       `json:"version"`
-	Seq     int64     `json:"seq"`
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	Type      string    `json:"type"`
+	Value     string    `json:"value"`
+	Quality   string    `json:"quality"`
+	Version   int       `json:"version"`
+	Seq       int64     `json:"seq"`
+	WrittenAt *string   `json:"written_at,omitempty"`
 }
 
 // GetTagsResponse is the HTTP DTO for a list of tags response.
@@ -62,7 +65,10 @@ type UpdateTagRequest struct {
 }
 
 // UpdateTagResponse is the HTTP DTO for a tag value update response: the Seq
-// the write took, the one its tag_updated carries.
+// of the state — the one the write took, or the previous one when the value
+// and Quality did not change — and when it was last written. A write that
+// changes nothing publishes no tag_updated (ADR 0019).
 type UpdateTagResponse struct {
-	Seq int64 `json:"seq"`
+	Seq       int64   `json:"seq"`
+	WrittenAt *string `json:"written_at,omitempty"`
 }
