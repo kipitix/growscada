@@ -215,7 +215,7 @@ func sendJSON[T any](t *testing.T, srv *httptest.Server, method, path string, bo
 func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagService) {
 	t.Helper()
 	if _, err := db.ExecContext(context.Background(), "DELETE FROM engineering.draft_changes; DELETE FROM engineering.drafts; "+
-		"DELETE FROM runtime.revisions; DELETE FROM runtime.device_tokens; DELETE FROM runtime.tags; "+
+		"DELETE FROM runtime.revisions; DELETE FROM runtime.device_tokens; DELETE FROM runtime.journal; DELETE FROM runtime.tags; "+
 		"DELETE FROM runtime.environment_devices; DELETE FROM runtime.devices; DELETE FROM runtime.environments; "+
 		"DELETE FROM engineering.tags; "+
 		"DELETE FROM engineering.environment_devices; DELETE FROM engineering.devices; DELETE FROM engineering.environments; "+
@@ -250,6 +250,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(db), runtimeEvents.Publish)
 	deviceTokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(db))
 	runtimeNode := inprocess.NewRuntimeNode(tagStateSvc, deviceTokens, revisions)
+	journal := runtimeapp.NewJournalService(runtimepg.NewJournalRepositoryPostgres(db))
 	tagSvc := application.NewTagService(content, runtimeNode)
 	widgetTypes := repositories.NewWidgetTypeRepositories(db)
 	runner := outbox.NewPolicyRunner(db, []application.Policy{
@@ -289,6 +290,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(db)),
 		DeviceTokens: deviceTokens,
 		EditLocks:    editLocks,
+		Journal:      journal,
 	}, bus, 100)
 
 	srv := httptest.NewServer(router.ServeMux())

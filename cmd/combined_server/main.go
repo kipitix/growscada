@@ -139,6 +139,9 @@ func main() {
 	// with one, and its management (issue, rotate, revoke) lives here
 	deviceTokenService := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(sqlDB))
 	runtimeNode := inprocess.NewRuntimeNode(tagStateService, deviceTokenService, revisionService)
+	// The Journal is the Runtime node's operational record: its read side is
+	// served to the API as it is, never through the RuntimeNode port (ADR 0019).
+	journalService := runtimeapp.NewJournalService(runtimepg.NewJournalRepositoryPostgres(sqlDB))
 	// Registry of the policies: changes spanning aggregates, run as jobs
 	// apart from event delivery (ADR 0008)
 	policyRunner := outbox.NewPolicyRunner(sqlDB, []application.Policy{
@@ -221,6 +224,7 @@ func main() {
 		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(sqlDB)),
 		DeviceTokens: deviceTokenService,
 		EditLocks:    editLockService,
+		Journal:      journalService,
 	}, eventBus, cliArgs.MaxSSEClients)
 	// The reaper of the EditLocks: every 30 s it refreshes the last_seen of the
 	// holders present over SSE and frees a lock whose holder stopped being

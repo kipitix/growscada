@@ -1,0 +1,47 @@
+info:
+  name: get journal events (SSE stream)
+  type: http
+  seq: 139
+  tags:
+    - manual
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/journal/events
+  auth: inherit
+
+docs: |
+  The project's Journal as a Server-Sent Events stream (ADR 0019). The start
+  is `?from=` (which wins over the last message id), else the SSE
+  `Last-Event-ID` header, else the project's current position — so a client
+  that names neither receives new entries alone. Every message is
+  `id: <seq>` and `data: <Entry>`, the record contract's document as it is;
+  a reconnecting client that sends `Last-Event-ID` of the last message it saw
+  catches up exactly, because the stream reads the table rather than replaying
+  a buffer. The live tail is at-most-once: two racing commits may reach the
+  stream out of order or one may be missed. A stream opened on a project that
+  is not live is `404` and a bad position `400`, both before the stream
+  starts. The stream names no client and holds no EditLock; `/events` is
+  unchanged.
+
+  Bruno sends the request and waits for the response body, so it will hang
+  until the connection is closed (the stream never completes on its own);
+  cancel the request manually to inspect what was received so far.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: 'text/event-stream'
+    - expression: 'res.body'
+      operator: startsWith
+      value: ': connected'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

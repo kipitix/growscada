@@ -1,0 +1,33 @@
+info:
+  name: get journal after the last position
+  type: http
+  seq: 54
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/journal?from={{JOURNAL_LAST_SEQ}}
+  auth: inherit
+
+docs: |
+  `from` is exclusive: reading after the last position the previous request
+  saw returns an empty page, not the entry at it (ADR 0019).
+  `JOURNAL_LAST_SEQ` is set by that request from its answer.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.entries'
+      operator: isArray
+    - expression: 'res.body.entries.length'
+      operator: eq
+      value: '0'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -25,6 +25,7 @@ import (
 
 	"github.com/kipitix/growscada/contract"
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	recordv0 "github.com/kipitix/growscada/contract/record/v0"
 )
 
 var (
@@ -818,6 +819,19 @@ func (p *ProjectClient) TagStates(ctx context.Context) (map[string]apiv0.TagStat
 	var resp apiv0.GetTagStatesResponse
 	err := p.do(ctx, http.MethodGet, "/tag-states", nil, http.StatusOK, &resp)
 	return resp.TagStates, err
+}
+
+// Journal returns the Project's Journal entries after the position from, in
+// the order of their positions, at most limit of them (task 42, ADR 0019).
+// from is exclusive; a Project that is not live matches ErrNotFound.
+func (p *ProjectClient) Journal(ctx context.Context, from int64, limit int) ([]recordv0.Entry, error) {
+	var resp apiv0.JournalResponse
+	query := url.Values{
+		apiv0.JournalQueryFrom:  {strconv.FormatInt(from, 10)},
+		apiv0.JournalQueryLimit: {strconv.Itoa(limit)},
+	}
+	err := p.do(ctx, http.MethodGet, apiv0.JournalPath+"?"+query.Encode(), nil, http.StatusOK, &resp)
+	return resp.Entries, err
 }
 
 // DeployPreview reports what a Deploy of the Draft would do.

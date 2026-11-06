@@ -27,7 +27,7 @@ import (
 func cleanProjectsRest(t *testing.T) {
 	t.Helper()
 	if _, err := testDB().ExecContext(editlock.System(context.Background()),
-		"DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.tags; DELETE FROM engineering.scenes; DELETE FROM projects WHERE id <> '"+mainProject.String()+"'; "+
+		"DELETE FROM runtime.revisions; DELETE FROM runtime.journal; DELETE FROM runtime.tags; DELETE FROM engineering.tags; DELETE FROM engineering.scenes; DELETE FROM projects WHERE id <> '"+mainProject.String()+"'; "+
 			"UPDATE projects SET name = 'Main', version = 1, deleted_at = NULL"); err != nil {
 		t.Fatalf("cleanProjectsRest: %v", err)
 	}

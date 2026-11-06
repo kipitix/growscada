@@ -34,6 +34,7 @@ type APIRouter struct {
 	revisionsHandlers    *RevisionHandlers
 	projectFileHandlers  *ProjectFileHandlers
 	eventsHandlers       *EventsHandlers
+	journalHandlers      *JournalHandlers
 }
 
 func (r APIRouter) ServeMux() http.Handler {
@@ -66,6 +67,7 @@ func clientKeyMiddleware(next http.Handler) http.Handler {
 // Shutdown to return.
 func (r APIRouter) Close() {
 	r.eventsHandlers.Close()
+	r.journalHandlers.Close()
 }
 
 // corsMaxAge is how long, in seconds, a browser may cache a CORS preflight.
@@ -113,6 +115,7 @@ type Services struct {
 	DeviceConfig runtimeapp.DeviceConfigService
 	DeviceTokens runtimeapp.DeviceTokenService
 	EditLocks    application.EditLockService
+	Journal      runtimeapp.JournalService
 }
 
 // NewRouter returns the server API over the services of both roles.
@@ -140,6 +143,7 @@ func NewRouter(services Services, eventBus eventbus.EventBus, maxSSEClients int)
 		revisionsHandlers:    NewRevisionHandler(services.Revisions),
 		projectFileHandlers:  NewProjectFileHandler(services.ProjectFiles),
 		eventsHandlers:       NewEventsHandler(eventBus, projectService, maxSSEClients, WithDeviceTokens(services.DeviceTokens), WithEditLocks(services.EditLocks)),
+		journalHandlers:      NewJournalHandler(services.Journal, eventBus),
 	}
 	for _, rt := range router.routes() {
 		router.serveMux.HandleFunc(rt.pattern, rt.handler)
@@ -256,6 +260,8 @@ func (r *APIRouter) routes() []route {
 		{"POST " + pp + "/projectfile/deploy", r.projectFileHandlers.PostProjectFileDeploy},
 		{"GET " + pp + "/revisions/" + revisionResource.wildcard() + "/projectfile", r.projectFileHandlers.GetRevisionProjectFile},
 		{"GET " + pp + "/tag-states", deploy.GetTagStates},
+		{"GET " + pp + apiv0.JournalPath, r.journalHandlers.GetJournal},
+		{"GET " + pp + apiv0.JournalEventsPath, r.journalHandlers.GetJournalEvents},
 		{"GET " + pp + "/deploy/preview", deploy.GetDeployPreview},
 		{"POST " + pp + "/deploy", deploy.PostDeploy},
 		{"POST " + pp + "/discard", deploy.PostDiscard},

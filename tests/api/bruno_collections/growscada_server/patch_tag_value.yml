@@ -26,9 +26,15 @@ docs: |
   every one before it and publishes `tag_updated` with the same, while a
   repeat of the stored value and Quality keeps the previous `seq` and only
   moves `written_at` (ADR 0019). A body with `version` is `400 Bad Request`
-  (unknown field).
+  (unknown field). The position the write took is kept for the Journal read
+  that follows.
 
 runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("TAG_WRITE_SEQ", res.body.seq);
+        bru.setVar("TAG_WRITE_BEFORE", res.body.seq - 1);
   assertions:
     - expression: 'res.status'
       operator: eq

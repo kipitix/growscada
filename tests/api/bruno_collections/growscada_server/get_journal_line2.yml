@@ -1,0 +1,44 @@
+info:
+  name: get journal of the deployed project
+  type: http
+  seq: 53
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/journal
+  auth: inherit
+
+docs: |
+  The project Line 2 was deployed just above, so its Journal holds exactly the
+  `revision` entry of that Deploy: no device writes its tags, which makes the
+  project the stable place to read a whole page and then ask for what follows
+  its last position. The position is kept for the next request.
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("JOURNAL_LAST_SEQ", res.body.entries[res.body.entries.length - 1].seq);
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.entries'
+      operator: isArray
+    - expression: 'res.body.entries.length'
+      operator: eq
+      value: '1'
+    - expression: 'res.body.entries[0].type'
+      operator: eq
+      value: 'revision'
+    - expression: 'res.body.entries[0].revision.number'
+      operator: eq
+      value: '1'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

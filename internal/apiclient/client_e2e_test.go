@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	recordv0 "github.com/kipitix/growscada/contract/record/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/servertest"
 )
@@ -354,5 +355,48 @@ func TestRevisions_ListDetailAndRollback(t *testing.T) {
 	}
 	if _, err := project.RevisionByNumber(ctx, 99); !errors.Is(err, apiclient.ErrNotFound) {
 		t.Errorf("RevisionByNumber of a missing one: %v, want ErrNotFound", err)
+	}
+}
+
+// TestJournal_ReadsTheProjectsEntries: the client reads a page of the
+// Project's Journal, the tag_state entry of a write among it, and rereads
+// after its position with nothing left.
+func TestJournal_ReadsTheProjectsEntries(t *testing.T) {
+	client := startClient(t)
+	ctx := context.Background()
+	project := client.Project(servertest.MainProject)
+
+	created, err := project.CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.flow", Type: "integer"})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	servertest.DeployProject(t, postgres.DB(t), servertest.MainProject)
+	if _, err := project.SetTagValue(ctx, created.ID, "42", "good"); err != nil {
+		t.Fatalf("SetTagValue: %v", err)
+	}
+
+	entries, err := project.Journal(ctx, 0, 100)
+	if err != nil {
+		t.Fatalf("Journal: %v", err)
+	}
+	if len(entries) < 2 {
+		t.Fatalf("%d entries, want the Deploy and the write: %+v", len(entries), entries)
+	}
+	last := entries[len(entries)-1]
+	if last.Type != recordv0.EntryTypeTagState || last.TagState == nil ||
+		last.TagState.TagID != created.ID || last.TagState.Value != "42" || last.Seq <= 0 {
+		t.Errorf("the last entry: %+v", last)
+	}
+
+	after, err := project.Journal(ctx, last.Seq, 100)
+	if err != nil {
+		t.Fatalf("Journal after the last position: %v", err)
+	}
+	if len(after) != 0 {
+		t.Errorf("%d entries after the last position, want none", len(after))
+	}
+
+	if _, err := client.Project(uuid.New()).Journal(ctx, 0, 100); !errors.Is(err, apiclient.ErrNotFound) {
+		t.Errorf("Journal of an unknown project: %v, want ErrNotFound", err)
 	}
 }

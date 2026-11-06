@@ -1,0 +1,38 @@
+info:
+  name: get journal of an unknown project
+  type: http
+  seq: 54
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/00000000-0000-4000-8000-000000000000/journal
+  auth: inherit
+
+docs: |
+  A project that is not live — never existed or was deleted — answers
+  `404 project_not_found`, not an empty page: its Journal is not served any
+  more (ADR 0019).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '404'
+    - expression: 'res.headers["content-type"]'
+      operator: contains
+      value: 'application/problem+json'
+    - expression: 'res.body.status'
+      operator: eq
+      value: '404'
+    - expression: 'res.body.title'
+      operator: eq
+      value: 'Resource Not Found'
+    - expression: 'res.body.detail'
+      operator: contains
+      value: 'Project'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

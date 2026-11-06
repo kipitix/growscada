@@ -1,0 +1,53 @@
+info:
+  name: get journal
+  type: http
+  seq: 53
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/journal?from={{TAG_WRITE_BEFORE}}&limit=1
+  auth: inherit
+
+docs: |
+  A page of the project's Journal: the Runtime node's append-only record of
+  its operational state (ADR 0019). The entries are the record contract's
+  documents as they are stored, in the order of their positions (`seq`), each
+  with its own `schema_version`; `from` is exclusive and `limit` cuts the page.
+  The request reads exactly the entry the tag write above took
+  (`from = seq - 1`, `limit = 1`): the device simulator runs alongside this
+  collection and writes the dashboard's tags, so the last entry of the whole
+  journal is not this write. The only entry is a `tag_state` entry whose
+  `tag_state.tag_id` is the tag written and whose `seq` is the position the
+  write's answer named. A non-numeric or out-of-range position or page size is
+  `400`, a project that is not live `404 project_not_found`.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.entries'
+      operator: isArray
+    - expression: 'res.body.entries.length'
+      operator: eq
+      value: '1'
+    - expression: 'res.body.entries[0].seq'
+      operator: eq
+      value: '{{TAG_WRITE_SEQ}}'
+    - expression: 'res.body.entries[0].type'
+      operator: eq
+      value: 'tag_state'
+    - expression: 'res.body.entries[0].tag_state.tag_id'
+      operator: eq
+      value: '{{TAG_ID}}'
+    - expression: 'res.body.entries[0].seq'
+      operator: gt
+      value: '0'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
