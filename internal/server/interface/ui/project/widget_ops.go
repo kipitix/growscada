@@ -347,7 +347,10 @@ func (p *Project) setDragAlt(ctx app.Context, alt bool) {
 		return
 	}
 	p.dragAltHeld = alt
-	if p.draggingWidgetID == uuid.Nil {
+	// Before the pointer moves there is nothing to free or snap: the mousedown
+	// alone is a click, and pulling the Widgets then would leave the canvas at
+	// a position the mouseup sends no PATCH for.
+	if p.draggingWidgetID == uuid.Nil || !p.dragDidMove {
 		return
 	}
 	p.moveWidgetDrag(p.dragLastCliX, p.dragLastCliY)

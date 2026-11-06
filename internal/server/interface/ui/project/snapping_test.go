@@ -157,11 +157,34 @@ func TestDrag_AltFreesTheWidgetsOfSnapping(t *testing.T) {
 	}
 }
 
+// Alt pressed and released before the pointer moved is not a drag yet: it must
+// not pull the Widgets, or the canvas would show a position no PATCH ever sent.
+func TestSetDragAlt_BeforeThePointerMoves_LeavesTheWidgetsAlone(t *testing.T) {
+	p, a, _ := dragProject(t)
+	// a starts 4 px from the Scene's left edge, so a snap would pull it to 0.
+	p.widgets[0].Position.X = 4
+	p.dragStartPositions[a] = apiv0.PositionResponse{X: 4, Y: 100}
+
+	p.setDragAlt(p.compoCtx, true)
+	p.setDragAlt(p.compoCtx, false)
+
+	if got := p.widgets[0].Position.X; got != 4 {
+		t.Errorf("a at %v, want the untouched 4", got)
+	}
+	if got := p.widgets[1].Position.X; got != 150 {
+		t.Errorf("b at %v, want the untouched 150", got)
+	}
+	if p.dragGuides.vertical != nil || p.dragGuides.horizontal != nil {
+		t.Errorf("an Alt press without a move drew guides: %+v", p.dragGuides)
+	}
+}
+
 // Holding and releasing Alt re-applies the drag without another mousemove.
 func TestSetDragAlt_ReappliesTheDragAtThePointer(t *testing.T) {
 	p, _, _ := dragProject(t)
 	p.dragStartCliX = 0
 	p.moveWidgetDrag(267, 0)
+	p.dragDidMove = true // as the mousemove of a real drag records it
 	if got := p.widgets[0].Position.X; got != 280 {
 		t.Fatalf("snapped a at %v, want 280", got)
 	}
