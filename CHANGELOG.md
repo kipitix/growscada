@@ -1,5 +1,21 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.73] - 2026-11-06
+
+### Added
+
+- **Journal: чтение и живой поток** (задача 42, часть 2; ADR 0019)
+  - `application/runtime.JournalService` — сторона чтения Journal на Runtime-ноде, в порт `RuntimeNode` не входит: `Read(ctx, projectID, from, limit)` отдаёт записи проекта после исключающей `from` по возрастанию `seq` (не больше `limit`), `from < 0` и `limit` вне `(0, JournalMaxPageSize]` — `ErrInvalidInput`; `Position` — текущая позиция проекта (`COALESCE(MAX(seq), 0)`); константы `JournalPageSize = 100`, `JournalMaxPageSize = 1000`
+  - `postgres/runtime.NewJournalRepositoryPostgres` (`JournalRepository`: `FindAfter`, `Position`) над `runtime.journal`: `WHERE project_id = $1 AND seq > $2 ORDER BY seq LIMIT $3`, строки декодирует `journal_codec.go`; живость проекта проверяется до чтения (как у `FindAll` Revisions), поэтому удалённый проект — `project.ErrProjectNotFound`, а не пустая страница; записи чужого проекта не возвращаются
+  - Контракт `api/v0` **0.22** (MINOR): `JournalResponse{entries []recordv0.Entry}` (встраивание record/v0, как `RevisionResponse.Content`), `JournalPath`, `JournalEventsPath`, `JournalQueryFrom`, `JournalQueryLimit`; `make schemas`
+  - REST Runtime-ноды: `GET /api/v0/projects/{project_id}/journal?from=<seq>&limit=<n>` — 200 `{entries}`, `from` по умолчанию 0 и исключающая, `limit` по умолчанию 100 и не больше 1000, нечисловое или вне диапазона — 400, проект не жив — 404 `project_not_found`; `GET …/journal/events` — SSE: `Content-Type: text/event-stream`, `: connected`, затем `id: <seq>` и `data: <Entry>` на запись; старт — `?from=` (важнее), иначе `Last-Event-ID`, иначе `Position` (только новое), плохая позиция — 400 и мёртвый проект — 404 ещё до открытия потока
+  - Поток подписывается на `tag_updated` и `revision_created` **до** чтения позиции, читает таблицу страницами до пустой и ждёт пробуждения (payload не используется); страховочный тикер 5 с, сигналы схлопываются в канал ёмкостью 1; доставка at-most-once, а переподключение с `Last-Event-ID` догоняет точно, потому что читает таблицу (ADR 0019); свой обработчик, не `eventHub`: `maxSSEClients` на него не распространяется, `?client=` не нужен и EditLock не трогается; `/events` не менялся — судьба `tag_updated`/`revision_created` там за задачей 43
+  - `restapi.Services.Journal`; `main.go` и `servertest.StartAPI` проводят сервис; `APIRouter.Close` закрывает открытые Journal-потоки, чтобы shutdown не ждал их
+  - `apiclient.ProjectClient.Journal(ctx, from, limit)` — чтение диапазона, `ErrNotFound` на 404
+  - Bruno: `get_journal` (200, заголовок схемы, непустой `entries`, последняя запись `tag_state` с `tag_state.tag_id` записанного тега и `seq > 0`, позиция уходит в `JOURNAL_LAST_SEQ`), `get_journal_from_last` (после последней позиции — пустой список), `get_journal_invalid_limit` (`limit=0` — 400), `get_journal_unknown_project` (404), `get_journal_events` (manual: поток не заканчивается); плейсхолдер `JOURNAL_LAST_SEQ` в окружении
+  - AGENTS.md: чтение и поток Journal (маршруты, `Last-Event-ID`/`from`, at-most-once и точный догон, `/events` без изменений); CHANGELOG
+  - Тесты: сервис (передача диапазона, `ErrInvalidInput` на `from`/`limit`, `project.ErrProjectNotFound`), репозиторий (порядок `seq`, исключающая `from`, усечение `limit`, чужой проект, удалённый проект, пустой Journal), REST (200/400/404 чтения, SSE с `id:` и декодируемым `data`, `from` важнее заголовка, старт с позиции — только новое, событие чужого проекта не будит, отключение снимает подписку, `Close` завершает поток), apiclient (чтение, пустая страница после последней позиции, 404)
+
 ## [0.0.72] - 2026-11-06
 
 ### Added
