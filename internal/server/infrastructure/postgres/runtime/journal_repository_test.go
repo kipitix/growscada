@@ -294,8 +294,8 @@ func TestCreateRevision_Refused_LeavesNoJournalEntry(t *testing.T) {
 	revisions := runtimepg.NewRevisionRepositoryPostgres(postgres.DB(t))
 	twice := documentOf(projectID,
 		withEnvironments(
-			projectv0Environment(uuid.New(), "shop"),
-			projectv0Environment(uuid.New(), "shop"),
+			environmentOf(uuid.New(), "shop"),
+			environmentOf(uuid.New(), "shop"),
 		))
 	if _, err := revisions.CreateRevision(context.Background(), projectID.UUID(), twice, runtimeapp.RevisionCauseDeploy, time.Now()); err == nil {
 		t.Fatal("two environments of one name were stored")
@@ -305,8 +305,8 @@ func TestCreateRevision_Refused_LeavesNoJournalEntry(t *testing.T) {
 	}
 }
 
-// projectv0Environment is an Environment of a ProjectFile; the tests of the
-// journal name no more of it.
-func projectv0Environment(environmentID uuid.UUID, name string) projectv0.Environment {
+// environmentOf is an Environment of a ProjectFile named by the test alone: a
+// document with two Environments of one name is the refused one.
+func environmentOf(environmentID uuid.UUID, name string) projectv0.Environment {
 	return projectv0.Environment{ID: environmentID, Name: name}
 }
