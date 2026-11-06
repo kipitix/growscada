@@ -1,5 +1,21 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.72] - 2026-11-06
+
+### Added
+
+- **Journal: хранение и запись** (задача 42, часть 1; ADR 0019)
+  - Контракт `record/v0` **0.2** (MINOR): `Entry` встраивает `Header` и несёт `seq`, `timestamp` (RFC 3339), `project_id`, `type` и payload `tag_state`/`revision` (оба `omitempty`); `EntryType` (`tag_state`, `revision`) с `EntryTypes()`; payload-типы `TagState{tag_id, value, quality}` и `Revision{number, cause, rolled_back_from?}`; `RevisionCause` (`deploy`, `rollback`, `file`) — своё перечисление, запись не импортирует контракт API; `aggregate_id` нет — сущность названа в payload; `make schemas`, прежняя версия ушла в `frozen.sha256`
+  - Миграция `runtime/20261106000000_journal`: `runtime.journal` (`seq BIGINT` из явной `runtime.journal_seq`, `project_id` с `ON DELETE CASCADE`, `ts`, `type` с CHECK, `payload JSONB`, `schema_version`), индекс `(project_id, seq)`, append-only; `setval('runtime.journal_seq', MAX(tag_states.seq)+1, false)` до `DROP SEQUENCE runtime.tag_state_seq`, чтобы новое изменение было выше любого выданного `seq`; `runtime.tag_states.last_write_at` (NULL — начальное состояние); пустая `runtime.journal_cursors(subscriber, last_seq)`; Down возвращает `tag_state_seq` (значение выше сохранённых `seq`) и убирает таблицы и колонку
+  - Кодек `postgres/runtime/journal_codec.go`: `recordv0.Entry` ↔ строка `runtime.journal` (payload по `type`, `schema_version` строкой, время в `ts`), конструкторы `newTagStateEntry`/`newRevisionEntry`, неизвестный `type` при чтении — ошибка, чужая версия схемы и запись без payload своего типа — отказ; нужен и чтению 42_2
+  - Запись `tag_state`: `tagstate.Repository.Write` возвращает третий результат `changed bool`; одна транзакция — `SELECT … FOR UPDATE OF s` с проверкой Project, TagType и поставщика, сравнение value/Quality, при изменении `INSERT runtime.journal … RETURNING seq` и `UPDATE runtime.tag_states SET value, quality, seq, last_write_at`; повтор пишет только `last_write_at`, `seq` не двигается; строка тега блокируется, поэтому конкурентные писатели получают позиции в порядке блокировки; `tagstate.TagState.WrittenAt()` (`nil` у Initial) участвует в `Reconstitute`
+  - Запись `revision`: `CreateRevision` (Deploy, DeployFile с cause `file`) и `Rollback` вставляют `revision`-запись (`{number, cause, rolled_back_from?}`, без документа) в транзакции, нумерующей Revision, `ts = deployed_at`; откат транзакции записи не оставляет; `UpsertDefinitions`/`Delete`/`refreshCopies`/`RemoveProjectTagStates` Journal не трогают
+  - `TagStateService.SetTagValue` публикует `tag_updated` только при изменении; ответ PATCH несёт `seq` состояния (новый или прежний) и `written_at`; `FindTagStates` заполняет `WrittenAt`
+  - Контракт `api/v0` **0.21** (MINOR): `WrittenAt *string` (`written_at`, `omitempty`, RFC 3339) в `TagResponse`, `TagStateResponse` и `UpdateTagResponse`; `newTagResponse`/`newTagStateResponse`/`newUpdateTagResponse`/`newGetTagStatesResponse` переносят его; apiclient и PWA типы берут из `apiv0` — правок нет
+  - Seed `test_data`: состояния берут `seq` из `runtime.journal_seq` и пишут `last_write_at` (фикстура — не история, записей Journal в ней нет)
+  - AGENTS.md: `seq` — позиция Journal, `last_write_at`, записи `tag_state`/`revision` в тех же транзакциях, миграция `journal`; CHANGELOG
+  - Тесты: кодек (round-trip обоих типов, неизвестный `type`, чужая версия схемы, payload без своего типа), репозиторий (изменение — ровно одна запись с `seq` состояния и payload; повтор — ни записи, ни сдвига `seq`, двигается `last_write_at`; смена Quality — изменение; чужой поставщик — ни записи, ни изменения; конкурентные писатели — по записи на изменение в порядке блокировки; Deploy/DeployFile/Rollback — запись `revision` с временем Revision; отказ транзакции — ни записи; каскад Project уносит Journal, курсоры остаются), миграция (`setval` выше сохранённых `seq`, `last_write_at` NULL, `tag_state_seq` удалена, курсоры пусты, Down возвращает последовательность), сервис (`tag_updated` только при изменении, прежний `seq` у повтора, `written_at` до DTO), REST (`written_at` в ответах, повтор без сдвига `seq`), Bruno (`written_at` в `get_tags`, `get_tag_by_id`, `patch_tag_value`)
+
 ## [0.0.71] - 2026-11-06
 
 ### Added
