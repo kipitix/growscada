@@ -191,8 +191,12 @@ A portable file holding the operational record for a period — the Revisions in
 _Avoid_: backup, archive, dump
 
 **Journal**:
-The single append-only, totally ordered record of everything that happened in operation.
-_Avoid_: event log, audit log, history table
+The single append-only, totally ordered record of every change of a Project's operational state — a Tag's value and Quality, or the Revision Operation runs — each entry carrying the full new state of what changed and never the configuration itself.
+_Avoid_: event log, audit log, history table, write log
+
+**Journal position**:
+The number of a Journal entry — its place in the totally ordered record. The operational state at a position is a starting state plus the entries up to it; a Tag's state carries the position of its latest change.
+_Avoid_: `seq` (outside the wire format), offset, timestamp
 
 **Checkpoint**:
 A full snapshot of the operational state at one Journal position.
@@ -205,7 +209,7 @@ _Avoid_: viewer, replayer
 ### Cross-cutting
 
 **Version**:
-The optimistic-concurrency counter carried by every aggregate edited by people — not by Tag state, whose writes are numbered instead. A Draft's content is versioned as a whole: its entities carry no Version of their own.
+The optimistic-concurrency counter carried by every aggregate edited by people — not by Tag state, whose latest change is named by a Journal position instead. A Draft's content is versioned as a whole: its entities carry no Version of their own.
 _Avoid_: etag, stale client, base version
 
 **SchemaVersion**:
