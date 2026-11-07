@@ -52,6 +52,34 @@ func TestDraftUpdate_CAS(t *testing.T) {
 	}
 }
 
+// TestDraftCheckVersion: the check around a multi-step act over the Draft
+// passes at the Version it read and is a draft_conflict once a write raised it
+// (ADR 0022).
+func TestDraftCheckVersion(t *testing.T) {
+	cleanTags(t)
+	cleanDrafts(t)
+	ctx := context.Background()
+	scope := draft.ProjectScope(mainProject)
+	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
+	read := draftVersionOf(t, mainProject)
+
+	if err := testDrafts().CheckVersion(ctx, scope, read); err != nil {
+		t.Fatalf("CheckVersion at the current version: %v", err)
+	}
+
+	created := makeTag(t, "speed", repo)
+	mustUpdate(t, mainProject, "Create tag speed", func(session *draft.Session) error {
+		session.CreateTag(ctx, created)
+		return nil
+	})
+	if err := testDrafts().CheckVersion(ctx, scope, read); !errors.Is(err, draft.ErrDraftConflict) {
+		t.Fatalf("CheckVersion with a stale version: %v, want ErrDraftConflict", err)
+	}
+	if err := testDrafts().CheckVersion(ctx, scope, draftVersionOf(t, mainProject)); err != nil {
+		t.Errorf("CheckVersion at the new version: %v", err)
+	}
+}
+
 // TestDraftUpdate_WritesOneDraftChange: every successful write stores one row
 // with the before and after states of what it touched, and moves the stack
 // position (ADR 0017).
