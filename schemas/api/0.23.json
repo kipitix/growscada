@@ -1065,6 +1065,27 @@
       ],
       "type": "object"
     },
+    "OperationStateResponse": {
+      "properties": {
+        "position": {
+          "type": "integer"
+        },
+        "revision": {
+          "$ref": "#/$defs/RevisionResponse"
+        },
+        "tag_states": {
+          "additionalProperties": {
+            "$ref": "#/$defs/TagStateResponse"
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "position",
+        "tag_states"
+      ],
+      "type": "object"
+    },
     "Origin": {
       "properties": {
         "x": {
