@@ -167,10 +167,12 @@ func (r *Root) newSelector(mode Mode) *projects.Switcher {
 }
 
 // selectProject shows the project id (uuid.Nil: none) in mode; its switcher
-// calls it on the UI goroutine. The mode loads the project's content on the
+// calls it on the UI goroutine. Project loads the project's content on the
 // EventProjectResync of the Bar's stream of it: if the Bar follows it
 // already, it resyncs now; else, if mode is shown, the Bar follows it, its
 // stream resyncing as it opens; else mode loads it once shown (SetMode).
+// Operation reads nothing of the Bar: its own Player follows the Journal
+// (ADR 0020).
 func (r *Root) selectProject(mode Mode, id uuid.UUID) {
 	previous := r.selected[mode]
 	r.selected[mode] = id

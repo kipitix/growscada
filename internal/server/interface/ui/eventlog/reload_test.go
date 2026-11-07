@@ -35,7 +35,7 @@ func TestReloadTargetsFor(t *testing.T) {
 		{apiv0.Event{Type: apiv0.EventTagUpdated}, ReloadTargets{Tags: true}},
 		{apiv0.Event{Type: apiv0.EventTagDeleted}, ReloadTargets{Tags: true, Deploy: true}},
 		{apiv0.Event{Type: EventResync}, ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, EditLock: true}},
-		{apiv0.Event{Type: EventProjectResync}, ReloadTargets{LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Revision: true, EditLock: true}},
+		{apiv0.Event{Type: EventProjectResync}, ReloadTargets{LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, EditLock: true}},
 		{apiv0.Event{Type: apiv0.EventEditLockAcquired}, ReloadTargets{EditLock: true}},
 		{apiv0.Event{Type: apiv0.EventEditLockTakenOver}, ReloadTargets{EditLock: true}},
 		{apiv0.Event{Type: apiv0.EventProjectCreated}, ReloadTargets{Projects: true, Deploy: true}},
@@ -46,7 +46,7 @@ func TestReloadTargetsFor(t *testing.T) {
 		{apiv0.Event{Type: apiv0.EventDeviceCreated}, ReloadTargets{Deploy: true}},
 		{apiv0.Event{Type: apiv0.EventEnvironmentUpdated}, ReloadTargets{Deploy: true}},
 		{apiv0.Event{Type: apiv0.EventEnvironmentDeviceDeleted}, ReloadTargets{Deploy: true}},
-		{apiv0.Event{Type: apiv0.EventRevisionCreated}, ReloadTargets{Revision: true, Deploy: true}},
+		{apiv0.Event{Type: apiv0.EventRevisionCreated}, ReloadTargets{Deploy: true}},
 		{apiv0.Event{Type: apiv0.EventClientConnected}, ReloadTargets{}},
 
 		{apiv0.Event{Type: apiv0.EventSystemReady}, ReloadTargets{}},
@@ -61,9 +61,9 @@ func TestReloadTargetsFor(t *testing.T) {
 }
 
 // notShownYet are the event types that change no server-backed list of the
-// UI: the modes apply them themselves (the running Revision is reloaded by
-// Operation on revision_created), or they belong to content it does not show
-// yet (task 66 shows Devices, Environments and their pairs).
+// UI: the modes apply them themselves (Operation reads its own Journal, ADR
+// 0020), or they belong to content it does not show yet (task 66 shows
+// Devices, Environments and their pairs).
 var notShownYet = map[string]bool{}
 
 // TestReloadTargetsFor_CoversEveryKnownEvent guards the table against a new
@@ -125,7 +125,8 @@ func TestReloadTargets_DraftChanged(t *testing.T) {
 	}
 }
 
-func TestReloadTargets_WidgetsOf(t *testing.T) {	selected, other := uuid.New(), uuid.New()
+func TestReloadTargets_WidgetsOf(t *testing.T) {
+	selected, other := uuid.New(), uuid.New()
 
 	for name, tc := range map[string]struct {
 		targets  ReloadTargets

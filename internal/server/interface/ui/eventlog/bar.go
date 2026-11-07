@@ -175,10 +175,10 @@ func (b *Bar) OnDismount() {
 // SetProject switches the connection to the events of the project id
 // (uuid.Nil: none) by opening a new one; before the Bar is mounted it only
 // remembers it. The new connection fires EventProjectResync once it is open
-// (while a project is selected): Project and Operation load the new
-// project's content on it only. If the server's events are coming in, the
-// open connection carrying them stays until the new one is open, which then
-// fires no EventResync; otherwise it fires EventResync first.
+// (while a project is selected): Project loads the new project's content on
+// it only. If the server's events are coming in, the open connection carrying
+// them stays until the new one is open, which then fires no EventResync;
+// otherwise it fires EventResync first.
 func (b *Bar) SetProject(id uuid.UUID) {
 	if id == b.projectID {
 		return

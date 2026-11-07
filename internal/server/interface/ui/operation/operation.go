@@ -1,9 +1,10 @@
 // Package operation is the Operator's runtime view: the Scenes of the
-// Revision the Project runs, with live Tag values, read-only. It reads the
-// Revision and the snapshot of the Tag states from the REST API and follows
-// server events, applying tag_updated values directly; rendering is left to
-// livescene.View. The Draft and Library changes are invisible here until a
-// Deploy makes a new Revision, whose revision_created reloads it.
+// Revision the Project runs, with live Tag values, read-only. The operational
+// picture (the Revision, the Tag states, the Journal position and the
+// connection) comes from a player.Player over the Project's Journal stream;
+// rendering is left to livescene.View. The Draft and Library changes are
+// invisible here until a Deploy makes a new Revision, which reaches the
+// Player as a Journal entry (ADR 0020).
 package operation
 
 import (
@@ -12,9 +13,8 @@ import (
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
-	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
 	"github.com/kipitix/growscada/internal/server/interface/ui/livescene"
-	"github.com/kipitix/growscada/internal/server/interface/ui/tagstate"
+	"github.com/kipitix/growscada/internal/server/interface/ui/player"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -33,24 +33,15 @@ type Operation struct {
 	// come from the Revision the project runs, never from the Draft.
 	projectID uuid.UUID
 	content   *apiclient.ProjectClient
-
-	// deployed is false until the project's first Deploy: the view then says
-	// so, and nothing of the Draft is shown in its place.
-	deployed bool
-	revision apiv0.RevisionResponse
-	scenes   []apiv0.SceneResponse
-	// widgetTypes is the copy of each WidgetType the Revision holds, by ID.
-	widgetTypes map[uuid.UUID]apiv0.ReleasedWidgetTypeResponse
-	// widgets are those of the selected Scene of the Revision.
-	widgets []apiv0.WidgetResponse
-	tags    tagstate.Tags
+	// player is the operational model of the project shown: the Revision it
+	// runs, its Tag states and the Journal position. It is replaced on a
+	// switch of Project and closed when the mode leaves.
+	player *player.Player
+	// newSource builds the Player's entry source; nil means the live Journal
+	// stream (a test sets its own).
+	newSource func(*apiclient.ProjectClient) player.Source
 
 	selectedSceneID uuid.UUID
-	disconnected    bool
-
-	// Coalesce reloads of each server-backed list.
-	revisionReloader  uiutil.Reloader
-	tagStatesReloader uiutil.Reloader
 }
 
 func NewOperation(client *apiclient.Client) *Operation {
@@ -59,34 +50,22 @@ func NewOperation(client *apiclient.Client) *Operation {
 
 func (o *Operation) OnMount(ctx app.Context) {
 	o.compoCtx, o.mounted = ctx, true
-	o.widgetTypes = map[uuid.UUID]apiv0.ReleasedWidgetTypeResponse{}
 	ctx.ObserveState("theme", &o.ThemeMode)
-	ctx.ObserveState(eventlog.StateDisconnected, &o.disconnected)
 	o.selectedSceneID = uiutil.LoadID(ctx, o.sceneKey())
-
-	o.reload(ctx, eventlog.AllTargets)
-
-	ctx.Handle(eventlog.ActionServerEvent, func(ctx app.Context, a app.Action) {
-		ev, ok := a.Value.(apiv0.Event)
-		if !ok || !eventlog.ForProject(a, o.projectID) { // another mode's project
-			return
-		}
-		o.tags = eventlog.ApplyToTags(o.tags, ev)
-		o.reload(ctx, eventlog.ReloadTargetsFor(ev))
-	})
+	o.startPlayer()
 }
 
-// OnDismount marks the Operation unmounted: a SetProject until the next
-// OnMount only remembers the project, whose content that OnMount loads,
-// rather than working through the context of an unmounted component.
+// OnDismount closes the Player's stream: the mode no longer shows anything
+// until it is mounted again, which reads a fresh starting state.
 func (o *Operation) OnDismount() {
 	o.mounted = false
+	o.stopPlayer()
 }
 
-// SetProject shows the project id (uuid.Nil: none), dropping what was shown
-// of another one and restoring the new one's selected Scene. Its content is
-// loaded on the EventProjectResync of the Bar's stream of it, like
-// Project's. Before the Operation is mounted it only remembers it.
+// SetProject shows the project id (uuid.Nil: none), dropping what was shown of
+// another one and restoring the new one's selected Scene. A new Player reads
+// the new Project's starting state at once; before the Operation is mounted
+// it only remembers the project, whose Player that OnMount creates.
 func (o *Operation) SetProject(id uuid.UUID) {
 	if id == o.projectID {
 		return
@@ -98,26 +77,41 @@ func (o *Operation) SetProject(id uuid.UUID) {
 	if !o.mounted {
 		return
 	}
-	o.scenes, o.widgets = nil, nil
-	o.widgetTypes = map[uuid.UUID]apiv0.ReleasedWidgetTypeResponse{}
-	o.tags = tagstate.Tags{}
-	o.revision, o.deployed = apiv0.RevisionResponse{}, false
 	o.selectedSceneID = uiutil.LoadID(o.compoCtx, o.sceneKey())
+	o.startPlayer()
 	// Root calls it, so nothing marks this component for an update.
 	o.compoCtx.Update()
+}
+
+// startPlayer replaces the Player of the project shown with a fresh one. The
+// Player reads the starting state and opens the stream itself.
+func (o *Operation) startPlayer() {
+	o.stopPlayer()
+	if !o.mounted || o.content == nil {
+		return
+	}
+	var source player.Source
+	if o.newSource != nil {
+		source = o.newSource(o.content)
+	} else {
+		source = player.NewLiveSource(o.content)
+	}
+	o.player = player.New(o.compoCtx, o.content, source).WithOnChange(func() {
+		o.compoCtx.Update()
+	})
+	o.player.Resync()
+}
+
+func (o *Operation) stopPlayer() {
+	if o.player != nil {
+		o.player.Close()
+		o.player = nil
+	}
 }
 
 // sceneKey is the LocalStorage key of the selected Scene of the project
 // shown.
 func (o *Operation) sceneKey() string { return sceneStorageKey + ":" + o.projectID.String() }
-
-func (o *Operation) reload(ctx app.Context, targets eventlog.ReloadTargets) {
-	// Only the running Revision is read here: a Draft or Library event changes
-	// nothing until a Deploy makes a Revision (task 35, Q1/Q3).
-	if targets.Revision {
-		o.loadRevision(ctx)
-	}
-}
 
 func (o *Operation) selectScene(ctx app.Context, sceneID uuid.UUID) {
 	if sceneID == o.selectedSceneID {
@@ -125,16 +119,20 @@ func (o *Operation) selectScene(ctx app.Context, sceneID uuid.UUID) {
 	}
 	o.selectedSceneID = sceneID
 	uiutil.StoreID(ctx, o.sceneKey(), sceneID)
-	o.loadWidgets()
 }
 
 func (o *Operation) Render() app.UI {
 	if o.content == nil {
 		return uiutil.NoProject()
 	}
-	if !o.deployed {
+	var view player.View
+	if o.player != nil {
+		view = o.player.View()
+	}
+	if !view.Deployed() {
 		return renderNotDeployed()
 	}
+	selected := selectScene(view.Scenes, o.selectedSceneID)
 	return app.Div().
 		Style("display", "flex").
 		Style("flex-direction", "column").
@@ -143,16 +141,16 @@ func (o *Operation) Render() app.UI {
 		Style("min-height", "0").
 		Style("border", "1px solid var(--border)").
 		Body(
-			o.renderSceneTabs(),
-			o.renderScene(),
+			o.renderSceneTabs(view, selected),
+			o.renderScene(view, selected),
 		)
 }
 
-func (o *Operation) renderSceneTabs() app.UI {
-	tabs := make([]app.UI, 0, len(o.scenes))
-	for _, sc := range o.scenes {
+func (o *Operation) renderSceneTabs(view player.View, selected uuid.UUID) app.UI {
+	tabs := make([]app.UI, 0, len(view.Scenes))
+	for _, sc := range view.Scenes {
 		sc := sc
-		active := o.selectedSceneID == sc.ID
+		active := selected == sc.ID
 
 		bg, borderBottom, color, fontWeight := "var(--bg-hover)", "2px solid transparent", "var(--text-2)", "normal"
 		if active {
@@ -191,8 +189,8 @@ func (o *Operation) renderSceneTabs() app.UI {
 		Body(tabs...)
 }
 
-func (o *Operation) renderScene() app.UI {
-	sc, ok := o.findScene(o.selectedSceneID)
+func (o *Operation) renderScene(view player.View, selected uuid.UUID) app.UI {
+	sc, ok := uiutil.FindByID(view.Scenes, selected, uiutil.SceneID)
 	if !ok {
 		return app.Div().
 			Style("flex", "1").
@@ -204,27 +202,24 @@ func (o *Operation) renderScene() app.UI {
 			Text("No scenes to show")
 	}
 
-	var widgets []apiv0.WidgetResponse
-	if o.selectedSceneID == sc.ID {
-		widgets = o.widgets
-	}
+	widgets := view.Widgets(sc.ID)
 	return &livescene.View{
 		Scene:       sc,
 		Widgets:     widgets,
-		WidgetTypes: o.widgetTypes,
-		Tags:        livescene.SceneTags(widgets, o.tags.Find),
-		Connected:   !o.disconnected,
-		Theme:       o.ThemeMode,
+		WidgetTypes: view.WidgetTypes,
+		Tags: livescene.SceneTags(widgets, func(id uuid.UUID) (apiv0.TagResponse, bool) {
+			tag, ok := view.Tags[id]
+			return tag, ok
+		}),
+		Connected: view.Connected,
+		Theme:     o.ThemeMode,
 	}
-}
-
-func (o *Operation) findScene(id uuid.UUID) (apiv0.SceneResponse, bool) {
-	return uiutil.FindByID(o.scenes, id, uiutil.SceneID)
 }
 
 // renderNotDeployed is Operation's empty state: the Project runs no Revision,
 // so there is no configuration to show. The Draft is deliberately not shown in
-// its place: it is not what the plant runs.
+// its place: it is not what the plant runs. The first Deploy arrives as a
+// Journal entry and switches the screen without a reload.
 func renderNotDeployed() app.UI {
 	return app.Div().
 		Attr("data-operation-not-deployed", "true").

@@ -5,13 +5,15 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	recordv0 "github.com/kipitix/growscada/contract/record/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
-	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
+	"github.com/kipitix/growscada/internal/server/interface/ui/player"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uitest"
 	"github.com/kipitix/growscada/internal/server/servertest"
 )
@@ -29,17 +31,82 @@ type mountOnHost struct{ *Operation }
 
 func (m mountOnHost) OnPreRender(ctx app.Context) { m.OnMount(ctx) }
 
+// fakeSource is a player.Source a test drives: it reports the callbacks it is
+// opened with, so the test feeds the entries the server's Journal holds.
+type fakeSource struct {
+	events player.Events
+	from   int64
+	closed bool
+}
+
+func (s *fakeSource) Open(_ app.Context, from int64, events player.Events) {
+	s.from, s.events, s.closed = from, events, false
+	if events.Opened != nil {
+		events.Opened()
+	}
+}
+
+func (s *fakeSource) Close() { s.closed = true }
+
+func (s *fakeSource) feed(entries ...recordv0.Entry) {
+	for _, entry := range entries {
+		s.events.Entry(entry)
+	}
+}
+
+// countingTransport counts the requests the Operation makes, by path suffix.
+type countingTransport struct {
+	base http.RoundTripper
+
+	mu    sync.Mutex
+	paths map[string]int
+}
+
+func (c *countingTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	c.mu.Lock()
+	if c.paths == nil {
+		c.paths = make(map[string]int)
+	}
+	c.paths[r.URL.Path]++
+	c.mu.Unlock()
+	return c.base.RoundTrip(r)
+}
+
+func (c *countingTransport) count(suffix string) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	total := 0
+	for path, n := range c.paths {
+		if strings.HasSuffix(path, suffix) {
+			total += n
+		}
+	}
+	return total
+}
+
+// countingClient makes an Operation's requests go through counter.
+func countingClient(base *http.Client, counter *countingTransport) *http.Client {
+	counter.base = base.Transport
+	if counter.base == nil {
+		counter.base = http.DefaultTransport
+	}
+	return &http.Client{Transport: counter}
+}
+
 type fixture struct {
-	t *testing.T
-	o *Operation
-	e *uitest.Engine
+	t      *testing.T
+	o      *Operation
+	e      *uitest.Engine
+	source *fakeSource
 }
 
 func mount(t *testing.T, url string, httpClient *http.Client) *fixture {
 	t.Helper()
+	source := &fakeSource{}
 	o := NewOperation(apiclient.New(url, httpClient))
+	o.newSource = func(*apiclient.ProjectClient) player.Source { return source }
 	o.SetProject(servertest.MainProject)
-	f := &fixture{t: t, o: o}
+	f := &fixture{t: t, o: o, source: source}
 	f.e = uitest.Load(t, mountOnHost{o})
 	f.run()
 	return f
@@ -47,29 +114,29 @@ func mount(t *testing.T, url string, httpClient *http.Client) *fixture {
 
 func (f *fixture) run() { f.e.ConsumeAll() }
 
-func (f *fixture) event(ev apiv0.Event) {
-	f.o.compoCtx.NewActionWithValue(eventlog.ActionServerEvent, ev)
+// feed delivers entries to the Player on the UI goroutine and lets it finish
+// what they start (the Revision document read included).
+func (f *fixture) feed(entries ...recordv0.Entry) {
+	f.o.compoCtx.Dispatch(func(app.Context) { f.source.feed(entries...) })
 	f.run()
 }
 
-// TestNotDeployed_ShowsTheEmptyState: without a Revision Operation shows that
-// the Project is not deployed, not the Draft.
-func TestNotDeployed_ShowsTheEmptyState(t *testing.T) {
-	srv, _ := servertest.StartAPI(t, postgres.DB(t))
-	f := mount(t, srv.URL, srv.Client())
-
-	if f.o.deployed {
-		t.Fatalf("the project runs no Revision, but Operation is deployed")
+// pump delivers the entries the Project's Journal holds after the position
+// the Player has consumed.
+func (f *fixture) pump(project *apiclient.ProjectClient) {
+	f.t.Helper()
+	entries, err := project.Journal(context.Background(), f.o.player.Position(), 100)
+	if err != nil {
+		f.t.Fatalf("read the journal: %v", err)
 	}
-	html := app.HTMLString(f.o.Render())
-	if !strings.Contains(html, "Project is not deployed") || !strings.Contains(html, "data-operation-not-deployed") {
-		t.Errorf("Operation does not show the empty state: %s", html)
-	}
+	f.feed(entries...)
 }
 
-// TestRevision_ShowsScenesAndTagStates: Operation renders the Revision's
-// Scenes, its WidgetTypes and the Tag states snapshot.
-func TestRevision_ShowsScenesAndTagStates(t *testing.T) {
+// TestOperation_FirstDeployArrivesFromTheJournal: a Project without a
+// Revision shows the empty state, and its first Deploy arrives as a Journal
+// entry — no reload of /revision or /tag-states, the values then follow
+// tag_state entries.
+func TestOperation_FirstDeployArrivesFromTheJournal(t *testing.T) {
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
 	api := apiclient.New(srv.URL, srv.Client()).WithClientKey(servertest.ClientKey.String())
 	servertest.EnsureEditLock(t, srv, servertest.MainProject)
@@ -80,33 +147,62 @@ func TestRevision_ShowsScenesAndTagStates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create tag: %v", err)
 	}
-	if _, err := project.CreateScene(ctx, apiv0.CreateSceneRequest{Name: "Overview", Width: 800, Height: 600}); err != nil {
+	scene, err := project.CreateScene(ctx, apiv0.CreateSceneRequest{Name: "Overview", Width: 800, Height: 600})
+	if err != nil {
 		t.Fatalf("create scene: %v", err)
 	}
+
+	counter := &countingTransport{}
+	f := mount(t, srv.URL, countingClient(srv.Client(), counter))
+	if f.o.player.Deployed() {
+		t.Fatal("the project runs no Revision, but Operation is deployed")
+	}
+	html := app.HTMLString(f.o.Render())
+	if !strings.Contains(html, "Project is not deployed") || !strings.Contains(html, "data-operation-not-deployed") {
+		t.Errorf("Operation does not show the empty state: %s", html)
+	}
+
 	if _, err := project.Deploy(ctx); err != nil {
 		t.Fatalf("deploy: %v", err)
 	}
-	if _, err := project.SetTagValue(ctx, tag.ID, "42", "good"); err != nil {
-		t.Fatalf("set tag value: %v", err)
+	f.pump(project)
+	view := f.o.player.View()
+	if !view.Deployed() || len(view.Scenes) != 1 || view.Scenes[0].ID != scene.ID {
+		t.Fatalf("the revision entry did not switch the configuration: %+v", view)
 	}
-
-	f := mount(t, srv.URL, srv.Client())
-	if !f.o.deployed || len(f.o.scenes) != 1 || f.o.scenes[0].Name != "Overview" {
-		t.Fatalf("deployed %v, scenes %+v", f.o.deployed, f.o.scenes)
+	if tagView := view.Tags[tag.ID]; tagView.Value != "0" || tagView.Quality != "bad" || tagView.Seq != 0 {
+		t.Errorf("an unwritten Tag = %+v, want its type's zero value at bad", tagView)
 	}
-	state, ok := f.o.tags.Find(tag.ID)
-	if !ok || state.Value != "42" || state.Quality != "good" {
-		t.Errorf("tag state: %+v, %v; want the snapshot's 42 good", state, ok)
-	}
-	html := app.HTMLString(f.o.Render())
+	html = app.HTMLString(f.o.Render())
 	if !strings.Contains(html, "Overview") {
 		t.Errorf("Operation does not render the Revision's Scene: %s", html)
 	}
+
+	if _, err := project.SetTagValue(ctx, tag.ID, "42", "good"); err != nil {
+		t.Fatalf("set tag value: %v", err)
+	}
+	f.pump(project)
+	if tagView := f.o.player.View().Tags[tag.ID]; tagView.Value != "42" || tagView.Quality != "good" {
+		t.Errorf("the tag_state entry did not move the value: %+v", tagView)
+	}
+
+	// The Player reads the starting state and the Revision documents alone:
+	// Operation no longer reads /revision or /tag-states (ADR 0020).
+	if got := counter.count("/revision"); got != 0 {
+		t.Errorf("Operation read /revision %d times", got)
+	}
+	if got := counter.count("/tag-states"); got != 0 {
+		t.Errorf("Operation read /tag-states %d times", got)
+	}
+	if got := counter.count("/operation"); got == 0 {
+		t.Error("Operation never read the starting state")
+	}
 }
 
-// TestRevision_DraftChangesAreInvisible: a content event of the Draft changes
-// nothing; only revision_created reloads the running Revision.
-func TestRevision_DraftChangesAreInvisible(t *testing.T) {
+// TestOperation_SecondDeployAndRollbackSwitchTheConfiguration: a Draft change
+// alone is invisible; a Deploy makes a new Revision entry, which swaps the
+// configuration, and a Rollback does the same with a new number.
+func TestOperation_SecondDeployAndRollbackSwitchTheConfiguration(t *testing.T) {
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
 	api := apiclient.New(srv.URL, srv.Client()).WithClientKey(servertest.ClientKey.String())
 	servertest.EnsureEditLock(t, srv, servertest.MainProject)
@@ -116,31 +212,41 @@ func TestRevision_DraftChangesAreInvisible(t *testing.T) {
 	if _, err := project.CreateScene(ctx, apiv0.CreateSceneRequest{Name: "First", Width: 800, Height: 600}); err != nil {
 		t.Fatalf("create scene: %v", err)
 	}
-	deployed, err := project.Deploy(ctx)
-	if err != nil {
+	if _, err := project.Deploy(ctx); err != nil {
 		t.Fatalf("deploy: %v", err)
 	}
 
 	f := mount(t, srv.URL, srv.Client())
-	added, err := project.CreateScene(ctx, apiv0.CreateSceneRequest{Name: "Second", Width: 800, Height: 600})
-	if err != nil {
+	if view := f.o.player.View(); len(view.Scenes) != 1 || view.Scenes[0].Name != "First" {
+		t.Fatalf("the starting state = %+v", view.Scenes)
+	}
+
+	// A Draft change reaches Operation only through a Deploy.
+	if _, err := project.CreateScene(ctx, apiv0.CreateSceneRequest{Name: "Second", Width: 800, Height: 600}); err != nil {
 		t.Fatalf("create second scene: %v", err)
 	}
-
-	f.event(apiv0.Event{Type: apiv0.EventSceneCreated, ID: added.ID.String()})
-	if len(f.o.scenes) != 1 {
-		t.Fatalf("a Draft Scene reached Operation: %+v", f.o.scenes)
+	if view := f.o.player.View(); len(view.Scenes) != 1 {
+		t.Fatalf("a Draft Scene reached Operation: %+v", view.Scenes)
 	}
 
-	revision, err := project.Deploy(ctx)
-	if err != nil {
+	if _, err := project.Deploy(ctx); err != nil {
 		t.Fatalf("second deploy: %v", err)
 	}
-	if revision.Number != deployed.Number+1 {
-		t.Fatalf("second Deploy numbered %d, want %d", revision.Number, deployed.Number+1)
+	f.pump(project)
+	view := f.o.player.View()
+	if len(view.Scenes) != 2 || view.Revision.Number != 2 {
+		t.Fatalf("the second Deploy did not swap the configuration: #%d, %+v", view.Revision.Number, view.Scenes)
 	}
-	f.event(apiv0.Event{Type: apiv0.EventRevisionCreated, Revision: revision.Number, DeployedAt: revision.DeployedAt})
-	if len(f.o.scenes) != 2 {
-		t.Errorf("revision_created did not reload the Revision: %+v", f.o.scenes)
+
+	if _, err := project.Rollback(ctx, 1); err != nil {
+		t.Fatalf("rollback: %v", err)
+	}
+	f.pump(project)
+	view = f.o.player.View()
+	if view.Revision.Number != 3 || view.Revision.Cause != apiv0.RevisionCauseRollback {
+		t.Fatalf("revision = #%d %q, want #3 rolled back", view.Revision.Number, view.Revision.Cause)
+	}
+	if len(view.Scenes) != 1 || view.Scenes[0].Name != "First" {
+		t.Errorf("the Rollback did not restore the first configuration: %+v", view.Scenes)
 	}
 }

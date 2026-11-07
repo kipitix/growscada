@@ -10,15 +10,15 @@ import (
 
 // ReloadTargets says which server-backed lists an event makes stale.
 // It is the single routing table of the parts that show server data (the
-// project switcher of Root, Library, Project, Operation); each reloads the
-// lists it shows. Libraries are the server's with the WidgetTypes of their
-// Drafts (WidgetTypes); LibraryPins (the selected project's pins and the
+// project switcher of Root, Library, Project); each reloads the lists it
+// shows. Libraries are the server's with the WidgetTypes of their Drafts
+// (WidgetTypes); LibraryPins (the selected project's pins and the
 // WidgetTypes of the releases they pin), Scenes, Widgets and Tags are those
 // of the selected project. Deploy is the Project mode's deployment state (the
-// Revision it runs and whether the Draft differs from it); Revision is the
-// running Revision itself, which Operation reads.
+// Revision it runs and whether the Draft differs from it). Operation reads
+// none of these: it follows the Journal from a Player of its own (ADR 0020).
 type ReloadTargets struct {
-	Projects, Libraries, WidgetTypes, LibraryPins, Scenes, Widgets, Tags, Deploy, Revision, EditLock bool
+	Projects, Libraries, WidgetTypes, LibraryPins, Scenes, Widgets, Tags, Deploy, EditLock bool
 	// Scene is the one Scene whose own state and Widgets are stale (a Widget
 	// of it changed, which bumps its version without a scene event); uuid.Nil
 	// if none. The list of Scenes is not: only scene events and a resync
@@ -42,13 +42,13 @@ func (t ReloadTargets) DraftChanged() bool {
 }
 
 // AllTargets is every list.
-var AllTargets = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Revision: true, EditLock: true}
+var AllTargets = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, EditLock: true}
 
 // The lists of each stream: what its resync reloads, since the events it
 // published while disconnected are lost.
 var (
 	serverTargets  = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, EditLock: true}
-	projectTargets = ReloadTargets{LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Revision: true, EditLock: true}
+	projectTargets = ReloadTargets{LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, EditLock: true}
 )
 
 // ReloadTargetsFor routes an event of the streams (or EventResync,
@@ -66,9 +66,10 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 		// it rereads the lock.
 		return ReloadTargets{EditLock: true}
 	case apiv0.EventRevisionCreated:
-		// The Revision the Project runs changed: Operation rereads it, Project
-		// refreshes its badge; nothing of the Draft is touched.
-		return ReloadTargets{Revision: true, Deploy: true}
+		// The Revision the Project runs changed: Project refreshes its badge;
+		// nothing of the Draft is touched. Operation does not read this stream
+		// (ADR 0020).
+		return ReloadTargets{Deploy: true}
 	case apiv0.EventProjectCreated, apiv0.EventProjectUpdated, apiv0.EventProjectDeleted:
 		// A Project was made, renamed or removed: the mode rereads the list.
 		return ReloadTargets{Projects: true, Deploy: true}
