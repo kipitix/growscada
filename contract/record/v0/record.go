@@ -38,9 +38,11 @@ const (
 	EntryTypeRevision EntryType = "revision"
 )
 
-// EntryTypes returns the names of every entry type, so a reader checks a type
-// against the whole set. A stored entry may still carry EntryTypeRevision: a
-// reader that accepts the whole set accepts it too.
+// EntryTypes returns the names of every entry type this version writes, so a
+// writer picks one of them. A stored entry may still carry EntryTypeRevision;
+// UnmarshalJSON and the Journal codec read it as EntryTypeDeployment before a
+// reader checks the type, so the set names what a reader sees, not the bytes
+// of an old row.
 func EntryTypes() []string {
 	return []string{string(EntryTypeTagState), string(EntryTypeDeployment)}
 }
