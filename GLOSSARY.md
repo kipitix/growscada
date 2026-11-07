@@ -186,6 +186,14 @@ _Avoid_: import, upload, restore
 
 ### Operation and History
 
+**Operation**:
+The mode in which an Operator watches and controls the running Revision with the live Tag values; it follows the Journal from the present.
+_Avoid_: runtime mode, live mode, production
+
+**History**:
+The mode in which one reads a Project's operational past from Checkpoints and Journal entries.
+_Avoid_: replay, playback (a PlaybackFile is the file)
+
 **PlaybackFile**:
 A portable file holding the operational record for a period — the Revisions in force, the Journal entries and the Checkpoints needed to replay it.
 _Avoid_: backup, archive, dump
@@ -202,8 +210,12 @@ _Avoid_: `seq` (outside the wire format), offset, timestamp
 A full snapshot of the operational state at one Journal position.
 _Avoid_: snapshot (unqualified), backup
 
+**Starting state**:
+The Revision and the Tag states a Player begins from at one Journal position.
+_Avoid_: snapshot (a Checkpoint is a full snapshot), initial state
+
 **Player**:
-The client-side mechanism that renders the operational picture from a starting state plus Journal entries.
+The client-side mechanism that renders the operational picture from a starting state plus Journal entries, live (Operation) or replayed (History).
 _Avoid_: viewer, replayer
 
 ### Cross-cutting
