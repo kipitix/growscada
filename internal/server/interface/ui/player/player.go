@@ -251,7 +251,11 @@ func (p *Player) loadRevision(number int) {
 				return
 			}
 			if err != nil {
-				p.streamLost(true)
+				// A read the Player has overtaken (a newer Revision is
+				// already on screen) says nothing about the connection.
+				if p.revisionNeeded(number) {
+					p.streamLost(true)
+				}
 				return
 			}
 			if p.model.SetRevision(revision) {
@@ -259,6 +263,14 @@ func (p *Player) loadRevision(number int) {
 			}
 		})
 	})
+}
+
+// revisionNeeded reports whether the document of Revision number is still the
+// one the Player runs: a read of an older Revision may arrive after a newer
+// one was applied, and its failure is not a lost connection.
+func (p *Player) revisionNeeded(number int) bool {
+	revision := p.model.Revision()
+	return revision == nil || number > revision.Number
 }
 
 // streamOpened marks the connection up. If the starting state has advanced

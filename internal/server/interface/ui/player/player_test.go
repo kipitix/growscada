@@ -94,6 +94,23 @@ func TestPlayer_LostConnection(t *testing.T) {
 	}
 }
 
+// TestPlayer_RevisionNeeded: a document read is needed while the Player runs
+// no Revision or one older than the document; a read a newer Revision has
+// overtaken is not, so its failure is not a lost connection.
+func TestPlayer_RevisionNeeded(t *testing.T) {
+	p, _ := newTestPlayer(&recordingSource{})
+	if !p.revisionNeeded(1) {
+		t.Error("a Player without a Revision does not need its first document")
+	}
+	p.model.SetRevision(revision(2, nil, nil, nil))
+	if p.revisionNeeded(1) || p.revisionNeeded(2) {
+		t.Error("a Revision the Player already runs is still needed")
+	}
+	if !p.revisionNeeded(3) {
+		t.Error("a Revision newer than the one shown is not needed")
+	}
+}
+
 // TestPlayer_Close: closing ends the source and ignores whatever a replaced
 // stream still reports.
 func TestPlayer_Close(t *testing.T) {
