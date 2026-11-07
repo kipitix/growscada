@@ -1,5 +1,20 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.77] - 2026-11-08
+
+### Changed
+
+- **Runtime-сущность Revision переименована в Deployment** (задача 72_9)
+  - Домен и приложение: `application/runtime.Revision` → `Deployment`, `RevisionSummary` → `DeploymentSummary`, `RevisionCause` → `DeploymentCause` (значения `deploy`/`rollback`/`file` те же), `RevisionRepository` → `DeploymentRepository`, `RevisionService` → `DeploymentService`, `ErrRevisionNotFound` → `ErrDeploymentNotFound`; файлы `revision.go`/`revision_event.go`/`revision_service.go` → `deployment.go`/`deployment_event.go`/`deployment_service.go`; `NewRevisionCreatedEvent` → `NewDeploymentCreatedEvent`. `appdto.Revision` → `appdto.Deployment`, `RevisionSummary` → `DeploymentSummary`. Порт `RuntimeNode`: `FindCurrentRevision`/`FindRevision` → `FindCurrentDeployment`/`FindDeployment`; `inprocess` и `servertest` переименованы
+  - БД (`runtime/20261107000000_deployments`): `runtime.revisions` → `runtime.deployments`, колонка `n` → `number`, constraint'ы и индексы (`uq_runtime_deployments_project_number`, `idx_runtime_deployments_rolled_back_from`, `fk_/ck_runtime_deployments_*`, `deployments_pkey`, `deployments_pk_id_seq`); `cause`, `rolled_back_from`, `deployed_at`, `config` не менялись. Записи `runtime.journal` с `type='revision'` переведены в `type='deployment'`, payload (`number`, `cause`, `rolled_back_from`) тот же; новые записи — `deployment`. Старые строки читаются без перезаписи, Down возвращает прежние имена
+  - Контракт `api/v0` **0.25** (MINOR): `RevisionResponse` → `DeploymentResponse`, `RevisionSummaryResponse` → `DeploymentSummaryResponse`, `ListRevisionsResponse` → `ListDeploymentsResponse` (`deployments`), `RevisionCause` → `DeploymentCause`; в `OperationStateResponse` поле `revision` → `deployment`, в `DeployPreviewResponse` `current_revision` → `current_deployment`; событие `revision_created` → `deployment_created`, поле события `revision` → `deployment`. Маршруты `GET …/revision`, `GET …/revisions`, `GET …/revisions/{n}`, `GET …/revisions/{n}/projectfile`, `POST …/revisions/{n}/rollback` заменены на `…/deployment` и `…/deployments…`; старые отвечают **410 Gone** в формате Problem Details с подсказкой на новые и удаляются при выходе API 1.0
+  - Контракт `record/v0` **0.3** (MINOR): `Revision` → `Deployment`, тип записи Journal `revision` → `deployment`; payload-поле `deployment`. Кодек и `apiclient.ParseEntry` читают старый тип `revision` и старое поле `revision` (для старых Journal и PlaybackFile) и нормализуют их в `deployment`; пишется только новое имя. `make schemas`
+  - `apiclient`: `RevisionState` → `DeploymentState`, `ProjectClient.Revision` → `Deployment`, `Revisions` → `Deployments`, `RevisionByNumber` → `DeploymentByNumber`, `RevisionProjectFile` → `DeploymentProjectFile`, `Rollback` → `RollbackDeployment`; `ParseEntry` принимает обе формы
+  - UI: `ui/player.Model.Revision()`/`SetRevision` → `Deployment()`/`SetDeployment`, `Result.Revision` → `Deployment`; `GET …/operation` читает `deployment`; Player применяет записи `deployment` и читает документ `GET …/deployments/{n}`. Project-режим: «Deployments» вместо «Revisions», `GET …/deployment`, список `GET …/deployments`, кнопки и подписи; событие `deployment_created` перезагружает бейдж и список. Operation подписан на `deployment_created`; History/бэкенд читает записи `deployment`
+  - Документы: поправки в ADR 0013, 0014, 0019, 0020; `GLOSSARY.md` — **Deployment** и историческое **Revision**; AGENTS.md, CHANGELOG
+  - Bruno: запросы переименованы на `/deployments…`, добавлены пять запросов на старые маршруты, ожидающих 410
+  - Тесты: все runtime/application/restapi/UI/apiclient-тесты переименованы; добавлена миграционная проверка чтения старых `runtime.revisions` и Journal-записи `revision` и возврата имён Down'ом
+
 ## [0.0.76] - 2026-11-08
 
 ### Changed

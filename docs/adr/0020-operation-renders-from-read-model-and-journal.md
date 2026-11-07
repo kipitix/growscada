@@ -29,3 +29,7 @@ Task 43 (Player and Operation). ADR 0014 made the Revision the only truth of wha
 - Operation makes its own SSE connection next to the Bar's; `/tag-states` and `/revision` stay for the other readers, but Operation no longer uses them.
 - The Player is the piece History reuses: a starting state plus a source of entries, live or replayed (tasks 44–45).
 - `tag_updated` and `revision_created` stay on `/events`; removing them is not part of this decision.
+
+## Amendment 2026-11-08: Operation reads a Deployment (task 72_9)
+
+The running configuration is a **Deployment** now. `GET …/operation` answers `{position, deployment, tag_states}` (the member was `revision`), the Player applies `deployment` Journal entries and reads a document with `GET …/deployments/{n}`, and the live signal is `deployment_created`. Nothing of the read model's order, resync or batching changes. Read every "Revision" below as "Deployment".

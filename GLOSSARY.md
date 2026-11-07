@@ -11,7 +11,7 @@ The atomic process variable — an identifier, name, type, current value, and qu
 _Avoid_: variable, point, signal
 
 **Tag definition**:
-A Tag's name, TagType and supplier: configuration, part of the Draft and of a Revision.
+A Tag's name, TagType and supplier: configuration, part of the Draft and of a Deployment.
 _Avoid_: tag config, tag metadata
 
 **Supplier**:
@@ -19,7 +19,7 @@ What writes a Tag's value and Quality: one Device, or people — at most one per
 _Avoid_: writer, producer, owner, source
 
 **Tag state**:
-A Tag's current value and Quality: process state, held by the Runtime node, never part of the Draft or a Revision. The latest write wins.
+A Tag's current value and Quality: process state, held by the Runtime node, never part of the Draft or a Deployment. The latest write wins.
 _Avoid_: tag value, reading, live data
 
 **Quality**:
@@ -47,11 +47,11 @@ The external process that executes one Device's configuration and delivers its T
 _Avoid_: connector, adapter, driver, agent
 
 **Device Token**:
-The secret by which a Device Gateway acts for one Device: it writes that Device's Tags and nothing else. Issued on the Runtime node, never part of a Revision; outlives Deploys and Rollbacks.
+The secret by which a Device Gateway acts for one Device: it writes that Device's Tags and nothing else. Issued on the Runtime node, never part of a Deployment; outlives Deploys and Rollbacks.
 _Avoid_: API key, password, credential (unqualified)
 
 **Draft Tag state**:
-A Tag's value and Quality as set in the Draft — state, not configuration, living apart from the Tag definition. Never carried into a Revision, which gives the Tag its ordinary initial state instead.
+A Tag's value and Quality as set in the Draft — state, not configuration, living apart from the Tag definition. Never carried into a Deployment, which gives the Tag its ordinary initial state instead.
 _Avoid_: initial value, default value, sample value
 
 ### Visualization
@@ -83,7 +83,7 @@ The tenant: the top-level owner of Projects and Libraries. Everything a server s
 _Avoid_: tenant (in UI), company, account, team
 
 **Project**:
-Owned by one Organization. The unit of operational ownership and isolation: Tags, Scenes with their Widgets, Devices, Environments, the Draft, Revisions and the Journal belong to exactly one Project.
+Owned by one Organization. The unit of operational ownership and isolation: Tags, Scenes with their Widgets, Devices, Environments, the Draft, Deployments and the Journal belong to exactly one Project.
 _Avoid_: workspace, site, solution
 
 **Library**:
@@ -123,7 +123,7 @@ A GrowSCADA server acting in the role that holds the Draft and its DraftChanges,
 _Avoid_: dev server, designer server, studio
 
 **Runtime node**:
-A GrowSCADA server acting in the role that runs Revisions and keeps the Journal and Checkpoints, serving Operation and History. Runtime-origin entities are born here.
+A GrowSCADA server acting in the role that runs Deployments and keeps the Journal and Checkpoints, serving Operation and History. Runtime-origin entities are born here.
 _Avoid_: production server, station, runtime (unqualified)
 
 ### Project lifecycle
@@ -141,16 +141,20 @@ Resetting a Draft to its last published state, dropping all DraftChanges.
 _Avoid_: revert, reset, cancel
 
 **Deploy**:
-The act of delivering the whole Draft, as a ProjectFile, to a Runtime node, which atomically makes it a new Revision and switches Operation to it.
+The act of delivering the whole Draft, as a ProjectFile, to a Runtime node, which atomically makes it a new Deployment and switches Operation to it.
 _Avoid_: publish, apply, save
 
 **Release**:
 The act of turning a Library's Draft into a new Library Release. The Library counterpart of Deploy.
 _Avoid_: publish, tag, version
 
+**Deployment**:
+The Runtime node's immutable record that a configuration runs: its number, when it was deployed, its cause, the document it holds and, once Releases exist, the Release it runs (task 72_4). A Deploy, a Rollback or a project file deploy makes it; Operation always runs exactly one Deployment.
+_Avoid_: release, build, version (the concurrency counter), commit
+
 **Revision**:
-An immutable, numbered snapshot of the project configuration produced by Deploy or by Rollback. Operation always runs exactly one Revision.
-_Avoid_: release, build, version (the concurrency counter)
+The former name of a Deployment, used before task 72_9; it survives only as the name of old Journal entries, PlaybackFiles and documents.
+_Avoid_: using it for anything current
 
 **Origin**:
 Where a Tag or Widget came from: `Project` (defined in the Draft and deployed) or `Runtime` (created while the system runs).
@@ -161,11 +165,11 @@ Taking a Runtime-origin Tag or Widget into the Draft, keeping its identity.
 _Avoid_: import, promote, claim
 
 **Rollback**:
-Making an earlier Revision operational again, performed on the Runtime node alone; it produces a new Revision with the earlier content that records the one it copied, never rewrites history.
+Making an earlier Deployment operational again, performed on the Runtime node alone; it produces a new Deployment with the earlier content that records the one it copied, never rewrites history.
 _Avoid_: revert, undo
 
 **ProjectFile**:
-A portable file holding one project configuration (the content of a Revision) and no operational history.
+A portable file holding one project configuration (the content of a Deployment) and no operational history.
 _Avoid_: export, package, backup
 
 **Open a ProjectFile**:
@@ -173,13 +177,13 @@ Replacing the whole content of a Project's Draft with a ProjectFile — one Draf
 _Avoid_: import, upload, load, restore
 
 **Deploy a file**:
-Making a valid ProjectFile the new Revision of a Project on the Runtime node, without touching the Draft; the Revision's cause is `file`.
+Making a valid ProjectFile the new Deployment of a Project on the Runtime node, without touching the Draft; the Deployment's cause is `file`.
 _Avoid_: import, upload, restore
 
 ### Operation and History
 
 **Operation**:
-The mode in which an Operator watches and controls the running Revision with the live Tag values; it follows the Journal from the present.
+The mode in which an Operator watches and controls the running Deployment with the live Tag values; it follows the Journal from the present.
 _Avoid_: runtime mode, live mode, production
 
 **History**:
@@ -187,11 +191,11 @@ The mode in which one reads a Project's operational past from Checkpoints and Jo
 _Avoid_: replay, playback (a PlaybackFile is the file)
 
 **PlaybackFile**:
-A portable file holding the operational record for a period — the Revisions in force, the Journal entries and the Checkpoints needed to replay it.
+A portable file holding the operational record for a period — the Deployments in force, the Journal entries and the Checkpoints needed to replay it.
 _Avoid_: backup, archive, dump
 
 **Journal**:
-The single append-only, totally ordered record of every change of a Project's operational state — a Tag's value and Quality, or the Revision Operation runs — each entry carrying the full new state of what changed and never the configuration itself.
+The single append-only, totally ordered record of every change of a Project's operational state — a Tag's value and Quality, or the Deployment Operation runs — each entry carrying the full new state of what changed and never the configuration itself.
 _Avoid_: event log, audit log, history table, write log
 
 **Journal position**:
@@ -203,7 +207,7 @@ A full snapshot of the operational state at one Journal position.
 _Avoid_: snapshot (unqualified), backup
 
 **Starting state**:
-The Revision and the Tag states a Player begins from at one Journal position.
+The Deployment and the Tag states a Player begins from at one Journal position.
 _Avoid_: snapshot (a Checkpoint is a full snapshot), initial state
 
 **Player**:

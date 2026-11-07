@@ -18,3 +18,7 @@ A Rollback is an operational act and belongs in the Journal, but the Journal doe
 - Returning the running Revision on a duplicate Rollback with 200: rejected. It would make a write look successful while changing nothing and would hide a client that retried a lost answer; 409 says plainly that there is nothing to roll back.
 - A `GET …/revisions/{n}` that returns only counts: rejected. The Revision document is already the shape the API serves for the running one; the UI can summarise it and a tool can inspect it without a second shape.
 - Putting the Rollback UI in Operation: rejected for now. Operation is read-only and is rebuilt as the Player by task 43; Project mode already owns Deploy and Discard, and the Runtime-only entry point is the REST API until then.
+
+## Amendment 2026-11-08: the Revision is a Deployment (task 72_9)
+
+The entity this ADR appends is a **Deployment** now: a Rollback still copies an earlier Deployment's document into a new numbered one, keeps `cause`/`rolled_back_from`, publishes `deployment_created` and refuses an unchanged document `409 nothing_to_rollback`. The routes are `GET …/deployments`, `GET …/deployments/{n}` and `POST …/deployments/{n}/rollback`; the old `/revisions…` routes answer `410 Gone`. The store is `runtime.deployments`, its column `number`. Read every "Revision" below as "Deployment".

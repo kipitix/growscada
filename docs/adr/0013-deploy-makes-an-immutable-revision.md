@@ -26,3 +26,7 @@ A Deploy of the Draft (ADR 0014's Rollback was the second) is no longer the only
 - A dirty flag kept by the Engineering node: rejected. Every path that edits the Draft would have to set it, and a missed one silently loses a Deploy.
 - Discard as one transaction over the whole Draft: rejected as an exception to one aggregate per transaction (ADR 0008), for a mechanism the Draft aggregate (task 38) will replace.
 - Keeping in a Revision the Tag states, the Device Tokens or the aggregate versions: rejected. None is configuration: states are process state, tokens are secrets, and a Revision is immutable while versions change.
+
+## Amendment 2026-11-08: the Revision is a Deployment (task 72_9)
+
+The runtime entity this ADR calls a Revision is called a **Deployment** now. Nothing of the decision changes — a Deploy still makes one immutable numbered document from the Draft, Operation still runs exactly one, and the document is still the truth — but the names follow: `runtime.revisions` is `runtime.deployments` (its `n` column is `number`), `RevisionResponse`/`RevisionCause` are `DeploymentResponse`/`DeploymentCause`, the event `revision_created` is `deployment_created`, and the routes `/projects/{id}/revision` and `/projects/{id}/revisions…` are `/deployment` and `/deployments…` (the old ones answer `410 Gone`). Read every "Revision" below as "Deployment".

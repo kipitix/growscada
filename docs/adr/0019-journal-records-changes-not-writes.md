@@ -30,3 +30,7 @@ ADR 0002 chose state tables plus a single, totally ordered Journal of "fat" entr
 - Checkpoints (task 44), PlaybackFile (task 46) and History (task 45) are built on positions; Player (task 43) starts from a Checkpoint or the current state and applies entries after it.
 - The record format is a contract of its own (`contract/record/v0`, ADR 0005): it is stored forever, so it never imports the API's types — it mirrors the Revision causes, as `devicelink` mirrors the API's enums (ADR 0004).
 - A client that needs every entry gets it by replaying from a position, not by trusting the live stream; this is the same trade ADR 0011 made for `tag_updated`.
+
+## Amendment 2026-11-08: the configuration entry is `deployment` (task 72_9)
+
+The Journal entry that addresses a configuration change was `revision` before task 72_9 and is `deployment` now; its payload is unchanged (`{number, cause, rolled_back_from?}`), and it still addresses the document in the Runtime node's store, now `runtime.deployments`. The migration rewrites the type of existing rows, and readers still accept a row or PlaybackFile that carries the old type and the old payload member. Read every "revision" entry below as a "deployment" entry.
