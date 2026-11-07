@@ -947,11 +947,11 @@ func (p *ProjectClient) DeploymentByNumber(ctx context.Context, number int) (api
 	return resp, err
 }
 
-// Rollback makes the Deployment's document the Project's new Deployment and
-// returns its summary. The error matches ErrConflict if its document is the
-// running one or a Discard is under way, ErrNotFound if the Project has no
-// such Deployment.
-func (p *ProjectClient) Rollback(ctx context.Context, number int) (apiv0.DeploymentSummaryResponse, error) {
+// RollbackDeployment makes the Deployment's document the Project's new
+// Deployment and returns its summary. The error matches ErrConflict if its
+// document is the running one or a Discard is under way, ErrNotFound if the
+// Project has no such Deployment.
+func (p *ProjectClient) RollbackDeployment(ctx context.Context, number int) (apiv0.DeploymentSummaryResponse, error) {
 	var resp apiv0.DeploymentSummaryResponse
 	err := p.do(ctx, http.MethodPost, deploymentPath(number)+"/rollback", nil, http.StatusCreated, &resp)
 	return resp, err

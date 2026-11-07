@@ -236,7 +236,7 @@ func TestOperation_SecondDeployAndRollbackSwitchTheConfiguration(t *testing.T) {
 		t.Fatalf("the second Deploy did not swap the configuration: #%d, %+v", view.Deployment.Number, view.Scenes)
 	}
 
-	if _, err := project.Rollback(ctx, 1); err != nil {
+	if _, err := project.RollbackDeployment(ctx, 1); err != nil {
 		t.Fatalf("rollback: %v", err)
 	}
 	f.pump(project)

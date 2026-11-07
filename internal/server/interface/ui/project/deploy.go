@@ -111,7 +111,7 @@ func (p *Project) doRollback(ctx app.Context, number int) {
 	}
 	p.rollingBack = true
 	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DeploymentSummaryResponse, error) {
-		return pc.Rollback(c, number)
+		return pc.RollbackDeployment(c, number)
 	}, func(ctx app.Context, _ apiv0.DeploymentSummaryResponse) {
 		p.rollingBack = false
 		p.closeDeploymentsDialog()

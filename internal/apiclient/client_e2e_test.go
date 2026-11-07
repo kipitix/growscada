@@ -333,11 +333,11 @@ func TestDeployments_ListDetailAndRollback(t *testing.T) {
 		t.Fatalf("the second CreateTag: %v", err)
 	}
 	servertest.DeployProject(t, postgres.DB(t), servertest.MainProject)
-	if _, err := project.Rollback(ctx, 2); !errors.Is(err, apiclient.ErrConflict) {
+	if _, err := project.RollbackDeployment(ctx, 2); !errors.Is(err, apiclient.ErrConflict) {
 		t.Errorf("Rollback to the running deployment: %v, want ErrConflict", err)
 	}
 
-	rolled, err := project.Rollback(ctx, 1)
+	rolled, err := project.RollbackDeployment(ctx, 1)
 	if err != nil {
 		t.Fatalf("Rollback: %v", err)
 	}

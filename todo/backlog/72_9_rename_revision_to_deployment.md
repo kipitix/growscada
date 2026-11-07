@@ -73,3 +73,4 @@ Priority: 1
 ## Comments
 
 - 2026-11-07: решение пользователя: Runtime Revision переименовать в Deployment. Выполнять до 72_4, чтобы не добавлять `release_number` в `runtime.revisions` и сразу не переименовывать.
+- 2026-11-08 (kx_review): пункт спеки «Operation: подписка на `deployment_created`» намеренно не выполняется: Operation следует Journal (ADR 0020), а `deployment_created` в `/events` остаётся для остальных режимов; Player применяет записи `deployment`. Пункт `apiclient`: `Rollback` → `RollbackDeployment` доведён на стадии kx_fix (CHANGELOG его уже обещал).
