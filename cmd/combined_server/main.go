@@ -31,7 +31,7 @@ import (
 // otherwise (PUBLIC_API_URL).
 const apiPort = "9090"
 
-// runtimeEventsQueueSize is how many tag_updated and revision_created wait
+// runtimeEventsQueueSize is how many tag_updated and deployment_created wait
 // for the SSE fan-out before the Runtime node's write waits for room.
 const runtimeEventsQueueSize = 1024
 
@@ -121,9 +121,9 @@ func main() {
 		slog.Error("Organization error", "error", err)
 		emergencyExit(gracedownManager, gracedown.ExitConfig)
 	}
-	// The Runtime node, in this process: the Tag states, the Revisions and
+	// The Runtime node, in this process: the Tag states, the Deployments and
 	// the Device Tokens (ADR 0011). It publishes tag_updated and
-	// revision_created to the event bus itself, bypassing the outbox, through
+	// deployment_created to the event bus itself, bypassing the outbox, through
 	// a queue: a Device's write or a Deploy does not wait for the SSE fan-out.
 	// The Engineering node reaches it only through the RuntimeNode port.
 	runtimeEvents := eventbus.NewAsyncPublisher(eventBus, runtimeEventsQueueSize)
@@ -134,18 +134,18 @@ func main() {
 		close(runtimeEventsDone)
 	}()
 	tagStateService := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(sqlDB), organizationID, runtimeEvents.Publish)
-	revisionService := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(sqlDB), runtimeEvents.Publish)
+	deploymentService := runtimeapp.NewDeploymentService(runtimepg.NewDeploymentRepositoryPostgres(sqlDB), runtimeEvents.Publish)
 	// The Device Tokens are the Runtime node's too: a Gateway authenticates
 	// with one, and its management (issue, rotate, revoke) lives here
 	deviceTokenService := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(sqlDB))
-	runtimeNode := inprocess.NewRuntimeNode(tagStateService, deviceTokenService, revisionService)
+	runtimeNode := inprocess.NewRuntimeNode(tagStateService, deviceTokenService, deploymentService)
 	// The Journal is the Runtime node's operational record: its read side is
 	// served to the API as it is, never through the RuntimeNode port (ADR 0019).
 	journalService := runtimeapp.NewJournalService(runtimepg.NewJournalRepositoryPostgres(sqlDB))
 	// The Operation read model is the Runtime node's too: it composes the
-	// Journal position, the running Revision and its Tag states in one answer
+	// Journal position, the running Deployment and its Tag states in one answer
 	// for the Player (task 43, ADR 0020). The Engineering node never reads it.
-	operationStateService := runtimeapp.NewOperationStateService(journalService, revisionService, tagStateService)
+	operationStateService := runtimeapp.NewOperationStateService(journalService, deploymentService, tagStateService)
 	// Registry of the policies: changes spanning aggregates, run as jobs
 	// apart from event delivery (ADR 0008)
 	policyRunner := outbox.NewPolicyRunner(sqlDB, []application.Policy{
@@ -200,7 +200,7 @@ func main() {
 	tagService := application.NewTagService(projectContent, runtimeNode)
 	// Deploy and Discard (task 35): the Engineering node assembles the Draft's
 	// ProjectFile and hands it to the Runtime node, which stores it as a
-	// Revision; the Engineering node keeps no copy of what it sent (ADR 0014).
+	// Deployment; the Engineering node keeps no copy of what it sent (ADR 0014).
 	projectFileBuilder := application.NewProjectFileBuilder(projectContent)
 	deployService := application.NewDeployService(projectContent, projectFileBuilder, runtimeNode)
 	discardService := application.NewDiscardService(projectContent, runtimeNode, libraryRepository, releaseRepository)
@@ -223,7 +223,7 @@ func main() {
 		Deploy:       deployService,
 		Discard:      discardService,
 		ProjectFiles: projectFileService,
-		Revisions:    revisionService,
+		Deployments:  deploymentService,
 		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(sqlDB)),
 		DeviceTokens: deviceTokenService,
 		Journal:      journalService,

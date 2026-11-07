@@ -321,7 +321,7 @@ func (p *Project) applyKeyAction(ctx app.Context, action uiutil.KeyAction) {
 // mode is open. An undo behind the Deploy confirmation would change the Draft
 // the dialog shows.
 func (p *Project) keyActionAllowed() bool {
-	return !p.deployDialog && !p.revisionsDialog && !p.projectFileDialog
+	return !p.deployDialog && !p.deploymentsDialog && !p.projectFileDialog
 }
 
 // shown reports whether the Project mode is the one displayed. Root keeps every

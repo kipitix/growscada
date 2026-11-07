@@ -29,7 +29,7 @@ type APIRouter struct {
 	deployHandlers       *DeployHandlers
 	draftHandlers        *DraftHandlers
 	draftChangesHandlers *DraftChangesHandlers
-	revisionsHandlers    *RevisionHandlers
+	deploymentsHandlers  *DeploymentHandlers
 	projectFileHandlers  *ProjectFileHandlers
 	eventsHandlers       *EventsHandlers
 	journalHandlers      *JournalHandlers
@@ -72,8 +72,8 @@ func corsMiddleware(next http.Handler) http.Handler {
 // Services are the services the server API serves: the Engineering node's,
 // and the Runtime node's TagStates, which writes the tags' states,
 // DeviceTokens, which authenticates Devices and manages their tokens,
-// Revisions, which reads the running Revision, DeviceConfig, which reads
-// the running Revision's copies, and Operation, which reads the starting
+// Deployments, which reads the running Deployment, DeviceConfig, which reads
+// the running Deployment's copies, and Operation, which reads the starting
 // state of Operation (ADR 0011, ADR 0020). A Device token service that is nil
 // is a server without the Runtime node: token management answers 404.
 type Services struct {
@@ -91,7 +91,7 @@ type Services struct {
 	Deploy       application.DeployService
 	Discard      application.DiscardService
 	ProjectFiles application.ProjectFileService
-	Revisions    runtimeapp.RevisionService
+	Deployments  runtimeapp.DeploymentService
 	DeviceConfig runtimeapp.DeviceConfigService
 	DeviceTokens runtimeapp.DeviceTokenService
 	Journal      runtimeapp.JournalService
@@ -116,10 +116,10 @@ func NewRouter(services Services, eventBus eventbus.EventBus, maxSSEClients int)
 		deviceTokensHandlers: NewDeviceTokensHandler(services.DeviceTokens, services.Devices),
 		deviceConfigHandlers: NewDeviceConfigHandler(services.DeviceConfig, services.DeviceTokens),
 		deviceWhoAmIHandlers: NewDeviceIdentityHandler(services.DeviceTokens),
-		deployHandlers:       NewDeployHandler(services.Deploy, services.Discard, services.Revisions, services.TagStates),
+		deployHandlers:       NewDeployHandler(services.Deploy, services.Discard, services.Deployments, services.TagStates),
 		draftHandlers:        NewDraftHandler(services.Draft),
 		draftChangesHandlers: NewDraftChangesHandler(services.DraftChanges),
-		revisionsHandlers:    NewRevisionHandler(services.Revisions),
+		deploymentsHandlers:  NewDeploymentHandler(services.Deployments),
 		projectFileHandlers:  NewProjectFileHandler(services.ProjectFiles),
 		eventsHandlers:       NewEventsHandler(eventBus, projectService, maxSSEClients, WithDeviceTokens(services.DeviceTokens)),
 		journalHandlers:      NewJournalHandler(services.Journal, eventBus),
@@ -149,7 +149,7 @@ func (r *APIRouter) routes() []route {
 	devices, environments := r.devicesHandlers, r.environmentsHandlers
 	tokens, config := r.deviceTokensHandlers, r.deviceConfigHandlers
 	deploy := r.deployHandlers
-	revisions := r.revisionsHandlers
+	deployments := r.deploymentsHandlers
 	changes := r.draftChangesHandlers
 	return []route{
 		{"GET " + p + "/projects", projects.GetProjects},
@@ -230,14 +230,21 @@ func (r *APIRouter) routes() []route {
 		{"GET " + pp + apiv0.DraftChangesPath, changes.GetProjectDraftChanges},
 		{"POST " + pp + apiv0.DraftChangesUndoPath, changes.PostProjectDraftChangesUndo},
 		{"POST " + pp + apiv0.DraftChangesRedoPath, changes.PostProjectDraftChangesRedo},
-		{"GET " + pp + "/revision", deploy.GetRevision},
-		{"GET " + pp + "/revisions", revisions.GetRevisions},
-		{"GET " + pp + "/revisions/" + revisionResource.wildcard(), revisions.GetRevisionByNumber},
-		{"POST " + pp + "/revisions/" + revisionResource.wildcard() + "/rollback", revisions.PostRollback},
+		{"GET " + pp + "/deployment", deploy.GetDeployment},
+		{"GET " + pp + "/deployments", deployments.GetDeployments},
+		{"GET " + pp + "/deployments/" + deploymentResource.wildcard(), deployments.GetDeploymentByNumber},
+		{"POST " + pp + "/deployments/" + deploymentResource.wildcard() + "/rollback", deployments.PostRollback},
+		// The Revision routes of before task 72_9 answer 410, naming the
+		// Deployment routes (removed with API 1.0).
+		{"GET " + pp + removedDeploymentPath, deploymentRenamed},
+		{"GET " + pp + removedDeploymentsPath, deploymentRenamed},
+		{"GET " + pp + removedDeploymentsPath + "/" + deploymentResource.wildcard(), deploymentRenamed},
+		{"GET " + pp + removedDeploymentsPath + "/" + deploymentResource.wildcard() + "/projectfile", deploymentRenamed},
+		{"POST " + pp + removedDeploymentsPath + "/" + deploymentResource.wildcard() + "/rollback", deploymentRenamed},
 		{"GET " + pp + "/projectfile", r.projectFileHandlers.GetDraftProjectFile},
 		{"POST " + pp + "/projectfile", r.projectFileHandlers.PostProjectFile},
 		{"POST " + pp + "/projectfile/deploy", r.projectFileHandlers.PostProjectFileDeploy},
-		{"GET " + pp + "/revisions/" + revisionResource.wildcard() + "/projectfile", r.projectFileHandlers.GetRevisionProjectFile},
+		{"GET " + pp + "/deployments/" + deploymentResource.wildcard() + "/projectfile", r.projectFileHandlers.GetDeploymentProjectFile},
 		{"GET " + pp + "/tag-states", deploy.GetTagStates},
 		{"GET " + pp + apiv0.JournalPath, r.journalHandlers.GetJournal},
 		{"GET " + pp + apiv0.JournalEventsPath, r.journalHandlers.GetJournalEvents},

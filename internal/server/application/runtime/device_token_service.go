@@ -33,7 +33,7 @@ type IssuedDeviceToken struct {
 
 // DeviceTokenService is the Runtime node's service of Device Tokens (ADR
 // 0004, amendment 2026-11-01): one token per Device, issued here and never
-// part of a Revision. Every method takes the Project first; the Project of a
+// part of a Deployment. Every method takes the Project first; the Project of a
 // token is the one its Device belongs to.
 type DeviceTokenService interface {
 	// Authenticate resolves a bearer to the token behind it: the Device it

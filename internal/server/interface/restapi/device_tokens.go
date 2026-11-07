@@ -17,7 +17,7 @@ import (
 // Issuing and rotating check the Device in the Draft through the Engineering
 // node's service: a token is never issued for a Device that does not exist.
 // Reading and revoking do not: a token outlives its Device (a Deploy can take
-// it out of the running Revision, the Draft can forget it), and an orphaned
+// it out of the running Deployment, the Draft can forget it), and an orphaned
 // token must stay visible and revocable — the UI shows those (task 66).
 type DeviceTokensHandlers struct {
 	tokens  runtimeapp.DeviceTokenService

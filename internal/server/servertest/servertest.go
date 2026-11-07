@@ -200,20 +200,20 @@ func sendJSON[T any](t *testing.T, srv *httptest.Server, method, path string, bo
 	return out
 }
 
-// StartAPI cleans every table (the Revisions, the Runtime node's copies of
+// StartAPI cleans every table (the Deployments, the Runtime node's copies of
 // Tags, Devices and Environments with their states and tokens, the Draft's
 // Tags, widgets, scenes, Library Pins, libraries with their WidgetTypes and
 // releases, projects but MainProject — restored live if a test deleted it —,
 // outbox, policy_jobs) and serves the real REST API over the
 // database, with the outbox dispatcher delivering committed events to its
-// event streams, the Runtime node publishing tag_updated and revision_created,
+// event streams, the Runtime node publishing tag_updated and deployment_created,
 // and the policy runner running the policies, as the server does. The returned TagService
 // is the one behind the API, for arranging and checking state directly; a
 // tag's state is written through the API.
 func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagService) {
 	t.Helper()
 	if _, err := db.ExecContext(context.Background(), "DELETE FROM engineering.draft_changes; DELETE FROM engineering.drafts; "+
-		"DELETE FROM runtime.revisions; DELETE FROM runtime.device_tokens; DELETE FROM runtime.journal; DELETE FROM runtime.tags; "+
+		"DELETE FROM runtime.deployments; DELETE FROM runtime.device_tokens; DELETE FROM runtime.journal; DELETE FROM runtime.tags; "+
 		"DELETE FROM runtime.environment_devices; DELETE FROM runtime.devices; DELETE FROM runtime.environments; "+
 		"DELETE FROM engineering.tags; "+
 		"DELETE FROM engineering.environment_devices; DELETE FROM engineering.devices; DELETE FROM engineering.environments; "+
@@ -244,11 +244,11 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	libraryContent := application.NewLibraryContent(libraries, drafts, orgID)
 	runtimeEvents := eventbus.NewAsyncPublisher(bus, 1024)
 	tagStateSvc := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, runtimeEvents.Publish)
-	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(db), runtimeEvents.Publish)
+	deployments := runtimeapp.NewDeploymentService(runtimepg.NewDeploymentRepositoryPostgres(db), runtimeEvents.Publish)
 	deviceTokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(db))
-	runtimeNode := inprocess.NewRuntimeNode(tagStateSvc, deviceTokens, revisions)
+	runtimeNode := inprocess.NewRuntimeNode(tagStateSvc, deviceTokens, deployments)
 	journal := runtimeapp.NewJournalService(runtimepg.NewJournalRepositoryPostgres(db))
-	operation := runtimeapp.NewOperationStateService(journal, revisions, tagStateSvc)
+	operation := runtimeapp.NewOperationStateService(journal, deployments, tagStateSvc)
 	tagSvc := application.NewTagService(content, runtimeNode)
 	widgetTypes := repositories.NewWidgetTypeRepositories(db)
 	runner := outbox.NewPolicyRunner(db, []application.Policy{
@@ -282,7 +282,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 		Deploy:       application.NewDeployService(content, application.NewProjectFileBuilder(content), runtimeNode),
 		Discard:      application.NewDiscardService(content, runtimeNode, libraries, releases),
 		ProjectFiles: application.NewProjectFileService(content, application.NewProjectFileBuilder(content), runtimeNode, libraries, releases),
-		Revisions:    revisions,
+		Deployments:  deployments,
 		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(db)),
 		DeviceTokens: deviceTokens,
 		Journal:      journal,

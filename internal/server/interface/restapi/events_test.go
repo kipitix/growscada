@@ -207,10 +207,10 @@ func TestEventsHandlers_GetProjectEvents_StreamsPublishedEvent(t *testing.T) {
 	}
 }
 
-// TestEventsHandlers_RevisionCreated_CarriesTheRevisionAndStaysInItsProject:
-// the new Revision reaches the stream of its own Project alone, with its
+// TestEventsHandlers_DeploymentCreated_CarriesTheDeploymentAndStaysInItsProject:
+// the new Deployment reaches the stream of its own Project alone, with its
 // number and time (task 35, Q11).
-func TestEventsHandlers_RevisionCreated_CarriesTheRevisionAndStaysInItsProject(t *testing.T) {
+func TestEventsHandlers_DeploymentCreated_CarriesTheDeploymentAndStaysInItsProject(t *testing.T) {
 	bus := eventbus.NewEventBus()
 	h := restapi.NewEventsHandler(bus, anyProjects{}, 100)
 
@@ -224,15 +224,15 @@ func TestEventsHandlers_RevisionCreated_CarriesTheRevisionAndStaysInItsProject(t
 	waitFor(t, time.Second, func() bool { return strings.Contains(other.body(), ": connected") })
 
 	at := time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
-	bus.Publish(runtimeapp.NewRevisionCreatedEvent(runtimeapp.Revision{
+	bus.Publish(runtimeapp.NewDeploymentCreatedEvent(runtimeapp.Deployment{
 		Number:     3,
 		DeployedAt: at,
 		Content:    projectv0.ProjectFile{Header: projectv0.Header{ProjectID: mainProject}},
 	}))
-	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), "revision_created") })
+	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), "deployment_created") })
 
 	// A later event of the other Project proves its stream was served and
-	// carries no revision_created of the first one.
+	// carries no deployment_created of the first one.
 	otherTag := id.NewID[tag.Tag]()
 	bus.Publish(tag.NewTagCreatedEvent(otherTag, id.NewID(id.IDWithUUID[project.Project](otherProject))))
 	waitFor(t, time.Second, func() bool { return strings.Contains(other.body(), "tag_created") })
@@ -243,28 +243,28 @@ func TestEventsHandlers_RevisionCreated_CarriesTheRevisionAndStaysInItsProject(t
 	<-doneOther
 
 	want := map[string]any{
-		"type":        "revision_created",
+		"type":        "deployment_created",
 		"id":          mainProject.String(),
-		"revision":    float64(3),
+		"deployment":  float64(3),
 		"deployed_at": "2026-11-03T10:00:00Z",
 	}
 	var found bool
 	for _, m := range sseEventMessages(t, rec.body()) {
-		if m["type"] != "revision_created" {
+		if m["type"] != "deployment_created" {
 			continue
 		}
 		found = true
 		for key, value := range want {
 			if m[key] != value {
-				t.Errorf("revision_created %s = %v, want %v", key, m[key], value)
+				t.Errorf("deployment_created %s = %v, want %v", key, m[key], value)
 			}
 		}
 	}
 	if !found {
-		t.Fatalf("the project's stream carried no revision_created: %q", rec.body())
+		t.Fatalf("the project's stream carried no deployment_created: %q", rec.body())
 	}
-	if strings.Contains(other.body(), "revision_created") {
-		t.Errorf("another project's stream carried the revision: %q", other.body())
+	if strings.Contains(other.body(), "deployment_created") {
+		t.Errorf("another project's stream carried the deployment: %q", other.body())
 	}
 }
 

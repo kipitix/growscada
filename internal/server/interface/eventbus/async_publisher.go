@@ -9,7 +9,7 @@ import (
 // AsyncPublisher hands events to an EventBus from one goroutine of its own
 // (Run), in the order they were published: the publisher only queues an
 // event, and the delivery to the subscribers (the SSE fan-out) runs apart
-// from it. The Runtime node publishes tag_updated and revision_created
+// from it. The Runtime node publishes tag_updated and deployment_created
 // through it, so a Device's write or a Deploy does not wait for the fan-out
 // (ADR 0011).
 type AsyncPublisher struct {

@@ -19,7 +19,7 @@ package apiv0
 // included, on tag_updated only. tag_updated is delivered at-most-once: a
 // reader that may have missed one rereads the tags on reconnect, and drops a
 // state whose seq is not greater than the one it holds.
-// Revision and DeployedAt are those of the new Revision on revision_created
+// Deployment and DeployedAt are those of the new Deployment on deployment_created
 // only, the signal by which a reader of a Project's running configuration
 // reloads it.
 // Readers skip event types they do not know: a new type is a MINOR change.
@@ -36,10 +36,10 @@ type Event struct {
 	EnvironmentID string       `json:"environment_id,omitempty"`
 	DeviceID      string       `json:"device_id,omitempty"`
 	Tag           *TagResponse `json:"tag,omitempty"`
-	// Revision and DeployedAt name the Revision a revision_created created:
+	// Deployment and DeployedAt name the Deployment a deployment_created created:
 	// its number and the time it was deployed (RFC 3339). ID is the Project's;
 	// the stream of a Project carries the event to that Project's readers.
-	Revision   int    `json:"revision,omitempty"`
+	Deployment int    `json:"deployment,omitempty"`
 	DeployedAt string `json:"deployed_at,omitempty"`
 }
 
@@ -82,7 +82,7 @@ const (
 	EventEnvironmentDeviceUpdated = "environment_device_updated"
 	EventEnvironmentDeviceDeleted = "environment_device_deleted"
 
-	EventRevisionCreated = "revision_created"
+	EventDeploymentCreated = "deployment_created"
 )
 
 // EventTypes returns every type of Event of this version of the contract.
@@ -100,6 +100,6 @@ func EventTypes() []string {
 		EventDeviceCreated, EventDeviceUpdated, EventDeviceDeleted,
 		EventEnvironmentCreated, EventEnvironmentUpdated, EventEnvironmentDeleted,
 		EventEnvironmentDeviceCreated, EventEnvironmentDeviceUpdated, EventEnvironmentDeviceDeleted,
-		EventRevisionCreated,
+		EventDeploymentCreated,
 	}
 }

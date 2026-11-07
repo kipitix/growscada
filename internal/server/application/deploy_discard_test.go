@@ -64,29 +64,29 @@ func mustCreateTag(t *testing.T, name, tagType string) appdto.Tag {
 
 // --- Deploy ---
 
-func TestDeploy_CreatesARevision(t *testing.T) {
+func TestDeploy_CreatesADeployment(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	ctx := context.Background()
 	created := mustCreateTag(t, "speed", "integer")
 
 	deploy, node := newDeployService()
-	revision, err := deploy.Deploy(ctx, mainProject)
+	deployment, err := deploy.Deploy(ctx, mainProject)
 	if err != nil {
 		t.Fatalf("Deploy: %v", err)
 	}
-	if revision.Number != 1 || revision.DeployedAt.IsZero() {
-		t.Errorf("revision %+v, want number 1 and a time", revision)
+	if deployment.Number != 1 || deployment.DeployedAt.IsZero() {
+		t.Errorf("deployment %+v, want number 1 and a time", deployment)
 	}
-	if revision.Cause != "deploy" || revision.RolledBackFrom != nil {
-		t.Errorf("the cause of the Revision is %q from %v, want a deploy", revision.Cause, revision.RolledBackFrom)
+	if deployment.Cause != "deploy" || deployment.RolledBackFrom != nil {
+		t.Errorf("the cause of the Deployment is %q from %v, want a deploy", deployment.Cause, deployment.RolledBackFrom)
 	}
-	current, ok, err := node.FindCurrentRevision(ctx, mainProject)
+	current, ok, err := node.FindCurrentDeployment(ctx, mainProject)
 	if err != nil || !ok || current.Number != 1 {
-		t.Fatalf("FindCurrentRevision: %+v, %v, %v", current, ok, err)
+		t.Fatalf("FindCurrentDeployment: %+v, %v, %v", current, ok, err)
 	}
 	if len(current.Content.Tags) != 1 || current.Content.Tags[0].ID != created.ID {
-		t.Errorf("the revision carries %+v, want the tag %s", current.Content.Tags, created.ID)
+		t.Errorf("the deployment carries %+v, want the tag %s", current.Content.Tags, created.ID)
 	}
 	if n := tagStateCount(t, mainProject); n != 1 {
 		t.Errorf("tag states at the Runtime node: %d, want the deployed one", n)
@@ -141,7 +141,7 @@ func TestDeploy_UnchangedDraft_IsRefused(t *testing.T) {
 	}
 }
 
-func TestDeploy_AChangedWidget_IsANewRevision(t *testing.T) {
+func TestDeploy_AChangedWidget_IsANewDeployment(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	ctx := context.Background()
@@ -157,8 +157,8 @@ func TestDeploy_AChangedWidget_IsANewRevision(t *testing.T) {
 		t.Fatalf("Deploy: %v", err)
 	}
 	preview, err := deploy.Preview(ctx, mainProject)
-	if err != nil || preview.CurrentRevision == nil || !preview.Unchanged {
-		t.Fatalf("Preview after the Deploy: %+v, %v, want revision 1 unchanged", preview, err)
+	if err != nil || preview.CurrentDeployment == nil || !preview.Unchanged {
+		t.Fatalf("Preview after the Deploy: %+v, %v, want deployment 1 unchanged", preview, err)
 	}
 
 	changed := testCreateWidgetInput
@@ -171,16 +171,16 @@ func TestDeploy_AChangedWidget_IsANewRevision(t *testing.T) {
 		t.Fatalf("Preview after the change: %+v, %v, want a difference", preview, err)
 	}
 
-	revision, err := deploy.Deploy(ctx, mainProject)
+	deployment, err := deploy.Deploy(ctx, mainProject)
 	if err != nil {
 		t.Fatalf("the second Deploy: %v", err)
 	}
-	if revision.Number != 2 {
-		t.Errorf("the second revision: %d, want 2", revision.Number)
+	if deployment.Number != 2 {
+		t.Errorf("the second deployment: %d, want 2", deployment.Number)
 	}
 }
 
-func TestDeployPreview_ReportsTheCurrentRevisionAndTheDraft(t *testing.T) {
+func TestDeployPreview_ReportsTheCurrentDeploymentAndTheDraft(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	ctx := context.Background()
@@ -191,8 +191,8 @@ func TestDeployPreview_ReportsTheCurrentRevisionAndTheDraft(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Preview: %v", err)
 	}
-	if preview.CurrentRevision != nil || preview.Unchanged || len(preview.DroppedWidgets) != 0 {
-		t.Errorf("the preview before a Deploy: %+v, want no Revision, changed, nothing dropped", preview)
+	if preview.CurrentDeployment != nil || preview.Unchanged || len(preview.DroppedWidgets) != 0 {
+		t.Errorf("the preview before a Deploy: %+v, want no Deployment, changed, nothing dropped", preview)
 	}
 
 	if _, err := deploy.Deploy(ctx, mainProject); err != nil {
@@ -202,23 +202,23 @@ func TestDeployPreview_ReportsTheCurrentRevisionAndTheDraft(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Preview: %v", err)
 	}
-	if preview.CurrentRevision == nil || preview.CurrentRevision.Number != 1 || !preview.Unchanged {
-		t.Errorf("the preview after the Deploy: %+v, want revision 1 unchanged", preview)
+	if preview.CurrentDeployment == nil || preview.CurrentDeployment.Number != 1 || !preview.Unchanged {
+		t.Errorf("the preview after the Deploy: %+v, want deployment 1 unchanged", preview)
 	}
 }
 
 // --- Discard ---
 
-func TestDiscard_WithoutARevision_IsRefused(t *testing.T) {
+func TestDiscard_WithoutADeployment_IsRefused(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 
-	if _, err := newDiscardService().Discard(context.Background(), mainProject); !errors.Is(err, application.ErrNoRevisionToDiscard) {
-		t.Errorf("Discard of a project never deployed: %v, want ErrNoRevisionToDiscard", err)
+	if _, err := newDiscardService().Discard(context.Background(), mainProject); !errors.Is(err, application.ErrNoDeploymentToDiscard) {
+		t.Errorf("Discard of a project never deployed: %v, want ErrNoDeploymentToDiscard", err)
 	}
 }
 
-// TestDiscard_RestoresTheDraft: the Draft is brought back to the Revision —
+// TestDiscard_RestoresTheDraft: the Draft is brought back to the Deployment —
 // the removed Widget, Scene, Tag, Device and pin come back under their IDs,
 // what was added goes, and the Tag states are the Runtime node's, kept.
 func TestDiscard_RestoresTheDraft(t *testing.T) {
@@ -279,7 +279,7 @@ func TestDiscard_RestoresTheDraft(t *testing.T) {
 		}
 	}
 	if n := tagStateCount(t, mainProject); n != 1 {
-		t.Errorf("the Tag states after the Discard: %d, want the running revision's one kept", n)
+		t.Errorf("the Tag states after the Discard: %d, want the running deployment's one kept", n)
 	}
 	if found, err := newService().FindTagByID(ctx, mainProject, tag.ID); err != nil || found.Value != "7" {
 		t.Errorf("the state of %s after the Discard: %+v, %v, want the value 7 kept", tag.ID, found, err)
@@ -351,7 +351,7 @@ func TestDiscard_RemovesADeviceAndAnEnvironmentOfTheDraft(t *testing.T) {
 }
 
 // TestDiscard_OfAPinnedLibraryRestoresThePin: the pin of a Library the Draft
-// dropped comes back, at the release the Revision names, without the check of
+// dropped comes back, at the release the Deployment names, without the check of
 // the Widgets a switch runs.
 func TestDiscard_OfAPinnedLibraryRestoresThePin(t *testing.T) {
 	cleanDevices(t)

@@ -9,7 +9,7 @@ http:
   auth: inherit
 
 docs: |
-  Deploying the Draft that is the running Revision unchanged is refused:
+  Deploying the Draft that is the running Deployment unchanged is refused:
   `409 Conflict` `nothing_to_deploy`, as releasing an unchanged Library
   Draft is.
 

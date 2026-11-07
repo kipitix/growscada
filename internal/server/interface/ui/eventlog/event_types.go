@@ -53,7 +53,7 @@ func defaultFilters() map[category]bool {
 
 // isProjectContent reports whether an event is of a project's content (Tags,
 // their values, Scenes, Widgets, Library Pins, Devices, Environments, their
-// pairs and the Revision), carried by the stream of that project; anything
+// pairs and the Deployment), carried by the stream of that project; anything
 // else is the server's.
 func isProjectContent(ev apiv0.Event) bool {
 	switch ev.Type {
@@ -61,7 +61,7 @@ func isProjectContent(ev apiv0.Event) bool {
 		apiv0.EventDeviceCreated, apiv0.EventDeviceUpdated, apiv0.EventDeviceDeleted,
 		apiv0.EventEnvironmentCreated, apiv0.EventEnvironmentUpdated, apiv0.EventEnvironmentDeleted,
 		apiv0.EventEnvironmentDeviceCreated, apiv0.EventEnvironmentDeviceUpdated, apiv0.EventEnvironmentDeviceDeleted,
-		apiv0.EventRevisionCreated:
+		apiv0.EventDeploymentCreated:
 		return true
 	}
 	switch eventTypeInfoByType[ev.Type].category {
@@ -125,7 +125,7 @@ var eventTypeInfoByType = map[string]eventTypeInfo{
 	apiv0.EventEnvironmentDeviceUpdated: {categoryOther, "EnvironmentDevice %s updated"},
 	apiv0.EventEnvironmentDeviceDeleted: {categoryOther, "EnvironmentDevice %s deleted"},
 
-	apiv0.EventRevisionCreated: {categoryProject, "Project deployed"},
+	apiv0.EventDeploymentCreated: {categoryProject, "Project deployed"},
 }
 
 // describe is the log text of an event of this type with the given id.

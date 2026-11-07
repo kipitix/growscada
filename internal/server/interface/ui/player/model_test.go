@@ -14,8 +14,8 @@ import (
 // id is a stable ID named for readability.
 func id(name string) uuid.UUID { return uuid.NewSHA1(uuid.Nil, []byte(name)) }
 
-func revision(number int, tags []projectv0.TagDefinition, scenes []projectv0.Scene, types []projectv0.WidgetType) apiv0.RevisionResponse {
-	return apiv0.RevisionResponse{
+func deployment(number int, tags []projectv0.TagDefinition, scenes []projectv0.Scene, types []projectv0.WidgetType) apiv0.DeploymentResponse {
+	return apiv0.DeploymentResponse{
 		Number: number,
 		Content: projectv0.ProjectFile{
 			Header: projectv0.Header{
@@ -39,12 +39,12 @@ func tagEntry(seq int64, tagID uuid.UUID, value, quality string) recordv0.Entry 
 	}
 }
 
-func revisionEntry(seq int64, number int) recordv0.Entry {
+func deploymentEntry(seq int64, number int) recordv0.Entry {
 	return recordv0.Entry{
-		Header:   recordv0.Header{SchemaVersion: recordv0.SchemaVersion()},
-		Seq:      seq,
-		Type:     recordv0.EntryTypeRevision,
-		Revision: &recordv0.Revision{Number: number, Cause: recordv0.RevisionCauseDeploy},
+		Header:     recordv0.Header{SchemaVersion: recordv0.SchemaVersion()},
+		Seq:        seq,
+		Type:       recordv0.EntryTypeDeployment,
+		Deployment: &recordv0.Deployment{Number: number, Cause: recordv0.DeploymentCauseDeploy},
 	}
 }
 
@@ -54,7 +54,7 @@ func revisionEntry(seq int64, number int) recordv0.Entry {
 func TestApply_TagStateBySeq(t *testing.T) {
 	tagID := id("speed")
 	m := &Model{}
-	m.SetRevision(revision(1, []projectv0.TagDefinition{{ID: tagID, Name: "speed", Type: "integer"}}, nil, nil))
+	m.SetDeployment(deployment(1, []projectv0.TagDefinition{{ID: tagID, Name: "speed", Type: "integer"}}, nil, nil))
 
 	if got := m.Apply(tagEntry(5, tagID, "42", "good")); !got.Changed {
 		t.Fatal("the first state was not applied")
@@ -97,13 +97,13 @@ func TestApply_TagStateBySeq(t *testing.T) {
 	}
 }
 
-// TestApply_TagOutsideConfiguration: the state of a Tag the running Revision
-// does not name is kept by ID, so a later Revision that names it finds it, but
+// TestApply_TagOutsideConfiguration: the state of a Tag the running Deployment
+// does not name is kept by ID, so a later Deployment that names it finds it, but
 // it is not rendered.
 func TestApply_TagOutsideConfiguration(t *testing.T) {
 	inConfig, outside := id("speed"), id("pressure")
 	m := &Model{}
-	m.SetRevision(revision(1, []projectv0.TagDefinition{{ID: inConfig, Name: "speed", Type: "integer"}}, nil, nil))
+	m.SetDeployment(deployment(1, []projectv0.TagDefinition{{ID: inConfig, Name: "speed", Type: "integer"}}, nil, nil))
 
 	if got := m.Apply(tagEntry(3, outside, "7", "good")); !got.Changed {
 		t.Fatal("the state of a Tag outside the configuration was dropped")
@@ -120,13 +120,13 @@ func TestApply_TagOutsideConfiguration(t *testing.T) {
 	}
 }
 
-// TestApply_RevisionByNumber: a revision entry asks for the document of a
+// TestApply_DeploymentByNumber: a deployment entry asks for the document of a
 // greater number alone; applying it keeps the Tag states by ID, gives a new
 // Tag its zero value and stops rendering a removed one.
-func TestApply_RevisionByNumber(t *testing.T) {
+func TestApply_DeploymentByNumber(t *testing.T) {
 	kept, removed, added := id("kept"), id("removed"), id("added")
 	m := &Model{}
-	m.SetRevision(revision(1,
+	m.SetDeployment(deployment(1,
 		[]projectv0.TagDefinition{
 			{ID: kept, Name: "kept", Type: "integer"},
 			{ID: removed, Name: "removed", Type: "boolean"},
@@ -135,16 +135,16 @@ func TestApply_RevisionByNumber(t *testing.T) {
 	m.Apply(tagEntry(4, kept, "42", "good"))
 	m.Apply(tagEntry(5, removed, "true", "good"))
 
-	if got := m.Apply(revisionEntry(6, 2)); got.Revision != 2 || got.Changed {
-		t.Fatalf("revision entry = %+v, want a request for 2", got)
+	if got := m.Apply(deploymentEntry(6, 2)); got.Deployment != 2 || got.Changed {
+		t.Fatalf("deployment entry = %+v, want a request for 2", got)
 	}
-	if !m.SetRevision(revision(2,
+	if !m.SetDeployment(deployment(2,
 		[]projectv0.TagDefinition{
 			{ID: kept, Name: "kept", Type: "integer"},
 			{ID: added, Name: "added", Type: "string"},
 		},
 		nil, nil)) {
-		t.Fatal("Revision 2 was refused")
+		t.Fatal("Deployment 2 was refused")
 	}
 
 	view := m.View()
@@ -161,16 +161,16 @@ func TestApply_RevisionByNumber(t *testing.T) {
 		t.Errorf("the state of a removed Tag was dropped: %+v, %v", state, ok)
 	}
 
-	for _, entry := range []recordv0.Entry{revisionEntry(7, 2), revisionEntry(8, 1)} {
-		if got := m.Apply(entry); got.Revision != 0 {
-			t.Errorf("revision entry for #%d asked for a document", entry.Revision.Number)
+	for _, entry := range []recordv0.Entry{deploymentEntry(7, 2), deploymentEntry(8, 1)} {
+		if got := m.Apply(entry); got.Deployment != 0 {
+			t.Errorf("deployment entry for #%d asked for a document", entry.Deployment.Number)
 		}
 	}
-	if m.SetRevision(revision(1, nil, nil, nil)) {
-		t.Error("an older Revision replaced a newer one")
+	if m.SetDeployment(deployment(1, nil, nil, nil)) {
+		t.Error("an older Deployment replaced a newer one")
 	}
-	if m.Apply(revisionEntry(9, 3)).Revision != 3 {
-		t.Error("a newer Revision did not ask for its document")
+	if m.Apply(deploymentEntry(9, 3)).Deployment != 3 {
+		t.Error("a newer Deployment did not ask for its document")
 	}
 }
 
@@ -180,21 +180,21 @@ func TestApply_RevisionByNumber(t *testing.T) {
 func TestApply_IgnoresWhatItCannotApply(t *testing.T) {
 	tagID := id("speed")
 	m := &Model{}
-	m.SetRevision(revision(1, []projectv0.TagDefinition{{ID: tagID, Name: "speed", Type: "integer"}}, nil, nil))
+	m.SetDeployment(deployment(1, []projectv0.TagDefinition{{ID: tagID, Name: "speed", Type: "integer"}}, nil, nil))
 	m.Apply(tagEntry(3, tagID, "42", "good"))
 
 	future := tagEntry(4, tagID, "43", "good")
 	future.Type = recordv0.EntryType("future")
 	foreign := tagEntry(5, tagID, "44", "good")
 	foreign.SchemaVersion.Major = recordv0.SchemaVersion().Major + 1
-	foreignRevision := revisionEntry(6, 2)
-	foreignRevision.SchemaVersion.Major = recordv0.SchemaVersion().Major + 1
+	foreignDeployment := deploymentEntry(6, 2)
+	foreignDeployment.SchemaVersion.Major = recordv0.SchemaVersion().Major + 1
 	withoutPayload := tagEntry(7, tagID, "45", "good")
 	withoutPayload.TagState = nil
-	withoutRevision := revisionEntry(8, 2)
-	withoutRevision.Revision = nil
+	withoutDeployment := deploymentEntry(8, 2)
+	withoutDeployment.Deployment = nil
 
-	for _, entry := range []recordv0.Entry{future, foreign, foreignRevision, withoutPayload, withoutRevision} {
+	for _, entry := range []recordv0.Entry{future, foreign, foreignDeployment, withoutPayload, withoutDeployment} {
 		if got := m.Apply(entry); got != (Result{}) {
 			t.Errorf("entry %q at %d applied as %+v", entry.Type, entry.Seq, got)
 		}
@@ -202,8 +202,8 @@ func TestApply_IgnoresWhatItCannotApply(t *testing.T) {
 	if state, _ := m.TagState(tagID); state.Value != "42" {
 		t.Errorf("an entry the reader cannot apply changed the state: %+v", state)
 	}
-	if m.Revision().Number != 1 {
-		t.Errorf("a foreign or empty revision entry changed the configuration: #%d", m.Revision().Number)
+	if m.Deployment().Number != 1 {
+		t.Errorf("a foreign or empty deployment entry changed the configuration: #%d", m.Deployment().Number)
 	}
 	if m.Position() != 8 {
 		t.Errorf("position = %d, want the cursor past every consumed entry", m.Position())
@@ -215,27 +215,27 @@ func TestApply_IgnoresWhatItCannotApply(t *testing.T) {
 func TestMergeSnapshot_NewerStateWins(t *testing.T) {
 	tagID := id("speed")
 	m := &Model{}
-	m.SetRevision(revision(2, []projectv0.TagDefinition{{ID: tagID, Name: "speed", Type: "integer"}}, nil, nil))
+	m.SetDeployment(deployment(2, []projectv0.TagDefinition{{ID: tagID, Name: "speed", Type: "integer"}}, nil, nil))
 	m.Apply(tagEntry(6, tagID, "43", "good"))
 
 	written := "2026-11-07T09:00:00Z"
 	m.MergeSnapshot(apiv0.OperationStateResponse{
-		Position:  10,
-		Revision:  ptr(revision(1, nil, nil, nil)),
-		TagStates: map[string]apiv0.TagStateResponse{tagID.String(): {Value: "42", Quality: "bad", Seq: 4, WrittenAt: &written}},
+		Position:   10,
+		Deployment: ptr(deployment(1, nil, nil, nil)),
+		TagStates:  map[string]apiv0.TagStateResponse{tagID.String(): {Value: "42", Quality: "bad", Seq: 4, WrittenAt: &written}},
 	})
 	if state, _ := m.TagState(tagID); state.Value != "43" || state.Seq != 6 {
 		t.Errorf("the starting state rolled the Tag back: %+v", state)
 	}
-	if m.Revision().Number != 2 {
-		t.Errorf("the starting state rolled the Revision back to #%d", m.Revision().Number)
+	if m.Deployment().Number != 2 {
+		t.Errorf("the starting state rolled the Deployment back to #%d", m.Deployment().Number)
 	}
 	if m.Position() != 10 {
 		t.Errorf("position = %d, want the starting state's 10", m.Position())
 	}
 }
 
-// TestView_MapsProjectFile: the Revision document is mapped to the shapes
+// TestView_MapsProjectFile: the Deployment document is mapped to the shapes
 // livescene renders — Scenes, Widgets with their geometry's matrix,
 // WidgetTypes with their ports and Tags with their states.
 func TestView_MapsProjectFile(t *testing.T) {
@@ -254,7 +254,7 @@ func TestView_MapsProjectFile(t *testing.T) {
 		},
 	}
 	m := &Model{}
-	m.SetRevision(revision(1,
+	m.SetDeployment(deployment(1,
 		[]projectv0.TagDefinition{
 			{ID: tagID, Name: "speed", Type: "integer"},
 			{ID: id("name"), Name: "name", Type: "string"},
@@ -334,7 +334,7 @@ func TestView_MapsProjectFile(t *testing.T) {
 }
 
 // TestView_SceneSwitch: each Scene renders its own Widgets, and a Scene the
-// Revision does not hold renders none.
+// Deployment does not hold renders none.
 func TestView_SceneSwitch(t *testing.T) {
 	first, second := id("first"), id("second")
 	scene := func(sceneID uuid.UUID, widgetName string) projectv0.Scene {
@@ -344,7 +344,7 @@ func TestView_SceneSwitch(t *testing.T) {
 		}
 	}
 	m := &Model{}
-	m.SetRevision(revision(1, nil, []projectv0.Scene{scene(first, "one"), scene(second, "two")}, nil))
+	m.SetDeployment(deployment(1, nil, []projectv0.Scene{scene(first, "one"), scene(second, "two")}, nil))
 
 	view := m.View()
 	if widgets := view.Widgets(first); len(widgets) != 1 || widgets[0].Name != "one" {
@@ -354,7 +354,7 @@ func TestView_SceneSwitch(t *testing.T) {
 		t.Errorf("second scene's widgets = %+v", widgets)
 	}
 	if widgets := view.Widgets(id("gone")); len(widgets) != 0 {
-		t.Errorf("a Scene the Revision lacks rendered %+v", widgets)
+		t.Errorf("a Scene the Deployment lacks rendered %+v", widgets)
 	}
 }
 

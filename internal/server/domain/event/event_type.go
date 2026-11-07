@@ -55,7 +55,7 @@ var (
 	EventTypeEnvironmentDeviceUpdated = EventType{eventType: 34}
 	EventTypeEnvironmentDeviceDeleted = EventType{eventType: 35}
 
-	EventTypeRevisionCreated = EventType{eventType: 36}
+	EventTypeDeploymentCreated = EventType{eventType: 36}
 )
 
 // eventTypeNames is the single source of truth for known event types:
@@ -99,7 +99,7 @@ var eventTypeNames = []struct {
 	{EventTypeEnvironmentDeviceCreated, "environment_device_created"},
 	{EventTypeEnvironmentDeviceUpdated, "environment_device_updated"},
 	{EventTypeEnvironmentDeviceDeleted, "environment_device_deleted"},
-	{EventTypeRevisionCreated, "revision_created"},
+	{EventTypeDeploymentCreated, "deployment_created"},
 }
 
 // AllEventTypes returns every known EventType.

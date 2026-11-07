@@ -10,7 +10,7 @@ import (
 
 // TestOperation_StateReadsTheSnapshot walks the Operation read model through
 // its states: a live Project before its first Deploy answers 200 with no
-// Revision, a Deploy brings the document and the initial states of its Tags,
+// Deployment, a Deploy brings the document and the initial states of its Tags,
 // a value write moves both the state and the Journal position, and a deleted
 // Project is 404 (task 43, ADR 0020).
 func TestOperation_StateReadsTheSnapshot(t *testing.T) {
@@ -22,8 +22,8 @@ func TestOperation_StateReadsTheSnapshot(t *testing.T) {
 		t.Fatalf("GET operation before Deploy: %d %s", rec.Code, rec.Body)
 	}
 	before := decodeBody[apiv0.OperationStateResponse](t, rec)
-	if before.Revision != nil {
-		t.Errorf("GET operation before Deploy carries a Revision: %+v", before.Revision)
+	if before.Deployment != nil {
+		t.Errorf("GET operation before Deploy carries a Deployment: %+v", before.Deployment)
 	}
 	if before.TagStates == nil || len(before.TagStates) != 0 {
 		t.Errorf("GET operation before Deploy has tag_states %+v, want an empty object", before.TagStates)
@@ -43,18 +43,18 @@ func TestOperation_StateReadsTheSnapshot(t *testing.T) {
 		t.Fatalf("GET operation after Deploy: %d %s", rec.Code, rec.Body)
 	}
 	after := decodeBody[apiv0.OperationStateResponse](t, rec)
-	if after.Revision == nil || after.Revision.Number != 1 || after.Revision.Content.ProjectID != mainProject {
-		t.Fatalf("GET operation after Deploy: %+v", after.Revision)
+	if after.Deployment == nil || after.Deployment.Number != 1 || after.Deployment.Content.ProjectID != mainProject {
+		t.Fatalf("GET operation after Deploy: %+v", after.Deployment)
 	}
-	if len(after.Revision.Content.Tags) != 1 || after.Revision.Content.Tags[0].ID != created.ID {
-		t.Errorf("the Revision of the snapshot carries %+v", after.Revision.Content.Tags)
+	if len(after.Deployment.Content.Tags) != 1 || after.Deployment.Content.Tags[0].ID != created.ID {
+		t.Errorf("the Deployment of the snapshot carries %+v", after.Deployment.Content.Tags)
 	}
 	initial, ok := after.TagStates[created.ID.String()]
 	if !ok || initial.Value != "0" || initial.Quality != "bad" || initial.Seq != 0 || initial.WrittenAt != nil {
 		t.Errorf("the initial state of the new Tag: %+v, %v", initial, ok)
 	}
 	if after.Position <= 0 {
-		t.Errorf("the position after Deploy is %d, want the revision entry's", after.Position)
+		t.Errorf("the position after Deploy is %d, want the deployment entry's", after.Position)
 	}
 
 	rec = serve(router, http.MethodPatch, mainPath+"/tags/"+created.ID.String()+"/value",

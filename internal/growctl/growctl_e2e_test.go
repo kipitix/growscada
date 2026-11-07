@@ -539,7 +539,7 @@ func TestGetTags_YAML_RoundTripsThroughApply(t *testing.T) {
 	}
 
 	// Re-applying the export to an empty server recreates the same tags.
-	if _, err := postgres.DB(t).ExecContext(context.Background(), "DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
+	if _, err := postgres.DB(t).ExecContext(context.Background(), "DELETE FROM runtime.deployments; DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
 		t.Fatalf("clean tags: %v", err)
 	}
 	if _, err := runGrowctl(t, srv, exported, "apply"); err != nil {

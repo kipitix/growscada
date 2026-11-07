@@ -115,7 +115,7 @@ func mount(t *testing.T, url string, httpClient *http.Client) *fixture {
 func (f *fixture) run() { f.e.ConsumeAll() }
 
 // feed delivers entries to the Player on the UI goroutine and lets it finish
-// what they start (the Revision document read included).
+// what they start (the Deployment document read included).
 func (f *fixture) feed(entries ...recordv0.Entry) {
 	f.o.compoCtx.Dispatch(func(app.Context) { f.source.feed(entries...) })
 	f.run()
@@ -133,8 +133,8 @@ func (f *fixture) pump(project *apiclient.ProjectClient) {
 }
 
 // TestOperation_FirstDeployArrivesFromTheJournal: a Project without a
-// Revision shows the empty state, and its first Deploy arrives as a Journal
-// entry — no reload of /revision or /tag-states, the values then follow
+// Deployment shows the empty state, and its first Deploy arrives as a Journal
+// entry — no reload of /deployment or /tag-states, the values then follow
 // tag_state entries.
 func TestOperation_FirstDeployArrivesFromTheJournal(t *testing.T) {
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
@@ -154,7 +154,7 @@ func TestOperation_FirstDeployArrivesFromTheJournal(t *testing.T) {
 	counter := &countingTransport{}
 	f := mount(t, srv.URL, countingClient(srv.Client(), counter))
 	if f.o.player.Deployed() {
-		t.Fatal("the project runs no Revision, but Operation is deployed")
+		t.Fatal("the project runs no Deployment, but Operation is deployed")
 	}
 	html := app.HTMLString(f.o.Render())
 	if !strings.Contains(html, "Project is not deployed") || !strings.Contains(html, "data-operation-not-deployed") {
@@ -167,14 +167,14 @@ func TestOperation_FirstDeployArrivesFromTheJournal(t *testing.T) {
 	f.pump(project)
 	view := f.o.player.View()
 	if !view.Deployed() || len(view.Scenes) != 1 || view.Scenes[0].ID != scene.ID {
-		t.Fatalf("the revision entry did not switch the configuration: %+v", view)
+		t.Fatalf("the deployment entry did not switch the configuration: %+v", view)
 	}
 	if tagView := view.Tags[tag.ID]; tagView.Value != "0" || tagView.Quality != "bad" || tagView.Seq != 0 {
 		t.Errorf("an unwritten Tag = %+v, want its type's zero value at bad", tagView)
 	}
 	html = app.HTMLString(f.o.Render())
 	if !strings.Contains(html, "Overview") {
-		t.Errorf("Operation does not render the Revision's Scene: %s", html)
+		t.Errorf("Operation does not render the Deployment's Scene: %s", html)
 	}
 
 	if _, err := project.SetTagValue(ctx, tag.ID, "42", "good"); err != nil {
@@ -185,10 +185,10 @@ func TestOperation_FirstDeployArrivesFromTheJournal(t *testing.T) {
 		t.Errorf("the tag_state entry did not move the value: %+v", tagView)
 	}
 
-	// The Player reads the starting state and the Revision documents alone:
-	// Operation no longer reads /revision or /tag-states (ADR 0020).
-	if got := counter.count("/revision"); got != 0 {
-		t.Errorf("Operation read /revision %d times", got)
+	// The Player reads the starting state and the Deployment documents alone:
+	// Operation no longer reads /deployment or /tag-states (ADR 0020).
+	if got := counter.count("/deployment"); got != 0 {
+		t.Errorf("Operation read /deployment %d times", got)
 	}
 	if got := counter.count("/tag-states"); got != 0 {
 		t.Errorf("Operation read /tag-states %d times", got)
@@ -199,7 +199,7 @@ func TestOperation_FirstDeployArrivesFromTheJournal(t *testing.T) {
 }
 
 // TestOperation_SecondDeployAndRollbackSwitchTheConfiguration: a Draft change
-// alone is invisible; a Deploy makes a new Revision entry, which swaps the
+// alone is invisible; a Deploy makes a new Deployment entry, which swaps the
 // configuration, and a Rollback does the same with a new number.
 func TestOperation_SecondDeployAndRollbackSwitchTheConfiguration(t *testing.T) {
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
@@ -232,8 +232,8 @@ func TestOperation_SecondDeployAndRollbackSwitchTheConfiguration(t *testing.T) {
 	}
 	f.pump(project)
 	view := f.o.player.View()
-	if len(view.Scenes) != 2 || view.Revision.Number != 2 {
-		t.Fatalf("the second Deploy did not swap the configuration: #%d, %+v", view.Revision.Number, view.Scenes)
+	if len(view.Scenes) != 2 || view.Deployment.Number != 2 {
+		t.Fatalf("the second Deploy did not swap the configuration: #%d, %+v", view.Deployment.Number, view.Scenes)
 	}
 
 	if _, err := project.Rollback(ctx, 1); err != nil {
@@ -241,8 +241,8 @@ func TestOperation_SecondDeployAndRollbackSwitchTheConfiguration(t *testing.T) {
 	}
 	f.pump(project)
 	view = f.o.player.View()
-	if view.Revision.Number != 3 || view.Revision.Cause != apiv0.RevisionCauseRollback {
-		t.Fatalf("revision = #%d %q, want #3 rolled back", view.Revision.Number, view.Revision.Cause)
+	if view.Deployment.Number != 3 || view.Deployment.Cause != apiv0.DeploymentCauseRollback {
+		t.Fatalf("deployment = #%d %q, want #3 rolled back", view.Deployment.Number, view.Deployment.Cause)
 	}
 	if len(view.Scenes) != 1 || view.Scenes[0].Name != "First" {
 		t.Errorf("the Rollback did not restore the first configuration: %+v", view.Scenes)

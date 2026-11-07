@@ -9,10 +9,10 @@ http:
   auth: inherit
 
 docs: |
-  The states of the Tags of the running Revision, by Tag ID: the snapshot
+  The states of the Tags of the running Deployment, by Tag ID: the snapshot
   Operation renders before `tag_updated` events arrive. The empty project has
   no Tags, so the snapshot is empty and carries no state to check; a project
-  without a Revision answers `404`. Each state carries `seq`, the Journal
+  without a Deployment answers `404`. Each state carries `seq`, the Journal
   position of its latest change, and `written_at`, when it was last written
   (absent for a state no supplier has written yet, ADR 0019).
 

@@ -9,7 +9,7 @@ http:
   auth: inherit
 
 docs: |
-  Resets the whole Draft to the Revision the project runs, in one transaction
+  Resets the whole Draft to the Deployment the project runs, in one transaction
   (ADR 0016): the answer is `200` with the Draft's new `version`. A project
   that was never deployed answers `409`.
 

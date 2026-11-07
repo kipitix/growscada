@@ -11,12 +11,12 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
 
-// TestDeployBar_ShowsTheRevisionAndDeploys: the bar starts at "Not deployed",
-// the dialog previews the first Deploy, and confirming makes Revision 1.
-func TestDeployBar_ShowsTheRevisionAndDeploys(t *testing.T) {
+// TestDeployBar_ShowsTheDeploymentAndDeploys: the bar starts at "Not deployed",
+// the dialog previews the first Deploy, and confirming makes Deployment 1.
+func TestDeployBar_ShowsTheDeploymentAndDeploys(t *testing.T) {
 	f := startProject(t)
 
-	if !f.p.deployLoaded || f.p.deployPreview.CurrentRevision != nil {
+	if !f.p.deployLoaded || f.p.deployPreview.CurrentDeployment != nil {
 		t.Fatalf("deployment state: loaded %v, %+v", f.p.deployLoaded, f.p.deployPreview)
 	}
 	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, "Not deployed") {
@@ -33,29 +33,29 @@ func TestDeployBar_ShowsTheRevisionAndDeploys(t *testing.T) {
 	// A reload of the bar that lands while the dialog is open must not rewrite
 	// it: the dialog keeps the preview it was opened with.
 	f.p.deployPreview = apiv0.DeployPreviewResponse{
-		CurrentRevision: &apiv0.RevisionSummaryResponse{Number: 7, DeployedAt: "2026-11-04T10:00:00Z"},
-		Unchanged:       true,
+		CurrentDeployment: &apiv0.DeploymentSummaryResponse{Number: 7, DeployedAt: "2026-11-04T10:00:00Z"},
+		Unchanged:         true,
 	}
 	html = app.HTMLString(f.p.Render())
-	if !strings.Contains(html, "Revision 7") || !strings.Contains(html, "not been deployed yet") {
+	if !strings.Contains(html, "Deployment 7") || !strings.Contains(html, "not been deployed yet") {
 		t.Errorf("the bar's reload rewrote the open dialog: %s", html)
 	}
 
 	f.p.deploy(f.p.compoCtx)
 	f.run()
 	f.noToasts()
-	if f.p.deployPreview.CurrentRevision == nil || f.p.deployPreview.CurrentRevision.Number != 1 {
+	if f.p.deployPreview.CurrentDeployment == nil || f.p.deployPreview.CurrentDeployment.Number != 1 {
 		t.Fatalf("after Deploy: %+v", f.p.deployPreview)
 	}
 	if f.p.deployDialog {
 		t.Error("the dialog is still open after Deploy")
 	}
-	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, "Revision 1") {
-		t.Errorf("the bar does not show Revision 1: %s", html)
+	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, "Deployment 1") {
+		t.Errorf("the bar does not show Deployment 1: %s", html)
 	}
 }
 
-// TestDeployDialog_UnchangedDraftSaysNothingToDeploy: deploying the Revision
+// TestDeployDialog_UnchangedDraftSaysNothingToDeploy: deploying the Deployment
 // the Draft is refuses, and the dialog says so before the server does.
 func TestDeployDialog_UnchangedDraftSaysNothingToDeploy(t *testing.T) {
 	url, api := newServer(t)
@@ -86,7 +86,7 @@ func TestDeployBar_DraftChangeShowsUnreleasedChanges(t *testing.T) {
 		t.Fatalf("deploy: %v", err)
 	}
 	f := mount(t, url, api)
-	if f.p.deployPreview.CurrentRevision == nil || !f.p.deployPreview.Unchanged {
+	if f.p.deployPreview.CurrentDeployment == nil || !f.p.deployPreview.Unchanged {
 		t.Fatalf("after Deploy: %+v", f.p.deployPreview)
 	}
 

@@ -305,28 +305,28 @@ func TestProjects_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestRevisions_ListDetailAndRollback: the client lists the Revisions, reads
+// TestDeployments_ListDetailAndRollback: the client lists the Deployments, reads
 // one by number and rolls the running configuration back to an earlier one.
-func TestRevisions_ListDetailAndRollback(t *testing.T) {
+func TestDeployments_ListDetailAndRollback(t *testing.T) {
 	client := startClient(t)
 	ctx := context.Background()
 	project := client.Project(servertest.MainProject)
 
-	if list, err := project.Revisions(ctx); err != nil || len(list) != 0 {
-		t.Fatalf("Revisions before the Deploy: %+v, %v; want none", list, err)
+	if list, err := project.Deployments(ctx); err != nil || len(list) != 0 {
+		t.Fatalf("Deployments before the Deploy: %+v, %v; want none", list, err)
 	}
 	if _, err := project.CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.speed", Type: "integer"}); err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
 	servertest.DeployProject(t, postgres.DB(t), servertest.MainProject)
 
-	list, err := project.Revisions(ctx)
-	if err != nil || len(list) != 1 || list[0].Number != 1 || list[0].Cause != apiv0.RevisionCauseDeploy {
-		t.Fatalf("Revisions after the Deploy: %+v, %v", list, err)
+	list, err := project.Deployments(ctx)
+	if err != nil || len(list) != 1 || list[0].Number != 1 || list[0].Cause != apiv0.DeploymentCauseDeploy {
+		t.Fatalf("Deployments after the Deploy: %+v, %v", list, err)
 	}
-	one, err := project.RevisionByNumber(ctx, 1)
+	one, err := project.DeploymentByNumber(ctx, 1)
 	if err != nil || one.Number != 1 || one.Content.ProjectID != servertest.MainProject {
-		t.Fatalf("RevisionByNumber: %+v, %v", one, err)
+		t.Fatalf("DeploymentByNumber: %+v, %v", one, err)
 	}
 
 	if _, err := project.CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.flow", Type: "integer"}); err != nil {
@@ -334,22 +334,22 @@ func TestRevisions_ListDetailAndRollback(t *testing.T) {
 	}
 	servertest.DeployProject(t, postgres.DB(t), servertest.MainProject)
 	if _, err := project.Rollback(ctx, 2); !errors.Is(err, apiclient.ErrConflict) {
-		t.Errorf("Rollback to the running revision: %v, want ErrConflict", err)
+		t.Errorf("Rollback to the running deployment: %v, want ErrConflict", err)
 	}
 
 	rolled, err := project.Rollback(ctx, 1)
 	if err != nil {
 		t.Fatalf("Rollback: %v", err)
 	}
-	if rolled.Number != 3 || rolled.Cause != apiv0.RevisionCauseRollback || rolled.RolledBackFrom == nil || *rolled.RolledBackFrom != 1 {
-		t.Errorf("the rolled-back revision: %+v", rolled)
+	if rolled.Number != 3 || rolled.Cause != apiv0.DeploymentCauseRollback || rolled.RolledBackFrom == nil || *rolled.RolledBackFrom != 1 {
+		t.Errorf("the rolled-back deployment: %+v", rolled)
 	}
-	running, err := project.Revision(ctx)
-	if err != nil || !running.Deployed || running.Revision.Number != 3 || running.Revision.Cause != apiv0.RevisionCauseRollback {
-		t.Errorf("the running revision after the Rollback: %+v, %v", running, err)
+	running, err := project.Deployment(ctx)
+	if err != nil || !running.Deployed || running.Deployment.Number != 3 || running.Deployment.Cause != apiv0.DeploymentCauseRollback {
+		t.Errorf("the running deployment after the Rollback: %+v, %v", running, err)
 	}
-	if _, err := project.RevisionByNumber(ctx, 99); !errors.Is(err, apiclient.ErrNotFound) {
-		t.Errorf("RevisionByNumber of a missing one: %v, want ErrNotFound", err)
+	if _, err := project.DeploymentByNumber(ctx, 99); !errors.Is(err, apiclient.ErrNotFound) {
+		t.Errorf("DeploymentByNumber of a missing one: %v, want ErrNotFound", err)
 	}
 }
 
@@ -405,8 +405,8 @@ func TestOperation_ReturnsTheStartingState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Operation before Deploy: %v", err)
 	}
-	if before.Revision != nil {
-		t.Errorf("Operation before Deploy carries a Revision: %+v", before.Revision)
+	if before.Deployment != nil {
+		t.Errorf("Operation before Deploy carries a Deployment: %+v", before.Deployment)
 	}
 	if before.TagStates == nil || len(before.TagStates) != 0 {
 		t.Errorf("Operation before Deploy has tag_states %+v, want an empty object", before.TagStates)
@@ -422,15 +422,15 @@ func TestOperation_ReturnsTheStartingState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Operation after Deploy: %v", err)
 	}
-	if after.Revision == nil || after.Revision.Number != 1 || after.Revision.Content.ProjectID != servertest.MainProject {
-		t.Fatalf("Operation after Deploy: %+v", after.Revision)
+	if after.Deployment == nil || after.Deployment.Number != 1 || after.Deployment.Content.ProjectID != servertest.MainProject {
+		t.Fatalf("Operation after Deploy: %+v", after.Deployment)
 	}
 	initial := after.TagStates[created.ID.String()]
 	if initial.Value != "0" || initial.Quality != "bad" || initial.Seq != 0 {
 		t.Errorf("the initial state of the new Tag: %+v", initial)
 	}
 	if after.Position <= 0 {
-		t.Errorf("the position after Deploy is %d, want the revision entry's", after.Position)
+		t.Errorf("the position after Deploy is %d, want the deployment entry's", after.Position)
 	}
 
 	seq, err := project.SetTagValue(ctx, created.ID, "42", "good")

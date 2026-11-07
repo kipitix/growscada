@@ -10,17 +10,17 @@ http:
 
 docs: |
   The starting state of Operation (task 43, ADR 0020): the project's Journal
-  position, the Revision it runs and the states of all its Tags by ID. The
+  position, the Deployment it runs and the states of all its Tags by ID. The
   request runs after a Deploy and before the first value write below.
 
-  The project Main was deployed by the test stack, so `revision` carries its
+  The project Main was deployed by the test stack, so `deployment` carries its
   document and `position` is above zero. `tag_states` holds every Tag of the
-  Revision: `is_cached` ({{BOOLEAN_TAG_ID}}) has the seeded state it was
+  Deployment: `is_cached` ({{BOOLEAN_TAG_ID}}) has the seeded state it was
   written with, while `is_debug`
   (6ba7b812-9dad-11d1-80b4-00c04fd430c8) holds its zero value `false` with
   quality `bad`. The device simulator drives `is_active`, `max_connections`
   and `status_message`, so their states move; a live project without a
-  Revision answers 200 with `revision: null` and an empty `tag_states`, and a
+  Deployment answers 200 with `deployment: null` and an empty `tag_states`, and a
   project that is not live answers `404`.
 
 runtime:
@@ -35,13 +35,13 @@ runtime:
     - expression: 'res.body.position'
       operator: gt
       value: '0'
-    - expression: 'res.body.revision.number'
+    - expression: 'res.body.deployment.number'
       operator: eq
       value: '1'
-    - expression: 'res.body.revision.content.project_id'
+    - expression: 'res.body.deployment.content.project_id'
       operator: eq
       value: '"{{PROJECT_ID}}"'
-    - expression: 'res.body.revision.content.tags'
+    - expression: 'res.body.deployment.content.tags'
       operator: isArray
     - expression: 'res.body.tag_states'
       operator: isDefined

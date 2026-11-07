@@ -18,8 +18,8 @@ import (
 const maxProjectFileBytes = 64 << 20
 
 // ProjectFileHandlers serves the project files of a Project (task 39,
-// ADR 0018): its Draft and any Revision as downloads, a file opened as the
-// Draft, and a file deployed as a Revision without the Draft.
+// ADR 0018): its Draft and any Deployment as downloads, a file opened as the
+// Draft, and a file deployed as a Deployment without the Draft.
 type ProjectFileHandlers struct {
 	files application.ProjectFileService
 }
@@ -46,23 +46,23 @@ func (h ProjectFileHandlers) GetDraftProjectFile(w http.ResponseWriter, r *http.
 	sendProjectFile(w, download.File, projectFileName(download.ProjectName, projectID, "draft"))
 }
 
-// GetRevisionProjectFile handles GET /projects/{project_id}/revisions/{revision_number}/projectfile:
-// the exact document the Runtime node stored for Revision n.
-func (h ProjectFileHandlers) GetRevisionProjectFile(w http.ResponseWriter, r *http.Request) {
+// GetDeploymentProjectFile handles GET /projects/{project_id}/deployments/{deployment_number}/projectfile:
+// the exact document the Runtime node stored for Deployment n.
+func (h ProjectFileHandlers) GetDeploymentProjectFile(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := pathUUID(w, r, projectResource)
 	if !ok {
 		return
 	}
-	number, ok := pathInt(w, r, revisionResource)
+	number, ok := pathInt(w, r, deploymentResource)
 	if !ok {
 		return
 	}
-	download, err := h.files.Revision(r.Context(), projectID, number)
+	download, err := h.files.Deployment(r.Context(), projectID, number)
 	if err != nil {
 		sendError(w, r, err)
 		return
 	}
-	sendProjectFile(w, download.File, projectFileName(download.ProjectName, projectID, fmt.Sprintf("revision-%d", number)))
+	sendProjectFile(w, download.File, projectFileName(download.ProjectName, projectID, fmt.Sprintf("deployment-%d", number)))
 }
 
 // PostProjectFile handles POST /projects/{project_id}/projectfile?version=V:
@@ -91,8 +91,8 @@ func (h ProjectFileHandlers) PostProjectFile(w http.ResponseWriter, r *http.Requ
 }
 
 // PostProjectFileDeploy handles POST /projects/{project_id}/projectfile/deploy:
-// it makes the document the Project's new Revision without touching the Draft.
-// 201 with the Revision; 409 nothing_to_deploy when it is the running one; 400
+// it makes the document the Project's new Deployment without touching the Draft.
+// 201 with the Deployment; 409 nothing_to_deploy when it is the running one; 400
 // with file_issues when it does not validate.
 func (h ProjectFileHandlers) PostProjectFileDeploy(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := pathUUID(w, r, projectResource)
@@ -103,12 +103,12 @@ func (h ProjectFileHandlers) PostProjectFileDeploy(w http.ResponseWriter, r *htt
 	if !ok {
 		return
 	}
-	revision, err := h.files.Deploy(r.Context(), projectID, document)
+	deployment, err := h.files.Deploy(r.Context(), projectID, document)
 	if err != nil {
 		sendError(w, r, err)
 		return
 	}
-	sendJSONResponse(w, http.StatusCreated, newDeployResponse(revision))
+	sendJSONResponse(w, http.StatusCreated, newDeployResponse(deployment))
 }
 
 // readDocument reads the ProjectFile a POST carries. It has already sent a 400

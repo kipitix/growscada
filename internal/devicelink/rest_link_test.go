@@ -172,7 +172,7 @@ func TestWrite_DeletedTag(t *testing.T) {
 	if _, err := svc.DeleteTagByID(context.Background(), servertest.MainProject, created.ID, servertest.DraftVersion(t, postgres.DB(t), servertest.MainProject)); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	// The running Revision still holds the Tag: the next Deploy drops it.
+	// The running Deployment still holds the Tag: the next Deploy drops it.
 	servertest.DeployProject(t, postgres.DB(t), servertest.MainProject)
 
 	err = link.Write(context.Background(), tag, "1", devicelink.QualityGood)

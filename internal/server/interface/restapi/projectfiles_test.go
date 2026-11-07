@@ -38,10 +38,10 @@ func decodeFile(t *testing.T, rec *httptest.ResponseRecorder) projectv0.ProjectF
 	return file
 }
 
-// TestProjectFiles_DownloadDraftAndRevision: the Draft and a Revision are
+// TestProjectFiles_DownloadDraftAndDeployment: the Draft and a Deployment are
 // attachments named after the Project, the document is the ProjectFile as it
 // is, and the schema version stays a header (ADR 0018).
-func TestProjectFiles_DownloadDraftAndRevision(t *testing.T) {
+func TestProjectFiles_DownloadDraftAndDeployment(t *testing.T) {
 	cleanProjectsRest(t)
 	services := newServices()
 	router := services.router()
@@ -67,22 +67,22 @@ func TestProjectFiles_DownloadDraftAndRevision(t *testing.T) {
 	if rec := serve(router, http.MethodPost, mainPath+"/deploy", nil); rec.Code != http.StatusCreated {
 		t.Fatalf("POST deploy: %d %s", rec.Code, rec.Body)
 	}
-	rec = serve(router, http.MethodGet, mainPath+"/revisions/1/projectfile", nil)
+	rec = serve(router, http.MethodGet, mainPath+"/deployments/1/projectfile", nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET revision 1 projectfile: %d %s", rec.Code, rec.Body)
+		t.Fatalf("GET deployment 1 projectfile: %d %s", rec.Code, rec.Body)
 	}
-	if got := rec.Header().Get("Content-Disposition"); got != `attachment; filename="Main-revision-1.json"` {
+	if got := rec.Header().Get("Content-Disposition"); got != `attachment; filename="Main-deployment-1.json"` {
 		t.Errorf("Content-Disposition %q", got)
 	}
-	if revisionFile := decodeFile(t, rec); revisionFile.ProjectID != mainProject {
-		t.Errorf("the revision file names project %s", revisionFile.ProjectID)
+	if deploymentFile := decodeFile(t, rec); deploymentFile.ProjectID != mainProject {
+		t.Errorf("the deployment file names project %s", deploymentFile.ProjectID)
 	}
 
-	if rec := serve(router, http.MethodGet, mainPath+"/revisions/99/projectfile", nil); rec.Code != http.StatusNotFound {
-		t.Errorf("a missing revision's file: %d, want 404", rec.Code)
+	if rec := serve(router, http.MethodGet, mainPath+"/deployments/99/projectfile", nil); rec.Code != http.StatusNotFound {
+		t.Errorf("a missing deployment's file: %d, want 404", rec.Code)
 	}
-	if rec := serve(router, http.MethodGet, mainPath+"/revisions/abc/projectfile", nil); rec.Code != http.StatusBadRequest {
-		t.Errorf("a revision number that is not a number: %d, want 400", rec.Code)
+	if rec := serve(router, http.MethodGet, mainPath+"/deployments/abc/projectfile", nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("a deployment number that is not a number: %d, want 400", rec.Code)
 	}
 }
 
@@ -179,8 +179,8 @@ func TestProjectFiles_OpenRefusals(t *testing.T) {
 	}
 }
 
-// TestProjectFiles_DeployFromFileAndDiscard: a file is a Revision of its own
-// with cause file, the Draft is untouched, and a Discard of a foreign Revision
+// TestProjectFiles_DeployFromFileAndDiscard: a file is a Deployment of its own
+// with cause file, the Draft is untouched, and a Discard of a foreign Deployment
 // refuses instead of writing a pin this server cannot hold (ADR 0018).
 func TestProjectFiles_DeployFromFileAndDiscard(t *testing.T) {
 	cleanProjectsRest(t)
@@ -203,26 +203,26 @@ func TestProjectFiles_DeployFromFileAndDiscard(t *testing.T) {
 	}
 	deployed := decodeBody[apiv0.DeployResponse](t, rec)
 	if deployed.Number != 1 {
-		t.Errorf("the file became revision %d, want 1", deployed.Number)
+		t.Errorf("the file became deployment %d, want 1", deployed.Number)
 	}
 	if got := services.draftVersion(t); got != before {
 		t.Errorf("the file deploy changed the Draft: version %d, want %d", got, before)
 	}
 
-	rec = serve(router, http.MethodGet, mainPath+"/revisions", nil)
-	list := decodeBody[apiv0.ListRevisionsResponse](t, rec)
-	if len(list.Revisions) != 1 || list.Revisions[0].Cause != apiv0.RevisionCauseFile || list.Revisions[0].RolledBackFrom != nil {
-		t.Errorf("the history after a file deploy: %+v", list.Revisions)
+	rec = serve(router, http.MethodGet, mainPath+"/deployments", nil)
+	list := decodeBody[apiv0.ListDeploymentsResponse](t, rec)
+	if len(list.Deployments) != 1 || list.Deployments[0].Cause != apiv0.DeploymentCauseFile || list.Deployments[0].RolledBackFrom != nil {
+		t.Errorf("the history after a file deploy: %+v", list.Deployments)
 	}
 
-	// The same document is the running Revision already.
+	// The same document is the running Deployment already.
 	if rec := serve(router, http.MethodPost, mainPath+"/projectfile/deploy", file); rec.Code != http.StatusConflict {
 		t.Fatalf("deploying the running file: %d %s", rec.Code, rec.Body)
 	}
 
 	rec = serve(router, http.MethodPost, mainPath+"/discard", nil)
 	if rec.Code != http.StatusConflict {
-		t.Fatalf("discarding a foreign revision: %d %s", rec.Code, rec.Body)
+		t.Fatalf("discarding a foreign deployment: %d %s", rec.Code, rec.Body)
 	}
 	problem := decodeBody[apiv0.Problem](t, rec)
 	if len(problem.FileIssues) == 0 || !strings.HasPrefix(problem.FileIssues[0].Path, "library_pins[") {

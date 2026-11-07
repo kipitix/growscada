@@ -20,7 +20,7 @@ import (
 // stored as its hash, with its fingerprint, the Device it acts for and that
 // Device's Project. There is no foreign key to the copy of the Device on
 // purpose: a token outlives a Deploy that drops its Device from the running
-// Revision, and sleeps until the Device is back.
+// Deployment, and sleeps until the Device is back.
 type deviceTokenRepositoryPostgres struct {
 	db *sql.DB
 }

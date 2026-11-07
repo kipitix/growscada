@@ -9,8 +9,8 @@ http:
   auth: inherit
 
 docs: |
-  What a Deploy of the Draft would do. The project has no Revision yet, so
-  `current_revision` is absent, `unchanged` is false and `dropped_widgets`
+  What a Deploy of the Draft would do. The project has no Deployment yet, so
+  `current_deployment` is absent, `unchanged` is false and `dropped_widgets`
   is empty until runtime entities exist (task 48).
 
 runtime:

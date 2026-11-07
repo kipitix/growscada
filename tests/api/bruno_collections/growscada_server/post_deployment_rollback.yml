@@ -1,23 +1,23 @@
 info:
-  name: get revision after rollback
+  name: post deployment rollback
   type: http
-  seq: 63
+  seq: 61
 
 http:
-  method: GET
-  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/revision
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/deployments/1/rollback
   auth: inherit
 
 docs: |
-  The Revision the project runs is the one the Rollback appended: its
-  document is the copy of Revision 1, and the cause tells a reader it was a
-  Rollback and what it copied.
+  Makes the document of Deployment 1 the project's running configuration as a
+  new Deployment: history is not rewritten, and the answer names the new number,
+  the cause `rollback` and the Deployment it copied. The Draft is not read.
 
 runtime:
   assertions:
     - expression: 'res.status'
       operator: eq
-      value: '200'
+      value: '201'
     - expression: 'res.headers["growscada-schema-version"]'
       operator: isDefined
     - expression: 'res.body.number'
@@ -29,9 +29,8 @@ runtime:
     - expression: 'res.body.rolled_back_from'
       operator: eq
       value: '1'
-    - expression: 'res.body.content.project_id'
-      operator: eq
-      value: '"{{OTHER_PROJECT_ID}}"'
+    - expression: 'res.body.deployed_at'
+      operator: isDefined
 
 settings:
   encodeUrl: true

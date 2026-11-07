@@ -240,7 +240,7 @@ func (t tagServiceImpl) CreateTag(ctx context.Context, rawProjectID uuid.UUID, n
 // as it was read, with its last state. The write states the Version of the
 // Draft the client saw and, in the same change, removes the Tag's PortBindings
 // from every Scene of the Project (ADR 0010, ADR 0017). The Runtime node's copy
-// of the definition stays until the next Deploy removes it with the Revision
+// of the definition stays until the next Deploy removes it with the Deployment
 // it came from (ADR 0011, task 35): nothing of the Draft writes there.
 func (t tagServiceImpl) DeleteTagByID(ctx context.Context, rawProjectID, rawID uuid.UUID, rawVersion int) (appdto.Tag, error) {
 	projectID, scope, err := t.content.open(ctx, rawProjectID)

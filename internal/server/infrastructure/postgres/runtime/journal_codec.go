@@ -38,16 +38,16 @@ func newTagStateEntry(projectID uuid.UUID, at time.Time, tagID uuid.UUID, value,
 	}
 }
 
-// newRevisionEntry returns the Journal entry of a Revision that appeared: its
-// number, its cause and the Revision a Rollback copied. The document itself
+// newDeploymentEntry returns the Journal entry of a Deployment that appeared: its
+// number, its cause and the Deployment a Rollback copied. The document itself
 // is not part of the entry (ADR 0014).
-func newRevisionEntry(projectID uuid.UUID, at time.Time, number int, cause recordv0.RevisionCause, rolledBackFrom *int) recordv0.Entry {
+func newDeploymentEntry(projectID uuid.UUID, at time.Time, number int, cause recordv0.DeploymentCause, rolledBackFrom *int) recordv0.Entry {
 	return recordv0.Entry{
-		Header:    recordv0.Header{SchemaVersion: recordv0.SchemaVersion()},
-		Timestamp: at.UTC().Format(time.RFC3339),
-		ProjectID: projectID,
-		Type:      recordv0.EntryTypeRevision,
-		Revision:  &recordv0.Revision{Number: number, Cause: cause, RolledBackFrom: rolledBackFrom},
+		Header:     recordv0.Header{SchemaVersion: recordv0.SchemaVersion()},
+		Timestamp:  at.UTC().Format(time.RFC3339),
+		ProjectID:  projectID,
+		Type:       recordv0.EntryTypeDeployment,
+		Deployment: &recordv0.Deployment{Number: number, Cause: cause, RolledBackFrom: rolledBackFrom},
 	}
 }
 
@@ -87,11 +87,11 @@ func encodeJournalPayload(entry recordv0.Entry) ([]byte, error) {
 			return nil, fmt.Errorf("cannot encode a %s journal entry without its tag_state", entry.Type)
 		}
 		payload = entry.TagState
-	case recordv0.EntryTypeRevision:
-		if entry.Revision == nil {
-			return nil, fmt.Errorf("cannot encode a %s journal entry without its revision", entry.Type)
+	case recordv0.EntryTypeDeployment:
+		if entry.Deployment == nil {
+			return nil, fmt.Errorf("cannot encode a %s journal entry without its deployment", entry.Type)
 		}
-		payload = entry.Revision
+		payload = entry.Deployment
 	default:
 		return nil, fmt.Errorf("cannot encode a journal entry of unknown type %q", entry.Type)
 	}
@@ -117,6 +117,11 @@ func decodeJournalEntry(row journalRow) (recordv0.Entry, error) {
 		ProjectID: row.ProjectID,
 		Type:      recordv0.EntryType(row.Type),
 	}
+	// A row written before task 72_9 carries the entry type's old name: it is
+	// a Deployment entry, and a reader of the Journal sees it as one.
+	if entry.Type == recordv0.EntryTypeRevision {
+		entry.Type = recordv0.EntryTypeDeployment
+	}
 	switch entry.Type {
 	case recordv0.EntryTypeTagState:
 		var payload recordv0.TagState
@@ -124,12 +129,12 @@ func decodeJournalEntry(row journalRow) (recordv0.Entry, error) {
 			return recordv0.Entry{}, fmt.Errorf("cannot decode the tag_state payload of journal entry %d: %w", row.Seq, err)
 		}
 		entry.TagState = &payload
-	case recordv0.EntryTypeRevision:
-		var payload recordv0.Revision
+	case recordv0.EntryTypeDeployment:
+		var payload recordv0.Deployment
 		if err := json.Unmarshal(row.Payload, &payload); err != nil {
-			return recordv0.Entry{}, fmt.Errorf("cannot decode the revision payload of journal entry %d: %w", row.Seq, err)
+			return recordv0.Entry{}, fmt.Errorf("cannot decode the deployment payload of journal entry %d: %w", row.Seq, err)
 		}
-		entry.Revision = &payload
+		entry.Deployment = &payload
 	default:
 		return recordv0.Entry{}, fmt.Errorf("cannot decode journal entry %d: unknown type %q", row.Seq, row.Type)
 	}

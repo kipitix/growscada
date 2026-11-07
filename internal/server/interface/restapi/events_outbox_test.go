@@ -45,7 +45,7 @@ func TestEventsHandlers_GetProjectEvents_DeliversCommittedChangesInCommitOrder(t
 		t.Fatalf("CreateTag: %v", err)
 	}
 	// The values below are the Runtime node's: they need a Deploy first
-	// (task 35, Q4). It publishes revision_created, before the stream opens.
+	// (task 35, Q4). It publishes deployment_created, before the stream opens.
 	if _, err := services.deploy.Deploy(ctx, mainProject); err != nil && !errors.Is(err, application.ErrNothingToDeploy) {
 		t.Fatalf("deploy: %v", err)
 	}

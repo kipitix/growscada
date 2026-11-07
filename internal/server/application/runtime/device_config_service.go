@@ -13,11 +13,11 @@ import (
 // Device is named by the token and the Environment by the request; both must
 // be of one Project.
 //
-// The configuration is the running Revision's: the copies of the Runtime node,
+// The configuration is the running Deployment's: the copies of the Runtime node,
 // never the Draft (task 35, Q5).
 type DeviceConfigService interface {
 	// Config returns the configuration of the Device in the Environment.
-	// Returns an error wrapping device.ErrDeviceNotFound if the Revision has
+	// Returns an error wrapping device.ErrDeviceNotFound if the Deployment has
 	// no such Device (a dormant token), and one wrapping
 	// device.ErrEnvironmentNotFound or device.ErrEnvironmentDeviceNotFound
 	// if it has no such Environment or the Device does not stand in it.
@@ -25,10 +25,10 @@ type DeviceConfigService interface {
 }
 
 // DeviceConfigRepository reads the configuration of a Device from the
-// Runtime node's copies, which the running Revision fills.
+// Runtime node's copies, which the running Deployment fills.
 type DeviceConfigRepository interface {
 	// FindConfig returns the configuration of the Device in the Environment,
-	// read in one transaction. A Device the Revision does not have is
+	// read in one transaction. A Device the Deployment does not have is
 	// device.ErrDeviceNotFound; an Environment or a pair it does not have is
 	// device.ErrEnvironmentNotFound or device.ErrEnvironmentDeviceNotFound.
 	FindConfig(ctx context.Context, projectID, deviceID, environmentID uuid.UUID) (DeviceConfig, error)

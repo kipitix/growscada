@@ -1,7 +1,7 @@
 info:
-  name: get a revision as a project file
+  name: get the revision project file route is gone
   type: http
-  seq: 135
+  seq: 191
 
 http:
   method: GET
@@ -9,25 +9,22 @@ http:
   auth: inherit
 
 docs: |
-  The document the Runtime node stored for Revision 1, exactly as it was
-  deployed (ADR 0018). It is a download named after the revision.
+  A Deployment's document is `GET …/deployments/{n}/projectfile`: the old
+  route answers `410 Gone` and is removed with the API 1.0.
 
 runtime:
   assertions:
     - expression: 'res.status'
       operator: eq
-      value: '200'
+      value: '410'
     - expression: 'res.headers["growscada-schema-version"]'
       operator: isDefined
     - expression: 'res.headers["content-type"]'
       operator: eq
-      value: application/json
-    - expression: 'res.headers["content-disposition"]'
+      value: application/problem+json
+    - expression: 'res.body.status'
       operator: eq
-      value: 'attachment; filename="Main-revision-1.json"'
-    - expression: 'res.body.project_id'
-      operator: eq
-      value: '{{PROJECT_ID}}'
+      value: '410'
 
 settings:
   encodeUrl: true

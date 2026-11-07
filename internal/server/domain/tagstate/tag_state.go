@@ -36,7 +36,7 @@ type Definition struct {
 }
 
 // TagState is a Tag's current value and Quality, held by the Runtime node,
-// never part of the Draft or a Revision. It has a single writer — the Tag's
+// never part of the Draft or a Deployment. It has a single writer — the Tag's
 // supplier, or people — so a write states no expected Version: the latest
 // write wins, numbered by its Seq. WrittenAt is when the state was last
 // written, changed or not; a state nobody has written yet has none (ADR

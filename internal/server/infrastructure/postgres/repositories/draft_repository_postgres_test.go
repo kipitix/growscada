@@ -337,11 +337,11 @@ func mustDevice(t *testing.T, name string) device.Device {
 	return created
 }
 
-// TestDraftReplace_RemovesThePairsTheRevisionLacks: a pair (Environment,
+// TestDraftReplace_RemovesThePairsTheDeploymentLacks: a pair (Environment,
 // Device) has no ID of its own — its Environment's ID and its Device's ID
-// together name it. A Discard (Replace) drops the pairs the Revision does not
+// together name it. A Discard (Replace) drops the pairs the Deployment does not
 // hold even while their Environment stays.
-func TestDraftReplace_RemovesThePairsTheRevisionLacks(t *testing.T) {
+func TestDraftReplace_RemovesThePairsTheDeploymentLacks(t *testing.T) {
 	cleanDrafts(t)
 	ctx := context.Background()
 	if _, err := testDB.ExecContext(ctx,
@@ -378,7 +378,7 @@ func TestDraftReplace_RemovesThePairsTheRevisionLacks(t *testing.T) {
 		return err
 	})
 
-	// The Revision the Discard restores holds the Environment with one pair.
+	// The Deployment the Discard restores holds the Environment with one pair.
 	if _, err := testDrafts().Replace(ctx, draft.ProjectScope(mainProject), func(session *draft.Session) error {
 		return session.Replace(ctx, draft.Content{
 			Devices:            []device.Device{one, two},

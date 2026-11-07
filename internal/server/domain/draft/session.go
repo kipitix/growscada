@@ -666,7 +666,7 @@ func (s *Session) ReplaceWidgetTypes(ctx context.Context, release library.Librar
 }
 
 // Content is the whole content of a Project's Draft as a value: what a
-// Discard restores from a Revision and what the cleanup of a deleted Project
+// Discard restores from a Deployment and what the cleanup of a deleted Project
 // writes away.
 type Content struct {
 	Tags               []tag.Tag
@@ -679,7 +679,7 @@ type Content struct {
 
 // Replace replaces the whole content of the Draft with content (Discard,
 // ADR 0016): every entity the Draft holds goes, with its events, and every
-// entity of content is created, with the identity it has in the Revision. The
+// entity of content is created, with the identity it has in the Deployment. The
 // stack and the DraftChanges go with the caller's transaction, not here.
 func (s *Session) Replace(ctx context.Context, content Content) error {
 	if err := s.Purge(ctx); err != nil {

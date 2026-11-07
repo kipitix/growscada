@@ -48,7 +48,7 @@ type Project struct {
 	scenes      []apiv0.SceneResponse
 	widgets     []apiv0.WidgetResponse
 	tags        tagstate.Tags
-	// deployPreview is the deployment state of the project: the Revision it
+	// deployPreview is the deployment state of the project: the Deployment it
 	// runs and whether the Draft differs from it. deployLoaded is false until
 	// the first answer, so nothing is shown before it.
 	deployPreview apiv0.DeployPreviewResponse
@@ -62,18 +62,18 @@ type Project struct {
 	deployDialog bool
 	deploying    bool
 	discarding   bool
-	// revisions is the list the Revisions dialog shows, newest first,
-	// loaded when it opens and reloaded on revision_created while it is open.
-	// selectedRevision is the row whose document is shown (0: none) as
-	// revisionDetail, once revisionDetailLoaded; rollingBack marks a Rollback
+	// deployments is the list the Deployments dialog shows, newest first,
+	// loaded when it opens and reloaded on deployment_created while it is open.
+	// selectedDeployment is the row whose document is shown (0: none) as
+	// deploymentDetail, once deploymentDetailLoaded; rollingBack marks a Rollback
 	// in flight.
-	revisions            []apiv0.RevisionSummaryResponse
-	revisionsLoaded      bool
-	revisionsDialog      bool
-	selectedRevision     int
-	revisionDetail       apiv0.RevisionResponse
-	revisionDetailLoaded bool
-	rollingBack          bool
+	deployments            []apiv0.DeploymentSummaryResponse
+	deploymentsLoaded      bool
+	deploymentsDialog      bool
+	selectedDeployment     int
+	deploymentDetail       apiv0.DeploymentResponse
+	deploymentDetailLoaded bool
+	rollingBack            bool
 	// ── Project file dialog (task 39, ADR 0018) ─────────────────────────────
 	// projectFileDialog is true while the dialog is open; pendingProjectFile
 	// is the picked file waiting for confirmation, projectFileIssues the
@@ -113,7 +113,7 @@ type Project struct {
 	widgetsReloader     uiutil.Reloader
 	tagsReloader        uiutil.Reloader
 	deployReloader      uiutil.Reloader
-	revisionsReloader   uiutil.Reloader
+	deploymentsReloader uiutil.Reloader
 	// onKeyDown listens for Ctrl+Z and Ctrl+Shift+Z while the mode is shown;
 	// it is released with the component (noKeyDown). onKeyUp and onBlur end a
 	// series of arrow moves at the keyboard or when the window loses focus.
@@ -328,9 +328,9 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.deployPreview, p.deployLoaded = apiv0.DeployPreviewResponse{}, false
 	p.dialogPreview = apiv0.DeployPreviewResponse{}
 	p.deployDialog, p.deploying, p.discarding = false, false, false
-	p.revisions, p.revisionsLoaded = nil, false
-	p.revisionsDialog, p.selectedRevision, p.rollingBack = false, 0, false
-	p.revisionDetail, p.revisionDetailLoaded = apiv0.RevisionResponse{}, false
+	p.deployments, p.deploymentsLoaded = nil, false
+	p.deploymentsDialog, p.selectedDeployment, p.rollingBack = false, 0, false
+	p.deploymentDetail, p.deploymentDetailLoaded = apiv0.DeploymentResponse{}, false
 	p.projectFileDialog, p.projectFileBusy = false, false
 	p.pendingProjectFile = nil
 	p.projectFileIssues, p.projectFileDetail = nil, ""

@@ -21,32 +21,32 @@ func documentTag(def tagstate.Definition) projectv0.TagDefinition {
 	return projectv0.TagDefinition{ID: def.TagID.UUID(), Name: def.Name.String(), Type: def.Type.String()}
 }
 
-// TestRevisionService_Deploy_KeepsTheTagStatesOfTheRunningRevision drives the
+// TestDeploymentService_Deploy_KeepsTheTagStatesOfTheRunningDeployment drives the
 // service over the real repository: two Deploys in a row, the state of a Tag
 // that stays, a new Tag's initial state, a TagType change and a Tag the next
-// Revision no longer has (task 35, Q4).
-func TestRevisionService_Deploy_KeepsTheTagStatesOfTheRunningRevision(t *testing.T) {
+// Deployment no longer has (task 35, Q4).
+func TestDeploymentService_Deploy_KeepsTheTagStatesOfTheRunningDeployment(t *testing.T) {
 	projectID, _ := newProject(t)
 	db := postgres.DB(t)
-	revisions := runtimepg.NewRevisionRepositoryPostgres(db)
+	deployments := runtimepg.NewDeploymentRepositoryPostgres(db)
 	states := runtimepg.NewTagStateRepositoryPostgres(db)
 	ctx := context.Background()
 
 	var published []event.Event
-	service := runtimeapp.NewRevisionService(revisions, func(e event.Event) {
+	service := runtimeapp.NewDeploymentService(deployments, func(e event.Event) {
 		published = append(published, e)
-		ev, ok := e.(runtimeapp.RevisionCreatedEvent)
+		ev, ok := e.(runtimeapp.DeploymentCreatedEvent)
 		if !ok {
-			t.Errorf("published a %T, not a RevisionCreatedEvent", e)
+			t.Errorf("published a %T, not a DeploymentCreatedEvent", e)
 			return
 		}
 		// The row is readable when the event is published: the commit happened.
 		var number int
 		if err := db.QueryRowContext(ctx,
-			`SELECT n FROM runtime.revisions WHERE project_id = $1 AND n = $2`,
+			`SELECT number FROM runtime.deployments WHERE project_id = $1 AND number = $2`,
 			projectID.UUID(), ev.Number(),
 		).Scan(&number); err != nil {
-			t.Errorf("revision %d published before its commit: %v", ev.Number(), err)
+			t.Errorf("deployment %d published before its commit: %v", ev.Number(), err)
 		}
 	})
 
@@ -59,7 +59,7 @@ func TestRevisionService_Deploy_KeepsTheTagStatesOfTheRunningRevision(t *testing
 		t.Fatalf("Deploy 1: %v", err)
 	}
 	if rev1.Number != 1 {
-		t.Errorf("first revision number %d, want 1", rev1.Number)
+		t.Errorf("first deployment number %d, want 1", rev1.Number)
 	}
 	initialSpeed := mustFind(t, states, projectID, speed.TagID)
 	if initialSpeed.Value().String() != "0" || initialSpeed.Quality() != tag.TagQualityBad {
@@ -79,7 +79,7 @@ func TestRevisionService_Deploy_KeepsTheTagStatesOfTheRunningRevision(t *testing
 		t.Fatalf("Deploy 2: %v", err)
 	}
 	if rev2.Number != 2 {
-		t.Errorf("second revision number %d, want 2", rev2.Number)
+		t.Errorf("second deployment number %d, want 2", rev2.Number)
 	}
 	if rev2.DeployedAt.Before(rev1.DeployedAt) {
 		t.Errorf("deployed_at went back: %s then %s", rev1.DeployedAt, rev2.DeployedAt)
@@ -107,20 +107,20 @@ func TestRevisionService_Deploy_KeepsTheTagStatesOfTheRunningRevision(t *testing
 	}
 
 	// A Tag created by the bridge after the Deploy commits stays outside the
-	// running Revision: its value is 404 until the next Deploy.
+	// running Deployment: its value is 404 until the next Deploy.
 	late := definition(t, projectID, "late", tag.TagTypeInteger)
 	if err := states.UpsertDefinitions(ctx, projectID, []tagstate.Definition{late}); err != nil {
 		t.Fatalf("UpsertDefinitions: %v", err)
 	}
 	if found := findStates(t, states, projectID, late.TagID); len(found) != 0 {
-		t.Errorf("the bridge copied a tag outside the revision: %v", found)
+		t.Errorf("the bridge copied a tag outside the deployment: %v", found)
 	}
 	unwritten, err := tagstate.Initial(late)
 	if err != nil {
 		t.Fatalf("initial state: %v", err)
 	}
 	if _, _, err := states.Write(ctx, unwritten, tag.NoSupplier()); !errors.Is(err, tag.ErrTagNotFound) {
-		t.Errorf("writing a tag outside the revision: %v, want ErrTagNotFound", err)
+		t.Errorf("writing a tag outside the deployment: %v, want ErrTagNotFound", err)
 	}
 
 	fourth := documentOf(projectID, withTags(documentTag(retyped), documentTag(late)))
@@ -129,7 +129,7 @@ func TestRevisionService_Deploy_KeepsTheTagStatesOfTheRunningRevision(t *testing
 	}
 	fresh := mustFind(t, states, projectID, late.TagID)
 	if fresh.Value().String() != "0" || fresh.Quality() != tag.TagQualityBad {
-		t.Errorf("the tag of the next revision starts at %s", fresh)
+		t.Errorf("the tag of the next deployment starts at %s", fresh)
 	}
 	writtenLate, err := fresh.Write("7", tag.TagQualityGood)
 	if err != nil {
@@ -143,12 +143,12 @@ func TestRevisionService_Deploy_KeepsTheTagStatesOfTheRunningRevision(t *testing
 		t.Fatalf("published %d events, want 4", len(published))
 	}
 	for i, e := range published {
-		ev, ok := e.(runtimeapp.RevisionCreatedEvent)
+		ev, ok := e.(runtimeapp.DeploymentCreatedEvent)
 		if !ok {
-			t.Fatalf("published a %T, not a RevisionCreatedEvent", e)
+			t.Fatalf("published a %T, not a DeploymentCreatedEvent", e)
 		}
 		if ev.Number() != i+1 {
-			t.Errorf("event %d names revision %d, want %d", i, ev.Number(), i+1)
+			t.Errorf("event %d names deployment %d, want %d", i, ev.Number(), i+1)
 		}
 		if ev.ProjectID().UUID() != projectID.UUID() {
 			t.Errorf("event %d is of project %s", i, ev.ProjectID())

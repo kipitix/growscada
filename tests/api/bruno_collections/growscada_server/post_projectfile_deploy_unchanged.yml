@@ -1,5 +1,5 @@
 info:
-  name: deploy the project file the Revision already is
+  name: deploy the project file the Deployment already is
   type: http
   seq: 141
 
@@ -16,7 +16,7 @@ http:
   auth: inherit
 
 docs: |
-  The document is the Revision the project runs: `409 nothing_to_deploy`, as a
+  The document is the Deployment the project runs: `409 nothing_to_deploy`, as a
   Deploy of an unchanged Draft (ADR 0018).
 
 runtime:

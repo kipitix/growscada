@@ -12,96 +12,96 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
-// The Project mode's deployment state (task 35, part 5): the Revision the
+// The Project mode's deployment state (task 35, part 5): the Deployment the
 // project runs, whether the Draft differs from it, and the Deploy and Discard
 // actions. The state comes from the Deploy preview, which is the same document
-// comparison a Deploy does; the Revision itself is Operation's.
+// comparison a Deploy does; the Deployment itself is Operation's.
 
-// loadRevisions (re)loads the Revisions the dialog lists, newest first.
-func (p *Project) loadRevisions(ctx app.Context) {
+// loadDeployments (re)loads the Deployments the dialog lists, newest first.
+func (p *Project) loadDeployments(ctx app.Context) {
 	if p.content == nil {
-		p.revisions, p.revisionsLoaded = nil, false
+		p.deployments, p.deploymentsLoaded = nil, false
 		return
 	}
-	uiutil.LoadOfProject(p.compoCtx, &p.revisionsReloader, p.projectContent,
-		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.RevisionSummaryResponse, error) {
-			return pc.Revisions(c)
+	uiutil.LoadOfProject(p.compoCtx, &p.deploymentsReloader, p.projectContent,
+		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.DeploymentSummaryResponse, error) {
+			return pc.Deployments(c)
 		},
-		func(ctx app.Context, revisions []apiv0.RevisionSummaryResponse) {
-			p.revisions, p.revisionsLoaded = revisions, true
-		}, p.loadRevisions)
+		func(ctx app.Context, deployments []apiv0.DeploymentSummaryResponse) {
+			p.deployments, p.deploymentsLoaded = deployments, true
+		}, p.loadDeployments)
 }
 
-// openRevisionsDialog shows the Revisions of the project, read afresh: the
+// openDeploymentsDialog shows the Deployments of the project, read afresh: the
 // dialog is available even before the first Deploy, where it is empty.
-func (p *Project) openRevisionsDialog(ctx app.Context) {
-	p.revisionsDialog = true
-	p.selectRevision(ctx, 0)
-	p.loadRevisions(ctx)
+func (p *Project) openDeploymentsDialog(ctx app.Context) {
+	p.deploymentsDialog = true
+	p.selectDeployment(ctx, 0)
+	p.loadDeployments(ctx)
 	ctx.Update()
 }
 
-// closeRevisionsDialog closes the list without rolling anything back.
-func (p *Project) closeRevisionsDialog() {
-	p.revisionsDialog = false
-	p.clearRevisionSelection()
+// closeDeploymentsDialog closes the list without rolling anything back.
+func (p *Project) closeDeploymentsDialog() {
+	p.deploymentsDialog = false
+	p.clearDeploymentSelection()
 }
 
-// clearRevisionSelection forgets the row whose document was shown.
-func (p *Project) clearRevisionSelection() {
-	p.selectedRevision = 0
-	p.revisionDetail, p.revisionDetailLoaded = apiv0.RevisionResponse{}, false
+// clearDeploymentSelection forgets the row whose document was shown.
+func (p *Project) clearDeploymentSelection() {
+	p.selectedDeployment = 0
+	p.deploymentDetail, p.deploymentDetailLoaded = apiv0.DeploymentResponse{}, false
 }
 
-// selectRevision shows the document of the Revision number (0: none) as a
+// selectDeployment shows the document of the Deployment number (0: none) as a
 // summary for comparison. A response of a row no longer selected is dropped.
-func (p *Project) selectRevision(ctx app.Context, number int) {
-	p.selectedRevision = number
-	p.revisionDetail, p.revisionDetailLoaded = apiv0.RevisionResponse{}, false
+func (p *Project) selectDeployment(ctx app.Context, number int) {
+	p.selectedDeployment = number
+	p.deploymentDetail, p.deploymentDetailLoaded = apiv0.DeploymentResponse{}, false
 	if number == 0 || p.content == nil {
 		return
 	}
-	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.RevisionResponse, error) {
-		return pc.RevisionByNumber(c, number)
-	}, func(ctx app.Context, detail apiv0.RevisionResponse) {
-		if p.selectedRevision != number {
+	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DeploymentResponse, error) {
+		return pc.DeploymentByNumber(c, number)
+	}, func(ctx app.Context, detail apiv0.DeploymentResponse) {
+		if p.selectedDeployment != number {
 			return
 		}
-		p.revisionDetail, p.revisionDetailLoaded = detail, true
+		p.deploymentDetail, p.deploymentDetailLoaded = detail, true
 		ctx.Update()
 	}, nil)
 }
 
-// isCurrentRevision reports whether number is the Revision the project runs.
+// isCurrentDeployment reports whether number is the Deployment the project runs.
 // It is the newest of the list the dialog shows: the list is where the row is
 // read from, so the mark and the offer to roll back agree even before the
 // Deploy preview has answered.
-func (p *Project) isCurrentRevision(number int) bool {
-	return len(p.revisions) > 0 && p.revisions[0].Number == number
+func (p *Project) isCurrentDeployment(number int) bool {
+	return len(p.deployments) > 0 && p.deployments[0].Number == number
 }
 
-// rollbackRevision confirms rolling the project back to the selected Revision
-// and does it. The current Revision's own document has nothing to roll back to
+// rollbackDeployment confirms rolling the project back to the selected Deployment
+// and does it. The current Deployment's own document has nothing to roll back to
 // and is refused before the request, as the dialog does not offer it.
-func (p *Project) rollbackRevision(ctx app.Context) {
+func (p *Project) rollbackDeployment(ctx app.Context) {
 	if p.content == nil || p.rollingBack || p.deploying || p.discarding {
 		return
 	}
-	number := p.selectedRevision
-	if number == 0 || p.isCurrentRevision(number) {
+	number := p.selectedDeployment
+	if number == 0 || p.isCurrentDeployment(number) {
 		return
 	}
-	message := fmt.Sprintf("Roll the project back to revision %d? Its configuration becomes a new revision.", number)
+	message := fmt.Sprintf("Roll the project back to deployment %d? Its configuration becomes a new deployment.", number)
 	if !app.Window().Call("confirm", message).Bool() {
 		return
 	}
 	p.doRollback(ctx, number)
 }
 
-// doRollback rolls the project back to the Revision number: a new Revision
+// doRollback rolls the project back to the Deployment number: a new Deployment
 // with the same document. Success closes the dialog and reloads the preview and
 // the list; the server's refusal (nothing to roll back, the Draft being
-// discarded, a Revision gone) is a toast and leaves the dialog open.
+// discarded, a Deployment gone) is a toast and leaves the dialog open.
 func (p *Project) doRollback(ctx app.Context, number int) {
 	if p.content == nil || p.rollingBack {
 		return
@@ -110,13 +110,13 @@ func (p *Project) doRollback(ctx app.Context, number int) {
 		return
 	}
 	p.rollingBack = true
-	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.RevisionSummaryResponse, error) {
+	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DeploymentSummaryResponse, error) {
 		return pc.Rollback(c, number)
-	}, func(ctx app.Context, _ apiv0.RevisionSummaryResponse) {
+	}, func(ctx app.Context, _ apiv0.DeploymentSummaryResponse) {
 		p.rollingBack = false
-		p.closeRevisionsDialog()
+		p.closeDeploymentsDialog()
 		p.loadDeploy(ctx)
-		p.loadRevisions(ctx)
+		p.loadDeployments(ctx)
 		ctx.Update()
 	}, func(ctx app.Context, err error) {
 		p.rollingBack = false
@@ -159,7 +159,7 @@ func (p *Project) closeDeployDialog() {
 	p.deployDialog = false
 }
 
-// deploy confirms the open dialog: it makes the Draft the new Revision. The
+// deploy confirms the open dialog: it makes the Draft the new Deployment. The
 // server's refusal (nothing to deploy, the Draft being discarded) is a toast.
 func (p *Project) deploy(ctx app.Context) {
 	if p.content == nil || p.deploying || p.discarding || p.rollingBack {
@@ -176,8 +176,8 @@ func (p *Project) deploy(ctx app.Context) {
 		p.deployDialog = false
 		p.loadDeploy(ctx)
 		p.loadDraftChanges(ctx) // a Deploy clears the stack (ADR 0017)
-		if p.revisionsDialog {
-			p.loadRevisions(ctx)
+		if p.deploymentsDialog {
+			p.loadDeployments(ctx)
 		}
 		ctx.Update()
 	}, func(ctx app.Context, err error) {
@@ -191,8 +191,8 @@ func (p *Project) deploy(ctx app.Context) {
 	})
 }
 
-// discard resets the Draft to the Revision the project runs, after the
-// browser's confirmation. Without a Revision the server refuses (409), which
+// discard resets the Draft to the Deployment the project runs, after the
+// browser's confirmation. Without a Deployment the server refuses (409), which
 // is the toast.
 func (p *Project) discard(ctx app.Context) {
 	if p.content == nil || p.discarding || p.deploying || p.rollingBack {
@@ -201,7 +201,7 @@ func (p *Project) discard(ctx app.Context) {
 	if p.waitMoves(ctx, func(ctx app.Context) { p.discard(ctx) }) {
 		return
 	}
-	message := "Discard the Draft of this project and restore it to the Revision it runs?"
+	message := "Discard the Draft of this project and restore it to the Deployment it runs?"
 	if !app.Window().Call("confirm", message).Bool() {
 		return
 	}
@@ -222,28 +222,28 @@ func (p *Project) discard(ctx app.Context) {
 	})
 }
 
-// renderDeployBar is the project's header: the Revision it runs (or "Not
+// renderDeployBar is the project's header: the Deployment it runs (or "Not
 // deployed"), whether the Draft has changes not deployed, and the Deploy and
 // Discard buttons.
 func (p *Project) renderDeployBar() app.UI {
 	badge := "Not deployed"
-	if p.deployPreview.CurrentRevision != nil {
-		badge = fmt.Sprintf("Revision %d · deployed %s",
-			p.deployPreview.CurrentRevision.Number,
-			formatDeployedAt(p.deployPreview.CurrentRevision.DeployedAt))
+	if p.deployPreview.CurrentDeployment != nil {
+		badge = fmt.Sprintf("Deployment %d · deployed %s",
+			p.deployPreview.CurrentDeployment.Number,
+			formatDeployedAt(p.deployPreview.CurrentDeployment.DeployedAt))
 	}
 
 	body := []app.UI{
 		p.renderDraftChangesBar(),
 		app.Div().Style("width", "1px").Style("height", "18px").Style("background", "var(--border)"),
 		app.Span().
-			Attr("data-deploy-revision", "true").
+			Attr("data-deploy-running", "true").
 			Style("font-size", "12px").
 			Style("font-weight", "600").
 			Style("color", "var(--text-2)").
 			Text(badge),
 	}
-	if p.deployLoaded && p.deployPreview.CurrentRevision != nil && !p.deployPreview.Unchanged {
+	if p.deployLoaded && p.deployPreview.CurrentDeployment != nil && !p.deployPreview.Unchanged {
 		body = append(body, app.Span().
 			Attr("data-deploy-differs", "true").
 			Style("font-size", "12px").
@@ -256,14 +256,14 @@ func (p *Project) renderDeployBar() app.UI {
 			!p.deploying && !p.discarding && !p.rollingBack && !p.projectFileBusy, func(ctx app.Context) {
 				p.openProjectFileDialog(ctx)
 			}),
-		p.deployButton("Revisions", "The Revisions of the project", !p.deploying && !p.discarding && !p.rollingBack, func(ctx app.Context) {
-			p.openRevisionsDialog(ctx)
+		p.deployButton("Deployments", "The Deployments of the project", !p.deploying && !p.discarding && !p.rollingBack, func(ctx app.Context) {
+			p.openDeploymentsDialog(ctx)
 		}),
-		p.deployButton("Deploy", "Deploy the Draft as a new Revision",
+		p.deployButton("Deploy", "Deploy the Draft as a new Deployment",
 			!p.deploying && !p.discarding && !p.rollingBack, func(ctx app.Context) {
 				p.openDeployDialog(ctx)
 			}),
-		p.deployButton("Discard", "Reset the Draft to the Revision the project runs",
+		p.deployButton("Discard", "Reset the Draft to the Deployment the project runs",
 			!p.discarding && !p.deploying && !p.rollingBack, func(ctx app.Context) {
 				p.discard(ctx)
 			}),
@@ -272,8 +272,8 @@ func (p *Project) renderDeployBar() app.UI {
 	if p.deployDialog {
 		body = append(body, p.renderDeployDialog())
 	}
-	if p.revisionsDialog {
-		body = append(body, p.renderRevisionsDialog())
+	if p.deploymentsDialog {
+		body = append(body, p.renderDeploymentsDialog())
 	}
 	if p.projectFileDialog {
 		body = append(body, p.renderProjectFileDialog())
@@ -312,11 +312,11 @@ func (p *Project) renderDeployDialog() app.UI {
 	preview := p.dialogPreview
 
 	lines := []app.UI{}
-	if preview.CurrentRevision != nil {
+	if preview.CurrentDeployment != nil {
 		lines = append(lines, app.P().
 			Style("margin", "0 0 6px").
-			Text(fmt.Sprintf("Current revision: %d, deployed %s.",
-				preview.CurrentRevision.Number, formatDeployedAt(preview.CurrentRevision.DeployedAt))))
+			Text(fmt.Sprintf("Current deployment: %d, deployed %s.",
+				preview.CurrentDeployment.Number, formatDeployedAt(preview.CurrentDeployment.DeployedAt))))
 	} else {
 		lines = append(lines, app.P().
 			Style("margin", "0 0 6px").
@@ -325,11 +325,11 @@ func (p *Project) renderDeployDialog() app.UI {
 	if preview.Unchanged {
 		lines = append(lines, app.P().
 			Style("margin", "0 0 6px").
-			Text("Nothing to deploy: the Draft is the revision it runs."))
+			Text("Nothing to deploy: the Draft is the deployment it runs."))
 	} else {
 		lines = append(lines, app.P().
 			Style("margin", "0 0 6px").
-			Text("The whole Draft becomes a new Revision and Operation switches to it."))
+			Text("The whole Draft becomes a new Deployment and Operation switches to it."))
 	}
 	if len(preview.DroppedWidgets) == 0 {
 		lines = append(lines, app.P().
@@ -395,28 +395,28 @@ func (p *Project) renderDeployDialog() app.UI {
 		)
 }
 
-// renderRevisionsDialog is the list of the project's Revisions with the
+// renderDeploymentsDialog is the list of the project's Deployments with the
 // summary of the selected one: newest first, what caused each, and the running
 // one marked, whose rollback is not offered (task 36, ADR 0014).
-func (p *Project) renderRevisionsDialog() app.UI {
+func (p *Project) renderDeploymentsDialog() app.UI {
 	rows := []app.UI{}
 	switch {
-	case !p.revisionsLoaded:
+	case !p.deploymentsLoaded:
 		rows = append(rows, app.P().
 			Style("margin", "0 0 6px").
 			Style("color", "var(--text-muted)").
-			Text("Loading revisions…"))
-	case len(p.revisions) == 0:
+			Text("Loading deployments…"))
+	case len(p.deployments) == 0:
 		rows = append(rows, app.P().
 			Style("margin", "0 0 6px").
 			Text("The project has not been deployed yet."))
 	default:
-		for _, revision := range p.revisions {
-			rows = append(rows, p.renderRevisionRow(revision))
+		for _, deployment := range p.deployments {
+			rows = append(rows, p.renderDeploymentRow(deployment))
 		}
 	}
-	if p.selectedRevision != 0 {
-		rows = append(rows, p.renderRevisionSummary())
+	if p.selectedDeployment != 0 {
+		rows = append(rows, p.renderDeploymentSummary())
 	}
 
 	buttons := []app.UI{
@@ -426,13 +426,13 @@ func (p *Project) renderRevisionsDialog() app.UI {
 			Style("cursor", "pointer").
 			Text("Close").
 			OnClick(func(ctx app.Context, e app.Event) {
-				p.closeRevisionsDialog()
+				p.closeDeploymentsDialog()
 				ctx.Update()
 			}),
 	}
-	if p.selectedRevision != 0 && !p.isCurrentRevision(p.selectedRevision) {
+	if p.selectedDeployment != 0 && !p.isCurrentDeployment(p.selectedDeployment) {
 		buttons = append(buttons, app.Button().
-			Attr("data-revision-rollback", "true").
+			Attr("data-deployment-rollback", "true").
 			Disabled(p.rollingBack || p.deploying || p.discarding).
 			Style("padding", "4px 12px").
 			Style("font-size", "13px").
@@ -441,12 +441,12 @@ func (p *Project) renderRevisionsDialog() app.UI {
 			Style("color", "var(--accent-text)").
 			Text("Roll back").
 			OnClick(func(ctx app.Context, e app.Event) {
-				p.rollbackRevision(ctx)
+				p.rollbackDeployment(ctx)
 			}))
 	}
 
 	return app.Div().
-		Attr("data-revisions-dialog", "true").
+		Attr("data-deployments-dialog", "true").
 		Style("position", "absolute").
 		Style("top", "48px").
 		Style("right", "16px").
@@ -459,7 +459,7 @@ func (p *Project) renderRevisionsDialog() app.UI {
 		Style("box-shadow", "var(--toast-shadow)").
 		Style("font-size", "13px").
 		Body(
-			app.H3().Style("margin", "0 0 8px").Text("Revisions"),
+			app.H3().Style("margin", "0 0 8px").Text("Deployments"),
 			app.Div().Body(rows...),
 			app.Div().
 				Style("display", "flex").
@@ -470,24 +470,24 @@ func (p *Project) renderRevisionsDialog() app.UI {
 		)
 }
 
-// renderRevisionRow is one Revision of the list: its number, when it was
+// renderDeploymentRow is one Deployment of the list: its number, when it was
 // deployed and why; the running one is marked.
-func (p *Project) renderRevisionRow(revision apiv0.RevisionSummaryResponse) app.UI {
+func (p *Project) renderDeploymentRow(deployment apiv0.DeploymentSummaryResponse) app.UI {
 	body := []app.UI{
 		app.Span().Text(fmt.Sprintf("#%d · %s · %s",
-			revision.Number, formatDeployedAt(revision.DeployedAt), revisionCauseText(revision.Cause, revision.RolledBackFrom))),
+			deployment.Number, formatDeployedAt(deployment.DeployedAt), deploymentCauseText(deployment.Cause, deployment.RolledBackFrom))),
 	}
-	if p.isCurrentRevision(revision.Number) {
+	if p.isCurrentDeployment(deployment.Number) {
 		body = append(body, app.Span().
-			Attr("data-revision-current", "true").
+			Attr("data-deployment-current", "true").
 			Style("margin-left", "8px").
 			Style("font-size", "11px").
 			Style("color", "var(--accent)").
 			Text("current"))
 	}
 	body = append(body, app.Button().
-		Attr("data-revision-download", fmt.Sprint(revision.Number)).
-		Title(fmt.Sprintf("Download revision %d as a project file", revision.Number)).
+		Attr("data-deployment-download", fmt.Sprint(deployment.Number)).
+		Title(fmt.Sprintf("Download deployment %d as a project file", deployment.Number)).
 		Style("margin-left", "8px").
 		Style("padding", "1px 7px").
 		Style("font-size", "11px").
@@ -500,10 +500,10 @@ func (p *Project) renderRevisionRow(revision apiv0.RevisionSummaryResponse) app.
 		OnClick(func(ctx app.Context, e app.Event) {
 			e.Call("stopPropagation")
 			e.StopImmediatePropagation()
-			p.downloadRevisionProjectFile(ctx, revision.Number)
+			p.downloadDeploymentProjectFile(ctx, deployment.Number)
 		}))
 	row := app.Div().
-		Attr("data-revision-row", fmt.Sprint(revision.Number)).
+		Attr("data-deployment-row", fmt.Sprint(deployment.Number)).
 		Style("display", "flex").
 		Style("align-items", "center").
 		Style("justify-content", "space-between").
@@ -512,10 +512,10 @@ func (p *Project) renderRevisionRow(revision apiv0.RevisionSummaryResponse) app.
 		Style("border-radius", "4px").
 		Body(body...).
 		OnClick(func(ctx app.Context, e app.Event) {
-			p.selectRevision(ctx, revision.Number)
+			p.selectDeployment(ctx, deployment.Number)
 			ctx.Update()
 		})
-	if p.selectedRevision == revision.Number {
+	if p.selectedDeployment == deployment.Number {
 		row = row.
 			Style("background", "var(--bg-elevated)").
 			Style("font-weight", "600")
@@ -523,30 +523,30 @@ func (p *Project) renderRevisionRow(revision apiv0.RevisionSummaryResponse) app.
 	return row
 }
 
-// renderRevisionSummary is the selected Revision's document as counts, for
+// renderDeploymentSummary is the selected Deployment's document as counts, for
 // comparison with what the project runs.
-func (p *Project) renderRevisionSummary() app.UI {
-	if !p.revisionDetailLoaded {
+func (p *Project) renderDeploymentSummary() app.UI {
+	if !p.deploymentDetailLoaded {
 		return app.P().
 			Style("margin", "8px 0 0").
 			Style("color", "var(--text-muted)").
-			Text(fmt.Sprintf("Loading revision %d…", p.selectedRevision))
+			Text(fmt.Sprintf("Loading deployment %d…", p.selectedDeployment))
 	}
-	detail := p.revisionDetail
+	detail := p.deploymentDetail
 	widgets := 0
 	for _, scene := range detail.Content.Scenes {
 		widgets += len(scene.Widgets)
 	}
 	return app.Div().
-		Attr("data-revision-summary", "true").
+		Attr("data-deployment-summary", "true").
 		Style("margin", "8px 0 0").
 		Style("padding", "8px").
 		Style("border-top", "1px solid var(--border)").
 		Body(
 			app.P().
 				Style("margin", "0 0 4px").
-				Text(fmt.Sprintf("Revision %d · %s · %s",
-					detail.Number, formatDeployedAt(detail.DeployedAt), revisionCauseText(detail.Cause, detail.RolledBackFrom))),
+				Text(fmt.Sprintf("Deployment %d · %s · %s",
+					detail.Number, formatDeployedAt(detail.DeployedAt), deploymentCauseText(detail.Cause, detail.RolledBackFrom))),
 			app.P().
 				Style("margin", "0").
 				Style("color", "var(--text-2)").
@@ -556,19 +556,19 @@ func (p *Project) renderRevisionSummary() app.UI {
 		)
 }
 
-// revisionCauseText renders why a Revision exists: a Deploy, or a Rollback
-// naming the Revision it copied. A cause this build does not know is shown as
+// deploymentCauseText renders why a Deployment exists: a Deploy, or a Rollback
+// naming the Deployment it copied. A cause this build does not know is shown as
 // it came rather than passed off as a Deploy.
-func revisionCauseText(cause apiv0.RevisionCause, rolledBackFrom *int) string {
+func deploymentCauseText(cause apiv0.DeploymentCause, rolledBackFrom *int) string {
 	switch cause {
-	case apiv0.RevisionCauseDeploy:
+	case apiv0.DeploymentCauseDeploy:
 		return "Deployed"
-	case apiv0.RevisionCauseRollback:
+	case apiv0.DeploymentCauseRollback:
 		if rolledBackFrom != nil {
 			return fmt.Sprintf("Rolled back from #%d", *rolledBackFrom)
 		}
 		return "Rolled back"
-	case apiv0.RevisionCauseFile:
+	case apiv0.DeploymentCauseFile:
 		return "Deployed from file"
 	default:
 		return string(cause)

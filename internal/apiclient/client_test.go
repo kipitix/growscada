@@ -126,7 +126,7 @@ func TestProjectFiles_DownloadOpenAndDeploy(t *testing.T) {
 	var openQuery, deployPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/projectfile") && !strings.Contains(r.URL.Path, "/revisions/"):
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/projectfile") && !strings.Contains(r.URL.Path, "/deployments/"):
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Content-Disposition", `attachment; filename="Main-draft.json"`)
 			w.Write(document)
@@ -157,8 +157,8 @@ func TestProjectFiles_DownloadOpenAndDeploy(t *testing.T) {
 	if !reflect.DeepEqual(download.Data, document) || download.Filename != "Main-draft.json" {
 		t.Errorf("download %+v, want the document and its filename", download)
 	}
-	if _, err := project.RevisionProjectFile(ctx, 2); !errors.Is(err, apiclient.ErrNotFound) {
-		t.Errorf("a missing revision's file: %v, want ErrNotFound", err)
+	if _, err := project.DeploymentProjectFile(ctx, 2); !errors.Is(err, apiclient.ErrNotFound) {
+		t.Errorf("a missing deployment's file: %v, want ErrNotFound", err)
 	}
 
 	state, err := project.OpenProjectFile(ctx, 7, document)
@@ -169,9 +169,9 @@ func TestProjectFiles_DownloadOpenAndDeploy(t *testing.T) {
 		t.Errorf("open sent %q with %q", opened, openQuery)
 	}
 
-	revision, err := project.DeployProjectFile(ctx, document)
-	if err != nil || revision.Number != 3 {
-		t.Fatalf("DeployProjectFile = %+v, %v", revision, err)
+	deployment, err := project.DeployProjectFile(ctx, document)
+	if err != nil || deployment.Number != 3 {
+		t.Fatalf("DeployProjectFile = %+v, %v", deployment, err)
 	}
 	if !reflect.DeepEqual(deployed, document) || deployPath != apiv0.PathPrefix+apiv0.ProjectPath(testProject.String())+"/projectfile/deploy" {
 		t.Errorf("deploy sent %q to %q", deployed, deployPath)

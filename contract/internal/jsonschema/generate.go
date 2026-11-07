@@ -125,7 +125,7 @@ func (g *generator) schemaOf(t reflect.Type) (map[string]any, error) {
 // $ref to its $defs entry, generating the entry with schema on first use.
 //
 // Two distinct types may share a name (projectv0.PortBinding and an
-// apiv0.PortBinding in one document, e.g. a Revision carries a ProjectFile):
+// apiv0.PortBinding in one document, e.g. a Deployment carries a ProjectFile):
 // the first takes the bare name, the next one a name qualified by its package,
 // so the same Go type always gets the same entry.
 func (g *generator) ref(t reflect.Type, schema func(reflect.Type) (map[string]any, error)) (map[string]any, error) {

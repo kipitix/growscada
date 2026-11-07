@@ -174,8 +174,8 @@ func newRuntimeNode() application.RuntimeNode {
 func newRuntime() (runtimeapp.TagStateService, application.RuntimeNode) {
 	states := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(testDB), soleOrganization(), func(event.Event) {})
 	tokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(testDB))
-	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(testDB), func(event.Event) {})
-	return states, inprocess.NewRuntimeNode(states, tokens, revisions)
+	deployments := runtimeapp.NewDeploymentService(runtimepg.NewDeploymentRepositoryPostgres(testDB), func(event.Event) {})
+	return states, inprocess.NewRuntimeNode(states, tokens, deployments)
 }
 
 // deployProject deploys the Draft of the project through the Engineering

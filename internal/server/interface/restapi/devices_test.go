@@ -28,7 +28,7 @@ import (
 func cleanDevicesRest(t *testing.T) {
 	t.Helper()
 	if _, err := testDB().ExecContext(context.Background(),
-		"DELETE FROM runtime.revisions; DELETE FROM runtime.device_tokens; DELETE FROM runtime.tags; "+
+		"DELETE FROM runtime.deployments; DELETE FROM runtime.device_tokens; DELETE FROM runtime.tags; "+
 			"DELETE FROM runtime.environment_devices; DELETE FROM runtime.devices; DELETE FROM runtime.environments; "+
 			"DELETE FROM engineering.tags; "+
 			"DELETE FROM engineering.environment_devices; DELETE FROM engineering.devices; DELETE FROM engineering.environments"); err != nil {
@@ -338,7 +338,7 @@ func TestDeviceIdentity(t *testing.T) {
 }
 
 // TestDeviceTokens_OrphanTokenStaysVisibleAndRevocable: a token outlives its
-// Device — a Deploy can take the Device out of the running Revision, the Draft
+// Device — a Deploy can take the Device out of the running Deployment, the Draft
 // can forget it — and an orphaned one must still be readable and revocable
 // through the Device it names (task 66 shows them in the UI).
 func TestDeviceTokens_OrphanTokenStaysVisibleAndRevocable(t *testing.T) {
@@ -394,7 +394,7 @@ func TestDeviceConfig(t *testing.T) {
 		t.Fatalf("PUT pair: %d %s", rec.Code, rec.Body)
 	}
 
-	// The Gateway's configuration is the running Revision's, never the Draft's.
+	// The Gateway's configuration is the running Deployment's, never the Draft's.
 	fullDocument := projectv0.ProjectFile{
 		Header: projectv0.Header{SchemaVersion: projectv0.SchemaVersion(), ProjectID: mainProject},
 		Tags: []projectv0.TagDefinition{{
@@ -409,7 +409,7 @@ func TestDeviceConfig(t *testing.T) {
 			Params: projectv0.JSONObject(`{"address":"10.0.0.1:502"}`),
 		}},
 	}
-	deployRevision(t, services.revisions, fullDocument)
+	deployDeployment(t, services.deployments, fullDocument)
 
 	configPath := apiv0.PathPrefix + "/device/config?" + apiv0.DeviceConfigQueryEnvironment + "=" + environment.ID.String()
 	rec := serveAs(router, http.MethodGet, configPath, nil, "Bearer "+token)
@@ -464,21 +464,21 @@ func TestDeviceConfig(t *testing.T) {
 		t.Errorf("a missing environment: %d, want 404", rec.Code)
 	}
 
-	// The Environment leaves the Revision: the Device is there, its place is not.
-	deployRevision(t, services.revisions, projectv0.ProjectFile{
+	// The Environment leaves the Deployment: the Device is there, its place is not.
+	deployDeployment(t, services.deployments, projectv0.ProjectFile{
 		Header:  fullDocument.Header,
 		Devices: fullDocument.Devices,
 	})
 	if rec := serveAs(router, http.MethodGet, configPath, nil, "Bearer "+token); rec.Code != http.StatusNotFound {
-		t.Errorf("an environment outside the Revision: %d, want 404", rec.Code)
+		t.Errorf("an environment outside the Deployment: %d, want 404", rec.Code)
 	}
 
-	// The Device leaves the Revision: its token sleeps, and the Gateway waits.
-	deployRevision(t, services.revisions, projectv0.ProjectFile{Header: fullDocument.Header})
+	// The Device leaves the Deployment: its token sleeps, and the Gateway waits.
+	deployDeployment(t, services.deployments, projectv0.ProjectFile{Header: fullDocument.Header})
 	if rec := serveAs(router, http.MethodGet, configPath, nil, "Bearer "+token); rec.Code != http.StatusForbidden {
 		t.Errorf("a dormant token: %d, want 403", rec.Code)
 	}
-	// The token itself is outside the Revision: it stays, and is still revocable.
+	// The token itself is outside the Deployment: it stays, and is still revocable.
 	if rec := serve(router, http.MethodGet, mainPath+"/devices/"+device.ID.String()+"/token", nil); rec.Code != http.StatusOK {
 		t.Errorf("the dormant token's metadata: %d, want 200", rec.Code)
 	}

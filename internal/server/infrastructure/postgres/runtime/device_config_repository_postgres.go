@@ -16,7 +16,7 @@ import (
 
 // deviceConfigRepositoryPostgres reads the configuration a Device Gateway
 // serves from the Runtime node's copies — runtime.devices, runtime.environments,
-// runtime.environment_devices and runtime.tags — which the running Revision
+// runtime.environment_devices and runtime.tags — which the running Deployment
 // fills (task 35, Q5). It never reads the Draft, and never the engineering
 // schema.
 type deviceConfigRepositoryPostgres struct {
@@ -33,7 +33,7 @@ func NewDeviceConfigRepositoryPostgres(aDb *sql.DB) runtimeapp.DeviceConfigRepos
 
 // FindConfig reads the Device, its Environment, their pair and the Tags the
 // Device supplies in one transaction, so a Deploy that commits meanwhile
-// cannot mix two Revisions in one answer. The transaction is REPEATABLE READ:
+// cannot mix two Deployments in one answer. The transaction is REPEATABLE READ:
 // READ COMMITTED would give every statement its own snapshot and let a Deploy
 // land between them. A Project marked deleted is not found, as every read of
 // its content.
@@ -142,7 +142,7 @@ func findConfigConnection(ctx context.Context, tx *sql.Tx, environmentID, device
 }
 
 // findConfigTags returns the Tags the Device supplies, by ID: the copies of
-// the running Revision, not the Draft's definitions.
+// the running Deployment, not the Draft's definitions.
 func findConfigTags(ctx context.Context, tx *sql.Tx, projectID, deviceID uuid.UUID) ([]runtimeapp.DeviceConfigTag, error) {
 	rows, err := tx.QueryContext(ctx,
 		`SELECT id, name, type FROM runtime.tags WHERE project_id = $1 AND device_id = $2 ORDER BY id`,

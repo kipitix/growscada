@@ -1,5 +1,5 @@
 info:
-  name: discard a Revision whose Library Releases are not here
+  name: discard a Deployment whose Library Releases are not here
   type: http
   seq: 143
 
@@ -9,9 +9,9 @@ http:
   auth: inherit
 
 docs: |
-  The running Revision was deployed from a foreign file and names a Library
+  The running Deployment was deployed from a foreign file and names a Library
   Release this server does not have: the Draft cannot hold that pin, so the
-  Discard is refused with `revision_not_discardable` and the missing pins as
+  Discard is refused with `deployment_not_discardable` and the missing pins as
   `file_issues`, and the Draft is left as it is (ADR 0018).
 
 runtime:

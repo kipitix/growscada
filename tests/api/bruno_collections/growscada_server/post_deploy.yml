@@ -9,7 +9,7 @@ http:
   auth: inherit
 
 docs: |
-  Deploys the Draft, making it the project's first Revision. The number and
+  Deploys the Draft, making it the project's first Deployment. The number and
   the deployment time are the Runtime node's; nothing of the Draft reaches it
   before this call, so writing a Tag value in a project that was never
   deployed answers `404`.

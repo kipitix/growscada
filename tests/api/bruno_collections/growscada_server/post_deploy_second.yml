@@ -9,8 +9,8 @@ http:
   auth: inherit
 
 docs: |
-  The Draft of the project changed since its first Revision (a Library Pin
-  was added), so this Deploy makes Revision 2. It is the Revision a Rollback
+  The Draft of the project changed since its first Deployment (a Library Pin
+  was added), so this Deploy makes Deployment 2. It is the Deployment a Rollback
   can then leave behind.
 
 runtime:

@@ -122,12 +122,12 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 			apiv0.Event{Type: "environment_device_updated", ID: environmentID.String(), EnvironmentID: environmentID.String(), DeviceID: deviceID.String()}},
 		event.EventTypeEnvironmentDeviceDeleted: {device.NewEnvironmentDeviceDeletedEvent(environmentID, deviceID, projectID, ts),
 			apiv0.Event{Type: "environment_device_deleted", ID: environmentID.String(), EnvironmentID: environmentID.String(), DeviceID: deviceID.String()}},
-		event.EventTypeRevisionCreated: {runtimeapp.NewRevisionCreatedEvent(runtimeapp.Revision{
+		event.EventTypeDeploymentCreated: {runtimeapp.NewDeploymentCreatedEvent(runtimeapp.Deployment{
 			Number:     3,
 			DeployedAt: at,
 			Content:    projectv0.ProjectFile{Header: projectv0.Header{ProjectID: projectID.UUID()}},
 		}, ts),
-			apiv0.Event{Type: "revision_created", ID: projectID.String(), Revision: 3, DeployedAt: timestamp}},
+			apiv0.Event{Type: "deployment_created", ID: projectID.String(), Deployment: 3, DeployedAt: timestamp}},
 	}
 
 	for _, et := range event.AllEventTypes() {

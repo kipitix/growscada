@@ -94,20 +94,20 @@ func TestPlayer_LostConnection(t *testing.T) {
 	}
 }
 
-// TestPlayer_RevisionNeeded: a document read is needed while the Player runs
-// no Revision or one older than the document; a read a newer Revision has
+// TestPlayer_DeploymentNeeded: a document read is needed while the Player runs
+// no Deployment or one older than the document; a read a newer Deployment has
 // overtaken is not, so its failure is not a lost connection.
-func TestPlayer_RevisionNeeded(t *testing.T) {
+func TestPlayer_DeploymentNeeded(t *testing.T) {
 	p, _ := newTestPlayer(&recordingSource{})
-	if !p.revisionNeeded(1) {
-		t.Error("a Player without a Revision does not need its first document")
+	if !p.deploymentNeeded(1) {
+		t.Error("a Player without a Deployment does not need its first document")
 	}
-	p.model.SetRevision(revision(2, nil, nil, nil))
-	if p.revisionNeeded(1) || p.revisionNeeded(2) {
-		t.Error("a Revision the Player already runs is still needed")
+	p.model.SetDeployment(deployment(2, nil, nil, nil))
+	if p.deploymentNeeded(1) || p.deploymentNeeded(2) {
+		t.Error("a Deployment the Player already runs is still needed")
 	}
-	if !p.revisionNeeded(3) {
-		t.Error("a Revision newer than the one shown is not needed")
+	if !p.deploymentNeeded(3) {
+		t.Error("a Deployment newer than the one shown is not needed")
 	}
 }
 

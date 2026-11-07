@@ -225,11 +225,11 @@ func TestSendError(t *testing.T) {
 }
 
 // TestSendError_NothingToRollback_IsAConflict: a Rollback to the running
-// document names the Revision of the path and says there is nothing to do.
+// document names the Deployment of the path and says there is nothing to do.
 func TestSendError_NothingToRollback_IsAConflict(t *testing.T) {
-	err := fmt.Errorf("%w: revision 3 of project x is the one it runs", runtimeapp.ErrNothingToRollback)
-	assertProblem(t, err, map[string]string{"revision_number": "3"}, http.StatusConflict,
-		"Conflict: Revision", "Nothing to rollback: the revision holds the document the project runs")
+	err := fmt.Errorf("%w: deployment 3 of project x is the one it runs", runtimeapp.ErrNothingToRollback)
+	assertProblem(t, err, map[string]string{"deployment_number": "3"}, http.StatusConflict,
+		"Conflict: Deployment", "Nothing to rollback: the deployment holds the document the project runs")
 }
 
 // TestSendError_DraftConflict_NamesTheDraft: the 409 of a stale Version of the

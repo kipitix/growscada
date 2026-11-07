@@ -115,7 +115,7 @@ func withDraftVersion(req *http.Request) *http.Request {
 		return req
 	}
 	path := req.URL.Path
-	if strings.HasSuffix(path, "/deploy") || strings.HasSuffix(path, "/discard") || strings.Contains(path, "/revisions") ||
+	if strings.HasSuffix(path, "/deploy") || strings.HasSuffix(path, "/discard") || strings.Contains(path, "/deployments") ||
 		strings.HasSuffix(path, "/value") || strings.Contains(path, "/token") ||
 		strings.Contains(path, "/projectfile") {
 		return req

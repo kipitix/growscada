@@ -44,7 +44,7 @@ func TestReloadTargetsFor(t *testing.T) {
 		{apiv0.Event{Type: apiv0.EventDeviceCreated}, ReloadTargets{Deploy: true}},
 		{apiv0.Event{Type: apiv0.EventEnvironmentUpdated}, ReloadTargets{Deploy: true}},
 		{apiv0.Event{Type: apiv0.EventEnvironmentDeviceDeleted}, ReloadTargets{Deploy: true}},
-		{apiv0.Event{Type: apiv0.EventRevisionCreated}, ReloadTargets{Deploy: true}},
+		{apiv0.Event{Type: apiv0.EventDeploymentCreated}, ReloadTargets{Deploy: true}},
 		{apiv0.Event{Type: apiv0.EventClientConnected}, ReloadTargets{}},
 
 		{apiv0.Event{Type: apiv0.EventSystemReady}, ReloadTargets{}},
@@ -98,7 +98,7 @@ func TestReloadTargets_DraftChanged(t *testing.T) {
 		{Type: apiv0.EventWidgetTypeUpdated},
 		{Type: apiv0.EventDeviceCreated},
 		{Type: apiv0.EventEnvironmentDeviceCreated},
-		{Type: apiv0.EventRevisionCreated}, // a Deploy clears the stack
+		{Type: apiv0.EventDeploymentCreated}, // a Deploy clears the stack
 		{Type: apiv0.EventLibraryReleased},
 		{Type: EventResync},
 	}

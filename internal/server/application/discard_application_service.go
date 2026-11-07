@@ -20,13 +20,13 @@ import (
 )
 
 // DiscardService is the Engineering node's Discard (ADR 0016): it resets the
-// whole Draft to the Revision the Project runs, in one transaction over the
+// whole Draft to the Deployment the Project runs, in one transaction over the
 // Draft, and answers with the Draft's new state (task 35, Q10).
 type DiscardService interface {
-	// Discard resets the live Project projectID's Draft to the Revision it
+	// Discard resets the live Project projectID's Draft to the Deployment it
 	// runs. The written Draft is one change: its content is replaced, its
 	// DraftChange stack is cleared and its Version raised.
-	// Returns ErrNoRevisionToDiscard if the Project has no Revision, and an
+	// Returns ErrNoDeploymentToDiscard if the Project has no Deployment, and an
 	// error wrapping project.ErrProjectNotFound if it is not live.
 	Discard(ctx context.Context, projectID uuid.UUID) (appdto.DraftState, error)
 }
@@ -41,7 +41,7 @@ type discardServiceImpl struct {
 var _ DiscardService = (*discardServiceImpl)(nil)
 
 // NewDiscardService returns the DiscardService of the live Projects the
-// ProjectContent serves, reading the current Revision through the Runtime node
+// ProjectContent serves, reading the current Deployment through the Runtime node
 // aRuntime and checking its Library Pins against this server's Libraries and
 // Releases (ADR 0018).
 func NewDiscardService(aContent ProjectContent, aRuntime RuntimeNode,
@@ -54,21 +54,21 @@ func (s discardServiceImpl) Discard(ctx context.Context, rawProjectID uuid.UUID)
 	if err != nil {
 		return appdto.DraftState{}, err
 	}
-	revision, ok, err := s.runtime.FindCurrentRevision(ctx, projectID.UUID())
+	deployment, ok, err := s.runtime.FindCurrentDeployment(ctx, projectID.UUID())
 	if err != nil {
-		return appdto.DraftState{}, fmt.Errorf("cannot read the current revision of project %s: %w", projectID, err)
+		return appdto.DraftState{}, fmt.Errorf("cannot read the current deployment of project %s: %w", projectID, err)
 	}
 	if !ok {
-		return appdto.DraftState{}, fmt.Errorf("%w: %s", ErrNoRevisionToDiscard, projectID)
+		return appdto.DraftState{}, fmt.Errorf("%w: %s", ErrNoDeploymentToDiscard, projectID)
 	}
-	content, err := contentOfRevision(projectID, revision.Content)
+	content, err := contentOfDeployment(projectID, deployment.Content)
 	if err != nil {
-		return appdto.DraftState{}, fmt.Errorf("cannot read the revision of project %s: %w", projectID, err)
+		return appdto.DraftState{}, fmt.Errorf("cannot read the deployment of project %s: %w", projectID, err)
 	}
-	// A Revision deployed from a foreign file may name Library Releases this
+	// A Deployment deployed from a foreign file may name Library Releases this
 	// server does not have: the Draft cannot hold such pins, so the Discard is
 	// refused instead of failing on the foreign key (ADR 0018).
-	if err := discardableRevision(ctx, s.libraries, s.releases, revision.Content); err != nil {
+	if err := discardableDeployment(ctx, s.libraries, s.releases, deployment.Content); err != nil {
 		return appdto.DraftState{}, fmt.Errorf("cannot discard project %s: %w", projectID, err)
 	}
 	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), func(session *draft.Session) error {
@@ -101,15 +101,15 @@ func (s discardServiceImpl) lockDiscardedPins(ctx context.Context, content draft
 		}
 	}
 	if len(issues) > 0 {
-		return RevisionNotDiscardableError{Issues: issues}
+		return DeploymentNotDiscardableError{Issues: issues}
 	}
 	return nil
 }
 
-// contentOfRevision rebuilds the content of a Project's Draft from the
-// ProjectFile of the Revision it runs: the entities keep the identity they
+// contentOfDeployment rebuilds the content of a Project's Draft from the
+// ProjectFile of the Deployment it runs: the entities keep the identity they
 // had when they were deployed.
-func contentOfRevision(projectID id.ID[project.Project], file projectv0.ProjectFile) (draft.Content, error) {
+func contentOfDeployment(projectID id.ID[project.Project], file projectv0.ProjectFile) (draft.Content, error) {
 	var content draft.Content
 	for _, d := range file.Devices {
 		protocol, err := device.NewDeviceProtocol(d.Protocol)

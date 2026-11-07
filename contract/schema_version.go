@@ -3,7 +3,7 @@
 // its own SchemaVersion and lives in its own subpackage per MAJOR:
 //
 //   - api/vN      — the server API: REST requests, responses and live events;
-//   - project/vN  — the project format: ProjectFile and Revision;
+//   - project/vN  — the project format: ProjectFile and Deployment;
 //   - record/vN   — the operational record format: Journal entries,
 //     Checkpoints and PlaybackFiles;
 //   - manifest/vN — growctl manifests;

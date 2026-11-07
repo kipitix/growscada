@@ -1,10 +1,10 @@
-// Package player is the UI's operational model: the Revision a Project runs,
+// Package player is the UI's operational model: the Deployment a Project runs,
 // the states of its Tags and the position of its Journal, fed by a starting
 // state and the Journal entries that follow. A Player does not know whether
 // its entries are live or replayed (ADR 0020): Operation instantiates it over
 // the live stream, History (task 45) will instantiate it over a playback.
 //
-// The package is the UI layer's alone: it maps the Revision's ProjectFile to
+// The package is the UI layer's alone: it maps the Deployment's ProjectFile to
 // the shapes livescene renders and imports no server domain.
 package player
 
@@ -20,7 +20,7 @@ import (
 
 // TagState is the state of one Tag as the Player knows it. It is kept for
 // every Tag the Player ever heard of, including one no longer in the running
-// configuration: a state is keyed by the Tag's identity, so a later Revision
+// configuration: a state is keyed by the Tag's identity, so a later Deployment
 // that names the Tag again finds it (ADR 0020). A state outside the
 // configuration is never rendered.
 type TagState struct {
@@ -35,25 +35,25 @@ type Result struct {
 	// Changed reports whether the rendered picture changed: a Tag state the
 	// Player applies.
 	Changed bool
-	// Revision is the Revision whose document must be read
-	// (GET …/revisions/{n}) and applied, 0 when no document is needed. The
+	// Deployment is the Deployment whose document must be read
+	// (GET …/deployments/{n}) and applied, 0 when no document is needed. The
 	// entry carries only the number: the document is immutable and lives in
 	// the Runtime node's store (ADR 0014).
-	Revision int
+	Deployment int
 }
 
-// Model is the operational picture of one Project: the Revision it runs, the
+// Model is the operational picture of one Project: the Deployment it runs, the
 // states of its Tags by ID, its Journal position and whether its stream is
-// connected. The zero value is a Project without a Revision, no states and
+// connected. The zero value is a Project without a Deployment, no states and
 // position 0. Everything here is owned by one Player and lives on the UI
 // goroutine.
 type Model struct {
-	position  int64
-	revision  *apiv0.RevisionResponse
-	states    map[uuid.UUID]TagState
-	connected bool
+	position   int64
+	deployment *apiv0.DeploymentResponse
+	states     map[uuid.UUID]TagState
+	connected  bool
 
-	// The render forms of revision.Content, rebuilt when the Revision changes.
+	// The render forms of deployment.Content, rebuilt when the Deployment changes.
 	scenes      []apiv0.SceneResponse
 	widgetTypes map[uuid.UUID]apiv0.ReleasedWidgetTypeResponse
 	widgets     map[uuid.UUID][]apiv0.WidgetResponse
@@ -63,8 +63,8 @@ type Model struct {
 // a stream starts after.
 func (m *Model) Position() int64 { return m.position }
 
-// Deployed reports whether the Project runs a Revision.
-func (m *Model) Deployed() bool { return m.revision != nil }
+// Deployed reports whether the Project runs a Deployment.
+func (m *Model) Deployed() bool { return m.deployment != nil }
 
 // Connected reports whether the Player's stream is up.
 func (m *Model) Connected() bool { return m.connected }
@@ -78,9 +78,9 @@ func (m *Model) SetConnected(connected bool) bool {
 	return true
 }
 
-// Revision returns the Revision the Project runs, nil until its first Deploy.
+// Deployment returns the Deployment the Project runs, nil until its first Deploy.
 // The document is for reading only.
-func (m *Model) Revision() *apiv0.RevisionResponse { return m.revision }
+func (m *Model) Deployment() *apiv0.DeploymentResponse { return m.deployment }
 
 // TagState returns the known state of the Tag id, false if none was heard of.
 func (m *Model) TagState(id uuid.UUID) (TagState, bool) {
@@ -93,7 +93,7 @@ func (m *Model) TagState(id uuid.UUID) (TagState, bool) {
 func (m *Model) States() map[uuid.UUID]TagState { return m.states }
 
 // MergeSnapshot applies a starting state (GET …/operation, or a checkpoint of
-// a playback): the position moves forward, a Revision with a greater number
+// a playback): the position moves forward, a Deployment with a greater number
 // wins, and for every Tag the state with the greater Seq wins. Entries that
 // arrived while the starting state was being read are therefore never rolled
 // back by it (ADR 0020).
@@ -101,8 +101,8 @@ func (m *Model) MergeSnapshot(snapshot apiv0.OperationStateResponse) {
 	if snapshot.Position > m.position {
 		m.position = snapshot.Position
 	}
-	if snapshot.Revision != nil {
-		m.SetRevision(*snapshot.Revision)
+	if snapshot.Deployment != nil {
+		m.SetDeployment(*snapshot.Deployment)
 	}
 	for key, state := range snapshot.TagStates {
 		id, err := uuid.Parse(key)
@@ -124,16 +124,16 @@ func (m *Model) MergeSnapshot(snapshot apiv0.OperationStateResponse) {
 	}
 }
 
-// SetRevision swaps the configuration to revision and reports whether it did.
-// A repeated or older Revision is ignored; the Tag states are kept by ID, so
+// SetDeployment swaps the configuration to deployment and reports whether it did.
+// A repeated or older Deployment is ignored; the Tag states are kept by ID, so
 // a new Tag shows its type's zero value with Quality bad until it is written
 // and a removed Tag is no longer rendered.
-func (m *Model) SetRevision(revision apiv0.RevisionResponse) bool {
-	if m.revision != nil && revision.Number <= m.revision.Number {
+func (m *Model) SetDeployment(deployment apiv0.DeploymentResponse) bool {
+	if m.deployment != nil && deployment.Number <= m.deployment.Number {
 		return false
 	}
-	document := revision
-	m.revision = &document
+	document := deployment
+	m.deployment = &document
 
 	content := document.Content
 	m.scenes = make([]apiv0.SceneResponse, len(content.Scenes))
@@ -168,14 +168,14 @@ func (m *Model) Apply(entry recordv0.Entry) Result {
 	switch entry.Type {
 	case recordv0.EntryTypeTagState:
 		return m.applyTagState(entry)
-	case recordv0.EntryTypeRevision:
-		if entry.Revision == nil {
+	case recordv0.EntryTypeDeployment:
+		if entry.Deployment == nil {
 			return Result{}
 		}
-		if m.revision != nil && entry.Revision.Number <= m.revision.Number {
+		if m.deployment != nil && entry.Deployment.Number <= m.deployment.Number {
 			return Result{}
 		}
-		return Result{Revision: entry.Revision.Number}
+		return Result{Deployment: entry.Deployment.Number}
 	}
 	return Result{}
 }
@@ -207,11 +207,11 @@ func (m *Model) applyTagState(entry recordv0.Entry) Result {
 	return Result{Changed: true}
 }
 
-// View returns what Operation renders: the Revision's Scenes and WidgetTypes,
+// View returns what Operation renders: the Deployment's Scenes and WidgetTypes,
 // the Tags of its configuration with their states and the state of the
 // connection. A View shares the Model's maps for reading only.
 type View struct {
-	Revision    *apiv0.RevisionResponse
+	Deployment  *apiv0.DeploymentResponse
 	Scenes      []apiv0.SceneResponse
 	WidgetTypes map[uuid.UUID]apiv0.ReleasedWidgetTypeResponse
 	Tags        map[uuid.UUID]apiv0.TagResponse
@@ -220,11 +220,11 @@ type View struct {
 	widgets map[uuid.UUID][]apiv0.WidgetResponse
 }
 
-// Deployed reports whether there is a Revision to render.
-func (v View) Deployed() bool { return v.Revision != nil }
+// Deployed reports whether there is a Deployment to render.
+func (v View) Deployed() bool { return v.Deployment != nil }
 
-// Widgets returns the Widgets of the Scene sceneID of the Revision; nil when
-// the Revision has no such Scene.
+// Widgets returns the Widgets of the Scene sceneID of the Deployment; nil when
+// the Deployment has no such Scene.
 func (v View) Widgets(sceneID uuid.UUID) []apiv0.WidgetResponse { return v.widgets[sceneID] }
 
 // View returns the current picture. The Tags are those of the running
@@ -232,7 +232,7 @@ func (v View) Widgets(sceneID uuid.UUID) []apiv0.WidgetResponse { return v.widge
 // with Quality bad and Seq 0, as a Tag never written does.
 func (m *Model) View() View {
 	return View{
-		Revision:    m.revision,
+		Deployment:  m.deployment,
 		Scenes:      m.scenes,
 		WidgetTypes: m.widgetTypes,
 		Tags:        m.tags(),
@@ -244,10 +244,10 @@ func (m *Model) View() View {
 // tags are the Tags of the running configuration with their states, by ID.
 func (m *Model) tags() map[uuid.UUID]apiv0.TagResponse {
 	empty := map[uuid.UUID]apiv0.TagResponse{}
-	if m.revision == nil {
+	if m.deployment == nil {
 		return empty
 	}
-	definitions := m.revision.Content.Tags
+	definitions := m.deployment.Content.Tags
 	tags := make(map[uuid.UUID]apiv0.TagResponse, len(definitions))
 	for _, definition := range definitions {
 		state, ok := m.states[definition.ID]
@@ -270,7 +270,7 @@ func (m *Model) tags() map[uuid.UUID]apiv0.TagResponse {
 	return tags
 }
 
-// sceneOf is the Revision's Scene in the shape the view renders. The Revision
+// sceneOf is the Deployment's Scene in the shape the view renders. The Deployment
 // has no aggregate versions: the Version is not read.
 func sceneOf(scene projectv0.Scene) apiv0.SceneResponse {
 	return apiv0.SceneResponse{
@@ -282,8 +282,8 @@ func sceneOf(scene projectv0.Scene) apiv0.SceneResponse {
 	}
 }
 
-// widgetOf is the Revision's Widget in the shape the view renders. The
-// Revision has no matrix: it is derived from the geometry (uiutil.MatrixCSS
+// widgetOf is the Deployment's Widget in the shape the view renders. The
+// Deployment has no matrix: it is derived from the geometry (uiutil.MatrixCSS
 // mirrors the domain formula).
 func widgetOf(widget projectv0.Widget, sceneID uuid.UUID) apiv0.WidgetResponse {
 	bindings := make([]apiv0.PortBinding, len(widget.PortBindings))
@@ -312,7 +312,7 @@ func widgetOf(widget projectv0.Widget, sceneID uuid.UUID) apiv0.WidgetResponse {
 	}
 }
 
-// widgetTypeOf is the Revision's copy of a WidgetType in the shape the view
+// widgetTypeOf is the Deployment's copy of a WidgetType in the shape the view
 // renders.
 func widgetTypeOf(widgetType projectv0.WidgetType) apiv0.ReleasedWidgetTypeResponse {
 	ports := make([]apiv0.InputPort, len(widgetType.InputPorts))
@@ -333,7 +333,7 @@ func widgetTypeOf(widgetType projectv0.WidgetType) apiv0.ReleasedWidgetTypeRespo
 }
 
 // zeroValueOf is the TagType's zero value as a Tag's value is spelled: a Tag
-// of the Revision the Runtime node holds no state for still renders its type.
+// of the Deployment the Runtime node holds no state for still renders its type.
 func zeroValueOf(tagType string) string {
 	switch tagType {
 	case "boolean":

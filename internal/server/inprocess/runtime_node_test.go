@@ -132,79 +132,79 @@ func TestRuntimeNode_ReturnsTheRuntimeNodesErrors(t *testing.T) {
 	}
 }
 
-// recordingRevisions is a RevisionService that records what it is given and
-// answers with revision, or err.
-type recordingRevisions struct {
-	runtimeapp.RevisionService
+// recordingDeployments is a DeploymentService that records what it is given and
+// answers with deployment, or err.
+type recordingDeployments struct {
+	runtimeapp.DeploymentService
 
 	projectID  uuid.UUID
 	file       projectv0.ProjectFile
-	revision   runtimeapp.Revision
-	current    runtimeapp.Revision
+	deployment runtimeapp.Deployment
+	current    runtimeapp.Deployment
 	hasCurrent bool
 	err        error
 }
 
-func (r *recordingRevisions) Deploy(_ context.Context, projectID uuid.UUID, file projectv0.ProjectFile) (runtimeapp.Revision, error) {
+func (r *recordingDeployments) Deploy(_ context.Context, projectID uuid.UUID, file projectv0.ProjectFile) (runtimeapp.Deployment, error) {
 	r.projectID, r.file = projectID, file
-	return r.revision, r.err
+	return r.deployment, r.err
 }
 
-func (r *recordingRevisions) FindCurrent(context.Context, uuid.UUID) (runtimeapp.Revision, bool, error) {
+func (r *recordingDeployments) FindCurrent(context.Context, uuid.UUID) (runtimeapp.Deployment, bool, error) {
 	return r.current, r.hasCurrent, r.err
 }
 
-// TestRuntimeNode_Deploy_HandsOverTheDocumentAndConvertsTheRevision: the
-// Engineering node's DTO of a Revision is the Runtime node's.
-func TestRuntimeNode_Deploy_HandsOverTheDocumentAndConvertsTheRevision(t *testing.T) {
+// TestRuntimeNode_Deploy_HandsOverTheDocumentAndConvertsTheDeployment: the
+// Engineering node's DTO of a Deployment is the Runtime node's.
+func TestRuntimeNode_Deploy_HandsOverTheDocumentAndConvertsTheDeployment(t *testing.T) {
 	projectID := uuid.New()
 	at := time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
 	file := projectv0.ProjectFile{Header: projectv0.Header{ProjectID: projectID}}
-	revisions := &recordingRevisions{revision: runtimeapp.Revision{Number: 3, DeployedAt: at, Content: file}}
+	deployments := &recordingDeployments{deployment: runtimeapp.Deployment{Number: 3, DeployedAt: at, Content: file}}
 
-	got, err := inprocess.NewRuntimeNode(&recordingStates{}, nil, revisions).Deploy(context.Background(), projectID, file)
+	got, err := inprocess.NewRuntimeNode(&recordingStates{}, nil, deployments).Deploy(context.Background(), projectID, file)
 	if err != nil {
 		t.Fatalf("Deploy: %v", err)
 	}
-	if revisions.projectID != projectID || !reflect.DeepEqual(revisions.file, file) {
-		t.Errorf("deployed %v of %v, want %v of %v", revisions.file, revisions.projectID, file, projectID)
+	if deployments.projectID != projectID || !reflect.DeepEqual(deployments.file, file) {
+		t.Errorf("deployed %v of %v, want %v of %v", deployments.file, deployments.projectID, file, projectID)
 	}
-	want := appdto.Revision{Number: 3, DeployedAt: at, Content: file}
+	want := appdto.Deployment{Number: 3, DeployedAt: at, Content: file}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Deploy = %+v, want %+v", got, want)
 	}
 }
 
-// TestRuntimeNode_FindCurrentRevision_ConvertsTheRevisionAndItsPresence.
-func TestRuntimeNode_FindCurrentRevision_ConvertsTheRevisionAndItsPresence(t *testing.T) {
+// TestRuntimeNode_FindCurrentDeployment_ConvertsTheDeploymentAndItsPresence.
+func TestRuntimeNode_FindCurrentDeployment_ConvertsTheDeploymentAndItsPresence(t *testing.T) {
 	projectID := uuid.New()
 	at := time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
 	file := projectv0.ProjectFile{Header: projectv0.Header{ProjectID: projectID}}
-	revisions := &recordingRevisions{current: runtimeapp.Revision{Number: 2, DeployedAt: at, Content: file}, hasCurrent: true}
+	deployments := &recordingDeployments{current: runtimeapp.Deployment{Number: 2, DeployedAt: at, Content: file}, hasCurrent: true}
 
-	got, ok, err := inprocess.NewRuntimeNode(&recordingStates{}, nil, revisions).FindCurrentRevision(context.Background(), projectID)
+	got, ok, err := inprocess.NewRuntimeNode(&recordingStates{}, nil, deployments).FindCurrentDeployment(context.Background(), projectID)
 	if err != nil || !ok {
-		t.Fatalf("FindCurrentRevision: %+v, %t, %v", got, ok, err)
+		t.Fatalf("FindCurrentDeployment: %+v, %t, %v", got, ok, err)
 	}
-	want := appdto.Revision{Number: 2, DeployedAt: at, Content: file}
+	want := appdto.Deployment{Number: 2, DeployedAt: at, Content: file}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("FindCurrentRevision = %+v, want %+v", got, want)
+		t.Errorf("FindCurrentDeployment = %+v, want %+v", got, want)
 	}
 
-	revisions.hasCurrent = false
-	if _, ok, err := inprocess.NewRuntimeNode(&recordingStates{}, nil, revisions).FindCurrentRevision(context.Background(), projectID); err != nil || ok {
-		t.Errorf("a project without a revision: %t, %v", ok, err)
+	deployments.hasCurrent = false
+	if _, ok, err := inprocess.NewRuntimeNode(&recordingStates{}, nil, deployments).FindCurrentDeployment(context.Background(), projectID); err != nil || ok {
+		t.Errorf("a project without a deployment: %t, %v", ok, err)
 	}
 }
 
-// TestRuntimeNode_WithoutRevisions_RefusesToDeploy: a Runtime node wired
-// without the Revision service has nothing to deploy to.
-func TestRuntimeNode_WithoutRevisions_RefusesToDeploy(t *testing.T) {
+// TestRuntimeNode_WithoutDeployments_RefusesToDeploy: a Runtime node wired
+// without the Deployment service has nothing to deploy to.
+func TestRuntimeNode_WithoutDeployments_RefusesToDeploy(t *testing.T) {
 	node := inprocess.NewRuntimeNode(&recordingStates{}, nil, nil)
 	if _, err := node.Deploy(context.Background(), uuid.New(), projectv0.ProjectFile{}); err == nil {
-		t.Error("Deploy without a Revision service returned no error")
+		t.Error("Deploy without a Deployment service returned no error")
 	}
-	if _, _, err := node.FindCurrentRevision(context.Background(), uuid.New()); err == nil {
-		t.Error("FindCurrentRevision without a Revision service returned no error")
+	if _, _, err := node.FindCurrentDeployment(context.Background(), uuid.New()); err == nil {
+		t.Error("FindCurrentDeployment without a Deployment service returned no error")
 	}
 }

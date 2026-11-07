@@ -11,7 +11,7 @@ http:
 docs: |
   The Device `sim` was removed just before, but its token was not: a token
   outlives its Device (a Deploy can take the Device out of the running
-  Revision, the Draft can forget it). Its metadata stays readable so that the
+  Deployment, the Draft can forget it). Its metadata stays readable so that the
   UI shows the orphan and people can revoke it (task 66).
 
 runtime:

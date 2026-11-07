@@ -603,13 +603,13 @@ func TestMigrationTagStatesAndDevices_SplitsTheStateAndAddsDevices(t *testing.T)
 		t.Error("an Environment name taken twice in the Project's copy")
 	}
 
-	// A token sleeps while its Device is not in the running Revision: Deploy
+	// A token sleeps while its Device is not in the running Deployment: Deploy
 	// removes the copy of the Device, the token stays behind (ADR 0004,
 	// amendment 2026-11-01).
 	mustExec(`DELETE FROM runtime.devices WHERE id = $1`, deviceID)
 	var tokens int
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM runtime.device_tokens WHERE device_id = $1`, deviceID).Scan(&tokens); err != nil || tokens != 1 {
-		t.Errorf("the token of a Device out of the Revision: %d, %v", tokens, err)
+		t.Errorf("the token of a Device out of the Deployment: %d, %v", tokens, err)
 	}
 	// A pair is derived data too: it goes with either side, while the other
 	// side and the token stay (ADR 0011). The pair of the Device is gone...
@@ -835,5 +835,71 @@ func TestMigrationJournal_KeepsThePositionAboveEveryState(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM information_schema.columns WHERE table_schema = 'runtime'
 	                                   AND table_name = 'tag_states' AND column_name = 'last_write_at'`).Scan(&writeMoment); err != nil || writeMoment != 0 {
 		t.Errorf("last_write_at left after the down: %d, %v", writeMoment, err)
+	}
+}
+
+// TestMigrationDeployments_RenamesTheRevisionStore: the Runtime node's store of
+// a Project's running configuration was called a Revision before task 72_9. A
+// row written then is read as a Deployment after the migration, its Journal
+// entry is a deployment entry, and the Down puts both names back.
+func TestMigrationDeployments_RenamesTheRevisionStore(t *testing.T) {
+	ctx := context.Background()
+	db, dir := migrationDB(t)
+	const main = "b0000000-0000-4000-8000-000000000001"
+	if err := goose.UpToContext(ctx, db, dir, rolesBaseline); err != nil {
+		t.Fatalf("migrate public: %v", err)
+	}
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS(filepath.Join(dir, "..", "runtime")),
+		goose.WithTableName("runtime.goose_db_version"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := provider.UpTo(ctx, 20261106000000); err != nil {
+		t.Fatalf("migrate runtime to the previous version: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO runtime.revisions (project_id, n, deployed_at, cause, config)
+	                                  VALUES ($1, 1, now(), 'deploy', '{}')`, main); err != nil {
+		t.Fatalf("insert a revision: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO runtime.journal (project_id, ts, type, payload, schema_version)
+	                                  VALUES ($1, now(), 'revision', '{"number":1,"cause":"deploy"}', '0.2')`, main); err != nil {
+		t.Fatalf("insert a revision journal entry: %v", err)
+	}
+
+	if _, err := provider.UpTo(ctx, 20261107000000); err != nil {
+		t.Fatalf("migrate the deployment store: %v", err)
+	}
+
+	var number int
+	if err := db.QueryRowContext(ctx, `SELECT number FROM runtime.deployments WHERE project_id = $1`, main).Scan(&number); err != nil {
+		t.Fatalf("read the stored deployment: %v", err)
+	}
+	if number != 1 {
+		t.Errorf("the stored deployment is numbered %d, want 1", number)
+	}
+	var entryType string
+	if err := db.QueryRowContext(ctx, `SELECT type FROM runtime.journal WHERE project_id = $1`, main).Scan(&entryType); err != nil {
+		t.Fatalf("read the journal entry: %v", err)
+	}
+	if entryType != "deployment" {
+		t.Errorf("the journal entry is of type %q, want deployment", entryType)
+	}
+	var oldTables int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM pg_tables WHERE schemaname = 'runtime' AND tablename = 'revisions'`).Scan(&oldTables); err != nil || oldTables != 0 {
+		t.Errorf("the revisions table is left: %d, %v", oldTables, err)
+	}
+
+	// Down: the store and the Journal entry are named as they were.
+	if _, err := provider.DownTo(ctx, 20261106000000); err != nil {
+		t.Fatalf("migrate the deployment store down: %v", err)
+	}
+	if err := db.QueryRowContext(ctx, `SELECT n FROM runtime.revisions WHERE project_id = $1`, main).Scan(&number); err != nil {
+		t.Fatalf("read the stored revision after the down: %v", err)
+	}
+	if err := db.QueryRowContext(ctx, `SELECT type FROM runtime.journal WHERE project_id = $1`, main).Scan(&entryType); err != nil {
+		t.Fatalf("read the journal entry after the down: %v", err)
+	}
+	if entryType != "revision" {
+		t.Errorf("the journal entry after the down is of type %q, want revision", entryType)
 	}
 }

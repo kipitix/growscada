@@ -19,14 +19,14 @@ import (
 
 // unstoredEventTypes are the event types the outbox never holds: those of
 // delivery, tag_updated, which the Runtime node publishes itself, and
-// revision_created, which it publishes once a Deploy has committed (ADR 0011,
+// deployment_created, which it publishes once a Deploy has committed (ADR 0011,
 // task 35).
 var unstoredEventTypes = map[event.EventType]bool{
 	event.EventTypeSystemReady:        true,
 	event.EventTypeClientConnected:    true,
 	event.EventTypeClientDisconnected: true,
 	event.EventTypeTagUpdated:         true,
-	event.EventTypeRevisionCreated:    true,
+	event.EventTypeDeploymentCreated:  true,
 }
 
 // sampleEvents returns one event of every domain event type.

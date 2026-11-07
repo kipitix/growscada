@@ -1,22 +1,22 @@
 info:
-  name: get revision by missing number
+  name: get deployment by invalid number
   type: http
-  seq: 48
+  seq: 49
 
 http:
   method: GET
-  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/revisions/99
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/deployments/abc
   auth: inherit
 
 docs: |
-  A revision number the project does not have is `404` Problem Details,
-  naming the Revision of the path.
+  A deployment number that is not a number is `400 Bad Request` Problem
+  Details: the path names the Deployment, and the API says which part is wrong.
 
 runtime:
   assertions:
     - expression: 'res.status'
       operator: eq
-      value: '404'
+      value: '400'
     - expression: 'res.headers["growscada-schema-version"]'
       operator: isDefined
     - expression: 'res.headers["content-type"]'

@@ -66,7 +66,7 @@ type Player struct {
 	model   Model
 	updater updateBatcher
 
-	// opens counts the explicit opens; a starting state or a Revision
+	// opens counts the explicit opens; a starting state or a Deployment
 	// document read by an older one is dropped.
 	opens uint64
 	// openSeq counts the Source.Open calls: a callback of a replaced stream
@@ -132,7 +132,7 @@ func (p *Player) Close() {
 // Position returns the Journal position the Player has consumed.
 func (p *Player) Position() int64 { return p.model.Position() }
 
-// Deployed reports whether the Project runs a Revision.
+// Deployed reports whether the Project runs a Deployment.
 func (p *Player) Deployed() bool { return p.model.Deployed() }
 
 // Connected reports whether the stream is up.
@@ -227,50 +227,50 @@ func (p *Player) open() {
 	})
 }
 
-// apply applies one entry. A revision entry names a document the Runtime node
+// apply applies one entry. A deployment entry names a document the Runtime node
 // stores: it is read asynchronously and applied by its number.
 func (p *Player) apply(entry recordv0.Entry) {
 	result := p.model.Apply(entry)
 	if result.Changed {
 		p.updater.Request()
 	}
-	if result.Revision > 0 {
-		p.loadRevision(result.Revision)
+	if result.Deployment > 0 {
+		p.loadDeployment(result.Deployment)
 	}
 }
 
-// loadRevision reads the document of Revision number and swaps the
+// loadDeployment reads the document of Deployment number and swaps the
 // configuration to it. A failure is lost connectivity: the old configuration
 // stays on screen, the view shows disconnected and the full resync retries
 // (ADR 0020).
-func (p *Player) loadRevision(number int) {
+func (p *Player) loadDeployment(number int) {
 	p.ctx.Async(func() {
-		revision, err := p.project.RevisionByNumber(p.ctx, number)
+		deployment, err := p.project.DeploymentByNumber(p.ctx, number)
 		p.ctx.Dispatch(func(ctx app.Context) {
 			if p.closed {
 				return
 			}
 			if err != nil {
-				// A read the Player has overtaken (a newer Revision is
+				// A read the Player has overtaken (a newer Deployment is
 				// already on screen) says nothing about the connection.
-				if p.revisionNeeded(number) {
+				if p.deploymentNeeded(number) {
 					p.streamLost(true)
 				}
 				return
 			}
-			if p.model.SetRevision(revision) {
+			if p.model.SetDeployment(deployment) {
 				p.updater.Request()
 			}
 		})
 	})
 }
 
-// revisionNeeded reports whether the document of Revision number is still the
-// one the Player runs: a read of an older Revision may arrive after a newer
+// deploymentNeeded reports whether the document of Deployment number is still the
+// one the Player runs: a read of an older Deployment may arrive after a newer
 // one was applied, and its failure is not a lost connection.
-func (p *Player) revisionNeeded(number int) bool {
-	revision := p.model.Revision()
-	return revision == nil || number > revision.Number
+func (p *Player) deploymentNeeded(number int) bool {
+	deployment := p.model.Deployment()
+	return deployment == nil || number > deployment.Number
 }
 
 // streamOpened marks the connection up. If the starting state has advanced

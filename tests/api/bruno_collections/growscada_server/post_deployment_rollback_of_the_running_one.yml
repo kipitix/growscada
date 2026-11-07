@@ -1,17 +1,17 @@
 info:
-  name: post revision rollback of the running one
+  name: post deployment rollback of the running one
   type: http
   seq: 60
 
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/revisions/2/rollback
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/deployments/2/rollback
   auth: inherit
 
 docs: |
-  Revision 2 is the one the project runs, so its document is the running
+  Deployment 2 is the one the project runs, so its document is the running
   document unchanged: a Rollback would change nothing and is refused `409
-  nothing_to_rollback`; no Revision is appended.
+  nothing_to_rollback`; no Deployment is appended.
 
 runtime:
   assertions:

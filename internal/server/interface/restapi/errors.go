@@ -48,8 +48,8 @@ var (
 	environmentDeviceResource = resource{name: "EnvironmentDevice", pathParam: "device_id"}
 	// A Device Token is named by its Device: there is one per Device.
 	deviceTokenResource = resource{name: "DeviceToken", pathParam: "device_id"}
-	// A Revision is named by its number within its Project.
-	revisionResource = resource{name: "Revision", pathParam: "revision_number"}
+	// A Deployment is named by its number within its Project.
+	deploymentResource = resource{name: "Deployment", pathParam: "deployment_number"}
 )
 
 // wildcard is the router pattern segment that carries the resource's ID.
@@ -79,18 +79,18 @@ var errorMappings = []errorMapping{
 	{draft.ErrNothingToRedo, http.StatusConflict, projectResource,
 		"Nothing to redo: nothing was undone, or a new change replaced the redo tail"},
 	{application.ErrNothingToDeploy, http.StatusConflict, projectResource,
-		"Nothing to deploy: the Draft of the project is the revision it runs"},
-	{application.ErrNoRevisionToDiscard, http.StatusConflict, projectResource,
-		"Nothing to discard: the project runs no revision"},
+		"Nothing to deploy: the Draft of the project is the deployment it runs"},
+	{application.ErrNoDeploymentToDiscard, http.StatusConflict, projectResource,
+		"Nothing to discard: the project runs no deployment"},
 	{application.ErrNothingToOpen, http.StatusConflict, projectResource,
 		"Nothing to open: the Draft of the project is the project file"},
 	{application.ErrDraftNotDeployable, http.StatusConflict, projectResource,
 		"The Draft cannot be exported: it is not deployable; repair the Draft first"},
-	{application.ErrRevisionNotDiscardable, http.StatusConflict, revisionResource,
-		"The Revision names Library Releases this server does not have; the Draft is left as it is"},
-	{runtimeapp.ErrNothingToRollback, http.StatusConflict, revisionResource,
-		"Nothing to rollback: the revision holds the document the project runs"},
-	{runtimeapp.ErrRevisionNotFound, http.StatusNotFound, revisionResource, ""},
+	{application.ErrDeploymentNotDiscardable, http.StatusConflict, deploymentResource,
+		"The Deployment names Library Releases this server does not have; the Draft is left as it is"},
+	{runtimeapp.ErrNothingToRollback, http.StatusConflict, deploymentResource,
+		"Nothing to rollback: the deployment holds the document the project runs"},
+	{runtimeapp.ErrDeploymentNotFound, http.StatusNotFound, deploymentResource, ""},
 	{project.ErrProjectNotFound, http.StatusNotFound, projectResource, ""},
 	{project.ErrProjectConflict, http.StatusConflict, projectResource, "Project was changed concurrently; reload it and retry"},
 	{project.ErrProjectNameTaken, http.StatusConflict, projectResource, "Project name is already taken"},
@@ -157,10 +157,10 @@ func sendError(w http.ResponseWriter, r *http.Request, err error) {
 		return
 	}
 	// A Discard refused for foreign pins names the missing ones as file_issues.
-	var notDiscardable application.RevisionNotDiscardableError
+	var notDiscardable application.DeploymentNotDiscardableError
 	if errors.As(err, &notDiscardable) {
-		problem := NewConflict(revisionResource.name,
-			"The Revision names Library Releases this server does not have; the Draft is left as it is", r.URL.Path)
+		problem := NewConflict(deploymentResource.name,
+			"The Deployment names Library Releases this server does not have; the Draft is left as it is", r.URL.Path)
 		problem.FileIssues = newFileIssues(notDiscardable.Issues)
 		sendProblem(w, problem)
 		return

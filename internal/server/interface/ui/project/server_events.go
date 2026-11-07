@@ -42,8 +42,8 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 		}
 		if targets.Deploy {
 			p.loadDeploy(ctx)
-			if p.revisionsDialog {
-				p.loadRevisions(ctx)
+			if p.deploymentsDialog {
+				p.loadDeployments(ctx)
 			}
 		}
 		if targets.Libraries {

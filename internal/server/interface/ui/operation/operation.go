@@ -1,9 +1,9 @@
 // Package operation is the Operator's runtime view: the Scenes of the
-// Revision the Project runs, with live Tag values, read-only. The operational
-// picture (the Revision, the Tag states, the Journal position and the
+// Deployment the Project runs, with live Tag values, read-only. The operational
+// picture (the Deployment, the Tag states, the Journal position and the
 // connection) comes from a player.Player over the Project's Journal stream;
 // rendering is left to livescene.View. The Draft and Library changes are
-// invisible here until a Deploy makes a new Revision, which reaches the
+// invisible here until a Deploy makes a new Deployment, which reaches the
 // Player as a Journal entry (ADR 0020).
 package operation
 
@@ -30,10 +30,10 @@ type Operation struct {
 	client    *apiclient.Client
 	// projectID is the project shown, uuid.Nil if none; content is the client
 	// of its content, nil if none (SetProject). The Scene and the WidgetTypes
-	// come from the Revision the project runs, never from the Draft.
+	// come from the Deployment the project runs, never from the Draft.
 	projectID uuid.UUID
 	content   *apiclient.ProjectClient
-	// player is the operational model of the project shown: the Revision it
+	// player is the operational model of the project shown: the Deployment it
 	// runs, its Tag states and the Journal position. It is replaced on a
 	// switch of Project and closed when the mode leaves.
 	player *player.Player
@@ -216,7 +216,7 @@ func (o *Operation) renderScene(view player.View, selected uuid.UUID) app.UI {
 	}
 }
 
-// renderNotDeployed is Operation's empty state: the Project runs no Revision,
+// renderNotDeployed is Operation's empty state: the Project runs no Deployment,
 // so there is no configuration to show. The Draft is deliberately not shown in
 // its place: it is not what the plant runs. The first Deploy arrives as a
 // Journal entry and switches the screen without a reload.

@@ -1,7 +1,7 @@
 // Package projectv0 is MAJOR 0 of the project format: the ProjectFile and
-// the Revision, which share one shape (ADR 0005). A ProjectFile is a full
+// the Deployment, which share one shape (ADR 0005). A ProjectFile is a full
 // snapshot of a Project's configuration — no operational state, no history,
-// no names of the Project itself (ADR 0006) — and a Revision is that same
+// no names of the Project itself (ADR 0006) — and a Deployment is that same
 // document, numbered and stored by the Runtime node.
 package projectv0
 
@@ -149,7 +149,7 @@ type PortBinding struct {
 // WidgetType is the copy of a WidgetType a Project uses, taken from the
 // Library Release the Project pins: its template, its script and its input
 // ports, with no version — a Release never changes, so a copy of it cannot
-// either. A Widget's TypeID names one. The copy makes a Revision, and a
+// either. A Widget's TypeID names one. The copy makes a Deployment, and a
 // ProjectFile, independent of the Library.
 type WidgetType struct {
 	ID             uuid.UUID   `json:"id"`

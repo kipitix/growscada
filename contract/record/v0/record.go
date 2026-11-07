@@ -5,6 +5,8 @@
 package recordv0
 
 import (
+	"encoding/json"
+
 	"github.com/google/uuid"
 	"github.com/kipitix/growscada/contract"
 )
@@ -12,7 +14,7 @@ import (
 // SchemaVersion is the version of the operational record format this package
 // describes.
 // A function rather than a variable, so no importer can change it.
-func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 2} }
+func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 3} }
 
 // Header is the root of every record document: the SchemaVersion the rest of
 // the document follows. A reader checks it before anything else.
@@ -25,17 +27,22 @@ type Header struct {
 type EntryType string
 
 // The entry types. Configuration is never an entry of its own: it changes
-// only through a Revision, and the Revision entry is the address of its whole
-// new state.
+// only through a Deployment, and the Deployment entry is the address of its
+// whole new state.
 const (
-	EntryTypeTagState EntryType = "tag_state"
+	EntryTypeTagState   EntryType = "tag_state"
+	EntryTypeDeployment EntryType = "deployment"
+	// EntryTypeRevision is the name EntryTypeDeployment had before task 72_9.
+	// Readers accept it, so a Journal row or a PlaybackFile written then still
+	// reads; nothing writes it.
 	EntryTypeRevision EntryType = "revision"
 )
 
 // EntryTypes returns the names of every entry type, so a reader checks a type
-// against the whole set.
+// against the whole set. A stored entry may still carry EntryTypeRevision: a
+// reader that accepts the whole set accepts it too.
 func EntryTypes() []string {
-	return []string{string(EntryTypeTagState), string(EntryTypeRevision)}
+	return []string{string(EntryTypeTagState), string(EntryTypeDeployment)}
 }
 
 // Entry is one Journal entry: a change of a Project's operational state. It
@@ -47,12 +54,50 @@ func EntryTypes() []string {
 // server. Timestamp is RFC 3339.
 type Entry struct {
 	Header
-	Seq       int64     `json:"seq"`
-	Timestamp string    `json:"timestamp"`
-	ProjectID uuid.UUID `json:"project_id"`
-	Type      EntryType `json:"type"`
-	TagState  *TagState `json:"tag_state,omitempty"`
-	Revision  *Revision `json:"revision,omitempty"`
+	Seq        int64       `json:"seq"`
+	Timestamp  string      `json:"timestamp"`
+	ProjectID  uuid.UUID   `json:"project_id"`
+	Type       EntryType   `json:"type"`
+	TagState   *TagState   `json:"tag_state,omitempty"`
+	Deployment *Deployment `json:"deployment,omitempty"`
+}
+
+// UnmarshalJSON reads an entry as it is, accepting the names a Deployment had
+// before task 72_9: an entry of type "revision" is read as a Deployment, and
+// the payload of the "revision" member is read as the Deployment's. A reader
+// of an old Journal row or PlaybackFile therefore sees the entry a new one
+// carries, while encoding an Entry writes only the Deployment names.
+func (e *Entry) UnmarshalJSON(data []byte) error {
+	type entryJSON struct {
+		Header
+		Seq              int64       `json:"seq"`
+		Timestamp        string      `json:"timestamp"`
+		ProjectID        uuid.UUID   `json:"project_id"`
+		Type             EntryType   `json:"type"`
+		TagState         *TagState   `json:"tag_state,omitempty"`
+		Deployment       *Deployment `json:"deployment,omitempty"`
+		LegacyDeployment *Deployment `json:"revision,omitempty"`
+	}
+	var raw entryJSON
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if raw.Type == EntryTypeRevision {
+		raw.Type = EntryTypeDeployment
+	}
+	if raw.Deployment == nil {
+		raw.Deployment = raw.LegacyDeployment
+	}
+	*e = Entry{
+		Header:     raw.Header,
+		Seq:        raw.Seq,
+		Timestamp:  raw.Timestamp,
+		ProjectID:  raw.ProjectID,
+		Type:       raw.Type,
+		TagState:   raw.TagState,
+		Deployment: raw.Deployment,
+	}
+	return nil
 }
 
 // TagState is the payload of a tag_state entry: the Tag's new value and
@@ -64,24 +109,24 @@ type TagState struct {
 	Quality string    `json:"quality"`
 }
 
-// Revision is the payload of a revision entry: the Revision that appeared.
+// Deployment is the payload of a deployment entry: the Deployment that appeared.
 // The document itself is not part of the record — it is immutable in the
 // Runtime node's store, and the number addresses it (ADR 0014).
-type Revision struct {
-	Number         int           `json:"number"`
-	Cause          RevisionCause `json:"cause"`
-	RolledBackFrom *int          `json:"rolled_back_from,omitempty"`
+type Deployment struct {
+	Number         int             `json:"number"`
+	Cause          DeploymentCause `json:"cause"`
+	RolledBackFrom *int            `json:"rolled_back_from,omitempty"`
 }
 
-// RevisionCause is why a Revision exists, as the record names it. It mirrors
-// the API's RevisionCause instead of importing it: the record is stored
+// DeploymentCause is why a Deployment exists, as the record names it. It mirrors
+// the API's DeploymentCause instead of importing it: the record is stored
 // forever (ADR 0004, ADR 0019).
-type RevisionCause string
+type DeploymentCause string
 
-// The Revision causes: a Deploy made it from the Draft, a Rollback copied an
+// The Deployment causes: a Deploy made it from the Draft, a Rollback copied an
 // earlier one, or a project file was deployed as it is (ADR 0014, ADR 0018).
 const (
-	RevisionCauseDeploy   RevisionCause = "deploy"
-	RevisionCauseRollback RevisionCause = "rollback"
-	RevisionCauseFile     RevisionCause = "file"
+	DeploymentCauseDeploy   DeploymentCause = "deploy"
+	DeploymentCauseRollback DeploymentCause = "rollback"
+	DeploymentCauseFile     DeploymentCause = "file"
 )

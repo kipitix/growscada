@@ -24,7 +24,7 @@ http:
 docs: |
   A file deployed on a Runtime node that does not have its Libraries: the
   document is self-contained, so the local Libraries are not checked and the
-  Revision is made (ADR 0018). Its pin is what a Discard cannot write here.
+  Deployment is made (ADR 0018). Its pin is what a Discard cannot write here.
 
 runtime:
   assertions:

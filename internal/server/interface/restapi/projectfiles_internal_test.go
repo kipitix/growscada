@@ -28,7 +28,7 @@ func TestProjectFileName_FallsBackToTheProjectID(t *testing.T) {
 	if got := projectFileName("///", projectID, "draft"); got != projectID.String()+"-draft.json" {
 		t.Errorf("filename %q, want the project's ID", got)
 	}
-	if got := projectFileName("Line 1", projectID, "revision-3"); got != "Line-1-revision-3.json" {
+	if got := projectFileName("Line 1", projectID, "deployment-3"); got != "Line-1-deployment-3.json" {
 		t.Errorf("filename %q", got)
 	}
 }

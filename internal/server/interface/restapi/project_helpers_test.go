@@ -38,7 +38,7 @@ type testServices struct {
 	projects     application.ProjectService
 	tags         application.TagService
 	states       runtimeapp.TagStateService
-	revisions    runtimeapp.RevisionService
+	deployments  runtimeapp.DeploymentService
 	deploy       application.DeployService
 	discard      application.DiscardService
 	projectFiles application.ProjectFileService
@@ -78,15 +78,15 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 	libraryContent := application.NewLibraryContent(libraries, drafts, orgID)
 	widgetTypes := repositories.NewWidgetTypeRepositories(db)
 	states := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, publish)
-	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(db), publish)
+	deployments := runtimeapp.NewDeploymentService(runtimepg.NewDeploymentRepositoryPostgres(db), publish)
 	deviceTokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(db))
-	runtimeNode := inprocess.NewRuntimeNode(states, deviceTokens, revisions)
+	runtimeNode := inprocess.NewRuntimeNode(states, deviceTokens, deployments)
 	journal := runtimeapp.NewJournalService(runtimepg.NewJournalRepositoryPostgres(db))
 	return testServices{
 		projects:     application.NewProjectService(projectRepo, orgID),
 		tags:         application.NewTagService(content, runtimeNode),
 		states:       states,
-		revisions:    revisions,
+		deployments:  deployments,
 		deploy:       application.NewDeployService(content, application.NewProjectFileBuilder(content), runtimeNode),
 		discard:      application.NewDiscardService(content, runtimeNode, libraries, releases),
 		projectFiles: application.NewProjectFileService(content, application.NewProjectFileBuilder(content), runtimeNode, libraries, releases),
@@ -101,7 +101,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		deviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(db)),
 		deviceTokens: deviceTokens,
 		journal:      journal,
-		operation:    runtimeapp.NewOperationStateService(journal, revisions, states),
+		operation:    runtimeapp.NewOperationStateService(journal, deployments, states),
 	}
 }
 
@@ -112,7 +112,7 @@ func (s testServices) services() restapi.Services {
 		Libraries: s.libraries, WidgetTypes: s.widgetTypes, LibraryPins: s.pins, Scenes: s.scenes,
 		Devices: s.devices, Environments: s.environments,
 		Draft: s.draft, DraftChanges: s.draftChanges,
-		Deploy: s.deploy, Discard: s.discard, ProjectFiles: s.projectFiles, Revisions: s.revisions,
+		Deploy: s.deploy, Discard: s.discard, ProjectFiles: s.projectFiles, Deployments: s.deployments,
 		DeviceConfig: s.deviceConfig, DeviceTokens: s.deviceTokens,
 		Journal: s.journal, Operation: s.operation,
 	}
@@ -123,9 +123,9 @@ func (s testServices) router() testRouter {
 	return testRouter{APIRouter: restapi.NewRouter(s.services(), eventbus.NewEventBus(), 100)}
 }
 
-// deployRevision deploys file to mainProject through the Runtime node's
+// deployDeployment deploys file to mainProject through the Runtime node's
 // service, as the Engineering node's DeployService will (task 35, part 4).
-func deployRevision(t *testing.T, service runtimeapp.RevisionService, file projectv0.ProjectFile) {
+func deployDeployment(t *testing.T, service runtimeapp.DeploymentService, file projectv0.ProjectFile) {
 	t.Helper()
 	if _, err := service.Deploy(context.Background(), mainProject, file); err != nil {
 		t.Fatalf("deploy: %v", err)

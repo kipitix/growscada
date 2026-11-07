@@ -1,17 +1,17 @@
 info:
-  name: get revision
+  name: get deployment after rollback
   type: http
-  seq: 42
+  seq: 63
 
 http:
   method: GET
-  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/revision
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/deployment
   auth: inherit
 
 docs: |
-  The Revision the project runs: its number, its deployment time and the
-  ProjectFile it holds. Operation reads this document and nothing of the
-  Draft; `404` means the project was never deployed.
+  The Deployment the project runs is the one the Rollback appended: its
+  document is the copy of Deployment 1, and the cause tells a reader it was a
+  Rollback and what it copied.
 
 runtime:
   assertions:
@@ -21,6 +21,12 @@ runtime:
     - expression: 'res.headers["growscada-schema-version"]'
       operator: isDefined
     - expression: 'res.body.number'
+      operator: eq
+      value: '3'
+    - expression: 'res.body.cause'
+      operator: eq
+      value: '"rollback"'
+    - expression: 'res.body.rolled_back_from'
       operator: eq
       value: '1'
     - expression: 'res.body.content.project_id'

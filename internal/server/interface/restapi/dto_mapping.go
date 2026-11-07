@@ -563,46 +563,46 @@ func newFileIssues(issues []application.FileIssue) []apiv0.FileIssue {
 	return converted
 }
 
-func newRevisionResponse(revision runtimeapp.Revision) apiv0.RevisionResponse {
-	return apiv0.RevisionResponse{
-		Number:         revision.Number,
-		DeployedAt:     deployedAt(revision.DeployedAt),
-		Cause:          apiv0.RevisionCause(revision.Cause),
-		RolledBackFrom: revision.RolledBackFrom,
-		Content:        revision.Content,
+func newDeploymentResponse(deployment runtimeapp.Deployment) apiv0.DeploymentResponse {
+	return apiv0.DeploymentResponse{
+		Number:         deployment.Number,
+		DeployedAt:     deployedAt(deployment.DeployedAt),
+		Cause:          apiv0.DeploymentCause(deployment.Cause),
+		RolledBackFrom: deployment.RolledBackFrom,
+		Content:        deployment.Content,
 	}
 }
 
-func newDeployResponse(revision appdto.Revision) apiv0.DeployResponse {
-	return apiv0.DeployResponse{Number: revision.Number, DeployedAt: deployedAt(revision.DeployedAt)}
+func newDeployResponse(deployment appdto.Deployment) apiv0.DeployResponse {
+	return apiv0.DeployResponse{Number: deployment.Number, DeployedAt: deployedAt(deployment.DeployedAt)}
 }
 
-func newRevisionSummaryResponse(revision appdto.Revision) apiv0.RevisionSummaryResponse {
-	return newRevisionSummary(runtimeapp.RevisionSummary{
-		Number:         revision.Number,
-		DeployedAt:     revision.DeployedAt,
-		Cause:          runtimeapp.RevisionCause(revision.Cause),
-		RolledBackFrom: revision.RolledBackFrom,
+func newDeploymentSummaryResponse(deployment appdto.Deployment) apiv0.DeploymentSummaryResponse {
+	return newDeploymentSummary(runtimeapp.DeploymentSummary{
+		Number:         deployment.Number,
+		DeployedAt:     deployment.DeployedAt,
+		Cause:          runtimeapp.DeploymentCause(deployment.Cause),
+		RolledBackFrom: deployment.RolledBackFrom,
 	})
 }
 
-func newRollbackResponse(revision runtimeapp.Revision) apiv0.RevisionSummaryResponse {
-	return newRevisionSummary(revision.Summary())
+func newRollbackResponse(deployment runtimeapp.Deployment) apiv0.DeploymentSummaryResponse {
+	return newDeploymentSummary(deployment.Summary())
 }
 
-func newRevisionSummary(summary runtimeapp.RevisionSummary) apiv0.RevisionSummaryResponse {
-	return apiv0.RevisionSummaryResponse{
+func newDeploymentSummary(summary runtimeapp.DeploymentSummary) apiv0.DeploymentSummaryResponse {
+	return apiv0.DeploymentSummaryResponse{
 		Number:         summary.Number,
 		DeployedAt:     deployedAt(summary.DeployedAt),
-		Cause:          apiv0.RevisionCause(summary.Cause),
+		Cause:          apiv0.DeploymentCause(summary.Cause),
 		RolledBackFrom: summary.RolledBackFrom,
 	}
 }
 
-func newListRevisionsResponse(summaries []runtimeapp.RevisionSummary) apiv0.ListRevisionsResponse {
-	resp := apiv0.ListRevisionsResponse{Revisions: make([]apiv0.RevisionSummaryResponse, len(summaries))}
+func newListDeploymentsResponse(summaries []runtimeapp.DeploymentSummary) apiv0.ListDeploymentsResponse {
+	resp := apiv0.ListDeploymentsResponse{Deployments: make([]apiv0.DeploymentSummaryResponse, len(summaries))}
 	for i, summary := range summaries {
-		resp.Revisions[i] = newRevisionSummary(summary)
+		resp.Deployments[i] = newDeploymentSummary(summary)
 	}
 	return resp
 }
@@ -612,9 +612,9 @@ func newDeployPreviewResponse(preview appdto.DeployPreview) apiv0.DeployPreviewR
 		Unchanged:      preview.Unchanged,
 		DroppedWidgets: make([]apiv0.DroppedWidgetResponse, len(preview.DroppedWidgets)),
 	}
-	if preview.CurrentRevision != nil {
-		summary := newRevisionSummaryResponse(*preview.CurrentRevision)
-		resp.CurrentRevision = &summary
+	if preview.CurrentDeployment != nil {
+		summary := newDeploymentSummaryResponse(*preview.CurrentDeployment)
+		resp.CurrentDeployment = &summary
 	}
 	for i, dropped := range preview.DroppedWidgets {
 		resp.DroppedWidgets[i] = apiv0.DroppedWidgetResponse{
@@ -639,7 +639,7 @@ func newGetTagStatesResponse(states []runtimeapp.TagState) apiv0.GetTagStatesRes
 }
 
 // newOperationStateResponse maps the Runtime node's Operation state to its
-// contract body: the position, the Revision (null until the first Deploy) and
+// contract body: the position, the Deployment (null until the first Deploy) and
 // every Tag's state by ID. tag_states is an empty object, never null.
 func newOperationStateResponse(state runtimeapp.OperationState) apiv0.OperationStateResponse {
 	resp := apiv0.OperationStateResponse{
@@ -647,8 +647,8 @@ func newOperationStateResponse(state runtimeapp.OperationState) apiv0.OperationS
 		TagStates: make(map[string]apiv0.TagStateResponse, len(state.TagStates)),
 	}
 	if state.Deployed {
-		revision := newRevisionResponse(state.Revision)
-		resp.Revision = &revision
+		deployment := newDeploymentResponse(state.Deployment)
+		resp.Deployment = &deployment
 	}
 	for _, tagState := range state.TagStates {
 		resp.TagStates[tagState.ID.String()] = newTagStateSnapshotResponse(tagState)

@@ -15,7 +15,7 @@ import (
 // (WidgetTypes); LibraryPins (the selected project's pins and the
 // WidgetTypes of the releases they pin), Scenes, Widgets and Tags are those
 // of the selected project. Deploy is the Project mode's deployment state (the
-// Revision it runs and whether the Draft differs from it). Operation reads
+// Deployment it runs and whether the Draft differs from it). Operation reads
 // none of these: it follows the Journal from a Player of its own (ADR 0020).
 type ReloadTargets struct {
 	Projects, Libraries, WidgetTypes, LibraryPins, Scenes, Widgets, Tags, Deploy bool
@@ -60,8 +60,8 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 		return serverTargets
 	case EventProjectResync:
 		return projectTargets
-	case apiv0.EventRevisionCreated:
-		// The Revision the Project runs changed: Project refreshes its badge;
+	case apiv0.EventDeploymentCreated:
+		// The Deployment the Project runs changed: Project refreshes its badge;
 		// nothing of the Draft is touched. Operation does not read this stream
 		// (ADR 0020).
 		return ReloadTargets{Deploy: true}

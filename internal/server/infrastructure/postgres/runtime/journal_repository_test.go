@@ -67,13 +67,13 @@ func tagStatePayload(t *testing.T, e storedEntry) recordv0.TagState {
 	return payload
 }
 
-// revisionPayload decodes the payload of a revision entry.
-func revisionPayload(t *testing.T, e storedEntry) recordv0.Revision {
+// deploymentPayload decodes the payload of a deployment entry.
+func deploymentPayload(t *testing.T, e storedEntry) recordv0.Deployment {
 	t.Helper()
-	if e.Type != string(recordv0.EntryTypeRevision) {
-		t.Fatalf("entry %d is a %s, want revision", e.Seq, e.Type)
+	if e.Type != string(recordv0.EntryTypeDeployment) {
+		t.Fatalf("entry %d is a %s, want deployment", e.Seq, e.Type)
 	}
-	var payload recordv0.Revision
+	var payload recordv0.Deployment
 	if err := json.Unmarshal(e.Payload, &payload); err != nil {
 		t.Fatalf("decode the payload of entry %d: %v", e.Seq, err)
 	}
@@ -236,72 +236,72 @@ func TestJournal_CascadesWithTheProjectAndKeepsCursors(t *testing.T) {
 	}
 }
 
-// TestCreateRevision_RecordsARevisionEntry: a Deploy, a project file and a
-// Rollback each append one revision entry in the Revision's transaction, with
-// the Revision's time and cause and never the document (ADR 0019).
-func TestCreateRevision_RecordsARevisionEntry(t *testing.T) {
+// TestCreateDeployment_RecordsADeploymentEntry: a Deploy, a project file and a
+// Rollback each append one deployment entry in the Deployment's transaction, with
+// the Deployment's time and cause and never the document (ADR 0019).
+func TestCreateDeployment_RecordsADeploymentEntry(t *testing.T) {
 	projectID, _ := newProject(t)
-	revisions := runtimepg.NewRevisionRepositoryPostgres(postgres.DB(t))
+	deployments := runtimepg.NewDeploymentRepositoryPostgres(postgres.DB(t))
 	ctx := context.Background()
 
 	at := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
-	deployed, err := revisions.CreateRevision(ctx, projectID.UUID(), documentOf(projectID), runtimeapp.RevisionCauseDeploy, at)
+	deployed, err := deployments.CreateDeployment(ctx, projectID.UUID(), documentOf(projectID), runtimeapp.DeploymentCauseDeploy, at)
 	if err != nil {
-		t.Fatalf("CreateRevision: %v", err)
+		t.Fatalf("CreateDeployment: %v", err)
 	}
-	fromFile, err := revisions.CreateRevision(ctx, projectID.UUID(), documentOf(projectID, withTags(documentTag(definition(t, projectID, "speed", tag.TagTypeInteger)))), runtimeapp.RevisionCauseFile, at.Add(time.Minute))
+	fromFile, err := deployments.CreateDeployment(ctx, projectID.UUID(), documentOf(projectID, withTags(documentTag(definition(t, projectID, "speed", tag.TagTypeInteger)))), runtimeapp.DeploymentCauseFile, at.Add(time.Minute))
 	if err != nil {
-		t.Fatalf("CreateRevision(file): %v", err)
+		t.Fatalf("CreateDeployment(file): %v", err)
 	}
-	rolledBack, err := revisions.Rollback(ctx, projectID.UUID(), deployed.Number, at.Add(2*time.Minute))
+	rolledBack, err := deployments.Rollback(ctx, projectID.UUID(), deployed.Number, at.Add(2*time.Minute))
 	if err != nil {
 		t.Fatalf("Rollback: %v", err)
 	}
 
 	entries := journalEntriesOf(t, projectID.UUID())
 	if len(entries) != 3 {
-		t.Fatalf("%d journal entries, want one per Revision", len(entries))
+		t.Fatalf("%d journal entries, want one per Deployment", len(entries))
 	}
 	for i, want := range []struct {
 		number int
-		cause  recordv0.RevisionCause
+		cause  recordv0.DeploymentCause
 		from   *int
 		at     time.Time
 	}{
-		{deployed.Number, recordv0.RevisionCauseDeploy, nil, at},
-		{fromFile.Number, recordv0.RevisionCauseFile, nil, at.Add(time.Minute)},
-		{rolledBack.Number, recordv0.RevisionCauseRollback, &deployed.Number, at.Add(2 * time.Minute)},
+		{deployed.Number, recordv0.DeploymentCauseDeploy, nil, at},
+		{fromFile.Number, recordv0.DeploymentCauseFile, nil, at.Add(time.Minute)},
+		{rolledBack.Number, recordv0.DeploymentCauseRollback, &deployed.Number, at.Add(2 * time.Minute)},
 	} {
 		entry := entries[i]
-		payload := revisionPayload(t, entry)
+		payload := deploymentPayload(t, entry)
 		if payload.Number != want.number || payload.Cause != want.cause {
-			t.Errorf("entry %d: revision %d by %s, want %d by %s", i, payload.Number, payload.Cause, want.number, want.cause)
+			t.Errorf("entry %d: deployment %d by %s, want %d by %s", i, payload.Number, payload.Cause, want.number, want.cause)
 		}
 		if (payload.RolledBackFrom == nil) != (want.from == nil) ||
 			(payload.RolledBackFrom != nil && *payload.RolledBackFrom != *want.from) {
 			t.Errorf("entry %d: rolled back from %v, want %v", i, payload.RolledBackFrom, want.from)
 		}
 		if got := entry.Timestamp.UTC(); !got.Equal(want.at) {
-			t.Errorf("entry %d at %s, want the Revision's %s", i, got, want.at)
+			t.Errorf("entry %d at %s, want the Deployment's %s", i, got, want.at)
 		}
 	}
 }
 
-// TestCreateRevision_Refused_LeavesNoJournalEntry: a transaction that rolls
+// TestCreateDeployment_Refused_LeavesNoJournalEntry: a transaction that rolls
 // back takes its entry with it.
-func TestCreateRevision_Refused_LeavesNoJournalEntry(t *testing.T) {
+func TestCreateDeployment_Refused_LeavesNoJournalEntry(t *testing.T) {
 	projectID, _ := newProject(t)
-	revisions := runtimepg.NewRevisionRepositoryPostgres(postgres.DB(t))
+	deployments := runtimepg.NewDeploymentRepositoryPostgres(postgres.DB(t))
 	twice := documentOf(projectID,
 		withEnvironments(
 			environmentOf(uuid.New(), "shop"),
 			environmentOf(uuid.New(), "shop"),
 		))
-	if _, err := revisions.CreateRevision(context.Background(), projectID.UUID(), twice, runtimeapp.RevisionCauseDeploy, time.Now()); err == nil {
+	if _, err := deployments.CreateDeployment(context.Background(), projectID.UUID(), twice, runtimeapp.DeploymentCauseDeploy, time.Now()); err == nil {
 		t.Fatal("two environments of one name were stored")
 	}
 	if entries := journalEntriesOf(t, projectID.UUID()); len(entries) != 0 {
-		t.Errorf("%d journal entries of a refused Revision", len(entries))
+		t.Errorf("%d journal entries of a refused Deployment", len(entries))
 	}
 }
 

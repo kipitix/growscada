@@ -1,18 +1,18 @@
 info:
-  name: get revisions
+  name: get deployments
   type: http
   seq: 46
 
 http:
   method: GET
-  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/revisions
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/deployments
   auth: inherit
 
 docs: |
-  The Revisions of the project, newest first, without their documents: the
+  The Deployments of the project, newest first, without their documents: the
   number, the deployment time and why each exists (`deploy` or `rollback`).
   The project was deployed once just before, so the list holds exactly that
-  Revision.
+  Deployment.
 
 runtime:
   assertions:
@@ -21,15 +21,15 @@ runtime:
       value: '200'
     - expression: 'res.headers["growscada-schema-version"]'
       operator: isDefined
-    - expression: 'res.body.revisions'
+    - expression: 'res.body.deployments'
       operator: isArray
-    - expression: 'res.body.revisions.length'
+    - expression: 'res.body.deployments.length'
       operator: eq
       value: '1'
-    - expression: 'res.body.revisions[0].number'
+    - expression: 'res.body.deployments[0].number'
       operator: eq
       value: '1'
-    - expression: 'res.body.revisions[0].cause'
+    - expression: 'res.body.deployments[0].cause'
       operator: eq
       value: '"deploy"'
 

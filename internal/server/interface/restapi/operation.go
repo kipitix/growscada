@@ -7,8 +7,8 @@ import (
 )
 
 // OperationHandlers serves the starting state of Operation (task 43,
-// ADR 0020): the Project's Journal position, the Revision it runs and the
-// states of that Revision's Tags. It is the Runtime node's model; the handler
+// ADR 0020): the Project's Journal position, the Deployment it runs and the
+// states of that Deployment's Tags. It is the Runtime node's model; the handler
 // touches no Draft and holds no lock.
 type OperationHandlers struct {
 	operation runtimeapp.OperationStateService
@@ -22,8 +22,8 @@ func NewOperationHandler(operation runtimeapp.OperationStateService) *OperationH
 
 // GetOperation handles GET /projects/{project_id}/operation: 200 with the
 // Operation state. A live Project answers 200 even before its first Deploy —
-// revision null, tag_states {} — so Operation can subscribe and catch the
-// first Revision; a Project that is not live is 404.
+// deployment null, tag_states {} — so Operation can subscribe and catch the
+// first Deployment; a Project that is not live is 404.
 func (h OperationHandlers) GetOperation(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := pathUUID(w, r, projectResource)
 	if !ok {

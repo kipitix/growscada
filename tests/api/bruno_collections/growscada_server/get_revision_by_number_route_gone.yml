@@ -1,0 +1,33 @@
+info:
+  name: get the revision by number route is gone
+  type: http
+  seq: 190
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/revisions/1
+  auth: inherit
+
+docs: |
+  One Deployment is `GET …/deployments/{n}`: the old route answers
+  `410 Gone` and is removed with the API 1.0.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '410'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: application/problem+json
+    - expression: 'res.body.status'
+      operator: eq
+      value: '410'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

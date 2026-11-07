@@ -773,30 +773,30 @@ func widgetPath(sceneID, widgetID uuid.UUID) string {
 	return scenePath(sceneID) + "/widgets/" + widgetID.String()
 }
 
-// ── Deploy and Revision ──────────────────────────────────────────────────────
+// ── Deploy and Deployment ──────────────────────────────────────────────────────
 
-// RevisionState is one Project's running Revision, with its ProjectFile.
+// DeploymentState is one Project's running Deployment, with its ProjectFile.
 // Deployed is false until the Project's first Deploy: the call then matched a
-// 404, which here means "no Revision", not "no Project" (a Project that is
+// 404, which here means "no Deployment", not "no Project" (a Project that is
 // gone makes the loads of its content fail as well).
-type RevisionState struct {
-	Revision apiv0.RevisionResponse
-	Deployed bool
+type DeploymentState struct {
+	Deployment apiv0.DeploymentResponse
+	Deployed   bool
 }
 
-// Revision returns the Revision the project runs. Deployed is false when the
+// Deployment returns the Deployment the project runs. Deployed is false when the
 // project was never deployed; an error matching ErrNotFound is not used for
 // that.
-func (p *ProjectClient) Revision(ctx context.Context) (RevisionState, error) {
-	var resp apiv0.RevisionResponse
-	err := p.do(ctx, http.MethodGet, "/revision", nil, http.StatusOK, &resp)
+func (p *ProjectClient) Deployment(ctx context.Context) (DeploymentState, error) {
+	var resp apiv0.DeploymentResponse
+	err := p.do(ctx, http.MethodGet, "/deployment", nil, http.StatusOK, &resp)
 	if errors.Is(err, ErrNotFound) {
-		return RevisionState{}, nil
+		return DeploymentState{}, nil
 	}
-	return RevisionState{Revision: resp, Deployed: err == nil}, err
+	return DeploymentState{Deployment: resp, Deployed: err == nil}, err
 }
 
-// TagStates returns the states of the Tags of the running Revision, by Tag ID:
+// TagStates returns the states of the Tags of the running Deployment, by Tag ID:
 // the snapshot of a reader that does not follow the Journal, since Operation
 // reads its starting state from …/operation (ADR 0020).
 func (p *ProjectClient) TagStates(ctx context.Context) (map[string]apiv0.TagStateResponse, error) {
@@ -806,9 +806,9 @@ func (p *ProjectClient) TagStates(ctx context.Context) (map[string]apiv0.TagStat
 }
 
 // Operation returns the starting state of Operation (task 43, ADR 0020): the
-// Project's Journal position, the Revision it runs (nil until the first
-// Deploy) and the states of that Revision's Tags by ID. A live Project answers
-// even before its first Deploy, so a nil Revision is not an error; a Project
+// Project's Journal position, the Deployment it runs (nil until the first
+// Deploy) and the states of that Deployment's Tags by ID. A live Project answers
+// even before its first Deploy, so a nil Deployment is not an error; a Project
 // that is gone matches ErrNotFound.
 func (p *ProjectClient) Operation(ctx context.Context) (apiv0.OperationStateResponse, error) {
 	var resp apiv0.OperationStateResponse
@@ -836,17 +836,17 @@ func (p *ProjectClient) DeployPreview(ctx context.Context) (apiv0.DeployPreviewR
 	return resp, err
 }
 
-// Deploy makes the Draft the Project's new Revision. The error matches
-// ErrConflict if the Draft is the Revision the Project runs unchanged.
+// Deploy makes the Draft the Project's new Deployment. The error matches
+// ErrConflict if the Draft is the Deployment the Project runs unchanged.
 func (p *ProjectClient) Deploy(ctx context.Context) (apiv0.DeployResponse, error) {
 	var resp apiv0.DeployResponse
 	err := p.do(ctx, http.MethodPost, "/deploy", nil, http.StatusCreated, &resp)
 	return resp, err
 }
 
-// Discard starts resetting the Draft to the Revision the Project runs and
+// Discard starts resetting the Draft to the Deployment the Project runs and
 // returns its answer at once. The error matches ErrConflict if the Project
-// runs no Revision or a Discard is already under way.
+// runs no Deployment or a Discard is already under way.
 func (p *ProjectClient) Discard(ctx context.Context) (apiv0.DiscardProjectResponse, error) {
 	var resp apiv0.DiscardProjectResponse
 	err := p.do(ctx, http.MethodPost, "/discard", nil, http.StatusOK, &resp)
@@ -866,11 +866,11 @@ func (p *ProjectClient) DraftProjectFile(ctx context.Context) (ProjectFileDownlo
 	return p.downloadProjectFile(ctx, "/projectfile")
 }
 
-// RevisionProjectFile returns the ProjectFile the Runtime node stored for
-// Revision number. The error matches ErrNotFound if the Project has no such
-// Revision.
-func (p *ProjectClient) RevisionProjectFile(ctx context.Context, number int) (ProjectFileDownload, error) {
-	return p.downloadProjectFile(ctx, revisionPath(number)+"/projectfile")
+// DeploymentProjectFile returns the ProjectFile the Runtime node stored for
+// Deployment number. The error matches ErrNotFound if the Project has no such
+// Deployment.
+func (p *ProjectClient) DeploymentProjectFile(ctx context.Context, number int) (ProjectFileDownload, error) {
+	return p.downloadProjectFile(ctx, deploymentPath(number)+"/projectfile")
 }
 
 func (p *ProjectClient) downloadProjectFile(ctx context.Context, path string) (ProjectFileDownload, error) {
@@ -892,9 +892,9 @@ func (p *ProjectClient) OpenProjectFile(ctx context.Context, version int, docume
 	return resp, err
 }
 
-// DeployProjectFile makes document the Project's new Revision without the
+// DeployProjectFile makes document the Project's new Deployment without the
 // Draft (ADR 0018). The error matches ErrConflict when the document is the
-// running Revision's.
+// running Deployment's.
 func (p *ProjectClient) DeployProjectFile(ctx context.Context, document []byte) (apiv0.DeployResponse, error) {
 	var resp apiv0.DeployResponse
 	err := p.doBytes(ctx, http.MethodPost, "/projectfile/deploy", document, http.StatusCreated, &resp)
@@ -931,33 +931,33 @@ func filenameOf(header http.Header) string {
 	return ""
 }
 
-// Revisions returns the Revisions of the Project, newest first, without their
-// documents; a Project without a Revision has an empty list.
-func (p *ProjectClient) Revisions(ctx context.Context) ([]apiv0.RevisionSummaryResponse, error) {
-	var resp apiv0.ListRevisionsResponse
-	err := p.do(ctx, http.MethodGet, "/revisions", nil, http.StatusOK, &resp)
-	return resp.Revisions, err
+// Deployments returns the Deployments of the Project, newest first, without their
+// documents; a Project without a Deployment has an empty list.
+func (p *ProjectClient) Deployments(ctx context.Context) ([]apiv0.DeploymentSummaryResponse, error) {
+	var resp apiv0.ListDeploymentsResponse
+	err := p.do(ctx, http.MethodGet, "/deployments", nil, http.StatusOK, &resp)
+	return resp.Deployments, err
 }
 
-// RevisionByNumber returns one Revision with its ProjectFile. The error
-// matches ErrNotFound if the Project has no such Revision.
-func (p *ProjectClient) RevisionByNumber(ctx context.Context, number int) (apiv0.RevisionResponse, error) {
-	var resp apiv0.RevisionResponse
-	err := p.do(ctx, http.MethodGet, revisionPath(number), nil, http.StatusOK, &resp)
+// DeploymentByNumber returns one Deployment with its ProjectFile. The error
+// matches ErrNotFound if the Project has no such Deployment.
+func (p *ProjectClient) DeploymentByNumber(ctx context.Context, number int) (apiv0.DeploymentResponse, error) {
+	var resp apiv0.DeploymentResponse
+	err := p.do(ctx, http.MethodGet, deploymentPath(number), nil, http.StatusOK, &resp)
 	return resp, err
 }
 
-// Rollback makes the Revision's document the Project's new Revision and
+// Rollback makes the Deployment's document the Project's new Deployment and
 // returns its summary. The error matches ErrConflict if its document is the
 // running one or a Discard is under way, ErrNotFound if the Project has no
-// such Revision.
-func (p *ProjectClient) Rollback(ctx context.Context, number int) (apiv0.RevisionSummaryResponse, error) {
-	var resp apiv0.RevisionSummaryResponse
-	err := p.do(ctx, http.MethodPost, revisionPath(number)+"/rollback", nil, http.StatusCreated, &resp)
+// such Deployment.
+func (p *ProjectClient) Rollback(ctx context.Context, number int) (apiv0.DeploymentSummaryResponse, error) {
+	var resp apiv0.DeploymentSummaryResponse
+	err := p.do(ctx, http.MethodPost, deploymentPath(number)+"/rollback", nil, http.StatusCreated, &resp)
 	return resp, err
 }
 
-func revisionPath(number int) string { return "/revisions/" + strconv.Itoa(number) }
+func deploymentPath(number int) string { return "/deployments/" + strconv.Itoa(number) }
 
 // ── Transport ────────────────────────────────────────────────────────────────
 

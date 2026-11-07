@@ -9,7 +9,7 @@ http:
   auth: inherit
 
 docs: |
-  The Draft is the Revision the project runs: the preview names it and says
+  The Draft is the Deployment the project runs: the preview names it and says
   `unchanged`.
 
 runtime:
@@ -19,7 +19,7 @@ runtime:
       value: '200'
     - expression: 'res.headers["growscada-schema-version"]'
       operator: isDefined
-    - expression: 'res.body.current_revision.number'
+    - expression: 'res.body.current_deployment.number'
       operator: eq
       value: '1'
     - expression: 'res.body.unchanged'

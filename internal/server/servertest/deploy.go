@@ -16,7 +16,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/inprocess"
 )
 
-// DeployProject deploys the Project's Draft as a Revision, through the
+// DeployProject deploys the Project's Draft as a Deployment, through the
 // Engineering node's DeployService, as the server does (task 35, part 4): the
 // Tags with their suppliers, the Devices, the Environments with their pairs,
 // the Scenes with their Widgets and the WidgetTypes their pins hold. A test
@@ -36,11 +36,11 @@ func DeployProject(t *testing.T, db *sql.DB, projectID uuid.UUID) {
 		repositories.NewProjectRepositoryPostgres(db), repositories.NewProjectScopes(db), drafts, orgID)
 	states := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, func(event.Event) {})
 	tokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(db))
-	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(db), func(event.Event) {})
+	deployments := runtimeapp.NewDeploymentService(runtimepg.NewDeploymentRepositoryPostgres(db), func(event.Event) {})
 	service := application.NewDeployService(
 		content,
 		application.NewProjectFileBuilder(content),
-		inprocess.NewRuntimeNode(states, tokens, revisions),
+		inprocess.NewRuntimeNode(states, tokens, deployments),
 	)
 	if _, err := service.Deploy(ctx, projectID); err != nil {
 		// A test that deploys twice without changing the Draft asks for

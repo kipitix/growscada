@@ -138,7 +138,7 @@ func TestProjectFileDialog_FileIssuesAreAList(t *testing.T) {
 }
 
 // TestProjectFileDialog_DeployFromFileReloadsThePreview: a deployed file
-// becomes the Revision the Project runs and leaves the Draft as it was.
+// becomes the Deployment the Project runs and leaves the Draft as it was.
 func TestProjectFileDialog_DeployFromFileReloadsThePreview(t *testing.T) {
 	f := startProject(t)
 	if _, err := f.api.CreateTag(context.Background(), apiv0.CreateTagRequest{Name: "speed", Type: "integer"}); err != nil {
@@ -159,10 +159,10 @@ func TestProjectFileDialog_DeployFromFileReloadsThePreview(t *testing.T) {
 	if f.p.projectFileDialog {
 		t.Error("the dialog stayed open after the file was deployed")
 	}
-	if f.p.deployPreview.CurrentRevision == nil || f.p.deployPreview.CurrentRevision.Number != 1 {
+	if f.p.deployPreview.CurrentDeployment == nil || f.p.deployPreview.CurrentDeployment.Number != 1 {
 		var current any
-		if f.p.deployPreview.CurrentRevision != nil {
-			current = *f.p.deployPreview.CurrentRevision
+		if f.p.deployPreview.CurrentDeployment != nil {
+			current = *f.p.deployPreview.CurrentDeployment
 		}
 		t.Fatalf("the bar after a file deploy: %+v, current %+v (dialog %v, pending %+v, toasts %+v)",
 			f.p.deployPreview, current, f.p.projectFileDialog, f.p.pendingProjectFile, f.e.TakeToasts())
@@ -172,9 +172,9 @@ func TestProjectFileDialog_DeployFromFileReloadsThePreview(t *testing.T) {
 	}
 }
 
-// TestRevisionsDialog_MarksAFileRevisionAndOffersDownloads: the cause file is
+// TestDeploymentsDialog_MarksAFileDeploymentAndOffersDownloads: the cause file is
 // shown as "Deployed from file", and each row offers its own download.
-func TestRevisionsDialog_MarksAFileRevisionAndOffersDownloads(t *testing.T) {
+func TestDeploymentsDialog_MarksAFileDeploymentAndOffersDownloads(t *testing.T) {
 	url, api := newServer(t)
 	file := projectv0.ProjectFile{Header: projectv0.Header{
 		SchemaVersion: projectv0.SchemaVersion(), ProjectID: api.ID(),
@@ -183,7 +183,7 @@ func TestRevisionsDialog_MarksAFileRevisionAndOffersDownloads(t *testing.T) {
 		t.Fatalf("deploy a file: %v", err)
 	}
 	f := mount(t, url, api)
-	f.p.openRevisionsDialog(f.p.compoCtx)
+	f.p.openDeploymentsDialog(f.p.compoCtx)
 	f.run()
 	f.noToasts()
 
@@ -191,7 +191,7 @@ func TestRevisionsDialog_MarksAFileRevisionAndOffersDownloads(t *testing.T) {
 	if !strings.Contains(html, "Deployed from file") {
 		t.Errorf("the list does not name the file cause: %s", html)
 	}
-	if !strings.Contains(html, `data-revision-download="1"`) {
+	if !strings.Contains(html, `data-deployment-download="1"`) {
 		t.Errorf("the row offers no download: %s", html)
 	}
 }

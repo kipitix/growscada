@@ -1,16 +1,16 @@
 info:
-  name: get a missing revision as a project file
+  name: get a missing deployment as a project file
   type: http
   seq: 136
 
 http:
   method: GET
-  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/revisions/99/projectfile
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/deployments/99/projectfile
   auth: inherit
 
 docs: |
-  A Revision number the project does not have is `404`: a file cannot be
-  downloaded for a Revision that is not there (ADR 0018).
+  A Deployment number the project does not have is `404`: a file cannot be
+  downloaded for a Deployment that is not there (ADR 0018).
 
 runtime:
   assertions:

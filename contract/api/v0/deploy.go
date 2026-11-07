@@ -6,47 +6,47 @@ import (
 	projectv0 "github.com/kipitix/growscada/contract/project/v0"
 )
 
-// RevisionCause is why a Revision exists (task 36, ADR 0014; task 39,
+// DeploymentCause is why a Deployment exists (task 36, ADR 0014; task 39,
 // ADR 0018): a Deploy made it from the Draft, a Rollback copied an earlier
 // one, or a project file was deployed as it is.
-type RevisionCause string
+type DeploymentCause string
 
 const (
-	RevisionCauseDeploy   RevisionCause = "deploy"
-	RevisionCauseRollback RevisionCause = "rollback"
-	RevisionCauseFile     RevisionCause = "file"
+	DeploymentCauseDeploy   DeploymentCause = "deploy"
+	DeploymentCauseRollback DeploymentCause = "rollback"
+	DeploymentCauseFile     DeploymentCause = "file"
 )
 
-// RevisionResponse is the Revision a Project runs: its number, when it was
+// DeploymentResponse is the Deployment a Project runs: its number, when it was
 // deployed, why it exists and the ProjectFile it holds (task 35). GET
-// /projects/{id}/revision answers 404 until the Project's first Deploy.
-// RolledBackFrom names the Revision a Rollback copied and is absent for a
+// /projects/{id}/deployment answers 404 until the Project's first Deploy.
+// RolledBackFrom names the Deployment a Rollback copied and is absent for a
 // Deploy. Nothing of the Draft is part of it: Operation reads this document
 // alone.
-type RevisionResponse struct {
+type DeploymentResponse struct {
 	Number         int                   `json:"number"`
 	DeployedAt     string                `json:"deployed_at"`
-	Cause          RevisionCause         `json:"cause"`
+	Cause          DeploymentCause       `json:"cause"`
 	RolledBackFrom *int                  `json:"rolled_back_from,omitempty"`
 	Content        projectv0.ProjectFile `json:"content"`
 }
 
-// RevisionSummaryResponse names a Revision without carrying its document: the
+// DeploymentSummaryResponse names a Deployment without carrying its document: the
 // number, the time it was deployed and why it exists.
-type RevisionSummaryResponse struct {
-	Number         int           `json:"number"`
-	DeployedAt     string        `json:"deployed_at"`
-	Cause          RevisionCause `json:"cause"`
-	RolledBackFrom *int          `json:"rolled_back_from,omitempty"`
+type DeploymentSummaryResponse struct {
+	Number         int             `json:"number"`
+	DeployedAt     string          `json:"deployed_at"`
+	Cause          DeploymentCause `json:"cause"`
+	RolledBackFrom *int            `json:"rolled_back_from,omitempty"`
 }
 
-// ListRevisionsResponse is the Project's Revisions, newest first (task 36). A
-// Project without a Revision answers an empty list, not 404.
-type ListRevisionsResponse struct {
-	Revisions []RevisionSummaryResponse `json:"revisions"`
+// ListDeploymentsResponse is the Project's Deployments, newest first (task 36). A
+// Project without a Deployment answers an empty list, not 404.
+type ListDeploymentsResponse struct {
+	Deployments []DeploymentSummaryResponse `json:"deployments"`
 }
 
-// DroppedWidgetResponse names a Widget of the running Revision that a Deploy
+// DroppedWidgetResponse names a Widget of the running Deployment that a Deploy
 // would drop, because its Scene or its WidgetType is gone from the Draft
 // (task 48 fills the list; until then it is always empty).
 type DroppedWidgetResponse struct {
@@ -55,16 +55,16 @@ type DroppedWidgetResponse struct {
 	Name     string    `json:"name"`
 }
 
-// DeployPreviewResponse is what a Deploy of the Draft would do: the Revision
+// DeployPreviewResponse is what a Deploy of the Draft would do: the Deployment
 // the Project runs now (absent until its first Deploy), whether the Draft is
-// that Revision unchanged, and the runtime Widgets a Deploy would drop.
+// that Deployment unchanged, and the runtime Widgets a Deploy would drop.
 type DeployPreviewResponse struct {
-	CurrentRevision *RevisionSummaryResponse `json:"current_revision,omitempty"`
-	Unchanged       bool                     `json:"unchanged"`
-	DroppedWidgets  []DroppedWidgetResponse  `json:"dropped_widgets"`
+	CurrentDeployment *DeploymentSummaryResponse `json:"current_deployment,omitempty"`
+	Unchanged         bool                       `json:"unchanged"`
+	DroppedWidgets    []DroppedWidgetResponse    `json:"dropped_widgets"`
 }
 
-// DeployResponse is the answer of POST /projects/{id}/deploy: the Revision the
+// DeployResponse is the answer of POST /projects/{id}/deploy: the Deployment the
 // Deploy made.
 type DeployResponse struct {
 	Number     int    `json:"number"`
@@ -78,13 +78,13 @@ const DraftPath = "/draft"
 
 // DraftStateResponse is the state of a Project's Draft: its Version. GET
 // /projects/{id}/draft answers it, and POST /projects/{id}/discard answers it
-// after the reset to the Revision the Project runs.
+// after the reset to the Deployment the Project runs.
 type DraftStateResponse struct {
 	Version int `json:"version"`
 }
 
 // DiscardProjectResponse is the answer of POST /projects/{id}/discard: the
-// Draft of the Project was reset to the Revision it runs in one transaction
+// Draft of the Project was reset to the Deployment it runs in one transaction
 // (ADR 0016).
 type DiscardProjectResponse = DraftStateResponse
 
@@ -129,10 +129,10 @@ type TagStateResponse struct {
 }
 
 // GetTagStatesResponse is the snapshot of the Tag states of the running
-// Revision, by Tag ID, for the first render of a reader that does not follow
+// Deployment, by Tag ID, for the first render of a reader that does not follow
 // the Journal: later changes arrive as tag_updated. Operation reads its
 // starting state from GET …/operation and follows the Journal instead (ADR
-// 0020). A Project without a Revision answers 404; a Tag of the Revision
+// 0020). A Project without a Deployment answers 404; a Tag of the Deployment
 // without a state is left out (its state is the TagType's zero value with
 // quality bad).
 type GetTagStatesResponse struct {

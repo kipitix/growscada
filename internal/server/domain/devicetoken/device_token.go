@@ -1,8 +1,8 @@
 // Package devicetoken holds the Device Token: the secret by which a Device
 // Gateway acts for one Device — it writes that Device's Tags and nothing else
 // (ADR 0004, amendment 2026-11-01). A token is issued on the Runtime node,
-// stored as its hash and never part of a Revision; it outlives Deploys and
-// Rollbacks and sleeps while its Device is not in the running Revision. The
+// stored as its hash and never part of a Deployment; it outlives Deploys and
+// Rollbacks and sleeps while its Device is not in the running Deployment. The
 // aggregate itself lives in the Runtime node's schema; this package holds the
 // secret's value object, the record the Runtime node stores and the
 // repository interface.

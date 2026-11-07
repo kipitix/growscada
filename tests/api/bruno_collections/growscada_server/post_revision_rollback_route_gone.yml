@@ -1,0 +1,33 @@
+info:
+  name: post the revision rollback route is gone
+  type: http
+  seq: 192
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/revisions/1/rollback
+  auth: inherit
+
+docs: |
+  A Rollback is `POST …/deployments/{n}/rollback`: the old route answers
+  `410 Gone` and is removed with the API 1.0.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '410'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: application/problem+json
+    - expression: 'res.body.status'
+      operator: eq
+      value: '410'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

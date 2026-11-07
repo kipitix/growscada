@@ -71,7 +71,7 @@ func TestMain(m *testing.M) {
 // cleanTags removes the Tag definitions and the Tag states.
 func cleanTags(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
+	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM runtime.deployments; DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
 		t.Fatalf("cleanTags: %v", err)
 	}
 }
@@ -426,7 +426,7 @@ func TestTags_RuntimeNodeUnreadable_ReadAndDeleteWithInitialStates(t *testing.T)
 }
 
 // TestDeleteTag_LeavesItsStateUntilTheNextDeploy: the Draft's deletion is not
-// the Runtime node's business; the running Revision still holds the Tag, and
+// the Runtime node's business; the running Deployment still holds the Tag, and
 // the next Deploy removes it with its state (task 35, Q4).
 func TestDeleteTag_LeavesItsStateUntilTheNextDeploy(t *testing.T) {
 	cleanTags(t)
@@ -450,7 +450,7 @@ func TestDeleteTag_LeavesItsStateUntilTheNextDeploy(t *testing.T) {
 		t.Errorf("deleted %+v, want its last state true, good", deleted)
 	}
 	if _, err := states.SetTagValue(ctx, mainProject, runtimeapp.SetTagValueInput{TagID: created.ID, Value: "false", Quality: "good"}); err != nil {
-		t.Errorf("a value written while the running revision still holds the tag: %v", err)
+		t.Errorf("a value written while the running deployment still holds the tag: %v", err)
 	}
 
 	deployProject(t, mainProject)

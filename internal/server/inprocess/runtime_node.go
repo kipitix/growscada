@@ -18,19 +18,19 @@ import (
 )
 
 type runtimeNode struct {
-	states    runtimeapp.TagStateService
-	tokens    runtimeapp.DeviceTokenService
-	revisions runtimeapp.RevisionService
+	states      runtimeapp.TagStateService
+	tokens      runtimeapp.DeviceTokenService
+	deployments runtimeapp.DeploymentService
 }
 
 var _ application.RuntimeNode = (*runtimeNode)(nil)
 
 // NewRuntimeNode returns the RuntimeNode calling the Runtime node's services
-// of Tag states, of Device Tokens and of Revisions in the same process. A nil
+// of Tag states, of Device Tokens and of Deployments in the same process. A nil
 // tokens is a Runtime node that serves no Device Tokens: its removal is a
-// no-op; a nil revisions is one that cannot deploy.
-func NewRuntimeNode(someStates runtimeapp.TagStateService, someTokens runtimeapp.DeviceTokenService, someRevisions runtimeapp.RevisionService) application.RuntimeNode {
-	return &runtimeNode{states: someStates, tokens: someTokens, revisions: someRevisions}
+// no-op; a nil deployments is one that cannot deploy.
+func NewRuntimeNode(someStates runtimeapp.TagStateService, someTokens runtimeapp.DeviceTokenService, someDeployments runtimeapp.DeploymentService) application.RuntimeNode {
+	return &runtimeNode{states: someStates, tokens: someTokens, deployments: someDeployments}
 }
 
 func (n runtimeNode) RemoveProjectTagStates(ctx context.Context, projectID uuid.UUID) error {
@@ -56,59 +56,59 @@ func (n runtimeNode) FindTagStates(ctx context.Context, projectID uuid.UUID, tag
 	return states, nil
 }
 
-func (n runtimeNode) Deploy(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile) (appdto.Revision, error) {
-	if n.revisions == nil {
-		return appdto.Revision{}, fmt.Errorf("runtime node serves no revisions")
+func (n runtimeNode) Deploy(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile) (appdto.Deployment, error) {
+	if n.deployments == nil {
+		return appdto.Deployment{}, fmt.Errorf("runtime node serves no deployments")
 	}
-	revision, err := n.revisions.Deploy(ctx, projectID, file)
+	deployment, err := n.deployments.Deploy(ctx, projectID, file)
 	if err != nil {
-		return appdto.Revision{}, err
+		return appdto.Deployment{}, err
 	}
-	return toAppdtoRevision(revision), nil
+	return toAppdtoDeployment(deployment), nil
 }
 
-func (n runtimeNode) DeployFile(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile) (appdto.Revision, error) {
-	if n.revisions == nil {
-		return appdto.Revision{}, fmt.Errorf("runtime node serves no revisions")
+func (n runtimeNode) DeployFile(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile) (appdto.Deployment, error) {
+	if n.deployments == nil {
+		return appdto.Deployment{}, fmt.Errorf("runtime node serves no deployments")
 	}
-	revision, err := n.revisions.DeployFile(ctx, projectID, file)
+	deployment, err := n.deployments.DeployFile(ctx, projectID, file)
 	if err != nil {
-		return appdto.Revision{}, err
+		return appdto.Deployment{}, err
 	}
-	return toAppdtoRevision(revision), nil
+	return toAppdtoDeployment(deployment), nil
 }
 
-func (n runtimeNode) FindRevision(ctx context.Context, projectID uuid.UUID, number int) (appdto.Revision, error) {
-	if n.revisions == nil {
-		return appdto.Revision{}, fmt.Errorf("runtime node serves no revisions")
+func (n runtimeNode) FindDeployment(ctx context.Context, projectID uuid.UUID, number int) (appdto.Deployment, error) {
+	if n.deployments == nil {
+		return appdto.Deployment{}, fmt.Errorf("runtime node serves no deployments")
 	}
-	revision, err := n.revisions.Find(ctx, projectID, number)
+	deployment, err := n.deployments.Find(ctx, projectID, number)
 	if err != nil {
-		return appdto.Revision{}, err
+		return appdto.Deployment{}, err
 	}
-	return toAppdtoRevision(revision), nil
+	return toAppdtoDeployment(deployment), nil
 }
 
-func (n runtimeNode) FindCurrentRevision(ctx context.Context, projectID uuid.UUID) (appdto.Revision, bool, error) {
-	if n.revisions == nil {
-		return appdto.Revision{}, false, fmt.Errorf("runtime node serves no revisions")
+func (n runtimeNode) FindCurrentDeployment(ctx context.Context, projectID uuid.UUID) (appdto.Deployment, bool, error) {
+	if n.deployments == nil {
+		return appdto.Deployment{}, false, fmt.Errorf("runtime node serves no deployments")
 	}
-	revision, ok, err := n.revisions.FindCurrent(ctx, projectID)
+	deployment, ok, err := n.deployments.FindCurrent(ctx, projectID)
 	if err != nil {
-		return appdto.Revision{}, false, err
+		return appdto.Deployment{}, false, err
 	}
-	return toAppdtoRevision(revision), ok, nil
+	return toAppdtoDeployment(deployment), ok, nil
 }
 
-// toAppdtoRevision is the Runtime node's Revision as the Engineering node's
-// appdto.Revision: the roles keep their own types, and the composition in one
+// toAppdtoDeployment is the Runtime node's Deployment as the Engineering node's
+// appdto.Deployment: the roles keep their own types, and the composition in one
 // process is where the two meet (ADR 0011).
-func toAppdtoRevision(revision runtimeapp.Revision) appdto.Revision {
-	return appdto.Revision{
-		Number:         revision.Number,
-		DeployedAt:     revision.DeployedAt,
-		Cause:          string(revision.Cause),
-		RolledBackFrom: revision.RolledBackFrom,
-		Content:        revision.Content,
+func toAppdtoDeployment(deployment runtimeapp.Deployment) appdto.Deployment {
+	return appdto.Deployment{
+		Number:         deployment.Number,
+		DeployedAt:     deployment.DeployedAt,
+		Cause:          string(deployment.Cause),
+		RolledBackFrom: deployment.RolledBackFrom,
+		Content:        deployment.Content,
 	}
 }

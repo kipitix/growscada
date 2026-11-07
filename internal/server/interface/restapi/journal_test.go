@@ -188,7 +188,7 @@ func TestJournalEvents_WithoutAPositionCarriesOnlyNew(t *testing.T) {
 	}
 
 	journal.add(journalEntry(projectID, 11, "new"))
-	bus.Publish(revisionEventOf(projectID))
+	bus.Publish(deploymentEventOf(projectID))
 	message := readJournalMessage(t, br)
 	if message.id != "11" {
 		t.Errorf("the new entry has id %q, want 11", message.id)
@@ -213,7 +213,7 @@ func TestJournalEvents_FromWinsOverLastEventID(t *testing.T) {
 }
 
 // TestJournalEvents_AnotherProjectsEntryDoesNotWake: only a tag_updated or
-// revision_created of the Project itself makes the stream read again.
+// deployment_created of the Project itself makes the stream read again.
 func TestJournalEvents_AnotherProjectsEntryDoesNotWake(t *testing.T) {
 	projectID, otherProjectID := uuid.New(), uuid.New()
 	journal := &fakeJournalService{position: 10}
@@ -224,14 +224,14 @@ func TestJournalEvents_AnotherProjectsEntryDoesNotWake(t *testing.T) {
 	waitForReads(t, journal, 2) // the first page and the catch-up page
 
 	before := journal.readCount()
-	bus.Publish(revisionEventOf(otherProjectID))
+	bus.Publish(deploymentEventOf(otherProjectID))
 	time.Sleep(150 * time.Millisecond)
 	if after := journal.readCount(); after != before {
 		t.Errorf("another project's event made the stream read: %d reads, before %d", after, before)
 	}
 
 	journal.add(journalEntry(projectID, 11, "new"))
-	bus.Publish(revisionEventOf(projectID))
+	bus.Publish(deploymentEventOf(projectID))
 	if message := readJournalMessage(t, br); message.id != "11" {
 		t.Errorf("the project's own event sent id %q, want 11", message.id)
 	}
@@ -254,7 +254,7 @@ func TestJournalEvents_DisconnectDropsTheSubscription(t *testing.T) {
 	time.Sleep(150 * time.Millisecond)
 
 	before := journal.readCount()
-	bus.Publish(revisionEventOf(projectID))
+	bus.Publish(deploymentEventOf(projectID))
 	time.Sleep(150 * time.Millisecond)
 	if after := journal.readCount(); after != before {
 		t.Errorf("the closed stream still reads after an event: %d reads, before %d", after, before)
@@ -365,10 +365,10 @@ func journalEntry(projectID uuid.UUID, seq int64, value string) recordv0.Entry {
 	}
 }
 
-// revisionEventOf is a revision_created of the Project: one of the two events
+// deploymentEventOf is a deployment_created of the Project: one of the two events
 // that wake the live stream.
-func revisionEventOf(projectID uuid.UUID) event.Event {
-	return runtimeapp.NewRevisionCreatedEvent(runtimeapp.Revision{
+func deploymentEventOf(projectID uuid.UUID) event.Event {
+	return runtimeapp.NewDeploymentCreatedEvent(runtimeapp.Deployment{
 		Number:  1,
 		Content: projectv0.ProjectFile{Header: projectv0.Header{ProjectID: projectID}},
 	})

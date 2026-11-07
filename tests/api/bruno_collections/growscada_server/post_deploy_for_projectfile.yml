@@ -9,7 +9,7 @@ http:
   auth: inherit
 
 docs: |
-  The project Main gets its first Revision, so its Revisions have a document
+  The project Main gets its first Deployment, so its Deployments have a document
   to download (ADR 0018). The Draft is unchanged by the Deploy and keeps its
   Version, which the file requests below state.
 

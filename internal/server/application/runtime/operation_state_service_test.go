@@ -27,19 +27,19 @@ func (j fakeOperationJournal) Position(_ context.Context, _ uuid.UUID) (int64, e
 	return j.position, j.err
 }
 
-// fakeOperationRevisions is the Runtime node's Revisions as the Operation read
+// fakeOperationDeployments is the Runtime node's Deployments as the Operation read
 // model sees it.
-type fakeOperationRevisions struct {
-	runtimeapp.RevisionService
-	revision runtimeapp.Revision
-	deployed bool
-	err      error
-	calls    *[]string
+type fakeOperationDeployments struct {
+	runtimeapp.DeploymentService
+	deployment runtimeapp.Deployment
+	deployed   bool
+	err        error
+	calls      *[]string
 }
 
-func (r fakeOperationRevisions) FindCurrent(_ context.Context, _ uuid.UUID) (runtimeapp.Revision, bool, error) {
-	*r.calls = append(*r.calls, "revision")
-	return r.revision, r.deployed, r.err
+func (r fakeOperationDeployments) FindCurrent(_ context.Context, _ uuid.UUID) (runtimeapp.Deployment, bool, error) {
+	*r.calls = append(*r.calls, "deployment")
+	return r.deployment, r.deployed, r.err
 }
 
 // fakeOperationStates is the Runtime node's Tag states as the Operation read
@@ -58,24 +58,24 @@ func (s fakeOperationStates) FindTagStates(context.Context, uuid.UUID, []uuid.UU
 
 // operationService builds the read model over the fakes, recording every read
 // in calls.
-func operationService(journal fakeOperationJournal, revisions fakeOperationRevisions, states fakeOperationStates) (runtimeapp.OperationStateService, *[]string) {
+func operationService(journal fakeOperationJournal, deployments fakeOperationDeployments, states fakeOperationStates) (runtimeapp.OperationStateService, *[]string) {
 	calls := &[]string{}
-	journal.calls, revisions.calls, states.calls = calls, calls, calls
-	return runtimeapp.NewOperationStateService(journal, revisions, states), calls
+	journal.calls, deployments.calls, states.calls = calls, calls, calls
+	return runtimeapp.NewOperationStateService(journal, deployments, states), calls
 }
 
 func tagDefinition(id uuid.UUID, name, tagType string) projectv0.TagDefinition {
 	return projectv0.TagDefinition{ID: id, Name: name, Type: tagType}
 }
 
-func TestOperationStateService_ReadsThePositionThenTheRevisionThenTheStates(t *testing.T) {
+func TestOperationStateService_ReadsThePositionThenTheDeploymentThenTheStates(t *testing.T) {
 	projectID := uuid.New()
 	tagID := uuid.New()
 	service, calls := operationService(
 		fakeOperationJournal{position: 12},
-		fakeOperationRevisions{
+		fakeOperationDeployments{
 			deployed: true,
-			revision: runtimeapp.Revision{Number: 2, Content: projectv0.ProjectFile{
+			deployment: runtimeapp.Deployment{Number: 2, Content: projectv0.ProjectFile{
 				Tags: []projectv0.TagDefinition{tagDefinition(tagID, "speed", "integer")},
 			}},
 		},
@@ -86,7 +86,7 @@ func TestOperationStateService_ReadsThePositionThenTheRevisionThenTheStates(t *t
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	want := []string{"position", "revision", "states"}
+	want := []string{"position", "deployment", "states"}
 	if len(*calls) != len(want) {
 		t.Fatalf("read %v, want %v", *calls, want)
 	}
@@ -95,7 +95,7 @@ func TestOperationStateService_ReadsThePositionThenTheRevisionThenTheStates(t *t
 			t.Fatalf("read %v, want %v", *calls, want)
 		}
 	}
-	if state.Position != 12 || !state.Deployed || state.Revision.Number != 2 {
+	if state.Position != 12 || !state.Deployed || state.Deployment.Number != 2 {
 		t.Errorf("state %+v", state)
 	}
 	if len(state.TagStates) != 1 || state.TagStates[0].Value != "3" || state.TagStates[0].Seq != 12 {
@@ -113,7 +113,7 @@ func TestOperationStateService_AnUnwrittenTagIsItsZeroValueWithQualityBad(t *tes
 			writtenID := uuid.New()
 			service, _ := operationService(
 				fakeOperationJournal{position: 5},
-				fakeOperationRevisions{deployed: true, revision: runtimeapp.Revision{
+				fakeOperationDeployments{deployed: true, deployment: runtimeapp.Deployment{
 					Number: 1,
 					Content: projectv0.ProjectFile{Tags: []projectv0.TagDefinition{
 						tagDefinition(writtenID, "written", "integer"),
@@ -146,10 +146,10 @@ func TestOperationStateService_AnUnwrittenTagIsItsZeroValueWithQualityBad(t *tes
 	}
 }
 
-func TestOperationStateService_AProjectWithoutRevisionAnswersItsPosition(t *testing.T) {
+func TestOperationStateService_AProjectWithoutDeploymentAnswersItsPosition(t *testing.T) {
 	service, calls := operationService(
 		fakeOperationJournal{position: 3},
-		fakeOperationRevisions{deployed: false},
+		fakeOperationDeployments{deployed: false},
 		fakeOperationStates{},
 	)
 	state, err := service.Get(context.Background(), uuid.New())
@@ -157,17 +157,17 @@ func TestOperationStateService_AProjectWithoutRevisionAnswersItsPosition(t *test
 		t.Fatalf("Get: %v", err)
 	}
 	if state.Position != 3 || state.Deployed || len(state.TagStates) != 0 {
-		t.Errorf("state %+v, want position 3 and no revision", state)
+		t.Errorf("state %+v, want position 3 and no deployment", state)
 	}
 	if len(*calls) != 2 {
-		t.Errorf("read %v, want the position and the revision alone", *calls)
+		t.Errorf("read %v, want the position and the deployment alone", *calls)
 	}
 }
 
 func TestOperationStateService_ADeployedProjectWithoutTagsHasNoStates(t *testing.T) {
 	service, _ := operationService(
 		fakeOperationJournal{position: 9},
-		fakeOperationRevisions{deployed: true, revision: runtimeapp.Revision{Number: 1}},
+		fakeOperationDeployments{deployed: true, deployment: runtimeapp.Deployment{Number: 1}},
 		fakeOperationStates{},
 	)
 	state, err := service.Get(context.Background(), uuid.New())
@@ -182,7 +182,7 @@ func TestOperationStateService_ADeployedProjectWithoutTagsHasNoStates(t *testing
 func TestOperationStateService_RefusesADocumentWithAnUnknownTagType(t *testing.T) {
 	service, _ := operationService(
 		fakeOperationJournal{},
-		fakeOperationRevisions{deployed: true, revision: runtimeapp.Revision{
+		fakeOperationDeployments{deployed: true, deployment: runtimeapp.Deployment{
 			Number:  1,
 			Content: projectv0.ProjectFile{Tags: []projectv0.TagDefinition{tagDefinition(uuid.New(), "speed", "float")}},
 		}},
@@ -196,15 +196,15 @@ func TestOperationStateService_RefusesADocumentWithAnUnknownTagType(t *testing.T
 func TestOperationStateService_PassesTheProjectsFateAndTheReadFailuresThrough(t *testing.T) {
 	projectID := uuid.New()
 	for _, tc := range []struct {
-		name      string
-		journal   fakeOperationJournal
-		revisions fakeOperationRevisions
+		name        string
+		journal     fakeOperationJournal
+		deployments fakeOperationDeployments
 	}{
-		{"journal", fakeOperationJournal{err: project.ErrProjectNotFound}, fakeOperationRevisions{deployed: true}},
-		{"revision", fakeOperationJournal{}, fakeOperationRevisions{err: project.ErrProjectNotFound}},
+		{"journal", fakeOperationJournal{err: project.ErrProjectNotFound}, fakeOperationDeployments{deployed: true}},
+		{"deployment", fakeOperationJournal{}, fakeOperationDeployments{err: project.ErrProjectNotFound}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			service, _ := operationService(tc.journal, tc.revisions, fakeOperationStates{})
+			service, _ := operationService(tc.journal, tc.deployments, fakeOperationStates{})
 			if _, err := service.Get(context.Background(), projectID); !errors.Is(err, project.ErrProjectNotFound) {
 				t.Errorf("%v, want project.ErrProjectNotFound", err)
 			}
@@ -213,7 +213,7 @@ func TestOperationStateService_PassesTheProjectsFateAndTheReadFailuresThrough(t 
 
 	service, _ := operationService(
 		fakeOperationJournal{},
-		fakeOperationRevisions{deployed: true, revision: runtimeapp.Revision{
+		fakeOperationDeployments{deployed: true, deployment: runtimeapp.Deployment{
 			Number:  1,
 			Content: projectv0.ProjectFile{Tags: []projectv0.TagDefinition{tagDefinition(uuid.New(), "speed", "integer")}},
 		}},

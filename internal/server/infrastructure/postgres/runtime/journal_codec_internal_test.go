@@ -19,8 +19,8 @@ func TestJournalCodec_RoundTripsEveryType(t *testing.T) {
 	rolledBackFrom := 3
 	for _, entry := range []recordv0.Entry{
 		newTagStateEntry(projectID, at, tagID, "42", "good"),
-		newRevisionEntry(projectID, at, 7, recordv0.RevisionCauseRollback, &rolledBackFrom),
-		newRevisionEntry(projectID, at, 8, recordv0.RevisionCauseFile, nil),
+		newDeploymentEntry(projectID, at, 7, recordv0.DeploymentCauseRollback, &rolledBackFrom),
+		newDeploymentEntry(projectID, at, 8, recordv0.DeploymentCauseFile, nil),
 	} {
 		row, err := encodeJournalEntry(entry)
 		if err != nil {
@@ -38,8 +38,8 @@ func TestJournalCodec_RoundTripsEveryType(t *testing.T) {
 			decoded.Timestamp != at.Format(time.RFC3339) || decoded.SchemaVersion != recordv0.SchemaVersion() {
 			t.Errorf("decoded %s: %+v", entry.Type, decoded)
 		}
-		if !reflect.DeepEqual(decoded.TagState, entry.TagState) || !reflect.DeepEqual(decoded.Revision, entry.Revision) {
-			t.Errorf("decoded payload %+v/%+v, want %+v/%+v", decoded.TagState, decoded.Revision, entry.TagState, entry.Revision)
+		if !reflect.DeepEqual(decoded.TagState, entry.TagState) || !reflect.DeepEqual(decoded.Deployment, entry.Deployment) {
+			t.Errorf("decoded payload %+v/%+v, want %+v/%+v", decoded.TagState, decoded.Deployment, entry.TagState, entry.Deployment)
 		}
 	}
 }

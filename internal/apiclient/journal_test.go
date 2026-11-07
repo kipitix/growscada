@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
+	recordv0 "github.com/kipitix/growscada/contract/record/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
 )
 
@@ -40,9 +41,16 @@ func TestParseEntry(t *testing.T) {
 		t.Errorf("tag_state read as %+v", entry.TagState)
 	}
 
+	entry, ok = apiclient.ParseEntry(`{"seq":8,"type":"deployment","deployment":{"number":3,"cause":"rollback","rolled_back_from":1}}`)
+	if !ok || entry.Deployment == nil || entry.Deployment.Number != 3 || entry.Deployment.RolledBackFrom == nil || *entry.Deployment.RolledBackFrom != 1 {
+		t.Errorf("deployment entry read as %+v, ok %v", entry, ok)
+	}
+
+	// An entry written before task 72_9 carries the old type and payload
+	// member: it is read as a Deployment entry.
 	entry, ok = apiclient.ParseEntry(`{"seq":8,"type":"revision","revision":{"number":3,"cause":"rollback","rolled_back_from":1}}`)
-	if !ok || entry.Revision == nil || entry.Revision.Number != 3 || entry.Revision.RolledBackFrom == nil || *entry.Revision.RolledBackFrom != 1 {
-		t.Errorf("revision entry read as %+v, ok %v", entry, ok)
+	if !ok || entry.Type != recordv0.EntryTypeDeployment || entry.Deployment == nil || entry.Deployment.Number != 3 {
+		t.Errorf("a revision entry read as %+v, ok %v", entry, ok)
 	}
 
 	// A type a reader has not learnt yet is still an entry: the reader decides

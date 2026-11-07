@@ -86,7 +86,7 @@ services:
       timeout: 5s
       retries: 15
 
-  # The seed creates no Revision: its Runtime copies of the Tags and Devices
+  # The seed creates no Deployment: its Runtime copies of the Tags and Devices
   # are inserted by test_data directly, so the stack would run on fixtures
   # alone. Deploy "Main" (the simulator's Device and the dashboard's Tags)
   # once, as a real deployment would, before anything writes a Tag value or

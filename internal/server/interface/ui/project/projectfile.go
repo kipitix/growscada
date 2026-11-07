@@ -15,13 +15,13 @@ import (
 )
 
 // The Project file dialog (task 39, ADR 0018): one button in the header opens
-// it, and from there the Draft or a Revision is downloaded, a file is opened
-// as the whole Draft, or a file is deployed as a new Revision. A file is read
+// it, and from there the Draft or a Deployment is downloaded, a file is opened
+// as the whole Draft, or a file is deployed as a new Deployment. A file is read
 // once, confirmed with its counts, and does not survive a reload.
 
 // pendingProjectFile is a picked file waiting for confirmation.
 type pendingProjectFile struct {
-	// action is "open" (replace the Draft) or "deploy" (make a Revision).
+	// action is "open" (replace the Draft) or "deploy" (make a Deployment).
 	action string
 	name   string
 	data   []byte
@@ -66,13 +66,13 @@ func (p *Project) downloadDraftProjectFile(ctx app.Context) {
 	})
 }
 
-// downloadRevisionProjectFile saves the document of a Revision.
-func (p *Project) downloadRevisionProjectFile(ctx app.Context, number int) {
+// downloadDeploymentProjectFile saves the document of a Deployment.
+func (p *Project) downloadDeploymentProjectFile(ctx app.Context, number int) {
 	if p.content == nil {
 		return
 	}
 	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiclient.ProjectFileDownload, error) {
-		return pc.RevisionProjectFile(c, number)
+		return pc.DeploymentProjectFile(c, number)
 	}, func(ctx app.Context, download apiclient.ProjectFileDownload) {
 		saveProjectFile(download.Filename, download.Data)
 		ctx.Update()
@@ -137,7 +137,7 @@ func (p *Project) doOpenProjectFile(ctx app.Context, pending *pendingProjectFile
 	})
 }
 
-// doDeployProjectFile makes the file a Revision without the Draft: Operation
+// doDeployProjectFile makes the file a Deployment without the Draft: Operation
 // switches to it and the Draft stays as it is.
 func (p *Project) doDeployProjectFile(ctx app.Context, pending *pendingProjectFile) {
 	if p.waitMoves(ctx, func(ctx app.Context) { p.doDeployProjectFile(ctx, pending) }) {
@@ -150,8 +150,8 @@ func (p *Project) doDeployProjectFile(ctx app.Context, pending *pendingProjectFi
 		p.projectFileBusy = false
 		p.closeProjectFileDialog()
 		p.loadDeploy(ctx)
-		if p.revisionsDialog {
-			p.loadRevisions(ctx)
+		if p.deploymentsDialog {
+			p.loadDeployments(ctx)
 		}
 		ctx.Update()
 	}, func(ctx app.Context, err error) {
@@ -182,7 +182,7 @@ func (p *Project) renderProjectFileDialog() app.UI {
 		app.P().
 			Style("margin", "0 0 8px").
 			Style("color", "var(--text-2)").
-			Text("A project file is the whole configuration as one document: the Draft, or any Revision. It replaces the Draft or becomes a Revision; it is not kept after a reload."),
+			Text("A project file is the whole configuration as one document: the Draft, or any Deployment. It replaces the Draft or becomes a Deployment; it is not kept after a reload."),
 		app.Div().
 			Style("display", "flex").
 			Style("flex-wrap", "wrap").
@@ -192,7 +192,7 @@ func (p *Project) renderProjectFileDialog() app.UI {
 					func(ctx app.Context) { p.downloadDraftProjectFile(ctx) }),
 				p.projectFilePickButton("Open a file…", p.projectFileOpenTitle(),
 					!p.projectFileBusy, "open"),
-				p.projectFilePickButton("Deploy a file…", "Make a file the Project's new Revision; the Draft does not change",
+				p.projectFilePickButton("Deploy a file…", "Make a file the Project's new Deployment; the Draft does not change",
 					!p.projectFileBusy, "deploy"),
 			),
 	}
@@ -245,7 +245,7 @@ func (p *Project) renderProjectFileConfirmation(pending *pendingProjectFile) app
 	}
 	action := "Open it as the Draft: it replaces the whole Draft, and undo restores the previous one."
 	if pending.action == "deploy" {
-		action = "Deploy it: Operation switches to a new Revision, and the Draft does not change."
+		action = "Deploy it: Operation switches to a new Deployment, and the Draft does not change."
 	}
 	lines := []app.UI{
 		app.P().
@@ -276,7 +276,7 @@ func (p *Project) renderProjectFileConfirmation(pending *pendingProjectFile) app
 		lines = append(lines, app.P().
 			Style("margin", "0 0 4px").
 			Style("color", "var(--text-muted)").
-			Text(p.currentRevisionText()))
+			Text(p.currentDeploymentText()))
 	}
 	confirm := app.Button().
 		Attr("data-projectfile-confirm", "true").
@@ -316,17 +316,17 @@ func (p *Project) renderProjectFileConfirmation(pending *pendingProjectFile) app
 		)
 }
 
-// currentRevisionText names the Revision the Project runs, for the deploy
+// currentDeploymentText names the Deployment the Project runs, for the deploy
 // confirmation.
-func (p *Project) currentRevisionText() string {
+func (p *Project) currentDeploymentText() string {
 	if !p.deployLoaded {
-		return "The current Revision is being read."
+		return "The current Deployment is being read."
 	}
-	if p.deployPreview.CurrentRevision == nil {
+	if p.deployPreview.CurrentDeployment == nil {
 		return "The project has not been deployed yet."
 	}
-	return fmt.Sprintf("Current revision: %d, deployed %s.",
-		p.deployPreview.CurrentRevision.Number, formatDeployedAt(p.deployPreview.CurrentRevision.DeployedAt))
+	return fmt.Sprintf("Current deployment: %d, deployed %s.",
+		p.deployPreview.CurrentDeployment.Number, formatDeployedAt(p.deployPreview.CurrentDeployment.DeployedAt))
 }
 
 // renderProjectFileIssues lists every problem of the file: its path in the

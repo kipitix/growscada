@@ -21,7 +21,7 @@ import (
 )
 
 // journalStreamSafetyInterval is how often the live Journal stream reads the
-// table even without a wake-up: a tag_updated or revision_created that the
+// table even without a wake-up: a tag_updated or deployment_created that the
 // stream missed (published before its subscription, or dropped with AtMostOnce
 // delivery) must not leave the stream behind forever. Wake-ups normally make
 // the wait shorter (task 42).
@@ -45,7 +45,7 @@ type JournalHandlers struct {
 }
 
 // NewJournalHandler creates the handlers over the Runtime node's Journal and
-// the EventBus whose tag_updated and revision_created wake the live stream.
+// the EventBus whose tag_updated and deployment_created wake the live stream.
 func NewJournalHandler(journal runtimeapp.JournalService, bus eventbus.EventBus) *JournalHandlers {
 	return &JournalHandlers{journal: journal, bus: bus, closed: make(chan struct{})}
 }
@@ -126,7 +126,7 @@ func (h *JournalHandlers) GetJournalEvents(w http.ResponseWriter, r *http.Reques
 	}
 	subscriptions := []eventbus.Subscription{
 		h.bus.Subscribe(event.EventTypeTagUpdated, notify),
-		h.bus.Subscribe(event.EventTypeRevisionCreated, notify),
+		h.bus.Subscribe(event.EventTypeDeploymentCreated, notify),
 	}
 	defer func() {
 		for _, subscription := range subscriptions {

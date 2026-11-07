@@ -10,7 +10,7 @@ http:
 
 docs: |
   The project Line 2 was deployed just above, so its Journal holds exactly the
-  `revision` entry of that Deploy: no device writes its tags, which makes the
+  `deployment` entry of that Deploy: no device writes its tags, which makes the
   project the stable place to read a whole page and then ask for what follows
   its last position. The position is kept for the next request.
 
@@ -32,8 +32,8 @@ runtime:
       value: '1'
     - expression: 'res.body.entries[0].type'
       operator: eq
-      value: 'revision'
-    - expression: 'res.body.entries[0].revision.number'
+      value: 'deployment'
+    - expression: 'res.body.entries[0].deployment.number'
       operator: eq
       value: '1'
 

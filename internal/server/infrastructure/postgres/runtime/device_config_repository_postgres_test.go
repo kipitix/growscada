@@ -16,10 +16,10 @@ import (
 	runtimepg "github.com/kipitix/growscada/internal/server/infrastructure/postgres/runtime"
 )
 
-// TestFindConfig_ReadsTheRunningRevisionsCopies: the Gateway's configuration
-// is the Device and the Environment of the Revision, their pair's parameters
+// TestFindConfig_ReadsTheRunningDeploymentsCopies: the Gateway's configuration
+// is the Device and the Environment of the Deployment, their pair's parameters
 // and the Tags the Device supplies there.
-func TestFindConfig_ReadsTheRunningRevisionsCopies(t *testing.T) {
+func TestFindConfig_ReadsTheRunningDeploymentsCopies(t *testing.T) {
 	projectID, _ := newProject(t)
 	db := postgres.DB(t)
 	ctx := context.Background()
@@ -43,7 +43,7 @@ func TestFindConfig_ReadsTheRunningRevisionsCopies(t *testing.T) {
 			projectv0.TagDefinition{ID: foreign, Name: "other", Type: "integer", SupplierDeviceID: &otherDeviceID},
 		),
 	)
-	mustCreateRevision(t, runtimepg.NewRevisionRepositoryPostgres(db), projectID.UUID(), file, time.Now())
+	mustCreateDeployment(t, runtimepg.NewDeploymentRepositoryPostgres(db), projectID.UUID(), file, time.Now())
 
 	repo := runtimepg.NewDeviceConfigRepositoryPostgres(db)
 	config, err := repo.FindConfig(ctx, projectID.UUID(), deviceID, environmentID)
@@ -71,22 +71,22 @@ func TestFindConfig_ReadsTheRunningRevisionsCopies(t *testing.T) {
 	}
 }
 
-// TestFindConfig_OutsideTheRevision: a Device or an Environment the running
-// Revision does not have is not found, nor is a pair of a Device that does
+// TestFindConfig_OutsideTheDeployment: a Device or an Environment the running
+// Deployment does not have is not found, nor is a pair of a Device that does
 // not stand in the Environment.
-func TestFindConfig_OutsideTheRevision(t *testing.T) {
+func TestFindConfig_OutsideTheDeployment(t *testing.T) {
 	projectID, _ := newProject(t)
 	db := postgres.DB(t)
 	ctx := context.Background()
 	repo := runtimepg.NewDeviceConfigRepositoryPostgres(db)
-	revisions := runtimepg.NewRevisionRepositoryPostgres(db)
+	deployments := runtimepg.NewDeploymentRepositoryPostgres(db)
 
 	deviceID, environmentID := uuid.New(), uuid.New()
 	file := documentOf(projectID,
 		withDevices(projectv0.Device{ID: deviceID, Name: "sim", Protocol: "simulation"}),
 		withEnvironments(projectv0.Environment{ID: environmentID, Name: "bench"}),
 	)
-	mustCreateRevision(t, revisions, projectID.UUID(), file, time.Now())
+	mustCreateDeployment(t, deployments, projectID.UUID(), file, time.Now())
 
 	if _, err := repo.FindConfig(ctx, projectID.UUID(), uuid.New(), environmentID); !errors.Is(err, device.ErrDeviceNotFound) {
 		t.Errorf("an unknown device: %v, want ErrDeviceNotFound", err)
@@ -98,11 +98,11 @@ func TestFindConfig_OutsideTheRevision(t *testing.T) {
 		t.Errorf("a device outside the environment: %v, want ErrEnvironmentDeviceNotFound", err)
 	}
 
-	// The next Revision drops the Device: its copy goes, and a dormant token's
+	// The next Deployment drops the Device: its copy goes, and a dormant token's
 	// Device is not found.
-	mustCreateRevision(t, revisions, projectID.UUID(), documentOf(projectID), time.Now())
+	mustCreateDeployment(t, deployments, projectID.UUID(), documentOf(projectID), time.Now())
 	if _, err := repo.FindConfig(ctx, projectID.UUID(), deviceID, environmentID); !errors.Is(err, device.ErrDeviceNotFound) {
-		t.Errorf("a device outside the running revision: %v, want ErrDeviceNotFound", err)
+		t.Errorf("a device outside the running deployment: %v, want ErrDeviceNotFound", err)
 	}
 }
 
@@ -115,7 +115,7 @@ func TestFindConfig_OfADeletedProject_IsProjectNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	deviceID, environmentID := uuid.New(), uuid.New()
-	mustCreateRevision(t, runtimepg.NewRevisionRepositoryPostgres(db), projectID.UUID(),
+	mustCreateDeployment(t, runtimepg.NewDeploymentRepositoryPostgres(db), projectID.UUID(),
 		documentOf(projectID,
 			withDevices(projectv0.Device{ID: deviceID, Name: "sim", Protocol: "simulation"}),
 			withEnvironments(projectv0.Environment{ID: environmentID, Name: "bench"}),

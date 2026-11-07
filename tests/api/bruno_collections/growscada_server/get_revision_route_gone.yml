@@ -1,0 +1,34 @@
+info:
+  name: get the revision route is gone
+  type: http
+  seq: 188
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/revision
+  auth: inherit
+
+docs: |
+  The running configuration is a Deployment now (task 72_9): the old route
+  answers `410 Gone` with a hint to `GET …/deployment`, and is removed with
+  the API 1.0.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '410'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: application/problem+json
+    - expression: 'res.body.status'
+      operator: eq
+      value: '410'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

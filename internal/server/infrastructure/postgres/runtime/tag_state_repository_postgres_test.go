@@ -99,15 +99,15 @@ func TestUpsertDefinitions_InsertsTheInitialStateAndKeepsAWrittenOne(t *testing.
 	}
 }
 
-// TestUpsertDefinitions_AfterARevision_WritesNoCopyOutsideIt: once a Project
-// has a Revision, the bridge is silent — a Tag created after the Deploy commits
-// is no copy of the running Revision, so a value write is 404 until the next
+// TestUpsertDefinitions_AfterADeployment_WritesNoCopyOutsideIt: once a Project
+// has a Deployment, the bridge is silent — a Tag created after the Deploy commits
+// is no copy of the running Deployment, so a value write is 404 until the next
 // Deploy (task 35, Q4).
-func TestUpsertDefinitions_AfterARevision_WritesNoCopyOutsideIt(t *testing.T) {
+func TestUpsertDefinitions_AfterADeployment_WritesNoCopyOutsideIt(t *testing.T) {
 	projectID, _ := newProject(t)
 	db := postgres.DB(t)
 	ctx := context.Background()
-	mustCreateRevision(t, runtimepg.NewRevisionRepositoryPostgres(db), projectID.UUID(), documentOf(projectID), time.Now())
+	mustCreateDeployment(t, runtimepg.NewDeploymentRepositoryPostgres(db), projectID.UUID(), documentOf(projectID), time.Now())
 
 	repo := runtimepg.NewTagStateRepositoryPostgres(db)
 	late := definition(t, projectID, "late", tag.TagTypeInteger)
@@ -119,18 +119,18 @@ func TestUpsertDefinitions_AfterARevision_WritesNoCopyOutsideIt(t *testing.T) {
 		t.Fatalf("FindByIDs: %v", err)
 	}
 	if _, ok := found[late.TagID]; ok {
-		t.Error("the bridge copied a tag outside the running revision")
+		t.Error("the bridge copied a tag outside the running deployment")
 	}
 }
 
-// TestDelete_AfterARevision_KeepsTheRunningCopy: a Draft deletion reaches the
-// Runtime node with the next Deploy; while the Revision runs, its copy stays.
-func TestDelete_AfterARevision_KeepsTheRunningCopy(t *testing.T) {
+// TestDelete_AfterADeployment_KeepsTheRunningCopy: a Draft deletion reaches the
+// Runtime node with the next Deploy; while the Deployment runs, its copy stays.
+func TestDelete_AfterADeployment_KeepsTheRunningCopy(t *testing.T) {
 	projectID, _ := newProject(t)
 	db := postgres.DB(t)
 	ctx := context.Background()
 	speed := definition(t, projectID, "speed", tag.TagTypeInteger)
-	mustCreateRevision(t, runtimepg.NewRevisionRepositoryPostgres(db), projectID.UUID(), documentOf(projectID, withTags(documentTag(speed))), time.Now())
+	mustCreateDeployment(t, runtimepg.NewDeploymentRepositoryPostgres(db), projectID.UUID(), documentOf(projectID, withTags(documentTag(speed))), time.Now())
 
 	repo := runtimepg.NewTagStateRepositoryPostgres(db)
 	if err := repo.Delete(ctx, projectID, []id.ID[tag.Tag]{speed.TagID}); err != nil {
@@ -143,9 +143,9 @@ func TestDelete_AfterARevision_KeepsTheRunningCopy(t *testing.T) {
 
 // TestUpsertDefinitions_ConcurrentWithADeploy_WritesNoCopyOutsideIt: whichever
 // way a bridge write and a Deploy interleave, the bridge leaves no copy outside
-// the running Revision (task 35, Q4). Both take the same advisory lock, so the
-// bridge either writes before the Revision exists — and the Deploy's diff
-// removes a copy the document does not name — or finds the Revision and writes
+// the running Deployment (task 35, Q4). Both take the same advisory lock, so the
+// bridge either writes before the Deployment exists — and the Deploy's diff
+// removes a copy the document does not name — or finds the Deployment and writes
 // nothing.
 func TestUpsertDefinitions_ConcurrentWithADeploy_WritesNoCopyOutsideIt(t *testing.T) {
 	ctx := context.Background()
@@ -154,7 +154,7 @@ func TestUpsertDefinitions_ConcurrentWithADeploy_WritesNoCopyOutsideIt(t *testin
 		projectID, _ := newProject(t)
 		late := definition(t, projectID, "late", tag.TagTypeInteger)
 		document := documentOf(projectID)
-		revisions := runtimepg.NewRevisionRepositoryPostgres(db)
+		deployments := runtimepg.NewDeploymentRepositoryPostgres(db)
 		states := runtimepg.NewTagStateRepositoryPostgres(db)
 
 		start := make(chan struct{})
@@ -164,7 +164,7 @@ func TestUpsertDefinitions_ConcurrentWithADeploy_WritesNoCopyOutsideIt(t *testin
 		go func() {
 			defer wg.Done()
 			<-start
-			_, err := revisions.CreateRevision(ctx, projectID.UUID(), document, runtimeapp.RevisionCauseDeploy, time.Now())
+			_, err := deployments.CreateDeployment(ctx, projectID.UUID(), document, runtimeapp.DeploymentCauseDeploy, time.Now())
 			errs <- err
 		}()
 		go func() {
@@ -186,7 +186,7 @@ func TestUpsertDefinitions_ConcurrentWithADeploy_WritesNoCopyOutsideIt(t *testin
 			t.Fatalf("round %d: FindByIDs: %v", round, err)
 		}
 		if _, ok := found[late.TagID]; ok {
-			t.Fatalf("round %d: the bridge left a copy outside the running revision", round)
+			t.Fatalf("round %d: the bridge left a copy outside the running deployment", round)
 		}
 	}
 }

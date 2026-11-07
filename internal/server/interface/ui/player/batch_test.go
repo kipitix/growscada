@@ -62,7 +62,7 @@ func TestPlayer_EntryBurstOneRedraw(t *testing.T) {
 	p.onChange = func() { redraws++ }
 
 	first, second := id("first"), id("second")
-	p.model.SetRevision(revision(1, []projectv0.TagDefinition{
+	p.model.SetDeployment(deployment(1, []projectv0.TagDefinition{
 		{ID: first, Name: "first", Type: "integer"},
 		{ID: second, Name: "second", Type: "integer"},
 	}, nil, nil))

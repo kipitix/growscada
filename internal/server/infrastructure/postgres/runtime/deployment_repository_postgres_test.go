@@ -51,16 +51,16 @@ func withEnvironmentDevices(pairs ...projectv0.EnvironmentDevice) func(*projectv
 	return func(f *projectv0.ProjectFile) { f.EnvironmentDevices = pairs }
 }
 
-func mustCreateRevision(t *testing.T, repo runtimeapp.RevisionRepository, projectID uuid.UUID, file projectv0.ProjectFile, at time.Time) runtimeapp.Revision {
+func mustCreateDeployment(t *testing.T, repo runtimeapp.DeploymentRepository, projectID uuid.UUID, file projectv0.ProjectFile, at time.Time) runtimeapp.Deployment {
 	t.Helper()
-	revision, err := repo.CreateRevision(context.Background(), projectID, file, runtimeapp.RevisionCauseDeploy, at)
+	deployment, err := repo.CreateDeployment(context.Background(), projectID, file, runtimeapp.DeploymentCauseDeploy, at)
 	if err != nil {
-		t.Fatalf("CreateRevision: %v", err)
+		t.Fatalf("CreateDeployment: %v", err)
 	}
-	return revision
+	return deployment
 }
 
-func mustFindCurrent(t *testing.T, repo runtimeapp.RevisionRepository, projectID uuid.UUID) (runtimeapp.Revision, bool) {
+func mustFindCurrent(t *testing.T, repo runtimeapp.DeploymentRepository, projectID uuid.UUID) (runtimeapp.Deployment, bool) {
 	t.Helper()
 	found, ok, err := repo.FindCurrent(context.Background(), projectID)
 	if err != nil {
@@ -78,13 +78,13 @@ func countRows(t *testing.T, query string, args ...any) int {
 	return count
 }
 
-func TestCreateRevision_NumbersRevisionsAndKeepsTheDocument(t *testing.T) {
+func TestCreateDeployment_NumbersDeploymentsAndKeepsTheDocument(t *testing.T) {
 	projectID, _ := newProject(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(postgres.DB(t))
+	repo := runtimepg.NewDeploymentRepositoryPostgres(postgres.DB(t))
 	ctx := context.Background()
 
 	if _, ok := mustFindCurrent(t, repo, projectID.UUID()); ok {
-		t.Fatal("a project that was never deployed has a revision")
+		t.Fatal("a project that was never deployed has a deployment")
 	}
 
 	tagID := uuid.New()
@@ -94,42 +94,42 @@ func TestCreateRevision_NumbersRevisionsAndKeepsTheDocument(t *testing.T) {
 		file := first
 		file.Tags = []projectv0.TagDefinition{{ID: tagID, Name: "speed", Type: "integer"}}
 		at := start.Add(time.Duration(i) * time.Minute)
-		revision, err := repo.CreateRevision(ctx, projectID.UUID(), file, runtimeapp.RevisionCauseDeploy, at)
+		deployment, err := repo.CreateDeployment(ctx, projectID.UUID(), file, runtimeapp.DeploymentCauseDeploy, at)
 		if err != nil {
-			t.Fatalf("CreateRevision %d: %v", i, err)
+			t.Fatalf("CreateDeployment %d: %v", i, err)
 		}
-		if revision.Number != i {
-			t.Errorf("revision %d created with number %d", i, revision.Number)
+		if deployment.Number != i {
+			t.Errorf("deployment %d created with number %d", i, deployment.Number)
 		}
-		if !revision.DeployedAt.Equal(at) {
-			t.Errorf("revision %d deployed at %s, want %s", i, revision.DeployedAt, at)
+		if !deployment.DeployedAt.Equal(at) {
+			t.Errorf("deployment %d deployed at %s, want %s", i, deployment.DeployedAt, at)
 		}
-		if !reflect.DeepEqual(revision.Content, file) {
-			t.Errorf("revision %d content differs from the document", i)
+		if !reflect.DeepEqual(deployment.Content, file) {
+			t.Errorf("deployment %d content differs from the document", i)
 		}
 	}
 
 	current, ok := mustFindCurrent(t, repo, projectID.UUID())
 	if !ok {
-		t.Fatal("a deployed project has no revision")
+		t.Fatal("a deployed project has no deployment")
 	}
 	if current.Number != 3 {
-		t.Errorf("current revision %d, want 3", current.Number)
+		t.Errorf("current deployment %d, want 3", current.Number)
 	}
 	if !current.DeployedAt.Equal(start.Add(3 * time.Minute)) {
-		t.Errorf("current revision deployed at %s", current.DeployedAt)
+		t.Errorf("current deployment deployed at %s", current.DeployedAt)
 	}
 	if !reflect.DeepEqual(current.Content.Tags, first.Tags) || current.Content.ProjectID != projectID.UUID() {
-		t.Errorf("current revision content %+v, want %+v", current.Content, first)
+		t.Errorf("current deployment content %+v, want %+v", current.Content, first)
 	}
-	if got := countRows(t, `SELECT count(*) FROM runtime.revisions WHERE project_id = $1`, projectID.UUID()); got != 3 {
-		t.Errorf("stored revisions %d, want 3", got)
+	if got := countRows(t, `SELECT count(*) FROM runtime.deployments WHERE project_id = $1`, projectID.UUID()); got != 3 {
+		t.Errorf("stored deployments %d, want 3", got)
 	}
 }
 
-func TestCreateRevision_ConcurrentDeploysTakeDistinctNumbers(t *testing.T) {
+func TestCreateDeployment_ConcurrentDeploysTakeDistinctNumbers(t *testing.T) {
 	projectID, _ := newProject(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(postgres.DB(t))
+	repo := runtimepg.NewDeploymentRepositoryPostgres(postgres.DB(t))
 	ctx := context.Background()
 
 	const deploys = 8
@@ -140,8 +140,8 @@ func TestCreateRevision_ConcurrentDeploysTakeDistinctNumbers(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			revision, err := repo.CreateRevision(ctx, projectID.UUID(), documentOf(projectID), runtimeapp.RevisionCauseDeploy, time.Now())
-			numbers[i], errs[i] = revision.Number, err
+			deployment, err := repo.CreateDeployment(ctx, projectID.UUID(), documentOf(projectID), runtimeapp.DeploymentCauseDeploy, time.Now())
+			numbers[i], errs[i] = deployment.Number, err
 		}(i)
 	}
 	wg.Wait()
@@ -157,34 +157,34 @@ func TestCreateRevision_ConcurrentDeploysTakeDistinctNumbers(t *testing.T) {
 			t.Fatalf("numbers %v, want 1..%d", numbers, deploys)
 		}
 	}
-	if got := countRows(t, `SELECT count(*) FROM runtime.revisions WHERE project_id = $1`, projectID.UUID()); got != deploys {
-		t.Errorf("stored revisions %d, want %d", got, deploys)
+	if got := countRows(t, `SELECT count(*) FROM runtime.deployments WHERE project_id = $1`, projectID.UUID()); got != deploys {
+		t.Errorf("stored deployments %d, want %d", got, deploys)
 	}
 	if current, ok := mustFindCurrent(t, repo, projectID.UUID()); !ok || current.Number != deploys {
-		t.Errorf("current revision %+v (%v), want %d", current.Number, ok, deploys)
+		t.Errorf("current deployment %+v (%v), want %d", current.Number, ok, deploys)
 	}
 }
 
-func TestCreateRevision_TheUniqueKeyIsTheSafetyNet(t *testing.T) {
+func TestCreateDeployment_TheUniqueKeyIsTheSafetyNet(t *testing.T) {
 	projectID, _ := newProject(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(postgres.DB(t))
-	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID), time.Now())
+	repo := runtimepg.NewDeploymentRepositoryPostgres(postgres.DB(t))
+	mustCreateDeployment(t, repo, projectID.UUID(), documentOf(projectID), time.Now())
 
 	_, err := postgres.DB(t).ExecContext(context.Background(),
-		`INSERT INTO runtime.revisions (project_id, n, deployed_at, cause, config) VALUES ($1, 1, now(), 'deploy', '{}')`,
+		`INSERT INTO runtime.deployments (project_id, number, deployed_at, cause, config) VALUES ($1, 1, now(), 'deploy', '{}')`,
 		projectID.UUID(),
 	)
 	var pqErr *pq.Error
 	if !errors.As(err, &pqErr) || pqErr.Code != "23505" {
-		t.Fatalf("a second revision 1: %v, want a unique violation", err)
+		t.Fatalf("a second deployment 1: %v, want a unique violation", err)
 	}
 }
 
-func TestCreateRevision_KeepsStatesAndTokensAndDropsAbsentCopies(t *testing.T) {
+func TestCreateDeployment_KeepsStatesAndTokensAndDropsAbsentCopies(t *testing.T) {
 	projectID, _ := newProject(t)
 	db := postgres.DB(t)
 	ctx := context.Background()
-	repo := runtimepg.NewRevisionRepositoryPostgres(db)
+	repo := runtimepg.NewDeploymentRepositoryPostgres(db)
 	states := runtimepg.NewTagStateRepositoryPostgres(db)
 
 	keptTag, droppedTag := uuid.New(), uuid.New()
@@ -201,7 +201,7 @@ func TestCreateRevision_KeepsStatesAndTokensAndDropsAbsentCopies(t *testing.T) {
 			Params: projectv0.JSONObject(`{"address": "10.0.0.1"}`),
 		}),
 	)
-	mustCreateRevision(t, repo, projectID.UUID(), first, time.Now())
+	mustCreateDeployment(t, repo, projectID.UUID(), first, time.Now())
 
 	writeValue(t, states, projectID, keptTag, 42)
 	if _, err := db.ExecContext(ctx,
@@ -213,7 +213,7 @@ func TestCreateRevision_KeepsStatesAndTokensAndDropsAbsentCopies(t *testing.T) {
 	}
 
 	second := documentOf(projectID, withTags(projectv0.TagDefinition{ID: keptTag, Name: "kept", Type: "integer"}))
-	mustCreateRevision(t, repo, projectID.UUID(), second, time.Now())
+	mustCreateDeployment(t, repo, projectID.UUID(), second, time.Now())
 
 	if got := findValue(t, states, projectID, keptTag); got != "42" {
 		t.Errorf("the state of the kept tag is %q, want 42", got)
@@ -245,7 +245,7 @@ func TestCreateRevision_KeepsStatesAndTokensAndDropsAbsentCopies(t *testing.T) {
 			Params: projectv0.JSONObject(`{"address": "10.0.0.2"}`),
 		}),
 	)
-	mustCreateRevision(t, repo, projectID.UUID(), third, time.Now())
+	mustCreateDeployment(t, repo, projectID.UUID(), third, time.Now())
 
 	var params []byte
 	if err := db.QueryRowContext(ctx,
@@ -259,17 +259,17 @@ func TestCreateRevision_KeepsStatesAndTokensAndDropsAbsentCopies(t *testing.T) {
 		t.Fatalf("decode the pair params: %v", err)
 	}
 	if decoded["address"] != "10.0.0.2" {
-		t.Errorf("the pair params are %s, want the address of the new revision", params)
+		t.Errorf("the pair params are %s, want the address of the new deployment", params)
 	}
 }
 
-func TestCreateRevision_AnEmptyConfigAndParamsAreTheEmptyObject(t *testing.T) {
+func TestCreateDeployment_AnEmptyConfigAndParamsAreTheEmptyObject(t *testing.T) {
 	projectID, _ := newProject(t)
 	db := postgres.DB(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(db)
+	repo := runtimepg.NewDeploymentRepositoryPostgres(db)
 	deviceID, environmentID := uuid.New(), uuid.New()
 
-	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+	mustCreateDeployment(t, repo, projectID.UUID(), documentOf(projectID,
 		withDevices(projectv0.Device{ID: deviceID, Name: "meter", Protocol: "simulation"}),
 		withEnvironments(projectv0.Environment{ID: environmentID, Name: "bench"}),
 		withEnvironmentDevices(projectv0.EnvironmentDevice{EnvironmentID: environmentID, DeviceID: deviceID}),
@@ -293,10 +293,10 @@ func TestCreateRevision_AnEmptyConfigAndParamsAreTheEmptyObject(t *testing.T) {
 	}
 }
 
-func TestCreateRevision_RefusesAPairWhoseCopiesAreOfAnotherProject(t *testing.T) {
+func TestCreateDeployment_RefusesAPairWhoseCopiesAreOfAnotherProject(t *testing.T) {
 	projectID, orgID := newProject(t)
 	db := postgres.DB(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(db)
+	repo := runtimepg.NewDeploymentRepositoryPostgres(db)
 	ctx := context.Background()
 
 	otherID := id.NewID[project.Project]()
@@ -306,7 +306,7 @@ func TestCreateRevision_RefusesAPairWhoseCopiesAreOfAnotherProject(t *testing.T)
 		t.Fatalf("insert the other project: %v", err)
 	}
 	deviceID, environmentID := uuid.New(), uuid.New()
-	mustCreateRevision(t, repo, otherID.UUID(), documentOf(otherID,
+	mustCreateDeployment(t, repo, otherID.UUID(), documentOf(otherID,
 		withDevices(projectv0.Device{ID: deviceID, Name: "meter", Protocol: "simulation", Config: projectv0.JSONObject(`{"host": "meter"}`)}),
 		withEnvironments(projectv0.Environment{ID: environmentID, Name: "bench"}),
 		withEnvironmentDevices(projectv0.EnvironmentDevice{
@@ -315,12 +315,12 @@ func TestCreateRevision_RefusesAPairWhoseCopiesAreOfAnotherProject(t *testing.T)
 		}),
 	), time.Now())
 
-	_, err := repo.CreateRevision(ctx, projectID.UUID(), documentOf(projectID,
+	_, err := repo.CreateDeployment(ctx, projectID.UUID(), documentOf(projectID,
 		withEnvironmentDevices(projectv0.EnvironmentDevice{
 			EnvironmentID: environmentID, DeviceID: deviceID,
 			Params: projectv0.JSONObject(`{"address": "10.9.9.9"}`),
 		}),
-	), runtimeapp.RevisionCauseDeploy, time.Now())
+	), runtimeapp.DeploymentCauseDeploy, time.Now())
 	if err == nil {
 		t.Fatal("the pair of another project was taken")
 	}
@@ -340,15 +340,15 @@ func TestCreateRevision_RefusesAPairWhoseCopiesAreOfAnotherProject(t *testing.T)
 	}
 }
 
-func TestCreateRevision_HealsACopyThatLostItsState(t *testing.T) {
+func TestCreateDeployment_HealsACopyThatLostItsState(t *testing.T) {
 	projectID, _ := newProject(t)
 	db := postgres.DB(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(db)
+	repo := runtimepg.NewDeploymentRepositoryPostgres(db)
 	states := runtimepg.NewTagStateRepositoryPostgres(db)
 	tagID := uuid.New()
 	file := documentOf(projectID, withTags(projectv0.TagDefinition{ID: tagID, Name: "counter", Type: "integer"}))
 
-	mustCreateRevision(t, repo, projectID.UUID(), file, time.Now())
+	mustCreateDeployment(t, repo, projectID.UUID(), file, time.Now())
 	if _, err := db.ExecContext(context.Background(), `DELETE FROM runtime.tag_states WHERE tag_id = $1`, tagID); err != nil {
 		t.Fatalf("drop the state: %v", err)
 	}
@@ -356,7 +356,7 @@ func TestCreateRevision_HealsACopyThatLostItsState(t *testing.T) {
 		t.Fatal("the state survives its deletion")
 	}
 
-	mustCreateRevision(t, repo, projectID.UUID(), file, time.Now())
+	mustCreateDeployment(t, repo, projectID.UUID(), file, time.Now())
 	state, ok := stateOf(t, states, projectID, tagID)
 	if !ok {
 		t.Fatal("the deploy of an unchanged document did not give the copy its state back")
@@ -366,14 +366,14 @@ func TestCreateRevision_HealsACopyThatLostItsState(t *testing.T) {
 	}
 }
 
-func TestCreateRevision_TwoEnvironmentsMaySwapTheirNames(t *testing.T) {
+func TestCreateDeployment_TwoEnvironmentsMaySwapTheirNames(t *testing.T) {
 	projectID, _ := newProject(t)
 	db := postgres.DB(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(db)
+	repo := runtimepg.NewDeploymentRepositoryPostgres(db)
 	ctx := context.Background()
 	first, second := uuid.New(), uuid.New()
 
-	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+	mustCreateDeployment(t, repo, projectID.UUID(), documentOf(projectID,
 		withEnvironments(
 			projectv0.Environment{ID: first, Name: "bench"},
 			projectv0.Environment{ID: second, Name: "lab"},
@@ -381,7 +381,7 @@ func TestCreateRevision_TwoEnvironmentsMaySwapTheirNames(t *testing.T) {
 	), time.Now())
 
 	// The first write takes the name the second one has not left yet.
-	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+	mustCreateDeployment(t, repo, projectID.UUID(), documentOf(projectID,
 		withEnvironments(
 			projectv0.Environment{ID: first, Name: "lab"},
 			projectv0.Environment{ID: second, Name: "bench"},
@@ -399,29 +399,29 @@ func TestCreateRevision_TwoEnvironmentsMaySwapTheirNames(t *testing.T) {
 	}
 }
 
-func TestCreateRevision_RefusesTwoEnvironmentsOfOneName(t *testing.T) {
+func TestCreateDeployment_RefusesTwoEnvironmentsOfOneName(t *testing.T) {
 	projectID, _ := newProject(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(postgres.DB(t))
+	repo := runtimepg.NewDeploymentRepositoryPostgres(postgres.DB(t))
 
-	_, err := repo.CreateRevision(context.Background(), projectID.UUID(), documentOf(projectID,
+	_, err := repo.CreateDeployment(context.Background(), projectID.UUID(), documentOf(projectID,
 		withEnvironments(
 			projectv0.Environment{ID: uuid.New(), Name: "bench"},
 			projectv0.Environment{ID: uuid.New(), Name: "bench"},
 		),
-	), runtimeapp.RevisionCauseDeploy, time.Now())
+	), runtimeapp.DeploymentCauseDeploy, time.Now())
 	if err == nil {
 		t.Fatal("two environments of one name were taken")
 	}
 }
 
-func TestCreateRevision_ResetsTheStateOfAChangedTagTypeAndKeepsTheOthers(t *testing.T) {
+func TestCreateDeployment_ResetsTheStateOfAChangedTagTypeAndKeepsTheOthers(t *testing.T) {
 	projectID, _ := newProject(t)
 	db := postgres.DB(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(db)
+	repo := runtimepg.NewDeploymentRepositoryPostgres(db)
 	states := runtimepg.NewTagStateRepositoryPostgres(db)
 
 	changed, renamed := uuid.New(), uuid.New()
-	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+	mustCreateDeployment(t, repo, projectID.UUID(), documentOf(projectID,
 		withTags(
 			projectv0.TagDefinition{ID: changed, Name: "counter", Type: "integer"},
 			projectv0.TagDefinition{ID: renamed, Name: "plain", Type: "integer"},
@@ -430,7 +430,7 @@ func TestCreateRevision_ResetsTheStateOfAChangedTagTypeAndKeepsTheOthers(t *test
 	writeValue(t, states, projectID, changed, 42)
 	writeValue(t, states, projectID, renamed, 7)
 
-	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+	mustCreateDeployment(t, repo, projectID.UUID(), documentOf(projectID,
 		withTags(
 			projectv0.TagDefinition{ID: changed, Name: "counter", Type: "string"},
 			projectv0.TagDefinition{ID: renamed, Name: "renamed", Type: "integer"},
@@ -449,27 +449,27 @@ func TestCreateRevision_ResetsTheStateOfAChangedTagTypeAndKeepsTheOthers(t *test
 	}
 }
 
-func TestCreateRevision_TheProjectTakesItsRevisionsAlong(t *testing.T) {
+func TestCreateDeployment_TheProjectTakesItsDeploymentsAlong(t *testing.T) {
 	projectID, _ := newProject(t)
 	db := postgres.DB(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(db)
-	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID), time.Now())
+	repo := runtimepg.NewDeploymentRepositoryPostgres(db)
+	mustCreateDeployment(t, repo, projectID.UUID(), documentOf(projectID), time.Now())
 
 	if _, err := db.ExecContext(context.Background(), `DELETE FROM projects WHERE id = $1`, projectID.UUID()); err != nil {
 		t.Fatalf("delete project: %v", err)
 	}
-	if got := countRows(t, `SELECT count(*) FROM runtime.revisions WHERE project_id = $1`, projectID.UUID()); got != 0 {
-		t.Errorf("revisions of the deleted project: %d, want none", got)
+	if got := countRows(t, `SELECT count(*) FROM runtime.deployments WHERE project_id = $1`, projectID.UUID()); got != 0 {
+		t.Errorf("deployments of the deleted project: %d, want none", got)
 	}
 }
 
-func TestCreateRevision_CopiesTheSupplyingDeviceOfATag(t *testing.T) {
+func TestCreateDeployment_CopiesTheSupplyingDeviceOfATag(t *testing.T) {
 	projectID, _ := newProject(t)
 	db := postgres.DB(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(db)
+	repo := runtimepg.NewDeploymentRepositoryPostgres(db)
 	deviceID, tagID := uuid.New(), uuid.New()
 
-	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+	mustCreateDeployment(t, repo, projectID.UUID(), documentOf(projectID,
 		withDevices(projectv0.Device{ID: deviceID, Name: "meter", Protocol: "simulation"}),
 		withTags(projectv0.TagDefinition{ID: tagID, Name: "speed", Type: "integer", SupplierDeviceID: &deviceID}),
 	), time.Now())
@@ -483,19 +483,19 @@ func TestCreateRevision_CopiesTheSupplyingDeviceOfATag(t *testing.T) {
 	}
 }
 
-func TestCreateRevision_UpdatesTheCopiesOfAKnownDeviceAndEnvironment(t *testing.T) {
+func TestCreateDeployment_UpdatesTheCopiesOfAKnownDeviceAndEnvironment(t *testing.T) {
 	projectID, _ := newProject(t)
 	db := postgres.DB(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(db)
+	repo := runtimepg.NewDeploymentRepositoryPostgres(db)
 	deviceID, environmentID := uuid.New(), uuid.New()
 	ctx := context.Background()
 
-	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+	mustCreateDeployment(t, repo, projectID.UUID(), documentOf(projectID,
 		withDevices(projectv0.Device{ID: deviceID, Name: "meter", Comment: "old", Protocol: "simulation", Config: projectv0.JSONObject(`{"host": "a"}`)}),
 		withEnvironments(projectv0.Environment{ID: environmentID, Name: "bench", Comment: "old"}),
 	), time.Now())
 
-	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+	mustCreateDeployment(t, repo, projectID.UUID(), documentOf(projectID,
 		withDevices(projectv0.Device{ID: deviceID, Name: "meter-2", Comment: "new", Protocol: "modbus", Config: projectv0.JSONObject(`{"host": "b"}`)}),
 		withEnvironments(projectv0.Environment{ID: environmentID, Name: "lab", Comment: "new"}),
 	), time.Now())
@@ -508,7 +508,7 @@ func TestCreateRevision_UpdatesTheCopiesOfAKnownDeviceAndEnvironment(t *testing.
 		t.Fatalf("read the device copy: %v", err)
 	}
 	if name != "meter-2" || comment != "new" || protocol != "modbus" || !strings.Contains(string(config), `"b"`) {
-		t.Errorf("the device copy is %s/%s/%s/%s, want the values of the new revision", name, comment, protocol, config)
+		t.Errorf("the device copy is %s/%s/%s/%s, want the values of the new deployment", name, comment, protocol, config)
 	}
 	var environmentName, environmentComment string
 	if err := db.QueryRowContext(ctx,
@@ -517,110 +517,110 @@ func TestCreateRevision_UpdatesTheCopiesOfAKnownDeviceAndEnvironment(t *testing.
 		t.Fatalf("read the environment copy: %v", err)
 	}
 	if environmentName != "lab" || environmentComment != "new" {
-		t.Errorf("the environment copy is %s/%s, want the values of the new revision", environmentName, environmentComment)
+		t.Errorf("the environment copy is %s/%s, want the values of the new deployment", environmentName, environmentComment)
 	}
 }
 
-func TestCreateRevision_RefusesADocumentOfAnotherProject(t *testing.T) {
+func TestCreateDeployment_RefusesADocumentOfAnotherProject(t *testing.T) {
 	projectID, _ := newProject(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(postgres.DB(t))
+	repo := runtimepg.NewDeploymentRepositoryPostgres(postgres.DB(t))
 	otherID := id.NewID[project.Project]()
 
-	if _, err := repo.CreateRevision(context.Background(), projectID.UUID(), documentOf(otherID), runtimeapp.RevisionCauseDeploy, time.Now()); err == nil {
+	if _, err := repo.CreateDeployment(context.Background(), projectID.UUID(), documentOf(otherID), runtimeapp.DeploymentCauseDeploy, time.Now()); err == nil {
 		t.Fatal("the document of another project was stored")
 	} else if !strings.Contains(err.Error(), "document of project") {
 		t.Errorf("error %v, want a refusal naming the document's project", err)
 	}
 }
 
-// TestRollback_AppendsARevisionWithTheCopiedDocument: a Rollback copies the
-// document of an earlier Revision into a new number, records the cause and the
+// TestRollback_AppendsADeploymentWithTheCopiedDocument: a Rollback copies the
+// document of an earlier Deployment into a new number, records the cause and the
 // number it copied, and leaves the history as it was (ADR 0014).
-func TestRollback_AppendsARevisionWithTheCopiedDocument(t *testing.T) {
+func TestRollback_AppendsADeploymentWithTheCopiedDocument(t *testing.T) {
 	projectID, _ := newProject(t)
 	db := postgres.DB(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(db)
+	repo := runtimepg.NewDeploymentRepositoryPostgres(db)
 	states := runtimepg.NewTagStateRepositoryPostgres(db)
 	ctx := context.Background()
 
 	keptTag, addedTag := uuid.New(), uuid.New()
 	first := documentOf(projectID, withTags(projectv0.TagDefinition{ID: keptTag, Name: "speed", Type: "integer"}))
 	start := time.Date(2026, 11, 4, 10, 0, 0, 0, time.UTC)
-	mustCreateRevision(t, repo, projectID.UUID(), first, start)
+	mustCreateDeployment(t, repo, projectID.UUID(), first, start)
 	writeValue(t, states, projectID, keptTag, 42)
 
 	second := documentOf(projectID, withTags(
 		projectv0.TagDefinition{ID: keptTag, Name: "speed", Type: "integer"},
 		projectv0.TagDefinition{ID: addedTag, Name: "flow", Type: "integer"},
 	))
-	mustCreateRevision(t, repo, projectID.UUID(), second, start.Add(time.Minute))
+	mustCreateDeployment(t, repo, projectID.UUID(), second, start.Add(time.Minute))
 
 	rolled, err := repo.Rollback(ctx, projectID.UUID(), 1, start.Add(2*time.Minute))
 	if err != nil {
 		t.Fatalf("Rollback: %v", err)
 	}
 	if rolled.Number != 3 {
-		t.Errorf("the rolled-back revision is %d, want 3", rolled.Number)
+		t.Errorf("the rolled-back deployment is %d, want 3", rolled.Number)
 	}
-	if rolled.Cause != runtimeapp.RevisionCauseRollback {
+	if rolled.Cause != runtimeapp.DeploymentCauseRollback {
 		t.Errorf("the cause is %q, want rollback", rolled.Cause)
 	}
 	if rolled.RolledBackFrom == nil || *rolled.RolledBackFrom != 1 {
 		t.Errorf("rolled_back_from is %v, want 1", rolled.RolledBackFrom)
 	}
 	if !reflect.DeepEqual(rolled.Content, first) {
-		t.Errorf("the rolled-back document %+v, want the document of revision 1", rolled.Content)
+		t.Errorf("the rolled-back document %+v, want the document of deployment 1", rolled.Content)
 	}
 
 	var cause string
 	var rolledBackFrom *int
 	if err := db.QueryRowContext(ctx,
-		`SELECT cause, rolled_back_from FROM runtime.revisions WHERE project_id = $1 AND n = 3`,
+		`SELECT cause, rolled_back_from FROM runtime.deployments WHERE project_id = $1 AND number = 3`,
 		projectID.UUID(),
 	).Scan(&cause, &rolledBackFrom); err != nil {
-		t.Fatalf("read the stored revision: %v", err)
+		t.Fatalf("read the stored deployment: %v", err)
 	}
 	if cause != "rollback" || rolledBackFrom == nil || *rolledBackFrom != 1 {
-		t.Errorf("the stored revision is %q from %v, want rollback from 1", cause, rolledBackFrom)
+		t.Errorf("the stored deployment is %q from %v, want rollback from 1", cause, rolledBackFrom)
 	}
 
 	// The copies follow the copied document: the Tag it does not have goes
 	// with its state, the one it has keeps its value.
 	if got := countRows(t, `SELECT count(*) FROM runtime.tags WHERE id = $1`, addedTag); got != 0 {
-		t.Errorf("the copy of the tag the copied revision lacks is still stored")
+		t.Errorf("the copy of the tag the copied deployment lacks is still stored")
 	}
 	if got := countRows(t, `SELECT count(*) FROM runtime.tag_states WHERE tag_id = $1`, addedTag); got != 0 {
-		t.Errorf("the state of the tag the copied revision lacks is still stored")
+		t.Errorf("the state of the tag the copied deployment lacks is still stored")
 	}
 	if got := findValue(t, states, projectID, keptTag); got != "42" {
 		t.Errorf("the state of the kept tag is %q, want 42", got)
 	}
 
-	// History is not rewritten: revision 1 is still there, intact.
+	// History is not rewritten: deployment 1 is still there, intact.
 	firstCopy, err := repo.FindByNumber(ctx, projectID.UUID(), 1)
 	if err != nil {
 		t.Fatalf("FindByNumber 1: %v", err)
 	}
-	if firstCopy.Cause != runtimeapp.RevisionCauseDeploy || firstCopy.RolledBackFrom != nil {
-		t.Errorf("revision 1 is %q from %v, want a deploy", firstCopy.Cause, firstCopy.RolledBackFrom)
+	if firstCopy.Cause != runtimeapp.DeploymentCauseDeploy || firstCopy.RolledBackFrom != nil {
+		t.Errorf("deployment 1 is %q from %v, want a deploy", firstCopy.Cause, firstCopy.RolledBackFrom)
 	}
 	if !reflect.DeepEqual(firstCopy.Content, first) {
-		t.Errorf("revision 1 changed: %+v", firstCopy.Content)
+		t.Errorf("deployment 1 changed: %+v", firstCopy.Content)
 	}
 	if current, ok := mustFindCurrent(t, repo, projectID.UUID()); !ok || current.Number != 3 {
-		t.Errorf("the running revision is %d (%v), want 3", current.Number, ok)
+		t.Errorf("the running deployment is %d (%v), want 3", current.Number, ok)
 	}
 }
 
 // TestRollback_KeepsTokensAndResetsAChangedTagType: the copies follow the
 // copied document through the same diff a Deploy runs — a Tag whose TagType
-// changed since the target Revision starts from the target type's zero value,
+// changed since the target Deployment starts from the target type's zero value,
 // and a Device Token outlives the Device the target document does not have
 // (task 36, Q6).
 func TestRollback_KeepsTokensAndResetsAChangedTagType(t *testing.T) {
 	projectID, _ := newProject(t)
 	db := postgres.DB(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(db)
+	repo := runtimepg.NewDeploymentRepositoryPostgres(db)
 	states := runtimepg.NewTagStateRepositoryPostgres(db)
 	ctx := context.Background()
 
@@ -632,7 +632,7 @@ func TestRollback_KeepsTokensAndResetsAChangedTagType(t *testing.T) {
 			projectv0.TagDefinition{ID: kept, Name: "plain", Type: "integer"},
 		),
 	)
-	mustCreateRevision(t, repo, projectID.UUID(), first, time.Now())
+	mustCreateDeployment(t, repo, projectID.UUID(), first, time.Now())
 	writeValue(t, states, projectID, retyped, 42)
 	writeValue(t, states, projectID, kept, 7)
 
@@ -643,7 +643,7 @@ func TestRollback_KeepsTokensAndResetsAChangedTagType(t *testing.T) {
 		),
 		withDevices(projectv0.Device{ID: deviceID, Name: "meter", Protocol: "simulation", Config: projectv0.JSONObject(`{"host": "meter"}`)}),
 	)
-	mustCreateRevision(t, repo, projectID.UUID(), second, time.Now())
+	mustCreateDeployment(t, repo, projectID.UUID(), second, time.Now())
 	if _, err := db.ExecContext(ctx,
 		`INSERT INTO runtime.device_tokens (device_id, project_id, token_hash, fingerprint, issued_at)
 		 VALUES ($1, $2, $3, 'gsc_dev_…', now())`,
@@ -667,7 +667,7 @@ func TestRollback_KeepsTokensAndResetsAChangedTagType(t *testing.T) {
 		t.Errorf("the state of the unchanged tag is %q, want 7", got)
 	}
 	if got := countRows(t, `SELECT count(*) FROM runtime.devices WHERE id = $1`, deviceID); got != 0 {
-		t.Errorf("the copy of the device the copied revision lacks is still stored")
+		t.Errorf("the copy of the device the copied deployment lacks is still stored")
 	}
 	if got := countRows(t, `SELECT count(*) FROM runtime.device_tokens WHERE device_id = $1`, deviceID); got != 1 {
 		t.Errorf("the token of the dropped device is gone: a token outlives a rollback")
@@ -675,40 +675,40 @@ func TestRollback_KeepsTokensAndResetsAChangedTagType(t *testing.T) {
 }
 
 // TestRollback_OfTheRunningContent_IsRefused: the numbers differ, the
-// documents do not, and no Revision is appended (ADR 0014).
+// documents do not, and no Deployment is appended (ADR 0014).
 func TestRollback_OfTheRunningContent_IsRefused(t *testing.T) {
 	projectID, _ := newProject(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(postgres.DB(t))
+	repo := runtimepg.NewDeploymentRepositoryPostgres(postgres.DB(t))
 	ctx := context.Background()
 
 	file := documentOf(projectID, withTags(projectv0.TagDefinition{ID: uuid.New(), Name: "speed", Type: "integer"}))
-	mustCreateRevision(t, repo, projectID.UUID(), file, time.Now())
+	mustCreateDeployment(t, repo, projectID.UUID(), file, time.Now())
 
 	if _, err := repo.Rollback(ctx, projectID.UUID(), 1, time.Now()); !errors.Is(err, runtimeapp.ErrNothingToRollback) {
-		t.Fatalf("Rollback to the running revision: %v, want ErrNothingToRollback", err)
+		t.Fatalf("Rollback to the running deployment: %v, want ErrNothingToRollback", err)
 	}
-	if got := countRows(t, `SELECT count(*) FROM runtime.revisions WHERE project_id = $1`, projectID.UUID()); got != 1 {
-		t.Errorf("stored revisions %d, want 1", got)
+	if got := countRows(t, `SELECT count(*) FROM runtime.deployments WHERE project_id = $1`, projectID.UUID()); got != 1 {
+		t.Errorf("stored deployments %d, want 1", got)
 	}
 }
 
-// TestRollback_OfARevisionTheProjectDoesNotHave: a number the Project has no
-// Revision for, a number of another Project, and a Project without any
-// Revision are all a not-found.
-func TestRollback_OfARevisionTheProjectDoesNotHave(t *testing.T) {
+// TestRollback_OfADeploymentTheProjectDoesNotHave: a number the Project has no
+// Deployment for, a number of another Project, and a Project without any
+// Deployment are all a not-found.
+func TestRollback_OfADeploymentTheProjectDoesNotHave(t *testing.T) {
 	projectID, _ := newProject(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(postgres.DB(t))
+	repo := runtimepg.NewDeploymentRepositoryPostgres(postgres.DB(t))
 	ctx := context.Background()
 
-	if _, err := repo.Rollback(ctx, projectID.UUID(), 1, time.Now()); !errors.Is(err, runtimeapp.ErrRevisionNotFound) {
-		t.Errorf("Rollback of a project without revisions: %v, want ErrRevisionNotFound", err)
+	if _, err := repo.Rollback(ctx, projectID.UUID(), 1, time.Now()); !errors.Is(err, runtimeapp.ErrDeploymentNotFound) {
+		t.Errorf("Rollback of a project without deployments: %v, want ErrDeploymentNotFound", err)
 	}
-	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID), time.Now())
-	if _, err := repo.Rollback(ctx, projectID.UUID(), 7, time.Now()); !errors.Is(err, runtimeapp.ErrRevisionNotFound) {
-		t.Errorf("Rollback of a missing number: %v, want ErrRevisionNotFound", err)
+	mustCreateDeployment(t, repo, projectID.UUID(), documentOf(projectID), time.Now())
+	if _, err := repo.Rollback(ctx, projectID.UUID(), 7, time.Now()); !errors.Is(err, runtimeapp.ErrDeploymentNotFound) {
+		t.Errorf("Rollback of a missing number: %v, want ErrDeploymentNotFound", err)
 	}
-	if _, err := repo.FindByNumber(ctx, projectID.UUID(), 7); !errors.Is(err, runtimeapp.ErrRevisionNotFound) {
-		t.Errorf("FindByNumber of a missing number: %v, want ErrRevisionNotFound", err)
+	if _, err := repo.FindByNumber(ctx, projectID.UUID(), 7); !errors.Is(err, runtimeapp.ErrDeploymentNotFound) {
+		t.Errorf("FindByNumber of a missing number: %v, want ErrDeploymentNotFound", err)
 	}
 
 	otherID := id.NewID[project.Project]()
@@ -718,24 +718,24 @@ func TestRollback_OfARevisionTheProjectDoesNotHave(t *testing.T) {
 
 	// A number another Project has is not this Project's.
 	anotherID, _ := newProject(t)
-	mustCreateRevision(t, repo, anotherID.UUID(), documentOf(anotherID), time.Now())
-	mustCreateRevision(t, repo, anotherID.UUID(), documentOf(anotherID), time.Now())
-	if _, err := repo.Rollback(ctx, projectID.UUID(), 2, time.Now()); !errors.Is(err, runtimeapp.ErrRevisionNotFound) {
-		t.Errorf("Rollback to a number only another project has: %v, want ErrRevisionNotFound", err)
+	mustCreateDeployment(t, repo, anotherID.UUID(), documentOf(anotherID), time.Now())
+	mustCreateDeployment(t, repo, anotherID.UUID(), documentOf(anotherID), time.Now())
+	if _, err := repo.Rollback(ctx, projectID.UUID(), 2, time.Now()); !errors.Is(err, runtimeapp.ErrDeploymentNotFound) {
+		t.Errorf("Rollback to a number only another project has: %v, want ErrDeploymentNotFound", err)
 	}
-	if _, err := repo.FindByNumber(ctx, projectID.UUID(), 2); !errors.Is(err, runtimeapp.ErrRevisionNotFound) {
-		t.Errorf("FindByNumber of a number only another project has: %v, want ErrRevisionNotFound", err)
+	if _, err := repo.FindByNumber(ctx, projectID.UUID(), 2); !errors.Is(err, runtimeapp.ErrDeploymentNotFound) {
+		t.Errorf("FindByNumber of a number only another project has: %v, want ErrDeploymentNotFound", err)
 	}
 }
 
-// TestRevisionReads_OfADeletedProject_AreANotFound: the rows of a deleted
-// Project are not its Revisions to serve until its cleanup removes them.
-func TestRevisionReads_OfADeletedProject_AreANotFound(t *testing.T) {
+// TestDeploymentReads_OfADeletedProject_AreANotFound: the rows of a deleted
+// Project are not its Deployments to serve until its cleanup removes them.
+func TestDeploymentReads_OfADeletedProject_AreANotFound(t *testing.T) {
 	projectID, _ := newProject(t)
 	db := postgres.DB(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(db)
+	repo := runtimepg.NewDeploymentRepositoryPostgres(db)
 	ctx := context.Background()
-	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID), time.Now())
+	mustCreateDeployment(t, repo, projectID.UUID(), documentOf(projectID), time.Now())
 
 	if _, err := db.ExecContext(ctx, `UPDATE projects SET deleted_at = now() WHERE id = $1`, projectID.UUID()); err != nil {
 		t.Fatalf("mark the project deleted: %v", err)
@@ -755,25 +755,25 @@ func TestRevisionReads_OfADeletedProject_AreANotFound(t *testing.T) {
 // the other waits, so the numbers never collide.
 func TestRollback_AndADeploy_Serialize(t *testing.T) {
 	projectID, _ := newProject(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(postgres.DB(t))
+	repo := runtimepg.NewDeploymentRepositoryPostgres(postgres.DB(t))
 	ctx := context.Background()
 
-	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+	mustCreateDeployment(t, repo, projectID.UUID(), documentOf(projectID,
 		withTags(projectv0.TagDefinition{ID: uuid.New(), Name: "first", Type: "integer"})), time.Now())
-	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+	mustCreateDeployment(t, repo, projectID.UUID(), documentOf(projectID,
 		withTags(projectv0.TagDefinition{ID: uuid.New(), Name: "second", Type: "integer"})), time.Now())
 
 	numbers := make(chan int, 2)
 	errs := make(chan error, 2)
 	go func() {
-		revision, err := repo.Rollback(ctx, projectID.UUID(), 1, time.Now())
-		numbers <- revision.Number
+		deployment, err := repo.Rollback(ctx, projectID.UUID(), 1, time.Now())
+		numbers <- deployment.Number
 		errs <- err
 	}()
 	go func() {
-		revision, err := repo.CreateRevision(ctx, projectID.UUID(), documentOf(projectID,
-			withTags(projectv0.TagDefinition{ID: uuid.New(), Name: "third", Type: "integer"})), runtimeapp.RevisionCauseDeploy, time.Now())
-		numbers <- revision.Number
+		deployment, err := repo.CreateDeployment(ctx, projectID.UUID(), documentOf(projectID,
+			withTags(projectv0.TagDefinition{ID: uuid.New(), Name: "third", Type: "integer"})), runtimeapp.DeploymentCauseDeploy, time.Now())
+		numbers <- deployment.Number
 		errs <- err
 	}()
 	got := []int{}
@@ -787,20 +787,20 @@ func TestRollback_AndADeploy_Serialize(t *testing.T) {
 	if !reflect.DeepEqual(got, []int{3, 4}) {
 		t.Errorf("the two writers took numbers %v, want 3 and 4", got)
 	}
-	if n := countRows(t, `SELECT count(*) FROM runtime.revisions WHERE project_id = $1`, projectID.UUID()); n != 4 {
-		t.Errorf("stored revisions %d, want 4", n)
+	if n := countRows(t, `SELECT count(*) FROM runtime.deployments WHERE project_id = $1`, projectID.UUID()); n != 4 {
+		t.Errorf("stored deployments %d, want 4", n)
 	}
 }
 
 // TestRollback_TwoConcurrent_Serialize: two Rollbacks take the advisory lock
-// in turn, so both append a Revision and the numbers never collide.
+// in turn, so both append a Deployment and the numbers never collide.
 func TestRollback_TwoConcurrent_Serialize(t *testing.T) {
 	projectID, _ := newProject(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(postgres.DB(t))
+	repo := runtimepg.NewDeploymentRepositoryPostgres(postgres.DB(t))
 	ctx := context.Background()
 
 	for i, name := range []string{"first", "second", "third"} {
-		mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+		mustCreateDeployment(t, repo, projectID.UUID(), documentOf(projectID,
 			withTags(projectv0.TagDefinition{ID: uuid.New(), Name: name, Type: "integer"})),
 			time.Now().Add(time.Duration(i)*time.Minute))
 	}
@@ -809,8 +809,8 @@ func TestRollback_TwoConcurrent_Serialize(t *testing.T) {
 	errs := make(chan error, 2)
 	for _, target := range []int{1, 2} {
 		go func() {
-			revision, err := repo.Rollback(ctx, projectID.UUID(), target, time.Now())
-			numbers <- revision.Number
+			deployment, err := repo.Rollback(ctx, projectID.UUID(), target, time.Now())
+			numbers <- deployment.Number
 			errs <- err
 		}()
 	}
@@ -825,31 +825,31 @@ func TestRollback_TwoConcurrent_Serialize(t *testing.T) {
 	if !reflect.DeepEqual(got, []int{4, 5}) {
 		t.Errorf("the two rollbacks took numbers %v, want 4 and 5", got)
 	}
-	if n := countRows(t, `SELECT count(*) FROM runtime.revisions WHERE project_id = $1`, projectID.UUID()); n != 5 {
-		t.Errorf("stored revisions %d, want 5", n)
+	if n := countRows(t, `SELECT count(*) FROM runtime.deployments WHERE project_id = $1`, projectID.UUID()); n != 5 {
+		t.Errorf("stored deployments %d, want 5", n)
 	}
 }
 
 // TestFindAll_IsNewestFirstAndWithoutDocuments: the list carries the summaries
-// only, and a Project without a Revision has an empty one.
+// only, and a Project without a Deployment has an empty one.
 func TestFindAll_IsNewestFirstAndWithoutDocuments(t *testing.T) {
 	projectID, _ := newProject(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(postgres.DB(t))
+	repo := runtimepg.NewDeploymentRepositoryPostgres(postgres.DB(t))
 	ctx := context.Background()
 
 	empty, err := repo.FindAll(ctx, projectID.UUID())
 	if err != nil {
-		t.Fatalf("FindAll of a project without revisions: %v", err)
+		t.Fatalf("FindAll of a project without deployments: %v", err)
 	}
 	if empty == nil || len(empty) != 0 {
-		t.Errorf("FindAll of a project without revisions = %+v, want an empty list", empty)
+		t.Errorf("FindAll of a project without deployments = %+v, want an empty list", empty)
 	}
 
 	tagID := uuid.New()
 	start := time.Date(2026, 11, 4, 9, 0, 0, 0, time.UTC)
-	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+	mustCreateDeployment(t, repo, projectID.UUID(), documentOf(projectID,
 		withTags(projectv0.TagDefinition{ID: tagID, Name: "speed", Type: "integer"})), start)
-	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID,
+	mustCreateDeployment(t, repo, projectID.UUID(), documentOf(projectID,
 		withTags(
 			projectv0.TagDefinition{ID: tagID, Name: "speed", Type: "integer"},
 			projectv0.TagDefinition{ID: uuid.New(), Name: "flow", Type: "integer"},
@@ -867,12 +867,12 @@ func TestFindAll_IsNewestFirstAndWithoutDocuments(t *testing.T) {
 	}
 	for i, want := range []struct {
 		number int
-		cause  runtimeapp.RevisionCause
+		cause  runtimeapp.DeploymentCause
 		from   *int
 	}{
-		{3, runtimeapp.RevisionCauseRollback, ptr(1)},
-		{2, runtimeapp.RevisionCauseDeploy, nil},
-		{1, runtimeapp.RevisionCauseDeploy, nil},
+		{3, runtimeapp.DeploymentCauseRollback, ptr(1)},
+		{2, runtimeapp.DeploymentCauseDeploy, nil},
+		{1, runtimeapp.DeploymentCauseDeploy, nil},
 	} {
 		got := summaries[i]
 		if got.Number != want.number || got.Cause != want.cause {
@@ -889,13 +889,13 @@ func TestFindAll_IsNewestFirstAndWithoutDocuments(t *testing.T) {
 
 func ptr(n int) *int { return &n }
 
-// TestRevisionCause_Constraints: the store refuses a cause it does not know
-// and a rollback that does not name the Revision it copied.
-func TestRevisionCause_Constraints(t *testing.T) {
+// TestDeploymentCause_Constraints: the store refuses a cause it does not know
+// and a rollback that does not name the Deployment it copied.
+func TestDeploymentCause_Constraints(t *testing.T) {
 	projectID, _ := newProject(t)
 	db := postgres.DB(t)
-	repo := runtimepg.NewRevisionRepositoryPostgres(db)
-	mustCreateRevision(t, repo, projectID.UUID(), documentOf(projectID), time.Now())
+	repo := runtimepg.NewDeploymentRepositoryPostgres(db)
+	mustCreateDeployment(t, repo, projectID.UUID(), documentOf(projectID), time.Now())
 
 	for name, insert := range map[string]struct {
 		cause string
@@ -907,14 +907,14 @@ func TestRevisionCause_Constraints(t *testing.T) {
 		"rollback from nothing": {"rollback", ptr(9)},
 	} {
 		_, err := db.ExecContext(context.Background(),
-			`INSERT INTO runtime.revisions (project_id, n, deployed_at, cause, rolled_back_from, config)
+			`INSERT INTO runtime.deployments (project_id, number, deployed_at, cause, rolled_back_from, config)
 			 VALUES ($1, 2, now(), $2, $3, '{}')`,
 			projectID.UUID(), insert.cause, insert.from,
 		)
 		if err == nil {
 			t.Errorf("%s: the row was taken", name)
 			_, _ = db.ExecContext(context.Background(),
-				`DELETE FROM runtime.revisions WHERE project_id = $1 AND n = 2`, projectID.UUID())
+				`DELETE FROM runtime.deployments WHERE project_id = $1 AND number = 2`, projectID.UUID())
 		}
 	}
 }

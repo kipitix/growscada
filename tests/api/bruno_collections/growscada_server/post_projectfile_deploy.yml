@@ -1,5 +1,5 @@
 info:
-  name: deploy a project file as a Revision
+  name: deploy a project file as a Deployment
   type: http
   seq: 140
 
@@ -16,8 +16,8 @@ http:
   auth: inherit
 
 docs: |
-  A file becomes a new Revision without the Draft:
-  the Revision's cause is `file`, and its document is the one sent
+  A file becomes a new Deployment without the Draft:
+  the Deployment's cause is `file`, and its document is the one sent
   (ADR 0018). The Draft keeps its Version.
 
 runtime:

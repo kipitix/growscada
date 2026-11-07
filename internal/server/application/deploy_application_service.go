@@ -11,19 +11,19 @@ import (
 )
 
 // DeployService is the Engineering node's Deploy (task 35, Q6, Q8, Q9): it
-// assembles the ProjectFile of the Draft, compares it with the Revision the
+// assembles the ProjectFile of the Draft, compares it with the Deployment the
 // Project runs, and hands it to the Runtime node. It keeps no copy of what it
-// sent: the Revision is the only truth (ADR 0014).
+// sent: the Deployment is the only truth (ADR 0014).
 type DeployService interface {
 	// Deploy deploys the Draft of the live Project projectID and returns the
-	// Revision the Runtime node created. After a successful Deploy its
+	// Deployment the Runtime node created. After a successful Deploy its
 	// DraftChange stack is cleared (ADR 0017).
-	// Returns ErrNothingToDeploy if the Draft is the current Revision
+	// Returns ErrNothingToDeploy if the Draft is the current Deployment
 	// unchanged, and an error wrapping project.ErrProjectNotFound if the
 	// Project is not live.
-	Deploy(ctx context.Context, projectID uuid.UUID) (appdto.Revision, error)
+	Deploy(ctx context.Context, projectID uuid.UUID) (appdto.Deployment, error)
 	// Preview reports what Deploy would do, without deploying: the current
-	// Revision (absent until the first Deploy), whether the Draft is it
+	// Deployment (absent until the first Deploy), whether the Draft is it
 	// unchanged, and the runtime Widgets a Deploy would drop.
 	Preview(ctx context.Context, projectID uuid.UUID) (appdto.DeployPreview, error)
 }
@@ -42,10 +42,10 @@ func NewDeployService(aContent ProjectContent, aBuilder ProjectFileBuilder, aRun
 	return &deployServiceImpl{content: aContent, builder: aBuilder, runtime: aRuntime}
 }
 
-func (s deployServiceImpl) Deploy(ctx context.Context, projectID uuid.UUID) (appdto.Revision, error) {
+func (s deployServiceImpl) Deploy(ctx context.Context, projectID uuid.UUID) (appdto.Deployment, error) {
 	checked, _, err := s.content.open(ctx, projectID)
 	if err != nil {
-		return appdto.Revision{}, err
+		return appdto.Deployment{}, err
 	}
 	// The Draft is read and built over several queries with no transaction
 	// around them. The Version read before the build is checked again in a
@@ -54,40 +54,40 @@ func (s deployServiceImpl) Deploy(ctx context.Context, projectID uuid.UUID) (app
 	// ProjectFile (ADR 0022).
 	version, err := s.content.DraftVersion(ctx, checked)
 	if err != nil {
-		return appdto.Revision{}, err
+		return appdto.Deployment{}, err
 	}
 	file, err := s.builder.Build(ctx, projectID)
 	if err != nil {
-		return appdto.Revision{}, err
+		return appdto.Deployment{}, err
 	}
-	current, ok, err := s.runtime.FindCurrentRevision(ctx, projectID)
+	current, ok, err := s.runtime.FindCurrentDeployment(ctx, projectID)
 	if err != nil {
-		return appdto.Revision{}, fmt.Errorf("cannot read the current revision of project %s: %w", projectID, err)
+		return appdto.Deployment{}, fmt.Errorf("cannot read the current deployment of project %s: %w", projectID, err)
 	}
 	if ok {
 		unchanged, err := sameProjectFile(file, current.Content)
 		if err != nil {
-			return appdto.Revision{}, err
+			return appdto.Deployment{}, err
 		}
 		if unchanged {
-			return appdto.Revision{}, fmt.Errorf("%w: the draft of project %s is the revision it runs", ErrNothingToDeploy, projectID)
+			return appdto.Deployment{}, fmt.Errorf("%w: the draft of project %s is the deployment it runs", ErrNothingToDeploy, projectID)
 		}
 	}
 	if err := s.content.Drafts().CheckVersion(ctx, draft.ProjectScope(checked), version); err != nil {
-		return appdto.Revision{}, err
+		return appdto.Deployment{}, err
 	}
 
-	revision, err := s.runtime.Deploy(ctx, projectID, file)
+	deployment, err := s.runtime.Deploy(ctx, projectID, file)
 	if err != nil {
-		return appdto.Revision{}, fmt.Errorf("cannot deploy project %s: %w", projectID, err)
+		return appdto.Deployment{}, fmt.Errorf("cannot deploy project %s: %w", projectID, err)
 	}
-	// The Revision stands: the DraftChange stack that made it is cleared in a
+	// The Deployment stands: the DraftChange stack that made it is cleared in a
 	// transaction of its own, because Deploy crosses to the Runtime node. A
-	// failure to clear is reported while the Revision stands (ADR 0017).
+	// failure to clear is reported while the Deployment stands (ADR 0017).
 	if err := s.content.Drafts().ClearStack(ctx, draft.ProjectScope(checked)); err != nil {
-		return appdto.Revision{}, fmt.Errorf("cannot clear the draft stack of deployed project %s: %w", projectID, err)
+		return appdto.Deployment{}, fmt.Errorf("cannot clear the draft stack of deployed project %s: %w", projectID, err)
 	}
-	return revision, nil
+	return deployment, nil
 }
 
 func (s deployServiceImpl) Preview(ctx context.Context, projectID uuid.UUID) (appdto.DeployPreview, error) {
@@ -95,15 +95,15 @@ func (s deployServiceImpl) Preview(ctx context.Context, projectID uuid.UUID) (ap
 	if err != nil {
 		return appdto.DeployPreview{}, err
 	}
-	current, ok, err := s.runtime.FindCurrentRevision(ctx, projectID)
+	current, ok, err := s.runtime.FindCurrentDeployment(ctx, projectID)
 	if err != nil {
-		return appdto.DeployPreview{}, fmt.Errorf("cannot read the current revision of project %s: %w", projectID, err)
+		return appdto.DeployPreview{}, fmt.Errorf("cannot read the current deployment of project %s: %w", projectID, err)
 	}
 	preview := appdto.DeployPreview{DroppedWidgets: []appdto.DroppedWidget{}}
 	if !ok {
 		return preview, nil
 	}
-	preview.CurrentRevision = &current
+	preview.CurrentDeployment = &current
 	unchanged, err := sameProjectFile(file, current.Content)
 	if err != nil {
 		return appdto.DeployPreview{}, err

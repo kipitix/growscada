@@ -8,12 +8,12 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
 
-func TestDeploy_RevisionPreviewAndTagStates(t *testing.T) {
+func TestDeploy_DeploymentPreviewAndTagStates(t *testing.T) {
 	cleanProjectsRest(t)
 	router := newServices().router()
 
-	if rec := serve(router, http.MethodGet, mainPath+"/revision", nil); rec.Code != http.StatusNotFound {
-		t.Fatalf("GET revision before Deploy: %d, want 404", rec.Code)
+	if rec := serve(router, http.MethodGet, mainPath+"/deployment", nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("GET deployment before Deploy: %d, want 404", rec.Code)
 	}
 	if rec := serve(router, http.MethodGet, mainPath+"/tag-states", nil); rec.Code != http.StatusNotFound {
 		t.Fatalf("GET tag-states before Deploy: %d, want 404", rec.Code)
@@ -24,7 +24,7 @@ func TestDeploy_RevisionPreviewAndTagStates(t *testing.T) {
 		t.Fatalf("GET preview before Deploy: %d %s", rec.Code, rec.Body)
 	}
 	preview := decodeBody[apiv0.DeployPreviewResponse](t, rec)
-	if preview.CurrentRevision != nil || preview.Unchanged || preview.DroppedWidgets == nil || len(preview.DroppedWidgets) != 0 {
+	if preview.CurrentDeployment != nil || preview.Unchanged || preview.DroppedWidgets == nil || len(preview.DroppedWidgets) != 0 {
 		t.Errorf("preview before Deploy: %+v", preview)
 	}
 
@@ -43,16 +43,16 @@ func TestDeploy_RevisionPreviewAndTagStates(t *testing.T) {
 		t.Errorf("the first Deploy: %+v", deployed)
 	}
 
-	rec = serve(router, http.MethodGet, mainPath+"/revision", nil)
+	rec = serve(router, http.MethodGet, mainPath+"/deployment", nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET revision: %d %s", rec.Code, rec.Body)
+		t.Fatalf("GET deployment: %d %s", rec.Code, rec.Body)
 	}
-	revision := decodeBody[apiv0.RevisionResponse](t, rec)
-	if revision.Number != 1 || revision.DeployedAt == "" || revision.Content.ProjectID != mainProject {
-		t.Errorf("GET revision: %+v", revision)
+	deployment := decodeBody[apiv0.DeploymentResponse](t, rec)
+	if deployment.Number != 1 || deployment.DeployedAt == "" || deployment.Content.ProjectID != mainProject {
+		t.Errorf("GET deployment: %+v", deployment)
 	}
-	if len(revision.Content.Tags) == 0 {
-		t.Errorf("the Revision holds no Tag definitions: %+v", revision.Content)
+	if len(deployment.Content.Tags) == 0 {
+		t.Errorf("the Deployment holds no Tag definitions: %+v", deployment.Content)
 	}
 
 	rec = serve(router, http.MethodGet, mainPath+"/tag-states", nil)
@@ -69,7 +69,7 @@ func TestDeploy_RevisionPreviewAndTagStates(t *testing.T) {
 
 	rec = serve(router, http.MethodGet, mainPath+"/deploy/preview", nil)
 	preview = decodeBody[apiv0.DeployPreviewResponse](t, rec)
-	if preview.CurrentRevision == nil || preview.CurrentRevision.Number != 1 || !preview.Unchanged {
+	if preview.CurrentDeployment == nil || preview.CurrentDeployment.Number != 1 || !preview.Unchanged {
 		t.Errorf("preview after Deploy: %+v", preview)
 	}
 
@@ -78,26 +78,26 @@ func TestDeploy_RevisionPreviewAndTagStates(t *testing.T) {
 	}
 }
 
-// TestRevisions_ListDetailRollback drives the three routes of task 36: the
+// TestDeployments_ListDetailRollback drives the three routes of task 36: the
 // list (an empty array before the first Deploy), the detail with its document,
-// and a Rollback that appends a copy of an earlier Revision — with the
+// and a Rollback that appends a copy of an earlier Deployment — with the
 // refusals a bad number, a missing one and the running document get.
-func TestRevisions_ListDetailRollback(t *testing.T) {
+func TestDeployments_ListDetailRollback(t *testing.T) {
 	cleanProjectsRest(t)
 	router := newServices().router()
 
-	rec := serve(router, http.MethodGet, mainPath+"/revisions", nil)
+	rec := serve(router, http.MethodGet, mainPath+"/deployments", nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET revisions before the Deploy: %d %s", rec.Code, rec.Body)
+		t.Fatalf("GET deployments before the Deploy: %d %s", rec.Code, rec.Body)
 	}
-	if list := decodeBody[apiv0.ListRevisionsResponse](t, rec); list.Revisions == nil || len(list.Revisions) != 0 {
-		t.Errorf("the list of a project without a Revision: %+v", list.Revisions)
+	if list := decodeBody[apiv0.ListDeploymentsResponse](t, rec); list.Deployments == nil || len(list.Deployments) != 0 {
+		t.Errorf("the list of a project without a Deployment: %+v", list.Deployments)
 	}
-	if rec := serve(router, http.MethodGet, mainPath+"/revisions/1", nil); rec.Code != http.StatusNotFound {
-		t.Errorf("GET a Revision of a project without one: %d, want 404", rec.Code)
+	if rec := serve(router, http.MethodGet, mainPath+"/deployments/1", nil); rec.Code != http.StatusNotFound {
+		t.Errorf("GET a Deployment of a project without one: %d, want 404", rec.Code)
 	}
-	if rec := serve(router, http.MethodPost, mainPath+"/revisions/1/rollback", nil); rec.Code != http.StatusNotFound {
-		t.Errorf("Rollback of a project without a Revision: %d, want 404", rec.Code)
+	if rec := serve(router, http.MethodPost, mainPath+"/deployments/1/rollback", nil); rec.Code != http.StatusNotFound {
+		t.Errorf("Rollback of a project without a Deployment: %d, want 404", rec.Code)
 	}
 
 	rec = serve(router, http.MethodPost, mainPath+"/tags", apiv0.CreateTagRequest{Name: "speed", Type: "integer"})
@@ -109,20 +109,20 @@ func TestRevisions_ListDetailRollback(t *testing.T) {
 		t.Fatalf("POST deploy: %d %s", rec.Code, rec.Body)
 	}
 
-	rec = serve(router, http.MethodGet, mainPath+"/revisions", nil)
-	list := decodeBody[apiv0.ListRevisionsResponse](t, rec)
-	if len(list.Revisions) != 1 || list.Revisions[0].Number != 1 || list.Revisions[0].Cause != apiv0.RevisionCauseDeploy {
-		t.Fatalf("the list after the first Deploy: %+v", list.Revisions)
+	rec = serve(router, http.MethodGet, mainPath+"/deployments", nil)
+	list := decodeBody[apiv0.ListDeploymentsResponse](t, rec)
+	if len(list.Deployments) != 1 || list.Deployments[0].Number != 1 || list.Deployments[0].Cause != apiv0.DeploymentCauseDeploy {
+		t.Fatalf("the list after the first Deploy: %+v", list.Deployments)
 	}
-	if list.Revisions[0].RolledBackFrom != nil {
-		t.Errorf("a Deploy names a Revision it copied: %v", list.Revisions[0].RolledBackFrom)
-	}
-
-	if rec := serve(router, http.MethodGet, mainPath+"/revisions/abc", nil); rec.Code != http.StatusBadRequest {
-		t.Errorf("GET a revision number that is not a number: %d, want 400", rec.Code)
+	if list.Deployments[0].RolledBackFrom != nil {
+		t.Errorf("a Deploy names a Deployment it copied: %v", list.Deployments[0].RolledBackFrom)
 	}
 
-	// The second Revision differs from the first: another Tag.
+	if rec := serve(router, http.MethodGet, mainPath+"/deployments/abc", nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("GET a deployment number that is not a number: %d, want 400", rec.Code)
+	}
+
+	// The second Deployment differs from the first: another Tag.
 	rec = serve(router, http.MethodPost, mainPath+"/tags", apiv0.CreateTagRequest{Name: "flow", Type: "integer"})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("POST the second tag: %d %s", rec.Code, rec.Body)
@@ -131,57 +131,57 @@ func TestRevisions_ListDetailRollback(t *testing.T) {
 		t.Fatalf("the second deploy: %d %s", rec.Code, rec.Body)
 	}
 
-	rec = serve(router, http.MethodGet, mainPath+"/revisions/1", nil)
+	rec = serve(router, http.MethodGet, mainPath+"/deployments/1", nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET revision 1: %d %s", rec.Code, rec.Body)
+		t.Fatalf("GET deployment 1: %d %s", rec.Code, rec.Body)
 	}
-	firstRevision := decodeBody[apiv0.RevisionResponse](t, rec)
-	if firstRevision.Number != 1 || firstRevision.Cause != apiv0.RevisionCauseDeploy {
-		t.Errorf("revision 1: %+v", firstRevision)
+	firstDeployment := decodeBody[apiv0.DeploymentResponse](t, rec)
+	if firstDeployment.Number != 1 || firstDeployment.Cause != apiv0.DeploymentCauseDeploy {
+		t.Errorf("deployment 1: %+v", firstDeployment)
 	}
-	if len(firstRevision.Content.Tags) != 1 || firstRevision.Content.Tags[0].ID != first.ID {
-		t.Errorf("revision 1 carries %+v, want only the first tag", firstRevision.Content.Tags)
+	if len(firstDeployment.Content.Tags) != 1 || firstDeployment.Content.Tags[0].ID != first.ID {
+		t.Errorf("deployment 1 carries %+v, want only the first tag", firstDeployment.Content.Tags)
 	}
-	if rec := serve(router, http.MethodGet, mainPath+"/revisions/99", nil); rec.Code != http.StatusNotFound {
-		t.Errorf("GET a missing revision: %d, want 404", rec.Code)
-	}
-
-	// The running Revision's own document is nothing to roll back to.
-	if rec := serve(router, http.MethodPost, mainPath+"/revisions/2/rollback", nil); rec.Code != http.StatusConflict {
-		t.Errorf("Rollback to the running revision: %d, want 409", rec.Code)
+	if rec := serve(router, http.MethodGet, mainPath+"/deployments/99", nil); rec.Code != http.StatusNotFound {
+		t.Errorf("GET a missing deployment: %d, want 404", rec.Code)
 	}
 
-	rec = serve(router, http.MethodPost, mainPath+"/revisions/1/rollback", nil)
+	// The running Deployment's own document is nothing to roll back to.
+	if rec := serve(router, http.MethodPost, mainPath+"/deployments/2/rollback", nil); rec.Code != http.StatusConflict {
+		t.Errorf("Rollback to the running deployment: %d, want 409", rec.Code)
+	}
+
+	rec = serve(router, http.MethodPost, mainPath+"/deployments/1/rollback", nil)
 	if rec.Code != http.StatusCreated {
-		t.Fatalf("Rollback to revision 1: %d %s", rec.Code, rec.Body)
+		t.Fatalf("Rollback to deployment 1: %d %s", rec.Code, rec.Body)
 	}
-	rolled := decodeBody[apiv0.RevisionSummaryResponse](t, rec)
-	if rolled.Number != 3 || rolled.Cause != apiv0.RevisionCauseRollback {
-		t.Errorf("the rolled-back revision: %+v", rolled)
+	rolled := decodeBody[apiv0.DeploymentSummaryResponse](t, rec)
+	if rolled.Number != 3 || rolled.Cause != apiv0.DeploymentCauseRollback {
+		t.Errorf("the rolled-back deployment: %+v", rolled)
 	}
 	if rolled.RolledBackFrom == nil || *rolled.RolledBackFrom != 1 {
-		t.Errorf("the rollback names %v, want revision 1", rolled.RolledBackFrom)
+		t.Errorf("the rollback names %v, want deployment 1", rolled.RolledBackFrom)
 	}
 
-	rec = serve(router, http.MethodGet, mainPath+"/revision", nil)
-	running := decodeBody[apiv0.RevisionResponse](t, rec)
-	if rec.Code != http.StatusOK || running.Number != 3 || running.Cause != apiv0.RevisionCauseRollback {
-		t.Fatalf("the running revision after the Rollback: %d %+v", rec.Code, running)
+	rec = serve(router, http.MethodGet, mainPath+"/deployment", nil)
+	running := decodeBody[apiv0.DeploymentResponse](t, rec)
+	if rec.Code != http.StatusOK || running.Number != 3 || running.Cause != apiv0.DeploymentCauseRollback {
+		t.Fatalf("the running deployment after the Rollback: %d %+v", rec.Code, running)
 	}
 	if len(running.Content.Tags) != 1 || running.Content.Tags[0].ID != first.ID {
-		t.Errorf("the running document is %+v, want the copy of revision 1", running.Content.Tags)
+		t.Errorf("the running document is %+v, want the copy of deployment 1", running.Content.Tags)
 	}
 
-	rec = serve(router, http.MethodGet, mainPath+"/revisions", nil)
-	list = decodeBody[apiv0.ListRevisionsResponse](t, rec)
-	if len(list.Revisions) != 3 || list.Revisions[0].Number != 3 || list.Revisions[0].Cause != apiv0.RevisionCauseRollback {
-		t.Errorf("the list after the Rollback: %+v", list.Revisions)
+	rec = serve(router, http.MethodGet, mainPath+"/deployments", nil)
+	list = decodeBody[apiv0.ListDeploymentsResponse](t, rec)
+	if len(list.Deployments) != 3 || list.Deployments[0].Number != 3 || list.Deployments[0].Cause != apiv0.DeploymentCauseRollback {
+		t.Errorf("the list after the Rollback: %+v", list.Deployments)
 	}
 }
 
-// TestRevisions_OfADeletedProject_Are404: a deleted Project keeps its rows
-// until its cleanup removes them, but they are not its Revisions to serve.
-func TestRevisions_OfADeletedProject_Are404(t *testing.T) {
+// TestDeployments_OfADeletedProject_Are404: a deleted Project keeps its rows
+// until its cleanup removes them, but they are not its Deployments to serve.
+func TestDeployments_OfADeletedProject_Are404(t *testing.T) {
 	cleanProjectsRest(t)
 	router := newServices().router()
 	if rec := serve(router, http.MethodPost, mainPath+"/deploy", nil); rec.Code != http.StatusCreated {
@@ -198,13 +198,13 @@ func TestRevisions_OfADeletedProject_Are404(t *testing.T) {
 		}
 	})
 
-	if rec := serve(router, http.MethodGet, mainPath+"/revisions", nil); rec.Code != http.StatusNotFound {
-		t.Errorf("GET revisions of a deleted project: %d, want 404", rec.Code)
+	if rec := serve(router, http.MethodGet, mainPath+"/deployments", nil); rec.Code != http.StatusNotFound {
+		t.Errorf("GET deployments of a deleted project: %d, want 404", rec.Code)
 	}
-	if rec := serve(router, http.MethodGet, mainPath+"/revisions/1", nil); rec.Code != http.StatusNotFound {
-		t.Errorf("GET revision 1 of a deleted project: %d, want 404", rec.Code)
+	if rec := serve(router, http.MethodGet, mainPath+"/deployments/1", nil); rec.Code != http.StatusNotFound {
+		t.Errorf("GET deployment 1 of a deleted project: %d, want 404", rec.Code)
 	}
-	if rec := serve(router, http.MethodPost, mainPath+"/revisions/1/rollback", nil); rec.Code != http.StatusNotFound {
+	if rec := serve(router, http.MethodPost, mainPath+"/deployments/1/rollback", nil); rec.Code != http.StatusNotFound {
 		t.Errorf("Rollback of a deleted project: %d, want 404", rec.Code)
 	}
 }
@@ -214,7 +214,7 @@ func TestDeploy_Discard(t *testing.T) {
 	router := newServices().router()
 
 	if rec := serve(router, http.MethodPost, mainPath+"/discard", nil); rec.Code != http.StatusConflict {
-		t.Fatalf("POST discard without a Revision: %d, want 409", rec.Code)
+		t.Fatalf("POST discard without a Deployment: %d, want 409", rec.Code)
 	}
 	if rec := serve(router, http.MethodPost, mainPath+"/deploy", nil); rec.Code != http.StatusCreated {
 		t.Fatalf("POST deploy: %d %s", rec.Code, rec.Body)
