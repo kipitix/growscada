@@ -813,8 +813,9 @@ func (p *ProjectClient) Revision(ctx context.Context) (RevisionState, error) {
 	return RevisionState{Revision: resp, Deployed: err == nil}, err
 }
 
-// TagStates returns the states of the Tags of the running Revision, by Tag ID
-// (their string form): the snapshot Operation renders before tag_updated.
+// TagStates returns the states of the Tags of the running Revision, by Tag ID:
+// the snapshot of a reader that does not follow the Journal, since Operation
+// reads its starting state from …/operation (ADR 0020).
 func (p *ProjectClient) TagStates(ctx context.Context) (map[string]apiv0.TagStateResponse, error) {
 	var resp apiv0.GetTagStatesResponse
 	err := p.do(ctx, http.MethodGet, "/tag-states", nil, http.StatusOK, &resp)

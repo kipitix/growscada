@@ -129,10 +129,12 @@ type TagStateResponse struct {
 }
 
 // GetTagStatesResponse is the snapshot of the Tag states of the running
-// Revision, by Tag ID, for the first render of Operation: later changes arrive
-// as tag_updated. A Project without a Revision answers 404; a Tag of the
-// Revision without a state is left out (its state is the TagType's zero value
-// with quality bad).
+// Revision, by Tag ID, for the first render of a reader that does not follow
+// the Journal: later changes arrive as tag_updated. Operation reads its
+// starting state from GET …/operation and follows the Journal instead (ADR
+// 0020). A Project without a Revision answers 404; a Tag of the Revision
+// without a state is left out (its state is the TagType's zero value with
+// quality bad).
 type GetTagStatesResponse struct {
 	TagStates map[string]TagStateResponse `json:"tag_states"`
 }
