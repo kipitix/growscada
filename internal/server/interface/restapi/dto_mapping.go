@@ -625,12 +625,34 @@ func newDeployPreviewResponse(preview appdto.DeployPreview) apiv0.DeployPreviewR
 	return resp
 }
 
+func newTagStateSnapshotResponse(state runtimeapp.TagState) apiv0.TagStateResponse {
+	return apiv0.TagStateResponse{
+		Value: state.Value, Quality: state.Quality, Seq: state.Seq, WrittenAt: writtenAt(state.WrittenAt),
+	}
+}
+
 func newGetTagStatesResponse(states []runtimeapp.TagState) apiv0.GetTagStatesResponse {
 	resp := apiv0.GetTagStatesResponse{TagStates: make(map[string]apiv0.TagStateResponse, len(states))}
 	for _, state := range states {
-		resp.TagStates[state.ID.String()] = apiv0.TagStateResponse{
-			Value: state.Value, Quality: state.Quality, Seq: state.Seq, WrittenAt: writtenAt(state.WrittenAt),
-		}
+		resp.TagStates[state.ID.String()] = newTagStateSnapshotResponse(state)
+	}
+	return resp
+}
+
+// newOperationStateResponse maps the Runtime node's Operation state to its
+// contract body: the position, the Revision (null until the first Deploy) and
+// every Tag's state by ID. tag_states is an empty object, never null.
+func newOperationStateResponse(state runtimeapp.OperationState) apiv0.OperationStateResponse {
+	resp := apiv0.OperationStateResponse{
+		Position:  state.Position,
+		TagStates: make(map[string]apiv0.TagStateResponse, len(state.TagStates)),
+	}
+	if state.Deployed {
+		revision := newRevisionResponse(state.Revision)
+		resp.Revision = &revision
+	}
+	for _, tagState := range state.TagStates {
+		resp.TagStates[tagState.ID.String()] = newTagStateSnapshotResponse(tagState)
 	}
 	return resp
 }

@@ -142,6 +142,10 @@ func main() {
 	// The Journal is the Runtime node's operational record: its read side is
 	// served to the API as it is, never through the RuntimeNode port (ADR 0019).
 	journalService := runtimeapp.NewJournalService(runtimepg.NewJournalRepositoryPostgres(sqlDB))
+	// The Operation read model is the Runtime node's too: it composes the
+	// Journal position, the running Revision and its Tag states in one answer
+	// for the Player (task 43, ADR 0020). The Engineering node never reads it.
+	operationStateService := runtimeapp.NewOperationStateService(journalService, revisionService, tagStateService)
 	// Registry of the policies: changes spanning aggregates, run as jobs
 	// apart from event delivery (ADR 0008)
 	policyRunner := outbox.NewPolicyRunner(sqlDB, []application.Policy{
@@ -225,6 +229,7 @@ func main() {
 		DeviceTokens: deviceTokenService,
 		EditLocks:    editLockService,
 		Journal:      journalService,
+		Operation:    operationStateService,
 	}, eventBus, cliArgs.MaxSSEClients)
 	// The reaper of the EditLocks: every 30 s it refreshes the last_seen of the
 	// holders present over SSE and frees a lock whose holder stopped being

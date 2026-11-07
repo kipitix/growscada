@@ -251,6 +251,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	deviceTokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(db))
 	runtimeNode := inprocess.NewRuntimeNode(tagStateSvc, deviceTokens, revisions)
 	journal := runtimeapp.NewJournalService(runtimepg.NewJournalRepositoryPostgres(db))
+	operation := runtimeapp.NewOperationStateService(journal, revisions, tagStateSvc)
 	tagSvc := application.NewTagService(content, runtimeNode)
 	widgetTypes := repositories.NewWidgetTypeRepositories(db)
 	runner := outbox.NewPolicyRunner(db, []application.Policy{
@@ -291,6 +292,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 		DeviceTokens: deviceTokens,
 		EditLocks:    editLocks,
 		Journal:      journal,
+		Operation:    operation,
 	}, bus, 100)
 
 	srv := httptest.NewServer(router.ServeMux())

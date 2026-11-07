@@ -35,6 +35,7 @@ type APIRouter struct {
 	projectFileHandlers  *ProjectFileHandlers
 	eventsHandlers       *EventsHandlers
 	journalHandlers      *JournalHandlers
+	operationHandlers    *OperationHandlers
 }
 
 func (r APIRouter) ServeMux() http.Handler {
@@ -93,8 +94,9 @@ func corsMiddleware(next http.Handler) http.Handler {
 // Services are the services the server API serves: the Engineering node's,
 // and the Runtime node's TagStates, which writes the tags' states,
 // DeviceTokens, which authenticates Devices and manages their tokens,
-// Revisions, which reads the running Revision, and DeviceConfig, which reads
-// the running Revision's copies (ADR 0011). A Device token service that is nil
+// Revisions, which reads the running Revision, DeviceConfig, which reads
+// the running Revision's copies, and Operation, which reads the starting
+// state of Operation (ADR 0011, ADR 0020). A Device token service that is nil
 // is a server without the Runtime node: token management answers 404.
 type Services struct {
 	Projects     application.ProjectService
@@ -116,6 +118,7 @@ type Services struct {
 	DeviceTokens runtimeapp.DeviceTokenService
 	EditLocks    application.EditLockService
 	Journal      runtimeapp.JournalService
+	Operation    runtimeapp.OperationStateService
 }
 
 // NewRouter returns the server API over the services of both roles.
@@ -144,6 +147,7 @@ func NewRouter(services Services, eventBus eventbus.EventBus, maxSSEClients int)
 		projectFileHandlers:  NewProjectFileHandler(services.ProjectFiles),
 		eventsHandlers:       NewEventsHandler(eventBus, projectService, maxSSEClients, WithDeviceTokens(services.DeviceTokens), WithEditLocks(services.EditLocks)),
 		journalHandlers:      NewJournalHandler(services.Journal, eventBus),
+		operationHandlers:    NewOperationHandler(services.Operation),
 	}
 	for _, rt := range router.routes() {
 		router.serveMux.HandleFunc(rt.pattern, rt.handler)
@@ -262,6 +266,7 @@ func (r *APIRouter) routes() []route {
 		{"GET " + pp + "/tag-states", deploy.GetTagStates},
 		{"GET " + pp + apiv0.JournalPath, r.journalHandlers.GetJournal},
 		{"GET " + pp + apiv0.JournalEventsPath, r.journalHandlers.GetJournalEvents},
+		{"GET " + pp + apiv0.OperationPath, r.operationHandlers.GetOperation},
 		{"GET " + pp + "/deploy/preview", deploy.GetDeployPreview},
 		{"POST " + pp + "/deploy", deploy.PostDeploy},
 		{"POST " + pp + "/discard", deploy.PostDiscard},

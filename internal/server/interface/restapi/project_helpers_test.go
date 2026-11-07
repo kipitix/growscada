@@ -54,6 +54,7 @@ type testServices struct {
 	draft        application.DraftService
 	draftChanges application.DraftChangesService
 	journal      runtimeapp.JournalService
+	operation    runtimeapp.OperationStateService
 }
 
 // newServices returns the services over the test database; the Runtime
@@ -82,6 +83,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(db), publish)
 	deviceTokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(db))
 	runtimeNode := inprocess.NewRuntimeNode(states, deviceTokens, revisions)
+	journal := runtimeapp.NewJournalService(runtimepg.NewJournalRepositoryPostgres(db))
 	return testServices{
 		projects:     application.NewProjectService(projectRepo, orgID),
 		tags:         application.NewTagService(content, runtimeNode),
@@ -101,7 +103,8 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		environments: application.NewEnvironmentService(content),
 		deviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(db)),
 		deviceTokens: deviceTokens,
-		journal:      runtimeapp.NewJournalService(runtimepg.NewJournalRepositoryPostgres(db)),
+		journal:      journal,
+		operation:    runtimeapp.NewOperationStateService(journal, revisions, states),
 	}
 }
 
@@ -114,7 +117,7 @@ func (s testServices) services() restapi.Services {
 		Draft: s.draft, DraftChanges: s.draftChanges,
 		Deploy: s.deploy, Discard: s.discard, ProjectFiles: s.projectFiles, Revisions: s.revisions,
 		DeviceConfig: s.deviceConfig, DeviceTokens: s.deviceTokens, EditLocks: s.editLocks,
-		Journal: s.journal,
+		Journal: s.journal, Operation: s.operation,
 	}
 }
 

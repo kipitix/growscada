@@ -821,6 +821,17 @@ func (p *ProjectClient) TagStates(ctx context.Context) (map[string]apiv0.TagStat
 	return resp.TagStates, err
 }
 
+// Operation returns the starting state of Operation (task 43, ADR 0020): the
+// Project's Journal position, the Revision it runs (nil until the first
+// Deploy) and the states of that Revision's Tags by ID. A live Project answers
+// even before its first Deploy, so a nil Revision is not an error; a Project
+// that is gone matches ErrNotFound.
+func (p *ProjectClient) Operation(ctx context.Context) (apiv0.OperationStateResponse, error) {
+	var resp apiv0.OperationStateResponse
+	err := p.do(ctx, http.MethodGet, apiv0.OperationPath, nil, http.StatusOK, &resp)
+	return resp, err
+}
+
 // Journal returns the Project's Journal entries after the position from, in
 // the order of their positions, at most limit of them (task 42, ADR 0019).
 // from is exclusive; a Project that is not live matches ErrNotFound.

@@ -400,3 +400,60 @@ func TestJournal_ReadsTheProjectsEntries(t *testing.T) {
 		t.Errorf("Journal of an unknown project: %v, want ErrNotFound", err)
 	}
 }
+
+func TestOperation_ReturnsTheStartingState(t *testing.T) {
+	client := startClient(t)
+	ctx := context.Background()
+	project := client.Project(servertest.MainProject)
+
+	before, err := project.Operation(ctx)
+	if err != nil {
+		t.Fatalf("Operation before Deploy: %v", err)
+	}
+	if before.Revision != nil {
+		t.Errorf("Operation before Deploy carries a Revision: %+v", before.Revision)
+	}
+	if before.TagStates == nil || len(before.TagStates) != 0 {
+		t.Errorf("Operation before Deploy has tag_states %+v, want an empty object", before.TagStates)
+	}
+
+	created, err := project.CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.flow", Type: "integer"})
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	servertest.DeployProject(t, postgres.DB(t), servertest.MainProject)
+
+	after, err := project.Operation(ctx)
+	if err != nil {
+		t.Fatalf("Operation after Deploy: %v", err)
+	}
+	if after.Revision == nil || after.Revision.Number != 1 || after.Revision.Content.ProjectID != servertest.MainProject {
+		t.Fatalf("Operation after Deploy: %+v", after.Revision)
+	}
+	initial := after.TagStates[created.ID.String()]
+	if initial.Value != "0" || initial.Quality != "bad" || initial.Seq != 0 {
+		t.Errorf("the initial state of the new Tag: %+v", initial)
+	}
+	if after.Position <= 0 {
+		t.Errorf("the position after Deploy is %d, want the revision entry's", after.Position)
+	}
+
+	seq, err := project.SetTagValue(ctx, created.ID, "42", "good")
+	if err != nil {
+		t.Fatalf("SetTagValue: %v", err)
+	}
+	written, err := project.Operation(ctx)
+	if err != nil {
+		t.Fatalf("Operation after the write: %v", err)
+	}
+	if state := written.TagStates[created.ID.String()]; state.Value != "42" || state.Quality != "good" || state.Seq != seq {
+		t.Errorf("the state after the write: %+v", state)
+	}
+	if written.Position != seq {
+		t.Errorf("the position after the write is %d, want the state's %d", written.Position, seq)
+	}
+
+	if _, err := client.Project(uuid.New()).Operation(ctx); !errors.Is(err, apiclient.ErrNotFound) {
+		t.Errorf("Operation of an unknown project: %v, want ErrNotFound", err)
+	}
+}
