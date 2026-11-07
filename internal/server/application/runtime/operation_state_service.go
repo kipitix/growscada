@@ -34,8 +34,8 @@ type OperationStateService interface {
 	// the position last could hide it from Operation forever (ADR 0020).
 	// Every Tag of the Revision is present: one the Runtime node holds no
 	// state of is its TagType's zero value with Quality bad and position 0.
-	// A Project that is not live, or belongs to another Organization, is an
-	// error wrapping project.ErrProjectNotFound.
+	// A Project that is not live is an error wrapping
+	// project.ErrProjectNotFound.
 	Get(ctx context.Context, projectID uuid.UUID) (OperationState, error)
 }
 
