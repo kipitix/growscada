@@ -1,5 +1,6 @@
 # Разделение команд и запросов (CQRS, ступень 1)
 Status: needs-triage
+Priority: 3
 
 Появилось в grilling задачи 21 (2026-10-11). Сейчас модель одна: запросы идут через те же агрегаты и репозитории, что и команды. Ступень 1 разводит модели записи и чтения в одной БД — синхронно, без проекций и без eventual consistency.
 
@@ -22,7 +23,7 @@ Status: needs-triage
 ## Ограничения
 
 - Ступень 2 (отдельные read-таблицы, обновляемые проектором по событиям) — не здесь. Если понадобится, проектор строится на механизме `policy_jobs` (задача 21, ADR 0008): задание с ключом агрегата пересобирает строку проекции из текущего состояния (Event Notification, не event sourcing — ADR 0002).
-- Revision/ProjectFile (модель чтения Runtime node) и Journal + Checkpoint (модель чтения History и Player) — уже отдельные модели. Эта задача касается модели Draft на Engineering node и временного Operation поверх текущих таблиц.
+- Revision/ProjectFile (модель чтения Runtime node), Commit/Release (новые read-модели Engineering node, 72_2–72_5) и Journal + Checkpoint (модель чтения History и Player) — уже отдельные модели. Эта задача касается модели Draft на Engineering node и временного Operation поверх текущих таблиц.
 
 ## Приёмка
 

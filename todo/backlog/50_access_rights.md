@@ -1,9 +1,10 @@
 # Права доступа
+Priority: 3
 Blocked by: 34, 49
 
 - Разграничение пользователей и устройств
 - Для пользователей авторизация через внешние системы
-- Права пользователей в Organization и Project (кто может Deploy, Release, Rollback)
+- Права пользователей в Organization и Project (кто может Save/Commit, Release, Deploy, Rollback)
 - Устройства авторизуются Device Token (задача 34)
 
 ## Comments

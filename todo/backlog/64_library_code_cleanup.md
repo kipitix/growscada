@@ -1,5 +1,6 @@
 # Чистка кода после задачи 33
 Status: needs-triage
+Priority: 3
 
 Появилось при ревью задачи 33 (находки №10–13). Это не ошибки в поведении (кроме недетерминированного сообщения growctl), а места, где код легко разойдётся при следующих изменениях.
 
@@ -8,3 +9,7 @@ Status: needs-triage
 - **Дубль CAS в репозитории закреплений** (`postgres/repositories/library_pin_repository_postgres.go`). `Save` и `Delete` заново реализуют шаг версии (Initial→Committed, Next) и транзакцию из `aggregateStore.save`/`delete`, хотя у `aggregateStore` есть хук `lock` как раз для такой блокировки. Перевести закрепления на `aggregateStore`, передав `lockForChange` хуком, чтобы изменения CAS и классификации конфликтов доходили и до них.
 - **Разбор версии клиента в шести местах** (`application/`: `libraryVersion` в `LibraryService`, inline в `LibraryPinService`, `WidgetTypeService`, `ProjectService`, `SceneService`). Правило одно: «отрицательная версия — это ошибка ввода клиента (400), а не конфликт». Свести к обобщённой `clientVersion[T](raw int) (version.Version[T], error)` с одной формулировкой ошибки.
 - `make build`, `make test`, `make bruno_test` проходят без изменений в API.
+
+## Comments
+
+- 2026-11-07: `WithNumber`, `DraftDiffers` и Release-путь меняются в 72_2/72_5 (Release из Commit). Выполнять после 72_5, иначе чистка разойдётся с новой моделью.

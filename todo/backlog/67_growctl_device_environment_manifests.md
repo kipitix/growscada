@@ -1,6 +1,7 @@
 # growctl: манифесты Device и Environment
 Status: needs-triage
-Blocked by: 34_4
+Priority: 3
+Blocked by: 34_4, 72_8
 
 Слой C. Термины — `GLOSSARY.md` (Device, Environment, Environment Device).
 
@@ -29,3 +30,4 @@ Blocked by: 34_4
 ## Comments
 
 - 2026-11-01 (grilling задачи 34): выделено из задачи 34 вместе с UI; спецификация — за инженером.
+- 2026-11-07: после 72_8 growctl работает без Check in/out; apply правит Draft, публикация — save → release → deploy. Выполнять после 72_8, чтобы не переписывать команды дважды.

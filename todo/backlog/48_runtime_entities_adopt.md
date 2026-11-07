@@ -1,12 +1,13 @@
 # Runtime-сущности от Operator и Adopt
 Status: ready-for-human
-Blocked by: 38, 43
+Priority: 3
+Blocked by: 38, 43, 72_4
 
 Слой E. Термины — `GLOSSARY.md` (Origin, Adopt).
 
-- Operator в Operation создаёт/изменяет/удаляет runtime-Widgets (Origin=Runtime) на Scenes текущей Revision; WidgetType менять не может.
+- Operator в Operation создаёт/изменяет/удаляет runtime-Widgets (Origin=Runtime) на Scenes текущей Deployment; WidgetType менять не может.
 - Все изменения — записи Journal.
-- Adopt: Engineer явно принимает runtime-Tag или runtime-Widget в Draft (одна DraftChange), ID сохраняется; после Deploy Origin=Project.
+- Adopt: Engineer явно принимает runtime-Tag или runtime-Widget в Draft (одна DraftChange), ID сохраняется; после Deploy Release Origin=Project.
 - Регистрация runtime-тегов со стороны Device — после задачи 34.
 - Поле Origin (`Project`/`Runtime`) у Tag и Widget, enum без Unknown (ADR 0001); имя Tag уникально среди всех Tag проекта независимо от Origin. Перенесено из задачи 32 (ADR 0011): вводится вместе с первым создателем Runtime-origin сущностей.
 

@@ -1,6 +1,7 @@
 # Типизированный конфиг протокола `simulation`
 
 Status: ready-for-agent
+Priority: 3
 
 Домен принимает `Device.Config` как любой JSON-объект (`domain/device/device_config.go`), хотя спека задачи 34 (часть A, «Сущности») требует: «`config` — JSON под протокол (для `simulation` валидируется типизированно)». Из-за этого в Draft сохраняется конфиг, который Gateway не сможет исполнить, а `Device.Update` меняет протокол, не перепроверяя конфиг.
 

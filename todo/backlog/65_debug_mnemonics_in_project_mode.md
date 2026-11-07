@@ -1,6 +1,7 @@
 # Отладка мнемосхем в Project-режиме на живых данных
 Status: needs-info
-Blocked by: 34_4
+Priority: 3
+Blocked by: 34_4, 72_6
 
 Слой E. Термины — `GLOSSARY.md` (Draft Tag state, Tag state).
 

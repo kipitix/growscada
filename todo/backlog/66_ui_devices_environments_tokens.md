@@ -1,6 +1,7 @@
 # UI: устройства, окружения и токены в режиме Project
 Status: needs-triage
-Blocked by: 34_4
+Priority: 3
+Blocked by: 34_4, 72_6
 
 Слой E. Термины — `GLOSSARY.md` (Device, Environment, Environment Device, Device Token).
 
@@ -28,3 +29,4 @@ Blocked by: 34_4
 ## Comments
 
 - 2026-11-01 (grilling задачи 34): выделено из задачи 34 вместе с growctl-манифестом; спецификация — за инженером.
+- 2026-11-07: после 72_6 Project-режим без EditLock, с Save/Commit; панель устройств делать по тем же правилам (Version Draft, 409 draft_conflict), без строки замка. Выполнять после 72_6.
