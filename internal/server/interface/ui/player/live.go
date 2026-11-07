@@ -89,7 +89,7 @@ func (s *LiveSource) Close() {
 		return
 	}
 	s.closed = true
-	if s.source.Truthy() {
+	if s.source != nil {
 		s.source.Call("close")
 	}
 	if s.onMessage != nil {
