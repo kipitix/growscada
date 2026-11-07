@@ -1,5 +1,19 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.74] - 2026-11-07
+
+### Added
+
+- **Модель чтения Operation на Runtime-ноде** (задача 43, часть 1; ADR 0020)
+  - Контракт `api/v0` **0.23** (MINOR): `OperationPath = "/operation"` и `OperationStateResponse{position, revision, tag_states}` — позиция Journal проекта, работающая Revision (`RevisionResponse` с `content: ProjectFile`, `null` до первого Deploy, без `omitempty`) и состояния всех её тегов по ID (`TagStateResponse`, `{}` без Revision, не `null`); `make schemas`, прежняя версия ушла в `frozen.sha256`
+  - `application/runtime.OperationStateService` (файл `operation_state_service.go`, в порт `RuntimeNode` не входит): `Get(ctx, projectID)` отвечает `OperationState{Position, Revision, Deployed, TagStates}` и читает в одном порядке — `JournalService.Position`, `RevisionService.FindCurrent`, `TagStateService.FindTagStates` по ID тегов документа; так Deploy, закоммиченный между чтениями, получает позицию выше снимка и приходит из потока, а чтение позиции последней могло бы скрыть его навсегда (ADR 0020)
+  - Ненаписанный тег добивает `tag.NewTagType(definition.Type).InitialState()` — zero-значение типа, Quality `bad`, `seq` 0, `WrittenAt` nil; неизвестный тип в документе — ошибка; живой Project без Revision — `Deployed == false` с позицией и без состояний, не ошибка; удалённый/чужой Project — ошибка с `project.ErrProjectNotFound`. Рендер-формы не собираются: конфигурация — `projectv0.ProjectFile` как есть, импортов `domain/scene` и engineering-схем нет (ADR 0011); новых репозиториев, миграций и записей outbox нет
+  - REST Runtime-ноды: `GET /api/v0/projects/{project_id}/operation` — 200 `{position, revision, tag_states}`, заголовок схемы как у всех ответов; живой Project без Revision — 200 с `revision: null`, удалённый — 404 `project_not_found`; проводка `restapi.Services.Operation`, `main.go`, `servertest`
+  - `apiclient.ProjectClient.Operation(ctx)` — читает снимок, 404 остаётся `apiclient.ErrNotFound`, отсутствие Revision — успешный ответ с `revision == nil`
+  - Bruno: `get_operation` (200, заголовок схемы, `position > 0`, `revision.number`, тег с записанным состоянием и тег с zero-значением и `quality: bad`) в разделе deploy — после Deploy, до первых записей значений; `requestBodies` не нужен (GET)
+  - AGENTS.md: маршрут и модель чтения Operation (порядок чтений, ненаписанные теги, отсутствие Revision) в разделах Runtime и REST; CHANGELOG
+  - Тесты: сервис (порядок чтений, zero/bad/`seq` 0 для string/integer/boolean, отсутствие Revision, развёрнутый пустой Project, неизвестный тип, `project.ErrProjectNotFound`), REST (200 до и после Deploy, начальное состояние тега, сдвиг позиции записью значения, 404 удалённого Project), apiclient (снимок до/после Deploy и после записи, 404)
+
 ## [0.0.73] - 2026-11-06
 
 ### Added
