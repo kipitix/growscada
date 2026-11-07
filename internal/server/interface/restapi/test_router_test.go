@@ -39,9 +39,9 @@ func (r testRouter) ServeMux() http.Handler {
 	})
 }
 
-// lockRouter is the API over the test database, with no test wrapper: a
+// plainRouter is the API over the test database, with no test wrapper: a
 // request is what it states.
-func lockRouter() servingRouter {
+func plainRouter() servingRouter {
 	return restapi.NewRouter(newServices().services(), eventbus.NewEventBus(), 100)
 }
 

@@ -264,9 +264,7 @@ func printLibraryDiff(out io.Writer, plan libraryPlan) {
 }
 
 // executeLibraries runs the plan's libraries, WidgetTypes and pins, printing
-// each step once it is done. It stops at the first failure. The libraries
-// whose Draft it writes are checked out first (ADR 0015): a plan that writes
-// no WidgetType takes no lock.
+// each step once it is done. It stops at the first failure.
 func executeLibraries(ctx context.Context, client *Client, run *settings, plan libraryPlan, out io.Writer) error {
 	ids := map[string]apiv0.LibraryResponse{}
 	for _, s := range plan.libraries {

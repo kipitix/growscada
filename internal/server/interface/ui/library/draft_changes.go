@@ -92,11 +92,8 @@ func (l *Library) stepDraftChange(ctx app.Context, undo bool) {
 // rejectedDraftChange handles a refused undo or redo. A stale Version is what a
 // refused edit is (the Problem carries the Draft's state): the Version is
 // forgotten and the list and the stack are read as they are now. An empty stack
-// (nothing_to_undo or nothing_to_redo, whose 409 carries neither the Draft nor
-// the lock) is a toast and a reread of the stack alone, with no claim on the
-// WidgetTypes. A lock that refuses the write (another client took it over since
-// this tab looked) is neither: its Problem carries the lock, which is applied so
-// the Draft turns read-only at once.
+// (nothing_to_undo or nothing_to_redo, whose 409 carries no Draft) is a toast
+// and a reread of the stack alone, with no claim on the WidgetTypes.
 func (l *Library) rejectedDraftChange(ctx app.Context, err error) {
 	var se *apiclient.StatusError
 	problem := errors.Is(err, apiclient.ErrConflict) && errors.As(err, &se)
@@ -182,7 +179,7 @@ func (l *Library) listenShortcuts() {
 		}
 		ev := args[0]
 		action := uiutil.KeyEventAction(ev)
-		if action == uiutil.KeyNone || !l.shown() || !l.keyActionAllowed() {
+		if action == uiutil.KeyNone || !l.shown() {
 			return nil
 		}
 		ev.Call("preventDefault") // the browser's own undo of the page
@@ -203,25 +200,15 @@ func (l *Library) noKeyDown() {
 }
 
 // applyKeyAction runs the command a keydown asked for: the buttons' own, so a
-// shortcut is refused exactly as they are (the lock, a release shown, a command
-// in flight).
+// shortcut is refused exactly as they are (a release shown, a command in
+// flight).
 func (l *Library) applyKeyAction(ctx app.Context, action uiutil.KeyAction) {
-	if !l.keyActionAllowed() {
-		return
-	}
 	switch action {
 	case uiutil.KeyUndo:
 		l.undoDraftChange(ctx)
 	case uiutil.KeyRedo:
 		l.redoDraftChange(ctx)
 	}
-}
-
-// keyActionAllowed reports whether a shortcut may act now: no dialog of the
-// mode is open. An undo behind the name of a Check out or a takeover would act
-// on a Draft the user is only about to take.
-func (l *Library) keyActionAllowed() bool {
-	return true
 }
 
 // shown reports whether the Library mode is the one displayed. Root keeps every

@@ -36,10 +36,9 @@ func TestProjectFileDialog_ShowsTheActionsAndTheConfirmation(t *testing.T) {
 			t.Errorf("the dialog does not show %q: %s", want, html)
 		}
 	}
-	// The lock is held here: the open action is enabled and its hint must not
-	// tell the user to check the Draft out.
-	if strings.Contains(html, "Replace the whole Draft with a file; can be undone — Check the Draft out") {
-		t.Errorf("the open action carries the read-only hint while the lock is held: %s", html)
+	// The open action is offered and its hint says what it does.
+	if !strings.Contains(html, "Open a file…") {
+		t.Errorf("the dialog does not offer the open action: %s", html)
 	}
 
 	file, err := f.api.DraftProjectFile(context.Background())

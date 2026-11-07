@@ -16,8 +16,8 @@ import (
 // buttons of the header, the Ctrl+Z and Ctrl+Shift+Z shortcuts, and the state
 // they read (the descriptions of the next steps) — read on mount, on a resync,
 // after each content event and after each command (loadDraftChanges). Both
-// commands are writes of the Draft: they state
-// its Version like any other (ADR 0015, ADR 0016).
+// commands are writes of the Draft: they state its Version like any other
+// (ADR 0016).
 
 // draftChangesVersion is the Version the last stack answer stated — what an
 // undo and a redo state, since they apply the state the buttons were built
@@ -95,11 +95,8 @@ func (p *Project) stepDraftChange(ctx app.Context, undo bool) {
 // rejectedDraftChange handles a refused undo or redo. A stale Version is what a
 // refused edit is (the Problem carries the Draft's state): the Version is
 // forgotten and the stack and the content are read as they are now. An empty
-// stack (nothing_to_undo or nothing_to_redo, whose 409 carries neither the Draft
-// nor the lock) is a toast and a reread of the stack alone, with no claim on the
-// content. A lock that refuses the write (another client took it over since
-// this tab looked) is neither: its Problem carries the lock, which is applied so
-// the Draft turns read-only at once.
+// stack (nothing_to_undo or nothing_to_redo, whose 409 carries no Draft) is a
+// toast and a reread of the stack alone, with no claim on the content.
 func (p *Project) rejectedDraftChange(ctx app.Context, err error) {
 	var se *apiclient.StatusError
 	problem := errors.Is(err, apiclient.ErrConflict) && errors.As(err, &se)
@@ -307,7 +304,7 @@ func (p *Project) escapeSelection(ctx app.Context) {
 }
 
 // applyKeyAction runs the command a keydown asked for: the buttons' own, so a
-// shortcut is refused exactly as they are (the lock, a command in flight).
+// shortcut is refused exactly as they are (a command in flight).
 func (p *Project) applyKeyAction(ctx app.Context, action uiutil.KeyAction) {
 	if !p.keyActionAllowed() {
 		return
@@ -322,8 +319,7 @@ func (p *Project) applyKeyAction(ctx app.Context, action uiutil.KeyAction) {
 
 // keyActionAllowed reports whether a shortcut may act now: no dialog of the
 // mode is open. An undo behind the Deploy confirmation would change the Draft
-// the dialog shows, and behind the name of a Check out or a takeover it would
-// act on a Draft the user is only about to take.
+// the dialog shows.
 func (p *Project) keyActionAllowed() bool {
 	return !p.deployDialog && !p.revisionsDialog && !p.projectFileDialog
 }

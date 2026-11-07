@@ -129,7 +129,7 @@ func TestPostDraftChanges_UndoAndRedo(t *testing.T) {
 
 func TestPostDraftChanges_EmptyStack(t *testing.T) {
 	cleanDrafts(t)
-	router := lockRouter()
+	router := plainRouter()
 	path := mainPath + apiv0.DraftChangesUndoPath
 
 	rec := callAs(t, router, http.MethodPost, path, apiv0.DraftChangeCommandRequest{Version: 1}, "")

@@ -87,7 +87,7 @@ func TestReloadTargetsFor_CoversEveryKnownEvent(t *testing.T) {
 
 // TestReloadTargets_DraftChanged: the events that write a Draft's content, a
 // Deploy or a Release clear its stack (ADR 0017), so they ask for a reread of
-// the stack; a Tag's value and the Draft's lock alone do not.
+// the stack; a Tag's value alone does not.
 func TestReloadTargets_DraftChanged(t *testing.T) {
 	changes := []apiv0.Event{
 		{Type: apiv0.EventTagCreated},

@@ -19,6 +19,9 @@ runtime:
       value: '410'
     - expression: 'res.headers["growscada-schema-version"]'
       operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: application/problem+json
     - expression: 'res.body.status'
       operator: eq
       value: '410'
