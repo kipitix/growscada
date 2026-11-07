@@ -12,7 +12,6 @@ import (
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
@@ -108,7 +107,7 @@ func (s testScope) EnvironmentDevices() device.EnvironmentDeviceRepository {
 
 // soleOrganization is the organization the migrations create.
 func soleOrganization() id.ID[organization.Organization] {
-	orgID, err := repositories.FindSoleOrganization(editlock.System(context.Background()), testDB)
+	orgID, err := repositories.FindSoleOrganization(context.Background(), testDB)
 	if err != nil {
 		panic("organization: " + err.Error())
 	}
@@ -117,10 +116,20 @@ func soleOrganization() id.ID[organization.Organization] {
 
 // cleanProjects removes every project but mainProject, with its Library
 // Pins, Devices and Environments; their other content must be gone already.
+// cleanDrafts removes every Draft row and its DraftChanges: the tests start
+// from a fresh Draft.
+func cleanDrafts(t *testing.T) {
+	t.Helper()
+	if _, err := testDB.ExecContext(context.Background(),
+		"DELETE FROM engineering.draft_changes; DELETE FROM engineering.drafts"); err != nil {
+		t.Fatalf("clean drafts: %v", err)
+	}
+}
+
 func cleanProjects(t *testing.T) {
 	t.Helper()
 	main := "'" + mainProject.String() + "'"
-	if _, err := testDB.ExecContext(editlock.System(context.Background()),
+	if _, err := testDB.ExecContext(context.Background(),
 		`DELETE FROM engineering.environment_devices ed USING engineering.environments e
 		 WHERE ed.environment_id = e.id AND e.project_id <> `+main+`;
 		 DELETE FROM engineering.devices WHERE project_id <> `+main+`;
@@ -179,10 +188,8 @@ func deployProject(t *testing.T, projectID uuid.UUID) {
 		content,
 		application.NewProjectFileBuilder(content),
 		newRuntimeNode(),
-		application.NewEditLockService(content, newLibraryContent(),
-			repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB))),
 	)
-	if _, err := service.Deploy(editlock.System(context.Background()), projectID); err != nil && !errors.Is(err, application.ErrNothingToDeploy) {
+	if _, err := service.Deploy(context.Background(), projectID); err != nil && !errors.Is(err, application.ErrNothingToDeploy) {
 		t.Fatalf("deploy project %s: %v", projectID, err)
 	}
 }
@@ -202,7 +209,7 @@ var errRuntimeDown = errors.New("runtime node down")
 func tagStateCount(t *testing.T, projectID uuid.UUID) int {
 	t.Helper()
 	var n int
-	if err := testDB.QueryRowContext(editlock.System(context.Background()), `SELECT count(*) FROM runtime.tags WHERE project_id = $1`, projectID).Scan(&n); err != nil {
+	if err := testDB.QueryRowContext(context.Background(), `SELECT count(*) FROM runtime.tags WHERE project_id = $1`, projectID).Scan(&n); err != nil {
 		t.Fatalf("count tag states: %v", err)
 	}
 	return n
@@ -213,8 +220,8 @@ func tagStateCount(t *testing.T, projectID uuid.UUID) int {
 func draftVersionOf(t *testing.T, projectID uuid.UUID) int {
 	t.Helper()
 	drafts := repositories.NewDraftRepositoryPostgres(testDB, nil)
-	found, ok, err := drafts.Read(editlock.System(context.Background()),
-		editlock.ProjectScope(id.NewID(id.IDWithUUID[project.Project](projectID))))
+	found, ok, err := drafts.Read(context.Background(),
+		draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](projectID))))
 	if err != nil {
 		t.Fatalf("read the draft of %s: %v", projectID, err)
 	}

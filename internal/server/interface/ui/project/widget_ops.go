@@ -19,9 +19,6 @@ import (
 // createWidget places a Widget of the WidgetType typeID at (x, y) on the
 // selected Scene and selects it.
 func (p *Project) createWidget(ctx app.Context, typeID uuid.UUID, x, y float64) {
-	if p.refuseReadOnly(ctx) {
-		return
-	}
 	if p.waitMoves(ctx, func(ctx app.Context) { p.createWidget(ctx, typeID, x, y) }) {
 		return
 	}
@@ -65,9 +62,6 @@ func (p *Project) createWidget(ctx app.Context, typeID uuid.UUID, x, y float64) 
 // client could not read) leaves it unknown, so the known one, now stale, is
 // forgotten and the Scenes are reread.
 func (p *Project) deleteWidget(ctx app.Context, widgetID uuid.UUID) {
-	if p.refuseReadOnly(ctx) {
-		return
-	}
 	if p.waitMoves(ctx, func(ctx app.Context) { p.deleteWidget(ctx, widgetID) }) {
 		return
 	}
@@ -96,9 +90,6 @@ func (p *Project) deleteWidget(ctx app.Context, widgetID uuid.UUID) {
 }
 
 func (p *Project) saveWidgetName(ctx app.Context) {
-	if p.refuseReadOnly(ctx) {
-		return
-	}
 	if p.waitMoves(ctx, func(ctx app.Context) { p.saveWidgetName(ctx) }) {
 		return
 	}
@@ -114,9 +105,6 @@ func (p *Project) saveWidgetName(ctx app.Context) {
 }
 
 func (p *Project) saveWidgetGeometry(ctx app.Context) {
-	if p.refuseReadOnly(ctx) {
-		return
-	}
 	if p.waitMoves(ctx, func(ctx app.Context) { p.saveWidgetGeometry(ctx) }) {
 		return
 	}
@@ -151,9 +139,6 @@ func (p *Project) saveWidgetGeometry(ctx app.Context) {
 }
 
 func (p *Project) bindPort(ctx app.Context, portName string, tagID uuid.UUID) {
-	if p.refuseReadOnly(ctx) {
-		return
-	}
 	if p.waitMoves(ctx, func(ctx app.Context) { p.bindPort(ctx, portName, tagID) }) {
 		return
 	}
@@ -182,9 +167,6 @@ func (p *Project) bindPort(ctx app.Context, portName string, tagID uuid.UUID) {
 }
 
 func (p *Project) unbindPort(ctx app.Context, portName string) {
-	if p.refuseReadOnly(ctx) {
-		return
-	}
 	if p.waitMoves(ctx, func(ctx app.Context) { p.unbindPort(ctx, portName) }) {
 		return
 	}
@@ -204,9 +186,6 @@ func (p *Project) unbindPort(ctx app.Context, portName string) {
 
 // putWidget saves w on the selected Scene at the Scene's known version.
 func (p *Project) putWidget(ctx app.Context, w apiv0.WidgetResponse) {
-	if p.refuseReadOnly(ctx) {
-		return
-	}
 	if p.waitMoves(ctx, func(ctx app.Context) { p.putWidget(ctx, w) }) {
 		return
 	}
@@ -242,15 +221,10 @@ func widgetRequest(w apiv0.WidgetResponse, sceneVersion int) apiv0.UpdateWidgetR
 
 // ── Drag finalisation ─────────────────────────────────────────────────────────
 
-// pressWidget is what a plain (unmodified) press on a Widget does: a read-only
-// Draft selects that Widget alone — no drag follows, and the press is not a
-// refused write; otherwise the selection is replaced with an unselected Widget
-// and the selection begins to move with it.
+// pressWidget is what a plain (unmodified) press on a Widget does: the
+// selection is replaced with an unselected Widget and the selection begins to
+// move with it.
 func (p *Project) pressWidget(ctx app.Context, e app.Event, id uuid.UUID) {
-	if p.readOnly() {
-		p.selectOnly(ctx, id)
-		return
-	}
 	if !p.isWidgetSelected(id) {
 		p.selectOnly(ctx, id)
 	}
@@ -260,7 +234,7 @@ func (p *Project) pressWidget(ctx app.Context, e app.Event, id uuid.UUID) {
 // beginWidgetDrag starts moving the selection with the Widget id, recording
 // where every selected Widget is now. A pending arrow series is sent first.
 func (p *Project) beginWidgetDrag(ctx app.Context, e app.Event, id uuid.UUID) {
-	if p.readOnly() || p.selectedSceneID == uuid.Nil {
+	if p.selectedSceneID == uuid.Nil {
 		return
 	}
 	p.endArrowSeries(ctx)

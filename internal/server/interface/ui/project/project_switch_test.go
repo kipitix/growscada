@@ -12,7 +12,6 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
-	"github.com/kipitix/growscada/internal/server/servertest"
 )
 
 func TestSetProject_ShowsTheContentOfTheNewProjectOnly(t *testing.T) {
@@ -27,7 +26,6 @@ func TestSetProject_ShowsTheContentOfTheNewProjectOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	servertest.EnsureEditLockWithClient(t, api.Client, created.ID)
 	line := api.Project(created.ID)
 	inLine, err := line.CreateScene(context.Background(), apiv0.CreateSceneRequest{Name: "Line scene", Width: 100, Height: 100})
 	if err != nil {
@@ -101,7 +99,6 @@ func TestSetProject_WhileUnmounted_OnlyRemembersIt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	servertest.EnsureEditLockWithClient(t, api.Client, created.ID)
 	inLine, err := api.Project(created.ID).CreateScene(context.Background(), apiv0.CreateSceneRequest{Name: "Line scene", Width: 100, Height: 100})
 	if err != nil {
 		t.Fatalf("create scene: %v", err)

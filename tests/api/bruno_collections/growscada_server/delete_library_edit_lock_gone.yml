@@ -1,28 +1,27 @@
 info:
-  name: delete library edit lock teardown (library Widgets)
+  name: delete library edit lock is gone
   type: http
-  seq: 298
+  seq: 186
 
 http:
   method: DELETE
   url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/edit-lock
-  headers:
-    - name: X-GrowSCADA-Client
-      value: "{{CLIENT_KEY}}"
   auth: inherit
 
 docs: |
-  Teardown of the library section: the client that wrote the Draft of the
-  library Widgets gives its EditLock back, leaving the Draft as it is
-  (ADR 0015).
+  A Library's Check in is gone with the EditLock (ADR 0022): the route
+  answers `410 Gone`.
 
 runtime:
   assertions:
     - expression: 'res.status'
-      operator: in
-      value: '[200, 404]'
+      operator: eq
+      value: '410'
     - expression: 'res.headers["growscada-schema-version"]'
       operator: isDefined
+    - expression: 'res.body.status'
+      operator: eq
+      value: '410'
 
 settings:
   encodeUrl: true

@@ -4,40 +4,29 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
+	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/project"
-	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
 
 func newDraftChangesService() application.DraftChangesService {
 	return application.NewDraftChangesService(contentOver(newScopes()), newLibraryContent())
 }
 
-// holdDraft makes the Draft of scope held by a client of key, whose returned
-// context is the one of its requests.
-func holdDraft(t *testing.T, scope editlock.Scope) context.Context {
-	t.Helper()
-	holder, err := editlock.NewHolder(editlock.NewKey(), "alice")
-	if err != nil {
-		t.Fatalf("holder: %v", err)
-	}
-	lock, err := editlock.CreateEditLock(scope).Acquire(holder, time.Now())
-	if err != nil {
-		t.Fatalf("acquire: %v", err)
-	}
-	repo := repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB))
-	if _, err := repo.Create(editlock.System(context.Background()), lock); err != nil {
-		t.Fatalf("hold the draft: %v", err)
-	}
-	return editlock.WithClient(context.Background(), holder.Key())
+// projectScope is the Scope of the Draft of a Project; libraryScope that of a
+// Library.
+func projectScope(projectID uuid.UUID) draft.Scope {
+	return draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](projectID)))
+}
+
+func libraryScope(libraryID uuid.UUID) draft.Scope {
+	return draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](libraryID)))
 }
 
 // --- State ---
@@ -46,9 +35,9 @@ func holdDraft(t *testing.T, scope editlock.Scope) context.Context {
 // stack: its Version is the one its first write states, with nothing to undo
 // or redo.
 func TestDraftChangesState_FreshDraft(t *testing.T) {
-	cleanEditLocksApp(t)
+	cleanDrafts(t)
 	cleanTags(t)
-	state, err := newDraftChangesService().State(editlock.System(context.Background()), projectScope(mainProject))
+	state, err := newDraftChangesService().State(context.Background(), projectScope(mainProject))
 	if err != nil {
 		t.Fatalf("State: %v", err)
 	}
@@ -63,9 +52,9 @@ func TestDraftChangesState_FreshDraft(t *testing.T) {
 // TestDraftChangesState_NamesTheNextSteps: after one change the undo names it;
 // after the undo the redo names it and the undo has nothing left.
 func TestDraftChangesState_NamesTheNextSteps(t *testing.T) {
-	cleanEditLocksApp(t)
+	cleanDrafts(t)
 	cleanTags(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	svc := newDraftChangesService()
 	if _, err := newService().CreateTag(ctx, mainProject,
 		appdto.CreateTagInput{Name: "pressure", Type: "integer", Version: draftVersionOf(t, mainProject)}); err != nil {
@@ -105,9 +94,9 @@ func TestDraftChangesState_NamesTheNextSteps(t *testing.T) {
 // TestDraftChangesUndoRedo_Project: an undo removes the Tag the change
 // created, a redo brings it back, and the Draft's Version follows the stack.
 func TestDraftChangesUndoRedo_Project(t *testing.T) {
-	cleanEditLocksApp(t)
+	cleanDrafts(t)
 	cleanTags(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	svc := newDraftChangesService()
 	created, err := newService().CreateTag(ctx, mainProject,
 		appdto.CreateTagInput{Name: "pressure", Type: "integer", Version: draftVersionOf(t, mainProject)})
@@ -142,9 +131,9 @@ func TestDraftChangesUndoRedo_Project(t *testing.T) {
 // TestDraftChangesUndoRedo_Library: a Library's Draft undoes and redoes the
 // creation of a WidgetType the same way.
 func TestDraftChangesUndoRedo_Library(t *testing.T) {
-	cleanEditLocksApp(t)
+	cleanDrafts(t)
 	cleanWidgetTypes(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	svc := newDraftChangesService()
 	created, err := newWidgetTypeService().CreateWidgetType(ctx, wtLibrary,
 		libraryDraftVersionOf(t, wtLibrary), testCreateWidgetTypeInput)
@@ -185,8 +174,7 @@ func TestDraftChangesUndoRedo_Library(t *testing.T) {
 // TestDraftChanges_NotLiveScope: a Project or Library that does not exist is
 // not found, and so is one marked deleted.
 func TestDraftChanges_NotLiveScope(t *testing.T) {
-	cleanEditLocksApp(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	svc := newDraftChangesService()
 	if _, err := svc.State(ctx, projectScope(uuid.New())); !errors.Is(err, project.ErrProjectNotFound) {
 		t.Errorf("State of a missing project: %v, want ErrProjectNotFound", err)
@@ -199,50 +187,40 @@ func TestDraftChanges_NotLiveScope(t *testing.T) {
 	}
 }
 
-// TestDraftChangesUndo_GateAndStaleVersion: undo and redo are writes of the
-// Draft: without the EditLock they are refused (no client is 400, another
-// client's lock is 409), a stale Version is a conflict, and an empty stack is
-// nothing to undo.
-func TestDraftChangesUndo_GateAndStaleVersion(t *testing.T) {
-	cleanEditLocksApp(t)
+// TestDraftChangesUndo_StaleVersion: a stale Version is a conflict, and an
+// empty stack is nothing to undo; both commands state the Version the client
+// read (ADR 0016, ADR 0017).
+func TestDraftChangesUndo_StaleVersion(t *testing.T) {
+	cleanDrafts(t)
 	cleanTags(t)
-	system := editlock.System(context.Background())
+	ctx := context.Background()
 	svc := newDraftChangesService()
 	stale := draftVersionOf(t, mainProject)
-	created, err := newService().CreateTag(system, mainProject,
+	created, err := newService().CreateTag(ctx, mainProject,
 		appdto.CreateTagInput{Name: "pressure", Type: "integer", Version: draftVersionOf(t, mainProject)})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}
 
-	if _, err := svc.Undo(context.Background(), projectScope(mainProject), created.Version); !errors.Is(err, editlock.ErrNoClient) {
-		t.Errorf("Undo with no client: %v, want ErrNoClient", err)
-	}
-	holder := holdDraft(t, projectScope(mainProject))
-	other := editlock.WithClient(context.Background(), editlock.NewKey())
-	if _, err := svc.Undo(other, projectScope(mainProject), created.Version); !errors.Is(err, editlock.ErrEditLockNotHeld) {
-		t.Errorf("Undo of another client: %v, want ErrEditLockNotHeld", err)
-	}
-	if _, err := svc.Undo(holder, projectScope(mainProject), stale); !errors.Is(err, draft.ErrDraftConflict) {
+	if _, err := svc.Undo(ctx, projectScope(mainProject), stale); !errors.Is(err, draft.ErrDraftConflict) {
 		t.Errorf("Undo with a stale version: %v, want ErrDraftConflict", err)
 	}
-	after, err := svc.Undo(holder, projectScope(mainProject), created.Version)
+	after, err := svc.Undo(ctx, projectScope(mainProject), created.Version)
 	if err != nil {
-		t.Fatalf("Undo of the holder: %v", err)
+		t.Fatalf("Undo: %v", err)
 	}
-	if _, err := svc.Undo(holder, projectScope(mainProject), after.Version); !errors.Is(err, draft.ErrNothingToUndo) {
+	if _, err := svc.Undo(ctx, projectScope(mainProject), after.Version); !errors.Is(err, draft.ErrNothingToUndo) {
 		t.Errorf("Undo of an empty stack: %v, want ErrNothingToUndo", err)
 	}
-	if _, err := svc.Redo(holder, projectScope(mainProject), after.Version); err != nil {
-		t.Fatalf("Redo of the holder: %v", err)
+	if _, err := svc.Redo(ctx, projectScope(mainProject), after.Version); err != nil {
+		t.Fatalf("Redo: %v", err)
 	}
 }
 
 // TestDraftChangesUndo_InvalidVersion: a negative Version is the client's
 // input, not a conflict.
 func TestDraftChangesUndo_InvalidVersion(t *testing.T) {
-	cleanEditLocksApp(t)
-	_, err := newDraftChangesService().Undo(editlock.System(context.Background()), projectScope(mainProject), -1)
+	_, err := newDraftChangesService().Undo(context.Background(), projectScope(mainProject), -1)
 	if !errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("Undo with a negative version: %v, want ErrInvalidInput", err)
 	}

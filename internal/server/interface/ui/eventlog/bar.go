@@ -87,9 +87,6 @@ type Bar struct {
 	app.Compo
 
 	apiServerURL string
-	// clientKey is the key of the tab, sent as the client parameter of the
-	// stream: presence while it is open (ADR 0015).
-	clientKey string
 	// compoCtx is the component's own context, set with mounted in OnMount.
 	compoCtx app.Context
 	mounted  bool
@@ -134,14 +131,6 @@ type eventStream struct {
 
 func NewBar(apiServerURL string) *Bar {
 	return &Bar{apiServerURL: apiServerURL}
-}
-
-// WithClientKey makes the Bar name the client key in its stream (client), so
-// the server counts the tab as present while the stream is open: its
-// EditLock is alive without requests (ADR 0015). An empty key is none.
-func (b *Bar) WithClientKey(key string) *Bar {
-	b.clientKey = key
-	return b
 }
 
 func (b *Bar) OnMount(ctx app.Context) {
@@ -217,9 +206,6 @@ func (b *Bar) connectStream(ctx app.Context) *eventStream {
 	if b.projectID != uuid.Nil {
 		params.Set(apiv0.EventsQueryProject, b.projectID.String())
 		resyncs = append(resyncs, EventProjectResync)
-	}
-	if b.clientKey != "" {
-		params.Set(apiv0.EventsQueryClient, b.clientKey)
 	}
 	if len(params) > 0 {
 		streamURL += "?" + params.Encode()

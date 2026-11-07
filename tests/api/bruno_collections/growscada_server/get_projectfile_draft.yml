@@ -12,7 +12,7 @@ docs: |
   The Draft as a ProjectFile, the same document a Deploy would send
   (ADR 0018). It is a download: `application/json`, an attachment named after
   the project, and the API's schema version staying a header. Reading it needs
-  no EditLock.
+  no Draft write.
 
 runtime:
   assertions:

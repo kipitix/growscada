@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
@@ -13,12 +12,9 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/kipitix/growscada/internal/server/domain/draft"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/migrations"
-	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
 
 // mainProject is the project "Main" the migrations create: the tests' content
@@ -33,7 +29,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 
 	pgContainer, err := tcpostgres.Run(ctx,
 		"postgres:16-alpine",
@@ -77,30 +73,12 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// cleanEditLocks frees every Draft: no row keeps a holder.
-func cleanEditLocks(t *testing.T) {
+// cleanDrafts removes every Draft row and its DraftChanges: the tests start
+// from a fresh Draft.
+func cleanDrafts(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(editlock.System(context.Background()),
+	if _, err := testDB.ExecContext(context.Background(),
 		`DELETE FROM engineering.draft_changes; DELETE FROM engineering.drafts`); err != nil {
-		t.Fatalf("cleanEditLocks: %v", err)
+		t.Fatalf("cleanDrafts: %v", err)
 	}
-}
-
-// editLockRepo is the store of the EditLocks: the Drafts' rows (ADR 0016).
-func editLockRepo() draft.Repository {
-	return repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB))
-}
-
-// createHeldLockOf holds the Draft of scope for "alice" and stores the lock.
-func createHeldLockOf(t *testing.T, scope editlock.Scope) editlock.EditLock {
-	t.Helper()
-	holder, err := editlock.NewHolder(editlock.NewKey(), "alice")
-	if err != nil {
-		t.Fatalf("holder: %v", err)
-	}
-	lock, err := editlock.CreateEditLock(scope).Acquire(holder, time.Now())
-	if err != nil {
-		t.Fatalf("acquire: %v", err)
-	}
-	return lock
 }

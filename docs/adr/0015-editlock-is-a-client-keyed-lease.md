@@ -1,3 +1,5 @@
+> **Superseded by [ADR 0022](0022-draft-is-edited-without-editlock.md).** Kept as the history of the decision: the EditLock, the client key and the read-only Draft are gone.
+
 # The EditLock is a lease held by a client key, kept alive by the SSE connection and checked in the write's transaction
 
 The Draft of a Project or of a Library has one editor at a time. There are no Users yet (task 49), so the only identity a client has is what it can say about itself: the PWA is a browser tab with one SSE connection, and every edit is a separate HTTP request that no connection can be inferred from. We make the EditLock an Engineering node's marker aggregate over one Draft, held by a key the tab keeps for itself and kept alive by the tab's SSE connection, and we check it inside the transaction of every gated write.

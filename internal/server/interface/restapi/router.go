@@ -9,7 +9,6 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 )
 
@@ -25,7 +24,6 @@ type APIRouter struct {
 	devicesHandlers      *DevicesHandlers
 	environmentsHandlers *EnvironmentsHandlers
 	deviceTokensHandlers *DeviceTokensHandlers
-	editLockHandlers     *EditLockHandlers
 	deviceConfigHandlers *DeviceConfigHandlers
 	deviceWhoAmIHandlers *DeviceIdentityHandlers
 	deployHandlers       *DeployHandlers
@@ -39,27 +37,7 @@ type APIRouter struct {
 }
 
 func (r APIRouter) ServeMux() http.Handler {
-	return schemaVersionMiddleware(corsMiddleware(clientKeyMiddleware(r.serveMux)))
-}
-
-// clientKeyMiddleware reads the client key of a request (X-GrowSCADA-Client,
-// ADR 0015) and puts the request's identity in its context: the client that
-// holds it, or no client at all. A header that is not a UUID is 400: a client
-// that names itself must name itself properly.
-func clientKeyMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		raw := r.Header.Get(apiv0.ClientHeader)
-		if raw == "" {
-			next.ServeHTTP(w, r.WithContext(editlock.WithoutClient(r.Context())))
-			return
-		}
-		key, err := editlock.ParseKey(raw)
-		if err != nil {
-			sendProblem(w, NewBadRequest("client: '"+raw+"' is not a valid UUID", r.URL.Path))
-			return
-		}
-		next.ServeHTTP(w, r.WithContext(editlock.WithClient(r.Context(), key)))
-	})
+	return schemaVersionMiddleware(corsMiddleware(r.serveMux))
 }
 
 // Close prepares the router for graceful shutdown: the SSE event hub leaves
@@ -78,7 +56,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, "+contract.SchemaVersionHeader+", "+apiv0.ClientHeader)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, "+contract.SchemaVersionHeader)
 		w.Header().Set("Access-Control-Expose-Headers", contract.SchemaVersionHeader+", Content-Disposition")
 		// Lets the browser reuse a preflight instead of repeating it before every
 		// POST/PUT/PATCH/DELETE; browsers cap the value (Chromium at 2 hours).
@@ -116,7 +94,6 @@ type Services struct {
 	Revisions    runtimeapp.RevisionService
 	DeviceConfig runtimeapp.DeviceConfigService
 	DeviceTokens runtimeapp.DeviceTokenService
-	EditLocks    application.EditLockService
 	Journal      runtimeapp.JournalService
 	Operation    runtimeapp.OperationStateService
 }
@@ -142,10 +119,9 @@ func NewRouter(services Services, eventBus eventbus.EventBus, maxSSEClients int)
 		deployHandlers:       NewDeployHandler(services.Deploy, services.Discard, services.Revisions, services.TagStates),
 		draftHandlers:        NewDraftHandler(services.Draft),
 		draftChangesHandlers: NewDraftChangesHandler(services.DraftChanges),
-		editLockHandlers:     NewEditLockHandler(services.EditLocks),
 		revisionsHandlers:    NewRevisionHandler(services.Revisions),
 		projectFileHandlers:  NewProjectFileHandler(services.ProjectFiles),
-		eventsHandlers:       NewEventsHandler(eventBus, projectService, maxSSEClients, WithDeviceTokens(services.DeviceTokens), WithEditLocks(services.EditLocks)),
+		eventsHandlers:       NewEventsHandler(eventBus, projectService, maxSSEClients, WithDeviceTokens(services.DeviceTokens)),
 		journalHandlers:      NewJournalHandler(services.Journal, eventBus),
 		operationHandlers:    NewOperationHandler(services.Operation),
 	}
@@ -175,7 +151,6 @@ func (r *APIRouter) routes() []route {
 	deploy := r.deployHandlers
 	revisions := r.revisionsHandlers
 	changes := r.draftChangesHandlers
-	locks := r.editLockHandlers
 	return []route{
 		{"GET " + p + "/projects", projects.GetProjects},
 		{"GET " + pp, projects.GetProjectsByID},
@@ -209,10 +184,10 @@ func (r *APIRouter) routes() []route {
 		{"PUT " + lp + "/widget-types/" + widgetTypeResource.wildcard(), widgetTypes.PutWidgetTypesByID},
 		{"DELETE " + lp + "/widget-types/" + widgetTypeResource.wildcard(), widgetTypes.DeleteWidgetTypesByID},
 
-		{"GET " + lp + apiv0.EditLockPath, locks.GetLibraryEditLock},
-		{"POST " + lp + apiv0.EditLockPath, locks.PostLibraryEditLock},
-		{"DELETE " + lp + apiv0.EditLockPath, locks.DeleteLibraryEditLock},
-		{"POST " + lp + apiv0.EditLockPath + "/takeover", locks.PostLibraryEditLockTakeOver},
+		{"GET " + lp + removedDraftLockPath, draftLockRemoved},
+		{"POST " + lp + removedDraftLockPath, draftLockRemoved},
+		{"DELETE " + lp + removedDraftLockPath, draftLockRemoved},
+		{"POST " + lp + removedDraftLockPath + "/takeover", draftLockRemoved},
 
 		{"GET " + pp + "/library-pins", pins.GetLibraryPins},
 		{"PUT " + pp + "/library-pins/" + libraryPinResource.wildcard(), pins.PutLibraryPin},
@@ -271,10 +246,10 @@ func (r *APIRouter) routes() []route {
 		{"POST " + pp + "/deploy", deploy.PostDeploy},
 		{"POST " + pp + "/discard", deploy.PostDiscard},
 
-		{"GET " + pp + apiv0.EditLockPath, locks.GetEditLock},
-		{"POST " + pp + apiv0.EditLockPath, locks.PostEditLock},
-		{"DELETE " + pp + apiv0.EditLockPath, locks.DeleteEditLock},
-		{"POST " + pp + apiv0.EditLockPath + "/takeover", locks.PostEditLockTakeOver},
+		{"GET " + pp + removedDraftLockPath, draftLockRemoved},
+		{"POST " + pp + removedDraftLockPath, draftLockRemoved},
+		{"DELETE " + pp + removedDraftLockPath, draftLockRemoved},
+		{"POST " + pp + removedDraftLockPath + "/takeover", draftLockRemoved},
 
 		{"GET " + p + "/device", r.deviceWhoAmIHandlers.GetDeviceIdentity},
 		{"GET " + p + "/device/config", config.GetDeviceConfig},

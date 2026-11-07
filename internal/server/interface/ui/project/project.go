@@ -84,20 +84,6 @@ type Project struct {
 	pendingProjectFile *pendingProjectFile
 	projectFileIssues  []apiv0.FileIssue
 	projectFileDetail  string
-	// ── EditLock of the Draft (ADR 0015) ────────────────────────────────────
-	// tabKey is the key of this tab: the client the API client acts as.
-	// editLock is the state of the Draft's lock, read on mount and on the
-	// project's resync and applied from its events; lockLoaded is false until
-	// the first answer. Without the lock (readOnly) the Draft is not edited.
-	tabKey         uuid.UUID
-	editLock       apiv0.EditLockResponse
-	lockLoaded     bool
-	lockName       string // the name declared once, from LocalStorage
-	lockNameInput  string
-	askingName     bool
-	takeOverDialog bool
-	checkingOut    bool
-
 	// draftVersions holds the Version of the Draft: every write of its content
 	// states it and every content response carries it (ADR 0016). Like the
 	// other Versions it is forgotten when the server may have gone back (a
@@ -207,11 +193,6 @@ type Project struct {
 	moveSending  bool
 	moveDraining bool
 	moveQueue    []func(app.Context)
-	// checkIns are the Check ins waiting for the Draft's last write: they run
-	// once no move PATCH is in flight (GiveBackDraft). A project switch drops
-	// the moveQueue, never these — the Draft left is still to be given back.
-	checkIns []func()
-
 	// marquee is the selection rectangle being dragged on empty canvas.
 	marquee marqueeState
 
@@ -286,9 +267,6 @@ func (p *Project) OnMount(ctx app.Context) {
 	ctx.LocalStorage().Get("project:widgetTypeWidth", &p.widgetTypeWidth)
 	ctx.LocalStorage().Get("project:propertiesWidth", &p.propertiesWidth)
 
-	p.tabKey = tabKeyOf(p.client)
-	ctx.LocalStorage().Get(editLockNameKey, &p.lockName)
-
 	var savedTab string
 	ctx.LocalStorage().Get("project:subTab", &savedTab)
 	if savedTab != "" {
@@ -306,7 +284,6 @@ func (p *Project) OnMount(ctx app.Context) {
 	p.loadDeploy(ctx)
 	p.loadDraftState(ctx)
 	p.loadDraftChanges(ctx)
-	p.loadEditLock(ctx)
 
 	p.listenShortcuts()
 	p.handleServerEvents(ctx)
@@ -351,8 +328,6 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.deployPreview, p.deployLoaded = apiv0.DeployPreviewResponse{}, false
 	p.dialogPreview = apiv0.DeployPreviewResponse{}
 	p.deployDialog, p.deploying, p.discarding = false, false, false
-	p.editLock, p.lockLoaded = apiv0.EditLockResponse{}, false
-	p.lockNameInput, p.askingName, p.takeOverDialog, p.checkingOut = "", false, false, false
 	p.revisions, p.revisionsLoaded = nil, false
 	p.revisionsDialog, p.selectedRevision, p.rollingBack = false, 0, false
 	p.revisionDetail, p.revisionDetailLoaded = apiv0.RevisionResponse{}, false

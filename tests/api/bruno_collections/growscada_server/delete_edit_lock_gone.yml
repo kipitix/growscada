@@ -1,27 +1,27 @@
 info:
-  name: delete edit lock teardown (project Main)
+  name: delete edit lock is gone
   type: http
-  seq: 300
+  seq: 182
 
 http:
   method: DELETE
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/edit-lock
-  headers:
-    - name: X-GrowSCADA-Client
-      value: "{{CLIENT_KEY}}"
   auth: inherit
 
 docs: |
-  Teardown of the collection: the client that wrote the Draft of the project
-  Main gives its EditLock back, leaving the Draft as it is (ADR 0015).
+  A Check in is gone with the EditLock (ADR 0022): the route answers `410
+  Gone`.
 
 runtime:
   assertions:
     - expression: 'res.status'
-      operator: in
-      value: '[200, 404]'
+      operator: eq
+      value: '410'
     - expression: 'res.headers["growscada-schema-version"]'
       operator: isDefined
+    - expression: 'res.body.status'
+      operator: eq
+      value: '410'
 
 settings:
   encodeUrl: true

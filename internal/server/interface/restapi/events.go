@@ -12,7 +12,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/client"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
@@ -30,7 +29,6 @@ type EventsHandlers struct {
 	hub      *eventHub
 	projects application.ProjectService
 	tokens   runtimeapp.DeviceTokenService
-	locks    application.EditLockService
 }
 
 // NewEventsHandler creates the SSE event handler; a project's stream is
@@ -52,13 +50,6 @@ type EventsOption func(*EventsHandlers)
 // answers 401: the handler serves no Runtime node.
 func WithDeviceTokens(tokens runtimeapp.DeviceTokenService) EventsOption {
 	return func(h *EventsHandlers) { h.tokens = tokens }
-}
-
-// WithEditLocks counts a stream that names its client (the client parameter)
-// as presence of that client: while the stream is open, its EditLock is alive
-// (ADR 0015). Without it no stream is presence.
-func WithEditLocks(locks application.EditLockService) EventsOption {
-	return func(h *EventsHandlers) { h.locks = locks }
 }
 
 // Close detaches the hub from the EventBus and ends every open event stream,
@@ -128,17 +119,8 @@ func (h *EventsHandlers) GetDeviceEvents(w http.ResponseWriter, r *http.Request)
 
 // stream serves an SSE stream of streams (see eventHub.addClient).
 func (h *EventsHandlers) stream(w http.ResponseWriter, r *http.Request, streams eventStreams) {
-	// The client that follows the stream is presence: its EditLock survives
-	// while the stream is open (ADR 0015). The parameter is optional.
-	key, follows, ok := h.streamClient(w, r)
-	if !ok {
-		return
-	}
-	if follows {
-		h.locks.Attach(key)
-		defer h.locks.Detach(key)
-	}
-
+	// A stream names no client: ?client= of an older tab is accepted and
+	// ignored (ADR 0022).
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		sendProblem(w, NewInternalError("streaming not supported", r.URL.Path))
@@ -181,23 +163,6 @@ func (h *EventsHandlers) stream(w http.ResponseWriter, r *http.Request, streams 
 			}
 		}
 	}
-}
-
-// streamClient is the client named by the stream's query parameter. A stream
-// that names none, or a server without EditLocks, is no presence: follows is
-// false. A parameter that is not a UUID has already been answered with a 400,
-// so the caller returns on ok == false.
-func (h *EventsHandlers) streamClient(w http.ResponseWriter, r *http.Request) (key editlock.Key, follows, ok bool) {
-	raw := r.URL.Query().Get(apiv0.EventsQueryClient)
-	if raw == "" || h.locks == nil {
-		return editlock.Key{}, false, true
-	}
-	key, err := editlock.ParseKey(raw)
-	if err != nil {
-		sendProblem(w, NewBadRequest(fmt.Sprintf("%s: '%s' is not a valid UUID", apiv0.EventsQueryClient, raw), r.URL.Path))
-		return editlock.Key{}, false, false
-	}
-	return key, true, true
 }
 
 // writeEvent writes one SSE message within eventWriteTimeout. A writer that

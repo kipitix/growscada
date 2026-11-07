@@ -6,7 +6,6 @@ import (
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
-	"github.com/kipitix/growscada/internal/server/servertest"
 )
 
 // testAPI is a second client of the test server, which arranges and checks
@@ -19,13 +18,9 @@ type testAPI struct {
 
 func newTestAPI(t *testing.T, client *apiclient.Client) *testAPI {
 	t.Helper()
-	// The test client acts as the tab: the same key as the mounted Library,
-	// which holds the Draft's EditLock (ADR 0015).
-	client = client.WithClientKey(servertest.ClientKey.String())
 	lib, err := client.CreateLibrary(context.Background(), apiv0.CreateLibraryRequest{Name: "Widgets"})
 	if err != nil {
 		t.Fatalf("create library: %v", err)
 	}
-	servertest.EnsureLibraryEditLockWithClient(t, client, lib.ID)
 	return &testAPI{Client: client, LibraryClient: client.Library(lib.ID)}
 }

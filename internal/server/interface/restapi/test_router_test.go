@@ -2,23 +2,21 @@ package restapi_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
+	"testing"
 
 	"github.com/google/uuid"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
-
-// testClientKey is the client the tests' HTTP requests act as. The EditLock of
-// a project under test holds it (holdEditLockFor): a test writes the Draft
-// through the API, which needs the lock (ADR 0015). A test of the lock itself
-// drives the routes with its own keys through restapi.NewRouter directly.
-var testClientKey = uuid.MustParse("d0000000-0000-4000-8000-00000000d00d")
 
 // servingRouter is anything an HTTP test hands requests to: the API router or
 // a testRouter wrapping it.
@@ -26,8 +24,10 @@ type servingRouter interface {
 	ServeMux() http.Handler
 }
 
-// testRouter is the API router with testClientKey on every request, holding
-// the EditLock of every project the request names.
+// testRouter is the API router that fills the Version of the Draft in a write
+// request: the tests are about what the server does with a request, not about
+// stating the Version in every body and URL. A request that states one keeps
+// it, so stale-version tests still see their conflict.
 type testRouter struct {
 	APIRouter *restapi.APIRouter
 }
@@ -35,30 +35,46 @@ type testRouter struct {
 func (r testRouter) ServeMux() http.Handler {
 	inner := r.APIRouter.ServeMux()
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		req.Header.Set(apiv0.ClientHeader, testClientKey.String())
-		if projectID := projectIDInPath(req.URL.Path); projectID != uuid.Nil {
-			holdEditLockFor(projectID)
-		}
-		if libraryID := libraryIDInPath(req.URL.Path); libraryID != uuid.Nil {
-			holdLibraryEditLockFor(libraryID)
-		}
 		inner.ServeHTTP(w, withDraftVersion(req))
 	})
 }
 
-// holdTestEditLock makes testClientKey the holder of the Main project's
-// EditLock, whatever it was.
-func holdTestEditLock() { holdEditLockFor(mainProject) }
+// lockRouter is the API over the test database, with no test wrapper: a
+// request is what it states.
+func lockRouter() servingRouter {
+	return restapi.NewRouter(newServices().services(), eventbus.NewEventBus(), 100)
+}
 
-// holdEditLockFor makes testClientKey the holder of the EditLock of the
-// project projectID. A project that does not exist gets no row: the request
-// is answered 404 before any write.
-func holdEditLockFor(projectID uuid.UUID) {
-	db := testDB()
-	_, _ = db.Exec(`INSERT INTO engineering.drafts (id, project_id, lock_version) VALUES (gen_random_uuid(), $1, 1) ON CONFLICT DO NOTHING`, projectID)
-	_, _ = db.Exec(
-		`UPDATE engineering.drafts SET holder_key = $2, holder_name = 'restapi-test', held_since = now(), last_seen = now()
-		 WHERE project_id = $1`, projectID, testClientKey)
+// callAs sends a request through router with body encoded as JSON (nil: no
+// body). The key parameter is ignored: the API names no client (ADR 0022).
+func callAs(t *testing.T, router servingRouter, method, path string, body any, key string) *httptest.ResponseRecorder {
+	t.Helper()
+	_ = key
+	var reader *bytes.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("encode body: %v", err)
+		}
+		reader = bytes.NewReader(data)
+	} else {
+		reader = bytes.NewReader(nil)
+	}
+	req := httptest.NewRequest(method, path, reader)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeMux().ServeHTTP(rec, req)
+	return rec
+}
+
+// cleanDrafts removes every Draft row and its DraftChanges: the tests start
+// from a fresh Draft.
+func cleanDrafts(t *testing.T) {
+	t.Helper()
+	if _, err := testDB().ExecContext(context.Background(),
+		"DELETE FROM engineering.draft_changes; DELETE FROM engineering.drafts"); err != nil {
+		t.Fatalf("clean drafts: %v", err)
+	}
 }
 
 // projectIDInPath is the project a request path names, uuid.Nil if none.
@@ -73,17 +89,6 @@ func projectIDInPath(path string) uuid.UUID {
 		return uuid.Nil
 	}
 	return projectID
-}
-
-// holdLibraryEditLockFor makes testClientKey the holder of the EditLock of the
-// Draft of the library libraryID. A library that does not exist gets no row:
-// the request is answered 404 before any write.
-func holdLibraryEditLockFor(libraryID uuid.UUID) {
-	db := testDB()
-	_, _ = db.Exec(`INSERT INTO engineering.drafts (id, library_id, lock_version) VALUES (gen_random_uuid(), $1, 1) ON CONFLICT DO NOTHING`, libraryID)
-	_, _ = db.Exec(
-		`UPDATE engineering.drafts SET holder_key = $2, holder_name = 'restapi-test', held_since = now(), last_seen = now()
-		 WHERE library_id = $1`, libraryID, testClientKey)
 }
 
 // libraryIDInPath is the library a request path names, uuid.Nil if none.

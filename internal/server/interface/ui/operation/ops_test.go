@@ -138,8 +138,7 @@ func (f *fixture) pump(project *apiclient.ProjectClient) {
 // tag_state entries.
 func TestOperation_FirstDeployArrivesFromTheJournal(t *testing.T) {
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
-	api := apiclient.New(srv.URL, srv.Client()).WithClientKey(servertest.ClientKey.String())
-	servertest.EnsureEditLock(t, srv, servertest.MainProject)
+	api := apiclient.New(srv.URL, srv.Client())
 	project := api.Project(servertest.MainProject)
 	ctx := context.Background()
 
@@ -204,8 +203,7 @@ func TestOperation_FirstDeployArrivesFromTheJournal(t *testing.T) {
 // configuration, and a Rollback does the same with a new number.
 func TestOperation_SecondDeployAndRollbackSwitchTheConfiguration(t *testing.T) {
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
-	api := apiclient.New(srv.URL, srv.Client()).WithClientKey(servertest.ClientKey.String())
-	servertest.EnsureEditLock(t, srv, servertest.MainProject)
+	api := apiclient.New(srv.URL, srv.Client())
 	project := api.Project(servertest.MainProject)
 	ctx := context.Background()
 

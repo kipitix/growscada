@@ -21,7 +21,6 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/migrations"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
@@ -47,7 +46,7 @@ func stopTestDB() {
 		testDBConn.Close()
 	}
 	if pgContainer != nil {
-		pgContainer.Terminate(editlock.System(context.Background()))
+		pgContainer.Terminate(context.Background())
 	}
 }
 
@@ -66,7 +65,7 @@ func testDB() *sql.DB {
 }
 
 func startTestDB() {
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 
 	container, err := tcpostgres.Run(ctx,
 		"postgres:16-alpine",
@@ -102,7 +101,7 @@ func startTestDB() {
 
 func cleanTags(t *testing.T) {
 	t.Helper()
-	if _, err := testDB().ExecContext(editlock.System(context.Background()), "DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
+	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
 		t.Fatalf("cleanTags: %v", err)
 	}
 }
@@ -117,14 +116,14 @@ func newRouter() testRouter {
 func createTagViaService(t *testing.T, name, tagType, value, quality string) appdto.Tag {
 	t.Helper()
 	services := newServices()
-	resp, err := services.tags.CreateTag(editlock.System(context.Background()), mainProject, appdto.CreateTagInput{Version: testDraftVersion(t, mainProject), Name: name, Type: tagType})
+	resp, err := services.tags.CreateTag(context.Background(), mainProject, appdto.CreateTagInput{Version: testDraftVersion(t, mainProject), Name: name, Type: tagType})
 	if err != nil {
 		t.Fatalf("createTagViaService(%q): %v", name, err)
 	}
-	if _, err := services.deploy.Deploy(editlock.System(context.Background()), mainProject); err != nil {
+	if _, err := services.deploy.Deploy(context.Background(), mainProject); err != nil {
 		t.Fatalf("createTagViaService(%q): deploy: %v", name, err)
 	}
-	written, err := services.states.SetTagValue(editlock.System(context.Background()), mainProject, runtimeapp.SetTagValueInput{TagID: resp.ID, Value: value, Quality: quality})
+	written, err := services.states.SetTagValue(context.Background(), mainProject, runtimeapp.SetTagValueInput{TagID: resp.ID, Value: value, Quality: quality})
 	if err != nil {
 		t.Fatalf("createTagViaService(%q): write its state: %v", name, err)
 	}
@@ -334,7 +333,7 @@ func TestGetTagsByID_ExistingTag_Returns200WithTag(t *testing.T) {
 // seq 0 in the body.
 func TestGetTagsByID_NotWrittenYet_IsTheInitialStateWithSeqZero(t *testing.T) {
 	cleanTags(t)
-	created, err := newServices().tags.CreateTag(editlock.System(context.Background()), mainProject, appdto.CreateTagInput{Version: testDraftVersion(t, mainProject), Name: "fresh", Type: "boolean"})
+	created, err := newServices().tags.CreateTag(context.Background(), mainProject, appdto.CreateTagInput{Version: testDraftVersion(t, mainProject), Name: "fresh", Type: "boolean"})
 	if err != nil {
 		t.Fatalf("CreateTag: %v", err)
 	}

@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/kipitix/growscada/internal/server/domain/draft"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 )
 
@@ -48,7 +47,7 @@ func TestWidgetTypeNextID_ReturnsUniqueIDs(t *testing.T) {
 
 func TestWidgetTypeFindByID_EmptyDraft_ReturnsErrWidgetTypeNotFound(t *testing.T) {
 	repo := newWidgetTypeRepo(t)
-	_, err := repo.FindByID(editlock.System(context.Background()), repo.NextID())
+	_, err := repo.FindByID(context.Background(), repo.NextID())
 	if !errors.Is(err, library.ErrWidgetTypeNotFound) {
 		t.Errorf("expected ErrWidgetTypeNotFound, got %v", err)
 	}
@@ -56,7 +55,7 @@ func TestWidgetTypeFindByID_EmptyDraft_ReturnsErrWidgetTypeNotFound(t *testing.T
 
 func TestWidgetTypeFindAll_EmptyDraft(t *testing.T) {
 	repo := newWidgetTypeRepo(t)
-	list, err := repo.FindAll(editlock.System(context.Background()))
+	list, err := repo.FindAll(context.Background())
 	if err != nil {
 		t.Fatalf("FindAll: %v", err)
 	}
@@ -74,7 +73,7 @@ func TestWidgetType_CreateAndRead_RoundTripsTheDefinition(t *testing.T) {
 
 	stored := mustStoreWidgetType(t, built, repo)
 
-	found, err := repo.FindByID(editlock.System(context.Background()), stored.ID())
+	found, err := repo.FindByID(context.Background(), stored.ID())
 	if err != nil {
 		t.Fatalf("FindByID: %v", err)
 	}
@@ -86,7 +85,7 @@ func TestWidgetType_CreateAndRead_RoundTripsTheDefinition(t *testing.T) {
 
 func TestWidgetTypeFindAll_CreationOrder(t *testing.T) {
 	repo := newWidgetTypeRepo(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	first := mustStoreWidgetType(t, makeWidgetType(t, "first", nil, repo), repo)
 	second := mustStoreWidgetType(t, makeWidgetType(t, "second", nil, repo), repo)
 
@@ -101,7 +100,7 @@ func TestWidgetTypeFindAll_CreationOrder(t *testing.T) {
 
 func TestWidgetType_UpdateInTheDraft_IsReadBack(t *testing.T) {
 	repo := newWidgetTypeRepo(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	built := mustStoreWidgetType(t, makeWidgetType(t, "gauge", nil, repo), repo)
 	portName, _ := library.NewInputPortName("value")
 	changed, err := built.Update(built.Name(), built.HtmlTemplate(), built.Script(), built.ScriptLanguage(),
@@ -123,7 +122,7 @@ func TestWidgetType_UpdateInTheDraft_IsReadBack(t *testing.T) {
 
 func TestWidgetTypeDelete_InTheDraft_RemovesIt(t *testing.T) {
 	repo := newWidgetTypeRepo(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	built := mustStoreWidgetType(t, makeWidgetType(t, "gauge", nil, repo), repo)
 
 	mustUpdateLibrary(t, repo.libraryID, "Delete widget type gauge", func(session *draft.Session) error {
@@ -139,10 +138,10 @@ func TestWidgetTypeDelete_InTheDraft_RemovesIt(t *testing.T) {
 func TestWidgetTypeCreate_NameTakenInTheLibrary_IsRefused(t *testing.T) {
 	repo := newWidgetTypeRepo(t)
 	mustStoreWidgetType(t, makeWidgetType(t, "gauge", nil, repo), repo)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	again := makeWidgetType(t, "gauge", nil, repo)
 
-	_, err := testDrafts().Update(ctx, editlock.LibraryScope(repo.libraryID), libraryDraftVersionOf(t, repo.libraryID),
+	_, err := testDrafts().Update(ctx, draft.LibraryScope(repo.libraryID), libraryDraftVersionOf(t, repo.libraryID),
 		"Create widget type gauge", func(session *draft.Session) error {
 			session.CreateWidgetType(ctx, again)
 			return nil
@@ -155,7 +154,7 @@ func TestWidgetTypeCreate_NameTakenInTheLibrary_IsRefused(t *testing.T) {
 func TestWidgetTypeReads_FollowTheLibrary(t *testing.T) {
 	own := newWidgetTypeRepo(t)
 	other := newWidgetTypeRepo(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	built := mustStoreWidgetType(t, makeWidgetType(t, "gauge", nil, own), own)
 
 	if _, err := other.FindByID(ctx, built.ID()); !errors.Is(err, library.ErrWidgetTypeNotFound) {

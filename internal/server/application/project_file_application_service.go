@@ -37,13 +37,13 @@ type ProjectFileService interface {
 	// not live.
 	Revision(ctx context.Context, projectID uuid.UUID, n int) (ProjectFileDownload, error)
 	// Open replaces the whole Draft with document, stating the Version the
-	// client saw and requiring the EditLock: one DraftChange, "Open a project
+	// client saw: one DraftChange, "Open a project
 	// file" (ADR 0017). Returns an error matching ErrNothingToOpen if the
 	// canonical document is the Draft already, and one matching
 	// ErrInvalidProjectFile when the document does not validate.
 	Open(ctx context.Context, projectID uuid.UUID, version int, document []byte) (appdto.DraftState, error)
 	// Deploy makes document the new Revision of the live Project without the
-	// Draft or the EditLock (ADR 0018). Returns an error matching
+	// Draft (ADR 0018). Returns an error matching
 	// ErrNothingToDeploy if the document is the running Revision's.
 	Deploy(ctx context.Context, projectID uuid.UUID, document []byte) (appdto.Revision, error)
 }

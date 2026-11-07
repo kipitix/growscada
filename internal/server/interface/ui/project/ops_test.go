@@ -51,10 +51,7 @@ type fixture struct {
 func newServer(t *testing.T) (string, *testAPI) {
 	t.Helper()
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
-	// The tests edit the Draft, which needs its EditLock: the API client and
-	// the mounted Project act as one client, the one holding it (ADR 0015).
-	servertest.EnsureEditLock(t, srv, servertest.MainProject)
-	return srv.URL, newTestAPI(apiclient.New(srv.URL, srv.Client()).WithClientKey(servertest.ClientKey.String()))
+	return srv.URL, newTestAPI(apiclient.New(srv.URL, srv.Client()))
 }
 
 // mount mounts a Project talking to the server at url.
@@ -66,7 +63,7 @@ func mount(t *testing.T, url string, api *testAPI) *fixture {
 // mountWith is mount with the Project's requests sent through httpClient.
 func mountWith(t *testing.T, url string, api *testAPI, httpClient *http.Client) *fixture {
 	t.Helper()
-	p := NewProject(apiclient.New(url, httpClient).WithClientKey(servertest.ClientKey.String()))
+	p := NewProject(apiclient.New(url, httpClient))
 	p.SetProject(servertest.MainProject)
 	f := &fixture{t: t, p: p, api: api}
 	f.e = uitest.Load(t, mountOnHost{p})
@@ -151,7 +148,6 @@ func createWidgetType(t *testing.T, api *testAPI, name string, ports ...apiv0.In
 	if err != nil {
 		t.Fatalf("create library: %v", err)
 	}
-	servertest.EnsureLibraryEditLockWithClient(t, api.Client, lib.ID)
 	created, err := api.Library(lib.ID).CreateWidgetType(ctx, apiv0.CreateWidgetTypeRequest{
 		Name: name, HtmlTemplate: "<div></div>", ScriptLanguage: "javascript",
 		DefaultWidth: 150, DefaultHeight: 70, InputPorts: ports,
@@ -754,11 +750,11 @@ func TestNoServer_ShowsNetworkErrors(t *testing.T) {
 		}
 	}
 
-	// Without the lock — the server did not answer — the Draft is read-only:
-	// creating a Scene is refused on this side, without a request.
+	// The server does not answer: creating a Scene is attempted, and its
+	// failure is the network error of the request.
 	f.p.createScene(f.p.compoCtx)
 	f.run()
-	if got := f.oneToast(); got.Title != "Client Error" || !strings.Contains(got.Detail, "Read-only") {
+	if got := f.oneToast(); got.Title != "Network Error" || !strings.Contains(got.Detail, l.Addr().String()) {
 		t.Errorf("create: toast %+v", got)
 	}
 }

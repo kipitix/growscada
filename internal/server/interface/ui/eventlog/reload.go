@@ -18,7 +18,7 @@ import (
 // Revision it runs and whether the Draft differs from it). Operation reads
 // none of these: it follows the Journal from a Player of its own (ADR 0020).
 type ReloadTargets struct {
-	Projects, Libraries, WidgetTypes, LibraryPins, Scenes, Widgets, Tags, Deploy, EditLock bool
+	Projects, Libraries, WidgetTypes, LibraryPins, Scenes, Widgets, Tags, Deploy bool
 	// Scene is the one Scene whose own state and Widgets are stale (a Widget
 	// of it changed, which bumps its version without a scene event); uuid.Nil
 	// if none. The list of Scenes is not: only scene events and a resync
@@ -42,13 +42,13 @@ func (t ReloadTargets) DraftChanged() bool {
 }
 
 // AllTargets is every list.
-var AllTargets = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, EditLock: true}
+var AllTargets = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true}
 
 // The lists of each stream: what its resync reloads, since the events it
 // published while disconnected are lost.
 var (
-	serverTargets  = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, EditLock: true}
-	projectTargets = ReloadTargets{LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, EditLock: true}
+	serverTargets  = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true}
+	projectTargets = ReloadTargets{LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true}
 )
 
 // ReloadTargetsFor routes an event of the streams (or EventResync,
@@ -60,11 +60,6 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 		return serverTargets
 	case EventProjectResync:
 		return projectTargets
-	case apiv0.EventEditLockAcquired, apiv0.EventEditLockReleased,
-		apiv0.EventEditLockTakenOver, apiv0.EventEditLockExpired:
-		// The event carries the new state (ADR 0015); a reader that dropped
-		// it rereads the lock.
-		return ReloadTargets{EditLock: true}
 	case apiv0.EventRevisionCreated:
 		// The Revision the Project runs changed: Project refreshes its badge;
 		// nothing of the Draft is touched. Operation does not read this stream

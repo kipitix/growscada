@@ -6,9 +6,6 @@ info:
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/projectfile/deploy
-  headers:
-    - name: X-GrowSCADA-Client
-      value: "{{CLIENT_KEY}}"
   body:
     type: json
     data: |-
@@ -19,7 +16,7 @@ http:
   auth: inherit
 
 docs: |
-  A file becomes a new Revision without the Draft and without the EditLock:
+  A file becomes a new Revision without the Draft:
   the Revision's cause is `file`, and its document is the one sent
   (ADR 0018). The Draft keeps its Version.
 

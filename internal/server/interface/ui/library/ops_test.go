@@ -52,7 +52,7 @@ func newServer(t *testing.T) (string, *testAPI) {
 
 func mount(t *testing.T, url string, api *testAPI) *fixture {
 	t.Helper()
-	l := NewLibrary(apiclient.New(url, http.DefaultClient).WithClientKey(servertest.ClientKey.String()))
+	l := NewLibrary(apiclient.New(url, http.DefaultClient))
 	f := &fixture{t: t, l: l, api: api, url: url}
 	f.e = uitest.Load(t, mountOnHost{l})
 	return f

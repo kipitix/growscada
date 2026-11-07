@@ -6,9 +6,6 @@ info:
 http:
   method: PATCH
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/tags/{{TAG_ID}}/value
-  headers:
-    - name: X-GrowSCADA-Client
-      value: "{{CLIENT_KEY}}"
   body:
     type: json
     data: |-

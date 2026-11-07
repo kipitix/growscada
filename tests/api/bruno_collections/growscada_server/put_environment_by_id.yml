@@ -6,9 +6,6 @@ info:
 http:
   method: PUT
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/environments/{{ENVIRONMENT_ID}}
-  headers:
-    - name: X-GrowSCADA-Client
-      value: "{{CLIENT_KEY}}"
   body:
     type: json
     data: |-

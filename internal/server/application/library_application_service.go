@@ -54,7 +54,7 @@ var _ LibraryService = (*libraryServiceImpl)(nil)
 // NewLibraryService returns the service of the libraries of the Organization
 // aContent serves. The events of its changes are recorded by the aggregates
 // and saved with them (ADR 0008); a deleted library is removed by the policy
-// of NewLibraryCleanupPolicy. A Release is gated by the Draft's EditLock and
+// of NewLibraryCleanupPolicy. A Release is gated by the Draft's Version and
 // clears its DraftChange stack once made; a Discard is one transaction over
 // the Draft (ADR 0016, ADR 0017).
 func NewLibraryService(

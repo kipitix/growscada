@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/server/application/appdto"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 )
 
 // DeployService is the Engineering node's Deploy (task 35, Q6, Q8, Q9): it
@@ -28,40 +28,32 @@ type DeployService interface {
 	Preview(ctx context.Context, projectID uuid.UUID) (appdto.DeployPreview, error)
 }
 
-// EditLockGate refuses a write of a Draft whose EditLock the request does not
-// hold (ADR 0015).
-type EditLockGate interface {
-	// CheckHeld returns editlock.ErrNoClient when the request names no client,
-	// and editlock.ErrEditLockNotHeld when the lock is free or another
-	// client's. The server's own writes pass.
-	CheckHeld(ctx context.Context, scope editlock.Scope) error
-}
-
 type deployServiceImpl struct {
 	content ProjectContent
 	builder ProjectFileBuilder
 	runtime RuntimeNode
-	locks   EditLockGate
 }
 
 var _ DeployService = (*deployServiceImpl)(nil)
 
 // NewDeployService returns the DeployService over the content of the live
-// Projects aContent, the builder aBuilder, the Runtime node aRuntime and the
-// EditLocks of the Drafts aGate.
-func NewDeployService(aContent ProjectContent, aBuilder ProjectFileBuilder, aRuntime RuntimeNode, aGate EditLockGate) DeployService {
-	return &deployServiceImpl{content: aContent, builder: aBuilder, runtime: aRuntime, locks: aGate}
+// Projects aContent, the builder aBuilder and the Runtime node aRuntime.
+func NewDeployService(aContent ProjectContent, aBuilder ProjectFileBuilder, aRuntime RuntimeNode) DeployService {
+	return &deployServiceImpl{content: aContent, builder: aBuilder, runtime: aRuntime}
 }
 
 func (s deployServiceImpl) Deploy(ctx context.Context, projectID uuid.UUID) (appdto.Revision, error) {
-	deployed, _, err := s.content.open(ctx, projectID)
+	checked, _, err := s.content.open(ctx, projectID)
 	if err != nil {
 		return appdto.Revision{}, err
 	}
-	// A Deploy is an act over the Draft as a whole: it needs the lock, checked
-	// before the build, which spans several queries and has no single
-	// transaction to check it in (ADR 0015).
-	if err := s.locks.CheckHeld(ctx, editlock.ProjectScope(deployed)); err != nil {
+	// The Draft is read and built over several queries with no transaction
+	// around them. The Version read before the build is checked again in a
+	// short transaction after it, so the document sent is the Draft at that
+	// Version and a write that landed meanwhile is a conflict, not a mixed
+	// ProjectFile (ADR 0022).
+	version, err := s.content.DraftVersion(ctx, checked)
+	if err != nil {
 		return appdto.Revision{}, err
 	}
 	file, err := s.builder.Build(ctx, projectID)
@@ -81,6 +73,9 @@ func (s deployServiceImpl) Deploy(ctx context.Context, projectID uuid.UUID) (app
 			return appdto.Revision{}, fmt.Errorf("%w: the draft of project %s is the revision it runs", ErrNothingToDeploy, projectID)
 		}
 	}
+	if err := s.content.Drafts().CheckVersion(ctx, draft.ProjectScope(checked), version); err != nil {
+		return appdto.Revision{}, err
+	}
 
 	revision, err := s.runtime.Deploy(ctx, projectID, file)
 	if err != nil {
@@ -89,7 +84,7 @@ func (s deployServiceImpl) Deploy(ctx context.Context, projectID uuid.UUID) (app
 	// The Revision stands: the DraftChange stack that made it is cleared in a
 	// transaction of its own, because Deploy crosses to the Runtime node. A
 	// failure to clear is reported while the Revision stands (ADR 0017).
-	if err := s.content.Drafts().ClearStack(ctx, editlock.ProjectScope(deployed)); err != nil {
+	if err := s.content.Drafts().ClearStack(ctx, draft.ProjectScope(checked)); err != nil {
 		return appdto.Revision{}, fmt.Errorf("cannot clear the draft stack of deployed project %s: %w", projectID, err)
 	}
 	return revision, nil

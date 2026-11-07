@@ -43,13 +43,10 @@ func newOptions(opts []Option) options {
 // Project, the store of a Library's Draft (library set) only rows of that
 // Library.
 type aggregateStore[T any] struct {
-	db      *sql.DB
-	table   tableName
-	project *id.ID[project.Project]
-	library *id.ID[library.Library]
-	// lock, if set, runs first in the transaction of every write: it locks
-	// and checks what the write rests on (e.g. the row of its Library).
-	lock     func(ctx context.Context, tx *sql.Tx) error
+	db       *sql.DB
+	table    tableName
+	project  *id.ID[project.Project]
+	library  *id.ID[library.Library]
 	notFound error
 	conflict error
 	onCommit func()
@@ -105,11 +102,6 @@ func (s aggregateStore[T]) save(ctx context.Context, anID id.ID[T], current vers
 	}
 
 	err := s.inTx(ctx, events, func(tx *sql.Tx) error {
-		if s.lock != nil {
-			if err := s.lock(ctx, tx); err != nil {
-				return err
-			}
-		}
 		if current == version.Initial[T]() {
 			return w.insert(tx, next)
 		}
@@ -142,11 +134,6 @@ func (s aggregateStore[T]) deleteAnyVersion(ctx context.Context, anID id.ID[T], 
 // current is nil.
 func (s aggregateStore[T]) deleteWhere(ctx context.Context, anID id.ID[T], current *version.Version[T], events []event.Event) error {
 	return s.inTx(ctx, events, func(tx *sql.Tx) error {
-		if s.lock != nil {
-			if err := s.lock(ctx, tx); err != nil {
-				return err
-			}
-		}
 		cond, args := s.where(anID)
 		query := fmt.Sprintf(`DELETE FROM %s WHERE %s`, s.table, cond)
 		if current != nil {
@@ -177,14 +164,6 @@ func (s aggregateStore[T]) inTx(ctx context.Context, events []event.Event, write
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// The Draft's EditLock gates every write of its content (ADR 0015): the
-	// check reads the lock row in this transaction, so a takeover waits for
-	// this write and this write waits for a takeover.
-	if s.library != nil {
-		if err := checkLibraryEditLock(ctx, tx, *s.library); err != nil {
-			return err
-		}
-	}
 	if err := write(tx); err != nil {
 		return err
 	}

@@ -2,6 +2,10 @@
 
 A Project's Draft and a Library's Draft were a set of aggregates — Scene, Tag definition, Device, Environment, Environment Device, Library Pin, WidgetType — each with its own Version and compare-and-swap, held together by transitional row locks: a Scene's write locked its Library Pin, a WidgetType's write locked its Library, every write read the EditLock row of another aggregate. ADR 0008 already noted that an atomic DraftChange touching several of them is not served by a multi-aggregate transaction and calls for the Draft as the aggregate, and ADR 0012 and ADR 0015 named the locks it would retire. This is that aggregate.
 
+## Amendment 2026-11-08: the EditLock is not a field of the Draft (ADR 0022)
+
+ADR 0022 removes the EditLock: `engineering.drafts` loses `holder_key`, `holder_name`, `held_since`, `last_seen` and `lock_version`, and `internal/server/domain/editlock` is gone; its `Scope` becomes `draft.Scope`. The Draft stays one aggregate per scope with one Version, and that Version is now the only concurrency token: a write states it, and `draftRepositoryPostgres.Update` answers `draft.ConflictError` when it is stale. There is no read-only Draft and no gate to check in a write's transaction; Deploy checks the Version around its build (ADR 0022). Everything else below about the aggregate, its content and its transaction holds.
+
 ## Decision
 
 - **One Draft aggregate per scope.** `engineering.drafts` holds one row per Project or per Library: two nullable foreign keys (`project_id`, `library_id`) with a CHECK that exactly one is set, both `ON DELETE CASCADE`, one unique index each. The row carries the Draft's content `version`, its EditLock (holder key and name, `since`, `last_seen`, and a separate `lock_version`), and the position of its DraftChange stack. The Draft's identity is the row's own ID; the scope columns say which Project or Library it belongs to.

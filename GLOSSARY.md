@@ -109,13 +109,17 @@ The role that works on site in Operation mode: watches and controls the process.
 _Avoid_: user
 
 **Client**:
-A browser tab following the server's events over one SSE connection: the holder of an EditLock until Users exist (task 49). It is identified by a key the tab keeps for itself.
+A browser tab following the server's events over one SSE connection. It is a connection, not an identity: no write of a Draft is attributed to it (ADR 0022).
 _Avoid_: user, session, account
+
+**Author**:
+The name an Engineer declares when saving a Draft; it is recorded with the save and shown to other Engineers (task 72_2). A declared name, not an account: Users come with tasks 49/50.
+_Avoid_: user, owner, editor
 
 ### Nodes
 
 **Engineering node**:
-A GrowSCADA server acting in the role that holds the Draft, the EditLock and the DraftChanges, and deploys to a Runtime node.
+A GrowSCADA server acting in the role that holds the Draft and its DraftChanges, and deploys to a Runtime node.
 _Avoid_: dev server, designer server, studio
 
 **Runtime node**:
@@ -124,20 +128,8 @@ _Avoid_: production server, station, runtime (unqualified)
 
 ### Project lifecycle
 
-**EditLock**:
-The marker that one holder — today a Client, later a User — currently holds one Draft for editing. Without it the Draft is read-only.
-_Avoid_: lock (unqualified); acquire/release
-
-**Check out**:
-Taking the EditLock of a Draft for editing, declaring the holder's name.
-_Avoid_: acquire, lock, grab
-
-**Check in**:
-Giving the EditLock of a Draft back, leaving the Draft and its DraftChanges as they are.
-_Avoid_: release, unlock
-
 **Draft**:
-The working state of a Project or of a Library as it is being edited, and the unit of consistency: every change to it is one DraftChange. A Project's Draft holds Scenes with their Widgets, Tag definitions, Devices, Environments and the pinned Library Releases; a Library's holds its WidgetTypes.
+The working state of a Project or of a Library as it is being edited, and the unit of consistency: every change to it is one DraftChange, and its Version is the only token a write states (ADR 0016, ADR 0022). A Project's Draft holds Scenes with their Widgets, Tag definitions, Devices, Environments and the pinned Library Releases; a Library's holds its WidgetTypes.
 _Avoid_: working copy, unsaved changes
 
 **DraftChange**:
@@ -177,11 +169,11 @@ A portable file holding one project configuration (the content of a Revision) an
 _Avoid_: export, package, backup
 
 **Open a ProjectFile**:
-Replacing the whole content of a Project's Draft with a ProjectFile — one DraftChange that undo reverses — after checking that the file names the Project and that its pinned Library Releases exist locally. Requires the EditLock.
+Replacing the whole content of a Project's Draft with a ProjectFile — one DraftChange that undo reverses — after checking that the file names the Project and that its pinned Library Releases exist locally. Requires the Draft's Version.
 _Avoid_: import, upload, load, restore
 
 **Deploy a file**:
-Making a valid ProjectFile the new Revision of a Project on the Runtime node, without touching the Draft and without the EditLock; the Revision's cause is `file`.
+Making a valid ProjectFile the new Revision of a Project on the Runtime node, without touching the Draft; the Revision's cause is `file`.
 _Avoid_: import, upload, restore
 
 ### Operation and History

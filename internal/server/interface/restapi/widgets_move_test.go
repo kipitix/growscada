@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 )
 
 // The group move route: PATCH …/scenes/{scene_id}/widgets (task 40, part 1).
@@ -47,7 +46,7 @@ func TestPatchWidgets_Valid_Returns200WithNewVersion(t *testing.T) {
 		t.Error("the answer carries no Version")
 	}
 
-	listed, err := newServices().scenes.FindWidgetsBySceneID(editlock.System(context.Background()), mainProject, sc.ID)
+	listed, err := newServices().scenes.FindWidgetsBySceneID(context.Background(), mainProject, sc.ID)
 	if err != nil {
 		t.Fatalf("FindWidgetsBySceneID: %v", err)
 	}
@@ -189,40 +188,6 @@ func TestPatchWidgets_NothingToMove_Returns409(t *testing.T) {
 	}
 	if !strings.Contains(problem.Detail, "Nothing to move") {
 		t.Errorf("the 409 says %q", problem.Detail)
-	}
-}
-
-func TestPatchWidgets_WithoutEditLock_ReturnsRefusal(t *testing.T) {
-	cleanWidgetsRest(t)
-	cleanEditLocksRest(t)
-	router := lockRouter()
-	sc := createSceneViaSceneService(t)
-	created := createWidgetViaService(t, sc.ID, sc.Version, testWidgetInput)
-	moves := apiv0.MoveWidgetsRequest{
-		Version: testDraftVersion(t, mainProject),
-		Moves:   []apiv0.WidgetMoveRequest{{WidgetID: created.ID, X: 1, Y: 2}},
-	}
-
-	if rec := callAs(t, router, http.MethodPatch, movePath(sc.ID), moves, ""); rec.Code != http.StatusBadRequest {
-		t.Errorf("a request naming no client: %d, want 400: %s", rec.Code, rec.Body)
-	}
-
-	aliceKey := uuid.MustParse("a1000000-0000-4000-8000-000000000001")
-	bobKey := uuid.MustParse("b1000000-0000-4000-8000-000000000002")
-	if rec := callAs(t, router, http.MethodPost, mainPath+apiv0.EditLockPath,
-		apiv0.CheckOutEditLockRequest{Name: "alice"}, aliceKey.String()); rec.Code != http.StatusCreated {
-		t.Fatalf("check out: %d %s", rec.Code, rec.Body)
-	}
-	rec := callAs(t, router, http.MethodPatch, movePath(sc.ID), moves, bobKey.String())
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("another client: %d, want 409: %s", rec.Code, rec.Body)
-	}
-	var problem apiv0.Problem
-	if err := json.NewDecoder(rec.Body).Decode(&problem); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if problem.EditLock == nil {
-		t.Error("the 409 carries no edit lock")
 	}
 }
 

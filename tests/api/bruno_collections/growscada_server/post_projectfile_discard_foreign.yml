@@ -6,9 +6,6 @@ info:
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/discard
-  headers:
-    - name: X-GrowSCADA-Client
-      value: "{{CLIENT_KEY}}"
   auth: inherit
 
 docs: |

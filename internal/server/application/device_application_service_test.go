@@ -11,7 +11,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
@@ -20,7 +19,7 @@ import (
 // of the test database: the pairs first, then the rows they refer to.
 func cleanDevices(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(editlock.System(context.Background()),
+	if _, err := testDB.ExecContext(context.Background(),
 		`DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.tags;
 		 DELETE FROM engineering.environment_devices; DELETE FROM engineering.devices; DELETE FROM engineering.environments`); err != nil {
 		t.Fatalf("cleanDevices: %v", err)
@@ -40,7 +39,7 @@ func newEnvironmentService() application.EnvironmentService {
 func newDevices(t *testing.T) (application.DeviceService, appdto.Device) {
 	t.Helper()
 	svc := newDeviceService()
-	created, err := svc.CreateDevice(editlock.System(context.Background()), mainProject, draftVersionOf(t, mainProject), appdto.DeviceInput{
+	created, err := svc.CreateDevice(context.Background(), mainProject, draftVersionOf(t, mainProject), appdto.DeviceInput{
 		Name: "device-" + uuid.NewString(), Comment: "the pump", Protocol: "simulation", Config: []byte(`{"pattern":"ramp"}`),
 	})
 	if err != nil {
@@ -51,7 +50,7 @@ func newDevices(t *testing.T) (application.DeviceService, appdto.Device) {
 
 func TestDeviceService_CRUD(t *testing.T) {
 	cleanDevices(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	svc, created := newDevices(t)
 
 	if created.Version == 0 || created.Protocol != "simulation" {
@@ -93,7 +92,7 @@ func TestDeviceService_CRUD(t *testing.T) {
 
 func TestEnvironmentService_CRUDAndPairs(t *testing.T) {
 	cleanDevices(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	devices, created := newDevices(t)
 	environments := newEnvironmentService()
 
@@ -153,7 +152,7 @@ func TestEnvironmentService_CRUDAndPairs(t *testing.T) {
 func TestDeviceService_ProjectScope(t *testing.T) {
 	cleanProjects(t)
 	cleanDevices(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	projects := application.NewProjectService(repositories.NewProjectRepositoryPostgres(testDB), soleOrganization())
 	other, err := projects.CreateProject(ctx, appdto.ProjectInput{Name: "Devices Other " + uuid.NewString()})
 	if err != nil {

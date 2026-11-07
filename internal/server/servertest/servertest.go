@@ -25,7 +25,7 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/migrations"
@@ -131,7 +131,6 @@ func NewDeviceInProject(t *testing.T, srv *httptest.Server, db *sql.DB, projectI
 	t.Helper()
 	ctx := context.Background()
 	projectPath := apiv0.ProjectPath(projectID.String())
-	EnsureEditLock(t, srv, projectID)
 	device := postJSON[apiv0.CreateDeviceResponse](t, srv, projectPath+"/devices",
 		apiv0.CreateDeviceRequest{Name: name, Protocol: "simulation", Config: apiv0.JSONObject(`{}`),
 			Version: DraftVersion(t, db, projectID)})
@@ -185,7 +184,6 @@ func sendJSON[T any](t *testing.T, srv *httptest.Server, method, path string, bo
 		t.Fatalf("%s %s: %v", method, path, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(apiv0.ClientHeader, ClientKey.String())
 	resp, err := srv.Client().Do(req)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
@@ -244,7 +242,6 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	content := application.NewProjectContent(projectRepo, scopes, drafts, orgID)
 	libraries := repositories.NewLibraryRepositoryPostgres(db, onCommit)
 	libraryContent := application.NewLibraryContent(libraries, drafts, orgID)
-	editLocks := application.NewEditLockService(content, libraryContent, drafts)
 	runtimeEvents := eventbus.NewAsyncPublisher(bus, 1024)
 	tagStateSvc := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, runtimeEvents.Publish)
 	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(db), runtimeEvents.Publish)
@@ -261,11 +258,10 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	dispatcher.SetPolicyRunner(runner)
 	ctx, stop := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
-	wg.Add(4)
+	wg.Add(3)
 	go func() { defer wg.Done(); dispatcher.Run(ctx) }()
 	go func() { defer wg.Done(); runtimeEvents.Run(ctx) }()
 	go func() { defer wg.Done(); runner.Run(ctx) }()
-	go func() { defer wg.Done(); application.RunEditLockReaper(ctx, editLocks) }()
 	t.Cleanup(func() {
 		stop()
 		wg.Wait()
@@ -283,14 +279,12 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 		Environments: application.NewEnvironmentService(content),
 		Draft:        application.NewDraftService(content),
 		DraftChanges: application.NewDraftChangesService(content, libraryContent),
-		Deploy: application.NewDeployService(
-			content, application.NewProjectFileBuilder(content), runtimeNode, editLocks),
+		Deploy:       application.NewDeployService(content, application.NewProjectFileBuilder(content), runtimeNode),
 		Discard:      application.NewDiscardService(content, runtimeNode, libraries, releases),
 		ProjectFiles: application.NewProjectFileService(content, application.NewProjectFileBuilder(content), runtimeNode, libraries, releases),
 		Revisions:    revisions,
 		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(db)),
 		DeviceTokens: deviceTokens,
-		EditLocks:    editLocks,
 		Journal:      journal,
 		Operation:    operation,
 	}, bus, 100)
@@ -306,8 +300,8 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 func DraftVersion(t *testing.T, db *sql.DB, projectID uuid.UUID) int {
 	t.Helper()
 	drafts := repositories.NewDraftRepositoryPostgres(db, nil)
-	found, ok, err := drafts.Read(editlock.System(context.Background()),
-		editlock.ProjectScope(id.NewID(id.IDWithUUID[project.Project](projectID))))
+	found, ok, err := drafts.Read(context.Background(),
+		draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](projectID))))
 	if err != nil {
 		t.Fatalf("read the draft of %s: %v", projectID, err)
 	}

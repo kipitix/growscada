@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/server/domain/draft"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
@@ -24,7 +23,7 @@ func mustSaveLibrary(t *testing.T) library.Library {
 		t.Fatal(err)
 	}
 	repo := repositories.NewLibraryRepositoryPostgres(testDB)
-	saved, err := repo.Save(editlock.System(context.Background()), library.CreateLibrary(repo.NextID(), soleOrganization(t), name))
+	saved, err := repo.Save(context.Background(), library.CreateLibrary(repo.NextID(), soleOrganization(t), name))
 	if err != nil {
 		t.Fatalf("Save library: %v", err)
 	}
@@ -53,7 +52,7 @@ func newWidgetTypeRepo(t *testing.T) libraryRepo {
 // mustRelease releases the Draft of the library as it is.
 func mustRelease(t *testing.T, libraryID id.ID[library.Library]) library.LibraryRelease {
 	t.Helper()
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	lib, err := repositories.NewLibraryRepositoryPostgres(testDB).FindByID(ctx, libraryID)
 	if err != nil {
 		t.Fatalf("FindByID library: %v", err)
@@ -81,7 +80,7 @@ func mustRelease(t *testing.T, libraryID id.ID[library.Library]) library.Library
 // mustPin pins release in the project through the project's Draft.
 func mustPin(t *testing.T, projectID id.ID[project.Project], release library.LibraryRelease) librarypin.LibraryPin {
 	t.Helper()
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	var saved librarypin.LibraryPin
 	mustUpdate(t, projectID, "test pin", func(session *draft.Session) error {
 		var err error
@@ -114,7 +113,7 @@ func mustPinWidgetType(t *testing.T, projectID id.ID[project.Project], ports ...
 // cleanLibraries removes every pin and library with its Draft and releases.
 func cleanLibraries(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(editlock.System(context.Background()),
+	if _, err := testDB.ExecContext(context.Background(),
 		"DELETE FROM engineering.widgets; DELETE FROM engineering.library_pins; DELETE FROM engineering.libraries"); err != nil {
 		t.Fatalf("cleanLibraries: %v", err)
 	}

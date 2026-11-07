@@ -28,7 +28,6 @@ func TestSchemaIsCommitted(t *testing.T) {
 			DeployResponse{}, DiscardProjectResponse{}, TagStateResponse{}, GetTagStatesResponse{},
 			JournalResponse{}, OperationStateResponse{},
 			DraftChangesResponse{}, DraftChangeCommandRequest{},
-			EditLockResponse{}, EditLockHolderResponse{}, CheckOutEditLockRequest{}, TakeOverEditLockRequest{},
 			Event{}, Problem{},
 		},
 	})

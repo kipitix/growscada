@@ -1,11 +1,9 @@
 package growctl_test
 
 import (
-	"context"
 	"strings"
 	"testing"
 
-	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/servertest"
 )
 
@@ -54,53 +52,6 @@ spec:
 	edited = strings.Replace(edited, "width: 30", "width: 35", 1)
 	if out, err := runGrowctl(t, srv, edited, "apply"); err != nil {
 		t.Fatalf("apply two edits: %q, %v", out, err)
-	}
-}
-
-// TestLibrary_HeldLock_IsAnErrorNamingTheHolder: a run that writes a library's
-// Draft does not write it for another client; --take-over takes it
-// (ADR 0015).
-func TestLibrary_HeldLock_IsAnErrorNamingTheHolder(t *testing.T) {
-	srv, _ := servertest.StartAPI(t, postgres.DB(t))
-	if _, err := runGrowctl(t, srv, libraryManifest, "apply"); err != nil {
-		t.Fatalf("apply: %v", err)
-	}
-	found, ok, err := apiclient.New(srv.URL, srv.Client()).FindLibraryByName(context.Background(), "Gauges")
-	if err != nil || !ok {
-		t.Fatalf("find library Gauges: %t, %v", ok, err)
-	}
-	servertest.EnsureLibraryEditLock(t, srv, found.ID)
-
-	edited := strings.Replace(libraryManifest, "width: 40", "width: 60", 1)
-	if _, err := runGrowctl(t, srv, edited, "apply"); err == nil {
-		t.Fatal("apply of a held Draft succeeded")
-	} else if !strings.Contains(err.Error(), servertest.ClientName) || !strings.Contains(err.Error(), "--take-over") {
-		t.Errorf("the refusal does not name the holder and the way out: %v", err)
-	}
-	if _, err := runGrowctl(t, srv, edited, "apply", "--take-over"); err != nil {
-		t.Errorf("apply --take-over: %v", err)
-	}
-}
-
-// TestLibraryRelease_HeldLock_IsAnErrorNamingTheHolder: a Release is an act
-// over the whole Draft and needs its EditLock (ADR 0015).
-func TestLibraryRelease_HeldLock_IsAnErrorNamingTheHolder(t *testing.T) {
-	srv, _ := servertest.StartAPI(t, postgres.DB(t))
-	if _, err := runGrowctl(t, srv, libraryManifest, "apply"); err != nil {
-		t.Fatalf("apply: %v", err)
-	}
-	found, ok, err := apiclient.New(srv.URL, srv.Client()).FindLibraryByName(context.Background(), "Gauges")
-	if err != nil || !ok {
-		t.Fatalf("find library Gauges: %t, %v", ok, err)
-	}
-	servertest.EnsureLibraryEditLock(t, srv, found.ID)
-
-	if _, _, err := execGrowctl(t, srv, "", "release", "Gauges"); err == nil ||
-		!strings.Contains(err.Error(), servertest.ClientName) || !strings.Contains(err.Error(), "--take-over") {
-		t.Errorf("release of a held Draft: %v, want the holder named", err)
-	}
-	if _, _, err := execGrowctl(t, srv, "", "release", "Gauges", "--take-over"); err != nil {
-		t.Errorf("release --take-over: %v", err)
 	}
 }
 

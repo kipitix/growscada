@@ -47,7 +47,6 @@ func (l *Library) renderLibrariesColumn() app.UI {
 		Style("min-height", "0").
 		Body(
 			app.H3().Style("margin", "0 0 8px 0").Text("Libraries"),
-			l.renderEditLockBar(),
 			l.renderDraftChangesBar(),
 			app.Div().
 				Style("display", "flex").
@@ -84,12 +83,8 @@ func (l *Library) renderLibraryStatus() app.UI {
 	default:
 		status = "Release " + itoa(lib.LatestRelease) + " · up to date"
 	}
-	editable := l.lockMine()
 	releaseHint := "Release the Draft as the next Library Release"
 	discardHint := "Reset the Draft to its latest release"
-	if !l.lockMine() {
-		releaseHint, discardHint = readOnlyTitle(releaseHint), readOnlyTitle(discardHint)
-	}
 	return app.Div().
 		Style("margin-top", "8px").
 		Style("padding-top", "8px").
@@ -105,8 +100,8 @@ func (l *Library) renderLibraryStatus() app.UI {
 				Style("display", "flex").
 				Style("gap", "4px").
 				Body(
-					smallButton("Release", editable && lib.HasUnreleasedChanges, "accent", releaseHint, l.release),
-					smallButton("Discard", editable && lib.LatestRelease > 0 && lib.HasUnreleasedChanges, "error", discardHint, l.discard),
+					smallButton("Release", lib.HasUnreleasedChanges, "accent", releaseHint, l.release),
+					smallButton("Discard", lib.LatestRelease > 0 && lib.HasUnreleasedChanges, "error", discardHint, l.discard),
 				),
 		)
 }

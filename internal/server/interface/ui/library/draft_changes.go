@@ -17,7 +17,7 @@ import (
 // shortcuts, and the state they read (the descriptions of the next steps) —
 // read on mount, on a resync, after each content event and after each command
 // (loadDraftChanges). Both commands are writes of the Draft: they are gated by
-// its EditLock and state its Version like any other (ADR 0015, ADR 0016).
+// its Version like any other (ADR 0016).
 
 // draftChangesVersion is the Version the last stack answer stated — what an
 // undo and a redo state, since they apply the state the buttons were built
@@ -110,18 +110,12 @@ func (l *Library) rejectedDraftChange(ctx app.Context, err error) {
 		ctx.Update()
 		return
 	}
-	if problem && se.Problem.EditLock != nil {
-		l.applyEditLock(ctx, *se.Problem.EditLock)
-		ctx.Update()
-		return
-	}
 	uiutil.ShowError(ctx, err)
 	l.loadDraftChanges(ctx)
 	ctx.Update()
 }
 
-// renderDraftChangesBar is the Undo and Redo pair of the libraries column; it
-// follows the EditLock row, which says whether the Draft may be edited at all.
+// renderDraftChangesBar is the Undo and Redo pair of the libraries column.
 func (l *Library) renderDraftChangesBar() app.UI {
 	if l.libraryID == uuid.Nil {
 		return app.Div()
@@ -146,13 +140,11 @@ func (l *Library) undoDraftChangeFromButton() { l.undoDraftChange(l.compoCtx) }
 func (l *Library) redoDraftChangeFromButton() { l.redoDraftChange(l.compoCtx) }
 
 // undoTitle is the hover text of the Undo button: the step the server would
-// undo, why the button is off without the lock, or that the stack is empty.
+// undo, or that the stack is empty.
 func (l *Library) undoTitle() string {
 	switch {
 	case l.viewing != 0:
 		return "Undo the last change — a release is shown; open the Draft to edit it"
-	case l.lockReadOnly():
-		return readOnlyTitle("Undo the last change")
 	case !l.changesLoaded:
 		return "Undo the last change"
 	case !l.changes.CanUndo || l.changes.UndoDescription == "":
@@ -167,8 +159,6 @@ func (l *Library) redoTitle() string {
 	switch {
 	case l.viewing != 0:
 		return "Redo the change undone last — a release is shown; open the Draft to edit it"
-	case l.lockReadOnly():
-		return readOnlyTitle("Redo the change undone last")
 	case !l.changesLoaded:
 		return "Redo the change undone last"
 	case !l.changes.CanRedo || l.changes.RedoDescription == "":
@@ -231,7 +221,7 @@ func (l *Library) applyKeyAction(ctx app.Context, action uiutil.KeyAction) {
 // mode is open. An undo behind the name of a Check out or a takeover would act
 // on a Draft the user is only about to take.
 func (l *Library) keyActionAllowed() bool {
-	return !l.askingName && !l.takeOverDialog
+	return true
 }
 
 // shown reports whether the Library mode is the one displayed. Root keeps every

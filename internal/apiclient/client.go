@@ -71,10 +71,6 @@ type Client struct {
 	// deviceToken, when set, is sent as Authorization: Bearer <token> on every
 	// request: the client acts as the Device the token names.
 	deviceToken string
-	// clientKey, when set, is sent as X-GrowSCADA-Client on every request: the
-	// client acts as the browser tab that holds the EditLock of a Draft
-	// (ADR 0015).
-	clientKey string
 }
 
 // Option configures a Client.
@@ -118,19 +114,6 @@ func (c *Client) WithDeviceToken(token string) *Client {
 	gateway.deviceToken = token
 	return &gateway
 }
-
-// WithClientKey returns a client of the same server whose every request names
-// the client key — the key a browser tab keeps for itself — so a gated write
-// of a Draft acts as that tab (X-GrowSCADA-Client, ADR 0015). An empty key is
-// none: the returned client sends no header. The receiver is left as it is.
-func (c *Client) WithClientKey(key string) *Client {
-	identified := *c
-	identified.clientKey = key
-	return &identified
-}
-
-// ClientKey is the key this client names, if any.
-func (c *Client) ClientKey() string { return c.clientKey }
 
 // ── Projects ─────────────────────────────────────────────────────────────────
 
@@ -976,80 +959,6 @@ func (p *ProjectClient) Rollback(ctx context.Context, number int) (apiv0.Revisio
 
 func revisionPath(number int) string { return "/revisions/" + strconv.Itoa(number) }
 
-// ── EditLock ─────────────────────────────────────────────────────────────────
-
-// StateEditLock returns the state of the Project's Draft EditLock, free or
-// held (ADR 0015).
-func (p *ProjectClient) StateEditLock(ctx context.Context) (apiv0.EditLockResponse, error) {
-	var resp apiv0.EditLockResponse
-	err := p.do(ctx, http.MethodGet, apiv0.EditLockPath, nil, http.StatusOK, &resp)
-	return resp, err
-}
-
-// CheckOutEditLock takes the Project's Draft for editing under name. The error
-// matches ErrConflict if another client holds it; holding it already is not a
-// conflict.
-func (p *ProjectClient) CheckOutEditLock(ctx context.Context, name string) (apiv0.EditLockResponse, error) {
-	var resp apiv0.EditLockResponse
-	err := p.doOneOf(ctx, http.MethodPost, apiv0.EditLockPath,
-		apiv0.CheckOutEditLockRequest{Name: name}, &resp, http.StatusCreated, http.StatusOK)
-	return resp, err
-}
-
-// CheckInEditLock gives the Project's Draft back. A free lock is not an
-// error; another client's is (ErrConflict).
-func (p *ProjectClient) CheckInEditLock(ctx context.Context) (apiv0.EditLockResponse, error) {
-	var resp apiv0.EditLockResponse
-	err := p.do(ctx, http.MethodDelete, apiv0.EditLockPath, nil, http.StatusOK, &resp)
-	return resp, err
-}
-
-// TakeOverEditLock takes the Project's Draft from its holder, stating the
-// version observed. The error matches ErrConflict if the version is stale
-// (reload the state and retry) or the lock is free.
-func (p *ProjectClient) TakeOverEditLock(ctx context.Context, name string, version int) (apiv0.EditLockResponse, error) {
-	var resp apiv0.EditLockResponse
-	err := p.do(ctx, http.MethodPost, apiv0.EditLockPath+"/takeover",
-		apiv0.TakeOverEditLockRequest{Name: name, Version: version}, http.StatusOK, &resp)
-	return resp, err
-}
-
-// StateEditLock returns the state of the Library's Draft EditLock, free or
-// held (ADR 0015).
-func (l *LibraryClient) StateEditLock(ctx context.Context) (apiv0.EditLockResponse, error) {
-	var resp apiv0.EditLockResponse
-	err := l.do(ctx, http.MethodGet, apiv0.EditLockPath, nil, http.StatusOK, &resp)
-	return resp, err
-}
-
-// CheckOutEditLock takes the Library's Draft for editing under name. The error
-// matches ErrConflict if another client holds it; holding it already is not a
-// conflict.
-func (l *LibraryClient) CheckOutEditLock(ctx context.Context, name string) (apiv0.EditLockResponse, error) {
-	var resp apiv0.EditLockResponse
-	err := l.doOneOf(ctx, http.MethodPost, apiv0.EditLockPath,
-		apiv0.CheckOutEditLockRequest{Name: name}, &resp, http.StatusCreated, http.StatusOK)
-	return resp, err
-}
-
-// CheckInEditLock gives the Library's Draft back. A free lock is not an
-// error; another client's is (ErrConflict).
-func (l *LibraryClient) CheckInEditLock(ctx context.Context) (apiv0.EditLockResponse, error) {
-	var resp apiv0.EditLockResponse
-	err := l.do(ctx, http.MethodDelete, apiv0.EditLockPath, nil, http.StatusOK, &resp)
-	return resp, err
-}
-
-// TakeOverEditLock takes the Library's Draft from its holder, stating the
-// version observed. The error matches ErrConflict if the version is stale
-// (reload the state and retry) or the lock is free.
-func (l *LibraryClient) TakeOverEditLock(ctx context.Context, name string, version int) (apiv0.EditLockResponse, error) {
-	var resp apiv0.EditLockResponse
-	err := l.do(ctx, http.MethodPost, apiv0.EditLockPath+"/takeover",
-		apiv0.TakeOverEditLockRequest{Name: name, Version: version}, http.StatusOK, &resp)
-	return resp, err
-}
-
 // ── Transport ────────────────────────────────────────────────────────────────
 
 // maxProblemBody caps how much of an error response is read.
@@ -1169,14 +1078,10 @@ func drainAndClose(body io.ReadCloser) {
 	_ = body.Close()
 }
 
-// authenticate adds the Device Token and the client key of the client, if it
-// has them.
+// authenticate adds the Device Token of the client, if it has one.
 func (c *Client) authenticate(req *http.Request) {
 	if c.deviceToken != "" {
 		req.Header.Set("Authorization", "Bearer "+c.deviceToken)
-	}
-	if c.clientKey != "" {
-		req.Header.Set(apiv0.ClientHeader, c.clientKey)
 	}
 }
 

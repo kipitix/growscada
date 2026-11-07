@@ -300,12 +300,6 @@ func executeLibraries(ctx context.Context, client *Client, run *settings, plan l
 		return client.Library(found.ID), nil
 	}
 
-	unlock, err := run.lockFoundLibraries(ctx, client, plan.changedLibraryNames())
-	if err != nil {
-		return err
-	}
-	defer unlock()
-
 	// draftVersions is the Version of each library's Draft as the last response
 	// of this run stated: one Version covers every write of the content
 	// (ADR 0016), so a run writing two WidgetTypes of one library states the
@@ -465,36 +459,9 @@ func planDeleteLibraries(ctx context.Context, client *Client, manifests Manifest
 }
 
 // executeDeleteLibraries deletes the WidgetTypes, then the libraries, of a
-// delete -f, printing each step once it is done. The Drafts it writes are
-// checked out first (ADR 0015); a library gone meanwhile is reported as not
-// found, its lock not taken.
+// delete -f, printing each step once it is done. A library gone meanwhile is
+// reported as not found.
 func executeDeleteLibraries(ctx context.Context, client *Client, run *settings, types []WidgetTypeStep, libs []LibraryStep, out io.Writer) error {
-	var names []string
-	seen := map[string]bool{}
-	for _, s := range types {
-		if s.Action == ActionDelete && !seen[s.Library] {
-			seen[s.Library] = true
-			names = append(names, s.Library)
-		}
-	}
-	sort.Strings(names)
-	var unlocks []func()
-	defer func() {
-		for i := len(unlocks) - 1; i >= 0; i-- {
-			unlocks[i]()
-		}
-	}()
-	for _, name := range names {
-		lib, _, err := findLibrary(ctx, client, name)
-		if err != nil {
-			continue // gone: its steps are reported as not found
-		}
-		release, err := run.lockLibrary(ctx, lib, name)
-		if err != nil {
-			return err
-		}
-		unlocks = append(unlocks, release)
-	}
 	for _, s := range types {
 		ref := widgetTypeRef(s.Library, s.Name())
 		if s.Action == ActionDelete {
@@ -557,13 +524,6 @@ func newReleaseCommand(s *settings) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			// A Release is an act over the whole Draft: it needs its EditLock
-			// (ADR 0015).
-			unlock, err := s.lockLibrary(ctx, lib, args[0])
-			if err != nil {
-				return err
-			}
-			defer unlock()
 			state, err := lib.DraftState(ctx)
 			if err != nil {
 				return fmt.Errorf("library/%s: %w", args[0], err)
@@ -595,13 +555,6 @@ func newDiscardCommand(s *settings) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			// A Discard is an act over the whole Draft: it needs its EditLock
-			// (ADR 0015).
-			unlock, err := s.lockLibrary(ctx, lib, args[0])
-			if err != nil {
-				return err
-			}
-			defer unlock()
 			state, err := lib.Discard(ctx)
 			if err != nil {
 				return fmt.Errorf("library/%s: %w", args[0], err)

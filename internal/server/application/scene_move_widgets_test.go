@@ -11,14 +11,13 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 )
 
 // createWidgetIn creates a widget of the shared fixture in the scene.
 func createWidgetIn(t *testing.T, svc application.SceneService, sceneID uuid.UUID) appdto.Widget {
 	t.Helper()
-	created, err := svc.CreateWidget(editlock.System(context.Background()), mainProject, sceneID,
+	created, err := svc.CreateWidget(context.Background(), mainProject, sceneID,
 		draftVersionOf(t, mainProject), testCreateWidgetInput)
 	if err != nil {
 		t.Fatalf("CreateWidget: %v", err)
@@ -61,7 +60,7 @@ func lastChangeSides(t *testing.T, projectID uuid.UUID) (string, int, int) {
 // positionIn returns the x and y the service reports for the widget.
 func positionIn(t *testing.T, svc application.SceneService, sceneID, widgetID uuid.UUID) (float64, float64, int) {
 	t.Helper()
-	w, err := svc.FindWidgetByID(editlock.System(context.Background()), mainProject, sceneID, widgetID)
+	w, err := svc.FindWidgetByID(context.Background(), mainProject, sceneID, widgetID)
 	if err != nil {
 		t.Fatalf("FindWidgetByID: %v", err)
 	}
@@ -71,7 +70,7 @@ func positionIn(t *testing.T, svc application.SceneService, sceneID, widgetID uu
 func TestMoveWidgets_MovesTheGroupInOneChange(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	sc := mustCreateScene(t, svc)
 	first := createWidgetIn(t, svc, sc.ID)
 	second := createWidgetIn(t, svc, sc.ID)
@@ -113,7 +112,7 @@ func TestMoveWidgets_MovesTheGroupInOneChange(t *testing.T) {
 func TestMoveWidgets_KeepsEverythingButThePosition(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	sc := mustCreateScene(t, svc)
 	input := testCreateWidgetInput
 	input.Labels = []string{"keep", "me"}
@@ -145,7 +144,7 @@ func TestMoveWidgets_KeepsEverythingButThePosition(t *testing.T) {
 func TestMoveWidgets_EmptyList_IsInvalidInput(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	sc := mustCreateScene(t, svc)
 	version := draftVersionOf(t, mainProject)
 	changes := draftChangeCountOf(t, mainProject)
@@ -163,7 +162,7 @@ func TestMoveWidgets_EmptyList_IsInvalidInput(t *testing.T) {
 func TestMoveWidgets_RepeatedWidget_IsInvalidInput(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	sc := mustCreateScene(t, svc)
 	created := createWidgetIn(t, svc, sc.ID)
 	version := draftVersionOf(t, mainProject)
@@ -185,7 +184,7 @@ func TestMoveWidgets_UnknownScene_ReturnsNotFound(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
 
-	_, err := svc.MoveWidgets(editlock.System(context.Background()), mainProject, uuid.New(),
+	_, err := svc.MoveWidgets(context.Background(), mainProject, uuid.New(),
 		draftVersionOf(t, mainProject), []appdto.WidgetMove{{WidgetID: uuid.New(), X: 1, Y: 2}})
 
 	if !errors.Is(err, scene.ErrSceneNotFound) {
@@ -196,7 +195,7 @@ func TestMoveWidgets_UnknownScene_ReturnsNotFound(t *testing.T) {
 func TestMoveWidgets_WidgetOfAnotherScene_ReturnsNotFound(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	target := mustCreateScene(t, svc)
 	other := mustCreateScene(t, svc)
 	foreign := createWidgetIn(t, svc, other.ID)
@@ -215,7 +214,7 @@ func TestMoveWidgets_StaleVersion_ReturnsConflict(t *testing.T) {
 	sc := mustCreateScene(t, svc)
 	created := createWidgetIn(t, svc, sc.ID)
 
-	_, err := svc.MoveWidgets(editlock.System(context.Background()), mainProject, sc.ID,
+	_, err := svc.MoveWidgets(context.Background(), mainProject, sc.ID,
 		draftVersionOf(t, mainProject)+99, []appdto.WidgetMove{{WidgetID: created.ID, X: 1, Y: 2}})
 
 	if !errors.Is(err, draft.ErrDraftConflict) {
@@ -226,7 +225,7 @@ func TestMoveWidgets_StaleVersion_ReturnsConflict(t *testing.T) {
 func TestMoveWidgets_NothingToMove_IsConflictAndWritesNothing(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	sc := mustCreateScene(t, svc)
 	first := createWidgetIn(t, svc, sc.ID)
 	second := createWidgetIn(t, svc, sc.ID)
@@ -243,24 +242,5 @@ func TestMoveWidgets_NothingToMove_IsConflictAndWritesNothing(t *testing.T) {
 	}
 	if draftVersionOf(t, mainProject) != version || draftChangeCountOf(t, mainProject) != changes {
 		t.Error("a refused move wrote the Draft")
-	}
-}
-
-func TestMoveWidgets_GatedByTheEditLock(t *testing.T) {
-	cleanScenes(t)
-	svc := newSceneService()
-	sc := mustCreateScene(t, svc)
-	created := createWidgetIn(t, svc, sc.ID)
-	moves := []appdto.WidgetMove{{WidgetID: created.ID, X: 1, Y: 2}}
-	version := draftVersionOf(t, mainProject)
-
-	if _, err := svc.MoveWidgets(context.Background(), mainProject, sc.ID, version, moves); !errors.Is(err, editlock.ErrNoClient) {
-		t.Errorf("a request naming no client: %v, want ErrNoClient", err)
-	}
-	if _, err := svc.MoveWidgets(clientContext(editlock.NewKey()), mainProject, sc.ID, version, moves); !errors.Is(err, editlock.ErrEditLockNotHeld) {
-		t.Errorf("a request of a client without the lock: %v, want ErrEditLockNotHeld", err)
-	}
-	if draftVersionOf(t, mainProject) != version {
-		t.Error("a gated move raised the Draft's Version")
 	}
 }

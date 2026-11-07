@@ -10,7 +10,6 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -25,8 +24,8 @@ import (
 func TestDraftUpdate_CAS(t *testing.T) {
 	cleanTags(t)
 	cleanScenes(t)
-	cleanEditLocks(t)
-	ctx := editlock.System(context.Background())
+	cleanDrafts(t)
+	ctx := context.Background()
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	created := makeTag(t, "speed", repo)
 
@@ -40,7 +39,7 @@ func TestDraftUpdate_CAS(t *testing.T) {
 	}
 
 	late := makeTag(t, "pressure", repo)
-	_, err := testDrafts().Update(ctx, editlock.ProjectScope(mainProject), first, "create late tag",
+	_, err := testDrafts().Update(ctx, draft.ProjectScope(mainProject), first, "create late tag",
 		func(session *draft.Session) error {
 			session.CreateTag(ctx, late)
 			return nil
@@ -59,8 +58,8 @@ func TestDraftUpdate_CAS(t *testing.T) {
 func TestDraftUpdate_WritesOneDraftChange(t *testing.T) {
 	cleanTags(t)
 	cleanScenes(t)
-	cleanEditLocks(t)
-	ctx := editlock.System(context.Background())
+	cleanDrafts(t)
+	ctx := context.Background()
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	created := makeTag(t, "speed", repo)
 
@@ -109,9 +108,9 @@ func TestDraftUpdate_WritesOneDraftChange(t *testing.T) {
 func TestDraftOpen_OneChangeWithOnlyTheDifference(t *testing.T) {
 	cleanTags(t)
 	cleanScenes(t)
-	cleanEditLocks(t)
-	ctx := editlock.System(context.Background())
-	scope := editlock.ProjectScope(mainProject)
+	cleanDrafts(t)
+	ctx := context.Background()
+	scope := draft.ProjectScope(mainProject)
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	speed := makeTag(t, "speed", repo)
 	pressure := makeTag(t, "pressure", repo)
@@ -196,56 +195,12 @@ func TestDraftOpen_OneChangeWithOnlyTheDifference(t *testing.T) {
 	}
 }
 
-// TestDraftUpdate_Gate: a write of a Draft is refused to a client that does
-// not hold its EditLock (ADR 0015, ADR 0016), and the holder's write raises
-// last_seen.
-func TestDraftUpdate_Gate(t *testing.T) {
-	cleanTags(t)
-	cleanEditLocks(t)
-	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
-	created := makeTag(t, "speed", repo)
-	scope := editlock.ProjectScope(mainProject)
-	version := draftVersionOf(t, mainProject)
-
-	if _, err := testDrafts().Update(context.Background(), scope, version, "no client", func(*draft.Session) error {
-		return nil
-	}); !errors.Is(err, editlock.ErrNoClient) {
-		t.Fatalf("a write with no client: %v, want ErrNoClient", err)
-	}
-
-	alice, err := editLockRepo().Create(editlock.System(context.Background()), createHeldLockOf(t, scope))
-	if err != nil {
-		t.Fatalf("hold the lock: %v", err)
-	}
-	bob := editlock.WithClient(context.Background(), editlock.NewKey())
-	if _, err := testDrafts().Update(bob, scope, version, "another client", func(*draft.Session) error {
-		return nil
-	}); !errors.Is(err, editlock.ErrEditLockNotHeld) {
-		t.Fatalf("a write of another client: %v, want ErrEditLockNotHeld", err)
-	}
-
-	holder := editlock.WithClient(context.Background(), alice.Holder().Key())
-	if _, err := testDrafts().Update(holder, scope, version, "the holder", func(session *draft.Session) error {
-		session.CreateTag(context.Background(), created)
-		return nil
-	}); err != nil {
-		t.Fatalf("the holder's write: %v", err)
-	}
-	found, _, err := editLockRepo().Find(editlock.System(context.Background()), scope)
-	if err != nil {
-		t.Fatalf("find the lock: %v", err)
-	}
-	if !found.LastSeen().After(alice.LastSeen()) {
-		t.Errorf("last seen %s, want it raised by the write", found.LastSeen())
-	}
-}
-
 // TestDraftUpdate_SceneChangeKeepsItsWidgets: an update writes the Scene's row
 // only; its widgets are not removed by the write (a regression of the
 // snapshot writer's delete pass).
 func TestDraftUpdate_SceneChangeKeepsItsWidgets(t *testing.T) {
 	cleanScenes(t)
-	cleanEditLocks(t)
+	cleanDrafts(t)
 	repo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
 	w := makeWidget(t, repo, "w1")
 	saved := mustSave(t, repo, withWidgets(makeScene(t, repo, "scene-1"), w))
@@ -268,7 +223,7 @@ func TestDraftUpdate_SceneChangeKeepsItsWidgets(t *testing.T) {
 // DraftChanges along (ON DELETE CASCADE).
 func TestDraft_RowsGoWithTheirScope(t *testing.T) {
 	cleanProjects(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	projects := repositories.NewProjectRepositoryPostgres(testDB)
 	p := mustCreateProject(t, projects, "Line 1")
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB, p.ID())
@@ -287,7 +242,7 @@ func TestDraft_RowsGoWithTheirScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mark the project deleted: %v", err)
 	}
-	if _, err := testDrafts().Purge(ctx, editlock.ProjectScope(p.ID())); err != nil {
+	if _, err := testDrafts().Purge(ctx, draft.ProjectScope(p.ID())); err != nil {
 		t.Fatalf("purge: %v", err)
 	}
 	if err := projects.Delete(ctx, marked); err != nil {
@@ -309,7 +264,7 @@ func TestDraft_RowsGoWithTheirScope(t *testing.T) {
 // deleted, which is not live, and keeps the Project's row for its own delete.
 func TestDraftPurge_OfADeletedProject(t *testing.T) {
 	cleanProjects(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	projects := repositories.NewProjectRepositoryPostgres(testDB)
 	p := mustCreateProject(t, projects, "Line 1")
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB, p.ID())
@@ -324,7 +279,7 @@ func TestDraftPurge_OfADeletedProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mark the project deleted: %v", err)
 	}
-	if _, err := testDrafts().Purge(ctx, editlock.ProjectScope(p.ID())); err != nil {
+	if _, err := testDrafts().Purge(ctx, draft.ProjectScope(p.ID())); err != nil {
 		t.Fatalf("purge: %v", err)
 	}
 	var tags int
@@ -359,8 +314,8 @@ func mustDevice(t *testing.T, name string) device.Device {
 // together name it. A Discard (Replace) drops the pairs the Revision does not
 // hold even while their Environment stays.
 func TestDraftReplace_RemovesThePairsTheRevisionLacks(t *testing.T) {
-	cleanEditLocks(t)
-	ctx := editlock.System(context.Background())
+	cleanDrafts(t)
+	ctx := context.Background()
 	if _, err := testDB.ExecContext(ctx,
 		`DELETE FROM engineering.environment_devices; DELETE FROM engineering.devices; DELETE FROM engineering.environments`); err != nil {
 		t.Fatalf("clean devices: %v", err)
@@ -396,7 +351,7 @@ func TestDraftReplace_RemovesThePairsTheRevisionLacks(t *testing.T) {
 	})
 
 	// The Revision the Discard restores holds the Environment with one pair.
-	if _, err := testDrafts().Replace(ctx, editlock.ProjectScope(mainProject), func(session *draft.Session) error {
+	if _, err := testDrafts().Replace(ctx, draft.ProjectScope(mainProject), func(session *draft.Session) error {
 		return session.Replace(ctx, draft.Content{
 			Devices:            []device.Device{one, two},
 			Environments:       []device.Environment{environment},
@@ -478,11 +433,11 @@ func mustWidgetOf(t *testing.T, repo scene.SceneRepository, released library.Rel
 // carries the Tag and the Widget bound and whose after side the Widget alone,
 // unbound (ADR 0010, ADR 0017).
 func TestDraftDeleteTag_UnbindsItsWidgetsInOneChange(t *testing.T) {
-	cleanEditLocks(t)
+	cleanDrafts(t)
 	cleanWidgetTypes(t)
 	cleanScenes(t)
 	cleanTags(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	bound := makeTag(t, "pressure", tagRepo)
@@ -529,11 +484,11 @@ func TestDraftDeleteTag_UnbindsItsWidgetsInOneChange(t *testing.T) {
 // the pinned Release removes, in its own DraftChange, the PortBindings the new
 // Release no longer declares (ADR 0010, ADR 0012, ADR 0017).
 func TestDraftPutLibraryPin_SwitchRemovesBrokenBindingsInOneChange(t *testing.T) {
-	cleanEditLocks(t)
+	cleanDrafts(t)
 	cleanWidgetTypes(t)
 	cleanScenes(t)
 	cleanTags(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 
 	typeRepo := newWidgetTypeRepo(t)
 	portName, err := library.NewInputPortName("value")
@@ -639,9 +594,9 @@ func libraryDraftChangeCount(t *testing.T, libraryID id.ID[library.Library]) int
 // conflict that writes nothing (ADR 0016, ADR 0017).
 func TestDraftLibrary_OneChangePerWriteAndCAS(t *testing.T) {
 	cleanWidgetTypes(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	repo := newWidgetTypeRepo(t)
-	scope := editlock.LibraryScope(repo.libraryID)
+	scope := draft.LibraryScope(repo.libraryID)
 	initial := libraryDraftVersionOf(t, repo.libraryID)
 	wt := makeWidgetType(t, "gauge", nil, repo)
 
@@ -691,9 +646,9 @@ func TestDraftLibrary_OneChangePerWriteAndCAS(t *testing.T) {
 // were swapped, the Version rises and the DraftChanges go (ADR 0016).
 func TestDraftLibrary_ReplaceRestoresTheReleaseAndClearsTheStack(t *testing.T) {
 	cleanWidgetTypes(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	repo := newWidgetTypeRepo(t)
-	scope := editlock.LibraryScope(repo.libraryID)
+	scope := draft.LibraryScope(repo.libraryID)
 	a := mustStoreWidgetType(t, makeWidgetType(t, "a", nil, repo), repo)
 	b := mustStoreWidgetType(t, makeWidgetType(t, "b", nil, repo), repo)
 	release := mustRelease(t, repo.libraryID)
@@ -746,7 +701,7 @@ func TestDraftLibrary_ReplaceRestoresTheReleaseAndClearsTheStack(t *testing.T) {
 // mustFindWidgetType reads a WidgetType of the Library's Draft.
 func mustFindWidgetType(t *testing.T, repo libraryRepo, typeID id.ID[library.WidgetType]) library.WidgetType {
 	t.Helper()
-	found, err := repo.FindByID(editlock.System(context.Background()), typeID)
+	found, err := repo.FindByID(context.Background(), typeID)
 	if err != nil {
 		t.Fatalf("FindByID: %v", err)
 	}
@@ -758,12 +713,12 @@ func mustFindWidgetType(t *testing.T, repo libraryRepo, typeID id.ID[library.Wid
 // raises the Draft's Version, steps the stack back, publishes the inverse
 // events and appends no DraftChange of its own (ADR 0017).
 func TestDraftUndo_RestoresTheDeletedTagAndItsBindings(t *testing.T) {
-	cleanEditLocks(t)
+	cleanDrafts(t)
 	cleanWidgetTypes(t)
 	cleanScenes(t)
 	cleanTags(t)
 	cleanOutbox(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	bound := makeTag(t, "pressure", tagRepo)
@@ -783,7 +738,7 @@ func TestDraftUndo_RestoresTheDeletedTagAndItsBindings(t *testing.T) {
 	})
 	cleanOutbox(t)
 	changes := draftChangeCount(t, mainProject)
-	scope := editlock.ProjectScope(mainProject)
+	scope := draft.ProjectScope(mainProject)
 	version := draftVersionOf(t, mainProject)
 
 	stack, ok, err := testDrafts().Stack(ctx, scope)
@@ -822,12 +777,12 @@ func TestDraftUndo_RestoresTheDeletedTagAndItsBindings(t *testing.T) {
 // after states again, and a new change after an undo deletes the redo tail, so
 // the redo has nothing left to apply (ADR 0017).
 func TestDraftUndoRedo_RedoReappliesAndANewChangeTrimsTheTail(t *testing.T) {
-	cleanEditLocks(t)
+	cleanDrafts(t)
 	cleanTags(t)
 	cleanOutbox(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
-	scope := editlock.ProjectScope(mainProject)
+	scope := draft.ProjectScope(mainProject)
 
 	first := makeTag(t, "speed", repo)
 	mustSaveTag(t, repo, first)
@@ -851,15 +806,14 @@ func TestDraftUndoRedo_RedoReappliesAndANewChangeTrimsTheTail(t *testing.T) {
 	}
 }
 
-// TestDraftUndo_EmptyStackAndItsGate: an undo or redo with nothing to apply is
-// refused, and so is one from a client that does not hold the EditLock or that
-// states a stale Version.
-func TestDraftUndo_EmptyStackAndItsGate(t *testing.T) {
-	cleanEditLocks(t)
+// TestDraftUndo_EmptyStackAndStaleVersion: an undo or redo with nothing to
+// apply is refused, and so is one that states a stale Version.
+func TestDraftUndo_EmptyStackAndStaleVersion(t *testing.T) {
+	cleanDrafts(t)
 	cleanTags(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
-	scope := editlock.ProjectScope(mainProject)
+	scope := draft.ProjectScope(mainProject)
 	empty := draftVersionOf(t, mainProject)
 
 	if _, err := testDrafts().Undo(ctx, scope, empty); !errors.Is(err, draft.ErrNothingToUndo) {
@@ -871,20 +825,11 @@ func TestDraftUndo_EmptyStackAndItsGate(t *testing.T) {
 
 	created := makeTag(t, "speed", repo)
 	mustSaveTag(t, repo, created)
-	if _, err := testDrafts().Undo(context.Background(), scope, draftVersionOf(t, mainProject)); !errors.Is(err, editlock.ErrNoClient) {
-		t.Errorf("undo with no client: %v, want ErrNoClient", err)
-	}
-	held := createHeldLockOf(t, scope)
-	if _, err := editLockRepo().Create(editlock.System(context.Background()), held); err != nil {
-		t.Fatalf("hold the lock: %v", err)
-	}
-	other := editlock.WithClient(context.Background(), editlock.NewKey())
-	if _, err := testDrafts().Undo(other, scope, draftVersionOf(t, mainProject)); !errors.Is(err, editlock.ErrEditLockNotHeld) {
-		t.Errorf("undo of another client: %v, want ErrEditLockNotHeld", err)
-	}
-	holder := editlock.WithClient(context.Background(), held.Holder().Key())
-	if _, err := testDrafts().Undo(holder, scope, empty); !errors.Is(err, draft.ErrDraftConflict) {
+	if _, err := testDrafts().Undo(ctx, scope, empty); !errors.Is(err, draft.ErrDraftConflict) {
 		t.Errorf("undo with a stale version: %v, want ErrDraftConflict", err)
+	}
+	if _, err := testDrafts().Undo(ctx, scope, draftVersionOf(t, mainProject)); err != nil {
+		t.Errorf("undo: %v", err)
 	}
 }
 
@@ -892,11 +837,11 @@ func TestDraftUndo_EmptyStackAndItsGate(t *testing.T) {
 // WidgetType and redoes it, with the events of each side.
 func TestDraftUndo_LibraryWidgetType(t *testing.T) {
 	cleanWidgetTypes(t)
-	cleanEditLocks(t)
+	cleanDrafts(t)
 	cleanOutbox(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	repo := newWidgetTypeRepo(t)
-	scope := editlock.LibraryScope(repo.libraryID)
+	scope := draft.LibraryScope(repo.libraryID)
 	saved := mustCreateWidgetType(t, repo.libraryID, makeWidgetType(t, "gauge", nil, repo))
 	cleanOutbox(t)
 
@@ -925,7 +870,7 @@ func TestDraftUndo_LibraryWidgetType(t *testing.T) {
 // TestDraftChanges_KeepTheLatestHundred: the stack is trimmed to its depth,
 // older changes being dropped and no longer undoable (ADR 0017).
 func TestDraftChanges_KeepTheLatestHundred(t *testing.T) {
-	cleanEditLocks(t)
+	cleanDrafts(t)
 	cleanTags(t)
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	for i := 0; i < 101; i++ {
@@ -960,16 +905,16 @@ func draftChangeCount(t *testing.T, projectID id.ID[project.Project]) int {
 // Scene carry each of its Widgets, and the undo writes them all back — the
 // rows of the intent, applied together (ADR 0017).
 func TestDraftUndo_RestoresADeletedSceneWithItsWidgets(t *testing.T) {
-	cleanEditLocks(t)
+	cleanDrafts(t)
 	cleanWidgetTypes(t)
 	cleanScenes(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
 	first := makeWidget(t, sceneRepo, "w1")
 	second := makeWidget(t, sceneRepo, "w2")
 	saved := mustSave(t, sceneRepo, withWidgets(makeScene(t, sceneRepo, "main"), first, second))
 
-	if _, err := testDrafts().Update(ctx, editlock.ProjectScope(mainProject), draftVersionOf(t, mainProject),
+	if _, err := testDrafts().Update(ctx, draft.ProjectScope(mainProject), draftVersionOf(t, mainProject),
 		"Delete scene main", func(session *draft.Session) error {
 			_, err := session.DeleteScene(ctx, saved.ID())
 			return err
@@ -980,7 +925,7 @@ func TestDraftUndo_RestoresADeletedSceneWithItsWidgets(t *testing.T) {
 		t.Fatalf("the scene is still there: %v", err)
 	}
 
-	if _, err := testDrafts().Undo(ctx, editlock.ProjectScope(mainProject), draftVersionOf(t, mainProject)); err != nil {
+	if _, err := testDrafts().Undo(ctx, draft.ProjectScope(mainProject), draftVersionOf(t, mainProject)); err != nil {
 		t.Fatalf("Undo: %v", err)
 	}
 	found := mustFindByID(t, sceneRepo, saved.ID())
@@ -995,11 +940,11 @@ func TestDraftUndo_RestoresADeletedSceneWithItsWidgets(t *testing.T) {
 // for each (ADR 0010, ADR 0017). A widget that did not move stays out of the
 // change.
 func TestDraftMoveWidgets_OneChangeWithBothPositions(t *testing.T) {
-	cleanEditLocks(t)
+	cleanDrafts(t)
 	cleanWidgetTypes(t)
 	cleanScenes(t)
 	cleanOutbox(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	repo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
 	first := makeWidget(t, repo, "w1")
 	second := makeWidget(t, repo, "w2")
@@ -1050,7 +995,7 @@ func TestDraftMoveWidgets_OneChangeWithBothPositions(t *testing.T) {
 		t.Error("the widget that did not move is in the change")
 	}
 
-	if _, err := testDrafts().Undo(ctx, editlock.ProjectScope(mainProject), draftVersionOf(t, mainProject)); err != nil {
+	if _, err := testDrafts().Undo(ctx, draft.ProjectScope(mainProject), draftVersionOf(t, mainProject)); err != nil {
 		t.Fatalf("Undo: %v", err)
 	}
 	restored := mustFindByID(t, repo, saved.ID())

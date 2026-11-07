@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
@@ -54,18 +53,11 @@ type settings struct {
 	// project is --project, "" when not given (see projectFor).
 	project string
 	errOut  io.Writer
-	// clientName is --client-name: the name growctl declares when it checks a
-	// Draft out. takeOver is --take-over: take the lock from its holder.
-	clientName string
-	takeOver   bool
-	// runKey is the client key of this run (key).
-	runKey string
 }
 
 // client returns a client of the server for one run.
 func (s *settings) client() *Client {
-	client := NewClient(s.server, &http.Client{Timeout: 30 * time.Second}, s.errOut)
-	return &Client{Client: client.WithClientKey(s.key())}
+	return NewClient(s.server, &http.Client{Timeout: 30 * time.Second}, s.errOut)
 }
 
 // NewRootCommand builds the growctl command tree. Output goes to the command's
@@ -95,10 +87,6 @@ func NewRootCommand() *cobra.Command {
 		"GrowSCADA REST API URL (env "+ServerEnv+")")
 	root.PersistentFlags().StringVar(&s.project, "project", "",
 		"project to work in (default: the manifests' metadata.project, else the context's, see growctl config use-project)")
-	root.PersistentFlags().StringVar(&s.clientName, "client-name", defaultClientName(),
-		"name declared when growctl checks a Draft out for editing")
-	root.PersistentFlags().BoolVar(&s.takeOver, "take-over", false,
-		"take the Draft's EditLock from the client that holds it")
 
 	root.AddCommand(
 		newApplyCommand(s),
@@ -366,13 +354,6 @@ func deleteManifests(cmd *cobra.Command, s *settings, client *Client, projectFla
 			return nil
 		}
 	}
-	if tags != nil && slices.ContainsFunc(tagSteps, func(step Step) bool { return step.Action == ActionDelete }) {
-		unlock, err := s.lockProject(ctx, client, tags.ProjectClient.ID())
-		if err != nil {
-			return err
-		}
-		defer unlock()
-	}
 	if err := executeDelete(ctx, tags, tagSteps, cmd.OutOrStdout()); err != nil {
 		return err
 	}
@@ -437,55 +418,7 @@ func deleteMatching(cmd *cobra.Command, s *settings, client *Client, projectFlag
 	for i, t := range matched {
 		steps[i] = Step{Action: ActionDelete, Server: t}
 	}
-	unlock, err := s.lockProject(ctx, client, tags.ProjectClient.ID())
-	if err != nil {
-		return err
-	}
-	defer unlock()
 	return executeDelete(ctx, tags, steps, cmd.OutOrStdout())
-}
-
-// lockDraftsOf checks the Drafts the plan writes out: the project of its tags
-// and those of its pins. A plan that changes nothing takes no lock.
-func (p applyPlan) lockDraftsOf(ctx context.Context, client *Client, s *settings, created map[string]apiv0.ProjectResponse) (func(), error) {
-	// The tags are planned on one project, identified when it was planned: a
-	// project renamed or re-created under the same name meanwhile is not it.
-	var tagProject uuid.UUID
-	if p.tagsOf != nil {
-		tagProject = p.tagsOf.ProjectClient.ID()
-	}
-	names := map[string]bool{}
-	if slices.ContainsFunc(p.tags, func(step Step) bool { return step.Action == ActionCreate || step.Action == ActionPrune }) {
-		names[p.project] = true
-	}
-	for _, pin := range p.libraries.pins {
-		if pin.Action != ActionUnchanged {
-			names[pin.Project] = true
-		}
-	}
-	var ids []uuid.UUID
-	if names[p.project] && tagProject != uuid.Nil {
-		delete(names, p.project)
-		ids = append(ids, tagProject)
-	}
-	for name := range names {
-		if name == "" {
-			continue
-		}
-		if project, ok := created[name]; ok {
-			ids = append(ids, project.ID)
-			continue
-		}
-		found, ok, err := client.FindProjectByName(ctx, name)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			return nil, fmt.Errorf("project/%s not found", name)
-		}
-		ids = append(ids, found.ID)
-	}
-	return s.lockProjects(ctx, client, ids)
 }
 
 // executeDelete runs delete steps on tags, printing each once it is done; a
@@ -673,13 +606,6 @@ func executeApply(ctx context.Context, client *Client, plan applyPlan, s *settin
 	if err != nil {
 		return err
 	}
-	// The Drafts this run writes are checked out first (ADR 0015): an
-	// unchanged plan takes no lock and needs none.
-	unlock, err := plan.lockDraftsOf(ctx, client, s, created)
-	if err != nil {
-		return err
-	}
-	defer unlock()
 	if err := executeLibraries(ctx, client, s, plan.libraries, out); err != nil {
 		return err
 	}

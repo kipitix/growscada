@@ -6,7 +6,6 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/device"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
@@ -59,11 +58,6 @@ var apiEventTypes = map[event.EventType]string{
 	event.EventTypeEnvironmentDeviceUpdated: apiv0.EventEnvironmentDeviceUpdated,
 	event.EventTypeEnvironmentDeviceDeleted: apiv0.EventEnvironmentDeviceDeleted,
 	event.EventTypeRevisionCreated:          apiv0.EventRevisionCreated,
-
-	event.EventTypeEditLockAcquired:  apiv0.EventEditLockAcquired,
-	event.EventTypeEditLockReleased:  apiv0.EventEditLockReleased,
-	event.EventTypeEditLockTakenOver: apiv0.EventEditLockTakenOver,
-	event.EventTypeEditLockExpired:   apiv0.EventEditLockExpired,
 }
 
 // newAPIEvent translates a domain (or delivery) event into the event stream's
@@ -106,18 +100,6 @@ func newAPIEvent(e event.Event) apiv0.Event {
 		ev.ID = e.DeviceID().String()
 	case device.EnvironmentEvent:
 		ev.ID = e.EnvironmentID().String()
-	case editlock.Event:
-		// The event names the Draft: a Project's lock through the Project's
-		// ID, a Library's through its own, which the server's stream carries
-		// (ADR 0015).
-		if e.Scope().IsLibrary() {
-			ev.ID = e.Scope().LibraryID().String()
-			ev.LibraryID = e.Scope().LibraryID().String()
-		} else {
-			ev.ID = e.Scope().ProjectID().String()
-		}
-		lock := newEditLockResponseOfEvent(e.State())
-		ev.EditLock = &lock
 	case runtimeapp.RevisionCreatedEvent:
 		ev.ID = e.ProjectID().String()
 		ev.Revision = e.Number()

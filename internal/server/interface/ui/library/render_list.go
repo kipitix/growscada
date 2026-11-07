@@ -37,16 +37,10 @@ func (l *Library) listTitle() string {
 
 func (l *Library) renderListButtons() app.UI {
 	editable := !l.readOnly()
-	title := func(title string) string {
-		if editable {
-			return title
-		}
-		return readOnlyTitle(title)
-	}
 	deleteDisabled := !editable || l.selectedID == uuid.Nil
 
 	deleteBtn := app.Button().
-		Title(title("Delete the selected WidgetType from the Draft")).
+		Title("Delete the selected WidgetType from the Draft").
 		Style("flex", "1").
 		Style("padding", "4px 0").
 		Style("font-size", "13px").
@@ -70,7 +64,7 @@ func (l *Library) renderListButtons() app.UI {
 	}
 
 	createBtn := app.Button().
-		Title(title("Create a WidgetType in the Draft")).
+		Title("Create a WidgetType in the Draft").
 		Style("flex", "1").
 		Style("padding", "4px 0").
 		Style("font-size", "13px").

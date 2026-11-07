@@ -7,10 +7,10 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/server/domain/draft"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
 	"github.com/kipitix/growscada/internal/server/domain/project"
+	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 // ProjectContent opens the content of the live Projects of one Organization
@@ -37,8 +37,22 @@ func NewProjectContent(aProjectRepository project.ProjectRepository, someScopes 
 func (c ProjectContent) Drafts() draft.Repository { return c.drafts }
 
 // ScopeOf is the scope of the Draft of projectID.
-func (c ProjectContent) ScopeOf(projectID id.ID[project.Project]) editlock.Scope {
-	return editlock.ProjectScope(projectID)
+func (c ProjectContent) ScopeOf(projectID id.ID[project.Project]) draft.Scope {
+	return draft.ProjectScope(projectID)
+}
+
+// DraftVersion is the Version of the Draft of projectID as a Version value: the
+// token a multi-step act over the Draft states (ADR 0022). A Draft never
+// written is the fresh Draft at version 1.
+func (c ProjectContent) DraftVersion(ctx context.Context, projectID id.ID[project.Project]) (version.Version[draft.Draft], error) {
+	found, ok, err := c.drafts.Read(ctx, draft.ProjectScope(projectID))
+	if err != nil {
+		return version.Version[draft.Draft]{}, fmt.Errorf("cannot read the draft of project %s: %w", projectID, err)
+	}
+	if !ok {
+		return version.Committed[draft.Draft](), nil
+	}
+	return found.Version(), nil
 }
 
 // open returns the ID and the read repositories of the live Project
@@ -65,7 +79,7 @@ func (c ProjectContent) openUnchecked(rawProjectID uuid.UUID) (id.ID[project.Pro
 // has version 0.
 func (c ProjectContent) Version(ctx context.Context, rawProjectID uuid.UUID) (int, error) {
 	projectID, _ := c.openUnchecked(rawProjectID)
-	found, ok, err := c.drafts.Read(ctx, editlock.ProjectScope(projectID))
+	found, ok, err := c.drafts.Read(ctx, draft.ProjectScope(projectID))
 	if err != nil {
 		return 0, fmt.Errorf("cannot read the draft of project %s: %w", projectID, err)
 	}

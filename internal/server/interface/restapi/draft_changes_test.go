@@ -55,7 +55,7 @@ func decodeProblem(t *testing.T, rec *httptest.ResponseRecorder) apiv0.Problem {
 }
 
 func TestGetDraftChanges_AfterAChange(t *testing.T) {
-	cleanEditLocksRest(t)
+	cleanDrafts(t)
 	cleanTags(t)
 	router := newRouter()
 	if rec := callRoutes(t, router, http.MethodPost, mainPath+"/tags",
@@ -77,7 +77,7 @@ func TestGetDraftChanges_AfterAChange(t *testing.T) {
 }
 
 func TestPostDraftChanges_UndoAndRedo(t *testing.T) {
-	cleanEditLocksRest(t)
+	cleanDrafts(t)
 	cleanTags(t)
 	router := newRouter()
 	if rec := callRoutes(t, router, http.MethodPost, mainPath+"/tags",
@@ -127,17 +127,12 @@ func TestPostDraftChanges_UndoAndRedo(t *testing.T) {
 	}
 }
 
-func TestPostDraftChanges_EmptyStackAndNoClient(t *testing.T) {
-	cleanEditLocksRest(t)
+func TestPostDraftChanges_EmptyStack(t *testing.T) {
+	cleanDrafts(t)
 	router := lockRouter()
 	path := mainPath + apiv0.DraftChangesUndoPath
 
 	rec := callAs(t, router, http.MethodPost, path, apiv0.DraftChangeCommandRequest{Version: 1}, "")
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("undo with no client: %d, want 400", rec.Code)
-	}
-
-	rec = callAs(t, router, http.MethodPost, path, apiv0.DraftChangeCommandRequest{Version: 1}, testClientKey.String())
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("undo of an empty stack: %d, want 409", rec.Code)
 	}
@@ -159,6 +154,7 @@ func TestGetDraftChanges_ProjectNotFound(t *testing.T) {
 }
 
 func TestLibraryDraftChanges_UndoAndRedo(t *testing.T) {
+	cleanDrafts(t)
 	cleanWidgetTypes(t)
 	router := newRouter()
 	created := createWidgetTypeViaService(t, testWtInput)
@@ -215,7 +211,7 @@ func TestLibraryDraftChanges_NotFound(t *testing.T) {
 }
 
 func TestLibraryDraftChanges_EmptyStackNamesTheLibrary(t *testing.T) {
-	cleanEditLocksRest(t)
+	cleanDrafts(t)
 	cleanWidgetTypes(t)
 	router := newRouter()
 	path := apiv0.PathPrefix + apiv0.LibraryPath(wtLibrary.String()) + apiv0.DraftChangesUndoPath

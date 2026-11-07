@@ -1,29 +1,27 @@
 info:
-  name: get edit lock (held)
+  name: post edit lock is gone
   type: http
-  seq: 9
+  seq: 181
 
 http:
-  method: GET
+  method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/edit-lock
   auth: inherit
 
 docs: |
-  The lock the setup took: held by the collection's client, 200 (ADR 0015).
+  A Check out is gone with the EditLock (ADR 0022): the route answers `410
+  Gone`.
 
 runtime:
   assertions:
     - expression: 'res.status'
       operator: eq
-      value: '200'
+      value: '410'
     - expression: 'res.headers["growscada-schema-version"]'
       operator: isDefined
-    - expression: 'res.body.held'
+    - expression: 'res.body.status'
       operator: eq
-      value: 'true'
-    - expression: 'res.body.holder.name'
-      operator: eq
-      value: '"bruno"'
+      value: '410'
 
 settings:
   encodeUrl: true

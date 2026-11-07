@@ -45,9 +45,6 @@ func (p *Project) pinOf(id uuid.UUID) (apiv0.LibraryPinResponse, bool) {
 
 // addPin pins the latest release of the library.
 func (p *Project) addPin(libraryID uuid.UUID) {
-	if p.refuseReadOnly(p.compoCtx) {
-		return
-	}
 	if p.waitMoves(p.compoCtx, func(ctx app.Context) { p.addPin(libraryID) }) {
 		return
 	}
@@ -70,9 +67,6 @@ func (p *Project) addPin(libraryID uuid.UUID) {
 // release 0, after its preview: orphaned Widgets refuse it, broken bindings
 // are confirmed.
 func (p *Project) changePin(libraryID uuid.UUID, release int) {
-	if p.refuseReadOnly(p.compoCtx) {
-		return
-	}
 	if p.waitMoves(p.compoCtx, func(ctx app.Context) { p.changePin(libraryID, release) }) {
 		return
 	}
@@ -108,9 +102,6 @@ func (p *Project) changePin(libraryID uuid.UUID, release int) {
 
 // savePin switches (release > 0) or removes the pin.
 func (p *Project) savePin(content *apiclient.ProjectClient, libraryID uuid.UUID, release, version int) {
-	if p.refuseReadOnly(p.compoCtx) {
-		return
-	}
 	mark := p.markDraft()
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.LibraryPinResponse, error) {
 		if release == 0 {
@@ -187,8 +178,6 @@ func (p *Project) renderPinsPanel() app.UI {
 					Title(p.libraryName(libraryID)).
 					Text(p.libraryName(libraryID)),
 				app.Select().
-					Disabled(p.readOnly()).
-					Title(readOnlyTitle()).
 					Style("font-size", "11px").
 					Style("background", "var(--input-bg)").
 					Style("color", "var(--text)").
@@ -204,7 +193,6 @@ func (p *Project) renderPinsPanel() app.UI {
 					}, app.EventScope(scope)).
 					Body(options...),
 				app.Button().
-					Disabled(p.readOnly()).
 					Style("font-size", "11px").
 					Style("padding", "1px 6px").
 					Style("cursor", "pointer").
@@ -212,7 +200,6 @@ func (p *Project) renderPinsPanel() app.UI {
 					Style("border-radius", "3px").
 					Style("background", "var(--bg-hover)").
 					Style("color", "var(--text)").
-					Title(readOnlyTitle("Unpin")).
 					Text("✕").
 					OnClick(func(ctx app.Context, e app.Event) {
 						p.changePin(libraryID, 0)
@@ -230,8 +217,6 @@ func (p *Project) renderPinsPanel() app.UI {
 	if len(addable) > 1 {
 		rows = append(rows, app.Select().
 			Class("library-pin-add").
-			Disabled(p.readOnly()).
-			Title(readOnlyTitle()).
 			Style("width", "100%").
 			Style("font-size", "11px").
 			Style("background", "var(--input-bg)").

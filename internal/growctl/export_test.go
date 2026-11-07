@@ -8,8 +8,7 @@ import (
 // ApplyInTwoSteps is apply split where the server may change between the
 // plan and its execution.
 func ApplyInTwoSteps(ctx context.Context, client *Client, project string, manifest io.Reader) (execute func(out io.Writer) error, err error) {
-	s := &settings{clientName: "growctl-test"}
-	client = &Client{Client: client.WithClientKey(s.key())}
+	s := &settings{}
 	plan, err := planApply(ctx, client, project, []string{"-"}, manifest, false, NameFilter{})
 	if err != nil {
 		return nil, err

@@ -67,34 +67,6 @@ type Root struct {
 	// reloadOnAppUpdate is set by the banner's Reload while the service
 	// worker fetches the new app (see reloadApp).
 	reloadOnAppUpdate bool
-	// clientKey is the key of this tab, the identity it edits Drafts under
-	// (ADR 0015); it is kept in sessionStorage.
-	clientKey uuid.UUID
-	// mounted is false until OnMount, whose context checkInEditLock needs.
-	mounted bool
-}
-
-// tabClientKey and tabClientKeyPath are the sessionStorage entry of the tab's
-// client key (ADR 0015).
-const tabClientKeyPath = "editlock:client"
-
-// tabKey is the key of this tab: the one sessionStorage holds, or a new one,
-// stored at once. A store the browser does not offer (a test engine on the
-// host) gives a fresh key that is simply not kept.
-func tabKey() uuid.UUID {
-	storage := app.Window().Get("sessionStorage")
-	if storage.Truthy() {
-		if raw := storage.Call("getItem", tabClientKeyPath).String(); raw != "" {
-			if parsed, err := uuid.Parse(raw); err == nil {
-				return parsed
-			}
-		}
-	}
-	key := uuid.New()
-	if storage.Truthy() {
-		storage.Call("setItem", tabClientKeyPath, key.String())
-	}
-	return key
 }
 
 func NewRoot(anAPIServerURL string) *Root {
@@ -102,15 +74,10 @@ func NewRoot(anAPIServerURL string) *Root {
 		currentMode: ModeLibrary,
 		themeMode:   "auto",
 	}
-	// The key of the tab, the holder of every EditLock this tab takes
-	// (ADR 0015): one per tab, surviving a reload, kept in sessionStorage. It
-	// is coordination, not authentication: no secret is in it.
-	r.clientKey = tabKey()
-	r.client = apiclient.New(anAPIServerURL, http.DefaultClient, apiclient.OnServerVersion(r.observeServerVersion)).
-		WithClientKey(r.clientKey.String())
+	r.client = apiclient.New(anAPIServerURL, http.DefaultClient, apiclient.OnServerVersion(r.observeServerVersion))
 	r.project = project.NewProject(r.client)
 	r.operation = operation.NewOperation(r.client)
-	r.bar = eventlog.NewBar(anAPIServerURL).WithClientKey(r.clientKey.String())
+	r.bar = eventlog.NewBar(anAPIServerURL)
 	r.modes = []modeView{
 		{mode: ModeLibrary, ui: library.NewLibrary(r.client)},
 		{mode: ModeProject, ui: r.project, switcher: r.newSwitcher(ModeProject)},
@@ -123,7 +90,7 @@ func NewRoot(anAPIServerURL string) *Root {
 }
 
 func (r *Root) OnMount(ctx app.Context) {
-	r.compoCtx, r.mounted = ctx, true
+	r.compoCtx = ctx
 	ctx.Page().SetTitle("GrowSCADA")
 
 	injectToastCSS()
@@ -174,15 +141,7 @@ func (r *Root) newSelector(mode Mode) *projects.Switcher {
 // Operation reads nothing of the Bar: its own Player follows the Journal
 // (ADR 0020).
 func (r *Root) selectProject(mode Mode, id uuid.UUID) {
-	previous := r.selected[mode]
 	r.selected[mode] = id
-	if mode == ModeProject && previous != id {
-		// The Draft of the project left is given back before another one is
-		// shown (ADR 0015): a tab edits one Draft at a time. The mode sends
-		// the Check in after the writes it still owes that Draft, so a move of
-		// the last moment is not refused by the lock it gives back.
-		r.giveBackDraft(previous)
-	}
 	switch mode {
 	case ModeProject:
 		r.project.SetProject(id)
@@ -617,26 +576,10 @@ func (r *Root) renderThemeToggle() app.UI {
 		})
 }
 
-// giveBackDraft lets the Project mode give the Draft of the project id back
-// (ADR 0015), after the writes the mode still owes it: nothing to do for a
-// project left that is none, nor for a Root that is not mounted — it has no
-// Check in to send.
-func (r *Root) giveBackDraft(id uuid.UUID) {
-	if id == uuid.Nil || !r.mounted {
-		return
-	}
-	r.project.GiveBackDraft(r.compoCtx, id)
-}
-
 // SetMode shows mode, opening it if it was not yet. The Bar follows the
 // project of a mode that shows one, from its switcher's announcement on
 // (selectProject); Library leaves it as it is.
 func (r *Root) SetMode(mode Mode) {
-	if r.currentMode == ModeProject && mode != ModeProject {
-		// Leaving the Project mode gives the Draft back (ADR 0015), after the
-		// writes the mode still owes it.
-		r.giveBackDraft(r.selected[ModeProject])
-	}
 	r.currentMode = mode
 	r.opened[mode] = true
 	if id, ok := r.selected[mode]; ok {

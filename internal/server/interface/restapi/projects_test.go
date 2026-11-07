@@ -13,7 +13,6 @@ import (
 	"github.com/google/uuid"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -26,7 +25,7 @@ import (
 // all of them.
 func cleanProjectsRest(t *testing.T) {
 	t.Helper()
-	if _, err := testDB().ExecContext(editlock.System(context.Background()),
+	if _, err := testDB().ExecContext(context.Background(),
 		"DELETE FROM runtime.revisions; DELETE FROM runtime.journal; DELETE FROM runtime.tags; DELETE FROM engineering.tags; DELETE FROM engineering.scenes; DELETE FROM projects WHERE id <> '"+mainProject.String()+"'; "+
 			"UPDATE projects SET name = 'Main', version = 1, deleted_at = NULL"); err != nil {
 		t.Fatalf("cleanProjectsRest: %v", err)

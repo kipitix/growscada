@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/server/domain/device"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
@@ -138,16 +137,10 @@ func (h *eventHub) Close() {
 
 // eventStreamOf returns the stream an event goes to: the project's whose
 // content it is about, or the server's (uuid.Nil) for the events of projects
-// themselves, WidgetTypes, connections and the system, and the lock of a
-// Library's Draft.
+// themselves, WidgetTypes, connections and the system.
 func eventStreamOf(e event.Event) uuid.UUID {
 	if content, ok := e.(project.ContentEvent); ok {
 		return content.ProjectID().UUID()
-	}
-	// An EditLock names its Draft: a Project's lock goes to that Project's
-	// stream, a Library's (ProjectID zero) to the server's (ADR 0015).
-	if scoped, ok := e.(editlock.Event); ok {
-		return scoped.Scope().ProjectID().UUID()
 	}
 	return uuid.Nil
 }

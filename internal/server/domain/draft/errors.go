@@ -3,8 +3,6 @@ package draft
 import (
 	"errors"
 	"fmt"
-
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 )
 
 // ErrDraftConflict is the one edit conflict of a Draft's content: the Version
@@ -21,7 +19,7 @@ var ErrDraftConflict = errors.New("draft version conflict")
 type ConflictError struct {
 	Expected int
 	Current  int
-	Scope    editlock.Scope
+	Scope    Scope
 }
 
 func (e ConflictError) Error() string {
@@ -50,7 +48,7 @@ var ErrNothingToRedo = errors.New("nothing to redo")
 // It names the Draft whose stack is empty, so the API can title the conflict
 // after its Project or Library.
 type NothingToStepError struct {
-	Scope editlock.Scope
+	Scope Scope
 	Undo  bool
 }
 

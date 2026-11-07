@@ -27,19 +27,6 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 			l.loadDraftChanges(ctx)
 		}
 		targets := eventlog.ReloadTargetsFor(ev)
-		// The selected library's lock changes with a Check out, a Check in, a
-		// takeover or an expiry; the event carries its new state, the toast of
-		// a lost lock included (ADR 0015). A Library's lock goes to the
-		// server's stream, which the Bar holds always. An event without it (a
-		// resync) rereads it.
-		switch {
-		case ev.EditLock != nil:
-			if ev.ID == l.libraryID.String() {
-				l.applyEditLock(ctx, *ev.EditLock)
-			}
-		case targets.EditLock:
-			l.loadEditLock(ctx)
-		}
 		// A write of the Draft's content is one DraftChange, and a Release
 		// clears the stack (ADR 0017): the undo and redo buttons follow the
 		// events, as the release state does.

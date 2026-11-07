@@ -35,7 +35,7 @@ const lastEventIDHeader = "Last-Event-ID"
 
 // JournalHandlers serves a Project's Journal on the Runtime node (task 42,
 // ADR 0019): a page of entries and a live stream of them. Both are read-only
-// and touch no Draft, so the stream names no client and holds no EditLock.
+// and touch no Draft, so the stream names no client and holds no lock.
 type JournalHandlers struct {
 	journal runtimeapp.JournalService
 	bus     eventbus.EventBus

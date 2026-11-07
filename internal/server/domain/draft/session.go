@@ -7,7 +7,6 @@ import (
 	"slices"
 
 	"github.com/kipitix/growscada/internal/server/domain/device"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -48,7 +47,7 @@ func (s *Session) Draft() Draft { return s.draft }
 func (s *Session) Version() version.Version[Draft] { return s.draft.Version() }
 
 // Scope is the Project or Library the Draft belongs to.
-func (s *Session) Scope() editlock.Scope { return s.draft.Scope() }
+func (s *Session) Scope() Scope { return s.draft.Scope() }
 
 // ProjectID is the Project of the Draft's scope, a zero ID for a Library's.
 func (s *Session) ProjectID() id.ID[project.Project] { return s.draft.Scope().ProjectID() }

@@ -10,7 +10,6 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/application"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 	runtimepg "github.com/kipitix/growscada/internal/server/infrastructure/postgres/runtime"
@@ -26,7 +25,7 @@ import (
 // node before a Deploy.
 func DeployProject(t *testing.T, db *sql.DB, projectID uuid.UUID) {
 	t.Helper()
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	orgID, err := repositories.FindSoleOrganization(ctx, db)
 	if err != nil {
 		t.Fatalf("organization: %v", err)
@@ -38,14 +37,10 @@ func DeployProject(t *testing.T, db *sql.DB, projectID uuid.UUID) {
 	states := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, func(event.Event) {})
 	tokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(db))
 	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(db), func(event.Event) {})
-	locks := application.NewEditLockService(content,
-		application.NewLibraryContent(repositories.NewLibraryRepositoryPostgres(db), drafts, orgID),
-		drafts)
 	service := application.NewDeployService(
 		content,
 		application.NewProjectFileBuilder(content),
 		inprocess.NewRuntimeNode(states, tokens, revisions),
-		locks,
 	)
 	if _, err := service.Deploy(ctx, projectID); err != nil {
 		// A test that deploys twice without changing the Draft asks for

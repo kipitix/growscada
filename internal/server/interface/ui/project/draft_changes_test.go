@@ -15,7 +15,7 @@ import (
 // The DraftChange stack in the Project mode (ADR 0017): the Undo and Redo
 // buttons of the header and their descriptions, the keyboard shortcuts, what a
 // refusal does and one Version of the Draft. The fixture's API client and the
-// mounted Project act as servertest.ClientKey, the holder of Main's lock
+// mounted Project act on one Draft
 // (newServer).
 
 // reloadChanges makes the Project read the stack again, as an event or a
@@ -164,42 +164,6 @@ func TestUndo_EmptyStack_IsAToastAndAReread(t *testing.T) {
 	}
 }
 
-// TestDraftChanges_ReadOnly: without the lock both buttons are off with the
-// hint, and a shortcut is refused without a request; the stack stays.
-func TestDraftChanges_ReadOnly(t *testing.T) {
-	f := startProject(t)
-	createScene(t, f.api, "One")
-	f.reloadChanges()
-
-	other := otherClient(t, f.api)
-	if _, err := other.TakeOverEditLock(context.Background(), "bob", f.p.editLock.Version); err != nil {
-		t.Fatalf("take over: %v", err)
-	}
-	f.reloadLock()
-	f.e.TakeToasts()
-
-	html := app.HTMLString(f.p.renderDraftChangesBar())
-	if f.p.canUndo() {
-		t.Errorf("Undo is on without the lock: %+v", f.p.changes)
-	}
-	if !strings.Contains(html, readOnlyHint) {
-		t.Errorf("the buttons do not say the Draft is read-only: %s", html)
-	}
-
-	f.p.applyKeyAction(f.p.compoCtx, uiutil.KeyUndo)
-	f.run()
-	if got := f.oneToast(); !strings.Contains(got.Detail, "Read-only") {
-		t.Errorf("toast %+v, want the read-only hint", got)
-	}
-	state, err := f.api.DraftChanges(context.Background())
-	if err != nil {
-		t.Fatalf("read the stack: %v", err)
-	}
-	if !state.CanUndo {
-		t.Errorf("the stack was lost with the lock: %+v", state)
-	}
-}
-
 // TestContentEvent_ReloadsTheStack: a write of the Draft's content is one
 // DraftChange, so the buttons follow its event.
 func TestContentEvent_ReloadsTheStack(t *testing.T) {
@@ -327,39 +291,5 @@ func TestDraftChangesBar_UnnamedStep_IsOff(t *testing.T) {
 	f.noToasts()
 	if got := log.take(); len(got) != 0 {
 		t.Errorf("requests of an unnamed step: %v, want none", got)
-	}
-}
-
-// TestUndo_LockLost_IsNotAnEmptyStack: the 409 of a write the EditLock refuses
-// carries the lock, not the Draft: the Draft turns read-only at once and the
-// stack is left alone.
-func TestUndo_LockLost_IsNotAnEmptyStack(t *testing.T) {
-	url, api := newServer(t)
-	createScene(t, api, "One")
-	f := mount(t, url, api)
-	f.reloadChanges()
-
-	other := otherClient(t, api)
-	if _, err := other.TakeOverEditLock(context.Background(), "bob", f.p.editLock.Version); err != nil {
-		t.Fatalf("take over: %v", err)
-	}
-	f.e.TakeToasts()
-
-	f.p.applyKeyAction(f.p.compoCtx, uiutil.KeyUndo)
-	f.run()
-
-	got := f.oneToast()
-	if !strings.Contains(got.Detail, "no longer hold the lock") {
-		t.Errorf("toast %+v, want the lost lock", got)
-	}
-	if !f.p.readOnly() {
-		t.Error("the Draft is still editable after a refused write")
-	}
-	state, err := api.DraftChanges(context.Background())
-	if err != nil {
-		t.Fatalf("read the stack: %v", err)
-	}
-	if !state.CanUndo {
-		t.Errorf("the stack was taken for empty: %+v", state)
 	}
 }

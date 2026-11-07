@@ -3,13 +3,11 @@ package project
 import (
 	"context"
 	"net/http"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
@@ -141,24 +139,6 @@ func TestArrowMove_BackToTheStartSendsNothing(t *testing.T) {
 	if after := f.scene(sceneID).Version; after != before {
 		t.Errorf("scene version %d → %d", before, after)
 	}
-}
-
-func TestArrowMove_ReadOnlyMovesNothingAndAsksNothing(t *testing.T) {
-	f, sceneID, ids, counter := moveFixture(t, 1)
-	f.p.selectOnly(f.p.compoCtx, ids[0])
-	f.p.editLock = apiv0.EditLockResponse{} // no lock: read-only
-
-	f.p.beginArrowMove(f.p.compoCtx, 5, 0)
-	f.p.flushArrowMoves(f.p.compoCtx)
-	f.run()
-
-	if got := counter.patches(); got != 0 {
-		t.Errorf("%d PATCHes in read-only", got)
-	}
-	if w := f.widget(sceneID, ids[0]); w.Position.X != 10 {
-		t.Errorf("read-only moved the widget to %v", w.Position)
-	}
-	f.noToasts() // and no toast per key press
 }
 
 // A write that follows an arrow series is sent only after the series' PATCH
@@ -339,63 +319,4 @@ func TestArrowMove_TheTimerEndsTheSeries(t *testing.T) {
 		t.Errorf("position %+v: want (14, 23)", w.Position)
 	}
 	f.knowsVersion(sceneID)
-}
-
-// Read-only: a press on a Widget selects it and begins no drag, so nothing is
-// sent and no toast says the write was refused.
-func TestWidgetDrag_ReadOnlySendsNothing(t *testing.T) {
-	f, _, ids, counter := moveFixture(t, 1)
-	f.p.editLock = apiv0.EditLockResponse{}
-	f.p.selectOnly(f.p.compoCtx, ids[0])
-
-	f.p.beginWidgetDrag(f.p.compoCtx, app.Event{}, ids[0])
-	if f.p.draggingWidgetID != uuid.Nil {
-		t.Error("read-only began a drag")
-	}
-	f.p.finalizeAllDrags(f.p.compoCtx)
-	f.run()
-
-	if got := counter.patches(); got != 0 {
-		t.Errorf("%d PATCHes in read-only", got)
-	}
-	f.noToasts()
-}
-
-// Read-only: a plain press selects the Widget alone, even one of a group —
-// selection is read-only work, and no drag follows the press.
-func TestWidgetPress_ReadOnlySelectsAlone(t *testing.T) {
-	f, _, ids := selectionFixture(t, 3)
-	f.p.editLock = apiv0.EditLockResponse{} // no lock: read-only
-	f.p.selectAllWidgets(f.p.compoCtx)
-
-	f.p.pressWidget(f.p.compoCtx, app.Event{}, ids[1])
-
-	if got := f.selection(); len(got) != 1 || got[0] != ids[1] {
-		t.Errorf("read-only press: %v, want %v alone", got, ids[1])
-	}
-	if f.p.draggingWidgetID != uuid.Nil {
-		t.Error("read-only press began a drag")
-	}
-}
-
-// The Draft of the project left is given back after its last write: a series
-// of arrow moves still running is sent, and its PATCH comes before the Check
-// in, so the server does not refuse the move with the lock it just released.
-func TestGiveBackDraft_SendsTheSeriesBeforeTheCheckIn(t *testing.T) {
-	f, sceneID, ids, counter := moveFixture(t, 1)
-	f.p.selectOnly(f.p.compoCtx, ids[0])
-
-	f.p.beginArrowMove(f.p.compoCtx, 6, 0)
-	f.p.GiveBackDraft(f.p.compoCtx, f.p.projectID)
-	f.p.SetProject(uuid.Nil) // the switch Root does right after
-	f.run()
-
-	f.noToasts()
-	writes := counter.writes()
-	if len(writes) != 2 || writes[0][:5] != "PATCH" || !strings.HasSuffix(writes[1], apiv0.EditLockPath) {
-		t.Fatalf("writes %v: want the series' PATCH, then the Check in", writes)
-	}
-	if w := f.widget(sceneID, ids[0]); w.Position.X != 16 {
-		t.Errorf("position x %v: the move of the Draft left was lost", w.Position.X)
-	}
 }

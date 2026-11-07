@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/kipitix/growscada/internal/server/application"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
@@ -21,7 +20,7 @@ const testPolicyName = "test_policy"
 
 func cleanPolicyJobs(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(editlock.System(context.Background()), "DELETE FROM policy_jobs"); err != nil {
+	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM policy_jobs"); err != nil {
 		t.Fatalf("cleanPolicyJobs: %v", err)
 	}
 }
@@ -29,7 +28,7 @@ func cleanPolicyJobs(t *testing.T) {
 func countPolicyJobs(t *testing.T) int {
 	t.Helper()
 	var n int
-	if err := testDB.QueryRowContext(editlock.System(context.Background()),
+	if err := testDB.QueryRowContext(context.Background(),
 		`SELECT count(*) FROM policy_jobs WHERE policy = $1`, testPolicyName).Scan(&n); err != nil {
 		t.Fatalf("count policy_jobs: %v", err)
 	}
@@ -103,7 +102,7 @@ func TestPolicyRunner_FailedJob_RetriedAfterPause_DeliveryNotHeldBack(t *testing
 	runner := outbox.NewPolicyRunner(testDB, []application.Policy{policy}, outbox.WithRetryPause(pause, pause))
 	var delivered recorder
 	d := outbox.NewDispatcher(testDB, delivered.deliver, outbox.WithPolicyRunner(runner), outbox.WithPollInterval(time.Hour))
-	ctx, cancel := context.WithCancel(editlock.System(context.Background()))
+	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() { defer wg.Done(); d.Run(ctx) }()
@@ -149,10 +148,10 @@ func TestPolicyRunner_StoppedWhileRunning_JobRunsAgainAfterStart(t *testing.T) {
 		return ctx.Err()
 	})
 	runner := outbox.NewPolicyRunner(testDB, []application.Policy{blocking})
-	if _, err := outbox.NewDispatcher(testDB, func(event.Event) {}, outbox.WithPolicyRunner(runner)).DrainOnce(editlock.System(context.Background())); err != nil {
+	if _, err := outbox.NewDispatcher(testDB, func(event.Event) {}, outbox.WithPolicyRunner(runner)).DrainOnce(context.Background()); err != nil {
 		t.Fatalf("DrainOnce: %v", err)
 	}
-	ctx, cancel := context.WithCancel(editlock.System(context.Background()))
+	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { runner.Run(ctx); close(done) }()
 	<-started
@@ -160,7 +159,7 @@ func TestPolicyRunner_StoppedWhileRunning_JobRunsAgainAfterStart(t *testing.T) {
 	<-done
 
 	succeeding := newTestPolicy(func(context.Context, string, int) error { return nil })
-	n, err := outbox.NewPolicyRunner(testDB, []application.Policy{succeeding}).RunDueOnce(editlock.System(context.Background()))
+	n, err := outbox.NewPolicyRunner(testDB, []application.Policy{succeeding}).RunDueOnce(context.Background())
 	if err != nil {
 		t.Fatalf("RunDueOnce: %v", err)
 	}
@@ -183,7 +182,7 @@ type policyJobState struct {
 func policyJobOf(t *testing.T, key string) (policyJobState, bool) {
 	t.Helper()
 	var j policyJobState
-	err := testDB.QueryRowContext(editlock.System(context.Background()),
+	err := testDB.QueryRowContext(context.Background(),
 		`SELECT generation, attempts, next_attempt_at <= now(), coalesce(last_error, '')
 		 FROM policy_jobs WHERE policy = $1 AND job_key = $2`, testPolicyName, key,
 	).Scan(&j.generation, &j.attempts, &j.due, &j.lastError)
@@ -202,7 +201,7 @@ func enqueueTagCreated(t *testing.T, runner *outbox.PolicyRunner, name string) t
 	t.Helper()
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	saved := mustSaveTag(t, repo, createTag(t, repo, name))
-	if _, err := outbox.NewDispatcher(testDB, func(event.Event) {}, outbox.WithPolicyRunner(runner)).DrainOnce(editlock.System(context.Background())); err != nil {
+	if _, err := outbox.NewDispatcher(testDB, func(event.Event) {}, outbox.WithPolicyRunner(runner)).DrainOnce(context.Background()); err != nil {
 		t.Fatalf("DrainOnce: %v", err)
 	}
 	return saved
@@ -210,7 +209,7 @@ func enqueueTagCreated(t *testing.T, runner *outbox.PolicyRunner, name string) t
 
 func runDueOnce(t *testing.T, runner *outbox.PolicyRunner) int {
 	t.Helper()
-	n, err := runner.RunDueOnce(editlock.System(context.Background()))
+	n, err := runner.RunDueOnce(context.Background())
 	if err != nil {
 		t.Fatalf("RunDueOnce: %v", err)
 	}
@@ -317,7 +316,7 @@ func TestPolicyRunner_EventMergesWhileRetrySucceeds_RunsAgainWithFailuresForgott
 	runner = outbox.NewPolicyRunner(testDB, []application.Policy{policy}, outbox.WithRetryPause(time.Hour, time.Hour))
 	enqueueTagCreated(t, runner, "first")
 	runDueOnce(t, runner)
-	if _, err := testDB.ExecContext(editlock.System(context.Background()), `UPDATE policy_jobs SET next_attempt_at = now()`); err != nil {
+	if _, err := testDB.ExecContext(context.Background(), `UPDATE policy_jobs SET next_attempt_at = now()`); err != nil {
 		t.Fatalf("make the job due: %v", err)
 	}
 

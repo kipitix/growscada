@@ -6,9 +6,6 @@ info:
 http:
   method: DELETE
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/devices/{{DEVICE_ID}}?version=20
-  headers:
-    - name: X-GrowSCADA-Client
-      value: "{{CLIENT_KEY}}"
   auth: inherit
 
 docs: |

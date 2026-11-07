@@ -1,0 +1,30 @@
+info:
+  name: get library edit lock is gone
+  type: http
+  seq: 184
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/edit-lock
+  auth: inherit
+
+docs: |
+  A Library's Draft has no EditLock either (ADR 0022): the route answers `410
+  Gone`.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '410'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.status'
+      operator: eq
+      value: '410'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -10,7 +10,6 @@ import (
 	"github.com/lib/pq"
 
 	"github.com/kipitix/growscada/internal/server/domain/draft"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/version"
@@ -38,16 +37,11 @@ func NewLibraryReleaseRepositoryPostgres(aDb *sql.DB, opts ...Option) library.Li
 // reads the Draft again and refuses an unchanged one.
 func (r libraryReleaseRepositoryPostgresImpl) Save(ctx context.Context, release library.LibraryRelease, expected version.Version[library.DraftContent]) (library.LibraryRelease, error) {
 	libraryID := release.LibraryID()
-	scope := editlock.LibraryScope(libraryID)
+	scope := draft.LibraryScope(libraryID)
 	var createdAt time.Time // as stored, to the column's precision
 	err := r.store.inTx(ctx, release.PendingEvents(), func(tx *sql.Tx) error {
 		row, err := lockDraftRow(ctx, tx, scope, true, true)
 		if err != nil {
-			return err
-		}
-		// A Release is an act over the whole Draft: the client must hold its
-		// EditLock, checked in the transaction of the release rows (ADR 0015).
-		if err := gateDraft(ctx, tx, row, scope); err != nil {
 			return err
 		}
 		if row.version != expected.Number() {

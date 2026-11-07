@@ -1,6 +1,8 @@
 package library
 
 import (
+	"context"
+
 	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
@@ -66,18 +68,6 @@ type Library struct {
 	newPortName string
 	newPortDesc string
 	newPortType string
-	// ── EditLock of the Draft (ADR 0015) ───────────────────────────────────
-	// editLock is the state of the selected library's lock, read on mount,
-	// on a resync and on every edit_lock_* of it; tabKey is the key this tab
-	// edits under, lockName the name the user declared once.
-	editLock       apiv0.EditLockResponse
-	lockLoaded     bool
-	tabKey         uuid.UUID
-	lockName       string
-	lockNameInput  string
-	askingName     bool
-	takeOverDialog bool
-	checkingOut    bool
 	// onKeyDown listens for Ctrl+Z and Ctrl+Shift+Z while the mode is shown;
 	// it is released with the component (noKeyDown).
 	onKeyDown app.Func
@@ -99,12 +89,9 @@ func (l *Library) OnMount(ctx app.Context) {
 	ctx.ObserveState("theme", &l.ThemeMode)
 	l.selectedID = uiutil.LoadID(ctx, selectedIDKey)
 	l.libraryID = uiutil.LoadID(ctx, libraryIDKey)
-	l.tabKey = tabKeyOf(l.client)
-	ctx.LocalStorage().Get(editLockNameKey, &l.lockName)
 	l.loadLibraries(ctx)
 	l.loadList(ctx)
 	l.loadReleases(ctx)
-	l.loadEditLock(ctx)
 	l.loadDraftChanges(ctx)
 	l.listenShortcuts()
 	l.handleServerEvents(ctx)
@@ -116,6 +103,33 @@ func (l *Library) OnDismount() {
 }
 
 // ── Input Data ────────────────────────────────────────────────────────────────
+
+// callDraft runs call against the Draft of the library shown, if there is one,
+// and hands its answer to onOK only while that Draft is still the one shown: a
+// response for the library left is dropped. onErr nil shows the error as a
+// toast.
+func callDraft[T any](l *Library, call func(context.Context, *apiclient.LibraryClient) (T, error), onOK func(app.Context, T), onErr func(app.Context, error)) {
+	draft := l.draft()
+	if draft == nil {
+		return // no library shown
+	}
+	uiutil.Call(l.compoCtx, func(c context.Context) (T, error) {
+		return call(c, draft)
+	}, func(ctx app.Context, v T) {
+		if draft == l.draft() && onOK != nil {
+			onOK(ctx, v)
+		}
+	}, func(ctx app.Context, err error) {
+		if draft != l.draft() {
+			return // the Draft left: its failure is not this one's
+		}
+		if onErr != nil {
+			onErr(ctx, err)
+			return
+		}
+		uiutil.ShowError(ctx, err)
+	})
+}
 
 // selectedInputValues returns the Input Data values of the selected
 // WidgetType, keyed by port name; nil if none was entered.
@@ -167,9 +181,9 @@ func (l *Library) selectedLibrary() (apiv0.LibraryResponse, bool) {
 }
 
 // readOnly reports whether the WidgetTypes shown cannot be edited: those of a
-// release, or of a Draft this tab does not hold the EditLock of (ADR 0015).
+// release shown read-only are not the Draft.
 func (l *Library) readOnly() bool {
-	return l.viewing != 0 || l.lockReadOnly()
+	return l.viewing != 0
 }
 
 // shownTypes returns the WidgetTypes shown: those of the release viewed, or
@@ -196,29 +210,22 @@ func (l *Library) shownTypes() []apiv0.WidgetTypeResponse {
 }
 
 // selectLibrary shows the library id's Draft; its WidgetTypes and releases
-// are loaded. The Draft left is given back first (ADR 0015): a tab edits one
-// Draft at a time.
+// are loaded.
 func (l *Library) selectLibrary(ctx app.Context, id uuid.UUID) {
 	if id == l.libraryID {
 		return
-	}
-	if l.lockMine() {
-		l.releaseEditLock(l.libraryID)
 	}
 	l.libraryID = id
 	l.viewing = 0
 	l.widgetTypes, l.releases = nil, nil
 	l.draftVersions.Forget()
 	l.clearSelection()
-	l.editLock, l.lockLoaded = apiv0.EditLockResponse{}, false
-	l.lockNameInput, l.askingName, l.takeOverDialog, l.checkingOut = "", false, false, false
 	l.changes, l.changesLoaded = apiv0.DraftChangesResponse{}, false
 	l.undoing, l.redoing = false, false
 	uiutil.StoreID(ctx, libraryIDKey, id)
 	uiutil.StoreID(ctx, selectedIDKey, uuid.Nil)
 	l.loadList(ctx)
 	l.loadReleases(ctx)
-	l.loadEditLock(ctx)
 	l.loadDraftChanges(ctx)
 }
 

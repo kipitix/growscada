@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -18,12 +17,12 @@ import (
 // undoDraft is a Draft of a Project at position 3, its content at version 5.
 func undoDraft(t *testing.T) Draft {
 	t.Helper()
-	scope := editlock.ProjectScope(id.NewID[project.Project]())
+	scope := ProjectScope(id.NewID[project.Project]())
 	ver, err := version.New(version.WithNumber[Draft](5))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return NewDraft(id.NewID[Draft](), scope, ver, 3, editlock.CreateEditLock(scope))
+	return NewDraft(id.NewID[Draft](), scope, ver, 3)
 }
 
 // TestDraft_UndoAndRedoStepTheStackAndRaiseTheVersion: undo applies the change
@@ -175,8 +174,8 @@ func TestSession_RedoReappliesTheAfterStates(t *testing.T) {
 // snapshot — created, updated or deleted — for a Project's Draft and a
 // Library's alike.
 func TestInverseEvents_EveryKind(t *testing.T) {
-	projectScope := editlock.ProjectScope(id.NewID[project.Project]())
-	libraryScope := editlock.LibraryScope(id.NewID[library.Library]())
+	projectScope := ProjectScope(id.NewID[project.Project]())
+	libraryScope := LibraryScope(id.NewID[library.Library]())
 	sceneID, typeID, pairID, deviceID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	pinID, widgetID := uuid.New(), uuid.New()
 	renamedScene := sceneSnapshot(sceneID)
@@ -186,11 +185,11 @@ func TestInverseEvents_EveryKind(t *testing.T) {
 	deletedEnvironment := environmentSnapshot(uuid.New())
 	libraryDraftType := widgetTypeSnapshot(uuid.New(), typeID)
 	cases := []struct {
-		name string
-		scope editlock.Scope
-		old  []Snapshot
-		new  []Snapshot
-		want event.EventType
+		name  string
+		scope Scope
+		old   []Snapshot
+		new   []Snapshot
+		want  event.EventType
 	}{
 		{"tag created", projectScope, nil, []Snapshot{tagSnapshot(uuid.New())}, event.EventTypeTagCreated},
 		{"tag deleted", projectScope, []Snapshot{tagSnapshot(uuid.New())}, nil, event.EventTypeTagDeleted},
@@ -229,7 +228,7 @@ func TestInverseEvents_EveryKind(t *testing.T) {
 // the same state is not a change.
 func TestInverseEvents_UnchangedRowPublishesNothing(t *testing.T) {
 	snapshot := sceneSnapshot(uuid.New())
-	events, err := inverseEvents(editlock.ProjectScope(id.NewID[project.Project]()), []Snapshot{snapshot}, []Snapshot{snapshot})
+	events, err := inverseEvents(ProjectScope(id.NewID[project.Project]()), []Snapshot{snapshot}, []Snapshot{snapshot})
 	if err != nil {
 		t.Fatalf("inverseEvents: %v", err)
 	}

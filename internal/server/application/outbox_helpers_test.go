@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
@@ -12,7 +11,7 @@ import (
 
 func cleanOutbox(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(editlock.System(context.Background()), "DELETE FROM outbox"); err != nil {
+	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM outbox"); err != nil {
 		t.Fatalf("cleanOutbox: %v", err)
 	}
 }
@@ -27,7 +26,7 @@ func deliveredOnCommit(t *testing.T) (eventbus.EventBus, repositories.Option) {
 	bus := eventbus.NewEventBus()
 	d := outbox.NewDispatcher(testDB, bus.Publish)
 	return bus, repositories.NotifyOnCommit(func() {
-		if _, err := d.DrainOnce(editlock.System(context.Background())); err != nil {
+		if _, err := d.DrainOnce(context.Background()); err != nil {
 			t.Errorf("DrainOnce: %v", err)
 		}
 	})

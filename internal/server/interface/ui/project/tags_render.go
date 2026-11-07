@@ -43,7 +43,7 @@ func (p *Project) renderTagListColumn() app.UI {
 }
 
 func (p *Project) renderTagListButtons() app.UI {
-	deleteDisabled := p.selectedTagID == uuid.Nil || p.creatingTag || p.readOnly()
+	deleteDisabled := p.selectedTagID == uuid.Nil || p.creatingTag
 
 	deleteBtn := app.Button().
 		Style("flex", "1").
@@ -63,13 +63,12 @@ func (p *Project) renderTagListButtons() app.UI {
 		})
 	if deleteDisabled {
 		deleteBtn = deleteBtn.
-			Title(readOnlyHint).
 			Style("opacity", "0.4").
 			Style("cursor", "default").
 			Disabled(true)
 	}
 
-	createDisabled := p.creatingTag || p.readOnly()
+	createDisabled := p.creatingTag
 	createBtn := app.Button().
 		Style("flex", "1").
 		Style("padding", "4px 0").
@@ -89,7 +88,6 @@ func (p *Project) renderTagListButtons() app.UI {
 		})
 	if createDisabled {
 		createBtn = createBtn.
-			Title(readOnlyHint).
 			Style("opacity", "0.4").
 			Style("cursor", "default").
 			Disabled(true)

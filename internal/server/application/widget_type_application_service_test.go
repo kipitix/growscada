@@ -10,7 +10,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
@@ -50,7 +49,7 @@ func TestCreateWidgetType_Valid_ReturnsID(t *testing.T) {
 	cleanWidgetTypes(t)
 	svc := newWidgetTypeService()
 
-	resp, err := svc.CreateWidgetType(editlock.System(context.Background()), wtLibrary, libraryDraftVersionOf(t, wtLibrary), testCreateWidgetTypeInput)
+	resp, err := svc.CreateWidgetType(context.Background(), wtLibrary, libraryDraftVersionOf(t, wtLibrary), testCreateWidgetTypeInput)
 
 	if err != nil {
 		t.Fatalf("CreateWidgetType returned unexpected error: %v", err)
@@ -66,7 +65,7 @@ func TestCreateWidgetType_InvalidScriptLanguage_ReturnsError(t *testing.T) {
 
 	input := testCreateWidgetTypeInput
 	input.ScriptLanguage = "ruby"
-	_, err := svc.CreateWidgetType(editlock.System(context.Background()), wtLibrary, libraryDraftVersionOf(t, wtLibrary), input)
+	_, err := svc.CreateWidgetType(context.Background(), wtLibrary, libraryDraftVersionOf(t, wtLibrary), input)
 
 	if !errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("expected ErrInvalidInput for invalid script language, got: %v", err)
@@ -90,7 +89,7 @@ func TestCreateWidgetType_InputPortTypeHint(t *testing.T) {
 
 			input := testCreateWidgetTypeInput
 			input.InputPorts = []appdto.InputPort{{Name: "value", TypeHint: tc.typeHint}}
-			resp, err := svc.CreateWidgetType(editlock.System(context.Background()), wtLibrary, libraryDraftVersionOf(t, wtLibrary), input)
+			resp, err := svc.CreateWidgetType(context.Background(), wtLibrary, libraryDraftVersionOf(t, wtLibrary), input)
 
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("CreateWidgetType error = %v, wantErr %v", err, tc.wantErr)
@@ -111,7 +110,7 @@ func TestFindAllWidgetTypes_EmptyDB_ReturnsEmptyList(t *testing.T) {
 	cleanWidgetTypes(t)
 	svc := newWidgetTypeService()
 
-	resp, err := svc.FindAllWidgetTypes(editlock.System(context.Background()), wtLibrary)
+	resp, err := svc.FindAllWidgetTypes(context.Background(), wtLibrary)
 
 	if err != nil {
 		t.Fatalf("FindAllWidgetTypes returned unexpected error: %v", err)
@@ -124,7 +123,7 @@ func TestFindAllWidgetTypes_EmptyDB_ReturnsEmptyList(t *testing.T) {
 func TestFindAllWidgetTypes_Multiple_ReturnsAll(t *testing.T) {
 	cleanWidgetTypes(t)
 	svc := newWidgetTypeService()
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 
 	input2 := testCreateWidgetTypeInput
 	input2.Name = "thermometer"
@@ -150,7 +149,7 @@ func TestFindAllWidgetTypes_Multiple_ReturnsAll(t *testing.T) {
 func TestFindWidgetTypeByID_Existing_ReturnsCorrectFields(t *testing.T) {
 	cleanWidgetTypes(t)
 	svc := newWidgetTypeService()
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 
 	created, err := svc.CreateWidgetType(ctx, wtLibrary, libraryDraftVersionOf(t, wtLibrary), testCreateWidgetTypeInput)
 	if err != nil {
@@ -174,7 +173,7 @@ func TestFindWidgetTypeByID_NotFound_ReturnsWrappedError(t *testing.T) {
 	cleanWidgetTypes(t)
 	svc := newWidgetTypeService()
 
-	_, err := svc.FindWidgetTypeByID(editlock.System(context.Background()), wtLibrary, uuid.New())
+	_, err := svc.FindWidgetTypeByID(context.Background(), wtLibrary, uuid.New())
 
 	if err == nil {
 		t.Fatal("expected error for non-existent widget type, got nil")
@@ -189,7 +188,7 @@ func TestFindWidgetTypeByID_NotFound_ReturnsWrappedError(t *testing.T) {
 func TestUpdateWidgetType_Valid_ReturnsIncrementedVersion(t *testing.T) {
 	cleanWidgetTypes(t)
 	svc := newWidgetTypeService()
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 
 	created, err := svc.CreateWidgetType(ctx, wtLibrary, libraryDraftVersionOf(t, wtLibrary), testCreateWidgetTypeInput)
 	if err != nil {
@@ -216,7 +215,7 @@ func TestUpdateWidgetType_Valid_ReturnsIncrementedVersion(t *testing.T) {
 func TestUpdateWidgetType_Valid_FieldsAreUpdated(t *testing.T) {
 	cleanWidgetTypes(t)
 	svc := newWidgetTypeService()
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 
 	created, err := svc.CreateWidgetType(ctx, wtLibrary, libraryDraftVersionOf(t, wtLibrary), testCreateWidgetTypeInput)
 	if err != nil {
@@ -251,7 +250,7 @@ func TestUpdateWidgetType_NotFound_ReturnsWrappedError(t *testing.T) {
 	cleanWidgetTypes(t)
 	svc := newWidgetTypeService()
 
-	_, err := svc.UpdateWidgetType(editlock.System(context.Background()), wtLibrary, uuid.New(), 0, appdto.WidgetTypeInput{
+	_, err := svc.UpdateWidgetType(context.Background(), wtLibrary, uuid.New(), 0, appdto.WidgetTypeInput{
 		Name:           "x",
 		HtmlTemplate:   "<div/>",
 		Script:         "x",
@@ -269,7 +268,7 @@ func TestUpdateWidgetType_NotFound_ReturnsWrappedError(t *testing.T) {
 func TestUpdateWidgetType_InvalidScriptLanguage_ReturnsError(t *testing.T) {
 	cleanWidgetTypes(t)
 	svc := newWidgetTypeService()
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 
 	created, err := svc.CreateWidgetType(ctx, wtLibrary, libraryDraftVersionOf(t, wtLibrary), testCreateWidgetTypeInput)
 	if err != nil {
@@ -295,7 +294,7 @@ func TestUpdateWidgetType_InvalidScriptLanguage_ReturnsError(t *testing.T) {
 func TestDeleteWidgetType_Existing_ReturnsDeletedItem(t *testing.T) {
 	cleanWidgetTypes(t)
 	svc := newWidgetTypeService()
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 
 	created, err := svc.CreateWidgetType(ctx, wtLibrary, libraryDraftVersionOf(t, wtLibrary), testCreateWidgetTypeInput)
 	if err != nil {
@@ -315,7 +314,7 @@ func TestDeleteWidgetType_Existing_ReturnsDeletedItem(t *testing.T) {
 func TestDeleteWidgetType_Existing_RemovedFromDB(t *testing.T) {
 	cleanWidgetTypes(t)
 	svc := newWidgetTypeService()
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 
 	created, err := svc.CreateWidgetType(ctx, wtLibrary, libraryDraftVersionOf(t, wtLibrary), testCreateWidgetTypeInput)
 	if err != nil {
@@ -336,7 +335,7 @@ func TestDeleteWidgetType_NotFound_ReturnsWrappedError(t *testing.T) {
 	cleanWidgetTypes(t)
 	svc := newWidgetTypeService()
 
-	_, err := svc.DeleteWidgetTypeByID(editlock.System(context.Background()), wtLibrary, uuid.New(), libraryDraftVersionOf(t, wtLibrary))
+	_, err := svc.DeleteWidgetTypeByID(context.Background(), wtLibrary, uuid.New(), libraryDraftVersionOf(t, wtLibrary))
 
 	if err == nil {
 		t.Fatal("expected error for non-existent widget type, got nil")
@@ -351,7 +350,7 @@ func TestDeleteWidgetType_NotFound_ReturnsWrappedError(t *testing.T) {
 func TestCreateWidgetType_Success_PublishesCreatedEvent(t *testing.T) {
 	cleanWidgetTypes(t)
 	svc, bus := newWidgetTypeServiceWithBus(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 
 	var received []event.Event
 	bus.Subscribe(event.EventTypeWidgetTypeCreated, func(e event.Event) {
@@ -378,7 +377,7 @@ func TestCreateWidgetType_Success_PublishesCreatedEvent(t *testing.T) {
 func TestDeleteWidgetType_Success_PublishesDeletedEvent(t *testing.T) {
 	cleanWidgetTypes(t)
 	svc, bus := newWidgetTypeServiceWithBus(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 
 	created, err := svc.CreateWidgetType(ctx, wtLibrary, libraryDraftVersionOf(t, wtLibrary), testCreateWidgetTypeInput)
 	if err != nil {
@@ -409,7 +408,7 @@ func TestDeleteWidgetType_Success_PublishesDeletedEvent(t *testing.T) {
 func TestUpdateWidgetType_Success_PublishesUpdatedEvent(t *testing.T) {
 	cleanWidgetTypes(t)
 	svc, bus := newWidgetTypeServiceWithBus(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 
 	created, err := svc.CreateWidgetType(ctx, wtLibrary, libraryDraftVersionOf(t, wtLibrary), testCreateWidgetTypeInput)
 	if err != nil {
@@ -448,7 +447,7 @@ func TestUpdateWidgetType_Success_PublishesUpdatedEvent(t *testing.T) {
 func TestUpdateWidgetType_StaleVersion_ReturnsConflict(t *testing.T) {
 	cleanWidgetTypes(t)
 	svc := newWidgetTypeService()
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 
 	created, err := svc.CreateWidgetType(ctx, wtLibrary, libraryDraftVersionOf(t, wtLibrary), testCreateWidgetTypeInput)
 	if err != nil {
@@ -480,7 +479,7 @@ func TestDeleteWidgetType_UsedByWidget_TouchesNoScene(t *testing.T) {
 	cleanScenes(t)
 	wtSvc := newWidgetTypeService()
 	sceneSvc := newSceneService()
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 
 	created, lib := pinNewWidgetType(t, mainProject, testCreateWidgetTypeInput)
 	sc := mustCreateScene(t, sceneSvc)
@@ -507,7 +506,7 @@ func TestDeleteWidgetType_UsedByWidget_TouchesNoScene(t *testing.T) {
 func TestWidgetType_OfAnotherOrMissingLibrary_IsNotFound(t *testing.T) {
 	cleanWidgetTypes(t)
 	svc := newWidgetTypeService()
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	created, err := svc.CreateWidgetType(ctx, wtLibrary, libraryDraftVersionOf(t, wtLibrary), testCreateWidgetTypeInput)
 	if err != nil {
 		t.Fatalf("CreateWidgetType: %v", err)

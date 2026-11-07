@@ -10,7 +10,6 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 )
 
 // Create and Update of a resource parse the client's fields with one function,
@@ -41,7 +40,7 @@ func TestSceneInput_InvalidField_IsInvalidInputOnCreateAndUpdate(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cleanScenes(t)
 			svc := newSceneService()
-			ctx := editlock.System(context.Background())
+			ctx := context.Background()
 			sc := mustCreateScene(t, svc)
 			input := testCreateSceneInput
 			tc.modify(&input)
@@ -72,7 +71,7 @@ func TestWidgetInput_InvalidField_IsInvalidInputOnCreateAndUpdate(t *testing.T) 
 		t.Run(name, func(t *testing.T) {
 			cleanScenes(t)
 			svc := newSceneService()
-			ctx := editlock.System(context.Background())
+			ctx := context.Background()
 			sc := mustCreateScene(t, svc)
 			created, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, testCreateWidgetInput)
 			if err != nil {
@@ -93,7 +92,7 @@ func TestWidgetInput_InvalidField_IsInvalidInputOnCreateAndUpdate(t *testing.T) 
 func TestWidgetInput_NegativeVersion_IsInvalidInputOnCreateAndUpdate(t *testing.T) {
 	cleanScenes(t)
 	svc := newSceneService()
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	sc := mustCreateScene(t, svc)
 	created, err := svc.CreateWidget(ctx, mainProject, sc.ID, sc.Version, testCreateWidgetInput)
 	if err != nil {
@@ -108,7 +107,7 @@ func TestWidgetInput_NegativeVersion_IsInvalidInputOnCreateAndUpdate(t *testing.
 }
 
 func TestUpdate_NegativeVersion_IsInvalidInput(t *testing.T) {
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 
 	cleanScenes(t)
 	sceneSvc := newSceneService()
@@ -145,7 +144,7 @@ func TestWidgetTypeInput_InvalidField_IsInvalidInputOnCreateAndUpdate(t *testing
 		t.Run(name, func(t *testing.T) {
 			cleanWidgetTypes(t)
 			svc := newWidgetTypeService()
-			ctx := editlock.System(context.Background())
+			ctx := context.Background()
 			created, err := svc.CreateWidgetType(ctx, wtLibrary, libraryDraftVersionOf(t, wtLibrary), testCreateWidgetTypeInput)
 			if err != nil {
 				t.Fatalf("CreateWidgetType: %v", err)
@@ -165,7 +164,7 @@ func TestWidgetTypeInput_InvalidField_IsInvalidInputOnCreateAndUpdate(t *testing
 func TestWidgetTypeInput_DuplicatePortNames_IsInvalidInputOnCreateAndUpdate(t *testing.T) {
 	cleanWidgetTypes(t)
 	svc := newWidgetTypeService()
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	created, err := svc.CreateWidgetType(ctx, wtLibrary, libraryDraftVersionOf(t, wtLibrary), testCreateWidgetTypeInput)
 	if err != nil {
 		t.Fatalf("CreateWidgetType: %v", err)

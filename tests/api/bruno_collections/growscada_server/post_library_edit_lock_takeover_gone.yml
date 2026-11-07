@@ -1,0 +1,30 @@
+info:
+  name: post library edit lock takeover is gone
+  type: http
+  seq: 187
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/edit-lock/takeover
+  auth: inherit
+
+docs: |
+  A Library's takeover is gone with the EditLock (ADR 0022): the route
+  answers `410 Gone`.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '410'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.status'
+      operator: eq
+      value: '410'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

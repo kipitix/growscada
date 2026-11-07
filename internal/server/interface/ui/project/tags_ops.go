@@ -12,9 +12,6 @@ import (
 )
 
 func (p *Project) createTag(ctx app.Context) {
-	if p.refuseReadOnly(ctx) {
-		return
-	}
 	if p.waitMoves(ctx, func(ctx app.Context) { p.createTag(ctx) }) {
 		return
 	}
@@ -34,9 +31,6 @@ func (p *Project) createTag(ctx app.Context) {
 }
 
 func (p *Project) deleteTag(ctx app.Context) {
-	if p.refuseReadOnly(ctx) {
-		return
-	}
 	if p.waitMoves(ctx, func(ctx app.Context) { p.deleteTag(ctx) }) {
 		return
 	}

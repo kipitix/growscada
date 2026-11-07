@@ -15,7 +15,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/devicetoken"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
@@ -51,8 +50,6 @@ var (
 	deviceTokenResource = resource{name: "DeviceToken", pathParam: "device_id"}
 	// A Revision is named by its number within its Project.
 	revisionResource = resource{name: "Revision", pathParam: "revision_number"}
-	// An EditLock is named by the Project of its Draft.
-	editLockResource = resource{name: "EditLock", pathParam: "project_id"}
 )
 
 // wildcard is the router pattern segment that carries the resource's ID.
@@ -132,14 +129,6 @@ var errorMappings = []errorMapping{
 	{devicetoken.ErrTokenNotFound, http.StatusNotFound, deviceTokenResource, ""},
 	{devicetoken.ErrTokenExists, http.StatusConflict, deviceTokenResource,
 		"Device already has a token; revoke or rotate it"},
-	{editlock.ErrEditLockHeld, http.StatusConflict, editLockResource,
-		"The Draft is being edited by another client; take the lock over to edit it"},
-	{editlock.ErrEditLockNotHeld, http.StatusConflict, editLockResource,
-		"The Draft is not held by this client; check the lock out before editing"},
-	{editlock.ErrEditLockFree, http.StatusConflict, editLockResource,
-		"The Draft is free; check the lock out instead of taking it over"},
-	{editlock.ErrEditLockVersionStale, http.StatusConflict, editLockResource,
-		"The Draft's lock was changed concurrently; reload it and retry"},
 }
 
 // sendError responds to an error from the application layer. Invalid input is
@@ -152,11 +141,6 @@ var errorMappings = []errorMapping{
 // that does not say which ID was not found, which is a service fault — is a
 // 500 that logs the error and tells the client nothing internal.
 func sendError(w http.ResponseWriter, r *http.Request, err error) {
-	if errors.Is(err, editlock.ErrNoClient) {
-		sendProblem(w, NewBadRequest(
-			"The request names no client: send the client key in "+apiv0.ClientHeader, r.URL.Path))
-		return
-	}
 	// A project file that does not validate answers every problem found, not
 	// the first: the 400 carries them as file_issues (ADR 0018).
 	var invalidFile application.ProjectFileError
@@ -229,12 +213,6 @@ func sendError(w http.ResponseWriter, r *http.Request, err error) {
 				for _, pw := range orphans.Widgets {
 					problem.OrphanedWidgets = append(problem.OrphanedWidgets, newPinnedWidgetResponse(appdto.NewPinnedWidget(pw)))
 				}
-			}
-			// A gated write that failed names the lock that refused it, so the
-			// client can show who edits the Draft and offer a takeover.
-			if state, ok := editlock.StateOf(err); ok {
-				lock := newEditLockResponseOfEvent(state)
-				problem.EditLock = &lock
 			}
 			sendProblem(w, problem)
 		case http.StatusInternalServerError:

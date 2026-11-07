@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/server/domain/draft"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
@@ -35,8 +34,8 @@ func NewLibraryContent(aLibraryRepository library.LibraryRepository, someDrafts 
 func (c LibraryContent) Drafts() draft.Repository { return c.drafts }
 
 // ScopeOf is the scope of the Draft of libraryID.
-func (c LibraryContent) ScopeOf(libraryID id.ID[library.Library]) editlock.Scope {
-	return editlock.LibraryScope(libraryID)
+func (c LibraryContent) ScopeOf(libraryID id.ID[library.Library]) draft.Scope {
+	return draft.LibraryScope(libraryID)
 }
 
 // open returns the ID of the live Library rawLibraryID. Returns an error
@@ -54,7 +53,7 @@ func (c LibraryContent) open(ctx context.Context, rawLibraryID uuid.UUID) (id.ID
 // version 0; its row, and the first version a write states, starts at 1.
 func (c LibraryContent) Version(ctx context.Context, rawLibraryID uuid.UUID) (int, error) {
 	libraryID := id.NewID(id.IDWithUUID[library.Library](rawLibraryID))
-	found, ok, err := c.drafts.Read(ctx, editlock.LibraryScope(libraryID))
+	found, ok, err := c.drafts.Read(ctx, draft.LibraryScope(libraryID))
 	if err != nil {
 		return 0, fmt.Errorf("cannot read the draft of library %s: %w", libraryID, err)
 	}

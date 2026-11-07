@@ -1,5 +1,21 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.76] - 2026-11-08
+
+### Changed
+
+- **EditLock убран: правка и сохранение без Check in/out** (задача 72_1; ADR 0022, поправка в ADR 0016; ADR 0015 помечен заменённым)
+  - Удалён пакет `internal/server/domain/editlock` и всё, что он вёл: агрегат `EditLock`, `Holder`, `Snapshot`, события `edit_lock_*`, `application.EditLockService`, `EditLockGate`, `RunEditLockReaper`, presence (`Attach`/`Detach`), `editlock.System` и идентичность клиента в контексте. `Scope` (Draft Project'а или Library) переехал в `domain/draft` (`draft.Scope`, `ProjectScope`, `LibraryScope`) и больше не несёт версии замка. `domain/draft.Draft` потерял `Lock()`, `WithLock`, `PendingEvents` и поля замка
+  - Конкурентность — только Version Draft: `draftRepositoryPostgres.Update` блокирует строку Draft и сравнивает заявленную Version, расхождение — `draft.ConflictError` (409 `draft_conflict` с текущей Version в `Problem.draft`); 400 «нет клиента» и 409 «замок занят» исчезли. Undo/redo остаются общими: второй инженер может отменить чужой DraftChange (осознанно до задач 49/50)
+  - Deploy защищён проверкой Version вокруг сборки: читает Version V, собирает ProjectFile, затем в короткой транзакции проверяет, что Version всё ещё V (`draft.Repository.CheckVersion`), иначе 409 `draft_conflict`; только после проверки документ уходит на Runtime, поэтому смешанный ProjectFile не отправляется. Тот же помощник переиспользует 72_2
+  - Миграция `engineering/20261106000000_remove_edit_lock`: из `engineering.drafts` удалены `holder_key`, `holder_name`, `held_since`, `last_seen`, `lock_version` (таблица `engineering.edit_locks` была удалена ещё в `20261105000001_drafts`). Сид замков не создаёт
+  - REST и контракт: удалён `contract/api/v0/editlock.go`, DTO замка, `Problem.edit_lock`, события `edit_lock_*` из `EventTypes`, `apiEventTypes` и samples; MINOR `api/v0` поднят до 0.24, `make schemas` обновлён. Четыре маршрута на Project и Library (`GET/POST/DELETE …/edit-lock`, `POST …/edit-lock/takeover`) отвечают **410 Gone** в формате Problem Details с подсказкой; удаляются при выходе API 1.0. Middleware `X-GrowSCADA-Client` удалён, `?client=` у SSE принимается и игнорируется, `eventHub` больше не считает presence
+  - `apiclient`: удалены `WithClientKey`, `ClientKey` и методы замка; `growctl`: нет Check out/Check in вокруг мутирующего прогона, флагов `--client-name`/`--take-over` и заголовка клиента — мутации просто шлют Version
+  - UI: из шапок Project и Library убрана строка замка, read-only режим без замка, `editlock:client` (sessionStorage), `editlock:name` (LocalStorage), `?client=` у SSE, обработка `edit_lock_*` и toast «потерян замок»; кнопки правки, Deploy/Release/Discard доступны всегда. `GiveBackDraft`/Check in удалены, логика «дождаться серии стрелок перед записью» сохранена (она про Version); 409 `draft_conflict` перечитывает содержимое и стек
+  - Bruno: удалены setup/teardown-запросы замка и `X-GrowSCADA-Client` во всех запросах; маршруты `/edit-lock` покрыты запросами, ожидающими 410
+  - Документы: ADR 0022, поправка в ADR 0016, ADR 0015 помечен заменённым; GLOSSARY (EditLock/Check out/Check in удалены, Client переопределён, добавлен Author); AGENTS.md; CHANGELOG
+  - Тесты: удалены тесты замка (домен, приложение, репозитории, REST, UI, growctl, apiclient e2e); тесты DraftChanges/Deploy/движения виджетов проверяют Version и конфликт; добавлены проверки `CheckVersion` и 410-маршрутов через Bruno
+
 ## [0.0.75] - 2026-11-07
 
 ### Added

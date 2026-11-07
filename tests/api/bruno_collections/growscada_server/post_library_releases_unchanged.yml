@@ -6,9 +6,6 @@ info:
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/releases
-  headers:
-    - name: X-GrowSCADA-Client
-      value: "{{CLIENT_KEY}}"
   body:
     type: json
     data: |-

@@ -138,25 +138,6 @@ func TestProjectFileDialog_FileIssuesAreAList(t *testing.T) {
 	}
 }
 
-// TestProjectFileDialog_OpenIsDisabledWithoutTheLock: the Draft write is
-// gated like every other; the deploy of a file stays available.
-func TestProjectFileDialog_OpenIsDisabledWithoutTheLock(t *testing.T) {
-	f := startProject(t)
-	f.p.editLock, f.p.lockLoaded = apiv0.EditLockResponse{}, true
-
-	f.p.openProjectFileDialog(f.p.compoCtx)
-	html := app.HTMLString(f.p.Render())
-	if strings.Contains(html, `data-projectfile-input="open"`) {
-		t.Errorf("the open input is offered without the EditLock: %s", html)
-	}
-	if !strings.Contains(html, `data-projectfile-input="deploy"`) {
-		t.Errorf("the deploy input is disabled without the EditLock: %s", html)
-	}
-	if !strings.Contains(html, "Check the Draft out") {
-		t.Errorf("the disabled open has no hint: %s", html)
-	}
-}
-
 // TestProjectFileDialog_DeployFromFileReloadsThePreview: a deployed file
 // becomes the Revision the Project runs and leaves the Draft as it was.
 func TestProjectFileDialog_DeployFromFileReloadsThePreview(t *testing.T) {

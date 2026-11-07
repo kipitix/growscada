@@ -9,8 +9,6 @@ http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/tags
   headers:
-    - name: X-GrowSCADA-Client
-      value: "{{CLIENT_KEY}}"
     - name: GrowSCADA-Schema-Version
       value: "0.99"
   body:

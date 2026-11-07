@@ -9,7 +9,7 @@ import (
 // OperationHandlers serves the starting state of Operation (task 43,
 // ADR 0020): the Project's Journal position, the Revision it runs and the
 // states of that Revision's Tags. It is the Runtime node's model; the handler
-// touches no Draft and holds no EditLock.
+// touches no Draft and holds no lock.
 type OperationHandlers struct {
 	operation runtimeapp.OperationStateService
 }

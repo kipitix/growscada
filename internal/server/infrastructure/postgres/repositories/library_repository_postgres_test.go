@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/kipitix/growscada/internal/server/domain/draft"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
@@ -15,7 +14,7 @@ import (
 
 func TestLibrarySave_RenameAndNameTaken(t *testing.T) {
 	cleanLibraries(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	repo := repositories.NewLibraryRepositoryPostgres(testDB)
 	lib := mustSaveLibrary(t)
 	other := mustSaveLibrary(t)
@@ -50,7 +49,7 @@ func TestLibrarySave_RenameAndNameTaken(t *testing.T) {
 func TestLibraryDelete_OnlyWhileNoLiveProjectPinsIt(t *testing.T) {
 	cleanProjects(t)
 	cleanLibraries(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	libraries := repositories.NewLibraryRepositoryPostgres(testDB)
 	projects := repositories.NewProjectRepositoryPostgres(testDB)
 	other := mustCreateProject(t, projects, "Line 1")
@@ -99,7 +98,7 @@ func TestLibraryDelete_OnlyWhileNoLiveProjectPinsIt(t *testing.T) {
 
 func TestLibraryRelease_SaveAndRead(t *testing.T) {
 	cleanLibraries(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	repo := newWidgetTypeRepo(t)
 	port, _ := library.NewInputPortName("value")
 	saved := mustStoreWidgetType(t, makeWidgetType(t, "gauge", []library.InputPort{library.NewInputPort(port, "the value", library.AnyTypeHint())}, repo), repo)
@@ -132,7 +131,7 @@ func TestLibraryRelease_SaveAndRead(t *testing.T) {
 	if _, err := releases.Save(ctx, again, libraryDraftContentVersionOf(t, repo.libraryID)); !errors.Is(err, library.ErrReleaseNumberTaken) {
 		t.Errorf("number 1 again: expected ErrReleaseNumberTaken, got %v", err)
 	}
-	if _, err := testDrafts().Update(ctx, editlock.LibraryScope(repo.libraryID), libraryDraftVersionOf(t, repo.libraryID),
+	if _, err := testDrafts().Update(ctx, draft.LibraryScope(repo.libraryID), libraryDraftVersionOf(t, repo.libraryID),
 		"Delete widget type gauge", func(session *draft.Session) error {
 			_, err := session.DeleteWidgetType(ctx, saved.ID())
 			return err
@@ -157,7 +156,7 @@ func TestLibraryRelease_SaveAndRead(t *testing.T) {
 // stores nothing (ADR 0016).
 func TestLibraryRelease_SaveRefusesAStaleDraftVersion(t *testing.T) {
 	cleanLibraries(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	repo := newWidgetTypeRepo(t)
 	mustStoreWidgetType(t, makeWidgetType(t, "gauge", nil, repo), repo)
 	releases := repositories.NewLibraryReleaseRepositoryPostgres(testDB)
@@ -201,7 +200,7 @@ func TestLibraryRelease_SaveRefusesAStaleDraftVersion(t *testing.T) {
 // changed, added or removed since the release, whatever was stored.
 func TestLibraryReleaseState_OfTheStoredDraftAndRelease(t *testing.T) {
 	cleanLibraries(t)
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	repo := newWidgetTypeRepo(t)
 	releases := repositories.NewLibraryReleaseRepositoryPostgres(testDB)
 	check := func(step string, wantLatest int, wantDiffers bool) {

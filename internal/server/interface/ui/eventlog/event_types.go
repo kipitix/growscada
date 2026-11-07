@@ -52,10 +52,9 @@ func defaultFilters() map[category]bool {
 }
 
 // isProjectContent reports whether an event is of a project's content (Tags,
-// their values, Scenes, Widgets, Library Pins, Devices, Environments and their
-// pairs, the Revision, and the EditLock of the project's Draft), carried by
-// the stream of that project; anything else is the server's. A Library's
-// EditLock is the server's, though its type is a Draft's.
+// their values, Scenes, Widgets, Library Pins, Devices, Environments, their
+// pairs and the Revision), carried by the stream of that project; anything
+// else is the server's.
 func isProjectContent(ev apiv0.Event) bool {
 	switch ev.Type {
 	case apiv0.EventLibraryPinCreated, apiv0.EventLibraryPinUpdated, apiv0.EventLibraryPinDeleted,
@@ -64,11 +63,6 @@ func isProjectContent(ev apiv0.Event) bool {
 		apiv0.EventEnvironmentDeviceCreated, apiv0.EventEnvironmentDeviceUpdated, apiv0.EventEnvironmentDeviceDeleted,
 		apiv0.EventRevisionCreated:
 		return true
-	case apiv0.EventEditLockAcquired, apiv0.EventEditLockReleased,
-		apiv0.EventEditLockTakenOver, apiv0.EventEditLockExpired:
-		// A Project's lock travels on that Project's stream; a Library's,
-		// which names its library, on the server's (ADR 0015).
-		return ev.LibraryID == ""
 	}
 	switch eventTypeInfoByType[ev.Type].category {
 	case categoryTag, categoryValue, categoryScene, categoryWidget:
@@ -132,11 +126,6 @@ var eventTypeInfoByType = map[string]eventTypeInfo{
 	apiv0.EventEnvironmentDeviceDeleted: {categoryOther, "EnvironmentDevice %s deleted"},
 
 	apiv0.EventRevisionCreated: {categoryProject, "Project deployed"},
-
-	apiv0.EventEditLockAcquired:  {categoryProject, "Draft %s checked out"},
-	apiv0.EventEditLockReleased:  {categoryProject, "Draft %s checked in"},
-	apiv0.EventEditLockTakenOver: {categoryProject, "Draft %s taken over"},
-	apiv0.EventEditLockExpired:   {categoryProject, "Draft %s lock expired"},
 }
 
 // describe is the log text of an event of this type with the given id.

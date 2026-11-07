@@ -14,14 +14,13 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
 
 func cleanScenesRest(t *testing.T) {
 	t.Helper()
 	// ON DELETE CASCADE removes widgets too; that's fine for scene tests.
-	if _, err := testDB().ExecContext(editlock.System(context.Background()), "DELETE FROM engineering.scenes"); err != nil {
+	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM engineering.scenes"); err != nil {
 		t.Fatalf("cleanScenesRest: %v", err)
 	}
 }
@@ -32,7 +31,7 @@ func newRouterWithScenes() testRouter {
 
 func createSceneViaService(t *testing.T, input appdto.SceneInput) appdto.Scene {
 	t.Helper()
-	resp, err := newServices().scenes.CreateScene(editlock.System(context.Background()), mainProject, testDraftVersion(t, mainProject), input)
+	resp, err := newServices().scenes.CreateScene(context.Background(), mainProject, testDraftVersion(t, mainProject), input)
 	if err != nil {
 		t.Fatalf("createSceneViaService: %v", err)
 	}

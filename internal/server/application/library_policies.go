@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -70,8 +69,6 @@ func (p libraryCleanupPolicy) JobKey(e event.Event) (string, bool) {
 }
 
 func (p libraryCleanupPolicy) Run(ctx context.Context, key string) error {
-	// A policy writes as the server: it passes no EditLock check (ADR 0015).
-	ctx = editlock.System(ctx)
 	libraryID, err := parseLibraryKey(key)
 	if err != nil {
 		return err

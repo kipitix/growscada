@@ -16,9 +16,6 @@ import (
 // ── Scene CRUD ────────────────────────────────────────────────────────────────
 
 func (p *Project) createScene(ctx app.Context) {
-	if p.refuseReadOnly(ctx) {
-		return
-	}
 	if p.waitMoves(ctx, func(ctx app.Context) { p.createScene(ctx) }) {
 		return
 	}
@@ -72,9 +69,6 @@ func (p *Project) confirmDeleteScene(ctx app.Context, sceneID uuid.UUID, sceneNa
 }
 
 func (p *Project) deleteScene(ctx app.Context, sceneID uuid.UUID) {
-	if p.refuseReadOnly(ctx) {
-		return
-	}
 	if p.waitMoves(ctx, func(ctx app.Context) { p.deleteScene(ctx, sceneID) }) {
 		return
 	}
@@ -101,9 +95,6 @@ func (p *Project) selectScene(ctx app.Context, id uuid.UUID) {
 
 func (p *Project) saveSceneProperties(ctx app.Context) {
 	ctx = p.compoCtx
-	if p.refuseReadOnly(ctx) {
-		return
-	}
 	if p.waitMoves(ctx, func(ctx app.Context) { p.saveSceneProperties(ctx) }) {
 		return
 	}
@@ -138,9 +129,6 @@ func (p *Project) startEditingScene(id uuid.UUID, name string) {
 }
 
 func (p *Project) commitSceneEdit(ctx app.Context) {
-	if p.refuseReadOnly(ctx) {
-		return
-	}
 	if p.waitMoves(ctx, func(ctx app.Context) { p.commitSceneEdit(ctx) }) {
 		return
 	}
@@ -165,9 +153,6 @@ func (p *Project) commitSceneEdit(ctx app.Context) {
 
 // putScene saves the Scene's properties at its known version.
 func (p *Project) putScene(sc apiv0.SceneResponse) {
-	if p.readOnly() {
-		return
-	}
 	if p.waitMoves(p.compoCtx, func(ctx app.Context) { p.putScene(sc) }) {
 		return
 	}

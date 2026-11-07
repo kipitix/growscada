@@ -28,14 +28,12 @@ func startClient(t *testing.T) *apiclient.Client {
 	return startClientAndServer(t)
 }
 
-// startClientAndServer starts the API and returns a client of it acting as
-// servertest.ClientKey, the holder of the Main project's EditLock: the tests
-// write the Draft, which needs the lock (ADR 0015).
+// startClientAndServer starts the API and returns a client of it: the tests
+// write the Draft, which needs no lock (ADR 0022).
 func startClientAndServer(t *testing.T) *apiclient.Client {
 	t.Helper()
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
-	servertest.EnsureEditLock(t, srv, servertest.MainProject)
-	return apiclient.New(srv.URL, srv.Client()).WithClientKey(servertest.ClientKey.String())
+	return apiclient.New(srv.URL, srv.Client())
 }
 
 func TestTags_RoundTrip(t *testing.T) {
@@ -148,8 +146,7 @@ func TestWidgetTypes_RoundTrip(t *testing.T) {
 	}
 }
 
-// createLibrary creates a library of a name of its own and returns its
-// client, the client holding the library's Draft EditLock (ADR 0015).
+// createLibrary creates a library of a name of its own and returns its client.
 func createLibrary(t *testing.T, client *apiclient.Client) *apiclient.LibraryClient {
 	t.Helper()
 	created, err := client.CreateLibrary(context.Background(), apiv0.CreateLibraryRequest{Name: "lib-" + uuid.NewString()})
@@ -159,7 +156,6 @@ func createLibrary(t *testing.T, client *apiclient.Client) *apiclient.LibraryCli
 	if found, ok, err := client.FindLibraryByName(context.Background(), "no such library"); err != nil || ok {
 		t.Fatalf("FindLibraryByName: %+v, %t, %v", found, ok, err)
 	}
-	servertest.EnsureLibraryEditLockWithClient(t, client, created.ID)
 	return client.Library(created.ID)
 }
 
@@ -291,7 +287,6 @@ func TestProjects_RoundTrip(t *testing.T) {
 	if content.ID() != created.ID {
 		t.Errorf("ProjectClient.ID: %s", content.ID())
 	}
-	servertest.EnsureEditLockWithClient(t, client, created.ID)
 	if _, err := content.CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.speed", Type: "integer"}); err != nil {
 		t.Fatalf("CreateTag in the new project: %v", err)
 	}

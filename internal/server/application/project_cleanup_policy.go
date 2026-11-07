@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/kipitix/growscada/internal/server/domain/draft"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 )
@@ -62,8 +61,6 @@ func (p projectCleanupPolicy) JobKey(e event.Event) (string, bool) {
 // row's removal fails while the state holds it, and the next run removes the
 // state.
 func (p projectCleanupPolicy) Run(ctx context.Context, key string) error {
-	// A policy writes as the server: it passes no EditLock check (ADR 0015).
-	ctx = editlock.System(ctx)
 	projectID, rest, err := cutProjectKey(key)
 	if err != nil {
 		return err
@@ -79,7 +76,7 @@ func (p projectCleanupPolicy) Run(ctx context.Context, key string) error {
 		return fmt.Errorf("cannot find deleted project %s: %w", projectID, err)
 	}
 
-	if _, err := p.drafts.Purge(ctx, editlock.ProjectScope(projectID)); err != nil {
+	if _, err := p.drafts.Purge(ctx, draft.ProjectScope(projectID)); err != nil {
 		return fmt.Errorf("cannot empty project %s: %w", projectID, err)
 	}
 	if err := p.runtime.RemoveProjectTagStates(ctx, projectID.UUID()); err != nil {

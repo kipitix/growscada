@@ -56,11 +56,6 @@ var (
 	EventTypeEnvironmentDeviceDeleted = EventType{eventType: 35}
 
 	EventTypeRevisionCreated = EventType{eventType: 36}
-
-	EventTypeEditLockAcquired  = EventType{eventType: 38}
-	EventTypeEditLockReleased  = EventType{eventType: 39}
-	EventTypeEditLockTakenOver = EventType{eventType: 40}
-	EventTypeEditLockExpired   = EventType{eventType: 41}
 )
 
 // eventTypeNames is the single source of truth for known event types:
@@ -105,10 +100,6 @@ var eventTypeNames = []struct {
 	{EventTypeEnvironmentDeviceUpdated, "environment_device_updated"},
 	{EventTypeEnvironmentDeviceDeleted, "environment_device_deleted"},
 	{EventTypeRevisionCreated, "revision_created"},
-	{EventTypeEditLockAcquired, "edit_lock_acquired"},
-	{EventTypeEditLockReleased, "edit_lock_released"},
-	{EventTypeEditLockTakenOver, "edit_lock_taken_over"},
-	{EventTypeEditLockExpired, "edit_lock_expired"},
 }
 
 // AllEventTypes returns every known EventType.

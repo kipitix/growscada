@@ -1,7 +1,6 @@
 package restapi
 
 import (
-	"reflect"
 	"testing"
 	"time"
 
@@ -10,7 +9,6 @@ import (
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/client"
 	"github.com/kipitix/growscada/internal/server/domain/device"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -124,24 +122,6 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 			apiv0.Event{Type: "environment_device_updated", ID: environmentID.String(), EnvironmentID: environmentID.String(), DeviceID: deviceID.String()}},
 		event.EventTypeEnvironmentDeviceDeleted: {device.NewEnvironmentDeviceDeletedEvent(environmentID, deviceID, projectID, ts),
 			apiv0.Event{Type: "environment_device_deleted", ID: environmentID.String(), EnvironmentID: environmentID.String(), DeviceID: deviceID.String()}},
-		event.EventTypeEditLockAcquired: {editlock.NewEditLockAcquiredEvent(editlock.ProjectScope(projectID),
-			editlock.Snapshot{Held: true, Holder: editLockHolder(), Since: at, LastSeen: at, Version: 3}, ts),
-			apiv0.Event{Type: "edit_lock_acquired", ID: projectID.String(), EditLock: &apiv0.EditLockResponse{
-				Held: true, Version: 3, Holder: &apiv0.EditLockHolderResponse{
-					Key: editLockKey().UUID(), Name: "alice", Since: "2026-10-15T12:30:00Z"}}}},
-		event.EventTypeEditLockReleased: {editlock.NewEditLockReleasedEvent(editlock.ProjectScope(projectID),
-			editlock.Snapshot{Version: 4}, ts),
-			apiv0.Event{Type: "edit_lock_released", ID: projectID.String(), EditLock: &apiv0.EditLockResponse{
-				Held: false, Version: 4}}},
-		event.EventTypeEditLockTakenOver: {editlock.NewEditLockTakenOverEvent(editlock.ProjectScope(projectID),
-			editlock.Snapshot{Held: true, Holder: editLockHolder(), Since: at, LastSeen: at, Version: 5}, editlock.Holder{}, ts),
-			apiv0.Event{Type: "edit_lock_taken_over", ID: projectID.String(), EditLock: &apiv0.EditLockResponse{
-				Held: true, Version: 5, Holder: &apiv0.EditLockHolderResponse{
-					Key: editLockKey().UUID(), Name: "alice", Since: "2026-10-15T12:30:00Z"}}}},
-		event.EventTypeEditLockExpired: {editlock.NewEditLockExpiredEvent(editlock.ProjectScope(projectID),
-			editlock.Snapshot{Version: 6}, ts),
-			apiv0.Event{Type: "edit_lock_expired", ID: projectID.String(), EditLock: &apiv0.EditLockResponse{
-				Held: false, Version: 6}}},
 		event.EventTypeRevisionCreated: {runtimeapp.NewRevisionCreatedEvent(runtimeapp.Revision{
 			Number:     3,
 			DeployedAt: at,
@@ -172,14 +152,6 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 				t.Errorf("Tag: got %+v, want %+v", *got.Tag, *want.Tag)
 			}
 			got.Tag, want.Tag = nil, nil
-			if got.EditLock == nil || want.EditLock == nil {
-				if got.EditLock != want.EditLock {
-					t.Errorf("EditLock: got %+v, want %+v", got.EditLock, want.EditLock)
-				}
-			} else if !reflect.DeepEqual(*got.EditLock, *want.EditLock) {
-				t.Errorf("EditLock: got %+v, want %+v", *got.EditLock, *want.EditLock)
-			}
-			got.EditLock, want.EditLock = nil, nil
 			if got != want {
 				t.Errorf("got %+v, want %+v", got, want)
 			}
@@ -211,36 +183,4 @@ func TestAPIEventTypes_UsesEveryContractEventType(t *testing.T) {
 			t.Errorf("contract event type %q is not in apiEventTypes", name)
 		}
 	}
-}
-
-// editLockKey is the key of the sample holders.
-var sampleEditLockKey = editlock.NewKey()
-
-func editLockKey() editlock.Key { return sampleEditLockKey }
-
-// TestNewAPIEvent_LibraryEditLock names the Library of a Library's Draft and
-// not the zero Project of its Scope (ADR 0015): the event is the server's,
-// and the UI tells it from a Project's.
-func TestNewAPIEvent_LibraryEditLock(t *testing.T) {
-	at := time.Date(2026, 10, 15, 12, 30, 0, 0, time.UTC)
-	ts := event.WithTimestamp(event.NewEventTimestamp(event.EventTimestampWithTime(at)))
-	libraryID := id.NewID[library.Library]()
-
-	ev := newAPIEvent(editlock.NewEditLockAcquiredEvent(editlock.LibraryScope(libraryID),
-		editlock.Snapshot{Held: true, Holder: editLockHolder(), Since: at, LastSeen: at, Version: 1}, ts))
-	if ev.ID != libraryID.String() || ev.LibraryID != libraryID.String() {
-		t.Errorf("got ID %q, LibraryID %q; want the library %s", ev.ID, ev.LibraryID, libraryID)
-	}
-	if ev.EditLock == nil || !ev.EditLock.Held {
-		t.Errorf("the event carries no lock state: %+v", ev.EditLock)
-	}
-}
-
-// editLockHolder is the sample holder of the edit_lock_* events.
-func editLockHolder() editlock.Holder {
-	holder, err := editlock.NewHolder(editLockKey(), "alice")
-	if err != nil {
-		panic(err)
-	}
-	return holder
 }

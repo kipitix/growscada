@@ -21,7 +21,7 @@ docs: |
   a buffer. The live tail is at-most-once: two racing commits may reach the
   stream out of order or one may be missed. A stream opened on a project that
   is not live is `404` and a bad position `400`, both before the stream
-  starts. The stream names no client and holds no EditLock; `/events` is
+  starts. The stream names no client; `/events` is
   unchanged.
 
   Bruno sends the request and waits for the response body, so it will hang

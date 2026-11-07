@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/server/domain/device"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -49,7 +48,7 @@ const (
 // with a different row is updated, and one only oldSide has is deleted. The
 // restored rows are published as the forward edit of the same effect would be,
 // which is what the SSE stream and the UI reload on.
-func inverseEvents(scope editlock.Scope, oldSide, newSide []Snapshot) ([]event.Event, error) {
+func inverseEvents(scope Scope, oldSide, newSide []Snapshot) ([]event.Event, error) {
 	var events []event.Event
 	for _, snapshot := range newSide {
 		previous, ok := findSnapshot(oldSide, snapshot)
@@ -105,7 +104,7 @@ func sameState(a, b State) bool { return reflect.DeepEqual(a, b) }
 // row names the same entity, Scene and WidgetType as the row it replaces. A
 // Tag definition has no update event, so a Tag that changed in place is a
 // deletion and a creation, as the forward write records it.
-func snapshotEvents(scope editlock.Scope, snapshot Snapshot, change entityChange) ([]event.Event, error) {
+func snapshotEvents(scope Scope, snapshot Snapshot, change entityChange) ([]event.Event, error) {
 	projectID := scope.ProjectID()
 	libraryID := scope.LibraryID()
 	switch state := snapshot.State.(type) {

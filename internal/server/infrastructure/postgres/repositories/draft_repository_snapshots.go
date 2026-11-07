@@ -12,7 +12,6 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
@@ -40,7 +39,7 @@ var (
 // kindBelongs reports whether a snapshot of kind is content of the Draft of
 // the scope: a Project's Draft holds no WidgetType, a Library's no Scene, Tag
 // or Device.
-func kindBelongs(scope editlock.Scope, kind draft.Kind) bool {
+func kindBelongs(scope draft.Scope, kind draft.Kind) bool {
 	if scope.IsLibrary() {
 		return kind == draft.KindWidgetType
 	}
@@ -50,7 +49,7 @@ func kindBelongs(scope editlock.Scope, kind draft.Kind) bool {
 // applySnapshots writes the entities a change touched: those only in before
 // go, those only in after come or change. The order is fixed by kind, not by
 // the order the operation recorded them in.
-func applySnapshots(ctx context.Context, tx *sql.Tx, scope editlock.Scope, before, after []draft.Snapshot) error {
+func applySnapshots(ctx context.Context, tx *sql.Tx, scope draft.Scope, before, after []draft.Snapshot) error {
 	for _, kind := range deleteOrder {
 		for _, snapshot := range before {
 			if snapshot.Kind != kind || containsSnapshot(after, snapshot) {
@@ -102,7 +101,7 @@ func containsSnapshot(list []draft.Snapshot, wanted draft.Snapshot) bool {
 	return false
 }
 
-func deleteSnapshot(ctx context.Context, tx *sql.Tx, scope editlock.Scope, snapshot draft.Snapshot) error {
+func deleteSnapshot(ctx context.Context, tx *sql.Tx, scope draft.Scope, snapshot draft.Snapshot) error {
 	projectID := scope.ProjectID().UUID()
 	switch state := snapshot.State.(type) {
 	case draft.TagState:
@@ -146,7 +145,7 @@ func deleteSnapshot(ctx context.Context, tx *sql.Tx, scope editlock.Scope, snaps
 	}
 }
 
-func upsertSnapshot(ctx context.Context, tx *sql.Tx, scope editlock.Scope, snapshot draft.Snapshot) error {
+func upsertSnapshot(ctx context.Context, tx *sql.Tx, scope draft.Scope, snapshot draft.Snapshot) error {
 	projectID := scope.ProjectID().UUID()
 	switch state := snapshot.State.(type) {
 	case draft.TagState:
@@ -323,7 +322,7 @@ func marshalSnapshotBindings(bindings []draft.PortBindingState) ([]byte, error) 
 // operation touches, always within the Draft's own Project (ADR 0016).
 type draftLoader struct {
 	tx       *sql.Tx
-	scope    editlock.Scope
+	scope    draft.Scope
 	project  id.ID[project.Project]
 	library  id.ID[library.Library]
 	releases library.LibraryReleaseRepository

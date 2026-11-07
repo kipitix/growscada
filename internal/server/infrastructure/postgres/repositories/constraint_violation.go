@@ -51,13 +51,6 @@ const constraintLibrariesLiveName = "uq_libraries_organization_live_name"
 // (library_id, name).
 const constraintWidgetTypesName = "uq_widget_types_library_name"
 
-// The unique indexes on the scope of an EditLock: one row per Draft (ADR
-// 0015). A creation meeting one rereads the row it lost the race to.
-const (
-	constraintEditLocksProject = "uq_edit_locks_project"
-	constraintEditLocksLibrary = "uq_edit_locks_library"
-)
-
 // constraintReleasesNumber is the unique constraint on library_releases
 // (library_id, number).
 const constraintReleasesNumber = "uq_library_releases_library_number"

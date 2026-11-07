@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 )
 
 // TestOperation_StateReadsTheSnapshot walks the Operation read model through
@@ -84,12 +83,12 @@ func TestOperation_StateReadsTheSnapshot(t *testing.T) {
 func TestOperation_OfADeletedProject_Is404(t *testing.T) {
 	cleanProjectsRest(t)
 	router := newServices().router()
-	if _, err := testDB().ExecContext(editlock.System(context.Background()),
+	if _, err := testDB().ExecContext(context.Background(),
 		"UPDATE projects SET deleted_at = now() WHERE id = '"+mainProject.String()+"'"); err != nil {
 		t.Fatalf("mark the project deleted: %v", err)
 	}
 	t.Cleanup(func() {
-		if _, err := testDB().ExecContext(editlock.System(context.Background()),
+		if _, err := testDB().ExecContext(context.Background(),
 			"UPDATE projects SET deleted_at = NULL WHERE id = '"+mainProject.String()+"'"); err != nil {
 			t.Errorf("clear the deletion mark: %v", err)
 		}

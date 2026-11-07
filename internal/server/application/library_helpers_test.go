@@ -8,7 +8,7 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
@@ -34,7 +34,7 @@ func ensureTestWidgetType(t *testing.T) {
 // its release 1 holding it, and the pin of the release in projectID.
 func ensurePinnedType(t *testing.T, libraryID uuid.UUID, libraryName string, typeID uuid.UUID, typeName string, projectID uuid.UUID) {
 	t.Helper()
-	if _, err := testDB.ExecContext(editlock.System(context.Background()),
+	if _, err := testDB.ExecContext(context.Background(),
 		`INSERT INTO engineering.libraries (id, organization_id, name, version)
 		     SELECT $1, id, $2, 1 FROM organizations ON CONFLICT (id) DO NOTHING;`,
 		libraryID, libraryName,
@@ -55,11 +55,11 @@ func ensurePinnedType(t *testing.T, libraryID uuid.UUID, libraryName string, typ
 		 VALUES ($1, 1, $2, $3, '<div></div>', 'function update(){}', 'javascript', '[]', 100, 100)
 		 ON CONFLICT DO NOTHING`, []any{libraryID, typeID, typeName}},
 	} {
-		if _, err := testDB.ExecContext(editlock.System(context.Background()), q.query, q.args...); err != nil {
+		if _, err := testDB.ExecContext(context.Background(), q.query, q.args...); err != nil {
 			t.Fatalf("ensurePinnedType: %v", err)
 		}
 	}
-	if _, err := testDB.ExecContext(editlock.System(context.Background()),
+	if _, err := testDB.ExecContext(context.Background(),
 		`INSERT INTO engineering.library_pins (project_id, library_id, release_number)
 		 VALUES ($1, $2, 1) ON CONFLICT DO NOTHING`,
 		projectID, libraryID,
@@ -86,8 +86,8 @@ func newLibraryService() application.LibraryService {
 func libraryDraftVersionOf(t *testing.T, libraryID uuid.UUID) int {
 	t.Helper()
 	drafts := repositories.NewDraftRepositoryPostgres(testDB, nil)
-	found, ok, err := drafts.Read(editlock.System(context.Background()),
-		editlock.LibraryScope(id.NewID(id.IDWithUUID[library.Library](libraryID))))
+	found, ok, err := drafts.Read(context.Background(),
+		draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](libraryID))))
 	if err != nil {
 		t.Fatalf("read the draft of library %s: %v", libraryID, err)
 	}
@@ -104,7 +104,7 @@ func newLibraryPinService() application.LibraryPinService {
 // mustCreateLibrary creates a library of a name of its own.
 func mustCreateLibrary(t *testing.T) appdto.Library {
 	t.Helper()
-	lib, err := newLibraryService().CreateLibrary(editlock.System(context.Background()), appdto.LibraryInput{Name: "lib-" + uuid.NewString()})
+	lib, err := newLibraryService().CreateLibrary(context.Background(), appdto.LibraryInput{Name: "lib-" + uuid.NewString()})
 	if err != nil {
 		t.Fatalf("CreateLibrary: %v", err)
 	}
@@ -115,10 +115,10 @@ func mustCreateLibrary(t *testing.T) appdto.Library {
 func mustReleaseLibrary(t *testing.T, libraryID uuid.UUID) appdto.LibraryRelease {
 	t.Helper()
 	svc := newLibraryService()
-	if _, err := svc.FindLibraryByID(editlock.System(context.Background()), libraryID); err != nil {
+	if _, err := svc.FindLibraryByID(context.Background(), libraryID); err != nil {
 		t.Fatalf("FindLibraryByID: %v", err)
 	}
-	release, err := svc.Release(editlock.System(context.Background()), libraryID, libraryDraftVersionOf(t, libraryID), appdto.ReleaseInput{})
+	release, err := svc.Release(context.Background(), libraryID, libraryDraftVersionOf(t, libraryID), appdto.ReleaseInput{})
 	if err != nil {
 		t.Fatalf("Release: %v", err)
 	}
@@ -130,7 +130,7 @@ func mustReleaseLibrary(t *testing.T, libraryID uuid.UUID) appdto.LibraryRelease
 // returns the type and its library.
 func pinNewWidgetType(t *testing.T, projectID uuid.UUID, input appdto.WidgetTypeInput) (appdto.WidgetType, appdto.Library) {
 	t.Helper()
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	lib := mustCreateLibrary(t)
 	if input.Name == "" {
 		input.Name = "type"

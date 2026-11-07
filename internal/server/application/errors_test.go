@@ -10,7 +10,6 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
@@ -40,7 +39,7 @@ func TestTagService_CorruptStoredTag_IsNotInvalidInput(t *testing.T) {
 	scopes := newScopes()
 	scopes.tags = func(tag.TagRepository) tag.TagRepository { return corruptTagRepository{} }
 	svc := application.NewTagService(contentOver(scopes), newRuntimeNode())
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 
 	_, err := svc.FindTagByID(ctx, mainProject, uuid.New())
 	if err == nil || errors.Is(err, application.ErrInvalidInput) {
@@ -56,7 +55,7 @@ func TestTagService_CorruptStoredTag_IsNotInvalidInput(t *testing.T) {
 func TestErrInvalidInput_KeepsMessageAndCause(t *testing.T) {
 	svc := newService()
 
-	_, err := svc.CreateTag(editlock.System(context.Background()), mainProject, appdto.CreateTagInput{Version: draftVersionOf(t, mainProject), Name: "t", Type: "bogus"})
+	_, err := svc.CreateTag(context.Background(), mainProject, appdto.CreateTagInput{Version: draftVersionOf(t, mainProject), Name: "t", Type: "bogus"})
 
 	want := `cannot create tag because of type: unknown tag type: "bogus"`
 	if err == nil || err.Error() != want {

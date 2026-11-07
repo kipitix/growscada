@@ -16,7 +16,7 @@ import (
 // buttons of the header, the Ctrl+Z and Ctrl+Shift+Z shortcuts, and the state
 // they read (the descriptions of the next steps) — read on mount, on a resync,
 // after each content event and after each command (loadDraftChanges). Both
-// commands are writes of the Draft: they are gated by its EditLock and state
+// commands are writes of the Draft: they state
 // its Version like any other (ADR 0015, ADR 0016).
 
 // draftChangesVersion is the Version the last stack answer stated — what an
@@ -34,13 +34,13 @@ func (p *Project) draftChangesVersion() int {
 // no description is no step either: the description is what the button shows
 // as its hover text, and an unnamed step is not offered.
 func (p *Project) canUndo() bool {
-	return p.changesLoaded && !p.readOnly() && p.changes.CanUndo && p.changes.UndoDescription != "" &&
+	return p.changesLoaded && p.changes.CanUndo && p.changes.UndoDescription != "" &&
 		!p.undoing && !p.redoing
 }
 
 // canRedo reports whether the Redo button acts now.
 func (p *Project) canRedo() bool {
-	return p.changesLoaded && !p.readOnly() && p.changes.CanRedo && p.changes.RedoDescription != "" &&
+	return p.changesLoaded && p.changes.CanRedo && p.changes.RedoDescription != "" &&
 		!p.undoing && !p.redoing
 }
 
@@ -54,7 +54,7 @@ func (p *Project) redoDraftChange(ctx app.Context) { p.stepDraftChange(ctx, fals
 // Version last seen: its answer is the state of the stack after it. The
 // content itself comes with the events, as after any edit.
 func (p *Project) stepDraftChange(ctx app.Context, undo bool) {
-	if p.content == nil || p.undoing || p.redoing || p.refuseReadOnly(ctx) {
+	if p.content == nil || p.undoing || p.redoing {
 		return
 	}
 	// A command the buttons would not offer is not sent: a shortcut is the
@@ -115,18 +115,12 @@ func (p *Project) rejectedDraftChange(ctx app.Context, err error) {
 		})
 		return
 	}
-	if problem && se.Problem.EditLock != nil {
-		p.applyEditLock(ctx, *se.Problem.EditLock)
-		ctx.Update()
-		return
-	}
 	uiutil.ShowError(ctx, err)
 	p.loadDraftChanges(ctx)
 	ctx.Update()
 }
 
-// renderDraftChangesBar is the Undo and Redo pair of the Project's header; it
-// follows the EditLock row, which says whether the Draft may be edited at all.
+// renderDraftChangesBar is the Undo and Redo pair of the Project's header.
 func (p *Project) renderDraftChangesBar() app.UI {
 	return app.Div().
 		Attr("data-draft-changes-bar", "true").
@@ -140,11 +134,9 @@ func (p *Project) renderDraftChangesBar() app.UI {
 }
 
 // undoTitle is the hover text of the Undo button: the step the server would
-// undo, why the button is off without the lock, or that the stack is empty.
+// undo, or that the stack is empty.
 func (p *Project) undoTitle() string {
 	switch {
-	case p.readOnly():
-		return readOnlyTitle("Undo the last change")
 	case !p.changesLoaded:
 		return "Undo the last change"
 	case !p.changes.CanUndo || p.changes.UndoDescription == "":
@@ -157,8 +149,6 @@ func (p *Project) undoTitle() string {
 // redoTitle is the hover text of the Redo button.
 func (p *Project) redoTitle() string {
 	switch {
-	case p.readOnly():
-		return readOnlyTitle("Redo the change undone last")
 	case !p.changesLoaded:
 		return "Redo the change undone last"
 	case !p.changes.CanRedo || p.changes.RedoDescription == "":
@@ -267,9 +257,6 @@ func (p *Project) handleKeyDown(ev app.Value) {
 	}
 	if dx, dy, arrow := arrowStep(key, ev.Get("shiftKey").Bool()); arrow {
 		ev.Call("preventDefault") // the page does not scroll under the selection
-		if p.readOnly() {
-			return // selection is read-only work too, moving is not
-		}
 		p.compoCtx.Dispatch(func(ctx app.Context) { p.beginArrowMove(ctx, dx, dy) })
 		return
 	}
@@ -338,7 +325,7 @@ func (p *Project) applyKeyAction(ctx app.Context, action uiutil.KeyAction) {
 // the dialog shows, and behind the name of a Check out or a takeover it would
 // act on a Draft the user is only about to take.
 func (p *Project) keyActionAllowed() bool {
-	return !p.deployDialog && !p.revisionsDialog && !p.askingName && !p.takeOverDialog && !p.projectFileDialog
+	return !p.deployDialog && !p.revisionsDialog && !p.projectFileDialog
 }
 
 // shown reports whether the Project mode is the one displayed. Root keeps every

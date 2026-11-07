@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/kipitix/growscada/internal/server/domain/draft"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -16,7 +15,7 @@ import (
 func cleanScenes(t *testing.T) {
 	t.Helper()
 	// widgets cascade-delete with their scene (ON DELETE CASCADE on scene_id).
-	if _, err := testDB.ExecContext(editlock.System(context.Background()), "DELETE FROM engineering.scenes"); err != nil {
+	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM engineering.scenes"); err != nil {
 		t.Fatalf("cleanScenes: %v", err)
 	}
 }
@@ -81,7 +80,7 @@ func makeTag(t *testing.T, name string, repo tag.TagRepository) tag.Tag {
 
 func mustSaveTag(t *testing.T, _ tag.TagRepository, aTag tag.Tag) tag.Tag {
 	t.Helper()
-	ctx := editlock.System(context.Background())
+	ctx := context.Background()
 	mustUpdate(t, aTag.ProjectID(), "test tag", func(session *draft.Session) error {
 		session.CreateTag(ctx, aTag)
 		return nil
@@ -91,7 +90,7 @@ func mustSaveTag(t *testing.T, _ tag.TagRepository, aTag tag.Tag) tag.Tag {
 
 func cleanTags(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(editlock.System(context.Background()),
+	if _, err := testDB.ExecContext(context.Background(),
 		`DELETE FROM runtime.revisions; DELETE FROM runtime.tags; DELETE FROM engineering.tags`); err != nil {
 		t.Fatalf("cleanTags: %v", err)
 	}

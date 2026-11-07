@@ -11,7 +11,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
-	"github.com/kipitix/growscada/internal/server/domain/editlock"
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -40,7 +40,6 @@ type testServices struct {
 	states       runtimeapp.TagStateService
 	revisions    runtimeapp.RevisionService
 	deploy       application.DeployService
-	editLocks    application.EditLockService
 	discard      application.DiscardService
 	projectFiles application.ProjectFileService
 	libraries    application.LibraryService
@@ -67,7 +66,7 @@ func newServices(opts ...repositories.Option) testServices {
 // Runtime node publishing its tag_updated to publish.
 func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Option) testServices {
 	db := testDB()
-	orgID, err := repositories.FindSoleOrganization(editlock.System(context.Background()), db)
+	orgID, err := repositories.FindSoleOrganization(context.Background(), db)
 	if err != nil {
 		panic("organization: " + err.Error())
 	}
@@ -77,7 +76,6 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 	content := application.NewProjectContent(projectRepo, repositories.NewProjectScopes(db, opts...), drafts, orgID)
 	libraries := repositories.NewLibraryRepositoryPostgres(db, opts...)
 	libraryContent := application.NewLibraryContent(libraries, drafts, orgID)
-	editLocks := application.NewEditLockService(content, libraryContent, drafts)
 	widgetTypes := repositories.NewWidgetTypeRepositories(db)
 	states := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, publish)
 	revisions := runtimeapp.NewRevisionService(runtimepg.NewRevisionRepositoryPostgres(db), publish)
@@ -89,8 +87,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		tags:         application.NewTagService(content, runtimeNode),
 		states:       states,
 		revisions:    revisions,
-		deploy:       application.NewDeployService(content, application.NewProjectFileBuilder(content), runtimeNode, editLocks),
-		editLocks:    editLocks,
+		deploy:       application.NewDeployService(content, application.NewProjectFileBuilder(content), runtimeNode),
 		discard:      application.NewDiscardService(content, runtimeNode, libraries, releases),
 		projectFiles: application.NewProjectFileService(content, application.NewProjectFileBuilder(content), runtimeNode, libraries, releases),
 		draft:        application.NewDraftService(content),
@@ -116,13 +113,12 @@ func (s testServices) services() restapi.Services {
 		Devices: s.devices, Environments: s.environments,
 		Draft: s.draft, DraftChanges: s.draftChanges,
 		Deploy: s.deploy, Discard: s.discard, ProjectFiles: s.projectFiles, Revisions: s.revisions,
-		DeviceConfig: s.deviceConfig, DeviceTokens: s.deviceTokens, EditLocks: s.editLocks,
+		DeviceConfig: s.deviceConfig, DeviceTokens: s.deviceTokens,
 		Journal: s.journal, Operation: s.operation,
 	}
 }
 
-// router returns the API router over the services, with the test client's key
-// on every request: the tests write the Draft, which needs the EditLock.
+// router returns the API router over the services.
 func (s testServices) router() testRouter {
 	return testRouter{APIRouter: restapi.NewRouter(s.services(), eventbus.NewEventBus(), 100)}
 }
@@ -131,7 +127,7 @@ func (s testServices) router() testRouter {
 // service, as the Engineering node's DeployService will (task 35, part 4).
 func deployRevision(t *testing.T, service runtimeapp.RevisionService, file projectv0.ProjectFile) {
 	t.Helper()
-	if _, err := service.Deploy(editlock.System(context.Background()), mainProject, file); err != nil {
+	if _, err := service.Deploy(context.Background(), mainProject, file); err != nil {
 		t.Fatalf("deploy: %v", err)
 	}
 }
@@ -150,7 +146,7 @@ func (anyProjects) FindProjectByID(_ context.Context, projectID uuid.UUID) (appd
 // content states (ADR 0016).
 func (s testServices) draftVersion(t *testing.T) int {
 	t.Helper()
-	state, err := s.draft.State(editlock.System(context.Background()), mainProject)
+	state, err := s.draft.State(context.Background(), mainProject)
 	if err != nil {
 		t.Fatalf("draft state: %v", err)
 	}
@@ -164,8 +160,8 @@ func (s testServices) draftVersion(t *testing.T) int {
 func testLibraryDraftVersion(t *testing.T, libraryID uuid.UUID) int {
 	t.Helper()
 	drafts := repositories.NewDraftRepositoryPostgres(testDB(), nil)
-	found, ok, err := drafts.Read(editlock.System(context.Background()),
-		editlock.LibraryScope(id.NewID(id.IDWithUUID[library.Library](libraryID))))
+	found, ok, err := drafts.Read(context.Background(),
+		draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](libraryID))))
 	if err != nil {
 		t.Fatalf("read the draft of library %s: %v", libraryID, err)
 	}
@@ -178,8 +174,8 @@ func testLibraryDraftVersion(t *testing.T, libraryID uuid.UUID) int {
 func testDraftVersion(t *testing.T, projectID uuid.UUID) int {
 	t.Helper()
 	drafts := repositories.NewDraftRepositoryPostgres(testDB(), nil)
-	found, ok, err := drafts.Read(editlock.System(context.Background()),
-		editlock.ProjectScope(id.NewID(id.IDWithUUID[project.Project](projectID))))
+	found, ok, err := drafts.Read(context.Background(),
+		draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](projectID))))
 	if err != nil {
 		t.Fatalf("read the draft of %s: %v", projectID, err)
 	}

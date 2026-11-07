@@ -95,7 +95,7 @@ const DraftChangesPath = "/draft-changes"
 
 // DraftChangesUndoPath and DraftChangesRedoPath are the commands of the stack:
 // each applies one DraftChange and answers the state after it. Both state the
-// Version of the Draft the client saw and are gated by its EditLock.
+// Version of the Draft the client saw.
 const (
 	DraftChangesUndoPath = DraftChangesPath + "/undo"
 	DraftChangesRedoPath = DraftChangesPath + "/redo"
