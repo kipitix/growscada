@@ -19,6 +19,7 @@ func TestReloadTargetsFor(t *testing.T) {
 		{apiv0.Event{Type: apiv0.EventWidgetTypeUpdated}, ReloadTargets{WidgetTypes: true, Libraries: true}},
 		{apiv0.Event{Type: apiv0.EventWidgetTypeDeleted}, ReloadTargets{WidgetTypes: true, Libraries: true}},
 		{apiv0.Event{Type: apiv0.EventLibraryReleased}, ReloadTargets{Libraries: true, Releases: true, Commits: true}},
+		{apiv0.Event{Type: apiv0.EventLibraryReleaseNoteUpdated}, ReloadTargets{Releases: true}},
 		{apiv0.Event{Type: apiv0.EventLibraryUpdated}, ReloadTargets{WidgetTypes: true, Libraries: true}},
 		{apiv0.Event{Type: apiv0.EventLibraryPinUpdated}, ReloadTargets{LibraryPins: true}},
 		{apiv0.Event{Type: apiv0.EventSceneCreated}, ReloadTargets{Scenes: true}},

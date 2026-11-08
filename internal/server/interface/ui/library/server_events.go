@@ -29,14 +29,18 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 			l.loadDraftChanges(ctx)
 		}
 		targets := eventlog.ReloadTargetsFor(ev)
-		// A write of the Draft's content is one DraftChange, and a Release
-		// clears the stack (ADR 0017): the undo and redo buttons follow the
-		// events, as the release state does.
+		// A write of the Draft's content is one DraftChange: the undo and redo
+		// buttons follow the events (ADR 0017), as the release state does. A
+		// Release publishes a Commit and clears no stack (task 72_5).
 		if targets.DraftChanged() {
 			l.loadDraftChanges(ctx)
 		}
 		if targets.Libraries {
 			l.loadLibraries(ctx)
+		}
+		// A Release of the selected Library, its note changed in another tab,
+		// and the Library itself changed: the list of Releases follows.
+		if targets.Libraries || targets.Releases {
 			l.loadReleases(ctx)
 		}
 		if targets.WidgetTypes {

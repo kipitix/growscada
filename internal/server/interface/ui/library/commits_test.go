@@ -102,6 +102,29 @@ func TestReleaseHistoryLabel_CommitAndLegacy(t *testing.T) {
 	}
 }
 
+// TestReleaseNoteEvent_ReloadsTheHistory: a note changed in another tab
+// (library_release_note_updated) rereads the Releases of the selected library
+// (task 72_5; ADR 0021).
+func TestReleaseNoteEvent_ReloadsTheHistory(t *testing.T) {
+	url, api := newServer(t)
+	f := mount(t, url, api)
+	f.run()
+	f.l.createItem(f.l.compoCtx)
+	f.run()
+	releaseNow(t, f)
+	if len(f.l.releases) != 1 || f.l.releases[0].Note != "" {
+		t.Fatalf("the releases before the event: %+v", f.l.releases)
+	}
+
+	if _, err := f.api.UpdateReleaseNote(context.Background(), 1, apiv0.UpdateLibraryReleaseNoteRequest{Note: "renoted"}); err != nil {
+		t.Fatalf("UpdateReleaseNote: %v", err)
+	}
+	f.event(apiv0.Event{Type: apiv0.EventLibraryReleaseNoteUpdated, ID: f.l.libraryID.String(), Release: 1})
+	if len(f.l.releases) != 1 || f.l.releases[0].Note != "renoted" {
+		t.Errorf("the releases after the event: %+v, want the renamed note", f.l.releases)
+	}
+}
+
 // TestSaveCommit_LibraryShortcutsWaitForTheDialogs: the Save and the History
 // dialogs of the mode hold the Draft's shortcuts (task 72_2; ADR 0021).
 func TestSaveCommit_LibraryShortcutsWaitForTheDialogs(t *testing.T) {

@@ -156,6 +156,10 @@ func (l *Library) renderHistory() app.UI {
 			Style("cursor", "pointer").
 			Text("Note").
 			OnClick(func(ctx app.Context, e app.Event) {
+				// The row below shows the Release: editing its note does not
+				// also switch the view to it.
+				e.Call("stopPropagation")
+				e.StopImmediatePropagation()
 				l.editReleaseNote(r)
 			}, app.EventScope("note/"+itoa(r.Number)))
 		items = append(items, entry(r.Number, label, title, note))
