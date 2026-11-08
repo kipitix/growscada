@@ -350,8 +350,30 @@ func (p *Project) renderCommitRow(commit apiv0.CommitResponse) app.UI {
 						commit.ContentCounts.Scenes, commit.ContentCounts.Widgets, commit.ContentCounts.Tags,
 						commit.ContentCounts.Devices, commit.ContentCounts.Environments)),
 			),
-			title,
+			app.Span().Style("display", "flex").Style("gap", "4px").Body(
+				p.downloadCommitButton(commit.Number),
+				title,
+			),
 		)
+}
+
+// downloadCommitButton offers the snapshot of a Commit as a download: the
+// ProjectFile the Save fixed (task 72_2; ADR 0021).
+func (p *Project) downloadCommitButton(number int) app.UI {
+	return app.Button().
+		Attr("data-commit-download", fmt.Sprint(number)).
+		Title("Download the project file this Commit fixed").
+		Style("padding", "1px 7px").
+		Style("font-size", "11px").
+		Style("cursor", "pointer").
+		Style("border", "1px solid var(--border-input)").
+		Style("border-radius", "4px").
+		Style("background", "var(--bg)").
+		Style("color", "var(--text)").
+		Text("Project file").
+		OnClick(func(ctx app.Context, e app.Event) {
+			p.downloadCommitProjectFile(ctx, number)
+		})
 }
 
 // downloadCommitProjectFile downloads the ProjectFile a Commit fixed.

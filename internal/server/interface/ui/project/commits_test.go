@@ -48,6 +48,10 @@ func TestSaveCommit_HistoryRowAndIndicator(t *testing.T) {
 	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-commit-row="1"`) {
 		t.Errorf("the history does not show Commit 1: %s", html)
 	}
+	// The content of a Commit is read by its own button (task 72_2).
+	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-commit-download="1"`) {
+		t.Errorf("the history offers no download of Commit 1: %s", html)
+	}
 }
 
 // TestSaveCommit_ConflictRereadsAndRename: a Save of a stale Version is a
