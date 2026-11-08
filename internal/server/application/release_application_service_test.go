@@ -70,6 +70,14 @@ func TestReleaseService_CreateListFindNoteAndFile(t *testing.T) {
 	if len(list) != 1 || !list[0].Released {
 		t.Errorf("the published commit is not marked: %+v", list)
 	}
+	// Renaming a published Commit is metadata: it keeps its Release mark.
+	renamed, err := commits.Rename(ctx, scope, 1, "Renamed after the release")
+	if err != nil {
+		t.Fatalf("Rename: %v", err)
+	}
+	if !renamed.Released {
+		t.Errorf("a renamed published commit lost its release mark: %+v", renamed)
+	}
 
 	releases, err := service.List(ctx, projectID)
 	if err != nil {

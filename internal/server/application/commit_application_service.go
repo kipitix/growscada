@@ -209,7 +209,9 @@ func (s commitServiceImpl) Rename(ctx context.Context, scope draft.Scope, rawNum
 	if err != nil {
 		return appdto.Commit{}, err
 	}
-	return appdto.NewCommit(commit), nil
+	// A title is metadata: the rename changes no Release, and a published
+	// Commit stays marked as one (task 72_3; ADR 0021).
+	return s.releasedCommit(ctx, scope, appdto.NewCommit(commit))
 }
 
 func (s commitServiceImpl) ProjectFile(ctx context.Context, scope draft.Scope, rawNumber int) (ProjectFileDownload, error) {
