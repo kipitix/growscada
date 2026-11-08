@@ -22,3 +22,7 @@ A Rollback is an operational act and belongs in the Journal, but the Journal doe
 ## Amendment 2026-11-08: the Revision is a Deployment (task 72_9)
 
 The entity this ADR appends is a **Deployment** now: a Rollback still copies an earlier Deployment's document into a new numbered one, keeps `cause`/`rolled_back_from`, publishes `deployment_created` and refuses an unchanged document `409 nothing_to_rollback`. The routes are `GET …/deployments`, `GET …/deployments/{n}` and `POST …/deployments/{n}/rollback`; the old `/revisions…` routes answer `410 Gone`. The store is `runtime.deployments`, its column `number`. Read every "Revision" below as "Deployment".
+
+## Amendment 2026-11-08: a Rollback keeps the Release (task 72_4)
+
+A Rollback copies the `release_number` of the Deployment it names into the new Deployment: the Release becomes the running one again, a Rollback of a file deployment stays without a Release, and `rolled_back_from` is unchanged. The Project mode no longer offers a Rollback button — it deploys a Release from the list — but the API and History keep the route.

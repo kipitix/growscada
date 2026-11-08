@@ -33,3 +33,7 @@ Task 43 (Player and Operation). ADR 0014 made the Revision the only truth of wha
 ## Amendment 2026-11-08: Operation reads a Deployment (task 72_9)
 
 The running configuration is a **Deployment** now. `GET …/operation` answers `{position, deployment, tag_states}` (the member was `revision`), the Player applies `deployment` Journal entries and reads a document with `GET …/deployments/{n}`, and the live signal is `deployment_created`. Nothing of the read model's order, resync or batching changes. Read every "Revision" below as "Deployment".
+
+## Amendment 2026-11-08: the Deployment carries its Release (task 72_4)
+
+`GET …/deployment` and `GET …/operation` serve the Deployment's `release_number` beside its cause; Operation and the Player ignore it, while the Project mode compares it with the Release list to mark the running Release. Nothing of the read model, the Journal order or the resync changes.

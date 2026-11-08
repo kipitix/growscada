@@ -34,3 +34,7 @@ ADR 0002 chose state tables plus a single, totally ordered Journal of "fat" entr
 ## Amendment 2026-11-08: the configuration entry is `deployment` (task 72_9)
 
 The Journal entry that addresses a configuration change was `revision` before task 72_9 and is `deployment` now; its payload is unchanged (`{number, cause, rolled_back_from?}`), and it still addresses the document in the Runtime node's store, now `runtime.deployments`. The migration rewrites the type of existing rows, and readers still accept a row or PlaybackFile that carries the old type and the old payload member. Read every "revision" entry below as a "deployment" entry.
+
+## Amendment 2026-11-08: a deployment entry names its Release (task 72_4)
+
+The `deployment` payload gains `release_number` (nullable, MINOR): the number of the Project Release the Deployment made, or nothing for a file deployment and for every entry written before task 72_4. The document is still not in the entry; the number addresses it. An old reader ignores the field, and an old row decodes as `nil`.

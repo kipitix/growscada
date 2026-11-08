@@ -145,12 +145,20 @@ The act of fixing the Draft's current state as a new Commit under a title and an
 _Avoid_: commit (as a verb), check in, publish
 
 **Discard**:
-Resetting a Draft to its last published state, dropping all DraftChanges.
+Resetting a Draft to its last Commit, dropping the unsaved DraftChanges (task 72_4). A Project with no Commit is refused with `nothing_to_discard`; **Revert to deployed** is the different act of resetting it to the running Deployment instead.
 _Avoid_: revert, reset, cancel
 
 **Deploy**:
-The act of delivering the whole Draft, as a ProjectFile, to a Runtime node, which atomically makes it a new Deployment and switches Operation to it.
+The act of making a Project Release — or, on a Runtime node without an Engineering node, a ProjectFile — the running Deployment (task 72_4). A Deploy takes a Release, not the Draft: the order is Save → Release → Deploy. A Deploy of the Release that already runs is refused `nothing_to_deploy`.
 _Avoid_: publish, apply, save
+
+**Deploy Release**:
+The act of making one Project Release the running Deployment: `POST …/projects/{id}/releases/{n}/deploy`. It needs no Draft Version and changes no Draft; Operation switches to it.
+_Avoid_: publish, roll out
+
+**Revert to deployed**:
+Resetting a Draft to the Deployment the Project runs, dropping the unsaved DraftChanges — the Discard of before task 72_4, now `POST …/projects/{id}/revert-to-deployed`. Discard resets to the last Commit instead.
+_Avoid_: discard, rollback
 
 **Release**:
 The act of publishing a new Release. A Project's publishes a Commit as a Project Release (task 72_3): it copies the Commit's content and needs no Draft Version. A Library's snapshots its Draft today (ADR 0007), states the Draft's Version, and from task 72_5 publishes a Commit too. A Release outlives the Commit, the Draft and future retention, and needs no Deploy.
@@ -165,7 +173,7 @@ Where a Release's content came from: `commit` (a Commit) or, from task 72_4, `fi
 _Avoid_: source, kind
 
 **Deployment**:
-The Runtime node's immutable record that a configuration runs: its number, when it was deployed, its cause, the document it holds and, once Releases exist, the Release it runs (task 72_4). A Deploy, a Rollback or a project file deploy makes it; Operation always runs exactly one Deployment. The running Deployment of a Project keeps the Libraries its document names from being deleted; a Discard of one that names a Release this server lacks drops that pin with a warning (task 71).
+The Runtime node's immutable record that a configuration runs: its number, when it was deployed, its cause, the Release it came from (`release_number`, nil for a Deployment from a file or one made before task 72_4) and the document it holds. A Deploy of a Release, a Rollback or a direct file Deploy on a Runtime-only node makes it; Operation always runs exactly one Deployment. The running Deployment of a Project keeps the Libraries its document names from being deleted; a Revert of one that names a Release this server lacks drops that pin with a warning (task 71).
 _Avoid_: release, build, version (the concurrency counter), commit
 
 **Revision**:
@@ -181,7 +189,7 @@ Taking a Runtime-origin Tag or Widget into the Draft, keeping its identity.
 _Avoid_: import, promote, claim
 
 **Rollback**:
-Making an earlier Deployment operational again, performed on the Runtime node alone; it produces a new Deployment with the earlier content that records the one it copied, never rewrites history.
+Making an earlier Deployment operational again, performed on the Runtime node alone; it produces a new Deployment with the earlier content and the earlier Release (`release_number`), records the one it copied and never rewrites history. The Project mode leaves it to the API and History (task 72_4).
 _Avoid_: revert, undo
 
 **ProjectFile**:
@@ -193,7 +201,7 @@ Replacing the whole content of a Project's Draft with a ProjectFile — one Draf
 _Avoid_: import, upload, load, restore
 
 **Deploy a file**:
-Making a valid ProjectFile the new Deployment of a Project on the Runtime node, without touching the Draft; the Deployment's cause is `file`.
+Making a valid ProjectFile the new Deployment of a Project without touching the Draft. On a server with the Engineering node the file is first published as a Release with Release Origin `file` and the Release is deployed, so the history shows what runs; on a Runtime-only node the file is stored directly with cause `file` and no Release (task 72_4; ADR 0018).
 _Avoid_: import, upload, restore
 
 ### Operation and History
