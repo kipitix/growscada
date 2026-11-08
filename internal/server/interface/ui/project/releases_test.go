@@ -62,6 +62,19 @@ func TestRelease_FromTheHistory(t *testing.T) {
 	if f.p.editingRelease != 0 {
 		t.Errorf("the note editor stayed open")
 	}
+
+	// A Commit is published at most once: a second publication is the
+	// server's 409 with a toast, and the list still holds one Release.
+	f.p.openReleaseDialog(1)
+	f.p.releaseAuthor = "Grace"
+	f.p.publishRelease(f.p.compoCtx)
+	f.run()
+	if toasts := f.e.TakeToasts(); len(toasts) != 1 {
+		t.Errorf("a second release of Commit 1 showed %d toasts, want one", len(toasts))
+	}
+	if len(f.p.releases) != 1 || f.p.releases[0].Number != 1 {
+		t.Errorf("a second release of Commit 1 was stored: %+v", f.p.releases)
+	}
 }
 
 // TestRelease_ShortcutsWaitForTheDialogs: the Releases dialogs hold the Draft's

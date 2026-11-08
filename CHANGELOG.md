@@ -12,7 +12,7 @@
   - UI (Project): у каждого Commit'а в **History** — кнопка **Make Release** (диалог: заметка, автор из LocalStorage; у опубликованного Commit'а выключена с подсказкой), toast после успеха; кнопка **Releases** и диалог со списком Release (номер, заголовок Commit'а, заметка, автор, время, счётчики), редактированием заметки на месте и выгрузкой ProjectFile'а; `eventlog.ReloadTargets.Releases` перечитывает список и историю на `release_created`/`release_note_updated` и на resync
   - Документы: ADR 0021 (Project Release — отдельный агрегат, копия Commit'а, один Commit — одна Release), `GLOSSARY.md` (Release, Project Release, Release Origin, Commit), AGENTS.md, CHANGELOG
   - Bruno: create/list/find/download/rename заметки, `409 commit_already_released`, `404` для отсутствующего Commit/Release; `requestBodies` пополнены
-  - Тесты: домен (копия Commit'а, чужой Commit, пустая/длинная заметка, `WithNote`, `Origin`), репозиторий (нумерация 1/2, один Commit — одна Release и конкурентная публикация, снимок заголовка, пины, CASCADE проекта), application/REST (create/list/find/projectfile, PATCH заметки, 400/404/409, `released` в истории), UI (`uitest`: публикация из истории, список, правка заметки, диалоги и шорткаты)
+  - Тесты: домен (копия Commit'а, чужой Commit, пустая/длинная заметка, `WithNote`, `Origin`), репозиторий (нумерация 1/2, один Commit — одна Release и конкурентная публикация, снимок заголовка, пины, CASCADE проекта), application/REST (create/list/find/projectfile, PATCH заметки, 400/404/409, `released` в истории и после переименования, доставка `release_created`/`release_note_updated` через outbox), UI (`uitest`: публикация из истории, повторная публикация, список, правка заметки, диалоги и шорткаты)
 
 ## [0.0.78] - 2026-11-08
 

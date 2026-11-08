@@ -153,7 +153,7 @@ The act of delivering the whole Draft, as a ProjectFile, to a Runtime node, whic
 _Avoid_: publish, apply, save
 
 **Release**:
-The act of publishing a Commit as a new Release: a Project Release now, a Library Release in task 72_5. The Release copies the Commit's content, so it outlives the Commit, the Draft and future retention. It needs no Deploy and no Draft Version.
+The act of publishing a new Release. A Project's publishes a Commit as a Project Release (task 72_3): it copies the Commit's content and needs no Draft Version. A Library's snapshots its Draft today (ADR 0007), states the Draft's Version, and from task 72_5 publishes a Commit too. A Release outlives the Commit, the Draft and future retention, and needs no Deploy.
 _Avoid_: publish, tag, version
 
 **Project Release**:
