@@ -320,6 +320,9 @@ func (p *Project) renderProjectFileConfirmation(pending *pendingProjectFile) app
 // currentDeploymentText names the Deployment the Project runs, for the deploy
 // confirmation.
 func (p *Project) currentDeploymentText() string {
+	if p.deploymentFailed {
+		return "The current Deployment cannot be read; the Deployment is unknown."
+	}
 	if !p.deploymentLoaded {
 		return "The current Deployment is being read."
 	}

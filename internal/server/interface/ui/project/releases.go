@@ -252,7 +252,16 @@ func (p *Project) renderReleaseDialog() app.UI {
 // download of the copied ProjectFile.
 func (p *Project) renderReleasesDialog() app.UI {
 	rows := []app.UI{}
-	if p.deployed && p.deployment.ReleaseNumber == nil {
+	switch {
+	case p.deploymentFailed:
+		// The Deployment could not be read: the list is the Engineering node's
+		// and stays, but which Release runs cannot be checked (task 72_4).
+		rows = append(rows, app.P().
+			Attr("data-release-running-unknown", "true").
+			Style("margin", "0 0 6px").
+			Style("color", "var(--toast-warn-title)").
+			Text("The running Release cannot be checked: the Deployment of the project cannot be read."))
+	case p.deployed && p.deployment.ReleaseNumber == nil:
 		rows = append(rows, app.P().
 			Attr("data-release-running-deployment", "true").
 			Style("margin", "0 0 6px").

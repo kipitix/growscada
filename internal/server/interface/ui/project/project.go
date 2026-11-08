@@ -49,11 +49,14 @@ type Project struct {
 	widgets     []apiv0.WidgetResponse
 	tags        tagstate.Tags
 	// deployment is the Deployment the project runs and deployed says whether
-	// it has one; deploymentLoaded is false until the first answer. The
-	// running Release is deployment.ReleaseNumber (task 72_4).
+	// it has one; deploymentLoaded is false until the first answer, and
+	// deploymentFailed tells a failed read (the running Release is then
+	// unknown, not "not deployed"). The running Release is
+	// deployment.ReleaseNumber (task 72_4).
 	deployment       apiv0.DeploymentResponse
 	deployed         bool
 	deploymentLoaded bool
+	deploymentFailed bool
 	// deploying marks a Deploy of a Release in flight; discarding and
 	// reverting mark the Draft resets.
 	deploying  bool
@@ -361,7 +364,7 @@ func (p *Project) SetProject(id uuid.UUID) {
 	ctx := p.compoCtx
 	p.scenes, p.widgets, p.tags = nil, nil, tagstate.Tags{}
 	p.widgetTypes, p.pins = nil, nil
-	p.deployment, p.deployed, p.deploymentLoaded = apiv0.DeploymentResponse{}, false, false
+	p.deployment, p.deployed, p.deploymentLoaded, p.deploymentFailed = apiv0.DeploymentResponse{}, false, false, false
 	p.deploying, p.discarding, p.reverting = false, false, false
 	p.deployments, p.deploymentsLoaded = nil, false
 	p.deploymentsDialog, p.selectedDeployment = false, 0

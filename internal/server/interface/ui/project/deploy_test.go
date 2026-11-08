@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -140,5 +141,46 @@ func TestDeployRelease_ServerRefusalIsAToast(t *testing.T) {
 
 	if got := f.oneToast(); got.Status != http.StatusConflict || !strings.Contains(got.Detail, "Nothing to deploy") {
 		t.Errorf("the refusal is not a toast: %+v", got)
+	}
+}
+
+// failDeploymentRead fails the GET of the Deployment alone: the rest of the
+// mode works, so a test sees what the Release list says when the running one
+// cannot be checked.
+type failDeploymentRead struct{}
+
+func (failDeploymentRead) RoundTrip(r *http.Request) (*http.Response, error) {
+	if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/deployment") {
+		return nil, errors.New("the deployment cannot be read")
+	}
+	return http.DefaultTransport.RoundTrip(r)
+}
+
+// TestReleasesDialog_UnknownDeployment: a failed read of the Deployment is not
+// "not deployed": the list says the running Release cannot be checked, and the
+// list itself stays readable because it is the Engineering node's (task 72_4).
+func TestReleasesDialog_UnknownDeployment(t *testing.T) {
+	url, api := newServer(t)
+	deployDraft(t, api)
+	f := mountWith(t, url, api, &http.Client{Transport: failDeploymentRead{}})
+	f.run()
+	f.e.TakeToasts() // the failed read of the Deployment is the toast of its load
+
+	if !f.p.deploymentFailed || f.p.deploymentLoaded {
+		t.Fatalf("the failed read: failed %v, loaded %v", f.p.deploymentFailed, f.p.deploymentLoaded)
+	}
+	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, "Deployment unknown") {
+		t.Errorf("the bar passes an unknown Deployment off as not deployed: %s", html)
+	}
+
+	f.p.openReleasesDialog(f.p.compoCtx)
+	f.run()
+	f.e.TakeToasts()
+	html := app.HTMLString(f.p.Render())
+	if !strings.Contains(html, "data-release-running-unknown") {
+		t.Errorf("the list does not say the running Release cannot be checked: %s", html)
+	}
+	if !strings.Contains(html, `data-release-row="1"`) {
+		t.Errorf("the list is not shown without the Deployment: %s", html)
 	}
 }

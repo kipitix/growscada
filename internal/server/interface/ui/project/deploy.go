@@ -86,19 +86,36 @@ func (p *Project) isCurrentDeployment(number int) bool {
 }
 
 // loadDeploy (re)loads the Deployment the project runs: the Release it came
-// from is what the Release list marks as running.
+// from is what the Release list marks as running. A failed read is not "not
+// deployed": deploymentFailed makes the mode say the running Release cannot be
+// checked rather than offer it for Deploy (task 72_4).
 func (p *Project) loadDeploy(ctx app.Context) {
 	if p.content == nil {
-		p.deployment, p.deployed, p.deploymentLoaded = apiv0.DeploymentResponse{}, false, false
+		p.deployment, p.deployed, p.deploymentLoaded, p.deploymentFailed = apiv0.DeploymentResponse{}, false, false, false
 		return
 	}
-	uiutil.LoadOfProject(p.compoCtx, &p.deployReloader, p.projectContent,
-		func(c context.Context, pc *apiclient.ProjectClient) (apiclient.DeploymentState, error) {
-			return pc.Deployment(c)
-		},
-		func(ctx app.Context, state apiclient.DeploymentState) {
-			p.deployment, p.deployed, p.deploymentLoaded = state.Deployment, state.Deployed, true
-		}, p.loadDeploy)
+	if !p.deployReloader.Start() {
+		return
+	}
+	content := p.content
+	uiutil.Do(p.compoCtx, func(c context.Context) (apiclient.DeploymentState, error) {
+		return content.Deployment(c)
+	}, func(ctx app.Context, state apiclient.DeploymentState, err error) {
+		rerun := p.deployReloader.Done()
+		switch {
+		case content != p.content:
+			// A response of the project left: it says nothing of the one shown.
+			rerun = true
+		case err != nil:
+			p.deploymentFailed = true
+			uiutil.ShowError(ctx, err)
+		default:
+			p.deployment, p.deployed, p.deploymentLoaded, p.deploymentFailed = state.Deployment, state.Deployed, true, false
+		}
+		if rerun {
+			p.loadDeploy(ctx)
+		}
+	})
 }
 
 // discard resets the Draft to the last Commit, dropping the unsaved changes,
@@ -187,12 +204,17 @@ func (p *Project) showDiscardWarnings(ctx app.Context, answer apiv0.DiscardProje
 // actions.
 func (p *Project) renderDeployBar() app.UI {
 	badge := "Not deployed"
-	if p.deployed {
+	switch {
+	case p.deployed:
 		badge = fmt.Sprintf("Deployment %d · deployed %s",
 			p.deployment.Number, formatDeployedAt(p.deployment.DeployedAt))
 		if p.deployment.ReleaseNumber != nil {
 			badge += fmt.Sprintf(" · Release %d", *p.deployment.ReleaseNumber)
 		}
+	case p.deploymentFailed:
+		// The read failed: the mode does not claim the project is not
+		// deployed (task 72_4).
+		badge = "Deployment unknown"
 	}
 
 	body := p.renderCommitBar()
