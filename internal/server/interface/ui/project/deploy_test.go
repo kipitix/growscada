@@ -125,6 +125,9 @@ func TestReleasesDialog_DeploymentWithoutRelease(t *testing.T) {
 	if !strings.Contains(html, "Running Deployment 4 (not a Release)") {
 		t.Errorf("the list does not say the Deployment is not a Release: %s", html)
 	}
+	if !strings.Contains(html, "Deployment 4 · not a Release") {
+		t.Errorf("the bar does not say the running Deployment is not a Release: %s", html)
+	}
 	if !strings.Contains(html, `data-release-deploy="1"`) {
 		t.Errorf("the list does not offer the Release for Deploy: %s", html)
 	}
@@ -317,6 +320,9 @@ func TestRevertToDeployed_WithoutDeploymentIsAToast(t *testing.T) {
 	}
 }
 
+// failDeploymentRead fails the GET of the Deployment alone: the rest of the
+// mode works, so a test sees what the Release list says when the running one
+// cannot be checked.
 type failDeploymentRead struct{}
 
 func (failDeploymentRead) RoundTrip(r *http.Request) (*http.Response, error) {
