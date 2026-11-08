@@ -191,6 +191,64 @@ func TestDiscardChanges_ResetsToTheLastCommit(t *testing.T) {
 	}
 }
 
+// TestDiscardChanges_RestoresTheContentShown: a Discard replaces the whole
+// Draft, so the Scenes and the Widgets of the selected one are read again — the
+// Version of the Draft was answered by the Discard itself and says nothing of
+// the content it restored (task 72_6; ADR 0021).
+func TestDiscardChanges_RestoresTheContentShown(t *testing.T) {
+	f := startProject(t)
+	f.run()
+	sceneID := createScene(t, f.api, "First")
+	typeID := createWidgetType(t, f.api, "Lamp")
+	widgetID := createWidget(t, f.api, sceneID, typeID, "W")
+	f.p.loadScenes(f.p.compoCtx)
+	f.p.loadWidgets(f.p.compoCtx)
+	f.run()
+	f.noToasts()
+	f.p.saveAuthor, f.p.saveTitle = "Ada", "First save"
+	f.p.saveCommit(f.p.compoCtx)
+	f.run()
+	f.e.TakeToasts() // the Save's own confirmation
+
+	// Another tab renames the Scene and drops its Widget: the Draft this tab
+	// shows no longer matches its Commit.
+	sc := f.scene(sceneID)
+	if _, err := f.api.UpdateScene(context.Background(), sceneID, apiv0.UpdateSceneRequest{
+		Name: "Second", Width: sc.Width, Height: sc.Height, Version: sc.Version,
+	}); err != nil {
+		t.Fatalf("rename scene: %v", err)
+	}
+	if _, err := f.api.DeleteWidget(context.Background(), sceneID, widgetID, 0); err != nil {
+		t.Fatalf("delete widget: %v", err)
+	}
+	f.p.loadScenes(f.p.compoCtx)
+	f.p.loadWidgets(f.p.compoCtx)
+	f.run()
+	if len(f.p.scenes) != 1 || f.p.scenes[0].Name != "Second" || len(f.p.widgets) != 0 {
+		t.Fatalf("the shown Draft before the Discard: %+v, widgets %+v", f.p.scenes, f.p.widgets)
+	}
+
+	f.p.doDiscard(f.p.compoCtx)
+	f.run()
+	f.noToasts()
+	if sc := f.scene(sceneID); sc.Name != "First" {
+		t.Fatalf("server scene after the Discard: %+v, want the Commit's", sc)
+	}
+	if len(f.p.scenes) != 1 || f.p.scenes[0].Name != "First" {
+		t.Errorf("the shown scenes after the Discard: %+v, want the restored one", f.p.scenes)
+	}
+	widgets, err := f.api.ListWidgets(context.Background(), sceneID)
+	if err != nil {
+		t.Fatalf("server widgets: %v", err)
+	}
+	if len(widgets) != 1 {
+		t.Fatalf("server widgets after the Discard: %+v, want the Commit's one", widgets)
+	}
+	if len(f.p.widgets) != 1 {
+		t.Errorf("the shown widgets after the Discard: %+v, want the restored one", f.p.widgets)
+	}
+}
+
 // TestDiscardChanges_WithoutCommitIsAToast: a Draft never saved has nothing to
 // fall back to: the server refuses and the refusal is the toast (task 72_6).
 func TestDiscardChanges_WithoutCommitIsAToast(t *testing.T) {

@@ -93,9 +93,14 @@ func (p *Project) setScene(ctx app.Context, mark uiutil.Mark, sc apiv0.SceneResp
 
 // reloadShownWidgets reads the shown Scene's Widgets again when a newer state
 // of the Scene id arrived (fresh): they carry the Version they were read at,
-// and the change may be one of them.
+// and the change may be one of them — or the whole Draft was replaced and the
+// list of it is the truth (task 72_6). Widgets of another Scene are the caller's
+// to read when the selection moves.
 func (p *Project) reloadShownWidgets(ctx app.Context, id uuid.UUID, fresh bool) {
-	if !fresh || id != p.selectedSceneID || len(p.widgets) == 0 || p.widgets[0].SceneID != id {
+	if !fresh || id != p.selectedSceneID {
+		return
+	}
+	if len(p.widgets) > 0 && p.widgets[0].SceneID != id {
 		return
 	}
 	p.loadWidgets(ctx)

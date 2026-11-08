@@ -110,6 +110,13 @@ type Project struct {
 	// against it too, so a Discard leaves nothing unsaved even though the
 	// Version rose (task 72_6). 0: no such reset.
 	cleanDraftVersion int
+	// contentReplacements counts the replacements of the whole Draft (a
+	// Discard, a Revert, an opened project file): a Scene list requested after
+	// the last one is the truth whatever Version it states, so the Scenes shown
+	// and the Widgets of the selected one are replaced by it. The replacement
+	// answers the Version itself, which the list would then not advance
+	// (task 72_6).
+	contentReplacements uint64
 	// renamingCommit is the number of the Commit whose title is edited in
 	// place (0: none), renameCommitTitle the text of the editor.
 	renamingCommit    int
@@ -382,7 +389,7 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.commits, p.commitsLoaded = nil, false
 	p.saveDialog, p.savingCommit, p.commitsDialog = false, false, false
 	p.renamingCommit, p.renameCommitTitle = 0, ""
-	p.cleanDraftVersion = 0
+	p.cleanDraftVersion, p.contentReplacements = 0, 0
 	p.releases, p.releasesLoaded = nil, false
 	p.releasesDialog, p.releaseDialog, p.releasing = false, false, false
 	p.releaseCommit, p.releaseNote, p.releaseAuthor = 0, "", ""

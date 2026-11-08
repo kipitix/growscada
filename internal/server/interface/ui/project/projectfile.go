@@ -124,6 +124,10 @@ func (p *Project) doOpenProjectFile(ctx app.Context, pending *pendingProjectFile
 		p.projectFileBusy = false
 		p.observeDraftVersion(mark, opened.Version)
 		p.closeProjectFileDialog()
+		// The whole Draft was replaced: the Scene list is the truth whatever
+		// Version it states, and it rereads the Widgets of the selected Scene
+		// (setScenes, task 72_6).
+		p.contentReplacements++
 		p.loadScenes(ctx)
 		p.loadTags(ctx)
 		p.loadWidgetTypes(ctx)

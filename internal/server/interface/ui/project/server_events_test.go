@@ -211,7 +211,7 @@ func TestSceneReread_RequestedBeforeASave_KeepsTheSave(t *testing.T) {
 	f.p.commitSceneEdit(f.p.compoCtx)
 	f.run()
 	f.p.setScene(f.p.compoCtx, mark, stale)
-	f.p.setScenes(f.p.compoCtx, mark, []apiv0.SceneResponse{stale, f.scene(f.p.scenes[1].ID)})
+	f.p.setScenes(f.p.compoCtx, mark, 0, []apiv0.SceneResponse{stale, f.scene(f.p.scenes[1].ID)})
 	f.run()
 
 	f.noToasts()
@@ -237,7 +237,7 @@ func TestWidgetEvent_SceneNotListedYet_ItsVersionIsKept(t *testing.T) {
 	}
 
 	f.event(apiv0.Event{Type: apiv0.EventWidgetDeleted, ID: widgetID.String(), SceneID: added.String()})
-	f.p.setScenes(f.p.compoCtx, mark, listed)
+	f.p.setScenes(f.p.compoCtx, mark, 0, listed)
 	f.run()
 	f.selectScene(added)
 	f.p.sceneEdit.name = "Renamed"

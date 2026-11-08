@@ -147,8 +147,14 @@ func (p *Project) doDiscard(ctx app.Context) {
 	}, func(ctx app.Context, discarded apiv0.DiscardProjectResponse) {
 		p.discarding = false
 		p.observeDraftVersion(mark, discarded.Version)
-		p.cleanDraftVersion = discarded.Version // the Draft is its last Commit again
-		p.reloadDraftContent(ctx)               // a Discard clears the stack (ADR 0017)
+		// The Draft is its last Commit again — unless some Library Releases
+		// could not be restored and their Widgets were dropped with them
+		// (task 71); then it differs from that Commit and stays unsaved.
+		p.cleanDraftVersion = discarded.Version
+		if len(discarded.Warnings) > 0 {
+			p.cleanDraftVersion = 0
+		}
+		p.reloadDraftContent(ctx) // a Discard clears the stack (ADR 0017)
 		p.showDiscardWarnings(ctx, discarded)
 		ctx.Update()
 	}, func(ctx app.Context, err error) {
@@ -190,8 +196,9 @@ func (p *Project) doRevert(ctx app.Context) {
 		p.observeDraftVersion(mark, reverted.Version)
 		// A Draft reset to the Release of its last Commit is that Commit
 		// again: nothing is unsaved. A Deployment of another Release (or of
-		// none) may differ from it, and the indicator follows the Version.
-		if p.revertIsTheLastCommit() {
+		// none) may differ from it, and the indicator follows the Version. A
+		// Drop of the Widgets of an unrestorable Release (task 71) differs too.
+		if p.revertIsTheLastCommit() && len(reverted.Warnings) == 0 {
 			p.cleanDraftVersion = reverted.Version
 		} else {
 			p.cleanDraftVersion = 0
@@ -226,6 +233,10 @@ func (p *Project) revertIsTheLastCommit() bool {
 // Scenes carry the Widgets of the selected one; the events do the same, but a
 // reset is rare and the screen should not wait for them (task 72_6).
 func (p *Project) reloadDraftContent(ctx app.Context) {
+	// The whole content was replaced: the Scene list is the truth whatever
+	// Version it states, and it rereads the Widgets of the selected Scene
+	// (setScenes, task 72_6).
+	p.contentReplacements++
 	p.loadScenes(ctx)
 	p.loadTags(ctx)
 	p.loadPins(ctx)

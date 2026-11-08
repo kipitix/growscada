@@ -177,12 +177,13 @@ func (p *Project) loadScenes(ctx app.Context) {
 		return
 	}
 	mark := p.markDraft()
+	replacements := p.contentReplacements
 	uiutil.LoadOfProject(p.compoCtx, &p.scenesReloader, p.projectContent,
 		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.SceneResponse, error) {
 			return pc.ListScenes(c)
 		},
 		func(ctx app.Context, scenes []apiv0.SceneResponse) {
-			p.setScenes(ctx, mark, scenes)
+			p.setScenes(ctx, mark, replacements, scenes)
 		}, p.loadScenes)
 }
 
@@ -190,21 +191,29 @@ func (p *Project) loadScenes(ctx app.Context) {
 // the first scene) and merges the scene properties editor. The list decides
 // which Scenes there are; one Version serves the whole Draft (ADR 0016), so
 // the list states it once and a list answered before a newer state of it does
-// not replace what is shown. mark is the moment the list was requested.
-func (p *Project) setScenes(ctx app.Context, mark uiutil.Mark, scenes []apiv0.SceneResponse) {
+// not replace what is shown. mark is the moment the list was requested;
+// replacements is how many times the Draft's content had been replaced then —
+// the list of a replacement (a Discard, a Revert, an opened project file) is
+// the truth whatever Version it states, because the replacement answered that
+// Version itself (task 72_6).
+func (p *Project) setScenes(ctx app.Context, mark uiutil.Mark, replacements uint64, scenes []apiv0.SceneResponse) {
 	old, known := p.findScene(p.selectedSceneID)
 	prevSceneID := p.selectedSceneID
 
+	// A list requested after the whole Draft was replaced (a Discard, a Revert,
+	// an opened project file) is the truth whatever Version it states: the
+	// replacement answered that Version itself, so the list advances nothing
+	// and the Scenes shown and the Widgets of the selected one are replaced by
+	// it (task 72_6).
+	replaced := replacements > 0 && replacements == p.contentReplacements
 	// A newer Version while the selected Scene's Widgets are shown means they
 	// may have changed: they are read again.
 	fresh := len(scenes) > 0 && p.draftVersions.Advance(mark, p.projectID, scenes[0].Version)
-	if len(scenes) > 0 {
-		p.reloadShownWidgets(ctx, p.selectedSceneID, fresh)
-	}
+	reread := fresh || replaced
 
 	merged := make([]apiv0.SceneResponse, len(scenes))
 	for i, sc := range scenes {
-		if !fresh {
+		if !reread {
 			if cur, ok := p.findScene(sc.ID); ok {
 				sc = cur
 			}
@@ -214,11 +223,19 @@ func (p *Project) setScenes(ctx app.Context, mark uiutil.Mark, scenes []apiv0.Sc
 	p.scenes = merged
 
 	if _, exists := p.findScene(p.selectedSceneID); p.selectedSceneID != uuid.Nil && !exists {
+		// The Scene shown is gone with its Widgets: nothing is left to draw.
 		p.selectedSceneID = uuid.Nil
+		p.widgets = nil
 		p.clearWidgetSelection(ctx)
 	}
 	if p.selectedSceneID == uuid.Nil && len(scenes) > 0 {
 		p.selectedSceneID = scenes[0].ID
+	}
+
+	// The Widgets of the selected Scene are read once the selection says which
+	// Scene that is: a reset may have deleted the one shown.
+	if len(scenes) > 0 {
+		p.reloadShownWidgets(ctx, p.selectedSceneID, reread)
 	}
 
 	if current, ok := p.findScene(p.selectedSceneID); ok && known && p.selectedSceneID == prevSceneID {
