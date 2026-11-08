@@ -95,8 +95,9 @@ func (h ProjectFileHandlers) PostProjectFile(w http.ResponseWriter, r *http.Requ
 // it publishes the document as a Release with origin file and makes it the
 // Project's new Deployment without touching the Draft (task 72_4). ?author= and
 // ?title= are optional; the file and the plain title stand for them. 201 with
-// the Deployment; 409 nothing_to_deploy when it is the running one; 400 with
-// file_issues when it does not validate.
+// the Deployment; 400 with file_issues when it does not validate. Every file
+// deploy makes a new Release, so a document equal to the running one is no
+// refusal.
 func (h ProjectFileHandlers) PostProjectFileDeploy(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := pathUUID(w, r, projectResource)
 	if !ok {

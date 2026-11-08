@@ -48,7 +48,7 @@ type RuntimeNode interface {
 	FindDeployment(ctx context.Context, projectID uuid.UUID, n int) (appdto.Deployment, error)
 	// DeploymentNamesLibrary reports whether the running Deployment of any live
 	// Project names a Release of this Library in its ProjectFile (task 71): a
-	// Library so named cannot be removed, because a Discard of that Deployment
+	// Library so named cannot be removed, because a Revert of that Deployment
 	// could not restore the pin. The answer reads no Engineering schema.
 	DeploymentNamesLibrary(ctx context.Context, libraryID uuid.UUID) (bool, error)
 }

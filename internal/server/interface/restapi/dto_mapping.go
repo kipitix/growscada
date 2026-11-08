@@ -641,16 +641,6 @@ func newDeployResponse(deployment appdto.Deployment) apiv0.DeployResponse {
 	return apiv0.DeployResponse{Number: deployment.Number, DeployedAt: deployedAt(deployment.DeployedAt)}
 }
 
-func newDeploymentSummaryResponse(deployment appdto.Deployment) apiv0.DeploymentSummaryResponse {
-	return newDeploymentSummary(runtimeapp.DeploymentSummary{
-		Number:         deployment.Number,
-		DeployedAt:     deployment.DeployedAt,
-		Cause:          runtimeapp.DeploymentCause(deployment.Cause),
-		RolledBackFrom: deployment.RolledBackFrom,
-		ReleaseNumber:  deployment.ReleaseNumber,
-	})
-}
-
 func newRollbackResponse(deployment runtimeapp.Deployment) apiv0.DeploymentSummaryResponse {
 	return newDeploymentSummary(deployment.Summary())
 }

@@ -129,7 +129,7 @@ type DeploymentRepository interface {
 
 	// DeploymentNamesLibrary reports whether the running Deployment of any live
 	// Project names a Release of this Library in its ProjectFile (task 71): the
-	// Engineering node asks before a Library is removed, because a Discard of
+	// Engineering node asks before a Library is removed, because a Revert of
 	// such a Deployment could not restore the pin. A Project that runs no
 	// Deployment names nothing.
 	DeploymentNamesLibrary(ctx context.Context, libraryID uuid.UUID) (bool, error)

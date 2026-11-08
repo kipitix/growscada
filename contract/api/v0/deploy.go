@@ -60,8 +60,8 @@ type MissingReleaseResponse struct {
 	Release   int       `json:"release"`
 }
 
-// DeployResponse is the answer of POST /projects/{id}/deploy: the Deployment the
-// Deploy made.
+// DeployResponse is the answer of POST /projects/{id}/releases/{n}/deploy and
+// of a deploy of a project file: the Deployment the Deploy made.
 type DeployResponse struct {
 	Number     int    `json:"number"`
 	DeployedAt string `json:"deployed_at"`
@@ -73,25 +73,27 @@ type DeployResponse struct {
 const DraftPath = "/draft"
 
 // DraftStateResponse is the state of a Project's Draft: its Version. GET
-// /projects/{id}/draft answers it, and POST /projects/{id}/discard answers it
-// after the reset to the Deployment the Project runs.
+// /projects/{id}/draft answers it, and so do POST /projects/{id}/discard (the
+// reset to the last Commit) and POST /projects/{id}/revert-to-deployed (the
+// reset to the Deployment the Project runs) after the reset.
 type DraftStateResponse struct {
 	Version int `json:"version"`
 }
 
-// DiscardProjectResponse is the answer of POST /projects/{id}/discard: the
-// Draft of the Project was reset to the Deployment it runs in one transaction
-// (ADR 0016). Warnings name the Library Releases the Deployment used but this
-// server does not have: their pins, and the Widgets of their WidgetTypes, were
-// dropped from the restored Draft (task 71).
+// DiscardProjectResponse is the answer of POST /projects/{id}/discard — the
+// Draft reset to its last Commit — and of POST /projects/{id}/revert-to-deployed
+// — the Draft reset to the Deployment the Project runs —, each in one
+// transaction (ADR 0016, task 72_4). Warnings name the Library Releases the
+// restored target used but this server does not have: their pins, and the
+// Widgets of their WidgetTypes, were dropped from the restored Draft (task 71).
 type DiscardProjectResponse struct {
 	Version  int                      `json:"version"`
 	Warnings []DiscardWarningResponse `json:"warnings,omitempty"`
 }
 
-// DiscardWarningResponse is one Library Pin a Discard could not restore: the
-// Library is gone, or the Release is. DroppedWidgets counts the Widgets of that
-// Library's WidgetTypes that went with it.
+// DiscardWarningResponse is one Library Pin a Discard or a Revert could not
+// restore: the Library is gone, or the Release is. DroppedWidgets counts the
+// Widgets of that Library's WidgetTypes that went with it.
 type DiscardWarningResponse struct {
 	LibraryID      uuid.UUID `json:"library_id"`
 	Release        int       `json:"release"`
