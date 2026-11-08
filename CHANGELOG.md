@@ -1,5 +1,19 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.78] - 2026-11-08
+
+### Added
+
+- **Commit: Save фиксирует снимок Draft'а** (задача 72_2; ADR 0021)
+  - Домен: `domain/draft.Commit` — сущность Draft'а (не отдельный агрегат): `ID`, `Number` (1, 2, 3… в Draft'е), `Title` (VO: обрезанный, непустой, ≤200 символов), `Author` (VO: обрезанный, непустой, ≤100), `CreatedAt`, `DraftVersion`, `Content`; неизменяем, `WithTitle` возвращает новый Commit с событием `commit_title_updated`; `NewCommit` пишет `commit_created`. `CommitContent` — либо канонический `projectv0.ProjectFile`, либо копии `library.ReleasedWidgetType`, кодируется внутренним форматом с версией (как outbox/DraftChange). `Draft`/`DraftChange` не меняются: Save не пишет DraftChange и не поднимает Version. Новые `draft.ErrNothingToSave`, `draft.ErrCommitNotFound`; `commit_created`/`commit_title_updated` в `event.EventType`
+  - Application: `CommitService` (`Save`, `List`, `Find`, `Rename`, `ProjectFile`) для Project'а и Library через `draft.Scope`. Save читает Version, собирает снимок тем же `ProjectFileBuilder`, что Deploy (Library — `WidgetTypes`), затем репозиторий под блокировкой строки Draft'а сверяет Version (`409 draft_conflict`), отказывает неизменённому Draft'у (`409 nothing_to_save`), выдаёт номер `last_commit_number+1` и пишет Commit с пинами; отказ сборщика — `409 draft_not_saveable` с причиной. `appdto.Commit` с `content_counts` и `released` (пока всегда false)
+  - БД (`engineering/20261108000000_commits`): `engineering.commits` (`id`, `draft_id` → `engineering.drafts` CASCADE, `number`, `title`, `author`, `created_at`, `draft_version`, `content` jsonb; `unique(draft_id, number)`, индекс `(draft_id, number desc)`), `engineering.commit_library_pins` (пины ProjectFile'а Commit'а, для задачи 71), `engineering.drafts.last_commit_number`/`last_commit_draft_version`
+  - REST (контракт `api/v0` **0.26**, MINOR): `POST …/commits` `{version,title,author}` → 201 `CommitResponse`; `GET …/commits` → `{commits}` новыми первыми без содержимого; `GET …/commits/{n}` → `CommitResponse` (у Library — с `widget_types`); `PATCH …/commits/{n}` `{title}`; `GET …/projects/{id}/commits/{n}/projectfile` — вложение с документом. События `commit_created`/`commit_title_updated` (поле `commit`), Project — в поток Project'а, Library — в серверный; `apiclient`: `SaveCommit`, `Commits`, `Commit`, `RenameCommit`, `CommitProjectFile`
+  - UI (Project и Library): кнопка **Save** (выключена без изменений), индикатор «Unsaved changes»/«Saved» по Version Draft'а против `draft_version` последнего Commit'а, диалог Save (заголовок по умолчанию, автор из `author:name` в LocalStorage), диалог **History** (номер, заголовок, автор, время, счётчики) с переименованием заголовка на месте; `eventlog.ReloadTargets.Commits` перечитывает историю на `commit_created`/`commit_title_updated` и на resync
+  - Документы: ADR 0021 (начало; окончательно — 72_8), GLOSSARY (Commit, Save, Draft), AGENTS.md, CHANGELOG
+  - Bruno: save/list/find/download/rename для Project'а и Library, `409 nothing_to_save`, `400` без автора; `requestBodies` пополнены
+  - Тесты: домен (заголовок/автор, `WithTitle`, кодирование содержимого), репозиторий (нумерация, `last_commit_*`, `nothing_to_save`, конфликт и две конкурентные Save, переименование, CASCADE, содержимое Project/Library), application/REST (маршруты, 400/404/409), UI (`uitest`: Save, индикатор, история, переименование, конфликт)
+
 ## [0.0.77] - 2026-11-08
 
 ### Changed

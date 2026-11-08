@@ -773,6 +773,75 @@ func widgetPath(sceneID, widgetID uuid.UUID) string {
 	return scenePath(sceneID) + "/widgets/" + widgetID.String()
 }
 
+// ── Commits ───────────────────────────────────────────────────────────────────
+
+// SaveCommit fixes the Draft as a Commit at the stated Version (task 72_2;
+// ADR 0021). The error matches ErrConflict for nothing_to_save and for a stale
+// draft_conflict; an empty title or author is a 400.
+func (p *ProjectClient) SaveCommit(ctx context.Context, req apiv0.CreateCommitRequest) (apiv0.CommitResponse, error) {
+	var resp apiv0.CommitResponse
+	err := p.do(ctx, http.MethodPost, apiv0.CommitPath, req, http.StatusCreated, &resp)
+	return resp, err
+}
+
+// Commits returns the Project's Commit history, newest first, without content.
+func (p *ProjectClient) Commits(ctx context.Context) ([]apiv0.CommitResponse, error) {
+	var resp apiv0.GetCommitsResponse
+	err := p.do(ctx, http.MethodGet, apiv0.CommitPath, nil, http.StatusOK, &resp)
+	return resp.Commits, err
+}
+
+// Commit returns one Commit. A number the Project does not have matches
+// ErrNotFound.
+func (p *ProjectClient) Commit(ctx context.Context, number int) (apiv0.CommitResponse, error) {
+	var resp apiv0.CommitResponse
+	err := p.do(ctx, http.MethodGet, apiv0.CommitPathOf(number), nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+// RenameCommit changes a Commit's title. It states no Draft Version.
+func (p *ProjectClient) RenameCommit(ctx context.Context, number int, req apiv0.RenameCommitRequest) (apiv0.CommitResponse, error) {
+	var resp apiv0.CommitResponse
+	err := p.do(ctx, http.MethodPatch, apiv0.CommitPathOf(number), req, http.StatusOK, &resp)
+	return resp, err
+}
+
+// CommitProjectFile returns the ProjectFile a Commit fixed, as a download.
+// The error matches ErrNotFound for a number the Project does not have.
+func (p *ProjectClient) CommitProjectFile(ctx context.Context, number int) (ProjectFileDownload, error) {
+	return p.downloadProjectFile(ctx, apiv0.CommitPathOf(number)+"/projectfile")
+}
+
+// SaveCommit fixes the Library's Draft as a Commit at the stated Version
+// (task 72_2; ADR 0021).
+func (l *LibraryClient) SaveCommit(ctx context.Context, req apiv0.CreateCommitRequest) (apiv0.CommitResponse, error) {
+	var resp apiv0.CommitResponse
+	err := l.do(ctx, http.MethodPost, apiv0.CommitPath, req, http.StatusCreated, &resp)
+	return resp, err
+}
+
+// Commits returns the Library's Commit history, newest first, without
+// content.
+func (l *LibraryClient) Commits(ctx context.Context) ([]apiv0.CommitResponse, error) {
+	var resp apiv0.GetCommitsResponse
+	err := l.do(ctx, http.MethodGet, apiv0.CommitPath, nil, http.StatusOK, &resp)
+	return resp.Commits, err
+}
+
+// Commit returns one Commit, with the WidgetTypes of its snapshot.
+func (l *LibraryClient) Commit(ctx context.Context, number int) (apiv0.CommitResponse, error) {
+	var resp apiv0.CommitResponse
+	err := l.do(ctx, http.MethodGet, apiv0.CommitPathOf(number), nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+// RenameCommit changes a Commit's title. It states no Draft Version.
+func (l *LibraryClient) RenameCommit(ctx context.Context, number int, req apiv0.RenameCommitRequest) (apiv0.CommitResponse, error) {
+	var resp apiv0.CommitResponse
+	err := l.do(ctx, http.MethodPatch, apiv0.CommitPathOf(number), req, http.StatusOK, &resp)
+	return resp, err
+}
+
 // ── Deploy and Deployment ──────────────────────────────────────────────────────
 
 // DeploymentState is one Project's running Deployment, with its ProjectFile.

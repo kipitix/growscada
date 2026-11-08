@@ -67,5 +67,8 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 		if targets.Tags {
 			p.loadTags(ctx)
 		}
+		if targets.Commits {
+			p.loadCommits(ctx)
+		}
 	})
 }

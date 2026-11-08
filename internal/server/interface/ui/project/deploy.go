@@ -233,7 +233,8 @@ func (p *Project) renderDeployBar() app.UI {
 			formatDeployedAt(p.deployPreview.CurrentDeployment.DeployedAt))
 	}
 
-	body := []app.UI{
+	body := p.renderCommitBar()
+	body = append(body,
 		p.renderDraftChangesBar(),
 		app.Div().Style("width", "1px").Style("height", "18px").Style("background", "var(--border)"),
 		app.Span().
@@ -242,7 +243,7 @@ func (p *Project) renderDeployBar() app.UI {
 			Style("font-weight", "600").
 			Style("color", "var(--text-2)").
 			Text(badge),
-	}
+	)
 	if p.deployLoaded && p.deployPreview.CurrentDeployment != nil && !p.deployPreview.Unchanged {
 		body = append(body, app.Span().
 			Attr("data-deploy-differs", "true").
@@ -277,6 +278,12 @@ func (p *Project) renderDeployBar() app.UI {
 	}
 	if p.projectFileDialog {
 		body = append(body, p.renderProjectFileDialog())
+	}
+	if p.saveDialog {
+		body = append(body, p.renderSaveDialog())
+	}
+	if p.commitsDialog {
+		body = append(body, p.renderCommitsDialog())
 	}
 
 	return app.Div().

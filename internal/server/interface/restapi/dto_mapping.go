@@ -485,6 +485,38 @@ func newGetLibrariesResponse(list []appdto.Library) apiv0.GetLibrariesResponse {
 	return apiv0.GetLibrariesResponse{Libraries: items}
 }
 
+func newCommitResponse(c appdto.Commit) apiv0.CommitResponse {
+	resp := apiv0.CommitResponse{
+		ID:           c.ID,
+		Number:       c.Number,
+		Title:        c.Title,
+		Author:       c.Author,
+		CreatedAt:    c.CreatedAt.UTC(),
+		DraftVersion: c.DraftVersion,
+		Released:     c.Released,
+		ContentCounts: apiv0.CommitContentCounts{
+			Scenes:       c.Counts.Scenes,
+			Widgets:      c.Counts.Widgets,
+			Tags:         c.Counts.Tags,
+			Devices:      c.Counts.Devices,
+			Environments: c.Counts.Environments,
+			WidgetTypes:  c.Counts.WidgetTypes,
+		},
+	}
+	if c.WidgetTypes != nil {
+		resp.WidgetTypes = newReleasedWidgetTypeResponses(c.WidgetTypes)
+	}
+	return resp
+}
+
+func newGetCommitsResponse(list []appdto.Commit) apiv0.GetCommitsResponse {
+	items := make([]apiv0.CommitResponse, len(list))
+	for i, c := range list {
+		items[i] = newCommitResponse(c)
+	}
+	return apiv0.GetCommitsResponse{Commits: items}
+}
+
 func newLibraryReleaseResponse(r appdto.LibraryRelease) apiv0.LibraryReleaseResponse {
 	return apiv0.LibraryReleaseResponse{
 		LibraryID:   r.LibraryID,

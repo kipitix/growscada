@@ -1,0 +1,36 @@
+info:
+  name: rename a project commit
+  type: http
+  seq: 160
+
+http:
+  method: PATCH
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/commits/1
+  body:
+    type: json
+    data: |-
+      {
+        "title": "Before the demo"
+      }
+  auth: inherit
+
+docs: |
+  A Commit's title changes on its own: no Draft Version is stated and the
+  snapshot is untouched (task 72_2; ADR 0021).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.title'
+      operator: eq
+      value: '"Before the demo"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

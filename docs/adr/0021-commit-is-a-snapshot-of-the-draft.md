@@ -1,0 +1,32 @@
+# A Commit is an immutable snapshot of the Draft, fixed by Save
+
+An Engineer needs a named point of history to return to, to release and to deploy, while the Draft stays editable without a lock (ADR 0022) and every edit is still written at once as a DraftChange (ADR 0016, ADR 0017). A DraftChange is a reversible intent, not a point of history: it holds the before and after state of what one write touched, is trimmed with the stack and is cleared by Deploy, Release and Discard. Something must therefore hold the whole Draft as it was when the Engineer decided it was worth keeping, and it must outlive the stack.
+
+This ADR starts the model; task 72_8 gives it its final form together with Releases and the Deploy that runs one.
+
+## Decision
+
+- **Commit is an entity of the Draft**, like DraftChange, not an aggregate of its own. It belongs to exactly one Draft (`draft.Scope`), is numbered 1, 2, 3… within it, and is removed with it by the foreign key. A Save is one transaction over the Draft's row, so a Commit is written in the same transaction as the last Version it fixed, and no policy is needed.
+- **Commit is immutable.** It holds its `ID`, number, title, Author, time, the Version of the Draft it fixed and its content. The content is the canonical ProjectFile of a Project's Draft — assembled by the same builder a Deploy uses — or the copies of a Library's Draft WidgetTypes, the same value object a Library Release holds. The encoding is internal, with a format version, like the outbox and DraftChanges (ADR 0005). Only the title changes, through `WithTitle`, which records `commit_title_updated`; the snapshot never does.
+- **Save fixes the Draft; it does not save it.** The Draft's edits are still written at once, and Save writes no DraftChange, raises no Version and touches no undo/redo stack. The Draft remembers `last_commit_number` and `last_commit_draft_version`, so a Save of a Draft at the Version of its last Commit is refused as `nothing_to_save`. The UI shows unsaved changes as the Draft's Version above its last Commit's.
+- **The snapshot is built before the transaction and checked against the Version.** The builder reads the Draft over several queries; the repository then locks the Draft's row, checks that the stated Version is still current (a write that landed meanwhile is 409 `draft_conflict`), refuses an unchanged Draft and inserts the Commit under the row lock. The row lock also makes the number unique without a retry loop. Building inside the transaction was rejected for the first version: it would hold the row lock for as long as the whole Draft is read, and the Version check gives the same guarantee.
+- **Renaming a title states no Version.** A title is not content: `commit_title_updated` and the API's `PATCH …/commits/{n}` work after another Engineer's writes, and the snapshot is untouched.
+- **The REST API and the events.** `POST …/commits` takes `{version, title, author}`, `GET …/commits` lists newest first without content, `GET …/commits/{n}` reads one (a Library's with its WidgetTypes), `PATCH …/commits/{n}` renames it and `GET …/projects/{id}/commits/{n}/projectfile` downloads a Project's snapshot. A Project's events go to its stream, a Library's to the server's; the modes reload the history on them and never the Draft's content. The API's MINOR rises.
+- **Tasks 72_3…72_8 build on this.** A Release is made from a Commit, a Deploy runs a Release, and retention of Commits comes later. Until then `CommitResponse.released` is always false, and the history is kept whole.
+
+## Considered Options
+
+- **Commit as an aggregate with its own repository and policy**: rejected. It shares the Draft's transaction, its liveness and its CASCADE, and a policy between the two would only add a window in which a Commit names a Draft that has moved.
+- **A full Draft snapshot per DraftChange**: rejected with ADR 0017: the volume is the Draft times the depth of the stack, and the stack is trimmed.
+- **Tagging a DraftChange as a point of history**: rejected. The stack is cleared by Deploy and Release, so the tags would disappear exactly when the history matters, and undo after a Save would not be a Save.
+- **Content fetched and hashed from the Draft on read instead of stored**: rejected. The builder and the whole content may change later; a Commit must keep the bytes it fixed.
+- **Building the ProjectFile inside the Save transaction**: rejected for the first version. It would hold the Draft's row lock through every read of the builder; the Version check around a build outside it gives the same "the snapshot is the Draft at this Version" guarantee, and Deploy already works that way (ADR 0022).
+
+## Consequences
+
+- A Commit's storage is proportional to the Draft: the whole ProjectFile per Save. Retention is a later task; until then every Save is kept.
+- The Draft gains two counters and the history gains a table (`engineering.commits`, `engineering.commit_library_pins` for a Project's pins). The pins are what task 71 uses to keep a Library from being deleted while a Project's history names its Release.
+- A Save whose Draft the builder refuses is 409 `draft_not_saveable` with the builder's reason, exactly as a download of the Draft is 409 `draft_not_deployable`: an inconsistent Draft is neither deployable nor a point of history.
+- Save does not require a Deployment: a Project that has never been deployed has Commits.
+- The Author is a name in the request, stored with the Commit and shown to other Engineers; tasks 49/50 replace it with a User.
+- The undo/redo stack is unaffected: Save neither clears it nor adds to it.

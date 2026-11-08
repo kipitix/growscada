@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/server/domain/device"
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -52,6 +53,9 @@ type payload struct {
 	// event, whose ID is its Environment's.
 	EnvironmentID *uuid.UUID `json:"environment_id,omitempty"`
 	DeviceID      *uuid.UUID `json:"device_id,omitempty"`
+	// Commit is the number of the Commit of commit_created and
+	// commit_title_updated.
+	Commit int `json:"commit,omitempty"`
 }
 
 // Encode returns the stored form of a domain event. Events of delivery
@@ -69,6 +73,14 @@ func Encode(e event.Event) ([]byte, error) {
 	switch ev := e.(type) {
 	case tag.TagEvent:
 		p.ID = ev.TagID().UUID()
+	case draft.CommitEvent:
+		p.Commit = ev.CommitNumber()
+		if ev.Scope().IsLibrary() {
+			libraryID := ev.Scope().LibraryID().UUID()
+			p.ID, p.LibraryID = libraryID, &libraryID
+		} else {
+			p.ID = ev.Scope().ProjectID().UUID()
+		}
 	case library.WidgetTypeEvent:
 		p.ID = ev.WidgetTypeID().UUID()
 		libraryID := ev.LibraryID().UUID()
@@ -130,6 +142,20 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 	environmentOfEvent := id.NewID(id.IDWithUUID[device.Environment](p.ID))
 
 	switch eventType {
+	case event.EventTypeCommitCreated, event.EventTypeCommitTitleUpdated:
+		var scope draft.Scope
+		switch {
+		case p.ProjectID != nil:
+			scope = draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](*p.ProjectID)))
+		case p.LibraryID != nil:
+			scope = draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](*p.LibraryID)))
+		default:
+			return nil, fmt.Errorf("cannot decode %s payload: no project_id or library_id", eventType)
+		}
+		if eventType == event.EventTypeCommitCreated {
+			return draft.NewCommitCreatedEvent(scope, p.Commit, ts), nil
+		}
+		return draft.NewCommitTitleUpdatedEvent(scope, p.Commit, ts), nil
 	case event.EventTypeWidgetTypeCreated, event.EventTypeWidgetTypeUpdated, event.EventTypeWidgetTypeDeleted:
 		if p.LibraryID == nil {
 			return nil, fmt.Errorf("cannot decode %s payload: no library_id", eventType)

@@ -129,12 +129,20 @@ _Avoid_: production server, station, runtime (unqualified)
 ### Project lifecycle
 
 **Draft**:
-The working state of a Project or of a Library as it is being edited, and the unit of consistency: every change to it is one DraftChange, and its Version is the only token a write states (ADR 0016, ADR 0022). A Project's Draft holds Scenes with their Widgets, Tag definitions, Devices, Environments and the pinned Library Releases; a Library's holds its WidgetTypes.
+The working state of a Project or of a Library as it is being edited, and the unit of consistency: every change to it is one DraftChange, and its Version is the only token a write states (ADR 0016, ADR 0022). A Project's Draft holds Scenes with their Widgets, Tag definitions, Devices, Environments and the pinned Library Releases; a Library's holds its WidgetTypes. It also keeps the history of its Commits.
 _Avoid_: working copy, unsaved changes
 
 **DraftChange**:
 One Engineer intent applied to the Draft — possibly touching several parts of the Draft at once — and the unit of undo/redo. The Draft keeps the stack of them; Deploy, Release and Discard clear it.
 _Avoid_: edit, step, command, operation
+
+**Commit**:
+An immutable, numbered snapshot of the whole Draft, fixed by a Save: its canonical ProjectFile for a Project, its WidgetTypes for a Library, with a title, the Author and the time (task 72_2; ADR 0021). It is an entity of the Draft, not a DraftChange: writing it raises no Version and clears no undo stack. Releases are made from Commits and a Deployment runs one.
+_Avoid_: revision, version, checkpoint, snapshot (unqualified)
+
+**Save**:
+The act of fixing the Draft's current state as a new Commit under a title and an Author (task 72_2; ADR 0021). It does not write the Draft: edits are written at once as DraftChanges, and a Save of an unchanged Draft is refused with `nothing_to_save`.
+_Avoid_: commit (as a verb), check in, publish
 
 **Discard**:
 Resetting a Draft to its last published state, dropping all DraftChanges.

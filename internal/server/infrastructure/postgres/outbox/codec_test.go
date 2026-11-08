@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/kipitix/growscada/internal/server/domain/device"
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -74,6 +75,8 @@ func sampleEvents(t *testing.T) []event.Event {
 		device.NewEnvironmentUpdatedEvent(environmentID, projectID, ts),
 		device.NewEnvironmentDeletedEvent(environmentID, projectID, ts),
 		device.NewEnvironmentDeviceCreatedEvent(environmentID, deviceID, projectID, ts),
+		draft.NewCommitCreatedEvent(draft.ProjectScope(projectID), 2, ts),
+		draft.NewCommitTitleUpdatedEvent(draft.LibraryScope(libraryID), 3, ts),
 		device.NewEnvironmentDeviceUpdatedEvent(environmentID, deviceID, projectID, ts),
 		device.NewEnvironmentDeviceDeletedEvent(environmentID, deviceID, projectID, ts),
 	}
@@ -177,6 +180,11 @@ func assertSameSubject(t *testing.T, original, decoded event.Event) {
 	case device.EnvironmentEvent:
 		if got, ok := decoded.(device.EnvironmentEvent); !ok || got.EnvironmentID() != want.EnvironmentID() {
 			t.Errorf("decoded %T, want an event of environment %s", decoded, want.EnvironmentID())
+		}
+	case draft.CommitEvent:
+		got, ok := decoded.(draft.CommitEvent)
+		if !ok || got.Scope().String() != want.Scope().String() || got.CommitNumber() != want.CommitNumber() {
+			t.Errorf("decoded %T, want commit %d of %s", decoded, want.CommitNumber(), want.Scope())
 		}
 	case scene.SceneEvent:
 		if got := decoded.(scene.SceneEvent); got.SceneID() != want.SceneID() {

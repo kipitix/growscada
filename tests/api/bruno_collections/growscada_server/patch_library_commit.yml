@@ -1,0 +1,36 @@
+info:
+  name: rename a library commit
+  type: http
+  seq: 168
+
+http:
+  method: PATCH
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/commits/1
+  body:
+    type: json
+    data: |-
+      {
+        "title": "Widgets for the demo"
+      }
+  auth: inherit
+
+docs: |
+  A Commit's title changes on its own, with no Draft Version stated
+  (task 72_2; ADR 0021).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.title'
+      operator: eq
+      value: '"Widgets for the demo"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

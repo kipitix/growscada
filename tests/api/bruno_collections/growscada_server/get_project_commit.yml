@@ -1,0 +1,31 @@
+info:
+  name: get one project commit
+  type: http
+  seq: 158
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/commits/1
+  auth: inherit
+
+docs: |
+  One Commit of the project's Draft, with the counts of its snapshot. A
+  number the Draft does not have answers 404 `commit_not_found`
+  (task 72_2; ADR 0021).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.title'
+      operator: eq
+      value: '"First save"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

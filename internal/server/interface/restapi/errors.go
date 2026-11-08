@@ -50,6 +50,8 @@ var (
 	deviceTokenResource = resource{name: "DeviceToken", pathParam: "device_id"}
 	// A Deployment is named by its number within its Project.
 	deploymentResource = resource{name: "Deployment", pathParam: "deployment_number"}
+	// A Commit is named by its number within its Draft.
+	commitResource = resource{name: "Commit", pathParam: "commit_number"}
 )
 
 // wildcard is the router pattern segment that carries the resource's ID.
@@ -88,6 +90,11 @@ var errorMappings = []errorMapping{
 		"The Draft cannot be exported: it is not deployable; repair the Draft first"},
 	{application.ErrDeploymentNotDiscardable, http.StatusConflict, deploymentResource,
 		"The Deployment names Library Releases this server does not have; the Draft is left as it is"},
+	{draft.ErrNothingToSave, http.StatusConflict, commitResource,
+		"Nothing to save: the Draft has not changed since its last Commit"},
+	{application.ErrDraftNotSaveable, http.StatusConflict, commitResource,
+		"The Draft cannot be saved: it cannot be assembled; repair the Draft first"},
+	{draft.ErrCommitNotFound, http.StatusNotFound, commitResource, ""},
 	{runtimeapp.ErrNothingToRollback, http.StatusConflict, deploymentResource,
 		"Nothing to rollback: the deployment holds the document the project runs"},
 	{runtimeapp.ErrDeploymentNotFound, http.StatusNotFound, deploymentResource, ""},
@@ -154,6 +161,12 @@ func sendError(w http.ResponseWriter, r *http.Request, err error) {
 	var notDeployable application.DraftNotDeployableError
 	if errors.As(err, &notDeployable) {
 		sendProblem(w, NewConflict("Draft", notDeployable.Reason, r.URL.Path))
+		return
+	}
+	// A Draft the builder refuses to save names its reason too.
+	var notSaveable application.DraftNotSaveableError
+	if errors.As(err, &notSaveable) {
+		sendProblem(w, NewConflict(commitResource.name, notSaveable.Reason, r.URL.Path))
 		return
 	}
 	// A Discard refused for foreign pins names the missing ones as file_issues.

@@ -1,0 +1,52 @@
+info:
+  name: save the project draft as a commit
+  type: http
+  seq: 156
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/commits
+  body:
+    type: json
+    data: |-
+      {
+        "version": {{PROJECT_COMMIT_VERSION}},
+        "title": "First save",
+        "author": "Ada"
+      }
+  auth: inherit
+
+docs: |
+  A Save fixes the whole Draft as an immutable Commit: number 1 of the
+  project's Draft, with its title and Author (task 72_2; ADR 0021). `version`
+  is the Version of the Draft the client saw; a Save that finds the Draft at
+  the Version of its last Commit answers 409 `nothing_to_save`.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '1'
+    - expression: 'res.body.title'
+      operator: eq
+      value: '"First save"'
+    - expression: 'res.body.author'
+      operator: eq
+      value: '"Ada"'
+    - expression: 'res.body.released'
+      operator: eq
+      value: 'false'
+    - expression: 'res.body.content_counts.scenes'
+      operator: gt
+      value: '0'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

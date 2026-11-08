@@ -741,7 +741,7 @@ func TestNoServer_ShowsNetworkErrors(t *testing.T) {
 	f := mount(t, url, nil)
 
 	toasts := f.e.TakeToasts()
-	if len(toasts) != 7 { // libraries, pins, widget types, scenes, tags, deployment state, the Draft
+	if len(toasts) != 8 { // libraries, pins, widget types, scenes, tags, deployment state, the Draft, the commits
 		t.Fatalf("want a toast per list, got %+v", toasts)
 	}
 	for _, got := range toasts {

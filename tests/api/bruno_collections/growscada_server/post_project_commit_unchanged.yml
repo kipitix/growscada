@@ -1,0 +1,41 @@
+info:
+  name: save the project draft without changes
+  type: http
+  seq: 161
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/commits
+  body:
+    type: json
+    data: |-
+      {
+        "version": {{PROJECT_COMMIT_VERSION}},
+        "title": "Nothing new",
+        "author": "Ada"
+      }
+  auth: inherit
+
+docs: |
+  The Draft is still at the Version its last Commit fixed: there is nothing
+  to save and the answer is 409 `nothing_to_save` (task 72_2; ADR 0021).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '409'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: application/problem+json
+    - expression: 'res.body.status'
+      operator: eq
+      value: '409'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

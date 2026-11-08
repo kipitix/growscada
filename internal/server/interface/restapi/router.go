@@ -31,6 +31,7 @@ type APIRouter struct {
 	draftChangesHandlers *DraftChangesHandlers
 	deploymentsHandlers  *DeploymentHandlers
 	projectFileHandlers  *ProjectFileHandlers
+	commitHandlers       *CommitHandlers
 	eventsHandlers       *EventsHandlers
 	journalHandlers      *JournalHandlers
 	operationHandlers    *OperationHandlers
@@ -91,6 +92,7 @@ type Services struct {
 	Deploy       application.DeployService
 	Discard      application.DiscardService
 	ProjectFiles application.ProjectFileService
+	Commits      application.CommitService
 	Deployments  runtimeapp.DeploymentService
 	DeviceConfig runtimeapp.DeviceConfigService
 	DeviceTokens runtimeapp.DeviceTokenService
@@ -121,6 +123,7 @@ func NewRouter(services Services, eventBus eventbus.EventBus, maxSSEClients int)
 		draftChangesHandlers: NewDraftChangesHandler(services.DraftChanges),
 		deploymentsHandlers:  NewDeploymentHandler(services.Deployments),
 		projectFileHandlers:  NewProjectFileHandler(services.ProjectFiles),
+		commitHandlers:       NewCommitHandler(services.Commits),
 		eventsHandlers:       NewEventsHandler(eventBus, projectService, maxSSEClients, WithDeviceTokens(services.DeviceTokens)),
 		journalHandlers:      NewJournalHandler(services.Journal, eventBus),
 		operationHandlers:    NewOperationHandler(services.Operation),
@@ -151,6 +154,7 @@ func (r *APIRouter) routes() []route {
 	deploy := r.deployHandlers
 	deployments := r.deploymentsHandlers
 	changes := r.draftChangesHandlers
+	commits := r.commitHandlers
 	return []route{
 		{"GET " + p + "/projects", projects.GetProjects},
 		{"GET " + pp, projects.GetProjectsByID},
@@ -177,6 +181,10 @@ func (r *APIRouter) routes() []route {
 		{"GET " + lp + apiv0.DraftChangesPath, changes.GetLibraryDraftChanges},
 		{"POST " + lp + apiv0.DraftChangesUndoPath, changes.PostLibraryDraftChangesUndo},
 		{"POST " + lp + apiv0.DraftChangesRedoPath, changes.PostLibraryDraftChangesRedo},
+		{"GET " + lp + apiv0.CommitPath, commits.GetCommits},
+		{"POST " + lp + apiv0.CommitPath, commits.PostCommit},
+		{"GET " + lp + apiv0.CommitPath + "/" + commitResource.wildcard(), commits.GetCommitByNumber},
+		{"PATCH " + lp + apiv0.CommitPath + "/" + commitResource.wildcard(), commits.PatchCommit},
 
 		{"GET " + lp + "/widget-types", widgetTypes.GetWidgetTypes},
 		{"GET " + lp + "/widget-types/" + widgetTypeResource.wildcard(), widgetTypes.GetWidgetTypesByID},
@@ -230,6 +238,11 @@ func (r *APIRouter) routes() []route {
 		{"GET " + pp + apiv0.DraftChangesPath, changes.GetProjectDraftChanges},
 		{"POST " + pp + apiv0.DraftChangesUndoPath, changes.PostProjectDraftChangesUndo},
 		{"POST " + pp + apiv0.DraftChangesRedoPath, changes.PostProjectDraftChangesRedo},
+		{"GET " + pp + apiv0.CommitPath, commits.GetCommits},
+		{"POST " + pp + apiv0.CommitPath, commits.PostCommit},
+		{"GET " + pp + apiv0.CommitPath + "/" + commitResource.wildcard(), commits.GetCommitByNumber},
+		{"PATCH " + pp + apiv0.CommitPath + "/" + commitResource.wildcard(), commits.PatchCommit},
+		{"GET " + pp + apiv0.CommitPath + "/" + commitResource.wildcard() + "/projectfile", commits.GetCommitProjectFile},
 		{"GET " + pp + "/deployment", deploy.GetDeployment},
 		{"GET " + pp + "/deployments", deployments.GetDeployments},
 		{"GET " + pp + "/deployments/" + deploymentResource.wildcard(), deployments.GetDeploymentByNumber},

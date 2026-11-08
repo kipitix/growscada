@@ -1,0 +1,31 @@
+info:
+  name: get the library draft version for a commit
+  type: http
+  seq: 163
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/draft
+  auth: inherit
+
+docs: |
+  Reads the Version of the library's Draft that the Save requests state
+  (ADR 0016). `LIBRARY_COMMIT_VERSION` carries it to the requests that follow.
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("LIBRARY_COMMIT_VERSION", res.body.version);
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

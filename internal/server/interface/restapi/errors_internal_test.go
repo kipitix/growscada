@@ -344,6 +344,8 @@ var domainSentinels = map[string]error{
 	"draft.ErrDraftNotFound":              draft.ErrDraftNotFound,
 	"draft.ErrNothingToUndo":              draft.ErrNothingToUndo,
 	"draft.ErrNothingToRedo":              draft.ErrNothingToRedo,
+	"draft.ErrNothingToSave":              draft.ErrNothingToSave,
+	"draft.ErrCommitNotFound":             draft.ErrCommitNotFound,
 }
 
 // unmappedSentinels are the domain sentinels errorMappings leaves out on

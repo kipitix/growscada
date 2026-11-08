@@ -1,0 +1,31 @@
+info:
+  name: get the project commits
+  type: http
+  seq: 157
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/commits
+  auth: inherit
+
+docs: |
+  The history of the project's Draft, newest first, without content: number,
+  title, author, time, the Draft Version it fixed and the counts of its
+  snapshot (task 72_2; ADR 0021).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.commits[0].number'
+      operator: eq
+      value: '1'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

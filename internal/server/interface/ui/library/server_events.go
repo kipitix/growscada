@@ -1,10 +1,12 @@
 package library
 
 import (
+	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
+	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
 // ── Server events ─────────────────────────────────────────────────────────────
@@ -39,6 +41,13 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 		}
 		if targets.WidgetTypes {
 			l.loadList(ctx)
+		}
+		if targets.Commits {
+			// A commit event names the Library in ev.ID: another library's
+			// leaves the history shown alone (task 72_2; task 72_7).
+			if id := uiutil.ParseID(ev.ID); id == uuid.Nil || id == l.libraryID {
+				l.loadCommits(ctx)
+			}
 		}
 	})
 }

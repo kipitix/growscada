@@ -43,14 +43,16 @@ func NewDraftRepositoryPostgres(db *sql.DB, releases library.LibraryReleaseRepos
 
 // draftRow is a drafts row as stored.
 type draftRow struct {
-	id            uuid.UUID
-	projectID     uuid.NullUUID
-	libraryID     uuid.NullUUID
-	version       int
-	stackPosition int
+	id                     uuid.UUID
+	projectID              uuid.NullUUID
+	libraryID              uuid.NullUUID
+	version                int
+	stackPosition          int
+	lastCommitNumber       int
+	lastCommitDraftVersion int
 }
 
-const selectDraftColumns = `id, project_id, library_id, version, stack_position`
+const selectDraftColumns = `id, project_id, library_id, version, stack_position, last_commit_number, last_commit_draft_version`
 
 func (r draftRepositoryPostgres) Read(ctx context.Context, scope draft.Scope) (draft.Draft, bool, error) {
 	cond, args := scopeCondition(scope)
@@ -510,7 +512,8 @@ func versionOfDraft(number int) version.Version[draft.Draft] {
 
 func scanDraftRow(scan func(...any) error) (*draftRow, error) {
 	var row draftRow
-	if err := scan(&row.id, &row.projectID, &row.libraryID, &row.version, &row.stackPosition); err != nil {
+	if err := scan(&row.id, &row.projectID, &row.libraryID, &row.version, &row.stackPosition,
+		&row.lastCommitNumber, &row.lastCommitDraftVersion); err != nil {
 		return nil, err
 	}
 	return &row, nil

@@ -52,6 +52,10 @@ var requestBodies = map[string]any{
 	"POST " + projectPrefix + "/projectfile/deploy":                                                                      projectv0.ProjectFile{},
 	"POST " + projectPrefix + apiv0.DraftChangesUndoPath:                                                                 apiv0.DraftChangeCommandRequest{},
 	"POST " + projectPrefix + apiv0.DraftChangesRedoPath:                                                                 apiv0.DraftChangeCommandRequest{},
+	"POST " + projectPrefix + apiv0.CommitPath:                                                                           apiv0.CreateCommitRequest{},
+	"PATCH " + projectPrefix + apiv0.CommitPath + "/" + commitResource.wildcard():                                        apiv0.RenameCommitRequest{},
+	"POST " + libraryPrefix + apiv0.CommitPath:                                                                           apiv0.CreateCommitRequest{},
+	"PATCH " + libraryPrefix + apiv0.CommitPath + "/" + commitResource.wildcard():                                        apiv0.RenameCommitRequest{},
 	// The removed EditLock routes (ADR 0022) answer 410 without a body.
 	"POST " + projectPrefix + removedDraftLockPath:               nil,
 	"POST " + projectPrefix + removedDraftLockPath + "/takeover": nil,

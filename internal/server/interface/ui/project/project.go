@@ -93,6 +93,24 @@ type Project struct {
 	// what says whether a reread state is newer than the one shown.
 	draftVersions uiutil.Versions
 
+	// ── Commits (task 72_2; ADR 0021) ──────────────────────────────────────
+	// commits is the history of the Draft, newest first; commitsLoaded is
+	// false until its first answer. saveDialog is true while the Save dialog
+	// is open, saveTitle and saveAuthor its fields; savingCommit marks the
+	// request in flight. commitsDialog is true while the history is shown.
+	commits         []apiv0.CommitResponse
+	commitsLoaded   bool
+	commitsReloader uiutil.Reloader
+	saveDialog      bool
+	savingCommit    bool
+	saveTitle       string
+	saveAuthor      string
+	commitsDialog   bool
+	// renamingCommit is the number of the Commit whose title is edited in
+	// place (0: none), renameCommitTitle the text of the editor.
+	renamingCommit    int
+	renameCommitTitle string
+
 	// ── DraftChange stack (ADR 0017) ────────────────────────────────────────
 	// changes is the state of the Draft's undo/redo stack, read on mount, on a
 	// resync, after the content events and after each undo or redo;
@@ -267,6 +285,7 @@ func (p *Project) OnMount(ctx app.Context) {
 	ctx.LocalStorage().Get("project:widgetTypeWidth", &p.widgetTypeWidth)
 	ctx.LocalStorage().Get("project:propertiesWidth", &p.propertiesWidth)
 
+	ctx.LocalStorage().Get(authorKey, &p.saveAuthor)
 	var savedTab string
 	ctx.LocalStorage().Get("project:subTab", &savedTab)
 	if savedTab != "" {
@@ -284,6 +303,7 @@ func (p *Project) OnMount(ctx app.Context) {
 	p.loadDeploy(ctx)
 	p.loadDraftState(ctx)
 	p.loadDraftChanges(ctx)
+	p.loadCommits(ctx)
 
 	p.listenShortcuts()
 	p.handleServerEvents(ctx)
@@ -336,6 +356,9 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.projectFileIssues, p.projectFileDetail = nil, ""
 	p.changes, p.changesLoaded = apiv0.DraftChangesResponse{}, false
 	p.undoing, p.redoing = false, false
+	p.commits, p.commitsLoaded = nil, false
+	p.saveDialog, p.savingCommit, p.commitsDialog = false, false, false
+	p.renamingCommit, p.renameCommitTitle = 0, ""
 	p.draftVersions.Forget()
 	clear(p.staleScenes)
 	p.widgetsReloadDeferred = false

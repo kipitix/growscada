@@ -1,0 +1,42 @@
+info:
+  name: save the library draft as a commit
+  type: http
+  seq: 165
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/commits
+  body:
+    type: json
+    data: |-
+      {
+        "version": {{LIBRARY_COMMIT_VERSION}},
+        "title": "Widgets before the demo",
+        "author": "Ada"
+      }
+  auth: inherit
+
+docs: |
+  A Save fixes the whole Draft as an immutable Commit: number 1 of the
+  library's Draft, holding the copies of its WidgetTypes (task 72_2;
+  ADR 0021).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '1'
+    - expression: 'res.body.content_counts.widget_types'
+      operator: gt
+      value: '0'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

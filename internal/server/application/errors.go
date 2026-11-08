@@ -62,6 +62,21 @@ var ErrDraftNotDeployable = errors.New("the draft is not deployable")
 // pins cannot be written, and the Draft is left as it is.
 var ErrDeploymentNotDiscardable = errors.New("the deployment cannot be discarded here: library releases are missing")
 
+// ErrDraftNotSaveable matches (errors.Is) a Save refused because the Draft
+// cannot be assembled into a snapshot: the same inconsistency that refuses a
+// Deploy refuses a Commit (task 72_2; ADR 0021).
+var ErrDraftNotSaveable = errors.New("the draft is not saveable")
+
+// DraftNotSaveableError is a Save the builder refused, with the builder's
+// reason.
+type DraftNotSaveableError struct {
+	Reason string
+}
+
+func (e DraftNotSaveableError) Error() string { return "the draft is not saveable: " + e.Reason }
+
+func (e DraftNotSaveableError) Is(target error) bool { return target == ErrDraftNotSaveable }
+
 // DraftNotDeployableError is an export of a Draft the builder refused, with
 // the builder's reason.
 type DraftNotDeployableError struct {

@@ -223,6 +223,7 @@ func main() {
 		Deploy:       deployService,
 		Discard:      discardService,
 		ProjectFiles: projectFileService,
+		Commits:      application.NewCommitService(projectContent, libraryContent, projectFileBuilder, widgetTypeRepositories),
 		Deployments:  deploymentService,
 		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(sqlDB)),
 		DeviceTokens: deviceTokenService,

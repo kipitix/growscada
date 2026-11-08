@@ -1,0 +1,38 @@
+info:
+  name: save the project draft without an author
+  type: http
+  seq: 162
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/commits
+  body:
+    type: json
+    data: |-
+      {
+        "version": {{PROJECT_COMMIT_VERSION}},
+        "title": "No author",
+        "author": ""
+      }
+  auth: inherit
+
+docs: |
+  An Author is required: an empty one is invalid input, 400 (task 72_2;
+  ADR 0021).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '400'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: application/problem+json
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

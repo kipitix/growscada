@@ -9,6 +9,7 @@ import (
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/domain/client"
 	"github.com/kipitix/growscada/internal/server/domain/device"
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -128,6 +129,10 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 			Content:    projectv0.ProjectFile{Header: projectv0.Header{ProjectID: projectID.UUID()}},
 		}, ts),
 			apiv0.Event{Type: "deployment_created", ID: projectID.String(), Deployment: 3, DeployedAt: timestamp}},
+		event.EventTypeCommitCreated: {draft.NewCommitCreatedEvent(draft.ProjectScope(projectID), 2, ts),
+			apiv0.Event{Type: "commit_created", ID: projectID.String(), Commit: 2}},
+		event.EventTypeCommitTitleUpdated: {draft.NewCommitTitleUpdatedEvent(draft.LibraryScope(libraryID), 3, ts),
+			apiv0.Event{Type: "commit_title_updated", ID: libraryID.String(), Commit: 3}},
 	}
 
 	for _, et := range event.AllEventTypes() {

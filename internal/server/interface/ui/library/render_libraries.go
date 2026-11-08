@@ -62,6 +62,9 @@ func (l *Library) renderLibrariesColumn() app.UI {
 				Style("max-height", "30%").
 				Style("overflow-y", "auto").
 				Body(items...),
+			l.renderCommitBar(),
+			app.If(l.saveDialog, l.renderSaveDialog).Else(func() app.UI { return app.Div() }),
+			app.If(l.commitsDialog, l.renderCommitsDialog).Else(func() app.UI { return app.Div() }),
 			l.renderLibraryStatus(),
 			l.renderHistory(),
 		)

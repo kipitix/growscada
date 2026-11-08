@@ -46,6 +46,25 @@ type Library struct {
 	// draftStateReloader loads the Draft's Version when the WidgetTypes carry
 	// none: the Draft of a library without one.
 	draftStateReloader uiutil.Reloader
+	// ── Commits (task 72_2; ADR 0021) ──────────────────────────────────────
+	// commits is the history of the selected library's Draft, newest first;
+	// commitsLoaded is false until its first answer. saveDialog is true while
+	// the Save dialog is open, saveTitle and saveAuthor its fields;
+	// savingCommit marks the request in flight. commitsDialog is true while
+	// the history is shown.
+	commits         []apiv0.CommitResponse
+	commitsLoaded   bool
+	commitsReloader uiutil.Reloader
+	saveDialog      bool
+	savingCommit    bool
+	saveTitle       string
+	saveAuthor      string
+	commitsDialog   bool
+	// renamingCommit is the number of the Commit whose title is edited in
+	// place (0: none), renameCommitTitle the text of the editor.
+	renamingCommit    int
+	renameCommitTitle string
+
 	// ── DraftChange stack (ADR 0017) ───────────────────────────────────────
 	// changes is the state of the Draft's undo/redo stack, read on mount, on a
 	// resync, after the content events and after each undo or redo;
@@ -93,6 +112,8 @@ func (l *Library) OnMount(ctx app.Context) {
 	l.loadList(ctx)
 	l.loadReleases(ctx)
 	l.loadDraftChanges(ctx)
+	ctx.LocalStorage().Get(authorKey, &l.saveAuthor)
+	l.loadCommits(ctx)
 	l.listenShortcuts()
 	l.handleServerEvents(ctx)
 }
@@ -222,11 +243,15 @@ func (l *Library) selectLibrary(ctx app.Context, id uuid.UUID) {
 	l.clearSelection()
 	l.changes, l.changesLoaded = apiv0.DraftChangesResponse{}, false
 	l.undoing, l.redoing = false, false
+	l.commits, l.commitsLoaded = nil, false
+	l.saveDialog, l.savingCommit, l.commitsDialog = false, false, false
+	l.renamingCommit, l.renameCommitTitle = 0, ""
 	uiutil.StoreID(ctx, libraryIDKey, id)
 	uiutil.StoreID(ctx, selectedIDKey, uuid.Nil)
 	l.loadList(ctx)
 	l.loadReleases(ctx)
 	l.loadDraftChanges(ctx)
+	l.loadCommits(ctx)
 }
 
 // view shows release n read-only (0: back to the Draft).

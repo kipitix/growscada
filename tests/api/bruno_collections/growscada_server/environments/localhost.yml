@@ -50,3 +50,10 @@ variables:
     value: '0'
   - name: JOURNAL_LAST_SEQ
     value: '0'
+  # The Draft Versions the Save requests state (task 72_2): the requests set
+  # them from the draft reads that precede them; the values here are what the
+  # static check substitutes.
+  - name: PROJECT_COMMIT_VERSION
+    value: '1'
+  - name: LIBRARY_COMMIT_VERSION
+    value: '1'

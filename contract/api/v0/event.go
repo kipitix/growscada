@@ -41,6 +41,9 @@ type Event struct {
 	// the stream of a Project carries the event to that Project's readers.
 	Deployment int    `json:"deployment,omitempty"`
 	DeployedAt string `json:"deployed_at,omitempty"`
+	// Commit is the number of the Commit a commit_created or
+	// commit_title_updated is about; ID is the Project's or the Library's.
+	Commit int `json:"commit,omitempty"`
 }
 
 // The types of Event: the names the event stream publishes (ADR 0009).
@@ -83,6 +86,9 @@ const (
 	EventEnvironmentDeviceDeleted = "environment_device_deleted"
 
 	EventDeploymentCreated = "deployment_created"
+
+	EventCommitCreated      = "commit_created"
+	EventCommitTitleUpdated = "commit_title_updated"
 )
 
 // EventTypes returns every type of Event of this version of the contract.
@@ -101,5 +107,6 @@ func EventTypes() []string {
 		EventEnvironmentCreated, EventEnvironmentUpdated, EventEnvironmentDeleted,
 		EventEnvironmentDeviceCreated, EventEnvironmentDeviceUpdated, EventEnvironmentDeviceDeleted,
 		EventDeploymentCreated,
+		EventCommitCreated, EventCommitTitleUpdated,
 	}
 }

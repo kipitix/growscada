@@ -62,4 +62,29 @@ type Repository interface {
 	// position, as Undo does its before states. Returns ErrNothingToRedo when
 	// nothing was undone.
 	Redo(ctx context.Context, scope Scope, expected version.Version[Draft]) (Draft, error)
+
+	// SaveCommit fixes the Draft as a Commit (task 72_2; ADR 0021): it locks
+	// the Draft's row, checks expected — a stale Version is a ConflictError —,
+	// refuses a Draft at the Version of its last Commit (ErrNothingToSave),
+	// numbers the Commit after the last one, writes it with the pins of its
+	// ProjectFile and raises last_commit_number and last_commit_draft_version.
+	// content is assembled by the caller from the Draft at expected (a
+	// ProjectFile or a Library's WidgetTypes); no DraftChange is written and
+	// the Version is not raised.
+	SaveCommit(ctx context.Context, scope Scope, expected version.Version[Draft], title CommitTitle, author Author, content CommitContent) (Commit, error)
+
+	// RenameCommit changes the title of the Commit number of the Draft and
+	// records commit_title_updated. It states no Draft Version: the title is
+	// not content, so the command works after another Engineer's writes.
+	// Returns ErrCommitNotFound for a number the Draft does not have.
+	RenameCommit(ctx context.Context, scope Scope, number int, title CommitTitle) (Commit, error)
+
+	// FindCommits returns the Draft's Commits, newest first. A Project or
+	// Library that is not live is ErrProjectNotFound or ErrLibraryNotFound.
+	FindCommits(ctx context.Context, scope Scope) ([]Commit, error)
+
+	// FindCommit returns the Commit number of the Draft. A Project or Library
+	// that is not live is ErrProjectNotFound or ErrLibraryNotFound; a number
+	// the Draft does not have is ErrCommitNotFound.
+	FindCommit(ctx context.Context, scope Scope, number int) (Commit, error)
 }

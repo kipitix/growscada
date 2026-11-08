@@ -1,0 +1,32 @@
+info:
+  name: get the library commits before the first save
+  type: http
+  seq: 164
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/commits
+  auth: inherit
+
+docs: |
+  A Library never saved has no Commits: the list is empty (task 72_2;
+  ADR 0021).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.commits'
+      operator: isArray
+    - expression: 'res.body.commits.length'
+      operator: eq
+      value: '0'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -54,6 +54,7 @@ type testServices struct {
 	draftChanges application.DraftChangesService
 	journal      runtimeapp.JournalService
 	operation    runtimeapp.OperationStateService
+	commits      application.CommitService
 }
 
 // newServices returns the services over the test database; the Runtime
@@ -102,6 +103,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		deviceTokens: deviceTokens,
 		journal:      journal,
 		operation:    runtimeapp.NewOperationStateService(journal, deployments, states),
+		commits:      application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes),
 	}
 }
 
@@ -114,7 +116,7 @@ func (s testServices) services() restapi.Services {
 		Draft: s.draft, DraftChanges: s.draftChanges,
 		Deploy: s.deploy, Discard: s.discard, ProjectFiles: s.projectFiles, Deployments: s.deployments,
 		DeviceConfig: s.deviceConfig, DeviceTokens: s.deviceTokens,
-		Journal: s.journal, Operation: s.operation,
+		Journal: s.journal, Operation: s.operation, Commits: s.commits,
 	}
 }
 
