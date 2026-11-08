@@ -116,6 +116,35 @@ func TestReleaseService_CreateListFindNoteAndFile(t *testing.T) {
 	}
 }
 
+// TestReleaseService_ListNeedsNoRuntime: a Release list is the Engineering
+// node's data, so it is served while the Runtime node is unreachable (task
+// 72_4); the running Release is the Deployment's to name, by another read.
+func TestReleaseService_ListNeedsNoRuntime(t *testing.T) {
+	cleanProjects(t)
+	ctx := context.Background()
+	projects := application.NewProjectService(repositories.NewProjectRepositoryPostgres(testDB), soleOrganization())
+	createdProject, err := projects.CreateProject(ctx, appdto.ProjectInput{Name: "releases-no-runtime-" + uuid.NewString()})
+	if err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	projectID := createdProject.ID
+	scope := draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](projectID)))
+	if _, err := newCommitService().Save(ctx, scope, 1, "First save", "Ada"); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if _, err := newReleaseService().Create(ctx, projectID, 1, "", "Ada"); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	service := application.NewReleaseService(contentOver(newScopes()),
+		repositories.NewProjectReleaseRepositoryPostgres(testDB), nil,
+		repositories.NewLibraryRepositoryPostgres(testDB), repositories.NewLibraryReleaseRepositoryPostgres(testDB))
+	list, err := service.List(ctx, projectID)
+	if err != nil || len(list) != 1 || list[0].Number != 1 {
+		t.Errorf("List without a Runtime node: %+v, %v", list, err)
+	}
+}
+
 // TestReleaseService_RefusesADeletedProject: a Project that is not live has no
 // Releases to read or publish.
 func TestReleaseService_RefusesADeletedProject(t *testing.T) {

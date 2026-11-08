@@ -1045,6 +1045,49 @@ func TestCreateDeployment_ReleaseNumber(t *testing.T) {
 	}
 }
 
+// TestCreateDeployment_TwoRacingDeploysOfOneRelease: the check of the running
+// Release shares the advisory lock with the numbering, so two Deploys of one
+// Release race into one Deployment and one refusal (task 72_4).
+func TestCreateDeployment_TwoRacingDeploysOfOneRelease(t *testing.T) {
+	projectID, _ := newProject(t)
+	repo := runtimepg.NewDeploymentRepositoryPostgres(postgres.DB(t))
+	ctx := context.Background()
+	first := 1
+
+	var (
+		wg                sync.WaitGroup
+		mu                sync.Mutex
+		deployed, refused int
+	)
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := repo.CreateDeployment(ctx, projectID.UUID(), documentOf(projectID),
+				runtimeapp.DeploymentCauseDeploy, &first, time.Now())
+			mu.Lock()
+			defer mu.Unlock()
+			switch {
+			case err == nil:
+				deployed++
+			case errors.Is(err, runtimeapp.ErrNothingToDeploy):
+				refused++
+			default:
+				t.Errorf("Deploy: %v, want no error or ErrNothingToDeploy", err)
+			}
+		}()
+	}
+	wg.Wait()
+
+	if deployed != 1 || refused != 1 {
+		t.Fatalf("%d Deploys and %d refusals, want one of each", deployed, refused)
+	}
+	summaries, err := repo.FindAll(ctx, projectID.UUID())
+	if err != nil || len(summaries) != 1 {
+		t.Errorf("the Deployments after the race: %+v, %v, want one", summaries, err)
+	}
+}
+
 // TestRollback_KeepsTheReleaseNumber: a Rollback copies the Release of the
 // Deployment it names (task 72_4).
 func TestRollback_KeepsTheReleaseNumber(t *testing.T) {
