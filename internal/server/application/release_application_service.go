@@ -74,7 +74,7 @@ func (s releaseServiceImpl) Create(ctx context.Context, rawProjectID uuid.UUID, 
 	if err != nil {
 		return appdto.Release{}, err
 	}
-	created, err := s.releases.Create(ctx, scope, commit, note, author, release.OriginCommit)
+	created, err := s.releases.Create(ctx, scope, commit, note, author)
 	if err != nil {
 		return appdto.Release{}, fmt.Errorf("cannot release commit %d of project %s: %w", number, projectID, err)
 	}

@@ -69,7 +69,7 @@ func TestProjectRelease_CreateListFindAndNote(t *testing.T) {
 	})
 	secondCommit := savedCommit(t, "Second")
 
-	first, err := repo.Create(ctx, scope, firstCommit, testReleaseNote(t, " for the demo "), commitAuthor(t), release.OriginCommit)
+	first, err := repo.Create(ctx, scope, firstCommit, testReleaseNote(t, " for the demo "), commitAuthor(t))
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -79,11 +79,11 @@ func TestProjectRelease_CreateListFindAndNote(t *testing.T) {
 	if first.CommitTitle().String() != "First" || first.Note().String() != "for the demo" {
 		t.Errorf("first release title %q, note %q", first.CommitTitle(), first.Note())
 	}
-	if _, err := repo.Create(ctx, scope, firstCommit, testReleaseNote(t, ""), commitAuthor(t), release.OriginCommit); !errors.Is(err, release.ErrCommitAlreadyReleased) {
+	if _, err := repo.Create(ctx, scope, firstCommit, testReleaseNote(t, ""), commitAuthor(t)); !errors.Is(err, release.ErrCommitAlreadyReleased) {
 		t.Fatalf("a second release of a commit: %v, want ErrCommitAlreadyReleased", err)
 	}
 
-	second, err := repo.Create(ctx, scope, secondCommit, testReleaseNote(t, ""), commitAuthor(t), release.OriginCommit)
+	second, err := repo.Create(ctx, scope, secondCommit, testReleaseNote(t, ""), commitAuthor(t))
 	if err != nil {
 		t.Fatalf("second Create: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestProjectRelease_TwoCreatesOfOneCommit(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := repo.Create(ctx, scope, commit, testReleaseNote(t, ""), commitAuthor(t), release.OriginCommit)
+			_, err := repo.Create(ctx, scope, commit, testReleaseNote(t, ""), commitAuthor(t))
 			mu.Lock()
 			results = append(results, err)
 			mu.Unlock()
@@ -225,7 +225,7 @@ func TestProjectRelease_Cascade(t *testing.T) {
 		t.Fatalf("NewCommit: %v", err)
 	}
 	repo := repositories.NewProjectReleaseRepositoryPostgres(testDB)
-	created, err := repo.Create(ctx, scope, commit, testReleaseNote(t, ""), author, release.OriginCommit)
+	created, err := repo.Create(ctx, scope, commit, testReleaseNote(t, ""), author)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}

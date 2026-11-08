@@ -40,7 +40,7 @@ func NewProjectReleaseRepositoryPostgres(aDb *sql.DB, opts ...Option) release.Re
 // release.Repository): an advisory lock on the Project serializes concurrent
 // publications, so the number is the greatest stored plus one without a retry
 // loop; the unique keys are the safety net.
-func (r projectReleaseRepositoryPostgres) Create(ctx context.Context, scope draft.Scope, commit draft.Commit, aNote release.Note, anAuthor draft.Author, origin release.Origin) (release.Release, error) {
+func (r projectReleaseRepositoryPostgres) Create(ctx context.Context, scope draft.Scope, commit draft.Commit, aNote release.Note, anAuthor draft.Author) (release.Release, error) {
 	if !scope.IsProject() {
 		return nil, fmt.Errorf("cannot release %s: project releases are the only ones of task 72_3", scope)
 	}
