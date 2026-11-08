@@ -1,5 +1,40 @@
 {
   "$defs": {
+    "BrokenBindingResponse": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "port_name": {
+          "type": "string"
+        },
+        "scene_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "tag_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "type_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "widget_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "scene_id",
+        "widget_id",
+        "name",
+        "type_id",
+        "port_name",
+        "tag_id"
+      ],
+      "type": "object"
+    },
     "CommitContentCounts": {
       "properties": {
         "devices": {
@@ -175,6 +210,33 @@
       ],
       "type": "object"
     },
+    "CreateLibraryRequest": {
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "CreateLibraryResponse": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "type": "object"
+    },
     "CreateProjectReleaseRequest": {
       "properties": {
         "author": {
@@ -217,6 +279,24 @@
       "required": [
         "id",
         "version"
+      ],
+      "type": "object"
+    },
+    "CreateReleaseRequest": {
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "integer"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "commit",
+        "author"
       ],
       "type": "object"
     },
@@ -1042,6 +1122,62 @@
       ],
       "type": "object"
     },
+    "GetLibrariesResponse": {
+      "properties": {
+        "libraries": {
+          "items": {
+            "$ref": "#/$defs/LibraryResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "libraries"
+      ],
+      "type": "object"
+    },
+    "GetLibraryPinsResponse": {
+      "properties": {
+        "library_pins": {
+          "items": {
+            "$ref": "#/$defs/LibraryPinResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "library_pins"
+      ],
+      "type": "object"
+    },
+    "GetLibraryReleasesResponse": {
+      "properties": {
+        "releases": {
+          "items": {
+            "$ref": "#/$defs/LibraryReleaseResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "releases"
+      ],
+      "type": "object"
+    },
+    "GetPinnedWidgetTypesResponse": {
+      "properties": {
+        "widget_types": {
+          "items": {
+            "$ref": "#/$defs/ReleasedWidgetTypeResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "widget_types"
+      ],
+      "type": "object"
+    },
     "GetProjectsResponse": {
       "properties": {
         "projects": {
@@ -1189,6 +1325,130 @@
       ],
       "type": "object"
     },
+    "LibraryPinResponse": {
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "commit_number": {
+          "type": "integer"
+        },
+        "library_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "origin": {
+          "type": "string"
+        },
+        "release": {
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "library_id",
+        "release",
+        "version",
+        "author",
+        "origin",
+        "note"
+      ],
+      "type": "object"
+    },
+    "LibraryReleaseResponse": {
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "commit_number": {
+          "type": "integer"
+        },
+        "content_counts": {
+          "$ref": "#/$defs/CommitContentCounts"
+        },
+        "created_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "library_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer"
+        },
+        "origin": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "widget_types": {
+          "items": {
+            "$ref": "#/$defs/ReleasedWidgetTypeResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "library_id",
+        "number",
+        "author",
+        "origin",
+        "note",
+        "created_at",
+        "widget_types",
+        "content_counts"
+      ],
+      "type": "object"
+    },
+    "LibraryResponse": {
+      "properties": {
+        "has_unpublished_changes": {
+          "type": "boolean"
+        },
+        "has_unsaved_changes": {
+          "type": "boolean"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "latest_commit": {
+          "type": "integer"
+        },
+        "latest_release": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "version",
+        "latest_release",
+        "latest_commit",
+        "has_unsaved_changes",
+        "has_unpublished_changes"
+      ],
+      "type": "object"
+    },
     "ListDeploymentsResponse": {
       "properties": {
         "deployments": {
@@ -1295,6 +1555,27 @@
       "required": [
         "x",
         "y"
+      ],
+      "type": "object"
+    },
+    "PinImpactResponse": {
+      "properties": {
+        "broken_bindings": {
+          "items": {
+            "$ref": "#/$defs/BrokenBindingResponse"
+          },
+          "type": "array"
+        },
+        "orphaned_widgets": {
+          "items": {
+            "$ref": "#/$defs/PinnedWidgetResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "orphaned_widgets",
+        "broken_bindings"
       ],
       "type": "object"
     },
@@ -1519,6 +1800,21 @@
       "required": [
         "id",
         "name",
+        "version"
+      ],
+      "type": "object"
+    },
+    "PutLibraryPinRequest": {
+      "properties": {
+        "release": {
+          "type": "integer"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "release",
         "version"
       ],
       "type": "object"
@@ -1980,6 +2276,43 @@
       "type": "object"
     },
     "UpdateEnvironmentResponse": {
+      "properties": {
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    },
+    "UpdateLibraryReleaseNoteRequest": {
+      "properties": {
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "note"
+      ],
+      "type": "object"
+    },
+    "UpdateLibraryRequest": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "type": "object"
+    },
+    "UpdateLibraryResponse": {
       "properties": {
         "version": {
           "type": "integer"
