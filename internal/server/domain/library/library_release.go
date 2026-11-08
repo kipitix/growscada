@@ -9,10 +9,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/id"
 )
 
-// ErrCommitAlreadyReleased is returned when a Commit is published as a
-// Library Release already: one Commit is released at most once (task 72_5;
-// ADR 0021).
-
 // LibraryRelease - an immutable snapshot of a Library's Draft (ADR 0007): a
 // numbered copy of all its WidgetTypes under their own IDs, with the time it
 // was made, an optional note and the Author who published it. It is made from

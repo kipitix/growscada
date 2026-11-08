@@ -44,17 +44,6 @@ func libraryDraftVersionOf(t *testing.T, libraryID id.ID[library.Library]) versi
 	return found.Version()
 }
 
-// libraryDraftContentVersionOf is libraryDraftVersionOf as the Library's
-// release repository states it.
-func libraryDraftContentVersionOf(t *testing.T, libraryID id.ID[library.Library]) version.Version[library.DraftContent] {
-	t.Helper()
-	ver, err := version.New(version.WithNumber[library.DraftContent](libraryDraftVersionOf(t, libraryID).Number()))
-	if err != nil {
-		t.Fatalf("Version: %v", err)
-	}
-	return ver
-}
-
 // mustUpdateLibrary runs one write of the Library's Draft at its current
 // Version, as the server does.
 func mustUpdateLibrary(t *testing.T, libraryID id.ID[library.Library], description string, change func(*draft.Session) error) draft.Draft {

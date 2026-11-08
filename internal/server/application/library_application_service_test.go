@@ -232,6 +232,67 @@ func TestDiscard_ResetsTheDraftToTheLastCommit(t *testing.T) {
 	create("after-discard")
 }
 
+// TestRevertToLatestRelease_ResetsTheDraftToTheRelease: Revert brings back the
+// published state — the latest Release's content — in one transaction, while
+// Discard goes to the last Commit, which may hold more (task 72_5; ADR 0016).
+func TestRevertToLatestRelease_ResetsTheDraftToTheRelease(t *testing.T) {
+	ctx := context.Background()
+	libSvc, wtSvc := newLibraryService(), newWidgetTypeService()
+	lib := mustCreateLibrary(t)
+	if _, err := libSvc.RevertToLatestRelease(ctx, lib.ID); !errors.Is(err, library.ErrNoRelease) {
+		t.Errorf("a library never released: expected ErrNoRelease, got %v", err)
+	}
+	create := func(name string) appdto.WidgetType {
+		t.Helper()
+		input := testCreateWidgetTypeInput
+		input.Name = name
+		wt, err := wtSvc.CreateWidgetType(ctx, lib.ID, libraryDraftVersionOf(t, lib.ID), input)
+		if err != nil {
+			t.Fatalf("CreateWidgetType %s: %v", name, err)
+		}
+		return wt
+	}
+	published := create("published")
+	mustReleaseLibrary(t, lib.ID)
+	unpublished := create("unpublished")
+	mustCommitLibrary(t, lib.ID)
+
+	state, err := libSvc.RevertToLatestRelease(ctx, lib.ID)
+	if err != nil {
+		t.Fatalf("RevertToLatestRelease: %v", err)
+	}
+	if state.Version <= 0 {
+		t.Errorf("the Draft state after the Revert: %+v", state)
+	}
+	names := func() map[uuid.UUID]bool {
+		t.Helper()
+		list, err := wtSvc.FindAllWidgetTypes(ctx, lib.ID)
+		if err != nil {
+			t.Fatalf("FindAllWidgetTypes: %v", err)
+		}
+		found := make(map[uuid.UUID]bool, len(list))
+		for _, wt := range list {
+			found[wt.ID] = true
+		}
+		return found
+	}
+	if got := names(); !got[published.ID] || got[unpublished.ID] {
+		t.Errorf("the Draft after the Revert: %v, want the WidgetTypes of the Release", got)
+	}
+	if commits, err := newCommitService().List(ctx, draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](lib.ID)))); err != nil || len(commits) != 2 {
+		t.Errorf("the Commits after the Revert: %+v, %v; want both kept", commits, err)
+	}
+
+	// Discard, unlike Revert, goes to the last Commit: the unpublished type
+	// comes back.
+	if _, err := libSvc.Discard(ctx, lib.ID); err != nil {
+		t.Fatalf("Discard: %v", err)
+	}
+	if got := names(); !got[published.ID] || !got[unpublished.ID] {
+		t.Errorf("the Draft after the Discard: %v, want the last Commit", got)
+	}
+}
+
 // TestLibraryPin_SwitchOrphaningWidgetsIsRefused_PreviewNamesThem: a switch
 // or removal that would leave Widgets without their WidgetType is refused,
 // naming them, and the preview names them and the bindings it would break.

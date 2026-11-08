@@ -19,13 +19,6 @@ var (
 	ErrCommitAlreadyReleased = errors.New("library commit already released")
 )
 
-// DraftContent is the phantom type of the Version of a Library's Draft: the
-// one token every write of its content states (ADR 0016). The Draft aggregate
-// is draft.Draft, which composes this package; the marker keeps the Version of
-// the Library's own lifecycle (rename, deletion) from being stated in its
-// place.
-type DraftContent struct{}
-
 // LibraryReleaseRepository - repository interface for storing and reading
 // Library Releases. A release is only ever added, never changed nor removed
 // but with its Library.

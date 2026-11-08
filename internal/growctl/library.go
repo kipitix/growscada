@@ -567,10 +567,12 @@ func saveOrLastCommit(ctx context.Context, lib *apiclient.LibraryClient, title, 
 func newDiscardCommand(s *settings) *cobra.Command {
 	return &cobra.Command{
 		Use:   "discard <library>",
-		Short: "Reset the Draft of a library to its latest Library Release",
-		Long: "Reset the Draft of the library to its latest release: the WidgetTypes added\n" +
-			"since are removed, the changed ones restored, the removed ones brought back.\n" +
-			"The server does it in one transaction and answers the Draft's new state.",
+		Short: "Reset the Draft of a library to its last Commit",
+		Long: "Reset the Draft of the library to its last Commit, dropping the unsaved changes:\n" +
+			"the WidgetTypes added since are removed, the changed ones restored, the removed\n" +
+			"ones brought back. The published state is the latest Release, which `release`\n" +
+			"publishes. The server does it in one transaction and answers the Draft's new\n" +
+			"state; a library never saved has nothing to discard to.",
 		Args: exactlyOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -603,7 +605,7 @@ func newGetLibrariesCommand(s *settings) *cobra.Command {
 		Use:     "libraries",
 		Aliases: []string{"library"},
 		Short:   "List libraries",
-		Long:    "List the server's libraries in creation order, with their latest release.",
+		Long:    "List the server's libraries in creation order, with their latest Release, last Commit and whether each has unsaved or unpublished changes.",
 		Args:    noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			libraries, err := s.client().ListLibraries(cmd.Context())

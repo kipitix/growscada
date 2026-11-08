@@ -234,17 +234,6 @@ func libraryVersion(raw int) (version.Version[library.Library], error) {
 	return expected, nil
 }
 
-// libraryDraftVersion parses the Version of a Library's Draft a client
-// states; a negative one is no version at all: the client's input, not a
-// conflict.
-func libraryDraftVersion(raw int) (version.Version[library.DraftContent], error) {
-	expected, err := version.New(version.WithNumber[library.DraftContent](raw))
-	if err != nil {
-		return expected, invalidInput(fmt.Errorf("version: %w", err))
-	}
-	return expected, nil
-}
-
 // DeleteLibraryByID marks a library deleted, while no live Project pins it and
 // no running Deployment names a Release of it, and returns it as it was read,
 // with its releases: from then on it does not exist for the API. Its Draft and
