@@ -1,5 +1,102 @@
 {
   "$defs": {
+    "CommitContentCounts": {
+      "properties": {
+        "devices": {
+          "type": "integer"
+        },
+        "environments": {
+          "type": "integer"
+        },
+        "scenes": {
+          "type": "integer"
+        },
+        "tags": {
+          "type": "integer"
+        },
+        "widget_types": {
+          "type": "integer"
+        },
+        "widgets": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "scenes",
+        "widgets",
+        "tags",
+        "devices",
+        "environments",
+        "widget_types"
+      ],
+      "type": "object"
+    },
+    "CommitResponse": {
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "content_counts": {
+          "$ref": "#/$defs/CommitContentCounts"
+        },
+        "created_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "draft_version": {
+          "type": "integer"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "number": {
+          "type": "integer"
+        },
+        "released": {
+          "type": "boolean"
+        },
+        "title": {
+          "type": "string"
+        },
+        "widget_types": {
+          "items": {
+            "$ref": "#/$defs/ReleasedWidgetTypeResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "number",
+        "title",
+        "author",
+        "created_at",
+        "draft_version",
+        "released",
+        "content_counts"
+      ],
+      "type": "object"
+    },
+    "CreateCommitRequest": {
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version",
+        "title",
+        "author"
+      ],
+      "type": "object"
+    },
     "CreateDeviceRequest": {
       "properties": {
         "comment": {
@@ -75,6 +172,24 @@
       "required": [
         "id",
         "version"
+      ],
+      "type": "object"
+    },
+    "CreateProjectReleaseRequest": {
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "integer"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "commit",
+        "author"
       ],
       "type": "object"
     },
@@ -864,6 +979,20 @@
       ],
       "type": "object"
     },
+    "GetCommitsResponse": {
+      "properties": {
+        "commits": {
+          "items": {
+            "$ref": "#/$defs/CommitResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "commits"
+      ],
+      "type": "object"
+    },
     "GetDevicesResponse": {
       "properties": {
         "devices": {
@@ -917,6 +1046,20 @@
       },
       "required": [
         "projects"
+      ],
+      "type": "object"
+    },
+    "GetReleasesResponse": {
+      "properties": {
+        "releases": {
+          "items": {
+            "$ref": "#/$defs/ReleaseResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "releases"
       ],
       "type": "object"
     },
@@ -1373,6 +1516,105 @@
       ],
       "type": "object"
     },
+    "ReleaseResponse": {
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "commit_number": {
+          "type": "integer"
+        },
+        "content_counts": {
+          "$ref": "#/$defs/CommitContentCounts"
+        },
+        "created_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer"
+        },
+        "origin": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "number",
+        "commit_number",
+        "title",
+        "note",
+        "author",
+        "created_at",
+        "origin",
+        "content_counts"
+      ],
+      "type": "object"
+    },
+    "ReleasedWidgetTypeResponse": {
+      "properties": {
+        "default_height": {
+          "type": "integer"
+        },
+        "default_width": {
+          "type": "integer"
+        },
+        "html_template": {
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "input_ports": {
+          "items": {
+            "$ref": "#/$defs/InputPort"
+          },
+          "type": "array"
+        },
+        "library_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "script": {
+          "type": "string"
+        },
+        "script_language": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "library_id",
+        "name",
+        "html_template",
+        "script",
+        "script_language",
+        "default_width",
+        "default_height",
+        "input_ports"
+      ],
+      "type": "object"
+    },
+    "RenameCommitRequest": {
+      "properties": {
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "type": "object"
+    },
     "Rotation": {
       "properties": {
         "degrees": {
@@ -1764,6 +2006,17 @@
       },
       "required": [
         "version"
+      ],
+      "type": "object"
+    },
+    "UpdateReleaseNoteRequest": {
+      "properties": {
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "note"
       ],
       "type": "object"
     },

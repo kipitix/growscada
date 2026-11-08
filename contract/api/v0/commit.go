@@ -45,10 +45,11 @@ type CommitContentCounts struct {
 
 // CommitResponse is the HTTP DTO of a Commit without its content: its number
 // within the Draft, its title, its author, the time it was made, the Version
-// of the Draft it fixed, whether a Release was made of it (false until
-// task 72_3) and the counts of its snapshot. WidgetTypes is filled for the
-// Commit of a Library alone, by GET …/commits/{n}; a Project's Commit is read
-// as a ProjectFile from …/commits/{n}/projectfile.
+// of the Draft it fixed, whether a Release was made of it (a Project's
+// Commit only, until task 72_5 gives Libraries Releases of their own) and the
+// counts of its snapshot. WidgetTypes is filled for the Commit of a Library
+// alone, by GET …/commits/{n}; a Project's Commit is read as a ProjectFile
+// from …/commits/{n}/projectfile.
 type CommitResponse struct {
 	ID            uuid.UUID                    `json:"id"`
 	Number        int                          `json:"number"`
