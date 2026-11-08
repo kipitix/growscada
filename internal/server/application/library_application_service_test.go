@@ -334,8 +334,13 @@ func TestLibraryPin_AddRequiresAReleaseAndPinsOnce(t *testing.T) {
 	if err != nil || !created || pin.Release != 1 || pin.Version == 0 {
 		t.Fatalf("add: %+v, %t, %v", pin, created, err)
 	}
+	if pin.CommitNumber == nil || pin.Title != "Save" || pin.Author != "Ada" || pin.Origin != "commit" {
+		t.Errorf("the provenance of the added pin: %+v, want commit 1 titled %q by Ada", pin, "Save")
+	}
 	if again, added, err := svc.PutLibraryPin(ctx, mainProject, lib.ID, 1, draftVersionOf(t, mainProject)); err != nil || added || again.Release != 1 {
 		t.Errorf("pinning the same release again: %+v, %t, %v; want the pin as it is", again, added, err)
+	} else if again.Title != "Save" || again.CommitNumber == nil {
+		t.Errorf("the provenance of the same pin: %+v", again)
 	}
 	if _, _, err := svc.PutLibraryPin(ctx, mainProject, uuid.New(), 1, draftVersionOf(t, mainProject)); !errors.Is(err, library.ErrLibraryNotFound) {
 		t.Errorf("a missing library: expected ErrLibraryNotFound, got %v", err)
@@ -345,5 +350,49 @@ func TestLibraryPin_AddRequiresAReleaseAndPinsOnce(t *testing.T) {
 	}
 	if _, err := svc.DeleteLibraryPin(ctx, mainProject, lib.ID, draftVersionOf(t, mainProject)); !errors.Is(err, librarypin.ErrLibraryPinNotFound) {
 		t.Errorf("removing again: expected ErrLibraryPinNotFound, got %v", err)
+	}
+}
+
+// TestLibraryPin_ProvenanceOfEachLibrary: two Libraries, each at Release 1,
+// show the provenance of their own Release — not of another Library's Release
+// of the same number (task 72_5).
+func TestLibraryPin_ProvenanceOfEachLibrary(t *testing.T) {
+	ctx := context.Background()
+	svc := newLibraryPinService()
+	first, second := mustCreateLibrary(t), mustCreateLibrary(t)
+	mustReleaseLibraryTitled(t, first.ID, "First library", "Ada")
+	mustReleaseLibraryTitled(t, second.ID, "Second library", "Bob")
+	for _, lib := range []appdto.Library{first, second} {
+		if _, _, err := svc.PutLibraryPin(ctx, mainProject, lib.ID, 1, draftVersionOf(t, mainProject)); err != nil {
+			t.Fatalf("pin library %s: %v", lib.ID, err)
+		}
+	}
+
+	pins, err := svc.FindLibraryPins(ctx, mainProject)
+	if err != nil {
+		t.Fatalf("FindLibraryPins: %v", err)
+	}
+	want := map[uuid.UUID]struct{ title, author string }{
+		first.ID:  {"First library", "Ada"},
+		second.ID: {"Second library", "Bob"},
+	}
+	seen := map[uuid.UUID]bool{}
+	for _, pin := range pins {
+		expected, ok := want[pin.LibraryID]
+		if !ok {
+			continue
+		}
+		seen[pin.LibraryID] = true
+		if pin.Title != expected.title || pin.Author != expected.author || pin.CommitNumber == nil || *pin.CommitNumber != 1 {
+			t.Errorf("the pin of library %s: %+v, want commit 1 titled %q by %s", pin.LibraryID, pin, expected.title, expected.author)
+		}
+	}
+	if len(seen) != len(want) {
+		t.Errorf("the pins found: %v, want both libraries", seen)
+	}
+	for _, lib := range []appdto.Library{first, second} {
+		if _, err := svc.DeleteLibraryPin(ctx, mainProject, lib.ID, draftVersionOf(t, mainProject)); err != nil {
+			t.Fatalf("unpin library %s: %v", lib.ID, err)
+		}
 	}
 }

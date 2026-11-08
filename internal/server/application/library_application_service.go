@@ -369,7 +369,7 @@ func (s libraryServiceImpl) FindRelease(ctx context.Context, rawID uuid.UUID, ra
 	if err != nil {
 		return appdto.LibraryRelease{}, fmt.Errorf("error on find release in repository: %w", err)
 	}
-	title, err := s.commitTitle(ctx, found, release)
+	title, err := publishedCommitTitle(ctx, s.content.Drafts(), found.ID(), release)
 	if err != nil {
 		return appdto.LibraryRelease{}, err
 	}
@@ -391,7 +391,7 @@ func (s libraryServiceImpl) UpdateReleaseNote(ctx context.Context, rawID uuid.UU
 	if err != nil {
 		return appdto.LibraryRelease{}, fmt.Errorf("error on update release note: %w", err)
 	}
-	title, err := s.commitTitle(ctx, found, updated)
+	title, err := publishedCommitTitle(ctx, s.content.Drafts(), found.ID(), updated)
 	if err != nil {
 		return appdto.LibraryRelease{}, err
 	}
@@ -412,19 +412,20 @@ func (s libraryServiceImpl) commitTitles(ctx context.Context, l library.Library)
 	return titles, nil
 }
 
-// commitTitle returns the title of the Commit a Release published; empty for a
-// legacy Release and for one whose Commit is gone.
-func (s libraryServiceImpl) commitTitle(ctx context.Context, l library.Library, release library.LibraryRelease) (string, error) {
+// publishedCommitTitle returns the current title of the Commit a Library
+// Release published; empty for a legacy Release and for one whose Commit this
+// server does not have.
+func publishedCommitTitle(ctx context.Context, drafts draft.Repository, libraryID id.ID[library.Library], release library.LibraryRelease) (string, error) {
 	number := release.CommitNumber()
 	if number == nil {
 		return "", nil
 	}
-	commit, err := s.content.Drafts().FindCommit(ctx, s.content.ScopeOf(l.ID()), *number)
+	commit, err := drafts.FindCommit(ctx, draft.LibraryScope(libraryID), *number)
 	if errors.Is(err, draft.ErrCommitNotFound) {
 		return "", nil
 	}
 	if err != nil {
-		return "", fmt.Errorf("cannot read commit %d of library %s: %w", *number, l.ID(), err)
+		return "", fmt.Errorf("cannot read commit %d of library %s: %w", *number, libraryID, err)
 	}
 	return commit.Title().String(), nil
 }

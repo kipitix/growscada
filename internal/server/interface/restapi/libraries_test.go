@@ -134,6 +134,11 @@ func TestLibraryPins_AddPreviewSwitchRemove(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("add pin: %d %s", rec.Code, rec.Body)
 	}
+	added := decodeBody[apiv0.LibraryPinResponse](t, rec)
+	if added.CommitNumber == nil || *added.CommitNumber != commit.Number || added.Title == nil || *added.Title != "Save" ||
+		added.Author != "Ada" || added.Origin != apiv0.LibraryReleaseOriginCommit {
+		t.Errorf("the provenance of the pin: %+v, want commit 1 titled Save by Ada", added)
+	}
 
 	palette := decodeBody[apiv0.GetPinnedWidgetTypesResponse](t, serve(router, http.MethodGet, mainPath+"/widget-types", nil))
 	found := false
@@ -174,8 +179,13 @@ func TestLibraryPins_AddPreviewSwitchRemove(t *testing.T) {
 	}
 
 	serve(router, http.MethodDelete, mainPath+"/scenes/"+sc.ID.String()+"/widgets/"+w.ID.String(), nil)
-	if rec := serve(router, http.MethodPut, pins, apiv0.PutLibraryPinRequest{Release: 2, Version: testDraftVersion(t, mainProject)}); rec.Code != http.StatusOK {
+	rec = serve(router, http.MethodPut, pins, apiv0.PutLibraryPinRequest{Release: 2, Version: testDraftVersion(t, mainProject)})
+	if rec.Code != http.StatusOK {
 		t.Fatalf("switch: %d %s", rec.Code, rec.Body)
+	}
+	switched := decodeBody[apiv0.LibraryPinResponse](t, rec)
+	if switched.Release != 2 || switched.CommitNumber == nil || *switched.CommitNumber != second.Number {
+		t.Errorf("the provenance of the switched pin: %+v", switched)
 	}
 	if list := decodeBody[apiv0.GetLibraryPinsResponse](t, serve(router, http.MethodGet, mainPath+"/library-pins", nil)); !hasPin(list, wtLibrary, 2) {
 		t.Errorf("pins: %+v", list)

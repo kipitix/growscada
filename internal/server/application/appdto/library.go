@@ -116,25 +116,39 @@ type LibraryPin struct {
 	Note         string
 }
 
+// PinRelease is the Release a Library Pin names, with the current title of
+// the Commit it published: the provenance a Project sees of what it pinned
+// (task 72_5). A legacy Release names no Commit and has no title.
+type PinRelease struct {
+	Release library.LibraryRelease
+	Title   string
+}
+
 // NewLibraryPin creates a LibraryPin DTO from the domain aggregate and the
-// Release it pins; a nil release leaves the provenance empty.
-func NewLibraryPin(p librarypin.LibraryPin, version int, release library.LibraryRelease) LibraryPin {
+// Release it pins; a nil pinned leaves the provenance empty.
+func NewLibraryPin(p librarypin.LibraryPin, version int, pinned *PinRelease) LibraryPin {
 	dto := LibraryPin{LibraryID: p.LibraryID().UUID(), Release: p.Release().Int(), Version: version}
-	if release != nil {
-		dto.CommitNumber = release.CommitNumber()
-		dto.Author = release.Author().String()
-		dto.Origin = release.Origin().String()
-		dto.Note = release.Note()
+	if pinned != nil && pinned.Release != nil {
+		dto.CommitNumber = pinned.Release.CommitNumber()
+		dto.Title = pinned.Title
+		dto.Author = pinned.Release.Author().String()
+		dto.Origin = pinned.Release.Origin().String()
+		dto.Note = pinned.Release.Note()
 	}
 	return dto
 }
 
-// NewLibraryPinList creates a slice of LibraryPin DTOs; releases maps a pinned
-// release number to the Release itself.
-func NewLibraryPinList(list []librarypin.LibraryPin, version int, releases map[library.ReleaseNumber]library.LibraryRelease) []LibraryPin {
+// NewLibraryPinList creates a slice of LibraryPin DTOs; pinned holds, in the
+// order of list, the Release each pin names and its Commit's title, a nil
+// entry for a Release this server does not have.
+func NewLibraryPinList(list []librarypin.LibraryPin, version int, pinned []*PinRelease) []LibraryPin {
 	result := make([]LibraryPin, len(list))
 	for i, p := range list {
-		result[i] = NewLibraryPin(p, version, releases[p.Release()])
+		var release *PinRelease
+		if i < len(pinned) {
+			release = pinned[i]
+		}
+		result[i] = NewLibraryPin(p, version, release)
 	}
 	return result
 }

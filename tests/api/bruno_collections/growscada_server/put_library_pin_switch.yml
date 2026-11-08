@@ -32,6 +32,18 @@ runtime:
     - expression: 'res.body.version'
       operator: eq
       value: '3'
+    - expression: 'res.body.commit_number'
+      operator: eq
+      value: '1'
+    - expression: 'res.body.title'
+      operator: eq
+      value: '"Widgets of the release"'
+    - expression: 'res.body.author'
+      operator: eq
+      value: '"Bruno"'
+    - expression: 'res.body.origin'
+      operator: eq
+      value: '"commit"'
 
 settings:
   encodeUrl: true

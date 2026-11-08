@@ -114,9 +114,15 @@ func mustCreateLibrary(t *testing.T) appdto.Library {
 // mustCommitLibrary saves the library's Draft as a Commit as it is.
 func mustCommitLibrary(t *testing.T, libraryID uuid.UUID) appdto.Commit {
 	t.Helper()
+	return mustCommitLibraryTitled(t, libraryID, "Save", "Ada")
+}
+
+// mustCommitLibraryTitled saves the library's Draft as a Commit titled title.
+func mustCommitLibraryTitled(t *testing.T, libraryID uuid.UUID, title, author string) appdto.Commit {
+	t.Helper()
 	commit, err := newCommitService().Save(context.Background(),
 		draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](libraryID))),
-		libraryDraftVersionOf(t, libraryID), "Save", "Ada")
+		libraryDraftVersionOf(t, libraryID), title, author)
 	if err != nil {
 		t.Fatalf("Save commit: %v", err)
 	}
@@ -127,12 +133,19 @@ func mustCommitLibrary(t *testing.T, libraryID uuid.UUID) appdto.Commit {
 // the next Library Release (task 72_5; ADR 0021).
 func mustReleaseLibrary(t *testing.T, libraryID uuid.UUID) appdto.LibraryRelease {
 	t.Helper()
+	return mustReleaseLibraryTitled(t, libraryID, "Save", "Ada")
+}
+
+// mustReleaseLibraryTitled publishes a Commit titled title as the next Library
+// Release.
+func mustReleaseLibraryTitled(t *testing.T, libraryID uuid.UUID, title, author string) appdto.LibraryRelease {
+	t.Helper()
 	svc := newLibraryService()
 	if _, err := svc.FindLibraryByID(context.Background(), libraryID); err != nil {
 		t.Fatalf("FindLibraryByID: %v", err)
 	}
-	commit := mustCommitLibrary(t, libraryID)
-	release, err := svc.Release(context.Background(), libraryID, appdto.ReleaseInput{Commit: commit.Number, Author: "Ada"})
+	commit := mustCommitLibraryTitled(t, libraryID, title, author)
+	release, err := svc.Release(context.Background(), libraryID, appdto.ReleaseInput{Commit: commit.Number, Author: author})
 	if err != nil {
 		t.Fatalf("Release: %v", err)
 	}

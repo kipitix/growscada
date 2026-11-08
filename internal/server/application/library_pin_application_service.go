@@ -67,32 +67,33 @@ func (s libraryPinServiceImpl) FindLibraryPins(ctx context.Context, rawProjectID
 	if err != nil {
 		return nil, err
 	}
-	releases, err := s.pinnedReleases(ctx, list)
+	pinned, err := s.pinnedReleases(ctx, list)
 	if err != nil {
 		return nil, err
 	}
-	return appdto.NewLibraryPinList(list, version, releases), nil
+	return appdto.NewLibraryPinList(list, version, pinned), nil
 }
 
-// pinnedReleases reads the Release each pin names, keyed by its number: the
-// provenance a Project sees of what it pins (task 72_5). A Release this
-// server does not have is left out.
-func (s libraryPinServiceImpl) pinnedReleases(ctx context.Context, list []librarypin.LibraryPin) (map[library.ReleaseNumber]library.LibraryRelease, error) {
-	releases := make(map[library.ReleaseNumber]library.LibraryRelease, len(list))
-	for _, pin := range list {
-		if _, ok := releases[pin.Release()]; ok {
-			continue
-		}
-		found, err := s.releases.FindByNumber(ctx, pin.LibraryID(), pin.Release())
+// pinnedReleases reads the Release each pin names and the title of its Commit,
+// in the order of the pins: the provenance a Project sees of what it pinned
+// (task 72_5). A Release this server does not have is left nil.
+func (s libraryPinServiceImpl) pinnedReleases(ctx context.Context, list []librarypin.LibraryPin) ([]*appdto.PinRelease, error) {
+	pinned := make([]*appdto.PinRelease, len(list))
+	for i, pin := range list {
+		found, err := s.pinnedRelease(ctx, pin)
 		if errors.Is(err, library.ErrReleaseNotFound) {
 			continue
 		}
 		if err != nil {
-			return nil, fmt.Errorf("cannot find pinned release: %w", err)
+			return nil, err
 		}
-		releases[pin.Release()] = found
+		title, err := publishedCommitTitle(ctx, s.content.Drafts(), pin.LibraryID(), found)
+		if err != nil {
+			return nil, err
+		}
+		pinned[i] = &appdto.PinRelease{Release: found, Title: title}
 	}
-	return releases, nil
+	return pinned, nil
 }
 
 func (s libraryPinServiceImpl) FindPinnedWidgetTypes(ctx context.Context, rawProjectID uuid.UUID) ([]appdto.ReleasedWidgetType, error) {
@@ -174,7 +175,11 @@ func (s libraryPinServiceImpl) PutLibraryPin(ctx context.Context, rawProjectID, 
 		}
 		return appdto.LibraryPin{}, false, fmt.Errorf("cannot save library pin: %w", err)
 	}
-	return appdto.NewLibraryPin(saved, result.Version().Number(), release), added, nil
+	title, err := publishedCommitTitle(ctx, s.content.Drafts(), lib.ID(), release)
+	if err != nil {
+		return appdto.LibraryPin{}, false, err
+	}
+	return appdto.NewLibraryPin(saved, result.Version().Number(), &appdto.PinRelease{Release: release, Title: title}), added, nil
 }
 
 // DeleteLibraryPin removes the pin of the library, unless Widgets of the
@@ -198,11 +203,15 @@ func (s libraryPinServiceImpl) DeleteLibraryPin(ctx context.Context, rawProjectI
 	if err != nil {
 		return appdto.LibraryPin{}, fmt.Errorf("cannot delete library pin: %w", err)
 	}
-	var release library.LibraryRelease
-	if found, err := s.releases.FindByNumber(ctx, deleted.LibraryID(), deleted.Release()); err == nil {
-		release = found
+	var pinned *appdto.PinRelease
+	if release, err := s.releases.FindByNumber(ctx, deleted.LibraryID(), deleted.Release()); err == nil {
+		title, err := publishedCommitTitle(ctx, s.content.Drafts(), deleted.LibraryID(), release)
+		if err != nil {
+			return appdto.LibraryPin{}, err
+		}
+		pinned = &appdto.PinRelease{Release: release, Title: title}
 	}
-	return appdto.NewLibraryPin(deleted, result.Version().Number(), release), nil
+	return appdto.NewLibraryPin(deleted, result.Version().Number(), pinned), nil
 }
 
 // PinImpact previews what pinning release instead (nil: removing the pin)
