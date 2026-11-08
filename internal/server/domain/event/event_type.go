@@ -59,6 +59,9 @@ var (
 
 	EventTypeCommitCreated      = EventType{eventType: 37}
 	EventTypeCommitTitleUpdated = EventType{eventType: 38}
+
+	EventTypeReleaseCreated     = EventType{eventType: 39}
+	EventTypeReleaseNoteUpdated = EventType{eventType: 40}
 )
 
 // eventTypeNames is the single source of truth for known event types:
@@ -105,6 +108,8 @@ var eventTypeNames = []struct {
 	{EventTypeDeploymentCreated, "deployment_created"},
 	{EventTypeCommitCreated, "commit_created"},
 	{EventTypeCommitTitleUpdated, "commit_title_updated"},
+	{EventTypeReleaseCreated, "release_created"},
+	{EventTypeReleaseNoteUpdated, "release_note_updated"},
 }
 
 // AllEventTypes returns every known EventType.

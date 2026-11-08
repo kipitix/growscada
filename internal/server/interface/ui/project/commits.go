@@ -144,6 +144,7 @@ func (p *Project) renderCommitBar() []app.UI {
 	body = append(body, p.deployButton("History", "The Commits of the project", !p.savingCommit, func(ctx app.Context) {
 		p.openCommitsDialog(ctx)
 	}))
+	body = append(body, p.renderReleaseBar())
 	return body
 }
 
@@ -347,6 +348,7 @@ func (p *Project) renderCommitRow(commit apiv0.CommitResponse) app.UI {
 			),
 			app.Span().Style("display", "flex").Style("gap", "4px").Body(
 				p.downloadCommitButton(commit.Number),
+				p.releaseCommitButton(commit),
 				title,
 			),
 		)

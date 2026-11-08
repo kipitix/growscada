@@ -368,6 +368,9 @@ func (b *Bar) addEntry(ev apiv0.Event) {
 // commit_created or commit_title_updated is about (its ID is the Project's or
 // the Library's), the ID of every other event.
 func eventRef(ev apiv0.Event) string {
+	if ev.Type == apiv0.EventReleaseCreated || ev.Type == apiv0.EventReleaseNoteUpdated {
+		return strconv.Itoa(ev.Release)
+	}
 	if ev.Commit > 0 {
 		return strconv.Itoa(ev.Commit)
 	}

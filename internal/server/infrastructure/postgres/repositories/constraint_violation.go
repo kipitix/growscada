@@ -55,6 +55,11 @@ const constraintWidgetTypesName = "uq_widget_types_library_name"
 // (library_id, number).
 const constraintReleasesNumber = "uq_library_releases_library_number"
 
+// constraintProjectReleasesCommit is the unique constraint on
+// project_releases (project_id, commit_number) of a release of a commit: one
+// Commit is published at most once.
+const constraintProjectReleasesCommit = "uq_project_releases_project_commit"
+
 // Constraints of library_pins: one pin per project and library, the release
 // pinned exists, and the foreign keys that refuse removing a library a
 // project pins.

@@ -11,6 +11,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/project"
+	"github.com/kipitix/growscada/internal/server/domain/release"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/domain/tagstate"
@@ -44,7 +45,8 @@ func sampleEvents(t *testing.T) []event.Event {
 	libraryID := id.NewID[library.Library]()
 	deviceID := id.NewID[device.Device]()
 	environmentID := id.NewID[device.Environment]()
-	release, _ := library.NewReleaseNumber(3)
+	libraryRelease, _ := library.NewReleaseNumber(3)
+	projectReleaseNumber, _ := release.NewNumber(4)
 	return []event.Event{
 		tag.NewTagCreatedEvent(tagID, projectID, ts),
 		tag.NewTagDeletedEvent(tagID, projectID, ts),
@@ -54,7 +56,7 @@ func sampleEvents(t *testing.T) []event.Event {
 		library.NewLibraryCreatedEvent(libraryID, ts),
 		library.NewLibraryUpdatedEvent(libraryID, ts),
 		library.NewLibraryDeletedEvent(libraryID, ts),
-		library.NewLibraryReleasedEvent(libraryID, release, ts),
+		library.NewLibraryReleasedEvent(libraryID, libraryRelease, ts),
 		librarypin.NewLibraryPinCreatedEvent(libraryID, projectID, ts),
 		librarypin.NewLibraryPinUpdatedEvent(libraryID, projectID, ts),
 		librarypin.NewLibraryPinDeletedEvent(libraryID, projectID, ts),
@@ -77,6 +79,8 @@ func sampleEvents(t *testing.T) []event.Event {
 		device.NewEnvironmentDeviceCreatedEvent(environmentID, deviceID, projectID, ts),
 		draft.NewCommitCreatedEvent(draft.ProjectScope(projectID), 2, ts),
 		draft.NewCommitTitleUpdatedEvent(draft.LibraryScope(libraryID), 3, ts),
+		release.NewReleaseCreatedEvent(draft.ProjectScope(projectID), projectReleaseNumber, ts),
+		release.NewReleaseNoteUpdatedEvent(draft.LibraryScope(libraryID), projectReleaseNumber, ts),
 		device.NewEnvironmentDeviceUpdatedEvent(environmentID, deviceID, projectID, ts),
 		device.NewEnvironmentDeviceDeletedEvent(environmentID, deviceID, projectID, ts),
 	}
@@ -147,6 +151,10 @@ func assertSameSubject(t *testing.T, original, decoded event.Event) {
 			if got, ok := decoded.(library.LibraryReleasedEvent); !ok || got.Release() != releasedWant.Release() {
 				t.Errorf("decoded %T, want release %s", decoded, releasedWant.Release())
 			}
+		}
+	case release.ReleaseEvent:
+		if got, ok := decoded.(release.ReleaseEvent); !ok || got.Scope() != want.Scope() || got.ReleaseNumber() != want.ReleaseNumber() {
+			t.Errorf("decoded %T, want release %s of %s", decoded, want.ReleaseNumber(), want.Scope())
 		}
 	case librarypin.LibraryPinEvent:
 		if got, ok := decoded.(librarypin.LibraryPinEvent); !ok || got.LibraryID() != want.LibraryID() {

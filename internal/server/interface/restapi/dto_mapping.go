@@ -517,6 +517,37 @@ func newGetCommitsResponse(list []appdto.Commit) apiv0.GetCommitsResponse {
 	return apiv0.GetCommitsResponse{Commits: items}
 }
 
+// newReleaseResponse converts an application-layer Release to its contract
+// body without content.
+func newReleaseResponse(r appdto.Release) apiv0.ReleaseResponse {
+	return apiv0.ReleaseResponse{
+		Number:       r.Number,
+		CommitNumber: r.CommitNumber,
+		Title:        r.Title,
+		Note:         r.Note,
+		Author:       r.Author,
+		CreatedAt:    r.CreatedAt.UTC(),
+		Origin:       r.Origin,
+		ContentCounts: apiv0.CommitContentCounts{
+			Scenes:       r.Counts.Scenes,
+			Widgets:      r.Counts.Widgets,
+			Tags:         r.Counts.Tags,
+			Devices:      r.Counts.Devices,
+			Environments: r.Counts.Environments,
+			WidgetTypes:  r.Counts.WidgetTypes,
+		},
+	}
+}
+
+// newGetReleasesResponse converts a list of Releases, newest first.
+func newGetReleasesResponse(list []appdto.Release) apiv0.GetReleasesResponse {
+	items := make([]apiv0.ReleaseResponse, len(list))
+	for i, r := range list {
+		items[i] = newReleaseResponse(r)
+	}
+	return apiv0.GetReleasesResponse{Releases: items}
+}
+
 func newLibraryReleaseResponse(r appdto.LibraryRelease) apiv0.LibraryReleaseResponse {
 	return apiv0.LibraryReleaseResponse{
 		LibraryID:   r.LibraryID,

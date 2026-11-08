@@ -70,5 +70,8 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 		if targets.Commits {
 			p.loadCommits(ctx)
 		}
+		if targets.Releases {
+			p.loadReleases(ctx)
+		}
 	})
 }

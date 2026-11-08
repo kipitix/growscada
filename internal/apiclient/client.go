@@ -812,6 +812,43 @@ func (p *ProjectClient) CommitProjectFile(ctx context.Context, number int) (Proj
 	return p.downloadProjectFile(ctx, apiv0.CommitPathOf(number)+"/projectfile")
 }
 
+// CreateRelease publishes a Commit as the next Release of the Project (task
+// 72_3; ADR 0021). The error matches ErrConflict if the Commit is released
+// already and ErrNotFound for a Project or a Commit it does not have.
+func (p *ProjectClient) CreateRelease(ctx context.Context, req apiv0.CreateProjectReleaseRequest) (apiv0.ReleaseResponse, error) {
+	var resp apiv0.ReleaseResponse
+	err := p.do(ctx, http.MethodPost, apiv0.ReleasePath, req, http.StatusCreated, &resp)
+	return resp, err
+}
+
+// Releases returns the Project's Releases, newest first, without content.
+func (p *ProjectClient) Releases(ctx context.Context) ([]apiv0.ReleaseResponse, error) {
+	var resp apiv0.GetReleasesResponse
+	err := p.do(ctx, http.MethodGet, apiv0.ReleasePath, nil, http.StatusOK, &resp)
+	return resp.Releases, err
+}
+
+// Release returns one Release. A number the Project does not have matches
+// ErrNotFound.
+func (p *ProjectClient) Release(ctx context.Context, number int) (apiv0.ReleaseResponse, error) {
+	var resp apiv0.ReleaseResponse
+	err := p.do(ctx, http.MethodGet, apiv0.ReleasePathOf(number), nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+// UpdateReleaseNote changes a Release's note. It states no Draft Version.
+func (p *ProjectClient) UpdateReleaseNote(ctx context.Context, number int, req apiv0.UpdateReleaseNoteRequest) (apiv0.ReleaseResponse, error) {
+	var resp apiv0.ReleaseResponse
+	err := p.do(ctx, http.MethodPatch, apiv0.ReleasePathOf(number), req, http.StatusOK, &resp)
+	return resp, err
+}
+
+// ReleaseProjectFile returns the ProjectFile a Release copied, as a download.
+// The error matches ErrNotFound for a number the Project does not have.
+func (p *ProjectClient) ReleaseProjectFile(ctx context.Context, number int) (ProjectFileDownload, error) {
+	return p.downloadProjectFile(ctx, apiv0.ReleaseProjectFilePathOf(number))
+}
+
 // SaveCommit fixes the Library's Draft as a Commit at the stated Version
 // (task 72_2; ADR 0021).
 func (l *LibraryClient) SaveCommit(ctx context.Context, req apiv0.CreateCommitRequest) (apiv0.CommitResponse, error) {

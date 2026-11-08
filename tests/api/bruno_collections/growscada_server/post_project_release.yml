@@ -1,0 +1,54 @@
+info:
+  name: release the project commit
+  type: http
+  seq: 169
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/releases
+  body:
+    type: json
+    data: |-
+      {
+        "commit": 1,
+        "note": "First release",
+        "author": "Grace"
+      }
+  auth: inherit
+
+docs: |
+  A Release publishes Commit 1 as the Project's Release 1: an immutable copy of
+  the Commit's ProjectFile with a note, the author and the time (task 72_3;
+  ADR 0021). It states no Draft Version and changes no Draft.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '1'
+    - expression: 'res.body.commit_number'
+      operator: eq
+      value: '1'
+    - expression: 'res.body.title'
+      operator: eq
+      value: '"Before the demo"'
+    - expression: 'res.body.note'
+      operator: eq
+      value: '"First release"'
+    - expression: 'res.body.author'
+      operator: eq
+      value: '"Grace"'
+    - expression: 'res.body.origin'
+      operator: eq
+      value: '"commit"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

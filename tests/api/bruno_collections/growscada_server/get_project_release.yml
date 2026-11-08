@@ -1,0 +1,32 @@
+info:
+  name: get the project release
+  type: http
+  seq: 171
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/releases/1
+  auth: inherit
+
+docs: |
+  One Release with the counts of its snapshot (task 72_3; ADR 0021).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '1'
+    - expression: 'res.body.content_counts.scenes'
+      operator: gt
+      value: '0'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

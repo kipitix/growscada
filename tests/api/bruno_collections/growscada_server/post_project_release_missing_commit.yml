@@ -1,0 +1,37 @@
+info:
+  name: release a missing commit
+  type: http
+  seq: 175
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/releases
+  body:
+    type: json
+    data: |-
+      {
+        "commit": 99,
+        "author": "Grace"
+      }
+  auth: inherit
+
+docs: |
+  A Release of a Commit the project does not have is 404: the number is named
+  by the body (task 72_3; ADR 0021).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '404'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: application/problem+json
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

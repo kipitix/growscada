@@ -62,7 +62,8 @@ func isProjectContent(ev apiv0.Event) bool {
 		apiv0.EventEnvironmentCreated, apiv0.EventEnvironmentUpdated, apiv0.EventEnvironmentDeleted,
 		apiv0.EventEnvironmentDeviceCreated, apiv0.EventEnvironmentDeviceUpdated, apiv0.EventEnvironmentDeviceDeleted,
 		apiv0.EventDeploymentCreated,
-		apiv0.EventCommitCreated, apiv0.EventCommitTitleUpdated:
+		apiv0.EventCommitCreated, apiv0.EventCommitTitleUpdated,
+		apiv0.EventReleaseCreated, apiv0.EventReleaseNoteUpdated:
 		return true
 	}
 	switch eventTypeInfoByType[ev.Type].category {
@@ -130,6 +131,9 @@ var eventTypeInfoByType = map[string]eventTypeInfo{
 
 	apiv0.EventCommitCreated:      {categoryProject, "Commit %s saved"},
 	apiv0.EventCommitTitleUpdated: {categoryProject, "Commit %s retitled"},
+
+	apiv0.EventReleaseCreated:     {categoryProject, "Release %s published"},
+	apiv0.EventReleaseNoteUpdated: {categoryProject, "Release %s note updated"},
 }
 
 // describe is the log text of an event of this type with the given id.

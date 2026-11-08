@@ -137,7 +137,7 @@ One Engineer intent applied to the Draft — possibly touching several parts of 
 _Avoid_: edit, step, command, operation
 
 **Commit**:
-An immutable, numbered snapshot of the whole Draft, fixed by a Save: its canonical ProjectFile for a Project, its WidgetTypes for a Library, with a title, the Author and the time (task 72_2; ADR 0021). It is an entity of the Draft, not a DraftChange: writing it raises no Version and clears no undo stack. Releases are made from Commits and a Deployment runs one.
+An immutable, numbered snapshot of the whole Draft, fixed by a Save: its canonical ProjectFile for a Project, its WidgetTypes for a Library, with a title, the Author and the time (task 72_2; ADR 0021). It is an entity of the Draft, not a DraftChange: writing it raises no Version and clears no undo stack. A Project's Commit is published as a Project Release; a Library's as a Library Release (task 72_5).
 _Avoid_: revision, version, checkpoint, snapshot (unqualified)
 
 **Save**:
@@ -153,8 +153,16 @@ The act of delivering the whole Draft, as a ProjectFile, to a Runtime node, whic
 _Avoid_: publish, apply, save
 
 **Release**:
-The act of turning a Library's Draft into a new Library Release. The Library counterpart of Deploy.
+The act of publishing a Commit as a new Release: a Project Release now, a Library Release in task 72_5. The Release copies the Commit's content, so it outlives the Commit, the Draft and future retention. It needs no Deploy and no Draft Version.
 _Avoid_: publish, tag, version
+
+**Project Release**:
+The publication of a Project's Commit (task 72_3; ADR 0021): an immutable, numbered copy of the Commit's ProjectFile with the Commit's title at that moment, a note, the Author, the time and the Release Origin. One Commit is published at most once; a note changes on its own and is the only editable part. Its number is its identity within the Project.
+_Avoid_: snapshot, version, deployment
+
+**Release Origin**:
+Where a Release's content came from: `commit` (a Commit) or, from task 72_4, `file` (a project file). Unlike a Tag's or Widget's Origin, it is not about the Draft and the Runtime.
+_Avoid_: source, kind
 
 **Deployment**:
 The Runtime node's immutable record that a configuration runs: its number, when it was deployed, its cause, the document it holds and, once Releases exist, the Release it runs (task 72_4). A Deploy, a Rollback or a project file deploy makes it; Operation always runs exactly one Deployment.

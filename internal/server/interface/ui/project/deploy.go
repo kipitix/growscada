@@ -285,6 +285,12 @@ func (p *Project) renderDeployBar() app.UI {
 	if p.commitsDialog {
 		body = append(body, p.renderCommitsDialog())
 	}
+	if p.releasesDialog {
+		body = append(body, p.renderReleasesDialog())
+	}
+	if p.releaseDialog {
+		body = append(body, p.renderReleaseDialog())
+	}
 
 	return app.Div().
 		Attr("data-deploy-bar", "true").

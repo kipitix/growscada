@@ -1,0 +1,34 @@
+info:
+  name: get the project releases
+  type: http
+  seq: 170
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/releases
+  auth: inherit
+
+docs: |
+  The Releases of the project, newest first, without content: number, the
+  Commit published and its title at that moment, note, author, time, origin
+  and the counts of the snapshot (task 72_3; ADR 0021).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.releases[0].number'
+      operator: eq
+      value: '1'
+    - expression: 'res.body.releases[0].commit_number'
+      operator: eq
+      value: '1'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

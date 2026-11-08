@@ -1,0 +1,39 @@
+info:
+  name: change the project release note
+  type: http
+  seq: 173
+
+http:
+  method: PATCH
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/releases/1
+  body:
+    type: json
+    data: |-
+      {
+        "note": "After the demo"
+      }
+  auth: inherit
+
+docs: |
+  A note is metadata: it changes on its own, without a Draft Version, and the
+  content of the Release is untouched (task 72_3; ADR 0021).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.note'
+      operator: eq
+      value: '"After the demo"'
+    - expression: 'res.body.commit_number'
+      operator: eq
+      value: '1'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

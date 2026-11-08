@@ -32,6 +32,7 @@ type APIRouter struct {
 	deploymentsHandlers  *DeploymentHandlers
 	projectFileHandlers  *ProjectFileHandlers
 	commitHandlers       *CommitHandlers
+	releaseHandlers      *ReleaseHandlers
 	eventsHandlers       *EventsHandlers
 	journalHandlers      *JournalHandlers
 	operationHandlers    *OperationHandlers
@@ -93,6 +94,7 @@ type Services struct {
 	Discard      application.DiscardService
 	ProjectFiles application.ProjectFileService
 	Commits      application.CommitService
+	Releases     application.ReleaseService
 	Deployments  runtimeapp.DeploymentService
 	DeviceConfig runtimeapp.DeviceConfigService
 	DeviceTokens runtimeapp.DeviceTokenService
@@ -124,6 +126,7 @@ func NewRouter(services Services, eventBus eventbus.EventBus, maxSSEClients int)
 		deploymentsHandlers:  NewDeploymentHandler(services.Deployments),
 		projectFileHandlers:  NewProjectFileHandler(services.ProjectFiles),
 		commitHandlers:       NewCommitHandler(services.Commits),
+		releaseHandlers:      NewReleaseHandler(services.Releases),
 		eventsHandlers:       NewEventsHandler(eventBus, projectService, maxSSEClients, WithDeviceTokens(services.DeviceTokens)),
 		journalHandlers:      NewJournalHandler(services.Journal, eventBus),
 		operationHandlers:    NewOperationHandler(services.Operation),
@@ -155,6 +158,7 @@ func (r *APIRouter) routes() []route {
 	deployments := r.deploymentsHandlers
 	changes := r.draftChangesHandlers
 	commits := r.commitHandlers
+	releases := r.releaseHandlers
 	return []route{
 		{"GET " + p + "/projects", projects.GetProjects},
 		{"GET " + pp, projects.GetProjectsByID},
@@ -243,6 +247,11 @@ func (r *APIRouter) routes() []route {
 		{"GET " + pp + apiv0.CommitPath + "/" + commitResource.wildcard(), commits.GetCommitByNumber},
 		{"PATCH " + pp + apiv0.CommitPath + "/" + commitResource.wildcard(), commits.PatchCommit},
 		{"GET " + pp + apiv0.CommitPath + "/" + commitResource.wildcard() + "/projectfile", commits.GetCommitProjectFile},
+		{"GET " + pp + apiv0.ReleasePath, releases.GetReleases},
+		{"POST " + pp + apiv0.ReleasePath, releases.PostRelease},
+		{"GET " + pp + apiv0.ReleasePath + "/" + projectReleaseResource.wildcard(), releases.GetReleaseByNumber},
+		{"PATCH " + pp + apiv0.ReleasePath + "/" + projectReleaseResource.wildcard(), releases.PatchRelease},
+		{"GET " + pp + apiv0.ReleasePath + "/" + projectReleaseResource.wildcard() + "/projectfile", releases.GetReleaseProjectFile},
 		{"GET " + pp + "/deployment", deploy.GetDeployment},
 		{"GET " + pp + "/deployments", deployments.GetDeployments},
 		{"GET " + pp + "/deployments/" + deploymentResource.wildcard(), deployments.GetDeploymentByNumber},

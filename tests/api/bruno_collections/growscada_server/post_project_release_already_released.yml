@@ -1,0 +1,40 @@
+info:
+  name: release an already published commit
+  type: http
+  seq: 174
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/releases
+  body:
+    type: json
+    data: |-
+      {
+        "commit": 1,
+        "author": "Grace"
+      }
+  auth: inherit
+
+docs: |
+  One Commit is published at most once: a second Release of Commit 1 is 409
+  `commit_already_released` (task 72_3; ADR 0021).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '409'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: application/problem+json
+    - expression: 'res.body.type'
+      operator: eq
+      value: '"https://api.growscada.com/errors/conflict"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

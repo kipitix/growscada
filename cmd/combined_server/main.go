@@ -115,6 +115,7 @@ func main() {
 	// (ADR 0016).
 	projectScopes := repositories.NewProjectScopes(sqlDB, notifyDispatcher)
 	draftRepository := repositories.NewDraftRepositoryPostgres(sqlDB, releaseRepository, notifyDispatcher)
+	projectReleaseRepository := repositories.NewProjectReleaseRepositoryPostgres(sqlDB, notifyDispatcher)
 	// The one Organization the server runs with until Users exist
 	organizationID, err := repositories.FindSoleOrganization(context.Background(), sqlDB)
 	if err != nil {
@@ -223,7 +224,8 @@ func main() {
 		Deploy:       deployService,
 		Discard:      discardService,
 		ProjectFiles: projectFileService,
-		Commits:      application.NewCommitService(projectContent, libraryContent, projectFileBuilder, widgetTypeRepositories),
+		Commits:      application.NewCommitService(projectContent, libraryContent, projectFileBuilder, widgetTypeRepositories, projectReleaseRepository),
+		Releases:     application.NewReleaseService(projectContent, projectReleaseRepository),
 		Deployments:  deploymentService,
 		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(sqlDB)),
 		DeviceTokens: deviceTokenService,

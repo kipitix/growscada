@@ -29,7 +29,10 @@ type Event struct {
 	ID        string `json:"id,omitempty"`
 	SceneID   string `json:"scene_id,omitempty"`
 	LibraryID string `json:"library_id,omitempty"`
-	Release   int    `json:"release,omitempty"`
+	// Release is the number of the new Release, on release_created and
+	// release_note_updated, and of a Library Release on library_released; ID is
+	// the Project's or the Library's.
+	Release int    `json:"release,omitempty"`
 	// EnvironmentID and DeviceID name the pair whose parameters changed, on
 	// environment_device_* only; ID is the Environment's (the pair has no ID
 	// of its own), and EnvironmentID names it again.
@@ -89,6 +92,9 @@ const (
 
 	EventCommitCreated      = "commit_created"
 	EventCommitTitleUpdated = "commit_title_updated"
+
+	EventReleaseCreated     = "release_created"
+	EventReleaseNoteUpdated = "release_note_updated"
 )
 
 // EventTypes returns every type of Event of this version of the contract.
@@ -108,5 +114,6 @@ func EventTypes() []string {
 		EventEnvironmentDeviceCreated, EventEnvironmentDeviceUpdated, EventEnvironmentDeviceDeleted,
 		EventDeploymentCreated,
 		EventCommitCreated, EventCommitTitleUpdated,
+		EventReleaseCreated, EventReleaseNoteUpdated,
 	}
 }

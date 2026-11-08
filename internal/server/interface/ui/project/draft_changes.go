@@ -323,7 +323,7 @@ func (p *Project) applyKeyAction(ctx app.Context, action uiutil.KeyAction) {
 // Save is about to fix as a Commit.
 func (p *Project) keyActionAllowed() bool {
 	return !p.deployDialog && !p.deploymentsDialog && !p.projectFileDialog &&
-		!p.saveDialog && !p.commitsDialog
+		!p.saveDialog && !p.commitsDialog && !p.releasesDialog && !p.releaseDialog
 }
 
 // shown reports whether the Project mode is the one displayed. Root keeps every

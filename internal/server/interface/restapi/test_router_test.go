@@ -117,7 +117,7 @@ func withDraftVersion(req *http.Request) *http.Request {
 	path := req.URL.Path
 	if strings.HasSuffix(path, "/deploy") || strings.HasSuffix(path, "/discard") || strings.Contains(path, "/deployments") ||
 		strings.HasSuffix(path, "/value") || strings.Contains(path, "/token") ||
-		strings.Contains(path, "/projectfile") {
+		strings.Contains(path, "/projectfile") || strings.Contains(path, apiv0.ReleasePath) {
 		return req
 	}
 	version := draftVersionInDB(projectID)

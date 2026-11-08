@@ -66,7 +66,8 @@ func TestForwards(t *testing.T) {
 			(strings.HasPrefix(et, "widget_") && !strings.HasPrefix(et, "widget_type_")) ||
 			strings.HasPrefix(et, "library_pin_") || strings.HasPrefix(et, "device_") ||
 			strings.HasPrefix(et, "environment_") || et == apiv0.EventDeploymentCreated ||
-			et == apiv0.EventCommitCreated || et == apiv0.EventCommitTitleUpdated
+			et == apiv0.EventCommitCreated || et == apiv0.EventCommitTitleUpdated ||
+			et == apiv0.EventReleaseCreated || et == apiv0.EventReleaseNoteUpdated
 		if got := forwards(true, ev); got == content {
 			t.Errorf("%s from a superseded connection: delivered %t, want %t", et, got, !content)
 		}

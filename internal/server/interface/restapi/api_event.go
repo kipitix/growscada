@@ -11,6 +11,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/project"
+	"github.com/kipitix/growscada/internal/server/domain/release"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/domain/tagstate"
@@ -61,6 +62,8 @@ var apiEventTypes = map[event.EventType]string{
 	event.EventTypeDeploymentCreated:        apiv0.EventDeploymentCreated,
 	event.EventTypeCommitCreated:            apiv0.EventCommitCreated,
 	event.EventTypeCommitTitleUpdated:       apiv0.EventCommitTitleUpdated,
+	event.EventTypeReleaseCreated:           apiv0.EventReleaseCreated,
+	event.EventTypeReleaseNoteUpdated:       apiv0.EventReleaseNoteUpdated,
 }
 
 // newAPIEvent translates a domain (or delivery) event into the event stream's
@@ -83,6 +86,13 @@ func newAPIEvent(e event.Event) apiv0.Event {
 			ev.ID = e.Scope().ProjectID().String()
 		}
 		ev.Commit = e.CommitNumber()
+	case release.ReleaseEvent:
+		if e.Scope().IsLibrary() {
+			ev.ID = e.Scope().LibraryID().String()
+		} else {
+			ev.ID = e.Scope().ProjectID().String()
+		}
+		ev.Release = e.ReleaseNumber().Int()
 	case tag.TagEvent:
 		ev.ID = e.TagID().String()
 		if updated, ok := e.(tagstate.TagUpdatedEvent); ok {

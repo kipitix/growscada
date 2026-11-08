@@ -55,6 +55,7 @@ type testServices struct {
 	journal      runtimeapp.JournalService
 	operation    runtimeapp.OperationStateService
 	commits      application.CommitService
+	releases     application.ReleaseService
 }
 
 // newServices returns the services over the test database; the Runtime
@@ -74,6 +75,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 	projectRepo := repositories.NewProjectRepositoryPostgres(db, opts...)
 	releases := repositories.NewLibraryReleaseRepositoryPostgres(db, opts...)
 	drafts := repositories.NewDraftRepositoryPostgres(db, releases, opts...)
+	projectReleases := repositories.NewProjectReleaseRepositoryPostgres(db, opts...)
 	content := application.NewProjectContent(projectRepo, repositories.NewProjectScopes(db, opts...), drafts, orgID)
 	libraries := repositories.NewLibraryRepositoryPostgres(db, opts...)
 	libraryContent := application.NewLibraryContent(libraries, drafts, orgID)
@@ -103,7 +105,8 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		deviceTokens: deviceTokens,
 		journal:      journal,
 		operation:    runtimeapp.NewOperationStateService(journal, deployments, states),
-		commits:      application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes),
+		commits:      application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, projectReleases),
+		releases:     application.NewReleaseService(content, projectReleases),
 	}
 }
 
@@ -116,7 +119,7 @@ func (s testServices) services() restapi.Services {
 		Draft: s.draft, DraftChanges: s.draftChanges,
 		Deploy: s.deploy, Discard: s.discard, ProjectFiles: s.projectFiles, Deployments: s.deployments,
 		DeviceConfig: s.deviceConfig, DeviceTokens: s.deviceTokens,
-		Journal: s.journal, Operation: s.operation, Commits: s.commits,
+		Journal: s.journal, Operation: s.operation, Commits: s.commits, Releases: s.releases,
 	}
 }
 

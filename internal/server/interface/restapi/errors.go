@@ -19,6 +19,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/project"
+	"github.com/kipitix/growscada/internal/server/domain/release"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
@@ -52,6 +53,8 @@ var (
 	deploymentResource = resource{name: "Deployment", pathParam: "deployment_number"}
 	// A Commit is named by its number within its Draft.
 	commitResource = resource{name: "Commit", pathParam: "commit_number"}
+	// A Project Release is named by its number within its Project.
+	projectReleaseResource = resource{name: "Release", pathParam: "release_number"}
 )
 
 // wildcard is the router pattern segment that carries the resource's ID.
@@ -95,6 +98,9 @@ var errorMappings = []errorMapping{
 	{application.ErrDraftNotSaveable, http.StatusConflict, commitResource,
 		"The Draft cannot be saved: it cannot be assembled; repair the Draft first"},
 	{draft.ErrCommitNotFound, http.StatusNotFound, commitResource, ""},
+	{release.ErrCommitAlreadyReleased, http.StatusConflict, projectReleaseResource,
+		"Commit is already released"},
+	{release.ErrReleaseNotFound, http.StatusNotFound, projectReleaseResource, ""},
 	{runtimeapp.ErrNothingToRollback, http.StatusConflict, deploymentResource,
 		"Nothing to rollback: the deployment holds the document the project runs"},
 	{runtimeapp.ErrDeploymentNotFound, http.StatusNotFound, deploymentResource, ""},

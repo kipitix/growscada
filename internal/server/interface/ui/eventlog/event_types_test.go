@@ -88,6 +88,10 @@ func TestEventRef(t *testing.T) {
 	if got := eventTypeInfoByType[renamed.Type].describe(eventRef(renamed)); got != "Commit 4 retitled" {
 		t.Errorf("a commit_title_updated: got %q", got)
 	}
+	released := apiv0.Event{Type: apiv0.EventReleaseCreated, ID: "project-id", Release: 2}
+	if got := eventTypeInfoByType[released.Type].describe(eventRef(released)); got != "Release 2 published" {
+		t.Errorf("a release_created: got %q", got)
+	}
 	scene := apiv0.Event{Type: apiv0.EventSceneCreated, ID: "scene-id"}
 	if got := eventRef(scene); got != "scene-id" {
 		t.Errorf("an event without a commit: got %q", got)

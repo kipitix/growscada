@@ -111,6 +111,25 @@ type Project struct {
 	renamingCommit    int
 	renameCommitTitle string
 
+	// ── Releases (task 72_3; ADR 0021) ─────────────────────────────────────
+	// releases is the publication history, newest first; releasesLoaded is
+	// false until its first answer. releasesDialog is true while the list is
+	// shown, releaseDialog while a Commit is published, releasing marks that
+	// request in flight. releaseCommit is the Commit being published (0:
+	// none). editingRelease is the number of the Release whose note is edited
+	// in place (0: none), releaseNoteDraft the text of the editor.
+	releases         []apiv0.ReleaseResponse
+	releasesLoaded   bool
+	releasesReloader uiutil.Reloader
+	releasesDialog   bool
+	releaseDialog    bool
+	releasing        bool
+	releaseCommit    int
+	releaseNote      string
+	releaseAuthor    string
+	editingRelease   int
+	releaseNoteDraft string
+
 	// ── DraftChange stack (ADR 0017) ────────────────────────────────────────
 	// changes is the state of the Draft's undo/redo stack, read on mount, on a
 	// resync, after the content events and after each undo or redo;
@@ -304,6 +323,7 @@ func (p *Project) OnMount(ctx app.Context) {
 	p.loadDraftState(ctx)
 	p.loadDraftChanges(ctx)
 	p.loadCommits(ctx)
+	p.loadReleases(ctx)
 
 	p.listenShortcuts()
 	p.handleServerEvents(ctx)
@@ -359,6 +379,10 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.commits, p.commitsLoaded = nil, false
 	p.saveDialog, p.savingCommit, p.commitsDialog = false, false, false
 	p.renamingCommit, p.renameCommitTitle = 0, ""
+	p.releases, p.releasesLoaded = nil, false
+	p.releasesDialog, p.releaseDialog, p.releasing = false, false, false
+	p.releaseCommit, p.releaseNote, p.releaseAuthor = 0, "", ""
+	p.editingRelease, p.releaseNoteDraft = 0, ""
 	p.draftVersions.Forget()
 	clear(p.staleScenes)
 	p.widgetsReloadDeferred = false

@@ -1,0 +1,33 @@
+info:
+  name: download the project file of a release
+  type: http
+  seq: 172
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/releases/1/projectfile
+  auth: inherit
+
+docs: |
+  The ProjectFile the Release copied, as a download: the Release outlives the
+  Commit, the Draft and its retention (task 72_3; ADR 0021).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: application/json
+    - expression: 'res.body.project_id'
+      operator: eq
+      value: '{{PROJECT_ID}}'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
