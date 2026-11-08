@@ -18,35 +18,42 @@ import (
 )
 
 // missingLibraryReleases returns the Library Pins of a Deployment's
-// ProjectFile that this server cannot write, by Library ID: the Library is not
-// live here, or it has no such Release (task 71). A Deployment deployed from a
-// file elsewhere may name both; a Library removed after the Deployment was
-// made leaves the second.
+// ProjectFile that this server cannot write, in the order of their Library
+// IDs: the Library is not live here, or it has no such Release (task 71). A
+// Deployment deployed from a file elsewhere may name both; a Library removed
+// after the Deployment was made leaves the second.
 func missingLibraryReleases(ctx context.Context, libraries library.LibraryRepository,
-	releases library.LibraryReleaseRepository, file projectv0.ProjectFile) (map[uuid.UUID]int, error) {
-	missing := make(map[uuid.UUID]int, len(file.LibraryPins))
+	releases library.LibraryReleaseRepository, file projectv0.ProjectFile) ([]appdto.MissingRelease, error) {
+	byLibrary := make(map[uuid.UUID]int, len(file.LibraryPins))
 	for _, pin := range file.LibraryPins {
 		libraryID := id.NewID(id.IDWithUUID[library.Library](pin.LibraryID))
 		if _, err := libraries.FindByID(ctx, libraryID); err != nil {
 			if errors.Is(err, library.ErrLibraryNotFound) {
-				missing[pin.LibraryID] = pin.Release
+				byLibrary[pin.LibraryID] = pin.Release
 				continue
 			}
 			return nil, fmt.Errorf("cannot read library %s: %w", pin.LibraryID, err)
 		}
 		number, err := library.NewReleaseNumber(pin.Release)
 		if err != nil {
-			missing[pin.LibraryID] = pin.Release
+			byLibrary[pin.LibraryID] = pin.Release
 			continue
 		}
 		if _, err := releases.FindByNumber(ctx, libraryID, number); err != nil {
 			if errors.Is(err, library.ErrReleaseNotFound) {
-				missing[pin.LibraryID] = pin.Release
+				byLibrary[pin.LibraryID] = pin.Release
 				continue
 			}
 			return nil, fmt.Errorf("cannot read release %d of library %s: %w", pin.Release, pin.LibraryID, err)
 		}
 	}
+	missing := make([]appdto.MissingRelease, 0, len(byLibrary))
+	for libraryID, release := range byLibrary {
+		missing = append(missing, appdto.MissingRelease{LibraryID: libraryID, Release: release})
+	}
+	sort.Slice(missing, func(i, j int) bool {
+		return missing[i].LibraryID.String() < missing[j].LibraryID.String()
+	})
 	return missing, nil
 }
 
@@ -57,12 +64,16 @@ func missingLibraryReleases(ctx context.Context, libraries library.LibraryReposi
 // Discard must leave it writable. Nothing else of the document changes, so the
 // rest of the configuration is restored as it was.
 func dropMissingLibraryReleases(content draft.Content, file projectv0.ProjectFile,
-	missing map[uuid.UUID]int) (draft.Content, []appdto.DiscardWarning) {
+	missing []appdto.MissingRelease) (draft.Content, []appdto.DiscardWarning) {
 	dropped := make(map[uuid.UUID]int, len(missing))
 	if len(missing) > 0 {
+		gone := make(map[uuid.UUID]struct{}, len(missing))
+		for _, release := range missing {
+			gone[release.LibraryID] = struct{}{}
+		}
 		droppedTypes := make(map[uuid.UUID]uuid.UUID, len(file.WidgetTypes))
 		for _, wt := range file.WidgetTypes {
-			if _, ok := missing[wt.LibraryID]; ok {
+			if _, ok := gone[wt.LibraryID]; ok {
 				droppedTypes[wt.ID] = wt.LibraryID
 			}
 		}
@@ -85,7 +96,7 @@ func dropMissingLibraryReleases(content draft.Content, file projectv0.ProjectFil
 		content.Scenes = scenes
 		keptPins := make([]librarypin.LibraryPin, 0, len(content.LibraryPins))
 		for _, pin := range content.LibraryPins {
-			if _, ok := missing[pin.LibraryID().UUID()]; ok {
+			if _, ok := gone[pin.LibraryID().UUID()]; ok {
 				continue
 			}
 			keptPins = append(keptPins, pin)
@@ -93,13 +104,10 @@ func dropMissingLibraryReleases(content draft.Content, file projectv0.ProjectFil
 		content.LibraryPins = keptPins
 	}
 	warnings := make([]appdto.DiscardWarning, 0, len(missing))
-	for libraryID, release := range missing {
+	for _, release := range missing {
 		warnings = append(warnings, appdto.DiscardWarning{
-			LibraryID: libraryID, Release: release, DroppedWidgets: dropped[libraryID],
+			LibraryID: release.LibraryID, Release: release.Release, DroppedWidgets: dropped[release.LibraryID],
 		})
 	}
-	sort.Slice(warnings, func(i, j int) bool {
-		return warnings[i].LibraryID.String() < warnings[j].LibraryID.String()
-	})
 	return content, warnings
 }

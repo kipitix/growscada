@@ -3,7 +3,6 @@ package application
 import (
 	"context"
 	"fmt"
-	"sort"
 
 	"github.com/google/uuid"
 
@@ -31,11 +30,11 @@ type DeployService interface {
 }
 
 type deployServiceImpl struct {
-	content    ProjectContent
-	builder    ProjectFileBuilder
-	runtime    RuntimeNode
-	libraries  library.LibraryRepository
-	releases   library.LibraryReleaseRepository
+	content   ProjectContent
+	builder   ProjectFileBuilder
+	runtime   RuntimeNode
+	libraries library.LibraryRepository
+	releases  library.LibraryReleaseRepository
 }
 
 var _ DeployService = (*deployServiceImpl)(nil)
@@ -122,15 +121,9 @@ func (s deployServiceImpl) Preview(ctx context.Context, projectID uuid.UUID) (ap
 	preview.Unchanged = unchanged
 	// The pins of the running Deployment this server cannot write: a Discard
 	// drops their Widgets instead of restoring them (task 71).
-	missing, err := missingLibraryReleases(ctx, s.libraries, s.releases, current.Content)
+	preview.MissingReleases, err = missingLibraryReleases(ctx, s.libraries, s.releases, current.Content)
 	if err != nil {
 		return appdto.DeployPreview{}, fmt.Errorf("cannot check the library pins of project %s: %w", projectID, err)
 	}
-	for libraryID, release := range missing {
-		preview.MissingReleases = append(preview.MissingReleases, appdto.MissingRelease{LibraryID: libraryID, Release: release})
-	}
-	sort.Slice(preview.MissingReleases, func(i, j int) bool {
-		return preview.MissingReleases[i].LibraryID.String() < preview.MissingReleases[j].LibraryID.String()
-	})
 	return preview, nil
 }
