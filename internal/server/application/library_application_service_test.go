@@ -11,8 +11,10 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
+	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
+	"github.com/kipitix/growscada/internal/server/domain/project"
 )
 
 func TestLibraryService_ReleaseNumbersAndRefusesAnUnchangedDraft(t *testing.T) {
@@ -104,7 +106,7 @@ func TestLibraryService_DeleteRefusedWhileALiveProjectPinsIt(t *testing.T) {
 
 // TestLibraryService_DeleteRefusedWhileARunningDeploymentNamesIt: a Release in
 // the running Deployment of a Project keeps the Library, even with no pin; a
-// Deployment of the past does not (task 71).
+// Deployment, a Commit and a Project Release of the past do not (task 71).
 func TestLibraryService_DeleteRefusedWhileARunningDeploymentNamesIt(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	ctx := context.Background()
@@ -121,10 +123,19 @@ func TestLibraryService_DeleteRefusedWhileARunningDeploymentNamesIt(t *testing.T
 	}
 
 	// A new Deployment without the pin leaves the library in history alone: a
-	// Commit or an old Deployment does not keep it.
+	// Commit or an old Deployment does not keep it. A Project Release of that
+	// Commit copies the pins but does not keep it either.
 	deployProject(t, mainProject)
+	if _, err := newCommitService().Save(ctx,
+		draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](mainProject))),
+		draftVersionOf(t, mainProject), "With the library", "Ada"); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if _, err := newReleaseService().Create(ctx, mainProject, 1, "", "Ada"); err != nil {
+		t.Fatalf("Create release: %v", err)
+	}
 	if _, err := r.libSvc.DeleteLibraryByID(ctx, libraryID); err != nil {
-		t.Fatalf("named by an old Deployment only: %v", err)
+		t.Fatalf("named by an old Deployment, a Commit and a Release only: %v", err)
 	}
 }
 
