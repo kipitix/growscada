@@ -1,8 +1,7 @@
 info:
   name: post discard to the last commit
   type: http
-  seq: 73
-
+  seq: 74
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/discard

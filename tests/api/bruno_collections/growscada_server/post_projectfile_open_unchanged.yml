@@ -1,8 +1,7 @@
 info:
   name: open the project file the Draft already is
   type: http
-  seq: 138
-
+  seq: 139
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/projectfile?version=25

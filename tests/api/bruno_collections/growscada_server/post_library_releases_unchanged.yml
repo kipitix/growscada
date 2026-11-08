@@ -1,7 +1,7 @@
 info:
   name: post library releases unchanged
   type: http
-  seq: 57
+  seq: 58
 
 http:
   method: POST
@@ -10,13 +10,14 @@ http:
     type: json
     data: |-
       {
-        "note": "",
-        "version": 2
+        "commit": {{LIBRARY_RELEASE_COMMIT}},
+        "author": "Bruno"
       }
   auth: inherit
 
 docs: |
-  A Draft unchanged since the latest release is not released.
+  One Commit is published at most once: a second Release of it is refused
+  (task 72_5; ADR 0021).
 
 runtime:
   assertions:
@@ -30,7 +31,7 @@ runtime:
       value: '"application/problem+json"'
     - expression: 'res.body.title'
       operator: eq
-      value: '"Conflict: Library"'
+      value: '"Conflict: LibraryRelease"'
 
 settings:
   encodeUrl: true

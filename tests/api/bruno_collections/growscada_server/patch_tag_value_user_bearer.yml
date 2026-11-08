@@ -1,8 +1,7 @@
 info:
   name: patch tag value with a user bearer
   type: http
-  seq: 108
-
+  seq: 109
 http:
   method: PATCH
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/tags/{{DEVICE_TAG_ID}}/value

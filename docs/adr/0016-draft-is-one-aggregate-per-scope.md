@@ -32,3 +32,7 @@ ADR 0022 removes the EditLock: `engineering.drafts` loses `holder_key`, `holder_
 - A Project or Library deleted while its Draft is held still goes; the Draft row cascades and the holder learns from the deletion event.
 - The Runtime node is untouched: Tag states, Device Tokens, Revisions and the Journal stay where they were (ADR 0011).
 - `AGENTS.md` and `GLOSSARY.md` describe the Draft as the unit of consistency; the Project and Library modes' read-only behaviour is unchanged, but it now rests on one row instead of two.
+
+## Amendment 2026-11-08: Discard goes to the last Commit, Revert to the published state
+
+After task 72_4 (a Project) and task 72_5 (a Library) the two resets are distinct. **Discard** resets a Draft to its last Commit — the saved state, dropping the unsaved DraftChanges — and a Draft with no Commit is 409 `nothing_to_discard` instead of falling back to a Release. **Revert** resets it to the published state: the running Deployment of a Project (`revert-to-deployed`) or the latest Library Release (`revert-to-release`, task 72_5), and is 409 without one. Both are one transaction over the Draft, clear the undo stack and write no DraftChange; neither changes a Commit, a Release or a Deployment. The consequence for the flags: "unsaved changes" is the Draft's Version above the one its last Commit fixed, and "unpublished changes" is the last Commit's number above the Commit the latest Release published (0 for a legacy Release).

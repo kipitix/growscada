@@ -103,7 +103,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		deviceTokens: deviceTokens,
 		journal:      journal,
 		operation:    runtimeapp.NewOperationStateService(journal, deployments, states),
-		commits:      application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, projectReleases),
+		commits:      application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, projectReleases, releases),
 		releases:     application.NewReleaseService(content, projectReleases, runtimeNode, libraries, releases),
 	}
 }

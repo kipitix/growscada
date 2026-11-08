@@ -145,6 +145,24 @@ func (p *Project) showOrphaned(ctx app.Context, what string, widgets []apiv0.Pin
 	}})
 }
 
+// pinProvenance describes the Release a pin names (task 72_5): the Commit it
+// published, its title, the Author and the note; a legacy Release names no
+// Commit.
+func (p *Project) pinProvenance(pin apiv0.LibraryPinResponse) string {
+	if pin.CommitNumber == nil {
+		return "legacy release"
+	}
+	title := ""
+	if pin.Title != nil {
+		title = *pin.Title
+	}
+	provenance := fmt.Sprintf("commit #%d %s · %s", *pin.CommitNumber, title, pin.Author)
+	if pin.Note != "" {
+		provenance += " · " + pin.Note
+	}
+	return provenance
+}
+
 // renderPinsPanel renders the project's pins: each with its release to
 // switch to and a removal, and the libraries to add.
 func (p *Project) renderPinsPanel() app.UI {
@@ -164,46 +182,55 @@ func (p *Project) renderPinsPanel() app.UI {
 		}
 		rows = append(rows, app.Div().
 			Class("library-pin").
-			Style("display", "flex").
-			Style("align-items", "center").
-			Style("gap", "4px").
 			Style("margin-bottom", "4px").
 			Style("font-size", "12px").
 			Body(
-				app.Span().
-					Style("flex", "1").
-					Style("overflow", "hidden").
-					Style("text-overflow", "ellipsis").
-					Style("white-space", "nowrap").
-					Title(p.libraryName(libraryID)).
-					Text(p.libraryName(libraryID)),
-				app.Select().
+				app.Div().
+					Style("display", "flex").
+					Style("align-items", "center").
+					Style("gap", "4px").
+					Body(
+						app.Span().
+							Style("flex", "1").
+							Style("overflow", "hidden").
+							Style("text-overflow", "ellipsis").
+							Style("white-space", "nowrap").
+							Title(p.libraryName(libraryID)).
+							Text(p.libraryName(libraryID)),
+						app.Select().
+							Style("font-size", "11px").
+							Style("background", "var(--input-bg)").
+							Style("color", "var(--text)").
+							Style("border", "1px solid var(--border-input)").
+							OnChange(func(ctx app.Context, e app.Event) {
+								n, err := strconv.Atoi(ctx.JSSrc().Get("value").String())
+								// The select shows the pinned release until the reload
+								// after a switch: a cancelled or refused one leaves it.
+								ctx.JSSrc().Set("value", strconv.Itoa(pinned))
+								if err == nil {
+									p.changePin(libraryID, n)
+								}
+							}, app.EventScope(scope)).
+							Body(options...),
+						app.Button().
+							Style("font-size", "11px").
+							Style("padding", "1px 6px").
+							Style("cursor", "pointer").
+							Style("border", "1px solid var(--border-input)").
+							Style("border-radius", "3px").
+							Style("background", "var(--bg-hover)").
+							Style("color", "var(--text)").
+							Text("✕").
+							OnClick(func(ctx app.Context, e app.Event) {
+								p.changePin(libraryID, 0)
+							}, app.EventScope(scope)),
+					),
+				app.Div().
+					Attr("data-pin-provenance", strconv.Itoa(pin.Release)).
+					Style("color", "var(--text-muted)").
 					Style("font-size", "11px").
-					Style("background", "var(--input-bg)").
-					Style("color", "var(--text)").
-					Style("border", "1px solid var(--border-input)").
-					OnChange(func(ctx app.Context, e app.Event) {
-						n, err := strconv.Atoi(ctx.JSSrc().Get("value").String())
-						// The select shows the pinned release until the reload
-						// after a switch: a cancelled or refused one leaves it.
-						ctx.JSSrc().Set("value", strconv.Itoa(pinned))
-						if err == nil {
-							p.changePin(libraryID, n)
-						}
-					}, app.EventScope(scope)).
-					Body(options...),
-				app.Button().
-					Style("font-size", "11px").
-					Style("padding", "1px 6px").
-					Style("cursor", "pointer").
-					Style("border", "1px solid var(--border-input)").
-					Style("border-radius", "3px").
-					Style("background", "var(--bg-hover)").
-					Style("color", "var(--text)").
-					Text("✕").
-					OnClick(func(ctx app.Context, e app.Event) {
-						p.changePin(libraryID, 0)
-					}, app.EventScope(scope)),
+					Style("padding-left", "2px").
+					Text(p.pinProvenance(pin)),
 			))
 	}
 

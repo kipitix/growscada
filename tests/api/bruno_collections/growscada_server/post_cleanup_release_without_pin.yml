@@ -1,8 +1,7 @@
 info:
   name: release the cleanup commit without the pin
   type: http
-  seq: 1995
-
+  seq: 1996
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/releases

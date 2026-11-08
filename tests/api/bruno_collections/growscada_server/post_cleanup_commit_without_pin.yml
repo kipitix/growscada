@@ -1,8 +1,7 @@
 info:
   name: save the cleanup draft without the pin
   type: http
-  seq: 1994
-
+  seq: 1995
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/commits

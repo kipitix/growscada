@@ -10,10 +10,9 @@ import (
 // noteMaxRunes is the longest note a Release takes.
 const noteMaxRunes = 2000
 
-// Number - the number of a Release within its scope — a Project's, or a
-// Library's in task 72_5 —: 1, 2, 3… It is the Release's identity within the
-// scope, as a Library Release's number is within its Library. The zero value
-// is no Release.
+// Number - the number of a Project Release within its Project: 1, 2, 3… It
+// is the Release's identity within the scope; a Library Release has its own
+// number, in the library package (task 72_5). The zero value is no Release.
 // Value Object.
 type Number struct {
 	n int

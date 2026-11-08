@@ -21,7 +21,8 @@ func newCommitService() application.CommitService {
 	content := contentOver(newScopes())
 	return application.NewCommitService(content, newLibraryContent(),
 		application.NewProjectFileBuilder(content), repositories.NewWidgetTypeRepositories(testDB),
-		repositories.NewProjectReleaseRepositoryPostgres(testDB))
+		repositories.NewProjectReleaseRepositoryPostgres(testDB),
+		repositories.NewLibraryReleaseRepositoryPostgres(testDB))
 }
 
 // TestCommitService_ProjectSaveListFindRename: a Save of a Project's Draft

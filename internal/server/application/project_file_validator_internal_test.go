@@ -339,9 +339,16 @@ func pinnedFile(t *testing.T, projectID, libraryID uuid.UUID) (projectv0.Project
 	if err != nil {
 		t.Fatalf("release number: %v", err)
 	}
-	release := library.ReconstituteRelease(
-		id.NewID(id.IDWithUUID[library.Library](libraryID)), number, "",
+	author, err := library.NewAuthor("system")
+	if err != nil {
+		t.Fatalf("author: %v", err)
+	}
+	release, err := library.ReconstituteRelease(
+		id.NewID(id.IDWithUUID[library.Library](libraryID)), number, nil, author, library.OriginLegacy, "",
 		time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC), []library.ReleasedWidgetType{released})
+	if err != nil {
+		t.Fatalf("release: %v", err)
+	}
 	file := emptyFile(projectID)
 	file.Tags = []projectv0.TagDefinition{{ID: tagID, Name: "speed", Type: "integer"}}
 	file.LibraryPins = []projectv0.LibraryPin{{LibraryID: libraryID, Release: 1}}

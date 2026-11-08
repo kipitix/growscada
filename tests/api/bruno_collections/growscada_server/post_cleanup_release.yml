@@ -1,8 +1,7 @@
 info:
   name: release the cleanup commit
   type: http
-  seq: 1983
-
+  seq: 1984
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/releases

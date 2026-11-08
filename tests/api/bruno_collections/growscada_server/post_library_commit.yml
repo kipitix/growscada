@@ -1,11 +1,10 @@
 info:
   name: save the library draft as a commit
   type: http
-  seq: 165
-
+  seq: 166
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/commits
+  url: http://{{API_SERVER}}/api/v0/libraries/{{OTHER_LIBRARY_ID}}/commits
   body:
     type: json
     data: |-

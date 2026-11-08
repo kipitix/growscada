@@ -20,8 +20,8 @@ import (
 // 72_3; ADR 0021): a Commit is published as an immutable, numbered Release, the
 // Releases are listed and read, a note is changed, a Release is downloaded as
 // the ProjectFile it copied, and a Release is made the Project's running
-// Deployment (task 72_4). It serves Projects alone; task 72_5 extends it to
-// Libraries.
+// Deployment (task 72_4). It serves Projects alone: a Library's Releases are
+// the LibraryService's (task 72_5).
 type ReleaseService interface {
 	// Create publishes Commit commitNumber of the live Project projectID as
 	// the next Release, with the note and the Author. It needs no Draft

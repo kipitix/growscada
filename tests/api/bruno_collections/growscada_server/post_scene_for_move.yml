@@ -1,8 +1,7 @@
 info:
   name: create a scene for the group move
   type: http
-  seq: 146
-
+  seq: 147
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/scenes

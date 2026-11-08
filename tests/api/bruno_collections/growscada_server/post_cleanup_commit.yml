@@ -1,8 +1,7 @@
 info:
   name: save the cleanup draft as a commit
   type: http
-  seq: 1982
-
+  seq: 1983
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/commits

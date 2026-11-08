@@ -1,8 +1,7 @@
 info:
   name: post project draft changes undo
   type: http
-  seq: 120
-
+  seq: 121
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/draft-changes/undo

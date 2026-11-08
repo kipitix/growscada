@@ -1,8 +1,7 @@
 info:
   name: move a widget that is not in the scene
   type: http
-  seq: 153
-
+  seq: 154
 http:
   method: PATCH
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/scenes/{{MOVE_SCENE_ID}}/widgets

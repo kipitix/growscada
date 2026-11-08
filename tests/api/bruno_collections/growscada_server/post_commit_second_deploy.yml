@@ -1,8 +1,7 @@
 info:
   name: save the changed draft as a second commit
   type: http
-  seq: 60
-
+  seq: 61
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/commits

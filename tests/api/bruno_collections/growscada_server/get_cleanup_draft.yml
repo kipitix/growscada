@@ -1,8 +1,7 @@
 info:
   name: get the cleanup draft before the commit
   type: http
-  seq: 1981
-
+  seq: 1982
 http:
   method: GET
   url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/draft

@@ -507,13 +507,13 @@ func findLibrary(ctx context.Context, client *Client, name string) (*apiclient.L
 }
 
 func newReleaseCommand(s *settings) *cobra.Command {
-	var note string
+	var note, title, author string
 	cmd := &cobra.Command{
 		Use:   "release <library> [--note <note>]",
-		Short: "Release the Draft of a library as its next Library Release",
-		Long: "Make the next Library Release of the library from its Draft as it is now. A\n" +
-			"Draft unchanged since the latest release, or one being discarded, is not\n" +
-			"released. Projects use the release once they pin it (spec.libraryPins).",
+		Short: "Save the Draft of a library and release the Commit as its next Library Release",
+		Long: "Save the Draft of the library as a Commit, unless it is at the last one, and\n" +
+			"publish that Commit as the next Library Release (ADR 0021). Projects use the\n" +
+			"release once they pin it (spec.libraryPins).",
 		Args: exactlyOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -522,11 +522,11 @@ func newReleaseCommand(s *settings) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			state, err := lib.DraftState(ctx)
+			commit, err := saveOrLastCommit(ctx, lib, title, author)
 			if err != nil {
 				return fmt.Errorf("library/%s: %w", args[0], err)
 			}
-			release, err := lib.Release(ctx, apiv0.CreateReleaseRequest{Note: note, Version: state.Version})
+			release, err := lib.Release(ctx, apiv0.CreateReleaseRequest{Commit: commit.Number, Note: note, Author: author})
 			if err != nil {
 				return fmt.Errorf("library/%s: %w", args[0], err)
 			}
@@ -535,7 +535,33 @@ func newReleaseCommand(s *settings) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&note, "note", "", "the release's note")
+	cmd.Flags().StringVar(&title, "title", "Release", "the title of the Commit, when the Draft is saved")
+	cmd.Flags().StringVar(&author, "author", "growctl", "the author of the Commit and the Release")
 	return cmd
+}
+
+// saveOrLastCommit fixes the Draft as a Commit with title and author, or
+// returns the last Commit when the Draft has not changed since it.
+func saveOrLastCommit(ctx context.Context, lib *apiclient.LibraryClient, title, author string) (apiv0.CommitResponse, error) {
+	state, err := lib.DraftState(ctx)
+	if err != nil {
+		return apiv0.CommitResponse{}, err
+	}
+	saved, err := lib.SaveCommit(ctx, apiv0.CreateCommitRequest{Version: state.Version, Title: title, Author: author})
+	if err == nil {
+		return saved, nil
+	}
+	if !errors.Is(err, apiclient.ErrConflict) {
+		return apiv0.CommitResponse{}, err
+	}
+	commits, err := lib.Commits(ctx)
+	if err != nil {
+		return apiv0.CommitResponse{}, err
+	}
+	if len(commits) == 0 {
+		return apiv0.CommitResponse{}, errors.New("the draft has no commit to release")
+	}
+	return commits[0], nil
 }
 
 func newDiscardCommand(s *settings) *cobra.Command {
@@ -589,9 +615,9 @@ func newGetLibrariesCommand(s *settings) *cobra.Command {
 				return nil
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tRELEASE\tUNRELEASED")
+			fmt.Fprintln(w, "NAME\tRELEASE\tCOMMIT\tUNSAVED\tUNPUBLISHED")
 			for _, l := range libraries {
-				fmt.Fprintf(w, "%s\t%d\t%t\n", l.Name, l.LatestRelease, l.HasUnreleasedChanges)
+				fmt.Fprintf(w, "%s\t%d\t%d\t%t\t%t\n", l.Name, l.LatestRelease, l.LatestCommit, l.HasUnsavedChanges, l.HasUnpublishedChanges)
 			}
 			return w.Flush()
 		},

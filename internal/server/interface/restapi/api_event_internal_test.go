@@ -33,6 +33,16 @@ func releaseNumber(t *testing.T, number int) release.Number {
 	return n
 }
 
+// libraryReleaseNumber is a Library Release number of the tests.
+func libraryReleaseNumber(t *testing.T, number int) library.ReleaseNumber {
+	t.Helper()
+	n, err := library.NewReleaseNumber(number)
+	if err != nil {
+		t.Fatalf("NewReleaseNumber(%d): %v", number, err)
+	}
+	return n
+}
+
 // TestNewAPIEvent_TranslatesEveryEventType checks newAPIEvent on a sample of
 // every domain EventType: a type without a sample fails the test, so a new
 // event cannot reach the stream untranslated.
@@ -148,6 +158,8 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 			apiv0.Event{Type: "release_created", ID: projectID.String(), Release: 1}},
 		event.EventTypeReleaseNoteUpdated: {release.NewReleaseNoteUpdatedEvent(draft.LibraryScope(libraryID), releaseNumber(t, 2), ts),
 			apiv0.Event{Type: "release_note_updated", ID: libraryID.String(), Release: 2}},
+		event.EventTypeLibraryReleaseNoteUpdated: {library.NewLibraryReleaseNoteUpdatedEvent(libraryID, libraryReleaseNumber(t, 3), ts),
+			apiv0.Event{Type: "library_release_note_updated", ID: libraryID.String(), Release: 3}},
 	}
 
 	for _, et := range event.AllEventTypes() {

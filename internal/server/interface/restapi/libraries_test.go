@@ -11,8 +11,8 @@ import (
 )
 
 // TestLibraries_DraftReleaseDiscard walks a library through the API: create,
-// a WidgetType in its Draft, a Release, the refusal of an unchanged one, the
-// releases read back, a rename and a Discard.
+// a WidgetType in its Draft, a Save, a Release of that Commit, the refusal of
+// a second Release of it, the releases read back, a rename and a Discard.
 func TestLibraries_DraftReleaseDiscard(t *testing.T) {
 	router := newServices().router()
 	const p = apiv0.PathPrefix
@@ -29,7 +29,10 @@ func TestLibraries_DraftReleaseDiscard(t *testing.T) {
 		t.Errorf("a taken name: %d, want 409", rec.Code)
 	}
 	if rec := serve(router, http.MethodPost, lp+"/discard", nil); rec.Code != http.StatusConflict {
-		t.Errorf("a Discard of a library never released: %d, want 409", rec.Code)
+		t.Errorf("a Discard of a library never saved: %d, want 409", rec.Code)
+	}
+	if rec := serve(router, http.MethodPost, lp+"/revert-to-release", nil); rec.Code != http.StatusConflict {
+		t.Errorf("a Revert of a library never released: %d, want 409", rec.Code)
 	}
 	rec = serve(router, http.MethodPost, lp+"/widget-types", apiv0.CreateWidgetTypeRequest{
 		Version: 1, Name: "gauge", HtmlTemplate: "<div/>", ScriptLanguage: "javascript", DefaultWidth: 10, DefaultHeight: 10,
@@ -39,16 +42,35 @@ func TestLibraries_DraftReleaseDiscard(t *testing.T) {
 	}
 	wt := decodeBody[apiv0.CreateWidgetTypeResponse](t, rec)
 
-	rec = serve(router, http.MethodPost, lp+"/releases", apiv0.CreateReleaseRequest{Note: "first", Version: wt.Version})
+	// A Release names a Commit, not the Draft.
+	rec = serve(router, http.MethodPost, lp+"/commits", apiv0.CreateCommitRequest{Version: wt.Version, Title: "First", Author: "Ada"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("POST commits: %d %s", rec.Code, rec.Body)
+	}
+	commit := decodeBody[apiv0.CommitResponse](t, rec)
+
+	rec = serve(router, http.MethodPost, lp+"/releases", apiv0.CreateReleaseRequest{Commit: commit.Number, Note: "first", Author: "Ada"})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("POST releases: %d %s", rec.Code, rec.Body)
 	}
 	release := decodeBody[apiv0.LibraryReleaseResponse](t, rec)
-	if release.Number != 1 || release.Note != "first" || len(release.WidgetTypes) != 1 || release.WidgetTypes[0].ID != wt.ID || release.WidgetTypes[0].LibraryID != created.ID {
+	if release.Number != 1 || release.Note != "first" || release.CommitNumber == nil || *release.CommitNumber != commit.Number ||
+		release.Title == nil || *release.Title != "First" || release.Author != "Ada" || release.Origin != apiv0.LibraryReleaseOriginCommit ||
+		len(release.WidgetTypes) != 1 || release.WidgetTypes[0].ID != wt.ID || release.WidgetTypes[0].LibraryID != created.ID {
 		t.Errorf("release: %+v", release)
 	}
-	if rec := serve(router, http.MethodPost, lp+"/releases", apiv0.CreateReleaseRequest{Version: wt.Version}); rec.Code != http.StatusConflict {
-		t.Errorf("an unchanged Draft: %d, want 409", rec.Code)
+	if rec := serve(router, http.MethodPost, lp+"/releases", apiv0.CreateReleaseRequest{Commit: commit.Number, Author: "Ada"}); rec.Code != http.StatusConflict {
+		t.Errorf("a released commit: %d, want 409", rec.Code)
+	}
+	if rec := serve(router, http.MethodPost, lp+"/releases", apiv0.CreateReleaseRequest{Commit: 9, Author: "Ada"}); rec.Code != http.StatusNotFound {
+		t.Errorf("a missing commit: %d, want 404", rec.Code)
+	}
+	rec = serve(router, http.MethodPatch, lp+"/releases/1", apiv0.UpdateLibraryReleaseNoteRequest{Note: "renoted"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH release note: %d %s", rec.Code, rec.Body)
+	}
+	if updated := decodeBody[apiv0.LibraryReleaseResponse](t, rec); updated.Note != "renoted" || len(updated.WidgetTypes) != 1 {
+		t.Errorf("the renoted release: %+v", updated)
 	}
 	if rec := serve(router, http.MethodGet, lp+"/releases/1", nil); rec.Code != http.StatusOK {
 		t.Errorf("GET release 1: %d", rec.Code)
@@ -68,7 +90,8 @@ func TestLibraries_DraftReleaseDiscard(t *testing.T) {
 		t.Fatalf("PUT library: %d %s", rec.Code, rec.Body)
 	}
 	found := decodeBody[apiv0.GetLibrariesResponse](t, serve(router, http.MethodGet, p+"/libraries?name="+name+"-renamed", nil))
-	if len(found.Libraries) != 1 || found.Libraries[0].LatestRelease != 1 || found.Libraries[0].HasUnreleasedChanges {
+	if len(found.Libraries) != 1 || found.Libraries[0].LatestRelease != 1 || found.Libraries[0].LatestCommit != commit.Number ||
+		found.Libraries[0].HasUnsavedChanges || found.Libraries[0].HasUnpublishedChanges {
 		t.Errorf("GET ?name=: %+v", found)
 	}
 
@@ -82,6 +105,13 @@ func TestLibraries_DraftReleaseDiscard(t *testing.T) {
 	}
 	if list := decodeBody[apiv0.GetWidgetTypesResponse](t, serve(router, http.MethodGet, lp+"/widget-types", nil)); len(list.WidgetTypes) != 1 || list.WidgetTypes[0].ID != wt.ID {
 		t.Errorf("the Draft after the Discard: %+v", list)
+	}
+	rec = serve(router, http.MethodPost, lp+"/revert-to-release", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST revert-to-release: %d %s", rec.Code, rec.Body)
+	}
+	if list := decodeBody[apiv0.GetWidgetTypesResponse](t, serve(router, http.MethodGet, lp+"/widget-types", nil)); len(list.WidgetTypes) != 1 || list.WidgetTypes[0].ID != wt.ID {
+		t.Errorf("the Draft after the Revert: %+v", list)
 	}
 }
 
@@ -98,7 +128,8 @@ func TestLibraryPins_AddPreviewSwitchRemove(t *testing.T) {
 	if rec := serve(router, http.MethodPut, pins, apiv0.PutLibraryPinRequest{Release: 1}); rec.Code != http.StatusBadRequest {
 		t.Errorf("pinning a release that does not exist: %d, want 400", rec.Code)
 	}
-	serve(router, http.MethodPost, lp+"/releases", apiv0.CreateReleaseRequest{Version: wt.Version})
+	commit := createLibraryCommitViaService(t, router, wtLibrary, wt.Version)
+	serve(router, http.MethodPost, lp+"/releases", apiv0.CreateReleaseRequest{Commit: commit.Number, Author: "Ada"})
 	rec := serve(router, http.MethodPut, pins, apiv0.PutLibraryPinRequest{Release: 1})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("add pin: %d %s", rec.Code, rec.Body)
@@ -119,7 +150,8 @@ func TestLibraryPins_AddPreviewSwitchRemove(t *testing.T) {
 	w := createWidgetViaService(t, sc.ID, sc.Version, input)
 
 	serve(router, http.MethodDelete, lp+"/widget-types/"+wt.ID.String()+"?version="+strconv.Itoa(testLibraryDraftVersion(t, wtLibrary)), nil)
-	serve(router, http.MethodPost, lp+"/releases", apiv0.CreateReleaseRequest{Version: testLibraryDraftVersion(t, wtLibrary)})
+	second := createLibraryCommitViaService(t, router, wtLibrary, testLibraryDraftVersion(t, wtLibrary))
+	serve(router, http.MethodPost, lp+"/releases", apiv0.CreateReleaseRequest{Commit: second.Number, Author: "Ada"})
 
 	impact := decodeBody[apiv0.PinImpactResponse](t, serve(router, http.MethodGet, pins+"/impact?release=2", nil))
 	if len(impact.OrphanedWidgets) != 1 || impact.OrphanedWidgets[0].WidgetID != w.ID {
@@ -166,4 +198,16 @@ func hasPin(list apiv0.GetLibraryPinsResponse, libraryID uuid.UUID, release int)
 		}
 	}
 	return false
+}
+
+// createLibraryCommitViaService saves the library's Draft as a Commit through
+// the API, as the UI does before a Release (task 72_5; ADR 0021).
+func createLibraryCommitViaService(t *testing.T, router servingRouter, libraryID uuid.UUID, version int) apiv0.CommitResponse {
+	t.Helper()
+	path := apiv0.PathPrefix + apiv0.LibraryPath(libraryID.String()) + "/commits"
+	rec := serve(router, http.MethodPost, path, apiv0.CreateCommitRequest{Version: version, Title: "Save", Author: "Ada"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("POST commits: %d %s", rec.Code, rec.Body)
+	}
+	return decodeBody[apiv0.CommitResponse](t, rec)
 }

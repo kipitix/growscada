@@ -1,8 +1,7 @@
 info:
   name: move widgets that already hold these positions
   type: http
-  seq: 150
-
+  seq: 151
 http:
   method: PATCH
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/scenes/{{MOVE_SCENE_ID}}/widgets

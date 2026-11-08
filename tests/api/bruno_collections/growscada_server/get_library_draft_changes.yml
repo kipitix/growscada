@@ -1,8 +1,7 @@
 info:
   name: get library draft changes
   type: http
-  seq: 128
-
+  seq: 129
 http:
   method: GET
   url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/draft-changes

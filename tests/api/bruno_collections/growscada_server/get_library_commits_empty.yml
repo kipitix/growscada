@@ -1,11 +1,10 @@
 info:
   name: get the library commits before the first save
   type: http
-  seq: 164
-
+  seq: 165
 http:
   method: GET
-  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/commits
+  url: http://{{API_SERVER}}/api/v0/libraries/{{OTHER_LIBRARY_ID}}/commits
   auth: inherit
 
 docs: |

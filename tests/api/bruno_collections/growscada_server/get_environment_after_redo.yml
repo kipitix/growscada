@@ -1,8 +1,7 @@
 info:
   name: get environment after redo
   type: http
-  seq: 123
-
+  seq: 124
 http:
   method: GET
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/environments/{{ENVIRONMENT_ID}}

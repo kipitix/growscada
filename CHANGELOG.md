@@ -1,5 +1,20 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.82] - 2026-11-08
+
+### Added
+
+- **Library Release из Commit; Revert to latest Release; провенанс в пинах** (задача 72_5; ADR 0007/0012/0016/0017/0021)
+  - Домен `library`: `LibraryRelease` получает `CommitNumber() *int` (nil для legacy-Release), `Author`, `Origin` (`commit`/`legacy`); `CreateRelease(lib, number, commitNumber, note, author, at, types)` публикует Commit и пишет `library_released`; `ReconstituteRelease` проверяет провенанс; `WithNote` меняет только заметку и пишет `library_release_note_updated` (новый `EventType` и имя в контракте); `ErrCommitAlreadyReleased`; `ErrNothingToRelease`, `DraftDiffers` и `WithNumber` удалены; `ReleaseStateOf` считает `UnsavedChanges` (Version Draft выше зафиксированной последним Commit) и `UnpublishedChanges` (номер последнего Commit выше опубликованного последней Release)
+  - БД (`engineering/20261110000000_library_release_commit`): `library_releases.commit_number`/`author`/`origin` (default `system`/`legacy`), check `origin IN ('commit','legacy')` и провенанса, частичный unique `(library_id, commit_number) where origin='commit'`; `released_widget_types` не меняется
+  - Репозиторий: `Save` без Version Draft, проверяет живую Library, пишет провенанс и копии, различает `ErrReleaseNumberTaken` и `ErrCommitAlreadyReleased`, `UpdateNote` (с событием), `ReleasedCommits`; `session.ReplaceWidgetTypes` принимает копии WidgetTypes
+  - Application: `LibraryService.Release` публикует Commit (читы `FindCommit`, копии, номер + retry, без Draft Version и без очистки стека); `FindReleases`/`FindRelease` несут текущий заголовок Commit'а и `content_counts`; `UpdateReleaseNote`; `Discard` — к последнему Commit (409 `nothing_to_discard`), новый `RevertToLatestRelease` — к последней Release (409 `NoRelease`); `appdto.Library` — `LatestCommit`, `HasUnsavedChanges`, `HasUnpublishedChanges`; `LibraryPin` несёт провенанс Release. `CommitService` помечает опубликованные Commit'ы Library через `ReleasedCommits`
+  - REST (контракт `api/v0` **0.30**, MINOR): `POST …/libraries/{id}/releases` `{commit, note?, author}` → 201 (409 `commit_already_released`, 404 Commit/Library, 400); `GET …/libraries/{id}/releases` с `commit_number`, `title`, `author`, `origin`, `note`, `content_counts`; `PATCH …/libraries/{id}/releases/{n}` `{note}` → 200 (без Version); `POST …/libraries/{id}/revert-to-release` → 200 `{version}`; `POST …/discard` — к последнему Commit; `LibraryPinResponse` — `commit_number`, `title`, `author`, `origin`, `note`; `apiclient` (`Release` без Version, `UpdateReleaseNote`, `RevertToRelease`), `growctl release` сохраняет Commit и публикует его, `libraries` печатает commit/saved/unpublished
+  - UI (Library): у Commit'а в History — **Make Release** (заметка, автор из LocalStorage; у опубликованного — «Released»), список Release показывает Commit/`legacy`, автора и заметку с редактированием заметки, статус — «unpublished commits», Discard — к Commit, **Revert** — к последней Release; UI (Project): у пина — провенанс Release (Commit, заголовок, автор, заметка/`legacy`); `eventlog` знает `library_release_note_updated` и перечитывает Release/Commit'ы на `library_released`
+  - Документы: ADR 0007/0012/0016/0017/0021 (поправки task 72_5), `GLOSSARY.md` (Library Release, Legacy Release, Discard, Revert to latest Release, Release), `AGENTS.md`, CHANGELOG
+  - Bruno: Commit перед Release, провенанс в ответе и пинах, 409 повторной публикации Commit'а, `PATCH` заметки, `revert-to-release`, legacy `origin` в сиде, Commit для cleanup-сценария; `requestBodies` пополнены
+  - Тесты: домен (Release из Commit, провенанс, `WithNote`, состояния), репозиторий (провенанс, unique commit, legacy, `released_widget_types`, `ReleasedCommits`), application (публикация Commit'а, 404/409, заметка, Discard к Commit, Revert к Release, пины с провенансом), REST, uitest (кнопка Release, legacy-строка, провенанс пина), apiclient
+
 ## [0.0.81] - 2026-11-08
 
 ### Added

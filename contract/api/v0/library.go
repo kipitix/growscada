@@ -10,20 +10,36 @@ import (
 // with this exact name, unique among the server's live libraries.
 const LibrariesQueryName = "name"
 
+// The origins of a Library Release (task 72_5): a Commit of the Library's
+// Draft, or the Draft as it was before Commits (a legacy Release).
+const (
+	LibraryReleaseOriginCommit = "commit"
+	LibraryReleaseOriginLegacy = "legacy"
+)
+
+// RevertToReleasePath, under a Library's path, resets its Draft to its latest
+// Release (task 72_5): the published state. Discard resets it to the last
+// Commit instead — the saved state.
+const RevertToReleasePath = "/revert-to-release"
+
 // LibraryResponse is the HTTP DTO for representing a library in API
 // responses. The WidgetTypes of its Draft live under
 // /libraries/{id}/widget-types, its releases under /libraries/{id}/releases.
-// LatestRelease is the number of its latest release, 0 if none.
-// HasUnreleasedChanges reports whether the Draft differs from the latest
-// release (always, for a library never released). Version is the Library's
-// own (rename and deletion); the Version of its Draft is read from GET
+// LatestRelease is the number of its latest release, 0 if none; LatestCommit
+// the number of the Draft's last Commit, 0 when it was never saved.
+// HasUnsavedChanges reports whether the Draft moved since its last Commit;
+// HasUnpublishedChanges whether the last Commit is newer than the one the
+// latest Release published (task 72_5; ADR 0021). Version is the Library's own
+// (rename and deletion); the Version of its Draft is read from GET
 // /libraries/{id}/draft and carried by the DTOs of its content.
 type LibraryResponse struct {
-	ID                   uuid.UUID `json:"id"`
-	Name                 string    `json:"name"`
-	Version              int       `json:"version"`
-	LatestRelease        int       `json:"latest_release"`
-	HasUnreleasedChanges bool      `json:"has_unreleased_changes"`
+	ID                    uuid.UUID `json:"id"`
+	Name                  string    `json:"name"`
+	Version               int       `json:"version"`
+	LatestRelease         int       `json:"latest_release"`
+	LatestCommit          int       `json:"latest_commit"`
+	HasUnsavedChanges     bool      `json:"has_unsaved_changes"`
+	HasUnpublishedChanges bool      `json:"has_unpublished_changes"`
 }
 
 // GetLibrariesResponse is the HTTP DTO for a list of libraries.
@@ -56,28 +72,50 @@ type UpdateLibraryResponse struct {
 	Version int `json:"version"`
 }
 
-// CreateReleaseRequest is the HTTP DTO of POST /libraries/{id}/releases: a
-// Release of the library's Draft as it is, with an optional note. Version
-// must be the Version of the library's Draft the client saw (ADR 0016).
+// CreateReleaseRequest is the HTTP DTO of POST /libraries/{id}/releases: the
+// publication of a Commit of the library's Draft as the next Library Release,
+// with an optional note and the Author who published it (task 72_5;
+// ADR 0021). It states no Draft Version: a Commit is immutable.
 type CreateReleaseRequest struct {
-	Note    string `json:"note"`
-	Version int    `json:"version"`
+	Commit int    `json:"commit"`
+	Note   string `json:"note,omitempty"`
+	Author string `json:"author"`
+}
+
+// UpdateLibraryReleaseNoteRequest is the HTTP DTO of
+// PATCH /libraries/{id}/releases/{n}: the new note of a Library Release. The
+// content never changes.
+type UpdateLibraryReleaseNoteRequest struct {
+	Note string `json:"note"`
 }
 
 // DiscardLibraryResponse is the answer of POST /libraries/{id}/discard: the
-// Draft of the library was reset to its latest release in one transaction
-// (ADR 0016).
+// Draft of the library was reset to its last Commit in one transaction
+// (task 72_5; ADR 0016).
 type DiscardLibraryResponse = DraftStateResponse
 
+// RevertLibraryResponse is the answer of POST
+// /libraries/{id}/revert-to-release: the Draft of the library was reset to its
+// latest Release in one transaction (task 72_5; ADR 0016).
+type RevertLibraryResponse = DraftStateResponse
+
 // LibraryReleaseResponse is the HTTP DTO of a Library Release: its number
-// within the library, the time it was made, its note and the copies of the
-// WidgetTypes of the Draft it holds.
+// within the library, the Commit it published and that Commit's title at the
+// moment of the read, the Author, the origin (a Commit, or a legacy Release
+// made before Commits), the note, the time, the copies of the WidgetTypes it
+// holds and the counts of its snapshot. CommitNumber and Title are null for a
+// legacy Release.
 type LibraryReleaseResponse struct {
-	LibraryID   uuid.UUID                    `json:"library_id"`
-	Number      int                          `json:"number"`
-	Note        string                       `json:"note"`
-	CreatedAt   time.Time                    `json:"created_at"`
-	WidgetTypes []ReleasedWidgetTypeResponse `json:"widget_types"`
+	LibraryID     uuid.UUID                    `json:"library_id"`
+	Number        int                          `json:"number"`
+	CommitNumber  *int                         `json:"commit_number"`
+	Title         *string                      `json:"title"`
+	Author        string                       `json:"author"`
+	Origin        string                       `json:"origin"`
+	Note          string                       `json:"note"`
+	CreatedAt     time.Time                    `json:"created_at"`
+	WidgetTypes   []ReleasedWidgetTypeResponse `json:"widget_types"`
+	ContentCounts CommitContentCounts          `json:"content_counts"`
 }
 
 // GetLibraryReleasesResponse is the HTTP DTO for the releases of a library,

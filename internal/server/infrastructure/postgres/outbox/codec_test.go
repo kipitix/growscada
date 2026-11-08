@@ -57,6 +57,7 @@ func sampleEvents(t *testing.T) []event.Event {
 		library.NewLibraryUpdatedEvent(libraryID, ts),
 		library.NewLibraryDeletedEvent(libraryID, ts),
 		library.NewLibraryReleasedEvent(libraryID, libraryRelease, ts),
+		library.NewLibraryReleaseNoteUpdatedEvent(libraryID, libraryRelease, ts),
 		librarypin.NewLibraryPinCreatedEvent(libraryID, projectID, ts),
 		librarypin.NewLibraryPinUpdatedEvent(libraryID, projectID, ts),
 		librarypin.NewLibraryPinDeletedEvent(libraryID, projectID, ts),

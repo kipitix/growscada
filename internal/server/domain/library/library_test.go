@@ -62,83 +62,114 @@ func TestLibraryDelete_MarksDeletedAndRecordsDeletedEvent(t *testing.T) {
 	}
 }
 
-func TestCreateRelease_NumbersAndRefusesAnUnchangedDraft(t *testing.T) {
+func TestCreateRelease_FromACommit(t *testing.T) {
 	lib := makeStoredLibrary(t)
-	draft := []WidgetType{makeCommittedWidgetType(t)}
 	at := time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
+	author, err := NewAuthor("Ada")
+	if err != nil {
+		t.Fatalf("NewAuthor: %v", err)
+	}
 
-	first, err := CreateRelease(lib, draft, nil, "first", at)
+	first, err := CreateRelease(lib, FirstRelease(), 1, "first", author, at, nil)
 	if err != nil {
 		t.Fatalf("CreateRelease: %v", err)
 	}
-	if first.Number() != FirstRelease() || first.Note() != "first" || !first.CreatedAt().Equal(at) || len(first.WidgetTypes()) != 1 {
-		t.Errorf("unexpected first release %s", first)
+	commitNumber := first.CommitNumber()
+	if first.Number() != FirstRelease() || first.Note() != "first" || !first.CreatedAt().Equal(at) ||
+		commitNumber == nil || *commitNumber != 1 || first.Author().String() != "Ada" || first.Origin() != OriginCommit {
+		t.Errorf("unexpected first release %s: %+v", first, first)
 	}
 	if ev, ok := first.PendingEvents()[0].(LibraryReleasedEvent); !ok || ev.Release() != FirstRelease() || ev.LibraryID() != lib.ID() {
 		t.Errorf("expected library_released of release 1, got %v", first.PendingEvents())
 	}
 
-	if _, err := CreateRelease(lib, draft, first, "", at); !errors.Is(err, ErrNothingToRelease) {
-		t.Errorf("an unchanged Draft: expected ErrNothingToRelease, got %v", err)
-	}
-
-	changed, err := draft[0].Update(mustName(t, "thermometer"), draft[0].HtmlTemplate(), draft[0].Script(), draft[0].ScriptLanguage(), draft[0].DefaultSize(), nil)
-	if err != nil {
-		t.Fatalf("Update: %v", err)
-	}
-	second, err := CreateRelease(lib, []WidgetType{changed}, first, "", at)
+	second, err := CreateRelease(lib, FirstRelease().Next(), 2, "", author, at, nil)
 	if err != nil || second.Number().Int() != 2 {
 		t.Fatalf("second release: %v, %v", second, err)
 	}
 }
 
-func TestDraftDiffers(t *testing.T) {
+func TestCreateRelease_RefusesAWidgetTypeOfAnotherLibrary(t *testing.T) {
 	lib := makeStoredLibrary(t)
-	wt := makeCommittedWidgetType(t)
-	release, err := CreateRelease(lib, []WidgetType{wt}, nil, "", time.Now())
+	author, _ := NewAuthor("Ada")
+	other := ReleasedFrom(makeCommittedWidgetType(t))
+	other.libraryID = id.NewID[Library]()
+	if _, err := CreateRelease(lib, FirstRelease(), 1, "", author, time.Now(), []ReleasedWidgetType{other}); err == nil {
+		t.Error("a WidgetType of another Library: expected an error")
+	}
+}
+
+func TestReconstituteRelease_ChecksTheProvenance(t *testing.T) {
+	author, _ := NewAuthor("Ada")
+	at := time.Now()
+	commit := 1
+	if _, err := ReconstituteRelease(testLibraryID, FirstRelease(), nil, author, OriginCommit, "", at, nil); err == nil {
+		t.Error("a release of a commit without its number: expected an error")
+	}
+	if _, err := ReconstituteRelease(testLibraryID, FirstRelease(), &commit, author, OriginLegacy, "", at, nil); err == nil {
+		t.Error("a legacy release naming a commit: expected an error")
+	}
+	legacy, err := ReconstituteRelease(testLibraryID, FirstRelease(), nil, author, OriginLegacy, "", at, nil)
+	if err != nil || legacy.CommitNumber() != nil || legacy.Origin() != OriginLegacy {
+		t.Errorf("legacy release: %v, %v", legacy, err)
+	}
+}
+
+func TestReleaseWithNote_RecordsNoteUpdatedAndKeepsTheContent(t *testing.T) {
+	lib := makeStoredLibrary(t)
+	author, _ := NewAuthor("Ada")
+	release, err := CreateRelease(lib, FirstRelease(), 1, "first", author, time.Now(), nil)
 	if err != nil {
 		t.Fatalf("CreateRelease: %v", err)
 	}
-	renamed, _ := wt.Update(mustName(t, "other"), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.DefaultSize(), nil)
-	port, _ := NewInputPortName("value")
-	withPort, _ := wt.Update(wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(), wt.DefaultSize(),
-		[]InputPort{NewInputPort(port, "", AnyTypeHint())})
-
-	cases := map[string]struct {
-		draft []WidgetType
-		want  bool
-	}{
-		"same":       {[]WidgetType{wt}, false},
-		"renamed":    {[]WidgetType{renamed}, true},
-		"port added": {[]WidgetType{withPort}, true},
-		"removed":    {nil, true},
-		"added":      {[]WidgetType{wt, makeCommittedWidgetType(t)}, true},
+	updated := release.WithNote("second")
+	if updated.Note() != "second" || release.Note() != "first" {
+		t.Errorf("WithNote: %q, original %q", updated.Note(), release.Note())
 	}
-	for name, tc := range cases {
-		if got := DraftDiffers(tc.draft, release); got != tc.want {
-			t.Errorf("%s: DraftDiffers = %t, want %t", name, got, tc.want)
-		}
+	if updated.Number() != release.Number() || updated.CommitNumber() == nil || *updated.CommitNumber() != 1 {
+		t.Errorf("WithNote changed the identity: %+v", updated)
 	}
-	if !DraftDiffers(nil, nil) {
-		t.Error("a Library never released differs from any Draft")
+	ev, ok := updated.PendingEvents()[0].(LibraryReleaseNoteUpdatedEvent)
+	if !ok || ev.Release() != FirstRelease() || ev.LibraryID() != lib.ID() {
+		t.Errorf("expected library_release_note_updated, got %v", updated.PendingEvents())
 	}
 }
 
 func TestReleaseStateOf(t *testing.T) {
-	lib := makeStoredLibrary(t)
-	wt := makeCommittedWidgetType(t)
-	if got := ReleaseStateOf([]WidgetType{wt}, nil); got.Latest.IsValid() || !got.DraftDiffers {
-		t.Errorf("never released: %+v", got)
-	}
-	release, err := CreateRelease(lib, []WidgetType{wt}, nil, "", time.Now())
+	author, _ := NewAuthor("Ada")
+	commit := 2
+	released, err := ReconstituteRelease(testLibraryID, FirstRelease(), &commit, author, OriginCommit, "", time.Now(), nil)
 	if err != nil {
-		t.Fatalf("CreateRelease: %v", err)
+		t.Fatalf("ReconstituteRelease: %v", err)
 	}
-	if got := ReleaseStateOf([]WidgetType{wt}, release); got.Latest != FirstRelease() || got.DraftDiffers {
-		t.Errorf("released: %+v", got)
+	legacy, err := ReconstituteRelease(testLibraryID, FirstRelease(), nil, author, OriginLegacy, "", time.Now(), nil)
+	if err != nil {
+		t.Fatalf("ReconstituteRelease: %v", err)
 	}
-	if got := ReleaseStateOf(nil, release); got.Latest != FirstRelease() || !got.DraftDiffers {
-		t.Errorf("changed since: %+v", got)
+
+	cases := map[string]struct {
+		latest             LibraryRelease
+		lastCommit         int
+		draftVersion       int
+		lastCommitDraftVer int
+		wantLatest         int
+		wantLastReleaseCmt int
+		wantUnsaved        bool
+		wantUnpublished    bool
+	}{
+		"never saved, never released": {nil, 0, 1, 0, 0, 0, true, false},
+		"saved, not released":         {nil, 2, 3, 3, 0, 0, false, true},
+		"released commit 2":           {released, 2, 3, 3, 1, 2, false, false},
+		"moved after the commit":      {released, 3, 4, 3, 1, 2, true, true},
+		"legacy release, no commit":   {legacy, 0, 1, 0, 1, 0, true, false},
+		"legacy release, commit 1":    {legacy, 1, 2, 2, 1, 0, false, true},
+	}
+	for name, tc := range cases {
+		got := ReleaseStateOf(tc.latest, tc.lastCommit, tc.draftVersion, tc.lastCommitDraftVer)
+		if got.Latest.Int() != tc.wantLatest || got.LatestReleaseCommit != tc.wantLastReleaseCmt ||
+			got.UnsavedChanges != tc.wantUnsaved || got.UnpublishedChanges != tc.wantUnpublished {
+			t.Errorf("%s: %+v", name, got)
+		}
 	}
 }
 

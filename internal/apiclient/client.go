@@ -401,17 +401,13 @@ func (l *LibraryClient) DeleteWidgetType(ctx context.Context, id uuid.UUID, vers
 
 func widgetTypePath(id uuid.UUID) string { return "/widget-types/" + id.String() }
 
-// Release makes a release of the library's Draft. The error matches
-// ErrConflict if req.Version is stale or the Draft has not changed since the
-// latest release.
+// Release publishes a Commit of the library's Draft as the next Library
+// Release (task 72_5; ADR 0021). The error matches ErrConflict if the Commit
+// is released already and ErrNotFound for a library or a Commit it does not
+// have.
 func (l *LibraryClient) Release(ctx context.Context, req apiv0.CreateReleaseRequest) (apiv0.LibraryReleaseResponse, error) {
 	var resp apiv0.LibraryReleaseResponse
-	version, err := l.draftVersionOf(ctx, req.Version)
-	if err != nil {
-		return resp, err
-	}
-	req.Version = version
-	err = l.do(ctx, http.MethodPost, "/releases", req, http.StatusCreated, &resp)
+	err := l.do(ctx, http.MethodPost, "/releases", req, http.StatusCreated, &resp)
 	return resp, err
 }
 
@@ -427,6 +423,14 @@ func (l *LibraryClient) ListReleases(ctx context.Context) ([]apiv0.LibraryReleas
 func (l *LibraryClient) GetRelease(ctx context.Context, n int) (apiv0.LibraryReleaseResponse, error) {
 	var resp apiv0.LibraryReleaseResponse
 	err := l.do(ctx, http.MethodGet, "/releases/"+strconv.Itoa(n), nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+// UpdateReleaseNote changes the note of a Library Release (task 72_5). It
+// states no Draft Version: the content never changes.
+func (l *LibraryClient) UpdateReleaseNote(ctx context.Context, n int, req apiv0.UpdateLibraryReleaseNoteRequest) (apiv0.LibraryReleaseResponse, error) {
+	var resp apiv0.LibraryReleaseResponse
+	err := l.do(ctx, http.MethodPatch, "/releases/"+strconv.Itoa(n), req, http.StatusOK, &resp)
 	return resp, err
 }
 
@@ -470,12 +474,21 @@ func (p *ProjectClient) draftChangeCommand(ctx context.Context, path string, sta
 	return resp, err
 }
 
-// Discard resets the library's Draft to its latest release in one transaction
-// and returns the Draft's new state. The error matches ErrConflict if the
-// library was never released.
+// Discard resets the library's Draft to its last Commit in one transaction and
+// returns the Draft's new state (task 72_5). The error matches ErrConflict if
+// the library has no Commit.
 func (l *LibraryClient) Discard(ctx context.Context) (apiv0.DiscardLibraryResponse, error) {
 	var resp apiv0.DiscardLibraryResponse
 	err := l.do(ctx, http.MethodPost, "/discard", nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+// RevertToRelease resets the library's Draft to its latest Release in one
+// transaction and returns the Draft's new state (task 72_5). The error matches
+// ErrConflict if the library was never released.
+func (l *LibraryClient) RevertToRelease(ctx context.Context) (apiv0.RevertLibraryResponse, error) {
+	var resp apiv0.RevertLibraryResponse
+	err := l.do(ctx, http.MethodPost, apiv0.RevertToReleasePath, nil, http.StatusOK, &resp)
 	return resp, err
 }
 

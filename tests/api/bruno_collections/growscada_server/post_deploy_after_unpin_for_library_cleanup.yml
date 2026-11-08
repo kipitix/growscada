@@ -1,8 +1,7 @@
 info:
   name: deploy the cleanup project without the pin
   type: http
-  seq: 1996
-
+  seq: 1997
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/releases/{{CLEANUP_RELEASE_NUMBER}}/deploy

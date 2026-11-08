@@ -50,20 +50,21 @@ var apiEventTypes = map[event.EventType]string{
 	event.EventTypeLibraryPinUpdated: apiv0.EventLibraryPinUpdated,
 	event.EventTypeLibraryPinDeleted: apiv0.EventLibraryPinDeleted,
 
-	event.EventTypeDeviceCreated:            apiv0.EventDeviceCreated,
-	event.EventTypeDeviceUpdated:            apiv0.EventDeviceUpdated,
-	event.EventTypeDeviceDeleted:            apiv0.EventDeviceDeleted,
-	event.EventTypeEnvironmentCreated:       apiv0.EventEnvironmentCreated,
-	event.EventTypeEnvironmentUpdated:       apiv0.EventEnvironmentUpdated,
-	event.EventTypeEnvironmentDeleted:       apiv0.EventEnvironmentDeleted,
-	event.EventTypeEnvironmentDeviceCreated: apiv0.EventEnvironmentDeviceCreated,
-	event.EventTypeEnvironmentDeviceUpdated: apiv0.EventEnvironmentDeviceUpdated,
-	event.EventTypeEnvironmentDeviceDeleted: apiv0.EventEnvironmentDeviceDeleted,
-	event.EventTypeDeploymentCreated:        apiv0.EventDeploymentCreated,
-	event.EventTypeCommitCreated:            apiv0.EventCommitCreated,
-	event.EventTypeCommitTitleUpdated:       apiv0.EventCommitTitleUpdated,
-	event.EventTypeReleaseCreated:           apiv0.EventReleaseCreated,
-	event.EventTypeReleaseNoteUpdated:       apiv0.EventReleaseNoteUpdated,
+	event.EventTypeDeviceCreated:             apiv0.EventDeviceCreated,
+	event.EventTypeDeviceUpdated:             apiv0.EventDeviceUpdated,
+	event.EventTypeDeviceDeleted:             apiv0.EventDeviceDeleted,
+	event.EventTypeEnvironmentCreated:        apiv0.EventEnvironmentCreated,
+	event.EventTypeEnvironmentUpdated:        apiv0.EventEnvironmentUpdated,
+	event.EventTypeEnvironmentDeleted:        apiv0.EventEnvironmentDeleted,
+	event.EventTypeEnvironmentDeviceCreated:  apiv0.EventEnvironmentDeviceCreated,
+	event.EventTypeEnvironmentDeviceUpdated:  apiv0.EventEnvironmentDeviceUpdated,
+	event.EventTypeEnvironmentDeviceDeleted:  apiv0.EventEnvironmentDeviceDeleted,
+	event.EventTypeDeploymentCreated:         apiv0.EventDeploymentCreated,
+	event.EventTypeCommitCreated:             apiv0.EventCommitCreated,
+	event.EventTypeCommitTitleUpdated:        apiv0.EventCommitTitleUpdated,
+	event.EventTypeReleaseCreated:            apiv0.EventReleaseCreated,
+	event.EventTypeReleaseNoteUpdated:        apiv0.EventReleaseNoteUpdated,
+	event.EventTypeLibraryReleaseNoteUpdated: apiv0.EventLibraryReleaseNoteUpdated,
 }
 
 // newAPIEvent translates a domain (or delivery) event into the event stream's
@@ -109,6 +110,9 @@ func newAPIEvent(e event.Event) apiv0.Event {
 		ev.ID = e.LibraryID().String()
 		if released, ok := e.(library.LibraryReleasedEvent); ok {
 			ev.Release = released.Release().Int()
+		}
+		if updated, ok := e.(library.LibraryReleaseNoteUpdatedEvent); ok {
+			ev.Release = updated.Release().Int()
 		}
 	case librarypin.LibraryPinEvent:
 		ev.ID = e.LibraryID().String()

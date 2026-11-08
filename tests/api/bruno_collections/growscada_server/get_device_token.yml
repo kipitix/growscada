@@ -1,8 +1,7 @@
 info:
   name: get device token
   type: http
-  seq: 89
-
+  seq: 90
 http:
   method: GET
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/devices/{{DEVICE_ID}}/token

@@ -469,11 +469,13 @@ func newReleasedWidgetTypeResponses(list []appdto.ReleasedWidgetType) []apiv0.Re
 
 func newLibraryResponse(l appdto.Library) apiv0.LibraryResponse {
 	return apiv0.LibraryResponse{
-		ID:                   l.ID,
-		Name:                 l.Name,
-		Version:              l.Version,
-		LatestRelease:        l.LatestRelease,
-		HasUnreleasedChanges: l.HasUnreleasedChanges,
+		ID:                    l.ID,
+		Name:                  l.Name,
+		Version:               l.Version,
+		LatestRelease:         l.LatestRelease,
+		LatestCommit:          l.LatestCommit,
+		HasUnsavedChanges:     l.HasUnsavedChanges,
+		HasUnpublishedChanges: l.HasUnpublishedChanges,
 	}
 }
 
@@ -521,21 +523,26 @@ func newGetCommitsResponse(list []appdto.Commit) apiv0.GetCommitsResponse {
 // body without content.
 func newReleaseResponse(r appdto.Release) apiv0.ReleaseResponse {
 	return apiv0.ReleaseResponse{
-		Number:       r.Number,
-		CommitNumber: r.CommitNumber,
-		Title:        r.Title,
-		Note:         r.Note,
-		Author:       r.Author,
-		CreatedAt:    r.CreatedAt.UTC(),
-		Origin:       r.Origin,
-		ContentCounts: apiv0.CommitContentCounts{
-			Scenes:       r.Counts.Scenes,
-			Widgets:      r.Counts.Widgets,
-			Tags:         r.Counts.Tags,
-			Devices:      r.Counts.Devices,
-			Environments: r.Counts.Environments,
-			WidgetTypes:  r.Counts.WidgetTypes,
-		},
+		Number:        r.Number,
+		CommitNumber:  r.CommitNumber,
+		Title:         r.Title,
+		Note:          r.Note,
+		Author:        r.Author,
+		CreatedAt:     r.CreatedAt.UTC(),
+		Origin:        r.Origin,
+		ContentCounts: newCommitContentCounts(r.Counts),
+	}
+}
+
+// newCommitContentCounts converts the counts of a Commit's snapshot.
+func newCommitContentCounts(c appdto.CommitCounts) apiv0.CommitContentCounts {
+	return apiv0.CommitContentCounts{
+		Scenes:       c.Scenes,
+		Widgets:      c.Widgets,
+		Tags:         c.Tags,
+		Devices:      c.Devices,
+		Environments: c.Environments,
+		WidgetTypes:  c.WidgetTypes,
 	}
 }
 
@@ -549,13 +556,22 @@ func newGetReleasesResponse(list []appdto.Release) apiv0.GetReleasesResponse {
 }
 
 func newLibraryReleaseResponse(r appdto.LibraryRelease) apiv0.LibraryReleaseResponse {
-	return apiv0.LibraryReleaseResponse{
-		LibraryID:   r.LibraryID,
-		Number:      r.Number,
-		Note:        r.Note,
-		CreatedAt:   r.CreatedAt.UTC(),
-		WidgetTypes: newReleasedWidgetTypeResponses(r.WidgetTypes),
+	resp := apiv0.LibraryReleaseResponse{
+		LibraryID:     r.LibraryID,
+		Number:        r.Number,
+		Author:        r.Author,
+		Origin:        r.Origin,
+		Note:          r.Note,
+		CreatedAt:     r.CreatedAt.UTC(),
+		WidgetTypes:   newReleasedWidgetTypeResponses(r.WidgetTypes),
+		ContentCounts: newCommitContentCounts(r.Counts),
 	}
+	if r.CommitNumber != nil {
+		number := *r.CommitNumber
+		title := r.Title
+		resp.CommitNumber, resp.Title = &number, &title
+	}
+	return resp
 }
 
 func newGetLibraryReleasesResponse(list []appdto.LibraryRelease) apiv0.GetLibraryReleasesResponse {
@@ -567,7 +583,20 @@ func newGetLibraryReleasesResponse(list []appdto.LibraryRelease) apiv0.GetLibrar
 }
 
 func newLibraryPinResponse(p appdto.LibraryPin) apiv0.LibraryPinResponse {
-	return apiv0.LibraryPinResponse{LibraryID: p.LibraryID, Release: p.Release, Version: p.Version}
+	resp := apiv0.LibraryPinResponse{
+		LibraryID: p.LibraryID,
+		Release:   p.Release,
+		Version:   p.Version,
+		Author:    p.Author,
+		Origin:    p.Origin,
+		Note:      p.Note,
+	}
+	if p.CommitNumber != nil {
+		number := *p.CommitNumber
+		title := p.Title
+		resp.CommitNumber, resp.Title = &number, &title
+	}
+	return resp
 }
 
 func newGetLibraryPinsResponse(list []appdto.LibraryPin) apiv0.GetLibraryPinsResponse {

@@ -2,6 +2,7 @@ package library
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"os"
@@ -200,28 +201,29 @@ func TestDeleteItem_LastType_KeepsTheDraftVersion(t *testing.T) {
 	f.run()
 	f.noToasts()
 
-	if _, err := f.api.Release(context.Background(), apiv0.CreateReleaseRequest{
-		Version: f.l.draftVersion(),
-	}); err != nil {
+	if _, err := saveAndRelease(context.Background(), f.api.LibraryClient, ""); err != nil {
 		t.Fatalf("release of the emptied Draft at the known version: %v", err)
 	}
 }
 
-// TestRelease_ReleasesTheDraftAndShowsItInTheHistory: Release makes release
-// 1 of the Draft, shown in the history; viewing it is read-only.
+// TestRelease_ReleasesTheDraftAndShowsItInTheHistory: a Commit published as
+// Release 1 is shown in the history; viewing it is read-only.
 func TestRelease_ReleasesTheDraftAndShowsItInTheHistory(t *testing.T) {
 	f, id := selected(t)
 
-	if lib, ok := f.l.selectedLibrary(); !ok || !lib.HasUnreleasedChanges || lib.LatestRelease != 0 {
+	if lib, ok := f.l.selectedLibrary(); !ok || !lib.HasUnsavedChanges || lib.LatestRelease != 0 {
 		t.Fatalf("library before the release: %+v", lib)
 	}
 	releaseNow(t, f)
 
-	if lib, _ := f.l.selectedLibrary(); lib.LatestRelease != 1 || lib.HasUnreleasedChanges {
+	if lib, _ := f.l.selectedLibrary(); lib.LatestRelease != 1 || lib.HasUnsavedChanges || lib.HasUnpublishedChanges {
 		t.Errorf("library after the release: %+v", lib)
 	}
 	if len(f.l.releases) != 1 || len(f.l.releases[0].WidgetTypes) != 1 || f.l.releases[0].WidgetTypes[0].ID != id {
 		t.Fatalf("history: %+v", f.l.releases)
+	}
+	if f.l.releases[0].CommitNumber == nil || *f.l.releases[0].CommitNumber != 1 || f.l.releases[0].Origin != apiv0.LibraryReleaseOriginCommit {
+		t.Errorf("the provenance of the release: %+v", f.l.releases[0])
 	}
 	f.l.view(1)
 	if !f.l.readOnly() || len(f.l.shownTypes()) != 1 {
@@ -238,15 +240,42 @@ func TestRelease_ReleasesTheDraftAndShowsItInTheHistory(t *testing.T) {
 	}
 }
 
-// releaseNow releases the selected library's Draft as Release does, without
-// its dialog.
+// saveAndRelease saves the library's Draft as a Commit and publishes that
+// Commit, as releaseNow does without the UI: the pair of the new semantics of
+// a Library Release (task 72_5; ADR 0021). A Draft already at its last Commit
+// publishes that one.
+func saveAndRelease(ctx context.Context, lib *apiclient.LibraryClient, note string) (apiv0.LibraryReleaseResponse, error) {
+	state, err := lib.DraftState(ctx)
+	if err != nil {
+		return apiv0.LibraryReleaseResponse{}, err
+	}
+	commit, err := lib.SaveCommit(ctx, apiv0.CreateCommitRequest{Version: state.Version, Title: "Save", Author: "Ada"})
+	if err != nil {
+		if !errors.Is(err, apiclient.ErrConflict) {
+			return apiv0.LibraryReleaseResponse{}, err
+		}
+		commits, err := lib.Commits(ctx)
+		if err != nil {
+			return apiv0.LibraryReleaseResponse{}, err
+		}
+		if len(commits) == 0 {
+			return apiv0.LibraryReleaseResponse{}, errors.New("the draft has no commit to release")
+		}
+		commit = commits[0]
+	}
+	return lib.Release(ctx, apiv0.CreateReleaseRequest{Commit: commit.Number, Note: note, Author: "Ada"})
+}
+
+// releaseNow releases the selected library's last Commit, saving the Draft
+// first when it moved since it.
 func releaseNow(t *testing.T, f *fixture) {
 	t.Helper()
-	if _, err := f.api.Release(context.Background(), apiv0.CreateReleaseRequest{Version: 0}); err != nil {
+	if _, err := saveAndRelease(context.Background(), f.api.LibraryClient, ""); err != nil {
 		t.Fatalf("release: %v", err)
 	}
 	f.l.loadLibraries(f.l.compoCtx)
 	f.l.loadReleases(f.l.compoCtx)
+	f.l.loadCommits(f.l.compoCtx) // the release marks its Commit
 	f.run()
 	f.noToasts()
 }

@@ -3,6 +3,7 @@ package library
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
@@ -32,7 +33,9 @@ func (l *Library) createLibrary() {
 	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.CreateLibraryResponse, error) {
 		return l.client.CreateLibrary(c, apiv0.CreateLibraryRequest{Name: name})
 	}, func(ctx app.Context, created apiv0.CreateLibraryResponse) {
-		l.libraries = append(l.libraries, apiv0.LibraryResponse{ID: created.ID, Name: name, Version: created.Version, HasUnreleasedChanges: true})
+		l.libraries = append(l.libraries, apiv0.LibraryResponse{
+			ID: created.ID, Name: name, Version: created.Version, HasUnsavedChanges: true,
+		})
 		l.selectLibrary(ctx, created.ID)
 		l.loadLibraries(ctx)
 	}, nil)
@@ -71,32 +74,67 @@ func (l *Library) deleteLibrary() {
 	}, nil)
 }
 
-// release asks for an optional note and releases the selected library's
-// Draft.
-func (l *Library) release() {
+// releaseCommit publishes a Commit of the selected library as the next Library
+// Release (task 72_5; ADR 0021): a note is asked for, and the Author is the
+// stored one, asked for when none is.
+func (l *Library) releaseCommit(commit apiv0.CommitResponse) {
 	lib, ok := l.selectedLibrary()
+	if !ok || commit.Released {
+		return
+	}
+	note, ok := prompt(fmt.Sprintf("Publish commit #%d of %s as release %d. Note (optional):",
+		commit.Number, lib.Name, lib.LatestRelease+1), "", true)
 	if !ok {
 		return
 	}
-	note, ok := prompt("Release "+lib.Name+" as release "+itoa(lib.LatestRelease+1)+". Note (optional):", "", true)
+	author := l.saveAuthor
+	if author == "" {
+		if author, ok = prompt("Author:", "", false); !ok || author == "" {
+			return
+		}
+		l.saveAuthor = author
+		l.compoCtx.LocalStorage().Set(uiutil.AuthorKey, author)
+	}
+	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.LibraryReleaseResponse, error) {
+		return l.client.Library(lib.ID).Release(c, apiv0.CreateReleaseRequest{
+			Commit: commit.Number, Note: note, Author: author,
+		})
+	}, func(ctx app.Context, _ apiv0.LibraryReleaseResponse) {
+		l.loadReleases(ctx)
+		l.loadCommits(ctx)
+		l.loadLibraries(ctx)
+	}, l.reloadOnConflict)
+}
+
+// editReleaseNote changes the note of a Release after asking for it; the
+// content never changes (task 72_5).
+func (l *Library) editReleaseNote(release apiv0.LibraryReleaseResponse) {
+	note, ok := prompt(fmt.Sprintf("Note of release %d:", release.Number), release.Note, true)
+	if !ok {
+		return
+	}
+	lib, ok := l.selectedLibrary()
 	if !ok {
 		return
 	}
 	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.LibraryReleaseResponse, error) {
-		return l.client.Library(lib.ID).Release(c, apiv0.CreateReleaseRequest{Note: note, Version: l.draftVersion()})
-	}, func(ctx app.Context, _ apiv0.LibraryReleaseResponse) {
-		l.loadLibraries(ctx)
-		l.loadReleases(ctx)
-		l.loadDraftChanges(ctx) // a Release clears the stack (ADR 0017)
+		return l.client.Library(lib.ID).UpdateReleaseNote(c, release.Number, apiv0.UpdateLibraryReleaseNoteRequest{Note: note})
+	}, func(ctx app.Context, updated apiv0.LibraryReleaseResponse) {
+		for i := range l.releases {
+			if l.releases[i].Number == updated.Number {
+				l.releases[i] = updated
+			}
+		}
+		ctx.Update()
 	}, l.reloadOnConflict)
 }
 
-// discard resets the selected library's Draft to its latest release after a
+// discard resets the selected library's Draft to its last Commit after a
 // confirmation; the server does it in one transaction and answers its state.
 func (l *Library) discard() {
 	lib, ok := l.selectedLibrary()
 	if !ok || !app.Window().Call("confirm",
-		"Discard every change of "+lib.Name+" since release "+itoa(lib.LatestRelease)+"? The Draft goes back to that release.").Bool() {
+		"Discard every change of "+lib.Name+" since commit "+itoa(lib.LatestCommit)+"? The Draft goes back to that Commit.").Bool() {
 		return
 	}
 	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.DiscardLibraryResponse, error) {
@@ -108,6 +146,26 @@ func (l *Library) discard() {
 		l.loadLibraries(ctx)
 		l.loadReleases(ctx)
 		l.loadDraftChanges(ctx) // a Discard clears the stack (ADR 0017)
+	}, l.reloadOnConflict)
+}
+
+// revert resets the selected library's Draft to its latest Release after a
+// confirmation: the published state (task 72_5).
+func (l *Library) revert() {
+	lib, ok := l.selectedLibrary()
+	if !ok || !app.Window().Call("confirm",
+		"Revert "+lib.Name+" to its latest release "+itoa(lib.LatestRelease)+"? The Draft goes back to the published state.").Bool() {
+		return
+	}
+	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.RevertLibraryResponse, error) {
+		return l.client.Library(lib.ID).RevertToRelease(c)
+	}, func(ctx app.Context, state apiv0.RevertLibraryResponse) {
+		l.draftVersions.Forget()
+		l.observeDraftVersion(l.markDraft(), state.Version)
+		l.loadList(ctx)
+		l.loadLibraries(ctx)
+		l.loadReleases(ctx)
+		l.loadDraftChanges(ctx) // a Revert clears the stack (ADR 0017)
 	}, l.reloadOnConflict)
 }
 

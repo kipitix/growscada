@@ -1,7 +1,7 @@
 info:
   name: get journal events (SSE stream)
   type: http
-  seq: 139
+  seq: 140
   tags:
     - manual
 

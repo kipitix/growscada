@@ -24,6 +24,9 @@ runtime:
     - expression: 'res.body.releases[0].number'
       operator: eq
       value: '1'
+    - expression: 'res.body.releases[0].origin'
+      operator: eq
+      value: '"legacy"'
 
 settings:
   encodeUrl: true

@@ -84,6 +84,7 @@ func (l *Library) saveCommit() {
 		l.savingCommit = false
 		l.saveDialog = false
 		l.loadCommits(ctx)
+		l.loadLibraries(ctx) // the status follows the new last Commit
 		ctx.Update()
 	}, func(ctx app.Context, err error) {
 		if draft != l.draft() {
@@ -266,6 +267,11 @@ func (l *Library) renderCommitRow(commit apiv0.CommitResponse) app.UI {
 				ctx.Update()
 			})
 	}
+	release := smallButton("Make Release", !commit.Released, "accent",
+		"Publish this Commit as the next Library Release", func() { l.releaseCommit(commit) })
+	if commit.Released {
+		release = smallButton("Released", false, "", "A Release publishes this Commit", func() {})
+	}
 	return app.Div().
 		Attr("data-commit-row", fmt.Sprint(commit.Number)).
 		Style("padding", "3px 0").
@@ -274,6 +280,6 @@ func (l *Library) renderCommitRow(commit apiv0.CommitResponse) app.UI {
 			app.Div().Text(fmt.Sprintf("#%d %s", commit.Number, commit.Title)),
 			app.Div().Style("color", "var(--text-muted)").Text(fmt.Sprintf("%s · %s · %d widget types",
 				commit.Author, commit.CreatedAt.Local().Format("2006-01-02 15:04"), commit.ContentCounts.WidgetTypes)),
-			rename,
+			app.Div().Style("display", "flex").Style("gap", "4px").Body(rename, release),
 		)
 }

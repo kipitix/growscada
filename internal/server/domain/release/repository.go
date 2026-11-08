@@ -40,7 +40,7 @@ type Repository interface {
 	UpdateNote(ctx context.Context, scope draft.Scope, number int, note Note) (Release, error)
 
 	// ReleasedCommits returns the numbers of the Commits the scope published.
-	// It is empty for a scope with no Release, and for a Library's until
-	// task 72_5.
+	// A Library's Releases are the library.LibraryReleaseRepository's
+	// (task 72_5).
 	ReleasedCommits(ctx context.Context, scope draft.Scope) ([]int, error)
 }

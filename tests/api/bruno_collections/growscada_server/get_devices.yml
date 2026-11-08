@@ -1,8 +1,7 @@
 info:
   name: get devices
   type: http
-  seq: 84
-
+  seq: 85
 http:
   method: GET
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/devices

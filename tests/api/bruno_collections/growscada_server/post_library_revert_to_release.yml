@@ -1,0 +1,30 @@
+info:
+  name: post library revert to the latest release
+  type: http
+  seq: 178
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/revert-to-release
+  auth: inherit
+
+docs: |
+  Reverts the Draft to its latest published Release in one transaction
+  (task 72_5; ADR 0016). Discard resets it to the last Commit instead. The
+  Library has releases, so the Revert works.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.version'
+      operator: isNumber
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

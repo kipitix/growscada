@@ -223,7 +223,7 @@ func main() {
 		DraftChanges: draftChangesService,
 		Discard:      discardService,
 		ProjectFiles: projectFileService,
-		Commits:      application.NewCommitService(projectContent, libraryContent, projectFileBuilder, widgetTypeRepositories, projectReleaseRepository),
+		Commits:      application.NewCommitService(projectContent, libraryContent, projectFileBuilder, widgetTypeRepositories, projectReleaseRepository, releaseRepository),
 		Releases: application.NewReleaseService(projectContent, projectReleaseRepository, runtimeNode,
 			libraryRepository, releaseRepository),
 		Deployments:  deploymentService,

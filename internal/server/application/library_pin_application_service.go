@@ -67,7 +67,32 @@ func (s libraryPinServiceImpl) FindLibraryPins(ctx context.Context, rawProjectID
 	if err != nil {
 		return nil, err
 	}
-	return appdto.NewLibraryPinList(list, version), nil
+	releases, err := s.pinnedReleases(ctx, list)
+	if err != nil {
+		return nil, err
+	}
+	return appdto.NewLibraryPinList(list, version, releases), nil
+}
+
+// pinnedReleases reads the Release each pin names, keyed by its number: the
+// provenance a Project sees of what it pins (task 72_5). A Release this
+// server does not have is left out.
+func (s libraryPinServiceImpl) pinnedReleases(ctx context.Context, list []librarypin.LibraryPin) (map[library.ReleaseNumber]library.LibraryRelease, error) {
+	releases := make(map[library.ReleaseNumber]library.LibraryRelease, len(list))
+	for _, pin := range list {
+		if _, ok := releases[pin.Release()]; ok {
+			continue
+		}
+		found, err := s.releases.FindByNumber(ctx, pin.LibraryID(), pin.Release())
+		if errors.Is(err, library.ErrReleaseNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("cannot find pinned release: %w", err)
+		}
+		releases[pin.Release()] = found
+	}
+	return releases, nil
 }
 
 func (s libraryPinServiceImpl) FindPinnedWidgetTypes(ctx context.Context, rawProjectID uuid.UUID) ([]appdto.ReleasedWidgetType, error) {
@@ -149,7 +174,7 @@ func (s libraryPinServiceImpl) PutLibraryPin(ctx context.Context, rawProjectID, 
 		}
 		return appdto.LibraryPin{}, false, fmt.Errorf("cannot save library pin: %w", err)
 	}
-	return appdto.NewLibraryPin(saved, result.Version().Number()), added, nil
+	return appdto.NewLibraryPin(saved, result.Version().Number(), release), added, nil
 }
 
 // DeleteLibraryPin removes the pin of the library, unless Widgets of the
@@ -173,7 +198,11 @@ func (s libraryPinServiceImpl) DeleteLibraryPin(ctx context.Context, rawProjectI
 	if err != nil {
 		return appdto.LibraryPin{}, fmt.Errorf("cannot delete library pin: %w", err)
 	}
-	return appdto.NewLibraryPin(deleted, result.Version().Number()), nil
+	var release library.LibraryRelease
+	if found, err := s.releases.FindByNumber(ctx, deleted.LibraryID(), deleted.Release()); err == nil {
+		release = found
+	}
+	return appdto.NewLibraryPin(deleted, result.Version().Number(), release), nil
 }
 
 // PinImpact previews what pinning release instead (nil: removing the pin)

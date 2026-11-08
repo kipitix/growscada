@@ -1,8 +1,7 @@
 info:
   name: open an invalid project file
   type: http
-  seq: 144
-
+  seq: 145
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/projectfile?version=25

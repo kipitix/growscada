@@ -1,8 +1,7 @@
 info:
   name: get deployment after rollback
   type: http
-  seq: 66
-
+  seq: 67
 http:
   method: GET
   url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/deployment

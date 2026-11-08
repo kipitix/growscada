@@ -1,8 +1,7 @@
 info:
   name: post library discard
   type: http
-  seq: 77
-
+  seq: 78
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/discard

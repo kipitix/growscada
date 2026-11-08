@@ -1,8 +1,7 @@
 info:
   name: post environment
   type: http
-  seq: 97
-
+  seq: 98
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/environments

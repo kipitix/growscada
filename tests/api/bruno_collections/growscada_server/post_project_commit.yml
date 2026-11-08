@@ -1,8 +1,7 @@
 info:
   name: save the project draft as a commit
   type: http
-  seq: 156
-
+  seq: 157
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/commits

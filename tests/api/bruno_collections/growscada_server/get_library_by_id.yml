@@ -9,10 +9,11 @@ http:
   auth: inherit
 
 docs: |
-  `latest_release` is the number of the latest Library Release (0 for none);
-  `has_unreleased_changes` tells whether the Draft differs from it. `version`
-  is the Library's own (rename and deletion); the Version of its Draft is
-  GET /libraries/{id}/draft.
+  `latest_release` is the number of the latest Library Release (0 for none),
+  `latest_commit` that of the last Commit; `has_unsaved_changes` tells whether
+  the Draft moved since that Commit, `has_unpublished_changes` whether the
+  Commit was released (task 72_5). `version` is the Library's own (rename and
+  deletion); the Version of its Draft is GET /libraries/{id}/draft.
 
 runtime:
   assertions:
@@ -27,7 +28,13 @@ runtime:
     - expression: 'res.body.latest_release'
       operator: eq
       value: '1'
-    - expression: 'res.body.has_unreleased_changes'
+    - expression: 'res.body.latest_commit'
+      operator: eq
+      value: '0'
+    - expression: 'res.body.has_unsaved_changes'
+      operator: eq
+      value: 'true'
+    - expression: 'res.body.has_unpublished_changes'
       operator: eq
       value: 'false'
 

@@ -1,8 +1,7 @@
 info:
   name: put scene by id
   type: http
-  seq: 69
-
+  seq: 70
 http:
   method: PUT
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/scenes/{{SCENE_ID}}

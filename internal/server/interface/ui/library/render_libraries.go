@@ -5,6 +5,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
+
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
 
 func itoa(n int) string { return strconv.Itoa(n) }
@@ -70,8 +72,8 @@ func (l *Library) renderLibrariesColumn() app.UI {
 		)
 }
 
-// renderLibraryStatus renders the selected library's release state, Release
-// and Discard.
+// renderLibraryStatus renders the selected library's Commit and Release
+// state, its Discard and its Revert.
 func (l *Library) renderLibraryStatus() app.UI {
 	lib, ok := l.selectedLibrary()
 	if !ok {
@@ -79,15 +81,17 @@ func (l *Library) renderLibraryStatus() app.UI {
 	}
 	var status string
 	switch {
+	case lib.LatestRelease == 0 && lib.LatestCommit == 0:
+		status = "Never saved or released."
+	case lib.LatestCommit == 0:
+		status = "Release " + itoa(lib.LatestRelease) + " · legacy, no commits"
 	case lib.LatestRelease == 0:
-		status = "Never released."
-	case lib.HasUnreleasedChanges:
-		status = "Release " + itoa(lib.LatestRelease) + " · unreleased changes"
+		status = "Commit #" + itoa(lib.LatestCommit) + " · never released"
+	case lib.HasUnpublishedChanges:
+		status = "Release " + itoa(lib.LatestRelease) + " · unpublished commits"
 	default:
 		status = "Release " + itoa(lib.LatestRelease) + " · up to date"
 	}
-	releaseHint := "Release the Draft as the next Library Release"
-	discardHint := "Reset the Draft to its latest release"
 	return app.Div().
 		Style("margin-top", "8px").
 		Style("padding-top", "8px").
@@ -103,8 +107,10 @@ func (l *Library) renderLibraryStatus() app.UI {
 				Style("display", "flex").
 				Style("gap", "4px").
 				Body(
-					smallButton("Release", lib.HasUnreleasedChanges, "accent", releaseHint, l.release),
-					smallButton("Discard", lib.LatestRelease > 0 && lib.HasUnreleasedChanges, "error", discardHint, l.discard),
+					smallButton("Discard", lib.LatestCommit > 0, "error",
+						"Reset the Draft to its last Commit, dropping the unsaved changes", l.discard),
+					smallButton("Revert", lib.LatestRelease > 0, "",
+						"Reset the Draft to its latest Release, the published state", l.revert),
 				),
 		)
 }
@@ -118,29 +124,41 @@ func (l *Library) renderHistory() app.UI {
 	// The handlers are scoped by n: go-app keeps a handler of the same func
 	// literal on a reused element, so a release prepended to the list would
 	// leave each entry viewing the release it showed before.
-	entry := func(n int, label, title string) app.UI {
+	entry := func(n int, label, title string, extra app.UI) app.UI {
 		d := app.Div().
 			Class("library-history").
+			Style("display", "flex").
+			Style("align-items", "center").
+			Style("gap", "4px").
 			Style("padding", "4px 8px").
 			Style("cursor", "pointer").
 			Style("border-radius", "4px").
 			Style("font-size", "12px").
 			Title(title).
-			Text(label).
 			OnClick(func(ctx app.Context, e app.Event) { l.view(n) }, app.EventScope(itoa(n)))
+		text := app.Span().Style("flex", "1").Text(label)
 		if n == l.viewing {
-			return d.Style("background", "var(--bg-hover)").Style("font-weight", "600").Style("color", "var(--text)")
+			d = d.Style("background", "var(--bg-hover)").Style("font-weight", "600").Style("color", "var(--text)")
+		} else {
+			d = d.Style("color", "var(--text)")
 		}
-		return d.Style("color", "var(--text)")
+		return d.Body(text, extra)
 	}
-	items := []app.UI{entry(0, "Draft", "The WidgetTypes being edited")}
+	items := []app.UI{entry(0, "Draft", "The WidgetTypes being edited", app.Div())}
 	for i := len(l.releases) - 1; i >= 0; i-- {
 		r := l.releases[i]
-		label := "Release " + itoa(r.Number)
-		if r.Note != "" {
-			label += " — " + r.Note
-		}
-		items = append(items, entry(r.Number, label, r.CreatedAt.Local().Format("2006-01-02 15:04")))
+		label := releaseHistoryLabel(r)
+		title := r.Author + " · " + r.CreatedAt.Local().Format("2006-01-02 15:04")
+		note := app.Button().
+			Attr("data-release-note", itoa(r.Number)).
+			Style("padding", "0 6px").
+			Style("font-size", "11px").
+			Style("cursor", "pointer").
+			Text("Note").
+			OnClick(func(ctx app.Context, e app.Event) {
+				l.editReleaseNote(r)
+			}, app.EventScope("note/"+itoa(r.Number)))
+		items = append(items, entry(r.Number, label, title, note))
 	}
 	return app.Div().
 		Style("margin-top", "8px").
@@ -151,6 +169,24 @@ func (l *Library) renderHistory() app.UI {
 			app.H3().Style("margin", "0 0 6px 0").Style("font-size", "13px").Text("History"),
 			app.Div().Body(items...),
 		)
+}
+
+// releaseHistoryLabel is the history line of a Release: its number, the Commit
+// it published (or "legacy") and its note (task 72_5).
+func releaseHistoryLabel(r apiv0.LibraryReleaseResponse) string {
+	label := "Release " + itoa(r.Number)
+	if r.CommitNumber != nil {
+		label += " — commit #" + itoa(*r.CommitNumber)
+		if r.Title != nil && *r.Title != "" {
+			label += " " + *r.Title
+		}
+	} else {
+		label += " — legacy"
+	}
+	if r.Note != "" {
+		label += " — " + r.Note
+	}
+	return label
 }
 
 // smallButton renders a button of the columns; kind "accent", "error" or ""

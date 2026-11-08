@@ -31,3 +31,7 @@ This ADR starts the model; task 72_8 gives it its final form together with Relea
 - Save does not require a Deployment: a Project that has never been deployed has Commits.
 - The Author is a name in the request, stored with the Commit and shown to other Engineers; tasks 49/50 replace it with a User.
 - The undo/redo stack is unaffected: Save neither clears it nor adds to it.
+
+## Amendment 2026-11-08: a Library Release is a Commit's publication too
+
+Task 72_5 gives a Library the same pair as a Project. A Library Release is made from a Library's Commit: the copies of the Commit's WidgetTypes go into `released_widget_types` in the same transaction as the Release row, the Release names the Commit (`commit_number`), its Author, its origin and its note, and one Commit is published at most once. The Release does not copy the Commit's title: the list reads it from the Commit, and a Release with `origin = legacy` has none. The content of a Library Commit and of its Release is the same value object, and the ProjectFile's pins are unaffected. `CommitResponse.released` is true for a Library's Commit a Release published, so the Library UI disables "Make Release" on it. The Release is never removed alone and outlives nothing of its Library; the Library's deletion is still kept only by a live pin or a running Deployment (task 71).

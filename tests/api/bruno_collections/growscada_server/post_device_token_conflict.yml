@@ -1,8 +1,7 @@
 info:
   name: post device token conflict
   type: http
-  seq: 103
-
+  seq: 104
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/devices/{{OTHER_DEVICE_ID}}/token

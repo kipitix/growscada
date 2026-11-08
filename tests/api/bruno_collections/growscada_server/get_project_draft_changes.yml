@@ -1,8 +1,7 @@
 info:
   name: get project draft changes
   type: http
-  seq: 119
-
+  seq: 120
 http:
   method: GET
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/draft-changes

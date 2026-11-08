@@ -641,11 +641,12 @@ func (s *Session) DeleteWidgetType(ctx context.Context, typeID id.ID[library.Wid
 	return found, nil
 }
 
-// ReplaceWidgetTypes resets the Draft's Library to release (Discard, ADR 0016):
-// every WidgetType the Draft holds goes, with its events, and every copy the
-// release holds is recreated under its ID, with its events. The stack and the
-// DraftChanges go with the caller's transaction, not here.
-func (s *Session) ReplaceWidgetTypes(ctx context.Context, release library.LibraryRelease) error {
+// ReplaceWidgetTypes resets the Draft's Library to the released WidgetTypes
+// (Discard to a Commit, Revert to a Release; ADR 0016, ADR 0021): every
+// WidgetType the Draft holds goes, with its events, and every copy is
+// recreated under its ID, with its events. The stack and the DraftChanges go
+// with the caller's transaction, not here.
+func (s *Session) ReplaceWidgetTypes(ctx context.Context, released []library.ReleasedWidgetType) error {
 	stored, err := s.loader.WidgetTypes(ctx)
 	if err != nil {
 		return err
@@ -654,8 +655,8 @@ func (s *Session) ReplaceWidgetTypes(ctx context.Context, release library.Librar
 		s.recordBefore(SnapshotOfWidgetType(wt))
 		s.recordEvents(wt.Delete().PendingEvents()...)
 	}
-	for _, released := range release.WidgetTypes() {
-		wt, err := library.RecreateWidgetType(released)
+	for _, copy := range released {
+		wt, err := library.RecreateWidgetType(copy)
 		if err != nil {
 			return err
 		}

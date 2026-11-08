@@ -1,8 +1,7 @@
 info:
   name: get the draft as a project file
   type: http
-  seq: 133
-
+  seq: 134
 http:
   method: GET
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/projectfile

@@ -1,8 +1,7 @@
 info:
   name: post scenes
   type: http
-  seq: 66
-
+  seq: 67
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/scenes

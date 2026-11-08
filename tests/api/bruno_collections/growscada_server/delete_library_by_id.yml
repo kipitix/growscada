@@ -1,8 +1,7 @@
 info:
   name: delete library by id
   type: http
-  seq: 81
-
+  seq: 82
 http:
   method: DELETE
   url: http://{{API_SERVER}}/api/v0/libraries/{{OTHER_LIBRARY_ID}}

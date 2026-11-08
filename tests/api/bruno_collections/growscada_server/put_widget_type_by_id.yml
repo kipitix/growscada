@@ -1,8 +1,7 @@
 info:
   name: put widget type by id
   type: http
-  seq: 70
-
+  seq: 71
 http:
   method: PUT
   url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/widget-types/{{WIDGET_TYPE_ID}}

@@ -187,7 +187,15 @@ func TestDraftChanges_AReleaseShownIsReadOnly(t *testing.T) {
 	f := mount(t, url, api)
 	f.l.createItem(f.l.compoCtx)
 	f.run()
-	if _, err := api.Release(context.Background(), apiv0.CreateReleaseRequest{Note: "one"}); err != nil {
+	state, err := api.DraftState(context.Background())
+	if err != nil {
+		t.Fatalf("DraftState: %v", err)
+	}
+	commit, err := api.SaveCommit(context.Background(), apiv0.CreateCommitRequest{Version: state.Version, Title: "Save", Author: "Ada"})
+	if err != nil {
+		t.Fatalf("SaveCommit: %v", err)
+	}
+	if _, err := api.Release(context.Background(), apiv0.CreateReleaseRequest{Commit: commit.Number, Note: "one", Author: "Ada"}); err != nil {
 		t.Fatalf("release: %v", err)
 	}
 	createWidgetType(t, api, "Gauge") // a change after the release, which cleared the stack

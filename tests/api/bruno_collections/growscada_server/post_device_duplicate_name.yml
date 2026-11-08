@@ -1,8 +1,7 @@
 info:
   name: post device duplicate name
   type: http
-  seq: 95
-
+  seq: 96
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/devices

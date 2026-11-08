@@ -52,7 +52,12 @@ func released(t *testing.T, anID id.ID[library.WidgetType], hint string) library
 
 func release(n int, types ...library.ReleasedWidgetType) library.LibraryRelease {
 	number, _ := library.NewReleaseNumber(n)
-	return library.ReconstituteRelease(testLibrary, number, "", time.Now(), types)
+	author, _ := library.NewAuthor("system")
+	found, err := library.ReconstituteRelease(testLibrary, number, nil, author, library.OriginLegacy, "", time.Now(), types)
+	if err != nil {
+		panic(err)
+	}
+	return found
 }
 
 func placed(t *testing.T, typeID id.ID[library.WidgetType], tagID id.ID[tag.Tag]) librarypin.PlacedWidget {
@@ -116,7 +121,11 @@ func TestLibraryPin_SwitchAndDelete(t *testing.T) {
 	}
 
 	stored := librarypin.ReconstituteLibraryPin(testProject, testLibrary, first.Number())
-	other := library.ReconstituteRelease(id.NewID[library.Library](), second.Number(), "", time.Now(), nil)
+	author, _ := library.NewAuthor("system")
+	other, err := library.ReconstituteRelease(id.NewID[library.Library](), second.Number(), nil, author, library.OriginLegacy, "", time.Now(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := stored.Switch(other); err == nil {
 		t.Error("a release of another Library cannot be pinned in place")
 	}

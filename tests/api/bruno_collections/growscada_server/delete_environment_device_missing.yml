@@ -1,8 +1,7 @@
 info:
   name: delete environment device missing
   type: http
-  seq: 110
-
+  seq: 111
 http:
   method: DELETE
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/environments/{{ENVIRONMENT_ID}}/devices/{{OTHER_DEVICE_ID}}?version=18

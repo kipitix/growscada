@@ -1,7 +1,7 @@
 info:
   name: post library releases
   type: http
-  seq: 56
+  seq: 57
 
 http:
   method: POST
@@ -10,15 +10,15 @@ http:
     type: json
     data: |-
       {
+        "commit": {{LIBRARY_RELEASE_COMMIT}},
         "note": "with the pressure gauge",
-        "version": 2
+        "author": "Bruno"
       }
   auth: inherit
 
 docs: |
-  Releases the Draft as it is: the next release of the library, the latest
-  plus one. `version` must be the Version of the library's Draft the client
-  saw (ADR 0016).
+  Publishes a Commit as the next Library Release (task 72_5; ADR 0021). The
+  seeded library's release 1 predates Commits, so this is release 2.
 
 runtime:
   assertions:
@@ -33,6 +33,18 @@ runtime:
     - expression: 'res.body.note'
       operator: eq
       value: '"with the pressure gauge"'
+    - expression: 'res.body.origin'
+      operator: eq
+      value: '"commit"'
+    - expression: 'res.body.author'
+      operator: eq
+      value: '"Bruno"'
+    - expression: 'res.body.title'
+      operator: eq
+      value: '"Widgets of the release"'
+    - expression: 'res.body.content_counts.widget_types'
+      operator: gt
+      value: '0'
 
 settings:
   encodeUrl: true

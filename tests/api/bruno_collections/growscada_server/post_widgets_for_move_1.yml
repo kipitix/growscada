@@ -1,8 +1,7 @@
 info:
   name: create the first widget for the group move
   type: http
-  seq: 147
-
+  seq: 148
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/scenes/{{MOVE_SCENE_ID}}/widgets

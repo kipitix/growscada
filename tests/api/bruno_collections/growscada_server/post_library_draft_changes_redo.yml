@@ -1,8 +1,7 @@
 info:
   name: post library draft changes redo
   type: http
-  seq: 132
-
+  seq: 133
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/draft-changes/redo

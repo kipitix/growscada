@@ -1,8 +1,7 @@
 info:
   name: delete widget by id
   type: http
-  seq: 74
-
+  seq: 75
 http:
   method: DELETE
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/scenes/{{SCENE_ID}}/widgets/{{WIDGET_ID}}?version=7

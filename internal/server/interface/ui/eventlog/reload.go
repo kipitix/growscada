@@ -70,6 +70,10 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 		// marks alone: no content of the Draft and no DraftChange stack
 		// (task 72_3; ADR 0021).
 		return ReloadTargets{Releases: true, Commits: true}
+	case apiv0.EventLibraryReleaseNoteUpdated:
+		// A Library Release note is metadata: the list of Releases alone
+		// changes, not the Draft and not the "released" marks (task 72_5).
+		return ReloadTargets{Releases: true}
 	case apiv0.EventDeploymentCreated:
 		// The Deployment the Project runs changed: Project refreshes its badge;
 		// nothing of the Draft is touched. Operation does not read this stream
@@ -82,9 +86,12 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 		// A change of the Draft changes whether its library has changes
 		// not released.
 		return ReloadTargets{WidgetTypes: true, Libraries: true}
-	case apiv0.EventLibraryCreated, apiv0.EventLibraryUpdated, apiv0.EventLibraryDeleted,
-		apiv0.EventLibraryReleased:
+	case apiv0.EventLibraryCreated, apiv0.EventLibraryUpdated, apiv0.EventLibraryDeleted:
 		return ReloadTargets{Libraries: true, WidgetTypes: true}
+	case apiv0.EventLibraryReleased:
+		// A Release publishes a Commit: the release list and the history's
+		// "released" marks change; the Draft is untouched (task 72_5).
+		return ReloadTargets{Libraries: true, Releases: true, Commits: true}
 	case apiv0.EventLibraryPinCreated, apiv0.EventLibraryPinUpdated, apiv0.EventLibraryPinDeleted:
 		return ReloadTargets{LibraryPins: true}
 	case apiv0.EventSceneCreated, apiv0.EventSceneUpdated, apiv0.EventSceneDeleted:

@@ -98,6 +98,9 @@ func Encode(e event.Event) ([]byte, error) {
 	case library.LibraryReleasedEvent:
 		p.ID = ev.LibraryID().UUID()
 		p.Release = ev.Release().Int()
+	case library.LibraryReleaseNoteUpdatedEvent:
+		p.ID = ev.LibraryID().UUID()
+		p.Release = ev.Release().Int()
 	case library.LibraryEvent:
 		p.ID = ev.LibraryID().UUID()
 	case librarypin.LibraryPinEvent:
@@ -203,10 +206,13 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 		return library.NewLibraryUpdatedEvent(libraryOfEvent, ts), nil
 	case event.EventTypeLibraryDeleted:
 		return library.NewLibraryDeletedEvent(libraryOfEvent, ts), nil
-	case event.EventTypeLibraryReleased:
+	case event.EventTypeLibraryReleased, event.EventTypeLibraryReleaseNoteUpdated:
 		release, err := library.NewReleaseNumber(p.Release)
 		if err != nil {
 			return nil, fmt.Errorf("cannot decode %s payload: %w", eventType, err)
+		}
+		if eventType == event.EventTypeLibraryReleaseNoteUpdated {
+			return library.NewLibraryReleaseNoteUpdatedEvent(libraryOfEvent, release, ts), nil
 		}
 		return library.NewLibraryReleasedEvent(libraryOfEvent, release, ts), nil
 	case event.EventTypeProjectCreated:

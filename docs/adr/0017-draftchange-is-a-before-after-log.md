@@ -27,3 +27,7 @@ An Engineer must be able to undo an intent that touched several parts of the Dra
 - A client that loses the EditLock loses the ability to undo, not the history; the next holder sees the same stack.
 - The UI's `Ctrl+Z`/`Ctrl+Shift+Z` and its buttons read `GET …/draft-changes` and refresh on `EventResync` and on the content events.
 - The contract grows by the DraftChange state and the two commands; `SchemaVersion` rises by a MINOR.
+
+## Amendment 2026-11-08: publishing a Release clears no stack
+
+A Project Release (task 72_3, task 72_4) and a Library Release (task 72_5) publish a Commit: they copy the content and change no Draft, so they no longer clear the DraftChange stack. Only a Discard and a Revert, which replace the Draft's content in one transaction, clear it. A Save clears nothing either (ADR 0021). The stack therefore survives a Release and the next undo may reach changes made before it.

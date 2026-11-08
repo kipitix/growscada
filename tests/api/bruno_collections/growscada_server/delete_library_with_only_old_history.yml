@@ -1,8 +1,7 @@
 info:
   name: delete a library only an old Deployment names
   type: http
-  seq: 1997
-
+  seq: 1998
 http:
   method: DELETE
   url: http://{{API_SERVER}}/api/v0/libraries/{{CLEANUP_LIBRARY_ID}}

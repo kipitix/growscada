@@ -1,8 +1,7 @@
 info:
   name: get device config (gateway)
   type: http
-  seq: 91
-
+  seq: 92
 http:
   method: GET
   url: http://{{API_SERVER}}/api/v0/device/config?environment={{ENVIRONMENT_ID}}

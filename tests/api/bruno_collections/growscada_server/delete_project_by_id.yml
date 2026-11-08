@@ -1,8 +1,7 @@
 info:
   name: delete project by id
   type: http
-  seq: 80
-
+  seq: 81
 http:
   method: DELETE
   url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}

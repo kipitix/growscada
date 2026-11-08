@@ -18,7 +18,7 @@ func TestReloadTargetsFor(t *testing.T) {
 		{apiv0.Event{Type: apiv0.EventWidgetTypeCreated}, ReloadTargets{WidgetTypes: true, Libraries: true}},
 		{apiv0.Event{Type: apiv0.EventWidgetTypeUpdated}, ReloadTargets{WidgetTypes: true, Libraries: true}},
 		{apiv0.Event{Type: apiv0.EventWidgetTypeDeleted}, ReloadTargets{WidgetTypes: true, Libraries: true}},
-		{apiv0.Event{Type: apiv0.EventLibraryReleased}, ReloadTargets{WidgetTypes: true, Libraries: true}},
+		{apiv0.Event{Type: apiv0.EventLibraryReleased}, ReloadTargets{Libraries: true, Releases: true, Commits: true}},
 		{apiv0.Event{Type: apiv0.EventLibraryUpdated}, ReloadTargets{WidgetTypes: true, Libraries: true}},
 		{apiv0.Event{Type: apiv0.EventLibraryPinUpdated}, ReloadTargets{LibraryPins: true}},
 		{apiv0.Event{Type: apiv0.EventSceneCreated}, ReloadTargets{Scenes: true}},
@@ -111,7 +111,6 @@ func TestReloadTargets_DraftChanged(t *testing.T) {
 		{Type: apiv0.EventWidgetCreated},
 		{Type: apiv0.EventLibraryPinDeleted},
 		{Type: apiv0.EventWidgetTypeUpdated},
-		{Type: apiv0.EventLibraryReleased}, // a Library's Release clears its stack (ADR 0007)
 		{Type: EventResync},
 	}
 	for _, ev := range changes {
@@ -123,6 +122,7 @@ func TestReloadTargets_DraftChanged(t *testing.T) {
 		{Type: apiv0.EventTagUpdated, Tag: &apiv0.TagResponse{}}, // a value, not a DraftChange
 		{Type: apiv0.EventDeploymentCreated},                     // a Deploy takes a Release (task 72_4)
 		{Type: apiv0.EventReleaseCreated},                        // a Release copies a Commit
+		{Type: apiv0.EventLibraryReleased},                       // a Library Release copies a Commit (task 72_5)
 		{Type: apiv0.EventDeviceCreated},                         // no Device list yet (task 66)
 		{Type: apiv0.EventClientConnected},
 		{Type: apiv0.EventSystemReady},

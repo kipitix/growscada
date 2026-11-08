@@ -1,8 +1,7 @@
 info:
   name: delete environment by id
   type: http
-  seq: 116
-
+  seq: 117
 http:
   method: DELETE
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/environments/{{ENVIRONMENT_ID}}?version=21

@@ -1,8 +1,7 @@
 info:
   name: post widgets
   type: http
-  seq: 67
-
+  seq: 68
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/scenes/{{SCENE_ID}}/widgets

@@ -1,8 +1,7 @@
 info:
   name: get the draft before the second deploy
   type: http
-  seq: 59
-
+  seq: 60
 http:
   method: GET
   url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/draft

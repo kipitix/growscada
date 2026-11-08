@@ -1,8 +1,7 @@
 info:
   name: deploy a file whose library is not here
   type: http
-  seq: 1999
-
+  seq: 2000
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/projectfile/deploy

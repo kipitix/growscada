@@ -1,8 +1,7 @@
 info:
   name: put device by id
   type: http
-  seq: 96
-
+  seq: 97
 http:
   method: PUT
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/devices/{{DEVICE_ID}}

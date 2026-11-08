@@ -1,8 +1,7 @@
 info:
   name: post deploy second
   type: http
-  seq: 62
-
+  seq: 63
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/releases/{{OTHER_RELEASE_NUMBER}}/deploy

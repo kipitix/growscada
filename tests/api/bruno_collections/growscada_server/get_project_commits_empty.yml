@@ -1,8 +1,7 @@
 info:
   name: get the project commits before the save of the draft
   type: http
-  seq: 155
-
+  seq: 156
 http:
   method: GET
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/commits

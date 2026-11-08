@@ -1,8 +1,7 @@
 info:
   name: write to the Draft after a Revert that dropped a Release
   type: http
-  seq: 2001
-
+  seq: 2002
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/tags

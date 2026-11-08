@@ -1,8 +1,7 @@
 info:
   name: put library by id
   type: http
-  seq: 71
-
+  seq: 72
 http:
   method: PUT
   url: http://{{API_SERVER}}/api/v0/libraries/{{OTHER_LIBRARY_ID}}

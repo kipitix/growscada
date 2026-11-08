@@ -1,8 +1,7 @@
 info:
   name: delete the seeded environment device
   type: http
-  seq: 114
-
+  seq: 115
 http:
   method: DELETE
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/environments/{{ENVIRONMENT_ID}}/devices/{{DEVICE_ID}}?version=19

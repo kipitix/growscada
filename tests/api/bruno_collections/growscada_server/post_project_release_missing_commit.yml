@@ -1,8 +1,7 @@
 info:
   name: release a missing commit
   type: http
-  seq: 175
-
+  seq: 176
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/releases

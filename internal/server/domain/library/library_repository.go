@@ -24,9 +24,12 @@ var (
 	// a live Project pins one of its releases, and by Delete while any
 	// Project does.
 	ErrLibraryPinned = errors.New("library is pinned by projects")
-	// ErrNoRelease is returned by a Discard of a library never released: there
+	// ErrNoRelease is returned by a Revert of a library never released: there
 	// is nothing to go back to.
 	ErrNoRelease = errors.New("library has no release")
+	// ErrNothingToDiscard is returned by a Discard of a library never saved:
+	// there is no Commit to reset its Draft to (task 72_5).
+	ErrNothingToDiscard = errors.New("library has no commit to discard to")
 )
 
 // LibraryRepository - repository interface for storing and managing

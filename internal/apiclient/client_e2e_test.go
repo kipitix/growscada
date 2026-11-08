@@ -100,17 +100,24 @@ func TestWidgetTypes_RoundTrip(t *testing.T) {
 		t.Fatalf("ListWidgetTypes: %+v, %v", list, err)
 	}
 
-	release, err := lib.Release(ctx, apiv0.CreateReleaseRequest{Note: "first", Version: updated.Version})
-	if err != nil || release.Number != 1 || len(release.WidgetTypes) != 1 {
+	commit, err := lib.SaveCommit(ctx, apiv0.CreateCommitRequest{Version: updated.Version, Title: "First", Author: "Ada"})
+	if err != nil {
+		t.Fatalf("SaveCommit: %v", err)
+	}
+	release, err := lib.Release(ctx, apiv0.CreateReleaseRequest{Commit: commit.Number, Note: "first", Author: "Ada"})
+	if err != nil || release.Number != 1 || len(release.WidgetTypes) != 1 || release.CommitNumber == nil || *release.CommitNumber != commit.Number {
 		t.Fatalf("Release: %+v, %v", release, err)
 	}
-	if _, err := lib.Release(ctx, apiv0.CreateReleaseRequest{Version: updated.Version}); !errors.Is(err, apiclient.ErrConflict) {
-		t.Errorf("Release of an unchanged Draft: %v, want ErrConflict", err)
+	if _, err := lib.Release(ctx, apiv0.CreateReleaseRequest{Commit: commit.Number, Author: "Ada"}); !errors.Is(err, apiclient.ErrConflict) {
+		t.Errorf("Release of a released Commit: %v, want ErrConflict", err)
+	}
+	if updatedNote, err := lib.UpdateReleaseNote(ctx, 1, apiv0.UpdateLibraryReleaseNoteRequest{Note: "second"}); err != nil || updatedNote.Note != "second" {
+		t.Errorf("UpdateReleaseNote: %+v, %v", updatedNote, err)
 	}
 	if releases, err := lib.ListReleases(ctx); err != nil || len(releases) != 1 {
 		t.Errorf("ListReleases: %+v, %v", releases, err)
 	}
-	if got, err := lib.GetRelease(ctx, 1); err != nil || got.Note != "first" {
+	if got, err := lib.GetRelease(ctx, 1); err != nil || got.Note != "second" {
 		t.Errorf("GetRelease: %+v, %v", got, err)
 	}
 	if _, err := lib.GetRelease(ctx, 2); !errors.Is(err, apiclient.ErrNotFound) {
@@ -169,7 +176,7 @@ func pinnedType(t *testing.T, client *apiclient.Client, req apiv0.CreateWidgetTy
 	if err != nil {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
-	release, err := lib.Release(ctx, apiv0.CreateReleaseRequest{})
+	release, err := publishLibrary(ctx, lib, wt.Version)
 	if err != nil {
 		t.Fatalf("Release: %v", err)
 	}
@@ -177,6 +184,16 @@ func pinnedType(t *testing.T, client *apiclient.Client, req apiv0.CreateWidgetTy
 		t.Fatalf("PinLibrary: %v", err)
 	}
 	return wt
+}
+
+// publishLibrary saves the library's Draft as a Commit at version and
+// publishes that Commit (task 72_5; ADR 0021).
+func publishLibrary(ctx context.Context, lib *apiclient.LibraryClient, version int) (apiv0.LibraryReleaseResponse, error) {
+	commit, err := lib.SaveCommit(ctx, apiv0.CreateCommitRequest{Version: version, Title: "Save", Author: "Ada"})
+	if err != nil {
+		return apiv0.LibraryReleaseResponse{}, err
+	}
+	return lib.Release(ctx, apiv0.CreateReleaseRequest{Commit: commit.Number, Author: "Ada"})
 }
 
 func TestScenesAndWidgets_RoundTrip(t *testing.T) {

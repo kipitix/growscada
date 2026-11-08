@@ -1,8 +1,7 @@
 info:
   name: deploy the same project file again
   type: http
-  seq: 141
-
+  seq: 142
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/projectfile/deploy

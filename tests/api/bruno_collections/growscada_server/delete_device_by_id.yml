@@ -1,8 +1,7 @@
 info:
   name: delete device by id
   type: http
-  seq: 115
-
+  seq: 116
 http:
   method: DELETE
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/devices/{{DEVICE_ID}}?version=20

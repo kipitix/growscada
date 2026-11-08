@@ -67,7 +67,19 @@ type LibraryReleasedEvent interface {
 	Release() ReleaseNumber
 }
 
+// LibraryReleaseNoteUpdatedEvent is recorded by LibraryRelease.WithNote: the
+// note of Release number changed; its content never does (task 72_5).
+type LibraryReleaseNoteUpdatedEvent interface {
+	LibraryEvent
+	Release() ReleaseNumber
+}
+
 type libraryReleasedEventImpl struct {
+	libraryEventImpl
+	release ReleaseNumber
+}
+
+type libraryReleaseNoteUpdatedEventImpl struct {
 	libraryEventImpl
 	release ReleaseNumber
 }
@@ -76,4 +88,14 @@ func NewLibraryReleasedEvent(anID id.ID[Library], aRelease ReleaseNumber, opts .
 	return &libraryReleasedEventImpl{newLibraryEvent(event.EventTypeLibraryReleased, anID, opts...), aRelease}
 }
 
+func NewLibraryReleaseNoteUpdatedEvent(anID id.ID[Library], aRelease ReleaseNumber, opts ...event.EventOption) LibraryReleaseNoteUpdatedEvent {
+	return &libraryReleaseNoteUpdatedEventImpl{
+		libraryEventImpl: newLibraryEvent(event.EventTypeLibraryReleaseNoteUpdated, anID, opts...),
+		release:          aRelease,
+	}
+}
+
 func (e libraryReleasedEventImpl) Release() ReleaseNumber { return e.release }
+func (e libraryReleaseNoteUpdatedEventImpl) Release() ReleaseNumber {
+	return e.release
+}

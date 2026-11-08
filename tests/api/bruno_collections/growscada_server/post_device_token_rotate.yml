@@ -1,8 +1,7 @@
 info:
   name: post device token rotate
   type: http
-  seq: 104
-
+  seq: 105
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/devices/{{OTHER_DEVICE_ID}}/token/rotate

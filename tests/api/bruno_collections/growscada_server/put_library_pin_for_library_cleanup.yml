@@ -1,8 +1,7 @@
 info:
   name: pin the library in the cleanup project
   type: http
-  seq: 197
-
+  seq: 198
 http:
   method: PUT
   url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/library-pins/{{CLEANUP_LIBRARY_ID}}

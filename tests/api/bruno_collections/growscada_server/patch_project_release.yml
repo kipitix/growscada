@@ -1,8 +1,7 @@
 info:
   name: change the project release note
   type: http
-  seq: 173
-
+  seq: 174
 http:
   method: PATCH
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/releases/6

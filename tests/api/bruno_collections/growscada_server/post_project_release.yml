@@ -1,8 +1,7 @@
 info:
   name: release the project commit
   type: http
-  seq: 169
-
+  seq: 170
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/releases

@@ -1,8 +1,7 @@
 info:
   name: post widget type for undo
   type: http
-  seq: 130
-
+  seq: 131
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/widget-types

@@ -14,6 +14,8 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
+	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
 
@@ -62,8 +64,8 @@ func ensureTestWidgetType(t *testing.T) {
 	}
 }
 
-// releaseAndPin releases the Draft of the library and pins the release in
-// mainProject, in place of the release pinned so far.
+// releaseAndPin saves the Draft of the library as a Commit, releases it and
+// pins the release in mainProject, in place of the release pinned so far.
 func releaseAndPin(t *testing.T, libraryID uuid.UUID) appdto.LibraryRelease {
 	t.Helper()
 	ctx := context.Background()
@@ -72,7 +74,12 @@ func releaseAndPin(t *testing.T, libraryID uuid.UUID) appdto.LibraryRelease {
 	if err != nil {
 		t.Fatalf("DraftState: %v", err)
 	}
-	release, err := services.libraries.Release(ctx, libraryID, state.Version, appdto.ReleaseInput{})
+	commit, err := services.commits.Save(ctx,
+		draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](libraryID))), state.Version, "Save", "Ada")
+	if err != nil {
+		t.Fatalf("Save commit: %v", err)
+	}
+	release, err := services.libraries.Release(ctx, libraryID, appdto.ReleaseInput{Commit: commit.Number, Author: "Ada"})
 	if err != nil {
 		t.Fatalf("Release: %v", err)
 	}

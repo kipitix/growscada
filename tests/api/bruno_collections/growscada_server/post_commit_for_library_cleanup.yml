@@ -1,0 +1,42 @@
+info:
+  name: save the library of the cleanup flow as a commit
+  type: http
+  seq: 196
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/libraries/{{CLEANUP_LIBRARY_ID}}/commits
+  body:
+    type: json
+    data: |-
+      {
+        "version": {{CLEANUP_LIBRARY_DRAFT_VERSION}},
+        "title": "The one release",
+        "author": "Ada"
+      }
+  auth: inherit
+
+docs: |
+  A Library Release is made from a Commit (task 72_5; ADR 0021): the cleanup
+  library's Draft is saved, and the next request publishes this Commit.
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("CLEANUP_LIBRARY_COMMIT", res.body.number);
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '1'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

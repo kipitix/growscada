@@ -1,0 +1,42 @@
+info:
+  name: patch a library release note
+  type: http
+  seq: 177
+
+http:
+  method: PATCH
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/releases/2
+  body:
+    type: json
+    data: |-
+      {
+        "note": "renoted after the demo"
+      }
+  auth: inherit
+
+docs: |
+  A Release's note is metadata and changes on its own, with no Draft Version
+  stated (task 72_5; ADR 0021). The content never changes.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.note'
+      operator: eq
+      value: '"renoted after the demo"'
+    - expression: 'res.body.number'
+      operator: eq
+      value: '2'
+    - expression: 'res.body.origin'
+      operator: eq
+      value: '"commit"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

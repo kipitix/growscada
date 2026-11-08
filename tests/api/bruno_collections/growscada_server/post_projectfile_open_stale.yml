@@ -1,8 +1,7 @@
 info:
   name: open a project file with a stale version
   type: http
-  seq: 139
-
+  seq: 140
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/projectfile?version=24

@@ -1,11 +1,14 @@
 package restapi
 
 import (
+	"errors"
 	"net/http"
+	"strconv"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 )
 
 // LibrariesHandlers handles HTTP requests related to libraries, their
@@ -123,8 +126,8 @@ func (h LibrariesHandlers) DeleteLibrariesByID(w http.ResponseWriter, r *http.Re
 	sendJSONResponse(w, http.StatusOK, newLibraryResponse(deleted))
 }
 
-// PostReleases handles POST /libraries/{library_id}/releases: a Release of
-// the library's Draft.
+// PostReleases handles POST /libraries/{library_id}/releases: a Commit of the
+// library's Draft published as the next Library Release (task 72_5).
 func (h LibrariesHandlers) PostReleases(w http.ResponseWriter, r *http.Request) {
 	libraryID, ok := pathUUID(w, r, libraryResource)
 	if !ok {
@@ -134,8 +137,16 @@ func (h LibrariesHandlers) PostReleases(w http.ResponseWriter, r *http.Request) 
 	if !decodeRequest(w, r, &request) {
 		return
 	}
-	created, err := h.service.Release(r.Context(), libraryID, request.Version, appdto.ReleaseInput{Note: request.Note})
+	created, err := h.service.Release(r.Context(), libraryID, appdto.ReleaseInput{
+		Commit: request.Commit, Note: request.Note, Author: request.Author,
+	})
 	if err != nil {
+		// The Commit is named by the body, so the path cannot say which one
+		// was missing: answer with the number the request holds.
+		if errors.Is(err, draft.ErrCommitNotFound) {
+			sendProblem(w, NewNotFound(commitResource.name, strconv.Itoa(request.Commit), r.URL.Path))
+			return
+		}
 		sendError(w, r, err)
 		return
 	}
@@ -174,8 +185,32 @@ func (h LibrariesHandlers) GetReleasesByNumber(w http.ResponseWriter, r *http.Re
 	sendJSONResponse(w, http.StatusOK, newLibraryReleaseResponse(found))
 }
 
+// PatchReleasesByNumber handles PATCH /libraries/{library_id}/releases/{release_number}:
+// a new note. The content of the Release never changes and no Draft Version
+// is stated.
+func (h LibrariesHandlers) PatchReleasesByNumber(w http.ResponseWriter, r *http.Request) {
+	libraryID, ok := pathUUID(w, r, libraryResource)
+	if !ok {
+		return
+	}
+	number, ok := pathInt(w, r, releaseResource)
+	if !ok {
+		return
+	}
+	var request apiv0.UpdateLibraryReleaseNoteRequest
+	if !decodeRequest(w, r, &request) {
+		return
+	}
+	updated, err := h.service.UpdateReleaseNote(r.Context(), libraryID, number, request.Note)
+	if err != nil {
+		sendError(w, r, err)
+		return
+	}
+	sendJSONResponse(w, http.StatusOK, newLibraryReleaseResponse(updated))
+}
+
 // PostDiscard handles POST /libraries/{library_id}/discard: the Draft is reset
-// to the latest release in one transaction and its new state is answered.
+// to the last Commit in one transaction and its new state is answered.
 func (h LibrariesHandlers) PostDiscard(w http.ResponseWriter, r *http.Request) {
 	libraryID, ok := pathUUID(w, r, libraryResource)
 	if !ok {
@@ -187,4 +222,20 @@ func (h LibrariesHandlers) PostDiscard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sendJSONResponse(w, http.StatusOK, apiv0.DiscardLibraryResponse{Version: state.Version})
+}
+
+// PostRevertToRelease handles POST /libraries/{library_id}/revert-to-release:
+// the Draft is reset to the latest Release in one transaction and its new
+// state is answered (task 72_5).
+func (h LibrariesHandlers) PostRevertToRelease(w http.ResponseWriter, r *http.Request) {
+	libraryID, ok := pathUUID(w, r, libraryResource)
+	if !ok {
+		return
+	}
+	state, err := h.service.RevertToLatestRelease(r.Context(), libraryID)
+	if err != nil {
+		sendError(w, r, err)
+		return
+	}
+	sendJSONResponse(w, http.StatusOK, apiv0.RevertLibraryResponse{Version: state.Version})
 }

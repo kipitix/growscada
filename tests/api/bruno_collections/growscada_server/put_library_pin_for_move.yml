@@ -1,8 +1,7 @@
 info:
   name: pin the library for the group move
   type: http
-  seq: 145
-
+  seq: 146
 http:
   method: PUT
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/library-pins/{{LIBRARY_ID}}

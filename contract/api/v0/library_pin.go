@@ -10,11 +10,18 @@ import (
 const LibraryPinImpactQueryRelease = "release"
 
 // LibraryPinResponse is the HTTP DTO of a Library Pin: the Library Release,
-// by its number, the project uses of the library.
+// by its number, the project uses of the library, and the provenance of that
+// Release (task 72_5): the Commit it published and its title, the Author, the
+// origin and the note. CommitNumber and Title are null for a legacy Release.
 type LibraryPinResponse struct {
-	LibraryID uuid.UUID `json:"library_id"`
-	Release   int       `json:"release"`
-	Version   int       `json:"version"`
+	LibraryID    uuid.UUID `json:"library_id"`
+	Release      int       `json:"release"`
+	Version      int       `json:"version"`
+	CommitNumber *int      `json:"commit_number"`
+	Title        *string   `json:"title"`
+	Author       string    `json:"author"`
+	Origin       string    `json:"origin"`
+	Note         string    `json:"note"`
 }
 
 // GetLibraryPinsResponse is the HTTP DTO for the pins of a project, in the

@@ -1,8 +1,7 @@
 info:
   name: release the second commit
   type: http
-  seq: 61
-
+  seq: 62
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/releases

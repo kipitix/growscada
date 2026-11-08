@@ -22,6 +22,10 @@ http:
   auth: inherit
 
 runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("CLEANUP_LIBRARY_DRAFT_VERSION", res.body.version);
   assertions:
     - expression: 'res.status'
       operator: eq

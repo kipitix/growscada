@@ -1,8 +1,7 @@
 info:
   name: get environments
   type: http
-  seq: 86
-
+  seq: 87
 http:
   method: GET
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/environments

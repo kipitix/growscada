@@ -1,8 +1,7 @@
 info:
   name: post project draft changes redo
   type: http
-  seq: 122
-
+  seq: 123
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/draft-changes/redo

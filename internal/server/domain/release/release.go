@@ -21,8 +21,8 @@ import (
 // metadata and changes on its own (WithNote, release_note_updated).
 type Release interface {
 	ID() id.ID[Release]
-	// Scope is the Project (or, from task 72_5, the Library) the Release
-	// belongs to.
+	// Scope is the Project the Release belongs to. A Library's Release is the
+	// library.LibraryRelease (task 72_5).
 	Scope() draft.Scope
 	// Number is the Release's number within its scope, from 1.
 	Number() Number

@@ -26,6 +26,8 @@ var requestBodies = map[string]any{
 	"POST " + apiv0.PathPrefix + "/libraries":                                                                            apiv0.CreateLibraryRequest{},
 	"PUT " + libraryPrefix:                                                                                               apiv0.UpdateLibraryRequest{},
 	"POST " + libraryPrefix + "/releases":                                                                                apiv0.CreateReleaseRequest{},
+	"PATCH " + libraryPrefix + "/releases/" + releaseResource.wildcard():                                                 apiv0.UpdateLibraryReleaseNoteRequest{},
+	"POST " + libraryPrefix + apiv0.RevertToReleasePath:                                                                  nil,
 	"POST " + libraryPrefix + "/discard":                                                                                 nil,
 	"POST " + libraryPrefix + apiv0.DraftChangesUndoPath:                                                                 apiv0.DraftChangeCommandRequest{},
 	"POST " + libraryPrefix + apiv0.DraftChangesRedoPath:                                                                 apiv0.DraftChangeCommandRequest{},

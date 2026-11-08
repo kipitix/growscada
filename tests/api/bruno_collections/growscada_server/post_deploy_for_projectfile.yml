@@ -1,8 +1,7 @@
 info:
   name: deploy a file for the project file downloads
   type: http
-  seq: 134
-
+  seq: 135
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/projectfile/deploy

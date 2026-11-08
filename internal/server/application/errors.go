@@ -36,8 +36,7 @@ var ErrRaceLost = errors.New("write race lost on every attempt")
 
 // ErrNothingToDeploy matches (errors.Is) a Deploy refused because the Release
 // it names is the Deployment the Project runs already (task 72_4), or because
-// a project file is the running Deployment's (ADR 0018), as
-// library.ErrNothingToRelease refuses an unchanged Release.
+// a project file is the running Deployment's (ADR 0018).
 var ErrNothingToDeploy = errors.New("nothing to deploy")
 
 // ErrNothingToDiscard matches (errors.Is) a Discard refused because the

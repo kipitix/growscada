@@ -1,8 +1,7 @@
 info:
   name: delete tag by id
   type: http
-  seq: 79
-
+  seq: 80
 http:
   method: DELETE
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/tags/{{TAG_ID}}?version=10

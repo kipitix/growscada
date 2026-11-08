@@ -108,6 +108,8 @@ var eventTypeInfoByType = map[string]eventTypeInfo{
 	apiv0.EventLibraryPinUpdated: {categoryLibrary, "Library %s pin switched"},
 	apiv0.EventLibraryPinDeleted: {categoryLibrary, "Library %s unpinned"},
 
+	apiv0.EventLibraryReleaseNoteUpdated: {categoryLibrary, "Library %s release note updated"},
+
 	apiv0.EventSceneCreated: {categoryScene, "Scene %s created"},
 	apiv0.EventSceneUpdated: {categoryScene, "Scene %s updated"},
 	apiv0.EventSceneDeleted: {categoryScene, "Scene %s deleted"},

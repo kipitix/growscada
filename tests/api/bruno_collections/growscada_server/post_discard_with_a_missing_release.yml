@@ -1,8 +1,7 @@
 info:
   name: revert to a Deployment whose Library Release is not here
   type: http
-  seq: 2000
-
+  seq: 2001
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/revert-to-deployed

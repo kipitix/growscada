@@ -25,6 +25,10 @@ http:
   auth: inherit
 
 runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("LIBRARY_COMMIT_VERSION", res.body.version);
   assertions:
     - expression: 'res.status'
       operator: eq

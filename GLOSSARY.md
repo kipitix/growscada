@@ -91,8 +91,12 @@ A reusable collection of WidgetTypes owned by an Organization, outside any Proje
 _Avoid_: catalog, toolbox, package
 
 **Library Release**:
-An immutable, numbered snapshot of a Library's Draft; removed only with its Library. A Project's Commit or Release keeps only a link to a deleted Library — its document carries the WidgetType copies —, while a running Deployment that names the Release keeps the Library from being deleted (task 71).
+An immutable, numbered snapshot of a Library's Draft, made from one of its Commits (task 72_5; ADR 0021): the copies of the Commit's WidgetTypes, the Author who published it, an optional note and the Commit's number and title. One Commit is published at most once; the note is metadata and changes on its own. A Release older than Commits has no Commit and Release Origin `legacy`. Removed only with its Library. A Project's Commit or Release keeps only a link to a deleted Library — its document carries the WidgetType copies —, while a running Deployment that names the Release keeps the Library from being deleted (task 71).
 _Avoid_: library version, snapshot
+
+**Legacy Release**:
+A Library Release made before Commits existed: it names no Commit (`commit_number` null), has the Author `system` and Release Origin `legacy`. It stays usable and pinnable like any Release.
+_Avoid_: old release, version 1
 
 **Library Pin**:
 The choice, in a Project's Draft, of one Library Release of one Library. Switching or removing it is refused while Widgets would be left without their WidgetType. A Library is removed only while no live Project pins it and no live Project's running Deployment names one of its Releases.
@@ -145,8 +149,12 @@ The act of fixing the Draft's current state as a new Commit under a title and an
 _Avoid_: commit (as a verb), check in, publish
 
 **Discard**:
-Resetting a Draft to its last Commit, dropping the unsaved DraftChanges (task 72_4). A Project with no Commit is refused with `nothing_to_discard`; **Revert to deployed** is the different act of resetting it to the running Deployment instead.
+Resetting a Draft to its last Commit, dropping the unsaved DraftChanges (task 72_4, task 72_5). A Project or a Library with no Commit is refused with `nothing_to_discard`; **Revert to deployed** (a Project) and **Revert to latest Release** (a Library) are the different act of resetting it to the published state instead.
 _Avoid_: revert, reset, cancel
+
+**Revert to latest Release**:
+Resetting a Library's Draft to its latest Library Release — the published state — in one transaction, `POST …/libraries/{id}/revert-to-release` (task 72_5). A Library never released is refused. Discard resets it to the last Commit instead.
+_Avoid_: discard, rollback, restore
 
 **Deploy**:
 The act of making a Project Release — or, on a Runtime node without an Engineering node, a ProjectFile — the running Deployment (task 72_4). A Deploy takes a Release, not the Draft: the order is Save → Release → Deploy. A Deploy of the Release that already runs is refused `nothing_to_deploy`.
@@ -161,7 +169,7 @@ Resetting a Draft to the Deployment the Project runs, dropping the unsaved Draft
 _Avoid_: discard, rollback
 
 **Release**:
-The act of publishing a new Release. A Project's publishes a Commit as a Project Release (task 72_3): it copies the Commit's content and needs no Draft Version. A Library's snapshots its Draft today (ADR 0007), states the Draft's Version, and from task 72_5 publishes a Commit too. A Release outlives the Commit, the Draft and future retention, and needs no Deploy.
+The act of publishing a new Release. A Project's publishes a Commit as a Project Release (task 72_3); a Library's publishes a Commit as a Library Release (task 72_5). Both copy the Commit's content and need no Draft Version. A Release outlives the Commit, the Draft and future retention, and needs no Deploy.
 _Avoid_: publish, tag, version
 
 **Project Release**:

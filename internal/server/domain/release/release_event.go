@@ -12,7 +12,8 @@ import (
 // release_created and release_note_updated. It names the Release's scope and
 // its number; a Project's Release event also implements project.ContentEvent,
 // so the event stream routes it to that Project's clients (ADR 0006,
-// ADR 0009). A Library's Release publishes its own names in task 72_5.
+// ADR 0009). A Library's Release has events of its own, in the library
+// package (task 72_5).
 type ReleaseEvent interface {
 	event.Event
 	Scope() draft.Scope

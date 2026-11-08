@@ -17,55 +17,68 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/project"
 )
 
-func TestLibraryService_ReleaseNumbersAndRefusesAnUnchangedDraft(t *testing.T) {
+func TestLibraryService_ReleasePublishesACommit(t *testing.T) {
 	ctx := context.Background()
 	svc := newLibraryService()
 	lib := mustCreateLibrary(t)
-	if !lib.HasUnreleasedChanges || lib.LatestRelease != 0 {
-		t.Errorf("a new library: %+v, want unreleased changes and no release", lib)
+	if !lib.HasUnsavedChanges || lib.HasUnpublishedChanges || lib.LatestRelease != 0 || lib.LatestCommit != 0 {
+		t.Errorf("a new library: %+v, want unsaved changes and no commit or release", lib)
 	}
-	if _, err := svc.Release(ctx, lib.ID, libraryDraftVersionOf(t, lib.ID)+1, appdto.ReleaseInput{}); !errors.Is(err, draft.ErrDraftConflict) {
-		t.Errorf("a stale version: expected ErrLibraryConflict, got %v", err)
+	if _, err := svc.Release(ctx, lib.ID, appdto.ReleaseInput{Commit: 7, Author: "Ada"}); !errors.Is(err, draft.ErrCommitNotFound) {
+		t.Errorf("a commit the library does not have: expected ErrCommitNotFound, got %v", err)
 	}
 	wt, err := newWidgetTypeService().CreateWidgetType(ctx, lib.ID, libraryDraftVersionOf(t, lib.ID), testCreateWidgetTypeInput)
 	if err != nil {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
+	commit := mustCommitLibrary(t, lib.ID)
+	if found, _ := svc.FindLibraryByID(ctx, lib.ID); found.HasUnsavedChanges || !found.HasUnpublishedChanges || found.LatestCommit != commit.Number {
+		t.Errorf("after the Commit: %+v, want unsaved changes gone and the commit unpublished", found)
+	}
 
-	first, err := svc.Release(ctx, lib.ID, libraryDraftVersionOf(t, lib.ID), appdto.ReleaseInput{Note: "first"})
+	if _, err := svc.Release(ctx, lib.ID, appdto.ReleaseInput{Commit: commit.Number}); !errors.Is(err, application.ErrInvalidInput) {
+		t.Errorf("a release without an author: expected invalid input, got %v", err)
+	}
+	first, err := svc.Release(ctx, lib.ID, appdto.ReleaseInput{Commit: commit.Number, Note: "first", Author: "Ada"})
 	if err != nil {
 		t.Fatalf("Release: %v", err)
 	}
-	if first.Number != 1 || first.Note != "first" || len(first.WidgetTypes) != 1 || first.WidgetTypes[0].ID != wt.ID {
+	if first.Number != 1 || first.Note != "first" || first.CommitNumber == nil || *first.CommitNumber != commit.Number ||
+		first.Title != commit.Title || first.Author != "Ada" || first.Origin != "commit" ||
+		len(first.WidgetTypes) != 1 || first.WidgetTypes[0].ID != wt.ID {
 		t.Errorf("release 1: %+v", first)
 	}
-	if _, err := svc.Release(ctx, lib.ID, libraryDraftVersionOf(t, lib.ID), appdto.ReleaseInput{}); !errors.Is(err, library.ErrNothingToRelease) {
-		t.Errorf("an unchanged Draft: expected ErrNothingToRelease, got %v", err)
+	if _, err := svc.Release(ctx, lib.ID, appdto.ReleaseInput{Commit: commit.Number, Author: "Ada"}); !errors.Is(err, library.ErrCommitAlreadyReleased) {
+		t.Errorf("a released commit: expected ErrCommitAlreadyReleased, got %v", err)
 	}
 	found, err := svc.FindLibraryByID(ctx, lib.ID)
-	if err != nil || found.HasUnreleasedChanges || found.LatestRelease != 1 {
+	if err != nil || found.HasUnsavedChanges || found.HasUnpublishedChanges || found.LatestRelease != 1 {
 		t.Errorf("after the release: %+v, %v", found, err)
 	}
 
 	if _, err := newWidgetTypeService().DeleteWidgetTypeByID(ctx, lib.ID, wt.ID, libraryDraftVersionOf(t, lib.ID)); err != nil {
 		t.Fatal(err)
 	}
-	if found, _ := svc.FindLibraryByID(ctx, lib.ID); !found.HasUnreleasedChanges {
-		t.Error("a removed WidgetType is a change not released")
+	if found, _ := svc.FindLibraryByID(ctx, lib.ID); !found.HasUnsavedChanges {
+		t.Error("a removed WidgetType is a change not saved")
 	}
-	second, err := svc.Release(ctx, lib.ID, libraryDraftVersionOf(t, lib.ID), appdto.ReleaseInput{})
+	secondCommit := mustCommitLibrary(t, lib.ID)
+	second, err := svc.Release(ctx, lib.ID, appdto.ReleaseInput{Commit: secondCommit.Number, Author: "Ada"})
 	if err != nil || second.Number != 2 || len(second.WidgetTypes) != 0 {
 		t.Fatalf("release 2: %+v, %v", second, err)
 	}
 	all, err := svc.FindReleases(ctx, lib.ID)
-	if err != nil || len(all) != 2 || all[0].Number != 1 {
+	if err != nil || len(all) != 2 || all[0].Number != 1 || all[1].CommitNumber == nil || *all[1].CommitNumber != secondCommit.Number {
 		t.Errorf("FindReleases: %+v, %v", all, err)
 	}
-	if got, err := svc.FindRelease(ctx, lib.ID, 1); err != nil || len(got.WidgetTypes) != 1 {
+	if got, err := svc.FindRelease(ctx, lib.ID, 1); err != nil || len(got.WidgetTypes) != 1 || got.Title != commit.Title {
 		t.Errorf("FindRelease 1: %+v, %v", got, err)
 	}
 	if _, err := svc.FindRelease(ctx, lib.ID, 3); !errors.Is(err, library.ErrReleaseNotFound) {
 		t.Errorf("a missing release: expected ErrReleaseNotFound, got %v", err)
+	}
+	if updated, err := svc.UpdateReleaseNote(ctx, lib.ID, 1, "renoted"); err != nil || updated.Note != "renoted" || len(updated.WidgetTypes) != 1 {
+		t.Errorf("UpdateReleaseNote: %+v, %v", updated, err)
 	}
 }
 
@@ -85,7 +98,7 @@ func TestLibraryService_DeleteRefusedWhileALiveProjectPinsIt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DeleteLibraryByID: %v", err)
 	}
-	if deleted.LatestRelease != 1 || deleted.HasUnreleasedChanges {
+	if deleted.LatestRelease != 1 {
 		t.Errorf("the deleted library: %+v, want it as it was, at release 1", deleted)
 	}
 	if _, err := r.libSvc.FindLibraryByID(ctx, libraryID); !errors.Is(err, library.ErrLibraryNotFound) {
@@ -145,15 +158,16 @@ func TestLibraryService_DeleteRefusedWhileARunningDeploymentNamesIt(t *testing.T
 	}
 }
 
-// TestDiscard_ResetsTheDraftToTheLatestRelease: one transaction brings the
-// WidgetTypes added since go, the changed ones restored and the removed ones
-// back under their IDs — two names swapped since the release included.
-func TestDiscard_ResetsTheDraftToTheLatestRelease(t *testing.T) {
+// TestDiscard_ResetsTheDraftToTheLastCommit: one transaction brings the
+// WidgetTypes added since the Commit go, the changed ones restored and the
+// removed ones back under their IDs — two names swapped since the Commit
+// included.
+func TestDiscard_ResetsTheDraftToTheLastCommit(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	ctx := context.Background()
 	lib := mustCreateLibrary(t)
-	if _, err := r.libSvc.Discard(ctx, lib.ID); !errors.Is(err, library.ErrNoRelease) {
-		t.Errorf("a library never released: expected ErrNoRelease, got %v", err)
+	if _, err := r.libSvc.Discard(ctx, lib.ID); !errors.Is(err, library.ErrNothingToDiscard) {
+		t.Errorf("a library never saved: expected ErrNothingToDiscard, got %v", err)
 	}
 	create := func(name string) appdto.WidgetType {
 		t.Helper()
@@ -191,7 +205,7 @@ func TestDiscard_ResetsTheDraftToTheLatestRelease(t *testing.T) {
 		t.Fatalf("Discard: %v", err)
 	}
 	after, err := r.libSvc.FindLibraryByID(ctx, lib.ID)
-	if err != nil || after.HasUnreleasedChanges {
+	if err != nil || after.HasUnpublishedChanges {
 		t.Errorf("after the Discard: %+v, %v", after, err)
 	}
 	if state.Version <= 0 {

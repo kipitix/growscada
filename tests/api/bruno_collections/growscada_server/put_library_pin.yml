@@ -1,8 +1,7 @@
 info:
   name: put library pin
   type: http
-  seq: 58
-
+  seq: 59
 http:
   method: PUT
   url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/library-pins/{{OTHER_LIBRARY_ID}}

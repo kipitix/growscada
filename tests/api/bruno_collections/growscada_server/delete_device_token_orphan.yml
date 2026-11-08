@@ -1,8 +1,7 @@
 info:
   name: delete the orphan device token
   type: http
-  seq: 118
-
+  seq: 119
 http:
   method: DELETE
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/devices/{{DEVICE_ID}}/token

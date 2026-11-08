@@ -1,8 +1,7 @@
 info:
   name: post device
   type: http
-  seq: 94
-
+  seq: 95
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/devices

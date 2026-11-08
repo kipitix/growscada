@@ -1,8 +1,7 @@
 info:
   name: patch tag value with an unknown token
   type: http
-  seq: 107
-
+  seq: 108
 http:
   method: PATCH
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/tags/{{DEVICE_TAG_ID}}/value

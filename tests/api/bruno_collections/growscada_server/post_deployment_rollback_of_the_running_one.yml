@@ -1,8 +1,7 @@
 info:
   name: post deployment rollback of the running one
   type: http
-  seq: 63
-
+  seq: 64
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/deployments/2/rollback

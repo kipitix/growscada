@@ -1,8 +1,7 @@
 info:
   name: deploy a project file of another server
   type: http
-  seq: 142
-
+  seq: 143
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/projectfile/deploy

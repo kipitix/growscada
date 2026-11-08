@@ -1,0 +1,43 @@
+info:
+  name: save the library draft for the release
+  type: http
+  seq: 56
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/commits
+  body:
+    type: json
+    data: |-
+      {
+        "version": {{LIBRARY_COMMIT_VERSION}},
+        "title": "Widgets of the release",
+        "author": "Bruno"
+      }
+  auth: inherit
+
+docs: |
+  A Library Release is made from a Commit (task 72_5; ADR 0021): the Draft is
+  saved first, and the Release below publishes this Commit. The Commit number
+  carries to the Release.
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("LIBRARY_RELEASE_COMMIT", res.body.number);
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '1'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

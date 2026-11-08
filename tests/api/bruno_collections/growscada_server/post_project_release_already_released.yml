@@ -1,8 +1,7 @@
 info:
   name: release an already published commit
   type: http
-  seq: 174
-
+  seq: 175
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/releases

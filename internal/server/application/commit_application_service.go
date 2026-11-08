@@ -37,11 +37,12 @@ type CommitService interface {
 }
 
 type commitServiceImpl struct {
-	content     ProjectContent
-	libraries   LibraryContent
-	builder     ProjectFileBuilder
-	widgetTypes library.WidgetTypeRepositories
-	releases    release.Repository
+	content         ProjectContent
+	libraries       LibraryContent
+	builder         ProjectFileBuilder
+	widgetTypes     library.WidgetTypeRepositories
+	releases        release.Repository
+	libraryReleases library.LibraryReleaseRepository
 }
 
 var _ CommitService = (*commitServiceImpl)(nil)
@@ -49,11 +50,13 @@ var _ CommitService = (*commitServiceImpl)(nil)
 // NewCommitService returns the service of the Commits of the Projects aContent
 // serves and of the Libraries aLibraries serves, assembling a Project's
 // snapshot with aBuilder, reading a Library's Draft through someWidgetTypes and
-// marking a Commit a Release published with someReleases.
+// marking a Commit a Release published with someReleases and
+// someLibraryReleases.
 func NewCommitService(aContent ProjectContent, aLibraries LibraryContent, aBuilder ProjectFileBuilder,
-	someWidgetTypes library.WidgetTypeRepositories, someReleases release.Repository) CommitService {
+	someWidgetTypes library.WidgetTypeRepositories, someReleases release.Repository,
+	someLibraryReleases library.LibraryReleaseRepository) CommitService {
 	return &commitServiceImpl{content: aContent, libraries: aLibraries, builder: aBuilder,
-		widgetTypes: someWidgetTypes, releases: someReleases}
+		widgetTypes: someWidgetTypes, releases: someReleases, libraryReleases: someLibraryReleases}
 }
 
 func (s commitServiceImpl) Save(ctx context.Context, scope draft.Scope, rawVersion int, rawTitle, rawAuthor string) (appdto.Commit, error) {
@@ -174,13 +177,19 @@ func (s commitServiceImpl) releasedCommit(ctx context.Context, scope draft.Scope
 	return dtos[0], nil
 }
 
-// markReleased sets Released on the Commits a Release published. Only a
-// Project has Releases until task 72_5.
+// markReleased sets Released on the Commits a Release published: a Project's
+// through its Releases, a Library's through its Library Releases (task 72_5).
 func (s commitServiceImpl) markReleased(ctx context.Context, scope draft.Scope, dtos []appdto.Commit) error {
-	if !scope.IsProject() || len(dtos) == 0 {
+	if len(dtos) == 0 {
 		return nil
 	}
-	numbers, err := s.releases.ReleasedCommits(ctx, scope)
+	var numbers []int
+	var err error
+	if scope.IsProject() {
+		numbers, err = s.releases.ReleasedCommits(ctx, scope)
+	} else {
+		numbers, err = s.libraryReleases.ReleasedCommits(ctx, scope.LibraryID())
+	}
 	if err != nil {
 		return fmt.Errorf("cannot read the releases of %s: %w", scope, err)
 	}

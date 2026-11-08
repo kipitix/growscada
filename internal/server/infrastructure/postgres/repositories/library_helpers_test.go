@@ -2,6 +2,7 @@ package repositories_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -49,7 +50,8 @@ func newWidgetTypeRepo(t *testing.T) libraryRepo {
 	return libraryRepo{repositories.NewWidgetTypeRepositoryPostgres(testDB, lib.ID()), lib.ID()}
 }
 
-// mustRelease releases the Draft of the library as it is.
+// mustRelease saves the Draft of the library as a Commit, unless it is at the
+// last one, and publishes that Commit as the next Library Release (task 72_5).
 func mustRelease(t *testing.T, libraryID id.ID[library.Library]) library.LibraryRelease {
 	t.Helper()
 	ctx := context.Background()
@@ -57,24 +59,76 @@ func mustRelease(t *testing.T, libraryID id.ID[library.Library]) library.Library
 	if err != nil {
 		t.Fatalf("FindByID library: %v", err)
 	}
-	draft, err := repositories.NewWidgetTypeRepositoryPostgres(testDB, libraryID).FindAll(ctx)
+	draftNow, err := repositories.NewWidgetTypeRepositoryPostgres(testDB, libraryID).FindAll(ctx)
 	if err != nil {
 		t.Fatalf("FindAll widget types: %v", err)
+	}
+	copies := make([]library.ReleasedWidgetType, len(draftNow))
+	for i, wt := range draftNow {
+		copies[i] = library.ReleasedFrom(wt)
+	}
+	commit, err := mustCommit(t, libraryID)
+	if err != nil {
+		t.Fatalf("commit: %v", err)
 	}
 	releases := repositories.NewLibraryReleaseRepositoryPostgres(testDB)
 	latest, err := releases.FindLatest(ctx, libraryID)
 	if err != nil {
 		t.Fatalf("FindLatest: %v", err)
 	}
-	release, err := library.CreateRelease(lib, draft, latest, "", time.Now())
+	number := library.FirstRelease()
+	if latest != nil {
+		number = latest.Number().Next()
+	}
+	author, err := library.NewAuthor("Ada")
+	if err != nil {
+		t.Fatalf("NewAuthor: %v", err)
+	}
+	release, err := library.CreateRelease(lib, number, commit.Number(), "", author, time.Now(), copies)
 	if err != nil {
 		t.Fatalf("CreateRelease: %v", err)
 	}
-	saved, err := releases.Save(ctx, release, libraryDraftContentVersionOf(t, libraryID))
+	saved, err := releases.Save(ctx, release)
 	if err != nil {
 		t.Fatalf("Save release: %v", err)
 	}
 	return saved
+}
+
+// mustCommit saves the Draft of the library as a Commit, or returns its last
+// one when the Draft has not changed since it.
+func mustCommit(t *testing.T, libraryID id.ID[library.Library]) (draft.Commit, error) {
+	t.Helper()
+	ctx := context.Background()
+	draftNow, err := repositories.NewWidgetTypeRepositoryPostgres(testDB, libraryID).FindAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	copies := make([]library.ReleasedWidgetType, len(draftNow))
+	for i, wt := range draftNow {
+		copies[i] = library.ReleasedFrom(wt)
+	}
+	title, err := draft.NewCommitTitle("Release")
+	if err != nil {
+		return nil, err
+	}
+	author, err := draft.NewAuthor("Ada")
+	if err != nil {
+		return nil, err
+	}
+	saved, err := testDrafts().SaveCommit(ctx, draft.LibraryScope(libraryID), libraryDraftVersionOf(t, libraryID),
+		title, author, draft.NewLibraryCommitContent(copies))
+	if err == nil {
+		return saved, nil
+	}
+	if !errors.Is(err, draft.ErrNothingToSave) {
+		return nil, err
+	}
+	last, ok, err := testDrafts().FindLastCommit(ctx, draft.LibraryScope(libraryID))
+	if err != nil || !ok {
+		return nil, err
+	}
+	return last, nil
 }
 
 // mustPin pins release in the project through the project's Draft.

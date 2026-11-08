@@ -6,7 +6,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/kipitix/growscada/internal/server/domain/draft"
+	"github.com/kipitix/growscada/internal/server/domain/event"
+	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
@@ -110,6 +114,10 @@ func TestLibraryRelease_SaveAndRead(t *testing.T) {
 	if first.Number() != library.FirstRelease() {
 		t.Errorf("first release numbered %s", first.Number())
 	}
+	commitNumber := first.CommitNumber()
+	if commitNumber == nil || *commitNumber != 1 || first.Author().String() != "Ada" || first.Origin() != library.OriginCommit {
+		t.Errorf("the provenance of the first release: %+v", first)
+	}
 
 	got, err := releases.FindByNumber(ctx, repo.libraryID, first.Number())
 	if err != nil {
@@ -125,12 +133,22 @@ func TestLibraryRelease_SaveAndRead(t *testing.T) {
 	if _, err := releases.FindByNumber(ctx, repo.libraryID, first.Number().Next()); !errors.Is(err, library.ErrReleaseNotFound) {
 		t.Errorf("a missing release: expected ErrReleaseNotFound, got %v", err)
 	}
-
-	lib, _ := repositories.NewLibraryRepositoryPostgres(testDB).FindByID(ctx, repo.libraryID)
-	again, _ := library.CreateRelease(lib, []library.WidgetType{}, nil, "", time.Now())
-	if _, err := releases.Save(ctx, again, libraryDraftContentVersionOf(t, repo.libraryID)); !errors.Is(err, library.ErrReleaseNumberTaken) {
-		t.Errorf("number 1 again: expected ErrReleaseNumberTaken, got %v", err)
+	if numbers, err := releases.ReleasedCommits(ctx, repo.libraryID); err != nil || len(numbers) != 1 || numbers[0] != 1 {
+		t.Errorf("ReleasedCommits: %v, %v", numbers, err)
 	}
+
+	// One Commit is published at most once: a second Release of it is refused,
+	// even under another number.
+	lib, _ := repositories.NewLibraryRepositoryPostgres(testDB).FindByID(ctx, repo.libraryID)
+	author, _ := library.NewAuthor("Ada")
+	again, err := library.CreateRelease(lib, first.Number().Next(), *commitNumber, "", author, time.Now(), nil)
+	if err != nil {
+		t.Fatalf("CreateRelease: %v", err)
+	}
+	if _, err := releases.Save(ctx, again); !errors.Is(err, library.ErrCommitAlreadyReleased) {
+		t.Errorf("releasing commit 1 twice: expected ErrCommitAlreadyReleased, got %v", err)
+	}
+
 	if _, err := testDrafts().Update(ctx, draft.LibraryScope(repo.libraryID), libraryDraftVersionOf(t, repo.libraryID),
 		"Delete widget type gauge", func(session *draft.Session) error {
 			_, err := session.DeleteWidgetType(ctx, saved.ID())
@@ -138,12 +156,15 @@ func TestLibraryRelease_SaveAndRead(t *testing.T) {
 		}); err != nil {
 		t.Fatalf("Delete widget type: %v", err)
 	}
-	second, _ := library.CreateRelease(lib, nil, first, "emptied", time.Now())
-	if _, err := releases.Save(ctx, second, libraryDraftContentVersionOf(t, repo.libraryID)); err != nil {
-		t.Fatalf("Save second: %v", err)
+	second := mustRelease(t, repo.libraryID)
+	if second.Number().Int() != 2 {
+		t.Fatalf("second release numbered %s", second.Number())
+	}
+	if numbers, err := releases.ReleasedCommits(ctx, repo.libraryID); err != nil || len(numbers) != 2 {
+		t.Errorf("ReleasedCommits: %v, %v", numbers, err)
 	}
 	all, err := releases.FindAll(ctx, repo.libraryID)
-	if err != nil || len(all) != 2 || all[1].Note() != "emptied" || len(all[1].WidgetTypes()) != 0 || len(all[0].WidgetTypes()) != 1 {
+	if err != nil || len(all) != 2 || len(all[1].WidgetTypes()) != 0 || len(all[0].WidgetTypes()) != 1 {
 		t.Errorf("FindAll: %v, %v", all, err)
 	}
 	if latest, _ := releases.FindLatest(ctx, repo.libraryID); latest.Number().Int() != 2 {
@@ -151,81 +172,94 @@ func TestLibraryRelease_SaveAndRead(t *testing.T) {
 	}
 }
 
-// TestLibraryRelease_SaveRefusesAStaleDraftVersion: the Release states the
-// Version of the Draft the client read; a write since then is a conflict and
-// stores nothing (ADR 0016).
-func TestLibraryRelease_SaveRefusesAStaleDraftVersion(t *testing.T) {
+// TestLibraryRelease_NoteAndLegacy: a note is metadata and changes alone,
+// recording its event; a Release stored before Commits reads back as legacy,
+// with its system author and no Commit.
+func TestLibraryRelease_NoteAndLegacy(t *testing.T) {
 	cleanLibraries(t)
 	ctx := context.Background()
 	repo := newWidgetTypeRepo(t)
 	mustStoreWidgetType(t, makeWidgetType(t, "gauge", nil, repo), repo)
 	releases := repositories.NewLibraryReleaseRepositoryPostgres(testDB)
-	lib, err := repositories.NewLibraryRepositoryPostgres(testDB).FindByID(ctx, repo.libraryID)
+	first := mustRelease(t, repo.libraryID)
+
+	updated, err := releases.UpdateNote(ctx, repo.libraryID, first.Number(), "with a note")
 	if err != nil {
-		t.Fatalf("FindByID library: %v", err)
+		t.Fatalf("UpdateNote: %v", err)
 	}
-	read, err := repo.FindAll(ctx)
-	if err != nil {
-		t.Fatalf("FindAll widget types: %v", err)
+	if updated.Note() != "with a note" || updated.Number() != first.Number() || *updated.CommitNumber() != *first.CommitNumber() {
+		t.Errorf("UpdateNote: %+v", updated)
 	}
-	readVersion := libraryDraftContentVersionOf(t, repo.libraryID)
-	stale, err := library.CreateRelease(lib, read, nil, "", time.Now())
-	if err != nil {
-		t.Fatalf("CreateRelease: %v", err)
+	if events := updated.PendingEvents(); len(events) != 1 || events[0].Type() != event.EventTypeLibraryReleaseNoteUpdated {
+		t.Errorf("UpdateNote events: %v", events)
+	}
+	if read, err := releases.FindByNumber(ctx, repo.libraryID, first.Number()); err != nil || read.Note() != "with a note" {
+		t.Errorf("the note read back: %v, %v", read, err)
 	}
 
-	mustStoreWidgetType(t, makeWidgetType(t, "dial", nil, repo), repo)
-	if _, err := releases.Save(ctx, stale, readVersion); !errors.Is(err, draft.ErrDraftConflict) {
-		t.Fatalf("a release at a stale Draft Version: expected ErrDraftConflict, got %v", err)
+	// A Release of the days before Commits: no commit, system author, legacy.
+	second := id.NewID[library.Library]()
+	if _, err := testDB.ExecContext(ctx,
+		`INSERT INTO engineering.libraries (id, organization_id, name, version) SELECT $1, id, $2, 1 FROM organizations`,
+		second.UUID(), "legacy-"+uuid.NewString()); err != nil {
+		t.Fatalf("insert legacy library: %v", err)
 	}
-	if latest, err := releases.FindLatest(ctx, repo.libraryID); err != nil || latest != nil {
-		t.Errorf("the refused release was stored: %v, %v", latest, err)
+	if _, err := testDB.ExecContext(ctx,
+		`INSERT INTO engineering.library_releases (library_id, number) VALUES ($1, 1)`, second.UUID()); err != nil {
+		t.Fatalf("insert legacy release: %v", err)
 	}
-
-	draftNow, err := repo.FindAll(ctx)
+	legacy, err := releases.FindLatest(ctx, second)
 	if err != nil {
-		t.Fatalf("FindAll widget types: %v", err)
+		t.Fatalf("FindLatest legacy: %v", err)
 	}
-	fresh, err := library.CreateRelease(lib, draftNow, nil, "", time.Now())
-	if err != nil {
-		t.Fatalf("CreateRelease of the Draft as it is: %v", err)
+	if legacy.CommitNumber() != nil || legacy.Origin() != library.OriginLegacy || legacy.Author().String() != "system" {
+		t.Errorf("the legacy release: %+v", legacy)
 	}
-	if _, err := releases.Save(ctx, fresh, libraryDraftContentVersionOf(t, repo.libraryID)); err != nil {
-		t.Fatalf("Save release of the Draft as it is: %v", err)
+	if numbers, err := releases.ReleasedCommits(ctx, second); err != nil || len(numbers) != 0 {
+		t.Errorf("a legacy release names no commit: %v, %v", numbers, err)
 	}
 }
 
-// TestLibraryReleaseState_OfTheStoredDraftAndRelease: a Draft and its latest
-// release read back from the database differ exactly when a WidgetType was
-// changed, added or removed since the release, whatever was stored.
-func TestLibraryReleaseState_OfTheStoredDraftAndRelease(t *testing.T) {
+// TestLibraryReleaseState_UnsavedAndUnpublished: the Draft is unsaved when its
+// Version is above the one its last Commit fixed, and unpublished while the
+// last Commit is newer than the one the latest Release published
+// (task 72_5; ADR 0021).
+func TestLibraryReleaseState_UnsavedAndUnpublished(t *testing.T) {
 	cleanLibraries(t)
 	ctx := context.Background()
 	repo := newWidgetTypeRepo(t)
 	releases := repositories.NewLibraryReleaseRepositoryPostgres(testDB)
-	check := func(step string, wantLatest int, wantDiffers bool) {
+	check := func(step string, wantLatest int, wantUnsaved, wantUnpublished bool) {
 		t.Helper()
-		draftNow, err := repo.FindAll(ctx)
-		if err != nil {
-			t.Fatalf("%s: FindAll: %v", step, err)
-		}
 		latest, err := releases.FindLatest(ctx, repo.libraryID)
 		if err != nil {
 			t.Fatalf("%s: FindLatest: %v", step, err)
 		}
-		if got := library.ReleaseStateOf(draftNow, latest); got.Latest.Int() != wantLatest || got.DraftDiffers != wantDiffers {
-			t.Errorf("%s: %+v, want release %d, differs %t", step, got, wantLatest, wantDiffers)
+		lastCommit, found, err := testDrafts().FindLastCommit(ctx, draft.LibraryScope(repo.libraryID))
+		if err != nil {
+			t.Fatalf("%s: FindLastCommit: %v", step, err)
+		}
+		lastCommitNumber, lastCommitDraftVersion := 0, 0
+		if found {
+			lastCommitNumber = lastCommit.Number()
+			lastCommitDraftVersion = lastCommit.DraftVersion().Number()
+		}
+		got := library.ReleaseStateOf(latest, lastCommitNumber, libraryDraftVersionOf(t, repo.libraryID).Number(), lastCommitDraftVersion)
+		if got.Latest.Int() != wantLatest || got.UnsavedChanges != wantUnsaved || got.UnpublishedChanges != wantUnpublished {
+			t.Errorf("%s: %+v, want release %d, unsaved %t, unpublished %t",
+				step, got, wantLatest, wantUnsaved, wantUnpublished)
 		}
 	}
 
-	check("a new library", 0, true)
+	check("a new library", 0, true, false)
 	port, _ := library.NewInputPortName("value")
 	ports := []library.InputPort{library.NewInputPort(port, "the value", library.AnyTypeHint())}
 	gauge := mustStoreWidgetType(t, makeWidgetType(t, "gauge", ports, repo), repo)
+	check("a Draft never saved", 0, true, false)
 	mustRelease(t, repo.libraryID)
-	check("released", 1, false)
+	check("saved and released", 1, false, false)
 
-	update := func(step string, html string, ports []library.InputPort) {
+	update := func(html string, ports []library.InputPort) {
 		t.Helper()
 		h, _ := library.NewHtmlTemplate(html)
 		changed, err := gauge.Update(gauge.Name(), h, gauge.Script(), gauge.ScriptLanguage(), gauge.DefaultSize(), ports)
@@ -234,26 +268,20 @@ func TestLibraryReleaseState_OfTheStoredDraftAndRelease(t *testing.T) {
 		}
 		gauge = mustUpdateLibraryWidgetType(t, repo.libraryID, changed)
 	}
-	update("html", "<p></p>", ports)
-	check("html changed", 1, true)
-	h, _ := library.NewHtmlTemplate("<div></div>")
-	update("html restored", h.String(), ports)
-	check("html restored", 1, false)
-	update("ports", h.String(), nil)
-	check("ports changed", 1, true)
+	update("<p></p>", ports)
+	check("changed since the commit", 1, true, false)
 	mustRelease(t, repo.libraryID)
-	check("released again", 2, false)
+	check("saved and released again", 2, false, false)
 
 	extra := mustStoreWidgetType(t, makeWidgetType(t, "extra", nil, repo), repo)
-	check("a WidgetType added", 2, true)
+	check("a WidgetType added", 2, true, false)
 	mustUpdateLibrary(t, repo.libraryID, "Delete widget type extra", func(session *draft.Session) error {
 		_, err := session.DeleteWidgetType(ctx, extra.ID())
 		return err
 	})
-	check("the added one removed", 2, false)
-	mustUpdateLibrary(t, repo.libraryID, "Delete widget type gauge", func(session *draft.Session) error {
-		_, err := session.DeleteWidgetType(ctx, gauge.ID())
-		return err
-	})
-	check("a released WidgetType removed", 2, true)
+	// The Draft is back to the released content, but its Version moved: it is
+	// not at the last Commit.
+	check("the added one removed", 2, true, false)
+	mustRelease(t, repo.libraryID)
+	check("released after the removal", 3, false, false)
 }

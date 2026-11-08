@@ -702,7 +702,7 @@ func TestDraftLibrary_ReplaceRestoresTheReleaseAndClearsTheStack(t *testing.T) {
 
 	before := libraryDraftVersionOf(t, repo.libraryID)
 	result, err := testDrafts().Replace(ctx, scope, func(session *draft.Session) error {
-		return session.ReplaceWidgetTypes(ctx, release)
+		return session.ReplaceWidgetTypes(ctx, release.WidgetTypes())
 	})
 	if err != nil {
 		t.Fatalf("replace: %v", err)

@@ -1,8 +1,7 @@
 info:
   name: get one project commit
   type: http
-  seq: 158
-
+  seq: 159
 http:
   method: GET
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/commits/2

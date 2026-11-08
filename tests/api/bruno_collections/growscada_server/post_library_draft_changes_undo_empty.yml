@@ -1,8 +1,7 @@
 info:
   name: post library draft changes undo on an empty stack
   type: http
-  seq: 129
-
+  seq: 130
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/draft-changes/undo

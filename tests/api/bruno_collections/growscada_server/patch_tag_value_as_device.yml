@@ -1,8 +1,7 @@
 info:
   name: patch tag value as the device
   type: http
-  seq: 105
-
+  seq: 106
 http:
   method: PATCH
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/tags/{{DEVICE_TAG_ID}}/value

@@ -1,7 +1,7 @@
 info:
   name: release the library of the cleanup flow
   type: http
-  seq: 196
+  seq: 197
 
 http:
   method: POST
@@ -10,8 +10,9 @@ http:
     type: json
     data: |-
       {
+        "commit": {{CLEANUP_LIBRARY_COMMIT}},
         "note": "The one release",
-        "version": 2
+        "author": "Ada"
       }
   auth: inherit
 

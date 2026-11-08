@@ -1,11 +1,10 @@
 info:
   name: rename a library commit
   type: http
-  seq: 168
-
+  seq: 169
 http:
   method: PATCH
-  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/commits/1
+  url: http://{{API_SERVER}}/api/v0/libraries/{{OTHER_LIBRARY_ID}}/commits/1
   body:
     type: json
     data: |-

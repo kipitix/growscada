@@ -1,8 +1,7 @@
 info:
   name: get device identity (gateway)
   type: http
-  seq: 90
-
+  seq: 91
 http:
   method: GET
   url: http://{{API_SERVER}}/api/v0/device

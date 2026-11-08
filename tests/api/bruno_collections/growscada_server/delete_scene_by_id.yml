@@ -1,8 +1,7 @@
 info:
   name: delete scene by id
   type: http
-  seq: 75
-
+  seq: 76
 http:
   method: DELETE
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/scenes/{{SCENE_ID}}?version=8

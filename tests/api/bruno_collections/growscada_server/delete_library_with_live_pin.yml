@@ -1,8 +1,7 @@
 info:
   name: delete a library a live project pins
   type: http
-  seq: 198
-
+  seq: 199
 http:
   method: DELETE
   url: http://{{API_SERVER}}/api/v0/libraries/{{CLEANUP_LIBRARY_ID}}
