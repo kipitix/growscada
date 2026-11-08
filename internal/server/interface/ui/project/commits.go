@@ -10,6 +10,7 @@ import (
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
+	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -43,17 +44,29 @@ func (p *Project) lastCommitVersion() int {
 	return p.commits[0].DraftVersion
 }
 
-// hasUnsavedChanges reports whether the Draft moved since its last Commit.
+// hasUnsavedChanges reports whether the Draft moved since its last Commit. A
+// Discard of this tab made the Draft equal to that Commit at a higher Version,
+// so that Version counts as clean too (task 72_6).
 func (p *Project) hasUnsavedChanges() bool {
-	return p.commitsLoaded && p.draftVersion() > p.lastCommitVersion()
+	return p.commitsLoaded && p.draftVersion() > max(p.lastCommitVersion(), p.cleanDraftVersion)
 }
 
 // openSaveDialog opens the Save dialog with a default title and the stored
-// author.
+// author. A first Save with no author yet shows the field empty: the dialog is
+// where the name is asked for (task 72_6).
 func (p *Project) openSaveDialog(ctx app.Context) {
 	p.saveTitle = "Save " + time.Now().Format("02.01.2006 15:04")
 	p.saveDialog = true
 	ctx.Update()
+}
+
+// saveFromShortcut is Ctrl+S: the Save dialog when the Draft has unsaved
+// changes, nothing otherwise (task 72_6).
+func (p *Project) saveFromShortcut(ctx app.Context) {
+	if !p.hasUnsavedChanges() || p.savingCommit {
+		return
+	}
+	p.openSaveDialog(ctx)
 }
 
 // saveCommit confirms the Save dialog: the Draft as it is becomes a Commit.
@@ -75,18 +88,48 @@ func (p *Project) saveCommit(ctx app.Context) {
 		return pc.SaveCommit(c, apiv0.CreateCommitRequest{
 			Version: p.draftVersion(), Title: title, Author: author,
 		})
-	}, func(ctx app.Context, _ apiv0.CommitResponse) {
+	}, func(ctx app.Context, saved apiv0.CommitResponse) {
 		p.savingCommit = false
 		p.saveDialog = false
+		ctx.NewActionWithValue(toast.ActionAdd, toast.Problem{Problem: apiv0.Problem{
+			Title:  fmt.Sprintf("Commit %d saved", saved.Number),
+			Detail: saved.Title,
+		}})
 		p.loadCommits(ctx)
 		ctx.Update()
 	}, func(ctx app.Context, err error) {
 		p.savingCommit = false
-		// A conflict drops the Draft's Version and rereads the content; a
-		// nothing_to_save means the history moved.
-		p.rejectedDraftWrite(ctx, err, p.loadCommits)
+		// A conflict drops the Draft's Version and rereads the content, the
+		// stack and the history; a nothing_to_save means the history moved.
+		p.rejectedDraftWrite(ctx, err, func(ctx app.Context) {
+			p.loadCommits(ctx)
+			p.loadDraftChanges(ctx)
+		})
 		ctx.Update()
 	})
+}
+
+// changeAuthor asks for the author name the Save and Release dialogs fill in.
+// It is no lock: it blocks nobody and only fills in the dialogs (task 72_6).
+func (p *Project) changeAuthor(ctx app.Context) {
+	name, ok := prompt("Author:", p.saveAuthor)
+	if !ok {
+		return
+	}
+	p.saveAuthor = name
+	ctx.LocalStorage().Set(uiutil.AuthorKey, name)
+	ctx.Update()
+}
+
+// prompt asks the user for a text in the browser's dialog; false if they
+// cancel or leave it empty.
+func prompt(message, value string) (string, bool) {
+	answer := app.Window().Call("prompt", message, value)
+	if answer.IsNull() || answer.IsUndefined() {
+		return "", false
+	}
+	text := strings.TrimSpace(answer.String())
+	return text, text != ""
 }
 
 // openCommitsDialog shows the history, read afresh.
@@ -121,10 +164,18 @@ func (p *Project) renameCommit(ctx app.Context) {
 func commitTime(at time.Time) string { return at.Local().Format("2006-01-02 15:04") }
 
 // renderCommitBar is the project header's Save, its unsaved-changes
-// indicator and the history button.
+// indicator, the history, the Releases and the author (task 72_2, task 72_6).
 func (p *Project) renderCommitBar() []app.UI {
+	saveTitle := "Save the Draft as a Commit"
+	label := "Save"
+	switch {
+	case p.savingCommit:
+		label, saveTitle = "Saving…", "The Draft is being fixed as a Commit"
+	case !p.hasUnsavedChanges():
+		saveTitle = "Nothing to save since the last save"
+	}
 	body := []app.UI{
-		p.deployButton("Save", "Save the Draft as a Commit", p.hasUnsavedChanges() && !p.savingCommit, func(ctx app.Context) {
+		p.deployButton(label, saveTitle, p.hasUnsavedChanges() && !p.savingCommit, func(ctx app.Context) {
 			p.openSaveDialog(ctx)
 		}),
 	}
@@ -145,7 +196,44 @@ func (p *Project) renderCommitBar() []app.UI {
 		p.openCommitsDialog(ctx)
 	}))
 	body = append(body, p.renderReleaseBar())
+	body = append(body, p.renderAuthorBar())
 	return body
+}
+
+// renderAuthorBar shows the author the Save and Release dialogs fill in, with
+// a button to change it: it is not a lock and blocks nobody (task 72_6).
+func (p *Project) renderAuthorBar() app.UI {
+	name := strings.TrimSpace(p.saveAuthor)
+	label := "Author: not set"
+	if name != "" {
+		label = "Author: " + name
+	}
+	return app.Div().
+		Attr("data-author-bar", "true").
+		Style("display", "flex").
+		Style("align-items", "center").
+		Style("gap", "4px").
+		Body(
+			app.Span().
+				Attr("data-author-name", name).
+				Style("font-size", "12px").
+				Style("color", "var(--text-muted)").
+				Text(label),
+			app.Button().
+				Attr("data-author-change", "true").
+				Title("Change the author name").
+				Style("padding", "1px 7px").
+				Style("font-size", "11px").
+				Style("cursor", "pointer").
+				Style("border", "1px solid var(--border-input)").
+				Style("border-radius", "4px").
+				Style("background", "var(--bg)").
+				Style("color", "var(--text)").
+				Text("Change").
+				OnClick(func(ctx app.Context, e app.Event) {
+					p.changeAuthor(ctx)
+				}),
+		)
 }
 
 // renderSaveDialog is the Save confirmation: a title, the author, and the
@@ -222,12 +310,21 @@ func (p *Project) renderSaveDialog() app.UI {
 						Style("cursor", "pointer").
 						Style("background", "var(--accent)").
 						Style("color", "var(--accent-text)").
-						Text("Save").
+						Text(saveConfirmLabel(p.savingCommit)).
 						OnClick(func(ctx app.Context, e app.Event) {
 							p.saveCommit(ctx)
 						}),
 				),
 		)
+}
+
+// saveConfirmLabel is the Save dialog's button: Save, or that the request is in
+// flight (a second click sends nothing).
+func saveConfirmLabel(saving bool) string {
+	if saving {
+		return "Saving…"
+	}
+	return "Save"
 }
 
 // renderCommitsDialog is the history: number, title, author, time and counts,
@@ -339,6 +436,7 @@ func (p *Project) renderCommitRow(commit apiv0.CommitResponse) app.UI {
 			app.Span().Body(
 				app.Strong().Text(fmt.Sprintf("#%d ", commit.Number)),
 				app.Span().Text(commit.Title),
+				p.commitPublishedMark(commit),
 				app.Span().Style("margin-left", "8px").Style("color", "var(--text-muted)").
 					Text(fmt.Sprintf("%s · %s", commit.Author, commitTime(commit.CreatedAt))),
 				app.Span().Style("margin-left", "8px").Style("color", "var(--text-muted)").
@@ -352,6 +450,21 @@ func (p *Project) renderCommitRow(commit apiv0.CommitResponse) app.UI {
 				title,
 			),
 		)
+}
+
+// commitPublishedMark marks a Commit a Release published already: the history
+// says at a glance which of them are deployed from (task 72_6).
+func (p *Project) commitPublishedMark(commit apiv0.CommitResponse) app.UI {
+	if !commit.Released {
+		return app.Span()
+	}
+	return app.Span().
+		Attr("data-commit-published", fmt.Sprint(commit.Number)).
+		Title("This Commit is published as a Release").
+		Style("margin-left", "8px").
+		Style("font-size", "11px").
+		Style("color", "var(--accent)").
+		Text("released")
 }
 
 // downloadCommitButton offers the snapshot of a Commit as a download: the

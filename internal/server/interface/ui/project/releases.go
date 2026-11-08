@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -85,11 +86,28 @@ func (p *Project) doDeployRelease(ctx app.Context, number int) {
 		ctx.Update()
 	}, func(ctx app.Context, err error) {
 		p.deploying = false
-		uiutil.ShowError(ctx, err)
+		if nothingToDeploy(err) {
+			// Another tab deployed it meanwhile: the list is right, the
+			// request was not (task 72_6).
+			ctx.NewActionWithValue(toast.ActionAdd, toast.Problem{Problem: apiv0.Problem{
+				Title:  "This Release is running already",
+				Detail: "The project runs it: nothing to deploy.",
+			}})
+		} else {
+			uiutil.ShowError(ctx, err)
+		}
 		p.loadReleases(ctx)
 		p.loadDeploy(ctx)
 		ctx.Update()
 	})
+}
+
+// nothingToDeploy reports the server's refusal of a Deploy of the Release the
+// project runs already. The Problem carries no code, so its detail names it.
+func nothingToDeploy(err error) bool {
+	var statusErr *apiclient.StatusError
+	return errors.Is(err, apiclient.ErrConflict) && errors.As(err, &statusErr) &&
+		strings.Contains(statusErr.Problem.Detail, "Nothing to deploy")
 }
 
 // openReleaseDialog opens the publication of a Commit: a note and the author.
@@ -158,11 +176,29 @@ func (p *Project) saveReleaseNote(ctx app.Context) {
 	}, nil)
 }
 
-// renderReleaseBar is the header's button of the Releases.
+// renderReleaseBar is the header's button of the Releases, with the number of
+// the running Release beside it (task 72_6).
 func (p *Project) renderReleaseBar() app.UI {
-	return p.deployButton("Releases", "The Releases of the project", !p.releasing, func(ctx app.Context) {
+	button := p.deployButton("Releases", "The Releases of the project", !p.releasing, func(ctx app.Context) {
 		p.openReleasesDialog(ctx)
 	})
+	if !p.deployed || p.deployment.ReleaseNumber == nil {
+		return button
+	}
+	return app.Div().
+		Style("display", "flex").
+		Style("align-items", "center").
+		Style("gap", "4px").
+		Body(
+			button,
+			app.Span().
+				Attr("data-release-badge", fmt.Sprint(*p.deployment.ReleaseNumber)).
+				Title("The Release the project runs").
+				Style("font-size", "11px").
+				Style("font-weight", "600").
+				Style("color", "var(--accent)").
+				Text(fmt.Sprintf("R%d", *p.deployment.ReleaseNumber)),
+		)
 }
 
 // renderReleaseDialog is the publication confirmation: the Commit's number, a
@@ -275,7 +311,7 @@ func (p *Project) renderReleasesDialog() app.UI {
 			Text("Loading releases…"))
 	case len(p.releases) == 0:
 		rows = append(rows, app.P().Style("margin", "0 0 6px").
-			Text("The project has not been released yet."))
+			Text("The project has not been released yet. Save the Draft, then publish a Release from its history: a Release is what gets deployed."))
 	default:
 		for _, released := range p.releases {
 			rows = append(rows, p.renderReleaseRow(released))

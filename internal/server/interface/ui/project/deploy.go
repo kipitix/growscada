@@ -132,6 +132,14 @@ func (p *Project) discard(ctx app.Context) {
 	if !app.Window().Call("confirm", message).Bool() {
 		return
 	}
+	p.doDiscard(ctx)
+}
+
+// doDiscard performs the reset the confirmation asked for.
+func (p *Project) doDiscard(ctx app.Context) {
+	if p.content == nil || p.discarding || p.deploying || p.reverting {
+		return
+	}
 	p.discarding = true
 	mark := p.markDraft()
 	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DiscardProjectResponse, error) {
@@ -139,7 +147,8 @@ func (p *Project) discard(ctx app.Context) {
 	}, func(ctx app.Context, discarded apiv0.DiscardProjectResponse) {
 		p.discarding = false
 		p.observeDraftVersion(mark, discarded.Version)
-		p.loadDraftChanges(ctx) // a Discard clears the stack (ADR 0017)
+		p.cleanDraftVersion = discarded.Version // the Draft is its last Commit again
+		p.reloadDraftContent(ctx)               // a Discard clears the stack (ADR 0017)
 		p.showDiscardWarnings(ctx, discarded)
 		ctx.Update()
 	}, func(ctx app.Context, err error) {
@@ -164,6 +173,14 @@ func (p *Project) revert(ctx app.Context) {
 	if !app.Window().Call("confirm", message).Bool() {
 		return
 	}
+	p.doRevert(ctx)
+}
+
+// doRevert performs the reset the confirmation asked for.
+func (p *Project) doRevert(ctx app.Context) {
+	if p.content == nil || p.reverting || p.deploying || p.discarding {
+		return
+	}
 	p.reverting = true
 	mark := p.markDraft()
 	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DiscardProjectResponse, error) {
@@ -171,7 +188,15 @@ func (p *Project) revert(ctx app.Context) {
 	}, func(ctx app.Context, reverted apiv0.DiscardProjectResponse) {
 		p.reverting = false
 		p.observeDraftVersion(mark, reverted.Version)
-		p.loadDraftChanges(ctx)
+		// A Draft reset to the Release of its last Commit is that Commit
+		// again: nothing is unsaved. A Deployment of another Release (or of
+		// none) may differ from it, and the indicator follows the Version.
+		if p.revertIsTheLastCommit() {
+			p.cleanDraftVersion = reverted.Version
+		} else {
+			p.cleanDraftVersion = 0
+		}
+		p.reloadDraftContent(ctx)
 		p.showDiscardWarnings(ctx, reverted)
 		ctx.Update()
 	}, func(ctx app.Context, err error) {
@@ -179,6 +204,35 @@ func (p *Project) revert(ctx app.Context) {
 		uiutil.ShowError(ctx, err)
 		ctx.Update()
 	})
+}
+
+// revertIsTheLastCommit reports whether the Deployment the project runs is the
+// Release its last Commit was published as: a Revert then puts the Draft back
+// to that Commit, not to some other state.
+func (p *Project) revertIsTheLastCommit() bool {
+	if !p.deployed || p.deployment.ReleaseNumber == nil || len(p.commits) == 0 {
+		return false
+	}
+	for _, released := range p.releases {
+		if released.CommitNumber == p.commits[0].Number {
+			return released.Number == *p.deployment.ReleaseNumber
+		}
+	}
+	return false
+}
+
+// reloadDraftContent rereads what a Discard or a Revert replaced: the Draft's
+// content, its Version and stack, the history and the running Deployment. The
+// Scenes carry the Widgets of the selected one; the events do the same, but a
+// reset is rare and the screen should not wait for them (task 72_6).
+func (p *Project) reloadDraftContent(ctx app.Context) {
+	p.loadScenes(ctx)
+	p.loadTags(ctx)
+	p.loadPins(ctx)
+	p.loadWidgetTypes(ctx)
+	p.loadDraftChanges(ctx)
+	p.loadCommits(ctx)
+	p.loadDeploy(ctx)
 }
 
 // showDiscardWarnings tells what a Discard or Revert could not restore: the
@@ -200,17 +254,17 @@ func (p *Project) showDiscardWarnings(ctx app.Context, answer apiv0.DiscardProje
 }
 
 // renderDeployBar is the project's header: the Deployment it runs and its
-// Release, and the Deploy, Discard, Revert, Deployments and project file
-// actions.
+// Release, and the Deploy, Discard changes, Revert to deployed, Deployments and
+// project file actions.
 func (p *Project) renderDeployBar() app.UI {
 	badge := "Not deployed"
 	switch {
+	case p.deployed && p.deployment.ReleaseNumber != nil:
+		// The Release is what people choose and name; the Deployment number
+		// stays in the Deployments history and the detail (task 72_6).
+		badge = fmt.Sprintf("Release %d · running", *p.deployment.ReleaseNumber)
 	case p.deployed:
-		badge = fmt.Sprintf("Deployment %d · deployed %s",
-			p.deployment.Number, formatDeployedAt(p.deployment.DeployedAt))
-		if p.deployment.ReleaseNumber != nil {
-			badge += fmt.Sprintf(" · Release %d", *p.deployment.ReleaseNumber)
-		}
+		badge = fmt.Sprintf("Deployment %d · not a Release", p.deployment.Number)
 	case p.deploymentFailed:
 		// The read failed: the mode does not claim the project is not
 		// deployed (task 72_4).
@@ -238,15 +292,15 @@ func (p *Project) renderDeployBar() app.UI {
 			!p.deploying && !p.discarding && !p.reverting, func(ctx app.Context) {
 				p.openDeploymentsDialog(ctx)
 			}),
-		p.deployButton("Deploy", "Choose a Release to deploy",
+		p.deployButton("Deploy", p.deployButtonTitle(),
 			!p.deploying && !p.discarding && !p.reverting, func(ctx app.Context) {
 				p.openReleasesDialog(ctx)
 			}),
-		p.deployButton("Discard", "Reset the Draft to its last Commit",
+		p.deployButton("Discard changes", "Reset the Draft to its last Commit, dropping the unsaved changes",
 			!p.discarding && !p.deploying && !p.reverting, func(ctx app.Context) {
 				p.discard(ctx)
 			}),
-		p.deployButton("Revert", "Reset the Draft to the Deployment the project runs",
+		p.deployButton("Revert to deployed", "Reset the Draft to the Deployment the project runs",
 			!p.reverting && !p.deploying && !p.discarding, func(ctx app.Context) {
 				p.revert(ctx)
 			}),
@@ -281,6 +335,15 @@ func (p *Project) renderDeployBar() app.UI {
 		Style("border-bottom", "1px solid var(--border)").
 		Style("background", "var(--bg-elevated)").
 		Body(body...)
+}
+
+// deployButtonTitle is the Deploy button's hover text: a Release list with
+// nothing in it says what to do first (task 72_6).
+func (p *Project) deployButtonTitle() string {
+	if p.releasesLoaded && len(p.releases) == 0 {
+		return "Save the Draft and publish a Release first: only a Release is deployed"
+	}
+	return "Choose a Release to deploy"
 }
 
 func (p *Project) deployButton(label, title string, enabled bool, onClick func(app.Context)) app.UI {

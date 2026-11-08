@@ -105,6 +105,11 @@ type Project struct {
 	saveTitle       string
 	saveAuthor      string
 	commitsDialog   bool
+	// cleanDraftVersion is the Version of the Draft a Discard of this tab just
+	// made equal to its last Commit: the unsaved-changes indicator compares
+	// against it too, so a Discard leaves nothing unsaved even though the
+	// Version rose (task 72_6). 0: no such reset.
+	cleanDraftVersion int
 	// renamingCommit is the number of the Commit whose title is edited in
 	// place (0: none), renameCommitTitle the text of the editor.
 	renamingCommit    int
@@ -377,6 +382,7 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.commits, p.commitsLoaded = nil, false
 	p.saveDialog, p.savingCommit, p.commitsDialog = false, false, false
 	p.renamingCommit, p.renameCommitTitle = 0, ""
+	p.cleanDraftVersion = 0
 	p.releases, p.releasesLoaded = nil, false
 	p.releasesDialog, p.releaseDialog, p.releasing = false, false, false
 	p.releaseCommit, p.releaseNote, p.releaseAuthor = 0, "", ""

@@ -226,16 +226,30 @@ func (p *Project) noKeyDown() {
 
 // handleKeyDown answers the keyboard of the shown mode: Ctrl/Cmd+A selects
 // every Widget of the Scene, Esc drops the selection (and a rectangle being
-// dragged), the arrows move the selection, and Ctrl+Z / Ctrl+Shift+Z undo and
-// redo the Draft. All of them are ignored in a field the user types in, behind
-// a dialog of the mode and while another mode is shown.
+// dragged), the arrows move the selection, Ctrl+Z / Ctrl+Shift+Z undo and
+// redo the Draft, and Ctrl+S saves it. All but Save are ignored in a field the
+// user types in, behind a dialog of the mode and while another mode is shown;
+// Save is taken even in a field, because the browser's own Save Page is never
+// what the mode means.
 func (p *Project) handleKeyDown(ev app.Value) {
-	if !p.shown() || !p.keyActionAllowed() || uiutil.KeyEventTyping(ev) {
+	if !p.shown() || !p.keyActionAllowed() {
 		return
 	}
-	ctrl := ev.Get("ctrlKey").Bool() || ev.Get("metaKey").Bool()
+	ctrl := ev.Get("ctrlKey").Bool()
+	meta := ev.Get("metaKey").Bool()
+	shift := ev.Get("shiftKey").Bool()
 	key := ev.Get("key").String()
 	code := ev.Get("code").String()
+	// Ctrl+S takes the browser's Save Page away everywhere: the Draft is what
+	// is saved (task 72_6; ADR 0021).
+	if uiutil.ShortcutKey(key, code, ctrl, meta, shift, false) == uiutil.KeySave {
+		ev.Call("preventDefault")
+		p.compoCtx.Dispatch(func(ctx app.Context) { p.saveFromShortcut(ctx) })
+		return
+	}
+	if uiutil.KeyEventTyping(ev) {
+		return
+	}
 	if key == "Alt" {
 		// Alt of a body drag: it frees the Widgets of snapping and hides the
 		// guides at once, and releasing it snaps them back (task 41).
@@ -243,7 +257,7 @@ func (p *Project) handleKeyDown(ev app.Value) {
 		return
 	}
 	switch {
-	case ctrl && (strings.EqualFold(key, "a") || code == "KeyA"):
+	case (ctrl || meta) && (strings.EqualFold(key, "a") || code == "KeyA"):
 		ev.Call("preventDefault")
 		p.compoCtx.Dispatch(func(ctx app.Context) { p.selectAllWidgets(ctx) })
 		return
@@ -252,7 +266,7 @@ func (p *Project) handleKeyDown(ev app.Value) {
 		p.compoCtx.Dispatch(func(ctx app.Context) { p.escapeSelection(ctx) })
 		return
 	}
-	if dx, dy, arrow := arrowStep(key, ev.Get("shiftKey").Bool()); arrow {
+	if dx, dy, arrow := arrowStep(key, shift); arrow {
 		ev.Call("preventDefault") // the page does not scroll under the selection
 		p.compoCtx.Dispatch(func(ctx app.Context) { p.beginArrowMove(ctx, dx, dy) })
 		return
@@ -314,6 +328,8 @@ func (p *Project) applyKeyAction(ctx app.Context, action uiutil.KeyAction) {
 		p.undoDraftChange(ctx)
 	case uiutil.KeyRedo:
 		p.redoDraftChange(ctx)
+	case uiutil.KeySave:
+		p.saveFromShortcut(ctx)
 	}
 }
 

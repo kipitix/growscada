@@ -1,5 +1,18 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.83] - 2026-11-08
+
+### Changed
+
+- **Project UI: редакторская модель Save → Release → Deploy доведена до описания задачи 72_6** (task 72_6; ADR 0021/0022)
+  - Шапка Project: **Save** — основная кнопка, выключена без изменений с подсказкой «Nothing to save since the last save», во время запроса показывает «Saving…» и второй клик ничего не шлёт; успех — toast «Commit N saved», индикатор несохранённых изменений гаснет; 409 `draft_conflict` перечитывает Draft, стек и историю. `Ctrl+S`/`Cmd+S` открывает диалог Save (и перехватывает браузерное «Сохранить страницу»), при отсутствии изменений не делает ничего; из поля ввода тоже работает
+  - Автор: имя хранится в `author:name`, показывается в шапке («Author: <name>») с кнопкой смены (браузерный prompt); диалоги Save и Release подставляют его, первый диалог спрашивает. Это не замок и никого не блокирует
+  - История: у опубликованного Commit'а — пометка «released»; Save/Release/Deploy по-прежнему перечитывают список, `commit_*`/`release_*`/resync — тоже
+  - Релиз/Deploy: у кнопки **Releases** — бейдж номера работающей Release; шапка показывает «Release N · running» (или «Deployment N · not a Release», «Not deployed», «Deployment unknown»); пустой список Release подсказывает сохранить Draft и опубликовать Release; 409 `nothing_to_deploy` — отдельный toast «This Release is running already»; 404 перечитывает список
+  - **Discard** переименован в **Discard changes**, **Revert** — в **Revert to deployed**: обе операции после успеха перечитывают содержимое Draft, Version, стек, историю и работающую Deployment (события делают то же, но сброс не ждёт их); Discard, сделанный этой вкладкой, считается «чистым» для индикатора несохранённых изменений, хотя Version Draft вырос, а Revert — когда работающая Deployment пришла из Release последнего Commit'а
+  - Документы: `AGENTS.md` (Project-режим), CHANGELOG
+  - Тесты `uitest`: toast Save и «нечего сохранять», `Ctrl+S` с изменениями и без, строка автора, пометка опубликованного Commit'а, пустой список Release, Discard changes к последнему Commit'у и 409 без Commit'ов, Revert to deployed к работающей Deployment и 409 без неё, новые подписи кнопок; `uiutil.ShortcutKey` покрывает `Ctrl+S`
+
 ## [0.0.82] - 2026-11-08
 
 ### Added

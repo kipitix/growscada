@@ -56,8 +56,11 @@ func TestDeployBar_ShowsTheDeploymentAndItsRelease(t *testing.T) {
 	if !f.p.deployed || f.p.deployment.Number != 1 || f.p.deployment.ReleaseNumber == nil || *f.p.deployment.ReleaseNumber != 1 {
 		t.Fatalf("after Deploy: deployed %v, %+v", f.p.deployed, f.p.deployment)
 	}
-	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, "Deployment 1") || !strings.Contains(html, "Release 1") {
-		t.Errorf("the bar does not show Deployment 1 of Release 1: %s", html)
+	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, "Release 1 · running") {
+		t.Errorf("the bar does not show Release 1 running: %s", html)
+	}
+	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-release-badge="1"`) {
+		t.Errorf("the bar shows no badge of the running Release: %s", html)
 	}
 }
 
@@ -139,14 +142,123 @@ func TestDeployRelease_ServerRefusalIsAToast(t *testing.T) {
 	f.p.doDeployRelease(f.p.compoCtx, 1)
 	f.run()
 
-	if got := f.oneToast(); got.Status != http.StatusConflict || !strings.Contains(got.Detail, "Nothing to deploy") {
-		t.Errorf("the refusal is not a toast: %+v", got)
+	if got := f.oneToast(); !strings.Contains(got.Title, "running already") {
+		t.Errorf("the refusal is not the running-already toast: %+v", got)
 	}
 }
 
-// failDeploymentRead fails the GET of the Deployment alone: the rest of the
-// mode works, so a test sees what the Release list says when the running one
-// cannot be checked.
+// TestDiscardChanges_ResetsToTheLastCommit: Discard changes drops the unsaved
+// changes, puts the Draft back to its last Commit and turns the indicator off
+// (task 72_6; ADR 0021).
+func TestDiscardChanges_ResetsToTheLastCommit(t *testing.T) {
+	f := startProject(t)
+	f.run()
+	f.p.createScene(f.p.compoCtx)
+	f.run()
+	f.noToasts()
+	f.p.saveAuthor = "Ada"
+	f.p.saveTitle = "First save"
+	f.p.saveCommit(f.p.compoCtx)
+	f.run()
+	f.e.TakeToasts() // the Save's own confirmation
+
+	f.p.createScene(f.p.compoCtx)
+	f.run()
+	f.noToasts()
+	if !f.p.hasUnsavedChanges() {
+		t.Fatal("the change after the Commit is not unsaved")
+	}
+	html := app.HTMLString(f.p.Render())
+	if !strings.Contains(html, "Discard changes") || !strings.Contains(html, "Revert to deployed") {
+		t.Errorf("the header does not name the two resets apart: %s", html)
+	}
+
+	f.p.doDiscard(f.p.compoCtx)
+	f.run()
+	f.noToasts()
+	if f.p.hasUnsavedChanges() {
+		t.Errorf("the Draft still reports unsaved changes after Discard changes")
+	}
+	scenes, err := f.api.ListScenes(context.Background())
+	if err != nil {
+		t.Fatalf("server scenes: %v", err)
+	}
+	if len(scenes) != 1 {
+		t.Errorf("the Draft after Discard changes has %d scenes, want the Commit's 1", len(scenes))
+	}
+	if len(f.p.scenes) != 1 {
+		t.Errorf("the shown Draft has %d scenes after Discard changes, want 1", len(f.p.scenes))
+	}
+}
+
+// TestDiscardChanges_WithoutCommitIsAToast: a Draft never saved has nothing to
+// fall back to: the server refuses and the refusal is the toast (task 72_6).
+func TestDiscardChanges_WithoutCommitIsAToast(t *testing.T) {
+	f := startProject(t)
+	f.run()
+	f.p.doDiscard(f.p.compoCtx)
+	f.run()
+	if got := f.oneToast(); got.Status != http.StatusConflict {
+		t.Errorf("Discard changes without a Commit: toast %+v, want a 409", got)
+	}
+}
+
+// TestRevertToDeployed_ResetsToTheRunningDeployment: Revert to deployed puts
+// the Draft back to what the project runs, unsaved changes and all (task 72_6;
+// ADR 0021).
+func TestRevertToDeployed_ResetsToTheRunningDeployment(t *testing.T) {
+	f := startProject(t)
+	f.run()
+	f.p.createScene(f.p.compoCtx)
+	f.run()
+	f.noToasts()
+	deployDraft(t, f.api)
+	f.p.loadDeploy(f.p.compoCtx)
+	f.p.loadCommits(f.p.compoCtx)
+	f.p.loadReleases(f.p.compoCtx)
+	f.run()
+	f.e.TakeToasts()
+
+	f.p.createScene(f.p.compoCtx)
+	f.run()
+	f.noToasts()
+	if len(f.p.scenes) != 2 {
+		t.Fatalf("the shown Draft has %d scenes before Revert, want 2", len(f.p.scenes))
+	}
+
+	f.p.doRevert(f.p.compoCtx)
+	f.run()
+	f.noToasts()
+	scenes, err := f.api.ListScenes(context.Background())
+	if err != nil {
+		t.Fatalf("server scenes: %v", err)
+	}
+	if len(scenes) != 1 {
+		t.Errorf("the Draft after Revert has %d scenes, want the Deployment's 1", len(scenes))
+	}
+	if len(f.p.scenes) != 1 {
+		t.Errorf("the shown Draft has %d scenes after Revert, want 1", len(f.p.scenes))
+	}
+	// The Deployment came from the Release of the last Commit: the Draft is
+	// that Commit again, so nothing is unsaved.
+	if f.p.hasUnsavedChanges() {
+		t.Errorf("the Draft reports unsaved changes after a Revert to its last Commit's Release")
+	}
+}
+
+// TestRevertToDeployed_WithoutDeploymentIsAToast: a project never deployed has
+// nothing to return to: the server refuses and the refusal is the toast
+// (task 72_6).
+func TestRevertToDeployed_WithoutDeploymentIsAToast(t *testing.T) {
+	f := startProject(t)
+	f.run()
+	f.p.doRevert(f.p.compoCtx)
+	f.run()
+	if got := f.oneToast(); got.Status != http.StatusConflict {
+		t.Errorf("Revert to deployed without a Deployment: toast %+v, want a 409", got)
+	}
+}
+
 type failDeploymentRead struct{}
 
 func (failDeploymentRead) RoundTrip(r *http.Request) (*http.Response, error) {

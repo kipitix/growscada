@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -32,7 +33,7 @@ func TestSaveCommit_HistoryRowAndIndicator(t *testing.T) {
 	f.p.saveCommit(f.p.compoCtx)
 	f.run()
 
-	f.noToasts()
+	f.e.TakeToasts() // the Save's own confirmation
 	if len(f.p.commits) != 1 || f.p.commits[0].Number != 1 || f.p.commits[0].Author != "Ada" {
 		t.Fatalf("the history: %+v", f.p.commits)
 	}
@@ -54,9 +55,82 @@ func TestSaveCommit_HistoryRowAndIndicator(t *testing.T) {
 	}
 }
 
-// TestSaveCommit_ConflictRereadsAndRename: a Save of a stale Version is a
-// conflict that rereads the Draft, and a Commit's title is renamed in place
-// (task 72_2; ADR 0021).
+// TestSaveCommit_SuccessAndNothingToSave: a Save shows its toast, the shortcut
+// opens the dialog only while the Draft has changes, and a Save of an unchanged
+// Draft is the server's 409 (task 72_6; ADR 0021).
+func TestSaveCommit_SuccessAndNothingToSave(t *testing.T) {
+	f := startProject(t)
+	f.run()
+	f.p.saveAuthor = "Ada"
+	f.p.saveTitle = "First save"
+	f.p.saveCommit(f.p.compoCtx)
+	f.run()
+	if got := f.oneToast(); !strings.Contains(got.Title, "Commit 1 saved") {
+		t.Errorf("the Save showed %+v, want its confirmation", got)
+	}
+	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-commit-saved`) {
+		t.Errorf("the header does not mark the Draft saved: %s", html)
+	}
+
+	// Nothing moved since the Commit: Ctrl+S does nothing and the Save button
+	// says why it is off.
+	f.p.saveDialog = false
+	f.p.saveFromShortcut(f.p.compoCtx)
+	f.run()
+	if f.p.saveDialog {
+		t.Errorf("Ctrl+S opened the Save dialog with nothing to save")
+	}
+	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, "Nothing to save since the last save") {
+		t.Errorf("the Save button does not say there is nothing to save: %s", html)
+	}
+
+	// A Save forced anyway is the server's refusal.
+	f.p.openSaveDialog(f.p.compoCtx)
+	f.p.saveCommit(f.p.compoCtx)
+	f.run()
+	if got := f.oneToast(); got.Status != http.StatusConflict {
+		t.Errorf("a Save of an unchanged Draft: toast %+v, want a 409", got)
+	}
+}
+
+// TestSaveShortcut_WithChangesOpensTheDialog: Ctrl+S asks for the title and the
+// author as the Save button does, once the Draft has changes (task 72_6).
+func TestSaveShortcut_WithChangesOpensTheDialog(t *testing.T) {
+	f := startProject(t)
+	f.run()
+	f.p.saveAuthor = "Ada"
+	f.p.saveTitle = "First save"
+	f.p.saveCommit(f.p.compoCtx)
+	f.run()
+	f.e.TakeToasts() // the Save's own confirmation
+	f.p.saveDialog = false
+
+	f.p.createScene(f.p.compoCtx)
+	f.run()
+	f.noToasts()
+	f.p.saveFromShortcut(f.p.compoCtx)
+	f.run()
+	if !f.p.saveDialog {
+		t.Errorf("Ctrl+S did not open the Save dialog with unsaved changes")
+	}
+}
+
+// TestAuthorBar_ShowsTheStoredName: the header names the author the Save and
+// Release dialogs fill in, with a button to change it — not a lock (task 72_6).
+func TestAuthorBar_ShowsTheStoredName(t *testing.T) {
+	f := startProject(t)
+	f.run()
+	f.p.saveAuthor = "Ada"
+
+	html := app.HTMLString(f.p.Render())
+	if !strings.Contains(html, "Author: Ada") || !strings.Contains(html, `data-author-name="Ada"`) {
+		t.Errorf("the header does not name the author: %s", html)
+	}
+	if !strings.Contains(html, `data-author-change`) {
+		t.Errorf("the header offers no way to change the author: %s", html)
+	}
+}
+
 // TestSaveCommit_ShortcutsWaitForTheDialogs: the Save and the History dialogs
 // of the mode hold the Draft's shortcuts, like its other dialogs (task 72_2;
 // ADR 0021).
@@ -76,6 +150,9 @@ func TestSaveCommit_ShortcutsWaitForTheDialogs(t *testing.T) {
 	}
 }
 
+// TestSaveCommit_ConflictRereadsAndRename: a Save of a stale Version is a
+// conflict that rereads the Draft, and a Commit's title is renamed in place
+// (task 72_2; ADR 0021).
 func TestSaveCommit_ConflictRereadsAndRename(t *testing.T) {
 	f := startProject(t)
 	f.run()
@@ -83,7 +160,7 @@ func TestSaveCommit_ConflictRereadsAndRename(t *testing.T) {
 	f.p.saveTitle = "First save"
 	f.p.saveCommit(f.p.compoCtx)
 	f.run()
-	f.noToasts()
+	f.e.TakeToasts() // the Save's own confirmation
 
 	// Another tab writes the Draft: the Version rises above the one this tab
 	// saved at.

@@ -17,7 +17,7 @@ func TestRelease_FromTheHistory(t *testing.T) {
 	f.p.saveTitle = "First save"
 	f.p.saveCommit(f.p.compoCtx)
 	f.run()
-	f.noToasts()
+	f.e.TakeToasts() // the Save's own confirmation
 
 	f.p.openCommitsDialog(f.p.compoCtx)
 	f.run()
@@ -43,6 +43,12 @@ func TestRelease_FromTheHistory(t *testing.T) {
 	if len(f.p.commits) != 1 || !f.p.commits[0].Released {
 		t.Errorf("the history does not mark the published commit: %+v", f.p.commits)
 	}
+	f.p.openCommitsDialog(f.p.compoCtx)
+	f.run()
+	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-commit-published="1"`) {
+		t.Errorf("the history shows no published mark: %s", html)
+	}
+	f.p.commitsDialog = false
 
 	f.p.openReleasesDialog(f.p.compoCtx)
 	f.run()
@@ -74,6 +80,20 @@ func TestRelease_FromTheHistory(t *testing.T) {
 	}
 	if len(f.p.releases) != 1 || f.p.releases[0].Number != 1 {
 		t.Errorf("a second release of Commit 1 was stored: %+v", f.p.releases)
+	}
+}
+
+// TestReleasesDialog_EmptySaysWhatToDoFirst: with no Release, the Deploy list
+// says a Release has to be saved and published before anything is deployed
+// (task 72_6).
+func TestReleasesDialog_EmptySaysWhatToDoFirst(t *testing.T) {
+	f := startProject(t)
+	f.run()
+	f.p.openReleasesDialog(f.p.compoCtx)
+	f.run()
+	html := app.HTMLString(f.p.Render())
+	if !strings.Contains(html, "Save the Draft, then publish a Release") {
+		t.Errorf("the empty Release list does not say what to do first: %s", html)
 	}
 }
 
