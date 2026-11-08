@@ -252,6 +252,43 @@ func TestDiscardChanges_RestoresTheContentShown(t *testing.T) {
 	}
 }
 
+// TestDiscardChanges_LaterSceneListFollowsTheVersion: only the list the
+// replacement itself asked for is the truth whatever Version it states; a list
+// requested after it is an ordinary one again, so a stale answer does not put
+// the Scenes shown back (task 72_6; ADR 0016).
+func TestDiscardChanges_LaterSceneListFollowsTheVersion(t *testing.T) {
+	f := startProject(t)
+	f.run()
+	sceneID := createScene(t, f.api, "First")
+	f.p.loadScenes(f.p.compoCtx)
+	f.run()
+	f.noToasts()
+	f.p.saveAuthor, f.p.saveTitle = "Ada", "First save"
+	f.p.saveCommit(f.p.compoCtx)
+	f.run()
+	f.e.TakeToasts() // the Save's own confirmation
+
+	f.p.doDiscard(f.p.compoCtx)
+	f.run()
+	f.noToasts()
+	if len(f.p.scenes) != 1 || f.p.scenes[0].Name != "First" {
+		t.Fatalf("the shown Draft after the Discard: %+v, want the restored one", f.p.scenes)
+	}
+
+	// A list read now but answered after a rename that follows: it is stale.
+	stale, mark := f.scene(sceneID), f.p.markDraft()
+	f.p.startEditingScene(sceneID, "Renamed")
+	f.p.commitSceneEdit(f.p.compoCtx)
+	f.run()
+	f.noToasts()
+	f.p.setScenes(f.p.compoCtx, mark, f.p.contentReplacements, []apiv0.SceneResponse{stale})
+	f.run()
+
+	if sc, _ := f.p.findScene(sceneID); sc.Name != "Renamed" {
+		t.Errorf("the shown scene is %q, want the saved rename: a stale list replaced it", sc.Name)
+	}
+}
+
 // TestDiscardChanges_WithoutCommitIsAToast: a Draft never saved has nothing to
 // fall back to: the server refuses and the refusal is the toast (task 72_6).
 func TestDiscardChanges_WithoutCommitIsAToast(t *testing.T) {

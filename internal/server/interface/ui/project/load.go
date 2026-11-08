@@ -200,12 +200,17 @@ func (p *Project) setScenes(ctx app.Context, mark uiutil.Mark, replacements uint
 	old, known := p.findScene(p.selectedSceneID)
 	prevSceneID := p.selectedSceneID
 
-	// A list requested after the whole Draft was replaced (a Discard, a Revert,
-	// an opened project file) is the truth whatever Version it states: the
-	// replacement answered that Version itself, so the list advances nothing
+	// The first list requested after the whole Draft was replaced (a Discard, a
+	// Revert, an opened project file) is the truth whatever Version it states:
+	// the replacement answered that Version itself, so the list advances nothing
 	// and the Scenes shown and the Widgets of the selected one are replaced by
-	// it (task 72_6).
-	replaced := replacements > 0 && replacements == p.contentReplacements
+	// it. Every later list — and a second answer of that same replacement — is an
+	// ordinary one again, judged by its Version, or a stale answer would put the
+	// Scenes shown back (task 72_6).
+	replaced := replacements == p.contentReplacements && replacements > p.appliedReplacements
+	if replaced {
+		p.appliedReplacements = replacements
+	}
 	// A newer Version while the selected Scene's Widgets are shown means they
 	// may have changed: they are read again.
 	fresh := len(scenes) > 0 && p.draftVersions.Advance(mark, p.projectID, scenes[0].Version)
