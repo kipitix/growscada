@@ -226,4 +226,3 @@ func (s projectFileServiceImpl) projectName(ctx context.Context, projectID id.ID
 	}
 	return found.Name().String(), nil
 }
-

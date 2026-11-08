@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
@@ -99,6 +100,31 @@ func TestDeployBar_DraftChangeShowsUnreleasedChanges(t *testing.T) {
 	}
 	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, "Unreleased changes") {
 		t.Errorf("the bar does not show the unreleased changes: %s", html)
+	}
+}
+
+// TestDeployBar_MissingLibraryReleasesAreAWarning: a running Deployment that
+// names a Library Release this server does not have is shown in the bar and in
+// the Deploy dialog, so the widgets a Discard drops are expected (task 71).
+func TestDeployBar_MissingLibraryReleasesAreAWarning(t *testing.T) {
+	libraryID := uuid.MustParse("d0000000-0000-4000-8000-0000000000ff")
+	f := startProject(t)
+	f.p.deployLoaded = true
+	f.p.deployPreview = apiv0.DeployPreviewResponse{
+		CurrentDeployment: &apiv0.DeploymentSummaryResponse{Number: 4, DeployedAt: "2026-11-04T10:00:00Z"},
+		MissingReleases:   []apiv0.MissingReleaseResponse{{LibraryID: libraryID, Release: 1}},
+	}
+
+	html := app.HTMLString(f.p.Render())
+	if !strings.Contains(html, "data-deploy-missing-releases") || !strings.Contains(html, "Missing Library Releases") {
+		t.Errorf("the bar does not warn about the missing Library Releases: %s", html)
+	}
+
+	f.p.dialogPreview = f.p.deployPreview
+	f.p.deployDialog = true
+	html = app.HTMLString(f.p.Render())
+	if !strings.Contains(html, "does not have") || !strings.Contains(html, libraryID.String()) {
+		t.Errorf("the Deploy dialog does not name the missing Library Release: %s", html)
 	}
 }
 
