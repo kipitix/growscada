@@ -6,9 +6,9 @@ import (
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 )
 
-// KeyAction is the Draft command a keydown asks for: the Undo, Redo and Save
-// buttons of the Project and Library modes, pressed on the keyboard (ADR 0017,
-// ADR 0021).
+// KeyAction is the Draft command a keydown asks for: undo and redo (the
+// buttons of the Project and Library modes) and Save (the Project mode's, which
+// takes the key even in a field; task 72_6, ADR 0017, ADR 0021).
 type KeyAction int
 
 const (

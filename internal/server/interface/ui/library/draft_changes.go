@@ -179,7 +179,12 @@ func (l *Library) listenShortcuts() {
 		}
 		ev := args[0]
 		action := uiutil.KeyEventAction(ev)
-		if action == uiutil.KeyNone || !l.shown() || !l.keyActionAllowed() {
+		// The Library's Save has no shortcut yet (task 72_7): the mode's keys
+		// are the Undo and the Redo, and Ctrl+S stays the browser's own.
+		if action != uiutil.KeyUndo && action != uiutil.KeyRedo {
+			return nil
+		}
+		if !l.shown() || !l.keyActionAllowed() {
 			return nil
 		}
 		ev.Call("preventDefault") // the browser's own undo of the page

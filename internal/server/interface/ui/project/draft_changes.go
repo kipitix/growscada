@@ -229,10 +229,10 @@ func (p *Project) noKeyDown() {
 // dragged), the arrows move the selection, Ctrl+Z / Ctrl+Shift+Z undo and
 // redo the Draft, and Ctrl+S saves it. All but Save are ignored in a field the
 // user types in, behind a dialog of the mode and while another mode is shown;
-// Save is taken even in a field, because the browser's own Save Page is never
-// what the mode means.
+// Save is taken even there, because the browser's own Save Page is never what
+// the mode means — a dialog of the mode holds the Save itself.
 func (p *Project) handleKeyDown(ev app.Value) {
-	if !p.shown() || !p.keyActionAllowed() {
+	if !p.shown() {
 		return
 	}
 	ctrl := ev.Get("ctrlKey").Bool()
@@ -240,14 +240,17 @@ func (p *Project) handleKeyDown(ev app.Value) {
 	shift := ev.Get("shiftKey").Bool()
 	key := ev.Get("key").String()
 	code := ev.Get("code").String()
-	// Ctrl+S takes the browser's Save Page away everywhere: the Draft is what
-	// is saved (task 72_6; ADR 0021).
+	// Ctrl+S takes the browser's Save Page away wherever it is pressed while
+	// the mode is shown; the Draft is saved when no dialog of the mode is
+	// open, like the other commands (task 72_6; ADR 0021).
 	if uiutil.ShortcutKey(key, code, ctrl, meta, shift, false) == uiutil.KeySave {
 		ev.Call("preventDefault")
-		p.compoCtx.Dispatch(func(ctx app.Context) { p.saveFromShortcut(ctx) })
+		if p.keyActionAllowed() {
+			p.compoCtx.Dispatch(func(ctx app.Context) { p.saveFromShortcut(ctx) })
+		}
 		return
 	}
-	if uiutil.KeyEventTyping(ev) {
+	if !p.keyActionAllowed() || uiutil.KeyEventTyping(ev) {
 		return
 	}
 	if key == "Alt" {
@@ -318,7 +321,9 @@ func (p *Project) escapeSelection(ctx app.Context) {
 }
 
 // applyKeyAction runs the command a keydown asked for: the buttons' own, so a
-// shortcut is refused exactly as they are (a command in flight).
+// shortcut is refused exactly as they are (a command in flight). Save has its
+// own way through handleKeyDown — it is taken in a field and behind a dialog
+// too — and is not repeated here.
 func (p *Project) applyKeyAction(ctx app.Context, action uiutil.KeyAction) {
 	if !p.keyActionAllowed() {
 		return
@@ -328,8 +333,6 @@ func (p *Project) applyKeyAction(ctx app.Context, action uiutil.KeyAction) {
 		p.undoDraftChange(ctx)
 	case uiutil.KeyRedo:
 		p.redoDraftChange(ctx)
-	case uiutil.KeySave:
-		p.saveFromShortcut(ctx)
 	}
 }
 
