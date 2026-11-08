@@ -199,11 +199,11 @@ func main() {
 	libraryContent := application.NewLibraryContent(libraryRepository, draftRepository, organizationID)
 	projectService := application.NewProjectService(projectRepository, organizationID)
 	tagService := application.NewTagService(projectContent, runtimeNode)
-	// Deploy and Discard (task 35): the Engineering node assembles the Draft's
-	// ProjectFile and hands it to the Runtime node, which stores it as a
-	// Deployment; the Engineering node keeps no copy of what it sent (ADR 0014).
+	// Deploy, Discard and Revert (task 35, task 72_4): a Deploy hands a Release
+	// to the Runtime node, which stores it as a Deployment; the Engineering
+	// node keeps no copy of what it sent (ADR 0014). Discard falls back to the
+	// last Commit, Revert to the running Deployment.
 	projectFileBuilder := application.NewProjectFileBuilder(projectContent)
-	deployService := application.NewDeployService(projectContent, projectFileBuilder, runtimeNode, libraryRepository, releaseRepository)
 	discardService := application.NewDiscardService(projectContent, runtimeNode, libraryRepository, releaseRepository)
 	projectFileService := application.NewProjectFileService(projectContent, projectFileBuilder, runtimeNode,
 		libraryRepository, releaseRepository)
@@ -221,11 +221,11 @@ func main() {
 		Environments: application.NewEnvironmentService(projectContent),
 		Draft:        application.NewDraftService(projectContent),
 		DraftChanges: draftChangesService,
-		Deploy:       deployService,
 		Discard:      discardService,
 		ProjectFiles: projectFileService,
 		Commits:      application.NewCommitService(projectContent, libraryContent, projectFileBuilder, widgetTypeRepositories, projectReleaseRepository),
-		Releases:     application.NewReleaseService(projectContent, projectReleaseRepository),
+		Releases: application.NewReleaseService(projectContent, projectReleaseRepository, runtimeNode,
+			libraryRepository, releaseRepository),
 		Deployments:  deploymentService,
 		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(sqlDB)),
 		DeviceTokens: deviceTokenService,

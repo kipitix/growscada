@@ -10,14 +10,14 @@ http:
     type: json
     data: |-
       {
-        "commit": 1,
+        "commit": 2,
         "note": "First release",
         "author": "Grace"
       }
   auth: inherit
 
 docs: |
-  A Release publishes Commit 1 as the Project's Release 1: an immutable copy of
+  A Release publishes Commit 2 as a new Project Release: an immutable copy of
   the Commit's ProjectFile with a note, the author and the time (task 72_3;
   ADR 0021). It states no Draft Version and changes no Draft.
 
@@ -30,10 +30,10 @@ runtime:
       operator: isDefined
     - expression: 'res.body.number'
       operator: eq
-      value: '1'
+      value: '6'
     - expression: 'res.body.commit_number'
       operator: eq
-      value: '1'
+      value: '2'
     - expression: 'res.body.title'
       operator: eq
       value: '"Before the demo"'

@@ -1,17 +1,16 @@
 info:
-  name: get deploy preview of a never deployed project
+  name: get the draft before the deploy
   type: http
   seq: 40
 
 http:
   method: GET
-  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/deploy/preview
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/draft
   auth: inherit
 
 docs: |
-  What a Deploy of the Draft would do. The project has no Deployment yet, so
-  `current_deployment` is absent, `unchanged` is false and `dropped_widgets`
-  is empty until runtime entities exist (task 48).
+  The Version of the project's Draft, which the Commit below states. A Deploy
+  takes a Release since task 72_4: Save → Release → Deploy.
 
 runtime:
   assertions:
@@ -20,11 +19,14 @@ runtime:
       value: '200'
     - expression: 'res.headers["growscada-schema-version"]'
       operator: isDefined
-    - expression: 'res.body.unchanged'
-      operator: eq
-      value: 'false'
-    - expression: 'res.body.dropped_widgets'
-      operator: isArray
+    - expression: 'res.body.version'
+      operator: gt
+      value: '0'
+
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("OTHER_DRAFT_VERSION", res.body.version)
 
 settings:
   encodeUrl: true

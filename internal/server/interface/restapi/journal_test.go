@@ -32,11 +32,12 @@ import (
 // refused (task 42, ADR 0019).
 func TestJournalGet_ReadsTheProjectsEntries(t *testing.T) {
 	cleanProjectsRest(t)
-	router := newServices().router()
+	services := newServices()
+	router := services.router()
 
 	projectID := createJournalProject(t, router, "Journal read")
 	createJournalTag(t, router, projectID, "flow")
-	serve(router, http.MethodPost, journalProjectPath(projectID)+"/deploy", nil)
+	deployDraftForProject(t, services, projectID)
 
 	result := patchJournalTag(t, router, projectID, "1")
 	patchJournalTag(t, router, projectID, "2")

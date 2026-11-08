@@ -17,10 +17,11 @@ func TestJournalCodec_RoundTripsEveryType(t *testing.T) {
 	at := time.Date(2026, 11, 6, 12, 30, 15, 0, time.UTC)
 	projectID, tagID := uuid.New(), uuid.New()
 	rolledBackFrom := 3
+	releaseNumber := 5
 	for _, entry := range []recordv0.Entry{
 		newTagStateEntry(projectID, at, tagID, "42", "good"),
-		newDeploymentEntry(projectID, at, 7, recordv0.DeploymentCauseRollback, &rolledBackFrom),
-		newDeploymentEntry(projectID, at, 8, recordv0.DeploymentCauseFile, nil),
+		newDeploymentEntry(projectID, at, 7, recordv0.DeploymentCauseRollback, &releaseNumber, &rolledBackFrom),
+		newDeploymentEntry(projectID, at, 8, recordv0.DeploymentCauseFile, nil, nil),
 	} {
 		row, err := encodeJournalEntry(entry)
 		if err != nil {

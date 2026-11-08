@@ -15,7 +15,8 @@ import (
 // Project is 404 (task 43, ADR 0020).
 func TestOperation_StateReadsTheSnapshot(t *testing.T) {
 	cleanProjectsRest(t)
-	router := newServices().router()
+	services := newServices()
+	router := services.router()
 
 	rec := serve(router, http.MethodGet, mainPath+"/operation", nil)
 	if rec.Code != http.StatusOK {
@@ -34,9 +35,7 @@ func TestOperation_StateReadsTheSnapshot(t *testing.T) {
 		t.Fatalf("POST tag: %d %s", rec.Code, rec.Body)
 	}
 	created := decodeBody[apiv0.CreateTagResponse](t, rec)
-	if rec := serve(router, http.MethodPost, mainPath+"/deploy", nil); rec.Code != http.StatusCreated {
-		t.Fatalf("POST deploy: %d %s", rec.Code, rec.Body)
-	}
+	deployDraftThroughServices(t, services)
 
 	rec = serve(router, http.MethodGet, mainPath+"/operation", nil)
 	if rec.Code != http.StatusOK {
@@ -82,7 +81,8 @@ func TestOperation_StateReadsTheSnapshot(t *testing.T) {
 // its cleanup removes them, but its Operation state is not served.
 func TestOperation_OfADeletedProject_Is404(t *testing.T) {
 	cleanProjectsRest(t)
-	router := newServices().router()
+	services := newServices()
+	router := services.router()
 	if _, err := testDB().ExecContext(context.Background(),
 		"UPDATE projects SET deleted_at = now() WHERE id = '"+mainProject.String()+"'"); err != nil {
 		t.Fatalf("mark the project deleted: %v", err)

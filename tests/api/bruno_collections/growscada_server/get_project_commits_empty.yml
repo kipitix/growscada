@@ -1,5 +1,5 @@
 info:
-  name: get the project commits before the first save
+  name: get the project commits before the save of the draft
   type: http
   seq: 155
 
@@ -23,7 +23,7 @@ runtime:
       operator: isArray
     - expression: 'res.body.commits.length'
       operator: eq
-      value: '0'
+      value: '1'
 
 settings:
   encodeUrl: true

@@ -57,6 +57,15 @@ variables:
     value: '1'
   - name: LIBRARY_COMMIT_VERSION
     value: '1'
+  # The Draft Versions, Commit and Release numbers of the Deploy flows
+  # (task 72_4): the requests set them from their responses; the values here
+  # are what the static check substitutes.
+  - name: OTHER_DRAFT_VERSION
+    value: '1'
+  - name: OTHER_COMMIT_NUMBER
+    value: '1'
+  - name: OTHER_RELEASE_NUMBER
+    value: '1'
   # The Project, Library and Draft Version of the library-cleanup flow
   # (task 71): the requests set them from their responses; the values here are
   # what the static check substitutes.
@@ -66,3 +75,7 @@ variables:
     value: d0000000-0000-4000-8000-0000000000f4
   - name: CLEANUP_DRAFT_VERSION
     value: '3'
+  - name: CLEANUP_COMMIT_NUMBER
+    value: '1'
+  - name: CLEANUP_RELEASE_NUMBER
+    value: '1'

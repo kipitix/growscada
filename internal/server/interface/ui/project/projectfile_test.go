@@ -137,8 +137,9 @@ func TestProjectFileDialog_FileIssuesAreAList(t *testing.T) {
 	}
 }
 
-// TestProjectFileDialog_DeployFromFileReloadsThePreview: a deployed file
-// becomes the Deployment the Project runs and leaves the Draft as it was.
+// TestProjectFileDialog_DeployFromFileReloadsTheDeployment: a deployed file
+// becomes a Release and the Deployment the Project runs, and the Draft stays
+// as it was.
 func TestProjectFileDialog_DeployFromFileReloadsThePreview(t *testing.T) {
 	f := startProject(t)
 	if _, err := f.api.CreateTag(context.Background(), apiv0.CreateTagRequest{Name: "speed", Type: "integer"}); err != nil {
@@ -159,21 +160,15 @@ func TestProjectFileDialog_DeployFromFileReloadsThePreview(t *testing.T) {
 	if f.p.projectFileDialog {
 		t.Error("the dialog stayed open after the file was deployed")
 	}
-	if f.p.deployPreview.CurrentDeployment == nil || f.p.deployPreview.CurrentDeployment.Number != 1 {
-		var current any
-		if f.p.deployPreview.CurrentDeployment != nil {
-			current = *f.p.deployPreview.CurrentDeployment
-		}
-		t.Fatalf("the bar after a file deploy: %+v, current %+v (dialog %v, pending %+v, toasts %+v)",
-			f.p.deployPreview, current, f.p.projectFileDialog, f.p.pendingProjectFile, f.e.TakeToasts())
-	}
-	if f.p.deployPreview.Unchanged {
-		t.Error("the file deploy reported the Draft as deployed")
+	if !f.p.deployed || f.p.deployment.Number != 1 || f.p.deployment.ReleaseNumber == nil || *f.p.deployment.ReleaseNumber != 1 {
+		t.Fatalf("the bar after a file deploy: deployed %v, %+v (dialog %v, pending %+v, toasts %+v)",
+			f.p.deployed, f.p.deployment, f.p.projectFileDialog, f.p.pendingProjectFile, f.e.TakeToasts())
 	}
 }
 
-// TestDeploymentsDialog_MarksAFileDeploymentAndOffersDownloads: the cause file is
-// shown as "Deployed from file", and each row offers its own download.
+// TestDeploymentsDialog_MarksAFileDeploymentAndOffersDownloads: a file deploy
+// leaves a Release and is shown as a Deploy of it, and each row offers its own
+// download.
 func TestDeploymentsDialog_MarksAFileDeploymentAndOffersDownloads(t *testing.T) {
 	url, api := newServer(t)
 	file := projectv0.ProjectFile{Header: projectv0.Header{
@@ -188,8 +183,8 @@ func TestDeploymentsDialog_MarksAFileDeploymentAndOffersDownloads(t *testing.T) 
 	f.noToasts()
 
 	html := app.HTMLString(f.p.Render())
-	if !strings.Contains(html, "Deployed from file") {
-		t.Errorf("the list does not name the file cause: %s", html)
+	if !strings.Contains(html, "Release 1") {
+		t.Errorf("the list does not name the Release of the file: %s", html)
 	}
 	if !strings.Contains(html, `data-deployment-download="1"`) {
 		t.Errorf("the row offers no download: %s", html)

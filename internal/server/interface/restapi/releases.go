@@ -50,6 +50,27 @@ func (h ReleaseHandlers) PostRelease(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusCreated, newReleaseResponse(created))
 }
 
+// PostReleaseDeploy handles POST …/releases/{release_number}/deploy: the
+// Release becomes the Project's running Deployment (task 72_4). 201 with the
+// new Deployment; 409 nothing_to_deploy when that Release runs already; 404 for
+// a Project or a Release it does not have.
+func (h ReleaseHandlers) PostReleaseDeploy(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := pathUUID(w, r, projectResource)
+	if !ok {
+		return
+	}
+	number, ok := pathInt(w, r, projectReleaseResource)
+	if !ok {
+		return
+	}
+	deployment, err := h.releases.Deploy(r.Context(), projectID, number, "")
+	if err != nil {
+		sendError(w, r, err)
+		return
+	}
+	sendJSONResponse(w, http.StatusCreated, newDeployResponse(deployment))
+}
+
 // GetReleases handles GET …/releases: the Project's Releases, newest first,
 // without content.
 func (h ReleaseHandlers) GetReleases(w http.ResponseWriter, r *http.Request) {

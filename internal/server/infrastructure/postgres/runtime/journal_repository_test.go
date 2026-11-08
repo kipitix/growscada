@@ -245,11 +245,11 @@ func TestCreateDeployment_RecordsADeploymentEntry(t *testing.T) {
 	ctx := context.Background()
 
 	at := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
-	deployed, err := deployments.CreateDeployment(ctx, projectID.UUID(), documentOf(projectID), runtimeapp.DeploymentCauseDeploy, at)
+	deployed, err := deployments.CreateDeployment(ctx, projectID.UUID(), documentOf(projectID), runtimeapp.DeploymentCauseDeploy, nil, at)
 	if err != nil {
 		t.Fatalf("CreateDeployment: %v", err)
 	}
-	fromFile, err := deployments.CreateDeployment(ctx, projectID.UUID(), documentOf(projectID, withTags(documentTag(definition(t, projectID, "speed", tag.TagTypeInteger)))), runtimeapp.DeploymentCauseFile, at.Add(time.Minute))
+	fromFile, err := deployments.CreateDeployment(ctx, projectID.UUID(), documentOf(projectID, withTags(documentTag(definition(t, projectID, "speed", tag.TagTypeInteger)))), runtimeapp.DeploymentCauseFile, nil, at.Add(time.Minute))
 	if err != nil {
 		t.Fatalf("CreateDeployment(file): %v", err)
 	}
@@ -297,7 +297,7 @@ func TestCreateDeployment_Refused_LeavesNoJournalEntry(t *testing.T) {
 			environmentOf(uuid.New(), "shop"),
 			environmentOf(uuid.New(), "shop"),
 		))
-	if _, err := deployments.CreateDeployment(context.Background(), projectID.UUID(), twice, runtimeapp.DeploymentCauseDeploy, time.Now()); err == nil {
+	if _, err := deployments.CreateDeployment(context.Background(), projectID.UUID(), twice, runtimeapp.DeploymentCauseDeploy, nil, time.Now()); err == nil {
 		t.Fatal("two environments of one name were stored")
 	}
 	if entries := journalEntriesOf(t, projectID.UUID()); len(entries) != 0 {

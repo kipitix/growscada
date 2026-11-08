@@ -120,9 +120,7 @@ func createTagViaService(t *testing.T, name, tagType, value, quality string) app
 	if err != nil {
 		t.Fatalf("createTagViaService(%q): %v", name, err)
 	}
-	if _, err := services.deploy.Deploy(context.Background(), mainProject); err != nil {
-		t.Fatalf("createTagViaService(%q): deploy: %v", name, err)
-	}
+	deployDraftThroughServices(t, services)
 	written, err := services.states.SetTagValue(context.Background(), mainProject, runtimeapp.SetTagValueInput{TagID: resp.ID, Value: value, Quality: quality})
 	if err != nil {
 		t.Fatalf("createTagViaService(%q): write its state: %v", name, err)

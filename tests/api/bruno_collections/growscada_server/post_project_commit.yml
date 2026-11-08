@@ -31,7 +31,7 @@ runtime:
       operator: isDefined
     - expression: 'res.body.number'
       operator: eq
-      value: '1'
+      value: '2'
     - expression: 'res.body.title'
       operator: eq
       value: '"First save"'

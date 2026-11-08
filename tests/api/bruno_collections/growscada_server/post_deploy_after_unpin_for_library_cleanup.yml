@@ -1,17 +1,17 @@
 info:
   name: deploy the cleanup project without the pin
   type: http
-  seq: 202
+  seq: 1996
 
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/deploy
+  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/releases/{{CLEANUP_RELEASE_NUMBER}}/deploy
   auth: inherit
 
 docs: |
-  Deployment 2 of Line 4 does not name the Legacy library. Deployment 1 still
-  does, but a Deployment of the past keeps no library: only the running one
-  does (task 71).
+  Release 2 does not name the Legacy library: Deployment 2 does not, and
+  Deployment 1 still does, but a Deployment of the past keeps no library: only
+  the running one does (task 71; task 72_4).
 
 runtime:
   assertions:

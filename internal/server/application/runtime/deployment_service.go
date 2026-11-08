@@ -18,14 +18,16 @@ import (
 // node's to assign; the Engineering node reaches the service through its
 // RuntimeNode port.
 type DeploymentService interface {
-	// Deploy stores file as the new Deployment of the Project and publishes
-	// deployment_created once the Deployment is committed. The document must name
-	// the Project it is deployed to.
-	Deploy(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile) (Deployment, error)
+	// DeployRelease stores file as the new Deployment of the Project, made
+	// from Release releaseNumber (task 72_4), and publishes
+	// deployment_created once the Deployment is committed. The document must
+	// name the Project it is deployed to. ErrNothingToDeploy if the Project
+	// already runs that Release.
+	DeployRelease(ctx context.Context, projectID uuid.UUID, releaseNumber int, file projectv0.ProjectFile) (Deployment, error)
 	// DeployFile stores file as the new Deployment of the Project with cause
 	// file (ADR 0018): the document is self-contained, so the Runtime node
-	// reads no Draft and no Library. It publishes deployment_created as a
-	// Deploy does.
+	// reads no Draft and no Library. It states no Release (nil). It publishes
+	// deployment_created as a Deploy does.
 	DeployFile(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile) (Deployment, error)
 	// FindCurrent returns the latest Deployment of the Project, and whether the
 	// Project has one at all: a Project is not deployed until it does.
@@ -68,13 +70,16 @@ func NewDeploymentService(someDeployments DeploymentRepository, publish func(eve
 	return &deploymentServiceImpl{deployments: someDeployments, publish: publish, now: time.Now}
 }
 
-func (s deploymentServiceImpl) Deploy(ctx context.Context, rawProjectID uuid.UUID, file projectv0.ProjectFile) (Deployment, error) {
+func (s deploymentServiceImpl) DeployRelease(ctx context.Context, rawProjectID uuid.UUID, releaseNumber int, file projectv0.ProjectFile) (Deployment, error) {
 	if file.ProjectID != rawProjectID {
 		return Deployment{}, invalidInput(fmt.Errorf("cannot deploy a document of project %s to project %s", file.ProjectID, rawProjectID))
 	}
-	deployment, err := s.deployments.CreateDeployment(ctx, rawProjectID, file, DeploymentCauseDeploy, s.now())
+	if releaseNumber < 1 {
+		return Deployment{}, invalidInput(fmt.Errorf("release number must be positive, got %d", releaseNumber))
+	}
+	deployment, err := s.deployments.CreateDeployment(ctx, rawProjectID, file, DeploymentCauseDeploy, &releaseNumber, s.now())
 	if err != nil {
-		return Deployment{}, fmt.Errorf("cannot deploy project %s: %w", rawProjectID, err)
+		return Deployment{}, fmt.Errorf("cannot deploy release %d of project %s: %w", releaseNumber, rawProjectID, err)
 	}
 	s.publish(NewDeploymentCreatedEvent(deployment))
 	return deployment, nil
@@ -84,7 +89,7 @@ func (s deploymentServiceImpl) DeployFile(ctx context.Context, rawProjectID uuid
 	if file.ProjectID != rawProjectID {
 		return Deployment{}, invalidInput(fmt.Errorf("cannot deploy a document of project %s to project %s", file.ProjectID, rawProjectID))
 	}
-	deployment, err := s.deployments.CreateDeployment(ctx, rawProjectID, file, DeploymentCauseFile, s.now())
+	deployment, err := s.deployments.CreateDeployment(ctx, rawProjectID, file, DeploymentCauseFile, nil, s.now())
 	if err != nil {
 		return Deployment{}, fmt.Errorf("cannot deploy a project file to project %s: %w", rawProjectID, err)
 	}

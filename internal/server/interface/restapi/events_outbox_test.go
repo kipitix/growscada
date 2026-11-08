@@ -2,13 +2,11 @@ package restapi_test
 
 import (
 	"context"
-	"errors"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
@@ -26,7 +24,7 @@ import (
 // the one before (the acceptance of task 32), and with no order to the
 // outbox's events.
 func TestEventsHandlers_GetProjectEvents_DeliversCommittedChangesInCommitOrder(t *testing.T) {
-	cleanTags(t)
+	cleanProjectsRest(t)
 	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM outbox"); err != nil {
 		t.Fatalf("clean outbox: %v", err)
 	}
@@ -46,9 +44,7 @@ func TestEventsHandlers_GetProjectEvents_DeliversCommittedChangesInCommitOrder(t
 	}
 	// The values below are the Runtime node's: they need a Deploy first
 	// (task 35, Q4). It publishes deployment_created, before the stream opens.
-	if _, err := services.deploy.Deploy(ctx, mainProject); err != nil && !errors.Is(err, application.ErrNothingToDeploy) {
-		t.Fatalf("deploy: %v", err)
-	}
+	deployDraftThroughServices(t, services)
 	// Drain what was committed before the stream opens: its events are not
 	// this test's sequence.
 	if _, err := dispatcher.DrainOnce(ctx); err != nil {

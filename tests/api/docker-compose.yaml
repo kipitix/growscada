@@ -88,9 +88,10 @@ services:
 
   # The seed creates no Deployment: its Runtime copies of the Tags and Devices
   # are inserted by test_data directly, so the stack would run on fixtures
-  # alone. Deploy "Main" (the simulator's Device and the dashboard's Tags)
-  # once, as a real deployment would, before anything writes a Tag value or
-  # connects a Device (task 35). A Draft is deployed without a lock (ADR 0022).
+  # alone. Publish the Draft of "Main" (the simulator's Device and the
+  # dashboard's Tags) as a Commit and a Release and deploy that Release once,
+  # as a real deployment would, before anything writes a Tag value or connects
+  # a Device (task 35; task 72_4: a Deploy takes a Release).
   deploy:
     image: curlimages/curl:8.10.1
     depends_on:
@@ -99,8 +100,16 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        curl -fsS -X POST \
-          http://server:9090/api/v0/projects/b0000000-0000-4000-8000-000000000001/deploy
+        set -e
+        project=http://server:9090/api/v0/projects/b0000000-0000-4000-8000-000000000001
+        version=$$(curl -fsS $$project/draft | sed 's/.*"version":\([0-9]*\).*/\1/')
+        curl -fsS -X POST $$project/commits \
+          -H 'Content-Type: application/json' \
+          -d '{"version":'$$version',"title":"Seed","author":"seed"}' >/dev/null
+        curl -fsS -X POST $$project/releases \
+          -H 'Content-Type: application/json' \
+          -d '{"commit":1,"author":"seed"}' >/dev/null
+        curl -fsS -X POST $$project/releases/1/deploy >/dev/null
     restart: "no"
 
   simulator:

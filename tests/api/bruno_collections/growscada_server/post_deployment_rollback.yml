@@ -1,7 +1,7 @@
 info:
   name: post deployment rollback
   type: http
-  seq: 61
+  seq: 64
 
 http:
   method: POST

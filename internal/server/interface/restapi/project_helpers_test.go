@@ -39,7 +39,6 @@ type testServices struct {
 	tags         application.TagService
 	states       runtimeapp.TagStateService
 	deployments  runtimeapp.DeploymentService
-	deploy       application.DeployService
 	discard      application.DiscardService
 	projectFiles application.ProjectFileService
 	libraries    application.LibraryService
@@ -90,7 +89,6 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		tags:         application.NewTagService(content, runtimeNode),
 		states:       states,
 		deployments:  deployments,
-		deploy:       application.NewDeployService(content, application.NewProjectFileBuilder(content), runtimeNode, libraries, releases),
 		discard:      application.NewDiscardService(content, runtimeNode, libraries, releases),
 		projectFiles: application.NewProjectFileService(content, application.NewProjectFileBuilder(content), runtimeNode, libraries, releases),
 		draft:        application.NewDraftService(content),
@@ -106,7 +104,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		journal:      journal,
 		operation:    runtimeapp.NewOperationStateService(journal, deployments, states),
 		commits:      application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, projectReleases),
-		releases:     application.NewReleaseService(content, projectReleases),
+		releases:     application.NewReleaseService(content, projectReleases, runtimeNode, libraries, releases),
 	}
 }
 
@@ -117,7 +115,7 @@ func (s testServices) services() restapi.Services {
 		Libraries: s.libraries, WidgetTypes: s.widgetTypes, LibraryPins: s.pins, Scenes: s.scenes,
 		Devices: s.devices, Environments: s.environments,
 		Draft: s.draft, DraftChanges: s.draftChanges,
-		Deploy: s.deploy, Discard: s.discard, ProjectFiles: s.projectFiles, Deployments: s.deployments,
+		Discard: s.discard, ProjectFiles: s.projectFiles, Deployments: s.deployments,
 		DeviceConfig: s.deviceConfig, DeviceTokens: s.deviceTokens,
 		Journal: s.journal, Operation: s.operation, Commits: s.commits, Releases: s.releases,
 	}
@@ -129,11 +127,70 @@ func (s testServices) router() testRouter {
 }
 
 // deployDeployment deploys file to mainProject through the Runtime node's
-// service, as the Engineering node's DeployService will (task 35, part 4).
+// service, as a server without the Engineering node does (ADR 0018): the
+// document stands alone and states no Release.
 func deployDeployment(t *testing.T, service runtimeapp.DeploymentService, file projectv0.ProjectFile) {
 	t.Helper()
-	if _, err := service.Deploy(context.Background(), mainProject, file); err != nil {
+	if _, err := service.DeployFile(context.Background(), mainProject, file); err != nil {
 		t.Fatalf("deploy: %v", err)
+	}
+}
+
+// deployDraftThroughServices saves the Draft as a Commit, publishes it and
+// deploys the Release: the order a Deploy takes since task 72_4.
+func deployDraftThroughServices(t *testing.T, services testServices) {
+	t.Helper()
+	ctx := context.Background()
+	scope := draft.ProjectScope(mainProjectID)
+	saved, err := services.commits.Save(ctx, scope, services.draftVersion(t), "Save", "Ada")
+	if err != nil {
+		t.Fatalf("save commit: %v", err)
+	}
+	released := releaseCommit(t, services, mainProject, saved.Number)
+	if _, err := services.releases.Deploy(ctx, mainProject, released.Number, "Ada"); err != nil {
+		t.Fatalf("deploy release: %v", err)
+	}
+}
+
+// releaseCommit publishes Commit number, or returns the Release that already
+// published it: a test that deploys a Draft another test fixed as a Commit
+// reuses its Release.
+func releaseCommit(t *testing.T, services testServices, projectID uuid.UUID, number int) appdto.Release {
+	t.Helper()
+	ctx := context.Background()
+	created, err := services.releases.Create(ctx, projectID, number, "", "Ada")
+	if err == nil {
+		return created
+	}
+	list, listErr := services.releases.List(ctx, projectID)
+	if listErr != nil {
+		t.Fatalf("release: %v", err)
+	}
+	for _, existing := range list {
+		if existing.CommitNumber == number {
+			return existing
+		}
+	}
+	t.Fatalf("release: %v", err)
+	return appdto.Release{}
+}
+
+// deployDraftForProject is deployDraftThroughServices for any live Project.
+func deployDraftForProject(t *testing.T, services testServices, projectID uuid.UUID) {
+	t.Helper()
+	ctx := context.Background()
+	state, err := services.draft.State(ctx, projectID)
+	if err != nil {
+		t.Fatalf("draft state: %v", err)
+	}
+	scope := draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](projectID)))
+	saved, err := services.commits.Save(ctx, scope, state.Version, "Save", "Ada")
+	if err != nil {
+		t.Fatalf("save commit: %v", err)
+	}
+	released := releaseCommit(t, services, projectID, saved.Number)
+	if _, err := services.releases.Deploy(ctx, projectID, released.Number, "Ada"); err != nil {
+		t.Fatalf("deploy release: %v", err)
 	}
 }
 

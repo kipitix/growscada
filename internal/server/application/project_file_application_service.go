@@ -42,10 +42,6 @@ type ProjectFileService interface {
 	// canonical document is the Draft already, and one matching
 	// ErrInvalidProjectFile when the document does not validate.
 	Open(ctx context.Context, projectID uuid.UUID, version int, document []byte) (appdto.DraftState, error)
-	// Deploy makes document the new Deployment of the live Project without the
-	// Draft (ADR 0018). Returns an error matching
-	// ErrNothingToDeploy if the document is the running Deployment's.
-	Deploy(ctx context.Context, projectID uuid.UUID, document []byte) (appdto.Deployment, error)
 }
 
 type projectFileServiceImpl struct {
@@ -180,38 +176,6 @@ func (s projectFileServiceImpl) lockLocalPins(ctx context.Context, file projectv
 		return ProjectFileError{Issues: issues}
 	}
 	return nil
-}
-
-func (s projectFileServiceImpl) Deploy(ctx context.Context, rawProjectID uuid.UUID, document []byte) (appdto.Deployment, error) {
-	projectID, _, err := s.content.open(ctx, rawProjectID)
-	if err != nil {
-		return appdto.Deployment{}, err
-	}
-	// A deployed file is self-contained: the Runtime node runs the copies in
-	// it and reads no Library, so the local ones are not checked (ADR 0018).
-	validator := projectFileValidator{}
-	validated, err := validator.validate(ctx, projectID, document, false)
-	if err != nil {
-		return appdto.Deployment{}, err
-	}
-	current, ok, err := s.runtime.FindCurrentDeployment(ctx, projectID.UUID())
-	if err != nil {
-		return appdto.Deployment{}, fmt.Errorf("cannot read the current deployment of project %s: %w", projectID, err)
-	}
-	if ok {
-		same, err := sameProjectFile(validated.file, current.Content)
-		if err != nil {
-			return appdto.Deployment{}, err
-		}
-		if same {
-			return appdto.Deployment{}, fmt.Errorf("%w: project %s runs the file already", ErrNothingToDeploy, projectID)
-		}
-	}
-	deployment, err := s.runtime.DeployFile(ctx, projectID.UUID(), validated.file)
-	if err != nil {
-		return appdto.Deployment{}, fmt.Errorf("cannot deploy the project file to %s: %w", projectID, err)
-	}
-	return deployment, nil
 }
 
 // projectName returns the name of the live Project projectID, which names the

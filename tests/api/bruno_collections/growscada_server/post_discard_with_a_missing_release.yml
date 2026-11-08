@@ -1,19 +1,20 @@
 info:
-  name: discard a Deployment whose Library Release is not here
+  name: revert to a Deployment whose Library Release is not here
   type: http
-  seq: 207
+  seq: 2000
 
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/discard
+  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/revert-to-deployed
   auth: inherit
 
 docs: |
   The running Deployment names a Library Release this server does not have:
-  the Discard drops the pin with the widget of that Release's WidgetType and
+  the Revert drops the pin with the widget of that Release's WidgetType and
   answers `200` with the Draft's new Version and a warning naming the pin and
-  the widgets it took (task 71). The Draft is left consistent and writable,
-  which the next request shows.
+  the widgets it took (task 71; task 72_4). The Draft is left consistent and
+  writable, which the next request shows. A Discard would fall back to the last
+  Commit instead.
 
 runtime:
   scripts:

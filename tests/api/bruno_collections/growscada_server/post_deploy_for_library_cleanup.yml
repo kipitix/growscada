@@ -1,16 +1,17 @@
 info:
   name: deploy the cleanup project with the pin
   type: http
-  seq: 199
+  seq: 1990
 
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/deploy
+  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/releases/{{CLEANUP_RELEASE_NUMBER}}/deploy
   auth: inherit
 
 docs: |
-  Deployment 1 of Line 4 names the release of the Legacy library in its
-  ProjectFile: it now keeps the library from being deleted too (task 71).
+  Release 1 of the cleanup project names the release of the Legacy library in
+  its ProjectFile: Deployment 1 now keeps the library from being deleted too
+  (task 71; task 72_4).
 
 runtime:
   assertions:

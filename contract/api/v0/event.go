@@ -32,7 +32,7 @@ type Event struct {
 	// Release is the number of the new Release, on release_created and
 	// release_note_updated, and of a Library Release on library_released; ID is
 	// the Project's or the Library's.
-	Release int    `json:"release,omitempty"`
+	Release int `json:"release,omitempty"`
 	// EnvironmentID and DeviceID name the pair whose parameters changed, on
 	// environment_device_* only; ID is the Environment's (the pair has no ID
 	// of its own), and EnvironmentID names it again.
@@ -44,6 +44,10 @@ type Event struct {
 	// the stream of a Project carries the event to that Project's readers.
 	Deployment int    `json:"deployment,omitempty"`
 	DeployedAt string `json:"deployed_at,omitempty"`
+	// ReleaseNumber is the Project Release a deployment_created deployed
+	// (task 72_4); absent for a Deployment from a file or one made before
+	// Releases existed.
+	ReleaseNumber *int `json:"release_number,omitempty"`
 	// Commit is the number of the Commit a commit_created or
 	// commit_title_updated is about; ID is the Project's or the Library's.
 	Commit int `json:"commit,omitempty"`

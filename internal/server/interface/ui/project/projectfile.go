@@ -150,6 +150,7 @@ func (p *Project) doDeployProjectFile(ctx app.Context, pending *pendingProjectFi
 		p.projectFileBusy = false
 		p.closeProjectFileDialog()
 		p.loadDeploy(ctx)
+		p.loadReleases(ctx) // the file became a Release (task 72_4)
 		if p.deploymentsDialog {
 			p.loadDeployments(ctx)
 		}
@@ -319,14 +320,18 @@ func (p *Project) renderProjectFileConfirmation(pending *pendingProjectFile) app
 // currentDeploymentText names the Deployment the Project runs, for the deploy
 // confirmation.
 func (p *Project) currentDeploymentText() string {
-	if !p.deployLoaded {
+	if !p.deploymentLoaded {
 		return "The current Deployment is being read."
 	}
-	if p.deployPreview.CurrentDeployment == nil {
+	if !p.deployed {
 		return "The project has not been deployed yet."
 	}
-	return fmt.Sprintf("Current deployment: %d, deployed %s.",
-		p.deployPreview.CurrentDeployment.Number, formatDeployedAt(p.deployPreview.CurrentDeployment.DeployedAt))
+	text := fmt.Sprintf("Current deployment: %d, deployed %s.",
+		p.deployment.Number, formatDeployedAt(p.deployment.DeployedAt))
+	if p.deployment.ReleaseNumber != nil {
+		text += fmt.Sprintf(" It carries Release %d.", *p.deployment.ReleaseNumber)
+	}
+	return text
 }
 
 // renderProjectFileIssues lists every problem of the file: its path in the

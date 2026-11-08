@@ -57,7 +57,7 @@ func withLibraryPins(pins ...projectv0.LibraryPin) func(*projectv0.ProjectFile) 
 
 func mustCreateDeployment(t *testing.T, repo runtimeapp.DeploymentRepository, projectID uuid.UUID, file projectv0.ProjectFile, at time.Time) runtimeapp.Deployment {
 	t.Helper()
-	deployment, err := repo.CreateDeployment(context.Background(), projectID, file, runtimeapp.DeploymentCauseDeploy, at)
+	deployment, err := repo.CreateDeployment(context.Background(), projectID, file, runtimeapp.DeploymentCauseDeploy, nil, at)
 	if err != nil {
 		t.Fatalf("CreateDeployment: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestCreateDeployment_NumbersDeploymentsAndKeepsTheDocument(t *testing.T) {
 		file := first
 		file.Tags = []projectv0.TagDefinition{{ID: tagID, Name: "speed", Type: "integer"}}
 		at := start.Add(time.Duration(i) * time.Minute)
-		deployment, err := repo.CreateDeployment(ctx, projectID.UUID(), file, runtimeapp.DeploymentCauseDeploy, at)
+		deployment, err := repo.CreateDeployment(ctx, projectID.UUID(), file, runtimeapp.DeploymentCauseDeploy, nil, at)
 		if err != nil {
 			t.Fatalf("CreateDeployment %d: %v", i, err)
 		}
@@ -144,7 +144,7 @@ func TestCreateDeployment_ConcurrentDeploysTakeDistinctNumbers(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			deployment, err := repo.CreateDeployment(ctx, projectID.UUID(), documentOf(projectID), runtimeapp.DeploymentCauseDeploy, time.Now())
+			deployment, err := repo.CreateDeployment(ctx, projectID.UUID(), documentOf(projectID), runtimeapp.DeploymentCauseDeploy, nil, time.Now())
 			numbers[i], errs[i] = deployment.Number, err
 		}(i)
 	}
@@ -324,7 +324,7 @@ func TestCreateDeployment_RefusesAPairWhoseCopiesAreOfAnotherProject(t *testing.
 			EnvironmentID: environmentID, DeviceID: deviceID,
 			Params: projectv0.JSONObject(`{"address": "10.9.9.9"}`),
 		}),
-	), runtimeapp.DeploymentCauseDeploy, time.Now())
+	), runtimeapp.DeploymentCauseDeploy, nil, time.Now())
 	if err == nil {
 		t.Fatal("the pair of another project was taken")
 	}
@@ -412,7 +412,7 @@ func TestCreateDeployment_RefusesTwoEnvironmentsOfOneName(t *testing.T) {
 			projectv0.Environment{ID: uuid.New(), Name: "bench"},
 			projectv0.Environment{ID: uuid.New(), Name: "bench"},
 		),
-	), runtimeapp.DeploymentCauseDeploy, time.Now())
+	), runtimeapp.DeploymentCauseDeploy, nil, time.Now())
 	if err == nil {
 		t.Fatal("two environments of one name were taken")
 	}
@@ -530,7 +530,7 @@ func TestCreateDeployment_RefusesADocumentOfAnotherProject(t *testing.T) {
 	repo := runtimepg.NewDeploymentRepositoryPostgres(postgres.DB(t))
 	otherID := id.NewID[project.Project]()
 
-	if _, err := repo.CreateDeployment(context.Background(), projectID.UUID(), documentOf(otherID), runtimeapp.DeploymentCauseDeploy, time.Now()); err == nil {
+	if _, err := repo.CreateDeployment(context.Background(), projectID.UUID(), documentOf(otherID), runtimeapp.DeploymentCauseDeploy, nil, time.Now()); err == nil {
 		t.Fatal("the document of another project was stored")
 	} else if !strings.Contains(err.Error(), "document of project") {
 		t.Errorf("error %v, want a refusal naming the document's project", err)
@@ -818,7 +818,7 @@ func TestRollback_AndADeploy_Serialize(t *testing.T) {
 	}()
 	go func() {
 		deployment, err := repo.CreateDeployment(ctx, projectID.UUID(), documentOf(projectID,
-			withTags(projectv0.TagDefinition{ID: uuid.New(), Name: "third", Type: "integer"})), runtimeapp.DeploymentCauseDeploy, time.Now())
+			withTags(projectv0.TagDefinition{ID: uuid.New(), Name: "third", Type: "integer"})), runtimeapp.DeploymentCauseDeploy, nil, time.Now())
 		numbers <- deployment.Number
 		errs <- err
 	}()
@@ -999,4 +999,77 @@ func findValue(t *testing.T, states tagstate.Repository, projectID id.ID[project
 		t.Fatalf("no state of tag %s", tagID)
 	}
 	return state.Value().String()
+}
+
+// TestCreateDeployment_ReleaseNumber: a Deploy of a Release stores and serves
+// its number, refuses a second Deploy of the same Release, and a Deployment
+// from a file states none (task 72_4).
+func TestCreateDeployment_ReleaseNumber(t *testing.T) {
+	projectID, _ := newProject(t)
+	repo := runtimepg.NewDeploymentRepositoryPostgres(postgres.DB(t))
+	ctx := context.Background()
+	first := 1
+
+	deployment, err := repo.CreateDeployment(ctx, projectID.UUID(), documentOf(projectID),
+		runtimeapp.DeploymentCauseDeploy, &first, time.Now())
+	if err != nil {
+		t.Fatalf("CreateDeployment: %v", err)
+	}
+	if deployment.ReleaseNumber == nil || *deployment.ReleaseNumber != 1 {
+		t.Errorf("the new deployment names release %v, want 1", deployment.ReleaseNumber)
+	}
+	current, ok, err := repo.FindCurrent(ctx, projectID.UUID())
+	if err != nil || !ok || current.ReleaseNumber == nil || *current.ReleaseNumber != 1 {
+		t.Errorf("FindCurrent: %+v, %t, %v, want release 1", current, ok, err)
+	}
+	summaries, err := repo.FindAll(ctx, projectID.UUID())
+	if err != nil || len(summaries) != 1 || summaries[0].ReleaseNumber == nil || *summaries[0].ReleaseNumber != 1 {
+		t.Errorf("FindAll: %+v, %v, want release 1", summaries, err)
+	}
+	found, err := repo.FindByNumber(ctx, projectID.UUID(), deployment.Number)
+	if err != nil || found.ReleaseNumber == nil || *found.ReleaseNumber != 1 {
+		t.Errorf("FindByNumber: %+v, %v, want release 1", found, err)
+	}
+
+	if _, err := repo.CreateDeployment(ctx, projectID.UUID(), documentOf(projectID),
+		runtimeapp.DeploymentCauseDeploy, &first, time.Now()); !errors.Is(err, runtimeapp.ErrNothingToDeploy) {
+		t.Errorf("a second Deploy of release 1: %v, want ErrNothingToDeploy", err)
+	}
+	if _, err := repo.CreateDeployment(ctx, projectID.UUID(), documentOf(projectID),
+		runtimeapp.DeploymentCauseFile, nil, time.Now()); err != nil {
+		t.Fatalf("a file deployment: %v", err)
+	}
+	fileCurrent, _, err := repo.FindCurrent(ctx, projectID.UUID())
+	if err != nil || fileCurrent.ReleaseNumber != nil {
+		t.Errorf("a file deployment names release %v, want none: %v", fileCurrent.ReleaseNumber, err)
+	}
+}
+
+// TestRollback_KeepsTheReleaseNumber: a Rollback copies the Release of the
+// Deployment it names (task 72_4).
+func TestRollback_KeepsTheReleaseNumber(t *testing.T) {
+	projectID, _ := newProject(t)
+	repo := runtimepg.NewDeploymentRepositoryPostgres(postgres.DB(t))
+	ctx := context.Background()
+	firstRelease, secondRelease := 1, 2
+
+	first, err := repo.CreateDeployment(ctx, projectID.UUID(),
+		documentOf(projectID, withTags(documentTag(definition(t, projectID, "speed", tag.TagTypeInteger)))),
+		runtimeapp.DeploymentCauseDeploy, &firstRelease, time.Now())
+	if err != nil {
+		t.Fatalf("CreateDeployment 1: %v", err)
+	}
+	if _, err := repo.CreateDeployment(ctx, projectID.UUID(),
+		documentOf(projectID, withTags(documentTag(definition(t, projectID, "flow", tag.TagTypeInteger)))),
+		runtimeapp.DeploymentCauseDeploy, &secondRelease, time.Now()); err != nil {
+		t.Fatalf("CreateDeployment 2: %v", err)
+	}
+
+	rolled, err := repo.Rollback(ctx, projectID.UUID(), first.Number, time.Now())
+	if err != nil {
+		t.Fatalf("Rollback: %v", err)
+	}
+	if rolled.ReleaseNumber == nil || *rolled.ReleaseNumber != 1 {
+		t.Errorf("the rollback names release %v, want 1", rolled.ReleaseNumber)
+	}
 }

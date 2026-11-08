@@ -1,0 +1,43 @@
+info:
+  name: save the draft as a commit before the deploy
+  type: http
+  seq: 41
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/commits
+  body:
+    type: json
+    data: |-
+      {
+        "version": {{OTHER_DRAFT_VERSION}},
+        "title": "Before the deploy",
+        "author": "Ada"
+      }
+  auth: inherit
+
+docs: |
+  A Deploy takes a Release, and a Release publishes a Commit (task 72_4;
+  ADR 0021): this Save fixes the Draft as Commit 1.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '1'
+
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("OTHER_COMMIT_NUMBER", res.body.number)
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

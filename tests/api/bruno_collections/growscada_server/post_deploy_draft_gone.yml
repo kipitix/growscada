@@ -1,0 +1,33 @@
+info:
+  name: post deploy of the draft is gone
+  type: http
+  seq: 45
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/deploy
+  auth: inherit
+
+docs: |
+  A Deploy took the Draft before task 72_4 and takes a Release now: the old
+  route answers `410 Gone` and names the order Save → Release → Deploy.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '410'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: '"application/problem+json"'
+    - expression: 'res.body.detail'
+      operator: contains
+      value: Save
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

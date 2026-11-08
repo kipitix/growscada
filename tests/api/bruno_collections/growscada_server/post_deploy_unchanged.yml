@@ -1,17 +1,16 @@
 info:
-  name: post deploy unchanged
+  name: deploy the running release again
   type: http
   seq: 45
 
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/deploy
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/releases/{{OTHER_RELEASE_NUMBER}}/deploy
   auth: inherit
 
 docs: |
-  Deploying the Draft that is the running Deployment unchanged is refused:
-  `409 Conflict` `nothing_to_deploy`, as releasing an unchanged Library
-  Draft is.
+  A Release that is the running Deployment already is refused: `409 Conflict`
+  `nothing_to_deploy` (task 72_4).
 
 runtime:
   assertions:

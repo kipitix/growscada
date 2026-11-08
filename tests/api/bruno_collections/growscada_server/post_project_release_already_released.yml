@@ -10,7 +10,7 @@ http:
     type: json
     data: |-
       {
-        "commit": 1,
+        "commit": 2,
         "author": "Grace"
       }
   auth: inherit

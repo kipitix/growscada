@@ -1,0 +1,42 @@
+info:
+  name: save the changed draft as a second commit
+  type: http
+  seq: 60
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/commits
+  body:
+    type: json
+    data: |-
+      {
+        "version": {{OTHER_DRAFT_VERSION}},
+        "title": "Second save",
+        "author": "Ada"
+      }
+  auth: inherit
+
+docs: |
+  The Draft with the Library Pin becomes Commit 2 (task 72_2; ADR 0021).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '2'
+
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("OTHER_COMMIT_NUMBER", res.body.number)
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

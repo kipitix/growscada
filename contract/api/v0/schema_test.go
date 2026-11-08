@@ -24,7 +24,7 @@ func TestSchemaIsCommitted(t *testing.T) {
 			DeviceTokenResponse{}, DeviceTokenMetadataResponse{},
 			DeviceConfigResponse{}, DeviceConfigDeviceResponse{}, DeviceConfigEnvironmentResponse{}, DeviceConfigConnectionResponse{}, DeviceConfigTagResponse{},
 			DeviceIdentityResponse{},
-			DeploymentResponse{}, DeploymentSummaryResponse{}, ListDeploymentsResponse{}, DroppedWidgetResponse{}, DeployPreviewResponse{},
+			DeploymentResponse{}, DeploymentSummaryResponse{}, ListDeploymentsResponse{},
 			DeployResponse{}, DiscardProjectResponse{}, TagStateResponse{}, GetTagStatesResponse{},
 			JournalResponse{}, OperationStateResponse{},
 			DraftChangesResponse{}, DraftChangeCommandRequest{},

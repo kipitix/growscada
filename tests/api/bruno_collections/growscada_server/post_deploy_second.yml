@@ -1,17 +1,16 @@
 info:
   name: post deploy second
   type: http
-  seq: 59
+  seq: 62
 
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/deploy
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/releases/{{OTHER_RELEASE_NUMBER}}/deploy
   auth: inherit
 
 docs: |
-  The Draft of the project changed since its first Deployment (a Library Pin
-  was added), so this Deploy makes Deployment 2. It is the Deployment a Rollback
-  can then leave behind.
+  Release 2 is made the running Deployment: Deployment 2, which a Rollback can
+  then leave behind (task 72_4).
 
 runtime:
   assertions:

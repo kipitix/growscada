@@ -1,17 +1,24 @@
 info:
-  name: post deploy for the project file downloads
+  name: deploy a file for the project file downloads
   type: http
   seq: 134
 
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/deploy
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/projectfile/deploy
+  body:
+    type: json
+    data: |-
+      {
+        "schema_version": "0.2",
+        "project_id": "{{PROJECT_ID}}"
+      }
   auth: inherit
 
 docs: |
-  The project Main gets its first Deployment, so its Deployments have a document
-  to download (ADR 0018). The Draft is unchanged by the Deploy and keeps its
-  Version, which the file requests below state.
+  A file is published as a Release with origin file and becomes the project's
+  first Deployment (task 72_4), so its Deployments have a document to download
+  (ADR 0018). The Draft is unchanged by the Deploy.
 
 runtime:
   assertions:

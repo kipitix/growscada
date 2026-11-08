@@ -632,6 +632,7 @@ func newDeploymentResponse(deployment runtimeapp.Deployment) apiv0.DeploymentRes
 		DeployedAt:     deployedAt(deployment.DeployedAt),
 		Cause:          apiv0.DeploymentCause(deployment.Cause),
 		RolledBackFrom: deployment.RolledBackFrom,
+		ReleaseNumber:  deployment.ReleaseNumber,
 		Content:        deployment.Content,
 	}
 }
@@ -646,6 +647,7 @@ func newDeploymentSummaryResponse(deployment appdto.Deployment) apiv0.Deployment
 		DeployedAt:     deployment.DeployedAt,
 		Cause:          runtimeapp.DeploymentCause(deployment.Cause),
 		RolledBackFrom: deployment.RolledBackFrom,
+		ReleaseNumber:  deployment.ReleaseNumber,
 	})
 }
 
@@ -659,6 +661,7 @@ func newDeploymentSummary(summary runtimeapp.DeploymentSummary) apiv0.Deployment
 		DeployedAt:     deployedAt(summary.DeployedAt),
 		Cause:          apiv0.DeploymentCause(summary.Cause),
 		RolledBackFrom: summary.RolledBackFrom,
+		ReleaseNumber:  summary.ReleaseNumber,
 	}
 }
 
@@ -666,28 +669,6 @@ func newListDeploymentsResponse(summaries []runtimeapp.DeploymentSummary) apiv0.
 	resp := apiv0.ListDeploymentsResponse{Deployments: make([]apiv0.DeploymentSummaryResponse, len(summaries))}
 	for i, summary := range summaries {
 		resp.Deployments[i] = newDeploymentSummary(summary)
-	}
-	return resp
-}
-
-func newDeployPreviewResponse(preview appdto.DeployPreview) apiv0.DeployPreviewResponse {
-	resp := apiv0.DeployPreviewResponse{
-		Unchanged:      preview.Unchanged,
-		DroppedWidgets: make([]apiv0.DroppedWidgetResponse, len(preview.DroppedWidgets)),
-	}
-	if preview.CurrentDeployment != nil {
-		summary := newDeploymentSummaryResponse(*preview.CurrentDeployment)
-		resp.CurrentDeployment = &summary
-	}
-	for i, dropped := range preview.DroppedWidgets {
-		resp.DroppedWidgets[i] = apiv0.DroppedWidgetResponse{
-			SceneID: dropped.SceneID, WidgetID: dropped.WidgetID, Name: dropped.Name,
-		}
-	}
-	for _, missing := range preview.MissingReleases {
-		resp.MissingReleases = append(resp.MissingReleases, apiv0.MissingReleaseResponse{
-			LibraryID: missing.LibraryID, Release: missing.Release,
-		})
 	}
 	return resp
 }

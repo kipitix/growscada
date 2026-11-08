@@ -29,10 +29,12 @@ type RuntimeNode interface {
 	// FindTagStates returns the states of the Tags with the given IDs; a Tag
 	// without a state is left out.
 	FindTagStates(ctx context.Context, projectID uuid.UUID, tagIDs []uuid.UUID) ([]appdto.TagState, error)
-	// Deploy stores file as the new Deployment of the Project and returns it:
-	// the number and the time are the Runtime node's to assign. The document
-	// must name the Project it is deployed to.
-	Deploy(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile) (appdto.Deployment, error)
+	// DeployRelease stores file as the new Deployment of the Project, made
+	// from Release releaseNumber (task 72_4), and returns it: the number and
+	// the time are the Runtime node's to assign. The document must name the
+	// Project it is deployed to, and the Release the Project already runs is
+	// ErrNothingToDeploy.
+	DeployRelease(ctx context.Context, projectID uuid.UUID, releaseNumber int, file projectv0.ProjectFile) (appdto.Deployment, error)
 	// DeployFile stores file as the new Deployment of the Project with cause
 	// file (ADR 0018): the document needs no Draft and no Library, and the
 	// Deployment is published as any Deploy's is. The document must name the

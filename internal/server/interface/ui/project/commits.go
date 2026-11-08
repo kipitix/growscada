@@ -58,7 +58,7 @@ func (p *Project) openSaveDialog(ctx app.Context) {
 
 // saveCommit confirms the Save dialog: the Draft as it is becomes a Commit.
 func (p *Project) saveCommit(ctx app.Context) {
-	if p.content == nil || p.savingCommit || p.deploying || p.discarding || p.rollingBack {
+	if p.content == nil || p.savingCommit || p.deploying || p.discarding || p.reverting {
 		return
 	}
 	if p.waitMoves(ctx, func(ctx app.Context) { p.saveCommit(ctx) }) {

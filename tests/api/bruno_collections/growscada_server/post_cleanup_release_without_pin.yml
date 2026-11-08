@@ -1,0 +1,39 @@
+info:
+  name: release the cleanup commit without the pin
+  type: http
+  seq: 1995
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/releases
+  body:
+    type: json
+    data: |-
+      {
+        "commit": {{CLEANUP_COMMIT_NUMBER}},
+        "author": "Ada"
+      }
+  auth: inherit
+
+docs: |
+  Commit 2 becomes Release 2; its document does not name the Legacy library,
+  so once it runs the library may go (task 71).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("CLEANUP_RELEASE_NUMBER", res.body.number)
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

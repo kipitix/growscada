@@ -90,7 +90,6 @@ type Services struct {
 	Environments application.EnvironmentService
 	Draft        application.DraftService
 	DraftChanges application.DraftChangesService
-	Deploy       application.DeployService
 	Discard      application.DiscardService
 	ProjectFiles application.ProjectFileService
 	Commits      application.CommitService
@@ -120,11 +119,11 @@ func NewRouter(services Services, eventBus eventbus.EventBus, maxSSEClients int)
 		deviceTokensHandlers: NewDeviceTokensHandler(services.DeviceTokens, services.Devices),
 		deviceConfigHandlers: NewDeviceConfigHandler(services.DeviceConfig, services.DeviceTokens),
 		deviceWhoAmIHandlers: NewDeviceIdentityHandler(services.DeviceTokens),
-		deployHandlers:       NewDeployHandler(services.Deploy, services.Discard, services.Deployments, services.TagStates),
+		deployHandlers:       NewDeployHandler(services.Discard, services.Deployments, services.TagStates),
 		draftHandlers:        NewDraftHandler(services.Draft),
 		draftChangesHandlers: NewDraftChangesHandler(services.DraftChanges),
 		deploymentsHandlers:  NewDeploymentHandler(services.Deployments),
-		projectFileHandlers:  NewProjectFileHandler(services.ProjectFiles),
+		projectFileHandlers:  NewProjectFileHandler(services.ProjectFiles, services.Releases),
 		commitHandlers:       NewCommitHandler(services.Commits),
 		releaseHandlers:      NewReleaseHandler(services.Releases),
 		eventsHandlers:       NewEventsHandler(eventBus, projectService, maxSSEClients, WithDeviceTokens(services.DeviceTokens)),
@@ -252,6 +251,7 @@ func (r *APIRouter) routes() []route {
 		{"GET " + pp + apiv0.ReleasePath + "/" + projectReleaseResource.wildcard(), releases.GetReleaseByNumber},
 		{"PATCH " + pp + apiv0.ReleasePath + "/" + projectReleaseResource.wildcard(), releases.PatchRelease},
 		{"GET " + pp + apiv0.ReleasePath + "/" + projectReleaseResource.wildcard() + "/projectfile", releases.GetReleaseProjectFile},
+		{"POST " + pp + apiv0.ReleasePath + "/" + projectReleaseResource.wildcard() + "/deploy", releases.PostReleaseDeploy},
 		{"GET " + pp + "/deployment", deploy.GetDeployment},
 		{"GET " + pp + "/deployments", deployments.GetDeployments},
 		{"GET " + pp + "/deployments/" + deploymentResource.wildcard(), deployments.GetDeploymentByNumber},
@@ -271,9 +271,11 @@ func (r *APIRouter) routes() []route {
 		{"GET " + pp + apiv0.JournalPath, r.journalHandlers.GetJournal},
 		{"GET " + pp + apiv0.JournalEventsPath, r.journalHandlers.GetJournalEvents},
 		{"GET " + pp + apiv0.OperationPath, r.operationHandlers.GetOperation},
-		{"GET " + pp + "/deploy/preview", deploy.GetDeployPreview},
-		{"POST " + pp + "/deploy", deploy.PostDeploy},
+		// A Deploy of the Draft took the Draft before task 72_4; it answers
+		// 410 and names the Release route (removed with API 1.0).
+		{"POST " + pp + "/deploy", deployDraftRemoved},
 		{"POST " + pp + "/discard", deploy.PostDiscard},
+		{"POST " + pp + apiv0.RevertToDeployedPath, deploy.PostRevert},
 
 		{"GET " + pp + removedDraftLockPath, draftLockRemoved},
 		{"POST " + pp + removedDraftLockPath, draftLockRemoved},

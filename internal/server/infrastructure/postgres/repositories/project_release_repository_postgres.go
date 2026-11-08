@@ -44,6 +44,28 @@ func (r projectReleaseRepositoryPostgres) Create(ctx context.Context, scope draf
 	if !scope.IsProject() {
 		return nil, fmt.Errorf("cannot release %s: project releases are the only ones of task 72_3", scope)
 	}
+	return r.create(ctx, scope, func(number release.Number) (release.Release, error) {
+		return release.CreateRelease(scope, commit, number, aNote, anAuthor, time.Now().UTC())
+	})
+}
+
+// CreateFromFile publishes a ProjectFile as the next Release of scope with
+// origin file (task 72_4): no Commit is named.
+func (r projectReleaseRepositoryPostgres) CreateFromFile(ctx context.Context, scope draft.Scope, title draft.CommitTitle,
+	aNote release.Note, anAuthor draft.Author, content draft.CommitContent) (release.Release, error) {
+	if !scope.IsProject() {
+		return nil, fmt.Errorf("cannot release %s: project releases are the only ones of task 72_4", scope)
+	}
+	return r.create(ctx, scope, func(number release.Number) (release.Release, error) {
+		return release.CreateReleaseFromFile(scope, number, title, aNote, anAuthor, time.Now().UTC(), content)
+	})
+}
+
+// create numbers and stores a Release of the scope built from its number: one
+// transaction over the Project, with the events of the new Release in the
+// outbox.
+func (r projectReleaseRepositoryPostgres) create(ctx context.Context, scope draft.Scope,
+	build func(number release.Number) (release.Release, error)) (release.Release, error) {
 	projectID := scope.ProjectID()
 	var created release.Release
 	err := r.inTx(ctx, func(tx *sql.Tx) ([]event.Event, error) {
@@ -54,7 +76,7 @@ func (r projectReleaseRepositoryPostgres) Create(ctx context.Context, scope draf
 		if err != nil {
 			return nil, err
 		}
-		created, err = release.CreateRelease(scope, commit, number, aNote, anAuthor, time.Now().UTC())
+		created, err = build(number)
 		if err != nil {
 			return nil, err
 		}

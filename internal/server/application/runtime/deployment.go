@@ -10,13 +10,14 @@ import (
 	projectv0 "github.com/kipitix/growscada/contract/project/v0"
 )
 
-// DeploymentCause is why a Deployment exists: a Deploy made it, a Rollback copied
-// an earlier one (ADR 0014), or a project file was deployed as it is
-// (ADR 0018).
+// DeploymentCause is why a Deployment exists: a Deploy made it from a Release
+// (task 72_4), a Rollback copied an earlier one (ADR 0014), or a project file
+// was deployed as it is (ADR 0018).
 type DeploymentCause string
 
 const (
-	// DeploymentCauseDeploy is a Deployment made from the Draft by a Deploy.
+	// DeploymentCauseDeploy is a Deployment made from a Project Release by a
+	// Deploy.
 	DeploymentCauseDeploy DeploymentCause = "deploy"
 	// DeploymentCauseRollback is a Deployment made by copying an earlier one.
 	DeploymentCauseRollback DeploymentCause = "rollback"
@@ -34,6 +35,11 @@ var ErrDeploymentNotFound = errors.New("deployment not found")
 // the history would grow with a Deployment that changes nothing.
 var ErrNothingToRollback = errors.New("nothing to rollback")
 
+// ErrNothingToDeploy matches (errors.Is) a Deploy Release refused because the
+// Project already runs that Release (task 72_4): the Release is immutable, so
+// deploying it again would add a Deployment that changes nothing.
+var ErrNothingToDeploy = errors.New("nothing to deploy")
+
 // Deployment is the Runtime node's view of a Deployment: a numbered, immutable
 // snapshot of a Project's configuration, created by a Deploy or by a Rollback
 // (task 35, ADR 0014). Its Content is the ProjectFile as it was delivered; the
@@ -50,16 +56,20 @@ type Deployment struct {
 	DeployedAt     time.Time
 	Cause          DeploymentCause
 	RolledBackFrom *int
-	Content        projectv0.ProjectFile
+	// ReleaseNumber is the Project Release the Deployment made (task 72_4):
+	// nil for a Deployment from a file, or one made before Releases existed.
+	ReleaseNumber *int
+	Content       projectv0.ProjectFile
 }
 
 // DeploymentSummary is a Deployment without its document: what a list of them
-// shows — the number, the time and the cause.
+// shows — the number, the time, the cause and the Release.
 type DeploymentSummary struct {
 	Number         int
 	DeployedAt     time.Time
 	Cause          DeploymentCause
 	RolledBackFrom *int
+	ReleaseNumber  *int
 }
 
 // Summary returns the Deployment without its document: what a list of Deployments
@@ -70,6 +80,7 @@ func (r Deployment) Summary() DeploymentSummary {
 		DeployedAt:     r.DeployedAt,
 		Cause:          r.Cause,
 		RolledBackFrom: r.RolledBackFrom,
+		ReleaseNumber:  r.ReleaseNumber,
 	}
 }
 
@@ -80,23 +91,26 @@ func (r Deployment) Summary() DeploymentSummary {
 type DeploymentRepository interface {
 	// CreateDeployment numbers and stores the Deployment of the Project: one
 	// transaction takes the next number, writes the document with cause and
-	// brings the Runtime node's copies of the Tag definitions, the Devices,
-	// the Environments and their pairs into line with it. The cause is deploy
-	// for a Deploy of the Draft and file for a project file (ADR 0018); a
-	// Rollback has its own method. The Tag states survive it — a new Tag gets
-	// its initial one, a Tag whose TagType changed is reset to it, an
-	// unchanged Tag keeps its state — and so do the Device Tokens. Concurrent
-	// Deploys of one Project are serialized.
-	CreateDeployment(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile, cause DeploymentCause, now time.Time) (Deployment, error)
+	// releaseNumber and brings the Runtime node's copies of the Tag
+	// definitions, the Devices, the Environments and their pairs into line
+	// with it. The cause is deploy for a Deploy of a Release and file for a
+	// project file (ADR 0018); a Rollback has its own method. releaseNumber is
+	// the Project Release the document came from, nil for a file deployment.
+	// A Deploy of the Release the Project already runs is ErrNothingToDeploy,
+	// checked under the same lock that numbers the Deployment. The Tag states
+	// survive it — a new Tag gets its initial one, a Tag whose TagType changed
+	// is reset to it, an unchanged Tag keeps its state — and so do the Device
+	// Tokens. Concurrent Deploys of one Project are serialized.
+	CreateDeployment(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile, cause DeploymentCause, releaseNumber *int, now time.Time) (Deployment, error)
 
 	// Rollback copies the Deployment n of the Project into a new one numbered
 	// after the greatest stored: one transaction locks the Project — refusing
 	// it while the Project is deleted or being discarded —, compares the
 	// document with the running Deployment's (equal → ErrNothingToRollback),
-	// stores the copy with the cause rollback and the number it copied, and
-	// rebuilds the derived copies by the same diff as a Deploy. The document
-	// is copied as it is. ErrDeploymentNotFound if the Project has no such
-	// Deployment.
+	// stores the copy with the cause rollback, the number it copied and its
+	// Release, and rebuilds the derived copies by the same diff as a Deploy.
+	// The document is copied as it is. ErrDeploymentNotFound if the Project
+	// has no such Deployment.
 	Rollback(ctx context.Context, projectID uuid.UUID, n int, now time.Time) (Deployment, error)
 
 	// FindCurrent returns the latest Deployment of the Project, and whether the

@@ -19,19 +19,24 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
 
-// DiscardService is the Engineering node's Discard (ADR 0016): it resets the
-// whole Draft to the Deployment the Project runs, in one transaction over the
-// Draft, and answers with the Draft's new state (task 35, Q10).
+// DiscardService is the Engineering node's Discard and Revert (ADR 0016,
+// task 72_4): Discard resets the whole Draft to the Project's last Commit —
+// the saved state, dropping unsaved work —, while Revert resets it to the
+// Deployment the Project runs. Each is one transaction over the Draft.
 type DiscardService interface {
-	// Discard resets the live Project projectID's Draft to the Deployment it
-	// runs. The written Draft is one change: its content is replaced, its
-	// DraftChange stack is cleared and its Version raised. A Library Pin the
-	// Deployment names but this server cannot write is dropped with the
-	// Widgets of its WidgetTypes, and reported in the answer's warnings: the
-	// Draft stays writable (task 71).
-	// Returns ErrNoDeploymentToDiscard if the Project has no Deployment, and an
-	// error wrapping project.ErrProjectNotFound if it is not live.
+	// Discard resets the live Project projectID's Draft to its last Commit,
+	// dropping the unsaved changes. The written Draft is one change: its
+	// content is replaced, its DraftChange stack is cleared and its Version
+	// raised. A Library Pin the Commit names but this server cannot write is
+	// dropped with the Widgets of its WidgetTypes, and reported in the answer's
+	// warnings: the Draft stays writable (task 71).
+	// Returns ErrNothingToDiscard if the Project has no Commit, and an error
+	// wrapping project.ErrProjectNotFound if it is not live.
 	Discard(ctx context.Context, projectID uuid.UUID) (appdto.DiscardedDraft, error)
+	// Revert resets the Draft to the Deployment the Project runs, as Discard
+	// did before task 72_4. It refuses with ErrNoDeploymentToDiscard when the
+	// Project runs none.
+	Revert(ctx context.Context, projectID uuid.UUID) (appdto.DiscardedDraft, error)
 }
 
 type discardServiceImpl struct {
@@ -53,6 +58,45 @@ func NewDiscardService(aContent ProjectContent, aRuntime RuntimeNode,
 }
 
 func (s discardServiceImpl) Discard(ctx context.Context, rawProjectID uuid.UUID) (appdto.DiscardedDraft, error) {
+	projectID, _, err := s.content.open(ctx, rawProjectID)
+	if err != nil {
+		return appdto.DiscardedDraft{}, err
+	}
+	commits, err := s.content.Drafts().FindCommits(ctx, s.content.ScopeOf(projectID))
+	if err != nil {
+		return appdto.DiscardedDraft{}, fmt.Errorf("cannot read the commits of project %s: %w", projectID, err)
+	}
+	if len(commits) == 0 {
+		return appdto.DiscardedDraft{}, fmt.Errorf("%w: %s", ErrNothingToDiscard, projectID)
+	}
+	// FindCommits is newest first: the last Commit is what the Draft falls
+	// back to when its unsaved changes go.
+	file, ok := commits[0].Content().ProjectFile()
+	if !ok {
+		return appdto.DiscardedDraft{}, fmt.Errorf("commit %d of project %s holds no project file", commits[0].Number(), projectID)
+	}
+	content, err := contentOfDeployment(projectID, file)
+	if err != nil {
+		return appdto.DiscardedDraft{}, fmt.Errorf("cannot read commit %d of project %s: %w", commits[0].Number(), projectID, err)
+	}
+	missing, err := missingLibraryReleases(ctx, s.libraries, s.releases, file)
+	if err != nil {
+		return appdto.DiscardedDraft{}, fmt.Errorf("cannot check the library pins of project %s: %w", projectID, err)
+	}
+	content, warnings := dropMissingLibraryReleases(content, file, missing)
+	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), func(session *draft.Session) error {
+		if err := s.lockDiscardedPins(ctx, content, session); err != nil {
+			return err
+		}
+		return session.Replace(ctx, content)
+	})
+	if err != nil {
+		return appdto.DiscardedDraft{}, fmt.Errorf("cannot discard project %s: %w", projectID, err)
+	}
+	return appdto.DiscardedDraft{Version: result.Version().Number(), Warnings: warnings}, nil
+}
+
+func (s discardServiceImpl) Revert(ctx context.Context, rawProjectID uuid.UUID) (appdto.DiscardedDraft, error) {
 	projectID, _, err := s.content.open(ctx, rawProjectID)
 	if err != nil {
 		return appdto.DiscardedDraft{}, err

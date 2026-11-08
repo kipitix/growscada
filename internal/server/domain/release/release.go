@@ -85,6 +85,23 @@ func CreateRelease(scope draft.Scope, commit draft.Commit, number Number, aNote 
 	return impl, nil
 }
 
+// CreateReleaseFromFile publishes the ProjectFile content as Release number of
+// scope, with the title and the Author who deployed it (task 72_4): the
+// content came from a file, not from a Commit, so the Release names no Commit.
+// It records release_created like CreateRelease does.
+// Returns an error if the number is not positive or the content does not
+// belong to the scope.
+func CreateReleaseFromFile(scope draft.Scope, number Number, title draft.CommitTitle, aNote Note,
+	anAuthor draft.Author, at time.Time, content draft.CommitContent) (Release, error) {
+	created, err := ReconstituteRelease(scope, id.NewID[Release](), number, 0, title, aNote, anAuthor, at, OriginFile, content)
+	if err != nil {
+		return nil, err
+	}
+	impl := created.(*releaseImpl)
+	impl.pending = []event.Event{NewReleaseCreatedEvent(scope, number)}
+	return impl, nil
+}
+
 // ReconstituteRelease rebuilds a Release as stored; it records no event. For
 // repositories.
 func ReconstituteRelease(

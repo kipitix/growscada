@@ -6,150 +6,138 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
 
-// TestDeployBar_ShowsTheDeploymentAndDeploys: the bar starts at "Not deployed",
-// the dialog previews the first Deploy, and confirming makes Deployment 1.
-func TestDeployBar_ShowsTheDeploymentAndDeploys(t *testing.T) {
+// deployDraft saves the Draft as a Commit, publishes it and deploys the
+// Release: a Deploy takes a Release since task 72_4.
+func deployDraft(t *testing.T, api *testAPI) apiv0.DeployResponse {
+	t.Helper()
+	ctx := context.Background()
+	state, err := api.DraftState(ctx)
+	if err != nil {
+		t.Fatalf("draft state: %v", err)
+	}
+	commit, err := api.SaveCommit(ctx, apiv0.CreateCommitRequest{Version: state.Version, Title: "Save", Author: "Ada"})
+	if err != nil {
+		t.Fatalf("save commit: %v", err)
+	}
+	released, err := api.CreateRelease(ctx, apiv0.CreateProjectReleaseRequest{Commit: commit.Number, Author: "Ada"})
+	if err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	deployed, err := api.DeployRelease(ctx, released.Number)
+	if err != nil {
+		t.Fatalf("deploy release: %v", err)
+	}
+	return deployed
+}
+
+// TestDeployBar_ShowsTheDeploymentAndItsRelease: the bar starts at "Not
+// deployed", and after a Deploy it names the Deployment and the Release it
+// came from.
+func TestDeployBar_ShowsTheDeploymentAndItsRelease(t *testing.T) {
 	f := startProject(t)
 
-	if !f.p.deployLoaded || f.p.deployPreview.CurrentDeployment != nil {
-		t.Fatalf("deployment state: loaded %v, %+v", f.p.deployLoaded, f.p.deployPreview)
+	if !f.p.deploymentLoaded || f.p.deployed {
+		t.Fatalf("deployment state: loaded %v, deployed %v", f.p.deploymentLoaded, f.p.deployed)
 	}
 	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, "Not deployed") {
 		t.Errorf("the bar does not say the project is not deployed: %s", html)
 	}
 
-	f.p.openDeployDialog(f.p.compoCtx)
-	f.run()
-	html := app.HTMLString(f.p.Render())
-	if !strings.Contains(html, "Deploy the project") || !strings.Contains(html, "not been deployed yet") {
-		t.Errorf("the dialog does not preview the first Deploy: %s", html)
-	}
-
-	// A reload of the bar that lands while the dialog is open must not rewrite
-	// it: the dialog keeps the preview it was opened with.
-	f.p.deployPreview = apiv0.DeployPreviewResponse{
-		CurrentDeployment: &apiv0.DeploymentSummaryResponse{Number: 7, DeployedAt: "2026-11-04T10:00:00Z"},
-		Unchanged:         true,
-	}
-	html = app.HTMLString(f.p.Render())
-	if !strings.Contains(html, "Deployment 7") || !strings.Contains(html, "not been deployed yet") {
-		t.Errorf("the bar's reload rewrote the open dialog: %s", html)
-	}
-
-	f.p.deploy(f.p.compoCtx)
+	deployDraft(t, f.api)
+	f.p.loadDeploy(f.p.compoCtx)
 	f.run()
 	f.noToasts()
-	if f.p.deployPreview.CurrentDeployment == nil || f.p.deployPreview.CurrentDeployment.Number != 1 {
-		t.Fatalf("after Deploy: %+v", f.p.deployPreview)
+	if !f.p.deployed || f.p.deployment.Number != 1 || f.p.deployment.ReleaseNumber == nil || *f.p.deployment.ReleaseNumber != 1 {
+		t.Fatalf("after Deploy: deployed %v, %+v", f.p.deployed, f.p.deployment)
 	}
-	if f.p.deployDialog {
-		t.Error("the dialog is still open after Deploy")
-	}
-	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, "Deployment 1") {
-		t.Errorf("the bar does not show Deployment 1: %s", html)
+	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, "Deployment 1") || !strings.Contains(html, "Release 1") {
+		t.Errorf("the bar does not show Deployment 1 of Release 1: %s", html)
 	}
 }
 
-// TestDeployDialog_UnchangedDraftSaysNothingToDeploy: deploying the Deployment
-// the Draft is refuses, and the dialog says so before the server does.
-func TestDeployDialog_UnchangedDraftSaysNothingToDeploy(t *testing.T) {
-	url, api := newServer(t)
-	if _, err := api.Deploy(context.Background()); err != nil {
-		t.Fatalf("deploy: %v", err)
-	}
-	f := mount(t, url, api)
-
-	f.p.openDeployDialog(f.p.compoCtx)
-	f.run()
-	if !f.p.deployPreview.Unchanged {
-		t.Fatalf("the deployed Draft is not unchanged: %+v", f.p.deployPreview)
-	}
-	html := app.HTMLString(f.p.Render())
-	if !strings.Contains(html, "Nothing to deploy") {
-		t.Errorf("the dialog does not say nothing is to be deployed: %s", html)
-	}
-	if strings.Contains(html, `data-deploy-confirm="true"`) {
-		t.Errorf("the dialog offers to Deploy an unchanged Draft: %s", html)
-	}
-}
-
-// TestDeployBar_DraftChangeShowsUnreleasedChanges: a content event reloads the
-// deployment state, and a changed Draft is shown as not deployed.
-func TestDeployBar_DraftChangeShowsUnreleasedChanges(t *testing.T) {
-	url, api := newServer(t)
-	if _, err := api.Deploy(context.Background()); err != nil {
-		t.Fatalf("deploy: %v", err)
-	}
-	f := mount(t, url, api)
-	if f.p.deployPreview.CurrentDeployment == nil || !f.p.deployPreview.Unchanged {
-		t.Fatalf("after Deploy: %+v", f.p.deployPreview)
-	}
-
-	created := createScene(t, api, "After the Deploy")
-	f.event(apiv0.Event{Type: apiv0.EventSceneCreated, ID: created.String()})
-
-	f.noToasts()
-	if f.p.deployPreview.Unchanged {
-		t.Errorf("the Draft changed, but the bar still says it is deployed: %+v", f.p.deployPreview)
-	}
-	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, "Unreleased changes") {
-		t.Errorf("the bar does not show the unreleased changes: %s", html)
-	}
-}
-
-// TestDeployBar_MissingLibraryReleasesAreAWarning: a running Deployment that
-// names a Library Release this server does not have is shown in the bar and in
-// the Deploy dialog, so the widgets a Discard drops are expected (task 71).
-func TestDeployBar_MissingLibraryReleasesAreAWarning(t *testing.T) {
-	libraryID := uuid.MustParse("d0000000-0000-4000-8000-0000000000ff")
+// TestReleasesDialog_DeploysAReleaseAndMovesTheMark: the list marks the running
+// Release and offers every other one, and a Deploy moves the mark (task 72_4).
+func TestReleasesDialog_DeploysAReleaseAndMovesTheMark(t *testing.T) {
 	f := startProject(t)
-	f.p.deployLoaded = true
-	f.p.deployPreview = apiv0.DeployPreviewResponse{
-		CurrentDeployment: &apiv0.DeploymentSummaryResponse{Number: 4, DeployedAt: "2026-11-04T10:00:00Z"},
-		MissingReleases:   []apiv0.MissingReleaseResponse{{LibraryID: libraryID, Release: 1}},
+	deployDraft(t, f.api)
+	// A second Commit and Release, not deployed yet.
+	createScene(t, f.api, "Second")
+	state, err := f.api.DraftState(context.Background())
+	if err != nil {
+		t.Fatalf("draft state: %v", err)
+	}
+	if _, err := f.api.SaveCommit(context.Background(), apiv0.CreateCommitRequest{
+		Version: state.Version, Title: "Second save", Author: "Ada"}); err != nil {
+		t.Fatalf("save commit: %v", err)
+	}
+	if _, err := f.api.CreateRelease(context.Background(), apiv0.CreateProjectReleaseRequest{Commit: 2, Author: "Ada"}); err != nil {
+		t.Fatalf("release: %v", err)
 	}
 
+	f.p.openReleasesDialog(f.p.compoCtx)
+	f.run()
+	f.p.loadDeploy(f.p.compoCtx)
+	f.run()
 	html := app.HTMLString(f.p.Render())
-	if !strings.Contains(html, "data-deploy-missing-releases") || !strings.Contains(html, "Missing Library Releases") {
-		t.Errorf("the bar does not warn about the missing Library Releases: %s", html)
+	if !strings.Contains(html, `data-release-running="1"`) {
+		t.Errorf("Release 1 is not marked running: %s", html)
+	}
+	if !strings.Contains(html, `data-release-deploy="2"`) {
+		t.Errorf("Release 2 is not offered for Deploy: %s", html)
 	}
 
-	f.p.dialogPreview = f.p.deployPreview
-	f.p.deployDialog = true
+	f.p.doDeployRelease(f.p.compoCtx, 2)
+	f.run()
+	if got := f.oneToast(); !strings.Contains(got.Title, "Release 2 deployed") {
+		t.Errorf("the Deploy showed %+v, want its confirmation", got)
+	}
+	if f.p.deployment.ReleaseNumber == nil || *f.p.deployment.ReleaseNumber != 2 {
+		t.Fatalf("the running Release after the Deploy: %+v", f.p.deployment)
+	}
 	html = app.HTMLString(f.p.Render())
-	if !strings.Contains(html, "does not have") || !strings.Contains(html, libraryID.String()) {
-		t.Errorf("the Deploy dialog does not name the missing Library Release: %s", html)
+	if !strings.Contains(html, `data-release-running="2"`) || strings.Contains(html, `data-release-running="1"`) {
+		t.Errorf("the running mark did not move to Release 2: %s", html)
 	}
 }
 
-// TestDeploy_ServerRefusalIsAToast: the dialog was previewed against a changed
-// Draft, and another user deployed it before the confirmation. The server's
-// 409 must reach the user as a toast, not as a silent failure.
-func TestDeploy_ServerRefusalIsAToast(t *testing.T) {
-	url, api := newServer(t)
-	f := mount(t, url, api)
+// TestReleasesDialog_DeploymentWithoutRelease: a Deployment from a file, or one
+// made before Releases existed, is shown as "not a Release" and a Release is
+// offered (task 72_4).
+func TestReleasesDialog_DeploymentWithoutRelease(t *testing.T) {
+	f := startProject(t)
+	f.p.deployed = true
+	f.p.deploymentLoaded = true
+	f.p.deployment = apiv0.DeploymentResponse{Number: 4, DeployedAt: "2026-11-04T10:00:00Z"}
+	f.p.releases = []apiv0.ReleaseResponse{{Number: 1, Title: "First"}}
+	f.p.releasesLoaded = true
+	f.p.releasesDialog = true
 
-	f.p.openDeployDialog(f.p.compoCtx)
+	html := app.HTMLString(f.p.Render())
+	if !strings.Contains(html, "Running Deployment 4 (not a Release)") {
+		t.Errorf("the list does not say the Deployment is not a Release: %s", html)
+	}
+	if !strings.Contains(html, `data-release-deploy="1"`) {
+		t.Errorf("the list does not offer the Release for Deploy: %s", html)
+	}
+}
+
+// TestDeployRelease_ServerRefusalIsAToast: another user deploys the Release the
+// list shows as deployable. The server's 409 must reach the user as a toast.
+func TestDeployRelease_ServerRefusalIsAToast(t *testing.T) {
+	f := startProject(t)
+	deployDraft(t, f.api)
+	f.p.loadDeploy(f.p.compoCtx)
+	f.p.loadReleases(f.p.compoCtx)
 	f.run()
-	if f.p.dialogPreview.Unchanged {
-		t.Fatalf("the dialog previews an unchanged Draft: %+v", f.p.dialogPreview)
-	}
 
-	if _, err := api.Deploy(context.Background()); err != nil {
-		t.Fatalf("deploy from another user: %v", err)
-	}
-	f.p.deploy(f.p.compoCtx)
+	f.p.doDeployRelease(f.p.compoCtx, 1)
 	f.run()
 
-	if f.p.deployDialog {
-		t.Error("the dialog is still open after the server refused the Deploy")
-	}
 	if got := f.oneToast(); got.Status != http.StatusConflict || !strings.Contains(got.Detail, "Nothing to deploy") {
 		t.Errorf("the refusal is not a toast: %+v", got)
 	}

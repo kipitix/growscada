@@ -48,32 +48,28 @@ type Project struct {
 	scenes      []apiv0.SceneResponse
 	widgets     []apiv0.WidgetResponse
 	tags        tagstate.Tags
-	// deployPreview is the deployment state of the project: the Deployment it
-	// runs and whether the Draft differs from it. deployLoaded is false until
-	// the first answer, so nothing is shown before it.
-	deployPreview apiv0.DeployPreviewResponse
-	deployLoaded  bool
-	// dialogPreview is the preview the open Deploy dialog was built from: the
-	// dialog keeps it even if a reload of deployPreview lands meanwhile.
-	dialogPreview apiv0.DeployPreviewResponse
-	// deployDialog is true while the Deploy confirmation is open; deploying
-	// and discarding mark the request in flight, and neither starts while the
-	// other runs.
-	deployDialog bool
-	deploying    bool
-	discarding   bool
+	// deployment is the Deployment the project runs and deployed says whether
+	// it has one; deploymentLoaded is false until the first answer. The
+	// running Release is deployment.ReleaseNumber (task 72_4).
+	deployment       apiv0.DeploymentResponse
+	deployed         bool
+	deploymentLoaded bool
+	// deploying marks a Deploy of a Release in flight; discarding and
+	// reverting mark the Draft resets.
+	deploying  bool
+	discarding bool
+	reverting  bool
 	// deployments is the list the Deployments dialog shows, newest first,
 	// loaded when it opens and reloaded on deployment_created while it is open.
 	// selectedDeployment is the row whose document is shown (0: none) as
-	// deploymentDetail, once deploymentDetailLoaded; rollingBack marks a Rollback
-	// in flight.
+	// deploymentDetail, once deploymentDetailLoaded. The Project mode shows no
+	// Rollback: it stays in the API and History (task 72_4).
 	deployments            []apiv0.DeploymentSummaryResponse
 	deploymentsLoaded      bool
 	deploymentsDialog      bool
 	selectedDeployment     int
 	deploymentDetail       apiv0.DeploymentResponse
 	deploymentDetailLoaded bool
-	rollingBack            bool
 	// ── Project file dialog (task 39, ADR 0018) ─────────────────────────────
 	// projectFileDialog is true while the dialog is open; pendingProjectFile
 	// is the picked file waiting for confirmation, projectFileIssues the
@@ -365,11 +361,10 @@ func (p *Project) SetProject(id uuid.UUID) {
 	ctx := p.compoCtx
 	p.scenes, p.widgets, p.tags = nil, nil, tagstate.Tags{}
 	p.widgetTypes, p.pins = nil, nil
-	p.deployPreview, p.deployLoaded = apiv0.DeployPreviewResponse{}, false
-	p.dialogPreview = apiv0.DeployPreviewResponse{}
-	p.deployDialog, p.deploying, p.discarding = false, false, false
+	p.deployment, p.deployed, p.deploymentLoaded = apiv0.DeploymentResponse{}, false, false
+	p.deploying, p.discarding, p.reverting = false, false, false
 	p.deployments, p.deploymentsLoaded = nil, false
-	p.deploymentsDialog, p.selectedDeployment, p.rollingBack = false, 0, false
+	p.deploymentsDialog, p.selectedDeployment = false, 0
 	p.deploymentDetail, p.deploymentDetailLoaded = apiv0.DeploymentResponse{}, false
 	p.projectFileDialog, p.projectFileBusy = false, false
 	p.pendingProjectFile = nil

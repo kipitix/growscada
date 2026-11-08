@@ -322,7 +322,7 @@ func (p *Project) applyKeyAction(ctx app.Context, action uiutil.KeyAction) {
 // the dialog shows, and one behind the Save dialog would change the Draft the
 // Save is about to fix as a Commit.
 func (p *Project) keyActionAllowed() bool {
-	return !p.deployDialog && !p.deploymentsDialog && !p.projectFileDialog &&
+	return !p.deploymentsDialog && !p.projectFileDialog &&
 		!p.saveDialog && !p.commitsDialog && !p.releasesDialog && !p.releaseDialog
 }
 

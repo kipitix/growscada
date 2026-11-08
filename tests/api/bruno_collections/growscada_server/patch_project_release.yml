@@ -5,7 +5,7 @@ info:
 
 http:
   method: PATCH
-  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/releases/1
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/releases/6
   body:
     type: json
     data: |-
@@ -30,7 +30,7 @@ runtime:
       value: '"After the demo"'
     - expression: 'res.body.commit_number'
       operator: eq
-      value: '1'
+      value: '2'
 
 settings:
   encodeUrl: true

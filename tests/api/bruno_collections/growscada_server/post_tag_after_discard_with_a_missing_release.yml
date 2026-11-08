@@ -1,7 +1,7 @@
 info:
-  name: write to the Draft after a Discard that dropped a Release
+  name: write to the Draft after a Revert that dropped a Release
   type: http
-  seq: 208
+  seq: 2001
 
 http:
   method: POST
@@ -17,9 +17,9 @@ http:
   auth: inherit
 
 docs: |
-  The Draft is writable again right after the Discard: the next write states
-  the Version the Discard answered (task 71). This is where the old behaviour
-  left a pin the server could not hold and refused every write.
+  The Draft is writable again right after the Revert: the next write states
+  the Version the Revert answered (task 71; task 72_4). This is where the old
+  behaviour left a pin the server could not hold and refused every write.
 
 runtime:
   assertions:

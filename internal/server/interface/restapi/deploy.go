@@ -10,21 +10,21 @@ import (
 )
 
 // DeployHandlers handles the deployment of a Project: the Deployment it runs,
-// the snapshot of its Tag states, the preview and the act of Deploy, and
-// Discard (task 35, part 5). The Deployment and the Tag states are the Runtime
-// node's; Deploy and Discard are the Engineering node's.
+// the snapshot of its Tag states, Discard and Revert (task 35, part 5; task
+// 72_4). The Deployment and the Tag states are the Runtime node's; Discard and
+// Revert are the Engineering node's. A Deploy of a Release is served by the
+// Release handlers, and the old Deploy of the Draft answers 410.
 type DeployHandlers struct {
-	deploy      application.DeployService
 	discard     application.DiscardService
 	deployments runtimeapp.DeploymentService
 	states      runtimeapp.TagStateService
 }
 
-// NewDeployHandler creates the handler over the Engineering node's Deploy and
-// Discard services and the Runtime node's Deployments and Tag states.
-func NewDeployHandler(deploy application.DeployService, discard application.DiscardService,
+// NewDeployHandler creates the handler over the Engineering node's Discard and
+// Revert services and the Runtime node's Deployments and Tag states.
+func NewDeployHandler(discard application.DiscardService,
 	deployments runtimeapp.DeploymentService, states runtimeapp.TagStateService) *DeployHandlers {
-	return &DeployHandlers{deploy: deploy, discard: discard, deployments: deployments, states: states}
+	return &DeployHandlers{discard: discard, deployments: deployments, states: states}
 }
 
 // currentDeployment returns the Deployment the Project runs, answering 404 itself
@@ -81,42 +81,10 @@ func (h DeployHandlers) GetTagStates(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusOK, newGetTagStatesResponse(found))
 }
 
-// GetDeployPreview handles GET /projects/{project_id}/deploy/preview: the
-// Deployment the Project runs, whether its Draft is that Deployment unchanged, and
-// the runtime Widgets a Deploy would drop.
-func (h DeployHandlers) GetDeployPreview(w http.ResponseWriter, r *http.Request) {
-	projectID, ok := pathUUID(w, r, projectResource)
-	if !ok {
-		return
-	}
-	preview, err := h.deploy.Preview(r.Context(), projectID)
-	if err != nil {
-		sendError(w, r, err)
-		return
-	}
-	sendJSONResponse(w, http.StatusOK, newDeployPreviewResponse(preview))
-}
-
-// PostDeploy handles POST /projects/{project_id}/deploy: it makes the Draft
-// the new Deployment of the Project. 201 with the new Deployment; 409
-// nothing_to_deploy when the Draft is the Deployment the Project runs.
-func (h DeployHandlers) PostDeploy(w http.ResponseWriter, r *http.Request) {
-	projectID, ok := pathUUID(w, r, projectResource)
-	if !ok {
-		return
-	}
-	deployment, err := h.deploy.Deploy(r.Context(), projectID)
-	if err != nil {
-		sendError(w, r, err)
-		return
-	}
-	sendJSONResponse(w, http.StatusCreated, newDeployResponse(deployment))
-}
-
 // PostDiscard handles POST /projects/{project_id}/discard: it resets the Draft
-// to the Deployment the Project runs and answers the Draft's new state, with
-// the Library Releases it could not restore (task 71). 409 without a
-// Deployment.
+// to the Project's last Commit, dropping the unsaved changes, and answers the
+// Draft's new state, with the Library Releases it could not restore (task 71,
+// task 72_4). 409 nothing_to_discard without a Commit.
 func (h DeployHandlers) PostDiscard(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := pathUUID(w, r, projectResource)
 	if !ok {
@@ -128,4 +96,30 @@ func (h DeployHandlers) PostDiscard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sendJSONResponse(w, http.StatusOK, newDiscardProjectResponse(discarded))
+}
+
+// PostRevert handles POST /projects/{project_id}/revert-to-deployed: it resets
+// the Draft to the Deployment the Project runs — the Discard of before task
+// 72_4 — and answers the Draft's new state. 409 without a Deployment.
+func (h DeployHandlers) PostRevert(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := pathUUID(w, r, projectResource)
+	if !ok {
+		return
+	}
+	reverted, err := h.discard.Revert(r.Context(), projectID)
+	if err != nil {
+		sendError(w, r, err)
+		return
+	}
+	sendJSONResponse(w, http.StatusOK, newDiscardProjectResponse(reverted))
+}
+
+// deployDraftRemoved answers POST /projects/{project_id}/deploy: a Deploy took
+// the Draft before task 72_4 and takes a Release now. The route stays, answering
+// 410, so an old tab or tool learns the order instead of getting a bare 404;
+// it is removed when the API reaches 1.0.
+func deployDraftRemoved(w http.ResponseWriter, r *http.Request) {
+	sendProblem(w, NewGone(
+		"A Deploy takes a Release: Save → Release → Deploy (POST "+"/projects/{project_id}/releases/{release_number}/deploy)",
+		r.URL.Path))
 }

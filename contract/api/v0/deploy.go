@@ -7,8 +7,8 @@ import (
 )
 
 // DeploymentCause is why a Deployment exists (task 36, ADR 0014; task 39,
-// ADR 0018): a Deploy made it from the Draft, a Rollback copied an earlier
-// one, or a project file was deployed as it is.
+// ADR 0018; task 72_4): a Deploy made it from a Project Release, a Rollback
+// copied an earlier one, or a project file was deployed as it is.
 type DeploymentCause string
 
 const (
@@ -18,26 +18,31 @@ const (
 )
 
 // DeploymentResponse is the Deployment a Project runs: its number, when it was
-// deployed, why it exists and the ProjectFile it holds (task 35). GET
-// /projects/{id}/deployment answers 404 until the Project's first Deploy.
-// RolledBackFrom names the Deployment a Rollback copied and is absent for a
-// Deploy. Nothing of the Draft is part of it: Operation reads this document
+// deployed, why it exists, the Release it came from and the ProjectFile it
+// holds (task 35, task 72_4). GET /projects/{id}/deployment answers 404 until
+// the Project's first Deploy. RolledBackFrom names the Deployment a Rollback
+// copied and is absent for a Deploy. ReleaseNumber is the Project Release the
+// Deployment made (nil for a Deployment from a file, or one made before task
+// 72_4). Nothing of the Draft is part of it: Operation reads this document
 // alone.
 type DeploymentResponse struct {
 	Number         int                   `json:"number"`
 	DeployedAt     string                `json:"deployed_at"`
 	Cause          DeploymentCause       `json:"cause"`
 	RolledBackFrom *int                  `json:"rolled_back_from,omitempty"`
+	ReleaseNumber  *int                  `json:"release_number,omitempty"`
 	Content        projectv0.ProjectFile `json:"content"`
 }
 
 // DeploymentSummaryResponse names a Deployment without carrying its document: the
-// number, the time it was deployed and why it exists.
+// number, the time it was deployed, why it exists and the Release it came from
+// (task 72_4).
 type DeploymentSummaryResponse struct {
 	Number         int             `json:"number"`
 	DeployedAt     string          `json:"deployed_at"`
 	Cause          DeploymentCause `json:"cause"`
 	RolledBackFrom *int            `json:"rolled_back_from,omitempty"`
+	ReleaseNumber  *int            `json:"release_number,omitempty"`
 }
 
 // ListDeploymentsResponse is the Project's Deployments, newest first (task 36). A
@@ -46,30 +51,9 @@ type ListDeploymentsResponse struct {
 	Deployments []DeploymentSummaryResponse `json:"deployments"`
 }
 
-// DroppedWidgetResponse names a Widget of the running Deployment that a Deploy
-// would drop, because its Scene or its WidgetType is gone from the Draft
-// (task 48 fills the list; until then it is always empty).
-type DroppedWidgetResponse struct {
-	SceneID  uuid.UUID `json:"scene_id"`
-	WidgetID uuid.UUID `json:"widget_id"`
-	Name     string    `json:"name"`
-}
-
-// DeployPreviewResponse is what a Deploy of the Draft would do: the Deployment
-// the Project runs now (absent until its first Deploy), whether the Draft is
-// that Deployment unchanged, the runtime Widgets a Deploy would drop and the
-// Library Releases that Deployment names but this server does not have
-// (task 71).
-type DeployPreviewResponse struct {
-	CurrentDeployment *DeploymentSummaryResponse `json:"current_deployment,omitempty"`
-	Unchanged         bool                       `json:"unchanged"`
-	DroppedWidgets    []DroppedWidgetResponse    `json:"dropped_widgets"`
-	MissingReleases   []MissingReleaseResponse   `json:"missing_releases,omitempty"`
-}
-
 // MissingReleaseResponse names a Library Release the running Deployment uses
 // but this server does not have: the Deployment was made from a file elsewhere,
-// or the Library was removed after it. A Discard drops the Widgets of that
+// or the Library was removed after it. A Revert drops the Widgets of that
 // Release's WidgetTypes instead of restoring the pin (task 71).
 type MissingReleaseResponse struct {
 	LibraryID uuid.UUID `json:"library_id"`

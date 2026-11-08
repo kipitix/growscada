@@ -126,12 +126,18 @@ func TestLibraryService_DeleteRefusedWhileARunningDeploymentNamesIt(t *testing.T
 	// Commit or an old Deployment does not keep it. A Project Release of that
 	// Commit copies the pins but does not keep it either.
 	deployProject(t, mainProject)
-	if _, err := newCommitService().Save(ctx,
+	saved, err := newCommitService().Save(ctx,
 		draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](mainProject))),
-		draftVersionOf(t, mainProject), "With the library", "Ada"); err != nil {
+		draftVersionOf(t, mainProject), "With the library", "Ada")
+	if err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	if _, err := newReleaseService().Create(ctx, mainProject, 1, "", "Ada"); err != nil {
+	// The test needs a Project Release of this Commit; a release left by
+	// another test of the same Project names another Commit.
+	if _, err := testDB.ExecContext(ctx, "DELETE FROM engineering.project_releases WHERE project_id = $1", mainProject); err != nil {
+		t.Fatalf("clean releases: %v", err)
+	}
+	if _, err := newReleaseService().Create(ctx, mainProject, saved.Number, "", "Ada"); err != nil {
 		t.Fatalf("Create release: %v", err)
 	}
 	if _, err := r.libSvc.DeleteLibraryByID(ctx, libraryID); err != nil {

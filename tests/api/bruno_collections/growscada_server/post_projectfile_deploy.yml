@@ -16,9 +16,9 @@ http:
   auth: inherit
 
 docs: |
-  A file becomes a new Deployment without the Draft:
-  the Deployment's cause is `file`, and its document is the one sent
-  (ADR 0018). The Draft keeps its Version.
+  A file becomes a Release with origin file and a new Deployment without the
+  Draft (task 72_4): the Deployment's document is the one sent. The Draft keeps
+  its Version.
 
 runtime:
   assertions:

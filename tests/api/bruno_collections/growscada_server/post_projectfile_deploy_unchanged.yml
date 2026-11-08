@@ -1,5 +1,5 @@
 info:
-  name: deploy the project file the Deployment already is
+  name: deploy the same project file again
   type: http
   seq: 141
 
@@ -16,22 +16,19 @@ http:
   auth: inherit
 
 docs: |
-  The document is the Deployment the project runs: `409 nothing_to_deploy`, as a
-  Deploy of an unchanged Draft (ADR 0018).
+  Every file deploy publishes a Release (task 72_4), so the same document is a
+  new Deployment even though its content did not change.
 
 runtime:
   assertions:
     - expression: 'res.status'
       operator: eq
-      value: '409'
+      value: '201'
     - expression: 'res.headers["growscada-schema-version"]'
       operator: isDefined
-    - expression: 'res.headers["content-type"]'
+    - expression: 'res.body.number'
       operator: eq
-      value: application/problem+json
-    - expression: 'res.body.detail'
-      operator: contains
-      value: Nothing to deploy
+      value: '4'
 
 settings:
   encodeUrl: true

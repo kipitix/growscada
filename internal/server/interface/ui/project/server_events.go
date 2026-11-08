@@ -42,6 +42,7 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 		}
 		if targets.Deploy {
 			p.loadDeploy(ctx)
+			p.loadReleases(ctx) // the Release the Deployment came from is marked running
 			if p.deploymentsDialog {
 				p.loadDeployments(ctx)
 			}

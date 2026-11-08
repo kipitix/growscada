@@ -237,7 +237,7 @@ func TestShortcut_EmptyStack_SendsNothing(t *testing.T) {
 	}
 }
 
-// TestShortcut_DialogOpen_SendsNothing: an undo behind the Deploy confirmation
+// TestShortcut_DialogOpen_SendsNothing: an undo behind a dialog of the mode
 // would change the Draft the dialog shows.
 func TestShortcut_DialogOpen_SendsNothing(t *testing.T) {
 	url, api := newServer(t)
@@ -247,7 +247,7 @@ func TestShortcut_DialogOpen_SendsNothing(t *testing.T) {
 	f.e.TakeToasts()
 	log.take()
 
-	f.p.deployDialog = true
+	f.p.releasesDialog = true
 	f.p.applyKeyAction(f.p.compoCtx, uiutil.KeyUndo)
 	f.run()
 

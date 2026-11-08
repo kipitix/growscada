@@ -1,7 +1,7 @@
 info:
   name: delete a library a running Deployment names
   type: http
-  seq: 200
+  seq: 1991
 
 http:
   method: DELETE

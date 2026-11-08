@@ -15,9 +15,15 @@ type Repository interface {
 	// refuses a Commit that is already released (ErrCommitAlreadyReleased) and
 	// writes the copy of the content with the Library Pins of a Project's
 	// ProjectFile, in one transaction. A Project that is not live is
-	// ErrProjectNotFound. The Release's Origin is the Commit's: a Release made
-	// from a project file (task 72_4) comes through a constructor of its own.
+	// ErrProjectNotFound.
 	Create(ctx context.Context, scope draft.Scope, commit draft.Commit, note Note, author draft.Author) (Release, error)
+
+	// CreateFromFile publishes content as the next Release of scope with
+	// origin file (task 72_4): no Commit is named, the title stands in its
+	// place. It takes the same lock and number as Create, and writes the same
+	// copy and pins, in one transaction.
+	CreateFromFile(ctx context.Context, scope draft.Scope, title draft.CommitTitle, note Note,
+		author draft.Author, content draft.CommitContent) (Release, error)
 
 	// List returns the Releases of scope, newest first, without their content
 	// in the DTO (the content is read for the counts).

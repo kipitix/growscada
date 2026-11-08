@@ -64,9 +64,7 @@ func TestProjectFiles_DownloadDraftAndDeployment(t *testing.T) {
 		t.Errorf("the draft file: project %s, schema %s", file.ProjectID, file.SchemaVersion)
 	}
 
-	if rec := serve(router, http.MethodPost, mainPath+"/deploy", nil); rec.Code != http.StatusCreated {
-		t.Fatalf("POST deploy: %d %s", rec.Code, rec.Body)
-	}
+	deployDraftThroughServices(t, services)
 	rec = serve(router, http.MethodGet, mainPath+"/deployments/1/projectfile", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET deployment 1 projectfile: %d %s", rec.Code, rec.Body)
@@ -179,12 +177,12 @@ func TestProjectFiles_OpenRefusals(t *testing.T) {
 	}
 }
 
-// TestProjectFiles_DeployFromFileAndDiscard: a file is a Deployment of its own
-// with cause file, the Draft is untouched, and a Discard of a Deployment that
-// names a Library Release this server does not have drops that pin with the
-// Widgets of its WidgetTypes and names it in warnings, so the Draft stays
-// writable (ADR 0018, task 71).
-func TestProjectFiles_DeployFromFileAndDiscard(t *testing.T) {
+// TestProjectFiles_DeployFromFileAndRevert: a file is published as a Release
+// with origin file and deployed, the Draft is untouched, and a Revert of a
+// Deployment that names a Library Release this server does not have drops that
+// pin with the Widgets of its WidgetTypes and names it in warnings, so the
+// Draft stays writable (ADR 0018, task 71; task 72_4).
+func TestProjectFiles_DeployFromFileAndRevert(t *testing.T) {
 	cleanProjectsRest(t)
 	services := newServices()
 	router := services.router()
@@ -229,32 +227,29 @@ func TestProjectFiles_DeployFromFileAndDiscard(t *testing.T) {
 
 	rec = serve(router, http.MethodGet, mainPath+"/deployments", nil)
 	list := decodeBody[apiv0.ListDeploymentsResponse](t, rec)
-	if len(list.Deployments) != 1 || list.Deployments[0].Cause != apiv0.DeploymentCauseFile || list.Deployments[0].RolledBackFrom != nil {
+	if len(list.Deployments) != 1 || list.Deployments[0].Cause != apiv0.DeploymentCauseDeploy ||
+		list.Deployments[0].ReleaseNumber == nil || *list.Deployments[0].ReleaseNumber != 1 {
 		t.Errorf("the history after a file deploy: %+v", list.Deployments)
 	}
-
-	// The same document is the running Deployment already.
-	if rec := serve(router, http.MethodPost, mainPath+"/projectfile/deploy", file); rec.Code != http.StatusConflict {
-		t.Fatalf("deploying the running file: %d %s", rec.Code, rec.Body)
+	rec = serve(router, http.MethodGet, mainPath+"/releases", nil)
+	releases := decodeBody[apiv0.GetReleasesResponse](t, rec)
+	if len(releases.Releases) != 1 || releases.Releases[0].Origin != apiv0.ReleaseOriginFile || releases.Releases[0].Title != "File" {
+		t.Errorf("the releases after a file deploy: %+v", releases.Releases)
 	}
 
-	rec = serve(router, http.MethodGet, mainPath+"/deploy/preview", nil)
-	preview := decodeBody[apiv0.DeployPreviewResponse](t, rec)
-	if len(preview.MissingReleases) != 1 || preview.MissingReleases[0].LibraryID != foreignLibrary || preview.MissingReleases[0].Release != 1 {
-		t.Errorf("the preview's missing releases: %+v", preview.MissingReleases)
-	}
-
-	rec = serve(router, http.MethodPost, mainPath+"/discard", nil)
+	// A Revert restores what runs as far as this server can: the foreign pin
+	// goes with the Widgets of its WidgetType, and the answer names it.
+	rec = serve(router, http.MethodPost, mainPath+"/revert-to-deployed", nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("discarding a foreign deployment: %d %s", rec.Code, rec.Body)
+		t.Fatalf("reverting a foreign deployment: %d %s", rec.Code, rec.Body)
 	}
 	discarded := decodeBody[apiv0.DiscardProjectResponse](t, rec)
 	if len(discarded.Warnings) != 1 || discarded.Warnings[0].LibraryID != foreignLibrary ||
 		discarded.Warnings[0].Release != 1 || discarded.Warnings[0].DroppedWidgets != 1 {
-		t.Errorf("the discard's warnings: %+v", discarded.Warnings)
+		t.Errorf("the revert's warnings: %+v", discarded.Warnings)
 	}
 	if discarded.Version != before+1 {
-		t.Errorf("the Draft after the Discard is at version %d, want %d", discarded.Version, before+1)
+		t.Errorf("the Draft after the Revert is at version %d, want %d", discarded.Version, before+1)
 	}
 
 	rec = serve(router, http.MethodGet, mainPath+"/library-pins", nil)

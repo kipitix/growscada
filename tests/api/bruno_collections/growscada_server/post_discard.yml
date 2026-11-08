@@ -1,5 +1,5 @@
 info:
-  name: post discard
+  name: post discard to the last commit
   type: http
   seq: 73
 
@@ -9,9 +9,11 @@ http:
   auth: inherit
 
 docs: |
-  Resets the whole Draft to the Deployment the project runs, in one transaction
-  (ADR 0016): the answer is `200` with the Draft's new `version`. A project
-  that was never deployed answers `409`.
+  Discard resets the whole Draft to its last Commit — the unsaved changes go —
+  in one transaction (task 72_4; ADR 0016): the answer is `200` with the
+  Draft's new `version`. A project with no Commit answers `409`
+  `nothing_to_discard`; its Revert-to-deployed restores the running
+  Deployment.
 
 runtime:
   assertions:
@@ -21,8 +23,8 @@ runtime:
     - expression: 'res.headers["growscada-schema-version"]'
       operator: isDefined
     - expression: 'res.body.version'
-      operator: eq
-      value: '4'
+      operator: gt
+      value: '0'
 
 settings:
   encodeUrl: true

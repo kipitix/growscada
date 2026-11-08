@@ -14,10 +14,11 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
-// The Project mode's deployment state (task 35, part 5): the Deployment the
-// project runs, whether the Draft differs from it, and the Deploy and Discard
-// actions. The state comes from the Deploy preview, which is the same document
-// comparison a Deploy does; the Deployment itself is Operation's.
+// The Project mode's deployment state (task 35, part 5; task 72_4): the
+// Deployment the project runs and the Release it came from, the Deployments
+// history, Discard to the last Commit and Revert to the running Deployment. A
+// Deploy takes a Release, so the header's Deploy button opens the Release list
+// (releases.go); the Deployment itself is Operation's.
 
 // loadDeployments (re)loads the Deployments the dialog lists, newest first.
 func (p *Project) loadDeployments(ctx app.Context) {
@@ -43,7 +44,7 @@ func (p *Project) openDeploymentsDialog(ctx app.Context) {
 	ctx.Update()
 }
 
-// closeDeploymentsDialog closes the list without rolling anything back.
+// closeDeploymentsDialog closes the list.
 func (p *Project) closeDeploymentsDialog() {
 	p.deploymentsDialog = false
 	p.clearDeploymentSelection()
@@ -75,135 +76,42 @@ func (p *Project) selectDeployment(ctx app.Context, number int) {
 }
 
 // isCurrentDeployment reports whether number is the Deployment the project runs.
-// It is the newest of the list the dialog shows: the list is where the row is
-// read from, so the mark and the offer to roll back agree even before the
-// Deploy preview has answered.
+// The Deployment state is the truth; the list is the fallback while it has not
+// answered, so the mark agrees with the history.
 func (p *Project) isCurrentDeployment(number int) bool {
+	if p.deployed {
+		return p.deployment.Number == number
+	}
 	return len(p.deployments) > 0 && p.deployments[0].Number == number
 }
 
-// rollbackDeployment confirms rolling the project back to the selected Deployment
-// and does it. The current Deployment's own document has nothing to roll back to
-// and is refused before the request, as the dialog does not offer it.
-func (p *Project) rollbackDeployment(ctx app.Context) {
-	if p.content == nil || p.rollingBack || p.deploying || p.discarding {
-		return
-	}
-	number := p.selectedDeployment
-	if number == 0 || p.isCurrentDeployment(number) {
-		return
-	}
-	message := fmt.Sprintf("Roll the project back to deployment %d? Its configuration becomes a new deployment.", number)
-	if !app.Window().Call("confirm", message).Bool() {
-		return
-	}
-	p.doRollback(ctx, number)
-}
-
-// doRollback rolls the project back to the Deployment number: a new Deployment
-// with the same document. Success closes the dialog and reloads the preview and
-// the list; the server's refusal (nothing to roll back, the Draft being
-// discarded, a Deployment gone) is a toast and leaves the dialog open.
-func (p *Project) doRollback(ctx app.Context, number int) {
-	if p.content == nil || p.rollingBack {
-		return
-	}
-	if p.waitMoves(ctx, func(ctx app.Context) { p.doRollback(ctx, number) }) {
-		return
-	}
-	p.rollingBack = true
-	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DeploymentSummaryResponse, error) {
-		return pc.RollbackDeployment(c, number)
-	}, func(ctx app.Context, _ apiv0.DeploymentSummaryResponse) {
-		p.rollingBack = false
-		p.closeDeploymentsDialog()
-		p.loadDeploy(ctx)
-		p.loadDeployments(ctx)
-		ctx.Update()
-	}, func(ctx app.Context, err error) {
-		p.rollingBack = false
-		uiutil.ShowError(ctx, err)
-		ctx.Update()
-	})
-}
-
-// loadDeploy (re)loads the deployment state of the project.
+// loadDeploy (re)loads the Deployment the project runs: the Release it came
+// from is what the Release list marks as running.
 func (p *Project) loadDeploy(ctx app.Context) {
 	if p.content == nil {
-		p.deployPreview, p.deployLoaded = apiv0.DeployPreviewResponse{}, false
+		p.deployment, p.deployed, p.deploymentLoaded = apiv0.DeploymentResponse{}, false, false
 		return
 	}
 	uiutil.LoadOfProject(p.compoCtx, &p.deployReloader, p.projectContent,
-		func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DeployPreviewResponse, error) {
-			return pc.DeployPreview(c)
+		func(c context.Context, pc *apiclient.ProjectClient) (apiclient.DeploymentState, error) {
+			return pc.Deployment(c)
 		},
-		func(ctx app.Context, preview apiv0.DeployPreviewResponse) {
-			p.deployPreview, p.deployLoaded = preview, true
+		func(ctx app.Context, state apiclient.DeploymentState) {
+			p.deployment, p.deployed, p.deploymentLoaded = state.Deployment, state.Deployed, true
 		}, p.loadDeploy)
 }
 
-// openDeployDialog reads the preview afresh and opens the confirmation with
-// it: what the Deploy would do, not what was last seen. The dialog keeps that
-// preview (dialogPreview), so a reload of the bar that lands meanwhile does
-// not rewrite it.
-func (p *Project) openDeployDialog(ctx app.Context) {
-	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DeployPreviewResponse, error) {
-		return pc.DeployPreview(c)
-	}, func(ctx app.Context, preview apiv0.DeployPreviewResponse) {
-		p.dialogPreview = preview
-		p.deployDialog = true
-		ctx.Update()
-	}, nil)
-}
-
-// closeDeployDialog closes the confirmation without deploying.
-func (p *Project) closeDeployDialog() {
-	p.deployDialog = false
-}
-
-// deploy confirms the open dialog: it makes the Draft the new Deployment. The
-// server's refusal (nothing to deploy, the Draft being discarded) is a toast.
-func (p *Project) deploy(ctx app.Context) {
-	if p.content == nil || p.deploying || p.discarding || p.rollingBack {
-		return
-	}
-	if p.waitMoves(ctx, func(ctx app.Context) { p.deploy(ctx) }) {
-		return
-	}
-	p.deploying = true
-	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DeployResponse, error) {
-		return pc.Deploy(c)
-	}, func(ctx app.Context, _ apiv0.DeployResponse) {
-		p.deploying = false
-		p.deployDialog = false
-		p.loadDeploy(ctx)
-		p.loadDraftChanges(ctx) // a Deploy clears the stack (ADR 0017)
-		if p.deploymentsDialog {
-			p.loadDeployments(ctx)
-		}
-		ctx.Update()
-	}, func(ctx app.Context, err error) {
-		// The dialog goes: its preview is what failed (the Draft may have
-		// been deployed meanwhile), and the reloaded bar shows the truth.
-		p.deploying = false
-		p.deployDialog = false
-		uiutil.ShowError(ctx, err)
-		p.loadDeploy(ctx)
-		ctx.Update()
-	})
-}
-
-// discard resets the Draft to the Deployment the project runs, after the
-// browser's confirmation. Without a Deployment the server refuses (409), which
-// is the toast.
+// discard resets the Draft to the last Commit, dropping the unsaved changes,
+// after the browser's confirmation. Without a Commit the server refuses (409),
+// which is the toast.
 func (p *Project) discard(ctx app.Context) {
-	if p.content == nil || p.discarding || p.deploying || p.rollingBack {
+	if p.content == nil || p.discarding || p.deploying || p.reverting {
 		return
 	}
 	if p.waitMoves(ctx, func(ctx app.Context) { p.discard(ctx) }) {
 		return
 	}
-	message := "Discard the Draft of this project and restore it to the Deployment it runs?"
+	message := "Discard the unsaved changes of this project and restore the Draft from its last Commit?"
 	if !app.Window().Call("confirm", message).Bool() {
 		return
 	}
@@ -214,39 +122,77 @@ func (p *Project) discard(ctx app.Context) {
 	}, func(ctx app.Context, discarded apiv0.DiscardProjectResponse) {
 		p.discarding = false
 		p.observeDraftVersion(mark, discarded.Version)
-		p.loadDeploy(ctx)
 		p.loadDraftChanges(ctx) // a Discard clears the stack (ADR 0017)
-		if len(discarded.Warnings) > 0 {
-			// The Discard restored the Deployment as far as this server can: the
-			// Library Releases it lacks went with the widgets of their types
-			// (task 71).
-			parts := make([]string, len(discarded.Warnings))
-			for i, warning := range discarded.Warnings {
-				parts[i] = fmt.Sprintf("library %s release %d: %d widgets dropped",
-					warning.LibraryID, warning.Release, warning.DroppedWidgets)
-			}
-			ctx.NewActionWithValue(toast.ActionAdd, toast.Problem{Problem: apiv0.Problem{
-				Title:  "Discarded without some Library Releases",
-				Detail: strings.Join(parts, "; "),
-			}})
-		}
+		p.showDiscardWarnings(ctx, discarded)
 		ctx.Update()
 	}, func(ctx app.Context, err error) {
 		p.discarding = false
+		uiutil.ShowError(ctx, err)
+		p.loadDraftChanges(ctx)
+		ctx.Update()
+	})
+}
+
+// revert resets the Draft to the Deployment the project runs, after the
+// browser's confirmation. Without a Deployment the server refuses (409), which
+// is the toast.
+func (p *Project) revert(ctx app.Context) {
+	if p.content == nil || p.reverting || p.deploying || p.discarding {
+		return
+	}
+	if p.waitMoves(ctx, func(ctx app.Context) { p.revert(ctx) }) {
+		return
+	}
+	message := "Reset the Draft to the Deployment the project runs?"
+	if !app.Window().Call("confirm", message).Bool() {
+		return
+	}
+	p.reverting = true
+	mark := p.markDraft()
+	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DiscardProjectResponse, error) {
+		return pc.RevertToDeployed(c)
+	}, func(ctx app.Context, reverted apiv0.DiscardProjectResponse) {
+		p.reverting = false
+		p.observeDraftVersion(mark, reverted.Version)
+		p.loadDraftChanges(ctx)
+		p.showDiscardWarnings(ctx, reverted)
+		ctx.Update()
+	}, func(ctx app.Context, err error) {
+		p.reverting = false
 		uiutil.ShowError(ctx, err)
 		ctx.Update()
 	})
 }
 
-// renderDeployBar is the project's header: the Deployment it runs (or "Not
-// deployed"), whether the Draft has changes not deployed, and the Deploy and
-// Discard buttons.
+// showDiscardWarnings tells what a Discard or Revert could not restore: the
+// Library Releases this server does not have went with the widgets of their
+// types (task 71).
+func (p *Project) showDiscardWarnings(ctx app.Context, answer apiv0.DiscardProjectResponse) {
+	if len(answer.Warnings) == 0 {
+		return
+	}
+	parts := make([]string, len(answer.Warnings))
+	for i, warning := range answer.Warnings {
+		parts[i] = fmt.Sprintf("library %s release %d: %d widgets dropped",
+			warning.LibraryID, warning.Release, warning.DroppedWidgets)
+	}
+	ctx.NewActionWithValue(toast.ActionAdd, toast.Problem{Problem: apiv0.Problem{
+		Title:  "Restored without some Library Releases",
+		Detail: strings.Join(parts, "; "),
+	}})
+}
+
+// renderDeployBar is the project's header: the Deployment it runs and its
+// Release, and the Deploy, Discard, Revert, Deployments and project file
+// actions.
 func (p *Project) renderDeployBar() app.UI {
 	badge := "Not deployed"
-	if p.deployPreview.CurrentDeployment != nil {
+	if p.deployed {
 		badge = fmt.Sprintf("Deployment %d · deployed %s",
-			p.deployPreview.CurrentDeployment.Number,
-			formatDeployedAt(p.deployPreview.CurrentDeployment.DeployedAt))
+			p.deployment.Number, formatDeployedAt(p.deployment.DeployedAt))
+		if p.deployment.ReleaseNumber != nil {
+			badge += fmt.Sprintf(" · Release %d", *p.deployment.ReleaseNumber)
+		}
 	}
 
 	body := p.renderCommitBar()
@@ -260,43 +206,30 @@ func (p *Project) renderDeployBar() app.UI {
 			Style("color", "var(--text-2)").
 			Text(badge),
 	)
-	if p.deployLoaded && p.deployPreview.CurrentDeployment != nil && !p.deployPreview.Unchanged {
-		body = append(body, app.Span().
-			Attr("data-deploy-differs", "true").
-			Style("font-size", "12px").
-			Style("color", "var(--toast-warn-title)").
-			Text("Unreleased changes"))
-	}
-	if p.deployLoaded && len(p.deployPreview.MissingReleases) > 0 {
-		body = append(body, app.Span().
-			Attr("data-deploy-missing-releases", "true").
-			Title("The running Deployment names Library Releases this server does not have; a Discard drops their widgets").
-			Style("font-size", "12px").
-			Style("color", "var(--toast-warn-title)").
-			Text("Missing Library Releases"))
-	}
 	body = append(body,
 		app.Div().Style("flex", "1"),
 		p.deployButton("Project file…", "Download the Draft, open a file, or deploy one",
-			!p.deploying && !p.discarding && !p.rollingBack && !p.projectFileBusy, func(ctx app.Context) {
+			!p.deploying && !p.discarding && !p.reverting && !p.projectFileBusy, func(ctx app.Context) {
 				p.openProjectFileDialog(ctx)
 			}),
-		p.deployButton("Deployments", "The Deployments of the project", !p.deploying && !p.discarding && !p.rollingBack, func(ctx app.Context) {
-			p.openDeploymentsDialog(ctx)
-		}),
-		p.deployButton("Deploy", "Deploy the Draft as a new Deployment",
-			!p.deploying && !p.discarding && !p.rollingBack, func(ctx app.Context) {
-				p.openDeployDialog(ctx)
+		p.deployButton("Deployments", "The Deployments of the project",
+			!p.deploying && !p.discarding && !p.reverting, func(ctx app.Context) {
+				p.openDeploymentsDialog(ctx)
 			}),
-		p.deployButton("Discard", "Reset the Draft to the Deployment the project runs",
-			!p.discarding && !p.deploying && !p.rollingBack, func(ctx app.Context) {
+		p.deployButton("Deploy", "Choose a Release to deploy",
+			!p.deploying && !p.discarding && !p.reverting, func(ctx app.Context) {
+				p.openReleasesDialog(ctx)
+			}),
+		p.deployButton("Discard", "Reset the Draft to its last Commit",
+			!p.discarding && !p.deploying && !p.reverting, func(ctx app.Context) {
 				p.discard(ctx)
+			}),
+		p.deployButton("Revert", "Reset the Draft to the Deployment the project runs",
+			!p.reverting && !p.deploying && !p.discarding, func(ctx app.Context) {
+				p.revert(ctx)
 			}),
 	)
 
-	if p.deployDialog {
-		body = append(body, p.renderDeployDialog())
-	}
 	if p.deploymentsDialog {
 		body = append(body, p.renderDeploymentsDialog())
 	}
@@ -343,105 +276,9 @@ func (p *Project) deployButton(label, title string, enabled bool, onClick func(a
 		OnClick(func(ctx app.Context, e app.Event) { onClick(ctx) }, app.EventScope(label))
 }
 
-// renderDeployDialog is the confirmation over the deploy bar: what the Deploy
-// would make, and a warning for what it would drop.
-func (p *Project) renderDeployDialog() app.UI {
-	preview := p.dialogPreview
-
-	lines := []app.UI{}
-	if preview.CurrentDeployment != nil {
-		lines = append(lines, app.P().
-			Style("margin", "0 0 6px").
-			Text(fmt.Sprintf("Current deployment: %d, deployed %s.",
-				preview.CurrentDeployment.Number, formatDeployedAt(preview.CurrentDeployment.DeployedAt))))
-	} else {
-		lines = append(lines, app.P().
-			Style("margin", "0 0 6px").
-			Text("The project has not been deployed yet."))
-	}
-	if preview.Unchanged {
-		lines = append(lines, app.P().
-			Style("margin", "0 0 6px").
-			Text("Nothing to deploy: the Draft is the deployment it runs."))
-	} else {
-		lines = append(lines, app.P().
-			Style("margin", "0 0 6px").
-			Text("The whole Draft becomes a new Deployment and Operation switches to it."))
-	}
-	if len(preview.DroppedWidgets) == 0 {
-		lines = append(lines, app.P().
-			Style("margin", "0 0 6px").
-			Style("color", "var(--text-muted)").
-			Text("No runtime widgets would be dropped."))
-	} else {
-		for _, dropped := range preview.DroppedWidgets {
-			lines = append(lines, app.P().
-				Style("margin", "0 0 6px").
-				Style("color", "var(--toast-warn-title)").
-				Text("Dropped widget: "+dropped.Name))
-		}
-	}
-	for _, missing := range preview.MissingReleases {
-		lines = append(lines, app.P().
-			Style("margin", "0 0 6px").
-			Style("color", "var(--toast-warn-title)").
-			Text(fmt.Sprintf("The running Deployment names Library Release %d of library %s, which this server does not have: a Discard drops its widgets.",
-				missing.Release, missing.LibraryID)))
-	}
-
-	buttons := []app.UI{
-		app.Button().
-			Style("padding", "4px 12px").
-			Style("font-size", "13px").
-			Style("cursor", "pointer").
-			Text("Cancel").
-			OnClick(func(ctx app.Context, e app.Event) {
-				p.closeDeployDialog()
-				ctx.Update()
-			}),
-	}
-	if !preview.Unchanged {
-		buttons = append(buttons, app.Button().
-			Attr("data-deploy-confirm", "true").
-			Disabled(p.deploying || p.rollingBack).
-			Style("padding", "4px 12px").
-			Style("font-size", "13px").
-			Style("cursor", "pointer").
-			Style("background", "var(--accent)").
-			Style("color", "var(--accent-text)").
-			Text("Deploy").
-			OnClick(func(ctx app.Context, e app.Event) {
-				p.deploy(ctx)
-			}))
-	}
-
-	return app.Div().
-		Attr("data-deploy-dialog", "true").
-		Style("position", "absolute").
-		Style("top", "48px").
-		Style("right", "16px").
-		Style("z-index", "20").
-		Style("width", "420px").
-		Style("padding", "14px").
-		Style("border", "1px solid var(--border)").
-		Style("border-radius", "6px").
-		Style("background", "var(--bg)").
-		Style("box-shadow", "var(--toast-shadow)").
-		Style("font-size", "13px").
-		Body(
-			app.H3().Style("margin", "0 0 8px").Text("Deploy the project"),
-			app.Div().Body(lines...),
-			app.Div().
-				Style("display", "flex").
-				Style("justify-content", "flex-end").
-				Style("gap", "8px").
-				Body(buttons...),
-		)
-}
-
 // renderDeploymentsDialog is the list of the project's Deployments with the
-// summary of the selected one: newest first, what caused each, and the running
-// one marked, whose rollback is not offered (task 36, ADR 0014).
+// summary of the selected one: newest first, what caused each, the Release it
+// came from and the running one marked (task 36, ADR 0014; task 72_4).
 func (p *Project) renderDeploymentsDialog() app.UI {
 	rows := []app.UI{}
 	switch {
@@ -461,32 +298,6 @@ func (p *Project) renderDeploymentsDialog() app.UI {
 	}
 	if p.selectedDeployment != 0 {
 		rows = append(rows, p.renderDeploymentSummary())
-	}
-
-	buttons := []app.UI{
-		app.Button().
-			Style("padding", "4px 12px").
-			Style("font-size", "13px").
-			Style("cursor", "pointer").
-			Text("Close").
-			OnClick(func(ctx app.Context, e app.Event) {
-				p.closeDeploymentsDialog()
-				ctx.Update()
-			}),
-	}
-	if p.selectedDeployment != 0 && !p.isCurrentDeployment(p.selectedDeployment) {
-		buttons = append(buttons, app.Button().
-			Attr("data-deployment-rollback", "true").
-			Disabled(p.rollingBack || p.deploying || p.discarding).
-			Style("padding", "4px 12px").
-			Style("font-size", "13px").
-			Style("cursor", "pointer").
-			Style("background", "var(--accent)").
-			Style("color", "var(--accent-text)").
-			Text("Roll back").
-			OnClick(func(ctx app.Context, e app.Event) {
-				p.rollbackDeployment(ctx)
-			}))
 	}
 
 	return app.Div().
@@ -510,16 +321,31 @@ func (p *Project) renderDeploymentsDialog() app.UI {
 				Style("justify-content", "flex-end").
 				Style("gap", "8px").
 				Style("margin-top", "10px").
-				Body(buttons...),
+				Body(app.Button().
+					Style("padding", "4px 12px").
+					Style("font-size", "13px").
+					Style("cursor", "pointer").
+					Text("Close").
+					OnClick(func(ctx app.Context, e app.Event) {
+						p.closeDeploymentsDialog()
+						ctx.Update()
+					})),
 		)
 }
 
 // renderDeploymentRow is one Deployment of the list: its number, when it was
-// deployed and why; the running one is marked.
+// deployed, why and from which Release; the running one is marked.
 func (p *Project) renderDeploymentRow(deployment apiv0.DeploymentSummaryResponse) app.UI {
 	body := []app.UI{
 		app.Span().Text(fmt.Sprintf("#%d · %s · %s",
 			deployment.Number, formatDeployedAt(deployment.DeployedAt), deploymentCauseText(deployment.Cause, deployment.RolledBackFrom))),
+	}
+	if deployment.ReleaseNumber != nil {
+		body = append(body, app.Span().
+			Style("margin-left", "8px").
+			Style("font-size", "11px").
+			Style("color", "var(--text-muted)").
+			Text(fmt.Sprintf("Release %d", *deployment.ReleaseNumber)))
 	}
 	if p.isCurrentDeployment(deployment.Number) {
 		body = append(body, app.Span().

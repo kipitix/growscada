@@ -19,7 +19,9 @@ import (
 // newReleaseService returns the service of Project Releases over the test
 // database.
 func newReleaseService() application.ReleaseService {
-	return application.NewReleaseService(contentOver(newScopes()), repositories.NewProjectReleaseRepositoryPostgres(testDB))
+	return application.NewReleaseService(contentOver(newScopes()), repositories.NewProjectReleaseRepositoryPostgres(testDB),
+		newRuntimeNode(), repositories.NewLibraryRepositoryPostgres(testDB),
+		repositories.NewLibraryReleaseRepositoryPostgres(testDB))
 }
 
 // TestReleaseService_CreateListFindNoteAndFile: a Commit is published once,

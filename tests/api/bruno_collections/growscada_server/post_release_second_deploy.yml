@@ -1,0 +1,42 @@
+info:
+  name: release the second commit
+  type: http
+  seq: 61
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/releases
+  body:
+    type: json
+    data: |-
+      {
+        "commit": {{OTHER_COMMIT_NUMBER}},
+        "author": "Ada"
+      }
+  auth: inherit
+
+docs: |
+  Commit 2 becomes Release 2: the Release a second Deploy makes running
+  (task 72_4).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '2'
+
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("OTHER_RELEASE_NUMBER", res.body.number)
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

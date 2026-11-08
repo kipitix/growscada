@@ -1,0 +1,43 @@
+info:
+  name: save the cleanup draft without the pin
+  type: http
+  seq: 1994
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/commits
+  body:
+    type: json
+    data: |-
+      {
+        "version": {{CLEANUP_DRAFT_VERSION}},
+        "title": "Without the pin",
+        "author": "Ada"
+      }
+  auth: inherit
+
+docs: |
+  The Draft of the cleanup project after the unpin becomes Commit 2: a
+  Deployment of the past keeps no library (task 71).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '2'
+
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("CLEANUP_COMMIT_NUMBER", res.body.number)
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

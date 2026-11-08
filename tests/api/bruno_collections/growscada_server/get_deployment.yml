@@ -1,7 +1,7 @@
 info:
   name: get deployment
   type: http
-  seq: 42
+  seq: 44
 
 http:
   method: GET

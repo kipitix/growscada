@@ -22,10 +22,10 @@ runtime:
       operator: isDefined
     - expression: 'res.body.releases[0].number'
       operator: eq
-      value: '1'
+      value: '6'
     - expression: 'res.body.releases[0].commit_number'
       operator: eq
-      value: '1'
+      value: '2'
 
 settings:
   encodeUrl: true

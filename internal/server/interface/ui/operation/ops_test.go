@@ -20,6 +20,51 @@ import (
 
 var postgres servertest.Postgres
 
+// cleanMain removes the runtime state and the history of Main: the Operation
+// tests start from a Project without a Deployment or a Scene.
+func cleanMain(t *testing.T) {
+	t.Helper()
+	main := "'" + servertest.MainProject.String() + "'"
+	if _, err := postgres.DB(t).ExecContext(context.Background(),
+		`DELETE FROM runtime.journal WHERE project_id = `+main+`;
+		 DELETE FROM runtime.deployments WHERE project_id = `+main+`;
+		 DELETE FROM runtime.tag_states;
+		 DELETE FROM runtime.tags WHERE project_id = `+main+`;
+		 DELETE FROM engineering.tags WHERE project_id = `+main+`;
+		 DELETE FROM engineering.scenes WHERE project_id = `+main+`;
+		 DELETE FROM engineering.project_releases WHERE project_id = `+main+`;
+		 DELETE FROM engineering.commits WHERE draft_id IN (SELECT id FROM engineering.drafts WHERE project_id = `+main+`);
+		 DELETE FROM engineering.draft_changes WHERE draft_id IN (SELECT id FROM engineering.drafts WHERE project_id = `+main+`);
+		 UPDATE engineering.drafts SET last_commit_number = 0, last_commit_draft_version = 0, stack_position = 0
+		 WHERE project_id = `+main); err != nil {
+		t.Fatalf("clean Main: %v", err)
+	}
+}
+
+// deployDraft saves the Draft as a Commit, publishes it and deploys the
+// Release: a Deploy takes a Release since task 72_4.
+func deployDraft(t *testing.T, project *apiclient.ProjectClient) apiv0.DeployResponse {
+	t.Helper()
+	ctx := context.Background()
+	state, err := project.DraftState(ctx)
+	if err != nil {
+		t.Fatalf("draft state: %v", err)
+	}
+	commit, err := project.SaveCommit(ctx, apiv0.CreateCommitRequest{Version: state.Version, Title: "Save", Author: "Ada"})
+	if err != nil {
+		t.Fatalf("save commit: %v", err)
+	}
+	released, err := project.CreateRelease(ctx, apiv0.CreateProjectReleaseRequest{Commit: commit.Number, Author: "Ada"})
+	if err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	deployed, err := project.DeployRelease(ctx, released.Number)
+	if err != nil {
+		t.Fatalf("deploy release: %v", err)
+	}
+	return deployed
+}
+
 func TestMain(m *testing.M) {
 	code := m.Run()
 	postgres.Close()
@@ -137,6 +182,7 @@ func (f *fixture) pump(project *apiclient.ProjectClient) {
 // entry — no reload of /deployment or /tag-states, the values then follow
 // tag_state entries.
 func TestOperation_FirstDeployArrivesFromTheJournal(t *testing.T) {
+	cleanMain(t)
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
 	api := apiclient.New(srv.URL, srv.Client())
 	project := api.Project(servertest.MainProject)
@@ -161,9 +207,7 @@ func TestOperation_FirstDeployArrivesFromTheJournal(t *testing.T) {
 		t.Errorf("Operation does not show the empty state: %s", html)
 	}
 
-	if _, err := project.Deploy(ctx); err != nil {
-		t.Fatalf("deploy: %v", err)
-	}
+	deployDraft(t, project)
 	f.pump(project)
 	view := f.o.player.View()
 	if !view.Deployed() || len(view.Scenes) != 1 || view.Scenes[0].ID != scene.ID {
@@ -202,6 +246,7 @@ func TestOperation_FirstDeployArrivesFromTheJournal(t *testing.T) {
 // alone is invisible; a Deploy makes a new Deployment entry, which swaps the
 // configuration, and a Rollback does the same with a new number.
 func TestOperation_SecondDeployAndRollbackSwitchTheConfiguration(t *testing.T) {
+	cleanMain(t)
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
 	api := apiclient.New(srv.URL, srv.Client())
 	project := api.Project(servertest.MainProject)
@@ -210,9 +255,7 @@ func TestOperation_SecondDeployAndRollbackSwitchTheConfiguration(t *testing.T) {
 	if _, err := project.CreateScene(ctx, apiv0.CreateSceneRequest{Name: "First", Width: 800, Height: 600}); err != nil {
 		t.Fatalf("create scene: %v", err)
 	}
-	if _, err := project.Deploy(ctx); err != nil {
-		t.Fatalf("deploy: %v", err)
-	}
+	deployDraft(t, project)
 
 	f := mount(t, srv.URL, srv.Client())
 	if view := f.o.player.View(); len(view.Scenes) != 1 || view.Scenes[0].Name != "First" {
@@ -227,9 +270,7 @@ func TestOperation_SecondDeployAndRollbackSwitchTheConfiguration(t *testing.T) {
 		t.Fatalf("a Draft Scene reached Operation: %+v", view.Scenes)
 	}
 
-	if _, err := project.Deploy(ctx); err != nil {
-		t.Fatalf("second deploy: %v", err)
-	}
+	deployDraft(t, project)
 	f.pump(project)
 	view := f.o.player.View()
 	if len(view.Scenes) != 2 || view.Deployment.Number != 2 {

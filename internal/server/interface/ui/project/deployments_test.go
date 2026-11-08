@@ -11,19 +11,13 @@ import (
 )
 
 // deployTwice deploys the Draft of Main with one Scene (Deployment 1), adds a
-// second Scene and deploys again (Deployment 2): the history a Rollback can go
-// back through.
+// second Scene and deploys again (Deployment 2): the history the list shows.
 func deployTwice(t *testing.T, api *testAPI) {
 	t.Helper()
-	ctx := context.Background()
 	createScene(t, api, "First")
-	if _, err := api.Deploy(ctx); err != nil {
-		t.Fatalf("deploy 1: %v", err)
-	}
+	deployDraft(t, api)
 	createScene(t, api, "Second")
-	if _, err := api.Deploy(ctx); err != nil {
-		t.Fatalf("deploy 2: %v", err)
-	}
+	deployDraft(t, api)
 }
 
 // TestDeploymentsDialog_EmptyBeforeTheFirstDeploy: the button is always there,
@@ -45,8 +39,9 @@ func TestDeploymentsDialog_EmptyBeforeTheFirstDeploy(t *testing.T) {
 }
 
 // TestDeploymentsDialog_ListsTheDeploymentsAndMarksTheRunningOne: the list is
-// newest first, the running Deployment is marked, and its rollback is not
-// offered; another one shows its document as counts.
+// newest first, the running Deployment is marked, and it shows the Release the
+// Deployment came from and its document as counts. Rollback is not offered by
+// the Project mode (task 72_4).
 func TestDeploymentsDialog_ListsTheDeploymentsAndMarksTheRunningOne(t *testing.T) {
 	url, api := newServer(t)
 	deployTwice(t, api)
@@ -56,7 +51,7 @@ func TestDeploymentsDialog_ListsTheDeploymentsAndMarksTheRunningOne(t *testing.T
 	f.run()
 	f.noToasts()
 	html := app.HTMLString(f.p.Render())
-	for _, want := range []string{`data-deployment-row="1"`, `data-deployment-row="2"`, "Deployed", `data-deployment-current`} {
+	for _, want := range []string{`data-deployment-row="1"`, `data-deployment-row="2"`, "Deployed", `data-deployment-current`, "Release 2"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("the list does not show %s: %s", want, html)
 		}
@@ -71,76 +66,8 @@ func TestDeploymentsDialog_ListsTheDeploymentsAndMarksTheRunningOne(t *testing.T
 	if !strings.Contains(html, "1 scenes, 0 widgets") {
 		t.Errorf("the summary does not count the document: %s", html)
 	}
-	if !strings.Contains(html, `data-deployment-rollback`) {
-		t.Errorf("the dialog does not offer the Rollback: %s", html)
-	}
-
-	f.p.selectDeployment(f.p.compoCtx, 2)
-	f.run()
-	html = app.HTMLString(f.p.Render())
 	if strings.Contains(html, `data-deployment-rollback`) {
-		t.Errorf("the dialog offers to roll back the running Deployment: %s", html)
-	}
-}
-
-// TestRollback_AppendsADeploymentAndUpdatesTheBadge: a Rollback makes a new
-// Deployment with the old document, and the bar and the list say so.
-func TestRollback_AppendsADeploymentAndUpdatesTheBadge(t *testing.T) {
-	url, api := newServer(t)
-	deployTwice(t, api)
-	f := mount(t, url, api)
-
-	f.p.openDeploymentsDialog(f.p.compoCtx)
-	f.run()
-	f.p.selectDeployment(f.p.compoCtx, 1)
-	f.run()
-	f.p.doRollback(f.p.compoCtx, 1)
-	f.run()
-	f.noToasts()
-
-	if f.p.deploymentsDialog {
-		t.Error("the Deployments dialog is still open after the Rollback")
-	}
-	if f.p.deployPreview.CurrentDeployment == nil || f.p.deployPreview.CurrentDeployment.Number != 3 {
-		t.Fatalf("the bar's Deployment after the Rollback: %+v", f.p.deployPreview.CurrentDeployment)
-	}
-	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, "Deployment 3") {
-		t.Errorf("the bar does not show Deployment 3: %s", html)
-	}
-
-	f.p.openDeploymentsDialog(f.p.compoCtx)
-	f.run()
-	f.p.selectDeployment(f.p.compoCtx, 3)
-	f.run()
-	html := app.HTMLString(f.p.Render())
-	if !strings.Contains(html, "Rolled back from #1") {
-		t.Errorf("the list does not name what the Rollback copied: %s", html)
-	}
-	if !strings.Contains(html, `data-deployment-row="3"`) || !strings.Contains(html, `data-deployment-current`) {
-		t.Errorf("the new Deployment is not the running one in the list: %s", html)
-	}
-}
-
-// TestRollback_ServerRefusalIsAToast: another user rolled the project back
-// (or it was already refused) — the server's 409 must reach the user, and the
-// dialog stay open.
-func TestRollback_ServerRefusalIsAToast(t *testing.T) {
-	url, api := newServer(t)
-	deployTwice(t, api)
-	f := mount(t, url, api)
-
-	f.p.openDeploymentsDialog(f.p.compoCtx)
-	f.run()
-	// The running Deployment's own document: the current one changed between the
-	// dialog's list and the click.
-	f.p.doRollback(f.p.compoCtx, 2)
-	f.run()
-
-	if !f.p.deploymentsDialog {
-		t.Error("the dialog closed on the server's refusal")
-	}
-	if got := f.oneToast(); got.Status == 0 || !strings.Contains(got.Detail, "Nothing to rollback") {
-		t.Errorf("the refusal is not a toast: %+v", got)
+		t.Errorf("the Project mode offers a Rollback: %s", html)
 	}
 }
 
@@ -148,17 +75,14 @@ func TestRollback_ServerRefusalIsAToast(t *testing.T) {
 // the dialog is open shows up in it.
 func TestDeploymentsDialog_ReloadsOnDeploymentCreated(t *testing.T) {
 	url, api := newServer(t)
-	if _, err := api.Deploy(context.Background()); err != nil {
-		t.Fatalf("deploy: %v", err)
-	}
+	createScene(t, api, "First")
+	deployDraft(t, api)
 	f := mount(t, url, api)
 	f.p.openDeploymentsDialog(f.p.compoCtx)
 	f.run()
 
 	createScene(t, api, "After the Deploy")
-	if _, err := api.Deploy(context.Background()); err != nil {
-		t.Fatalf("deploy 2: %v", err)
-	}
+	deployDraft(t, api)
 	f.event(apiv0.Event{Type: apiv0.EventDeploymentCreated})
 	f.noToasts()
 
@@ -167,17 +91,38 @@ func TestDeploymentsDialog_ReloadsOnDeploymentCreated(t *testing.T) {
 	}
 }
 
-// TestDeploy_IsRefusedWhileARollbackRuns: the bar disables Deploy during a
-// Rollback, and the handler refuses it too, so the two writes of the running
-// configuration never race.
-func TestDeploy_IsRefusedWhileARollbackRuns(t *testing.T) {
+// TestDeploymentCreatedEventReloadsTheReleaseList: a Deploy in another tab
+// moves the running mark without a reload of the page (task 72_4).
+func TestDeploymentCreatedEventReloadsTheReleaseList(t *testing.T) {
 	url, api := newServer(t)
-	deployTwice(t, api)
+	createScene(t, api, "First")
+	deployDraft(t, api)
+	createScene(t, api, "Second")
+	state, err := api.DraftState(context.Background())
+	if err != nil {
+		t.Fatalf("draft state: %v", err)
+	}
+	if _, err := api.SaveCommit(context.Background(), apiv0.CreateCommitRequest{Version: state.Version, Title: "Second", Author: "Ada"}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if _, err := api.CreateRelease(context.Background(), apiv0.CreateProjectReleaseRequest{Commit: 2, Author: "Ada"}); err != nil {
+		t.Fatalf("release: %v", err)
+	}
 	f := mount(t, url, api)
+	f.p.releasesDialog = true
+	f.p.loadReleases(f.p.compoCtx)
+	f.p.loadDeploy(f.p.compoCtx)
+	f.run()
 
-	f.p.rollingBack = true
-	f.p.deploy(f.p.compoCtx)
-	if f.p.deploying {
-		t.Error("a Deploy started while a Rollback was running")
+	if _, err := api.DeployRelease(context.Background(), 2); err != nil {
+		t.Fatalf("deploy release: %v", err)
+	}
+	f.event(apiv0.Event{Type: apiv0.EventDeploymentCreated})
+	f.run()
+	f.noToasts()
+
+	html := app.HTMLString(f.p.Render())
+	if !strings.Contains(html, `data-release-running="2"`) {
+		t.Errorf("the release list did not follow the Deployment: %s", html)
 	}
 }

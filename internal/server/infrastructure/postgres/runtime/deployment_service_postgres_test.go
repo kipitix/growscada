@@ -54,7 +54,7 @@ func TestDeploymentService_Deploy_KeepsTheTagStatesOfTheRunningDeployment(t *tes
 	running := definition(t, projectID, "running", tag.TagTypeBoolean)
 
 	first := documentOf(projectID, withTags(documentTag(speed)))
-	rev1, err := service.Deploy(ctx, projectID.UUID(), first)
+	rev1, err := service.DeployRelease(ctx, projectID.UUID(), 1, first)
 	if err != nil {
 		t.Fatalf("Deploy 1: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestDeploymentService_Deploy_KeepsTheTagStatesOfTheRunningDeployment(t *tes
 	}
 
 	second := documentOf(projectID, withTags(documentTag(speed), documentTag(running)))
-	rev2, err := service.Deploy(ctx, projectID.UUID(), second)
+	rev2, err := service.DeployRelease(ctx, projectID.UUID(), 2, second)
 	if err != nil {
 		t.Fatalf("Deploy 2: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestDeploymentService_Deploy_KeepsTheTagStatesOfTheRunningDeployment(t *tes
 	retyped := speed
 	retyped.Type = tag.TagTypeString
 	third := documentOf(projectID, withTags(documentTag(retyped)))
-	if _, err := service.Deploy(ctx, projectID.UUID(), third); err != nil {
+	if _, err := service.DeployRelease(ctx, projectID.UUID(), 3, third); err != nil {
 		t.Fatalf("Deploy 3: %v", err)
 	}
 	if reset := mustFind(t, states, projectID, speed.TagID); reset.Value().String() != "" || reset.Quality() != tag.TagQualityBad {
@@ -124,7 +124,7 @@ func TestDeploymentService_Deploy_KeepsTheTagStatesOfTheRunningDeployment(t *tes
 	}
 
 	fourth := documentOf(projectID, withTags(documentTag(retyped), documentTag(late)))
-	if _, err := service.Deploy(ctx, projectID.UUID(), fourth); err != nil {
+	if _, err := service.DeployRelease(ctx, projectID.UUID(), 4, fourth); err != nil {
 		t.Fatalf("Deploy 4: %v", err)
 	}
 	fresh := mustFind(t, states, projectID, late.TagID)

@@ -33,11 +33,63 @@ func (p *Project) loadReleases(ctx app.Context) {
 		}, p.loadReleases)
 }
 
-// openReleasesDialog shows the Releases, read afresh.
+// openReleasesDialog shows the Releases, read afresh: the list is where a
+// Release is made the running Deployment (task 72_4).
 func (p *Project) openReleasesDialog(ctx app.Context) {
 	p.releasesDialog = true
 	p.loadReleases(ctx)
+	p.loadDeploy(ctx)
 	ctx.Update()
+}
+
+// isRunningRelease reports whether the Release number is the one the running
+// Deployment came from. A Deployment from a file, or one made before Releases
+// existed, matches no Release (task 72_4).
+func (p *Project) isRunningRelease(number int) bool {
+	return p.deployed && p.deployment.ReleaseNumber != nil && *p.deployment.ReleaseNumber == number
+}
+
+// deployRelease makes Release number the running Deployment, after the
+// browser's confirmation. Success reloads the Release list and the Deployment;
+// the server's refusal (nothing to deploy, a Release gone) is a toast.
+func (p *Project) deployRelease(ctx app.Context, number int) {
+	if p.content == nil || p.deploying || p.discarding || p.reverting {
+		return
+	}
+	message := fmt.Sprintf("Make Release %d the running one? Operation switches to it.", number)
+	if !app.Window().Call("confirm", message).Bool() {
+		return
+	}
+	p.doDeployRelease(ctx, number)
+}
+
+// doDeployRelease performs the Deploy the confirmation asked for.
+func (p *Project) doDeployRelease(ctx app.Context, number int) {
+	if p.content == nil || p.deploying || p.discarding || p.reverting {
+		return
+	}
+	p.deploying = true
+	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DeployResponse, error) {
+		return pc.DeployRelease(c, number)
+	}, func(ctx app.Context, deployed apiv0.DeployResponse) {
+		p.deploying = false
+		ctx.NewActionWithValue(toast.ActionAdd, toast.Problem{Problem: apiv0.Problem{
+			Title:  fmt.Sprintf("Release %d deployed", number),
+			Detail: fmt.Sprintf("Deployment %d is running", deployed.Number),
+		}})
+		p.loadReleases(ctx)
+		p.loadDeploy(ctx)
+		if p.deploymentsDialog {
+			p.loadDeployments(ctx)
+		}
+		ctx.Update()
+	}, func(ctx app.Context, err error) {
+		p.deploying = false
+		uiutil.ShowError(ctx, err)
+		p.loadReleases(ctx)
+		p.loadDeploy(ctx)
+		ctx.Update()
+	})
 }
 
 // openReleaseDialog opens the publication of a Commit: a note and the author.
@@ -200,6 +252,14 @@ func (p *Project) renderReleaseDialog() app.UI {
 // download of the copied ProjectFile.
 func (p *Project) renderReleasesDialog() app.UI {
 	rows := []app.UI{}
+	if p.deployed && p.deployment.ReleaseNumber == nil {
+		rows = append(rows, app.P().
+			Attr("data-release-running-deployment", "true").
+			Style("margin", "0 0 6px").
+			Style("color", "var(--toast-warn-title)").
+			Text(fmt.Sprintf("Running Deployment %d (not a Release): choose a Release to deploy.",
+				p.deployment.Number)))
+	}
 	switch {
 	case !p.releasesLoaded:
 		rows = append(rows, app.P().Style("margin", "0 0 6px").Style("color", "var(--text-muted)").
@@ -317,10 +377,40 @@ func (p *Project) renderReleaseRow(released apiv0.ReleaseResponse) app.UI {
 					Text(released.Note),
 			),
 			app.Span().Style("display", "flex").Style("gap", "4px").Body(
+				p.releaseDeployControl(released.Number),
 				p.downloadReleaseButton(released.Number),
 				note,
 			),
 		)
+}
+
+// releaseDeployControl marks the running Release and offers every other one
+// for Deploy (task 72_4).
+func (p *Project) releaseDeployControl(number int) app.UI {
+	if p.isRunningRelease(number) {
+		return app.Span().
+			Attr("data-release-running", fmt.Sprint(number)).
+			Style("padding", "1px 7px").
+			Style("font-size", "11px").
+			Style("font-weight", "600").
+			Style("color", "var(--accent)").
+			Text("Running")
+	}
+	return app.Button().
+		Attr("data-release-deploy", fmt.Sprint(number)).
+		Title("Make this Release the running Deployment").
+		Disabled(p.deploying || p.discarding || p.reverting).
+		Style("padding", "1px 7px").
+		Style("font-size", "11px").
+		Style("cursor", "pointer").
+		Style("border", "1px solid var(--border-input)").
+		Style("border-radius", "4px").
+		Style("background", "var(--accent)").
+		Style("color", "var(--accent-text)").
+		Text("Deploy").
+		OnClick(func(ctx app.Context, e app.Event) {
+			p.deployRelease(ctx, number)
+		})
 }
 
 // releaseCommitButton offers a Commit's publication as a Release. A Commit

@@ -888,6 +888,10 @@ func (l *LibraryClient) RenameCommit(ctx context.Context, number int, req apiv0.
 type DeploymentState struct {
 	Deployment apiv0.DeploymentResponse
 	Deployed   bool
+	// ReleaseNumber is the Project Release the running Deployment made; nil
+	// for a Deployment from a file or one made before Releases existed
+	// (task 72_4).
+	ReleaseNumber *int
 }
 
 // Deployment returns the Deployment the project runs. Deployed is false when the
@@ -899,7 +903,7 @@ func (p *ProjectClient) Deployment(ctx context.Context) (DeploymentState, error)
 	if errors.Is(err, ErrNotFound) {
 		return DeploymentState{}, nil
 	}
-	return DeploymentState{Deployment: resp, Deployed: err == nil}, err
+	return DeploymentState{Deployment: resp, Deployed: err == nil, ReleaseNumber: resp.ReleaseNumber}, err
 }
 
 // TagStates returns the states of the Tags of the running Deployment, by Tag ID:
@@ -935,27 +939,30 @@ func (p *ProjectClient) Journal(ctx context.Context, from int64, limit int) ([]r
 	return resp.Entries, err
 }
 
-// DeployPreview reports what a Deploy of the Draft would do.
-func (p *ProjectClient) DeployPreview(ctx context.Context) (apiv0.DeployPreviewResponse, error) {
-	var resp apiv0.DeployPreviewResponse
-	err := p.do(ctx, http.MethodGet, "/deploy/preview", nil, http.StatusOK, &resp)
-	return resp, err
-}
-
-// Deploy makes the Draft the Project's new Deployment. The error matches
-// ErrConflict if the Draft is the Deployment the Project runs unchanged.
-func (p *ProjectClient) Deploy(ctx context.Context) (apiv0.DeployResponse, error) {
+// DeployRelease makes Release number the Project's running Deployment (task
+// 72_4). The error matches ErrConflict if that Release runs already and
+// ErrNotFound for a Release the Project does not have.
+func (p *ProjectClient) DeployRelease(ctx context.Context, number int) (apiv0.DeployResponse, error) {
 	var resp apiv0.DeployResponse
-	err := p.do(ctx, http.MethodPost, "/deploy", nil, http.StatusCreated, &resp)
+	err := p.do(ctx, http.MethodPost, apiv0.ReleaseDeployPathOf(number), nil, http.StatusCreated, &resp)
 	return resp, err
 }
 
-// Discard starts resetting the Draft to the Deployment the Project runs and
-// returns its answer at once. The error matches ErrConflict if the Project
-// runs no Deployment or a Discard is already under way.
+// Discard resets the Draft to the Project's last Commit, dropping the unsaved
+// changes, and returns its answer at once (task 72_4). The error matches
+// ErrConflict if the Project has no Commit.
 func (p *ProjectClient) Discard(ctx context.Context) (apiv0.DiscardProjectResponse, error) {
 	var resp apiv0.DiscardProjectResponse
 	err := p.do(ctx, http.MethodPost, "/discard", nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+// RevertToDeployed resets the Draft to the Deployment the Project runs and
+// returns its answer (task 72_4). The error matches ErrConflict if the Project
+// runs no Deployment.
+func (p *ProjectClient) RevertToDeployed(ctx context.Context) (apiv0.DiscardProjectResponse, error) {
+	var resp apiv0.DiscardProjectResponse
+	err := p.do(ctx, http.MethodPost, apiv0.RevertToDeployedPath, nil, http.StatusOK, &resp)
 	return resp, err
 }
 

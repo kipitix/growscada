@@ -16,6 +16,15 @@ func ReleasePathOf(number int) string { return ReleasePath + "/" + strconv.Itoa(
 // copied.
 func ReleaseProjectFilePathOf(number int) string { return ReleasePathOf(number) + "/projectfile" }
 
+// ReleaseDeployPathOf is the path of the command that makes Release number the
+// Project's running Deployment (task 72_4).
+func ReleaseDeployPathOf(number int) string { return ReleasePathOf(number) + "/deploy" }
+
+// RevertToDeployedPath, under a Project's path, resets the Draft to the
+// Deployment the Project runs (task 72_4). Discard resets it to the last
+// Commit instead.
+const RevertToDeployedPath = "/revert-to-deployed"
+
 // The origins of a Release: a Commit, or a project file (task 72_4).
 const (
 	ReleaseOriginCommit = "commit"

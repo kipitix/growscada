@@ -1,0 +1,43 @@
+info:
+  name: save the cleanup draft as a commit
+  type: http
+  seq: 1982
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/commits
+  body:
+    type: json
+    data: |-
+      {
+        "version": {{CLEANUP_DRAFT_VERSION}},
+        "title": "With the pin",
+        "author": "Ada"
+      }
+  auth: inherit
+
+docs: |
+  The Draft of the cleanup project, with the Library Pin, becomes Commit 1
+  (task 72_4).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '1'
+
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("CLEANUP_COMMIT_NUMBER", res.body.number)
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

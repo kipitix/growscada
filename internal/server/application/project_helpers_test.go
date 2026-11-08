@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -178,20 +179,24 @@ func newRuntime() (runtimeapp.TagStateService, application.RuntimeNode) {
 	return states, inprocess.NewRuntimeNode(states, tokens, deployments)
 }
 
-// deployProject deploys the Draft of the project through the Engineering
-// node's DeployService, as the server does (task 35, part 4): a test that
-// writes a Tag value deploys first, or the Tag has no state to write.
+// deployProject publishes the Draft of the project as a Release and deploys it,
+// as the server does since task 72_4: a test that writes a Tag value deploys
+// first, or the Tag has no state to write.
 func deployProject(t *testing.T, projectID uuid.UUID) {
 	t.Helper()
 	content := contentOver(newScopes())
-	service := application.NewDeployService(
-		content,
-		application.NewProjectFileBuilder(content),
-		newRuntimeNode(),
-		repositories.NewLibraryRepositoryPostgres(testDB),
-		repositories.NewLibraryReleaseRepositoryPostgres(testDB),
-	)
-	if _, err := service.Deploy(context.Background(), projectID); err != nil && !errors.Is(err, application.ErrNothingToDeploy) {
+	file, err := application.NewProjectFileBuilder(content).Build(context.Background(), projectID)
+	if err != nil {
+		t.Fatalf("build project %s: %v", projectID, err)
+	}
+	document, err := json.Marshal(file)
+	if err != nil {
+		t.Fatalf("encode project %s: %v", projectID, err)
+	}
+	service := application.NewReleaseService(content, repositories.NewProjectReleaseRepositoryPostgres(testDB),
+		newRuntimeNode(), repositories.NewLibraryRepositoryPostgres(testDB),
+		repositories.NewLibraryReleaseRepositoryPostgres(testDB))
+	if _, _, err := service.CreateFromFile(context.Background(), projectID, document, "test", "Deploy"); err != nil {
 		t.Fatalf("deploy project %s: %v", projectID, err)
 	}
 }

@@ -1,0 +1,46 @@
+info:
+  name: release the commit before the deploy
+  type: http
+  seq: 42
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/releases
+  body:
+    type: json
+    data: |-
+      {
+        "commit": {{OTHER_COMMIT_NUMBER}},
+        "note": "Deployed",
+        "author": "Ada"
+      }
+  auth: inherit
+
+docs: |
+  Commit 1 is published as the project's Release 1: an immutable copy of the
+  Draft (task 72_3; ADR 0021).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '1'
+    - expression: 'res.body.origin'
+      operator: eq
+      value: '"commit"'
+
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("OTHER_RELEASE_NUMBER", res.body.number)
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

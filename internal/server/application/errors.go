@@ -34,14 +34,20 @@ func invalidInput(err error) error {
 // edit conflict there is nothing for the caller to reload, only to retry later.
 var ErrRaceLost = errors.New("write race lost on every attempt")
 
-// ErrNothingToDeploy matches (errors.Is) a Deploy refused because the Draft is
-// the Deployment the Project runs unchanged (task 35, Q9), as
+// ErrNothingToDeploy matches (errors.Is) a Deploy refused because the Release
+// it names is the Deployment the Project runs already (task 72_4), or because
+// a project file is the running Deployment's (ADR 0018), as
 // library.ErrNothingToRelease refuses an unchanged Release.
 var ErrNothingToDeploy = errors.New("nothing to deploy")
 
-// ErrNoDeploymentToDiscard matches (errors.Is) a Discard refused because the
-// Project has no Deployment to reset its Draft to (task 35, Q10).
-var ErrNoDeploymentToDiscard = errors.New("nothing to discard: the project runs no deployment")
+// ErrNothingToDiscard matches (errors.Is) a Discard refused because the
+// Project has no Commit to reset its Draft to (task 72_4).
+var ErrNothingToDiscard = errors.New("nothing to discard: the project has no commit")
+
+// ErrNoDeploymentToDiscard matches (errors.Is) a Revert refused because the
+// Project has no Deployment to reset its Draft to (task 72_4; a Discard falls
+// back to the last Commit).
+var ErrNoDeploymentToDiscard = errors.New("nothing to revert: the project runs no deployment")
 
 // ErrInvalidProjectFile matches (errors.Is) a project file that does not
 // validate: its problems are the FileIssues of a ProjectFileError (task 39,

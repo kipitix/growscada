@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -10,21 +11,74 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
+	"github.com/kipitix/growscada/internal/server/domain/draft"
+	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/project"
+	"github.com/kipitix/growscada/internal/server/domain/release"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
 
-// newDeployService returns the Engineering node's DeployService over the test
-// database, as the server wires it, and the RuntimeNode behind it.
-func newDeployService() (application.DeployService, application.RuntimeNode) {
-	node := newRuntimeNode()
-	content := contentOver(newScopes())
-	return application.NewDeployService(
-		content,
-		application.NewProjectFileBuilder(content),
-		node,
-		repositories.NewLibraryRepositoryPostgres(testDB),
-		repositories.NewLibraryReleaseRepositoryPostgres(testDB),
-	), node
+// mustSaveCommit fixes the Draft of the project as a Commit at the Version it
+// shows, as Save does. A Draft unchanged since its last Commit has nothing to
+// save: that Commit is the one the test means.
+func mustSaveCommit(t *testing.T, projectID uuid.UUID, title string) appdto.Commit {
+	t.Helper()
+	ctx := context.Background()
+	scope := draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](projectID)))
+	saved, err := newCommitService().Save(ctx, scope, draftVersionOf(t, projectID), title, "Ada")
+	if errors.Is(err, draft.ErrNothingToSave) {
+		list, listErr := newCommitService().List(ctx, scope)
+		if listErr != nil || len(list) == 0 {
+			t.Fatalf("no commit to reuse: %v", listErr)
+		}
+		return list[0]
+	}
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	return saved
+}
+
+// mustRelease publishes Commit number, or returns the Release that already
+// published it.
+func mustRelease(t *testing.T, projectID uuid.UUID, commitNumber int) appdto.Release {
+	t.Helper()
+	ctx := context.Background()
+	created, err := newReleaseService().Create(ctx, projectID, commitNumber, "", "Ada")
+	if err == nil {
+		return created
+	}
+	list, listErr := newReleaseService().List(ctx, projectID)
+	if listErr != nil {
+		t.Fatalf("Create release: %v", err)
+	}
+	for _, existing := range list {
+		if existing.CommitNumber == commitNumber {
+			return existing
+		}
+	}
+	t.Fatalf("Create release: %v", err)
+	return appdto.Release{}
+}
+
+// mustReleaseAndDeploy publishes Commit commitNumber and makes it the running
+// Deployment: the two steps a Deploy takes since task 72_4.
+func mustReleaseAndDeploy(t *testing.T, projectID uuid.UUID, commitNumber int) appdto.Deployment {
+	t.Helper()
+	ctx := context.Background()
+	released := mustRelease(t, projectID, commitNumber)
+	deployment, err := newReleaseService().Deploy(ctx, projectID, released.Number, "Ada")
+	if err != nil {
+		t.Fatalf("Deploy release %d: %v", released.Number, err)
+	}
+	return deployment
+}
+
+// mustDeployTheDraft saves the Draft as a Commit and deploys its Release.
+func mustDeployTheDraft(t *testing.T, projectID uuid.UUID) appdto.Deployment {
+	t.Helper()
+	saved := mustSaveCommit(t, projectID, "Deploy")
+	return mustReleaseAndDeploy(t, projectID, saved.Number)
 }
 
 // newDiscardService returns the Engineering node's DiscardService over the
@@ -34,8 +88,7 @@ func newDiscardService() application.DiscardService {
 		repositories.NewLibraryRepositoryPostgres(testDB), repositories.NewLibraryReleaseRepositoryPostgres(testDB))
 }
 
-// runDiscard discards the project through the service and runs the policy, as
-// the dispatcher and the runner would.
+// runDiscard discards the project through the service.
 func runDiscard(t *testing.T, projectID uuid.UUID) {
 	t.Helper()
 	ctx := context.Background()
@@ -64,27 +117,34 @@ func mustCreateTag(t *testing.T, name, tagType string) appdto.Tag {
 	return created
 }
 
-// --- Deploy ---
+// --- Deploy Release ---
 
-func TestDeploy_CreatesADeployment(t *testing.T) {
+func TestDeployRelease_CreatesADeployment(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	ctx := context.Background()
 	created := mustCreateTag(t, "speed", "integer")
+	saved := mustSaveCommit(t, mainProject, "First save")
+	released, err := newReleaseService().Create(ctx, mainProject, saved.Number, "", "Ada")
+	if err != nil {
+		t.Fatalf("Create release: %v", err)
+	}
 
-	deploy, node := newDeployService()
-	deployment, err := deploy.Deploy(ctx, mainProject)
+	deployment, err := newReleaseService().Deploy(ctx, mainProject, released.Number, "Ada")
 	if err != nil {
 		t.Fatalf("Deploy: %v", err)
 	}
-	if deployment.Number != 1 || deployment.DeployedAt.IsZero() {
-		t.Errorf("deployment %+v, want number 1 and a time", deployment)
+	if deployment.Number < 1 || deployment.DeployedAt.IsZero() {
+		t.Errorf("deployment %+v, want a number and a time", deployment)
 	}
 	if deployment.Cause != "deploy" || deployment.RolledBackFrom != nil {
 		t.Errorf("the cause of the Deployment is %q from %v, want a deploy", deployment.Cause, deployment.RolledBackFrom)
 	}
-	current, ok, err := node.FindCurrentDeployment(ctx, mainProject)
-	if err != nil || !ok || current.Number != 1 {
+	if deployment.ReleaseNumber == nil || *deployment.ReleaseNumber != released.Number {
+		t.Errorf("the deployment names release %v, want %d", deployment.ReleaseNumber, released.Number)
+	}
+	current, ok, err := newRuntimeNode().FindCurrentDeployment(ctx, mainProject)
+	if err != nil || !ok || current.Number != deployment.Number {
 		t.Fatalf("FindCurrentDeployment: %+v, %v, %v", current, ok, err)
 	}
 	if len(current.Content.Tags) != 1 || current.Content.Tags[0].ID != created.ID {
@@ -95,55 +155,33 @@ func TestDeploy_CreatesADeployment(t *testing.T) {
 	}
 }
 
-// TestDeploy_ClearsTheDraftChangeStack: after a successful Deploy the Draft's
-// stack is empty and at its start (ADR 0017).
-func TestDeploy_ClearsTheDraftChangeStack(t *testing.T) {
+func TestDeployRelease_Repeated_IsRefused(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	ctx := context.Background()
 	mustCreateTag(t, "speed", "integer")
-	mustCreateTag(t, "pressure", "integer")
-
-	stackOf := func() (changes, position int) {
-		t.Helper()
-		if err := testDB.QueryRowContext(ctx,
-			`SELECT (SELECT count(*) FROM engineering.draft_changes dc
-			        JOIN engineering.drafts d ON d.id = dc.draft_id WHERE d.project_id = $1),
-			        (SELECT stack_position FROM engineering.drafts WHERE project_id = $1)`,
-			mainProject).Scan(&changes, &position); err != nil {
-			t.Fatalf("read the stack: %v", err)
-		}
-		return changes, position
+	saved := mustSaveCommit(t, mainProject, "First save")
+	released, err := newReleaseService().Create(ctx, mainProject, saved.Number, "", "Ada")
+	if err != nil {
+		t.Fatalf("Create release: %v", err)
 	}
-	if changes, position := stackOf(); changes == 0 || position == 0 {
-		t.Fatalf("the Draft before the Deploy: %d changes at %d, want two writes", changes, position)
-	}
-
-	deploy, _ := newDeployService()
-	if _, err := deploy.Deploy(ctx, mainProject); err != nil {
+	if _, err := newReleaseService().Deploy(ctx, mainProject, released.Number, "Ada"); err != nil {
 		t.Fatalf("Deploy: %v", err)
 	}
-	if changes, position := stackOf(); changes != 0 || position != 0 {
-		t.Errorf("the Draft after the Deploy: %d changes at %d, want a cleared stack", changes, position)
+	if _, err := newReleaseService().Deploy(ctx, mainProject, released.Number, "Ada"); !errors.Is(err, application.ErrNothingToDeploy) {
+		t.Errorf("a second Deploy of the same Release: %v, want ErrNothingToDeploy", err)
 	}
 }
 
-func TestDeploy_UnchangedDraft_IsRefused(t *testing.T) {
+func TestDeployRelease_Missing_IsNotFound(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
-	ctx := context.Background()
-	mustCreateTag(t, "speed", "integer")
-
-	deploy, _ := newDeployService()
-	if _, err := deploy.Deploy(ctx, mainProject); err != nil {
-		t.Fatalf("Deploy: %v", err)
-	}
-	if _, err := deploy.Deploy(ctx, mainProject); !errors.Is(err, application.ErrNothingToDeploy) {
-		t.Errorf("a second Deploy of the same Draft: %v, want ErrNothingToDeploy", err)
+	if _, err := newReleaseService().Deploy(context.Background(), mainProject, 9, "Ada"); !errors.Is(err, release.ErrReleaseNotFound) {
+		t.Errorf("Deploy of a missing release: %v, want ErrReleaseNotFound", err)
 	}
 }
 
-func TestDeploy_AChangedWidget_IsANewDeployment(t *testing.T) {
+func TestDeployRelease_AChangedCommit_IsANewDeployment(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	ctx := context.Background()
@@ -153,14 +191,9 @@ func TestDeploy_AChangedWidget_IsANewDeployment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateWidget: %v", err)
 	}
-
-	deploy, _ := newDeployService()
-	if _, err := deploy.Deploy(ctx, mainProject); err != nil {
-		t.Fatalf("Deploy: %v", err)
-	}
-	preview, err := deploy.Preview(ctx, mainProject)
-	if err != nil || preview.CurrentDeployment == nil || !preview.Unchanged {
-		t.Fatalf("Preview after the Deploy: %+v, %v, want deployment 1 unchanged", preview, err)
+	first := mustDeployTheDraft(t, mainProject)
+	if first.ReleaseNumber == nil {
+		t.Fatalf("the first deployment: %+v, want its release", first)
 	}
 
 	changed := testCreateWidgetInput
@@ -168,62 +201,66 @@ func TestDeploy_AChangedWidget_IsANewDeployment(t *testing.T) {
 	if _, err := scenes.UpdateWidget(ctx, mainProject, scene.ID, widget.ID, widget.Version, changed); err != nil {
 		t.Fatalf("UpdateWidget: %v", err)
 	}
-	preview, err = deploy.Preview(ctx, mainProject)
-	if err != nil || preview.Unchanged {
-		t.Fatalf("Preview after the change: %+v, %v, want a difference", preview, err)
-	}
-
-	deployment, err := deploy.Deploy(ctx, mainProject)
-	if err != nil {
-		t.Fatalf("the second Deploy: %v", err)
-	}
-	if deployment.Number != 2 {
-		t.Errorf("the second deployment: %d, want 2", deployment.Number)
+	second := mustDeployTheDraft(t, mainProject)
+	if second.Number != first.Number+1 || second.ReleaseNumber == nil || *second.ReleaseNumber <= *first.ReleaseNumber {
+		t.Errorf("the second deployment: %+v, want the next Deployment of a later Release", second)
 	}
 }
 
-func TestDeployPreview_ReportsTheCurrentDeploymentAndTheDraft(t *testing.T) {
+// TestCreateReleaseFromFile_DeploysTheFile: a file deployment publishes the
+// document as a Release with origin file and makes it the running Deployment
+// (task 72_4).
+func TestCreateReleaseFromFile_DeploysTheFile(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	ctx := context.Background()
 	mustCreateTag(t, "speed", "integer")
-
-	deploy, _ := newDeployService()
-	preview, err := deploy.Preview(ctx, mainProject)
+	content := contentOver(newScopes())
+	file, err := application.NewProjectFileBuilder(content).Build(ctx, mainProject)
 	if err != nil {
-		t.Fatalf("Preview: %v", err)
+		t.Fatalf("Build: %v", err)
 	}
-	if preview.CurrentDeployment != nil || preview.Unchanged || len(preview.DroppedWidgets) != 0 {
-		t.Errorf("the preview before a Deploy: %+v, want no Deployment, changed, nothing dropped", preview)
-	}
-
-	if _, err := deploy.Deploy(ctx, mainProject); err != nil {
-		t.Fatalf("Deploy: %v", err)
-	}
-	preview, err = deploy.Preview(ctx, mainProject)
+	document, err := json.Marshal(file)
 	if err != nil {
-		t.Fatalf("Preview: %v", err)
+		t.Fatalf("encode: %v", err)
 	}
-	if preview.CurrentDeployment == nil || preview.CurrentDeployment.Number != 1 || !preview.Unchanged {
-		t.Errorf("the preview after the Deploy: %+v, want deployment 1 unchanged", preview)
+	released, deployment, err := newReleaseService().CreateFromFile(ctx, mainProject, document, "", "")
+	if err != nil {
+		t.Fatalf("CreateFromFile: %v", err)
+	}
+	if released.Origin != "file" || released.CommitNumber != 0 || released.Title != "File" || released.Author != "file" {
+		t.Errorf("the release of the file: %+v", released)
+	}
+	if deployment.Number < 1 || deployment.ReleaseNumber == nil || *deployment.ReleaseNumber != released.Number {
+		t.Errorf("the deployment of the file: %+v, want a Deployment of release %d", deployment, released.Number)
+	}
+	current, ok, err := newRuntimeNode().FindCurrentDeployment(ctx, mainProject)
+	if err != nil || !ok || current.ReleaseNumber == nil || *current.ReleaseNumber != released.Number {
+		t.Errorf("the running deployment: %+v, %v, %v", current, ok, err)
 	}
 }
 
-// --- Discard ---
+// --- Discard to the last Commit and Revert to the Deployment ---
 
-func TestDiscard_WithoutADeployment_IsRefused(t *testing.T) {
-	cleanDevices(t)
-	cleanScenes(t)
+func TestDiscard_WithoutACommit_IsRefused(t *testing.T) {
+	cleanProjects(t)
+	ctx := context.Background()
+	created, err := application.NewProjectService(repositories.NewProjectRepositoryPostgres(testDB), soleOrganization()).
+		CreateProject(ctx, appdto.ProjectInput{Name: "discard-" + uuid.NewString()})
+	if err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
 
-	if _, err := newDiscardService().Discard(context.Background(), mainProject); !errors.Is(err, application.ErrNoDeploymentToDiscard) {
-		t.Errorf("Discard of a project never deployed: %v, want ErrNoDeploymentToDiscard", err)
+	if _, err := newDiscardService().Discard(ctx, created.ID); !errors.Is(err, application.ErrNothingToDiscard) {
+		t.Errorf("Discard of a project never saved: %v, want ErrNothingToDiscard", err)
 	}
 }
 
-// TestDiscard_RestoresTheDraft: the Draft is brought back to the Deployment —
-// the removed Widget, Scene, Tag, Device and pin come back under their IDs,
-// what was added goes, and the Tag states are the Runtime node's, kept.
-func TestDiscard_RestoresTheDraft(t *testing.T) {
+// TestDiscard_RestoresTheLastCommit: the Draft is brought back to its last
+// Commit — the removed Widget, Scene, Tag, Device and pin come back under
+// their IDs, what was added goes, and the Tag states are the Runtime node's,
+// kept.
+func TestDiscard_RestoresTheLastCommit(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	ctx := context.Background()
@@ -243,10 +280,7 @@ func TestDiscard_RestoresTheDraft(t *testing.T) {
 		t.Fatalf("CreateWidget: %v", err)
 	}
 
-	deploy, _ := newDeployService()
-	if _, err := deploy.Deploy(ctx, mainProject); err != nil {
-		t.Fatalf("Deploy: %v", err)
-	}
+	mustDeployTheDraft(t, mainProject)
 	// A state written before the Discard is the Runtime node's to keep.
 	states, _ := newRuntime()
 	if _, err := states.SetTagValue(ctx, mainProject, runtimeapp.SetTagValueInput{TagID: tag.ID, Value: "7", Quality: "good"}); err != nil {
@@ -303,19 +337,15 @@ func TestDiscard_RestoresTheDraft(t *testing.T) {
 }
 
 // TestDiscard_RemovesADeviceAndAnEnvironmentOfTheDraft: a Device and an
-// Environment added since the Deploy go, with the pair that joins them and the
-// Tag the Device supplies, though the Tag and the pair name them and a removal
-// of either is refused while something does.
+// Environment added since the last Commit go, with the pair that joins them and
+// the Tag the Device supplies.
 func TestDiscard_RemovesADeviceAndAnEnvironmentOfTheDraft(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	cleanPins(t)
 	ctx := context.Background()
 
-	deploy, _ := newDeployService()
-	if _, err := deploy.Deploy(ctx, mainProject); err != nil {
-		t.Fatalf("Deploy: %v", err)
-	}
+	mustDeployTheDraft(t, mainProject)
 
 	devices := newDeviceService()
 	added, err := devices.CreateDevice(ctx, mainProject, draftVersionOf(t, mainProject), appdto.DeviceInput{
@@ -353,8 +383,7 @@ func TestDiscard_RemovesADeviceAndAnEnvironmentOfTheDraft(t *testing.T) {
 }
 
 // TestDiscard_OfAPinnedLibraryRestoresThePin: the pin of a Library the Draft
-// dropped comes back, at the release the Deployment names, without the check of
-// the Widgets a switch runs.
+// dropped comes back, at the release the last Commit names.
 func TestDiscard_OfAPinnedLibraryRestoresThePin(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
@@ -362,11 +391,7 @@ func TestDiscard_OfAPinnedLibraryRestoresThePin(t *testing.T) {
 	ctx := context.Background()
 
 	_, lib := pinNewWidgetType(t, mainProject, appdto.WidgetTypeInput{Name: "gauge"})
-
-	deploy, _ := newDeployService()
-	if _, err := deploy.Deploy(ctx, mainProject); err != nil {
-		t.Fatalf("Deploy: %v", err)
-	}
+	mustDeployTheDraft(t, mainProject)
 	if _, err := newLibraryPinService().DeleteLibraryPin(ctx, mainProject, lib.ID, draftVersionOf(t, mainProject)); err != nil {
 		t.Fatalf("DeleteLibraryPin: %v", err)
 	}
@@ -376,5 +401,37 @@ func TestDiscard_OfAPinnedLibraryRestoresThePin(t *testing.T) {
 	pins, err := newLibraryPinService().FindLibraryPins(ctx, mainProject)
 	if err != nil || len(pins) != 1 || pins[0].LibraryID != lib.ID || pins[0].Release != 1 {
 		t.Errorf("the pins after the Discard: %+v, %v, want %s at release 1", pins, err, lib.ID)
+	}
+}
+
+func TestRevert_WithoutADeployment_IsRefused(t *testing.T) {
+	cleanDevices(t)
+	cleanScenes(t)
+
+	if _, err := newDiscardService().Revert(context.Background(), mainProject); !errors.Is(err, application.ErrNoDeploymentToDiscard) {
+		t.Errorf("Revert of a project never deployed: %v, want ErrNoDeploymentToDiscard", err)
+	}
+}
+
+// TestRevert_RestoresTheDeployment: the Draft goes back to what runs, even
+// when a later Commit exists — that is the difference from Discard.
+func TestRevert_RestoresTheDeployment(t *testing.T) {
+	cleanDevices(t)
+	cleanScenes(t)
+	ctx := context.Background()
+
+	tag := mustCreateTag(t, "speed", "integer")
+	mustDeployTheDraft(t, mainProject)
+	if _, err := newService().DeleteTagByID(ctx, mainProject, tag.ID, draftVersionOf(t, mainProject)); err != nil {
+		t.Fatalf("DeleteTagByID: %v", err)
+	}
+
+	if _, err := newDiscardService().Revert(ctx, mainProject); err != nil {
+		t.Fatalf("Revert: %v", err)
+	}
+
+	allTags, err := newService().FindAllTags(ctx, mainProject)
+	if err != nil || len(allTags) != 1 || allTags[0].ID != tag.ID {
+		t.Errorf("the tags after the Revert: %+v, %v, want %s back", allTags, err, tag.ID)
 	}
 }

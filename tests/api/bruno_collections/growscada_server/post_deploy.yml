@@ -1,17 +1,17 @@
 info:
-  name: post deploy
+  name: post release deploy
   type: http
-  seq: 41
+  seq: 43
 
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/deploy
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/releases/{{OTHER_RELEASE_NUMBER}}/deploy
   auth: inherit
 
 docs: |
-  Deploys the Draft, making it the project's first Deployment. The number and
-  the deployment time are the Runtime node's; nothing of the Draft reaches it
-  before this call, so writing a Tag value in a project that was never
+  The Release becomes the project's first Deployment (task 72_4). The number,
+  the time and the Release are the Runtime node's; nothing of the Draft reaches
+  it before this call, so writing a Tag value in a project that was never
   deployed answers `404`.
 
 runtime:

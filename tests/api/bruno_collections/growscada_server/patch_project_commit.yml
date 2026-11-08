@@ -5,7 +5,7 @@ info:
 
 http:
   method: PATCH
-  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/commits/1
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/commits/2
   body:
     type: json
     data: |-

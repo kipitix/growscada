@@ -164,7 +164,7 @@ func TestUpsertDefinitions_ConcurrentWithADeploy_WritesNoCopyOutsideIt(t *testin
 		go func() {
 			defer wg.Done()
 			<-start
-			_, err := deployments.CreateDeployment(ctx, projectID.UUID(), document, runtimeapp.DeploymentCauseDeploy, time.Now())
+			_, err := deployments.CreateDeployment(ctx, projectID.UUID(), document, runtimeapp.DeploymentCauseDeploy, nil, time.Now())
 			errs <- err
 		}()
 		go func() {

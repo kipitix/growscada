@@ -1,7 +1,7 @@
 info:
   name: deploy a file whose library is not here
   type: http
-  seq: 205
+  seq: 1999
 
 http:
   method: POST
