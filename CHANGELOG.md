@@ -1,5 +1,18 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.84] - 2026-11-09
+
+### Changed
+
+- **Library UI: редакторская модель Save → Commit → Release доведена до описания задачи 72_7** (task 72_7; ADR 0016/0017/0021)
+  - Шапка Library: **Save** — диалог с заголовком (по умолчанию «Save DD.MM.YYYY HH:MM») и автором; успех — toast «Commit N saved», кнопка показывает «Saving…» и выключена без изменений с подсказкой «Nothing to save since the last save»; `Ctrl+S`/`Cmd+S` открывает диалог (и перехватывает браузерное «Сохранить страницу»), при отсутствии изменений не делает ничего; 409 `draft_conflict` перечитывает Draft, стек, список WidgetTypes и историю. Автор хранится в `author:name` и показывается строкой «Author: <name>» с кнопкой смены — это не замок
+  - Индикатор несохранённых изменений: Discard этой вкладки и Revert к Release последнего Commit'а считаются «чистыми», хотя Version Draft вырос; в списке Library у каждой строки — состояние «unsaved changes», «unpublished commit» или «published» (легаси-Release — `legacy`)
+  - **История**: у каждого Commit'а — просмотр его WidgetTypes только для чтения (`GET …/commits/{n}`, снимок Commit'а, не Draft); **Make Release** открывает диалог (заметка необязательна, автор из LocalStorage) вместо браузерного prompt, успех — toast «Release N published», повторная публикация того же Commit'а — toast 409; у опубликованного Commit'а кнопка выключена
+  - **Releases**: строка списка показывает номер, Commit (или `legacy`), заметку, автора, время и число WidgetTypes; выбор строки открывает копии только для чтения, заметка правится отдельной кнопкой; Discard — к последнему Commit'у, Revert — к последней Release, обе с подтверждением и перечитыванием Draft/стека/истории
+  - События: `commit_*`, `library_released` и `library_release_note_updated` другой Library не перезагружают выбранную; `widget_type_*` перечитывают Draft и признак неопубликованных изменений, но не Releases с содержимым; `EventResync` перечитывает шапку, историю и Releases
+  - Документы: `AGENTS.md` (Library-режим), CHANGELOG
+  - Тесты `uitest`: `Ctrl+S` с изменениями и без, toast Save и конфликт с перечитыванием, Discard к Commit'у и индикатор, Revert к последней Release, публикация и повторная публикация (toast 409), просмотр Commit'а только для чтения, три состояния списка, счётчики строки Release, события чужой Library и `widget_type_updated` без перечитывания Releases
+
 ## [0.0.83] - 2026-11-08
 
 ### Changed

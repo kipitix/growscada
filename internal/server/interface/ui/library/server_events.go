@@ -24,34 +24,53 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 		}
 		if ev.Type == eventlog.EventResync {
 			// Events were lost: the server may have gone back, the stack with
-			// it.
+			// it. Everything the mode shows is read again (task 72_7).
 			l.draftVersions.Forget()
 			l.loadDraftChanges(ctx)
+			l.loadLibraries(ctx)
+			l.loadList(ctx)
+			l.loadReleases(ctx)
+			l.loadCommits(ctx)
+			return
 		}
+		mine := l.eventOfSelectedLibrary(ev)
 		targets := eventlog.ReloadTargetsFor(ev)
 		// A write of the Draft's content is one DraftChange: the undo and redo
 		// buttons follow the events (ADR 0017), as the release state does. A
 		// Release publishes a Commit and clears no stack (task 72_5).
-		if targets.DraftChanged() {
+		if targets.DraftChanged() && mine {
 			l.loadDraftChanges(ctx)
 		}
 		if targets.Libraries {
 			l.loadLibraries(ctx)
 		}
-		// A Release of the selected Library, its note changed in another tab,
-		// and the Library itself changed: the list of Releases follows.
-		if targets.Libraries || targets.Releases {
-			l.loadReleases(ctx)
-		}
-		if targets.WidgetTypes {
+		if targets.WidgetTypes && mine {
+			// A WidgetType of the selected library changed: its Draft and the
+			// unsaved indicator follow. The Releases are not reread with
+			// their content, which a Draft edit never changes (task 72_7).
 			l.loadList(ctx)
 		}
-		if targets.Commits {
-			// A commit event names the Library in ev.ID: another library's
-			// leaves the history shown alone (task 72_2; task 72_7).
-			if id := uiutil.ParseID(ev.ID); id == uuid.Nil || id == l.libraryID {
-				l.loadCommits(ctx)
-			}
+		if targets.Commits && mine {
+			l.loadCommits(ctx)
+		}
+		// A Release of the selected Library and its note changed in another
+		// tab: the list of Releases follows, never another library's
+		// (task 72_7).
+		if targets.Releases && mine {
+			l.loadReleases(ctx)
 		}
 	})
+}
+
+// eventOfSelectedLibrary reports whether an event of a Library's Commit, its
+// Release or a WidgetType of its Draft concerns the selected library. The
+// event names the library in ev.ID, and a WidgetType event in ev.LibraryID;
+// an event that names none concerns every one (task 72_7).
+func (l *Library) eventOfSelectedLibrary(ev apiv0.Event) bool {
+	id := ev.ID
+	if ev.LibraryID != "" {
+		id = ev.LibraryID
+	}
+	parsed := uiutil.ParseID(id)
+	return parsed == uuid.Nil || parsed == l.libraryID
 }

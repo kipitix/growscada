@@ -29,10 +29,14 @@ func (l *Library) renderListColumn() app.UI {
 
 // listTitle names what the WidgetTypes shown are of.
 func (l *Library) listTitle() string {
-	if l.viewing != 0 {
+	switch {
+	case l.viewingCommit != 0:
+		return "Commit " + itoa(l.viewingCommit) + " (read-only)"
+	case l.viewing != 0:
 		return "Release " + itoa(l.viewing) + " (read-only)"
+	default:
+		return "Widget Types"
 	}
-	return "Widget Types"
 }
 
 func (l *Library) renderListButtons() app.UI {

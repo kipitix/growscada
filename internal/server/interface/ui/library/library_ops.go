@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
+	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -74,36 +76,73 @@ func (l *Library) deleteLibrary() {
 	}, nil)
 }
 
-// releaseCommit publishes a Commit of the selected library as the next Library
-// Release (task 72_5; ADR 0021): a note is asked for, and the Author is the
-// stored one, asked for when none is.
-func (l *Library) releaseCommit(commit apiv0.CommitResponse) {
-	lib, ok := l.selectedLibrary()
-	if !ok || commit.Released {
+// openReleaseDialog opens the publication of a Commit of the selected library
+// as the next Library Release: a note (optional) and the stored Author
+// (task 72_7; ADR 0021).
+func (l *Library) openReleaseDialog(commit apiv0.CommitResponse) {
+	if l.draft() == nil || commit.Released {
 		return
 	}
-	note, ok := prompt(fmt.Sprintf("Publish commit #%d of %s as release %d. Note (optional):",
-		commit.Number, lib.Name, lib.LatestRelease+1), "", true)
-	if !ok {
+	l.releaseCommit = commit.Number
+	l.releaseNote = ""
+	l.releaseAuthor = l.saveAuthor
+	l.releaseDialog = true
+	l.compoCtx.Update()
+}
+
+// publishRelease confirms the release dialog: the Commit becomes the next
+// immutable Release. It changes no Draft, so no Version is stated (task 72_7).
+func (l *Library) publishRelease() {
+	draft := l.draft()
+	number := l.releaseCommit
+	if draft == nil || l.releasing || number == 0 {
 		return
 	}
-	author := l.saveAuthor
+	author := strings.TrimSpace(l.releaseAuthor)
 	if author == "" {
-		if author, ok = prompt("Author:", "", false); !ok || author == "" {
+		uiutil.ShowError(l.compoCtx, fmt.Errorf("an author is required"))
+		return
+	}
+	l.releasing = true
+	l.saveAuthor = author
+	l.compoCtx.LocalStorage().Set(uiutil.AuthorKey, author)
+	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.LibraryReleaseResponse, error) {
+		return draft.Release(c, apiv0.CreateReleaseRequest{Commit: number, Note: l.releaseNote, Author: author})
+	}, func(ctx app.Context, created apiv0.LibraryReleaseResponse) {
+		if draft != l.draft() {
+			l.releasing = false
 			return
 		}
-		l.saveAuthor = author
-		l.compoCtx.LocalStorage().Set(uiutil.AuthorKey, author)
-	}
-	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.LibraryReleaseResponse, error) {
-		return l.client.Library(lib.ID).Release(c, apiv0.CreateReleaseRequest{
-			Commit: commit.Number, Note: note, Author: author,
-		})
-	}, func(ctx app.Context, _ apiv0.LibraryReleaseResponse) {
+		l.releasing, l.releaseDialog, l.releaseCommit = false, false, 0
+		ctx.NewActionWithValue(toast.ActionAdd, toast.Problem{Problem: apiv0.Problem{
+			Title:  fmt.Sprintf("Release %d published", created.Number),
+			Detail: releaseTitle(created),
+		}})
 		l.loadReleases(ctx)
 		l.loadCommits(ctx)
 		l.loadLibraries(ctx)
-	}, l.reloadOnConflict)
+		ctx.Update()
+	}, func(ctx app.Context, err error) {
+		if draft != l.draft() {
+			l.releasing = false
+			return
+		}
+		l.releasing = false
+		uiutil.ShowError(ctx, err)
+		// A Commit published meanwhile (409) leaves the history the truth.
+		l.loadReleases(ctx)
+		l.loadCommits(ctx)
+		l.loadLibraries(ctx)
+		ctx.Update()
+	})
+}
+
+// releaseTitle is the Commit title a Release names as its detail.
+func releaseTitle(released apiv0.LibraryReleaseResponse) string {
+	if released.Title == nil {
+		return ""
+	}
+	return *released.Title
 }
 
 // editReleaseNote changes the note of a Release after asking for it; the
@@ -129,44 +168,97 @@ func (l *Library) editReleaseNote(release apiv0.LibraryReleaseResponse) {
 	}, l.reloadOnConflict)
 }
 
-// discard resets the selected library's Draft to its last Commit after a
-// confirmation; the server does it in one transaction and answers its state.
+// discard resets the selected library's Draft to its last Commit, dropping the
+// unsaved changes, after the browser's confirmation. Without a Commit the
+// server refuses (409), which is the toast (task 72_7; ADR 0021).
 func (l *Library) discard() {
 	lib, ok := l.selectedLibrary()
 	if !ok || !app.Window().Call("confirm",
 		"Discard every change of "+lib.Name+" since commit "+itoa(lib.LatestCommit)+"? The Draft goes back to that Commit.").Bool() {
 		return
 	}
-	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.DiscardLibraryResponse, error) {
-		return l.client.Library(lib.ID).Discard(c)
+	l.doDiscard(l.compoCtx)
+}
+
+// doDiscard performs the reset the confirmation asked for: one transaction of
+// the Draft, which the answer states.
+func (l *Library) doDiscard(ctx app.Context) {
+	if l.draft() == nil {
+		return
+	}
+	callDraft(l, func(c context.Context, draft *apiclient.LibraryClient) (apiv0.DiscardLibraryResponse, error) {
+		return draft.Discard(c)
 	}, func(ctx app.Context, state apiv0.DiscardLibraryResponse) {
 		l.draftVersions.Forget()
 		l.observeDraftVersion(l.markDraft(), state.Version)
+		// The Draft is its last Commit again: nothing is unsaved, even though
+		// its Version rose (task 72_7).
+		l.cleanDraftVersion = state.Version
 		l.loadList(ctx)
 		l.loadLibraries(ctx)
 		l.loadReleases(ctx)
 		l.loadDraftChanges(ctx) // a Discard clears the stack (ADR 0017)
-	}, l.reloadOnConflict)
+		ctx.Update()
+	}, func(ctx app.Context, err error) {
+		uiutil.ShowError(ctx, err)
+		// A 409 nothing_to_discard means the history moved: the header is the
+		// truth once it is reread.
+		l.loadLibraries(ctx)
+		l.loadDraftChanges(ctx)
+		ctx.Update()
+	})
 }
 
 // revert resets the selected library's Draft to its latest Release after a
-// confirmation: the published state (task 72_5).
+// confirmation: the published state, not the last Save (task 72_5, task 72_7).
 func (l *Library) revert() {
 	lib, ok := l.selectedLibrary()
 	if !ok || !app.Window().Call("confirm",
 		"Revert "+lib.Name+" to its latest release "+itoa(lib.LatestRelease)+"? The Draft goes back to the published state.").Bool() {
 		return
 	}
-	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.RevertLibraryResponse, error) {
-		return l.client.Library(lib.ID).RevertToRelease(c)
+	l.doRevert(l.compoCtx)
+}
+
+// doRevert performs the reset the confirmation asked for.
+func (l *Library) doRevert(ctx app.Context) {
+	clean := l.revertIsTheLastCommit()
+	callDraft(l, func(c context.Context, draft *apiclient.LibraryClient) (apiv0.RevertLibraryResponse, error) {
+		return draft.RevertToRelease(c)
 	}, func(ctx app.Context, state apiv0.RevertLibraryResponse) {
 		l.draftVersions.Forget()
 		l.observeDraftVersion(l.markDraft(), state.Version)
+		// A Draft reset to the Release of its last Commit is that Commit
+		// again: nothing is unsaved. A Revert to an older Release differs from
+		// the last Commit, and the indicator follows the Version (task 72_7).
+		if clean {
+			l.cleanDraftVersion = state.Version
+		} else {
+			l.cleanDraftVersion = 0
+		}
 		l.loadList(ctx)
 		l.loadLibraries(ctx)
 		l.loadReleases(ctx)
 		l.loadDraftChanges(ctx) // a Revert clears the stack (ADR 0017)
-	}, l.reloadOnConflict)
+		ctx.Update()
+	}, func(ctx app.Context, err error) {
+		uiutil.ShowError(ctx, err)
+		l.loadLibraries(ctx)
+		l.loadDraftChanges(ctx)
+		ctx.Update()
+	})
+}
+
+// revertIsTheLastCommit reports whether the latest Release published the last
+// Commit: a Revert then puts the Draft back to that Commit, not to some older
+// published state.
+func (l *Library) revertIsTheLastCommit() bool {
+	lib, ok := l.selectedLibrary()
+	if !ok || lib.LatestCommit == 0 || len(l.releases) == 0 {
+		return false
+	}
+	latest := l.releases[len(l.releases)-1]
+	return latest.CommitNumber != nil && *latest.CommitNumber == lib.LatestCommit
 }
 
 // reloadOnConflict shows err and, on a conflict, rereads the libraries: the

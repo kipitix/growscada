@@ -32,7 +32,9 @@ func TestSaveCommit_LibraryHistoryAndRename(t *testing.T) {
 	f.l.saveCommit()
 	f.run()
 
-	f.noToasts()
+	if got := f.oneToast(); !strings.Contains(got.Title, "Commit 1 saved") {
+		t.Errorf("the Save confirmation: %+v", got)
+	}
 	if len(f.l.commits) != 1 || f.l.commits[0].Number != 1 || f.l.commits[0].Author != "Ada" {
 		t.Fatalf("the history: %+v", f.l.commits)
 	}

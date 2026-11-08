@@ -168,7 +168,7 @@ func (l *Library) redoTitle() string {
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 
 // listenShortcuts makes Ctrl+Z and Ctrl+Shift+Z (Cmd on macOS) undo and redo
-// the Draft while the Library mode is shown.
+// the Draft while the Library mode is shown, and Ctrl+S save it (task 72_7).
 func (l *Library) listenShortcuts() {
 	if l.onKeyDown != nil {
 		return
@@ -178,9 +178,23 @@ func (l *Library) listenShortcuts() {
 			return nil
 		}
 		ev := args[0]
+		key := ev.Get("key").String()
+		code := ev.Get("code").String()
+		ctrl, meta, shift := ev.Get("ctrlKey").Bool(), ev.Get("metaKey").Bool(), ev.Get("shiftKey").Bool()
+		// Ctrl+S takes the browser's Save Page away wherever it is pressed
+		// while the mode is shown; the Draft is fixed as a Commit when no
+		// dialog of the mode is open, like the other commands (task 72_7).
+		if uiutil.ShortcutKey(key, code, ctrl, meta, shift, false) == uiutil.KeySave {
+			if !l.shown() {
+				return nil
+			}
+			ev.Call("preventDefault")
+			if l.keyActionAllowed() {
+				l.compoCtx.Dispatch(func(ctx app.Context) { l.saveFromShortcut(ctx) })
+			}
+			return nil
+		}
 		action := uiutil.KeyEventAction(ev)
-		// The Library's Save has no shortcut yet (task 72_7): the mode's keys
-		// are the Undo and the Redo, and Ctrl+S stays the browser's own.
 		if action != uiutil.KeyUndo && action != uiutil.KeyRedo {
 			return nil
 		}
@@ -196,9 +210,9 @@ func (l *Library) listenShortcuts() {
 
 // keyActionAllowed reports whether a shortcut may act now: no dialog of the
 // mode is open. An undo behind the Save dialog would change the Draft the Save
-// is about to fix as a Commit.
+// is about to fix as a Commit; a Release dialog holds the Draft too.
 func (l *Library) keyActionAllowed() bool {
-	return !l.saveDialog && !l.commitsDialog
+	return !l.saveDialog && !l.commitsDialog && !l.releaseDialog
 }
 
 // noKeyDown releases the listener (OnDismount).

@@ -12,6 +12,7 @@ import (
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
+	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -44,15 +45,18 @@ func (l *Library) lastCommitVersion() int {
 	return l.commits[0].DraftVersion
 }
 
-// hasUnsavedChanges reports whether the Draft moved since its last Commit.
+// hasUnsavedChanges reports whether the Draft moved since its last Commit. A
+// Discard of this tab made the Draft equal to that Commit at a higher Version,
+// so that Version counts as clean too; so does a Revert to the Release of the
+// last Commit (task 72_7).
 func (l *Library) hasUnsavedChanges() bool {
-	return l.commitsLoaded && l.draftVersion() > l.lastCommitVersion()
+	return l.commitsLoaded && l.draftVersion() > max(l.lastCommitVersion(), l.cleanDraftVersion)
 }
 
 // openSaveDialog opens the Save dialog with a default title and the stored
 // author.
 func (l *Library) openSaveDialog() {
-	if l.draft() == nil || l.viewing != 0 {
+	if l.draft() == nil || l.readOnly() {
 		return
 	}
 	l.saveTitle = "Save " + time.Now().Format("02.01.2006 15:04")
@@ -60,10 +64,19 @@ func (l *Library) openSaveDialog() {
 	l.compoCtx.Update()
 }
 
+// saveFromShortcut is Ctrl+S: the Save dialog when the Draft has unsaved
+// changes, nothing otherwise (task 72_7; ADR 0021).
+func (l *Library) saveFromShortcut(ctx app.Context) {
+	if l.readOnly() || !l.hasUnsavedChanges() || l.savingCommit {
+		return
+	}
+	l.openSaveDialog()
+}
+
 // saveCommit confirms the Save dialog: the Draft as it is becomes a Commit.
 func (l *Library) saveCommit() {
 	draft := l.draft()
-	if draft == nil || l.savingCommit {
+	if draft == nil || l.savingCommit || l.readOnly() {
 		return
 	}
 	title, author := strings.TrimSpace(l.saveTitle), strings.TrimSpace(l.saveAuthor)
@@ -76,13 +89,18 @@ func (l *Library) saveCommit() {
 	version := l.draftVersion()
 	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.CommitResponse, error) {
 		return draft.SaveCommit(c, apiv0.CreateCommitRequest{Version: version, Title: title, Author: author})
-	}, func(ctx app.Context, _ apiv0.CommitResponse) {
+	}, func(ctx app.Context, saved apiv0.CommitResponse) {
 		if draft != l.draft() {
 			l.savingCommit = false
 			return
 		}
 		l.savingCommit = false
 		l.saveDialog = false
+		l.cleanDraftVersion = 0
+		ctx.NewActionWithValue(toast.ActionAdd, toast.Problem{Problem: apiv0.Problem{
+			Title:  fmt.Sprintf("Commit %d saved", saved.Number),
+			Detail: saved.Title,
+		}})
 		l.loadCommits(ctx)
 		l.loadLibraries(ctx) // the status follows the new last Commit
 		ctx.Update()
@@ -97,10 +115,24 @@ func (l *Library) saveCommit() {
 			l.forgetDraftVersion()
 			l.loadDraftState(ctx)
 			l.loadDraftChanges(ctx)
+			l.loadList(ctx)
 		}
 		l.loadCommits(ctx)
+		l.loadLibraries(ctx)
 		ctx.Update()
 	})
+}
+
+// changeAuthor asks for the author name the Save and Release dialogs fill in.
+// It is no lock: it blocks nobody and only fills in the dialogs (task 72_7).
+func (l *Library) changeAuthor(ctx app.Context) {
+	name, ok := prompt("Author:", l.saveAuthor, false)
+	if !ok {
+		return
+	}
+	l.saveAuthor = name
+	ctx.LocalStorage().Set(uiutil.AuthorKey, name)
+	ctx.Update()
 }
 
 // openCommitsDialog shows the history, read afresh.
@@ -133,12 +165,19 @@ func (l *Library) renameCommit() {
 	}, nil)
 }
 
-// renderCommitBar is the library column's Save, its unsaved-changes indicator
-// and the history button.
+// renderCommitBar is the library column's Save, its unsaved-changes indicator,
+// the history button and the author (task 72_7; ADR 0021).
 func (l *Library) renderCommitBar() app.UI {
-	editable := l.viewing == 0 && l.libraryID != uuid.Nil
-	save := smallButton("Save", editable && l.hasUnsavedChanges() && !l.savingCommit,
-		"accent", "Save the Draft as a Commit", l.openSaveDialog)
+	editable := !l.readOnly() && l.libraryID != uuid.Nil
+	saveLabel, saveTitle := "Save", "Save the Draft as a Commit"
+	switch {
+	case l.savingCommit:
+		saveLabel, saveTitle = "Saving…", "The Draft is being fixed as a Commit"
+	case !l.hasUnsavedChanges():
+		saveTitle = "Nothing to save since the last save"
+	}
+	save := smallButton(saveLabel, editable && l.hasUnsavedChanges() && !l.savingCommit,
+		"accent", saveTitle, l.openSaveDialog)
 	history := smallButton("History", l.libraryID != uuid.Nil,
 		"", "The Commits of the library", l.openCommitsDialog)
 	indicator := app.Span().Style("font-size", "11px").Style("color", "var(--text-muted)")
@@ -153,6 +192,44 @@ func (l *Library) renderCommitBar() app.UI {
 		Body(
 			app.Div().Style("display", "flex").Style("gap", "4px").Body(save, history),
 			indicator,
+			l.renderAuthorBar(),
+		)
+}
+
+// renderAuthorBar shows the author the Save and Release dialogs fill in, with a
+// button to change it: it is not a lock and blocks nobody (task 72_7).
+func (l *Library) renderAuthorBar() app.UI {
+	name := strings.TrimSpace(l.saveAuthor)
+	label := "Author: not set"
+	if name != "" {
+		label = "Author: " + name
+	}
+	return app.Div().
+		Attr("data-author-bar", "true").
+		Style("display", "flex").
+		Style("align-items", "center").
+		Style("gap", "4px").
+		Style("margin-top", "2px").
+		Body(
+			app.Span().
+				Attr("data-author-name", name).
+				Style("font-size", "11px").
+				Style("color", "var(--text-muted)").
+				Text(label),
+			app.Button().
+				Attr("data-author-change", "true").
+				Title("Change the author name").
+				Style("padding", "1px 6px").
+				Style("font-size", "11px").
+				Style("cursor", "pointer").
+				Style("border", "1px solid var(--border-input)").
+				Style("border-radius", "3px").
+				Style("background", "var(--bg)").
+				Style("color", "var(--text)").
+				Text("Change").
+				OnClick(func(ctx app.Context, e app.Event) {
+					l.changeAuthor(ctx)
+				}),
 		)
 }
 
@@ -196,6 +273,53 @@ func (l *Library) renderSaveDialog() app.UI {
 				smallButton("Save", !l.savingCommit, "accent", "Save the Draft as a Commit", l.saveCommit),
 				smallButton("Cancel", true, "", "Close without saving", func() {
 					l.saveDialog = false
+					l.compoCtx.Update()
+				}),
+			),
+		)
+}
+
+// renderReleaseDialog is the publication of a Commit: a note, the author and
+// the Release itself (task 72_7; ADR 0021).
+func (l *Library) renderReleaseDialog() app.UI {
+	return app.Div().
+		Attr("data-release-dialog", "true").
+		Style("padding", "8px").
+		Style("margin-top", "6px").
+		Style("border", "1px solid var(--border)").
+		Style("border-radius", "4px").
+		Style("background", "var(--bg)").
+		Style("font-size", "12px").
+		Body(
+			app.Div().Style("margin-bottom", "4px").Text(fmt.Sprintf("Release Commit %d", l.releaseCommit)),
+			app.Input().
+				Attr("data-release-note", "true").
+				Type("text").
+				Value(l.releaseNote).
+				Placeholder("Note (optional)").
+				Style("width", "100%").
+				Style("box-sizing", "border-box").
+				Style("margin-bottom", "4px").
+				Style("font-size", "12px").
+				OnInput(func(ctx app.Context, e app.Event) {
+					l.releaseNote = ctx.JSSrc().Get("value").String()
+				}),
+			app.Input().
+				Attr("data-release-author", "true").
+				Type("text").
+				Value(l.releaseAuthor).
+				Placeholder("Author").
+				Style("width", "100%").
+				Style("box-sizing", "border-box").
+				Style("margin-bottom", "6px").
+				Style("font-size", "12px").
+				OnInput(func(ctx app.Context, e app.Event) {
+					l.releaseAuthor = ctx.JSSrc().Get("value").String()
+				}),
+			app.Div().Style("display", "flex").Style("gap", "4px").Body(
+				smallButton("Release", !l.releasing, "accent", "Publish this Commit as the next Library Release", l.publishRelease),
+				smallButton("Cancel", true, "", "Close without publishing", func() {
+					l.releaseDialog, l.releaseCommit = false, 0
 					l.compoCtx.Update()
 				}),
 			),
@@ -268,10 +392,12 @@ func (l *Library) renderCommitRow(commit apiv0.CommitResponse) app.UI {
 			})
 	}
 	release := smallButton("Make Release", !commit.Released, "accent",
-		"Publish this Commit as the next Library Release", func() { l.releaseCommit(commit) })
+		"Publish this Commit as the next Library Release", func() { l.openReleaseDialog(commit) })
 	if commit.Released {
 		release = smallButton("Released", false, "", "A Release publishes this Commit", func() {})
 	}
+	view := smallButton("View", true, "", "Show the WidgetTypes of this Commit read-only",
+		func() { l.viewCommit(commit.Number) })
 	return app.Div().
 		Attr("data-commit-row", fmt.Sprint(commit.Number)).
 		Style("padding", "3px 0").
@@ -280,6 +406,6 @@ func (l *Library) renderCommitRow(commit apiv0.CommitResponse) app.UI {
 			app.Div().Text(fmt.Sprintf("#%d %s", commit.Number, commit.Title)),
 			app.Div().Style("color", "var(--text-muted)").Text(fmt.Sprintf("%s · %s · %d widget types",
 				commit.Author, commit.CreatedAt.Local().Format("2006-01-02 15:04"), commit.ContentCounts.WidgetTypes)),
-			app.Div().Style("display", "flex").Style("gap", "4px").Body(rename, release),
+			app.Div().Style("display", "flex").Style("gap", "4px").Body(view, rename, release),
 		)
 }

@@ -34,9 +34,13 @@ type Library struct {
 	releases         []apiv0.LibraryReleaseResponse
 	releasesReloader uiutil.Reloader
 	// viewing is the number of the release shown, read-only, in place of the
-	// Draft; 0 for the Draft.
-	viewing     int
-	widgetTypes []apiv0.WidgetTypeResponse
+	// Draft; 0 for the Draft. viewingCommit, when not 0, shows the WidgetTypes
+	// of that Commit instead: commitTypes is its snapshot, read when it is
+	// opened (task 72_7).
+	viewing       int
+	viewingCommit int
+	commitTypes   []apiv0.WidgetTypeResponse
+	widgetTypes   []apiv0.WidgetTypeResponse
 	// draftVersions holds the Version of the selected library's Draft: every
 	// write of its content states it and every content DTO carries it
 	// (ADR 0016). One number serves the whole Draft, so it is also what says
@@ -64,6 +68,20 @@ type Library struct {
 	// place (0: none), renameCommitTitle the text of the editor.
 	renamingCommit    int
 	renameCommitTitle string
+	// cleanDraftVersion is the Version of the Draft a Discard or a Revert of
+	// this tab just made equal to its last Commit: the unsaved-changes
+	// indicator compares against it too, so the reset leaves nothing unsaved
+	// even though the Version rose (task 72_7). 0: no such reset.
+	cleanDraftVersion int
+	// ── Release from a Commit (task 72_7; ADR 0021) ────────────────────────
+	// releaseDialog is true while a Commit is being published, releaseCommit
+	// the Commit of the dialog, releaseNote and releaseAuthor its fields;
+	// releasing marks the request in flight.
+	releaseDialog bool
+	releasing     bool
+	releaseCommit int
+	releaseNote   string
+	releaseAuthor string
 
 	// ── DraftChange stack (ADR 0017) ───────────────────────────────────────
 	// changes is the state of the Draft's undo/redo stack, read on mount, on a
@@ -202,14 +220,17 @@ func (l *Library) selectedLibrary() (apiv0.LibraryResponse, bool) {
 }
 
 // readOnly reports whether the WidgetTypes shown cannot be edited: those of a
-// release shown read-only are not the Draft.
+// release or a Commit shown read-only are not the Draft.
 func (l *Library) readOnly() bool {
-	return l.viewing != 0
+	return l.viewing != 0 || l.viewingCommit != 0
 }
 
-// shownTypes returns the WidgetTypes shown: those of the release viewed, or
-// of the Draft.
+// shownTypes returns the WidgetTypes shown: those of the release or the Commit
+// viewed, or of the Draft.
 func (l *Library) shownTypes() []apiv0.WidgetTypeResponse {
+	if l.viewingCommit != 0 {
+		return l.commitTypes
+	}
 	if l.viewing == 0 {
 		return l.widgetTypes
 	}
@@ -217,17 +238,23 @@ func (l *Library) shownTypes() []apiv0.WidgetTypeResponse {
 		if r.Number != l.viewing {
 			continue
 		}
-		types := make([]apiv0.WidgetTypeResponse, len(r.WidgetTypes))
-		for i, wt := range r.WidgetTypes {
-			types[i] = apiv0.WidgetTypeResponse{
-				ID: wt.ID, LibraryID: wt.LibraryID, Name: wt.Name, HtmlTemplate: wt.HtmlTemplate, Script: wt.Script,
-				ScriptLanguage: wt.ScriptLanguage, DefaultWidth: wt.DefaultWidth, DefaultHeight: wt.DefaultHeight,
-				InputPorts: wt.InputPorts,
-			}
-		}
-		return types
+		return releasedWidgetTypes(r.WidgetTypes)
 	}
 	return nil
+}
+
+// releasedWidgetTypes converts the copies a Release or a Commit holds into the
+// shape of the Draft's WidgetTypes, so both read the same list.
+func releasedWidgetTypes(copies []apiv0.ReleasedWidgetTypeResponse) []apiv0.WidgetTypeResponse {
+	types := make([]apiv0.WidgetTypeResponse, len(copies))
+	for i, wt := range copies {
+		types[i] = apiv0.WidgetTypeResponse{
+			ID: wt.ID, LibraryID: wt.LibraryID, Name: wt.Name, HtmlTemplate: wt.HtmlTemplate, Script: wt.Script,
+			ScriptLanguage: wt.ScriptLanguage, DefaultWidth: wt.DefaultWidth, DefaultHeight: wt.DefaultHeight,
+			InputPorts: wt.InputPorts,
+		}
+	}
+	return types
 }
 
 // selectLibrary shows the library id's Draft; its WidgetTypes and releases
@@ -237,7 +264,7 @@ func (l *Library) selectLibrary(ctx app.Context, id uuid.UUID) {
 		return
 	}
 	l.libraryID = id
-	l.viewing = 0
+	l.viewing, l.viewingCommit, l.commitTypes = 0, 0, nil
 	l.widgetTypes, l.releases = nil, nil
 	l.draftVersions.Forget()
 	l.clearSelection()
@@ -246,6 +273,8 @@ func (l *Library) selectLibrary(ctx app.Context, id uuid.UUID) {
 	l.commits, l.commitsLoaded = nil, false
 	l.saveDialog, l.savingCommit, l.commitsDialog = false, false, false
 	l.renamingCommit, l.renameCommitTitle = 0, ""
+	l.cleanDraftVersion = 0
+	l.releaseDialog, l.releasing, l.releaseCommit = false, false, 0
 	uiutil.StoreID(ctx, libraryIDKey, id)
 	uiutil.StoreID(ctx, selectedIDKey, uuid.Nil)
 	l.loadList(ctx)
@@ -254,18 +283,41 @@ func (l *Library) selectLibrary(ctx app.Context, id uuid.UUID) {
 	l.loadCommits(ctx)
 }
 
-// view shows release n read-only (0: back to the Draft).
+// view shows release n read-only (0: back to the Draft). Opening a release
+// leaves a Commit shown.
 func (l *Library) view(n int) {
-	if n == l.viewing {
+	if n == l.viewing && l.viewingCommit == 0 {
 		return
 	}
-	l.viewing = n
+	l.viewing, l.viewingCommit, l.commitTypes = n, 0, nil
 	l.clearSelection()
+}
+
+// viewCommit shows the WidgetTypes of Commit n read-only (0: back to the
+// Draft). They are read from the Commit's snapshot, never from the Draft
+// (task 72_7; ADR 0021).
+func (l *Library) viewCommit(n int) {
+	draft := l.draft()
+	if draft == nil || n == 0 {
+		return
+	}
+	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.CommitResponse, error) {
+		return draft.Commit(c, n)
+	}, func(ctx app.Context, commit apiv0.CommitResponse) {
+		if draft != l.draft() {
+			return
+		}
+		l.viewing, l.viewingCommit = 0, commit.Number
+		l.commitTypes = releasedWidgetTypes(commit.WidgetTypes)
+		l.commitsDialog = false
+		l.clearSelection()
+		ctx.Update()
+	}, nil)
 }
 
 // itemIdx returns the index of the WidgetType id in the list; -1 if absent.
 func (l *Library) itemIdx(id uuid.UUID) int {
-	if l.viewing != 0 {
+	if l.readOnly() {
 		return -1
 	}
 	return uiutil.IdxByID(l.widgetTypes, id, uiutil.WidgetTypeID)

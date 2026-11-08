@@ -168,7 +168,7 @@ func (l *Library) setWidgetTypes(ctx app.Context, mark uiutil.Mark, items []apiv
 		// that emptied the Draft.
 		l.loadDraftState(ctx)
 	}
-	if l.selectedID == uuid.Nil || l.viewing != 0 {
+	if l.selectedID == uuid.Nil || l.readOnly() {
 		return
 	}
 	current, exists := l.findItem(l.selectedID)
