@@ -9,19 +9,25 @@ http:
   auth: inherit
 
 docs: |
-  Deletes a library with its Draft and releases, refused (`409`) while a
-  live project pins it: the project Line 2 was deleted just before.
+  Refused (`409`) while a running Deployment of a live project names one of the
+  library's releases: the project Main pinned it in the seed, and the first
+  Deployment — the one the server made at start — still names it, though the
+  pin is gone from the Draft. A Discard of that Deployment could not restore
+  the Release, so the library stays (task 71; ADR 0007).
 
 runtime:
   assertions:
     - expression: 'res.status'
       operator: eq
-      value: '200'
+      value: '409'
     - expression: 'res.headers["growscada-schema-version"]'
       operator: isDefined
-    - expression: 'res.body.id'
+    - expression: 'res.headers["content-type"]'
       operator: eq
-      value: '"{{OTHER_LIBRARY_ID}}"'
+      value: application/problem+json
+    - expression: 'res.body.detail'
+      operator: contains
+      value: running Deployment
 
 settings:
   encodeUrl: true

@@ -1,0 +1,31 @@
+info:
+  name: deploy the cleanup project without the pin
+  type: http
+  seq: 202
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/deploy
+  auth: inherit
+
+docs: |
+  Deployment 2 of Line 4 does not name the Legacy library. Deployment 1 still
+  does, but a Deployment of the past keeps no library: only the running one
+  does (task 71).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '2'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

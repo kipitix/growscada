@@ -1,0 +1,40 @@
+info:
+  name: pin the library in the cleanup project
+  type: http
+  seq: 197
+
+http:
+  method: PUT
+  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/library-pins/{{CLEANUP_LIBRARY_ID}}
+  body:
+    type: json
+    data: |-
+      {
+        "release": 1,
+        "version": 1
+      }
+  auth: inherit
+
+docs: |
+  The first write of Line 4's Draft: `version` 1 adds the pin and the answer
+  carries the Draft's new Version, 2.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.release'
+      operator: eq
+      value: '1'
+    - expression: 'res.body.version'
+      operator: eq
+      value: '2'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

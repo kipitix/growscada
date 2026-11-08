@@ -1,0 +1,33 @@
+info:
+  name: delete a library a live project pins
+  type: http
+  seq: 198
+
+http:
+  method: DELETE
+  url: http://{{API_SERVER}}/api/v0/libraries/{{CLEANUP_LIBRARY_ID}}
+  auth: inherit
+
+docs: |
+  Refused (`409`): Line 4 pins the library in its Draft, so the library is in
+  use (ADR 0012). The next requests unpin it, deploy again and delete it.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '409'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: application/problem+json
+    - expression: 'res.body.detail'
+      operator: contains
+      value: pinned by Projects
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

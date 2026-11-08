@@ -91,11 +91,11 @@ A reusable collection of WidgetTypes owned by an Organization, outside any Proje
 _Avoid_: catalog, toolbox, package
 
 **Library Release**:
-An immutable, numbered snapshot of a Library's Draft; never removed.
+An immutable, numbered snapshot of a Library's Draft; removed only with its Library. A Project's Commit or Release keeps only a link to a deleted Library — its document carries the WidgetType copies —, while a running Deployment that names the Release keeps the Library from being deleted (task 71).
 _Avoid_: library version, snapshot
 
 **Library Pin**:
-The choice, in a Project's Draft, of one Library Release of one Library. Switching or removing it is refused while Widgets would be left without their WidgetType.
+The choice, in a Project's Draft, of one Library Release of one Library. Switching or removing it is refused while Widgets would be left without their WidgetType. A Library is removed only while no live Project pins it and no live Project's running Deployment names one of its Releases.
 _Avoid_: dependency, import, reference, subscription
 
 ### Roles and clients
@@ -165,7 +165,7 @@ Where a Release's content came from: `commit` (a Commit) or, from task 72_4, `fi
 _Avoid_: source, kind
 
 **Deployment**:
-The Runtime node's immutable record that a configuration runs: its number, when it was deployed, its cause, the document it holds and, once Releases exist, the Release it runs (task 72_4). A Deploy, a Rollback or a project file deploy makes it; Operation always runs exactly one Deployment.
+The Runtime node's immutable record that a configuration runs: its number, when it was deployed, its cause, the document it holds and, once Releases exist, the Release it runs (task 72_4). A Deploy, a Rollback or a project file deploy makes it; Operation always runs exactly one Deployment. The running Deployment of a Project keeps the Libraries its document names from being deleted; a Discard of one that names a Release this server lacks drops that pin with a warning (task 71).
 _Avoid_: release, build, version (the concurrency counter), commit
 
 **Revision**:

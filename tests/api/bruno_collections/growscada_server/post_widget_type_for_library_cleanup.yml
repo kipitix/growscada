@@ -1,0 +1,38 @@
+info:
+  name: post a widget type for the library cleanup flow
+  type: http
+  seq: 195
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/libraries/{{CLEANUP_LIBRARY_ID}}/widget-types
+  body:
+    type: json
+    data: |-
+      {
+        "version": 1,
+        "name": "legacy gauge",
+        "html_template": "<div class=\"gauge\"></div>",
+        "script": "function render(inputs) {}",
+        "script_language": "javascript",
+        "default_width": 100,
+        "default_height": 100,
+        "input_ports": []
+      }
+  auth: inherit
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.id'
+      operator: isString
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

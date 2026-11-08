@@ -1,0 +1,41 @@
+info:
+  name: create a library for the library cleanup flow
+  type: http
+  seq: 194
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/libraries
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Legacy"
+      }
+  auth: inherit
+
+docs: |
+  The library of the cleanup flow (task 71): it gets a WidgetType, a release, a
+  pin in Line 4 and a Deployment that names it. Its ID carries to the requests
+  that follow.
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("CLEANUP_LIBRARY_ID", res.body.id);
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.version'
+      operator: eq
+      value: '1'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

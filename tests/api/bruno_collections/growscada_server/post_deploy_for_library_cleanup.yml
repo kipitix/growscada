@@ -1,0 +1,30 @@
+info:
+  name: deploy the cleanup project with the pin
+  type: http
+  seq: 199
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/deploy
+  auth: inherit
+
+docs: |
+  Deployment 1 of Line 4 names the release of the Legacy library in its
+  ProjectFile: it now keeps the library from being deleted too (task 71).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '1'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

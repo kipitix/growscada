@@ -11,3 +11,7 @@ The ProjectFile carries the list of Library Pins the Draft used — the Library 
 - Library inside each Project (copy on import): rejected. No reuse; fixing a WidgetType means editing every Project by hand.
 - Per-WidgetType versions referenced by Widgets: rejected for mixing versions within one Project and multiplying versioning of Themes and ComputationTypes.
 - Revision references the Library Release instead of copying it: rejected. The Runtime node would need the Library, and the ProjectFile would stop being self-contained.
+
+## Amendment 2026-11-08: a running Deployment keeps the Library it names
+
+A Library Release is never removed alone: it goes with its Library. A Commit of a Project and a Project Release copy the WidgetType content they need, so they outlive the Library and keep only a link to it — the History and a PlaybackFile render after its deletion. A **running Deployment** is different: a Discard restores the Project's Draft from its ProjectFile, pins included, so a Deployment whose document names a Release of a deleted Library could not restore it. A Library is therefore removed only while no live Project pins it **and** no live Project's running Deployment names one of its Releases (task 71): the Engineering node asks the Runtime node, which reads the pins of each Project's running document. The frontend warns that a Commit or a Release of the past keeps a link to the deleted Library.

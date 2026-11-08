@@ -1,0 +1,38 @@
+info:
+  name: write to the Draft after a Discard that dropped a Release
+  type: http
+  seq: 208
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/tags
+  body:
+    type: json
+    data: |-
+      {
+        "name": "after the discard",
+        "type": "integer",
+        "version": {{CLEANUP_DRAFT_VERSION}}
+      }
+  auth: inherit
+
+docs: |
+  The Draft is writable again right after the Discard: the next write states
+  the Version the Discard answered (task 71). This is where the old behaviour
+  left a pin the server could not hold and refused every write.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.id'
+      operator: isString
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

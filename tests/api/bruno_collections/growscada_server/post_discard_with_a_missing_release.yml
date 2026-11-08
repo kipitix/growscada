@@ -1,0 +1,43 @@
+info:
+  name: discard a Deployment whose Library Release is not here
+  type: http
+  seq: 207
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/discard
+  auth: inherit
+
+docs: |
+  The running Deployment names a Library Release this server does not have:
+  the Discard drops the pin with the widget of that Release's WidgetType and
+  answers `200` with the Draft's new Version and a warning naming the pin and
+  the widgets it took (task 71). The Draft is left consistent and writable,
+  which the next request shows.
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("CLEANUP_DRAFT_VERSION", res.body.version);
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.warnings[0].library_id'
+      operator: eq
+      value: '"d0000000-0000-4000-8000-0000000000ff"'
+    - expression: 'res.body.warnings[0].release'
+      operator: eq
+      value: '1'
+    - expression: 'res.body.warnings[0].dropped_widgets'
+      operator: eq
+      value: '1'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -12,3 +12,7 @@ These row locks hold invariants that span aggregates — Scene and Library Pin, 
 - Let a Widget outlive its WidgetType and render it as a placeholder: rejected. It breaks the invariant every Scene, the Player and the ProjectFile rely on.
 - Discard in one transaction over all WidgetTypes of the Library: rejected as an exception to one aggregate per transaction (ADR 0008) for a mechanism that task 38 will replace by a Draft aggregate anyway.
 - Discard as a policy with the Draft left editable, resetting only WidgetTypes not changed since the Discard: rejected as harder to reason about than a short read-only spell.
+
+## Amendment 2026-11-08: the running Deployment blocks the Library's deletion too
+
+The pins of the Draft are no longer the only thing that keeps a Library from being deleted: a Project's Commit and Project Release name the releases they copied but do not block the deletion (their documents are self-contained), while the running Deployment of any live Project does (task 71, ADR 0007). The check is the Engineering node's, made when the deletion is asked for; it reads the Runtime node through the `RuntimeNode` port and answers 409 with the reason. The cleanup policy of a marked Library re-checks nothing: a Deployment that names it can only appear from a project file deployed afterwards, and a Discard of that Deployment then drops the missing pin with a warning instead of failing (ADR 0018).

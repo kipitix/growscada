@@ -1,0 +1,31 @@
+info:
+  name: delete a library only an old Deployment names
+  type: http
+  seq: 203
+
+http:
+  method: DELETE
+  url: http://{{API_SERVER}}/api/v0/libraries/{{CLEANUP_LIBRARY_ID}}
+  auth: inherit
+
+docs: |
+  Allowed (`200`): only Deployment 1 of Line 4 names the library, and it is
+  the past. Its document carries the WidgetType copies, so the Deployment and
+  its file keep rendering after the deletion (task 71; ADR 0007).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.id'
+      operator: eq
+      value: '"{{CLEANUP_LIBRARY_ID}}"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

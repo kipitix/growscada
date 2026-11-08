@@ -1,0 +1,41 @@
+info:
+  name: create a project for the library cleanup flow
+  type: http
+  seq: 193
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Line 4"
+      }
+  auth: inherit
+
+docs: |
+  A project of its own for the library-cleanup flow (task 71): what blocks the
+  deletion of a library is exercised here, away from the projects the rest of
+  the collection uses. Its ID carries to the requests that follow.
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("CLEANUP_PROJECT_ID", res.body.id);
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.version'
+      operator: eq
+      value: '1'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

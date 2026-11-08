@@ -1,0 +1,35 @@
+info:
+  name: delete a library a running Deployment names
+  type: http
+  seq: 200
+
+http:
+  method: DELETE
+  url: http://{{API_SERVER}}/api/v0/libraries/{{CLEANUP_LIBRARY_ID}}
+  auth: inherit
+
+docs: |
+  Refused (`409`) though the Draft no longer pins the library: the running
+  Deployment of Line 4 names its release, and a Discard of that Deployment
+  could not restore the pin (task 71; ADR 0007). The next requests make a
+  Deployment that does not name it and delete the library then.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '409'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: application/problem+json
+    - expression: 'res.body.detail'
+      operator: contains
+      value: running Deployment
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

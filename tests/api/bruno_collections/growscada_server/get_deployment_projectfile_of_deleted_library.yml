@@ -1,0 +1,30 @@
+info:
+  name: download a Deployment whose library was deleted
+  type: http
+  seq: 204
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/deployments/1/projectfile
+  auth: inherit
+
+docs: |
+  The document of Deployment 1 still names the deleted library and still
+  renders: a Deployment of the past is self-contained (task 71; ADR 0007).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-disposition"]'
+      operator: contains
+      value: 'Line-4-deployment-1.json'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

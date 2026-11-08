@@ -26,7 +26,7 @@ This ADR starts the model; task 72_8 gives it its final form together with Relea
 ## Consequences
 
 - A Commit's storage is proportional to the Draft: the whole ProjectFile per Save. Retention is a later task; until then every Save is kept.
-- The Draft gains two counters and the history gains a table (`engineering.commits`, `engineering.commit_library_pins` for a Project's pins). The pins are what task 71 uses to keep a Library from being deleted while a Project's history names its Release. A Project's Releases gain `engineering.project_releases` and `engineering.project_release_library_pins`, a copy of the ProjectFile and of its pins.
+- The Draft gains two counters and the history gains a table (`engineering.commits`, `engineering.commit_library_pins` for a Project's pins). The pins of a Commit or a Project Release do not keep a Library from being deleted: the documents are self-contained, and only a running Deployment does (task 71, ADR 0007). A Project's Releases gain `engineering.project_releases` and `engineering.project_release_library_pins`, a copy of the ProjectFile and of its pins.
 - A Save whose Draft the builder refuses is 409 `draft_not_saveable` with the builder's reason, exactly as a download of the Draft is 409 `draft_not_deployable`: an inconsistent Draft is neither deployable nor a point of history.
 - Save does not require a Deployment: a Project that has never been deployed has Commits.
 - The Author is a name in the request, stored with the Commit and shown to other Engineers; tasks 49/50 replace it with a User.

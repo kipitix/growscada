@@ -1,0 +1,33 @@
+info:
+  name: release the library of the cleanup flow
+  type: http
+  seq: 196
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/libraries/{{CLEANUP_LIBRARY_ID}}/releases
+  body:
+    type: json
+    data: |-
+      {
+        "note": "The one release",
+        "version": 2
+      }
+  auth: inherit
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '1'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

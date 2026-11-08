@@ -1,5 +1,20 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.80] - 2026-11-08
+
+### Added
+
+- **Удаление Library с историей: работающая Deployment блокирует, Discard деградирует** (задача 71; ADR 0007/0012/0021)
+  - Runtime node: `DeploymentRepository.DeploymentNamesLibrary` / `DeploymentService.DeploymentNamesLibrary` — «называет ли работающая Deployment любого живого Project'а Release этой Library». Читает `runtime.deployments` (последняя Deployment каждого живого Project'а) и `library_pins` её документа через `jsonb_array_elements`; таблица пинов Deployment не заводится. Порт `RuntimeNode.DeploymentNamesLibrary`, реализация `inprocess`
+  - Application: `LibraryService.DeleteLibraryByID` спрашивает Runtime node и отвечает `409 library` с `ErrLibraryInRunningDeployment`, если Release библиотеки названа работающей Deployment; старые Commit/Project Release и старые Deployment удаление не блокируют (их документы самодостаточны). Живой `library_pins` блокирует как раньше (`ErrLibraryPinned`). `NewLibraryCleanupPolicy` не перепроверяет Deployment: помеченная Library уже невидима API, а Deployment из файла, появившаяся позже, деградирует в предупреждение при Discard
+  - Application: `DiscardService.Discard` вместо отказа `deployment_not_discardable` пропускает пины работающей Deployment, чьей Library или Release нет на сервере: пин, WidgetTypes этой Library и Widgets из них не восстанавливаются, остальное содержимое — как есть; ответ несёт `warnings` (`library_id`, `release`, `dropped_widgets`), Draft снова доступен для записи. Общий помощник `missingLibraryReleases`/`dropMissingLibraryReleases` (`application/library_pins_of_deployment.go`)
+  - `DeployService.Preview` добавляет `missing_releases`: пины работающей Deployment, которых нет на этом сервере (для Project-режима — предупреждение «в истории не хватает Release»)
+  - REST (контракт `api/v0` **0.28**, MINOR): `DiscardProjectResponse` становится структурой `{version, warnings?}`, новый `DiscardWarningResponse`; `DeployPreviewResponse` получает `missing_releases` (`{library_id, release}`); `DELETE /libraries/{id}` отвечает 409 и для Library, названной работающей Deployment. `make schemas`
+  - UI (Project): в шапке и в диалоге Deploy — предупреждение о нехватке Library Release у работающей Deployment; после Discard — toast со списком пропущенных Release и числом удалённых Widgets. UI (Library): подтверждение удаления предупреждает, что Commit/Release прошлого сохранят ссылку на удалённую Library, а работающая Deployment удаление запрещает
+  - Документы: ADR 0007 (поправка: работающая Deployment держит Library), ADR 0012 (поправка: проверка при удалении, политика не ретраится), ADR 0021 (пины Commit/Release не блокируют удаление), `GLOSSARY.md` (Library Release, Library Pin, Deployment), `AGENTS.md`, CHANGELOG
+  - Bruno: `DELETE /libraries/{id}` при живом пине — 409, при работающей Deployment — 409, только при старой истории — 200; отдельный сценарий: Library, названная работающей Deployment, → 409; после нового Deploy без пина → 200; Deployment из файла с чужим пином → `POST …/discard` 200 с `warnings`, Draft доступен для записи
+  - Тесты: репозиторий (`DeploymentNamesLibrary` — работающая/старая Deployment, удалённый Project), application (удаление при работающей Deployment — 409, после нового Deploy — 200; Discard с чужим пином — warnings и записываемый Draft), REST (preview `missing_releases`, Discard 200 с warnings и удалёнными Widgets), UI-предупреждения
+
 ## [0.0.79] - 2026-11-08
 
 ### Added

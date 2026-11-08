@@ -1,0 +1,26 @@
+info:
+  name: unpin the library of the cleanup flow
+  type: http
+  seq: 201
+
+http:
+  method: DELETE
+  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/library-pins/{{CLEANUP_LIBRARY_ID}}?version=2
+  auth: inherit
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.library_id'
+      operator: eq
+      value: '"{{CLEANUP_LIBRARY_ID}}"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
