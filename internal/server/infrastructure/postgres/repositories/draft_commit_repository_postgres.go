@@ -152,6 +152,27 @@ func (r draftRepositoryPostgres) FindCommits(ctx context.Context, scope draft.Sc
 	return commits, nil
 }
 
+// FindLastCommit returns the Draft's newest Commit, if it has one (see
+// draft.Repository). It is one row: a Discard needs no other Commit.
+func (r draftRepositoryPostgres) FindLastCommit(ctx context.Context, scope draft.Scope) (draft.Commit, bool, error) {
+	if err := checkScopeLive(ctx, r.db, scope); err != nil {
+		return nil, false, err
+	}
+	column, value := scopeColumn(scope)
+	row := r.db.QueryRowContext(ctx,
+		`SELECT c.id, c.number, c.title, c.author, c.created_at, c.draft_version, c.content
+		 FROM engineering.commits c JOIN engineering.drafts d ON d.id = c.draft_id
+		 WHERE d.`+column+` = $1 ORDER BY c.number DESC LIMIT 1`, value)
+	commit, err := scanCommitRow(scope, row.Scan)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("cannot read the last commit of %s: %w", scope, err)
+	}
+	return commit, true, nil
+}
+
 // FindCommit returns the Commit number of the Draft (see draft.Repository).
 func (r draftRepositoryPostgres) FindCommit(ctx context.Context, scope draft.Scope, number int) (draft.Commit, error) {
 	if err := checkScopeLive(ctx, r.db, scope); err != nil {

@@ -62,22 +62,22 @@ func (s discardServiceImpl) Discard(ctx context.Context, rawProjectID uuid.UUID)
 	if err != nil {
 		return appdto.DiscardedDraft{}, err
 	}
-	commits, err := s.content.Drafts().FindCommits(ctx, s.content.ScopeOf(projectID))
+	// The newest Commit is what the Draft falls back to when its unsaved
+	// changes go.
+	last, found, err := s.content.Drafts().FindLastCommit(ctx, s.content.ScopeOf(projectID))
 	if err != nil {
-		return appdto.DiscardedDraft{}, fmt.Errorf("cannot read the commits of project %s: %w", projectID, err)
+		return appdto.DiscardedDraft{}, fmt.Errorf("cannot read the last commit of project %s: %w", projectID, err)
 	}
-	if len(commits) == 0 {
+	if !found {
 		return appdto.DiscardedDraft{}, fmt.Errorf("%w: %s", ErrNothingToDiscard, projectID)
 	}
-	// FindCommits is newest first: the last Commit is what the Draft falls
-	// back to when its unsaved changes go.
-	file, ok := commits[0].Content().ProjectFile()
+	file, ok := last.Content().ProjectFile()
 	if !ok {
-		return appdto.DiscardedDraft{}, fmt.Errorf("commit %d of project %s holds no project file", commits[0].Number(), projectID)
+		return appdto.DiscardedDraft{}, fmt.Errorf("commit %d of project %s holds no project file", last.Number(), projectID)
 	}
-	content, err := contentOfDeployment(projectID, file)
+	content, err := contentOfProjectFile(projectID, file)
 	if err != nil {
-		return appdto.DiscardedDraft{}, fmt.Errorf("cannot read commit %d of project %s: %w", commits[0].Number(), projectID, err)
+		return appdto.DiscardedDraft{}, fmt.Errorf("cannot read commit %d of project %s: %w", last.Number(), projectID, err)
 	}
 	missing, err := missingLibraryReleases(ctx, s.libraries, s.releases, file)
 	if err != nil {
@@ -108,7 +108,7 @@ func (s discardServiceImpl) Revert(ctx context.Context, rawProjectID uuid.UUID) 
 	if !ok {
 		return appdto.DiscardedDraft{}, fmt.Errorf("%w: %s", ErrNoDeploymentToDiscard, projectID)
 	}
-	content, err := contentOfDeployment(projectID, deployment.Content)
+	content, err := contentOfProjectFile(projectID, deployment.Content)
 	if err != nil {
 		return appdto.DiscardedDraft{}, fmt.Errorf("cannot read the deployment of project %s: %w", projectID, err)
 	}
@@ -116,7 +116,7 @@ func (s discardServiceImpl) Revert(ctx context.Context, rawProjectID uuid.UUID) 
 	// removed after it, may name Library Releases this server does not have.
 	// The Draft cannot hold such a pin: it goes with the Widgets of its
 	// Library's WidgetTypes, and the answer names it — rather than refusing the
-	// Discard and leaving the Draft unwritable (task 71).
+	// Revert and leaving the Draft unwritable (task 71).
 	missing, err := missingLibraryReleases(ctx, s.libraries, s.releases, deployment.Content)
 	if err != nil {
 		return appdto.DiscardedDraft{}, fmt.Errorf("cannot check the library pins of project %s: %w", projectID, err)
@@ -129,15 +129,15 @@ func (s discardServiceImpl) Revert(ctx context.Context, rawProjectID uuid.UUID) 
 		return session.Replace(ctx, content)
 	})
 	if err != nil {
-		return appdto.DiscardedDraft{}, fmt.Errorf("cannot discard project %s: %w", projectID, err)
+		return appdto.DiscardedDraft{}, fmt.Errorf("cannot revert project %s: %w", projectID, err)
 	}
 	return appdto.DiscardedDraft{Version: result.Version().Number(), Warnings: warnings}, nil
 }
 
 // lockDiscardedPins locks every Library the kept pins name FOR SHARE in the
-// Discard's transaction: a Library deleted between the check and the write
-// makes the Discard refuse, not fail on the foreign key (ADR 0018). The pins
-// the check already dropped are not locked.
+// Discard's or Revert's transaction: a Library deleted between the check and the
+// write makes the command refuse, not fail on the foreign key (ADR 0018). The
+// pins the check already dropped are not locked.
 func (s discardServiceImpl) lockDiscardedPins(ctx context.Context, content draft.Content, session *draft.Session) error {
 	var issues []FileIssue
 	for i, pin := range content.LibraryPins {
@@ -158,10 +158,10 @@ func (s discardServiceImpl) lockDiscardedPins(ctx context.Context, content draft
 	return nil
 }
 
-// contentOfDeployment rebuilds the content of a Project's Draft from the
-// ProjectFile of the Deployment it runs: the entities keep the identity they
-// had when they were deployed.
-func contentOfDeployment(projectID id.ID[project.Project], file projectv0.ProjectFile) (draft.Content, error) {
+// contentOfProjectFile rebuilds the content of a Project's Draft from the
+// ProjectFile a Deployment runs or a Commit fixed: the entities keep the
+// identity they had when they were stored.
+func contentOfProjectFile(projectID id.ID[project.Project], file projectv0.ProjectFile) (draft.Content, error) {
 	var content draft.Content
 	for _, d := range file.Devices {
 		protocol, err := device.NewDeviceProtocol(d.Protocol)

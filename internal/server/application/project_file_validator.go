@@ -93,7 +93,7 @@ func (v projectFileValidator) validate(ctx context.Context, projectID id.ID[proj
 	}
 
 	canonical := canonicalProjectFile(file)
-	content, err := contentOfDeployment(projectID, canonical)
+	content, err := contentOfProjectFile(projectID, canonical)
 	if err != nil {
 		problems.add("", "the document cannot be read as a Draft: %s", err)
 		return projectFileValidation{}, ProjectFileError{Issues: problems.issues}

@@ -121,6 +121,13 @@ func TestDraftSaveCommit_NumbersAndContent(t *testing.T) {
 	if len(list) != 2 || list[0].Number() != 2 || list[1].Number() != 1 {
 		t.Errorf("commits newest first: %d", len(list))
 	}
+	lastCommit, hasLast, err := testDrafts().FindLastCommit(ctx, scope)
+	if err != nil {
+		t.Fatalf("FindLastCommit: %v", err)
+	}
+	if !hasLast || lastCommit.Number() != 2 {
+		t.Errorf("the last commit: %s, %t, want 2", lastCommit, hasLast)
+	}
 }
 
 // TestDraftSaveCommit_StaleVersionAndTwoSaves: a Save of a Version a write has
@@ -132,6 +139,10 @@ func TestDraftSaveCommit_StaleVersionAndTwoSaves(t *testing.T) {
 	scope := draft.ProjectScope(mainProject)
 	content := projectCommitContent()
 	tags := repositories.NewTagRepositoryPostgres(testDB, mainProject)
+
+	if _, found, err := testDrafts().FindLastCommit(ctx, scope); err != nil || found {
+		t.Fatalf("FindLastCommit of a Draft never saved: %t, %v, want none", found, err)
+	}
 
 	read := draftVersionOf(t, mainProject)
 	mustUpdate(t, mainProject, "create a tag", func(session *draft.Session) error {

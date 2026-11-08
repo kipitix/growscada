@@ -26,8 +26,9 @@ type Repository interface {
 
 	// CheckVersion locks the Draft's row and checks it is still at expected: a
 	// stale Version is a ConflictError. It is the check a multi-step act over
-	// the Draft (Deploy, which builds the ProjectFile over several queries)
-	// makes after it read the Draft and before it acts on it (ADR 0022).
+	// the Draft makes after it read the Draft and before it acts on it (ADR
+	// 0022). A Deploy takes a Release and reads no Draft, so the pattern has no
+	// caller since task 72_4; ADR 0022 keeps it for the next act that needs it.
 	CheckVersion(ctx context.Context, scope Scope, expected version.Version[Draft]) error
 
 	// Replace runs a write that replaces the whole content of the Draft
@@ -82,6 +83,12 @@ type Repository interface {
 	// FindCommits returns the Draft's Commits, newest first. A Project or
 	// Library that is not live is ErrProjectNotFound or ErrLibraryNotFound.
 	FindCommits(ctx context.Context, scope Scope) ([]Commit, error)
+
+	// FindLastCommit returns the Draft's newest Commit, and whether it has one
+	// at all: a Draft never saved has none. It is the read of a Discard, which
+	// falls back to it (task 72_4) and needs no other Commit. A Project or
+	// Library that is not live is ErrProjectNotFound or ErrLibraryNotFound.
+	FindLastCommit(ctx context.Context, scope Scope) (Commit, bool, error)
 
 	// FindCommit returns the Commit number of the Draft. A Project or Library
 	// that is not live is ErrProjectNotFound or ErrLibraryNotFound; a number
