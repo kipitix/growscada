@@ -179,7 +179,7 @@ func (l *Library) listenShortcuts() {
 		}
 		ev := args[0]
 		action := uiutil.KeyEventAction(ev)
-		if action == uiutil.KeyNone || !l.shown() {
+		if action == uiutil.KeyNone || !l.shown() || !l.keyActionAllowed() {
 			return nil
 		}
 		ev.Call("preventDefault") // the browser's own undo of the page
@@ -187,6 +187,13 @@ func (l *Library) listenShortcuts() {
 		return nil
 	})
 	app.Window().Call("addEventListener", "keydown", l.onKeyDown)
+}
+
+// keyActionAllowed reports whether a shortcut may act now: no dialog of the
+// mode is open. An undo behind the Save dialog would change the Draft the Save
+// is about to fix as a Commit.
+func (l *Library) keyActionAllowed() bool {
+	return !l.saveDialog && !l.commitsDialog
 }
 
 // noKeyDown releases the listener (OnDismount).

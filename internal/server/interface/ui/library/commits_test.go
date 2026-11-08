@@ -51,3 +51,22 @@ func TestSaveCommit_LibraryHistoryAndRename(t *testing.T) {
 		t.Errorf("the renamed history: %+v", f.l.commits)
 	}
 }
+
+// TestSaveCommit_LibraryShortcutsWaitForTheDialogs: the Save and the History
+// dialogs of the mode hold the Draft's shortcuts (task 72_2; ADR 0021).
+func TestSaveCommit_LibraryShortcutsWaitForTheDialogs(t *testing.T) {
+	url, api := newServer(t)
+	f := mount(t, url, api)
+	f.run()
+	if !f.l.keyActionAllowed() {
+		t.Fatal("a shortcut is refused without a dialog")
+	}
+	f.l.saveDialog = true
+	if f.l.keyActionAllowed() {
+		t.Errorf("a shortcut acts behind the Save dialog")
+	}
+	f.l.saveDialog, f.l.commitsDialog = false, true
+	if f.l.keyActionAllowed() {
+		t.Errorf("a shortcut acts behind the History dialog")
+	}
+}

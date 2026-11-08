@@ -53,6 +53,25 @@ func TestSaveCommit_HistoryRowAndIndicator(t *testing.T) {
 // TestSaveCommit_ConflictRereadsAndRename: a Save of a stale Version is a
 // conflict that rereads the Draft, and a Commit's title is renamed in place
 // (task 72_2; ADR 0021).
+// TestSaveCommit_ShortcutsWaitForTheDialogs: the Save and the History dialogs
+// of the mode hold the Draft's shortcuts, like its other dialogs (task 72_2;
+// ADR 0021).
+func TestSaveCommit_ShortcutsWaitForTheDialogs(t *testing.T) {
+	f := startProject(t)
+	f.run()
+	if !f.p.keyActionAllowed() {
+		t.Fatal("a shortcut is refused without a dialog")
+	}
+	f.p.saveDialog = true
+	if f.p.keyActionAllowed() {
+		t.Errorf("a shortcut acts behind the Save dialog")
+	}
+	f.p.saveDialog, f.p.commitsDialog = false, true
+	if f.p.keyActionAllowed() {
+		t.Errorf("a shortcut acts behind the History dialog")
+	}
+}
+
 func TestSaveCommit_ConflictRereadsAndRename(t *testing.T) {
 	f := startProject(t)
 	f.run()
