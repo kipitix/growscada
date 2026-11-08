@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -346,7 +347,7 @@ func (b *Bar) addEntry(ev apiv0.Event) {
 	text := ev.Type
 	if info, ok := eventTypeInfoByType[ev.Type]; ok {
 		cat = info.category
-		text = info.describe(ev.ID)
+		text = info.describe(eventRef(ev))
 	} else if ev.ID != "" {
 		text = fmt.Sprintf("%s %s", ev.Type, ev.ID)
 	}
@@ -361,6 +362,16 @@ func (b *Bar) addEntry(ev apiv0.Event) {
 	if len(b.entries) > maxEntries {
 		b.entries = b.entries[:maxEntries]
 	}
+}
+
+// eventRef is what a type's description names: the number of the Commit a
+// commit_created or commit_title_updated is about (its ID is the Project's or
+// the Library's), the ID of every other event.
+func eventRef(ev apiv0.Event) string {
+	if ev.Commit > 0 {
+		return strconv.Itoa(ev.Commit)
+	}
+	return ev.ID
 }
 
 // handleError responds to a stream's "error" event (dropped connection,
