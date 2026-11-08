@@ -107,7 +107,7 @@ func TestWidgetEvent_SceneNotShown_RereadsThatSceneOnly(t *testing.T) {
 	f.event(apiv0.Event{Type: apiv0.EventWidgetCreated, ID: widgetID.String(), SceneID: other.String()})
 
 	f.noToasts()
-	if got, want := log.take(), []string{deployPath, changesPath, releasesPath, scenePath(other)}; !slices.Equal(got, want) {
+	if got, want := log.take(), []string{changesPath, scenePath(other)}; !slices.Equal(got, want) {
 		t.Errorf("requests: %v, want %v", got, want)
 	}
 	f.knowsVersion(other)
@@ -124,7 +124,7 @@ func TestWidgetEvent_SceneShown_RereadsItsWidgetsOnly(t *testing.T) {
 
 	f.noToasts()
 	// The Widgets carry the Scene's version.
-	want := []string{deployPath, changesPath, releasesPath, scenePath(shown) + "/widgets"}
+	want := []string{changesPath, scenePath(shown) + "/widgets"}
 	if got := log.take(); !slices.Equal(got, want) {
 		t.Errorf("requests: %v, want %v", got, want)
 	}
@@ -141,7 +141,7 @@ func TestWidgetEvent_SceneNotListed_IsIgnored(t *testing.T) {
 	f.event(apiv0.Event{Type: apiv0.EventWidgetDeleted, ID: uuid.NewString(), SceneID: gone.String()})
 
 	f.noToasts() // a 404 is no error: the Scene was deleted meanwhile
-	if got := log.take(); !slices.Equal(got, []string{deployPath, changesPath, releasesPath, scenePath(gone)}) {
+	if got := log.take(); !slices.Equal(got, []string{changesPath, scenePath(gone)}) {
 		t.Errorf("requests: %v", got)
 	}
 	if len(f.p.scenes) != 2 {
@@ -318,7 +318,7 @@ func TestWidgetEvents_InSeveralScenesNotShown_RereadTheListOnce(t *testing.T) {
 
 	f.noToasts()
 	// The first Scene is reread by itself; the others, marked meanwhile, with the list.
-	if got, want := log.take(), []string{deployPath, deployPath, changesPath, changesPath, releasesPath, releasesPath,
+	if got, want := log.take(), []string{changesPath, changesPath,
 		"GET " + mainContent + "/scenes", scenePath(more[0])}; !slices.Equal(got, want) {
 		t.Errorf("requests: %v, want %v", got, want)
 	}
@@ -343,7 +343,22 @@ func TestServerEvents_OfAnotherProject_Dropped(t *testing.T) {
 
 	f.p.compoCtx.NewActionWithValue(eventlog.ActionServerEvent, created, app.T(eventlog.ProjectTag, f.p.projectID.String()))
 	f.run()
-	if got, want := log.take(), []string{deployPath, changesPath, releasesPath, "GET " + mainContent + "/scenes"}; !slices.Equal(got, want) {
+	if got, want := log.take(), []string{changesPath, "GET " + mainContent + "/scenes"}; !slices.Equal(got, want) {
 		t.Errorf("requests on the project's event: %v, want %v", got, want)
+	}
+}
+
+// TestDeploymentCreated_RereadsTheDeploymentAndItsReleases: a Deploy in another
+// tab moves the running Release; a write of the Draft changes neither the
+// Deployment nor the list, so it does not reread them (task 72_4).
+func TestDeploymentCreated_RereadsTheDeploymentAndItsReleases(t *testing.T) {
+	url, api := newServer(t)
+	f, log := mountLogged(t, url, api)
+
+	f.event(apiv0.Event{Type: apiv0.EventDeploymentCreated})
+
+	f.noToasts()
+	if got, want := log.take(), []string{deployPath, releasesPath}; !slices.Equal(got, want) {
+		t.Errorf("requests: %v, want %v", got, want)
 	}
 }

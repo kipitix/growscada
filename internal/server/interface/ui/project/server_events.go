@@ -34,15 +34,17 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 			p.loadDraftChanges(ctx)
 		}
 		targets := eventlog.ReloadTargetsFor(ev)
-		// A write of the Draft's content is one DraftChange, and a Deploy or a
-		// Release clears the stack (ADR 0017): the undo and redo buttons follow
-		// the events, as the counts they show do.
+		// A write of the Draft's content is one DraftChange (ADR 0017): the
+		// undo and redo buttons follow the events, as the counts they show do.
 		if targets.DraftChanged() {
 			p.loadDraftChanges(ctx)
 		}
 		if targets.Deploy {
+			// A Deploy, a Rollback or a file deploy: the running Deployment and
+			// the Release it came from, which the list marks (task 72_4). A
+			// write of the Draft changes neither.
 			p.loadDeploy(ctx)
-			p.loadReleases(ctx) // the Release the Deployment came from is marked running
+			p.loadReleases(ctx)
 			if p.deploymentsDialog {
 				p.loadDeployments(ctx)
 			}

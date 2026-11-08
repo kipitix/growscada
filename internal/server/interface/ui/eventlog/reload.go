@@ -33,12 +33,13 @@ func (t ReloadTargets) WidgetsOf(selected uuid.UUID) bool {
 }
 
 // DraftChanged reports whether the event may have changed a Draft's DraftChange
-// stack (ADR 0017): every write of its content is one change, and a Deploy or
-// a Release clears the stack. Such an event is what the modes reread the stack
-// on, alongside a resync; an event of the Draft's lifecycle alone (a Project or
-// Library renamed or deleted) is not.
+// stack (ADR 0017): every write of its content is one change, and a Discard
+// clears the stack. A Deploy and a Release take a snapshot and change no Draft,
+// so they leave the stack as it is (task 72_4). Such an event is what the modes
+// reread the stack on, alongside a resync; an event of the Draft's lifecycle
+// alone (a Project or Library renamed or deleted) is not.
 func (t ReloadTargets) DraftChanged() bool {
-	return t.Tags || t.Scenes || t.Widgets || t.LibraryPins || t.WidgetTypes || t.Deploy
+	return t.Tags || t.Scenes || t.Widgets || t.LibraryPins || t.WidgetTypes || t.Scene != uuid.Nil
 }
 
 // AllTargets is every list.
@@ -85,30 +86,30 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 		apiv0.EventLibraryReleased:
 		return ReloadTargets{Libraries: true, WidgetTypes: true}
 	case apiv0.EventLibraryPinCreated, apiv0.EventLibraryPinUpdated, apiv0.EventLibraryPinDeleted:
-		return ReloadTargets{LibraryPins: true, Deploy: true}
+		return ReloadTargets{LibraryPins: true}
 	case apiv0.EventSceneCreated, apiv0.EventSceneUpdated, apiv0.EventSceneDeleted:
-		return ReloadTargets{Scenes: true, Deploy: true}
+		return ReloadTargets{Scenes: true}
 	case apiv0.EventWidgetCreated, apiv0.EventWidgetUpdated, apiv0.EventWidgetDeleted:
 		// The only place scene_id is read.
 		if sceneID := uiutil.ParseID(ev.SceneID); sceneID != uuid.Nil {
-			return ReloadTargets{Scene: sceneID, Deploy: true}
+			return ReloadTargets{Scene: sceneID}
 		}
 		// Not knowing the Scene, every Scene (the widget change bumped its
 		// version) and the shown Widgets may be stale.
-		return ReloadTargets{Scenes: true, Widgets: true, Deploy: true}
+		return ReloadTargets{Scenes: true, Widgets: true}
 	case apiv0.EventTagUpdated:
 		if ev.Tag != nil {
 			return ReloadTargets{}
 		}
 		return ReloadTargets{Tags: true}
 	case apiv0.EventTagCreated, apiv0.EventTagDeleted:
-		return ReloadTargets{Tags: true, Deploy: true}
+		return ReloadTargets{Tags: true}
 	case apiv0.EventDeviceCreated, apiv0.EventDeviceUpdated, apiv0.EventDeviceDeleted,
 		apiv0.EventEnvironmentCreated, apiv0.EventEnvironmentUpdated, apiv0.EventEnvironmentDeleted,
 		apiv0.EventEnvironmentDeviceCreated, apiv0.EventEnvironmentDeviceUpdated, apiv0.EventEnvironmentDeviceDeleted:
-		// The UI shows no Devices yet (task 66), but they are part of the
-		// ProjectFile: the Project mode's deployment state may be stale.
-		return ReloadTargets{Deploy: true}
+		// The Project mode shows no Devices yet (task 66): the Deployment it
+		// runs changes on deployment_created alone (task 72_4).
+		return ReloadTargets{}
 	}
 	// The Library events make nothing of a Project stale: a Project sees a
 	// Library only through the Release it pins, whose switch is a pin event.

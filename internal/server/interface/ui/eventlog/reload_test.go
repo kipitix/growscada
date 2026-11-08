@@ -20,30 +20,31 @@ func TestReloadTargetsFor(t *testing.T) {
 		{apiv0.Event{Type: apiv0.EventWidgetTypeDeleted}, ReloadTargets{WidgetTypes: true, Libraries: true}},
 		{apiv0.Event{Type: apiv0.EventLibraryReleased}, ReloadTargets{WidgetTypes: true, Libraries: true}},
 		{apiv0.Event{Type: apiv0.EventLibraryUpdated}, ReloadTargets{WidgetTypes: true, Libraries: true}},
-		{apiv0.Event{Type: apiv0.EventLibraryPinUpdated}, ReloadTargets{LibraryPins: true, Deploy: true}},
-		{apiv0.Event{Type: apiv0.EventSceneCreated}, ReloadTargets{Scenes: true, Deploy: true}},
-		{apiv0.Event{Type: apiv0.EventSceneUpdated}, ReloadTargets{Scenes: true, Deploy: true}},
-		{apiv0.Event{Type: apiv0.EventSceneDeleted}, ReloadTargets{Scenes: true, Deploy: true}},
-		{apiv0.Event{Type: apiv0.EventWidgetCreated, SceneID: sceneID.String()}, ReloadTargets{Scene: sceneID, Deploy: true}},
-		{apiv0.Event{Type: apiv0.EventWidgetUpdated, SceneID: sceneID.String()}, ReloadTargets{Scene: sceneID, Deploy: true}},
-		{apiv0.Event{Type: apiv0.EventWidgetDeleted, SceneID: sceneID.String()}, ReloadTargets{Scene: sceneID, Deploy: true}},
+		{apiv0.Event{Type: apiv0.EventLibraryPinUpdated}, ReloadTargets{LibraryPins: true}},
+		{apiv0.Event{Type: apiv0.EventSceneCreated}, ReloadTargets{Scenes: true}},
+		{apiv0.Event{Type: apiv0.EventSceneUpdated}, ReloadTargets{Scenes: true}},
+		{apiv0.Event{Type: apiv0.EventSceneDeleted}, ReloadTargets{Scenes: true}},
+		{apiv0.Event{Type: apiv0.EventWidgetCreated, SceneID: sceneID.String()}, ReloadTargets{Scene: sceneID}},
+		{apiv0.Event{Type: apiv0.EventWidgetUpdated, SceneID: sceneID.String()}, ReloadTargets{Scene: sceneID}},
+		{apiv0.Event{Type: apiv0.EventWidgetDeleted, SceneID: sceneID.String()}, ReloadTargets{Scene: sceneID}},
 		// Without its Scene (an older server) or with one that does not parse.
-		{apiv0.Event{Type: apiv0.EventWidgetUpdated}, ReloadTargets{Scenes: true, Widgets: true, Deploy: true}},
-		{apiv0.Event{Type: apiv0.EventWidgetDeleted, SceneID: "not-a-uuid"}, ReloadTargets{Scenes: true, Widgets: true, Deploy: true}},
-		{apiv0.Event{Type: apiv0.EventTagCreated}, ReloadTargets{Tags: true, Deploy: true}},
+		{apiv0.Event{Type: apiv0.EventWidgetUpdated}, ReloadTargets{Scenes: true, Widgets: true}},
+		{apiv0.Event{Type: apiv0.EventWidgetDeleted, SceneID: "not-a-uuid"}, ReloadTargets{Scenes: true, Widgets: true}},
+		{apiv0.Event{Type: apiv0.EventTagCreated}, ReloadTargets{Tags: true}},
 		{apiv0.Event{Type: apiv0.EventTagUpdated, Tag: &apiv0.TagResponse{ID: sceneID}}, ReloadTargets{}},
 		{apiv0.Event{Type: apiv0.EventTagUpdated}, ReloadTargets{Tags: true}},
-		{apiv0.Event{Type: apiv0.EventTagDeleted}, ReloadTargets{Tags: true, Deploy: true}},
+		{apiv0.Event{Type: apiv0.EventTagDeleted}, ReloadTargets{Tags: true}},
 		{apiv0.Event{Type: EventResync}, ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, Commits: true}},
 		{apiv0.Event{Type: EventProjectResync}, ReloadTargets{LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Commits: true, Releases: true}},
 		{apiv0.Event{Type: apiv0.EventProjectCreated}, ReloadTargets{Projects: true, Deploy: true}},
 		{apiv0.Event{Type: apiv0.EventProjectUpdated}, ReloadTargets{Projects: true, Deploy: true}},
 		{apiv0.Event{Type: apiv0.EventProjectDeleted}, ReloadTargets{Projects: true, Deploy: true}},
-		// The UI shows no Devices, Environments and pairs yet (task 66), but
-		// they are part of the ProjectFile: the deployment state is stale.
-		{apiv0.Event{Type: apiv0.EventDeviceCreated}, ReloadTargets{Deploy: true}},
-		{apiv0.Event{Type: apiv0.EventEnvironmentUpdated}, ReloadTargets{Deploy: true}},
-		{apiv0.Event{Type: apiv0.EventEnvironmentDeviceDeleted}, ReloadTargets{Deploy: true}},
+		// The UI shows no Devices, Environments and pairs yet (task 66): a
+		// write of the Draft changes no list, and the Deployment it runs
+		// changes on deployment_created alone (task 72_4).
+		{apiv0.Event{Type: apiv0.EventDeviceCreated}, ReloadTargets{}},
+		{apiv0.Event{Type: apiv0.EventEnvironmentUpdated}, ReloadTargets{}},
+		{apiv0.Event{Type: apiv0.EventEnvironmentDeviceDeleted}, ReloadTargets{}},
 		{apiv0.Event{Type: apiv0.EventDeploymentCreated}, ReloadTargets{Deploy: true}},
 		{apiv0.Event{Type: apiv0.EventCommitCreated}, ReloadTargets{Commits: true}},
 		{apiv0.Event{Type: apiv0.EventCommitTitleUpdated}, ReloadTargets{Commits: true}},
@@ -66,7 +67,17 @@ func TestReloadTargetsFor(t *testing.T) {
 // UI: the modes apply them themselves (Operation reads its own Journal, ADR
 // 0020), or they belong to content it does not show yet (task 66 shows
 // Devices, Environments and their pairs).
-var notShownYet = map[string]bool{}
+var notShownYet = map[string]bool{
+	apiv0.EventDeviceCreated:            true,
+	apiv0.EventDeviceUpdated:            true,
+	apiv0.EventDeviceDeleted:            true,
+	apiv0.EventEnvironmentCreated:       true,
+	apiv0.EventEnvironmentUpdated:       true,
+	apiv0.EventEnvironmentDeleted:       true,
+	apiv0.EventEnvironmentDeviceCreated: true,
+	apiv0.EventEnvironmentDeviceUpdated: true,
+	apiv0.EventEnvironmentDeviceDeleted: true,
+}
 
 // TestReloadTargetsFor_CoversEveryKnownEvent guards the table against a new
 // aggregate event type added to the event log but not routed.
@@ -89,9 +100,9 @@ func TestReloadTargetsFor_CoversEveryKnownEvent(t *testing.T) {
 	}
 }
 
-// TestReloadTargets_DraftChanged: the events that write a Draft's content, a
-// Deploy or a Release clear its stack (ADR 0017), so they ask for a reread of
-// the stack; a Tag's value alone does not.
+// TestReloadTargets_DraftChanged: the events that write a Draft's content ask
+// for a reread of the stack (ADR 0017); a Tag's value, a Deploy and a Release
+// change no Draft and leave the stack alone (task 72_4).
 func TestReloadTargets_DraftChanged(t *testing.T) {
 	changes := []apiv0.Event{
 		{Type: apiv0.EventTagCreated},
@@ -100,10 +111,7 @@ func TestReloadTargets_DraftChanged(t *testing.T) {
 		{Type: apiv0.EventWidgetCreated},
 		{Type: apiv0.EventLibraryPinDeleted},
 		{Type: apiv0.EventWidgetTypeUpdated},
-		{Type: apiv0.EventDeviceCreated},
-		{Type: apiv0.EventEnvironmentDeviceCreated},
-		{Type: apiv0.EventDeploymentCreated}, // a Deploy clears the stack
-		{Type: apiv0.EventLibraryReleased},
+		{Type: apiv0.EventLibraryReleased}, // a Library's Release clears its stack (ADR 0007)
 		{Type: EventResync},
 	}
 	for _, ev := range changes {
@@ -113,6 +121,9 @@ func TestReloadTargets_DraftChanged(t *testing.T) {
 	}
 	unchanged := []apiv0.Event{
 		{Type: apiv0.EventTagUpdated, Tag: &apiv0.TagResponse{}}, // a value, not a DraftChange
+		{Type: apiv0.EventDeploymentCreated},                     // a Deploy takes a Release (task 72_4)
+		{Type: apiv0.EventReleaseCreated},                        // a Release copies a Commit
+		{Type: apiv0.EventDeviceCreated},                         // no Device list yet (task 66)
 		{Type: apiv0.EventClientConnected},
 		{Type: apiv0.EventSystemReady},
 	}
