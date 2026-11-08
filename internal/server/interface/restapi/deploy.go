@@ -5,7 +5,6 @@ import (
 
 	"github.com/google/uuid"
 
-	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
 )
@@ -114,18 +113,19 @@ func (h DeployHandlers) PostDeploy(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusCreated, newDeployResponse(deployment))
 }
 
-// PostDiscard handles POST /projects/{project_id}/discard: it marks the Project
-// as being reset to the Deployment it runs and answers at once (202); the Draft
-// is read-only until the Discard ends. 409 without a Deployment.
+// PostDiscard handles POST /projects/{project_id}/discard: it resets the Draft
+// to the Deployment the Project runs and answers the Draft's new state, with
+// the Library Releases it could not restore (task 71). 409 without a
+// Deployment.
 func (h DeployHandlers) PostDiscard(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := pathUUID(w, r, projectResource)
 	if !ok {
 		return
 	}
-	state, err := h.discard.Discard(r.Context(), projectID)
+	discarded, err := h.discard.Discard(r.Context(), projectID)
 	if err != nil {
 		sendError(w, r, err)
 		return
 	}
-	sendJSONResponse(w, http.StatusOK, apiv0.DiscardProjectResponse{Version: state.Version})
+	sendJSONResponse(w, http.StatusOK, newDiscardProjectResponse(discarded))
 }

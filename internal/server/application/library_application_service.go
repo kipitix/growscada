@@ -45,6 +45,7 @@ type libraryServiceImpl struct {
 	libraries    library.LibraryRepository
 	releases     library.LibraryReleaseRepository
 	widgetTypes  library.WidgetTypeRepositories
+	runtime      RuntimeNode
 	organization id.ID[organization.Organization]
 	now          func() time.Time
 }
@@ -56,18 +57,22 @@ var _ LibraryService = (*libraryServiceImpl)(nil)
 // and saved with them (ADR 0008); a deleted library is removed by the policy
 // of NewLibraryCleanupPolicy. A Release is gated by the Draft's Version and
 // clears its DraftChange stack once made; a Discard is one transaction over
-// the Draft (ADR 0016, ADR 0017).
+// the Draft (ADR 0016, ADR 0017). The Runtime node aRuntime is asked whether a
+// running Deployment names a Release of a library about to be deleted
+// (task 71).
 func NewLibraryService(
 	aContent LibraryContent,
 	someLibraries library.LibraryRepository,
 	someReleases library.LibraryReleaseRepository,
 	someWidgetTypes library.WidgetTypeRepositories,
+	aRuntime RuntimeNode,
 ) LibraryService {
 	return &libraryServiceImpl{
 		content:      aContent,
 		libraries:    someLibraries,
 		releases:     someReleases,
 		widgetTypes:  someWidgetTypes,
+		runtime:      aRuntime,
 		organization: aContent.organization,
 		now:          time.Now,
 	}
@@ -211,16 +216,29 @@ func libraryDraftVersion(raw int) (version.Version[library.DraftContent], error)
 	return expected, nil
 }
 
-// DeleteLibraryByID marks a library deleted, while no live Project pins it,
-// and returns it as it was read, with its releases: from then on it does not
-// exist for the API. Its Draft and releases are removed later, by the policy
-// of NewLibraryCleanupPolicy. It expects no Version (retryOnRace).
+// DeleteLibraryByID marks a library deleted, while no live Project pins it and
+// no running Deployment names a Release of it, and returns it as it was read,
+// with its releases: from then on it does not exist for the API. Its Draft and
+// releases are removed later, by the policy of NewLibraryCleanupPolicy. A
+// Commit or a Project Release of the past does not refuse it: their documents
+// carry the WidgetType copies they need (task 71). It expects no Version
+// (retryOnRace).
 func (s libraryServiceImpl) DeleteLibraryByID(ctx context.Context, rawID uuid.UUID) (appdto.Library, error) {
 	var deleted appdto.Library
 	err := retryOnRace(library.ErrLibraryConflict, func() error {
 		found, err := s.findOwn(ctx, rawID)
 		if err != nil {
 			return err
+		}
+		// A running Deployment naming one of the library's Releases would make
+		// a Discard of it unable to restore the pin; the pins alone do not tell
+		// (task 71).
+		named, err := s.runtime.DeploymentNamesLibrary(ctx, found.ID().UUID())
+		if err != nil {
+			return fmt.Errorf("cannot read the deployments naming library %s: %w", found.ID(), err)
+		}
+		if named {
+			return fmt.Errorf("%w: %s", ErrLibraryInRunningDeployment, found.ID())
 		}
 		if deleted, err = s.describe(ctx, found); err != nil {
 			return err

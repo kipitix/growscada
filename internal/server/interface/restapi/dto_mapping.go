@@ -684,6 +684,23 @@ func newDeployPreviewResponse(preview appdto.DeployPreview) apiv0.DeployPreviewR
 			SceneID: dropped.SceneID, WidgetID: dropped.WidgetID, Name: dropped.Name,
 		}
 	}
+	for _, missing := range preview.MissingReleases {
+		resp.MissingReleases = append(resp.MissingReleases, apiv0.MissingReleaseResponse{
+			LibraryID: missing.LibraryID, Release: missing.Release,
+		})
+	}
+	return resp
+}
+
+// newDiscardProjectResponse is the answer of a Discard: the Draft's new state
+// and the Library Releases it could not restore (task 71).
+func newDiscardProjectResponse(discarded appdto.DiscardedDraft) apiv0.DiscardProjectResponse {
+	resp := apiv0.DiscardProjectResponse{Version: discarded.Version}
+	for _, warning := range discarded.Warnings {
+		resp.Warnings = append(resp.Warnings, apiv0.DiscardWarningResponse{
+			LibraryID: warning.LibraryID, Release: warning.Release, DroppedWidgets: warning.DroppedWidgets,
+		})
+	}
 	return resp
 }
 

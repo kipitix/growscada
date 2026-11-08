@@ -3,11 +3,13 @@ package application
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
+	"github.com/kipitix/growscada/internal/server/domain/library"
 )
 
 // DeployService is the Engineering node's Deploy (task 35, Q6, Q8, Q9): it
@@ -29,17 +31,23 @@ type DeployService interface {
 }
 
 type deployServiceImpl struct {
-	content ProjectContent
-	builder ProjectFileBuilder
-	runtime RuntimeNode
+	content    ProjectContent
+	builder    ProjectFileBuilder
+	runtime    RuntimeNode
+	libraries  library.LibraryRepository
+	releases   library.LibraryReleaseRepository
 }
 
 var _ DeployService = (*deployServiceImpl)(nil)
 
 // NewDeployService returns the DeployService over the content of the live
-// Projects aContent, the builder aBuilder and the Runtime node aRuntime.
-func NewDeployService(aContent ProjectContent, aBuilder ProjectFileBuilder, aRuntime RuntimeNode) DeployService {
-	return &deployServiceImpl{content: aContent, builder: aBuilder, runtime: aRuntime}
+// Projects aContent, the builder aBuilder and the Runtime node aRuntime. The
+// Libraries and Releases are read for the preview: it names the pins of the
+// running Deployment this server lacks (task 71).
+func NewDeployService(aContent ProjectContent, aBuilder ProjectFileBuilder, aRuntime RuntimeNode,
+	someLibraries library.LibraryRepository, someReleases library.LibraryReleaseRepository) DeployService {
+	return &deployServiceImpl{content: aContent, builder: aBuilder, runtime: aRuntime,
+		libraries: someLibraries, releases: someReleases}
 }
 
 func (s deployServiceImpl) Deploy(ctx context.Context, projectID uuid.UUID) (appdto.Deployment, error) {
@@ -99,7 +107,10 @@ func (s deployServiceImpl) Preview(ctx context.Context, projectID uuid.UUID) (ap
 	if err != nil {
 		return appdto.DeployPreview{}, fmt.Errorf("cannot read the current deployment of project %s: %w", projectID, err)
 	}
-	preview := appdto.DeployPreview{DroppedWidgets: []appdto.DroppedWidget{}}
+	preview := appdto.DeployPreview{
+		DroppedWidgets:  []appdto.DroppedWidget{},
+		MissingReleases: []appdto.MissingRelease{},
+	}
 	if !ok {
 		return preview, nil
 	}
@@ -109,5 +120,17 @@ func (s deployServiceImpl) Preview(ctx context.Context, projectID uuid.UUID) (ap
 		return appdto.DeployPreview{}, err
 	}
 	preview.Unchanged = unchanged
+	// The pins of the running Deployment this server cannot write: a Discard
+	// drops their Widgets instead of restoring them (task 71).
+	missing, err := missingLibraryReleases(ctx, s.libraries, s.releases, current.Content)
+	if err != nil {
+		return appdto.DeployPreview{}, fmt.Errorf("cannot check the library pins of project %s: %w", projectID, err)
+	}
+	for libraryID, release := range missing {
+		preview.MissingReleases = append(preview.MissingReleases, appdto.MissingRelease{LibraryID: libraryID, Release: release})
+	}
+	sort.Slice(preview.MissingReleases, func(i, j int) bool {
+		return preview.MissingReleases[i].LibraryID.String() < preview.MissingReleases[j].LibraryID.String()
+	})
 	return preview, nil
 }

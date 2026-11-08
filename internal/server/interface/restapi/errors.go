@@ -113,6 +113,8 @@ var errorMappings = []errorMapping{
 	{library.ErrLibraryConflict, http.StatusConflict, libraryResource, "Library was changed concurrently; reload it and retry"},
 	{library.ErrLibraryNameTaken, http.StatusConflict, libraryResource, "Library name is already taken"},
 	{library.ErrLibraryPinned, http.StatusConflict, libraryResource, "Library is pinned by Projects; unpin it first"},
+	{application.ErrLibraryInRunningDeployment, http.StatusConflict, libraryResource,
+		"Library is named by the running Deployment of a project; deploy a configuration without it first"},
 	{library.ErrNoRelease, http.StatusConflict, libraryResource, "Library has never been released: there is nothing to discard to"},
 	{library.ErrNothingToRelease, http.StatusConflict, libraryResource, "Library's Draft has not changed since its latest release"},
 	{library.ErrReleaseNumberTaken, http.StatusConflict, libraryResource, "Library was released concurrently; retry"},

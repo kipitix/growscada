@@ -41,6 +41,8 @@ func DeployProject(t *testing.T, db *sql.DB, projectID uuid.UUID) {
 		content,
 		application.NewProjectFileBuilder(content),
 		inprocess.NewRuntimeNode(states, tokens, deployments),
+		repositories.NewLibraryRepositoryPostgres(db),
+		releases,
 	)
 	if _, err := service.Deploy(ctx, projectID); err != nil {
 		// A test that deploys twice without changing the Draft asks for

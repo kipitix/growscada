@@ -227,39 +227,3 @@ func (s projectFileServiceImpl) projectName(ctx context.Context, projectID id.ID
 	return found.Name().String(), nil
 }
 
-// discardableDeployment checks the Deployment's pins against this server before a
-// Discard writes them (ADR 0018): a Deployment deployed from a foreign file may
-// name Library Releases that are not here, and the Draft cannot hold them.
-func discardableDeployment(ctx context.Context, libraries library.LibraryRepository, releases library.LibraryReleaseRepository,
-	file projectv0.ProjectFile) error {
-	var issues []FileIssue
-	for i, pin := range file.LibraryPins {
-		path := fmt.Sprintf("library_pins[%d]", i)
-		libraryID := id.NewID(id.IDWithUUID[library.Library](pin.LibraryID))
-		if _, err := libraries.FindByID(ctx, libraryID); err != nil {
-			if errors.Is(err, library.ErrLibraryNotFound) {
-				issues = append(issues, FileIssue{Path: path,
-					Message: fmt.Sprintf("library %s is not live on this server", pin.LibraryID)})
-				continue
-			}
-			return fmt.Errorf("cannot read library %s: %w", pin.LibraryID, err)
-		}
-		number, err := library.NewReleaseNumber(pin.Release)
-		if err != nil {
-			issues = append(issues, FileIssue{Path: path + ".release", Message: err.Error()})
-			continue
-		}
-		if _, err := releases.FindByNumber(ctx, libraryID, number); err != nil {
-			if errors.Is(err, library.ErrReleaseNotFound) {
-				issues = append(issues, FileIssue{Path: path,
-					Message: fmt.Sprintf("library %s has no release %d on this server", pin.LibraryID, pin.Release)})
-				continue
-			}
-			return fmt.Errorf("cannot read release %d of library %s: %w", pin.Release, pin.LibraryID, err)
-		}
-	}
-	if len(issues) > 0 {
-		return DeploymentNotDiscardableError{Issues: issues}
-	}
-	return nil
-}

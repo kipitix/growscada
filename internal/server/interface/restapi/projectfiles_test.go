@@ -180,8 +180,10 @@ func TestProjectFiles_OpenRefusals(t *testing.T) {
 }
 
 // TestProjectFiles_DeployFromFileAndDiscard: a file is a Deployment of its own
-// with cause file, the Draft is untouched, and a Discard of a foreign Deployment
-// refuses instead of writing a pin this server cannot hold (ADR 0018).
+// with cause file, the Draft is untouched, and a Discard of a Deployment that
+// names a Library Release this server does not have drops that pin with the
+// Widgets of its WidgetTypes and names it in warnings, so the Draft stays
+// writable (ADR 0018, task 71).
 func TestProjectFiles_DeployFromFileAndDiscard(t *testing.T) {
 	cleanProjectsRest(t)
 	services := newServices()
@@ -194,8 +196,24 @@ func TestProjectFiles_DeployFromFileAndDiscard(t *testing.T) {
 	rec := serve(router, http.MethodGet, mainPath+"/projectfile", nil)
 	file := decodeFile(t, rec)
 	// A pin to a Library this server does not have: a file from another
-	// server, whose document is still self-contained.
-	file.LibraryPins = append(file.LibraryPins, projectv0.LibraryPin{LibraryID: uuid.New(), Release: 1})
+	// server, whose document is still self-contained. A Widget of that
+	// Library's WidgetType is what a Discard cannot keep without the pin.
+	foreignLibrary := uuid.New()
+	foreignType := projectv0.WidgetType{
+		ID: uuid.New(), LibraryID: foreignLibrary, Name: "foreign gauge",
+		HTMLTemplate: "<div></div>", Script: "function render(inputs) {}", ScriptLanguage: "javascript",
+		DefaultWidth: 10, DefaultHeight: 10,
+	}
+	file.WidgetTypes = append(file.WidgetTypes, foreignType)
+	file.Scenes = append(file.Scenes, projectv0.Scene{
+		ID: uuid.New(), Name: "foreign scene", Width: 100, Height: 100,
+		Widgets: []projectv0.Widget{{
+			ID: uuid.New(), Name: "foreign widget",
+			Size: projectv0.Size{Width: 10, Height: 10}, Origin: projectv0.Origin{X: 0.5, Y: 0.5},
+			TypeID: foreignType.ID,
+		}},
+	})
+	file.LibraryPins = append(file.LibraryPins, projectv0.LibraryPin{LibraryID: foreignLibrary, Release: 1})
 
 	rec = serve(router, http.MethodPost, mainPath+"/projectfile/deploy", file)
 	if rec.Code != http.StatusCreated {
@@ -220,16 +238,46 @@ func TestProjectFiles_DeployFromFileAndDiscard(t *testing.T) {
 		t.Fatalf("deploying the running file: %d %s", rec.Code, rec.Body)
 	}
 
+	rec = serve(router, http.MethodGet, mainPath+"/deploy/preview", nil)
+	preview := decodeBody[apiv0.DeployPreviewResponse](t, rec)
+	if len(preview.MissingReleases) != 1 || preview.MissingReleases[0].LibraryID != foreignLibrary || preview.MissingReleases[0].Release != 1 {
+		t.Errorf("the preview's missing releases: %+v", preview.MissingReleases)
+	}
+
 	rec = serve(router, http.MethodPost, mainPath+"/discard", nil)
-	if rec.Code != http.StatusConflict {
+	if rec.Code != http.StatusOK {
 		t.Fatalf("discarding a foreign deployment: %d %s", rec.Code, rec.Body)
 	}
-	problem := decodeBody[apiv0.Problem](t, rec)
-	if len(problem.FileIssues) == 0 || !strings.HasPrefix(problem.FileIssues[0].Path, "library_pins[") {
-		t.Errorf("the discard's file_issues: %+v", problem.FileIssues)
+	discarded := decodeBody[apiv0.DiscardProjectResponse](t, rec)
+	if len(discarded.Warnings) != 1 || discarded.Warnings[0].LibraryID != foreignLibrary ||
+		discarded.Warnings[0].Release != 1 || discarded.Warnings[0].DroppedWidgets != 1 {
+		t.Errorf("the discard's warnings: %+v", discarded.Warnings)
 	}
-	if got := services.draftVersion(t); got != before {
-		t.Errorf("the refused discard changed the Draft: version %d, want %d", got, before)
+	if discarded.Version != before+1 {
+		t.Errorf("the Draft after the Discard is at version %d, want %d", discarded.Version, before+1)
+	}
+
+	rec = serve(router, http.MethodGet, mainPath+"/library-pins", nil)
+	pins := decodeBody[apiv0.GetLibraryPinsResponse](t, rec)
+	for _, pin := range pins.LibraryPins {
+		if pin.LibraryID == foreignLibrary {
+			t.Errorf("the Draft kept a pin this server cannot hold: %+v", pin)
+		}
+	}
+	rec = serve(router, http.MethodGet, mainPath+"/scenes", nil)
+	scenes := decodeBody[apiv0.GetScenesResponse](t, rec)
+	if len(scenes.Scenes) != 1 {
+		t.Fatalf("the Draft has %d scenes after the Discard, want the one of the file", len(scenes.Scenes))
+	}
+	rec = serve(router, http.MethodGet, mainPath+"/scenes/"+scenes.Scenes[0].ID.String()+"/widgets", nil)
+	widgets := decodeBody[apiv0.GetWidgetsResponse](t, rec)
+	if len(widgets.Widgets) != 0 {
+		t.Errorf("the Draft kept the widgets of the missing Release: %+v", widgets.Widgets)
+	}
+	// The Draft is writable again: the next write states its new Version.
+	if rec := serve(router, http.MethodPost, mainPath+"/tags",
+		apiv0.CreateTagRequest{Name: "pressure", Type: "integer", Version: discarded.Version}); rec.Code != http.StatusCreated {
+		t.Fatalf("the Draft after the Discard is not writable: %d %s", rec.Code, rec.Body)
 	}
 }
 

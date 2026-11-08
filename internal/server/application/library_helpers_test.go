@@ -78,7 +78,7 @@ func newLibraryContent(opts ...repositories.Option) application.LibraryContent {
 
 func newLibraryService() application.LibraryService {
 	return application.NewLibraryService(newLibraryContent(), repositories.NewLibraryRepositoryPostgres(testDB),
-		repositories.NewLibraryReleaseRepositoryPostgres(testDB), repositories.NewWidgetTypeRepositories(testDB))
+		repositories.NewLibraryReleaseRepositoryPostgres(testDB), repositories.NewWidgetTypeRepositories(testDB), newRuntimeNode())
 }
 
 // libraryDraftVersionOf returns the Version of a Library's Draft, 1 for one

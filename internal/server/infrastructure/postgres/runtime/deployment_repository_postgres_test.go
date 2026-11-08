@@ -51,6 +51,10 @@ func withEnvironmentDevices(pairs ...projectv0.EnvironmentDevice) func(*projectv
 	return func(f *projectv0.ProjectFile) { f.EnvironmentDevices = pairs }
 }
 
+func withLibraryPins(pins ...projectv0.LibraryPin) func(*projectv0.ProjectFile) {
+	return func(f *projectv0.ProjectFile) { f.LibraryPins = pins }
+}
+
 func mustCreateDeployment(t *testing.T, repo runtimeapp.DeploymentRepository, projectID uuid.UUID, file projectv0.ProjectFile, at time.Time) runtimeapp.Deployment {
 	t.Helper()
 	deployment, err := repo.CreateDeployment(context.Background(), projectID, file, runtimeapp.DeploymentCauseDeploy, at)
@@ -530,6 +534,48 @@ func TestCreateDeployment_RefusesADocumentOfAnotherProject(t *testing.T) {
 		t.Fatal("the document of another project was stored")
 	} else if !strings.Contains(err.Error(), "document of project") {
 		t.Errorf("error %v, want a refusal naming the document's project", err)
+	}
+}
+
+// TestDeploymentNamesLibrary_ReadsTheRunningDeploymentAlone: a pin of a
+// Project's running Deployment answers yes; one only of an earlier Deployment,
+// or of a Project no longer live, answers no (task 71).
+func TestDeploymentNamesLibrary_ReadsTheRunningDeploymentAlone(t *testing.T) {
+	projectID, _ := newProject(t)
+	otherProjectID, _ := newProject(t)
+	db := postgres.DB(t)
+	repo := runtimepg.NewDeploymentRepositoryPostgres(db)
+	ctx := context.Background()
+	start := time.Date(2026, 11, 4, 10, 0, 0, 0, time.UTC)
+	libraryID, otherLibraryID := uuid.New(), uuid.New()
+
+	named, err := repo.DeploymentNamesLibrary(ctx, libraryID)
+	if err != nil || named {
+		t.Fatalf("before any Deployment: %v, %v", named, err)
+	}
+
+	pinned := documentOf(projectID, withLibraryPins(projectv0.LibraryPin{LibraryID: libraryID, Release: 1}))
+	mustCreateDeployment(t, repo, projectID.UUID(), pinned, start)
+	if named, err := repo.DeploymentNamesLibrary(ctx, libraryID); err != nil || !named {
+		t.Fatalf("a pin of the running Deployment: %v, %v", named, err)
+	}
+
+	// A later Deployment without the pin makes it history alone.
+	plain := documentOf(projectID)
+	mustCreateDeployment(t, repo, projectID.UUID(), plain, start.Add(time.Minute))
+	if named, err := repo.DeploymentNamesLibrary(ctx, libraryID); err != nil || named {
+		t.Fatalf("a pin of an old Deployment: %v, %v", named, err)
+	}
+
+	// A Project marked deleted has no running Deployment: its document stops
+	// keeping the Library, as its cleanup will remove it.
+	otherPinned := documentOf(otherProjectID, withLibraryPins(projectv0.LibraryPin{LibraryID: otherLibraryID, Release: 1}))
+	mustCreateDeployment(t, repo, otherProjectID.UUID(), otherPinned, start.Add(2*time.Minute))
+	if _, err := db.ExecContext(ctx, `UPDATE projects SET deleted_at = now() WHERE id = $1`, otherProjectID.UUID()); err != nil {
+		t.Fatalf("mark the project deleted: %v", err)
+	}
+	if named, err := repo.DeploymentNamesLibrary(ctx, otherLibraryID); err != nil || named {
+		t.Fatalf("a pin of a deleted Project's Deployment: %v, %v", named, err)
 	}
 }
 

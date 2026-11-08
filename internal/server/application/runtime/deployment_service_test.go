@@ -31,6 +31,8 @@ type fakeDeployments struct {
 	rolledBack     bool
 	rollbackErr    error
 	rollbackNumber int
+	namedLibrary   bool
+	namedErr       error
 }
 
 func (r *fakeDeployments) CreateDeployment(_ context.Context, projectID uuid.UUID, file projectv0.ProjectFile, cause runtimeapp.DeploymentCause, now time.Time) (runtimeapp.Deployment, error) {
@@ -54,6 +56,10 @@ func (r *fakeDeployments) FindAll(context.Context, uuid.UUID) ([]runtimeapp.Depl
 
 func (r *fakeDeployments) FindByNumber(context.Context, uuid.UUID, int) (runtimeapp.Deployment, error) {
 	return r.byNumber, r.findByErr
+}
+
+func (r *fakeDeployments) DeploymentNamesLibrary(context.Context, uuid.UUID) (bool, error) {
+	return r.namedLibrary, r.namedErr
 }
 
 func (r *fakeDeployments) Rollback(_ context.Context, projectID uuid.UUID, n int, now time.Time) (runtimeapp.Deployment, error) {

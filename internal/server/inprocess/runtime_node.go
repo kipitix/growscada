@@ -100,6 +100,13 @@ func (n runtimeNode) FindCurrentDeployment(ctx context.Context, projectID uuid.U
 	return toAppdtoDeployment(deployment), ok, nil
 }
 
+func (n runtimeNode) DeploymentNamesLibrary(ctx context.Context, libraryID uuid.UUID) (bool, error) {
+	if n.deployments == nil {
+		return false, fmt.Errorf("runtime node serves no deployments")
+	}
+	return n.deployments.DeploymentNamesLibrary(ctx, libraryID)
+}
+
 // toAppdtoDeployment is the Runtime node's Deployment as the Engineering node's
 // appdto.Deployment: the roles keep their own types, and the composition in one
 // process is where the two meet (ADR 0011).

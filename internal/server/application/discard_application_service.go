@@ -25,10 +25,13 @@ import (
 type DiscardService interface {
 	// Discard resets the live Project projectID's Draft to the Deployment it
 	// runs. The written Draft is one change: its content is replaced, its
-	// DraftChange stack is cleared and its Version raised.
+	// DraftChange stack is cleared and its Version raised. A Library Pin the
+	// Deployment names but this server cannot write is dropped with the
+	// Widgets of its WidgetTypes, and reported in the answer's warnings: the
+	// Draft stays writable (task 71).
 	// Returns ErrNoDeploymentToDiscard if the Project has no Deployment, and an
 	// error wrapping project.ErrProjectNotFound if it is not live.
-	Discard(ctx context.Context, projectID uuid.UUID) (appdto.DraftState, error)
+	Discard(ctx context.Context, projectID uuid.UUID) (appdto.DiscardedDraft, error)
 }
 
 type discardServiceImpl struct {
@@ -43,34 +46,38 @@ var _ DiscardService = (*discardServiceImpl)(nil)
 // NewDiscardService returns the DiscardService of the live Projects the
 // ProjectContent serves, reading the current Deployment through the Runtime node
 // aRuntime and checking its Library Pins against this server's Libraries and
-// Releases (ADR 0018).
+// Releases (ADR 0018, task 71).
 func NewDiscardService(aContent ProjectContent, aRuntime RuntimeNode,
 	someLibraries library.LibraryRepository, someReleases library.LibraryReleaseRepository) DiscardService {
 	return &discardServiceImpl{content: aContent, runtime: aRuntime, libraries: someLibraries, releases: someReleases}
 }
 
-func (s discardServiceImpl) Discard(ctx context.Context, rawProjectID uuid.UUID) (appdto.DraftState, error) {
+func (s discardServiceImpl) Discard(ctx context.Context, rawProjectID uuid.UUID) (appdto.DiscardedDraft, error) {
 	projectID, _, err := s.content.open(ctx, rawProjectID)
 	if err != nil {
-		return appdto.DraftState{}, err
+		return appdto.DiscardedDraft{}, err
 	}
 	deployment, ok, err := s.runtime.FindCurrentDeployment(ctx, projectID.UUID())
 	if err != nil {
-		return appdto.DraftState{}, fmt.Errorf("cannot read the current deployment of project %s: %w", projectID, err)
+		return appdto.DiscardedDraft{}, fmt.Errorf("cannot read the current deployment of project %s: %w", projectID, err)
 	}
 	if !ok {
-		return appdto.DraftState{}, fmt.Errorf("%w: %s", ErrNoDeploymentToDiscard, projectID)
+		return appdto.DiscardedDraft{}, fmt.Errorf("%w: %s", ErrNoDeploymentToDiscard, projectID)
 	}
 	content, err := contentOfDeployment(projectID, deployment.Content)
 	if err != nil {
-		return appdto.DraftState{}, fmt.Errorf("cannot read the deployment of project %s: %w", projectID, err)
+		return appdto.DiscardedDraft{}, fmt.Errorf("cannot read the deployment of project %s: %w", projectID, err)
 	}
-	// A Deployment deployed from a foreign file may name Library Releases this
-	// server does not have: the Draft cannot hold such pins, so the Discard is
-	// refused instead of failing on the foreign key (ADR 0018).
-	if err := discardableDeployment(ctx, s.libraries, s.releases, deployment.Content); err != nil {
-		return appdto.DraftState{}, fmt.Errorf("cannot discard project %s: %w", projectID, err)
+	// A Deployment deployed from a foreign file, or one whose Library was
+	// removed after it, may name Library Releases this server does not have.
+	// The Draft cannot hold such a pin: it goes with the Widgets of its
+	// Library's WidgetTypes, and the answer names it — rather than refusing the
+	// Discard and leaving the Draft unwritable (task 71).
+	missing, err := missingLibraryReleases(ctx, s.libraries, s.releases, deployment.Content)
+	if err != nil {
+		return appdto.DiscardedDraft{}, fmt.Errorf("cannot check the library pins of project %s: %w", projectID, err)
 	}
+	content, warnings := dropMissingLibraryReleases(content, deployment.Content, missing)
 	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), func(session *draft.Session) error {
 		if err := s.lockDiscardedPins(ctx, content, session); err != nil {
 			return err
@@ -78,14 +85,15 @@ func (s discardServiceImpl) Discard(ctx context.Context, rawProjectID uuid.UUID)
 		return session.Replace(ctx, content)
 	})
 	if err != nil {
-		return appdto.DraftState{}, fmt.Errorf("cannot discard project %s: %w", projectID, err)
+		return appdto.DiscardedDraft{}, fmt.Errorf("cannot discard project %s: %w", projectID, err)
 	}
-	return appdto.DraftState{Version: result.Version().Number()}, nil
+	return appdto.DiscardedDraft{Version: result.Version().Number(), Warnings: warnings}, nil
 }
 
-// lockDiscardedPins locks every pinned Library's row FOR SHARE in the
+// lockDiscardedPins locks every Library the kept pins name FOR SHARE in the
 // Discard's transaction: a Library deleted between the check and the write
-// makes the Discard refuse, not fail on the foreign key (ADR 0018).
+// makes the Discard refuse, not fail on the foreign key (ADR 0018). The pins
+// the check already dropped are not locked.
 func (s discardServiceImpl) lockDiscardedPins(ctx context.Context, content draft.Content, session *draft.Session) error {
 	var issues []FileIssue
 	for i, pin := range content.LibraryPins {

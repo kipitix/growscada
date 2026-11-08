@@ -56,10 +56,12 @@ func (l *Library) renameLibrary() {
 }
 
 // deleteLibrary deletes the selected library after a confirmation; the
-// server refuses it while a project pins it.
+// server refuses it while a project pins it or a running Deployment names one
+// of its Releases, but old Commits and Releases keep only a link to it
+// (task 71).
 func (l *Library) deleteLibrary() {
 	lib, ok := l.selectedLibrary()
-	if !ok || !app.Window().Call("confirm", "Delete the library "+lib.Name+" with its Draft and releases?").Bool() {
+	if !ok || !app.Window().Call("confirm", "Delete the library "+lib.Name+" with its Draft and releases? A project that pins it, or a running Deployment that names one of its releases, refuses the deletion. Commits and Releases of the past keep a link to the deleted library.").Bool() {
 		return
 	}
 	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.LibraryResponse, error) {

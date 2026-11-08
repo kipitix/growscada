@@ -188,6 +188,8 @@ func deployProject(t *testing.T, projectID uuid.UUID) {
 		content,
 		application.NewProjectFileBuilder(content),
 		newRuntimeNode(),
+		repositories.NewLibraryRepositoryPostgres(testDB),
+		repositories.NewLibraryReleaseRepositoryPostgres(testDB),
 	)
 	if _, err := service.Deploy(context.Background(), projectID); err != nil && !errors.Is(err, application.ErrNothingToDeploy) {
 		t.Fatalf("deploy project %s: %v", projectID, err)

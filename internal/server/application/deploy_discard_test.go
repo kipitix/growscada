@@ -22,6 +22,8 @@ func newDeployService() (application.DeployService, application.RuntimeNode) {
 		content,
 		application.NewProjectFileBuilder(content),
 		node,
+		repositories.NewLibraryRepositoryPostgres(testDB),
+		repositories.NewLibraryReleaseRepositoryPostgres(testDB),
 	), node
 }
 

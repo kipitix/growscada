@@ -102,6 +102,32 @@ func TestLibraryService_DeleteRefusedWhileALiveProjectPinsIt(t *testing.T) {
 	}
 }
 
+// TestLibraryService_DeleteRefusedWhileARunningDeploymentNamesIt: a Release in
+// the running Deployment of a Project keeps the Library, even with no pin; a
+// Deployment of the past does not (task 71).
+func TestLibraryService_DeleteRefusedWhileARunningDeploymentNamesIt(t *testing.T) {
+	r := newReconciliation(t, reconciliationWiring{})
+	ctx := context.Background()
+	wt := r.createType(t, "value")
+	libraryID := r.libraries[wt.ID]
+	deployProject(t, mainProject) // the running Deployment names the release
+
+	// The pin goes; the Deployment keeps naming the library.
+	if _, err := r.pinSvc.DeleteLibraryPin(ctx, mainProject, libraryID, draftVersionOf(t, mainProject)); err != nil {
+		t.Fatalf("DeleteLibraryPin: %v", err)
+	}
+	if _, err := r.libSvc.DeleteLibraryByID(ctx, libraryID); !errors.Is(err, application.ErrLibraryInRunningDeployment) {
+		t.Fatalf("named by the running Deployment: expected ErrLibraryInRunningDeployment, got %v", err)
+	}
+
+	// A new Deployment without the pin leaves the library in history alone: a
+	// Commit or an old Deployment does not keep it.
+	deployProject(t, mainProject)
+	if _, err := r.libSvc.DeleteLibraryByID(ctx, libraryID); err != nil {
+		t.Fatalf("named by an old Deployment only: %v", err)
+	}
+}
+
 // TestDiscard_ResetsTheDraftToTheLatestRelease: one transaction brings the
 // WidgetTypes added since go, the changed ones restored and the removed ones
 // back under their IDs — two names swapped since the release included.

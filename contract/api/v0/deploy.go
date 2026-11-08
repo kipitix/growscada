@@ -57,11 +57,23 @@ type DroppedWidgetResponse struct {
 
 // DeployPreviewResponse is what a Deploy of the Draft would do: the Deployment
 // the Project runs now (absent until its first Deploy), whether the Draft is
-// that Deployment unchanged, and the runtime Widgets a Deploy would drop.
+// that Deployment unchanged, the runtime Widgets a Deploy would drop and the
+// Library Releases that Deployment names but this server does not have
+// (task 71).
 type DeployPreviewResponse struct {
 	CurrentDeployment *DeploymentSummaryResponse `json:"current_deployment,omitempty"`
 	Unchanged         bool                       `json:"unchanged"`
 	DroppedWidgets    []DroppedWidgetResponse    `json:"dropped_widgets"`
+	MissingReleases   []MissingReleaseResponse   `json:"missing_releases,omitempty"`
+}
+
+// MissingReleaseResponse names a Library Release the running Deployment uses
+// but this server does not have: the Deployment was made from a file elsewhere,
+// or the Library was removed after it. A Discard drops the Widgets of that
+// Release's WidgetTypes instead of restoring the pin (task 71).
+type MissingReleaseResponse struct {
+	LibraryID uuid.UUID `json:"library_id"`
+	Release   int       `json:"release"`
 }
 
 // DeployResponse is the answer of POST /projects/{id}/deploy: the Deployment the
@@ -85,8 +97,22 @@ type DraftStateResponse struct {
 
 // DiscardProjectResponse is the answer of POST /projects/{id}/discard: the
 // Draft of the Project was reset to the Deployment it runs in one transaction
-// (ADR 0016).
-type DiscardProjectResponse = DraftStateResponse
+// (ADR 0016). Warnings name the Library Releases the Deployment used but this
+// server does not have: their pins, and the Widgets of their WidgetTypes, were
+// dropped from the restored Draft (task 71).
+type DiscardProjectResponse struct {
+	Version  int                      `json:"version"`
+	Warnings []DiscardWarningResponse `json:"warnings,omitempty"`
+}
+
+// DiscardWarningResponse is one Library Pin a Discard could not restore: the
+// Library is gone, or the Release is. DroppedWidgets counts the Widgets of that
+// Library's WidgetTypes that went with it.
+type DiscardWarningResponse struct {
+	LibraryID      uuid.UUID `json:"library_id"`
+	Release        int       `json:"release"`
+	DroppedWidgets int       `json:"dropped_widgets"`
+}
 
 // DraftChangesPath is the path, under a Project's and a Library's path, of the
 // state of the Draft's DraftChange stack (ADR 0017): what an undo and a redo

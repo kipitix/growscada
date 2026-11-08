@@ -112,4 +112,11 @@ type DeploymentRepository interface {
 	// ErrDeploymentNotFound if the Project has no such Deployment, a Project that
 	// is gone is project.ErrProjectNotFound.
 	FindByNumber(ctx context.Context, projectID uuid.UUID, n int) (Deployment, error)
+
+	// DeploymentNamesLibrary reports whether the running Deployment of any live
+	// Project names a Release of this Library in its ProjectFile (task 71): the
+	// Engineering node asks before a Library is removed, because a Discard of
+	// such a Deployment could not restore the pin. A Project that runs no
+	// Deployment names nothing.
+	DeploymentNamesLibrary(ctx context.Context, libraryID uuid.UUID) (bool, error)
 }

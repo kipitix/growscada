@@ -3,12 +3,14 @@ package project
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
+	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -214,6 +216,20 @@ func (p *Project) discard(ctx app.Context) {
 		p.observeDraftVersion(mark, discarded.Version)
 		p.loadDeploy(ctx)
 		p.loadDraftChanges(ctx) // a Discard clears the stack (ADR 0017)
+		if len(discarded.Warnings) > 0 {
+			// The Discard restored the Deployment as far as this server can: the
+			// Library Releases it lacks went with the widgets of their types
+			// (task 71).
+			parts := make([]string, len(discarded.Warnings))
+			for i, warning := range discarded.Warnings {
+				parts[i] = fmt.Sprintf("library %s release %d: %d widgets dropped",
+					warning.LibraryID, warning.Release, warning.DroppedWidgets)
+			}
+			ctx.NewActionWithValue(toast.ActionAdd, toast.Problem{Problem: apiv0.Problem{
+				Title:  "Discarded without some Library Releases",
+				Detail: strings.Join(parts, "; "),
+			}})
+		}
 		ctx.Update()
 	}, func(ctx app.Context, err error) {
 		p.discarding = false
@@ -250,6 +266,14 @@ func (p *Project) renderDeployBar() app.UI {
 			Style("font-size", "12px").
 			Style("color", "var(--toast-warn-title)").
 			Text("Unreleased changes"))
+	}
+	if p.deployLoaded && len(p.deployPreview.MissingReleases) > 0 {
+		body = append(body, app.Span().
+			Attr("data-deploy-missing-releases", "true").
+			Title("The running Deployment names Library Releases this server does not have; a Discard drops their widgets").
+			Style("font-size", "12px").
+			Style("color", "var(--toast-warn-title)").
+			Text("Missing Library Releases"))
 	}
 	body = append(body,
 		app.Div().Style("flex", "1"),
@@ -356,6 +380,13 @@ func (p *Project) renderDeployDialog() app.UI {
 				Style("color", "var(--toast-warn-title)").
 				Text("Dropped widget: "+dropped.Name))
 		}
+	}
+	for _, missing := range preview.MissingReleases {
+		lines = append(lines, app.P().
+			Style("margin", "0 0 6px").
+			Style("color", "var(--toast-warn-title)").
+			Text(fmt.Sprintf("The running Deployment names Library Release %d of library %s, which this server does not have: a Discard drops its widgets.",
+				missing.Release, missing.LibraryID)))
 	}
 
 	buttons := []app.UI{

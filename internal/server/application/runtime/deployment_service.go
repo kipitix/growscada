@@ -44,6 +44,11 @@ type DeploymentService interface {
 	// the running one and project.ErrProjectNotFound if the Project is not
 	// live.
 	Rollback(ctx context.Context, projectID uuid.UUID, n int) (Deployment, error)
+	// DeploymentNamesLibrary reports whether the running Deployment of any live
+	// Project names a Release of this Library in its ProjectFile (task 71): the
+	// Engineering node asks before a Library is removed. A Project that runs no
+	// Deployment names nothing.
+	DeploymentNamesLibrary(ctx context.Context, libraryID uuid.UUID) (bool, error)
 }
 
 type deploymentServiceImpl struct {
@@ -118,4 +123,12 @@ func (s deploymentServiceImpl) Rollback(ctx context.Context, rawProjectID uuid.U
 	}
 	s.publish(NewDeploymentCreatedEvent(deployment))
 	return deployment, nil
+}
+
+func (s deploymentServiceImpl) DeploymentNamesLibrary(ctx context.Context, rawLibraryID uuid.UUID) (bool, error) {
+	named, err := s.deployments.DeploymentNamesLibrary(ctx, rawLibraryID)
+	if err != nil {
+		return false, fmt.Errorf("cannot read the running deployments naming library %s: %w", rawLibraryID, err)
+	}
+	return named, nil
 }

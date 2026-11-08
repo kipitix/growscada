@@ -289,6 +289,39 @@ func (r deploymentRepositoryPostgres) FindAll(ctx context.Context, projectID uui
 	return summaries, nil
 }
 
+// DeploymentNamesLibrary reports whether the running Deployment of any live
+// Project names a Release of the Library (task 71): the latest Deployment of
+// each live Project is read, and its document's library_pins are searched by
+// the Library's ID. The pins are provenance of the document, so the answer
+// needs no copy of them in a table of their own.
+func (r deploymentRepositoryPostgres) DeploymentNamesLibrary(ctx context.Context, libraryID uuid.UUID) (bool, error) {
+	var named bool
+	err := r.db.QueryRowContext(ctx,
+		`SELECT EXISTS (
+		     SELECT 1
+		     FROM (
+		         SELECT DISTINCT ON (project_id) project_id, config
+		         FROM runtime.deployments
+		         ORDER BY project_id, number DESC
+		     ) running
+		     JOIN projects p ON p.id = running.project_id AND p.deleted_at IS NULL
+		     WHERE EXISTS (
+		         SELECT 1
+		         FROM jsonb_array_elements(
+		                  CASE WHEN jsonb_typeof(running.config -> 'library_pins') = 'array'
+		                       THEN running.config -> 'library_pins'
+		                       ELSE '[]'::jsonb END) AS pin
+		         WHERE pin ->> 'library_id' = $1
+		     )
+		 )`,
+		libraryID.String(),
+	).Scan(&named)
+	if err != nil {
+		return false, fmt.Errorf("cannot read the running deployments naming library %s: %w", libraryID, err)
+	}
+	return named, nil
+}
+
 func (r deploymentRepositoryPostgres) FindByNumber(ctx context.Context, projectID uuid.UUID, n int) (runtimeapp.Deployment, error) {
 	if err := liveProject(ctx, r.db, projectID); err != nil {
 		return runtimeapp.Deployment{}, err

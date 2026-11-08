@@ -203,7 +203,7 @@ func main() {
 	// ProjectFile and hands it to the Runtime node, which stores it as a
 	// Deployment; the Engineering node keeps no copy of what it sent (ADR 0014).
 	projectFileBuilder := application.NewProjectFileBuilder(projectContent)
-	deployService := application.NewDeployService(projectContent, projectFileBuilder, runtimeNode)
+	deployService := application.NewDeployService(projectContent, projectFileBuilder, runtimeNode, libraryRepository, releaseRepository)
 	discardService := application.NewDiscardService(projectContent, runtimeNode, libraryRepository, releaseRepository)
 	projectFileService := application.NewProjectFileService(projectContent, projectFileBuilder, runtimeNode,
 		libraryRepository, releaseRepository)
@@ -213,7 +213,7 @@ func main() {
 		Projects:     projectService,
 		Tags:         tagService,
 		TagStates:    tagStateService,
-		Libraries:    application.NewLibraryService(libraryContent, libraryRepository, releaseRepository, widgetTypeRepositories),
+		Libraries:    application.NewLibraryService(libraryContent, libraryRepository, releaseRepository, widgetTypeRepositories, runtimeNode),
 		WidgetTypes:  application.NewWidgetTypeService(libraryContent, widgetTypeRepositories),
 		LibraryPins:  application.NewLibraryPinService(projectContent, libraryRepository, releaseRepository),
 		Scenes:       application.NewSceneService(projectContent),

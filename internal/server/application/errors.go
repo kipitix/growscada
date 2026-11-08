@@ -67,6 +67,13 @@ var ErrDeploymentNotDiscardable = errors.New("the deployment cannot be discarded
 // Deploy refuses a Commit (task 72_2; ADR 0021).
 var ErrDraftNotSaveable = errors.New("the draft is not saveable")
 
+// ErrLibraryInRunningDeployment matches (errors.Is) a Library deletion refused
+// because the running Deployment of a Project names one of its Releases in its
+// ProjectFile (task 71): a Discard of that Deployment would find no Release to
+// restore. Old Commits and Project Releases do not refuse it — their documents
+// carry the WidgetType copies they need.
+var ErrLibraryInRunningDeployment = errors.New("the library is named by a running deployment")
+
 // DraftNotSaveableError is a Save the builder refused, with the builder's
 // reason.
 type DraftNotSaveableError struct {

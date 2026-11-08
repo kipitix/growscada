@@ -104,7 +104,7 @@ func TestCommitService_ProjectSaveListFindRename(t *testing.T) {
 func TestCommitService_LibrarySaveAndList(t *testing.T) {
 	ctx := context.Background()
 	libraries := application.NewLibraryService(newLibraryContent(), repositories.NewLibraryRepositoryPostgres(testDB),
-		repositories.NewLibraryReleaseRepositoryPostgres(testDB), repositories.NewWidgetTypeRepositories(testDB))
+		repositories.NewLibraryReleaseRepositoryPostgres(testDB), repositories.NewWidgetTypeRepositories(testDB), newRuntimeNode())
 	created, err := libraries.CreateLibrary(ctx, appdto.LibraryInput{Name: "commits-" + uuid.NewString()})
 	if err != nil {
 		t.Fatalf("CreateLibrary: %v", err)
