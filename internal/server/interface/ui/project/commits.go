@@ -19,11 +19,6 @@ import (
 // history, so the indicator follows the Version of the Draft against the one
 // the last Commit fixed.
 
-// authorKey is the LocalStorage key of the author name the dialogs prefill;
-// the name is a declaration, not an account (task 72_2; tasks 49/50 bring
-// Users).
-const authorKey = "author:name"
-
 // loadCommits (re)loads the history of the project's Draft.
 func (p *Project) loadCommits(ctx app.Context) {
 	if p.content == nil {
@@ -75,7 +70,7 @@ func (p *Project) saveCommit(ctx app.Context) {
 		return
 	}
 	p.savingCommit = true
-	ctx.LocalStorage().Set(authorKey, author)
+	ctx.LocalStorage().Set(uiutil.AuthorKey, author)
 	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.CommitResponse, error) {
 		return pc.SaveCommit(c, apiv0.CreateCommitRequest{
 			Version: p.draftVersion(), Title: title, Author: author,

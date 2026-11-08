@@ -112,7 +112,7 @@ func (l *Library) OnMount(ctx app.Context) {
 	l.loadList(ctx)
 	l.loadReleases(ctx)
 	l.loadDraftChanges(ctx)
-	ctx.LocalStorage().Get(authorKey, &l.saveAuthor)
+	ctx.LocalStorage().Get(uiutil.AuthorKey, &l.saveAuthor)
 	l.loadCommits(ctx)
 	l.listenShortcuts()
 	l.handleServerEvents(ctx)

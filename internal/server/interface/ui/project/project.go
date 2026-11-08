@@ -285,7 +285,7 @@ func (p *Project) OnMount(ctx app.Context) {
 	ctx.LocalStorage().Get("project:widgetTypeWidth", &p.widgetTypeWidth)
 	ctx.LocalStorage().Get("project:propertiesWidth", &p.propertiesWidth)
 
-	ctx.LocalStorage().Get(authorKey, &p.saveAuthor)
+	ctx.LocalStorage().Get(uiutil.AuthorKey, &p.saveAuthor)
 	var savedTab string
 	ctx.LocalStorage().Get("project:subTab", &savedTab)
 	if savedTab != "" {

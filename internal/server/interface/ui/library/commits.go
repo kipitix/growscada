@@ -20,11 +20,6 @@ import (
 // titles are renamed. The Draft is still written at once, so the indicator
 // follows the Version of the Draft against the one the last Commit fixed.
 
-// authorKey is the LocalStorage key of the author name the dialogs prefill;
-// the name is a declaration, not an account (task 72_2; tasks 49/50 bring
-// Users).
-const authorKey = "author:name"
-
 // loadCommits (re)loads the history of the selected library's Draft.
 func (l *Library) loadCommits(ctx app.Context) {
 	if l.libraryID == uuid.Nil {
@@ -77,7 +72,7 @@ func (l *Library) saveCommit() {
 		return
 	}
 	l.savingCommit = true
-	l.compoCtx.LocalStorage().Set(authorKey, author)
+	l.compoCtx.LocalStorage().Set(uiutil.AuthorKey, author)
 	version := l.draftVersion()
 	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.CommitResponse, error) {
 		return draft.SaveCommit(c, apiv0.CreateCommitRequest{Version: version, Title: title, Author: author})
