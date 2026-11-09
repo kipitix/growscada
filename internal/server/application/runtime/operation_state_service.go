@@ -37,20 +37,32 @@ type OperationStateService interface {
 	// A Project that is not live is an error wrapping
 	// project.ErrProjectNotFound.
 	Get(ctx context.Context, projectID uuid.UUID) (OperationState, error)
+
+	// GetAt returns the starting state at the Journal position at, for History
+	// (task 44, ADR 0023): the nearest Checkpoint at or before at, its
+	// Deployment resolved to the document and its Tag states. Position is the
+	// Checkpoint's seq — the moment the caller may read the Journal from — and
+	// a past position beyond the Project's current one is clamped to it. Before
+	// the first Checkpoint the answer is the empty state at position 0; a
+	// negative at is ErrInvalidInput. The Tag states carry no WrittenAt: the
+	// record keeps the value, the Quality and the position alone. A Project
+	// that is not live is an error wrapping project.ErrProjectNotFound.
+	GetAt(ctx context.Context, projectID uuid.UUID, at int64) (OperationState, error)
 }
 
 type operationStateServiceImpl struct {
 	journal     JournalService
 	deployments DeploymentService
 	states      TagStateService
+	checkpoints CheckpointRepository
 }
 
 var _ OperationStateService = (*operationStateServiceImpl)(nil)
 
 // NewOperationStateService returns the read model over the Runtime node's
-// Journal, Deployments and Tag states.
-func NewOperationStateService(journal JournalService, deployments DeploymentService, states TagStateService) OperationStateService {
-	return &operationStateServiceImpl{journal: journal, deployments: deployments, states: states}
+// Journal, Deployments, Tag states and Checkpoints.
+func NewOperationStateService(journal JournalService, deployments DeploymentService, states TagStateService, checkpoints CheckpointRepository) OperationStateService {
+	return &operationStateServiceImpl{journal: journal, deployments: deployments, states: states, checkpoints: checkpoints}
 }
 
 func (s operationStateServiceImpl) Get(ctx context.Context, projectID uuid.UUID) (OperationState, error) {
@@ -91,6 +103,62 @@ func (s operationStateServiceImpl) Get(ctx context.Context, projectID uuid.UUID)
 				projectID, definition.ID, deployment.Number, err)
 		}
 		states = append(states, initial)
+	}
+	state.TagStates = states
+	return state, nil
+}
+
+func (s operationStateServiceImpl) GetAt(ctx context.Context, projectID uuid.UUID, at int64) (OperationState, error) {
+	if at < 0 {
+		return OperationState{}, invalidInput(fmt.Errorf("operation position %d is negative", at))
+	}
+	position, err := s.journal.Position(ctx, projectID)
+	if err != nil {
+		return OperationState{}, fmt.Errorf("cannot read the operation state of project %s at %d: journal position: %w", projectID, at, err)
+	}
+	if at > position {
+		at = position
+	}
+	checkpoint, ok, err := s.checkpoints.Nearest(ctx, projectID, at)
+	if err != nil {
+		return OperationState{}, fmt.Errorf("cannot read the operation state of project %s at %d: checkpoint: %w", projectID, at, err)
+	}
+	if !ok {
+		// History reads the Journal from 0 and replays it: no snapshot before
+		// the moment is not an error (ADR 0023).
+		return OperationState{Position: 0}, nil
+	}
+	state := OperationState{Position: checkpoint.Seq}
+	if checkpoint.Deployment == nil {
+		return state, nil
+	}
+	deployment, err := s.deployments.Find(ctx, projectID, checkpoint.Deployment.Number)
+	if err != nil {
+		return OperationState{}, fmt.Errorf("cannot read the operation state of project %s at %d: deployment %d: %w",
+			projectID, at, checkpoint.Deployment.Number, err)
+	}
+	state.Deployed = true
+	state.Deployment = deployment
+	definitions := make(map[uuid.UUID]projectv0.TagDefinition, len(deployment.Content.Tags))
+	for _, definition := range deployment.Content.Tags {
+		definitions[definition.ID] = definition
+	}
+	states := make([]TagState, 0, len(checkpoint.TagStates))
+	for _, checkpointState := range checkpoint.TagStates {
+		state := TagState{
+			ID:      checkpointState.TagID,
+			Value:   checkpointState.Value,
+			Quality: checkpointState.Quality,
+			Seq:     checkpointState.Seq,
+		}
+		// The record keeps no definition copy, so the name and the type come
+		// from the Deployment's document when it names the Tag — the API does
+		// not read them, History may show them (ADR 0023).
+		if definition, named := definitions[checkpointState.TagID]; named {
+			state.Name = definition.Name
+			state.Type = definition.Type
+		}
+		states = append(states, state)
 	}
 	state.TagStates = states
 	return state, nil

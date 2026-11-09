@@ -146,7 +146,8 @@ func main() {
 	// The Operation read model is the Runtime node's too: it composes the
 	// Journal position, the running Deployment and its Tag states in one answer
 	// for the Player (task 43, ADR 0020). The Engineering node never reads it.
-	operationStateService := runtimeapp.NewOperationStateService(journalService, deploymentService, tagStateService)
+	checkpointRepository := runtimepg.NewCheckpointRepositoryPostgres(sqlDB)
+	operationStateService := runtimeapp.NewOperationStateService(journalService, deploymentService, tagStateService, checkpointRepository)
 	// Registry of the policies: changes spanning aggregates, run as jobs
 	// apart from event delivery (ADR 0008)
 	policyRunner := outbox.NewPolicyRunner(sqlDB, []application.Policy{
@@ -196,7 +197,7 @@ func main() {
 	// never replays a Project from position 0 (task 44, ADR 0023). A Deploy
 	// writes its own Checkpoint in its transaction; this service adds the ones
 	// between Deployments. It is not the outbox and runs no policy.
-	checkpointService := runtimeapp.NewCheckpointService(runtimepg.NewCheckpointRepositoryPostgres(sqlDB))
+	checkpointService := runtimeapp.NewCheckpointService(checkpointRepository)
 	checkpointCtx, stopCheckpoints := context.WithCancel(context.Background())
 	checkpointsDone := make(chan struct{})
 	go func() {

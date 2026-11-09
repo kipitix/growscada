@@ -1,5 +1,18 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.87] - 2026-11-09
+
+### Added
+
+- **Checkpoint: стартовое состояние Operation на прошлую позицию Journal (`?at=`)** (задача 44_2; ADR 0020, ADR 0023)
+  - `contract/api/v0` **0.31**: необязательный параметр `at` у `GET …/operation` (`OperationQueryAt`); новых типов нет, `make schemas`
+  - `application/runtime.OperationStateService.GetAt(ctx, projectID, at)`: `at` зажимается до текущей позиции Journal; `CheckpointRepository.Nearest` — до первого снимка пустое состояние на позиции 0, иначе `DeploymentService.Find` по номеру снимка и состояния тегов из снимка (`WrittenAt` нет, Name/Type — из документа Deployment, если тег в нём назван); отрицательный `at` — `ErrInvalidInput`, неживой Project — `project.ErrProjectNotFound`; `Get` без `at` не изменился
+  - REST: `GET /api/v0/projects/{id}/operation?at=<position>` — тот же `OperationStateResponse`, `position` ответа — `seq` снимка; нечисловой или отрицательный `at` — 400, будущий зажимается
+  - `apiclient.ProjectClient.OperationAt(ctx, position)`; `Operation` не изменился
+  - Bruno: `get_operation_at` (200, заголовок схемы, `position`, `deployment`, `tag_states`) и `get_operation_at_invalid` (400 `application/problem+json`); статическая проверка коллекции проходит
+  - Тесты: `GetAt` (до первого снимка, на снимке, между снимками, за концом, отрицательный, снимок без Deployment, ошибки чтения), REST (200 с `at` и без, зажим, 400 на `at=x` и `at=-1`, 404 удалённого Project, заголовок схемы), `apiclient.OperationAt` против `servertest`
+  - Проверки: `make build`, `make test`, `make bruno_test`
+
 ## [0.0.86] - 2026-11-09
 
 ### Added

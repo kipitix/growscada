@@ -939,6 +939,20 @@ func (p *ProjectClient) Operation(ctx context.Context) (apiv0.OperationStateResp
 	return resp, err
 }
 
+// OperationAt returns the starting state of Operation at a past Journal
+// position (task 44, ADR 0023): the nearest Checkpoint at or before position,
+// its Deployment and its Tag states, with the Checkpoint's seq in Position —
+// the moment History reads the Journal from. A position beyond the Project's
+// current one is clamped to it, before the first Checkpoint the answer is the
+// empty state at position 0, and a negative position is a 400 (*StatusError).
+// A Project that is gone matches ErrNotFound.
+func (p *ProjectClient) OperationAt(ctx context.Context, position int64) (apiv0.OperationStateResponse, error) {
+	var resp apiv0.OperationStateResponse
+	query := url.Values{apiv0.OperationQueryAt: {strconv.FormatInt(position, 10)}}
+	err := p.do(ctx, http.MethodGet, apiv0.OperationPath+"?"+query.Encode(), nil, http.StatusOK, &resp)
+	return resp, err
+}
+
 // Journal returns the Project's Journal entries after the position from, in
 // the order of their positions, at most limit of them (task 42, ADR 0019).
 // from is exclusive; a Project that is not live matches ErrNotFound.

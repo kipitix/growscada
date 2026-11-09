@@ -1,0 +1,30 @@
+info:
+  name: get operation state at a non-numeric position
+  type: http
+  seq: 44
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/operation?at=abc
+  auth: inherit
+
+docs: |
+  `at` that is not a number is the caller's input: `400 Bad Request` as Problem
+  Details, before any read of the project (task 44, ADR 0023).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '400'
+    - expression: 'res.headers["content-type"]'
+      operator: contains
+      value: 'application/problem+json'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

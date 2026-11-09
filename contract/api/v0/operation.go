@@ -8,6 +8,14 @@ package apiv0
 // live stream.
 const OperationPath = "/operation"
 
+// OperationQueryAt is the optional parameter of GET …/operation (task 44,
+// ADR 0023): the Journal position to answer the starting state at, for History.
+// The answer is the nearest Checkpoint at or before it, read like a deployment
+// document, with the Checkpoint's position in the answer; a position beyond the
+// Project's current one is clamped to it, and a negative or non-numeric one is
+// 400. Without it the route reads the present state, as before.
+const OperationQueryAt = "at"
+
 // OperationStateResponse is the starting state of Operation: where the
 // Project's Journal stands, the Deployment it runs and the states of that
 // Deployment's Tags by Tag ID (ADR 0020).

@@ -1,0 +1,47 @@
+info:
+  name: get operation state at a past position
+  type: http
+  seq: 44
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/operation?at=999999999
+  auth: inherit
+
+docs: |
+  The starting state at a past Journal position (task 44, ADR 0023): the
+  nearest Checkpoint at or before `at`, its Deployment resolved to the document
+  and its Tag states as the snapshot keeps them — the same body as the present
+  read model. A position beyond the project's current one is clamped to it, so
+  `at=999999999` answers from the latest Checkpoint; `position` in the answer is
+  that Checkpoint's `seq`, and History reads `GET …/journal?from=<seq>` from
+  there. Before the first Checkpoint the answer is the empty state at position
+  0; a negative or non-numeric `at` is `400`, a project that is not live `404
+  project_not_found`. Without `at` the route reads the present state.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.position'
+      operator: isNumber
+    - expression: 'res.body.position'
+      operator: gt
+      value: '0'
+    - expression: 'res.body.deployment.number'
+      operator: eq
+      value: '1'
+    - expression: 'res.body.deployment.content.project_id'
+      operator: eq
+      value: '"{{PROJECT_ID}}"'
+    - expression: 'res.body.tag_states'
+      operator: isDefined
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

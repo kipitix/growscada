@@ -102,7 +102,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		deviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(db)),
 		deviceTokens: deviceTokens,
 		journal:      journal,
-		operation:    runtimeapp.NewOperationStateService(journal, deployments, states),
+		operation:    runtimeapp.NewOperationStateService(journal, deployments, states, runtimepg.NewCheckpointRepositoryPostgres(db)),
 		commits:      application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, projectReleases, releases),
 		releases:     application.NewReleaseService(content, projectReleases, runtimeNode, libraries, releases),
 	}

@@ -465,7 +465,37 @@ func TestOperation_ReturnsTheStartingState(t *testing.T) {
 		t.Errorf("the position after the write is %d, want the state's %d", written.Position, seq)
 	}
 
+	// ?at= answers from the Checkpoint the Deploy wrote, not the present
+	// state (task 44, ADR 0023).
+	snapshot, err := project.OperationAt(ctx, after.Position)
+	if err != nil {
+		t.Fatalf("OperationAt the Deploy's position: %v", err)
+	}
+	if snapshot.Position != after.Position {
+		t.Errorf("OperationAt is at %d, want the Checkpoint's %d", snapshot.Position, after.Position)
+	}
+	if snapshot.Deployment == nil || snapshot.Deployment.Number != 1 {
+		t.Fatalf("OperationAt carries the Deployment %+v", snapshot.Deployment)
+	}
+	if state := snapshot.TagStates[created.ID.String()]; state.Value != "0" || state.Quality != "bad" || state.Seq != 0 || state.WrittenAt != nil {
+		t.Errorf("the state at the Checkpoint: %+v, want the initial one", state)
+	}
+	past, err := project.OperationAt(ctx, written.Position)
+	if err != nil {
+		t.Fatalf("OperationAt the written position: %v", err)
+	}
+	if past.Position != after.Position {
+		t.Errorf("OperationAt past the end is at %d, want the latest Checkpoint's %d", past.Position, after.Position)
+	}
+	var statusErr *apiclient.StatusError
+	if _, err := project.OperationAt(ctx, -1); !errors.As(err, &statusErr) || statusErr.Problem.Status != http.StatusBadRequest {
+		t.Errorf("OperationAt a negative position: %v, want a 400", err)
+	}
+
 	if _, err := client.Project(uuid.New()).Operation(ctx); !errors.Is(err, apiclient.ErrNotFound) {
 		t.Errorf("Operation of an unknown project: %v, want ErrNotFound", err)
+	}
+	if _, err := client.Project(uuid.New()).OperationAt(ctx, 0); !errors.Is(err, apiclient.ErrNotFound) {
+		t.Errorf("OperationAt of an unknown project: %v, want ErrNotFound", err)
 	}
 }
