@@ -51,11 +51,18 @@ func newServer(t *testing.T) (string, *testAPI) {
 	return srv.URL, newTestAPI(t, apiclient.New(srv.URL, srv.Client()))
 }
 
+// mount mounts a Library showing the library the test API works on: Root
+// announces the selection of its page with SetLibrary (task 73), which a test
+// does here directly.
 func mount(t *testing.T, url string, api *testAPI) *fixture {
 	t.Helper()
 	l := NewLibrary(apiclient.New(url, http.DefaultClient))
 	f := &fixture{t: t, l: l, api: api, url: url}
 	f.e = uitest.Load(t, mountOnHost{l})
+	if api != nil {
+		f.l.SetLibrary(api.ID())
+		f.e.ConsumeAll()
+	}
 	return f
 }
 
@@ -302,7 +309,10 @@ func TestDiscard_ResetsTheDraftAtOnce(t *testing.T) {
 	}
 }
 
-func TestLibraries_SelectFallsBackToTheFirst(t *testing.T) {
+// TestLibraries_SetLibraryShowsTheGivenOne: the page announces the library,
+// not the column: SetLibrary loads it, and a library deleted elsewhere leaves
+// the component with nothing selected instead of an error (task 73).
+func TestLibraries_SetLibraryShowsTheGivenOne(t *testing.T) {
 	url, api := newServer(t)
 	other, err := api.CreateLibrary(context.Background(), apiv0.CreateLibraryRequest{Name: "Other"})
 	if err != nil {
@@ -313,7 +323,7 @@ func TestLibraries_SelectFallsBackToTheFirst(t *testing.T) {
 	if f.l.libraryID != api.ID() || len(f.l.libraries) != 2 {
 		t.Fatalf("selected %v of %d libraries, want the first", f.l.libraryID, len(f.l.libraries))
 	}
-	f.l.selectLibrary(f.l.compoCtx, other.ID)
+	f.l.SetLibrary(other.ID)
 	f.run()
 	if f.l.libraryID != other.ID || len(f.l.widgetTypes) != 0 {
 		t.Errorf("the other library: %v, %d types", f.l.libraryID, len(f.l.widgetTypes))
@@ -321,42 +331,27 @@ func TestLibraries_SelectFallsBackToTheFirst(t *testing.T) {
 	if _, err := api.DeleteLibrary(context.Background(), other.ID); err != nil {
 		t.Fatal(err)
 	}
-	f.l.loadLibraries(f.l.compoCtx)
+	f.l.loadList(f.l.compoCtx)
 	f.run()
-	if f.l.libraryID != api.ID() {
-		t.Errorf("after the deletion selected %v, want the first", f.l.libraryID)
+	f.noToasts()
+	if f.l.libraryID != uuid.Nil || f.l.widgetTypes != nil {
+		t.Errorf("a library deleted elsewhere: selected %v, %d types; want none", f.l.libraryID, len(f.l.widgetTypes))
 	}
 }
 
-// TestLibraries_SelectedDeleted_SelectsAnotherWithoutAnError: the Draft and
-// the releases of a library deleted elsewhere answer 404 before the list is
-// reloaded; that selects another library instead of showing an error, and
-// none once the last is gone.
-func TestLibraries_SelectedDeleted_SelectsAnotherWithoutAnError(t *testing.T) {
+// TestLibraries_LastDeleted_LeavesNothingSelected: the 404 of the Draft and
+// the releases of a library deleted elsewhere leaves the component with
+// nothing selected, without an error, and the page then lists what is left
+// (task 73).
+func TestLibraries_LastDeleted_LeavesNothingSelected(t *testing.T) {
 	url, api := newServer(t)
-	other, err := api.CreateLibrary(context.Background(), apiv0.CreateLibraryRequest{Name: "Other"})
-	if err != nil {
-		t.Fatal(err)
-	}
 	f := mount(t, url, api)
 	f.run()
-	f.l.selectLibrary(f.l.compoCtx, other.ID)
-	f.run()
-	if _, err := api.DeleteLibrary(context.Background(), other.ID); err != nil {
-		t.Fatal(err)
-	}
-	f.l.loadList(f.l.compoCtx)
-	f.l.loadReleases(f.l.compoCtx)
-	f.run()
-	f.noToasts()
-	if f.l.libraryID != api.ID() {
-		t.Errorf("after the deletion selected %v, want %v", f.l.libraryID, api.ID())
-	}
-
 	if _, err := api.DeleteLibrary(context.Background(), api.ID()); err != nil {
 		t.Fatal(err)
 	}
 	f.l.loadList(f.l.compoCtx)
+	f.l.loadReleases(f.l.compoCtx)
 	f.run()
 	f.noToasts()
 	if f.l.libraryID != uuid.Nil || f.l.widgetTypes != nil || f.l.releases != nil {

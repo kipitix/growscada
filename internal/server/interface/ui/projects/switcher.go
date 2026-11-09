@@ -1,12 +1,11 @@
-// Package projects is the project switcher at the top of the modes that show
-// a project (Project, Operation, History), one in each: the server's
-// projects, the one the mode shows, and creating, renaming and deleting them
-// (ADR 0006). Library does not depend on it: WidgetTypes are the server's.
+// Package projects is the small project selector at the top of Operation and
+// History, one in each: the server's projects and the one the mode shows
+// (ADR 0006). Project and Library list their entities on a selection page of
+// their own (ui/picker, task 73), which also creates, renames and deletes
+// them; Library does not depend on a project at all.
 package projects
 
 import (
-	"context"
-	"fmt"
 	"slices"
 
 	"github.com/google/uuid"
@@ -26,8 +25,8 @@ const legacyKey = "root:projectID"
 // Switcher lists the server's projects and keeps one selected. The
 // selection is announced to onSelect once the list is known, and again each
 // time it changes: the user picks another project, or the selected one is
-// gone (deleted here or elsewhere) and the first one is taken instead —
-// uuid.Nil when there are none.
+// gone (deleted elsewhere) and the first one is taken instead — uuid.Nil when
+// there are none.
 type Switcher struct {
 	app.Compo
 	// compoCtx is the component's own context, captured in OnMount; async
@@ -38,10 +37,6 @@ type Switcher struct {
 	key      string
 	onSelect func(uuid.UUID)
 
-	// editable tells whether the switcher also creates, renames and deletes
-	// projects (its buttons), or only selects them.
-	editable bool
-
 	projects []apiv0.ProjectResponse
 	reloader uiutil.Reloader
 	// selected is the project announced, uuid.Nil until the list is known;
@@ -51,15 +46,9 @@ type Switcher struct {
 	preferred uuid.UUID
 }
 
-// NewSwitcher returns the switcher of the projects of the server client
-// talks to, keeping the selection under the LocalStorage key and announcing
-// it to onSelect. It creates, renames and deletes projects too.
-func NewSwitcher(client *apiclient.Client, key string, onSelect func(uuid.UUID)) *Switcher {
-	return &Switcher{client: client, key: key, onSelect: onSelect, editable: true}
-}
-
-// NewSelector returns a switcher that only selects among the projects: the
-// same as NewSwitcher without the buttons that create, rename and delete.
+// NewSelector returns the selector of the projects of the server client talks
+// to, keeping the selection under the LocalStorage key and announcing it to
+// onSelect.
 func NewSelector(client *apiclient.Client, key string, onSelect func(uuid.UUID)) *Switcher {
 	return &Switcher{client: client, key: key, onSelect: onSelect}
 }
@@ -154,64 +143,6 @@ func (s *Switcher) Select(ctx app.Context, id uuid.UUID) {
 	s.reselect(ctx)
 }
 
-// Create creates a project named name and selects it.
-func (s *Switcher) Create(ctx app.Context, name string) {
-	req := apiv0.CreateProjectRequest{Name: name}
-	uiutil.Call(s.compoCtx, func(c context.Context) (apiv0.CreateProjectResponse, error) {
-		return s.client.CreateProject(c, req)
-	}, func(ctx app.Context, created apiv0.CreateProjectResponse) {
-		s.preferred = created.ID
-		s.load(ctx)
-	}, nil)
-}
-
-// Rename renames the selected project to name, at the version last loaded.
-// A conflict (renamed elsewhere, or the name taken) is shown and the list
-// reloaded.
-func (s *Switcher) Rename(ctx app.Context, name string) {
-	p, ok := s.find(s.selected)
-	if !ok {
-		return
-	}
-	req := apiv0.UpdateProjectRequest{Name: name, Version: p.Version}
-	uiutil.Call(s.compoCtx, func(c context.Context) (apiv0.UpdateProjectResponse, error) {
-		return s.client.UpdateProject(c, p.ID, req)
-	}, func(ctx app.Context, _ apiv0.UpdateProjectResponse) {
-		s.load(ctx)
-	}, func(ctx app.Context, err error) {
-		uiutil.ShowError(ctx, err)
-		s.load(ctx)
-	})
-}
-
-// Delete deletes the selected project with all its content; the first
-// remaining project is selected as soon as the server confirms.
-func (s *Switcher) Delete(ctx app.Context) {
-	id := s.selected
-	if id == uuid.Nil {
-		return
-	}
-	uiutil.Call(s.compoCtx, func(c context.Context) (apiv0.ProjectResponse, error) {
-		return s.client.DeleteProject(c, id)
-	}, func(ctx app.Context, _ apiv0.ProjectResponse) {
-		s.forget(ctx, id)
-		s.load(ctx)
-	}, func(ctx app.Context, err error) {
-		uiutil.ShowError(ctx, err)
-		s.load(ctx)
-	})
-}
-
-// prompt asks the user for a text in the browser's dialog; false if they
-// cancel or leave it empty.
-func prompt(message, value string) (string, bool) {
-	answer := app.Window().Call("prompt", message, value)
-	if !answer.Truthy() {
-		return "", false
-	}
-	return answer.String(), answer.String() != ""
-}
-
 func (s *Switcher) Render() app.UI {
 	options := make([]app.UI, 0, len(s.projects)+1)
 	if s.selected == uuid.Nil {
@@ -220,70 +151,25 @@ func (s *Switcher) Render() app.UI {
 	for _, p := range s.projects {
 		options = append(options, app.Option().Value(p.ID.String()).Selected(p.ID == s.selected).Text(p.Name))
 	}
-	_, hasCurrent := s.find(s.selected)
-
-	body := []app.UI{
-		app.Span().
-			Style("font-size", "12px").
-			Style("color", "var(--text-3)").
-			Text("Project"),
-		app.Select().
-			Attr("aria-label", "Project").
-			Style("font-size", "13px").
-			Style("padding", "2px 4px").
-			Style("max-width", "220px").
-			OnChange(func(ctx app.Context, e app.Event) {
-				s.Select(ctx, uiutil.ParseID(ctx.JSSrc().Get("value").String()))
-			}).
-			Body(options...),
-	}
-	if s.editable {
-		body = append(body,
-			s.button("+", "Create a project", true, func(ctx app.Context) {
-				if name, ok := prompt("Name of the new project:", ""); ok {
-					s.Create(ctx, name)
-				}
-			}),
-			// The buttons read the selected project when clicked: go-app keeps
-			// a handler of the same func literal on a reused element.
-			s.button("✎", "Rename the project", hasCurrent, func(ctx app.Context) {
-				current, _ := s.find(s.selected)
-				if name, ok := prompt("New name of the project:", current.Name); ok && name != current.Name {
-					s.Rename(ctx, name)
-				}
-			}),
-			s.button("🗑", "Delete the project", hasCurrent, func(ctx app.Context) {
-				current, _ := s.find(s.selected)
-				message := fmt.Sprintf("Delete project %q with all its scenes, widgets and tags?", current.Name)
-				if app.Window().Call("confirm", message).Bool() {
-					s.Delete(ctx)
-				}
-			}),
-		)
-	}
-
 	return app.Div().
 		Attr("data-project-switcher", "true").
 		Style("display", "flex").
 		Style("align-items", "center").
 		Style("gap", "4px").
 		Style("margin-bottom", "8px").
-		Body(body...)
-}
-
-func (s *Switcher) button(icon, title string, enabled bool, onClick func(app.Context)) app.UI {
-	return app.Button().
-		Title(title).
-		Attr("aria-label", title).
-		Disabled(!enabled).
-		Style("padding", "2px 7px").
-		Style("font-size", "13px").
-		Style("line-height", "1").
-		Style("cursor", "pointer").
-		Style("border", "1px solid var(--border-input)").
-		Style("border-radius", "4px").
-		Style("background", "var(--bg-elevated)").
-		Style("color", "var(--text-2)").
-		Text(icon).
-		OnClick(func(ctx app.Context, e app.Event) { onClick(ctx) })
+		Body(
+			app.Span().
+				Style("font-size", "12px").
+				Style("color", "var(--text-3)").
+				Text("Project"),
+			app.Select().
+				Attr("aria-label", "Project").
+				Style("font-size", "13px").
+				Style("padding", "2px 4px").
+				Style("max-width", "220px").
+				OnChange(func(ctx app.Context, e app.Event) {
+					s.Select(ctx, uiutil.ParseID(ctx.JSSrc().Get("value").String()))
+				}).
+				Body(options...),
+		)
 }

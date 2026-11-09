@@ -78,26 +78,22 @@ func (l *Library) applyDraftChanges(mark uiutil.Mark, state apiv0.DraftChangesRe
 	l.changes, l.changesLoaded = state, true
 }
 
-// loadLibraries (re)loads the library list and keeps a valid selection,
-// falling back to the first library (none when the list is empty).
+// loadLibraries (re)loads the library list: the header reads the selected
+// one from it, and the selection page keeps its own list. A library the list
+// no longer holds is left by the page, which announces another one or none
+// (task 73).
 func (l *Library) loadLibraries(ctx app.Context) {
 	uiutil.Load(l.compoCtx, &l.librariesReloader, l.client.ListLibraries, func(ctx app.Context, list []apiv0.LibraryResponse) {
 		l.libraries = list
-		if _, ok := l.selectedLibrary(); ok {
-			return
-		}
-		next := uuid.Nil
-		if len(list) > 0 {
-			next = list[0].ID
-		}
-		l.selectLibrary(ctx, next)
 	}, l.loadLibraries)
 }
 
 // libraryGone handles a 404 of the selected library's Draft or releases: the
-// library was deleted, so the list is reloaded, which selects another one,
-// instead of showing an error (ADR 0007).
+// library was deleted, so it is left and the list reloaded instead of an
+// error being shown (ADR 0007). The selection page picks another one, or
+// none, and shows itself then (task 73).
 func (l *Library) libraryGone(ctx app.Context, _ *apiclient.LibraryClient) {
+	l.selectLibrary(ctx, uuid.Nil)
 	l.loadLibraries(ctx)
 }
 

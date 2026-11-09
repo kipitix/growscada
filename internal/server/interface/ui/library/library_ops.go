@@ -26,56 +26,6 @@ func prompt(message, value string, empty bool) (string, bool) {
 	return answer.String(), empty || answer.String() != ""
 }
 
-// createLibrary asks for a name and creates a library, then selects it.
-func (l *Library) createLibrary() {
-	name, ok := prompt("Name of the new library:", "", false)
-	if !ok {
-		return
-	}
-	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.CreateLibraryResponse, error) {
-		return l.client.CreateLibrary(c, apiv0.CreateLibraryRequest{Name: name})
-	}, func(ctx app.Context, created apiv0.CreateLibraryResponse) {
-		l.libraries = append(l.libraries, apiv0.LibraryResponse{
-			ID: created.ID, Name: name, Version: created.Version, HasUnsavedChanges: true,
-		})
-		l.selectLibrary(ctx, created.ID)
-		l.loadLibraries(ctx)
-	}, nil)
-}
-
-// renameLibrary asks for a new name of the selected library.
-func (l *Library) renameLibrary() {
-	lib, ok := l.selectedLibrary()
-	if !ok {
-		return
-	}
-	name, ok := prompt("New name of the library:", lib.Name, false)
-	if !ok || name == lib.Name {
-		return
-	}
-	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.UpdateLibraryResponse, error) {
-		return l.client.UpdateLibrary(c, lib.ID, apiv0.UpdateLibraryRequest{Name: name, Version: lib.Version})
-	}, func(ctx app.Context, _ apiv0.UpdateLibraryResponse) {
-		l.loadLibraries(ctx)
-	}, l.reloadOnConflict)
-}
-
-// deleteLibrary deletes the selected library after a confirmation; the
-// server refuses it while a project pins it or a running Deployment names one
-// of its Releases, but old Commits and Releases keep only a link to it
-// (task 71).
-func (l *Library) deleteLibrary() {
-	lib, ok := l.selectedLibrary()
-	if !ok || !app.Window().Call("confirm", "Delete the library "+lib.Name+" with its Draft and releases? A project that pins it, or a running Deployment that names one of its releases, refuses the deletion. Commits and Releases of the past keep a link to the deleted library.").Bool() {
-		return
-	}
-	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.LibraryResponse, error) {
-		return l.client.DeleteLibrary(c, lib.ID)
-	}, func(ctx app.Context, _ apiv0.LibraryResponse) {
-		l.loadLibraries(ctx)
-	}, nil)
-}
-
 // openReleaseDialog opens the publication of a Commit of the selected library
 // as the next Library Release: a note (optional) and the stored Author
 // (task 72_7; ADR 0021).

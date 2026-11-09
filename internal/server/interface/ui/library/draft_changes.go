@@ -112,7 +112,7 @@ func (l *Library) rejectedDraftChange(ctx app.Context, err error) {
 	ctx.Update()
 }
 
-// renderDraftChangesBar is the Undo and Redo pair of the libraries column.
+// renderDraftChangesBar is the Undo and Redo pair of the header.
 func (l *Library) renderDraftChangesBar() app.UI {
 	if l.libraryID == uuid.Nil {
 		return app.Div()
@@ -121,10 +121,9 @@ func (l *Library) renderDraftChangesBar() app.UI {
 		Attr("data-draft-changes-bar", "true").
 		Style("display", "flex").
 		Style("gap", "4px").
-		Style("margin-bottom", "4px").
 		Body(
-			smallButton("Undo", l.canUndo(), "", l.undoTitle(), l.undoDraftChangeFromButton),
-			smallButton("Redo", l.canRedo(), "", l.redoTitle(), l.redoDraftChangeFromButton),
+			barButton("Undo", l.canUndo(), "", l.undoTitle(), l.undoDraftChangeFromButton),
+			barButton("Redo", l.canRedo(), "", l.redoTitle(), l.redoDraftChangeFromButton),
 		)
 }
 

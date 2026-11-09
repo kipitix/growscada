@@ -54,6 +54,7 @@ var sharedDomain = []string{
 	"internal/server/domain/project",
 	"internal/server/domain/organization",
 	"internal/server/domain/id",
+	"internal/server/domain/description",
 	"internal/server/domain/event",
 	"internal/server/domain/version",
 }

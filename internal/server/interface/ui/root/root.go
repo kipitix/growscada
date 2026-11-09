@@ -16,9 +16,11 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/history"
 	"github.com/kipitix/growscada/internal/server/interface/ui/library"
 	"github.com/kipitix/growscada/internal/server/interface/ui/operation"
+	"github.com/kipitix/growscada/internal/server/interface/ui/picker"
 	"github.com/kipitix/growscada/internal/server/interface/ui/project"
 	"github.com/kipitix/growscada/internal/server/interface/ui/projects"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
+	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
 type Mode string
@@ -36,18 +38,28 @@ type Root struct {
 	// compoCtx is the component's own context, captured in OnMount; the server
 	// version seen by the client is dispatched through it.
 	compoCtx    app.Context
+	mounted     bool
 	currentMode Mode
 	themeMode   string // "auto" | "light" | "dark"
 	// client is the one client of the REST API, given to every mode.
 	client    *apiclient.Client
 	project   *project.Project
+	library   *library.Library
 	operation *operation.Operation
 	// bar follows the event stream of the project of the mode shown (the
 	// last such mode while Library, which does not depend on one, is shown).
 	bar *eventlog.Bar
-	// selected holds the project each mode with a project switcher shows,
-	// once its switcher announced it.
+	// selected holds the entity each mode shows, once its switcher or
+	// selection page announced it: the Project of the modes with a project
+	// switcher, and the Project or Library of the Project and Library modes.
 	selected map[Mode]uuid.UUID
+	// entityName is the name of the entity selected, as last read by the
+	// selection page: the slim "← Список · <name>" row of the editor.
+	entityName map[Mode]string
+	// showList is true while a mode shows its selection page (task 73)
+	// instead of the editor of the entity selected. The tab opens the last
+	// entity; with none it opens the page.
+	showList map[Mode]bool
 	// The modes in the order of their slots, made once: a mode is mounted
 	// when first opened and stays mounted while another is shown, so it
 	// keeps what it loaded (shown even while the server is down), its
@@ -76,22 +88,49 @@ func NewRoot(anAPIServerURL string) *Root {
 	}
 	r.client = apiclient.New(anAPIServerURL, http.DefaultClient, apiclient.OnServerVersion(r.observeServerVersion))
 	r.project = project.NewProject(r.client)
+	r.library = library.NewLibrary(r.client)
 	r.operation = operation.NewOperation(r.client)
 	r.bar = eventlog.NewBar(anAPIServerURL)
 	r.modes = []modeView{
-		{mode: ModeLibrary, ui: library.NewLibrary(r.client)},
-		{mode: ModeProject, ui: r.project, switcher: r.newSwitcher(ModeProject)},
+		{mode: ModeLibrary, ui: r.library, picker: picker.New(
+			picker.NewLibrarySource(r.client), picker.LibraryKey,
+			func(id uuid.UUID, name string) { r.selectEntity(ModeLibrary, id, name) },
+			func(id uuid.UUID) { r.openEntity(ModeLibrary, id) },
+		)},
+		{mode: ModeProject, ui: r.project, picker: picker.New(
+			picker.NewProjectSource(r.client), picker.ProjectKey,
+			func(id uuid.UUID, name string) { r.selectEntity(ModeProject, id, name) },
+			func(id uuid.UUID) { r.openEntity(ModeProject, id) },
+		)},
 		{mode: ModeOperation, ui: r.operation, switcher: r.newSelector(ModeOperation)},
 		{mode: ModeHistory, ui: &history.History{}, switcher: r.newSelector(ModeHistory)},
 	}
 	r.opened = map[Mode]bool{}
 	r.selected = map[Mode]uuid.UUID{}
+	r.entityName = map[Mode]string{}
+	r.showList = map[Mode]bool{}
 	return r
 }
 
 func (r *Root) OnMount(ctx app.Context) {
-	r.compoCtx = ctx
+	r.compoCtx, r.mounted = ctx, true
 	ctx.Page().SetTitle("GrowSCADA")
+
+	// The tab opens the entity last shown: it is read here, before any mode
+	// mounts, so the editor does not wait for its selection page (task 73).
+	r.selected[ModeProject] = uiutil.LoadID(ctx, picker.ProjectKey)
+	r.selected[ModeLibrary] = uiutil.LoadID(ctx, picker.LibraryKey)
+
+	// A load of the project shown found it gone: the mode leaves it at once,
+	// so the content the server removes after it is not loaded for it, and
+	// shows its selection page (task 73).
+	ctx.Handle(uiutil.ActionProjectGone, func(ctx app.Context, a app.Action) {
+		id, ok := a.Value.(uuid.UUID)
+		if !ok || id == uuid.Nil || r.selected[ModeProject] != id {
+			return
+		}
+		r.selectEntity(ModeProject, uuid.Nil, "")
+	})
 
 	injectToastCSS()
 
@@ -118,15 +157,9 @@ func (r *Root) OnMount(ctx app.Context) {
 	})
 }
 
-// newSwitcher returns the project switcher of mode, its selection kept
-// apart from the other modes'.
-func (r *Root) newSwitcher(mode Mode) *projects.Switcher {
-	return projects.NewSwitcher(r.client, string(mode)+":projectID", func(id uuid.UUID) {
-		r.selectProject(mode, id)
-	})
-}
-
-// newSelector is newSwitcher for a mode that only selects projects.
+// newSelector is the project switcher of a mode that only selects projects
+// (Operation, History): Project and Library list their entities on a
+// selection page of their own (task 73).
 func (r *Root) newSelector(mode Mode) *projects.Switcher {
 	return projects.NewSelector(r.client, string(mode)+":projectID", func(id uuid.UUID) {
 		r.selectProject(mode, id)
@@ -154,6 +187,76 @@ func (r *Root) selectProject(mode Mode, id uuid.UUID) {
 	case mode == r.currentMode:
 		r.bar.SetProject(id)
 	}
+}
+
+// selectEntity shows the entity id (uuid.Nil: none) in the Library or the
+// Project mode on behalf of its selection page, which calls it on the UI
+// goroutine with the name it read. A mode with nothing to show leaves the
+// page open (task 73); the entity selected stays announced to the event
+// stream, so the page's list and the editor follow the same one.
+func (r *Root) selectEntity(mode Mode, id uuid.UUID, name string) {
+	r.selected[mode] = id
+	r.entityName[mode] = name
+	switch mode {
+	case ModeProject:
+		r.project.SetProject(id)
+		switch {
+		case r.bar.Project() == id:
+			r.bar.ResyncProject()
+		case mode == r.currentMode:
+			r.bar.SetProject(id)
+		}
+	case ModeLibrary:
+		r.library.SetLibrary(id)
+	}
+	if id == uuid.Nil {
+		r.showList[mode] = true
+	}
+	if r.mounted {
+		r.compoCtx.Update()
+	}
+}
+
+// openEntity shows the editor of id: the selection page's Open row or a
+// created entity.
+func (r *Root) openEntity(mode Mode, id uuid.UUID) {
+	if id == uuid.Nil {
+		return
+	}
+	r.showList[mode] = false
+	r.selectEntity(mode, id, r.entityName[mode])
+}
+
+// showListPage shows the selection page of mode, rereading its list, and
+// keeps the entity selected announced to the event stream as it is.
+func (r *Root) showListPage(mode Mode) {
+	r.showList[mode] = true
+	if m := r.modeView(mode); m != nil && m.picker != nil && r.mounted {
+		m.picker.Reload(r.compoCtx)
+	}
+	if r.mounted {
+		r.compoCtx.Update()
+	}
+}
+
+// modeView returns the view of mode, nil if there is none.
+func (r *Root) modeView(mode Mode) *modeView {
+	for i := range r.modes {
+		if r.modes[i].mode == mode {
+			return &r.modes[i]
+		}
+	}
+	return nil
+}
+
+// barProject is the project the event stream follows while mode is shown:
+// none for Library, which does not depend on one.
+func (r *Root) barProject(mode Mode) (uuid.UUID, bool) {
+	if mode == ModeLibrary {
+		return uuid.Nil, false
+	}
+	id, ok := r.selected[mode]
+	return id, ok
 }
 
 // observeServerVersion records the server API version stated by a response.
@@ -455,7 +558,7 @@ func (r *Root) Render() app.UI {
 				Style("position", "relative").
 				Style("background", "var(--bg)").
 				Body(app.Range(r.modes).Slice(func(i int) app.UI {
-					return r.modeSlot(r.modes[i])
+					return r.modeSlot(&r.modes[i])
 				})),
 			r.bar,
 		)
@@ -465,7 +568,7 @@ func (r *Root) Render() app.UI {
 // opened, then holding it for good. Each mode keeps its own slot, so opening
 // one never remounts another. A mode not shown is hidden with visibility,
 // not display: the iframes of its Widgets keep their size.
-func (r *Root) modeSlot(m modeView) app.UI {
+func (r *Root) modeSlot(m *modeView) app.UI {
 	visibility := "hidden"
 	if m.mode == r.currentMode {
 		visibility = "visible"
@@ -478,12 +581,38 @@ func (r *Root) modeSlot(m modeView) app.UI {
 		Style("padding", "12px").
 		Style("box-sizing", "border-box").
 		Style("visibility", visibility).
-		Body(app.If(r.opened[m.mode], func() app.UI { return modeContent(m) }))
+		Body(app.If(r.opened[m.mode], func() app.UI { return r.modeContent(m) }))
 }
 
-// modeContent is the component of a mode, under its project switcher if it
-// has one.
-func modeContent(m modeView) app.UI {
+// modeContent is the component of a mode: its selection page or the editor of
+// the entity selected, under its project switcher if it has one.
+func (r *Root) modeContent(m *modeView) app.UI {
+	if m.picker != nil {
+		// Both screens stay mounted — the page keeps its list, the editor its
+		// unsaved edits and its iframes — and the hidden one is only invisible.
+		return app.Div().
+			Style("position", "relative").
+			Style("display", "flex").
+			Style("flex", "1").
+			Style("min-width", "0").
+			Style("min-height", "0").
+			Body(
+				screen(r.showList[m.mode], m.picker),
+				screen(!r.showList[m.mode], app.Div().
+					Style("display", "flex").
+					Style("flex-direction", "column").
+					Style("flex", "1").
+					Style("min-height", "0").
+					Body(
+						r.renderBackBar(m.mode),
+						app.Div().
+							Style("display", "flex").
+							Style("flex", "1").
+							Style("min-height", "0").
+							Body(m.ui),
+					)),
+			)
+	}
 	if m.switcher == nil {
 		return m.ui
 	}
@@ -503,12 +632,58 @@ func modeContent(m modeView) app.UI {
 		)
 }
 
-// modeView is a mode and its component, with the switcher of the project it
-// shows (nil for Library, which shows none).
+// screen is one screen of a mode with a selection page, shown or hidden: it
+// fills the mode's slot, so the hidden one keeps its layout and its iframes.
+func screen(visible bool, body app.UI) app.UI {
+	visibility := "hidden"
+	if visible {
+		visibility = "visible"
+	}
+	return app.Div().
+		Style("position", "absolute").
+		Style("inset", "0").
+		Style("display", "flex").
+		Style("flex-direction", "column").
+		Style("visibility", visibility).
+		Body(body)
+}
+
+// renderBackBar is the slim "← Список · <name>" row at the top left of the
+// editor of the Library and Project modes (task 73): it shows the selection
+// page and keeps the entity announced to the event stream.
+func (r *Root) renderBackBar(mode Mode) app.UI {
+	label := "← Список"
+	if name := r.entityName[mode]; name != "" {
+		label += " · " + name
+	}
+	return app.Div().
+		Attr("data-back-to-list", "true").
+		Style("display", "flex").
+		Style("align-items", "center").
+		Style("height", "26px").
+		Style("flex-shrink", "0").
+		Style("padding", "0 10px").
+		Style("box-sizing", "border-box").
+		Style("border-bottom", "1px solid var(--border)").
+		Style("background", "var(--bg-elevated)").
+		Style("font-size", "12px").
+		Style("color", "var(--text-2)").
+		Style("cursor", "pointer").
+		Style("user-select", "none").
+		Text(label).
+		OnClick(func(ctx app.Context, e app.Event) {
+			r.showListPage(mode)
+		})
+}
+
+// modeView is a mode and its component: the switcher of the project it shows
+// (Operation, History) or the selection page of its entities (Library,
+// Project). At most one of them is set.
 type modeView struct {
 	mode     Mode
 	ui       app.Composer
 	switcher *projects.Switcher
+	picker   *picker.Picker
 }
 
 func (r *Root) tab(label string, mode Mode) app.UI {
@@ -576,13 +751,18 @@ func (r *Root) renderThemeToggle() app.UI {
 		})
 }
 
-// SetMode shows mode, opening it if it was not yet. The Bar follows the
-// project of a mode that shows one, from its switcher's announcement on
-// (selectProject); Library leaves it as it is.
+// SetMode shows mode, opening it if it was not yet. A tab of the Library or
+// the Project mode opens the entity last shown, or its selection page when
+// there is none (task 73). The Bar follows the project of a mode that shows
+// one, from its switcher's announcement on (selectProject); Library leaves it
+// as it is.
 func (r *Root) SetMode(mode Mode) {
 	r.currentMode = mode
 	r.opened[mode] = true
-	if id, ok := r.selected[mode]; ok {
+	if m := r.modeView(mode); m != nil && m.picker != nil {
+		r.showList[mode] = r.selected[mode] == uuid.Nil
+	}
+	if id, ok := r.barProject(mode); ok {
 		r.bar.SetProject(id)
 	}
 }

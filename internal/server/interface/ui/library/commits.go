@@ -165,9 +165,9 @@ func (l *Library) renameCommit() {
 	}, nil)
 }
 
-// renderCommitBar is the library column's Save, its unsaved-changes indicator,
-// the history button and the author (task 72_7; ADR 0021).
-func (l *Library) renderCommitBar() app.UI {
+// renderCommitBar is the header's Save, its unsaved-changes indicator and the
+// History and Releases buttons (task 72_7; task 73; ADR 0021).
+func (l *Library) renderCommitBar() []app.UI {
 	editable := !l.readOnly() && l.libraryID != uuid.Nil
 	saveLabel, saveTitle := "Save", "Save the Draft as a Commit"
 	switch {
@@ -178,24 +178,27 @@ func (l *Library) renderCommitBar() app.UI {
 	case !l.hasUnsavedChanges():
 		saveTitle = "Nothing to save since the last save"
 	}
-	save := smallButton(saveLabel, editable && l.hasUnsavedChanges() && !l.savingCommit,
-		"accent", saveTitle, l.openSaveDialog)
-	history := smallButton("History", l.libraryID != uuid.Nil,
-		"", "The Commits of the library", l.openCommitsDialog)
-	indicator := app.Span().Style("font-size", "11px").Style("color", "var(--text-muted)")
-	if l.hasUnsavedChanges() {
-		indicator = indicator.Attr("data-commit-unsaved", "true").Style("color", "var(--toast-warn-title)").
-			Text("Unsaved changes")
-	} else if l.commitsLoaded {
-		indicator = indicator.Attr("data-commit-saved", "true").Text("Saved")
+	body := []app.UI{
+		barButton(saveLabel, editable && l.hasUnsavedChanges() && !l.savingCommit, "accent", saveTitle, l.openSaveDialog),
 	}
-	return app.Div().
-		Style("margin-bottom", "4px").
-		Body(
-			app.Div().Style("display", "flex").Style("gap", "4px").Body(save, history),
-			indicator,
-			l.renderAuthorBar(),
-		)
+	if l.hasUnsavedChanges() {
+		body = append(body, app.Span().
+			Attr("data-commit-unsaved", "true").
+			Style("font-size", "12px").
+			Style("color", "var(--toast-warn-title)").
+			Text("Unsaved changes"))
+	} else if l.commitsLoaded {
+		body = append(body, app.Span().
+			Attr("data-commit-saved", "true").
+			Style("font-size", "12px").
+			Style("color", "var(--text-muted)").
+			Text("Saved"))
+	}
+	body = append(body,
+		barButton("History", l.libraryID != uuid.Nil, "", "The Commits of the library", l.openCommitsDialog),
+		barButton("Releases", l.libraryID != uuid.Nil, "", "The Releases of the library", l.openReleasesDialog),
+	)
+	return body
 }
 
 // renderAuthorBar shows the author the Save and Release dialogs fill in, with a

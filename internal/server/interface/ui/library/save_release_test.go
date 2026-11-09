@@ -222,7 +222,7 @@ func TestCommitView_ShowsTheSnapshotReadOnly(t *testing.T) {
 	if title := f.l.redoTitle(); !strings.Contains(title, "open the Draft to edit it") {
 		t.Errorf("the redo title %q: want the Commit named as read-only", title)
 	}
-	if html := app.HTMLString(f.l.renderCommitBar()); !strings.Contains(html, "open the Draft to edit it") {
+	if html := app.HTMLString(app.Div().Body(f.l.renderCommitBar()...)); !strings.Contains(html, "open the Draft to edit it") {
 		t.Errorf("the Save button of the Commit view: %s", html)
 	}
 
@@ -232,25 +232,26 @@ func TestCommitView_ShowsTheSnapshotReadOnly(t *testing.T) {
 	}
 }
 
-// TestLibraryState_ListsTheThreeStates: the selected library's state follows
-// the Draft: unsaved changes, an unpublished Commit, then published
-// (task 72_7; ADR 0021).
+// TestLibraryState_ListsTheThreeStates: the header's state of the selected
+// library follows the Draft: unsaved changes, an unpublished Commit, then
+// published (task 72_7; task 73; ADR 0021).
 func TestLibraryState_ListsTheThreeStates(t *testing.T) {
 	f, _ := selected(t)
 	f.run()
-	if html := app.HTMLString(f.l.Render()); !strings.Contains(html, `data-library-state="unsaved"`) {
-		t.Errorf("the list does not mark the unsaved Draft: %s", html)
+	status := func() string { return app.HTMLString(f.l.renderLibraryStatus()) }
+	if html := status(); !strings.Contains(html, "unsaved changes") {
+		t.Errorf("the header does not mark the unsaved Draft: %s", html)
 	}
 
 	saveWithUI(t, f, "First save")
 	f.run()
-	if html := app.HTMLString(f.l.Render()); !strings.Contains(html, `data-library-state="unpublished"`) {
-		t.Errorf("the list does not mark the unpublished Commit: %s", html)
+	if html := status(); !strings.Contains(html, "not published yet") {
+		t.Errorf("the header does not mark the unpublished Commit: %s", html)
 	}
 
 	releaseNow(t, f)
-	if html := app.HTMLString(f.l.Render()); !strings.Contains(html, `data-library-state="published"`) {
-		t.Errorf("the list does not mark the published state: %s", html)
+	if html := status(); !strings.Contains(html, "published") {
+		t.Errorf("the header does not mark the published state: %s", html)
 	}
 }
 

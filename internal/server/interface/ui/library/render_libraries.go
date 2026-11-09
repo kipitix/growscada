@@ -12,81 +12,55 @@ import (
 
 func itoa(n int) string { return strconv.Itoa(n) }
 
-// ── Libraries column ──────────────────────────────────────────────────────────
+// ── Header ────────────────────────────────────────────────────────────────────
 
-func (l *Library) renderLibrariesColumn() app.UI {
-	items := make([]app.UI, 0, len(l.libraries))
-	for _, lib := range l.libraries {
-		id := lib.ID
-		state, stateText := l.releaseStateOf(lib)
-		item := app.Div().
-			Class("library-item").
-			Style("padding", "6px 8px").
-			Style("cursor", "pointer").
-			Style("border-radius", "4px").
-			Style("font-size", "13px").
-			Body(
-				app.Div().Text(lib.Name),
-				app.Div().
-					Attr("data-library-state", state).
-					Style("font-size", "10px").
-					Style("margin-top", "1px").
-					Style("opacity", "0.75").
-					Text(stateText),
-			).
-			OnClick(func(ctx app.Context, e app.Event) {
-				l.selectLibrary(ctx, id)
-			}, app.EventScope(id.String())).
-			OnDblClick(func(ctx app.Context, e app.Event) {
-				l.renameLibrary()
-			})
-		if id == l.libraryID {
-			item = item.Style("background", "var(--accent)").Style("color", "var(--accent-text)")
-		} else {
-			item = item.Style("color", "var(--text)")
-		}
-		items = append(items, item)
+// renderHeader is the slim header above the editor (task 73): Save with its
+// unsaved-changes indicator, History, Releases, the Undo and Redo pair, the
+// library's Commit and Release state with Discard and Revert, and the author —
+// the actions that used to sit in the libraries column, which is gone. The
+// dialogs the header opens follow it.
+func (l *Library) renderHeader() app.UI {
+	if l.libraryID == uuid.Nil {
+		return app.Div()
 	}
-	if len(items) == 0 {
-		items = append(items, app.Div().Style("font-size", "13px").Style("color", "var(--text-muted)").Text("No libraries."))
-	}
-
+	body := l.renderCommitBar()
+	body = append(body,
+		barDivider(),
+		l.renderDraftChangesBar(),
+		barDivider(),
+		l.renderLibraryStatus(),
+		app.Div().Style("flex", "1"),
+		l.renderAuthorBar(),
+	)
 	return app.Div().
-		Style("display", "flex").
-		Style("flex-direction", "column").
-		Style("width", "200px").
+		Attr("data-library-header", "true").
 		Style("flex-shrink", "0").
-		Style("min-height", "0").
 		Body(
-			app.H3().Style("margin", "0 0 8px 0").Text("Libraries"),
-			l.renderDraftChangesBar(),
 			app.Div().
 				Style("display", "flex").
-				Style("gap", "4px").
-				Style("margin-bottom", "4px").
-				Body(
-					smallButton("Create", true, "accent", "Create a library", l.createLibrary),
-					smallButton("Rename", l.libraryID != uuid.Nil, "", "Rename the selected library", l.renameLibrary),
-					smallButton("Delete", l.libraryID != uuid.Nil, "error", "Delete the selected library with its Draft and releases", l.deleteLibrary),
-				),
-			app.Div().
-				Style("flex", "0 1 auto").
-				Style("max-height", "30%").
-				Style("overflow-y", "auto").
-				Body(items...),
-			l.renderCommitBar(),
+				Style("flex-wrap", "wrap").
+				Style("align-items", "center").
+				Style("gap", "8px").
+				Style("padding", "6px 10px").
+				Style("border-bottom", "1px solid var(--border)").
+				Style("background", "var(--bg-elevated)").
+				Body(body...),
 			app.If(l.saveDialog, l.renderSaveDialog).Else(func() app.UI { return app.Div() }),
 			app.If(l.commitsDialog, l.renderCommitsDialog).Else(func() app.UI { return app.Div() }),
+			app.If(l.releasesDialog, l.renderReleasesDialog).Else(func() app.UI { return app.Div() }),
 			app.If(l.releaseDialog, l.renderReleaseDialog).Else(func() app.UI { return app.Div() }),
-			l.renderLibraryStatus(),
-			l.renderHistory(),
 		)
+}
+
+// barDivider separates the groups of the header.
+func barDivider() app.UI {
+	return app.Div().Style("width", "1px").Style("height", "18px").Style("background", "var(--border)")
 }
 
 // releaseStateOf is one library's Release state (task 72_7; ADR 0021): the
 // Draft changed since its last Commit (the selected one follows this tab's
 // Discard), the last Commit is not published, or the published state is the
-// saved one. The state is a short word for the list and its kind says which.
+// saved one. The state is a short word for the header and its kind says which.
 func (l *Library) releaseStateOf(lib apiv0.LibraryResponse) (kind, text string) {
 	unsaved := lib.HasUnsavedChanges
 	if lib.ID == l.libraryID {
@@ -106,8 +80,8 @@ func (l *Library) releaseStateOf(lib apiv0.LibraryResponse) (kind, text string) 
 	}
 }
 
-// renderLibraryStatus renders the selected library's Commit and Release
-// state, its Discard and its Revert.
+// renderLibraryStatus renders the selected library's Commit and Release state
+// and its Discard and Revert.
 func (l *Library) renderLibraryStatus() app.UI {
 	lib, ok := l.selectedLibrary()
 	if !ok {
@@ -130,35 +104,40 @@ func (l *Library) renderLibraryStatus() app.UI {
 		status = "Release " + itoa(lib.LatestRelease) + " · published"
 	}
 	return app.Div().
-		Style("margin-top", "8px").
-		Style("padding-top", "8px").
-		Style("border-top", "1px solid var(--border)").
+		Attr("data-library-status", "true").
+		Style("display", "flex").
+		Style("align-items", "center").
+		Style("gap", "6px").
 		Body(
-			app.Div().
+			app.Span().
 				Class("library-status").
 				Style("font-size", "12px").
 				Style("color", "var(--text-muted)").
-				Style("margin-bottom", "6px").
 				Text(status),
-			app.Div().
-				Style("display", "flex").
-				Style("gap", "4px").
-				Body(
-					smallButton("Discard", lib.LatestCommit > 0, "error",
-						"Reset the Draft to its last Commit, dropping the unsaved changes", l.discard),
-					smallButton("Revert", lib.LatestRelease > 0, "",
-						"Reset the Draft to its latest Release, the published state", l.revert),
-				),
+			barButton("Discard", lib.LatestCommit > 0, "error",
+				"Reset the Draft to its last Commit, dropping the unsaved changes", l.discard),
+			barButton("Revert", lib.LatestRelease > 0, "",
+				"Reset the Draft to its latest Release, the published state", l.revert),
 		)
 }
 
-// renderHistory renders the Draft and the releases of the selected library;
-// a release is shown read-only, with the Commit it published, its Author, time
-// and the count of WidgetTypes it copied (task 72_7).
-func (l *Library) renderHistory() app.UI {
+// ── Releases ──────────────────────────────────────────────────────────────────
+
+// openReleasesDialog shows the releases of the selected library, read afresh.
+func (l *Library) openReleasesDialog() {
 	if l.libraryID == uuid.Nil {
-		return app.Div()
+		return
 	}
+	l.releasesDialog = true
+	l.loadReleases(l.compoCtx)
+	l.compoCtx.Update()
+}
+
+// renderReleasesDialog is the releases of the selected library and a way back
+// to the Draft; a release is shown read-only, with the Commit it published,
+// its Author, time and the count of WidgetTypes it copied (task 72_7). The
+// note of each is edited in place.
+func (l *Library) renderReleasesDialog() app.UI {
 	// The handlers are scoped by n: go-app keeps a handler of the same func
 	// literal on a reused element, so a release prepended to the list would
 	// leave each entry viewing the release it showed before.
@@ -189,13 +168,22 @@ func (l *Library) renderHistory() app.UI {
 		items = append(items, l.renderReleaseRow(l.releases[i]))
 	}
 	return app.Div().
-		Style("margin-top", "8px").
-		Style("flex", "1").
-		Style("min-height", "0").
+		Attr("data-releases-dialog", "true").
+		Style("padding", "8px").
+		Style("margin-top", "6px").
+		Style("border", "1px solid var(--border)").
+		Style("border-radius", "4px").
+		Style("background", "var(--bg)").
+		Style("font-size", "12px").
+		Style("max-height", "40vh").
 		Style("overflow-y", "auto").
 		Body(
-			app.H3().Style("margin", "0 0 6px 0").Style("font-size", "13px").Text("Releases"),
+			app.Div().Style("font-weight", "600").Style("margin-bottom", "4px").Text("Releases"),
 			app.Div().Body(items...),
+			smallButton("Close", true, "", "Close the releases", func() {
+				l.releasesDialog = false
+				l.compoCtx.Update()
+			}),
 		)
 }
 
@@ -264,7 +252,36 @@ func (l *Library) renderReleaseRow(r apiv0.LibraryReleaseResponse) app.UI {
 	return row.Style("color", "var(--text)")
 }
 
-// smallButton renders a button of the columns; kind "accent", "error" or ""
+// ── Buttons ───────────────────────────────────────────────────────────────────
+
+// barButton renders one action of the header; kind "accent", "error" or ""
+// picks its colours, title is its hover text. options go to the click handler:
+// a button of a list gives it the row's identity, so a reused element does not
+// keep the handler of the row it showed before (app.EventScope).
+func barButton(text string, enabled bool, kind, title string, onClick func(), options ...app.EventOption) app.UI {
+	border, bg, fg := "var(--border-input)", "var(--bg-hover)", "var(--text)"
+	switch kind {
+	case "accent":
+		border, bg, fg = "var(--accent-border)", "var(--accent-bg)", "var(--accent)"
+	case "error":
+		border, bg, fg = "var(--error-border)", "var(--error-bg)", "var(--error)"
+	}
+	b := app.Button().
+		Title(title).
+		Style("padding", "2px 9px").
+		Style("font-size", "12px").
+		Style("border", "1px solid "+border).
+		Style("border-radius", "4px").
+		Style("background", bg).
+		Style("color", fg).
+		Text(text)
+	if !enabled {
+		return b.Style("opacity", "0.4").Style("cursor", "default").Disabled(true)
+	}
+	return b.Style("cursor", "pointer").OnClick(func(ctx app.Context, e app.Event) { onClick() }, options...)
+}
+
+// smallButton renders a button of the dialogs; kind "accent", "error" or ""
 // picks its colours, title is its hover text. options go to the click handler:
 // a button of a list gives it the row's identity, so a reused element does not
 // keep the handler of the row it showed before (app.EventScope).

@@ -21,6 +21,7 @@ type Library struct {
 	// element is unmounted (e.g. a tab that turns into its rename input), which
 	// would lose the result and leave a Reloader loading forever.
 	compoCtx  app.Context
+	mounted   bool
 	ThemeMode string // exported so go-app detects theme changes and re-renders
 	client    *apiclient.Client
 	// libraries are the server's; libraryID is the one selected, whose Draft
@@ -82,6 +83,10 @@ type Library struct {
 	releaseCommit int
 	releaseNote   string
 	releaseAuthor string
+	// ── Releases panel (task 73) ───────────────────────────────────────────
+	// releasesDialog is true while the releases of the selected library are
+	// listed: the column that held them is gone, they open from the header.
+	releasesDialog bool
 
 	// ── DraftChange stack (ADR 0017) ───────────────────────────────────────
 	// changes is the state of the Draft's undo/redo stack, read on mount, on a
@@ -122,9 +127,11 @@ func NewLibrary(client *apiclient.Client) *Library {
 }
 
 func (l *Library) OnMount(ctx app.Context) {
-	l.compoCtx = ctx
+	l.compoCtx, l.mounted = ctx, true
 	ctx.ObserveState("theme", &l.ThemeMode)
 	l.selectedID = uiutil.LoadID(ctx, selectedIDKey)
+	// Root announces the library the selection page shows (SetLibrary); the
+	// key read here is the same one, for the tab that opens it first.
 	l.libraryID = uiutil.LoadID(ctx, libraryIDKey)
 	l.loadLibraries(ctx)
 	l.loadList(ctx)
@@ -138,6 +145,7 @@ func (l *Library) OnMount(ctx app.Context) {
 
 // OnDismount releases the keyboard shortcuts of the Draft left.
 func (l *Library) OnDismount() {
+	l.mounted = false
 	l.noKeyDown()
 }
 
@@ -257,6 +265,21 @@ func releasedWidgetTypes(copies []apiv0.ReleasedWidgetTypeResponse) []apiv0.Widg
 	return types
 }
 
+// SetLibrary shows the library id (uuid.Nil: none); Root calls it with what
+// its selection page announced. The WidgetTypes and releases of the library
+// are loaded, and what was shown of another one is dropped (task 73).
+func (l *Library) SetLibrary(id uuid.UUID) {
+	if id == l.libraryID {
+		return
+	}
+	if !l.mounted {
+		// Not mounted yet: OnMount loads what this remembers.
+		l.libraryID = id
+		return
+	}
+	l.selectLibrary(l.compoCtx, id)
+}
+
 // selectLibrary shows the library id's Draft; its WidgetTypes and releases
 // are loaded.
 func (l *Library) selectLibrary(ctx app.Context, id uuid.UUID) {
@@ -275,6 +298,7 @@ func (l *Library) selectLibrary(ctx app.Context, id uuid.UUID) {
 	l.renamingCommit, l.renameCommitTitle = 0, ""
 	l.cleanDraftVersion = 0
 	l.releaseDialog, l.releasing, l.releaseCommit = false, false, 0
+	l.releasesDialog = false
 	uiutil.StoreID(ctx, libraryIDKey, id)
 	uiutil.StoreID(ctx, selectedIDKey, uuid.Nil)
 	l.loadList(ctx)
@@ -286,6 +310,7 @@ func (l *Library) selectLibrary(ctx app.Context, id uuid.UUID) {
 // view shows release n read-only (0: back to the Draft). Opening a release
 // clears a Commit shown.
 func (l *Library) view(n int) {
+	l.releasesDialog = false
 	if n == l.viewing && l.viewingCommit == 0 {
 		return
 	}
@@ -309,7 +334,7 @@ func (l *Library) viewCommit(n int) {
 		}
 		l.viewing, l.viewingCommit = 0, commit.Number
 		l.commitTypes = releasedWidgetTypes(commit.WidgetTypes)
-		l.commitsDialog = false
+		l.commitsDialog, l.releasesDialog = false, false
 		l.clearSelection()
 		ctx.Update()
 	}, nil)
@@ -333,18 +358,25 @@ func (l *Library) startEditing(id uuid.UUID, currentName string) {
 func (l *Library) Render() app.UI {
 	return app.Div().
 		Style("display", "flex").
-		Style("flex-direction", "row").
+		Style("flex-direction", "column").
 		Style("flex", "1").
 		Style("min-height", "0").
-		Style("gap", "8px").
 		Body(
-			l.renderLibrariesColumn(),
-			l.renderListColumn(),
-			l.renderEditorColumn("HTML Template", "html-template", l.edit.html, l.editorInput(func(v string) { l.edit.html = v }), !l.readOnly()),
-			l.renderEditorColumn("Script", "script-editor", l.edit.script, l.editorInput(func(v string) { l.edit.script = v }), !l.readOnly()),
-			l.renderInputPortsColumn(),
-			l.renderInputDataColumn(),
-			l.renderPreviewColumn(),
+			l.renderHeader(),
+			app.Div().
+				Style("display", "flex").
+				Style("flex-direction", "row").
+				Style("flex", "1").
+				Style("min-height", "0").
+				Style("gap", "8px").
+				Body(
+					l.renderListColumn(),
+					l.renderEditorColumn("HTML Template", "html-template", l.edit.html, l.editorInput(func(v string) { l.edit.html = v }), !l.readOnly()),
+					l.renderEditorColumn("Script", "script-editor", l.edit.script, l.editorInput(func(v string) { l.edit.script = v }), !l.readOnly()),
+					l.renderInputPortsColumn(),
+					l.renderInputDataColumn(),
+					l.renderPreviewColumn(),
+				),
 		)
 }
 

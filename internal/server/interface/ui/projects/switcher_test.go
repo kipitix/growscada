@@ -56,7 +56,7 @@ func startWith(t *testing.T, httpClient *http.Client, arrange func(api *apiclien
 		arrange(api)
 	}
 	f := &fixture{t: t, api: api}
-	f.s = NewSwitcher(apiclient.New(srv.URL, httpClient), "test:projectID", func(id uuid.UUID) { f.announced = append(f.announced, id) })
+	f.s = NewSelector(apiclient.New(srv.URL, httpClient), "test:projectID", func(id uuid.UUID) { f.announced = append(f.announced, id) })
 	f.e = uitest.Load(t, mountOnHost{f.s})
 	return f
 }
@@ -89,7 +89,7 @@ func TestSwitcher_SelectsTheFirstProjectOnceListed(t *testing.T) {
 	}
 }
 
-func TestSwitcher_SelectAndCreate(t *testing.T) {
+func TestSwitcher_Select(t *testing.T) {
 	f := start(t, nil)
 	line := f.createProject("Line 1")
 	f.s.load(f.s.compoCtx)
@@ -98,63 +98,13 @@ func TestSwitcher_SelectAndCreate(t *testing.T) {
 	f.s.Select(f.s.compoCtx, line)
 	f.lastAnnounced(line)
 
-	f.s.Create(f.s.compoCtx, "Line 2")
+	// A project selected stays selected across a reload.
+	f.s.load(f.s.compoCtx)
 	f.run()
-	created, ok, err := f.api.FindProjectByName(context.Background(), "Line 2")
-	if err != nil || !ok {
-		t.Fatalf("Line 2 on the server: %v, %v", ok, err)
-	}
-	f.lastAnnounced(created.ID)
-	if n := len(f.s.Projects()); n != 3 {
-		t.Errorf("listed %d projects, want 3", n)
-	}
-
-	f.s.Create(f.s.compoCtx, "Line 2") // taken
-	f.run()
-	if toasts := f.e.TakeToasts(); len(toasts) != 1 || toasts[0].Status != http.StatusConflict {
-		t.Errorf("toasts: %+v, want one 409", toasts)
-	}
+	f.lastAnnounced(line)
 }
 
-func TestSwitcher_Rename(t *testing.T) {
-	f := start(t, nil)
-
-	f.s.Rename(f.s.compoCtx, "Plant")
-	f.run()
-
-	got, err := f.api.GetProject(context.Background(), servertest.MainProject)
-	if err != nil || got.Name != "Plant" {
-		t.Fatalf("server project: %+v, %v", got, err)
-	}
-	if p := f.s.Projects(); len(p) != 1 || p[0].Name != "Plant" {
-		t.Errorf("listed %+v, want the new name", p)
-	}
-	if toasts := f.e.TakeToasts(); len(toasts) != 0 {
-		t.Errorf("toasts: %+v", toasts)
-	}
-}
-
-func TestSwitcher_DeleteSelected_SelectsTheFirstLeft(t *testing.T) {
-	var line uuid.UUID
-	f := start(t, func(api *apiclient.Client) {
-		created, err := api.CreateProject(context.Background(), apiv0.CreateProjectRequest{Name: "Line 1"})
-		if err != nil {
-			t.Fatalf("create project: %v", err)
-		}
-		line = created.ID
-	})
-	f.s.Select(f.s.compoCtx, line)
-
-	f.s.Delete(f.s.compoCtx)
-	f.run()
-
-	f.lastAnnounced(servertest.MainProject)
-	if _, err := f.api.GetProject(context.Background(), line); err == nil {
-		t.Error("the project is still on the server")
-	}
-}
-
-func TestSwitcher_SelectedDeletedElsewhere_SelectsTheFirstLeft(t *testing.T) {
+func TestSwitcher_SelectedGone_SelectsTheFirstLeft(t *testing.T) {
 	f := start(t, nil)
 	line := f.createProject("Line 1")
 	f.s.load(f.s.compoCtx)
@@ -173,7 +123,10 @@ func TestSwitcher_SelectedDeletedElsewhere_SelectsTheFirstLeft(t *testing.T) {
 func TestSwitcher_NoProjectLeft_SelectsNone(t *testing.T) {
 	f := start(t, nil)
 
-	f.s.Delete(f.s.compoCtx)
+	if _, err := f.api.DeleteProject(context.Background(), servertest.MainProject); err != nil {
+		t.Fatalf("delete project: %v", err)
+	}
+	f.s.compoCtx.NewActionWithValue(eventlog.ActionServerEvent, apiv0.Event{Type: apiv0.EventProjectDeleted, ID: servertest.MainProject.String()})
 	f.run()
 
 	f.lastAnnounced(uuid.Nil)
