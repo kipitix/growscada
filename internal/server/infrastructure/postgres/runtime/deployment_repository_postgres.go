@@ -77,11 +77,19 @@ func (r deploymentRepositoryPostgres) CreateDeployment(ctx context.Context, proj
 			return runtimeapp.Deployment{}, fmt.Errorf("%w: release %d of project %s is the deployment it runs", runtimeapp.ErrNothingToDeploy, *releaseNumber, projectID)
 		}
 	}
-	number, err := insertDeployment(ctx, tx, projectID, config, cause, releaseNumber, nil, now)
+	number, seq, err := insertDeployment(ctx, tx, projectID, config, cause, releaseNumber, nil, now)
 	if err != nil {
 		return runtimeapp.Deployment{}, err
 	}
 	if err := refreshCopies(ctx, tx, projectID, file); err != nil {
+		return runtimeapp.Deployment{}, err
+	}
+	// The Checkpoint describes the state after the Deployment's Journal entry
+	// and is written after the copies are rebuilt, so it names the Deployment
+	// and holds the initial states of the Tags the document adds (task 44,
+	// ADR 0023).
+	checkpoint := &recordv0.Deployment{Number: number, Cause: journalCause(cause), ReleaseNumber: releaseNumber}
+	if _, err := insertCheckpoint(ctx, tx, projectID, seq, checkpoint, now); err != nil {
 		return runtimeapp.Deployment{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -152,11 +160,23 @@ func (r deploymentRepositoryPostgres) Rollback(ctx context.Context, projectID uu
 	}
 	rolledBackFrom := n
 	releaseNumber := nullableInt(targetReleaseNumber)
-	number, err := insertDeployment(ctx, tx, projectID, targetConfig, runtimeapp.DeploymentCauseRollback, releaseNumber, &rolledBackFrom, now)
+	number, seq, err := insertDeployment(ctx, tx, projectID, targetConfig, runtimeapp.DeploymentCauseRollback, releaseNumber, &rolledBackFrom, now)
 	if err != nil {
 		return runtimeapp.Deployment{}, err
 	}
 	if err := refreshCopies(ctx, tx, projectID, file); err != nil {
+		return runtimeapp.Deployment{}, err
+	}
+	// A Rollback is a Deployment like any other: its Checkpoint names the new
+	// number, the cause and the Deployment it copied, and holds the Tag states
+	// as they are after the copies are rebuilt (task 44, ADR 0023).
+	checkpoint := &recordv0.Deployment{
+		Number:         number,
+		Cause:          recordv0.DeploymentCauseRollback,
+		RolledBackFrom: &rolledBackFrom,
+		ReleaseNumber:  releaseNumber,
+	}
+	if _, err := insertCheckpoint(ctx, tx, projectID, seq, checkpoint, now); err != nil {
 		return runtimeapp.Deployment{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -207,27 +227,29 @@ func prepareDeploymentTx(ctx context.Context, tx *sql.Tx, projectID uuid.UUID) e
 // net of a writer that bypassed the advisory lock. The Deployment's Journal
 // entry is appended in the same transaction, with the Deployment's time: a
 // Deployment that never commits leaves no entry, and the entry never carries
-// the document (ADR 0014, ADR 0019).
+// the document (ADR 0014, ADR 0019). It returns the number and the entry's
+// position — the position the Deployment's Checkpoint describes (task 44).
 func insertDeployment(ctx context.Context, tx *sql.Tx, projectID uuid.UUID, config []byte,
-	cause runtimeapp.DeploymentCause, releaseNumber *int, rolledBackFrom *int, now time.Time) (int, error) {
+	cause runtimeapp.DeploymentCause, releaseNumber *int, rolledBackFrom *int, now time.Time) (int, int64, error) {
 	var number int
 	if err := tx.QueryRowContext(ctx,
 		`SELECT COALESCE(MAX(number), 0) + 1 FROM runtime.deployments WHERE project_id = $1`,
 		projectID,
 	).Scan(&number); err != nil {
-		return 0, fmt.Errorf("cannot number the deployment of project %s: %w", projectID, err)
+		return 0, 0, fmt.Errorf("cannot number the deployment of project %s: %w", projectID, err)
 	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO runtime.deployments (project_id, number, deployed_at, cause, rolled_back_from, release_number, config)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		projectID, number, now, string(cause), rolledBackFrom, releaseNumber, config,
 	); err != nil {
-		return 0, fmt.Errorf("cannot insert deployment %d of project %s: %w", number, projectID, err)
+		return 0, 0, fmt.Errorf("cannot insert deployment %d of project %s: %w", number, projectID, err)
 	}
-	if _, err := appendJournalEntry(ctx, tx, newDeploymentEntry(projectID, now, number, journalCause(cause), releaseNumber, rolledBackFrom)); err != nil {
-		return 0, fmt.Errorf("cannot record deployment %d of project %s: %w", number, projectID, err)
+	seq, err := appendJournalEntry(ctx, tx, newDeploymentEntry(projectID, now, number, journalCause(cause), releaseNumber, rolledBackFrom))
+	if err != nil {
+		return 0, 0, fmt.Errorf("cannot record deployment %d of project %s: %w", number, projectID, err)
 	}
-	return number, nil
+	return number, seq, nil
 }
 
 // journalCause is the Deployment cause as the record names it: the record has

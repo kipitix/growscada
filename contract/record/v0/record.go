@@ -14,7 +14,7 @@ import (
 // SchemaVersion is the version of the operational record format this package
 // describes.
 // A function rather than a variable, so no importer can change it.
-func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 4} }
+func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 5} }
 
 // Header is the root of every record document: the SchemaVersion the rest of
 // the document follows. A reader checks it before anything else.
@@ -121,6 +121,34 @@ type Deployment struct {
 	Cause          DeploymentCause `json:"cause"`
 	RolledBackFrom *int            `json:"rolled_back_from,omitempty"`
 	ReleaseNumber  *int            `json:"release_number,omitempty"`
+}
+
+// Checkpoint is an immutable snapshot of a Project's operational state at a
+// Journal position (task 44, ADR 0023): the Deployment in force and every Tag
+// state, stored beside the Journal and never an entry of it. Seq is the
+// position the snapshot describes — the state after the entry at that
+// position; Timestamp is RFC 3339, when the snapshot was taken.
+//
+// The Deployment is addressed, not copied: the document stays in the Runtime
+// node's store (ADR 0014). Deployment is nil for a Project that runs no
+// Deployment, as a Project before its first Deploy does.
+type Checkpoint struct {
+	Header
+	Seq        int64                `json:"seq"`
+	ProjectID  uuid.UUID            `json:"project_id"`
+	Timestamp  string               `json:"timestamp"`
+	Deployment *Deployment          `json:"deployment,omitempty"`
+	TagStates  []CheckpointTagState `json:"tag_states"`
+}
+
+// CheckpointTagState is one Tag's state in a Checkpoint: its value, Quality
+// and the position of its latest change. WrittenAt is not part of the record:
+// a past state has no write moment the snapshot keeps (ADR 0023).
+type CheckpointTagState struct {
+	TagID   uuid.UUID `json:"tag_id"`
+	Value   string    `json:"value"`
+	Quality string    `json:"quality"`
+	Seq     int64     `json:"seq"`
 }
 
 // DeploymentCause is why a Deployment exists, as the record names it. It mirrors

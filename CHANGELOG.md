@@ -1,5 +1,19 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.86] - 2026-11-09
+
+### Added
+
+- **Checkpoint: неизменяемый снимок операционного состояния на позицию Journal — запись и её писатели** (задача 44_1; ADR 0023)
+  - `contract/record/v0` **0.5**: `Checkpoint` (встраивает `Header`; `seq`, `project_id`, `timestamp`, `deployment`, `tag_states`) и `CheckpointTagState` (`tag_id`, `value`, `quality`, `seq`); Deployment — тот же payload, что у `deployment`-записи Journal, документ не копируется; `make schemas`
+  - Миграция `runtime/20261111000000_checkpoints`: `runtime.checkpoints` с ключом `(project_id, seq)`, `taken_at`, `schema_version`, jsonb-`payload` `{deployment, tag_states}`, каскад с Project и индекс `(project_id, seq DESC)`
+  - `postgres/runtime/checkpoint_codec.go` — кодек с `schema_version` в строке; `NewCheckpointRepositoryPostgres` — `Nearest` (последний Checkpoint ≤ позиции; неживой Project — `project.ErrProjectNotFound`), `DueProjects` (порог считается записями Journal, только живые Project'ы) и `Snapshot` (одна `REPEATABLE READ`-транзакция, вставка `ON CONFLICT DO NOTHING`)
+  - Deploy Release, Deploy файла и Rollback пишут Checkpoint в своей транзакции — после `refreshCopies`, на `seq` записи `deployment`; `insertDeployment` теперь возвращает `(number, seq)`, а неудавшаяся Deployment снимка не оставляет
+  - `application/runtime.CheckpointService`: `Run` (тикер `CheckpointScanEvery = time.Minute`) и `RunOnce` для детерминированных тестов; `CheckpointEveryEntries = 10 000`; ошибка снимка логируется и повторяется следующим проходом, outbox и policy не участвуют. Запуск в `cmd/combined_server/main.go` рядом с dispatcher и policy runner; `servertest` тикер не поднимает
+  - Тесты: кодек (round-trip, отказ чужой `schema_version`, пустой `tag_states`), интеграционные (`postgres/runtime`: три пути Deployment пишут Checkpoint на позицию записи `deployment`, состояния снимка совпадают с `runtime.tag_states`, `Nearest` до/на/после, `DueProjects` до и после порога, повторный `Snapshot` не дублирует, удаление Project удаляет Checkpoint каскадом), `CheckpointService.RunOnce` (снимок только созревшего Project, повторный проход ничего не добавляет, ошибка одного Project не останавливает другие)
+  - `?at=` у `GET …/operation`, `apiclient` и Bruno — часть 2 (44_2); текущий read-model Operation и REST не менялись
+  - Проверки: `make build`, `make test`; `make bruno_test` не требуется — REST и UI не менялись
+
 ## [0.0.85] - 2026-11-09
 
 ### Changed

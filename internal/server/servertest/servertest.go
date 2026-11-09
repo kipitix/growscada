@@ -213,7 +213,7 @@ func sendJSON[T any](t *testing.T, srv *httptest.Server, method, path string, bo
 func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagService) {
 	t.Helper()
 	if _, err := db.ExecContext(context.Background(), "DELETE FROM engineering.draft_changes; DELETE FROM engineering.drafts; "+
-		"DELETE FROM runtime.deployments; DELETE FROM runtime.device_tokens; DELETE FROM runtime.journal; DELETE FROM runtime.tags; "+
+		"DELETE FROM runtime.deployments; DELETE FROM runtime.checkpoints; DELETE FROM runtime.device_tokens; DELETE FROM runtime.journal; DELETE FROM runtime.tags; "+
 		"DELETE FROM runtime.environment_devices; DELETE FROM runtime.devices; DELETE FROM runtime.environments; "+
 		"DELETE FROM engineering.tags; "+
 		"DELETE FROM engineering.environment_devices; DELETE FROM engineering.devices; DELETE FROM engineering.environments; "+

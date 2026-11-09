@@ -191,6 +191,27 @@ func main() {
 			return ctx.Err()
 		}
 	})
+	// The periodic Checkpoints of the Runtime node: a snapshot of every Project
+	// whose Journal position moved far enough past its latest one, so History
+	// never replays a Project from position 0 (task 44, ADR 0023). A Deploy
+	// writes its own Checkpoint in its transaction; this service adds the ones
+	// between Deployments. It is not the outbox and runs no policy.
+	checkpointService := runtimeapp.NewCheckpointService(runtimepg.NewCheckpointRepositoryPostgres(sqlDB))
+	checkpointCtx, stopCheckpoints := context.WithCancel(context.Background())
+	checkpointsDone := make(chan struct{})
+	go func() {
+		checkpointService.Run(checkpointCtx)
+		close(checkpointsDone)
+	}()
+	gracedownManager.RegisterInterface("Checkpoint Service", 15*time.Second, func(ctx context.Context) error {
+		stopCheckpoints()
+		select {
+		case <-checkpointsDone:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	})
 
 	// INTERFACE COMPONENTS
 	// API server
