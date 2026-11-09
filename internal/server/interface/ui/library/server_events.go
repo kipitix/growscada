@@ -58,6 +58,13 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 		if targets.Commits && mine {
 			l.loadCommits(ctx)
 		}
+		// A Library Release names the Commit it published by that Commit's
+		// current title — its own copy carries none —, so a rename changes the
+		// Release list too. A Project Release keeps the title it was published
+		// with and needs no such read (task 72_7; ADR 0021).
+		if ev.Type == apiv0.EventCommitTitleUpdated && mine {
+			l.loadReleases(ctx)
+		}
 		// A Release of the selected Library and its note changed in another
 		// tab: the list of Releases follows, never another library's
 		// (task 72_7).

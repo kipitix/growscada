@@ -332,3 +332,23 @@ func TestServerEvents_ProjectResyncLeavesTheLibraryAlone(t *testing.T) {
 		t.Errorf("a project resync reloaded the history: %+v", f.l.commits)
 	}
 }
+
+// TestCommitTitleEvent_RereadsTheReleases: a Library Release names its Commit
+// by the Commit's current title — its own copy carries none —, so a rename
+// changes the Release list too (task 72_7; ADR 0021).
+func TestCommitTitleEvent_RereadsTheReleases(t *testing.T) {
+	f, _ := selected(t)
+	f.run()
+	releaseNow(t, f)
+	if len(f.l.releases) != 1 || f.l.releases[0].Title == nil || *f.l.releases[0].Title != "Save" {
+		t.Fatalf("the released Commit's title: %+v", f.l.releases)
+	}
+	if _, err := f.api.RenameCommit(context.Background(), 1, apiv0.RenameCommitRequest{Title: "Renamed"}); err != nil {
+		t.Fatalf("rename the Commit: %v", err)
+	}
+
+	f.event(apiv0.Event{Type: apiv0.EventCommitTitleUpdated, ID: f.l.libraryID.String(), Commit: 1})
+	if len(f.l.releases) != 1 || f.l.releases[0].Title == nil || *f.l.releases[0].Title != "Renamed" {
+		t.Errorf("a rename of the Commit did not reread the Releases: %+v", f.l.releases)
+	}
+}
