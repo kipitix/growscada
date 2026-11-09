@@ -4,7 +4,7 @@ A Project's Draft and a Library's Draft were a set of aggregates — Scene, Tag 
 
 ## Amendment 2026-11-08: the EditLock is not a field of the Draft (ADR 0022)
 
-ADR 0022 removes the EditLock: `engineering.drafts` loses `holder_key`, `holder_name`, `held_since`, `last_seen` and `lock_version`, and `internal/server/domain/editlock` is gone; its `Scope` becomes `draft.Scope`. The Draft stays one aggregate per scope with one Version, and that Version is now the only concurrency token: a write states it, and `draftRepositoryPostgres.Update` answers `draft.ConflictError` when it is stale. There is no read-only Draft and no gate to check in a write's transaction; Deploy checks the Version around its build (ADR 0022). Everything else below about the aggregate, its content and its transaction holds.
+ADR 0022 removes the EditLock: `engineering.drafts` loses `holder_key`, `holder_name`, `held_since`, `last_seen` and `lock_version`, and `internal/server/domain/editlock` is gone; its `Scope` becomes `draft.Scope`. The Draft stays one aggregate per scope with one Version, and that Version is now the only concurrency token: a write states it, and `draftRepositoryPostgres.Update` answers `draft.ConflictError` when it is stale. There is no read-only Draft and no gate to check in a write's transaction. Save checks the Version under the Draft row's lock (ADR 0021); a Deploy takes a Release and reads no Draft (task 72_4, ADR 0022). Everything else below about the aggregate, its content and its transaction holds.
 
 ## Decision
 

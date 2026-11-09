@@ -1,16 +1,16 @@
 info:
-  name: post library edit lock takeover is gone
+  name: post editing lock is gone
   type: http
-  seq: 187
+  seq: 181
 
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/edit-lock/takeover
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/edit-lock
   auth: inherit
 
 docs: |
-  A Library's takeover is gone with the EditLock (ADR 0022): the route
-  answers `410 Gone`.
+  The editing lock's POST is gone (ADR 0022): the route answers `410
+  Gone`.
 
 runtime:
   assertions:

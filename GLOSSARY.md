@@ -133,11 +133,11 @@ _Avoid_: production server, station, runtime (unqualified)
 ### Project lifecycle
 
 **Draft**:
-The working state of a Project or of a Library as it is being edited, and the unit of consistency: every change to it is one DraftChange, and its Version is the only token a write states (ADR 0016, ADR 0022). A Project's Draft holds Scenes with their Widgets, Tag definitions, Devices, Environments and the pinned Library Releases; a Library's holds its WidgetTypes. It also keeps the history of its Commits.
+The working state of a Project or of a Library as it is being edited, and the unit of consistency: every change to it is one DraftChange, and its Version is the only token a write states (ADR 0016, ADR 0022). It is edited without a lock; two Engineers see each other's writes as a conflict on the Version. A Project's Draft holds Scenes with their Widgets, Tag definitions, Devices, Environments and the pinned Library Releases; a Library's holds its WidgetTypes. It also keeps the history of its Commits.
 _Avoid_: working copy, unsaved changes
 
 **DraftChange**:
-One Engineer intent applied to the Draft — possibly touching several parts of the Draft at once — and the unit of undo/redo. The Draft keeps the stack of them; Deploy, Release and Discard clear it.
+One Engineer intent applied to the Draft — possibly touching several parts of the Draft at once — and the unit of undo/redo. The Draft keeps the stack of them; only a Discard or a Revert, which replace the content, clear it — a Save, a Release and a Deploy leave the stack alone (ADR 0017, ADR 0021).
 _Avoid_: edit, step, command, operation
 
 **Commit**:
@@ -146,7 +146,7 @@ _Avoid_: revision, version, checkpoint, snapshot (unqualified)
 
 **Save**:
 The act of fixing the Draft's current state as a new Commit under a title and an Author (task 72_2; ADR 0021). It does not write the Draft: edits are written at once as DraftChanges, and a Save of an unchanged Draft is refused with `nothing_to_save`.
-_Avoid_: commit (as a verb), check in, publish
+_Avoid_: commit (as a verb), publish
 
 **Discard**:
 Resetting a Draft to its last Commit, dropping the unsaved DraftChanges (task 72_4, task 72_5). A Project or a Library with no Commit is refused with `nothing_to_discard`; **Revert to deployed** (a Project) and **Revert to latest Release** (a Library) are the different act of resetting it to the published state instead.
@@ -255,7 +255,3 @@ _Avoid_: etag, stale client, base version
 **SchemaVersion**:
 The `MAJOR.MINOR` version of the JSON schema that a message or document conforms to.
 _Avoid_: version (unqualified), protocol version, format version
-
-**Client**:
-Identity marker for a connected SSE client, used by connection-lifecycle domain events.
-_Avoid_: session, connection, user

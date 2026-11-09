@@ -1,15 +1,15 @@
 info:
-  name: post library edit lock is gone
+  name: delete library editing lock is gone
   type: http
-  seq: 185
+  seq: 186
 
 http:
-  method: POST
+  method: DELETE
   url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/edit-lock
   auth: inherit
 
 docs: |
-  A Library's Check out is gone with the EditLock (ADR 0022): the route
+  The editing lock's DELETE for a Library is gone (ADR 0022): the route
   answers `410 Gone`.
 
 runtime:

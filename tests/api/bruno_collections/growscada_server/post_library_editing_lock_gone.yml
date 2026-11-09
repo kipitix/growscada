@@ -1,16 +1,16 @@
 info:
-  name: post edit lock is gone
+  name: post library editing lock is gone
   type: http
-  seq: 181
+  seq: 185
 
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/edit-lock
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/edit-lock
   auth: inherit
 
 docs: |
-  A Check out is gone with the EditLock (ADR 0022): the route answers `410
-  Gone`.
+  The editing lock's POST for a Library is gone (ADR 0022): the route
+  answers `410 Gone`.
 
 runtime:
   assertions:

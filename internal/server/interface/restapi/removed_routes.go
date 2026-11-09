@@ -16,7 +16,7 @@ const removedDraftLockPath = "/edit-lock"
 // and saved freely, and its Version is the only concurrency token (ADR 0022).
 func draftLockRemoved(w http.ResponseWriter, r *http.Request) {
 	sendProblem(w, NewGone(
-		"EditLock is gone: edit and save the Draft; the Version of the Draft is the only concurrency token",
+		"The editing lock is gone: edit and save the Draft; the Version of the Draft is the only concurrency token",
 		r.URL.Path))
 }
 

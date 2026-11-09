@@ -1,17 +1,16 @@
 info:
-  name: get edit lock is gone
+  name: delete editing lock is gone
   type: http
-  seq: 180
+  seq: 182
 
 http:
-  method: GET
+  method: DELETE
   url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/edit-lock
   auth: inherit
 
 docs: |
-  The Draft is edited without a lock (ADR 0022): every EditLock route answers
-  `410 Gone` with a hint to edit and save the Draft, and is removed with the
-  API 1.0. The Draft's Version is the only concurrency token.
+  The editing lock's DELETE is gone (ADR 0022): the route answers `410
+  Gone`.
 
 runtime:
   assertions:

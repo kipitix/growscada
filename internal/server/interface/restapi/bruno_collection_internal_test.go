@@ -62,7 +62,7 @@ var requestBodies = map[string]any{
 	"PATCH " + projectPrefix + apiv0.ReleasePath + "/" + projectReleaseResource.wildcard():                               apiv0.UpdateReleaseNoteRequest{},
 	"POST " + libraryPrefix + apiv0.CommitPath:                                                                           apiv0.CreateCommitRequest{},
 	"PATCH " + libraryPrefix + apiv0.CommitPath + "/" + commitResource.wildcard():                                        apiv0.RenameCommitRequest{},
-	// The removed EditLock routes (ADR 0022) answer 410 without a body.
+	// The removed editing-lock routes (ADR 0022) answer 410 without a body.
 	"POST " + projectPrefix + removedDraftLockPath:               nil,
 	"POST " + projectPrefix + removedDraftLockPath + "/takeover": nil,
 	"POST " + libraryPrefix + removedDraftLockPath:               nil,
