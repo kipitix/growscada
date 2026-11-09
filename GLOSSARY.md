@@ -83,11 +83,11 @@ The tenant: the top-level owner of Projects and Libraries. Everything a server s
 _Avoid_: tenant (in UI), company, account, team
 
 **Project**:
-Owned by one Organization. The unit of operational ownership and isolation: Tags, Scenes with their Widgets, Devices, Environments, the Draft, Deployments and the Journal belong to exactly one Project.
+Owned by one Organization. The unit of operational ownership and isolation: Tags, Scenes with their Widgets, Devices, Environments, the Draft, Deployments and the Journal belong to exactly one Project. It carries a name, unique among the live Projects of its Organization, and an optional description.
 _Avoid_: workspace, site, solution
 
 **Library**:
-A reusable collection of WidgetTypes owned by an Organization, outside any Project, and used by any number of Projects.
+A reusable collection of WidgetTypes owned by an Organization, outside any Project, and used by any number of Projects. It carries a name, unique among the live Libraries of its Organization, and an optional description.
 _Avoid_: catalog, toolbox, package
 
 **Library Release**:
