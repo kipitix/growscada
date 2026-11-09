@@ -265,8 +265,10 @@ func (l *Library) renderReleaseRow(r apiv0.LibraryReleaseResponse) app.UI {
 }
 
 // smallButton renders a button of the columns; kind "accent", "error" or ""
-// picks its colours, title is its hover text.
-func smallButton(text string, enabled bool, kind, title string, onClick func()) app.UI {
+// picks its colours, title is its hover text. options go to the click handler:
+// a button of a list gives it the row's identity, so a reused element does not
+// keep the handler of the row it showed before (app.EventScope).
+func smallButton(text string, enabled bool, kind, title string, onClick func(), options ...app.EventOption) app.UI {
 	border, bg, fg := "var(--border-input)", "var(--bg-hover)", "var(--text)"
 	switch kind {
 	case "accent":
@@ -287,5 +289,5 @@ func smallButton(text string, enabled bool, kind, title string, onClick func()) 
 	if !enabled {
 		return b.Style("opacity", "0.4").Style("cursor", "default").Disabled(true)
 	}
-	return b.Style("cursor", "pointer").OnClick(func(ctx app.Context, e app.Event) { onClick() })
+	return b.Style("cursor", "pointer").OnClick(func(ctx app.Context, e app.Event) { onClick() }, options...)
 }

@@ -389,15 +389,16 @@ func (l *Library) renderCommitRow(commit apiv0.CommitResponse) app.UI {
 			OnClick(func(ctx app.Context, e app.Event) {
 				l.renamingCommit, l.renameCommitTitle = commit.Number, commit.Title
 				ctx.Update()
-			})
+			}, app.EventScope("rename/"+itoa(commit.Number)))
 	}
 	release := smallButton("Make Release", !commit.Released, "accent",
-		"Publish this Commit as the next Library Release", func() { l.openReleaseDialog(commit) })
+		"Publish this Commit as the next Library Release", func() { l.openReleaseDialog(commit) },
+		app.EventScope("release/"+itoa(commit.Number)))
 	if commit.Released {
 		release = smallButton("Released", false, "", "A Release publishes this Commit", func() {})
 	}
 	view := smallButton("View", true, "", "Show the WidgetTypes of this Commit read-only",
-		func() { l.viewCommit(commit.Number) })
+		func() { l.viewCommit(commit.Number) }, app.EventScope("view/"+itoa(commit.Number)))
 	return app.Div().
 		Attr("data-commit-row", fmt.Sprint(commit.Number)).
 		Style("padding", "3px 0").
