@@ -171,16 +171,18 @@ func (s projectServiceImpl) describe(ctx context.Context, p project.Project) (ap
 }
 
 // draftState reads the Version of a project's Draft and the one its last
-// Commit fixed. A Draft never written is the fresh Draft at version 1.
+// Commit fixed. A Draft never written has nothing to save: its state is the
+// zero one, so the project shows no unsaved changes (task 73).
 func (s projectServiceImpl) draftState(ctx context.Context, projectID id.ID[project.Project]) (appdto.ProjectDraftState, error) {
 	scope := draft.ProjectScope(projectID)
-	draftVersion := 1
-	if found, ok, err := s.drafts.Read(ctx, scope); err != nil {
+	foundDraft, ok, err := s.drafts.Read(ctx, scope)
+	if err != nil {
 		return appdto.ProjectDraftState{}, fmt.Errorf("cannot read the draft of project %s: %w", projectID, err)
-	} else if ok {
-		draftVersion = found.Version().Number()
 	}
-	state := appdto.ProjectDraftState{DraftVersion: draftVersion}
+	if !ok {
+		return appdto.ProjectDraftState{}, nil
+	}
+	state := appdto.ProjectDraftState{DraftVersion: foundDraft.Version().Number()}
 	lastCommit, found, err := s.drafts.FindLastCommit(ctx, scope)
 	if err != nil {
 		return appdto.ProjectDraftState{}, fmt.Errorf("cannot find the last commit of project %s: %w", projectID, err)

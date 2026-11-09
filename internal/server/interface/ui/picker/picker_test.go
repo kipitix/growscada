@@ -88,8 +88,14 @@ func (f *fixture) names() []string {
 // unsaved-changes badge (task 73).
 func TestPicker_ListsSortedWithDescriptionAndState(t *testing.T) {
 	f := startProjects(t, func(api *apiclient.Client) {
-		if _, err := api.CreateProject(context.Background(), apiv0.CreateProjectRequest{Name: "zulu", Description: "The last line"}); err != nil {
+		zulu, err := api.CreateProject(context.Background(), apiv0.CreateProjectRequest{Name: "zulu", Description: "The last line"})
+		if err != nil {
 			t.Fatalf("create project: %v", err)
+		}
+		// A project whose Draft was never written has nothing to save: only
+		// the one with a change carries the badge (task 73).
+		if _, err := api.Project(zulu.ID).CreateTag(context.Background(), apiv0.CreateTagRequest{Name: "pump.flow", Type: "integer"}); err != nil {
+			t.Fatalf("create tag: %v", err)
 		}
 		if _, err := api.CreateProject(context.Background(), apiv0.CreateProjectRequest{Name: "Alpha"}); err != nil {
 			t.Fatalf("create project: %v", err)
@@ -100,14 +106,20 @@ func TestPicker_ListsSortedWithDescriptionAndState(t *testing.T) {
 	if got := f.names(); len(got) != 3 || got[0] != "Alpha" || got[1] != servertest.MainProjectName || got[2] != "zulu" {
 		t.Fatalf("listed %v, want them sorted by name", got)
 	}
-	var zulu Item
+	var zulu, alpha Item
 	for _, item := range f.p.items {
-		if item.Name == "zulu" {
+		switch item.Name {
+		case "zulu":
 			zulu = item
+		case "Alpha":
+			alpha = item
 		}
 	}
 	if zulu.Description != "The last line" || zulu.State != StateUnsavedChanges || zulu.StateKind != "unsaved" {
 		t.Errorf("zulu: %+v, want its description and unsaved changes", zulu)
+	}
+	if alpha.Description != "" || alpha.State != "" {
+		t.Errorf("alpha: %+v, want no description and no badge", alpha)
 	}
 	html := app.HTMLString(f.p.Render())
 	for _, want := range []string{`data-picker-row`, "The last line", "Unsaved changes", "No description", "Projects"} {

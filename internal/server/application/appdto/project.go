@@ -21,6 +21,7 @@ type Project struct {
 // ProjectDraftState is what a Project's Draft tells of it: the Version of the
 // Draft and the one the last Commit fixed (ADR 0016, ADR 0021).
 type ProjectDraftState struct {
+	// DraftVersion is 0 for a Draft never written: there is nothing to save.
 	DraftVersion int
 	// LastCommitDraftVersion is 0 for a Draft never saved.
 	LastCommitDraftVersion int

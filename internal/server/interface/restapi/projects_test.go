@@ -82,10 +82,10 @@ func TestProjects_CreateListUpdateDelete(t *testing.T) {
 	if len(list.Projects) != 2 || list.Projects[0].ID != mainProject || list.Projects[1].Name != "Line 1" {
 		t.Errorf("GET /projects: %+v", list)
 	}
-	// A description is trimmed when written, and a Draft that was never saved
-	// has unsaved changes (task 73).
-	if got := list.Projects[1]; got.Description != "The first line" || !got.HasUnsavedChanges {
-		t.Errorf("the created project: %+v, want its trimmed description and unsaved changes", got)
+	// A description is trimmed when written, and a Draft that was never
+	// written has nothing to save (task 73).
+	if got := list.Projects[1]; got.Description != "The first line" || got.HasUnsavedChanges {
+		t.Errorf("the created project: %+v, want its trimmed description and no unsaved changes", got)
 	}
 	rec = serve(router, http.MethodGet, apiv0.PathPrefix+"/projects?name=Line%201", nil)
 	if byName := decodeBody[apiv0.GetProjectsResponse](t, rec); len(byName.Projects) != 1 || byName.Projects[0].ID != created.ID {

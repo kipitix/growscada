@@ -49,9 +49,9 @@ func TestProjectService_CreateFindUpdate(t *testing.T) {
 	if err != nil || created.Name != "Line 1" || created.Version != 1 || created.Description != "The first line" {
 		t.Fatalf("CreateProject: %+v, %v", created, err)
 	}
-	// A Draft that was never saved has unsaved changes (task 73).
-	if !created.HasUnsavedChanges {
-		t.Errorf("a new project must show unsaved changes: %+v", created)
+	// A project whose Draft was never written has nothing to save (task 73).
+	if created.HasUnsavedChanges {
+		t.Errorf("a new project must not show unsaved changes: %+v", created)
 	}
 	if _, err := svc.CreateProject(ctx, appdto.ProjectInput{Name: "Line 1"}); !errors.Is(err, project.ErrProjectNameTaken) {
 		t.Errorf("a taken name: expected ErrProjectNameTaken, got %v", err)
@@ -95,8 +95,17 @@ func TestProjectService_CreateFindUpdate(t *testing.T) {
 		t.Errorf("FindAllProjects: %+v, %v", all, err)
 	}
 
-	// A Save makes the Draft clean: the unsaved-changes flag follows the last
-	// Commit (task 73; ADR 0021).
+	// A write of the Draft's content makes it unsaved, and a Save fixes it:
+	// the flag follows the last Commit (task 73; ADR 0016, ADR 0021).
+	if _, err := r.tagSvc.CreateTag(ctx, created.ID, appdto.CreateTagInput{
+		Version: draftVersionOf(t, created.ID), Name: "pump.speed", Type: "integer",
+	}); err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	changed, err := svc.FindProjectByID(ctx, created.ID)
+	if err != nil || !changed.HasUnsavedChanges {
+		t.Errorf("after a write of the Draft: %+v, %v, want unsaved changes", changed, err)
+	}
 	mustSaveCommit(t, created.ID, "First")
 	saved, err := svc.FindProjectByID(ctx, created.ID)
 	if err != nil || saved.HasUnsavedChanges {
