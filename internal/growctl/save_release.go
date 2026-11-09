@@ -108,9 +108,9 @@ func (t workflowTarget) commits(ctx context.Context) ([]apiv0.CommitResponse, er
 
 // releaseRow is one Release of either kind, as the lists print it.
 type releaseRow struct {
-	Number   int
-	Commit   int // 0 for a Library Release older than Commits
-	Title    string
+	Number  int
+	Commit  int // 0 for a Library Release older than Commits
+	Title   string
 	Note    string
 	Author  string
 	Origin  string
@@ -178,8 +178,8 @@ func resolveAuthor(flag string) (string, error) {
 	return "", usageError(fmt.Errorf("no author: use --author or set %s", AuthorEnv))
 }
 
-// requireOneOf reports a missing or non-positive number flag as a usage error.
-func requireOneOf(cmd *cobra.Command, flag string, value int) error {
+// requirePositive reports a missing or non-positive number flag as a usage error.
+func requirePositive(cmd *cobra.Command, flag string, value int) error {
 	if value > 0 {
 		return nil
 	}
@@ -240,7 +240,7 @@ func newReleaseCommand(s *settings) *cobra.Command {
 			"--library. Projects deploy a Release with `growctl deploy`.",
 		Args: exactlyOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := requireOneOf(cmd, "commit", commit); err != nil {
+			if err := requirePositive(cmd, "commit", commit); err != nil {
 				return err
 			}
 			author, err := resolveAuthor(author)
@@ -277,7 +277,7 @@ func newDeployCommand(s *settings) *cobra.Command {
 			"runs is refused (nothing_to_deploy); Operation switches to the new one.",
 		Args: exactlyOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := requireOneOf(cmd, "release", release); err != nil {
+			if err := requirePositive(cmd, "release", release); err != nil {
 				return err
 			}
 			target, err := resolveProjectTarget(cmd.Context(), s.client(), args[0])
