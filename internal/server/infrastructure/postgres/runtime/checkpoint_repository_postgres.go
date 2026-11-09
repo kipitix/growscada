@@ -137,9 +137,10 @@ func (r checkpointRepositoryPostgres) Snapshot(ctx context.Context, projectID uu
 // insertCheckpoint writes a Checkpoint of the Project at seq in the caller's
 // transaction: the Deployment in force and every runtime.tag_states row read
 // there, in the order of their Tag IDs. ON CONFLICT DO NOTHING: the same
-// position is never written twice, and a Deployment's anchor wins over a
-// concurrent periodic snapshot of the same position. It reports whether the
-// row was inserted.
+// position is never written twice, and a Deployment's anchor and a periodic
+// snapshot that reach one position describe the same state — the snapshot
+// reads the Journal and the states from one moment — so whichever inserts
+// first is kept. It reports whether the row was inserted.
 func insertCheckpoint(ctx context.Context, tx *sql.Tx, projectID uuid.UUID, seq int64,
 	deployment *recordv0.Deployment, takenAt time.Time) (bool, error) {
 	states, err := checkpointTagStates(ctx, tx, projectID)
