@@ -266,8 +266,9 @@ func TestPicker_DeleteSelectedLeavesNone(t *testing.T) {
 	}
 }
 
-// TestPicker_ReloadsOnServerEvents: a project_created or a resync rereads the
-// list; a library event does not (task 73).
+// TestPicker_ReloadsOnServerEvents: a project_created, a Save, a write of a
+// Draft's content or a resync rereads the list; a library event does not
+// (task 73).
 func TestPicker_ReloadsOnServerEvents(t *testing.T) {
 	f := startProjects(t, nil)
 	f.run()
@@ -288,11 +289,27 @@ func TestPicker_ReloadsOnServerEvents(t *testing.T) {
 		t.Errorf("a library event changed the project list: %d", len(f.p.items))
 	}
 
+	// A Save fixes a Draft, and a write of one makes the project unsaved: the
+	// row's badge follows both (task 73).
 	f.create("Line 2", "")
-	f.p.compoCtx.NewActionWithValue(eventlog.ActionServerEvent, apiv0.Event{Type: eventlog.EventResync})
+	f.p.compoCtx.NewActionWithValue(eventlog.ActionServerEvent, apiv0.Event{Type: apiv0.EventCommitCreated, ID: uuid.NewString()})
 	f.run()
 	if len(f.p.items) != 3 {
-		t.Errorf("listed %d projects after a resync, want 3", len(f.p.items))
+		t.Errorf("listed %d projects after commit_created, want 3", len(f.p.items))
+	}
+
+	f.create("Line 3", "")
+	f.p.compoCtx.NewActionWithValue(eventlog.ActionServerEvent, apiv0.Event{Type: apiv0.EventTagCreated, ID: uuid.NewString()})
+	f.run()
+	if len(f.p.items) != 4 {
+		t.Errorf("listed %d projects after tag_created, want 4", len(f.p.items))
+	}
+
+	f.create("Line 4", "")
+	f.p.compoCtx.NewActionWithValue(eventlog.ActionServerEvent, apiv0.Event{Type: eventlog.EventResync})
+	f.run()
+	if len(f.p.items) != 5 {
+		t.Errorf("listed %d projects after a resync, want 5", len(f.p.items))
 	}
 }
 
@@ -341,6 +358,27 @@ func TestPicker_StoredSelectionReported(t *testing.T) {
 	f.run()
 	if len(f.selected) != 1 || f.selected[0] != uuid.Nil {
 		t.Errorf("announced %v, want none", f.selected)
+	}
+}
+
+// TestPicker_ReloadReadsTheListAgain: Root asks a shown page to reread its
+// list; before the page mounts it has nothing to read, and OnMount does it
+// (task 73).
+func TestPicker_ReloadReadsTheListAgain(t *testing.T) {
+	f := startProjects(t, nil)
+	f.run()
+
+	unmounted := New(NewProjectSource(f.api), ProjectKey, nil, nil)
+	unmounted.Reload(app.Context{}) // no context yet: must not read anything
+	if unmounted.loaded || len(unmounted.items) != 0 {
+		t.Errorf("a page not mounted read its list: %+v", unmounted)
+	}
+
+	f.create("Line 1", "")
+	f.p.Reload(f.p.compoCtx)
+	f.run()
+	if len(f.p.items) != 2 {
+		t.Errorf("listed %d projects after a reload, want 2", len(f.p.items))
 	}
 }
 

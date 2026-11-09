@@ -74,7 +74,10 @@ type Picker struct {
 	// compoCtx is the component's own context, captured in OnMount; async
 	// results are dispatched through it.
 	compoCtx app.Context
-	source   Source
+	// mounted is set in OnMount: a Reload before that finds the list already
+	// read by it.
+	mounted bool
+	source  Source
 	// key is the LocalStorage key of the selection, shared with the mode.
 	key      string
 	onSelect func(uuid.UUID, string)
@@ -109,6 +112,7 @@ func New(source Source, key string, onSelect func(uuid.UUID, string), onOpen fun
 
 func (p *Picker) OnMount(ctx app.Context) {
 	p.compoCtx = ctx
+	p.mounted = true
 	p.selected = uiutil.LoadID(ctx, p.key)
 	p.load(ctx)
 	ctx.Handle(eventlog.ActionServerEvent, func(ctx app.Context, a app.Action) {
@@ -116,14 +120,26 @@ func (p *Picker) OnMount(ctx app.Context) {
 		if !ok {
 			return
 		}
-		if targets := eventlog.ReloadTargetsFor(ev); targets.Projects || targets.Libraries {
+		// A row reads the entity's name, its description and whether its Draft
+		// moved since its last Commit. A create, an update or a delete of an
+		// entity changes the list itself; a Save fixes the Draft of one, and
+		// any write of a Draft's content makes one unsaved (task 73;
+		// ReloadTargetsFor).
+		if targets := eventlog.ReloadTargetsFor(ev); targets.Projects || targets.Libraries ||
+			targets.Commits || targets.DraftChanged() {
 			p.load(ctx)
 		}
 	})
 }
 
-// Reload rereads the list: the page is shown again.
-func (p *Picker) Reload(ctx app.Context) { p.load(ctx) }
+// Reload rereads the list: the page is shown again. Before OnMount the list
+// is not read yet, and OnMount reads it.
+func (p *Picker) Reload(ctx app.Context) {
+	if !p.mounted {
+		return
+	}
+	p.load(ctx)
+}
 
 // Items returns the list as last loaded.
 func (p *Picker) Items() []Item { return p.items }

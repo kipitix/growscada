@@ -166,19 +166,17 @@ func (r *Root) newSelector(mode Mode) *projects.Switcher {
 	})
 }
 
-// selectProject shows the project id (uuid.Nil: none) in mode; its switcher
-// calls it on the UI goroutine. Project loads the project's content on the
-// EventProjectResync of the Bar's stream of it: if the Bar follows it
-// already, it resyncs now; else, if mode is shown, the Bar follows it, its
-// stream resyncing as it opens; else mode loads it once shown (SetMode).
-// Operation reads nothing of the Bar: its own Player follows the Journal
-// (ADR 0020).
+// selectProject shows the project id (uuid.Nil: none) in mode, one of those
+// whose compact switcher selects a project (Operation, History); it calls it
+// on the UI goroutine. Operation reads nothing of the Bar: its own Player
+// follows the Journal (ADR 0020); History reads it. If the Bar follows the
+// project already, it resyncs now; else, if mode is shown, the Bar follows
+// it, its stream resyncing as it opens; else mode reads it once shown
+// (SetMode). The Project mode has a selection page instead, which announces
+// through selectEntity (task 73).
 func (r *Root) selectProject(mode Mode, id uuid.UUID) {
 	r.selected[mode] = id
-	switch mode {
-	case ModeProject:
-		r.project.SetProject(id)
-	case ModeOperation:
+	if mode == ModeOperation {
 		r.operation.SetProject(id)
 	}
 	switch {
@@ -764,6 +762,10 @@ func (r *Root) SetMode(mode Mode) {
 	r.opened[mode] = true
 	if m := r.modeView(mode); m != nil && m.picker != nil {
 		r.showList[mode] = r.selected[mode] == uuid.Nil
+		if r.showList[mode] {
+			// The page reads its list whenever it is shown (task 73).
+			m.picker.Reload(r.compoCtx)
+		}
 	}
 	if id, ok := r.barProject(mode); ok {
 		r.bar.SetProject(id)
