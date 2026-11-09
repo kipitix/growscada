@@ -1,7 +1,7 @@
 # Страницы выбора Library и Project вместо выпадающего списка
 
 Status: ready-for-agent
-Priority: 3
+Priority: 1
 
 ## Задача
 
