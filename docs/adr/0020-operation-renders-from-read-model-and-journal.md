@@ -37,3 +37,7 @@ The running configuration is a **Deployment** now. `GET …/operation` answers `
 ## Amendment 2026-11-08: the Deployment carries its Release (task 72_4)
 
 `GET …/deployment` and `GET …/operation` serve the Deployment's `release_number` beside its cause; Operation and the Player ignore it, while the Project mode compares it with the Release list to mark the running Release. Nothing of the read model, the Journal order or the resync changes.
+
+## Amendment 2026-11-09: the starting state can be read at a past position (task 44)
+
+`GET …/operation?at=<position>` serves the same `OperationStateResponse` from the nearest Checkpoint at or before that position (ADR 0023): the Checkpoint's position, its Deployment with the document and its Tag states. History (task 45) then reads `GET …/journal?from=<position>` and applies the entries itself, so the Player stays client-side and the server composes no state at T. Without `at` the route is unchanged and reads the present state; Operation is not switched to Checkpoints.

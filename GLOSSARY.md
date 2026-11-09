@@ -235,8 +235,8 @@ The number of a Journal entry — its place in the totally ordered record. The o
 _Avoid_: `seq` (outside the wire format), offset, timestamp
 
 **Checkpoint**:
-A full snapshot of the operational state at one Journal position.
-_Avoid_: snapshot (unqualified), backup
+An immutable record of a Project's full operational state at one Journal position: the Deployment it ran, by number and with its Release, and every Tag state with the position of its latest change. It is a record beside the Journal, not an entry of it, and not an aggregate — it has no behaviour, events or Version. It is written when a Deployment appears and periodically; History begins from the nearest Checkpoint before a moment and applies the Journal entries after it.
+_Avoid_: snapshot (unqualified), backup, savepoint, cursor, offset
 
 **Starting state**:
 The Deployment and the Tag states a Player begins from at one Journal position.
