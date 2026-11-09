@@ -283,7 +283,7 @@ Browser automation. Use for verifying UI changes in the running PWA (port 8080):
 
 ## Development Rules
 
-1. **Work in a separate branch.** Never make changes directly on the `path` branch. If the current branch is `path`, stop and ask the user to create or switch to a feature branch before proceeding.
+1. **Change code only in a separate branch.** Never change code on the `path` branch: `internal/`, `cmd/`, `contract/`, `schemas/`, `tests/`, migrations, `Makefile` and build or config files. If the current branch is `path`, stop and ask the user to create or switch to a feature branch before touching any of them. Task descriptions and service documents may be edited on `path` directly — `todo/` (backlog, priorities, comments), `docs/`, `GLOSSARY.md`, `AGENTS.md`, `CHANGELOG.md`, `.opencode/`. A change that mixes code with documents goes to a feature branch.
 
 2. **Never commit without explicit user request.** Do not run `git commit` on your own initiative. Only commit when the user explicitly asks ("commit this", "make a commit", etc.). Preparing and staging changes is fine; committing is not.
 
