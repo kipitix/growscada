@@ -56,10 +56,11 @@ spec:
 }
 
 // TestLibrary_ApplyReleasePinDiscardDelete walks a library through growctl:
-// apply creates it with its Draft, release makes release 1, apply pins it in
-// Main, an edited WidgetType is updated and released again, the pin switched
-// to release 2, prune removes a WidgetType left out, discard resets the
-// Draft, delete removes the WidgetType and, once unpinned, the library.
+// apply creates it with its Draft, save fixes Commit 1, release publishes it
+// as release 1, apply pins it in Main, an edited WidgetType is updated, saved
+// and released again, the pin switched to release 2, prune removes a
+// WidgetType left out, discard resets the Draft, delete removes the
+// WidgetType and, once unpinned, the library.
 func TestLibrary_ApplyReleasePinDiscardDelete(t *testing.T) {
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
 
@@ -69,11 +70,16 @@ func TestLibrary_ApplyReleasePinDiscardDelete(t *testing.T) {
 	}
 	assertOutput(t, out, "library/Gauges created", "widgettype/Gauges/Lamp created")
 
-	if _, _, err := execGrowctl(t, srv, "", "release", "Gauges"); err != nil {
-		t.Fatalf("release: %v", err)
+	out, _, err = execGrowctl(t, srv, "", "save", "Gauges", "--title", "First", "--author", "tester")
+	if err != nil || out != "library/Gauges saved commit 1\n" {
+		t.Fatalf("save: %q, %v", out, err)
 	}
-	if _, stderr, err := execGrowctl(t, srv, "", "release", "Gauges"); err == nil {
-		t.Errorf("a release of an unchanged Draft must fail, stderr %q", stderr)
+	out, _, err = execGrowctl(t, srv, "", "release", "Gauges", "--commit", "1", "--author", "tester")
+	if err != nil || out != "library/Gauges released 1\n" {
+		t.Fatalf("release 1: %q, %v", out, err)
+	}
+	if _, stderr, err := execGrowctl(t, srv, "", "release", "Gauges", "--commit", "1", "--author", "tester"); err == nil {
+		t.Errorf("a release of an already published Commit must fail, stderr %q", stderr)
 	}
 
 	out, err = runGrowctl(t, srv, libraryManifest+mainPins("1"), "apply")
@@ -91,9 +97,21 @@ func TestLibrary_ApplyReleasePinDiscardDelete(t *testing.T) {
 	if out, err = runGrowctl(t, srv, edited, "apply"); err != nil || !strings.Contains(out, "widgettype/Gauges/Lamp updated") {
 		t.Fatalf("apply the edit: %q, %v", out, err)
 	}
-	out, _, err = execGrowctl(t, srv, "", "release", "Gauges", "--note", "wider")
+	if out, _, err = execGrowctl(t, srv, "", "save", "Gauges", "--title", "Wider", "--author", "tester"); err != nil ||
+		out != "library/Gauges saved commit 2\n" {
+		t.Fatalf("save 2: %q, %v", out, err)
+	}
+	out, _, err = execGrowctl(t, srv, "", "release", "Gauges", "--commit", "2", "--note", "wider", "--author", "tester")
 	if err != nil || out != "library/Gauges released 2\n" {
 		t.Fatalf("release 2: %q, %v", out, err)
+	}
+	out, _, err = execGrowctl(t, srv, "", "commits", "Gauges", "--library")
+	if err != nil || !strings.Contains(out, "Wider") || !strings.Contains(out, "true") {
+		t.Fatalf("commits: %q, %v", out, err)
+	}
+	out, _, err = execGrowctl(t, srv, "", "releases", "Gauges", "--library")
+	if err != nil || !strings.Contains(out, "wider") || !strings.Contains(out, "commit") {
+		t.Fatalf("releases: %q, %v", out, err)
 	}
 	if out, err = runGrowctl(t, srv, edited+mainPins("2"), "apply"); err != nil || !strings.Contains(out, "project/Main pin library/Gauges release 2 switched") {
 		t.Fatalf("switch the pin: %q, %v", out, err)

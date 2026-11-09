@@ -506,64 +506,6 @@ func findLibrary(ctx context.Context, client *Client, name string) (*apiclient.L
 	return client.Library(found.ID), found, nil
 }
 
-func newReleaseCommand(s *settings) *cobra.Command {
-	var note, title, author string
-	cmd := &cobra.Command{
-		Use:   "release <library> [--note <note>]",
-		Short: "Save the Draft of a library and release the Commit as its next Library Release",
-		Long: "Save the Draft of the library as a Commit, unless it is at the last one, and\n" +
-			"publish that Commit as the next Library Release (ADR 0021). Projects use the\n" +
-			"release once they pin it (spec.libraryPins).",
-		Args: exactlyOneArg,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			client := s.client()
-			lib, _, err := findLibrary(ctx, client, args[0])
-			if err != nil {
-				return err
-			}
-			commit, err := saveOrLastCommit(ctx, lib, title, author)
-			if err != nil {
-				return fmt.Errorf("library/%s: %w", args[0], err)
-			}
-			release, err := lib.Release(ctx, apiv0.CreateReleaseRequest{Commit: commit.Number, Note: note, Author: author})
-			if err != nil {
-				return fmt.Errorf("library/%s: %w", args[0], err)
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "library/%s released %d\n", args[0], release.Number)
-			return nil
-		},
-	}
-	cmd.Flags().StringVar(&note, "note", "", "the release's note")
-	cmd.Flags().StringVar(&title, "title", "Release", "the title of the Commit, when the Draft is saved")
-	cmd.Flags().StringVar(&author, "author", "growctl", "the author of the Commit and the Release")
-	return cmd
-}
-
-// saveOrLastCommit fixes the Draft as a Commit with title and author, or
-// returns the last Commit when the Draft has not changed since it.
-func saveOrLastCommit(ctx context.Context, lib *apiclient.LibraryClient, title, author string) (apiv0.CommitResponse, error) {
-	state, err := lib.DraftState(ctx)
-	if err != nil {
-		return apiv0.CommitResponse{}, err
-	}
-	saved, err := lib.SaveCommit(ctx, apiv0.CreateCommitRequest{Version: state.Version, Title: title, Author: author})
-	if err == nil {
-		return saved, nil
-	}
-	if !errors.Is(err, apiclient.ErrConflict) {
-		return apiv0.CommitResponse{}, err
-	}
-	commits, err := lib.Commits(ctx)
-	if err != nil {
-		return apiv0.CommitResponse{}, err
-	}
-	if len(commits) == 0 {
-		return apiv0.CommitResponse{}, errors.New("the draft has no commit to release")
-	}
-	return commits[0], nil
-}
-
 func newDiscardCommand(s *settings) *cobra.Command {
 	return &cobra.Command{
 		Use:   "discard <library>",

@@ -69,8 +69,20 @@ func NewRootCommand() *cobra.Command {
 	}
 
 	root := &cobra.Command{
-		Use:           "growctl",
-		Short:         "Declaratively manage GrowSCADA projects, their tags and libraries from YAML manifests",
+		Use:   "growctl",
+		Short: "Declaratively manage GrowSCADA projects, their tags and libraries from YAML manifests",
+		Long: "Declaratively manage GrowSCADA projects, their tags and libraries from YAML\n" +
+			"manifests: apply and diff bring the Draft to the manifests, delete removes it.\n" +
+			"apply edits the Draft and nothing more; to make the result run, follow the\n" +
+			"Save → Release → Deploy order:\n\n" +
+			"  growctl apply -f manifests/          # edit the Draft\n" +
+			"  growctl save Main --title 'Before the demo'\n" +
+			"  growctl release Main --commit 1 --note 'Ready'\n" +
+			"  growctl deploy Main --release 1      # the Project's running Deployment\n\n" +
+			"A Library is pinned by a Project at a Release, so its own path is apply →\n" +
+			"save → release, then a Release number in the Project's spec.libraryPins. The\n" +
+			"author of a Save or a Release is --author, else GrowSCADA_AUTHOR, else the\n" +
+			"operating system's user name.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Args:          cobra.ArbitraryArgs,
@@ -93,7 +105,11 @@ func NewRootCommand() *cobra.Command {
 		newDiffCommand(s),
 		newDeleteCommand(s),
 		newGetCommand(s),
+		newSaveCommand(s),
 		newReleaseCommand(s),
+		newDeployCommand(s),
+		newCommitsCommand(s),
+		newReleasesCommand(s),
 		newDiscardCommand(s),
 		newConfigCommand(),
 	)
@@ -166,8 +182,8 @@ func newApplyCommand(s *settings) *cobra.Command {
 		Long: "Create the manifest's projects and tags that are missing on the server; the\n" +
 			"projects go first, then the libraries: missing ones are created, the WidgetTypes\n" +
 			"of their Drafts created or updated to the manifest, and the Library Pins a\n" +
-			"project's spec.libraryPins declares added or switched (a release is made with\n" +
-			"growctl release). With --prune, the WidgetTypes of a library the manifest\n" +
+			"project's spec.libraryPins declares added or switched (a release is published\n" +
+			"with `growctl save` and `growctl release`). With --prune, the WidgetTypes of a library the manifest\n" +
 			"declares WidgetTypes of are pruned too. A created tag's state is its type's zero value with quality\n" +
 			"bad until a supplier writes one; existing tags keep their state. The tags are\n" +
 			"those of the project growctl works in (--project). With --prune, the\n" +

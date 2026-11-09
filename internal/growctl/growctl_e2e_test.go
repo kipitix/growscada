@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -1003,5 +1004,73 @@ func TestGetProjects_TableAndYAML(t *testing.T) {
 	manifests, err := growctl.ParseManifests([]byte(exported))
 	if err != nil || len(manifests.Projects) != 2 || manifests.Projects[1].Name != "Line 1" {
 		t.Errorf("exported projects: %+v, %v\n%s", manifests, err, exported)
+	}
+}
+
+// TestSaveReleaseDeploy_Project walks the closing workflow: apply edits the
+// Draft, save fixes a Commit, release publishes it, deploy makes it the
+// running Deployment (ADR 0021), and the lists report each step.
+func TestSaveReleaseDeploy_Project(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+	if _, err := runGrowctl(t, srv, twoTags, "apply"); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	out, stderr, err := execGrowctl(t, srv, "", "commits", "Main")
+	if err != nil || out != "" || !strings.Contains(stderr, "has no commits") {
+		t.Fatalf("commits before the save: %q, %q, %v", out, stderr, err)
+	}
+	out, _, err = execGrowctl(t, srv, "", "save", "Main", "--title", "Before the demo", "--author", "Grace")
+	if err != nil || out != "project/Main saved commit 1\n" {
+		t.Fatalf("save: %q, %v", out, err)
+	}
+	if _, stderr, err := execGrowctl(t, srv, "", "save", "Main", "--title", "Again", "--author", "Grace"); err == nil {
+		t.Errorf("a save of an unchanged Draft must fail, stderr %q", stderr)
+	}
+	out, _, err = execGrowctl(t, srv, "", "commits", "Main")
+	if err != nil || !strings.Contains(out, "Before the demo") || !strings.Contains(out, "Grace") || !strings.Contains(out, "false") {
+		t.Fatalf("commits after the save: %q, %v", out, err)
+	}
+
+	out, _, err = execGrowctl(t, srv, "", "release", "Main", "--commit", "1", "--note", "Ready", "--author", "Grace")
+	released, found := strings.CutPrefix(out, "project/Main released ")
+	if err != nil || !found {
+		t.Fatalf("release: %q, %v", out, err)
+	}
+	releaseNumber := strings.TrimSpace(released)
+	out, _, err = execGrowctl(t, srv, "", "releases", "Main")
+	if err != nil || !strings.Contains(out, "Ready") || !strings.Contains(out, "Grace") || !strings.Contains(out, "commit") {
+		t.Fatalf("releases: %q, %v", out, err)
+	}
+
+	out, _, err = execGrowctl(t, srv, "", "deploy", "Main", "--release", releaseNumber)
+	if err != nil || out != "project/Main deployed 1\n" {
+		t.Fatalf("deploy: %q, %v", out, err)
+	}
+	if _, stderr, err := execGrowctl(t, srv, "", "deploy", "Main", "--release", releaseNumber); err == nil {
+		t.Errorf("a deploy of the running Release must fail, stderr %q", stderr)
+	}
+	running, err := apiclient.New(srv.URL, srv.Client()).Project(servertest.MainProject).Deployment(context.Background())
+	number, _ := strconv.Atoi(releaseNumber)
+	if err != nil || !running.Deployed || running.ReleaseNumber == nil || *running.ReleaseNumber != number {
+		t.Errorf("the running Deployment must have Release %d: %+v, %v", number, running, err)
+	}
+}
+
+// TestSave_AuthorFromTheEnvironment: without --author the Save records
+// GROWSCADA_AUTHOR, and without both it is a usage error.
+func TestSave_AuthorFromTheEnvironment(t *testing.T) {
+	srv, _ := servertest.StartAPI(t, postgres.DB(t))
+	if _, err := runGrowctl(t, srv, twoTags, "apply"); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	t.Setenv(growctl.AuthorEnv, "From the environment")
+	out, _, err := execGrowctl(t, srv, "", "save", "Main", "--title", "Env author")
+	if err != nil || out != "project/Main saved commit 1\n" {
+		t.Fatalf("save: %q, %v", out, err)
+	}
+	out, _, err = execGrowctl(t, srv, "", "commits", "Main")
+	if err != nil || !strings.Contains(out, "From the environment") {
+		t.Fatalf("commits: %q, %v", out, err)
 	}
 }
