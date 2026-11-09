@@ -59,7 +59,7 @@ func newReconciliation(t *testing.T, _ reconciliationWiring) *reconciliation {
 	drafts := repositories.NewDraftRepositoryPostgres(testDB, releases)
 	states, runtimeNode := newRuntime()
 	r := &reconciliation{
-		projectSvc: application.NewProjectService(projects, soleOrganization()),
+		projectSvc: application.NewProjectService(projects, drafts, soleOrganization()),
 		tagSvc:     application.NewTagService(contentOver(newScopes()), runtimeNode),
 		states:     states,
 		libSvc:     newLibraryService(),

@@ -23,6 +23,8 @@ runtime:
     - expression: 'res.body.name'
       operator: eq
       value: '"Main"'
+    - expression: 'res.body.description'
+      operator: isString
     - expression: 'res.body.version'
       operator: eq
       value: '1'

@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/kipitix/growscada/internal/server/domain/description"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -74,18 +75,18 @@ func (r projectRepositoryPostgresImpl) save(ctx context.Context, p project.Proje
 	saved, err := store.save(ctx, p.ID(), p.Version(), p.PendingEvents(), rowWrite[project.Project]{
 		insert: func(tx *sql.Tx, next version.Version[project.Project]) error {
 			_, err := tx.ExecContext(ctx,
-				`INSERT INTO projects (id, organization_id, name, version, deleted_at)
-				 VALUES ($1, $2, $3, $4, CASE WHEN $5 THEN now() END)`,
-				p.ID().UUID(), p.OrganizationID().UUID(), p.Name().String(), next.Number(), p.IsDeleted(),
+				`INSERT INTO projects (id, organization_id, name, description, version, deleted_at)
+				 VALUES ($1, $2, $3, $4, $5, CASE WHEN $6 THEN now() END)`,
+				p.ID().UUID(), p.OrganizationID().UUID(), p.Name().String(), p.Description().String(), next.Number(), p.IsDeleted(),
 			)
 			return projectWriteError("insert new project", err)
 		},
 		update: func(tx *sql.Tx, current, next version.Version[project.Project]) (bool, error) {
 			res, err := tx.ExecContext(ctx,
 				`UPDATE projects
-				 SET name = $1, version = $2, deleted_at = CASE WHEN $3 THEN now() END
-				 WHERE id = $4 AND version = $5 AND deleted_at IS NULL`,
-				p.Name().String(), next.Number(), p.IsDeleted(), p.ID().UUID(), current.Number(),
+				 SET name = $1, description = $2, version = $3, deleted_at = CASE WHEN $4 THEN now() END
+				 WHERE id = $5 AND version = $6 AND deleted_at IS NULL`,
+				p.Name().String(), p.Description().String(), next.Number(), p.IsDeleted(), p.ID().UUID(), current.Number(),
 			)
 			if err != nil {
 				return false, projectWriteError("update project", err)
@@ -113,7 +114,7 @@ func (r projectRepositoryPostgresImpl) save(ctx context.Context, p project.Proje
 	if err != nil {
 		return nil, err
 	}
-	return project.ReconstituteProject(p.ID(), p.OrganizationID(), p.Name(), p.IsDeleted(), saved), nil
+	return project.ReconstituteProject(p.ID(), p.OrganizationID(), p.Name(), p.Description(), p.IsDeleted(), saved), nil
 }
 
 // projectWriteError maps a failed write of a projects row: a name taken by a
@@ -153,7 +154,7 @@ func (r projectRepositoryPostgresImpl) Delete(ctx context.Context, p project.Pro
 	})
 }
 
-const selectProjectColumns = `id, organization_id, name, deleted_at IS NOT NULL, version`
+const selectProjectColumns = `id, organization_id, name, description, deleted_at IS NOT NULL, version`
 
 func (r projectRepositoryPostgresImpl) FindByID(ctx context.Context, projectID id.ID[project.Project]) (project.Project, error) {
 	return r.findOne(ctx, projectID, `WHERE id = $1 AND deleted_at IS NULL`, projectID.UUID())
@@ -219,10 +220,11 @@ func (r projectRepositoryPostgresImpl) scanProject(scan func(...any) error) (pro
 	var (
 		rawID, rawOrgID uuid.UUID
 		rawName         string
+		rawDescription  string
 		deleted         bool
 		rawVersion      int
 	)
-	if err := scan(&rawID, &rawOrgID, &rawName, &deleted, &rawVersion); err != nil {
+	if err := scan(&rawID, &rawOrgID, &rawName, &rawDescription, &deleted, &rawVersion); err != nil {
 		return nil, err
 	}
 	name, err := project.NewProjectName(rawName)
@@ -236,6 +238,6 @@ func (r projectRepositoryPostgresImpl) scanProject(scan func(...any) error) (pro
 	return project.ReconstituteProject(
 		id.NewID(id.IDWithUUID[project.Project](rawID)),
 		id.NewID(id.IDWithUUID[organization.Organization](rawOrgID)),
-		name, deleted, ver,
+		name, description.FromStorage(rawDescription), deleted, ver,
 	), nil
 }

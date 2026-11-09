@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/kipitix/growscada/internal/server/domain/description"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
@@ -46,18 +47,18 @@ func (r libraryRepositoryPostgresImpl) Save(ctx context.Context, l library.Libra
 	saved, err := r.store.save(ctx, l.ID(), l.Version(), l.PendingEvents(), rowWrite[library.Library]{
 		insert: func(tx *sql.Tx, next version.Version[library.Library]) error {
 			_, err := tx.ExecContext(ctx,
-				`INSERT INTO engineering.libraries (id, organization_id, name, version, deleted_at)
-				 VALUES ($1, $2, $3, $4, CASE WHEN $5 THEN now() END)`,
-				l.ID().UUID(), l.OrganizationID().UUID(), l.Name().String(), next.Number(), l.IsDeleted(),
+				`INSERT INTO engineering.libraries (id, organization_id, name, description, version, deleted_at)
+				 VALUES ($1, $2, $3, $4, $5, CASE WHEN $6 THEN now() END)`,
+				l.ID().UUID(), l.OrganizationID().UUID(), l.Name().String(), l.Description().String(), next.Number(), l.IsDeleted(),
 			)
 			return libraryWriteError("insert new library", err)
 		},
 		update: func(tx *sql.Tx, current, next version.Version[library.Library]) (bool, error) {
 			res, err := tx.ExecContext(ctx,
 				`UPDATE engineering.libraries
-				 SET name = $1, version = $2, deleted_at = CASE WHEN $3 THEN now() END
-				 WHERE id = $4 AND version = $5 AND deleted_at IS NULL`,
-				l.Name().String(), next.Number(), l.IsDeleted(), l.ID().UUID(), current.Number(),
+				 SET name = $1, description = $2, version = $3, deleted_at = CASE WHEN $4 THEN now() END
+				 WHERE id = $5 AND version = $6 AND deleted_at IS NULL`,
+				l.Name().String(), l.Description().String(), next.Number(), l.IsDeleted(), l.ID().UUID(), current.Number(),
 			)
 			if err != nil {
 				return false, libraryWriteError("update library", err)
@@ -88,7 +89,7 @@ func (r libraryRepositoryPostgresImpl) Save(ctx context.Context, l library.Libra
 	if err != nil {
 		return nil, err
 	}
-	return library.ReconstituteLibrary(l.ID(), l.OrganizationID(), l.Name(), l.IsDeleted(), saved), nil
+	return library.ReconstituteLibrary(l.ID(), l.OrganizationID(), l.Name(), l.Description(), l.IsDeleted(), saved), nil
 }
 
 // checkNotPinned fails with ErrLibraryPinned if a live Project pins the
@@ -144,7 +145,7 @@ func (r libraryRepositoryPostgresImpl) Delete(ctx context.Context, l library.Lib
 	})
 }
 
-const selectLibraryColumns = `id, organization_id, name, deleted_at IS NOT NULL, version`
+const selectLibraryColumns = `id, organization_id, name, description, deleted_at IS NOT NULL, version`
 
 func (r libraryRepositoryPostgresImpl) FindByID(ctx context.Context, anID id.ID[library.Library]) (library.Library, error) {
 	return r.findOne(ctx, anID, `WHERE id = $1 AND deleted_at IS NULL`, anID.UUID())
@@ -210,10 +211,11 @@ func scanLibrary(scan func(...any) error) (library.Library, error) {
 	var (
 		rawID, rawOrgID uuid.UUID
 		rawName         string
+		rawDescription  string
 		deleted         bool
 		rawVersion      int
 	)
-	if err := scan(&rawID, &rawOrgID, &rawName, &deleted, &rawVersion); err != nil {
+	if err := scan(&rawID, &rawOrgID, &rawName, &rawDescription, &deleted, &rawVersion); err != nil {
 		return nil, err
 	}
 	name, err := library.NewLibraryName(rawName)
@@ -227,6 +229,6 @@ func scanLibrary(scan func(...any) error) (library.Library, error) {
 	return library.ReconstituteLibrary(
 		id.NewID(id.IDWithUUID[library.Library](rawID)),
 		id.NewID(id.IDWithUUID[organization.Organization](rawOrgID)),
-		name, deleted, ver,
+		name, description.FromStorage(rawDescription), deleted, ver,
 	), nil
 }

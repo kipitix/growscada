@@ -17,6 +17,10 @@ runtime:
       operator: isDefined
     - expression: 'res.body.libraries'
       operator: isArray
+    - expression: 'res.body.libraries[0].description'
+      operator: isString
+    - expression: 'res.body.libraries[0].has_unsaved_changes'
+      operator: isBoolean
 
 settings:
   encodeUrl: true

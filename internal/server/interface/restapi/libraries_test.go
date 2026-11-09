@@ -18,7 +18,7 @@ func TestLibraries_DraftReleaseDiscard(t *testing.T) {
 	const p = apiv0.PathPrefix
 	name := "lib-" + uuid.NewString()
 
-	rec := serve(router, http.MethodPost, p+"/libraries", apiv0.CreateLibraryRequest{Name: name})
+	rec := serve(router, http.MethodPost, p+"/libraries", apiv0.CreateLibraryRequest{Name: name, Description: "  Shared widgets  "})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("POST /libraries: %d %s", rec.Code, rec.Body)
 	}
@@ -85,7 +85,7 @@ func TestLibraries_DraftReleaseDiscard(t *testing.T) {
 		t.Errorf("GET releases: %+v", releases)
 	}
 
-	rec = serve(router, http.MethodPut, lp, apiv0.UpdateLibraryRequest{Name: name + "-renamed", Version: created.Version})
+	rec = serve(router, http.MethodPut, lp, apiv0.UpdateLibraryRequest{Name: name + "-renamed", Description: ptr("Renamed"), Version: created.Version})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("PUT library: %d %s", rec.Code, rec.Body)
 	}
@@ -93,6 +93,16 @@ func TestLibraries_DraftReleaseDiscard(t *testing.T) {
 	if len(found.Libraries) != 1 || found.Libraries[0].LatestRelease != 1 || found.Libraries[0].LatestCommit != commit.Number ||
 		found.Libraries[0].HasUnsavedChanges || found.Libraries[0].HasUnpublishedChanges {
 		t.Errorf("GET ?name=: %+v", found)
+	}
+	if got := found.Libraries[0].Description; got != "Renamed" {
+		t.Errorf("the description after a PUT: %q, want %q", got, "Renamed")
+	}
+	// An update without a description keeps the current one (task 73).
+	if rec := serve(router, http.MethodPut, lp, apiv0.UpdateLibraryRequest{Name: name + "-renamed", Version: created.Version + 1}); rec.Code != http.StatusOK {
+		t.Fatalf("PUT without a description: %d %s", rec.Code, rec.Body)
+	}
+	if got := decodeBody[apiv0.LibraryResponse](t, serve(router, http.MethodGet, lp, nil)); got.Description != "Renamed" {
+		t.Errorf("a PUT without a description erased it: %q", got.Description)
 	}
 
 	rec = serve(router, http.MethodPost, lp+"/discard", nil)

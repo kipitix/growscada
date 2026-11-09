@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	projectv0 "github.com/kipitix/growscada/contract/project/v0"
+	"github.com/kipitix/growscada/internal/server/domain/description"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
@@ -378,7 +379,7 @@ func TestValidateProjectFile_OpenChecksLocalLibraries(t *testing.T) {
 	found := library.ReconstituteLibrary(
 		id.NewID(id.IDWithUUID[library.Library](libraryID)),
 		id.NewID[organization.Organization](),
-		libraryName, false, version.Initial[library.Library](),
+		libraryName, description.Description{}, false, version.Initial[library.Library](),
 	)
 	validator := projectFileValidator{
 		libraries: fakeLibraries{found: map[uuid.UUID]library.Library{libraryID: found}},

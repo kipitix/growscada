@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -38,14 +39,19 @@ func countRows(t *testing.T, table string, projectID uuid.UUID) int {
 	return n
 }
 
-func TestProjectService_CreateFindRename(t *testing.T) {
+func TestProjectService_CreateFindUpdate(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	svc := r.projectSvc
 	ctx := context.Background()
 
-	created, err := svc.CreateProject(ctx, appdto.ProjectInput{Name: "Line 1"})
-	if err != nil || created.Name != "Line 1" || created.Version != 1 {
+	description := "  The first line  "
+	created, err := svc.CreateProject(ctx, appdto.ProjectInput{Name: "Line 1", Description: &description})
+	if err != nil || created.Name != "Line 1" || created.Version != 1 || created.Description != "The first line" {
 		t.Fatalf("CreateProject: %+v, %v", created, err)
+	}
+	// A Draft that was never saved has unsaved changes (task 73).
+	if !created.HasUnsavedChanges {
+		t.Errorf("a new project must show unsaved changes: %+v", created)
 	}
 	if _, err := svc.CreateProject(ctx, appdto.ProjectInput{Name: "Line 1"}); !errors.Is(err, project.ErrProjectNameTaken) {
 		t.Errorf("a taken name: expected ErrProjectNameTaken, got %v", err)
@@ -53,25 +59,48 @@ func TestProjectService_CreateFindRename(t *testing.T) {
 	if _, err := svc.CreateProject(ctx, appdto.ProjectInput{Name: ""}); !errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("an empty name: expected ErrInvalidInput, got %v", err)
 	}
+	long := strings.Repeat("x", 501)
+	if _, err := svc.CreateProject(ctx, appdto.ProjectInput{Name: "Line 9", Description: &long}); !errors.Is(err, application.ErrInvalidInput) {
+		t.Errorf("a description over the limit: expected ErrInvalidInput, got %v", err)
+	}
 
 	byName, err := svc.FindProjectByName(ctx, "Line 1")
 	if err != nil || byName.ID != created.ID {
 		t.Errorf("FindProjectByName: %+v, %v", byName, err)
 	}
-	renamed, err := svc.UpdateProject(ctx, created.ID, created.Version, appdto.ProjectInput{Name: "Line 2"})
-	if err != nil || renamed.Name != "Line 2" || renamed.Version != 2 {
+	second := "Second line"
+	renamed, err := svc.UpdateProject(ctx, created.ID, created.Version, appdto.ProjectInput{Name: "Line 2", Description: &second})
+	if err != nil || renamed.Name != "Line 2" || renamed.Description != "Second line" || renamed.Version != 2 {
 		t.Fatalf("UpdateProject: %+v, %v", renamed, err)
+	}
+	// A nil description keeps the current one (task 73).
+	kept, err := svc.UpdateProject(ctx, created.ID, renamed.Version, appdto.ProjectInput{Name: "Line 3"})
+	if err != nil || kept.Description != "Second line" {
+		t.Fatalf("UpdateProject without a description: %+v, %v", kept, err)
+	}
+	cleared := ""
+	emptied, err := svc.UpdateProject(ctx, created.ID, kept.Version, appdto.ProjectInput{Name: "Line 3", Description: &cleared})
+	if err != nil || emptied.Description != "" {
+		t.Fatalf("UpdateProject clearing the description: %+v, %v", emptied, err)
 	}
 	if _, err := svc.UpdateProject(ctx, created.ID, created.Version, appdto.ProjectInput{Name: "Line 3"}); !errors.Is(err, project.ErrProjectConflict) {
 		t.Errorf("a stale rename: expected ErrProjectConflict, got %v", err)
 	}
-	if _, err := svc.UpdateProject(ctx, created.ID, renamed.Version, appdto.ProjectInput{Name: "Main"}); !errors.Is(err, project.ErrProjectNameTaken) {
+	if _, err := svc.UpdateProject(ctx, created.ID, emptied.Version, appdto.ProjectInput{Name: "Main"}); !errors.Is(err, project.ErrProjectNameTaken) {
 		t.Errorf("a rename to a taken name: expected ErrProjectNameTaken, got %v", err)
 	}
 
 	all, err := svc.FindAllProjects(ctx)
 	if err != nil || len(all) != 2 || all[0].ID != mainProject || all[1].ID != created.ID {
 		t.Errorf("FindAllProjects: %+v, %v", all, err)
+	}
+
+	// A Save makes the Draft clean: the unsaved-changes flag follows the last
+	// Commit (task 73; ADR 0021).
+	mustSaveCommit(t, created.ID, "First")
+	saved, err := svc.FindProjectByID(ctx, created.ID)
+	if err != nil || saved.HasUnsavedChanges {
+		t.Errorf("after a Save: %+v, %v, want no unsaved changes", saved, err)
 	}
 }
 

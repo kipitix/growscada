@@ -219,7 +219,7 @@ func main() {
 	// Create services
 	projectContent := application.NewProjectContent(projectRepository, projectScopes, draftRepository, organizationID)
 	libraryContent := application.NewLibraryContent(libraryRepository, draftRepository, organizationID)
-	projectService := application.NewProjectService(projectRepository, organizationID)
+	projectService := application.NewProjectService(projectRepository, draftRepository, organizationID)
 	tagService := application.NewTagService(projectContent, runtimeNode)
 	// Deploy, Discard and Revert (task 35, task 72_4): a Deploy hands a Release
 	// to the Runtime node, which stores it as a Deployment; the Engineering

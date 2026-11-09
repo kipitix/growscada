@@ -12,9 +12,10 @@ import (
 // Library is the application-layer DTO for library data. Its Organization is
 // left out: it is the server's own, the same for every library.
 type Library struct {
-	ID      uuid.UUID
-	Name    string
-	Version int
+	ID          uuid.UUID
+	Name        string
+	Description string
+	Version     int
 	// LatestRelease is the number of the latest Library Release; 0 if none.
 	LatestRelease int
 	// LatestCommit is the number of the Draft's last Commit; 0 when it was
@@ -27,9 +28,12 @@ type Library struct {
 	HasUnpublishedChanges bool
 }
 
-// LibraryInput holds the fields of a library a client creates or renames.
+// LibraryInput holds the fields of a library a client creates or updates.
+// A nil Description leaves the current one as it is, so a client that sends
+// only a name does not erase it; a pointer to an empty string clears it.
 type LibraryInput struct {
-	Name string
+	Name        string
+	Description *string
 }
 
 // NewLibrary creates a Library DTO from the domain aggregate and the state its
@@ -38,6 +42,7 @@ func NewLibrary(l library.Library, state library.ReleaseState) Library {
 	return Library{
 		ID:                    l.ID().UUID(),
 		Name:                  l.Name().String(),
+		Description:           l.Description().String(),
 		Version:               l.Version().Number(),
 		LatestRelease:         state.Latest.Int(),
 		LatestCommit:          state.LatestCommit,

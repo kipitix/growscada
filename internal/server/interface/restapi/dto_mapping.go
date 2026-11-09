@@ -16,7 +16,13 @@ import (
 // layer's DTOs.
 
 func newProjectResponse(p appdto.Project) apiv0.ProjectResponse {
-	return apiv0.ProjectResponse{ID: p.ID, Name: p.Name, Version: p.Version}
+	return apiv0.ProjectResponse{
+		ID:                p.ID,
+		Name:              p.Name,
+		Description:       p.Description,
+		Version:           p.Version,
+		HasUnsavedChanges: p.HasUnsavedChanges,
+	}
 }
 
 func newGetProjectsResponse(list []appdto.Project) apiv0.GetProjectsResponse {
@@ -471,6 +477,7 @@ func newLibraryResponse(l appdto.Library) apiv0.LibraryResponse {
 	return apiv0.LibraryResponse{
 		ID:                    l.ID,
 		Name:                  l.Name,
+		Description:           l.Description,
 		Version:               l.Version,
 		LatestRelease:         l.LatestRelease,
 		LatestCommit:          l.LatestCommit,

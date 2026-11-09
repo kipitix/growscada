@@ -10,14 +10,15 @@ http:
     type: json
     data: |-
       {
-        "name": "Line 1"
+        "name": "Line 1",
+        "description": "Created by Bruno"
       }
   auth: inherit
 
 docs: |
-  Creates an empty project. Its name is unique among the live projects of
-  the server: a taken one returns `409 Conflict` (see "post projects duplicate
-  name").
+  Creates an empty project with an optional description (task 73). Its name is
+  unique among the live projects of the server: a taken one returns
+  `409 Conflict` (see "post projects duplicate name").
 
 runtime:
   assertions:

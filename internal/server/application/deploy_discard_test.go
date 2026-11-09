@@ -245,7 +245,7 @@ func TestCreateReleaseFromFile_DeploysTheFile(t *testing.T) {
 func TestDiscard_WithoutACommit_IsRefused(t *testing.T) {
 	cleanProjects(t)
 	ctx := context.Background()
-	created, err := application.NewProjectService(repositories.NewProjectRepositoryPostgres(testDB), soleOrganization()).
+	created, err := application.NewProjectService(repositories.NewProjectRepositoryPostgres(testDB), repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB)), soleOrganization()).
 		CreateProject(ctx, appdto.ProjectInput{Name: "discard-" + uuid.NewString()})
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)

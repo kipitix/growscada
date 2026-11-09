@@ -84,7 +84,10 @@ func (h LibrariesHandlers) PostLibraries(w http.ResponseWriter, r *http.Request)
 	if !decodeRequest(w, r, &request) {
 		return
 	}
-	created, err := h.service.CreateLibrary(r.Context(), appdto.LibraryInput{Name: request.Name})
+	created, err := h.service.CreateLibrary(r.Context(), appdto.LibraryInput{
+		Name:        request.Name,
+		Description: &request.Description,
+	})
 	if err != nil {
 		sendError(w, r, err)
 		return
@@ -92,7 +95,8 @@ func (h LibrariesHandlers) PostLibraries(w http.ResponseWriter, r *http.Request)
 	sendJSONResponse(w, http.StatusCreated, apiv0.CreateLibraryResponse{ID: created.ID, Version: created.Version})
 }
 
-// PutLibrariesByID handles PUT /libraries/{library_id}: a rename.
+// PutLibrariesByID handles PUT /libraries/{library_id}: an update of its name
+// and description.
 func (h LibrariesHandlers) PutLibrariesByID(w http.ResponseWriter, r *http.Request) {
 	libraryID, ok := pathUUID(w, r, libraryResource)
 	if !ok {
@@ -102,7 +106,10 @@ func (h LibrariesHandlers) PutLibrariesByID(w http.ResponseWriter, r *http.Reque
 	if !decodeRequest(w, r, &request) {
 		return
 	}
-	updated, err := h.service.UpdateLibrary(r.Context(), libraryID, request.Version, appdto.LibraryInput{Name: request.Name})
+	updated, err := h.service.UpdateLibrary(r.Context(), libraryID, request.Version, appdto.LibraryInput{
+		Name:        request.Name,
+		Description: request.Description,
+	})
 	if err != nil {
 		sendError(w, r, err)
 		return

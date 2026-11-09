@@ -10,6 +10,7 @@ http:
     data: |-
       {
         "name": "Extras renamed",
+        "description": "Renamed by Bruno",
         "version": 1
       }
   auth: inherit

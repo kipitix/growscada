@@ -68,7 +68,10 @@ func (h ProjectsHandlers) PostProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := h.service.CreateProject(r.Context(), appdto.ProjectInput{Name: request.Name})
+	created, err := h.service.CreateProject(r.Context(), appdto.ProjectInput{
+		Name:        request.Name,
+		Description: &request.Description,
+	})
 	if err != nil {
 		sendError(w, r, err)
 		return
@@ -77,7 +80,8 @@ func (h ProjectsHandlers) PostProjects(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusCreated, apiv0.CreateProjectResponse{ID: created.ID, Version: created.Version})
 }
 
-// PutProjectsByID handles PUT /projects/{project_id}: a rename.
+// PutProjectsByID handles PUT /projects/{project_id}: an update of its name
+// and description.
 func (h ProjectsHandlers) PutProjectsByID(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := pathUUID(w, r, projectResource)
 	if !ok {
@@ -89,7 +93,10 @@ func (h ProjectsHandlers) PutProjectsByID(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	updated, err := h.service.UpdateProject(r.Context(), projectID, request.Version, appdto.ProjectInput{Name: request.Name})
+	updated, err := h.service.UpdateProject(r.Context(), projectID, request.Version, appdto.ProjectInput{
+		Name:        request.Name,
+		Description: request.Description,
+	})
 	if err != nil {
 		sendError(w, r, err)
 		return

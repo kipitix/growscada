@@ -38,7 +38,7 @@ func newLibraryEvent(anEventType event.EventType, anID id.ID[Library], opts ...e
 // LibraryCreatedEvent is recorded by CreateLibrary.
 type LibraryCreatedEvent interface{ LibraryEvent }
 
-// LibraryUpdatedEvent is recorded by Library.Rename.
+// LibraryUpdatedEvent is recorded by Library.Update.
 type LibraryUpdatedEvent interface{ LibraryEvent }
 
 // LibraryDeletedEvent is recorded by Library.Delete.

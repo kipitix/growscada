@@ -27,6 +27,9 @@ runtime:
     - expression: 'res.body.name'
       operator: eq
       value: '"Line 3"'
+    - expression: 'res.body.description'
+      operator: eq
+      value: '"Second line"'
 
 settings:
   encodeUrl: true

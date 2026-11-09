@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/kipitix/growscada/internal/server/domain/description"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
@@ -15,6 +16,9 @@ import (
 // the Draft aggregate of the Library (ADR 0016): the WidgetTypes are its
 // entities and every write of them states the Draft's one Version. Projects
 // never see the Draft, only the Library Releases they pin.
+//
+// Its name and description are attributes of the aggregate, never content: a
+// Library Release and a pin carry the WidgetType copies alone (task 73).
 //
 // Deleting a Library only marks it deleted, and only while no live Project
 // pins it: from then on it does not exist for anyone but the policy that
@@ -30,6 +34,9 @@ type Library interface {
 	ID() id.ID[Library]
 	OrganizationID() id.ID[organization.Organization]
 	Name() LibraryName
+	// Description is the library's optional, free-text description; empty
+	// when it has none. It is an attribute of the aggregate, never content.
+	Description() description.Description
 	Version() version.Version[Library]
 	// IsDeleted reports whether the library is marked deleted (Delete).
 	IsDeleted() bool
@@ -39,9 +46,10 @@ type Library interface {
 	// Returns ErrLibraryConflict if expected is not the Version.
 	CheckVersion(expected version.Version[Library]) error
 
-	// Rename changes the library's name and records a LibraryUpdatedEvent.
-	// Returns ErrLibraryConflict if expected is not the Version.
-	Rename(expected version.Version[Library], aName LibraryName) (Library, error)
+	// Update changes the library's name and description and records a
+	// LibraryUpdatedEvent. Returns ErrLibraryConflict if expected is not the
+	// Version.
+	Update(expected version.Version[Library], aName LibraryName, aDescription description.Description) (Library, error)
 
 	// Delete marks the library deleted and records a LibraryDeletedEvent;
 	// saving it frees its name. Like removing any aggregate, it expects no
@@ -57,6 +65,7 @@ type libraryImpl struct {
 	id             id.ID[Library]
 	organizationID id.ID[organization.Organization]
 	name           LibraryName
+	description    description.Description
 	deleted        bool
 	version        version.Version[Library]
 	pending        []event.Event
@@ -67,11 +76,12 @@ var _ Library = (*libraryImpl)(nil)
 // CreateLibrary creates a new, not yet saved library of the Organization
 // anOrganizationID, with an empty Draft and no release, and records a
 // LibraryCreatedEvent.
-func CreateLibrary(anID id.ID[Library], anOrganizationID id.ID[organization.Organization], aName LibraryName) Library {
+func CreateLibrary(anID id.ID[Library], anOrganizationID id.ID[organization.Organization], aName LibraryName, aDescription description.Description) Library {
 	return &libraryImpl{
 		id:             anID,
 		organizationID: anOrganizationID,
 		name:           aName,
+		description:    aDescription,
 		version:        version.Initial[Library](),
 		pending:        []event.Event{NewLibraryCreatedEvent(anID)},
 	}
@@ -83,6 +93,7 @@ func ReconstituteLibrary(
 	anID id.ID[Library],
 	anOrganizationID id.ID[organization.Organization],
 	aName LibraryName,
+	aDescription description.Description,
 	deleted bool,
 	aVersion version.Version[Library],
 ) Library {
@@ -90,6 +101,7 @@ func ReconstituteLibrary(
 		id:             anID,
 		organizationID: anOrganizationID,
 		name:           aName,
+		description:    aDescription,
 		deleted:        deleted,
 		version:        aVersion,
 	}
@@ -98,6 +110,7 @@ func ReconstituteLibrary(
 func (l *libraryImpl) ID() id.ID[Library]                               { return l.id }
 func (l *libraryImpl) OrganizationID() id.ID[organization.Organization] { return l.organizationID }
 func (l *libraryImpl) Name() LibraryName                                { return l.name }
+func (l *libraryImpl) Description() description.Description             { return l.description }
 func (l *libraryImpl) Version() version.Version[Library]                { return l.version }
 func (l *libraryImpl) IsDeleted() bool                                  { return l.deleted }
 
@@ -108,14 +121,15 @@ func (l *libraryImpl) CheckVersion(expected version.Version[Library]) error {
 	return nil
 }
 
-func (l *libraryImpl) Rename(expected version.Version[Library], aName LibraryName) (Library, error) {
+func (l *libraryImpl) Update(expected version.Version[Library], aName LibraryName, aDescription description.Description) (Library, error) {
 	if err := l.CheckVersion(expected); err != nil {
 		return nil, err
 	}
-	renamed := *l
-	renamed.name = aName
-	renamed.pending = append(slices.Clone(l.pending), NewLibraryUpdatedEvent(l.id))
-	return &renamed, nil
+	updated := *l
+	updated.name = aName
+	updated.description = aDescription
+	updated.pending = append(slices.Clone(l.pending), NewLibraryUpdatedEvent(l.id))
+	return &updated, nil
 }
 
 func (l *libraryImpl) Delete() Library {
@@ -131,6 +145,6 @@ func (l *libraryImpl) PendingEvents() []event.Event {
 
 // String implements [fmt.Stringer].
 func (l *libraryImpl) String() string {
-	return fmt.Sprintf("Library: %s, Organization: %s, Deleted: %t, Version: %s",
-		l.name, l.organizationID, l.deleted, l.version)
+	return fmt.Sprintf("Library: %s, Description: %q, Organization: %s, Deleted: %t, Version: %s",
+		l.name, l.description, l.organizationID, l.deleted, l.version)
 }

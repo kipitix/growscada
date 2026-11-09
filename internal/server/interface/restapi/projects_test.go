@@ -59,11 +59,14 @@ func decodeBody[T any](t *testing.T, rec *httptest.ResponseRecorder) T {
 	return v
 }
 
-func TestProjects_CreateListRenameDelete(t *testing.T) {
+// ptr returns a pointer to s, for the optional description of an update.
+func ptr[T any](v T) *T { return &v }
+
+func TestProjects_CreateListUpdateDelete(t *testing.T) {
 	cleanProjectsRest(t)
 	router := newServices().router()
 
-	rec := serve(router, http.MethodPost, apiv0.PathPrefix+"/projects", apiv0.CreateProjectRequest{Name: "Line 1"})
+	rec := serve(router, http.MethodPost, apiv0.PathPrefix+"/projects", apiv0.CreateProjectRequest{Name: "Line 1", Description: "  The first line  "})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("POST /projects: %d %s", rec.Code, rec.Body)
 	}
@@ -79,6 +82,11 @@ func TestProjects_CreateListRenameDelete(t *testing.T) {
 	if len(list.Projects) != 2 || list.Projects[0].ID != mainProject || list.Projects[1].Name != "Line 1" {
 		t.Errorf("GET /projects: %+v", list)
 	}
+	// A description is trimmed when written, and a Draft that was never saved
+	// has unsaved changes (task 73).
+	if got := list.Projects[1]; got.Description != "The first line" || !got.HasUnsavedChanges {
+		t.Errorf("the created project: %+v, want its trimmed description and unsaved changes", got)
+	}
 	rec = serve(router, http.MethodGet, apiv0.PathPrefix+"/projects?name=Line%201", nil)
 	if byName := decodeBody[apiv0.GetProjectsResponse](t, rec); len(byName.Projects) != 1 || byName.Projects[0].ID != created.ID {
 		t.Errorf("GET /projects?name=: %+v", byName)
@@ -88,7 +96,7 @@ func TestProjects_CreateListRenameDelete(t *testing.T) {
 		t.Errorf("GET /projects?name=missing: %d %+v", rec.Code, none)
 	}
 
-	rec = serve(router, http.MethodPut, path, apiv0.UpdateProjectRequest{Name: "Line 2", Version: created.Version})
+	rec = serve(router, http.MethodPut, path, apiv0.UpdateProjectRequest{Name: "Line 2", Description: ptr("Second line"), Version: created.Version})
 	if rec.Code != http.StatusOK || decodeBody[apiv0.UpdateProjectResponse](t, rec).Version != created.Version+1 {
 		t.Errorf("PUT: %d", rec.Code)
 	}
@@ -96,8 +104,26 @@ func TestProjects_CreateListRenameDelete(t *testing.T) {
 		t.Errorf("a stale PUT: %d, want 409", rec.Code)
 	}
 	rec = serve(router, http.MethodGet, path, nil)
-	if got := decodeBody[apiv0.ProjectResponse](t, rec); got.Name != "Line 2" {
+	if got := decodeBody[apiv0.ProjectResponse](t, rec); got.Name != "Line 2" || got.Description != "Second line" {
 		t.Errorf("GET: %+v", got)
+	}
+	// An update without a description keeps the current one; an empty one
+	// clears it (task 73).
+	rec = serve(router, http.MethodPut, path, apiv0.UpdateProjectRequest{Name: "Line 2", Version: created.Version + 1})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PUT without a description: %d %s", rec.Code, rec.Body)
+	}
+	if got := decodeBody[apiv0.ProjectResponse](t, serve(router, http.MethodGet, path, nil)); got.Description != "Second line" {
+		t.Errorf("a PUT without a description erased it: %+v", got)
+	}
+	if rec := serve(router, http.MethodPut, path, apiv0.UpdateProjectRequest{Name: "Line 2", Description: ptr(""), Version: created.Version + 2}); rec.Code != http.StatusOK {
+		t.Fatalf("PUT clearing the description: %d %s", rec.Code, rec.Body)
+	}
+	if got := decodeBody[apiv0.ProjectResponse](t, serve(router, http.MethodGet, path, nil)); got.Description != "" {
+		t.Errorf("an empty description must clear it: %+v", got)
+	}
+	if rec := serve(router, http.MethodPut, path, apiv0.UpdateProjectRequest{Name: "Line 2", Description: ptr(strings.Repeat("x", 501)), Version: created.Version + 3}); rec.Code != http.StatusBadRequest {
+		t.Errorf("a description over the limit: %d, want 400", rec.Code)
 	}
 
 	rec = serve(router, http.MethodDelete, path, nil)

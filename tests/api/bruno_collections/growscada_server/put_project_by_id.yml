@@ -10,13 +10,15 @@ http:
     data: |-
       {
         "name": "Line 3",
+        "description": "Second line",
         "version": 1
       }
   auth: inherit
 
 docs: |
-  Renames a project. `version` is the version the rename is based on; another
-  one returns `409 Conflict` (reload and retry).
+  Updates a project's name and description (task 73). `version` is the version
+  the update is based on; another one returns `409 Conflict` (reload and
+  retry). An absent `description` keeps the current one.
 
 runtime:
   assertions:

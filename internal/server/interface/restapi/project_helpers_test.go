@@ -85,7 +85,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 	runtimeNode := inprocess.NewRuntimeNode(states, deviceTokens, deployments)
 	journal := runtimeapp.NewJournalService(runtimepg.NewJournalRepositoryPostgres(db))
 	return testServices{
-		projects:     application.NewProjectService(projectRepo, orgID),
+		projects:     application.NewProjectService(projectRepo, drafts, orgID),
 		tags:         application.NewTagService(content, runtimeNode),
 		states:       states,
 		deployments:  deployments,

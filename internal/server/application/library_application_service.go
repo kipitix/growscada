@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	"github.com/kipitix/growscada/internal/server/domain/description"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -187,7 +188,11 @@ func (s libraryServiceImpl) CreateLibrary(ctx context.Context, input appdto.Libr
 	if err != nil {
 		return appdto.Library{}, fmt.Errorf("cannot create library: name: %w", invalidInput(err))
 	}
-	saved, err := s.libraries.Save(ctx, library.CreateLibrary(s.libraries.NextID(), s.organization, name))
+	desc, err := descriptionOf(input.Description, description.Description{})
+	if err != nil {
+		return appdto.Library{}, fmt.Errorf("cannot create library: %w", err)
+	}
+	saved, err := s.libraries.Save(ctx, library.CreateLibrary(s.libraries.NextID(), s.organization, name, desc))
 	if err != nil {
 		return appdto.Library{}, fmt.Errorf("cannot save library: %w", err)
 	}
@@ -195,7 +200,8 @@ func (s libraryServiceImpl) CreateLibrary(ctx context.Context, input appdto.Libr
 	return appdto.NewLibrary(saved, library.ReleaseState{UnsavedChanges: true}), nil
 }
 
-// UpdateLibrary renames a library, expecting its Version.
+// UpdateLibrary changes a library's name and description, expecting its
+// Version. A nil description keeps the current one (task 73).
 func (s libraryServiceImpl) UpdateLibrary(ctx context.Context, rawID uuid.UUID, rawExpectedVersion int, input appdto.LibraryInput) (appdto.Library, error) {
 	found, err := s.findOwn(ctx, rawID)
 	if err != nil {
@@ -213,11 +219,15 @@ func (s libraryServiceImpl) UpdateLibrary(ctx context.Context, rawID uuid.UUID, 
 	if err != nil {
 		return appdto.Library{}, fmt.Errorf("cannot update library: name: %w", invalidInput(err))
 	}
-	renamed, err := found.Rename(expected, name)
+	desc, err := descriptionOf(input.Description, found.Description())
 	if err != nil {
 		return appdto.Library{}, fmt.Errorf("cannot update library: %w", err)
 	}
-	saved, err := s.libraries.Save(ctx, renamed)
+	updated, err := found.Update(expected, name, desc)
+	if err != nil {
+		return appdto.Library{}, fmt.Errorf("cannot update library: %w", err)
+	}
+	saved, err := s.libraries.Save(ctx, updated)
 	if err != nil {
 		return appdto.Library{}, fmt.Errorf("cannot save library: %w", err)
 	}

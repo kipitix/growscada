@@ -7,6 +7,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	"github.com/kipitix/growscada/internal/server/domain/description"
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -26,6 +28,7 @@ type ProjectService interface {
 
 type projectServiceImpl struct {
 	repository   project.ProjectRepository
+	drafts       draft.Repository
 	organization id.ID[organization.Organization]
 }
 
@@ -34,9 +37,10 @@ var _ ProjectService = (*projectServiceImpl)(nil)
 // NewProjectService returns the service of the projects of the Organization
 // anOrganizationID. The events of its changes are recorded by the Project and
 // saved with it (ADR 0008); the content of a deleted project is removed by
-// the policy of NewProjectCleanupPolicy.
-func NewProjectService(aRepository project.ProjectRepository, anOrganizationID id.ID[organization.Organization]) ProjectService {
-	return &projectServiceImpl{repository: aRepository, organization: anOrganizationID}
+// the policy of NewProjectCleanupPolicy. The Drafts are read for the
+// unsaved-changes flag of a project's selection row (task 73).
+func NewProjectService(aRepository project.ProjectRepository, someDrafts draft.Repository, anOrganizationID id.ID[organization.Organization]) ProjectService {
+	return &projectServiceImpl{repository: aRepository, drafts: someDrafts, organization: anOrganizationID}
 }
 
 func (s projectServiceImpl) FindAllProjects(ctx context.Context) ([]appdto.Project, error) {
@@ -44,7 +48,15 @@ func (s projectServiceImpl) FindAllProjects(ctx context.Context) ([]appdto.Proje
 	if err != nil {
 		return nil, fmt.Errorf("error on find projects in repository: %w", err)
 	}
-	return appdto.NewProjectList(list), nil
+	states := make([]appdto.ProjectDraftState, len(list))
+	for i, p := range list {
+		state, err := s.draftState(ctx, p.ID())
+		if err != nil {
+			return nil, err
+		}
+		states[i] = state
+	}
+	return appdto.NewProjectList(list, states), nil
 }
 
 func (s projectServiceImpl) FindProjectByID(ctx context.Context, rawID uuid.UUID) (appdto.Project, error) {
@@ -52,7 +64,7 @@ func (s projectServiceImpl) FindProjectByID(ctx context.Context, rawID uuid.UUID
 	if err != nil {
 		return appdto.Project{}, err
 	}
-	return appdto.NewProject(found), nil
+	return s.describe(ctx, found)
 }
 
 // FindProjectByName returns the live project with the name, unique in the
@@ -66,7 +78,7 @@ func (s projectServiceImpl) FindProjectByName(ctx context.Context, rawName strin
 	if err != nil {
 		return appdto.Project{}, fmt.Errorf("error on find project by name in repository: %w", err)
 	}
-	return appdto.NewProject(found), nil
+	return s.describe(ctx, found)
 }
 
 func (s projectServiceImpl) CreateProject(ctx context.Context, input appdto.ProjectInput) (appdto.Project, error) {
@@ -74,14 +86,19 @@ func (s projectServiceImpl) CreateProject(ctx context.Context, input appdto.Proj
 	if err != nil {
 		return appdto.Project{}, fmt.Errorf("cannot create project: name: %w", invalidInput(err))
 	}
-	saved, err := s.repository.Save(ctx, project.CreateProject(s.repository.NextID(), s.organization, name))
+	desc, err := descriptionOf(input.Description, description.Description{})
+	if err != nil {
+		return appdto.Project{}, fmt.Errorf("cannot create project: %w", err)
+	}
+	saved, err := s.repository.Save(ctx, project.CreateProject(s.repository.NextID(), s.organization, name, desc))
 	if err != nil {
 		return appdto.Project{}, fmt.Errorf("cannot save project: %w", err)
 	}
-	return appdto.NewProject(saved), nil
+	return s.describe(ctx, saved)
 }
 
-// UpdateProject renames a project, expecting its Version.
+// UpdateProject changes a project's name and description, expecting its
+// Version. A nil description keeps the current one (task 73).
 func (s projectServiceImpl) UpdateProject(ctx context.Context, rawID uuid.UUID, rawExpectedVersion int, input appdto.ProjectInput) (appdto.Project, error) {
 	found, err := findOwnProject(ctx, s.repository, s.organization, id.NewID(id.IDWithUUID[project.Project](rawID)))
 	if err != nil {
@@ -101,16 +118,20 @@ func (s projectServiceImpl) UpdateProject(ctx context.Context, rawID uuid.UUID, 
 	if err != nil {
 		return appdto.Project{}, fmt.Errorf("cannot update project: name: %w", invalidInput(err))
 	}
-	renamed, err := found.Rename(expected, name)
+	desc, err := descriptionOf(input.Description, found.Description())
+	if err != nil {
+		return appdto.Project{}, fmt.Errorf("cannot update project: %w", err)
+	}
+	updated, err := found.Update(expected, name, desc)
 	if err != nil {
 		return appdto.Project{}, fmt.Errorf("cannot update project: %w", err)
 	}
 
-	saved, err := s.repository.Save(ctx, renamed)
+	saved, err := s.repository.Save(ctx, updated)
 	if err != nil {
 		return appdto.Project{}, fmt.Errorf("cannot save project: %w", err)
 	}
-	return appdto.NewProject(saved), nil
+	return s.describe(ctx, saved)
 }
 
 // DeleteProjectByID marks a project deleted and returns it as it was read:
@@ -136,5 +157,49 @@ func (s projectServiceImpl) DeleteProjectByID(ctx context.Context, rawID uuid.UU
 	if err != nil {
 		return appdto.Project{}, err
 	}
-	return appdto.NewProject(deleted), nil
+	// The project is gone: its Draft tells nothing of a deleted project.
+	return appdto.NewProject(deleted, appdto.ProjectDraftState{}), nil
+}
+
+// describe returns the DTO of p with the state of its Draft.
+func (s projectServiceImpl) describe(ctx context.Context, p project.Project) (appdto.Project, error) {
+	state, err := s.draftState(ctx, p.ID())
+	if err != nil {
+		return appdto.Project{}, err
+	}
+	return appdto.NewProject(p, state), nil
+}
+
+// draftState reads the Version of a project's Draft and the one its last
+// Commit fixed. A Draft never written is the fresh Draft at version 1.
+func (s projectServiceImpl) draftState(ctx context.Context, projectID id.ID[project.Project]) (appdto.ProjectDraftState, error) {
+	scope := draft.ProjectScope(projectID)
+	draftVersion := 1
+	if found, ok, err := s.drafts.Read(ctx, scope); err != nil {
+		return appdto.ProjectDraftState{}, fmt.Errorf("cannot read the draft of project %s: %w", projectID, err)
+	} else if ok {
+		draftVersion = found.Version().Number()
+	}
+	state := appdto.ProjectDraftState{DraftVersion: draftVersion}
+	lastCommit, found, err := s.drafts.FindLastCommit(ctx, scope)
+	if err != nil {
+		return appdto.ProjectDraftState{}, fmt.Errorf("cannot find the last commit of project %s: %w", projectID, err)
+	}
+	if found {
+		state.LastCommitDraftVersion = lastCommit.DraftVersion().Number()
+	}
+	return state, nil
+}
+
+// descriptionOf parses an optional description stated by a client: nil keeps
+// current, a pointer to a string replaces it (an empty one clears it).
+func descriptionOf(stated *string, current description.Description) (description.Description, error) {
+	if stated == nil {
+		return current, nil
+	}
+	desc, err := description.New(*stated)
+	if err != nil {
+		return description.Description{}, invalidInput(err)
+	}
+	return desc, nil
 }

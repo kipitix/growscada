@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/kipitix/growscada/internal/server/domain/description"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
@@ -23,7 +24,7 @@ func mustProjectName(t *testing.T, s string) ProjectName {
 func makeStoredProject(t *testing.T) Project {
 	t.Helper()
 	ver, _ := version.New(version.WithNumber[Project](2))
-	return ReconstituteProject(id.NewID[Project](), id.NewID[organization.Organization](), mustProjectName(t, "Line 1"), false, ver)
+	return ReconstituteProject(id.NewID[Project](), id.NewID[organization.Organization](), mustProjectName(t, "Line 1"), description.Description{}, false, ver)
 }
 
 func TestNewProjectName_RejectsEmpty(t *testing.T) {
@@ -37,7 +38,7 @@ func TestNewProjectName_RejectsEmpty(t *testing.T) {
 
 func TestCreateProject_RecordsCreatedEventAtInitialVersion(t *testing.T) {
 	projectID, orgID := id.NewID[Project](), id.NewID[organization.Organization]()
-	p := CreateProject(projectID, orgID, mustProjectName(t, "Main"))
+	p := CreateProject(projectID, orgID, mustProjectName(t, "Main"), description.FromStorage("The main line"))
 
 	if p.ID() != projectID || p.OrganizationID() != orgID || p.Name().String() != "Main" {
 		t.Errorf("unexpected project %s", p)
@@ -60,30 +61,31 @@ func TestReconstituteProject_RecordsNothing(t *testing.T) {
 	}
 }
 
-func TestProjectRename_ChangesTheNameAndRecordsUpdatedEvent(t *testing.T) {
+func TestProjectUpdate_ChangesTheNameAndDescription(t *testing.T) {
 	p := makeStoredProject(t)
 
-	renamed, err := p.Rename(p.Version(), mustProjectName(t, "Line 2"))
+	updated, err := p.Update(p.Version(), mustProjectName(t, "Line 2"), description.FromStorage("A description"))
 
 	if err != nil {
-		t.Fatalf("Rename: %v", err)
+		t.Fatalf("Update: %v", err)
 	}
-	if renamed.Name().String() != "Line 2" || renamed.Version() != p.Version() || renamed.ID() != p.ID() {
-		t.Errorf("unexpected renamed project %s", renamed)
+	if updated.Name().String() != "Line 2" || updated.Description().String() != "A description" ||
+		updated.Version() != p.Version() || updated.ID() != p.ID() {
+		t.Errorf("unexpected updated project %s", updated)
 	}
 	if p.Name().String() != "Line 1" || len(p.PendingEvents()) != 0 {
-		t.Error("Rename must leave the original as it was")
+		t.Error("Update must leave the original as it was")
 	}
-	events := renamed.PendingEvents()
+	events := updated.PendingEvents()
 	if len(events) != 1 || events[0].Type() != event.EventTypeProjectUpdated {
 		t.Errorf("expected one project_updated, got %v", events)
 	}
 }
 
-func TestProjectRename_StaleVersionIsConflict(t *testing.T) {
+func TestProjectUpdate_StaleVersionIsConflict(t *testing.T) {
 	p := makeStoredProject(t)
 
-	_, err := p.Rename(version.Committed[Project](), mustProjectName(t, "Line 2"))
+	_, err := p.Update(version.Committed[Project](), mustProjectName(t, "Line 2"), description.Description{})
 
 	if !errors.Is(err, ErrProjectConflict) {
 		t.Errorf("expected ErrProjectConflict, got %v", err)

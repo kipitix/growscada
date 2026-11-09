@@ -16,7 +16,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
 
-func TestLibrarySave_RenameAndNameTaken(t *testing.T) {
+func TestLibrarySave_UpdateAndNameTaken(t *testing.T) {
 	cleanLibraries(t)
 	ctx := context.Background()
 	repo := repositories.NewLibraryRepositoryPostgres(testDB)
@@ -26,7 +26,7 @@ func TestLibrarySave_RenameAndNameTaken(t *testing.T) {
 	if lib.Version() != version.Committed[library.Library]() {
 		t.Errorf("a new library: version %s, want committed", lib.Version())
 	}
-	renamed, _ := lib.Rename(lib.Version(), other.Name())
+	renamed, _ := lib.Update(lib.Version(), other.Name(), lib.Description())
 	if _, err := repo.Save(ctx, renamed); !errors.Is(err, library.ErrLibraryNameTaken) {
 		t.Errorf("a taken name: expected ErrLibraryNameTaken, got %v", err)
 	}

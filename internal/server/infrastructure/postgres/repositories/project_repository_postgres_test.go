@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/kipitix/growscada/internal/server/domain/description"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
@@ -53,7 +54,7 @@ func mustProjectName(t *testing.T, s string) project.ProjectName {
 // mustCreateProject stores a new project of the sole organization.
 func mustCreateProject(t *testing.T, repo project.ProjectRepository, name string) project.Project {
 	t.Helper()
-	saved, err := repo.Save(context.Background(), project.CreateProject(repo.NextID(), soleOrganization(t), mustProjectName(t, name)))
+	saved, err := repo.Save(context.Background(), project.CreateProject(repo.NextID(), soleOrganization(t), mustProjectName(t, name), description.Description{}))
 	if err != nil {
 		t.Fatalf("Save project %q: %v", name, err)
 	}
@@ -98,7 +99,7 @@ func TestProjectSave_TakenName_ReturnsErrProjectNameTaken(t *testing.T) {
 	repo := repositories.NewProjectRepositoryPostgres(testDB)
 	mustCreateProject(t, repo, "Line 1")
 
-	_, err := repo.Save(context.Background(), project.CreateProject(repo.NextID(), soleOrganization(t), mustProjectName(t, "Line 1")))
+	_, err := repo.Save(context.Background(), project.CreateProject(repo.NextID(), soleOrganization(t), mustProjectName(t, "Line 1"), description.Description{}))
 
 	if !errors.Is(err, project.ErrProjectNameTaken) {
 		t.Errorf("expected ErrProjectNameTaken, got %v", err)
@@ -111,7 +112,7 @@ func TestProjectSave_Rename_RaisesVersionAndStaleOneConflicts(t *testing.T) {
 	ctx := context.Background()
 	saved := mustCreateProject(t, repo, "Line 1")
 
-	renamed, err := saved.Rename(saved.Version(), mustProjectName(t, "Line 2"))
+	renamed, err := saved.Update(saved.Version(), mustProjectName(t, "Line 2"), saved.Description())
 	if err != nil {
 		t.Fatalf("Rename: %v", err)
 	}

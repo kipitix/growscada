@@ -25,6 +25,8 @@ runtime:
     - expression: 'res.body.id'
       operator: eq
       value: '"{{LIBRARY_ID}}"'
+    - expression: 'res.body.description'
+      operator: isString
     - expression: 'res.body.latest_release'
       operator: eq
       value: '1'

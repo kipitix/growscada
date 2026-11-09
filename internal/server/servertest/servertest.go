@@ -269,7 +269,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	})
 
 	router := restapi.NewRouter(restapi.Services{
-		Projects:     application.NewProjectService(projectRepo, orgID),
+		Projects:     application.NewProjectService(projectRepo, drafts, orgID),
 		Tags:         tagSvc,
 		TagStates:    tagStateSvc,
 		Libraries:    application.NewLibraryService(libraryContent, libraries, releases, widgetTypes, runtimeNode),

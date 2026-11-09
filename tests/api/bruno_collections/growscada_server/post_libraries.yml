@@ -10,7 +10,8 @@ http:
     type: json
     data: |-
       {
-        "name": "Bruno library"
+        "name": "Bruno library",
+        "description": "Created by Bruno"
       }
   auth: inherit
 

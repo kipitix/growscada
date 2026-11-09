@@ -24,6 +24,10 @@ runtime:
     - expression: 'res.body.projects[0].name'
       operator: eq
       value: '"Main"'
+    - expression: 'res.body.projects[0].description'
+      operator: isString
+    - expression: 'res.body.projects[0].has_unsaved_changes'
+      operator: isBoolean
 
 settings:
   encodeUrl: true

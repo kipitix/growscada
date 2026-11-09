@@ -5,7 +5,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/id"
 )
 
-// ProjectUpdatedEvent is recorded by Project.Rename.
+// ProjectUpdatedEvent is recorded by Project.Update.
 type ProjectUpdatedEvent interface {
 	ProjectEvent
 }

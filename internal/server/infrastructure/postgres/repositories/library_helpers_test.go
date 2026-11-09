@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/kipitix/growscada/internal/server/domain/description"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
@@ -24,7 +25,7 @@ func mustSaveLibrary(t *testing.T) library.Library {
 		t.Fatal(err)
 	}
 	repo := repositories.NewLibraryRepositoryPostgres(testDB)
-	saved, err := repo.Save(context.Background(), library.CreateLibrary(repo.NextID(), soleOrganization(t), name))
+	saved, err := repo.Save(context.Background(), library.CreateLibrary(repo.NextID(), soleOrganization(t), name, description.Description{}))
 	if err != nil {
 		t.Fatalf("Save library: %v", err)
 	}

@@ -25,16 +25,19 @@ const RevertToReleasePath = "/revert-to-release"
 // LibraryResponse is the HTTP DTO for representing a library in API
 // responses. The WidgetTypes of its Draft live under
 // /libraries/{id}/widget-types, its releases under /libraries/{id}/releases.
+// Description is the library's optional, free-text description of at most 500
+// characters (task 73); it is an attribute of the library, never content.
 // LatestRelease is the number of its latest release, 0 if none; LatestCommit
 // the number of the Draft's last Commit, 0 when it was never saved.
 // HasUnsavedChanges reports whether the Draft moved since its last Commit;
 // HasUnpublishedChanges whether the last Commit is newer than the one the
 // latest Release published (task 72_5; ADR 0021). Version is the Library's own
-// (rename and deletion); the Version of its Draft is read from GET
+// (update and deletion); the Version of its Draft is read from GET
 // /libraries/{id}/draft and carried by the DTOs of its content.
 type LibraryResponse struct {
 	ID                    uuid.UUID `json:"id"`
 	Name                  string    `json:"name"`
+	Description           string    `json:"description"`
 	Version               int       `json:"version"`
 	LatestRelease         int       `json:"latest_release"`
 	LatestCommit          int       `json:"latest_commit"`
@@ -49,7 +52,8 @@ type GetLibrariesResponse struct {
 
 // CreateLibraryRequest is the HTTP DTO for creating a library.
 type CreateLibraryRequest struct {
-	Name string `json:"name"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
 }
 
 // CreateLibraryResponse is the HTTP DTO for a library creation response.
@@ -60,14 +64,17 @@ type CreateLibraryResponse struct {
 	Version int       `json:"version"`
 }
 
-// UpdateLibraryRequest is the HTTP DTO for renaming a library.
-// Version must match the current persisted version for optimistic locking.
+// UpdateLibraryRequest is the HTTP DTO for updating a library's name and
+// description. Version must match the current persisted version for optimistic
+// locking. An absent Description keeps the current one, so a client that sends
+// only a name does not erase it; an empty string clears it (task 73).
 type UpdateLibraryRequest struct {
-	Name    string `json:"name"`
-	Version int    `json:"version"`
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
+	Version     int     `json:"version"`
 }
 
-// UpdateLibraryResponse is the HTTP DTO for a library rename response.
+// UpdateLibraryResponse is the HTTP DTO for a library update response.
 type UpdateLibraryResponse struct {
 	Version int `json:"version"`
 }
