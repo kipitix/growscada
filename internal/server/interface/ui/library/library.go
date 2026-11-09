@@ -284,7 +284,7 @@ func (l *Library) selectLibrary(ctx app.Context, id uuid.UUID) {
 }
 
 // view shows release n read-only (0: back to the Draft). Opening a release
-// leaves a Commit shown.
+// clears a Commit shown.
 func (l *Library) view(n int) {
 	if n == l.viewing && l.viewingCommit == 0 {
 		return

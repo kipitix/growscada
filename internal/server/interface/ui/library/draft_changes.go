@@ -140,8 +140,8 @@ func (l *Library) redoDraftChangeFromButton() { l.redoDraftChange(l.compoCtx) }
 // undo, or that the stack is empty.
 func (l *Library) undoTitle() string {
 	switch {
-	case l.viewing != 0:
-		return "Undo the last change — a release is shown; open the Draft to edit it"
+	case l.readOnly():
+		return "Undo the last change — a release or a commit is shown; open the Draft to edit it"
 	case !l.changesLoaded:
 		return "Undo the last change"
 	case !l.changes.CanUndo || l.changes.UndoDescription == "":
@@ -154,8 +154,8 @@ func (l *Library) undoTitle() string {
 // redoTitle is the hover text of the Redo button.
 func (l *Library) redoTitle() string {
 	switch {
-	case l.viewing != 0:
-		return "Redo the change undone last — a release is shown; open the Draft to edit it"
+	case l.readOnly():
+		return "Redo the change undone last — a release or a commit is shown; open the Draft to edit it"
 	case !l.changesLoaded:
 		return "Redo the change undone last"
 	case !l.changes.CanRedo || l.changes.RedoDescription == "":

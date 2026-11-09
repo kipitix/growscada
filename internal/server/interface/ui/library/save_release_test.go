@@ -210,6 +210,20 @@ func TestCommitView_ShowsTheSnapshotReadOnly(t *testing.T) {
 	if title := f.l.listTitle(); !strings.Contains(title, "Commit 1") {
 		t.Errorf("the list title %q: want the Commit named", title)
 	}
+	// A Commit is not the Draft: the stack commands and Save say so too
+	// (task 72_7).
+	if f.l.canUndo() || f.l.canRedo() {
+		t.Errorf("the Commit view offers a stack step: %+v", f.l.changes)
+	}
+	if title := f.l.undoTitle(); !strings.Contains(title, "open the Draft to edit it") {
+		t.Errorf("the undo title %q: want the Commit named as read-only", title)
+	}
+	if title := f.l.redoTitle(); !strings.Contains(title, "open the Draft to edit it") {
+		t.Errorf("the redo title %q: want the Commit named as read-only", title)
+	}
+	if html := app.HTMLString(f.l.renderCommitBar()); !strings.Contains(html, "open the Draft to edit it") {
+		t.Errorf("the Save button of the Commit view: %s", html)
+	}
 
 	f.l.view(0)
 	if f.l.readOnly() || f.l.viewingCommit != 0 || len(f.l.shownTypes()) != 1 {

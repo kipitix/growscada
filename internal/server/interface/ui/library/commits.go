@@ -173,6 +173,8 @@ func (l *Library) renderCommitBar() app.UI {
 	switch {
 	case l.savingCommit:
 		saveLabel, saveTitle = "Saving…", "The Draft is being fixed as a Commit"
+	case l.readOnly():
+		saveTitle = "A release or a commit is shown; open the Draft to edit it"
 	case !l.hasUnsavedChanges():
 		saveTitle = "Nothing to save since the last save"
 	}
