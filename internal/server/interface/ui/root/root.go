@@ -634,10 +634,13 @@ func (r *Root) modeContent(m *modeView) app.UI {
 
 // screen is one screen of a mode with a selection page, shown or hidden: it
 // fills the mode's slot, so the hidden one keeps its layout and its iframes.
+// A shown screen inherits the visibility of its mode's slot — explicit
+// "visible" would also show it on top of another mode, which Root hides with
+// visibility — and a hidden one is hidden within the mode shown.
 func screen(visible bool, body app.UI) app.UI {
 	visibility := "hidden"
 	if visible {
-		visibility = "visible"
+		visibility = "inherit"
 	}
 	return app.Div().
 		Style("position", "absolute").

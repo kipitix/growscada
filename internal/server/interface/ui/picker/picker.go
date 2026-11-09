@@ -420,13 +420,13 @@ func (p *Picker) renderRow(item Item) app.UI {
 				),
 			button("Open", "accent", true, "Open the "+p.source.Singular(), func(ctx app.Context) {
 				p.open(ctx, id)
-			}),
+			}, app.EventScope("open/"+id.String())),
 			button("Edit", "", true, "Change the name and description", func(ctx app.Context) {
 				p.openDialog(ctx, id)
-			}),
+			}, app.EventScope("edit/"+id.String())),
 			button("Delete", "error", true, "Delete the "+p.source.Singular(), func(ctx app.Context) {
 				p.deleteEntity(ctx, id)
-			}),
+			}, app.EventScope("delete/"+id.String())),
 		).
 		OnDblClick(func(ctx app.Context, e app.Event) { p.open(ctx, id) }, app.EventScope("open/"+id.String()))
 	return row
