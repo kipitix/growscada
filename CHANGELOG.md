@@ -1,5 +1,20 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.88] - 2026-11-09
+
+### Added
+
+- **Страницы выбора Library и Project, описание у обеих сущностей и `has_unsaved_changes` у проекта** (задача 73; ADR 0006, ADR 0007, ADR 0016, ADR 0021)
+  - Домен: `project.Project` и `library.Library` получают `Description` — необязательный текст до 500 символов, обрезанный по краям; атрибут агрегата, не контент (в ProjectFile, Deployment, Commit и манифесты не попадает). Вместо `Rename` у обоих одна операция `Update(expectedVersion, name, description)` с одним `project_updated`/`library_updated`; новое значение-объект `domain/description` в общем домене обеих ролей
+  - API **0.31 → 0.32** (MINOR): `ProjectResponse`/`LibraryResponse` получают `description`, `ProjectResponse` — `has_unsaved_changes` (Version Draft против `draft_version` последнего Commit; у Draft, который ещё не писали, — `false`); `CreateProjectRequest`/`CreateLibraryRequest` — `description`, `UpdateProjectRequest`/`UpdateLibraryRequest` — `description *string` (отсутствие поля сохраняет описание, пустая строка очищает); `make schemas`
+  - Миграции: `public/20261112000000_project_description` (`projects.description`) и `engineering/20261112000000_library_description` (`libraries.description`), обе `TEXT NOT NULL DEFAULT ''`
+  - UI: новый пакет `ui/picker` — страница выбора Library и Project: список по имени с описанием в одну строку (полный текст в `title`, «No description» пустому) и бейджем состояния («Unsaved changes» у обеих, у Library дальше `unpublished commit`/`published`/`legacy`/`never saved`), кнопка **Create** и строки **Open / Edit / Delete**; Create и Edit — один диалог Name + Description (`textarea` 2 строки), отказ сервера показывается внутри диалога с сохранённым вводом, сервер — единственный валидатор; Create сразу открывает редактор, Edit и Delete (с подтверждением) остаются на списке; список перечитывается при показе, по событиям, меняющим строку (`project_*`, `library_*`, Save и любая запись Draft), и после своих команд
+  - `root`: у режимов Library и Project два экрана — страница выбора и редактор; оба остаются смонтированными (скрытие `visibility`), вкладка открывает последнюю сущность из LocalStorage, без сущности — страницу; у редактора слим-строка `← Список · <имя>` (`data-back-to-list`, 26 px), которая показывает страницу и объявляет выбранную сущность EventBus-потоку; удаление открытой сущности оставляет вкладку на странице. `ui/projects.Switcher` остался только селектором для Operation и History
+  - `Library`: левая колонка библиотек исчезла; Save с индикатором несохранённого, History, Releases, Undo/Redo, состояние Commit/Release с Discard/Revert и автор переехали в слим-заголовок над редактором; `Library.SetLibrary(id)` показывает библиотеку, объявленную страницей, а 404 удалённой просто снимает выбор
+  - Bruno: create/update/list проектов и библиотек проверяют `description` и `has_unsaved_changes`; статическая проверка коллекций проходит
+  - Тесты: `description` (обрезка, лимит, чтение из хранилища), `Update` агрегатов и `has_unsaved_changes` (новый project — чисто, запись Draft — грязно, Save — чисто; отсутствие `description` не стирает, пустая строка стирает), миграции и репозитории, REST (200/400/409, заголовок схемы), `ui/picker` против живого API (сортировка, описание, бейджи, диалог с ошибкой внутри, create открывает редактор, edit/delete остаются, удаление выбранной сущности, перечитывание по событиям), `root` (вкладка открывает последнюю сущность или страницу, слим-строка, Library не трогает Bar), Library (`SetLibrary`, заголовок)
+  - Проверки: `make build`, `make test`, `make bruno_test`, ручной обход PWA (страницы выбора обеих сущностей, диалог с отказом сервера, create → редактор, back → список, бейдж после записи Draft, удаление с подтверждением); консоль без ошибок задачи
+
 ## [0.0.87] - 2026-11-09
 
 ### Added
