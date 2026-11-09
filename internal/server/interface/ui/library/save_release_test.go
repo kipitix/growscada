@@ -9,6 +9,7 @@ import (
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
 )
 
 // The Library's Save → Commit → Release flow of task 72_7: Ctrl+S, the status
@@ -311,5 +312,23 @@ func TestWidgetTypeEvent_DoesNotReloadTheReleasesWithContent(t *testing.T) {
 	}
 	if len(f.l.widgetTypes) != 1 || f.l.widgetTypes[0].ID != id {
 		t.Errorf("a WidgetType event did not reread the Draft: %+v", f.l.widgetTypes)
+	}
+}
+
+// TestServerEvents_ProjectResyncLeavesTheLibraryAlone: the Bar's stream may
+// follow a Project while Library is shown; a resync of that stream makes none
+// of the Library's lists stale (task 72_7).
+func TestServerEvents_ProjectResyncLeavesTheLibraryAlone(t *testing.T) {
+	f, _ := selected(t)
+	f.run()
+	f.l.releases = []apiv0.LibraryReleaseResponse{{Number: 99}}
+	f.l.commits = []apiv0.CommitResponse{{Number: 99}}
+
+	f.event(apiv0.Event{Type: eventlog.EventProjectResync})
+	if len(f.l.releases) != 1 || f.l.releases[0].Number != 99 {
+		t.Errorf("a project resync reloaded the releases: %+v", f.l.releases)
+	}
+	if len(f.l.commits) != 1 || f.l.commits[0].Number != 99 {
+		t.Errorf("a project resync reloaded the history: %+v", f.l.commits)
 	}
 }

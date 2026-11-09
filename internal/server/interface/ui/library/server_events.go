@@ -22,6 +22,11 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 		if !ok {
 			return
 		}
+		if ev.Type == eventlog.EventProjectResync {
+			// The Library shows nothing of a project: a resync of the Bar's
+			// stream makes none of its lists stale (task 72_7).
+			return
+		}
 		if ev.Type == eventlog.EventResync {
 			// Events were lost: the server may have gone back, the stack with
 			// it. Everything the mode shows is read again (task 72_7).
