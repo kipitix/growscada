@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -544,18 +543,14 @@ func (s libraryServiceImpl) revertIsTheLastCommit(ctx context.Context, libraryID
 }
 
 // sameWidgetTypeCopies reports whether two lists of released copies hold the
-// same WidgetTypes with the same definitions, in the same order.
+// same WidgetTypes with the same definitions, in the same order: what a Revert
+// to a Release compares before it can call the Draft clean (task 74).
 func sameWidgetTypeCopies(a, b []library.ReleasedWidgetType) bool {
 	if len(a) != len(b) {
 		return false
 	}
 	for i := range a {
-		left, right := a[i], b[i]
-		if left.ID() != right.ID() || left.LibraryID() != right.LibraryID() ||
-			left.Name() != right.Name() || left.HtmlTemplate() != right.HtmlTemplate() ||
-			left.Script() != right.Script() || left.ScriptLanguage() != right.ScriptLanguage() ||
-			left.DefaultSize() != right.DefaultSize() ||
-			!slices.Equal(left.InputPorts(), right.InputPorts()) {
+		if !a[i].SameAs(b[i]) {
 			return false
 		}
 	}

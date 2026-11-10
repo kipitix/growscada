@@ -172,6 +172,32 @@ func TestReleaseStateOf(t *testing.T) {
 	}
 }
 
+// TestReleasedWidgetType_SameAs: two copies are the same exactly while their
+// definitions are — the rule a Revert to a Release uses to call the Draft clean
+// (task 74; ADR 0016, amendment 2026-11-10).
+func TestReleasedWidgetType_SameAs(t *testing.T) {
+	wt := makeCommittedWidgetType(t)
+	released := ReleasedFrom(wt)
+	if !released.SameAs(ReleasedFrom(wt)) || !released.Matches(wt) {
+		t.Fatalf("a copy of the same WidgetType differs: %s", released)
+	}
+	if released.SameAs(ReleasedFrom(makeCommittedWidgetType(t))) {
+		t.Errorf("two WidgetTypes with different IDs are the same")
+	}
+	html, err := NewHtmlTemplate("<span></span>")
+	if err != nil {
+		t.Fatalf("NewHtmlTemplate: %v", err)
+	}
+	changed, err := ReconstituteWidgetType(wt.ID(), wt.LibraryID(), wt.Name(), html, wt.Script(),
+		wt.ScriptLanguage(), wt.DefaultSize(), wt.InputPorts())
+	if err != nil {
+		t.Fatalf("ReconstituteWidgetType: %v", err)
+	}
+	if released.SameAs(ReleasedFrom(changed)) {
+		t.Errorf("copies with different templates are the same")
+	}
+}
+
 func TestRecreateWidgetType_RestoresTheReleasedDefinition(t *testing.T) {
 	wt := makeCommittedWidgetType(t)
 	released := ReleasedFrom(wt)

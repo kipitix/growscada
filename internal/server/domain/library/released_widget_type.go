@@ -78,18 +78,25 @@ func (r ReleasedWidgetType) DefaultSize() Size              { return r.defaultSi
 // InputPorts returns a copy of the type's InputPorts.
 func (r ReleasedWidgetType) InputPorts() []InputPort { return slices.Clone(r.inputPorts) }
 
+// SameAs reports whether other is this copy with the same definition: the rule
+// a Revert to a Library Release uses to tell that the Release published the
+// Commit the Draft's last one is (task 74).
+func (r ReleasedWidgetType) SameAs(other ReleasedWidgetType) bool {
+	return r.id == other.id &&
+		r.libraryID == other.libraryID &&
+		r.name == other.name &&
+		r.htmlTemplate == other.htmlTemplate &&
+		r.script == other.script &&
+		r.scriptLanguage == other.scriptLanguage &&
+		r.defaultSize == other.defaultSize &&
+		slices.Equal(r.inputPorts, other.inputPorts)
+}
+
 // Matches reports whether wt, a WidgetType of the Draft, is the same
 // WidgetType with the same definition: what a release of the Draft now
 // would hold.
 func (r ReleasedWidgetType) Matches(wt WidgetType) bool {
-	return r.id == wt.ID() &&
-		r.libraryID == wt.LibraryID() &&
-		r.name == wt.Name() &&
-		r.htmlTemplate == wt.HtmlTemplate() &&
-		r.script == wt.Script() &&
-		r.scriptLanguage == wt.ScriptLanguage() &&
-		r.defaultSize == wt.DefaultSize() &&
-		slices.Equal(r.inputPorts, wt.InputPorts())
+	return r.SameAs(ReleasedFrom(wt))
 }
 
 // String implements [fmt.Stringer].
