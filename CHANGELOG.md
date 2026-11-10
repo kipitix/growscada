@@ -1,5 +1,17 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.91] - 2026-11-10
+
+### Changed
+
+- **Кнопки страницы выбора, шапки и диалогов Library собирает один `uiutil.Button`; `descriptionOf` переехал в свой файл** (задача 77)
+  - `ui/uiutil/button.go` — `Button(text, kind, enabled, title, layout, onClick, options…)` с пресетом вёрстки: `ButtonPage` (`3px 10px`, `12px`, выключенная `0.5`), `ButtonBar` (`2px 9px`, `12px`, `0.4`), `ButtonSmall` (`flex: 1`, `4px 0`, `13px`, `0.4`); палитра `accent`/`error`/нейтральная и выключенное состояние (`opacity`, `cursor: default`, `Disabled`) теперь в одном месте
+  - `ui/picker.button`, `ui/library.barButton` и `ui/library.smallButton` — тонкие обёртки над ним: вызовы, `Title`, `Text` и `app.EventScope` не изменились, поэтому меняется только порядок объявлений в атрибуте `style`. Шесть сборщиков `ui/project` (`deployButton`, `projectFileButton` и остальные) остаются как были — это отдельная задача
+  - `ui/picker`: `stateColor` и `stateBorder` свёрнуты в одну `stateBadge(kind) (color, border string)` — список состояний и цвета бейджа в одной функции
+  - `application/description_input.go` — `descriptionOf` переехал из `project_application_service.go` в собственный файл пакета `application` без изменения поведения; им пользуются оба сервиса, домен, контракт и схемы не тронуты
+  - Тесты: UI-тесты `ui/picker` и `ui/library` прошли без правок (поведение и метрики прежние); REST-слой не менялся
+  - Проверки: `make build`, `make test`, `make bruno_test` (214/214 и 6/6), ручной обход PWA (страницы выбора Library и Project, шапка редактора и диалоги Library: те же метрики, цвета и выключенные состояния); консоль без ошибок задачи
+
 ## [0.0.90] - 2026-11-10
 
 ### Fixed
