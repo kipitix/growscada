@@ -14,8 +14,12 @@ const (
 	ButtonPage ButtonLayout = "page"
 	// ButtonBar is an action of a mode's header.
 	ButtonBar ButtonLayout = "bar"
-	// ButtonSmall is an action of a dialog: it shares the row's width.
+	// ButtonSmall is an action of a dialog or of a table's filter row: it
+	// shares the row's width.
 	ButtonSmall ButtonLayout = "small"
+	// ButtonRow is an action of a row of a list, e.g. a Release's Deploy or
+	// a Commit's download.
+	ButtonRow ButtonLayout = "row"
 )
 
 // Button renders one action: kind "accent", "error" or "" picks its palette,
@@ -24,10 +28,10 @@ const (
 // the row's identity, so a reused element does not keep the handler of the row
 // it showed before (app.EventScope).
 //
-// The palette and the disabled state of the picker's and the Library's buttons
-// live here alone (task 77); the Project mode's builders still carry their own
-// copies of both.
-func Button(text, kind string, enabled bool, title string, layout ButtonLayout, onClick func(app.Context, app.Event), options ...app.EventOption) app.UI {
+// The palette and the disabled state of every mode's buttons live here alone:
+// the picker's page, the Library's and the Project's headers and dialogs, and
+// the rows of their lists (task 77, task 80).
+func Button(text, kind string, enabled bool, title string, layout ButtonLayout, onClick func(app.Context, app.Event), options ...app.EventOption) app.HTMLButton {
 	border, bg, fg := buttonColors(kind)
 	b := app.Button().
 		Title(title).
@@ -43,6 +47,9 @@ func Button(text, kind string, enabled bool, title string, layout ButtonLayout, 
 		dimmed = "0.4"
 	case ButtonSmall:
 		b = b.Style("flex", "1").Style("padding", "4px 0").Style("font-size", "13px")
+		dimmed = "0.4"
+	case ButtonRow:
+		b = b.Style("padding", "1px 7px").Style("font-size", "11px")
 		dimmed = "0.4"
 	default:
 		b = b.Style("padding", "3px 10px").Style("font-size", "12px")

@@ -43,50 +43,20 @@ func (l *Library) renderListButtons() app.UI {
 	editable := !l.readOnly()
 	deleteDisabled := !editable || l.selectedID == uuid.Nil
 
-	deleteBtn := app.Button().
-		Title("Delete the selected WidgetType from the Draft").
-		Style("flex", "1").
-		Style("padding", "4px 0").
-		Style("font-size", "13px").
-		Style("cursor", "pointer").
-		Style("border", "1px solid var(--error-border)").
-		Style("border-radius", "4px").
-		Style("background", "var(--error-bg)").
-		Style("color", "var(--error)").
-		Text("Delete").
-		OnClick(func(ctx app.Context, e app.Event) {
+	deleteBtn := uiutil.Button("Delete", "error", !deleteDisabled,
+		"Delete the selected WidgetType from the Draft", uiutil.ButtonSmall,
+		func(ctx app.Context, e app.Event) {
 			if !app.Window().Call("confirm", "Are you sure you want to delete?").Bool() {
 				return
 			}
 			l.deleteItem(ctx)
 		})
-	if deleteDisabled {
-		deleteBtn = deleteBtn.
-			Style("opacity", "0.4").
-			Style("cursor", "default").
-			Disabled(true)
-	}
 
-	createBtn := app.Button().
-		Title("Create a WidgetType in the Draft").
-		Style("flex", "1").
-		Style("padding", "4px 0").
-		Style("font-size", "13px").
-		Style("cursor", "pointer").
-		Style("border", "1px solid var(--accent-border)").
-		Style("border-radius", "4px").
-		Style("background", "var(--accent-bg)").
-		Style("color", "var(--accent)").
-		Text("Create").
-		OnClick(func(ctx app.Context, e app.Event) {
+	createBtn := uiutil.Button("Create", "accent", editable,
+		"Create a WidgetType in the Draft", uiutil.ButtonSmall,
+		func(ctx app.Context, e app.Event) {
 			l.createItem(ctx)
 		})
-	if !editable {
-		createBtn = createBtn.
-			Style("opacity", "0.4").
-			Style("cursor", "default").
-			Disabled(true)
-	}
 
 	return app.Div().
 		Style("display", "flex").

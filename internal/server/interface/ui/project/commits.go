@@ -212,20 +212,9 @@ func (p *Project) renderAuthorBar() app.UI {
 				Style("font-size", "12px").
 				Style("color", "var(--text-muted)").
 				Text(label),
-			app.Button().
-				Attr("data-author-change", "true").
-				Title("Change the author name").
-				Style("padding", "1px 7px").
-				Style("font-size", "11px").
-				Style("cursor", "pointer").
-				Style("border", "1px solid var(--border-input)").
-				Style("border-radius", "4px").
-				Style("background", "var(--bg)").
-				Style("color", "var(--text)").
-				Text("Change").
-				OnClick(func(ctx app.Context, e app.Event) {
-					p.changeAuthor(ctx)
-				}),
+			rowButton("Change", "", true, "Change the author name",
+				func(ctx app.Context) { p.changeAuthor(ctx) }).
+				Attr("data-author-change", "true"),
 		)
 }
 
@@ -401,21 +390,12 @@ func (p *Project) renderCommitRow(commit apiv0.CommitResponse) app.UI {
 				}),
 		)
 	} else {
-		title = app.Button().
-			Attr("data-commit-rename", fmt.Sprint(commit.Number)).
-			Title("Rename the title of this Commit").
-			Style("padding", "1px 7px").
-			Style("font-size", "11px").
-			Style("cursor", "pointer").
-			Style("border", "1px solid var(--border-input)").
-			Style("border-radius", "4px").
-			Style("background", "var(--bg)").
-			Style("color", "var(--text)").
-			Text("Rename").
-			OnClick(func(ctx app.Context, e app.Event) {
+		title = rowButton("Rename", "", true, "Rename the title of this Commit",
+			func(ctx app.Context) {
 				p.startRenamingCommit(commit.Number, commit.Title)
 				ctx.Update()
-			})
+			}, app.EventScope("rename/"+fmt.Sprint(commit.Number))).
+			Attr("data-commit-rename", fmt.Sprint(commit.Number))
 	}
 	return app.Div().
 		Attr("data-commit-row", fmt.Sprint(commit.Number)).
@@ -463,20 +443,11 @@ func (p *Project) commitPublishedMark(commit apiv0.CommitResponse) app.UI {
 // downloadCommitButton offers the snapshot of a Commit as a download: the
 // ProjectFile the Save fixed (task 72_2; ADR 0021).
 func (p *Project) downloadCommitButton(number int) app.UI {
-	return app.Button().
-		Attr("data-commit-download", fmt.Sprint(number)).
-		Title("Download the project file this Commit fixed").
-		Style("padding", "1px 7px").
-		Style("font-size", "11px").
-		Style("cursor", "pointer").
-		Style("border", "1px solid var(--border-input)").
-		Style("border-radius", "4px").
-		Style("background", "var(--bg)").
-		Style("color", "var(--text)").
-		Text("Project file").
-		OnClick(func(ctx app.Context, e app.Event) {
-			p.downloadCommitProjectFile(ctx, number)
-		})
+	return rowButton("Project file", "", true,
+		"Download the project file this Commit fixed",
+		func(ctx app.Context) { p.downloadCommitProjectFile(ctx, number) },
+		app.EventScope("download-commit/"+fmt.Sprint(number))).
+		Attr("data-commit-download", fmt.Sprint(number))
 }
 
 // downloadCommitProjectFile downloads the ProjectFile a Commit fixed.

@@ -5,10 +5,47 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
+
+// TestCommitBar_IndicatorKeepsTheButtonPositions: the unsaved-changes indicator
+// is always the header's second child — hidden when it has nothing to say —, so
+// History and Releases never shift by a position and a reused element keeps
+// its own handler (task 79). TestEngine renders but dispatches no DOM click, so
+// the panels themselves are checked in the browser; this test guards the
+// structure the bug came from.
+func TestCommitBar_IndicatorKeepsTheButtonPositions(t *testing.T) {
+	l := &Library{libraryID: uuid.New()}
+	for _, tc := range []struct {
+		name    string
+		unsaved bool
+		marker  string
+	}{
+		{"unsaved changes", true, `data-commit-unsaved`},
+		{"nothing to show", false, `display:none`},
+	} {
+		l.draftUnsaved, l.draftStateLoaded = tc.unsaved, false
+		bar := l.renderCommitBar()
+		if len(bar) != 4 {
+			t.Fatalf("%s: the header has %d children, want 4", tc.name, len(bar))
+		}
+		if html := app.HTMLString(bar[0]); !strings.Contains(html, ">Save<") {
+			t.Errorf("%s: the first child is not Save: %s", tc.name, html)
+		}
+		if html := app.HTMLString(bar[1]); !strings.Contains(html, tc.marker) {
+			t.Errorf("%s: the indicator: %s", tc.name, html)
+		}
+		if html := app.HTMLString(bar[2]); !strings.Contains(html, ">History<") {
+			t.Errorf("%s: the third child is not History: %s", tc.name, html)
+		}
+		if html := app.HTMLString(bar[3]); !strings.Contains(html, ">Releases<") {
+			t.Errorf("%s: the fourth child is not Releases: %s", tc.name, html)
+		}
+	}
+}
 
 // TestSaveCommit_LibraryHistoryAndRename: Save fixes the Draft as Commit 1,
 // the indicator goes off, the history shows it and its title is renamed in

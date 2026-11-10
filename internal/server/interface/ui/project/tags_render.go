@@ -45,53 +45,22 @@ func (p *Project) renderTagListColumn() app.UI {
 func (p *Project) renderTagListButtons() app.UI {
 	deleteDisabled := p.selectedTagID == uuid.Nil || p.creatingTag
 
-	deleteBtn := app.Button().
-		Style("flex", "1").
-		Style("padding", "4px 0").
-		Style("font-size", "13px").
-		Style("cursor", "pointer").
-		Style("border", "1px solid var(--error-border)").
-		Style("border-radius", "4px").
-		Style("background", "var(--error-bg)").
-		Style("color", "var(--error)").
-		Text("Delete").
-		OnClick(func(ctx app.Context, e app.Event) {
+	deleteBtn := uiutil.Button("Delete", "error", !deleteDisabled, "", uiutil.ButtonSmall,
+		func(ctx app.Context, e app.Event) {
 			if !app.Window().Call("confirm", "Are you sure you want to delete?").Bool() {
 				return
 			}
 			p.deleteTag(ctx)
 		})
-	if deleteDisabled {
-		deleteBtn = deleteBtn.
-			Style("opacity", "0.4").
-			Style("cursor", "default").
-			Disabled(true)
-	}
 
-	createDisabled := p.creatingTag
-	createBtn := app.Button().
-		Style("flex", "1").
-		Style("padding", "4px 0").
-		Style("font-size", "13px").
-		Style("cursor", "pointer").
-		Style("border", "1px solid var(--accent-border)").
-		Style("border-radius", "4px").
-		Style("background", "var(--accent-bg)").
-		Style("color", "var(--accent)").
-		Text("Create").
-		OnClick(func(ctx app.Context, e app.Event) {
+	createBtn := uiutil.Button("Create", "accent", !p.creatingTag, "", uiutil.ButtonSmall,
+		func(ctx app.Context, e app.Event) {
 			p.creatingTag = true
 			p.newTagName = "New Tag"
 			p.newTagType = "string"
 			p.selectedTagID = uuid.Nil
 			uiutil.StoreID(ctx, p.selectionKey(tagIDKey), uuid.Nil)
 		})
-	if createDisabled {
-		createBtn = createBtn.
-			Style("opacity", "0.4").
-			Style("cursor", "default").
-			Disabled(true)
-	}
 
 	return app.Div().
 		Style("display", "flex").
@@ -249,6 +218,9 @@ func (p *Project) renderTagCreateForm() app.UI {
 				Style("display", "flex").
 				Style("gap", "8px").
 				Body(
+					// The dialog's primary and secondary actions: their own
+					// large metric and the solid accent, not a page/bar/row
+					// action, so they stay outside uiutil.Button (task 80).
 					app.Button().
 						Style("padding", "6px 18px").
 						Style("font-size", "13px").

@@ -1,5 +1,26 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.93] - 2026-11-10
+
+### Fixed
+
+- **History и Releases в шапке Library больше не путаются обработчиками** (задача 79)
+  - `ui/library`: `History`, `Releases` (`commits.go`), `Discard`, `Revert` (`render_libraries.go`) и `Undo`, `Redo` (`draft_changes.go`) получают стабильный `app.EventScope` — go-app переиспользует элемент шапки, если указатель кода обработчика совпал
+  - Индикатор `Saved`/`Unsaved changes` стал постоянным вторым ребёнком шапки и скрывается `display:none`, когда сказать нечего, поэтому `History` и `Releases` не сдвигаются по позиции в принципе
+  - Тест `TestCommitBar_IndicatorKeepsTheButtonPositions` проверяет структуру шапки в обоих состояниях индикатора; `app.TestEngine` не диспатчит DOM-клики, поэтому сами панели проверены в браузере
+
+### Changed
+
+- **Все кнопки Project и Library собирает `uiutil.Button`; палитра и выключенное состояние живут в одном месте** (задача 80)
+  - `ui/uiutil/button.go`: новый пресет `ButtonRow` (`1px 7px`, `11px`, выключенная `0.4`); `Button` возвращает `app.HTMLButton`, чтобы навешивать `data-*`
+  - Шесть сборщиков `ui/project` (`deployButton`, `projectFileButton`, `draftChangeButton` — bar; `releaseCommitButton`, `downloadReleaseButton`, `downloadCommitButton` — row) стали тонкими обёртками; кнопки строк `Deploy`, `Project file`, `Edit note`, `Change`, `Rename`, `Download` и `✕` пина/порта идут через новый `rowButton` (`ui/project/buttons.go`)
+  - `ui/project/tags_render.go` и `ui/library/render_list.go` — `ButtonSmall`; `ui/library/render_editor.go` (`✕`, `+ Add Port`, `Apply`) — пресеты `row`/`page`
+  - Строковым кнопкам добавлен `app.EventScope` там, где его не было (Release, Commit, Deployment, порт)
+  - Осознанно вне `uiutil.Button` остались кнопки подвала диалогов (свой крупный метрик, у основной — сплошной `--accent`), иконка сброса поля свойства, голые встроенные текстовые действия и label выбора файла; причина записана одним комментарием в `ui/project/buttons.go`
+  - Видимое следствие решения «полностью унифицировать»: нейтральные кнопки Project получили общий фон `--bg-hover`, а выключенные — `opacity` 0.4 и `cursor: default` (раньше не приглушались и оставляли `cursor: pointer`); метрики и порядок кнопок прежние
+  - Контракт, REST, схемы и Bruno не менялись
+  - Проверки: `make build`, `make test`, `make bruno_test`, ручной обход PWA (шапки Project и Library в обоих состояниях индикатора, страница выбора, диалоги, строки Release/Commit/Deployment, колонки WidgetTypes и Tags); консоль без ошибок задачи
+
 ## [0.0.92] - 2026-11-10
 
 ### Fixed

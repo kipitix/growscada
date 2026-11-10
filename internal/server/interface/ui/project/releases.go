@@ -382,21 +382,12 @@ func (p *Project) renderReleaseRow(released apiv0.ReleaseResponse) app.UI {
 				}),
 		)
 	} else {
-		note = app.Button().
-			Attr("data-release-edit-note", fmt.Sprint(released.Number)).
-			Title("Change the note of this Release").
-			Style("padding", "1px 7px").
-			Style("font-size", "11px").
-			Style("cursor", "pointer").
-			Style("border", "1px solid var(--border-input)").
-			Style("border-radius", "4px").
-			Style("background", "var(--bg)").
-			Style("color", "var(--text)").
-			Text("Edit note").
-			OnClick(func(ctx app.Context, e app.Event) {
+		note = rowButton("Edit note", "", true, "Change the note of this Release",
+			func(ctx app.Context) {
 				p.startEditingReleaseNote(released.Number, released.Note)
 				ctx.Update()
-			})
+			}, app.EventScope("note/"+fmt.Sprint(released.Number))).
+			Attr("data-release-edit-note", fmt.Sprint(released.Number))
 	}
 	return app.Div().
 		Attr("data-release-row", fmt.Sprint(released.Number)).
@@ -441,62 +432,38 @@ func (p *Project) releaseDeployControl(number int) app.UI {
 			Style("color", "var(--accent)").
 			Text("Running")
 	}
-	return app.Button().
-		Attr("data-release-deploy", fmt.Sprint(number)).
-		Title("Make this Release the running Deployment").
-		Disabled(p.deploying || p.discarding || p.reverting).
-		Style("padding", "1px 7px").
-		Style("font-size", "11px").
-		Style("cursor", "pointer").
-		Style("border", "1px solid var(--border-input)").
-		Style("border-radius", "4px").
-		Style("background", "var(--accent)").
-		Style("color", "var(--accent-text)").
-		Text("Deploy").
-		OnClick(func(ctx app.Context, e app.Event) {
-			p.deployRelease(ctx, number)
-		})
+	// Every Release row has the same handler literal: the number scopes it, so
+	// a reused element acts on the row it shows now.
+	return rowButton("Deploy", "accent", !(p.deploying || p.discarding || p.reverting),
+		"Make this Release the running Deployment",
+		func(ctx app.Context) { p.deployRelease(ctx, number) },
+		app.EventScope("deploy/"+fmt.Sprint(number))).
+		Attr("data-release-deploy", fmt.Sprint(number))
 }
 
 // releaseCommitButton offers a Commit's publication as a Release. A Commit
 // published already has the button disabled with the reason in its tooltip
 // (task 72_3; ADR 0021).
 func (p *Project) releaseCommitButton(commit apiv0.CommitResponse) app.UI {
-	button := app.Button().
-		Attr("data-commit-release", fmt.Sprint(commit.Number)).
-		Style("padding", "1px 7px").
-		Style("font-size", "11px").
-		Style("cursor", "pointer").
-		Style("border", "1px solid var(--border-input)").
-		Style("border-radius", "4px").
-		Style("background", "var(--bg)").
-		Style("color", "var(--text)").
-		Text("Make Release")
+	title := "Publish this Commit as a Release"
 	if commit.Released {
-		return button.Disabled(true).Title("This Commit is released already")
+		title = "This Commit is released already"
 	}
-	return button.Title("Publish this Commit as a Release").OnClick(func(ctx app.Context, e app.Event) {
-		p.openReleaseDialog(commit.Number)
-		ctx.Update()
-	})
+	return rowButton("Make Release", "", !commit.Released, title,
+		func(ctx app.Context) {
+			p.openReleaseDialog(commit.Number)
+			ctx.Update()
+		}, app.EventScope("release/"+fmt.Sprint(commit.Number))).
+		Attr("data-commit-release", fmt.Sprint(commit.Number))
 }
 
 // downloadReleaseButton offers the ProjectFile a Release copied as a download.
 func (p *Project) downloadReleaseButton(number int) app.UI {
-	return app.Button().
-		Attr("data-release-download", fmt.Sprint(number)).
-		Title("Download the project file this Release copied").
-		Style("padding", "1px 7px").
-		Style("font-size", "11px").
-		Style("cursor", "pointer").
-		Style("border", "1px solid var(--border-input)").
-		Style("border-radius", "4px").
-		Style("background", "var(--bg)").
-		Style("color", "var(--text)").
-		Text("Project file").
-		OnClick(func(ctx app.Context, e app.Event) {
-			p.downloadReleaseProjectFile(ctx, number)
-		})
+	return rowButton("Project file", "", true,
+		"Download the project file this Release copied",
+		func(ctx app.Context) { p.downloadReleaseProjectFile(ctx, number) },
+		app.EventScope("download-release/"+fmt.Sprint(number))).
+		Attr("data-release-download", fmt.Sprint(number))
 }
 
 // downloadReleaseProjectFile downloads the ProjectFile a Release copied.

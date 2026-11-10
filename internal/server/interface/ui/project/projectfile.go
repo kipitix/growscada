@@ -373,18 +373,8 @@ func (p *Project) projectFileOpenTitle() string {
 }
 
 func (p *Project) projectFileButton(label, title string, enabled bool, onClick func(app.Context)) app.UI {
-	return app.Button().
-		Title(title).
-		Disabled(!enabled).
-		Style("padding", "2px 9px").
-		Style("font-size", "12px").
-		Style("cursor", "pointer").
-		Style("border", "1px solid var(--border-input)").
-		Style("border-radius", "4px").
-		Style("background", "var(--bg)").
-		Style("color", "var(--text)").
-		Text(label).
-		OnClick(func(ctx app.Context, e app.Event) { onClick(ctx) }, app.EventScope("projectfile", label))
+	return uiutil.Button(label, "", enabled, title, uiutil.ButtonBar,
+		func(ctx app.Context, e app.Event) { onClick(ctx) }, app.EventScope("projectfile", label))
 }
 
 // projectFilePickButton is a button that opens the browser's file picker: a
@@ -405,18 +395,12 @@ func (p *Project) projectFilePickButton(label, title string, enabled bool, scope
 		Style("opacity", "0").
 		Style("overflow", "hidden")
 	if !enabled {
-		return app.Button().
-			Title(title).
-			Disabled(true).
-			Style("padding", "2px 9px").
-			Style("font-size", "12px").
-			Style("cursor", "not-allowed").
-			Style("border", "1px solid var(--border-input)").
-			Style("border-radius", "4px").
-			Style("background", "var(--bg)").
-			Style("color", "var(--text)").
-			Text(label)
+		return uiutil.Button(label, "", false, title, uiutil.ButtonBar,
+			func(app.Context, app.Event) {}, app.EventScope("projectfile", scope))
 	}
+	// A file picker must be a label wrapping the input: a button cannot open
+	// the browser's picker, so this one carries the header metrics itself
+	// rather than going through uiutil.Button.
 	return app.Label().
 		Title(title).
 		Style("position", "relative").
@@ -427,7 +411,7 @@ func (p *Project) projectFilePickButton(label, title string, enabled bool, scope
 		Style("cursor", "pointer").
 		Style("border", "1px solid var(--border-input)").
 		Style("border-radius", "4px").
-		Style("background", "var(--bg)").
+		Style("background", "var(--bg-hover)").
 		Style("color", "var(--text)").
 		Body(
 			app.Span().Text(label),

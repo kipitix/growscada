@@ -125,8 +125,10 @@ func (l *Library) renderDraftChangesBar() app.UI {
 		Style("display", "flex").
 		Style("gap", "4px").
 		Body(
-			barButton("Undo", l.canUndo(), "", l.undoTitle(), l.undoDraftChangeFromButton),
-			barButton("Redo", l.canRedo(), "", l.redoTitle(), l.redoDraftChangeFromButton),
+			barButton("Undo", l.canUndo(), "", l.undoTitle(), l.undoDraftChangeFromButton,
+				app.EventScope("undo")),
+			barButton("Redo", l.canRedo(), "", l.redoTitle(), l.redoDraftChangeFromButton,
+				app.EventScope("redo")),
 		)
 }
 

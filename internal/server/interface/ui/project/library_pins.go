@@ -214,18 +214,9 @@ func (p *Project) renderPinsPanel() app.UI {
 								}
 							}, app.EventScope(scope)).
 							Body(options...),
-						app.Button().
-							Style("font-size", "11px").
-							Style("padding", "1px 6px").
-							Style("cursor", "pointer").
-							Style("border", "1px solid var(--border-input)").
-							Style("border-radius", "3px").
-							Style("background", "var(--bg-hover)").
-							Style("color", "var(--text)").
-							Text("✕").
-							OnClick(func(ctx app.Context, e app.Event) {
-								p.changePin(libraryID, 0)
-							}, app.EventScope(scope)),
+						rowButton("✕", "", true, "Unpin this library",
+							func(ctx app.Context) { p.changePin(libraryID, 0) },
+							app.EventScope(scope)),
 					),
 				app.Div().
 					Attr("data-pin-provenance", strconv.Itoa(pin.Release)).

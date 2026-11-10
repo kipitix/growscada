@@ -171,25 +171,36 @@ func (l *Library) renderCommitBar() []app.UI {
 	case !l.hasUnsavedChanges():
 		saveTitle = "Nothing to save since the last save"
 	}
+	// The indicator is always a child, hidden when there is nothing to show:
+	// a conditional one would shift History and Releases by a position, and
+	// go-app keeps the handler of a reused element whose handler is the same
+	// func literal (task 79).
+	indicator := app.Span().Style("font-size", "12px")
+	switch {
+	case l.hasUnsavedChanges():
+		indicator = indicator.
+			Attr("data-commit-unsaved", "true").
+			Style("color", "var(--toast-warn-title)").
+			Text("Unsaved changes")
+	case l.draftStateLoaded && len(l.commits) > 0:
+		indicator = indicator.
+			Attr("data-commit-saved", "true").
+			Style("color", "var(--text-muted)").
+			Text("Saved")
+	default:
+		indicator = indicator.Style("display", "none")
+	}
 	body := []app.UI{
 		barButton(saveLabel, editable && l.hasUnsavedChanges() && !l.savingCommit, "accent", saveTitle, l.openSaveDialog),
+		indicator,
 	}
-	if l.hasUnsavedChanges() {
-		body = append(body, app.Span().
-			Attr("data-commit-unsaved", "true").
-			Style("font-size", "12px").
-			Style("color", "var(--toast-warn-title)").
-			Text("Unsaved changes"))
-	} else if l.draftStateLoaded && len(l.commits) > 0 {
-		body = append(body, app.Span().
-			Attr("data-commit-saved", "true").
-			Style("font-size", "12px").
-			Style("color", "var(--text-muted)").
-			Text("Saved"))
-	}
+	// Each action also names its own app.EventScope, so a reused element can
+	// never keep another action's handler.
 	body = append(body,
-		barButton("History", l.libraryID != uuid.Nil, "", "The Commits of the library", l.openCommitsDialog),
-		barButton("Releases", l.libraryID != uuid.Nil, "", "The Releases of the library", l.openReleasesDialog),
+		barButton("History", l.libraryID != uuid.Nil, "", "The Commits of the library", l.openCommitsDialog,
+			app.EventScope("history")),
+		barButton("Releases", l.libraryID != uuid.Nil, "", "The Releases of the library", l.openReleasesDialog,
+			app.EventScope("releases")),
 	)
 	return body
 }
@@ -214,20 +225,10 @@ func (l *Library) renderAuthorBar() app.UI {
 				Style("font-size", "11px").
 				Style("color", "var(--text-muted)").
 				Text(label),
-			app.Button().
-				Attr("data-author-change", "true").
-				Title("Change the author name").
-				Style("padding", "1px 6px").
-				Style("font-size", "11px").
-				Style("cursor", "pointer").
-				Style("border", "1px solid var(--border-input)").
-				Style("border-radius", "3px").
-				Style("background", "var(--bg)").
-				Style("color", "var(--text)").
-				Text("Change").
-				OnClick(func(ctx app.Context, e app.Event) {
+			uiutil.Button("Change", "", true, "Change the author name", uiutil.ButtonRow,
+				func(ctx app.Context, e app.Event) {
 					l.changeAuthor(ctx)
-				}),
+				}).Attr("data-author-change", "true"),
 		)
 }
 
@@ -378,6 +379,8 @@ func (l *Library) renderCommitRow(commit apiv0.CommitResponse) app.UI {
 			}),
 		)
 	} else {
+		// A bare inline action: it borrows the browser's own button look, so
+		// it carries no palette of its own.
 		rename = app.Button().
 			Attr("data-commit-rename", fmt.Sprint(commit.Number)).
 			Style("padding", "0 6px").

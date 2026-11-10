@@ -333,19 +333,12 @@ func (p *Project) deployButtonTitle() string {
 	return "Choose a Release to deploy"
 }
 
+// deployButton is one action of the Project's header; the label is also the
+// EventScope, so a reused element never keeps another action's handler (task
+// 80). It is named for its first use and is the header's general button.
 func (p *Project) deployButton(label, title string, enabled bool, onClick func(app.Context)) app.UI {
-	return app.Button().
-		Title(title).
-		Disabled(!enabled).
-		Style("padding", "2px 9px").
-		Style("font-size", "12px").
-		Style("cursor", "pointer").
-		Style("border", "1px solid var(--border-input)").
-		Style("border-radius", "4px").
-		Style("background", "var(--bg)").
-		Style("color", "var(--text)").
-		Text(label).
-		OnClick(func(ctx app.Context, e app.Event) { onClick(ctx) }, app.EventScope(label))
+	return uiutil.Button(label, "", enabled, title, uiutil.ButtonBar,
+		func(ctx app.Context, e app.Event) { onClick(ctx) }, app.EventScope(label))
 }
 
 // renderDeploymentsDialog is the list of the project's Deployments with the
@@ -427,23 +420,16 @@ func (p *Project) renderDeploymentRow(deployment apiv0.DeploymentSummaryResponse
 			Style("color", "var(--accent)").
 			Text("current"))
 	}
-	body = append(body, app.Button().
-		Attr("data-deployment-download", fmt.Sprint(deployment.Number)).
-		Title(fmt.Sprintf("Download deployment %d as a project file", deployment.Number)).
-		Style("margin-left", "8px").
-		Style("padding", "1px 7px").
-		Style("font-size", "11px").
-		Style("cursor", "pointer").
-		Style("border", "1px solid var(--border-input)").
-		Style("border-radius", "4px").
-		Style("background", "var(--bg)").
-		Style("color", "var(--text)").
-		Text("Download").
-		OnClick(func(ctx app.Context, e app.Event) {
+	body = append(body, uiutil.Button("Download", "", true,
+		fmt.Sprintf("Download deployment %d as a project file", deployment.Number),
+		uiutil.ButtonRow,
+		func(ctx app.Context, e app.Event) {
 			e.Call("stopPropagation")
 			e.StopImmediatePropagation()
 			p.downloadDeploymentProjectFile(ctx, deployment.Number)
-		}))
+		}, app.EventScope("download-deployment/"+fmt.Sprint(deployment.Number))).
+		Attr("data-deployment-download", fmt.Sprint(deployment.Number)).
+		Style("margin-left", "8px"))
 	row := app.Div().
 		Attr("data-deployment-row", fmt.Sprint(deployment.Number)).
 		Style("display", "flex").

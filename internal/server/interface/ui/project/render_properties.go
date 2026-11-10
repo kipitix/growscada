@@ -282,6 +282,9 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 			styled = styled.Style("flex", "1").Style("min-width", "0")
 		}
 
+		// An icon inside the input's box: absolute, borderless and
+		// transparent, unlike any page/bar/row action, so it stays outside
+		// uiutil.Button (task 80).
 		resetBtn := app.Button().
 			Style("position", "absolute").
 			Style("right", "3px").
@@ -766,22 +769,15 @@ func (p *Project) renderWidgetProperties(w apiv0.WidgetResponse) app.UI {
 	deleteBtn := app.Div().
 		Style("padding-top", "4px").
 		Body(
-			app.Button().
-				Style("width", "100%").
-				Style("padding", "5px 0").
-				Style("font-size", "12px").
-				Style("cursor", "pointer").
-				Style("border", "1px solid var(--error-border)").
-				Style("border-radius", "3px").
-				Style("background", "var(--error-bg)").
-				Style("color", "var(--error)").
-				Text("Delete Widget").
-				OnClick(func(ctx app.Context, e app.Event) {
+			uiutil.Button("Delete Widget", "error", true, "Delete the selected Widget from the Scene",
+				uiutil.ButtonSmall,
+				func(ctx app.Context, e app.Event) {
 					if !app.Window().Call("confirm", "Are you sure you want to delete this widget?").Bool() {
 						return
 					}
 					p.deleteWidget(ctx, wid)
-				}, app.EventScope(scope)),
+				}, app.EventScope(scope)).
+				Style("width", "100%"),
 		)
 
 	return app.Div().Body(

@@ -223,17 +223,8 @@ func (l *Library) renderInputPortsColumn() app.UI {
 						app.Span().Style("color", "var(--text-muted)").Style("margin-left", "4px").Text("("+typeLabel+")"),
 						app.Div().Style("font-size", "11px").Style("color", "var(--text-muted)").Text(desc),
 					),
-				app.Button().
-					Style("font-size", "11px").
-					Style("padding", "1px 6px").
-					Style("cursor", "pointer").
-					Style("border", "1px solid var(--border-input)").
-					Style("border-radius", "3px").
-					Style("background", "var(--bg-hover)").
-					Style("color", "var(--text)").
-					Text("✕").
-					Disabled(disabled).
-					OnClick(func(ctx app.Context, e app.Event) {
+				uiutil.Button("✕", "", !disabled, "Remove this input port", uiutil.ButtonRow,
+					func(ctx app.Context, e app.Event) {
 						ports := make([]apiv0.InputPort, 0, len(l.edit.ports)-1)
 						for j, pp := range l.edit.ports {
 							if j != idx {
@@ -241,7 +232,7 @@ func (l *Library) renderInputPortsColumn() app.UI {
 							}
 						}
 						l.edit.ports = ports
-					}),
+					}, app.EventScope("port/"+itoa(idx))),
 			)
 		portRows = append(portRows, row)
 	}
@@ -311,18 +302,8 @@ func (l *Library) renderInputPortsColumn() app.UI {
 					l.newPortType = ctx.JSSrc().Get("value").String()
 				}).
 				Body(typeOptions...),
-			app.Button().
-				Style("font-size", "12px").
-				Style("padding", "3px 8px").
-				Style("cursor", "pointer").
-				Style("border", "1px solid var(--border-input)").
-				Style("border-radius", "3px").
-				Style("background", "var(--bg-hover)").
-				Style("color", "var(--text)").
-				Style("align-self", "flex-start").
-				Text("+ Add Port").
-				Disabled(disabled).
-				OnClick(func(ctx app.Context, e app.Event) {
+			uiutil.Button("+ Add Port", "", !disabled, "Add the input port above", uiutil.ButtonPage,
+				func(ctx app.Context, e app.Event) {
 					name := strings.TrimSpace(l.newPortName)
 					if name == "" || !uiutil.IsValidJSIdentifier(name) {
 						return
@@ -341,7 +322,7 @@ func (l *Library) renderInputPortsColumn() app.UI {
 					l.newPortName = ""
 					l.newPortDesc = ""
 					l.newPortType = ""
-				}),
+				}).Style("align-self", "flex-start"),
 		)
 
 	portList := make([]app.UI, 0, len(portRows)+1)
@@ -454,21 +435,8 @@ func (l *Library) renderInputDataColumn() app.UI {
 }
 
 func (l *Library) renderApplyButton() app.UI {
-	btn := app.Button().
-		Style("margin-top", "4px").
-		Style("padding", "4px 12px").
-		Style("font-size", "13px").
-		Style("border", "1px solid var(--border-input)").
-		Style("border-radius", "4px").
-		Style("align-self", "flex-end").
-		Style("background", "var(--bg-hover)").
-		Style("color", "var(--text)").
-		Text("Apply").
-		OnClick(func(ctx app.Context, e app.Event) {
+	return uiutil.Button("Apply", "", l.selectedID != uuid.Nil, "Apply the changes to the WidgetType", uiutil.ButtonPage,
+		func(ctx app.Context, e app.Event) {
 			l.applyChanges(ctx)
-		})
-	if l.selectedID == uuid.Nil {
-		return btn.Style("opacity", "0.4").Style("cursor", "default").Disabled(true)
-	}
-	return btn.Style("cursor", "pointer")
+		}).Style("margin-top", "4px").Style("align-self", "flex-end")
 }

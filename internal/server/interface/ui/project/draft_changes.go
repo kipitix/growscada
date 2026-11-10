@@ -160,19 +160,9 @@ func (p *Project) redoTitle() string {
 // draftChangeButton is one of the two: attr names it for the tests and the
 // browser, title is its hover text.
 func (p *Project) draftChangeButton(label, attr, title string, enabled bool, onClick func(app.Context)) app.UI {
-	return app.Button().
-		Attr(attr, "true").
-		Title(title).
-		Disabled(!enabled).
-		Style("padding", "2px 9px").
-		Style("font-size", "12px").
-		Style("cursor", "pointer").
-		Style("border", "1px solid var(--border-input)").
-		Style("border-radius", "4px").
-		Style("background", "var(--bg)").
-		Style("color", "var(--text)").
-		Text(label).
-		OnClick(func(ctx app.Context, e app.Event) { onClick(ctx) }, app.EventScope(label))
+	return uiutil.Button(label, "", enabled, title, uiutil.ButtonBar,
+		func(ctx app.Context, e app.Event) { onClick(ctx) }, app.EventScope(label)).
+		Attr(attr, "true")
 }
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────

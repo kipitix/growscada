@@ -113,9 +113,11 @@ func (l *Library) renderLibraryStatus() app.UI {
 				Style("color", "var(--text-muted)").
 				Text(status),
 			barButton("Discard", lib.LatestCommit > 0, "error",
-				"Reset the Draft to its last Commit, dropping the unsaved changes", l.discard),
+				"Reset the Draft to its last Commit, dropping the unsaved changes", l.discard,
+				app.EventScope("discard")),
 			barButton("Revert", lib.LatestRelease > 0, "",
-				"Reset the Draft to its latest Release, the published state", l.revert),
+				"Reset the Draft to its latest Release, the published state", l.revert,
+				app.EventScope("revert")),
 		)
 }
 
@@ -207,6 +209,8 @@ func releaseHistoryLabel(r apiv0.LibraryReleaseResponse) string {
 // Author, time and count, its note edited in place. Clicking it shows its
 // copies read-only (task 72_7).
 func (l *Library) renderReleaseRow(r apiv0.LibraryReleaseResponse) app.UI {
+	// A bare inline action: it borrows the browser's own button look, so it
+	// carries no palette of its own.
 	note := app.Button().
 		Attr("data-release-note", itoa(r.Number)).
 		Style("padding", "0 6px").
