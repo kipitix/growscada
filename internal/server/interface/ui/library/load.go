@@ -159,13 +159,13 @@ func (l *Library) loadUnsavedChanges(ctx app.Context) {
 		return
 	}
 	mark := l.markDraft()
-	uiutil.LoadFor(l.compoCtx, &l.unsavedReloader, l.draft,
+	uiutil.LoadForGone(l.compoCtx, &l.unsavedReloader, l.draft,
 		func(c context.Context, lib *apiclient.LibraryClient) (apiv0.DraftStateResponse, error) {
 			return lib.DraftState(c)
 		},
 		func(ctx app.Context, _ *apiclient.LibraryClient, state apiv0.DraftStateResponse) {
 			l.applyDraftState(mark, state)
-		}, l.loadUnsavedChanges)
+		}, l.libraryGone, l.loadUnsavedChanges)
 }
 
 // loadReleases (re)loads the releases of the selected library.
