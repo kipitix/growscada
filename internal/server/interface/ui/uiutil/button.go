@@ -24,8 +24,9 @@ const (
 // the row's identity, so a reused element does not keep the handler of the row
 // it showed before (app.EventScope).
 //
-// It is the one place the palette and the disabled state of the UI's buttons
-// live (task 77).
+// The palette and the disabled state of the picker's and the Library's buttons
+// live here alone (task 77); the Project mode's builders still carry their own
+// copies of both.
 func Button(text, kind string, enabled bool, title string, layout ButtonLayout, onClick func(app.Context, app.Event), options ...app.EventOption) app.UI {
 	border, bg, fg := buttonColors(kind)
 	b := app.Button().
