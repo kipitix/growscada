@@ -1,5 +1,19 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.90] - 2026-11-10
+
+### Fixed
+
+- **404 выбранной Library возвращает вкладку на страницу выбора** (задача 76)
+  - `uiutil.ActionLibraryGone` (`uiutil/call.go`, значение — ID библиотеки): действие, которое шлёт чтение выбранной Library, получившее 404; `Root.OnMount` обрабатывает его рядом с `uiutil.ActionProjectGone`
+  - `ui/library`: `libraryGone` больше не сбрасывает выбор внутри компонента, а шлёт действие; `loadCommits` и `loadDraftChanges` переведены на `uiutil.LoadForGone` (у `loadDraftChanges` `mark` по-прежнему берётся до запроса, защита `applyDraftChanges` от отставшего ответа не изменилась), так что 404 любого из чтений — Draft'а, состояния Draft'а, стека DraftChange, Commit'ов и Releases — уходит в действие, а не в тост; 404 команд (`commit_not_found`, `release_not_found`, `widget_type_not_found`) остаются своими ошибками и редактор не покидают
+  - `root`: общий хелпер `Root.entityGone(mode, id)` — проверка, что это всё ещё показанная сущность, `selectEntity(mode, uuid.Nil, "")`, `showListPage` (страница выбора видна, её список перечитывается через `picker.Reload`); им пользуются оба обработчика, поэтому и удалённый Project теперь перечитывает список, а не только показывает страницу; комментарии `OnMount` и `renderBackBar` говорят об этом
+  - Стухший ключ `library:selectedLibrary` (и `project:projectID`) закрывается тем же путём: вкладка открывает редактор, первое чтение получает 404, действие возвращает на страницу, ключ чистит `selectLibrary(nil)`/`selectNone` через `uiutil.StoreID`
+  - `ui/uitest`: `LoadWatching`/`TakeActions` записывают действия, которые видит хост, чтобы компонент проверялся по факту, который он сообщает родителю; `ui/library` — 404 любого из пяти чтений шлёт `ActionLibraryGone` с ID библиотеки и без тоста, 404 команды оставляет редактор с ошибкой сервера; `ui/root` — оба режима по `ActionProjectGone`/`ActionLibraryGone` уходят на страницу, а отставший 404 уже покинутой сущности ничего не меняет
+  - `AGENTS.md`: возврат на страницу выбора при удалённой или найденной исчезнувшей сущности описан для Project и Library
+  - REST, контракт, схемы и Bruno не менялись
+  - Проверки: `make build`, `make test`, `make bruno_test` (853/853 и 14/14), ручной обход PWA (стухший `library:selectedLibrary` и Library, удалённая в другой вкладке, возвращают на страницу с актуальным списком, удалённой строки нет, `← Список` и выбор другой Library работают, Project как раньше); консоль без ошибок задачи
+
 ## [0.0.89] - 2026-11-10
 
 ### Fixed
