@@ -1,5 +1,19 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.89] - 2026-11-10
+
+### Fixed
+
+- **Бейдж «Unsaved changes» исчезает после Discard к последнему Commit** (задача 74; ADR 0016, ADR 0021)
+  - Домен `draft`: у `Draft` появляется **Clean Version** — `CleanVersion()` и `HasUnsavedChanges()` (`Version > CleanVersion`), `WithCleanVersion`; `Repository.SaveCommit` отказывает `nothing_to_save` на чистой версии и сам ставит маркер, `Repository.Replace` получает признак «записанное содержимое равно последнему Commit'у» и ставит маркер только при нём
+  - Миграция `engineering/20261113000000_draft_clean_version`: `engineering.drafts.clean_version INTEGER NOT NULL DEFAULT 0` с бэкфиллом `clean_version = version` там, где Draft стоял на версии последнего Commit'а; репозиторий читает и пишет маркер (`selectDraftColumns`, `draftOf`, `SaveCommit`, `Replace`)
+  - Application: `ProjectService.draftState` и `LibraryService.releaseState`/`DraftState` читают флаг из строки Draft'а (`FindLastCommit` для флага больше не нужен); `library.ReleaseStateOf` принимает готовый флаг; `CreateLibrary` отдаёт `has_unsaved_changes: false` (новорождённая библиотека — «never saved»); `DiscardService.Discard` чист, `Revert` — только при равенстве содержимого документу последнего Commit'а и без warnings; `LibraryService.Discard` чист, `RevertToLatestRelease` — только если последний Release опубликовал последний Commit (сравнение копий WidgetTypes); `ProjectFileService.Open` маркер не трогает (принятое ограничение: после Open флаг «грязный»)
+  - API **0.32 → 0.33** (MINOR): `DraftStateResponse` получает `has_unsaved_changes` — `GET …/draft` обоих, ответы `discard`/`revert-to-release` библиотеки и `Open` проекта; в `Problem.draft` значим только `version`; `make schemas`
+  - UI: `cleanDraftVersion` и сравнение версий убраны из обоих редакторов — Save, «Unsaved changes»/«Saved», строка статуса и `Ctrl+S` рисуют серверный флаг; `loadDraftState` читается на mount, на resync, после каждой команды и после каждого события содержимого (последнее — только флаг: версия показанного содержимого не поднимается, иначе запись устаревшего содержимого перестала бы ловить конфликт); `doDiscard`/`doRevert` ничего не выставляют, `releaseStateOf` не подменяет серверный флаг локальным; `ui/picker` не изменился
+  - Bruno: `get_draft`, `get_library_draft`, `post_library_discard`, `post_library_revert_to_release` проверяют `has_unsaved_changes`
+  - Тесты: домен (переходы флага при записи, Save, Undo, `WithCleanVersion`), репозиторий (маркер после Save/Discard, `nothing_to_save` после Discard, нечистая замена), application (флаг у «не писали»/«писали»/«сохранили»/«Discarded»/«Reverted»/«Discard с warnings», новорождённая библиотека, Revert к старому Release — грязно), UI (бейдж и Save после Save/Discard/Revert и после чужого Discard), `TestPicker_LibraryStates` — все пять состояний
+  - Проверки: `make build`, `make test`, `make bruno_test`, `make schemas`
+
 ## [0.0.88] - 2026-11-09
 
 ### Added
