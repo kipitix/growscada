@@ -188,16 +188,3 @@ func (s projectServiceImpl) draftState(ctx context.Context, projectID id.ID[proj
 		HasUnsavedChanges: foundDraft.HasUnsavedChanges(),
 	}, nil
 }
-
-// descriptionOf parses an optional description stated by a client: nil keeps
-// current, a pointer to a string replaces it (an empty one clears it).
-func descriptionOf(stated *string, current description.Description) (description.Description, error) {
-	if stated == nil {
-		return current, nil
-	}
-	desc, err := description.New(*stated)
-	if err != nil {
-		return description.Description{}, invalidInput(err)
-	}
-	return desc, nil
-}

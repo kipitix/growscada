@@ -8,6 +8,7 @@ import (
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
 func itoa(n int) string { return strconv.Itoa(n) }
@@ -251,57 +252,22 @@ func (l *Library) renderReleaseRow(r apiv0.LibraryReleaseResponse) app.UI {
 
 // ── Buttons ───────────────────────────────────────────────────────────────────
 
-// barButton renders one action of the header; kind "accent", "error" or ""
-// picks its colours, title is its hover text. options go to the click handler:
-// a button of a list gives it the row's identity, so a reused element does not
-// keep the handler of the row it showed before (app.EventScope).
+// barButton renders one action of the header in its compact layout; kind
+// "accent", "error" or "" picks its colours, title is its hover text. options
+// go to the click handler: a button of a list gives it the row's identity, so
+// a reused element does not keep the handler of the row it showed before
+// (app.EventScope).
 func barButton(text string, enabled bool, kind, title string, onClick func(), options ...app.EventOption) app.UI {
-	border, bg, fg := "var(--border-input)", "var(--bg-hover)", "var(--text)"
-	switch kind {
-	case "accent":
-		border, bg, fg = "var(--accent-border)", "var(--accent-bg)", "var(--accent)"
-	case "error":
-		border, bg, fg = "var(--error-border)", "var(--error-bg)", "var(--error)"
-	}
-	b := app.Button().
-		Title(title).
-		Style("padding", "2px 9px").
-		Style("font-size", "12px").
-		Style("border", "1px solid "+border).
-		Style("border-radius", "4px").
-		Style("background", bg).
-		Style("color", fg).
-		Text(text)
-	if !enabled {
-		return b.Style("opacity", "0.4").Style("cursor", "default").Disabled(true)
-	}
-	return b.Style("cursor", "pointer").OnClick(func(ctx app.Context, e app.Event) { onClick() }, options...)
+	return uiutil.Button(text, kind, enabled, title, uiutil.ButtonBar,
+		func(app.Context, app.Event) { onClick() }, options...)
 }
 
-// smallButton renders a button of the dialogs; kind "accent", "error" or ""
-// picks its colours, title is its hover text. options go to the click handler:
-// a button of a list gives it the row's identity, so a reused element does not
-// keep the handler of the row it showed before (app.EventScope).
+// smallButton renders a button of the dialogs in their shared-width layout;
+// kind "accent", "error" or "" picks its colours, title is its hover text.
+// options go to the click handler: a button of a list gives it the row's
+// identity, so a reused element does not keep the handler of the row it showed
+// before (app.EventScope).
 func smallButton(text string, enabled bool, kind, title string, onClick func(), options ...app.EventOption) app.UI {
-	border, bg, fg := "var(--border-input)", "var(--bg-hover)", "var(--text)"
-	switch kind {
-	case "accent":
-		border, bg, fg = "var(--accent-border)", "var(--accent-bg)", "var(--accent)"
-	case "error":
-		border, bg, fg = "var(--error-border)", "var(--error-bg)", "var(--error)"
-	}
-	b := app.Button().
-		Title(title).
-		Style("flex", "1").
-		Style("padding", "4px 0").
-		Style("font-size", "13px").
-		Style("border", "1px solid "+border).
-		Style("border-radius", "4px").
-		Style("background", bg).
-		Style("color", fg).
-		Text(text)
-	if !enabled {
-		return b.Style("opacity", "0.4").Style("cursor", "default").Disabled(true)
-	}
-	return b.Style("cursor", "pointer").OnClick(func(ctx app.Context, e app.Event) { onClick() }, options...)
+	return uiutil.Button(text, kind, enabled, title, uiutil.ButtonSmall,
+		func(app.Context, app.Event) { onClick() }, options...)
 }

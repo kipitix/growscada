@@ -391,14 +391,15 @@ func (p *Picker) renderRow(item Item) app.UI {
 	id := item.ID
 	badges := []app.UI{}
 	if item.State != "" {
+		color, border := stateBadge(item.StateKind)
 		badges = append(badges, app.Span().
 			Attr("data-picker-state", item.StateKind).
 			Style("font-size", "10px").
 			Style("padding", "1px 6px").
 			Style("border-radius", "8px").
 			Style("white-space", "nowrap").
-			Style("color", stateColor(item.StateKind)).
-			Style("border", "1px solid "+stateBorder(item.StateKind)).
+			Style("color", color).
+			Style("border", "1px solid "+border).
 			Text(item.State))
 	}
 	description := app.Div().
@@ -528,48 +529,22 @@ func (p *Picker) renderDialog() app.UI {
 		)
 }
 
-// button renders one action of the page; kind "accent", "error" or "" picks
-// its colours. options scope the handler to the row it belongs to.
+// button renders one action of the page in the layout of its rows; kind
+// "accent", "error" or "" picks its colours. options scope the handler to the
+// row it belongs to.
 func button(label, kind string, enabled bool, title string, onClick func(app.Context), options ...app.EventOption) app.UI {
-	border, bg, fg := "var(--border-input)", "var(--bg-hover)", "var(--text)"
-	switch kind {
-	case "accent":
-		border, bg, fg = "var(--accent-border)", "var(--accent-bg)", "var(--accent)"
-	case "error":
-		border, bg, fg = "var(--error-border)", "var(--error-bg)", "var(--error)"
-	}
-	b := app.Button().
-		Title(title).
-		Style("padding", "3px 10px").
-		Style("font-size", "12px").
-		Style("border", "1px solid "+border).
-		Style("border-radius", "4px").
-		Style("background", bg).
-		Style("color", fg).
-		Text(label)
-	if !enabled {
-		return b.Style("opacity", "0.5").Style("cursor", "default").Disabled(true)
-	}
-	return b.Style("cursor", "pointer").OnClick(func(ctx app.Context, e app.Event) { onClick(ctx) }, options...)
+	return uiutil.Button(label, kind, enabled, title, uiutil.ButtonPage,
+		func(ctx app.Context, _ app.Event) { onClick(ctx) }, options...)
 }
 
-// stateColor is the text colour of a badge.
-func stateColor(kind string) string {
+// stateBadge is the text colour and the border colour of a state's badge: the
+// one place its palette lives.
+func stateBadge(kind string) (color, border string) {
 	switch kind {
 	case "unsaved", "unpublished":
-		return "var(--toast-warn-title)"
+		return "var(--toast-warn-title)", "var(--toast-warn-border)"
 	default:
-		return "var(--text-muted)"
-	}
-}
-
-// stateBorder is the border colour of a badge.
-func stateBorder(kind string) string {
-	switch kind {
-	case "unsaved", "unpublished":
-		return "var(--toast-warn-border)"
-	default:
-		return "var(--border)"
+		return "var(--text-muted)", "var(--border)"
 	}
 }
 
