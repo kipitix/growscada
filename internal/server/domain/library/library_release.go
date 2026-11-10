@@ -174,8 +174,9 @@ type ReleaseState struct {
 	// LatestReleaseCommit is the Commit the latest Release published; 0 for no
 	// Release and for a legacy one.
 	LatestReleaseCommit int
-	// UnsavedChanges reports whether the Draft moved since its last Commit:
-	// Version of the Draft above the one the last Commit fixed.
+	// UnsavedChanges reports whether the Draft moved since its content last
+	// equalled its last Commit: the Draft's own flag (ADR 0016, amendment
+	// 2026-11-10).
 	UnsavedChanges bool
 	// UnpublishedChanges reports whether the last Commit is newer than the one
 	// the latest Release published.
@@ -183,12 +184,12 @@ type ReleaseState struct {
 }
 
 // ReleaseStateOf returns the ReleaseState of a Library whose latest Release is
-// latest (nil for none), whose Draft is at draftVersion and whose last Commit,
-// number lastCommitNumber, fixed lastCommitDraftVersion.
-func ReleaseStateOf(latest LibraryRelease, lastCommitNumber, draftVersion, lastCommitDraftVersion int) ReleaseState {
+// latest (nil for none) and whose last Commit, number lastCommitNumber, is
+// published or not; unsavedChanges is the Draft's own unsaved-changes flag.
+func ReleaseStateOf(latest LibraryRelease, lastCommitNumber int, unsavedChanges bool) ReleaseState {
 	state := ReleaseState{
 		LatestCommit:   lastCommitNumber,
-		UnsavedChanges: draftVersion > lastCommitDraftVersion,
+		UnsavedChanges: unsavedChanges,
 	}
 	if latest != nil {
 		state.Latest = latest.Number()

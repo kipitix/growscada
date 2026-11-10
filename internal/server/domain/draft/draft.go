@@ -21,7 +21,8 @@ import (
 // over this row (ADR 0016).
 //
 // Draft is immutable: every change returns a new Draft. A content change
-// keeps the Version; the repository raises it once when it stores the change.
+// keeps the Version; the repository raises it once when it stores the change,
+// and a Save or a reset to a Commit's content moves the Clean Version with it.
 type Draft interface {
 	ID() id.ID[Draft]
 	// Scope is the Project or the Library the Draft belongs to; it never
@@ -30,6 +31,15 @@ type Draft interface {
 	// Version is the Version of the Draft's content: the token every write
 	// of it states and raises.
 	Version() version.Version[Draft]
+	// CleanVersion is the Version at which the Draft's content last equalled
+	// its last Commit's: a Save puts the Draft there, and so does a reset whose
+	// target is that content (ADR 0016, amendment 2026-11-10). 0 for a Draft
+	// whose content never equalled a Commit's — one never saved.
+	CleanVersion() version.Version[Draft]
+	// HasUnsavedChanges reports whether the Draft's Version is above its Clean
+	// Version: its content moved since it last equalled its last Commit. A
+	// Draft never written has no Version above its Clean one, so it is clean.
+	HasUnsavedChanges() bool
 	// StackPosition is the number of DraftChanges applied; the next undo
 	// steps back from it.
 	StackPosition() int
@@ -37,6 +47,9 @@ type Draft interface {
 	// WithVersion returns the Draft at the given Version: what the repository
 	// stores and answers after a write.
 	WithVersion(version.Version[Draft]) Draft
+	// WithCleanVersion returns the Draft at the given Clean Version: what a
+	// Save and a reset to a Commit's content store.
+	WithCleanVersion(version.Version[Draft]) Draft
 	// WithStackPosition returns the Draft at the given stack position.
 	WithStackPosition(position int) Draft
 
@@ -56,24 +69,37 @@ type draftImpl struct {
 	id            id.ID[Draft]
 	scope         Scope
 	version       version.Version[Draft]
+	cleanVersion  version.Version[Draft]
 	stackPosition int
 }
 
 var _ Draft = (*draftImpl)(nil)
 
-// NewDraft returns the Draft of scope at anID, at the given Version and stack
-// position.
-func NewDraft(anID id.ID[Draft], scope Scope, aVersion version.Version[Draft], stackPosition int) Draft {
-	return &draftImpl{id: anID, scope: scope, version: aVersion, stackPosition: stackPosition}
+// NewDraft returns the Draft of scope at anID, at the given Version, Clean
+// Version and stack position.
+func NewDraft(anID id.ID[Draft], scope Scope, aVersion, aCleanVersion version.Version[Draft], stackPosition int) Draft {
+	return &draftImpl{id: anID, scope: scope, version: aVersion, cleanVersion: aCleanVersion, stackPosition: stackPosition}
 }
 
 func (d *draftImpl) ID() id.ID[Draft]                { return d.id }
 func (d *draftImpl) Scope() Scope                    { return d.scope }
 func (d *draftImpl) Version() version.Version[Draft] { return d.version }
-func (d *draftImpl) StackPosition() int              { return d.stackPosition }
+func (d *draftImpl) CleanVersion() version.Version[Draft] {
+	return d.cleanVersion
+}
+func (d *draftImpl) HasUnsavedChanges() bool {
+	return d.version.Number() > d.cleanVersion.Number()
+}
+func (d *draftImpl) StackPosition() int { return d.stackPosition }
 func (d *draftImpl) WithVersion(v version.Version[Draft]) Draft {
 	copied := *d
 	copied.version = v
+	return &copied
+}
+
+func (d *draftImpl) WithCleanVersion(v version.Version[Draft]) Draft {
+	copied := *d
+	copied.cleanVersion = v
 	return &copied
 }
 

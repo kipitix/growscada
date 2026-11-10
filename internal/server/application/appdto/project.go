@@ -19,18 +19,22 @@ type Project struct {
 }
 
 // ProjectDraftState is what a Project's Draft tells of it: the Version of the
-// Draft and the one the last Commit fixed (ADR 0016, ADR 0021).
+// Draft and whether it holds changes its last Commit does not (ADR 0016,
+// ADR 0021; task 74).
 type ProjectDraftState struct {
 	// DraftVersion is 0 for a Draft never written: there is nothing to save.
 	DraftVersion int
-	// LastCommitDraftVersion is 0 for a Draft never saved.
-	LastCommitDraftVersion int
+	// HasUnsavedChanges is the Draft's own flag: its Version is above its
+	// Clean Version (ADR 0016, amendment 2026-11-10).
+	HasUnsavedChanges bool
 }
 
-// DraftState is the state of a Project's Draft after a Discard: the Version
-// every content DTO of the Project now carries (ADR 0016).
+// DraftState is the state of a Draft: the Version every content DTO of the
+// Project or Library now carries (ADR 0016) and whether it holds changes its
+// last Commit does not (task 74).
 type DraftState struct {
-	Version int
+	Version           int
+	HasUnsavedChanges bool
 }
 
 // DraftChanges is the state of a Draft's DraftChange stack (ADR 0017): the
@@ -61,7 +65,7 @@ func NewProject(p project.Project, state ProjectDraftState) Project {
 		Name:              p.Name().String(),
 		Description:       p.Description().String(),
 		Version:           p.Version().Number(),
-		HasUnsavedChanges: state.DraftVersion > state.LastCommitDraftVersion,
+		HasUnsavedChanges: state.HasUnsavedChanges,
 	}
 }
 

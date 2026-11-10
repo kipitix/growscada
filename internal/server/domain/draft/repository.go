@@ -34,8 +34,12 @@ type Repository interface {
 	// Replace runs a write that replaces the whole content of the Draft
 	// (Discard, ADR 0016): it writes the rows change touched, clears the
 	// DraftChanges and the stack and commits, with no DraftChange of its own.
-	// Returns the Draft as stored.
-	Replace(ctx context.Context, scope Scope, change func(*Session) error) (Draft, error)
+	// clean tells whether the content change writes is the content of the
+	// Draft's last Commit: the Clean Version then becomes the new Version, as a
+	// Save puts it there. Otherwise the marker is untouched, so the raised
+	// Version stays above it and the Draft reports unsaved changes (ADR 0016,
+	// amendment 2026-11-10). Returns the Draft as stored.
+	Replace(ctx context.Context, scope Scope, clean bool, change func(*Session) error) (Draft, error)
 
 	// Purge removes the whole content of the Draft of a deleted Project
 	// (ADR 0006), with no DraftChange.
@@ -66,12 +70,13 @@ type Repository interface {
 
 	// SaveCommit fixes the Draft as a Commit (task 72_2; ADR 0021): it locks
 	// the Draft's row, checks expected — a stale Version is a ConflictError —,
-	// refuses a Draft at the Version of its last Commit (ErrNothingToSave),
-	// numbers the Commit after the last one, writes it with the pins of its
-	// ProjectFile and raises last_commit_number and last_commit_draft_version.
-	// content is assembled by the caller from the Draft at expected (a
-	// ProjectFile or a Library's WidgetTypes); no DraftChange is written and
-	// the Version is not raised.
+	// refuses a Draft at its Clean Version (ErrNothingToSave: there is nothing
+	// the last Commit does not hold already), numbers the Commit after the last
+	// one, writes it with the pins of its ProjectFile, raises
+	// last_commit_number and last_commit_draft_version and makes expected the
+	// Clean Version (ADR 0016, amendment 2026-11-10). content is assembled by
+	// the caller from the Draft at expected (a ProjectFile or a Library's
+	// WidgetTypes); no DraftChange is written and the Version is not raised.
 	SaveCommit(ctx context.Context, scope Scope, expected version.Version[Draft], title CommitTitle, author Author, content CommitContent) (Commit, error)
 
 	// RenameCommit changes the title of the Commit number of the Draft and

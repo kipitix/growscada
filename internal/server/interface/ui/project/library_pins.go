@@ -60,6 +60,7 @@ func (p *Project) addPin(libraryID uuid.UUID) {
 		p.observeDraftVersion(mark, saved.Version)
 		p.loadPins(ctx)
 		p.loadWidgetTypes(ctx)
+		p.loadDraftState(ctx)
 	}, p.rejectedDraftVersion)
 }
 
@@ -112,6 +113,7 @@ func (p *Project) savePin(content *apiclient.ProjectClient, libraryID uuid.UUID,
 		p.observeDraftVersion(mark, saved.Version)
 		p.loadPins(ctx)
 		p.loadWidgetTypes(ctx)
+		p.loadDraftState(ctx)
 	}, func(ctx app.Context, err error) {
 		// Widgets placed since the preview: the refusal names them.
 		var se *apiclient.StatusError

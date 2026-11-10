@@ -85,6 +85,7 @@ func (p *Project) stepDraftChange(ctx app.Context, undo bool) {
 		// one, which the next write states (the content follows by its events).
 		p.observeDraftVersion(mark, state.Version)
 		p.applyDraftChanges(mark, state)
+		p.loadDraftState(ctx) // the command raised the Version: unsaved again
 		ctx.Update()
 	}, func(ctx app.Context, err error) {
 		p.undoing, p.redoing = false, false
@@ -113,6 +114,7 @@ func (p *Project) rejectedDraftChange(ctx app.Context, err error) {
 		return
 	}
 	uiutil.ShowError(ctx, err)
+	p.loadDraftState(ctx)
 	p.loadDraftChanges(ctx)
 	ctx.Update()
 }

@@ -3,7 +3,6 @@ package restapi
 import (
 	"net/http"
 
-	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 )
 
@@ -29,5 +28,5 @@ func (h DraftHandlers) GetDraft(w http.ResponseWriter, r *http.Request) {
 		sendError(w, r, err)
 		return
 	}
-	sendJSONResponse(w, http.StatusOK, apiv0.DraftStateResponse{Version: state.Version})
+	sendJSONResponse(w, http.StatusOK, newDraftStateResponse(state))
 }

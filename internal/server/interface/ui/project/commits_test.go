@@ -20,8 +20,15 @@ func TestSaveCommit_HistoryRowAndIndicator(t *testing.T) {
 	if !f.p.commitsLoaded {
 		t.Fatal("the history was not loaded")
 	}
+	// A Draft nothing was written to has no unsaved changes and no badge
+	// (task 74; ADR 0016, amendment 2026-11-10).
+	if f.p.hasUnsavedChanges() {
+		t.Fatalf("a Draft nothing was written to reports unsaved changes")
+	}
+	f.p.createScene(f.p.compoCtx)
+	f.run()
 	if !f.p.hasUnsavedChanges() {
-		t.Fatalf("a fresh Draft reports no unsaved changes against no Commit")
+		t.Fatalf("the change after the Commit is not unsaved")
 	}
 	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-commit-unsaved`) {
 		t.Errorf("the header does not mark unsaved changes: %s", html)
@@ -177,9 +184,9 @@ func TestSaveCommit_ConflictRereadsAndRename(t *testing.T) {
 	if got := f.oneToast(); got.Status != 409 {
 		t.Fatalf("a stale Save: toast %+v, want a 409", got)
 	}
-	if f.p.draftVersion() <= f.p.lastCommitVersion() {
+	if len(f.p.commits) == 0 || f.p.draftVersion() <= f.p.commits[0].DraftVersion {
 		t.Errorf("the conflict did not reread the Draft: version %d, last commit %d",
-			f.p.draftVersion(), f.p.lastCommitVersion())
+			f.p.draftVersion(), f.p.commits[0].DraftVersion)
 	}
 	f.p.saveDialog = false
 

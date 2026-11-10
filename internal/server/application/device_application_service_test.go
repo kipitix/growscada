@@ -21,7 +21,8 @@ func cleanDevices(t *testing.T) {
 	t.Helper()
 	if _, err := testDB.ExecContext(context.Background(),
 		`DELETE FROM runtime.deployments; DELETE FROM runtime.tags; DELETE FROM engineering.tags;
-		 DELETE FROM engineering.environment_devices; DELETE FROM engineering.devices; DELETE FROM engineering.environments`); err != nil {
+		 DELETE FROM engineering.environment_devices; DELETE FROM engineering.devices; DELETE FROM engineering.environments;
+		 UPDATE engineering.drafts SET clean_version = 0`); err != nil {
 		t.Fatalf("cleanDevices: %v", err)
 	}
 }

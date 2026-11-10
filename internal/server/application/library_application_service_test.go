@@ -21,8 +21,10 @@ func TestLibraryService_ReleasePublishesACommit(t *testing.T) {
 	ctx := context.Background()
 	svc := newLibraryService()
 	lib := mustCreateLibrary(t)
-	if !lib.HasUnsavedChanges || lib.HasUnpublishedChanges || lib.LatestRelease != 0 || lib.LatestCommit != 0 {
-		t.Errorf("a new library: %+v, want unsaved changes and no commit or release", lib)
+	// A library never written is clean and never saved: no unsaved changes and
+	// no commit or release (task 74; ADR 0016).
+	if lib.HasUnsavedChanges || lib.HasUnpublishedChanges || lib.LatestRelease != 0 || lib.LatestCommit != 0 {
+		t.Errorf("a new library: %+v, want no unsaved changes and no commit or release", lib)
 	}
 	if _, err := svc.Release(ctx, lib.ID, appdto.ReleaseInput{Commit: 7, Author: "Ada"}); !errors.Is(err, draft.ErrCommitNotFound) {
 		t.Errorf("a commit the library does not have: expected ErrCommitNotFound, got %v", err)
@@ -205,11 +207,17 @@ func TestDiscard_ResetsTheDraftToTheLastCommit(t *testing.T) {
 		t.Fatalf("Discard: %v", err)
 	}
 	after, err := r.libSvc.FindLibraryByID(ctx, lib.ID)
-	if err != nil || after.HasUnpublishedChanges {
+	if err != nil || after.HasUnpublishedChanges || after.HasUnsavedChanges {
 		t.Errorf("after the Discard: %+v, %v", after, err)
 	}
-	if state.Version <= 0 {
+	if state.Version <= 0 || state.HasUnsavedChanges {
 		t.Errorf("the Draft state after the Discard: %+v", state)
+	}
+	// The Draft is its last Commit again: there is nothing to save.
+	if _, err := newCommitService().Save(ctx,
+		draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](lib.ID))),
+		libraryDraftVersionOf(t, lib.ID), "After the discard", "Ada"); !errors.Is(err, draft.ErrNothingToSave) {
+		t.Errorf("a Save after a Discard: %v, want ErrNothingToSave", err)
 	}
 	draft, err := r.wtSvc.FindAllWidgetTypes(ctx, lib.ID)
 	if err != nil {
@@ -264,6 +272,11 @@ func TestRevertToLatestRelease_ResetsTheDraftToTheRelease(t *testing.T) {
 	if state.Version <= 0 {
 		t.Errorf("the Draft state after the Revert: %+v", state)
 	}
+	// The latest Release published an older Commit: the Draft is that
+	// Release's content, not its last Commit's, so it is unsaved (task 74).
+	if !state.HasUnsavedChanges {
+		t.Errorf("the Draft after a Revert to an older Release: %+v, want unsaved changes", state)
+	}
 	names := func() map[uuid.UUID]bool {
 		t.Helper()
 		list, err := wtSvc.FindAllWidgetTypes(ctx, lib.ID)
@@ -285,11 +298,15 @@ func TestRevertToLatestRelease_ResetsTheDraftToTheRelease(t *testing.T) {
 
 	// Discard, unlike Revert, goes to the last Commit: the unpublished type
 	// comes back.
-	if _, err := libSvc.Discard(ctx, lib.ID); err != nil {
+	discarded, err := libSvc.Discard(ctx, lib.ID)
+	if err != nil {
 		t.Fatalf("Discard: %v", err)
 	}
 	if got := names(); !got[published.ID] || !got[unpublished.ID] {
 		t.Errorf("the Draft after the Discard: %v, want the last Commit", got)
+	}
+	if discarded.HasUnsavedChanges {
+		t.Errorf("the Draft after the Discard: %+v, want it clean", discarded)
 	}
 }
 

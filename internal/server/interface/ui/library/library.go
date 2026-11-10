@@ -51,6 +51,9 @@ type Library struct {
 	// draftStateReloader loads the Draft's Version when the WidgetTypes carry
 	// none: the Draft of a library without one.
 	draftStateReloader uiutil.Reloader
+	// unsavedReloader loads the Draft's unsaved-changes flag on the events of
+	// its content alone, never raising the known Version (task 74).
+	unsavedReloader uiutil.Reloader
 	// ── Commits (task 72_2; ADR 0021) ──────────────────────────────────────
 	// commits is the history of the selected library's Draft, newest first;
 	// commitsLoaded is false until its first answer. saveDialog is true while
@@ -69,11 +72,14 @@ type Library struct {
 	// place (0: none), renameCommitTitle the text of the editor.
 	renamingCommit    int
 	renameCommitTitle string
-	// cleanDraftVersion is the Version of the Draft a Discard or a Revert of
-	// this tab just made equal to its last Commit: the unsaved-changes
-	// indicator compares against it too, so the reset leaves nothing unsaved
-	// even though the Version rose (task 72_7). 0: no such reset.
-	cleanDraftVersion int
+	// draftUnsaved is the unsaved-changes flag of the selected library's
+	// Draft, as the server answers it: its Version is above its Clean Version
+	// (ADR 0016, amendment 2026-11-10; task 74). The editor draws it and never
+	// derives it.
+	draftUnsaved bool
+	// draftStateLoaded is false until the first answer of the Draft's state:
+	// the header says nothing about saved changes before it.
+	draftStateLoaded bool
 	// ── Release from a Commit (task 72_7; ADR 0021) ────────────────────────
 	// releaseDialog is true while a Commit is being published, releaseCommit
 	// the Commit of the dialog, releaseNote and releaseAuthor its fields;
@@ -136,6 +142,7 @@ func (l *Library) OnMount(ctx app.Context) {
 	l.loadLibraries(ctx)
 	l.loadList(ctx)
 	l.loadReleases(ctx)
+	l.loadDraftState(ctx)
 	l.loadDraftChanges(ctx)
 	ctx.LocalStorage().Get(uiutil.AuthorKey, &l.saveAuthor)
 	l.loadCommits(ctx)
@@ -296,13 +303,14 @@ func (l *Library) selectLibrary(ctx app.Context, id uuid.UUID) {
 	l.commits, l.commitsLoaded = nil, false
 	l.saveDialog, l.savingCommit, l.commitsDialog = false, false, false
 	l.renamingCommit, l.renameCommitTitle = 0, ""
-	l.cleanDraftVersion = 0
+	l.draftUnsaved, l.draftStateLoaded = false, false
 	l.releaseDialog, l.releasing, l.releaseCommit = false, false, 0
 	l.releasesDialog = false
 	uiutil.StoreID(ctx, libraryIDKey, id)
 	uiutil.StoreID(ctx, selectedIDKey, uuid.Nil)
 	l.loadList(ctx)
 	l.loadReleases(ctx)
+	l.loadDraftState(ctx)
 	l.loadDraftChanges(ctx)
 	l.loadCommits(ctx)
 }

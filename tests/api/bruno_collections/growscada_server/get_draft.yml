@@ -9,10 +9,11 @@ http:
   auth: inherit
 
 docs: |
-  The state of the project's Draft (ADR 0016): its `version`, the one every
-  write of the Draft's content states and every content DTO of the project
-  carries. A project that does not exist answers `404`; a project never
-  written has the version a fresh Draft starts at.
+  The state of the project's Draft (ADR 0016, task 74): its `version`, the one
+  every write of the Draft's content states and every content DTO of the
+  project carries, and `has_unsaved_changes`, the Draft's own flag that its
+  Version is above its Clean Version. A project that does not exist answers
+  `404`; a project never written has the version a fresh Draft starts at.
 
 runtime:
   assertions:
@@ -24,6 +25,8 @@ runtime:
     - expression: 'res.body.version'
       operator: gt
       value: '0'
+    - expression: 'res.body.has_unsaved_changes'
+      operator: isBoolean
 
 settings:
   encodeUrl: true

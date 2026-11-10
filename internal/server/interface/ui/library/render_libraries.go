@@ -58,16 +58,13 @@ func barDivider() app.UI {
 }
 
 // releaseStateOf is one library's Release state (task 72_7; ADR 0021): the
-// Draft changed since its last Commit (the selected one follows this tab's
-// Discard), the last Commit is not published, or the published state is the
-// saved one. The state is a short word for the header and its kind says which.
+// Draft changed since its last Commit (the server's own flag, which the
+// selected one follows too — task 74), the last Commit is not published, or the
+// published state is the saved one. The state is a short word for the header
+// and its kind says which.
 func (l *Library) releaseStateOf(lib apiv0.LibraryResponse) (kind, text string) {
-	unsaved := lib.HasUnsavedChanges
-	if lib.ID == l.libraryID {
-		unsaved = l.hasUnsavedChanges()
-	}
 	switch {
-	case unsaved:
+	case lib.HasUnsavedChanges:
 		return "unsaved", "unsaved changes"
 	case lib.HasUnpublishedChanges:
 		return "unpublished", "unpublished commit"

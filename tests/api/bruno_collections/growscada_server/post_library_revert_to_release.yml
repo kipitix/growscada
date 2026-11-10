@@ -11,7 +11,8 @@ http:
 docs: |
   Reverts the Draft to its latest published Release in one transaction
   (task 72_5; ADR 0016). Discard resets it to the last Commit instead. The
-  Library has releases, so the Revert works.
+  Library has releases, so the Revert works. The Draft is clean — no unsaved
+  changes — only when that Release published its last Commit (task 74).
 
 runtime:
   assertions:
@@ -22,6 +23,8 @@ runtime:
       operator: isDefined
     - expression: 'res.body.version'
       operator: isNumber
+    - expression: 'res.body.has_unsaved_changes'
+      operator: isBoolean
 
 settings:
   encodeUrl: true

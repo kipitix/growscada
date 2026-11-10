@@ -313,25 +313,93 @@ func TestPicker_ReloadsOnServerEvents(t *testing.T) {
 	}
 }
 
-// TestPicker_LibraryStates: the library rows carry the Commit and Release
-// state of LibraryResponse (task 73).
+// TestPicker_LibraryStates: the library rows carry the five states of
+// LibraryResponse: never saved, unsaved changes, an unpublished Commit, a
+// published one, and a legacy Release older than Commits (task 73; task 74).
 func TestPicker_LibraryStates(t *testing.T) {
-	f := start(t, NewLibrarySource, LibraryKey, func(api *apiclient.Client) {
-		if _, err := api.CreateLibrary(context.Background(), apiv0.CreateLibraryRequest{Name: "Widgets", Description: "Shared widgets"}); err != nil {
-			t.Fatalf("create library: %v", err)
-		}
-	})
-	f.run()
-
-	if len(f.p.items) != 1 {
-		t.Fatalf("listed %+v", f.p.items)
+	f := start(t, NewLibrarySource, LibraryKey, nil)
+	ctx := context.Background()
+	created, err := f.api.CreateLibrary(ctx, apiv0.CreateLibraryRequest{Name: "Widgets", Description: "Shared widgets"})
+	if err != nil {
+		t.Fatalf("create library: %v", err)
 	}
-	item := f.p.items[0]
-	if item.Name != "Widgets" || item.Description != "Shared widgets" || item.State != StateUnsavedChanges {
-		t.Errorf("the library row: %+v", item)
+	lib := f.api.Library(created.ID)
+	reload := func() Item {
+		t.Helper()
+		f.p.load(f.p.compoCtx)
+		f.run()
+		if len(f.p.items) != 1 {
+			t.Fatalf("listed %+v", f.p.items)
+		}
+		return f.p.items[0]
+	}
+
+	// A library nothing was written to is clean and never saved: no badge.
+	if item := reload(); item.Name != "Widgets" || item.Description != "Shared widgets" ||
+		item.State != StateNeverSaved || item.StateKind != "new" {
+		t.Fatalf("the new library's row: %+v, want never saved", item)
 	}
 	if f.p.source.Title() != "Libraries" {
 		t.Errorf("the page title: %q", f.p.source.Title())
+	}
+
+	// A write of the Draft is unsaved changes.
+	state, err := lib.DraftState(ctx)
+	if err != nil {
+		t.Fatalf("DraftState: %v", err)
+	}
+	if _, err := lib.CreateWidgetType(ctx, apiv0.CreateWidgetTypeRequest{
+		Name: "gauge", HtmlTemplate: "<div></div>", Script: "function update(){}",
+		ScriptLanguage: "javascript", DefaultWidth: 100, DefaultHeight: 100, Version: state.Version,
+	}); err != nil {
+		t.Fatalf("CreateWidgetType: %v", err)
+	}
+	if item := reload(); item.State != StateUnsavedChanges || item.StateKind != "unsaved" {
+		t.Errorf("after a write: %+v, want unsaved changes", item)
+	}
+
+	// A Save fixes the Commit, nothing published yet.
+	state, err = lib.DraftState(ctx)
+	if err != nil {
+		t.Fatalf("DraftState: %v", err)
+	}
+	commit, err := lib.SaveCommit(ctx, apiv0.CreateCommitRequest{Version: state.Version, Title: "First", Author: "Ada"})
+	if err != nil {
+		t.Fatalf("SaveCommit: %v", err)
+	}
+	if item := reload(); item.State != StateUnpublishedCommit || item.StateKind != "unpublished" {
+		t.Errorf("after a Save: %+v, want an unpublished commit", item)
+	}
+
+	// A Release publishes it.
+	if _, err := lib.Release(ctx, apiv0.CreateReleaseRequest{Commit: commit.Number, Author: "Ada"}); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+	if item := reload(); item.State != StatePublished || item.StateKind != "published" {
+		t.Errorf("after a Release: %+v, want published", item)
+	}
+
+	// A Release older than Commits — a legacy one — is a library whose Draft
+	// has no Commit and one Release.
+	legacyID := uuid.New()
+	if _, err := postgres.DB(t).ExecContext(ctx,
+		`INSERT INTO engineering.libraries (id, organization_id, name, version)
+		 SELECT $1, id, 'Legacy', 1 FROM organizations ORDER BY pk_id LIMIT 1`,
+		legacyID,
+	); err != nil {
+		t.Fatalf("arrange the legacy library: %v", err)
+	}
+	if _, err := postgres.DB(t).ExecContext(ctx,
+		`INSERT INTO engineering.library_releases (library_id, number) VALUES ($1, 1)`,
+		legacyID,
+	); err != nil {
+		t.Fatalf("arrange the legacy release: %v", err)
+	}
+	f.p.load(f.p.compoCtx)
+	f.run()
+	if len(f.p.items) != 2 || f.p.items[0].Name != "Legacy" ||
+		f.p.items[0].State != StateLegacy || f.p.items[0].StateKind != "legacy" {
+		t.Errorf("the legacy library's row: %+v, want it first and legacy", f.p.items)
 	}
 }
 

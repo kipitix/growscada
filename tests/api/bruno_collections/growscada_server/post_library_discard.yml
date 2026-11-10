@@ -10,7 +10,9 @@ http:
 docs: |
   Resets the Draft to its last Commit — dropping the unsaved changes — in one
   transaction over the Draft and answers the Draft's new state (task 72_5;
-  ADR 0016). The latest Release is the target of revert-to-release instead.
+  ADR 0016). The Draft is then its Clean Version: `has_unsaved_changes` is
+  false (task 74). The latest Release is the target of revert-to-release
+  instead.
 
 runtime:
   assertions:
@@ -22,6 +24,9 @@ runtime:
     - expression: 'res.body.version'
       operator: eq
       value: '5'
+    - expression: 'res.body.has_unsaved_changes'
+      operator: eq
+      value: 'false'
 
 settings:
   encodeUrl: true

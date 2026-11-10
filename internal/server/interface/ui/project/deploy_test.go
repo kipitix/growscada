@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
@@ -395,5 +396,36 @@ func TestReleasesDialog_UnknownDeployment(t *testing.T) {
 	}
 	if !strings.Contains(html, `data-release-row="1"`) {
 		t.Errorf("the list is not shown without the Deployment: %s", html)
+	}
+}
+
+// TestDiscard_AnotherTabsDiscardClearsTheBadge: a Discard performed elsewhere
+// arrives as the content events it wrote, and the badge follows the Draft's own
+// state — the flag the server answers —, not anything this tab remembers
+// (task 74; ADR 0016, amendment 2026-11-10).
+func TestDiscard_AnotherTabsDiscardClearsTheBadge(t *testing.T) {
+	f := startProject(t)
+	f.run()
+	f.p.saveAuthor, f.p.saveTitle = "Ada", "First save"
+	f.p.saveCommit(f.p.compoCtx)
+	f.run()
+	f.e.TakeToasts() // the Save's own confirmation
+
+	f.p.createScene(f.p.compoCtx)
+	f.run()
+	if !f.p.hasUnsavedChanges() {
+		t.Fatal("the change after the Commit is not unsaved")
+	}
+
+	if _, err := f.api.Discard(context.Background()); err != nil {
+		t.Fatalf("another tab's Discard: %v", err)
+	}
+	// The events of the Discard reach this tab: the Scene it removed is one.
+	f.event(apiv0.Event{Type: apiv0.EventSceneDeleted, ID: uuid.NewString()})
+	if f.p.hasUnsavedChanges() {
+		t.Errorf("the badge stays after another tab's Discard")
+	}
+	if html := app.HTMLString(f.p.Render()); strings.Contains(html, "data-commit-unsaved") {
+		t.Errorf("the header still marks unsaved changes: %s", html)
 	}
 }

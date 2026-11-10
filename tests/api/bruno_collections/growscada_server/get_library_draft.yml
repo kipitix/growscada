@@ -9,9 +9,10 @@ http:
   auth: inherit
 
 docs: |
-  The Version of the library's Draft: the one every write of its content
-  states and every DTO of it carries (ADR 0016). A Library's own `version` is
-  its lifecycle's (rename and deletion), a different number.
+  The Version of the library's Draft and whether it holds changes its last
+  Commit does not: the one every write of its content states and every DTO of
+  it carries (ADR 0016, task 74). A Library's own `version` is its lifecycle's
+  (rename and deletion), a different number.
 
 runtime:
   assertions:
@@ -23,6 +24,8 @@ runtime:
     - expression: 'res.body.version'
       operator: eq
       value: '1'
+    - expression: 'res.body.has_unsaved_changes'
+      operator: isBoolean
 
 settings:
   encodeUrl: true

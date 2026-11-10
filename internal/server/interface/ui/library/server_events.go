@@ -31,6 +31,7 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 			// Events were lost: the server may have gone back, the stack with
 			// it. Everything the mode shows is read again (task 72_7).
 			l.draftVersions.Forget()
+			l.loadDraftState(ctx)
 			l.loadDraftChanges(ctx)
 			l.loadLibraries(ctx)
 			l.loadList(ctx)
@@ -42,8 +43,10 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 		targets := eventlog.ReloadTargetsFor(ev)
 		// A write of the Draft's content is one DraftChange: the undo and redo
 		// buttons follow the events (ADR 0017), as the release state does. A
-		// Release publishes a Commit and clears no stack (task 72_5).
+		// Release publishes a Commit and clears no stack (task 72_5). The flag
+		// follows every write of the content, the Draft's own state (task 74).
 		if targets.DraftChanged() && mine {
+			l.loadUnsavedChanges(ctx)
 			l.loadDraftChanges(ctx)
 		}
 		if targets.Libraries {
@@ -57,6 +60,7 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 		}
 		if targets.Commits && mine {
 			l.loadCommits(ctx)
+			l.loadUnsavedChanges(ctx) // a Save makes the Draft its Commit's content
 		}
 		// A Library Release names the Commit it published by that Commit's
 		// current title — its own copy carries none —, so a rename changes the

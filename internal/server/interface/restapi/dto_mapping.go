@@ -33,6 +33,12 @@ func newGetProjectsResponse(list []appdto.Project) apiv0.GetProjectsResponse {
 	return apiv0.GetProjectsResponse{Projects: items}
 }
 
+// newDraftStateResponse converts the state of a Draft: its Version and whether
+// it holds changes its last Commit does not (task 74).
+func newDraftStateResponse(state appdto.DraftState) apiv0.DraftStateResponse {
+	return apiv0.DraftStateResponse{Version: state.Version, HasUnsavedChanges: state.HasUnsavedChanges}
+}
+
 // newTagResponse converts an app-level Tag DTO to an apiv0.TagResponse DTO.
 func newTagResponse(t appdto.Tag) apiv0.TagResponse {
 	return apiv0.TagResponse{

@@ -1,0 +1,2846 @@
+{
+  "$defs": {
+    "BrokenBindingResponse": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "port_name": {
+          "type": "string"
+        },
+        "scene_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "tag_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "type_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "widget_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "scene_id",
+        "widget_id",
+        "name",
+        "type_id",
+        "port_name",
+        "tag_id"
+      ],
+      "type": "object"
+    },
+    "CommitContentCounts": {
+      "properties": {
+        "devices": {
+          "type": "integer"
+        },
+        "environments": {
+          "type": "integer"
+        },
+        "scenes": {
+          "type": "integer"
+        },
+        "tags": {
+          "type": "integer"
+        },
+        "widget_types": {
+          "type": "integer"
+        },
+        "widgets": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "scenes",
+        "widgets",
+        "tags",
+        "devices",
+        "environments",
+        "widget_types"
+      ],
+      "type": "object"
+    },
+    "CommitResponse": {
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "content_counts": {
+          "$ref": "#/$defs/CommitContentCounts"
+        },
+        "created_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "draft_version": {
+          "type": "integer"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "number": {
+          "type": "integer"
+        },
+        "released": {
+          "type": "boolean"
+        },
+        "title": {
+          "type": "string"
+        },
+        "widget_types": {
+          "items": {
+            "$ref": "#/$defs/ReleasedWidgetTypeResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "number",
+        "title",
+        "author",
+        "created_at",
+        "draft_version",
+        "released",
+        "content_counts"
+      ],
+      "type": "object"
+    },
+    "CreateCommitRequest": {
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version",
+        "title",
+        "author"
+      ],
+      "type": "object"
+    },
+    "CreateDeviceRequest": {
+      "properties": {
+        "comment": {
+          "type": "string"
+        },
+        "config": {
+          "type": "object"
+        },
+        "name": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "comment",
+        "protocol",
+        "config",
+        "version"
+      ],
+      "type": "object"
+    },
+    "CreateDeviceResponse": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "type": "object"
+    },
+    "CreateEnvironmentRequest": {
+      "properties": {
+        "comment": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "comment",
+        "version"
+      ],
+      "type": "object"
+    },
+    "CreateEnvironmentResponse": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "type": "object"
+    },
+    "CreateLibraryRequest": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "CreateLibraryResponse": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "type": "object"
+    },
+    "CreateProjectReleaseRequest": {
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "integer"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "commit",
+        "author"
+      ],
+      "type": "object"
+    },
+    "CreateProjectRequest": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "CreateProjectResponse": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "type": "object"
+    },
+    "CreateReleaseRequest": {
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "integer"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "commit",
+        "author"
+      ],
+      "type": "object"
+    },
+    "CreateSceneRequest": {
+      "properties": {
+        "background_html": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        },
+        "width": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "width",
+        "height",
+        "background_html"
+      ],
+      "type": "object"
+    },
+    "CreateSceneResponse": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "type": "object"
+    },
+    "CreateTagRequest": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "version"
+      ],
+      "type": "object"
+    },
+    "CreateTagResponse": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "CreateWidgetRequest": {
+      "properties": {
+        "labels": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "$ref": "#/$defs/OriginRequest"
+        },
+        "port_bindings": {
+          "items": {
+            "$ref": "#/$defs/PortBinding"
+          },
+          "type": "array"
+        },
+        "position": {
+          "$ref": "#/$defs/PositionRequest"
+        },
+        "rotation": {
+          "$ref": "#/$defs/RotationRequest"
+        },
+        "size": {
+          "$ref": "#/$defs/SizeRequest"
+        },
+        "type_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "position",
+        "size",
+        "origin",
+        "rotation",
+        "type_id",
+        "version",
+        "labels",
+        "port_bindings"
+      ],
+      "type": "object"
+    },
+    "CreateWidgetResponse": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "type": "object"
+    },
+    "CreateWidgetTypeRequest": {
+      "properties": {
+        "default_height": {
+          "type": "integer"
+        },
+        "default_width": {
+          "type": "integer"
+        },
+        "html_template": {
+          "type": "string"
+        },
+        "input_ports": {
+          "items": {
+            "$ref": "#/$defs/InputPort"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "script": {
+          "type": "string"
+        },
+        "script_language": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version",
+        "name",
+        "html_template",
+        "script",
+        "script_language",
+        "default_width",
+        "default_height",
+        "input_ports"
+      ],
+      "type": "object"
+    },
+    "CreateWidgetTypeResponse": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "type": "object"
+    },
+    "DeployResponse": {
+      "properties": {
+        "deployed_at": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "number",
+        "deployed_at"
+      ],
+      "type": "object"
+    },
+    "Deployment": {
+      "properties": {
+        "cause": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer"
+        },
+        "release_number": {
+          "type": "integer"
+        },
+        "rolled_back_from": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "number",
+        "cause"
+      ],
+      "type": "object"
+    },
+    "DeploymentResponse": {
+      "properties": {
+        "cause": {
+          "type": "string"
+        },
+        "content": {
+          "$ref": "#/$defs/ProjectFile"
+        },
+        "deployed_at": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer"
+        },
+        "release_number": {
+          "type": "integer"
+        },
+        "rolled_back_from": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "number",
+        "deployed_at",
+        "cause",
+        "content"
+      ],
+      "type": "object"
+    },
+    "DeploymentSummaryResponse": {
+      "properties": {
+        "cause": {
+          "type": "string"
+        },
+        "deployed_at": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer"
+        },
+        "release_number": {
+          "type": "integer"
+        },
+        "rolled_back_from": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "number",
+        "deployed_at",
+        "cause"
+      ],
+      "type": "object"
+    },
+    "Device": {
+      "properties": {
+        "comment": {
+          "type": "string"
+        },
+        "config": {
+          "type": "object"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "comment",
+        "protocol",
+        "config"
+      ],
+      "type": "object"
+    },
+    "DeviceConfigConnectionResponse": {
+      "properties": {
+        "params": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "params"
+      ],
+      "type": "object"
+    },
+    "DeviceConfigDeviceResponse": {
+      "properties": {
+        "config": {
+          "type": "object"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "protocol",
+        "config"
+      ],
+      "type": "object"
+    },
+    "DeviceConfigEnvironmentResponse": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "type": "object"
+    },
+    "DeviceConfigResponse": {
+      "properties": {
+        "connection": {
+          "$ref": "#/$defs/DeviceConfigConnectionResponse"
+        },
+        "device": {
+          "$ref": "#/$defs/DeviceConfigDeviceResponse"
+        },
+        "environment": {
+          "$ref": "#/$defs/DeviceConfigEnvironmentResponse"
+        },
+        "tags": {
+          "items": {
+            "$ref": "#/$defs/DeviceConfigTagResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "device",
+        "environment",
+        "connection",
+        "tags"
+      ],
+      "type": "object"
+    },
+    "DeviceConfigTagResponse": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "type"
+      ],
+      "type": "object"
+    },
+    "DeviceIdentityResponse": {
+      "properties": {
+        "device_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "project_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "device_id"
+      ],
+      "type": "object"
+    },
+    "DeviceResponse": {
+      "properties": {
+        "comment": {
+          "type": "string"
+        },
+        "config": {
+          "type": "object"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "comment",
+        "protocol",
+        "config",
+        "version"
+      ],
+      "type": "object"
+    },
+    "DeviceTokenMetadataResponse": {
+      "properties": {
+        "device_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "issued_at": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "device_id",
+        "fingerprint",
+        "issued_at"
+      ],
+      "type": "object"
+    },
+    "DeviceTokenResponse": {
+      "properties": {
+        "token": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "type": "object"
+    },
+    "DiscardProjectResponse": {
+      "properties": {
+        "version": {
+          "type": "integer"
+        },
+        "warnings": {
+          "items": {
+            "$ref": "#/$defs/DiscardWarningResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    },
+    "DiscardWarningResponse": {
+      "properties": {
+        "dropped_widgets": {
+          "type": "integer"
+        },
+        "library_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "release": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "library_id",
+        "release",
+        "dropped_widgets"
+      ],
+      "type": "object"
+    },
+    "DraftChangeCommandRequest": {
+      "properties": {
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    },
+    "DraftChangesResponse": {
+      "properties": {
+        "can_redo": {
+          "type": "boolean"
+        },
+        "can_undo": {
+          "type": "boolean"
+        },
+        "redo_description": {
+          "type": "string"
+        },
+        "undo_description": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version",
+        "can_undo",
+        "can_redo"
+      ],
+      "type": "object"
+    },
+    "DraftStateResponse": {
+      "properties": {
+        "has_unsaved_changes": {
+          "type": "boolean"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version",
+        "has_unsaved_changes"
+      ],
+      "type": "object"
+    },
+    "Entry": {
+      "properties": {
+        "deployment": {
+          "$ref": "#/$defs/Deployment"
+        },
+        "project_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+          "type": "string"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "tag_state": {
+          "$ref": "#/$defs/TagState"
+        },
+        "timestamp": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "seq",
+        "timestamp",
+        "project_id",
+        "type"
+      ],
+      "type": "object"
+    },
+    "Environment": {
+      "properties": {
+        "comment": {
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "comment"
+      ],
+      "type": "object"
+    },
+    "EnvironmentDevice": {
+      "properties": {
+        "device_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "environment_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "params": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "environment_id",
+        "device_id",
+        "params"
+      ],
+      "type": "object"
+    },
+    "EnvironmentDeviceResponse": {
+      "properties": {
+        "device_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "environment_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "params": {
+          "type": "object"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "environment_id",
+        "device_id",
+        "params",
+        "version"
+      ],
+      "type": "object"
+    },
+    "EnvironmentResponse": {
+      "properties": {
+        "comment": {
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "comment",
+        "version"
+      ],
+      "type": "object"
+    },
+    "Event": {
+      "properties": {
+        "commit": {
+          "type": "integer"
+        },
+        "deployed_at": {
+          "type": "string"
+        },
+        "deployment": {
+          "type": "integer"
+        },
+        "device_id": {
+          "type": "string"
+        },
+        "environment_id": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "library_id": {
+          "type": "string"
+        },
+        "release": {
+          "type": "integer"
+        },
+        "release_number": {
+          "type": "integer"
+        },
+        "scene_id": {
+          "type": "string"
+        },
+        "tag": {
+          "$ref": "#/$defs/TagResponse"
+        },
+        "timestamp": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "timestamp"
+      ],
+      "type": "object"
+    },
+    "FileIssue": {
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "message"
+      ],
+      "type": "object"
+    },
+    "GetCommitsResponse": {
+      "properties": {
+        "commits": {
+          "items": {
+            "$ref": "#/$defs/CommitResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "commits"
+      ],
+      "type": "object"
+    },
+    "GetDevicesResponse": {
+      "properties": {
+        "devices": {
+          "items": {
+            "$ref": "#/$defs/DeviceResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "devices"
+      ],
+      "type": "object"
+    },
+    "GetEnvironmentDevicesResponse": {
+      "properties": {
+        "devices": {
+          "items": {
+            "$ref": "#/$defs/EnvironmentDeviceResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "devices"
+      ],
+      "type": "object"
+    },
+    "GetEnvironmentsResponse": {
+      "properties": {
+        "environments": {
+          "items": {
+            "$ref": "#/$defs/EnvironmentResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "environments"
+      ],
+      "type": "object"
+    },
+    "GetLibrariesResponse": {
+      "properties": {
+        "libraries": {
+          "items": {
+            "$ref": "#/$defs/LibraryResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "libraries"
+      ],
+      "type": "object"
+    },
+    "GetLibraryPinsResponse": {
+      "properties": {
+        "library_pins": {
+          "items": {
+            "$ref": "#/$defs/LibraryPinResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "library_pins"
+      ],
+      "type": "object"
+    },
+    "GetLibraryReleasesResponse": {
+      "properties": {
+        "releases": {
+          "items": {
+            "$ref": "#/$defs/LibraryReleaseResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "releases"
+      ],
+      "type": "object"
+    },
+    "GetPinnedWidgetTypesResponse": {
+      "properties": {
+        "widget_types": {
+          "items": {
+            "$ref": "#/$defs/ReleasedWidgetTypeResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "widget_types"
+      ],
+      "type": "object"
+    },
+    "GetProjectsResponse": {
+      "properties": {
+        "projects": {
+          "items": {
+            "$ref": "#/$defs/ProjectResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "projects"
+      ],
+      "type": "object"
+    },
+    "GetReleasesResponse": {
+      "properties": {
+        "releases": {
+          "items": {
+            "$ref": "#/$defs/ReleaseResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "releases"
+      ],
+      "type": "object"
+    },
+    "GetScenesResponse": {
+      "properties": {
+        "scenes": {
+          "items": {
+            "$ref": "#/$defs/SceneResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "scenes"
+      ],
+      "type": "object"
+    },
+    "GetTagStatesResponse": {
+      "properties": {
+        "tag_states": {
+          "additionalProperties": {
+            "$ref": "#/$defs/TagStateResponse"
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "tag_states"
+      ],
+      "type": "object"
+    },
+    "GetTagsResponse": {
+      "properties": {
+        "tags": {
+          "items": {
+            "$ref": "#/$defs/TagResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "tags"
+      ],
+      "type": "object"
+    },
+    "GetWidgetTypesResponse": {
+      "properties": {
+        "widget_types": {
+          "items": {
+            "$ref": "#/$defs/WidgetTypeResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "widget_types"
+      ],
+      "type": "object"
+    },
+    "GetWidgetsResponse": {
+      "properties": {
+        "widgets": {
+          "items": {
+            "$ref": "#/$defs/WidgetResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "widgets"
+      ],
+      "type": "object"
+    },
+    "InputPort": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type_hint": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "type_hint"
+      ],
+      "type": "object"
+    },
+    "JournalResponse": {
+      "properties": {
+        "entries": {
+          "items": {
+            "$ref": "#/$defs/Entry"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "entries"
+      ],
+      "type": "object"
+    },
+    "LibraryPin": {
+      "properties": {
+        "library_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "release": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "library_id",
+        "release"
+      ],
+      "type": "object"
+    },
+    "LibraryPinResponse": {
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "commit_number": {
+          "type": "integer"
+        },
+        "library_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "origin": {
+          "type": "string"
+        },
+        "release": {
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "library_id",
+        "release",
+        "version",
+        "author",
+        "origin",
+        "note"
+      ],
+      "type": "object"
+    },
+    "LibraryReleaseResponse": {
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "commit_number": {
+          "type": "integer"
+        },
+        "content_counts": {
+          "$ref": "#/$defs/CommitContentCounts"
+        },
+        "created_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "library_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer"
+        },
+        "origin": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "widget_types": {
+          "items": {
+            "$ref": "#/$defs/ReleasedWidgetTypeResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "library_id",
+        "number",
+        "author",
+        "origin",
+        "note",
+        "created_at",
+        "widget_types",
+        "content_counts"
+      ],
+      "type": "object"
+    },
+    "LibraryResponse": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "has_unpublished_changes": {
+          "type": "boolean"
+        },
+        "has_unsaved_changes": {
+          "type": "boolean"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "latest_commit": {
+          "type": "integer"
+        },
+        "latest_release": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "version",
+        "latest_release",
+        "latest_commit",
+        "has_unsaved_changes",
+        "has_unpublished_changes"
+      ],
+      "type": "object"
+    },
+    "ListDeploymentsResponse": {
+      "properties": {
+        "deployments": {
+          "items": {
+            "$ref": "#/$defs/DeploymentSummaryResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "deployments"
+      ],
+      "type": "object"
+    },
+    "MoveWidgetsRequest": {
+      "properties": {
+        "moves": {
+          "items": {
+            "$ref": "#/$defs/WidgetMoveRequest"
+          },
+          "type": "array"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version",
+        "moves"
+      ],
+      "type": "object"
+    },
+    "MoveWidgetsResponse": {
+      "properties": {
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    },
+    "OperationStateResponse": {
+      "properties": {
+        "deployment": {
+          "$ref": "#/$defs/DeploymentResponse"
+        },
+        "position": {
+          "type": "integer"
+        },
+        "tag_states": {
+          "additionalProperties": {
+            "$ref": "#/$defs/TagStateResponse"
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "position",
+        "tag_states"
+      ],
+      "type": "object"
+    },
+    "Origin": {
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "OriginRequest": {
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "OriginResponse": {
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "PinImpactResponse": {
+      "properties": {
+        "broken_bindings": {
+          "items": {
+            "$ref": "#/$defs/BrokenBindingResponse"
+          },
+          "type": "array"
+        },
+        "orphaned_widgets": {
+          "items": {
+            "$ref": "#/$defs/PinnedWidgetResponse"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "orphaned_widgets",
+        "broken_bindings"
+      ],
+      "type": "object"
+    },
+    "PinnedWidgetResponse": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "scene_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "type_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "widget_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "scene_id",
+        "widget_id",
+        "name",
+        "type_id"
+      ],
+      "type": "object"
+    },
+    "PortBinding": {
+      "properties": {
+        "port_name": {
+          "type": "string"
+        },
+        "tag_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "port_name",
+        "tag_id"
+      ],
+      "type": "object"
+    },
+    "Position": {
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "z": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "type": "object"
+    },
+    "PositionRequest": {
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "z": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "type": "object"
+    },
+    "PositionResponse": {
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "z": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "type": "object"
+    },
+    "Problem": {
+      "properties": {
+        "detail": {
+          "type": "string"
+        },
+        "draft": {
+          "$ref": "#/$defs/DraftStateResponse"
+        },
+        "file_issues": {
+          "items": {
+            "$ref": "#/$defs/FileIssue"
+          },
+          "type": "array"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "orphaned_widgets": {
+          "items": {
+            "$ref": "#/$defs/PinnedWidgetResponse"
+          },
+          "type": "array"
+        },
+        "status": {
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "title",
+        "status"
+      ],
+      "type": "object"
+    },
+    "ProjectFile": {
+      "properties": {
+        "devices": {
+          "items": {
+            "$ref": "#/$defs/Device"
+          },
+          "type": "array"
+        },
+        "environment_devices": {
+          "items": {
+            "$ref": "#/$defs/EnvironmentDevice"
+          },
+          "type": "array"
+        },
+        "environments": {
+          "items": {
+            "$ref": "#/$defs/Environment"
+          },
+          "type": "array"
+        },
+        "library_pins": {
+          "items": {
+            "$ref": "#/$defs/LibraryPin"
+          },
+          "type": "array"
+        },
+        "project_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "scenes": {
+          "items": {
+            "$ref": "#/$defs/Scene"
+          },
+          "type": "array"
+        },
+        "schema_version": {
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "$ref": "#/$defs/TagDefinition"
+          },
+          "type": "array"
+        },
+        "widget_types": {
+          "items": {
+            "$ref": "#/$defs/WidgetType"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema_version",
+        "project_id",
+        "tags",
+        "devices",
+        "environments",
+        "environment_devices",
+        "scenes",
+        "widget_types",
+        "library_pins"
+      ],
+      "type": "object"
+    },
+    "ProjectResponse": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "has_unsaved_changes": {
+          "type": "boolean"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "version",
+        "has_unsaved_changes"
+      ],
+      "type": "object"
+    },
+    "PutLibraryPinRequest": {
+      "properties": {
+        "release": {
+          "type": "integer"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "release",
+        "version"
+      ],
+      "type": "object"
+    },
+    "ReleaseResponse": {
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "commit_number": {
+          "type": "integer"
+        },
+        "content_counts": {
+          "$ref": "#/$defs/CommitContentCounts"
+        },
+        "created_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer"
+        },
+        "origin": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "number",
+        "commit_number",
+        "title",
+        "note",
+        "author",
+        "created_at",
+        "origin",
+        "content_counts"
+      ],
+      "type": "object"
+    },
+    "ReleasedWidgetTypeResponse": {
+      "properties": {
+        "default_height": {
+          "type": "integer"
+        },
+        "default_width": {
+          "type": "integer"
+        },
+        "html_template": {
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "input_ports": {
+          "items": {
+            "$ref": "#/$defs/InputPort"
+          },
+          "type": "array"
+        },
+        "library_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "script": {
+          "type": "string"
+        },
+        "script_language": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "library_id",
+        "name",
+        "html_template",
+        "script",
+        "script_language",
+        "default_width",
+        "default_height",
+        "input_ports"
+      ],
+      "type": "object"
+    },
+    "RenameCommitRequest": {
+      "properties": {
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "type": "object"
+    },
+    "Rotation": {
+      "properties": {
+        "degrees": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "degrees"
+      ],
+      "type": "object"
+    },
+    "RotationRequest": {
+      "properties": {
+        "degrees": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "degrees"
+      ],
+      "type": "object"
+    },
+    "RotationResponse": {
+      "properties": {
+        "degrees": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "degrees"
+      ],
+      "type": "object"
+    },
+    "Scene": {
+      "properties": {
+        "background_html": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "widgets": {
+          "items": {
+            "$ref": "#/$defs/Widget"
+          },
+          "type": "array"
+        },
+        "width": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "width",
+        "height",
+        "background_html",
+        "widgets"
+      ],
+      "type": "object"
+    },
+    "SceneResponse": {
+      "properties": {
+        "background_html": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        },
+        "width": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "width",
+        "height",
+        "background_html",
+        "version"
+      ],
+      "type": "object"
+    },
+    "Size": {
+      "properties": {
+        "height": {
+          "type": "integer"
+        },
+        "width": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width",
+        "height"
+      ],
+      "type": "object"
+    },
+    "SizeRequest": {
+      "properties": {
+        "height": {
+          "type": "integer"
+        },
+        "width": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width",
+        "height"
+      ],
+      "type": "object"
+    },
+    "SizeResponse": {
+      "properties": {
+        "height": {
+          "type": "integer"
+        },
+        "width": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width",
+        "height"
+      ],
+      "type": "object"
+    },
+    "TagDefinition": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "supplier_device_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "type"
+      ],
+      "type": "object"
+    },
+    "TagResponse": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "quality": {
+          "type": "string"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "type": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        },
+        "written_at": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "type",
+        "value",
+        "quality",
+        "version",
+        "seq"
+      ],
+      "type": "object"
+    },
+    "TagState": {
+      "properties": {
+        "quality": {
+          "type": "string"
+        },
+        "tag_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "tag_id",
+        "value",
+        "quality"
+      ],
+      "type": "object"
+    },
+    "TagStateResponse": {
+      "properties": {
+        "quality": {
+          "type": "string"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "value": {
+          "type": "string"
+        },
+        "written_at": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "quality",
+        "seq"
+      ],
+      "type": "object"
+    },
+    "TransformMatrixResponse": {
+      "properties": {
+        "a": {
+          "type": "number"
+        },
+        "b": {
+          "type": "number"
+        },
+        "c": {
+          "type": "number"
+        },
+        "css": {
+          "type": "string"
+        },
+        "d": {
+          "type": "number"
+        },
+        "e": {
+          "type": "number"
+        },
+        "f": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f",
+        "css"
+      ],
+      "type": "object"
+    },
+    "UpdateDeviceRequest": {
+      "properties": {
+        "comment": {
+          "type": "string"
+        },
+        "config": {
+          "type": "object"
+        },
+        "name": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "comment",
+        "protocol",
+        "config",
+        "version"
+      ],
+      "type": "object"
+    },
+    "UpdateDeviceResponse": {
+      "properties": {
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    },
+    "UpdateEnvironmentDeviceRequest": {
+      "properties": {
+        "params": {
+          "type": "object"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "params",
+        "version"
+      ],
+      "type": "object"
+    },
+    "UpdateEnvironmentRequest": {
+      "properties": {
+        "comment": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "comment",
+        "version"
+      ],
+      "type": "object"
+    },
+    "UpdateEnvironmentResponse": {
+      "properties": {
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    },
+    "UpdateLibraryReleaseNoteRequest": {
+      "properties": {
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "note"
+      ],
+      "type": "object"
+    },
+    "UpdateLibraryRequest": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "type": "object"
+    },
+    "UpdateLibraryResponse": {
+      "properties": {
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    },
+    "UpdateProjectRequest": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "type": "object"
+    },
+    "UpdateProjectResponse": {
+      "properties": {
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    },
+    "UpdateReleaseNoteRequest": {
+      "properties": {
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "note"
+      ],
+      "type": "object"
+    },
+    "UpdateSceneRequest": {
+      "properties": {
+        "background_html": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        },
+        "width": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "width",
+        "height",
+        "background_html",
+        "version"
+      ],
+      "type": "object"
+    },
+    "UpdateSceneResponse": {
+      "properties": {
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    },
+    "UpdateTagRequest": {
+      "properties": {
+        "quality": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "quality"
+      ],
+      "type": "object"
+    },
+    "UpdateTagResponse": {
+      "properties": {
+        "seq": {
+          "type": "integer"
+        },
+        "written_at": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq"
+      ],
+      "type": "object"
+    },
+    "UpdateWidgetRequest": {
+      "properties": {
+        "labels": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "$ref": "#/$defs/OriginRequest"
+        },
+        "port_bindings": {
+          "items": {
+            "$ref": "#/$defs/PortBinding"
+          },
+          "type": "array"
+        },
+        "position": {
+          "$ref": "#/$defs/PositionRequest"
+        },
+        "rotation": {
+          "$ref": "#/$defs/RotationRequest"
+        },
+        "size": {
+          "$ref": "#/$defs/SizeRequest"
+        },
+        "type_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "position",
+        "size",
+        "origin",
+        "rotation",
+        "type_id",
+        "version",
+        "labels",
+        "port_bindings"
+      ],
+      "type": "object"
+    },
+    "UpdateWidgetResponse": {
+      "properties": {
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    },
+    "UpdateWidgetTypeRequest": {
+      "properties": {
+        "default_height": {
+          "type": "integer"
+        },
+        "default_width": {
+          "type": "integer"
+        },
+        "html_template": {
+          "type": "string"
+        },
+        "input_ports": {
+          "items": {
+            "$ref": "#/$defs/InputPort"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "script": {
+          "type": "string"
+        },
+        "script_language": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "html_template",
+        "script",
+        "script_language",
+        "default_width",
+        "default_height",
+        "input_ports",
+        "version"
+      ],
+      "type": "object"
+    },
+    "UpdateWidgetTypeResponse": {
+      "properties": {
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    },
+    "Widget": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "labels": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "port_bindings": {
+          "items": {
+            "$ref": "#/$defs/project.v0.PortBinding"
+          },
+          "type": "array"
+        },
+        "position": {
+          "$ref": "#/$defs/Position"
+        },
+        "rotation": {
+          "$ref": "#/$defs/Rotation"
+        },
+        "size": {
+          "$ref": "#/$defs/Size"
+        },
+        "type_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "position",
+        "size",
+        "origin",
+        "rotation",
+        "type_id",
+        "labels",
+        "port_bindings"
+      ],
+      "type": "object"
+    },
+    "WidgetMoveRequest": {
+      "properties": {
+        "widget_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "widget_id",
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "WidgetResponse": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "labels": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "$ref": "#/$defs/OriginResponse"
+        },
+        "port_bindings": {
+          "items": {
+            "$ref": "#/$defs/PortBinding"
+          },
+          "type": "array"
+        },
+        "position": {
+          "$ref": "#/$defs/PositionResponse"
+        },
+        "rotation": {
+          "$ref": "#/$defs/RotationResponse"
+        },
+        "scene_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "size": {
+          "$ref": "#/$defs/SizeResponse"
+        },
+        "transform_matrix": {
+          "$ref": "#/$defs/TransformMatrixResponse"
+        },
+        "type_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "position",
+        "size",
+        "origin",
+        "rotation",
+        "transform_matrix",
+        "type_id",
+        "scene_id",
+        "version",
+        "labels",
+        "port_bindings"
+      ],
+      "type": "object"
+    },
+    "WidgetType": {
+      "properties": {
+        "default_height": {
+          "type": "integer"
+        },
+        "default_width": {
+          "type": "integer"
+        },
+        "html_template": {
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "input_ports": {
+          "items": {
+            "$ref": "#/$defs/project.v0.InputPort"
+          },
+          "type": "array"
+        },
+        "library_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "script": {
+          "type": "string"
+        },
+        "script_language": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "library_id",
+        "name",
+        "html_template",
+        "script",
+        "script_language",
+        "default_width",
+        "default_height",
+        "input_ports"
+      ],
+      "type": "object"
+    },
+    "WidgetTypeResponse": {
+      "properties": {
+        "default_height": {
+          "type": "integer"
+        },
+        "default_width": {
+          "type": "integer"
+        },
+        "html_template": {
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "input_ports": {
+          "items": {
+            "$ref": "#/$defs/InputPort"
+          },
+          "type": "array"
+        },
+        "library_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "script": {
+          "type": "string"
+        },
+        "script_language": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "library_id",
+        "name",
+        "html_template",
+        "script",
+        "script_language",
+        "default_width",
+        "default_height",
+        "input_ports",
+        "version"
+      ],
+      "type": "object"
+    },
+    "project.v0.InputPort": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type_hint": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "type_hint"
+      ],
+      "type": "object"
+    },
+    "project.v0.PortBinding": {
+      "properties": {
+        "port_name": {
+          "type": "string"
+        },
+        "tag_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "port_name",
+        "tag_id"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/kipitix/growscada/schemas/api/0.33.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GrowSCADA server API 0.33"
+}

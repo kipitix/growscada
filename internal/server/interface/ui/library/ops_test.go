@@ -283,6 +283,7 @@ func releaseNow(t *testing.T, f *fixture) {
 	f.l.loadLibraries(f.l.compoCtx)
 	f.l.loadReleases(f.l.compoCtx)
 	f.l.loadCommits(f.l.compoCtx) // the release marks its Commit
+	f.l.loadDraftState(f.l.compoCtx)
 	f.run()
 	f.noToasts()
 }

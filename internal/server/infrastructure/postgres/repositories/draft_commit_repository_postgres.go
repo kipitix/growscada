@@ -32,8 +32,9 @@ func (r draftRepositoryPostgres) SaveCommit(ctx context.Context, scope draft.Sco
 		if expected.Number() != row.version {
 			return nil, draft.ConflictError{Expected: expected.Number(), Current: row.version, Scope: scope}
 		}
-		// A Draft that did not change since its last Save has nothing to fix.
-		if row.lastCommitDraftVersion == row.version {
+		// A Draft at its Clean Version equals its last Commit: nothing is
+		// there to fix (ADR 0016, amendment 2026-11-10).
+		if row.cleanVersion == row.version {
 			return nil, fmt.Errorf("%w: %s", draft.ErrNothingToSave, scope)
 		}
 		number := row.lastCommitNumber + 1
@@ -59,8 +60,8 @@ func (r draftRepositoryPostgres) SaveCommit(ctx context.Context, scope draft.Sco
 			return nil, err
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE engineering.drafts SET last_commit_number = $2, last_commit_draft_version = $3, updated_at = now() WHERE id = $1`,
-			row.id, number, expected.Number()); err != nil {
+			`UPDATE engineering.drafts SET last_commit_number = $2, last_commit_draft_version = $3, clean_version = $4, updated_at = now() WHERE id = $1`,
+			row.id, number, expected.Number(), expected.Number()); err != nil {
 			return nil, fmt.Errorf("cannot record the last commit of %s: %w", scope, err)
 		}
 		// The event was recorded when the Commit was made; the returned Commit

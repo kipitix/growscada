@@ -71,7 +71,8 @@ func TestMain(m *testing.M) {
 // cleanTags removes the Tag definitions and the Tag states.
 func cleanTags(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM runtime.deployments; DELETE FROM runtime.tags; DELETE FROM engineering.tags"); err != nil {
+	if _, err := testDB.ExecContext(context.Background(),
+		"DELETE FROM runtime.deployments; DELETE FROM runtime.tags; DELETE FROM engineering.tags; UPDATE engineering.drafts SET clean_version = 0"); err != nil {
 		t.Fatalf("cleanTags: %v", err)
 	}
 }

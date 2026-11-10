@@ -141,9 +141,9 @@ func (l *Library) doDiscard(ctx app.Context) {
 	}, func(ctx app.Context, state apiv0.DiscardLibraryResponse) {
 		l.draftVersions.Forget()
 		l.observeDraftVersion(l.markDraft(), state.Version)
-		// The Draft is its last Commit again: nothing is unsaved, even though
-		// its Version rose (task 72_7).
-		l.cleanDraftVersion = state.Version
+		// The Draft is its last Commit again, and the server says so: the
+		// flag is read with the Draft's state (task 74).
+		l.loadDraftState(ctx)
 		l.loadList(ctx)
 		l.loadLibraries(ctx)
 		l.loadReleases(ctx)
@@ -154,6 +154,7 @@ func (l *Library) doDiscard(ctx app.Context) {
 		// A 409 nothing_to_discard means the history moved: the header is the
 		// truth once it is reread.
 		l.loadLibraries(ctx)
+		l.loadDraftState(ctx)
 		l.loadDraftChanges(ctx)
 		ctx.Update()
 	})
@@ -172,20 +173,15 @@ func (l *Library) revert() {
 
 // doRevert performs the reset the confirmation asked for.
 func (l *Library) doRevert(ctx app.Context) {
-	clean := l.revertIsTheLastCommit()
 	callDraft(l, func(c context.Context, draft *apiclient.LibraryClient) (apiv0.RevertLibraryResponse, error) {
 		return draft.RevertToRelease(c)
 	}, func(ctx app.Context, state apiv0.RevertLibraryResponse) {
 		l.draftVersions.Forget()
 		l.observeDraftVersion(l.markDraft(), state.Version)
-		// A Draft reset to the Release of its last Commit is that Commit
-		// again: nothing is unsaved. A Revert to an older Release differs from
-		// the last Commit, and the indicator follows the Version (task 72_7).
-		if clean {
-			l.cleanDraftVersion = state.Version
-		} else {
-			l.cleanDraftVersion = 0
-		}
+		// The server's Draft state says whether the Release was the content of
+		// the last Commit: a Revert to an older one keeps the Draft unsaved
+		// (task 74).
+		l.loadDraftState(ctx)
 		l.loadList(ctx)
 		l.loadLibraries(ctx)
 		l.loadReleases(ctx)
@@ -194,21 +190,10 @@ func (l *Library) doRevert(ctx app.Context) {
 	}, func(ctx app.Context, err error) {
 		uiutil.ShowError(ctx, err)
 		l.loadLibraries(ctx)
+		l.loadDraftState(ctx)
 		l.loadDraftChanges(ctx)
 		ctx.Update()
 	})
-}
-
-// revertIsTheLastCommit reports whether the latest Release published the last
-// Commit: a Revert then puts the Draft back to that Commit, not to some older
-// published state.
-func (l *Library) revertIsTheLastCommit() bool {
-	lib, ok := l.selectedLibrary()
-	if !ok || lib.LatestCommit == 0 || len(l.releases) == 0 {
-		return false
-	}
-	latest := l.releases[len(l.releases)-1]
-	return latest.CommitNumber != nil && *latest.CommitNumber == lib.LatestCommit
 }
 
 // reloadOnConflict shows err and, on a conflict, rereads the libraries: the

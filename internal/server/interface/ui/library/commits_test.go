@@ -15,13 +15,16 @@ import (
 // place (task 72_2; ADR 0021).
 func TestSaveCommit_LibraryHistoryAndRename(t *testing.T) {
 	url, api := newServer(t)
+	// A library with a change to save: a Draft nothing was written to is clean
+	// and has nothing to fix as a Commit (task 74).
+	createWidgetType(t, api, "Gauge")
 	f := mount(t, url, api)
 	f.run()
 	if !f.l.commitsLoaded || f.l.libraryID != api.LibraryClient.ID() {
 		t.Fatalf("the library was not selected or its history not loaded")
 	}
 	if !f.l.hasUnsavedChanges() {
-		t.Fatalf("a fresh Draft reports no unsaved changes against no Commit")
+		t.Fatalf("a Draft written but never saved reports no unsaved changes")
 	}
 	if html := app.HTMLString(f.l.Render()); !strings.Contains(html, `data-commit-unsaved`) {
 		t.Errorf("the column does not mark unsaved changes: %s", html)

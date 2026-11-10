@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -131,7 +132,7 @@ func (s libraryServiceImpl) describeAll(ctx context.Context, list []library.Libr
 	return result, nil
 }
 
-// releaseState reads what a library's Commits and Releases tell of it.
+// releaseState reads what a library's Commits, Releases and Draft tell of it.
 func (s libraryServiceImpl) releaseState(ctx context.Context, l library.Library) (library.ReleaseState, error) {
 	latest, err := s.releases.FindLatest(ctx, l.ID())
 	if err != nil {
@@ -141,16 +142,30 @@ func (s libraryServiceImpl) releaseState(ctx context.Context, l library.Library)
 	if err != nil {
 		return library.ReleaseState{}, fmt.Errorf("cannot find the last commit of library %s: %w", l.ID(), err)
 	}
-	lastCommitNumber, lastCommitDraftVersion := 0, 0
+	lastCommitNumber := 0
 	if found {
 		lastCommitNumber = lastCommit.Number()
-		lastCommitDraftVersion = lastCommit.DraftVersion().Number()
 	}
-	draftVersion, err := s.content.Version(ctx, l.ID().UUID())
+	unsaved, err := s.unsavedChanges(ctx, l.ID())
 	if err != nil {
 		return library.ReleaseState{}, err
 	}
-	return library.ReleaseStateOf(latest, lastCommitNumber, draftVersion, lastCommitDraftVersion), nil
+	return library.ReleaseStateOf(latest, lastCommitNumber, unsaved), nil
+}
+
+// unsavedChanges reports whether the library's Draft moved since its content
+// last equalled its last Commit: the Draft's own flag, not a comparison of
+// numbers kept here (ADR 0016, amendment 2026-11-10). A Draft never written —
+// no row — is clean.
+func (s libraryServiceImpl) unsavedChanges(ctx context.Context, libraryID id.ID[library.Library]) (bool, error) {
+	found, ok, err := s.content.Drafts().Read(ctx, s.content.ScopeOf(libraryID))
+	if err != nil {
+		return false, fmt.Errorf("cannot read the draft of library %s: %w", libraryID, err)
+	}
+	if !ok {
+		return false, nil
+	}
+	return found.HasUnsavedChanges(), nil
 }
 
 func (s libraryServiceImpl) FindAllLibraries(ctx context.Context) ([]appdto.Library, error) {
@@ -196,8 +211,8 @@ func (s libraryServiceImpl) CreateLibrary(ctx context.Context, input appdto.Libr
 	if err != nil {
 		return appdto.Library{}, fmt.Errorf("cannot save library: %w", err)
 	}
-	// A new Draft has no Commit: its content is not saved yet.
-	return appdto.NewLibrary(saved, library.ReleaseState{UnsavedChanges: true}), nil
+	// A new Draft has no Commit and no changes: it is clean and never saved.
+	return appdto.NewLibrary(saved, library.ReleaseState{}), nil
 }
 
 // UpdateLibrary changes a library's name and description, expecting its
@@ -429,17 +444,23 @@ func publishedCommitTitle(ctx context.Context, drafts draft.Repository, libraryI
 	return commit.Title().String(), nil
 }
 
-// DraftState returns the Version of the library's Draft.
+// DraftState returns the Version of the library's Draft and whether it holds
+// changes its last Commit does not.
 func (s libraryServiceImpl) DraftState(ctx context.Context, rawID uuid.UUID) (appdto.DraftState, error) {
 	found, err := s.findOwn(ctx, rawID)
 	if err != nil {
 		return appdto.DraftState{}, err
 	}
-	version, err := s.content.Version(ctx, found.ID().UUID())
+	read, ok, err := s.content.Drafts().Read(ctx, s.content.ScopeOf(found.ID()))
 	if err != nil {
-		return appdto.DraftState{}, err
+		return appdto.DraftState{}, fmt.Errorf("cannot read the draft of library %s: %w", found.ID(), err)
 	}
-	return appdto.DraftState{Version: version}, nil
+	if !ok {
+		// A Draft never written is a fresh one at version 1: the Version its
+		// first write states. It has no content to differ from a Commit.
+		return appdto.DraftState{Version: 1}, nil
+	}
+	return appdto.DraftState{Version: read.Version().Number(), HasUnsavedChanges: read.HasUnsavedChanges()}, nil
 }
 
 // Discard resets the Draft of the library to its last Commit in one
@@ -463,13 +484,13 @@ func (s libraryServiceImpl) Discard(ctx context.Context, rawID uuid.UUID) (appdt
 	if !ok {
 		return appdto.DraftState{}, fmt.Errorf("commit %d of library %s holds no widget types", last.Number(), found.ID())
 	}
-	result, err := s.content.Drafts().Replace(ctx, scope, func(session *draft.Session) error {
+	result, err := s.content.Drafts().Replace(ctx, scope, true, func(session *draft.Session) error {
 		return session.ReplaceWidgetTypes(ctx, types)
 	})
 	if err != nil {
 		return appdto.DraftState{}, fmt.Errorf("cannot discard library %s: %w", found.ID(), err)
 	}
-	return appdto.DraftState{Version: result.Version().Number()}, nil
+	return appdto.DraftState{Version: result.Version().Number(), HasUnsavedChanges: result.HasUnsavedChanges()}, nil
 }
 
 // RevertToLatestRelease resets the Draft of the library to its latest Release
@@ -487,11 +508,56 @@ func (s libraryServiceImpl) RevertToLatestRelease(ctx context.Context, rawID uui
 	if latest == nil {
 		return appdto.DraftState{}, fmt.Errorf("%w: %s", library.ErrNoRelease, found.ID())
 	}
-	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(found.ID()), func(session *draft.Session) error {
+	// The Draft the Revert writes is its last Commit's content only when the
+	// latest Release published that Commit: then it is clean, as after a
+	// Discard. An older Release is a different content, and the marker stays
+	// where it was (task 74).
+	clean, err := s.revertIsTheLastCommit(ctx, found.ID(), latest)
+	if err != nil {
+		return appdto.DraftState{}, err
+	}
+	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(found.ID()), clean, func(session *draft.Session) error {
 		return session.ReplaceWidgetTypes(ctx, latest.WidgetTypes())
 	})
 	if err != nil {
 		return appdto.DraftState{}, fmt.Errorf("cannot revert library %s: %w", found.ID(), err)
 	}
-	return appdto.DraftState{Version: result.Version().Number()}, nil
+	return appdto.DraftState{Version: result.Version().Number(), HasUnsavedChanges: result.HasUnsavedChanges()}, nil
+}
+
+// revertIsTheLastCommit reports whether the latest Release published the last
+// Commit of the library's Draft: the WidgetType copies of the two are the same.
+// A Release before Commits, or one of an older Commit, is not it.
+func (s libraryServiceImpl) revertIsTheLastCommit(ctx context.Context, libraryID id.ID[library.Library], latest library.LibraryRelease) (bool, error) {
+	last, found, err := s.content.Drafts().FindLastCommit(ctx, s.content.ScopeOf(libraryID))
+	if err != nil {
+		return false, fmt.Errorf("cannot read the last commit of library %s: %w", libraryID, err)
+	}
+	if !found {
+		return false, nil
+	}
+	types, ok := last.Content().WidgetTypes()
+	if !ok {
+		return false, nil
+	}
+	return sameWidgetTypeCopies(latest.WidgetTypes(), types), nil
+}
+
+// sameWidgetTypeCopies reports whether two lists of released copies hold the
+// same WidgetTypes with the same definitions, in the same order.
+func sameWidgetTypeCopies(a, b []library.ReleasedWidgetType) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		left, right := a[i], b[i]
+		if left.ID() != right.ID() || left.LibraryID() != right.LibraryID() ||
+			left.Name() != right.Name() || left.HtmlTemplate() != right.HtmlTemplate() ||
+			left.Script() != right.Script() || left.ScriptLanguage() != right.ScriptLanguage() ||
+			left.DefaultSize() != right.DefaultSize() ||
+			!slices.Equal(left.InputPorts(), right.InputPorts()) {
+			return false
+		}
+	}
+	return true
 }

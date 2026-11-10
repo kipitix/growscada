@@ -36,21 +36,12 @@ func (l *Library) loadCommits(ctx app.Context) {
 		}, l.loadCommits)
 }
 
-// lastCommitVersion is the Version of the Draft the last Commit fixed, 0 for
-// a Draft never saved.
-func (l *Library) lastCommitVersion() int {
-	if len(l.commits) == 0 {
-		return 0
-	}
-	return l.commits[0].DraftVersion
-}
-
-// hasUnsavedChanges reports whether the Draft moved since its last Commit. A
-// Discard of this tab made the Draft equal to that Commit at a higher Version,
-// so that Version counts as clean too; so does a Revert to the Release of the
-// last Commit (task 72_7).
+// hasUnsavedChanges reports whether the Draft moved since its content last
+// equalled its last Commit. The flag is the server's — the Draft's own Clean
+// Version marker (ADR 0016, amendment 2026-11-10; task 74) —, so a Discard, a
+// Revert and a Save all follow it without this tab remembering anything.
 func (l *Library) hasUnsavedChanges() bool {
-	return l.commitsLoaded && l.draftVersion() > max(l.lastCommitVersion(), l.cleanDraftVersion)
+	return l.draftUnsaved
 }
 
 // openSaveDialog opens the Save dialog with a default title and the stored
@@ -96,13 +87,13 @@ func (l *Library) saveCommit() {
 		}
 		l.savingCommit = false
 		l.saveDialog = false
-		l.cleanDraftVersion = 0
 		ctx.NewActionWithValue(toast.ActionAdd, toast.Problem{Problem: apiv0.Problem{
 			Title:  fmt.Sprintf("Commit %d saved", saved.Number),
 			Detail: saved.Title,
 		}})
 		l.loadCommits(ctx)
-		l.loadLibraries(ctx) // the status follows the new last Commit
+		l.loadDraftState(ctx) // the Save made the Draft its Commit's content
+		l.loadLibraries(ctx)  // the status follows the new last Commit
 		ctx.Update()
 	}, func(ctx app.Context, err error) {
 		if draft != l.draft() {
@@ -187,7 +178,7 @@ func (l *Library) renderCommitBar() []app.UI {
 			Style("font-size", "12px").
 			Style("color", "var(--toast-warn-title)").
 			Text("Unsaved changes"))
-	} else if l.commitsLoaded {
+	} else if l.commitsLoaded && len(l.commits) > 0 {
 		body = append(body, app.Span().
 			Attr("data-commit-saved", "true").
 			Style("font-size", "12px").

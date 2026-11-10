@@ -22,7 +22,7 @@ func undoDraft(t *testing.T) Draft {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return NewDraft(id.NewID[Draft](), scope, ver, 3)
+	return NewDraft(id.NewID[Draft](), scope, ver, ver, 3)
 }
 
 // TestDraft_UndoAndRedoStepTheStackAndRaiseTheVersion: undo applies the change

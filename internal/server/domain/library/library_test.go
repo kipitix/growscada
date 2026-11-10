@@ -151,24 +151,22 @@ func TestReleaseStateOf(t *testing.T) {
 	cases := map[string]struct {
 		latest             LibraryRelease
 		lastCommit         int
-		draftVersion       int
-		lastCommitDraftVer int
+		unsaved            bool
 		wantLatest         int
 		wantLastReleaseCmt int
-		wantUnsaved        bool
 		wantUnpublished    bool
 	}{
-		"never saved, never released": {nil, 0, 1, 0, 0, 0, true, false},
-		"saved, not released":         {nil, 2, 3, 3, 0, 0, false, true},
-		"released commit 2":           {released, 2, 3, 3, 1, 2, false, false},
-		"moved after the commit":      {released, 3, 4, 3, 1, 2, true, true},
-		"legacy release, no commit":   {legacy, 0, 1, 0, 1, 0, true, false},
-		"legacy release, commit 1":    {legacy, 1, 2, 2, 1, 0, false, true},
+		"never saved, never released": {nil, 0, false, 0, 0, false},
+		"saved, not released":         {nil, 2, false, 0, 0, true},
+		"released commit 2":           {released, 2, false, 1, 2, false},
+		"moved after the commit":      {released, 3, true, 1, 2, true},
+		"legacy release, no commit":   {legacy, 0, true, 1, 0, false},
+		"legacy release, commit 1":    {legacy, 1, false, 1, 0, true},
 	}
 	for name, tc := range cases {
-		got := ReleaseStateOf(tc.latest, tc.lastCommit, tc.draftVersion, tc.lastCommitDraftVer)
+		got := ReleaseStateOf(tc.latest, tc.lastCommit, tc.unsaved)
 		if got.Latest.Int() != tc.wantLatest || got.LatestReleaseCommit != tc.wantLastReleaseCmt ||
-			got.UnsavedChanges != tc.wantUnsaved || got.UnpublishedChanges != tc.wantUnpublished {
+			got.UnsavedChanges != tc.unsaved || got.UnpublishedChanges != tc.wantUnpublished {
 			t.Errorf("%s: %+v", name, got)
 		}
 	}

@@ -80,6 +80,81 @@ func TestDraftCheckVersion(t *testing.T) {
 	}
 }
 
+// TestDraftCleanVersion_SaveDiscardAndNothingToSave: the Draft's Clean Version
+// is the marker of its unsaved changes and of the Save's refusal — a write is
+// unsaved, a Save cleans it, a clean replacement cleans it, an unclean one does
+// not (task 74; ADR 0016, amendment 2026-11-10).
+func TestDraftCleanVersion_SaveDiscardAndNothingToSave(t *testing.T) {
+	cleanTags(t)
+	cleanScenes(t)
+	cleanDrafts(t)
+	ctx := context.Background()
+	scope := draft.ProjectScope(mainProject)
+	tags := repositories.NewTagRepositoryPostgres(testDB, mainProject)
+
+	read := func() draft.Draft {
+		t.Helper()
+		found, ok, err := testDrafts().Read(ctx, scope)
+		if err != nil || !ok {
+			t.Fatalf("read draft: %+v, %t, %v", found, ok, err)
+		}
+		return found
+	}
+	if _, ok, err := testDrafts().Read(ctx, scope); err != nil || ok {
+		t.Fatalf("a Draft never written has a row: %v", err)
+	}
+
+	// A write of the content raises the Version above the marker: unsaved.
+	mustUpdate(t, mainProject, "create a tag", func(session *draft.Session) error {
+		session.CreateTag(ctx, makeTag(t, "clean-speed", tags))
+		return nil
+	})
+	if !read().HasUnsavedChanges() {
+		t.Fatalf("a write above the Clean Version is clean")
+	}
+
+	// A Save makes the Draft its Commit's content, and nothing is left to save.
+	if _, err := testDrafts().SaveCommit(ctx, scope, draftVersionOf(t, mainProject),
+		commitTitle(t, "First"), commitAuthor(t), projectCommitContent()); err != nil {
+		t.Fatalf("SaveCommit: %v", err)
+	}
+	saved := read()
+	if saved.HasUnsavedChanges() || saved.CleanVersion() != saved.Version() {
+		t.Errorf("a saved Draft: %s, clean %s; want it clean", saved.Version(), saved.CleanVersion())
+	}
+	if _, err := testDrafts().SaveCommit(ctx, scope, draftVersionOf(t, mainProject),
+		commitTitle(t, "Again"), commitAuthor(t), projectCommitContent()); !errors.Is(err, draft.ErrNothingToSave) {
+		t.Fatalf("a Save at the Clean Version: %v, want ErrNothingToSave", err)
+	}
+
+	// A replacement whose content is the Commit's — a Discard — is clean, and a
+	// Save of it is refused too.
+	result, err := testDrafts().Replace(ctx, scope, true, func(session *draft.Session) error {
+		return session.Replace(ctx, draft.Content{})
+	})
+	if err != nil {
+		t.Fatalf("Replace: %v", err)
+	}
+	if result.HasUnsavedChanges() {
+		t.Errorf("a clean replacement is unsaved: %s, clean %s", result.Version(), result.CleanVersion())
+	}
+	if _, err := testDrafts().SaveCommit(ctx, scope, draftVersionOf(t, mainProject),
+		commitTitle(t, "After a discard"), commitAuthor(t), projectCommitContent()); !errors.Is(err, draft.ErrNothingToSave) {
+		t.Fatalf("a Save after a Discard: %v, want ErrNothingToSave", err)
+	}
+
+	// A replacement whose content is another one keeps the marker: the raised
+	// Version makes the Draft unsaved again.
+	if _, err := testDrafts().Replace(ctx, scope, false, func(session *draft.Session) error {
+		return session.Replace(ctx, draft.Content{})
+	}); err != nil {
+		t.Fatalf("Replace: %v", err)
+	}
+	if !read().HasUnsavedChanges() {
+		t.Errorf("a replacement that is not the Commit's is clean")
+	}
+}
+
 // TestDraftUpdate_WritesOneDraftChange: every successful write stores one row
 // with the before and after states of what it touched, and moves the stack
 // position (ADR 0017).
@@ -379,7 +454,7 @@ func TestDraftReplace_RemovesThePairsTheDeploymentLacks(t *testing.T) {
 	})
 
 	// The Deployment the Discard restores holds the Environment with one pair.
-	if _, err := testDrafts().Replace(ctx, draft.ProjectScope(mainProject), func(session *draft.Session) error {
+	if _, err := testDrafts().Replace(ctx, draft.ProjectScope(mainProject), false, func(session *draft.Session) error {
 		return session.Replace(ctx, draft.Content{
 			Devices:            []device.Device{one, two},
 			Environments:       []device.Environment{environment},
@@ -701,7 +776,7 @@ func TestDraftLibrary_ReplaceRestoresTheReleaseAndClearsTheStack(t *testing.T) {
 	}
 
 	before := libraryDraftVersionOf(t, repo.libraryID)
-	result, err := testDrafts().Replace(ctx, scope, func(session *draft.Session) error {
+	result, err := testDrafts().Replace(ctx, scope, false, func(session *draft.Session) error {
 		return session.ReplaceWidgetTypes(ctx, release.WidgetTypes())
 	})
 	if err != nil {

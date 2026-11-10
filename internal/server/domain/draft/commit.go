@@ -19,7 +19,7 @@ import (
 //
 // Commit is immutable: renaming its title returns a new Commit and records
 // commit_title_updated; its content never changes. A Save that finds the
-// Draft at the Version of the last Commit is refused (ErrNothingToSave).
+// Draft at its Clean Version is refused (ErrNothingToSave).
 type Commit interface {
 	ID() id.ID[Commit]
 	// Scope is the Draft the Commit belongs to.

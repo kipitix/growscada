@@ -48,6 +48,7 @@ func (p *Project) deleteTag(ctx app.Context) {
 			uiutil.StoreID(ctx, p.selectionKey(tagIDKey), uuid.Nil)
 		}
 		p.loadTags(ctx)
+		p.loadDraftState(ctx)
 	}, p.rejectedTagEdit)
 }
 

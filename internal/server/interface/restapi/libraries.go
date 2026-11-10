@@ -75,7 +75,7 @@ func (h LibrariesHandlers) GetDraft(w http.ResponseWriter, r *http.Request) {
 		sendError(w, r, err)
 		return
 	}
-	sendJSONResponse(w, http.StatusOK, apiv0.DraftStateResponse{Version: state.Version})
+	sendJSONResponse(w, http.StatusOK, newDraftStateResponse(state))
 }
 
 // PostLibraries handles POST /libraries
@@ -228,7 +228,7 @@ func (h LibrariesHandlers) PostDiscard(w http.ResponseWriter, r *http.Request) {
 		sendError(w, r, err)
 		return
 	}
-	sendJSONResponse(w, http.StatusOK, apiv0.DiscardLibraryResponse{Version: state.Version})
+	sendJSONResponse(w, http.StatusOK, apiv0.DiscardLibraryResponse(newDraftStateResponse(state)))
 }
 
 // PostRevertToRelease handles POST /libraries/{library_id}/revert-to-release:
@@ -244,5 +244,5 @@ func (h LibrariesHandlers) PostRevertToRelease(w http.ResponseWriter, r *http.Re
 		sendError(w, r, err)
 		return
 	}
-	sendJSONResponse(w, http.StatusOK, apiv0.RevertLibraryResponse{Version: state.Version})
+	sendJSONResponse(w, http.StatusOK, apiv0.RevertLibraryResponse(newDraftStateResponse(state)))
 }

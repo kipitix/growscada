@@ -170,27 +170,23 @@ func (s projectServiceImpl) describe(ctx context.Context, p project.Project) (ap
 	return appdto.NewProject(p, state), nil
 }
 
-// draftState reads the Version of a project's Draft and the one its last
-// Commit fixed. A Draft never written has nothing to save: its state is the
-// zero one, so the project shows no unsaved changes (task 73).
+// draftState reads the Version of a project's Draft and its unsaved-changes
+// flag, both from the Draft's row alone: the flag is the Draft's own Clean
+// Version marker (ADR 0016, amendment 2026-11-10). A Draft never written has
+// nothing to save: its state is the zero one, so the project shows no unsaved
+// changes (task 73, task 74).
 func (s projectServiceImpl) draftState(ctx context.Context, projectID id.ID[project.Project]) (appdto.ProjectDraftState, error) {
-	scope := draft.ProjectScope(projectID)
-	foundDraft, ok, err := s.drafts.Read(ctx, scope)
+	foundDraft, ok, err := s.drafts.Read(ctx, draft.ProjectScope(projectID))
 	if err != nil {
 		return appdto.ProjectDraftState{}, fmt.Errorf("cannot read the draft of project %s: %w", projectID, err)
 	}
 	if !ok {
 		return appdto.ProjectDraftState{}, nil
 	}
-	state := appdto.ProjectDraftState{DraftVersion: foundDraft.Version().Number()}
-	lastCommit, found, err := s.drafts.FindLastCommit(ctx, scope)
-	if err != nil {
-		return appdto.ProjectDraftState{}, fmt.Errorf("cannot find the last commit of project %s: %w", projectID, err)
-	}
-	if found {
-		state.LastCommitDraftVersion = lastCommit.DraftVersion().Number()
-	}
-	return state, nil
+	return appdto.ProjectDraftState{
+		DraftVersion:      foundDraft.Version().Number(),
+		HasUnsavedChanges: foundDraft.HasUnsavedChanges(),
+	}, nil
 }
 
 // descriptionOf parses an optional description stated by a client: nil keeps

@@ -35,20 +35,12 @@ func (p *Project) loadCommits(ctx app.Context) {
 		}, p.loadCommits)
 }
 
-// lastCommitVersion is the Version of the Draft the last Commit fixed, 0 for
-// a Draft never saved.
-func (p *Project) lastCommitVersion() int {
-	if len(p.commits) == 0 {
-		return 0
-	}
-	return p.commits[0].DraftVersion
-}
-
-// hasUnsavedChanges reports whether the Draft moved since its last Commit. A
-// Discard of this tab made the Draft equal to that Commit at a higher Version,
-// so that Version counts as clean too (task 72_6).
+// hasUnsavedChanges reports whether the Draft moved since its content last
+// equalled its last Commit. The flag is the server's — the Draft's own Clean
+// Version marker (ADR 0016, amendment 2026-11-10; task 74) —, so a Discard, a
+// Revert and a Save all follow it without this tab remembering anything.
 func (p *Project) hasUnsavedChanges() bool {
-	return p.commitsLoaded && p.draftVersion() > max(p.lastCommitVersion(), p.cleanDraftVersion)
+	return p.draftUnsaved
 }
 
 // openSaveDialog opens the Save dialog with a default title and the stored
@@ -96,6 +88,7 @@ func (p *Project) saveCommit(ctx app.Context) {
 			Detail: saved.Title,
 		}})
 		p.loadCommits(ctx)
+		p.loadDraftState(ctx) // the Save made the Draft its Commit's content
 		ctx.Update()
 	}, func(ctx app.Context, err error) {
 		p.savingCommit = false
@@ -185,7 +178,7 @@ func (p *Project) renderCommitBar() []app.UI {
 			Style("font-size", "12px").
 			Style("color", "var(--toast-warn-title)").
 			Text("Unsaved changes"))
-	} else if p.commitsLoaded {
+	} else if p.commitsLoaded && len(p.commits) > 0 {
 		body = append(body, app.Span().
 			Attr("data-commit-saved", "true").
 			Style("font-size", "12px").

@@ -36,7 +36,10 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 		targets := eventlog.ReloadTargetsFor(ev)
 		// A write of the Draft's content is one DraftChange (ADR 0017): the
 		// undo and redo buttons follow the events, as the counts they show do.
+		// The unsaved-changes flag follows every write of the content, the
+		// Draft's own state (task 74).
 		if targets.DraftChanged() {
+			p.loadUnsavedChanges(ctx)
 			p.loadDraftChanges(ctx)
 		}
 		if targets.Deploy {
@@ -72,6 +75,7 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 		}
 		if targets.Commits {
 			p.loadCommits(ctx)
+			p.loadUnsavedChanges(ctx) // a Save makes the Draft its Commit's content
 		}
 		if targets.Releases {
 			p.loadReleases(ctx)

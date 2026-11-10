@@ -42,6 +42,7 @@ func (p *Project) createScene(ctx app.Context) {
 		p.syncSceneEditingFields()
 		p.loadScenes(ctx)
 		p.loadWidgets(ctx)
+		p.loadDraftState(ctx)
 	}, func(ctx app.Context, err error) { p.rejectedDraftWrite(ctx, err, p.loadScenes) })
 }
 
@@ -78,6 +79,7 @@ func (p *Project) deleteScene(ctx app.Context, sceneID uuid.UUID) {
 	}, func(ctx app.Context, deleted apiv0.SceneResponse) {
 		p.observeDraftVersion(mark, deleted.Version)
 		p.loadScenes(ctx)
+		p.loadDraftState(ctx)
 	}, p.rejectedSceneEdit(nil))
 }
 
@@ -169,5 +171,6 @@ func (p *Project) putScene(sc apiv0.SceneResponse) {
 	}, func(ctx app.Context, updated apiv0.UpdateSceneResponse) {
 		// The list holds the properties as saved.
 		p.observeDraftVersion(mark, updated.Version)
+		p.loadDraftState(ctx)
 	}, p.rejectedSceneEdit(p.loadScenes))
 }

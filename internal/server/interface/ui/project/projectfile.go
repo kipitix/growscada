@@ -133,6 +133,7 @@ func (p *Project) doOpenProjectFile(ctx app.Context, pending *pendingProjectFile
 		p.loadWidgetTypes(ctx)
 		p.loadPins(ctx)
 		p.loadDeploy(ctx)
+		p.loadDraftState(ctx)
 		p.loadDraftChanges(ctx)
 		ctx.Update()
 	}, func(ctx app.Context, err error) {

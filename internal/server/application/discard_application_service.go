@@ -84,7 +84,7 @@ func (s discardServiceImpl) Discard(ctx context.Context, rawProjectID uuid.UUID)
 		return appdto.DiscardedDraft{}, fmt.Errorf("cannot check the library pins of project %s: %w", projectID, err)
 	}
 	content, warnings := dropMissingLibraryReleases(content, file, missing)
-	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), func(session *draft.Session) error {
+	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), len(warnings) == 0, func(session *draft.Session) error {
 		if err := s.lockDiscardedPins(ctx, content, session); err != nil {
 			return err
 		}
@@ -122,7 +122,16 @@ func (s discardServiceImpl) Revert(ctx context.Context, rawProjectID uuid.UUID) 
 		return appdto.DiscardedDraft{}, fmt.Errorf("cannot check the library pins of project %s: %w", projectID, err)
 	}
 	content, warnings := dropMissingLibraryReleases(content, deployment.Content, missing)
-	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), func(session *draft.Session) error {
+	// The Draft the Revert writes is its last Commit's content only when the
+	// Deployment is exactly that and nothing of it was dropped: then it is
+	// clean, as after a Discard. A Deployment of another Release, of a file or
+	// of an older state is a different content (task 74).
+	clean, err := s.revertIsTheLastCommit(ctx, projectID, deployment.Content)
+	if err != nil {
+		return appdto.DiscardedDraft{}, err
+	}
+	clean = clean && len(warnings) == 0
+	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), clean, func(session *draft.Session) error {
 		if err := s.lockDiscardedPins(ctx, content, session); err != nil {
 			return err
 		}
@@ -132,6 +141,29 @@ func (s discardServiceImpl) Revert(ctx context.Context, rawProjectID uuid.UUID) 
 		return appdto.DiscardedDraft{}, fmt.Errorf("cannot revert project %s: %w", projectID, err)
 	}
 	return appdto.DiscardedDraft{Version: result.Version().Number(), Warnings: warnings}, nil
+}
+
+// revertIsTheLastCommit reports whether the document of the Deployment a
+// Project runs is the content of its last Commit: the Draft a Revert writes is
+// then that Commit again and clean, as after a Discard (task 74). A Project
+// with no Commit, or a Deployment of another content, is not clean.
+func (s discardServiceImpl) revertIsTheLastCommit(ctx context.Context, projectID id.ID[project.Project], document projectv0.ProjectFile) (bool, error) {
+	last, found, err := s.content.Drafts().FindLastCommit(ctx, s.content.ScopeOf(projectID))
+	if err != nil {
+		return false, fmt.Errorf("cannot read the last commit of project %s: %w", projectID, err)
+	}
+	if !found {
+		return false, nil
+	}
+	file, ok := last.Content().ProjectFile()
+	if !ok {
+		return false, nil
+	}
+	same, err := sameProjectFile(document, file)
+	if err != nil {
+		return false, fmt.Errorf("cannot compare the deployment and the last commit of project %s: %w", projectID, err)
+	}
+	return same, nil
 }
 
 // lockDiscardedPins locks every Library the kept pins name FOR SHARE in the

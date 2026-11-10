@@ -114,9 +114,11 @@ func (l *Library) loadList(ctx app.Context) {
 		}, l.libraryGone, l.loadList)
 }
 
-// loadDraftState (re)loads the Version of the selected library's Draft: the
-// Draft of a library without a WidgetType carries it in no content DTO, and
-// every write of the Draft states it (ADR 0016).
+// loadDraftState (re)loads the state of the selected library's Draft: its
+// Version — the Draft of a library without a WidgetType carries it in no
+// content DTO, and every write of the Draft states it (ADR 0016) — and whether
+// it holds changes its last Commit does not (task 74). It is read on mount, on
+// a resync, after each content event and after each command.
 func (l *Library) loadDraftState(ctx app.Context) {
 	if l.libraryID == uuid.Nil {
 		return
@@ -128,7 +130,42 @@ func (l *Library) loadDraftState(ctx app.Context) {
 		},
 		func(ctx app.Context, _ *apiclient.LibraryClient, state apiv0.DraftStateResponse) {
 			l.observeDraftVersion(mark, state.Version)
+			l.applyDraftState(mark, state)
 		}, l.libraryGone, l.loadDraftState)
+}
+
+// applyDraftState stores the unsaved-changes flag a request sent at mark
+// answered, under the same guard as applyDraftChanges: an answer of a read sent
+// before a later write, or before a resync, would put a stale badge back.
+func (l *Library) applyDraftState(mark uiutil.Mark, state apiv0.DraftStateResponse) {
+	if l.draftVersions.Forgotten(mark, l.libraryID) {
+		return
+	}
+	if known := l.draftVersion(); known > state.Version {
+		return
+	}
+	l.draftUnsaved, l.draftStateLoaded = state.HasUnsavedChanges, true
+}
+
+// loadUnsavedChanges (re)loads whether the selected library's Draft holds
+// changes its last Commit does not, from the Draft's state, after a content
+// event of another tab. The answer states the server's Version too, but that is
+// not the Version the shown WidgetTypes were read at: advancing it would let an
+// edit of the stale content overwrite the other tab's change instead of being
+// refused as a conflict, so only the flag is applied (task 74).
+func (l *Library) loadUnsavedChanges(ctx app.Context) {
+	draft := l.draft()
+	if draft == nil {
+		return
+	}
+	mark := l.markDraft()
+	uiutil.LoadFor(l.compoCtx, &l.unsavedReloader, l.draft,
+		func(c context.Context, lib *apiclient.LibraryClient) (apiv0.DraftStateResponse, error) {
+			return lib.DraftState(c)
+		},
+		func(ctx app.Context, _ *apiclient.LibraryClient, state apiv0.DraftStateResponse) {
+			l.applyDraftState(mark, state)
+		}, l.loadUnsavedChanges)
 }
 
 // loadReleases (re)loads the releases of the selected library.

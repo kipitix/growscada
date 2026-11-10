@@ -82,6 +82,7 @@ func (l *Library) stepDraftChange(ctx app.Context, undo bool) {
 		// events).
 		l.observeDraftVersion(mark, state.Version)
 		l.applyDraftChanges(mark, state)
+		l.loadDraftState(ctx) // the command raised the Version: unsaved again
 		ctx.Update()
 	}, func(ctx app.Context, err error) {
 		l.undoing, l.redoing = false, false
@@ -100,6 +101,7 @@ func (l *Library) rejectedDraftChange(ctx app.Context, err error) {
 	if problem && se.Problem.Draft != nil {
 		uiutil.ShowError(ctx, err)
 		l.forgetDraftVersion()
+		l.loadDraftState(ctx)
 		l.loadDraftChanges(ctx)
 		l.loadList(ctx)
 		l.loadReleases(ctx)
@@ -108,6 +110,7 @@ func (l *Library) rejectedDraftChange(ctx app.Context, err error) {
 		return
 	}
 	uiutil.ShowError(ctx, err)
+	l.loadDraftState(ctx)
 	l.loadDraftChanges(ctx)
 	ctx.Update()
 }

@@ -139,7 +139,7 @@ func (s projectFileServiceImpl) Open(ctx context.Context, rawProjectID uuid.UUID
 	if err != nil {
 		return appdto.DraftState{}, fmt.Errorf("cannot open the project file of %s: %w", projectID, err)
 	}
-	return appdto.DraftState{Version: result.Version().Number()}, nil
+	return appdto.DraftState{Version: result.Version().Number(), HasUnsavedChanges: result.HasUnsavedChanges()}, nil
 }
 
 // lockLocalPins rechecks the local Releases inside the Draft's transaction:

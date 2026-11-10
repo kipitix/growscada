@@ -21,7 +21,9 @@ import (
 func cleanScenes(t *testing.T) {
 	t.Helper()
 	// widgets cascade-delete with their scene (ON DELETE CASCADE on scene_id).
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM engineering.scenes"); err != nil {
+	// The content changed without a Save: the Draft's Clean Version is gone.
+	if _, err := testDB.ExecContext(context.Background(),
+		"DELETE FROM engineering.scenes; UPDATE engineering.drafts SET clean_version = 0"); err != nil {
 		t.Fatalf("cleanScenes: %v", err)
 	}
 	ensureTestWidgetType(t)

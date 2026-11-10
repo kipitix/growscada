@@ -53,6 +53,7 @@ func (l *Library) createItem(ctx app.Context) {
 		})
 		l.selectItem(created.ID)
 		l.loadList(ctx)
+		l.loadDraftState(ctx)
 	}, l.rejectedDraftWrite)
 }
 
@@ -70,6 +71,7 @@ func (l *Library) deleteItem(ctx app.Context) {
 			l.clearSelection()
 		}
 		l.loadList(ctx)
+		l.loadDraftState(ctx)
 	}, l.rejectedDraftWrite)
 }
 
@@ -148,6 +150,7 @@ func (l *Library) updateWidgetType(id uuid.UUID, req apiv0.UpdateWidgetTypeReque
 	}, func(ctx app.Context, updated apiv0.UpdateWidgetTypeResponse) {
 		l.observeDraftVersion(mark, updated.Version)
 		l.loadList(ctx)
+		l.loadDraftState(ctx)
 	}, l.rejectedDraftWrite)
 }
 
@@ -159,6 +162,7 @@ func (l *Library) rejectedDraftWrite(ctx app.Context, err error) {
 	if errors.Is(err, apiclient.ErrConflict) {
 		l.forgetDraftVersion()
 		l.loadList(ctx)
+		l.loadDraftState(ctx)
 		l.loadDraftChanges(ctx)
 		l.loadCommits(ctx)
 		l.loadLibraries(ctx)

@@ -47,12 +47,13 @@ type draftRow struct {
 	projectID              uuid.NullUUID
 	libraryID              uuid.NullUUID
 	version                int
+	cleanVersion           int
 	stackPosition          int
 	lastCommitNumber       int
 	lastCommitDraftVersion int
 }
 
-const selectDraftColumns = `id, project_id, library_id, version, stack_position, last_commit_number, last_commit_draft_version`
+const selectDraftColumns = `id, project_id, library_id, version, clean_version, stack_position, last_commit_number, last_commit_draft_version`
 
 func (r draftRepositoryPostgres) Read(ctx context.Context, scope draft.Scope) (draft.Draft, bool, error) {
 	cond, args := scopeCondition(scope)
@@ -74,7 +75,7 @@ func draftOf(row draftRow, scope draft.Scope) draft.Draft {
 	if err != nil {
 		ver = version.Initial[draft.Draft]()
 	}
-	return draft.NewDraft(id.NewID(id.IDWithUUID[draft.Draft](row.id)), scope, ver, row.stackPosition)
+	return draft.NewDraft(id.NewID(id.IDWithUUID[draft.Draft](row.id)), scope, ver, versionOfDraft(row.cleanVersion), row.stackPosition)
 }
 
 // Update runs one write of the Draft's content (see draft.Repository).
@@ -133,8 +134,11 @@ func (r draftRepositoryPostgres) CheckVersion(ctx context.Context, scope draft.S
 	return tx.Commit()
 }
 
-// Replace replaces the whole content of the Draft (see draft.Repository).
-func (r draftRepositoryPostgres) Replace(ctx context.Context, scope draft.Scope, change func(*draft.Session) error) (draft.Draft, error) {
+// Replace replaces the whole content of the Draft (see draft.Repository). A
+// clean replacement — one whose content is the last Commit's — makes the new
+// Version the Clean Version; otherwise the marker stays, so the raised Version
+// keeps the Draft unsaved.
+func (r draftRepositoryPostgres) Replace(ctx context.Context, scope draft.Scope, clean bool, change func(*draft.Session) error) (draft.Draft, error) {
 	var result draft.Draft
 	err := r.inTx(ctx, func(tx *sql.Tx) ([]event.Event, error) {
 		row, err := lockDraftRow(ctx, tx, scope, true, true)
@@ -167,7 +171,14 @@ func (r draftRepositoryPostgres) Replace(ctx context.Context, scope draft.Scope,
 		if err := updateDraftProgress(ctx, tx, row.id, next, 0); err != nil {
 			return nil, err
 		}
-		result = current.WithVersion(versionOfDraft(next)).WithStackPosition(0)
+		cleanVersion := versionOfDraft(row.cleanVersion)
+		if clean {
+			if err := updateDraftCleanVersion(ctx, tx, row.id, next); err != nil {
+				return nil, err
+			}
+			cleanVersion = versionOfDraft(next)
+		}
+		result = current.WithVersion(versionOfDraft(next)).WithCleanVersion(cleanVersion).WithStackPosition(0)
 		return session.Events(), nil
 	})
 	if err != nil {
@@ -502,6 +513,17 @@ func updateDraftProgress(ctx context.Context, tx *sql.Tx, draftID uuid.UUID, con
 	return nil
 }
 
+// updateDraftCleanVersion makes version the Draft's Clean Version: the content
+// stored at it equals the last Commit's (ADR 0016, amendment 2026-11-10).
+func updateDraftCleanVersion(ctx context.Context, tx *sql.Tx, draftID uuid.UUID, version int) error {
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE engineering.drafts SET clean_version = $2, updated_at = now() WHERE id = $1`,
+		draftID, version); err != nil {
+		return fmt.Errorf("cannot update the draft's clean version: %w", err)
+	}
+	return nil
+}
+
 func versionOfDraft(number int) version.Version[draft.Draft] {
 	ver, err := version.New(version.WithNumber[draft.Draft](number))
 	if err != nil {
@@ -512,7 +534,7 @@ func versionOfDraft(number int) version.Version[draft.Draft] {
 
 func scanDraftRow(scan func(...any) error) (*draftRow, error) {
 	var row draftRow
-	if err := scan(&row.id, &row.projectID, &row.libraryID, &row.version, &row.stackPosition,
+	if err := scan(&row.id, &row.projectID, &row.libraryID, &row.version, &row.cleanVersion, &row.stackPosition,
 		&row.lastCommitNumber, &row.lastCommitDraftVersion); err != nil {
 		return nil, err
 	}

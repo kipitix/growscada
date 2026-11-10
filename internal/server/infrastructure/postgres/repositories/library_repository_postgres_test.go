@@ -239,19 +239,25 @@ func TestLibraryReleaseState_UnsavedAndUnpublished(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: FindLastCommit: %v", step, err)
 		}
-		lastCommitNumber, lastCommitDraftVersion := 0, 0
+		lastCommitNumber := 0
 		if found {
 			lastCommitNumber = lastCommit.Number()
-			lastCommitDraftVersion = lastCommit.DraftVersion().Number()
 		}
-		got := library.ReleaseStateOf(latest, lastCommitNumber, libraryDraftVersionOf(t, repo.libraryID).Number(), lastCommitDraftVersion)
+		// The flag is the Draft's own Clean Version marker (task 74).
+		unsaved := false
+		if foundDraft, ok, err := testDrafts().Read(ctx, draft.LibraryScope(repo.libraryID)); err != nil {
+			t.Fatalf("%s: Read: %v", step, err)
+		} else if ok {
+			unsaved = foundDraft.HasUnsavedChanges()
+		}
+		got := library.ReleaseStateOf(latest, lastCommitNumber, unsaved)
 		if got.Latest.Int() != wantLatest || got.UnsavedChanges != wantUnsaved || got.UnpublishedChanges != wantUnpublished {
 			t.Errorf("%s: %+v, want release %d, unsaved %t, unpublished %t",
 				step, got, wantLatest, wantUnsaved, wantUnpublished)
 		}
 	}
 
-	check("a new library", 0, true, false)
+	check("a new library", 0, false, false)
 	port, _ := library.NewInputPortName("value")
 	ports := []library.InputPort{library.NewInputPort(port, "the value", library.AnyTypeHint())}
 	gauge := mustStoreWidgetType(t, makeWidgetType(t, "gauge", ports, repo), repo)

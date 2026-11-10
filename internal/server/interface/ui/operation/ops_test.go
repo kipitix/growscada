@@ -35,7 +35,7 @@ func cleanMain(t *testing.T) {
 		 DELETE FROM engineering.project_releases WHERE project_id = `+main+`;
 		 DELETE FROM engineering.commits WHERE draft_id IN (SELECT id FROM engineering.drafts WHERE project_id = `+main+`);
 		 DELETE FROM engineering.draft_changes WHERE draft_id IN (SELECT id FROM engineering.drafts WHERE project_id = `+main+`);
-		 UPDATE engineering.drafts SET last_commit_number = 0, last_commit_draft_version = 0, stack_position = 0
+		 UPDATE engineering.drafts SET last_commit_number = 0, last_commit_draft_version = 0, stack_position = 0, clean_version = 0
 		 WHERE project_id = `+main); err != nil {
 		t.Fatalf("clean Main: %v", err)
 	}

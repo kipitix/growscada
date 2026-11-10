@@ -72,12 +72,19 @@ type DeployResponse struct {
 // states (ADR 0016).
 const DraftPath = "/draft"
 
-// DraftStateResponse is the state of a Project's Draft: its Version. GET
-// /projects/{id}/draft answers it, and so do POST /projects/{id}/discard (the
-// reset to the last Commit) and POST /projects/{id}/revert-to-deployed (the
-// reset to the Deployment the Project runs) after the reset.
+// DraftStateResponse is the state of a Project's or a Library's Draft: its
+// Version and whether it holds changes its last Commit does not (ADR 0016,
+// task 74). GET /projects/{id}/draft and GET /libraries/{id}/draft answer it, and
+// so do POST /projects/{id}/discard (the reset to the last Commit), POST
+// /projects/{id}/revert-to-deployed (the reset to the Deployment the Project
+// runs), POST /libraries/{id}/discard (to the last Commit) and POST
+// /libraries/{id}/revert-to-release (to the latest Release) after the reset.
+//
+// In Problem.draft (409 draft_conflict) only Version is meaningful: the
+// conflict names the Version the server holds, not the state of its flag.
 type DraftStateResponse struct {
-	Version int `json:"version"`
+	Version           int  `json:"version"`
+	HasUnsavedChanges bool `json:"has_unsaved_changes"`
 }
 
 // DiscardProjectResponse is the answer of POST /projects/{id}/discard — the

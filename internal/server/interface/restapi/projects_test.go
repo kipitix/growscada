@@ -29,7 +29,7 @@ func cleanProjectsRest(t *testing.T) {
 		"DELETE FROM runtime.deployments; DELETE FROM runtime.journal; DELETE FROM runtime.tags; DELETE FROM engineering.tags; DELETE FROM engineering.scenes; DELETE FROM engineering.project_releases; "+
 			"DELETE FROM engineering.commits; DELETE FROM engineering.draft_changes; DELETE FROM projects WHERE id <> '"+mainProject.String()+"'; "+
 			"UPDATE projects SET name = 'Main', version = 1, deleted_at = NULL; "+
-			"UPDATE engineering.drafts SET last_commit_number = 0, last_commit_draft_version = 0, stack_position = 0"); err != nil {
+			"UPDATE engineering.drafts SET last_commit_number = 0, last_commit_draft_version = 0, stack_position = 0, clean_version = 0"); err != nil {
 		t.Fatalf("cleanProjectsRest: %v", err)
 	}
 }

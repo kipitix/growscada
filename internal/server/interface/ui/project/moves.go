@@ -160,6 +160,7 @@ func (p *Project) sendMoves(ctx app.Context, sceneID uuid.UUID, moves []apiv0.Wi
 		if content == p.content {
 			p.moveSending = false
 			p.observeDraftVersion(mark, resp.Version)
+			p.loadDraftState(ctx)
 			p.runMoveQueue(ctx)
 		}
 	}, func(ctx app.Context, err error) {

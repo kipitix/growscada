@@ -101,8 +101,14 @@ func runDiscard(t *testing.T, projectID uuid.UUID) {
 // starts from none. The Libraries and their releases stay.
 func cleanPins(t *testing.T) {
 	t.Helper()
-	if _, err := testDB.ExecContext(context.Background(),
+	ctx := context.Background()
+	if _, err := testDB.ExecContext(ctx,
 		"DELETE FROM engineering.library_pins WHERE project_id = $1", mainProject); err != nil {
+		t.Fatalf("cleanPins: %v", err)
+	}
+	// The content changed without a Save: the Draft's Clean Version is gone.
+	if _, err := testDB.ExecContext(ctx,
+		"UPDATE engineering.drafts SET clean_version = 0 WHERE project_id = $1", mainProject); err != nil {
 		t.Fatalf("cleanPins: %v", err)
 	}
 }
@@ -401,6 +407,114 @@ func TestDiscard_OfAPinnedLibraryRestoresThePin(t *testing.T) {
 	pins, err := newLibraryPinService().FindLibraryPins(ctx, mainProject)
 	if err != nil || len(pins) != 1 || pins[0].LibraryID != lib.ID || pins[0].Release != 1 {
 		t.Errorf("the pins after the Discard: %+v, %v, want %s at release 1", pins, err, lib.ID)
+	}
+}
+
+// TestUnsavedChanges_FollowTheDraftsCleanVersion: the unsaved-changes flag of a
+// Project comes from the Draft's own Clean Version marker: a never written Draft
+// is clean, a write is unsaved, and a Save, a Discard and a Revert to the last
+// Commit's content clean it; a write above the marker, or a Revert to another
+// content, is unsaved again (task 74; ADR 0016, amendment 2026-11-10).
+func TestUnsavedChanges_FollowTheDraftsCleanVersion(t *testing.T) {
+	cleanProjects(t)
+	ctx := context.Background()
+	projects := application.NewProjectService(repositories.NewProjectRepositoryPostgres(testDB),
+		repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB)), soleOrganization())
+	drafts := application.NewDraftService(contentOver(newScopes()))
+	created, err := projects.CreateProject(ctx, appdto.ProjectInput{Name: "unsaved-" + uuid.NewString()})
+	if err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	check := func(step string, want bool) {
+		t.Helper()
+		found, err := projects.FindProjectByID(ctx, created.ID)
+		if err != nil || found.HasUnsavedChanges != want {
+			t.Errorf("%s: the project shows %+v, %v; want unsaved %t", step, found, err, want)
+		}
+		state, err := drafts.State(ctx, created.ID)
+		if err != nil || state.HasUnsavedChanges != want {
+			t.Errorf("%s: the Draft state is %+v, %v; want unsaved %t", step, state, err, want)
+		}
+	}
+	write := func(name string) {
+		t.Helper()
+		if _, err := newService().CreateTag(ctx, created.ID, appdto.CreateTagInput{
+			Version: draftVersionOf(t, created.ID), Name: name, Type: "integer",
+		}); err != nil {
+			t.Fatalf("CreateTag %s: %v", name, err)
+		}
+	}
+	scope := draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](created.ID)))
+	refused := func(step string) {
+		t.Helper()
+		if _, err := newCommitService().Save(ctx, scope, draftVersionOf(t, created.ID), step, "Ada"); !errors.Is(err, draft.ErrNothingToSave) {
+			t.Errorf("%s: Save %v, want ErrNothingToSave", step, err)
+		}
+	}
+
+	check("never written", false)
+	write("speed")
+	check("written", true)
+	mustSaveCommit(t, created.ID, "First")
+	check("saved", false)
+	refused("saved")
+
+	write("pressure")
+	check("written after the save", true)
+	if _, err := newDiscardService().Discard(ctx, created.ID); err != nil {
+		t.Fatalf("Discard: %v", err)
+	}
+	check("discarded", false)
+	refused("discarded")
+
+	write("flow")
+	check("written after the discard", true)
+	mustDeployTheDraft(t, created.ID)
+	check("deployed", false)
+	write("temperature")
+	check("written after the deploy", true)
+	if _, err := newDiscardService().Revert(ctx, created.ID); err != nil {
+		t.Fatalf("Revert: %v", err)
+	}
+	check("reverted to the last commit's content", false)
+
+	// A later Commit is not the running Deployment: a Revert to that Deployment
+	// is another content, so the Draft stays unsaved.
+	write("level")
+	mustSaveCommit(t, created.ID, "Second")
+	check("saved after the revert", false)
+	if _, err := newDiscardService().Revert(ctx, created.ID); err != nil {
+		t.Fatalf("Revert to the running deployment: %v", err)
+	}
+	check("reverted to another content", true)
+}
+
+// TestDiscard_WithAWarningStaysUnsaved: a Discard that could not restore a
+// Library Release drops its pin with its Widgets — the content really differs
+// from the Commit's — and the Draft stays unsaved (task 74; task 71).
+func TestDiscard_WithAWarningStaysUnsaved(t *testing.T) {
+	r := newReconciliation(t, reconciliationWiring{})
+	ctx := context.Background()
+	_, lib := pinNewWidgetType(t, mainProject, appdto.WidgetTypeInput{Name: "gauge"})
+	mustDeployTheDraft(t, mainProject)
+	if found, err := r.projectSvc.FindProjectByID(ctx, mainProject); err != nil || found.HasUnsavedChanges {
+		t.Fatalf("before the Discard: %+v, %v; want the deployed Draft clean", found, err)
+	}
+
+	// This server does not have the Library the Commit pins any more.
+	if _, err := testDB.ExecContext(ctx,
+		`UPDATE engineering.libraries SET deleted_at = now() WHERE id = $1`, lib.ID); err != nil {
+		t.Fatalf("mark the library deleted: %v", err)
+	}
+	answer, err := newDiscardService().Discard(ctx, mainProject)
+	if err != nil {
+		t.Fatalf("Discard: %v", err)
+	}
+	if len(answer.Warnings) != 1 || answer.Warnings[0].LibraryID != lib.ID {
+		t.Fatalf("the Discard's warnings: %+v, want the missing library", answer.Warnings)
+	}
+	if found, err := r.projectSvc.FindProjectByID(ctx, mainProject); err != nil || !found.HasUnsavedChanges {
+		t.Errorf("after a Discard that dropped a pin: %+v, %v; want unsaved changes", found, err)
 	}
 }
 

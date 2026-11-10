@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
@@ -35,7 +36,7 @@ func TestSaveFromShortcut_OpensTheDialogOnlyWithChanges(t *testing.T) {
 	f, _ := selected(t)
 	f.run()
 	if !f.l.hasUnsavedChanges() {
-		t.Fatal("a fresh Draft reports no unsaved changes")
+		t.Fatal("a Draft written but never saved reports no unsaved changes")
 	}
 	f.l.saveFromShortcut(f.l.compoCtx)
 	if !f.l.saveDialog {
@@ -90,9 +91,8 @@ func TestDiscard_ResetsToTheLastCommitAndClearsTheIndicator(t *testing.T) {
 	f.run()
 	saveWithUI(t, f, "First save")
 
-	createWidgetType(t, f.api, "Added")
-	f.l.loadList(f.l.compoCtx)
-	f.run()
+	added := createWidgetType(t, f.api, "Added")
+	f.event(apiv0.Event{Type: apiv0.EventWidgetTypeCreated, ID: added.String(), LibraryID: f.l.libraryID.String()})
 	if !f.l.hasUnsavedChanges() {
 		t.Fatal("the change after the Commit is not unsaved")
 	}
@@ -126,9 +126,8 @@ func TestRevert_ResetsToTheLatestReleaseAndClearsTheIndicator(t *testing.T) {
 		t.Fatal("the Draft of a fresh Release reports unsaved changes")
 	}
 
-	createWidgetType(t, f.api, "Added")
-	f.l.loadList(f.l.compoCtx)
-	f.run()
+	added := createWidgetType(t, f.api, "Added")
+	f.event(apiv0.Event{Type: apiv0.EventWidgetTypeCreated, ID: added.String(), LibraryID: f.l.libraryID.String()})
 	if !f.l.hasUnsavedChanges() {
 		t.Fatal("the change after the Release is not unsaved")
 	}
@@ -351,5 +350,36 @@ func TestCommitTitleEvent_RereadsTheReleases(t *testing.T) {
 	f.event(apiv0.Event{Type: apiv0.EventCommitTitleUpdated, ID: f.l.libraryID.String(), Commit: 1})
 	if len(f.l.releases) != 1 || f.l.releases[0].Title == nil || *f.l.releases[0].Title != "Renamed" {
 		t.Errorf("a rename of the Commit did not reread the Releases: %+v", f.l.releases)
+	}
+}
+
+// TestDiscard_AnotherTabsDiscardClearsTheIndicator: a Discard performed
+// elsewhere arrives as the Draft's content events; the indicator is the flag
+// the server answers (task 74; ADR 0016, amendment 2026-11-10).
+func TestDiscard_AnotherTabsDiscardClearsTheIndicator(t *testing.T) {
+	f, _ := selected(t)
+	f.run()
+	saveWithUI(t, f, "First save")
+
+	createWidgetType(t, f.api, "Added")
+	f.l.loadUnsavedChanges(f.l.compoCtx)
+	f.run()
+	if !f.l.hasUnsavedChanges() {
+		t.Fatal("the change after the Commit is not unsaved")
+	}
+
+	if _, err := f.api.Discard(context.Background()); err != nil {
+		t.Fatalf("another tab's Discard: %v", err)
+	}
+	// The events of the Discard reach this tab: the WidgetType it removed is
+	// one.
+	f.event(apiv0.Event{
+		Type: apiv0.EventWidgetTypeDeleted, ID: uuid.NewString(), LibraryID: f.l.libraryID.String(),
+	})
+	if f.l.hasUnsavedChanges() {
+		t.Errorf("the indicator stays after another tab's Discard")
+	}
+	if html := app.HTMLString(app.Div().Body(f.l.renderCommitBar()...)); strings.Contains(html, "data-commit-unsaved") {
+		t.Errorf("the header still marks unsaved changes: %s", html)
 	}
 }

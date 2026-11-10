@@ -54,6 +54,7 @@ func (p *Project) createWidget(ctx app.Context, typeID uuid.UUID, x, y float64) 
 		uiutil.StoreID(ctx, p.selectionKey(widgetIDKey), created.ID)
 		p.syncEditingFields(w)
 		p.loadWidgets(ctx)
+		p.loadDraftState(ctx)
 	}, p.rejectedSceneEdit(nil))
 }
 
@@ -76,6 +77,7 @@ func (p *Project) deleteWidget(ctx app.Context, widgetID uuid.UUID) {
 			p.forgetDraftVersion()
 			p.loadScenes(ctx)
 		}
+		p.loadDraftState(ctx)
 		if p.isWidgetSelected(widgetID) {
 			p.removeWidgetFromSelection(ctx, widgetID)
 		}
@@ -196,6 +198,7 @@ func (p *Project) putWidget(ctx app.Context, w apiv0.WidgetResponse) {
 		return content.UpdateWidget(c, sceneID, w.ID, req)
 	}, func(ctx app.Context, updated apiv0.UpdateWidgetResponse) {
 		p.observeDraftVersion(mark, updated.Version)
+		p.loadDraftState(ctx)
 	}, p.rejectedSceneEdit(p.loadWidgets))
 }
 

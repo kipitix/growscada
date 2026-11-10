@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 
-	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	projectv0 "github.com/kipitix/growscada/contract/project/v0"
 	"github.com/kipitix/growscada/internal/server/application"
 )
@@ -88,7 +87,7 @@ func (h ProjectFileHandlers) PostProjectFile(w http.ResponseWriter, r *http.Requ
 		sendError(w, r, err)
 		return
 	}
-	sendJSONResponse(w, http.StatusOK, apiv0.DraftStateResponse{Version: state.Version})
+	sendJSONResponse(w, http.StatusOK, newDraftStateResponse(state))
 }
 
 // PostProjectFileDeploy handles POST /projects/{project_id}/projectfile/deploy:

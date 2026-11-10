@@ -56,8 +56,10 @@ func (p *Project) rejectedDraftWrite(ctx app.Context, err error, reload func(app
 	}
 }
 
-// loadDraftState (re)loads the Version of the Draft: what every content write
-// states (ADR 0016).
+// loadDraftState (re)loads the state of the Draft: the Version every content
+// write states (ADR 0016) and whether it holds changes its last Commit does
+// not (task 74). It is read on mount, on a resync, after each content event and
+// after each command — the points loadDraftChanges is read at.
 func (p *Project) loadDraftState(ctx app.Context) {
 	if p.content == nil {
 		return
@@ -69,7 +71,45 @@ func (p *Project) loadDraftState(ctx app.Context) {
 		},
 		func(ctx app.Context, state apiv0.DraftStateResponse) {
 			p.observeDraftVersion(mark, state.Version)
+			p.applyDraftState(mark, state)
 		}, p.loadDraftState)
+}
+
+// applyDraftState stores the unsaved-changes flag a request sent at mark
+// answered, under the same guard as applyDraftChanges: an answer of a read sent
+// before a later write, or before a resync, would put a stale badge back.
+func (p *Project) applyDraftState(mark uiutil.Mark, state apiv0.DraftStateResponse) {
+	if p.draftVersions.Forgotten(mark, p.projectID) {
+		return
+	}
+	if known := p.draftVersions.Of(p.projectID); known > state.Version {
+		return
+	}
+	p.draftUnsaved, p.draftStateLoaded = state.HasUnsavedChanges, true
+}
+
+// loadUnsavedChanges (re)loads whether the Draft holds changes its last Commit
+// does not, from the Draft's state, after a content event of another tab. The
+// answer states the server's Version too, but that is not the Version the shown
+// content was read at: advancing it would let a write of the stale content
+// overwrite the other tab's change instead of being refused as a conflict
+// (task 72_6), so only the flag is applied (task 74).
+func (p *Project) loadUnsavedChanges(ctx app.Context) {
+	if p.content == nil {
+		return
+	}
+	content := p.content
+	mark := p.markDraft()
+	uiutil.LoadOfProject(p.compoCtx, &p.unsavedReloader, p.projectContent,
+		func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DraftStateResponse, error) {
+			return pc.DraftState(c)
+		},
+		func(ctx app.Context, state apiv0.DraftStateResponse) {
+			if content != p.content {
+				return
+			}
+			p.applyDraftState(mark, state)
+		}, p.loadUnsavedChanges)
 }
 
 // loadDraftChanges (re)loads the state of the Draft's DraftChange stack (ADR

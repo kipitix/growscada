@@ -105,11 +105,13 @@ type Project struct {
 	saveTitle       string
 	saveAuthor      string
 	commitsDialog   bool
-	// cleanDraftVersion is the Version of the Draft a Discard of this tab just
-	// made equal to its last Commit: the unsaved-changes indicator compares
-	// against it too, so a Discard leaves nothing unsaved even though the
-	// Version rose (task 72_6). 0: no such reset.
-	cleanDraftVersion int
+	// draftUnsaved is the unsaved-changes flag of the project's Draft, as the
+	// server answers it: its Version is above its Clean Version (ADR 0016,
+	// amendment 2026-11-10; task 74). The editor draws it and never derives it.
+	draftUnsaved bool
+	// draftStateLoaded is false until the first answer of the Draft's state:
+	// the header says nothing about saved changes before it.
+	draftStateLoaded bool
 	// contentReplacements counts the replacements of the whole Draft (a
 	// Discard, a Revert, an opened project file): the first Scene list requested
 	// after one is the truth whatever Version it states, so the Scenes shown and
@@ -156,6 +158,7 @@ type Project struct {
 	// Coalesce reloads of each server-backed list (see load.go).
 	widgetTypesReloader uiutil.Reloader
 	draftReloader       uiutil.Reloader
+	unsavedReloader     uiutil.Reloader
 	changesReloader     uiutil.Reloader
 	librariesReloader   uiutil.Reloader
 	pinsReloader        uiutil.Reloader
@@ -391,7 +394,8 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.commits, p.commitsLoaded = nil, false
 	p.saveDialog, p.savingCommit, p.commitsDialog = false, false, false
 	p.renamingCommit, p.renameCommitTitle = 0, ""
-	p.cleanDraftVersion, p.contentReplacements, p.appliedReplacements = 0, 0, 0
+	p.draftUnsaved, p.draftStateLoaded = false, false
+	p.contentReplacements, p.appliedReplacements = 0, 0
 	p.releases, p.releasesLoaded = nil, false
 	p.releasesDialog, p.releaseDialog, p.releasing = false, false, false
 	p.releaseCommit, p.releaseNote, p.releaseAuthor = 0, "", ""
