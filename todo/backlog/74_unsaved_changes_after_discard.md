@@ -1,7 +1,7 @@
 # Бейдж «Unsaved changes» не исчезает после Discard к последнему Commit
 
 Status: ready-for-agent
-Priority: 3
+Priority: 1
 Absorbs: 75
 
 Появилось при ревью задачи 73 (находки Bugs 3 / Spec 2). Приёмочный п. 5

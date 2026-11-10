@@ -1,7 +1,7 @@
 # Русская подпись `← Список` в PWA: весь интерфейс на английском
 
 Status: ready-for-agent
-Priority: 3
+Priority: 1
 
 Найдено при ревью задачи 73. Весь интерфейс PWA английский («Projects»,
 «Libraries», «Open», «Edit», «Save», «Discard»), а слим-строка возврата к
