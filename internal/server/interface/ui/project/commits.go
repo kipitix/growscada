@@ -17,8 +17,8 @@ import (
 // The Project mode's Save and its history (task 72_2; ADR 0021): Save fixes
 // the Draft as a Commit, the history lists them and their titles are renamed.
 // The Draft is still written at once — Save only records a named point of
-// history, so the indicator follows the Version of the Draft against the one
-// the last Commit fixed.
+// history, so the indicator is the Draft's own unsaved-changes flag, its
+// Version against its Clean Version (ADR 0016, amendment 2026-11-10; task 74).
 
 // loadCommits (re)loads the history of the project's Draft.
 func (p *Project) loadCommits(ctx app.Context) {
@@ -178,7 +178,7 @@ func (p *Project) renderCommitBar() []app.UI {
 			Style("font-size", "12px").
 			Style("color", "var(--toast-warn-title)").
 			Text("Unsaved changes"))
-	} else if p.commitsLoaded && len(p.commits) > 0 {
+	} else if p.draftStateLoaded && len(p.commits) > 0 {
 		body = append(body, app.Span().
 			Attr("data-commit-saved", "true").
 			Style("font-size", "12px").

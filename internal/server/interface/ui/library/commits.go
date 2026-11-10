@@ -18,8 +18,9 @@ import (
 
 // The Library mode's Save and its history (task 72_2; ADR 0021): Save fixes
 // the selected library's Draft as a Commit, the history lists them and their
-// titles are renamed. The Draft is still written at once, so the indicator
-// follows the Version of the Draft against the one the last Commit fixed.
+// titles are renamed. The Draft is still written at once, so the indicator is
+// the Draft's own unsaved-changes flag, its Version against its Clean Version
+// (ADR 0016, amendment 2026-11-10; task 74).
 
 // loadCommits (re)loads the history of the selected library's Draft.
 func (l *Library) loadCommits(ctx app.Context) {
@@ -178,7 +179,7 @@ func (l *Library) renderCommitBar() []app.UI {
 			Style("font-size", "12px").
 			Style("color", "var(--toast-warn-title)").
 			Text("Unsaved changes"))
-	} else if l.commitsLoaded && len(l.commits) > 0 {
+	} else if l.draftStateLoaded && len(l.commits) > 0 {
 		body = append(body, app.Span().
 			Attr("data-commit-saved", "true").
 			Style("font-size", "12px").
