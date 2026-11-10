@@ -39,8 +39,8 @@ func (l *Library) forgetDraftVersion() { l.draftVersions.ForgetID(l.libraryID) }
 // read on mount, on a resync and after each content event; the answer is
 // applied only when it is not behind what is known, so a read answered after a
 // later write does not put an older stack back. A 404 means the library is
-// gone and leaves it (libraryGone); any other failure is not a toast: the next
-// event brings the truth.
+// gone and leaves it (libraryGone); another failure shows its toast, and the
+// next event reads the stack again.
 func (l *Library) loadDraftChanges(ctx app.Context) {
 	if l.draft() == nil {
 		l.changes, l.changesLoaded = apiv0.DraftChangesResponse{}, false
@@ -89,7 +89,7 @@ func (l *Library) loadLibraries(ctx app.Context) {
 // 0007). The read is the one that is 404 only for a deleted library; a
 // command's 404 stays its own error. Root handles the action, leaves the
 // library, shows the selection page and rereads its list (task 76), and the
-// tab that opens a stale key goes the same way on its first read (task 73).
+// tab that opens a stale key goes the same way on its first read (task 76).
 func (l *Library) libraryGone(ctx app.Context, lib *apiclient.LibraryClient) {
 	ctx.NewActionWithValue(uiutil.ActionLibraryGone, lib.ID())
 }
