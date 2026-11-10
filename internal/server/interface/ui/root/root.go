@@ -121,15 +121,21 @@ func (r *Root) OnMount(ctx app.Context) {
 	r.selected[ModeProject] = uiutil.LoadID(ctx, picker.ProjectKey)
 	r.selected[ModeLibrary] = uiutil.LoadID(ctx, picker.LibraryKey)
 
-	// A load of the project shown found it gone: the mode leaves it at once,
-	// so the content the server removes after it is not loaded for it, and
-	// shows its selection page (task 73).
+	// A read of the entity the editor shows found it gone: the mode leaves it
+	// at once, so the content the server removes after it is not loaded for
+	// it, and shows its selection page with its list reread (task 73,
+	// task 76). The Project says so through the content of its project, the
+	// Library through a read of its Draft, its stack, its Commits or its
+	// releases.
 	ctx.Handle(uiutil.ActionProjectGone, func(ctx app.Context, a app.Action) {
-		id, ok := a.Value.(uuid.UUID)
-		if !ok || id == uuid.Nil || r.selected[ModeProject] != id {
-			return
+		if id, ok := a.Value.(uuid.UUID); ok {
+			r.entityGone(ModeProject, id)
 		}
-		r.selectEntity(ModeProject, uuid.Nil, "")
+	})
+	ctx.Handle(uiutil.ActionLibraryGone, func(ctx app.Context, a app.Action) {
+		if id, ok := a.Value.(uuid.UUID); ok {
+			r.entityGone(ModeLibrary, id)
+		}
 	})
 
 	injectToastCSS()
@@ -235,6 +241,19 @@ func (r *Root) showListPage(mode Mode) {
 	if r.mounted {
 		r.compoCtx.Update()
 	}
+}
+
+// entityGone leaves the entity id of mode, which a read found gone, and shows
+// the selection page with its list reread: the editor that would be empty is
+// replaced by the page, and the deleted row leaves the list instead of hanging
+// there (task 76). The id must still be the one shown: a delayed 404 of an
+// entity left meanwhile is not this one's.
+func (r *Root) entityGone(mode Mode, id uuid.UUID) {
+	if id == uuid.Nil || r.selected[mode] != id {
+		return
+	}
+	r.selectEntity(mode, uuid.Nil, "")
+	r.showListPage(mode)
 }
 
 // modeView returns the view of mode, nil if there is none.
@@ -651,7 +670,8 @@ func screen(visible bool, body app.UI) app.UI {
 
 // renderBackBar is the slim "← Список · <name>" row at the top left of the
 // editor of the Library and Project modes (task 73): it shows the selection
-// page and keeps the entity announced to the event stream.
+// page and keeps the entity announced to the event stream. An entity a read
+// finds gone returns to that page too, without the user asking (task 76).
 func (r *Root) renderBackBar(mode Mode) app.UI {
 	label := "← Список"
 	if name := r.entityName[mode]; name != "" {

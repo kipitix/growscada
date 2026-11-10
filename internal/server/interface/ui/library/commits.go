@@ -22,19 +22,20 @@ import (
 // the Draft's own unsaved-changes flag, its Version against its Clean Version
 // (ADR 0016, amendment 2026-11-10; task 74).
 
-// loadCommits (re)loads the history of the selected library's Draft.
+// loadCommits (re)loads the history of the selected library's Draft. A 404
+// means the library is gone and leaves it (libraryGone).
 func (l *Library) loadCommits(ctx app.Context) {
 	if l.libraryID == uuid.Nil {
 		l.commits, l.commitsLoaded = nil, false
 		return
 	}
-	uiutil.LoadFor(l.compoCtx, &l.commitsReloader, l.draft,
+	uiutil.LoadForGone(l.compoCtx, &l.commitsReloader, l.draft,
 		func(c context.Context, lib *apiclient.LibraryClient) ([]apiv0.CommitResponse, error) {
 			return lib.Commits(c)
 		},
 		func(ctx app.Context, _ *apiclient.LibraryClient, commits []apiv0.CommitResponse) {
 			l.commits, l.commitsLoaded = commits, true
-		}, l.loadCommits)
+		}, l.libraryGone, l.loadCommits)
 }
 
 // hasUnsavedChanges reports whether the Draft moved since its content last

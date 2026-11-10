@@ -67,6 +67,14 @@ func LoadFor[K comparable, T any](ctx app.Context, r *Reloader, key func() K, ca
 // another, so a mode shows no error for what was deleted (ADR 0006).
 const ActionProjectGone = "uiutil.project-gone"
 
+// ActionLibraryGone is the go-app action fired, with the library's uuid.UUID
+// as its value, when a read of the library the editor shows finds it gone
+// (404): Root leaves it and shows the selection page, whose list is reread, so
+// a library deleted in another tab does not leave the editor empty (task 76).
+// A command's 404 is its own error and fires nothing: only the reads whose
+// only 404 is a deleted library fire it.
+const ActionLibraryGone = "uiutil.library-gone"
+
 // LoadOfProject is LoadFor of a list of the content of the project shown
 // (its Scenes, its Tags), keyed by the project's client (nil: none, nothing
 // is loaded by then). Such a list is 404 only when the project is gone, so

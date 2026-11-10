@@ -17,6 +17,7 @@ import (
 	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uitest"
+	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 	"github.com/kipitix/growscada/internal/server/servertest"
 )
 
@@ -53,12 +54,12 @@ func newServer(t *testing.T) (string, *testAPI) {
 
 // mount mounts a Library showing the library the test API works on: Root
 // announces the selection of its page with SetLibrary (task 73), which a test
-// does here directly.
-func mount(t *testing.T, url string, api *testAPI) *fixture {
+// does here directly. The actions named watch are recorded (TakeActions).
+func mount(t *testing.T, url string, api *testAPI, watch ...string) *fixture {
 	t.Helper()
 	l := NewLibrary(apiclient.New(url, http.DefaultClient))
 	f := &fixture{t: t, l: l, api: api, url: url}
-	f.e = uitest.Load(t, mountOnHost{l})
+	f.e = uitest.LoadWatching(t, mountOnHost{l}, watch...)
 	if api != nil {
 		f.l.SetLibrary(api.ID())
 		f.e.ConsumeAll()
@@ -311,8 +312,9 @@ func TestDiscard_ResetsTheDraftAtOnce(t *testing.T) {
 }
 
 // TestLibraries_SetLibraryShowsTheGivenOne: the page announces the library,
-// not the column: SetLibrary loads it, and a library deleted elsewhere leaves
-// the component with nothing selected instead of an error (task 73).
+// not the column: SetLibrary shows the given one and drops what was shown of
+// another (task 73). A library deleted elsewhere is left through the action
+// of any read of it (TestLibraryGone_AnyReadOfTheSelectedLibraryFiresTheAction).
 func TestLibraries_SetLibraryShowsTheGivenOne(t *testing.T) {
 	url, api := newServer(t)
 	other, err := api.CreateLibrary(context.Background(), apiv0.CreateLibraryRequest{Name: "Other"})
@@ -329,35 +331,75 @@ func TestLibraries_SetLibraryShowsTheGivenOne(t *testing.T) {
 	if f.l.libraryID != other.ID || len(f.l.widgetTypes) != 0 {
 		t.Errorf("the other library: %v, %d types", f.l.libraryID, len(f.l.widgetTypes))
 	}
-	if _, err := api.DeleteLibrary(context.Background(), other.ID); err != nil {
-		t.Fatal(err)
+}
+
+// TestLibraryGone_AnyReadOfTheSelectedLibraryFiresTheAction: a 404 of any of
+// the reads of the selected library — its Draft's WidgetTypes, the state of
+// the Draft, its stack of DraftChanges, its Commits, its releases — means the
+// library is gone: the read fires ActionLibraryGone with the library's ID and
+// shows no toast (task 76). Root leaves the library and shows the page on it.
+func TestLibraryGone_AnyReadOfTheSelectedLibraryFiresTheAction(t *testing.T) {
+	reads := []struct {
+		name string
+		load func(*fixture)
+	}{
+		{"widget types", func(f *fixture) { f.l.loadList(f.l.compoCtx) }},
+		{"draft state", func(f *fixture) { f.l.loadDraftState(f.l.compoCtx) }},
+		{"draft changes", func(f *fixture) { f.l.loadDraftChanges(f.l.compoCtx) }},
+		{"commits", func(f *fixture) { f.l.loadCommits(f.l.compoCtx) }},
+		{"releases", func(f *fixture) { f.l.loadReleases(f.l.compoCtx) }},
 	}
-	f.l.loadList(f.l.compoCtx)
-	f.run()
-	f.noToasts()
-	if f.l.libraryID != uuid.Nil || f.l.widgetTypes != nil {
-		t.Errorf("a library deleted elsewhere: selected %v, %d types; want none", f.l.libraryID, len(f.l.widgetTypes))
+	for _, read := range reads {
+		t.Run(read.name, func(t *testing.T) {
+			url, api := newServer(t)
+			f := mount(t, url, api, uiutil.ActionLibraryGone)
+			f.run()
+			gone := api.ID()
+			if _, err := api.DeleteLibrary(context.Background(), gone); err != nil {
+				t.Fatal(err)
+			}
+			f.e.TakeActions()
+
+			read.load(f)
+			f.run()
+
+			f.noToasts()
+			got := f.e.TakeActions()
+			if len(got) != 1 || got[0].Name != uiutil.ActionLibraryGone {
+				t.Fatalf("actions %+v: want one %q", got, uiutil.ActionLibraryGone)
+			}
+			if id, ok := got[0].Value.(uuid.UUID); !ok || id != gone {
+				t.Errorf("the action names %v, want the library %v", got[0].Value, gone)
+			}
+		})
 	}
 }
 
-// TestLibraries_LastDeleted_LeavesNothingSelected: the 404 of the Draft and
-// the releases of a library deleted elsewhere leaves the component with
-// nothing selected, without an error, and the page then lists what is left
-// (task 73).
-func TestLibraries_LastDeleted_LeavesNothingSelected(t *testing.T) {
+// TestLibraryGone_ACommandKeepsItsOwnError: a command's 404 names what the
+// command could not find, not the library: the editor stays on the library and
+// the server's error is shown, and no read reported it gone (task 76).
+func TestLibraryGone_ACommandKeepsItsOwnError(t *testing.T) {
 	url, api := newServer(t)
-	f := mount(t, url, api)
-	f.run()
-	if _, err := api.DeleteLibrary(context.Background(), api.ID()); err != nil {
+	f := mount(t, url, api, uiutil.ActionLibraryGone)
+	releaseNow(t, f)
+	gone := api.ID()
+	if _, err := api.DeleteLibrary(context.Background(), gone); err != nil {
 		t.Fatal(err)
 	}
-	f.l.loadList(f.l.compoCtx)
-	f.l.loadReleases(f.l.compoCtx)
+	f.e.TakeActions()
+
+	f.l.renamingCommit, f.l.renameCommitTitle = 1, "Renamed"
+	f.l.renameCommit()
 	f.run()
-	f.noToasts()
-	if f.l.libraryID != uuid.Nil || f.l.widgetTypes != nil || f.l.releases != nil {
-		t.Errorf("no library left, yet selected %v with %d types and %d releases",
-			f.l.libraryID, len(f.l.widgetTypes), len(f.l.releases))
+
+	if got := f.oneToast(); got.Status != http.StatusNotFound {
+		t.Errorf("toast %+v: want the server's 404", got)
+	}
+	if f.l.libraryID != gone {
+		t.Errorf("the editor left the library %v for %v on a command's 404", gone, f.l.libraryID)
+	}
+	if got := f.e.TakeActions(); len(got) != 0 {
+		t.Errorf("a command fired %+v: only a read reports the library gone", got)
 	}
 }
 

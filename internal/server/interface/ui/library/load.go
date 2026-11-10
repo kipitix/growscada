@@ -38,29 +38,24 @@ func (l *Library) forgetDraftVersion() { l.draftVersions.ForgetID(l.libraryID) }
 // 0017): what an undo and a redo would apply, and the Version both state. It is
 // read on mount, on a resync and after each content event; the answer is
 // applied only when it is not behind what is known, so a read answered after a
-// later write does not put an older stack back. A failed read is not a toast:
-// the next event brings the truth.
+// later write does not put an older stack back. A 404 means the library is
+// gone and leaves it (libraryGone); any other failure is not a toast: the next
+// event brings the truth.
 func (l *Library) loadDraftChanges(ctx app.Context) {
 	if l.draft() == nil {
 		l.changes, l.changesLoaded = apiv0.DraftChangesResponse{}, false
 		return
 	}
-	if !l.changesReloader.Start() {
-		return
-	}
-	draft := l.draft()
+	// The mark is taken before the request is sent: an answer of a read sent
+	// before a forget must not put the forgotten state back (applyDraftChanges).
 	mark := l.markDraft()
-	uiutil.Do(l.compoCtx, func(c context.Context) (apiv0.DraftChangesResponse, error) {
-		return draft.DraftChanges(c)
-	}, func(ctx app.Context, state apiv0.DraftChangesResponse, err error) {
-		rerun := l.changesReloader.Done()
-		if draft == l.draft() && err == nil {
+	uiutil.LoadForGone(l.compoCtx, &l.changesReloader, l.draft,
+		func(c context.Context, lib *apiclient.LibraryClient) (apiv0.DraftChangesResponse, error) {
+			return lib.DraftChanges(c)
+		},
+		func(ctx app.Context, _ *apiclient.LibraryClient, state apiv0.DraftChangesResponse) {
 			l.applyDraftChanges(mark, state)
-		}
-		if rerun {
-			l.loadDraftChanges(ctx)
-		}
-	})
+		}, l.libraryGone, l.loadDraftChanges)
 }
 
 // applyDraftChanges stores the state of the stack that a request sent at mark
@@ -88,13 +83,15 @@ func (l *Library) loadLibraries(ctx app.Context) {
 	}, l.loadLibraries)
 }
 
-// libraryGone handles a 404 of the selected library's Draft or releases: the
-// library was deleted, so it is left and the list reloaded instead of an
-// error being shown (ADR 0007). The selection page picks another one, or
-// none, and shows itself then (task 73).
-func (l *Library) libraryGone(ctx app.Context, _ *apiclient.LibraryClient) {
-	l.selectLibrary(ctx, uuid.Nil)
-	l.loadLibraries(ctx)
+// libraryGone handles a 404 of a read of the selected library — its Draft, the
+// state of the Draft, its stack of DraftChanges, its Commits or its releases:
+// the library was deleted, so it is left instead of an error being shown (ADR
+// 0007). The read is the one that is 404 only for a deleted library; a
+// command's 404 stays its own error. Root handles the action, leaves the
+// library, shows the selection page and rereads its list (task 76), and the
+// tab that opens a stale key goes the same way on its first read (task 73).
+func (l *Library) libraryGone(ctx app.Context, lib *apiclient.LibraryClient) {
+	ctx.NewActionWithValue(uiutil.ActionLibraryGone, lib.ID())
 }
 
 // loadList (re)loads the WidgetTypes of the selected library's Draft;
