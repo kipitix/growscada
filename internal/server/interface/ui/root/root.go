@@ -54,7 +54,7 @@ type Root struct {
 	// switcher, and the Project or Library of the Project and Library modes.
 	selected map[Mode]uuid.UUID
 	// entityName is the name of the entity selected, as last read by the
-	// selection page: the slim "← Список · <name>" row of the editor.
+	// selection page: the slim "← List · <name>" row of the editor.
 	entityName map[Mode]string
 	// showList is true while a mode shows its selection page (task 73)
 	// instead of the editor of the entity selected. The tab opens the last
@@ -668,12 +668,12 @@ func screen(visible bool, body app.UI) app.UI {
 		Body(body)
 }
 
-// renderBackBar is the slim "← Список · <name>" row at the top left of the
+// renderBackBar is the slim "← List · <name>" row at the top left of the
 // editor of the Library and Project modes (task 73): it shows the selection
 // page and keeps the entity announced to the event stream. An entity a read
 // finds gone returns to that page too, without the user asking (task 76).
 func (r *Root) renderBackBar(mode Mode) app.UI {
-	label := "← Список"
+	label := "← List"
 	if name := r.entityName[mode]; name != "" {
 		label += " · " + name
 	}

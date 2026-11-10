@@ -13,7 +13,7 @@ import (
 
 // TestSelectionPage_TabOpensTheLastEntityOrTheList: a tab of the Library and
 // Project modes shows the editor of the entity selected, and the page when
-// there is none; the slim "← Список" row shows the page, and the next tab
+// there is none; the slim "← List" row shows the page, and the next tab
 // opens the editor again (task 73).
 func TestSelectionPage_TabOpensTheLastEntityOrTheList(t *testing.T) {
 	r := NewRoot("http://127.0.0.1:0")
@@ -79,18 +79,18 @@ func TestSelectionPage_LibraryDoesNotFollowTheBar(t *testing.T) {
 	}
 }
 
-// TestBackBar_ShowsTheListAndTheEntity: the slim row reads "← Список · <name>"
+// TestBackBar_ShowsTheListAndTheEntity: the slim row reads "← List · <name>"
 // and names the page without one.
 func TestBackBar_ShowsTheListAndTheEntity(t *testing.T) {
 	r := NewRoot("http://127.0.0.1:0")
 	r.modes = nil
 	r.entityName[ModeProject] = "Main"
 
-	if got := app.HTMLString(r.renderBackBar(ModeProject)); !strings.Contains(got, "← Список · Main") {
+	if got := app.HTMLString(r.renderBackBar(ModeProject)); !strings.Contains(got, "← List · Main") {
 		t.Errorf("the back row: %s", got)
 	}
 	r.entityName[ModeProject] = ""
-	if got := app.HTMLString(r.renderBackBar(ModeProject)); !strings.Contains(got, "← Список") || strings.Contains(got, " · ") {
+	if got := app.HTMLString(r.renderBackBar(ModeProject)); !strings.Contains(got, "← List") || strings.Contains(got, " · ") {
 		t.Errorf("the back row without a name: %s", got)
 	}
 }

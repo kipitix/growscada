@@ -1,5 +1,16 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.92] - 2026-11-10
+
+### Fixed
+
+- **Подпись возврата к странице выбора — английская, как весь интерфейс PWA** (задача 78)
+  - `ui/root.renderBackBar` показывает `← List` и `← List · <name>` вместо `← Список…`; клик по-прежнему показывает страницу выбора и не снимает объявление сущности потоку событий, `data-back-to-list` не менялся
+  - Комментарии `Root.renderBackBar`, поля `entityName`, теста `selection_test.go` и `ui/picker` говорят о новой подписи; `AGENTS.md` — тоже
+  - `selection_test.go` проверяет новые литералы; прочёсывание `internal/server/interface/ui` на кириллицу находит только комментарии и намеренные данные тестов раскладки клавиатуры (`uiutil/keys_test.go`), пользовательских русских строк в UI не осталось
+  - Контракт, REST, схемы и Bruno не менялись
+  - Проверки: `make build`, `make test`; ручной обход PWA — шапка редактора Library и Project
+
 ## [0.0.91] - 2026-11-10
 
 ### Changed

@@ -2,7 +2,7 @@
 // (task 73): the list of the server's libraries or projects with Create,
 // Open, Edit and Delete, and the Name+Description dialog they share. With no
 // entity the page is the mode's whole screen; from an editor it is opened by
-// the "← Список" row of Root.
+// the "← List" row of Root.
 //
 // The page reads its list on mount, on every event that may change it
 // (project_* or library_*, EventResync) and when it is shown again. A
