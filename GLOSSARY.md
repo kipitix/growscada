@@ -136,6 +136,10 @@ _Avoid_: production server, station, runtime (unqualified)
 The working state of a Project or of a Library as it is being edited, and the unit of consistency: every change to it is one DraftChange, and its Version is the only token a write states (ADR 0016, ADR 0022). It is edited without a lock; two Engineers see each other's writes as a conflict on the Version. A Project's Draft holds Scenes with their Widgets, Tag definitions, Devices, Environments and the pinned Library Releases; a Library's holds its WidgetTypes. It also keeps the history of its Commits.
 _Avoid_: working copy, unsaved changes
 
+**Clean Version**:
+The Version of a Draft at which its content last equalled its last Commit: a Save puts the Draft there, and so does a reset whose target is that Commit's content. A Draft has unsaved changes exactly while its Version is above its Clean Version; one nothing was ever written to is clean, and one written but never saved has none. It is a fact of the Draft, not a flag a tab keeps.
+_Avoid_: saved version, base version, dirty flag
+
 **DraftChange**:
 One Engineer intent applied to the Draft — possibly touching several parts of the Draft at once — and the unit of undo/redo. The Draft keeps the stack of them; only a Discard or a Revert, which replace the content, clear it — a Save, a Release and a Deploy leave the stack alone (ADR 0017, ADR 0021).
 _Avoid_: edit, step, command, operation
@@ -145,15 +149,15 @@ An immutable, numbered snapshot of the whole Draft, fixed by a Save: its canonic
 _Avoid_: revision, version, checkpoint, snapshot (unqualified)
 
 **Save**:
-The act of fixing the Draft's current state as a new Commit under a title and an Author (task 72_2; ADR 0021). It does not write the Draft: edits are written at once as DraftChanges, and a Save of an unchanged Draft is refused with `nothing_to_save`.
+The act of fixing the Draft's current state as a new Commit under a title and an Author (task 72_2; ADR 0021). It does not write the Draft: edits are written at once as DraftChanges, and a Save of a Draft at its Clean Version is refused with `nothing_to_save`.
 _Avoid_: commit (as a verb), publish
 
 **Discard**:
-Resetting a Draft to its last Commit, dropping the unsaved DraftChanges (task 72_4, task 72_5). A Project or a Library with no Commit is refused with `nothing_to_discard`; **Revert to deployed** (a Project) and **Revert to latest Release** (a Library) are the different act of resetting it to the published state instead.
+Resetting a Draft to its last Commit, dropping the unsaved DraftChanges (task 72_4, task 72_5). A Project or a Library with no Commit is refused with `nothing_to_discard`; **Revert to deployed** (a Project) and **Revert to latest Release** (a Library) are the different act of resetting it to the published state instead. The Draft is its Clean Version afterwards, unless Library Releases the Commit names could not be restored (task 71).
 _Avoid_: revert, reset, cancel
 
 **Revert to latest Release**:
-Resetting a Library's Draft to its latest Library Release — the published state — in one transaction, `POST …/libraries/{id}/revert-to-release` (task 72_5). A Library never released is refused. Discard resets it to the last Commit instead.
+Resetting a Library's Draft to its latest Library Release — the published state — in one transaction, `POST …/libraries/{id}/revert-to-release` (task 72_5). A Library never released is refused. Discard resets it to the last Commit instead; the Draft is its Clean Version afterwards only when that Release published the last Commit.
 _Avoid_: discard, rollback, restore
 
 **Deploy**:
@@ -165,7 +169,7 @@ The act of making one Project Release the running Deployment: `POST …/projects
 _Avoid_: publish, roll out
 
 **Revert to deployed**:
-Resetting a Draft to the Deployment the Project runs, dropping the unsaved DraftChanges — the Discard of before task 72_4, now `POST …/projects/{id}/revert-to-deployed`. Discard resets to the last Commit instead.
+Resetting a Draft to the Deployment the Project runs, dropping the unsaved DraftChanges — the Discard of before task 72_4, now `POST …/projects/{id}/revert-to-deployed`. Discard resets to the last Commit instead; the Draft is its Clean Version afterwards only when that Deployment's document is the last Commit's content.
 _Avoid_: discard, rollback
 
 **Release**:
