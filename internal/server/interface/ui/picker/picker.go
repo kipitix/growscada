@@ -1,14 +1,21 @@
 // Package picker is the selection page of the Library and Project modes
-// (task 73): the list of the server's libraries or projects with Create,
-// Open, Edit and Delete, and the Name+Description dialog they share. With no
-// entity the page is the mode's whole screen; from an editor it is opened by
-// the "← List" row of Root.
+// (task 73, task 82): the list of the server's libraries or projects beside
+// the details of the selected one, two panes on a desktop screen and two
+// screens on a phone.
+//
+// The list is for choosing an entity and, for the Libraries, for arranging it
+// (task 81): a row carries a name and a dot for the entity's state, nothing
+// else. Everything that acts on the entity — its name and description, opening
+// the editor, deleting it — lives in the details pane. Create puts a draft row
+// at the top of the list and opens the details in its "new" mode, so the page
+// has no dialog and no form of its own.
 //
 // The page reads its list on mount, on every event that may change it
 // (project_* or library_*, EventResync) and when it is shown again. A
 // description is one line with its full text in the title; an entity without
-// one says so quietly. Nothing is filtered or paged: the list is sorted by
-// name here, and "no entity" is not a page of its own (task 73).
+// one says so quietly. Nothing is filtered or paged: the Libraries come in the
+// order the person arranged (ADR 0024), the rest, and the Projects, by name;
+// "no entity" is not a page of its own (task 73).
 package picker
 
 import (
@@ -48,7 +55,7 @@ type Item struct {
 type Source interface {
 	// Title heads the page ("Libraries", "Projects").
 	Title() string
-	// Singular names one entity in the dialog and the messages.
+	// Singular names one entity in the messages.
 	Singular() string
 	// Plural names them in the list's empty text.
 	Plural() string
@@ -65,8 +72,35 @@ type Source interface {
 	DeleteQuestion(name string) string
 }
 
+// OrderSource is a Source whose entities carry a per-user order (task 81,
+// ADR 0024): the Library list. A Source that does not implement it lists its
+// entities by name and offers no drag.
+type OrderSource interface {
+	// Order returns the IDs the person placed, first to last, and the Version
+	// their next write states.
+	Order(ctx context.Context) ([]uuid.UUID, int, error)
+	// SetOrder stores the whole order and returns the Version stored.
+	SetOrder(ctx context.Context, version int, ids []uuid.UUID) (int, error)
+}
+
 // emptyDescription is the quiet text of an entity without a description.
 const emptyDescription = "No description"
+
+// The mobile screens of the page: the list, or the details of one entity. On a
+// desktop screen both are shown and the state only says which one a phone
+// would show.
+const (
+	screenList    = "list"
+	screenDetails = "details"
+)
+
+// The field of the selected entity the details pane is editing, empty for
+// none: the name or the description is edited in place (task 82).
+const (
+	fieldNone        = ""
+	fieldName        = "name"
+	fieldDescription = "description"
+)
 
 // Picker is the selection page of one kind of entity.
 type Picker struct {
@@ -87,33 +121,58 @@ type Picker struct {
 	loaded   bool
 	reloader uiutil.Reloader
 
-	// selected is the entity the mode shows and its name as last read; the
-	// page reports the pair to onSelect whenever either moves.
+	// order is the arrangement the person stored (task 81), the IDs the list
+	// puts first; orderVersion is the Version its next write states, and
+	// orderSeq drops a response of a read a newer one overtook.
+	order        []uuid.UUID
+	orderVersion int
+	orderSeq     int
+	savingOrder  bool
+
+	// selected is the entity the details pane shows and its name as last read;
+	// the page reports the pair to onSelect whenever either moves.
 	selected     uuid.UUID
 	selectedName string
+	// screen is the mobile pane shown: the list unless a row was chosen.
+	screen string
 
-	// dialog is the Name+Description dialog: editingID is the entity edited
-	// (uuid.Nil: a new one), its fields, and the server's refusal shown inside
-	// it, with the input kept (task 73).
-	dialog            bool
-	editingID         uuid.UUID
-	dialogName        string
-	dialogDescription string
-	dialogError       string
-	dialogBusy        bool
+	// field and value are the inline edit in progress of the selected entity;
+	// editError is the server's refusal, shown under the fields, and saving
+	// says a write is in flight.
+	field     string
+	value     string
+	editError string
+	saving    bool
+
+	// creating is a new entity whose name is not committed yet: the list shows
+	// a draft row and the details pane its name field.
+	creating    bool
+	createName  string
+	createError string
+	createBusy  bool
+
+	// dragFrom is the row a desktop drag started on, -1 for none; dragging
+	// says one is in flight, so the rows can show where a drop would land.
+	dragFrom int
+	dragging bool
+
+	// releaseTouch ends the pointer-drag listeners of a phone (task 82).
+	releaseTouch func()
 }
 
 // New returns the selection page of source, keeping the selection under the
 // LocalStorage key and reporting it to onSelect — the entity the mode shows,
 // uuid.Nil for none — and to onOpen when the user opens one.
 func New(source Source, key string, onSelect func(uuid.UUID, string), onOpen func(uuid.UUID)) *Picker {
-	return &Picker{source: source, key: key, onSelect: onSelect, onOpen: onOpen}
+	return &Picker{source: source, key: key, onSelect: onSelect, onOpen: onOpen, dragFrom: -1}
 }
 
 func (p *Picker) OnMount(ctx app.Context) {
 	p.compoCtx = ctx
 	p.mounted = true
+	p.screen = screenList
 	p.selected = uiutil.LoadID(ctx, p.key)
+	p.installTouch()
 	p.load(ctx)
 	ctx.Handle(eventlog.ActionServerEvent, func(ctx app.Context, a app.Action) {
 		ev, ok := a.Value.(apiv0.Event)
@@ -132,6 +191,11 @@ func (p *Picker) OnMount(ctx app.Context) {
 	})
 }
 
+// OnDismount releases what a phone's drag holds in the browser.
+func (p *Picker) OnDismount() {
+	p.uninstallTouch()
+}
+
 // Reload rereads the list: the page is shown again. Before OnMount the list
 // is not read yet, and OnMount reads it.
 func (p *Picker) Reload(ctx app.Context) {
@@ -141,14 +205,11 @@ func (p *Picker) Reload(ctx app.Context) {
 	p.load(ctx)
 }
 
-// Items returns the list as last loaded.
+// Items returns the list as last loaded, in the server's order.
 func (p *Picker) Items() []Item { return p.items }
 
 // SelectedID returns the entity the page reports as shown (uuid.Nil: none).
 func (p *Picker) SelectedID() uuid.UUID { return p.selected }
-
-// EditingID returns the entity the dialog edits (uuid.Nil: a new one).
-func (p *Picker) EditingID() uuid.UUID { return p.editingID }
 
 // Name returns the name of the entity id as last read.
 func (p *Picker) Name(id uuid.UUID) string {
@@ -161,6 +222,43 @@ func (p *Picker) Name(id uuid.UUID) string {
 	return ""
 }
 
+// Displayed returns the entities as the page shows them: the IDs the person
+// placed first, in that order, then the rest by name (task 81, ADR 0024). An
+// ID of an entity this list does not have is ignored; the client is what
+// merges, the server never reads the entities.
+func (p *Picker) Displayed() []Item {
+	shown := make([]Item, 0, len(p.items))
+	placed := make(map[uuid.UUID]struct{}, len(p.order))
+	byID := make(map[uuid.UUID]Item, len(p.items))
+	for _, item := range p.items {
+		byID[item.ID] = item
+	}
+	for _, anID := range p.order {
+		item, ok := byID[anID]
+		if !ok {
+			continue
+		}
+		if _, twice := placed[anID]; twice {
+			continue
+		}
+		placed[anID] = struct{}{}
+		shown = append(shown, item)
+	}
+	rest := make([]Item, 0, len(p.items)-len(shown))
+	for _, item := range p.items {
+		if _, ok := placed[item.ID]; !ok {
+			rest = append(rest, item)
+		}
+	}
+	slices.SortFunc(rest, byName)
+	return append(shown, rest...)
+}
+
+// byName orders two entities alphabetically, whatever their case.
+func byName(a, b Item) int {
+	return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+}
+
 func (p *Picker) find(id uuid.UUID) (Item, bool) {
 	for _, item := range p.items {
 		if item.ID == id {
@@ -170,18 +268,43 @@ func (p *Picker) find(id uuid.UUID) (Item, bool) {
 	return Item{}, false
 }
 
-// load (re)reads the list and reconciles the selection with it: a client
-// reload or a resync is its own, and an entity deleted elsewhere leaves
-// nothing to show.
+// load (re)reads the list and the arrangement, and reconciles the selection
+// with them: a client reload or a resync is its own, and an entity deleted
+// elsewhere leaves nothing to show.
 func (p *Picker) load(ctx app.Context) {
 	uiutil.Load(p.compoCtx, &p.reloader, p.source.List, func(ctx app.Context, items []Item) {
-		slices.SortFunc(items, func(a, b Item) int {
-			return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
-		})
 		p.items, p.loaded = items, true
 		p.reconcile(ctx)
+		p.loadOrder(ctx)
 		ctx.Update()
 	}, p.load)
+}
+
+// loadOrder rereads the arrangement of the entities, when the source has one
+// (task 81). A response of a read a newer one overtook is dropped.
+func (p *Picker) loadOrder(ctx app.Context) {
+	orderSource, ok := p.source.(OrderSource)
+	if !ok {
+		return
+	}
+	p.orderSeq++
+	seq := p.orderSeq
+	uiutil.Call(p.compoCtx, func(c context.Context) (orderState, error) {
+		ids, version, err := orderSource.Order(c)
+		return orderState{ids: ids, version: version}, err
+	}, func(ctx app.Context, state orderState) {
+		if seq != p.orderSeq {
+			return
+		}
+		p.order, p.orderVersion = state.ids, state.version
+		ctx.Update()
+	}, nil)
+}
+
+// orderState is a read of the arrangement with its Version.
+type orderState struct {
+	ids     []uuid.UUID
+	version int
 }
 
 // reconcile announces the selection the reloaded list holds: the same entity
@@ -213,6 +336,7 @@ func (p *Picker) report(ctx app.Context, item Item) {
 // selectNone reports that no entity is selected, and forgets the key, so the
 // next mount does not look for it.
 func (p *Picker) selectNone(ctx app.Context) {
+	p.screen = screenList
 	if p.selected == uuid.Nil && p.selectedName == "" {
 		return
 	}
@@ -223,7 +347,31 @@ func (p *Picker) selectNone(ctx app.Context) {
 	}
 }
 
-// open shows the editor of id: the Open row, or a created entity.
+// selectByID shows the details of the entity id, read as it is now: go-app
+// reuses a row whose handler it thinks is the same one, so a handler never
+// carries an entity's data from an older render (task 82).
+func (p *Picker) selectByID(ctx app.Context, id uuid.UUID) {
+	item, ok := p.find(id)
+	if !ok {
+		return
+	}
+	p.selectItem(ctx, item)
+}
+
+// selectItem shows the details of item: a click on its row, or the arrows of
+// the list. Choosing an entity abandons the draft of a new one, which was never
+// sent anywhere, and closes the inline edit of the one shown: the field belongs
+// to that entity, not to the one picked now.
+func (p *Picker) selectItem(ctx app.Context, item Item) {
+	p.creating, p.createName, p.createError = false, "", ""
+	p.field, p.value, p.editError = fieldNone, "", ""
+	p.report(ctx, item)
+	p.screen = screenDetails
+	ctx.Update()
+}
+
+// open shows the editor of id: the Open button of the details pane, or a
+// created entity.
 func (p *Picker) open(ctx app.Context, id uuid.UUID) {
 	if item, ok := p.find(id); ok {
 		p.report(ctx, item)
@@ -239,61 +387,147 @@ func (p *Picker) open(ctx app.Context, id uuid.UUID) {
 	}
 }
 
-// openDialog opens the Name+Description dialog of id (uuid.Nil: a new entity).
-func (p *Picker) openDialog(ctx app.Context, id uuid.UUID) {
-	p.dialog, p.editingID = true, id
-	p.dialogError, p.dialogBusy = "", false
-	if id == uuid.Nil {
-		p.dialogName, p.dialogDescription = "", ""
-	} else if item, ok := p.find(id); ok {
-		p.dialogName, p.dialogDescription = item.Name, item.Description
-	}
-	ctx.Update()
-}
-
-// closeDialog closes the dialog and drops its state.
-func (p *Picker) closeDialog(ctx app.Context) {
-	p.dialog, p.editingID, p.dialogBusy = false, uuid.Nil, false
-	p.dialogName, p.dialogDescription, p.dialogError = "", "", ""
-	ctx.Update()
-}
-
-// submitDialog sends the dialog: Create of a new entity or Update of the one
-// edited. The server validates — a refusal is shown inside the dialog, with
-// the input kept — and a created entity opens at once (task 73).
-func (p *Picker) submitDialog(ctx app.Context) {
-	if p.dialogBusy {
+// startEdit opens the inline edit of the selected entity's field, with the
+// value it holds now.
+func (p *Picker) startEdit(ctx app.Context, field string) {
+	item, ok := p.find(p.selected)
+	if !ok || p.busy() {
 		return
 	}
-	p.dialogBusy, p.dialogError = true, ""
-	id, name, dialogDescription := p.editingID, p.dialogName, p.dialogDescription
-	version := 0
-	if item, ok := p.find(id); ok {
-		version = item.Version
+	p.field = field
+	p.editError = ""
+	switch field {
+	case fieldName:
+		p.value = item.Name
+	case fieldDescription:
+		p.value = item.Description
 	}
-	uiutil.Do(p.compoCtx, func(c context.Context) (uuid.UUID, error) {
-		if id == uuid.Nil {
-			return p.source.Create(c, name, dialogDescription)
-		}
-		return id, p.source.Update(c, id, version, name, dialogDescription)
-	}, func(ctx app.Context, saved uuid.UUID, err error) {
-		p.dialogBusy = false
-		if err != nil {
-			p.dialogError = problemText(err)
+	ctx.Update()
+}
+
+// cancelEdit drops the inline edit and the value typed into it.
+func (p *Picker) cancelEdit(ctx app.Context) {
+	p.field, p.value, p.editError = fieldNone, "", ""
+	ctx.Update()
+}
+
+// commitEdit writes the edited field: Enter or a blur of the name, Ctrl+Enter
+// or a blur of the description. The server is the only validator; a refusal or
+// a conflict keeps the field open with the text typed in it (task 82).
+func (p *Picker) commitEdit(ctx app.Context) {
+	if p.saving || p.field == fieldNone {
+		return
+	}
+	item, ok := p.find(p.selected)
+	if !ok {
+		p.cancelEdit(ctx)
+		return
+	}
+	name, description := item.Name, item.Description
+	if p.field == fieldName {
+		name = strings.TrimSpace(p.value)
+	} else {
+		description = strings.TrimSpace(p.value)
+	}
+	// Nothing changed: the page leaves the field without a request, so an
+	// edit that changes nothing neither bumps the Version nor publishes.
+	if name == item.Name && description == item.Description {
+		p.field, p.value, p.editError = fieldNone, "", ""
+		ctx.Update()
+		return
+	}
+	if name == "" {
+		p.editError = "A name is required"
+		ctx.Update()
+		return
+	}
+	p.saving = true
+	edited := item.ID
+	uiutil.Do(p.compoCtx, func(c context.Context) (struct{}, error) {
+		return struct{}{}, p.source.Update(c, edited, item.Version, name, description)
+	}, func(ctx app.Context, _ struct{}, err error) {
+		p.saving = false
+		// The user may have chosen another entity while the write was in
+		// flight: its refusal belongs to the entity edited, never to the one
+		// shown now, and the field of that one is not this write's to close.
+		if p.selected != edited {
+			if err != nil {
+				uiutil.ShowError(ctx, err)
+			}
+			p.load(ctx)
 			ctx.Update()
 			return
 		}
-		p.dialog = false
-		p.load(ctx)
-		if id == uuid.Nil {
-			p.open(ctx, saved)
+		if err != nil {
+			p.editError = problemText(err)
+			if errors.Is(err, apiclient.ErrConflict) {
+				// The entity moved on: reread it so the next attempt states
+				// its current Version, and keep the text typed in.
+				p.load(ctx)
+			}
+			ctx.Update()
+			return
 		}
+		p.field, p.value, p.editError = fieldNone, "", ""
+		p.load(ctx)
 		ctx.Update()
 	})
 }
 
-// deleteEntity removes the entity after a confirmation; deleting the shown one
-// leaves the page (root shows it then), deleting another one stays on it.
+// startCreate puts a new entity at the top of the list and opens the details
+// in its "new" mode, with the name field focused (task 82).
+func (p *Picker) startCreate(ctx app.Context) {
+	if p.busy() {
+		return
+	}
+	p.field, p.editError = fieldNone, ""
+	p.creating, p.createName, p.createError = true, "", ""
+	p.screen = screenDetails
+	// The draft row is the list's selection while it is open, and it sits at
+	// the top: a list scrolled down has to show it.
+	app.Window().GetElementByID(p.rowsID()).Set("scrollTop", 0)
+	ctx.Update()
+}
+
+// cancelCreate drops the draft without a request.
+func (p *Picker) cancelCreate(ctx app.Context) {
+	p.creating, p.createName, p.createError = false, "", ""
+	p.screen = screenList
+	ctx.Update()
+}
+
+// commitCreate creates the entity of the draft row. An empty name drops it
+// without a request; a refusal of the server keeps the draft with the text and
+// the message under it (task 82).
+func (p *Picker) commitCreate(ctx app.Context) {
+	if p.createBusy || !p.creating {
+		return
+	}
+	name := strings.TrimSpace(p.createName)
+	if name == "" {
+		p.cancelCreate(ctx)
+		return
+	}
+	p.createBusy = true
+	p.createError = ""
+	uiutil.Do(p.compoCtx, func(c context.Context) (uuid.UUID, error) {
+		return p.source.Create(c, name, "")
+	}, func(ctx app.Context, id uuid.UUID, err error) {
+		p.createBusy = false
+		if err != nil {
+			p.createError = problemText(err)
+			ctx.Update()
+			return
+		}
+		p.creating, p.createName, p.createError = false, "", ""
+		p.load(ctx)
+		p.open(ctx, id)
+	})
+}
+
+// deleteEntity removes the entity after a confirmation; the details pane then
+// shows the next one, so deleting never leaves an empty pane on a desktop
+// screen and a dead screen on a phone.
 func (p *Picker) deleteEntity(ctx app.Context, id uuid.UUID) {
 	item, ok := p.find(id)
 	if !ok {
@@ -307,20 +541,148 @@ func (p *Picker) deleteEntity(ctx app.Context, id uuid.UUID) {
 
 // doDelete is the deletion the confirmation asked for.
 func (p *Picker) doDelete(ctx app.Context, id uuid.UUID) {
+	shown := p.Displayed()
+	index := slices.IndexFunc(shown, func(item Item) bool { return item.ID == id })
 	wasSelected := id == p.selected
 	uiutil.Call(p.compoCtx, func(c context.Context) (struct{}, error) {
 		return struct{}{}, p.source.Delete(c, id)
 	}, func(ctx app.Context, _ struct{}) {
 		if wasSelected {
-			p.selectNone(ctx)
+			p.selectAfterDelete(ctx, shown, id, index)
 		}
 		p.load(ctx)
 		ctx.Update()
 	}, nil)
 }
 
-// problemText is a refusal of the server as the dialog shows it: its detail,
-// or its title when it carries none.
+// selectAfterDelete selects the entity that took the deleted one's place, the
+// last one when it was the last, or none.
+func (p *Picker) selectAfterDelete(ctx app.Context, shown []Item, deleted uuid.UUID, index int) {
+	rest := make([]Item, 0, len(shown)-1)
+	for _, item := range shown {
+		if item.ID != deleted {
+			rest = append(rest, item)
+		}
+	}
+	switch {
+	case len(rest) == 0:
+		p.selectNone(ctx)
+	case index >= len(rest):
+		p.report(ctx, rest[len(rest)-1])
+	default:
+		p.report(ctx, rest[index])
+	}
+}
+
+// move puts the entity at position from at position to and stores the whole
+// order at once, optimistically: a refused write puts the previous
+// arrangement back and shows the refusal (task 81, task 82).
+func (p *Picker) move(ctx app.Context, from, to int) {
+	shown := p.Displayed()
+	if from == to || from < 0 || to < 0 || from >= len(shown) || to >= len(shown) || p.savingOrder {
+		return
+	}
+	moved := slices.Clone(shown)
+	item := moved[from]
+	moved = slices.Delete(moved, from, from+1)
+	moved = slices.Insert(moved, to, item)
+	ids := make([]uuid.UUID, len(moved))
+	for i, it := range moved {
+		ids[i] = it.ID
+	}
+	orderSource, ok := p.source.(OrderSource)
+	if !ok {
+		return
+	}
+	previous, version := p.order, p.orderVersion
+	p.order = ids
+	p.savingOrder = true
+	ctx.Update()
+	uiutil.Do(p.compoCtx, func(c context.Context) (int, error) {
+		return orderSource.SetOrder(c, version, ids)
+	}, func(ctx app.Context, saved int, err error) {
+		p.savingOrder = false
+		if err != nil {
+			p.order = previous
+			uiutil.ShowError(ctx, err)
+			if errors.Is(err, apiclient.ErrConflict) {
+				p.loadOrder(ctx)
+			}
+			ctx.Update()
+			return
+		}
+		p.orderVersion = saved
+		ctx.Update()
+	})
+}
+
+// moveSelected moves the selected entity one place, for the keyboard's
+// Alt+Arrow (task 82).
+func (p *Picker) moveSelected(ctx app.Context, delta int) {
+	shown := p.Displayed()
+	index := slices.IndexFunc(shown, func(item Item) bool { return item.ID == p.selected })
+	if index < 0 {
+		return
+	}
+	p.move(ctx, index, index+delta)
+}
+
+// stepSelection moves the selection through the shown list, clamped at its
+// ends.
+func (p *Picker) stepSelection(ctx app.Context, delta int) {
+	shown := p.Displayed()
+	if len(shown) == 0 {
+		return
+	}
+	index := slices.IndexFunc(shown, func(item Item) bool { return item.ID == p.selected })
+	next := index + delta
+	switch {
+	case index < 0:
+		next = 0
+	case next < 0:
+		next = 0
+	case next >= len(shown):
+		next = len(shown) - 1
+	}
+	p.selectItem(ctx, shown[next])
+}
+
+// onRowsKey is the keyboard of the list: the arrows move the selection, Alt
+// with an arrow moves the selected entity, Enter opens it (task 82).
+func (p *Picker) onRowsKey(ctx app.Context, e app.Event) {
+	if p.creating || p.busy() {
+		return
+	}
+	alt := e.Get("altKey").Bool()
+	switch e.Get("key").String() {
+	case "ArrowDown":
+		e.PreventDefault()
+		if alt {
+			p.moveSelected(ctx, 1)
+			return
+		}
+		p.stepSelection(ctx, 1)
+	case "ArrowUp":
+		e.PreventDefault()
+		if alt {
+			p.moveSelected(ctx, -1)
+			return
+		}
+		p.stepSelection(ctx, -1)
+	case "Enter":
+		if p.selected != uuid.Nil {
+			p.open(ctx, p.selected)
+		}
+	}
+}
+
+// busy reports whether a write of the page is in flight: the actions of the
+// details pane wait for it, so a click never states a Version the write about
+// to land makes stale (task 82).
+func (p *Picker) busy() bool { return p.saving || p.savingOrder || p.createBusy }
+
+// problemText is a refusal of the server as the page shows it: its detail, or
+// its title when it carries none.
 func problemText(err error) string {
 	var se *apiclient.StatusError
 	if errors.As(err, &se) {
@@ -336,216 +698,12 @@ func problemText(err error) string {
 	return problem.Title
 }
 
-// ── Render ────────────────────────────────────────────────────────────────────
-
-func (p *Picker) Render() app.UI {
-	rows := make([]app.UI, 0, len(p.items))
-	for _, item := range p.items {
-		rows = append(rows, p.renderRow(item))
+// boolAttr renders a boolean attribute value the way HTML reads it.
+func boolAttr(v bool) string {
+	if v {
+		return "true"
 	}
-	if len(rows) == 0 {
-		text := "No " + p.source.Plural() + " yet."
-		if !p.loaded {
-			text = "Loading " + p.source.Plural() + "…"
-		}
-		rows = append(rows, app.Div().
-			Style("font-size", "13px").
-			Style("color", "var(--text-muted)").
-			Style("padding", "8px 0").
-			Text(text))
-	}
-	return app.Div().
-		Attr("data-picker", p.source.Singular()).
-		Style("display", "flex").
-		Style("flex-direction", "column").
-		Style("flex", "1").
-		Style("min-width", "0").
-		Style("min-height", "0").
-		Style("padding", "8px 16px").
-		Style("box-sizing", "border-box").
-		Body(
-			app.Div().
-				Style("display", "flex").
-				Style("align-items", "center").
-				Style("gap", "10px").
-				Style("padding-bottom", "8px").
-				Body(
-					app.H2().Style("margin", "0").Style("font-size", "16px").Text(p.source.Title()),
-					app.Div().Style("flex", "1"),
-					button("Create", "accent", true, "Create a new "+p.source.Singular(), func(ctx app.Context) {
-						p.openDialog(ctx, uuid.Nil)
-					}),
-				),
-			app.If(p.dialog, p.renderDialog).Else(func() app.UI { return app.Div() }),
-			app.Div().
-				Style("flex", "1").
-				Style("min-height", "0").
-				Style("overflow-y", "auto").
-				Body(rows...),
-		)
-}
-
-// renderRow is one entity: its name, its badges, its description on one line
-// and the three things the page does with it.
-func (p *Picker) renderRow(item Item) app.UI {
-	id := item.ID
-	badges := []app.UI{}
-	if item.State != "" {
-		color, border := stateBadge(item.StateKind)
-		badges = append(badges, app.Span().
-			Attr("data-picker-state", item.StateKind).
-			Style("font-size", "10px").
-			Style("padding", "1px 6px").
-			Style("border-radius", "8px").
-			Style("white-space", "nowrap").
-			Style("color", color).
-			Style("border", "1px solid "+border).
-			Text(item.State))
-	}
-	description := app.Div().
-		Attr("data-picker-description", "true").
-		Style("font-size", "12px").
-		Style("overflow", "hidden").
-		Style("text-overflow", "ellipsis").
-		Style("white-space", "nowrap")
-	if item.Description == "" {
-		description = description.Style("color", "var(--text-muted)").Text(emptyDescription)
-	} else {
-		description = description.Style("color", "var(--text-2)").Title(item.Description).Text(item.Description)
-	}
-	row := app.Div().
-		Attr("data-picker-row", id.String()).
-		Style("display", "flex").
-		Style("align-items", "center").
-		Style("gap", "10px").
-		Style("padding", "8px 4px").
-		Style("border-bottom", "1px solid var(--border)").
-		Body(
-			app.Div().
-				Style("flex", "1").
-				Style("min-width", "0").
-				Body(
-					app.Div().
-						Style("display", "flex").
-						Style("align-items", "center").
-						Style("gap", "6px").
-						Body(
-							app.Span().Style("font-size", "14px").Style("font-weight", "600").Text(item.Name),
-							app.Span().Body(badges...),
-						),
-					description,
-				),
-			button("Open", "accent", true, "Open the "+p.source.Singular(), func(ctx app.Context) {
-				p.open(ctx, id)
-			}, app.EventScope("open/"+id.String())),
-			button("Edit", "", true, "Change the name and description", func(ctx app.Context) {
-				p.openDialog(ctx, id)
-			}, app.EventScope("edit/"+id.String())),
-			button("Delete", "error", true, "Delete the "+p.source.Singular(), func(ctx app.Context) {
-				p.deleteEntity(ctx, id)
-			}, app.EventScope("delete/"+id.String())),
-		).
-		OnDblClick(func(ctx app.Context, e app.Event) { p.open(ctx, id) }, app.EventScope("open/"+id.String()))
-	return row
-}
-
-// renderDialog is the Name+Description form of a new or an edited entity.
-func (p *Picker) renderDialog() app.UI {
-	title := "New " + p.source.Singular()
-	if p.editingID != uuid.Nil {
-		title = "Edit " + p.source.Singular()
-	}
-	var problem app.UI = app.Div()
-	if p.dialogError != "" {
-		problem = app.Div().
-			Attr("role", "alert").
-			Attr("data-picker-error", "true").
-			Style("margin", "0 0 8px").
-			Style("padding", "4px 8px").
-			Style("font-size", "12px").
-			Style("border", "1px solid var(--error-border)").
-			Style("border-radius", "4px").
-			Style("background", "var(--error-bg)").
-			Style("color", "var(--error)").
-			Text(p.dialogError)
-	}
-	return app.Div().
-		Attr("data-picker-dialog", "true").
-		Style("margin-bottom", "8px").
-		Style("padding", "10px").
-		Style("border", "1px solid var(--border)").
-		Style("border-radius", "6px").
-		Style("background", "var(--bg-elevated)").
-		Style("font-size", "13px").
-		Body(
-			app.H3().Style("margin", "0 0 8px").Style("font-size", "14px").Text(title),
-			problem,
-			app.Div().Style("margin", "0 0 4px").Text("Name"),
-			app.Input().
-				Attr("data-picker-name", "true").
-				Type("text").
-				Value(p.dialogName).
-				Placeholder("Name").
-				Style("width", "100%").
-				Style("box-sizing", "border-box").
-				Style("padding", "4px 6px").
-				Style("border", "1px solid var(--border-input)").
-				Style("border-radius", "4px").
-				Style("background", "var(--input-bg)").
-				Style("color", "var(--text)").
-				OnInput(func(ctx app.Context, e app.Event) {
-					p.dialogName = ctx.JSSrc().Get("value").String()
-				}),
-			app.Div().Style("margin", "8px 0 4px").Text("Description"),
-			app.Textarea().
-				Attr("data-picker-description-input", "true").
-				Rows(2).
-				Placeholder("Description (optional)").
-				Style("width", "100%").
-				Style("box-sizing", "border-box").
-				Style("padding", "4px 6px").
-				Style("border", "1px solid var(--border-input)").
-				Style("border-radius", "4px").
-				Style("background", "var(--input-bg)").
-				Style("color", "var(--text)").
-				Style("resize", "vertical").
-				Style("font-family", "inherit").
-				Text(p.dialogDescription).
-				OnInput(func(ctx app.Context, e app.Event) {
-					p.dialogDescription = ctx.JSSrc().Get("value").String()
-				}),
-			app.Div().
-				Style("display", "flex").
-				Style("gap", "6px").
-				Style("margin-top", "10px").
-				Body(
-					button("Save", "accent", !p.dialogBusy, "Save the "+p.source.Singular(), func(ctx app.Context) {
-						p.submitDialog(ctx)
-					}),
-					button("Cancel", "", true, "Close without saving", func(ctx app.Context) {
-						p.closeDialog(ctx)
-					}),
-				),
-		)
-}
-
-// button renders one action of the page in the layout of its rows; kind
-// "accent", "error" or "" picks its colours. options scope the handler to the
-// row it belongs to.
-func button(label, kind string, enabled bool, title string, onClick func(app.Context), options ...app.EventOption) app.UI {
-	return uiutil.Button(label, kind, enabled, title, uiutil.ButtonPage,
-		func(ctx app.Context, _ app.Event) { onClick(ctx) }, options...)
-}
-
-// stateBadge is the text colour and the border colour of a state's badge: the
-// one place its palette lives.
-func stateBadge(kind string) (color, border string) {
-	switch kind {
-	case "unsaved", "unpublished":
-		return "var(--toast-warn-title)", "var(--toast-warn-border)"
-	default:
-		return "var(--text-muted)", "var(--border)"
-	}
+	return "false"
 }
 
 // String implements [fmt.Stringer], for the tests' messages.

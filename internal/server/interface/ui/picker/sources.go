@@ -128,3 +128,23 @@ func (s librarySource) Delete(ctx context.Context, id uuid.UUID) error {
 func (s librarySource) DeleteQuestion(name string) string {
 	return "Delete the library " + name + " with its Draft and releases? A project that pins it, or a running Deployment that names one of its releases, refuses the deletion. Commits and Releases of the past keep a link to the deleted library."
 }
+
+// Order returns the library order of the person the server acts for: the IDs
+// they placed, first to last, and the Version their next write states
+// (task 81, ADR 0024).
+func (s librarySource) Order(ctx context.Context) ([]uuid.UUID, int, error) {
+	order, err := s.client.LibraryOrder(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+	return order.LibraryIDs, order.Version, nil
+}
+
+// SetOrder stores the whole library order and returns the Version stored.
+func (s librarySource) SetOrder(ctx context.Context, version int, ids []uuid.UUID) (int, error) {
+	order, err := s.client.SetLibraryOrder(ctx, version, ids)
+	if err != nil {
+		return 0, err
+	}
+	return order.Version, nil
+}

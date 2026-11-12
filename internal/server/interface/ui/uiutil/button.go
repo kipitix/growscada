@@ -32,6 +32,23 @@ const (
 // the picker's page, the Library's and the Project's headers and dialogs, and
 // the rows of their lists (task 77, task 80).
 func Button(text, kind string, enabled bool, title string, layout ButtonLayout, onClick func(app.Context, app.Event), options ...app.EventOption) app.HTMLButton {
+	return button(kind, enabled, title, layout, app.Text(text), onClick, options...)
+}
+
+// IconButton is Button with an icon and no text: the picker's actions
+// (task 82). The icon is the whole face of the button, so the title is its
+// accessible name — a hover text alone does not give one — and a destructive
+// action keeps its confirmation.
+func IconButton(icon app.UI, kind string, enabled bool, title string, layout ButtonLayout, onClick func(app.Context, app.Event), options ...app.EventOption) app.HTMLButton {
+	return button(kind, enabled, title, layout, icon, onClick, options...).
+		Attr("aria-label", title).
+		Style("display", "inline-flex").
+		Style("align-items", "center").
+		Style("justify-content", "center")
+}
+
+// button renders one action around the content it shows.
+func button(kind string, enabled bool, title string, layout ButtonLayout, content app.UI, onClick func(app.Context, app.Event), options ...app.EventOption) app.HTMLButton {
 	border, bg, fg := buttonColors(kind)
 	b := app.Button().
 		Title(title).
@@ -39,7 +56,7 @@ func Button(text, kind string, enabled bool, title string, layout ButtonLayout, 
 		Style("border-radius", "4px").
 		Style("background", bg).
 		Style("color", fg).
-		Text(text)
+		Body(content)
 	dimmed := "0.5"
 	switch layout {
 	case ButtonBar:

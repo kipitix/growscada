@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -63,6 +64,11 @@ func startProjects(t *testing.T, arrange func(api *apiclient.Client)) *fixture {
 	return start(t, NewProjectSource, ProjectKey, arrange)
 }
 
+func startLibraries(t *testing.T, arrange func(api *apiclient.Client)) *fixture {
+	t.Helper()
+	return start(t, NewLibrarySource, LibraryKey, arrange)
+}
+
 func (f *fixture) run() { f.e.ConsumeAll() }
 
 func (f *fixture) create(name, description string) uuid.UUID {
@@ -76,16 +82,31 @@ func (f *fixture) create(name, description string) uuid.UUID {
 
 // names returns the names listed, in the order shown.
 func (f *fixture) names() []string {
-	names := make([]string, len(f.p.items))
-	for i, item := range f.p.items {
+	shown := f.p.Displayed()
+	names := make([]string, len(shown))
+	for i, item := range shown {
 		names[i] = item.Name
 	}
 	return names
 }
 
+// selectByName shows the details of the entity named name.
+func (f *fixture) selectByName(name string) Item {
+	f.t.Helper()
+	for _, item := range f.p.Displayed() {
+		if item.Name == name {
+			f.p.selectItem(f.p.compoCtx, item)
+			f.run()
+			return item
+		}
+	}
+	f.t.Fatalf("no %q in %v", name, f.names())
+	return Item{}
+}
+
 // TestPicker_ListsSortedWithDescriptionAndState: the page reads the live
-// entities on mount, sorts them by name and shows the description and the
-// unsaved-changes badge (task 73).
+// entities on mount and sorts them by name; the list shows names and the state
+// dot, the details the description and the state in words (task 73, task 82).
 func TestPicker_ListsSortedWithDescriptionAndState(t *testing.T) {
 	f := startProjects(t, func(api *apiclient.Client) {
 		zulu, err := api.CreateProject(context.Background(), apiv0.CreateProjectRequest{Name: "zulu", Description: "The last line"})
@@ -121,11 +142,26 @@ func TestPicker_ListsSortedWithDescriptionAndState(t *testing.T) {
 	if alpha.Description != "" || alpha.State != "" {
 		t.Errorf("alpha: %+v, want no description and no badge", alpha)
 	}
-	html := app.HTMLString(f.p.Render())
-	for _, want := range []string{`data-picker-row`, "The last line", "Unsaved changes", "No description", "Projects"} {
-		if !strings.Contains(html, want) {
-			t.Errorf("the page does not show %q: %s", want, html)
+
+	// The list is names and the dot of the state; the details carry the rest.
+	list := app.HTMLString(f.p.Render())
+	for _, want := range []string{`data-picker-row`, `data-picker-dot="unsaved"`, "Projects", `data-picker-selected="0"`} {
+		if !strings.Contains(list, want) {
+			t.Errorf("the list does not show %q: %s", want, list)
 		}
+	}
+
+	f.selectByName("zulu")
+	html := app.HTMLString(f.p.Render())
+	for _, want := range []string{`data-picker-name`, "The last line", "Unsaved changes", `data-screen="details"`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("the details of zulu do not show %q: %s", want, html)
+		}
+	}
+
+	f.selectByName("Alpha")
+	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, emptyDescription) {
+		t.Errorf("the details of alpha do not say there is no description: %s", html)
 	}
 }
 
@@ -148,28 +184,33 @@ func TestPicker_OpenReportsTheEntity(t *testing.T) {
 	}
 }
 
-// TestPicker_CreateOpensTheNewEntity: Create validates nothing on its own,
-// the server is the only validator, and a created entity opens at once
-// (task 73).
+// TestPicker_CreateOpensTheNewEntity: Create puts a draft row in the list and
+// its name field in the details; the server is the only validator, and a
+// created entity opens at once (task 82).
 func TestPicker_CreateOpensTheNewEntity(t *testing.T) {
 	f := startProjects(t, nil)
 	f.run()
 
-	f.p.openDialog(f.p.compoCtx, uuid.Nil)
-	f.p.dialogName = "Line 1"
-	f.p.dialogDescription = "  A new line  "
-	f.p.submitDialog(f.p.compoCtx)
+	f.p.startCreate(f.p.compoCtx)
+	f.run()
+	if !f.p.creating || f.p.screenName() != screenDetails {
+		t.Fatalf("the draft is not open: %+v", f.p)
+	}
+	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-picker-draft`) ||
+		!strings.Contains(html, `data-picker-create-name`) {
+		t.Errorf("the page does not show the draft: %s", html)
+	}
+
+	f.p.createName = "Line 1"
+	f.p.commitCreate(f.p.compoCtx)
 	f.run()
 
-	if f.p.dialog {
-		t.Errorf("the dialog is still open: %q", f.p.dialogError)
+	if f.p.creating {
+		t.Errorf("the draft is still open: %q", f.p.createError)
 	}
 	created, ok, err := f.api.FindProjectByName(context.Background(), "Line 1")
 	if err != nil || !ok {
 		t.Fatalf("Line 1 on the server: %v, %v", ok, err)
-	}
-	if created.Description != "A new line" {
-		t.Errorf("the description stored: %q", created.Description)
 	}
 	if len(f.opened) != 1 || f.opened[0] != created.ID {
 		t.Errorf("opened %v, want the created project", f.opened)
@@ -179,9 +220,90 @@ func TestPicker_CreateOpensTheNewEntity(t *testing.T) {
 	}
 }
 
-// TestPicker_EditErrorStaysInTheDialog: a refusal of the server — here a name
-// taken — is shown inside the dialog, which keeps the input (task 73).
-func TestPicker_EditErrorStaysInTheDialog(t *testing.T) {
+// TestPicker_CreateEmptyNameDropsTheDraft: a draft left without a name is no
+// request at all (task 82).
+func TestPicker_CreateEmptyNameDropsTheDraft(t *testing.T) {
+	f := startProjects(t, nil)
+	f.run()
+
+	f.p.startCreate(f.p.compoCtx)
+	f.p.createName = "   "
+	f.p.commitCreate(f.p.compoCtx)
+	f.run()
+
+	if f.p.creating || f.p.createError != "" {
+		t.Errorf("the draft: creating %t, %q", f.p.creating, f.p.createError)
+	}
+	if len(f.p.items) != 1 {
+		t.Errorf("listed %d projects, want Main only", len(f.p.items))
+	}
+}
+
+// TestPicker_ChoosingAnEntityDropsTheDraft: picking another entity while a
+// new one is being created abandons the draft, which was never sent (task 82).
+func TestPicker_ChoosingAnEntityDropsTheDraft(t *testing.T) {
+	f := startProjects(t, nil)
+	f.run()
+
+	f.p.startCreate(f.p.compoCtx)
+	f.p.createName = "Never sent"
+	main := f.selectByName(servertest.MainProjectName)
+
+	if f.p.creating || f.p.createName != "" || f.p.createError != "" {
+		t.Errorf("the draft survived a selection: %+v", f.p)
+	}
+	if f.p.SelectedID() != main.ID {
+		t.Errorf("selected %v, want Main", f.p.SelectedID())
+	}
+	if len(f.p.items) != 1 {
+		t.Errorf("the draft reached the server: %+v", f.p.items)
+	}
+}
+
+// TestPicker_CreateSelectsTheDraftAndCancelRestores: the draft row is the
+// list's selection while it is open, and Cancel brings the previous selection
+// back (task 82).
+func TestPicker_CreateSelectsTheDraftAndCancelRestores(t *testing.T) {
+	f := startProjects(t, nil)
+	f.run()
+	main := f.selectByName(servertest.MainProjectName)
+
+	f.p.startCreate(f.p.compoCtx)
+	f.run()
+
+	html := app.HTMLString(f.p.Render())
+	if !strings.Contains(html, `data-picker-draft="1"`) {
+		t.Fatalf("the draft row is not shown: %s", html)
+	}
+	if got := strings.Count(html, `data-picker-selected="1"`); got != 1 {
+		t.Errorf("the list marks %d rows selected with a draft open, want the draft only", got)
+	}
+	if f.p.SelectedID() != main.ID {
+		t.Errorf("the draft moved the selection to %v", f.p.SelectedID())
+	}
+
+	f.p.cancelCreate(f.p.compoCtx)
+	f.run()
+
+	html = app.HTMLString(f.p.Render())
+	if f.p.creating || f.p.SelectedID() != main.ID {
+		t.Errorf("after Cancel: creating %t, selected %v", f.p.creating, f.p.SelectedID())
+	}
+	if strings.Contains(html, "data-picker-draft") {
+		t.Errorf("the draft row survived Cancel: %s", html)
+	}
+	if got := strings.Count(html, `data-picker-selected="1"`); got != 1 {
+		t.Errorf("the list marks %d rows selected after Cancel, want the previous one", got)
+	}
+	if !strings.Contains(html, `data-screen="list"`) {
+		t.Errorf("Cancel left the phone on the details screen: %s", html)
+	}
+}
+
+// TestPicker_EditErrorStaysInTheField: a refusal of the server — here a name
+// taken — is shown under the field, which keeps the text and stays open
+// (task 82).
+func TestPicker_EditErrorStaysInTheField(t *testing.T) {
 	f := startProjects(t, func(api *apiclient.Client) {
 		if _, err := api.CreateProject(context.Background(), apiv0.CreateProjectRequest{Name: "Line 1"}); err != nil {
 			t.Fatalf("create project: %v", err)
@@ -189,41 +311,81 @@ func TestPicker_EditErrorStaysInTheDialog(t *testing.T) {
 	})
 	f.run()
 
-	f.p.openDialog(f.p.compoCtx, servertest.MainProject)
-	f.p.dialogName = "Line 1"
-	f.p.dialogDescription = "Kept"
-	f.p.submitDialog(f.p.compoCtx)
+	f.selectByName(servertest.MainProjectName)
+	f.p.startEdit(f.p.compoCtx, fieldName)
+	f.p.value = "Line 1"
+	f.p.commitEdit(f.p.compoCtx)
 	f.run()
 
-	if !f.p.dialog || f.p.dialogError == "" || !strings.Contains(f.p.dialogError, "taken") {
-		t.Fatalf("dialog %t, error %q; want the refusal inside the dialog", f.p.dialog, f.p.dialogError)
+	if f.p.field != fieldName || f.p.editError == "" || !strings.Contains(f.p.editError, "taken") {
+		t.Fatalf("field %q, error %q; want the refusal in the open field", f.p.field, f.p.editError)
 	}
-	if f.p.dialogName != "Line 1" || f.p.dialogDescription != "Kept" {
-		t.Errorf("the input was lost: %q %q", f.p.dialogName, f.p.dialogDescription)
+	if f.p.value != "Line 1" {
+		t.Errorf("the input was lost: %q", f.p.value)
 	}
 	html := app.HTMLString(f.p.Render())
-	if !strings.Contains(html, `data-picker-error`) || !strings.Contains(html, "taken") || !strings.Contains(html, "Kept") {
-		t.Errorf("the dialog does not show the refusal and the input: %s", html)
+	if !strings.Contains(html, `data-picker-error`) || !strings.Contains(html, "taken") || !strings.Contains(html, `value="Line 1"`) {
+		t.Errorf("the field does not show the refusal and the input: %s", html)
 	}
-	if f.p.EditingID() != servertest.MainProject {
-		t.Errorf("editing %v, want Main", f.p.EditingID())
+	if got, err := f.api.GetProject(context.Background(), servertest.MainProject); err != nil || got.Name != servertest.MainProjectName {
+		t.Errorf("the refused edit changed the project: %+v, %v", got, err)
 	}
 }
 
-// TestPicker_EditSavesNameAndDescription: an edit changes both and stays on
-// the list.
+// TestPicker_SelectingAnotherEntityDropsTheEdit: the inline field belongs to
+// the entity it was opened on; picking another one closes it, with the text
+// and any refusal of the first, so a later Enter cannot write there (task 82).
+func TestPicker_SelectingAnotherEntityDropsTheEdit(t *testing.T) {
+	f := startProjects(t, func(api *apiclient.Client) {
+		if _, err := api.CreateProject(context.Background(), apiv0.CreateProjectRequest{Name: "Line 1"}); err != nil {
+			t.Fatalf("create project: %v", err)
+		}
+	})
+	f.run()
+	f.selectByName(servertest.MainProjectName)
+
+	// A refusal keeps the field open on the entity it belongs to.
+	f.p.startEdit(f.p.compoCtx, fieldName)
+	f.p.value = "Line 1"
+	f.p.commitEdit(f.p.compoCtx)
+	f.run()
+	if f.p.field != fieldName || f.p.editError == "" {
+		t.Fatalf("the refused edit did not stay in its field: %q %q", f.p.field, f.p.editError)
+	}
+
+	// Picking another entity drops it rather than showing it there.
+	line := f.selectByName("Line 1")
+	if f.p.field != fieldNone || f.p.value != "" || f.p.editError != "" {
+		t.Errorf("the edit of Main survived the selection: field %q, value %q, error %q",
+			f.p.field, f.p.value, f.p.editError)
+	}
+	if f.p.SelectedID() != line.ID {
+		t.Errorf("selected %v, want Line 1", f.p.SelectedID())
+	}
+	if got, err := f.api.GetProject(context.Background(), servertest.MainProject); err != nil || got.Name != servertest.MainProjectName {
+		t.Errorf("the refused edit changed the project: %+v, %v", got, err)
+	}
+}
+
+// TestPicker_EditSavesNameAndDescription: an edit of either field changes it,
+// stays on the page and sends the whole pair (task 82).
 func TestPicker_EditSavesNameAndDescription(t *testing.T) {
 	f := startProjects(t, nil)
 	f.run()
 
-	f.p.openDialog(f.p.compoCtx, servertest.MainProject)
-	f.p.dialogName = "Plant"
-	f.p.dialogDescription = "The plant line"
-	f.p.submitDialog(f.p.compoCtx)
+	f.selectByName(servertest.MainProjectName)
+	f.p.startEdit(f.p.compoCtx, fieldName)
+	f.p.value = "  Plant "
+	f.p.commitEdit(f.p.compoCtx)
 	f.run()
 
-	if f.p.dialog || f.p.dialogError != "" {
-		t.Fatalf("dialog %t: %q", f.p.dialog, f.p.dialogError)
+	f.p.startEdit(f.p.compoCtx, fieldDescription)
+	f.p.value = "The plant line"
+	f.p.commitEdit(f.p.compoCtx)
+	f.run()
+
+	if f.p.field != fieldNone || f.p.editError != "" {
+		t.Fatalf("field %q: %q", f.p.field, f.p.editError)
 	}
 	got, err := f.api.GetProject(context.Background(), servertest.MainProject)
 	if err != nil || got.Name != "Plant" || got.Description != "The plant line" {
@@ -237,9 +399,39 @@ func TestPicker_EditSavesNameAndDescription(t *testing.T) {
 	}
 }
 
-// TestPicker_DeleteSelectedLeavesNone: deleting the shown entity selects none
-// — the mode shows the page then — and deleting another one keeps it.
-func TestPicker_DeleteSelectedLeavesNone(t *testing.T) {
+// TestPicker_UnchangedEditSendsNothing: a field left as it was asks the server
+// for nothing (task 82).
+func TestPicker_UnchangedEditSendsNothing(t *testing.T) {
+	f := startProjects(t, nil)
+	f.run()
+
+	f.selectByName(servertest.MainProjectName)
+	before, err := f.api.GetProject(context.Background(), servertest.MainProject)
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	// The field opens on the value the entity holds, so leaving it alone is
+	// no change at all.
+	f.p.startEdit(f.p.compoCtx, fieldDescription)
+	f.p.commitEdit(f.p.compoCtx)
+	f.run()
+
+	after, err := f.api.GetProject(context.Background(), servertest.MainProject)
+	if err != nil {
+		t.Fatalf("GetProject after the edit: %v", err)
+	}
+	if after.Version != before.Version {
+		t.Errorf("an unchanged edit bumped the version: %d -> %d", before.Version, after.Version)
+	}
+	if f.p.field != fieldNone {
+		t.Errorf("the field is still open: %q", f.p.field)
+	}
+}
+
+// TestPicker_DeleteSelectsTheNext: deleting the shown entity shows the one
+// that took its place, so the details are never empty while something is
+// left (task 82).
+func TestPicker_DeleteSelectsTheNext(t *testing.T) {
 	var line uuid.UUID
 	f := startProjects(t, func(api *apiclient.Client) {
 		created, err := api.CreateProject(context.Background(), apiv0.CreateProjectRequest{Name: "Line 1"})
@@ -249,7 +441,7 @@ func TestPicker_DeleteSelectedLeavesNone(t *testing.T) {
 		line = created.ID
 	})
 	f.run()
-	f.p.open(f.p.compoCtx, line)
+	f.selectByName("Line 1")
 	f.run()
 
 	f.p.doDelete(f.p.compoCtx, line)
@@ -258,8 +450,8 @@ func TestPicker_DeleteSelectedLeavesNone(t *testing.T) {
 	if _, err := f.api.GetProject(context.Background(), line); err == nil {
 		t.Error("the project is still on the server")
 	}
-	if f.p.SelectedID() != uuid.Nil || len(f.selected) == 0 || f.selected[len(f.selected)-1] != uuid.Nil {
-		t.Errorf("selected %v, want none: %v", f.p.SelectedID(), f.selected)
+	if f.p.SelectedID() != servertest.MainProject {
+		t.Errorf("selected %v after the delete, want Main", f.p.SelectedID())
 	}
 	if len(f.p.items) != 1 || f.p.items[0].ID != servertest.MainProject {
 		t.Errorf("listed %+v, want Main only", f.p.items)
@@ -290,7 +482,7 @@ func TestPicker_ReloadsOnServerEvents(t *testing.T) {
 	}
 
 	// A Save fixes a Draft, and a write of one makes the project unsaved: the
-	// row's badge follows both (task 73).
+	// row's dot follows both (task 73).
 	f.create("Line 2", "")
 	f.p.compoCtx.NewActionWithValue(eventlog.ActionServerEvent, apiv0.Event{Type: apiv0.EventCommitCreated, ID: uuid.NewString()})
 	f.run()
@@ -317,7 +509,7 @@ func TestPicker_ReloadsOnServerEvents(t *testing.T) {
 // LibraryResponse: never saved, unsaved changes, an unpublished Commit, a
 // published one, and a legacy Release older than Commits (task 73; task 74).
 func TestPicker_LibraryStates(t *testing.T) {
-	f := start(t, NewLibrarySource, LibraryKey, nil)
+	f := startLibraries(t, nil)
 	ctx := context.Background()
 	created, err := f.api.CreateLibrary(ctx, apiv0.CreateLibraryRequest{Name: "Widgets", Description: "Shared widgets"})
 	if err != nil {
@@ -328,10 +520,11 @@ func TestPicker_LibraryStates(t *testing.T) {
 		t.Helper()
 		f.p.load(f.p.compoCtx)
 		f.run()
-		if len(f.p.items) != 1 {
-			t.Fatalf("listed %+v", f.p.items)
+		if shown := f.p.Displayed(); len(shown) > 0 {
+			return shown[0]
 		}
-		return f.p.items[0]
+		t.Fatalf("listed nothing")
+		return Item{}
 	}
 
 	// A library nothing was written to is clean and never saved: no badge.
@@ -397,9 +590,10 @@ func TestPicker_LibraryStates(t *testing.T) {
 	}
 	f.p.load(f.p.compoCtx)
 	f.run()
-	if len(f.p.items) != 2 || f.p.items[0].Name != "Legacy" ||
-		f.p.items[0].State != StateLegacy || f.p.items[0].StateKind != "legacy" {
-		t.Errorf("the legacy library's row: %+v, want it first and legacy", f.p.items)
+	shown := f.p.Displayed()
+	if len(shown) != 2 || shown[0].Name != "Legacy" ||
+		shown[0].State != StateLegacy || shown[0].StateKind != "legacy" {
+		t.Errorf("the legacy library's row: %+v, want it first and legacy", shown)
 	}
 }
 
@@ -467,5 +661,28 @@ func TestPicker_NoSelectionLists(t *testing.T) {
 	e.ConsumeAll()
 	if html := app.HTMLString(p.Render()); !strings.Contains(html, "Projects") || !strings.Contains(html, "Loading projects…") {
 		t.Errorf("an unreachable server: %s", html)
+	}
+}
+
+// TestPicker_SelectingShowsTheDetailsOfOne: the details pane shows the entity
+// the list reports, and the list marks exactly that row (task 82).
+func TestPicker_SelectingShowsTheDetailsOfOne(t *testing.T) {
+	f := startProjects(t, func(api *apiclient.Client) {
+		if _, err := api.CreateProject(context.Background(), apiv0.CreateProjectRequest{Name: "Alpha", Description: "A line"}); err != nil {
+			t.Fatalf("create project: %v", err)
+		}
+	})
+	f.run()
+
+	alpha := f.selectByName("Alpha")
+	if f.p.SelectedID() != alpha.ID {
+		t.Errorf("selected %v, want Alpha", f.p.SelectedID())
+	}
+	html := app.HTMLString(f.p.Render())
+	if !strings.Contains(html, `data-picker-selected="1"`) || !strings.Contains(html, "A line") {
+		t.Errorf("the details do not follow the selection: %s", html)
+	}
+	if !slices.Contains(f.selected, alpha.ID) {
+		t.Errorf("the selection was not reported: %v", f.selected)
 	}
 }
