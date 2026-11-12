@@ -1,5 +1,22 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.94] - 2026-11-12
+
+### Added
+
+- **Порядок библиотек хранится на сервере под пользователя, отдельным агрегатом** (задача 81; ADR 0024)
+  - Миграция `public/20261113000000_user_settings.sql`: `public.user_settings` с ключом `(user_id, organization_id, key)`, payload `jsonb`, версией и `updated_at`; `user_id` без внешнего ключа до задачи 49 (Users), `organization_id` ссылается на `organizations`, ограничения на положительную версию и объектный payload
+  - `domain/settings`: агрегат `Settings` (владелец, организация, `Order`, `version.Version[Settings]`, без событий), VO `Order` (нулевой ID и дубли отбрасываются, `IDs()` — копия), `Repository` (`Find`/`Save`), `ErrSettingsConflict`, `SingleUser()` — фиксированный `f0000000-0000-4000-8000-000000000001`
+  - `postgres/repositories/user_settings_repository_postgres.go`: кодек payload `{"library_ids": [...]}`, вставка при начальной версии (`ON CONFLICT DO NOTHING`), CAS при сохранённой; outbox и событий нет — настройка не контент
+  - `application.SettingsService` (`LibraryOrder`, `SetLibraryOrder`): владелец — параметр конструктора (`settings.SingleUser` до авторизации, затем принципал запроса), организация — серверная; заявленная версия проверяется до записи, гонку ловит CAS; дубли и ID удалённой библиотеки терпимы
+  - REST: `GET /api/v0/settings/library-order` → `{version, library_ids}` (200 и `{0, []}` без строки), `PUT` с `{version, library_ids}` → 200 с сохранённой версией; устаревшая версия — 409 `settings_conflict`; `apiclient.LibraryOrder`/`SetLibraryOrder`
+  - Контракт `api/v0` MINOR 0.33 → 0.34 (`LibraryOrderResponse`, `SetLibraryOrderRequest`), `make schemas`
+  - Bruno: `get_library_order` (seq 10, пустое состояние), `put_library_order` (seq 73, первая запись и версия 1); `requestBodies`, статическая проверка коллекции
+  - `main.go`, `servertest` (очистка `user_settings` между тестами) и сервисы тестов `restapi`; `domain/settings` — в Engineering node списка `roles_test.go`
+  - Тесты: домен (нормализация порядка, `WithLibraryOrder` не двигает владельца и версию, стабильность `SingleUser`), репозиторий (вставка/чтение/CAS/конфликт, раздельность владельцев и организаций), API (пустое состояние, нормализация, 409, ID несуществующей библиотеки), `TestDomainSentinels_AreListed`
+  - Порядок не входит в ProjectFile/Commit/Release, `growctl` и `GET /libraries` не затронуты; слияние сохранённого порядка с живым списком — на клиенте (задача 82)
+  - Проверки: `make build`, `make test`, `make bruno_test`; ручной прогон API на dev-базе (GET пустой, PUT с дублем, GET, PUT со старой версией → 409 `application/problem+json`, строка в `user_settings`); UI задачей не менялся
+
 ## [0.0.93] - 2026-11-10
 
 ### Fixed

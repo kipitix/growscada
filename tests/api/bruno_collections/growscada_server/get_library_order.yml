@@ -1,0 +1,36 @@
+info:
+  name: get library order
+  type: http
+  seq: 10
+
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/settings/library-order
+  auth: inherit
+
+docs: |
+  The library order of the person the server acts for (task 81; ADR 0024).
+  It is a per-user setting, stored apart from the libraries it orders: an
+  empty list at version 0 is a person who never reordered, never a 404.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.library_ids'
+      operator: isArray
+    - expression: 'res.body.library_ids.length'
+      operator: eq
+      value: '0'
+    - expression: 'res.body.version'
+      operator: eq
+      value: '0'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

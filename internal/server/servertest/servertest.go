@@ -28,6 +28,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
+	"github.com/kipitix/growscada/internal/server/domain/settings"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/migrations"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
@@ -220,6 +221,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 		"DELETE FROM engineering.widgets; "+
 		"DELETE FROM engineering.scenes; DELETE FROM engineering.library_pins; DELETE FROM engineering.libraries; "+
 		"DELETE FROM outbox; DELETE FROM policy_jobs; "+
+		"DELETE FROM user_settings; "+
 		"DELETE FROM projects WHERE id <> '"+MainProject.String()+"'; "+
 		// A test that deleted Main may have left its row removed by the
 		// cleanup policy, not only marked.
@@ -284,6 +286,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 		ProjectFiles: application.NewProjectFileService(content, application.NewProjectFileBuilder(content), runtimeNode, libraries, releases),
 		Commits:      application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, projectReleases, releases),
 		Releases:     application.NewReleaseService(content, projectReleases, runtimeNode, libraries, releases),
+		Settings:     application.NewSettingsService(repositories.NewUserSettingsRepositoryPostgres(db), settings.SingleUser(), orgID),
 		Deployments:  deployments,
 		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(db)),
 		DeviceTokens: deviceTokens,

@@ -206,6 +206,30 @@ func (p *ProjectClient) doOneOf(ctx context.Context, method, path string, body a
 	return p.c.doOneOf(ctx, method, p.prefix+path, body, out, wantStatuses...)
 }
 
+// ── Per-user settings ────────────────────────────────────────────────────────
+
+// LibraryOrder returns the library order of the person the server acts for
+// (task 81): the Version the next write states, and the IDs of the libraries
+// they placed, first to last. Version 0 with no ID is a person who never
+// reordered.
+func (c *Client) LibraryOrder(ctx context.Context) (apiv0.LibraryOrderResponse, error) {
+	var resp apiv0.LibraryOrderResponse
+	err := c.do(ctx, http.MethodGet, apiv0.LibraryOrderPath, nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+// SetLibraryOrder stores the whole library order, stating the Version it was
+// read at (0 when there was none). The error matches ErrConflict when another
+// write came first: the newer order is never overwritten silently.
+func (c *Client) SetLibraryOrder(ctx context.Context, version int, libraryIDs []uuid.UUID) (apiv0.LibraryOrderResponse, error) {
+	var resp apiv0.LibraryOrderResponse
+	err := c.do(ctx, http.MethodPut, apiv0.LibraryOrderPath, apiv0.SetLibraryOrderRequest{
+		Version:    version,
+		LibraryIDs: libraryIDs,
+	}, http.StatusOK, &resp)
+	return resp, err
+}
+
 // ── Libraries ────────────────────────────────────────────────────────────────
 
 // ListLibraries returns every live library of the server, in creation order.

@@ -21,6 +21,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/release"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
+	"github.com/kipitix/growscada/internal/server/domain/settings"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
 
@@ -55,6 +56,9 @@ var (
 	commitResource = resource{name: "Commit", pathParam: "commit_number"}
 	// A Project Release is named by its number within its Project.
 	projectReleaseResource = resource{name: "Release", pathParam: "release_number"}
+	// The per-user settings of the server are named by no path at all: the
+	// person they belong to never is (task 81).
+	userSettingsResource = resource{name: "UserSettings"}
 )
 
 // wildcard is the router pattern segment that carries the resource's ID.
@@ -147,6 +151,8 @@ var errorMappings = []errorMapping{
 	{devicetoken.ErrTokenNotFound, http.StatusNotFound, deviceTokenResource, ""},
 	{devicetoken.ErrTokenExists, http.StatusConflict, deviceTokenResource,
 		"Device already has a token; revoke or rotate it"},
+	{settings.ErrSettingsConflict, http.StatusConflict, userSettingsResource,
+		"Settings were changed concurrently; reload them and retry"},
 }
 
 // sendError responds to an error from the application layer. Invalid input is

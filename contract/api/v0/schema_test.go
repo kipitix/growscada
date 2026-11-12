@@ -20,6 +20,7 @@ func TestSchemaIsCommitted(t *testing.T) {
 			CreateWidgetTypeRequest{}, CreateWidgetTypeResponse{}, UpdateWidgetTypeRequest{}, UpdateWidgetTypeResponse{},
 			LibraryResponse{}, GetLibrariesResponse{}, CreateLibraryRequest{}, CreateLibraryResponse{}, UpdateLibraryRequest{}, UpdateLibraryResponse{},
 			DraftStateResponse{}, CreateReleaseRequest{}, UpdateLibraryReleaseNoteRequest{}, LibraryReleaseResponse{}, GetLibraryReleasesResponse{},
+			LibraryOrderResponse{}, SetLibraryOrderRequest{},
 			LibraryPinResponse{}, GetLibraryPinsResponse{}, PutLibraryPinRequest{},
 			PinnedWidgetResponse{}, BrokenBindingResponse{}, PinImpactResponse{},
 			ProjectResponse{}, GetProjectsResponse{}, CreateProjectRequest{}, CreateProjectResponse{}, UpdateProjectRequest{}, UpdateProjectResponse{},

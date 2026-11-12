@@ -28,6 +28,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/release"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
+	"github.com/kipitix/growscada/internal/server/domain/settings"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
 
@@ -364,6 +365,7 @@ var domainSentinels = map[string]error{
 	"draft.ErrCommitNotFound":             draft.ErrCommitNotFound,
 	"release.ErrReleaseNotFound":          release.ErrReleaseNotFound,
 	"release.ErrCommitAlreadyReleased":    release.ErrCommitAlreadyReleased,
+	"settings.ErrSettingsConflict":        settings.ErrSettingsConflict,
 }
 
 // unmappedSentinels are the domain sentinels errorMappings leaves out on

@@ -15,6 +15,7 @@ import (
 	"github.com/kipitix/gracedown"
 	"github.com/kipitix/growscada/internal/server/application"
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
+	"github.com/kipitix/growscada/internal/server/domain/settings"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/outbox"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 	runtimepg "github.com/kipitix/growscada/internal/server/infrastructure/postgres/runtime"
@@ -116,6 +117,10 @@ func main() {
 	projectScopes := repositories.NewProjectScopes(sqlDB, notifyDispatcher)
 	draftRepository := repositories.NewDraftRepositoryPostgres(sqlDB, releaseRepository, notifyDispatcher)
 	projectReleaseRepository := repositories.NewProjectReleaseRepositoryPostgres(sqlDB, notifyDispatcher)
+	// The per-user settings of the server (task 81, ADR 0024): one person's
+	// view of the content, stored apart from it. Until authentication exists
+	// every request acts as settings.SingleUser.
+	userSettingsRepository := repositories.NewUserSettingsRepositoryPostgres(sqlDB)
 	// The one Organization the server runs with until Users exist
 	organizationID, err := repositories.FindSoleOrganization(context.Background(), sqlDB)
 	if err != nil {
@@ -248,6 +253,7 @@ func main() {
 		Commits:      application.NewCommitService(projectContent, libraryContent, projectFileBuilder, widgetTypeRepositories, projectReleaseRepository, releaseRepository),
 		Releases: application.NewReleaseService(projectContent, projectReleaseRepository, runtimeNode,
 			libraryRepository, releaseRepository),
+		Settings:     application.NewSettingsService(userSettingsRepository, settings.SingleUser(), organizationID),
 		Deployments:  deploymentService,
 		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(sqlDB)),
 		DeviceTokens: deviceTokenService,

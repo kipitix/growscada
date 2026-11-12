@@ -36,6 +36,7 @@ var engineeringRole = []string{
 	"internal/server/domain/library",
 	"internal/server/domain/librarypin",
 	"internal/server/domain/release",
+	"internal/server/domain/settings",
 	"internal/server/application",
 	"internal/server/application/appdto",
 	"internal/server/infrastructure/postgres/repositories",

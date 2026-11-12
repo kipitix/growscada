@@ -1,0 +1,46 @@
+info:
+  name: put library order
+  type: http
+  seq: 73
+
+http:
+  method: PUT
+  url: http://{{API_SERVER}}/api/v0/settings/library-order
+  body:
+    type: json
+    data: |-
+      {
+        "version": 0,
+        "library_ids": ["{{OTHER_LIBRARY_ID}}", "{{LIBRARY_ID}}"]
+      }
+  auth: inherit
+
+docs: |
+  Stores the whole order the client shows, stating the version it read (0:
+  none yet) — task 81; ADR 0024. The answer carries the stored version, which
+  the next write states. A stale version is 409, so a newer order is never
+  overwritten silently; repetitions are dropped and the IDs of libraries that
+  do not exist are tolerated.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.version'
+      operator: eq
+      value: '1'
+    - expression: 'res.body.library_ids.length'
+      operator: eq
+      value: '2'
+    - expression: 'res.body.library_ids[0]'
+      operator: eq
+      value: '"{{OTHER_LIBRARY_ID}}"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

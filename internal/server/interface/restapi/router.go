@@ -33,6 +33,7 @@ type APIRouter struct {
 	projectFileHandlers  *ProjectFileHandlers
 	commitHandlers       *CommitHandlers
 	releaseHandlers      *ReleaseHandlers
+	settingsHandlers     *SettingsHandlers
 	eventsHandlers       *EventsHandlers
 	journalHandlers      *JournalHandlers
 	operationHandlers    *OperationHandlers
@@ -94,6 +95,9 @@ type Services struct {
 	ProjectFiles application.ProjectFileService
 	Commits      application.CommitService
 	Releases     application.ReleaseService
+	// Settings are the per-user settings of the server (task 81): one
+	// person's view of its content, never its content (ADR 0024).
+	Settings     application.SettingsService
 	Deployments  runtimeapp.DeploymentService
 	DeviceConfig runtimeapp.DeviceConfigService
 	DeviceTokens runtimeapp.DeviceTokenService
@@ -126,6 +130,7 @@ func NewRouter(services Services, eventBus eventbus.EventBus, maxSSEClients int)
 		projectFileHandlers:  NewProjectFileHandler(services.ProjectFiles, services.Releases),
 		commitHandlers:       NewCommitHandler(services.Commits),
 		releaseHandlers:      NewReleaseHandler(services.Releases),
+		settingsHandlers:     NewSettingsHandler(services.Settings),
 		eventsHandlers:       NewEventsHandler(eventBus, projectService, maxSSEClients, WithDeviceTokens(services.DeviceTokens)),
 		journalHandlers:      NewJournalHandler(services.Journal, eventBus),
 		operationHandlers:    NewOperationHandler(services.Operation),
@@ -158,12 +163,18 @@ func (r *APIRouter) routes() []route {
 	changes := r.draftChangesHandlers
 	commits := r.commitHandlers
 	releases := r.releaseHandlers
+	settings := r.settingsHandlers
 	return []route{
 		{"GET " + p + "/projects", projects.GetProjects},
 		{"GET " + pp, projects.GetProjectsByID},
 		{"POST " + p + "/projects", projects.PostProjects},
 		{"PUT " + pp, projects.PutProjectsByID},
 		{"DELETE " + pp, projects.DeleteProjectsByID},
+
+		// The per-user settings of the server (task 81, ADR 0024): one
+		// person's view of the libraries, stored apart from them.
+		{"GET " + p + apiv0.LibraryOrderPath, settings.GetLibraryOrder},
+		{"PUT " + p + apiv0.LibraryOrderPath, settings.PutLibraryOrder},
 
 		{"GET " + pp + "/tags", tags.GetTags},
 		{"GET " + pp + "/tags/" + tagResource.wildcard(), tags.GetTagsByID},
