@@ -56,8 +56,8 @@ function indexAt(y) {
 
 function autoScroll(y) {
 	var box = rows.getBoundingClientRect();
-	if (y < box.top + 48) { rows.scrollTop -= 14; }
-	else if (y > box.bottom - 48) { rows.scrollTop += 14; }
+	if (y < box.top + 60) { rows.scrollTop -= 14; }
+	else if (y > box.bottom - 60) { rows.scrollTop += 14; }
 }
 
 function markDrop(target) {
@@ -68,7 +68,9 @@ function markDrop(target) {
 }
 
 function onDown(e) {
-	if (pointerId !== null) { return; }
+	// A gesture that never saw its pointerup (a capture that failed and a
+	// release outside the list) must not swallow every later touch.
+	if (pointerId !== null) { stop(); }
 	var grip = e.target && e.target.closest ? e.target.closest('[data-picker-grip]') : null;
 	if (!grip) { return; }
 	var row = grip.closest('[data-picker-row]');
@@ -82,10 +84,13 @@ function onDown(e) {
 	dragged = row;
 	pointerId = e.pointerId;
 	row.classList.add('is-dragging');
+	if (navigator.vibrate) { navigator.vibrate(10); }
 	try { rows.setPointerCapture(pointerId); } catch (err) { /* very old browsers */ }
-	rows.addEventListener('pointermove', onMove);
-	rows.addEventListener('pointerup', onUp);
-	rows.addEventListener('pointercancel', onCancel);
+	// The window hears the release even when the pointer leaves the list and
+	// the capture did not take.
+	window.addEventListener('pointermove', onMove);
+	window.addEventListener('pointerup', onUp);
+	window.addEventListener('pointercancel', onCancel);
 }
 
 function onMove(e) {
@@ -118,9 +123,9 @@ function stop() {
 		try { rows.releasePointerCapture(pointerId); } catch (err) { /* already gone */ }
 	}
 	pointerId = null;
-	rows.removeEventListener('pointermove', onMove);
-	rows.removeEventListener('pointerup', onUp);
-	rows.removeEventListener('pointercancel', onCancel);
+	window.removeEventListener('pointermove', onMove);
+	window.removeEventListener('pointerup', onUp);
+	window.removeEventListener('pointercancel', onCancel);
 	if (dragged) { dragged.classList.remove('is-dragging'); }
 	dragged = null;
 	rowEls().forEach(function (el) { el.classList.remove('is-drop'); });
