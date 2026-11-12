@@ -55,6 +55,20 @@ func TestSettings_LibraryOrder(t *testing.T) {
 		t.Errorf("the stored order: %+v", read)
 	}
 
+	// library_ids is required, as the schema states: a body without it is a
+	// client error, not an empty order, and the stored arrangement stays.
+	rec = serve(router, http.MethodPut, orderPath, map[string]any{"version": 1})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("PUT without library_ids: %d %s", rec.Code, rec.Body)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/problem+json" {
+		t.Errorf("a refusal's content type: %q", got)
+	}
+	read = decodeBody[apiv0.LibraryOrderResponse](t, serve(router, http.MethodGet, orderPath, nil))
+	if read.Version != 1 || len(read.LibraryIDs) != 2 {
+		t.Errorf("a refused body changed the order: %+v", read)
+	}
+
 	// A write at a stale Version is 409 with a Problem, and changes nothing.
 	rec = serve(router, http.MethodPut, orderPath, apiv0.SetLibraryOrderRequest{
 		Version: 0, LibraryIDs: []uuid.UUID{first},

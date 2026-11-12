@@ -222,6 +222,11 @@ func (c *Client) LibraryOrder(ctx context.Context) (apiv0.LibraryOrderResponse, 
 // read at (0 when there was none). The error matches ErrConflict when another
 // write came first: the newer order is never overwritten silently.
 func (c *Client) SetLibraryOrder(ctx context.Context, version int, libraryIDs []uuid.UUID) (apiv0.LibraryOrderResponse, error) {
+	// The request states library_ids as an array: a nil slice would marshal to
+	// null, which the schema forbids and the server refuses.
+	if libraryIDs == nil {
+		libraryIDs = []uuid.UUID{}
+	}
 	var resp apiv0.LibraryOrderResponse
 	err := c.do(ctx, http.MethodPut, apiv0.LibraryOrderPath, apiv0.SetLibraryOrderRequest{
 		Version:    version,

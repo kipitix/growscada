@@ -40,6 +40,14 @@ func (h SettingsHandlers) PutLibraryOrder(w http.ResponseWriter, r *http.Request
 	if !decodeRequest(w, r, &request) {
 		return
 	}
+	// library_ids is required, as the schema states: an absent one and an empty
+	// one decode alike, so the absent one is refused here — a client that
+	// forgets the field must not wipe the order. [] is a person who placed no
+	// library.
+	if request.LibraryIDs == nil {
+		sendProblem(w, NewBadRequest("library_ids is required: send the whole order, [] for none", r.URL.Path))
+		return
+	}
 	order, err := h.service.SetLibraryOrder(r.Context(), request.Version, request.LibraryIDs)
 	if err != nil {
 		sendError(w, r, err)

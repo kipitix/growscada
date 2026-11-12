@@ -20,10 +20,11 @@ type LibraryOrderResponse struct {
 
 // SetLibraryOrderRequest is the HTTP DTO of PUT /settings/library-order: the
 // whole order the client shows and the Version it read (0 when there was
-// none). Repetitions are dropped and the IDs of libraries that do not exist
-// are tolerated: an order is a view of the libraries, never an invariant about
-// them (ADR 0024). A stale Version is 409, so a newer order is not overwritten
-// silently.
+// none). LibraryIDs is required and always an array: an absent list is 400,
+// and [] places no library. Repetitions are dropped and the IDs of libraries
+// that do not exist are tolerated: an order is a view of the libraries, never
+// an invariant about them (ADR 0024). A stale Version is 409, so a newer order
+// is not overwritten silently.
 type SetLibraryOrderRequest struct {
 	Version    int         `json:"version"`
 	LibraryIDs []uuid.UUID `json:"library_ids"`
