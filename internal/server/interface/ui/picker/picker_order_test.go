@@ -23,6 +23,7 @@ type fakeSource struct {
 	setCalls int
 	setIDs   []uuid.UUID
 	setErr   error
+	orderErr error
 }
 
 func (s *fakeSource) Title() string                        { return "Libraries" }
@@ -37,6 +38,9 @@ func (s *fakeSource) Delete(context.Context, uuid.UUID) error                   
 func (s *fakeSource) DeleteQuestion(name string) string                            { return "Delete " + name + "?" }
 
 func (s *fakeSource) Order(context.Context) (Order, error) {
+	if s.orderErr != nil {
+		return Order{}, s.orderErr
+	}
 	return Order{IDs: s.order, Version: s.version}, nil
 }
 
@@ -233,4 +237,31 @@ func TestPicker_MoveInvalidatesAnOlderOrderRead(t *testing.T) {
 		t.Errorf("the drop left the read sequence at %d, want it bumped", p.orderSeq)
 	}
 	e.ConsumeAll()
+}
+
+// TestPicker_OrderUnavailableShowsNoDrag: a server older than API 0.34 has no
+// per-user settings: the page lists by name, offers no handle and does not
+// toast on every load (task 82).
+func TestPicker_OrderUnavailableShowsNoDrag(t *testing.T) {
+	alpha, bravo := fakeItem("Alpha"), fakeItem("Bravo")
+	src := &fakeSource{
+		items:    []Item{bravo, alpha},
+		orderErr: &apiclient.StatusError{Problem: apiv0.Problem{Status: http.StatusNotFound}},
+	}
+	p := New(src, "test:picker", nil, nil)
+	e := uitest.Load(t, mountOnHost{p})
+	e.ConsumeAll()
+
+	if p.sortable() {
+		t.Error("the page offers a drag without a server that keeps the order")
+	}
+	if html := app.HTMLString(p.Render()); strings.Contains(html, `data-picker-grip="1"`) {
+		t.Errorf("the page shows a grip: %s", html)
+	}
+	if toasts := e.TakeToasts(); len(toasts) != 0 {
+		t.Errorf("a missing setting toasted: %v", toasts)
+	}
+	if shown := p.Displayed(); shown[0].Name != "Alpha" {
+		t.Errorf("the page lists %v, want them by name", shown)
+	}
 }

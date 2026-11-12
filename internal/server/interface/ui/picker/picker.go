@@ -126,6 +126,10 @@ type Picker struct {
 	order       Order
 	orderSeq    int
 	savingOrder bool
+	// orderUnavailable says the server has no per-user settings (an API older
+	// than 0.34): the list is by name and offers no drag, rather than failing
+	// a write and a toast on every load (task 82).
+	orderUnavailable bool
 
 	// selected is the entity the details pane shows and its name as last read;
 	// the page reports the pair to onSelect whenever either moves.
@@ -293,7 +297,16 @@ func (p *Picker) loadOrder(ctx app.Context) {
 		}
 		p.order = order
 		ctx.Update()
-	}, nil)
+	}, func(ctx app.Context, err error) {
+		if errors.Is(err, apiclient.ErrNotFound) {
+			// A server without the setting is not an error worth a toast on
+			// every load: the list is by name and offers no drag.
+			p.orderUnavailable = true
+			ctx.Update()
+			return
+		}
+		uiutil.ShowError(ctx, err)
+	})
 }
 
 // reconcile announces the selection the reloaded list holds: the same entity
@@ -568,7 +581,7 @@ func (p *Picker) selectAfterDelete(ctx app.Context, shown []Item, deleted uuid.U
 // arrangement back and shows the refusal (task 81, task 82).
 func (p *Picker) move(ctx app.Context, from, to int) {
 	orderSource, ok := p.source.(OrderSource)
-	if !ok || p.savingOrder {
+	if !ok || p.orderUnavailable || p.savingOrder {
 		return
 	}
 	ids := reordered(p.Displayed(), from, to)

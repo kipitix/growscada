@@ -38,9 +38,9 @@ func (p *Picker) screenName() string {
 }
 
 // sortable reports whether the entities can be arranged: the source carries a
-// per-user order, and a draft row cannot be dragged.
+// per-user order the server knows, and a draft row cannot be dragged.
 func (p *Picker) sortable() bool {
-	if p.creating {
+	if p.creating || p.orderUnavailable {
 		return false
 	}
 	_, ok := p.source.(OrderSource)
