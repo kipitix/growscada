@@ -86,11 +86,11 @@ func (r userSettingsRepositoryPostgres) SaveLibraryOrder(ctx context.Context, s 
 		if err != nil {
 			return settings.Settings{}, fmt.Errorf("cannot insert user settings: %w", err)
 		}
-		written, err := res.RowsAffected()
+		written, err := writtenOnce(res)
 		if err != nil {
-			return settings.Settings{}, fmt.Errorf("cannot get rows affected on insert: %w", err)
+			return settings.Settings{}, fmt.Errorf("cannot insert user settings: %w", err)
 		}
-		if written != 1 {
+		if !written {
 			return settings.Settings{}, fmt.Errorf("%w: settings of %s in %s exist already",
 				settings.ErrSettingsConflict, s.Owner(), s.OrganizationID())
 		}
@@ -106,13 +106,24 @@ func (r userSettingsRepositoryPostgres) SaveLibraryOrder(ctx context.Context, s 
 	if err != nil {
 		return settings.Settings{}, fmt.Errorf("cannot update user settings: %w", err)
 	}
-	written, err := res.RowsAffected()
+	written, err := writtenOnce(res)
 	if err != nil {
-		return settings.Settings{}, fmt.Errorf("cannot get rows affected on update: %w", err)
+		return settings.Settings{}, fmt.Errorf("cannot update user settings: %w", err)
 	}
-	if written != 1 {
+	if !written {
 		return settings.Settings{}, fmt.Errorf("%w: settings of %s in %s are not at version %s",
 			settings.ErrSettingsConflict, s.Owner(), s.OrganizationID(), current)
 	}
 	return settings.Reconstitute(s.Owner(), s.OrganizationID(), s.LibraryOrder(), next), nil
+}
+
+// writtenOnce reports whether a statement wrote its row. A statement that wrote
+// none lost the race: the row was inserted or changed by another writer, which
+// is ErrSettingsConflict.
+func writtenOnce(res sql.Result) (bool, error) {
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("cannot get rows affected: %w", err)
+	}
+	return n == 1, nil
 }

@@ -25,7 +25,7 @@ func TestNewOrder_NormalizesDuplicatesAndTheZeroID(t *testing.T) {
 	if got := order.IDs(); len(got) != 3 || got[0] != second || got[1] != first || got[2] != third {
 		t.Errorf("IDs() = %v, want [second, first, third]", got)
 	}
-	if order.IsEmpty() {
+	if len(order.IDs()) != 3 {
 		t.Error("an order of three libraries is empty")
 	}
 }
@@ -37,7 +37,7 @@ func TestOrder_EmptyIsNeverNil(t *testing.T) {
 	if ids := order.IDs(); ids == nil || len(ids) != 0 {
 		t.Errorf("IDs() = %v, want an empty slice", ids)
 	}
-	if !order.IsEmpty() {
+	if len(order.IDs()) != 0 {
 		t.Error("an order of no library is not empty")
 	}
 }
@@ -62,7 +62,7 @@ func TestSettings_WithLibraryOrderKeepsTheVersionAndTheOwner(t *testing.T) {
 	if empty.Version().IsCommitted() {
 		t.Error("settings nobody wrote are committed")
 	}
-	if !empty.LibraryOrder().IsEmpty() {
+	if len(empty.LibraryOrder().IDs()) != 0 {
 		t.Error("settings nobody wrote hold an order")
 	}
 
@@ -76,7 +76,7 @@ func TestSettings_WithLibraryOrderKeepsTheVersionAndTheOwner(t *testing.T) {
 	if got := changed.LibraryOrder().IDs(); len(got) != 2 || got[0] != second || got[1] != first {
 		t.Errorf("the order: %v", got)
 	}
-	if !empty.LibraryOrder().IsEmpty() {
+	if len(empty.LibraryOrder().IDs()) != 0 {
 		t.Error("the change mutated the settings it was made from")
 	}
 }

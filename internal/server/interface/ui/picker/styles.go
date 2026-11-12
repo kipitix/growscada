@@ -35,6 +35,12 @@ const pickerCSS = `
 	gap: 8px;
 	padding-bottom: 8px;
 }
+[data-picker] [data-picker-create] {
+	width: 36px;
+	height: 36px;
+	padding: 0;
+	box-sizing: border-box;
+}
 [data-picker] [data-picker-rows] {
 	flex: 1;
 	min-height: 0;
@@ -167,6 +173,10 @@ const pickerCSS = `
 	[data-picker] [data-picker-row] {
 		min-height: 48px;
 		padding: 8px 6px;
+	}
+	[data-picker] [data-picker-create] {
+		width: 44px;
+		height: 44px;
 	}
 	[data-picker] [data-picker-grip] {
 		width: 32px;

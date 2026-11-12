@@ -44,9 +44,6 @@ func (o Order) IDs() []uuid.UUID {
 	return slices.Clone(o.ids)
 }
 
-// IsEmpty reports whether the order places no library.
-func (o Order) IsEmpty() bool { return len(o.ids) == 0 }
-
 // String implements [fmt.Stringer].
 func (o Order) String() string {
 	ids := make([]string, len(o.ids))

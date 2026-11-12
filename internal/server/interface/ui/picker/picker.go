@@ -94,12 +94,14 @@ const (
 	screenDetails = "details"
 )
 
-// The field of the selected entity the details pane is editing, empty for
-// none: the name or the description is edited in place (task 82).
+// editField is the field of the selected entity the details pane is editing,
+// empty for none: the name or the description is edited in place (task 82).
+type editField string
+
 const (
-	fieldNone        = ""
-	fieldName        = "name"
-	fieldDescription = "description"
+	fieldNone        editField = ""
+	fieldName        editField = "name"
+	fieldDescription editField = "description"
 )
 
 // Picker is the selection page of one kind of entity.
@@ -141,7 +143,7 @@ type Picker struct {
 	// field and value are the inline edit in progress of the selected entity;
 	// editError is the server's refusal, shown under the fields, and saving
 	// says a write is in flight.
-	field     string
+	field     editField
 	value     string
 	editError string
 	saving    bool
@@ -389,7 +391,7 @@ func (p *Picker) open(ctx app.Context, id uuid.UUID) {
 
 // startEdit opens the inline edit of the selected entity's field, with the
 // value it holds now.
-func (p *Picker) startEdit(ctx app.Context, field string) {
+func (p *Picker) startEdit(ctx app.Context, field editField) {
 	item, ok := p.find(p.selected)
 	if !ok || p.busy() {
 		return
@@ -680,13 +682,6 @@ func (p *Picker) busy() bool { return p.saving || p.savingOrder || p.createBusy 
 // problemText is a refusal of the server as the page shows it: its detail, or
 // its title when it carries none.
 func problemText(err error) string {
-	var se *apiclient.StatusError
-	if errors.As(err, &se) {
-		if se.Problem.Detail != "" {
-			return se.Problem.Detail
-		}
-		return se.Problem.Title
-	}
 	problem := toast.FromError(err)
 	if problem.Detail != "" {
 		return problem.Detail

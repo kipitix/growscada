@@ -65,7 +65,8 @@ func (p *Picker) renderListPane() app.UI {
 					app.Div().Style("flex", "1"),
 					uiutil.IconButton(iconPlus(), "accent", !p.busy(),
 						"Create a new "+p.source.Singular(), uiutil.ButtonPage,
-						func(ctx app.Context, _ app.Event) { p.startCreate(ctx) }),
+						func(ctx app.Context, _ app.Event) { p.startCreate(ctx) }).
+						Attr("data-picker-create", "1"),
 				),
 			app.Div().
 				Attr("data-picker-rows", "true").
