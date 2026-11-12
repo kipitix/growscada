@@ -300,6 +300,43 @@ func TestPicker_CreateSelectsTheDraftAndCancelRestores(t *testing.T) {
 	}
 }
 
+// TestPicker_InlineEditHasAVisibleCancel: a phone has no Escape, so the field
+// offers a Cancel button that discards the edit without writing it (task 82).
+func TestPicker_InlineEditHasAVisibleCancel(t *testing.T) {
+	f := startProjects(t, nil)
+	f.run()
+	f.selectByName(servertest.MainProjectName)
+	before, err := f.api.GetProject(context.Background(), servertest.MainProject)
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+
+	f.p.startEdit(f.p.compoCtx, fieldDescription)
+	f.p.value = "never sent"
+	f.run()
+
+	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-picker-cancel="1"`) {
+		t.Errorf("the open field has no way out but Escape: %s", html)
+	}
+
+	f.p.cancelEdit(f.p.compoCtx)
+	f.run()
+
+	if f.p.field != fieldNone || f.p.value != "" {
+		t.Errorf("Cancel left the edit open: %q %q", f.p.field, f.p.value)
+	}
+	if strings.Contains(app.HTMLString(f.p.Render()), "data-picker-cancel") {
+		t.Error("the Cancel button outlived the edit")
+	}
+	after, err := f.api.GetProject(context.Background(), servertest.MainProject)
+	if err != nil {
+		t.Fatalf("GetProject after the cancel: %v", err)
+	}
+	if after.Version != before.Version || after.Description != before.Description {
+		t.Errorf("Cancel wrote the edit: %+v, want %+v", after, before)
+	}
+}
+
 // TestPicker_EditErrorStaysInTheField: a refusal of the server — here a name
 // taken — is shown under the field, which keeps the text and stays open
 // (task 82).

@@ -301,14 +301,17 @@ func (p *Picker) renderNameBlock(item Item) app.UI {
 				p.startEdit(ctx, fieldName)
 			}, app.EventScope("edit-name/"+item.ID.String()))
 	}
+	var trailing app.UI
+	if p.field == fieldName {
+		trailing = p.renderCancelEdit()
+	} else {
+		trailing = uiutil.IconButton(iconPencil(), "", !p.busy(),
+			"Change the name", uiutil.ButtonPage,
+			func(ctx app.Context, _ app.Event) { p.startEdit(ctx, fieldName) })
+	}
 	return app.Div().
 		Attr("data-picker-name-row", "true").
-		Body(
-			name,
-			uiutil.IconButton(iconPencil(), "", !p.busy() && p.field == fieldNone,
-				"Change the name", uiutil.ButtonPage,
-				func(ctx app.Context, _ app.Event) { p.startEdit(ctx, fieldName) }),
-		)
+		Body(name, trailing)
 }
 
 // renderDescriptionBlock is the description, edited in place: Enter breaks the
@@ -357,14 +360,31 @@ func (p *Picker) renderDescriptionBlock(item Item) app.UI {
 				p.startEdit(ctx, fieldDescription)
 			}, app.EventScope("edit-description/"+item.ID.String()))
 	}
+	var trailing app.UI
+	if p.field == fieldDescription {
+		trailing = p.renderCancelEdit()
+	} else {
+		trailing = uiutil.IconButton(iconPencil(), "", !p.busy(),
+			"Change the description", uiutil.ButtonPage,
+			func(ctx app.Context, _ app.Event) { p.startEdit(ctx, fieldDescription) })
+	}
 	return app.Div().
 		Attr("data-picker-description-row", "true").
-		Body(
-			description,
-			uiutil.IconButton(iconPencil(), "", !p.busy() && p.field == fieldNone,
-				"Change the description", uiutil.ButtonPage,
-				func(ctx app.Context, _ app.Event) { p.startEdit(ctx, fieldDescription) }),
-		)
+		Body(description, trailing)
+}
+
+// renderCancelEdit is the visible way out of an inline edit: a phone has no
+// Escape, and every tap outside the field saves instead of cancelling. The
+// button keeps the field from blurring, so a tap on it never commits the edit
+// it is cancelling (task 82).
+func (p *Picker) renderCancelEdit() app.UI {
+	return app.Div().
+		Attr("data-picker-cancel", "1").
+		OnMouseDown(func(ctx app.Context, e app.Event) {
+			e.PreventDefault()
+		}).
+		Body(uiutil.Button("Cancel", "", true, "Discard the change", uiutil.ButtonPage,
+			func(ctx app.Context, _ app.Event) { p.cancelEdit(ctx) }))
 }
 
 // renderStateLine is the state of the entity in words, beside its dot.
