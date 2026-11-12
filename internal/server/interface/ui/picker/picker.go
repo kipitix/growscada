@@ -261,13 +261,11 @@ func byName(a, b Item) int {
 	return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
 }
 
+// itemID is the ID of an Item for uiutil's lookups.
+func itemID(item Item) uuid.UUID { return item.ID }
+
 func (p *Picker) find(id uuid.UUID) (Item, bool) {
-	for _, item := range p.items {
-		if item.ID == id {
-			return item, true
-		}
-	}
-	return Item{}, false
+	return uiutil.FindByID(p.items, id, itemID)
 }
 
 // load (re)reads the list and the arrangement, and reconciles the selection
@@ -544,7 +542,7 @@ func (p *Picker) deleteEntity(ctx app.Context, id uuid.UUID) {
 // doDelete is the deletion the confirmation asked for.
 func (p *Picker) doDelete(ctx app.Context, id uuid.UUID) {
 	shown := p.Displayed()
-	index := slices.IndexFunc(shown, func(item Item) bool { return item.ID == id })
+	index := uiutil.IdxByID(shown, id, itemID)
 	wasSelected := id == p.selected
 	uiutil.Call(p.compoCtx, func(c context.Context) (struct{}, error) {
 		return struct{}{}, p.source.Delete(c, id)
@@ -618,7 +616,7 @@ func (p *Picker) move(ctx app.Context, from, to int) {
 // Alt+Arrow (task 82).
 func (p *Picker) moveSelected(ctx app.Context, delta int) {
 	shown := p.Displayed()
-	index := slices.IndexFunc(shown, func(item Item) bool { return item.ID == p.selected })
+	index := uiutil.IdxByID(shown, p.selected, itemID)
 	if index < 0 {
 		return
 	}
@@ -632,7 +630,7 @@ func (p *Picker) stepSelection(ctx app.Context, delta int) {
 	if len(shown) == 0 {
 		return
 	}
-	index := slices.IndexFunc(shown, func(item Item) bool { return item.ID == p.selected })
+	index := uiutil.IdxByID(shown, p.selected, itemID)
 	next := index + delta
 	switch {
 	case index < 0:
