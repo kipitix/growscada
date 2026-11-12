@@ -3,6 +3,7 @@ package repositories_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -66,6 +67,16 @@ func TestUserSettings_InsertFindAndUpdate(t *testing.T) {
 	other := id.NewID(id.IDWithUUID[settings.User](uuid.New()))
 	if _, ok, err := repo.Find(ctx, other, org); err != nil || ok {
 		t.Errorf("Find of another owner: %t, %v", ok, err)
+	}
+	// And a write of another owner leaves this one's row as it is.
+	if _, err := repo.Save(ctx, settings.Empty(other, org).
+		WithLibraryOrder(settings.NewOrder([]uuid.UUID{firstLibrary}))); err != nil {
+		t.Fatalf("Save for another owner: %v", err)
+	}
+	if mine, ok, err := repo.Find(ctx, own, org); err != nil || !ok {
+		t.Fatalf("Find after another owner's write: %t, %v", ok, err)
+	} else if got := mine.LibraryOrder().IDs(); len(got) != 2 || got[0] != secondLibrary || got[1] != firstLibrary {
+		t.Errorf("another owner's write changed the order: %v", got)
 	}
 
 	updated, err := repo.Save(ctx, found.WithLibraryOrder(settings.NewOrder([]uuid.UUID{firstLibrary})))
@@ -174,5 +185,99 @@ func TestUserSettings_OrganizationsAreApart(t *testing.T) {
 	}
 	if got := second.LibraryOrder().IDs(); len(got) != 1 || got[0] != secondLibrary {
 		t.Errorf("the second organization's order: %v", got)
+	}
+}
+
+// raceWrites runs every write at once, from one start, and returns their
+// errors in order.
+func raceWrites(writes ...func() error) []error {
+	errs := make([]error, len(writes))
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(len(writes))
+	for i, write := range writes {
+		go func(i int, write func() error) {
+			defer wg.Done()
+			<-start
+			errs[i] = write()
+		}(i, write)
+	}
+	close(start)
+	wg.Wait()
+	return errs
+}
+
+// TestUserSettings_RacingWrites_OneWins: two writers that read one Version do
+// not overwrite each other. The insert and the update are each one statement
+// whose compare-and-swap lets a single writer through and answers the other
+// ErrSettingsConflict (task 81, ADR 0024).
+func TestUserSettings_RacingWrites_OneWins(t *testing.T) {
+	cleanUserSettings(t)
+	repo := repositories.NewUserSettingsRepositoryPostgres(testDB)
+	ctx := context.Background()
+	own, org := settings.SingleUser(), soleOrganization(t)
+	empty := settings.Empty(own, org)
+
+	checkOneWins := func(t *testing.T, errs []error) {
+		t.Helper()
+		var won, conflicted int
+		for _, err := range errs {
+			switch {
+			case err == nil:
+				won++
+			case errors.Is(err, settings.ErrSettingsConflict):
+				conflicted++
+			default:
+				t.Fatalf("a racing write: %v", err)
+			}
+		}
+		if won != 1 || conflicted != 1 {
+			t.Errorf("winners %d, conflicts %d; want one and one", won, conflicted)
+		}
+	}
+
+	// Two first writes of one setting, both at the initial Version.
+	inserts := raceWrites(
+		func() error {
+			_, err := repo.Save(ctx, empty.WithLibraryOrder(settings.NewOrder([]uuid.UUID{firstLibrary})))
+			return err
+		},
+		func() error {
+			_, err := repo.Save(ctx, empty.WithLibraryOrder(settings.NewOrder([]uuid.UUID{secondLibrary})))
+			return err
+		},
+	)
+	checkOneWins(t, inserts)
+
+	stored, ok, err := repo.Find(ctx, own, org)
+	if err != nil || !ok {
+		t.Fatalf("Find after the racing inserts: %t, %v", ok, err)
+	}
+	if stored.Version().Number() != 1 {
+		t.Fatalf("the racing inserts stored version %d, want 1", stored.Version().Number())
+	}
+
+	// Two updates of the row they both read at that Version.
+	updates := raceWrites(
+		func() error {
+			_, err := repo.Save(ctx, stored.WithLibraryOrder(settings.NewOrder([]uuid.UUID{firstLibrary})))
+			return err
+		},
+		func() error {
+			_, err := repo.Save(ctx, stored.WithLibraryOrder(settings.NewOrder([]uuid.UUID{secondLibrary})))
+			return err
+		},
+	)
+	checkOneWins(t, updates)
+
+	stored, ok, err = repo.Find(ctx, own, org)
+	if err != nil || !ok {
+		t.Fatalf("Find after the racing updates: %t, %v", ok, err)
+	}
+	if stored.Version().Number() != 2 {
+		t.Errorf("the racing updates stored version %d, want 2", stored.Version().Number())
+	}
+	if got := stored.LibraryOrder().IDs(); len(got) != 1 {
+		t.Errorf("the order after the racing updates: %v", got)
 	}
 }

@@ -42,15 +42,15 @@ type settingsServiceImpl struct {
 
 var _ SettingsService = (*settingsServiceImpl)(nil)
 
-// NewSettingsService returns the service of the settings of the person own in
-// the Organization org. own is the principal of the request once
+// NewSettingsService returns the service of the settings of the person owner
+// in the Organization org. owner is the principal of the request once
 // authentication exists; today it is settings.SingleUser.
 func NewSettingsService(
 	repository settings.Repository,
-	own id.ID[settings.User],
+	owner id.ID[settings.User],
 	org id.ID[organization.Organization],
 ) SettingsService {
-	return &settingsServiceImpl{repository: repository, owner: own, organization: org}
+	return &settingsServiceImpl{repository: repository, owner: owner, organization: org}
 }
 
 func (s settingsServiceImpl) LibraryOrder(ctx context.Context) (appdto.LibraryOrder, error) {

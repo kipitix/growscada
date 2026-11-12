@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/server/application/appdto"
 )
 
 // orderPath is the route of the per-user library order (task 81).
@@ -22,7 +23,8 @@ func TestSettings_LibraryOrder(t *testing.T) {
 	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM user_settings"); err != nil {
 		t.Fatalf("clean the settings: %v", err)
 	}
-	router := newServices().router()
+	services := newServices()
+	router := services.router()
 
 	rec := serve(router, http.MethodGet, orderPath, nil)
 	if rec.Code != http.StatusOK {
@@ -84,17 +86,23 @@ func TestSettings_LibraryOrder(t *testing.T) {
 		t.Errorf("a refused write changed the order: %+v", read)
 	}
 
-	// The ID of a library that does not exist is tolerated: the order is a
+	// The ID of a library that was really deleted is tolerated: the order is a
 	// view of the libraries, never an invariant about them (ADR 0024).
-	unknown := uuid.New()
+	gone, err := services.libraries.CreateLibrary(context.Background(), appdto.LibraryInput{Name: "Gone"})
+	if err != nil {
+		t.Fatalf("create a library to delete: %v", err)
+	}
+	if _, err := services.libraries.DeleteLibraryByID(context.Background(), gone.ID); err != nil {
+		t.Fatalf("delete the library: %v", err)
+	}
 	rec = serve(router, http.MethodPut, orderPath, apiv0.SetLibraryOrderRequest{
-		Version: 1, LibraryIDs: []uuid.UUID{unknown, first},
+		Version: 1, LibraryIDs: []uuid.UUID{gone.ID, first},
 	})
 	if rec.Code != http.StatusOK {
-		t.Fatalf("PUT with an unknown library: %d %s", rec.Code, rec.Body)
+		t.Fatalf("PUT with a deleted library: %d %s", rec.Code, rec.Body)
 	}
 	read = decodeBody[apiv0.LibraryOrderResponse](t, serve(router, http.MethodGet, orderPath, nil))
-	if read.Version != 2 || len(read.LibraryIDs) != 2 || read.LibraryIDs[0] != unknown {
-		t.Errorf("the order with an unknown library: %+v", read)
+	if read.Version != 2 || len(read.LibraryIDs) != 2 || read.LibraryIDs[0] != gone.ID {
+		t.Errorf("the order with a deleted library: %+v", read)
 	}
 }

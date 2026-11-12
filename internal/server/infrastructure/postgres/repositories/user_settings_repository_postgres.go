@@ -3,11 +3,8 @@ package repositories
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
-
-	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
@@ -36,35 +33,10 @@ func NewUserSettingsRepositoryPostgres(aDb *sql.DB) settings.Repository {
 	return &userSettingsRepositoryPostgres{db: aDb}
 }
 
-// libraryOrderPayload is the stored shape of the library_order setting: a
-// document, so the key can gain fields later without a migration.
-type libraryOrderPayload struct {
-	LibraryIDs []uuid.UUID `json:"library_ids"`
-}
-
-// encodeLibraryOrder encodes the order as the row's payload.
-func encodeLibraryOrder(order settings.Order) ([]byte, error) {
-	payload, err := json.Marshal(libraryOrderPayload{LibraryIDs: order.IDs()})
-	if err != nil {
-		return nil, fmt.Errorf("cannot encode library order: %w", err)
-	}
-	return payload, nil
-}
-
-// decodeLibraryOrder decodes the order of a row's payload. Duplicates and the
-// zero ID are normalized away, as a client's request is.
-func decodeLibraryOrder(payload []byte) (settings.Order, error) {
-	var stored libraryOrderPayload
-	if err := json.Unmarshal(payload, &stored); err != nil {
-		return settings.Order{}, fmt.Errorf("cannot decode library order: %w", err)
-	}
-	return settings.NewOrder(stored.LibraryIDs), nil
-}
-
-// Find returns the settings of own in org (see settings.Repository).
+// Find returns the settings of owner in org (see settings.Repository).
 func (r userSettingsRepositoryPostgres) Find(
 	ctx context.Context,
-	own id.ID[settings.User],
+	owner id.ID[settings.User],
 	org id.ID[organization.Organization],
 ) (settings.Settings, bool, error) {
 	var (
@@ -74,7 +46,7 @@ func (r userSettingsRepositoryPostgres) Find(
 	err := r.db.QueryRowContext(ctx,
 		`SELECT version, payload FROM public.user_settings
 		 WHERE user_id = $1 AND organization_id = $2 AND key = $3`,
-		own.UUID(), org.UUID(), keyLibraryOrder,
+		owner.UUID(), org.UUID(), keyLibraryOrder,
 	).Scan(&rawVersion, &payload)
 	if errors.Is(err, sql.ErrNoRows) {
 		return settings.Settings{}, false, nil
@@ -90,7 +62,7 @@ func (r userSettingsRepositoryPostgres) Find(
 	if err != nil {
 		return settings.Settings{}, false, fmt.Errorf("cannot create settings version: %w", err)
 	}
-	return settings.Reconstitute(own, org, order, ver), true, nil
+	return settings.Reconstitute(owner, org, order, ver), true, nil
 }
 
 // Save writes the settings (see settings.Repository): one statement, so one

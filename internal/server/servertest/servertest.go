@@ -205,7 +205,7 @@ func sendJSON[T any](t *testing.T, srv *httptest.Server, method, path string, bo
 // Tags, Devices and Environments with their states and tokens, the Draft's
 // Tags, widgets, scenes, Library Pins, libraries with their WidgetTypes and
 // releases, projects but MainProject — restored live if a test deleted it —,
-// outbox, policy_jobs) and serves the real REST API over the
+// outbox, policy_jobs, the per-user settings) and serves the real REST API over the
 // database, with the outbox dispatcher delivering committed events to its
 // event streams, the Runtime node publishing tag_updated and deployment_created,
 // and the policy runner running the policies, as the server does. The returned TagService

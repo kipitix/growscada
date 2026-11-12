@@ -17,9 +17,9 @@ var ErrSettingsConflict = errors.New("user settings were changed concurrently")
 // by their owner and Organization, apart from the aggregates they name; a
 // write of them is one transaction over one row.
 type Repository interface {
-	// Find returns the settings of own in org. ok is false when the person
+	// Find returns the settings of owner in org. ok is false when the person
 	// never wrote any: the caller then works on Empty.
-	Find(ctx context.Context, own id.ID[User], org id.ID[organization.Organization]) (Settings, bool, error)
+	Find(ctx context.Context, owner id.ID[User], org id.ID[organization.Organization]) (Settings, bool, error)
 
 	// Save writes the settings: one of the initial Version is inserted at the
 	// first stored one, a stored one is replaced only while it is still at the

@@ -1,0 +1,37 @@
+info:
+  name: put library order without ids
+  type: http
+  seq: 128
+
+http:
+  method: PUT
+  url: http://{{API_SERVER}}/api/v0/settings/library-order
+  body:
+    type: json
+    data: |-
+      {
+        "version": 1
+      }
+  auth: inherit
+
+docs: |
+  `library_ids` is required, as the schema states: a body that leaves it out
+  is a client error, not an empty order, so a forgotten field never wipes the
+  arrangement (task 81; ADR 0024). Sending `[]` is the way to place no library.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '400'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: '"application/problem+json"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -53,19 +53,19 @@ var _ fmt.Stringer = Settings{}
 
 // Empty returns the settings of a person who has written none: no order, at
 // the initial Version (a store inserts them on their first write).
-func Empty(own id.ID[User], org id.ID[organization.Organization]) Settings {
-	return Settings{owner: own, org: org}
+func Empty(owner id.ID[User], org id.ID[organization.Organization]) Settings {
+	return Settings{owner: owner, org: org}
 }
 
 // Reconstitute rebuilds Settings as stored; it records no event. For
 // repositories.
 func Reconstitute(
-	own id.ID[User],
+	owner id.ID[User],
 	org id.ID[organization.Organization],
 	order Order,
 	aVersion version.Version[Settings],
 ) Settings {
-	return Settings{owner: own, org: org, order: order, version: aVersion}
+	return Settings{owner: owner, org: org, order: order, version: aVersion}
 }
 
 // Owner is the person the settings belong to; it never changes.
