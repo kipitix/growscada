@@ -36,8 +36,8 @@ func (s *fakeSource) Update(context.Context, uuid.UUID, int, string, string) err
 func (s *fakeSource) Delete(context.Context, uuid.UUID) error                      { return nil }
 func (s *fakeSource) DeleteQuestion(name string) string                            { return "Delete " + name + "?" }
 
-func (s *fakeSource) Order(context.Context) ([]uuid.UUID, int, error) {
-	return s.order, s.version, nil
+func (s *fakeSource) Order(context.Context) (Order, error) {
+	return Order{IDs: s.order, Version: s.version}, nil
 }
 
 func (s *fakeSource) SetOrder(_ context.Context, _ int, ids []uuid.UUID) (int, error) {
@@ -60,7 +60,7 @@ func TestPicker_DisplayedMergesTheStoredOrder(t *testing.T) {
 	alpha, bravo, charlie := fakeItem("Alpha"), fakeItem("Bravo"), fakeItem("Charlie")
 	p := &Picker{
 		items: []Item{charlie, alpha, bravo},
-		order: []uuid.UUID{bravo.ID, uuid.New()},
+		order: Order{IDs: []uuid.UUID{bravo.ID, uuid.New()}},
 	}
 
 	shown := p.Displayed()
@@ -97,8 +97,8 @@ func TestPicker_MoveStoresTheWholeOrder(t *testing.T) {
 			t.Fatalf("stored %v, want %v", src.setIDs, want)
 		}
 	}
-	if p.orderVersion != 1 {
-		t.Errorf("the version stored: %d, want 1", p.orderVersion)
+	if p.order.Version != 1 {
+		t.Errorf("the version stored: %d, want 1", p.order.Version)
 	}
 	if shown := p.Displayed(); shown[0].Name != "Bravo" {
 		t.Errorf("the page lists %v after the move", shown)
@@ -183,4 +183,54 @@ func TestPicker_LibrarySourceHasOrder(t *testing.T) {
 	if !New(src, LibraryKey, nil, nil).sortable() {
 		t.Error("the library page offers no drag")
 	}
+}
+
+// TestPicker_Reordered: the arithmetic of a drop moves one entity to a new
+// position and refuses anything that moves nothing (task 82).
+func TestPicker_Reordered(t *testing.T) {
+	alpha, bravo, charlie := fakeItem("Alpha"), fakeItem("Bravo"), fakeItem("Charlie")
+	shown := []Item{alpha, bravo, charlie}
+
+	cases := []struct {
+		from, to int
+		want     []uuid.UUID
+	}{
+		{0, 2, []uuid.UUID{bravo.ID, charlie.ID, alpha.ID}},
+		{2, 0, []uuid.UUID{charlie.ID, alpha.ID, bravo.ID}},
+		{1, 1, nil},
+		{-1, 0, nil},
+		{0, 3, nil},
+		{3, 0, nil},
+	}
+	for _, c := range cases {
+		got := reordered(shown, c.from, c.to)
+		if len(got) != len(c.want) {
+			t.Errorf("reordered(%d, %d) = %v, want %v", c.from, c.to, got, c.want)
+			continue
+		}
+		for i := range c.want {
+			if got[i] != c.want[i] {
+				t.Errorf("reordered(%d, %d) = %v, want %v", c.from, c.to, got, c.want)
+				break
+			}
+		}
+	}
+}
+
+// TestPicker_MoveInvalidatesAnOlderOrderRead: a drop makes the response of an
+// order read started before it stale, so the read cannot undo the drop and
+// leave the next write stating an older Version (task 82).
+func TestPicker_MoveInvalidatesAnOlderOrderRead(t *testing.T) {
+	alpha, bravo, charlie := fakeItem("Alpha"), fakeItem("Bravo"), fakeItem("Charlie")
+	src := &fakeSource{items: []Item{alpha, bravo, charlie}}
+	p := New(src, "test:picker", nil, nil)
+	e := uitest.Load(t, mountOnHost{p})
+	e.ConsumeAll()
+
+	p.orderSeq = 3 // as if a read were in flight
+	p.move(p.compoCtx, 0, 2)
+	if p.orderSeq != 4 {
+		t.Errorf("the drop left the read sequence at %d, want it bumped", p.orderSeq)
+	}
+	e.ConsumeAll()
 }

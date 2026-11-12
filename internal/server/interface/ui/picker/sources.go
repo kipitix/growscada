@@ -132,12 +132,12 @@ func (s librarySource) DeleteQuestion(name string) string {
 // Order returns the library order of the person the server acts for: the IDs
 // they placed, first to last, and the Version their next write states
 // (task 81, ADR 0024).
-func (s librarySource) Order(ctx context.Context) ([]uuid.UUID, int, error) {
+func (s librarySource) Order(ctx context.Context) (Order, error) {
 	order, err := s.client.LibraryOrder(ctx)
 	if err != nil {
-		return nil, 0, err
+		return Order{}, err
 	}
-	return order.LibraryIDs, order.Version, nil
+	return Order{IDs: order.LibraryIDs, Version: order.Version}, nil
 }
 
 // SetOrder stores the whole library order and returns the Version stored.

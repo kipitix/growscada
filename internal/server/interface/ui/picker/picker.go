@@ -76,9 +76,9 @@ type Source interface {
 // ADR 0024): the Library list. A Source that does not implement it lists its
 // entities by name and offers no drag.
 type OrderSource interface {
-	// Order returns the IDs the person placed, first to last, and the Version
-	// their next write states.
-	Order(ctx context.Context) ([]uuid.UUID, int, error)
+	// Order returns the arrangement the person placed and the Version their
+	// next write states.
+	Order(ctx context.Context) (Order, error)
 	// SetOrder stores the whole order and returns the Version stored.
 	SetOrder(ctx context.Context, version int, ids []uuid.UUID) (int, error)
 }
@@ -122,12 +122,10 @@ type Picker struct {
 	reloader uiutil.Reloader
 
 	// order is the arrangement the person stored (task 81), the IDs the list
-	// puts first; orderVersion is the Version its next write states, and
-	// orderSeq drops a response of a read a newer one overtook.
-	order        []uuid.UUID
-	orderVersion int
-	orderSeq     int
-	savingOrder  bool
+	// puts first; orderSeq drops a response of a read a newer one overtook.
+	order       Order
+	orderSeq    int
+	savingOrder bool
 
 	// selected is the entity the details pane shows and its name as last read;
 	// the page reports the pair to onSelect whenever either moves.
@@ -228,12 +226,12 @@ func (p *Picker) Name(id uuid.UUID) string {
 // merges, the server never reads the entities.
 func (p *Picker) Displayed() []Item {
 	shown := make([]Item, 0, len(p.items))
-	placed := make(map[uuid.UUID]struct{}, len(p.order))
+	placed := make(map[uuid.UUID]struct{}, len(p.order.IDs))
 	byID := make(map[uuid.UUID]Item, len(p.items))
 	for _, item := range p.items {
 		byID[item.ID] = item
 	}
-	for _, anID := range p.order {
+	for _, anID := range p.order.IDs {
 		item, ok := byID[anID]
 		if !ok {
 			continue
@@ -289,22 +287,13 @@ func (p *Picker) loadOrder(ctx app.Context) {
 	}
 	p.orderSeq++
 	seq := p.orderSeq
-	uiutil.Call(p.compoCtx, func(c context.Context) (orderState, error) {
-		ids, version, err := orderSource.Order(c)
-		return orderState{ids: ids, version: version}, err
-	}, func(ctx app.Context, state orderState) {
+	uiutil.Call(p.compoCtx, orderSource.Order, func(ctx app.Context, order Order) {
 		if seq != p.orderSeq {
 			return
 		}
-		p.order, p.orderVersion = state.ids, state.version
+		p.order = order
 		ctx.Update()
 	}, nil)
-}
-
-// orderState is a read of the arrangement with its Version.
-type orderState struct {
-	ids     []uuid.UUID
-	version int
 }
 
 // reconcile announces the selection the reloaded list holds: the same entity
@@ -578,28 +567,24 @@ func (p *Picker) selectAfterDelete(ctx app.Context, shown []Item, deleted uuid.U
 // order at once, optimistically: a refused write puts the previous
 // arrangement back and shows the refusal (task 81, task 82).
 func (p *Picker) move(ctx app.Context, from, to int) {
-	shown := p.Displayed()
-	if from == to || from < 0 || to < 0 || from >= len(shown) || to >= len(shown) || p.savingOrder {
-		return
-	}
-	moved := slices.Clone(shown)
-	item := moved[from]
-	moved = slices.Delete(moved, from, from+1)
-	moved = slices.Insert(moved, to, item)
-	ids := make([]uuid.UUID, len(moved))
-	for i, it := range moved {
-		ids[i] = it.ID
-	}
 	orderSource, ok := p.source.(OrderSource)
-	if !ok {
+	if !ok || p.savingOrder {
 		return
 	}
-	previous, version := p.order, p.orderVersion
-	p.order = ids
+	ids := reordered(p.Displayed(), from, to)
+	if ids == nil {
+		return
+	}
+	previous := p.order
+	p.order = Order{IDs: ids, Version: previous.Version}
+	// An order read started before the drop states the arrangement before it:
+	// this bump makes its response stale, so it cannot undo the drop on
+	// screen and leave the next write stating an older Version.
+	p.orderSeq++
 	p.savingOrder = true
 	ctx.Update()
 	uiutil.Do(p.compoCtx, func(c context.Context) (int, error) {
-		return orderSource.SetOrder(c, version, ids)
+		return orderSource.SetOrder(c, previous.Version, ids)
 	}, func(ctx app.Context, saved int, err error) {
 		p.savingOrder = false
 		if err != nil {
@@ -611,7 +596,7 @@ func (p *Picker) move(ctx app.Context, from, to int) {
 			ctx.Update()
 			return
 		}
-		p.orderVersion = saved
+		p.order.Version = saved
 		ctx.Update()
 	})
 }
