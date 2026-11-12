@@ -33,8 +33,9 @@ func NewUserSettingsRepositoryPostgres(aDb *sql.DB) settings.Repository {
 	return &userSettingsRepositoryPostgres{db: aDb}
 }
 
-// Find returns the settings of owner in org (see settings.Repository).
-func (r userSettingsRepositoryPostgres) Find(
+// FindLibraryOrder returns the library order of owner in org (see
+// settings.Repository).
+func (r userSettingsRepositoryPostgres) FindLibraryOrder(
 	ctx context.Context,
 	owner id.ID[settings.User],
 	org id.ID[organization.Organization],
@@ -65,11 +66,12 @@ func (r userSettingsRepositoryPostgres) Find(
 	return settings.Reconstitute(owner, org, order, ver), true, nil
 }
 
-// Save writes the settings (see settings.Repository): one statement, so one
+// SaveLibraryOrder writes the library order (see settings.Repository): one
+// statement, so one
 // transaction over one row. The insert's key is the row's, and a row written
 // meanwhile turns it into a conflict; the update's compare-and-swap does the
 // same for a stored one.
-func (r userSettingsRepositoryPostgres) Save(ctx context.Context, s settings.Settings) (settings.Settings, error) {
+func (r userSettingsRepositoryPostgres) SaveLibraryOrder(ctx context.Context, s settings.Settings) (settings.Settings, error) {
 	payload, err := encodeLibraryOrder(s.LibraryOrder())
 	if err != nil {
 		return settings.Settings{}, err

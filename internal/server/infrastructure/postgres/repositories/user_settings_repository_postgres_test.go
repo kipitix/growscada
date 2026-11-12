@@ -36,12 +36,12 @@ func TestUserSettings_InsertFindAndUpdate(t *testing.T) {
 	ctx := context.Background()
 	own, org := settings.SingleUser(), soleOrganization(t)
 
-	if _, ok, err := repo.Find(ctx, own, org); err != nil || ok {
+	if _, ok, err := repo.FindLibraryOrder(ctx, own, org); err != nil || ok {
 		t.Fatalf("Find of settings nobody wrote: %t, %v", ok, err)
 	}
 
 	empty := settings.Empty(own, org)
-	saved, err := repo.Save(ctx, empty.WithLibraryOrder(settings.NewOrder([]uuid.UUID{secondLibrary, firstLibrary})))
+	saved, err := repo.SaveLibraryOrder(ctx, empty.WithLibraryOrder(settings.NewOrder([]uuid.UUID{secondLibrary, firstLibrary})))
 	if err != nil {
 		t.Fatalf("Save the first order: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestUserSettings_InsertFindAndUpdate(t *testing.T) {
 		t.Errorf("the first write stored version %d, want 1", saved.Version().Number())
 	}
 
-	found, ok, err := repo.Find(ctx, own, org)
+	found, ok, err := repo.FindLibraryOrder(ctx, own, org)
 	if err != nil || !ok {
 		t.Fatalf("Find after the insert: %t, %v", ok, err)
 	}
@@ -65,28 +65,28 @@ func TestUserSettings_InsertFindAndUpdate(t *testing.T) {
 
 	// A find of another owner finds nothing: the setting is one person's.
 	other := id.NewID(id.IDWithUUID[settings.User](uuid.New()))
-	if _, ok, err := repo.Find(ctx, other, org); err != nil || ok {
+	if _, ok, err := repo.FindLibraryOrder(ctx, other, org); err != nil || ok {
 		t.Errorf("Find of another owner: %t, %v", ok, err)
 	}
 	// And a write of another owner leaves this one's row as it is.
-	if _, err := repo.Save(ctx, settings.Empty(other, org).
+	if _, err := repo.SaveLibraryOrder(ctx, settings.Empty(other, org).
 		WithLibraryOrder(settings.NewOrder([]uuid.UUID{firstLibrary}))); err != nil {
 		t.Fatalf("Save for another owner: %v", err)
 	}
-	if mine, ok, err := repo.Find(ctx, own, org); err != nil || !ok {
+	if mine, ok, err := repo.FindLibraryOrder(ctx, own, org); err != nil || !ok {
 		t.Fatalf("Find after another owner's write: %t, %v", ok, err)
 	} else if got := mine.LibraryOrder().IDs(); len(got) != 2 || got[0] != secondLibrary || got[1] != firstLibrary {
 		t.Errorf("another owner's write changed the order: %v", got)
 	}
 
-	updated, err := repo.Save(ctx, found.WithLibraryOrder(settings.NewOrder([]uuid.UUID{firstLibrary})))
+	updated, err := repo.SaveLibraryOrder(ctx, found.WithLibraryOrder(settings.NewOrder([]uuid.UUID{firstLibrary})))
 	if err != nil {
 		t.Fatalf("Save the second order: %v", err)
 	}
 	if updated.Version().Number() != 2 {
 		t.Errorf("the second write stored version %d, want 2", updated.Version().Number())
 	}
-	found, ok, err = repo.Find(ctx, own, org)
+	found, ok, err = repo.FindLibraryOrder(ctx, own, org)
 	if err != nil || !ok {
 		t.Fatalf("Find after the update: %t, %v", ok, err)
 	}
@@ -105,23 +105,23 @@ func TestUserSettings_StaleVersionIsAConflict(t *testing.T) {
 	own, org := settings.SingleUser(), soleOrganization(t)
 	empty := settings.Empty(own, org)
 
-	first, err := repo.Save(ctx, empty.WithLibraryOrder(settings.NewOrder([]uuid.UUID{firstLibrary})))
+	first, err := repo.SaveLibraryOrder(ctx, empty.WithLibraryOrder(settings.NewOrder([]uuid.UUID{firstLibrary})))
 	if err != nil {
 		t.Fatalf("Save the first order: %v", err)
 	}
-	if _, err := repo.Save(ctx, empty.WithLibraryOrder(settings.NewOrder([]uuid.UUID{secondLibrary}))); !errors.Is(err, settings.ErrSettingsConflict) {
+	if _, err := repo.SaveLibraryOrder(ctx, empty.WithLibraryOrder(settings.NewOrder([]uuid.UUID{secondLibrary}))); !errors.Is(err, settings.ErrSettingsConflict) {
 		t.Errorf("a second insert of one setting: %v, want ErrSettingsConflict", err)
 	}
 
 	// Two writers that read Version 1: the second write is refused, and the
 	// order the first one stored stays.
-	if _, err := repo.Save(ctx, first.WithLibraryOrder(settings.NewOrder([]uuid.UUID{secondLibrary}))); err != nil {
+	if _, err := repo.SaveLibraryOrder(ctx, first.WithLibraryOrder(settings.NewOrder([]uuid.UUID{secondLibrary}))); err != nil {
 		t.Fatalf("Save at the version read: %v", err)
 	}
-	if _, err := repo.Save(ctx, first.WithLibraryOrder(settings.NewOrder([]uuid.UUID{firstLibrary}))); !errors.Is(err, settings.ErrSettingsConflict) {
+	if _, err := repo.SaveLibraryOrder(ctx, first.WithLibraryOrder(settings.NewOrder([]uuid.UUID{firstLibrary}))); !errors.Is(err, settings.ErrSettingsConflict) {
 		t.Errorf("a write at a stale version: %v, want ErrSettingsConflict", err)
 	}
-	found, ok, err := repo.Find(ctx, own, org)
+	found, ok, err := repo.FindLibraryOrder(ctx, own, org)
 	if err != nil || !ok {
 		t.Fatalf("Find after the conflicts: %t, %v", ok, err)
 	}
@@ -160,23 +160,23 @@ func TestUserSettings_OrganizationsAreApart(t *testing.T) {
 		}
 	})
 
-	if _, err := repo.Save(ctx, settings.Empty(own, firstOrg).
+	if _, err := repo.SaveLibraryOrder(ctx, settings.Empty(own, firstOrg).
 		WithLibraryOrder(settings.NewOrder([]uuid.UUID{firstLibrary}))); err != nil {
 		t.Fatalf("Save in the first organization: %v", err)
 	}
-	if _, ok, err := repo.Find(ctx, own, otherOrg); err != nil || ok {
+	if _, ok, err := repo.FindLibraryOrder(ctx, own, otherOrg); err != nil || ok {
 		t.Errorf("the second organization has the first one's order: %t, %v", ok, err)
 	}
-	if _, err := repo.Save(ctx, settings.Empty(own, otherOrg).
+	if _, err := repo.SaveLibraryOrder(ctx, settings.Empty(own, otherOrg).
 		WithLibraryOrder(settings.NewOrder([]uuid.UUID{secondLibrary}))); err != nil {
 		t.Fatalf("Save in the second organization: %v", err)
 	}
 
-	first, ok, err := repo.Find(ctx, own, firstOrg)
+	first, ok, err := repo.FindLibraryOrder(ctx, own, firstOrg)
 	if err != nil || !ok {
 		t.Fatalf("Find in the first organization: %t, %v", ok, err)
 	}
-	second, ok, err := repo.Find(ctx, own, otherOrg)
+	second, ok, err := repo.FindLibraryOrder(ctx, own, otherOrg)
 	if err != nil || !ok {
 		t.Fatalf("Find in the second organization: %t, %v", ok, err)
 	}
@@ -239,17 +239,17 @@ func TestUserSettings_RacingWrites_OneWins(t *testing.T) {
 	// Two first writes of one setting, both at the initial Version.
 	inserts := raceWrites(
 		func() error {
-			_, err := repo.Save(ctx, empty.WithLibraryOrder(settings.NewOrder([]uuid.UUID{firstLibrary})))
+			_, err := repo.SaveLibraryOrder(ctx, empty.WithLibraryOrder(settings.NewOrder([]uuid.UUID{firstLibrary})))
 			return err
 		},
 		func() error {
-			_, err := repo.Save(ctx, empty.WithLibraryOrder(settings.NewOrder([]uuid.UUID{secondLibrary})))
+			_, err := repo.SaveLibraryOrder(ctx, empty.WithLibraryOrder(settings.NewOrder([]uuid.UUID{secondLibrary})))
 			return err
 		},
 	)
 	checkOneWins(t, inserts)
 
-	stored, ok, err := repo.Find(ctx, own, org)
+	stored, ok, err := repo.FindLibraryOrder(ctx, own, org)
 	if err != nil || !ok {
 		t.Fatalf("Find after the racing inserts: %t, %v", ok, err)
 	}
@@ -260,17 +260,17 @@ func TestUserSettings_RacingWrites_OneWins(t *testing.T) {
 	// Two updates of the row they both read at that Version.
 	updates := raceWrites(
 		func() error {
-			_, err := repo.Save(ctx, stored.WithLibraryOrder(settings.NewOrder([]uuid.UUID{firstLibrary})))
+			_, err := repo.SaveLibraryOrder(ctx, stored.WithLibraryOrder(settings.NewOrder([]uuid.UUID{firstLibrary})))
 			return err
 		},
 		func() error {
-			_, err := repo.Save(ctx, stored.WithLibraryOrder(settings.NewOrder([]uuid.UUID{secondLibrary})))
+			_, err := repo.SaveLibraryOrder(ctx, stored.WithLibraryOrder(settings.NewOrder([]uuid.UUID{secondLibrary})))
 			return err
 		},
 	)
 	checkOneWins(t, updates)
 
-	stored, ok, err = repo.Find(ctx, own, org)
+	stored, ok, err = repo.FindLibraryOrder(ctx, own, org)
 	if err != nil || !ok {
 		t.Fatalf("Find after the racing updates: %t, %v", ok, err)
 	}

@@ -54,7 +54,7 @@ func NewSettingsService(
 }
 
 func (s settingsServiceImpl) LibraryOrder(ctx context.Context) (appdto.LibraryOrder, error) {
-	found, ok, err := s.repository.Find(ctx, s.owner, s.organization)
+	found, ok, err := s.repository.FindLibraryOrder(ctx, s.owner, s.organization)
 	if err != nil {
 		return appdto.LibraryOrder{}, fmt.Errorf("error on find settings: %w", err)
 	}
@@ -65,7 +65,7 @@ func (s settingsServiceImpl) LibraryOrder(ctx context.Context) (appdto.LibraryOr
 }
 
 func (s settingsServiceImpl) SetLibraryOrder(ctx context.Context, version int, libraryIDs []uuid.UUID) (appdto.LibraryOrder, error) {
-	current, ok, err := s.repository.Find(ctx, s.owner, s.organization)
+	current, ok, err := s.repository.FindLibraryOrder(ctx, s.owner, s.organization)
 	if err != nil {
 		return appdto.LibraryOrder{}, fmt.Errorf("error on find settings: %w", err)
 	}
@@ -79,7 +79,7 @@ func (s settingsServiceImpl) SetLibraryOrder(ctx context.Context, version int, l
 		return appdto.LibraryOrder{}, fmt.Errorf("%w: settings at %d, request stated %d",
 			settings.ErrSettingsConflict, current.Version().Number(), version)
 	}
-	saved, err := s.repository.Save(ctx, current.WithLibraryOrder(settings.NewOrder(libraryIDs)))
+	saved, err := s.repository.SaveLibraryOrder(ctx, current.WithLibraryOrder(settings.NewOrder(libraryIDs)))
 	if err != nil {
 		return appdto.LibraryOrder{}, fmt.Errorf("error on save settings: %w", err)
 	}
