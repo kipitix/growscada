@@ -35,8 +35,8 @@ var singleUser = id.NewID(id.IDWithUUID[User](uuid.MustParse("f0000000-0000-4000
 func SingleUser() id.ID[User] { return singleUser }
 
 // Settings are the settings of one person in one Organization. They hold the
-// library order for now (task 81); a new setting is a new method and a new
-// stored key, with no migration and no change of this aggregate's shape
+// library order for now (task 81); a new setting is a new key with its own
+// type and test, extending this aggregate — no migration and no column
 // (ADR 0024).
 //
 // Settings are immutable: a change returns a new Settings. They record no
