@@ -1,0 +1,37 @@
+info:
+  name: put project order without ids
+  type: http
+  seq: 179
+
+http:
+  method: PUT
+  url: http://{{API_SERVER}}/api/v0/settings/project-order
+  body:
+    type: json
+    data: |-
+      {
+        "version": 1
+      }
+  auth: inherit
+
+docs: |
+  `project_ids` is required, as `library_ids` is: a body that leaves it out is
+  a client error, not an empty order, so a forgotten field never wipes the
+  arrangement (task 83; ADR 0024). Sending `[]` is the way to place no project.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '400'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: '"application/problem+json"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

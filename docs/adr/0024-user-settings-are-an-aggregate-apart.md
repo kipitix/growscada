@@ -1,6 +1,6 @@
 # User settings are their own aggregate, stored apart from the content they view
 
-The selection page of the Libraries (task 73) lists them in name order. An Engineer wants to arrange the list themselves, and the arrangement must outlive the tab: it belongs on the server, because the same person works from several devices. The obvious place — a `position` column on `engineering.libraries` — is the wrong one. The order is a fact about **N libraries at once**, so writing it would change N aggregates in one transaction, which ADR 0008 forbids; it would also raise every library's Version on every drag, so arranging the list would collide with renaming a library in another tab, and `growctl apply` would have to learn not to reset it. The same reasoning will apply to the Project list later.
+The selection page of the Libraries (task 73) lists them in name order. An Engineer wants to arrange the list themselves, and the arrangement must outlive the tab: it belongs on the server, because the same person works from several devices. The obvious place — a `position` column on `engineering.libraries` — is the wrong one. The order is a fact about **N libraries at once**, so writing it would change N aggregates in one transaction, which ADR 0008 forbids; it would also raise every library's Version on every drag, so arranging the list would collide with renaming a library in another tab, and `growctl apply` would have to learn not to reset it. The same reasoning applies to the Project list, which task 83 brought to the same shape (see the amendment).
 
 Users do not exist yet (task 49) and authentication comes after them (task 50). Until then every request acts as one person, and the settings must be written in a shape that survives the arrival of real identities without a rewrite of the service, the API and the table's meaning.
 
@@ -37,3 +37,13 @@ Task 81. The term is `GLOSSARY.md` (User settings).
 - Deleting a library leaves its ID in an order until the next write. That is by design: the order is a view, and a stale entry costs nothing.
 - When Users arrive (task 49), the first migration backfills `SingleUser`'s rows to the first User; when authentication arrives (task 50), the settings service's owner becomes the request's principal. The table, the key and the API stay as they are.
 - The settings are one row per person per Organization per key; they grow with the number of people, not with the content.
+
+## Amendment 2026-11-13: the project order is the second setting (task 83)
+
+The Projects' selection page arranges its rows as the Libraries' page does, and the reasoning above holds unchanged: the order of N projects is a per-user view of content, never a property of one project.
+
+- **A second key, not a second table.** `public.user_settings` holds `project_order` beside `library_order`: its own payload `{"project_ids": [...]}`, its own codec and its own Version, so arranging the projects never touches the libraries' order and the other way round.
+- **The repository names both.** `settings.Repository` gains `FindProjectOrder`/`SaveProjectOrder` beside `FindLibraryOrder`/`SaveLibraryOrder`, exactly as decided above: a setting is a pair of methods with its own row, never a key the caller has to know. The aggregate and the `Order` value object are shared — which key the settings hold is the row's, and the payload's field names it (`library_ids`, `project_ids`).
+- **Its own routes.** `GET`/`PUT /api/v0/settings/project-order`, with `project_ids` required as `library_ids` is; `api/v0` MINOR 0.34 → 0.35.
+- **Both pages merge on the client.** The Projects page puts the stored IDs first, then the rest by name, and sends the whole merged order on a drop; `GET /projects` keeps the order it had, so `growctl` is unaffected.
+- A project deleted in another tab leaves its ID in the order until the next write, as a library does: the order is a view, and a stale entry costs nothing.

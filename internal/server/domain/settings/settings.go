@@ -35,9 +35,9 @@ var singleUser = id.NewID(id.IDWithUUID[User](uuid.MustParse("f0000000-0000-4000
 func SingleUser() id.ID[User] { return singleUser }
 
 // Settings are the settings of one person in one Organization. They hold the
-// library order for now (task 81); a new setting is a new key with its own
-// type and test, extending this aggregate — no migration and no column
-// (ADR 0024).
+// order of the libraries or of the projects, one key each (task 81, task 83);
+// a new setting is a new key with its own type and test, extending this
+// aggregate — no migration and no column (ADR 0024).
 //
 // Settings are immutable: a change returns a new Settings. They record no
 // event and carry the Version the store gives them, stated by every write of
@@ -74,17 +74,18 @@ func (s Settings) Owner() id.ID[User] { return s.owner }
 // OrganizationID is the tenant the view belongs to; it never changes.
 func (s Settings) OrganizationID() id.ID[organization.Organization] { return s.org }
 
-// LibraryOrder is the order the person sees the Organization's libraries in.
-func (s Settings) LibraryOrder() Order { return s.order }
+// Order is the order the person sees the Organization's libraries or its
+// projects in: which one the settings hold is the key they are stored under.
+func (s Settings) Order() Order { return s.order }
 
 // Version is the Version the store holds the settings at; the zero Version
 // means they were never written.
 func (s Settings) Version() version.Version[Settings] { return s.version }
 
-// WithLibraryOrder returns the settings with the libraries ordered as order
-// places them. The Version is untouched — the store raises it, and refuses a
-// write at a stale one — and no event is recorded (ADR 0024).
-func (s Settings) WithLibraryOrder(order Order) Settings {
+// WithOrder returns the settings with the entities ordered as order places
+// them. The Version is untouched — the store raises it, and refuses a write at
+// a stale one — and no event is recorded (ADR 0024).
+func (s Settings) WithOrder(order Order) Settings {
 	changed := s
 	changed.order = order
 	return changed
@@ -92,6 +93,6 @@ func (s Settings) WithLibraryOrder(order Order) Settings {
 
 // String implements [fmt.Stringer].
 func (s Settings) String() string {
-	return fmt.Sprintf("settings of user %s in organization %s at version %s: libraries %s",
+	return fmt.Sprintf("settings of user %s in organization %s at version %s: order %s",
 		s.owner, s.org, s.version, s.order)
 }

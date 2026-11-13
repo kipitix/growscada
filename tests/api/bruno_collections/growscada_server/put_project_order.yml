@@ -1,0 +1,46 @@
+info:
+  name: put project order
+  type: http
+  seq: 144
+
+http:
+  method: PUT
+  url: http://{{API_SERVER}}/api/v0/settings/project-order
+  body:
+    type: json
+    data: |-
+      {
+        "version": 0,
+        "project_ids": ["{{OTHER_PROJECT_ID}}", "{{PROJECT_ID}}"]
+      }
+  auth: inherit
+
+docs: |
+  Stores the whole project order the client shows, stating the version it read
+  (0: none yet) — task 83; ADR 0024. The answer carries the stored version,
+  which the next write states. A stale version is 409; repetitions are dropped
+  and the IDs of projects that do not exist are tolerated. The library order
+  is another row and is not touched.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.version'
+      operator: eq
+      value: '1'
+    - expression: 'res.body.project_ids.length'
+      operator: eq
+      value: '2'
+    - expression: 'res.body.project_ids[0]'
+      operator: eq
+      value: '"{{OTHER_PROJECT_ID}}"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

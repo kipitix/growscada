@@ -17,9 +17,10 @@ var ErrSettingsConflict = errors.New("user settings were changed concurrently")
 // by their owner and Organization, apart from the aggregates they name; a
 // write of them is one transaction over one row.
 //
-// The methods name the setting they keep — the library order — rather than
-// hiding a key behind Find and Save: a second setting is a second pair of
-// methods with its own row, never a key the caller has to know (ADR 0024).
+// The methods name the setting they keep — the library order or the project
+// order — rather than hiding a key behind Find and Save: a second setting is a
+// second pair of methods with its own row, never a key the caller has to know
+// (ADR 0024).
 type Repository interface {
 	// FindLibraryOrder returns the library order of owner in org. ok is false
 	// when the person never wrote one: the caller then works on Empty.
@@ -30,4 +31,12 @@ type Repository interface {
 	// is still at the Version it was read at. A stale Version is
 	// ErrSettingsConflict.
 	SaveLibraryOrder(ctx context.Context, s Settings) (Settings, error)
+
+	// FindProjectOrder returns the project order of owner in org (task 83).
+	// ok is false when the person never wrote one.
+	FindProjectOrder(ctx context.Context, owner id.ID[User], org id.ID[organization.Organization]) (Settings, bool, error)
+
+	// SaveProjectOrder writes the project order, with the guarantees of
+	// SaveLibraryOrder.
+	SaveProjectOrder(ctx context.Context, s Settings) (Settings, error)
 }

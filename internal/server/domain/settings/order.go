@@ -8,12 +8,12 @@ import (
 	"github.com/google/uuid"
 )
 
-// Order is the order one person sees the Organization's libraries in: the
-// ones they placed, first to last. It names only what they moved: a library it
-// does not name follows them, by name, and an ID it names that no live library
-// has anymore is ignored — the order is a view of the content, never an
-// invariant about it, so a library deleted elsewhere never makes the order
-// unwritable (task 81, ADR 0024).
+// Order is the order one person sees the Organization's libraries or its
+// projects in: the ones they placed, first to last. It names only what they
+// moved: an entity it does not name follows them, by name, and an ID it names
+// that no live entity has anymore is ignored — the order is a view of the
+// content, never an invariant about it, so a library or a project deleted
+// elsewhere never makes the order unwritable (task 81, task 83, ADR 0024).
 //
 // Value Object.
 type Order struct {

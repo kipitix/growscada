@@ -73,8 +73,8 @@ type Source interface {
 }
 
 // OrderSource is a Source whose entities carry a per-user order (task 81,
-// ADR 0024): the Library list. A Source that does not implement it lists its
-// entities by name and offers no drag.
+// task 83, ADR 0024): the Libraries and the Projects. A Source that does not
+// implement it lists its entities by name and offers no drag.
 type OrderSource interface {
 	// Order returns the arrangement the person placed and the Version their
 	// next write states.
@@ -154,6 +154,13 @@ type Picker struct {
 	createName  string
 	createError string
 	createBusy  bool
+
+	// deleting is the delete confirmation of the selected entity: the person
+	// types its name to confirm, so a slip never removes a library or a
+	// project (task 82).
+	deleting    bool
+	deleteValue string
+	deleteError string
 
 	// dragFrom is the row a desktop drag started on, -1 for none; dragging
 	// says one is in flight, so the rows can show where a drop would land.
@@ -292,11 +299,7 @@ func (p *Picker) loadOrder(ctx app.Context) {
 	p.orderSeq++
 	seq := p.orderSeq
 	uiutil.Call(p.compoCtx, orderSource.Order, func(ctx app.Context, order Order) {
-		if seq != p.orderSeq {
-			return
-		}
-		p.order = order
-		ctx.Update()
+		p.applyOrder(ctx, seq, order)
 	}, func(ctx app.Context, err error) {
 		if errors.Is(err, apiclient.ErrNotFound) {
 			// A server without the setting is not an error worth a toast on
@@ -307,6 +310,18 @@ func (p *Picker) loadOrder(ctx app.Context) {
 		}
 		uiutil.ShowError(ctx, err)
 	})
+}
+
+// applyOrder takes the arrangement a read of it returned, unless a newer read
+// or a write of it overtook the read. A read that raced a write states the
+// arrangement before it: the write is what the person sees, and the write's
+// own reread states the stored one (task 82).
+func (p *Picker) applyOrder(ctx app.Context, seq int, order Order) {
+	if seq != p.orderSeq || p.savingOrder {
+		return
+	}
+	p.order = order
+	ctx.Update()
 }
 
 // reconcile announces the selection the reloaded list holds: the same entity
@@ -367,6 +382,7 @@ func (p *Picker) selectByID(ctx app.Context, id uuid.UUID) {
 func (p *Picker) selectItem(ctx app.Context, item Item) {
 	p.creating, p.createName, p.createError = false, "", ""
 	p.field, p.value, p.editError = fieldNone, "", ""
+	p.deleting, p.deleteValue, p.deleteError = false, "", ""
 	p.report(ctx, item)
 	p.screen = screenDetails
 	ctx.Update()
@@ -483,6 +499,7 @@ func (p *Picker) startCreate(ctx app.Context) {
 		return
 	}
 	p.field, p.editError = fieldNone, ""
+	p.deleting, p.deleteValue, p.deleteError = false, "", ""
 	p.creating, p.createName, p.createError = true, "", ""
 	p.screen = screenDetails
 	// The draft row is the list's selection while it is open, and it sits at
@@ -527,18 +544,43 @@ func (p *Picker) commitCreate(ctx app.Context) {
 	})
 }
 
-// deleteEntity removes the entity after a confirmation; the details pane then
-// shows the next one, so deleting never leaves an empty pane on a desktop
-// screen and a dead screen on a phone.
-func (p *Picker) deleteEntity(ctx app.Context, id uuid.UUID) {
-	item, ok := p.find(id)
+// startDelete opens the delete confirmation of the selected entity: the
+// details pane asks for its name, and nothing is sent until it is typed
+// exactly (task 82).
+func (p *Picker) startDelete(ctx app.Context) {
+	if p.busy() {
+		return
+	}
+	p.field, p.value, p.editError = fieldNone, "", ""
+	p.deleting, p.deleteValue, p.deleteError = true, "", ""
+	ctx.Update()
+}
+
+// cancelDelete closes the confirmation without a request.
+func (p *Picker) cancelDelete(ctx app.Context) {
+	p.deleting, p.deleteValue, p.deleteError = false, "", ""
+	ctx.Update()
+}
+
+// commitDelete removes the selected entity once its name is typed: the server
+// is asked only then, so a slip on the button deletes nothing. A name that
+// does not match keeps the confirmation open with the text (task 82).
+func (p *Picker) commitDelete(ctx app.Context) {
+	if p.busy() || !p.deleting {
+		return
+	}
+	item, ok := p.find(p.selected)
 	if !ok {
+		p.cancelDelete(ctx)
 		return
 	}
-	if !app.Window().Call("confirm", p.source.DeleteQuestion(item.Name)).Bool() {
+	if strings.TrimSpace(p.deleteValue) != item.Name {
+		p.deleteError = "The name does not match"
+		ctx.Update()
 		return
 	}
-	p.doDelete(ctx, id)
+	p.deleting, p.deleteValue, p.deleteError = false, "", ""
+	p.doDelete(ctx, item.ID)
 }
 
 // doDelete is the deletion the confirmation asked for.
@@ -603,13 +645,18 @@ func (p *Picker) move(ctx app.Context, from, to int) {
 		if err != nil {
 			p.order = previous
 			uiutil.ShowError(ctx, err)
-			if errors.Is(err, apiclient.ErrConflict) {
-				p.loadOrder(ctx)
-			}
+			// A refused write leaves the arrangement the page read, and a lost
+			// response may hide one that landed: the stored order is read
+			// again either way (task 82).
+			p.loadOrder(ctx)
 			ctx.Update()
 			return
 		}
 		p.order.Version = saved
+		// The stored arrangement is read again: a read of the order may have
+		// been served while this write was in flight, and the person sees what
+		// the server kept, never a guess of the page (task 82).
+		p.loadOrder(ctx)
 		ctx.Update()
 	})
 }

@@ -37,14 +37,21 @@ func (p *Picker) screenName() string {
 	return screenList
 }
 
-// sortable reports whether the entities can be arranged: the source carries a
-// per-user order the server knows, and a draft row cannot be dragged.
-func (p *Picker) sortable() bool {
-	if p.creating || p.orderUnavailable {
+// arrangeable reports whether the page has the column of the grip: the source
+// carries a per-user order the server knows. The column is kept while a draft
+// row is in the list, so the rows do not shift when Create opens (task 82).
+func (p *Picker) arrangeable() bool {
+	if p.orderUnavailable {
 		return false
 	}
 	_, ok := p.source.(OrderSource)
 	return ok
+}
+
+// sortable reports whether the entities can be dragged right now: the column
+// exists, and a draft row in the list cannot be dragged.
+func (p *Picker) sortable() bool {
+	return p.arrangeable() && !p.creating
 }
 
 // renderListPane is the left pane: the header with Create and the rows.
@@ -66,7 +73,8 @@ func (p *Picker) renderListPane() app.UI {
 					uiutil.IconButton(iconPlus(), "accent", !p.busy(),
 						"Create a new "+p.source.Singular(), uiutil.ButtonPage,
 						func(ctx app.Context, _ app.Event) { p.startCreate(ctx) }).
-						Attr("data-picker-create", "1"),
+						Attr("data-picker-create", "1").
+						Attr("data-picker-action", "1"),
 				),
 			app.Div().
 				Attr("data-picker-rows", "true").
@@ -119,6 +127,11 @@ func (p *Picker) renderDraftRow() app.UI {
 	if text == "" {
 		text = "New " + p.source.Singular()
 	}
+	body := []app.UI{}
+	if p.arrangeable() {
+		body = append(body, renderGripSpace())
+	}
+	body = append(body, app.Span().Text(text))
 	return app.Div().
 		Attr("data-picker-row", "draft").
 		Attr("data-picker-draft", "1").
@@ -126,7 +139,7 @@ func (p *Picker) renderDraftRow() app.UI {
 		Attr("aria-selected", "true").
 		Attr("data-picker-selected", "1").
 		Style("font-style", "italic").
-		Body(app.Span().Text(text)).
+		Body(body...).
 		OnClick(func(ctx app.Context, _ app.Event) {
 			p.screen = screenDetails
 			ctx.Update()
@@ -140,6 +153,8 @@ func (p *Picker) renderRow(index int, item Item) app.UI {
 	body := []app.UI{}
 	if p.sortable() {
 		body = append(body, p.renderGrip(index, item))
+	} else if p.arrangeable() {
+		body = append(body, renderGripSpace())
 	}
 	body = append(body,
 		app.Span().
@@ -205,6 +220,12 @@ func (p *Picker) renderGrip(index int, item Item) app.UI {
 		Body(iconGrip())
 }
 
+// renderGripSpace holds the column of the grip while nothing can be dragged,
+// so the rows keep one size when a draft row opens (task 82).
+func renderGripSpace() app.UI {
+	return app.Span().Attr("data-picker-grip-space", "1")
+}
+
 // renderStateDot is the dot a row carries for the entity's state: the state
 // in words is in the details pane, so the list stays names (task 82).
 func (p *Picker) renderStateDot(item Item) app.UI {
@@ -248,6 +269,7 @@ func (p *Picker) renderDetails() app.UI {
 		p.renderStateLine(item),
 		p.renderErrorLine(p.editError),
 		p.renderActions(item),
+		p.renderDanger(item),
 	)
 }
 
@@ -304,11 +326,12 @@ func (p *Picker) renderNameBlock(item Item) app.UI {
 	}
 	var trailing app.UI
 	if p.field == fieldName {
-		trailing = p.renderCancelEdit()
+		trailing = p.renderEditActions()
 	} else {
-		trailing = uiutil.IconButton(iconPencil(), "", !p.busy(),
+		trailing = uiutil.IconButton(iconPencil(), "ghost", !p.busy(),
 			"Change the name", uiutil.ButtonPage,
-			func(ctx app.Context, _ app.Event) { p.startEdit(ctx, fieldName) })
+			func(ctx app.Context, _ app.Event) { p.startEdit(ctx, fieldName) }).
+			Attr("data-picker-quiet", "1")
 	}
 	return app.Div().
 		Attr("data-picker-name-row", "true").
@@ -363,29 +386,42 @@ func (p *Picker) renderDescriptionBlock(item Item) app.UI {
 	}
 	var trailing app.UI
 	if p.field == fieldDescription {
-		trailing = p.renderCancelEdit()
+		trailing = p.renderEditActions()
 	} else {
-		trailing = uiutil.IconButton(iconPencil(), "", !p.busy(),
+		trailing = uiutil.IconButton(iconPencil(), "ghost", !p.busy(),
 			"Change the description", uiutil.ButtonPage,
-			func(ctx app.Context, _ app.Event) { p.startEdit(ctx, fieldDescription) })
+			func(ctx app.Context, _ app.Event) { p.startEdit(ctx, fieldDescription) }).
+			Attr("data-picker-quiet", "1")
 	}
 	return app.Div().
 		Attr("data-picker-description-row", "true").
 		Body(description, trailing)
 }
 
-// renderCancelEdit is the visible way out of an inline edit: a phone has no
-// Escape, and every tap outside the field saves instead of cancelling. The
-// button keeps the field from blurring, so a tap on it never commits the edit
-// it is cancelling (task 82).
-func (p *Picker) renderCancelEdit() app.UI {
+// renderEditActions is the pair an open field carries in place of its pencil:
+// a tick that saves the change and a cross that drops it, both in the neutral
+// grey of a form's buttons (task 82). A phone has no Escape, and every tap
+// outside the field saves, so the cross is the only way out of an edit there.
+// The wrapper keeps the field from blurring, so neither tap commits or closes
+// the edit behind the button's own back.
+func (p *Picker) renderEditActions() app.UI {
 	return app.Div().
-		Attr("data-picker-cancel", "1").
+		Attr("data-picker-edit-actions", "1").
 		OnMouseDown(func(ctx app.Context, e app.Event) {
 			e.PreventDefault()
 		}).
-		Body(uiutil.Button("Cancel", "", true, "Discard the change", uiutil.ButtonPage,
-			func(ctx app.Context, _ app.Event) { p.cancelEdit(ctx) }))
+		Body(
+			uiutil.IconButton(iconCheck(), "", !p.busy(),
+				"Save the change", uiutil.ButtonPage,
+				func(ctx app.Context, _ app.Event) { p.commitEdit(ctx) }).
+				Attr("data-picker-edit-ok", "1").
+				Attr("data-picker-edit-action", "1"),
+			uiutil.IconButton(iconClose(), "", true,
+				"Discard the change", uiutil.ButtonPage,
+				func(ctx app.Context, _ app.Event) { p.cancelEdit(ctx) }).
+				Attr("data-picker-edit-cancel", "1").
+				Attr("data-picker-edit-action", "1"),
+		)
 }
 
 // renderStateLine is the state of the entity in words, beside its dot.
@@ -426,8 +462,8 @@ func (p *Picker) renderErrorLine(text string) app.UI {
 		Text(text)
 }
 
-// renderActions is Open and Delete of the selected entity: icons alone, with
-// their titles, on every screen (task 82).
+// renderActions is Open of the selected entity: an icon alone, with its title,
+// on every screen (task 82).
 func (p *Picker) renderActions(item Item) app.UI {
 	id := item.ID
 	return app.Div().
@@ -440,15 +476,88 @@ func (p *Picker) renderActions(item Item) app.UI {
 						return
 					}
 					p.open(ctx, id)
-				}, app.EventScope("open/"+id.String())),
-			uiutil.IconButton(iconTrash(), "error", !p.busy(),
-				"Delete the "+p.source.Singular(), uiutil.ButtonPage,
-				func(ctx app.Context, _ app.Event) {
-					if p.busy() {
-						return
+				}, app.EventScope("open/"+id.String())).
+				Attr("data-picker-action", "1"),
+		)
+}
+
+// renderDanger is Delete, set apart from the everyday action by a line and
+// below it: removing a library or a project is not one more icon beside Open
+// (task 82). Pressing it asks for the entity's name.
+func (p *Picker) renderDanger(item Item) app.UI {
+	id := item.ID
+	body := []app.UI{
+		app.Div().
+			Attr("data-picker-danger-line", "1").
+			Text("Delete this " + p.source.Singular()),
+	}
+	// The button gives way to the confirmation: pressing it again would wipe
+	// the name being typed (task 82).
+	if p.deleting {
+		body = append(body, p.renderDeleteConfirm(item))
+	} else {
+		body = append(body, uiutil.IconButton(iconTrash(), "error", !p.busy(),
+			"Delete the "+p.source.Singular(), uiutil.ButtonPage,
+			func(ctx app.Context, _ app.Event) {
+				if p.busy() {
+					return
+				}
+				p.startDelete(ctx)
+			}, app.EventScope("delete/"+id.String())).
+			Attr("data-picker-action", "1").
+			Attr("data-picker-delete", "1"))
+	}
+	return app.Div().
+		Attr("data-picker-danger", "1").
+		Body(body...)
+}
+
+// renderDeleteConfirm asks for the name of the entity being deleted: the
+// button that follows removes it for good, so it is typed, never clicked by
+// accident (task 82).
+func (p *Picker) renderDeleteConfirm(item Item) app.UI {
+	return app.Div().
+		Attr("data-picker-delete-confirm-panel", "1").
+		Body(
+			app.Div().
+				Attr("data-picker-delete-question", "1").
+				Text(p.source.DeleteQuestion(item.Name)),
+			app.Div().
+				Attr("data-picker-delete-hint", "1").
+				Text(`Type "`+item.Name+`" to confirm:`),
+			app.Input().
+				Attr("data-picker-delete-input", "1").
+				Attr("id", "picker-"+p.source.Singular()+"-delete-name").
+				Attr("name", "delete-name").
+				Type("text").
+				Value(p.deleteValue).
+				Placeholder(item.Name).
+				AutoFocus(true).
+				OnInput(func(ctx app.Context, _ app.Event) {
+					p.deleteValue = ctx.JSSrc().Get("value").String()
+				}).
+				OnKeyDown(func(ctx app.Context, e app.Event) {
+					switch e.Get("key").String() {
+					case "Enter":
+						p.commitDelete(ctx)
+					case "Escape":
+						p.cancelDelete(ctx)
 					}
-					p.deleteEntity(ctx, id)
-				}, app.EventScope("delete/"+id.String())),
+				}),
+			p.renderErrorLine(p.deleteError),
+			app.Div().
+				Style("display", "flex").
+				Style("gap", "6px").
+				Style("margin-top", "10px").
+				Body(
+					uiutil.Button("Delete", "error", !p.busy(),
+						"Delete the "+p.source.Singular()+" for good", uiutil.ButtonPage,
+						func(ctx app.Context, _ app.Event) { p.commitDelete(ctx) }).
+						Attr("data-picker-delete-confirm", "1"),
+					uiutil.Button("Cancel", "", true,
+						"Keep the "+p.source.Singular(), uiutil.ButtonPage,
+						func(ctx app.Context, _ app.Event) { p.cancelDelete(ctx) }),
+				),
 		)
 }
 
@@ -470,7 +579,8 @@ func (p *Picker) renderFirstCreate() app.UI {
 			Style("margin-top", "10px").
 			Body(uiutil.IconButton(iconPlus(), "accent", !p.busy(),
 				"Create the first "+p.source.Singular(), uiutil.ButtonPage,
-				func(ctx app.Context, _ app.Event) { p.startCreate(ctx) })),
+				func(ctx app.Context, _ app.Event) { p.startCreate(ctx) }).
+				Attr("data-picker-action", "1")),
 	)
 }
 

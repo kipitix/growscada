@@ -3,7 +3,9 @@ package picker
 import (
 	"context"
 	"net/http"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -17,6 +19,9 @@ import (
 // fakeSource is a Source with a per-user order and no server: the merge, the
 // moves and the revert are what these tests are about (task 82).
 type fakeSource struct {
+	// mu guards the order: a test may read it while a write of it is in
+	// flight, as the page itself does (task 82).
+	mu       sync.Mutex
 	items    []Item
 	order    []uuid.UUID
 	version  int
@@ -24,6 +29,12 @@ type fakeSource struct {
 	setIDs   []uuid.UUID
 	setErr   error
 	orderErr error
+	// staleIDs, while staleReads is above zero, is what a read of the order
+	// returns instead of the stored one: a read served before a write landed.
+	staleIDs   []uuid.UUID
+	staleReads int
+	// orderCalls counts the reads of the order.
+	orderCalls int
 }
 
 func (s *fakeSource) Title() string                        { return "Libraries" }
@@ -38,13 +49,22 @@ func (s *fakeSource) Delete(context.Context, uuid.UUID) error                   
 func (s *fakeSource) DeleteQuestion(name string) string                            { return "Delete " + name + "?" }
 
 func (s *fakeSource) Order(context.Context) (Order, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.orderCalls++
 	if s.orderErr != nil {
 		return Order{}, s.orderErr
+	}
+	if s.staleReads > 0 {
+		s.staleReads--
+		return Order{IDs: s.staleIDs, Version: s.version - 1}, nil
 	}
 	return Order{IDs: s.order, Version: s.version}, nil
 }
 
 func (s *fakeSource) SetOrder(_ context.Context, _ int, ids []uuid.UUID) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.setCalls++
 	s.setIDs = append([]uuid.UUID{}, ids...)
 	if s.setErr != nil {
@@ -53,6 +73,14 @@ func (s *fakeSource) SetOrder(_ context.Context, _ int, ids []uuid.UUID) (int, e
 	s.version++
 	s.order = append([]uuid.UUID{}, ids...)
 	return s.version, nil
+}
+
+// serveStale makes the next reads of the order return ids, as a read served
+// before a write landed does (task 82).
+func (s *fakeSource) serveStale(ids []uuid.UUID, reads int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.staleIDs, s.staleReads = ids, reads
 }
 
 func fakeItem(name string) Item { return Item{ID: uuid.New(), Name: name} }
@@ -134,6 +162,34 @@ func TestPicker_RefusedMovePutsTheOrderBack(t *testing.T) {
 	}
 }
 
+// TestPicker_StaleOrderReadDoesNotUndoTheMove: a read of the order served
+// while a move is being stored states the arrangement before it. Applied, it
+// put the old arrangement back on screen and left the page out of step with
+// the server until a reload; the page must show what the server kept (task 82).
+func TestPicker_StaleOrderReadDoesNotUndoTheMove(t *testing.T) {
+	alpha, bravo, charlie := fakeItem("Alpha"), fakeItem("Bravo"), fakeItem("Charlie")
+	src := &fakeSource{items: []Item{charlie, alpha, bravo}}
+	p := New(src, LibraryKey, nil, nil)
+	e := uitest.Load(t, mountOnHost{p})
+	e.ConsumeAll()
+
+	p.move(p.compoCtx, 0, 2)
+	src.serveStale([]uuid.UUID{alpha.ID, bravo.ID, charlie.ID}, 1)
+	p.loadOrder(p.compoCtx)
+	e.ConsumeAll()
+
+	want := []uuid.UUID{bravo.ID, charlie.ID, alpha.ID}
+	if got := p.order.IDs; !slices.Equal(got, want) {
+		t.Errorf("the page shows the arrangement %v, want the stored %v", got, want)
+	}
+	if p.savingOrder {
+		t.Error("the page is still saving")
+	}
+	if src.orderCalls < 3 {
+		t.Errorf("the order was read %d times, want a read after the write", src.orderCalls)
+	}
+}
+
 // TestPicker_KeyboardStepsAndMoves: the arrows step the selection, Alt with an
 // arrow moves the selected entity (task 82).
 func TestPicker_KeyboardStepsAndMoves(t *testing.T) {
@@ -162,18 +218,17 @@ func TestPicker_KeyboardStepsAndMoves(t *testing.T) {
 	}
 }
 
-// TestPicker_ProjectSourceHasNoOrder: the Projects carry no per-user order, so
-// their page lists by name and offers no handle (task 81, task 82).
-func TestPicker_ProjectSourceHasNoOrder(t *testing.T) {
-	p := New(NewProjectSource(apiclient.New("http://127.0.0.1:1", http.DefaultClient)), ProjectKey, nil, nil)
-	if _, ok := p.source.(OrderSource); ok {
-		t.Fatal("the project source implements OrderSource")
+// TestPicker_ProjectSourceHasOrder: the Projects carry a per-user order of
+// their own (task 83), so their page arranges its rows as the Library page
+// does (task 81, task 82).
+func TestPicker_ProjectSourceHasOrder(t *testing.T) {
+	src := NewProjectSource(apiclient.New("http://127.0.0.1:1", http.DefaultClient))
+	if _, ok := src.(OrderSource); !ok {
+		t.Fatal("the project source carries no order")
 	}
-	if p.sortable() {
-		t.Error("the project page offers a drag")
-	}
-	if html := app.HTMLString(p.Render()); strings.Contains(html, `data-picker-grip="1"`) {
-		t.Errorf("the project page shows a grip: %s", html)
+	p := New(src, ProjectKey, nil, nil)
+	if !p.sortable() {
+		t.Error("the project page offers no drag")
 	}
 }
 
@@ -263,5 +318,31 @@ func TestPicker_OrderUnavailableShowsNoDrag(t *testing.T) {
 	}
 	if shown := p.Displayed(); shown[0].Name != "Alpha" {
 		t.Errorf("the page lists %v, want them by name", shown)
+	}
+}
+
+// TestPicker_CreateKeepsTheGripColumn: the draft row cannot be dragged, but the
+// list must not shift when it opens: the column of the grip stays, empty, and
+// the rows keep one height (task 82).
+func TestPicker_CreateKeepsTheGripColumn(t *testing.T) {
+	alpha, bravo := fakeItem("Alpha"), fakeItem("Bravo")
+	p := New(&fakeSource{items: []Item{alpha, bravo}}, LibraryKey, nil, nil)
+	e := uitest.Load(t, mountOnHost{p})
+	e.ConsumeAll()
+
+	before := app.HTMLString(p.Render())
+	if got := strings.Count(before, `data-picker-grip="1"`); got != 2 {
+		t.Fatalf("the list shows %d handles, want one per library", got)
+	}
+
+	p.startCreate(p.compoCtx)
+	e.ConsumeAll()
+	html := app.HTMLString(p.Render())
+
+	if strings.Contains(html, `data-picker-grip="1"`) {
+		t.Error("a draft row can be dragged from a handle")
+	}
+	if got, want := strings.Count(html, `data-picker-grip-space="1"`), 3; got != want {
+		t.Errorf("the list keeps %d grip columns with a draft open, want %d", got, want)
 	}
 }

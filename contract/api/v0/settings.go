@@ -29,3 +29,28 @@ type SetLibraryOrderRequest struct {
 	Version    int         `json:"version"`
 	LibraryIDs []uuid.UUID `json:"library_ids"`
 }
+
+// ProjectOrderPath is the path, under PathPrefix, of the project order of the
+// person the server acts for (task 83): the same per-user setting as the
+// library order, stored under its own key (ADR 0024).
+const ProjectOrderPath = "/settings/project-order"
+
+// ProjectOrderResponse is the HTTP DTO of a person's project order: the
+// Version every write of it states, and the IDs of the projects the person
+// placed, first to last. It holds only the projects they moved: the rest
+// follow them, by name, and the client merges the two. Version 0 with an empty
+// list is a person who never reordered.
+type ProjectOrderResponse struct {
+	Version    int         `json:"version"`
+	ProjectIDs []uuid.UUID `json:"project_ids"`
+}
+
+// SetProjectOrderRequest is the HTTP DTO of PUT /settings/project-order: the
+// whole order the client shows and the Version it read (0 when there was
+// none). ProjectIDs is required and always an array: an absent list is 400,
+// and [] places no project. Repetitions are dropped and the IDs of projects
+// that do not exist are tolerated, as the library order's are (ADR 0024).
+type SetProjectOrderRequest struct {
+	Version    int         `json:"version"`
+	ProjectIDs []uuid.UUID `json:"project_ids"`
+}

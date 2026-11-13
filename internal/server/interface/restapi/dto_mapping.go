@@ -764,6 +764,12 @@ func newDraftChangesResponse(state appdto.DraftChanges) apiv0.DraftChangesRespon
 // newLibraryOrderResponse maps a person's library order to its contract body:
 // the Version every write states and the IDs they placed, first to last. The
 // list is empty, never null, for an order that names no library (task 81).
-func newLibraryOrderResponse(order appdto.LibraryOrder) apiv0.LibraryOrderResponse {
-	return apiv0.LibraryOrderResponse{Version: order.Version, LibraryIDs: order.LibraryIDs}
+func newLibraryOrderResponse(order appdto.Order) apiv0.LibraryOrderResponse {
+	return apiv0.LibraryOrderResponse{Version: order.Version, LibraryIDs: order.IDs}
+}
+
+// newProjectOrderResponse maps a person's project order to its contract body,
+// as the library order's does (task 83).
+func newProjectOrderResponse(order appdto.Order) apiv0.ProjectOrderResponse {
+	return apiv0.ProjectOrderResponse{Version: order.Version, ProjectIDs: order.IDs}
 }

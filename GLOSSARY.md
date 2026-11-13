@@ -261,5 +261,5 @@ The `MAJOR.MINOR` version of the JSON schema that a message or document conforms
 _Avoid_: version (unqualified), protocol version, format version
 
 **User settings**:
-The per-user preferences of the server — for now the order of the libraries, later more — kept in their own aggregate, apart from the content they view (task 81; ADR 0024). They are a view of the content, never part of it: no ProjectFile, Commit or Release carries them, and a change of them records no event. Until Users and authentication exist (task 49, task 50), the one person every request acts for owns them.
+The per-user preferences of the server — for now the order of the libraries and of the projects, later more — kept in their own aggregate, apart from the content they view (task 81, task 83; ADR 0024). They are a view of the content, never part of it: no ProjectFile, Commit or Release carries them, and a change of them records no event. Until Users and authentication exist (task 49, task 50), the one person every request acts for owns them.
 _Avoid_: preferences, profile, config, options

@@ -184,6 +184,27 @@ func TestPicker_OpenReportsTheEntity(t *testing.T) {
 	}
 }
 
+// TestPicker_ActionsAreOneSquare: Create, Open and Delete are the page's
+// actions and share one square, while the pencils of the fields are quiet
+// (task 82).
+func TestPicker_ActionsAreOneSquare(t *testing.T) {
+	f := startProjects(t, nil)
+	f.run()
+	f.selectByName(servertest.MainProjectName)
+	f.run()
+
+	html := app.HTMLString(f.p.Render())
+	if got, want := strings.Count(html, `data-picker-action="1"`), 3; got != want {
+		t.Errorf("the page marks %d square actions, want Create, Open and Delete", got)
+	}
+	if got, want := strings.Count(html, `data-picker-quiet="1"`), 2; got != want {
+		t.Errorf("the page shows %d quiet pencils, want the name's and the description's", got)
+	}
+	if !strings.Contains(html, "border:1px solid transparent") {
+		t.Error("a pencil draws a frame like an action")
+	}
+}
+
 // TestPicker_CreateOpensTheNewEntity: Create puts a draft row in the list and
 // its name field in the details; the server is the only validator, and a
 // created entity opens at once (task 82).
@@ -315,8 +336,10 @@ func TestPicker_InlineEditHasAVisibleCancel(t *testing.T) {
 	f.p.value = "never sent"
 	f.run()
 
-	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-picker-cancel="1"`) {
-		t.Errorf("the open field has no way out but Escape: %s", html)
+	html := app.HTMLString(f.p.Render())
+	if !strings.Contains(html, `data-picker-edit-ok="1"`) ||
+		!strings.Contains(html, `data-picker-edit-cancel="1"`) {
+		t.Errorf("the open field has no tick and cross of its own: %s", html)
 	}
 
 	f.p.cancelEdit(f.p.compoCtx)
@@ -325,8 +348,9 @@ func TestPicker_InlineEditHasAVisibleCancel(t *testing.T) {
 	if f.p.field != fieldNone || f.p.value != "" {
 		t.Errorf("Cancel left the edit open: %q %q", f.p.field, f.p.value)
 	}
-	if strings.Contains(app.HTMLString(f.p.Render()), "data-picker-cancel") {
-		t.Error("the Cancel button outlived the edit")
+	if html := app.HTMLString(f.p.Render()); strings.Contains(html, `data-picker-edit-ok="1"`) ||
+		strings.Contains(html, `data-picker-edit-cancel="1"`) {
+		t.Error("the tick and the cross outlived the edit")
 	}
 	after, err := f.api.GetProject(context.Background(), servertest.MainProject)
 	if err != nil {
@@ -492,6 +516,74 @@ func TestPicker_DeleteSelectsTheNext(t *testing.T) {
 	}
 	if len(f.p.items) != 1 || f.p.items[0].ID != servertest.MainProject {
 		t.Errorf("listed %+v, want Main only", f.p.items)
+	}
+}
+
+// TestPicker_DeleteNeedsTheName: Delete sits below a line of its own and asks
+// for the entity's name; nothing is sent until the name is typed exactly, and
+// a wrong one keeps the confirmation open (task 82).
+func TestPicker_DeleteNeedsTheName(t *testing.T) {
+	var line uuid.UUID
+	f := startProjects(t, func(api *apiclient.Client) {
+		created, err := api.CreateProject(context.Background(), apiv0.CreateProjectRequest{Name: "Line 1"})
+		if err != nil {
+			t.Fatalf("create project: %v", err)
+		}
+		line = created.ID
+	})
+	f.run()
+	f.selectByName("Line 1")
+	f.run()
+
+	html := app.HTMLString(f.p.Render())
+	if !strings.Contains(html, `data-picker-danger="1"`) {
+		t.Fatalf("Delete is not set apart from the other actions: %s", html)
+	}
+	if strings.Contains(html, `data-picker-delete-input="1"`) {
+		t.Error("the confirmation is open before Delete was pressed")
+	}
+
+	f.p.startDelete(f.p.compoCtx)
+	f.run()
+
+	html = app.HTMLString(f.p.Render())
+	if !strings.Contains(html, `data-picker-delete-input="1"`) ||
+		!strings.Contains(html, `data-picker-delete-confirm="1"`) {
+		t.Fatalf("the confirmation asks for no name: %s", html)
+	}
+
+	f.p.deleteValue = "Line 2"
+	f.p.commitDelete(f.p.compoCtx)
+	f.run()
+
+	if _, err := f.api.GetProject(context.Background(), line); err != nil {
+		t.Errorf("a name that does not match deleted the project: %v", err)
+	}
+	if f.p.deleteError == "" || !f.p.deleting {
+		t.Errorf("a wrong name: error %q, open %t; want the confirmation kept with its refusal",
+			f.p.deleteError, f.p.deleting)
+	}
+
+	// Picking another entity closes the confirmation rather than leaving it
+	// over the details of another one.
+	f.selectByName(servertest.MainProjectName)
+	f.run()
+	if f.p.deleting || f.p.deleteValue != "" || f.p.deleteError != "" {
+		t.Errorf("the confirmation of Line 1 survived the selection: %t %q %q",
+			f.p.deleting, f.p.deleteValue, f.p.deleteError)
+	}
+
+	f.selectByName("Line 1")
+	f.p.startDelete(f.p.compoCtx)
+	f.p.deleteValue = "Line 1"
+	f.p.commitDelete(f.p.compoCtx)
+	f.run()
+
+	if _, err := f.api.GetProject(context.Background(), line); err == nil {
+		t.Error("the project is still on the server after its name was typed")
+	}
+	if f.p.deleting {
+		t.Error("the confirmation outlived the deletion")
 	}
 }
 

@@ -171,10 +171,13 @@ func (r *APIRouter) routes() []route {
 		{"PUT " + pp, projects.PutProjectsByID},
 		{"DELETE " + pp, projects.DeleteProjectsByID},
 
-		// The per-user settings of the server (task 81, ADR 0024): one
-		// person's view of the libraries, stored apart from them.
+		// The per-user settings of the server (task 81, task 83, ADR 0024):
+		// one person's view of the libraries and of the projects, stored apart
+		// from them.
 		{"GET " + p + apiv0.LibraryOrderPath, settings.GetLibraryOrder},
 		{"PUT " + p + apiv0.LibraryOrderPath, settings.PutLibraryOrder},
+		{"GET " + p + apiv0.ProjectOrderPath, settings.GetProjectOrder},
+		{"PUT " + p + apiv0.ProjectOrderPath, settings.PutProjectOrder},
 
 		{"GET " + pp + "/tags", tags.GetTags},
 		{"GET " + pp + "/tags/" + tagResource.wildcard(), tags.GetTagsByID},

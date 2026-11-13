@@ -235,6 +235,27 @@ func (c *Client) SetLibraryOrder(ctx context.Context, version int, libraryIDs []
 	return resp, err
 }
 
+// ProjectOrder returns the project order of the person the server acts for
+// (task 83): the IDs they placed, first to last, and the Version their next
+// write states. A person who never reordered is Version 0 and no ID.
+func (c *Client) ProjectOrder(ctx context.Context) (apiv0.ProjectOrderResponse, error) {
+	var resp apiv0.ProjectOrderResponse
+	err := c.do(ctx, http.MethodGet, apiv0.ProjectOrderPath, nil, http.StatusOK, &resp)
+	return resp, err
+}
+
+// SetProjectOrder stores the whole project order, stating the Version it was
+// read at (0 when there was none), and returns the Version stored (task 83).
+// A stale Version is ErrConflict.
+func (c *Client) SetProjectOrder(ctx context.Context, version int, projectIDs []uuid.UUID) (apiv0.ProjectOrderResponse, error) {
+	var resp apiv0.ProjectOrderResponse
+	err := c.do(ctx, http.MethodPut, apiv0.ProjectOrderPath, apiv0.SetProjectOrderRequest{
+		Version:    version,
+		ProjectIDs: projectIDs,
+	}, http.StatusOK, &resp)
+	return resp, err
+}
+
 // ── Libraries ────────────────────────────────────────────────────────────────
 
 // ListLibraries returns every live library of the server, in creation order.

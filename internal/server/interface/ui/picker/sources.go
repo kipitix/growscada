@@ -69,6 +69,26 @@ func (s projectSource) DeleteQuestion(name string) string {
 	return "Delete project " + name + " with all its scenes, widgets and tags?"
 }
 
+// Order returns the project order of the person the server acts for: the IDs
+// they placed, first to last, and the Version their next write states
+// (task 83, ADR 0024).
+func (s projectSource) Order(ctx context.Context) (Order, error) {
+	order, err := s.client.ProjectOrder(ctx)
+	if err != nil {
+		return Order{}, err
+	}
+	return Order{IDs: order.ProjectIDs, Version: order.Version}, nil
+}
+
+// SetOrder stores the whole project order and returns the Version stored.
+func (s projectSource) SetOrder(ctx context.Context, version int, ids []uuid.UUID) (int, error) {
+	order, err := s.client.SetProjectOrder(ctx, version, ids)
+	if err != nil {
+		return 0, err
+	}
+	return order.Version, nil
+}
+
 // NewLibrarySource returns the selection page's server side for the Libraries.
 func NewLibrarySource(client *apiclient.Client) Source { return librarySource{client: client} }
 

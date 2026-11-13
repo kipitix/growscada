@@ -106,3 +106,70 @@ func TestSettings_LibraryOrder(t *testing.T) {
 		t.Errorf("the order with a deleted library: %+v", read)
 	}
 }
+
+// projectOrderPath is the route of the per-user project order (task 83).
+var projectOrderPath = apiv0.PathPrefix + apiv0.ProjectOrderPath
+
+// TestSettings_ProjectOrder covers the per-user project order (task 83): its
+// own row, apart from the library order, and the same rules — a Version every
+// write states, a required list, and a stale write refused.
+func TestSettings_ProjectOrder(t *testing.T) {
+	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM user_settings"); err != nil {
+		t.Fatalf("clean the settings: %v", err)
+	}
+	services := newServices()
+	router := services.router()
+
+	rec := serve(router, http.MethodGet, projectOrderPath, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET project order: %d %s", rec.Code, rec.Body)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, `"project_ids":[]`) || !strings.Contains(body, `"version":0`) {
+		t.Errorf("an order nobody wrote: %s", body)
+	}
+
+	first := uuid.MustParse("b0000000-0000-4000-8000-000000000001")
+	second := uuid.MustParse("b0000000-0000-4000-8000-000000000002")
+	rec = serve(router, http.MethodPut, projectOrderPath, apiv0.SetProjectOrderRequest{
+		Version: 0,
+		// A repetition and the zero ID are dropped, not refused (ADR 0024).
+		ProjectIDs: []uuid.UUID{second, second, uuid.Nil, first},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PUT the first project order: %d %s", rec.Code, rec.Body)
+	}
+	written := decodeBody[apiv0.ProjectOrderResponse](t, rec)
+	if written.Version != 1 {
+		t.Errorf("the first write answered version %d, want 1", written.Version)
+	}
+	if len(written.ProjectIDs) != 2 || written.ProjectIDs[0] != second || written.ProjectIDs[1] != first {
+		t.Errorf("the normalized order: %v", written.ProjectIDs)
+	}
+
+	// The library order is another row: writing the projects wrote no library.
+	rec = serve(router, http.MethodGet, orderPath, nil)
+	if body := rec.Body.String(); !strings.Contains(body, `"library_ids":[]`) || !strings.Contains(body, `"version":0`) {
+		t.Errorf("the project order wrote the library order: %s", body)
+	}
+
+	// project_ids is required, as library_ids is.
+	rec = serve(router, http.MethodPut, projectOrderPath, map[string]any{"version": 1})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("PUT without project_ids: %d %s", rec.Code, rec.Body)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/problem+json" {
+		t.Errorf("a refusal's content type: %q", got)
+	}
+
+	// A write at a stale Version is 409 and changes nothing.
+	rec = serve(router, http.MethodPut, projectOrderPath, apiv0.SetProjectOrderRequest{
+		Version: 0, ProjectIDs: []uuid.UUID{first},
+	})
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("PUT at a stale version: %d %s", rec.Code, rec.Body)
+	}
+	read := decodeBody[apiv0.ProjectOrderResponse](t, serve(router, http.MethodGet, projectOrderPath, nil))
+	if read.Version != 1 || len(read.ProjectIDs) != 2 {
+		t.Errorf("a refused write changed the order: %+v", read)
+	}
+}

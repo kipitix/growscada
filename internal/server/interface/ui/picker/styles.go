@@ -35,9 +35,37 @@ const pickerCSS = `
 	gap: 8px;
 	padding-bottom: 8px;
 }
-[data-picker] [data-picker-create] {
+/* Create, Open and Delete are one square: the actions of the page (task 82). */
+[data-picker] [data-picker-action] {
 	width: 36px;
 	height: 36px;
+	padding: 0;
+	box-sizing: border-box;
+}
+/* The pencil of a field and the X that drops its edit are quieter than the
+   actions: no frame, a muted colour, and a smaller square, so they read as a
+   hint beside the text. */
+[data-picker] [data-picker-quiet] {
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	box-sizing: border-box;
+	opacity: 0.55;
+}
+[data-picker] [data-picker-quiet]:hover,
+[data-picker] [data-picker-quiet]:focus-visible {
+	opacity: 1;
+}
+/* The tick and the cross of an open field are form buttons: grey, visible,
+   and beside the field they act on. */
+[data-picker] [data-picker-edit-actions] {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+[data-picker] [data-picker-edit-action] {
+	width: 28px;
+	height: 28px;
 	padding: 0;
 	box-sizing: border-box;
 }
@@ -61,11 +89,16 @@ const pickerCSS = `
 	overflow-y: auto;
 	box-sizing: border-box;
 }
+/* A row keeps one height whatever it carries: the grip appears and goes with
+   the mode of the page, and the draft row carries none, but the list must not
+   change size under the pointer (task 82). */
 [data-picker] [data-picker-row] {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	padding: 6px 4px;
+	box-sizing: border-box;
+	height: 36px;
+	padding: 0 4px;
 	border-bottom: 1px solid var(--border);
 	cursor: pointer;
 	user-select: none;
@@ -77,13 +110,16 @@ const pickerCSS = `
 	background: var(--accent);
 	color: var(--accent-text);
 }
+[data-picker] [data-picker-grip],
+[data-picker] [data-picker-grip-space] {
+	width: 20px;
+	height: 24px;
+	flex-shrink: 0;
+}
 [data-picker] [data-picker-grip] {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	width: 20px;
-	height: 24px;
-	flex-shrink: 0;
 	cursor: grab;
 	color: var(--text-muted);
 }
@@ -101,7 +137,8 @@ const pickerCSS = `
 }
 [data-picker] [data-picker-name-input],
 [data-picker] [data-picker-description-input],
-[data-picker] [data-picker-create-name] {
+[data-picker] [data-picker-create-name],
+[data-picker] [data-picker-delete-input] {
 	width: 100%;
 	box-sizing: border-box;
 	padding: 4px 6px;
@@ -127,6 +164,28 @@ const pickerCSS = `
 	align-items: center;
 	gap: 8px;
 	margin-top: 18px;
+}
+/* Delete is set apart from the everyday actions: a line of its own, and room
+   below it, so it is never one more icon beside Open (task 82). */
+[data-picker] [data-picker-danger] {
+	margin-top: 28px;
+	padding-top: 12px;
+	border-top: 1px solid var(--border);
+}
+[data-picker] [data-picker-danger-line] {
+	margin-bottom: 8px;
+	font-size: 11px;
+	color: var(--text-muted);
+}
+[data-picker] [data-picker-delete-question] {
+	margin-top: 10px;
+	font-size: 12px;
+	color: var(--text-2);
+}
+[data-picker] [data-picker-delete-hint] {
+	margin-top: 10px;
+	margin-bottom: 6px;
+	font-size: 12px;
 }
 [data-picker] [data-picker-back] {
 	display: none;
@@ -174,13 +233,18 @@ const pickerCSS = `
 		min-height: 48px;
 		padding: 8px 6px;
 	}
-	[data-picker] [data-picker-create] {
+	[data-picker] [data-picker-action],
+	[data-picker] [data-picker-quiet],
+	[data-picker] [data-picker-edit-action] {
 		width: 44px;
 		height: 44px;
 	}
-	[data-picker] [data-picker-grip] {
+	[data-picker] [data-picker-grip],
+	[data-picker] [data-picker-grip-space] {
 		width: 32px;
 		height: 44px;
+	}
+	[data-picker] [data-picker-grip] {
 		touch-action: none;
 	}
 	[data-picker] [data-picker-name] {

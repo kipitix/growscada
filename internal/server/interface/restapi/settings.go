@@ -55,3 +55,38 @@ func (h SettingsHandlers) PutLibraryOrder(w http.ResponseWriter, r *http.Request
 	}
 	sendJSONResponse(w, http.StatusOK, newLibraryOrderResponse(order))
 }
+
+// GetProjectOrder handles GET /settings/project-order: the project order the
+// person stated, and the Version their next write states (task 83). A person
+// who never reordered is 200 with Version 0 and no project, never a 404.
+func (h SettingsHandlers) GetProjectOrder(w http.ResponseWriter, r *http.Request) {
+	order, err := h.service.ProjectOrder(r.Context())
+	if err != nil {
+		sendError(w, r, err)
+		return
+	}
+	sendJSONResponse(w, http.StatusOK, newProjectOrderResponse(order))
+}
+
+// PutProjectOrder handles PUT /settings/project-order: the whole order the
+// client shows, stored at the Version the request states (task 83). A stale
+// Version is 409; repetitions are dropped and the IDs of missing projects are
+// tolerated (ADR 0024).
+func (h SettingsHandlers) PutProjectOrder(w http.ResponseWriter, r *http.Request) {
+	var request apiv0.SetProjectOrderRequest
+	if !decodeRequest(w, r, &request) {
+		return
+	}
+	// project_ids is required, as library_ids is: a client that forgets the
+	// field must not wipe the order. [] is a person who placed no project.
+	if request.ProjectIDs == nil {
+		sendProblem(w, NewBadRequest("project_ids is required: send the whole order, [] for none", r.URL.Path))
+		return
+	}
+	order, err := h.service.SetProjectOrder(r.Context(), request.Version, request.ProjectIDs)
+	if err != nil {
+		sendError(w, r, err)
+		return
+	}
+	sendJSONResponse(w, http.StatusOK, newProjectOrderResponse(order))
+}

@@ -53,30 +53,30 @@ func TestOrder_IDsIsACopy(t *testing.T) {
 	}
 }
 
-// TestSettings_WithLibraryOrderKeepsTheVersionAndTheOwner: a change of a
+// TestSettings_WithOrderKeepsTheVersionAndTheOwner: a change of a
 // setting is the same aggregate at the same Version — the store raises it
 // (task 81, ADR 0024).
-func TestSettings_WithLibraryOrderKeepsTheVersionAndTheOwner(t *testing.T) {
+func TestSettings_WithOrderKeepsTheVersionAndTheOwner(t *testing.T) {
 	own := settings.SingleUser()
 	empty := settings.Empty(own, orgID)
 	if empty.Version().IsCommitted() {
 		t.Error("settings nobody wrote are committed")
 	}
-	if len(empty.LibraryOrder().IDs()) != 0 {
+	if len(empty.Order().IDs()) != 0 {
 		t.Error("settings nobody wrote hold an order")
 	}
 
-	changed := empty.WithLibraryOrder(settings.NewOrder([]uuid.UUID{second, first}))
+	changed := empty.WithOrder(settings.NewOrder([]uuid.UUID{second, first}))
 	if changed.Version() != empty.Version() {
 		t.Errorf("the version moved on a change: %s", changed.Version())
 	}
 	if changed.Owner() != own || changed.OrganizationID() != orgID {
 		t.Errorf("the change moved the settings to %s/%s", changed.Owner(), changed.OrganizationID())
 	}
-	if got := changed.LibraryOrder().IDs(); len(got) != 2 || got[0] != second || got[1] != first {
+	if got := changed.Order().IDs(); len(got) != 2 || got[0] != second || got[1] != first {
 		t.Errorf("the order: %v", got)
 	}
-	if len(empty.LibraryOrder().IDs()) != 0 {
+	if len(empty.Order().IDs()) != 0 {
 		t.Error("the change mutated the settings it was made from")
 	}
 }

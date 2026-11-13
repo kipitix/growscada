@@ -33,3 +33,28 @@ func decodeLibraryOrder(payload []byte) (settings.Order, error) {
 	}
 	return settings.NewOrder(stored.LibraryIDs), nil
 }
+
+// projectOrderPayload is the stored shape of the project_order setting
+// (task 83): a document of its own, so each key keeps its own field name.
+type projectOrderPayload struct {
+	ProjectIDs []uuid.UUID `json:"project_ids"`
+}
+
+// encodeProjectOrder encodes the order as the row's payload.
+func encodeProjectOrder(order settings.Order) ([]byte, error) {
+	payload, err := json.Marshal(projectOrderPayload{ProjectIDs: order.IDs()})
+	if err != nil {
+		return nil, fmt.Errorf("cannot encode project order: %w", err)
+	}
+	return payload, nil
+}
+
+// decodeProjectOrder decodes the order of a row's payload. Duplicates and the
+// zero ID are normalized away, as a client's request is.
+func decodeProjectOrder(payload []byte) (settings.Order, error) {
+	var stored projectOrderPayload
+	if err := json.Unmarshal(payload, &stored); err != nil {
+		return settings.Order{}, fmt.Errorf("cannot decode project order: %w", err)
+	}
+	return settings.NewOrder(stored.ProjectIDs), nil
+}

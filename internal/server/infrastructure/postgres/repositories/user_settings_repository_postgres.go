@@ -12,10 +12,23 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
-// keyLibraryOrder is the stored key of the library order (task 81): the order
-// of the libraries in the selection page. A new per-user setting is a new key
-// with its own codec, not a new table (ADR 0024).
-const keyLibraryOrder = "library_order"
+// settingsKey names one per-user setting: the key of its row and the codec of
+// its payload. A new setting is a new key with its own codec, not a new table
+// (ADR 0024).
+type settingsKey struct {
+	name   string
+	encode func(settings.Order) ([]byte, error)
+	decode func([]byte) (settings.Order, error)
+}
+
+var (
+	// libraryOrderKey is the order of the libraries in the selection page
+	// (task 81).
+	libraryOrderKey = settingsKey{"library_order", encodeLibraryOrder, decodeLibraryOrder}
+	// projectOrderKey is the order of the projects in the selection page
+	// (task 83).
+	projectOrderKey = settingsKey{"project_order", encodeProjectOrder, decodeProjectOrder}
+)
 
 // userSettingsRepositoryPostgres keeps public.user_settings: one row per
 // person, Organization and key. It writes no outbox row: a setting records no
@@ -40,6 +53,36 @@ func (r userSettingsRepositoryPostgres) FindLibraryOrder(
 	owner id.ID[settings.User],
 	org id.ID[organization.Organization],
 ) (settings.Settings, bool, error) {
+	return r.find(ctx, owner, org, libraryOrderKey)
+}
+
+// SaveLibraryOrder writes the library order (see settings.Repository).
+func (r userSettingsRepositoryPostgres) SaveLibraryOrder(ctx context.Context, s settings.Settings) (settings.Settings, error) {
+	return r.save(ctx, s, libraryOrderKey)
+}
+
+// FindProjectOrder returns the project order of owner in org (see
+// settings.Repository, task 83).
+func (r userSettingsRepositoryPostgres) FindProjectOrder(
+	ctx context.Context,
+	owner id.ID[settings.User],
+	org id.ID[organization.Organization],
+) (settings.Settings, bool, error) {
+	return r.find(ctx, owner, org, projectOrderKey)
+}
+
+// SaveProjectOrder writes the project order (see settings.Repository).
+func (r userSettingsRepositoryPostgres) SaveProjectOrder(ctx context.Context, s settings.Settings) (settings.Settings, error) {
+	return r.save(ctx, s, projectOrderKey)
+}
+
+// find reads the row of one setting of owner in org.
+func (r userSettingsRepositoryPostgres) find(
+	ctx context.Context,
+	owner id.ID[settings.User],
+	org id.ID[organization.Organization],
+	key settingsKey,
+) (settings.Settings, bool, error) {
 	var (
 		rawVersion int
 		payload    []byte
@@ -47,7 +90,7 @@ func (r userSettingsRepositoryPostgres) FindLibraryOrder(
 	err := r.db.QueryRowContext(ctx,
 		`SELECT version, payload FROM public.user_settings
 		 WHERE user_id = $1 AND organization_id = $2 AND key = $3`,
-		owner.UUID(), org.UUID(), keyLibraryOrder,
+		owner.UUID(), org.UUID(), key.name,
 	).Scan(&rawVersion, &payload)
 	if errors.Is(err, sql.ErrNoRows) {
 		return settings.Settings{}, false, nil
@@ -55,7 +98,7 @@ func (r userSettingsRepositoryPostgres) FindLibraryOrder(
 	if err != nil {
 		return settings.Settings{}, false, fmt.Errorf("cannot read user settings: %w", err)
 	}
-	order, err := decodeLibraryOrder(payload)
+	order, err := key.decode(payload)
 	if err != nil {
 		return settings.Settings{}, false, err
 	}
@@ -66,13 +109,12 @@ func (r userSettingsRepositoryPostgres) FindLibraryOrder(
 	return settings.Reconstitute(owner, org, order, ver), true, nil
 }
 
-// SaveLibraryOrder writes the library order (see settings.Repository): one
-// statement, so one
+// save writes one setting (see settings.Repository): one statement, so one
 // transaction over one row. The insert's key is the row's, and a row written
 // meanwhile turns it into a conflict; the update's compare-and-swap does the
 // same for a stored one.
-func (r userSettingsRepositoryPostgres) SaveLibraryOrder(ctx context.Context, s settings.Settings) (settings.Settings, error) {
-	payload, err := encodeLibraryOrder(s.LibraryOrder())
+func (r userSettingsRepositoryPostgres) save(ctx context.Context, s settings.Settings, key settingsKey) (settings.Settings, error) {
+	payload, err := key.encode(s.Order())
 	if err != nil {
 		return settings.Settings{}, err
 	}
@@ -81,7 +123,7 @@ func (r userSettingsRepositoryPostgres) SaveLibraryOrder(ctx context.Context, s 
 		res, err := r.db.ExecContext(ctx,
 			`INSERT INTO public.user_settings (user_id, organization_id, key, payload, version)
 			 VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING`,
-			s.Owner().UUID(), s.OrganizationID().UUID(), keyLibraryOrder, payload, version.Committed[settings.Settings]().Number(),
+			s.Owner().UUID(), s.OrganizationID().UUID(), key.name, payload, version.Committed[settings.Settings]().Number(),
 		)
 		if err != nil {
 			return settings.Settings{}, fmt.Errorf("cannot insert user settings: %w", err)
@@ -94,14 +136,14 @@ func (r userSettingsRepositoryPostgres) SaveLibraryOrder(ctx context.Context, s 
 			return settings.Settings{}, fmt.Errorf("%w: settings of %s in %s exist already",
 				settings.ErrSettingsConflict, s.Owner(), s.OrganizationID())
 		}
-		return settings.Reconstitute(s.Owner(), s.OrganizationID(), s.LibraryOrder(), version.Committed[settings.Settings]()), nil
+		return settings.Reconstitute(s.Owner(), s.OrganizationID(), s.Order(), version.Committed[settings.Settings]()), nil
 	}
 
 	next := current.Next()
 	res, err := r.db.ExecContext(ctx,
 		`UPDATE public.user_settings SET payload = $1, version = $2, updated_at = now()
 		 WHERE user_id = $3 AND organization_id = $4 AND key = $5 AND version = $6`,
-		payload, next.Number(), s.Owner().UUID(), s.OrganizationID().UUID(), keyLibraryOrder, current.Number(),
+		payload, next.Number(), s.Owner().UUID(), s.OrganizationID().UUID(), key.name, current.Number(),
 	)
 	if err != nil {
 		return settings.Settings{}, fmt.Errorf("cannot update user settings: %w", err)
@@ -114,7 +156,7 @@ func (r userSettingsRepositoryPostgres) SaveLibraryOrder(ctx context.Context, s 
 		return settings.Settings{}, fmt.Errorf("%w: settings of %s in %s are not at version %s",
 			settings.ErrSettingsConflict, s.Owner(), s.OrganizationID(), current)
 	}
-	return settings.Reconstitute(s.Owner(), s.OrganizationID(), s.LibraryOrder(), next), nil
+	return settings.Reconstitute(s.Owner(), s.OrganizationID(), s.Order(), next), nil
 }
 
 // writtenOnce reports whether a statement wrote its row. A statement that wrote

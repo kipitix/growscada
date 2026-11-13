@@ -44,7 +44,10 @@ func IconButton(icon app.UI, kind string, enabled bool, title string, layout But
 		Attr("aria-label", title).
 		Style("display", "inline-flex").
 		Style("align-items", "center").
-		Style("justify-content", "center")
+		Style("justify-content", "center").
+		// An icon is the whole face: the size of the button comes from the
+		// layout's CSS, never from the padding of a text button.
+		Style("padding", "0")
 }
 
 // button renders one action around the content it shows.
@@ -86,6 +89,10 @@ func buttonColors(kind string) (border, bg, fg string) {
 		border, bg, fg = "var(--accent-border)", "var(--accent-bg)", "var(--accent)"
 	case "error":
 		border, bg, fg = "var(--error-border)", "var(--error-bg)", "var(--error)"
+	case "ghost":
+		// An action that stays out of the way until it is looked at, e.g. the
+		// pencil of a field edited in place (task 82).
+		border, bg, fg = "transparent", "transparent", "var(--text-muted)"
 	}
 	return border, bg, fg
 }
