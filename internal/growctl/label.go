@@ -1,11 +1,13 @@
 package growctl
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
 	"text/tabwriter"
 
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
@@ -175,4 +177,123 @@ func colorOrNone(color string) string {
 		return "-"
 	}
 	return color
+}
+
+// newLabelCommand is the assignment of labels to saved states (task 85_3;
+// ADR 0025): `label assign` marks a Commit of a Project's or a Library's
+// Draft and `label unassign` takes the mark off. Labels themselves are managed
+// by `growctl labels`.
+func newLabelCommand(s *settings) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "label",
+		Short: "Place a label on a saved state or take it off",
+		Long: "A label is the Organization's metadata; `label assign` marks one saved\n" +
+			"state (Commit) of a Project or a Library and `label unassign` takes the\n" +
+			"mark off (task 85_3; ADR 0025). An assignment states no Draft Version and\n" +
+			"is idempotent: a repeat changes nothing. The label is named by its name,\n" +
+			"ignoring case, or by its ID.",
+		Args: cobra.ArbitraryArgs,
+		RunE: runGroup,
+	}
+	cmd.AddCommand(newLabelAssignCommand(s, true), newLabelAssignCommand(s, false))
+	return cmd
+}
+
+func newLabelAssignCommand(s *settings, assign bool) *cobra.Command {
+	var commit int
+	var label string
+	var asLibrary bool
+	verb, short := "assign", "Mark a saved state with a label"
+	if !assign {
+		verb, short = "unassign", "Take a label off a saved state"
+	}
+	cmd := &cobra.Command{
+		Use:   verb + " <project|library> --commit <n> --label <name|id> [--library]",
+		Short: short,
+		Long: short + " of a Project's or a Library's Draft (task 85_3; ADR 0025):\n" +
+			"the Commit is named by its number within the Draft, the label by its name\n" +
+			"(ignoring case) or its ID. The name is a Project's, or a Library's with\n" +
+			"--library. No Draft Version is stated.",
+		Args: exactlyOneArg,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := requirePositive(cmd, "commit", commit); err != nil {
+				return err
+			}
+			if strings.TrimSpace(label) == "" {
+				return usageError(fmt.Errorf("--label must name a label"))
+			}
+			client := s.client()
+			target, err := resolveWorkflowTarget(cmd.Context(), client, args[0], asLibrary)
+			if err != nil {
+				return err
+			}
+			found, err := resolveLabel(cmd.Context(), client, label)
+			if err != nil {
+				return err
+			}
+			labels, err := target.setLabel(cmd.Context(), assign, commit, found.ID)
+			if err != nil {
+				return fmt.Errorf("%s commit %d: %w", target.ref(), commit, err)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "%s saved state %d: %s %s\n",
+				target.ref(), commit, verb+"ed", found.Name)
+			if names := labelNames(labels); names != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "labels: %s\n", names)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().IntVar(&commit, "commit", 0, "the number of the saved state within its Draft")
+	cmd.Flags().StringVar(&label, "label", "", "the label's name (ignoring case) or ID")
+	cmd.Flags().BoolVar(&asLibrary, "library", false, "the name is a Library's, not a Project's")
+	return cmd
+}
+
+// resolveLabel returns the label a command names: by its name, ignoring case,
+// else by its ID. A name no label holds and an ID no label has are errors.
+func resolveLabel(ctx context.Context, client *Client, ref string) (apiv0.LabelResponse, error) {
+	if found, ok, err := client.FindLabelByName(ctx, ref); err != nil {
+		return apiv0.LabelResponse{}, err
+	} else if ok {
+		return found, nil
+	}
+	if rawID, err := uuid.Parse(ref); err == nil {
+		labels, err := client.Labels(ctx)
+		if err != nil {
+			return apiv0.LabelResponse{}, err
+		}
+		for _, l := range labels {
+			if l.ID == rawID {
+				return l, nil
+			}
+		}
+	}
+	return apiv0.LabelResponse{}, fmt.Errorf("label/%s: not found", ref)
+}
+
+// setLabel places the label on the target's saved state, or takes it off.
+func (t workflowTarget) setLabel(ctx context.Context, assign bool, commit int, labelID uuid.UUID) ([]apiv0.LabelResponse, error) {
+	switch {
+	case t.kind == "project" && assign:
+		return t.project.AssignLabel(ctx, commit, labelID)
+	case t.kind == "project":
+		return t.project.UnassignLabel(ctx, commit, labelID)
+	case assign:
+		return t.library.AssignLabel(ctx, commit, labelID)
+	default:
+		return t.library.UnassignLabel(ctx, commit, labelID)
+	}
+}
+
+// labelNames is the labels of a saved state as `commits` prints them: their
+// names, a color in parentheses when they have one.
+func labelNames(labels []apiv0.LabelResponse) string {
+	names := make([]string, len(labels))
+	for i, l := range labels {
+		names[i] = l.Name
+		if l.Color != "" {
+			names[i] += " (" + l.Color + ")"
+		}
+	}
+	return strings.Join(names, ", ")
 }

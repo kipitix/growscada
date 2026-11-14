@@ -319,9 +319,9 @@ func newCommitsCommand(s *settings) *cobra.Command {
 				return nil
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 3, ' ', 0)
-			fmt.Fprintln(w, "NUMBER\tTITLE\tAUTHOR\tCREATED\tRELEASED")
+			fmt.Fprintln(w, "NUMBER\tTITLE\tAUTHOR\tCREATED\tRELEASED\tLABELS")
 			for _, c := range commits {
-				fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%t\n", c.Number, c.Title, c.Author, formatTime(c.CreatedAt), c.Released)
+				fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%t\t%s\n", c.Number, c.Title, c.Author, formatTime(c.CreatedAt), c.Released, labelNames(c.Labels))
 			}
 			return w.Flush()
 		},

@@ -111,6 +111,7 @@ func NewRootCommand() *cobra.Command {
 		newCommitsCommand(s),
 		newReleasesCommand(s),
 		newLabelsCommand(s),
+		newLabelCommand(s),
 		newDiscardCommand(s),
 		newConfigCommand(),
 	)
