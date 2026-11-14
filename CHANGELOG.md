@@ -39,6 +39,14 @@
 
 ### Changed
 
+- **Окно Deploy выбирает сохранённое состояние, фильтруя по лейблу** (задача 85_5; ADR 0021, ADR 0025)
+  - кнопка Deploy в панели Project открывает «Deploy a saved state» вместо «Deploy a Release»: сохранения новые первыми — `#N`, название, автор, время, счётчики (scenes/widgets/tags/devices/environments) и цветные чипы лейблов, у строки **Deploy** и **Project file** (скачивание `GET …/commits/{n}/projectfile`)
+  - фильтр по лейблу серверный: `GET …/commits?label=<id>`, «All labels» по умолчанию, список перечитывается по выбору, а не фильтруется в памяти; удалённый лейбл возвращает фильтр на All, у Organization без лейблов фильтра нет — подсказка «No labels yet» с кнопкой окна Labels
+  - работающая строка помечена **Running** по `deployment.commit_number`; Deployment из файла или старый назван предупреждением «Running Deployment N (no saved state): choose a saved state to deploy.», а нечитаемый `GET …/deployment` — «the running saved state cannot be checked»; пусто — «Nothing saved yet. Save the Draft first: a saved state is what gets deployed.»
+  - Deploy: подтверждение «Make saved state N the running one? Operation switches to it.», тост «Saved state N deployed» + «Deployment M is running», перечитывание окна, `GET …/deployment` и списка Deployments; 409 `nothing_to_deploy` — «This saved state is running already»; окно и история перечитываются по `commit_created`, `deployment_created` и `label_*`
+  - подсказка кнопки Deploy: «Save the Draft first: only a saved state is deployed» без сохранений, иначе «Choose a saved state to deploy»; detail строки Deployments показывает «Saved state #N»
+  - `ui/savedstates` получил флаг `ShowRelease`: режим, который больше не публикует сохранения, рисует имя, лейблы и Load без Release и Make Release (Project так и делает, Library сохраняет кнопку до 85_7)
+
 - **UI говорит «saved state» вместо «commit»** (задача 84; ADR 0021)
   - панель режимов Library и Project — иконки с подсказками: назад к выбору (с именем сущности), Save, Undo, Redo, History; у Project ещё Project file, Deployments и Deploy; строка состояния и автор остались текстом
   - **History — отдельный экран**, а не диалог: список сохранений с прокруткой, в каждой строке время сохранения, имя (правится на месте карандашом, ✓/✕), **номер релиза и его заметка** (заметка правится там же) и автор, в конце — **Load** (в черновик, с подтверждением, если есть несохранённые правки) и **Make Release**
@@ -56,6 +64,7 @@
 
 ### Removed
 
+- **Release ушёл из режима Project** (задача 85_5): из `project.Project` убраны поля и загрузка релизов (`releases`, `releaseDialog`, `releaseCommit`, `releaseNote`, `releaseAuthor`, `releasing`, `editingRelease`, `releaseNoteDraft`), файл `project/releases.go` удалён; история Project больше не показывает релиз, который опубликовал сохранение, и не предлагает Make Release; `release_created`/`release_note_updated` режим не перечитывают (`ReloadTargets.Releases` остаётся у Library до 85_7). Из `apiclient.ProjectClient` убраны неиспользуемые `Release`, `UpdateReleaseNote` и `ReleaseProjectFile`; `CreateRelease`, `Releases` и `DeployRelease` остаются для growctl, серверные маршруты удалит 85_7
 - `GET …/commits/{n}/projectfile` больше не предлагается строкой истории; сам маршрут и скачивание ProjectFile релиза остаются
 - **Кнопка Releases и её окно** убраны из обоих режимов: релиз назначается из строки сохранения в History (Make Release), а список релизов остался только у Deploy — окно «Deploy a Release», из которого релиз делается запускаемым (заметка и скачивание ProjectFile релиза — там же). Вместе с окном ушли просмотр релиза только для чтения и режим read-only библиотеки
 
