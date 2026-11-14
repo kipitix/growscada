@@ -13,3 +13,4 @@ Priority: 3
 ## Comments
 
 - 2026-11-07: `WithNumber`, `DraftDiffers` и Release-путь меняются в 72_2/72_5 (Release из Commit). Выполнять после 72_5, иначе чистка разойдётся с новой моделью.
+- 2026-11-15: `library_release.go`, `WithNumber` и Release-путь удалены задачей 85_7, а `spec.libraryPins` стал `spec.libraryImports`; оставшиеся находки пересмотреть перед выполнением.

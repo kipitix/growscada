@@ -163,3 +163,30 @@ Blocked by: 85_1_mode_screen_persistence, 85_2_label_aggregate, 85_3_label_assig
 
 - 2026-11-14: выделено из 85. Документы и коллекции — в конце, когда форма
   API стабилизировалась.
+- 2026-11-15: сверка ADR 0025 и поправок к 0007/0012/0014/0018/0019/0021/0023
+  с кодом — расхождений нет (`engineering.labels` с `organization_id`,
+  `library_imports` с `commit_id`/`commit_number`, `commit_number` в
+  `runtime.deployments`, записи Journal и Checkpoint, record 0.6); новых
+  поправок не потребовалось.
+- 2026-11-15: `GLOSSARY.md` уже был приведён частями 85_2–85_7; убрана одна
+  устаревшая фраза про Release в «Deploy a file». `AGENTS.md` переписан
+  целиком по слоям: таблица домена (`label/`, `libraryimport/`, без
+  `release/` и `LibraryRelease`), application (Label, Deploy Commit,
+  Library без публикаций), REST (лейблы и назначения, `commits/{n}/deploy`,
+  `library-imports`, без release-маршрутов), UI (три состояния Library,
+  чипы в History, окна Deploy/Import/Labels, сохранённый экран выбора),
+  growctl, сид и Bruno.
+- 2026-11-15: `contract/api/v0` поднят 0.41 → 0.42: в `schema_test.go` не
+  были перечислены `GetLabelsResponse`, `CreateLabelRequest` и
+  `UpdateLabelRequest`, поэтому опубликованная схема не описывала API
+  лейблов. Типы добавлены, `make schemas` создал `0.42.json`, `0.41`
+  заморожена.
+- 2026-11-15: Bruno уже синхронизирован частями 85_2–85_7 (лейблы,
+  назначения, Deploy Commit, импорты; release-запросов нет). Запрос на
+  удалённые маршруты не добавлялся: статический тест требует, чтобы каждый
+  запрос попадал в `routes()`, а удалённых маршрутов там нет.
+- 2026-11-15: `CHANGELOG.md` — сводная запись 0.0.100 со ссылками на
+  85_1–85_8 и перечнем миграций/потерь данных. `todo/backlog/45` и `46`
+  переведены на `commit_number`/saved state; в 47–52, 57, 58, 61, 63, 64
+  убраны или помечены устаревшие Release-упоминания. `todo/PRIORITY.md`
+  оставлен финальному прогону `/kx_auto`.

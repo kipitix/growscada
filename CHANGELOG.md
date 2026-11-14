@@ -1,5 +1,38 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.100] - 2026-11-15
+
+Сводная запись цепочки 85_1–85_8: метки вместо релизов, деплой сохранённого
+состояния и импорт Library по сохранённому состоянию. Подробности каждой части
+— в записях 0.0.97–0.0.99; здесь — что меняется у пользователя и в данных.
+
+### Added
+
+- **Label — метка сохранённого состояния** (задачи 85_2, 85_3; ADR 0025): имя (1–100 символов, уникально в Organization без учёта регистра) и необязательный цвет `#RRGGBB`; назначения — сущности Label, без Version и undo, с событиями `label_created`/`label_updated`/`label_deleted`/`label_assigned`/`label_unassigned` в серверном потоке; глобальное окно **Labels** в шапке любого режима; чипы и «+ label» в History; фильтр `GET …/commits?label=`; стартовые лейблы `ready_for_import` и `ready_for_deploy` — обычные метки, не гейты
+- **Deploy сохранённого состояния** (задача 85_4; ADR 0014, ADR 0021): `POST …/commits/{n}/deploy`, `runtime.deployments.commit_number`, `commit_number` в записи `deployment` Journal и в Checkpoint, `Saved state #N · running` в шапке Project и окно **Deploy a saved state** с фильтром по лейблу (задача 85_5)
+- **Import Library по сохранённому состоянию** (задача 85_6; ADR 0007, ADR 0012): `library_imports` с Commit'ом, `library_imports`/`commit` в ProjectFile, `spec.libraryImports` в growctl, панель **Imported libraries** и окно **Import libraries…** с фильтром по лейблу и impact-превью
+- **Экран выбора Library/Project сохраняется** при смене вкладок и перезагрузке браузера (задача 85_1): `library:screen`, `project:screen` в LocalStorage
+- growctl: `labels` (list/create/rename/color/delete) и `label assign/unassign --commit N --label <name|id>`, колонка LABELS в `commits`
+
+### Changed
+
+- Порядок работы: Project — **Save → Deploy**, Library — **Save → Import**; «saved state» — то, что деплоится и импортируется
+- `contract/api/v0` MINOR 0.42 (`0.41` заморожена; схема получила `GetLabelsResponse`, `CreateLabelRequest` и `UpdateLabelRequest`, которых ей не хватало), `contract/project/v0` MINOR 0.3 (`library_imports`/`commit`), `contract/record/v0` MINOR 0.6 (`commit_number`), `contract/manifest/v0` MINOR 0.5 (`spec.libraryImports`); схемы перегенерированы, старые версии заморожены
+- growctl: `release`/`releases` удалены, `deploy` принимает `--commit N`; `get libraries` печатает `NAME COMMIT UNSAVED`
+- Сид (`test_data`) сохраняет Library и Project и деплоит сохранённое состояние — `make run_simulator`/`run_simulator_dashboard` работают от него
+- Bruno: release-запросы удалены, коллекция покрывает лейблы, назначения, Deploy сохранённого состояния и импорты
+- Документы: ADR 0025 и поправки к ADR 0007, 0012, 0014, 0018, 0019, 0021, 0023; `GLOSSARY.md`, `AGENTS.md` и `CHANGELOG.md` описывают saved state, Import и Label; Release остаётся только в истории ADR и этого файла
+
+### Removed
+
+- **Release удалён у Project и Library** (задача 85_7): домен, таблицы, сервисы, события, поля (`released`, `latest_release`, `has_unpublished_changes`, `release_number`), маршруты `/releases…` и `/libraries/{id}/revert-to-release` (404, без заглушек) и UI-панель; Library больше ничего не публикует
+
+### Breaking
+
+- **Осознанная потеря данных.** Миграции `engineering/20261114000002_library_imports`, `runtime/20261114000002_deployment_commit_number` и `runtime/20261115000000_drop_releases`: legacy Library Release (без Commit) удаляется вместе с импортами на него и Widget'ами этих WidgetTypes; сохранённые состояния, Deployment'ы и **работающая** Deployment переписываются на `library_imports`/`commit_number`; **все** стеки DraftChange очищаются; Draft'ы с изменённым контентом получают Version+1 и `clean_version = 0`. Down данные не возвращает — резервная копия единственный путь назад
+- **Внешние ProjectFile** старого формата (`library_pins`/`release`) отклоняются 400 с `file_issues`; новый формат — `library_imports`/`commit`
+- **Release-API больше нет**: клиент переходит на `…/commits/{n}/deploy` и импорт сохранённого состояния; ответы без `latest_release`, `released` и `Event.release`
+
 ## [0.0.99] - 2026-11-15
 
 ### Removed

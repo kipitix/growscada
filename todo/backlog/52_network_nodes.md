@@ -4,7 +4,7 @@ Priority: 3
 Blocked by: 35, 50, 72_4
 
 - Запуск бинарника с ролями Engineering, Runtime или обеими (конфигурация).
-- HTTP-реализация интерфейса Engineering→Runtime: Deploy Release, текущая Deployment (с номером Release), runtime-сущности.
+- HTTP-реализация интерфейса Engineering→Runtime: Deploy сохранённого состояния, текущая Deployment (с номером `commit_number`), runtime-сущности.
 - Отдельные БД по строкам подключения.
 - Аутентификация между узлами — после задач 49/50.
 - Сервер с одной ролью: в его БД серверная схема `public` и схема этой роли (ADR 0011).

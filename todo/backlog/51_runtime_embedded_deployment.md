@@ -2,7 +2,7 @@
 Priority: 3
 Blocked by: 35, 72_4
 
-- Из проекта (ProjectFile) собирается автономный исполняемый файл: Runtime node с уже вшитым работающим Deployment (тем, что сделан из Release), запускается на объекте без Engineering node и без Deploy.
+- Из проекта (ProjectFile) собирается автономный исполняемый файл: Runtime node с уже вшитым работающим Deployment (тем, что сделан из сохранённого состояния), запускается на объекте без Engineering node и без Deploy.
 - Решить: нужен ли такому бинарнику внешний Postgres или встроенное хранилище.
 
 ## Comments

@@ -23,7 +23,7 @@ Priority: 3
 ## Ограничения
 
 - Ступень 2 (отдельные read-таблицы, обновляемые проектором по событиям) — не здесь. Если понадобится, проектор строится на механизме `policy_jobs` (задача 21, ADR 0008): задание с ключом агрегата пересобирает строку проекции из текущего состояния (Event Notification, не event sourcing — ADR 0002).
-- Revision/ProjectFile (модель чтения Runtime node), Commit/Release (новые read-модели Engineering node, 72_2–72_5) и Journal + Checkpoint (модель чтения History и Player) — уже отдельные модели. Эта задача касается модели Draft на Engineering node и временного Operation поверх текущих таблиц.
+- Revision/ProjectFile (модель чтения Runtime node), Commit с лейблами и фильтром (read-модель Engineering node, 72_2, 85_2–85_3) и Journal + Checkpoint (модель чтения History и Player) — уже отдельные модели. Эта задача касается модели Draft на Engineering node и временного Operation поверх текущих таблиц.
 
 ## Приёмка
 

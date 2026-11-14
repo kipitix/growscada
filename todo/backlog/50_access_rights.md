@@ -4,7 +4,7 @@ Blocked by: 34, 49
 
 - Разграничение пользователей и устройств
 - Для пользователей авторизация через внешние системы
-- Права пользователей в Organization и Project (кто может Save/Commit, Release, Deploy, Rollback)
+- Права пользователей в Organization и Project (кто может Save, Deploy, Rollback, Import, управлять лейблами и назначать их)
 - Устройства авторизуются Device Token (задача 34)
 
 ## Comments

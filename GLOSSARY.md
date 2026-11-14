@@ -201,7 +201,7 @@ Replacing the whole content of a Project's Draft with a ProjectFile — one Draf
 _Avoid_: import, upload, load, restore
 
 **Deploy a file**:
-Making a valid ProjectFile the new Deployment of a Project without touching the Draft, with cause `file` and no saved state; it leaves no Release behind (task 85_4; ADR 0018).
+Making a valid ProjectFile the new Deployment of a Project without touching the Draft, with cause `file` and no saved state (task 85_4; ADR 0018).
 _Avoid_: import, upload, restore
 
 ### Operation and History
