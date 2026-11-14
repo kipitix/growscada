@@ -1257,15 +1257,31 @@ func TestMigrationLibraryImports_TurnsPinsIntoImports(t *testing.T) {
 		if err := db.QueryRowContext(ctx, query).Scan(&document); err != nil {
 			t.Fatalf("%s: %v", what, err)
 		}
-		for _, want := range []string{`"library_imports"`, `"commit": 1`, `"name": "kept"`} {
+		for _, want := range []string{`"library_imports"`, `"commit": 1`, `"name": "kept"`, `"schema_version": "0.3"`} {
 			if !strings.Contains(document, want) {
 				t.Errorf("%s does not hold %s: %s", what, want, document)
 			}
 		}
-		for _, gone := range []string{"library_pins", "dropped", droppedType.String(), legacyLibrary.String()} {
+		for _, gone := range []string{"library_pins", `"schema_version": "0.2"`, "dropped", droppedType.String(), legacyLibrary.String()} {
 			if strings.Contains(document, gone) {
 				t.Errorf("%s still holds %s: %s", what, gone, document)
 			}
 		}
+	}
+
+	// Down: the shape comes back, and an import of a saved state this server
+	// never released — the everyday case since task 85_6 — has no pin to
+	// become, so it goes rather than failing the foreign key to the Releases.
+	if _, err := db.ExecContext(ctx,
+		`DELETE FROM engineering.library_releases WHERE library_id = $1`, committedLibrary); err != nil {
+		t.Fatalf("drop the release of the imported saved state: %v", err)
+	}
+	if _, err := engineering.DownTo(ctx, 20261114000001); err != nil {
+		t.Fatalf("down the library imports: %v", err)
+	}
+	var pins int
+	if err := db.QueryRowContext(ctx,
+		`SELECT count(*) FROM engineering.library_pins WHERE project_id = $1`, main).Scan(&pins); err != nil || pins != 0 {
+		t.Errorf("the pins after the down: %d, %v; want none", pins, err)
 	}
 }

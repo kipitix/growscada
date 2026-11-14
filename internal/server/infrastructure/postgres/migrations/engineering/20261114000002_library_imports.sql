@@ -104,43 +104,50 @@ WHERE rc.library_id = prp.library_id AND rc.release_number = prp.release_number;
 -- Releases that copied them and to every Deployment — the running one included:
 -- Operation stops showing those Widgets at once. This is the one rewrite of
 -- Commit and Deployment documents, an exception recorded in ADR 0021.
+--
+-- The document's schema_version is stamped with the version of the shape it now
+-- has (project 0.3): a document that carries library_imports but still says 0.2
+-- is refused when it is opened from a file — the validator rebuilds it at the
+-- current version and compares the two documents whole, header included.
 CREATE FUNCTION pg_temp.imported_project_file(pf jsonb) RETURNS jsonb AS $$
     SELECT jsonb_set(
         jsonb_set(
             jsonb_set(
-                pf #- '{library_pins}',
-                '{library_imports}',
+                jsonb_set(
+                    pf #- '{library_pins}',
+                    '{library_imports}',
+                    COALESCE((
+                        SELECT jsonb_agg(jsonb_build_object(
+                            'library_id', e ->> 'library_id',
+                            'commit', rc.commit_number))
+                        FROM jsonb_array_elements(COALESCE(pf -> 'library_pins', '[]'::jsonb)) e
+                        JOIN release_commits rc
+                          ON rc.library_id = (e ->> 'library_id')::uuid
+                         AND rc.release_number = (e ->> 'release')::int
+                    ), '[]'::jsonb),
+                    true),
+                '{widget_types}',
                 COALESCE((
-                    SELECT jsonb_agg(jsonb_build_object(
-                        'library_id', e ->> 'library_id',
-                        'commit', rc.commit_number))
-                    FROM jsonb_array_elements(COALESCE(pf -> 'library_pins', '[]'::jsonb)) e
-                    JOIN release_commits rc
-                      ON rc.library_id = (e ->> 'library_id')::uuid
-                     AND rc.release_number = (e ->> 'release')::int
+                    SELECT jsonb_agg(wt)
+                    FROM jsonb_array_elements(COALESCE(pf -> 'widget_types', '[]'::jsonb)) wt
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM legacy_release_types lrt
+                        WHERE lrt.type_id = (wt ->> 'id')::uuid)
                 ), '[]'::jsonb),
                 true),
-            '{widget_types}',
+            '{scenes}',
             COALESCE((
-                SELECT jsonb_agg(wt)
-                FROM jsonb_array_elements(COALESCE(pf -> 'widget_types', '[]'::jsonb)) wt
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM legacy_release_types lrt
-                    WHERE lrt.type_id = (wt ->> 'id')::uuid)
+                SELECT jsonb_agg(jsonb_set(sc, '{widgets}', COALESCE((
+                    SELECT jsonb_agg(w)
+                    FROM jsonb_array_elements(COALESCE(sc -> 'widgets', '[]'::jsonb)) w
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM legacy_release_types lrt
+                        WHERE lrt.type_id = (w ->> 'type_id')::uuid)
+                ), '[]'::jsonb), true))
+                FROM jsonb_array_elements(COALESCE(pf -> 'scenes', '[]'::jsonb)) sc
             ), '[]'::jsonb),
             true),
-        '{scenes}',
-        COALESCE((
-            SELECT jsonb_agg(jsonb_set(sc, '{widgets}', COALESCE((
-                SELECT jsonb_agg(w)
-                FROM jsonb_array_elements(COALESCE(sc -> 'widgets', '[]'::jsonb)) w
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM legacy_release_types lrt
-                    WHERE lrt.type_id = (w ->> 'type_id')::uuid)
-            ), '[]'::jsonb), true))
-            FROM jsonb_array_elements(COALESCE(pf -> 'scenes', '[]'::jsonb)) sc
-        ), '[]'::jsonb),
-        true)
+        '{schema_version}', to_jsonb('0.3'::text), true)
 $$ LANGUAGE sql STABLE;
 
 UPDATE engineering.commits
@@ -193,6 +200,13 @@ UPDATE engineering.library_imports li
 SET commit_number = lr.number
 FROM engineering.library_releases lr
 WHERE lr.library_id = li.library_id AND lr.commit_number = li.commit_number;
+-- An import of a saved state this server never published as a Release has no
+-- pin to become: it goes before the foreign key to the Releases comes back, or
+-- a Down of a database that imported such a state would fail on that key.
+DELETE FROM engineering.library_imports li
+WHERE NOT EXISTS (
+    SELECT 1 FROM engineering.library_releases lr
+    WHERE lr.library_id = li.library_id AND lr.number = li.commit_number);
 ALTER TABLE engineering.library_imports RENAME CONSTRAINT uq_library_imports_project_library TO uq_library_pins_project_library;
 ALTER TABLE engineering.library_imports RENAME CONSTRAINT fk_library_imports_library_id TO fk_library_pins_library_id;
 ALTER TABLE engineering.library_imports RENAME CONSTRAINT fk_library_imports_project_id TO fk_library_pins_project_id;
