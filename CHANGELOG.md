@@ -1,5 +1,31 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.99] - 2026-11-15
+
+### Removed
+
+- **Release удалён у Project и Library** (задача 85_7; ADR 0007, ADR 0012, ADR 0021)
+  - `domain/release` целиком (`Release`, `Number`, `Note`, `Author`, `Origin`, `CreateRelease`, `CreateReleaseFromFile`, события `release_created`/`release_note_updated`) и `application/release_application_service.go`; у Library — `LibraryRelease`, `LibraryReleaseRepository`, VOs `ReleaseNumber`/`ReleaseOrigin`/`ReleaseAuthor`, `ReleaseState`, `ReleaseStateOf`, события `library_released`/`library_release_note_updated`; `EventType` 23, 39, 40 и 41 не переиспользуются
+  - `LibraryService.Release`/`FindReleases`/`FindRelease`/`UpdateReleaseNote`/`RevertToLatestRelease`; `NewCommitService` больше не принимает Release-репозитории, `appdto.Library` — без `LatestRelease`/`HasUnpublishedChanges`
+  - REST: `/projects/{id}/releases…` (список, публикация, чтение, заметка, `projectfile`, `deploy`) и `/libraries/{id}/releases…` плюс `POST …/libraries/{id}/revert-to-release` удалены полностью (404, без заглушек); `ReleasePath`, `ReleaseResponse`, `CreateReleaseRequest`, `UpdateReleaseNoteRequest`, `LibraryReleaseResponse`, `GetLibraryReleasesResponse`, `RevertToReleasePath`, `LibraryReleaseOrigin*` и `Event.Release` убраны из контракта
+  - репозитории `project_release_repository_postgres.go` и `library_release_repository_postgres.go`; миграция `runtime/20261115000000_drop_releases` дропает `engineering.project_release_library_pins`, `project_releases`, `released_widget_types` и `library_releases` (в runtime-цепочке: runtime-миграция 85_6 читает эти таблицы, а engineering-цепочка применяется раньше неё); Down создаёт пустые таблицы — Release, их заметки и копии WidgetTypes не возвращаются
+  - `apiclient`: `CreateRelease`, `Releases`, `Release`, `UpdateReleaseNote`, `ReleaseProjectFile`, `DeployRelease`, `LibraryClient.Release`/`ListReleases`/`GetRelease`/`UpdateReleaseNote`/`RevertToRelease`
+  - `eventlog`: `release_created`, `release_note_updated`, `library_released`, `library_release_note_updated` и `ReloadTargets.Releases`
+  - UI: Release-поля, диалог и панель Library (`releaseDialog`, `renderReleaseDialog`, `Make Release`), `savedstates.Screen.Row.Released/Release/Note`, `OnRelease`, `OnNote`, `renderRelease`; выбор Library — три состояния (`never saved`, `unsaved changes`, `saved`), заголовок Library — только индикатор несохранённых изменений, статус — «Saved state #N»
+
+### Changed
+
+- Термин «копия WidgetType в сохранённом состоянии» вместо «released»: `library.ReleasedWidgetType` → `library.WidgetTypeCopy` (`NewWidgetTypeCopy`, `CopyOf`, `SameAs`, `Matches`), `apiv0.ReleasedWidgetTypeResponse` → `apiv0.WidgetTypeCopyResponse`, `appdto.WidgetTypeCopy`, `uiutil.WidgetTypeCopyID`; поведение не изменилось
+- `contract/api/v0` MINOR 0.40 → 0.41, схема `schemas/api/0.41.json` (`0.40.json` заморожена); `CommitResponse.released`, `LibraryResponse.latest_release`/`has_unpublished_changes` и `Event.release` убраны
+- growctl: команды `release` и `releases` удалены, `deploy` принимает `--commit N`; `get libraries` печатает `NAME COMMIT UNSAVED`, `commits` — лейблы вместо `RELEASED`
+- сид (`test_data`) больше не вставляет Library Release; `migrations_test` проверяет копии WidgetTypes в сохранённом состоянии
+- Bruno: release-запросы удалены из коллекции, `requestBodies` почищен, сценарии Deploy переведены на saved state; UI-тесты, REST- и application-тесты Release удалены или переписаны, а удалённые маршруты проверяются на 404
+
+### Breaking
+
+- **Release больше нет.** Ответы `GET /libraries/{id}` (`latest_release`, `has_unpublished_changes`), `GET …/commits` (`released`) и события (`release`) отдают меньше полей, маршруты Release отвечают 404, а таблицы Release удалены миграцией — **данные Release (заметки, авторы, копии WidgetTypes) не восстанавливаются**
+- Текущее состояние проекта и библиотеки живёт в сохранённых состояниях (Commit): сохранить → развернуть; импорт Library называет сохранённое состояние
+
 ## [0.0.98] - 2026-11-15
 
 ### Added
