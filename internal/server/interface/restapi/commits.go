@@ -206,8 +206,9 @@ func commitLabelPath(w http.ResponseWriter, r *http.Request) (draft.Scope, int, 
 }
 
 // commitsLabelFilter reads ?label=<uuid> of a Commit list: uuid.Nil (every
-// saved state) when the parameter is absent; a value that is not a UUID is the
-// client's input. On failure it has already answered.
+// saved state) when the parameter is absent; a value that is not a UUID, or
+// the zero UUID, which names no label, is the client's input. On failure it
+// has already answered.
 func commitsLabelFilter(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	raw := r.URL.Query().Get(apiv0.CommitsQueryLabel)
 	if raw == "" {
@@ -216,6 +217,13 @@ func commitsLabelFilter(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool
 	labelID, err := uuid.Parse(raw)
 	if err != nil {
 		sendProblem(w, NewBadRequest(fmt.Sprintf("%s: '%s' is not a valid UUID", apiv0.CommitsQueryLabel, raw), r.URL.Path))
+		return uuid.Nil, false
+	}
+	if labelID == uuid.Nil {
+		// uuid.Nil is the filter's "every saved state": a client that names the
+		// zero UUID asks for a label that cannot exist, and keeping every state
+		// would answer the opposite of what it asked (task 85_3).
+		sendProblem(w, NewBadRequest(fmt.Sprintf("%s: '%s' names no label", apiv0.CommitsQueryLabel, raw), r.URL.Path))
 		return uuid.Nil, false
 	}
 	return labelID, true

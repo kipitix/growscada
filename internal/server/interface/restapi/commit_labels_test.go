@@ -89,6 +89,10 @@ func TestCommitLabels_AssignFilterAndChips(t *testing.T) {
 	if rec := serve(router, http.MethodGet, mainPath+"/commits?"+apiv0.CommitsQueryLabel+"=not-a-uuid", nil); rec.Code != http.StatusBadRequest {
 		t.Errorf("a label that is not a UUID: %d, want 400", rec.Code)
 	}
+	// The zero UUID names no label; it is not the filter's "every state".
+	if rec := serve(router, http.MethodGet, mainPath+"/commits?"+apiv0.CommitsQueryLabel+"="+uuid.Nil.String(), nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("the zero UUID as a label: %d, want 400", rec.Code)
+	}
 
 	// The label's assigned count follows its marks.
 	labels := decodeBody[apiv0.GetLabelsResponse](t, serve(router, http.MethodGet, apiv0.PathPrefix+apiv0.LabelPath, nil))

@@ -37,7 +37,8 @@ func CommitLabelPathOf(number int, labelID string) string {
 
 // CommitsQueryLabel is the parameter of GET …/commits that keeps only the
 // saved states the label with this ID marks (task 85_3). Without it the list
-// is every saved state.
+// is every saved state; a value that is not a UUID, or the zero UUID, which
+// names no label, is invalid input.
 const CommitsQueryLabel = "label"
 
 // CommitLabelsResponse is the answer of PUT and DELETE of one label of a saved
