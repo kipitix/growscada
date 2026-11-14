@@ -44,7 +44,7 @@ var _ SceneService = (*sceneServiceImpl)(nil)
 
 // NewSceneService returns the scene service. The events of its changes are
 // recorded by the Scene and saved with its Draft (ADR 0008, ADR 0016). A
-// Widget's WidgetType is the one a Library Release its Project pins holds
+// Widget's WidgetType is one the saved state its Project imports holds
 // (ADR 0007).
 func NewSceneService(aContent ProjectContent) SceneService {
 	return &sceneServiceImpl{content: aContent}
@@ -81,8 +81,8 @@ func widgetChangeError(err error) error {
 }
 
 // widgetSaveError marks a failed write of a scene with a new or changed
-// widget as invalid input when the widget's type is not in a release the
-// Project pins: the Draft's transaction checks the pin while it writes
+// widget as invalid input when the widget's type is not in a saved state the
+// Project imports: the Draft's transaction checks the import while it writes
 // (ADR 0012).
 func widgetSaveError(err error) error {
 	if errors.Is(err, library.ErrWidgetTypeNotFound) {

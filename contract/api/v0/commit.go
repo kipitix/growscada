@@ -62,7 +62,7 @@ type CommitLabelsResponse struct {
 //
 // HasUnsavedChanges is true unless the loaded Commit is the Draft's last one:
 // the Draft then differs from what a Save would fix. Warnings name the Library
-// Releases the loaded content used but this server does not have — their pins
+// Releases the loaded content used but this server does not have — their imports
 // and the Widgets of their WidgetTypes were dropped from the Draft, which stays
 // writable (task 71); a Library's answer never carries one.
 type LoadCommitResponse struct {

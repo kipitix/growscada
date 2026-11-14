@@ -64,7 +64,7 @@ var ErrDraftNotDeployable = errors.New("the draft is not deployable")
 
 // ErrDeploymentNotDiscardable matches (errors.Is) a Discard refused because the
 // Deployment names Library Releases this server does not have (ADR 0018): the
-// pins cannot be written, and the Draft is left as it is.
+// imports cannot be written, and the Draft is left as it is.
 var ErrDeploymentNotDiscardable = errors.New("the deployment cannot be discarded here: library releases are missing")
 
 // ErrDraftNotSaveable matches (errors.Is) a Save refused because the Draft
@@ -100,7 +100,7 @@ func (e DraftNotDeployableError) Error() string { return "the draft is not deplo
 func (e DraftNotDeployableError) Is(target error) bool { return target == ErrDraftNotDeployable }
 
 // DeploymentNotDiscardableError is a Discard refused because the Deployment's
-// pins are not local, naming them.
+// imports are not local, naming them.
 type DeploymentNotDiscardableError struct {
 	Issues []FileIssue
 }

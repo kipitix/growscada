@@ -111,7 +111,7 @@ func main() {
 	libraryRepository := repositories.NewLibraryRepositoryPostgres(sqlDB, notifyDispatcher)
 	releaseRepository := repositories.NewLibraryReleaseRepositoryPostgres(sqlDB, notifyDispatcher)
 	widgetTypeRepositories := repositories.NewWidgetTypeRepositories(sqlDB)
-	// The repositories of a Project's content (Tags, Scenes, Library Pins) are opened per
+	// The repositories of a Project's content (Tags, Scenes, Library Imports) are opened per
 	// Project (ADR 0006) for reads; every write goes through the Drafts
 	// (ADR 0016).
 	projectScopes := repositories.NewProjectScopes(sqlDB, notifyDispatcher)

@@ -626,7 +626,8 @@ func (s *Session) UpdateWidgetType(
 }
 
 // DeleteWidgetType removes a WidgetType from the Draft's Library. It touches
-// no Scene: Projects see only the copies the releases they pin hold (ADR 0007).
+// no Scene: Projects see only the copies the saved state an import names holds
+// (ADR 0007).
 func (s *Session) DeleteWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.WidgetType, error) {
 	found, err := s.loader.WidgetType(ctx, typeID)
 	if err != nil {

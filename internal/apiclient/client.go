@@ -304,7 +304,7 @@ func (c *Client) UpdateLibrary(ctx context.Context, id uuid.UUID, req apiv0.Upda
 }
 
 // DeleteLibrary deletes a library with its Draft and releases and returns
-// its last state. The error matches ErrConflict while a project pins it.
+// its last state. The error matches ErrConflict while a project imports it.
 func (c *Client) DeleteLibrary(ctx context.Context, id uuid.UUID) (apiv0.LibraryResponse, error) {
 	var resp apiv0.LibraryResponse
 	err := c.do(ctx, http.MethodDelete, apiv0.LibraryPath(id.String()), nil, http.StatusOK, &resp)
@@ -438,7 +438,7 @@ func (l *LibraryClient) UpdateWidgetType(ctx context.Context, id uuid.UUID, req 
 
 // DeleteWidgetType removes a WidgetType from the Draft, stating the Version of
 // the Draft the client saw, and returns its last state. It touches no project:
-// they use the releases they pin.
+// they use the copies the saved state an import names holds.
 func (l *LibraryClient) DeleteWidgetType(ctx context.Context, id uuid.UUID, version int) (apiv0.WidgetTypeResponse, error) {
 	var resp apiv0.WidgetTypeResponse
 	version, err := l.draftVersionOf(ctx, version)

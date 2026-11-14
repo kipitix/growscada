@@ -193,7 +193,7 @@ func sendError(w http.ResponseWriter, r *http.Request, err error) {
 		sendProblem(w, NewConflict(commitResource.name, notSaveable.Reason, r.URL.Path))
 		return
 	}
-	// A Discard refused for foreign pins names the missing ones as file_issues.
+	// A Discard refused for foreign imports names the missing ones as file_issues.
 	var notDiscardable application.DeploymentNotDiscardableError
 	if errors.As(err, &notDiscardable) {
 		problem := NewConflict(deploymentResource.name,

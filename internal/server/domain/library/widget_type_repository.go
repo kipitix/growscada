@@ -23,7 +23,8 @@ var (
 // every read sees only the widget types of that Library, so one of another is
 // not found. The writes are the Library Draft's (draft.Session, ADR 0016):
 // they state its Version and write one DraftChange. Removing a widget type
-// touches no Scene: Projects see only the copies the releases they pin hold.
+// touches no Scene: Projects see only the copies the saved state they import
+// holds.
 type WidgetTypeRepository interface {
 	// NextID returns a new unique identifier for a widget type.
 	NextID() id.ID[WidgetType]

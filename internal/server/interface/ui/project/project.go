@@ -36,8 +36,8 @@ type Project struct {
 	client    *apiclient.Client
 	// projectID is the project shown, uuid.Nil if none; content is the client
 	// of its content, nil if none (SetProject). The WidgetTypes are those of
-	// the releases the project pins; the libraries are the server's, shown
-	// whatever the project, for its pins.
+	// the saved states the project imports; the libraries are the server's,
+	// shown whatever the project, for its imports.
 	projectID uuid.UUID
 	content   *apiclient.ProjectClient
 
@@ -89,7 +89,7 @@ type Project struct {
 	// other Versions it is forgotten when the server may have gone back (a
 	// resync) and on a conflict, and a response sent before that does not
 	// bring the old one back (uiutil.Versions). One number serves the whole
-	// Draft — the Scenes, their Widgets, the Tags, the pins —, so it is also
+	// Draft — the Scenes, their Widgets, the Tags, the imports —, so it is also
 	// what says whether a reread state is newer than the one shown.
 	draftVersions uiutil.Versions
 

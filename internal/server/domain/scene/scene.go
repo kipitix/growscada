@@ -43,7 +43,7 @@ type Scene interface {
 	Update(aName SceneName, aSize SceneSize, aBackgroundHTML BackgroundHTML) (Scene, error)
 
 	// AddWidget places a new widget of WidgetType wt, as a Library Release the
-	// scene's Project pins holds it (ADR 0007), on the scene and records
+	// scene's Project imports holds it (ADR 0007), on the scene and records
 	// a WidgetCreatedEvent.
 	// Returns ErrWidgetAlreadyExists if the scene already holds a widget with
 	// its ID,

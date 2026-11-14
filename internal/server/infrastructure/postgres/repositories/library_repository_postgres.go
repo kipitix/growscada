@@ -40,9 +40,9 @@ func (r libraryRepositoryPostgresImpl) NextID() id.ID[library.Library] {
 
 // Save writes the libraries row. The CAS on update matches only a live row,
 // and a row it does not match is classified by whether a live one is there.
-// A library marked deleted is checked for pins after its row is updated:
-// the update waits for a pin being added (which locks the row for share) and
-// a pin added later finds the row deleted.
+// A library marked deleted is checked for imports after its row is updated:
+// the update waits for an import being added (which locks the row for share)
+// and an import added later finds the row deleted.
 func (r libraryRepositoryPostgresImpl) Save(ctx context.Context, l library.Library) (library.Library, error) {
 	saved, err := r.store.save(ctx, l.ID(), l.Version(), l.PendingEvents(), rowWrite[library.Library]{
 		insert: func(tx *sql.Tx, next version.Version[library.Library]) error {

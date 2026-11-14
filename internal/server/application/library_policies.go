@@ -44,8 +44,9 @@ const LibraryCleanupPolicyName = "remove_deleted_library"
 
 // libraryCleanupPolicy removes a Library marked deleted with its Draft and
 // its Library Releases; a library_deleted event's job does it. It was marked
-// only while no live Project pinned it, and no pin is added to it since; the
-// pins of Projects marked deleted hold it until their cleanup removes them,
+// only while no live Project imported it, and no import is added to it since;
+// the imports of Projects marked deleted hold it until their cleanup removes
+// them,
 // and the job is run again until then. For a live Library the job does
 // nothing.
 type libraryCleanupPolicy struct {

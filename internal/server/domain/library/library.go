@@ -15,13 +15,13 @@ import (
 // owned by an Organization and outside every Project (ADR 0007). Its Draft is
 // the Draft aggregate of the Library (ADR 0016): the WidgetTypes are its
 // entities and every write of them states the Draft's one Version. Projects
-// never see the Draft, only the Library Releases they pin.
+// never see the Draft, only the saved states they import.
 //
 // Its name and description are attributes of the aggregate, never content: a
-// Library Release and a pin carry the WidgetType copies alone (task 73).
+// Library Release and an import carry the WidgetType copies alone (task 73).
 //
 // Deleting a Library only marks it deleted, and only while no live Project
-// pins it: from then on it does not exist for anyone but the policy that
+// imports it: from then on it does not exist for anyone but the policy that
 // removes it with its Draft and its releases.
 //
 // A Discard is one transaction over the Draft (ADR 0016): it brings the

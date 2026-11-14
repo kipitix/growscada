@@ -17,7 +17,7 @@ type Problem struct {
 	// Instance is a URI reference identifying this occurrence: the request path.
 	Instance string `json:"instance,omitempty"`
 	// OrphanedWidgets are, on the 409 of a switch or removal of a Library
-	// Pin, the Widgets it would leave without their WidgetType.
+	// Import, the Widgets it would leave without their WidgetType.
 	OrphanedWidgets []AffectedWidgetResponse `json:"orphaned_widgets,omitempty"`
 	// Draft is, on the 409 of a write of a Draft's content, the state the
 	// Draft is in: the Version a retry of the write states (ADR 0016).
@@ -25,7 +25,7 @@ type Problem struct {
 	// FileIssues are, on the 400 of a project file that does not validate,
 	// every problem found in it: the path in the document and what is wrong
 	// there (ADR 0018). A Discard refused because the Deployment names Library
-	// Releases this server lacks names the missing pins the same way.
+	// Releases this server lacks names the missing imports the same way.
 	FileIssues []FileIssue `json:"file_issues,omitempty"`
 }
 

@@ -43,7 +43,7 @@ type LibraryRepository interface {
 	// a library of the initial version is inserted, any other replaces the
 	// stored live one if the stored version is still the library's version;
 	// a library marked deleted (Library.Delete) is stored so, unless a live
-	// Project pins it. The version is raised once per Save; the returned
+	// Project imports it. The version is raised once per Save; the returned
 	// library carries the new one and no events.
 	// Returns ErrLibraryNotFound if there is no such live library on update,
 	// ErrLibraryConflict if the stored version does not match,
@@ -73,6 +73,6 @@ type LibraryRepository interface {
 	// LibraryDeletedEvent when it was marked.
 	// Returns ErrLibraryNotFound if there is no such library marked deleted,
 	// ErrLibraryImported while Projects marked deleted, not removed yet, still
-	// pin it.
+	// import it.
 	Delete(context.Context, Library) error
 }

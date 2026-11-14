@@ -12,7 +12,7 @@ import (
 //
 // Every server-backed list of the Project mode is (re)loaded through a
 // uiutil.Reloader, both after the user's own mutations and on server events
-// (libraries, pins, scenes, widgets and tags changed by anyone — another tab,
+// (libraries, imports, scenes, widgets and tags changed by anyone — another tab,
 // growctl, a Device); the new state of a Tag carried by tag_updated is applied
 // without a reload. The events of the content are those of the stream of the
 // project followed by the Bar (eventlog.Bar.SetProject), which may be another

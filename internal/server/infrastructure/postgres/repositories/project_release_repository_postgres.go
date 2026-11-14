@@ -20,7 +20,7 @@ import (
 
 // projectReleaseRepositoryPostgres stores the Project Releases in
 // engineering.project_releases (task 72_3; ADR 0021). A Release is written
-// with the copy of its ProjectFile and the pins that file carries, in one
+// with the copy of its ProjectFile and the imports that file carries, in one
 // transaction over the Project.
 type projectReleaseRepositoryPostgres struct {
 	db       *sql.DB
@@ -246,7 +246,7 @@ func nextReleaseNumber(ctx context.Context, tx *sql.Tx, projectID id.ID[project.
 	return release.NewNumber(number)
 }
 
-// insertProjectRelease writes the Release and the pins of its ProjectFile,
+// insertProjectRelease writes the Release and the imports of its ProjectFile,
 // mapping the one-Commit-one-Release key to ErrCommitAlreadyReleased.
 func insertProjectRelease(ctx context.Context, tx *sql.Tx, projectID id.ID[project.Project], found release.Release) error {
 	content, err := json.Marshal(found.Content())

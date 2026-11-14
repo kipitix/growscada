@@ -37,7 +37,7 @@ var _ WidgetTypeService = (*widgetTypeServiceImpl)(nil)
 // of the libraries of the Organization the content serves. The writes go
 // through the Draft's repository, which records one DraftChange each
 // (ADR 0017); a change of a WidgetType touches no Scene: Projects see only the
-// releases they pin (ADR 0007).
+// saved states they import (ADR 0007).
 func NewWidgetTypeService(aContent LibraryContent, someWidgetTypes library.WidgetTypeRepositories) WidgetTypeService {
 	return &widgetTypeServiceImpl{content: aContent, widgetTypes: someWidgetTypes}
 }
@@ -191,8 +191,8 @@ func parseWidgetTypeDefinition(input appdto.WidgetTypeInput) (widgetTypeDefiniti
 }
 
 // DeleteWidgetTypeByID removes a widget type from the library's Draft. It
-// touches no Scene: the Widgets of Projects are of the copies the releases
-// they pin hold. The write states the Version of the Draft the client saw.
+// touches no Scene: the Widgets of Projects are of the copies the saved state
+// they import holds. The write states the Version of the Draft the client saw.
 func (s widgetTypeServiceImpl) DeleteWidgetTypeByID(ctx context.Context, rawLibraryID, rawID uuid.UUID, rawVersion int) (appdto.WidgetType, error) {
 	libraryID, repo, err := s.draft(ctx, rawLibraryID)
 	if err != nil {

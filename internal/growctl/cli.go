@@ -512,7 +512,7 @@ func executeProjects(ctx context.Context, client *Client, steps []ProjectStep, o
 }
 
 // applyPlan is what apply does: the projects first, then the libraries with
-// their WidgetTypes and the projects' pins, then the tags of the project
+// their WidgetTypes and the projects' imports, then the tags of the project
 // growctl works in.
 type applyPlan struct {
 	projects  []ProjectStep

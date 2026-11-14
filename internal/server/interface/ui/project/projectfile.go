@@ -264,7 +264,7 @@ func (p *Project) renderProjectFileConfirmation(pending *pendingProjectFile) app
 		app.P().
 			Style("margin", "0 0 4px").
 			Style("color", "var(--text-2)").
-			Text(fmt.Sprintf("%d tags, %d scenes, %d widgets, %d devices, %d environments, %d library pins",
+			Text(fmt.Sprintf("%d tags, %d scenes, %d widgets, %d devices, %d environments, %d library imports",
 				len(file.Tags), len(file.Scenes), widgets, len(file.Devices), len(file.Environments), len(file.LibraryImports))),
 		app.P().
 			Style("margin", "0 0 4px").

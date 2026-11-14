@@ -420,7 +420,7 @@ func TestValidateProjectFile_OpenChecksLocalLibraries(t *testing.T) {
 			id.NewID(id.IDWithUUID[project.Project](projectID)), encoded(t, file), true)
 		return err
 	}())
-	wantIssue(t, issues, "widget_types[0]", "differs from the release of library")
+	wantIssue(t, issues, "widget_types[0]", "differs from the copy the imported saved state of library")
 }
 
 // TestValidateProjectFile_DeployDoesNotCheckLocalLibraries: a self-contained

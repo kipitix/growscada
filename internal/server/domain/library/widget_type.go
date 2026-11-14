@@ -12,7 +12,7 @@ import (
 // Defines how a SCADA widget element is rendered via an HTML template and a script.
 // It belongs to the Draft of exactly one Library, fixed at creation; its name
 // is unique within that Library. Projects never see it, only the copies the
-// Library Releases they pin hold (ReleasedWidgetType).
+// saved states they import hold (ReleasedWidgetType).
 //
 // WidgetType is immutable: every change returns a new WidgetType that also
 // records the change's event. It carries no Version of its own: it is an

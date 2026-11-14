@@ -264,7 +264,7 @@ func libraryVersion(raw int) (version.Version[library.Library], error) {
 	return expected, nil
 }
 
-// DeleteLibraryByID marks a library deleted, while no live Project pins it and
+// DeleteLibraryByID marks a library deleted, while no live Project imports it and
 // no running Deployment names a Release of it, and returns it as it was read,
 // with its releases: from then on it does not exist for the API. Its Draft and
 // releases are removed later, by the policy of NewLibraryCleanupPolicy. A
@@ -279,7 +279,7 @@ func (s libraryServiceImpl) DeleteLibraryByID(ctx context.Context, rawID uuid.UU
 			return err
 		}
 		// A running Deployment naming one of the library's Releases would make
-		// a Discard of it unable to restore the pin; the pins alone do not tell
+		// a Discard of it unable to restore the import; the imports alone do not tell
 		// (task 71).
 		named, err := s.runtime.DeploymentNamesLibrary(ctx, found.ID().UUID())
 		if err != nil {

@@ -61,7 +61,7 @@ type ImportStep struct {
 }
 
 // libraryPlan is what apply does to the libraries, the WidgetTypes of their
-// Drafts and the projects' pins, after the projects and before the tags.
+// Drafts and the projects' imports, after the projects and before the tags.
 type libraryPlan struct {
 	libraries   []LibraryStep
 	widgetTypes []WidgetTypeStep
@@ -118,13 +118,13 @@ func sameDefinition(server apiv0.WidgetTypeResponse, m apiv0.CreateWidgetTypeReq
 		server.DefaultHeight == m.DefaultHeight && slices.Equal(normalize(server.InputPorts), normalize(m.InputPorts))
 }
 
-// planLibraries plans the manifests' libraries, WidgetTypes and pins
+// planLibraries plans the manifests' libraries, WidgetTypes and imports
 // against the server: missing libraries and WidgetTypes are created, the
 // WidgetTypes that differ updated and, with prune, those absent from the
 // manifests removed from every library the manifests declare WidgetTypes
-// of; the pins a project's spec declares are added or switched. A
+// of; the imports a project's spec declares are added or switched. A
 // WidgetType of a library the plan creates is created with it. Manifests
-// without libraries, WidgetTypes and pins plan nothing and read nothing.
+// without libraries, WidgetTypes and imports plan nothing and read nothing.
 func planLibraries(ctx context.Context, client *Client, manifests Manifests, prune bool) (libraryPlan, error) {
 	var plan libraryPlan
 	if !declaresLibraries(manifests) {
@@ -264,7 +264,7 @@ func printLibraryDiff(out io.Writer, plan libraryPlan) {
 	}
 }
 
-// executeLibraries runs the plan's libraries, WidgetTypes and pins, printing
+// executeLibraries runs the plan's libraries, WidgetTypes and imports, printing
 // each step once it is done. It stops at the first failure.
 func executeLibraries(ctx context.Context, client *Client, run *settings, plan libraryPlan, out io.Writer) error {
 	ids := map[string]apiv0.LibraryResponse{}

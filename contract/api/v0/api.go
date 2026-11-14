@@ -1,6 +1,6 @@
 // Package apiv0 is MAJOR 0 of the server API contract: the JSON bodies of
 // the REST API under PathPrefix and the live events of its event streams
-// (ADR 0005). The content of a project (Tags, Scenes, Widgets, Library Pins,
+// (ADR 0005). The content of a project (Tags, Scenes, Widgets, Library Imports,
 // Devices, Environments) lives under ProjectPath of the project (ADR 0006);
 // the projects themselves and the libraries, with the WidgetTypes of their
 // Drafts and their releases, are the server's (ADR 0007). The configuration

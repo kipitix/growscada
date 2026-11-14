@@ -50,7 +50,7 @@ func TestProjectFileDialog_ShowsTheActionsAndTheConfirmation(t *testing.T) {
 	if !strings.Contains(html, `data-projectfile-confirmation="open"`) {
 		t.Fatalf("the picked file has no confirmation: %s", html)
 	}
-	for _, want := range []string{"draft.json", "Schema 0.3", "tags", "replaces the whole Draft", "undo restores"} {
+	for _, want := range []string{"draft.json", "Schema 0.3", "tags", "library imports", "replaces the whole Draft", "undo restores"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("the confirmation does not show %q: %s", want, html)
 		}

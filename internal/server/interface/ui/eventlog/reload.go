@@ -13,7 +13,7 @@ import (
 // project switcher of Root, Library, Project); each reloads the lists it
 // shows. Libraries are the server's with the WidgetTypes of their Drafts
 // (WidgetTypes); LibraryImports (the selected project's imports and the
-// WidgetTypes of the releases they pin), Scenes, Widgets and Tags are those
+// WidgetTypes of the saved states they name), Scenes, Widgets and Tags are those
 // of the selected project. Deploy is the Project mode's deployment state (the
 // Deployment it runs and whether the Draft differs from it). Operation reads
 // none of these: it follows the Journal from a Player of its own (ADR 0020).
@@ -128,7 +128,8 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 		return ReloadTargets{}
 	}
 	// The Library events make nothing of a Project stale: a Project sees a
-	// Library only through the Release it pins, whose switch is a pin event.
+	// Library only through the saved state it imports, whose switch is an
+	// import event.
 	return ReloadTargets{}
 }
 

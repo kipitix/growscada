@@ -16,7 +16,7 @@ import (
 // ── Scenes and the Draft's one Version ────────────────────────────────────────
 //
 // One Version serves the whole Draft (ADR 0016): a Scene, its Widgets, a Tag,
-// a pin all carry it, and it is the token every write states (load.go). It is
+// an import all carry it, and it is the token every write states (load.go). It is
 // therefore also what says whether a reread state is newer than the one shown;
 // there are no per-Scene versions any more.
 

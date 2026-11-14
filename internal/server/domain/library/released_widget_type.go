@@ -10,7 +10,8 @@ import (
 // ReleasedWidgetType - the copy of a WidgetType held by a Library Release:
 // its definition under the WidgetType's ID, with no Version — a release
 // never changes. It is what a Project sees of a WidgetType, through the
-// release it pins (ADR 0007), and what the Widgets of its Scenes are checked
+// saved state it imports (ADR 0007), and what the Widgets of its Scenes are
+// checked
 // against.
 // Value Object.
 type ReleasedWidgetType struct {

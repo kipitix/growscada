@@ -21,7 +21,7 @@ type Repository interface {
 	// CreateFromFile publishes content as the next Release of scope with
 	// origin file (task 72_4): no Commit is named, the title stands in its
 	// place. It takes the same lock and number as Create, and writes the same
-	// copy and pins, in one transaction.
+	// copy and imports, in one transaction.
 	CreateFromFile(ctx context.Context, scope draft.Scope, title draft.CommitTitle, note Note,
 		author draft.Author, content draft.CommitContent) (Release, error)
 

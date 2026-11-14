@@ -10,7 +10,7 @@ package apiv0
 // Scenes, Widgets, Library Imports, Devices, Environments with the parameters
 // of their Devices. Type is one of the Event… names below. ID
 // is the affected aggregate's (or connection's) ID; system_ready carries
-// none; the ID of a library_* or library_pin_* event is the library's, and the
+// none; the ID of a library_* or library_import_* event is the library's, and the
 // ID of a label_* event is the label's.
 // SceneID is the Scene that holds (or held) the Widget, on widget_created,
 // widget_updated and widget_deleted only. LibraryID is the library of the

@@ -449,7 +449,7 @@ func TestLibraryImport_ProvenanceOfEachLibrary(t *testing.T) {
 
 	pins, err := svc.FindLibraryImports(ctx, mainProject)
 	if err != nil {
-		t.Fatalf("FindLibraryPins: %v", err)
+		t.Fatalf("FindLibraryImports: %v", err)
 	}
 	want := map[uuid.UUID]struct{ title, author string }{
 		first.ID:  {"First library", "Ada"},

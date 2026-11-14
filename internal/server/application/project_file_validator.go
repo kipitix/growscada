@@ -501,13 +501,13 @@ func (v projectFileValidator) localWidgetTypes(ctx context.Context, file project
 	for i, copied := range file.WidgetTypes {
 		local, ok := types[copied.ID]
 		if !ok {
-			// A copy no pinned release holds: if a Widget uses it, the
+			// A copy no imported saved state holds: if a Widget uses it, the
 			// rebuild below names the Widget; an unused one is extra.
 			continue
 		}
 		if !sameWidgetTypeCopy(local, copied) {
 			problems.add(fmt.Sprintf("widget_types[%d]", i),
-				"the copy of widget type %s differs from the release of library %s pinned here", copied.ID, copied.LibraryID)
+				"the copy of widget type %s differs from the copy the imported saved state of library %s holds", copied.ID, copied.LibraryID)
 		}
 	}
 	return types, nil

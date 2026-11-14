@@ -119,7 +119,7 @@ func (h LibrariesHandlers) PutLibrariesByID(w http.ResponseWriter, r *http.Reque
 
 // DeleteLibrariesByID handles DELETE /libraries/{library_id}. The library is
 // gone for the API at once; its Draft and releases are removed after the
-// response. Refused while a live project pins it.
+// response. Refused while a live project imports it.
 func (h LibrariesHandlers) DeleteLibrariesByID(w http.ResponseWriter, r *http.Request) {
 	libraryID, ok := pathUUID(w, r, libraryResource)
 	if !ok {

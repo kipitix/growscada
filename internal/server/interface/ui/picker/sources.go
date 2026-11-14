@@ -146,7 +146,7 @@ func (s librarySource) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func (s librarySource) DeleteQuestion(name string) string {
-	return "Delete the library " + name + " with its Draft and releases? A project that pins it, or a running Deployment that names one of its releases, refuses the deletion. Saved states and Releases of the past keep a link to the deleted library."
+	return "Delete the library " + name + " with its Draft and releases? A project that imports it, or a running Deployment that names one of its saved states, refuses the deletion. Saved states and Releases of the past keep a link to the deleted library."
 }
 
 // Order returns the library order of the person the server acts for: the IDs
