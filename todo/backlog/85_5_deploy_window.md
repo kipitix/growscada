@@ -2,6 +2,8 @@
 
 Status: ready-for-agent
 Priority: 1
+Parent: 85_labels_instead_of_releases
+Part: 5/8
 Blocked by: 85_3_label_assignments, 85_4_deploy_saved_state
 
 Часть 5 из `85_labels_instead_of_releases.md`. Слой D, режим Project.
@@ -22,7 +24,7 @@ Deploy теперь запускает Commit (85_4), но окно всё ещ�
 - если лейблов нет — фильтра нет, подсказка «No labels yet» с кнопкой,
   открывающей окно лейблов (85_2);
 - список сохранённых состояний, новые первыми: `#N`, название, автор, время,
-  счётчики (scenes/widgets/tags/devices/environments), чипы лейблов;
+  счётчики (scenes/widgets/tags/devices/environments), цветные чипы лейблов;
 - на строке: **Deploy** (кроме работающей) и **Project file** — скачивание
   `GET …/commits/{n}/projectfile` (маршрут уже есть);
 - работающая строка помечена **Running**, если

@@ -2,6 +2,8 @@
 
 Status: ready-for-agent
 Priority: 1
+Parent: 85_labels_instead_of_releases
+Part: 4/8
 
 Часть 4 из `85_labels_instead_of_releases.md`. Слой C (Runtime node и
 Engineering node). Меняет ADR 0014/0021: Deployment помнит, какое **saved
@@ -82,7 +84,8 @@ Commit, но Deploy всё равно запускает содержимое, �
   читает Release; если `origin = commit`, зовёт `DeployService.Deploy` с его
   `commit_number`; если `origin = file` — отправляет содержимое с
   `commit_number = nil` (без проверки «уже работает»). Маршрут
-  `POST …/releases/{n}/deploy` работает до 85_5, затем 410 (85_7).
+  `POST …/releases/{n}/deploy` работает до 85_5; в 85_7 маршрут удаляется
+  вместе с остальными `/releases` (404, без заглушки).
 - `ReleaseService` (создание, список, заметка) не трогается — до 85_5/85_7.
 
 ## REST (`contract/api/v0`, MINOR, `make schemas`)

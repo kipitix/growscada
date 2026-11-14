@@ -26,3 +26,7 @@ The entity this ADR appends is a **Deployment** now: a Rollback still copies an 
 ## Amendment 2026-11-08: a Rollback keeps the Release (task 72_4)
 
 A Rollback copies the `release_number` of the Deployment it names into the new Deployment: the Release becomes the running one again, a Rollback of a file deployment stays without a Release, and `rolled_back_from` is unchanged. The Project mode no longer offers a Rollback button — it deploys a Release from the list — but the API and History keep the route.
+
+## Amendment 2026-11-14: a Deployment names a Commit, not a Release (task 85)
+
+`runtime.deployments.release_number` is replaced by `commit_number`: the saved state a Deploy made running, or nothing for a file deploy. A Rollback copies the `commit_number` of the Deployment it names; `rolled_back_from`, `cause` and the document stay. `DeploymentService.DeployCommit` takes the number and refuses a Deploy of the saved state that already runs. The Journal's `deployment` payload and every Checkpoint carry `commit_number`; task 85 migrates the old rows. Release, its route and its aggregate are removed.

@@ -90,17 +90,13 @@ _Avoid_: workspace, site, solution
 A reusable collection of WidgetTypes owned by an Organization, outside any Project, and used by any number of Projects. It carries a name, unique among the live Libraries of its Organization, and an optional description.
 _Avoid_: catalog, toolbox, package
 
-**Library Release**:
-An immutable, numbered snapshot of a Library's Draft, made from one of its Commits (task 72_5; ADR 0021): the copies of the Commit's WidgetTypes, the Author who published it, an optional note and the Commit's number and title. One Commit is published at most once; the note is metadata and changes on its own. A Release older than Commits has no Commit and Release Origin `legacy`. Removed only with its Library. A Project's Commit or Release keeps only a link to a deleted Library — its document carries the WidgetType copies —, while a running Deployment that names the Release keeps the Library from being deleted (task 71).
-_Avoid_: library version, snapshot
+**Library Import**:
+The choice, in a Project's Draft, of one saved state (Commit) of one Library: the WidgetTypes of that Commit are what the Project uses. Switching or removing it is refused while Widgets would be left without their WidgetType; the PortBindings it breaks need confirmation. A Library is removed only while no live Project imports it and no live Project's running Deployment names it (task 71).
+_Avoid_: pin, dependency, reference, subscription, release
 
-**Legacy Release**:
-A Library Release made before Commits existed: it names no Commit (`commit_number` null), has the Author `system` and Release Origin `legacy`. It stays usable and pinnable like any Release.
-_Avoid_: old release, version 1
-
-**Library Pin**:
-The choice, in a Project's Draft, of one Library Release of one Library. Switching or removing it is refused while Widgets would be left without their WidgetType. A Library is removed only while no live Project pins it and no live Project's running Deployment names one of its Releases.
-_Avoid_: dependency, import, reference, subscription
+**Import**:
+The act of choosing the saved state of a Library a Project uses. A Project imports at most one saved state per Library; the choice is part of its Draft and is saved into the ProjectFile as the copy's provenance.
+_Avoid_: pin, attach, subscribe
 
 ### Roles and clients
 
@@ -133,7 +129,7 @@ _Avoid_: production server, station, runtime (unqualified)
 ### Project lifecycle
 
 **Draft**:
-The working state of a Project or of a Library as it is being edited, and the unit of consistency: every change to it is one DraftChange, and its Version is the only token a write states (ADR 0016, ADR 0022). It is edited without a lock; two Engineers see each other's writes as a conflict on the Version. A Project's Draft holds Scenes with their Widgets, Tag definitions, Devices, Environments and the pinned Library Releases; a Library's holds its WidgetTypes. It also keeps the history of its Commits.
+The working state of a Project or of a Library as it is being edited, and the unit of consistency: every change to it is one DraftChange, and its Version is the only token a write states (ADR 0016, ADR 0022). It is edited without a lock; two Engineers see each other's writes as a conflict on the Version. A Project's Draft holds Scenes with their Widgets, Tag definitions, Devices, Environments and the imported Library saved states; a Library's holds its WidgetTypes. It also keeps the history of its Commits.
 _Avoid_: working copy, unsaved changes
 
 **Clean Version**:
@@ -141,55 +137,43 @@ The Version of a Draft at which its content last equalled its last Commit: a Sav
 _Avoid_: saved version, base version, dirty flag
 
 **DraftChange**:
-One Engineer intent applied to the Draft — possibly touching several parts of the Draft at once — and the unit of undo/redo. The Draft keeps the stack of them; only a Discard or a Revert, which replace the content, clear it — a Save, a Release and a Deploy leave the stack alone (ADR 0017, ADR 0021).
+One Engineer intent applied to the Draft — possibly touching several parts of the Draft at once — and the unit of undo/redo. The Draft keeps the stack of them; only a Discard or a Revert, which replace the content, clear it — a Save and a Deploy leave the stack alone, and a Label change never touches it (ADR 0017, ADR 0021).
 _Avoid_: edit, step, command, operation
 
 **Commit**:
-An immutable, numbered snapshot of the whole Draft, fixed by a Save: its canonical ProjectFile for a Project, its WidgetTypes for a Library, with a title, the Author and the time (task 72_2; ADR 0021). It is an entity of the Draft, not a DraftChange: writing it raises no Version and clears no undo stack. A Project's Commit is published as a Project Release; a Library's as a Library Release (task 72_5). The UI calls it a **saved state** (task 84) — the code and the REST API keep the name Commit, and the two name one thing.
+An immutable, numbered snapshot of the whole Draft, fixed by a Save: its canonical ProjectFile for a Project, its WidgetTypes for a Library, with a title, the Author and the time (task 72_2; ADR 0021). It is an entity of the Draft, not a DraftChange: writing it raises no Version and clears no undo stack. A Project's Commit can be deployed; a Library's can be imported by a Project. The UI calls it a **saved state** (task 84) — the code and the REST API keep the name Commit, and the two name one thing.
 _Avoid_: revision, version, checkpoint, snapshot (unqualified)
 
 **Saved state**:
-The name the PWA gives a Commit (task 84): what a Save fixes, what the History lists, and what a person may load back into the Draft (`POST …/commits/{n}/load`) or publish as a Release. It is a name for people, not a second concept: the domain, the tables and the API say Commit, and a document that speaks of the API may say either.
+The name the PWA gives a Commit (task 84): what a Save fixes, what the History lists, and what a person may load back into the Draft (`POST …/commits/{n}/load`) or choose in Deploy and Import. It is a name for people, not a second concept: the domain, the tables and the API say Commit, and a document that speaks of the API may say either.
 _Avoid_: snapshot, checkpoint, revision, save point
+
+**Label**:
+A named mark with an optional color that an Engineer puts on saved states to group and filter them: a saved state may carry any number of labels, and one label may mark any number of saved states. Its name is unique in the Organization without regard to case. It belongs to the Organization, not to a Project or a Library, and it is not content: no Draft, Commit's ProjectFile or Deployment carries it. A Label owns its assignments.
+_Avoid_: tag (a Tag is a process variable), status, release, version
+
+**Label assignment**:
+The placing of one Label on one saved state: an entity of the Label, not an aggregate of its own. It changes no Draft, states no Version and is not part of undo/redo. Deleting a Label removes its assignments; deleting a Project or a Library removes the assignments of its saved states.
+_Avoid_: tag, mark, label (as the relation)
 
 **Save**:
 The act of fixing the Draft's current state as a new Commit under a title and an Author (task 72_2; ADR 0021). It does not write the Draft: edits are written at once as DraftChanges, and a Save of a Draft at its Clean Version is refused with `nothing_to_save`. The UI calls the result a saved state (task 84).
 _Avoid_: commit (as a verb), publish
 
 **Discard**:
-Resetting a Draft to its last Commit, dropping the unsaved DraftChanges (task 72_4, task 72_5). A Project or a Library with no Commit is refused with `nothing_to_discard`; **Revert to deployed** (a Project) and **Revert to latest Release** (a Library) are the different act of resetting it to the published state instead. The Draft is its Clean Version afterwards, unless Library Releases the Commit names could not be restored (task 71).
+Resetting a Draft to its last Commit, dropping the unsaved DraftChanges (task 72_4, task 72_5). A Project or a Library with no Commit is refused with `nothing_to_discard`; **Revert to deployed** (a Project) is the different act of resetting it to the running state instead. The Draft is its Clean Version afterwards, unless the Library Imports the Commit names could not be restored (task 71).
 _Avoid_: revert, reset, cancel
 
-**Revert to latest Release**:
-Resetting a Library's Draft to its latest Library Release — the published state — in one transaction, `POST …/libraries/{id}/revert-to-release` (task 72_5). A Library never released is refused. Discard resets it to the last Commit instead; the Draft is its Clean Version afterwards only when that Release published the last Commit.
-_Avoid_: discard, rollback, restore
-
 **Deploy**:
-The act of making a Project Release — or, on a Runtime node without an Engineering node, a ProjectFile — the running Deployment (task 72_4). A Deploy takes a Release, not the Draft: the order is Save → Release → Deploy. A Deploy of the Release that already runs is refused `nothing_to_deploy`.
+The act of making a saved state (Commit) of a Project — or, on a Runtime node without an Engineering node, a ProjectFile — the running Deployment (task 72_4). A Deploy takes a saved state, not the Draft: the order is Save → Deploy. A Deploy of the saved state that already runs is refused `nothing_to_deploy`.
 _Avoid_: publish, apply, save
 
-**Deploy Release**:
-The act of making one Project Release the running Deployment: `POST …/projects/{id}/releases/{n}/deploy`. It needs no Draft Version and changes no Draft; Operation switches to it.
-_Avoid_: publish, roll out
-
 **Revert to deployed**:
-Resetting a Draft to the Deployment the Project runs, dropping the unsaved DraftChanges — the Discard of before task 72_4, now `POST …/projects/{id}/revert-to-deployed`. Discard resets to the last Commit instead; the Draft is its Clean Version afterwards only when that Deployment's document is the last Commit's content.
+Resetting a Draft to the Deployment the Project runs, dropping the unsaved DraftChanges — `POST …/projects/{id}/revert-to-deployed`. Discard resets to the last Commit instead; the Draft is its Clean Version afterwards only when that Deployment's document is the last Commit's content.
 _Avoid_: discard, rollback
 
-**Release**:
-The act of publishing a new Release. A Project's publishes a Commit as a Project Release (task 72_3); a Library's publishes a Commit as a Library Release (task 72_5). Both copy the Commit's content and need no Draft Version. A Release outlives the Commit, the Draft and future retention, and needs no Deploy.
-_Avoid_: publish, tag, version
-
-**Project Release**:
-The publication of a Project's Commit (task 72_3; ADR 0021): an immutable, numbered copy of the Commit's ProjectFile with the Commit's title at that moment, a note, the Author, the time and the Release Origin. One Commit is published at most once; a note changes on its own and is the only editable part. Its number is its identity within the Project.
-_Avoid_: snapshot, version, deployment
-
-**Release Origin**:
-Where a Release's content came from: `commit` (a Commit) or, from task 72_4, `file` (a project file). Unlike a Tag's or Widget's Origin, it is not about the Draft and the Runtime.
-_Avoid_: source, kind
-
 **Deployment**:
-The Runtime node's immutable record that a configuration runs: its number, when it was deployed, its cause, the Release it came from (`release_number`, nil for a Deployment from a file or one made before task 72_4) and the document it holds. A Deploy of a Release, a Rollback or a direct file Deploy on a Runtime-only node makes it; Operation always runs exactly one Deployment. The running Deployment of a Project keeps the Libraries its document names from being deleted; a Revert of one that names a Release this server lacks drops that pin with a warning (task 71).
+The Runtime node's immutable record that a configuration runs: its number, when it was deployed, its cause, the saved state it came from (`commit_number`, nil for a Deployment from a file or one made before saved states were deployed) and the document it holds. A Deploy of a saved state, a Rollback or a direct file Deploy on a Runtime-only node makes it; Operation always runs exactly one Deployment. The running Deployment of a Project keeps the Libraries its document imports from being deleted; a Revert of one that names an import this server lacks drops it with a warning (task 71).
 _Avoid_: release, build, version (the concurrency counter), commit
 
 **Revision**:
@@ -205,7 +189,7 @@ Taking a Runtime-origin Tag or Widget into the Draft, keeping its identity.
 _Avoid_: import, promote, claim
 
 **Rollback**:
-Making an earlier Deployment operational again, performed on the Runtime node alone; it produces a new Deployment with the earlier content and the earlier Release (`release_number`), records the one it copied and never rewrites history. The Project mode leaves it to the API and History (task 72_4).
+Making an earlier Deployment operational again, performed on the Runtime node alone; it produces a new Deployment with the earlier content and the earlier saved state (`commit_number`), records the one it copied and never rewrites history. The Project mode leaves it to the API and History (task 72_4).
 _Avoid_: revert, undo
 
 **ProjectFile**:
@@ -213,11 +197,11 @@ A portable file holding one project configuration (the content of a Deployment) 
 _Avoid_: export, package, backup
 
 **Open a ProjectFile**:
-Replacing the whole content of a Project's Draft with a ProjectFile — one DraftChange that undo reverses — after checking that the file names the Project and that its pinned Library Releases exist locally. Requires the Draft's Version.
+Replacing the whole content of a Project's Draft with a ProjectFile — one DraftChange that undo reverses — after checking that the file names the Project and that the Library saved states it imports exist locally. Requires the Draft's Version.
 _Avoid_: import, upload, load, restore
 
 **Deploy a file**:
-Making a valid ProjectFile the new Deployment of a Project without touching the Draft. On a server with the Engineering node the file is first published as a Release with Release Origin `file` and the Release is deployed, so the history shows what runs; on a Runtime-only node the file is stored directly with cause `file` and no Release (task 72_4; ADR 0018).
+Making a valid ProjectFile the new Deployment of a Project without touching the Draft, with cause `file` and no saved state (task 72_4; ADR 0018).
 _Avoid_: import, upload, restore
 
 ### Operation and History
@@ -243,7 +227,7 @@ The number of a Journal entry — its place in the totally ordered record. The o
 _Avoid_: `seq` (outside the wire format), offset, timestamp
 
 **Checkpoint**:
-An immutable record of a Project's full operational state at one Journal position: the Deployment it ran, by number and with its Release, and every Tag state with the position of its latest change. It is a record beside the Journal, not an entry of it, and not an aggregate — it has no behaviour, events or Version. It is written when a Deployment appears and periodically; History begins from the nearest Checkpoint before a moment and applies the Journal entries after it.
+An immutable record of a Project's full operational state at one Journal position: the Deployment it ran, by number and with its saved state (`commit_number`), and every Tag state with the position of its latest change. It is a record beside the Journal, not an entry of it, and not an aggregate — it has no behaviour, events or Version. It is written when a Deployment appears and periodically; History begins from the nearest Checkpoint before a moment and applies the Journal entries after it.
 _Avoid_: snapshot (unqualified), backup, savepoint, cursor, offset
 
 **Starting state**:
@@ -265,5 +249,5 @@ The `MAJOR.MINOR` version of the JSON schema that a message or document conforms
 _Avoid_: version (unqualified), protocol version, format version
 
 **User settings**:
-The per-user preferences of the server — for now the order of the libraries and of the projects, later more — kept in their own aggregate, apart from the content they view (task 81, task 83; ADR 0024). They are a view of the content, never part of it: no ProjectFile, Commit or Release carries them, and a change of them records no event. Until Users and authentication exist (task 49, task 50), the one person every request acts for owns them.
+The per-user preferences of the server — for now the order of the libraries and of the projects, later more — kept in their own aggregate, apart from the content they view (task 81, task 83; ADR 0024). They are a view of the content, never part of it: no ProjectFile, Commit or Deployment carries them, and a change of them records no event. Until Users and authentication exist (task 49, task 50), the one person every request acts for owns them.
 _Avoid_: preferences, profile, config, options

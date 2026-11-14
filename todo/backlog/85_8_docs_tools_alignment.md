@@ -2,47 +2,61 @@
 
 Status: ready-for-agent
 Priority: 1
+Parent: 85_labels_instead_of_releases
+Part: 8/8
+Closes parent: yes
 Blocked by: 85_1_mode_screen_persistence, 85_2_label_aggregate, 85_3_label_assignments, 85_4_deploy_saved_state, 85_5_deploy_window, 85_6_import_library_state, 85_7_remove_releases
 
 Часть 8 из `85_labels_instead_of_releases.md`. Слой документов и инструментов
 вокруг сервера. Кода поведения здесь нет, кроме правок текстов, справки и
-коллекций.
+коллекций; ADR 0025 и поправки пишутся при грилинге (2026-11-14), здесь — их
+сверка с кодом.
 
 ## ADR
 
-- Новый `docs/adr/0025-labels-are-an-aggregate-apart-at-organization-level.md`:
-  - Label — агрегат Engineering node, логически принадлежит Organization
-    (`organization_id`), API серверный, пока Organization одна;
-  - назначение — отдельная связь many-to-many, не DraftChange, не Version, не
-    часть ProjectFile/Commit/Deployment;
-  - удаление лейбла каскадно снимает назначения; события;
-  - почему не поле Commit и не часть Draft: лейбл живёт дольше и меняется
-    независимо, как настройка, но виден всем;
+- `docs/adr/0025-labels-are-an-aggregate-apart-at-organization-level.md`
+  (написана при грилинге; здесь — сверка):
+  - Label — агрегат Engineering node с именем и необязательным цветом,
+    логически принадлежит Organization (`organization_id`), API серверный,
+    пока Organization одна;
+  - назначения — сущности Label, не отдельный агрегат; many-to-many,
+    не DraftChange, не Version, не часть ProjectFile/Commit/Deployment;
+  - удаление лейбла каскадно снимает назначения; удаление Project/Library
+    каскадно снимает назначения их Commit'ов через БД — исключение ADR 0008;
+  - события Label идут в серверный поток;
+  - два стартовых лейбла `ready_for_import`/`ready_for_deploy` — обычные
+    метки, не гейты;
   - при появлении выбора Organization меняется только путь/выборка.
 - Поправки:
   - **0007 Libraries** — Project использует не Release, а сохранённое
     состояние Library (Import); копии WidgetTypes по-прежнему в ProjectFile;
-  - **0012 Library Pin** — impact считается по Commit'у; защита Library от
+    полное переименование pin → import; legacy Release удаляется с импортами и
+    Widget'ами, без синтетических Commit'ов;
+  - **0012 Library Import** — impact считается по Commit'у; защита Library от
     удаления — живые импорты и работающая Deployment;
   - **0014/0021 Commit/Release/Deployment** — Release удалён; Deploy делает
     Commit; `Deployment.commit_number`; порядок Save → Deploy; Library:
-    Save → Import; один Commit больше не «публикуется»;
+    Save → Import; один Commit больше не «публикуется»; одноразовая перепись
+    Commit/Deployment (включая работающую) — исключение из неизменяемости;
+  - **0018 Project files** — file deploy не создаёт Release; старые файлы с
+    `library_pins`/`release` отклоняются `file_issues`;
   - **0019 Journal / 0023 Checkpoint** — запись `deployment` и Checkpoint
     несут `commit_number`; старые строки переписаны миграцией 85_4.
 
 ## GLOSSARY.md
 
 - Добавить:
-  - **Label** — именованная метка Organization, назначаемая сохранённым
-    состояниям; не content.
-  - **Label assignment** — связь лейбла и saved state; без Version и undo.
-  - **Import** — выбор сохранённого состояния Library, которое использует
-    Project; внутренний механизм — Library Pin.
+  - **Label** — имя + необязательный цвет, принадлежит Organization,
+    назначается сохранённым состояниям; владеет назначениями; не content.
+  - **Label assignment** — сущность Label: метка на одном saved state; без
+    Version и undo.
+  - **Import / Library Import** — выбор сохранённого состояния Library,
+    которое использует Project; заменил Library Pin.
 - Обновить:
   - **Saved state / Commit** — то, что деплоится и импортируется.
   - **Deploy** — делает сохранённое состояние Project'а работающим.
   - **Deployment** — помнит `commit_number`, nil для file/старых.
-  - **Library Pin** — теперь сохранённое состояние Library, не Release.
+  - **Library Pin** → **Library Import**; механизм и таблица переименованы.
 - Удалить (или пометить историческими, если на них ссылаются старые ADR):
   **Release**, **Project Release**, **Library Release**, **Legacy Release**,
   **Deploy Release**, **Revert to latest Release**. В текущем глоссарии
@@ -54,16 +68,18 @@ Blocked by: 85_1_mode_screen_persistence, 85_2_label_aggregate, 85_3_label_assig
   Assignment); `library/` — без LibraryRelease.
 - Application: `ReleaseService` → `DeployService`; CommitService без
   `released`; LibraryService без Release/RevertToLatestRelease;
-  LibraryPinService — Commit.
+  LibraryImportService — Commit; LabelService — имя/цвет/назначения.
 - Infrastructure: миграции release удалены, добавлены labels/commit_labels,
-  `deployments.commit_number`; Draft snapshots и ProjectFile — `commit`.
+  `library_imports`, `deployments.commit_number`; Draft snapshots и
+  ProjectFile — `library_imports`/`commit`.
 - REST: маршруты `/labels`, `…/commits/{n}/labels/{id}`,
-  `…/commits/{n}/deploy`, `…/library-pins` с `commit`; удалённые — 410.
-- UI: окно Labels; History с лейблами и без Release; окно Deploy по saved
-  states с фильтром; окно Import; состояния Library; сохранение экрана
-  выбора при смене вкладок.
-- growctl: `save` → `deploy --commit`; `release`/`releases` нет; лейблы в
-  `commits`.
+  `…/commits/{n}/deploy`, `…/library-imports` с `commit`; удалённые —
+  404 без заглушек.
+- UI: окно Labels (имя + цвет); History с лейблами и без Release; окно Deploy
+  по saved states с фильтром; окно Import; состояния Library; сохранение
+  экрана выбора при смене вкладок и перезагрузке.
+- growctl: `save` → `deploy --commit`; `release`/`releases` нет; `labels`
+  CRUD и `label assign/unassign`; манифест `spec.libraryImports`.
 - `make run_simulator`/`run_simulator_dashboard`: сид требует Save и Deploy
   сохранённого состояния (не Release); обновить описание и `tests/device_simulator`.
 - Ubiquitous language: Label, Import, Saved state, Deployment; Release — нет.
@@ -72,22 +88,29 @@ Blocked by: 85_1_mode_screen_persistence, 85_2_label_aggregate, 85_3_label_assig
 ## CHANGELOG.md
 
 - Новая версия (0.0.98 или следующая по текущей схеме):
-  - добавлены Label и назначения, окно Labels;
+  - добавлены Label (имя + необязательный цвет) и назначения, окно Labels,
+    стартовые лейблы `ready_for_import`/`ready_for_deploy`;
   - Deploy сохранённого состояния, `commit_number` в Deployment/Journal/
     Checkpoint/API;
-  - Import Library по сохранённому состоянию, `commit` в ProjectFile;
-  - удалены Release (Project/Library), их маршруты (410), события, поля
-    (`released`, `latest_release`, `has_unpublished_changes`,
+  - Import Library по сохранённому состоянию, `library_imports`/`commit` в
+    ProjectFile, полное переименование pin → import;
+  - удалены Release (Project/Library), их маршруты (404, без заглушек),
+    события, поля (`released`, `latest_release`, `has_unpublished_changes`,
     `release_number`);
   - ломающие изменения API/record/project контрактов и MINOR-бампы;
-  - миграция: legacy Library Release → синтетический Commit; потеря
-    undo-истории DraftChange с пинами; необратимый Down.
+  - миграция: legacy Library Release **удаляется** вместе с импортами и
+    Widget'ами (без синтетических Commit'ов); старые Commit'ы, Deployment'ы и
+    работающая Deployment переписываются; **все** стеки DraftChange
+    очищаются; Draft'ы с изменённым контентом получают Version+1 и
+    `clean_version = 0`; внешние старые ProjectFile отклоняются; необратимый
+    Down.
 - Ссылки на задачи 85_1–85_8.
 
 ## Схемы и контракты
 
 - `contract/api/v0` — MINOR после всех частей; `contract/project/v0` — MINOR
-  (`LibraryPin.Commit`); `contract/record/v0` — MINOR (`CommitNumber`).
+  (`LibraryImport.Commit`, `library_imports`); `contract/record/v0` — MINOR
+  (`CommitNumber`).
 - `make schemas`; проверить `schemas/<contract>/<MAJOR.MINOR>.json`,
   `frozen.sha256`, что старые версии не перезаписаны; `make test` проверяет
   соответствие типов и схем.
@@ -97,13 +120,13 @@ Blocked by: 85_1_mode_screen_persistence, 85_2_label_aggregate, 85_3_label_assig
 ## Bruno
 
 - Синхронизировать `tests/api/bruno_collections/growscada_server`:
-  - лейблы: create/list/rename/delete, 409, 404;
+  - лейблы: create/list/update (имя и цвет)/delete, 409, 404; seed-лейблы;
   - назначение: put/delete на Project и Library Commit, `?label=`, 400;
   - Deploy: Save → Deploy Commit; running/409; file deploy без Release;
   - Import: Save Library → Import её saved state (с фильтром по лейблу) →
     switch/remove; impact;
-  - удалённые Release-маршруты: по одному запросу на маршрут с 410;
-  - убрать старые release-запросы, которые больше не отражают модель;
+  - старые release-запросы удалить из коллекции (маршрутов больше нет);
+  - убрать запросы, которые больше не отражают модель;
   - `seq` — чтения, затем изменения, удаления последними; ID/версии — из
     ответов;
   - `requestBodies` в статическом тесте — для всех новых тел;

@@ -33,3 +33,7 @@ Task 44. The term is `GLOSSARY.md` (Checkpoint).
 - A Checkpoint's Tag states carry no `written_at`: the record is about value, Quality and position, and a past state has no "last written" the record keeps. `?at=` answers `written_at` absent.
 - The Checkpoint record grows with task 48 (runtime-origin entities) as a MINOR; a Checkpoint written before it decodes with none, which is the correct state for a moment before those entities existed.
 - The background service is the Runtime node's and is wired in `main.go`; a test calls its one-shot run instead of starting a ticker. The Engineering node's `RuntimeNode` port does not change.
+
+## Amendment 2026-11-14: the Checkpoint names a Commit (task 85)
+
+The `deployment` payload inside a Checkpoint follows ADR 0019's amendment: `commit_number` replaces `release_number`, and the migration rewrites every stored Checkpoint payload through the Project Release → Commit map, dropping the number for a file-origin Release. The `runtime.deployments` document a Checkpoint points at is rewritten by the same task; the Checkpoint itself is still an address, not a copy, so no document is duplicated.

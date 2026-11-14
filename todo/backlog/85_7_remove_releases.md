@@ -2,6 +2,8 @@
 
 Status: ready-for-agent
 Priority: 1
+Parent: 85_labels_instead_of_releases
+Part: 7/8
 Blocked by: 85_5_deploy_window, 85_6_import_library_state
 
 Часть 7 из `85_labels_instead_of_releases.md`. Слой C+D. После 85_4–85_6
@@ -17,7 +19,7 @@ Deploy идёт по Commit'у, а импорт — по сохранённом�
   `release_note_updated`).
 - `application/release_application_service.go`, `appdto.Release`,
   `project_release_repository_postgres.go`, `project_release_library_pins`.
-- Маршруты (все — `410 Gone`, как старый `POST …/deploy`):
+- Маршруты удаляются полностью (404, без заглушек):
   - `GET/POST …/projects/{id}/releases`
   - `GET/PATCH …/projects/{id}/releases/{n}`
   - `GET …/projects/{id}/releases/{n}/projectfile`
@@ -44,7 +46,7 @@ Deploy идёт по Commit'у, а импорт — по сохранённом�
 - `appdto.Library` поля `LatestRelease`, `HasUnpublishedChanges`;
   `LibraryResponse` — те же поля; `CreateReleaseRequest`,
   `LibraryReleaseResponse`; `RevertToReleasePath`.
-- Маршруты (410 Gone):
+- Маршруты удаляются полностью (404, без заглушек):
   - `GET/POST …/libraries/{id}/releases`
   - `GET/PATCH …/libraries/{id}/releases/{n}`
   - `POST …/libraries/{id}/revert-to-release`
@@ -53,7 +55,7 @@ Deploy идёт по Commit'у, а импорт — по сохранённом�
   каскадно удаляет её Commit'ы, Draft и WidgetTypes.
 - Миграция `engineering`: `DROP TABLE engineering.released_widget_types`,
   `DROP TABLE engineering.library_releases` (после 85_6 Release больше не
-  источник пинов). Down-миграция данные не возвращает — записать в файле.
+  источник импортов). Down-миграция данные не возвращает — записать в файле.
 
 ### Остатки термина
 
@@ -98,14 +100,13 @@ Deploy идёт по Commit'у, а импорт — по сохранённом�
 
 - Удалить/переписать все тесты Release (application, repository, REST, UI,
   growctl, servertest); `go build ./...` не должен знать `release`.
-- Проверить, что пути 410 отвечают и после удаления домена (обработчик-заглушка
-  остаётся, как у `POST …/deploy`).
+- Проверить, что удалённые маршруты больше не зарегистрированы и отвечают 404
+  (заглушек нет); `routes()` и статический Bruno-тест не должны их знать.
 - Library: удаление Library с Commit'ами, пинами и без них; cleanup policy.
 - Picker: три состояния, тексты, тесты.
 - Project: History без Make Release; Deploy saved state (85_5) зелёный.
-- Bruno: запросы удалённых маршрутов — 410; сценарий без Release:
-  Save Library → Import → Save Project → Deploy; старые release-запросы
-  удалить или переписать на 410; `requestBodies` почистить.
+- Bruno: старые release-запросы удалить из коллекции; сценарий без Release:
+  Save Library → Import → Save Project → Deploy; `requestBodies` почистить.
 - `make build`, `make test`, `make bruno_test`, ручной проход PWA.
 
 ## Документы
@@ -116,8 +117,8 @@ Deploy идёт по Commit'у, а импорт — по сохранённом�
 
 ## Вне объёма
 
-- Полное переименование `librarypin` → `libraryimport` и маршрутов
-  `library-pins` → `imports` (UI уже Import).
+- Обратная совместимость старых `/releases` и старых ProjectFile с
+  `library_pins`/`release` (85_6 их уже отклоняет).
 - Возврат Release в любой форме.
 
 ## Comments

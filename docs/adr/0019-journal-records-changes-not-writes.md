@@ -38,3 +38,7 @@ The Journal entry that addresses a configuration change was `revision` before ta
 ## Amendment 2026-11-08: a deployment entry names its Release (task 72_4)
 
 The `deployment` payload gains `release_number` (nullable, MINOR): the number of the Project Release the Deployment made, or nothing for a file deployment and for every entry written before task 72_4. The document is still not in the entry; the number addresses it. An old reader ignores the field, and an old row decodes as `nil`.
+
+## Amendment 2026-11-14: the deployment entry names a Commit (task 85)
+
+`release_number` becomes `commit_number` in the `deployment` payload: the saved state the Deployment made, or nothing for a file deploy. Task 85 removes Release and rewrites the stored rows: for each `deployment` entry the migration resolves the old Release to its Commit through `engineering.project_releases`, writes `commit_number`, drops `release_number` and raises the row's `schema_version` to the current record contract. A file-origin Release has no Commit, so its entries keep no number. `record/v0` rises a MINOR; the payload shape is otherwise unchanged.

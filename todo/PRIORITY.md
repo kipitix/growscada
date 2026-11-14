@@ -15,13 +15,13 @@
 
 | Порядок | Задача | Что | Зависит от |
 |---|---|---|---|
-| 1 | `85_1_mode_screen_persistence.md` | Library/Project: возврат на вкладку не сбрасывает экран выбора на редактор | — |
-| 2 | `85_2_label_aggregate.md` | Label: агрегат с `organization_id`, CRUD API, отдельное окно, события | — |
-| 3 | `85_3_label_assignments.md` | Назначение лейблов saved state, чипы в History, фильтр `?label=` | 85_2 |
+| 1 | `85_1_mode_screen_persistence.md` | Library/Project: экран выбора не сбрасывается при смене вкладок и после перезагрузки | — |
+| 2 | `85_2_label_aggregate.md` | Label: имя + цвет, `organization_id`, seed двух лейблов, CRUD API, окно, события | — |
+| 3 | `85_3_label_assignments.md` | Назначения-сущности Label, чипы в History, фильтр `?label=`, growctl assign | 85_2 |
 | 4 | `85_4_deploy_saved_state.md` | Deploy Commit'а; `commit_number` в Runtime, Journal, Checkpoint, API; миграция | — |
 | 5 | `85_5_deploy_window.md` | Новое окно Deploy по saved states с фильтром по лейблу; Release из Project UI | 85_3, 85_4 |
-| 6 | `85_6_import_library_state.md` | Import Library по Commit'у, `commit` в ProjectFile, legacy Release → Commit, окно Import с фильтром | 85_3, 85_4 |
-| 7 | `85_7_remove_releases.md` | Удалить Project/Library Release из домена, БД, API (410), UI, growctl | 85_5, 85_6 |
+| 6 | `85_6_import_library_state.md` | Полное переименование pin → import, legacy Release удаляется с импортами, перепись документов, окно Import | 85_3, 85_4 |
+| 7 | `85_7_remove_releases.md` | Удалить Project/Library Release из домена, БД, API (404), UI, growctl | 85_5, 85_6 |
 | 8 | `85_8_docs_tools_alignment.md` | ADR 0025 и поправки, GLOSSARY, AGENTS, CHANGELOG, схемы, Bruno, seed | 85_1–85_7 |
 
 85_1 можно брать параллельно с 85_2: она независима. 85_4 меняет носитель

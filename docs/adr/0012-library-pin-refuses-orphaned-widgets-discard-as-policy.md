@@ -20,3 +20,7 @@ The pins of the Draft are no longer the only thing that keeps a Library from bei
 ## Amendment 2026-11-08: a Release publishes a Commit; the pins stay the pins
 
 A Library Release is made from a Commit (task 72_5; ADR 0007, ADR 0021): it copies the Commit's WidgetTypes into `released_widget_types` and takes its number under the same unique key, so a Project still sees exactly what it pinned. Publishing no longer states the Draft's Version, and one Commit is published at most once (`ErrCommitAlreadyReleased`). The pins of a Project are untouched by a Release, and a Release does not block the Library's deletion any more than a Commit does: only a live pin and the running Deployment do (task 71). The old Release-number race remains: a lost `ErrReleaseNumberTaken` is retried on top of the winner.
+
+## Amendment 2026-11-14: the impact is computed on an imported saved state (task 85)
+
+The rule is unchanged — a switch or removal is refused while Widgets would be left without their WidgetType, and the bindings it breaks are removed after confirmation — but the target is now a **Commit** of the Library, not a Release. `ImportImpactOf` reads the WidgetTypes of that Commit; `library_imports` holds the number and ID; the row lock on the import and on the Library stays. The migration deletes legacy imports (a Release without a Commit) and the Widgets of their types, and rewrites the stored documents; the one-time exception is in ADR 0021. A Library is still deleted only while no live Project imports it and no running Deployment names it.
