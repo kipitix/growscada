@@ -10,7 +10,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
-	"github.com/kipitix/growscada/internal/server/domain/librarypin"
+	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -193,14 +193,14 @@ func (s *Session) DeleteScene(ctx context.Context, sceneID id.ID[scene.Scene]) (
 }
 
 // AddWidget places a Widget on a Scene, checking its WidgetType against the
-// Library Release the Project pins and its PortBindings against the Project's
+// saved states the Project imports and its PortBindings against the Project's
 // Tags in this transaction (ADR 0012).
 func (s *Session) AddWidget(ctx context.Context, sceneID id.ID[scene.Scene], w scene.Widget) (scene.Widget, error) {
 	sc, err := s.loader.Scene(ctx, sceneID)
 	if err != nil {
 		return nil, err
 	}
-	wt, err := s.loader.PinnedWidgetType(ctx, w.TypeID())
+	wt, err := s.loader.ImportedWidgetType(ctx, w.TypeID())
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +227,7 @@ func (s *Session) UpdateWidget(ctx context.Context, sceneID id.ID[scene.Scene], 
 	if err != nil {
 		return nil, err
 	}
-	wt, err := s.loader.PinnedWidgetType(ctx, w.TypeID())
+	wt, err := s.loader.ImportedWidgetType(ctx, w.TypeID())
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +285,7 @@ func (s *Session) RemoveWidget(ctx context.Context, sceneID id.ID[scene.Scene], 
 }
 
 // recordWidgetChanges records, of two states of one Scene, the Widgets that
-// differ: a binding removed by a Pin switch or a Tag deletion changes Widget
+// differ: a binding removed by an import switch or a Tag deletion changes Widget
 // rows, never the Scene's own row.
 func (s *Session) recordWidgetChanges(before, after scene.Scene) {
 	stored := make(map[id.ID[scene.Widget]]scene.Widget, len(before.Widgets()))
@@ -449,69 +449,69 @@ func (s *Session) DeleteEnvironmentDevice(ctx context.Context, environmentID id.
 	return found, nil
 }
 
-// PutLibraryPin pins a Library Release in the Draft: it adds the pin when the
-// Project pins no release of the Library, else switches it. A switch removes,
-// in the same change, the PortBindings the new release breaks; Widgets left
-// without their WidgetType refuse it (ADR 0012). The bool reports whether the
-// pin was added.
-func (s *Session) PutLibraryPin(ctx context.Context, libraryID id.ID[library.Library], number library.ReleaseNumber) (librarypin.LibraryPin, bool, error) {
-	release, err := s.loader.Release(ctx, libraryID, number)
+// PutLibraryImport imports a saved state of a Library in the Draft: it adds
+// the import when the Project imports no saved state of the Library, else
+// switches it. A switch removes, in the same change, the PortBindings the new
+// Commit breaks; Widgets left without their WidgetType refuse it (ADR 0012).
+// The bool reports whether the import was added.
+func (s *Session) PutLibraryImport(ctx context.Context, libraryID id.ID[library.Library], commitNumber int) (libraryimport.LibraryImport, bool, error) {
+	commit, err := s.loader.LibraryCommit(ctx, libraryID, commitNumber)
 	if err != nil {
 		return nil, false, err
 	}
-	found, err := s.loader.LibraryPin(ctx, libraryID)
+	found, err := s.loader.LibraryImport(ctx, libraryID)
 	switch {
-	case errors.Is(err, librarypin.ErrLibraryPinNotFound):
-		created := librarypin.CreateLibraryPin(s.ProjectID(), release)
-		s.recordAfter(SnapshotOfLibraryPin(created))
+	case errors.Is(err, libraryimport.ErrLibraryImportNotFound):
+		created := libraryimport.CreateLibraryImport(s.ProjectID(), commit)
+		s.recordAfter(SnapshotOfLibraryImport(created))
 		s.recordEvents(created.PendingEvents()...)
 		return created, true, nil
 	case err != nil:
 		return nil, false, err
 	}
-	from, err := s.loader.Release(ctx, libraryID, found.Release())
+	from, err := s.loader.LibraryCommit(ctx, libraryID, found.CommitNumber())
 	if err != nil {
 		return nil, false, err
 	}
-	if err := s.checkPinImpact(ctx, from, &release); err != nil {
+	if err := s.checkImportImpact(ctx, &from, &commit); err != nil {
 		return nil, false, err
 	}
-	switched, err := found.Switch(release)
+	switched, err := found.Switch(commit)
 	if err != nil {
 		return nil, false, err
 	}
-	s.recordBefore(SnapshotOfLibraryPin(found))
-	s.recordAfter(SnapshotOfLibraryPin(switched))
+	s.recordBefore(SnapshotOfLibraryImport(found))
+	s.recordAfter(SnapshotOfLibraryImport(switched))
 	s.recordEvents(switched.PendingEvents()...)
-	if err := s.reconcileScenes(ctx, &release); err != nil {
+	if err := s.reconcileScenes(ctx, &commit); err != nil {
 		return nil, false, err
 	}
 	return switched, false, nil
 }
 
-// DeleteLibraryPin removes the pin, refused while Widgets of the Project are
-// of its WidgetTypes.
-func (s *Session) DeleteLibraryPin(ctx context.Context, libraryID id.ID[library.Library]) (librarypin.LibraryPin, error) {
-	found, err := s.loader.LibraryPin(ctx, libraryID)
+// DeleteLibraryImport removes the import, refused while Widgets of the Project
+// are of its WidgetTypes.
+func (s *Session) DeleteLibraryImport(ctx context.Context, libraryID id.ID[library.Library]) (libraryimport.LibraryImport, error) {
+	found, err := s.loader.LibraryImport(ctx, libraryID)
 	if err != nil {
 		return nil, err
 	}
-	from, err := s.loader.Release(ctx, libraryID, found.Release())
+	from, err := s.loader.LibraryCommit(ctx, libraryID, found.CommitNumber())
 	if err != nil {
 		return nil, err
 	}
-	if err := s.checkPinImpact(ctx, from, nil); err != nil {
+	if err := s.checkImportImpact(ctx, &from, nil); err != nil {
 		return nil, err
 	}
 	deleted := found.Delete()
-	s.recordBefore(SnapshotOfLibraryPin(found))
+	s.recordBefore(SnapshotOfLibraryImport(found))
 	s.recordEvents(deleted.PendingEvents()...)
 	return found, nil
 }
 
-// checkPinImpact refuses a switch or removal that would leave Widgets of the
-// Project without their WidgetType (librarypin.ImpactOf).
-func (s *Session) checkPinImpact(ctx context.Context, from library.LibraryRelease, to *library.LibraryRelease) error {
+// checkImportImpact refuses a switch or removal that would leave Widgets of the
+// Project without their WidgetType (libraryimport.ImportImpactOf).
+func (s *Session) checkImportImpact(ctx context.Context, from, to *libraryimport.Commit) error {
 	scenes, err := s.loader.Scenes(ctx)
 	if err != nil {
 		return err
@@ -520,17 +520,13 @@ func (s *Session) checkPinImpact(ctx context.Context, from library.LibraryReleas
 	if err != nil {
 		return err
 	}
-	var toRelease library.LibraryRelease
-	if to != nil {
-		toRelease = *to
-	}
-	return librarypin.ImpactOf(placedWidgets(scenes), from, toRelease, tagTypes).Check()
+	return libraryimport.ImportImpactOf(placedWidgets(scenes), from, to, tagTypes).Check()
 }
 
-// reconcileScenes removes the PortBindings the new release breaks from every
+// reconcileScenes removes the PortBindings the new Commit breaks from every
 // Scene of the Project (ADR 0010, ADR 0012).
-func (s *Session) reconcileScenes(ctx context.Context, release *library.LibraryRelease) error {
-	if release == nil {
+func (s *Session) reconcileScenes(ctx context.Context, commit *libraryimport.Commit) error {
+	if commit == nil {
 		return nil
 	}
 	scenes, err := s.loader.Scenes(ctx)
@@ -549,7 +545,7 @@ func (s *Session) reconcileScenes(ctx context.Context, release *library.LibraryR
 				continue
 			}
 			seen[w.TypeID()] = struct{}{}
-			wt, ok := (*release).FindWidgetType(w.TypeID())
+			wt, ok := (*commit).FindWidgetType(w.TypeID())
 			if !ok {
 				continue
 			}
@@ -585,11 +581,11 @@ func sameSceneWidgets(a, b scene.Scene) bool {
 	return true
 }
 
-func placedWidgets(scenes []scene.Scene) []librarypin.PlacedWidget {
-	var placed []librarypin.PlacedWidget
+func placedWidgets(scenes []scene.Scene) []libraryimport.PlacedWidget {
+	var placed []libraryimport.PlacedWidget
 	for _, sc := range scenes {
 		for _, w := range sc.Widgets() {
-			placed = append(placed, librarypin.PlacedWidget{SceneID: sc.ID(), Widget: w})
+			placed = append(placed, libraryimport.PlacedWidget{SceneID: sc.ID(), Widget: w})
 		}
 	}
 	return placed
@@ -675,7 +671,7 @@ type Content struct {
 	Devices            []device.Device
 	Environments       []device.Environment
 	EnvironmentDevices []device.EnvironmentDevice
-	LibraryPins        []librarypin.LibraryPin
+	LibraryImports     []libraryimport.LibraryImport
 }
 
 // Replace replaces the whole content of the Draft with content (Discard,
@@ -707,9 +703,9 @@ func (s *Session) Replace(ctx context.Context, content Content) error {
 			s.recordEvents(scene.NewWidgetCreatedEvent(w.ID(), sc.ID(), s.ProjectID(), w.TypeID()))
 		}
 	}
-	for _, p := range content.LibraryPins {
-		s.recordAfter(SnapshotOfLibraryPin(p))
-		s.recordEvents(librarypin.NewLibraryPinCreatedEvent(p.LibraryID(), s.ProjectID()))
+	for _, i := range content.LibraryImports {
+		s.recordAfter(SnapshotOfLibraryImport(i))
+		s.recordEvents(libraryimport.NewLibraryImportCreatedEvent(i.LibraryID(), s.ProjectID()))
 	}
 	return nil
 }
@@ -737,7 +733,7 @@ func (s *Session) Purge(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	pins, err := s.loader.AllLibraryPins(ctx)
+	imports, err := s.loader.AllLibraryImports(ctx)
 	if err != nil {
 		return err
 	}
@@ -754,9 +750,9 @@ func (s *Session) Purge(ctx context.Context) error {
 		s.recordBefore(SnapshotOfTag(t))
 		s.recordEvents(t.Delete().PendingEvents()...)
 	}
-	for _, p := range pins {
-		s.recordBefore(SnapshotOfLibraryPin(p))
-		s.recordEvents(p.Delete().PendingEvents()...)
+	for _, i := range imports {
+		s.recordBefore(SnapshotOfLibraryImport(i))
+		s.recordEvents(i.Delete().PendingEvents()...)
 	}
 	for _, p := range pairs {
 		s.recordBefore(SnapshotOfEnvironmentDevice(p))

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 
 	projectv0 "github.com/kipitix/growscada/contract/project/v0"
 	"github.com/kipitix/growscada/internal/server/domain/description"
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
@@ -30,7 +32,7 @@ func emptyFile(projectID uuid.UUID) projectv0.ProjectFile {
 		EnvironmentDevices: []projectv0.EnvironmentDevice{},
 		Scenes:             []projectv0.Scene{},
 		WidgetTypes:        []projectv0.WidgetType{},
-		LibraryPins:        []projectv0.LibraryPin{},
+		LibraryImports:     []projectv0.LibraryImport{},
 	}
 }
 
@@ -123,7 +125,7 @@ func TestValidateProjectFile_RefusesAnotherProject(t *testing.T) {
 func TestValidateProjectFile_RefusesAnUnknownField(t *testing.T) {
 	projectID := uuid.New()
 	document := []byte(`{"schema_version":"` + projectv0.SchemaVersion().String() + `","project_id":"` +
-		projectID.String() + `","tags":[],"devices":[],"environments":[],"environment_devices":[],"scenes":[],"widget_types":[],"library_pins":[],"surprise":true}`)
+		projectID.String() + `","tags":[],"devices":[],"environments":[],"environment_devices":[],"scenes":[],"widget_types":[],"library_imports":[],"surprise":true}`)
 	_, err := (projectFileValidator{}).validate(context.Background(),
 		id.NewID(id.IDWithUUID[project.Project](projectID)), document, false)
 	issues := fileIssues(t, err)
@@ -165,7 +167,7 @@ func portFile(t *testing.T, projectID uuid.UUID, tagType string, ports []project
 	libraryID, typeID, tagID := uuid.New(), uuid.New(), uuid.New()
 	file := emptyFile(projectID)
 	file.Tags = []projectv0.TagDefinition{{ID: tagID, Name: "speed", Type: tagType}}
-	file.LibraryPins = []projectv0.LibraryPin{{LibraryID: libraryID, Release: 1}}
+	file.LibraryImports = []projectv0.LibraryImport{{LibraryID: libraryID, Commit: 1}}
 	file.WidgetTypes = []projectv0.WidgetType{{
 		ID: typeID, LibraryID: libraryID, Name: "gauge", ScriptLanguage: "javascript",
 		DefaultWidth: 10, DefaultHeight: 10, InputPorts: ports,
@@ -243,7 +245,7 @@ func TestValidateProjectFile_RefusesAWidgetOfTwoScenes(t *testing.T) {
 		ID: typeID, LibraryID: libraryID, Name: "gauge", ScriptLanguage: "javascript",
 		DefaultWidth: 10, DefaultHeight: 10,
 	}}
-	file.LibraryPins = []projectv0.LibraryPin{{LibraryID: libraryID, Release: 1}}
+	file.LibraryImports = []projectv0.LibraryImport{{LibraryID: libraryID, Commit: 1}}
 	widget := projectv0.Widget{
 		ID: widgetID, Name: "gauge", Size: projectv0.Size{Width: 10, Height: 10},
 		Origin: projectv0.Origin{X: 0.5, Y: 0.5}, TypeID: typeID,
@@ -273,7 +275,7 @@ func TestValidateProjectFile_RefusesAnExtraWidgetTypeCopy(t *testing.T) {
 // from the Draft it would make, and the file is refused (ADR 0018).
 func TestValidateProjectFile_RefusesADocumentItsOwnRebuildDiffersFrom(t *testing.T) {
 	projectID, libraryID := uuid.New(), uuid.New()
-	file, _ := pinnedFile(t, projectID, libraryID)
+	file, _ := importedFile(t, projectID, libraryID)
 	file.Scenes[0].Widgets[0].Rotation.Degrees = 370
 	issues := fileIssues(t, validateFile(t, projectID, file))
 	wantIssue(t, issues, "", "differs from the Draft it would make")
@@ -293,22 +295,23 @@ func (f fakeLibraries) FindByID(_ context.Context, libraryID id.ID[library.Libra
 	return found, nil
 }
 
-// fakeReleases serves FindByNumber from a map, as fakeLibraries does.
-type fakeReleases struct {
-	library.LibraryReleaseRepository
-	found map[string]library.LibraryRelease
+// fakeCommits serves FindCommit from a map, as fakeLibraries does.
+type fakeCommits struct {
+	draft.Repository
+	found map[string]draft.Commit
 }
 
-func (f fakeReleases) FindByNumber(_ context.Context, libraryID id.ID[library.Library], number library.ReleaseNumber) (library.LibraryRelease, error) {
-	found, ok := f.found[libraryID.UUID().String()+"/"+number.String()]
+func (f fakeCommits) FindCommit(_ context.Context, scope draft.Scope, number int) (draft.Commit, error) {
+	found, ok := f.found[scope.LibraryID().UUID().String()+"/"+strconv.Itoa(number)]
 	if !ok {
-		return nil, id.NotFound(library.ErrReleaseNotFound, libraryID)
+		return nil, fmt.Errorf("%w: %d of %s", draft.ErrCommitNotFound, number, scope)
 	}
 	return found, nil
 }
 
-// pinnedFile is a document of one Scene with one Widget of a pinned release.
-func pinnedFile(t *testing.T, projectID, libraryID uuid.UUID) (projectv0.ProjectFile, library.LibraryRelease) {
+// importedFile is a document of one Scene with one Widget of an imported
+// saved state.
+func importedFile(t *testing.T, projectID, libraryID uuid.UUID) (projectv0.ProjectFile, draft.Commit) {
 	t.Helper()
 	typeID, tagID := uuid.New(), uuid.New()
 	name, err := library.NewWidgetTypeName("gauge")
@@ -336,23 +339,23 @@ func pinnedFile(t *testing.T, projectID, libraryID uuid.UUID) (projectv0.Project
 	if err != nil {
 		t.Fatalf("released widget type: %v", err)
 	}
-	number, err := library.NewReleaseNumber(1)
+	title, err := draft.NewCommitTitle("Save")
 	if err != nil {
-		t.Fatalf("release number: %v", err)
+		t.Fatalf("commit title: %v", err)
 	}
-	author, err := library.NewAuthor("system")
+	author, err := draft.NewAuthor("system")
 	if err != nil {
 		t.Fatalf("author: %v", err)
 	}
-	release, err := library.ReconstituteRelease(
-		id.NewID(id.IDWithUUID[library.Library](libraryID)), number, nil, author, library.OriginLegacy, "",
-		time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC), []library.ReleasedWidgetType{released})
+	commit, err := draft.NewCommit(draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](libraryID))),
+		id.NewID[draft.Commit](), 1, title, author, time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC),
+		version.Committed[draft.Draft](), draft.NewLibraryCommitContent([]library.ReleasedWidgetType{released}))
 	if err != nil {
-		t.Fatalf("release: %v", err)
+		t.Fatalf("commit: %v", err)
 	}
 	file := emptyFile(projectID)
 	file.Tags = []projectv0.TagDefinition{{ID: tagID, Name: "speed", Type: "integer"}}
-	file.LibraryPins = []projectv0.LibraryPin{{LibraryID: libraryID, Release: 1}}
+	file.LibraryImports = []projectv0.LibraryImport{{LibraryID: libraryID, Commit: 1}}
 	file.WidgetTypes = []projectv0.WidgetType{{
 		ID: typeID, LibraryID: libraryID, Name: "gauge", ScriptLanguage: "javascript",
 		DefaultWidth: 100, DefaultHeight: 100,
@@ -366,12 +369,12 @@ func pinnedFile(t *testing.T, projectID, libraryID uuid.UUID) (projectv0.Project
 			PortBindings: []projectv0.PortBinding{{PortName: "value", TagID: tagID}},
 		}},
 	}}
-	return file, release
+	return file, commit
 }
 
 func TestValidateProjectFile_OpenChecksLocalLibraries(t *testing.T) {
 	projectID, libraryID := uuid.New(), uuid.New()
-	file, release := pinnedFile(t, projectID, libraryID)
+	file, commit := importedFile(t, projectID, libraryID)
 	libraryName, err := library.NewLibraryName("lib")
 	if err != nil {
 		t.Fatalf("library name: %v", err)
@@ -383,7 +386,7 @@ func TestValidateProjectFile_OpenChecksLocalLibraries(t *testing.T) {
 	)
 	validator := projectFileValidator{
 		libraries: fakeLibraries{found: map[uuid.UUID]library.Library{libraryID: found}},
-		releases:  fakeReleases{found: map[string]library.LibraryRelease{libraryID.String() + "/1": release}},
+		drafts:    fakeCommits{found: map[string]draft.Commit{libraryID.String() + "/1": commit}},
 	}
 	if _, err := validator.validate(context.Background(),
 		id.NewID(id.IDWithUUID[project.Project](projectID)), encoded(t, file), true); err != nil {
@@ -397,35 +400,35 @@ func TestValidateProjectFile_OpenChecksLocalLibraries(t *testing.T) {
 			id.NewID(id.IDWithUUID[project.Project](projectID)), encoded(t, file), true)
 		return err
 	}())
-	wantIssue(t, issues, "library_pins[0]", "is not live")
+	wantIssue(t, issues, "library_imports[0]", "is not live")
 
-	// A Release this server does not have.
+	// A saved state this server does not have.
 	validator.libraries = fakeLibraries{found: map[uuid.UUID]library.Library{libraryID: found}}
-	validator.releases = fakeReleases{}
+	validator.drafts = fakeCommits{}
 	issues = fileIssues(t, func() error {
 		_, err := validator.validate(context.Background(),
 			id.NewID(id.IDWithUUID[project.Project](projectID)), encoded(t, file), true)
 		return err
 	}())
-	wantIssue(t, issues, "library_pins[0]", "has no release")
+	wantIssue(t, issues, "library_imports[0]", "has no saved state")
 
-	// A copy that differs from the released WidgetType.
-	validator.releases = fakeReleases{found: map[string]library.LibraryRelease{libraryID.String() + "/1": release}}
+	// A copy that differs from the saved state's WidgetType.
+	validator.drafts = fakeCommits{found: map[string]draft.Commit{libraryID.String() + "/1": commit}}
 	file.WidgetTypes[0].HTMLTemplate = "changed"
 	issues = fileIssues(t, func() error {
 		_, err := validator.validate(context.Background(),
 			id.NewID(id.IDWithUUID[project.Project](projectID)), encoded(t, file), true)
 		return err
 	}())
-	wantIssue(t, issues, "widget_types[0]", "differs from the release")
+	wantIssue(t, issues, "widget_types[0]", "differs from the release of library")
 }
 
 // TestValidateProjectFile_DeployDoesNotCheckLocalLibraries: a self-contained
 // document runs on a Runtime node that has none of its Libraries (ADR 0018).
 func TestValidateProjectFile_DeployDoesNotCheckLocalLibraries(t *testing.T) {
 	projectID, libraryID := uuid.New(), uuid.New()
-	file, _ := pinnedFile(t, projectID, libraryID)
-	validator := projectFileValidator{libraries: fakeLibraries{}, releases: fakeReleases{}}
+	file, _ := importedFile(t, projectID, libraryID)
+	validator := projectFileValidator{libraries: fakeLibraries{}, drafts: fakeCommits{}}
 	if _, err := validator.validate(context.Background(),
 		id.NewID(id.IDWithUUID[project.Project](projectID)), encoded(t, file), false); err != nil {
 		t.Fatalf("a valid self-contained document: %v", err)

@@ -551,65 +551,65 @@ func (l *LibraryClient) LoadCommit(ctx context.Context, number int) (apiv0.LoadC
 	return resp, err
 }
 
-// ── Library Pins ─────────────────────────────────────────────────────────────
+// ── Library Imports ─────────────────────────────────────────────────────────
 
-// ListLibraryPins returns the project's Library Pins, in the order they were
-// added.
-func (p *ProjectClient) ListLibraryPins(ctx context.Context) ([]apiv0.LibraryPinResponse, error) {
-	var resp apiv0.GetLibraryPinsResponse
-	err := p.do(ctx, http.MethodGet, "/library-pins", nil, http.StatusOK, &resp)
-	return resp.LibraryPins, err
+// Imports returns the project's Library Imports, in the order they were added.
+func (p *ProjectClient) Imports(ctx context.Context) ([]apiv0.LibraryImportResponse, error) {
+	var resp apiv0.GetLibraryImportsResponse
+	err := p.do(ctx, http.MethodGet, "/library-imports", nil, http.StatusOK, &resp)
+	return resp.LibraryImports, err
 }
 
-// PinLibrary pins release req.Release of the library, adding the pin or
-// switching it; req.Version is the Version of the Draft the client saw. The
-// error matches ErrConflict if the version is stale or the switch would leave
-// Widgets without their WidgetType (the StatusError's Problem names them).
-func (p *ProjectClient) PinLibrary(ctx context.Context, libraryID uuid.UUID, req apiv0.PutLibraryPinRequest) (apiv0.LibraryPinResponse, error) {
-	var resp apiv0.LibraryPinResponse
+// ImportLibrary imports the saved state req.Commit of the library, adding the
+// import or switching it; req.Version is the Version of the Draft the client
+// saw. The error matches ErrConflict if the version is stale or the switch
+// would leave Widgets without their WidgetType (the StatusError's Problem names
+// them) and ErrNotFound for a saved state the library does not have.
+func (p *ProjectClient) ImportLibrary(ctx context.Context, libraryID uuid.UUID, req apiv0.PutLibraryImportRequest) (apiv0.LibraryImportResponse, error) {
+	var resp apiv0.LibraryImportResponse
 	version, err := p.draftVersionOf(ctx, req.Version)
 	if err != nil {
 		return resp, err
 	}
 	req.Version = version
-	err = p.doOneOf(ctx, http.MethodPut, libraryPinPath(libraryID), req, &resp, http.StatusOK, http.StatusCreated)
+	err = p.doOneOf(ctx, http.MethodPut, libraryImportPath(libraryID), req, &resp, http.StatusOK, http.StatusCreated)
 	return resp, err
 }
 
-// UnpinLibrary removes the pin of the library, stating the Version of the
+// RemoveImport removes the import of the library, stating the Version of the
 // Draft the client saw. The error matches ErrConflict while Widgets of the
 // project are of its WidgetTypes.
-func (p *ProjectClient) UnpinLibrary(ctx context.Context, libraryID uuid.UUID, version int) (apiv0.LibraryPinResponse, error) {
-	var resp apiv0.LibraryPinResponse
+func (p *ProjectClient) RemoveImport(ctx context.Context, libraryID uuid.UUID, version int) (apiv0.LibraryImportResponse, error) {
+	var resp apiv0.LibraryImportResponse
 	version, err := p.draftVersionOf(ctx, version)
 	if err != nil {
 		return resp, err
 	}
-	err = p.do(ctx, http.MethodDelete, withVersion(libraryPinPath(libraryID), version), nil, http.StatusOK, &resp)
+	err = p.do(ctx, http.MethodDelete, withVersion(libraryImportPath(libraryID), version), nil, http.StatusOK, &resp)
 	return resp, err
 }
 
-// LibraryPinImpact previews pinning the release numbered release of the
-// library; release 0 previews removing the pin.
-func (p *ProjectClient) LibraryPinImpact(ctx context.Context, libraryID uuid.UUID, release int) (apiv0.PinImpactResponse, error) {
-	path := libraryPinPath(libraryID) + "/impact"
-	if release != 0 {
-		path += "?" + apiv0.LibraryPinImpactQueryRelease + "=" + strconv.Itoa(release)
+// ImportImpact previews importing the saved state numbered commit of the
+// library; commit 0 previews removing the import.
+func (p *ProjectClient) ImportImpact(ctx context.Context, libraryID uuid.UUID, commit int) (apiv0.ImportImpactResponse, error) {
+	path := libraryImportPath(libraryID) + "/impact"
+	if commit != 0 {
+		path += "?" + apiv0.LibraryImportImpactQueryCommit + "=" + strconv.Itoa(commit)
 	}
-	var resp apiv0.PinImpactResponse
+	var resp apiv0.ImportImpactResponse
 	err := p.do(ctx, http.MethodGet, path, nil, http.StatusOK, &resp)
 	return resp, err
 }
 
-// ListWidgetTypes returns the WidgetTypes of every release the project pins:
-// those its Widgets may be of.
-func (p *ProjectClient) ListWidgetTypes(ctx context.Context) ([]apiv0.ReleasedWidgetTypeResponse, error) {
-	var resp apiv0.GetPinnedWidgetTypesResponse
+// ImportedWidgetTypes returns the WidgetTypes of every saved state the project
+// imports: those its Widgets may be of.
+func (p *ProjectClient) ImportedWidgetTypes(ctx context.Context) ([]apiv0.ReleasedWidgetTypeResponse, error) {
+	var resp apiv0.GetImportedWidgetTypesResponse
 	err := p.do(ctx, http.MethodGet, "/widget-types", nil, http.StatusOK, &resp)
 	return resp.WidgetTypes, err
 }
 
-func libraryPinPath(libraryID uuid.UUID) string { return "/library-pins/" + libraryID.String() }
+func libraryImportPath(libraryID uuid.UUID) string { return "/library-imports/" + libraryID.String() }
 
 // ── Tags ─────────────────────────────────────────────────────────────────────
 

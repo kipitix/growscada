@@ -78,7 +78,7 @@ func TestMain(m *testing.M) {
 func cleanDrafts(t *testing.T) {
 	t.Helper()
 	if _, err := testDB.ExecContext(context.Background(),
-		`DELETE FROM engineering.draft_changes; DELETE FROM engineering.drafts`); err != nil {
+		`DELETE FROM engineering.library_imports; DELETE FROM engineering.draft_changes; DELETE FROM engineering.drafts`); err != nil {
 		t.Fatalf("cleanDrafts: %v", err)
 	}
 }

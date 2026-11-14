@@ -34,7 +34,7 @@ var runtimeRole = []string{
 var engineeringRole = []string{
 	"internal/server/domain/scene",
 	"internal/server/domain/library",
-	"internal/server/domain/librarypin",
+	"internal/server/domain/libraryimport",
 	"internal/server/domain/release",
 	"internal/server/domain/settings",
 	"internal/server/application",

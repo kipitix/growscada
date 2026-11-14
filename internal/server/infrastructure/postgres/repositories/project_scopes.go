@@ -6,7 +6,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/application"
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/id"
-	"github.com/kipitix/growscada/internal/server/domain/librarypin"
+	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -32,7 +32,7 @@ func (s *projectScopes) ForProject(projectID id.ID[project.Project]) application
 		projectID:          projectID,
 		tags:               NewTagRepositoryPostgres(s.db, projectID, s.opts...),
 		scenes:             NewSceneRepositoryPostgres(s.db, projectID, s.opts...),
-		pins:               NewLibraryPinRepositoryPostgres(s.db, projectID, s.opts...),
+		imports:            NewLibraryImportRepositoryPostgres(s.db, projectID, s.opts...),
 		devices:            NewDeviceRepositoryPostgres(s.db, projectID, s.opts...),
 		environments:       NewEnvironmentRepositoryPostgres(s.db, projectID, s.opts...),
 		environmentDevices: NewEnvironmentDeviceRepositoryPostgres(s.db, projectID, s.opts...),
@@ -43,17 +43,17 @@ type projectScope struct {
 	projectID          id.ID[project.Project]
 	tags               tag.TagRepository
 	scenes             scene.SceneRepository
-	pins               librarypin.Repository
+	imports            libraryimport.Repository
 	devices            device.DeviceRepository
 	environments       device.EnvironmentRepository
 	environmentDevices device.EnvironmentDeviceRepository
 }
 
-func (s projectScope) ProjectID() id.ID[project.Project]  { return s.projectID }
-func (s projectScope) Tags() tag.TagRepository            { return s.tags }
-func (s projectScope) Scenes() scene.SceneRepository      { return s.scenes }
-func (s projectScope) LibraryPins() librarypin.Repository { return s.pins }
-func (s projectScope) Devices() device.DeviceRepository   { return s.devices }
+func (s projectScope) ProjectID() id.ID[project.Project]        { return s.projectID }
+func (s projectScope) Tags() tag.TagRepository                  { return s.tags }
+func (s projectScope) Scenes() scene.SceneRepository            { return s.scenes }
+func (s projectScope) LibraryImports() libraryimport.Repository { return s.imports }
+func (s projectScope) Devices() device.DeviceRepository         { return s.devices }
 func (s projectScope) Environments() device.EnvironmentRepository {
 	return s.environments
 }

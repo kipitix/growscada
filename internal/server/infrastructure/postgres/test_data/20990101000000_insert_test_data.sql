@@ -7,8 +7,8 @@
 --   Scenes:       c1d2e3f4-000N-4000-8000-000000000000
 --   Widgets:      b1c2d3e4-000N-4000-8000-000000000000
 --   Libraries:    d0000000-0000-4000-8000-00000000000N: 1 is "Main", created
---                 by the migrations with its release 1 pinned in Main; 2 is
---                 "Extras"
+--                 by the migrations, 2 is "Extras"; each is saved once and
+--                 imported by a Project
 --   Widget types: a1b2c3d4-000N-4000-8000-000000000000 (see below)
 --   Tags:         6ba7b81N-9dad-11d1-80b4-00c04fd430c8 (see below)
 
@@ -114,19 +114,54 @@ INSERT INTO engineering.widget_types (id, library_id, name, html_template, scrip
         24
     );
 
--- The Library Releases: release 1 of Main (made empty by the migrations)
--- gets copies of its Draft, Extras its own release 1 with its Draft
-INSERT INTO engineering.library_releases (library_id, number, note) VALUES
-    ('d0000000-0000-4000-8000-000000000002', 1, 'First release');
+-- Every seeded Project and Library gets its Draft row (ADR 0016): the one
+-- Version of its content.
+INSERT INTO engineering.drafts (id, project_id)
+    SELECT gen_random_uuid(), id FROM projects WHERE id NOT IN (SELECT project_id FROM engineering.drafts WHERE project_id IS NOT NULL);
+INSERT INTO engineering.drafts (id, library_id)
+    SELECT gen_random_uuid(), id FROM engineering.libraries WHERE id NOT IN (SELECT library_id FROM engineering.drafts WHERE library_id IS NOT NULL);
+
+-- The saved state of each Library's Draft (task 85_6): its WidgetTypes as
+-- copies, the content the imports name and the releases publish.
+INSERT INTO engineering.commits (id, draft_id, number, title, author, created_at, draft_version, content)
+    SELECT gen_random_uuid(), d.id, 1, 'Seed', 'seed', now(), 1,
+           jsonb_build_object(
+               'format', 1,
+               'kind', 'library',
+               'widget_types', COALESCE((
+                   SELECT jsonb_agg(jsonb_build_object(
+                       'id', w.id, 'library_id', w.library_id, 'name', w.name,
+                       'html_template', w.html_template, 'script', w.script,
+                       'script_language', w.script_language,
+                       'default_width', w.default_width, 'default_height', w.default_height,
+                       'input_ports', w.input_ports) ORDER BY w.pk_id)
+                   FROM engineering.widget_types w WHERE w.library_id = d.library_id), '[]'::jsonb))
+    FROM engineering.drafts d WHERE d.library_id IS NOT NULL;
+UPDATE engineering.drafts SET last_commit_number = 1, last_commit_draft_version = 1, clean_version = 1
+    WHERE library_id IS NOT NULL;
+
+-- The Library Releases: release 1 of each Library is its saved state 1
+INSERT INTO engineering.library_releases (library_id, number, note, commit_number, author, origin) VALUES
+    ('d0000000-0000-4000-8000-000000000001', 1, 'First release', 1, 'seed', 'commit'),
+    ('d0000000-0000-4000-8000-000000000002', 1, 'First release', 1, 'seed', 'commit')
+    ON CONFLICT (library_id, number) DO UPDATE
+    SET commit_number = EXCLUDED.commit_number, author = EXCLUDED.author, origin = EXCLUDED.origin;
 INSERT INTO engineering.released_widget_types
         (library_id, release_number, id, name, html_template, script, script_language, default_width, default_height, input_ports)
     SELECT library_id, 1, id, name, html_template, script, script_language, default_width, default_height, input_ports
     FROM engineering.widget_types ORDER BY pk_id;
 
--- The Library Pins: Main pins both Libraries, Line 2 only Main
-INSERT INTO engineering.library_pins (project_id, library_id, release_number) VALUES
-    ('b0000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000002', 1),
-    ('b0000000-0000-4000-8000-000000000002', 'd0000000-0000-4000-8000-000000000001', 1);
+-- The Library Imports: Main imports both Libraries, Line 2 only Main
+INSERT INTO engineering.library_imports (project_id, library_id, commit_number, commit_id)
+    SELECT i.project_id, i.library_id, 1, c.id
+    FROM (VALUES
+        ('b0000000-0000-4000-8000-000000000001'::uuid, 'd0000000-0000-4000-8000-000000000001'::uuid),
+        ('b0000000-0000-4000-8000-000000000001'::uuid, 'd0000000-0000-4000-8000-000000000002'::uuid),
+        ('b0000000-0000-4000-8000-000000000002'::uuid, 'd0000000-0000-4000-8000-000000000001'::uuid)) AS i(project_id, library_id)
+    JOIN engineering.drafts d ON d.library_id = i.library_id
+    JOIN engineering.commits c ON c.draft_id = d.id AND c.number = 1
+    ON CONFLICT (project_id, library_id) DO UPDATE
+    SET commit_number = EXCLUDED.commit_number, commit_id = EXCLUDED.commit_id;
 
 -- Add test data for scenes table
 -- version: default committed version is 1
@@ -192,14 +227,9 @@ INSERT INTO engineering.widgets (id, project_id, name, x, y, z, width, height, o
     );
 -- +goose StatementEnd
 
--- Every seeded Project and Library gets its Draft row (ADR 0016): the one
--- Version of its content and its EditLock, free.
-INSERT INTO engineering.drafts (id, project_id)
-    SELECT gen_random_uuid(), id FROM projects WHERE id NOT IN (SELECT project_id FROM engineering.drafts WHERE project_id IS NOT NULL);
-INSERT INTO engineering.drafts (id, library_id)
-    SELECT gen_random_uuid(), id FROM engineering.libraries WHERE id NOT IN (SELECT library_id FROM engineering.drafts WHERE library_id IS NOT NULL);
-
 -- +goose Down
+-- The imports keep a Commit of a Draft, so they go before the Drafts.
+DELETE FROM engineering.library_imports;
 DELETE FROM engineering.drafts;
 -- +goose StatementBegin
 -- Delete test data for widgets table by their ids
@@ -216,8 +246,8 @@ DELETE FROM engineering.scenes WHERE id IN (
     'c1d2e3f4-0002-4000-8000-000000000002'
 );
 
--- Delete the pins, releases and Library of the test data
-DELETE FROM engineering.library_pins WHERE (project_id, library_id) IN (
+-- Delete the imports, saved states, releases and Library of the test data
+DELETE FROM engineering.library_imports WHERE (project_id, library_id) IN (
     ('b0000000-0000-4000-8000-000000000001'::uuid, 'd0000000-0000-4000-8000-000000000002'::uuid),
     ('b0000000-0000-4000-8000-000000000002'::uuid, 'd0000000-0000-4000-8000-000000000001'::uuid)
 );

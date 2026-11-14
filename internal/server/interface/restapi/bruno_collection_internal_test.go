@@ -37,7 +37,7 @@ var requestBodies = map[string]any{
 	"POST " + libraryPrefix + apiv0.DraftChangesRedoPath:                                                                                  apiv0.DraftChangeCommandRequest{},
 	"POST " + libraryPrefix + "/widget-types":                                                                                             apiv0.CreateWidgetTypeRequest{},
 	"PUT " + libraryPrefix + "/widget-types/" + widgetTypeResource.wildcard():                                                             apiv0.UpdateWidgetTypeRequest{},
-	"PUT " + projectPrefix + "/library-pins/" + libraryPinResource.wildcard():                                                             apiv0.PutLibraryPinRequest{},
+	"PUT " + projectPrefix + "/library-imports/" + libraryImportResource.wildcard():                                                       apiv0.PutLibraryImportRequest{},
 	"POST " + projectPrefix + "/scenes/" + sceneResource.wildcard() + "/widgets":                                                          apiv0.CreateWidgetRequest{},
 	"PATCH " + projectPrefix + "/scenes/" + sceneResource.wildcard() + "/widgets":                                                         apiv0.MoveWidgetsRequest{},
 	"PUT " + projectPrefix + "/scenes/" + sceneResource.wildcard() + "/widgets/" + widgetResource.wildcard():                              apiv0.UpdateWidgetRequest{},

@@ -29,16 +29,15 @@ const draftChangeDepth = 100
 // DraftChange, the new Version and stack position and the outbox's events.
 type draftRepositoryPostgres struct {
 	db       *sql.DB
-	releases library.LibraryReleaseRepository
 	onCommit func()
 }
 
 var _ draft.Repository = (*draftRepositoryPostgres)(nil)
 
 // NewDraftRepositoryPostgres returns the repository of the Drafts.
-func NewDraftRepositoryPostgres(db *sql.DB, releases library.LibraryReleaseRepository, opts ...Option) draft.Repository {
+func NewDraftRepositoryPostgres(db *sql.DB, opts ...Option) draft.Repository {
 	o := newOptions(opts)
-	return &draftRepositoryPostgres{db: db, releases: releases, onCommit: o.onCommit}
+	return &draftRepositoryPostgres{db: db, onCommit: o.onCommit}
 }
 
 // draftRow is a drafts row as stored.
@@ -90,7 +89,7 @@ func (r draftRepositoryPostgres) Update(ctx context.Context, scope draft.Scope, 
 			return nil, draft.ConflictError{Expected: expected.Number(), Current: row.version, Scope: scope}
 		}
 		current := draftOf(*row, scope)
-		loader := &draftLoader{tx: tx, scope: scope, project: scope.ProjectID(), library: scope.LibraryID(), releases: r.releases}
+		loader := &draftLoader{tx: tx, scope: scope, project: scope.ProjectID(), library: scope.LibraryID()}
 		session := draft.NewSession(current, loader)
 		if err := change(session); err != nil {
 			return nil, err
@@ -148,7 +147,7 @@ func (r draftRepositoryPostgres) Replace(ctx context.Context, scope draft.Scope,
 			return nil, err
 		}
 		current := draftOf(*row, scope)
-		loader := &draftLoader{tx: tx, scope: scope, project: scope.ProjectID(), library: scope.LibraryID(), releases: r.releases}
+		loader := &draftLoader{tx: tx, scope: scope, project: scope.ProjectID(), library: scope.LibraryID()}
 		session := draft.NewSession(current, loader)
 		if err := change(session); err != nil {
 			return nil, err
@@ -203,7 +202,7 @@ func (r draftRepositoryPostgres) Purge(ctx context.Context, scope draft.Scope) (
 			return nil, err
 		}
 		current := draftOf(*row, scope)
-		loader := &draftLoader{tx: tx, scope: scope, project: scope.ProjectID(), library: scope.LibraryID(), releases: r.releases}
+		loader := &draftLoader{tx: tx, scope: scope, project: scope.ProjectID(), library: scope.LibraryID()}
 		session := draft.NewSession(current, loader)
 		if err := session.Purge(ctx); err != nil {
 			return nil, err
@@ -330,7 +329,7 @@ func (r draftRepositoryPostgres) stepStack(ctx context.Context, scope draft.Scop
 			return nil, nothingToStep(scope, undo)
 		}
 		current := draftOf(*row, scope)
-		loader := &draftLoader{tx: tx, scope: scope, project: scope.ProjectID(), library: scope.LibraryID(), releases: r.releases}
+		loader := &draftLoader{tx: tx, scope: scope, project: scope.ProjectID(), library: scope.LibraryID()}
 		session := draft.NewSession(current, loader)
 		if undo {
 			err = session.Undo(ctx, change)

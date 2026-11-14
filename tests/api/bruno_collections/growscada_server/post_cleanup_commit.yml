@@ -10,13 +10,13 @@ http:
     data: |-
       {
         "version": {{CLEANUP_DRAFT_VERSION}},
-        "title": "With the pin",
+        "title": "With the import",
         "author": "Ada"
       }
   auth: inherit
 
 docs: |
-  The Draft of the cleanup project, with the Library Pin, becomes Commit 1
+  The Draft of the cleanup project, with the Library Import, becomes Commit 1
   (task 72_4).
 
 runtime:

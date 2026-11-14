@@ -543,7 +543,7 @@ func (p *Project) reloadDraftContent(ctx app.Context) {
 	p.contentReplacements++
 	p.loadScenes(ctx)
 	p.loadTags(ctx)
-	p.loadPins(ctx)
+	p.loadImports(ctx)
 	p.loadWidgetTypes(ctx)
 	p.loadDraftState(ctx) // its Version and whether the new content is a Commit's
 	p.loadDraftChanges(ctx)
@@ -560,11 +560,11 @@ func (p *Project) showLoadWarnings(ctx app.Context, warnings []apiv0.DiscardWarn
 	}
 	parts := make([]string, len(warnings))
 	for i, warning := range warnings {
-		parts[i] = fmt.Sprintf("library %s release %d: %d widgets dropped",
-			warning.LibraryID, warning.Release, warning.DroppedWidgets)
+		parts[i] = fmt.Sprintf("library %s saved state %d: %d widgets dropped",
+			warning.LibraryID, warning.Commit, warning.DroppedWidgets)
 	}
 	ctx.NewActionWithValue(toast.ActionAdd, toast.Problem{Problem: apiv0.Problem{
-		Title:  "Restored without some Library Releases",
+		Title:  "Restored without some Library Imports",
 		Detail: strings.Join(parts, "; "),
 	}})
 }

@@ -125,32 +125,32 @@ func TestLibraries_DraftReleaseDiscard(t *testing.T) {
 	}
 }
 
-// TestLibraryPins_AddPreviewSwitchRemove: a pin is added, its preview names
-// the Widgets a switch would orphan, and the switch is refused naming them.
-func TestLibraryPins_AddPreviewSwitchRemove(t *testing.T) {
+// TestLibraryImports_AddPreviewSwitchRemove: an import is added, its preview
+// names the Widgets a switch would orphan, and the switch is refused naming
+// them (task 85_6).
+func TestLibraryImports_AddPreviewSwitchRemove(t *testing.T) {
 	cleanWidgetsRest(t)
 	cleanWidgetTypes(t)
 	router := newServices().router()
 	lp := apiv0.PathPrefix + apiv0.LibraryPath(wtLibrary.String())
-	pins := mainPath + "/library-pins/" + wtLibrary.String()
+	imports := mainPath + "/library-imports/" + wtLibrary.String()
 
 	wt := createWidgetTypeViaService(t, testWtInput)
-	if rec := serve(router, http.MethodPut, pins, apiv0.PutLibraryPinRequest{Release: 1}); rec.Code != http.StatusBadRequest {
-		t.Errorf("pinning a release that does not exist: %d, want 400", rec.Code)
+	if rec := serve(router, http.MethodPut, imports, apiv0.PutLibraryImportRequest{Commit: 1}); rec.Code != http.StatusNotFound {
+		t.Errorf("importing a saved state that does not exist: %d, want 404", rec.Code)
 	}
 	commit := createLibraryCommitViaService(t, router, wtLibrary, wt.Version)
 	serve(router, http.MethodPost, lp+"/releases", apiv0.CreateReleaseRequest{Commit: commit.Number, Author: "Ada"})
-	rec := serve(router, http.MethodPut, pins, apiv0.PutLibraryPinRequest{Release: 1})
+	rec := serve(router, http.MethodPut, imports, apiv0.PutLibraryImportRequest{Commit: commit.Number})
 	if rec.Code != http.StatusCreated {
-		t.Fatalf("add pin: %d %s", rec.Code, rec.Body)
+		t.Fatalf("add import: %d %s", rec.Code, rec.Body)
 	}
-	added := decodeBody[apiv0.LibraryPinResponse](t, rec)
-	if added.CommitNumber == nil || *added.CommitNumber != commit.Number || added.Title == nil || *added.Title != "Save" ||
-		added.Author != "Ada" || added.Origin != apiv0.LibraryReleaseOriginCommit {
-		t.Errorf("the provenance of the pin: %+v, want commit 1 titled Save by Ada", added)
+	added := decodeBody[apiv0.LibraryImportResponse](t, rec)
+	if added.CommitNumber != commit.Number || added.Title != "Save" || added.Author != "Ada" {
+		t.Errorf("the provenance of the import: %+v, want saved state 1 titled Save by Ada", added)
 	}
 
-	palette := decodeBody[apiv0.GetPinnedWidgetTypesResponse](t, serve(router, http.MethodGet, mainPath+"/widget-types", nil))
+	palette := decodeBody[apiv0.GetImportedWidgetTypesResponse](t, serve(router, http.MethodGet, mainPath+"/widget-types", nil))
 	found := false
 	for _, pwt := range palette.WidgetTypes {
 		found = found || pwt.ID == wt.ID
@@ -168,15 +168,15 @@ func TestLibraryPins_AddPreviewSwitchRemove(t *testing.T) {
 	second := createLibraryCommitViaService(t, router, wtLibrary, testLibraryDraftVersion(t, wtLibrary))
 	serve(router, http.MethodPost, lp+"/releases", apiv0.CreateReleaseRequest{Commit: second.Number, Author: "Ada"})
 
-	impact := decodeBody[apiv0.PinImpactResponse](t, serve(router, http.MethodGet, pins+"/impact?release=2", nil))
+	impact := decodeBody[apiv0.ImportImpactResponse](t, serve(router, http.MethodGet, imports+"/impact?commit="+strconv.Itoa(second.Number), nil))
 	if len(impact.OrphanedWidgets) != 1 || impact.OrphanedWidgets[0].WidgetID != w.ID {
 		t.Errorf("impact: %+v", impact)
 	}
-	if rec := serve(router, http.MethodGet, pins+"/impact?release=x", nil); rec.Code != http.StatusBadRequest {
-		t.Errorf("impact of release x: %d, want 400", rec.Code)
+	if rec := serve(router, http.MethodGet, imports+"/impact?commit=x", nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("impact of saved state x: %d, want 400", rec.Code)
 	}
 
-	rec = serve(router, http.MethodPut, pins, apiv0.PutLibraryPinRequest{Release: 2, Version: testDraftVersion(t, mainProject)})
+	rec = serve(router, http.MethodPut, imports, apiv0.PutLibraryImportRequest{Commit: second.Number, Version: testDraftVersion(t, mainProject)})
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("an orphaning switch: %d, want 409", rec.Code)
 	}
@@ -184,26 +184,26 @@ func TestLibraryPins_AddPreviewSwitchRemove(t *testing.T) {
 	if len(problem.OrphanedWidgets) != 1 || problem.OrphanedWidgets[0].WidgetID != w.ID || problem.OrphanedWidgets[0].SceneID != sc.ID {
 		t.Errorf("the refusal names %+v, want the widget", problem.OrphanedWidgets)
 	}
-	if rec := serve(router, http.MethodDelete, pins, nil); rec.Code != http.StatusConflict {
+	if rec := serve(router, http.MethodDelete, imports, nil); rec.Code != http.StatusConflict {
 		t.Errorf("an orphaning removal: %d, want 409", rec.Code)
 	}
 
 	serve(router, http.MethodDelete, mainPath+"/scenes/"+sc.ID.String()+"/widgets/"+w.ID.String(), nil)
-	rec = serve(router, http.MethodPut, pins, apiv0.PutLibraryPinRequest{Release: 2, Version: testDraftVersion(t, mainProject)})
+	rec = serve(router, http.MethodPut, imports, apiv0.PutLibraryImportRequest{Commit: second.Number, Version: testDraftVersion(t, mainProject)})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("switch: %d %s", rec.Code, rec.Body)
 	}
-	switched := decodeBody[apiv0.LibraryPinResponse](t, rec)
-	if switched.Release != 2 || switched.CommitNumber == nil || *switched.CommitNumber != second.Number {
-		t.Errorf("the provenance of the switched pin: %+v", switched)
+	switched := decodeBody[apiv0.LibraryImportResponse](t, rec)
+	if switched.CommitNumber != second.Number {
+		t.Errorf("the provenance of the switched import: %+v", switched)
 	}
-	if list := decodeBody[apiv0.GetLibraryPinsResponse](t, serve(router, http.MethodGet, mainPath+"/library-pins", nil)); !hasPin(list, wtLibrary, 2) {
-		t.Errorf("pins: %+v", list)
+	if list := decodeBody[apiv0.GetLibraryImportsResponse](t, serve(router, http.MethodGet, mainPath+"/library-imports", nil)); !hasImport(list, wtLibrary, second.Number) {
+		t.Errorf("imports: %+v", list)
 	}
-	if rec := serve(router, http.MethodDelete, pins, nil); rec.Code != http.StatusOK {
+	if rec := serve(router, http.MethodDelete, imports, nil); rec.Code != http.StatusOK {
 		t.Errorf("remove: %d %s", rec.Code, rec.Body)
 	}
-	if rec := serve(router, http.MethodDelete, pins, nil); rec.Code != http.StatusNotFound {
+	if rec := serve(router, http.MethodDelete, imports, nil); rec.Code != http.StatusNotFound {
 		t.Errorf("remove again: %d, want 404", rec.Code)
 	}
 	if rec := serve(router, http.MethodDelete, apiv0.PathPrefix+apiv0.LibraryPath(wtLibrary.String()), nil); rec.Code != http.StatusOK {
@@ -211,9 +211,9 @@ func TestLibraryPins_AddPreviewSwitchRemove(t *testing.T) {
 	}
 }
 
-func hasPin(list apiv0.GetLibraryPinsResponse, libraryID uuid.UUID, release int) bool {
-	for _, p := range list.LibraryPins {
-		if p.LibraryID == libraryID && p.Release == release {
+func hasImport(list apiv0.GetLibraryImportsResponse, libraryID uuid.UUID, commit int) bool {
+	for _, imported := range list.LibraryImports {
+		if imported.LibraryID == libraryID && imported.CommitNumber == commit {
 			return true
 		}
 	}

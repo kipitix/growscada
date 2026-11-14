@@ -10,7 +10,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/label"
 	"github.com/kipitix/growscada/internal/server/domain/library"
-	"github.com/kipitix/growscada/internal/server/domain/librarypin"
+	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/release"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
@@ -43,13 +43,13 @@ var apiEventTypes = map[event.EventType]string{
 	event.EventTypeProjectUpdated:     apiv0.EventProjectUpdated,
 	event.EventTypeProjectDeleted:     apiv0.EventProjectDeleted,
 
-	event.EventTypeLibraryCreated:    apiv0.EventLibraryCreated,
-	event.EventTypeLibraryUpdated:    apiv0.EventLibraryUpdated,
-	event.EventTypeLibraryDeleted:    apiv0.EventLibraryDeleted,
-	event.EventTypeLibraryReleased:   apiv0.EventLibraryReleased,
-	event.EventTypeLibraryPinCreated: apiv0.EventLibraryPinCreated,
-	event.EventTypeLibraryPinUpdated: apiv0.EventLibraryPinUpdated,
-	event.EventTypeLibraryPinDeleted: apiv0.EventLibraryPinDeleted,
+	event.EventTypeLibraryCreated:       apiv0.EventLibraryCreated,
+	event.EventTypeLibraryUpdated:       apiv0.EventLibraryUpdated,
+	event.EventTypeLibraryDeleted:       apiv0.EventLibraryDeleted,
+	event.EventTypeLibraryReleased:      apiv0.EventLibraryReleased,
+	event.EventTypeLibraryImportCreated: apiv0.EventLibraryImportCreated,
+	event.EventTypeLibraryImportUpdated: apiv0.EventLibraryImportUpdated,
+	event.EventTypeLibraryImportDeleted: apiv0.EventLibraryImportDeleted,
 
 	event.EventTypeDeviceCreated:             apiv0.EventDeviceCreated,
 	event.EventTypeDeviceUpdated:             apiv0.EventDeviceUpdated,
@@ -120,7 +120,7 @@ func newAPIEvent(e event.Event) apiv0.Event {
 		if updated, ok := e.(library.LibraryReleaseNoteUpdatedEvent); ok {
 			ev.Release = updated.Release().Int()
 		}
-	case librarypin.LibraryPinEvent:
+	case libraryimport.LibraryImportEvent:
 		ev.ID = e.LibraryID().String()
 	case device.EnvironmentDeviceEvent:
 		ev.ID = e.EnvironmentID().String()

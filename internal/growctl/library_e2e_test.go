@@ -7,9 +7,10 @@ import (
 	"github.com/kipitix/growscada/internal/server/servertest"
 )
 
-// mainPins declares the pin of release n of Gauges in the project Main.
-func mainPins(n string) string {
-	return "---\napiVersion: growscada/v0.4\nkind: Project\nmetadata:\n  name: Main\nspec:\n  libraryPins:\n    Gauges: " + n + "\n"
+// mainImports declares the import of saved state n of Gauges in the project
+// Main (task 85_6).
+func mainImports(n string) string {
+	return "---\napiVersion: growscada/v0.5\nkind: Project\nmetadata:\n  name: Main\nspec:\n  libraryImports:\n    Gauges: " + n + "\n"
 }
 
 // TestLibrary_ApplyUpdatesTwoWidgetTypesInOneRun: one Version covers every
@@ -57,10 +58,10 @@ spec:
 
 // TestLibrary_ApplyReleasePinDiscardDelete walks a library through growctl:
 // apply creates it with its Draft, save fixes Commit 1, release publishes it
-// as release 1, apply pins it in Main, an edited WidgetType is updated, saved
-// and released again, the pin switched to release 2, prune removes a
+// as release 1, apply imports it in Main, an edited WidgetType is updated,
+// saved and released again, the import switched to saved state 2, prune removes a
 // WidgetType left out, discard resets the Draft, delete removes the
-// WidgetType and, once unpinned, the library.
+// WidgetType and, once its import is gone, the library.
 func TestLibrary_ApplyReleasePinDiscardDelete(t *testing.T) {
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
 
@@ -82,15 +83,15 @@ func TestLibrary_ApplyReleasePinDiscardDelete(t *testing.T) {
 		t.Errorf("a release of an already published Commit must fail, stderr %q", stderr)
 	}
 
-	out, err = runGrowctl(t, srv, libraryManifest+mainPins("1"), "apply")
+	out, err = runGrowctl(t, srv, libraryManifest+mainImports("1"), "apply")
 	if err != nil {
-		t.Fatalf("apply the pin: %v", err)
+		t.Fatalf("apply the import: %v", err)
 	}
 	assertOutput(t, out, "project/Main unchanged", "library/Gauges unchanged", "widgettype/Gauges/Lamp unchanged",
-		"project/Main pin library/Gauges release 1 added")
+		"project/Main import library/Gauges saved state 1 added")
 
 	edited := strings.Replace(libraryManifest, "width: 40", "width: 60", 1)
-	out, _, err = execGrowctl(t, srv, edited+mainPins("1"), "diff", "-f", "-")
+	out, _, err = execGrowctl(t, srv, edited+mainImports("1"), "diff", "-f", "-")
 	if err == nil || out != "~ widgettype/Gauges/Lamp\n" {
 		t.Errorf("diff: %q, %v; want the change and exit status 1", out, err)
 	}
@@ -113,7 +114,7 @@ func TestLibrary_ApplyReleasePinDiscardDelete(t *testing.T) {
 	if err != nil || !strings.Contains(out, "wider") || !strings.Contains(out, "commit") {
 		t.Fatalf("releases: %q, %v", out, err)
 	}
-	if out, err = runGrowctl(t, srv, edited+mainPins("2"), "apply"); err != nil || !strings.Contains(out, "project/Main pin library/Gauges release 2 switched") {
+	if out, err = runGrowctl(t, srv, edited+mainImports("2"), "apply"); err != nil || !strings.Contains(out, "project/Main import library/Gauges saved state 2 switched") {
 		t.Fatalf("switch the pin: %q, %v", out, err)
 	}
 

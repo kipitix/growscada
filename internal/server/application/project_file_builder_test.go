@@ -26,7 +26,7 @@ func buildProjectFile(t *testing.T) string {
 func TestBuild_IsCanonical(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
-	cleanPins(t)
+	cleanImports(t)
 	ctx := context.Background()
 
 	mustCreateTag(t, "b-tag", "integer")
@@ -68,11 +68,11 @@ func TestBuild_IsCanonical(t *testing.T) {
 func TestBuild_CarriesOnlyTheWidgetTypesItsWidgetsUse(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
-	cleanPins(t)
+	cleanImports(t)
 	ctx := context.Background()
 
-	used, _ := pinNewWidgetType(t, mainProject, appdto.WidgetTypeInput{Name: "used"})
-	pinNewWidgetType(t, mainProject, appdto.WidgetTypeInput{Name: "unused"})
+	used, _ := importNewWidgetType(t, mainProject, appdto.WidgetTypeInput{Name: "used"})
+	importNewWidgetType(t, mainProject, appdto.WidgetTypeInput{Name: "unused"})
 
 	scenes := newSceneService()
 	scene := mustCreateScene(t, scenes)
@@ -89,18 +89,18 @@ func TestBuild_CarriesOnlyTheWidgetTypesItsWidgetsUse(t *testing.T) {
 	if len(file.WidgetTypes) != 1 || file.WidgetTypes[0].ID != used.ID {
 		t.Errorf("the widget types of the ProjectFile: %+v, want only %s", file.WidgetTypes, used.ID)
 	}
-	if len(file.LibraryPins) != 2 {
-		t.Errorf("the pins of the ProjectFile: %+v, want both, as provenance", file.LibraryPins)
+	if len(file.LibraryImports) != 2 {
+		t.Errorf("the imports of the ProjectFile: %+v, want both, as provenance", file.LibraryImports)
 	}
 }
 
 func TestBuild_AWidgetBoundToATagTheDraftLacks_IsAnError(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
-	cleanPins(t)
+	cleanImports(t)
 	ctx := context.Background()
 
-	wt, _ := pinNewWidgetType(t, mainProject, appdto.WidgetTypeInput{
+	wt, _ := importNewWidgetType(t, mainProject, appdto.WidgetTypeInput{
 		Name: "gauge", InputPorts: []appdto.InputPort{{Name: "value", TypeHint: "integer"}},
 	})
 	speed := mustCreateTag(t, "speed", "integer")
@@ -132,18 +132,18 @@ func TestBuild_AWidgetBoundToATagTheDraftLacks_IsAnError(t *testing.T) {
 func TestBuild_AWidgetOfANoLongerPinnedType_IsAnError(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
-	cleanPins(t)
+	cleanImports(t)
 	ctx := context.Background()
 	// The Draft keeps a Widget of a type no pinned release holds, so the Scene
 	// and the pins go with the test: the next one starts from a buildable Draft.
 	t.Cleanup(func() {
 		cleanScenes(t)
-		cleanPins(t)
+		cleanImports(t)
 	})
 
 	// The pin goes behind the service's back: the Draft keeps a Widget of a
 	// type no pinned release holds.
-	wt, lib := pinNewWidgetType(t, mainProject, appdto.WidgetTypeInput{Name: "orphan-maker"})
+	wt, lib := importNewWidgetType(t, mainProject, appdto.WidgetTypeInput{Name: "orphan-maker"})
 	scenes := newSceneService()
 	scene := mustCreateScene(t, scenes)
 	input := testCreateWidgetInput
@@ -152,7 +152,7 @@ func TestBuild_AWidgetOfANoLongerPinnedType_IsAnError(t *testing.T) {
 		t.Fatalf("CreateWidget: %v", err)
 	}
 	if _, err := testDB.ExecContext(ctx,
-		"DELETE FROM engineering.library_pins WHERE project_id = $1 AND library_id = $2", mainProject, lib.ID); err != nil {
+		"DELETE FROM engineering.library_imports WHERE project_id = $1 AND library_id = $2", mainProject, lib.ID); err != nil {
 		t.Fatalf("depin: %v", err)
 	}
 

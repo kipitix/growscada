@@ -55,19 +55,19 @@ type projectFileServiceImpl struct {
 	builder   ProjectFileBuilder
 	runtime   RuntimeNode
 	libraries library.LibraryRepository
-	releases  library.LibraryReleaseRepository
 }
 
 var _ ProjectFileService = (*projectFileServiceImpl)(nil)
 
 // NewProjectFileService returns the service of the project files of the live
 // Projects aContent serves, reading the running Deployments through aRuntime and
-// this server's Releases through the Libraries for opening a file.
+// this server's Libraries and their saved states — through aContent's Drafts —
+// for opening a file.
 func NewProjectFileService(aContent ProjectContent, aBuilder ProjectFileBuilder, aRuntime RuntimeNode,
-	someLibraries library.LibraryRepository, someReleases library.LibraryReleaseRepository) ProjectFileService {
+	someLibraries library.LibraryRepository) ProjectFileService {
 	return &projectFileServiceImpl{
 		content: aContent, builder: aBuilder, runtime: aRuntime,
-		libraries: someLibraries, releases: someReleases,
+		libraries: someLibraries,
 	}
 }
 
@@ -115,7 +115,7 @@ func (s projectFileServiceImpl) Open(ctx context.Context, rawProjectID uuid.UUID
 	if err != nil {
 		return appdto.DraftState{}, err
 	}
-	validator := projectFileValidator{libraries: s.libraries, releases: s.releases}
+	validator := projectFileValidator{libraries: s.libraries, drafts: s.content.Drafts()}
 	validated, err := validator.validate(ctx, projectID, document, true)
 	if err != nil {
 		return appdto.DraftState{}, err
@@ -137,7 +137,7 @@ func (s projectFileServiceImpl) Open(ctx context.Context, rawProjectID uuid.UUID
 
 	result, err := s.content.Drafts().Update(ctx, s.content.ScopeOf(projectID), expected, "Open a project file",
 		func(session *draft.Session) error {
-			if err := s.lockLocalPins(ctx, validated.file, session); err != nil {
+			if err := s.lockLocalImports(ctx, validated.file, session); err != nil {
 				return err
 			}
 			return session.Open(ctx, validated.content)
@@ -153,7 +153,7 @@ func (s projectFileServiceImpl) Deploy(ctx context.Context, rawProjectID uuid.UU
 	if err != nil {
 		return appdto.Deployment{}, err
 	}
-	validator := projectFileValidator{libraries: s.libraries, releases: s.releases}
+	validator := projectFileValidator{libraries: s.libraries, drafts: s.content.Drafts()}
 	validated, err := validator.validate(ctx, projectID, document, false)
 	if err != nil {
 		return appdto.Deployment{}, err
@@ -165,31 +165,27 @@ func (s projectFileServiceImpl) Deploy(ctx context.Context, rawProjectID uuid.UU
 	return deployed, nil
 }
 
-// lockLocalPins rechecks the local Releases inside the Draft's transaction:
-// every pinned Library's row is locked FOR SHARE, as PutLibraryPin does, and
-// its Release must still be there (ADR 0018). A Library deleted between the
-// validation and the write is a file issue, not a pin to a deleted Library.
-func (s projectFileServiceImpl) lockLocalPins(ctx context.Context, file projectv0.ProjectFile, session *draft.Session) error {
+// lockLocalImports rechecks the local saved states inside the Draft's
+// transaction: every imported Library's row is locked FOR SHARE, as
+// PutLibraryImport does, and its Commit must still be there (ADR 0018,
+// task 85_6). A Library deleted between the validation and the write is a file
+// issue, not an import of a deleted Library.
+func (s projectFileServiceImpl) lockLocalImports(ctx context.Context, file projectv0.ProjectFile, session *draft.Session) error {
 	var issues []FileIssue
-	for i, pin := range file.LibraryPins {
-		path := fmt.Sprintf("library_pins[%d]", i)
-		libraryID := id.NewID(id.IDWithUUID[library.Library](pin.LibraryID))
+	for i, imported := range file.LibraryImports {
+		path := fmt.Sprintf("library_imports[%d]", i)
+		libraryID := id.NewID(id.IDWithUUID[library.Library](imported.LibraryID))
 		if err := session.LockLibrary(ctx, libraryID); err != nil {
 			if errors.Is(err, library.ErrLibraryNotFound) {
-				issues = append(issues, FileIssue{Path: path, Message: fmt.Sprintf("library %s is not live on this server", pin.LibraryID)})
+				issues = append(issues, FileIssue{Path: path, Message: fmt.Sprintf("library %s is not live on this server", imported.LibraryID)})
 				continue
 			}
 			return err
 		}
-		number, err := library.NewReleaseNumber(pin.Release)
-		if err != nil {
-			issues = append(issues, FileIssue{Path: path + ".release", Message: err.Error()})
-			continue
-		}
-		if _, err := s.releases.FindByNumber(ctx, libraryID, number); err != nil {
-			if errors.Is(err, library.ErrReleaseNotFound) {
+		if _, err := s.content.Drafts().FindCommit(ctx, draft.LibraryScope(libraryID), imported.Commit); err != nil {
+			if errors.Is(err, draft.ErrCommitNotFound) {
 				issues = append(issues, FileIssue{Path: path,
-					Message: fmt.Sprintf("library %s has no release %d on this server", pin.LibraryID, pin.Release)})
+					Message: fmt.Sprintf("library %s has no saved state %d on this server", imported.LibraryID, imported.Commit)})
 				continue
 			}
 			return err

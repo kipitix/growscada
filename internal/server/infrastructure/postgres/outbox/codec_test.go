@@ -10,7 +10,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/label"
 	"github.com/kipitix/growscada/internal/server/domain/library"
-	"github.com/kipitix/growscada/internal/server/domain/librarypin"
+	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/release"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
@@ -60,9 +60,9 @@ func sampleEvents(t *testing.T) []event.Event {
 		library.NewLibraryDeletedEvent(libraryID, ts),
 		library.NewLibraryReleasedEvent(libraryID, libraryRelease, ts),
 		library.NewLibraryReleaseNoteUpdatedEvent(libraryID, libraryRelease, ts),
-		librarypin.NewLibraryPinCreatedEvent(libraryID, projectID, ts),
-		librarypin.NewLibraryPinUpdatedEvent(libraryID, projectID, ts),
-		librarypin.NewLibraryPinDeletedEvent(libraryID, projectID, ts),
+		libraryimport.NewLibraryImportCreatedEvent(libraryID, projectID, ts),
+		libraryimport.NewLibraryImportUpdatedEvent(libraryID, projectID, ts),
+		libraryimport.NewLibraryImportDeletedEvent(libraryID, projectID, ts),
 		scene.NewSceneCreatedEvent(sceneID, projectID, ts),
 		scene.NewSceneUpdatedEvent(sceneID, projectID, ts),
 		scene.NewSceneDeletedEvent(sceneID, projectID, ts),
@@ -164,8 +164,8 @@ func assertSameSubject(t *testing.T, original, decoded event.Event) {
 		if got, ok := decoded.(release.ReleaseEvent); !ok || got.Scope() != want.Scope() || got.ReleaseNumber() != want.ReleaseNumber() {
 			t.Errorf("decoded %T, want release %s of %s", decoded, want.ReleaseNumber(), want.Scope())
 		}
-	case librarypin.LibraryPinEvent:
-		if got, ok := decoded.(librarypin.LibraryPinEvent); !ok || got.LibraryID() != want.LibraryID() {
+	case libraryimport.LibraryImportEvent:
+		if got, ok := decoded.(libraryimport.LibraryImportEvent); !ok || got.LibraryID() != want.LibraryID() {
 			t.Errorf("decoded %T, want a pin of library %s", decoded, want.LibraryID())
 		}
 	case scene.WidgetEvent:

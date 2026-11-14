@@ -23,8 +23,8 @@ import (
 // ProjectFileBuilder assembles the ProjectFile of a Project's Draft (task 35,
 // Q2, Q6): the whole Draft — its Tags with their supplier, its Devices, its
 // Environments with the pairs of those Devices, its Scenes with their Widgets
-// — the copies of the WidgetTypes its Widgets use, taken from the Releases its
-// Library Pins hold, and the pins themselves as provenance.
+// — the copies of the WidgetTypes its Widgets use, taken from the saved states
+// its Library Imports name, and the imports themselves as provenance.
 //
 // The document is canonical: every list is sorted by ID and every carried
 // JSON object has its keys sorted, so the same Draft is always the same bytes.
@@ -34,7 +34,7 @@ type ProjectFileBuilder interface {
 	// Build returns the ProjectFile of the Draft of the live Project
 	// projectID. It is an error wrapping project.ErrProjectNotFound if the
 	// Project is not live, and a build error if a Widget refers to a
-	// WidgetType none of the pinned Releases holds or a Tag is supplied by a
+	// WidgetType none of the imported saved states holds or a Tag is supplied by a
 	// Device that is not of the Project: the Draft is inconsistent, and a
 	// Deploy must not paper over it.
 	Build(ctx context.Context, projectID uuid.UUID) (projectv0.ProjectFile, error)
@@ -78,9 +78,9 @@ func (b projectFileBuilder) Build(ctx context.Context, rawProjectID uuid.UUID) (
 	if err != nil {
 		return projectv0.ProjectFile{}, fmt.Errorf("cannot read the scenes of project %s: %w", projectID, err)
 	}
-	pins, err := scope.LibraryPins().FindAll(ctx)
+	imports, err := scope.LibraryImports().FindAll(ctx)
 	if err != nil {
-		return projectv0.ProjectFile{}, fmt.Errorf("cannot read the library pins of project %s: %w", projectID, err)
+		return projectv0.ProjectFile{}, fmt.Errorf("cannot read the library imports of project %s: %w", projectID, err)
 	}
 
 	return projectFileOfContent(projectID, draft.Content{
@@ -89,22 +89,22 @@ func (b projectFileBuilder) Build(ctx context.Context, rawProjectID uuid.UUID) (
 		Environments:       environments,
 		EnvironmentDevices: pairs,
 		Scenes:             scenes,
-		LibraryPins:        pins,
+		LibraryImports:     imports,
 	}, func(typeID id.ID[library.WidgetType]) (projectv0.WidgetType, error) {
-		pinned, err := scope.LibraryPins().FindPinnedWidgetType(ctx, typeID)
+		imported, err := scope.LibraryImports().FindImportedWidgetType(ctx, typeID)
 		if err != nil {
 			if errors.Is(err, library.ErrWidgetTypeNotFound) {
 				return projectv0.WidgetType{}, err
 			}
 			return projectv0.WidgetType{}, fmt.Errorf("cannot read widget type %s of project %s: %w", typeID, projectID, err)
 		}
-		return newProjectFileWidgetType(pinned), nil
+		return newProjectFileWidgetType(imported), nil
 	})
 }
 
 // widgetTypeResolver returns the copy of a WidgetType a ProjectFile carries:
-// the pinned Release's copy for a Draft, the document's own copy for a file
-// that is validated (task 39, ADR 0018).
+// the imported saved state's copy for a Draft, the document's own copy for a
+// file that is validated (task 39, ADR 0018).
 type widgetTypeResolver func(typeID id.ID[library.WidgetType]) (projectv0.WidgetType, error)
 
 // projectFileOfContent assembles the canonical ProjectFile of content, a
@@ -122,7 +122,7 @@ func projectFileOfContent(projectID id.ID[project.Project], content draft.Conten
 		EnvironmentDevices: make([]projectv0.EnvironmentDevice, 0, len(content.EnvironmentDevices)),
 		Scenes:             make([]projectv0.Scene, 0, len(content.Scenes)),
 		WidgetTypes:        []projectv0.WidgetType{},
-		LibraryPins:        make([]projectv0.LibraryPin, 0, len(content.LibraryPins)),
+		LibraryImports:     make([]projectv0.LibraryImport, 0, len(content.LibraryImports)),
 	}
 
 	deviceIDs := make(map[uuid.UUID]struct{}, len(content.Devices))
@@ -154,9 +154,9 @@ func projectFileOfContent(projectID id.ID[project.Project], content draft.Conten
 			Params:        projectv0.JSONObject(pair.Params().Bytes()),
 		})
 	}
-	for _, pin := range content.LibraryPins {
-		file.LibraryPins = append(file.LibraryPins, projectv0.LibraryPin{
-			LibraryID: pin.LibraryID().UUID(), Release: pin.Release().Int(),
+	for _, imported := range content.LibraryImports {
+		file.LibraryImports = append(file.LibraryImports, projectv0.LibraryImport{
+			LibraryID: imported.LibraryID().UUID(), Commit: imported.CommitNumber(),
 		})
 	}
 
@@ -177,7 +177,7 @@ func projectFileOfContent(projectID id.ID[project.Project], content draft.Conten
 				if err != nil {
 					if errors.Is(err, library.ErrWidgetTypeNotFound) {
 						return projectv0.ProjectFile{}, fmt.Errorf(
-							"cannot build the project file of %s: widget %s of scene %s is of widget type %s, which no pinned release holds",
+							"cannot build the project file of %s: widget %s of scene %s is of widget type %s, which no imported saved state holds",
 							projectID, w.ID(), sc.ID(), w.TypeID())
 					}
 					return projectv0.ProjectFile{}, err
@@ -271,7 +271,7 @@ func canonicalProjectFile(file projectv0.ProjectFile) projectv0.ProjectFile {
 	file.EnvironmentDevices = cloneOrEmpty(file.EnvironmentDevices)
 	file.Scenes = cloneOrEmpty(file.Scenes)
 	file.WidgetTypes = cloneOrEmpty(file.WidgetTypes)
-	file.LibraryPins = cloneOrEmpty(file.LibraryPins)
+	file.LibraryImports = cloneOrEmpty(file.LibraryImports)
 
 	slices.SortFunc(file.Tags, func(a, b projectv0.TagDefinition) int { return compareIDs(a.ID, b.ID) })
 	slices.SortFunc(file.Devices, func(a, b projectv0.Device) int { return compareIDs(a.ID, b.ID) })
@@ -284,7 +284,7 @@ func canonicalProjectFile(file projectv0.ProjectFile) projectv0.ProjectFile {
 	})
 	slices.SortFunc(file.Scenes, func(a, b projectv0.Scene) int { return compareIDs(a.ID, b.ID) })
 	slices.SortFunc(file.WidgetTypes, func(a, b projectv0.WidgetType) int { return compareIDs(a.ID, b.ID) })
-	slices.SortFunc(file.LibraryPins, func(a, b projectv0.LibraryPin) int { return compareIDs(a.LibraryID, b.LibraryID) })
+	slices.SortFunc(file.LibraryImports, func(a, b projectv0.LibraryImport) int { return compareIDs(a.LibraryID, b.LibraryID) })
 
 	for i := range file.Devices {
 		file.Devices[i].Config = canonicalJSONObject(file.Devices[i].Config)

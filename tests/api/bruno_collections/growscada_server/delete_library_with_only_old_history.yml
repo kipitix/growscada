@@ -1,5 +1,5 @@
 info:
-  name: delete a library only an old Deployment names
+  name: delete a library only an old Deployment imports
   type: http
   seq: 1998
 http:

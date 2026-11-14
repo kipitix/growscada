@@ -13,7 +13,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
-	"github.com/kipitix/growscada/internal/server/domain/librarypin"
+	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 )
 
@@ -84,24 +84,24 @@ func TestLibraryService_ReleasePublishesACommit(t *testing.T) {
 	}
 }
 
-func TestLibraryService_DeleteRefusedWhileALiveProjectPinsIt(t *testing.T) {
+func TestLibraryService_DeleteRefusedWhileALiveProjectImportsIt(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	ctx := context.Background()
 	wt := r.createType(t, "value")
 	libraryID := r.libraries[wt.ID]
 
-	if _, err := r.libSvc.DeleteLibraryByID(ctx, libraryID); !errors.Is(err, library.ErrLibraryPinned) {
-		t.Fatalf("pinned: expected ErrLibraryPinned, got %v", err)
+	if _, err := r.libSvc.DeleteLibraryByID(ctx, libraryID); !errors.Is(err, library.ErrLibraryImported) {
+		t.Fatalf("imported: expected ErrLibraryImported, got %v", err)
 	}
-	if _, err := r.pinSvc.DeleteLibraryPin(ctx, mainProject, libraryID, draftVersionOf(t, mainProject)); err != nil {
-		t.Fatalf("DeleteLibraryPin: %v", err)
+	if _, err := r.importSvc.DeleteLibraryImport(ctx, mainProject, libraryID, draftVersionOf(t, mainProject)); err != nil {
+		t.Fatalf("DeleteLibraryImport: %v", err)
 	}
 	deleted, err := r.libSvc.DeleteLibraryByID(ctx, libraryID)
 	if err != nil {
 		t.Fatalf("DeleteLibraryByID: %v", err)
 	}
-	if deleted.LatestRelease != 1 {
-		t.Errorf("the deleted library: %+v, want it as it was, at release 1", deleted)
+	if deleted.LatestCommit != 1 {
+		t.Errorf("the deleted library: %+v, want it as it was, at saved state 1", deleted)
 	}
 	if _, err := r.libSvc.FindLibraryByID(ctx, libraryID); !errors.Is(err, library.ErrLibraryNotFound) {
 		t.Errorf("a deleted library: expected ErrLibraryNotFound, got %v", err)
@@ -119,9 +119,10 @@ func TestLibraryService_DeleteRefusedWhileALiveProjectPinsIt(t *testing.T) {
 	}
 }
 
-// TestLibraryService_DeleteRefusedWhileARunningDeploymentNamesIt: a Release in
-// the running Deployment of a Project keeps the Library, even with no pin; a
-// Deployment, a Commit and a Project Release of the past do not (task 71).
+// TestLibraryService_DeleteRefusedWhileARunningDeploymentNamesIt: an import in
+// the running Deployment of a Project keeps the Library, even with no import
+// left in the Draft; a Deployment, a Commit and a Project Release of the past
+// do not (task 71, task 85_6).
 func TestLibraryService_DeleteRefusedWhileARunningDeploymentNamesIt(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	ctx := context.Background()
@@ -129,17 +130,17 @@ func TestLibraryService_DeleteRefusedWhileARunningDeploymentNamesIt(t *testing.T
 	libraryID := r.libraries[wt.ID]
 	deployProject(t, mainProject) // the running Deployment names the release
 
-	// The pin goes; the Deployment keeps naming the library.
-	if _, err := r.pinSvc.DeleteLibraryPin(ctx, mainProject, libraryID, draftVersionOf(t, mainProject)); err != nil {
-		t.Fatalf("DeleteLibraryPin: %v", err)
+	// The import goes; the Deployment keeps naming the library.
+	if _, err := r.importSvc.DeleteLibraryImport(ctx, mainProject, libraryID, draftVersionOf(t, mainProject)); err != nil {
+		t.Fatalf("DeleteLibraryImport: %v", err)
 	}
 	if _, err := r.libSvc.DeleteLibraryByID(ctx, libraryID); !errors.Is(err, application.ErrLibraryInRunningDeployment) {
 		t.Fatalf("named by the running Deployment: expected ErrLibraryInRunningDeployment, got %v", err)
 	}
 
-	// A new Deployment without the pin leaves the library in history alone: a
+	// A new Deployment without the import leaves the library in history alone: a
 	// Commit or an old Deployment does not keep it. A Project Release of that
-	// Commit copies the pins but does not keep it either. The Deploy saved the
+	// Commit copies the imports but does not keep it either. The Deploy saved the
 	// Draft it deployed, so its Commit is the history's newest one.
 	deployProject(t, mainProject)
 	scope := draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](mainProject)))
@@ -310,10 +311,10 @@ func TestRevertToLatestRelease_ResetsTheDraftToTheRelease(t *testing.T) {
 	}
 }
 
-// TestLibraryPin_SwitchOrphaningWidgetsIsRefused_PreviewNamesThem: a switch
+// TestLibraryImport_SwitchOrphaningWidgetsIsRefused_PreviewNamesThem: a switch
 // or removal that would leave Widgets without their WidgetType is refused,
 // naming them, and the preview names them and the bindings it would break.
-func TestLibraryPin_SwitchOrphaningWidgetsIsRefused_PreviewNamesThem(t *testing.T) {
+func TestLibraryImport_SwitchOrphaningWidgetsIsRefused_PreviewNamesThem(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	ctx := context.Background()
 	kept := r.createType(t, "value")
@@ -324,8 +325,8 @@ func TestLibraryPin_SwitchOrphaningWidgetsIsRefused_PreviewNamesThem(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	two := mustReleaseLibrary(t, libraryID)
-	r.switchPin(t, kept.ID, two.Number)
+	two := mustCommitLibrary(t, libraryID)
+	r.switchImport(t, kept.ID, two.Number)
 	sc := r.createScene(t, "scene")
 	onKept := r.addWidget(t, sc.ID, sc.Version, kept, "value")
 	orphan := r.addWidget(t, sc.ID, onKept.Version, dropped)
@@ -339,9 +340,9 @@ func TestLibraryPin_SwitchOrphaningWidgetsIsRefused_PreviewNamesThem(t *testing.
 	}); err != nil {
 		t.Fatal(err)
 	}
-	three := mustReleaseLibrary(t, libraryID)
+	three := mustCommitLibrary(t, libraryID)
 
-	impact, err := r.pinSvc.PinImpact(ctx, mainProject, libraryID, &three.Number)
+	impact, err := r.importSvc.ImportImpact(ctx, mainProject, libraryID, &three.Number)
 	if err != nil {
 		t.Fatalf("PinImpact: %v", err)
 	}
@@ -351,34 +352,34 @@ func TestLibraryPin_SwitchOrphaningWidgetsIsRefused_PreviewNamesThem(t *testing.
 	if len(impact.Broken) != 1 || impact.Broken[0].WidgetID != onKept.ID || impact.Broken[0].PortName != "value" {
 		t.Errorf("broken: %+v, want the binding of the dropped port", impact.Broken)
 	}
-	removal, err := r.pinSvc.PinImpact(ctx, mainProject, libraryID, nil)
+	removal, err := r.importSvc.ImportImpact(ctx, mainProject, libraryID, nil)
 	if err != nil || len(removal.Orphaned) != 2 {
 		t.Errorf("removal: %+v, %v; want both widgets orphaned", removal, err)
 	}
 	unpinned := mustCreateLibrary(t)
-	if _, err := r.pinSvc.PinImpact(ctx, mainProject, unpinned.ID, nil); !errors.Is(err, librarypin.ErrLibraryPinNotFound) {
-		t.Errorf("removal of a pin the project does not have: expected ErrLibraryPinNotFound, got %v", err)
+	if _, err := r.importSvc.ImportImpact(ctx, mainProject, unpinned.ID, nil); !errors.Is(err, libraryimport.ErrLibraryImportNotFound) {
+		t.Errorf("removal of a pin the project does not have: expected ErrLibraryImportNotFound, got %v", err)
 	}
 
-	pins, _ := r.pinSvc.FindLibraryPins(ctx, mainProject)
-	i := slices.IndexFunc(pins, func(p appdto.LibraryPin) bool { return p.LibraryID == libraryID })
+	pins, _ := r.importSvc.FindLibraryImports(ctx, mainProject)
+	i := slices.IndexFunc(pins, func(p appdto.LibraryImport) bool { return p.LibraryID == libraryID })
 	if i < 0 {
-		t.Fatal("the library is not pinned")
+		t.Fatal("the library is not imported")
 	}
-	pin := pins[i]
-	_, _, err = r.pinSvc.PutLibraryPin(ctx, mainProject, libraryID, three.Number, draftVersionOf(t, mainProject))
-	var orphans librarypin.OrphansError
+	imported := pins[i]
+	_, _, err = r.importSvc.PutLibraryImport(ctx, mainProject, libraryID, three.Number, draftVersionOf(t, mainProject))
+	var orphans libraryimport.OrphansError
 	if !errors.As(err, &orphans) || len(orphans.Widgets) != 1 || orphans.Widgets[0].Widget.ID().UUID() != orphan.ID {
 		t.Errorf("the switch: expected an OrphansError naming the widget, got %v", err)
 	}
-	if _, err := r.pinSvc.DeleteLibraryPin(ctx, mainProject, libraryID, draftVersionOf(t, mainProject)); !errors.Is(err, librarypin.ErrWidgetsOrphaned) {
+	if _, err := r.importSvc.DeleteLibraryImport(ctx, mainProject, libraryID, draftVersionOf(t, mainProject)); !errors.Is(err, libraryimport.ErrWidgetsOrphaned) {
 		t.Errorf("the removal: expected ErrWidgetsOrphaned, got %v", err)
 	}
-	if _, _, err := r.pinSvc.PutLibraryPin(ctx, mainProject, libraryID, three.Number, draftVersionOf(t, mainProject)-1); !errors.Is(err, draft.ErrDraftConflict) {
+	if _, _, err := r.importSvc.PutLibraryImport(ctx, mainProject, libraryID, three.Number, draftVersionOf(t, mainProject)-1); !errors.Is(err, draft.ErrDraftConflict) {
 		t.Errorf("a stale switch: expected draft.ErrDraftConflict, got %v", err)
 	}
-	if _, _, err := r.pinSvc.PutLibraryPin(ctx, mainProject, libraryID, 9, pin.Version); !errors.Is(err, application.ErrInvalidInput) {
-		t.Errorf("a missing release: expected ErrInvalidInput, got %v", err)
+	if _, _, err := r.importSvc.PutLibraryImport(ctx, mainProject, libraryID, 9, imported.Version); !errors.Is(err, draft.ErrCommitNotFound) {
+		t.Errorf("a missing saved state: expected ErrCommitNotFound, got %v", err)
 	}
 
 	// Once the orphan is gone, the switch passes and the policy removes the
@@ -386,67 +387,67 @@ func TestLibraryPin_SwitchOrphaningWidgetsIsRefused_PreviewNamesThem(t *testing.
 	if _, err := r.sceneSvc.DeleteWidgetByID(ctx, mainProject, sc.ID, orphan.ID, draftVersionOf(t, mainProject)); err != nil {
 		t.Fatal(err)
 	}
-	switched, created, err := r.pinSvc.PutLibraryPin(ctx, mainProject, libraryID, three.Number, draftVersionOf(t, mainProject))
-	if err != nil || created || switched.Release != three.Number {
+	switched, created, err := r.importSvc.PutLibraryImport(ctx, mainProject, libraryID, three.Number, draftVersionOf(t, mainProject))
+	if err != nil || created || switched.CommitNumber != three.Number {
 		t.Fatalf("switch: %+v, %t, %v", switched, created, err)
 	}
 	r.settle(t)
 	if got := r.boundPorts(t, sc.ID, onKept.ID); len(got) != 0 {
 		t.Errorf("bound to %v after the switch, want none", got)
 	}
-	types, err := r.pinSvc.FindPinnedWidgetTypes(ctx, mainProject)
+	types, err := r.importSvc.FindImportedWidgetTypes(ctx, mainProject)
 	if err != nil || slices.ContainsFunc(types, func(wt appdto.ReleasedWidgetType) bool { return wt.ID == dropped.ID }) {
 		t.Errorf("pinned types: %+v, %v; want no dropped type", types, err)
 	}
 }
 
-func TestLibraryPin_AddRequiresAReleaseAndPinsOnce(t *testing.T) {
+func TestLibraryImport_AddRequiresASavedStateAndImportsOnce(t *testing.T) {
 	ctx := context.Background()
-	svc := newLibraryPinService()
+	svc := newLibraryImportService(t)
 	lib := mustCreateLibrary(t)
-	if _, _, err := svc.PutLibraryPin(ctx, mainProject, lib.ID, 1, draftVersionOf(t, mainProject)); !errors.Is(err, application.ErrInvalidInput) || !errors.Is(err, library.ErrReleaseNotFound) {
-		t.Errorf("a library never released: expected invalid input of a missing release, got %v", err)
+	if _, _, err := svc.PutLibraryImport(ctx, mainProject, lib.ID, 1, draftVersionOf(t, mainProject)); !errors.Is(err, draft.ErrCommitNotFound) {
+		t.Errorf("a library never saved: expected ErrCommitNotFound, got %v", err)
 	}
-	mustReleaseLibrary(t, lib.ID)
-	pin, created, err := svc.PutLibraryPin(ctx, mainProject, lib.ID, 1, draftVersionOf(t, mainProject))
-	if err != nil || !created || pin.Release != 1 || pin.Version == 0 {
-		t.Fatalf("add: %+v, %t, %v", pin, created, err)
+	mustCommitLibrary(t, lib.ID)
+	imported, created, err := svc.PutLibraryImport(ctx, mainProject, lib.ID, 1, draftVersionOf(t, mainProject))
+	if err != nil || !created || imported.CommitNumber != 1 || imported.Version == 0 {
+		t.Fatalf("add: %+v, %t, %v", imported, created, err)
 	}
-	if pin.CommitNumber == nil || pin.Title != "Save" || pin.Author != "Ada" || pin.Origin != "commit" {
-		t.Errorf("the provenance of the added pin: %+v, want commit 1 titled %q by Ada", pin, "Save")
+	if imported.Title != "Save" || imported.Author != "Ada" || imported.SavedAt.IsZero() {
+		t.Errorf("the provenance of the added import: %+v, want saved state 1 titled %q by Ada", imported, "Save")
 	}
-	if again, added, err := svc.PutLibraryPin(ctx, mainProject, lib.ID, 1, draftVersionOf(t, mainProject)); err != nil || added || again.Release != 1 {
-		t.Errorf("pinning the same release again: %+v, %t, %v; want the pin as it is", again, added, err)
-	} else if again.Title != "Save" || again.CommitNumber == nil {
-		t.Errorf("the provenance of the same pin: %+v", again)
+	if again, added, err := svc.PutLibraryImport(ctx, mainProject, lib.ID, 1, draftVersionOf(t, mainProject)); err != nil || added || again.CommitNumber != 1 {
+		t.Errorf("importing the same saved state again: %+v, %t, %v; want the import as it is", again, added, err)
+	} else if again.Title != "Save" {
+		t.Errorf("the provenance of the same import: %+v", again)
 	}
-	if _, _, err := svc.PutLibraryPin(ctx, mainProject, uuid.New(), 1, draftVersionOf(t, mainProject)); !errors.Is(err, library.ErrLibraryNotFound) {
+	if _, _, err := svc.PutLibraryImport(ctx, mainProject, uuid.New(), 1, draftVersionOf(t, mainProject)); !errors.Is(err, library.ErrLibraryNotFound) {
 		t.Errorf("a missing library: expected ErrLibraryNotFound, got %v", err)
 	}
-	if _, err := svc.DeleteLibraryPin(ctx, mainProject, lib.ID, draftVersionOf(t, mainProject)); err != nil {
+	if _, err := svc.DeleteLibraryImport(ctx, mainProject, lib.ID, draftVersionOf(t, mainProject)); err != nil {
 		t.Fatalf("remove: %v", err)
 	}
-	if _, err := svc.DeleteLibraryPin(ctx, mainProject, lib.ID, draftVersionOf(t, mainProject)); !errors.Is(err, librarypin.ErrLibraryPinNotFound) {
-		t.Errorf("removing again: expected ErrLibraryPinNotFound, got %v", err)
+	if _, err := svc.DeleteLibraryImport(ctx, mainProject, lib.ID, draftVersionOf(t, mainProject)); !errors.Is(err, libraryimport.ErrLibraryImportNotFound) {
+		t.Errorf("removing again: expected ErrLibraryImportNotFound, got %v", err)
 	}
 }
 
-// TestLibraryPin_ProvenanceOfEachLibrary: two Libraries, each at Release 1,
-// show the provenance of their own Release — not of another Library's Release
-// of the same number (task 72_5).
-func TestLibraryPin_ProvenanceOfEachLibrary(t *testing.T) {
+// TestLibraryImport_ProvenanceOfEachLibrary: two Libraries, each at saved
+// state 1, show the provenance of their own saved state — not of another
+// Library's state of the same number (task 85_6).
+func TestLibraryImport_ProvenanceOfEachLibrary(t *testing.T) {
 	ctx := context.Background()
-	svc := newLibraryPinService()
+	svc := newLibraryImportService(t)
 	first, second := mustCreateLibrary(t), mustCreateLibrary(t)
-	mustReleaseLibraryTitled(t, first.ID, "First library", "Ada")
-	mustReleaseLibraryTitled(t, second.ID, "Second library", "Bob")
+	mustCommitLibraryTitled(t, first.ID, "First library", "Ada")
+	mustCommitLibraryTitled(t, second.ID, "Second library", "Bob")
 	for _, lib := range []appdto.Library{first, second} {
-		if _, _, err := svc.PutLibraryPin(ctx, mainProject, lib.ID, 1, draftVersionOf(t, mainProject)); err != nil {
-			t.Fatalf("pin library %s: %v", lib.ID, err)
+		if _, _, err := svc.PutLibraryImport(ctx, mainProject, lib.ID, 1, draftVersionOf(t, mainProject)); err != nil {
+			t.Fatalf("import library %s: %v", lib.ID, err)
 		}
 	}
 
-	pins, err := svc.FindLibraryPins(ctx, mainProject)
+	pins, err := svc.FindLibraryImports(ctx, mainProject)
 	if err != nil {
 		t.Fatalf("FindLibraryPins: %v", err)
 	}
@@ -461,16 +462,16 @@ func TestLibraryPin_ProvenanceOfEachLibrary(t *testing.T) {
 			continue
 		}
 		seen[pin.LibraryID] = true
-		if pin.Title != expected.title || pin.Author != expected.author || pin.CommitNumber == nil || *pin.CommitNumber != 1 {
-			t.Errorf("the pin of library %s: %+v, want commit 1 titled %q by %s", pin.LibraryID, pin, expected.title, expected.author)
+		if pin.Title != expected.title || pin.Author != expected.author || pin.CommitNumber != 1 {
+			t.Errorf("the import of library %s: %+v, want saved state 1 titled %q by %s", pin.LibraryID, pin, expected.title, expected.author)
 		}
 	}
 	if len(seen) != len(want) {
 		t.Errorf("the pins found: %v, want both libraries", seen)
 	}
 	for _, lib := range []appdto.Library{first, second} {
-		if _, err := svc.DeleteLibraryPin(ctx, mainProject, lib.ID, draftVersionOf(t, mainProject)); err != nil {
-			t.Fatalf("unpin library %s: %v", lib.ID, err)
+		if _, err := svc.DeleteLibraryImport(ctx, mainProject, lib.ID, draftVersionOf(t, mainProject)); err != nil {
+			t.Fatalf("remove the import of library %s: %v", lib.ID, err)
 		}
 	}
 }

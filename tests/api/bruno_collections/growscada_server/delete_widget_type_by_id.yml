@@ -9,7 +9,7 @@ http:
 
 docs: |
   Removes the WidgetType from the library's Draft. It touches no project:
-  their Widgets are of the copies the releases they pin hold.
+  their Widgets are of the copies the saved states they import hold.
 
   The delete states the Version of the library's Draft the client saw
   (`?version=`): a stale one returns `409 Conflict` (reload and retry).

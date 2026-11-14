@@ -29,7 +29,7 @@ func newReleaseService() application.ReleaseService {
 func TestReleaseService_CreateListFindNoteAndFile(t *testing.T) {
 	cleanProjects(t)
 	ctx := context.Background()
-	projects := application.NewProjectService(repositories.NewProjectRepositoryPostgres(testDB), repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB)), soleOrganization())
+	projects := application.NewProjectService(repositories.NewProjectRepositoryPostgres(testDB), repositories.NewDraftRepositoryPostgres(testDB), soleOrganization())
 	createdProject, err := projects.CreateProject(ctx, appdto.ProjectInput{Name: "releases-" + uuid.NewString()})
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
@@ -121,7 +121,7 @@ func TestReleaseService_CreateListFindNoteAndFile(t *testing.T) {
 func TestReleaseService_ListNeedsNoRuntime(t *testing.T) {
 	cleanProjects(t)
 	ctx := context.Background()
-	projects := application.NewProjectService(repositories.NewProjectRepositoryPostgres(testDB), repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB)), soleOrganization())
+	projects := application.NewProjectService(repositories.NewProjectRepositoryPostgres(testDB), repositories.NewDraftRepositoryPostgres(testDB), soleOrganization())
 	createdProject, err := projects.CreateProject(ctx, appdto.ProjectInput{Name: "releases-no-runtime-" + uuid.NewString()})
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)

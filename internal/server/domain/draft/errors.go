@@ -9,7 +9,7 @@ import (
 // the write stated is not the Draft's current one — another write of the same
 // Draft happened since the client read it (ADR 0016). Every write of the
 // Draft's content takes the same Version, so one sentinel serves the Tag, the
-// Scene, the Device, the Environment, the pair and the Library Pin.
+// Scene, the Device, the Environment, the pair and the Library Import.
 var ErrDraftConflict = errors.New("draft version conflict")
 
 // ConflictError is a write that lost ErrDraftConflict, with the Version it

@@ -79,8 +79,8 @@ func NewRootCommand() *cobra.Command {
 			"  growctl save Main --title 'Before the demo'\n" +
 			"  growctl release Main --commit 1 --note 'Ready'\n" +
 			"  growctl deploy Main --release 1      # the Project's running Deployment\n\n" +
-			"A Library is pinned by a Project at a Release, so its own path is apply →\n" +
-			"save → release, then a Release number in the Project's spec.libraryPins. The\n" +
+			"A Project imports a saved state of a Library, so the Library's own path is\n" +
+			"apply → save, then a saved state number in the Project's spec.libraryImports. The\n" +
 			"author of a Save or a Release is --author, else GrowSCADA_AUTHOR, else the\n" +
 			"operating system's user name.",
 		SilenceUsage:  true,
@@ -183,9 +183,9 @@ func newApplyCommand(s *settings) *cobra.Command {
 		Short: "Bring the server to the manifest's projects, libraries and tags",
 		Long: "Create the manifest's projects and tags that are missing on the server; the\n" +
 			"projects go first, then the libraries: missing ones are created, the WidgetTypes\n" +
-			"of their Drafts created or updated to the manifest, and the Library Pins a\n" +
-			"project's spec.libraryPins declares added or switched (a release is published\n" +
-			"with `growctl save` and `growctl release`). With --prune, the WidgetTypes of a library the manifest\n" +
+			"of their Drafts created or updated to the manifest, and the Library Imports a\n" +
+			"project's spec.libraryImports declares added or switched (a saved state is made\n" +
+			"with `growctl save`). With --prune, the WidgetTypes of a library the manifest\n" +
 			"declares WidgetTypes of are pruned too. A created tag's state is its type's zero value with quality\n" +
 			"bad until a supplier writes one; existing tags keep their state. The tags are\n" +
 			"those of the project growctl works in (--project). With --prune, the\n" +

@@ -7,8 +7,8 @@ package apiv0
 // connections,
 // plus, with ?project= (EventsQueryProject), those of that project's content;
 // GET /projects/{id}/events those of one project's content alone — Tags,
-// Scenes, Widgets, Library Pins, Devices, Environments with the parameters of
-// their Devices. Type is one of the Event… names below. ID
+// Scenes, Widgets, Library Imports, Devices, Environments with the parameters
+// of their Devices. Type is one of the Event… names below. ID
 // is the affected aggregate's (or connection's) ID; system_ready carries
 // none; the ID of a library_* or library_pin_* event is the library's, and the
 // ID of a label_* event is the label's.
@@ -81,13 +81,13 @@ const (
 	EventProjectUpdated     = "project_updated"
 	EventProjectDeleted     = "project_deleted"
 
-	EventLibraryCreated    = "library_created"
-	EventLibraryUpdated    = "library_updated"
-	EventLibraryDeleted    = "library_deleted"
-	EventLibraryReleased   = "library_released"
-	EventLibraryPinCreated = "library_pin_created"
-	EventLibraryPinUpdated = "library_pin_updated"
-	EventLibraryPinDeleted = "library_pin_deleted"
+	EventLibraryCreated       = "library_created"
+	EventLibraryUpdated       = "library_updated"
+	EventLibraryDeleted       = "library_deleted"
+	EventLibraryReleased      = "library_released"
+	EventLibraryImportCreated = "library_import_created"
+	EventLibraryImportUpdated = "library_import_updated"
+	EventLibraryImportDeleted = "library_import_deleted"
 
 	EventDeviceCreated            = "device_created"
 	EventDeviceUpdated            = "device_updated"
@@ -130,7 +130,7 @@ func EventTypes() []string {
 		EventClientConnected, EventClientDisconnected,
 		EventProjectCreated, EventProjectUpdated, EventProjectDeleted,
 		EventLibraryCreated, EventLibraryUpdated, EventLibraryDeleted, EventLibraryReleased,
-		EventLibraryPinCreated, EventLibraryPinUpdated, EventLibraryPinDeleted,
+		EventLibraryImportCreated, EventLibraryImportUpdated, EventLibraryImportDeleted,
 		EventDeviceCreated, EventDeviceUpdated, EventDeviceDeleted,
 		EventEnvironmentCreated, EventEnvironmentUpdated, EventEnvironmentDeleted,
 		EventEnvironmentDeviceCreated, EventEnvironmentDeviceUpdated, EventEnvironmentDeviceDeleted,

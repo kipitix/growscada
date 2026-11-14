@@ -203,7 +203,7 @@ func sendJSON[T any](t *testing.T, srv *httptest.Server, method, path string, bo
 
 // StartAPI cleans every table (the Deployments, the Runtime node's copies of
 // Tags, Devices and Environments with their states and tokens, the Draft's
-// Tags, widgets, scenes, Library Pins, libraries with their WidgetTypes and
+// Tags, widgets, scenes, Library Imports, libraries with their WidgetTypes and
 // releases, projects but MainProject — restored live if a test deleted it —,
 // outbox, policy_jobs, the per-user settings) and serves the real REST API over the
 // database, with the outbox dispatcher delivering committed events to its
@@ -213,13 +213,13 @@ func sendJSON[T any](t *testing.T, srv *httptest.Server, method, path string, bo
 // tag's state is written through the API.
 func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagService) {
 	t.Helper()
-	if _, err := db.ExecContext(context.Background(), "DELETE FROM engineering.draft_changes; DELETE FROM engineering.drafts; "+
+	if _, err := db.ExecContext(context.Background(), "DELETE FROM engineering.library_imports; DELETE FROM engineering.draft_changes; DELETE FROM engineering.drafts; "+
 		"DELETE FROM runtime.deployments; DELETE FROM runtime.checkpoints; DELETE FROM runtime.device_tokens; DELETE FROM runtime.journal; DELETE FROM runtime.tags; "+
 		"DELETE FROM runtime.environment_devices; DELETE FROM runtime.devices; DELETE FROM runtime.environments; "+
 		"DELETE FROM engineering.tags; "+
 		"DELETE FROM engineering.environment_devices; DELETE FROM engineering.devices; DELETE FROM engineering.environments; "+
 		"DELETE FROM engineering.widgets; "+
-		"DELETE FROM engineering.scenes; DELETE FROM engineering.library_pins; DELETE FROM engineering.libraries; "+
+		"DELETE FROM engineering.scenes; DELETE FROM engineering.libraries; "+
 		"DELETE FROM outbox; DELETE FROM policy_jobs; "+
 		"DELETE FROM user_settings; "+
 		// The labels the tests made go; the two the migrations seed stay, so
@@ -244,7 +244,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	projectRepo := repositories.NewProjectRepositoryPostgres(db, onCommit)
 	scopes := repositories.NewProjectScopes(db, onCommit)
 	releases := repositories.NewLibraryReleaseRepositoryPostgres(db, onCommit)
-	drafts := repositories.NewDraftRepositoryPostgres(db, releases, onCommit)
+	drafts := repositories.NewDraftRepositoryPostgres(db, onCommit)
 	projectReleases := repositories.NewProjectReleaseRepositoryPostgres(db, onCommit)
 	labelRepository := repositories.NewLabelRepositoryPostgres(db, onCommit)
 	content := application.NewProjectContent(projectRepo, scopes, drafts, orgID)
@@ -277,29 +277,29 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	})
 
 	router := restapi.NewRouter(restapi.Services{
-		Projects:     application.NewProjectService(projectRepo, drafts, orgID),
-		Tags:         tagSvc,
-		TagStates:    tagStateSvc,
-		Libraries:    application.NewLibraryService(libraryContent, libraries, releases, widgetTypes, runtimeNode),
-		WidgetTypes:  application.NewWidgetTypeService(libraryContent, widgetTypes),
-		LibraryPins:  application.NewLibraryPinService(content, libraries, releases),
-		Scenes:       application.NewSceneService(content),
-		Devices:      application.NewDeviceService(content),
-		Environments: application.NewEnvironmentService(content),
-		Draft:        application.NewDraftService(content),
-		DraftChanges: application.NewDraftChangesService(content, libraryContent),
-		Discard:      application.NewDiscardService(content, runtimeNode, libraries, releases),
-		ProjectFiles: application.NewProjectFileService(content, application.NewProjectFileBuilder(content), runtimeNode, libraries, releases),
-		Commits:      application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, projectReleases, releases, labelService),
-		Releases:     application.NewReleaseService(content, projectReleases, runtimeNode, application.NewDeployService(content, runtimeNode)),
-		Settings:     application.NewSettingsService(repositories.NewUserSettingsRepositoryPostgres(db), settings.SingleUser(), orgID),
-		Labels:       labelService,
-		Deploy:       application.NewDeployService(content, runtimeNode),
-		Deployments:  deployments,
-		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(db)),
-		DeviceTokens: deviceTokens,
-		Journal:      journal,
-		Operation:    operation,
+		Projects:       application.NewProjectService(projectRepo, drafts, orgID),
+		Tags:           tagSvc,
+		TagStates:      tagStateSvc,
+		Libraries:      application.NewLibraryService(libraryContent, libraries, releases, widgetTypes, runtimeNode),
+		WidgetTypes:    application.NewWidgetTypeService(libraryContent, widgetTypes),
+		LibraryImports: application.NewLibraryImportService(content, libraries, labelService),
+		Scenes:         application.NewSceneService(content),
+		Devices:        application.NewDeviceService(content),
+		Environments:   application.NewEnvironmentService(content),
+		Draft:          application.NewDraftService(content),
+		DraftChanges:   application.NewDraftChangesService(content, libraryContent),
+		Discard:        application.NewDiscardService(content, runtimeNode, libraries),
+		ProjectFiles:   application.NewProjectFileService(content, application.NewProjectFileBuilder(content), runtimeNode, libraries),
+		Commits:        application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, projectReleases, releases, labelService),
+		Releases:       application.NewReleaseService(content, projectReleases, runtimeNode, application.NewDeployService(content, runtimeNode)),
+		Settings:       application.NewSettingsService(repositories.NewUserSettingsRepositoryPostgres(db), settings.SingleUser(), orgID),
+		Labels:         labelService,
+		Deploy:         application.NewDeployService(content, runtimeNode),
+		Deployments:    deployments,
+		DeviceConfig:   runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(db)),
+		DeviceTokens:   deviceTokens,
+		Journal:        journal,
+		Operation:      operation,
 	}, bus, 100)
 
 	srv := httptest.NewServer(router.ServeMux())
@@ -312,7 +312,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 // version 1.
 func DraftVersion(t *testing.T, db *sql.DB, projectID uuid.UUID) int {
 	t.Helper()
-	drafts := repositories.NewDraftRepositoryPostgres(db, nil)
+	drafts := repositories.NewDraftRepositoryPostgres(db)
 	found, ok, err := drafts.Read(context.Background(),
 		draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](projectID))))
 	if err != nil {

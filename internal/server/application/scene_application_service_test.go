@@ -13,7 +13,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
-	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 )
@@ -776,7 +775,7 @@ func newBindingFixture(t *testing.T, svc application.SceneService) bindingFixtur
 	cleanScenes(t)
 	cleanTags(t)
 	ctx := context.Background()
-	wt, _ := pinNewWidgetType(t, mainProject, appdto.WidgetTypeInput{
+	wt, _ := importNewWidgetType(t, mainProject, appdto.WidgetTypeInput{
 		Name: "typed", HtmlTemplate: "<div></div>",
 		InputPorts: []appdto.InputPort{{Name: "value", TypeHint: "integer"}},
 	})
@@ -895,24 +894,8 @@ func renameScene(t *testing.T, svc application.SceneService, sceneID uuid.UUID) 
 	}
 }
 
-// racingPins runs race once, right after the first FindPinnedWidgetType: the
-// type is unpinned between the service's check and its Save.
-type racingPins struct {
-	librarypin.Repository
-	race func()
-}
-
-func (r *racingPins) FindPinnedWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.ReleasedWidgetType, error) {
-	found, err := r.Repository.FindPinnedWidgetType(ctx, typeID)
-	if race := r.race; race != nil {
-		r.race = nil
-		race()
-	}
-	return found, err
-}
-
-// racingLibrary and racingTypeID are a Library and its WidgetType the race
-// unpins; the shared fixture type stays.
+// racingLibrary and racingTypeID are a Library and its WidgetType a race
+// removes the import of; the shared fixture type stays.
 var (
 	racingLibrary = uuid.MustParse("7e57c0de-1000-4000-8000-000000000002")
 	racingTypeID  = uuid.MustParse("7e57c0de-0000-4000-8000-000000000002")
@@ -923,13 +906,13 @@ func insertRacingWidgetType(t *testing.T) {
 	ensurePinnedType(t, racingLibrary, "racing-library", racingTypeID, "racing-type", mainProject)
 }
 
-func TestCreateWidget_TypeUnpinned_ReturnsInvalidInput(t *testing.T) {
+func TestCreateWidget_TypeImportRemoved_ReturnsInvalidInput(t *testing.T) {
 	cleanScenes(t)
 	insertRacingWidgetType(t)
 	sc := mustCreateScene(t, newSceneService())
 	svc := newSceneService()
-	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM engineering.library_pins WHERE library_id = $1", racingLibrary); err != nil {
-		t.Fatalf("unpin: %v", err)
+	if _, err := testDB.ExecContext(context.Background(), "DELETE FROM engineering.library_imports WHERE library_id = $1", racingLibrary); err != nil {
+		t.Fatalf("remove the import: %v", err)
 	}
 
 	input := testCreateWidgetInput
@@ -941,7 +924,7 @@ func TestCreateWidget_TypeUnpinned_ReturnsInvalidInput(t *testing.T) {
 	}
 }
 
-func TestUpdateWidget_TypeUnpinned_ReturnsInvalidInput(t *testing.T) {
+func TestUpdateWidget_TypeImportRemoved_ReturnsInvalidInput(t *testing.T) {
 	cleanScenes(t)
 	insertRacingWidgetType(t)
 	ctx := context.Background()
@@ -951,8 +934,8 @@ func TestUpdateWidget_TypeUnpinned_ReturnsInvalidInput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateWidget: %v", err)
 	}
-	if _, err := testDB.ExecContext(ctx, "DELETE FROM engineering.library_pins WHERE library_id = $1", racingLibrary); err != nil {
-		t.Fatalf("unpin: %v", err)
+	if _, err := testDB.ExecContext(ctx, "DELETE FROM engineering.library_imports WHERE library_id = $1", racingLibrary); err != nil {
+		t.Fatalf("remove the import: %v", err)
 	}
 
 	input := testCreateWidgetInput

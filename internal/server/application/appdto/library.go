@@ -5,8 +5,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/library"
-	"github.com/kipitix/growscada/internal/server/domain/librarypin"
+	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 )
 
 // Library is the application-layer DTO for library data. Its Organization is
@@ -108,81 +109,60 @@ func NewLibraryReleaseList(list []library.LibraryRelease, titles map[int]string)
 	return result
 }
 
-// LibraryPin is the application-layer DTO for a Library Pin of a Project: the
-// Release it names and, for a Release made from a Commit, its provenance.
-type LibraryPin struct {
+// LibraryImport is the application-layer DTO for a Library Import of a
+// Project: the saved state of the Library it names, with that state's title,
+// Author, time and labels (task 85_6).
+type LibraryImport struct {
 	LibraryID    uuid.UUID
-	Release      int
-	Version      int
-	CommitNumber *int
+	CommitNumber int
 	Title        string
 	Author       string
-	Origin       string
-	Note         string
+	SavedAt      time.Time
+	Labels       []Label
+	Version      int
 }
 
-// PinRelease is the Release a Library Pin names, with the current title of
-// the Commit it published: the provenance a Project sees of what it pinned
-// (task 72_5). A legacy Release names no Commit and has no title.
-type PinRelease struct {
-	Release library.LibraryRelease
-	Title   string
-}
-
-// NewLibraryPin creates a LibraryPin DTO from the domain aggregate and the
-// Release it pins; a nil pinned leaves the provenance empty.
-func NewLibraryPin(p librarypin.LibraryPin, version int, pinned *PinRelease) LibraryPin {
-	dto := LibraryPin{LibraryID: p.LibraryID().UUID(), Release: p.Release().Int(), Version: version}
-	if pinned != nil && pinned.Release != nil {
-		dto.CommitNumber = pinned.Release.CommitNumber()
-		dto.Title = pinned.Title
-		dto.Author = pinned.Release.Author().String()
-		dto.Origin = pinned.Release.Origin().String()
-		dto.Note = pinned.Release.Note()
+// NewLibraryImport creates a LibraryImport DTO from the domain entity and, when
+// this server has it, the Commit it names: a Commit that cannot be read leaves
+// the provenance empty and the number as stored.
+func NewLibraryImport(i libraryimport.LibraryImport, version int, commit *draft.Commit, labels []Label) LibraryImport {
+	dto := LibraryImport{LibraryID: i.LibraryID().UUID(), CommitNumber: i.CommitNumber(), Labels: labels, Version: version}
+	if commit != nil {
+		dto.Title = (*commit).Title().String()
+		dto.Author = (*commit).Author().String()
+		dto.SavedAt = (*commit).CreatedAt()
+	}
+	if dto.Labels == nil {
+		dto.Labels = []Label{}
 	}
 	return dto
 }
 
-// NewLibraryPinList creates a slice of LibraryPin DTOs; pinned holds, in the
-// order of list, the Release each pin names and its Commit's title, a nil
-// entry for a Release this server does not have.
-func NewLibraryPinList(list []librarypin.LibraryPin, version int, pinned []*PinRelease) []LibraryPin {
-	result := make([]LibraryPin, len(list))
-	for i, p := range list {
-		var release *PinRelease
-		if i < len(pinned) {
-			release = pinned[i]
-		}
-		result[i] = NewLibraryPin(p, version, release)
-	}
-	return result
-}
-
-// PinnedWidget names a Widget of a Project with its Scene and WidgetType.
-type PinnedWidget struct {
+// AffectedWidget names a Widget of a Project with its Scene and WidgetType.
+type AffectedWidget struct {
 	SceneID  uuid.UUID
 	WidgetID uuid.UUID
 	Name     string
 	TypeID   uuid.UUID
 }
 
-// BrokenBinding is a PortBinding a switch of a pin would remove.
+// BrokenBinding is a PortBinding a switch of an import would remove.
 type BrokenBinding struct {
-	PinnedWidget
+	AffectedWidget
 	PortName string
 	TagID    uuid.UUID
 }
 
-// PinImpact is what switching or removing a pin would do to the Project's
-// Widgets (librarypin.Impact).
-type PinImpact struct {
-	Orphaned []PinnedWidget
+// ImportImpact is what switching or removing an import would do to the
+// Project's Widgets (libraryimport.Impact).
+type ImportImpact struct {
+	Orphaned []AffectedWidget
 	Broken   []BrokenBinding
 }
 
-// NewPinnedWidget creates a PinnedWidget DTO.
-func NewPinnedWidget(w librarypin.PlacedWidget) PinnedWidget {
-	return PinnedWidget{
+// NewAffectedWidget creates an AffectedWidget DTO.
+func NewAffectedWidget(w libraryimport.PlacedWidget) AffectedWidget {
+	return AffectedWidget{
 		SceneID:  w.SceneID.UUID(),
 		WidgetID: w.Widget.ID().UUID(),
 		Name:     w.Widget.Name().String(),
@@ -190,17 +170,17 @@ func NewPinnedWidget(w librarypin.PlacedWidget) PinnedWidget {
 	}
 }
 
-// NewPinImpact creates a PinImpact DTO from the domain's Impact.
-func NewPinImpact(i librarypin.Impact) PinImpact {
-	dto := PinImpact{Orphaned: []PinnedWidget{}, Broken: []BrokenBinding{}}
+// NewImportImpact creates an ImportImpact DTO from the domain's Impact.
+func NewImportImpact(i libraryimport.Impact) ImportImpact {
+	dto := ImportImpact{Orphaned: []AffectedWidget{}, Broken: []BrokenBinding{}}
 	for _, w := range i.Orphaned {
-		dto.Orphaned = append(dto.Orphaned, NewPinnedWidget(w))
+		dto.Orphaned = append(dto.Orphaned, NewAffectedWidget(w))
 	}
 	for _, b := range i.Broken {
 		dto.Broken = append(dto.Broken, BrokenBinding{
-			PinnedWidget: NewPinnedWidget(b.PlacedWidget),
-			PortName:     b.Binding.PortName().String(),
-			TagID:        b.Binding.TagID().UUID(),
+			AffectedWidget: NewAffectedWidget(b.PlacedWidget),
+			PortName:       b.Binding.PortName().String(),
+			TagID:          b.Binding.TagID().UUID(),
 		})
 	}
 	return dto

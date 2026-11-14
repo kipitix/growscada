@@ -30,9 +30,9 @@ func cleanWidgetsRest(t *testing.T) {
 }
 
 // testLibrary and testWidgetTypeID are the Library and the WidgetType of the
-// shared widget fixtures: a Widget's type must be pinned, so
-// ensureTestWidgetType stores the library with the type, its release 1 and
-// its pin in mainProject.
+// shared widget fixtures: a Widget's type must be imported, so
+// ensureTestWidgetType stores the library with the type, its saved state 1 and
+// the import of it in mainProject.
 var (
 	testLibrary      = uuid.MustParse("7e57c0de-1000-4000-8000-000000000001")
 	testWidgetTypeID = uuid.MustParse("7e57c0de-0000-4000-8000-000000000001")
@@ -55,8 +55,22 @@ func ensureTestWidgetType(t *testing.T) {
 		    (library_id, release_number, id, name, html_template, script, script_language, input_ports, default_width, default_height)
 		 VALUES ($1, 1, $2, 'test-type', '<div></div>', 'function update(){}', 'javascript', '[]', 100, 100)
 		 ON CONFLICT DO NOTHING`, []any{testLibrary, testWidgetTypeID}},
-		{`INSERT INTO engineering.library_pins (project_id, library_id, release_number)
-		 VALUES ($1, $2, 1) ON CONFLICT DO NOTHING`, []any{mainProject, testLibrary}},
+		{`INSERT INTO engineering.drafts (id, library_id) VALUES (gen_random_uuid(), $1) ON CONFLICT DO NOTHING`, []any{testLibrary}},
+		{`INSERT INTO engineering.commits (id, draft_id, number, title, author, created_at, draft_version, content)
+		 SELECT gen_random_uuid(), d.id, 1, 'Save', 'Ada', now(), 1,
+		        jsonb_build_object('format', 1, 'kind', 'library', 'widget_types',
+		            jsonb_build_array(jsonb_build_object(
+		                'id', $2::uuid, 'library_id', $1::uuid, 'name', 'test-type',
+		                'html_template', '<div></div>', 'script', 'function update(){}',
+		                'script_language', 'javascript', 'default_width', 100, 'default_height', 100,
+		                'input_ports', '[]'::jsonb)))
+		 FROM engineering.drafts d WHERE d.library_id = $1
+		 ON CONFLICT DO NOTHING`, []any{testLibrary, testWidgetTypeID}},
+		{`INSERT INTO engineering.library_imports (project_id, library_id, commit_number, commit_id)
+		 SELECT $1, $2, 1, c.id
+		 FROM engineering.drafts d JOIN engineering.commits c ON c.draft_id = d.id AND c.number = 1
+		 WHERE d.library_id = $2
+		 ON CONFLICT DO NOTHING`, []any{mainProject, testLibrary}},
 	} {
 		if _, err := testDB().ExecContext(context.Background(), q.query, q.args...); err != nil {
 			t.Fatalf("ensureTestWidgetType: %v", err)
@@ -65,7 +79,7 @@ func ensureTestWidgetType(t *testing.T) {
 }
 
 // releaseAndPin saves the Draft of the library as a Commit, releases it and
-// pins the release in mainProject, in place of the release pinned so far.
+// imports that Commit in mainProject, in place of the import so far.
 func releaseAndPin(t *testing.T, libraryID uuid.UUID) appdto.LibraryRelease {
 	t.Helper()
 	ctx := context.Background()
@@ -83,8 +97,8 @@ func releaseAndPin(t *testing.T, libraryID uuid.UUID) appdto.LibraryRelease {
 	if err != nil {
 		t.Fatalf("Release: %v", err)
 	}
-	if _, _, err := services.pins.PutLibraryPin(ctx, mainProject, libraryID, release.Number, testDraftVersion(t, mainProject)); err != nil {
-		t.Fatalf("PutLibraryPin: %v", err)
+	if _, _, err := services.imports.PutLibraryImport(ctx, mainProject, libraryID, commit.Number, testDraftVersion(t, mainProject)); err != nil {
+		t.Fatalf("PutLibraryImport: %v", err)
 	}
 	return release
 }

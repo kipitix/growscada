@@ -1,5 +1,30 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.98] - 2026-11-15
+
+### Added
+
+- **Импорт сохранённого состояния Library вместо pin по Release** (задача 85_6; ADR 0007, ADR 0012, ADR 0021)
+  - `domain/librarypin` → `domain/libraryimport`: `LibraryImport` (`ProjectID`, `LibraryID`, `CommitID`, `CommitNumber`, `Switch`, `Delete`) и `CreateLibraryImport`/`ReconstituteLibraryImport`/`ImportImpactOf`; значение `libraryimport.Commit` — сохранённое состояние Library (идентичность, номер, копии его WidgetTypes), поэтому impact и reconciliation считают по `commit.Content().WidgetTypes()`, а не по Release; события `library_import_created/updated/deleted`
+  - `libraryimport.LibraryImport` — сущность Draft'а Project'а: `draft.Session.PutLibraryImport`/`DeleteLibraryImport` читают Commit Library в транзакции Draft'а (`draft.Loader.LibraryCommit`), переключение удаляет сломанные PortBindings в том же DraftChange; `Sender`/снапшоты DraftChange — `KindLibraryImport`/`LibraryImportState{LibraryID, Commit}`, `commit_id` строки резолвится по (Library, номер) в записи
+  - миграция `engineering/20261114000002_library_imports`: `library_pins` → `library_imports` (`release_number` → `commit_number`, новый `commit_id UUID NOT NULL REFERENCES engineering.commits(id)`), `commit_library_pins` → `commit_library_imports`, провенанс Project Release пересчитан; legacy Release (без Commit) **удаляется** вместе с импортами на него и Widget'ами этих WidgetTypes; документы (`engineering.commits.content`, `engineering.project_releases.content`, `runtime.deployments.config` — включая работающую Deployment) переписаны на `library_imports`/`commit`; все DraftChange-стеки очищены, а Draft'ы, чей контент изменился, получили `version + 1` и `clean_version = 0`; Down данные не возвращает
+  - `contract/project/v0` MINOR 0.2 → 0.3: `ProjectFile.LibraryImports` с элементом `{library_id, commit}`; builder, валидатор, канонизация и тесты — на импортах; старый `library_pins`/`release` отклоняется строгим декодом (400 `file_issues`)
+  - `contract/api/v0` MINOR 0.39 → 0.40 и `contract/manifest/v0` MINOR 0.4 → 0.5 (`spec.libraryImports`, гейт версии 0.5): `LibraryImportResponse{library_id, commit_number, title, author, saved_at, labels, version}`, `PutLibraryImportRequest{commit, version}`, `GET …/library-imports/{library_id}/impact?commit=`; маршруты `/projects/{id}/library-imports…` и `/projects/{id}/widget-types` (палитра импортированных WidgetTypes); `appdto.LibraryImport`, `LibraryImportService` (`FindLibraryImports`, `PutLibraryImport`, `DeleteLibraryImport`, `ImportImpact`, `FindImportedWidgetTypes`); отсутствующий Commit — 404 `commit_not_found` (`application.MissingCommitError`), impact — 409 `orphaned_widgets`; `apiclient.Imports`/`ImportLibrary`/`RemoveImport`/`ImportImpact`/`ImportedWidgetTypes`
+  - `RuntimeNode.DeploymentNamesLibrary` читает `library_imports` документа; предупреждения Discard/Open/Load называют `saved state N`
+  - growctl: `spec.libraryPins` → `spec.libraryImports` (элемент `{library: <name>, commit: N}`), `apply` больше не публикует Release ради импорта — `save` делает сохранённое состояние, а `apply` его импортирует; `ImportStep`, вывод `project/<p> import library/<l> saved state N added|switched`
+  - UI Project: панель **Imported libraries** (имя Library, `saved state #N`, название, Author, чипы лейблов) и кнопка **Import libraries…**; окно Import libraries — список всех Library с текущим импортом или «Not imported», раскрытие Library показывает её сохранённые состояния (`#N`, название, автор, время, лейблы, число WidgetTypes), Import/Switch/Imported, Remove с impact-превью (orphaned — отказ с именами, broken — подтверждение), фильтр `All labels`/лейбл только по сохранённым состояниям выбранной Library и тексты «No libraries yet.»/«No saved states: save the library first.»; после успеха перечитываются импорты, WidgetTypes и состояние Draft'а; `library_import_*` перечитывают панель
+  - сид: у каждой Library есть сохранённое состояние и commit-backed Release 1, Project'ы импортируют эти состояния; тесты домена, репозитория (FK, миграция с картой/legacy-удалением/переписью JSONB и работающей Deployment, очисткой стеков и bump'ом версии), application/REST, UI (`uitest`: окно, фильтр, import/switch/remove, Library без сохранений, событие другого клиента) и growctl; Bruno: `put_library_import`, `put_library_import_switch`, `get_library_imports`, `get_library_import_impact`, `delete_library_import`, `get_imported_widget_types` и очистка/переносы
+
+### Changed
+
+- Library удаляется только пока её не импортирует живой Project (`library.ErrLibraryImported` вместо `ErrLibraryPinned`) и работающая Deployment не называет её сохранённое состояние
+- `eventlog`: `library_import_*` вместо `library_pin_*`, `ReloadTargets.LibraryImports`
+
+### Breaking
+
+- **Внешние ProjectFile** старого формата (`library_pins`/`release`) не открываются: 400 с `file_issues`; новый формат — `library_imports`/`commit`
+- **Осознанная потеря данных**: legacy Library Release (без Commit), импорты на него и Widget'ы его WidgetTypes удаляются миграцией; сохранённые состояния, Releases и документы, называвшие legacy Release, переписаны или очищены. Резервная копия — единственный путь назад
+
 ## [0.0.97] - 2026-11-14
 
 ### Added

@@ -11,15 +11,15 @@ import (
 // reports a delete blocked by ON DELETE RESTRICT with another SQLSTATE.
 func TestIsForeignKeyViolation_AcceptsBothPostgresCodes(t *testing.T) {
 	for _, code := range []pq.ErrorCode{foreignKeyViolationCode, restrictViolationCode} {
-		err := fmt.Errorf("wrapped: %w", &pq.Error{Code: code, Constraint: constraintLibraryPinsLibraryID})
-		if !isForeignKeyViolation(err, constraintLibraryPinsLibraryID) {
+		err := fmt.Errorf("wrapped: %w", &pq.Error{Code: code, Constraint: constraintLibraryImportsLibraryID})
+		if !isForeignKeyViolation(err, constraintLibraryImportsLibraryID) {
 			t.Errorf("code %s: expected a foreign key violation", code)
 		}
 	}
-	if isForeignKeyViolation(&pq.Error{Code: foreignKeyViolationCode, Constraint: "other"}, constraintLibraryPinsLibraryID) {
+	if isForeignKeyViolation(&pq.Error{Code: foreignKeyViolationCode, Constraint: "other"}, constraintLibraryImportsLibraryID) {
 		t.Error("another constraint: expected false")
 	}
-	if isForeignKeyViolation(&pq.Error{Code: uniqueViolationCode, Constraint: constraintLibraryPinsLibraryID}, constraintLibraryPinsLibraryID) {
+	if isForeignKeyViolation(&pq.Error{Code: uniqueViolationCode, Constraint: constraintLibraryImportsLibraryID}, constraintLibraryImportsLibraryID) {
 		t.Error("unique violation: expected false")
 	}
 }

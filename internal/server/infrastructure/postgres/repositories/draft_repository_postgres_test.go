@@ -565,7 +565,7 @@ func TestDraftDeleteTag_UnbindsItsWidgetsInOneChange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewInputPortName: %v", err)
 	}
-	released := mustPinWidgetType(t, mainProject, library.NewInputPort(portName, "", library.AnyTypeHint()))
+	released := mustImportWidgetType(t, mainProject, library.NewInputPort(portName, "", library.AnyTypeHint()))
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
 	widget := mustWidgetOf(t, sceneRepo, released, map[string]tag.Tag{"value": bound})
 	saved := mustSave(t, sceneRepo, withWidgets(makeScene(t, sceneRepo, "main"), widget))
@@ -617,16 +617,16 @@ func TestDraftPutLibraryPin_SwitchRemovesBrokenBindingsInOneChange(t *testing.T)
 	built := mustCreateWidgetType(t, typeRepo.libraryID, makeWidgetType(t, "gauge", []library.InputPort{
 		library.NewInputPort(portName, "", library.AnyTypeHint()),
 	}, typeRepo))
-	first := mustRelease(t, typeRepo.libraryID)
-	mustPin(t, mainProject, first)
+	first, err := mustCommit(t, typeRepo.libraryID)
+	if err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	mustImport(t, mainProject, first)
 
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	bound := makeTag(t, "speed", tagRepo)
 	mustSaveTag(t, tagRepo, bound)
-	released, ok := first.FindWidgetType(built.ID())
-	if !ok {
-		t.Fatalf("the release lacks the type %s", built.ID())
-	}
+	released := copyOfCommit(t, first, built.ID())
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
 	widget := mustWidgetOf(t, sceneRepo, released, map[string]tag.Tag{"value": bound})
 	saved := mustSave(t, sceneRepo, withWidgets(makeScene(t, sceneRepo, "main"), widget))
@@ -642,10 +642,13 @@ func TestDraftPutLibraryPin_SwitchRemovesBrokenBindingsInOneChange(t *testing.T)
 		t.Fatalf("Update: %v", err)
 	}
 	mustUpdateLibraryWidgetType(t, typeRepo.libraryID, narrowed)
-	second := mustRelease(t, typeRepo.libraryID)
+	second, err := mustCommit(t, typeRepo.libraryID)
+	if err != nil {
+		t.Fatalf("commit: %v", err)
+	}
 
-	mustUpdate(t, mainProject, "Switch pin", func(session *draft.Session) error {
-		_, _, err := session.PutLibraryPin(ctx, typeRepo.libraryID, second.Number())
+	mustUpdate(t, mainProject, "Switch import", func(session *draft.Session) error {
+		_, _, err := session.PutLibraryImport(ctx, typeRepo.libraryID, second.Number())
 		return err
 	})
 
@@ -654,7 +657,7 @@ func TestDraftPutLibraryPin_SwitchRemovesBrokenBindingsInOneChange(t *testing.T)
 		t.Errorf("the Scene after the switch: %+v, want the Widget unbound", found.Widgets())
 	}
 	description, before, after := lastDraftChange(t, mainProject)
-	if description != "Switch pin" {
+	if description != "Switch import" {
 		t.Errorf("the change: %q", description)
 	}
 	old, ok := snapshotOf(before, draft.KindWidget, widget.ID().UUID())
@@ -846,7 +849,7 @@ func TestDraftUndo_RestoresTheDeletedTagAndItsBindings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewInputPortName: %v", err)
 	}
-	released := mustPinWidgetType(t, mainProject, library.NewInputPort(portName, "", library.AnyTypeHint()))
+	released := mustImportWidgetType(t, mainProject, library.NewInputPort(portName, "", library.AnyTypeHint()))
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
 	widget := mustWidgetOf(t, sceneRepo, released, map[string]tag.Tag{"value": bound})
 	saved := mustSave(t, sceneRepo, withWidgets(makeScene(t, sceneRepo, "main"), widget))

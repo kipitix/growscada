@@ -6,7 +6,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
-	"github.com/kipitix/growscada/internal/server/domain/librarypin"
+	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
@@ -33,13 +33,15 @@ type Loader interface {
 	Scenes(ctx context.Context) ([]scene.Scene, error)
 	// Scene returns one Scene of the Draft's Project with its Widgets.
 	Scene(ctx context.Context, sceneID id.ID[scene.Scene]) (scene.Scene, error)
-	// PinnedWidgetType returns the WidgetType with the given ID from the
-	// Library Releases the Draft's Project pins.
-	PinnedWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.ReleasedWidgetType, error)
-	// Release returns the Library Release number of the Library.
-	Release(ctx context.Context, libraryID id.ID[library.Library], number library.ReleaseNumber) (library.LibraryRelease, error)
+	// ImportedWidgetType returns the WidgetType with the given ID from the
+	// saved states the Draft's Project imports.
+	ImportedWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.ReleasedWidgetType, error)
+	// LibraryCommit returns the saved state number of the Library, with the
+	// WidgetTypes it holds: what an import names (task 85_6). A number the
+	// Library's Draft does not have is draft.ErrCommitNotFound.
+	LibraryCommit(ctx context.Context, libraryID id.ID[library.Library], number int) (libraryimport.Commit, error)
 	// LockLibrary locks the live Library's row FOR SHARE in the Draft's
-	// transaction: a pin of it cannot then be written after its deletion
+	// transaction: an import of it cannot then be written after its deletion
 	// begins (ADR 0018). A Library that is gone or being deleted is
 	// library.ErrLibraryNotFound.
 	LockLibrary(ctx context.Context, libraryID id.ID[library.Library]) error
@@ -62,10 +64,10 @@ type Loader interface {
 	// PairsOfDevice returns the pairs the Device stands in.
 	PairsOfDevice(ctx context.Context, deviceID id.ID[device.Device]) ([]device.EnvironmentDevice, error)
 
-	// AllLibraryPins returns every Library Pin of the Draft's Project.
-	AllLibraryPins(ctx context.Context) ([]librarypin.LibraryPin, error)
-	// LibraryPin returns the pin of the Library in the Draft's Project.
-	LibraryPin(ctx context.Context, libraryID id.ID[library.Library]) (librarypin.LibraryPin, error)
+	// AllLibraryImports returns every Library Import of the Draft's Project.
+	AllLibraryImports(ctx context.Context) ([]libraryimport.LibraryImport, error)
+	// LibraryImport returns the import of the Library in the Draft's Project.
+	LibraryImport(ctx context.Context, libraryID id.ID[library.Library]) (libraryimport.LibraryImport, error)
 
 	// WidgetTypes returns every WidgetType of the Draft's Library, in
 	// creation order.

@@ -53,7 +53,7 @@ func makeWidgetIn(t *testing.T, repo scene.SceneRepository, projectID id.ID[proj
 	if err != nil {
 		t.Fatalf("NewWidgetName(%q): %v", name, err)
 	}
-	typeID := mustPinWidgetType(t, projectID).ID()
+	typeID := mustImportWidgetType(t, projectID).ID()
 	return scene.NewWidget(
 		repo.NextWidgetID(), newName, scene.NewPosition(10.0, 20.0, 0), library.DefaultSize(),
 		scene.DefaultOrigin(), scene.DefaultRotation(),

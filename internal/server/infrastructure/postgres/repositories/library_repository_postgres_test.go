@@ -57,10 +57,10 @@ func TestLibraryDelete_OnlyWhileNoLiveProjectPinsIt(t *testing.T) {
 	libraries := repositories.NewLibraryRepositoryPostgres(testDB)
 	projects := repositories.NewProjectRepositoryPostgres(testDB)
 	other := mustCreateProject(t, projects, "Line 1")
-	wt := mustPinWidgetType(t, other.ID())
+	wt := mustImportWidgetType(t, other.ID())
 	lib, _ := libraries.FindByID(ctx, wt.LibraryID())
 
-	if _, err := libraries.Save(ctx, lib.Delete()); !errors.Is(err, library.ErrLibraryPinned) {
+	if _, err := libraries.Save(ctx, lib.Delete()); !errors.Is(err, library.ErrLibraryImported) {
 		t.Fatalf("pinned by a live project: expected ErrLibraryPinned, got %v", err)
 	}
 	if _, err := libraries.FindByID(ctx, lib.ID()); err != nil {
@@ -80,10 +80,10 @@ func TestLibraryDelete_OnlyWhileNoLiveProjectPinsIt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindDeleted: %v", err)
 	}
-	if err := libraries.Delete(ctx, deleted); !errors.Is(err, library.ErrLibraryPinned) {
+	if err := libraries.Delete(ctx, deleted); !errors.Is(err, library.ErrLibraryImported) {
 		t.Errorf("removal while a deleted project pins it: expected ErrLibraryPinned, got %v", err)
 	}
-	if _, err := testDB.ExecContext(ctx, `DELETE FROM engineering.library_pins`); err != nil {
+	if _, err := testDB.ExecContext(ctx, `DELETE FROM engineering.library_imports`); err != nil {
 		t.Fatal(err)
 	}
 	if err := libraries.Delete(ctx, deleted); err != nil {

@@ -1,10 +1,10 @@
 # Example growctl manifest: a Library with two WidgetTypes in its Draft, and
-# the project "Line 2" pinning its first release.
+# the project "Line 2" importing its first saved state.
 #   make build
 #   bin/growctl/growctl apply -f tests/manifests/example_library.yaml   # the Draft
-#   bin/growctl/growctl release Gauges --note "first"                    # release 1
-#   bin/growctl/growctl apply -f tests/manifests/example_library.yaml   # the pin
-# The pin of a release that does not exist yet fails: release first.
+#   bin/growctl/growctl save Gauges --title "First" --author tester      # saved state 1
+#   bin/growctl/growctl apply -f tests/manifests/example_library.yaml   # the import
+# The import of a saved state that does not exist yet fails: save first.
 apiVersion: growscada/v0.4
 kind: Library
 metadata:
@@ -38,10 +38,10 @@ spec:
   inputPorts:
     - name: value
 ---
-apiVersion: growscada/v0.4
+apiVersion: growscada/v0.5
 kind: Project
 metadata:
   name: Line 2
 spec:
-  libraryPins:
+  libraryImports:
     Gauges: 1

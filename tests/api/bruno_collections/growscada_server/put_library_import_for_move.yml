@@ -1,23 +1,23 @@
 info:
-  name: pin the library for the group move
+  name: import the library for the group move
   type: http
   seq: 146
 http:
   method: PUT
-  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/library-pins/{{LIBRARY_ID}}
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/library-imports/{{LIBRARY_ID}}
   body:
     type: json
     data: |-
       {
-        "release": 2,
+        "commit": 2,
         "version": 25
       }
   auth: inherit
 
 docs: |
-  Opening a project file replaced the whole Draft, the Library Pins included,
-  so a Widget needs its Library pinned again before it can be created: the
-  request adds the pin (`201`) and raises the Draft's Version (ADR 0007,
+  Opening a project file replaced the whole Draft, the Library Imports included,
+  so a Widget needs its Library imported again before it can be created: the
+  request adds the import (`201`) and raises the Draft's Version (ADR 0007,
   ADR 0016).
 
 runtime:
@@ -30,7 +30,7 @@ runtime:
     - expression: 'res.body.library_id'
       operator: eq
       value: '"{{LIBRARY_ID}}"'
-    - expression: 'res.body.release'
+    - expression: 'res.body.commit_number'
       operator: eq
       value: '2'
 

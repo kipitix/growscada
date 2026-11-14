@@ -8,7 +8,7 @@ http:
   auth: inherit
 
 docs: |
-  The Version of the cleanup Draft, changed by the unpin (task 72_4).
+  The Version of the cleanup Draft, changed by the remove the import (task 72_4).
 
 runtime:
   assertions:

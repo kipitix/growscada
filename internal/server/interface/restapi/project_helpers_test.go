@@ -45,7 +45,7 @@ type testServices struct {
 	projectFiles application.ProjectFileService
 	libraries    application.LibraryService
 	widgetTypes  application.WidgetTypeService
-	pins         application.LibraryPinService
+	imports      application.LibraryImportService
 	scenes       application.SceneService
 	devices      application.DeviceService
 	environments application.EnvironmentService
@@ -77,7 +77,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 	}
 	projectRepo := repositories.NewProjectRepositoryPostgres(db, opts...)
 	releases := repositories.NewLibraryReleaseRepositoryPostgres(db, opts...)
-	drafts := repositories.NewDraftRepositoryPostgres(db, releases, opts...)
+	drafts := repositories.NewDraftRepositoryPostgres(db, opts...)
 	projectReleases := repositories.NewProjectReleaseRepositoryPostgres(db, opts...)
 	labels := repositories.NewLabelRepositoryPostgres(db, opts...)
 	content := application.NewProjectContent(projectRepo, repositories.NewProjectScopes(db, opts...), drafts, orgID)
@@ -95,14 +95,14 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		tags:         application.NewTagService(content, runtimeNode),
 		states:       states,
 		deployments:  deployments,
-		discard:      application.NewDiscardService(content, runtimeNode, libraries, releases),
+		discard:      application.NewDiscardService(content, runtimeNode, libraries),
 		deploy:       application.NewDeployService(content, runtimeNode),
-		projectFiles: application.NewProjectFileService(content, application.NewProjectFileBuilder(content), runtimeNode, libraries, releases),
+		projectFiles: application.NewProjectFileService(content, application.NewProjectFileBuilder(content), runtimeNode, libraries),
 		draft:        application.NewDraftService(content),
 		draftChanges: application.NewDraftChangesService(content, libraryContent),
 		libraries:    application.NewLibraryService(libraryContent, libraries, releases, widgetTypes, runtimeNode),
 		widgetTypes:  application.NewWidgetTypeService(libraryContent, widgetTypes),
-		pins:         application.NewLibraryPinService(content, libraries, releases),
+		imports:      application.NewLibraryImportService(content, libraries, labelService),
 		scenes:       application.NewSceneService(content),
 		devices:      application.NewDeviceService(content),
 		environments: application.NewEnvironmentService(content),
@@ -121,7 +121,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 func (s testServices) services() restapi.Services {
 	return restapi.Services{
 		Projects: s.projects, Tags: s.tags, TagStates: s.states,
-		Libraries: s.libraries, WidgetTypes: s.widgetTypes, LibraryPins: s.pins, Scenes: s.scenes,
+		Libraries: s.libraries, WidgetTypes: s.widgetTypes, LibraryImports: s.imports, Scenes: s.scenes,
 		Devices: s.devices, Environments: s.environments,
 		Draft: s.draft, DraftChanges: s.draftChanges,
 		Discard: s.discard, Deploy: s.deploy, ProjectFiles: s.projectFiles, Deployments: s.deployments,
@@ -231,7 +231,7 @@ func (s testServices) draftVersion(t *testing.T) int {
 // Draft never written.
 func testLibraryDraftVersion(t *testing.T, libraryID uuid.UUID) int {
 	t.Helper()
-	drafts := repositories.NewDraftRepositoryPostgres(testDB(), nil)
+	drafts := repositories.NewDraftRepositoryPostgres(testDB())
 	found, ok, err := drafts.Read(context.Background(),
 		draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](libraryID))))
 	if err != nil {
@@ -245,7 +245,7 @@ func testLibraryDraftVersion(t *testing.T, libraryID uuid.UUID) int {
 
 func testDraftVersion(t *testing.T, projectID uuid.UUID) int {
 	t.Helper()
-	drafts := repositories.NewDraftRepositoryPostgres(testDB(), nil)
+	drafts := repositories.NewDraftRepositoryPostgres(testDB())
 	found, ok, err := drafts.Read(context.Background(),
 		draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](projectID))))
 	if err != nil {

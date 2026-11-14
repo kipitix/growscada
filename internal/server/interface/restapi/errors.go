@@ -18,7 +18,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/label"
 	"github.com/kipitix/growscada/internal/server/domain/library"
-	"github.com/kipitix/growscada/internal/server/domain/librarypin"
+	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/release"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
@@ -43,10 +43,10 @@ var (
 	widgetResource     = resource{name: "Widget", pathParam: "widget_id"}
 	libraryResource    = resource{name: "Library", pathParam: "library_id"}
 	releaseResource    = resource{name: "LibraryRelease", pathParam: "release_number"}
-	// A Library Pin is named by its library within its project.
-	libraryPinResource  = resource{name: "LibraryPin", pathParam: "library_id"}
-	deviceResource      = resource{name: "Device", pathParam: "device_id"}
-	environmentResource = resource{name: "Environment", pathParam: "environment_id"}
+	// A Library Import is named by its library within its project.
+	libraryImportResource = resource{name: "LibraryImport", pathParam: "library_id"}
+	deviceResource        = resource{name: "Device", pathParam: "device_id"}
+	environmentResource   = resource{name: "Environment", pathParam: "environment_id"}
 	// An Environment Device is named by its Device within its Environment.
 	environmentDeviceResource = resource{name: "EnvironmentDevice", pathParam: "device_id"}
 	// A Device Token is named by its Device: there is one per Device.
@@ -123,7 +123,7 @@ var errorMappings = []errorMapping{
 	{library.ErrLibraryNotFound, http.StatusNotFound, libraryResource, ""},
 	{library.ErrLibraryConflict, http.StatusConflict, libraryResource, "Library was changed concurrently; reload it and retry"},
 	{library.ErrLibraryNameTaken, http.StatusConflict, libraryResource, "Library name is already taken"},
-	{library.ErrLibraryPinned, http.StatusConflict, libraryResource, "Library is pinned by Projects; unpin it first"},
+	{library.ErrLibraryImported, http.StatusConflict, libraryResource, "Library is imported by Projects; remove the import first"},
 	{application.ErrLibraryInRunningDeployment, http.StatusConflict, libraryResource,
 		"Library is named by the running Deployment of a project; deploy a configuration without it first"},
 	{library.ErrNoRelease, http.StatusConflict, libraryResource, "Library has never been released: there is nothing to revert to"},
@@ -133,9 +133,9 @@ var errorMappings = []errorMapping{
 	{library.ErrReleaseNotFound, http.StatusNotFound, releaseResource, ""},
 	{library.ErrWidgetTypeNotFound, http.StatusNotFound, widgetTypeResource, ""},
 	{library.ErrWidgetTypeNameTaken, http.StatusConflict, widgetTypeResource, "WidgetType name is already taken in the library"},
-	{librarypin.ErrLibraryPinNotFound, http.StatusNotFound, libraryPinResource, ""},
-	{librarypin.ErrLibraryPinExists, http.StatusConflict, libraryPinResource, "Library is already pinned in the project"},
-	{librarypin.ErrWidgetsOrphaned, http.StatusConflict, libraryPinResource,
+	{libraryimport.ErrLibraryImportNotFound, http.StatusNotFound, libraryImportResource, ""},
+	{libraryimport.ErrLibraryImportExists, http.StatusConflict, libraryImportResource, "Library is already imported in the project"},
+	{libraryimport.ErrWidgetsOrphaned, http.StatusConflict, libraryImportResource,
 		"Widgets of the project would be left without their WidgetType; remove them or change their type first"},
 	{scene.ErrSceneNotFound, http.StatusNotFound, sceneResource, ""},
 	{scene.ErrWidgetNotFound, http.StatusNotFound, widgetResource, ""},
@@ -202,6 +202,13 @@ func sendError(w http.ResponseWriter, r *http.Request, err error) {
 		sendProblem(w, problem)
 		return
 	}
+	// A saved state named by the request body rather than the path: the 404
+	// names the number the request stated (task 85_6).
+	var missingCommit application.MissingCommitError
+	if errors.As(err, &missingCommit) {
+		sendProblem(w, NewNotFound(commitResource.name, strconv.Itoa(missingCommit.Number), r.URL.Path))
+		return
+	}
 	if errors.Is(err, application.ErrInvalidInput) || errors.Is(err, runtimeapp.ErrInvalidInput) {
 		sendProblem(w, NewBadRequest(err.Error(), r.URL.Path))
 		return
@@ -245,10 +252,10 @@ func sendError(w http.ResponseWriter, r *http.Request, err error) {
 			if errors.As(err, &nothingToStep) && nothingToStep.Scope.IsLibrary() {
 				problem.Title = "Conflict: " + libraryResource.name
 			}
-			var orphans librarypin.OrphansError
+			var orphans libraryimport.OrphansError
 			if errors.As(err, &orphans) {
 				for _, pw := range orphans.Widgets {
-					problem.OrphanedWidgets = append(problem.OrphanedWidgets, newPinnedWidgetResponse(appdto.NewPinnedWidget(pw)))
+					problem.OrphanedWidgets = append(problem.OrphanedWidgets, newAffectedWidgetResponse(appdto.NewAffectedWidget(pw)))
 				}
 			}
 			sendProblem(w, problem)

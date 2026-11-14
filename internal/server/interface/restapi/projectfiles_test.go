@@ -211,7 +211,7 @@ func TestProjectFiles_DeployFromFileAndRevert(t *testing.T) {
 			TypeID: foreignType.ID,
 		}},
 	})
-	file.LibraryPins = append(file.LibraryPins, projectv0.LibraryPin{LibraryID: foreignLibrary, Release: 1})
+	file.LibraryImports = append(file.LibraryImports, projectv0.LibraryImport{LibraryID: foreignLibrary, Commit: 1})
 
 	rec = serve(router, http.MethodPost, mainPath+"/projectfile/deploy", file)
 	if rec.Code != http.StatusCreated {
@@ -245,18 +245,18 @@ func TestProjectFiles_DeployFromFileAndRevert(t *testing.T) {
 	}
 	discarded := decodeBody[apiv0.DiscardProjectResponse](t, rec)
 	if len(discarded.Warnings) != 1 || discarded.Warnings[0].LibraryID != foreignLibrary ||
-		discarded.Warnings[0].Release != 1 || discarded.Warnings[0].DroppedWidgets != 1 {
+		discarded.Warnings[0].Commit != 1 || discarded.Warnings[0].DroppedWidgets != 1 {
 		t.Errorf("the revert's warnings: %+v", discarded.Warnings)
 	}
 	if discarded.Version != before+1 {
 		t.Errorf("the Draft after the Revert is at version %d, want %d", discarded.Version, before+1)
 	}
 
-	rec = serve(router, http.MethodGet, mainPath+"/library-pins", nil)
-	pins := decodeBody[apiv0.GetLibraryPinsResponse](t, rec)
-	for _, pin := range pins.LibraryPins {
-		if pin.LibraryID == foreignLibrary {
-			t.Errorf("the Draft kept a pin this server cannot hold: %+v", pin)
+	rec = serve(router, http.MethodGet, mainPath+"/library-imports", nil)
+	imports := decodeBody[apiv0.GetLibraryImportsResponse](t, rec)
+	for _, imported := range imports.LibraryImports {
+		if imported.LibraryID == foreignLibrary {
+			t.Errorf("the Draft kept an import this server cannot hold: %+v", imported)
 		}
 	}
 	rec = serve(router, http.MethodGet, mainPath+"/scenes", nil)

@@ -16,7 +16,7 @@ http:
   auth: inherit
 
 docs: |
-  The Draft with the Library Pin becomes Commit 2 (task 72_2; ADR 0021).
+  The Draft with the Library Import becomes Commit 2 (task 72_2; ADR 0021).
 
 runtime:
   assertions:

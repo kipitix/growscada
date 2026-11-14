@@ -28,14 +28,14 @@ spec:
       typeHint: boolean
 `
 
-func TestParseManifests_LibraryWidgetTypeAndPins(t *testing.T) {
+func TestParseManifests_LibraryWidgetTypeAndImports(t *testing.T) {
 	got, err := growctl.ParseManifests([]byte(libraryManifest + `---
-apiVersion: growscada/v0.4
+apiVersion: growscada/v0.5
 kind: Project
 metadata:
   name: Line 1
 spec:
-  libraryPins:
+  libraryImports:
     Gauges: 2
 `))
 	if err != nil {
@@ -52,7 +52,7 @@ spec:
 		wt.Definition.DefaultWidth != 40 || len(wt.Definition.InputPorts) != 1 || wt.Definition.InputPorts[0].TypeHint != "boolean" {
 		t.Errorf("widget type: %+v", wt)
 	}
-	if len(got.Projects) != 1 || got.Projects[0].LibraryPins["Gauges"] != 2 {
+	if len(got.Projects) != 1 || got.Projects[0].LibraryImports["Gauges"] != 2 {
 		t.Errorf("projects: %+v", got.Projects)
 	}
 }
@@ -72,7 +72,8 @@ func TestParseManifests_InvalidLibraryDocuments(t *testing.T) {
 		{"bad port name", widgetType("{html: '', script: '', width: 1, height: 1, inputPorts: [{name: 'a b'}]}"), "invalid spec.inputPorts"},
 		{"duplicate port", widgetType("{html: '', script: '', width: 1, height: 1, inputPorts: [{name: a}, {name: a}]}"), "duplicate input port name"},
 		{"unknown type hint", widgetType("{html: '', script: '', width: 1, height: 1, inputPorts: [{name: a, typeHint: float}]}"), "typeHint"},
-		{"pin of release 0", "apiVersion: growscada/v0.4\nkind: Project\nmetadata: {name: a}\nspec: {libraryPins: {Gauges: 0}}\n", "invalid spec.libraryPins.Gauges"},
+		{"import of saved state 0", "apiVersion: growscada/v0.5\nkind: Project\nmetadata: {name: a}\nspec: {libraryImports: {Gauges: 0}}\n", "invalid spec.libraryImports.Gauges"},
+		{"imports of an older version", "apiVersion: growscada/v0.4\nkind: Project\nmetadata: {name: a}\nspec: {libraryImports: {Gauges: 1}}\n", "spec.libraryImports appeared in apiVersion"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -51,13 +51,14 @@ type ListDeploymentsResponse struct {
 	Deployments []DeploymentSummaryResponse `json:"deployments"`
 }
 
-// MissingReleaseResponse names a Library Release the running Deployment uses
-// but this server does not have: the Deployment was made from a file elsewhere,
-// or the Library was removed after it. A Revert drops the Widgets of that
-// Release's WidgetTypes instead of restoring the pin (task 71).
-type MissingReleaseResponse struct {
+// MissingImportResponse names a saved state of a Library the running Deployment
+// uses but this server does not have: the Deployment was made from a file
+// elsewhere, or the Library was removed after it. A Revert drops the Widgets of
+// that saved state's WidgetTypes instead of restoring the import (task 71,
+// task 85_6).
+type MissingImportResponse struct {
 	LibraryID uuid.UUID `json:"library_id"`
-	Release   int       `json:"release"`
+	Commit    int       `json:"commit"`
 }
 
 // DeployResponse is the answer of POST /projects/{id}/commits/{n}/deploy and
@@ -91,19 +92,19 @@ type DraftStateResponse struct {
 // Draft reset to its last Commit — and of POST /projects/{id}/revert-to-deployed
 // — the Draft reset to the Deployment the Project runs —, each in one
 // transaction (ADR 0016, task 72_4). Warnings name the Library Releases the
-// restored target used but this server does not have: their pins, and the
+// restored target used but this server does not have: their imports, and the
 // Widgets of their WidgetTypes, were dropped from the restored Draft (task 71).
 type DiscardProjectResponse struct {
 	Version  int                      `json:"version"`
 	Warnings []DiscardWarningResponse `json:"warnings,omitempty"`
 }
 
-// DiscardWarningResponse is one Library Pin a Discard or a Revert could not
-// restore: the Library is gone, or the Release is. DroppedWidgets counts the
-// Widgets of that Library's WidgetTypes that went with it.
+// DiscardWarningResponse is one Library Import a Discard or a Revert could not
+// restore: the Library is gone, or the saved state is. DroppedWidgets counts the
+// Widgets of that Library's WidgetTypes that went with it (task 85_6).
 type DiscardWarningResponse struct {
 	LibraryID      uuid.UUID `json:"library_id"`
-	Release        int       `json:"release"`
+	Commit         int       `json:"commit"`
 	DroppedWidgets int       `json:"dropped_widgets"`
 }
 

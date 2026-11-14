@@ -33,8 +33,8 @@ func testCommit(t *testing.T, scope draft.Scope) draft.Commit {
 	}
 	file := projectv0.ProjectFile{
 		Header: projectv0.Header{SchemaVersion: projectv0.SchemaVersion(), ProjectID: scope.ProjectID().UUID()},
-		LibraryPins: []projectv0.LibraryPin{
-			{LibraryID: id.NewID[library.Library]().UUID(), Release: 2},
+		LibraryImports: []projectv0.LibraryImport{
+			{LibraryID: id.NewID[library.Library]().UUID(), Commit: 2},
 		},
 	}
 	commit, err := draft.NewCommit(scope, id.NewID[draft.Commit](), 3, title, author, time.Now().UTC(),

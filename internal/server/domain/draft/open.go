@@ -9,14 +9,14 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
-	"github.com/kipitix/growscada/internal/server/domain/librarypin"
+	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
 
 // Open replaces the whole content of the Draft with content, recording only
 // the entities whose stored state actually differs (task 39, ADR 0018): a
-// Tag, Scene, Widget, Device, Environment, pair or pin that is the same on
+// Tag, Scene, Widget, Device, Environment, pair or import that is the same on
 // both sides is neither written nor announced, so the DraftChange is
 // proportional to the difference, not to two Drafts. The events are the
 // ordinary events of each changed entity, created, updated or deleted, so a
@@ -42,7 +42,7 @@ func (s *Session) Open(ctx context.Context, content Content) error {
 	if err != nil {
 		return err
 	}
-	pins, err := s.loader.AllLibraryPins(ctx)
+	imports, err := s.loader.AllLibraryImports(ctx)
 	if err != nil {
 		return err
 	}
@@ -51,7 +51,7 @@ func (s *Session) Open(ctx context.Context, content Content) error {
 	s.openDevices(devices, content.Devices)
 	s.openEnvironments(environments, content.Environments)
 	s.openPairs(pairs, content.EnvironmentDevices)
-	s.openPins(pins, content.LibraryPins)
+	s.openImports(imports, content.LibraryImports)
 	return nil
 }
 
@@ -181,32 +181,32 @@ func (s *Session) openPairs(stored, wanted []device.EnvironmentDevice) {
 	}
 }
 
-func (s *Session) openPins(stored, wanted []librarypin.LibraryPin) {
-	old := make(map[uuid.UUID]librarypin.LibraryPin, len(stored))
-	for _, p := range stored {
-		old[p.LibraryID().UUID()] = p
+func (s *Session) openImports(stored, wanted []libraryimport.LibraryImport) {
+	old := make(map[uuid.UUID]libraryimport.LibraryImport, len(stored))
+	for _, i := range stored {
+		old[i.LibraryID().UUID()] = i
 	}
 	seen := make(map[uuid.UUID]struct{}, len(wanted))
-	for _, p := range wanted {
-		id := p.LibraryID().UUID()
+	for _, i := range wanted {
+		id := i.LibraryID().UUID()
 		seen[id] = struct{}{}
 		before, ok := old[id]
 		switch {
 		case !ok:
-			s.recordAfter(SnapshotOfLibraryPin(p))
-			s.recordEvents(librarypin.NewLibraryPinCreatedEvent(p.LibraryID(), s.ProjectID()))
-		case !sameSnapshotState(SnapshotOfLibraryPin(before), SnapshotOfLibraryPin(p)):
-			s.recordBefore(SnapshotOfLibraryPin(before))
-			s.recordAfter(SnapshotOfLibraryPin(p))
-			s.recordEvents(librarypin.NewLibraryPinUpdatedEvent(p.LibraryID(), s.ProjectID()))
+			s.recordAfter(SnapshotOfLibraryImport(i))
+			s.recordEvents(libraryimport.NewLibraryImportCreatedEvent(i.LibraryID(), s.ProjectID()))
+		case !sameSnapshotState(SnapshotOfLibraryImport(before), SnapshotOfLibraryImport(i)):
+			s.recordBefore(SnapshotOfLibraryImport(before))
+			s.recordAfter(SnapshotOfLibraryImport(i))
+			s.recordEvents(libraryimport.NewLibraryImportUpdatedEvent(i.LibraryID(), s.ProjectID()))
 		}
 	}
-	for _, p := range stored {
-		if _, ok := seen[p.LibraryID().UUID()]; ok {
+	for _, i := range stored {
+		if _, ok := seen[i.LibraryID().UUID()]; ok {
 			continue
 		}
-		s.recordBefore(SnapshotOfLibraryPin(p))
-		s.recordEvents(librarypin.NewLibraryPinDeletedEvent(p.LibraryID(), s.ProjectID()))
+		s.recordBefore(SnapshotOfLibraryImport(i))
+		s.recordEvents(libraryimport.NewLibraryImportDeletedEvent(i.LibraryID(), s.ProjectID()))
 	}
 }
 
@@ -290,9 +290,9 @@ func (s *Session) openScenes(stored, wanted []scene.Scene) {
 }
 
 // LockLibrary locks the live Library's row FOR SHARE in the Draft's
-// transaction: a pin of the Library cannot be written after its deletion
-// begins, the same guard a pin of the ordinary API takes (ADR 0018). It is
-// the caller's check that the Release the pin names exists.
+// transaction: an import of the Library cannot be written after its deletion
+// begins, the same guard an import of the ordinary API takes (ADR 0018). It is
+// the caller's check that the Commit the import names exists.
 func (s *Session) LockLibrary(ctx context.Context, libraryID id.ID[library.Library]) error {
 	return s.loader.LockLibrary(ctx, libraryID)
 }

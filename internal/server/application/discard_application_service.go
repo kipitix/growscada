@@ -13,7 +13,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
-	"github.com/kipitix/growscada/internal/server/domain/librarypin"
+	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -28,9 +28,9 @@ type DiscardService interface {
 	// Discard resets the live Project projectID's Draft to its last Commit,
 	// dropping the unsaved changes. The written Draft is one change: its
 	// content is replaced, its DraftChange stack is cleared and its Version
-	// raised. A Library Pin the Commit names but this server cannot write is
-	// dropped with the Widgets of its WidgetTypes, and reported in the answer's
-	// warnings: the Draft stays writable (task 71).
+	// raised. A Library Import the Commit names but this server cannot write
+	// is dropped with the Widgets of its WidgetTypes, and reported in the
+	// answer's warnings: the Draft stays writable (task 71).
 	// Returns ErrNothingToDiscard if the Project has no Commit, and an error
 	// wrapping project.ErrProjectNotFound if it is not live.
 	Discard(ctx context.Context, projectID uuid.UUID) (appdto.DiscardedDraft, error)
@@ -41,9 +41,9 @@ type DiscardService interface {
 	// Load replaces the Draft with the content of the Project's Commit number,
 	// in one transaction: the saved state becomes what is edited, the
 	// DraftChange stack is cleared and the Version raised, as a Discard does.
-	// The Draft is clean exactly when that Commit is its last one. A Library Pin
-	// the Commit names but this server cannot write is dropped with the Widgets
-	// of its WidgetTypes and named in the answer (task 71).
+	// The Draft is clean exactly when that Commit is its last one. A Library
+	// Import the Commit names but this server cannot write is dropped with the
+	// Widgets of its WidgetTypes and named in the answer (task 71).
 	// Returns draft.ErrCommitNotFound for a number the Project does not have and
 	// an error wrapping project.ErrProjectNotFound if it is not live.
 	Load(ctx context.Context, projectID uuid.UUID, number int) (appdto.LoadedDraft, error)
@@ -53,18 +53,17 @@ type discardServiceImpl struct {
 	content   ProjectContent
 	runtime   RuntimeNode
 	libraries library.LibraryRepository
-	releases  library.LibraryReleaseRepository
 }
 
 var _ DiscardService = (*discardServiceImpl)(nil)
 
 // NewDiscardService returns the DiscardService of the live Projects the
 // ProjectContent serves, reading the current Deployment through the Runtime node
-// aRuntime and checking its Library Pins against this server's Libraries and
-// Releases (ADR 0018, task 71).
+// aRuntime and checking its Library Imports against this server's Libraries and
+// their saved states (ADR 0018, task 71, task 85_6).
 func NewDiscardService(aContent ProjectContent, aRuntime RuntimeNode,
-	someLibraries library.LibraryRepository, someReleases library.LibraryReleaseRepository) DiscardService {
-	return &discardServiceImpl{content: aContent, runtime: aRuntime, libraries: someLibraries, releases: someReleases}
+	someLibraries library.LibraryRepository) DiscardService {
+	return &discardServiceImpl{content: aContent, runtime: aRuntime, libraries: someLibraries}
 }
 
 func (s discardServiceImpl) Discard(ctx context.Context, rawProjectID uuid.UUID) (appdto.DiscardedDraft, error) {
@@ -116,13 +115,13 @@ func (s discardServiceImpl) Load(ctx context.Context, rawProjectID uuid.UUID, nu
 }
 
 // resetTo replaces the whole Draft of projectID with the content of commit in
-// one transaction: the pins the content keeps are locked FOR SHARE in it, the
+// one transaction: the imports the content keeps are locked FOR SHARE in it, the
 // DraftChange stack is cleared and the Version raised, and no DraftChange is
 // written. cleanCommit is the number of the Commit whose content is written:
 // the Draft is clean exactly when that is its last Commit, compared under the
-// Draft's lock (task 74). The Library Releases the content names but this
-// server lacks are dropped with the Widgets of their WidgetTypes and returned
-// as warnings, and they make the content no Commit's (task 71).
+// Draft's lock (task 74). The Library Imports the content names but this server
+// lacks are dropped with the Widgets of their WidgetTypes and returned as
+// warnings, and they make the content no Commit's (task 71).
 func (s discardServiceImpl) resetTo(ctx context.Context, projectID id.ID[project.Project], commit draft.Commit, cleanCommit int) (draft.Draft, []appdto.DiscardWarning, error) {
 	file, ok := commit.Content().ProjectFile()
 	if !ok {
@@ -132,18 +131,18 @@ func (s discardServiceImpl) resetTo(ctx context.Context, projectID id.ID[project
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot read commit %d of project %s: %w", commit.Number(), projectID, err)
 	}
-	missing, err := missingLibraryReleases(ctx, s.libraries, s.releases, file)
+	missing, err := missingLibraryImports(ctx, s.libraries, s.content.Drafts(), file)
 	if err != nil {
-		return nil, nil, fmt.Errorf("cannot check the library pins of project %s: %w", projectID, err)
+		return nil, nil, fmt.Errorf("cannot check the library imports of project %s: %w", projectID, err)
 	}
-	content, warnings := dropMissingLibraryReleases(content, file, missing)
+	content, warnings := dropMissingLibraryImports(content, file, missing)
 	if len(warnings) > 0 {
 		// What is written is no longer the Commit's content: the Draft keeps
 		// its unsaved mark (task 71).
 		cleanCommit = 0
 	}
 	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), cleanCommit, func(session *draft.Session) error {
-		if err := s.lockDiscardedPins(ctx, content, session); err != nil {
+		if err := s.lockDiscardedImports(ctx, content, session); err != nil {
 			return err
 		}
 		return session.Replace(ctx, content)
@@ -171,15 +170,15 @@ func (s discardServiceImpl) Revert(ctx context.Context, rawProjectID uuid.UUID) 
 		return appdto.DiscardedDraft{}, fmt.Errorf("cannot read the deployment of project %s: %w", projectID, err)
 	}
 	// A Deployment deployed from a foreign file, or one whose Library was
-	// removed after it, may name Library Releases this server does not have.
-	// The Draft cannot hold such a pin: it goes with the Widgets of its
+	// removed after it, may name Library Imports this server does not have.
+	// The Draft cannot hold such an import: it goes with the Widgets of its
 	// Library's WidgetTypes, and the answer names it — rather than refusing the
 	// Revert and leaving the Draft unwritable (task 71).
-	missing, err := missingLibraryReleases(ctx, s.libraries, s.releases, deployment.Content)
+	missing, err := missingLibraryImports(ctx, s.libraries, s.content.Drafts(), deployment.Content)
 	if err != nil {
-		return appdto.DiscardedDraft{}, fmt.Errorf("cannot check the library pins of project %s: %w", projectID, err)
+		return appdto.DiscardedDraft{}, fmt.Errorf("cannot check the library imports of project %s: %w", projectID, err)
 	}
-	content, warnings := dropMissingLibraryReleases(content, deployment.Content, missing)
+	content, warnings := dropMissingLibraryImports(content, deployment.Content, missing)
 	// The Draft the Revert writes is its last Commit's content only when the
 	// Deployment is exactly that and nothing of it was dropped: then it is
 	// clean, as after a Discard. A Deployment of another Release, of a file or
@@ -192,7 +191,7 @@ func (s discardServiceImpl) Revert(ctx context.Context, rawProjectID uuid.UUID) 
 		cleanCommit = 0
 	}
 	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), cleanCommit, func(session *draft.Session) error {
-		if err := s.lockDiscardedPins(ctx, content, session); err != nil {
+		if err := s.lockDiscardedImports(ctx, content, session); err != nil {
 			return err
 		}
 		return session.Replace(ctx, content)
@@ -232,18 +231,18 @@ func (s discardServiceImpl) revertIsTheLastCommit(ctx context.Context, projectID
 	return last.Number(), nil
 }
 
-// lockDiscardedPins locks every Library the kept pins name FOR SHARE in the
-// Discard's or Revert's transaction: a Library deleted between the check and the
-// write makes the command refuse, not fail on the foreign key (ADR 0018). The
-// pins the check already dropped are not locked.
-func (s discardServiceImpl) lockDiscardedPins(ctx context.Context, content draft.Content, session *draft.Session) error {
+// lockDiscardedImports locks every Library the kept imports name FOR SHARE in
+// the Discard's or Revert's transaction: a Library deleted between the check and
+// the write makes the command refuse, not fail on the foreign key (ADR 0018).
+// The imports the check already dropped are not locked.
+func (s discardServiceImpl) lockDiscardedImports(ctx context.Context, content draft.Content, session *draft.Session) error {
 	var issues []FileIssue
-	for i, pin := range content.LibraryPins {
-		if err := session.LockLibrary(ctx, pin.LibraryID()); err != nil {
+	for i, imported := range content.LibraryImports {
+		if err := session.LockLibrary(ctx, imported.LibraryID()); err != nil {
 			if errors.Is(err, library.ErrLibraryNotFound) {
 				issues = append(issues, FileIssue{
-					Path:    fmt.Sprintf("library_pins[%d]", i),
-					Message: fmt.Sprintf("library %s is not live on this server", pin.LibraryID()),
+					Path:    fmt.Sprintf("library_imports[%d]", i),
+					Message: fmt.Sprintf("library %s is not live on this server", imported.LibraryID()),
 				})
 				continue
 			}
@@ -326,13 +325,13 @@ func contentOfProjectFile(projectID id.ID[project.Project], file projectv0.Proje
 		}
 		content.Scenes = append(content.Scenes, built)
 	}
-	for _, p := range file.LibraryPins {
-		number, err := library.NewReleaseNumber(p.Release)
-		if err != nil {
-			return draft.Content{}, err
+	for _, imported := range file.LibraryImports {
+		if imported.Commit < 1 {
+			return draft.Content{}, fmt.Errorf("library %s: a saved state number is positive, got %d",
+				imported.LibraryID, imported.Commit)
 		}
-		content.LibraryPins = append(content.LibraryPins, librarypin.ReconstituteLibraryPin(projectID,
-			id.NewID(id.IDWithUUID[library.Library](p.LibraryID)), number))
+		content.LibraryImports = append(content.LibraryImports, libraryimport.ReconstituteLibraryImport(projectID,
+			id.NewID(id.IDWithUUID[library.Library](imported.LibraryID)), uuid.Nil, imported.Commit))
 	}
 	return content, nil
 }

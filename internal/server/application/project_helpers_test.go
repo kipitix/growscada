@@ -14,7 +14,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
-	"github.com/kipitix/growscada/internal/server/domain/librarypin"
+	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
@@ -37,9 +37,9 @@ var (
 // wrapper keeps its state between the calls of a service.
 type wrappedScopes struct {
 	application.ProjectScopes
-	tags   func(tag.TagRepository) tag.TagRepository
-	scenes func(scene.SceneRepository) scene.SceneRepository
-	pins   func(librarypin.Repository) librarypin.Repository
+	tags    func(tag.TagRepository) tag.TagRepository
+	scenes  func(scene.SceneRepository) scene.SceneRepository
+	imports func(libraryimport.Repository) libraryimport.Repository
 
 	mu     sync.Mutex
 	opened map[id.ID[project.Project]]application.ProjectScope
@@ -49,7 +49,7 @@ type wrappedScopes struct {
 func newScopes(opts ...repositories.Option) *wrappedScopes {
 	return &wrappedScopes{
 		ProjectScopes: repositories.NewProjectScopes(testDB, opts...),
-		drafts:        repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB, opts...), opts...),
+		drafts:        repositories.NewDraftRepositoryPostgres(testDB, opts...),
 	}
 }
 
@@ -64,7 +64,7 @@ func (s *wrappedScopes) ForProject(projectID id.ID[project.Project]) application
 	}
 	inner := s.ProjectScopes.ForProject(projectID)
 	scope := testScope{
-		projectID: projectID, tags: inner.Tags(), scenes: inner.Scenes(), pins: inner.LibraryPins(),
+		projectID: projectID, tags: inner.Tags(), scenes: inner.Scenes(), imports: inner.LibraryImports(),
 		devices: inner.Devices(), environments: inner.Environments(), environmentDevices: inner.EnvironmentDevices(),
 	}
 	if s.tags != nil {
@@ -73,8 +73,8 @@ func (s *wrappedScopes) ForProject(projectID id.ID[project.Project]) application
 	if s.scenes != nil {
 		scope.scenes = s.scenes(scope.scenes)
 	}
-	if s.pins != nil {
-		scope.pins = s.pins(scope.pins)
+	if s.imports != nil {
+		scope.imports = s.imports(scope.imports)
 	}
 	if s.opened == nil {
 		s.opened = map[id.ID[project.Project]]application.ProjectScope{}
@@ -87,17 +87,17 @@ type testScope struct {
 	projectID          id.ID[project.Project]
 	tags               tag.TagRepository
 	scenes             scene.SceneRepository
-	pins               librarypin.Repository
+	imports            libraryimport.Repository
 	devices            device.DeviceRepository
 	environments       device.EnvironmentRepository
 	environmentDevices device.EnvironmentDeviceRepository
 }
 
-func (s testScope) ProjectID() id.ID[project.Project]  { return s.projectID }
-func (s testScope) Tags() tag.TagRepository            { return s.tags }
-func (s testScope) Scenes() scene.SceneRepository      { return s.scenes }
-func (s testScope) LibraryPins() librarypin.Repository { return s.pins }
-func (s testScope) Devices() device.DeviceRepository   { return s.devices }
+func (s testScope) ProjectID() id.ID[project.Project]        { return s.projectID }
+func (s testScope) Tags() tag.TagRepository                  { return s.tags }
+func (s testScope) Scenes() scene.SceneRepository            { return s.scenes }
+func (s testScope) LibraryImports() libraryimport.Repository { return s.imports }
+func (s testScope) Devices() device.DeviceRepository         { return s.devices }
 func (s testScope) Environments() device.EnvironmentRepository {
 	return s.environments
 }
@@ -115,13 +115,13 @@ func soleOrganization() id.ID[organization.Organization] {
 }
 
 // cleanProjects removes every project but mainProject, with its Library
-// Pins, Devices and Environments; their other content must be gone already.
+// Imports, Devices and Environments; their other content must be gone already.
 // cleanDrafts removes every Draft row and its DraftChanges: the tests start
 // from a fresh Draft.
 func cleanDrafts(t *testing.T) {
 	t.Helper()
 	if _, err := testDB.ExecContext(context.Background(),
-		"DELETE FROM engineering.draft_changes; DELETE FROM engineering.drafts"); err != nil {
+		"DELETE FROM engineering.library_imports; DELETE FROM engineering.draft_changes; DELETE FROM engineering.drafts"); err != nil {
 		t.Fatalf("clean drafts: %v", err)
 	}
 }
@@ -134,7 +134,7 @@ func cleanProjects(t *testing.T) {
 		 WHERE ed.environment_id = e.id AND e.project_id <> `+main+`;
 		 DELETE FROM engineering.devices WHERE project_id <> `+main+`;
 		 DELETE FROM engineering.environments WHERE project_id <> `+main+`;
-		 DELETE FROM engineering.library_pins WHERE project_id <> `+main+`;
+		 DELETE FROM engineering.library_imports WHERE project_id <> `+main+`;
 		 DELETE FROM projects WHERE id <> `+main); err != nil {
 		t.Fatalf("cleanProjects: %v", err)
 	}
@@ -144,7 +144,7 @@ func cleanProjects(t *testing.T) {
 // database's organization, through scopes.
 func contentOver(scopes application.ProjectScopes) application.ProjectContent {
 	drafts, ok := scopes.(interface{ Drafts() draft.Repository })
-	draftRepo := repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB))
+	draftRepo := repositories.NewDraftRepositoryPostgres(testDB)
 	if ok {
 		draftRepo = drafts.Drafts()
 	}
@@ -203,7 +203,7 @@ func newDeployService() application.DeployService {
 func newProjectFileService() application.ProjectFileService {
 	content := contentOver(newScopes())
 	return application.NewProjectFileService(content, application.NewProjectFileBuilder(content), newRuntimeNode(),
-		repositories.NewLibraryRepositoryPostgres(testDB), repositories.NewLibraryReleaseRepositoryPostgres(testDB))
+		repositories.NewLibraryRepositoryPostgres(testDB))
 }
 
 // newServiceWithStates returns the tag service and the Runtime node's service
@@ -231,7 +231,7 @@ func tagStateCount(t *testing.T, projectID uuid.UUID) int {
 // its content states (ADR 0016).
 func draftVersionOf(t *testing.T, projectID uuid.UUID) int {
 	t.Helper()
-	drafts := repositories.NewDraftRepositoryPostgres(testDB, nil)
+	drafts := repositories.NewDraftRepositoryPostgres(testDB)
 	found, ok, err := drafts.Read(context.Background(),
 		draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](projectID))))
 	if err != nil {

@@ -24,7 +24,7 @@ import (
 
 // FileIssue is one problem of a project file: where in the document it is and
 // what is wrong there (ADR 0018). Path is the document path, e.g.
-// "schema_version", "library_pins[0]" or "scenes[2].widgets[0].type_id".
+// "schema_version", "library_imports[0]" or "scenes[2].widgets[0].type_id".
 type FileIssue struct {
 	Path    string
 	Message string
@@ -53,19 +53,19 @@ type projectFileValidation struct {
 }
 
 // projectFileValidator validates a ProjectFile for the Engineering node
-// (ADR 0018). Opening also checks the document's pins against this server's
-// live Libraries and their releases; deploying a file does not, because the
+// (ADR 0018). Opening also checks the document's imports against this server's
+// live Libraries and their saved states; deploying a file does not, because the
 // document carries the WidgetTypes its Widgets use.
 type projectFileValidator struct {
 	libraries library.LibraryRepository
-	releases  library.LibraryReleaseRepository
+	drafts    draft.Repository
 }
 
 // validate decodes document for projectID, checks its schema version, its
 // Project, its invariants and cross-references, rebuilds the ProjectFile it
 // would make and compares the two canonical forms. checkLibraries also
-// requires every pin to name a live Library with that Release here and every
-// copy to match it.
+// requires every import to name a live Library with that saved state here and
+// every copy to match it.
 func (v projectFileValidator) validate(ctx context.Context, projectID id.ID[project.Project], document []byte, checkLibraries bool) (projectFileValidation, error) {
 	// The schema version is read before the strict decode: a file of a newer
 	// MINOR may carry fields this build does not know, and "newer than the
@@ -204,7 +204,7 @@ type projectFileShape struct {
 	devices      map[uuid.UUID]projectv0.Device
 	environments map[uuid.UUID]projectv0.Environment
 	types        map[uuid.UUID]projectv0.WidgetType
-	pins         map[uuid.UUID]projectv0.LibraryPin
+	imports      map[uuid.UUID]projectv0.LibraryImport
 }
 
 // validateProjectFileShape enforces the invariants and the cross-references
@@ -217,7 +217,7 @@ func validateProjectFileShape(file projectv0.ProjectFile, problems *fileProblems
 		devices:      make(map[uuid.UUID]projectv0.Device, len(file.Devices)),
 		environments: make(map[uuid.UUID]projectv0.Environment, len(file.Environments)),
 		types:        make(map[uuid.UUID]projectv0.WidgetType, len(file.WidgetTypes)),
-		pins:         make(map[uuid.UUID]projectv0.LibraryPin, len(file.LibraryPins)),
+		imports:      make(map[uuid.UUID]projectv0.LibraryImport, len(file.LibraryImports)),
 	}
 
 	deviceNames := make(map[string]struct{}, len(file.Devices))
@@ -354,15 +354,15 @@ func validateProjectFileShape(file projectv0.ProjectFile, problems *fileProblems
 		}
 	}
 
-	for i, pin := range file.LibraryPins {
-		path := fmt.Sprintf("library_pins[%d]", i)
-		checkID(pin.LibraryID, path+".library_id", problems)
-		if _, ok := shape.pins[pin.LibraryID]; ok && pin.LibraryID != uuid.Nil {
-			problems.add(path+".library_id", "the library %s appears more than once", pin.LibraryID)
+	for i, imported := range file.LibraryImports {
+		path := fmt.Sprintf("library_imports[%d]", i)
+		checkID(imported.LibraryID, path+".library_id", problems)
+		if _, ok := shape.imports[imported.LibraryID]; ok && imported.LibraryID != uuid.Nil {
+			problems.add(path+".library_id", "the library %s appears more than once", imported.LibraryID)
 		}
-		shape.pins[pin.LibraryID] = pin
-		if _, err := library.NewReleaseNumber(pin.Release); err != nil {
-			problems.add(path+".release", "%s", err)
+		shape.imports[imported.LibraryID] = imported
+		if imported.Commit < 1 {
+			problems.add(path+".commit", "a saved state number is positive, got %d", imported.Commit)
 		}
 	}
 
@@ -405,9 +405,9 @@ func validateProjectFileShape(file projectv0.ProjectFile, problems *fileProblems
 			copied, ok := shape.types[w.TypeID]
 			if !ok {
 				problems.add(widgetPath+".type_id", "widget type %s is not in widget_types", w.TypeID)
-			} else if _, pinned := shape.pins[copied.LibraryID]; !pinned {
+			} else if _, imported := shape.imports[copied.LibraryID]; !imported {
 				problems.add(widgetPath+".type_id",
-					"widget type %s is of library %s, which library_pins does not name", w.TypeID, copied.LibraryID)
+					"widget type %s is of library %s, which library_imports does not name", w.TypeID, copied.LibraryID)
 			}
 			// A binding is only valid to a port the WidgetType declares, whose
 			// hint accepts the bound Tag's type: the invariant the domain
@@ -465,37 +465,37 @@ func checkID(value uuid.UUID, path string, problems *fileProblems) {
 }
 
 // localWidgetTypes checks a document that opens against this server's
-// Libraries (ADR 0018): every pin names a live Library with that Release, and
-// every copy the document carries matches the Release's copy. It returns the
-// copies the rebuild uses, by WidgetType ID.
+// Libraries (ADR 0018, task 85_6): every import names a live Library with that
+// saved state, and every copy the document carries matches the saved state's
+// copy. It returns the copies the rebuild uses, by WidgetType ID.
 func (v projectFileValidator) localWidgetTypes(ctx context.Context, file projectv0.ProjectFile, problems *fileProblems) (map[uuid.UUID]projectv0.WidgetType, error) {
 	types := make(map[uuid.UUID]projectv0.WidgetType)
-	for i, pin := range file.LibraryPins {
-		path := fmt.Sprintf("library_pins[%d]", i)
-		libraryID := id.NewID(id.IDWithUUID[library.Library](pin.LibraryID))
+	for i, imported := range file.LibraryImports {
+		path := fmt.Sprintf("library_imports[%d]", i)
+		libraryID := id.NewID(id.IDWithUUID[library.Library](imported.LibraryID))
 		lib, err := v.libraries.FindByID(ctx, libraryID)
 		if errors.Is(err, library.ErrLibraryNotFound) {
-			problems.add(path, "library %s is not live on this server", pin.LibraryID)
+			problems.add(path, "library %s is not live on this server", imported.LibraryID)
 			continue
 		}
 		if err != nil {
-			return nil, fmt.Errorf("cannot read library %s: %w", pin.LibraryID, err)
+			return nil, fmt.Errorf("cannot read library %s: %w", imported.LibraryID, err)
 		}
-		number, err := library.NewReleaseNumber(pin.Release)
-		if err != nil {
-			problems.add(path+".release", "%s", err)
-			continue
-		}
-		release, err := v.releases.FindByNumber(ctx, lib.ID(), number)
-		if errors.Is(err, library.ErrReleaseNotFound) {
-			problems.add(path, "library %s has no release %d on this server", pin.LibraryID, pin.Release)
+		commit, err := v.drafts.FindCommit(ctx, draft.LibraryScope(lib.ID()), imported.Commit)
+		if errors.Is(err, draft.ErrCommitNotFound) {
+			problems.add(path, "library %s has no saved state %d on this server", imported.LibraryID, imported.Commit)
 			continue
 		}
 		if err != nil {
-			return nil, fmt.Errorf("cannot read release %d of library %s: %w", pin.Release, pin.LibraryID, err)
+			return nil, fmt.Errorf("cannot read saved state %d of library %s: %w", imported.Commit, imported.LibraryID, err)
 		}
-		for _, released := range release.WidgetTypes() {
-			types[released.ID().UUID()] = newProjectFileWidgetType(released)
+		copies, ok := commit.Content().WidgetTypes()
+		if !ok {
+			problems.add(path, "saved state %d of library %s holds no widget types", imported.Commit, imported.LibraryID)
+			continue
+		}
+		for _, copy := range copies {
+			types[copy.ID().UUID()] = newProjectFileWidgetType(copy)
 		}
 	}
 	for i, copied := range file.WidgetTypes {

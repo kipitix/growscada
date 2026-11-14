@@ -10,7 +10,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
-	"github.com/kipitix/growscada/internal/server/domain/librarypin"
+	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
@@ -174,15 +174,15 @@ func snapshotEvents(scope Scope, snapshot Snapshot, change entityChange) ([]even
 		case entityDeleted:
 			return []event.Event{device.NewEnvironmentDeviceDeletedEvent(environmentID, deviceID, projectID)}, nil
 		}
-	case LibraryPinState:
-		pinnedID := id.NewID(id.IDWithUUID[library.Library](state.LibraryID))
+	case LibraryImportState:
+		importedID := id.NewID(id.IDWithUUID[library.Library](state.LibraryID))
 		switch change {
 		case entityCreated:
-			return []event.Event{librarypin.NewLibraryPinCreatedEvent(pinnedID, projectID)}, nil
+			return []event.Event{libraryimport.NewLibraryImportCreatedEvent(importedID, projectID)}, nil
 		case entityUpdated:
-			return []event.Event{librarypin.NewLibraryPinUpdatedEvent(pinnedID, projectID)}, nil
+			return []event.Event{libraryimport.NewLibraryImportUpdatedEvent(importedID, projectID)}, nil
 		case entityDeleted:
-			return []event.Event{librarypin.NewLibraryPinDeletedEvent(pinnedID, projectID)}, nil
+			return []event.Event{libraryimport.NewLibraryImportDeletedEvent(importedID, projectID)}, nil
 		}
 	case WidgetTypeState:
 		typeID := id.NewID(id.IDWithUUID[library.WidgetType](snapshot.ID))

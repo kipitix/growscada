@@ -332,13 +332,14 @@ func TestSeedData_AppliesOnTheMigratedSchema(t *testing.T) {
 	          (SELECT 1 FROM engineering.released_widget_types r WHERE r.id = w.id AND r.name = w.name AND r.release_number = 1)`).Scan(&unreleased); err != nil || unreleased != 0 {
 		t.Errorf("widget types not in release 1: %d, %v", unreleased, err)
 	}
-	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM engineering.library_pins`).Scan(&pins); err != nil || pins != 3 {
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM engineering.library_imports`).Scan(&pins); err != nil || pins != 3 {
 		t.Errorf("pins: %d, %v; want 3", pins, err)
 	}
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM engineering.widgets w WHERE NOT EXISTS
-	          (SELECT 1 FROM engineering.library_pins lp JOIN engineering.released_widget_types r
-	           ON r.library_id = lp.library_id AND r.release_number = lp.release_number
-	           WHERE lp.project_id = w.project_id AND r.id = w.type_id)`).Scan(&unpinnedWidgets); err != nil || unpinnedWidgets != 0 {
+	          (SELECT 1 FROM engineering.library_imports li JOIN engineering.commits c ON c.id = li.commit_id
+	           WHERE li.project_id = w.project_id
+	             AND EXISTS (SELECT 1 FROM jsonb_array_elements(c.content -> 'widget_types') wt
+	                         WHERE (wt ->> 'id')::uuid = w.type_id))`).Scan(&unpinnedWidgets); err != nil || unpinnedWidgets != 0 {
 		t.Errorf("widgets of a type not pinned: %d, %v", unpinnedWidgets, err)
 	}
 }
@@ -1097,5 +1098,174 @@ func TestMigrationDeploymentCommitNumber_ReadsTheSavedStatesBack(t *testing.T) {
 	}
 	if !checkpointRelease.Valid || checkpointRelease.String != "1" || checkpointSchema != "0.5" {
 		t.Errorf("the checkpoint after the down: release %v, schema %q, want 1 and 0.5", checkpointRelease, checkpointSchema)
+	}
+}
+
+// TestMigrationLibraryImports_TurnsPinsIntoImports: a Project imports the saved
+// state a commit-backed Release published rather than pinning that Release
+// (task 85_6). The import carries the Commit's identity, a legacy Release goes
+// with its copies and the Widgets of them, the saved states, the Releases and
+// every Deployment document are rewritten to library_imports, and the Draft
+// whose content changed reports unsaved changes.
+func TestMigrationLibraryImports_TurnsPinsIntoImports(t *testing.T) {
+	ctx := context.Background()
+	db, dir := migrationDB(t)
+	const main = "b0000000-0000-4000-8000-000000000001"
+	if err := goose.UpToContext(ctx, db, dir, rolesBaseline); err != nil {
+		t.Fatalf("migrate public: %v", err)
+	}
+	engineering, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS(filepath.Join(dir, "..", "engineering")),
+		goose.WithTableName("engineering.goose_db_version"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engineering.UpTo(ctx, 20261114000001); err != nil {
+		t.Fatalf("migrate engineering to the commits: %v", err)
+	}
+	deployments, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS(filepath.Join(dir, "..", "runtime")),
+		goose.WithTableName("runtime.goose_db_version"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := deployments.UpTo(ctx, 20261114000002); err != nil {
+		t.Fatalf("migrate runtime: %v", err)
+	}
+	mustExec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := db.ExecContext(ctx, query, args...); err != nil {
+			t.Fatalf("%s: %v", query, err)
+		}
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE projects SET name = 'Imports' WHERE id = $1`, main); err != nil {
+		t.Fatalf("name the project: %v", err)
+	}
+	// Two Libraries: A was saved and released from its Commit; B's release 1
+	// is a legacy one, without a Commit.
+	committedLibrary, legacyLibrary := uuid.New(), uuid.New()
+	keptType, droppedType := uuid.New(), uuid.New()
+	keptWidget, droppedWidget, sceneID, commitID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	mustExec(`INSERT INTO engineering.libraries (id, organization_id, name, version)
+	          SELECT $1, id, 'Kept', 1 FROM organizations`, committedLibrary)
+	mustExec(`INSERT INTO engineering.libraries (id, organization_id, name, version)
+	          SELECT $1, id, 'Dropped', 1 FROM organizations`, legacyLibrary)
+	mustExec(`UPDATE engineering.drafts SET version = 5, clean_version = 5 WHERE project_id = $1`, main)
+	mustExec(`INSERT INTO engineering.drafts (id, library_id, version) VALUES ($1, $2, 3)`, uuid.New(), committedLibrary)
+	mustExec(`INSERT INTO engineering.drafts (id, library_id, version) VALUES ($1, $2, 2)`, uuid.New(), legacyLibrary)
+	mustExec(`INSERT INTO engineering.commits (id, draft_id, number, title, author, created_at, draft_version, content)
+	          SELECT $1, d.id, 1, 'Save', 'Ada', now(), 3,
+	                 jsonb_build_object('format', 1, 'kind', 'library', 'widget_types',
+	                     jsonb_build_array(jsonb_build_object(
+	                         'id', $2::uuid, 'library_id', $3::uuid, 'name', 'gauge',
+	                         'html_template', '', 'script', '', 'script_language', 'javascript',
+	                         'default_width', 10, 'default_height', 10, 'input_ports', '[]'::jsonb)))
+	          FROM engineering.drafts d WHERE d.library_id = $3`, commitID, keptType, committedLibrary)
+	mustExec(`INSERT INTO engineering.library_releases (library_id, number, note, commit_number, author, origin)
+	          VALUES ($1, 1, '', 1, 'Ada', 'commit'), ($2, 1, '', NULL, '', 'legacy')`, committedLibrary, legacyLibrary)
+	mustExec(`INSERT INTO engineering.released_widget_types
+	              (library_id, release_number, id, name, html_template, script, script_language, default_width, default_height, input_ports)
+	          VALUES ($1, 1, $2, 'gauge', '', '', 'javascript', 10, 10, '[]'),
+	                 ($3, 1, $4, 'gauge', '', '', 'javascript', 10, 10, '[]')`,
+		committedLibrary, keptType, legacyLibrary, droppedType)
+	mustExec(`INSERT INTO engineering.library_pins (project_id, library_id, release_number)
+	          VALUES ($1, $2, 1), ($1, $3, 1)`, main, committedLibrary, legacyLibrary)
+	mustExec(`INSERT INTO engineering.scenes (id, project_id, name, width, height, background_html)
+	          VALUES ($1, $2, 'Main', 100, 100, '')`, sceneID, main)
+	mustExec(`INSERT INTO engineering.widgets (id, project_id, name, type_id, scene_id, labels, port_bindings)
+	          VALUES ($1, $3, 'kept', $4, $5, '{}', '[]'), ($2, $3, 'dropped', $6, $5, '{}', '[]')`,
+		keptWidget, droppedWidget, main, keptType, sceneID, droppedType)
+	mustExec(`INSERT INTO engineering.draft_changes (draft_id, seq, description, before, after)
+	          SELECT id, 1, 'a change', '{"format":1,"entities":[]}', '{"format":1,"entities":[]}'
+	          FROM engineering.drafts WHERE project_id = $1`, main)
+	projectFile := `jsonb_build_object(
+	        'schema_version', '0.2', 'project_id', $1::uuid,
+	        'tags', '[]'::jsonb, 'devices', '[]'::jsonb, 'environments', '[]'::jsonb,
+	        'environment_devices', '[]'::jsonb,
+	        'library_pins', jsonb_build_array(
+	            jsonb_build_object('library_id', $2::uuid, 'release', 1),
+	            jsonb_build_object('library_id', $3::uuid, 'release', 1)),
+	        'widget_types', jsonb_build_array(
+	            jsonb_build_object('id', $4::uuid, 'library_id', $2::uuid, 'name', 'gauge'),
+	            jsonb_build_object('id', $5::uuid, 'library_id', $3::uuid, 'name', 'gauge')),
+	        'scenes', jsonb_build_array(jsonb_build_object(
+	            'id', $6::uuid, 'name', 'Main', 'width', 100, 'height', 100,
+	            'widgets', jsonb_build_array(
+	                jsonb_build_object('id', $7::uuid, 'name', 'kept', 'type_id', $4::uuid),
+	                jsonb_build_object('id', $8::uuid, 'name', 'dropped', 'type_id', $5::uuid)))))`
+	args := []any{main, committedLibrary, legacyLibrary, keptType, droppedType, sceneID, keptWidget, droppedWidget}
+	mustExec(`INSERT INTO engineering.commits (id, draft_id, number, title, author, created_at, draft_version, content)
+	          SELECT $9, d.id, 1, 'Save', 'Ada', now(), 5,
+	                 jsonb_build_object('format', 1, 'kind', 'project', 'project_file', `+projectFile+`)
+	          FROM engineering.drafts d WHERE d.project_id = $1`,
+		append(args, uuid.New())...)
+	mustExec(`INSERT INTO engineering.project_releases
+	              (id, project_id, number, commit_number, commit_title, note, author, created_at, origin, content)
+	          VALUES ($9, $1, 1, 1, 'Save', NULL, 'Ada', now(), 'commit',
+	                  jsonb_build_object('format', 1, 'kind', 'project', 'project_file', `+projectFile+`))`,
+		append(args, uuid.New())...)
+	mustExec(`INSERT INTO runtime.deployments (project_id, number, deployed_at, cause, config)
+	          VALUES ($1, 1, now(), 'deploy', `+projectFile+`)`, args...)
+
+	if _, err := engineering.UpTo(ctx, 20261114000002); err != nil {
+		t.Fatalf("migrate the library imports: %v", err)
+	}
+
+	var commitNumber int
+	var importedCommit uuid.UUID
+	var imports int
+	if err := db.QueryRowContext(ctx,
+		`SELECT count(*), coalesce(max(commit_number), 0), coalesce((array_agg(commit_id))[1], '00000000-0000-0000-0000-000000000000'::uuid) FROM engineering.library_imports WHERE project_id = $1`, main,
+	).Scan(&imports, &commitNumber, &importedCommit); err != nil {
+		t.Fatalf("read the imports: %v", err)
+	}
+	if imports != 1 || commitNumber != 1 || importedCommit != commitID {
+		t.Errorf("the imports: %d rows, saved state %d, commit %s; want one of saved state 1 and %s",
+			imports, commitNumber, importedCommit, commitID)
+	}
+	for _, query := range []string{
+		`SELECT count(*) FROM engineering.library_releases WHERE library_id = '` + legacyLibrary.String() + `'`,
+		`SELECT count(*) FROM engineering.released_widget_types WHERE id = '` + droppedType.String() + `'`,
+		`SELECT count(*) FROM engineering.widgets WHERE id = '` + droppedWidget.String() + `'`,
+	} {
+		var left int
+		if err := db.QueryRowContext(ctx, query).Scan(&left); err != nil || left != 0 {
+			t.Errorf("%s: %d rows left, %v; want none", query, left, err)
+		}
+	}
+	var version, cleanVersion, stackPosition int
+	if err := db.QueryRowContext(ctx,
+		`SELECT version, clean_version, stack_position FROM engineering.drafts WHERE project_id = $1`, main,
+	).Scan(&version, &cleanVersion, &stackPosition); err != nil {
+		t.Fatalf("read the draft: %v", err)
+	}
+	if version != 6 || cleanVersion != 0 || stackPosition != 0 {
+		t.Errorf("the Draft: version %d, clean %d, stack %d; want 6, 0 and 0", version, cleanVersion, stackPosition)
+	}
+	var changes int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM engineering.draft_changes`).Scan(&changes); err != nil || changes != 0 {
+		t.Errorf("the DraftChange stack: %d rows, %v; want none", changes, err)
+	}
+
+	// Every document names library_imports and holds no copy or Widget of the
+	// dropped saved state.
+	documents := map[string]string{
+		"the saved state":        `SELECT (content -> 'project_file')::text FROM engineering.commits WHERE content ->> 'kind' = 'project'`,
+		"the Release":            `SELECT (content -> 'project_file')::text FROM engineering.project_releases`,
+		"the running Deployment": `SELECT config::text FROM runtime.deployments WHERE project_id = '` + main + `'`,
+	}
+	for what, query := range documents {
+		var document string
+		if err := db.QueryRowContext(ctx, query).Scan(&document); err != nil {
+			t.Fatalf("%s: %v", what, err)
+		}
+		for _, want := range []string{`"library_imports"`, `"commit": 1`, `"name": "kept"`} {
+			if !strings.Contains(document, want) {
+				t.Errorf("%s does not hold %s: %s", what, want, document)
+			}
+		}
+		for _, gone := range []string{"library_pins", "dropped", droppedType.String(), legacyLibrary.String()} {
+			if strings.Contains(document, gone) {
+				t.Errorf("%s still holds %s: %s", what, gone, document)
+			}
+		}
 	}
 }

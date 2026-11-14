@@ -23,7 +23,7 @@ func cleanProjects(t *testing.T) {
 	t.Helper()
 	main := "'" + mainProject.String() + "'"
 	if _, err := testDB.ExecContext(context.Background(),
-		`DELETE FROM runtime.deployments; DELETE FROM runtime.tags; DELETE FROM engineering.tags; DELETE FROM engineering.scenes; DELETE FROM engineering.library_pins;
+		`DELETE FROM runtime.deployments; DELETE FROM runtime.tags; DELETE FROM engineering.tags; DELETE FROM engineering.scenes; DELETE FROM engineering.library_imports;
 		 DELETE FROM engineering.environment_devices ed USING engineering.environments e
 		 WHERE ed.environment_id = e.id AND e.project_id <> `+main+`;
 		 DELETE FROM engineering.devices WHERE project_id <> `+main+`;
@@ -320,14 +320,14 @@ func TestSceneRepository_ScenesOfProjectsAreApart(t *testing.T) {
 	}
 }
 
-// TestProjectDelete_PinsHoldTheRow: a project's row is removed only once its
-// Library Pins are gone, as its other content.
-func TestProjectDelete_PinsHoldTheRow(t *testing.T) {
+// TestProjectDelete_ImportsHoldTheRow: a project's row is removed only once
+// its Library Imports are gone, as its other content.
+func TestProjectDelete_ImportsHoldTheRow(t *testing.T) {
 	cleanProjects(t)
 	projects := repositories.NewProjectRepositoryPostgres(testDB)
 	other := mustCreateProject(t, projects, "Line 1")
 	ctx := context.Background()
-	mustPinWidgetType(t, other.ID())
+	mustImportWidgetType(t, other.ID())
 	if _, err := projects.Save(ctx, other.Delete()); err != nil {
 		t.Fatalf("mark the project deleted: %v", err)
 	}
@@ -336,18 +336,18 @@ func TestProjectDelete_PinsHoldTheRow(t *testing.T) {
 		t.Fatalf("FindDeleted: %v", err)
 	}
 	if err := projects.Delete(ctx, deleted); !errors.Is(err, project.ErrProjectNotEmpty) {
-		t.Errorf("with a pin: expected ErrProjectNotEmpty, got %v", err)
+		t.Errorf("with an import: expected ErrProjectNotEmpty, got %v", err)
 	}
-	pins := repositories.NewLibraryPinRepositoryPostgres(testDB, other.ID())
-	all, err := pins.FindAll(ctx)
+	imports := repositories.NewLibraryImportRepositoryPostgres(testDB, other.ID())
+	all, err := imports.FindAll(ctx)
 	if err != nil || len(all) != 1 {
-		t.Fatalf("pins: %v, %v", all, err)
+		t.Fatalf("imports: %v, %v", all, err)
 	}
-	if _, err := testDB.ExecContext(ctx, `DELETE FROM engineering.library_pins WHERE project_id = $1`, other.ID().UUID()); err != nil {
-		t.Fatalf("remove the pins: %v", err)
+	if _, err := testDB.ExecContext(ctx, `DELETE FROM engineering.library_imports WHERE project_id = $1`, other.ID().UUID()); err != nil {
+		t.Fatalf("remove the imports: %v", err)
 	}
 	if err := projects.Delete(ctx, deleted); err != nil {
-		t.Errorf("without pins: %v", err)
+		t.Errorf("without imports: %v", err)
 	}
 }
 

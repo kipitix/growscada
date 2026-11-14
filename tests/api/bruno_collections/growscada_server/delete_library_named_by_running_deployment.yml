@@ -1,5 +1,5 @@
 info:
-  name: delete a library a running Deployment names
+  name: delete a library a running Deployment imports
   type: http
   seq: 1992
 http:
@@ -8,9 +8,9 @@ http:
   auth: inherit
 
 docs: |
-  Refused (`409`) though the Draft no longer pins the library: the running
+  Refused (`409`) though the Draft no longer imports the library: the running
   Deployment of Line 4 names its release, and a Discard of that Deployment
-  could not restore the pin (task 71; ADR 0007). The next requests make a
+  could not restore the import (task 71; ADR 0007). The next requests make a
   Deployment that does not name it and delete the library then.
 
 runtime:

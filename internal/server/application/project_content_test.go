@@ -36,7 +36,7 @@ func TestHotLists_ReadTheProjectOnlyToTellWhyNothingIsFound(t *testing.T) {
 	p := r.createProject(t, "Line 1")
 	projects := &countingProjects{ProjectRepository: repositories.NewProjectRepositoryPostgres(testDB)}
 	content := application.NewProjectContent(projects, newScopes(),
-		repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB)), soleOrganization())
+		repositories.NewDraftRepositoryPostgres(testDB), soleOrganization())
 	tags := application.NewTagService(content, newRuntimeNode())
 	scenes := application.NewSceneService(content)
 	reads := func(when string, want int) {

@@ -131,7 +131,7 @@ func (p *Project) doOpenProjectFile(ctx app.Context, pending *pendingProjectFile
 		p.loadScenes(ctx)
 		p.loadTags(ctx)
 		p.loadWidgetTypes(ctx)
-		p.loadPins(ctx)
+		p.loadImports(ctx)
 		p.loadDeploy(ctx)
 		p.loadDraftState(ctx)
 		p.loadDraftChanges(ctx)
@@ -265,7 +265,7 @@ func (p *Project) renderProjectFileConfirmation(pending *pendingProjectFile) app
 			Style("margin", "0 0 4px").
 			Style("color", "var(--text-2)").
 			Text(fmt.Sprintf("%d tags, %d scenes, %d widgets, %d devices, %d environments, %d library pins",
-				len(file.Tags), len(file.Scenes), widgets, len(file.Devices), len(file.Environments), len(file.LibraryPins))),
+				len(file.Tags), len(file.Scenes), widgets, len(file.Devices), len(file.Environments), len(file.LibraryImports))),
 		app.P().
 			Style("margin", "0 0 4px").
 			Text(action),

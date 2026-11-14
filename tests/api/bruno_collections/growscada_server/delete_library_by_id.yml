@@ -9,9 +9,9 @@ http:
 
 docs: |
   Refused (`409`) while a running Deployment of a live project names one of the
-  library's releases: the project Main pinned it in the seed, and the first
+  library's releases: the project Main imported it in the seed, and the first
   Deployment — the one the server made at start — still names it, though the
-  pin is gone from the Draft. A Discard of that Deployment could not restore
+  import is gone from the Draft. A Discard of that Deployment could not restore
   the Release, so the library stays (task 71; ADR 0007).
 
 runtime:

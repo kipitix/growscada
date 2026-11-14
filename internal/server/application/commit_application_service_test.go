@@ -24,7 +24,7 @@ func newCommitService() application.CommitService {
 		repositories.NewProjectReleaseRepositoryPostgres(testDB),
 		repositories.NewLibraryReleaseRepositoryPostgres(testDB),
 		application.NewLabelService(repositories.NewLabelRepositoryPostgres(testDB),
-			repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB)),
+			repositories.NewDraftRepositoryPostgres(testDB),
 			soleOrganization()))
 }
 
@@ -34,7 +34,7 @@ func newCommitService() application.CommitService {
 func TestCommitService_ProjectSaveListFindRename(t *testing.T) {
 	cleanProjects(t)
 	ctx := context.Background()
-	projects := application.NewProjectService(repositories.NewProjectRepositoryPostgres(testDB), repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB)), soleOrganization())
+	projects := application.NewProjectService(repositories.NewProjectRepositoryPostgres(testDB), repositories.NewDraftRepositoryPostgres(testDB), soleOrganization())
 	createdProject, err := projects.CreateProject(ctx, appdto.ProjectInput{Name: "commits-" + uuid.NewString()})
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)

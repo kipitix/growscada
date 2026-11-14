@@ -20,10 +20,10 @@ var (
 	// ErrLibraryNameTaken is returned by Save when another live library of
 	// the same Organization already has the name.
 	ErrLibraryNameTaken = errors.New("library name already taken")
-	// ErrLibraryPinned is returned by Save of a library marked deleted while
-	// a live Project pins one of its releases, and by Delete while any
+	// ErrLibraryImported is returned by Save of a library marked deleted while
+	// a live Project imports one of its saved states, and by Delete while any
 	// Project does.
-	ErrLibraryPinned = errors.New("library is pinned by projects")
+	ErrLibraryImported = errors.New("library is imported by projects")
 	// ErrNoRelease is returned by a Revert of a library never released: there
 	// is nothing to go back to.
 	ErrNoRelease = errors.New("library has no release")
@@ -48,7 +48,7 @@ type LibraryRepository interface {
 	// Returns ErrLibraryNotFound if there is no such live library on update,
 	// ErrLibraryConflict if the stored version does not match,
 	// ErrLibraryNameTaken if another live library of its Organization has the
-	// name, ErrLibraryPinned if it is marked deleted while pinned.
+	// name, ErrLibraryImported if it is marked deleted while imported.
 	Save(context.Context, Library) (Library, error)
 
 	// FindByID returns the live library with the given ID.
@@ -72,7 +72,7 @@ type LibraryRepository interface {
 	// Releases. It stores no events: the library recorded its
 	// LibraryDeletedEvent when it was marked.
 	// Returns ErrLibraryNotFound if there is no such library marked deleted,
-	// ErrLibraryPinned while Projects marked deleted, not removed yet, still
+	// ErrLibraryImported while Projects marked deleted, not removed yet, still
 	// pin it.
 	Delete(context.Context, Library) error
 }

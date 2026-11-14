@@ -1,20 +1,20 @@
 info:
-  name: delete library pin after rollback
+  name: delete library import after rollback
   type: http
   seq: 68
 http:
   method: DELETE
-  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/library-pins/{{OTHER_LIBRARY_ID}}?version=2
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/library-imports/{{OTHER_LIBRARY_ID}}?version=2
   auth: inherit
 
 docs: |
   Returns the Draft of the project to the document the Rollback made it run:
-  the pin the Deploy before added goes, so the next requests of the
+  the import the Deploy before added goes, so the next requests of the
   collection see the project as it was before this section.
 
   This DELETE sits in the middle of the collection, not with the deletes at
   the end: the requests after it read the restored Draft, and `post discard`
-  (seq 63) would already have cleared the pin.
+  (seq 63) would already have cleared the import.
 
 runtime:
   assertions:

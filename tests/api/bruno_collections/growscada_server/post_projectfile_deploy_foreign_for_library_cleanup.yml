@@ -9,12 +9,12 @@ http:
     type: json
     data: |-
       {
-        "schema_version": "0.2",
+        "schema_version": "0.3",
         "project_id": "{{CLEANUP_PROJECT_ID}}",
-        "library_pins": [
+        "library_imports": [
           {
             "library_id": "d0000000-0000-4000-8000-0000000000ff",
-            "release": 1
+            "commit": 1
           }
         ],
         "widget_types": [
@@ -58,7 +58,7 @@ http:
 docs: |
   A file from another server: its document is self-contained (the WidgetType
   copy, the scene and the widget are in it), so it is deployed as Deployment 3
-  of Line 4 without asking for the library (task 39; ADR 0018). The pin it
+  of Line 4 without asking for the library (task 39; ADR 0018). The import it
   names is what a Discard cannot write here.
 
 runtime:

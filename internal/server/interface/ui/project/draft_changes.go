@@ -107,7 +107,7 @@ func (p *Project) rejectedDraftChange(ctx app.Context, err error) {
 			p.loadScenes(ctx)
 			p.loadWidgets(ctx)
 			p.loadTags(ctx)
-			p.loadPins(ctx)
+			p.loadImports(ctx)
 			p.loadWidgetTypes(ctx)
 			p.loadDeploy(ctx)
 		})

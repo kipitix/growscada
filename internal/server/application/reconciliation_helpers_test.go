@@ -32,7 +32,7 @@ type reconciliation struct {
 	states     runtimeapp.TagStateService
 	libSvc     application.LibraryService
 	wtSvc      application.WidgetTypeService
-	pinSvc     application.LibraryPinService
+	importSvc  application.LibraryImportService
 	sceneSvc   application.SceneService
 	dispatcher *outbox.Dispatcher
 	runner     *outbox.PolicyRunner
@@ -55,8 +55,7 @@ func newReconciliation(t *testing.T, _ reconciliationWiring) *reconciliation {
 	cleanProjects(t)
 
 	projects := repositories.NewProjectRepositoryPostgres(testDB)
-	releases := repositories.NewLibraryReleaseRepositoryPostgres(testDB)
-	drafts := repositories.NewDraftRepositoryPostgres(testDB, releases)
+	drafts := repositories.NewDraftRepositoryPostgres(testDB)
 	states, runtimeNode := newRuntime()
 	r := &reconciliation{
 		projectSvc: application.NewProjectService(projects, drafts, soleOrganization()),
@@ -64,7 +63,7 @@ func newReconciliation(t *testing.T, _ reconciliationWiring) *reconciliation {
 		states:     states,
 		libSvc:     newLibraryService(),
 		wtSvc:      newWidgetTypeService(),
-		pinSvc:     newLibraryPinService(),
+		importSvc:  newLibraryImportService(t),
 		sceneSvc:   sceneServiceOver(newScopes()),
 		libraries:  map[uuid.UUID]uuid.UUID{},
 	}
@@ -126,7 +125,7 @@ func (r *reconciliation) createType(t *testing.T, ports ...string) appdto.Widget
 // createTypeIn is createType pinning the release in projectID.
 func (r *reconciliation) createTypeIn(t *testing.T, projectID uuid.UUID, ports ...string) appdto.WidgetType {
 	t.Helper()
-	created, lib := pinNewWidgetType(t, projectID, appdto.WidgetTypeInput{
+	created, lib := importNewWidgetType(t, projectID, appdto.WidgetTypeInput{
 		Name: "sensor", HtmlTemplate: "<div></div>", InputPorts: inputPorts(ports),
 	})
 	r.libraries[created.ID] = lib.ID
@@ -146,27 +145,28 @@ func (r *reconciliation) keepPorts(t *testing.T, wt appdto.WidgetType, ports ...
 	if err != nil {
 		t.Fatalf("UpdateWidgetType: %v", err)
 	}
-	r.switchPin(t, wt.ID, mustReleaseLibrary(t, r.libraries[wt.ID]).Number)
+	r.switchImport(t, wt.ID, mustCommitLibrary(t, r.libraries[wt.ID]).Number)
 	return updated
 }
 
-// switchPin pins release of the library of the type typeID in mainProject.
-func (r *reconciliation) switchPin(t *testing.T, typeID uuid.UUID, release int) {
+// switchImport imports the saved state commit of the library of the type
+// typeID in mainProject.
+func (r *reconciliation) switchImport(t *testing.T, typeID uuid.UUID, commit int) {
 	t.Helper()
 	ctx := context.Background()
-	pins, err := r.pinSvc.FindLibraryPins(ctx, mainProject)
+	imports, err := r.importSvc.FindLibraryImports(ctx, mainProject)
 	if err != nil {
-		t.Fatalf("FindLibraryPins: %v", err)
+		t.Fatalf("FindLibraryImports: %v", err)
 	}
-	for _, pin := range pins {
-		if pin.LibraryID == r.libraries[typeID] {
-			if _, _, err := r.pinSvc.PutLibraryPin(ctx, mainProject, pin.LibraryID, release, draftVersionOf(t, mainProject)); err != nil {
-				t.Fatalf("PutLibraryPin: %v", err)
+	for _, imported := range imports {
+		if imported.LibraryID == r.libraries[typeID] {
+			if _, _, err := r.importSvc.PutLibraryImport(ctx, mainProject, imported.LibraryID, commit, draftVersionOf(t, mainProject)); err != nil {
+				t.Fatalf("PutLibraryImport: %v", err)
 			}
 			return
 		}
 	}
-	t.Fatalf("library of type %s not pinned", typeID)
+	t.Fatalf("library of type %s not imported", typeID)
 }
 
 func (r *reconciliation) createScene(t *testing.T, name string) appdto.Scene {

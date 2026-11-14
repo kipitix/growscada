@@ -82,7 +82,7 @@ func mustDeployTheDraft(t *testing.T, projectID uuid.UUID) appdto.Deployment {
 // test database.
 func newDiscardService() application.DiscardService {
 	return application.NewDiscardService(contentOver(newScopes()), newRuntimeNode(),
-		repositories.NewLibraryRepositoryPostgres(testDB), repositories.NewLibraryReleaseRepositoryPostgres(testDB))
+		repositories.NewLibraryRepositoryPostgres(testDB))
 }
 
 // runDiscard discards the project through the service.
@@ -94,19 +94,19 @@ func runDiscard(t *testing.T, projectID uuid.UUID) {
 	}
 }
 
-// cleanPins removes the Library Pins of mainProject: a test that counts them
-// starts from none. The Libraries and their releases stay.
-func cleanPins(t *testing.T) {
+// cleanImports removes the Library Imports of mainProject: a test that counts
+// them starts from none. The Libraries and their saved states stay.
+func cleanImports(t *testing.T) {
 	t.Helper()
 	ctx := context.Background()
 	if _, err := testDB.ExecContext(ctx,
-		"DELETE FROM engineering.library_pins WHERE project_id = $1", mainProject); err != nil {
-		t.Fatalf("cleanPins: %v", err)
+		"DELETE FROM engineering.library_imports WHERE project_id = $1", mainProject); err != nil {
+		t.Fatalf("cleanImports: %v", err)
 	}
 	// The content changed without a Save: the Draft's Clean Version is gone.
 	if _, err := testDB.ExecContext(ctx,
 		"UPDATE engineering.drafts SET clean_version = 0 WHERE project_id = $1", mainProject); err != nil {
-		t.Fatalf("cleanPins: %v", err)
+		t.Fatalf("cleanImports: %v", err)
 	}
 }
 
@@ -310,7 +310,7 @@ func TestReleaseService_Deploy_OfAFileRelease_StatesNoSavedState(t *testing.T) {
 func TestDiscard_WithoutACommit_IsRefused(t *testing.T) {
 	cleanProjects(t)
 	ctx := context.Background()
-	created, err := application.NewProjectService(repositories.NewProjectRepositoryPostgres(testDB), repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB)), soleOrganization()).
+	created, err := application.NewProjectService(repositories.NewProjectRepositoryPostgres(testDB), repositories.NewDraftRepositoryPostgres(testDB), soleOrganization()).
 		CreateProject(ctx, appdto.ProjectInput{Name: "discard-" + uuid.NewString()})
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
@@ -407,7 +407,7 @@ func TestDiscard_RestoresTheLastCommit(t *testing.T) {
 func TestDiscard_RemovesADeviceAndAnEnvironmentOfTheDraft(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
-	cleanPins(t)
+	cleanImports(t)
 	ctx := context.Background()
 
 	mustDeployTheDraft(t, mainProject)
@@ -447,25 +447,25 @@ func TestDiscard_RemovesADeviceAndAnEnvironmentOfTheDraft(t *testing.T) {
 	}
 }
 
-// TestDiscard_OfAPinnedLibraryRestoresThePin: the pin of a Library the Draft
-// dropped comes back, at the release the last Commit names.
-func TestDiscard_OfAPinnedLibraryRestoresThePin(t *testing.T) {
+// TestDiscard_OfAnImportedLibraryRestoresTheImport: the import of a Library
+// the Draft dropped comes back, at the saved state the last Commit names.
+func TestDiscard_OfAnImportedLibraryRestoresTheImport(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
-	cleanPins(t)
+	cleanImports(t)
 	ctx := context.Background()
 
-	_, lib := pinNewWidgetType(t, mainProject, appdto.WidgetTypeInput{Name: "gauge"})
+	_, lib := importNewWidgetType(t, mainProject, appdto.WidgetTypeInput{Name: "gauge"})
 	mustDeployTheDraft(t, mainProject)
-	if _, err := newLibraryPinService().DeleteLibraryPin(ctx, mainProject, lib.ID, draftVersionOf(t, mainProject)); err != nil {
-		t.Fatalf("DeleteLibraryPin: %v", err)
+	if _, err := newLibraryImportService(t).DeleteLibraryImport(ctx, mainProject, lib.ID, draftVersionOf(t, mainProject)); err != nil {
+		t.Fatalf("DeleteLibraryImport: %v", err)
 	}
 
 	runDiscard(t, mainProject)
 
-	pins, err := newLibraryPinService().FindLibraryPins(ctx, mainProject)
-	if err != nil || len(pins) != 1 || pins[0].LibraryID != lib.ID || pins[0].Release != 1 {
-		t.Errorf("the pins after the Discard: %+v, %v, want %s at release 1", pins, err, lib.ID)
+	imports, err := newLibraryImportService(t).FindLibraryImports(ctx, mainProject)
+	if err != nil || len(imports) != 1 || imports[0].LibraryID != lib.ID || imports[0].CommitNumber != 1 {
+		t.Errorf("the imports after the Discard: %+v, %v, want %s at saved state 1", imports, err, lib.ID)
 	}
 }
 
@@ -478,7 +478,7 @@ func TestUnsavedChanges_FollowTheDraftsCleanVersion(t *testing.T) {
 	cleanProjects(t)
 	ctx := context.Background()
 	projects := application.NewProjectService(repositories.NewProjectRepositoryPostgres(testDB),
-		repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB)), soleOrganization())
+		repositories.NewDraftRepositoryPostgres(testDB), soleOrganization())
 	drafts := application.NewDraftService(contentOver(newScopes()))
 	created, err := projects.CreateProject(ctx, appdto.ProjectInput{Name: "unsaved-" + uuid.NewString()})
 	if err != nil {
@@ -554,7 +554,7 @@ func TestUnsavedChanges_FollowTheDraftsCleanVersion(t *testing.T) {
 func TestDiscard_WithAWarningStaysUnsaved(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	ctx := context.Background()
-	_, lib := pinNewWidgetType(t, mainProject, appdto.WidgetTypeInput{Name: "gauge"})
+	_, lib := importNewWidgetType(t, mainProject, appdto.WidgetTypeInput{Name: "gauge"})
 	mustDeployTheDraft(t, mainProject)
 	if found, err := r.projectSvc.FindProjectByID(ctx, mainProject); err != nil || found.HasUnsavedChanges {
 		t.Fatalf("before the Discard: %+v, %v; want the deployed Draft clean", found, err)

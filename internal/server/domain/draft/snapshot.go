@@ -9,7 +9,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
-	"github.com/kipitix/growscada/internal/server/domain/librarypin"
+	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -26,7 +26,7 @@ const (
 	KindDevice            Kind = "device"
 	KindEnvironment       Kind = "environment"
 	KindEnvironmentDevice Kind = "environment_device"
-	KindLibraryPin        Kind = "library_pin"
+	KindLibraryImport     Kind = "library_import"
 	KindWidgetType        Kind = "widget_type"
 )
 
@@ -37,7 +37,7 @@ const (
 // A Scene's Widgets are snapshots of their own: a widget row is what changes
 // when a binding is removed, and the Scene row stays as it is. A pair
 // (Environment, Device) has no ID of its own: its ID is the Environment's and
-// its state names the Device. A Library Pin's ID is its Library's.
+// its state names the Device. A Library Import's ID is its Library's.
 type Snapshot struct {
 	Kind  Kind
 	ID    uuid.UUID
@@ -143,13 +143,17 @@ type InputPortState struct {
 	TypeHint    string `json:"type_hint"`
 }
 
-// LibraryPinState is a pin's row; its ID is the Library's.
-type LibraryPinState struct {
+// LibraryImportState is an import's row; its ID is the Library's. Commit is
+// the number of the Library's saved state it names: the identity of that
+// Commit (the row's commit_id) is resolved from the Library and the number in
+// the write, so a snapshot restored by an undo or built from a ProjectFile
+// carries the number alone.
+type LibraryImportState struct {
 	LibraryID uuid.UUID `json:"library_id"`
-	Release   int       `json:"release"`
+	Commit    int       `json:"commit"`
 }
 
-func (LibraryPinState) kind() Kind { return KindLibraryPin }
+func (LibraryImportState) kind() Kind { return KindLibraryImport }
 
 // SnapshotOfTag is the snapshot of a Tag definition.
 func SnapshotOfTag(aTag tag.Tag) Snapshot {
@@ -241,10 +245,11 @@ func SnapshotOfWidgetType(wt library.WidgetType) Snapshot {
 	return Snapshot{Kind: KindWidgetType, ID: wt.ID().UUID(), State: state}
 }
 
-// SnapshotOfLibraryPin is the snapshot of a pin; its ID is the Library's.
-func SnapshotOfLibraryPin(p librarypin.LibraryPin) Snapshot {
-	return Snapshot{Kind: KindLibraryPin, ID: p.LibraryID().UUID(), State: LibraryPinState{
-		LibraryID: p.LibraryID().UUID(), Release: p.Release().Int(),
+// SnapshotOfLibraryImport is the snapshot of an import; its ID is the
+// Library's.
+func SnapshotOfLibraryImport(i libraryimport.LibraryImport) Snapshot {
+	return Snapshot{Kind: KindLibraryImport, ID: i.LibraryID().UUID(), State: LibraryImportState{
+		LibraryID: i.LibraryID().UUID(), Commit: i.CommitNumber(),
 	}}
 }
 
@@ -367,16 +372,17 @@ func (s Snapshot) WidgetType(libraryID id.ID[library.Library]) (library.WidgetTy
 		libraryID, name, html, script, language, size, ports)
 }
 
-// LibraryPin returns the pin the snapshot carries, at the Project projectID.
-func (s Snapshot) LibraryPin(projectID id.ID[project.Project]) (librarypin.LibraryPin, error) {
-	state, ok := s.State.(LibraryPinState)
+// LibraryImport returns the import the snapshot carries, at the Project
+// projectID. The Commit it names is resolved by the Library and the number
+// when the row is written.
+func (s Snapshot) LibraryImport(projectID id.ID[project.Project]) (libraryimport.LibraryImport, error) {
+	state, ok := s.State.(LibraryImportState)
 	if !ok {
-		return nil, fmt.Errorf("snapshot of %s carries %T, not a library pin", s.ID, s.State)
+		return nil, fmt.Errorf("snapshot of %s carries %T, not a library import", s.ID, s.State)
 	}
-	number, err := library.NewReleaseNumber(state.Release)
-	if err != nil {
-		return nil, fmt.Errorf("snapshot of pin %s: %w", state.LibraryID, err)
+	if state.Commit < 1 {
+		return nil, fmt.Errorf("snapshot of import %s: commit number %d is not positive", state.LibraryID, state.Commit)
 	}
-	return librarypin.ReconstituteLibraryPin(projectID,
-		id.NewID(id.IDWithUUID[library.Library](state.LibraryID)), number), nil
+	return libraryimport.ReconstituteLibraryImport(projectID,
+		id.NewID(id.IDWithUUID[library.Library](state.LibraryID)), uuid.Nil, state.Commit), nil
 }

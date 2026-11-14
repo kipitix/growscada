@@ -14,15 +14,15 @@ const constraintTagsName = "uq_tags_project_name"
 const constraintProjectsLiveName = "uq_projects_organization_live_name"
 
 // Foreign keys of a project's content to projects; they refuse removing a
-// project that still has content: Tag definitions, Scenes, Library Pins and
+// project that still has content: Tag definitions, Scenes, Library Imports and
 // Devices in the Draft, Tag states in runtime (ADR 0011).
 const (
-	constraintTagsProjectID         = "fk_tags_project_id"
-	constraintScenesProjectID       = "fk_scenes_project_id"
-	constraintLibraryPinsProjectID  = "fk_library_pins_project_id"
-	constraintDevicesProjectID      = "fk_devices_project_id"
-	constraintEnvironmentsProjectID = "fk_environments_project_id"
-	constraintRuntimeTagsProjectID  = "fk_runtime_tags_project_id"
+	constraintTagsProjectID           = "fk_tags_project_id"
+	constraintScenesProjectID         = "fk_scenes_project_id"
+	constraintLibraryImportsProjectID = "fk_library_imports_project_id"
+	constraintDevicesProjectID        = "fk_devices_project_id"
+	constraintEnvironmentsProjectID   = "fk_environments_project_id"
+	constraintRuntimeTagsProjectID    = "fk_runtime_tags_project_id"
 )
 
 // constraintDevicesName is the unique constraint on devices (project_id,
@@ -60,13 +60,13 @@ const constraintReleasesNumber = "uq_library_releases_library_number"
 // Commit is published at most once.
 const constraintProjectReleasesCommit = "uq_project_releases_project_commit"
 
-// Constraints of library_pins: one pin per project and library, the release
-// pinned exists, and the foreign keys that refuse removing a library a
-// project pins.
+// Constraints of library_imports: one import per project and library, the
+// commit imported exists, and the foreign keys that refuse removing a library a
+// project imports.
 const (
-	constraintLibraryPinsProjectLibrary = "uq_library_pins_project_library"
-	constraintLibraryPinsRelease        = "fk_library_pins_release"
-	constraintLibraryPinsLibraryID      = "fk_library_pins_library_id"
+	constraintLibraryImportsProjectLibrary = "uq_library_imports_project_library"
+	constraintLibraryImportsCommitID       = "fk_library_imports_commit_id"
+	constraintLibraryImportsLibraryID      = "fk_library_imports_library_id"
 )
 
 // PostgreSQL SQLSTATEs for unique_violation, foreign_key_violation and

@@ -210,23 +210,26 @@ func reconstructScene(projectID id.ID[project.Project], row rawSceneRow, someWid
 	return scene.ReconstituteScene(newID, projectID, newName, newSize, scene.NewBackgroundHTML(row.backgroundHTML), someWidgets), nil
 }
 
-// checkPinned reports whether the WidgetType typeID is held by a Library
-// Release the Project projectID pins: what a write of a Scene checks in the
-// Draft's transaction (ADR 0012).
-func checkPinned(ctx context.Context, q rowQuerier, projectID id.ID[project.Project], typeID id.ID[library.WidgetType]) error {
-	var pinned bool
+// checkImported reports whether the WidgetType typeID is held by a Commit the
+// Project projectID imports: what a write of a Scene checks in the Draft's
+// transaction (ADR 0012, task 85_6). The copies are the imported Commits'
+// content, so the check reads those documents.
+func checkImported(ctx context.Context, q rowQuerier, projectID id.ID[project.Project], typeID id.ID[library.WidgetType]) error {
+	var imported bool
 	err := q.QueryRowContext(ctx,
 		`SELECT EXISTS (
-		   SELECT 1 FROM engineering.library_pins lp
-		   JOIN engineering.released_widget_types r
-		     ON r.library_id = lp.library_id AND r.release_number = lp.release_number
-		   WHERE lp.project_id = $1 AND r.id = $2)`,
+		   SELECT 1 FROM engineering.library_imports li
+		   JOIN engineering.commits c ON c.id = li.commit_id
+		   WHERE li.project_id = $1
+		     AND EXISTS (SELECT 1
+		                 FROM jsonb_array_elements(COALESCE(c.content -> 'widget_types', '[]'::jsonb)) wt
+		                 WHERE wt ->> 'id' = $2))`,
 		projectID.UUID(), typeID.UUID(),
-	).Scan(&pinned)
+	).Scan(&imported)
 	if err != nil {
-		return fmt.Errorf("cannot check the pin of widget type %s: %w", typeID, err)
+		return fmt.Errorf("cannot check the import of widget type %s: %w", typeID, err)
 	}
-	if !pinned {
+	if !imported {
 		return id.NotFound(library.ErrWidgetTypeNotFound, typeID)
 	}
 	return nil

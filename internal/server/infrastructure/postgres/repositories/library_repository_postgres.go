@@ -69,7 +69,7 @@ func (r libraryRepositoryPostgresImpl) Save(ctx context.Context, l library.Libra
 			}
 			if n == 1 {
 				if l.IsDeleted() {
-					return true, r.checkNotPinned(ctx, tx, l.ID())
+					return true, r.checkNotImported(ctx, tx, l.ID())
 				}
 				return true, nil
 			}
@@ -92,20 +92,20 @@ func (r libraryRepositoryPostgresImpl) Save(ctx context.Context, l library.Libra
 	return library.ReconstituteLibrary(l.ID(), l.OrganizationID(), l.Name(), l.Description(), l.IsDeleted(), saved), nil
 }
 
-// checkNotPinned fails with ErrLibraryPinned if a live Project pins the
-// library.
-func (r libraryRepositoryPostgresImpl) checkNotPinned(ctx context.Context, tx *sql.Tx, anID id.ID[library.Library]) error {
-	var pinned bool
+// checkNotImported fails with ErrLibraryImported if a live Project imports a
+// saved state of the library.
+func (r libraryRepositoryPostgresImpl) checkNotImported(ctx context.Context, tx *sql.Tx, anID id.ID[library.Library]) error {
+	var imported bool
 	err := tx.QueryRowContext(ctx,
-		`SELECT EXISTS (SELECT 1 FROM engineering.library_pins lp JOIN projects p ON p.id = lp.project_id
-		                WHERE lp.library_id = $1 AND p.deleted_at IS NULL)`,
+		`SELECT EXISTS (SELECT 1 FROM engineering.library_imports li JOIN projects p ON p.id = li.project_id
+		                WHERE li.library_id = $1 AND p.deleted_at IS NULL)`,
 		anID.UUID(),
-	).Scan(&pinned)
+	).Scan(&imported)
 	if err != nil {
-		return fmt.Errorf("cannot check pins of library %s: %w", anID, err)
+		return fmt.Errorf("cannot check imports of library %s: %w", anID, err)
 	}
-	if pinned {
-		return fmt.Errorf("%w: %s", library.ErrLibraryPinned, anID)
+	if imported {
+		return fmt.Errorf("%w: %s", library.ErrLibraryImported, anID)
 	}
 	return nil
 }
@@ -123,13 +123,13 @@ func libraryWriteError(what string, err error) error {
 }
 
 // Delete removes the row of a library marked deleted, with its Draft and its
-// releases by the cascade of their foreign keys. The pins of Projects still
+// releases by the cascade of their foreign keys. The imports of Projects still
 // being removed refuse it.
 func (r libraryRepositoryPostgresImpl) Delete(ctx context.Context, l library.Library) error {
 	return r.store.inTx(ctx, l.PendingEvents(), func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `DELETE FROM engineering.libraries WHERE id = $1 AND deleted_at IS NOT NULL`, l.ID().UUID())
-		if isForeignKeyViolation(err, constraintLibraryPinsLibraryID) || isForeignKeyViolation(err, constraintLibraryPinsRelease) {
-			return fmt.Errorf("%w: %s", library.ErrLibraryPinned, l.ID())
+		if isForeignKeyViolation(err, constraintLibraryImportsLibraryID) || isForeignKeyViolation(err, constraintLibraryImportsCommitID) {
+			return fmt.Errorf("%w: %s", library.ErrLibraryImported, l.ID())
 		}
 		if err != nil {
 			return fmt.Errorf("cannot delete from libraries: %w", err)

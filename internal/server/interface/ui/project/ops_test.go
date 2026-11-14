@@ -159,9 +159,8 @@ func createWidgetType(t *testing.T, api *testAPI, name string, ports ...apiv0.In
 	if ports == nil {
 		ports = []apiv0.InputPort{}
 	}
-	// In a library of its own, released and pinned in Main: the project's
-	// Widgets are of the releases it pins. The Draft of the library is
-	// checked out to this client first (ADR 0015).
+	// In a library of its own, saved and imported in Main: the project's
+	// Widgets are of the saved states it imports.
 	ctx := context.Background()
 	lib, err := api.CreateLibrary(ctx, apiv0.CreateLibraryRequest{Name: "lib-" + uuid.NewString()})
 	if err != nil {
@@ -178,11 +177,8 @@ func createWidgetType(t *testing.T, api *testAPI, name string, ports ...apiv0.In
 	if err != nil {
 		t.Fatalf("save commit: %v", err)
 	}
-	if _, err := api.Library(lib.ID).Release(ctx, apiv0.CreateReleaseRequest{Commit: commit.Number, Author: "Ada"}); err != nil {
-		t.Fatalf("release: %v", err)
-	}
-	if _, err := api.PinLibrary(ctx, lib.ID, apiv0.PutLibraryPinRequest{Release: 1}); err != nil {
-		t.Fatalf("pin: %v", err)
+	if _, err := api.ImportLibrary(ctx, lib.ID, apiv0.PutLibraryImportRequest{Commit: commit.Number}); err != nil {
+		t.Fatalf("import: %v", err)
 	}
 	return created.ID
 }

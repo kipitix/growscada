@@ -19,7 +19,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/label"
 	"github.com/kipitix/growscada/internal/server/domain/library"
-	"github.com/kipitix/growscada/internal/server/domain/librarypin"
+	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/release"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
@@ -108,7 +108,7 @@ func Encode(e event.Event) ([]byte, error) {
 		p.Release = ev.Release().Int()
 	case library.LibraryEvent:
 		p.ID = ev.LibraryID().UUID()
-	case librarypin.LibraryPinEvent:
+	case libraryimport.LibraryImportEvent:
 		p.ID = ev.LibraryID().UUID()
 	case device.EnvironmentDeviceEvent:
 		p.ID = ev.EnvironmentID().UUID()
@@ -288,12 +288,12 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 		return scene.NewSceneUpdatedEvent(sceneID, projectID, ts), nil
 	case event.EventTypeSceneDeleted:
 		return scene.NewSceneDeletedEvent(sceneID, projectID, ts), nil
-	case event.EventTypeLibraryPinCreated:
-		return librarypin.NewLibraryPinCreatedEvent(libraryOfEvent, projectID, ts), nil
-	case event.EventTypeLibraryPinUpdated:
-		return librarypin.NewLibraryPinUpdatedEvent(libraryOfEvent, projectID, ts), nil
-	case event.EventTypeLibraryPinDeleted:
-		return librarypin.NewLibraryPinDeletedEvent(libraryOfEvent, projectID, ts), nil
+	case event.EventTypeLibraryImportCreated:
+		return libraryimport.NewLibraryImportCreatedEvent(libraryOfEvent, projectID, ts), nil
+	case event.EventTypeLibraryImportUpdated:
+		return libraryimport.NewLibraryImportUpdatedEvent(libraryOfEvent, projectID, ts), nil
+	case event.EventTypeLibraryImportDeleted:
+		return libraryimport.NewLibraryImportDeletedEvent(libraryOfEvent, projectID, ts), nil
 	case event.EventTypeDeviceCreated:
 		return device.NewDeviceCreatedEvent(deviceOfEvent, projectID, ts), nil
 	case event.EventTypeDeviceUpdated:

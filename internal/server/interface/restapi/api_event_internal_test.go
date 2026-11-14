@@ -14,7 +14,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/label"
 	"github.com/kipitix/growscada/internal/server/domain/library"
-	"github.com/kipitix/growscada/internal/server/domain/librarypin"
+	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/release"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
@@ -100,12 +100,12 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 			apiv0.Event{Type: "library_deleted", ID: libraryID.String()}},
 		event.EventTypeLibraryReleased: {library.NewLibraryReleasedEvent(libraryID, library.FirstRelease().Next(), ts),
 			apiv0.Event{Type: "library_released", ID: libraryID.String(), Release: 2}},
-		event.EventTypeLibraryPinCreated: {librarypin.NewLibraryPinCreatedEvent(libraryID, projectID, ts),
-			apiv0.Event{Type: "library_pin_created", ID: libraryID.String()}},
-		event.EventTypeLibraryPinUpdated: {librarypin.NewLibraryPinUpdatedEvent(libraryID, projectID, ts),
-			apiv0.Event{Type: "library_pin_updated", ID: libraryID.String()}},
-		event.EventTypeLibraryPinDeleted: {librarypin.NewLibraryPinDeletedEvent(libraryID, projectID, ts),
-			apiv0.Event{Type: "library_pin_deleted", ID: libraryID.String()}},
+		event.EventTypeLibraryImportCreated: {libraryimport.NewLibraryImportCreatedEvent(libraryID, projectID, ts),
+			apiv0.Event{Type: "library_import_created", ID: libraryID.String()}},
+		event.EventTypeLibraryImportUpdated: {libraryimport.NewLibraryImportUpdatedEvent(libraryID, projectID, ts),
+			apiv0.Event{Type: "library_import_updated", ID: libraryID.String()}},
+		event.EventTypeLibraryImportDeleted: {libraryimport.NewLibraryImportDeletedEvent(libraryID, projectID, ts),
+			apiv0.Event{Type: "library_import_deleted", ID: libraryID.String()}},
 		event.EventTypeWidgetCreated: {scene.NewWidgetCreatedEvent(widgetID, sceneID, projectID, widgetTypeID, ts),
 			apiv0.Event{Type: "widget_created", ID: widgetID.String(), SceneID: sceneID.String()}},
 		event.EventTypeWidgetUpdated: {scene.NewWidgetUpdatedEvent(widgetID, sceneID, projectID, widgetTypeID, ts),

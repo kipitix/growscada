@@ -1,4 +1,4 @@
-package librarypin
+package libraryimport
 
 import (
 	"errors"
@@ -9,12 +9,12 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 )
 
-// ErrWidgetsOrphaned matches the error of a switch or removal of a pin that
-// would leave Widgets of the Project without their WidgetType (ADR 0012);
+// ErrWidgetsOrphaned matches the error of a switch or removal of an import
+// that would leave Widgets of the Project without their WidgetType (ADR 0012);
 // the error is an OrphansError naming them.
 var ErrWidgetsOrphaned = errors.New("widgets would be left without their widget type")
 
-// OrphansError refuses a switch or removal of a pin: the Widgets it names
+// OrphansError refuses a switch or removal of an import: the Widgets it names
 // would be left without their WidgetType.
 type OrphansError struct {
 	Widgets []PlacedWidget
@@ -40,9 +40,9 @@ type BrokenBinding struct {
 	Binding scene.PortBinding
 }
 
-// Impact is what switching or removing a pin would do to the Project's
+// Impact is what switching or removing an import would do to the Project's
 // Widgets: those left without their WidgetType, which refuse it, and the
-// PortBindings it makes invalid, which a policy removes after it.
+// PortBindings it makes invalid, which the same change removes.
 type Impact struct {
 	Orphaned []PlacedWidget
 	Broken   []BrokenBinding
@@ -56,17 +56,18 @@ func (i Impact) Check() error {
 	return nil
 }
 
-// ImpactOf computes the Impact on widgets, the Widgets of a Project, of
-// pinning to instead of from, two Library Releases of one Library: from is
-// the release pinned now (nil if none), to the one pinned after (nil for
-// removing the pin). A Widget of a WidgetType from holds and to does not is
-// orphaned; a PortBinding of a Widget whose WidgetType both hold is broken
-// if to's copy of it does not declare the port, or the port's type hint does
-// not accept the TagType of the bound Tag as tagTypes, the TagTypes of the
-// Project's Tags, has it. A binding to a Tag that does not exist is no
-// matter of the pin: it is removed whatever the pin.
+// ImportImpactOf computes the Impact on widgets, the Widgets of a Project, of
+// importing to instead of from, two saved states of one Library: from is the
+// Commit imported now (nil if none), to the one imported after (nil for
+// removing the import). The WidgetTypes are those of the Commits themselves.
+// A Widget of a WidgetType from holds and to does not is orphaned; a
+// PortBinding of a Widget whose WidgetType both hold is broken if to's copy of
+// it does not declare the port, or the port's type hint does not accept the
+// TagType of the bound Tag as tagTypes, the TagTypes of the Project's Tags,
+// has it. A binding to a Tag that does not exist is no matter of the import:
+// it is removed whatever the import.
 // It is both the preview of a switch and the check that refuses it.
-func ImpactOf(widgets []PlacedWidget, from, to library.LibraryRelease, tagTypes scene.TagTypes) Impact {
+func ImportImpactOf(widgets []PlacedWidget, from, to *Commit, tagTypes scene.TagTypes) Impact {
 	var impact Impact
 	if from == nil {
 		return impact
@@ -75,17 +76,17 @@ func ImpactOf(widgets []PlacedWidget, from, to library.LibraryRelease, tagTypes 
 		if _, ok := from.FindWidgetType(pw.Widget.TypeID()); !ok {
 			continue
 		}
-		var released library.ReleasedWidgetType
+		var imported library.ReleasedWidgetType
 		found := false
 		if to != nil {
-			released, found = to.FindWidgetType(pw.Widget.TypeID())
+			imported, found = to.FindWidgetType(pw.Widget.TypeID())
 		}
 		if !found {
 			impact.Orphaned = append(impact.Orphaned, pw)
 			continue
 		}
 		ports := make(map[library.InputPortName]library.InputPort)
-		for _, p := range released.InputPorts() {
+		for _, p := range imported.InputPorts() {
 			ports[p.Name()] = p
 		}
 		for _, b := range pw.Widget.PortBindings() {

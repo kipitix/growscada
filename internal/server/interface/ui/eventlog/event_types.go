@@ -55,12 +55,12 @@ func defaultFilters() map[category]bool {
 }
 
 // isProjectContent reports whether an event is of a project's content (Tags,
-// their values, Scenes, Widgets, Library Pins, Devices, Environments, their
+// their values, Scenes, Widgets, Library Imports, Devices, Environments, their
 // pairs and the Deployment), carried by the stream of that project; anything
 // else is the server's.
 func isProjectContent(ev apiv0.Event) bool {
 	switch ev.Type {
-	case apiv0.EventLibraryPinCreated, apiv0.EventLibraryPinUpdated, apiv0.EventLibraryPinDeleted,
+	case apiv0.EventLibraryImportCreated, apiv0.EventLibraryImportUpdated, apiv0.EventLibraryImportDeleted,
 		apiv0.EventDeviceCreated, apiv0.EventDeviceUpdated, apiv0.EventDeviceDeleted,
 		apiv0.EventEnvironmentCreated, apiv0.EventEnvironmentUpdated, apiv0.EventEnvironmentDeleted,
 		apiv0.EventEnvironmentDeviceCreated, apiv0.EventEnvironmentDeviceUpdated, apiv0.EventEnvironmentDeviceDeleted,
@@ -103,13 +103,13 @@ var eventTypeInfoByType = map[string]eventTypeInfo{
 	apiv0.EventWidgetTypeUpdated: {categoryWidgetType, "WidgetType %s updated"},
 	apiv0.EventWidgetTypeDeleted: {categoryWidgetType, "WidgetType %s deleted"},
 
-	apiv0.EventLibraryCreated:    {categoryLibrary, "Library %s created"},
-	apiv0.EventLibraryUpdated:    {categoryLibrary, "Library %s updated"},
-	apiv0.EventLibraryDeleted:    {categoryLibrary, "Library %s deleted"},
-	apiv0.EventLibraryReleased:   {categoryLibrary, "Library %s released"},
-	apiv0.EventLibraryPinCreated: {categoryLibrary, "Library %s pinned"},
-	apiv0.EventLibraryPinUpdated: {categoryLibrary, "Library %s pin switched"},
-	apiv0.EventLibraryPinDeleted: {categoryLibrary, "Library %s unpinned"},
+	apiv0.EventLibraryCreated:       {categoryLibrary, "Library %s created"},
+	apiv0.EventLibraryUpdated:       {categoryLibrary, "Library %s updated"},
+	apiv0.EventLibraryDeleted:       {categoryLibrary, "Library %s deleted"},
+	apiv0.EventLibraryReleased:      {categoryLibrary, "Library %s released"},
+	apiv0.EventLibraryImportCreated: {categoryLibrary, "Library %s imported"},
+	apiv0.EventLibraryImportUpdated: {categoryLibrary, "Library %s import switched"},
+	apiv0.EventLibraryImportDeleted: {categoryLibrary, "Library %s import removed"},
 
 	apiv0.EventLibraryReleaseNoteUpdated: {categoryLibrary, "Library %s release note updated"},
 

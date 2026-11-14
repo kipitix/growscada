@@ -160,8 +160,8 @@ func (p *Project) applyDraftChanges(mark uiutil.Mark, state apiv0.DraftChangesRe
 
 // ── Widget types and Library Pins ─────────────────────────────────────────────
 
-// loadWidgetTypes (re)loads the WidgetTypes of the releases the project pins:
-// the palette, and what its Widgets are of (ADR 0007).
+// loadWidgetTypes (re)loads the WidgetTypes of the saved states the project
+// imports: the palette, and what its Widgets are of (ADR 0007).
 func (p *Project) loadWidgetTypes(ctx app.Context) {
 	if p.content == nil {
 		p.widgetTypes = nil
@@ -169,37 +169,37 @@ func (p *Project) loadWidgetTypes(ctx app.Context) {
 	}
 	uiutil.LoadOfProject(p.compoCtx, &p.widgetTypesReloader, p.projectContent,
 		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.ReleasedWidgetTypeResponse, error) {
-			return pc.ListWidgetTypes(c)
+			return pc.ImportedWidgetTypes(c)
 		},
 		func(ctx app.Context, list []apiv0.ReleasedWidgetTypeResponse) {
 			p.widgetTypes = list
 		}, p.loadWidgetTypes)
 }
 
-// loadPins (re)loads the project's Library Pins.
-func (p *Project) loadPins(ctx app.Context) {
+// loadImports (re)loads the project's Library Imports (task 85_6).
+func (p *Project) loadImports(ctx app.Context) {
 	if p.content == nil {
-		p.pins = nil
+		p.imports = nil
 		return
 	}
 	mark := p.markDraft()
-	uiutil.LoadOfProject(p.compoCtx, &p.pinsReloader, p.projectContent,
-		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.LibraryPinResponse, error) {
-			return pc.ListLibraryPins(c)
+	uiutil.LoadOfProject(p.compoCtx, &p.importsReloader, p.projectContent,
+		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.LibraryImportResponse, error) {
+			return pc.Imports(c)
 		},
-		func(ctx app.Context, pins []apiv0.LibraryPinResponse) {
-			p.pins = pins
-			for _, pin := range pins {
-				p.observeDraftVersion(mark, pin.Version)
+		func(ctx app.Context, imports []apiv0.LibraryImportResponse) {
+			p.imports = imports
+			for _, imported := range imports {
+				p.observeDraftVersion(mark, imported.Version)
 			}
-		}, p.loadPins)
+		}, p.loadImports)
 }
 
-// loadLibraries (re)loads the server's libraries: the names of the pinned
-// ones and the releases a pin may take.
+// loadLibraries (re)loads the server's libraries: the names of the imported
+// ones and the saved states an import may take.
 func (p *Project) loadLibraries(ctx app.Context) {
 	uiutil.Load(p.compoCtx, &p.librariesReloader, p.client.ListLibraries, func(ctx app.Context, list []apiv0.LibraryResponse) {
-		p.libraries = list
+		p.libraries, p.librariesLoaded = list, true
 	}, p.loadLibraries)
 }
 

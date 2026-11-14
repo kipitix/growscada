@@ -20,7 +20,7 @@ import (
 // SchemaVersion is the version of the manifest contract this package
 // describes.
 // A function rather than a variable, so no importer can change it.
-func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 4} }
+func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 5} }
 
 // apiVersionPrefix precedes the version in apiVersion.
 const apiVersionPrefix = "growscada/v"
@@ -97,11 +97,11 @@ type ProjectDocument struct {
 	Spec     *ProjectSpec    `yaml:"spec,omitempty"`
 }
 
-// ProjectSpec declares what a Project's Draft pins: LibraryPins maps the
-// name of a Library to the number of its Library Release the Project uses
-// (since 0.4). A Library the map leaves out keeps its pin, if any.
+// ProjectSpec declares what a Project's Draft imports: LibraryImports maps the
+// name of a Library to the number of its saved state — its Commit — the Project
+// uses (since 0.5). A Library the map leaves out keeps its import, if any.
 type ProjectSpec struct {
-	LibraryPins map[string]int `yaml:"libraryPins,omitempty"`
+	LibraryImports map[string]int `yaml:"libraryImports,omitempty"`
 }
 
 // LibraryDocument is a `kind: Library` document (since 0.4): a Library,

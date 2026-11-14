@@ -12,7 +12,7 @@ import (
 
 // SchemaVersion is the version of the project format this package describes.
 // A function rather than a variable, so no importer can change it.
-func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 2} }
+func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 3} }
 
 // Header is the root of every project document: the SchemaVersion the rest
 // of the document follows, and the Project the document configures. A reader
@@ -42,7 +42,7 @@ type ProjectFile struct {
 	EnvironmentDevices []EnvironmentDevice `json:"environment_devices"`
 	Scenes             []Scene             `json:"scenes"`
 	WidgetTypes        []WidgetType        `json:"widget_types"`
-	LibraryPins        []LibraryPin        `json:"library_pins"`
+	LibraryImports     []LibraryImport     `json:"library_imports"`
 }
 
 // TagDefinition is a Tag as the Draft defines it: its identity, its name
@@ -171,9 +171,11 @@ type InputPort struct {
 	TypeHint    string `json:"type_hint"`
 }
 
-// LibraryPin is the Library Release a Project's Draft uses, by number: the
-// provenance from which Discard restores the Project's pins.
-type LibraryPin struct {
+// LibraryImport is the saved state — the Commit — of a Library a Project's
+// Draft uses, by number: the provenance from which Discard restores the
+// Project's imports, and the Commits the copies of the WidgetTypes come from
+// (task 85_6).
+type LibraryImport struct {
 	LibraryID uuid.UUID `json:"library_id"`
-	Release   int       `json:"release"`
+	Commit    int       `json:"commit"`
 }

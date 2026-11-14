@@ -17,7 +17,7 @@ const (
 	tableNameProjects           tableName = "projects"
 	tableNameLibraries          tableName = "engineering.libraries"
 	tableNameReleases           tableName = "engineering.library_releases"
-	tableNameLibraryPins        tableName = "engineering.library_pins"
+	tableNameLibraryImports     tableName = "engineering.library_imports"
 	tableNameDevices            tableName = "engineering.devices"
 	tableNameEnvironments       tableName = "engineering.environments"
 	tableNameEnvironmentDevices tableName = "engineering.environment_devices"

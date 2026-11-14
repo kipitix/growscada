@@ -12,7 +12,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
-	"github.com/kipitix/growscada/internal/server/domain/librarypin"
+	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
@@ -132,44 +132,63 @@ func mustCommit(t *testing.T, libraryID id.ID[library.Library]) (draft.Commit, e
 	return last, nil
 }
 
-// mustPin pins release in the project through the project's Draft.
-func mustPin(t *testing.T, projectID id.ID[project.Project], release library.LibraryRelease) librarypin.LibraryPin {
+// mustImport imports the saved state of the Library in the project through the
+// project's Draft (task 85_6).
+func mustImport(t *testing.T, projectID id.ID[project.Project], commit draft.Commit) libraryimport.LibraryImport {
 	t.Helper()
 	ctx := context.Background()
-	var saved librarypin.LibraryPin
-	mustUpdate(t, projectID, "test pin", func(session *draft.Session) error {
+	var saved libraryimport.LibraryImport
+	mustUpdate(t, projectID, "test import", func(session *draft.Session) error {
 		var err error
-		saved, _, err = session.PutLibraryPin(ctx, release.LibraryID(), release.Number())
+		saved, _, err = session.PutLibraryImport(ctx, commit.Scope().LibraryID(), commit.Number())
 		return err
 	})
 	return saved
 }
 
-// mustSaveWidgetType stores a new WidgetType with the given ports in a new
-// library, releases it and pins the release in the project Main: a Widget's
-// type must be pinned.
-func mustSaveWidgetType(t *testing.T, ports ...library.InputPort) id.ID[library.WidgetType] {
+// copyOfCommit returns the copy of the WidgetType typeID the Commit holds.
+func copyOfCommit(t *testing.T, commit draft.Commit, typeID id.ID[library.WidgetType]) library.ReleasedWidgetType {
 	t.Helper()
-	return mustPinWidgetType(t, mainProject, ports...).ID()
+	copies, ok := commit.Content().WidgetTypes()
+	if !ok {
+		t.Fatalf("the commit holds no widget types")
+	}
+	for _, copy := range copies {
+		if copy.ID() == typeID {
+			return copy
+		}
+	}
+	t.Fatalf("the commit lacks the widget type %s", typeID)
+	return library.ReleasedWidgetType{}
 }
 
-// mustPinWidgetType is mustSaveWidgetType in projectID, returning the type
-// as released.
-func mustPinWidgetType(t *testing.T, projectID id.ID[project.Project], ports ...library.InputPort) library.ReleasedWidgetType {
+// mustSaveWidgetType stores a new WidgetType with the given ports in a new
+// library, saves it and imports it in the project Main: a Widget's type must be
+// imported.
+func mustSaveWidgetType(t *testing.T, ports ...library.InputPort) id.ID[library.WidgetType] {
+	t.Helper()
+	return mustImportWidgetType(t, mainProject, ports...).ID()
+}
+
+// mustImportWidgetType is mustSaveWidgetType in projectID, returning the type
+// as the imported saved state holds it.
+func mustImportWidgetType(t *testing.T, projectID id.ID[project.Project], ports ...library.InputPort) library.ReleasedWidgetType {
 	t.Helper()
 	repo := newWidgetTypeRepo(t)
 	saved := mustStoreWidgetType(t, makeWidgetType(t, "type", ports, repo), repo)
-	release := mustRelease(t, repo.libraryID)
-	mustPin(t, projectID, release)
-	released, _ := release.FindWidgetType(saved.ID())
-	return released
+	commit, err := mustCommit(t, repo.libraryID)
+	if err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	mustImport(t, projectID, commit)
+	return copyOfCommit(t, commit, saved.ID())
 }
 
-// cleanLibraries removes every pin and library with its Draft and releases.
+// cleanLibraries removes every import and library with its Draft and saved states.
 func cleanLibraries(t *testing.T) {
 	t.Helper()
 	if _, err := testDB.ExecContext(context.Background(),
-		"DELETE FROM engineering.widgets; DELETE FROM engineering.library_pins; DELETE FROM engineering.libraries"); err != nil {
+		"DELETE FROM engineering.widgets; DELETE FROM engineering.library_imports; DELETE FROM engineering.libraries"); err != nil {
 		t.Fatalf("cleanLibraries: %v", err)
 	}
 }

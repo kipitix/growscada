@@ -86,7 +86,7 @@ type Repository interface {
 	// the Draft's row, checks expected — a stale Version is a ConflictError —,
 	// refuses a Draft at its Clean Version (ErrNothingToSave: there is nothing
 	// the last Commit does not hold already), numbers the Commit after the last
-	// one, writes it with the pins of its ProjectFile, raises
+	// one, writes it with the imports of its ProjectFile, raises
 	// last_commit_number and last_commit_draft_version and makes expected the
 	// Clean Version (ADR 0016, amendment 2026-11-10). content is assembled by
 	// the caller from the Draft at expected (a ProjectFile or a Library's

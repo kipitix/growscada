@@ -86,9 +86,9 @@ type ReleasedWidgetTypeResponse struct {
 	InputPorts     []InputPort `json:"input_ports"`
 }
 
-// GetPinnedWidgetTypesResponse is the HTTP DTO of GET
-// /projects/{id}/widget-types: the WidgetTypes of every Library Release the
-// project pins, grouped by library in the order the pins were added.
-type GetPinnedWidgetTypesResponse struct {
+// GetImportedWidgetTypesResponse is the HTTP DTO of GET
+// /projects/{id}/widget-types: the WidgetTypes of every saved state the project
+// imports, grouped by library in the order the imports were added (task 85_6).
+type GetImportedWidgetTypesResponse struct {
 	WidgetTypes []ReleasedWidgetTypeResponse `json:"widget_types"`
 }

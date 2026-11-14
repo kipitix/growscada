@@ -48,13 +48,14 @@ func (s WidgetTypeStep) IsChange() bool {
 	return s.Action != ActionUnchanged && s.Action != ActionNotFound
 }
 
-// PinStep is one planned Library Pin of a project: ActionCreate adds it,
-// ActionUpdate switches it from release From, ActionUnchanged leaves it.
-type PinStep struct {
+// ImportStep is one planned Library Import of a project: ActionCreate adds it,
+// ActionUpdate switches it from the saved state From, ActionUnchanged leaves
+// it (task 85_6).
+type ImportStep struct {
 	Action  Action
 	Project string
 	Library string
-	Release int
+	Commit  int
 	From    int
 	Version int
 }
@@ -64,7 +65,7 @@ type PinStep struct {
 type libraryPlan struct {
 	libraries   []LibraryStep
 	widgetTypes []WidgetTypeStep
-	pins        []PinStep
+	imports     []ImportStep
 }
 
 func (p libraryPlan) changed() bool {
@@ -78,7 +79,7 @@ func (p libraryPlan) changed() bool {
 			return true
 		}
 	}
-	for _, s := range p.pins {
+	for _, s := range p.imports {
 		if s.Action != ActionUnchanged {
 			return true
 		}
@@ -194,43 +195,43 @@ func planLibraries(ctx context.Context, client *Client, manifests Manifests, pru
 		}
 	}
 
-	// The pins of the projects whose spec declares them.
+	// The imports of the projects whose spec declares them.
 	for _, m := range manifests.Projects {
-		if len(m.LibraryPins) == 0 {
+		if len(m.LibraryImports) == 0 {
 			continue
 		}
-		pinned := map[uuid.UUID]apiv0.LibraryPinResponse{}
+		imported := map[uuid.UUID]apiv0.LibraryImportResponse{}
 		if found, ok, err := client.FindProjectByName(ctx, m.Name); err != nil {
 			return plan, err
 		} else if ok {
-			pins, err := client.Project(found.ID).ListLibraryPins(ctx)
+			imports, err := client.Project(found.ID).Imports(ctx)
 			if err != nil {
 				return plan, fmt.Errorf("project/%s: %w", m.Name, err)
 			}
-			for _, p := range pins {
-				pinned[p.LibraryID] = p
+			for _, i := range imports {
+				imported[i.LibraryID] = i
 			}
 		}
-		libraryNames := make([]string, 0, len(m.LibraryPins))
-		for name := range m.LibraryPins {
+		libraryNames := make([]string, 0, len(m.LibraryImports))
+		for name := range m.LibraryImports {
 			libraryNames = append(libraryNames, name)
 		}
 		sort.Strings(libraryNames)
 		for _, libraryName := range libraryNames {
-			release := m.LibraryPins[libraryName]
-			step := PinStep{Action: ActionCreate, Project: m.Name, Library: libraryName, Release: release}
+			commit := m.LibraryImports[libraryName]
+			step := ImportStep{Action: ActionCreate, Project: m.Name, Library: libraryName, Commit: commit}
 			if lib, ok := byName[libraryName]; ok {
-				if p, ok := pinned[lib.ID]; ok {
-					step.Version, step.From = p.Version, p.Release
+				if i, ok := imported[lib.ID]; ok {
+					step.Version, step.From = i.Version, i.CommitNumber
 					step.Action = ActionUpdate
-					if p.Release == release {
+					if i.CommitNumber == commit {
 						step.Action = ActionUnchanged
 					}
 				}
 			} else if !created[libraryName] {
 				return plan, fmt.Errorf("project/%s: library/%s not found", m.Name, libraryName)
 			}
-			plan.pins = append(plan.pins, step)
+			plan.imports = append(plan.imports, step)
 		}
 	}
 	return plan, nil
@@ -253,12 +254,12 @@ func printLibraryDiff(out io.Writer, plan libraryPlan) {
 			fmt.Fprintf(out, "- %s\n", widgetTypeRef(s.Library, s.Name()))
 		}
 	}
-	for _, s := range plan.pins {
+	for _, s := range plan.imports {
 		switch s.Action {
 		case ActionCreate:
-			fmt.Fprintf(out, "+ project/%s pin library/%s release %d\n", s.Project, s.Library, s.Release)
+			fmt.Fprintf(out, "+ project/%s import library/%s saved state %d\n", s.Project, s.Library, s.Commit)
 		case ActionUpdate:
-			fmt.Fprintf(out, "~ project/%s pin library/%s release %d -> %d\n", s.Project, s.Library, s.From, s.Release)
+			fmt.Fprintf(out, "~ project/%s import library/%s saved state %d -> %d\n", s.Project, s.Library, s.From, s.Commit)
 		}
 	}
 }
@@ -347,7 +348,7 @@ func executeLibraries(ctx context.Context, client *Client, run *settings, plan l
 		fmt.Fprintf(out, "%s %s\n", ref, actionResult(s.Action))
 	}
 
-	for _, s := range plan.pins {
+	for _, s := range plan.imports {
 		if s.Action != ActionUnchanged {
 			lib, err := libraryOf(s.Library)
 			if err != nil {
@@ -365,17 +366,17 @@ func executeLibraries(ctx context.Context, client *Client, run *settings, plan l
 			if err != nil {
 				return fmt.Errorf("project/%s: %w", s.Project, err)
 			}
-			_, err = project.PinLibrary(ctx, lib.ID(), apiv0.PutLibraryPinRequest{Release: s.Release, Version: state.Version})
+			_, err = project.ImportLibrary(ctx, lib.ID(), apiv0.PutLibraryImportRequest{Commit: s.Commit, Version: state.Version})
 			if err != nil {
-				return fmt.Errorf("project/%s pin library/%s release %d: %w%s", s.Project, s.Library, s.Release, err, orphanedHint(err))
+				return fmt.Errorf("project/%s import library/%s saved state %d: %w%s", s.Project, s.Library, s.Commit, err, orphanedHint(err))
 			}
 		}
-		fmt.Fprintf(out, "project/%s pin library/%s release %d %s\n", s.Project, s.Library, s.Release, pinResult(s.Action))
+		fmt.Fprintf(out, "project/%s import library/%s saved state %d %s\n", s.Project, s.Library, s.Commit, importResult(s.Action))
 	}
 	return nil
 }
 
-// orphanedHint names the Widgets a refused switch of a pin would orphan.
+// orphanedHint names the Widgets a refused switch of an import would orphan.
 func orphanedHint(err error) string {
 	var se *apiclient.StatusError
 	if !errors.As(err, &se) || len(se.Problem.OrphanedWidgets) == 0 {
@@ -388,7 +389,8 @@ func orphanedHint(err error) string {
 	return hint
 }
 
-func pinResult(a Action) string {
+// importResult names what apply did to an import.
+func importResult(a Action) string {
 	switch a {
 	case ActionCreate:
 		return "added"
@@ -399,12 +401,12 @@ func pinResult(a Action) string {
 }
 
 // declaresLibraries reports whether the manifests declare a library, a
-// WidgetType or a project's pins.
+// WidgetType or a project's imports.
 func declaresLibraries(manifests Manifests) bool {
 	if len(manifests.Libraries) > 0 || len(manifests.WidgetTypes) > 0 {
 		return true
 	}
-	return slices.ContainsFunc(manifests.Projects, func(m ProjectManifest) bool { return len(m.LibraryPins) > 0 })
+	return slices.ContainsFunc(manifests.Projects, func(m ProjectManifest) bool { return len(m.LibraryImports) > 0 })
 }
 
 // planDeleteLibraries plans delete -f of the manifests' WidgetTypes, by

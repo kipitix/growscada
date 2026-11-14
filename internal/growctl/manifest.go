@@ -36,11 +36,11 @@ type TagManifest struct {
 }
 
 // ProjectManifest is a validated Project document from a manifest.
-// LibraryPins maps a Library's name to the release the Project pins; nil
-// when the document declares none.
+// LibraryImports maps a Library's name to the saved state the Project imports;
+// nil when the document declares none.
 type ProjectManifest struct {
-	Name        string
-	LibraryPins map[string]int
+	Name           string
+	LibraryImports map[string]int
 }
 
 // LibraryManifest is a validated Library document from a manifest.
@@ -245,6 +245,11 @@ func parseDocument(node *yaml.Node, manifests *Manifests) error {
 			if err := requireAPIVersion(version, librariesSince, "project/"+m.Name+": spec"); err != nil {
 				return err
 			}
+			if len(m.LibraryImports) > 0 {
+				if err := requireAPIVersion(version, libraryImportsSince, "project/"+m.Name+": spec.libraryImports"); err != nil {
+					return err
+				}
+			}
 		}
 		manifests.Projects = append(manifests.Projects, m)
 	case manifestv0.KindLibrary:
@@ -330,16 +335,16 @@ func validateProject(doc manifestv0.ProjectDocument) (ProjectManifest, error) {
 		return ProjectManifest{}, fmt.Errorf("project/%s: invalid metadata.name: %w", name, err)
 	}
 	m := ProjectManifest{Name: name}
-	if doc.Spec != nil && doc.Spec.LibraryPins != nil {
-		m.LibraryPins = make(map[string]int, len(doc.Spec.LibraryPins))
-		for libraryName, release := range doc.Spec.LibraryPins {
+	if doc.Spec != nil && doc.Spec.LibraryImports != nil {
+		m.LibraryImports = make(map[string]int, len(doc.Spec.LibraryImports))
+		for libraryName, commit := range doc.Spec.LibraryImports {
 			if _, err := library.NewLibraryName(libraryName); err != nil {
-				return ProjectManifest{}, fmt.Errorf("project/%s: invalid spec.libraryPins: %w", name, err)
+				return ProjectManifest{}, fmt.Errorf("project/%s: invalid spec.libraryImports: %w", name, err)
 			}
-			if _, err := library.NewReleaseNumber(release); err != nil {
-				return ProjectManifest{}, fmt.Errorf("project/%s: invalid spec.libraryPins.%s: %w", name, libraryName, err)
+			if commit < 1 {
+				return ProjectManifest{}, fmt.Errorf("project/%s: invalid spec.libraryImports.%s: a saved state number is positive, got %d", name, libraryName, commit)
 			}
-			m.LibraryPins[libraryName] = release
+			m.LibraryImports[libraryName] = commit
 		}
 	}
 	return m, nil
@@ -348,6 +353,11 @@ func validateProject(doc manifestv0.ProjectDocument) (ProjectManifest, error) {
 // librariesSince is the manifest version that brought kinds Library and
 // WidgetType and the spec of a Project.
 var librariesSince = contract.SchemaVersion{Major: 0, Minor: 4}
+
+// libraryImportsSince is the manifest version that renamed a Project's
+// libraryPins to libraryImports: a saved state of the Library, not a Release
+// (task 85_6).
+var libraryImportsSince = contract.SchemaVersion{Major: 0, Minor: 5}
 
 func validateLibrary(doc manifestv0.LibraryDocument) (LibraryManifest, error) {
 	name := doc.Metadata.Name

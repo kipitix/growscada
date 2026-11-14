@@ -3,7 +3,7 @@ package application
 import (
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/id"
-	"github.com/kipitix/growscada/internal/server/domain/librarypin"
+	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -18,9 +18,10 @@ type ProjectScope interface {
 	ProjectID() id.ID[project.Project]
 	Tags() tag.TagRepository
 	Scenes() scene.SceneRepository
-	// LibraryPins are the Library Pins of the Project's Draft, and through
-	// them the WidgetTypes its Widgets may be of (ADR 0007).
-	LibraryPins() librarypin.Repository
+	// LibraryImports are the Library Imports of the Project's Draft, and
+	// through them the WidgetTypes its Widgets may be of (ADR 0007,
+	// task 85_6).
+	LibraryImports() libraryimport.Repository
 	// Devices are the Devices of the Project's Draft: what its Tags may be
 	// supplied by (ADR 0004, amendment 2026-11-01).
 	Devices() device.DeviceRepository

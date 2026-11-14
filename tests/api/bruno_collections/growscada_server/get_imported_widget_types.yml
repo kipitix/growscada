@@ -1,5 +1,5 @@
 info:
-  name: get pinned widget types
+  name: get imported widget types
   type: http
   seq: 27
 
@@ -9,7 +9,7 @@ http:
   auth: inherit
 
 docs: |
-  The WidgetTypes of every release the project pins: those its Widgets may
+  The WidgetTypes of every saved state the project imports: those its Widgets may
   be of (the palette of its Scenes).
 
 runtime:

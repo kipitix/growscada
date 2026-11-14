@@ -24,7 +24,7 @@ import (
 // DeployProject saves the Project's Draft as a saved state and deploys it, as
 // the server does since task 85_4: the Tags with their suppliers, the Devices,
 // the Environments with their pairs, the Scenes with their Widgets and the
-// WidgetTypes their pins hold. A test that needs a Gateway's configuration or a
+// WidgetTypes their imports hold. A test that needs a Gateway's configuration or a
 // Tag value of the running configuration deploys in its setup: nothing of the
 // Draft reaches the Runtime node before a Deploy.
 func DeployProject(t *testing.T, db *sql.DB, projectID uuid.UUID) {
@@ -34,8 +34,7 @@ func DeployProject(t *testing.T, db *sql.DB, projectID uuid.UUID) {
 	if err != nil {
 		t.Fatalf("organization: %v", err)
 	}
-	libraryReleases := repositories.NewLibraryReleaseRepositoryPostgres(db)
-	drafts := repositories.NewDraftRepositoryPostgres(db, libraryReleases)
+	drafts := repositories.NewDraftRepositoryPostgres(db)
 	content := application.NewProjectContent(
 		repositories.NewProjectRepositoryPostgres(db), repositories.NewProjectScopes(db), drafts, orgID)
 	states := runtimeapp.NewTagStateService(runtimepg.NewTagStateRepositoryPostgres(db), orgID, func(event.Event) {})

@@ -200,7 +200,7 @@ func TestProjectRelease_TwoCreatesOfOneCommit(t *testing.T) {
 }
 
 // TestProjectRelease_Cascade: removing the Project removes its Releases and
-// their pins.
+// their imports.
 func TestProjectRelease_Cascade(t *testing.T) {
 	ctx := context.Background()
 	projectID := uuid.New()
@@ -218,8 +218,8 @@ func TestProjectRelease_Cascade(t *testing.T) {
 	author, _ := draft.NewAuthor("Ada")
 	commit, err := draft.NewCommit(scope, id.NewID[draft.Commit](), 1, title, author, time.Now().UTC(),
 		version.Committed[draft.Draft](), draft.NewProjectCommitContent(projectv0.ProjectFile{
-			Header:      projectv0.Header{SchemaVersion: projectv0.SchemaVersion(), ProjectID: projectID},
-			LibraryPins: []projectv0.LibraryPin{{LibraryID: uuid.New(), Release: 1}},
+			Header:         projectv0.Header{SchemaVersion: projectv0.SchemaVersion(), ProjectID: projectID},
+			LibraryImports: []projectv0.LibraryImport{{LibraryID: uuid.New(), Commit: 1}},
 		}))
 	if err != nil {
 		t.Fatalf("NewCommit: %v", err)

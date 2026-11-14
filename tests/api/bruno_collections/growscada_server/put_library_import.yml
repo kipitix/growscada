@@ -1,22 +1,22 @@
 info:
-  name: pin the library in the cleanup project
+  name: put library import
   type: http
-  seq: 198
+  seq: 59
 http:
   method: PUT
-  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/library-pins/{{CLEANUP_LIBRARY_ID}}
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/library-imports/{{OTHER_LIBRARY_ID}}
   body:
     type: json
     data: |-
       {
-        "release": 1,
+        "commit": 1,
         "version": 1
       }
   auth: inherit
 
 docs: |
-  The first write of Line 4's Draft: `version` 1 adds the pin and the answer
-  carries the Draft's new Version, 2.
+  `version` 0 adds the import (`201`); any other switches it and must be the
+  import's current version (`200`).
 
 runtime:
   assertions:
@@ -25,7 +25,7 @@ runtime:
       value: '201'
     - expression: 'res.headers["growscada-schema-version"]'
       operator: isDefined
-    - expression: 'res.body.release'
+    - expression: 'res.body.commit_number'
       operator: eq
       value: '1'
     - expression: 'res.body.version'

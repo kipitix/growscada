@@ -14,8 +14,8 @@ import (
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
 
-// testLibrary is the Library of the shared widget fixtures; its release 1
-// holds testWidgetTypeID and is pinned in mainProject.
+// testLibrary is the Library of the shared widget fixtures; its saved state 1
+// holds testWidgetTypeID and is imported in mainProject.
 var testLibrary = uuid.MustParse("7e57c0de-1000-4000-8000-000000000001")
 
 // testWidgetTypeID is the WidgetType of the shared widget fixtures: a
@@ -31,7 +31,8 @@ func ensureTestWidgetType(t *testing.T) {
 
 // ensurePinnedType stores, unless they are there, the library libraryID
 // named libraryName with the WidgetType typeID named typeName and no ports,
-// its release 1 holding it, and the pin of the release in projectID.
+// its release 1 holding it, its saved state 1, and the import of that saved
+// state in projectID (task 85_6).
 func ensurePinnedType(t *testing.T, libraryID uuid.UUID, libraryName string, typeID uuid.UUID, typeName string, projectID uuid.UUID) {
 	t.Helper()
 	if _, err := testDB.ExecContext(context.Background(),
@@ -59,12 +60,10 @@ func ensurePinnedType(t *testing.T, libraryID uuid.UUID, libraryName string, typ
 			t.Fatalf("ensurePinnedType: %v", err)
 		}
 	}
-	if _, err := testDB.ExecContext(context.Background(),
-		`INSERT INTO engineering.library_pins (project_id, library_id, release_number)
-		 VALUES ($1, $2, 1) ON CONFLICT DO NOTHING`,
-		projectID, libraryID,
-	); err != nil {
-		t.Fatalf("ensurePinnedType: pin: %v", err)
+	commit := mustCommitLibrary(t, libraryID)
+	if _, _, err := newLibraryImportService(t).PutLibraryImport(context.Background(),
+		projectID, libraryID, commit.Number, draftVersionOf(t, projectID)); err != nil {
+		t.Fatalf("ensurePinnedType: import: %v", err)
 	}
 }
 
@@ -72,7 +71,7 @@ func ensurePinnedType(t *testing.T, libraryID uuid.UUID, libraryName string, typ
 // through the Drafts.
 func newLibraryContent(opts ...repositories.Option) application.LibraryContent {
 	return application.NewLibraryContent(repositories.NewLibraryRepositoryPostgres(testDB, opts...),
-		repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB, opts...), opts...),
+		repositories.NewDraftRepositoryPostgres(testDB, opts...),
 		soleOrganization())
 }
 
@@ -85,7 +84,7 @@ func newLibraryService() application.LibraryService {
 // never written.
 func libraryDraftVersionOf(t *testing.T, libraryID uuid.UUID) int {
 	t.Helper()
-	drafts := repositories.NewDraftRepositoryPostgres(testDB, nil)
+	drafts := repositories.NewDraftRepositoryPostgres(testDB)
 	found, ok, err := drafts.Read(context.Background(),
 		draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](libraryID))))
 	if err != nil {
@@ -97,8 +96,10 @@ func libraryDraftVersionOf(t *testing.T, libraryID uuid.UUID) int {
 	return found.Version().Number()
 }
 
-func newLibraryPinService() application.LibraryPinService {
-	return application.NewLibraryPinService(contentOver(newScopes()), repositories.NewLibraryRepositoryPostgres(testDB), repositories.NewLibraryReleaseRepositoryPostgres(testDB))
+func newLibraryImportService(t *testing.T) application.LibraryImportService {
+	t.Helper()
+	return application.NewLibraryImportService(contentOver(newScopes()),
+		repositories.NewLibraryRepositoryPostgres(testDB), newLabelService(t))
 }
 
 // mustCreateLibrary creates a library of a name of its own.
@@ -152,10 +153,10 @@ func mustReleaseLibraryTitled(t *testing.T, libraryID uuid.UUID, title, author s
 	return release
 }
 
-// pinNewWidgetType creates, in a new library, a WidgetType of input
-// (its name made unique), releases it and pins the release in projectID; it
+// importNewWidgetType creates, in a new library, a WidgetType of input (its
+// name made unique), releases it and imports its saved state in projectID; it
 // returns the type and its library.
-func pinNewWidgetType(t *testing.T, projectID uuid.UUID, input appdto.WidgetTypeInput) (appdto.WidgetType, appdto.Library) {
+func importNewWidgetType(t *testing.T, projectID uuid.UUID, input appdto.WidgetTypeInput) (appdto.WidgetType, appdto.Library) {
 	t.Helper()
 	ctx := context.Background()
 	lib := mustCreateLibrary(t)
@@ -172,9 +173,9 @@ func pinNewWidgetType(t *testing.T, projectID uuid.UUID, input appdto.WidgetType
 	if err != nil {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
-	release := mustReleaseLibrary(t, lib.ID)
-	if _, _, err := newLibraryPinService().PutLibraryPin(ctx, projectID, lib.ID, release.Number, draftVersionOf(t, projectID)); err != nil {
-		t.Fatalf("PutLibraryPin: %v", err)
+	commit := mustCommitLibrary(t, lib.ID)
+	if _, _, err := newLibraryImportService(t).PutLibraryImport(ctx, projectID, lib.ID, commit.Number, draftVersionOf(t, projectID)); err != nil {
+		t.Fatalf("PutLibraryImport: %v", err)
 	}
 	return wt, lib
 }

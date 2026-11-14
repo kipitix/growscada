@@ -45,7 +45,7 @@ type Project struct {
 
 	widgetTypes []apiv0.ReleasedWidgetTypeResponse
 	libraries   []apiv0.LibraryResponse
-	pins        []apiv0.LibraryPinResponse
+	imports     []apiv0.LibraryImportResponse
 	scenes      []apiv0.SceneResponse
 	widgets     []apiv0.WidgetResponse
 	tags        tagstate.Tags
@@ -143,6 +143,21 @@ type Project struct {
 	OnBack   func()
 	BackName func() string
 
+	// ── Import libraries (task 85_6) ───────────────────────────────────────
+	// importDialog is true while the window is shown; importLibraryID is the
+	// library whose saved states it lists (uuid.Nil: none) as importCommits,
+	// newest first, narrowed by the label importLabel (uuid.Nil: all) —
+	// importCommitsLoaded is false until its first answer.
+	importDialog          bool
+	importLibraryID       uuid.UUID
+	importCommits         []apiv0.CommitResponse
+	importCommitsLoaded   bool
+	importCommitsReloader uiutil.Reloader
+	importLabel           uuid.UUID
+	// librariesLoaded is false until the server's libraries were read once:
+	// the Import window says nothing of their list before it.
+	librariesLoaded bool
+
 	// ── Deploy (task 85_5; ADR 0021, ADR 0025) ─────────────────────────────
 	// deployDialog is true while the window is shown; deployCommits is the
 	// saved states it lists, newest first — all of them, or the ones the
@@ -171,7 +186,7 @@ type Project struct {
 	unsavedReloader     uiutil.Reloader
 	changesReloader     uiutil.Reloader
 	librariesReloader   uiutil.Reloader
-	pinsReloader        uiutil.Reloader
+	importsReloader     uiutil.Reloader
 	scenesReloader      uiutil.Reloader
 	widgetsReloader     uiutil.Reloader
 	tagsReloader        uiutil.Reloader
@@ -343,7 +358,7 @@ func (p *Project) OnMount(ctx app.Context) {
 	}
 	p.restoreSelection(ctx)
 	p.loadLibraries(ctx)
-	p.loadPins(ctx)
+	p.loadImports(ctx)
 	p.loadWidgetTypes(ctx)
 	p.loadScenes(ctx)
 	if p.selectedSceneID != uuid.Nil {
@@ -400,7 +415,7 @@ func (p *Project) SetProject(id uuid.UUID) {
 	}
 	ctx := p.compoCtx
 	p.scenes, p.widgets, p.tags = nil, nil, tagstate.Tags{}
-	p.widgetTypes, p.pins = nil, nil
+	p.widgetTypes, p.imports = nil, nil
 	p.deployment, p.deployed, p.deploymentLoaded, p.deploymentFailed = apiv0.DeploymentResponse{}, false, false, false
 	p.deploying, p.loadingSavedState = false, 0
 	p.historyScreen = false
@@ -418,6 +433,8 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.draftUnsaved, p.draftStateLoaded = false, false
 	p.contentReplacements, p.appliedReplacements = 0, 0
 	p.deployCommits, p.deployCommitsLoaded, p.deployLabel = nil, false, uuid.Nil
+	p.importDialog, p.importLibraryID, p.importLabel = false, uuid.Nil, uuid.Nil
+	p.importCommits, p.importCommitsLoaded = nil, false
 	p.deployDialog = false
 	p.draftVersions.Forget()
 	clear(p.staleScenes)

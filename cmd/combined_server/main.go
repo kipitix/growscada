@@ -115,7 +115,7 @@ func main() {
 	// Project (ADR 0006) for reads; every write goes through the Drafts
 	// (ADR 0016).
 	projectScopes := repositories.NewProjectScopes(sqlDB, notifyDispatcher)
-	draftRepository := repositories.NewDraftRepositoryPostgres(sqlDB, releaseRepository, notifyDispatcher)
+	draftRepository := repositories.NewDraftRepositoryPostgres(sqlDB, notifyDispatcher)
 	projectReleaseRepository := repositories.NewProjectReleaseRepositoryPostgres(sqlDB, notifyDispatcher)
 	// The per-user settings of the server (task 81, ADR 0024): one person's
 	// view of the content, stored apart from it. Until authentication exists
@@ -235,39 +235,39 @@ func main() {
 	// falls back to the last Commit, Revert to the running Deployment. The
 	// Release handlers keep deploying a Release until task 85_5.
 	projectFileBuilder := application.NewProjectFileBuilder(projectContent)
-	discardService := application.NewDiscardService(projectContent, runtimeNode, libraryRepository, releaseRepository)
+	discardService := application.NewDiscardService(projectContent, runtimeNode, libraryRepository)
 	deployService := application.NewDeployService(projectContent, runtimeNode)
 	projectFileService := application.NewProjectFileService(projectContent, projectFileBuilder, runtimeNode,
-		libraryRepository, releaseRepository)
+		libraryRepository)
 	draftChangesService := application.NewDraftChangesService(projectContent, libraryContent)
 	// The labels of a saved state are read through the service that serves
 	// them, by the history that draws their chips (task 85_3; ADR 0025).
 	labelService := application.NewLabelService(labelRepository, draftRepository, organizationID)
 	// Create router
 	apiRouter := restapi.NewRouter(restapi.Services{
-		Projects:     projectService,
-		Tags:         tagService,
-		TagStates:    tagStateService,
-		Libraries:    application.NewLibraryService(libraryContent, libraryRepository, releaseRepository, widgetTypeRepositories, runtimeNode),
-		WidgetTypes:  application.NewWidgetTypeService(libraryContent, widgetTypeRepositories),
-		LibraryPins:  application.NewLibraryPinService(projectContent, libraryRepository, releaseRepository),
-		Scenes:       application.NewSceneService(projectContent),
-		Devices:      application.NewDeviceService(projectContent),
-		Environments: application.NewEnvironmentService(projectContent),
-		Draft:        application.NewDraftService(projectContent),
-		DraftChanges: draftChangesService,
-		Discard:      discardService,
-		ProjectFiles: projectFileService,
-		Commits:      application.NewCommitService(projectContent, libraryContent, projectFileBuilder, widgetTypeRepositories, projectReleaseRepository, releaseRepository, labelService),
-		Releases:     application.NewReleaseService(projectContent, projectReleaseRepository, runtimeNode, deployService),
-		Settings:     application.NewSettingsService(userSettingsRepository, settings.SingleUser(), organizationID),
-		Labels:       labelService,
-		Deploy:       deployService,
-		Deployments:  deploymentService,
-		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(sqlDB)),
-		DeviceTokens: deviceTokenService,
-		Journal:      journalService,
-		Operation:    operationStateService,
+		Projects:       projectService,
+		Tags:           tagService,
+		TagStates:      tagStateService,
+		Libraries:      application.NewLibraryService(libraryContent, libraryRepository, releaseRepository, widgetTypeRepositories, runtimeNode),
+		WidgetTypes:    application.NewWidgetTypeService(libraryContent, widgetTypeRepositories),
+		LibraryImports: application.NewLibraryImportService(projectContent, libraryRepository, labelService),
+		Scenes:         application.NewSceneService(projectContent),
+		Devices:        application.NewDeviceService(projectContent),
+		Environments:   application.NewEnvironmentService(projectContent),
+		Draft:          application.NewDraftService(projectContent),
+		DraftChanges:   draftChangesService,
+		Discard:        discardService,
+		ProjectFiles:   projectFileService,
+		Commits:        application.NewCommitService(projectContent, libraryContent, projectFileBuilder, widgetTypeRepositories, projectReleaseRepository, releaseRepository, labelService),
+		Releases:       application.NewReleaseService(projectContent, projectReleaseRepository, runtimeNode, deployService),
+		Settings:       application.NewSettingsService(userSettingsRepository, settings.SingleUser(), organizationID),
+		Labels:         labelService,
+		Deploy:         deployService,
+		Deployments:    deploymentService,
+		DeviceConfig:   runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(sqlDB)),
+		DeviceTokens:   deviceTokenService,
+		Journal:        journalService,
+		Operation:      operationStateService,
 	}, eventBus, cliArgs.MaxSSEClients)
 	// Register the event hub shutdown handler. The outbox is drained first,
 	// while SSE clients are still connected, so what is left in it reaches

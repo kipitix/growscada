@@ -13,31 +13,31 @@ import (
 )
 
 type APIRouter struct {
-	serveMux             *http.ServeMux
-	projectsHandlers     *ProjectsHandlers
-	librariesHandlers    *LibrariesHandlers
-	libraryPinsHandlers  *LibraryPinsHandlers
-	tagsHandlers         *TagsHandlers
-	widgetTypesHandlers  *WidgetTypesHandlers
-	widgetsHandlers      *WidgetsHandlers
-	scenesHandlers       *ScenesHandlers
-	devicesHandlers      *DevicesHandlers
-	environmentsHandlers *EnvironmentsHandlers
-	deviceTokensHandlers *DeviceTokensHandlers
-	deviceConfigHandlers *DeviceConfigHandlers
-	deviceWhoAmIHandlers *DeviceIdentityHandlers
-	deployHandlers       *DeployHandlers
-	draftHandlers        *DraftHandlers
-	draftChangesHandlers *DraftChangesHandlers
-	deploymentsHandlers  *DeploymentHandlers
-	projectFileHandlers  *ProjectFileHandlers
-	commitHandlers       *CommitHandlers
-	releaseHandlers      *ReleaseHandlers
-	settingsHandlers     *SettingsHandlers
-	labelHandlers        *LabelHandlers
-	eventsHandlers       *EventsHandlers
-	journalHandlers      *JournalHandlers
-	operationHandlers    *OperationHandlers
+	serveMux               *http.ServeMux
+	projectsHandlers       *ProjectsHandlers
+	librariesHandlers      *LibrariesHandlers
+	libraryImportsHandlers *LibraryImportsHandlers
+	tagsHandlers           *TagsHandlers
+	widgetTypesHandlers    *WidgetTypesHandlers
+	widgetsHandlers        *WidgetsHandlers
+	scenesHandlers         *ScenesHandlers
+	devicesHandlers        *DevicesHandlers
+	environmentsHandlers   *EnvironmentsHandlers
+	deviceTokensHandlers   *DeviceTokensHandlers
+	deviceConfigHandlers   *DeviceConfigHandlers
+	deviceWhoAmIHandlers   *DeviceIdentityHandlers
+	deployHandlers         *DeployHandlers
+	draftHandlers          *DraftHandlers
+	draftChangesHandlers   *DraftChangesHandlers
+	deploymentsHandlers    *DeploymentHandlers
+	projectFileHandlers    *ProjectFileHandlers
+	commitHandlers         *CommitHandlers
+	releaseHandlers        *ReleaseHandlers
+	settingsHandlers       *SettingsHandlers
+	labelHandlers          *LabelHandlers
+	eventsHandlers         *EventsHandlers
+	journalHandlers        *JournalHandlers
+	operationHandlers      *OperationHandlers
 }
 
 func (r APIRouter) ServeMux() http.Handler {
@@ -81,21 +81,21 @@ func corsMiddleware(next http.Handler) http.Handler {
 // state of Operation (ADR 0011, ADR 0020). A Device token service that is nil
 // is a server without the Runtime node: token management answers 404.
 type Services struct {
-	Projects     application.ProjectService
-	Tags         application.TagService
-	TagStates    runtimeapp.TagStateService
-	Libraries    application.LibraryService
-	WidgetTypes  application.WidgetTypeService
-	LibraryPins  application.LibraryPinService
-	Scenes       application.SceneService
-	Devices      application.DeviceService
-	Environments application.EnvironmentService
-	Draft        application.DraftService
-	DraftChanges application.DraftChangesService
-	Discard      application.DiscardService
-	ProjectFiles application.ProjectFileService
-	Commits      application.CommitService
-	Releases     application.ReleaseService
+	Projects       application.ProjectService
+	Tags           application.TagService
+	TagStates      runtimeapp.TagStateService
+	Libraries      application.LibraryService
+	WidgetTypes    application.WidgetTypeService
+	LibraryImports application.LibraryImportService
+	Scenes         application.SceneService
+	Devices        application.DeviceService
+	Environments   application.EnvironmentService
+	Draft          application.DraftService
+	DraftChanges   application.DraftChangesService
+	Discard        application.DiscardService
+	ProjectFiles   application.ProjectFileService
+	Commits        application.CommitService
+	Releases       application.ReleaseService
 	// Settings are the per-user settings of the server (task 81): one
 	// person's view of its content, never its content (ADR 0024).
 	Settings application.SettingsService
@@ -115,31 +115,31 @@ func NewRouter(services Services, eventBus eventbus.EventBus, maxSSEClients int)
 	projectService, tagService, tagStateService := services.Projects, services.Tags, services.TagStates
 	widgetTypeService, sceneService := services.WidgetTypes, services.Scenes
 	router := &APIRouter{
-		serveMux:             http.NewServeMux(),
-		projectsHandlers:     NewProjectsHandler(projectService),
-		librariesHandlers:    NewLibrariesHandler(services.Libraries),
-		libraryPinsHandlers:  NewLibraryPinsHandler(services.LibraryPins),
-		tagsHandlers:         NewTagsHandler(tagService, tagStateService, services.DeviceTokens),
-		widgetTypesHandlers:  NewWidgetTypesHandler(widgetTypeService),
-		widgetsHandlers:      NewWidgetsHandler(sceneService),
-		scenesHandlers:       NewScenesHandler(sceneService),
-		devicesHandlers:      NewDevicesHandler(services.Devices),
-		environmentsHandlers: NewEnvironmentsHandler(services.Environments),
-		deviceTokensHandlers: NewDeviceTokensHandler(services.DeviceTokens, services.Devices),
-		deviceConfigHandlers: NewDeviceConfigHandler(services.DeviceConfig, services.DeviceTokens),
-		deviceWhoAmIHandlers: NewDeviceIdentityHandler(services.DeviceTokens),
-		deployHandlers:       NewDeployHandler(services.Discard, services.Deploy, services.Deployments, services.TagStates),
-		draftHandlers:        NewDraftHandler(services.Draft),
-		draftChangesHandlers: NewDraftChangesHandler(services.DraftChanges),
-		deploymentsHandlers:  NewDeploymentHandler(services.Deployments),
-		projectFileHandlers:  NewProjectFileHandler(services.ProjectFiles),
-		commitHandlers:       NewCommitHandler(services.Commits, services.Labels),
-		releaseHandlers:      NewReleaseHandler(services.Releases),
-		settingsHandlers:     NewSettingsHandler(services.Settings),
-		labelHandlers:        NewLabelHandler(services.Labels),
-		eventsHandlers:       NewEventsHandler(eventBus, projectService, maxSSEClients, WithDeviceTokens(services.DeviceTokens)),
-		journalHandlers:      NewJournalHandler(services.Journal, eventBus),
-		operationHandlers:    NewOperationHandler(services.Operation),
+		serveMux:               http.NewServeMux(),
+		projectsHandlers:       NewProjectsHandler(projectService),
+		librariesHandlers:      NewLibrariesHandler(services.Libraries),
+		libraryImportsHandlers: NewLibraryImportsHandler(services.LibraryImports),
+		tagsHandlers:           NewTagsHandler(tagService, tagStateService, services.DeviceTokens),
+		widgetTypesHandlers:    NewWidgetTypesHandler(widgetTypeService),
+		widgetsHandlers:        NewWidgetsHandler(sceneService),
+		scenesHandlers:         NewScenesHandler(sceneService),
+		devicesHandlers:        NewDevicesHandler(services.Devices),
+		environmentsHandlers:   NewEnvironmentsHandler(services.Environments),
+		deviceTokensHandlers:   NewDeviceTokensHandler(services.DeviceTokens, services.Devices),
+		deviceConfigHandlers:   NewDeviceConfigHandler(services.DeviceConfig, services.DeviceTokens),
+		deviceWhoAmIHandlers:   NewDeviceIdentityHandler(services.DeviceTokens),
+		deployHandlers:         NewDeployHandler(services.Discard, services.Deploy, services.Deployments, services.TagStates),
+		draftHandlers:          NewDraftHandler(services.Draft),
+		draftChangesHandlers:   NewDraftChangesHandler(services.DraftChanges),
+		deploymentsHandlers:    NewDeploymentHandler(services.Deployments),
+		projectFileHandlers:    NewProjectFileHandler(services.ProjectFiles),
+		commitHandlers:         NewCommitHandler(services.Commits, services.Labels),
+		releaseHandlers:        NewReleaseHandler(services.Releases),
+		settingsHandlers:       NewSettingsHandler(services.Settings),
+		labelHandlers:          NewLabelHandler(services.Labels),
+		eventsHandlers:         NewEventsHandler(eventBus, projectService, maxSSEClients, WithDeviceTokens(services.DeviceTokens)),
+		journalHandlers:        NewJournalHandler(services.Journal, eventBus),
+		operationHandlers:      NewOperationHandler(services.Operation),
 	}
 	for _, rt := range router.routes() {
 		router.serveMux.HandleFunc(rt.pattern, rt.handler)
@@ -161,7 +161,7 @@ func (r *APIRouter) routes() []route {
 	pp := p + apiv0.ProjectPath(projectResource.wildcard())
 	lp := p + apiv0.LibraryPath(libraryResource.wildcard())
 	projects, tags, widgetTypes, widgets, scenes := r.projectsHandlers, r.tagsHandlers, r.widgetTypesHandlers, r.widgetsHandlers, r.scenesHandlers
-	libraries, pins := r.librariesHandlers, r.libraryPinsHandlers
+	libraries, imports := r.librariesHandlers, r.libraryImportsHandlers
 	devices, environments := r.devicesHandlers, r.environmentsHandlers
 	tokens, config := r.deviceTokensHandlers, r.deviceConfigHandlers
 	deploy := r.deployHandlers
@@ -233,11 +233,11 @@ func (r *APIRouter) routes() []route {
 		{"DELETE " + lp + removedDraftLockPath, draftLockRemoved},
 		{"POST " + lp + removedDraftLockPath + "/takeover", draftLockRemoved},
 
-		{"GET " + pp + "/library-pins", pins.GetLibraryPins},
-		{"PUT " + pp + "/library-pins/" + libraryPinResource.wildcard(), pins.PutLibraryPin},
-		{"DELETE " + pp + "/library-pins/" + libraryPinResource.wildcard(), pins.DeleteLibraryPin},
-		{"GET " + pp + "/library-pins/" + libraryPinResource.wildcard() + "/impact", pins.GetLibraryPinImpact},
-		{"GET " + pp + "/widget-types", pins.GetPinnedWidgetTypes},
+		{"GET " + pp + "/library-imports", imports.GetLibraryImports},
+		{"PUT " + pp + "/library-imports/" + libraryImportResource.wildcard(), imports.PutLibraryImport},
+		{"DELETE " + pp + "/library-imports/" + libraryImportResource.wildcard(), imports.DeleteLibraryImport},
+		{"GET " + pp + "/library-imports/" + libraryImportResource.wildcard() + "/impact", imports.GetLibraryImportImpact},
+		{"GET " + pp + "/widget-types", imports.GetImportedWidgetTypes},
 
 		{"GET " + pp + "/scenes/" + sceneResource.wildcard() + "/widgets", widgets.GetWidgetsBySceneID},
 		{"POST " + pp + "/scenes/" + sceneResource.wildcard() + "/widgets", widgets.PostWidgets},

@@ -35,7 +35,7 @@ func commitAuthor(t *testing.T) draft.Author {
 }
 
 // projectCommitContent is a canonical-enough ProjectFile of the main project,
-// with one pin to check that a Project's Commit stores them.
+// with one import to check that a Project's Commit stores them.
 func projectCommitContent() draft.CommitContent {
 	return draft.NewProjectCommitContent(projectv0.ProjectFile{
 		Header: projectv0.Header{SchemaVersion: projectv0.SchemaVersion(), ProjectID: mainProject.UUID()},
@@ -45,13 +45,13 @@ func projectCommitContent() draft.CommitContent {
 		Scenes: []projectv0.Scene{
 			{ID: uuid.New(), Name: "Main", Width: 100, Height: 100, Widgets: []projectv0.Widget{}},
 		},
-		LibraryPins: []projectv0.LibraryPin{{LibraryID: uuid.New(), Release: 3}},
+		LibraryImports: []projectv0.LibraryImport{{LibraryID: uuid.New(), Commit: 3}},
 	})
 }
 
 // TestDraftSaveCommit_NumbersAndContent: a Save fixes the Draft as Commit 1,
 // then 2, records what the last one fixed, and stores the snapshot with the
-// pins of a Project's ProjectFile (task 72_2; ADR 0021).
+// imports of a Project's ProjectFile (task 72_2; ADR 0021).
 func TestDraftSaveCommit_NumbersAndContent(t *testing.T) {
 	cleanTags(t)
 	cleanScenes(t)
@@ -98,13 +98,13 @@ func TestDraftSaveCommit_NumbersAndContent(t *testing.T) {
 		t.Errorf("last commit %d at version %d, want 2 at %d", lastNumber, lastVersion, draftVersionOf(t, mainProject).Number())
 	}
 
-	var pins int
+	var imports int
 	if err := testDB.QueryRowContext(ctx,
-		`SELECT count(*) FROM engineering.commit_library_pins WHERE commit_id = $1`, second.ID().UUID()).Scan(&pins); err != nil {
-		t.Fatalf("read the commit's pins: %v", err)
+		`SELECT count(*) FROM engineering.commit_library_imports WHERE commit_id = $1`, second.ID().UUID()).Scan(&imports); err != nil {
+		t.Fatalf("read the commit's imports: %v", err)
 	}
-	if pins != 1 {
-		t.Errorf("the project's commit holds %d pins, want 1", pins)
+	if imports != 1 {
+		t.Errorf("the project's commit holds %d imports, want 1", imports)
 	}
 
 	found, err := testDrafts().FindCommit(ctx, scope, 2)

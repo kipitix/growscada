@@ -122,25 +122,25 @@ func TestSession_UndoOfASceneCreationRemovesTheSceneAndItsWidgets(t *testing.T) 
 }
 
 // TestSession_UndoOfAPinSwitchRestoresThePinAndTheBindings: a change of both
-// sides is written back on its before side, with the pin and widget events.
-func TestSession_UndoOfAPinSwitchRestoresThePinAndTheBindings(t *testing.T) {
+// sides is written back on its before side, with the import and widget events.
+func TestSession_UndoOfAnImportSwitchRestoresTheImportAndTheBindings(t *testing.T) {
 	session := NewSession(undoDraft(t), nil)
 	libraryID, sceneID, widgetID := uuid.New(), uuid.New(), uuid.New()
 	err := session.Undo(context.Background(), DraftChange{Seq: 3,
-		Before: []Snapshot{pinSnapshot(libraryID, 1), widgetSnapshot(sceneID, widgetID, true)},
-		After:  []Snapshot{pinSnapshot(libraryID, 2), widgetSnapshot(sceneID, widgetID, false)},
+		Before: []Snapshot{importSnapshot(libraryID, 1), widgetSnapshot(sceneID, widgetID, true)},
+		After:  []Snapshot{importSnapshot(libraryID, 2), widgetSnapshot(sceneID, widgetID, false)},
 	})
 	if err != nil {
 		t.Fatalf("Undo: %v", err)
 	}
 	_, after := session.Changes()
-	pin, ok := after[0].State.(LibraryPinState)
-	if !ok || pin.Release != 1 {
-		t.Errorf("the restored pin is %v, want release 1", after[0].State)
+	imported, ok := after[0].State.(LibraryImportState)
+	if !ok || imported.Commit != 1 {
+		t.Errorf("the restored import is %v, want saved state 1", after[0].State)
 	}
 	types := eventTypes(session.Events())
-	if !types[event.EventTypeLibraryPinUpdated] || !types[event.EventTypeWidgetUpdated] {
-		t.Errorf("undo published %v, want library_pin_updated and widget_updated", types)
+	if !types[event.EventTypeLibraryImportUpdated] || !types[event.EventTypeWidgetUpdated] {
+		t.Errorf("undo published %v, want library_import_updated and widget_updated", types)
 	}
 }
 
@@ -206,8 +206,8 @@ func TestInverseEvents_EveryKind(t *testing.T) {
 		{"environment deleted", projectScope, []Snapshot{deletedEnvironment}, nil, event.EventTypeEnvironmentDeleted},
 		{"pair created", projectScope, nil, []Snapshot{pairSnapshot(pairID, deviceID)}, event.EventTypeEnvironmentDeviceCreated},
 		{"pair deleted", projectScope, []Snapshot{pairSnapshot(pairID, deviceID)}, nil, event.EventTypeEnvironmentDeviceDeleted},
-		{"pin created", projectScope, nil, []Snapshot{pinSnapshot(pinID, 1)}, event.EventTypeLibraryPinCreated},
-		{"pin updated", projectScope, []Snapshot{pinSnapshot(pinID, 1)}, []Snapshot{pinSnapshot(pinID, 2)}, event.EventTypeLibraryPinUpdated},
+		{"import created", projectScope, nil, []Snapshot{importSnapshot(pinID, 1)}, event.EventTypeLibraryImportCreated},
+		{"import updated", projectScope, []Snapshot{importSnapshot(pinID, 1)}, []Snapshot{importSnapshot(pinID, 2)}, event.EventTypeLibraryImportUpdated},
 		{"widget type created", libraryScope, nil, []Snapshot{libraryDraftType}, event.EventTypeWidgetTypeCreated},
 		{"widget type deleted", libraryScope, []Snapshot{libraryDraftType}, nil, event.EventTypeWidgetTypeDeleted},
 	}
@@ -284,9 +284,9 @@ func pairSnapshot(environmentID, deviceID uuid.UUID) Snapshot {
 	}}
 }
 
-func pinSnapshot(libraryID uuid.UUID, release int) Snapshot {
-	return Snapshot{Kind: KindLibraryPin, ID: libraryID, State: LibraryPinState{
-		LibraryID: libraryID, Release: release,
+func importSnapshot(libraryID uuid.UUID, commit int) Snapshot {
+	return Snapshot{Kind: KindLibraryImport, ID: libraryID, State: LibraryImportState{
+		LibraryID: libraryID, Commit: commit,
 	}}
 }
 

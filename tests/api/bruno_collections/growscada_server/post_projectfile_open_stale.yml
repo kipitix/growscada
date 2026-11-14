@@ -9,7 +9,7 @@ http:
     type: json
     data: |-
       {
-        "schema_version": "0.2",
+        "schema_version": "0.3",
         "project_id": "{{PROJECT_ID}}",
         "tags": [
           {

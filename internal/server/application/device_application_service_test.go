@@ -154,7 +154,7 @@ func TestDeviceService_ProjectScope(t *testing.T) {
 	cleanProjects(t)
 	cleanDevices(t)
 	ctx := context.Background()
-	projects := application.NewProjectService(repositories.NewProjectRepositoryPostgres(testDB), repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB)), soleOrganization())
+	projects := application.NewProjectService(repositories.NewProjectRepositoryPostgres(testDB), repositories.NewDraftRepositoryPostgres(testDB), soleOrganization())
 	other, err := projects.CreateProject(ctx, appdto.ProjectInput{Name: "Devices Other " + uuid.NewString()})
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)

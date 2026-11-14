@@ -14,7 +14,7 @@ import (
 
 func (p *Project) renderWidgetTypePanel() app.UI {
 	bg := uiutil.IframeBgColor()
-	items := make([]app.UI, 0, len(p.widgetTypes)+len(p.pins))
+	items := make([]app.UI, 0, len(p.widgetTypes))
 	var library uuid.UUID
 	for _, wt := range p.widgetTypes {
 		// The types come grouped by library: a header starts each group.
@@ -129,7 +129,7 @@ func (p *Project) renderWidgetTypePanel() app.UI {
 		listBody = app.Div().
 			Style("font-size", "13px").
 			Style("color", "var(--text-muted)").
-			Text("No widget types: pin a library released in the Library tab.")
+			Text("No widget types: import a saved state of a library in the panel above.")
 	} else {
 		listBody = app.Div().Body(items...)
 	}
@@ -142,7 +142,7 @@ func (p *Project) renderWidgetTypePanel() app.UI {
 		Style("min-height", "0").
 		Style("padding", "12px 8px").
 		Body(
-			p.renderPinsPanel(),
+			p.renderImportsPanel(),
 			app.H3().
 				Style("margin", "0 0 10px 0").
 				Style("font-size", "13px").

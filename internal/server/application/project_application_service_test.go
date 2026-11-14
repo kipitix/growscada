@@ -242,7 +242,7 @@ func TestProjectCleanup_RemovesScenesThenTagsThenTheProject(t *testing.T) {
 	}
 	r.settle(t)
 
-	for _, table := range []string{"engineering.tags", "engineering.scenes", "engineering.widgets", "engineering.library_pins", "runtime.tags"} {
+	for _, table := range []string{"engineering.tags", "engineering.scenes", "engineering.widgets", "engineering.library_imports", "runtime.tags"} {
 		if n := countRows(t, table, p); n != 0 {
 			t.Errorf("%s of the deleted project left: %d", table, n)
 		}
@@ -255,7 +255,7 @@ func TestProjectCleanup_RemovesScenesThenTagsThenTheProject(t *testing.T) {
 	for _, e := range r.takeDelivered() {
 		types = append(types, e.Type().String())
 	}
-	want := []string{"project_deleted", "widget_deleted", "scene_deleted", "tag_deleted", "library_pin_deleted"}
+	want := []string{"project_deleted", "widget_deleted", "scene_deleted", "tag_deleted", "library_import_deleted"}
 	if !slices.Equal(types, want) {
 		t.Errorf("delivered %v, want %v", types, want)
 	}
@@ -428,7 +428,7 @@ func TestProjectCleanup_StateUpsertedAfterTheStatesAreRemoved_IsRemovedOnTheNext
 	}
 
 	policy := application.NewProjectCleanupPolicy(repositories.NewProjectRepositoryPostgres(testDB),
-		repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB)),
+		repositories.NewDraftRepositoryPostgres(testDB),
 		stateUpsertingAfterRemoval{RuntimeNode: newRuntimeNode(), states: r.states, project: p, tagID: late})
 	if err := policy.Run(ctx, "project:"+p.String()); !errors.Is(err, project.ErrProjectNotEmpty) {
 		t.Fatalf("the run removing the states before the upsert: expected ErrProjectNotEmpty, got %v", err)
@@ -437,7 +437,7 @@ func TestProjectCleanup_StateUpsertedAfterTheStatesAreRemoved_IsRemovedOnTheNext
 		t.Fatalf("states of the project after the failed run: %d, want the late one", n)
 	}
 	policy = application.NewProjectCleanupPolicy(repositories.NewProjectRepositoryPostgres(testDB),
-		repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB)), newRuntimeNode())
+		repositories.NewDraftRepositoryPostgres(testDB), newRuntimeNode())
 	if err := policy.Run(ctx, "project:"+p.String()); err != nil {
 		t.Fatalf("the next run: %v", err)
 	}
@@ -459,7 +459,7 @@ func TestProjectCleanup_ForgetsTheDeviceTokensOfTheRemovedProject(t *testing.T) 
 	}
 	node := &forgottenTokens{RuntimeNode: newRuntimeNode()}
 	policy := application.NewProjectCleanupPolicy(repositories.NewProjectRepositoryPostgres(testDB),
-		repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB)), node)
+		repositories.NewDraftRepositoryPostgres(testDB), node)
 	if err := policy.Run(ctx, "project:"+p.String()); err != nil {
 		t.Fatalf("the run: %v", err)
 	}

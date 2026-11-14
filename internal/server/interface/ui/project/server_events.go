@@ -62,8 +62,8 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 		if targets.Libraries {
 			p.loadLibraries(ctx)
 		}
-		if targets.LibraryPins {
-			p.loadPins(ctx)
+		if targets.LibraryImports {
+			p.loadImports(ctx)
 			p.loadWidgetTypes(ctx)
 		}
 		if targets.Scenes {

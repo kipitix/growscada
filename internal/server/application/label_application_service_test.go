@@ -20,7 +20,7 @@ func newLabelService(t *testing.T) application.LabelService {
 		t.Fatalf("organization: %v", err)
 	}
 	return application.NewLabelService(repositories.NewLabelRepositoryPostgres(testDB),
-		repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB)), org)
+		repositories.NewDraftRepositoryPostgres(testDB), org)
 }
 
 // TestLabelService_CreateUpdateDelete covers the service of the labels: the

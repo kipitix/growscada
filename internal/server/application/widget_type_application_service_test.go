@@ -481,7 +481,7 @@ func TestDeleteWidgetType_UsedByWidget_TouchesNoScene(t *testing.T) {
 	sceneSvc := newSceneService()
 	ctx := context.Background()
 
-	created, lib := pinNewWidgetType(t, mainProject, testCreateWidgetTypeInput)
+	created, lib := importNewWidgetType(t, mainProject, testCreateWidgetTypeInput)
 	sc := mustCreateScene(t, sceneSvc)
 	input := testCreateWidgetInput
 	input.TypeID = created.ID

@@ -2,26 +2,26 @@ package appdto
 
 import "github.com/google/uuid"
 
-// MissingRelease names a Library Release the running Deployment uses but this
-// server does not have (task 71): the Document was deployed from a file, or its
-// Library was removed after the Deployment was made.
-type MissingRelease struct {
+// MissingImport names a saved state of a Library the running Deployment uses
+// but this server does not have (task 71, task 85_6): the Document was deployed
+// from a file, or its Library was removed after the Deployment was made.
+type MissingImport struct {
 	LibraryID uuid.UUID
-	Release   int
+	Commit    int
 }
 
-// DiscardWarning is one Library Pin a Discard could not restore (task 71): the
-// Library is gone, or the Release is, and the Draft is left without that pin.
-// DroppedWidgets counts the Widgets of that Library's WidgetTypes that went
-// with it — the Draft cannot hold them without the pin.
+// DiscardWarning is one Library Import a Discard could not restore (task 71):
+// the Library is gone, or the Commit is, and the Draft is left without that
+// import. DroppedWidgets counts the Widgets of that Library's WidgetTypes that
+// went with it — the Draft cannot hold them without the import.
 type DiscardWarning struct {
 	LibraryID      uuid.UUID
-	Release        int
+	Commit         int
 	DroppedWidgets int
 }
 
 // DiscardedDraft is a Project's Draft after a Discard: its Version and the
-// Library Releases the Discard could not restore.
+// Library Imports the Discard could not restore.
 type DiscardedDraft struct {
 	Version  int
 	Warnings []DiscardWarning
@@ -29,8 +29,9 @@ type DiscardedDraft struct {
 
 // LoadedDraft is a Draft after the content of one of its Commits replaced it
 // (task 84): the new Version, whether the Draft then differs from its last
-// Commit, and the Library Releases the loaded content used but this server does
-// not have, whose pins and Widgets were dropped (a Project's only, task 71).
+// Commit, and the Library Imports the loaded content used but this server does
+// not have, whose imports and Widgets were dropped (a Project's only,
+// task 71).
 type LoadedDraft struct {
 	Version           int
 	HasUnsavedChanges bool

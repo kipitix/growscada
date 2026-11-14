@@ -281,11 +281,11 @@ func insertProjectRelease(ctx context.Context, tx *sql.Tx, projectID id.ID[proje
 	if !ok {
 		return nil
 	}
-	for _, pin := range file.LibraryPins {
+	for _, imported := range file.LibraryImports {
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO engineering.project_release_library_pins (release_id, library_id, release_number) VALUES ($1, $2, $3)`,
-			found.ID().UUID(), pin.LibraryID, pin.Release); err != nil {
-			return fmt.Errorf("cannot insert a library pin of %s: %w", found, err)
+			found.ID().UUID(), imported.LibraryID, imported.Commit); err != nil {
+			return fmt.Errorf("cannot insert a library import of %s: %w", found, err)
 		}
 	}
 	return nil

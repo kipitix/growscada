@@ -1,10 +1,10 @@
 info:
-  name: unpin the library of the cleanup flow
+  name: unimport the library of the cleanup flow
   type: http
   seq: 1993
 http:
   method: DELETE
-  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/library-pins/{{CLEANUP_LIBRARY_ID}}?version=2
+  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/library-imports/{{CLEANUP_LIBRARY_ID}}?version=2
   auth: inherit
 
 runtime:

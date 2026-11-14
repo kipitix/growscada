@@ -56,7 +56,7 @@ func (r draftRepositoryPostgres) SaveCommit(ctx context.Context, scope draft.Sco
 		).Scan(&storedAt); err != nil {
 			return nil, fmt.Errorf("cannot insert the commit of %s: %w", scope, err)
 		}
-		if err := insertCommitPins(ctx, tx, commit); err != nil {
+		if err := insertCommitImports(ctx, tx, commit); err != nil {
 			return nil, err
 		}
 		if _, err := tx.ExecContext(ctx,
@@ -79,20 +79,21 @@ func (r draftRepositoryPostgres) SaveCommit(ctx context.Context, scope draft.Sco
 	return result, nil
 }
 
-// insertCommitPins writes the Library Pins a Project's ProjectFile carries:
-// they are the provenance of the Commit and what keeps a pinned Library from
-// being deleted (task 71). A Library's Commit has no pins.
-func insertCommitPins(ctx context.Context, tx *sql.Tx, commit draft.Commit) error {
+// insertCommitImports writes the Library Imports a Project's ProjectFile
+// carries: they are the provenance of the Commit and what keeps an imported
+// Library from being deleted (task 71, task 85_6). A Library's Commit has
+// neither.
+func insertCommitImports(ctx context.Context, tx *sql.Tx, commit draft.Commit) error {
 	file, ok := commit.Content().ProjectFile()
 	if !ok {
 		return nil
 	}
-	for _, pin := range file.LibraryPins {
+	for _, imported := range file.LibraryImports {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO engineering.commit_library_pins (commit_id, library_id, release_number) VALUES ($1, $2, $3)`,
-			commit.ID().UUID(), pin.LibraryID, pin.Release,
+			`INSERT INTO engineering.commit_library_imports (commit_id, library_id, commit_number) VALUES ($1, $2, $3)`,
+			commit.ID().UUID(), imported.LibraryID, imported.Commit,
 		); err != nil {
-			return fmt.Errorf("cannot insert a library pin of %s: %w", commit, err)
+			return fmt.Errorf("cannot insert a library import of %s: %w", commit, err)
 		}
 	}
 	return nil

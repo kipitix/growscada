@@ -8,7 +8,7 @@ http:
   auth: inherit
 
 docs: |
-  The Draft changed since the first Deploy (a Library Pin was added): its
+  The Draft changed since the first Deploy (a Library Import was added): its
   Version is what the second Save states (task 72_4).
 
 runtime:

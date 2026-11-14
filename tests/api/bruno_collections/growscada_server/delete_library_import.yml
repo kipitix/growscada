@@ -1,14 +1,14 @@
 info:
-  name: delete library pin
+  name: delete library import
   type: http
   seq: 79
 http:
   method: DELETE
-  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/library-pins/{{OTHER_LIBRARY_ID}}?version=9
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/library-imports/{{OTHER_LIBRARY_ID}}?version=9
   auth: inherit
 
 docs: |
-  Removes the pin; refused (`409`) while Widgets of the project are of its
+  Removes the import; refused (`409`) while Widgets of the project are of its
   WidgetTypes.
 
 runtime:

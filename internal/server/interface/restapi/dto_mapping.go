@@ -606,46 +606,41 @@ func newGetLibraryReleasesResponse(list []appdto.LibraryRelease) apiv0.GetLibrar
 	return apiv0.GetLibraryReleasesResponse{Releases: items}
 }
 
-func newLibraryPinResponse(p appdto.LibraryPin) apiv0.LibraryPinResponse {
-	resp := apiv0.LibraryPinResponse{
-		LibraryID: p.LibraryID,
-		Release:   p.Release,
-		Version:   p.Version,
-		Author:    p.Author,
-		Origin:    p.Origin,
-		Note:      p.Note,
+func newLibraryImportResponse(i appdto.LibraryImport) apiv0.LibraryImportResponse {
+	return apiv0.LibraryImportResponse{
+		LibraryID:    i.LibraryID,
+		CommitNumber: i.CommitNumber,
+		Title:        i.Title,
+		Author:       i.Author,
+		SavedAt:      i.SavedAt,
+		Labels:       newLabelResponses(i.Labels),
+		Version:      i.Version,
 	}
-	if p.CommitNumber != nil {
-		number := *p.CommitNumber
-		title := p.Title
-		resp.CommitNumber, resp.Title = &number, &title
-	}
-	return resp
 }
 
-func newGetLibraryPinsResponse(list []appdto.LibraryPin) apiv0.GetLibraryPinsResponse {
-	items := make([]apiv0.LibraryPinResponse, len(list))
-	for i, p := range list {
-		items[i] = newLibraryPinResponse(p)
+func newGetLibraryImportsResponse(list []appdto.LibraryImport) apiv0.GetLibraryImportsResponse {
+	items := make([]apiv0.LibraryImportResponse, len(list))
+	for i, imported := range list {
+		items[i] = newLibraryImportResponse(imported)
 	}
-	return apiv0.GetLibraryPinsResponse{LibraryPins: items}
+	return apiv0.GetLibraryImportsResponse{LibraryImports: items}
 }
 
-func newPinnedWidgetResponse(w appdto.PinnedWidget) apiv0.PinnedWidgetResponse {
+func newAffectedWidgetResponse(w appdto.AffectedWidget) apiv0.PinnedWidgetResponse {
 	return apiv0.PinnedWidgetResponse{SceneID: w.SceneID, WidgetID: w.WidgetID, Name: w.Name, TypeID: w.TypeID}
 }
 
-func newPinImpactResponse(i appdto.PinImpact) apiv0.PinImpactResponse {
-	resp := apiv0.PinImpactResponse{
+func newImportImpactResponse(i appdto.ImportImpact) apiv0.ImportImpactResponse {
+	resp := apiv0.ImportImpactResponse{
 		OrphanedWidgets: make([]apiv0.PinnedWidgetResponse, len(i.Orphaned)),
 		BrokenBindings:  make([]apiv0.BrokenBindingResponse, len(i.Broken)),
 	}
 	for n, w := range i.Orphaned {
-		resp.OrphanedWidgets[n] = newPinnedWidgetResponse(w)
+		resp.OrphanedWidgets[n] = newAffectedWidgetResponse(w)
 	}
 	for n, b := range i.Broken {
 		resp.BrokenBindings[n] = apiv0.BrokenBindingResponse{
-			PinnedWidgetResponse: newPinnedWidgetResponse(b.PinnedWidget),
+			PinnedWidgetResponse: newAffectedWidgetResponse(b.AffectedWidget),
 			PortName:             b.PortName,
 			TagID:                b.TagID,
 		}
@@ -726,19 +721,19 @@ func newLoadCommitResponse(loaded appdto.LoadedDraft) apiv0.LoadCommitResponse {
 	}
 	for _, warning := range loaded.Warnings {
 		resp.Warnings = append(resp.Warnings, apiv0.DiscardWarningResponse{
-			LibraryID: warning.LibraryID, Release: warning.Release, DroppedWidgets: warning.DroppedWidgets,
+			LibraryID: warning.LibraryID, Commit: warning.Commit, DroppedWidgets: warning.DroppedWidgets,
 		})
 	}
 	return resp
 }
 
 // newDiscardProjectResponse is the answer of a Discard: the Draft's new state
-// and the Library Releases it could not restore (task 71).
+// and the Library Imports it could not restore (task 71).
 func newDiscardProjectResponse(discarded appdto.DiscardedDraft) apiv0.DiscardProjectResponse {
 	resp := apiv0.DiscardProjectResponse{Version: discarded.Version}
 	for _, warning := range discarded.Warnings {
 		resp.Warnings = append(resp.Warnings, apiv0.DiscardWarningResponse{
-			LibraryID: warning.LibraryID, Release: warning.Release, DroppedWidgets: warning.DroppedWidgets,
+			LibraryID: warning.LibraryID, Commit: warning.Commit, DroppedWidgets: warning.DroppedWidgets,
 		})
 	}
 	return resp

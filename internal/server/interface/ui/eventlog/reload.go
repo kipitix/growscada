@@ -12,13 +12,13 @@ import (
 // It is the single routing table of the parts that show server data (the
 // project switcher of Root, Library, Project); each reloads the lists it
 // shows. Libraries are the server's with the WidgetTypes of their Drafts
-// (WidgetTypes); LibraryPins (the selected project's pins and the
+// (WidgetTypes); LibraryImports (the selected project's imports and the
 // WidgetTypes of the releases they pin), Scenes, Widgets and Tags are those
 // of the selected project. Deploy is the Project mode's deployment state (the
 // Deployment it runs and whether the Draft differs from it). Operation reads
 // none of these: it follows the Journal from a Player of its own (ADR 0020).
 type ReloadTargets struct {
-	Projects, Libraries, WidgetTypes, LibraryPins, Scenes, Widgets, Tags, Deploy, Commits, Releases bool
+	Projects, Libraries, WidgetTypes, LibraryImports, Scenes, Widgets, Tags, Deploy, Commits, Releases bool
 	// Labels is the server's labels (task 85_2): a label change is the
 	// server's event, and the global Labels window rereads its list on it.
 	Labels bool
@@ -42,17 +42,17 @@ func (t ReloadTargets) WidgetsOf(selected uuid.UUID) bool {
 // reread the stack on, alongside a resync; an event of the Draft's lifecycle
 // alone (a Project or Library renamed or deleted) is not.
 func (t ReloadTargets) DraftChanged() bool {
-	return t.Tags || t.Scenes || t.Widgets || t.LibraryPins || t.WidgetTypes || t.Scene != uuid.Nil
+	return t.Tags || t.Scenes || t.Widgets || t.LibraryImports || t.WidgetTypes || t.Scene != uuid.Nil
 }
 
 // AllTargets is every list.
-var AllTargets = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Commits: true, Releases: true, Labels: true}
+var AllTargets = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, LibraryImports: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Commits: true, Releases: true, Labels: true}
 
 // The lists of each stream: what its resync reloads, since the events it
 // published while disconnected are lost.
 var (
 	serverTargets  = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, Commits: true, Labels: true}
-	projectTargets = ReloadTargets{LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Commits: true, Releases: true}
+	projectTargets = ReloadTargets{LibraryImports: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Commits: true, Releases: true}
 )
 
 // ReloadTargetsFor routes an event of the streams (or EventResync,
@@ -101,8 +101,8 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 		// A Release publishes a Commit: the release list and the history's
 		// "released" marks change; the Draft is untouched (task 72_5).
 		return ReloadTargets{Libraries: true, Releases: true, Commits: true}
-	case apiv0.EventLibraryPinCreated, apiv0.EventLibraryPinUpdated, apiv0.EventLibraryPinDeleted:
-		return ReloadTargets{LibraryPins: true}
+	case apiv0.EventLibraryImportCreated, apiv0.EventLibraryImportUpdated, apiv0.EventLibraryImportDeleted:
+		return ReloadTargets{LibraryImports: true}
 	case apiv0.EventSceneCreated, apiv0.EventSceneUpdated, apiv0.EventSceneDeleted:
 		return ReloadTargets{Scenes: true}
 	case apiv0.EventWidgetCreated, apiv0.EventWidgetUpdated, apiv0.EventWidgetDeleted:

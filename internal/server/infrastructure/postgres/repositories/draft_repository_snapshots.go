@@ -14,7 +14,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
-	"github.com/kipitix/growscada/internal/server/domain/librarypin"
+	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -22,16 +22,16 @@ import (
 
 // deleteOrder and upsertOrder are the orders a change's snapshots are written
 // in: a delete before what refers to it, an insert after what it refers to
-// (a Widget's WidgetType is in a Library Pin, a Tag's supplier is a Device).
+// (a Widget's WidgetType is in an imported Commit, a Tag's supplier is a Device).
 var (
 	deleteOrder = []draft.Kind{
-		draft.KindWidget, draft.KindScene, draft.KindLibraryPin, draft.KindTag,
+		draft.KindWidget, draft.KindScene, draft.KindLibraryImport, draft.KindTag,
 		draft.KindEnvironmentDevice, draft.KindEnvironment, draft.KindDevice,
 		draft.KindWidgetType,
 	}
 	upsertOrder = []draft.Kind{
 		draft.KindDevice, draft.KindEnvironment, draft.KindEnvironmentDevice,
-		draft.KindTag, draft.KindLibraryPin, draft.KindScene, draft.KindWidget,
+		draft.KindTag, draft.KindLibraryImport, draft.KindScene, draft.KindWidget,
 		draft.KindWidgetType,
 	}
 )
@@ -132,10 +132,10 @@ func deleteSnapshot(ctx context.Context, tx *sql.Tx, scope draft.Scope, snapshot
 			   AND ed.environment_id = $2 AND ed.device_id = $3`,
 			projectID, state.EnvironmentID, state.DeviceID)
 		return wrapWrite("delete environment device", err)
-	case draft.LibraryPinState:
+	case draft.LibraryImportState:
 		_, err := tx.ExecContext(ctx,
-			`DELETE FROM engineering.library_pins WHERE project_id = $1 AND library_id = $2`, projectID, state.LibraryID)
-		return wrapWrite("delete library pin", err)
+			`DELETE FROM engineering.library_imports WHERE project_id = $1 AND library_id = $2`, projectID, state.LibraryID)
+		return wrapWrite("delete library import", err)
 	case draft.WidgetTypeState:
 		_, err := tx.ExecContext(ctx,
 			`DELETE FROM engineering.widget_types WHERE id = $1 AND library_id = $2`, snapshot.ID, scope.LibraryID().UUID())
@@ -174,7 +174,7 @@ func upsertSnapshot(ctx context.Context, tx *sql.Tx, scope draft.Scope, snapshot
 			snapshot.ID, projectID, state.Name, state.Width, state.Height, state.BackgroundHTML)
 		return wrapWrite("write scene", err)
 	case draft.WidgetState:
-		if err := checkPinned(ctx, tx, scope.ProjectID(), id.NewID(id.IDWithUUID[library.WidgetType](state.TypeID))); err != nil {
+		if err := checkImported(ctx, tx, scope.ProjectID(), id.NewID(id.IDWithUUID[library.WidgetType](state.TypeID))); err != nil {
 			return err
 		}
 		bindings, err := marshalSnapshotBindings(state.PortBindings)
@@ -233,19 +233,8 @@ func upsertSnapshot(ctx context.Context, tx *sql.Tx, scope draft.Scope, snapshot
 			return device.ErrEnvironmentDeviceExists
 		}
 		return wrapWrite("write environment device", err)
-	case draft.LibraryPinState:
-		_, err := tx.ExecContext(ctx,
-			`INSERT INTO engineering.library_pins (project_id, library_id, release_number)
-			 VALUES ($1, $2, $3)
-			 ON CONFLICT (project_id, library_id) DO UPDATE SET release_number = EXCLUDED.release_number`,
-			projectID, state.LibraryID, state.Release)
-		if isUniqueViolation(err, constraintLibraryPinsProjectLibrary) {
-			return fmt.Errorf("%w: library %s", librarypin.ErrLibraryPinExists, state.LibraryID)
-		}
-		if isForeignKeyViolation(err, constraintLibraryPinsRelease) {
-			return fmt.Errorf("%w: release %d of library %s", library.ErrReleaseNotFound, state.Release, state.LibraryID)
-		}
-		return wrapWrite("write library pin", err)
+	case draft.LibraryImportState:
+		return writeLibraryImport(ctx, tx, projectID, state)
 	case draft.WidgetTypeState:
 		ports, err := widgetTypePortsOf(state.InputPorts)
 		if err != nil {
@@ -321,11 +310,10 @@ func marshalSnapshotBindings(bindings []draft.PortBindingState) ([]byte, error) 
 // draftLoader reads, inside the write's transaction, only the entities an
 // operation touches, always within the Draft's own Project (ADR 0016).
 type draftLoader struct {
-	tx       *sql.Tx
-	scope    draft.Scope
-	project  id.ID[project.Project]
-	library  id.ID[library.Library]
-	releases library.LibraryReleaseRepository
+	tx      *sql.Tx
+	scope   draft.Scope
+	project id.ID[project.Project]
+	library id.ID[library.Library]
 }
 
 var _ draft.Loader = (*draftLoader)(nil)
@@ -514,24 +502,63 @@ func (l *draftLoader) readScenes(ctx context.Context, and string, args ...any) (
 	return result, nil
 }
 
-func (l *draftLoader) PinnedWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.ReleasedWidgetType, error) {
-	wt, err := scanReleasedWidgetType(l.tx.QueryRowContext(ctx, pinnedWidgetTypesQuery+` AND r.id = $2`, l.project.UUID(), typeID.UUID()).Scan)
+// ImportedWidgetType returns the copy of the WidgetType typeID the Commits the
+// Draft's Project imports hold (task 85_6).
+func (l *draftLoader) ImportedWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.ReleasedWidgetType, error) {
+	rows, err := l.tx.QueryContext(ctx, importedWidgetTypesQuery, l.project.UUID())
+	if err != nil {
+		return library.ReleasedWidgetType{}, fmt.Errorf("cannot read the imported widget type %s: %w", typeID, err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var contentJSON []byte
+		if err := rows.Scan(&contentJSON); err != nil {
+			return library.ReleasedWidgetType{}, fmt.Errorf("cannot read the imported widget type %s: %w", typeID, err)
+		}
+		var content draft.CommitContent
+		if err := json.Unmarshal(contentJSON, &content); err != nil {
+			return library.ReleasedWidgetType{}, fmt.Errorf("cannot decode the content of an imported commit: %w", err)
+		}
+		held, ok := content.WidgetTypes()
+		if !ok {
+			continue
+		}
+		for _, wt := range held {
+			if wt.ID() == typeID {
+				return wt, nil
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return library.ReleasedWidgetType{}, fmt.Errorf("cannot read the imported widget type %s: %w", typeID, err)
+	}
+	return library.ReleasedWidgetType{}, id.NotFound(library.ErrWidgetTypeNotFound, typeID)
+}
+
+// WidgetTypes returns every WidgetType of the Draft's Library, in creation
+// order.
+func (l *draftLoader) WidgetTypes(ctx context.Context) ([]library.WidgetType, error) {
+	return findWidgetTypes(ctx, l.tx, l.library)
+}
+
+// WidgetType returns one WidgetType of the Draft's Library.
+func (l *draftLoader) WidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.WidgetType, error) {
+	row := l.tx.QueryRowContext(ctx,
+		"SELECT "+selectWidgetTypeColumns+" FROM engineering.widget_types WHERE id = $1 AND library_id = $2",
+		typeID.UUID(), l.library.UUID())
+	wt, err := scanWidgetType(row.Scan)
 	if errors.Is(err, sql.ErrNoRows) {
-		return library.ReleasedWidgetType{}, id.NotFound(library.ErrWidgetTypeNotFound, typeID)
+		return nil, id.NotFound(library.ErrWidgetTypeNotFound, typeID)
 	}
 	if err != nil {
-		return library.ReleasedWidgetType{}, fmt.Errorf("cannot read the pinned widget type %s: %w", typeID, err)
+		return nil, fmt.Errorf("cannot read widget type %s: %w", typeID, err)
 	}
 	return wt, nil
 }
 
-func (l *draftLoader) Release(ctx context.Context, libraryID id.ID[library.Library], number library.ReleaseNumber) (library.LibraryRelease, error) {
-	return l.releases.FindByNumber(ctx, libraryID, number)
-}
-
 // LockLibrary locks the live Library's row FOR SHARE (see draft.Loader): the
-// deletion of the Library waits for the transaction that inserts a pin of it
-// (ADR 0018).
+// deletion of the Library waits for the transaction that inserts an import of
+// it (ADR 0018).
 func (l *draftLoader) LockLibrary(ctx context.Context, libraryID id.ID[library.Library]) error {
 	var live bool
 	err := l.tx.QueryRowContext(ctx,
@@ -648,72 +675,90 @@ func (l *draftLoader) readPairs(ctx context.Context, and string, args ...any) ([
 	return found, rows.Err()
 }
 
-func (l *draftLoader) AllLibraryPins(ctx context.Context) ([]librarypin.LibraryPin, error) {
+func (l *draftLoader) AllLibraryImports(ctx context.Context) ([]libraryimport.LibraryImport, error) {
 	rows, err := l.tx.QueryContext(ctx,
-		`SELECT library_id, release_number FROM engineering.library_pins WHERE project_id = $1 ORDER BY pk_id`,
+		`SELECT library_id, commit_id, commit_number FROM engineering.library_imports WHERE project_id = $1 ORDER BY pk_id`,
 		l.project.UUID())
 	if err != nil {
-		return nil, fmt.Errorf("cannot read library pins: %w", err)
+		return nil, fmt.Errorf("cannot read library imports: %w", err)
 	}
 	defer rows.Close()
-	found := []librarypin.LibraryPin{}
+	found := []libraryimport.LibraryImport{}
 	for rows.Next() {
 		var (
 			rawLibraryID uuid.UUID
-			rawRelease   int
+			rawCommitID  uuid.UUID
+			rawCommit    int
 		)
-		if err := rows.Scan(&rawLibraryID, &rawRelease); err != nil {
+		if err := rows.Scan(&rawLibraryID, &rawCommitID, &rawCommit); err != nil {
 			return nil, err
 		}
-		release, err := library.NewReleaseNumber(rawRelease)
-		if err != nil {
-			return nil, err
-		}
-		found = append(found, librarypin.ReconstituteLibraryPin(l.project, id.NewID(id.IDWithUUID[library.Library](rawLibraryID)), release))
+		found = append(found, libraryimport.ReconstituteLibraryImport(l.project,
+			id.NewID(id.IDWithUUID[library.Library](rawLibraryID)), rawCommitID, rawCommit))
 	}
 	return found, rows.Err()
 }
 
-// WidgetTypes returns every WidgetType of the Draft's Library, in creation
-// order.
-func (l *draftLoader) WidgetTypes(ctx context.Context) ([]library.WidgetType, error) {
-	return findWidgetTypes(ctx, l.tx, l.library)
-}
-
-// WidgetType returns one WidgetType of the Draft's Library.
-func (l *draftLoader) WidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.WidgetType, error) {
-	row := l.tx.QueryRowContext(ctx,
-		"SELECT "+selectWidgetTypeColumns+" FROM engineering.widget_types WHERE id = $1 AND library_id = $2",
-		typeID.UUID(), l.library.UUID())
-	wt, err := scanWidgetType(row.Scan)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, id.NotFound(library.ErrWidgetTypeNotFound, typeID)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("cannot read widget type %s: %w", typeID, err)
-	}
-	return wt, nil
-}
-
-func (l *draftLoader) LibraryPin(ctx context.Context, libraryID id.ID[library.Library]) (librarypin.LibraryPin, error) {
+func (l *draftLoader) LibraryImport(ctx context.Context, libraryID id.ID[library.Library]) (libraryimport.LibraryImport, error) {
 	var (
 		rawLibraryID uuid.UUID
-		rawRelease   int
+		rawCommitID  uuid.UUID
+		rawCommit    int
 	)
 	err := l.tx.QueryRowContext(ctx,
-		`SELECT library_id, release_number FROM engineering.library_pins WHERE project_id = $1 AND library_id = $2`,
-		l.project.UUID(), libraryID.UUID()).Scan(&rawLibraryID, &rawRelease)
+		`SELECT library_id, commit_id, commit_number FROM engineering.library_imports WHERE project_id = $1 AND library_id = $2`,
+		l.project.UUID(), libraryID.UUID()).Scan(&rawLibraryID, &rawCommitID, &rawCommit)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: library %s", librarypin.ErrLibraryPinNotFound, libraryID)
+		return nil, fmt.Errorf("%w: library %s", libraryimport.ErrLibraryImportNotFound, libraryID)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("cannot read library pin %s: %w", libraryID, err)
+		return nil, fmt.Errorf("cannot read library import %s: %w", libraryID, err)
 	}
-	release, err := library.NewReleaseNumber(rawRelease)
+	return libraryimport.ReconstituteLibraryImport(l.project,
+		id.NewID(id.IDWithUUID[library.Library](rawLibraryID)), rawCommitID, rawCommit), nil
+}
+
+// LibraryCommit returns the saved state number of the Library, with the
+// WidgetTypes it holds: what an import names (task 85_6).
+func (l *draftLoader) LibraryCommit(ctx context.Context, libraryID id.ID[library.Library], number int) (libraryimport.Commit, error) {
+	content, rawID, err := commitContentOfImport(ctx, l.tx, libraryID, number)
 	if err != nil {
-		return nil, err
+		return libraryimport.Commit{}, err
 	}
-	return librarypin.ReconstituteLibraryPin(l.project, id.NewID(id.IDWithUUID[library.Library](rawLibraryID)), release), nil
+	types, ok := content.WidgetTypes()
+	if !ok {
+		return libraryimport.Commit{}, fmt.Errorf("commit %d of library %s holds no widget types", number, libraryID)
+	}
+	return libraryimport.ReconstituteCommit(rawID, libraryID, number, types), nil
+}
+
+// writeLibraryImport writes the row of an import: its Commit is resolved by the
+// Library and the number in this transaction, so a snapshot restored by an undo
+// or built from a ProjectFile needs no Commit identity of its own. A number the
+// Library's Draft does not have is draft.ErrCommitNotFound.
+func writeLibraryImport(ctx context.Context, tx *sql.Tx, projectID uuid.UUID, state draft.LibraryImportState) error {
+	res, err := tx.ExecContext(ctx,
+		`INSERT INTO engineering.library_imports (project_id, library_id, commit_number, commit_id)
+		 SELECT $1::uuid, $2::uuid, $3::integer, c.id
+		 FROM engineering.commits c JOIN engineering.drafts d ON d.id = c.draft_id
+		 WHERE d.library_id = $2::uuid AND c.number = $3::integer
+		 ON CONFLICT (project_id, library_id) DO UPDATE
+		 SET commit_number = EXCLUDED.commit_number, commit_id = EXCLUDED.commit_id`,
+		projectID, state.LibraryID, state.Commit)
+	if isUniqueViolation(err, constraintLibraryImportsProjectLibrary) {
+		return fmt.Errorf("%w: library %s", libraryimport.ErrLibraryImportExists, state.LibraryID)
+	}
+	if err != nil {
+		return wrapWrite("write library import", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("cannot get rows affected on the write of a library import: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("%w: %d of library %s", draft.ErrCommitNotFound, state.Commit, state.LibraryID)
+	}
+	return nil
 }
 
 func scanDeviceRow(projectID id.ID[project.Project], scan func(...any) error) (device.Device, error) {

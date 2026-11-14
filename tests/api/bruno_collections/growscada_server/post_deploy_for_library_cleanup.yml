@@ -1,5 +1,5 @@
 info:
-  name: deploy the cleanup project with the pin
+  name: deploy the cleanup project with the import
   type: http
   seq: 1991
 http:

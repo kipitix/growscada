@@ -125,10 +125,10 @@ func TestWidgetTypes_RoundTrip(t *testing.T) {
 	}
 
 	project := client.Project(servertest.MainProject)
-	if _, err := project.PinLibrary(ctx, lib.ID(), apiv0.PutLibraryPinRequest{Release: 1}); err != nil {
-		t.Fatalf("PinLibrary: %v", err)
+	if _, err := project.ImportLibrary(ctx, lib.ID(), apiv0.PutLibraryImportRequest{Commit: commit.Number}); err != nil {
+		t.Fatalf("ImportLibrary: %v", err)
 	}
-	palette, err := project.ListWidgetTypes(ctx)
+	palette, err := project.ImportedWidgetTypes(ctx)
 	if err != nil || len(palette) != 1 || palette[0].ID != created.ID {
 		t.Errorf("the project's widget types: %+v, %v", palette, err)
 	}
@@ -138,14 +138,14 @@ func TestWidgetTypes_RoundTrip(t *testing.T) {
 	if _, err := lib.GetWidgetType(ctx, created.ID); !errors.Is(err, apiclient.ErrNotFound) {
 		t.Errorf("GetWidgetType after delete: %v, want ErrNotFound", err)
 	}
-	if impact, err := project.LibraryPinImpact(ctx, lib.ID(), 0); err != nil || len(impact.OrphanedWidgets) != 0 {
-		t.Errorf("LibraryPinImpact of the removal: %+v, %v", impact, err)
+	if impact, err := project.ImportImpact(ctx, lib.ID(), 0); err != nil || len(impact.OrphanedWidgets) != 0 {
+		t.Errorf("ImportImpact of the removal: %+v, %v", impact, err)
 	}
 	if _, err := client.DeleteLibrary(ctx, lib.ID()); !errors.Is(err, apiclient.ErrConflict) {
-		t.Errorf("DeleteLibrary while pinned: %v, want ErrConflict", err)
+		t.Errorf("DeleteLibrary while imported: %v, want ErrConflict", err)
 	}
-	if _, err := project.UnpinLibrary(ctx, lib.ID(), 0); err != nil {
-		t.Fatalf("UnpinLibrary: %v", err)
+	if _, err := project.RemoveImport(ctx, lib.ID(), 0); err != nil {
+		t.Fatalf("RemoveImport: %v", err)
 	}
 	discarded, err := lib.Discard(ctx)
 	if err != nil || discarded.Version <= updated.Version {
@@ -166,8 +166,8 @@ func createLibrary(t *testing.T, client *apiclient.Client) *apiclient.LibraryCli
 	return client.Library(created.ID)
 }
 
-// pinnedType creates a WidgetType of req in a new library, releases it and
-// pins the release in the project Main.
+// pinnedType creates a WidgetType of req in a new library, saves it and imports
+// the saved state in the project Main.
 func pinnedType(t *testing.T, client *apiclient.Client, req apiv0.CreateWidgetTypeRequest) apiv0.CreateWidgetTypeResponse {
 	t.Helper()
 	ctx := context.Background()
@@ -180,8 +180,8 @@ func pinnedType(t *testing.T, client *apiclient.Client, req apiv0.CreateWidgetTy
 	if err != nil {
 		t.Fatalf("Release: %v", err)
 	}
-	if _, err := client.Project(servertest.MainProject).PinLibrary(ctx, lib.ID(), apiv0.PutLibraryPinRequest{Release: release.Number}); err != nil {
-		t.Fatalf("PinLibrary: %v", err)
+	if _, err := client.Project(servertest.MainProject).ImportLibrary(ctx, lib.ID(), apiv0.PutLibraryImportRequest{Commit: *release.CommitNumber}); err != nil {
+		t.Fatalf("ImportLibrary: %v", err)
 	}
 	return wt
 }

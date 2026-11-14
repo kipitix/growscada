@@ -1,5 +1,5 @@
 info:
-  name: release the cleanup commit without the pin
+  name: release the cleanup commit without the import
   type: http
   seq: 1996
 http:

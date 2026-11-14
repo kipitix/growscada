@@ -1,21 +1,21 @@
 info:
-  name: put library pin switch
+  name: put library import switch
   type: http
   seq: 66
 http:
   method: PUT
-  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/library-pins/{{LIBRARY_ID}}
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/library-imports/{{LIBRARY_ID}}
   body:
     type: json
     data: |-
       {
-        "release": 2,
+        "commit": 2,
         "version": 2
       }
   auth: inherit
 
 docs: |
-  Switches the pin to another release. A switch that would leave Widgets
+  Switches the import to another saved state. A switch that would leave Widgets
   without their WidgetType returns `409` naming them in `orphaned_widgets`;
   the PortBindings it breaks are removed after it.
 
@@ -26,24 +26,18 @@ runtime:
       value: '200'
     - expression: 'res.headers["growscada-schema-version"]'
       operator: isDefined
-    - expression: 'res.body.release'
+    - expression: 'res.body.commit_number'
       operator: eq
       value: '2'
     - expression: 'res.body.version'
       operator: eq
       value: '3'
-    - expression: 'res.body.commit_number'
-      operator: eq
-      value: '1'
     - expression: 'res.body.title'
       operator: eq
       value: '"Widgets of the release"'
     - expression: 'res.body.author'
       operator: eq
       value: '"Bruno"'
-    - expression: 'res.body.origin'
-      operator: eq
-      value: '"commit"'
 
 settings:
   encodeUrl: true

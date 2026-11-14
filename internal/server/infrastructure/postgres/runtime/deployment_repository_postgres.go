@@ -332,10 +332,11 @@ func (r deploymentRepositoryPostgres) FindAll(ctx context.Context, projectID uui
 }
 
 // DeploymentNamesLibrary reports whether the running Deployment of any live
-// Project names a Release of the Library (task 71): the latest Deployment of
-// each live Project is read, and its document's library_pins are searched by
-// the Library's ID. The pins are provenance of the document, so the answer
-// needs no copy of them in a table of their own.
+// Project imports a saved state of the Library (task 71, task 85_6): the
+// latest Deployment of each live Project is read, and its document's
+// library_imports are searched by the Library's ID. The imports are provenance
+// of the document, so the answer needs no copy of them in a table of their
+// own.
 func (r deploymentRepositoryPostgres) DeploymentNamesLibrary(ctx context.Context, libraryID uuid.UUID) (bool, error) {
 	var named bool
 	err := r.db.QueryRowContext(ctx,
@@ -350,10 +351,10 @@ func (r deploymentRepositoryPostgres) DeploymentNamesLibrary(ctx context.Context
 		     WHERE EXISTS (
 		         SELECT 1
 		         FROM jsonb_array_elements(
-		                  CASE WHEN jsonb_typeof(running.config -> 'library_pins') = 'array'
-		                       THEN running.config -> 'library_pins'
-		                       ELSE '[]'::jsonb END) AS pin
-		         WHERE pin ->> 'library_id' = $1
+		                  CASE WHEN jsonb_typeof(running.config -> 'library_imports') = 'array'
+		                       THEN running.config -> 'library_imports'
+		                       ELSE '[]'::jsonb END) AS imported
+		         WHERE imported ->> 'library_id' = $1
 		     )
 		 )`,
 		libraryID.String(),

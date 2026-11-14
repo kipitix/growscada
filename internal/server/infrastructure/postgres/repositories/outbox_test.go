@@ -156,7 +156,7 @@ func TestSave_RolledBack_LeavesNothingInOutboxAndDeliversNothing(t *testing.T) {
 	// A widget of a type no longer pinned fails before anything is written.
 	stored := mustSaveScene(t, sceneRepo, "scene-1")
 	w := makeWidget(t, sceneRepo, "w1")
-	if _, err := testDB.ExecContext(ctx, "DELETE FROM engineering.library_pins WHERE project_id = $1", mainProject.UUID()); err != nil {
+	if _, err := testDB.ExecContext(ctx, "DELETE FROM engineering.library_imports WHERE project_id = $1", mainProject.UUID()); err != nil {
 		t.Fatalf("unpin: %v", err)
 	}
 	cleanOutbox(t) // the events of the library pinned for the widget
@@ -232,7 +232,7 @@ func TestDispatcher_Run_DeliversOnNotify(t *testing.T) {
 	go func() { d.Run(ctx); close(done) }()
 
 	repo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
-	notifying := repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB), repositories.NotifyOnCommit(d.Notify))
+	notifying := repositories.NewDraftRepositoryPostgres(testDB, repositories.NotifyOnCommit(d.Notify))
 	created := createTag(t, repo, "notified")
 	if _, err := notifying.Update(ctx, draft.ProjectScope(mainProject), draftVersionOf(t, mainProject), "notified",
 		func(session *draft.Session) error { session.CreateTag(ctx, created); return nil }); err != nil {

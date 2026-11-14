@@ -15,7 +15,7 @@ import (
 
 // testDrafts is the repository of the Drafts over the test database.
 func testDrafts() draft.Repository {
-	return repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB))
+	return repositories.NewDraftRepositoryPostgres(testDB)
 }
 
 // draftVersionOf returns the Version of the Project's Draft.

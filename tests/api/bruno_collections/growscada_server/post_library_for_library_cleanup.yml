@@ -16,7 +16,7 @@ http:
 
 docs: |
   The library of the cleanup flow (task 71): it gets a WidgetType, a release, a
-  pin in Line 4 and a Deployment that names it. Its ID carries to the requests
+  import in Line 4 and a Deployment that names it. Its ID carries to the requests
   that follow.
 
 runtime:
