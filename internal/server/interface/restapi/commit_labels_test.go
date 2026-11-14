@@ -141,6 +141,15 @@ func TestCommitLabels_LibraryScope(t *testing.T) {
 		t.Fatalf("CreateLibrary: %v", err)
 	}
 	path := apiv0.PathPrefix + apiv0.LibraryPath(created.ID.String())
+	label, err := services.labels.Create(ctx, "bruno-test-"+uuid.NewString()[:8], "")
+	if err != nil {
+		t.Fatalf("Create label: %v", err)
+	}
+	// A saved state another Draft holds is not this Library's: its number names
+	// no Commit of it (task 85_3).
+	if rec := serve(router, http.MethodPut, path+"/commits/1/labels/"+label.ID.String(), nil); rec.Code != http.StatusNotFound {
+		t.Errorf("a label on a Library without Commit 1: %d, want 404", rec.Code)
+	}
 	if _, err := services.widgetTypes.CreateWidgetType(ctx, created.ID, 1, appdto.WidgetTypeInput{
 		Name: "gauge", HtmlTemplate: "<div></div>", Script: "function update(){}",
 		ScriptLanguage: "javascript", DefaultWidth: 100, DefaultHeight: 100,
@@ -151,10 +160,6 @@ func TestCommitLabels_LibraryScope(t *testing.T) {
 		Version: 2, Title: "Widgets", Author: "Ada",
 	}); rec.Code != http.StatusCreated {
 		t.Fatalf("POST library commit: %d %s", rec.Code, rec.Body)
-	}
-	label, err := services.labels.Create(ctx, "bruno-test-"+uuid.NewString()[:8], "")
-	if err != nil {
-		t.Fatalf("Create label: %v", err)
 	}
 	labelPath := path + "/commits/1/labels/" + label.ID.String()
 	if rec := serve(router, http.MethodPut, labelPath, nil); rec.Code != http.StatusOK {

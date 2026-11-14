@@ -203,3 +203,58 @@ func TestLabelAssignments_CommitCascade(t *testing.T) {
 		t.Errorf("the assignments after the Draft's removal: %d, want 0", rows)
 	}
 }
+
+// TestLabelAssignments_DeleteRacesAssign: a delete of the label and a mark of a
+// saved state serialize on the label's row, so the mark is stored and then
+// cascade-removed or refused with ErrLabelNotFound — never a dangling row
+// (task 85_3; ADR 0025).
+func TestLabelAssignments_DeleteRacesAssign(t *testing.T) {
+	cleanTestLabels(t)
+	cleanDrafts(t)
+	ctx := context.Background()
+	repo := repositories.NewLabelRepositoryPostgres(testDB)
+	org := soleOrganization(t)
+	scope := draft.ProjectScope(mainProject)
+
+	saved, err := repo.Create(ctx, label.CreateLabel(repo.NextID(), org,
+		mustLabelName(t, "test-"+uuid.NewString()[:8]), label.Color{}, time.Now()))
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	commit, err := testDrafts().SaveCommit(ctx, scope, draftVersionOf(t, mainProject),
+		commitTitle(t, "First"), commitAuthor(t), projectCommitContent())
+	if err != nil {
+		t.Fatalf("SaveCommit: %v", err)
+	}
+	assigned, err := saved.Assign(commit.ID(), scope, commit.Number(), time.Now())
+	if err != nil {
+		t.Fatalf("Assign: %v", err)
+	}
+
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	go func() {
+		<-start
+		_, err := repo.Assign(ctx, assigned, commit.ID())
+		results <- err
+	}()
+	go func() {
+		<-start
+		results <- repo.Delete(ctx, saved.Delete())
+	}()
+	close(start)
+
+	for i := 0; i < 2; i++ {
+		if err := <-results; err != nil && !errors.Is(err, label.ErrLabelNotFound) {
+			t.Errorf("the racing write: %v, want nil or ErrLabelNotFound", err)
+		}
+	}
+	var rows int
+	if err := testDB.QueryRowContext(ctx,
+		`SELECT count(*) FROM engineering.commit_labels WHERE label_id = $1`, saved.ID().UUID()).Scan(&rows); err != nil {
+		t.Fatalf("count the assignments: %v", err)
+	}
+	if rows != 0 {
+		t.Errorf("the assignments of the deleted label: %d, want 0", rows)
+	}
+}

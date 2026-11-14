@@ -8,6 +8,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
+
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/server/servertest"
 )
 
 // TestSavedStateLabels_AssignAndUnassign covers the labels of a project's saved
@@ -60,12 +63,28 @@ func TestSavedStateLabels_AssignAndUnassign(t *testing.T) {
 		t.Errorf("the saved state's labels after a second mark: %+v", f.p.commits)
 	}
 
-	f.p.unassignLabel(f.p.compoCtx, 1, first.ID)
+	// Another tab takes the first mark off: its label_unassigned event reloads
+	// this mode's history (task 85_3).
+	if _, err := f.api.UnassignLabel(ctx, 1, first.ID); err != nil {
+		t.Fatalf("another tab's unassignment: %v", err)
+	}
+	f.event(apiv0.Event{Type: apiv0.EventLabelUnassigned, ID: servertest.MainProject.String(), Commit: 1, Label: first.ID.String()})
+	if len(f.p.commits) != 1 || len(f.p.commits[0].Labels) != 1 || f.p.commits[0].Labels[0].ID != second.ID {
+		t.Errorf("the history after another tab's unassignment: %+v", f.p.commits)
+	}
+
+	// The person takes the remaining mark off here.
+	f.p.unassignLabel(f.p.compoCtx, 1, second.ID)
 	f.run()
 	f.noToasts()
-	if len(f.p.commits) != 1 || len(f.p.commits[0].Labels) != 1 || f.p.commits[0].Labels[0].ID != second.ID {
-		t.Errorf("the saved state's labels after taking one off: %+v", f.p.commits)
+	if len(f.p.commits) != 1 || len(f.p.commits[0].Labels) != 0 {
+		t.Errorf("the saved state's labels after taking the mark off: %+v", f.p.commits)
 	}
+	if _, err := f.api.AssignLabel(ctx, 1, second.ID); err != nil {
+		t.Fatalf("another tab's mark: %v", err)
+	}
+	f.p.loadCommits(f.p.compoCtx)
+	f.run()
 
 	// Another tab deletes the label: the server refuses the mark and the UI
 	// shows its problem as a toast.

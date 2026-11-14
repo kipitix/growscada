@@ -18,6 +18,15 @@
   - UI: одно глобальное окно **Labels** в шапке любого режима — цветной маркер и чип, `assigned_count` серым, имя правится на месте (Enter сохраняет, Esc отменяет правку и оставляет окно открытым), палитра пресетов и hex-поле с «No color», удаление с подтверждением и счётчиком; внизу создание (`Ctrl/Cmd+Enter` из любого места окна); отказ сервера — под полем с сохранённым текстом. Список перечитывается на монтировании, по `label_*` и `EventResync`; `eventlog` знает три типа событий, категорию Label и `ReloadTargets.Labels`
   - тесты домена, репозитория (регистронезависимая уникальность, CASCADE, outbox, стартовые лейблы), REST (включая события серверного потока), `growctl` и окна; Bruno: `get_labels` (стартовые), `post_label`, `post_label_duplicate` (409), `patch_label`, `delete_label`
 
+- **Назначение лейблов сохранённым состояниям и фильтр по лейблу** (задача 85_3; ADR 0025)
+  - назначения — сущности агрегата `Label`, не отдельный агрегат: `Assign`/`Unassign`/`Assignments`, идемпотентные и без события на повтор; `label_assigned`/`label_unassigned` называют scope и номер Commit'а и идут в серверный поток; удаление лейбла снимает назначения в той же транзакции, удаление Project/Library — каскадом БД
+  - миграция `engineering.commit_labels` (`label_id`, `commit_id`, `assigned_at`, PK по паре, индекс по `commit_id`, CASCADE с обеих сторон)
+  - `LabelService.Assign`/`Unassign`/`LabelsOf`, `assigned_count` в списке лейблов; `CommitService` заполняет `labels` истории одним чтением, `FindCommits` фильтрует по лейблу SQL-join'ом (`CommitFilter`)
+  - REST `api/v0` MINOR 0.37 → 0.38: `PUT/DELETE /api/v0/{projects|libraries}/{id}/commits/{n}/labels/{label_id}` → `{labels}` (200, повтор не 409; 404 `commit_not_found`/`label_not_found`, 400), `GET …/commits?label=<uuid>`; в событии появилось поле `label`, в `CommitResponse` — `labels`; `apiclient.AssignLabel`/`UnassignLabel`/`CommitsByLabel`
+  - History обоих режимов: цветные чипы у строки сохранения, «+ label» раскрывает список всех лейблов с галочками; назначение не оптимистично — строка обновляется ответом, отказ — toast; при открытии History читается `GET /labels`, по `label_*` история перечитывается; пустой список ведёт в окно Labels
+  - `growctl label assign/unassign <project|library> --commit N --label <name|id> [--library]`, колонка LABELS в `commits` (имя и цвет)
+  - тесты домена, репозитория (PK, CASCADE, фильтр, гонка assign/delete), REST (200/404/400, фильтр, события серверного потока), UI обоих режимов; Bruno: `put_commit_label`, `get_commits_by_label`, `get_commit_with_label`, `put_library_commit_label`, `get_library_commits_by_label`, `delete_commit_label`, `delete_library_commit_label`, `get_commits_invalid_label` (400)
+
 ### Changed
 
 - **UI говорит «saved state» вместо «commit»** (задача 84; ADR 0021)
