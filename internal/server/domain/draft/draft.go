@@ -2,7 +2,7 @@
 // Library as it is being edited, and the unit of consistency of its content
 // (ADR 0016). A Project's Draft holds its Scenes with their Widgets, its Tag
 // definitions, its Devices, its Environments with their pairs and its Library
-// Pins; a Library's holds its WidgetTypes. The entities keep their own
+// Imports; a Library's holds its WidgetTypes. The entities keep their own
 // packages and tables: the Draft composes them and carries the one Version of
 // the whole content and the position of its DraftChange stack (ADR 0017).
 //

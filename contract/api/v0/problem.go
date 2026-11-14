@@ -18,7 +18,7 @@ type Problem struct {
 	Instance string `json:"instance,omitempty"`
 	// OrphanedWidgets are, on the 409 of a switch or removal of a Library
 	// Pin, the Widgets it would leave without their WidgetType.
-	OrphanedWidgets []PinnedWidgetResponse `json:"orphaned_widgets,omitempty"`
+	OrphanedWidgets []AffectedWidgetResponse `json:"orphaned_widgets,omitempty"`
 	// Draft is, on the 409 of a write of a Draft's content, the state the
 	// Draft is in: the Version a retry of the write states (ADR 0016).
 	Draft *DraftStateResponse `json:"draft,omitempty"`

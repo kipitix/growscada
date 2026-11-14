@@ -222,7 +222,7 @@ func (p *Project) saveImport(content *apiclient.ProjectClient, libraryID uuid.UU
 
 // showOrphaned tells that the change what is refused while the widgets are of
 // WidgetTypes it would drop.
-func (p *Project) showOrphaned(ctx app.Context, what string, widgets []apiv0.PinnedWidgetResponse) {
+func (p *Project) showOrphaned(ctx app.Context, what string, widgets []apiv0.AffectedWidgetResponse) {
 	names := make([]string, len(widgets))
 	for i, w := range widgets {
 		scene := w.SceneID.String()

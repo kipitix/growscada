@@ -1,7 +1,7 @@
 // Package manifestv0 is MAJOR 0 of the growctl manifest contract: the YAML
 // documents an Engineer writes to declare Projects and the Tags of a Project
 // (ADR 0005, ADR 0006), Libraries with the WidgetTypes of their Drafts and
-// the Library Pins of a Project (ADR 0007).
+// the Library Imports of a Project (ADR 0007).
 //
 // A manifest names its version in apiVersion as "growscada/vMAJOR.MINOR";
 // "growscada/vMAJOR" reads as MINOR 0. Manifests are written by people, so

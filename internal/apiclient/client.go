@@ -179,7 +179,7 @@ func (c *Client) getProjects(ctx context.Context, path string) ([]apiv0.ProjectR
 }
 
 // ProjectClient talks to the content of one project: its Tags, Scenes,
-// Widgets and Library Pins, under the project's path (ADR 0006). A project that is gone makes
+// Widgets and Library Imports, under the project's path (ADR 0006). A project that is gone makes
 // every call fail with an error matching ErrNotFound.
 type ProjectClient struct {
 	c      *Client

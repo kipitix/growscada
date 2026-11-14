@@ -626,13 +626,13 @@ func newGetLibraryImportsResponse(list []appdto.LibraryImport) apiv0.GetLibraryI
 	return apiv0.GetLibraryImportsResponse{LibraryImports: items}
 }
 
-func newAffectedWidgetResponse(w appdto.AffectedWidget) apiv0.PinnedWidgetResponse {
-	return apiv0.PinnedWidgetResponse{SceneID: w.SceneID, WidgetID: w.WidgetID, Name: w.Name, TypeID: w.TypeID}
+func newAffectedWidgetResponse(w appdto.AffectedWidget) apiv0.AffectedWidgetResponse {
+	return apiv0.AffectedWidgetResponse{SceneID: w.SceneID, WidgetID: w.WidgetID, Name: w.Name, TypeID: w.TypeID}
 }
 
 func newImportImpactResponse(i appdto.ImportImpact) apiv0.ImportImpactResponse {
 	resp := apiv0.ImportImpactResponse{
-		OrphanedWidgets: make([]apiv0.PinnedWidgetResponse, len(i.Orphaned)),
+		OrphanedWidgets: make([]apiv0.AffectedWidgetResponse, len(i.Orphaned)),
 		BrokenBindings:  make([]apiv0.BrokenBindingResponse, len(i.Broken)),
 	}
 	for n, w := range i.Orphaned {
@@ -640,9 +640,9 @@ func newImportImpactResponse(i appdto.ImportImpact) apiv0.ImportImpactResponse {
 	}
 	for n, b := range i.Broken {
 		resp.BrokenBindings[n] = apiv0.BrokenBindingResponse{
-			PinnedWidgetResponse: newAffectedWidgetResponse(b.AffectedWidget),
-			PortName:             b.PortName,
-			TagID:                b.TagID,
+			AffectedWidgetResponse: newAffectedWidgetResponse(b.AffectedWidget),
+			PortName:               b.PortName,
+			TagID:                  b.TagID,
 		}
 	}
 	return resp

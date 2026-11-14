@@ -1,5 +1,5 @@
 // Package growctl implements growctl — a kubectl-style CLI that declaratively
-// manages GrowSCADA entities (Projects with their Library Pins, the Tags of a
+// manages GrowSCADA entities (Projects with their Library Imports, the Tags of a
 // Project, Libraries and the WidgetTypes of their Drafts) from YAML manifests
 // through the REST API.
 package growctl

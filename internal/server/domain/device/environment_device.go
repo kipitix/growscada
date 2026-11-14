@@ -11,7 +11,7 @@ import (
 
 // EnvironmentDevice - aggregate of a Project's Draft, one per pair
 // (Environment, Device): the parameters by which that Device is reached in
-// that Environment. The pair is what identifies it, as a Library Pin is
+// that Environment. The pair is what identifies it, as a Library Import is
 // identified by its Library in its Project; it has no identifier of its own.
 //
 // EnvironmentDevice is immutable: every change returns a new

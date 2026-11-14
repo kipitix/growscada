@@ -13,7 +13,7 @@ type Repository interface {
 	// Create publishes commit as the next Release of scope, with the note and
 	// the Author: it locks the scope, numbers the Release after the latest one,
 	// refuses a Commit that is already released (ErrCommitAlreadyReleased) and
-	// writes the copy of the content with the Library Pins of a Project's
+	// writes the copy of the content with the Library Imports of a Project's
 	// ProjectFile, in one transaction. A Project that is not live is
 	// ErrProjectNotFound.
 	Create(ctx context.Context, scope draft.Scope, commit draft.Commit, note Note, author draft.Author) (Release, error)

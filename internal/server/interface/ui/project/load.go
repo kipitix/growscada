@@ -158,7 +158,7 @@ func (p *Project) applyDraftChanges(mark uiutil.Mark, state apiv0.DraftChangesRe
 	p.changes, p.changesLoaded = state, true
 }
 
-// ── Widget types and Library Pins ─────────────────────────────────────────────
+// ── Widget types and Library Imports ──────────────────────────────────────────
 
 // loadWidgetTypes (re)loads the WidgetTypes of the saved states the project
 // imports: the palette, and what its Widgets are of (ADR 0007).

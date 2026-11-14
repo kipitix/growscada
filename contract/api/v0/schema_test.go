@@ -22,7 +22,7 @@ func TestSchemaIsCommitted(t *testing.T) {
 			DraftStateResponse{}, CreateReleaseRequest{}, UpdateLibraryReleaseNoteRequest{}, LibraryReleaseResponse{}, GetLibraryReleasesResponse{},
 			LibraryOrderResponse{}, SetLibraryOrderRequest{},
 			LibraryImportResponse{}, GetLibraryImportsResponse{}, PutLibraryImportRequest{}, ImportImpactResponse{},
-			PinnedWidgetResponse{}, BrokenBindingResponse{},
+			AffectedWidgetResponse{}, BrokenBindingResponse{},
 			ProjectResponse{}, GetProjectsResponse{}, CreateProjectRequest{}, CreateProjectResponse{}, UpdateProjectRequest{}, UpdateProjectResponse{},
 			DeviceResponse{}, GetDevicesResponse{}, CreateDeviceRequest{}, CreateDeviceResponse{}, UpdateDeviceRequest{}, UpdateDeviceResponse{},
 			EnvironmentResponse{}, GetEnvironmentsResponse{}, CreateEnvironmentRequest{}, CreateEnvironmentResponse{}, UpdateEnvironmentRequest{}, UpdateEnvironmentResponse{},

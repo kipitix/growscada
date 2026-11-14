@@ -16,7 +16,7 @@ const ProjectCleanupPolicyName = "remove_deleted_project"
 
 // projectCleanupPolicy empties a Project marked deleted and removes it
 // (ADR 0006): its whole Draft content — Scenes, Tags, EnvironmentDevices,
-// Devices, Environments and Library Pins — in one transaction over the Draft
+// Devices, Environments and Library Imports — in one transaction over the Draft
 // with the events of the removal, then the states of its Tags in the Runtime
 // node (ADR 0011), and the Project's row last; a project_deleted event's job
 // does it. The Runtime node's copies of the Project's Devices and

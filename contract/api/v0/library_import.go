@@ -40,9 +40,9 @@ type PutLibraryImportRequest struct {
 	Version int `json:"version"`
 }
 
-// PinnedWidgetResponse names a Widget of the project: its Scene, its name and
+// AffectedWidgetResponse names a Widget of the project: its Scene, its name and
 // the WidgetType it is of.
-type PinnedWidgetResponse struct {
+type AffectedWidgetResponse struct {
 	SceneID  uuid.UUID `json:"scene_id"`
 	WidgetID uuid.UUID `json:"widget_id"`
 	Name     string    `json:"name"`
@@ -52,7 +52,7 @@ type PinnedWidgetResponse struct {
 // BrokenBindingResponse is a PortBinding a switch of an import would remove:
 // its port is no longer declared, or its type hint no longer accepts the Tag.
 type BrokenBindingResponse struct {
-	PinnedWidgetResponse
+	AffectedWidgetResponse
 	PortName string    `json:"port_name"`
 	TagID    uuid.UUID `json:"tag_id"`
 }
@@ -62,6 +62,6 @@ type BrokenBindingResponse struct {
 // there are any, the switch or removal is refused (409). BrokenBindings would
 // be removed in the same change.
 type ImportImpactResponse struct {
-	OrphanedWidgets []PinnedWidgetResponse  `json:"orphaned_widgets"`
-	BrokenBindings  []BrokenBindingResponse `json:"broken_bindings"`
+	OrphanedWidgets []AffectedWidgetResponse `json:"orphaned_widgets"`
+	BrokenBindings  []BrokenBindingResponse  `json:"broken_bindings"`
 }

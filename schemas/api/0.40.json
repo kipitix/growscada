@@ -1,5 +1,31 @@
 {
   "$defs": {
+    "AffectedWidgetResponse": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "scene_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "type_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "widget_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "scene_id",
+        "widget_id",
+        "name",
+        "type_id"
+      ],
+      "type": "object"
+    },
     "BrokenBindingResponse": {
       "properties": {
         "name": {
@@ -1305,7 +1331,7 @@
         },
         "orphaned_widgets": {
           "items": {
-            "$ref": "#/$defs/PinnedWidgetResponse"
+            "$ref": "#/$defs/AffectedWidgetResponse"
           },
           "type": "array"
         }
@@ -1651,32 +1677,6 @@
       ],
       "type": "object"
     },
-    "PinnedWidgetResponse": {
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "scene_id": {
-          "format": "uuid",
-          "type": "string"
-        },
-        "type_id": {
-          "format": "uuid",
-          "type": "string"
-        },
-        "widget_id": {
-          "format": "uuid",
-          "type": "string"
-        }
-      },
-      "required": [
-        "scene_id",
-        "widget_id",
-        "name",
-        "type_id"
-      ],
-      "type": "object"
-    },
     "PortBinding": {
       "properties": {
         "port_name": {
@@ -1769,7 +1769,7 @@
         },
         "orphaned_widgets": {
           "items": {
-            "$ref": "#/$defs/PinnedWidgetResponse"
+            "$ref": "#/$defs/AffectedWidgetResponse"
           },
           "type": "array"
         },

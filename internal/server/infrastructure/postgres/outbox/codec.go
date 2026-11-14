@@ -47,7 +47,7 @@ type payload struct {
 	// Scene.ReconcileWith.
 	ByReconciliation bool `json:"by_reconciliation,omitempty"`
 	// LibraryID is the Library of a WidgetType's event, and the Library of a
-	// Library Pin's (whose ID is the Library's too).
+	// Library Import's (whose ID is the Library's too).
 	LibraryID *uuid.UUID `json:"library_id,omitempty"`
 	// Release is the number of the Library Release of library_released, and of
 	// a Project Release of release_created and release_note_updated.

@@ -27,7 +27,7 @@ const (
 	// ActionNotFound reports a tag declared in the manifest but missing on the server (delete -f).
 	ActionNotFound
 	// ActionUpdate changes a WidgetType of a Library's Draft to its
-	// manifest, or switches a Library Pin to the release the manifest names.
+	// manifest, or switches a Library Import to the saved state the manifest names.
 	ActionUpdate
 )
 

@@ -8,7 +8,7 @@ import (
 // LibraryEvent - base interface for the events a Library records about
 // itself, and for LibraryReleasedEvent: events of the server's stream, like
 // those of Projects (no Project's content). The events of a WidgetType and
-// of a Library Pin name a Library too but are no LibraryEvent: libraryEvent
+// of a Library Import name a Library too but are no LibraryEvent: libraryEvent
 // tells them apart.
 type LibraryEvent interface {
 	event.Event
