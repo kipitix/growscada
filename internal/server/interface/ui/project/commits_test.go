@@ -192,15 +192,10 @@ func TestSaveCommit_ConflictRereadsAndRename(t *testing.T) {
 	}
 	f.p.saveDialog = false
 
-	f.p.startRenamingCommit(1, "First save")
-	f.p.renameCommitTitle = "Before the demo"
-	f.p.renameCommit(f.p.compoCtx)
+	f.p.renameSavedState(f.p.compoCtx, 1, "Before the demo")
 	f.run()
 	f.noToasts()
 	if len(f.p.commits) != 1 || f.p.commits[0].Title != "Before the demo" {
 		t.Errorf("the renamed history: %+v", f.p.commits)
-	}
-	if f.p.renamingCommit != 0 {
-		t.Errorf("the inline rename editor stayed open")
 	}
 }

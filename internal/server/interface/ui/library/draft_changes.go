@@ -30,18 +30,18 @@ func (l *Library) draftChangesVersion() int {
 	return l.draftVersion()
 }
 
-// canUndo reports whether the Undo button acts now: a Draft this tab may edit —
-// not a release shown read-only — with a change to undo. A state that offers a
-// step but no description is no step either: the description is what the button
-// shows as its hover text, and an unnamed step is not offered.
+// canUndo reports whether the Undo button acts now: a Draft with a change to
+// undo. A state that offers a step but no description is no step either: the
+// description is what the button shows as its hover text, and an unnamed step
+// is not offered.
 func (l *Library) canUndo() bool {
-	return l.changesLoaded && !l.readOnly() && l.changes.CanUndo && l.changes.UndoDescription != "" &&
+	return l.changesLoaded && l.changes.CanUndo && l.changes.UndoDescription != "" &&
 		!l.undoing && !l.redoing
 }
 
 // canRedo reports whether the Redo button acts now.
 func (l *Library) canRedo() bool {
-	return l.changesLoaded && !l.readOnly() && l.changes.CanRedo && l.changes.RedoDescription != "" &&
+	return l.changesLoaded && l.changes.CanRedo && l.changes.RedoDescription != "" &&
 		!l.undoing && !l.redoing
 }
 
@@ -55,7 +55,7 @@ func (l *Library) redoDraftChange(ctx app.Context) { l.stepDraftChange(ctx, fals
 // Version last seen: its answer is the state of the stack after it. The
 // WidgetTypes themselves come with the events, as after any edit.
 func (l *Library) stepDraftChange(ctx app.Context, undo bool) {
-	if l.draft() == nil || l.undoing || l.redoing || l.readOnly() {
+	if l.draft() == nil || l.undoing || l.redoing {
 		return
 	}
 	// A command the buttons would not offer is not sent: a shortcut is the
@@ -104,7 +104,6 @@ func (l *Library) rejectedDraftChange(ctx app.Context, err error) {
 		l.loadDraftState(ctx)
 		l.loadDraftChanges(ctx)
 		l.loadList(ctx)
-		l.loadReleases(ctx)
 		l.loadLibraries(ctx)
 		ctx.Update()
 		return
@@ -144,8 +143,6 @@ func (l *Library) redoDraftChangeFromButton() { l.redoDraftChange(l.compoCtx) }
 // undo, or that the stack is empty.
 func (l *Library) undoTitle() string {
 	switch {
-	case l.readOnly():
-		return "Undo the last change — a release is shown; open the Draft to edit it"
 	case !l.changesLoaded:
 		return "Undo the last change"
 	case !l.changes.CanUndo || l.changes.UndoDescription == "":
@@ -158,8 +155,6 @@ func (l *Library) undoTitle() string {
 // redoTitle is the hover text of the Redo button.
 func (l *Library) redoTitle() string {
 	switch {
-	case l.readOnly():
-		return "Redo the change undone last — a release is shown; open the Draft to edit it"
 	case !l.changesLoaded:
 		return "Redo the change undone last"
 	case !l.changes.CanRedo || l.changes.RedoDescription == "":

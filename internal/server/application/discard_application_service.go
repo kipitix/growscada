@@ -19,10 +19,11 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
 
-// DiscardService is the Engineering node's Discard and Revert (ADR 0016,
-// task 72_4): Discard resets the whole Draft to the Project's last Commit —
-// the saved state, dropping unsaved work —, while Revert resets it to the
-// Deployment the Project runs. Each is one transaction over the Draft.
+// DiscardService is the Engineering node's resets of a Project's Draft
+// (ADR 0016, task 72_4, task 84): Discard replaces it with its last Commit —
+// the saved state, dropping unsaved work —, Load with a Commit the client
+// names, and Revert with the Deployment the Project runs. Each is one
+// transaction over the Draft.
 type DiscardService interface {
 	// Discard resets the live Project projectID's Draft to its last Commit,
 	// dropping the unsaved changes. The written Draft is one change: its
@@ -80,7 +81,7 @@ func (s discardServiceImpl) Discard(ctx context.Context, rawProjectID uuid.UUID)
 	if !found {
 		return appdto.DiscardedDraft{}, fmt.Errorf("%w: %s", ErrNothingToDiscard, projectID)
 	}
-	result, warnings, err := s.resetTo(ctx, projectID, last, true)
+	result, warnings, err := s.resetTo(ctx, projectID, last, last.Number())
 	if err != nil {
 		return appdto.DiscardedDraft{}, err
 	}
@@ -102,11 +103,8 @@ func (s discardServiceImpl) Load(ctx context.Context, rawProjectID uuid.UUID, nu
 	}
 	// The loaded content is the Draft's clean state only when it is the last
 	// Commit: an older one leaves the Draft with unsaved changes (task 74).
-	last, found, err := s.content.Drafts().FindLastCommit(ctx, scope)
-	if err != nil {
-		return appdto.LoadedDraft{}, fmt.Errorf("cannot read the last commit of project %s: %w", projectID, err)
-	}
-	result, warnings, err := s.resetTo(ctx, projectID, commit, found && last.Number() == commit.Number())
+	// The comparison is the repository's, under the Draft's lock.
+	result, warnings, err := s.resetTo(ctx, projectID, commit, commit.Number())
 	if err != nil {
 		return appdto.LoadedDraft{}, err
 	}
@@ -120,11 +118,12 @@ func (s discardServiceImpl) Load(ctx context.Context, rawProjectID uuid.UUID, nu
 // resetTo replaces the whole Draft of projectID with the content of commit in
 // one transaction: the pins the content keeps are locked FOR SHARE in it, the
 // DraftChange stack is cleared and the Version raised, and no DraftChange is
-// written. clean says whether the written content is the Draft's last Commit's,
-// which makes the new Version the Clean Version (task 74). The Library Releases
-// the content names but this server lacks are dropped with the Widgets of their
-// WidgetTypes and returned as warnings (task 71).
-func (s discardServiceImpl) resetTo(ctx context.Context, projectID id.ID[project.Project], commit draft.Commit, clean bool) (draft.Draft, []appdto.DiscardWarning, error) {
+// written. cleanCommit is the number of the Commit whose content is written:
+// the Draft is clean exactly when that is its last Commit, compared under the
+// Draft's lock (task 74). The Library Releases the content names but this
+// server lacks are dropped with the Widgets of their WidgetTypes and returned
+// as warnings, and they make the content no Commit's (task 71).
+func (s discardServiceImpl) resetTo(ctx context.Context, projectID id.ID[project.Project], commit draft.Commit, cleanCommit int) (draft.Draft, []appdto.DiscardWarning, error) {
 	file, ok := commit.Content().ProjectFile()
 	if !ok {
 		return nil, nil, fmt.Errorf("commit %d of project %s holds no project file", commit.Number(), projectID)
@@ -138,7 +137,12 @@ func (s discardServiceImpl) resetTo(ctx context.Context, projectID id.ID[project
 		return nil, nil, fmt.Errorf("cannot check the library pins of project %s: %w", projectID, err)
 	}
 	content, warnings := dropMissingLibraryReleases(content, file, missing)
-	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), clean && len(warnings) == 0, func(session *draft.Session) error {
+	if len(warnings) > 0 {
+		// What is written is no longer the Commit's content: the Draft keeps
+		// its unsaved mark (task 71).
+		cleanCommit = 0
+	}
+	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), cleanCommit, func(session *draft.Session) error {
 		if err := s.lockDiscardedPins(ctx, content, session); err != nil {
 			return err
 		}
@@ -180,12 +184,14 @@ func (s discardServiceImpl) Revert(ctx context.Context, rawProjectID uuid.UUID) 
 	// Deployment is exactly that and nothing of it was dropped: then it is
 	// clean, as after a Discard. A Deployment of another Release, of a file or
 	// of an older state is a different content (task 74).
-	clean, err := s.revertIsTheLastCommit(ctx, projectID, deployment.Content)
+	cleanCommit, err := s.revertIsTheLastCommit(ctx, projectID, deployment.Content)
 	if err != nil {
 		return appdto.DiscardedDraft{}, err
 	}
-	clean = clean && len(warnings) == 0
-	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), clean, func(session *draft.Session) error {
+	if len(warnings) > 0 {
+		cleanCommit = 0
+	}
+	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), cleanCommit, func(session *draft.Session) error {
 		if err := s.lockDiscardedPins(ctx, content, session); err != nil {
 			return err
 		}
@@ -197,27 +203,33 @@ func (s discardServiceImpl) Revert(ctx context.Context, rawProjectID uuid.UUID) 
 	return appdto.DiscardedDraft{Version: result.Version().Number(), Warnings: warnings}, nil
 }
 
-// revertIsTheLastCommit reports whether the document of the Deployment a
-// Project runs is the content of its last Commit: the Draft a Revert writes is
-// then that Commit again and clean, as after a Discard (task 74). A Project
-// with no Commit, or a Deployment of another content, is not clean.
-func (s discardServiceImpl) revertIsTheLastCommit(ctx context.Context, projectID id.ID[project.Project], document projectv0.ProjectFile) (bool, error) {
+// revertIsTheLastCommit returns the number of the Project's last Commit when
+// the document of the Deployment it runs is that Commit's content, and 0
+// otherwise: the Draft a Revert writes is then that Commit again and clean, as
+// after a Discard (task 74). A Project with no Commit, or a Deployment of
+// another content, is 0. The repository compares the number with the one it
+// holds under the Draft's lock, so a Save committed meanwhile keeps the Draft
+// unsaved.
+func (s discardServiceImpl) revertIsTheLastCommit(ctx context.Context, projectID id.ID[project.Project], document projectv0.ProjectFile) (int, error) {
 	last, found, err := s.content.Drafts().FindLastCommit(ctx, s.content.ScopeOf(projectID))
 	if err != nil {
-		return false, fmt.Errorf("cannot read the last commit of project %s: %w", projectID, err)
+		return 0, fmt.Errorf("cannot read the last commit of project %s: %w", projectID, err)
 	}
 	if !found {
-		return false, nil
+		return 0, nil
 	}
 	file, ok := last.Content().ProjectFile()
 	if !ok {
-		return false, nil
+		return 0, nil
 	}
 	same, err := sameProjectFile(document, file)
 	if err != nil {
-		return false, fmt.Errorf("cannot compare the deployment and the last commit of project %s: %w", projectID, err)
+		return 0, fmt.Errorf("cannot compare the deployment and the last commit of project %s: %w", projectID, err)
 	}
-	return same, nil
+	if !same {
+		return 0, nil
+	}
+	return last.Number(), nil
 }
 
 // lockDiscardedPins locks every Library the kept pins name FOR SHARE in the

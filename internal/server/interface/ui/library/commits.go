@@ -12,6 +12,7 @@ import (
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
+	"github.com/kipitix/growscada/internal/server/interface/ui/savedstates"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
@@ -49,10 +50,10 @@ func (l *Library) hasUnsavedChanges() bool {
 // openSaveDialog opens the Save dialog with a default title and the stored
 // author.
 func (l *Library) openSaveDialog() {
-	if l.draft() == nil || l.readOnly() {
+	if l.draft() == nil {
 		return
 	}
-	l.saveTitle = "Save " + time.Now().Format("02.01.2006 15:04")
+	l.saveTitle = "Save " + uiutil.FormatTime(time.Now())
 	l.saveDialog = true
 	l.compoCtx.Update()
 }
@@ -60,7 +61,7 @@ func (l *Library) openSaveDialog() {
 // saveFromShortcut is Ctrl+S: the Save dialog when the Draft has unsaved
 // changes, nothing otherwise (task 72_7; ADR 0021).
 func (l *Library) saveFromShortcut(ctx app.Context) {
-	if l.readOnly() || !l.hasUnsavedChanges() || l.savingCommit {
+	if !l.hasUnsavedChanges() || l.savingCommit {
 		return
 	}
 	l.openSaveDialog()
@@ -69,7 +70,7 @@ func (l *Library) saveFromShortcut(ctx app.Context) {
 // saveCommit confirms the Save dialog: the Draft as it is becomes a Commit.
 func (l *Library) saveCommit() {
 	draft := l.draft()
-	if draft == nil || l.savingCommit || l.readOnly() {
+	if draft == nil || l.savingCommit {
 		return
 	}
 	title, author := strings.TrimSpace(l.saveTitle), strings.TrimSpace(l.saveAuthor)
@@ -143,15 +144,18 @@ func (l *Library) openHistory() {
 // being edited.
 func (l *Library) closeHistory() {
 	l.historyScreen = false
-	l.renamingCommit, l.renameCommitTitle = 0, ""
-	l.compoCtx.Update()
+	if l.history != nil {
+		l.history.ResetRename()
+	}
+	if l.mounted {
+		l.compoCtx.Update()
+	}
 }
 
-// renameCommit saves the inline title of a Commit. It states no Draft
-// Version: another Engineer's writes do not refuse it (ADR 0021).
-func (l *Library) renameCommit() {
+// renameSavedState saves the name the history screen edited. It states no
+// Draft Version: another Engineer's writes do not refuse it (ADR 0021).
+func (l *Library) renameSavedState(ctx app.Context, number int, title string) {
 	draft := l.draft()
-	number, title := l.renamingCommit, strings.TrimSpace(l.renameCommitTitle)
 	if draft == nil || number == 0 || title == "" {
 		return
 	}
@@ -161,22 +165,58 @@ func (l *Library) renameCommit() {
 		if draft != l.draft() {
 			return
 		}
-		l.renamingCommit, l.renameCommitTitle = 0, ""
 		l.loadCommits(ctx)
 		ctx.Update()
 	}, nil)
 }
 
+// releaseSavedState opens the publication of the saved state the screen named.
+func (l *Library) releaseSavedState(ctx app.Context, number int) {
+	for _, saved := range l.commits {
+		if saved.Number == number {
+			l.openReleaseDialog(saved)
+			return
+		}
+	}
+}
+
+// editSavedStateReleaseNote changes the note of the Release that published the
+// saved state, after asking for it: the note is metadata and states no Version
+// (task 72_5, task 84).
+func (l *Library) editSavedStateReleaseNote(ctx app.Context, number int) {
+	lib, ok := l.selectedLibrary()
+	if !ok {
+		return
+	}
+	for _, released := range l.releases {
+		if released.CommitNumber == nil || *released.CommitNumber != number {
+			continue
+		}
+		note, ok := prompt(fmt.Sprintf("Note of release %d:", released.Number), released.Note, true)
+		if !ok {
+			return
+		}
+		uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.LibraryReleaseResponse, error) {
+			return l.client.Library(lib.ID).UpdateReleaseNote(c, released.Number,
+				apiv0.UpdateLibraryReleaseNoteRequest{Note: note})
+		}, func(ctx app.Context, _ apiv0.LibraryReleaseResponse) {
+			l.loadReleases(ctx)
+			l.loadCommits(ctx)
+			ctx.Update()
+		}, l.reloadOnConflict)
+		return
+	}
+}
+
 // renderCommitBar is the panel's Save, its unsaved-changes indicator and the
-// History and Releases buttons (task 72_7; task 84; ADR 0021).
+// History button (task 72_7; task 84; ADR 0021). The Releases have no button of
+// their own: a saved state is published from the history, where it is listed.
 func (l *Library) renderCommitBar() []app.UI {
-	editable := !l.readOnly() && l.libraryID != uuid.Nil
+	editable := l.libraryID != uuid.Nil
 	saveTitle := "Save the Draft as a saved state"
 	switch {
 	case l.savingCommit:
 		saveTitle = "The Draft is being saved"
-	case l.readOnly():
-		saveTitle = "A release is shown; open the Draft to edit it"
 	case !l.hasUnsavedChanges():
 		saveTitle = "Nothing to save since the last save"
 	}
@@ -208,9 +248,6 @@ func (l *Library) renderCommitBar() []app.UI {
 		uiutil.PanelButton(uiutil.IconHistory(), l.libraryID != uuid.Nil,
 			"The saved states of the library", func(app.Context, app.Event) { l.openHistory() },
 			app.EventScope("history")),
-		uiutil.PanelButton(uiutil.IconTag(), l.libraryID != uuid.Nil,
-			"The Releases of the library", func(app.Context, app.Event) { l.openReleasesDialog() },
-			app.EventScope("releases")),
 	}
 }
 
@@ -335,136 +372,42 @@ func (l *Library) renderReleaseDialog() app.UI {
 }
 
 // renderHistoryScreen is the history of the selected library's saved states
-// (task 84): a screen of its own with a way back to the editor and one row per
-// saved state, the list scrolling in its own pane.
+// (task 84): the screen both modes share, fed with this library's history and
+// the Releases that published it.
 func (l *Library) renderHistoryScreen() app.UI {
-	rows := []app.UI{}
-	switch {
-	case !l.commitsLoaded:
-		rows = append(rows, app.Div().
-			Style("padding", "8px").
-			Style("color", "var(--text-muted)").
-			Text("Loading saved states…"))
-	case len(l.commits) == 0:
-		rows = append(rows, app.Div().
-			Style("padding", "8px").
-			Text("The library has not been saved yet."))
-	default:
-		for _, saved := range l.commits {
-			rows = append(rows, l.renderSavedStateRow(saved))
-		}
+	screen := l.history
+	screen.Rows = l.historyRows()
+	screen.Loaded = l.commitsLoaded
+	screen.Loading = l.loadingSavedState != 0
+	screen.OnBack = func(ctx app.Context) { l.closeHistory() }
+	screen.OnLoad = func(ctx app.Context, number int) { l.loadSavedState(number) }
+	screen.OnRelease = func(ctx app.Context, number int) { l.releaseSavedState(ctx, number) }
+	screen.OnRename = func(ctx app.Context, number int, title string) {
+		l.renameSavedState(ctx, number, title)
 	}
-	return app.Div().
-		Attr("data-history-screen", "true").
-		Style("display", "flex").
-		Style("flex-direction", "column").
-		Style("flex", "1").
-		Style("min-height", "0").
-		Body(
-			app.Div().
-				Style("display", "flex").
-				Style("align-items", "center").
-				Style("gap", "8px").
-				Style("padding", "6px 10px").
-				Style("border-bottom", "1px solid var(--border)").
-				Body(
-					uiutil.PanelButton(uiutil.IconBack(), true, "Back to the Draft",
-						func(app.Context, app.Event) { l.closeHistory() }, app.EventScope("history-back")),
-					app.Span().
-						Attr("data-history-title", "true").
-						Style("font-size", "13px").
-						Style("font-weight", "600").
-						Text("Saved states"),
-				),
-			app.Div().
-				Attr("data-history-list", "true").
-				Style("flex", "1").
-				Style("min-height", "0").
-				Style("overflow-y", "auto").
-				Style("padding", "4px 10px").
-				Body(rows...),
-		)
+	screen.OnNote = func(ctx app.Context, number int) { l.editSavedStateReleaseNote(ctx, number) }
+	return screen
 }
 
-// renderSavedStateRow is one saved state of the history (task 84): the time it
-// was saved, its name — edited in place — and its author, and at the end the
-// two actions: load it into the Draft and publish it as a Release.
-func (l *Library) renderSavedStateRow(saved apiv0.CommitResponse) app.UI {
-	number := itoa(saved.Number)
-	title := app.Span().
-		Attr("data-saved-state-title", number).
-		Style("font-size", "13px").
-		Text(saved.Title)
-	var name app.UI = app.Div().
-		Style("display", "flex").
-		Style("align-items", "center").
-		Style("gap", "4px").
-		Body(
-			title,
-			uiutil.PanelButton(uiutil.IconPencil(), true, "Rename the saved state",
-				func(app.Context, app.Event) {
-					l.renamingCommit, l.renameCommitTitle = saved.Number, saved.Title
-					l.compoCtx.Update()
-				}, app.EventScope("rename/"+number)),
-		)
-	if l.renamingCommit == saved.Number {
-		name = app.Div().
-			Style("display", "flex").
-			Style("align-items", "center").
-			Style("gap", "4px").
-			Body(
-				app.Input().
-					Attr("data-saved-state-rename", number).
-					Type("text").
-					Value(l.renameCommitTitle).
-					AutoFocus(true).
-					Style("font-size", "12px").
-					Style("padding", "2px 4px").
-					OnInput(func(ctx app.Context, e app.Event) {
-						l.renameCommitTitle = ctx.JSSrc().Get("value").String()
-					}),
-				uiutil.PanelButton(uiutil.IconCheck(), true, "Save the name",
-					func(app.Context, app.Event) { l.renameCommit() }, app.EventScope("rename-ok/"+number)),
-				uiutil.PanelButton(uiutil.IconClose(), true, "Drop the new name",
-					func(app.Context, app.Event) {
-						l.renamingCommit, l.renameCommitTitle = 0, ""
-						l.compoCtx.Update()
-					}, app.EventScope("rename-cancel/"+number)),
-			)
+// historyRows joins the history with the Releases that published it: a saved
+// state a Release published carries that Release's number and note (task 84).
+func (l *Library) historyRows() []savedstates.Row {
+	rows := make([]savedstates.Row, len(l.commits))
+	for i, saved := range l.commits {
+		row := savedstates.Row{
+			Number:   saved.Number,
+			Title:    saved.Title,
+			Author:   saved.Author,
+			SavedAt:  saved.CreatedAt,
+			Released: saved.Released,
+		}
+		for _, released := range l.releases {
+			if released.CommitNumber != nil && *released.CommitNumber == saved.Number {
+				row.Release, row.Note = released.Number, released.Note
+				break
+			}
+		}
+		rows[i] = row
 	}
-	release := uiutil.Button("Make Release", "accent", !saved.Released,
-		"Publish this saved state as the next Library Release",
-		uiutil.ButtonRow, func(ctx app.Context, e app.Event) { l.openReleaseDialog(saved) },
-		app.EventScope("release/"+number))
-	if saved.Released {
-		release = uiutil.Button("Released", "", false, "A Release publishes this saved state",
-			uiutil.ButtonRow, func(app.Context, app.Event) {}, app.EventScope("released/"+number))
-	}
-	load := uiutil.Button("Load", "", l.loadingSavedState == 0,
-		"Replace the Draft with this saved state",
-		uiutil.ButtonRow, func(ctx app.Context, e app.Event) { l.loadSavedState(saved.Number) },
-		app.EventScope("load/"+number))
-	return app.Div().
-		Attr("data-saved-state-row", number).
-		Style("display", "flex").
-		Style("flex-wrap", "wrap").
-		Style("align-items", "center").
-		Style("gap", "10px").
-		Style("padding", "6px 4px").
-		Style("border-bottom", "1px solid var(--border)").
-		Body(
-			app.Span().
-				Style("font-size", "11px").
-				Style("color", "var(--text-muted)").
-				Style("width", "118px").
-				Style("flex-shrink", "0").
-				Text(saved.CreatedAt.Local().Format("02.01.2006 15:04")),
-			app.Div().Style("flex", "1").Style("min-width", "0").Body(name),
-			app.Span().
-				Style("font-size", "11px").
-				Style("color", "var(--text-muted)").
-				Text(saved.Author),
-			load,
-			release,
-		)
+	return rows
 }

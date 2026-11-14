@@ -45,14 +45,16 @@ func TestRelease_FromTheHistory(t *testing.T) {
 	}
 	f.p.openHistory(f.p.compoCtx)
 	f.run()
-	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-commit-published="1"`) {
-		t.Errorf("the history shows no published mark: %s", html)
+	// The row names the Release that published it and its note (task 84).
+	html := app.HTMLString(f.p.Render())
+	if !strings.Contains(html, `data-saved-state-release="1"`) || !strings.Contains(html, "Release 1 · for the demo") {
+		t.Errorf("the history shows no Release of saved state 1: %s", html)
 	}
 	f.p.historyScreen = false
 
-	f.p.openReleasesDialog(f.p.compoCtx)
+	f.p.openDeployDialog(f.p.compoCtx)
 	f.run()
-	html := app.HTMLString(f.p.Render())
+	html = app.HTMLString(f.p.Render())
 	if !strings.Contains(html, `data-release-row="1"`) || !strings.Contains(html, `data-release-edit-note="1"`) {
 		t.Errorf("the releases dialog does not show Release 1: %s", html)
 	}
@@ -89,7 +91,7 @@ func TestRelease_FromTheHistory(t *testing.T) {
 func TestReleasesDialog_EmptySaysWhatToDoFirst(t *testing.T) {
 	f := startProject(t)
 	f.run()
-	f.p.openReleasesDialog(f.p.compoCtx)
+	f.p.openDeployDialog(f.p.compoCtx)
 	f.run()
 	html := app.HTMLString(f.p.Render())
 	if !strings.Contains(html, "Save the Draft, then publish a Release") {
@@ -105,11 +107,11 @@ func TestRelease_ShortcutsWaitForTheDialogs(t *testing.T) {
 	if !f.p.keyActionAllowed() {
 		t.Fatal("a shortcut is refused without a dialog")
 	}
-	f.p.releasesDialog = true
+	f.p.deployDialog = true
 	if f.p.keyActionAllowed() {
 		t.Errorf("a shortcut acts behind the Releases dialog")
 	}
-	f.p.releasesDialog, f.p.releaseDialog = false, true
+	f.p.deployDialog, f.p.releaseDialog = false, true
 	if f.p.keyActionAllowed() {
 		t.Errorf("a shortcut acts behind the release dialog")
 	}

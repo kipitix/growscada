@@ -109,7 +109,7 @@ func TestDeploymentCreatedEventReloadsTheReleaseList(t *testing.T) {
 		t.Fatalf("release: %v", err)
 	}
 	f := mount(t, url, api)
-	f.p.releasesDialog = true
+	f.p.deployDialog = true
 	f.p.loadReleases(f.p.compoCtx)
 	f.p.loadDeploy(f.p.compoCtx)
 	f.run()

@@ -128,8 +128,9 @@ func TestDraftCleanVersion_SaveDiscardAndNothingToSave(t *testing.T) {
 	}
 
 	// A replacement whose content is the Commit's — a Discard — is clean, and a
-	// Save of it is refused too.
-	result, err := testDrafts().Replace(ctx, scope, true, func(session *draft.Session) error {
+	// Save of it is refused too. The clean marker follows the Commit number the
+	// content is, compared with the Draft's last one under the row's lock.
+	result, err := testDrafts().Replace(ctx, scope, 1, func(session *draft.Session) error {
 		return session.Replace(ctx, draft.Content{})
 	})
 	if err != nil {
@@ -145,13 +146,28 @@ func TestDraftCleanVersion_SaveDiscardAndNothingToSave(t *testing.T) {
 
 	// A replacement whose content is another one keeps the marker: the raised
 	// Version makes the Draft unsaved again.
-	if _, err := testDrafts().Replace(ctx, scope, false, func(session *draft.Session) error {
+	if _, err := testDrafts().Replace(ctx, scope, 0, func(session *draft.Session) error {
 		return session.Replace(ctx, draft.Content{})
 	}); err != nil {
 		t.Fatalf("Replace: %v", err)
 	}
 	if !read().HasUnsavedChanges() {
 		t.Errorf("a replacement that is not the Commit's is clean")
+	}
+
+	// A replacement that names a Commit the Draft no longer has as its last one
+	// is not clean either: a Save committed meanwhile overtook it (task 84).
+	if _, err := testDrafts().SaveCommit(ctx, scope, draftVersionOf(t, mainProject),
+		commitTitle(t, "Second"), commitAuthor(t), projectCommitContent()); err != nil && !errors.Is(err, draft.ErrNothingToSave) {
+		t.Fatalf("SaveCommit: %v", err)
+	}
+	if _, err := testDrafts().Replace(ctx, scope, 1, func(session *draft.Session) error {
+		return session.Replace(ctx, draft.Content{})
+	}); err != nil {
+		t.Fatalf("Replace: %v", err)
+	}
+	if !read().HasUnsavedChanges() {
+		t.Errorf("a replacement of an older Commit than the last one is clean")
 	}
 }
 
@@ -454,7 +470,7 @@ func TestDraftReplace_RemovesThePairsTheDeploymentLacks(t *testing.T) {
 	})
 
 	// The Deployment the Discard restores holds the Environment with one pair.
-	if _, err := testDrafts().Replace(ctx, draft.ProjectScope(mainProject), false, func(session *draft.Session) error {
+	if _, err := testDrafts().Replace(ctx, draft.ProjectScope(mainProject), 0, func(session *draft.Session) error {
 		return session.Replace(ctx, draft.Content{
 			Devices:            []device.Device{one, two},
 			Environments:       []device.Environment{environment},
@@ -776,7 +792,7 @@ func TestDraftLibrary_ReplaceRestoresTheReleaseAndClearsTheStack(t *testing.T) {
 	}
 
 	before := libraryDraftVersionOf(t, repo.libraryID)
-	result, err := testDrafts().Replace(ctx, scope, false, func(session *draft.Session) error {
+	result, err := testDrafts().Replace(ctx, scope, 0, func(session *draft.Session) error {
 		return session.ReplaceWidgetTypes(ctx, release.WidgetTypes())
 	})
 	if err != nil {

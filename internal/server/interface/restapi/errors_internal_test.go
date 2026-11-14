@@ -143,7 +143,7 @@ func TestSendError(t *testing.T) {
 			err:        wrapped(library.ErrCommitAlreadyReleased),
 			wantStatus: http.StatusConflict,
 			wantTitle:  "Conflict: LibraryRelease",
-			wantDetail: "Commit is already released",
+			wantDetail: "This saved state is already released",
 		},
 		{
 			name:       "release not found",

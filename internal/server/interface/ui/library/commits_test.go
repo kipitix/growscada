@@ -12,9 +12,9 @@ import (
 )
 
 // TestCommitBar_IndicatorKeepsTheButtonPositions: the unsaved-changes indicator
-// is always the header's second child — hidden when it has nothing to say —, so
-// History and Releases never shift by a position and a reused element keeps
-// its own handler (task 79). TestEngine renders but dispatches no DOM click, so
+// is always the panel's second child — hidden when it has nothing to say —, so
+// History never shifts by a position and a reused element keeps its own handler
+// (task 79). TestEngine renders but dispatches no DOM click, so
 // the panels themselves are checked in the browser; this test guards the
 // structure the bug came from.
 func TestCommitBar_IndicatorKeepsTheButtonPositions(t *testing.T) {
@@ -29,8 +29,8 @@ func TestCommitBar_IndicatorKeepsTheButtonPositions(t *testing.T) {
 	} {
 		l.draftUnsaved, l.draftStateLoaded = tc.unsaved, false
 		bar := l.renderCommitBar()
-		if len(bar) != 4 {
-			t.Fatalf("%s: the header has %d children, want 4", tc.name, len(bar))
+		if len(bar) != 3 {
+			t.Fatalf("%s: the header has %d children, want 3", tc.name, len(bar))
 		}
 		if html := app.HTMLString(bar[0]); !strings.Contains(html, `data-icon="save"`) {
 			t.Errorf("%s: the first child is not Save: %s", tc.name, html)
@@ -41,9 +41,7 @@ func TestCommitBar_IndicatorKeepsTheButtonPositions(t *testing.T) {
 		if html := app.HTMLString(bar[2]); !strings.Contains(html, `data-icon="history"`) {
 			t.Errorf("%s: the third child is not History: %s", tc.name, html)
 		}
-		if html := app.HTMLString(bar[3]); !strings.Contains(html, `data-icon="tag"`) {
-			t.Errorf("%s: the fourth child is not Releases: %s", tc.name, html)
-		}
+
 	}
 }
 
@@ -88,8 +86,7 @@ func TestSaveCommit_LibraryHistoryAndRename(t *testing.T) {
 		t.Errorf("the history does not show Commit 1: %s", html)
 	}
 
-	f.l.renamingCommit, f.l.renameCommitTitle = 1, "For the demo"
-	f.l.renameCommit()
+	f.l.renameSavedState(f.l.compoCtx, 1, "For the demo")
 	f.run()
 	f.noToasts()
 	if len(f.l.commits) != 1 || f.l.commits[0].Title != "For the demo" {
@@ -116,54 +113,16 @@ func TestCommitRow_ReleaseButton(t *testing.T) {
 	f.l.loadCommits(f.l.compoCtx)
 	f.run()
 
-	html := app.HTMLString(f.l.renderSavedStateRow(f.l.commits[0]))
+	html := app.HTMLString(f.l.renderHistoryScreen())
 	if !strings.Contains(html, "Make Release") || strings.Contains(html, ">Released<") {
 		t.Errorf("the saved state row before the release: %s", html)
 	}
 
 	releaseNow(t, f)
 	f.run()
-	html = app.HTMLString(f.l.renderSavedStateRow(f.l.commits[0]))
+	html = app.HTMLString(f.l.renderHistoryScreen())
 	if !strings.Contains(html, "Released") {
 		t.Errorf("the saved state row after the release: %s", html)
-	}
-}
-
-// TestReleaseHistoryLabel_CommitAndLegacy: a Release names the Commit it
-// published, or says it predates Commits (task 72_5).
-func TestReleaseHistoryLabel_CommitAndLegacy(t *testing.T) {
-	number, title := 3, "Widgets of the release"
-	got := releaseHistoryLabel(apiv0.LibraryReleaseResponse{
-		Number: 2, CommitNumber: &number, Title: &title, Note: "a note", Origin: apiv0.LibraryReleaseOriginCommit,
-	})
-	if want := "Release 2 — saved state #3 Widgets of the release — a note"; got != want {
-		t.Errorf("the label: %q, want %q", got, want)
-	}
-	if got := releaseHistoryLabel(apiv0.LibraryReleaseResponse{Number: 1, Origin: apiv0.LibraryReleaseOriginLegacy}); got != "Release 1 — legacy" {
-		t.Errorf("the legacy label: %q", got)
-	}
-}
-
-// TestReleaseNoteEvent_ReloadsTheHistory: a note changed in another tab
-// (library_release_note_updated) rereads the Releases of the selected library
-// (task 72_5; ADR 0021).
-func TestReleaseNoteEvent_ReloadsTheHistory(t *testing.T) {
-	url, api := newServer(t)
-	f := mount(t, url, api)
-	f.run()
-	f.l.createItem(f.l.compoCtx)
-	f.run()
-	releaseNow(t, f)
-	if len(f.l.releases) != 1 || f.l.releases[0].Note != "" {
-		t.Fatalf("the releases before the event: %+v", f.l.releases)
-	}
-
-	if _, err := f.api.UpdateReleaseNote(context.Background(), 1, apiv0.UpdateLibraryReleaseNoteRequest{Note: "renoted"}); err != nil {
-		t.Fatalf("UpdateReleaseNote: %v", err)
-	}
-	f.event(apiv0.Event{Type: apiv0.EventLibraryReleaseNoteUpdated, ID: f.l.libraryID.String(), Release: 1})
-	if len(f.l.releases) != 1 || f.l.releases[0].Note != "renoted" {
-		t.Errorf("the releases after the event: %+v, want the renamed note", f.l.releases)
 	}
 }
 

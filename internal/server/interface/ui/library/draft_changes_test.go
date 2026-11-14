@@ -180,44 +180,6 @@ func TestUndo_EmptyStack_IsAToastAndAReread(t *testing.T) {
 	}
 }
 
-// TestDraftChanges_AReleaseShownIsReadOnly: what is shown is a release, not the
-// Draft, so there is nothing to undo and no request to make.
-func TestDraftChanges_AReleaseShownIsReadOnly(t *testing.T) {
-	url, api := newServer(t)
-	f := mount(t, url, api)
-	f.l.createItem(f.l.compoCtx)
-	f.run()
-	state, err := api.DraftState(context.Background())
-	if err != nil {
-		t.Fatalf("DraftState: %v", err)
-	}
-	commit, err := api.SaveCommit(context.Background(), apiv0.CreateCommitRequest{Version: state.Version, Title: "Save", Author: "Ada"})
-	if err != nil {
-		t.Fatalf("SaveCommit: %v", err)
-	}
-	if _, err := api.Release(context.Background(), apiv0.CreateReleaseRequest{Commit: commit.Number, Note: "one", Author: "Ada"}); err != nil {
-		t.Fatalf("release: %v", err)
-	}
-	createWidgetType(t, api, "Gauge") // a change after the release, which cleared the stack
-	f.l.loadReleases(f.l.compoCtx)
-	f.run()
-	f.reloadChanges()
-	if !f.l.canUndo() {
-		t.Fatalf("the Draft has a step to undo: %+v", f.l.changes)
-	}
-
-	f.l.view(1)
-	f.run()
-
-	if f.l.canUndo() || f.l.canRedo() {
-		t.Errorf("a release shown offers a step: %+v", f.l.changes)
-	}
-	html := app.HTMLString(f.l.renderDraftChangesBar())
-	if !strings.Contains(html, "open the Draft to edit it") {
-		t.Errorf("the buttons do not say a release is shown: %s", html)
-	}
-}
-
 // TestContentEvent_ReloadsTheStack: a write of the Draft's content is one
 // DraftChange, so the buttons follow its event.
 func TestContentEvent_ReloadsTheStack(t *testing.T) {

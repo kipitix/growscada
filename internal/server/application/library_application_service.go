@@ -489,7 +489,7 @@ func (s libraryServiceImpl) Discard(ctx context.Context, rawID uuid.UUID) (appdt
 	if !ok {
 		return appdto.DraftState{}, fmt.Errorf("commit %d of library %s holds no widget types", last.Number(), found.ID())
 	}
-	result, err := s.content.Drafts().Replace(ctx, scope, true, func(session *draft.Session) error {
+	result, err := s.content.Drafts().Replace(ctx, scope, last.Number(), func(session *draft.Session) error {
 		return session.ReplaceWidgetTypes(ctx, types)
 	})
 	if err != nil {
@@ -517,11 +517,8 @@ func (s libraryServiceImpl) LoadCommit(ctx context.Context, rawID uuid.UUID, num
 	}
 	// The loaded content is the Draft's clean state only when it is the last
 	// Commit: an older one leaves the Draft with unsaved changes (task 74).
-	last, hasLast, err := s.content.Drafts().FindLastCommit(ctx, scope)
-	if err != nil {
-		return appdto.LoadedDraft{}, fmt.Errorf("cannot read the last commit of library %s: %w", found.ID(), err)
-	}
-	result, err := s.content.Drafts().Replace(ctx, scope, hasLast && last.Number() == commit.Number(),
+	// The comparison is the repository's, under the Draft's lock.
+	result, err := s.content.Drafts().Replace(ctx, scope, commit.Number(),
 		func(session *draft.Session) error {
 			return session.ReplaceWidgetTypes(ctx, types)
 		})
@@ -553,11 +550,11 @@ func (s libraryServiceImpl) RevertToLatestRelease(ctx context.Context, rawID uui
 	// latest Release published that Commit: then it is clean, as after a
 	// Discard. An older Release is a different content, and the marker stays
 	// where it was (task 74).
-	clean, err := s.revertIsTheLastCommit(ctx, found.ID(), latest)
+	cleanCommit, err := s.revertIsTheLastCommit(ctx, found.ID(), latest)
 	if err != nil {
 		return appdto.DraftState{}, err
 	}
-	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(found.ID()), clean, func(session *draft.Session) error {
+	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(found.ID()), cleanCommit, func(session *draft.Session) error {
 		return session.ReplaceWidgetTypes(ctx, latest.WidgetTypes())
 	})
 	if err != nil {
@@ -566,22 +563,27 @@ func (s libraryServiceImpl) RevertToLatestRelease(ctx context.Context, rawID uui
 	return appdto.DraftState{Version: result.Version().Number(), HasUnsavedChanges: result.HasUnsavedChanges()}, nil
 }
 
-// revertIsTheLastCommit reports whether the latest Release published the last
-// Commit of the library's Draft: the WidgetType copies of the two are the same.
-// A Release before Commits, or one of an older Commit, is not it.
-func (s libraryServiceImpl) revertIsTheLastCommit(ctx context.Context, libraryID id.ID[library.Library], latest library.LibraryRelease) (bool, error) {
+// revertIsTheLastCommit returns the number of the library's last Commit when
+// the latest Release published it — the WidgetType copies of the two are the
+// same — and 0 otherwise. A Release before Commits, or one of an older Commit,
+// is 0. The repository compares the number with the one it holds under the
+// Draft's lock, so a Save committed meanwhile keeps the Draft unsaved.
+func (s libraryServiceImpl) revertIsTheLastCommit(ctx context.Context, libraryID id.ID[library.Library], latest library.LibraryRelease) (int, error) {
 	last, found, err := s.content.Drafts().FindLastCommit(ctx, s.content.ScopeOf(libraryID))
 	if err != nil {
-		return false, fmt.Errorf("cannot read the last commit of library %s: %w", libraryID, err)
+		return 0, fmt.Errorf("cannot read the last commit of library %s: %w", libraryID, err)
 	}
 	if !found {
-		return false, nil
+		return 0, nil
 	}
 	types, ok := last.Content().WidgetTypes()
 	if !ok {
-		return false, nil
+		return 0, nil
 	}
-	return sameWidgetTypeCopies(latest.WidgetTypes(), types), nil
+	if !sameWidgetTypeCopies(latest.WidgetTypes(), types) {
+		return 0, nil
+	}
+	return last.Number(), nil
 }
 
 // sameWidgetTypeCopies reports whether two lists of released copies hold the

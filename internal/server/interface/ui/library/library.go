@@ -8,6 +8,7 @@ import (
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
+	"github.com/kipitix/growscada/internal/server/interface/ui/savedstates"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -31,13 +32,15 @@ type Library struct {
 	libraryID         uuid.UUID
 	// libraryClient is the client of the library libraryID, nil if none: the
 	// key of its lists' loads.
-	libraryClient    *apiclient.LibraryClient
+	libraryClient *apiclient.LibraryClient
+	widgetTypes   []apiv0.WidgetTypeResponse
+	// releases are the library's, read for the history screen: a saved state a
+	// Release published shows that Release's number and note (task 84).
 	releases         []apiv0.LibraryReleaseResponse
 	releasesReloader uiutil.Reloader
-	// viewing is the number of the release shown, read-only, in place of the
-	// Draft; 0 for the Draft (task 72_7).
-	viewing     int
-	widgetTypes []apiv0.WidgetTypeResponse
+	// history is the screen that lists the saved states, shared with the
+	// Project mode (savedstates.Screen).
+	history *savedstates.Screen
 	// draftVersions holds the Version of the selected library's Draft: every
 	// write of its content states it and every content DTO carries it
 	// (ADR 0016). One number serves the whole Draft, so it is also what says
@@ -62,16 +65,20 @@ type Library struct {
 	savingCommit    bool
 	saveTitle       string
 	saveAuthor      string
-	// renamingCommit is the number of the saved state whose title is edited
-	// in place (0: none), renameCommitTitle the text of the editor.
-	renamingCommit    int
-	renameCommitTitle string
 	// historyScreen is true while the saved states are shown in place of the
 	// editor (task 84): History opens them and the way back closes them.
 	// loadingSavedState is the number of the saved state being loaded into the
 	// Draft (0: none).
 	historyScreen     bool
 	loadingSavedState int
+	// contentReplacements counts the replacements of the whole Draft (a load of
+	// a saved state): the first list of WidgetTypes requested after one
+	// replaces the editor instead of merging it, so a text typed but never
+	// applied does not survive the load. appliedReplacements is the last one
+	// whose list was applied; every later list is an ordinary one again
+	// (task 84).
+	contentReplacements uint64
+	appliedReplacements uint64
 	// draftUnsaved is the unsaved-changes flag of the selected library's
 	// Draft, as the server answers it: its Version is above its Clean Version
 	// (ADR 0016, amendment 2026-11-10; task 74). The editor draws it and never
@@ -89,10 +96,6 @@ type Library struct {
 	releaseCommit int
 	releaseNote   string
 	releaseAuthor string
-	// ── Releases panel (task 73) ───────────────────────────────────────────
-	// releasesDialog is true while the releases of the selected library are
-	// listed: the column that held them is gone, they open from the header.
-	releasesDialog bool
 
 	// ── DraftChange stack (ADR 0017) ───────────────────────────────────────
 	// changes is the state of the Draft's undo/redo stack, read on mount, on a
@@ -136,7 +139,11 @@ const (
 )
 
 func NewLibrary(client *apiclient.Client) *Library {
-	return &Library{client: client, inputValues: make(map[uuid.UUID]map[string]string)}
+	return &Library{
+		client:      client,
+		inputValues: make(map[uuid.UUID]map[string]string),
+		history:     savedstates.New(),
+	}
 }
 
 func (l *Library) OnMount(ctx app.Context) {
@@ -241,39 +248,9 @@ func (l *Library) selectedLibrary() (apiv0.LibraryResponse, bool) {
 	return uiutil.FindByID(l.libraries, l.libraryID, uiutil.LibraryID)
 }
 
-// readOnly reports whether the WidgetTypes shown cannot be edited: those of a
-// release shown read-only are not the Draft.
-func (l *Library) readOnly() bool {
-	return l.viewing != 0
-}
-
-// shownTypes returns the WidgetTypes shown: those of the release viewed, or of
-// the Draft.
+// shownTypes returns the WidgetTypes of the Draft.
 func (l *Library) shownTypes() []apiv0.WidgetTypeResponse {
-	if l.viewing == 0 {
-		return l.widgetTypes
-	}
-	for _, r := range l.releases {
-		if r.Number != l.viewing {
-			continue
-		}
-		return releasedWidgetTypes(r.WidgetTypes)
-	}
-	return nil
-}
-
-// releasedWidgetTypes converts the copies a Release or a Commit holds into the
-// shape of the Draft's WidgetTypes, so both read the same list.
-func releasedWidgetTypes(copies []apiv0.ReleasedWidgetTypeResponse) []apiv0.WidgetTypeResponse {
-	types := make([]apiv0.WidgetTypeResponse, len(copies))
-	for i, wt := range copies {
-		types[i] = apiv0.WidgetTypeResponse{
-			ID: wt.ID, LibraryID: wt.LibraryID, Name: wt.Name, HtmlTemplate: wt.HtmlTemplate, Script: wt.Script,
-			ScriptLanguage: wt.ScriptLanguage, DefaultWidth: wt.DefaultWidth, DefaultHeight: wt.DefaultHeight,
-			InputPorts: wt.InputPorts,
-		}
-	}
-	return types
+	return l.widgetTypes
 }
 
 // SetLibrary shows the library id (uuid.Nil: none); Root calls it with what
@@ -281,6 +258,12 @@ func releasedWidgetTypes(copies []apiv0.ReleasedWidgetTypeResponse) []apiv0.Widg
 // are loaded, and what was shown of another one is dropped (task 73).
 func (l *Library) SetLibrary(id uuid.UUID) {
 	if id == l.libraryID {
+		// The editor of the library shown is asked for again — the selection
+		// page's Open after the way back —, so the history screen closes: it is
+		// not the Draft the page opens (task 84).
+		if l.historyScreen {
+			l.closeHistory()
+		}
 		return
 	}
 	if !l.mounted {
@@ -298,7 +281,6 @@ func (l *Library) selectLibrary(ctx app.Context, id uuid.UUID) {
 		return
 	}
 	l.libraryID = id
-	l.viewing = 0
 	l.widgetTypes, l.releases = nil, nil
 	l.draftVersions.Forget()
 	l.clearSelection()
@@ -307,10 +289,10 @@ func (l *Library) selectLibrary(ctx app.Context, id uuid.UUID) {
 	l.commits, l.commitsLoaded = nil, false
 	l.saveDialog, l.savingCommit = false, false
 	l.historyScreen, l.loadingSavedState = false, 0
-	l.renamingCommit, l.renameCommitTitle = 0, ""
+	l.contentReplacements, l.appliedReplacements = 0, 0
+	l.history.ResetRename()
 	l.draftUnsaved, l.draftStateLoaded = false, false
 	l.releaseDialog, l.releasing, l.releaseCommit = false, false, 0
-	l.releasesDialog = false
 	uiutil.StoreID(ctx, libraryIDKey, id)
 	uiutil.StoreID(ctx, selectedIDKey, uuid.Nil)
 	l.loadList(ctx)
@@ -320,21 +302,8 @@ func (l *Library) selectLibrary(ctx app.Context, id uuid.UUID) {
 	l.loadCommits(ctx)
 }
 
-// view shows release n read-only (0: back to the Draft).
-func (l *Library) view(n int) {
-	l.releasesDialog = false
-	if n == l.viewing {
-		return
-	}
-	l.viewing = n
-	l.clearSelection()
-}
-
 // itemIdx returns the index of the WidgetType id in the list; -1 if absent.
 func (l *Library) itemIdx(id uuid.UUID) int {
-	if l.readOnly() {
-		return -1
-	}
 	return uiutil.IdxByID(l.widgetTypes, id, uiutil.WidgetTypeID)
 }
 
@@ -368,20 +337,16 @@ func (l *Library) renderEditor() app.UI {
 		Style("gap", "8px").
 		Body(
 			l.renderListColumn(),
-			l.renderEditorColumn("HTML Template", "html-template", l.edit.html, l.editorInput(func(v string) { l.edit.html = v }), !l.readOnly()),
-			l.renderEditorColumn("Script", "script-editor", l.edit.script, l.editorInput(func(v string) { l.edit.script = v }), !l.readOnly()),
+			l.renderEditorColumn("HTML Template", "html-template", l.edit.html, l.editorInput(func(v string) { l.edit.html = v }), true),
+			l.renderEditorColumn("Script", "script-editor", l.edit.script, l.editorInput(func(v string) { l.edit.script = v }), true),
 			l.renderInputPortsColumn(),
 			l.renderInputDataColumn(),
 			l.renderPreviewColumn(),
 		)
 }
 
-// editorInput returns the OnInput of an editor setting its field by set, nil
-// while the WidgetTypes shown are read-only.
+// editorInput returns the OnInput of an editor setting its field by set.
 func (l *Library) editorInput(set func(string)) func(app.Context, app.Event) {
-	if l.readOnly() {
-		return nil
-	}
 	return func(ctx app.Context, e app.Event) {
 		set(ctx.JSSrc().Get("value").String())
 	}

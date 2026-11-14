@@ -29,16 +29,11 @@ func (l *Library) renderListColumn() app.UI {
 
 // listTitle names what the WidgetTypes shown are of.
 func (l *Library) listTitle() string {
-	switch {
-	case l.viewing != 0:
-		return "Release " + itoa(l.viewing) + " (read-only)"
-	default:
-		return "Widget Types"
-	}
+	return "Widget Types"
 }
 
 func (l *Library) renderListButtons() app.UI {
-	editable := !l.readOnly()
+	editable := true
 	deleteDisabled := !editable || l.selectedID == uuid.Nil
 
 	deleteBtn := uiutil.Button("Delete", "error", !deleteDisabled,
@@ -127,9 +122,7 @@ func (l *Library) renderList() app.UI {
 					uiutil.StoreID(ctx, selectedIDKey, id)
 				}, app.EventScope(id.String())).
 				OnDblClick(func(ctx app.Context, e app.Event) {
-					if !l.readOnly() {
-						l.startEditing(id, name)
-					}
+					l.startEditing(id, name)
 				}, app.EventScope(id.String()+"/"+name))
 			if l.selectedID == id {
 				item = item.(app.HTMLDiv).

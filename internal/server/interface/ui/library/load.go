@@ -102,13 +102,31 @@ func (l *Library) loadList(ctx app.Context) {
 		return
 	}
 	mark := l.markDraft()
+	replacements := l.contentReplacements
 	uiutil.LoadForGone(l.compoCtx, &l.reloader, l.draft,
 		func(c context.Context, lib *apiclient.LibraryClient) ([]apiv0.WidgetTypeResponse, error) {
 			return lib.ListWidgetTypes(c)
 		},
 		func(ctx app.Context, _ *apiclient.LibraryClient, items []apiv0.WidgetTypeResponse) {
-			l.setWidgetTypes(ctx, mark, items)
+			l.setWidgetTypes(ctx, mark, replacements, items)
 		}, l.libraryGone, l.loadList)
+}
+
+// loadReleases (re)loads the releases of the selected library: the history
+// screen shows the number and note of the Release that published a saved state
+// (task 84). A 404 means the library is gone and leaves it (libraryGone).
+func (l *Library) loadReleases(ctx app.Context) {
+	if l.libraryID == uuid.Nil {
+		l.releases = nil
+		return
+	}
+	uiutil.LoadForGone(l.compoCtx, &l.releasesReloader, l.draft,
+		func(c context.Context, lib *apiclient.LibraryClient) ([]apiv0.LibraryReleaseResponse, error) {
+			return lib.ListReleases(c)
+		},
+		func(ctx app.Context, _ *apiclient.LibraryClient, releases []apiv0.LibraryReleaseResponse) {
+			l.releases = releases
+		}, l.libraryGone, l.loadReleases)
 }
 
 // loadDraftState (re)loads the state of the selected library's Draft: its
@@ -165,26 +183,15 @@ func (l *Library) loadUnsavedChanges(ctx app.Context) {
 		}, l.libraryGone, l.loadUnsavedChanges)
 }
 
-// loadReleases (re)loads the releases of the selected library.
-func (l *Library) loadReleases(ctx app.Context) {
-	if l.libraryID == uuid.Nil {
-		l.releases = nil
-		return
-	}
-	uiutil.LoadForGone(l.compoCtx, &l.releasesReloader, l.draft,
-		func(c context.Context, lib *apiclient.LibraryClient) ([]apiv0.LibraryReleaseResponse, error) {
-			return lib.ListReleases(c)
-		},
-		func(ctx app.Context, _ *apiclient.LibraryClient, releases []apiv0.LibraryReleaseResponse) {
-			l.releases = releases
-		}, l.libraryGone, l.loadReleases)
-}
-
 // setWidgetTypes replaces the list and brings the editor of the selected type
 // up to date: a type seen for the first time fills the editor, a known one is
 // merged field by field so unsaved edits survive changes made elsewhere, and a
-// deleted one drops the selection. mark is the moment the list was requested.
-func (l *Library) setWidgetTypes(ctx app.Context, mark uiutil.Mark, items []apiv0.WidgetTypeResponse) {
+// deleted one drops the selection. mark is the moment the list was requested;
+// replacements is how many times the whole Draft had been replaced then — the
+// first list after a replacement (a load of a saved state) is the truth, so the
+// editor is filled from it rather than merged, and a text typed but never
+// applied does not survive the load (task 84).
+func (l *Library) setWidgetTypes(ctx app.Context, mark uiutil.Mark, replacements uint64, items []apiv0.WidgetTypeResponse) {
 	old, known := l.findItem(l.selectedID)
 	for _, it := range items {
 		// Every DTO of the Draft carries its one Version (ADR 0016): the
@@ -198,15 +205,21 @@ func (l *Library) setWidgetTypes(ctx app.Context, mark uiutil.Mark, items []apiv
 		// that emptied the Draft.
 		l.loadDraftState(ctx)
 	}
-	if l.selectedID == uuid.Nil || l.readOnly() {
+	if l.selectedID == uuid.Nil {
 		return
 	}
 	current, exists := l.findItem(l.selectedID)
+	// The first list requested after the whole Draft was replaced is the truth:
+	// the editor takes it as it is, unsaved typing and all (task 84).
+	replaced := replacements == l.contentReplacements && replacements > l.appliedReplacements
+	if replaced {
+		l.appliedReplacements = replacements
+	}
 	switch {
 	case !exists:
 		l.clearSelection()
 		uiutil.StoreID(ctx, selectedIDKey, uuid.Nil)
-	case !known:
+	case !known || replaced:
 		l.selectItem(l.selectedID)
 	default:
 		l.mergeSelected(old, current)

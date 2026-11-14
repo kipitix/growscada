@@ -197,7 +197,7 @@ func (l *Library) renderPreviewColumn() app.UI {
 
 // renderInputPortsColumn renders the Input Ports management panel.
 func (l *Library) renderInputPortsColumn() app.UI {
-	disabled := l.selectedID == uuid.Nil || l.readOnly()
+	disabled := l.selectedID == uuid.Nil
 
 	// Existing ports list
 	portRows := make([]app.UI, 0, len(l.edit.ports))
@@ -342,8 +342,8 @@ func (l *Library) renderInputPortsColumn() app.UI {
 				Style("min-height", "0").
 				Style("overflow-y", "auto").
 				Body(portList...),
-			app.If(!l.readOnly(), func() app.UI { return addForm }),
-			app.If(!l.readOnly(), l.renderApplyButton),
+			addForm,
+			l.renderApplyButton(),
 		)
 }
 

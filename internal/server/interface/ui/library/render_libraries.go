@@ -1,7 +1,6 @@
 package library
 
 import (
-	"fmt"
 	"strconv"
 
 	"github.com/google/uuid"
@@ -51,7 +50,6 @@ func (l *Library) renderHeader() app.UI {
 				Style("background", "var(--bg-elevated)").
 				Body(body...),
 			app.If(l.saveDialog, l.renderSaveDialog).Else(func() app.UI { return app.Div() }),
-			app.If(l.releasesDialog, l.renderReleasesDialog).Else(func() app.UI { return app.Div() }),
 			app.If(l.releaseDialog, l.renderReleaseDialog).Else(func() app.UI { return app.Div() }),
 		)
 }
@@ -149,148 +147,7 @@ func (l *Library) renderLibraryStatus() app.UI {
 		)
 }
 
-// ── Releases ──────────────────────────────────────────────────────────────────
-
-// openReleasesDialog shows the releases of the selected library, read afresh.
-func (l *Library) openReleasesDialog() {
-	if l.libraryID == uuid.Nil {
-		return
-	}
-	l.releasesDialog = true
-	l.loadReleases(l.compoCtx)
-	l.compoCtx.Update()
-}
-
-// renderReleasesDialog is the releases of the selected library and a way back
-// to the Draft; a release is shown read-only, with the Commit it published,
-// its Author, time and the count of WidgetTypes it copied (task 72_7). The
-// note of each is edited in place.
-func (l *Library) renderReleasesDialog() app.UI {
-	// The handlers are scoped by n: go-app keeps a handler of the same func
-	// literal on a reused element, so a release prepended to the list would
-	// leave each entry viewing the release it showed before.
-	entry := func(n int, label, title string, extra app.UI) app.UI {
-		d := app.Div().
-			Class("library-history").
-			Style("display", "flex").
-			Style("align-items", "center").
-			Style("gap", "4px").
-			Style("padding", "4px 8px").
-			Style("cursor", "pointer").
-			Style("border-radius", "4px").
-			Style("font-size", "12px").
-			Title(title).
-			OnClick(func(ctx app.Context, e app.Event) { l.view(n) }, app.EventScope(itoa(n)))
-		text := app.Span().Style("flex", "1").Text(label)
-		if n == l.viewing {
-			d = d.Style("background", "var(--bg-hover)").Style("font-weight", "600").Style("color", "var(--text)")
-		} else {
-			d = d.Style("color", "var(--text)")
-		}
-		return d.Body(text, extra)
-	}
-	items := []app.UI{entry(0, "Draft", "The WidgetTypes being edited", app.Div())}
-	for i := len(l.releases) - 1; i >= 0; i-- {
-		items = append(items, l.renderReleaseRow(l.releases[i]))
-	}
-	return app.Div().
-		Attr("data-releases-dialog", "true").
-		Style("padding", "8px").
-		Style("margin-top", "6px").
-		Style("border", "1px solid var(--border)").
-		Style("border-radius", "4px").
-		Style("background", "var(--bg)").
-		Style("font-size", "12px").
-		Style("max-height", "40vh").
-		Style("overflow-y", "auto").
-		Body(
-			app.Div().Style("font-weight", "600").Style("margin-bottom", "4px").Text("Releases"),
-			app.Div().Body(items...),
-			smallButton("Close", true, "", "Close the releases", func() {
-				l.releasesDialog = false
-				l.compoCtx.Update()
-			}),
-		)
-}
-
-// releaseHistoryLabel is the history line of a Release: its number, the Commit
-// it published (or "legacy") and its note (task 72_5).
-func releaseHistoryLabel(r apiv0.LibraryReleaseResponse) string {
-	label := "Release " + itoa(r.Number)
-	if r.CommitNumber != nil {
-		label += " — saved state #" + itoa(*r.CommitNumber)
-		if r.Title != nil && *r.Title != "" {
-			label += " " + *r.Title
-		}
-	} else {
-		label += " — legacy"
-	}
-	if r.Note != "" {
-		label += " — " + r.Note
-	}
-	return label
-}
-
-// renderReleaseRow is one Release of the list: what it published and its
-// Author, time and count, its note edited in place. Clicking it shows its
-// copies read-only (task 72_7).
-func (l *Library) renderReleaseRow(r apiv0.LibraryReleaseResponse) app.UI {
-	// A bare inline action: it borrows the browser's own button look, so it
-	// carries no palette of its own.
-	note := app.Button().
-		Attr("data-release-note", itoa(r.Number)).
-		Style("padding", "0 6px").
-		Style("font-size", "11px").
-		Style("cursor", "pointer").
-		Text("Note").
-		OnClick(func(ctx app.Context, e app.Event) {
-			// The row below shows the Release: editing its note does not
-			// also switch the view to it.
-			e.Call("stopPropagation")
-			e.StopImmediatePropagation()
-			l.editReleaseNote(r)
-		}, app.EventScope("note/"+itoa(r.Number)))
-	row := app.Div().
-		Class("library-history").
-		Attr("data-release-row", itoa(r.Number)).
-		Style("display", "flex").
-		Style("align-items", "center").
-		Style("gap", "4px").
-		Style("padding", "4px 8px").
-		Style("cursor", "pointer").
-		Style("border-radius", "4px").
-		Style("font-size", "12px").
-		Title(r.Author+" · "+r.CreatedAt.Local().Format("2006-01-02 15:04")).
-		OnClick(func(ctx app.Context, e app.Event) { l.view(r.Number) }, app.EventScope(itoa(r.Number))).
-		Body(
-			app.Div().
-				Style("display", "flex").
-				Style("align-items", "center").
-				Style("gap", "4px").
-				Body(app.Span().Style("flex", "1").Text(releaseHistoryLabel(r)), note),
-			app.Div().
-				Style("font-size", "10px").
-				Style("opacity", "0.75").
-				Text(fmt.Sprintf("%s · %s · %d widget types", r.Author,
-					r.CreatedAt.Local().Format("2006-01-02 15:04"), r.ContentCounts.WidgetTypes)),
-		)
-	if r.Number == l.viewing {
-		return row.Style("background", "var(--bg-hover)").Style("font-weight", "600").Style("color", "var(--text)")
-	}
-	return row.Style("color", "var(--text)")
-}
-
 // ── Buttons ───────────────────────────────────────────────────────────────────
-
-// barButton renders one action of the header in its compact layout; kind
-// "accent", "error" or "" picks its colours, title is its hover text. options
-// go to the click handler: a button of a list gives it the row's identity, so
-// a reused element does not keep the handler of the row it showed before
-// (app.EventScope).
-func barButton(text string, enabled bool, kind, title string, onClick func(), options ...app.EventOption) app.UI {
-	return uiutil.Button(text, kind, enabled, title, uiutil.ButtonBar,
-		func(app.Context, app.Event) { onClick() }, options...)
-}
 
 // smallButton renders a button of the dialogs in their shared-width layout;
 // kind "accent", "error" or "" picks its colours, title is its hover text.

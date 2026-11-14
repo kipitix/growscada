@@ -247,7 +247,7 @@ func TestShortcut_DialogOpen_SendsNothing(t *testing.T) {
 	f.e.TakeToasts()
 	log.take()
 
-	f.p.releasesDialog = true
+	f.p.deployDialog = true
 	f.p.applyKeyAction(f.p.compoCtx, uiutil.KeyUndo)
 	f.run()
 

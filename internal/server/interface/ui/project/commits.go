@@ -10,6 +10,7 @@ import (
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
+	"github.com/kipitix/growscada/internal/server/interface/ui/savedstates"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
@@ -47,7 +48,7 @@ func (p *Project) hasUnsavedChanges() bool {
 // author. A first Save with no author yet shows the field empty: the dialog is
 // where the name is asked for (task 72_6).
 func (p *Project) openSaveDialog(ctx app.Context) {
-	p.saveTitle = "Save " + time.Now().Format("02.01.2006 15:04")
+	p.saveTitle = "Save " + uiutil.FormatTime(time.Now())
 	p.saveDialog = true
 	ctx.Update()
 }
@@ -130,6 +131,7 @@ func prompt(message, value string) (string, bool) {
 func (p *Project) openHistory(ctx app.Context) {
 	p.historyScreen = true
 	p.loadCommits(ctx)
+	p.loadReleases(ctx)
 	ctx.Update()
 }
 
@@ -137,37 +139,60 @@ func (p *Project) openHistory(ctx app.Context) {
 // being edited.
 func (p *Project) closeHistory() {
 	p.historyScreen = false
-	p.renamingCommit, p.renameCommitTitle = 0, ""
+	if p.history != nil {
+		p.history.ResetRename()
+	}
 	if p.mounted {
 		p.compoCtx.Update()
 	}
 }
 
-// startRenamingCommit opens the inline editor of a Commit's title.
-func (p *Project) startRenamingCommit(number int, current string) {
-	p.renamingCommit, p.renameCommitTitle = number, current
-}
-
-// renameCommit saves the inline title of a Commit. It states no Draft
-// Version: another Engineer's writes do not refuse it (ADR 0021).
-func (p *Project) renameCommit(ctx app.Context) {
-	number, title := p.renamingCommit, strings.TrimSpace(p.renameCommitTitle)
+// renameSavedState saves the name the history screen edited. It states no
+// Draft Version: another Engineer's writes do not refuse it (ADR 0021).
+func (p *Project) renameSavedState(ctx app.Context, number int, title string) {
 	if number == 0 || title == "" {
 		return
 	}
 	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.CommitResponse, error) {
 		return pc.RenameCommit(c, number, apiv0.RenameCommitRequest{Title: title})
 	}, func(ctx app.Context, _ apiv0.CommitResponse) {
-		p.renamingCommit, p.renameCommitTitle = 0, ""
 		p.loadCommits(ctx)
 		ctx.Update()
 	}, nil)
 }
 
-// commitTime renders a saved state's time in the browser's zone, as the
-// Library's history does: the same "02.01.2006 15:04" a Save's default title
-// carries (task 84).
-func commitTime(at time.Time) string { return at.Local().Format("02.01.2006 15:04") }
+// releaseSavedState opens the publication of the saved state the screen named.
+func (p *Project) releaseSavedState(ctx app.Context, number int) {
+	for _, saved := range p.commits {
+		if saved.Number == number {
+			p.openReleaseDialog(number)
+			return
+		}
+	}
+}
+
+// editSavedStateReleaseNote changes the note of the Release that published the
+// saved state, after asking for it: the note is metadata and states no Version
+// (task 72_3, task 84).
+func (p *Project) editSavedStateReleaseNote(ctx app.Context, number int) {
+	for _, released := range p.releases {
+		if released.CommitNumber != number {
+			continue
+		}
+		note, ok := prompt(fmt.Sprintf("Note of release %d:", released.Number), released.Note)
+		if !ok {
+			return
+		}
+		callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.ReleaseResponse, error) {
+			return pc.UpdateReleaseNote(c, released.Number, apiv0.UpdateReleaseNoteRequest{Note: note})
+		}, func(ctx app.Context, _ apiv0.ReleaseResponse) {
+			p.loadReleases(ctx)
+			p.loadCommits(ctx)
+			ctx.Update()
+		}, nil)
+		return
+	}
+}
 
 // renderCommitBar is the panel's Save, its unsaved-changes indicator, History
 // and Releases (task 72_2, task 72_6; task 84).
@@ -180,7 +205,7 @@ func (p *Project) renderCommitBar() []app.UI {
 		saveTitle = "Nothing to save since the last save"
 	}
 	body := []app.UI{
-		p.panelButton(uiutil.IconSave(), saveTitle, p.hasUnsavedChanges() && !p.savingCommit,
+		p.panelButton("save", uiutil.IconSave(), saveTitle, p.hasUnsavedChanges() && !p.savingCommit,
 			func(ctx app.Context) { p.openSaveDialog(ctx) }),
 	}
 	indicator := app.Span().Style("font-size", "12px")
@@ -200,9 +225,8 @@ func (p *Project) renderCommitBar() []app.UI {
 	}
 	body = append(body, indicator)
 	body = append(body,
-		p.panelButton(uiutil.IconHistory(), "The saved states of the project", !p.savingCommit,
+		p.panelButton("history", uiutil.IconHistory(), "The saved states of the project", !p.savingCommit,
 			func(ctx app.Context) { p.openHistory(ctx) }),
-		p.renderReleaseBar(),
 	)
 	return body
 }
@@ -323,150 +347,43 @@ func saveConfirmLabel(saving bool) string {
 	return "Save"
 }
 
-// renderHistoryScreen is the history of the project's saved states (task 84): a
-// screen of its own with a way back to the content and one row per saved state,
-// the list scrolling in its own pane.
+// renderHistoryScreen is the history of the project's saved states (task 84):
+// the screen both modes share, fed with this project's history and the Releases
+// that published it.
 func (p *Project) renderHistoryScreen() app.UI {
-	rows := []app.UI{}
-	switch {
-	case !p.commitsLoaded:
-		rows = append(rows, app.Div().
-			Style("padding", "8px").
-			Style("color", "var(--text-muted)").
-			Text("Loading saved states…"))
-	case len(p.commits) == 0:
-		rows = append(rows, app.Div().
-			Style("padding", "8px").
-			Text("The project has not been saved yet."))
-	default:
-		for _, saved := range p.commits {
-			rows = append(rows, p.renderSavedStateRow(saved))
+	screen := p.history
+	screen.Rows = p.historyRows()
+	screen.Loaded = p.commitsLoaded
+	screen.Loading = p.loadingSavedState != 0 || p.deploying
+	screen.OnBack = func(ctx app.Context) { p.closeHistory() }
+	screen.OnLoad = func(ctx app.Context, number int) { p.loadSavedState(ctx, number) }
+	screen.OnRelease = func(ctx app.Context, number int) { p.releaseSavedState(ctx, number) }
+	screen.OnRename = func(ctx app.Context, number int, title string) {
+		p.renameSavedState(ctx, number, title)
+	}
+	screen.OnNote = func(ctx app.Context, number int) { p.editSavedStateReleaseNote(ctx, number) }
+	return screen
+}
+
+// historyRows joins the history with the Releases that published it: a saved
+// state a Release published carries that Release's number and note (task 84).
+func (p *Project) historyRows() []savedstates.Row {
+	rows := make([]savedstates.Row, len(p.commits))
+	for i, saved := range p.commits {
+		row := savedstates.Row{
+			Number:   saved.Number,
+			Title:    saved.Title,
+			Author:   saved.Author,
+			SavedAt:  saved.CreatedAt,
+			Released: saved.Released,
 		}
+		for _, released := range p.releases {
+			if released.CommitNumber == saved.Number {
+				row.Release, row.Note = released.Number, released.Note
+				break
+			}
+		}
+		rows[i] = row
 	}
-	return app.Div().
-		Attr("data-history-screen", "true").
-		Style("display", "flex").
-		Style("flex-direction", "column").
-		Style("flex", "1").
-		Style("min-height", "0").
-		Body(
-			app.Div().
-				Style("display", "flex").
-				Style("align-items", "center").
-				Style("gap", "8px").
-				Style("padding", "6px 10px").
-				Style("border-bottom", "1px solid var(--border)").
-				Body(
-					uiutil.PanelButton(uiutil.IconBack(), true, "Back to the project",
-						func(ctx app.Context, e app.Event) { p.closeHistory() }, app.EventScope("history-back")),
-					app.Span().
-						Attr("data-history-title", "true").
-						Style("font-size", "13px").
-						Style("font-weight", "600").
-						Text("Saved states"),
-				),
-			app.Div().
-				Attr("data-history-list", "true").
-				Style("flex", "1").
-				Style("min-height", "0").
-				Style("overflow-y", "auto").
-				Style("padding", "4px 10px").
-				Body(rows...),
-		)
-}
-
-// renderSavedStateRow is one saved state of the history (task 84): the time it
-// was saved, its name — edited in place — and its author, and at the end the
-// two actions: load it into the Draft and publish it as a Release.
-func (p *Project) renderSavedStateRow(saved apiv0.CommitResponse) app.UI {
-	number := fmt.Sprint(saved.Number)
-	title := app.Span().
-		Attr("data-saved-state-title", number).
-		Style("font-size", "13px").
-		Text(saved.Title)
-	var name app.UI = app.Div().
-		Style("display", "flex").
-		Style("align-items", "center").
-		Style("gap", "4px").
-		Body(
-			title,
-			p.commitPublishedMark(saved),
-			uiutil.PanelButton(uiutil.IconPencil(), true, "Rename the saved state",
-				func(ctx app.Context, e app.Event) {
-					p.startRenamingCommit(saved.Number, saved.Title)
-					ctx.Update()
-				}, app.EventScope("rename/"+number)),
-		)
-	if p.renamingCommit == saved.Number {
-		name = app.Div().
-			Style("display", "flex").
-			Style("align-items", "center").
-			Style("gap", "4px").
-			Body(
-				app.Input().
-					Attr("data-saved-state-rename", number).
-					Type("text").
-					Value(p.renameCommitTitle).
-					AutoFocus(true).
-					Style("font-size", "12px").
-					Style("padding", "2px 4px").
-					OnInput(func(ctx app.Context, e app.Event) {
-						p.renameCommitTitle = ctx.JSSrc().Get("value").String()
-					}),
-				uiutil.PanelButton(uiutil.IconCheck(), true, "Save the name",
-					func(ctx app.Context, e app.Event) { p.renameCommit(ctx) }, app.EventScope("rename-ok/"+number)),
-				uiutil.PanelButton(uiutil.IconClose(), true, "Drop the new name",
-					func(ctx app.Context, e app.Event) {
-						p.renamingCommit, p.renameCommitTitle = 0, ""
-						ctx.Update()
-					}, app.EventScope("rename-cancel/"+number)),
-			)
-	}
-	release := p.releaseCommitButton(saved)
-	if saved.Released {
-		release = uiutil.Button("Released", "", false, "A Release publishes this saved state",
-			uiutil.ButtonRow, func(app.Context, app.Event) {}, app.EventScope("released/"+number))
-	}
-	load := uiutil.Button("Load", "", p.loadingSavedState == 0,
-		"Replace the Draft with this saved state",
-		uiutil.ButtonRow, func(ctx app.Context, e app.Event) { p.loadSavedState(ctx, saved.Number) },
-		app.EventScope("load/"+number))
-	return app.Div().
-		Attr("data-saved-state-row", number).
-		Style("display", "flex").
-		Style("flex-wrap", "wrap").
-		Style("align-items", "center").
-		Style("gap", "10px").
-		Style("padding", "6px 4px").
-		Style("border-bottom", "1px solid var(--border)").
-		Body(
-			app.Span().
-				Style("font-size", "11px").
-				Style("color", "var(--text-muted)").
-				Style("width", "118px").
-				Style("flex-shrink", "0").
-				Text(commitTime(saved.CreatedAt)),
-			app.Div().Style("flex", "1").Style("min-width", "0").Body(name),
-			app.Span().
-				Style("font-size", "11px").
-				Style("color", "var(--text-muted)").
-				Text(saved.Author),
-			load,
-			release,
-		)
-}
-
-// commitPublishedMark marks a Commit a Release published already: the history
-// says at a glance which of them are deployed from (task 72_6).
-func (p *Project) commitPublishedMark(commit apiv0.CommitResponse) app.UI {
-	if !commit.Released {
-		return app.Span()
-	}
-	return app.Span().
-		Attr("data-commit-published", fmt.Sprint(commit.Number)).
-		Title("This saved state is published as a Release").
-		Style("margin-left", "8px").
-		Style("font-size", "11px").
-		Style("color", "var(--accent)").
-		Text("released")
+	return rows
 }

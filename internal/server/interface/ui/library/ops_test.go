@@ -172,7 +172,7 @@ func TestApplyChanges_ListReadBeforeAConflict_DoesNotRestoreTheOldVersion(t *tes
 	f.oneToast() // the conflict
 	stale := slices.Clone(inFlight)
 	stale[0].Version = 15
-	f.l.setWidgetTypes(f.l.compoCtx, mark, stale) // its old answer arrives after the reread
+	f.l.setWidgetTypes(f.l.compoCtx, mark, 0, stale) // its old answer arrives after the reread
 
 	f.l.applyChanges(f.l.compoCtx)
 	f.run()
@@ -214,9 +214,10 @@ func TestDeleteItem_LastType_KeepsTheDraftVersion(t *testing.T) {
 	}
 }
 
-// TestRelease_ReleasesTheDraftAndShowsItInTheHistory: a Commit published as
-// Release 1 is shown in the history; viewing it is read-only.
-func TestRelease_ReleasesTheDraftAndShowsItInTheHistory(t *testing.T) {
+// TestRelease_ReleasesTheDraftAndMarksTheHistory: a saved state published as
+// Release 1 is marked "released" in the history, and the library's state
+// follows (task 72_5, task 84; ADR 0021).
+func TestRelease_ReleasesTheDraftAndMarksTheHistory(t *testing.T) {
 	f, id := selected(t)
 
 	if lib, ok := f.l.selectedLibrary(); !ok || !lib.HasUnsavedChanges || lib.LatestRelease != 0 {
@@ -227,24 +228,11 @@ func TestRelease_ReleasesTheDraftAndShowsItInTheHistory(t *testing.T) {
 	if lib, _ := f.l.selectedLibrary(); lib.LatestRelease != 1 || lib.HasUnsavedChanges || lib.HasUnpublishedChanges {
 		t.Errorf("library after the release: %+v", lib)
 	}
-	if len(f.l.releases) != 1 || len(f.l.releases[0].WidgetTypes) != 1 || f.l.releases[0].WidgetTypes[0].ID != id {
-		t.Fatalf("history: %+v", f.l.releases)
+	if len(f.l.commits) != 1 || !f.l.commits[0].Released || f.l.commits[0].ContentCounts.WidgetTypes != 1 {
+		t.Fatalf("history: %+v", f.l.commits)
 	}
-	if f.l.releases[0].CommitNumber == nil || *f.l.releases[0].CommitNumber != 1 || f.l.releases[0].Origin != apiv0.LibraryReleaseOriginCommit {
-		t.Errorf("the provenance of the release: %+v", f.l.releases[0])
-	}
-	f.l.view(1)
-	if !f.l.readOnly() || len(f.l.shownTypes()) != 1 {
-		t.Errorf("viewing release 1: read-only %t, %d types", f.l.readOnly(), len(f.l.shownTypes()))
-	}
-	f.l.createItem(f.l.compoCtx)
-	f.run()
-	if list, _ := f.api.ListWidgetTypes(context.Background()); len(list) != 1 {
-		t.Errorf("an edit while viewing a release reached the server: %+v", list)
-	}
-	f.l.view(0)
-	if f.l.readOnly() {
-		t.Error("the Draft is editable again")
+	if len(f.l.shownTypes()) != 1 || f.l.shownTypes()[0].ID != id {
+		t.Errorf("the Draft after the release: %+v", f.l.shownTypes())
 	}
 }
 
@@ -282,8 +270,8 @@ func releaseNow(t *testing.T, f *fixture) {
 		t.Fatalf("release: %v", err)
 	}
 	f.l.loadLibraries(f.l.compoCtx)
-	f.l.loadReleases(f.l.compoCtx)
-	f.l.loadCommits(f.l.compoCtx) // the release marks its Commit
+	f.l.loadReleases(f.l.compoCtx) // the history names the Release that published it
+	f.l.loadCommits(f.l.compoCtx)  // the release marks its Commit
 	f.l.loadDraftState(f.l.compoCtx)
 	f.run()
 	f.noToasts()
@@ -335,7 +323,7 @@ func TestLibraries_SetLibraryShowsTheGivenOne(t *testing.T) {
 
 // TestLibraryGone_AnyReadOfTheSelectedLibraryFiresTheAction: a 404 of any of
 // the reads of the selected library — its Draft's WidgetTypes, the state of
-// the Draft, its stack of DraftChanges, its Commits, its releases — means the
+// the Draft, its stack of DraftChanges, its saved states — means the
 // library is gone: the read fires ActionLibraryGone with the library's ID and
 // shows no toast (task 76). Root leaves the library and shows the page on it.
 func TestLibraryGone_AnyReadOfTheSelectedLibraryFiresTheAction(t *testing.T) {
@@ -347,7 +335,6 @@ func TestLibraryGone_AnyReadOfTheSelectedLibraryFiresTheAction(t *testing.T) {
 		{"draft state", func(f *fixture) { f.l.loadDraftState(f.l.compoCtx) }},
 		{"draft changes", func(f *fixture) { f.l.loadDraftChanges(f.l.compoCtx) }},
 		{"commits", func(f *fixture) { f.l.loadCommits(f.l.compoCtx) }},
-		{"releases", func(f *fixture) { f.l.loadReleases(f.l.compoCtx) }},
 	}
 	for _, read := range reads {
 		t.Run(read.name, func(t *testing.T) {
@@ -388,8 +375,7 @@ func TestLibraryGone_ACommandKeepsItsOwnError(t *testing.T) {
 	}
 	f.e.TakeActions()
 
-	f.l.renamingCommit, f.l.renameCommitTitle = 1, "Renamed"
-	f.l.renameCommit()
+	f.l.renameSavedState(f.l.compoCtx, 1, "Renamed")
 	f.run()
 
 	if got := f.oneToast(); got.Status != http.StatusNotFound {
@@ -463,7 +449,7 @@ func TestApplyChanges_StaleListAfterTheSave_KeepsTheSavedVersion(t *testing.T) {
 	f.l.edit.name = "Mine"
 	f.l.applyChanges(f.l.compoCtx)
 	f.run()
-	f.l.setWidgetTypes(f.l.compoCtx, mark, stale)
+	f.l.setWidgetTypes(f.l.compoCtx, mark, 0, stale)
 
 	f.l.edit.name = "Mine again"
 	f.l.applyChanges(f.l.compoCtx)

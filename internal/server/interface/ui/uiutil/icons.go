@@ -14,11 +14,9 @@ const (
 	iconUndoSVG    = `<svg data-icon="undo" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>`
 	iconRedoSVG    = `<svg data-icon="redo" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg>`
 	iconHistorySVG = `<svg data-icon="history" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v5l3 2"/></svg>`
-	iconTagSVG     = `<svg data-icon="tag" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4L11 3.8A2 2 0 0 0 9.6 3.2H4a1 1 0 0 0-1 1v5.6c0 .5.2 1 .6 1.4l9.6 9.6a2 2 0 0 0 2.8 0l4.6-4.6a2 2 0 0 0 0-2.8z"/><path d="M7.5 7.5h.01"/></svg>`
 	iconDeploySVG  = `<svg data-icon="deploy" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="M6 10l6-6 6 6"/><path d="M4 20h16"/></svg>`
 	iconLayersSVG  = `<svg data-icon="layers" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>`
 	iconFileSVG    = `<svg data-icon="file" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z"/><path d="M14 3v5h5"/></svg>`
-	iconLoadSVG    = `<svg data-icon="load" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12"/><path d="M6 10l6 6 6-6"/><path d="M4 20h16"/></svg>`
 	iconCheckSVG   = `<svg data-icon="check" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>`
 	iconCloseSVG   = `<svg data-icon="close" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`
 	iconPencilSVG  = `<svg data-icon="pencil" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M14 6l4 4"/></svg>`
@@ -37,9 +35,6 @@ func IconRedo() app.UI { return app.Raw(iconRedoSVG) }
 // IconHistory opens the saved states of the Draft.
 func IconHistory() app.UI { return app.Raw(iconHistorySVG) }
 
-// IconTag opens the Releases.
-func IconTag() app.UI { return app.Raw(iconTagSVG) }
-
 // IconDeploy makes a Release the running Deployment.
 func IconDeploy() app.UI { return app.Raw(iconDeploySVG) }
 
@@ -50,7 +45,6 @@ func IconLayers() app.UI { return app.Raw(iconLayersSVG) }
 func IconFile() app.UI { return app.Raw(iconFileSVG) }
 
 // IconLoad loads a saved state into the Draft.
-func IconLoad() app.UI { return app.Raw(iconLoadSVG) }
 
 // IconCheck saves the edit of a field in place.
 func IconCheck() app.UI { return app.Raw(iconCheckSVG) }

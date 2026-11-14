@@ -167,8 +167,9 @@ func (p *Project) doLoadSavedState(ctx app.Context, number int) {
 	})
 }
 
-// reloadDraftContent rereads what a Discard or a Revert replaced: the Draft's
-// content, its Version and stack, the history and the running Deployment. The
+// reloadDraftContent rereads what a load of a saved state replaced: the
+// Draft's content, its Version and stack, the history and the running
+// Deployment. The
 // Scenes carry the Widgets of the selected one; the events do the same, but a
 // reset is rare and the screen should not wait for them (task 72_6).
 func (p *Project) reloadDraftContent(ctx app.Context) {
@@ -204,9 +205,8 @@ func (p *Project) showLoadWarnings(ctx app.Context, warnings []apiv0.DiscardWarn
 	}})
 }
 
-// renderDeployBar is the project's header: the Deployment it runs and its
-// Release, and the Deploy, Discard changes, Revert to deployed, Deployments and
-// project file actions.
+// renderDeployBar is the project's panel: the Deployment it runs and its
+// Release, and the Deploy, Deployments and project file actions.
 func (p *Project) renderDeployBar() app.UI {
 	badge := "Not deployed"
 	switch {
@@ -242,17 +242,17 @@ func (p *Project) renderDeployBar() app.UI {
 		uiutil.BarDivider(),
 		p.renderAuthorBar(),
 		app.Div().Style("flex", "1"),
-		p.panelButton(uiutil.IconFile(), "Download the Draft, open a file, or deploy one",
+		p.panelButton("project-file", uiutil.IconFile(), "Download the Draft, open a file, or deploy one",
 			!busy && !p.projectFileBusy, func(ctx app.Context) {
 				p.openProjectFileDialog(ctx)
 			}),
-		p.panelButton(uiutil.IconLayers(), "The Deployments of the project",
+		p.panelButton("deployments", uiutil.IconLayers(), "The Deployments of the project",
 			!busy, func(ctx app.Context) {
 				p.openDeploymentsDialog(ctx)
 			}),
-		p.panelButton(uiutil.IconDeploy(), p.deployButtonTitle(),
+		p.panelButton("deploy", uiutil.IconDeploy(), p.deployButtonTitle(),
 			!busy, func(ctx app.Context) {
-				p.openReleasesDialog(ctx)
+				p.openDeployDialog(ctx)
 			}),
 	)
 
@@ -265,8 +265,8 @@ func (p *Project) renderDeployBar() app.UI {
 	if p.saveDialog {
 		body = append(body, p.renderSaveDialog())
 	}
-	if p.releasesDialog {
-		body = append(body, p.renderReleasesDialog())
+	if p.deployDialog {
+		body = append(body, p.renderDeployDialog())
 	}
 	if p.releaseDialog {
 		body = append(body, p.renderReleaseDialog())
@@ -325,11 +325,12 @@ func (p *Project) deployButtonTitle() string {
 	return "Choose a Release to deploy"
 }
 
-// panelButton is one icon action of the panel (task 84); the title is also the
-// EventScope, so a reused element never keeps another action's handler.
-func (p *Project) panelButton(icon app.UI, title string, enabled bool, onClick func(app.Context)) app.UI {
+// panelButton is one icon action of the panel (task 84). scope names the
+// action for go-app — a reused element keeps the handler of the scope it had —
+// and is never the hover text: rewording a title must not move a handler.
+func (p *Project) panelButton(scope string, icon app.UI, title string, enabled bool, onClick func(app.Context)) app.UI {
 	return uiutil.PanelButton(icon, enabled, title,
-		func(ctx app.Context, e app.Event) { onClick(ctx) }, app.EventScope(title))
+		func(ctx app.Context, e app.Event) { onClick(ctx) }, app.EventScope(scope))
 }
 
 // renderDeploymentsDialog is the list of the project's Deployments with the

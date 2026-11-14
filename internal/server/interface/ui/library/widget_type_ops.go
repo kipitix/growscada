@@ -20,7 +20,7 @@ const defaultScript = "function update() {\n}"
 func (l *Library) createItem(ctx app.Context) {
 	ctx = l.compoCtx
 	draft := l.draft()
-	if draft == nil || l.readOnly() {
+	if draft == nil {
 		return
 	}
 	req := apiv0.CreateWidgetTypeRequest{
@@ -60,7 +60,7 @@ func (l *Library) createItem(ctx app.Context) {
 func (l *Library) deleteItem(ctx app.Context) {
 	ctx = l.compoCtx
 	draft := l.draft()
-	if l.selectedID == uuid.Nil || draft == nil || l.readOnly() {
+	if l.selectedID == uuid.Nil || draft == nil {
 		return
 	}
 	deletedID := l.selectedID
@@ -76,7 +76,7 @@ func (l *Library) deleteItem(ctx app.Context) {
 }
 
 func (l *Library) applyChanges(ctx app.Context) {
-	if l.selectedID == uuid.Nil || l.readOnly() {
+	if l.selectedID == uuid.Nil {
 		return
 	}
 	current, ok := l.findItem(l.selectedID)
@@ -103,10 +103,6 @@ func (l *Library) commitEdit(ctx app.Context) {
 	name := l.editingName
 	l.editingID = uuid.Nil
 	l.editingName = ""
-	if l.readOnly() {
-		return
-	}
-
 	idx := l.itemIdx(id)
 	if idx < 0 {
 		return

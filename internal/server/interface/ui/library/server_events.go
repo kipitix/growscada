@@ -11,10 +11,10 @@ import (
 
 // ── Server events ─────────────────────────────────────────────────────────────
 //
-// The libraries, the selected one's releases and the WidgetTypes of its
-// Draft are reloaded on server events (changed by anyone — another tab,
-// growctl, a Discard); the editor merges the fresh data field by field
-// (edit_fields.go).
+// The libraries, the history of the selected one's Draft and its WidgetTypes
+// are reloaded on server events (changed by anyone — another tab, growctl, a
+// load of a saved state); the editor merges the fresh data field by field
+// (edit_fields.go), and takes it whole when the Draft itself was replaced.
 
 func (l *Library) handleServerEvents(ctx app.Context) {
 	ctx.Handle(eventlog.ActionServerEvent, func(ctx app.Context, a app.Action) {
@@ -35,7 +35,6 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 			l.loadDraftChanges(ctx)
 			l.loadLibraries(ctx)
 			l.loadList(ctx)
-			l.loadReleases(ctx)
 			l.loadCommits(ctx)
 			return
 		}
@@ -54,26 +53,21 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 		}
 		if targets.WidgetTypes && mine {
 			// A WidgetType of the selected library changed: its Draft and the
-			// unsaved indicator follow. The Releases are not reread with
-			// their content, which a Draft edit never changes (task 72_7).
+			// unsaved indicator follow. The history is not reread, which a
+			// Draft edit never changes (task 72_7).
 			l.loadList(ctx)
 		}
 		if targets.Commits && mine {
 			l.loadCommits(ctx)
 			l.loadUnsavedChanges(ctx) // a Save makes the Draft its Commit's content
 		}
-		// A Library Release names the Commit it published by that Commit's
-		// current title — its own copy carries none —, so a rename changes the
-		// Release list too. A Project Release keeps the title it was published
-		// with and needs no such read (task 72_7; ADR 0021).
-		if ev.Type == apiv0.EventCommitTitleUpdated && mine {
-			l.loadReleases(ctx)
-		}
-		// A Release of the selected Library and its note changed in another
-		// tab: the list of Releases follows, never another library's
-		// (task 72_7).
-		if targets.Releases && mine {
-			l.loadReleases(ctx)
+		// A Release of the selected library, or a rename of the saved state it
+		// published, changes the history's "released" mark and the library's
+		// state — never another library's (task 72_7; task 84).
+		if (targets.Releases || ev.Type == apiv0.EventCommitTitleUpdated) && mine {
+			l.loadReleases(ctx) // the row names the Release that published it
+			l.loadCommits(ctx)
+			l.loadLibraries(ctx)
 		}
 	})
 }

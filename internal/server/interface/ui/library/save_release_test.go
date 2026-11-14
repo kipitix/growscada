@@ -118,6 +118,31 @@ func TestLoadSavedState_ResetsToTheLastSavedStateAndClearsTheIndicator(t *testin
 	}
 }
 
+// TestLoadSavedState_ReplacesTheEditor: a text typed into the editor but never
+// applied does not survive the load of a saved state — the editor takes the
+// loaded WidgetType as it is, instead of merging the old typing into it
+// (task 84).
+func TestLoadSavedState_ReplacesTheEditor(t *testing.T) {
+	f, id := selected(t)
+	f.run()
+	saveWithUI(t, f, "First save")
+
+	f.l.selectItem(id)
+	f.l.edit.script = "typed but never applied"
+	f.run()
+
+	f.l.doLoadSavedState(f.l.compoCtx, 1)
+	f.run()
+	f.e.TakeToasts() // the load's own confirmation
+
+	if f.l.edit.script == "typed but never applied" {
+		t.Errorf("the load kept the typed text: %q", f.l.edit.script)
+	}
+	if want := f.widgetType(id).Script; f.l.edit.script != want {
+		t.Errorf("the editor holds %q after the load, want the saved %q", f.l.edit.script, want)
+	}
+}
+
 // TestLoadSavedState_OlderSavedStateLeavesTheDraftUnsaved: a saved state that
 // is not the last one becomes the Draft too, and the server then reports it
 // unsaved — it differs from the newest saved state (task 74; task 84).
@@ -173,8 +198,8 @@ func TestPublishRelease_RepeatedPublicationIsAToast(t *testing.T) {
 	if got := f.oneToast(); !strings.Contains(got.Title, "Release 1 published") {
 		t.Fatalf("the publication toast: %+v", got)
 	}
-	if len(f.l.releases) != 1 || f.l.releases[0].Number != 1 {
-		t.Fatalf("the releases after the publication: %+v", f.l.releases)
+	if len(f.l.commits) != 1 || !f.l.commits[0].Released {
+		t.Fatalf("the history after the publication: %+v", f.l.commits)
 	}
 
 	// Another tab may have published it meanwhile: the commit this one holds
@@ -216,18 +241,28 @@ func TestLibraryState_ListsTheThreeStates(t *testing.T) {
 	}
 }
 
-// TestReleaseRow_ShowsItsCounts: a Release of the list names the Commit it
-// published, its Author, time and the WidgetTypes it copied (task 72_7).
-func TestReleaseRow_ShowsItsCounts(t *testing.T) {
+// TestReleaseEvent_RereadsTheHistory: a Release of the selected library made in
+// another tab (library_released) rereads the history, whose row then says
+// "released" (task 84).
+func TestReleaseEvent_RereadsTheHistory(t *testing.T) {
 	f, _ := selected(t)
 	f.run()
-	releaseNow(t, f)
-	if len(f.l.releases) != 1 {
-		t.Fatalf("the releases: %+v", f.l.releases)
+	saveWithUI(t, f, "First save")
+	if len(f.l.commits) != 1 || f.l.commits[0].Released {
+		t.Fatalf("the history before the event: %+v", f.l.commits)
 	}
-	html := app.HTMLString(f.l.renderReleaseRow(f.l.releases[0]))
-	if !strings.Contains(html, "saved state #1") || !strings.Contains(html, "1 widget types") || !strings.Contains(html, "Ada") {
-		t.Errorf("the release row: %s", html)
+
+	// Another tab publishes the saved state.
+	if _, err := f.api.Release(context.Background(), apiv0.CreateReleaseRequest{Commit: 1, Author: "Ada"}); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	f.event(apiv0.Event{Type: apiv0.EventLibraryReleased, ID: f.l.libraryID.String(), Release: 1})
+	if len(f.l.commits) != 1 || !f.l.commits[0].Released {
+		t.Errorf("the history after the event: %+v, want the released mark", f.l.commits)
+	}
+	// The row names the Release that published the saved state (task 84).
+	if html := app.HTMLString(f.l.renderHistoryScreen()); !strings.Contains(html, `data-saved-state-release="1"`) {
+		t.Errorf("the history does not name Release 1: %s", html)
 	}
 }
 
@@ -241,7 +276,6 @@ func TestServerEvents_AnotherLibraryLeavesTheSelectedAlone(t *testing.T) {
 	}
 	f := mount(t, url, api)
 	f.run()
-	f.l.releases = []apiv0.LibraryReleaseResponse{{Number: 99}}
 	f.l.commits = []apiv0.CommitResponse{{Number: 99}}
 
 	for _, ev := range []apiv0.Event{
@@ -250,30 +284,9 @@ func TestServerEvents_AnotherLibraryLeavesTheSelectedAlone(t *testing.T) {
 		{Type: apiv0.EventLibraryReleaseNoteUpdated, ID: other.ID.String(), Release: 1},
 	} {
 		f.event(ev)
-		if len(f.l.releases) != 1 || f.l.releases[0].Number != 99 {
-			t.Fatalf("%s of another library reloaded the releases: %+v", ev.Type, f.l.releases)
-		}
 		if len(f.l.commits) != 1 || f.l.commits[0].Number != 99 {
 			t.Fatalf("%s of another library reloaded the history: %+v", ev.Type, f.l.commits)
 		}
-	}
-}
-
-// TestWidgetTypeEvent_DoesNotReloadTheReleasesWithContent: a WidgetType of the
-// selected Draft changes the list and the unsaved flag, never the Releases
-// with their copies (task 72_7).
-func TestWidgetTypeEvent_DoesNotReloadTheReleasesWithContent(t *testing.T) {
-	f, id := selected(t)
-	f.run()
-	releaseNow(t, f)
-	f.l.releases = []apiv0.LibraryReleaseResponse{{Number: 99}}
-
-	f.event(apiv0.Event{Type: apiv0.EventWidgetTypeUpdated, ID: id.String(), LibraryID: f.l.libraryID.String()})
-	if len(f.l.releases) != 1 || f.l.releases[0].Number != 99 {
-		t.Errorf("a WidgetType event reloaded the Releases with their content: %+v", f.l.releases)
-	}
-	if len(f.l.widgetTypes) != 1 || f.l.widgetTypes[0].ID != id {
-		t.Errorf("a WidgetType event did not reread the Draft: %+v", f.l.widgetTypes)
 	}
 }
 
@@ -283,35 +296,11 @@ func TestWidgetTypeEvent_DoesNotReloadTheReleasesWithContent(t *testing.T) {
 func TestServerEvents_ProjectResyncLeavesTheLibraryAlone(t *testing.T) {
 	f, _ := selected(t)
 	f.run()
-	f.l.releases = []apiv0.LibraryReleaseResponse{{Number: 99}}
 	f.l.commits = []apiv0.CommitResponse{{Number: 99}}
 
 	f.event(apiv0.Event{Type: eventlog.EventProjectResync})
-	if len(f.l.releases) != 1 || f.l.releases[0].Number != 99 {
-		t.Errorf("a project resync reloaded the releases: %+v", f.l.releases)
-	}
 	if len(f.l.commits) != 1 || f.l.commits[0].Number != 99 {
 		t.Errorf("a project resync reloaded the history: %+v", f.l.commits)
-	}
-}
-
-// TestCommitTitleEvent_RereadsTheReleases: a Library Release names its Commit
-// by the Commit's current title — its own copy carries none —, so a rename
-// changes the Release list too (task 72_7; ADR 0021).
-func TestCommitTitleEvent_RereadsTheReleases(t *testing.T) {
-	f, _ := selected(t)
-	f.run()
-	releaseNow(t, f)
-	if len(f.l.releases) != 1 || f.l.releases[0].Title == nil || *f.l.releases[0].Title != "Save" {
-		t.Fatalf("the released Commit's title: %+v", f.l.releases)
-	}
-	if _, err := f.api.RenameCommit(context.Background(), 1, apiv0.RenameCommitRequest{Title: "Renamed"}); err != nil {
-		t.Fatalf("rename the Commit: %v", err)
-	}
-
-	f.event(apiv0.Event{Type: apiv0.EventCommitTitleUpdated, ID: f.l.libraryID.String(), Commit: 1})
-	if len(f.l.releases) != 1 || f.l.releases[0].Title == nil || *f.l.releases[0].Title != "Renamed" {
-		t.Errorf("a rename of the Commit did not reread the Releases: %+v", f.l.releases)
 	}
 }
 

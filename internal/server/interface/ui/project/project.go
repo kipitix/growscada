@@ -9,6 +9,7 @@ import (
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
+	"github.com/kipitix/growscada/internal/server/interface/ui/savedstates"
 	"github.com/kipitix/growscada/internal/server/interface/ui/tagstate"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
@@ -120,13 +121,11 @@ type Project struct {
 	// ordinary one again and is judged by its Version (task 72_6).
 	contentReplacements uint64
 	appliedReplacements uint64
-	// renamingCommit is the number of the saved state whose name is edited in
-	// place (0: none), renameCommitTitle the text of the editor. historyScreen
-	// is true while the saved states are shown in place of the content
-	// (task 84): History opens them and the way back closes them.
-	renamingCommit    int
-	renameCommitTitle string
-	historyScreen     bool
+	// historyScreen is true while the saved states are shown in place of the
+	// content (task 84): History opens them and the way back closes them, and
+	// history is the screen that draws them, shared with the Library mode.
+	historyScreen bool
+	history       *savedstates.Screen
 
 	// OnBack and BackName are the panel's way back to the selection page and
 	// the project it shows (task 84). Root owns both — the page and the name
@@ -137,7 +136,7 @@ type Project struct {
 
 	// ── Releases (task 72_3; ADR 0021) ─────────────────────────────────────
 	// releases is the publication history, newest first; releasesLoaded is
-	// false until its first answer. releasesDialog is true while the list is
+	// false until its first answer. deployDialog is true while the list is
 	// shown, releaseDialog while a Commit is published, releasing marks that
 	// request in flight. releaseCommit is the Commit being published (0:
 	// none). editingRelease is the number of the Release whose note is edited
@@ -145,7 +144,7 @@ type Project struct {
 	releases         []apiv0.ReleaseResponse
 	releasesLoaded   bool
 	releasesReloader uiutil.Reloader
-	releasesDialog   bool
+	deployDialog     bool
 	releaseDialog    bool
 	releasing        bool
 	releaseCommit    int
@@ -318,7 +317,12 @@ const (
 )
 
 func NewProject(client *apiclient.Client) *Project {
-	return &Project{client: client, activeSubTab: subTabScenes, simInputs: make(map[uuid.UUID]map[string]string)}
+	return &Project{
+		client:       client,
+		activeSubTab: subTabScenes,
+		simInputs:    make(map[uuid.UUID]map[string]string),
+		history:      savedstates.New(),
+	}
 }
 
 func (p *Project) OnMount(ctx app.Context) {
@@ -372,6 +376,12 @@ func (p *Project) OnDismount() {
 // loads.
 func (p *Project) SetProject(id uuid.UUID) {
 	if id == p.projectID {
+		// The editor of the project shown is asked for again — the selection
+		// page's Open after the way back —, so the history screen closes: it is
+		// not the content the page opens (task 84).
+		if p.historyScreen {
+			p.closeHistory()
+		}
 		return
 	}
 	// A series of arrow moves belongs to the project left: it is sent before
@@ -403,11 +413,11 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.undoing, p.redoing = false, false
 	p.commits, p.commitsLoaded = nil, false
 	p.saveDialog, p.savingCommit = false, false
-	p.renamingCommit, p.renameCommitTitle = 0, ""
+	p.history.ResetRename()
 	p.draftUnsaved, p.draftStateLoaded = false, false
 	p.contentReplacements, p.appliedReplacements = 0, 0
 	p.releases, p.releasesLoaded = nil, false
-	p.releasesDialog, p.releaseDialog, p.releasing = false, false, false
+	p.deployDialog, p.releaseDialog, p.releasing = false, false, false
 	p.releaseCommit, p.releaseNote, p.releaseAuthor = 0, "", ""
 	p.editingRelease, p.releaseNoteDraft = 0, ""
 	p.draftVersions.Forget()

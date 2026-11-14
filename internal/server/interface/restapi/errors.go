@@ -52,8 +52,10 @@ var (
 	deviceTokenResource = resource{name: "DeviceToken", pathParam: "device_id"}
 	// A Deployment is named by its number within its Project.
 	deploymentResource = resource{name: "Deployment", pathParam: "deployment_number"}
-	// A Commit is named by its number within its Draft.
-	commitResource = resource{name: "Commit", pathParam: "commit_number"}
+	// A Commit is named by its number within its Draft. The name is what a
+	// person reads in a 404 and in a 409's title, so it says "Saved state", the
+	// UI's word for it (task 84); the path and the DTOs keep Commit.
+	commitResource = resource{name: "Saved state", pathParam: "commit_number"}
 	// A Project Release is named by its number within its Project.
 	projectReleaseResource = resource{name: "Release", pathParam: "release_number"}
 	// The per-user settings of the server are named by no path at all: the
@@ -100,12 +102,12 @@ var errorMappings = []errorMapping{
 	{application.ErrDeploymentNotDiscardable, http.StatusConflict, deploymentResource,
 		"The Deployment names Library Releases this server does not have; the Draft is left as it is"},
 	{draft.ErrNothingToSave, http.StatusConflict, commitResource,
-		"Nothing to save: the Draft has not changed since its last Commit"},
+		"Nothing to save: the draft has not changed since the last save"},
 	{application.ErrDraftNotSaveable, http.StatusConflict, commitResource,
 		"The Draft cannot be saved: it cannot be assembled; repair the Draft first"},
 	{draft.ErrCommitNotFound, http.StatusNotFound, commitResource, ""},
 	{release.ErrCommitAlreadyReleased, http.StatusConflict, projectReleaseResource,
-		"Commit is already released"},
+		"This saved state is already released"},
 	{release.ErrReleaseNotFound, http.StatusNotFound, projectReleaseResource, ""},
 	{runtimeapp.ErrNothingToRollback, http.StatusConflict, deploymentResource,
 		"Nothing to rollback: the deployment holds the document the project runs"},
@@ -123,7 +125,7 @@ var errorMappings = []errorMapping{
 		"Library is named by the running Deployment of a project; deploy a configuration without it first"},
 	{library.ErrNoRelease, http.StatusConflict, libraryResource, "Library has never been released: there is nothing to revert to"},
 	{library.ErrNothingToDiscard, http.StatusConflict, libraryResource, "Library has no Commit: there is nothing to discard"},
-	{library.ErrCommitAlreadyReleased, http.StatusConflict, releaseResource, "Commit is already released"},
+	{library.ErrCommitAlreadyReleased, http.StatusConflict, releaseResource, "This saved state is already released"},
 	{library.ErrReleaseNumberTaken, http.StatusConflict, libraryResource, "Library was released concurrently; retry"},
 	{library.ErrReleaseNotFound, http.StatusNotFound, releaseResource, ""},
 	{library.ErrWidgetTypeNotFound, http.StatusNotFound, widgetTypeResource, ""},

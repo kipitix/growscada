@@ -60,9 +60,6 @@ func TestDeployBar_ShowsTheDeploymentAndItsRelease(t *testing.T) {
 	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, "Release 1 · running") {
 		t.Errorf("the bar does not show Release 1 running: %s", html)
 	}
-	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-release-badge="1"`) {
-		t.Errorf("the bar shows no badge of the running Release: %s", html)
-	}
 }
 
 // TestReleasesDialog_DeploysAReleaseAndMovesTheMark: the list marks the running
@@ -84,7 +81,7 @@ func TestReleasesDialog_DeploysAReleaseAndMovesTheMark(t *testing.T) {
 		t.Fatalf("release: %v", err)
 	}
 
-	f.p.openReleasesDialog(f.p.compoCtx)
+	f.p.openDeployDialog(f.p.compoCtx)
 	f.run()
 	f.p.loadDeploy(f.p.compoCtx)
 	f.run()
@@ -120,7 +117,7 @@ func TestReleasesDialog_DeploymentWithoutRelease(t *testing.T) {
 	f.p.deployment = apiv0.DeploymentResponse{Number: 4, DeployedAt: "2026-11-04T10:00:00Z"}
 	f.p.releases = []apiv0.ReleaseResponse{{Number: 1, Title: "First"}}
 	f.p.releasesLoaded = true
-	f.p.releasesDialog = true
+	f.p.deployDialog = true
 
 	html := app.HTMLString(f.p.Render())
 	if !strings.Contains(html, "Running Deployment 4 (not a Release)") {
@@ -174,7 +171,7 @@ func TestLoadSavedState_ResetsToTheLastSavedState(t *testing.T) {
 		t.Fatal("the change after the saved state is not unsaved")
 	}
 	html := app.HTMLString(f.p.Render())
-	for _, icon := range []string{"save", "undo", "redo", "history", "tag", "deploy"} {
+	for _, icon := range []string{"save", "undo", "redo", "history", "deploy"} {
 		if !strings.Contains(html, `data-icon="`+icon+`"`) {
 			t.Errorf("the panel has no %s action: %s", icon, html)
 		}
@@ -343,7 +340,7 @@ func TestReleasesDialog_UnknownDeployment(t *testing.T) {
 		t.Errorf("the bar passes an unknown Deployment off as not deployed: %s", html)
 	}
 
-	f.p.openReleasesDialog(f.p.compoCtx)
+	f.p.openDeployDialog(f.p.compoCtx)
 	f.run()
 	f.e.TakeToasts()
 	html := app.HTMLString(f.p.Render())

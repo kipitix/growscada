@@ -34,10 +34,11 @@ func (p *Project) loadReleases(ctx app.Context) {
 		}, p.loadReleases)
 }
 
-// openReleasesDialog shows the Releases, read afresh: the list is where a
-// Release is made the running Deployment (task 72_4).
-func (p *Project) openReleasesDialog(ctx app.Context) {
-	p.releasesDialog = true
+// openDeployDialog shows the Releases, read afresh: the list is where a
+// Release is made the running Deployment (task 72_4), and the only place the
+// Releases are listed — the panel has no button of its own for them (task 84).
+func (p *Project) openDeployDialog(ctx app.Context) {
+	p.deployDialog = true
 	p.loadReleases(ctx)
 	p.loadDeploy(ctx)
 	ctx.Update()
@@ -176,30 +177,6 @@ func (p *Project) saveReleaseNote(ctx app.Context) {
 	}, nil)
 }
 
-// renderReleaseBar is the header's button of the Releases, with the number of
-// the running Release beside it (task 72_6).
-func (p *Project) renderReleaseBar() app.UI {
-	button := p.panelButton(uiutil.IconTag(), "The Releases of the project", !p.releasing,
-		func(ctx app.Context) { p.openReleasesDialog(ctx) })
-	if !p.deployed || p.deployment.ReleaseNumber == nil {
-		return button
-	}
-	return app.Div().
-		Style("display", "flex").
-		Style("align-items", "center").
-		Style("gap", "4px").
-		Body(
-			button,
-			app.Span().
-				Attr("data-release-badge", fmt.Sprint(*p.deployment.ReleaseNumber)).
-				Title("The Release the project runs").
-				Style("font-size", "11px").
-				Style("font-weight", "600").
-				Style("color", "var(--accent)").
-				Text(fmt.Sprintf("R%d", *p.deployment.ReleaseNumber)),
-		)
-}
-
 // renderReleaseDialog is the publication confirmation: the Commit's number, a
 // note and the author.
 func (p *Project) renderReleaseDialog() app.UI {
@@ -282,10 +259,11 @@ func (p *Project) renderReleaseDialog() app.UI {
 		)
 }
 
-// renderReleasesDialog is the list of Releases: number, the Commit's title,
-// note, author, time and counts, each row offering its note's edit and the
-// download of the copied ProjectFile.
-func (p *Project) renderReleasesDialog() app.UI {
+// renderDeployDialog is the list a Deploy chooses from: each Release's number,
+// the saved state's title, note, author, time and counts, with its note's edit,
+// the download of the copied ProjectFile and the Deploy itself (task 72_4,
+// task 84).
+func (p *Project) renderDeployDialog() app.UI {
 	rows := []app.UI{}
 	switch {
 	case p.deploymentFailed:
@@ -317,7 +295,7 @@ func (p *Project) renderReleasesDialog() app.UI {
 		}
 	}
 	return app.Div().
-		Attr("data-releases-dialog", "true").
+		Attr("data-deploy-dialog", "true").
 		Style("position", "absolute").
 		Style("top", "48px").
 		Style("left", "16px").
@@ -332,7 +310,7 @@ func (p *Project) renderReleasesDialog() app.UI {
 		Style("box-shadow", "var(--toast-shadow)").
 		Style("font-size", "13px").
 		Body(
-			app.H3().Style("margin", "0 0 8px").Text("Releases"),
+			app.H3().Style("margin", "0 0 8px").Text("Deploy a Release"),
 			app.Div().Body(rows...),
 			app.Div().
 				Style("display", "flex").
@@ -345,7 +323,7 @@ func (p *Project) renderReleasesDialog() app.UI {
 					Style("cursor", "pointer").
 					Text("Close").
 					OnClick(func(ctx app.Context, e app.Event) {
-						p.releasesDialog = false
+						p.deployDialog = false
 						ctx.Update()
 					})),
 		)
@@ -401,7 +379,7 @@ func (p *Project) renderReleaseRow(released apiv0.ReleaseResponse) app.UI {
 				app.Strong().Text(fmt.Sprintf("#%d ", released.Number)),
 				app.Span().Text(released.Title),
 				app.Span().Style("margin-left", "8px").Style("color", "var(--text-muted)").
-					Text(fmt.Sprintf("%s · %s", released.Author, commitTime(released.CreatedAt))),
+					Text(fmt.Sprintf("%s · %s", released.Author, uiutil.FormatTime(released.CreatedAt))),
 				app.Span().Style("margin-left", "8px").Style("color", "var(--text-muted)").
 					Text(fmt.Sprintf("%d scenes, %d widgets, %d tags, %d devices, %d environments",
 						released.ContentCounts.Scenes, released.ContentCounts.Widgets, released.ContentCounts.Tags,

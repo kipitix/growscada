@@ -68,7 +68,7 @@ func (l *Library) publishRelease() {
 			Title:  fmt.Sprintf("Release %d published", created.Number),
 			Detail: releaseTitle(created),
 		}})
-		l.loadReleases(ctx)
+		l.loadReleases(ctx) // the row names the Release that published it
 		l.loadCommits(ctx)
 		l.loadLibraries(ctx)
 		ctx.Update()
@@ -79,7 +79,7 @@ func (l *Library) publishRelease() {
 		}
 		l.releasing = false
 		uiutil.ShowError(ctx, err)
-		// A Commit published meanwhile (409) leaves the history the truth.
+		// A saved state published meanwhile (409) leaves the history the truth.
 		l.loadReleases(ctx)
 		l.loadCommits(ctx)
 		l.loadLibraries(ctx)
@@ -93,29 +93,6 @@ func releaseTitle(released apiv0.LibraryReleaseResponse) string {
 		return ""
 	}
 	return *released.Title
-}
-
-// editReleaseNote changes the note of a Release after asking for it; the
-// content never changes (task 72_5).
-func (l *Library) editReleaseNote(release apiv0.LibraryReleaseResponse) {
-	note, ok := prompt(fmt.Sprintf("Note of release %d:", release.Number), release.Note, true)
-	if !ok {
-		return
-	}
-	lib, ok := l.selectedLibrary()
-	if !ok {
-		return
-	}
-	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.LibraryReleaseResponse, error) {
-		return l.client.Library(lib.ID).UpdateReleaseNote(c, release.Number, apiv0.UpdateLibraryReleaseNoteRequest{Note: note})
-	}, func(ctx app.Context, updated apiv0.LibraryReleaseResponse) {
-		for i := range l.releases {
-			if l.releases[i].Number == updated.Number {
-				l.releases[i] = updated
-			}
-		}
-		ctx.Update()
-	}, l.reloadOnConflict)
 }
 
 // loadSavedState makes the saved state number the Draft (task 84), after a
@@ -148,10 +125,10 @@ func (l *Library) doLoadSavedState(ctx app.Context, number int) {
 		l.loadingSavedState = 0
 		l.draftVersions.Forget()
 		l.observeDraftVersion(l.markDraft(), loaded.Version)
-		l.viewing = 0
 		// The server's Draft state says whether the loaded saved state is the
 		// last one: an older one leaves the Draft unsaved (task 74).
 		l.loadDraftState(ctx)
+		l.contentReplacements++ // the list fills the editor, never merges it
 		l.loadList(ctx)
 		l.loadLibraries(ctx)
 		l.loadDraftChanges(ctx) // a load clears the stack (ADR 0017)
@@ -177,14 +154,4 @@ func (l *Library) reloadOnConflict(ctx app.Context, err error) {
 	if errors.Is(err, apiclient.ErrConflict) {
 		l.loadLibraries(ctx)
 	}
-}
-
-// selectedRelease returns the release viewed.
-func (l *Library) selectedRelease() (apiv0.LibraryReleaseResponse, bool) {
-	for _, r := range l.releases {
-		if r.Number == l.viewing {
-			return r, true
-		}
-	}
-	return apiv0.LibraryReleaseResponse{}, false
 }

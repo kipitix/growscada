@@ -32,14 +32,17 @@ type Repository interface {
 	CheckVersion(ctx context.Context, scope Scope, expected version.Version[Draft]) error
 
 	// Replace runs a write that replaces the whole content of the Draft
-	// (Discard, ADR 0016): it writes the rows change touched, clears the
+	// (Discard, Load, ADR 0016): it writes the rows change touched, clears the
 	// DraftChanges and the stack and commits, with no DraftChange of its own.
-	// clean tells whether the content change writes is the content of the
-	// Draft's last Commit: the Clean Version then becomes the new Version, as a
-	// Save puts it there. Otherwise the marker is untouched, so the raised
-	// Version stays above it and the Draft reports unsaved changes (ADR 0016,
-	// amendment 2026-11-10). Returns the Draft as stored.
-	Replace(ctx context.Context, scope Scope, clean bool, change func(*Session) error) (Draft, error)
+	// cleanCommit is the number of the Commit whose content change writes, 0
+	// when the content is no Commit's. The Clean Version becomes the new
+	// Version exactly when that Commit is the Draft's last one — compared
+	// under the Draft row's lock, so a Save committed between the caller's read
+	// and this transaction cannot mark another content clean. Otherwise the
+	// marker is untouched, so the raised Version stays above it and the Draft
+	// reports unsaved changes (ADR 0016, amendment 2026-11-10). Returns the
+	// Draft as stored.
+	Replace(ctx context.Context, scope Scope, cleanCommit int, change func(*Session) error) (Draft, error)
 
 	// Purge removes the whole content of the Draft of a deleted Project
 	// (ADR 0006), with no DraftChange.
