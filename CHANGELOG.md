@@ -19,7 +19,7 @@
 - Порядок работы: Project — **Save → Deploy**, Library — **Save → Import**; «saved state» — то, что деплоится и импортируется
 - `contract/api/v0` MINOR 0.42 (`0.41` заморожена; схема получила `GetLabelsResponse`, `CreateLabelRequest` и `UpdateLabelRequest`, которых ей не хватало), `contract/project/v0` MINOR 0.3 (`library_imports`/`commit`), `contract/record/v0` MINOR 0.6 (`commit_number`), `contract/manifest/v0` MINOR 0.5 (`spec.libraryImports`); схемы перегенерированы, старые версии заморожены
 - growctl: `release`/`releases` удалены, `deploy` принимает `--commit N`; `get libraries` печатает `NAME COMMIT UNSAVED`
-- Сид (`test_data`) сохраняет Library и Project и деплоит сохранённое состояние — `make run_simulator`/`run_simulator_dashboard` работают от него
+- Сид (`test_data`) сохраняет Draft каждой Library и импортирует это сохранённое состояние в Project'ы; Draft'ы Project'ов остаются несохранёнными, и `make db_up` не создаёт Deployment — значения `run_simulator`/`run_simulator_dashboard` видны в Operation только после Save и Deploy сохранённого состояния
 - Bruno: release-запросы удалены, коллекция покрывает лейблы, назначения, Deploy сохранённого состояния и импорты
 - Документы: ADR 0025 и поправки к ADR 0007, 0012, 0014, 0018, 0019, 0021, 0023; `GLOSSARY.md`, `AGENTS.md` и `CHANGELOG.md` описывают saved state, Import и Label; Release остаётся только в истории ADR и этого файла
 

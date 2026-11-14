@@ -190,3 +190,11 @@ Blocked by: 85_1_mode_screen_persistence, 85_2_label_aggregate, 85_3_label_assig
   переведены на `commit_number`/saved state; в 47–52, 57, 58, 61, 63, 64
   убраны или помечены устаревшие Release-упоминания. `todo/PRIORITY.md`
   оставлен финальному прогону `/kx_auto`.
+- 2026-11-15: ревью ветки. В `schema_test.go` не хватало
+  `ProjectOrderResponse` и `SetProjectOrderRequest`, поэтому схема 0.42 не
+  описывала тела `/settings/project-order` — типы добавлены, `0.42.json`
+  перегенерирована (изменение только аддитивное, версия ещё не на `path`);
+  удалён неиспользуемый `MissingImportResponse`; строка `settings/` и список
+  сервисов в `AGENTS.md` и описание сида в `CHANGELOG.md` приведены к коду
+  (сид сохраняет Draft'ы Library и импортирует их, но Project'ы не сохраняет
+  и Deployment не создаёт).
