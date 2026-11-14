@@ -9,6 +9,15 @@
   - REST: `POST /api/v0/projects/{id}/commits/{n}/load` и `POST /api/v0/libraries/{id}/commits/{n}/load` → `{version, has_unsaved_changes, warnings?}`; версия не передаётся — это сброс, а не запись контента; 404 `commit_not_found` для несуществующего номера; контракт `api/v0` MINOR 0.35 → 0.36, `make schemas`, `apiclient.ProjectClient.LoadCommit`/`LibraryClient.LoadCommit`
   - Bruno: `post_project_commit_load` (seq 2003), `post_library_commit_load` (2004), `post_project_commit_load_missing` (2005, 404)
 
+- **Лейблы — именованные метки сохранённых состояний** (задача 85_2; ADR 0025)
+  - `domain/label`: агрегат `Label` — имя, необязательный цвет `#RRGGBB`, `organization_id`, `created_at`; VO `Name` (trim, 1–100 символов, одна строка) и `Color` (пусто — нейтральный цвет темы); события `label_created`, `label_updated`, `label_deleted`. Имя уникально в Organization без учёта регистра (`Prod` и `prod` — одно имя, unique-индекс `lower(name)`). Лейбл — не content: ни Draft, ни Commit, ни ProjectFile, ни Deployment его не несёт, версия не спрашивается, DraftChange не пишется
+  - миграция `engineering.labels` со стартовыми лейблами `ready_for_import` и `ready_for_deploy` в единственной Organization; они обычные — переименовываются, перекрашиваются и удаляются
+  - `LabelService` и `appdto.Label` (`assigned_count` пока всегда 0 — назначения в задаче 85_3), Postgres-репозиторий с outbox-событиями и каскадом по Organization
+  - REST `api/v0` MINOR 0.36 → 0.37: `GET/POST /api/v0/labels`, `PATCH/DELETE /api/v0/labels/{id}` (`label_name_taken` 409, `label_not_found` 404, 400 на пустое имя и неверный цвет); `apiclient.Labels`/`CreateLabel`/`UpdateLabel`/`DeleteLabel`
+  - `growctl labels` — список (имя, цвет, `assigned_count`) и `create`/`rename`/`color`/`delete`; манифеста у лейбла нет, он метаданные
+  - UI: одно глобальное окно **Labels** в шапке любого режима — цветной маркер и чип, `assigned_count` серым, имя правится на месте (Enter сохраняет, Esc отменяет правку и оставляет окно открытым), палитра пресетов и hex-поле с «No color», удаление с подтверждением и счётчиком; внизу создание (`Ctrl/Cmd+Enter` из любого места окна); отказ сервера — под полем с сохранённым текстом. Список перечитывается на монтировании, по `label_*` и `EventResync`; `eventlog` знает три типа событий, категорию Label и `ReloadTargets.Labels`
+  - тесты домена, репозитория (регистронезависимая уникальность, CASCADE, outbox, стартовые лейблы), REST (включая события серверного потока), `growctl` и окна; Bruno: `get_labels` (стартовые), `post_label`, `post_label_duplicate` (409), `patch_label`, `delete_label`
+
 ### Changed
 
 - **UI говорит «saved state» вместо «commit»** (задача 84; ADR 0021)
