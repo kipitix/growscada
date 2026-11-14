@@ -252,7 +252,10 @@ func (d *Dialog) busy() bool {
 
 // ── Keyboard ──────────────────────────────────────────────────────────────────
 
-// listenKeys closes the window on Esc, and closes a field being edited first.
+// listenKeys manages the keys of the window: Ctrl/Cmd+Enter adds the label of
+// the footer row, and Esc closes a field being edited first and then the
+// window. A field of the window stops the propagation of its own keys, so Esc
+// and Enter inside one never reach these two.
 func (d *Dialog) listenKeys() {
 	if d.onKeyDown != nil {
 		return
@@ -262,7 +265,19 @@ func (d *Dialog) listenKeys() {
 			return nil
 		}
 		ev := args[0]
-		if ev.Get("key").String() != "Escape" {
+		key := ev.Get("key").String()
+		if key != "Escape" && key != "Enter" {
+			return nil
+		}
+		if ev.Get("ctrlKey").Bool() || ev.Get("metaKey").Bool() {
+			if key != "Enter" {
+				return nil
+			}
+			ev.Call("preventDefault")
+			d.compoCtx.Dispatch(func(ctx app.Context) { d.create(ctx) })
+			return nil
+		}
+		if key != "Escape" {
 			return nil
 		}
 		ev.Call("preventDefault")
@@ -398,8 +413,14 @@ func (d *Dialog) renderRow(l apiv0.LabelResponse) app.UI {
 				OnKeyDown(func(ctx app.Context, e app.Event) {
 					switch e.Get("key").String() {
 					case "Enter":
+						// The window adds a label on Ctrl/Cmd+Enter: the
+						// field commits alone.
+						e.StopImmediatePropagation()
 						d.commitRename(ctx)
 					case "Escape":
+						// The window closes on Esc: the field drops the change
+						// alone.
+						e.StopImmediatePropagation()
 						d.cancelRename(ctx)
 					}
 				}),
