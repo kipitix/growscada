@@ -12,7 +12,7 @@ docs: |
   library's saved states: the project Main imported it in the seed, and the first
   Deployment — the one the server made at start — still names it, though the
   import is gone from the Draft. A Discard of that Deployment could not restore
-  a running Deployment, so the library stays (task 71; ADR 0007).
+  the import, so the library stays (task 71; ADR 0007).
 
 runtime:
   assertions:

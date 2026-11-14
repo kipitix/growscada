@@ -642,7 +642,7 @@ func (p *Picker) renderCreate() app.UI {
 // one place its palette lives.
 func stateBadge(kind string) (color, border string) {
 	switch kind {
-	case "unsaved", "unpublished":
+	case "unsaved":
 		return "var(--toast-warn-title)", "var(--toast-warn-border)"
 	default:
 		return "var(--text-muted)", "var(--border)"

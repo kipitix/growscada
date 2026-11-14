@@ -1,5 +1,5 @@
 info:
-  name: deploy the commit before the deploy
+  name: deploy the first saved state
   type: http
   seq: 43
 

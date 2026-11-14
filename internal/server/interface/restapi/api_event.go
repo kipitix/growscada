@@ -71,9 +71,9 @@ var apiEventTypes = map[event.EventType]string{
 // newAPIEvent translates a domain (or delivery) event into the event stream's
 // message: its type through apiEventTypes, and the fields its family carries
 // — the affected aggregate's (or connection's) ID, the Scene of a Widget, the
-// Library of a WidgetType, the pair of an EnvironmentDevice, the Tag's new state of tag_updated, the number and time
-// of a new Deployment. An event type missing from the table gives
-// an empty Type; such an event is not sent.
+// Library of a WidgetType, the pair of an EnvironmentDevice, the Tag's new
+// state of tag_updated, the number and time of a new Deployment. An event type
+// missing from the table gives an empty Type; such an event is not sent.
 func newAPIEvent(e event.Event) apiv0.Event {
 	ev := apiv0.Event{
 		Type:      apiEventTypes[e.Type()],

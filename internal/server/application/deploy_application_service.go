@@ -12,7 +12,7 @@ import (
 
 // DeployService is the Engineering node's service of a Deploy (task 85_4): it
 // makes a saved state — a Commit — of a Project its running Deployment. A
-// A Release takes no part in it, and neither does a Draft Version: a Commit is
+// Release takes no part in it, and neither does a Draft Version: a Commit is
 // immutable and a Deploy changes no Draft (ADR 0021). The document is the
 // Commit's ProjectFile; the Runtime node stores it and assigns the number and
 // the time.

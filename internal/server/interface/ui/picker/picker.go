@@ -41,11 +41,11 @@ type Item struct {
 	Description string
 	// Version is the aggregate's own Version, stated by an update.
 	Version int
-	// State is a short badge ("unsaved changes", "published", …); empty for
+	// State is a short badge ("unsaved changes", "saved", …); empty for
 	// an entity with nothing to say about its Draft.
 	State string
 	// StateKind says what the badge means for its colour: "unsaved",
-	// "unpublished", "published", "legacy" or "new".
+	// "saved" or "new".
 	StateKind string
 }
 

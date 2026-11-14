@@ -54,8 +54,8 @@ var ErrNoDeploymentToDiscard = errors.New("nothing to revert: the project runs n
 var ErrInvalidProjectFile = errors.New("invalid project file")
 
 // ErrNothingToOpen matches (errors.Is) an open of a project file whose
-// canonical form is the Draft the Project has already (ADR 0018), as
-// ErrNothingToDeploy refuses an unchanged Draft.
+// canonical form is the Draft the Project has already (ADR 0018), as a Deploy
+// refuses the Deployment the Project runs.
 var ErrNothingToOpen = errors.New("nothing to open: the draft is the file")
 
 // ErrDraftNotDeployable matches (errors.Is) an export of a Draft the
@@ -63,8 +63,8 @@ var ErrNothingToOpen = errors.New("nothing to open: the draft is the file")
 var ErrDraftNotDeployable = errors.New("the draft is not deployable")
 
 // ErrDeploymentNotDiscardable matches (errors.Is) a Discard refused because the
-// Deployment names saved states of Libraries this server does not have (ADR 0018): the
-// imports cannot be written, and the Draft is left as it is.
+// Deployment names saved states of Libraries this server does not have (ADR
+// 0018): the imports cannot be written, and the Draft is left as it is.
 var ErrDeploymentNotDiscardable = errors.New("the deployment cannot be discarded here: library saved states are missing")
 
 // ErrDraftNotSaveable matches (errors.Is) a Save refused because the Draft
