@@ -83,7 +83,7 @@ func (s projectFileServiceImpl) Draft(ctx context.Context, rawProjectID uuid.UUI
 		}
 		return ProjectFileDownload{}, DraftNotDeployableError{Reason: err.Error()}
 	}
-	name, err := s.projectName(ctx, projectID)
+	name, err := projectDownloadName(ctx, s.content, projectID)
 	if err != nil {
 		return ProjectFileDownload{}, err
 	}
@@ -99,7 +99,7 @@ func (s projectFileServiceImpl) Deployment(ctx context.Context, rawProjectID uui
 	if err != nil {
 		return ProjectFileDownload{}, err
 	}
-	name, err := s.projectName(ctx, projectID)
+	name, err := projectDownloadName(ctx, s.content, projectID)
 	if err != nil {
 		return ProjectFileDownload{}, err
 	}
@@ -197,14 +197,15 @@ func (s projectFileServiceImpl) lockLocalImports(ctx context.Context, file proje
 	return nil
 }
 
-// projectName returns the name of the live Project projectID, which names the
-// downloaded file.
-func (s projectFileServiceImpl) projectName(ctx context.Context, projectID id.ID[project.Project]) (string, error) {
-	found, err := s.content.projects.FindByID(ctx, projectID)
+// projectDownloadName returns the name of the live Project projectID, which
+// names a downloaded file of it: a Draft, a Deployment or a Commit (task 39,
+// ADR 0018).
+func projectDownloadName(ctx context.Context, content ProjectContent, projectID id.ID[project.Project]) (string, error) {
+	found, err := content.projects.FindByID(ctx, projectID)
 	if err != nil {
 		return "", fmt.Errorf("cannot read project %s: %w", projectID, err)
 	}
-	if found.OrganizationID() != s.content.organization {
+	if found.OrganizationID() != content.organization {
 		return "", id.NotFound(project.ErrProjectNotFound, projectID)
 	}
 	return found.Name().String(), nil

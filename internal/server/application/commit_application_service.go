@@ -9,7 +9,6 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
-	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/version"
@@ -246,17 +245,4 @@ func commitNumber(raw int) (int, error) {
 		return 0, invalidInput(fmt.Errorf("commit number must be positive, got %d", raw))
 	}
 	return raw, nil
-}
-
-// projectDownloadName returns the name of the live Project projectID, which
-// names a download.
-func projectDownloadName(ctx context.Context, content ProjectContent, projectID id.ID[project.Project]) (string, error) {
-	found, err := content.projects.FindByID(ctx, projectID)
-	if err != nil {
-		return "", fmt.Errorf("cannot read project %s: %w", projectID, err)
-	}
-	if found.OrganizationID() != content.organization {
-		return "", id.NotFound(project.ErrProjectNotFound, projectID)
-	}
-	return found.Name().String(), nil
 }
