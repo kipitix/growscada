@@ -114,7 +114,7 @@ func TestDraftSaveCommit_NumbersAndContent(t *testing.T) {
 	if file, ok := found.Content().ProjectFile(); !ok || file.ProjectID != mainProject.UUID() {
 		t.Errorf("the stored content is not the project file: %+v", found.Content())
 	}
-	list, err := testDrafts().FindCommits(ctx, scope)
+	list, err := testDrafts().FindCommits(ctx, scope, draft.CommitFilter{})
 	if err != nil {
 		t.Fatalf("FindCommits: %v", err)
 	}
@@ -245,7 +245,7 @@ func TestDraftSaveCommit_Library(t *testing.T) {
 	if !ok || len(types) != 1 || types[0].ID() != wt.ID() {
 		t.Errorf("the library's commit holds %d widget types, want %s", len(types), wt.ID())
 	}
-	commits, err := testDrafts().FindCommits(ctx, scope)
+	commits, err := testDrafts().FindCommits(ctx, scope, draft.CommitFilter{})
 	if err != nil {
 		t.Fatalf("FindCommits: %v", err)
 	}

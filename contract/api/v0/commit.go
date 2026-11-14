@@ -25,6 +25,28 @@ const CommitLoadPath = "/load"
 // Project or Library into its Draft.
 func CommitLoadPathOf(number int) string { return CommitPathOf(number) + CommitLoadPath }
 
+// CommitLabelsPath is the path, under CommitPathOf, of the labels a saved state
+// carries (task 85_3; ADR 0025): PUT places one label on the saved state and
+// DELETE takes it away, each idempotent and each stating no Draft Version.
+const CommitLabelsPath = "/labels"
+
+// CommitLabelPathOf is the path of the label labelID of a saved state.
+func CommitLabelPathOf(number int, labelID string) string {
+	return CommitPathOf(number) + CommitLabelsPath + "/" + labelID
+}
+
+// CommitsQueryLabel is the parameter of GET …/commits that keeps only the
+// saved states the label with this ID marks (task 85_3). Without it the list
+// is every saved state.
+const CommitsQueryLabel = "label"
+
+// CommitLabelsResponse is the answer of PUT and DELETE of one label of a saved
+// state: every label the saved state carries afterwards, ordered by name
+// ignoring case (task 85_3; ADR 0025).
+type CommitLabelsResponse struct {
+	Labels []LabelResponse `json:"labels"`
+}
+
 // LoadCommitResponse is the answer of POST …/commits/{n}/load: the Draft after
 // the Commit's content replaced it, in one transaction.
 //
@@ -84,6 +106,9 @@ type CommitResponse struct {
 	Released      bool                         `json:"released"`
 	ContentCounts CommitContentCounts          `json:"content_counts"`
 	WidgetTypes   []ReleasedWidgetTypeResponse `json:"widget_types,omitempty"`
+	// Labels are the labels that mark this saved state, ordered by name
+	// ignoring case; absent when it carries none (task 85_3; ADR 0025).
+	Labels []LabelResponse `json:"labels,omitempty"`
 }
 
 // GetCommitsResponse is the HTTP DTO of GET …/commits: newest first, without

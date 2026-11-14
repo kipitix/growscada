@@ -22,7 +22,8 @@ func newCommitService() application.CommitService {
 	return application.NewCommitService(content, newLibraryContent(),
 		application.NewProjectFileBuilder(content), repositories.NewWidgetTypeRepositories(testDB),
 		repositories.NewProjectReleaseRepositoryPostgres(testDB),
-		repositories.NewLibraryReleaseRepositoryPostgres(testDB))
+		repositories.NewLibraryReleaseRepositoryPostgres(testDB),
+		repositories.NewLabelRepositoryPostgres(testDB), soleOrganization())
 }
 
 // TestCommitService_ProjectSaveListFindRename: a Save of a Project's Draft
@@ -60,7 +61,7 @@ func TestCommitService_ProjectSaveListFindRename(t *testing.T) {
 		t.Errorf("Save with an empty author: %v, want invalid input", err)
 	}
 
-	list, err := service.List(ctx, scope)
+	list, err := service.List(ctx, scope, uuid.Nil)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}

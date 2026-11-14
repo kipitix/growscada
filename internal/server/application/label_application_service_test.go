@@ -19,7 +19,8 @@ func newLabelService(t *testing.T) application.LabelService {
 	if err != nil {
 		t.Fatalf("organization: %v", err)
 	}
-	return application.NewLabelService(repositories.NewLabelRepositoryPostgres(testDB), org)
+	return application.NewLabelService(repositories.NewLabelRepositoryPostgres(testDB),
+		repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB)), org)
 }
 
 // TestLabelService_CreateUpdateDelete covers the service of the labels: the

@@ -292,7 +292,7 @@ func TestRevertToLatestRelease_ResetsTheDraftToTheRelease(t *testing.T) {
 	if got := names(); !got[published.ID] || got[unpublished.ID] {
 		t.Errorf("the Draft after the Revert: %v, want the WidgetTypes of the Release", got)
 	}
-	if commits, err := newCommitService().List(ctx, draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](lib.ID)))); err != nil || len(commits) != 2 {
+	if commits, err := newCommitService().List(ctx, draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](lib.ID))), uuid.Nil); err != nil || len(commits) != 2 {
 		t.Errorf("the Commits after the Revert: %+v, %v; want both kept", commits, err)
 	}
 

@@ -69,6 +69,8 @@ var apiEventTypes = map[event.EventType]string{
 	event.EventTypeLabelCreated:              apiv0.EventLabelCreated,
 	event.EventTypeLabelUpdated:              apiv0.EventLabelUpdated,
 	event.EventTypeLabelDeleted:              apiv0.EventLabelDeleted,
+	event.EventTypeLabelAssigned:             apiv0.EventLabelAssigned,
+	event.EventTypeLabelUnassigned:           apiv0.EventLabelUnassigned,
 }
 
 // newAPIEvent translates a domain (or delivery) event into the event stream's
@@ -137,6 +139,17 @@ func newAPIEvent(e event.Event) apiv0.Event {
 		ev.ID = e.SceneID().String()
 	case project.ProjectEvent:
 		ev.ID = e.ProjectID().String()
+	case label.LabelAssignmentEvent:
+		// An assignment names the saved state's scope in ID and its number in
+		// commit, and the label beside it: it goes to the server's stream, so
+		// History of either mode and the Labels window see it (task 85_3).
+		if e.Scope().IsLibrary() {
+			ev.ID = e.Scope().LibraryID().String()
+		} else {
+			ev.ID = e.Scope().ProjectID().String()
+		}
+		ev.Commit = e.CommitNumber()
+		ev.Label = e.LabelID().String()
 	case label.LabelEvent:
 		ev.ID = e.LabelID().String()
 	case eventbus.ClientEvent:

@@ -420,7 +420,7 @@ func (s libraryServiceImpl) UpdateReleaseNote(ctx context.Context, rawID uuid.UU
 // commitTitles returns the current title of every Commit of the library,
 // keyed by number: a Release shows the title of the Commit it published.
 func (s libraryServiceImpl) commitTitles(ctx context.Context, l library.Library) (map[int]string, error) {
-	commits, err := s.content.Drafts().FindCommits(ctx, s.content.ScopeOf(l.ID()))
+	commits, err := s.content.Drafts().FindCommits(ctx, s.content.ScopeOf(l.ID()), draft.CommitFilter{})
 	if err != nil {
 		return nil, fmt.Errorf("cannot read the commits of library %s: %w", l.ID(), err)
 	}

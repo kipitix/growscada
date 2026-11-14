@@ -168,6 +168,10 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 			apiv0.Event{Type: "label_updated", ID: labelID.String()}},
 		event.EventTypeLabelDeleted: {label.NewLabelDeletedEvent(labelID, ts),
 			apiv0.Event{Type: "label_deleted", ID: labelID.String()}},
+		event.EventTypeLabelAssigned: {label.NewLabelAssignedEvent(labelID, draft.ProjectScope(projectID), 4, ts),
+			apiv0.Event{Type: "label_assigned", ID: projectID.String(), Commit: 4, Label: labelID.String()}},
+		event.EventTypeLabelUnassigned: {label.NewLabelUnassignedEvent(labelID, draft.LibraryScope(libraryID), 5, ts),
+			apiv0.Event{Type: "label_unassigned", ID: libraryID.String(), Commit: 5, Label: labelID.String()}},
 	}
 
 	for _, et := range event.AllEventTypes() {

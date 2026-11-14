@@ -1,7 +1,7 @@
 info:
   name: delete label
   type: http
-  seq: 2014
+  seq: 2023
 
 http:
   method: DELETE

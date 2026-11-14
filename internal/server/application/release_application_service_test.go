@@ -65,7 +65,7 @@ func TestReleaseService_CreateListFindNoteAndFile(t *testing.T) {
 	}
 
 	// The Commit list marks the published one.
-	list, err := commits.List(ctx, scope)
+	list, err := commits.List(ctx, scope, uuid.Nil)
 	if err != nil {
 		t.Fatalf("List commits: %v", err)
 	}

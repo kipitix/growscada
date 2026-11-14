@@ -8,15 +8,18 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kipitix/growscada/internal/server/application/appdto"
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/label"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
 )
 
-// LabelService serves the Labels of the server's Organization: their names and
-// colors (task 85_2; ADR 0025). A label is not content: the service reads no
-// Draft, states no Version and writes no DraftChange. It owns its assignments
-// (task 85_3), which the repository writes in the label's own transaction.
+// LabelService serves the Labels of the server's Organization: their names,
+// their colors and the saved states they mark (task 85_2, task 85_3;
+// ADR 0025). A label is not content: the service reads no Draft Version,
+// states none and writes no DraftChange. An assignment names a Commit of a
+// Project's or a Library's Draft and is written in the label's own
+// transaction, which locks the label and the Commit.
 type LabelService interface {
 	// List returns the Organization's labels, ordered by name ignoring case.
 	List(ctx context.Context) ([]appdto.Label, error)
@@ -30,24 +33,43 @@ type LabelService interface {
 	// label.ErrLabelNotFound for a label the Organization lacks.
 	Update(ctx context.Context, labelID uuid.UUID, name, color *string) (appdto.Label, error)
 
-	// Delete removes a label with its assignments (task 85_3).
+	// Delete removes a label with its assignments.
 	// label.ErrLabelNotFound for a label the Organization lacks.
 	Delete(ctx context.Context, labelID uuid.UUID) error
+
+	// Assign marks the saved state commitNumber of scope with the label and
+	// returns every label the saved state carries afterwards. It is
+	// idempotent: a repeat changes nothing and records no event. A Project or
+	// Library that is not live is its not-found error, a Commit scope lacks is
+	// draft.ErrCommitNotFound, a label the Organization lacks
+	// label.ErrLabelNotFound; a number that is not positive is invalid input.
+	Assign(ctx context.Context, scope draft.Scope, commitNumber int, labelID uuid.UUID) ([]appdto.Label, error)
+
+	// Unassign takes the label off the saved state commitNumber of scope,
+	// idempotently, and returns the labels the saved state still carries.
+	Unassign(ctx context.Context, scope draft.Scope, commitNumber int, labelID uuid.UUID) ([]appdto.Label, error)
+
+	// LabelsOf returns the labels of every saved state of scope that carries
+	// one, keyed by the Commit's number: the read of a Commit list that shows
+	// its chips (task 85_3).
+	LabelsOf(ctx context.Context, scope draft.Scope) (map[int][]appdto.Label, error)
 }
 
 type labelServiceImpl struct {
 	repository   label.Repository
+	drafts       draft.Repository
 	organization id.ID[organization.Organization]
 	now          func() time.Time
 }
 
 var _ LabelService = (*labelServiceImpl)(nil)
 
-// NewLabelService returns the service of the Organization's labels. The
-// Organization is the server's own while one exists: the API is server-wide,
-// and `organization_id` is written from the first day (ADR 0025).
-func NewLabelService(repository label.Repository, organizationID id.ID[organization.Organization]) LabelService {
-	return &labelServiceImpl{repository: repository, organization: organizationID, now: time.Now}
+// NewLabelService returns the service of the Organization's labels, resolving
+// an assignment's Commit through the Drafts. The Organization is the server's
+// own while one exists: the API is server-wide, and `organization_id` is
+// written from the first day (ADR 0025).
+func NewLabelService(repository label.Repository, drafts draft.Repository, organizationID id.ID[organization.Organization]) LabelService {
+	return &labelServiceImpl{repository: repository, drafts: drafts, organization: organizationID, now: time.Now}
 }
 
 func (s labelServiceImpl) List(ctx context.Context) ([]appdto.Label, error) {
@@ -118,6 +140,83 @@ func (s labelServiceImpl) Delete(ctx context.Context, rawID uuid.UUID) error {
 		return fmt.Errorf("cannot delete label: %w", err)
 	}
 	return nil
+}
+
+func (s labelServiceImpl) Assign(ctx context.Context, scope draft.Scope, rawNumber int, rawLabelID uuid.UUID) ([]appdto.Label, error) {
+	number, commit, err := s.commitOf(ctx, scope, rawNumber)
+	if err != nil {
+		return nil, err
+	}
+	found, err := s.find(ctx, rawLabelID)
+	if err != nil {
+		return nil, err
+	}
+	assigned, err := found.Assign(commit.ID(), scope, number, s.now())
+	if err != nil {
+		return nil, fmt.Errorf("cannot assign label: %w", invalidInput(err))
+	}
+	if len(assigned.PendingEvents()) > 0 {
+		if _, err := s.repository.Assign(ctx, assigned, commit.ID()); err != nil {
+			return nil, fmt.Errorf("cannot save the assignment of label %s: %w", found.ID(), err)
+		}
+	}
+	return s.labelsOfCommit(ctx, scope, number)
+}
+
+func (s labelServiceImpl) Unassign(ctx context.Context, scope draft.Scope, rawNumber int, rawLabelID uuid.UUID) ([]appdto.Label, error) {
+	number, commit, err := s.commitOf(ctx, scope, rawNumber)
+	if err != nil {
+		return nil, err
+	}
+	found, err := s.find(ctx, rawLabelID)
+	if err != nil {
+		return nil, err
+	}
+	unassigned, err := found.Unassign(commit.ID())
+	if err != nil {
+		return nil, fmt.Errorf("cannot unassign label: %w", invalidInput(err))
+	}
+	if len(unassigned.PendingEvents()) > 0 {
+		if _, err := s.repository.Unassign(ctx, unassigned, commit.ID()); err != nil {
+			return nil, fmt.Errorf("cannot save the assignment of label %s: %w", found.ID(), err)
+		}
+	}
+	return s.labelsOfCommit(ctx, scope, number)
+}
+
+func (s labelServiceImpl) LabelsOf(ctx context.Context, scope draft.Scope) (map[int][]appdto.Label, error) {
+	byNumber, err := s.repository.LabelsOfScope(ctx, s.organization, scope)
+	if err != nil {
+		return nil, fmt.Errorf("cannot find the labels of %s: %w", scope, err)
+	}
+	return appdto.NewLabelMap(byNumber), nil
+}
+
+// labelsOfCommit is the labels the saved state commitNumber carries, as PUT
+// and DELETE answer: the whole set, ordered by name ignoring case.
+func (s labelServiceImpl) labelsOfCommit(ctx context.Context, scope draft.Scope, commitNumber int) ([]appdto.Label, error) {
+	byNumber, err := s.LabelsOf(ctx, scope)
+	if err != nil {
+		return nil, err
+	}
+	return byNumber[commitNumber], nil
+}
+
+// commitOf reads the Commit rawNumber of the Draft of scope, which checks the
+// Commit exists in that scope and the Project or Library is live.
+func (s labelServiceImpl) commitOf(ctx context.Context, scope draft.Scope, rawNumber int) (int, draft.Commit, error) {
+	if !scope.IsProject() && !scope.IsLibrary() {
+		return 0, nil, invalidInput(fmt.Errorf("scope: a project or a library is required"))
+	}
+	number, err := commitNumber(rawNumber)
+	if err != nil {
+		return 0, nil, err
+	}
+	commit, err := s.drafts.FindCommit(ctx, scope, number)
+	if err != nil {
+		return 0, nil, fmt.Errorf("cannot find the commit of %s: %w", scope, err)
+	}
+	return number, commit, nil
 }
 
 // find reads the label of the Organization; another Organization's is not

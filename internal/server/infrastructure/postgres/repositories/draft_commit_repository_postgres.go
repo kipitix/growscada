@@ -125,16 +125,23 @@ func (r draftRepositoryPostgres) RenameCommit(ctx context.Context, scope draft.S
 }
 
 // FindCommits returns the Draft's Commits, newest first (see
-// draft.Repository).
-func (r draftRepositoryPostgres) FindCommits(ctx context.Context, scope draft.Scope) ([]draft.Commit, error) {
+// draft.Repository). The filter's label keeps only the Commits it marks: the
+// join is in the query, never in memory.
+func (r draftRepositoryPostgres) FindCommits(ctx context.Context, scope draft.Scope, filter draft.CommitFilter) ([]draft.Commit, error) {
 	if err := checkScopeLive(ctx, r.db, scope); err != nil {
 		return nil, err
 	}
 	column, value := scopeColumn(scope)
-	rows, err := r.db.QueryContext(ctx,
-		`SELECT c.id, c.number, c.title, c.author, c.created_at, c.draft_version, c.content
+	args := []any{value}
+	query := `SELECT c.id, c.number, c.title, c.author, c.created_at, c.draft_version, c.content
 		 FROM engineering.commits c JOIN engineering.drafts d ON d.id = c.draft_id
-		 WHERE d.`+column+` = $1 ORDER BY c.number DESC`, value)
+		 WHERE d.` + column + ` = $1`
+	if filter.LabelID != uuid.Nil {
+		query += ` AND EXISTS (SELECT 1 FROM engineering.commit_labels cl
+			WHERE cl.commit_id = c.id AND cl.label_id = $2)`
+		args = append(args, filter.LabelID)
+	}
+	rows, err := r.db.QueryContext(ctx, query+` ORDER BY c.number DESC`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read the commits of %s: %w", scope, err)
 	}

@@ -246,6 +246,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	releases := repositories.NewLibraryReleaseRepositoryPostgres(db, onCommit)
 	drafts := repositories.NewDraftRepositoryPostgres(db, releases, onCommit)
 	projectReleases := repositories.NewProjectReleaseRepositoryPostgres(db, onCommit)
+	labelRepository := repositories.NewLabelRepositoryPostgres(db, onCommit)
 	content := application.NewProjectContent(projectRepo, scopes, drafts, orgID)
 	libraries := repositories.NewLibraryRepositoryPostgres(db, onCommit)
 	libraryContent := application.NewLibraryContent(libraries, drafts, orgID)
@@ -288,10 +289,10 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 		DraftChanges: application.NewDraftChangesService(content, libraryContent),
 		Discard:      application.NewDiscardService(content, runtimeNode, libraries, releases),
 		ProjectFiles: application.NewProjectFileService(content, application.NewProjectFileBuilder(content), runtimeNode, libraries, releases),
-		Commits:      application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, projectReleases, releases),
+		Commits:      application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, projectReleases, releases, labelRepository, orgID),
 		Releases:     application.NewReleaseService(content, projectReleases, runtimeNode, libraries, releases),
 		Settings:     application.NewSettingsService(repositories.NewUserSettingsRepositoryPostgres(db), settings.SingleUser(), orgID),
-		Labels:       application.NewLabelService(repositories.NewLabelRepositoryPostgres(db, onCommit), orgID),
+		Labels:       application.NewLabelService(labelRepository, drafts, orgID),
 		Deployments:  deployments,
 		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(db)),
 		DeviceTokens: deviceTokens,

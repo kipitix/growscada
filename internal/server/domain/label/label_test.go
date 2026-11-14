@@ -85,7 +85,7 @@ func TestCreateLabel_RecordsCreated(t *testing.T) {
 
 func TestLabel_RenameRecolorDelete_RecordUpdates(t *testing.T) {
 	created := label.ReconstituteLabel(id.NewID[label.Label](), id.NewID[organization.Organization](),
-		mustName(t, "Ready"), label.Color{}, time.Now())
+		mustName(t, "Ready"), label.Color{}, time.Now(), nil)
 
 	renamed, err := created.Rename(mustName(t, "Deployable"))
 	if err != nil {
@@ -125,7 +125,7 @@ func TestLabel_RenameRecolorDelete_RecordUpdates(t *testing.T) {
 func TestReconstituteLabel_RecordsNothing(t *testing.T) {
 	createdAt := time.Date(2026, 11, 14, 10, 0, 0, 0, time.UTC)
 	stored := label.ReconstituteLabel(id.NewID[label.Label](), id.NewID[organization.Organization](),
-		mustName(t, "Ready"), label.FromStorage("#AABBCC"), createdAt)
+		mustName(t, "Ready"), label.FromStorage("#AABBCC"), createdAt, nil)
 	if len(stored.PendingEvents()) != 0 {
 		t.Errorf("a reconstituted label records %v", stored.PendingEvents())
 	}

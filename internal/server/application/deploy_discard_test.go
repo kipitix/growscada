@@ -27,7 +27,7 @@ func mustSaveCommit(t *testing.T, projectID uuid.UUID, title string) appdto.Comm
 	scope := draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](projectID)))
 	saved, err := newCommitService().Save(ctx, scope, draftVersionOf(t, projectID), title, "Ada")
 	if errors.Is(err, draft.ErrNothingToSave) {
-		list, listErr := newCommitService().List(ctx, scope)
+		list, listErr := newCommitService().List(ctx, scope, uuid.Nil)
 		if listErr != nil || len(list) == 0 {
 			t.Fatalf("no commit to reuse: %v", listErr)
 		}

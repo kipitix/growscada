@@ -53,6 +53,11 @@ type Event struct {
 	// Commit is the number of the Commit a commit_created or
 	// commit_title_updated is about; ID is the Project's or the Library's.
 	Commit int `json:"commit,omitempty"`
+	// Label is the ID of the label on label_assigned and label_unassigned; ID
+	// is the Project's or the Library's and Commit the saved state's number
+	// (task 85_3; ADR 0025). A label_created, label_updated or label_deleted
+	// names the label in ID alone.
+	Label string `json:"label,omitempty"`
 }
 
 // The types of Event: the names the event stream publishes (ADR 0009).
@@ -107,6 +112,11 @@ const (
 	EventLabelCreated = "label_created"
 	EventLabelUpdated = "label_updated"
 	EventLabelDeleted = "label_deleted"
+	// EventLabelAssigned and EventLabelUnassigned go to the server's stream:
+	// Label names the label, ID the Project or Library of the saved state and
+	// Commit its number (task 85_3; ADR 0025).
+	EventLabelAssigned   = "label_assigned"
+	EventLabelUnassigned = "label_unassigned"
 )
 
 // EventTypes returns every type of Event of this version of the contract.
@@ -129,5 +139,6 @@ func EventTypes() []string {
 		EventReleaseCreated, EventReleaseNoteUpdated,
 		EventLibraryReleaseNoteUpdated,
 		EventLabelCreated, EventLabelUpdated, EventLabelDeleted,
+		EventLabelAssigned, EventLabelUnassigned,
 	}
 }

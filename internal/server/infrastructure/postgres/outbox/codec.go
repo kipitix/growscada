@@ -59,6 +59,10 @@ type payload struct {
 	// Commit is the number of the Commit of commit_created and
 	// commit_title_updated.
 	Commit int `json:"commit,omitempty"`
+	// LabelID is the label of a label_assigned or label_unassigned event: its
+	// ID is the scope's (a Project's or a Library's), so the label is named
+	// beside it (task 85_3).
+	LabelID *uuid.UUID `json:"label_id,omitempty"`
 }
 
 // Encode returns the stored form of a domain event. Events of delivery
@@ -131,6 +135,20 @@ func Encode(e event.Event) ([]byte, error) {
 		p.ID = ev.SceneID().UUID()
 	case project.ProjectEvent:
 		p.ID = ev.ProjectID().UUID()
+	case label.LabelAssignmentEvent:
+		// An assignment names the scope in ID and the label beside it, so a
+		// client reloads the history of the right Library or Project (task
+		// 85_3; ADR 0025).
+		labelID := ev.LabelID().UUID()
+		p.LabelID = &labelID
+		p.Commit = ev.CommitNumber()
+		if ev.Scope().IsLibrary() {
+			libraryID := ev.Scope().LibraryID().UUID()
+			p.ID, p.LibraryID = libraryID, &libraryID
+		} else {
+			projectID := ev.Scope().ProjectID().UUID()
+			p.ID, p.ProjectID = projectID, &projectID
+		}
 	case label.LabelEvent:
 		p.ID = ev.LabelID().UUID()
 	default:
@@ -234,6 +252,24 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 		default:
 			return label.NewLabelDeletedEvent(labelOfEvent, ts), nil
 		}
+	case event.EventTypeLabelAssigned, event.EventTypeLabelUnassigned:
+		if p.LabelID == nil {
+			return nil, fmt.Errorf("cannot decode %s payload: no label_id", eventType)
+		}
+		labelOfEvent := id.NewID(id.IDWithUUID[label.Label](*p.LabelID))
+		var scope draft.Scope
+		switch {
+		case p.ProjectID != nil:
+			scope = draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](*p.ProjectID)))
+		case p.LibraryID != nil:
+			scope = draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](*p.LibraryID)))
+		default:
+			return nil, fmt.Errorf("cannot decode %s payload: no project_id or library_id", eventType)
+		}
+		if eventType == event.EventTypeLabelAssigned {
+			return label.NewLabelAssignedEvent(labelOfEvent, scope, p.Commit, ts), nil
+		}
+		return label.NewLabelUnassignedEvent(labelOfEvent, scope, p.Commit, ts), nil
 	}
 
 	// Events of a Project's content: the Project is stored beside them.

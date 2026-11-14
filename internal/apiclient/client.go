@@ -878,6 +878,35 @@ func (p *ProjectClient) RenameCommit(ctx context.Context, number int, req apiv0.
 	return resp, err
 }
 
+// CommitsByLabel returns the Project's Commit history narrowed to the saved
+// states the label marks, newest first (task 85_3; ADR 0025).
+func (p *ProjectClient) CommitsByLabel(ctx context.Context, labelID uuid.UUID) ([]apiv0.CommitResponse, error) {
+	var resp apiv0.GetCommitsResponse
+	err := p.do(ctx, http.MethodGet,
+		apiv0.CommitPath+"?"+apiv0.CommitsQueryLabel+"="+labelID.String(), nil, http.StatusOK, &resp)
+	return resp.Commits, err
+}
+
+// AssignLabel marks the saved state number with the label and returns every
+// label the saved state carries afterwards. It is idempotent and states no
+// Draft Version. The error matches ErrNotFound for a Commit or a label this
+// server does not have (task 85_3; ADR 0025).
+func (p *ProjectClient) AssignLabel(ctx context.Context, number int, labelID uuid.UUID) ([]apiv0.LabelResponse, error) {
+	return p.commitLabel(ctx, http.MethodPut, number, labelID)
+}
+
+// UnassignLabel takes the label off the saved state number, idempotently, and
+// returns the labels it still carries.
+func (p *ProjectClient) UnassignLabel(ctx context.Context, number int, labelID uuid.UUID) ([]apiv0.LabelResponse, error) {
+	return p.commitLabel(ctx, http.MethodDelete, number, labelID)
+}
+
+func (p *ProjectClient) commitLabel(ctx context.Context, method string, number int, labelID uuid.UUID) ([]apiv0.LabelResponse, error) {
+	var resp apiv0.CommitLabelsResponse
+	err := p.do(ctx, method, apiv0.CommitLabelPathOf(number, labelID.String()), nil, http.StatusOK, &resp)
+	return resp.Labels, err
+}
+
 // CommitProjectFile returns the ProjectFile a Commit fixed, as a download.
 // The error matches ErrNotFound for a number the Project does not have.
 func (p *ProjectClient) CommitProjectFile(ctx context.Context, number int) (ProjectFileDownload, error) {
@@ -959,6 +988,34 @@ func (l *LibraryClient) RenameCommit(ctx context.Context, number int, req apiv0.
 	var resp apiv0.CommitResponse
 	err := l.do(ctx, http.MethodPatch, apiv0.CommitPathOf(number), req, http.StatusOK, &resp)
 	return resp, err
+}
+
+// CommitsByLabel returns the Library's Commit history narrowed to the saved
+// states the label marks, newest first (task 85_3; ADR 0025).
+func (l *LibraryClient) CommitsByLabel(ctx context.Context, labelID uuid.UUID) ([]apiv0.CommitResponse, error) {
+	var resp apiv0.GetCommitsResponse
+	err := l.do(ctx, http.MethodGet,
+		apiv0.CommitPath+"?"+apiv0.CommitsQueryLabel+"="+labelID.String(), nil, http.StatusOK, &resp)
+	return resp.Commits, err
+}
+
+// AssignLabel marks the saved state number with the label and returns every
+// label the saved state carries afterwards; the error matches ErrNotFound for
+// a Commit or a label this server does not have (task 85_3; ADR 0025).
+func (l *LibraryClient) AssignLabel(ctx context.Context, number int, labelID uuid.UUID) ([]apiv0.LabelResponse, error) {
+	return l.commitLabel(ctx, http.MethodPut, number, labelID)
+}
+
+// UnassignLabel takes the label off the saved state number, idempotently, and
+// returns the labels it still carries.
+func (l *LibraryClient) UnassignLabel(ctx context.Context, number int, labelID uuid.UUID) ([]apiv0.LabelResponse, error) {
+	return l.commitLabel(ctx, http.MethodDelete, number, labelID)
+}
+
+func (l *LibraryClient) commitLabel(ctx context.Context, method string, number int, labelID uuid.UUID) ([]apiv0.LabelResponse, error) {
+	var resp apiv0.CommitLabelsResponse
+	err := l.do(ctx, method, apiv0.CommitLabelPathOf(number, labelID.String()), nil, http.StatusOK, &resp)
+	return resp.Labels, err
 }
 
 // ── Deploy and Deployment ──────────────────────────────────────────────────────

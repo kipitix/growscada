@@ -371,6 +371,7 @@ var domainSentinels = map[string]error{
 	"label.ErrLabelNameTaken":             label.ErrLabelNameTaken,
 	"label.ErrInvalidLabelName":           label.ErrInvalidLabelName,
 	"label.ErrInvalidLabelColor":          label.ErrInvalidLabelColor,
+	"label.ErrInvalidAssignment":          label.ErrInvalidAssignment,
 }
 
 // unmappedSentinels are the domain sentinels errorMappings leaves out on
@@ -392,6 +393,7 @@ var unmappedSentinels = map[string]string{
 	"draft.ErrDraftNotFound":            "500: only the repository creates a draft's row, and its Project or Library exists",
 	"label.ErrInvalidLabelName":         "400: the service marks it invalid input",
 	"label.ErrInvalidLabelColor":        "400: the service marks it invalid input",
+	"label.ErrInvalidAssignment":        "400: the service marks it invalid input (a commit number that is not positive)",
 }
 
 // TestDomainSentinels_AreListed reads the domain sources, so a new sentinel

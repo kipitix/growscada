@@ -36,7 +36,7 @@ type UpdateLabelRequest struct {
 
 // LabelResponse is the HTTP DTO of a Label: its identity, name, optional color
 // (empty for the theme's neutral one), how many saved states it marks, and when
-// it was created. The count is 0 until task 85_3 adds the assignments.
+// it was created (task 85_2, task 85_3; ADR 0025).
 type LabelResponse struct {
 	ID            uuid.UUID `json:"id"`
 	Name          string    `json:"name"`

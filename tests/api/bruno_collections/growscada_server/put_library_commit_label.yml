@@ -1,0 +1,30 @@
+info:
+  name: put a label on a library saved state
+  type: http
+  seq: 2018
+http:
+  method: PUT
+  url: http://{{API_SERVER}}/api/v0/libraries/{{OTHER_LIBRARY_ID}}/commits/1/labels/{{LABEL_ID}}
+  auth: inherit
+
+docs: |
+  The same assignment under a Library (task 85_3; ADR 0025): the label belongs
+  to the Organization, and a library's saved state carries it as a project's
+  does. No Draft Version is stated.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.labels.length'
+      operator: eq
+      value: '1'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

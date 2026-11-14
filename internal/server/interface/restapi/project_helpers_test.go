@@ -78,6 +78,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 	releases := repositories.NewLibraryReleaseRepositoryPostgres(db, opts...)
 	drafts := repositories.NewDraftRepositoryPostgres(db, releases, opts...)
 	projectReleases := repositories.NewProjectReleaseRepositoryPostgres(db, opts...)
+	labels := repositories.NewLabelRepositoryPostgres(db, opts...)
 	content := application.NewProjectContent(projectRepo, repositories.NewProjectScopes(db, opts...), drafts, orgID)
 	libraries := repositories.NewLibraryRepositoryPostgres(db, opts...)
 	libraryContent := application.NewLibraryContent(libraries, drafts, orgID)
@@ -106,10 +107,10 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		deviceTokens: deviceTokens,
 		journal:      journal,
 		operation:    runtimeapp.NewOperationStateService(journal, deployments, states, runtimepg.NewCheckpointRepositoryPostgres(db)),
-		commits:      application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, projectReleases, releases),
+		commits:      application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, projectReleases, releases, labels, orgID),
 		releases:     application.NewReleaseService(content, projectReleases, runtimeNode, libraries, releases),
 		settings:     application.NewSettingsService(repositories.NewUserSettingsRepositoryPostgres(db), settings.SingleUser(), orgID),
-		labels:       application.NewLabelService(repositories.NewLabelRepositoryPostgres(db, opts...), orgID),
+		labels:       application.NewLabelService(labels, drafts, orgID),
 	}
 }
 

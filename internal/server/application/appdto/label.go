@@ -9,9 +9,8 @@ import (
 )
 
 // Label is the application-layer DTO of a Label: its identity, name, optional
-// color, when it was created and how many saved states it marks (task 85_2;
-// ADR 0025). An empty Color is the theme's neutral color. AssignedCount is 0
-// until task 85_3 adds the assignments.
+// color, when it was created and how many saved states it marks (task 85_2,
+// task 85_3; ADR 0025). An empty Color is the theme's neutral color.
 type Label struct {
 	ID            uuid.UUID
 	Name          string
@@ -23,10 +22,11 @@ type Label struct {
 // NewLabel creates a Label DTO from the domain aggregate.
 func NewLabel(l label.Label) Label {
 	return Label{
-		ID:        l.ID().UUID(),
-		Name:      l.Name().String(),
-		Color:     l.Color().String(),
-		CreatedAt: l.CreatedAt(),
+		ID:            l.ID().UUID(),
+		Name:          l.Name().String(),
+		Color:         l.Color().String(),
+		CreatedAt:     l.CreatedAt(),
+		AssignedCount: len(l.Assignments()),
 	}
 }
 
@@ -35,6 +35,16 @@ func NewLabels(labels []label.Label) []Label {
 	out := make([]Label, len(labels))
 	for i, l := range labels {
 		out[i] = NewLabel(l)
+	}
+	return out
+}
+
+// NewLabelMap creates the DTOs of the labels of each saved state, keyed by the
+// Commit's number, in the order the map holds them.
+func NewLabelMap(byNumber map[int][]label.Label) map[int][]Label {
+	out := make(map[int][]Label, len(byNumber))
+	for number, labels := range byNumber {
+		out[number] = NewLabels(labels)
 	}
 	return out
 }

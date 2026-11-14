@@ -3,8 +3,19 @@ package draft
 import (
 	"context"
 
+	"github.com/google/uuid"
+
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
+
+// CommitFilter narrows the Commit list of a Draft. The zero filter lists every
+// Commit.
+type CommitFilter struct {
+	// LabelID keeps only the Commits the label marks, filtered by the SQL join
+	// over engineering.commit_labels (task 85_3; ADR 0025). uuid.Nil keeps
+	// every Commit.
+	LabelID uuid.UUID
+}
 
 // Repository stores the Drafts and their DraftChanges in the Engineering
 // node's schema (ADR 0016, ADR 0017). One write of a Draft's content is one
@@ -88,9 +99,10 @@ type Repository interface {
 	// Returns ErrCommitNotFound for a number the Draft does not have.
 	RenameCommit(ctx context.Context, scope Scope, number int, title CommitTitle) (Commit, error)
 
-	// FindCommits returns the Draft's Commits, newest first. A Project or
-	// Library that is not live is ErrProjectNotFound or ErrLibraryNotFound.
-	FindCommits(ctx context.Context, scope Scope) ([]Commit, error)
+	// FindCommits returns the Draft's Commits, newest first, or only those the
+	// filter's label marks. A Project or Library that is not live is
+	// ErrProjectNotFound or ErrLibraryNotFound.
+	FindCommits(ctx context.Context, scope Scope, filter CommitFilter) ([]Commit, error)
 
 	// FindLastCommit returns the Draft's newest Commit, and whether it has one
 	// at all: a Draft never saved has none. It is the read of a Discard, which

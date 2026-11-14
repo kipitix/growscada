@@ -521,7 +521,18 @@ func newCommitResponse(c appdto.Commit) apiv0.CommitResponse {
 	if c.WidgetTypes != nil {
 		resp.WidgetTypes = newReleasedWidgetTypeResponses(c.WidgetTypes)
 	}
+	if c.Labels != nil {
+		resp.Labels = newLabelResponses(c.Labels)
+	}
 	return resp
+}
+
+// newCommitLabelsResponse maps the labels a saved state carries (task 85_3).
+func newCommitLabelsResponse(labels []appdto.Label) apiv0.CommitLabelsResponse {
+	if labels == nil {
+		labels = []appdto.Label{}
+	}
+	return apiv0.CommitLabelsResponse{Labels: newLabelResponses(labels)}
 }
 
 func newGetCommitsResponse(list []appdto.Commit) apiv0.GetCommitsResponse {
@@ -803,9 +814,14 @@ func newLabelResponse(l appdto.Label) apiv0.LabelResponse {
 
 // newGetLabelsResponse maps the labels, ordered by name ignoring case.
 func newGetLabelsResponse(labels []appdto.Label) apiv0.GetLabelsResponse {
+	return apiv0.GetLabelsResponse{Labels: newLabelResponses(labels)}
+}
+
+// newLabelResponses maps the labels in their order.
+func newLabelResponses(labels []appdto.Label) []apiv0.LabelResponse {
 	items := make([]apiv0.LabelResponse, len(labels))
 	for i, l := range labels {
 		items[i] = newLabelResponse(l)
 	}
-	return apiv0.GetLabelsResponse{Labels: items}
+	return items
 }

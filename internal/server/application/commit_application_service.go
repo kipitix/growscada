@@ -5,9 +5,14 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
+	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/label"
 	"github.com/kipitix/growscada/internal/server/domain/library"
+	"github.com/kipitix/growscada/internal/server/domain/organization"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/release"
 	"github.com/kipitix/growscada/internal/server/domain/version"
@@ -17,7 +22,8 @@ import (
 // ADR 0021): a Save fixes the whole Draft as an immutable, numbered snapshot,
 // the history is listed and read, and a title is renamed without touching the
 // snapshot. It serves both a Project's Draft and a Library's, named by a
-// draft.Scope.
+// draft.Scope. The labels that mark a saved state come from the Label
+// repository, read for a whole history at once (task 85_3; ADR 0025).
 type CommitService interface {
 	// Save fixes the Draft of scope at version as a Commit with the title and
 	// author, and returns it. Returns ErrNothingToSave if the Draft is at the
@@ -25,8 +31,9 @@ type CommitService interface {
 	// be assembled, and draft.ConflictError if version is stale. An empty
 	// title or author is invalid input.
 	Save(ctx context.Context, scope draft.Scope, version int, title, author string) (appdto.Commit, error)
-	// List returns the Draft's Commits, newest first, without their content.
-	List(ctx context.Context, scope draft.Scope) ([]appdto.Commit, error)
+	// List returns the Draft's Commits, newest first, without their content;
+	// labelID (uuid.Nil: every) keeps only the Commits it marks.
+	List(ctx context.Context, scope draft.Scope, labelID uuid.UUID) ([]appdto.Commit, error)
 	// Find returns one Commit; a Library's carries its WidgetTypes.
 	Find(ctx context.Context, scope draft.Scope, number int) (appdto.Commit, error)
 	// Rename changes the title of a Commit, stating no Draft Version.
@@ -43,20 +50,25 @@ type commitServiceImpl struct {
 	widgetTypes     library.WidgetTypeRepositories
 	releases        release.Repository
 	libraryReleases library.LibraryReleaseRepository
+	labels          label.Repository
+	organization    id.ID[organization.Organization]
 }
 
 var _ CommitService = (*commitServiceImpl)(nil)
 
 // NewCommitService returns the service of the Commits of the Projects aContent
 // serves and of the Libraries aLibraries serves, assembling a Project's
-// snapshot with aBuilder, reading a Library's Draft through someWidgetTypes and
+// snapshot with aBuilder, reading a Library's Draft through someWidgetTypes,
 // marking a Commit a Release published with someReleases and
-// someLibraryReleases.
+// someLibraryReleases, and reading the labels of a saved state from
+// someLabels of the Organization anOrganizationID.
 func NewCommitService(aContent ProjectContent, aLibraries LibraryContent, aBuilder ProjectFileBuilder,
 	someWidgetTypes library.WidgetTypeRepositories, someReleases release.Repository,
-	someLibraryReleases library.LibraryReleaseRepository) CommitService {
+	someLibraryReleases library.LibraryReleaseRepository, someLabels label.Repository,
+	anOrganizationID id.ID[organization.Organization]) CommitService {
 	return &commitServiceImpl{content: aContent, libraries: aLibraries, builder: aBuilder,
-		widgetTypes: someWidgetTypes, releases: someReleases, libraryReleases: someLibraryReleases}
+		widgetTypes: someWidgetTypes, releases: someReleases, libraryReleases: someLibraryReleases,
+		labels: someLabels, organization: anOrganizationID}
 }
 
 func (s commitServiceImpl) Save(ctx context.Context, scope draft.Scope, rawVersion int, rawTitle, rawAuthor string) (appdto.Commit, error) {
@@ -143,12 +155,15 @@ func (s commitServiceImpl) libraryContent(ctx context.Context, scope draft.Scope
 	return draft.NewLibraryCommitContent(copies), nil
 }
 
-func (s commitServiceImpl) List(ctx context.Context, scope draft.Scope) ([]appdto.Commit, error) {
-	commits, err := s.content.Drafts().FindCommits(ctx, scope)
+func (s commitServiceImpl) List(ctx context.Context, scope draft.Scope, labelID uuid.UUID) ([]appdto.Commit, error) {
+	commits, err := s.content.Drafts().FindCommits(ctx, scope, draft.CommitFilter{LabelID: labelID})
 	if err != nil {
 		return nil, err
 	}
 	dtos := appdto.NewCommitList(commits)
+	if err := s.attachLabels(ctx, scope, dtos); err != nil {
+		return nil, err
+	}
 	if err := s.markReleased(ctx, scope, dtos); err != nil {
 		return nil, err
 	}
@@ -168,13 +183,33 @@ func (s commitServiceImpl) Find(ctx context.Context, scope draft.Scope, rawNumbe
 	return s.releasedCommit(ctx, scope, dto)
 }
 
-// releasedCommit returns dto with Released set when a Release published it.
+// releasedCommit returns dto with Released set when a Release published it and
+// the labels that mark it (task 85_3).
 func (s commitServiceImpl) releasedCommit(ctx context.Context, scope draft.Scope, dto appdto.Commit) (appdto.Commit, error) {
 	dtos := []appdto.Commit{dto}
+	if err := s.attachLabels(ctx, scope, dtos); err != nil {
+		return appdto.Commit{}, err
+	}
 	if err := s.markReleased(ctx, scope, dtos); err != nil {
 		return appdto.Commit{}, err
 	}
 	return dtos[0], nil
+}
+
+// attachLabels fills the labels of each saved state of the list, read for the
+// whole list in one call (task 85_3; ADR 0025).
+func (s commitServiceImpl) attachLabels(ctx context.Context, scope draft.Scope, dtos []appdto.Commit) error {
+	if len(dtos) == 0 {
+		return nil
+	}
+	byNumber, err := s.labels.LabelsOfScope(ctx, s.organization, scope)
+	if err != nil {
+		return fmt.Errorf("cannot read the labels of %s: %w", scope, err)
+	}
+	for i := range dtos {
+		dtos[i].Labels = appdto.NewLabels(byNumber[dtos[i].Number])
+	}
+	return nil
 }
 
 // markReleased sets Released on the Commits a Release published: a Project's

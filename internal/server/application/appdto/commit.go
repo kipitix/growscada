@@ -21,8 +21,11 @@ type Commit struct {
 	DraftVersion int
 	// Released reports whether a Release was made of this Commit; false until
 	// task 72_3.
-	Released    bool
-	Counts      CommitCounts
+	Released bool
+	Counts   CommitCounts
+	// Labels are the labels that mark this saved state, ordered by name
+	// ignoring case (task 85_3; ADR 0025).
+	Labels      []Label
 	WidgetTypes []ReleasedWidgetType
 }
 

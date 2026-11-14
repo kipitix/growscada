@@ -89,6 +89,8 @@ func sampleEvents(t *testing.T) []event.Event {
 		label.NewLabelCreatedEvent(labelID, ts),
 		label.NewLabelUpdatedEvent(labelID, ts),
 		label.NewLabelDeletedEvent(labelID, ts),
+		label.NewLabelAssignedEvent(labelID, draft.ProjectScope(projectID), 5, ts),
+		label.NewLabelUnassignedEvent(labelID, draft.LibraryScope(libraryID), 6, ts),
 	}
 }
 
@@ -203,6 +205,11 @@ func assertSameSubject(t *testing.T, original, decoded event.Event) {
 	case scene.SceneEvent:
 		if got := decoded.(scene.SceneEvent); got.SceneID() != want.SceneID() {
 			t.Errorf("scene ID %s, want %s", got.SceneID(), want.SceneID())
+		}
+	case label.LabelAssignmentEvent:
+		got, ok := decoded.(label.LabelAssignmentEvent)
+		if !ok || got.LabelID() != want.LabelID() || got.Scope() != want.Scope() || got.CommitNumber() != want.CommitNumber() {
+			t.Errorf("decoded %T, want commit %d of %s of label %s", decoded, want.CommitNumber(), want.Scope(), want.LabelID())
 		}
 	case label.LabelEvent:
 		if got, ok := decoded.(label.LabelEvent); !ok || got.LabelID() != want.LabelID() {

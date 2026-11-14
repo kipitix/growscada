@@ -16,6 +16,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
@@ -38,6 +39,19 @@ type Label interface {
 	// Recolor changes the color and records a LabelUpdatedEvent. An empty
 	// Color clears it.
 	Recolor(Color) (Label, error)
+	// Assign marks the Commit commitID of scope, numbered commitNumber, with
+	// this label and records a LabelAssignedEvent; assigning a Commit the
+	// label marks already changes nothing and records nothing (task 85_3;
+	// ADR 0025). It returns ErrInvalidAssignment for a number that is not
+	// positive or a scope that names neither a Project nor a Library.
+	Assign(commitID id.ID[draft.Commit], scope draft.Scope, commitNumber int, at time.Time) (Label, error)
+	// Unassign removes the mark of the Commit commitID and records a
+	// LabelUnassignedEvent; a Commit the label does not mark changes nothing
+	// and records nothing.
+	Unassign(commitID id.ID[draft.Commit]) (Label, error)
+	// Assignments is the set of saved states the label marks, the read model
+	// of the UI. The repository loads it; a rename does not need it.
+	Assignments() []Assignment
 	// Delete records a LabelDeletedEvent; saving it removes the label with its
 	// assignments in the same transaction (task 85_3). Like removing any
 	// aggregate, it expects no Version.
@@ -53,6 +67,7 @@ type labelImpl struct {
 	name           Name
 	color          Color
 	createdAt      time.Time
+	assignments    []Assignment
 	pending        []event.Event
 }
 
@@ -71,15 +86,16 @@ func CreateLabel(anID id.ID[Label], anOrganizationID id.ID[organization.Organiza
 	}
 }
 
-// ReconstituteLabel rebuilds a label as stored; it records no event. For
-// repositories.
-func ReconstituteLabel(anID id.ID[Label], anOrganizationID id.ID[organization.Organization], aName Name, aColor Color, createdAt time.Time) Label {
+// ReconstituteLabel rebuilds a label as stored, with the saved states it
+// marks; it records no event. For repositories.
+func ReconstituteLabel(anID id.ID[Label], anOrganizationID id.ID[organization.Organization], aName Name, aColor Color, createdAt time.Time, assignments []Assignment) Label {
 	return &labelImpl{
 		id:             anID,
 		organizationID: anOrganizationID,
 		name:           aName,
 		color:          aColor,
 		createdAt:      createdAt.UTC(),
+		assignments:    slices.Clone(assignments),
 	}
 }
 
@@ -113,6 +129,50 @@ func (l *labelImpl) Delete() Label {
 	deleted := *l
 	deleted.pending = append(slices.Clone(l.pending), NewLabelDeletedEvent(l.id))
 	return &deleted
+}
+
+func (l *labelImpl) Assign(commitID id.ID[draft.Commit], scope draft.Scope, commitNumber int, at time.Time) (Label, error) {
+	assignment, err := NewAssignment(commitID, scope, commitNumber, at)
+	if err != nil {
+		return nil, err
+	}
+	if l.assignmentIndex(commitID) >= 0 {
+		// Idempotent: the mark is there already and no event is recorded, so a
+		// repeated request writes no outbox row.
+		return l, nil
+	}
+	assigned := *l
+	assigned.assignments = append(slices.Clone(l.assignments), assignment)
+	assigned.pending = append(slices.Clone(l.pending), NewLabelAssignedEvent(l.id, scope, commitNumber))
+	return &assigned, nil
+}
+
+func (l *labelImpl) Unassign(commitID id.ID[draft.Commit]) (Label, error) {
+	index := l.assignmentIndex(commitID)
+	if index < 0 {
+		return l, nil
+	}
+	unassigned := *l
+	unassigned.assignments = slices.Delete(slices.Clone(l.assignments), index, index+1)
+	assignment := l.assignments[index]
+	unassigned.pending = append(slices.Clone(l.pending),
+		NewLabelUnassignedEvent(l.id, assignment.Scope(), assignment.CommitNumber()))
+	return &unassigned, nil
+}
+
+func (l *labelImpl) Assignments() []Assignment {
+	return slices.Clone(l.assignments)
+}
+
+// assignmentIndex is the position of the mark of commitID in the label's set,
+// -1 when the label does not mark it.
+func (l *labelImpl) assignmentIndex(commitID id.ID[draft.Commit]) int {
+	for i, assignment := range l.assignments {
+		if assignment.CommitID() == commitID {
+			return i
+		}
+	}
+	return -1
 }
 
 func (l *labelImpl) PendingEvents() []event.Event {
