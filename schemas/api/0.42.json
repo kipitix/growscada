@@ -1790,6 +1790,25 @@
       ],
       "type": "object"
     },
+    "ProjectOrderResponse": {
+      "properties": {
+        "project_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version",
+        "project_ids"
+      ],
+      "type": "object"
+    },
     "ProjectResponse": {
       "properties": {
         "description": {
@@ -1960,6 +1979,25 @@
       "required": [
         "version",
         "library_ids"
+      ],
+      "type": "object"
+    },
+    "SetProjectOrderRequest": {
+      "properties": {
+        "project_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version",
+        "project_ids"
       ],
       "type": "object"
     },
