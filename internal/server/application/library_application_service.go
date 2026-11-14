@@ -50,6 +50,12 @@ type LibraryService interface {
 	// in one transaction over the Draft and answers the Draft's new state. A
 	// library never released is ErrNoRelease.
 	RevertToLatestRelease(ctx context.Context, libraryID uuid.UUID) (appdto.DraftState, error)
+	// LoadCommit replaces the library's Draft with the WidgetTypes of its
+	// Commit number, in one transaction: the saved state becomes what is
+	// edited, the DraftChange stack is cleared and the Version raised, as a
+	// Discard does. The Draft is clean exactly when that Commit is its last one
+	// (task 84). A number the library does not have is draft.ErrCommitNotFound.
+	LoadCommit(ctx context.Context, libraryID uuid.UUID, number int) (appdto.LoadedDraft, error)
 }
 
 type libraryServiceImpl struct {
@@ -490,6 +496,42 @@ func (s libraryServiceImpl) Discard(ctx context.Context, rawID uuid.UUID) (appdt
 		return appdto.DraftState{}, fmt.Errorf("cannot discard library %s: %w", found.ID(), err)
 	}
 	return appdto.DraftState{Version: result.Version().Number(), HasUnsavedChanges: result.HasUnsavedChanges()}, nil
+}
+
+// LoadCommit makes the library's Draft the content of one of its Commits
+// (task 84): the reset a Discard makes, to the Commit the client named rather
+// than the last one.
+func (s libraryServiceImpl) LoadCommit(ctx context.Context, rawID uuid.UUID, number int) (appdto.LoadedDraft, error) {
+	found, err := s.findOwn(ctx, rawID)
+	if err != nil {
+		return appdto.LoadedDraft{}, err
+	}
+	scope := s.content.ScopeOf(found.ID())
+	commit, err := s.content.Drafts().FindCommit(ctx, scope, number)
+	if err != nil {
+		return appdto.LoadedDraft{}, fmt.Errorf("cannot read commit %d of library %s: %w", number, found.ID(), err)
+	}
+	types, ok := commit.Content().WidgetTypes()
+	if !ok {
+		return appdto.LoadedDraft{}, fmt.Errorf("commit %d of library %s holds no widget types", commit.Number(), found.ID())
+	}
+	// The loaded content is the Draft's clean state only when it is the last
+	// Commit: an older one leaves the Draft with unsaved changes (task 74).
+	last, hasLast, err := s.content.Drafts().FindLastCommit(ctx, scope)
+	if err != nil {
+		return appdto.LoadedDraft{}, fmt.Errorf("cannot read the last commit of library %s: %w", found.ID(), err)
+	}
+	result, err := s.content.Drafts().Replace(ctx, scope, hasLast && last.Number() == commit.Number(),
+		func(session *draft.Session) error {
+			return session.ReplaceWidgetTypes(ctx, types)
+		})
+	if err != nil {
+		return appdto.LoadedDraft{}, fmt.Errorf("cannot load commit %d of library %s: %w", commit.Number(), found.ID(), err)
+	}
+	return appdto.LoadedDraft{
+		Version:           result.Version().Number(),
+		HasUnsavedChanges: result.HasUnsavedChanges(),
+	}, nil
 }
 
 // RevertToLatestRelease resets the Draft of the library to its latest Release

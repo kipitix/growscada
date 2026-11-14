@@ -125,10 +125,10 @@ func (l *Library) renderDraftChangesBar() app.UI {
 		Style("display", "flex").
 		Style("gap", "4px").
 		Body(
-			barButton("Undo", l.canUndo(), "", l.undoTitle(), l.undoDraftChangeFromButton,
-				app.EventScope("undo")),
-			barButton("Redo", l.canRedo(), "", l.redoTitle(), l.redoDraftChangeFromButton,
-				app.EventScope("redo")),
+			uiutil.PanelButton(uiutil.IconUndo(), l.canUndo(), l.undoTitle(),
+				func(app.Context, app.Event) { l.undoDraftChangeFromButton() }, app.EventScope("undo")),
+			uiutil.PanelButton(uiutil.IconRedo(), l.canRedo(), l.redoTitle(),
+				func(app.Context, app.Event) { l.redoDraftChangeFromButton() }, app.EventScope("redo")),
 		)
 }
 
@@ -145,7 +145,7 @@ func (l *Library) redoDraftChangeFromButton() { l.redoDraftChange(l.compoCtx) }
 func (l *Library) undoTitle() string {
 	switch {
 	case l.readOnly():
-		return "Undo the last change — a release or a commit is shown; open the Draft to edit it"
+		return "Undo the last change — a release is shown; open the Draft to edit it"
 	case !l.changesLoaded:
 		return "Undo the last change"
 	case !l.changes.CanUndo || l.changes.UndoDescription == "":
@@ -159,7 +159,7 @@ func (l *Library) undoTitle() string {
 func (l *Library) redoTitle() string {
 	switch {
 	case l.readOnly():
-		return "Redo the change undone last — a release or a commit is shown; open the Draft to edit it"
+		return "Redo the change undone last — a release is shown; open the Draft to edit it"
 	case !l.changesLoaded:
 		return "Redo the change undone last"
 	case !l.changes.CanRedo || l.changes.RedoDescription == "":
@@ -216,7 +216,7 @@ func (l *Library) listenShortcuts() {
 // mode is open. An undo behind the Save dialog would change the Draft the Save
 // is about to fix as a Commit; a Release dialog holds the Draft too.
 func (l *Library) keyActionAllowed() bool {
-	return !l.saveDialog && !l.commitsDialog && !l.releaseDialog
+	return !l.saveDialog && !l.historyScreen && !l.releaseDialog
 }
 
 // noKeyDown releases the listener (OnDismount).

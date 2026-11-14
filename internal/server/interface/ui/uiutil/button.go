@@ -50,6 +50,24 @@ func IconButton(icon app.UI, kind string, enabled bool, title string, layout But
 		Style("padding", "0")
 }
 
+// BarDivider separates the groups of a mode's panel (task 84).
+func BarDivider() app.UI {
+	return app.Div().
+		Style("width", "1px").
+		Style("height", "18px").
+		Style("background", "var(--border)")
+}
+
+// PanelButton is an icon action of a mode's panel (task 84): a 28 px square
+// whose icon is the whole face and whose title is its accessible name, so the
+// panel of the Library and the Project reads the same in both modes.
+func PanelButton(icon app.UI, enabled bool, title string, onClick func(app.Context, app.Event), options ...app.EventOption) app.HTMLButton {
+	return IconButton(icon, "", enabled, title, ButtonBar, onClick, options...).
+		Style("width", "28px").
+		Style("height", "28px").
+		Style("flex-shrink", "0")
+}
+
 // button renders one action around the content it shows.
 func button(kind string, enabled bool, title string, layout ButtonLayout, content app.UI, onClick func(app.Context, app.Event), options ...app.EventOption) app.HTMLButton {
 	border, bg, fg := buttonColors(kind)

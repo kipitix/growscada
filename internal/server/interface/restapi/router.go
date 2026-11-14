@@ -204,6 +204,7 @@ func (r *APIRouter) routes() []route {
 		{"POST " + lp + apiv0.CommitPath, commits.PostCommit},
 		{"GET " + lp + apiv0.CommitPath + "/" + commitResource.wildcard(), commits.GetCommitByNumber},
 		{"PATCH " + lp + apiv0.CommitPath + "/" + commitResource.wildcard(), commits.PatchCommit},
+		{"POST " + lp + apiv0.CommitPath + "/" + commitResource.wildcard() + apiv0.CommitLoadPath, libraries.PostCommitLoad},
 
 		{"GET " + lp + "/widget-types", widgetTypes.GetWidgetTypes},
 		{"GET " + lp + "/widget-types/" + widgetTypeResource.wildcard(), widgetTypes.GetWidgetTypesByID},
@@ -261,6 +262,7 @@ func (r *APIRouter) routes() []route {
 		{"POST " + pp + apiv0.CommitPath, commits.PostCommit},
 		{"GET " + pp + apiv0.CommitPath + "/" + commitResource.wildcard(), commits.GetCommitByNumber},
 		{"PATCH " + pp + apiv0.CommitPath + "/" + commitResource.wildcard(), commits.PatchCommit},
+		{"POST " + pp + apiv0.CommitPath + "/" + commitResource.wildcard() + apiv0.CommitLoadPath, deploy.PostCommitLoad},
 		{"GET " + pp + apiv0.CommitPath + "/" + commitResource.wildcard() + "/projectfile", commits.GetCommitProjectFile},
 		{"GET " + pp + apiv0.ReleasePath, releases.GetReleases},
 		{"POST " + pp + apiv0.ReleasePath, releases.PostRelease},

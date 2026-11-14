@@ -51,14 +51,16 @@ func TestSaveCommit_HistoryRowAndIndicator(t *testing.T) {
 		t.Errorf("the header does not mark the Draft saved: %s", html)
 	}
 
-	f.p.openCommitsDialog(f.p.compoCtx)
+	f.p.openHistory(f.p.compoCtx)
 	f.run()
-	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-commit-row="1"`) {
-		t.Errorf("the history does not show Commit 1: %s", html)
+	html := app.HTMLString(f.p.Render())
+	if !strings.Contains(html, `data-history-screen`) || !strings.Contains(html, `data-saved-state-row="1"`) {
+		t.Errorf("the history does not show saved state 1: %s", html)
 	}
-	// The content of a Commit is read by its own button (task 72_2).
-	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-commit-download="1"`) {
-		t.Errorf("the history offers no download of Commit 1: %s", html)
+	// The row's two actions are the load of the saved state and its release
+	// (task 84).
+	if !strings.Contains(html, `>Load<`) || !strings.Contains(html, `>Make Release<`) {
+		t.Errorf("the row offers no load and no release: %s", html)
 	}
 }
 
@@ -72,7 +74,7 @@ func TestSaveCommit_SuccessAndNothingToSave(t *testing.T) {
 	f.p.saveTitle = "First save"
 	f.p.saveCommit(f.p.compoCtx)
 	f.run()
-	if got := f.oneToast(); !strings.Contains(got.Title, "Commit 1 saved") {
+	if got := f.oneToast(); !strings.Contains(got.Title, "Saved state 1 saved") {
 		t.Errorf("the Save showed %+v, want its confirmation", got)
 	}
 	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-commit-saved`) {
@@ -151,7 +153,7 @@ func TestSaveCommit_ShortcutsWaitForTheDialogs(t *testing.T) {
 	if f.p.keyActionAllowed() {
 		t.Errorf("a shortcut acts behind the Save dialog")
 	}
-	f.p.saveDialog, f.p.commitsDialog = false, true
+	f.p.saveDialog, f.p.historyScreen = false, true
 	if f.p.keyActionAllowed() {
 		t.Errorf("a shortcut acts behind the History dialog")
 	}

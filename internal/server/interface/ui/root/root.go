@@ -89,6 +89,13 @@ func NewRoot(anAPIServerURL string) *Root {
 	r.client = apiclient.New(anAPIServerURL, http.DefaultClient, apiclient.OnServerVersion(r.observeServerVersion))
 	r.project = project.NewProject(r.client)
 	r.library = library.NewLibrary(r.client)
+	// The panel of each editor carries the way back to its selection page
+	// (task 84): Root owns the page and the name the selection announced, so
+	// the mode asks for both instead of knowing them.
+	r.library.OnBack = func() { r.showListPage(ModeLibrary) }
+	r.library.BackName = func() string { return r.entityName[ModeLibrary] }
+	r.project.OnBack = func() { r.showListPage(ModeProject) }
+	r.project.BackName = func() string { return r.entityName[ModeProject] }
 	r.operation = operation.NewOperation(r.client)
 	r.bar = eventlog.NewBar(anAPIServerURL)
 	r.modes = []modeView{
@@ -621,7 +628,6 @@ func (r *Root) modeContent(m *modeView) app.UI {
 					Style("flex", "1").
 					Style("min-height", "0").
 					Body(
-						r.renderBackBar(m.mode),
 						app.Div().
 							Style("display", "flex").
 							Style("flex", "1").
@@ -666,35 +672,6 @@ func screen(visible bool, body app.UI) app.UI {
 		Style("flex-direction", "column").
 		Style("visibility", visibility).
 		Body(body)
-}
-
-// renderBackBar is the slim "← List · <name>" row at the top left of the
-// editor of the Library and Project modes (task 73): it shows the selection
-// page and keeps the entity announced to the event stream. An entity a read
-// finds gone returns to that page too, without the user asking (task 76).
-func (r *Root) renderBackBar(mode Mode) app.UI {
-	label := "← List"
-	if name := r.entityName[mode]; name != "" {
-		label += " · " + name
-	}
-	return app.Div().
-		Attr("data-back-to-list", "true").
-		Style("display", "flex").
-		Style("align-items", "center").
-		Style("height", "26px").
-		Style("flex-shrink", "0").
-		Style("padding", "0 10px").
-		Style("box-sizing", "border-box").
-		Style("border-bottom", "1px solid var(--border)").
-		Style("background", "var(--bg-elevated)").
-		Style("font-size", "12px").
-		Style("color", "var(--text-2)").
-		Style("cursor", "pointer").
-		Style("user-select", "none").
-		Text(label).
-		OnClick(func(ctx app.Context, e app.Event) {
-			r.showListPage(mode)
-		})
 }
 
 // modeView is a mode and its component: the switcher of the project it shows

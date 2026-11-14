@@ -689,7 +689,7 @@ func TestPicker_LibraryStates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SaveCommit: %v", err)
 	}
-	if item := reload(); item.State != StateUnpublishedCommit || item.StateKind != "unpublished" {
+	if item := reload(); item.State != StateUnpublishedSavedState || item.StateKind != "unpublished" {
 		t.Errorf("after a Save: %+v, want an unpublished commit", item)
 	}
 

@@ -542,6 +542,15 @@ func (l *LibraryClient) RevertToRelease(ctx context.Context) (apiv0.RevertLibrar
 	return resp, err
 }
 
+// LoadCommit makes the library's Draft the content of a Commit (task 84), as a
+// Project's LoadCommit does. The error matches ErrNotFound for a number the
+// library does not have.
+func (l *LibraryClient) LoadCommit(ctx context.Context, number int) (apiv0.LoadCommitResponse, error) {
+	var resp apiv0.LoadCommitResponse
+	err := l.do(ctx, http.MethodPost, apiv0.CommitLoadPathOf(number), nil, http.StatusOK, &resp)
+	return resp, err
+}
+
 // ── Library Pins ─────────────────────────────────────────────────────────────
 
 // ListLibraryPins returns the project's Library Pins, in the order they were
@@ -873,6 +882,16 @@ func (p *ProjectClient) RenameCommit(ctx context.Context, number int, req apiv0.
 // The error matches ErrNotFound for a number the Project does not have.
 func (p *ProjectClient) CommitProjectFile(ctx context.Context, number int) (ProjectFileDownload, error) {
 	return p.downloadProjectFile(ctx, apiv0.CommitPathOf(number)+"/projectfile")
+}
+
+// LoadCommit makes the Draft the content of a Commit (task 84): the saved
+// state becomes what is edited, the DraftChange stack is cleared and the Draft's
+// Version raised. It states no Version — it is a reset, not a content write. The
+// error matches ErrNotFound for a number the Project does not have.
+func (p *ProjectClient) LoadCommit(ctx context.Context, number int) (apiv0.LoadCommitResponse, error) {
+	var resp apiv0.LoadCommitResponse
+	err := p.do(ctx, http.MethodPost, apiv0.CommitLoadPathOf(number), nil, http.StatusOK, &resp)
+	return resp, err
 }
 
 // CreateRelease publishes a Commit as the next Release of the Project (task

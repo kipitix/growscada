@@ -77,16 +77,16 @@ func TestEventTypeInfo_Describe(t *testing.T) {
 	}
 }
 
-// TestEventRef: a commit event is described by its number, not by the ID of
+// TestEventRef: a saved state event is described by its number, not by the ID of
 // the Project or Library it names (task 72_2; ADR 0021).
 func TestEventRef(t *testing.T) {
 	commit := apiv0.Event{Type: apiv0.EventCommitCreated, ID: "project-id", Commit: 3}
-	if got := eventTypeInfoByType[commit.Type].describe(eventRef(commit)); got != "Commit 3 saved" {
-		t.Errorf("a commit_created: got %q", got)
+	if got := eventTypeInfoByType[commit.Type].describe(eventRef(commit)); got != "Saved state 3 saved" {
+		t.Errorf("a saved state saved: got %q", got)
 	}
 	renamed := apiv0.Event{Type: apiv0.EventCommitTitleUpdated, ID: "library-id", Commit: 4}
-	if got := eventTypeInfoByType[renamed.Type].describe(eventRef(renamed)); got != "Commit 4 retitled" {
-		t.Errorf("a commit_title_updated: got %q", got)
+	if got := eventTypeInfoByType[renamed.Type].describe(eventRef(renamed)); got != "Saved state 4 retitled" {
+		t.Errorf("a saved state retitled: got %q", got)
 	}
 	released := apiv0.Event{Type: apiv0.EventReleaseCreated, ID: "project-id", Release: 2}
 	if got := eventTypeInfoByType[released.Type].describe(eventRef(released)); got != "Release 2 published" {

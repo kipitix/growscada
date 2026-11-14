@@ -14,6 +14,31 @@ const CommitPath = "/commits"
 // CommitPathOf is the path of the Commit number of a Project or Library.
 func CommitPathOf(number int) string { return CommitPath + "/" + strconv.Itoa(number) }
 
+// CommitLoadPath is the command, under CommitPathOf, that makes the Draft the
+// content of that Commit (task 84): the saved state becomes what is edited, the
+// DraftChange stack is cleared and the Version raised, as a Discard does. It
+// states no Version — it is a reset of the Draft, not a write of its content
+// (ADR 0016).
+const CommitLoadPath = "/load"
+
+// CommitLoadPathOf is the path of the command that loads the Commit number of a
+// Project or Library into its Draft.
+func CommitLoadPathOf(number int) string { return CommitPathOf(number) + CommitLoadPath }
+
+// LoadCommitResponse is the answer of POST …/commits/{n}/load: the Draft after
+// the Commit's content replaced it, in one transaction.
+//
+// HasUnsavedChanges is true unless the loaded Commit is the Draft's last one:
+// the Draft then differs from what a Save would fix. Warnings name the Library
+// Releases the loaded content used but this server does not have — their pins
+// and the Widgets of their WidgetTypes were dropped from the Draft, which stays
+// writable (task 71); a Library's answer never carries one.
+type LoadCommitResponse struct {
+	Version           int                      `json:"version"`
+	HasUnsavedChanges bool                     `json:"has_unsaved_changes"`
+	Warnings          []DiscardWarningResponse `json:"warnings,omitempty"`
+}
+
 // CreateCommitRequest is the HTTP DTO of POST …/commits: a Save that fixes the
 // Draft at version as a Commit with a title and the Author who made it.
 type CreateCommitRequest struct {

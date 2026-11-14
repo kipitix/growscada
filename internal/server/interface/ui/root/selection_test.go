@@ -1,7 +1,6 @@
 package root
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -79,19 +78,30 @@ func TestSelectionPage_LibraryDoesNotFollowTheBar(t *testing.T) {
 	}
 }
 
-// TestBackBar_ShowsTheListAndTheEntity: the slim row reads "← List · <name>"
-// and names the page without one.
-func TestBackBar_ShowsTheListAndTheEntity(t *testing.T) {
+// TestPanelBack_ShowsTheListAndTheEntity: the panel of the editor carries the
+// way back to the selection page and the name of the entity shown (task 84):
+// Root wires both from what the selection announced, and the way back shows
+// the page.
+func TestPanelBack_ShowsTheListAndTheEntity(t *testing.T) {
 	r := NewRoot("http://127.0.0.1:0")
-	r.modes = nil
-	r.entityName[ModeProject] = "Main"
+	main := uuid.New()
 
-	if got := app.HTMLString(r.renderBackBar(ModeProject)); !strings.Contains(got, "← List · Main") {
-		t.Errorf("the back row: %s", got)
+	r.selectEntity(ModeProject, main, "Main")
+	if got := r.project.BackName(); got != "Main" {
+		t.Errorf("the name of the panel: %q", got)
 	}
-	r.entityName[ModeProject] = ""
-	if got := app.HTMLString(r.renderBackBar(ModeProject)); !strings.Contains(got, "← List") || strings.Contains(got, " · ") {
-		t.Errorf("the back row without a name: %s", got)
+	r.selectEntity(ModeLibrary, main, "Widgets")
+	if got := r.library.BackName(); got != "Widgets" {
+		t.Errorf("the name of the library's panel: %q", got)
+	}
+
+	r.openEntity(ModeProject, main)
+	if r.showList[ModeProject] {
+		t.Fatal("opening a project does not show the editor")
+	}
+	r.project.OnBack()
+	if !r.showList[ModeProject] {
+		t.Error("the way back does not show the selection page")
 	}
 }
 

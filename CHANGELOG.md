@@ -1,5 +1,27 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.97] - 2026-11-13
+
+### Added
+
+- **Загрузка сохранения в черновик: `POST …/commits/{n}/load`** (задача 84; ADR 0021)
+  - `DiscardService.Load` (Project) и `LibraryService.LoadCommit` (Library): содержимое Commit'а становится Draft'ом одной транзакцией — стек DraftChange очищается, версия поднимается, DraftChange не пишется; Draft чист ровно тогда, когда загружен последний Commit (задача 74), а пины, которых на этом сервере нет, отбрасываются с предупреждениями (задача 71)
+  - REST: `POST /api/v0/projects/{id}/commits/{n}/load` и `POST /api/v0/libraries/{id}/commits/{n}/load` → `{version, has_unsaved_changes, warnings?}`; версия не передаётся — это сброс, а не запись контента; 404 `commit_not_found` для несуществующего номера; контракт `api/v0` MINOR 0.35 → 0.36, `make schemas`, `apiclient.ProjectClient.LoadCommit`/`LibraryClient.LoadCommit`
+  - Bruno: `post_project_commit_load` (seq 2003), `post_library_commit_load` (2004), `post_project_commit_load_missing` (2005, 404)
+
+### Changed
+
+- **UI говорит «saved state» вместо «commit»** (задача 84; ADR 0021)
+  - панель режимов Library и Project — иконки с подсказками: назад к выбору (с именем сущности), Save, Undo, Redo, History, Releases; у Project ещё Project file, Deployments и Deploy; строка состояния и автор остались текстом
+  - **History — отдельный экран**, а не диалог: список сохранений с прокруткой, в каждой строке время сохранения, имя (правится на месте карандашом, ✓/✕) и автор, в конце — **Load** (в черновик, с подтверждением, если есть несохранённые правки) и **Make Release**
+  - кнопки **Discard** и **Revert** убраны из обоих режимов (маршруты, сервисы и тесты остались); то же состояние достигается загрузкой последнего сохранения или сохранения, из которого сделан текущий Deployment
+  - просмотр сохранения только для чтения (**View**) убран вместе с кнопкой: у строки остались две названные действия
+  - тосты, статусы, подписи пикера и журнал событий: «Saved state N saved», «unpublished saved state», «saved state #N» и т.п.
+
+### Removed
+
+- `GET …/commits/{n}/projectfile` больше не предлагается строкой истории; сам маршрут и скачивание ProjectFile релиза остаются
+
 ## [0.0.96] - 2026-11-13
 
 ### Added

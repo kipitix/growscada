@@ -17,7 +17,7 @@ import (
 )
 
 // The Library mode's Save and its history (task 72_2; ADR 0021): Save fixes
-// the selected library's Draft as a Commit, the history lists them and their
+// the selected library's Draft as a saved state, the history lists them and their
 // titles are renamed. The Draft is still written at once, so the indicator is
 // the Draft's own unsaved-changes flag, its Version against its Clean Version
 // (ADR 0016, amendment 2026-11-10; task 74).
@@ -90,7 +90,7 @@ func (l *Library) saveCommit() {
 		l.savingCommit = false
 		l.saveDialog = false
 		ctx.NewActionWithValue(toast.ActionAdd, toast.Problem{Problem: apiv0.Problem{
-			Title:  fmt.Sprintf("Commit %d saved", saved.Number),
+			Title:  fmt.Sprintf("Saved state %d saved", saved.Number),
 			Detail: saved.Title,
 		}})
 		l.loadCommits(ctx)
@@ -128,13 +128,22 @@ func (l *Library) changeAuthor(ctx app.Context) {
 	ctx.Update()
 }
 
-// openCommitsDialog shows the history, read afresh.
-func (l *Library) openCommitsDialog() {
+// openHistory shows the saved states of the selected library, read afresh
+// (task 84): a screen of its own, in place of the editor.
+func (l *Library) openHistory() {
 	if l.libraryID == uuid.Nil {
 		return
 	}
-	l.commitsDialog = true
+	l.historyScreen = true
 	l.loadCommits(l.compoCtx)
+	l.compoCtx.Update()
+}
+
+// closeHistory returns from the saved states to the editor, dropping the name
+// being edited.
+func (l *Library) closeHistory() {
+	l.historyScreen = false
+	l.renamingCommit, l.renameCommitTitle = 0, ""
 	l.compoCtx.Update()
 }
 
@@ -158,16 +167,16 @@ func (l *Library) renameCommit() {
 	}, nil)
 }
 
-// renderCommitBar is the header's Save, its unsaved-changes indicator and the
-// History and Releases buttons (task 72_7; task 73; ADR 0021).
+// renderCommitBar is the panel's Save, its unsaved-changes indicator and the
+// History and Releases buttons (task 72_7; task 84; ADR 0021).
 func (l *Library) renderCommitBar() []app.UI {
 	editable := !l.readOnly() && l.libraryID != uuid.Nil
-	saveLabel, saveTitle := "Save", "Save the Draft as a Commit"
+	saveTitle := "Save the Draft as a saved state"
 	switch {
 	case l.savingCommit:
-		saveLabel, saveTitle = "Saving…", "The Draft is being fixed as a Commit"
+		saveTitle = "The Draft is being saved"
 	case l.readOnly():
-		saveTitle = "A release or a commit is shown; open the Draft to edit it"
+		saveTitle = "A release is shown; open the Draft to edit it"
 	case !l.hasUnsavedChanges():
 		saveTitle = "Nothing to save since the last save"
 	}
@@ -190,19 +199,19 @@ func (l *Library) renderCommitBar() []app.UI {
 	default:
 		indicator = indicator.Style("display", "none")
 	}
-	body := []app.UI{
-		barButton(saveLabel, editable && l.hasUnsavedChanges() && !l.savingCommit, "accent", saveTitle, l.openSaveDialog),
-		indicator,
-	}
 	// Each action also names its own app.EventScope, so a reused element can
 	// never keep another action's handler.
-	body = append(body,
-		barButton("History", l.libraryID != uuid.Nil, "", "The Commits of the library", l.openCommitsDialog,
+	return []app.UI{
+		uiutil.PanelButton(uiutil.IconSave(), editable && l.hasUnsavedChanges() && !l.savingCommit,
+			saveTitle, func(app.Context, app.Event) { l.openSaveDialog() }, app.EventScope("save")),
+		indicator,
+		uiutil.PanelButton(uiutil.IconHistory(), l.libraryID != uuid.Nil,
+			"The saved states of the library", func(app.Context, app.Event) { l.openHistory() },
 			app.EventScope("history")),
-		barButton("Releases", l.libraryID != uuid.Nil, "", "The Releases of the library", l.openReleasesDialog,
+		uiutil.PanelButton(uiutil.IconTag(), l.libraryID != uuid.Nil,
+			"The Releases of the library", func(app.Context, app.Event) { l.openReleasesDialog() },
 			app.EventScope("releases")),
-	)
-	return body
+	}
 }
 
 // renderAuthorBar shows the author the Save and Release dialogs fill in, with a
@@ -269,7 +278,7 @@ func (l *Library) renderSaveDialog() app.UI {
 					l.saveAuthor = ctx.JSSrc().Get("value").String()
 				}),
 			app.Div().Style("display", "flex").Style("gap", "4px").Body(
-				smallButton("Save", !l.savingCommit, "accent", "Save the Draft as a Commit", l.saveCommit),
+				smallButton("Save", !l.savingCommit, "accent", "Save the Draft as a saved state", l.saveCommit),
 				smallButton("Cancel", true, "", "Close without saving", func() {
 					l.saveDialog = false
 					l.compoCtx.Update()
@@ -290,7 +299,7 @@ func (l *Library) renderReleaseDialog() app.UI {
 		Style("background", "var(--bg)").
 		Style("font-size", "12px").
 		Body(
-			app.Div().Style("margin-bottom", "4px").Text(fmt.Sprintf("Release Commit %d", l.releaseCommit)),
+			app.Div().Style("margin-bottom", "4px").Text(fmt.Sprintf("Release saved state %d", l.releaseCommit)),
 			app.Input().
 				Attr("data-release-note", "true").
 				Type("text").
@@ -316,7 +325,7 @@ func (l *Library) renderReleaseDialog() app.UI {
 					l.releaseAuthor = ctx.JSSrc().Get("value").String()
 				}),
 			app.Div().Style("display", "flex").Style("gap", "4px").Body(
-				smallButton("Release", !l.releasing, "accent", "Publish this Commit as the next Library Release", l.publishRelease),
+				smallButton("Release", !l.releasing, "accent", "Publish this saved state as the next Library Release", l.publishRelease),
 				smallButton("Cancel", true, "", "Close without publishing", func() {
 					l.releaseDialog, l.releaseCommit = false, 0
 					l.compoCtx.Update()
@@ -325,89 +334,137 @@ func (l *Library) renderReleaseDialog() app.UI {
 		)
 }
 
-// renderCommitsDialog is the history of the selected library's Draft.
-func (l *Library) renderCommitsDialog() app.UI {
+// renderHistoryScreen is the history of the selected library's saved states
+// (task 84): a screen of its own with a way back to the editor and one row per
+// saved state, the list scrolling in its own pane.
+func (l *Library) renderHistoryScreen() app.UI {
 	rows := []app.UI{}
 	switch {
 	case !l.commitsLoaded:
-		rows = append(rows, app.Div().Style("color", "var(--text-muted)").Text("Loading commits…"))
+		rows = append(rows, app.Div().
+			Style("padding", "8px").
+			Style("color", "var(--text-muted)").
+			Text("Loading saved states…"))
 	case len(l.commits) == 0:
-		rows = append(rows, app.Div().Text("The library has not been saved yet."))
+		rows = append(rows, app.Div().
+			Style("padding", "8px").
+			Text("The library has not been saved yet."))
 	default:
-		for _, commit := range l.commits {
-			rows = append(rows, l.renderCommitRow(commit))
+		for _, saved := range l.commits {
+			rows = append(rows, l.renderSavedStateRow(saved))
 		}
 	}
 	return app.Div().
-		Attr("data-commits-dialog", "true").
-		Style("padding", "8px").
-		Style("margin-top", "6px").
-		Style("border", "1px solid var(--border)").
-		Style("border-radius", "4px").
-		Style("background", "var(--bg)").
-		Style("font-size", "12px").
-		Style("max-height", "40vh").
-		Style("overflow-y", "auto").
+		Attr("data-history-screen", "true").
+		Style("display", "flex").
+		Style("flex-direction", "column").
+		Style("flex", "1").
+		Style("min-height", "0").
 		Body(
-			app.Div().Style("font-weight", "600").Style("margin-bottom", "4px").Text("Commits"),
-			app.Div().Body(rows...),
-			smallButton("Close", true, "", "Close the history", func() {
-				l.commitsDialog = false
-				l.compoCtx.Update()
-			}),
+			app.Div().
+				Style("display", "flex").
+				Style("align-items", "center").
+				Style("gap", "8px").
+				Style("padding", "6px 10px").
+				Style("border-bottom", "1px solid var(--border)").
+				Body(
+					uiutil.PanelButton(uiutil.IconBack(), true, "Back to the Draft",
+						func(app.Context, app.Event) { l.closeHistory() }, app.EventScope("history-back")),
+					app.Span().
+						Attr("data-history-title", "true").
+						Style("font-size", "13px").
+						Style("font-weight", "600").
+						Text("Saved states"),
+				),
+			app.Div().
+				Attr("data-history-list", "true").
+				Style("flex", "1").
+				Style("min-height", "0").
+				Style("overflow-y", "auto").
+				Style("padding", "4px 10px").
+				Body(rows...),
 		)
 }
 
-// renderCommitRow is one Commit of the history, its title renamed in place.
-func (l *Library) renderCommitRow(commit apiv0.CommitResponse) app.UI {
-	var rename app.UI
-	if l.renamingCommit == commit.Number {
-		rename = app.Div().Body(
-			app.Input().
-				Attr("data-commit-rename-input", fmt.Sprint(commit.Number)).
-				Type("text").
-				Value(l.renameCommitTitle).
-				AutoFocus(true).
-				Style("font-size", "11px").
-				OnInput(func(ctx app.Context, e app.Event) {
-					l.renameCommitTitle = ctx.JSSrc().Get("value").String()
-				}),
-			smallButton("Save", true, "accent", "Save the title", l.renameCommit),
-			smallButton("Cancel", true, "", "Close the editor", func() {
-				l.renamingCommit, l.renameCommitTitle = 0, ""
-				l.compoCtx.Update()
-			}),
+// renderSavedStateRow is one saved state of the history (task 84): the time it
+// was saved, its name — edited in place — and its author, and at the end the
+// two actions: load it into the Draft and publish it as a Release.
+func (l *Library) renderSavedStateRow(saved apiv0.CommitResponse) app.UI {
+	number := itoa(saved.Number)
+	title := app.Span().
+		Attr("data-saved-state-title", number).
+		Style("font-size", "13px").
+		Text(saved.Title)
+	var name app.UI = app.Div().
+		Style("display", "flex").
+		Style("align-items", "center").
+		Style("gap", "4px").
+		Body(
+			title,
+			uiutil.PanelButton(uiutil.IconPencil(), true, "Rename the saved state",
+				func(app.Context, app.Event) {
+					l.renamingCommit, l.renameCommitTitle = saved.Number, saved.Title
+					l.compoCtx.Update()
+				}, app.EventScope("rename/"+number)),
 		)
-	} else {
-		// A bare inline action: it borrows the browser's own button look, so
-		// it carries no palette of its own.
-		rename = app.Button().
-			Attr("data-commit-rename", fmt.Sprint(commit.Number)).
-			Style("padding", "0 6px").
-			Style("font-size", "11px").
-			Style("cursor", "pointer").
-			Text("Rename").
-			OnClick(func(ctx app.Context, e app.Event) {
-				l.renamingCommit, l.renameCommitTitle = commit.Number, commit.Title
-				ctx.Update()
-			}, app.EventScope("rename/"+itoa(commit.Number)))
+	if l.renamingCommit == saved.Number {
+		name = app.Div().
+			Style("display", "flex").
+			Style("align-items", "center").
+			Style("gap", "4px").
+			Body(
+				app.Input().
+					Attr("data-saved-state-rename", number).
+					Type("text").
+					Value(l.renameCommitTitle).
+					AutoFocus(true).
+					Style("font-size", "12px").
+					Style("padding", "2px 4px").
+					OnInput(func(ctx app.Context, e app.Event) {
+						l.renameCommitTitle = ctx.JSSrc().Get("value").String()
+					}),
+				uiutil.PanelButton(uiutil.IconCheck(), true, "Save the name",
+					func(app.Context, app.Event) { l.renameCommit() }, app.EventScope("rename-ok/"+number)),
+				uiutil.PanelButton(uiutil.IconClose(), true, "Drop the new name",
+					func(app.Context, app.Event) {
+						l.renamingCommit, l.renameCommitTitle = 0, ""
+						l.compoCtx.Update()
+					}, app.EventScope("rename-cancel/"+number)),
+			)
 	}
-	release := smallButton("Make Release", !commit.Released, "accent",
-		"Publish this Commit as the next Library Release", func() { l.openReleaseDialog(commit) },
-		app.EventScope("release/"+itoa(commit.Number)))
-	if commit.Released {
-		release = smallButton("Released", false, "", "A Release publishes this Commit", func() {})
+	release := uiutil.Button("Make Release", "accent", !saved.Released,
+		"Publish this saved state as the next Library Release",
+		uiutil.ButtonRow, func(ctx app.Context, e app.Event) { l.openReleaseDialog(saved) },
+		app.EventScope("release/"+number))
+	if saved.Released {
+		release = uiutil.Button("Released", "", false, "A Release publishes this saved state",
+			uiutil.ButtonRow, func(app.Context, app.Event) {}, app.EventScope("released/"+number))
 	}
-	view := smallButton("View", true, "", "Show the WidgetTypes of this Commit read-only",
-		func() { l.viewCommit(commit.Number) }, app.EventScope("view/"+itoa(commit.Number)))
+	load := uiutil.Button("Load", "", l.loadingSavedState == 0,
+		"Replace the Draft with this saved state",
+		uiutil.ButtonRow, func(ctx app.Context, e app.Event) { l.loadSavedState(saved.Number) },
+		app.EventScope("load/"+number))
 	return app.Div().
-		Attr("data-commit-row", fmt.Sprint(commit.Number)).
-		Style("padding", "3px 0").
+		Attr("data-saved-state-row", number).
+		Style("display", "flex").
+		Style("flex-wrap", "wrap").
+		Style("align-items", "center").
+		Style("gap", "10px").
+		Style("padding", "6px 4px").
 		Style("border-bottom", "1px solid var(--border)").
 		Body(
-			app.Div().Text(fmt.Sprintf("#%d %s", commit.Number, commit.Title)),
-			app.Div().Style("color", "var(--text-muted)").Text(fmt.Sprintf("%s · %s · %d widget types",
-				commit.Author, commit.CreatedAt.Local().Format("2006-01-02 15:04"), commit.ContentCounts.WidgetTypes)),
-			app.Div().Style("display", "flex").Style("gap", "4px").Body(view, rename, release),
+			app.Span().
+				Style("font-size", "11px").
+				Style("color", "var(--text-muted)").
+				Style("width", "118px").
+				Style("flex-shrink", "0").
+				Text(saved.CreatedAt.Local().Format("02.01.2006 15:04")),
+			app.Div().Style("flex", "1").Style("min-width", "0").Body(name),
+			app.Span().
+				Style("font-size", "11px").
+				Style("color", "var(--text-muted)").
+				Text(saved.Author),
+			load,
+			release,
 		)
 }

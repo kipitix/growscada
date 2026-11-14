@@ -19,10 +19,10 @@ func TestRelease_FromTheHistory(t *testing.T) {
 	f.run()
 	f.e.TakeToasts() // the Save's own confirmation
 
-	f.p.openCommitsDialog(f.p.compoCtx)
+	f.p.openHistory(f.p.compoCtx)
 	f.run()
-	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-commit-release="1"`) {
-		t.Fatalf("the history offers no release of Commit 1: %s", html)
+	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-saved-state-row="1"`) {
+		t.Fatalf("the history offers no row of saved state 1: %s", html)
 	}
 
 	f.p.openReleaseDialog(1)
@@ -43,12 +43,12 @@ func TestRelease_FromTheHistory(t *testing.T) {
 	if len(f.p.commits) != 1 || !f.p.commits[0].Released {
 		t.Errorf("the history does not mark the published commit: %+v", f.p.commits)
 	}
-	f.p.openCommitsDialog(f.p.compoCtx)
+	f.p.openHistory(f.p.compoCtx)
 	f.run()
 	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-commit-published="1"`) {
 		t.Errorf("the history shows no published mark: %s", html)
 	}
-	f.p.commitsDialog = false
+	f.p.historyScreen = false
 
 	f.p.openReleasesDialog(f.p.compoCtx)
 	f.run()

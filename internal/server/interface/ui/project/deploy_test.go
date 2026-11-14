@@ -151,10 +151,11 @@ func TestDeployRelease_ServerRefusalIsAToast(t *testing.T) {
 	}
 }
 
-// TestDiscardChanges_ResetsToTheLastCommit: Discard changes drops the unsaved
-// changes, puts the Draft back to its last Commit and turns the indicator off
-// (task 72_6; ADR 0021).
-func TestDiscardChanges_ResetsToTheLastCommit(t *testing.T) {
+// TestLoadSavedState_ResetsToTheLastSavedState: a saved state becomes the
+// Draft, unsaved changes and all, and the indicator turns off when it is the
+// last one; the panel carries the icons of Save, Undo, Redo and History, and
+// the two removed resets are gone (task 72_6; task 84; ADR 0021).
+func TestLoadSavedState_ResetsToTheLastSavedState(t *testing.T) {
 	f := startProject(t)
 	f.run()
 	f.p.createScene(f.p.compoCtx)
@@ -170,36 +171,43 @@ func TestDiscardChanges_ResetsToTheLastCommit(t *testing.T) {
 	f.run()
 	f.noToasts()
 	if !f.p.hasUnsavedChanges() {
-		t.Fatal("the change after the Commit is not unsaved")
+		t.Fatal("the change after the saved state is not unsaved")
 	}
 	html := app.HTMLString(f.p.Render())
-	if !strings.Contains(html, "Discard changes") || !strings.Contains(html, "Revert to deployed") {
-		t.Errorf("the header does not name the two resets apart: %s", html)
+	for _, icon := range []string{"save", "undo", "redo", "history", "tag", "deploy"} {
+		if !strings.Contains(html, `data-icon="`+icon+`"`) {
+			t.Errorf("the panel has no %s action: %s", icon, html)
+		}
+	}
+	if strings.Contains(html, "Discard changes") || strings.Contains(html, "Revert to deployed") {
+		t.Errorf("the panel still offers the removed resets: %s", html)
 	}
 
-	f.p.doDiscard(f.p.compoCtx)
+	f.p.doLoadSavedState(f.p.compoCtx, 1)
 	f.run()
-	f.noToasts()
+	if got := f.oneToast(); !strings.Contains(got.Title, "Saved state 1 loaded") {
+		t.Errorf("the load confirmation: %+v", got)
+	}
 	if f.p.hasUnsavedChanges() {
-		t.Errorf("the Draft still reports unsaved changes after Discard changes")
+		t.Errorf("the Draft still reports unsaved changes after loading its last saved state")
 	}
 	scenes, err := f.api.ListScenes(context.Background())
 	if err != nil {
 		t.Fatalf("server scenes: %v", err)
 	}
 	if len(scenes) != 1 {
-		t.Errorf("the Draft after Discard changes has %d scenes, want the Commit's 1", len(scenes))
+		t.Errorf("the Draft after the load has %d scenes, want the saved state's 1", len(scenes))
 	}
 	if len(f.p.scenes) != 1 {
-		t.Errorf("the shown Draft has %d scenes after Discard changes, want 1", len(f.p.scenes))
+		t.Errorf("the shown Draft has %d scenes after the load, want 1", len(f.p.scenes))
 	}
 }
 
-// TestDiscardChanges_RestoresTheContentShown: a Discard replaces the whole
-// Draft, so the Scenes and the Widgets of the selected one are read again — the
-// Version of the Draft was answered by the Discard itself and says nothing of
-// the content it restored (task 72_6; ADR 0021).
-func TestDiscardChanges_RestoresTheContentShown(t *testing.T) {
+// TestLoadSavedState_RestoresTheContentShown: a load replaces the whole Draft,
+// so the Scenes and the Widgets of the selected one are read again — the
+// Version of the Draft was answered by the load itself and says nothing of the
+// content it restored (task 72_6; task 84; ADR 0021).
+func TestLoadSavedState_RestoresTheContentShown(t *testing.T) {
 	f := startProject(t)
 	f.run()
 	sceneID := createScene(t, f.api, "First")
@@ -232,9 +240,11 @@ func TestDiscardChanges_RestoresTheContentShown(t *testing.T) {
 		t.Fatalf("the shown Draft before the Discard: %+v, widgets %+v", f.p.scenes, f.p.widgets)
 	}
 
-	f.p.doDiscard(f.p.compoCtx)
+	f.p.doLoadSavedState(f.p.compoCtx, 1)
 	f.run()
-	f.noToasts()
+	if got := f.oneToast(); !strings.Contains(got.Title, "Saved state 1 loaded") {
+		t.Errorf("the load confirmation: %+v", got)
+	}
 	if sc := f.scene(sceneID); sc.Name != "First" {
 		t.Fatalf("server scene after the Discard: %+v, want the Commit's", sc)
 	}
@@ -253,11 +263,11 @@ func TestDiscardChanges_RestoresTheContentShown(t *testing.T) {
 	}
 }
 
-// TestDiscardChanges_LaterSceneListFollowsTheVersion: only the list the
+// TestLoadSavedState_LaterSceneListFollowsTheVersion: only the list the
 // replacement itself asked for is the truth whatever Version it states; a list
 // requested after it is an ordinary one again, so a stale answer does not put
-// the Scenes shown back (task 72_6; ADR 0016).
-func TestDiscardChanges_LaterSceneListFollowsTheVersion(t *testing.T) {
+// the Scenes shown back (task 72_6; task 84; ADR 0016).
+func TestLoadSavedState_LaterSceneListFollowsTheVersion(t *testing.T) {
 	f := startProject(t)
 	f.run()
 	sceneID := createScene(t, f.api, "First")
@@ -269,11 +279,13 @@ func TestDiscardChanges_LaterSceneListFollowsTheVersion(t *testing.T) {
 	f.run()
 	f.e.TakeToasts() // the Save's own confirmation
 
-	f.p.doDiscard(f.p.compoCtx)
+	f.p.doLoadSavedState(f.p.compoCtx, 1)
 	f.run()
-	f.noToasts()
+	if got := f.oneToast(); !strings.Contains(got.Title, "Saved state 1 loaded") {
+		t.Errorf("the load confirmation: %+v", got)
+	}
 	if len(f.p.scenes) != 1 || f.p.scenes[0].Name != "First" {
-		t.Fatalf("the shown Draft after the Discard: %+v, want the restored one", f.p.scenes)
+		t.Fatalf("the shown Draft after the load: %+v, want the restored one", f.p.scenes)
 	}
 
 	// A list read now but answered after a rename that follows: it is stale.
@@ -290,71 +302,15 @@ func TestDiscardChanges_LaterSceneListFollowsTheVersion(t *testing.T) {
 	}
 }
 
-// TestDiscardChanges_WithoutCommitIsAToast: a Draft never saved has nothing to
-// fall back to: the server refuses and the refusal is the toast (task 72_6).
-func TestDiscardChanges_WithoutCommitIsAToast(t *testing.T) {
+// TestLoadSavedState_WithoutThatSavedStateIsAToast: a number the Draft does
+// not have is the server's 404 as a toast (task 84).
+func TestLoadSavedState_WithoutThatSavedStateIsAToast(t *testing.T) {
 	f := startProject(t)
 	f.run()
-	f.p.doDiscard(f.p.compoCtx)
+	f.p.doLoadSavedState(f.p.compoCtx, 1)
 	f.run()
-	if got := f.oneToast(); got.Status != http.StatusConflict {
-		t.Errorf("Discard changes without a Commit: toast %+v, want a 409", got)
-	}
-}
-
-// TestRevertToDeployed_ResetsToTheRunningDeployment: Revert to deployed puts
-// the Draft back to what the project runs, unsaved changes and all (task 72_6;
-// ADR 0021).
-func TestRevertToDeployed_ResetsToTheRunningDeployment(t *testing.T) {
-	f := startProject(t)
-	f.run()
-	f.p.createScene(f.p.compoCtx)
-	f.run()
-	f.noToasts()
-	deployDraft(t, f.api)
-	f.p.loadDeploy(f.p.compoCtx)
-	f.p.loadCommits(f.p.compoCtx)
-	f.p.loadReleases(f.p.compoCtx)
-	f.run()
-	f.e.TakeToasts()
-
-	f.p.createScene(f.p.compoCtx)
-	f.run()
-	f.noToasts()
-	if len(f.p.scenes) != 2 {
-		t.Fatalf("the shown Draft has %d scenes before Revert, want 2", len(f.p.scenes))
-	}
-
-	f.p.doRevert(f.p.compoCtx)
-	f.run()
-	f.noToasts()
-	scenes, err := f.api.ListScenes(context.Background())
-	if err != nil {
-		t.Fatalf("server scenes: %v", err)
-	}
-	if len(scenes) != 1 {
-		t.Errorf("the Draft after Revert has %d scenes, want the Deployment's 1", len(scenes))
-	}
-	if len(f.p.scenes) != 1 {
-		t.Errorf("the shown Draft has %d scenes after Revert, want 1", len(f.p.scenes))
-	}
-	// The Deployment came from the Release of the last Commit: the Draft is
-	// that Commit again, so nothing is unsaved.
-	if f.p.hasUnsavedChanges() {
-		t.Errorf("the Draft reports unsaved changes after a Revert to its last Commit's Release")
-	}
-}
-
-// TestRevertToDeployed_WithoutDeploymentIsAToast: a project never deployed has
-// nothing to return to: the server refuses and the refusal is the toast
-// (task 72_6).
-func TestRevertToDeployed_WithoutDeploymentIsAToast(t *testing.T) {
-	f := startProject(t)
-	f.run()
-	f.p.doRevert(f.p.compoCtx)
-	f.run()
-	if got := f.oneToast(); got.Status != http.StatusConflict {
-		t.Errorf("Revert to deployed without a Deployment: toast %+v, want a 409", got)
+	if got := f.oneToast(); got.Status != http.StatusNotFound {
+		t.Errorf("loading a saved state the project does not have: toast %+v, want a 404", got)
 	}
 }
 

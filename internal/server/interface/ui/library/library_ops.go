@@ -118,76 +118,50 @@ func (l *Library) editReleaseNote(release apiv0.LibraryReleaseResponse) {
 	}, l.reloadOnConflict)
 }
 
-// discard resets the selected library's Draft to its last Commit, dropping the
-// unsaved changes, after the browser's confirmation. Without a Commit the
-// server refuses (409), which is the toast (task 72_7; ADR 0021).
-func (l *Library) discard() {
+// loadSavedState makes the saved state number the Draft (task 84), after a
+// confirmation when the Draft holds unsaved changes: the load clears the undo
+// stack, so the change is not one to take back.
+func (l *Library) loadSavedState(number int) {
 	lib, ok := l.selectedLibrary()
-	if !ok || !app.Window().Call("confirm",
-		"Discard every change of "+lib.Name+" since commit "+itoa(lib.LatestCommit)+"? The Draft goes back to that Commit.").Bool() {
+	if !ok || l.loadingSavedState != 0 {
 		return
 	}
-	l.doDiscard(l.compoCtx)
+	if l.hasUnsavedChanges() && !app.Window().Call("confirm",
+		fmt.Sprintf("Replace the unsaved changes of %s with saved state %d? The Draft becomes what was saved then.",
+			lib.Name, number)).Bool() {
+		return
+	}
+	l.doLoadSavedState(l.compoCtx, number)
 }
 
-// doDiscard performs the reset the confirmation asked for: one transaction of
-// the Draft, which the answer states.
-func (l *Library) doDiscard(ctx app.Context) {
+// doLoadSavedState performs the reset the confirmation asked for: one
+// transaction of the Draft, which the answer states. The WidgetTypes follow
+// with the list's reread.
+func (l *Library) doLoadSavedState(ctx app.Context, number int) {
 	if l.draft() == nil {
 		return
 	}
-	callDraft(l, func(c context.Context, draft *apiclient.LibraryClient) (apiv0.DiscardLibraryResponse, error) {
-		return draft.Discard(c)
-	}, func(ctx app.Context, state apiv0.DiscardLibraryResponse) {
+	l.loadingSavedState = number
+	callDraft(l, func(c context.Context, draft *apiclient.LibraryClient) (apiv0.LoadCommitResponse, error) {
+		return draft.LoadCommit(c, number)
+	}, func(ctx app.Context, loaded apiv0.LoadCommitResponse) {
+		l.loadingSavedState = 0
 		l.draftVersions.Forget()
-		l.observeDraftVersion(l.markDraft(), state.Version)
-		// The Draft is its last Commit again, and the server says so: the
-		// flag is read with the Draft's state (task 74).
+		l.observeDraftVersion(l.markDraft(), loaded.Version)
+		l.viewing = 0
+		// The server's Draft state says whether the loaded saved state is the
+		// last one: an older one leaves the Draft unsaved (task 74).
 		l.loadDraftState(ctx)
 		l.loadList(ctx)
 		l.loadLibraries(ctx)
-		l.loadReleases(ctx)
-		l.loadDraftChanges(ctx) // a Discard clears the stack (ADR 0017)
+		l.loadDraftChanges(ctx) // a load clears the stack (ADR 0017)
+		l.closeHistory()
+		ctx.NewActionWithValue(toast.ActionAdd, toast.Problem{Problem: apiv0.Problem{
+			Title: fmt.Sprintf("Saved state %d loaded", number),
+		}})
 		ctx.Update()
 	}, func(ctx app.Context, err error) {
-		uiutil.ShowError(ctx, err)
-		// A 409 nothing_to_discard means the history moved: the header is the
-		// truth once it is reread.
-		l.loadLibraries(ctx)
-		l.loadDraftState(ctx)
-		l.loadDraftChanges(ctx)
-		ctx.Update()
-	})
-}
-
-// revert resets the selected library's Draft to its latest Release after a
-// confirmation: the published state, not the last Save (task 72_5, task 72_7).
-func (l *Library) revert() {
-	lib, ok := l.selectedLibrary()
-	if !ok || !app.Window().Call("confirm",
-		"Revert "+lib.Name+" to its latest release "+itoa(lib.LatestRelease)+"? The Draft goes back to the published state.").Bool() {
-		return
-	}
-	l.doRevert(l.compoCtx)
-}
-
-// doRevert performs the reset the confirmation asked for.
-func (l *Library) doRevert(ctx app.Context) {
-	callDraft(l, func(c context.Context, draft *apiclient.LibraryClient) (apiv0.RevertLibraryResponse, error) {
-		return draft.RevertToRelease(c)
-	}, func(ctx app.Context, state apiv0.RevertLibraryResponse) {
-		l.draftVersions.Forget()
-		l.observeDraftVersion(l.markDraft(), state.Version)
-		// The server's Draft state says whether the Release was the content of
-		// the last Commit: a Revert to an older one keeps the Draft unsaved
-		// (task 74).
-		l.loadDraftState(ctx)
-		l.loadList(ctx)
-		l.loadLibraries(ctx)
-		l.loadReleases(ctx)
-		l.loadDraftChanges(ctx) // a Revert clears the stack (ADR 0017)
-		ctx.Update()
-	}, func(ctx app.Context, err error) {
+		l.loadingSavedState = 0
 		uiutil.ShowError(ctx, err)
 		l.loadLibraries(ctx)
 		l.loadDraftState(ctx)

@@ -145,11 +145,15 @@ One Engineer intent applied to the Draft — possibly touching several parts of 
 _Avoid_: edit, step, command, operation
 
 **Commit**:
-An immutable, numbered snapshot of the whole Draft, fixed by a Save: its canonical ProjectFile for a Project, its WidgetTypes for a Library, with a title, the Author and the time (task 72_2; ADR 0021). It is an entity of the Draft, not a DraftChange: writing it raises no Version and clears no undo stack. A Project's Commit is published as a Project Release; a Library's as a Library Release (task 72_5).
+An immutable, numbered snapshot of the whole Draft, fixed by a Save: its canonical ProjectFile for a Project, its WidgetTypes for a Library, with a title, the Author and the time (task 72_2; ADR 0021). It is an entity of the Draft, not a DraftChange: writing it raises no Version and clears no undo stack. A Project's Commit is published as a Project Release; a Library's as a Library Release (task 72_5). The UI calls it a **saved state** (task 84) — the code and the REST API keep the name Commit, and the two name one thing.
 _Avoid_: revision, version, checkpoint, snapshot (unqualified)
 
+**Saved state**:
+The name the PWA gives a Commit (task 84): what a Save fixes, what the History lists, and what a person may load back into the Draft (`POST …/commits/{n}/load`) or publish as a Release. It is a name for people, not a second concept: the domain, the tables and the API say Commit, and a document that speaks of the API may say either.
+_Avoid_: snapshot, checkpoint, revision, save point
+
 **Save**:
-The act of fixing the Draft's current state as a new Commit under a title and an Author (task 72_2; ADR 0021). It does not write the Draft: edits are written at once as DraftChanges, and a Save of a Draft at its Clean Version is refused with `nothing_to_save`.
+The act of fixing the Draft's current state as a new Commit under a title and an Author (task 72_2; ADR 0021). It does not write the Draft: edits are written at once as DraftChanges, and a Save of a Draft at its Clean Version is refused with `nothing_to_save`. The UI calls the result a saved state (task 84).
 _Avoid_: commit (as a verb), publish
 
 **Discard**:

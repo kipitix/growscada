@@ -705,6 +705,22 @@ func newListDeploymentsResponse(summaries []runtimeapp.DeploymentSummary) apiv0.
 	return resp
 }
 
+// newLoadCommitResponse is the answer of a load of a Commit into the Draft: the
+// Draft's new state and the Library Releases it could not restore (task 71,
+// task 84).
+func newLoadCommitResponse(loaded appdto.LoadedDraft) apiv0.LoadCommitResponse {
+	resp := apiv0.LoadCommitResponse{
+		Version:           loaded.Version,
+		HasUnsavedChanges: loaded.HasUnsavedChanges,
+	}
+	for _, warning := range loaded.Warnings {
+		resp.Warnings = append(resp.Warnings, apiv0.DiscardWarningResponse{
+			LibraryID: warning.LibraryID, Release: warning.Release, DroppedWidgets: warning.DroppedWidgets,
+		})
+	}
+	return resp
+}
+
 // newDiscardProjectResponse is the answer of a Discard: the Draft's new state
 // and the Library Releases it could not restore (task 71).
 func newDiscardProjectResponse(discarded appdto.DiscardedDraft) apiv0.DiscardProjectResponse {

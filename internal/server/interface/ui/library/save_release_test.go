@@ -83,10 +83,11 @@ func TestSaveCommit_ConflictRereadsTheDraft(t *testing.T) {
 	}
 }
 
-// TestDiscard_ResetsToTheLastCommitAndClearsTheIndicator: Discard drops the
-// unsaved changes, puts the Draft back to its last Commit and turns the
-// indicator off even though the Draft's Version rose (task 72_7; ADR 0021).
-func TestDiscard_ResetsToTheLastCommitAndClearsTheIndicator(t *testing.T) {
+// TestLoadSavedState_ResetsToTheLastSavedStateAndClearsTheIndicator: loading
+// the last saved state drops the unsaved changes, puts the Draft back to it and
+// turns the indicator off even though the Draft's Version rose (task 72_7;
+// task 84; ADR 0021).
+func TestLoadSavedState_ResetsToTheLastSavedStateAndClearsTheIndicator(t *testing.T) {
 	f, kept := selected(t)
 	f.run()
 	saveWithUI(t, f, "First save")
@@ -94,52 +95,52 @@ func TestDiscard_ResetsToTheLastCommitAndClearsTheIndicator(t *testing.T) {
 	added := createWidgetType(t, f.api, "Added")
 	f.event(apiv0.Event{Type: apiv0.EventWidgetTypeCreated, ID: added.String(), LibraryID: f.l.libraryID.String()})
 	if !f.l.hasUnsavedChanges() {
-		t.Fatal("the change after the Commit is not unsaved")
+		t.Fatal("the change after the saved state is not unsaved")
 	}
 
-	f.l.doDiscard(f.l.compoCtx)
+	f.l.doLoadSavedState(f.l.compoCtx, 1)
 	f.run()
-	f.noToasts()
+	if got := f.oneToast(); !strings.Contains(got.Title, "Saved state 1 loaded") {
+		t.Errorf("the load confirmation: %+v", got)
+	}
 	if f.l.hasUnsavedChanges() {
-		t.Error("the Draft still reports unsaved changes after a Discard")
+		t.Error("the Draft still reports unsaved changes after loading its last saved state")
 	}
 	list, err := f.api.ListWidgetTypes(context.Background())
 	if err != nil {
 		t.Fatalf("server widget types: %v", err)
 	}
 	if len(list) != 1 || list[0].ID != kept {
-		t.Errorf("the server's Draft after the Discard: %+v, want only the Commit's", list)
+		t.Errorf("the server's Draft after the load: %+v, want only the saved one", list)
 	}
 	if len(f.l.shownTypes()) != 1 || f.l.shownTypes()[0].ID != kept {
-		t.Errorf("the shown Draft after the Discard: %+v", f.l.shownTypes())
+		t.Errorf("the shown Draft after the load: %+v", f.l.shownTypes())
 	}
 }
 
-// TestRevert_ResetsToTheLatestReleaseAndClearsTheIndicator: Revert goes back
-// to the published state; when that Release published the last Commit, nothing
-// is unsaved either (task 72_7; ADR 0021).
-func TestRevert_ResetsToTheLatestReleaseAndClearsTheIndicator(t *testing.T) {
-	f, kept := selected(t)
+// TestLoadSavedState_OlderSavedStateLeavesTheDraftUnsaved: a saved state that
+// is not the last one becomes the Draft too, and the server then reports it
+// unsaved — it differs from the newest saved state (task 74; task 84).
+func TestLoadSavedState_OlderSavedStateLeavesTheDraftUnsaved(t *testing.T) {
+	f, _ := selected(t)
 	f.run()
-	releaseNow(t, f)
-	if f.l.hasUnsavedChanges() {
-		t.Fatal("the Draft of a fresh Release reports unsaved changes")
-	}
+	saveWithUI(t, f, "First save")
 
-	added := createWidgetType(t, f.api, "Added")
-	f.event(apiv0.Event{Type: apiv0.EventWidgetTypeCreated, ID: added.String(), LibraryID: f.l.libraryID.String()})
+	second := createWidgetType(t, f.api, "Second")
+	f.event(apiv0.Event{Type: apiv0.EventWidgetTypeCreated, ID: second.String(), LibraryID: f.l.libraryID.String()})
+	f.run()
+	saveWithUI(t, f, "Second save")
+
+	f.l.doLoadSavedState(f.l.compoCtx, 1)
+	f.run()
+	if got := f.oneToast(); !strings.Contains(got.Title, "Saved state 1 loaded") {
+		t.Errorf("the load confirmation: %+v", got)
+	}
 	if !f.l.hasUnsavedChanges() {
-		t.Fatal("the change after the Release is not unsaved")
+		t.Error("the Draft loaded from an older saved state reports no unsaved changes")
 	}
-
-	f.l.doRevert(f.l.compoCtx)
-	f.run()
-	f.noToasts()
-	if f.l.hasUnsavedChanges() {
-		t.Error("the Draft still reports unsaved changes after a Revert to its last Commit's Release")
-	}
-	if len(f.l.shownTypes()) != 1 || f.l.shownTypes()[0].ID != kept {
-		t.Errorf("the shown Draft after the Revert: %+v", f.l.shownTypes())
+	if len(f.l.shownTypes()) != 1 {
+		t.Errorf("the shown Draft after loading saved state 1: %+v, want its one WidgetType", f.l.shownTypes())
 	}
 }
 
@@ -186,51 +187,6 @@ func TestPublishRelease_RepeatedPublicationIsAToast(t *testing.T) {
 	}
 }
 
-// TestCommitView_ShowsTheSnapshotReadOnly: a Commit's WidgetTypes are shown
-// from its snapshot, never from the Draft, and cannot be edited (task 72_7).
-func TestCommitView_ShowsTheSnapshotReadOnly(t *testing.T) {
-	f, id := selected(t)
-	f.run()
-	saveWithUI(t, f, "First save")
-
-	f.l.openCommitsDialog()
-	f.run()
-	if html := app.HTMLString(f.l.Render()); !strings.Contains(html, `data-commit-row="1"`) {
-		t.Fatalf("the history does not show Commit 1: %s", html)
-	}
-	f.l.viewCommit(1)
-	f.run()
-	f.noToasts()
-	if f.l.viewingCommit != 1 || !f.l.readOnly() {
-		t.Errorf("the Commit view: viewingCommit %d, read-only %t", f.l.viewingCommit, f.l.readOnly())
-	}
-	if types := f.l.shownTypes(); len(types) != 1 || types[0].ID != id {
-		t.Errorf("the Commit's WidgetTypes: %+v", types)
-	}
-	if title := f.l.listTitle(); !strings.Contains(title, "Commit 1") {
-		t.Errorf("the list title %q: want the Commit named", title)
-	}
-	// A Commit is not the Draft: the stack commands and Save say so too
-	// (task 72_7).
-	if f.l.canUndo() || f.l.canRedo() {
-		t.Errorf("the Commit view offers a stack step: %+v", f.l.changes)
-	}
-	if title := f.l.undoTitle(); !strings.Contains(title, "open the Draft to edit it") {
-		t.Errorf("the undo title %q: want the Commit named as read-only", title)
-	}
-	if title := f.l.redoTitle(); !strings.Contains(title, "open the Draft to edit it") {
-		t.Errorf("the redo title %q: want the Commit named as read-only", title)
-	}
-	if html := app.HTMLString(app.Div().Body(f.l.renderCommitBar()...)); !strings.Contains(html, "open the Draft to edit it") {
-		t.Errorf("the Save button of the Commit view: %s", html)
-	}
-
-	f.l.view(0)
-	if f.l.readOnly() || f.l.viewingCommit != 0 || len(f.l.shownTypes()) != 1 {
-		t.Error("the Draft is not shown again after the Commit view")
-	}
-}
-
 // TestLibraryState_ListsTheThreeStates: the header's state of the selected
 // library follows the Draft: unsaved changes, an unpublished Commit, then
 // published (task 72_7; task 73; ADR 0021).
@@ -238,14 +194,20 @@ func TestLibraryState_ListsTheThreeStates(t *testing.T) {
 	f, _ := selected(t)
 	f.run()
 	status := func() string { return app.HTMLString(f.l.renderLibraryStatus()) }
-	if html := status(); !strings.Contains(html, "unsaved changes") {
-		t.Errorf("the header does not mark the unsaved Draft: %s", html)
+	if html := status(); !strings.Contains(html, "Never saved or released") {
+		t.Errorf("the header of a Draft never saved: %s", html)
 	}
 
 	saveWithUI(t, f, "First save")
 	f.run()
 	if html := status(); !strings.Contains(html, "not published yet") {
-		t.Errorf("the header does not mark the unpublished Commit: %s", html)
+		t.Errorf("the header does not mark the unpublished saved state: %s", html)
+	}
+
+	added := createWidgetType(t, f.api, "Added")
+	f.event(apiv0.Event{Type: apiv0.EventWidgetTypeCreated, ID: added.String(), LibraryID: f.l.libraryID.String()})
+	if html := status(); !strings.Contains(html, "unsaved changes") {
+		t.Errorf("the header does not mark the unsaved Draft: %s", html)
 	}
 
 	releaseNow(t, f)
@@ -264,7 +226,7 @@ func TestReleaseRow_ShowsItsCounts(t *testing.T) {
 		t.Fatalf("the releases: %+v", f.l.releases)
 	}
 	html := app.HTMLString(f.l.renderReleaseRow(f.l.releases[0]))
-	if !strings.Contains(html, "commit #1") || !strings.Contains(html, "1 widget types") || !strings.Contains(html, "Ada") {
+	if !strings.Contains(html, "saved state #1") || !strings.Contains(html, "1 widget types") || !strings.Contains(html, "Ada") {
 		t.Errorf("the release row: %s", html)
 	}
 }

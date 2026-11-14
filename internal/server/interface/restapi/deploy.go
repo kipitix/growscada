@@ -114,6 +114,28 @@ func (h DeployHandlers) PostRevert(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusOK, newDiscardProjectResponse(reverted))
 }
 
+// PostCommitLoad handles POST /projects/{project_id}/commits/{commit_number}/load:
+// the Draft replaced by the content of that Commit, in one transaction — the
+// saved state becomes what is edited (task 84). 404 for a number the Project
+// does not have; the Library Releases it could not restore are answered with
+// the new state (task 71).
+func (h DeployHandlers) PostCommitLoad(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := pathUUID(w, r, projectResource)
+	if !ok {
+		return
+	}
+	number, ok := pathInt(w, r, commitResource)
+	if !ok {
+		return
+	}
+	loaded, err := h.discard.Load(r.Context(), projectID, number)
+	if err != nil {
+		sendError(w, r, err)
+		return
+	}
+	sendJSONResponse(w, http.StatusOK, newLoadCommitResponse(loaded))
+}
+
 // deployDraftRemoved answers POST /projects/{project_id}/deploy: a Deploy took
 // the Draft before task 72_4 and takes a Release now. The route stays, answering
 // 410, so an old tab or tool learns the order instead of getting a bare 404;

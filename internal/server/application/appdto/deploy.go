@@ -26,3 +26,13 @@ type DiscardedDraft struct {
 	Version  int
 	Warnings []DiscardWarning
 }
+
+// LoadedDraft is a Draft after the content of one of its Commits replaced it
+// (task 84): the new Version, whether the Draft then differs from its last
+// Commit, and the Library Releases the loaded content used but this server does
+// not have, whose pins and Widgets were dropped (a Project's only, task 71).
+type LoadedDraft struct {
+	Version           int
+	HasUnsavedChanges bool
+	Warnings          []DiscardWarning
+}

@@ -37,6 +37,15 @@ type DiscardService interface {
 	// did before task 72_4. It refuses with ErrNoDeploymentToDiscard when the
 	// Project runs none.
 	Revert(ctx context.Context, projectID uuid.UUID) (appdto.DiscardedDraft, error)
+	// Load replaces the Draft with the content of the Project's Commit number,
+	// in one transaction: the saved state becomes what is edited, the
+	// DraftChange stack is cleared and the Version raised, as a Discard does.
+	// The Draft is clean exactly when that Commit is its last one. A Library Pin
+	// the Commit names but this server cannot write is dropped with the Widgets
+	// of its WidgetTypes and named in the answer (task 71).
+	// Returns draft.ErrCommitNotFound for a number the Project does not have and
+	// an error wrapping project.ErrProjectNotFound if it is not live.
+	Load(ctx context.Context, projectID uuid.UUID, number int) (appdto.LoadedDraft, error)
 }
 
 type discardServiceImpl struct {
@@ -71,29 +80,74 @@ func (s discardServiceImpl) Discard(ctx context.Context, rawProjectID uuid.UUID)
 	if !found {
 		return appdto.DiscardedDraft{}, fmt.Errorf("%w: %s", ErrNothingToDiscard, projectID)
 	}
-	file, ok := last.Content().ProjectFile()
+	result, warnings, err := s.resetTo(ctx, projectID, last, true)
+	if err != nil {
+		return appdto.DiscardedDraft{}, err
+	}
+	return appdto.DiscardedDraft{Version: result.Version().Number(), Warnings: warnings}, nil
+}
+
+// Load makes the Draft of the live Project the content of one of its Commits
+// (task 84): the same reset a Discard makes, to the Commit the client named
+// rather than the last one.
+func (s discardServiceImpl) Load(ctx context.Context, rawProjectID uuid.UUID, number int) (appdto.LoadedDraft, error) {
+	projectID, _, err := s.content.open(ctx, rawProjectID)
+	if err != nil {
+		return appdto.LoadedDraft{}, err
+	}
+	scope := s.content.ScopeOf(projectID)
+	commit, err := s.content.Drafts().FindCommit(ctx, scope, number)
+	if err != nil {
+		return appdto.LoadedDraft{}, fmt.Errorf("cannot read commit %d of project %s: %w", number, projectID, err)
+	}
+	// The loaded content is the Draft's clean state only when it is the last
+	// Commit: an older one leaves the Draft with unsaved changes (task 74).
+	last, found, err := s.content.Drafts().FindLastCommit(ctx, scope)
+	if err != nil {
+		return appdto.LoadedDraft{}, fmt.Errorf("cannot read the last commit of project %s: %w", projectID, err)
+	}
+	result, warnings, err := s.resetTo(ctx, projectID, commit, found && last.Number() == commit.Number())
+	if err != nil {
+		return appdto.LoadedDraft{}, err
+	}
+	return appdto.LoadedDraft{
+		Version:           result.Version().Number(),
+		HasUnsavedChanges: result.HasUnsavedChanges(),
+		Warnings:          warnings,
+	}, nil
+}
+
+// resetTo replaces the whole Draft of projectID with the content of commit in
+// one transaction: the pins the content keeps are locked FOR SHARE in it, the
+// DraftChange stack is cleared and the Version raised, and no DraftChange is
+// written. clean says whether the written content is the Draft's last Commit's,
+// which makes the new Version the Clean Version (task 74). The Library Releases
+// the content names but this server lacks are dropped with the Widgets of their
+// WidgetTypes and returned as warnings (task 71).
+func (s discardServiceImpl) resetTo(ctx context.Context, projectID id.ID[project.Project], commit draft.Commit, clean bool) (draft.Draft, []appdto.DiscardWarning, error) {
+	file, ok := commit.Content().ProjectFile()
 	if !ok {
-		return appdto.DiscardedDraft{}, fmt.Errorf("commit %d of project %s holds no project file", last.Number(), projectID)
+		return nil, nil, fmt.Errorf("commit %d of project %s holds no project file", commit.Number(), projectID)
 	}
 	content, err := contentOfProjectFile(projectID, file)
 	if err != nil {
-		return appdto.DiscardedDraft{}, fmt.Errorf("cannot read commit %d of project %s: %w", last.Number(), projectID, err)
+		return nil, nil, fmt.Errorf("cannot read commit %d of project %s: %w", commit.Number(), projectID, err)
 	}
 	missing, err := missingLibraryReleases(ctx, s.libraries, s.releases, file)
 	if err != nil {
-		return appdto.DiscardedDraft{}, fmt.Errorf("cannot check the library pins of project %s: %w", projectID, err)
+		return nil, nil, fmt.Errorf("cannot check the library pins of project %s: %w", projectID, err)
 	}
 	content, warnings := dropMissingLibraryReleases(content, file, missing)
-	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), len(warnings) == 0, func(session *draft.Session) error {
+	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), clean && len(warnings) == 0, func(session *draft.Session) error {
 		if err := s.lockDiscardedPins(ctx, content, session); err != nil {
 			return err
 		}
 		return session.Replace(ctx, content)
 	})
 	if err != nil {
-		return appdto.DiscardedDraft{}, fmt.Errorf("cannot discard project %s: %w", projectID, err)
+		return nil, nil, fmt.Errorf("cannot load commit %d of project %s: %w", commit.Number(), projectID, err)
 	}
-	return appdto.DiscardedDraft{Version: result.Version().Number(), Warnings: warnings}, nil
+	return result, warnings, nil
 }
 
 func (s discardServiceImpl) Revert(ctx context.Context, rawProjectID uuid.UUID) (appdto.DiscardedDraft, error) {

@@ -127,8 +127,8 @@ func (p *Project) renderDraftChangesBar() app.UI {
 		Style("align-items", "center").
 		Style("gap", "6px").
 		Body(
-			p.draftChangeButton("Undo", "data-undo", p.undoTitle(), p.canUndo(), p.undoDraftChange),
-			p.draftChangeButton("Redo", "data-redo", p.redoTitle(), p.canRedo(), p.redoDraftChange),
+			p.draftChangeButton(uiutil.IconUndo(), "data-undo", p.undoTitle(), p.canUndo(), p.undoDraftChange),
+			p.draftChangeButton(uiutil.IconRedo(), "data-redo", p.redoTitle(), p.canRedo(), p.redoDraftChange),
 		)
 }
 
@@ -159,9 +159,9 @@ func (p *Project) redoTitle() string {
 
 // draftChangeButton is one of the two: attr names it for the tests and the
 // browser, title is its hover text.
-func (p *Project) draftChangeButton(label, attr, title string, enabled bool, onClick func(app.Context)) app.UI {
-	return uiutil.Button(label, "", enabled, title, uiutil.ButtonBar,
-		func(ctx app.Context, e app.Event) { onClick(ctx) }, app.EventScope(label)).
+func (p *Project) draftChangeButton(icon app.UI, attr, title string, enabled bool, onClick func(app.Context)) app.UI {
+	return uiutil.PanelButton(icon, enabled, title,
+		func(ctx app.Context, e app.Event) { onClick(ctx) }, app.EventScope(attr)).
 		Attr(attr, "true")
 }
 
@@ -334,7 +334,7 @@ func (p *Project) applyKeyAction(ctx app.Context, action uiutil.KeyAction) {
 // Save is about to fix as a Commit.
 func (p *Project) keyActionAllowed() bool {
 	return !p.deploymentsDialog && !p.projectFileDialog &&
-		!p.saveDialog && !p.commitsDialog && !p.releasesDialog && !p.releaseDialog
+		!p.saveDialog && !p.historyScreen && !p.releasesDialog && !p.releaseDialog
 }
 
 // shown reports whether the Project mode is the one displayed. Root keeps every

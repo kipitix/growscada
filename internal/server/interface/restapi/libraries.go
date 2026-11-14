@@ -231,6 +231,27 @@ func (h LibrariesHandlers) PostDiscard(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusOK, apiv0.DiscardLibraryResponse(newDraftStateResponse(state)))
 }
 
+// PostCommitLoad handles POST /libraries/{library_id}/commits/{commit_number}/load:
+// the Draft replaced by the WidgetTypes of that Commit, in one transaction — the
+// saved state becomes what is edited (task 84). 404 for a number the library
+// does not have.
+func (h LibrariesHandlers) PostCommitLoad(w http.ResponseWriter, r *http.Request) {
+	libraryID, ok := pathUUID(w, r, libraryResource)
+	if !ok {
+		return
+	}
+	number, ok := pathInt(w, r, commitResource)
+	if !ok {
+		return
+	}
+	loaded, err := h.service.LoadCommit(r.Context(), libraryID, number)
+	if err != nil {
+		sendError(w, r, err)
+		return
+	}
+	sendJSONResponse(w, http.StatusOK, newLoadCommitResponse(loaded))
+}
+
 // PostRevertToRelease handles POST /libraries/{library_id}/revert-to-release:
 // the Draft is reset to the latest Release in one transaction and its new
 // state is answered (task 72_5).

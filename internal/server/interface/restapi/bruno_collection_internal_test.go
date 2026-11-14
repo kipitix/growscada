@@ -59,11 +59,13 @@ var requestBodies = map[string]any{
 	"POST " + projectPrefix + apiv0.DraftChangesRedoPath:                                                                 apiv0.DraftChangeCommandRequest{},
 	"POST " + projectPrefix + apiv0.CommitPath:                                                                           apiv0.CreateCommitRequest{},
 	"PATCH " + projectPrefix + apiv0.CommitPath + "/" + commitResource.wildcard():                                        apiv0.RenameCommitRequest{},
+	"POST " + projectPrefix + apiv0.CommitPath + "/" + commitResource.wildcard() + apiv0.CommitLoadPath:                  nil,
 	"POST " + projectPrefix + apiv0.ReleasePath:                                                                          apiv0.CreateProjectReleaseRequest{},
 	"POST " + projectPrefix + apiv0.ReleasePath + "/" + projectReleaseResource.wildcard() + "/deploy":                    nil,
 	"PATCH " + projectPrefix + apiv0.ReleasePath + "/" + projectReleaseResource.wildcard():                               apiv0.UpdateReleaseNoteRequest{},
 	"POST " + libraryPrefix + apiv0.CommitPath:                                                                           apiv0.CreateCommitRequest{},
 	"PATCH " + libraryPrefix + apiv0.CommitPath + "/" + commitResource.wildcard():                                        apiv0.RenameCommitRequest{},
+	"POST " + libraryPrefix + apiv0.CommitPath + "/" + commitResource.wildcard() + apiv0.CommitLoadPath:                  nil,
 	// The removed editing-lock routes (ADR 0022) answer 410 without a body.
 	"POST " + projectPrefix + removedDraftLockPath:               nil,
 	"POST " + projectPrefix + removedDraftLockPath + "/takeover": nil,

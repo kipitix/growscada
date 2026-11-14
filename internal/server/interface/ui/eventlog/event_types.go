@@ -131,8 +131,8 @@ var eventTypeInfoByType = map[string]eventTypeInfo{
 
 	apiv0.EventDeploymentCreated: {categoryProject, "Project deployed"},
 
-	apiv0.EventCommitCreated:      {categoryProject, "Commit %s saved"},
-	apiv0.EventCommitTitleUpdated: {categoryProject, "Commit %s retitled"},
+	apiv0.EventCommitCreated:      {categoryProject, "Saved state %s saved"},
+	apiv0.EventCommitTitleUpdated: {categoryProject, "Saved state %s retitled"},
 
 	apiv0.EventReleaseCreated:     {categoryProject, "Release %s published"},
 	apiv0.EventReleaseNoteUpdated: {categoryProject, "Release %s note updated"},

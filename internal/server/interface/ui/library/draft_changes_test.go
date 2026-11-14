@@ -51,7 +51,7 @@ func TestDraftChangesBar_EmptyStack(t *testing.T) {
 	f.noToasts()
 
 	html := app.HTMLString(f.l.renderDraftChangesBar())
-	if !strings.Contains(html, "Undo") || !strings.Contains(html, "Redo") {
+	if !strings.Contains(html, `data-icon="undo"`) || !strings.Contains(html, `data-icon="redo"`) {
 		t.Fatalf("the bar has no Undo and Redo: %s", html)
 	}
 	if f.l.canUndo() || f.l.canRedo() {

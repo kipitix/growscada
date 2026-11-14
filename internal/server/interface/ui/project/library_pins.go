@@ -158,7 +158,7 @@ func (p *Project) pinProvenance(pin apiv0.LibraryPinResponse) string {
 	if pin.Title != nil {
 		title = *pin.Title
 	}
-	provenance := fmt.Sprintf("commit #%d %s · %s", *pin.CommitNumber, title, pin.Author)
+	provenance := fmt.Sprintf("saved state #%d %s · %s", *pin.CommitNumber, title, pin.Author)
 	if pin.Note != "" {
 		provenance += " · " + pin.Note
 	}

@@ -35,13 +35,9 @@ type Library struct {
 	releases         []apiv0.LibraryReleaseResponse
 	releasesReloader uiutil.Reloader
 	// viewing is the number of the release shown, read-only, in place of the
-	// Draft; 0 for the Draft. viewingCommit, when not 0, shows the WidgetTypes
-	// of that Commit instead: commitTypes is its snapshot, read when it is
-	// opened (task 72_7).
-	viewing       int
-	viewingCommit int
-	commitTypes   []apiv0.WidgetTypeResponse
-	widgetTypes   []apiv0.WidgetTypeResponse
+	// Draft; 0 for the Draft (task 72_7).
+	viewing     int
+	widgetTypes []apiv0.WidgetTypeResponse
 	// draftVersions holds the Version of the selected library's Draft: every
 	// write of its content states it and every content DTO carries it
 	// (ADR 0016). One number serves the whole Draft, so it is also what says
@@ -58,8 +54,7 @@ type Library struct {
 	// commits is the history of the selected library's Draft, newest first;
 	// commitsLoaded is false until its first answer. saveDialog is true while
 	// the Save dialog is open, saveTitle and saveAuthor its fields;
-	// savingCommit marks the request in flight. commitsDialog is true while
-	// the history is shown.
+	// savingCommit marks the request in flight.
 	commits         []apiv0.CommitResponse
 	commitsLoaded   bool
 	commitsReloader uiutil.Reloader
@@ -67,11 +62,16 @@ type Library struct {
 	savingCommit    bool
 	saveTitle       string
 	saveAuthor      string
-	commitsDialog   bool
-	// renamingCommit is the number of the Commit whose title is edited in
-	// place (0: none), renameCommitTitle the text of the editor.
+	// renamingCommit is the number of the saved state whose title is edited
+	// in place (0: none), renameCommitTitle the text of the editor.
 	renamingCommit    int
 	renameCommitTitle string
+	// historyScreen is true while the saved states are shown in place of the
+	// editor (task 84): History opens them and the way back closes them.
+	// loadingSavedState is the number of the saved state being loaded into the
+	// Draft (0: none).
+	historyScreen     bool
+	loadingSavedState int
 	// draftUnsaved is the unsaved-changes flag of the selected library's
 	// Draft, as the server answers it: its Version is above its Clean Version
 	// (ADR 0016, amendment 2026-11-10; task 74). The editor draws it and never
@@ -119,6 +119,13 @@ type Library struct {
 	// onKeyDown listens for Ctrl+Z and Ctrl+Shift+Z while the mode is shown;
 	// it is released with the component (noKeyDown).
 	onKeyDown app.Func
+
+	// OnBack and BackName are the panel's way back to the selection page and
+	// the library it shows (task 84). Root owns both — the page and the name
+	// the selection announced — and sets them when it builds the mode; a mode
+	// nothing wired shows no way back.
+	OnBack   func()
+	BackName func() string
 }
 
 // selectedIDKey is the LocalStorage key of the selected WidgetType,
@@ -235,17 +242,14 @@ func (l *Library) selectedLibrary() (apiv0.LibraryResponse, bool) {
 }
 
 // readOnly reports whether the WidgetTypes shown cannot be edited: those of a
-// release or a Commit shown read-only are not the Draft.
+// release shown read-only are not the Draft.
 func (l *Library) readOnly() bool {
-	return l.viewing != 0 || l.viewingCommit != 0
+	return l.viewing != 0
 }
 
-// shownTypes returns the WidgetTypes shown: those of the release or the Commit
-// viewed, or of the Draft.
+// shownTypes returns the WidgetTypes shown: those of the release viewed, or of
+// the Draft.
 func (l *Library) shownTypes() []apiv0.WidgetTypeResponse {
-	if l.viewingCommit != 0 {
-		return l.commitTypes
-	}
 	if l.viewing == 0 {
 		return l.widgetTypes
 	}
@@ -294,14 +298,15 @@ func (l *Library) selectLibrary(ctx app.Context, id uuid.UUID) {
 		return
 	}
 	l.libraryID = id
-	l.viewing, l.viewingCommit, l.commitTypes = 0, 0, nil
+	l.viewing = 0
 	l.widgetTypes, l.releases = nil, nil
 	l.draftVersions.Forget()
 	l.clearSelection()
 	l.changes, l.changesLoaded = apiv0.DraftChangesResponse{}, false
 	l.undoing, l.redoing = false, false
 	l.commits, l.commitsLoaded = nil, false
-	l.saveDialog, l.savingCommit, l.commitsDialog = false, false, false
+	l.saveDialog, l.savingCommit = false, false
+	l.historyScreen, l.loadingSavedState = false, 0
 	l.renamingCommit, l.renameCommitTitle = 0, ""
 	l.draftUnsaved, l.draftStateLoaded = false, false
 	l.releaseDialog, l.releasing, l.releaseCommit = false, false, 0
@@ -315,37 +320,14 @@ func (l *Library) selectLibrary(ctx app.Context, id uuid.UUID) {
 	l.loadCommits(ctx)
 }
 
-// view shows release n read-only (0: back to the Draft). Opening a release
-// clears a Commit shown.
+// view shows release n read-only (0: back to the Draft).
 func (l *Library) view(n int) {
 	l.releasesDialog = false
-	if n == l.viewing && l.viewingCommit == 0 {
+	if n == l.viewing {
 		return
 	}
-	l.viewing, l.viewingCommit, l.commitTypes = n, 0, nil
+	l.viewing = n
 	l.clearSelection()
-}
-
-// viewCommit shows the WidgetTypes of Commit n read-only (0: back to the
-// Draft). They are read from the Commit's snapshot, never from the Draft
-// (task 72_7; ADR 0021).
-func (l *Library) viewCommit(n int) {
-	draft := l.draft()
-	if draft == nil || n == 0 {
-		return
-	}
-	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.CommitResponse, error) {
-		return draft.Commit(c, n)
-	}, func(ctx app.Context, commit apiv0.CommitResponse) {
-		if draft != l.draft() {
-			return
-		}
-		l.viewing, l.viewingCommit = 0, commit.Number
-		l.commitTypes = releasedWidgetTypes(commit.WidgetTypes)
-		l.commitsDialog, l.releasesDialog = false, false
-		l.clearSelection()
-		ctx.Update()
-	}, nil)
 }
 
 // itemIdx returns the index of the WidgetType id in the list; -1 if absent.
@@ -364,27 +346,33 @@ func (l *Library) startEditing(id uuid.UUID, currentName string) {
 // ── Render ────────────────────────────────────────────────────────────────────
 
 func (l *Library) Render() app.UI {
+	body := l.renderEditor()
+	if l.historyScreen {
+		body = l.renderHistoryScreen()
+	}
 	return app.Div().
 		Style("display", "flex").
 		Style("flex-direction", "column").
 		Style("flex", "1").
 		Style("min-height", "0").
+		Body(l.renderHeader(), body)
+}
+
+// renderEditor is the Draft: the WidgetTypes, their editor and the preview.
+func (l *Library) renderEditor() app.UI {
+	return app.Div().
+		Style("display", "flex").
+		Style("flex-direction", "row").
+		Style("flex", "1").
+		Style("min-height", "0").
+		Style("gap", "8px").
 		Body(
-			l.renderHeader(),
-			app.Div().
-				Style("display", "flex").
-				Style("flex-direction", "row").
-				Style("flex", "1").
-				Style("min-height", "0").
-				Style("gap", "8px").
-				Body(
-					l.renderListColumn(),
-					l.renderEditorColumn("HTML Template", "html-template", l.edit.html, l.editorInput(func(v string) { l.edit.html = v }), !l.readOnly()),
-					l.renderEditorColumn("Script", "script-editor", l.edit.script, l.editorInput(func(v string) { l.edit.script = v }), !l.readOnly()),
-					l.renderInputPortsColumn(),
-					l.renderInputDataColumn(),
-					l.renderPreviewColumn(),
-				),
+			l.renderListColumn(),
+			l.renderEditorColumn("HTML Template", "html-template", l.edit.html, l.editorInput(func(v string) { l.edit.html = v }), !l.readOnly()),
+			l.renderEditorColumn("Script", "script-editor", l.edit.script, l.editorInput(func(v string) { l.edit.script = v }), !l.readOnly()),
+			l.renderInputPortsColumn(),
+			l.renderInputDataColumn(),
+			l.renderPreviewColumn(),
 		)
 }
 

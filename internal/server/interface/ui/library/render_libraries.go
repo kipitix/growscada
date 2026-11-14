@@ -15,20 +15,24 @@ func itoa(n int) string { return strconv.Itoa(n) }
 
 // ── Header ────────────────────────────────────────────────────────────────────
 
-// renderHeader is the slim header above the editor (task 73): Save with its
-// unsaved-changes indicator, History, Releases, the Undo and Redo pair, the
-// library's Commit and Release state with Discard and Revert, and the author —
-// the actions that used to sit in the libraries column, which is gone. The
-// dialogs the header opens follow it.
+// renderHeader is the panel above the editor (task 84): the way back to the
+// libraries with the name of the one shown, Save with its unsaved-changes
+// indicator, Undo and Redo, History and Releases — icons, each with its hover
+// text —, the library's state and the author. The dialogs the panel opens
+// follow it.
 func (l *Library) renderHeader() app.UI {
 	if l.libraryID == uuid.Nil {
 		return app.Div()
 	}
-	body := l.renderCommitBar()
+	body := []app.UI{
+		l.renderBackButton(),
+		uiutil.BarDivider(),
+	}
+	body = append(body, l.renderCommitBar()...)
 	body = append(body,
-		barDivider(),
+		uiutil.BarDivider(),
 		l.renderDraftChangesBar(),
-		barDivider(),
+		uiutil.BarDivider(),
 		l.renderLibraryStatus(),
 		app.Div().Style("flex", "1"),
 		l.renderAuthorBar(),
@@ -47,28 +51,59 @@ func (l *Library) renderHeader() app.UI {
 				Style("background", "var(--bg-elevated)").
 				Body(body...),
 			app.If(l.saveDialog, l.renderSaveDialog).Else(func() app.UI { return app.Div() }),
-			app.If(l.commitsDialog, l.renderCommitsDialog).Else(func() app.UI { return app.Div() }),
 			app.If(l.releasesDialog, l.renderReleasesDialog).Else(func() app.UI { return app.Div() }),
 			app.If(l.releaseDialog, l.renderReleaseDialog).Else(func() app.UI { return app.Div() }),
 		)
 }
 
-// barDivider separates the groups of the header.
-func barDivider() app.UI {
-	return app.Div().Style("width", "1px").Style("height", "18px").Style("background", "var(--border)")
+// renderBackButton is the way back to the selection page (task 84), with the
+// name of the library shown. Root wires both — it owns the page and the name
+// the selection announced —, so a mode nothing wired shows the name alone.
+func (l *Library) renderBackButton() app.UI {
+	name := ""
+	if l.BackName != nil {
+		name = l.BackName()
+	}
+	if name == "" {
+		if lib, ok := l.selectedLibrary(); ok {
+			name = lib.Name
+		}
+	}
+	body := []app.UI{}
+	if l.OnBack != nil {
+		body = append(body, uiutil.PanelButton(uiutil.IconBack(), true, "Back to the libraries",
+			func(app.Context, app.Event) { l.OnBack() }, app.EventScope("back")))
+	}
+	body = append(body, app.Span().
+		Attr("data-editor-name", "true").
+		Style("font-size", "13px").
+		Style("font-weight", "600").
+		Style("color", "var(--text)").
+		// A long name is cut, never allowed to push the panel's actions out.
+		Style("max-width", "260px").
+		Style("overflow", "hidden").
+		Style("text-overflow", "ellipsis").
+		Style("white-space", "nowrap").
+		Text(name))
+	return app.Div().
+		Attr("data-panel-back", "true").
+		Style("display", "flex").
+		Style("align-items", "center").
+		Style("gap", "6px").
+		Body(body...)
 }
 
 // releaseStateOf is one library's Release state (task 72_7; ADR 0021): the
-// Draft changed since its last Commit (the server's own flag, which the
-// selected one follows too — task 74), the last Commit is not published, or the
-// published state is the saved one. The state is a short word for the header
-// and its kind says which.
+// Draft changed since its last saved state (the server's own flag, which the
+// selected one follows too — task 74), the last saved state is not published,
+// or the published state is the saved one. The state is a short word for the
+// panel and its kind says which.
 func (l *Library) releaseStateOf(lib apiv0.LibraryResponse) (kind, text string) {
 	switch {
 	case lib.HasUnsavedChanges:
 		return "unsaved", "unsaved changes"
 	case lib.HasUnpublishedChanges:
-		return "unpublished", "unpublished commit"
+		return "unpublished", "unpublished saved state"
 	case lib.LatestCommit > 0:
 		return "published", "published"
 	case lib.LatestRelease > 0:
@@ -78,8 +113,8 @@ func (l *Library) releaseStateOf(lib apiv0.LibraryResponse) (kind, text string) 
 	}
 }
 
-// renderLibraryStatus renders the selected library's Commit and Release state
-// and its Discard and Revert.
+// renderLibraryStatus is the state of the library in words: what its last saved
+// state and its last Release are.
 func (l *Library) renderLibraryStatus() app.UI {
 	lib, ok := l.selectedLibrary()
 	if !ok {
@@ -91,13 +126,13 @@ func (l *Library) renderLibraryStatus() app.UI {
 	case lib.LatestRelease == 0 && lib.LatestCommit == 0:
 		status = "Never saved or released."
 	case lib.LatestCommit == 0:
-		status = "Release " + itoa(lib.LatestRelease) + " · legacy, no commits"
+		status = "Release " + itoa(lib.LatestRelease) + " · legacy, no saved states"
 	case kind == "unsaved":
-		status = "Commit #" + itoa(lib.LatestCommit) + " · unsaved changes"
+		status = "Saved state #" + itoa(lib.LatestCommit) + " · unsaved changes"
 	case kind == "unpublished":
-		status = "Commit #" + itoa(lib.LatestCommit) + " · not published yet"
+		status = "Saved state #" + itoa(lib.LatestCommit) + " · not published yet"
 	case lib.LatestRelease == 0:
-		status = "Commit #" + itoa(lib.LatestCommit) + " · never released"
+		status = "Saved state #" + itoa(lib.LatestCommit) + " · never released"
 	default:
 		status = "Release " + itoa(lib.LatestRelease) + " · published"
 	}
@@ -105,19 +140,12 @@ func (l *Library) renderLibraryStatus() app.UI {
 		Attr("data-library-status", "true").
 		Style("display", "flex").
 		Style("align-items", "center").
-		Style("gap", "6px").
 		Body(
 			app.Span().
 				Class("library-status").
 				Style("font-size", "12px").
 				Style("color", "var(--text-muted)").
 				Text(status),
-			barButton("Discard", lib.LatestCommit > 0, "error",
-				"Reset the Draft to its last Commit, dropping the unsaved changes", l.discard,
-				app.EventScope("discard")),
-			barButton("Revert", lib.LatestRelease > 0, "",
-				"Reset the Draft to its latest Release, the published state", l.revert,
-				app.EventScope("revert")),
 		)
 }
 
@@ -154,9 +182,7 @@ func (l *Library) renderReleasesDialog() app.UI {
 			Title(title).
 			OnClick(func(ctx app.Context, e app.Event) { l.view(n) }, app.EventScope(itoa(n)))
 		text := app.Span().Style("flex", "1").Text(label)
-		if n == 0 && l.viewingCommit != 0 {
-			d = d.Style("color", "var(--text)")
-		} else if n == l.viewing {
+		if n == l.viewing {
 			d = d.Style("background", "var(--bg-hover)").Style("font-weight", "600").Style("color", "var(--text)")
 		} else {
 			d = d.Style("color", "var(--text)")
@@ -192,7 +218,7 @@ func (l *Library) renderReleasesDialog() app.UI {
 func releaseHistoryLabel(r apiv0.LibraryReleaseResponse) string {
 	label := "Release " + itoa(r.Number)
 	if r.CommitNumber != nil {
-		label += " — commit #" + itoa(*r.CommitNumber)
+		label += " — saved state #" + itoa(*r.CommitNumber)
 		if r.Title != nil && *r.Title != "" {
 			label += " " + *r.Title
 		}

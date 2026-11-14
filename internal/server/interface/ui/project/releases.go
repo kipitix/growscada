@@ -54,7 +54,7 @@ func (p *Project) isRunningRelease(number int) bool {
 // browser's confirmation. Success reloads the Release list and the Deployment;
 // the server's refusal (nothing to deploy, a Release gone) is a toast.
 func (p *Project) deployRelease(ctx app.Context, number int) {
-	if p.content == nil || p.deploying || p.discarding || p.reverting {
+	if p.content == nil || p.deploying || p.loadingSavedState != 0 {
 		return
 	}
 	message := fmt.Sprintf("Make Release %d the running one? Operation switches to it.", number)
@@ -66,7 +66,7 @@ func (p *Project) deployRelease(ctx app.Context, number int) {
 
 // doDeployRelease performs the Deploy the confirmation asked for.
 func (p *Project) doDeployRelease(ctx app.Context, number int) {
-	if p.content == nil || p.deploying || p.discarding || p.reverting {
+	if p.content == nil || p.deploying || p.loadingSavedState != 0 {
 		return
 	}
 	p.deploying = true
@@ -179,9 +179,8 @@ func (p *Project) saveReleaseNote(ctx app.Context) {
 // renderReleaseBar is the header's button of the Releases, with the number of
 // the running Release beside it (task 72_6).
 func (p *Project) renderReleaseBar() app.UI {
-	button := p.deployButton("Releases", "The Releases of the project", !p.releasing, func(ctx app.Context) {
-		p.openReleasesDialog(ctx)
-	})
+	button := p.panelButton(uiutil.IconTag(), "The Releases of the project", !p.releasing,
+		func(ctx app.Context) { p.openReleasesDialog(ctx) })
 	if !p.deployed || p.deployment.ReleaseNumber == nil {
 		return button
 	}
@@ -218,9 +217,9 @@ func (p *Project) renderReleaseDialog() app.UI {
 		Style("box-shadow", "var(--toast-shadow)").
 		Style("font-size", "13px").
 		Body(
-			app.H3().Style("margin", "0 0 8px").Text(fmt.Sprintf("Release Commit %d", p.releaseCommit)),
+			app.H3().Style("margin", "0 0 8px").Text(fmt.Sprintf("Release saved state %d", p.releaseCommit)),
 			app.P().Style("margin", "0 0 6px").Style("color", "var(--text-muted)").
-				Text("The Commit is published as an immutable Release: its content is copied and outlives the Commit."),
+				Text("The saved state is published as an immutable Release: its content is copied and outlives it."),
 			app.Input().
 				Attr("data-release-note", "true").
 				Type("text").
@@ -434,7 +433,7 @@ func (p *Project) releaseDeployControl(number int) app.UI {
 	}
 	// Every Release row has the same handler literal: the number scopes it, so
 	// a reused element acts on the row it shows now.
-	return rowButton("Deploy", "accent", !(p.deploying || p.discarding || p.reverting),
+	return rowButton("Deploy", "accent", !(p.deploying || p.loadingSavedState != 0),
 		"Make this Release the running Deployment",
 		func(ctx app.Context) { p.deployRelease(ctx, number) },
 		app.EventScope("deploy/"+fmt.Sprint(number))).
@@ -445,9 +444,9 @@ func (p *Project) releaseDeployControl(number int) app.UI {
 // published already has the button disabled with the reason in its tooltip
 // (task 72_3; ADR 0021).
 func (p *Project) releaseCommitButton(commit apiv0.CommitResponse) app.UI {
-	title := "Publish this Commit as a Release"
+	title := "Publish this saved state as a Release"
 	if commit.Released {
-		title = "This Commit is released already"
+		title = "This saved state is released already"
 	}
 	return rowButton("Make Release", "", !commit.Released, title,
 		func(ctx app.Context) {

@@ -32,16 +32,16 @@ func TestCommitBar_IndicatorKeepsTheButtonPositions(t *testing.T) {
 		if len(bar) != 4 {
 			t.Fatalf("%s: the header has %d children, want 4", tc.name, len(bar))
 		}
-		if html := app.HTMLString(bar[0]); !strings.Contains(html, ">Save<") {
+		if html := app.HTMLString(bar[0]); !strings.Contains(html, `data-icon="save"`) {
 			t.Errorf("%s: the first child is not Save: %s", tc.name, html)
 		}
 		if html := app.HTMLString(bar[1]); !strings.Contains(html, tc.marker) {
 			t.Errorf("%s: the indicator: %s", tc.name, html)
 		}
-		if html := app.HTMLString(bar[2]); !strings.Contains(html, ">History<") {
+		if html := app.HTMLString(bar[2]); !strings.Contains(html, `data-icon="history"`) {
 			t.Errorf("%s: the third child is not History: %s", tc.name, html)
 		}
-		if html := app.HTMLString(bar[3]); !strings.Contains(html, ">Releases<") {
+		if html := app.HTMLString(bar[3]); !strings.Contains(html, `data-icon="tag"`) {
 			t.Errorf("%s: the fourth child is not Releases: %s", tc.name, html)
 		}
 	}
@@ -72,7 +72,7 @@ func TestSaveCommit_LibraryHistoryAndRename(t *testing.T) {
 	f.l.saveCommit()
 	f.run()
 
-	if got := f.oneToast(); !strings.Contains(got.Title, "Commit 1 saved") {
+	if got := f.oneToast(); !strings.Contains(got.Title, "Saved state 1 saved") {
 		t.Errorf("the Save confirmation: %+v", got)
 	}
 	if len(f.l.commits) != 1 || f.l.commits[0].Number != 1 || f.l.commits[0].Author != "Ada" {
@@ -82,9 +82,9 @@ func TestSaveCommit_LibraryHistoryAndRename(t *testing.T) {
 		t.Errorf("the Draft still reports unsaved changes after a Save")
 	}
 
-	f.l.openCommitsDialog()
+	f.l.openHistory()
 	f.run()
-	if html := app.HTMLString(f.l.Render()); !strings.Contains(html, `data-commit-row="1"`) {
+	if html := app.HTMLString(f.l.Render()); !strings.Contains(html, `data-saved-state-row="1"`) {
 		t.Errorf("the history does not show Commit 1: %s", html)
 	}
 
@@ -116,16 +116,16 @@ func TestCommitRow_ReleaseButton(t *testing.T) {
 	f.l.loadCommits(f.l.compoCtx)
 	f.run()
 
-	html := app.HTMLString(f.l.renderCommitRow(f.l.commits[0]))
+	html := app.HTMLString(f.l.renderSavedStateRow(f.l.commits[0]))
 	if !strings.Contains(html, "Make Release") || strings.Contains(html, ">Released<") {
-		t.Errorf("the commit row before the release: %s", html)
+		t.Errorf("the saved state row before the release: %s", html)
 	}
 
 	releaseNow(t, f)
 	f.run()
-	html = app.HTMLString(f.l.renderCommitRow(f.l.commits[0]))
+	html = app.HTMLString(f.l.renderSavedStateRow(f.l.commits[0]))
 	if !strings.Contains(html, "Released") {
-		t.Errorf("the commit row after the release: %s", html)
+		t.Errorf("the saved state row after the release: %s", html)
 	}
 }
 
@@ -136,7 +136,7 @@ func TestReleaseHistoryLabel_CommitAndLegacy(t *testing.T) {
 	got := releaseHistoryLabel(apiv0.LibraryReleaseResponse{
 		Number: 2, CommitNumber: &number, Title: &title, Note: "a note", Origin: apiv0.LibraryReleaseOriginCommit,
 	})
-	if want := "Release 2 — commit #3 Widgets of the release — a note"; got != want {
+	if want := "Release 2 — saved state #3 Widgets of the release — a note"; got != want {
 		t.Errorf("the label: %q, want %q", got, want)
 	}
 	if got := releaseHistoryLabel(apiv0.LibraryReleaseResponse{Number: 1, Origin: apiv0.LibraryReleaseOriginLegacy}); got != "Release 1 — legacy" {
@@ -180,7 +180,7 @@ func TestSaveCommit_LibraryShortcutsWaitForTheDialogs(t *testing.T) {
 	if f.l.keyActionAllowed() {
 		t.Errorf("a shortcut acts behind the Save dialog")
 	}
-	f.l.saveDialog, f.l.commitsDialog = false, true
+	f.l.saveDialog, f.l.historyScreen = false, true
 	if f.l.keyActionAllowed() {
 		t.Errorf("a shortcut acts behind the History dialog")
 	}

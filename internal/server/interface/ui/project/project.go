@@ -57,11 +57,11 @@ type Project struct {
 	deployed         bool
 	deploymentLoaded bool
 	deploymentFailed bool
-	// deploying marks a Deploy of a Release in flight; discarding and
-	// reverting mark the Draft resets.
-	deploying  bool
-	discarding bool
-	reverting  bool
+	// deploying marks a Deploy of a Release in flight; loadingSavedState is
+	// the number of the saved state being loaded into the Draft (0: none,
+	// task 84).
+	deploying         bool
+	loadingSavedState int
 	// deployments is the list the Deployments dialog shows, newest first,
 	// loaded when it opens and reloaded on deployment_created while it is open.
 	// selectedDeployment is the row whose document is shown (0: none) as
@@ -96,7 +96,7 @@ type Project struct {
 	// commits is the history of the Draft, newest first; commitsLoaded is
 	// false until its first answer. saveDialog is true while the Save dialog
 	// is open, saveTitle and saveAuthor its fields; savingCommit marks the
-	// request in flight. commitsDialog is true while the history is shown.
+	// request in flight.
 	commits         []apiv0.CommitResponse
 	commitsLoaded   bool
 	commitsReloader uiutil.Reloader
@@ -104,7 +104,6 @@ type Project struct {
 	savingCommit    bool
 	saveTitle       string
 	saveAuthor      string
-	commitsDialog   bool
 	// draftUnsaved is the unsaved-changes flag of the project's Draft, as the
 	// server answers it: its Version is above its Clean Version (ADR 0016,
 	// amendment 2026-11-10; task 74). The editor draws it and never derives it.
@@ -121,10 +120,20 @@ type Project struct {
 	// ordinary one again and is judged by its Version (task 72_6).
 	contentReplacements uint64
 	appliedReplacements uint64
-	// renamingCommit is the number of the Commit whose title is edited in
-	// place (0: none), renameCommitTitle the text of the editor.
+	// renamingCommit is the number of the saved state whose name is edited in
+	// place (0: none), renameCommitTitle the text of the editor. historyScreen
+	// is true while the saved states are shown in place of the content
+	// (task 84): History opens them and the way back closes them.
 	renamingCommit    int
 	renameCommitTitle string
+	historyScreen     bool
+
+	// OnBack and BackName are the panel's way back to the selection page and
+	// the project it shows (task 84). Root owns both — the page and the name
+	// the selection announced — and sets them when it builds the mode; a mode
+	// nothing wired shows no way back.
+	OnBack   func()
+	BackName func() string
 
 	// ── Releases (task 72_3; ADR 0021) ─────────────────────────────────────
 	// releases is the publication history, newest first; releasesLoaded is
@@ -382,7 +391,8 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.scenes, p.widgets, p.tags = nil, nil, tagstate.Tags{}
 	p.widgetTypes, p.pins = nil, nil
 	p.deployment, p.deployed, p.deploymentLoaded, p.deploymentFailed = apiv0.DeploymentResponse{}, false, false, false
-	p.deploying, p.discarding, p.reverting = false, false, false
+	p.deploying, p.loadingSavedState = false, 0
+	p.historyScreen = false
 	p.deployments, p.deploymentsLoaded = nil, false
 	p.deploymentsDialog, p.selectedDeployment = false, 0
 	p.deploymentDetail, p.deploymentDetailLoaded = apiv0.DeploymentResponse{}, false
@@ -392,7 +402,7 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.changes, p.changesLoaded = apiv0.DraftChangesResponse{}, false
 	p.undoing, p.redoing = false, false
 	p.commits, p.commitsLoaded = nil, false
-	p.saveDialog, p.savingCommit, p.commitsDialog = false, false, false
+	p.saveDialog, p.savingCommit = false, false
 	p.renamingCommit, p.renameCommitTitle = 0, ""
 	p.draftUnsaved, p.draftStateLoaded = false, false
 	p.contentReplacements, p.appliedReplacements = 0, 0
@@ -482,21 +492,29 @@ func (p *Project) Render() app.UI {
 	if p.content == nil {
 		return uiutil.NoProject()
 	}
-	return app.Div().
+	body := app.UI(app.Div().
 		Style("display", "flex").
 		Style("flex-direction", "column").
 		Style("flex", "1").
 		Style("min-height", "0").
-		Style("overflow", "hidden").
 		Body(
-			p.renderDeployBar(),
 			p.renderSubTabs(),
 			app.If(p.activeSubTab == subTabScenes, func() app.UI {
 				return p.renderScenesContent()
 			}).Else(func() app.UI {
 				return p.renderTagsPanel()
 			}),
-		)
+		))
+	if p.historyScreen {
+		body = p.renderHistoryScreen()
+	}
+	return app.Div().
+		Style("display", "flex").
+		Style("flex-direction", "column").
+		Style("flex", "1").
+		Style("min-height", "0").
+		Style("overflow", "hidden").
+		Body(p.renderDeployBar(), body)
 }
 
 func (p *Project) renderSubTabs() app.UI {

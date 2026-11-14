@@ -1,0 +1,30 @@
+info:
+  name: load a saved state into the library draft
+  type: http
+  seq: 2004
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/libraries/{{OTHER_LIBRARY_ID}}/commits/1/load
+  auth: inherit
+
+docs: |
+  The same reset for a Library (task 84): its Draft becomes the WidgetTypes the
+  Commit copied, in one transaction. The Draft is clean exactly when the loaded
+  Commit is its last one.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.version'
+      operator: isNumber
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -118,87 +118,51 @@ func (p *Project) loadDeploy(ctx app.Context) {
 	})
 }
 
-// discard resets the Draft to the last Commit, dropping the unsaved changes,
-// after the browser's confirmation. Without a Commit the server refuses (409),
-// which is the toast.
-func (p *Project) discard(ctx app.Context) {
-	if p.content == nil || p.discarding || p.deploying || p.reverting {
+// loadSavedState makes the saved state number the Draft (task 84), after the
+// browser's confirmation when the Draft holds unsaved changes: the load clears
+// the undo stack, so the change is not one to take back.
+func (p *Project) loadSavedState(ctx app.Context, number int) {
+	if p.content == nil || p.deploying || p.loadingSavedState != 0 {
 		return
 	}
-	if p.waitMoves(ctx, func(ctx app.Context) { p.discard(ctx) }) {
+	if p.waitMoves(ctx, func(ctx app.Context) { p.loadSavedState(ctx, number) }) {
 		return
 	}
-	message := "Discard the unsaved changes of this project and restore the Draft from its last Commit?"
-	if !app.Window().Call("confirm", message).Bool() {
+	if p.hasUnsavedChanges() && !app.Window().Call("confirm",
+		fmt.Sprintf("Replace the unsaved changes of this project with saved state %d? The Draft becomes what was saved then.",
+			number)).Bool() {
 		return
 	}
-	p.doDiscard(ctx)
+	p.doLoadSavedState(ctx, number)
 }
 
-// doDiscard performs the reset the confirmation asked for.
-func (p *Project) doDiscard(ctx app.Context) {
-	if p.content == nil || p.discarding || p.deploying || p.reverting {
+// doLoadSavedState performs the reset the confirmation asked for: one
+// transaction of the Draft, which the answer states.
+func (p *Project) doLoadSavedState(ctx app.Context, number int) {
+	if p.content == nil || p.loadingSavedState != 0 {
 		return
 	}
-	p.discarding = true
+	p.loadingSavedState = number
 	mark := p.markDraft()
-	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DiscardProjectResponse, error) {
-		return pc.Discard(c)
-	}, func(ctx app.Context, discarded apiv0.DiscardProjectResponse) {
-		p.discarding = false
-		p.observeDraftVersion(mark, discarded.Version)
-		// The server's Draft state says whether the reset made the Draft its
-		// last Commit's content; the flag is reread with the content (task 74).
-		p.reloadDraftContent(ctx) // a Discard clears the stack (ADR 0017)
-		p.showDiscardWarnings(ctx, discarded)
+	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.LoadCommitResponse, error) {
+		return pc.LoadCommit(c, number)
+	}, func(ctx app.Context, loaded apiv0.LoadCommitResponse) {
+		p.loadingSavedState = 0
+		p.observeDraftVersion(mark, loaded.Version)
+		// The server's Draft state says whether the loaded saved state is the
+		// last one; the flag is reread with the content (task 74).
+		p.reloadDraftContent(ctx) // a load clears the stack (ADR 0017)
+		p.showLoadWarnings(ctx, loaded.Warnings)
+		p.closeHistory()
+		ctx.NewActionWithValue(toast.ActionAdd, toast.Problem{Problem: apiv0.Problem{
+			Title: fmt.Sprintf("Saved state %d loaded", number),
+		}})
 		ctx.Update()
 	}, func(ctx app.Context, err error) {
-		p.discarding = false
+		p.loadingSavedState = 0
 		uiutil.ShowError(ctx, err)
 		p.loadDraftState(ctx)
 		p.loadDraftChanges(ctx)
-		ctx.Update()
-	})
-}
-
-// revert resets the Draft to the Deployment the project runs, after the
-// browser's confirmation. Without a Deployment the server refuses (409), which
-// is the toast.
-func (p *Project) revert(ctx app.Context) {
-	if p.content == nil || p.reverting || p.deploying || p.discarding {
-		return
-	}
-	if p.waitMoves(ctx, func(ctx app.Context) { p.revert(ctx) }) {
-		return
-	}
-	message := "Reset the Draft to the Deployment the project runs?"
-	if !app.Window().Call("confirm", message).Bool() {
-		return
-	}
-	p.doRevert(ctx)
-}
-
-// doRevert performs the reset the confirmation asked for.
-func (p *Project) doRevert(ctx app.Context) {
-	if p.content == nil || p.reverting || p.deploying || p.discarding {
-		return
-	}
-	p.reverting = true
-	mark := p.markDraft()
-	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DiscardProjectResponse, error) {
-		return pc.RevertToDeployed(c)
-	}, func(ctx app.Context, reverted apiv0.DiscardProjectResponse) {
-		p.reverting = false
-		p.observeDraftVersion(mark, reverted.Version)
-		// The server's Draft state says whether the Deployment was the content
-		// of the last Commit; a Revert to another state keeps the Draft
-		// unsaved (task 74).
-		p.reloadDraftContent(ctx)
-		p.showDiscardWarnings(ctx, reverted)
-		ctx.Update()
-	}, func(ctx app.Context, err error) {
-		p.reverting = false
-		uiutil.ShowError(ctx, err)
 		ctx.Update()
 	})
 }
@@ -222,15 +186,15 @@ func (p *Project) reloadDraftContent(ctx app.Context) {
 	p.loadDeploy(ctx)
 }
 
-// showDiscardWarnings tells what a Discard or Revert could not restore: the
+// showLoadWarnings tells what a load of a saved state could not restore: the
 // Library Releases this server does not have went with the widgets of their
-// types (task 71).
-func (p *Project) showDiscardWarnings(ctx app.Context, answer apiv0.DiscardProjectResponse) {
-	if len(answer.Warnings) == 0 {
+// types (task 71, task 84).
+func (p *Project) showLoadWarnings(ctx app.Context, warnings []apiv0.DiscardWarningResponse) {
+	if len(warnings) == 0 {
 		return
 	}
-	parts := make([]string, len(answer.Warnings))
-	for i, warning := range answer.Warnings {
+	parts := make([]string, len(warnings))
+	for i, warning := range warnings {
 		parts[i] = fmt.Sprintf("library %s release %d: %d widgets dropped",
 			warning.LibraryID, warning.Release, warning.DroppedWidgets)
 	}
@@ -257,39 +221,38 @@ func (p *Project) renderDeployBar() app.UI {
 		// deployed (task 72_4).
 		badge = "Deployment unknown"
 	}
+	busy := p.deploying || p.loadingSavedState != 0
 
-	body := p.renderCommitBar()
+	body := []app.UI{
+		p.renderBackButton(),
+		uiutil.BarDivider(),
+	}
+	body = append(body, p.renderCommitBar()...)
 	body = append(body,
+		uiutil.BarDivider(),
 		p.renderDraftChangesBar(),
-		app.Div().Style("width", "1px").Style("height", "18px").Style("background", "var(--border)"),
+		uiutil.BarDivider(),
 		app.Span().
 			Attr("data-deploy-running", "true").
 			Style("font-size", "12px").
 			Style("font-weight", "600").
 			Style("color", "var(--text-2)").
+			Style("white-space", "nowrap").
 			Text(badge),
-	)
-	body = append(body,
+		uiutil.BarDivider(),
+		p.renderAuthorBar(),
 		app.Div().Style("flex", "1"),
-		p.deployButton("Project file…", "Download the Draft, open a file, or deploy one",
-			!p.deploying && !p.discarding && !p.reverting && !p.projectFileBusy, func(ctx app.Context) {
+		p.panelButton(uiutil.IconFile(), "Download the Draft, open a file, or deploy one",
+			!busy && !p.projectFileBusy, func(ctx app.Context) {
 				p.openProjectFileDialog(ctx)
 			}),
-		p.deployButton("Deployments", "The Deployments of the project",
-			!p.deploying && !p.discarding && !p.reverting, func(ctx app.Context) {
+		p.panelButton(uiutil.IconLayers(), "The Deployments of the project",
+			!busy, func(ctx app.Context) {
 				p.openDeploymentsDialog(ctx)
 			}),
-		p.deployButton("Deploy", p.deployButtonTitle(),
-			!p.deploying && !p.discarding && !p.reverting, func(ctx app.Context) {
+		p.panelButton(uiutil.IconDeploy(), p.deployButtonTitle(),
+			!busy, func(ctx app.Context) {
 				p.openReleasesDialog(ctx)
-			}),
-		p.deployButton("Discard changes", "Reset the Draft to its last Commit, dropping the unsaved changes",
-			!p.discarding && !p.deploying && !p.reverting, func(ctx app.Context) {
-				p.discard(ctx)
-			}),
-		p.deployButton("Revert to deployed", "Reset the Draft to the Deployment the project runs",
-			!p.reverting && !p.deploying && !p.discarding, func(ctx app.Context) {
-				p.revert(ctx)
 			}),
 	)
 
@@ -301,9 +264,6 @@ func (p *Project) renderDeployBar() app.UI {
 	}
 	if p.saveDialog {
 		body = append(body, p.renderSaveDialog())
-	}
-	if p.commitsDialog {
-		body = append(body, p.renderCommitsDialog())
 	}
 	if p.releasesDialog {
 		body = append(body, p.renderReleasesDialog())
@@ -324,6 +284,38 @@ func (p *Project) renderDeployBar() app.UI {
 		Body(body...)
 }
 
+// renderBackButton is the way back to the selection page (task 84), with the
+// name of the project shown. Root wires both — it owns the page and the name
+// the selection announced —, so a mode nothing wired shows the name alone.
+func (p *Project) renderBackButton() app.UI {
+	name := ""
+	if p.BackName != nil {
+		name = p.BackName()
+	}
+	body := []app.UI{}
+	if p.OnBack != nil {
+		body = append(body, uiutil.PanelButton(uiutil.IconBack(), true, "Back to the projects",
+			func(ctx app.Context, e app.Event) { p.OnBack() }, app.EventScope("back")))
+	}
+	body = append(body, app.Span().
+		Attr("data-editor-name", "true").
+		Style("font-size", "13px").
+		Style("font-weight", "600").
+		Style("color", "var(--text)").
+		// A long name is cut, never allowed to push the panel's actions out.
+		Style("max-width", "260px").
+		Style("overflow", "hidden").
+		Style("text-overflow", "ellipsis").
+		Style("white-space", "nowrap").
+		Text(name))
+	return app.Div().
+		Attr("data-panel-back", "true").
+		Style("display", "flex").
+		Style("align-items", "center").
+		Style("gap", "6px").
+		Body(body...)
+}
+
 // deployButtonTitle is the Deploy button's hover text: a Release list with
 // nothing in it says what to do first (task 72_6).
 func (p *Project) deployButtonTitle() string {
@@ -333,12 +325,11 @@ func (p *Project) deployButtonTitle() string {
 	return "Choose a Release to deploy"
 }
 
-// deployButton is one action of the Project's header; the label is also the
-// EventScope, so a reused element never keeps another action's handler (task
-// 80). It is named for its first use and is the header's general button.
-func (p *Project) deployButton(label, title string, enabled bool, onClick func(app.Context)) app.UI {
-	return uiutil.Button(label, "", enabled, title, uiutil.ButtonBar,
-		func(ctx app.Context, e app.Event) { onClick(ctx) }, app.EventScope(label))
+// panelButton is one icon action of the panel (task 84); the title is also the
+// EventScope, so a reused element never keeps another action's handler.
+func (p *Project) panelButton(icon app.UI, title string, enabled bool, onClick func(app.Context)) app.UI {
+	return uiutil.PanelButton(icon, enabled, title,
+		func(ctx app.Context, e app.Event) { onClick(ctx) }, app.EventScope(title))
 }
 
 // renderDeploymentsDialog is the list of the project's Deployments with the
