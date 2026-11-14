@@ -33,6 +33,18 @@ const (
 	ModeHistory   Mode = "history"
 )
 
+// The screens of a mode with a selection page, as LocalStorage keeps the one
+// the person left (task 85_1): the page of entities or the editor of one.
+const (
+	screenList   = "list"
+	screenEditor = "editor"
+)
+
+// screenKey is the LocalStorage key of the screen of mode ("library:screen",
+// "project:screen"); absent, the screen follows the entity selected, as task 73
+// had it.
+func screenKey(mode Mode) string { return string(mode) + ":screen" }
+
 type Root struct {
 	app.Compo
 	// compoCtx is the component's own context, captured in OnMount; the server
@@ -57,8 +69,10 @@ type Root struct {
 	// selection page: the slim "← List · <name>" row of the editor.
 	entityName map[Mode]string
 	// showList is true while a mode shows its selection page (task 73)
-	// instead of the editor of the entity selected. The tab opens the last
-	// entity; with none it opens the page.
+	// instead of the editor of the entity selected. It is decided when a mode
+	// is opened the first time and then kept for the tab's lifetime, so a walk
+	// from one tab to another and back returns to the same screen; LocalStorage
+	// holds it too, so a reload opens the screen the person left (task 85_1).
 	showList map[Mode]bool
 	// The modes in the order of their slots, made once: a mode is mounted
 	// when first opened and stays mounted while another is shown, so it
@@ -127,6 +141,13 @@ func (r *Root) OnMount(ctx app.Context) {
 	// mounts, so the editor does not wait for its selection page (task 73).
 	r.selected[ModeProject] = uiutil.LoadID(ctx, picker.ProjectKey)
 	r.selected[ModeLibrary] = uiutil.LoadID(ctx, picker.LibraryKey)
+
+	// The screen of a mode with a selection page is what the person left
+	// there, restored before any mode mounts: the page, or the editor of the
+	// entity selected — the page when there is none, whatever was stored
+	// (task 85_1).
+	r.showList[ModeProject] = showsList(loadScreen(ctx, ModeProject), r.selected[ModeProject])
+	r.showList[ModeLibrary] = showsList(loadScreen(ctx, ModeLibrary), r.selected[ModeLibrary])
 
 	// A read of the entity the editor shows found it gone: the mode leaves it
 	// at once, so the content the server removes after it is not loaded for
@@ -222,6 +243,7 @@ func (r *Root) selectEntity(mode Mode, id uuid.UUID, name string) {
 	}
 	if id == uuid.Nil {
 		r.showList[mode] = true
+		r.storeScreen(mode, screenList)
 	}
 	if r.mounted {
 		r.compoCtx.Update()
@@ -235,6 +257,7 @@ func (r *Root) openEntity(mode Mode, id uuid.UUID) {
 		return
 	}
 	r.showList[mode] = false
+	r.storeScreen(mode, screenEditor)
 	r.selectEntity(mode, id, r.entityName[mode])
 }
 
@@ -242,6 +265,7 @@ func (r *Root) openEntity(mode Mode, id uuid.UUID) {
 // keeps the entity selected announced to the event stream as it is.
 func (r *Root) showListPage(mode Mode) {
 	r.showList[mode] = true
+	r.storeScreen(mode, screenList)
 	if m := r.modeView(mode); m != nil && m.picker != nil && r.mounted {
 		m.picker.Reload(r.compoCtx)
 	}
@@ -253,14 +277,49 @@ func (r *Root) showListPage(mode Mode) {
 // entityGone leaves the entity id of mode, which a read found gone, and shows
 // the selection page with its list reread: the editor that would be empty is
 // replaced by the page, and the deleted row leaves the list instead of hanging
-// there (task 76). The id must still be the one shown: a delayed 404 of an
-// entity left meanwhile is not this one's.
+// there (task 76). The screen is recorded as the page, so a reload does not
+// reopen the editor of an entity that is gone (task 85_1). The id must still
+// be the one shown: a delayed 404 of an entity left meanwhile is not this one's.
 func (r *Root) entityGone(mode Mode, id uuid.UUID) {
 	if id == uuid.Nil || r.selected[mode] != id {
 		return
 	}
 	r.selectEntity(mode, uuid.Nil, "")
 	r.showListPage(mode)
+}
+
+// loadScreen reads the screen stored for mode, "" when none is: the screen
+// follows the entity selected then, as task 73 had it.
+func loadScreen(ctx app.Context, mode Mode) string {
+	var s string
+	if err := ctx.LocalStorage().Get(screenKey(mode), &s); err != nil {
+		return ""
+	}
+	if s != screenList && s != screenEditor {
+		return ""
+	}
+	return s
+}
+
+// storeScreen keeps the screen of mode for the next opening of its tab and the
+// next reload of the page; before the mount there is no LocalStorage to write.
+func (r *Root) storeScreen(mode Mode, screen string) {
+	if !r.mounted {
+		return
+	}
+	r.compoCtx.LocalStorage().Set(screenKey(mode), screen)
+}
+
+// showsList reports whether a mode with a selection page opens on the page,
+// given the screen it stored and the entity selected: the stored page always,
+// the stored editor only with an entity to show — an editor without one is the
+// page (task 85_1) — and with nothing stored the page when no entity is
+// selected and its editor when one is (task 73).
+func showsList(stored string, selected uuid.UUID) bool {
+	if stored == screenList {
+		return true
+	}
+	return selected == uuid.Nil
 }
 
 // modeView returns the view of mode, nil if there is none.
@@ -681,7 +740,16 @@ type modeView struct {
 	mode     Mode
 	ui       app.Composer
 	switcher *projects.Switcher
-	picker   *picker.Picker
+	picker   listPage
+}
+
+// listPage is the selection page of a mode with one: picker.Picker, behind an
+// interface only for the one thing Root does with it — ask it to reread the
+// list when the page is shown — so a test reaches the decision without the
+// page being mounted.
+type listPage interface {
+	app.UI
+	Reload(app.Context)
 }
 
 func (r *Root) tab(label string, mode Mode) app.UI {
@@ -750,17 +818,22 @@ func (r *Root) renderThemeToggle() app.UI {
 }
 
 // SetMode shows mode, opening it if it was not yet. A tab of the Library or
-// the Project mode opens the entity last shown, or its selection page when
-// there is none (task 73). The Bar follows the project of a mode that shows
+// the Project mode opens the screen the person left there — the selection page
+// or the editor of the entity last shown — and its list is reread when it is a
+// page (task 73, task 85_1). The Bar follows the project of a mode that shows
 // one, from its switcher's announcement on (selectProject); Library leaves it
 // as it is.
 func (r *Root) SetMode(mode Mode) {
 	r.currentMode = mode
+	first := !r.opened[mode]
 	r.opened[mode] = true
-	if m := r.modeView(mode); m != nil && m.picker != nil {
-		r.showList[mode] = r.selected[mode] == uuid.Nil
+	if m := r.modeView(mode); m != nil && m.picker != nil && first {
+		// The screen is decided once: what the person left it at stays
+		// through every return to the tab (task 85_1). A mode with nothing
+		// selected shows its page; a page reads its list when it is shown
+		// (task 73).
+		r.showList[mode] = r.showList[mode] || r.selected[mode] == uuid.Nil
 		if r.showList[mode] {
-			// The page reads its list whenever it is shown (task 73).
 			m.picker.Reload(r.compoCtx)
 		}
 	}
