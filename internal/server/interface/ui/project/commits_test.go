@@ -143,9 +143,9 @@ func TestAuthorBar_ShowsTheStoredName(t *testing.T) {
 	}
 }
 
-// TestSaveCommit_ShortcutsWaitForTheDialogs: the Save and the History dialogs
-// of the mode hold the Draft's shortcuts, like its other dialogs (task 72_2;
-// ADR 0021).
+// TestSaveCommit_ShortcutsWaitForTheDialogs: the Save, History and Deploy
+// dialogs of the mode hold the Draft's shortcuts, like its other dialogs
+// (task 72_2, task 85_5; ADR 0021).
 func TestSaveCommit_ShortcutsWaitForTheDialogs(t *testing.T) {
 	f := startProject(t)
 	f.run()
@@ -159,6 +159,10 @@ func TestSaveCommit_ShortcutsWaitForTheDialogs(t *testing.T) {
 	f.p.saveDialog, f.p.historyScreen = false, true
 	if f.p.keyActionAllowed() {
 		t.Errorf("a shortcut acts behind the History dialog")
+	}
+	f.p.historyScreen, f.p.deployDialog = false, true
+	if f.p.keyActionAllowed() {
+		t.Errorf("a shortcut acts behind the Deploy window")
 	}
 }
 

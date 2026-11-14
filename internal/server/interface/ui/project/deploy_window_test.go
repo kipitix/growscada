@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -225,6 +226,38 @@ func TestDeployWindow_NoLabelsHint(t *testing.T) {
 		if !strings.Contains(html, want) {
 			t.Errorf("the window does not hold %q: %s", want, html)
 		}
+	}
+}
+
+// failDeployCall fails the request that deploys a saved state: it never reaches
+// the server, so the window has to show a network error (task 85_5).
+type failDeployCall struct{}
+
+func (failDeployCall) RoundTrip(r *http.Request) (*http.Response, error) {
+	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/deploy") {
+		return nil, errors.New("the deploy did not reach the server")
+	}
+	return http.DefaultTransport.RoundTrip(r)
+}
+
+// TestDeployWindow_NetworkErrorIsAToast: a Deploy that never reaches the server
+// is the error toast, and the window stops being busy (task 85_5).
+func TestDeployWindow_NetworkErrorIsAToast(t *testing.T) {
+	url, api := newServer(t)
+	saveState(t, api, "First save")
+	saveState(t, api, "Second save")
+	f := mountWith(t, url, api, &http.Client{Transport: failDeployCall{}})
+	f.run()
+	f.e.TakeToasts() // the loads of the mount
+
+	f.p.doDeploySavedState(f.p.compoCtx, 2)
+	f.run()
+
+	if got := f.oneToast(); got.Title != "Network Error" {
+		t.Errorf("the failed Deploy showed %+v, want a network error", got)
+	}
+	if f.p.deploying {
+		t.Errorf("the window stayed busy after the failed Deploy")
 	}
 }
 
