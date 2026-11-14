@@ -414,7 +414,8 @@ func (d *Dialog) renderRow(l apiv0.LabelResponse) app.UI {
 		name = append(name,
 			renderChip(l.Name, l.Color),
 			uiutil.IconButton(uiutil.IconPencil(), "ghost", !d.busy(), "Rename the label", uiutil.ButtonBar,
-				func(ctx app.Context, e app.Event) { d.startRename(l); ctx.Update() }).
+				func(ctx app.Context, e app.Event) { d.startRename(l); ctx.Update() },
+				app.EventScope("rename/"+l.ID.String())).
 				Attr("data-label-rename", "true"),
 		)
 	}
@@ -433,10 +434,12 @@ func (d *Dialog) renderRow(l apiv0.LabelResponse) app.UI {
 			Style("color", "var(--text-muted)").
 			Text(fmt.Sprintf("%d", l.AssignedCount)),
 		uiutil.Button("Color", "", !d.busy(), "Change the color", uiutil.ButtonRow,
-			func(ctx app.Context, e app.Event) { d.openPalette(l); ctx.Update() }).
+			func(ctx app.Context, e app.Event) { d.openPalette(l); ctx.Update() },
+			app.EventScope("color/"+l.ID.String())).
 			Attr("data-label-color", "true"),
 		uiutil.Button("Delete", "error", !d.busy(), "Delete the label", uiutil.ButtonRow,
-			func(ctx app.Context, e app.Event) { d.startDelete(l); ctx.Update() }).
+			func(ctx app.Context, e app.Event) { d.startDelete(l); ctx.Update() },
+			app.EventScope("delete/"+l.ID.String())).
 			Attr("data-label-delete", "true"),
 	}
 
