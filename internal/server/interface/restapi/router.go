@@ -237,7 +237,7 @@ func (r *APIRouter) routes() []route {
 		{"PUT " + pp + "/library-imports/" + libraryImportResource.wildcard(), imports.PutLibraryImport},
 		{"DELETE " + pp + "/library-imports/" + libraryImportResource.wildcard(), imports.DeleteLibraryImport},
 		{"GET " + pp + "/library-imports/" + libraryImportResource.wildcard() + "/impact", imports.GetLibraryImportImpact},
-		{"GET " + pp + "/widget-types", imports.GetImportedWidgetTypes},
+		{"GET " + pp + "/library-imports/widget-types", imports.GetImportedWidgetTypes},
 
 		{"GET " + pp + "/scenes/" + sceneResource.wildcard() + "/widgets", widgets.GetWidgetsBySceneID},
 		{"POST " + pp + "/scenes/" + sceneResource.wildcard() + "/widgets", widgets.PostWidgets},

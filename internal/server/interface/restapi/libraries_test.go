@@ -150,7 +150,7 @@ func TestLibraryImports_AddPreviewSwitchRemove(t *testing.T) {
 		t.Errorf("the provenance of the import: %+v, want saved state 1 titled Save by Ada", added)
 	}
 
-	palette := decodeBody[apiv0.GetImportedWidgetTypesResponse](t, serve(router, http.MethodGet, mainPath+"/widget-types", nil))
+	palette := decodeBody[apiv0.GetImportedWidgetTypesResponse](t, serve(router, http.MethodGet, mainPath+"/library-imports/widget-types", nil))
 	found := false
 	for _, pwt := range palette.WidgetTypes {
 		found = found || pwt.ID == wt.ID

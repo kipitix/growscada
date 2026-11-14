@@ -605,7 +605,7 @@ func (p *ProjectClient) ImportImpact(ctx context.Context, libraryID uuid.UUID, c
 // imports: those its Widgets may be of.
 func (p *ProjectClient) ImportedWidgetTypes(ctx context.Context) ([]apiv0.ReleasedWidgetTypeResponse, error) {
 	var resp apiv0.GetImportedWidgetTypesResponse
-	err := p.do(ctx, http.MethodGet, "/widget-types", nil, http.StatusOK, &resp)
+	err := p.do(ctx, http.MethodGet, "/library-imports/widget-types", nil, http.StatusOK, &resp)
 	return resp.WidgetTypes, err
 }
 
