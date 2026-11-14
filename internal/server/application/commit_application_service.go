@@ -9,10 +9,7 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
-	"github.com/kipitix/growscada/internal/server/domain/id"
-	"github.com/kipitix/growscada/internal/server/domain/label"
 	"github.com/kipitix/growscada/internal/server/domain/library"
-	"github.com/kipitix/growscada/internal/server/domain/organization"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/release"
 	"github.com/kipitix/growscada/internal/server/domain/version"
@@ -50,8 +47,7 @@ type commitServiceImpl struct {
 	widgetTypes     library.WidgetTypeRepositories
 	releases        release.Repository
 	libraryReleases library.LibraryReleaseRepository
-	labels          label.Repository
-	organization    id.ID[organization.Organization]
+	labels          LabelService
 }
 
 var _ CommitService = (*commitServiceImpl)(nil)
@@ -60,15 +56,14 @@ var _ CommitService = (*commitServiceImpl)(nil)
 // serves and of the Libraries aLibraries serves, assembling a Project's
 // snapshot with aBuilder, reading a Library's Draft through someWidgetTypes,
 // marking a Commit a Release published with someReleases and
-// someLibraryReleases, and reading the labels of a saved state from
-// someLabels of the Organization anOrganizationID.
+// someLibraryReleases, and reading the labels of a saved state through
+// someLabels, the service that serves them (task 85_3; ADR 0025).
 func NewCommitService(aContent ProjectContent, aLibraries LibraryContent, aBuilder ProjectFileBuilder,
 	someWidgetTypes library.WidgetTypeRepositories, someReleases release.Repository,
-	someLibraryReleases library.LibraryReleaseRepository, someLabels label.Repository,
-	anOrganizationID id.ID[organization.Organization]) CommitService {
+	someLibraryReleases library.LibraryReleaseRepository, someLabels LabelService) CommitService {
 	return &commitServiceImpl{content: aContent, libraries: aLibraries, builder: aBuilder,
 		widgetTypes: someWidgetTypes, releases: someReleases, libraryReleases: someLibraryReleases,
-		labels: someLabels, organization: anOrganizationID}
+		labels: someLabels}
 }
 
 func (s commitServiceImpl) Save(ctx context.Context, scope draft.Scope, rawVersion int, rawTitle, rawAuthor string) (appdto.Commit, error) {
@@ -197,17 +192,17 @@ func (s commitServiceImpl) releasedCommit(ctx context.Context, scope draft.Scope
 }
 
 // attachLabels fills the labels of each saved state of the list, read for the
-// whole list in one call (task 85_3; ADR 0025).
+// whole list in one call of the label service (task 85_3; ADR 0025).
 func (s commitServiceImpl) attachLabels(ctx context.Context, scope draft.Scope, dtos []appdto.Commit) error {
 	if len(dtos) == 0 {
 		return nil
 	}
-	byNumber, err := s.labels.LabelsOfScope(ctx, s.organization, scope)
+	byNumber, err := s.labels.LabelsOf(ctx, scope)
 	if err != nil {
-		return fmt.Errorf("cannot read the labels of %s: %w", scope, err)
+		return err
 	}
 	for i := range dtos {
-		dtos[i].Labels = appdto.NewLabels(byNumber[dtos[i].Number])
+		dtos[i].Labels = byNumber[dtos[i].Number]
 	}
 	return nil
 }

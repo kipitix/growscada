@@ -238,6 +238,9 @@ func main() {
 	projectFileService := application.NewProjectFileService(projectContent, projectFileBuilder, runtimeNode,
 		libraryRepository, releaseRepository)
 	draftChangesService := application.NewDraftChangesService(projectContent, libraryContent)
+	// The labels of a saved state are read through the service that serves
+	// them, by the history that draws their chips (task 85_3; ADR 0025).
+	labelService := application.NewLabelService(labelRepository, draftRepository, organizationID)
 	// Create router
 	apiRouter := restapi.NewRouter(restapi.Services{
 		Projects:     projectService,
@@ -253,11 +256,11 @@ func main() {
 		DraftChanges: draftChangesService,
 		Discard:      discardService,
 		ProjectFiles: projectFileService,
-		Commits:      application.NewCommitService(projectContent, libraryContent, projectFileBuilder, widgetTypeRepositories, projectReleaseRepository, releaseRepository, labelRepository, organizationID),
+		Commits:      application.NewCommitService(projectContent, libraryContent, projectFileBuilder, widgetTypeRepositories, projectReleaseRepository, releaseRepository, labelService),
 		Releases: application.NewReleaseService(projectContent, projectReleaseRepository, runtimeNode,
 			libraryRepository, releaseRepository),
 		Settings:     application.NewSettingsService(userSettingsRepository, settings.SingleUser(), organizationID),
-		Labels:       application.NewLabelService(labelRepository, draftRepository, organizationID),
+		Labels:       labelService,
 		Deployments:  deploymentService,
 		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(sqlDB)),
 		DeviceTokens: deviceTokenService,

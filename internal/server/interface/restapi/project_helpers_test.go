@@ -88,6 +88,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 	deviceTokens := runtimeapp.NewDeviceTokenService(runtimepg.NewDeviceTokenRepositoryPostgres(db))
 	runtimeNode := inprocess.NewRuntimeNode(states, deviceTokens, deployments)
 	journal := runtimeapp.NewJournalService(runtimepg.NewJournalRepositoryPostgres(db))
+	labelService := application.NewLabelService(labels, drafts, orgID)
 	return testServices{
 		projects:     application.NewProjectService(projectRepo, drafts, orgID),
 		tags:         application.NewTagService(content, runtimeNode),
@@ -107,10 +108,10 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		deviceTokens: deviceTokens,
 		journal:      journal,
 		operation:    runtimeapp.NewOperationStateService(journal, deployments, states, runtimepg.NewCheckpointRepositoryPostgres(db)),
-		commits:      application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, projectReleases, releases, labels, orgID),
+		commits:      application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, projectReleases, releases, labelService),
 		releases:     application.NewReleaseService(content, projectReleases, runtimeNode, libraries, releases),
 		settings:     application.NewSettingsService(repositories.NewUserSettingsRepositoryPostgres(db), settings.SingleUser(), orgID),
-		labels:       application.NewLabelService(labels, drafts, orgID),
+		labels:       labelService,
 	}
 }
 

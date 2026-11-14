@@ -259,6 +259,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	operation := runtimeapp.NewOperationStateService(journal, deployments, tagStateSvc, runtimepg.NewCheckpointRepositoryPostgres(db))
 	tagSvc := application.NewTagService(content, runtimeNode)
 	widgetTypes := repositories.NewWidgetTypeRepositories(db)
+	labelService := application.NewLabelService(labelRepository, drafts, orgID)
 	runner := outbox.NewPolicyRunner(db, []application.Policy{
 		application.NewLibraryCleanupPolicy(libraries),
 		application.NewProjectCleanupPolicy(projectRepo, drafts, runtimeNode),
@@ -289,10 +290,10 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 		DraftChanges: application.NewDraftChangesService(content, libraryContent),
 		Discard:      application.NewDiscardService(content, runtimeNode, libraries, releases),
 		ProjectFiles: application.NewProjectFileService(content, application.NewProjectFileBuilder(content), runtimeNode, libraries, releases),
-		Commits:      application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, projectReleases, releases, labelRepository, orgID),
+		Commits:      application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, projectReleases, releases, labelService),
 		Releases:     application.NewReleaseService(content, projectReleases, runtimeNode, libraries, releases),
 		Settings:     application.NewSettingsService(repositories.NewUserSettingsRepositoryPostgres(db), settings.SingleUser(), orgID),
-		Labels:       application.NewLabelService(labelRepository, drafts, orgID),
+		Labels:       labelService,
 		Deployments:  deployments,
 		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(db)),
 		DeviceTokens: deviceTokens,

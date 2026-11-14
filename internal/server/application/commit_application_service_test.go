@@ -23,7 +23,9 @@ func newCommitService() application.CommitService {
 		application.NewProjectFileBuilder(content), repositories.NewWidgetTypeRepositories(testDB),
 		repositories.NewProjectReleaseRepositoryPostgres(testDB),
 		repositories.NewLibraryReleaseRepositoryPostgres(testDB),
-		repositories.NewLabelRepositoryPostgres(testDB), soleOrganization())
+		application.NewLabelService(repositories.NewLabelRepositoryPostgres(testDB),
+			repositories.NewDraftRepositoryPostgres(testDB, repositories.NewLibraryReleaseRepositoryPostgres(testDB)),
+			soleOrganization()))
 }
 
 // TestCommitService_ProjectSaveListFindRename: a Save of a Project's Draft
