@@ -3,13 +3,15 @@ package apiv0
 // Event is the payload of every message of the event streams (sent as SSE
 // `data:`), whatever the domain event. GET /events carries the events of the
 // server's own resources — projects, libraries with the WidgetTypes of their
-// Drafts and their releases — and of the connections,
+// Drafts and their releases, and the labels of the Organization — and of the
+// connections,
 // plus, with ?project= (EventsQueryProject), those of that project's content;
 // GET /projects/{id}/events those of one project's content alone — Tags,
 // Scenes, Widgets, Library Pins, Devices, Environments with the parameters of
 // their Devices. Type is one of the Event… names below. ID
 // is the affected aggregate's (or connection's) ID; system_ready carries
-// none; the ID of a library_* or library_pin_* event is the library's.
+// none; the ID of a library_* or library_pin_* event is the library's, and the
+// ID of a label_* event is the label's.
 // SceneID is the Scene that holds (or held) the Widget, on widget_created,
 // widget_updated and widget_deleted only. LibraryID is the library of the
 // WidgetType, on widget_type_* only. Release is the number of the new

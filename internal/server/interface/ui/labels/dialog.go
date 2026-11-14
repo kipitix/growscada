@@ -21,7 +21,6 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
-	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -139,7 +138,7 @@ func (d *Dialog) create(ctx app.Context) {
 	}, func(ctx app.Context, created apiv0.LabelResponse, err error) {
 		d.creating = false
 		if err != nil {
-			d.newError = problemText(err)
+			d.newError = uiutil.ProblemText(err)
 			ctx.Update()
 			return
 		}
@@ -174,7 +173,7 @@ func (d *Dialog) commitRename(ctx app.Context) {
 	}, func(ctx app.Context, _ apiv0.LabelResponse, err error) {
 		d.editBusy = false
 		if err != nil {
-			d.editError = problemText(err)
+			d.editError = uiutil.ProblemText(err)
 			ctx.Update()
 			return
 		}
@@ -206,7 +205,7 @@ func (d *Dialog) applyColor(ctx app.Context, color string) {
 	}, func(ctx app.Context, _ apiv0.LabelResponse, err error) {
 		d.paletteBusy = false
 		if err != nil {
-			d.paletteErr = problemText(err)
+			d.paletteErr = uiutil.ProblemText(err)
 			ctx.Update()
 			return
 		}
@@ -240,7 +239,7 @@ func (d *Dialog) commitDelete(ctx app.Context) {
 		d.load(ctx)
 	}, func(ctx app.Context, err error) {
 		d.deleting = false
-		d.deleteError = problemText(err)
+		d.deleteError = uiutil.ProblemText(err)
 		ctx.Update()
 	})
 }
@@ -698,14 +697,4 @@ func errorLine(text string) app.UI {
 		Style("font-size", "12px").
 		Style("margin-top", "4px").
 		Text(text)
-}
-
-// problemText is a refusal of the server as the window shows it: its detail,
-// or its title when it carries none.
-func problemText(err error) string {
-	problem := toast.FromError(err)
-	if problem.Detail != "" {
-		return problem.Detail
-	}
-	return problem.Title
 }

@@ -31,7 +31,6 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
-	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -477,7 +476,7 @@ func (p *Picker) commitEdit(ctx app.Context) {
 			return
 		}
 		if err != nil {
-			p.editError = problemText(err)
+			p.editError = uiutil.ProblemText(err)
 			if errors.Is(err, apiclient.ErrConflict) {
 				// The entity moved on: reread it so the next attempt states
 				// its current Version, and keep the text typed in.
@@ -534,7 +533,7 @@ func (p *Picker) commitCreate(ctx app.Context) {
 	}, func(ctx app.Context, id uuid.UUID, err error) {
 		p.createBusy = false
 		if err != nil {
-			p.createError = problemText(err)
+			p.createError = uiutil.ProblemText(err)
 			ctx.Update()
 			return
 		}
@@ -725,16 +724,6 @@ func (p *Picker) onRowsKey(ctx app.Context, e app.Event) {
 // details pane wait for it, so a click never states a Version the write about
 // to land makes stale (task 82).
 func (p *Picker) busy() bool { return p.saving || p.savingOrder || p.createBusy }
-
-// problemText is a refusal of the server as the page shows it: its detail, or
-// its title when it carries none.
-func problemText(err error) string {
-	problem := toast.FromError(err)
-	if problem.Detail != "" {
-		return problem.Detail
-	}
-	return problem.Title
-}
 
 // boolAttr renders a boolean attribute value the way HTML reads it.
 func boolAttr(v bool) string {

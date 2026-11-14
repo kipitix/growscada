@@ -14,8 +14,8 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/organization"
 )
 
-// constraintLabelsOrganizationName is the unique index on the names of a labels
-// of an organization, ignoring case.
+// constraintLabelsOrganizationName is the unique index on the names of the
+// labels of an Organization, ignoring case.
 const constraintLabelsOrganizationName = "uq_labels_organization_name"
 
 type labelRepositoryPostgresImpl struct {
