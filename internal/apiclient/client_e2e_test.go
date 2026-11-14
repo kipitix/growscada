@@ -259,6 +259,75 @@ func TestScenesAndWidgets_RoundTrip(t *testing.T) {
 	}
 }
 
+// TestCommitLabels_ClientRoundTrip: a label is placed on a Project's saved
+// state and on a Library's, the history is read narrowed to that label, and
+// the mark is taken off again (task 85_3; ADR 0025).
+func TestCommitLabels_ClientRoundTrip(t *testing.T) {
+	client := startClient(t)
+	ctx := context.Background()
+	label, err := client.CreateLabel(ctx, "ready-"+uuid.NewString()[:8], "#22c55e")
+	if err != nil {
+		t.Fatalf("CreateLabel: %v", err)
+	}
+
+	project := client.Project(servertest.MainProject)
+	if _, err := project.CreateTag(ctx, apiv0.CreateTagRequest{Name: "pump.speed", Type: "integer"}); err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	state, err := project.DraftState(ctx)
+	if err != nil {
+		t.Fatalf("DraftState: %v", err)
+	}
+	commit, err := project.SaveCommit(ctx, apiv0.CreateCommitRequest{Version: state.Version, Title: "First", Author: "Ada"})
+	if err != nil {
+		t.Fatalf("SaveCommit: %v", err)
+	}
+
+	marks, err := project.AssignLabel(ctx, commit.Number, label.ID)
+	if err != nil || len(marks) != 1 || marks[0].ID != label.ID {
+		t.Fatalf("AssignLabel: %+v, %v", marks, err)
+	}
+	filtered, err := project.CommitsByLabel(ctx, label.ID)
+	if err != nil || len(filtered) != 1 || filtered[0].Number != commit.Number || len(filtered[0].Labels) != 1 {
+		t.Fatalf("CommitsByLabel: %+v, %v", filtered, err)
+	}
+	if left, err := project.UnassignLabel(ctx, commit.Number, label.ID); err != nil || len(left) != 0 {
+		t.Errorf("UnassignLabel: %+v, %v", left, err)
+	}
+	if filtered, err := project.CommitsByLabel(ctx, label.ID); err != nil || len(filtered) != 0 {
+		t.Errorf("CommitsByLabel after the unassignment: %+v, %v", filtered, err)
+	}
+	if _, err := project.AssignLabel(ctx, commit.Number+1, label.ID); !errors.Is(err, apiclient.ErrNotFound) {
+		t.Errorf("AssignLabel of a missing saved state: %v, want ErrNotFound", err)
+	}
+
+	// The same under a Library: its history is its own.
+	lib := createLibrary(t, client)
+	if _, err := lib.CreateWidgetType(ctx, apiv0.CreateWidgetTypeRequest{
+		Name: "Gauge", HtmlTemplate: "<div></div>", Script: "", ScriptLanguage: "javascript",
+		DefaultWidth: 100, DefaultHeight: 50,
+	}); err != nil {
+		t.Fatalf("CreateWidgetType: %v", err)
+	}
+	libraryState, err := lib.DraftState(ctx)
+	if err != nil {
+		t.Fatalf("the library's DraftState: %v", err)
+	}
+	saved, err := lib.SaveCommit(ctx, apiv0.CreateCommitRequest{Version: libraryState.Version, Title: "First", Author: "Ada"})
+	if err != nil {
+		t.Fatalf("the library's SaveCommit: %v", err)
+	}
+	if marks, err := lib.AssignLabel(ctx, saved.Number, label.ID); err != nil || len(marks) != 1 {
+		t.Fatalf("the library's AssignLabel: %+v, %v", marks, err)
+	}
+	if filtered, err := lib.CommitsByLabel(ctx, label.ID); err != nil || len(filtered) != 1 || filtered[0].Number != saved.Number {
+		t.Errorf("the library's CommitsByLabel: %+v, %v", filtered, err)
+	}
+	if all, err := project.Commits(ctx); err != nil || len(all) != 1 || len(all[0].Labels) != 0 {
+		t.Errorf("the project's history after the library's mark: %+v, %v", all, err)
+	}
+}
+
 func TestBadRequest_CarriesTheServersDetail(t *testing.T) {
 	client := startClient(t)
 
