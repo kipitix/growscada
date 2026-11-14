@@ -163,6 +163,14 @@ func TestSendError(t *testing.T) {
 			wantDetail: "LibraryImport with ID '" + errorsTestID + "' not found",
 		},
 		{
+			name:       "a saved state the body names, not the path",
+			err:        wrapped(application.MissingCommitError{Number: 4}),
+			pathParams: map[string]string{"project_id": errorsTestID, "library_id": errorsTestID},
+			wantStatus: http.StatusNotFound,
+			wantTitle:  "Resource Not Found",
+			wantDetail: "Saved state with ID '4' not found",
+		},
+		{
 			name:       "library pin orphaning widgets",
 			err:        wrapped(libraryimport.OrphansError{}),
 			wantStatus: http.StatusConflict,

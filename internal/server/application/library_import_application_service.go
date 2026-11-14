@@ -176,8 +176,10 @@ func (s libraryImportServiceImpl) PutLibraryImport(ctx context.Context, rawProje
 			return err
 		})
 	if err != nil {
+		// The saved state was read before the write and can be gone by it: the
+		// 404 must name the number the body did, which the path does not carry.
 		if errors.Is(err, draft.ErrCommitNotFound) {
-			return appdto.LibraryImport{}, false, err
+			return appdto.LibraryImport{}, false, MissingCommitError{Number: rawCommit}
 		}
 		return appdto.LibraryImport{}, false, fmt.Errorf("cannot save library import: %w", err)
 	}
