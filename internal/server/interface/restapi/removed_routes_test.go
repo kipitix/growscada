@@ -36,3 +36,31 @@ func TestRemovedDeploymentRoutes_AreGoneWithHint(t *testing.T) {
 		}
 	}
 }
+
+// TestRemovedReleaseRoutes_AreNotFound: the routes that served a Project's and
+// a Library's Releases are gone with task 85_7, and no stub answers for them
+// (task 85_7).
+func TestRemovedReleaseRoutes_AreNotFound(t *testing.T) {
+	router := newRouter()
+	libraryPath := apiv0.PathPrefix + "/libraries/d0000000-0000-4000-8000-000000000001"
+	for _, tc := range []struct{ method, path string }{
+		{http.MethodGet, mainPath + "/releases"},
+		{http.MethodPost, mainPath + "/releases"},
+		{http.MethodGet, mainPath + "/releases/1"},
+		{http.MethodPatch, mainPath + "/releases/1"},
+		{http.MethodGet, mainPath + "/releases/1/projectfile"},
+		{http.MethodPost, mainPath + "/releases/1/deploy"},
+		{http.MethodGet, libraryPath + "/releases"},
+		{http.MethodPost, libraryPath + "/releases"},
+		{http.MethodGet, libraryPath + "/releases/1"},
+		{http.MethodPatch, libraryPath + "/releases/1"},
+		{http.MethodPost, libraryPath + "/revert-to-release"},
+	} {
+		rec := httptest.NewRecorder()
+		router.ServeMux().ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, nil))
+
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("%s %s: status %d, want 404", tc.method, tc.path, rec.Code)
+		}
+	}
+}
