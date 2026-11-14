@@ -165,7 +165,7 @@ Resetting a Draft to its last Commit, dropping the unsaved DraftChanges (task 72
 _Avoid_: revert, reset, cancel
 
 **Deploy**:
-The act of making a saved state (Commit) of a Project — or, on a Runtime node without an Engineering node, a ProjectFile — the running Deployment (task 72_4). A Deploy takes a saved state, not the Draft: the order is Save → Deploy. A Deploy of the saved state that already runs is refused `nothing_to_deploy`.
+The act of making a saved state (Commit) of a Project — or, on a Runtime node without an Engineering node, a ProjectFile — the running Deployment (task 85_4). A Deploy takes a saved state, not the Draft: the order is Save → Deploy. A Deploy of the saved state that already runs is refused `nothing_to_deploy`; the Deployment names that saved state in `commit_number`.
 _Avoid_: publish, apply, save
 
 **Revert to deployed**:
@@ -173,7 +173,7 @@ Resetting a Draft to the Deployment the Project runs, dropping the unsaved Draft
 _Avoid_: discard, rollback
 
 **Deployment**:
-The Runtime node's immutable record that a configuration runs: its number, when it was deployed, its cause, the saved state it came from (`commit_number`, nil for a Deployment from a file or one made before saved states were deployed) and the document it holds. A Deploy of a saved state, a Rollback or a direct file Deploy on a Runtime-only node makes it; Operation always runs exactly one Deployment. The running Deployment of a Project keeps the Libraries its document imports from being deleted; a Revert of one that names an import this server lacks drops it with a warning (task 71).
+The Runtime node's immutable record that a configuration runs: its number, when it was deployed, its cause, the saved state it came from (`commit_number`, nil for a Deployment from a file or one made before saved states were deployed) and the document it holds. A Deploy of a saved state, a Rollback or a file Deploy makes it; Operation always runs exactly one Deployment. The running Deployment of a Project keeps the Libraries its document imports from being deleted; a Revert of one that names an import this server lacks drops it with a warning (task 71).
 _Avoid_: release, build, version (the concurrency counter), commit
 
 **Revision**:
@@ -201,7 +201,7 @@ Replacing the whole content of a Project's Draft with a ProjectFile — one Draf
 _Avoid_: import, upload, load, restore
 
 **Deploy a file**:
-Making a valid ProjectFile the new Deployment of a Project without touching the Draft, with cause `file` and no saved state (task 72_4; ADR 0018).
+Making a valid ProjectFile the new Deployment of a Project without touching the Draft, with cause `file` and no saved state; it leaves no Release behind (task 85_4; ADR 0018).
 _Avoid_: import, upload, restore
 
 ### Operation and History
