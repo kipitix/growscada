@@ -939,27 +939,6 @@ func (p *ProjectClient) Releases(ctx context.Context) ([]apiv0.ReleaseResponse, 
 	return resp.Releases, err
 }
 
-// Release returns one Release. A number the Project does not have matches
-// ErrNotFound.
-func (p *ProjectClient) Release(ctx context.Context, number int) (apiv0.ReleaseResponse, error) {
-	var resp apiv0.ReleaseResponse
-	err := p.do(ctx, http.MethodGet, apiv0.ReleasePathOf(number), nil, http.StatusOK, &resp)
-	return resp, err
-}
-
-// UpdateReleaseNote changes a Release's note. It states no Draft Version.
-func (p *ProjectClient) UpdateReleaseNote(ctx context.Context, number int, req apiv0.UpdateReleaseNoteRequest) (apiv0.ReleaseResponse, error) {
-	var resp apiv0.ReleaseResponse
-	err := p.do(ctx, http.MethodPatch, apiv0.ReleasePathOf(number), req, http.StatusOK, &resp)
-	return resp, err
-}
-
-// ReleaseProjectFile returns the ProjectFile a Release copied, as a download.
-// The error matches ErrNotFound for a number the Project does not have.
-func (p *ProjectClient) ReleaseProjectFile(ctx context.Context, number int) (ProjectFileDownload, error) {
-	return p.downloadProjectFile(ctx, apiv0.ReleaseProjectFilePathOf(number))
-}
-
 // SaveCommit fixes the Library's Draft as a Commit at the stated Version
 // (task 72_2; ADR 0021).
 func (l *LibraryClient) SaveCommit(ctx context.Context, req apiv0.CreateCommitRequest) (apiv0.CommitResponse, error) {
@@ -1101,10 +1080,11 @@ func (p *ProjectClient) DeployCommit(ctx context.Context, number int) (apiv0.Dep
 	return resp, err
 }
 
-// DeployRelease makes Release number the Project's running Deployment (task
-// 72_4, kept until task 85_5 moves the UI to DeployCommit). The error matches
-// ErrConflict if that Release runs already and ErrNotFound for a Release the
-// Project does not have.
+// DeployRelease makes Release number the Project's running Deployment: a
+// Release of a saved state deploys that saved state, so it is the same Deploy
+// as DeployCommit (task 72_4, task 85_4). growctl still deploys a Release
+// until task 85_7 removes Releases. The error matches ErrConflict if that
+// Release runs already and ErrNotFound for a Release the Project does not have.
 func (p *ProjectClient) DeployRelease(ctx context.Context, number int) (apiv0.DeployResponse, error) {
 	var resp apiv0.DeployResponse
 	err := p.do(ctx, http.MethodPost, apiv0.ReleaseDeployPathOf(number), nil, http.StatusCreated, &resp)

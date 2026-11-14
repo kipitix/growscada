@@ -139,24 +139,17 @@ type Project struct {
 	OnBack   func()
 	BackName func() string
 
-	// ── Releases (task 72_3; ADR 0021) ─────────────────────────────────────
-	// releases is the publication history, newest first; releasesLoaded is
-	// false until its first answer. deployDialog is true while the list is
-	// shown, releaseDialog while a Commit is published, releasing marks that
-	// request in flight. releaseCommit is the Commit being published (0:
-	// none). editingRelease is the number of the Release whose note is edited
-	// in place (0: none), releaseNoteDraft the text of the editor.
-	releases         []apiv0.ReleaseResponse
-	releasesLoaded   bool
-	releasesReloader uiutil.Reloader
-	deployDialog     bool
-	releaseDialog    bool
-	releasing        bool
-	releaseCommit    int
-	releaseNote      string
-	releaseAuthor    string
-	editingRelease   int
-	releaseNoteDraft string
+	// ── Deploy (task 85_5; ADR 0021, ADR 0025) ─────────────────────────────
+	// deployDialog is true while the window is shown; deployCommits is the
+	// saved states it lists, newest first — all of them, or the ones the
+	// label deployLabel marks (uuid.Nil: all labels) — and deployCommitsLoaded
+	// is false until its first answer. The window knows no Release: a Deploy
+	// makes a saved state the running Deployment (task 85_4).
+	deployDialog          bool
+	deployCommits         []apiv0.CommitResponse
+	deployCommitsLoaded   bool
+	deployCommitsReloader uiutil.Reloader
+	deployLabel           uuid.UUID
 
 	// ── DraftChange stack (ADR 0017) ────────────────────────────────────────
 	// changes is the state of the Draft's undo/redo stack, read on mount, on a
@@ -357,7 +350,6 @@ func (p *Project) OnMount(ctx app.Context) {
 	p.loadDraftState(ctx)
 	p.loadDraftChanges(ctx)
 	p.loadCommits(ctx)
-	p.loadReleases(ctx)
 
 	p.listenShortcuts()
 	p.handleServerEvents(ctx)
@@ -421,10 +413,8 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.history.Reset()
 	p.draftUnsaved, p.draftStateLoaded = false, false
 	p.contentReplacements, p.appliedReplacements = 0, 0
-	p.releases, p.releasesLoaded = nil, false
-	p.deployDialog, p.releaseDialog, p.releasing = false, false, false
-	p.releaseCommit, p.releaseNote, p.releaseAuthor = 0, "", ""
-	p.editingRelease, p.releaseNoteDraft = 0, ""
+	p.deployCommits, p.deployCommitsLoaded, p.deployLabel = nil, false, uuid.Nil
+	p.deployDialog = false
 	p.draftVersions.Forget()
 	clear(p.staleScenes)
 	p.widgetsReloadDeferred = false

@@ -18,12 +18,14 @@ import (
 // is never a conflict with an edit.
 
 // loadHistoryLabels (re)loads the labels of the Organization: the menu of
-// every saved state of the history. A label created, renamed, recolored or
-// deleted elsewhere arrives here through the server's stream, as does an
-// assignment.
+// every saved state of the history and the filter of the Deploy window. A
+// label created, renamed, recolored or deleted elsewhere arrives here through
+// the server's stream, as does an assignment; a deleted one takes a filter that
+// named it back to All labels (task 85_5).
 func (p *Project) loadHistoryLabels(ctx app.Context) {
 	uiutil.Load(ctx, &p.historyLabelsReloader, p.client.Labels, func(ctx app.Context, list []apiv0.LabelResponse) {
 		p.historyLabels = list
+		p.resetDeployLabelIfGone(ctx)
 		ctx.Update()
 	}, p.loadHistoryLabels)
 }

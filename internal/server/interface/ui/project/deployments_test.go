@@ -1,7 +1,6 @@
 package project
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -88,42 +87,5 @@ func TestDeploymentsDialog_ReloadsOnDeploymentCreated(t *testing.T) {
 
 	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-deployment-row="2"`) {
 		t.Errorf("the open list did not pick up the new Deployment: %s", html)
-	}
-}
-
-// TestDeploymentCreatedEventReloadsTheReleaseList: a Deploy in another tab
-// moves the running mark without a reload of the page (task 72_4).
-func TestDeploymentCreatedEventReloadsTheReleaseList(t *testing.T) {
-	url, api := newServer(t)
-	createScene(t, api, "First")
-	deployDraft(t, api)
-	createScene(t, api, "Second")
-	state, err := api.DraftState(context.Background())
-	if err != nil {
-		t.Fatalf("draft state: %v", err)
-	}
-	if _, err := api.SaveCommit(context.Background(), apiv0.CreateCommitRequest{Version: state.Version, Title: "Second", Author: "Ada"}); err != nil {
-		t.Fatalf("save: %v", err)
-	}
-	released, err := api.CreateRelease(context.Background(), apiv0.CreateProjectReleaseRequest{Commit: 2, Author: "Ada"})
-	if err != nil {
-		t.Fatalf("release: %v", err)
-	}
-	f := mount(t, url, api)
-	f.p.deployDialog = true
-	f.p.loadReleases(f.p.compoCtx)
-	f.p.loadDeploy(f.p.compoCtx)
-	f.run()
-
-	if _, err := api.DeployRelease(context.Background(), released.Number); err != nil {
-		t.Fatalf("deploy release: %v", err)
-	}
-	f.event(apiv0.Event{Type: apiv0.EventDeploymentCreated})
-	f.run()
-	f.noToasts()
-
-	html := app.HTMLString(f.p.Render())
-	if !strings.Contains(html, `data-release-running="1"`) {
-		t.Errorf("the release list did not follow the Deployment: %s", html)
 	}
 }

@@ -22,6 +22,7 @@ func at(day, hour int) time.Time {
 func TestScreen_RowsAndActions(t *testing.T) {
 	s := New()
 	s.Loaded = true
+	s.ShowRelease = true
 	s.Rows = []Row{
 		{Number: 2, Title: "Second save", Author: "Ada", SavedAt: at(13, 21), Released: true, Release: 3, Note: "for the demo"},
 		{Number: 1, Title: "First save", Author: "Bob", SavedAt: at(12, 10)},
@@ -51,6 +52,25 @@ func TestScreen_RowsAndActions(t *testing.T) {
 	}
 	if strings.Contains(html, `data-saved-state-release="1"`) {
 		t.Errorf("a saved state no Release published names one: %s", html)
+	}
+}
+
+// TestScreen_WithoutRelease: a mode that shows no Release draws the name, the
+// labels and the Load alone (task 85_5).
+func TestScreen_WithoutRelease(t *testing.T) {
+	s := New()
+	s.Loaded = true
+	s.Rows = []Row{{Number: 1, Title: "First save", Author: "Ada", SavedAt: at(12, 10),
+		Released: true, Release: 3, Note: "for the demo"}}
+	html := app.HTMLString(s.Render())
+
+	if !strings.Contains(html, ">Load<") {
+		t.Errorf("the row offers no load: %s", html)
+	}
+	for _, unwant := range []string{`data-saved-state-release`, "Release 3", "Make Release"} {
+		if strings.Contains(html, unwant) {
+			t.Errorf("the row still shows %q: %s", unwant, html)
+		}
 	}
 }
 

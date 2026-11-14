@@ -93,7 +93,7 @@ var errorMappings = []errorMapping{
 	{draft.ErrNothingToRedo, http.StatusConflict, projectResource,
 		"Nothing to redo: nothing was undone, or a new change replaced the redo tail"},
 	{application.ErrNothingToDeploy, http.StatusConflict, projectReleaseResource,
-		"Nothing to deploy: this Release is the deployment the project runs"},
+		"Nothing to deploy: this saved state is the deployment the project runs"},
 	{application.ErrNoDeploymentToDiscard, http.StatusConflict, projectResource,
 		"Nothing to revert: the project runs no deployment"},
 	{application.ErrNothingToDiscard, http.StatusConflict, projectResource,

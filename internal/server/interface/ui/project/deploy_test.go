@@ -57,16 +57,12 @@ func TestDeployBar_ShowsTheDeploymentAndItsSavedState(t *testing.T) {
 	}
 }
 
-// TestReleasesDialog_DeploysAReleaseAndMovesTheMark: the list marks the running
-// Release and offers every other one, and a Deploy moves the mark (task 72_4).
-func TestReleasesDialog_DeploysAReleaseAndMovesTheMark(t *testing.T) {
+// TestDeployWindow_DeploysASavedStateAndMovesTheMark: the window marks the
+// running saved state and offers every other one, and a Deploy moves the mark
+// (task 85_5).
+func TestDeployWindow_DeploysASavedStateAndMovesTheMark(t *testing.T) {
 	f := startProject(t)
-	deployDraft(t, f.api)
-	// The running saved state is published as Release 1, so the list has a
-	// running row; a second Commit and Release are not deployed yet.
-	if _, err := f.api.CreateRelease(context.Background(), apiv0.CreateProjectReleaseRequest{Commit: 1, Author: "Ada"}); err != nil {
-		t.Fatalf("release the running saved state: %v", err)
-	}
+	deployDraft(t, f.api) // saved state 1 is running
 	createScene(t, f.api, "Second")
 	state, err := f.api.DraftState(context.Background())
 	if err != nil {
@@ -76,73 +72,69 @@ func TestReleasesDialog_DeploysAReleaseAndMovesTheMark(t *testing.T) {
 		Version: state.Version, Title: "Second save", Author: "Ada"}); err != nil {
 		t.Fatalf("save commit: %v", err)
 	}
-	if _, err := f.api.CreateRelease(context.Background(), apiv0.CreateProjectReleaseRequest{Commit: 2, Author: "Ada"}); err != nil {
-		t.Fatalf("release: %v", err)
-	}
 
 	f.p.openDeployDialog(f.p.compoCtx)
 	f.run()
 	f.p.loadDeploy(f.p.compoCtx)
 	f.run()
 	html := app.HTMLString(f.p.Render())
-	if !strings.Contains(html, `data-release-running="1"`) {
-		t.Errorf("Release 1 is not marked running: %s", html)
+	if !strings.Contains(html, `data-saved-state-running="1"`) {
+		t.Errorf("saved state 1 is not marked running: %s", html)
 	}
-	if !strings.Contains(html, `data-release-deploy="2"`) {
-		t.Errorf("Release 2 is not offered for Deploy: %s", html)
+	if !strings.Contains(html, `data-saved-state-deploy="2"`) {
+		t.Errorf("saved state 2 is not offered for Deploy: %s", html)
 	}
 
-	f.p.doDeployRelease(f.p.compoCtx, 2)
+	f.p.doDeploySavedState(f.p.compoCtx, 2)
 	f.run()
-	if got := f.oneToast(); !strings.Contains(got.Title, "Release 2 deployed") {
+	if got := f.oneToast(); !strings.Contains(got.Title, "Saved state 2 deployed") ||
+		!strings.Contains(got.Detail, "Deployment 2 is running") {
 		t.Errorf("the Deploy showed %+v, want its confirmation", got)
 	}
 	if f.p.deployment.CommitNumber == nil || *f.p.deployment.CommitNumber != 2 {
 		t.Fatalf("the running saved state after the Deploy: %+v", f.p.deployment)
 	}
 	html = app.HTMLString(f.p.Render())
-	if !strings.Contains(html, `data-release-running="2"`) || strings.Contains(html, `data-release-running="1"`) {
-		t.Errorf("the running mark did not move to Release 2: %s", html)
+	if !strings.Contains(html, `data-saved-state-running="2"`) || strings.Contains(html, `data-saved-state-running="1"`) {
+		t.Errorf("the running mark did not move to saved state 2: %s", html)
 	}
 }
 
-// TestReleasesDialog_DeploymentWithoutSavedState: a Deployment from a file, or
+// TestDeployWindow_DeploymentWithoutSavedState: a Deployment from a file, or
 // one made before saved states were deployed, is shown as one with no saved
-// state and a Release is offered (task 85_4).
-func TestReleasesDialog_DeploymentWithoutSavedState(t *testing.T) {
+// state and a saved state is offered (task 85_4, task 85_5).
+func TestDeployWindow_DeploymentWithoutSavedState(t *testing.T) {
 	f := startProject(t)
 	f.p.deployed = true
 	f.p.deploymentLoaded = true
 	f.p.deployment = apiv0.DeploymentResponse{Number: 4, DeployedAt: "2026-11-04T10:00:00Z"}
-	f.p.releases = []apiv0.ReleaseResponse{{Number: 1, Title: "First"}}
-	f.p.releasesLoaded = true
+	f.p.deployCommits = []apiv0.CommitResponse{{Number: 1, Title: "First"}}
+	f.p.deployCommitsLoaded = true
 	f.p.deployDialog = true
 
 	html := app.HTMLString(f.p.Render())
 	if !strings.Contains(html, "Running Deployment 4 (no saved state)") {
-		t.Errorf("the list does not say the Deployment has no saved state: %s", html)
+		t.Errorf("the window does not say the Deployment has no saved state: %s", html)
 	}
 	if !strings.Contains(html, "Deployment 4 · no saved state") {
 		t.Errorf("the bar does not say the running Deployment has no saved state: %s", html)
 	}
-	if !strings.Contains(html, `data-release-deploy="1"`) {
-		t.Errorf("the list does not offer the Release for Deploy: %s", html)
+	if !strings.Contains(html, `data-saved-state-deploy="1"`) {
+		t.Errorf("the window does not offer the saved state for Deploy: %s", html)
 	}
 }
 
-// TestDeployRelease_ServerRefusalIsAToast: another user deploys the Release the
-// list shows as deployable. The server's 409 must reach the user as a toast.
-func TestDeployRelease_ServerRefusalIsAToast(t *testing.T) {
+// TestDeploySavedState_ServerRefusalIsAToast: another user deploys the saved
+// state the window shows as deployable. The server's 409 must reach the user as
+// a toast (task 85_5).
+func TestDeploySavedState_ServerRefusalIsAToast(t *testing.T) {
 	f := startProject(t)
 	deployDraft(t, f.api)
-	if _, err := f.api.CreateRelease(context.Background(), apiv0.CreateProjectReleaseRequest{Commit: 1, Author: "Ada"}); err != nil {
-		t.Fatalf("release the running saved state: %v", err)
-	}
 	f.p.loadDeploy(f.p.compoCtx)
-	f.p.loadReleases(f.p.compoCtx)
+	f.p.openDeployDialog(f.p.compoCtx)
 	f.run()
 
-	f.p.doDeployRelease(f.p.compoCtx, 1)
+	f.p.doDeploySavedState(f.p.compoCtx, 1)
 	f.run()
 
 	if got := f.oneToast(); !strings.Contains(got.Title, "running already") {
@@ -314,7 +306,7 @@ func TestLoadSavedState_WithoutThatSavedStateIsAToast(t *testing.T) {
 }
 
 // failDeploymentRead fails the GET of the Deployment alone: the rest of the
-// mode works, so a test sees what the Release list says when the running one
+// mode works, so a test sees what the Deploy window says when the running one
 // cannot be checked.
 type failDeploymentRead struct{}
 
@@ -325,15 +317,13 @@ func (failDeploymentRead) RoundTrip(r *http.Request) (*http.Response, error) {
 	return http.DefaultTransport.RoundTrip(r)
 }
 
-// TestReleasesDialog_UnknownDeployment: a failed read of the Deployment is not
-// "not deployed": the list says the running Release cannot be checked, and the
-// list itself stays readable because it is the Engineering node's (task 72_4).
-func TestReleasesDialog_UnknownDeployment(t *testing.T) {
+// TestDeployWindow_UnknownDeployment: a failed read of the Deployment is not
+// "not deployed": the window says the running saved state cannot be checked,
+// and the list itself stays readable because it is the Engineering node's
+// (task 72_4; task 85_5).
+func TestDeployWindow_UnknownDeployment(t *testing.T) {
 	url, api := newServer(t)
 	deployDraft(t, api)
-	if _, err := api.CreateRelease(context.Background(), apiv0.CreateProjectReleaseRequest{Commit: 1, Author: "Ada"}); err != nil {
-		t.Fatalf("release the running saved state: %v", err)
-	}
 	f := mountWith(t, url, api, &http.Client{Transport: failDeploymentRead{}})
 	f.run()
 	f.e.TakeToasts() // the failed read of the Deployment is the toast of its load
@@ -349,10 +339,10 @@ func TestReleasesDialog_UnknownDeployment(t *testing.T) {
 	f.run()
 	f.e.TakeToasts()
 	html := app.HTMLString(f.p.Render())
-	if !strings.Contains(html, "data-release-running-unknown") {
-		t.Errorf("the list does not say the running Release cannot be checked: %s", html)
+	if !strings.Contains(html, "data-saved-state-running-unknown") {
+		t.Errorf("the window does not say the running saved state cannot be checked: %s", html)
 	}
-	if !strings.Contains(html, `data-release-row="1"`) {
+	if !strings.Contains(html, `data-saved-state-deploy-row="1"`) {
 		t.Errorf("the list is not shown without the Deployment: %s", html)
 	}
 }

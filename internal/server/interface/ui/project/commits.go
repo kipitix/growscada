@@ -104,8 +104,8 @@ func (p *Project) saveCommit(ctx app.Context) {
 	})
 }
 
-// changeAuthor asks for the author name the Save and Release dialogs fill in.
-// It is no lock: it blocks nobody and only fills in the dialogs (task 72_6).
+// changeAuthor asks for the author name the Save dialog fills in. It is no
+// lock: it blocks nobody and only fills in the dialog (task 72_6).
 func (p *Project) changeAuthor(ctx app.Context) {
 	name, ok := prompt("Author:", p.saveAuthor)
 	if !ok {
@@ -128,11 +128,11 @@ func prompt(message, value string) (string, bool) {
 }
 
 // openHistory shows the saved states of the project, read afresh (task 84): a
-// screen of its own, in place of the content.
+// screen of its own, in place of the content. The mode knows no Release, so the
+// rows carry the saved states and their labels alone (task 85_5).
 func (p *Project) openHistory(ctx app.Context) {
 	p.historyScreen = true
 	p.loadCommits(ctx)
-	p.loadReleases(ctx)
 	p.loadHistoryLabels(ctx)
 	ctx.Update()
 }
@@ -163,41 +163,8 @@ func (p *Project) renameSavedState(ctx app.Context, number int, title string) {
 	}, nil)
 }
 
-// releaseSavedState opens the publication of the saved state the screen named.
-func (p *Project) releaseSavedState(ctx app.Context, number int) {
-	for _, saved := range p.commits {
-		if saved.Number == number {
-			p.openReleaseDialog(number)
-			return
-		}
-	}
-}
-
-// editSavedStateReleaseNote changes the note of the Release that published the
-// saved state, after asking for it: the note is metadata and states no Version
-// (task 72_3, task 84).
-func (p *Project) editSavedStateReleaseNote(ctx app.Context, number int) {
-	for _, released := range p.releases {
-		if released.CommitNumber != number {
-			continue
-		}
-		note, ok := prompt(fmt.Sprintf("Note of release %d:", released.Number), released.Note)
-		if !ok {
-			return
-		}
-		callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.ReleaseResponse, error) {
-			return pc.UpdateReleaseNote(c, released.Number, apiv0.UpdateReleaseNoteRequest{Note: note})
-		}, func(ctx app.Context, _ apiv0.ReleaseResponse) {
-			p.loadReleases(ctx)
-			p.loadCommits(ctx)
-			ctx.Update()
-		}, nil)
-		return
-	}
-}
-
-// renderCommitBar is the panel's Save, its unsaved-changes indicator, History
-// and Releases (task 72_2, task 72_6; task 84).
+// renderCommitBar is the panel's Save, its unsaved-changes indicator and
+// History (task 72_2, task 72_6; task 84).
 func (p *Project) renderCommitBar() []app.UI {
 	saveTitle := "Save the Draft as a saved state"
 	switch {
@@ -233,7 +200,7 @@ func (p *Project) renderCommitBar() []app.UI {
 	return body
 }
 
-// renderAuthorBar shows the author the Save and Release dialogs fill in, with
+// renderAuthorBar shows the author the Save dialog fills in, with
 // a button to change it: it is not a lock and blocks nobody (task 72_6).
 func (p *Project) renderAuthorBar() app.UI {
 	name := strings.TrimSpace(p.saveAuthor)
@@ -350,8 +317,9 @@ func saveConfirmLabel(saving bool) string {
 }
 
 // renderHistoryScreen is the history of the project's saved states (task 84):
-// the screen both modes share, fed with this project's history and the Releases
-// that published it.
+// the screen both modes share, fed with this project's history and its labels.
+// A Release is not part of the Project mode any more, so the screen draws no
+// Release and offers no Make Release here (task 85_5).
 func (p *Project) renderHistoryScreen() app.UI {
 	screen := p.history
 	screen.Rows = p.historyRows()
@@ -360,11 +328,9 @@ func (p *Project) renderHistoryScreen() app.UI {
 	screen.AllLabels = p.historyLabels
 	screen.OnBack = func(ctx app.Context) { p.closeHistory() }
 	screen.OnLoad = func(ctx app.Context, number int) { p.loadSavedState(ctx, number) }
-	screen.OnRelease = func(ctx app.Context, number int) { p.releaseSavedState(ctx, number) }
 	screen.OnRename = func(ctx app.Context, number int, title string) {
 		p.renameSavedState(ctx, number, title)
 	}
-	screen.OnNote = func(ctx app.Context, number int) { p.editSavedStateReleaseNote(ctx, number) }
 	screen.OnAssign = func(ctx app.Context, number int, labelID uuid.UUID) {
 		p.assignLabel(ctx, number, labelID)
 	}
@@ -375,27 +341,19 @@ func (p *Project) renderHistoryScreen() app.UI {
 	return screen
 }
 
-// historyRows joins the history with the Releases that published it: a saved
-// state a Release published carries that Release's number and note, and each
-// carries the labels that mark it (task 84, task 85_3).
+// historyRows is the history as the screen draws it: each saved state with the
+// labels that mark it (task 84, task 85_3). No Release is joined: a Deploy takes
+// the saved state itself (task 85_5).
 func (p *Project) historyRows() []savedstates.Row {
 	rows := make([]savedstates.Row, len(p.commits))
 	for i, saved := range p.commits {
-		row := savedstates.Row{
-			Number:   saved.Number,
-			Title:    saved.Title,
-			Author:   saved.Author,
-			SavedAt:  saved.CreatedAt,
-			Labels:   saved.Labels,
-			Released: saved.Released,
+		rows[i] = savedstates.Row{
+			Number:  saved.Number,
+			Title:   saved.Title,
+			Author:  saved.Author,
+			SavedAt: saved.CreatedAt,
+			Labels:  saved.Labels,
 		}
-		for _, released := range p.releases {
-			if released.CommitNumber == saved.Number {
-				row.Release, row.Note = released.Number, released.Note
-				break
-			}
-		}
-		rows[i] = row
 	}
 	return rows
 }

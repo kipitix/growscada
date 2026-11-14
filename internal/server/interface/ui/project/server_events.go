@@ -25,6 +25,11 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 		if !ok || !eventlog.ForProject(a, p.projectID) {
 			return
 		}
+		if ev.Type == apiv0.EventReleaseCreated || ev.Type == apiv0.EventReleaseNoteUpdated {
+			// The Project mode knows no Release (task 85_5): its history and
+			// Deploy window show saved states alone.
+			return
+		}
 		p.tags = eventlog.ApplyToTags(p.tags, ev)
 		if ev.Type == eventlog.EventResync || ev.Type == eventlog.EventProjectResync {
 			// Events were lost: the server may have gone back, the stack with
@@ -44,10 +49,12 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 		}
 		if targets.Deploy {
 			// A Deploy, a Rollback or a file deploy: the running Deployment and
-			// the Release it came from, which the list marks (task 72_4). A
-			// write of the Draft changes neither.
+			// the saved state it came from, which the window marks (task 72_4;
+			// task 85_5). A write of the Draft changes neither.
 			p.loadDeploy(ctx)
-			p.loadReleases(ctx)
+			if p.deployDialog {
+				p.loadDeployCommits(ctx)
+			}
 			if p.deploymentsDialog {
 				p.loadDeployments(ctx)
 			}
@@ -76,13 +83,14 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 		if targets.Commits {
 			p.loadCommits(ctx)
 			p.loadUnsavedChanges(ctx) // a Save makes the Draft its Commit's content
-		}
-		if targets.Releases {
-			p.loadReleases(ctx)
+			if p.deployDialog {
+				p.loadDeployCommits(ctx) // the window lists the saved states too
+			}
 		}
 		if eventlog.IsLabelEvent(ev.Type) {
-			// The chips of the history and the labels its menu offers follow a
-			// label of the Organization or one of its assignments (task 85_3).
+			// The chips of the history and of the Deploy window, and the labels
+			// its filter offers, follow a label of the Organization or one of
+			// its assignments (task 85_3, task 85_5).
 			p.loadHistoryLabels(ctx)
 		}
 	})

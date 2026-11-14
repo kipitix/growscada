@@ -5,7 +5,8 @@
 // back: it knows nothing of the API, of a Draft or of a Release beyond the
 // numbers and words a row carries. The labels of a saved state are drawn here
 // alone: colored chips and a menu of the Organization's labels (task 85_3;
-// ADR 0025).
+// ADR 0025). A mode that no longer publishes saved states shows no Release and
+// no Make Release (task 85_5).
 package savedstates
 
 import (
@@ -55,6 +56,11 @@ type Screen struct {
 	// AllLabels are the labels of the Organization, the menu of every row:
 	// a saved state may carry any number of them (task 85_3).
 	AllLabels []apiv0.LabelResponse
+
+	// ShowRelease draws the Release that published a saved state and the Make
+	// Release action. A mode that no longer publishes saved states leaves it
+	// false and shows the names, the labels and the Load alone (task 85_5).
+	ShowRelease bool
 
 	// OnBack shows the Draft again; OnLoad, OnRelease, OnRename and OnNote
 	// act on the row they name. OnAssign places a label on the row's saved
@@ -146,11 +152,12 @@ func (s *Screen) Render() app.UI {
 // renderRow is one saved state: the time it was saved, its name and labels —
 // edited in place —, the Release that published it, its author, and the two
 // actions that end it: load it into the Draft, or publish it as the next
-// Release.
+// Release. A mode that shows no Release draws the name, the labels and the Load
+// alone (task 85_5).
 func (s *Screen) renderRow(row Row) app.UI {
 	number := strconv.Itoa(row.Number)
 	details := []app.UI{s.renderName(row)}
-	if row.Released {
+	if row.Released && s.ShowRelease {
 		details = append(details, s.renderRelease(row))
 	}
 	details = append(details, s.renderLabels(row))
@@ -162,16 +169,20 @@ func (s *Screen) renderRow(row Row) app.UI {
 				s.OnLoad(ctx, row.Number)
 			}
 		}, app.EventScope("load/"+number))
-	release := uiutil.Button("Make Release", "accent", !row.Released,
-		"Publish this saved state as the next Release",
-		uiutil.ButtonRow, func(ctx app.Context, e app.Event) {
-			if s.OnRelease != nil {
-				s.OnRelease(ctx, row.Number)
-			}
-		}, app.EventScope("release/"+number))
-	if row.Released {
-		release = uiutil.Button("Released", "", false, "A Release publishes this saved state",
-			uiutil.ButtonRow, func(app.Context, app.Event) {}, app.EventScope("released/"+number))
+	actions := []app.UI{load}
+	if s.ShowRelease {
+		release := uiutil.Button("Make Release", "accent", !row.Released,
+			"Publish this saved state as the next Release",
+			uiutil.ButtonRow, func(ctx app.Context, e app.Event) {
+				if s.OnRelease != nil {
+					s.OnRelease(ctx, row.Number)
+				}
+			}, app.EventScope("release/"+number))
+		if row.Released {
+			release = uiutil.Button("Released", "", false, "A Release publishes this saved state",
+				uiutil.ButtonRow, func(app.Context, app.Event) {}, app.EventScope("released/"+number))
+		}
+		actions = append(actions, release)
 	}
 
 	return app.Div().
@@ -196,8 +207,7 @@ func (s *Screen) renderRow(row Row) app.UI {
 				Style("font-size", "11px").
 				Style("color", "var(--text-muted)").
 				Text(row.Author),
-			load,
-			release,
+			app.Span().Style("display", "flex").Style("gap", "4px").Body(actions...),
 		)
 }
 
@@ -268,7 +278,7 @@ func (s *Screen) renderLabels(row Row) app.UI {
 	chipsBody := []app.UI{}
 	for _, l := range row.Labels {
 		assigned[l.ID] = true
-		chipsBody = append(chipsBody, renderChip(l))
+		chipsBody = append(chipsBody, LabelChip(l))
 	}
 	chipsBody = append(chipsBody, uiutil.Button("+ label", "", true, "Label this saved state", uiutil.ButtonRow,
 		func(ctx app.Context, e app.Event) {
@@ -349,9 +359,11 @@ func (s *Screen) renderLabelMenu(row Row, assigned map[uuid.UUID]bool) app.UI {
 		Body(items...)
 }
 
-// renderChip is one label of a saved state: a small colored chip that always
-// shows the name, so the color is never the only difference.
-func renderChip(l apiv0.LabelResponse) app.UI {
+// LabelChip is one label of a saved state: a small colored chip that always
+// shows the name, so the color is never the only difference. The history and
+// the Deploy window draw the labels of a saved state with it (task 85_3,
+// task 85_5).
+func LabelChip(l apiv0.LabelResponse) app.UI {
 	border, text := "var(--border)", "var(--text-muted)"
 	if l.Color != "" {
 		border, text = l.Color, "var(--text)"

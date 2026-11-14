@@ -34,9 +34,9 @@ func invalidInput(err error) error {
 // edit conflict there is nothing for the caller to reload, only to retry later.
 var ErrRaceLost = errors.New("write race lost on every attempt")
 
-// ErrNothingToDeploy matches (errors.Is) a Deploy refused because the Release
-// it names is the Deployment the Project runs already (task 72_4), or because
-// a project file is the running Deployment's (ADR 0018).
+// ErrNothingToDeploy matches (errors.Is) a Deploy refused because the saved
+// state it names is the Deployment the Project runs already (task 72_4,
+// task 85_4), or because a project file is the running Deployment's (ADR 0018).
 var ErrNothingToDeploy = errors.New("nothing to deploy")
 
 // ErrNothingToDiscard matches (errors.Is) a Discard refused because the

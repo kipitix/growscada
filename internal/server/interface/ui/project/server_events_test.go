@@ -89,12 +89,9 @@ var mainContent = apiv0.PathPrefix + apiv0.ProjectPath(servertest.MainProject.St
 // scenePath is the request of the Scene id.
 func scenePath(id uuid.UUID) string { return "GET " + mainContent + "/scenes/" + id.String() }
 
-// deployPath is the request of the deployment state, releasesPath the list
-// whose running mark follows it: every Deploy changes both (task 72_4).
-var (
-	deployPath   = "GET " + mainContent + "/deployment"
-	releasesPath = "GET " + mainContent + apiv0.ReleasePath
-)
+// deployPath is the request of the deployment state: every Deploy changes it,
+// and the Deploy window's running mark follows it (task 72_4, task 85_5).
+var deployPath = "GET " + mainContent + "/deployment"
 
 // changesPath is the read of the DraftChange stack: every write of the Draft's
 // content is one change (ADR 0017).
@@ -352,17 +349,33 @@ func TestServerEvents_OfAnotherProject_Dropped(t *testing.T) {
 	}
 }
 
-// TestDeploymentCreated_RereadsTheDeploymentAndItsReleases: a Deploy in another
-// tab moves the running Release; a write of the Draft changes neither the
-// Deployment nor the list, so it does not reread them (task 72_4).
-func TestDeploymentCreated_RereadsTheDeploymentAndItsReleases(t *testing.T) {
+// TestDeploymentCreated_RereadsTheDeployment: a Deploy in another tab moves the
+// running saved state; a write of the Draft changes neither the Deployment nor
+// the window, so it does not reread them (task 72_4; task 85_5).
+func TestDeploymentCreated_RereadsTheDeployment(t *testing.T) {
 	url, api := newServer(t)
 	f, log := mountLogged(t, url, api)
 
 	f.event(apiv0.Event{Type: apiv0.EventDeploymentCreated})
 
 	f.noToasts()
-	if got, want := log.take(), []string{deployPath, releasesPath}; !slices.Equal(got, want) {
+	if got, want := log.take(), []string{deployPath}; !slices.Equal(got, want) {
 		t.Errorf("requests: %v, want %v", got, want)
+	}
+}
+
+// TestReleaseEvents_AreIgnored: the Project mode knows no Release (task 85_5),
+// so its events change nothing here: the history and the Deploy window are the
+// saved states'.
+func TestReleaseEvents_AreIgnored(t *testing.T) {
+	url, api := newServer(t)
+	f, log := mountLogged(t, url, api)
+
+	f.event(apiv0.Event{Type: apiv0.EventReleaseCreated})
+	f.event(apiv0.Event{Type: apiv0.EventReleaseNoteUpdated})
+
+	f.noToasts()
+	if got := log.take(); len(got) != 0 {
+		t.Errorf("requests on a Release event: %v, want none", got)
 	}
 }

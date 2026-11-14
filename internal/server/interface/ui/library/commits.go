@@ -383,6 +383,9 @@ func (l *Library) renderHistoryScreen() app.UI {
 	screen.AllLabels = l.historyLabels
 	screen.OnBack = func(ctx app.Context) { l.closeHistory() }
 	screen.OnLoad = func(ctx app.Context, number int) { l.loadSavedState(number) }
+	// The Library still publishes a saved state as a Release until task 85_7
+	// removes Releases; the Project mode does not (task 85_5).
+	screen.ShowRelease = true
 	screen.OnRelease = func(ctx app.Context, number int) { l.releaseSavedState(ctx, number) }
 	screen.OnRename = func(ctx app.Context, number int, title string) {
 		l.renameSavedState(ctx, number, title)

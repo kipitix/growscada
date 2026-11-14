@@ -57,10 +57,13 @@ func TestSaveCommit_HistoryRowAndIndicator(t *testing.T) {
 	if !strings.Contains(html, `data-history-screen`) || !strings.Contains(html, `data-saved-state-row="1"`) {
 		t.Errorf("the history does not show saved state 1: %s", html)
 	}
-	// The row's two actions are the load of the saved state and its release
-	// (task 84).
-	if !strings.Contains(html, `>Load<`) || !strings.Contains(html, `>Make Release<`) {
-		t.Errorf("the row offers no load and no release: %s", html)
+	// The row's action is the load of the saved state: the Project mode knows
+	// no Release (task 85_5).
+	if !strings.Contains(html, `>Load<`) {
+		t.Errorf("the row offers no load: %s", html)
+	}
+	if strings.Contains(html, `>Make Release<`) {
+		t.Errorf("the row still offers a Release: %s", html)
 	}
 }
 
@@ -124,8 +127,8 @@ func TestSaveShortcut_WithChangesOpensTheDialog(t *testing.T) {
 	}
 }
 
-// TestAuthorBar_ShowsTheStoredName: the header names the author the Save and
-// Release dialogs fill in, with a button to change it — not a lock (task 72_6).
+// TestAuthorBar_ShowsTheStoredName: the header names the author the Save dialog
+// fills in, with a button to change it — not a lock (task 72_6).
 func TestAuthorBar_ShowsTheStoredName(t *testing.T) {
 	f := startProject(t)
 	f.run()
