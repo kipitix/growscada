@@ -58,6 +58,25 @@ func (f *fixture) labels() []apiv0.LabelResponse {
 	return list
 }
 
+// findLabel returns the label named name; the list also holds the two labels
+// the migrations seed, so a test reads its own by name instead of by position
+// (task 85_2; ADR 0025).
+func findLabel(t *testing.T, list []apiv0.LabelResponse, name string) apiv0.LabelResponse {
+	t.Helper()
+	found := 0
+	var label apiv0.LabelResponse
+	for _, l := range list {
+		if l.Name == name {
+			found++
+			label = l
+		}
+	}
+	if found != 1 {
+		t.Fatalf("the labels named %q: %d, want one (all: %+v)", name, found, list)
+	}
+	return label
+}
+
 // TestDialog_ListsTheLabels: the window shows every label with its color chip
 // and the number of saved states it marks (task 85_2).
 func TestDialog_ListsTheLabels(t *testing.T) {
@@ -90,8 +109,8 @@ func TestDialog_Create(t *testing.T) {
 	f.e.ConsumeAll()
 
 	list := f.labels()
-	if len(list) != 1 || list[0].Name != "Deployable" || list[0].Color != "#3b82f6" {
-		t.Fatalf("the created labels: %+v", list)
+	if created := findLabel(t, list, "Deployable"); created.Color != "#3b82f6" {
+		t.Fatalf("the created label: %+v", created)
 	}
 	if f.d.newName != "" || f.d.newColor != "" || f.d.newError != "" {
 		t.Errorf("the new row after a create: %q %q %q", f.d.newName, f.d.newColor, f.d.newError)
@@ -140,23 +159,21 @@ func TestDialog_RenameAndRecolor(t *testing.T) {
 	f.e.ConsumeAll()
 
 	list := f.labels()
-	if len(list) != 1 || list[0].Name != "Deployable" {
-		t.Fatalf("the renamed labels: %+v", list)
-	}
-	f.d.openPalette(list[0])
+	renamed := findLabel(t, list, "Deployable")
+	f.d.openPalette(renamed)
 	f.d.paletteText = "#22c55e"
 	f.d.applyColor(f.d.compoCtx, f.d.paletteText)
 	f.e.ConsumeAll()
 
-	list = f.labels()
-	if len(list) != 1 || list[0].Color != "#22c55e" {
-		t.Fatalf("the recolored label: %+v", list)
+	recolored := findLabel(t, f.labels(), "Deployable")
+	if recolored.Color != "#22c55e" {
+		t.Fatalf("the recolored label: %+v", recolored)
 	}
-	f.d.openPalette(list[0])
+	f.d.openPalette(recolored)
 	f.d.applyColor(f.d.compoCtx, "")
 	f.e.ConsumeAll()
-	if list = f.labels(); len(list) != 1 || list[0].Color != "" {
-		t.Errorf("the cleared color: %+v", list)
+	if cleared := findLabel(t, f.labels(), "Deployable"); cleared.Color != "" {
+		t.Errorf("the cleared color: %+v", cleared)
 	}
 }
 
@@ -169,7 +186,7 @@ func TestDialog_DeleteAsksFirst(t *testing.T) {
 	}
 	f.d.load(f.d.compoCtx)
 	f.e.ConsumeAll()
-	row := f.d.labels[0]
+	row := findLabel(t, f.d.labels, "Ready")
 
 	f.d.startDelete(row)
 	html := f.html()
@@ -179,16 +196,18 @@ func TestDialog_DeleteAsksFirst(t *testing.T) {
 	if !strings.Contains(html, "Ready") || !strings.Contains(html, "0 saved states") {
 		t.Errorf("the confirmation does not name the label and its count: %s", html)
 	}
-	if len(f.labels()) != 1 {
+	if !strings.Contains(f.html(), `data-label-row="`+row.ID.String()+`"`) {
 		t.Fatalf("the label is gone before the confirmation")
 	}
 
 	f.d.commitDelete(f.d.compoCtx)
 	f.e.ConsumeAll()
-	if list := f.labels(); len(list) != 0 {
-		t.Errorf("the deleted label is still stored: %+v", list)
+	for _, l := range f.labels() {
+		if l.ID == row.ID {
+			t.Errorf("the deleted label is still stored: %+v", l)
+		}
 	}
-	if strings.Contains(f.html(), "Ready") {
+	if strings.Contains(f.html(), `data-label-row="`+row.ID.String()+`"`) {
 		t.Errorf("the deleted label is still shown: %s", f.html())
 	}
 }

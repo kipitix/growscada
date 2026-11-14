@@ -22,8 +22,14 @@ runtime:
       operator: isDefined
     - expression: 'res.body.labels'
       operator: isArray
+    # The migrations seed these two, ordered by name ignoring case; the flow
+    # creates its own label after this read (task 85_2; ADR 0025).
     - expression: 'res.body.labels[0].name'
-      operator: isString
+      operator: eq
+      value: '"ready_for_deploy"'
+    - expression: 'res.body.labels[1].name'
+      operator: eq
+      value: '"ready_for_import"'
     - expression: 'res.body.labels[0].assigned_count'
       operator: eq
       value: '0'

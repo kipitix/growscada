@@ -221,7 +221,11 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 		"DELETE FROM engineering.widgets; "+
 		"DELETE FROM engineering.scenes; DELETE FROM engineering.library_pins; DELETE FROM engineering.libraries; "+
 		"DELETE FROM outbox; DELETE FROM policy_jobs; "+
-		"DELETE FROM user_settings; DELETE FROM engineering.labels; "+
+		"DELETE FROM user_settings; "+
+		// The labels the tests made go; the two the migrations seed stay, so
+		// every test sees a migrated database (task 85_2; ADR 0025).
+		"DELETE FROM engineering.labels "+
+		"WHERE id NOT IN ('f1000000-0000-4000-8000-000000000001', 'f1000000-0000-4000-8000-000000000002'); "+
 		"DELETE FROM projects WHERE id <> '"+MainProject.String()+"'; "+
 		// A test that deleted Main may have left its row removed by the
 		// cleanup policy, not only marked.

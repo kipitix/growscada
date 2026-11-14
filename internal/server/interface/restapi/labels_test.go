@@ -105,6 +105,34 @@ func TestLabels_CRUD(t *testing.T) {
 	}
 }
 
+// TestLabels_SeedsOfTheCleanDatabase: a migrated database carries the two
+// starter labels in its one Organization, and the API lists them by name
+// (task 85_2; ADR 0025).
+func TestLabels_SeedsOfTheCleanDatabase(t *testing.T) {
+	cleanTestLabels(t)
+	router := newServices().router()
+	labels := decodeBody[apiv0.GetLabelsResponse](t,
+		serve(router, http.MethodGet, apiv0.PathPrefix+apiv0.LabelPath, nil))
+
+	want := []string{"ready_for_deploy", "ready_for_import"}
+	var got []string
+	for _, l := range labels.Labels {
+		if l.Color != "" || l.AssignedCount != 0 || l.CreatedAt.IsZero() {
+			t.Errorf("the seed label %q: %+v, want no color, no assignment and a time", l.Name, l)
+		}
+		got = append(got, l.Name)
+	}
+	for _, name := range want {
+		found := false
+		for _, l := range labels.Labels {
+			found = found || l.Name == name
+		}
+		if !found {
+			t.Errorf("the seed label %q is missing: %v", name, got)
+		}
+	}
+}
+
 // TestLabels_EventsOnTheServerStream: a label change is a server event, so
 // every tab sees it, and a Project's stream carries its own content alone
 // (task 85_2; ADR 0025).
