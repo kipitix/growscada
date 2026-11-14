@@ -209,7 +209,7 @@ func TestEventsHandlers_GetProjectEvents_StreamsPublishedEvent(t *testing.T) {
 
 // TestEventsHandlers_DeploymentCreated_CarriesTheDeploymentAndStaysInItsProject:
 // the new Deployment reaches the stream of its own Project alone, with its
-// number and time (task 35, Q11).
+// number, time and the saved state it made running (task 35, Q11; task 85_4).
 func TestEventsHandlers_DeploymentCreated_CarriesTheDeploymentAndStaysInItsProject(t *testing.T) {
 	bus := eventbus.NewEventBus()
 	h := restapi.NewEventsHandler(bus, anyProjects{}, 100)
@@ -224,10 +224,12 @@ func TestEventsHandlers_DeploymentCreated_CarriesTheDeploymentAndStaysInItsProje
 	waitFor(t, time.Second, func() bool { return strings.Contains(other.body(), ": connected") })
 
 	at := time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
+	commitNumber := 2
 	bus.Publish(runtimeapp.NewDeploymentCreatedEvent(runtimeapp.Deployment{
-		Number:     3,
-		DeployedAt: at,
-		Content:    projectv0.ProjectFile{Header: projectv0.Header{ProjectID: mainProject}},
+		Number:       3,
+		DeployedAt:   at,
+		CommitNumber: &commitNumber,
+		Content:      projectv0.ProjectFile{Header: projectv0.Header{ProjectID: mainProject}},
 	}))
 	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), "deployment_created") })
 
@@ -243,10 +245,11 @@ func TestEventsHandlers_DeploymentCreated_CarriesTheDeploymentAndStaysInItsProje
 	<-doneOther
 
 	want := map[string]any{
-		"type":        "deployment_created",
-		"id":          mainProject.String(),
-		"deployment":  float64(3),
-		"deployed_at": "2026-11-03T10:00:00Z",
+		"type":          "deployment_created",
+		"id":            mainProject.String(),
+		"deployment":    float64(3),
+		"deployed_at":   "2026-11-03T10:00:00Z",
+		"commit_number": float64(2),
 	}
 	var found bool
 	for _, m := range sseEventMessages(t, rec.body()) {
