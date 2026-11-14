@@ -231,7 +231,7 @@ func TestDraftSaveCommit_Library(t *testing.T) {
 	repo := newWidgetTypeRepo(t)
 	wt := mustCreateWidgetType(t, repo.libraryID, makeWidgetType(t, "gauge", nil, repo))
 	scope := draft.LibraryScope(repo.libraryID)
-	content := draft.NewLibraryCommitContent([]library.ReleasedWidgetType{library.ReleasedFrom(wt)})
+	content := draft.NewLibraryCommitContent([]library.WidgetTypeCopy{library.CopyOf(wt)})
 
 	saved, err := testDrafts().SaveCommit(ctx, scope, libraryDraftVersionOf(t, repo.libraryID), commitTitle(t, "Widgets"), commitAuthor(t), content)
 	if err != nil {

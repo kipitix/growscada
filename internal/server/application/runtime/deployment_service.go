@@ -47,7 +47,7 @@ type DeploymentService interface {
 	// live.
 	Rollback(ctx context.Context, projectID uuid.UUID, n int) (Deployment, error)
 	// DeploymentNamesLibrary reports whether the running Deployment of any live
-	// Project names a Release of this Library in its ProjectFile (task 71): the
+	// Project names a saved state of this Library in its ProjectFile (task 71): the
 	// Engineering node asks before a Library is removed. A Project that runs no
 	// Deployment names nothing.
 	DeploymentNamesLibrary(ctx context.Context, libraryID uuid.UUID) (bool, error)

@@ -86,16 +86,11 @@ func TestDeployCommit_DeploymentAndTagStates(t *testing.T) {
 	if rec := serve(router, http.MethodPost, mainPath+"/commits/abc/deploy", nil); rec.Code != http.StatusBadRequest {
 		t.Errorf("a Deploy of a saved state number that is not a number: %d, want 400", rec.Code)
 	}
-	// The Release route of before task 85_5 deploys the same saved state: the
-	// running one is refused, and a missing Release is 404.
-	if rec := serve(router, http.MethodPost, mainPath+"/releases", apiv0.CreateProjectReleaseRequest{Commit: 1, Author: "Ada"}); rec.Code != http.StatusCreated {
-		t.Fatalf("POST release: %d %s", rec.Code, rec.Body)
-	}
-	if rec := serve(router, http.MethodPost, mainPath+"/releases/1/deploy", nil); rec.Code != http.StatusConflict {
-		t.Errorf("a Deploy of the running saved state through its Release: %d, want 409", rec.Code)
-	}
-	if rec := serve(router, http.MethodPost, mainPath+"/releases/9/deploy", nil); rec.Code != http.StatusNotFound {
-		t.Errorf("a Deploy of a missing Release: %d, want 404", rec.Code)
+	// The Release routes are gone with the Releases: they answer 404, not 410.
+	for _, path := range []string{mainPath + "/releases", mainPath + "/releases/1", mainPath + "/releases/1/deploy"} {
+		if rec := serve(router, http.MethodGet, path, nil); rec.Code != http.StatusNotFound {
+			t.Errorf("GET %s: %d, want 404", path, rec.Code)
+		}
 	}
 	if rec := serve(router, http.MethodPost, mainPath+"/deploy", nil); rec.Code != http.StatusGone {
 		t.Errorf("the removed Deploy of the Draft: %d, want 410", rec.Code)

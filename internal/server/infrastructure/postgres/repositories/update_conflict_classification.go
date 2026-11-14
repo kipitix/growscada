@@ -16,7 +16,6 @@ const (
 	tableNameWidgetTypes        tableName = "engineering.widget_types"
 	tableNameProjects           tableName = "projects"
 	tableNameLibraries          tableName = "engineering.libraries"
-	tableNameReleases           tableName = "engineering.library_releases"
 	tableNameLibraryImports     tableName = "engineering.library_imports"
 	tableNameDevices            tableName = "engineering.devices"
 	tableNameEnvironments       tableName = "engineering.environments"

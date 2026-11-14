@@ -634,9 +634,9 @@ func TestPicker_ReloadsOnServerEvents(t *testing.T) {
 	}
 }
 
-// TestPicker_LibraryStates: the library rows carry the five states of
-// LibraryResponse: never saved, unsaved changes, an unpublished Commit, a
-// published one, and a legacy Release older than Commits (task 73; task 74).
+// TestPicker_LibraryStates: the library rows carry the three states of
+// LibraryResponse: never saved, unsaved changes, and a saved state (task 73;
+// task 74; task 85_7).
 func TestPicker_LibraryStates(t *testing.T) {
 	f := startLibraries(t, nil)
 	ctx := context.Background()
@@ -680,49 +680,16 @@ func TestPicker_LibraryStates(t *testing.T) {
 		t.Errorf("after a write: %+v, want unsaved changes", item)
 	}
 
-	// A Save fixes the Commit, nothing published yet.
+	// A Save fixes the saved state.
 	state, err = lib.DraftState(ctx)
 	if err != nil {
 		t.Fatalf("DraftState: %v", err)
 	}
-	commit, err := lib.SaveCommit(ctx, apiv0.CreateCommitRequest{Version: state.Version, Title: "First", Author: "Ada"})
-	if err != nil {
+	if _, err := lib.SaveCommit(ctx, apiv0.CreateCommitRequest{Version: state.Version, Title: "First", Author: "Ada"}); err != nil {
 		t.Fatalf("SaveCommit: %v", err)
 	}
-	if item := reload(); item.State != StateUnpublishedSavedState || item.StateKind != "unpublished" {
-		t.Errorf("after a Save: %+v, want an unpublished commit", item)
-	}
-
-	// A Release publishes it.
-	if _, err := lib.Release(ctx, apiv0.CreateReleaseRequest{Commit: commit.Number, Author: "Ada"}); err != nil {
-		t.Fatalf("Release: %v", err)
-	}
-	if item := reload(); item.State != StatePublished || item.StateKind != "published" {
-		t.Errorf("after a Release: %+v, want published", item)
-	}
-
-	// A Release older than Commits — a legacy one — is a library whose Draft
-	// has no Commit and one Release.
-	legacyID := uuid.New()
-	if _, err := postgres.DB(t).ExecContext(ctx,
-		`INSERT INTO engineering.libraries (id, organization_id, name, version)
-		 SELECT $1, id, 'Legacy', 1 FROM organizations ORDER BY pk_id LIMIT 1`,
-		legacyID,
-	); err != nil {
-		t.Fatalf("arrange the legacy library: %v", err)
-	}
-	if _, err := postgres.DB(t).ExecContext(ctx,
-		`INSERT INTO engineering.library_releases (library_id, number) VALUES ($1, 1)`,
-		legacyID,
-	); err != nil {
-		t.Fatalf("arrange the legacy release: %v", err)
-	}
-	f.p.load(f.p.compoCtx)
-	f.run()
-	shown := f.p.Displayed()
-	if len(shown) != 2 || shown[0].Name != "Legacy" ||
-		shown[0].State != StateLegacy || shown[0].StateKind != "legacy" {
-		t.Errorf("the legacy library's row: %+v, want it first and legacy", shown)
+	if item := reload(); item.State != StateSaved || item.StateKind != "saved" {
+		t.Errorf("after a Save: %+v, want a saved state", item)
 	}
 }
 

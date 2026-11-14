@@ -303,7 +303,7 @@ func (c *Client) UpdateLibrary(ctx context.Context, id uuid.UUID, req apiv0.Upda
 	return resp, err
 }
 
-// DeleteLibrary deletes a library with its Draft and releases and returns
+// DeleteLibrary deletes a library with its Draft and saved states and returns
 // its last state. The error matches ErrConflict while a project imports it.
 func (c *Client) DeleteLibrary(ctx context.Context, id uuid.UUID) (apiv0.LibraryResponse, error) {
 	var resp apiv0.LibraryResponse
@@ -318,7 +318,7 @@ func (c *Client) getLibraries(ctx context.Context, path string) ([]apiv0.Library
 }
 
 // LibraryClient talks to one library: the WidgetTypes of its Draft, its
-// releases and Discards, under the library's path. A library that is gone
+// saved states and Discards, under the library's path. A library that is gone
 // makes every call fail with an error matching ErrNotFound.
 type LibraryClient struct {
 	c      *Client
@@ -451,39 +451,6 @@ func (l *LibraryClient) DeleteWidgetType(ctx context.Context, id uuid.UUID, vers
 
 func widgetTypePath(id uuid.UUID) string { return "/widget-types/" + id.String() }
 
-// Release publishes a Commit of the library's Draft as the next Library
-// Release (task 72_5; ADR 0021). The error matches ErrConflict if the Commit
-// is released already and ErrNotFound for a library or a Commit it does not
-// have.
-func (l *LibraryClient) Release(ctx context.Context, req apiv0.CreateReleaseRequest) (apiv0.LibraryReleaseResponse, error) {
-	var resp apiv0.LibraryReleaseResponse
-	err := l.do(ctx, http.MethodPost, "/releases", req, http.StatusCreated, &resp)
-	return resp, err
-}
-
-// ListReleases returns every release of the library, oldest first.
-func (l *LibraryClient) ListReleases(ctx context.Context) ([]apiv0.LibraryReleaseResponse, error) {
-	var resp apiv0.GetLibraryReleasesResponse
-	err := l.do(ctx, http.MethodGet, "/releases", nil, http.StatusOK, &resp)
-	return resp.Releases, err
-}
-
-// GetRelease returns the release numbered n. The error matches ErrNotFound if
-// there is none.
-func (l *LibraryClient) GetRelease(ctx context.Context, n int) (apiv0.LibraryReleaseResponse, error) {
-	var resp apiv0.LibraryReleaseResponse
-	err := l.do(ctx, http.MethodGet, "/releases/"+strconv.Itoa(n), nil, http.StatusOK, &resp)
-	return resp, err
-}
-
-// UpdateReleaseNote changes the note of a Library Release (task 72_5). It
-// states no Draft Version: the content never changes.
-func (l *LibraryClient) UpdateReleaseNote(ctx context.Context, n int, req apiv0.UpdateLibraryReleaseNoteRequest) (apiv0.LibraryReleaseResponse, error) {
-	var resp apiv0.LibraryReleaseResponse
-	err := l.do(ctx, http.MethodPatch, "/releases/"+strconv.Itoa(n), req, http.StatusOK, &resp)
-	return resp, err
-}
-
 // DraftState returns the Version of the project's Draft: what every content
 // write states and every content DTO carries (ADR 0016).
 func (p *ProjectClient) DraftState(ctx context.Context) (apiv0.DraftStateResponse, error) {
@@ -530,15 +497,6 @@ func (p *ProjectClient) draftChangeCommand(ctx context.Context, path string, sta
 func (l *LibraryClient) Discard(ctx context.Context) (apiv0.DiscardLibraryResponse, error) {
 	var resp apiv0.DiscardLibraryResponse
 	err := l.do(ctx, http.MethodPost, "/discard", nil, http.StatusOK, &resp)
-	return resp, err
-}
-
-// RevertToRelease resets the library's Draft to its latest Release in one
-// transaction and returns the Draft's new state (task 72_5). The error matches
-// ErrConflict if the library was never released.
-func (l *LibraryClient) RevertToRelease(ctx context.Context) (apiv0.RevertLibraryResponse, error) {
-	var resp apiv0.RevertLibraryResponse
-	err := l.do(ctx, http.MethodPost, apiv0.RevertToReleasePath, nil, http.StatusOK, &resp)
 	return resp, err
 }
 
@@ -603,7 +561,7 @@ func (p *ProjectClient) ImportImpact(ctx context.Context, libraryID uuid.UUID, c
 
 // ImportedWidgetTypes returns the WidgetTypes of every saved state the project
 // imports: those its Widgets may be of.
-func (p *ProjectClient) ImportedWidgetTypes(ctx context.Context) ([]apiv0.ReleasedWidgetTypeResponse, error) {
+func (p *ProjectClient) ImportedWidgetTypes(ctx context.Context) ([]apiv0.WidgetTypeCopyResponse, error) {
 	var resp apiv0.GetImportedWidgetTypesResponse
 	err := p.do(ctx, http.MethodGet, "/library-imports/widget-types", nil, http.StatusOK, &resp)
 	return resp.WidgetTypes, err
@@ -923,22 +881,6 @@ func (p *ProjectClient) LoadCommit(ctx context.Context, number int) (apiv0.LoadC
 	return resp, err
 }
 
-// CreateRelease publishes a Commit as the next Release of the Project (task
-// 72_3; ADR 0021). The error matches ErrConflict if the Commit is released
-// already and ErrNotFound for a Project or a Commit it does not have.
-func (p *ProjectClient) CreateRelease(ctx context.Context, req apiv0.CreateProjectReleaseRequest) (apiv0.ReleaseResponse, error) {
-	var resp apiv0.ReleaseResponse
-	err := p.do(ctx, http.MethodPost, apiv0.ReleasePath, req, http.StatusCreated, &resp)
-	return resp, err
-}
-
-// Releases returns the Project's Releases, newest first, without content.
-func (p *ProjectClient) Releases(ctx context.Context) ([]apiv0.ReleaseResponse, error) {
-	var resp apiv0.GetReleasesResponse
-	err := p.do(ctx, http.MethodGet, apiv0.ReleasePath, nil, http.StatusOK, &resp)
-	return resp.Releases, err
-}
-
 // SaveCommit fixes the Library's Draft as a Commit at the stated Version
 // (task 72_2; ADR 0021).
 func (l *LibraryClient) SaveCommit(ctx context.Context, req apiv0.CreateCommitRequest) (apiv0.CommitResponse, error) {
@@ -1077,17 +1019,6 @@ func (p *ProjectClient) Journal(ctx context.Context, from int64, limit int) ([]r
 func (p *ProjectClient) DeployCommit(ctx context.Context, number int) (apiv0.DeployResponse, error) {
 	var resp apiv0.DeployResponse
 	err := p.do(ctx, http.MethodPost, apiv0.CommitDeployPathOf(number), nil, http.StatusCreated, &resp)
-	return resp, err
-}
-
-// DeployRelease makes Release number the Project's running Deployment: a
-// Release of a saved state deploys that saved state, so it is the same Deploy
-// as DeployCommit (task 72_4, task 85_4). growctl still deploys a Release
-// until task 85_7 removes Releases. The error matches ErrConflict if that
-// Release runs already and ErrNotFound for a Release the Project does not have.
-func (p *ProjectClient) DeployRelease(ctx context.Context, number int) (apiv0.DeployResponse, error) {
-	var resp apiv0.DeployResponse
-	err := p.do(ctx, http.MethodPost, apiv0.ReleaseDeployPathOf(number), nil, http.StatusCreated, &resp)
 	return resp, err
 }
 

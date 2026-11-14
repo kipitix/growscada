@@ -10,7 +10,7 @@ http:
 
 docs: |
   The Version of the project's Draft, which the Commit below states. A Deploy
-  takes a Release since task 72_4: Save → Release → Deploy.
+  takes a saved state since task 85_4: Save → Deploy.
 
 runtime:
   assertions:

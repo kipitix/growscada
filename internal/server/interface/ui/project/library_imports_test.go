@@ -347,7 +347,7 @@ func TestImportWindow_AnotherClientsImportRereadsThePanel(t *testing.T) {
 }
 
 // hasWidgetType reports whether the palette holds the WidgetType typeID.
-func hasWidgetType(palette []apiv0.ReleasedWidgetTypeResponse, typeID uuid.UUID) bool {
+func hasWidgetType(palette []apiv0.WidgetTypeCopyResponse, typeID uuid.UUID) bool {
 	for _, wt := range palette {
 		if wt.ID == typeID {
 			return true

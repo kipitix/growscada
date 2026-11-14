@@ -209,9 +209,9 @@ func (l *Library) listenShortcuts() {
 
 // keyActionAllowed reports whether a shortcut may act now: no dialog of the
 // mode is open. An undo behind the Save dialog would change the Draft the Save
-// is about to fix as a Commit; a Release dialog holds the Draft too.
+// is about to fix as a Commit.
 func (l *Library) keyActionAllowed() bool {
-	return !l.saveDialog && !l.historyScreen && !l.releaseDialog
+	return !l.saveDialog && !l.historyScreen
 }
 
 // noKeyDown releases the listener (OnDismount).
@@ -225,7 +225,7 @@ func (l *Library) noKeyDown() {
 }
 
 // applyKeyAction runs the command a keydown asked for: the buttons' own, so a
-// shortcut is refused exactly as they are (a release shown, a command in
+// shortcut is refused exactly as they are (a dialog shown, a command in
 // flight).
 func (l *Library) applyKeyAction(ctx app.Context, action uiutil.KeyAction) {
 	switch action {

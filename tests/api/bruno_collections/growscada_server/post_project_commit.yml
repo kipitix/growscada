@@ -37,9 +37,6 @@ runtime:
     - expression: 'res.body.author'
       operator: eq
       value: '"Ada"'
-    - expression: 'res.body.released'
-      operator: eq
-      value: 'false'
     - expression: 'res.body.content_counts.scenes'
       operator: gt
       value: '0'

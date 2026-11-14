@@ -76,7 +76,7 @@ func ImportImpactOf(widgets []PlacedWidget, from, to *Commit, tagTypes scene.Tag
 		if _, ok := from.FindWidgetType(pw.Widget.TypeID()); !ok {
 			continue
 		}
-		var imported library.ReleasedWidgetType
+		var imported library.WidgetTypeCopy
 		found := false
 		if to != nil {
 			imported, found = to.FindWidgetType(pw.Widget.TypeID())

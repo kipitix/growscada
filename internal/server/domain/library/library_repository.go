@@ -24,9 +24,6 @@ var (
 	// a live Project imports one of its saved states, and by Delete while any
 	// Project does.
 	ErrLibraryImported = errors.New("library is imported by projects")
-	// ErrNoRelease is returned by a Revert of a library never released: there
-	// is nothing to go back to.
-	ErrNoRelease = errors.New("library has no release")
 	// ErrNothingToDiscard is returned by a Discard of a library never saved:
 	// there is no Commit to reset its Draft to (task 72_5).
 	ErrNothingToDiscard = errors.New("library has no commit to discard to")
@@ -68,8 +65,8 @@ type LibraryRepository interface {
 	// is live.
 	FindDeleted(context.Context, id.ID[Library]) (Library, error)
 
-	// Delete removes a library marked deleted with its Draft and its Library
-	// Releases. It stores no events: the library recorded its
+	// Delete removes a library marked deleted with its Draft and its saved
+	// states. It stores no events: the library recorded its
 	// LibraryDeletedEvent when it was marked.
 	// Returns ErrLibraryNotFound if there is no such library marked deleted,
 	// ErrLibraryImported while Projects marked deleted, not removed yet, still

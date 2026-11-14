@@ -26,7 +26,7 @@ type Library struct {
 	ThemeMode string // exported so go-app detects theme changes and re-renders
 	client    *apiclient.Client
 	// libraries are the server's; libraryID is the one selected, whose Draft
-	// (widgetTypes) and releases are shown, uuid.Nil if none.
+	// (widgetTypes) is shown, uuid.Nil if none.
 	libraries         []apiv0.LibraryResponse
 	librariesReloader uiutil.Reloader
 	libraryID         uuid.UUID
@@ -34,10 +34,6 @@ type Library struct {
 	// key of its lists' loads.
 	libraryClient *apiclient.LibraryClient
 	widgetTypes   []apiv0.WidgetTypeResponse
-	// releases are the library's, read for the history screen: a saved state a
-	// Release published shows that Release's number and note (task 84).
-	releases         []apiv0.LibraryReleaseResponse
-	releasesReloader uiutil.Reloader
 	// history is the screen that lists the saved states, shared with the
 	// Project mode (savedstates.Screen).
 	history *savedstates.Screen
@@ -92,16 +88,6 @@ type Library struct {
 	// draftStateLoaded is false until the first answer of the Draft's state:
 	// the header says nothing about saved changes before it.
 	draftStateLoaded bool
-	// ── Release from a Commit (task 72_7; ADR 0021) ────────────────────────
-	// releaseDialog is true while a Commit is being published, releaseCommit
-	// the Commit of the dialog, releaseNote and releaseAuthor its fields;
-	// releasing marks the request in flight.
-	releaseDialog bool
-	releasing     bool
-	releaseCommit int
-	releaseNote   string
-	releaseAuthor string
-
 	// ── DraftChange stack (ADR 0017) ───────────────────────────────────────
 	// changes is the state of the Draft's undo/redo stack, read on mount, on a
 	// resync, after the content events and after each undo or redo;
@@ -160,7 +146,6 @@ func (l *Library) OnMount(ctx app.Context) {
 	l.libraryID = uiutil.LoadID(ctx, libraryIDKey)
 	l.loadLibraries(ctx)
 	l.loadList(ctx)
-	l.loadReleases(ctx)
 	l.loadDraftState(ctx)
 	l.loadDraftChanges(ctx)
 	ctx.LocalStorage().Get(uiutil.AuthorKey, &l.saveAuthor)
@@ -259,8 +244,8 @@ func (l *Library) shownTypes() []apiv0.WidgetTypeResponse {
 }
 
 // SetLibrary shows the library id (uuid.Nil: none); Root calls it with what
-// its selection page announced. The WidgetTypes and releases of the library
-// are loaded, and what was shown of another one is dropped (task 73).
+// its selection page announced. The WidgetTypes of the library are loaded, and
+// what was shown of another one is dropped (task 73).
 func (l *Library) SetLibrary(id uuid.UUID) {
 	if id == l.libraryID {
 		// The editor of the library shown is asked for again — the selection
@@ -279,14 +264,13 @@ func (l *Library) SetLibrary(id uuid.UUID) {
 	l.selectLibrary(l.compoCtx, id)
 }
 
-// selectLibrary shows the library id's Draft; its WidgetTypes and releases
-// are loaded.
+// selectLibrary shows the library id's Draft; its WidgetTypes are loaded.
 func (l *Library) selectLibrary(ctx app.Context, id uuid.UUID) {
 	if id == l.libraryID {
 		return
 	}
 	l.libraryID = id
-	l.widgetTypes, l.releases = nil, nil
+	l.widgetTypes = nil
 	l.draftVersions.Forget()
 	l.clearSelection()
 	l.changes, l.changesLoaded = apiv0.DraftChangesResponse{}, false
@@ -297,11 +281,9 @@ func (l *Library) selectLibrary(ctx app.Context, id uuid.UUID) {
 	l.contentReplacements, l.appliedReplacements = 0, 0
 	l.history.Reset()
 	l.draftUnsaved, l.draftStateLoaded = false, false
-	l.releaseDialog, l.releasing, l.releaseCommit = false, false, 0
 	uiutil.StoreID(ctx, libraryIDKey, id)
 	uiutil.StoreID(ctx, selectedIDKey, uuid.Nil)
 	l.loadList(ctx)
-	l.loadReleases(ctx)
 	l.loadDraftState(ctx)
 	l.loadDraftChanges(ctx)
 	l.loadCommits(ctx)

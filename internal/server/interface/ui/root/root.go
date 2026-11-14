@@ -160,7 +160,7 @@ func (r *Root) OnMount(ctx app.Context) {
 	// it, and shows its selection page with its list reread (task 73,
 	// task 76). The Project says so through the content of its project, the
 	// Library through a read of its Draft, its stack, its Commits or its
-	// releases.
+	// saved states.
 	ctx.Handle(uiutil.ActionProjectGone, func(ctx app.Context, a app.Action) {
 		if id, ok := a.Value.(uuid.UUID); ok {
 			r.entityGone(ModeProject, id)

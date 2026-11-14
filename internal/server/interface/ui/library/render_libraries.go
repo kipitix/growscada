@@ -16,7 +16,7 @@ func itoa(n int) string { return strconv.Itoa(n) }
 
 // renderHeader is the panel above the editor (task 84): the way back to the
 // libraries with the name of the one shown, Save with its unsaved-changes
-// indicator, Undo and Redo, History and Releases — icons, each with its hover
+// indicator, Undo, Redo and History — icons, each with its hover
 // text —, the library's state and the author. The dialogs the panel opens
 // follow it.
 func (l *Library) renderHeader() app.UI {
@@ -50,7 +50,6 @@ func (l *Library) renderHeader() app.UI {
 				Style("background", "var(--bg-elevated)").
 				Body(body...),
 			app.If(l.saveDialog, l.renderSaveDialog).Else(func() app.UI { return app.Div() }),
-			app.If(l.releaseDialog, l.renderReleaseDialog).Else(func() app.UI { return app.Div() }),
 		)
 }
 
@@ -74,48 +73,37 @@ func (l *Library) renderBackButton() app.UI {
 	return uiutil.PanelBack("Back to the libraries", name, back)
 }
 
-// releaseStateOf is one library's Release state (task 72_7; ADR 0021): the
-// Draft changed since its last saved state (the server's own flag, which the
-// selected one follows too — task 74), the last saved state is not published,
-// or the published state is the saved one. The state is a short word for the
+// draftStateOf is one library's Draft state (task 74, task 85_7): the Draft
+// changed since its last saved state (the server's own flag, which the selected
+// one follows too) or it holds a saved state. The state is a short word for the
 // panel and its kind says which.
-func (l *Library) releaseStateOf(lib apiv0.LibraryResponse) (kind, text string) {
+func (l *Library) draftStateOf(lib apiv0.LibraryResponse) (kind, text string) {
 	switch {
 	case lib.HasUnsavedChanges:
 		return "unsaved", "unsaved changes"
-	case lib.HasUnpublishedChanges:
-		return "unpublished", "unpublished saved state"
 	case lib.LatestCommit > 0:
-		return "published", "published"
-	case lib.LatestRelease > 0:
-		return "legacy", "legacy release"
+		return "saved", "saved"
 	default:
 		return "new", "never saved"
 	}
 }
 
 // renderLibraryStatus is the state of the library in words: what its last saved
-// state and its last Release are.
+// state is.
 func (l *Library) renderLibraryStatus() app.UI {
 	lib, ok := l.selectedLibrary()
 	if !ok {
 		return app.Div()
 	}
-	kind, _ := l.releaseStateOf(lib)
+	kind, _ := l.draftStateOf(lib)
 	var status string
 	switch {
-	case lib.LatestRelease == 0 && lib.LatestCommit == 0:
-		status = "Never saved or released."
 	case lib.LatestCommit == 0:
-		status = "Release " + itoa(lib.LatestRelease) + " · legacy, no saved states"
+		status = "Never saved."
 	case kind == "unsaved":
 		status = "Saved state #" + itoa(lib.LatestCommit) + " · unsaved changes"
-	case kind == "unpublished":
-		status = "Saved state #" + itoa(lib.LatestCommit) + " · not published yet"
-	case lib.LatestRelease == 0:
-		status = "Saved state #" + itoa(lib.LatestCommit) + " · never released"
 	default:
-		status = "Release " + itoa(lib.LatestRelease) + " · published"
+		status = "Saved state #" + itoa(lib.LatestCommit)
 	}
 	return app.Div().
 		Attr("data-library-status", "true").

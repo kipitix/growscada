@@ -231,11 +231,6 @@ func TestProjectFiles_DeployFromFileAndRevert(t *testing.T) {
 		list.Deployments[0].CommitNumber != nil {
 		t.Errorf("the history after a file deploy: %+v", list.Deployments)
 	}
-	rec = serve(router, http.MethodGet, mainPath+"/releases", nil)
-	releases := decodeBody[apiv0.GetReleasesResponse](t, rec)
-	if len(releases.Releases) != 0 {
-		t.Errorf("the file deploy left releases: %+v, want none", releases.Releases)
-	}
 
 	// A Revert restores what runs as far as this server can: the foreign pin
 	// goes with the Widgets of its WidgetType, and the answer names it.

@@ -1,18 +1,18 @@
 info:
-  name: post release deploy
+  name: deploy the commit before the deploy
   type: http
   seq: 43
 
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/releases/{{OTHER_RELEASE_NUMBER}}/deploy
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/commits/{{OTHER_COMMIT_NUMBER}}/deploy
   auth: inherit
 
 docs: |
-  The Release becomes the project's first Deployment (task 72_4). The number,
-  the time and the Release are the Runtime node's; nothing of the Draft reaches
-  it before this call, so writing a Tag value in a project that was never
-  deployed answers `404`.
+  The saved state becomes the project's first Deployment (task 85_4). The
+  number and the time are the Runtime node's; nothing of the Draft reaches it
+  before this call, so writing a Tag value in a project that was never deployed
+  answers `404`.
 
 runtime:
   assertions:

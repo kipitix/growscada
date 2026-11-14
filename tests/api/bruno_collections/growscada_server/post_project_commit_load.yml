@@ -13,7 +13,7 @@ docs: |
   content of the Commit, its stack is cleared and its Version raised, in one
   transaction. Loading the last Commit leaves the Draft clean — there is
   nothing a Save would fix — and no Version is stated: the command is a reset,
-  not a write of content. The Library Releases the content names but this
+  not a write of content. The Library saved states the content names but this
   server lacks are answered as warnings, with the Widgets of their
   WidgetTypes dropped (task 71).
 

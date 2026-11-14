@@ -1,14 +1,11 @@
 package library
 
 import (
-	"context"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
-
-	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
 
 // TestCommitBar_IndicatorKeepsTheButtonPositions: the unsaved-changes indicator
@@ -91,38 +88,6 @@ func TestSaveCommit_LibraryHistoryAndRename(t *testing.T) {
 	f.noToasts()
 	if len(f.l.commits) != 1 || f.l.commits[0].Title != "For the demo" {
 		t.Errorf("the renamed history: %+v", f.l.commits)
-	}
-}
-
-// TestCommitRow_ReleaseButton: a Commit of the history offers "Make Release";
-// once a Release publishes it, the button says so (task 72_5; ADR 0021).
-func TestCommitRow_ReleaseButton(t *testing.T) {
-	url, api := newServer(t)
-	f := mount(t, url, api)
-	f.run()
-	f.l.createItem(f.l.compoCtx)
-	f.run()
-
-	state, err := api.DraftState(context.Background())
-	if err != nil {
-		t.Fatalf("DraftState: %v", err)
-	}
-	if _, err := api.SaveCommit(context.Background(), apiv0.CreateCommitRequest{Version: state.Version, Title: "Save", Author: "Ada"}); err != nil {
-		t.Fatalf("SaveCommit: %v", err)
-	}
-	f.l.loadCommits(f.l.compoCtx)
-	f.run()
-
-	html := app.HTMLString(f.l.renderHistoryScreen())
-	if !strings.Contains(html, "Make Release") || strings.Contains(html, ">Released<") {
-		t.Errorf("the saved state row before the release: %s", html)
-	}
-
-	releaseNow(t, f)
-	f.run()
-	html = app.HTMLString(f.l.renderHistoryScreen())
-	if !strings.Contains(html, "Released") {
-		t.Errorf("the saved state row after the release: %s", html)
 	}
 }
 

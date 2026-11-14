@@ -16,7 +16,7 @@ http:
 
 docs: |
   A file becomes the project's Deployment with no saved state and leaves no
-  Release (task 85_4), so its Deployments have a document to download
+  saved state (task 85_4), so its Deployments have a document to download
   (ADR 0018). The Draft is unchanged by the Deploy.
 
 runtime:

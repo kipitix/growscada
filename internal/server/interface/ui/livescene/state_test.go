@@ -30,8 +30,8 @@ func bind(port, tagName string) apiv0.PortBinding {
 	return apiv0.PortBinding{PortName: port, TagID: id(tagName)}
 }
 
-func testWidgetType() apiv0.ReleasedWidgetTypeResponse {
-	return apiv0.ReleasedWidgetTypeResponse{
+func testWidgetType() apiv0.WidgetTypeCopyResponse {
+	return apiv0.WidgetTypeCopyResponse{
 		ID: id("wt"),
 		InputPorts: []apiv0.InputPort{
 			{Name: "speed", TypeHint: "integer"},
@@ -128,7 +128,7 @@ func TestWidgetQuality(t *testing.T) {
 }
 
 func TestWidgetQuality_NoPorts(t *testing.T) {
-	wt := apiv0.ReleasedWidgetTypeResponse{ID: id("wt")}
+	wt := apiv0.WidgetTypeCopyResponse{ID: id("wt")}
 	if got := WidgetQuality(testWidget(), wt, nil, true); got != QualityGood {
 		t.Errorf("connected: got %s, want good", got)
 	}

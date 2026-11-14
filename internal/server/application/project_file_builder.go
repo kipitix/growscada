@@ -237,7 +237,7 @@ func newProjectFileWidget(w scene.Widget) projectv0.Widget {
 	}
 }
 
-func newProjectFileWidgetType(wt library.ReleasedWidgetType) projectv0.WidgetType {
+func newProjectFileWidgetType(wt library.WidgetTypeCopy) projectv0.WidgetType {
 	ports := wt.InputPorts()
 	inputPorts := make([]projectv0.InputPort, len(ports))
 	for i, p := range ports {

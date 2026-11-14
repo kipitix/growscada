@@ -88,11 +88,10 @@ services:
 
   # The seed creates no Deployment: its Runtime copies of the Tags and Devices
   # are inserted by test_data directly, so the stack would run on fixtures
-  # alone. Publish the Draft of "Main" (the simulator's Device and the
-  # dashboard's Tags) as a Commit, publish it as a Release for the release
-  # history and deploy the saved state once, as a real deployment would, before
-  # anything writes a Tag value or connects a Device (task 35; task 85_4: a
-  # Deploy takes a saved state).
+  # alone. Save the Draft of "Main" (the simulator's Device and the dashboard's
+  # Tags) as a Commit and deploy that saved state once, as a real deployment
+  # would, before anything writes a Tag value or connects a Device (task 35;
+  # task 85_4: a Deploy takes a saved state).
   deploy:
     image: curlimages/curl:8.10.1
     depends_on:
@@ -107,9 +106,6 @@ services:
         curl -fsS -X POST $$project/commits \
           -H 'Content-Type: application/json' \
           -d '{"version":'$$version',"title":"Seed","author":"seed"}' >/dev/null
-        curl -fsS -X POST $$project/releases \
-          -H 'Content-Type: application/json' \
-          -d '{"commit":1,"author":"seed"}' >/dev/null
         curl -fsS -X POST $$project/commits/1/deploy >/dev/null
     restart: "no"
 

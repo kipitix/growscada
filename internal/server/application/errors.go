@@ -63,9 +63,9 @@ var ErrNothingToOpen = errors.New("nothing to open: the draft is the file")
 var ErrDraftNotDeployable = errors.New("the draft is not deployable")
 
 // ErrDeploymentNotDiscardable matches (errors.Is) a Discard refused because the
-// Deployment names Library Releases this server does not have (ADR 0018): the
+// Deployment names saved states of Libraries this server does not have (ADR 0018): the
 // imports cannot be written, and the Draft is left as it is.
-var ErrDeploymentNotDiscardable = errors.New("the deployment cannot be discarded here: library releases are missing")
+var ErrDeploymentNotDiscardable = errors.New("the deployment cannot be discarded here: library saved states are missing")
 
 // ErrDraftNotSaveable matches (errors.Is) a Save refused because the Draft
 // cannot be assembled into a snapshot: the same inconsistency that refuses a
@@ -73,9 +73,9 @@ var ErrDeploymentNotDiscardable = errors.New("the deployment cannot be discarded
 var ErrDraftNotSaveable = errors.New("the draft is not saveable")
 
 // ErrLibraryInRunningDeployment matches (errors.Is) a Library deletion refused
-// because the running Deployment of a Project names one of its Releases in its
-// ProjectFile (task 71): a Discard of that Deployment would find no Release to
-// restore. Old Commits and Project Releases do not refuse it — their documents
+// because the running Deployment of a Project names one of its saved states in
+// its ProjectFile (task 71): a Discard of that Deployment would find no saved
+// state to restore. Old Commits do not refuse it — their documents
 // carry the WidgetType copies they need.
 var ErrLibraryInRunningDeployment = errors.New("the library is named by a running deployment")
 
@@ -106,7 +106,7 @@ type DeploymentNotDiscardableError struct {
 }
 
 func (e DeploymentNotDiscardableError) Error() string {
-	return "the deployment cannot be discarded here: " + fmt.Sprintf("%d library releases are missing", len(e.Issues))
+	return "the deployment cannot be discarded here: " + fmt.Sprintf("%d library saved states are missing", len(e.Issues))
 }
 
 func (e DeploymentNotDiscardableError) Is(target error) bool {

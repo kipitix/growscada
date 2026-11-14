@@ -12,7 +12,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 	"github.com/kipitix/growscada/internal/server/domain/project"
-	"github.com/kipitix/growscada/internal/server/domain/release"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/domain/tagstate"
@@ -47,8 +46,6 @@ func sampleEvents(t *testing.T) []event.Event {
 	deviceID := id.NewID[device.Device]()
 	environmentID := id.NewID[device.Environment]()
 	labelID := id.NewID[label.Label]()
-	libraryRelease, _ := library.NewReleaseNumber(3)
-	projectReleaseNumber, _ := release.NewNumber(4)
 	return []event.Event{
 		tag.NewTagCreatedEvent(tagID, projectID, ts),
 		tag.NewTagDeletedEvent(tagID, projectID, ts),
@@ -58,8 +55,6 @@ func sampleEvents(t *testing.T) []event.Event {
 		library.NewLibraryCreatedEvent(libraryID, ts),
 		library.NewLibraryUpdatedEvent(libraryID, ts),
 		library.NewLibraryDeletedEvent(libraryID, ts),
-		library.NewLibraryReleasedEvent(libraryID, libraryRelease, ts),
-		library.NewLibraryReleaseNoteUpdatedEvent(libraryID, libraryRelease, ts),
 		libraryimport.NewLibraryImportCreatedEvent(libraryID, projectID, ts),
 		libraryimport.NewLibraryImportUpdatedEvent(libraryID, projectID, ts),
 		libraryimport.NewLibraryImportDeletedEvent(libraryID, projectID, ts),
@@ -82,8 +77,6 @@ func sampleEvents(t *testing.T) []event.Event {
 		device.NewEnvironmentDeviceCreatedEvent(environmentID, deviceID, projectID, ts),
 		draft.NewCommitCreatedEvent(draft.ProjectScope(projectID), 2, ts),
 		draft.NewCommitTitleUpdatedEvent(draft.LibraryScope(libraryID), 3, ts),
-		release.NewReleaseCreatedEvent(draft.ProjectScope(projectID), projectReleaseNumber, ts),
-		release.NewReleaseNoteUpdatedEvent(draft.LibraryScope(libraryID), projectReleaseNumber, ts),
 		device.NewEnvironmentDeviceUpdatedEvent(environmentID, deviceID, projectID, ts),
 		device.NewEnvironmentDeviceDeletedEvent(environmentID, deviceID, projectID, ts),
 		label.NewLabelCreatedEvent(labelID, ts),
@@ -154,15 +147,6 @@ func assertSameSubject(t *testing.T, original, decoded event.Event) {
 		got, ok := decoded.(library.LibraryEvent)
 		if !ok || got.LibraryID() != want.LibraryID() {
 			t.Errorf("decoded %T, want an event of library %s", decoded, want.LibraryID())
-		}
-		if releasedWant, ok := want.(library.LibraryReleasedEvent); ok {
-			if got, ok := decoded.(library.LibraryReleasedEvent); !ok || got.Release() != releasedWant.Release() {
-				t.Errorf("decoded %T, want release %s", decoded, releasedWant.Release())
-			}
-		}
-	case release.ReleaseEvent:
-		if got, ok := decoded.(release.ReleaseEvent); !ok || got.Scope() != want.Scope() || got.ReleaseNumber() != want.ReleaseNumber() {
-			t.Errorf("decoded %T, want release %s of %s", decoded, want.ReleaseNumber(), want.Scope())
 		}
 	case libraryimport.LibraryImportEvent:
 		if got, ok := decoded.(libraryimport.LibraryImportEvent); !ok || got.LibraryID() != want.LibraryID() {

@@ -16,12 +16,12 @@ import (
 	"github.com/kipitix/growscada/internal/apiclient"
 )
 
-// AuthorEnv is the environment variable naming the default author of a Save or
-// a Release, used when --author is not given.
+// AuthorEnv is the environment variable naming the default author of a Save,
+// used when --author is not given.
 const AuthorEnv = "GROWSCADA_AUTHOR"
 
-// workflowTarget is what a Save, a Release or a list acts on: a Project or a
-// Library, by name. A Project is looked up first because the model is
+// workflowTarget is what a Save or a list acts on: a Project or a Library, by
+// name. A Project is looked up first because the model is
 // Project-first; --library forces the other reading when a Library has the
 // same name as a Project.
 type workflowTarget struct {
@@ -106,63 +106,9 @@ func (t workflowTarget) commits(ctx context.Context) ([]apiv0.CommitResponse, er
 	return t.library.Commits(ctx)
 }
 
-// releaseRow is one Release of either kind, as the lists print it.
-type releaseRow struct {
-	Number  int
-	Commit  int // 0 for a Library Release older than Commits
-	Title   string
-	Note    string
-	Author  string
-	Origin  string
-	Created time.Time
-}
-
-// releases returns the target's Releases, newest first, in one shape for a
-// Project and a Library.
-func (t workflowTarget) releases(ctx context.Context) ([]releaseRow, error) {
-	if t.kind == "project" {
-		releases, err := t.project.Releases(ctx)
-		if err != nil {
-			return nil, err
-		}
-		rows := make([]releaseRow, len(releases))
-		for i, r := range releases {
-			rows[i] = releaseRow{Number: r.Number, Commit: r.CommitNumber, Title: r.Title,
-				Note: r.Note, Author: r.Author, Origin: r.Origin, Created: r.CreatedAt}
-		}
-		return rows, nil
-	}
-	releases, err := t.library.ListReleases(ctx)
-	if err != nil {
-		return nil, err
-	}
-	rows := make([]releaseRow, len(releases))
-	for i, r := range releases {
-		row := releaseRow{Number: r.Number, Note: r.Note, Author: r.Author, Origin: r.Origin, Created: r.CreatedAt}
-		if r.CommitNumber != nil {
-			row.Commit = *r.CommitNumber
-		}
-		if r.Title != nil {
-			row.Title = *r.Title
-		}
-		rows[i] = row
-	}
-	return rows, nil
-}
-
-// release publishes the target's Commit as its next Release.
-func (t workflowTarget) release(ctx context.Context, commit int, note, author string) (int, error) {
-	if t.kind == "project" {
-		release, err := t.project.CreateRelease(ctx, apiv0.CreateProjectReleaseRequest{Commit: commit, Note: note, Author: author})
-		return release.Number, err
-	}
-	release, err := t.library.Release(ctx, apiv0.CreateReleaseRequest{Commit: commit, Note: note, Author: author})
-	return release.Number, err
-}
-
-// resolveAuthor returns the author a Save or a Release records: --author, else
+// resolveAuthor returns the author a Save records: --author, else
 // GROWSCADA_AUTHOR, else the operating system's user name. An empty name is
-// refused: every Commit and Release names one (ADR 0021).
+// refused: every Commit names one (ADR 0021).
 func resolveAuthor(flag string) (string, error) {
 	if author := strings.TrimSpace(flag); author != "" {
 		return author, nil
@@ -225,66 +171,26 @@ func newSaveCommand(s *settings) *cobra.Command {
 	return cmd
 }
 
-func newReleaseCommand(s *settings) *cobra.Command {
+func newDeployCommand(s *settings) *cobra.Command {
 	var commit int
-	var note, author string
-	var asLibrary bool
 	cmd := &cobra.Command{
-		Use:   "release <project|library> --commit <n> [--note <text>] [--author <name>]",
-		Short: "Publish a Commit as the next Release",
-		Long: "Release publishes an existing Commit as the next Release of the Project or\n" +
-			"the Library: an immutable copy of the Commit's content, with the Author,\n" +
-			"an optional note and the Commit's number and title (ADR 0021). It needs\n" +
-			"no Draft Version and changes no Draft, so its stack survives; one Commit\n" +
-			"is published at most once. The name is a Project's, or a Library's with\n" +
-			"--library. Projects deploy a Release with `growctl deploy`.",
+		Use:   "deploy <project> --commit <n>",
+		Short: "Make a saved state the Project's running Deployment",
+		Long: "Deploy makes an existing Commit — a saved state — the running Deployment\n" +
+			"of the Project (ADR 0021, task 85_4). It takes a Commit, never the Draft:\n" +
+			"the order is apply → save → deploy. A Deploy of the saved state that\n" +
+			"already runs is refused (nothing_to_deploy); Operation switches to the new\n" +
+			"one.",
 		Args: exactlyOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := requirePositive(cmd, "commit", commit); err != nil {
-				return err
-			}
-			author, err := resolveAuthor(author)
-			if err != nil {
-				return err
-			}
-			target, err := resolveWorkflowTarget(cmd.Context(), s.client(), args[0], asLibrary)
-			if err != nil {
-				return err
-			}
-			number, err := target.release(cmd.Context(), commit, note, author)
-			if err != nil {
-				return fmt.Errorf("%s: %w", target.ref(), err)
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s released %d\n", target.ref(), number)
-			return nil
-		},
-	}
-	cmd.Flags().IntVar(&commit, "commit", 0, "the number of the Commit to publish")
-	cmd.Flags().StringVar(&note, "note", "", "the Release's note")
-	cmd.Flags().StringVar(&author, "author", "", "the author of the Release (env "+AuthorEnv+")")
-	cmd.Flags().BoolVar(&asLibrary, "library", false, "the name is a Library's, not a Project's")
-	return cmd
-}
-
-func newDeployCommand(s *settings) *cobra.Command {
-	var release int
-	cmd := &cobra.Command{
-		Use:   "deploy <project> --release <n>",
-		Short: "Make a Release the Project's running Deployment",
-		Long: "Deploy makes an existing Release the running Deployment of the Project\n" +
-			"(ADR 0021, task 72_4). It takes a Release, never the Draft: the order is\n" +
-			"apply → save → release → deploy. A Deploy of the Release that already\n" +
-			"runs is refused (nothing_to_deploy); Operation switches to the new one.",
-		Args: exactlyOneArg,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := requirePositive(cmd, "release", release); err != nil {
 				return err
 			}
 			target, err := resolveProjectTarget(cmd.Context(), s.client(), args[0])
 			if err != nil {
 				return err
 			}
-			deployed, err := target.project.DeployRelease(cmd.Context(), release)
+			deployed, err := target.project.DeployCommit(cmd.Context(), commit)
 			if err != nil {
 				return fmt.Errorf("%s: %w", target.ref(), err)
 			}
@@ -292,7 +198,7 @@ func newDeployCommand(s *settings) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().IntVar(&release, "release", 0, "the number of the Release to deploy")
+	cmd.Flags().IntVar(&commit, "commit", 0, "the number of the saved state to deploy")
 	return cmd
 }
 
@@ -302,8 +208,8 @@ func newCommitsCommand(s *settings) *cobra.Command {
 		Use:   "commits <project|library> [--library]",
 		Short: "List the Commits of a Draft, newest first",
 		Long: "List the Commits of the Project's or the Library's Draft, newest first:\n" +
-			"their numbers, titles, authors, times and whether a Release published\n" +
-			"each. The name is a Project's, or a Library's with --library.",
+			"their numbers, titles, authors, times and labels. The name is a Project's,\n" +
+			"or a Library's with --library.",
 		Args: exactlyOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target, err := resolveWorkflowTarget(cmd.Context(), s.client(), args[0], asLibrary)
@@ -319,9 +225,9 @@ func newCommitsCommand(s *settings) *cobra.Command {
 				return nil
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 3, ' ', 0)
-			fmt.Fprintln(w, "NUMBER\tTITLE\tAUTHOR\tCREATED\tRELEASED\tLABELS")
+			fmt.Fprintln(w, "NUMBER\tTITLE\tAUTHOR\tCREATED\tLABELS")
 			for _, c := range commits {
-				fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%t\t%s\n", c.Number, c.Title, c.Author, formatTime(c.CreatedAt), c.Released, labelNames(c.Labels))
+				fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n", c.Number, c.Title, c.Author, formatTime(c.CreatedAt), labelNames(c.Labels))
 			}
 			return w.Flush()
 		},
@@ -330,46 +236,7 @@ func newCommitsCommand(s *settings) *cobra.Command {
 	return cmd
 }
 
-func newReleasesCommand(s *settings) *cobra.Command {
-	var asLibrary bool
-	cmd := &cobra.Command{
-		Use:   "releases <project|library> [--library]",
-		Short: "List the Releases of a Project or a Library, newest first",
-		Long: "List the Releases of the Project or the Library, newest first: their\n" +
-			"numbers, the Commit each published (or legacy for one older than\n" +
-			"Commits), titles, origins, authors, times and notes. The name is a\n" +
-			"Project's, or a Library's with --library.",
-		Args: exactlyOneArg,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			target, err := resolveWorkflowTarget(cmd.Context(), s.client(), args[0], asLibrary)
-			if err != nil {
-				return err
-			}
-			releases, err := target.releases(cmd.Context())
-			if err != nil {
-				return fmt.Errorf("%s: %w", target.ref(), err)
-			}
-			if len(releases) == 0 {
-				fmt.Fprintf(cmd.ErrOrStderr(), "%s has no releases.\n", target.ref())
-				return nil
-			}
-			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 3, ' ', 0)
-			fmt.Fprintln(w, "NUMBER\tCOMMIT\tTITLE\tORIGIN\tAUTHOR\tCREATED\tNOTE")
-			for _, r := range releases {
-				commit := "-"
-				if r.Commit > 0 {
-					commit = fmt.Sprintf("%d", r.Commit)
-				}
-				fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%s\n", r.Number, commit, r.Title, r.Origin, r.Author, formatTime(r.Created), r.Note)
-			}
-			return w.Flush()
-		},
-	}
-	cmd.Flags().BoolVar(&asLibrary, "library", false, "the name is a Library's, not a Project's")
-	return cmd
-}
-
-// formatTime is how the lists print a Commit's or a Release's time.
+// formatTime is how the lists print a Commit's time.
 func formatTime(t time.Time) string {
 	if t.IsZero() {
 		return "-"

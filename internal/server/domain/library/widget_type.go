@@ -12,7 +12,7 @@ import (
 // Defines how a SCADA widget element is rendered via an HTML template and a script.
 // It belongs to the Draft of exactly one Library, fixed at creation; its name
 // is unique within that Library. Projects never see it, only the copies the
-// saved states they import hold (ReleasedWidgetType).
+// saved states they import hold (WidgetTypeCopy).
 //
 // WidgetType is immutable: every change returns a new WidgetType that also
 // records the change's event. It carries no Version of its own: it is an
@@ -91,11 +91,10 @@ func CreateWidgetType(
 	return impl, nil
 }
 
-// RecreateWidgetType creates anew, not yet saved, the WidgetType a Library
-// Release holds, under its ID and in its Library, and records a
-// WidgetTypeCreatedEvent: a Discard bringing back a WidgetType removed from
-// the Draft since the release.
-func RecreateWidgetType(released ReleasedWidgetType) (WidgetType, error) {
+// RecreateWidgetType creates anew, not yet saved, the WidgetType a saved state
+// holds, under its ID and in its Library, and records a WidgetTypeCreatedEvent:
+// a Discard bringing back a WidgetType removed from the Draft since the save.
+func RecreateWidgetType(released WidgetTypeCopy) (WidgetType, error) {
 	return CreateWidgetType(released.ID(), released.LibraryID(), released.Name(), released.HtmlTemplate(),
 		released.Script(), released.ScriptLanguage(), released.DefaultSize(), released.InputPorts())
 }

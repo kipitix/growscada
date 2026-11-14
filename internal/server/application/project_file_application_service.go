@@ -44,7 +44,7 @@ type ProjectFileService interface {
 	Open(ctx context.Context, projectID uuid.UUID, version int, document []byte) (appdto.DraftState, error)
 	// Deploy validates document as a project file (ADR 0018) and makes it the
 	// Project's new Deployment without touching the Draft, stating no saved
-	// state: a file deployment leaves no Release behind (task 85_4). Returns
+	// state: a file deployment leaves no saved state behind (task 85_4). Returns
 	// an error matching ErrInvalidProjectFile when the document does not
 	// validate, and project.ErrProjectNotFound if the Project is not live.
 	Deploy(ctx context.Context, projectID uuid.UUID, document []byte) (appdto.Deployment, error)

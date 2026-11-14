@@ -34,7 +34,7 @@ runtime:
       value: '3'
     - expression: 'res.body.title'
       operator: eq
-      value: '"Widgets of the release"'
+      value: '"Widgets for import"'
     - expression: 'res.body.author'
       operator: eq
       value: '"Bruno"'

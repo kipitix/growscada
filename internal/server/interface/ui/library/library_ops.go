@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
@@ -24,75 +23,6 @@ func prompt(message, value string, empty bool) (string, bool) {
 		return "", false
 	}
 	return answer.String(), empty || answer.String() != ""
-}
-
-// openReleaseDialog opens the publication of a Commit of the selected library
-// as the next Library Release: a note (optional) and the stored Author
-// (task 72_7; ADR 0021).
-func (l *Library) openReleaseDialog(commit apiv0.CommitResponse) {
-	if l.draft() == nil || commit.Released {
-		return
-	}
-	l.releaseCommit = commit.Number
-	l.releaseNote = ""
-	l.releaseAuthor = l.saveAuthor
-	l.releaseDialog = true
-	l.compoCtx.Update()
-}
-
-// publishRelease confirms the release dialog: the Commit becomes the next
-// immutable Release. It changes no Draft, so no Version is stated (task 72_7).
-func (l *Library) publishRelease() {
-	draft := l.draft()
-	number := l.releaseCommit
-	if draft == nil || l.releasing || number == 0 {
-		return
-	}
-	author := strings.TrimSpace(l.releaseAuthor)
-	if author == "" {
-		uiutil.ShowError(l.compoCtx, fmt.Errorf("an author is required"))
-		return
-	}
-	l.releasing = true
-	l.saveAuthor = author
-	l.compoCtx.LocalStorage().Set(uiutil.AuthorKey, author)
-	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.LibraryReleaseResponse, error) {
-		return draft.Release(c, apiv0.CreateReleaseRequest{Commit: number, Note: l.releaseNote, Author: author})
-	}, func(ctx app.Context, created apiv0.LibraryReleaseResponse) {
-		if draft != l.draft() {
-			l.releasing = false
-			return
-		}
-		l.releasing, l.releaseDialog, l.releaseCommit = false, false, 0
-		ctx.NewActionWithValue(toast.ActionAdd, toast.Problem{Problem: apiv0.Problem{
-			Title:  fmt.Sprintf("Release %d published", created.Number),
-			Detail: releaseTitle(created),
-		}})
-		l.loadReleases(ctx) // the row names the Release that published it
-		l.loadCommits(ctx)
-		l.loadLibraries(ctx)
-		ctx.Update()
-	}, func(ctx app.Context, err error) {
-		if draft != l.draft() {
-			l.releasing = false
-			return
-		}
-		l.releasing = false
-		uiutil.ShowError(ctx, err)
-		// A saved state published meanwhile (409) leaves the history the truth.
-		l.loadReleases(ctx)
-		l.loadCommits(ctx)
-		l.loadLibraries(ctx)
-		ctx.Update()
-	})
-}
-
-// releaseTitle is the Commit title a Release names as its detail.
-func releaseTitle(released apiv0.LibraryReleaseResponse) string {
-	if released.Title == nil {
-		return ""
-	}
-	return *released.Title
 }
 
 // loadSavedState makes the saved state number the Draft (task 84), after a

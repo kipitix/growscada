@@ -203,8 +203,8 @@ func sendJSON[T any](t *testing.T, srv *httptest.Server, method, path string, bo
 
 // StartAPI cleans every table (the Deployments, the Runtime node's copies of
 // Tags, Devices and Environments with their states and tokens, the Draft's
-// Tags, widgets, scenes, Library Imports, libraries with their WidgetTypes and
-// releases, projects but MainProject — restored live if a test deleted it —,
+// Tags, widgets, scenes, Library Imports, libraries with their WidgetTypes,
+// projects but MainProject — restored live if a test deleted it —,
 // outbox, policy_jobs, the per-user settings) and serves the real REST API over the
 // database, with the outbox dispatcher delivering committed events to its
 // event streams, the Runtime node publishing tag_updated and deployment_created,
@@ -243,9 +243,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 	}
 	projectRepo := repositories.NewProjectRepositoryPostgres(db, onCommit)
 	scopes := repositories.NewProjectScopes(db, onCommit)
-	releases := repositories.NewLibraryReleaseRepositoryPostgres(db, onCommit)
 	drafts := repositories.NewDraftRepositoryPostgres(db, onCommit)
-	projectReleases := repositories.NewProjectReleaseRepositoryPostgres(db, onCommit)
 	labelRepository := repositories.NewLabelRepositoryPostgres(db, onCommit)
 	content := application.NewProjectContent(projectRepo, scopes, drafts, orgID)
 	libraries := repositories.NewLibraryRepositoryPostgres(db, onCommit)
@@ -280,7 +278,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 		Projects:       application.NewProjectService(projectRepo, drafts, orgID),
 		Tags:           tagSvc,
 		TagStates:      tagStateSvc,
-		Libraries:      application.NewLibraryService(libraryContent, libraries, releases, widgetTypes, runtimeNode),
+		Libraries:      application.NewLibraryService(libraryContent, libraries, widgetTypes, runtimeNode),
 		WidgetTypes:    application.NewWidgetTypeService(libraryContent, widgetTypes),
 		LibraryImports: application.NewLibraryImportService(content, libraries, labelService),
 		Scenes:         application.NewSceneService(content),
@@ -290,8 +288,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 		DraftChanges:   application.NewDraftChangesService(content, libraryContent),
 		Discard:        application.NewDiscardService(content, runtimeNode, libraries),
 		ProjectFiles:   application.NewProjectFileService(content, application.NewProjectFileBuilder(content), runtimeNode, libraries),
-		Commits:        application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, projectReleases, releases, labelService),
-		Releases:       application.NewReleaseService(content, projectReleases, runtimeNode, application.NewDeployService(content, runtimeNode)),
+		Commits:        application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, labelService),
 		Settings:       application.NewSettingsService(repositories.NewUserSettingsRepositoryPostgres(db), settings.SingleUser(), orgID),
 		Labels:         labelService,
 		Deploy:         application.NewDeployService(content, runtimeNode),

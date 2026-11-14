@@ -18,8 +18,6 @@ func TestReloadTargetsFor(t *testing.T) {
 		{apiv0.Event{Type: apiv0.EventWidgetTypeCreated}, ReloadTargets{WidgetTypes: true, Libraries: true}},
 		{apiv0.Event{Type: apiv0.EventWidgetTypeUpdated}, ReloadTargets{WidgetTypes: true, Libraries: true}},
 		{apiv0.Event{Type: apiv0.EventWidgetTypeDeleted}, ReloadTargets{WidgetTypes: true, Libraries: true}},
-		{apiv0.Event{Type: apiv0.EventLibraryReleased}, ReloadTargets{Libraries: true, Releases: true, Commits: true}},
-		{apiv0.Event{Type: apiv0.EventLibraryReleaseNoteUpdated}, ReloadTargets{Releases: true}},
 		{apiv0.Event{Type: apiv0.EventLibraryUpdated}, ReloadTargets{WidgetTypes: true, Libraries: true}},
 		{apiv0.Event{Type: apiv0.EventLibraryImportUpdated}, ReloadTargets{LibraryImports: true}},
 		{apiv0.Event{Type: apiv0.EventSceneCreated}, ReloadTargets{Scenes: true}},
@@ -36,7 +34,7 @@ func TestReloadTargetsFor(t *testing.T) {
 		{apiv0.Event{Type: apiv0.EventTagUpdated}, ReloadTargets{Tags: true}},
 		{apiv0.Event{Type: apiv0.EventTagDeleted}, ReloadTargets{Tags: true}},
 		{apiv0.Event{Type: EventResync}, ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, Commits: true, Labels: true}},
-		{apiv0.Event{Type: EventProjectResync}, ReloadTargets{LibraryImports: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Commits: true, Releases: true}},
+		{apiv0.Event{Type: EventProjectResync}, ReloadTargets{LibraryImports: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Commits: true}},
 		{apiv0.Event{Type: apiv0.EventProjectCreated}, ReloadTargets{Projects: true, Deploy: true}},
 		{apiv0.Event{Type: apiv0.EventProjectUpdated}, ReloadTargets{Projects: true, Deploy: true}},
 		{apiv0.Event{Type: apiv0.EventProjectDeleted}, ReloadTargets{Projects: true, Deploy: true}},
@@ -49,8 +47,6 @@ func TestReloadTargetsFor(t *testing.T) {
 		{apiv0.Event{Type: apiv0.EventDeploymentCreated}, ReloadTargets{Deploy: true}},
 		{apiv0.Event{Type: apiv0.EventCommitCreated}, ReloadTargets{Commits: true}},
 		{apiv0.Event{Type: apiv0.EventCommitTitleUpdated}, ReloadTargets{Commits: true}},
-		{apiv0.Event{Type: apiv0.EventReleaseCreated}, ReloadTargets{Releases: true, Commits: true}},
-		{apiv0.Event{Type: apiv0.EventReleaseNoteUpdated}, ReloadTargets{Releases: true, Commits: true}},
 		// A label change reaches the history's chips and the label's count, not
 		// a Draft (task 85_2, task 85_3).
 		{apiv0.Event{Type: apiv0.EventLabelCreated}, ReloadTargets{Labels: true, Commits: true}},
@@ -109,8 +105,8 @@ func TestReloadTargetsFor_CoversEveryKnownEvent(t *testing.T) {
 }
 
 // TestReloadTargets_DraftChanged: the events that write a Draft's content ask
-// for a reread of the stack (ADR 0017); a Tag's value, a Deploy and a Release
-// change no Draft and leave the stack alone (task 72_4).
+// for a reread of the stack (ADR 0017); a Tag's value and a Deploy change no
+// Draft and leave the stack alone (task 72_4).
 func TestReloadTargets_DraftChanged(t *testing.T) {
 	changes := []apiv0.Event{
 		{Type: apiv0.EventTagCreated},
@@ -129,8 +125,6 @@ func TestReloadTargets_DraftChanged(t *testing.T) {
 	unchanged := []apiv0.Event{
 		{Type: apiv0.EventTagUpdated, Tag: &apiv0.TagResponse{}}, // a value, not a DraftChange
 		{Type: apiv0.EventDeploymentCreated},                     // a Deploy takes a saved state (task 85_4)
-		{Type: apiv0.EventReleaseCreated},                        // a Release copies a Commit
-		{Type: apiv0.EventLibraryReleased},                       // a Library Release copies a Commit (task 72_5)
 		{Type: apiv0.EventDeviceCreated},                         // no Device list yet (task 66)
 		{Type: apiv0.EventClientConnected},
 		{Type: apiv0.EventSystemReady},

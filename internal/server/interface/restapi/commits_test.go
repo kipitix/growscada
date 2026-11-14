@@ -30,7 +30,7 @@ func TestCommits_ProjectSaveListFindRename(t *testing.T) {
 		t.Fatalf("POST commit: %d %s", rec.Code, rec.Body)
 	}
 	created := decodeBody[apiv0.CommitResponse](t, serve(router, http.MethodGet, mainPath+"/commits/1", nil))
-	if created.Number != 1 || created.Title != "First save" || created.Author != "Ada" || created.Released {
+	if created.Number != 1 || created.Title != "First save" || created.Author != "Ada" {
 		t.Errorf("the saved commit: %+v", created)
 	}
 

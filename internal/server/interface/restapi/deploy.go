@@ -13,8 +13,7 @@ import (
 // the snapshot of its Tag states, a Deploy of a saved state, Discard and Revert
 // (task 35, part 5; task 85_4). The Deployment and the Tag states are the
 // Runtime node's; a Deploy of a saved state, Discard and Revert are the
-// Engineering node's. A Deploy of a Release is served by the Release handlers
-// until task 85_5, and the old Deploy of the Draft answers 410.
+// Engineering node's. The old Deploy of the Draft answers 410.
 type DeployHandlers struct {
 	discard     application.DiscardService
 	deploys     application.DeployService
@@ -85,8 +84,8 @@ func (h DeployHandlers) GetTagStates(w http.ResponseWriter, r *http.Request) {
 
 // PostDiscard handles POST /projects/{project_id}/discard: it resets the Draft
 // to the Project's last Commit, dropping the unsaved changes, and answers the
-// Draft's new state, with the Library Releases it could not restore (task 71,
-// task 72_4). 409 nothing_to_discard without a Commit.
+// Draft's new state, with the saved states of Libraries it could not restore
+// (task 71, task 72_4). 409 nothing_to_discard without a Commit.
 func (h DeployHandlers) PostDiscard(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := pathUUID(w, r, projectResource)
 	if !ok {
@@ -119,8 +118,8 @@ func (h DeployHandlers) PostRevert(w http.ResponseWriter, r *http.Request) {
 // PostCommitLoad handles POST /projects/{project_id}/commits/{commit_number}/load:
 // the Draft replaced by the content of that Commit, in one transaction — the
 // saved state becomes what is edited (task 84). 404 for a number the Project
-// does not have; the Library Releases it could not restore are answered with
-// the new state (task 71).
+// does not have; the saved states of Libraries it could not restore are
+// answered with the new state (task 71).
 func (h DeployHandlers) PostCommitLoad(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := pathUUID(w, r, projectResource)
 	if !ok {

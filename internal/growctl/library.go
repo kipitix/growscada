@@ -514,9 +514,8 @@ func newDiscardCommand(s *settings) *cobra.Command {
 		Short: "Reset the Draft of a library to its last Commit",
 		Long: "Reset the Draft of the library to its last Commit, dropping the unsaved changes:\n" +
 			"the WidgetTypes added since are removed, the changed ones restored, the removed\n" +
-			"ones brought back. The published state is the latest Release, which `release`\n" +
-			"publishes. The server does it in one transaction and answers the Draft's new\n" +
-			"state; a library never saved has nothing to discard to.",
+			"ones brought back. The server does it in one transaction and answers the\n" +
+			"Draft's new state; a library never saved has nothing to discard to.",
 		Args: exactlyOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -549,7 +548,7 @@ func newGetLibrariesCommand(s *settings) *cobra.Command {
 		Use:     "libraries",
 		Aliases: []string{"library"},
 		Short:   "List libraries",
-		Long:    "List the server's libraries in creation order, with their latest Release, last Commit and whether each has unsaved or unpublished changes.",
+		Long:    "List the server's libraries in creation order, with their latest Commit and whether each has unsaved changes.",
 		Args:    noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			libraries, err := s.client().ListLibraries(cmd.Context())
@@ -561,9 +560,9 @@ func newGetLibrariesCommand(s *settings) *cobra.Command {
 				return nil
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tRELEASE\tCOMMIT\tUNSAVED\tUNPUBLISHED")
+			fmt.Fprintln(w, "NAME\tCOMMIT\tUNSAVED")
 			for _, l := range libraries {
-				fmt.Fprintf(w, "%s\t%d\t%d\t%t\t%t\n", l.Name, l.LatestRelease, l.LatestCommit, l.HasUnsavedChanges, l.HasUnpublishedChanges)
+				fmt.Fprintf(w, "%s\t%d\t%t\n", l.Name, l.LatestCommit, l.HasUnsavedChanges)
 			}
 			return w.Flush()
 		},

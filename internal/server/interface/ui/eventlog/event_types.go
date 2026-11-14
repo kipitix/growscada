@@ -65,8 +65,7 @@ func isProjectContent(ev apiv0.Event) bool {
 		apiv0.EventEnvironmentCreated, apiv0.EventEnvironmentUpdated, apiv0.EventEnvironmentDeleted,
 		apiv0.EventEnvironmentDeviceCreated, apiv0.EventEnvironmentDeviceUpdated, apiv0.EventEnvironmentDeviceDeleted,
 		apiv0.EventDeploymentCreated,
-		apiv0.EventCommitCreated, apiv0.EventCommitTitleUpdated,
-		apiv0.EventReleaseCreated, apiv0.EventReleaseNoteUpdated:
+		apiv0.EventCommitCreated, apiv0.EventCommitTitleUpdated:
 		return true
 	}
 	switch eventTypeInfoByType[ev.Type].category {
@@ -106,12 +105,9 @@ var eventTypeInfoByType = map[string]eventTypeInfo{
 	apiv0.EventLibraryCreated:       {categoryLibrary, "Library %s created"},
 	apiv0.EventLibraryUpdated:       {categoryLibrary, "Library %s updated"},
 	apiv0.EventLibraryDeleted:       {categoryLibrary, "Library %s deleted"},
-	apiv0.EventLibraryReleased:      {categoryLibrary, "Library %s released"},
 	apiv0.EventLibraryImportCreated: {categoryLibrary, "Library %s imported"},
 	apiv0.EventLibraryImportUpdated: {categoryLibrary, "Library %s import switched"},
 	apiv0.EventLibraryImportDeleted: {categoryLibrary, "Library %s import removed"},
-
-	apiv0.EventLibraryReleaseNoteUpdated: {categoryLibrary, "Library %s release note updated"},
 
 	apiv0.EventSceneCreated: {categoryScene, "Scene %s created"},
 	apiv0.EventSceneUpdated: {categoryScene, "Scene %s updated"},
@@ -136,9 +132,6 @@ var eventTypeInfoByType = map[string]eventTypeInfo{
 
 	apiv0.EventCommitCreated:      {categoryProject, "Saved state %s saved"},
 	apiv0.EventCommitTitleUpdated: {categoryProject, "Saved state %s retitled"},
-
-	apiv0.EventReleaseCreated:     {categoryProject, "Release %s published"},
-	apiv0.EventReleaseNoteUpdated: {categoryProject, "Release %s note updated"},
 
 	// The labels are the Organization's, never content of a project (task 85_2;
 	// ADR 0025).

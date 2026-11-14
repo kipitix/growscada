@@ -41,9 +41,8 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 		mine := l.eventOfSelectedLibrary(ev)
 		targets := eventlog.ReloadTargetsFor(ev)
 		// A write of the Draft's content is one DraftChange: the undo and redo
-		// buttons follow the events (ADR 0017), as the release state does. A
-		// Release publishes a Commit and clears no stack (task 72_5). The flag
-		// follows every write of the content, the Draft's own state (task 74).
+		// buttons follow the events (ADR 0017). The flag follows every write of
+		// the content, the Draft's own state (task 74).
 		if targets.DraftChanged() && mine {
 			l.loadUnsavedChanges(ctx)
 			l.loadDraftChanges(ctx)
@@ -61,14 +60,6 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 			l.loadCommits(ctx)
 			l.loadUnsavedChanges(ctx) // a Save makes the Draft its Commit's content
 		}
-		// A Release of the selected library, or a rename of the saved state it
-		// published, changes the history's "released" mark and the library's
-		// state — never another library's (task 72_7; task 84).
-		if (targets.Releases || ev.Type == apiv0.EventCommitTitleUpdated) && mine {
-			l.loadReleases(ctx) // the row names the Release that published it
-			l.loadCommits(ctx)
-			l.loadLibraries(ctx)
-		}
 		if eventlog.IsLabelEvent(ev.Type) {
 			// The chips of the history and the labels its menu offers follow a
 			// label of the Organization or one of its assignments, whichever
@@ -81,8 +72,8 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 	})
 }
 
-// eventOfSelectedLibrary reports whether an event of a Library's Commit, its
-// Release or a WidgetType of its Draft concerns the selected library. The
+// eventOfSelectedLibrary reports whether an event of a Library's Commit or a
+// WidgetType of its Draft concerns the selected library. The
 // event names the library in ev.ID, and a WidgetType event in ev.LibraryID;
 // an event that names none concerns every one (task 72_7).
 func (l *Library) eventOfSelectedLibrary(ev apiv0.Event) bool {

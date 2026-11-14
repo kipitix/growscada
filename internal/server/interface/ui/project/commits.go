@@ -128,8 +128,8 @@ func prompt(message, value string) (string, bool) {
 }
 
 // openHistory shows the saved states of the project, read afresh (task 84): a
-// screen of its own, in place of the content. The mode knows no Release, so the
-// rows carry the saved states and their labels alone (task 85_5).
+// screen of its own, in place of the content. The rows carry the saved states
+// and their labels alone: the mode has no Release (task 85_5, task 85_7).
 func (p *Project) openHistory(ctx app.Context) {
 	p.historyScreen = true
 	p.loadCommits(ctx)
@@ -318,8 +318,8 @@ func saveConfirmLabel(saving bool) string {
 
 // renderHistoryScreen is the history of the project's saved states (task 84):
 // the screen both modes share, fed with this project's history and its labels.
-// A Release is not part of the Project mode any more, so the screen draws no
-// Release and offers no Make Release here (task 85_5).
+// The history screen draws no Release and offers no Make Release: a Release is
+// gone from the model (task 85_5, task 85_7).
 func (p *Project) renderHistoryScreen() app.UI {
 	screen := p.history
 	screen.Rows = p.historyRows()

@@ -363,19 +363,3 @@ func TestDeploymentCreated_RereadsTheDeployment(t *testing.T) {
 		t.Errorf("requests: %v, want %v", got, want)
 	}
 }
-
-// TestReleaseEvents_AreIgnored: the Project mode knows no Release (task 85_5),
-// so its events change nothing here: the history and the Deploy window are the
-// saved states'.
-func TestReleaseEvents_AreIgnored(t *testing.T) {
-	url, api := newServer(t)
-	f, log := mountLogged(t, url, api)
-
-	f.event(apiv0.Event{Type: apiv0.EventReleaseCreated})
-	f.event(apiv0.Event{Type: apiv0.EventReleaseNoteUpdated})
-
-	f.noToasts()
-	if got := log.take(); len(got) != 0 {
-		t.Errorf("requests on a Release event: %v, want none", got)
-	}
-}

@@ -504,20 +504,20 @@ func (l *draftLoader) readScenes(ctx context.Context, and string, args ...any) (
 
 // ImportedWidgetType returns the copy of the WidgetType typeID the Commits the
 // Draft's Project imports hold (task 85_6).
-func (l *draftLoader) ImportedWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.ReleasedWidgetType, error) {
+func (l *draftLoader) ImportedWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.WidgetTypeCopy, error) {
 	rows, err := l.tx.QueryContext(ctx, importedWidgetTypesQuery, l.project.UUID())
 	if err != nil {
-		return library.ReleasedWidgetType{}, fmt.Errorf("cannot read the imported widget type %s: %w", typeID, err)
+		return library.WidgetTypeCopy{}, fmt.Errorf("cannot read the imported widget type %s: %w", typeID, err)
 	}
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var contentJSON []byte
 		if err := rows.Scan(&contentJSON); err != nil {
-			return library.ReleasedWidgetType{}, fmt.Errorf("cannot read the imported widget type %s: %w", typeID, err)
+			return library.WidgetTypeCopy{}, fmt.Errorf("cannot read the imported widget type %s: %w", typeID, err)
 		}
 		var content draft.CommitContent
 		if err := json.Unmarshal(contentJSON, &content); err != nil {
-			return library.ReleasedWidgetType{}, fmt.Errorf("cannot decode the content of an imported commit: %w", err)
+			return library.WidgetTypeCopy{}, fmt.Errorf("cannot decode the content of an imported commit: %w", err)
 		}
 		held, ok := content.WidgetTypes()
 		if !ok {
@@ -530,9 +530,9 @@ func (l *draftLoader) ImportedWidgetType(ctx context.Context, typeID id.ID[libra
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return library.ReleasedWidgetType{}, fmt.Errorf("cannot read the imported widget type %s: %w", typeID, err)
+		return library.WidgetTypeCopy{}, fmt.Errorf("cannot read the imported widget type %s: %w", typeID, err)
 	}
-	return library.ReleasedWidgetType{}, id.NotFound(library.ErrWidgetTypeNotFound, typeID)
+	return library.WidgetTypeCopy{}, id.NotFound(library.ErrWidgetTypeNotFound, typeID)
 }
 
 // WidgetTypes returns every WidgetType of the Draft's Library, in creation

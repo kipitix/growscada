@@ -1,15 +1,15 @@
 info:
-  name: post deploy second
+  name: deploy the second saved state
   type: http
   seq: 63
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/releases/{{OTHER_RELEASE_NUMBER}}/deploy
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/commits/{{OTHER_COMMIT_NUMBER}}/deploy
   auth: inherit
 
 docs: |
-  Release 2 is made the running Deployment: Deployment 2, which a Rollback can
-  then leave behind (task 72_4).
+  Saved state 2 is made the running Deployment: Deployment 2, which a Rollback
+  can then leave behind (task 85_4).
 
 runtime:
   assertions:

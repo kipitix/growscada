@@ -32,7 +32,6 @@ type APIRouter struct {
 	deploymentsHandlers    *DeploymentHandlers
 	projectFileHandlers    *ProjectFileHandlers
 	commitHandlers         *CommitHandlers
-	releaseHandlers        *ReleaseHandlers
 	settingsHandlers       *SettingsHandlers
 	labelHandlers          *LabelHandlers
 	eventsHandlers         *EventsHandlers
@@ -95,7 +94,6 @@ type Services struct {
 	Discard        application.DiscardService
 	ProjectFiles   application.ProjectFileService
 	Commits        application.CommitService
-	Releases       application.ReleaseService
 	// Settings are the per-user settings of the server (task 81): one
 	// person's view of its content, never its content (ADR 0024).
 	Settings application.SettingsService
@@ -134,7 +132,6 @@ func NewRouter(services Services, eventBus eventbus.EventBus, maxSSEClients int)
 		deploymentsHandlers:    NewDeploymentHandler(services.Deployments),
 		projectFileHandlers:    NewProjectFileHandler(services.ProjectFiles),
 		commitHandlers:         NewCommitHandler(services.Commits, services.Labels),
-		releaseHandlers:        NewReleaseHandler(services.Releases),
 		settingsHandlers:       NewSettingsHandler(services.Settings),
 		labelHandlers:          NewLabelHandler(services.Labels),
 		eventsHandlers:         NewEventsHandler(eventBus, projectService, maxSSEClients, WithDeviceTokens(services.DeviceTokens)),
@@ -168,7 +165,6 @@ func (r *APIRouter) routes() []route {
 	deployments := r.deploymentsHandlers
 	changes := r.draftChangesHandlers
 	commits := r.commitHandlers
-	releases := r.releaseHandlers
 	settings := r.settingsHandlers
 	labels := r.labelHandlers
 	return []route{
@@ -205,12 +201,7 @@ func (r *APIRouter) routes() []route {
 		{"PUT " + lp, libraries.PutLibrariesByID},
 		{"DELETE " + lp, libraries.DeleteLibrariesByID},
 		{"GET " + lp + "/draft", libraries.GetDraft},
-		{"POST " + lp + "/releases", libraries.PostReleases},
-		{"GET " + lp + "/releases", libraries.GetReleases},
-		{"GET " + lp + "/releases/" + releaseResource.wildcard(), libraries.GetReleasesByNumber},
-		{"PATCH " + lp + "/releases/" + releaseResource.wildcard(), libraries.PatchReleasesByNumber},
 		{"POST " + lp + "/discard", libraries.PostDiscard},
-		{"POST " + lp + apiv0.RevertToReleasePath, libraries.PostRevertToRelease},
 		{"GET " + lp + apiv0.DraftChangesPath, changes.GetLibraryDraftChanges},
 		{"POST " + lp + apiv0.DraftChangesUndoPath, changes.PostLibraryDraftChangesUndo},
 		{"POST " + lp + apiv0.DraftChangesRedoPath, changes.PostLibraryDraftChangesRedo},
@@ -283,12 +274,6 @@ func (r *APIRouter) routes() []route {
 		{"GET " + pp + apiv0.CommitPath + "/" + commitResource.wildcard() + "/projectfile", commits.GetCommitProjectFile},
 		{"PUT " + pp + apiv0.CommitPath + "/" + commitResource.wildcard() + apiv0.CommitLabelsPath + "/" + labelResource.wildcard(), commits.PutCommitLabel},
 		{"DELETE " + pp + apiv0.CommitPath + "/" + commitResource.wildcard() + apiv0.CommitLabelsPath + "/" + labelResource.wildcard(), commits.DeleteCommitLabel},
-		{"GET " + pp + apiv0.ReleasePath, releases.GetReleases},
-		{"POST " + pp + apiv0.ReleasePath, releases.PostRelease},
-		{"GET " + pp + apiv0.ReleasePath + "/" + projectReleaseResource.wildcard(), releases.GetReleaseByNumber},
-		{"PATCH " + pp + apiv0.ReleasePath + "/" + projectReleaseResource.wildcard(), releases.PatchRelease},
-		{"GET " + pp + apiv0.ReleasePath + "/" + projectReleaseResource.wildcard() + "/projectfile", releases.GetReleaseProjectFile},
-		{"POST " + pp + apiv0.ReleasePath + "/" + projectReleaseResource.wildcard() + "/deploy", releases.PostReleaseDeploy},
 		{"GET " + pp + "/deployment", deploy.GetDeployment},
 		{"GET " + pp + "/deployments", deployments.GetDeployments},
 		{"GET " + pp + "/deployments/" + deploymentResource.wildcard(), deployments.GetDeploymentByNumber},
@@ -309,7 +294,8 @@ func (r *APIRouter) routes() []route {
 		{"GET " + pp + apiv0.JournalEventsPath, r.journalHandlers.GetJournalEvents},
 		{"GET " + pp + apiv0.OperationPath, r.operationHandlers.GetOperation},
 		// A Deploy of the Draft took the Draft before task 72_4; it answers
-		// 410 and names the Release route (removed with API 1.0).
+		// 410 and names the Deploy-of-a-saved-state route (removed with API
+		// 1.0).
 		{"POST " + pp + "/deploy", deployDraftRemoved},
 		{"POST " + pp + "/discard", deploy.PostDiscard},
 		{"POST " + pp + apiv0.RevertToDeployedPath, deploy.PostRevert},

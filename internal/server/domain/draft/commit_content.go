@@ -25,7 +25,7 @@ const commitContentFormatVersion = 1
 // history.
 type CommitContent struct {
 	projectFile *projectv0.ProjectFile
-	widgetTypes []library.ReleasedWidgetType
+	widgetTypes []library.WidgetTypeCopy
 }
 
 // NewProjectCommitContent returns the content of a Project's Commit over the
@@ -36,7 +36,7 @@ func NewProjectCommitContent(file projectv0.ProjectFile) CommitContent {
 
 // NewLibraryCommitContent returns the content of a Library's Commit over the
 // copies of its Draft's WidgetTypes.
-func NewLibraryCommitContent(widgetTypes []library.ReleasedWidgetType) CommitContent {
+func NewLibraryCommitContent(widgetTypes []library.WidgetTypeCopy) CommitContent {
 	return CommitContent{widgetTypes: slices.Clone(widgetTypes)}
 }
 
@@ -57,7 +57,7 @@ func (c CommitContent) ProjectFile() (projectv0.ProjectFile, bool) {
 
 // WidgetTypes returns the content's WidgetTypes; false for a Project's
 // content.
-func (c CommitContent) WidgetTypes() ([]library.ReleasedWidgetType, bool) {
+func (c CommitContent) WidgetTypes() ([]library.WidgetTypeCopy, bool) {
 	if c.projectFile != nil {
 		return nil, false
 	}
@@ -72,7 +72,7 @@ type commitContentDocument struct {
 	WidgetTypes []releasedWidgetTypeDocument `json:"widget_types,omitempty"`
 }
 
-// releasedWidgetTypeDocument is the stored form of a ReleasedWidgetType; the
+// releasedWidgetTypeDocument is the stored form of a WidgetTypeCopy; the
 // field names repeat the release tables.
 type releasedWidgetTypeDocument struct {
 	ID             uuid.UUID           `json:"id"`
@@ -152,7 +152,7 @@ func (c *CommitContent) UnmarshalJSON(data []byte) error {
 		*c = NewProjectCommitContent(*doc.ProjectFile)
 		return nil
 	case "library":
-		types := make([]library.ReleasedWidgetType, len(doc.WidgetTypes))
+		types := make([]library.WidgetTypeCopy, len(doc.WidgetTypes))
 		for i, row := range doc.WidgetTypes {
 			ports := make([]library.InputPort, len(row.InputPorts))
 			for j, p := range row.InputPorts {
@@ -186,7 +186,7 @@ func (c *CommitContent) UnmarshalJSON(data []byte) error {
 			if err != nil {
 				return fmt.Errorf("cannot decode commit content: widget type %s: %w", row.ID, err)
 			}
-			copied, err := library.NewReleasedWidgetType(
+			copied, err := library.NewWidgetTypeCopy(
 				id.NewID(id.IDWithUUID[library.WidgetType](row.ID)),
 				id.NewID(id.IDWithUUID[library.Library](row.LibraryID)),
 				name, html, script, language, size, ports,

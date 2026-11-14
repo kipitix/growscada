@@ -3,8 +3,7 @@ package apiv0
 // Event is the payload of every message of the event streams (sent as SSE
 // `data:`), whatever the domain event. GET /events carries the events of the
 // server's own resources — projects, libraries with the WidgetTypes of their
-// Drafts and their releases, and the labels of the Organization — and of the
-// connections,
+// Drafts, and the labels of the Organization — and of the connections,
 // plus, with ?project= (EventsQueryProject), those of that project's content;
 // GET /projects/{id}/events those of one project's content alone — Tags,
 // Scenes, Widgets, Library Imports, Devices, Environments with the parameters
@@ -14,8 +13,7 @@ package apiv0
 // ID of a label_* event is the label's.
 // SceneID is the Scene that holds (or held) the Widget, on widget_created,
 // widget_updated and widget_deleted only. LibraryID is the library of the
-// WidgetType, on widget_type_* only. Release is the number of the new
-// release, on library_released only. EnvironmentID and DeviceID are the pair
+// WidgetType, on widget_type_* only. EnvironmentID and DeviceID are the pair
 // of an environment_device_* event. Tag
 // carries the Tag's full new state, in the shape of GET /tags/{id}, its seq
 // included, on tag_updated only. tag_updated is delivered at-most-once: a
@@ -31,10 +29,6 @@ type Event struct {
 	ID        string `json:"id,omitempty"`
 	SceneID   string `json:"scene_id,omitempty"`
 	LibraryID string `json:"library_id,omitempty"`
-	// Release is the number of the new Release, on release_created and
-	// release_note_updated, and of a Library Release on library_released; ID is
-	// the Project's or the Library's.
-	Release int `json:"release,omitempty"`
 	// EnvironmentID and DeviceID name the pair whose parameters changed, on
 	// environment_device_* only; ID is the Environment's (the pair has no ID
 	// of its own), and EnvironmentID names it again.
@@ -84,7 +78,6 @@ const (
 	EventLibraryCreated       = "library_created"
 	EventLibraryUpdated       = "library_updated"
 	EventLibraryDeleted       = "library_deleted"
-	EventLibraryReleased      = "library_released"
 	EventLibraryImportCreated = "library_import_created"
 	EventLibraryImportUpdated = "library_import_updated"
 	EventLibraryImportDeleted = "library_import_deleted"
@@ -103,11 +96,6 @@ const (
 
 	EventCommitCreated      = "commit_created"
 	EventCommitTitleUpdated = "commit_title_updated"
-
-	EventReleaseCreated     = "release_created"
-	EventReleaseNoteUpdated = "release_note_updated"
-
-	EventLibraryReleaseNoteUpdated = "library_release_note_updated"
 
 	EventLabelCreated = "label_created"
 	EventLabelUpdated = "label_updated"
@@ -129,15 +117,13 @@ func EventTypes() []string {
 		EventSceneCreated, EventSceneUpdated, EventSceneDeleted,
 		EventClientConnected, EventClientDisconnected,
 		EventProjectCreated, EventProjectUpdated, EventProjectDeleted,
-		EventLibraryCreated, EventLibraryUpdated, EventLibraryDeleted, EventLibraryReleased,
+		EventLibraryCreated, EventLibraryUpdated, EventLibraryDeleted,
 		EventLibraryImportCreated, EventLibraryImportUpdated, EventLibraryImportDeleted,
 		EventDeviceCreated, EventDeviceUpdated, EventDeviceDeleted,
 		EventEnvironmentCreated, EventEnvironmentUpdated, EventEnvironmentDeleted,
 		EventEnvironmentDeviceCreated, EventEnvironmentDeviceUpdated, EventEnvironmentDeviceDeleted,
 		EventDeploymentCreated,
 		EventCommitCreated, EventCommitTitleUpdated,
-		EventReleaseCreated, EventReleaseNoteUpdated,
-		EventLibraryReleaseNoteUpdated,
 		EventLabelCreated, EventLabelUpdated, EventLabelDeleted,
 		EventLabelAssigned, EventLabelUnassigned,
 	}

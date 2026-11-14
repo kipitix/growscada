@@ -50,7 +50,7 @@ type LibraryImportService interface {
 	ImportImpact(ctx context.Context, projectID, libraryID uuid.UUID, commit *int) (appdto.ImportImpact, error)
 	// FindImportedWidgetTypes returns the WidgetTypes of every saved state the
 	// project imports: the palette of its Scenes.
-	FindImportedWidgetTypes(ctx context.Context, projectID uuid.UUID) ([]appdto.ReleasedWidgetType, error)
+	FindImportedWidgetTypes(ctx context.Context, projectID uuid.UUID) ([]appdto.WidgetTypeCopy, error)
 }
 
 type libraryImportServiceImpl struct {
@@ -128,7 +128,7 @@ func (s libraryImportServiceImpl) libraryCommit(ctx context.Context, libraryID i
 	return commit, nil
 }
 
-func (s libraryImportServiceImpl) FindImportedWidgetTypes(ctx context.Context, rawProjectID uuid.UUID) ([]appdto.ReleasedWidgetType, error) {
+func (s libraryImportServiceImpl) FindImportedWidgetTypes(ctx context.Context, rawProjectID uuid.UUID) ([]appdto.WidgetTypeCopy, error) {
 	_, scope, err := s.content.open(ctx, rawProjectID)
 	if err != nil {
 		return nil, err
@@ -137,7 +137,7 @@ func (s libraryImportServiceImpl) FindImportedWidgetTypes(ctx context.Context, r
 	if err != nil {
 		return nil, fmt.Errorf("error on find imported widget types in repository: %w", err)
 	}
-	return appdto.NewReleasedWidgetTypeList(list), nil
+	return appdto.NewWidgetTypeCopyList(list), nil
 }
 
 // openImport opens the live project rawProjectID and finds its library

@@ -457,8 +457,8 @@ func newUpdateWidgetTypeInput(r apiv0.UpdateWidgetTypeRequest) appdto.WidgetType
 	}
 }
 
-func newReleasedWidgetTypeResponse(wt appdto.ReleasedWidgetType) apiv0.ReleasedWidgetTypeResponse {
-	return apiv0.ReleasedWidgetTypeResponse{
+func newWidgetTypeCopyResponse(wt appdto.WidgetTypeCopy) apiv0.WidgetTypeCopyResponse {
+	return apiv0.WidgetTypeCopyResponse{
 		ID:             wt.ID,
 		LibraryID:      wt.LibraryID,
 		Name:           wt.Name,
@@ -471,24 +471,22 @@ func newReleasedWidgetTypeResponse(wt appdto.ReleasedWidgetType) apiv0.ReleasedW
 	}
 }
 
-func newReleasedWidgetTypeResponses(list []appdto.ReleasedWidgetType) []apiv0.ReleasedWidgetTypeResponse {
-	items := make([]apiv0.ReleasedWidgetTypeResponse, len(list))
+func newWidgetTypeCopyResponses(list []appdto.WidgetTypeCopy) []apiv0.WidgetTypeCopyResponse {
+	items := make([]apiv0.WidgetTypeCopyResponse, len(list))
 	for i, wt := range list {
-		items[i] = newReleasedWidgetTypeResponse(wt)
+		items[i] = newWidgetTypeCopyResponse(wt)
 	}
 	return items
 }
 
 func newLibraryResponse(l appdto.Library) apiv0.LibraryResponse {
 	return apiv0.LibraryResponse{
-		ID:                    l.ID,
-		Name:                  l.Name,
-		Description:           l.Description,
-		Version:               l.Version,
-		LatestRelease:         l.LatestRelease,
-		LatestCommit:          l.LatestCommit,
-		HasUnsavedChanges:     l.HasUnsavedChanges,
-		HasUnpublishedChanges: l.HasUnpublishedChanges,
+		ID:                l.ID,
+		Name:              l.Name,
+		Description:       l.Description,
+		Version:           l.Version,
+		LatestCommit:      l.LatestCommit,
+		HasUnsavedChanges: l.HasUnsavedChanges,
 	}
 }
 
@@ -508,7 +506,6 @@ func newCommitResponse(c appdto.Commit) apiv0.CommitResponse {
 		Author:       c.Author,
 		CreatedAt:    c.CreatedAt.UTC(),
 		DraftVersion: c.DraftVersion,
-		Released:     c.Released,
 		ContentCounts: apiv0.CommitContentCounts{
 			Scenes:       c.Counts.Scenes,
 			Widgets:      c.Counts.Widgets,
@@ -519,7 +516,7 @@ func newCommitResponse(c appdto.Commit) apiv0.CommitResponse {
 		},
 	}
 	if c.WidgetTypes != nil {
-		resp.WidgetTypes = newReleasedWidgetTypeResponses(c.WidgetTypes)
+		resp.WidgetTypes = newWidgetTypeCopyResponses(c.WidgetTypes)
 	}
 	if c.Labels != nil {
 		resp.Labels = newLabelResponses(c.Labels)
@@ -541,69 +538,6 @@ func newGetCommitsResponse(list []appdto.Commit) apiv0.GetCommitsResponse {
 		items[i] = newCommitResponse(c)
 	}
 	return apiv0.GetCommitsResponse{Commits: items}
-}
-
-// newReleaseResponse converts an application-layer Release to its contract
-// body without content.
-func newReleaseResponse(r appdto.Release) apiv0.ReleaseResponse {
-	return apiv0.ReleaseResponse{
-		Number:        r.Number,
-		CommitNumber:  r.CommitNumber,
-		Title:         r.Title,
-		Note:          r.Note,
-		Author:        r.Author,
-		CreatedAt:     r.CreatedAt.UTC(),
-		Origin:        r.Origin,
-		ContentCounts: newCommitContentCounts(r.Counts),
-	}
-}
-
-// newCommitContentCounts converts the counts of a Commit's snapshot.
-func newCommitContentCounts(c appdto.CommitCounts) apiv0.CommitContentCounts {
-	return apiv0.CommitContentCounts{
-		Scenes:       c.Scenes,
-		Widgets:      c.Widgets,
-		Tags:         c.Tags,
-		Devices:      c.Devices,
-		Environments: c.Environments,
-		WidgetTypes:  c.WidgetTypes,
-	}
-}
-
-// newGetReleasesResponse converts a list of Releases, newest first.
-func newGetReleasesResponse(list []appdto.Release) apiv0.GetReleasesResponse {
-	items := make([]apiv0.ReleaseResponse, len(list))
-	for i, r := range list {
-		items[i] = newReleaseResponse(r)
-	}
-	return apiv0.GetReleasesResponse{Releases: items}
-}
-
-func newLibraryReleaseResponse(r appdto.LibraryRelease) apiv0.LibraryReleaseResponse {
-	resp := apiv0.LibraryReleaseResponse{
-		LibraryID:     r.LibraryID,
-		Number:        r.Number,
-		Author:        r.Author,
-		Origin:        r.Origin,
-		Note:          r.Note,
-		CreatedAt:     r.CreatedAt.UTC(),
-		WidgetTypes:   newReleasedWidgetTypeResponses(r.WidgetTypes),
-		ContentCounts: newCommitContentCounts(r.Counts),
-	}
-	if r.CommitNumber != nil {
-		number := *r.CommitNumber
-		title := r.Title
-		resp.CommitNumber, resp.Title = &number, &title
-	}
-	return resp
-}
-
-func newGetLibraryReleasesResponse(list []appdto.LibraryRelease) apiv0.GetLibraryReleasesResponse {
-	items := make([]apiv0.LibraryReleaseResponse, len(list))
-	for i, r := range list {
-		items[i] = newLibraryReleaseResponse(r)
-	}
-	return apiv0.GetLibraryReleasesResponse{Releases: items}
 }
 
 func newLibraryImportResponse(i appdto.LibraryImport) apiv0.LibraryImportResponse {
@@ -712,8 +646,8 @@ func newListDeploymentsResponse(summaries []runtimeapp.DeploymentSummary) apiv0.
 }
 
 // newLoadCommitResponse is the answer of a load of a Commit into the Draft: the
-// Draft's new state and the Library Releases it could not restore (task 71,
-// task 84).
+// Draft's new state and the saved states of Libraries it could not restore
+// (task 71, task 84).
 func newLoadCommitResponse(loaded appdto.LoadedDraft) apiv0.LoadCommitResponse {
 	resp := apiv0.LoadCommitResponse{
 		Version:           loaded.Version,

@@ -18,14 +18,14 @@ import (
 // never see the Draft, only the saved states they import.
 //
 // Its name and description are attributes of the aggregate, never content: a
-// Library Release and an import carry the WidgetType copies alone (task 73).
+// the import carries the WidgetType copies alone (task 73).
 //
 // Deleting a Library only marks it deleted, and only while no live Project
 // imports it: from then on it does not exist for anyone but the policy that
-// removes it with its Draft and its releases.
+// removes it with its Draft and its saved states.
 //
 // A Discard is one transaction over the Draft (ADR 0016): it brings the
-// WidgetTypes back to the latest Library Release, with no mark and no policy.
+// WidgetTypes back to the last Commit, with no mark and no policy.
 //
 // Library is immutable: every change returns a new Library that also records
 // the change's event. A change keeps the Version; the repository raises it

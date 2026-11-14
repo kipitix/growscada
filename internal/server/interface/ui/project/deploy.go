@@ -127,8 +127,7 @@ func (p *Project) loadDeploy(ctx app.Context) {
 //
 // The window lists the saved states of the Draft, newest first, and makes one
 // of them the running Deployment. The label filter is the server's:
-// GET …/commits?label=<id>, so the same filter serves growctl and Bruno. A
-// Release takes no part in it any more.
+// GET …/commits?label=<id>, so the same filter serves growctl and Bruno.
 
 // openDeployDialog shows the saved states, read afresh, with the labels the
 // filter offers: the window is the only place a Deploy is chosen from.
@@ -552,8 +551,8 @@ func (p *Project) reloadDraftContent(ctx app.Context) {
 }
 
 // showLoadWarnings tells what a load of a saved state could not restore: the
-// Library Releases this server does not have went with the widgets of their
-// types (task 71, task 84).
+// saved states of Libraries this server does not have went with the widgets of
+// their types (task 71, task 84).
 func (p *Project) showLoadWarnings(ctx app.Context, warnings []apiv0.DiscardWarningResponse) {
 	if len(warnings) == 0 {
 		return

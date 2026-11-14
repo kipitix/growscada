@@ -17,16 +17,11 @@ type Library struct {
 	Name        string
 	Description string
 	Version     int
-	// LatestRelease is the number of the latest Library Release; 0 if none.
-	LatestRelease int
 	// LatestCommit is the number of the Draft's last Commit; 0 when it was
 	// never saved.
 	LatestCommit int
 	// HasUnsavedChanges reports whether the Draft moved since its last Commit.
 	HasUnsavedChanges bool
-	// HasUnpublishedChanges reports whether the last Commit is newer than the
-	// one the latest Release published.
-	HasUnpublishedChanges bool
 }
 
 // LibraryInput holds the fields of a library a client creates or updates.
@@ -37,76 +32,18 @@ type LibraryInput struct {
 	Description *string
 }
 
-// NewLibrary creates a Library DTO from the domain aggregate and the state its
-// Commits and Releases are in.
-func NewLibrary(l library.Library, state library.ReleaseState) Library {
+// NewLibrary creates a Library DTO from the domain aggregate, the number of
+// its last Commit (0 when it was never saved) and whether its Draft moved
+// since that Commit (task 74).
+func NewLibrary(l library.Library, latestCommit int, hasUnsavedChanges bool) Library {
 	return Library{
-		ID:                    l.ID().UUID(),
-		Name:                  l.Name().String(),
-		Description:           l.Description().String(),
-		Version:               l.Version().Number(),
-		LatestRelease:         state.Latest.Int(),
-		LatestCommit:          state.LatestCommit,
-		HasUnsavedChanges:     state.UnsavedChanges,
-		HasUnpublishedChanges: state.UnpublishedChanges,
+		ID:                l.ID().UUID(),
+		Name:              l.Name().String(),
+		Description:       l.Description().String(),
+		Version:           l.Version().Number(),
+		LatestCommit:      latestCommit,
+		HasUnsavedChanges: hasUnsavedChanges,
 	}
-}
-
-// LibraryRelease is the application-layer DTO for a Library Release (task
-// 72_5; ADR 0021): its number, the Commit it published (nil for a legacy
-// Release), that Commit's title, its Author, origin, note, time, the copies of
-// its WidgetTypes and the counts of its snapshot.
-type LibraryRelease struct {
-	LibraryID    uuid.UUID
-	Number       int
-	CommitNumber *int
-	Title        string
-	Author       string
-	Origin       string
-	Note         string
-	CreatedAt    time.Time
-	WidgetTypes  []ReleasedWidgetType
-	Counts       CommitCounts
-}
-
-// ReleaseInput holds what a client states for a Library Release: the Commit to
-// publish, an optional note and the Author who publishes it.
-type ReleaseInput struct {
-	Commit int
-	Note   string
-	Author string
-}
-
-// NewLibraryRelease creates a LibraryRelease DTO from the domain aggregate; a
-// title is the Commit's title at the moment of the read, empty for a legacy
-// Release.
-func NewLibraryRelease(r library.LibraryRelease, title string) LibraryRelease {
-	return LibraryRelease{
-		LibraryID:    r.LibraryID().UUID(),
-		Number:       r.Number().Int(),
-		CommitNumber: r.CommitNumber(),
-		Title:        title,
-		Author:       r.Author().String(),
-		Origin:       r.Origin().String(),
-		Note:         r.Note(),
-		CreatedAt:    r.CreatedAt(),
-		WidgetTypes:  NewReleasedWidgetTypeList(r.WidgetTypes()),
-		Counts:       CommitCounts{WidgetTypes: len(r.WidgetTypes())},
-	}
-}
-
-// NewLibraryReleaseList creates a slice of LibraryRelease DTOs, oldest first;
-// titles maps a Commit number to its current title.
-func NewLibraryReleaseList(list []library.LibraryRelease, titles map[int]string) []LibraryRelease {
-	result := make([]LibraryRelease, len(list))
-	for i, r := range list {
-		title := ""
-		if number := r.CommitNumber(); number != nil {
-			title = titles[*number]
-		}
-		result[i] = NewLibraryRelease(r, title)
-	}
-	return result
 }
 
 // LibraryImport is the application-layer DTO for a Library Import of a

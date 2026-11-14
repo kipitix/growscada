@@ -1,16 +1,16 @@
 info:
-  name: deploy a missing release
+  name: deploy a missing saved state
   type: http
   seq: 50
 
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/releases/99/deploy
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/commits/99/deploy
   auth: inherit
 
 docs: |
-  A Release number the project does not have is `404 Not Found`, and the answer
-  names the Release (task 72_4).
+  A saved state number the project does not have is `404 Not Found`, and the
+  answer names the saved state (task 85_4).
 
 runtime:
   assertions:

@@ -56,7 +56,6 @@ type testServices struct {
 	journal      runtimeapp.JournalService
 	operation    runtimeapp.OperationStateService
 	commits      application.CommitService
-	releases     application.ReleaseService
 	settings     application.SettingsService
 	labels       application.LabelService
 }
@@ -76,9 +75,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		panic("organization: " + err.Error())
 	}
 	projectRepo := repositories.NewProjectRepositoryPostgres(db, opts...)
-	releases := repositories.NewLibraryReleaseRepositoryPostgres(db, opts...)
 	drafts := repositories.NewDraftRepositoryPostgres(db, opts...)
-	projectReleases := repositories.NewProjectReleaseRepositoryPostgres(db, opts...)
 	labels := repositories.NewLabelRepositoryPostgres(db, opts...)
 	content := application.NewProjectContent(projectRepo, repositories.NewProjectScopes(db, opts...), drafts, orgID)
 	libraries := repositories.NewLibraryRepositoryPostgres(db, opts...)
@@ -100,7 +97,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		projectFiles: application.NewProjectFileService(content, application.NewProjectFileBuilder(content), runtimeNode, libraries),
 		draft:        application.NewDraftService(content),
 		draftChanges: application.NewDraftChangesService(content, libraryContent),
-		libraries:    application.NewLibraryService(libraryContent, libraries, releases, widgetTypes, runtimeNode),
+		libraries:    application.NewLibraryService(libraryContent, libraries, widgetTypes, runtimeNode),
 		widgetTypes:  application.NewWidgetTypeService(libraryContent, widgetTypes),
 		imports:      application.NewLibraryImportService(content, libraries, labelService),
 		scenes:       application.NewSceneService(content),
@@ -110,8 +107,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		deviceTokens: deviceTokens,
 		journal:      journal,
 		operation:    runtimeapp.NewOperationStateService(journal, deployments, states, runtimepg.NewCheckpointRepositoryPostgres(db)),
-		commits:      application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, projectReleases, releases, labelService),
-		releases:     application.NewReleaseService(content, projectReleases, runtimeNode, application.NewDeployService(content, runtimeNode)),
+		commits:      application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, labelService),
 		settings:     application.NewSettingsService(repositories.NewUserSettingsRepositoryPostgres(db), settings.SingleUser(), orgID),
 		labels:       labelService,
 	}
@@ -126,7 +122,7 @@ func (s testServices) services() restapi.Services {
 		Draft: s.draft, DraftChanges: s.draftChanges,
 		Discard: s.discard, Deploy: s.deploy, ProjectFiles: s.projectFiles, Deployments: s.deployments,
 		DeviceConfig: s.deviceConfig, DeviceTokens: s.deviceTokens,
-		Journal: s.journal, Operation: s.operation, Commits: s.commits, Releases: s.releases,
+		Journal: s.journal, Operation: s.operation, Commits: s.commits,
 		Settings: s.settings, Labels: s.labels,
 	}
 }
@@ -146,8 +142,8 @@ func deployDeployment(t *testing.T, service runtimeapp.DeploymentService, file p
 	}
 }
 
-// deployDraftThroughServices saves the Draft as a Commit, publishes it and
-// deploys the Release: the order a Deploy takes since task 72_4.
+// deployDraftThroughServices saves the Draft as a Commit and deploys that
+// saved state: the order a Deploy takes since task 85_4.
 func deployDraftThroughServices(t *testing.T, services testServices) {
 	t.Helper()
 	ctx := context.Background()
@@ -156,33 +152,9 @@ func deployDraftThroughServices(t *testing.T, services testServices) {
 	if err != nil {
 		t.Fatalf("save commit: %v", err)
 	}
-	released := releaseCommit(t, services, mainProject, saved.Number)
-	if _, err := services.releases.Deploy(ctx, mainProject, released.Number, "Ada"); err != nil {
-		t.Fatalf("deploy release: %v", err)
+	if _, err := services.deploy.Deploy(ctx, mainProject, saved.Number); err != nil {
+		t.Fatalf("deploy saved state: %v", err)
 	}
-}
-
-// releaseCommit publishes Commit number, or returns the Release that already
-// published it: a test that deploys a Draft another test fixed as a Commit
-// reuses its Release.
-func releaseCommit(t *testing.T, services testServices, projectID uuid.UUID, number int) appdto.Release {
-	t.Helper()
-	ctx := context.Background()
-	created, err := services.releases.Create(ctx, projectID, number, "", "Ada")
-	if err == nil {
-		return created
-	}
-	list, listErr := services.releases.List(ctx, projectID)
-	if listErr != nil {
-		t.Fatalf("release: %v", err)
-	}
-	for _, existing := range list {
-		if existing.CommitNumber == number {
-			return existing
-		}
-	}
-	t.Fatalf("release: %v", err)
-	return appdto.Release{}
 }
 
 // deployDraftForProject is deployDraftThroughServices for any live Project.
@@ -198,9 +170,8 @@ func deployDraftForProject(t *testing.T, services testServices, projectID uuid.U
 	if err != nil {
 		t.Fatalf("save commit: %v", err)
 	}
-	released := releaseCommit(t, services, projectID, saved.Number)
-	if _, err := services.releases.Deploy(ctx, projectID, released.Number, "Ada"); err != nil {
-		t.Fatalf("deploy release: %v", err)
+	if _, err := services.deploy.Deploy(ctx, projectID, saved.Number); err != nil {
+		t.Fatalf("deploy saved state: %v", err)
 	}
 }
 

@@ -69,9 +69,9 @@ func newInputPorts(domainPorts []library.InputPort) []InputPort {
 	return ports
 }
 
-// ReleasedWidgetType is the application-layer DTO for the copy of a
-// WidgetType a Library Release holds: no Version, a release never changes.
-type ReleasedWidgetType struct {
+// WidgetTypeCopy is the application-layer DTO for the copy of a
+// WidgetType a saved state holds: no Version, a saved state never changes.
+type WidgetTypeCopy struct {
 	ID             uuid.UUID
 	LibraryID      uuid.UUID
 	Name           string
@@ -83,10 +83,10 @@ type ReleasedWidgetType struct {
 	InputPorts     []InputPort
 }
 
-// NewReleasedWidgetType creates a ReleasedWidgetType DTO from the domain
+// NewWidgetTypeCopy creates a WidgetTypeCopy DTO from the domain
 // value object.
-func NewReleasedWidgetType(wt library.ReleasedWidgetType) ReleasedWidgetType {
-	return ReleasedWidgetType{
+func NewWidgetTypeCopy(wt library.WidgetTypeCopy) WidgetTypeCopy {
+	return WidgetTypeCopy{
 		ID:             wt.ID().UUID(),
 		LibraryID:      wt.LibraryID().UUID(),
 		Name:           wt.Name().String(),
@@ -99,11 +99,11 @@ func NewReleasedWidgetType(wt library.ReleasedWidgetType) ReleasedWidgetType {
 	}
 }
 
-// NewReleasedWidgetTypeList creates a slice of ReleasedWidgetType DTOs.
-func NewReleasedWidgetTypeList(list []library.ReleasedWidgetType) []ReleasedWidgetType {
-	result := make([]ReleasedWidgetType, len(list))
+// NewWidgetTypeCopyList creates a slice of WidgetTypeCopy DTOs.
+func NewWidgetTypeCopyList(list []library.WidgetTypeCopy) []WidgetTypeCopy {
+	result := make([]WidgetTypeCopy, len(list))
 	for i, wt := range list {
-		result[i] = NewReleasedWidgetType(wt)
+		result[i] = NewWidgetTypeCopy(wt)
 	}
 	return result
 }

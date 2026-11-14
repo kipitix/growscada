@@ -528,7 +528,7 @@ func lastDraftChange(t *testing.T, projectID id.ID[project.Project]) (string, []
 
 // mustWidgetOf builds a Widget of the released type, bound by each port to the
 // Tag.
-func mustWidgetOf(t *testing.T, repo scene.SceneRepository, released library.ReleasedWidgetType, bindings map[string]tag.Tag) scene.Widget {
+func mustWidgetOf(t *testing.T, repo scene.SceneRepository, released library.WidgetTypeCopy, bindings map[string]tag.Tag) scene.Widget {
 	t.Helper()
 	name, err := scene.NewWidgetName("w-" + uuid.NewString())
 	if err != nil {
@@ -763,17 +763,24 @@ func TestDraftLibrary_OneChangePerWriteAndCAS(t *testing.T) {
 	}
 }
 
-// TestDraftLibrary_ReplaceRestoresTheReleaseAndClearsTheStack: a Discard is
-// one transaction over the Draft: the released names come back even when two
-// were swapped, the Version rises and the DraftChanges go (ADR 0016).
-func TestDraftLibrary_ReplaceRestoresTheReleaseAndClearsTheStack(t *testing.T) {
+// TestDraftLibrary_ReplaceRestoresTheSavedStateAndClearsTheStack: a Discard is
+// one transaction over the Draft: the saved names come back even when two were
+// swapped, the Version rises and the DraftChanges go (ADR 0016).
+func TestDraftLibrary_ReplaceRestoresTheSavedStateAndClearsTheStack(t *testing.T) {
 	cleanWidgetTypes(t)
 	ctx := context.Background()
 	repo := newWidgetTypeRepo(t)
 	scope := draft.LibraryScope(repo.libraryID)
 	a := mustStoreWidgetType(t, makeWidgetType(t, "a", nil, repo), repo)
 	b := mustStoreWidgetType(t, makeWidgetType(t, "b", nil, repo), repo)
-	release := mustRelease(t, repo.libraryID)
+	commit, err := mustCommit(t, repo.libraryID)
+	if err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	saved, ok := commit.Content().WidgetTypes()
+	if !ok {
+		t.Fatalf("the commit holds no widget types")
+	}
 
 	rename := func(wt library.WidgetType, name string) {
 		t.Helper()
@@ -796,7 +803,7 @@ func TestDraftLibrary_ReplaceRestoresTheReleaseAndClearsTheStack(t *testing.T) {
 
 	before := libraryDraftVersionOf(t, repo.libraryID)
 	result, err := testDrafts().Replace(ctx, scope, 0, func(session *draft.Session) error {
-		return session.ReplaceWidgetTypes(ctx, release.WidgetTypes())
+		return session.ReplaceWidgetTypes(ctx, saved)
 	})
 	if err != nil {
 		t.Fatalf("replace: %v", err)

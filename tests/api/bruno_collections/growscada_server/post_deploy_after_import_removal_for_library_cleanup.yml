@@ -4,13 +4,13 @@ info:
   seq: 1997
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/releases/{{CLEANUP_RELEASE_NUMBER}}/deploy
+  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/commits/{{CLEANUP_COMMIT_NUMBER}}/deploy
   auth: inherit
 
 docs: |
-  Release 2 does not name the Legacy library: Deployment 2 does not, and
+  Saved state 2 does not name the Legacy library: Deployment 2 does not, and
   Deployment 1 still does, but a Deployment of the past keeps no library: only
-  the running one does (task 71; task 72_4).
+  the running one does (task 71; task 85_6).
 
 runtime:
   assertions:

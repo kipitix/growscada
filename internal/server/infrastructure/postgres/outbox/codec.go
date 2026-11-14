@@ -21,7 +21,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 	"github.com/kipitix/growscada/internal/server/domain/project"
-	"github.com/kipitix/growscada/internal/server/domain/release"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
@@ -49,9 +48,6 @@ type payload struct {
 	// LibraryID is the Library of a WidgetType's event, and the Library of a
 	// Library Import's (whose ID is the Library's too).
 	LibraryID *uuid.UUID `json:"library_id,omitempty"`
-	// Release is the number of the Library Release of library_released, and of
-	// a Project Release of release_created and release_note_updated.
-	Release int `json:"release,omitempty"`
 	// EnvironmentID and DeviceID are the pair of an environment_device_*
 	// event, whose ID is its Environment's.
 	EnvironmentID *uuid.UUID `json:"environment_id,omitempty"`
@@ -88,24 +84,10 @@ func Encode(e event.Event) ([]byte, error) {
 		} else {
 			p.ID = ev.Scope().ProjectID().UUID()
 		}
-	case release.ReleaseEvent:
-		p.Release = ev.ReleaseNumber().Int()
-		if ev.Scope().IsLibrary() {
-			libraryID := ev.Scope().LibraryID().UUID()
-			p.ID, p.LibraryID = libraryID, &libraryID
-		} else {
-			p.ID = ev.Scope().ProjectID().UUID()
-		}
 	case library.WidgetTypeEvent:
 		p.ID = ev.WidgetTypeID().UUID()
 		libraryID := ev.LibraryID().UUID()
 		p.LibraryID = &libraryID
-	case library.LibraryReleasedEvent:
-		p.ID = ev.LibraryID().UUID()
-		p.Release = ev.Release().Int()
-	case library.LibraryReleaseNoteUpdatedEvent:
-		p.ID = ev.LibraryID().UUID()
-		p.Release = ev.Release().Int()
 	case library.LibraryEvent:
 		p.ID = ev.LibraryID().UUID()
 	case libraryimport.LibraryImportEvent:
@@ -190,24 +172,6 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 			return draft.NewCommitCreatedEvent(scope, p.Commit, ts), nil
 		}
 		return draft.NewCommitTitleUpdatedEvent(scope, p.Commit, ts), nil
-	case event.EventTypeReleaseCreated, event.EventTypeReleaseNoteUpdated:
-		var scope draft.Scope
-		switch {
-		case p.ProjectID != nil:
-			scope = draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](*p.ProjectID)))
-		case p.LibraryID != nil:
-			scope = draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](*p.LibraryID)))
-		default:
-			return nil, fmt.Errorf("cannot decode %s payload: no project_id or library_id", eventType)
-		}
-		number, err := release.NewNumber(p.Release)
-		if err != nil {
-			return nil, fmt.Errorf("cannot decode %s payload: %w", eventType, err)
-		}
-		if eventType == event.EventTypeReleaseCreated {
-			return release.NewReleaseCreatedEvent(scope, number, ts), nil
-		}
-		return release.NewReleaseNoteUpdatedEvent(scope, number, ts), nil
 	case event.EventTypeWidgetTypeCreated, event.EventTypeWidgetTypeUpdated, event.EventTypeWidgetTypeDeleted:
 		if p.LibraryID == nil {
 			return nil, fmt.Errorf("cannot decode %s payload: no library_id", eventType)
@@ -227,15 +191,6 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 		return library.NewLibraryUpdatedEvent(libraryOfEvent, ts), nil
 	case event.EventTypeLibraryDeleted:
 		return library.NewLibraryDeletedEvent(libraryOfEvent, ts), nil
-	case event.EventTypeLibraryReleased, event.EventTypeLibraryReleaseNoteUpdated:
-		release, err := library.NewReleaseNumber(p.Release)
-		if err != nil {
-			return nil, fmt.Errorf("cannot decode %s payload: %w", eventType, err)
-		}
-		if eventType == event.EventTypeLibraryReleaseNoteUpdated {
-			return library.NewLibraryReleaseNoteUpdatedEvent(libraryOfEvent, release, ts), nil
-		}
-		return library.NewLibraryReleasedEvent(libraryOfEvent, release, ts), nil
 	case event.EventTypeProjectCreated:
 		return project.NewProjectCreatedEvent(projectOfEvent, ts), nil
 	case event.EventTypeProjectUpdated:

@@ -22,8 +22,8 @@ var testLibrary = uuid.MustParse("7e57c0de-1000-4000-8000-000000000001")
 // Widget's type must be pinned, so ensureTestWidgetType stores and pins it.
 var testWidgetTypeID = uuid.MustParse("7e57c0de-0000-4000-8000-000000000001")
 
-// ensureTestWidgetType stores testLibrary with testWidgetTypeID, its release
-// 1 and its pin in mainProject, unless they are there.
+// ensureTestWidgetType stores testLibrary with testWidgetTypeID, its saved
+// state 1 and its import in mainProject, unless they are there.
 func ensureTestWidgetType(t *testing.T) {
 	t.Helper()
 	ensurePinnedType(t, testLibrary, "test-library", testWidgetTypeID, "test-type", mainProject)
@@ -31,8 +31,8 @@ func ensureTestWidgetType(t *testing.T) {
 
 // ensurePinnedType stores, unless they are there, the library libraryID
 // named libraryName with the WidgetType typeID named typeName and no ports,
-// its release 1 holding it, its saved state 1, and the import of that saved
-// state in projectID (task 85_6).
+// its saved state 1 holding it, and the import of that saved state in
+// projectID (task 85_6).
 func ensurePinnedType(t *testing.T, libraryID uuid.UUID, libraryName string, typeID uuid.UUID, typeName string, projectID uuid.UUID) {
 	t.Helper()
 	if _, err := testDB.ExecContext(context.Background(),
@@ -50,11 +50,6 @@ func ensurePinnedType(t *testing.T, libraryID uuid.UUID, libraryName string, typ
 		    (id, library_id, name, html_template, script, script_language, input_ports, default_width, default_height)
 		 VALUES ($2, $1, $3, '<div></div>', 'function update(){}', 'javascript', '[]', 100, 100)
 		 ON CONFLICT (id) DO NOTHING`, []any{libraryID, typeID, typeName}},
-		{`INSERT INTO engineering.library_releases (library_id, number) VALUES ($1, 1) ON CONFLICT DO NOTHING`, []any{libraryID}},
-		{`INSERT INTO engineering.released_widget_types
-		    (library_id, release_number, id, name, html_template, script, script_language, input_ports, default_width, default_height)
-		 VALUES ($1, 1, $2, $3, '<div></div>', 'function update(){}', 'javascript', '[]', 100, 100)
-		 ON CONFLICT DO NOTHING`, []any{libraryID, typeID, typeName}},
 	} {
 		if _, err := testDB.ExecContext(context.Background(), q.query, q.args...); err != nil {
 			t.Fatalf("ensurePinnedType: %v", err)
@@ -77,7 +72,7 @@ func newLibraryContent(opts ...repositories.Option) application.LibraryContent {
 
 func newLibraryService() application.LibraryService {
 	return application.NewLibraryService(newLibraryContent(), repositories.NewLibraryRepositoryPostgres(testDB),
-		repositories.NewLibraryReleaseRepositoryPostgres(testDB), repositories.NewWidgetTypeRepositories(testDB), newRuntimeNode())
+		repositories.NewWidgetTypeRepositories(testDB), newRuntimeNode())
 }
 
 // libraryDraftVersionOf returns the Version of a Library's Draft, 1 for one
@@ -128,29 +123,6 @@ func mustCommitLibraryTitled(t *testing.T, libraryID uuid.UUID, title, author st
 		t.Fatalf("Save commit: %v", err)
 	}
 	return commit
-}
-
-// mustReleaseLibrary saves the library's Draft as a Commit and publishes it as
-// the next Library Release (task 72_5; ADR 0021).
-func mustReleaseLibrary(t *testing.T, libraryID uuid.UUID) appdto.LibraryRelease {
-	t.Helper()
-	return mustReleaseLibraryTitled(t, libraryID, "Save", "Ada")
-}
-
-// mustReleaseLibraryTitled publishes a Commit titled title as the next Library
-// Release.
-func mustReleaseLibraryTitled(t *testing.T, libraryID uuid.UUID, title, author string) appdto.LibraryRelease {
-	t.Helper()
-	svc := newLibraryService()
-	if _, err := svc.FindLibraryByID(context.Background(), libraryID); err != nil {
-		t.Fatalf("FindLibraryByID: %v", err)
-	}
-	commit := mustCommitLibraryTitled(t, libraryID, title, author)
-	release, err := svc.Release(context.Background(), libraryID, appdto.ReleaseInput{Commit: commit.Number, Author: author})
-	if err != nil {
-		t.Fatalf("Release: %v", err)
-	}
-	return release
 }
 
 // importNewWidgetType creates, in a new library, a WidgetType of input (its

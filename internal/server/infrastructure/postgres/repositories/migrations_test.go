@@ -322,15 +322,18 @@ func TestSeedData_AppliesOnTheMigratedSchema(t *testing.T) {
 	if strings.Join(names, ",") != "Main,Line 2" {
 		t.Errorf("projects %v, want Main and Line 2", names)
 	}
-	// Two libraries, each released once with its Draft as it is; Main pins
-	// both, Line 2 Main; every Widget of a pinned type.
-	var libraries, unreleased, pins, unpinnedWidgets int
+	// Two libraries, each saved once with its Draft as it is; Main imports
+	// both, Line 2 Main; every Widget of an imported type.
+	var libraries, unsaved, pins, unpinnedWidgets int
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM engineering.libraries`).Scan(&libraries); err != nil || libraries != 2 {
 		t.Errorf("libraries: %d, %v; want 2", libraries, err)
 	}
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM engineering.widget_types w WHERE NOT EXISTS
-	          (SELECT 1 FROM engineering.released_widget_types r WHERE r.id = w.id AND r.name = w.name AND r.release_number = 1)`).Scan(&unreleased); err != nil || unreleased != 0 {
-		t.Errorf("widget types not in release 1: %d, %v", unreleased, err)
+	          (SELECT 1 FROM engineering.drafts d JOIN engineering.commits c ON c.draft_id = d.id
+	           WHERE d.library_id = w.library_id AND c.number = 1
+	             AND EXISTS (SELECT 1 FROM jsonb_array_elements(c.content -> 'widget_types') wt
+	                         WHERE (wt ->> 'id')::uuid = w.id AND wt ->> 'name' = w.name))`).Scan(&unsaved); err != nil || unsaved != 0 {
+		t.Errorf("widget types not in saved state 1: %d, %v", unsaved, err)
 	}
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM engineering.library_imports`).Scan(&pins); err != nil || pins != 3 {
 		t.Errorf("pins: %d, %v; want 3", pins, err)

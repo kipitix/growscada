@@ -50,11 +50,6 @@ func ensureTestWidgetType(t *testing.T) {
 		    (id, library_id, name, html_template, script, script_language, input_ports, default_width, default_height)
 		 VALUES ($2, $1, 'test-type', '<div></div>', 'function update(){}', 'javascript', '[]', 100, 100)
 		 ON CONFLICT (id) DO NOTHING`, []any{testLibrary, testWidgetTypeID}},
-		{`INSERT INTO engineering.library_releases (library_id, number) VALUES ($1, 1) ON CONFLICT DO NOTHING`, []any{testLibrary}},
-		{`INSERT INTO engineering.released_widget_types
-		    (library_id, release_number, id, name, html_template, script, script_language, input_ports, default_width, default_height)
-		 VALUES ($1, 1, $2, 'test-type', '<div></div>', 'function update(){}', 'javascript', '[]', 100, 100)
-		 ON CONFLICT DO NOTHING`, []any{testLibrary, testWidgetTypeID}},
 		{`INSERT INTO engineering.drafts (id, library_id) VALUES (gen_random_uuid(), $1) ON CONFLICT DO NOTHING`, []any{testLibrary}},
 		{`INSERT INTO engineering.commits (id, draft_id, number, title, author, created_at, draft_version, content)
 		 SELECT gen_random_uuid(), d.id, 1, 'Save', 'Ada', now(), 1,
@@ -78,9 +73,9 @@ func ensureTestWidgetType(t *testing.T) {
 	}
 }
 
-// releaseAndPin saves the Draft of the library as a Commit, releases it and
-// imports that Commit in mainProject, in place of the import so far.
-func releaseAndPin(t *testing.T, libraryID uuid.UUID) appdto.LibraryRelease {
+// saveAndImport saves the Draft of the library as a Commit and imports that
+// Commit in mainProject, in place of the import so far.
+func saveAndImport(t *testing.T, libraryID uuid.UUID) {
 	t.Helper()
 	ctx := context.Background()
 	services := newServices()
@@ -93,14 +88,9 @@ func releaseAndPin(t *testing.T, libraryID uuid.UUID) appdto.LibraryRelease {
 	if err != nil {
 		t.Fatalf("Save commit: %v", err)
 	}
-	release, err := services.libraries.Release(ctx, libraryID, appdto.ReleaseInput{Commit: commit.Number, Author: "Ada"})
-	if err != nil {
-		t.Fatalf("Release: %v", err)
-	}
 	if _, _, err := services.imports.PutLibraryImport(ctx, mainProject, libraryID, commit.Number, testDraftVersion(t, mainProject)); err != nil {
 		t.Fatalf("PutLibraryImport: %v", err)
 	}
-	return release
 }
 
 func newRouterWithWidgets() testRouter {
@@ -656,7 +646,7 @@ func TestPostWidgets_InvalidInput_Returns400(t *testing.T) {
 		DefaultWidth: 100, DefaultHeight: 100,
 		InputPorts: []appdto.InputPort{{Name: "value", TypeHint: "integer"}},
 	})
-	releaseAndPin(t, wtLibrary)
+	saveAndImport(t, wtLibrary)
 	cleanTags(t)
 	label := createTagViaService(t, "label", "string", "", "good")
 	cases := map[string]func(*apiv0.CreateWidgetRequest){

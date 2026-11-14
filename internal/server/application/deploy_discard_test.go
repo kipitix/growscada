@@ -14,7 +14,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/project"
-	"github.com/kipitix/growscada/internal/server/domain/release"
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
 
@@ -37,28 +36,6 @@ func mustSaveCommit(t *testing.T, projectID uuid.UUID, title string) appdto.Comm
 		t.Fatalf("Save: %v", err)
 	}
 	return saved
-}
-
-// mustRelease publishes Commit number, or returns the Release that already
-// published it.
-func mustRelease(t *testing.T, projectID uuid.UUID, commitNumber int) appdto.Release {
-	t.Helper()
-	ctx := context.Background()
-	created, err := newReleaseService().Create(ctx, projectID, commitNumber, "", "Ada")
-	if err == nil {
-		return created
-	}
-	list, listErr := newReleaseService().List(ctx, projectID)
-	if listErr != nil {
-		t.Fatalf("Create release: %v", err)
-	}
-	for _, existing := range list {
-		if existing.CommitNumber == commitNumber {
-			return existing
-		}
-	}
-	t.Fatalf("Create release: %v", err)
-	return appdto.Release{}
 }
 
 // mustDeployCommit makes the saved state commitNumber the running Deployment.
@@ -205,8 +182,9 @@ func TestDeployCommit_AChangedCommit_IsANewDeployment(t *testing.T) {
 	}
 }
 
-// TestProjectFileService_Deploy_LeavesNoRelease: a file deployment is a
-// Deployment with no saved state, and it publishes no Release (task 85_4).
+// TestProjectFileService_Deploy_StatesNoSavedState: a file deployment is a
+// Deployment with no saved state, and it publishes no Release — there is none
+// (task 85_4, task 85_7).
 func TestProjectFileService_Deploy_LeavesNoRelease(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
@@ -230,78 +208,6 @@ func TestProjectFileService_Deploy_LeavesNoRelease(t *testing.T) {
 	current, ok, err := newRuntimeNode().FindCurrentDeployment(ctx, mainProject)
 	if err != nil || !ok || current.CommitNumber != nil || current.Number != deployment.Number {
 		t.Errorf("the running deployment: %+v, %v, %v", current, ok, err)
-	}
-	releases, err := newReleaseService().List(ctx, mainProject)
-	if err != nil || len(releases) != 0 {
-		t.Errorf("the file deployment left Releases: %+v, %v, want none", releases, err)
-	}
-}
-
-// TestReleaseService_Deploy_DeploysTheSavedState: the Release route of before
-// task 85_5 deploys the saved state the Release published, so the refusal of a
-// running one is the same.
-func TestReleaseService_Deploy_DeploysTheSavedState(t *testing.T) {
-	cleanDevices(t)
-	cleanScenes(t)
-	ctx := context.Background()
-	mustCreateTag(t, "speed", "integer")
-	saved := mustSaveCommit(t, mainProject, "First save")
-	released := mustRelease(t, mainProject, saved.Number)
-
-	deployment, err := newReleaseService().Deploy(ctx, mainProject, released.Number, "Ada")
-	if err != nil {
-		t.Fatalf("Deploy: %v", err)
-	}
-	if deployment.CommitNumber == nil || *deployment.CommitNumber != saved.Number || deployment.Cause != "deploy" {
-		t.Errorf("the deployment of the Release: %+v, want saved state %d", deployment, saved.Number)
-	}
-	if _, err := newReleaseService().Deploy(ctx, mainProject, released.Number, "Ada"); !errors.Is(err, application.ErrNothingToDeploy) {
-		t.Errorf("a second Deploy of the Release: %v, want ErrNothingToDeploy", err)
-	}
-	if _, err := newReleaseService().Deploy(ctx, mainProject, 9, "Ada"); !errors.Is(err, release.ErrReleaseNotFound) {
-		t.Errorf("Deploy of a missing Release: %v, want ErrReleaseNotFound", err)
-	}
-}
-
-// TestReleaseService_Deploy_OfAFileRelease_StatesNoSavedState: a Release made
-// from a file before task 85_4 keeps deploying its content, and a second Deploy
-// of it is no refusal (the file is not compared).
-func TestReleaseService_Deploy_OfAFileRelease_StatesNoSavedState(t *testing.T) {
-	cleanDevices(t)
-	cleanScenes(t)
-	ctx := context.Background()
-	mustCreateTag(t, "speed", "integer")
-	file, err := application.NewProjectFileBuilder(contentOver(newScopes())).Build(ctx, mainProject)
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	title, err := draft.NewCommitTitle("File")
-	if err != nil {
-		t.Fatalf("NewCommitTitle: %v", err)
-	}
-	note, err := release.NewNote("")
-	if err != nil {
-		t.Fatalf("NewNote: %v", err)
-	}
-	author, err := draft.NewAuthor("file")
-	if err != nil {
-		t.Fatalf("NewAuthor: %v", err)
-	}
-	scope := draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](mainProject)))
-	released, err := repositories.NewProjectReleaseRepositoryPostgres(testDB).CreateFromFile(ctx, scope, title, note, author,
-		draft.NewProjectCommitContent(file))
-	if err != nil {
-		t.Fatalf("CreateFromFile: %v", err)
-	}
-	deployment, err := newReleaseService().Deploy(ctx, mainProject, released.Number().Int(), "Ada")
-	if err != nil {
-		t.Fatalf("Deploy: %v", err)
-	}
-	if deployment.CommitNumber != nil || deployment.Cause != "file" {
-		t.Errorf("the deployment of the file Release: %+v, want a file Deployment with no saved state", deployment)
-	}
-	if _, err := newReleaseService().Deploy(ctx, mainProject, released.Number().Int(), "Ada"); err != nil {
-		t.Errorf("a second Deploy of the same file: %v, want a new Deployment", err)
 	}
 }
 

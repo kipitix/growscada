@@ -35,7 +35,7 @@ type Loader interface {
 	Scene(ctx context.Context, sceneID id.ID[scene.Scene]) (scene.Scene, error)
 	// ImportedWidgetType returns the WidgetType with the given ID from the
 	// saved states the Draft's Project imports.
-	ImportedWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.ReleasedWidgetType, error)
+	ImportedWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.WidgetTypeCopy, error)
 	// LibraryCommit returns the saved state number of the Library, with the
 	// WidgetTypes it holds: what an import names (task 85_6). A number the
 	// Library's Draft does not have is draft.ErrCommitNotFound.

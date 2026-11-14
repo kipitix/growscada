@@ -24,8 +24,9 @@ type Problem struct {
 	Draft *DraftStateResponse `json:"draft,omitempty"`
 	// FileIssues are, on the 400 of a project file that does not validate,
 	// every problem found in it: the path in the document and what is wrong
-	// there (ADR 0018). A Discard refused because the Deployment names Library
-	// Releases this server lacks names the missing imports the same way.
+	// there (ADR 0018). A Discard refused because the Deployment names saved
+	// states of Libraries this server lacks names the missing imports the same
+	// way.
 	FileIssues []FileIssue `json:"file_issues,omitempty"`
 }
 

@@ -27,7 +27,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 	"github.com/kipitix/growscada/internal/server/domain/project"
-	"github.com/kipitix/growscada/internal/server/domain/release"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/settings"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -131,28 +130,6 @@ func TestSendError(t *testing.T) {
 			wantStatus: http.StatusConflict,
 			wantTitle:  "Conflict: Library",
 			wantDetail: "Library has no Commit: there is nothing to discard",
-		},
-		{
-			name:       "nothing to revert",
-			err:        wrapped(library.ErrNoRelease),
-			wantStatus: http.StatusConflict,
-			wantTitle:  "Conflict: Library",
-			wantDetail: "Library has never been released: there is nothing to revert to",
-		},
-		{
-			name:       "commit already released",
-			err:        wrapped(library.ErrCommitAlreadyReleased),
-			wantStatus: http.StatusConflict,
-			wantTitle:  "Conflict: LibraryRelease",
-			wantDetail: "This saved state is already released",
-		},
-		{
-			name:       "release not found",
-			err:        wrapped(library.ErrReleaseNotFound),
-			pathParams: map[string]string{"release_number": "7"},
-			wantStatus: http.StatusNotFound,
-			wantTitle:  "Resource Not Found",
-			wantDetail: "LibraryRelease with ID '7' not found",
 		},
 		{
 			name:       "library pin not found",
@@ -330,11 +307,7 @@ var domainSentinels = map[string]error{
 	"library.ErrLibraryConflict":             library.ErrLibraryConflict,
 	"library.ErrLibraryNameTaken":            library.ErrLibraryNameTaken,
 	"library.ErrLibraryImported":             library.ErrLibraryImported,
-	"library.ErrNoRelease":                   library.ErrNoRelease,
 	"library.ErrNothingToDiscard":            library.ErrNothingToDiscard,
-	"library.ErrCommitAlreadyReleased":       library.ErrCommitAlreadyReleased,
-	"library.ErrReleaseNotFound":             library.ErrReleaseNotFound,
-	"library.ErrReleaseNumberTaken":          library.ErrReleaseNumberTaken,
 	"libraryimport.ErrLibraryImportNotFound": libraryimport.ErrLibraryImportNotFound,
 	"libraryimport.ErrLibraryImportExists":   libraryimport.ErrLibraryImportExists,
 	"libraryimport.ErrWidgetsOrphaned":       libraryimport.ErrWidgetsOrphaned,
@@ -372,8 +345,6 @@ var domainSentinels = map[string]error{
 	"draft.ErrNothingToRedo":                 draft.ErrNothingToRedo,
 	"draft.ErrNothingToSave":                 draft.ErrNothingToSave,
 	"draft.ErrCommitNotFound":                draft.ErrCommitNotFound,
-	"release.ErrReleaseNotFound":             release.ErrReleaseNotFound,
-	"release.ErrCommitAlreadyReleased":       release.ErrCommitAlreadyReleased,
 	"settings.ErrSettingsConflict":           settings.ErrSettingsConflict,
 	"label.ErrLabelNotFound":                 label.ErrLabelNotFound,
 	"label.ErrLabelNameTaken":                label.ErrLabelNameTaken,

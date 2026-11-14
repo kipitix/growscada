@@ -55,16 +55,14 @@ func newServer(t *testing.T) (string, *testAPI) {
 	return srv.URL, newTestAPI(apiclient.New(srv.URL, srv.Client()))
 }
 
-// cleanHistory removes the Deployments, Releases, Commits and DraftChanges of
-// Main: a test that counts or numbers them starts from none (task 72_4 gave a
-// Deploy a Release, so the history would otherwise grow test after test).
+// cleanHistory removes the Deployments, Commits and DraftChanges of Main: a test
+// that counts or numbers them starts from none.
 func cleanHistory(t *testing.T) {
 	t.Helper()
 	main := "'" + servertest.MainProject.String() + "'"
 	if _, err := postgres.DB(t).ExecContext(context.Background(),
 		`DELETE FROM runtime.journal WHERE project_id = `+main+`;
 		 DELETE FROM runtime.deployments WHERE project_id = `+main+`;
-		 DELETE FROM engineering.project_releases WHERE project_id = `+main+`;
 		 DELETE FROM engineering.commits WHERE draft_id IN (SELECT id FROM engineering.drafts WHERE project_id = `+main+`);
 		 DELETE FROM engineering.draft_changes WHERE draft_id IN (SELECT id FROM engineering.drafts WHERE project_id = `+main+`);
 		 UPDATE engineering.drafts SET last_commit_number = 0, last_commit_draft_version = 0, stack_position = 0, clean_version = 0

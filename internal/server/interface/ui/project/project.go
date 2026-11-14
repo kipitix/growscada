@@ -43,7 +43,7 @@ type Project struct {
 
 	activeSubTab projectSubTab
 
-	widgetTypes []apiv0.ReleasedWidgetTypeResponse
+	widgetTypes []apiv0.WidgetTypeCopyResponse
 	libraries   []apiv0.LibraryResponse
 	imports     []apiv0.LibraryImportResponse
 	scenes      []apiv0.SceneResponse
@@ -504,8 +504,8 @@ func (p *Project) findWidget(id uuid.UUID) (apiv0.WidgetResponse, bool) {
 	return uiutil.FindByID(p.widgets, id, uiutil.WidgetID)
 }
 
-func (p *Project) widgetTypeByID(id uuid.UUID) (apiv0.ReleasedWidgetTypeResponse, bool) {
-	return uiutil.FindByID(p.widgetTypes, id, uiutil.ReleasedWidgetTypeID)
+func (p *Project) widgetTypeByID(id uuid.UUID) (apiv0.WidgetTypeCopyResponse, bool) {
+	return uiutil.FindByID(p.widgetTypes, id, uiutil.WidgetTypeCopyID)
 }
 
 func (p *Project) findTag(id uuid.UUID) (apiv0.TagResponse, bool) {

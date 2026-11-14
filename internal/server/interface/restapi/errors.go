@@ -20,7 +20,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 	"github.com/kipitix/growscada/internal/server/domain/project"
-	"github.com/kipitix/growscada/internal/server/domain/release"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/settings"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
@@ -42,7 +41,6 @@ var (
 	sceneResource      = resource{name: "Scene", pathParam: "scene_id"}
 	widgetResource     = resource{name: "Widget", pathParam: "widget_id"}
 	libraryResource    = resource{name: "Library", pathParam: "library_id"}
-	releaseResource    = resource{name: "LibraryRelease", pathParam: "release_number"}
 	// A Library Import is named by its library within its project.
 	libraryImportResource = resource{name: "LibraryImport", pathParam: "library_id"}
 	deviceResource        = resource{name: "Device", pathParam: "device_id"}
@@ -57,8 +55,6 @@ var (
 	// person reads in a 404 and in a 409's title, so it says "Saved state", the
 	// UI's word for it (task 84); the path and the DTOs keep Commit.
 	commitResource = resource{name: "Saved state", pathParam: "commit_number"}
-	// A Project Release is named by its number within its Project.
-	projectReleaseResource = resource{name: "Release", pathParam: "release_number"}
 	// The per-user settings of the server are named by no path at all: the
 	// person they belong to never is (task 81).
 	userSettingsResource = resource{name: "UserSettings"}
@@ -92,7 +88,7 @@ var errorMappings = []errorMapping{
 		"Nothing to undo: the Draft has no change at the stack's position"},
 	{draft.ErrNothingToRedo, http.StatusConflict, projectResource,
 		"Nothing to redo: nothing was undone, or a new change replaced the redo tail"},
-	{application.ErrNothingToDeploy, http.StatusConflict, projectReleaseResource,
+	{application.ErrNothingToDeploy, http.StatusConflict, commitResource,
 		"Nothing to deploy: this saved state is the deployment the project runs"},
 	{application.ErrNoDeploymentToDiscard, http.StatusConflict, projectResource,
 		"Nothing to revert: the project runs no deployment"},
@@ -103,15 +99,12 @@ var errorMappings = []errorMapping{
 	{application.ErrDraftNotDeployable, http.StatusConflict, projectResource,
 		"The Draft cannot be exported: it is not deployable; repair the Draft first"},
 	{application.ErrDeploymentNotDiscardable, http.StatusConflict, deploymentResource,
-		"The Deployment names Library Releases this server does not have; the Draft is left as it is"},
+		"The Deployment names saved states of Libraries this server does not have; the Draft is left as it is"},
 	{draft.ErrNothingToSave, http.StatusConflict, commitResource,
 		"Nothing to save: the draft has not changed since the last save"},
 	{application.ErrDraftNotSaveable, http.StatusConflict, commitResource,
 		"The Draft cannot be saved: it cannot be assembled; repair the Draft first"},
 	{draft.ErrCommitNotFound, http.StatusNotFound, commitResource, ""},
-	{release.ErrCommitAlreadyReleased, http.StatusConflict, projectReleaseResource,
-		"This saved state is already released"},
-	{release.ErrReleaseNotFound, http.StatusNotFound, projectReleaseResource, ""},
 	{runtimeapp.ErrNothingToRollback, http.StatusConflict, deploymentResource,
 		"Nothing to rollback: the deployment holds the document the project runs"},
 	{runtimeapp.ErrDeploymentNotFound, http.StatusNotFound, deploymentResource, ""},
@@ -126,11 +119,7 @@ var errorMappings = []errorMapping{
 	{library.ErrLibraryImported, http.StatusConflict, libraryResource, "Library is imported by Projects; remove the import first"},
 	{application.ErrLibraryInRunningDeployment, http.StatusConflict, libraryResource,
 		"Library is named by the running Deployment of a project; deploy a configuration without it first"},
-	{library.ErrNoRelease, http.StatusConflict, libraryResource, "Library has never been released: there is nothing to revert to"},
 	{library.ErrNothingToDiscard, http.StatusConflict, libraryResource, "Library has no Commit: there is nothing to discard"},
-	{library.ErrCommitAlreadyReleased, http.StatusConflict, releaseResource, "This saved state is already released"},
-	{library.ErrReleaseNumberTaken, http.StatusConflict, libraryResource, "Library was released concurrently; retry"},
-	{library.ErrReleaseNotFound, http.StatusNotFound, releaseResource, ""},
 	{library.ErrWidgetTypeNotFound, http.StatusNotFound, widgetTypeResource, ""},
 	{library.ErrWidgetTypeNameTaken, http.StatusConflict, widgetTypeResource, "WidgetType name is already taken in the library"},
 	{libraryimport.ErrLibraryImportNotFound, http.StatusNotFound, libraryImportResource, ""},
@@ -197,7 +186,7 @@ func sendError(w http.ResponseWriter, r *http.Request, err error) {
 	var notDiscardable application.DeploymentNotDiscardableError
 	if errors.As(err, &notDiscardable) {
 		problem := NewConflict(deploymentResource.name,
-			"The Deployment names Library Releases this server does not have; the Draft is left as it is", r.URL.Path)
+			"The Deployment names saved states of Libraries this server does not have; the Draft is left as it is", r.URL.Path)
 		problem.FileIssues = newFileIssues(notDiscardable.Issues)
 		sendProblem(w, problem)
 		return

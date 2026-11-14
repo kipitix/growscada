@@ -84,7 +84,7 @@ func (l *Library) loadLibraries(ctx app.Context) {
 }
 
 // libraryGone handles a 404 of a read of the selected library — its Draft, the
-// state of the Draft, its stack of DraftChanges, its Commits or its releases:
+// state of the Draft, its stack of DraftChanges or its Commits:
 // the library was deleted, so it is left instead of an error being shown (ADR
 // 0007). The read is the one that is 404 only for a deleted library; a
 // command's 404 stays its own error. Root handles the action, leaves the
@@ -110,23 +110,6 @@ func (l *Library) loadList(ctx app.Context) {
 		func(ctx app.Context, _ *apiclient.LibraryClient, items []apiv0.WidgetTypeResponse) {
 			l.setWidgetTypes(ctx, mark, replacements, items)
 		}, l.libraryGone, l.loadList)
-}
-
-// loadReleases (re)loads the releases of the selected library: the history
-// screen shows the number and note of the Release that published a saved state
-// (task 84). A 404 means the library is gone and leaves it (libraryGone).
-func (l *Library) loadReleases(ctx app.Context) {
-	if l.libraryID == uuid.Nil {
-		l.releases = nil
-		return
-	}
-	uiutil.LoadForGone(l.compoCtx, &l.releasesReloader, l.draft,
-		func(c context.Context, lib *apiclient.LibraryClient) ([]apiv0.LibraryReleaseResponse, error) {
-			return lib.ListReleases(c)
-		},
-		func(ctx app.Context, _ *apiclient.LibraryClient, releases []apiv0.LibraryReleaseResponse) {
-			l.releases = releases
-		}, l.libraryGone, l.loadReleases)
 }
 
 // loadDraftState (re)loads the state of the selected library's Draft: its

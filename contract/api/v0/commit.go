@@ -61,10 +61,10 @@ type CommitLabelsResponse struct {
 // the Commit's content replaced it, in one transaction.
 //
 // HasUnsavedChanges is true unless the loaded Commit is the Draft's last one:
-// the Draft then differs from what a Save would fix. Warnings name the Library
-// Releases the loaded content used but this server does not have — their imports
-// and the Widgets of their WidgetTypes were dropped from the Draft, which stays
-// writable (task 71); a Library's answer never carries one.
+// the Draft then differs from what a Save would fix. Warnings name the saved
+// states of Libraries the loaded content used but this server does not have —
+// their imports and the Widgets of their WidgetTypes were dropped from the
+// Draft, which stays writable (task 71); a Library's answer never carries one.
 type LoadCommitResponse struct {
 	Version           int                      `json:"version"`
 	HasUnsavedChanges bool                     `json:"has_unsaved_changes"`
@@ -102,20 +102,18 @@ type CommitContentCounts struct {
 
 // CommitResponse is the HTTP DTO of a Commit without its content: its number
 // within the Draft, its title, its author, the time it was made, the Version
-// of the Draft it fixed, whether a Release was made of it (a Project's or a
-// Library's — task 72_3, task 72_5) and the counts of its snapshot.
+// of the Draft it fixed and the counts of its snapshot (task 85_7).
 // WidgetTypes is filled for the Commit of a Library alone, by GET …/commits/{n};
 // a Project's Commit is read as a ProjectFile from …/commits/{n}/projectfile.
 type CommitResponse struct {
-	ID            uuid.UUID                    `json:"id"`
-	Number        int                          `json:"number"`
-	Title         string                       `json:"title"`
-	Author        string                       `json:"author"`
-	CreatedAt     time.Time                    `json:"created_at"`
-	DraftVersion  int                          `json:"draft_version"`
-	Released      bool                         `json:"released"`
-	ContentCounts CommitContentCounts          `json:"content_counts"`
-	WidgetTypes   []ReleasedWidgetTypeResponse `json:"widget_types,omitempty"`
+	ID            uuid.UUID                `json:"id"`
+	Number        int                      `json:"number"`
+	Title         string                   `json:"title"`
+	Author        string                   `json:"author"`
+	CreatedAt     time.Time                `json:"created_at"`
+	DraftVersion  int                      `json:"draft_version"`
+	ContentCounts CommitContentCounts      `json:"content_counts"`
+	WidgetTypes   []WidgetTypeCopyResponse `json:"widget_types,omitempty"`
 	// Labels are the labels that mark this saved state, ordered by name
 	// ignoring case; absent when it carries none (task 85_3; ADR 0025).
 	Labels []LabelResponse `json:"labels,omitempty"`

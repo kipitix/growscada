@@ -22,7 +22,7 @@ type Commit struct {
 	id          uuid.UUID
 	libraryID   id.ID[library.Library]
 	number      int
-	widgetTypes []library.ReleasedWidgetType
+	widgetTypes []library.WidgetTypeCopy
 }
 
 var _ fmt.Stringer = Commit{}
@@ -30,7 +30,7 @@ var _ fmt.Stringer = Commit{}
 // NewCommit returns the saved state number of the Library aLibraryID, held by
 // the Commit anID, with the copies of its WidgetTypes. Returns an error for a
 // zero identity, a zero Library or a number below 1.
-func NewCommit(anID uuid.UUID, aLibraryID id.ID[library.Library], number int, widgetTypes []library.ReleasedWidgetType) (Commit, error) {
+func NewCommit(anID uuid.UUID, aLibraryID id.ID[library.Library], number int, widgetTypes []library.WidgetTypeCopy) (Commit, error) {
 	if anID == uuid.Nil {
 		return Commit{}, fmt.Errorf("a commit needs an ID")
 	}
@@ -48,7 +48,7 @@ func NewCommit(anID uuid.UUID, aLibraryID id.ID[library.Library], number int, wi
 
 // ReconstituteCommit rebuilds a Commit as stored; it checks nothing. For
 // repositories.
-func ReconstituteCommit(anID uuid.UUID, aLibraryID id.ID[library.Library], number int, widgetTypes []library.ReleasedWidgetType) Commit {
+func ReconstituteCommit(anID uuid.UUID, aLibraryID id.ID[library.Library], number int, widgetTypes []library.WidgetTypeCopy) Commit {
 	return Commit{
 		id: anID, libraryID: aLibraryID, number: number,
 		widgetTypes: slices.Clone(widgetTypes),
@@ -65,16 +65,16 @@ func (c Commit) LibraryID() id.ID[library.Library] { return c.libraryID }
 func (c Commit) Number() int { return c.number }
 
 // WidgetTypes are the copies of the WidgetTypes the Commit holds.
-func (c Commit) WidgetTypes() []library.ReleasedWidgetType { return slices.Clone(c.widgetTypes) }
+func (c Commit) WidgetTypes() []library.WidgetTypeCopy { return slices.Clone(c.widgetTypes) }
 
 // FindWidgetType returns the copy of the WidgetType typeID the Commit holds.
-func (c Commit) FindWidgetType(typeID id.ID[library.WidgetType]) (library.ReleasedWidgetType, bool) {
+func (c Commit) FindWidgetType(typeID id.ID[library.WidgetType]) (library.WidgetTypeCopy, bool) {
 	for _, wt := range c.widgetTypes {
 		if wt.ID() == typeID {
 			return wt, true
 		}
 	}
-	return library.ReleasedWidgetType{}, false
+	return library.WidgetTypeCopy{}, false
 }
 
 // String implements [fmt.Stringer].

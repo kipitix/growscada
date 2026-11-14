@@ -181,7 +181,7 @@ func (s discardServiceImpl) Revert(ctx context.Context, rawProjectID uuid.UUID) 
 	content, warnings := dropMissingLibraryImports(content, deployment.Content, missing)
 	// The Draft the Revert writes is its last Commit's content only when the
 	// Deployment is exactly that and nothing of it was dropped: then it is
-	// clean, as after a Discard. A Deployment of another Release, of a file or
+	// clean, as after a Discard. A Deployment of another saved state, of a file or
 	// of an older state is a different content (task 74).
 	cleanCommit, err := s.revertIsTheLastCommit(ctx, projectID, deployment.Content)
 	if err != nil {

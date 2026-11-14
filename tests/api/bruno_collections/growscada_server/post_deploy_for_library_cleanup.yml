@@ -4,13 +4,13 @@ info:
   seq: 1991
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/releases/{{CLEANUP_RELEASE_NUMBER}}/deploy
+  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/commits/{{CLEANUP_COMMIT_NUMBER}}/deploy
   auth: inherit
 
 docs: |
-  Release 1 of the cleanup project names the release of the Legacy library in
-  its ProjectFile: Deployment 1 now keeps the library from being deleted too
-  (task 71; task 72_4).
+  Saved state 1 of the cleanup project names the saved state of the Legacy
+  library in its ProjectFile: Deployment 1 now keeps the library from being
+  deleted too (task 71; task 85_6).
 
 runtime:
   assertions:

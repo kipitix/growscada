@@ -19,14 +19,11 @@ type Commit struct {
 	Author       string
 	CreatedAt    time.Time
 	DraftVersion int
-	// Released reports whether a Release was made of this Commit; false until
-	// task 72_3.
-	Released bool
-	Counts   CommitCounts
+	Counts       CommitCounts
 	// Labels are the labels that mark this saved state, ordered by name
 	// ignoring case (task 85_3; ADR 0025).
 	Labels      []Label
-	WidgetTypes []ReleasedWidgetType
+	WidgetTypes []WidgetTypeCopy
 }
 
 // CommitCounts is the size of a Commit's snapshot.
@@ -57,7 +54,7 @@ func NewCommit(c draft.Commit) Commit {
 func NewCommitWithContent(c draft.Commit) Commit {
 	dto := NewCommit(c)
 	if types, ok := c.Content().WidgetTypes(); ok {
-		dto.WidgetTypes = NewReleasedWidgetTypeList(types)
+		dto.WidgetTypes = NewWidgetTypeCopyList(types)
 	}
 	return dto
 }

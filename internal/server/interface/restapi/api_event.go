@@ -12,7 +12,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 	"github.com/kipitix/growscada/internal/server/domain/project"
-	"github.com/kipitix/growscada/internal/server/domain/release"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/domain/tagstate"
@@ -46,38 +45,33 @@ var apiEventTypes = map[event.EventType]string{
 	event.EventTypeLibraryCreated:       apiv0.EventLibraryCreated,
 	event.EventTypeLibraryUpdated:       apiv0.EventLibraryUpdated,
 	event.EventTypeLibraryDeleted:       apiv0.EventLibraryDeleted,
-	event.EventTypeLibraryReleased:      apiv0.EventLibraryReleased,
 	event.EventTypeLibraryImportCreated: apiv0.EventLibraryImportCreated,
 	event.EventTypeLibraryImportUpdated: apiv0.EventLibraryImportUpdated,
 	event.EventTypeLibraryImportDeleted: apiv0.EventLibraryImportDeleted,
 
-	event.EventTypeDeviceCreated:             apiv0.EventDeviceCreated,
-	event.EventTypeDeviceUpdated:             apiv0.EventDeviceUpdated,
-	event.EventTypeDeviceDeleted:             apiv0.EventDeviceDeleted,
-	event.EventTypeEnvironmentCreated:        apiv0.EventEnvironmentCreated,
-	event.EventTypeEnvironmentUpdated:        apiv0.EventEnvironmentUpdated,
-	event.EventTypeEnvironmentDeleted:        apiv0.EventEnvironmentDeleted,
-	event.EventTypeEnvironmentDeviceCreated:  apiv0.EventEnvironmentDeviceCreated,
-	event.EventTypeEnvironmentDeviceUpdated:  apiv0.EventEnvironmentDeviceUpdated,
-	event.EventTypeEnvironmentDeviceDeleted:  apiv0.EventEnvironmentDeviceDeleted,
-	event.EventTypeDeploymentCreated:         apiv0.EventDeploymentCreated,
-	event.EventTypeCommitCreated:             apiv0.EventCommitCreated,
-	event.EventTypeCommitTitleUpdated:        apiv0.EventCommitTitleUpdated,
-	event.EventTypeReleaseCreated:            apiv0.EventReleaseCreated,
-	event.EventTypeReleaseNoteUpdated:        apiv0.EventReleaseNoteUpdated,
-	event.EventTypeLibraryReleaseNoteUpdated: apiv0.EventLibraryReleaseNoteUpdated,
-	event.EventTypeLabelCreated:              apiv0.EventLabelCreated,
-	event.EventTypeLabelUpdated:              apiv0.EventLabelUpdated,
-	event.EventTypeLabelDeleted:              apiv0.EventLabelDeleted,
-	event.EventTypeLabelAssigned:             apiv0.EventLabelAssigned,
-	event.EventTypeLabelUnassigned:           apiv0.EventLabelUnassigned,
+	event.EventTypeDeviceCreated:            apiv0.EventDeviceCreated,
+	event.EventTypeDeviceUpdated:            apiv0.EventDeviceUpdated,
+	event.EventTypeDeviceDeleted:            apiv0.EventDeviceDeleted,
+	event.EventTypeEnvironmentCreated:       apiv0.EventEnvironmentCreated,
+	event.EventTypeEnvironmentUpdated:       apiv0.EventEnvironmentUpdated,
+	event.EventTypeEnvironmentDeleted:       apiv0.EventEnvironmentDeleted,
+	event.EventTypeEnvironmentDeviceCreated: apiv0.EventEnvironmentDeviceCreated,
+	event.EventTypeEnvironmentDeviceUpdated: apiv0.EventEnvironmentDeviceUpdated,
+	event.EventTypeEnvironmentDeviceDeleted: apiv0.EventEnvironmentDeviceDeleted,
+	event.EventTypeDeploymentCreated:        apiv0.EventDeploymentCreated,
+	event.EventTypeCommitCreated:            apiv0.EventCommitCreated,
+	event.EventTypeCommitTitleUpdated:       apiv0.EventCommitTitleUpdated,
+	event.EventTypeLabelCreated:             apiv0.EventLabelCreated,
+	event.EventTypeLabelUpdated:             apiv0.EventLabelUpdated,
+	event.EventTypeLabelDeleted:             apiv0.EventLabelDeleted,
+	event.EventTypeLabelAssigned:            apiv0.EventLabelAssigned,
+	event.EventTypeLabelUnassigned:          apiv0.EventLabelUnassigned,
 }
 
 // newAPIEvent translates a domain (or delivery) event into the event stream's
 // message: its type through apiEventTypes, and the fields its family carries
 // — the affected aggregate's (or connection's) ID, the Scene of a Widget, the
-// Library of a WidgetType, the number of a new release, the pair of an
-// EnvironmentDevice, the Tag's new state of tag_updated, the number and time
+// Library of a WidgetType, the pair of an EnvironmentDevice, the Tag's new state of tag_updated, the number and time
 // of a new Deployment. An event type missing from the table gives
 // an empty Type; such an event is not sent.
 func newAPIEvent(e event.Event) apiv0.Event {
@@ -93,13 +87,6 @@ func newAPIEvent(e event.Event) apiv0.Event {
 			ev.ID = e.Scope().ProjectID().String()
 		}
 		ev.Commit = e.CommitNumber()
-	case release.ReleaseEvent:
-		if e.Scope().IsLibrary() {
-			ev.ID = e.Scope().LibraryID().String()
-		} else {
-			ev.ID = e.Scope().ProjectID().String()
-		}
-		ev.Release = e.ReleaseNumber().Int()
 	case tag.TagEvent:
 		ev.ID = e.TagID().String()
 		if updated, ok := e.(tagstate.TagUpdatedEvent); ok {
@@ -114,12 +101,6 @@ func newAPIEvent(e event.Event) apiv0.Event {
 		ev.LibraryID = e.LibraryID().String()
 	case library.LibraryEvent:
 		ev.ID = e.LibraryID().String()
-		if released, ok := e.(library.LibraryReleasedEvent); ok {
-			ev.Release = released.Release().Int()
-		}
-		if updated, ok := e.(library.LibraryReleaseNoteUpdatedEvent); ok {
-			ev.Release = updated.Release().Int()
-		}
 	case libraryimport.LibraryImportEvent:
 		ev.ID = e.LibraryID().String()
 	case device.EnvironmentDeviceEvent:

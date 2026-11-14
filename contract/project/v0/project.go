@@ -148,7 +148,7 @@ type PortBinding struct {
 
 // WidgetType is the copy of a WidgetType a Project uses, taken from the
 // saved state the Project imports: its template, its script and its input
-// ports, with no version — a Release never changes, so a copy of it cannot
+// ports, with no version — a saved state never changes, so a copy of it cannot
 // either. A Widget's TypeID names one. The copy makes a Deployment, and a
 // ProjectFile, independent of the Library.
 type WidgetType struct {

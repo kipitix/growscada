@@ -3,7 +3,7 @@
 // (ADR 0005). The content of a project (Tags, Scenes, Widgets, Library Imports,
 // Devices, Environments) lives under ProjectPath of the project (ADR 0006);
 // the projects themselves and the libraries, with the WidgetTypes of their
-// Drafts and their releases, are the server's (ADR 0007). The configuration
+// Drafts, are the server's (ADR 0007). The configuration
 // of a Device Gateway is the server's too: the Device is named by its token,
 // not by a project in the path.
 //
@@ -16,7 +16,7 @@ import "github.com/kipitix/growscada/contract"
 
 // SchemaVersion is the version of the server API this package describes.
 // A function rather than a variable, so no importer can change it.
-func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 40} }
+func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 41} }
 
 // PathPrefix is the URL path prefix of every endpoint of this MAJOR.
 const PathPrefix = "/api/v0"
@@ -35,5 +35,5 @@ const VersionQuery = "version"
 const EventsQueryProject = "project"
 
 // LibraryPath is the path, under PathPrefix, of the library with the given
-// ID: the prefix of the WidgetTypes of its Draft and of its releases.
+// ID: the prefix of the WidgetTypes and the saved states of its Draft.
 func LibraryPath(libraryID string) string { return "/libraries/" + libraryID }

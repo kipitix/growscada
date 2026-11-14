@@ -9,8 +9,8 @@ http:
   auth: inherit
 
 docs: |
-  A Deploy took the Draft before task 72_4 and takes a Release now: the old
-  route answers `410 Gone` and names the order Save → Release → Deploy.
+  A Deploy took the Draft before task 72_4 and takes a saved state now: the old
+  route answers `410 Gone` and names the order Save → Deploy.
 
 runtime:
   assertions:

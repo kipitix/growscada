@@ -31,7 +31,7 @@ func portName(t *testing.T, s string) library.InputPortName {
 
 // saved returns a WidgetType anID as a saved state holds it, declaring the
 // port "value" with the given hint, or no port for hint "-".
-func saved(t *testing.T, anID id.ID[library.WidgetType], hint string) library.ReleasedWidgetType {
+func saved(t *testing.T, anID id.ID[library.WidgetType], hint string) library.WidgetTypeCopy {
 	t.Helper()
 	name, _ := library.NewWidgetTypeName("gauge")
 	html, _ := library.NewHtmlTemplate("")
@@ -44,7 +44,7 @@ func saved(t *testing.T, anID id.ID[library.WidgetType], hint string) library.Re
 		}
 		ports = []library.InputPort{library.NewInputPort(portName(t, "value"), "", h)}
 	}
-	wt, err := library.NewReleasedWidgetType(anID, testLibrary, name, html, script, library.ScriptLanguageJavaScript, library.DefaultSize(), ports)
+	wt, err := library.NewWidgetTypeCopy(anID, testLibrary, name, html, script, library.ScriptLanguageJavaScript, library.DefaultSize(), ports)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func saved(t *testing.T, anID id.ID[library.WidgetType], hint string) library.Re
 }
 
 // commit returns the saved state number of the test Library holding types.
-func commit(t *testing.T, number int, types ...library.ReleasedWidgetType) libraryimport.Commit {
+func commit(t *testing.T, number int, types ...library.WidgetTypeCopy) libraryimport.Commit {
 	t.Helper()
 	found, err := libraryimport.NewCommit(uuid.New(), testLibrary, number, types)
 	if err != nil {

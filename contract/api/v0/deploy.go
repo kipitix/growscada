@@ -7,8 +7,8 @@ import (
 )
 
 // DeploymentCause is why a Deployment exists (task 36, ADR 0014; task 39,
-// ADR 0018; task 72_4): a Deploy made it from a Project Release, a Rollback
-// copied an earlier one, or a project file was deployed as it is.
+// ADR 0018; task 72_4): a Deploy made it from a saved state, a Rollback copied
+// an earlier one, or a project file was deployed as it is.
 type DeploymentCause string
 
 const (
@@ -68,6 +68,11 @@ type DeployResponse struct {
 	DeployedAt string `json:"deployed_at"`
 }
 
+// RevertToDeployedPath, under a Project's path, resets the Draft to the
+// Deployment the Project runs (task 72_4). Discard resets it to the last
+// Commit instead.
+const RevertToDeployedPath = "/revert-to-deployed"
+
 // DraftPath is the path, under a Project's path, of its Draft's state: the
 // Version every content DTO of the Project carries and every content write
 // states (ADR 0016).
@@ -78,8 +83,7 @@ const DraftPath = "/draft"
 // task 74). GET /projects/{id}/draft and GET /libraries/{id}/draft answer it, and
 // so do POST /projects/{id}/discard (the reset to the last Commit), POST
 // /projects/{id}/revert-to-deployed (the reset to the Deployment the Project
-// runs), POST /libraries/{id}/discard (to the last Commit) and POST
-// /libraries/{id}/revert-to-release (to the latest Release) after the reset.
+// runs) and POST /libraries/{id}/discard (to the last Commit) after the reset.
 //
 // In Problem.draft (409 draft_conflict) only Version is meaningful: the
 // conflict names the Version the server holds, not the state of its flag.
@@ -91,8 +95,8 @@ type DraftStateResponse struct {
 // DiscardProjectResponse is the answer of POST /projects/{id}/discard — the
 // Draft reset to its last Commit — and of POST /projects/{id}/revert-to-deployed
 // — the Draft reset to the Deployment the Project runs —, each in one
-// transaction (ADR 0016, task 72_4). Warnings name the Library Releases the
-// restored target used but this server does not have: their imports, and the
+// transaction (ADR 0016, task 72_4). Warnings name the saved states of Libraries
+// the restored target used but this server does not have: their imports, and the
 // Widgets of their WidgetTypes, were dropped from the restored Draft (task 71).
 type DiscardProjectResponse struct {
 	Version  int                      `json:"version"`

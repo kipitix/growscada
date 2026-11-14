@@ -130,5 +130,5 @@ func (h LibraryImportsHandlers) GetImportedWidgetTypes(w http.ResponseWriter, r 
 		sendError(w, r, err)
 		return
 	}
-	sendJSONResponse(w, http.StatusOK, apiv0.GetImportedWidgetTypesResponse{WidgetTypes: newReleasedWidgetTypeResponses(list)})
+	sendJSONResponse(w, http.StatusOK, apiv0.GetImportedWidgetTypesResponse{WidgetTypes: newWidgetTypeCopyResponses(list)})
 }

@@ -122,7 +122,7 @@ INSERT INTO engineering.drafts (id, library_id)
     SELECT gen_random_uuid(), id FROM engineering.libraries WHERE id NOT IN (SELECT library_id FROM engineering.drafts WHERE library_id IS NOT NULL);
 
 -- The saved state of each Library's Draft (task 85_6): its WidgetTypes as
--- copies, the content the imports name and the releases publish.
+-- copies, the content the imports name.
 INSERT INTO engineering.commits (id, draft_id, number, title, author, created_at, draft_version, content)
     SELECT gen_random_uuid(), d.id, 1, 'Seed', 'seed', now(), 1,
            jsonb_build_object(
@@ -144,17 +144,6 @@ UPDATE engineering.drafts SET last_commit_number = 1, last_commit_draft_version 
 -- is exactly its saved state (clean). A migration that bumped a Draft of an
 -- upgraded database says nothing of a fresh one.
 UPDATE engineering.drafts SET version = 1, clean_version = 0, stack_position = 0 WHERE project_id IS NOT NULL;
-
--- The Library Releases: release 1 of each Library is its saved state 1
-INSERT INTO engineering.library_releases (library_id, number, note, commit_number, author, origin) VALUES
-    ('d0000000-0000-4000-8000-000000000001', 1, 'First release', 1, 'seed', 'commit'),
-    ('d0000000-0000-4000-8000-000000000002', 1, 'First release', 1, 'seed', 'commit')
-    ON CONFLICT (library_id, number) DO UPDATE
-    SET commit_number = EXCLUDED.commit_number, author = EXCLUDED.author, origin = EXCLUDED.origin;
-INSERT INTO engineering.released_widget_types
-        (library_id, release_number, id, name, html_template, script, script_language, default_width, default_height, input_ports)
-    SELECT library_id, 1, id, name, html_template, script, script_language, default_width, default_height, input_ports
-    FROM engineering.widget_types ORDER BY pk_id;
 
 -- The Library Imports: Main imports both Libraries, Line 2 only Main
 INSERT INTO engineering.library_imports (project_id, library_id, commit_number, commit_id)
@@ -251,18 +240,11 @@ DELETE FROM engineering.scenes WHERE id IN (
     'c1d2e3f4-0002-4000-8000-000000000002'
 );
 
--- Delete the imports, saved states, releases and Library of the test data
+-- Delete the imports, saved states and Library of the test data
 DELETE FROM engineering.library_imports WHERE (project_id, library_id) IN (
     ('b0000000-0000-4000-8000-000000000001'::uuid, 'd0000000-0000-4000-8000-000000000002'::uuid),
     ('b0000000-0000-4000-8000-000000000002'::uuid, 'd0000000-0000-4000-8000-000000000001'::uuid)
 );
-DELETE FROM engineering.released_widget_types WHERE id IN (
-    'a1b2c3d4-0001-4000-8000-000000000001',
-    'a1b2c3d4-0002-4000-8000-000000000002',
-    'a1b2c3d4-0005-4000-8000-000000000003',
-    'a1b2c3d4-0006-4000-8000-000000000006'
-);
-DELETE FROM engineering.library_releases WHERE library_id = 'd0000000-0000-4000-8000-000000000002';
 DELETE FROM engineering.widget_types WHERE library_id = 'd0000000-0000-4000-8000-000000000002';
 DELETE FROM engineering.libraries WHERE id = 'd0000000-0000-4000-8000-000000000002';
 

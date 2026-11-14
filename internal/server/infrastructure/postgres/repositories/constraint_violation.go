@@ -51,15 +51,6 @@ const constraintLibrariesLiveName = "uq_libraries_organization_live_name"
 // (library_id, name).
 const constraintWidgetTypesName = "uq_widget_types_library_name"
 
-// constraintReleasesNumber is the unique constraint on library_releases
-// (library_id, number).
-const constraintReleasesNumber = "uq_library_releases_library_number"
-
-// constraintProjectReleasesCommit is the unique constraint on
-// project_releases (project_id, commit_number) of a release of a commit: one
-// Commit is published at most once.
-const constraintProjectReleasesCommit = "uq_project_releases_project_commit"
-
 // Constraints of library_imports: one import per project and library, the
 // commit imported exists, and the foreign keys that refuse removing a library a
 // project imports.

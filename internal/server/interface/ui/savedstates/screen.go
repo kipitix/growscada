@@ -2,11 +2,11 @@
 // by the Library and the Project modes (task 84). Both modes keep their own
 // data and commands — a library's and a project's saved states are read and
 // written by their own services —, so this package draws the screen and calls
-// back: it knows nothing of the API, of a Draft or of a Release beyond the
+// back: it knows nothing of the API, of a Draft or of a Deploy beyond the
 // numbers and words a row carries. The labels of a saved state are drawn here
 // alone: colored chips and a menu of the Organization's labels (task 85_3;
-// ADR 0025). A mode that no longer publishes saved states shows no Release and
-// no Make Release (task 85_5).
+// ADR 0025). A saved state is loaded into the Draft from here; publishing and
+// deploying it belong to the mode's own windows (task 85_7).
 package savedstates
 
 import (
@@ -21,9 +21,8 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
-// Row is one saved state as the screen shows it: what the history read, the
-// labels that mark it and, when a Release published it, that Release's number
-// and note.
+// Row is one saved state as the screen shows it: what the history read and
+// the labels that mark it.
 type Row struct {
 	Number  int
 	Title   string
@@ -32,12 +31,6 @@ type Row struct {
 	// Labels are the marks of the saved state, ordered by name ignoring case
 	// (task 85_3).
 	Labels []apiv0.LabelResponse
-	// Released says a Release published this saved state; Release is its
-	// number (0 for a Release made before saved states existed) and Note its
-	// note.
-	Released bool
-	Release  int
-	Note     string
 }
 
 // Screen draws the saved states of one Draft and the way back to it. The mode
@@ -57,22 +50,14 @@ type Screen struct {
 	// a saved state may carry any number of them (task 85_3).
 	AllLabels []apiv0.LabelResponse
 
-	// ShowRelease draws the Release that published a saved state and the Make
-	// Release action. A mode that no longer publishes saved states leaves it
-	// false and shows the names, the labels and the Load alone (task 85_5).
-	ShowRelease bool
-
-	// OnBack shows the Draft again; OnLoad, OnRelease, OnRename and OnNote
-	// act on the row they name. OnAssign places a label on the row's saved
-	// state and OnUnassign takes it off; OnManageLabels opens the Labels
-	// window, where new labels are named and colored. A mode confirms a load
-	// and asks for a note on its own: the screen only says which row was
-	// asked for.
+	// OnBack shows the Draft again; OnLoad and OnRename act on the row they
+	// name. OnAssign places a label on the row's saved state and OnUnassign
+	// takes it off; OnManageLabels opens the Labels window, where new labels
+	// are named and colored. A mode confirms a load on its own: the screen only
+	// says which row was asked for.
 	OnBack         func(ctx app.Context)
 	OnLoad         func(ctx app.Context, number int)
-	OnRelease      func(ctx app.Context, number int)
 	OnRename       func(ctx app.Context, number int, title string)
-	OnNote         func(ctx app.Context, number int)
 	OnAssign       func(ctx app.Context, number int, labelID uuid.UUID)
 	OnUnassign     func(ctx app.Context, number int, labelID uuid.UUID)
 	OnManageLabels func(ctx app.Context)
@@ -150,16 +135,11 @@ func (s *Screen) Render() app.UI {
 }
 
 // renderRow is one saved state: the time it was saved, its name and labels —
-// edited in place —, the Release that published it, its author, and the two
-// actions that end it: load it into the Draft, or publish it as the next
-// Release. A mode that shows no Release draws the name, the labels and the Load
-// alone (task 85_5).
+// edited in place —, its author, and the action that ends it: load it into the
+// Draft (task 85_7).
 func (s *Screen) renderRow(row Row) app.UI {
 	number := strconv.Itoa(row.Number)
 	details := []app.UI{s.renderName(row)}
-	if row.Released && s.ShowRelease {
-		details = append(details, s.renderRelease(row))
-	}
 	details = append(details, s.renderLabels(row))
 
 	load := uiutil.Button("Load", "", !s.Loading,
@@ -170,20 +150,6 @@ func (s *Screen) renderRow(row Row) app.UI {
 			}
 		}, app.EventScope("load/"+number))
 	actions := []app.UI{load}
-	if s.ShowRelease {
-		release := uiutil.Button("Make Release", "accent", !row.Released,
-			"Publish this saved state as the next Release",
-			uiutil.ButtonRow, func(ctx app.Context, e app.Event) {
-				if s.OnRelease != nil {
-					s.OnRelease(ctx, row.Number)
-				}
-			}, app.EventScope("release/"+number))
-		if row.Released {
-			release = uiutil.Button("Released", "", false, "A Release publishes this saved state",
-				uiutil.ButtonRow, func(app.Context, app.Event) {}, app.EventScope("released/"+number))
-		}
-		actions = append(actions, release)
-	}
 
 	return app.Div().
 		Attr("data-saved-state-row", number).
@@ -385,35 +351,4 @@ func labelTitle(l apiv0.LabelResponse, chosen bool) string {
 		return "Take " + l.Name + " off this saved state"
 	}
 	return "Mark this saved state " + l.Name
-}
-
-// renderRelease is the Release that published the saved state: its number and
-// note, the note edited in place. A Release made before saved states existed
-// has no number of them and is named as such.
-func (s *Screen) renderRelease(row Row) app.UI {
-	number := strconv.Itoa(row.Number)
-	label := "Release " + strconv.Itoa(row.Release)
-	if row.Release == 0 {
-		label = "Legacy Release"
-	}
-	if row.Note != "" {
-		label += " · " + row.Note
-	}
-	return app.Div().
-		Style("display", "flex").
-		Style("align-items", "center").
-		Style("gap", "4px").
-		Body(
-			app.Span().
-				Attr("data-saved-state-release", number).
-				Style("font-size", "11px").
-				Style("color", "var(--accent)").
-				Text(label),
-			uiutil.PanelButton(uiutil.IconPencil(), true, "Edit the Release's note",
-				func(ctx app.Context, e app.Event) {
-					if s.OnNote != nil {
-						s.OnNote(ctx, row.Number)
-					}
-				}, app.EventScope("note/"+number)),
-		)
 }

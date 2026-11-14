@@ -9,7 +9,7 @@ http:
 
 docs: |
   Refused (`409`) though the Draft no longer imports the library: the running
-  Deployment of Line 4 names its release, and a Discard of that Deployment
+  Deployment of Line 4 names its saved state, and a Discard of that Deployment
   could not restore the import (task 71; ADR 0007). The next requests make a
   Deployment that does not name it and delete the library then.
 

@@ -3,7 +3,6 @@ package library
 import (
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/kipitix/growscada/internal/server/domain/description"
 	"github.com/kipitix/growscada/internal/server/domain/event"
@@ -63,125 +62,15 @@ func TestLibraryDelete_MarksDeletedAndRecordsDeletedEvent(t *testing.T) {
 	}
 }
 
-func TestCreateRelease_FromACommit(t *testing.T) {
-	lib := makeStoredLibrary(t)
-	at := time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
-	author, err := NewAuthor("Ada")
-	if err != nil {
-		t.Fatalf("NewAuthor: %v", err)
-	}
-
-	first, err := CreateRelease(lib, FirstRelease(), 1, "first", author, at, nil)
-	if err != nil {
-		t.Fatalf("CreateRelease: %v", err)
-	}
-	commitNumber := first.CommitNumber()
-	if first.Number() != FirstRelease() || first.Note() != "first" || !first.CreatedAt().Equal(at) ||
-		commitNumber == nil || *commitNumber != 1 || first.Author().String() != "Ada" || first.Origin() != OriginCommit {
-		t.Errorf("unexpected first release %s: %+v", first, first)
-	}
-	if ev, ok := first.PendingEvents()[0].(LibraryReleasedEvent); !ok || ev.Release() != FirstRelease() || ev.LibraryID() != lib.ID() {
-		t.Errorf("expected library_released of release 1, got %v", first.PendingEvents())
-	}
-
-	second, err := CreateRelease(lib, FirstRelease().Next(), 2, "", author, at, nil)
-	if err != nil || second.Number().Int() != 2 {
-		t.Fatalf("second release: %v, %v", second, err)
-	}
-}
-
-func TestCreateRelease_RefusesAWidgetTypeOfAnotherLibrary(t *testing.T) {
-	lib := makeStoredLibrary(t)
-	author, _ := NewAuthor("Ada")
-	other := ReleasedFrom(makeCommittedWidgetType(t))
-	other.libraryID = id.NewID[Library]()
-	if _, err := CreateRelease(lib, FirstRelease(), 1, "", author, time.Now(), []ReleasedWidgetType{other}); err == nil {
-		t.Error("a WidgetType of another Library: expected an error")
-	}
-}
-
-func TestReconstituteRelease_ChecksTheProvenance(t *testing.T) {
-	author, _ := NewAuthor("Ada")
-	at := time.Now()
-	commit := 1
-	if _, err := ReconstituteRelease(testLibraryID, FirstRelease(), nil, author, OriginCommit, "", at, nil); err == nil {
-		t.Error("a release of a commit without its number: expected an error")
-	}
-	if _, err := ReconstituteRelease(testLibraryID, FirstRelease(), &commit, author, OriginLegacy, "", at, nil); err == nil {
-		t.Error("a legacy release naming a commit: expected an error")
-	}
-	legacy, err := ReconstituteRelease(testLibraryID, FirstRelease(), nil, author, OriginLegacy, "", at, nil)
-	if err != nil || legacy.CommitNumber() != nil || legacy.Origin() != OriginLegacy {
-		t.Errorf("legacy release: %v, %v", legacy, err)
-	}
-}
-
-func TestReleaseWithNote_RecordsNoteUpdatedAndKeepsTheContent(t *testing.T) {
-	lib := makeStoredLibrary(t)
-	author, _ := NewAuthor("Ada")
-	release, err := CreateRelease(lib, FirstRelease(), 1, "first", author, time.Now(), nil)
-	if err != nil {
-		t.Fatalf("CreateRelease: %v", err)
-	}
-	updated := release.WithNote("second")
-	if updated.Note() != "second" || release.Note() != "first" {
-		t.Errorf("WithNote: %q, original %q", updated.Note(), release.Note())
-	}
-	if updated.Number() != release.Number() || updated.CommitNumber() == nil || *updated.CommitNumber() != 1 {
-		t.Errorf("WithNote changed the identity: %+v", updated)
-	}
-	ev, ok := updated.PendingEvents()[0].(LibraryReleaseNoteUpdatedEvent)
-	if !ok || ev.Release() != FirstRelease() || ev.LibraryID() != lib.ID() {
-		t.Errorf("expected library_release_note_updated, got %v", updated.PendingEvents())
-	}
-}
-
-func TestReleaseStateOf(t *testing.T) {
-	author, _ := NewAuthor("Ada")
-	commit := 2
-	released, err := ReconstituteRelease(testLibraryID, FirstRelease(), &commit, author, OriginCommit, "", time.Now(), nil)
-	if err != nil {
-		t.Fatalf("ReconstituteRelease: %v", err)
-	}
-	legacy, err := ReconstituteRelease(testLibraryID, FirstRelease(), nil, author, OriginLegacy, "", time.Now(), nil)
-	if err != nil {
-		t.Fatalf("ReconstituteRelease: %v", err)
-	}
-
-	cases := map[string]struct {
-		latest             LibraryRelease
-		lastCommit         int
-		unsaved            bool
-		wantLatest         int
-		wantLastReleaseCmt int
-		wantUnpublished    bool
-	}{
-		"never saved, never released": {nil, 0, false, 0, 0, false},
-		"saved, not released":         {nil, 2, false, 0, 0, true},
-		"released commit 2":           {released, 2, false, 1, 2, false},
-		"moved after the commit":      {released, 3, true, 1, 2, true},
-		"legacy release, no commit":   {legacy, 0, true, 1, 0, false},
-		"legacy release, commit 1":    {legacy, 1, false, 1, 0, true},
-	}
-	for name, tc := range cases {
-		got := ReleaseStateOf(tc.latest, tc.lastCommit, tc.unsaved)
-		if got.Latest.Int() != tc.wantLatest || got.LatestReleaseCommit != tc.wantLastReleaseCmt ||
-			got.UnsavedChanges != tc.unsaved || got.UnpublishedChanges != tc.wantUnpublished {
-			t.Errorf("%s: %+v", name, got)
-		}
-	}
-}
-
-// TestReleasedWidgetType_SameAs: two copies are the same exactly while their
-// definitions are — the rule a Revert to a Release uses to call the Draft clean
-// (task 74; ADR 0016, amendment 2026-11-10).
-func TestReleasedWidgetType_SameAs(t *testing.T) {
+// TestWidgetTypeCopy_SameAs: two copies are the same exactly while their
+// definitions are (task 74; ADR 0016, amendment 2026-11-10).
+func TestWidgetTypeCopy_SameAs(t *testing.T) {
 	wt := makeCommittedWidgetType(t)
-	released := ReleasedFrom(wt)
-	if !released.SameAs(ReleasedFrom(wt)) || !released.Matches(wt) {
+	released := CopyOf(wt)
+	if !released.SameAs(CopyOf(wt)) || !released.Matches(wt) {
 		t.Fatalf("a copy of the same WidgetType differs: %s", released)
 	}
-	if released.SameAs(ReleasedFrom(makeCommittedWidgetType(t))) {
+	if released.SameAs(CopyOf(makeCommittedWidgetType(t))) {
 		t.Errorf("two WidgetTypes with different IDs are the same")
 	}
 	html, err := NewHtmlTemplate("<span></span>")
@@ -193,14 +82,14 @@ func TestReleasedWidgetType_SameAs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReconstituteWidgetType: %v", err)
 	}
-	if released.SameAs(ReleasedFrom(changed)) {
+	if released.SameAs(CopyOf(changed)) {
 		t.Errorf("copies with different templates are the same")
 	}
 }
 
 func TestRecreateWidgetType_RestoresTheReleasedDefinition(t *testing.T) {
 	wt := makeCommittedWidgetType(t)
-	released := ReleasedFrom(wt)
+	released := CopyOf(wt)
 
 	recreated, err := RecreateWidgetType(released)
 	if err != nil || recreated.ID() != wt.ID() || recreated.LibraryID() != wt.LibraryID() || !released.Matches(recreated) {

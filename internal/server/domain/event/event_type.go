@@ -40,7 +40,6 @@ var (
 	EventTypeLibraryCreated       = EventType{eventType: 19}
 	EventTypeLibraryUpdated       = EventType{eventType: 20}
 	EventTypeLibraryDeleted       = EventType{eventType: 21}
-	EventTypeLibraryReleased      = EventType{eventType: 23}
 	EventTypeLibraryImportCreated = EventType{eventType: 24}
 	EventTypeLibraryImportUpdated = EventType{eventType: 25}
 	EventTypeLibraryImportDeleted = EventType{eventType: 26}
@@ -60,10 +59,9 @@ var (
 	EventTypeCommitCreated      = EventType{eventType: 37}
 	EventTypeCommitTitleUpdated = EventType{eventType: 38}
 
-	EventTypeReleaseCreated     = EventType{eventType: 39}
-	EventTypeReleaseNoteUpdated = EventType{eventType: 40}
-
-	EventTypeLibraryReleaseNoteUpdated = EventType{eventType: 41}
+	// 23, 39, 40 and 41 were library_released, release_created,
+	// release_note_updated and library_release_note_updated; they went with
+	// Releases (task 85_7), and their numbers are not reused.
 
 	EventTypeLabelCreated = EventType{eventType: 42}
 	EventTypeLabelUpdated = EventType{eventType: 43}
@@ -101,7 +99,6 @@ var eventTypeNames = []struct {
 	{EventTypeLibraryCreated, "library_created"},
 	{EventTypeLibraryUpdated, "library_updated"},
 	{EventTypeLibraryDeleted, "library_deleted"},
-	{EventTypeLibraryReleased, "library_released"},
 	{EventTypeLibraryImportCreated, "library_import_created"},
 	{EventTypeLibraryImportUpdated, "library_import_updated"},
 	{EventTypeLibraryImportDeleted, "library_import_deleted"},
@@ -117,9 +114,6 @@ var eventTypeNames = []struct {
 	{EventTypeDeploymentCreated, "deployment_created"},
 	{EventTypeCommitCreated, "commit_created"},
 	{EventTypeCommitTitleUpdated, "commit_title_updated"},
-	{EventTypeReleaseCreated, "release_created"},
-	{EventTypeReleaseNoteUpdated, "release_note_updated"},
-	{EventTypeLibraryReleaseNoteUpdated, "library_release_note_updated"},
 	{EventTypeLabelCreated, "label_created"},
 	{EventTypeLabelUpdated, "label_updated"},
 	{EventTypeLabelDeleted, "label_deleted"},

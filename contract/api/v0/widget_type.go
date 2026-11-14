@@ -71,10 +71,10 @@ type UpdateWidgetTypeResponse struct {
 	Version int `json:"version"`
 }
 
-// ReleasedWidgetTypeResponse is the HTTP DTO of the copy of a WidgetType a
-// Library Release holds: its definition under the WidgetType's ID, with no
-// version — a release never changes. A Widget's type_id names one.
-type ReleasedWidgetTypeResponse struct {
+// WidgetTypeCopyResponse is the HTTP DTO of the copy of a WidgetType a saved
+// state or a ProjectFile holds: its definition under the WidgetType's ID, with
+// no version — a saved state never changes. A Widget's type_id names one.
+type WidgetTypeCopyResponse struct {
 	ID             uuid.UUID   `json:"id"`
 	LibraryID      uuid.UUID   `json:"library_id"`
 	Name           string      `json:"name"`
@@ -90,5 +90,5 @@ type ReleasedWidgetTypeResponse struct {
 // /projects/{id}/widget-types: the WidgetTypes of every saved state the project
 // imports, grouped by library in the order the imports were added (task 85_6).
 type GetImportedWidgetTypesResponse struct {
-	WidgetTypes []ReleasedWidgetTypeResponse `json:"widget_types"`
+	WidgetTypes []WidgetTypeCopyResponse `json:"widget_types"`
 }

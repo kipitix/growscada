@@ -36,7 +36,7 @@ func IconRedo() app.UI { return app.Raw(iconRedoSVG) }
 // IconHistory opens the saved states of the Draft.
 func IconHistory() app.UI { return app.Raw(iconHistorySVG) }
 
-// IconDeploy makes a Release the running Deployment.
+// IconDeploy makes a saved state the running Deployment.
 func IconDeploy() app.UI { return app.Raw(iconDeploySVG) }
 
 // IconLayers opens the Deployments of a Project.

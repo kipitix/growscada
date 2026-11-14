@@ -16,13 +16,12 @@ const (
 	LibraryKey = "library:selectedLibrary"
 )
 
-// Badge texts of an entity's state.
+// Badge texts of an entity's state (task 85_7): a Draft with changes its last
+// saved state does not hold, one with a saved state, and one never saved.
 const (
-	StateUnsavedChanges        = "Unsaved changes"
-	StateUnpublishedSavedState = "unpublished saved state"
-	StatePublished             = "published"
-	StateLegacy                = "legacy"
-	StateNeverSaved            = "never saved"
+	StateUnsavedChanges = "Unsaved changes"
+	StateSaved          = "saved"
+	StateNeverSaved     = "never saved"
 )
 
 // NewProjectSource returns the selection page's server side for the Projects.
@@ -113,18 +112,13 @@ func (s librarySource) List(ctx context.Context) ([]Item, error) {
 }
 
 // libraryState is a Library's state as its selection row shows it: unsaved
-// changes first, then the Commit and Release state the response reports
-// (task 72_7, task 73).
+// changes first, then whether it has a saved state at all (task 85_7).
 func libraryState(l apiv0.LibraryResponse) (text, kind string) {
 	switch {
 	case l.HasUnsavedChanges:
 		return StateUnsavedChanges, "unsaved"
-	case l.HasUnpublishedChanges:
-		return StateUnpublishedSavedState, "unpublished"
 	case l.LatestCommit > 0:
-		return StatePublished, "published"
-	case l.LatestRelease > 0:
-		return StateLegacy, "legacy"
+		return StateSaved, "saved"
 	default:
 		return StateNeverSaved, "new"
 	}
@@ -146,7 +140,7 @@ func (s librarySource) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func (s librarySource) DeleteQuestion(name string) string {
-	return "Delete the library " + name + " with its Draft and releases? A project that imports it, or a running Deployment that names one of its saved states, refuses the deletion. Saved states and Releases of the past keep a link to the deleted library."
+	return "Delete the library " + name + " with its Draft and saved states? A project that imports it, or a running Deployment that names one of its saved states, refuses the deletion."
 }
 
 // Order returns the library order of the person the server acts for: the IDs

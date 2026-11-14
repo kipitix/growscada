@@ -17,7 +17,7 @@ http:
   auth: inherit
 
 docs: |
-  A Deploy takes a Release, and a Release publishes a Commit (task 72_4;
+  A Deploy takes a saved state — a Commit (task 85_4;
   ADR 0021): this Save fixes the Draft as Commit 1.
 
 runtime:

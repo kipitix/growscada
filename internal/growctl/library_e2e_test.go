@@ -56,13 +56,12 @@ spec:
 	}
 }
 
-// TestLibrary_ApplyReleasePinDiscardDelete walks a library through growctl:
-// apply creates it with its Draft, save fixes Commit 1, release publishes it
-// as release 1, apply imports it in Main, an edited WidgetType is updated,
-// saved and released again, the import switched to saved state 2, prune removes a
-// WidgetType left out, discard resets the Draft, delete removes the
-// WidgetType and, once its import is gone, the library.
-func TestLibrary_ApplyReleasePinDiscardDelete(t *testing.T) {
+// TestLibrary_ApplyImportDiscardDelete walks a library through growctl: apply
+// creates it with its Draft, save fixes Commit 1, apply imports it in Main, an
+// edited WidgetType is updated and saved again, the import switched to saved
+// state 2, prune removes a WidgetType left out, discard resets the Draft,
+// delete removes the WidgetType and, once its import is gone, the library.
+func TestLibrary_ApplyImportDiscardDelete(t *testing.T) {
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
 
 	out, err := runGrowctl(t, srv, libraryManifest, "apply")
@@ -74,13 +73,6 @@ func TestLibrary_ApplyReleasePinDiscardDelete(t *testing.T) {
 	out, _, err = execGrowctl(t, srv, "", "save", "Gauges", "--title", "First", "--author", "tester")
 	if err != nil || out != "library/Gauges saved commit 1\n" {
 		t.Fatalf("save: %q, %v", out, err)
-	}
-	out, _, err = execGrowctl(t, srv, "", "release", "Gauges", "--commit", "1", "--author", "tester")
-	if err != nil || out != "library/Gauges released 1\n" {
-		t.Fatalf("release 1: %q, %v", out, err)
-	}
-	if _, stderr, err := execGrowctl(t, srv, "", "release", "Gauges", "--commit", "1", "--author", "tester"); err == nil {
-		t.Errorf("a release of an already published Commit must fail, stderr %q", stderr)
 	}
 
 	out, err = runGrowctl(t, srv, libraryManifest+mainImports("1"), "apply")
@@ -102,17 +94,9 @@ func TestLibrary_ApplyReleasePinDiscardDelete(t *testing.T) {
 		out != "library/Gauges saved commit 2\n" {
 		t.Fatalf("save 2: %q, %v", out, err)
 	}
-	out, _, err = execGrowctl(t, srv, "", "release", "Gauges", "--commit", "2", "--note", "wider", "--author", "tester")
-	if err != nil || out != "library/Gauges released 2\n" {
-		t.Fatalf("release 2: %q, %v", out, err)
-	}
 	out, _, err = execGrowctl(t, srv, "", "commits", "Gauges", "--library")
-	if err != nil || !strings.Contains(out, "Wider") || !strings.Contains(out, "true") {
+	if err != nil || !strings.Contains(out, "Wider") {
 		t.Fatalf("commits: %q, %v", out, err)
-	}
-	out, _, err = execGrowctl(t, srv, "", "releases", "Gauges", "--library")
-	if err != nil || !strings.Contains(out, "wider") || !strings.Contains(out, "commit") {
-		t.Fatalf("releases: %q, %v", out, err)
 	}
 	if out, err = runGrowctl(t, srv, edited+mainImports("2"), "apply"); err != nil || !strings.Contains(out, "project/Main import library/Gauges saved state 2 switched") {
 		t.Fatalf("switch the pin: %q, %v", out, err)

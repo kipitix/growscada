@@ -11,14 +11,14 @@ http:
     data: |-
       {
         "version": {{CLEANUP_LIBRARY_DRAFT_VERSION}},
-        "title": "The one release",
+        "title": "The one state",
         "author": "Ada"
       }
   auth: inherit
 
 docs: |
-  A Library Release is made from a Commit (task 72_5; ADR 0021): the cleanup
-  library's Draft is saved, and the next request publishes this Commit.
+  A Project imports a saved state of a Library (task 85_6): the cleanup
+  library's Draft is saved, and the next request imports this Commit.
 
 runtime:
   scripts:

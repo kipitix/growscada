@@ -106,17 +106,15 @@ func main() {
 	dispatcher := outbox.NewDispatcher(sqlDB, eventBus.Publish)
 	notifyDispatcher := repositories.NotifyOnCommit(dispatcher.Notify)
 	projectRepository := repositories.NewProjectRepositoryPostgres(sqlDB, notifyDispatcher)
-	// The libraries, their releases, and the repositories of a library's
-	// Draft, opened per Library (ADR 0007)
+	// The libraries and the repositories of a library's Draft, opened per
+	// Library (ADR 0007)
 	libraryRepository := repositories.NewLibraryRepositoryPostgres(sqlDB, notifyDispatcher)
-	releaseRepository := repositories.NewLibraryReleaseRepositoryPostgres(sqlDB, notifyDispatcher)
 	widgetTypeRepositories := repositories.NewWidgetTypeRepositories(sqlDB)
 	// The repositories of a Project's content (Tags, Scenes, Library Imports) are opened per
 	// Project (ADR 0006) for reads; every write goes through the Drafts
 	// (ADR 0016).
 	projectScopes := repositories.NewProjectScopes(sqlDB, notifyDispatcher)
 	draftRepository := repositories.NewDraftRepositoryPostgres(sqlDB, notifyDispatcher)
-	projectReleaseRepository := repositories.NewProjectReleaseRepositoryPostgres(sqlDB, notifyDispatcher)
 	// The per-user settings of the server (task 81, ADR 0024): one person's
 	// view of the content, stored apart from it. Until authentication exists
 	// every request acts as settings.SingleUser.
@@ -232,8 +230,7 @@ func main() {
 	// Deploy, Discard and Revert (task 35, task 85_4): a Deploy hands a saved
 	// state's ProjectFile to the Runtime node, which stores it as a Deployment;
 	// the Engineering node keeps no copy of what it sent (ADR 0014). Discard
-	// falls back to the last Commit, Revert to the running Deployment. The
-	// Release handlers keep deploying a Release until task 85_5.
+	// falls back to the last Commit, Revert to the running Deployment.
 	projectFileBuilder := application.NewProjectFileBuilder(projectContent)
 	discardService := application.NewDiscardService(projectContent, runtimeNode, libraryRepository)
 	deployService := application.NewDeployService(projectContent, runtimeNode)
@@ -248,7 +245,7 @@ func main() {
 		Projects:       projectService,
 		Tags:           tagService,
 		TagStates:      tagStateService,
-		Libraries:      application.NewLibraryService(libraryContent, libraryRepository, releaseRepository, widgetTypeRepositories, runtimeNode),
+		Libraries:      application.NewLibraryService(libraryContent, libraryRepository, widgetTypeRepositories, runtimeNode),
 		WidgetTypes:    application.NewWidgetTypeService(libraryContent, widgetTypeRepositories),
 		LibraryImports: application.NewLibraryImportService(projectContent, libraryRepository, labelService),
 		Scenes:         application.NewSceneService(projectContent),
@@ -258,8 +255,7 @@ func main() {
 		DraftChanges:   draftChangesService,
 		Discard:        discardService,
 		ProjectFiles:   projectFileService,
-		Commits:        application.NewCommitService(projectContent, libraryContent, projectFileBuilder, widgetTypeRepositories, projectReleaseRepository, releaseRepository, labelService),
-		Releases:       application.NewReleaseService(projectContent, projectReleaseRepository, runtimeNode, deployService),
+		Commits:        application.NewCommitService(projectContent, libraryContent, projectFileBuilder, widgetTypeRepositories, labelService),
 		Settings:       application.NewSettingsService(userSettingsRepository, settings.SingleUser(), organizationID),
 		Labels:         labelService,
 		Deploy:         deployService,

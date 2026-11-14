@@ -32,15 +32,15 @@ type Repository interface {
 
 	// FindImportedWidgetTypes returns the WidgetTypes of every Commit the
 	// Project imports: what its Widgets may be of.
-	FindImportedWidgetTypes(context.Context) ([]library.ReleasedWidgetType, error)
+	FindImportedWidgetTypes(context.Context) ([]library.WidgetTypeCopy, error)
 
 	// FindImportedWidgetTypesByID returns the WidgetTypes with the given IDs
 	// from the Commits the Project imports; an ID none of them holds is left
 	// out.
-	FindImportedWidgetTypesByID(context.Context, []id.ID[library.WidgetType]) ([]library.ReleasedWidgetType, error)
+	FindImportedWidgetTypesByID(context.Context, []id.ID[library.WidgetType]) ([]library.WidgetTypeCopy, error)
 
 	// FindImportedWidgetType returns the WidgetType with the given ID from the
 	// Commits the Project imports.
 	// Returns library.ErrWidgetTypeNotFound if none of them holds it.
-	FindImportedWidgetType(context.Context, id.ID[library.WidgetType]) (library.ReleasedWidgetType, error)
+	FindImportedWidgetType(context.Context, id.ID[library.WidgetType]) (library.WidgetTypeCopy, error)
 }

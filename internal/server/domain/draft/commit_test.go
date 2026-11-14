@@ -102,7 +102,7 @@ func TestNewCommit_RefusesContentOfTheOtherScope(t *testing.T) {
 	title, _ := draft.NewCommitTitle("Title")
 	author, _ := draft.NewAuthor("Ada")
 	ver, _ := version.New(version.WithNumber[draft.Draft](1))
-	types := draft.NewLibraryCommitContent([]library.ReleasedWidgetType{})
+	types := draft.NewLibraryCommitContent([]library.WidgetTypeCopy{})
 	if _, err := draft.NewCommit(draft.ProjectScope(id.NewID[project.Project]()),
 		id.NewID[draft.Commit](), 1, title, author, time.Now(), ver, types); err == nil {
 		t.Error("a project's commit with widget types was accepted")
@@ -122,15 +122,15 @@ func TestCommitContent_SurvivesTheEncoding(t *testing.T) {
 	script, _ := library.NewScript("function update(){}")
 	portName, _ := library.NewInputPortName("speed")
 	hint, _ := library.NewPortTypeHint("integer")
-	wt, err := library.NewReleasedWidgetType(typeID, libraryID, name, html, script,
+	wt, err := library.NewWidgetTypeCopy(typeID, libraryID, name, html, script,
 		library.ScriptLanguageJavaScript, library.DefaultSize(), []library.InputPort{
 			library.NewInputPort(portName, "speed", hint),
 		})
 	if err != nil {
-		t.Fatalf("NewReleasedWidgetType: %v", err)
+		t.Fatalf("NewWidgetTypeCopy: %v", err)
 	}
 
-	encoded, err := json.Marshal(draft.NewLibraryCommitContent([]library.ReleasedWidgetType{wt}))
+	encoded, err := json.Marshal(draft.NewLibraryCommitContent([]library.WidgetTypeCopy{wt}))
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}

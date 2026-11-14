@@ -18,7 +18,7 @@ import (
 // Deployment it runs and whether the Draft differs from it). Operation reads
 // none of these: it follows the Journal from a Player of its own (ADR 0020).
 type ReloadTargets struct {
-	Projects, Libraries, WidgetTypes, LibraryImports, Scenes, Widgets, Tags, Deploy, Commits, Releases bool
+	Projects, Libraries, WidgetTypes, LibraryImports, Scenes, Widgets, Tags, Deploy, Commits bool
 	// Labels is the server's labels (task 85_2): a label change is the
 	// server's event, and the global Labels window rereads its list on it.
 	Labels bool
@@ -37,8 +37,8 @@ func (t ReloadTargets) WidgetsOf(selected uuid.UUID) bool {
 
 // DraftChanged reports whether the event may have changed a Draft's DraftChange
 // stack (ADR 0017): every write of its content is one change, and a Discard
-// clears the stack. A Deploy and a Release take a snapshot and change no Draft,
-// so they leave the stack as it is (task 72_4). Such an event is what the modes
+// clears the stack. A Deploy takes a snapshot and changes no Draft, so it leaves
+// the stack as it is (task 72_4). Such an event is what the modes
 // reread the stack on, alongside a resync; an event of the Draft's lifecycle
 // alone (a Project or Library renamed or deleted) is not.
 func (t ReloadTargets) DraftChanged() bool {
@@ -46,13 +46,13 @@ func (t ReloadTargets) DraftChanged() bool {
 }
 
 // AllTargets is every list.
-var AllTargets = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, LibraryImports: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Commits: true, Releases: true, Labels: true}
+var AllTargets = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, LibraryImports: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Commits: true, Labels: true}
 
 // The lists of each stream: what its resync reloads, since the events it
 // published while disconnected are lost.
 var (
 	serverTargets  = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, Commits: true, Labels: true}
-	projectTargets = ReloadTargets{LibraryImports: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Commits: true, Releases: true}
+	projectTargets = ReloadTargets{LibraryImports: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Commits: true}
 )
 
 // ReloadTargetsFor routes an event of the streams (or EventResync,
@@ -68,15 +68,6 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 		// A Save or a rename changes the history alone: no content of the
 		// Draft and no DraftChange stack (task 72_2; ADR 0021).
 		return ReloadTargets{Commits: true}
-	case apiv0.EventReleaseCreated, apiv0.EventReleaseNoteUpdated:
-		// A Release changes the list of Releases and the history's "released"
-		// marks alone: no content of the Draft and no DraftChange stack
-		// (task 72_3; ADR 0021).
-		return ReloadTargets{Releases: true, Commits: true}
-	case apiv0.EventLibraryReleaseNoteUpdated:
-		// A Library Release note is metadata: the list of Releases alone
-		// changes, not the Draft and not the "released" marks (task 72_5).
-		return ReloadTargets{Releases: true}
 	case apiv0.EventDeploymentCreated:
 		// The Deployment the Project runs changed: Project refreshes its badge;
 		// nothing of the Draft is touched. Operation does not read this stream
@@ -92,15 +83,11 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 		// A Project was made, renamed or removed: the mode rereads the list.
 		return ReloadTargets{Projects: true, Deploy: true}
 	case apiv0.EventWidgetTypeCreated, apiv0.EventWidgetTypeUpdated, apiv0.EventWidgetTypeDeleted:
-		// A change of the Draft changes whether its library has changes
-		// not released.
+		// A change of the Draft changes whether its library has unsaved
+		// changes.
 		return ReloadTargets{WidgetTypes: true, Libraries: true}
 	case apiv0.EventLibraryCreated, apiv0.EventLibraryUpdated, apiv0.EventLibraryDeleted:
 		return ReloadTargets{Libraries: true, WidgetTypes: true}
-	case apiv0.EventLibraryReleased:
-		// A Release publishes a Commit: the release list and the history's
-		// "released" marks change; the Draft is untouched (task 72_5).
-		return ReloadTargets{Libraries: true, Releases: true, Commits: true}
 	case apiv0.EventLibraryImportCreated, apiv0.EventLibraryImportUpdated, apiv0.EventLibraryImportDeleted:
 		return ReloadTargets{LibraryImports: true}
 	case apiv0.EventSceneCreated, apiv0.EventSceneUpdated, apiv0.EventSceneDeleted:

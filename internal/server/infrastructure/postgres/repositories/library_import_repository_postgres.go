@@ -89,13 +89,13 @@ const importedWidgetTypesQuery = `SELECT c.content
 
 // FindImportedWidgetTypes returns the WidgetTypes of every Commit the Project
 // imports, in the order of the imports and of each Commit's copies.
-func (r libraryImportRepositoryPostgresImpl) FindImportedWidgetTypes(ctx context.Context) ([]library.ReleasedWidgetType, error) {
+func (r libraryImportRepositoryPostgresImpl) FindImportedWidgetTypes(ctx context.Context) ([]library.WidgetTypeCopy, error) {
 	return r.readImported(ctx, nil)
 }
 
 // FindImportedWidgetTypesByID returns the imported WidgetTypes with the given
 // IDs; an ID none of the Commits holds is left out.
-func (r libraryImportRepositoryPostgresImpl) FindImportedWidgetTypesByID(ctx context.Context, typeIDs []id.ID[library.WidgetType]) ([]library.ReleasedWidgetType, error) {
+func (r libraryImportRepositoryPostgresImpl) FindImportedWidgetTypesByID(ctx context.Context, typeIDs []id.ID[library.WidgetType]) ([]library.WidgetTypeCopy, error) {
 	wanted := make(map[uuid.UUID]struct{}, len(typeIDs))
 	for _, typeID := range typeIDs {
 		wanted[typeID.UUID()] = struct{}{}
@@ -105,13 +105,13 @@ func (r libraryImportRepositoryPostgresImpl) FindImportedWidgetTypesByID(ctx con
 
 // readImported reads the WidgetTypes of the imported Commits, all of them or
 // only those whose IDs are in wanted.
-func (r libraryImportRepositoryPostgresImpl) readImported(ctx context.Context, wanted map[uuid.UUID]struct{}) ([]library.ReleasedWidgetType, error) {
+func (r libraryImportRepositoryPostgresImpl) readImported(ctx context.Context, wanted map[uuid.UUID]struct{}) ([]library.WidgetTypeCopy, error) {
 	rows, err := r.db.QueryContext(ctx, importedWidgetTypesQuery, r.project.UUID())
 	if err != nil {
 		return nil, fmt.Errorf("error querying imported widget types: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	types := []library.ReleasedWidgetType{}
+	types := []library.WidgetTypeCopy{}
 	for rows.Next() {
 		var contentJSON []byte
 		if err := rows.Scan(&contentJSON); err != nil {
@@ -142,13 +142,13 @@ func (r libraryImportRepositoryPostgresImpl) readImported(ctx context.Context, w
 
 // FindImportedWidgetType returns the WidgetType typeID held by a Commit the
 // Project imports.
-func (r libraryImportRepositoryPostgresImpl) FindImportedWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.ReleasedWidgetType, error) {
+func (r libraryImportRepositoryPostgresImpl) FindImportedWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.WidgetTypeCopy, error) {
 	types, err := r.FindImportedWidgetTypesByID(ctx, []id.ID[library.WidgetType]{typeID})
 	if err != nil {
-		return library.ReleasedWidgetType{}, err
+		return library.WidgetTypeCopy{}, err
 	}
 	if len(types) == 0 {
-		return library.ReleasedWidgetType{}, id.NotFound(library.ErrWidgetTypeNotFound, typeID)
+		return library.WidgetTypeCopy{}, id.NotFound(library.ErrWidgetTypeNotFound, typeID)
 	}
 	return types[0], nil
 }

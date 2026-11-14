@@ -55,7 +55,7 @@ type Model struct {
 
 	// The render forms of deployment.Content, rebuilt when the Deployment changes.
 	scenes      []apiv0.SceneResponse
-	widgetTypes map[uuid.UUID]apiv0.ReleasedWidgetTypeResponse
+	widgetTypes map[uuid.UUID]apiv0.WidgetTypeCopyResponse
 	widgets     map[uuid.UUID][]apiv0.WidgetResponse
 }
 
@@ -146,7 +146,7 @@ func (m *Model) SetDeployment(deployment apiv0.DeploymentResponse) bool {
 		}
 		m.widgets[scene.ID] = widgets
 	}
-	m.widgetTypes = make(map[uuid.UUID]apiv0.ReleasedWidgetTypeResponse, len(content.WidgetTypes))
+	m.widgetTypes = make(map[uuid.UUID]apiv0.WidgetTypeCopyResponse, len(content.WidgetTypes))
 	for _, widgetType := range content.WidgetTypes {
 		m.widgetTypes[widgetType.ID] = widgetTypeOf(widgetType)
 	}
@@ -213,7 +213,7 @@ func (m *Model) applyTagState(entry recordv0.Entry) Result {
 type View struct {
 	Deployment  *apiv0.DeploymentResponse
 	Scenes      []apiv0.SceneResponse
-	WidgetTypes map[uuid.UUID]apiv0.ReleasedWidgetTypeResponse
+	WidgetTypes map[uuid.UUID]apiv0.WidgetTypeCopyResponse
 	Tags        map[uuid.UUID]apiv0.TagResponse
 	Connected   bool
 
@@ -314,12 +314,12 @@ func widgetOf(widget projectv0.Widget, sceneID uuid.UUID) apiv0.WidgetResponse {
 
 // widgetTypeOf is the Deployment's copy of a WidgetType in the shape the view
 // renders.
-func widgetTypeOf(widgetType projectv0.WidgetType) apiv0.ReleasedWidgetTypeResponse {
+func widgetTypeOf(widgetType projectv0.WidgetType) apiv0.WidgetTypeCopyResponse {
 	ports := make([]apiv0.InputPort, len(widgetType.InputPorts))
 	for i, port := range widgetType.InputPorts {
 		ports[i] = apiv0.InputPort{Name: port.Name, Description: port.Description, TypeHint: port.TypeHint}
 	}
-	return apiv0.ReleasedWidgetTypeResponse{
+	return apiv0.WidgetTypeCopyResponse{
 		ID:             widgetType.ID,
 		LibraryID:      widgetType.LibraryID,
 		Name:           widgetType.Name,

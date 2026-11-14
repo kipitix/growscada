@@ -32,7 +32,6 @@ func cleanMain(t *testing.T) {
 		 DELETE FROM runtime.tags WHERE project_id = `+main+`;
 		 DELETE FROM engineering.tags WHERE project_id = `+main+`;
 		 DELETE FROM engineering.scenes WHERE project_id = `+main+`;
-		 DELETE FROM engineering.project_releases WHERE project_id = `+main+`;
 		 DELETE FROM engineering.commits WHERE draft_id IN (SELECT id FROM engineering.drafts WHERE project_id = `+main+`);
 		 DELETE FROM engineering.draft_changes WHERE draft_id IN (SELECT id FROM engineering.drafts WHERE project_id = `+main+`);
 		 UPDATE engineering.drafts SET last_commit_number = 0, last_commit_draft_version = 0, stack_position = 0, clean_version = 0
@@ -41,8 +40,8 @@ func cleanMain(t *testing.T) {
 	}
 }
 
-// deployDraft saves the Draft as a Commit, publishes it and deploys the
-// Release: a Deploy takes a Release since task 72_4.
+// deployDraft saves the Draft as a Commit and deploys that saved state: a
+// Deploy takes a Commit since task 85_4.
 func deployDraft(t *testing.T, project *apiclient.ProjectClient) apiv0.DeployResponse {
 	t.Helper()
 	ctx := context.Background()
@@ -54,13 +53,9 @@ func deployDraft(t *testing.T, project *apiclient.ProjectClient) apiv0.DeployRes
 	if err != nil {
 		t.Fatalf("save commit: %v", err)
 	}
-	released, err := project.CreateRelease(ctx, apiv0.CreateProjectReleaseRequest{Commit: commit.Number, Author: "Ada"})
+	deployed, err := project.DeployCommit(ctx, commit.Number)
 	if err != nil {
-		t.Fatalf("release: %v", err)
-	}
-	deployed, err := project.DeployRelease(ctx, released.Number)
-	if err != nil {
-		t.Fatalf("deploy release: %v", err)
+		t.Fatalf("deploy saved state: %v", err)
 	}
 	return deployed
 }

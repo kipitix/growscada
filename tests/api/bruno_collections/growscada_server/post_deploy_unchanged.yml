@@ -1,16 +1,16 @@
 info:
-  name: deploy the running release again
+  name: deploy the running saved state again
   type: http
   seq: 45
 
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/releases/{{OTHER_RELEASE_NUMBER}}/deploy
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/commits/{{OTHER_COMMIT_NUMBER}}/deploy
   auth: inherit
 
 docs: |
-  A Release that is the running Deployment already is refused: `409 Conflict`
-  `nothing_to_deploy` (task 72_4).
+  A saved state that is the running Deployment already is refused: `409
+  Conflict` `nothing_to_deploy` (task 85_4).
 
 runtime:
   assertions:

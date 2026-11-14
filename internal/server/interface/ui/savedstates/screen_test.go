@@ -18,13 +18,12 @@ func at(day, hour int) time.Time {
 }
 
 // TestScreen_RowsAndActions: a row carries the time, the name, the author and
-// the two actions; a published one names its Release and its note (task 84).
+// the Load action (task 84, task 85_7).
 func TestScreen_RowsAndActions(t *testing.T) {
 	s := New()
 	s.Loaded = true
-	s.ShowRelease = true
 	s.Rows = []Row{
-		{Number: 2, Title: "Second save", Author: "Ada", SavedAt: at(13, 21), Released: true, Release: 3, Note: "for the demo"},
+		{Number: 2, Title: "Second save", Author: "Ada", SavedAt: at(13, 21)},
 		{Number: 1, Title: "First save", Author: "Bob", SavedAt: at(12, 10)},
 	}
 	html := app.HTMLString(s.Render())
@@ -37,39 +36,20 @@ func TestScreen_RowsAndActions(t *testing.T) {
 		"13.11.2026 21:04",
 		"Second save",
 		"Ada",
-		`data-saved-state-release="2"`,
-		"Release 3 · for the demo",
-		"Released",
 		`data-saved-state-row="1"`,
 		"First save",
 		"Bob",
 		">Load<",
-		">Make Release<",
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("the screen does not hold %q: %s", want, html)
 		}
 	}
-	if strings.Contains(html, `data-saved-state-release="1"`) {
-		t.Errorf("a saved state no Release published names one: %s", html)
-	}
-}
-
-// TestScreen_WithoutRelease: a mode that shows no Release draws the name, the
-// labels and the Load alone (task 85_5).
-func TestScreen_WithoutRelease(t *testing.T) {
-	s := New()
-	s.Loaded = true
-	s.Rows = []Row{{Number: 1, Title: "First save", Author: "Ada", SavedAt: at(12, 10),
-		Released: true, Release: 3, Note: "for the demo"}}
-	html := app.HTMLString(s.Render())
-
-	if !strings.Contains(html, ">Load<") {
-		t.Errorf("the row offers no load: %s", html)
-	}
-	for _, unwant := range []string{`data-saved-state-release`, "Release 3", "Make Release"} {
+	// A saved state is loaded, never published: the Release is gone from the
+	// model (task 85_7).
+	for _, unwant := range []string{`data-saved-state-release`, "Make Release", ">Released<"} {
 		if strings.Contains(html, unwant) {
-			t.Errorf("the row still shows %q: %s", unwant, html)
+			t.Errorf("the screen still shows %q: %s", unwant, html)
 		}
 	}
 }

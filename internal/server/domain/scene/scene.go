@@ -42,7 +42,7 @@ type Scene interface {
 	// SceneUpdatedEvent.
 	Update(aName SceneName, aSize SceneSize, aBackgroundHTML BackgroundHTML) (Scene, error)
 
-	// AddWidget places a new widget of WidgetType wt, as a Library Release the
+	// AddWidget places a new widget of WidgetType wt, as the saved state the
 	// scene's Project imports holds it (ADR 0007), on the scene and records
 	// a WidgetCreatedEvent.
 	// Returns ErrWidgetAlreadyExists if the scene already holds a widget with
@@ -52,7 +52,7 @@ type Scene interface {
 	// ErrPortNotDeclared, ErrBoundTagNotFound or ErrPortTypeMismatch.
 	// tagTypes holds the TagTypes of the Tags the widget binds; a Tag that
 	// is not in it as a Tag of the scene's Project does not exist.
-	AddWidget(w Widget, wt library.ReleasedWidgetType, tagTypes TagTypes) (Scene, error)
+	AddWidget(w Widget, wt library.WidgetTypeCopy, tagTypes TagTypes) (Scene, error)
 
 	// UpdateWidget replaces the scene's widget with the same ID by w, of
 	// WidgetType wt, and records a WidgetUpdatedEvent.
@@ -65,7 +65,7 @@ type Scene interface {
 	// removed by policies, not a reason to refuse the change (ADR 0010).
 	// tagTypes holds the TagTypes of the Tags the widget binds; a Tag that
 	// is not in it as a Tag of the scene's Project does not exist.
-	UpdateWidget(w Widget, wt library.ReleasedWidgetType, tagTypes TagTypes) (Scene, error)
+	UpdateWidget(w Widget, wt library.WidgetTypeCopy, tagTypes TagTypes) (Scene, error)
 
 	// MoveWidgets places each widget named by moves at its new position and
 	// records a WidgetUpdatedEvent for each widget that actually moved. Only
@@ -94,7 +94,7 @@ type Scene interface {
 	// for each widget it changes. The bool reports whether anything was
 	// removed. TagTypes of another Project are ErrTagTypesOfAnotherProject,
 	// nothing removed.
-	ReconcileWith(wt library.ReleasedWidgetType, tagTypes TagTypes) (Scene, bool, error)
+	ReconcileWith(wt library.WidgetTypeCopy, tagTypes TagTypes) (Scene, bool, error)
 
 	// TagsBoundByType returns the IDs of the Tags the scene's widgets of
 	// WidgetType typeID bind, each once: those ReconcileWith needs in
@@ -198,7 +198,7 @@ func (s *sceneImpl) Update(aName SceneName, aSize SceneSize, aBackgroundHTML Bac
 	}, nil
 }
 
-func (s *sceneImpl) AddWidget(w Widget, wt library.ReleasedWidgetType, tagTypes TagTypes) (Scene, error) {
+func (s *sceneImpl) AddWidget(w Widget, wt library.WidgetTypeCopy, tagTypes TagTypes) (Scene, error) {
 	if s.widgetIndex(w.ID()) >= 0 {
 		return nil, fmt.Errorf("%w: %s", ErrWidgetAlreadyExists, w.ID())
 	}
@@ -208,7 +208,7 @@ func (s *sceneImpl) AddWidget(w Widget, wt library.ReleasedWidgetType, tagTypes 
 	return s.withWidgets(append(slices.Clip(s.widgets), w), NewWidgetCreatedEvent(w.ID(), s.id, s.projectID, w.TypeID())), nil
 }
 
-func (s *sceneImpl) UpdateWidget(w Widget, wt library.ReleasedWidgetType, tagTypes TagTypes) (Scene, error) {
+func (s *sceneImpl) UpdateWidget(w Widget, wt library.WidgetTypeCopy, tagTypes TagTypes) (Scene, error) {
 	i := s.widgetIndex(w.ID())
 	if i < 0 {
 		return nil, id.NotFound(ErrWidgetNotFound, w.ID())
@@ -271,7 +271,7 @@ func (s *sceneImpl) RemoveWidget(widgetID id.ID[Widget]) (Scene, Widget, error) 
 	return s.withWidgets(slices.Concat(s.widgets[:i], s.widgets[i+1:]), NewWidgetDeletedEvent(widgetID, s.id, s.projectID)), s.widgets[i], nil
 }
 
-func (s *sceneImpl) ReconcileWith(wt library.ReleasedWidgetType, tagTypes TagTypes) (Scene, bool, error) {
+func (s *sceneImpl) ReconcileWith(wt library.WidgetTypeCopy, tagTypes TagTypes) (Scene, bool, error) {
 	if err := tagTypes.checkFor(s.projectID); err != nil {
 		return s, false, err
 	}
@@ -368,7 +368,7 @@ func (s *sceneImpl) record(someEvents ...event.Event) []event.Event {
 // of the widget is valid (see checkBinding), except those that stored, the
 // widget as the scene holds it (nil for a new one), already held while of the
 // same type.
-func (s *sceneImpl) checkWidgetType(w Widget, wt library.ReleasedWidgetType, tagTypes TagTypes, stored Widget) error {
+func (s *sceneImpl) checkWidgetType(w Widget, wt library.WidgetTypeCopy, tagTypes TagTypes, stored Widget) error {
 	if err := tagTypes.checkFor(s.projectID); err != nil {
 		return err
 	}
@@ -412,7 +412,7 @@ func (s *sceneImpl) checkBinding(b PortBinding, ports map[library.InputPortName]
 	return nil
 }
 
-func declaredPorts(wt library.ReleasedWidgetType) map[library.InputPortName]library.InputPort {
+func declaredPorts(wt library.WidgetTypeCopy) map[library.InputPortName]library.InputPort {
 	declared := make(map[library.InputPortName]library.InputPort, len(wt.InputPorts()))
 	for _, p := range wt.InputPorts() {
 		declared[p.Name()] = p

@@ -16,7 +16,7 @@ http:
   auth: inherit
 
 docs: |
-  Creates a library with an empty Draft and no release. Its name is unique
+  Creates a library with an empty Draft and no saved state. Its name is unique
   among the live libraries of the server.
 
 runtime:

@@ -25,11 +25,6 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 		if !ok || !eventlog.ForProject(a, p.projectID) {
 			return
 		}
-		if ev.Type == apiv0.EventReleaseCreated || ev.Type == apiv0.EventReleaseNoteUpdated {
-			// The Project mode knows no Release (task 85_5): its history and
-			// Deploy window show saved states alone.
-			return
-		}
 		p.tags = eventlog.ApplyToTags(p.tags, ev)
 		if ev.Type == eventlog.EventResync || ev.Type == eventlog.EventProjectResync {
 			// Events were lost: the server may have gone back, the stack with

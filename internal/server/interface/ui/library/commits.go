@@ -117,8 +117,8 @@ func (l *Library) saveCommit() {
 	})
 }
 
-// changeAuthor asks for the author name the Save and Release dialogs fill in.
-// It is no lock: it blocks nobody and only fills in the dialogs (task 72_7).
+// changeAuthor asks for the author name the Save dialog fills in. It is no lock:
+// it blocks nobody and only fills in the dialog (task 72_7).
 func (l *Library) changeAuthor(ctx app.Context) {
 	name, ok := prompt("Author:", l.saveAuthor, false)
 	if !ok {
@@ -171,47 +171,8 @@ func (l *Library) renameSavedState(ctx app.Context, number int, title string) {
 	}, nil)
 }
 
-// releaseSavedState opens the publication of the saved state the screen named.
-func (l *Library) releaseSavedState(ctx app.Context, number int) {
-	for _, saved := range l.commits {
-		if saved.Number == number {
-			l.openReleaseDialog(saved)
-			return
-		}
-	}
-}
-
-// editSavedStateReleaseNote changes the note of the Release that published the
-// saved state, after asking for it: the note is metadata and states no Version
-// (task 72_5, task 84).
-func (l *Library) editSavedStateReleaseNote(ctx app.Context, number int) {
-	lib, ok := l.selectedLibrary()
-	if !ok {
-		return
-	}
-	for _, released := range l.releases {
-		if released.CommitNumber == nil || *released.CommitNumber != number {
-			continue
-		}
-		note, ok := prompt(fmt.Sprintf("Note of release %d:", released.Number), released.Note, true)
-		if !ok {
-			return
-		}
-		uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.LibraryReleaseResponse, error) {
-			return l.client.Library(lib.ID).UpdateReleaseNote(c, released.Number,
-				apiv0.UpdateLibraryReleaseNoteRequest{Note: note})
-		}, func(ctx app.Context, _ apiv0.LibraryReleaseResponse) {
-			l.loadReleases(ctx)
-			l.loadCommits(ctx)
-			ctx.Update()
-		}, l.reloadOnConflict)
-		return
-	}
-}
-
 // renderCommitBar is the panel's Save, its unsaved-changes indicator and the
-// History button (task 72_7; task 84; ADR 0021). The Releases have no button of
-// their own: a saved state is published from the history, where it is listed.
+// History button (task 72_7; task 84; ADR 0021).
 func (l *Library) renderCommitBar() []app.UI {
 	editable := l.libraryID != uuid.Nil
 	saveTitle := "Save the Draft as a saved state"
@@ -222,7 +183,7 @@ func (l *Library) renderCommitBar() []app.UI {
 		saveTitle = "Nothing to save since the last save"
 	}
 	// The indicator is always a child, hidden when there is nothing to show:
-	// a conditional one would shift History and Releases by a position, and
+	// a conditional one would shift History by a position, and
 	// go-app keeps the handler of a reused element whose handler is the same
 	// func literal (task 79).
 	indicator := app.Span().Style("font-size", "12px")
@@ -252,8 +213,8 @@ func (l *Library) renderCommitBar() []app.UI {
 	}
 }
 
-// renderAuthorBar shows the author the Save and Release dialogs fill in, with a
-// button to change it: it is not a lock and blocks nobody (task 72_7).
+// renderAuthorBar shows the author the Save dialog fills in, with a button to
+// change it: it is not a lock and blocks nobody (task 72_7).
 func (l *Library) renderAuthorBar() app.UI {
 	name := strings.TrimSpace(l.saveAuthor)
 	label := "Author: not set"
@@ -325,56 +286,8 @@ func (l *Library) renderSaveDialog() app.UI {
 		)
 }
 
-// renderReleaseDialog is the publication of a Commit: a note, the author and
-// the Release itself (task 72_7; ADR 0021).
-func (l *Library) renderReleaseDialog() app.UI {
-	return app.Div().
-		Attr("data-release-dialog", "true").
-		Style("padding", "8px").
-		Style("margin-top", "6px").
-		Style("border", "1px solid var(--border)").
-		Style("border-radius", "4px").
-		Style("background", "var(--bg)").
-		Style("font-size", "12px").
-		Body(
-			app.Div().Style("margin-bottom", "4px").Text(fmt.Sprintf("Release saved state %d", l.releaseCommit)),
-			app.Input().
-				Attr("data-release-note", "true").
-				Type("text").
-				Value(l.releaseNote).
-				Placeholder("Note (optional)").
-				Style("width", "100%").
-				Style("box-sizing", "border-box").
-				Style("margin-bottom", "4px").
-				Style("font-size", "12px").
-				OnInput(func(ctx app.Context, e app.Event) {
-					l.releaseNote = ctx.JSSrc().Get("value").String()
-				}),
-			app.Input().
-				Attr("data-release-author", "true").
-				Type("text").
-				Value(l.releaseAuthor).
-				Placeholder("Author").
-				Style("width", "100%").
-				Style("box-sizing", "border-box").
-				Style("margin-bottom", "6px").
-				Style("font-size", "12px").
-				OnInput(func(ctx app.Context, e app.Event) {
-					l.releaseAuthor = ctx.JSSrc().Get("value").String()
-				}),
-			app.Div().Style("display", "flex").Style("gap", "4px").Body(
-				smallButton("Release", !l.releasing, "accent", "Publish this saved state as the next Library Release", l.publishRelease),
-				smallButton("Cancel", true, "", "Close without publishing", func() {
-					l.releaseDialog, l.releaseCommit = false, 0
-					l.compoCtx.Update()
-				}),
-			),
-		)
-}
-
 // renderHistoryScreen is the history of the selected library's saved states
-// (task 84): the screen both modes share, fed with this library's history and
-// the Releases that published it.
+// (task 84): the screen both modes share, fed with this library's history.
 func (l *Library) renderHistoryScreen() app.UI {
 	screen := l.history
 	screen.Rows = l.historyRows()
@@ -383,14 +296,9 @@ func (l *Library) renderHistoryScreen() app.UI {
 	screen.AllLabels = l.historyLabels
 	screen.OnBack = func(ctx app.Context) { l.closeHistory() }
 	screen.OnLoad = func(ctx app.Context, number int) { l.loadSavedState(number) }
-	// The Library still publishes a saved state as a Release until task 85_7
-	// removes Releases; the Project mode does not (task 85_5).
-	screen.ShowRelease = true
-	screen.OnRelease = func(ctx app.Context, number int) { l.releaseSavedState(ctx, number) }
 	screen.OnRename = func(ctx app.Context, number int, title string) {
 		l.renameSavedState(ctx, number, title)
 	}
-	screen.OnNote = func(ctx app.Context, number int) { l.editSavedStateReleaseNote(ctx, number) }
 	screen.OnAssign = func(ctx app.Context, number int, labelID uuid.UUID) {
 		l.assignLabel(ctx, number, labelID)
 	}
@@ -401,27 +309,18 @@ func (l *Library) renderHistoryScreen() app.UI {
 	return screen
 }
 
-// historyRows joins the history with the Releases that published it: a saved
-// state a Release published carries that Release's number and note, and each
-// carries the labels that mark it (task 84, task 85_3).
+// historyRows maps the history to the screen's rows: each carries the labels
+// that mark it (task 84, task 85_3).
 func (l *Library) historyRows() []savedstates.Row {
 	rows := make([]savedstates.Row, len(l.commits))
 	for i, saved := range l.commits {
-		row := savedstates.Row{
-			Number:   saved.Number,
-			Title:    saved.Title,
-			Author:   saved.Author,
-			SavedAt:  saved.CreatedAt,
-			Labels:   saved.Labels,
-			Released: saved.Released,
+		rows[i] = savedstates.Row{
+			Number:  saved.Number,
+			Title:   saved.Title,
+			Author:  saved.Author,
+			SavedAt: saved.CreatedAt,
+			Labels:  saved.Labels,
 		}
-		for _, released := range l.releases {
-			if released.CommitNumber != nil && *released.CommitNumber == saved.Number {
-				row.Release, row.Note = released.Number, released.Note
-				break
-			}
-		}
-		rows[i] = row
 	}
 	return rows
 }

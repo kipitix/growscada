@@ -16,33 +16,12 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/libraryimport"
 	"github.com/kipitix/growscada/internal/server/domain/project"
-	"github.com/kipitix/growscada/internal/server/domain/release"
 	"github.com/kipitix/growscada/internal/server/domain/scene"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/domain/tagstate"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
 )
-
-// releaseNumber is a Release number of the tests.
-func releaseNumber(t *testing.T, number int) release.Number {
-	t.Helper()
-	n, err := release.NewNumber(number)
-	if err != nil {
-		t.Fatalf("NewNumber(%d): %v", number, err)
-	}
-	return n
-}
-
-// libraryReleaseNumber is a Library Release number of the tests.
-func libraryReleaseNumber(t *testing.T, number int) library.ReleaseNumber {
-	t.Helper()
-	n, err := library.NewReleaseNumber(number)
-	if err != nil {
-		t.Fatalf("NewReleaseNumber(%d): %v", number, err)
-	}
-	return n
-}
 
 // TestNewAPIEvent_TranslatesEveryEventType checks newAPIEvent on a sample of
 // every domain EventType: a type without a sample fails the test, so a new
@@ -98,8 +77,6 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 			apiv0.Event{Type: "library_updated", ID: libraryID.String()}},
 		event.EventTypeLibraryDeleted: {library.NewLibraryDeletedEvent(libraryID, ts),
 			apiv0.Event{Type: "library_deleted", ID: libraryID.String()}},
-		event.EventTypeLibraryReleased: {library.NewLibraryReleasedEvent(libraryID, library.FirstRelease().Next(), ts),
-			apiv0.Event{Type: "library_released", ID: libraryID.String(), Release: 2}},
 		event.EventTypeLibraryImportCreated: {libraryimport.NewLibraryImportCreatedEvent(libraryID, projectID, ts),
 			apiv0.Event{Type: "library_import_created", ID: libraryID.String()}},
 		event.EventTypeLibraryImportUpdated: {libraryimport.NewLibraryImportUpdatedEvent(libraryID, projectID, ts),
@@ -156,12 +133,6 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 			apiv0.Event{Type: "commit_created", ID: projectID.String(), Commit: 2}},
 		event.EventTypeCommitTitleUpdated: {draft.NewCommitTitleUpdatedEvent(draft.LibraryScope(libraryID), 3, ts),
 			apiv0.Event{Type: "commit_title_updated", ID: libraryID.String(), Commit: 3}},
-		event.EventTypeReleaseCreated: {release.NewReleaseCreatedEvent(draft.ProjectScope(projectID), releaseNumber(t, 1), ts),
-			apiv0.Event{Type: "release_created", ID: projectID.String(), Release: 1}},
-		event.EventTypeReleaseNoteUpdated: {release.NewReleaseNoteUpdatedEvent(draft.LibraryScope(libraryID), releaseNumber(t, 2), ts),
-			apiv0.Event{Type: "release_note_updated", ID: libraryID.String(), Release: 2}},
-		event.EventTypeLibraryReleaseNoteUpdated: {library.NewLibraryReleaseNoteUpdatedEvent(libraryID, libraryReleaseNumber(t, 3), ts),
-			apiv0.Event{Type: "library_release_note_updated", ID: libraryID.String(), Release: 3}},
 		event.EventTypeLabelCreated: {label.NewLabelCreatedEvent(labelID, ts),
 			apiv0.Event{Type: "label_created", ID: labelID.String()}},
 		event.EventTypeLabelUpdated: {label.NewLabelUpdatedEvent(labelID, ts),

@@ -204,84 +204,49 @@ func TestDeleteItem_RemovesItAndTheSelection(t *testing.T) {
 // deletion, and is not refused as stale.
 func TestDeleteItem_LastType_KeepsTheDraftVersion(t *testing.T) {
 	f, _ := selected(t)
-	releaseNow(t, f)
+	saveNow(t, f)
 	f.l.deleteItem(f.l.compoCtx)
 	f.run()
 	f.noToasts()
 
-	if _, err := saveAndRelease(context.Background(), f.api.LibraryClient, ""); err != nil {
-		t.Fatalf("release of the emptied Draft at the known version: %v", err)
+	if err := saveAndCommit(context.Background(), f.api.LibraryClient); err != nil {
+		t.Fatalf("save of the emptied Draft at the known version: %v", err)
 	}
 }
 
-// TestRelease_ReleasesTheDraftAndMarksTheHistory: a saved state published as
-// Release 1 is marked "released" in the history, and the library's state
-// follows (task 72_5, task 84; ADR 0021).
-func TestRelease_ReleasesTheDraftAndMarksTheHistory(t *testing.T) {
-	f, id := selected(t)
-
-	if lib, ok := f.l.selectedLibrary(); !ok || !lib.HasUnsavedChanges || lib.LatestRelease != 0 {
-		t.Fatalf("library before the release: %+v", lib)
-	}
-	releaseNow(t, f)
-
-	if lib, _ := f.l.selectedLibrary(); lib.LatestRelease != 1 || lib.HasUnsavedChanges || lib.HasUnpublishedChanges {
-		t.Errorf("library after the release: %+v", lib)
-	}
-	if len(f.l.commits) != 1 || !f.l.commits[0].Released || f.l.commits[0].ContentCounts.WidgetTypes != 1 {
-		t.Fatalf("history: %+v", f.l.commits)
-	}
-	if len(f.l.shownTypes()) != 1 || f.l.shownTypes()[0].ID != id {
-		t.Errorf("the Draft after the release: %+v", f.l.shownTypes())
-	}
-}
-
-// saveAndRelease saves the library's Draft as a Commit and publishes that
-// Commit, as releaseNow does without the UI: the pair of the new semantics of
-// a Library Release (task 72_5; ADR 0021). A Draft already at its last Commit
-// publishes that one.
-func saveAndRelease(ctx context.Context, lib *apiclient.LibraryClient, note string) (apiv0.LibraryReleaseResponse, error) {
+// saveAndCommit saves the library's Draft as a Commit, at the Version the
+// server states. A Draft already at its last Commit keeps that one.
+func saveAndCommit(ctx context.Context, lib *apiclient.LibraryClient) error {
 	state, err := lib.DraftState(ctx)
 	if err != nil {
-		return apiv0.LibraryReleaseResponse{}, err
+		return err
 	}
-	commit, err := lib.SaveCommit(ctx, apiv0.CreateCommitRequest{Version: state.Version, Title: "Save", Author: "Ada"})
-	if err != nil {
-		if !errors.Is(err, apiclient.ErrConflict) {
-			return apiv0.LibraryReleaseResponse{}, err
-		}
-		commits, err := lib.Commits(ctx)
-		if err != nil {
-			return apiv0.LibraryReleaseResponse{}, err
-		}
-		if len(commits) == 0 {
-			return apiv0.LibraryReleaseResponse{}, errors.New("the draft has no commit to release")
-		}
-		commit = commits[0]
+	_, err = lib.SaveCommit(ctx, apiv0.CreateCommitRequest{Version: state.Version, Title: "Save", Author: "Ada"})
+	if err == nil || !errors.Is(err, apiclient.ErrConflict) {
+		return err
 	}
-	return lib.Release(ctx, apiv0.CreateReleaseRequest{Commit: commit.Number, Note: note, Author: "Ada"})
+	return nil
 }
 
-// releaseNow releases the selected library's last Commit, saving the Draft
-// first when it moved since it.
-func releaseNow(t *testing.T, f *fixture) {
+// saveNow saves the selected library's Draft as a saved state and rereads what
+// the Save changes.
+func saveNow(t *testing.T, f *fixture) {
 	t.Helper()
-	if _, err := saveAndRelease(context.Background(), f.api.LibraryClient, ""); err != nil {
-		t.Fatalf("release: %v", err)
+	if err := saveAndCommit(context.Background(), f.api.LibraryClient); err != nil {
+		t.Fatalf("save: %v", err)
 	}
 	f.l.loadLibraries(f.l.compoCtx)
-	f.l.loadReleases(f.l.compoCtx) // the history names the Release that published it
-	f.l.loadCommits(f.l.compoCtx)  // the release marks its Commit
+	f.l.loadCommits(f.l.compoCtx)
 	f.l.loadDraftState(f.l.compoCtx)
 	f.run()
 	f.noToasts()
 }
 
 // TestDiscard_ResetsTheDraftAtOnce: a Discard is one transaction, so the
-// Draft is back at the latest release as soon as the call returns.
+// Draft is back at its last saved state as soon as the call returns.
 func TestDiscard_ResetsTheDraftAtOnce(t *testing.T) {
 	f, kept := selected(t)
-	releaseNow(t, f)
+	saveNow(t, f)
 	createWidgetType(t, f.api, "Added")
 	state, err := f.api.Discard(context.Background())
 	if err != nil {
@@ -295,7 +260,7 @@ func TestDiscard_ResetsTheDraftAtOnce(t *testing.T) {
 		t.Fatalf("list widget types: %v", err)
 	}
 	if len(list) != 1 || list[0].ID != kept {
-		t.Errorf("the Draft after the Discard: %+v, want only the released type", list)
+		t.Errorf("the Draft after the Discard: %+v, want only the saved type", list)
 	}
 }
 
@@ -368,7 +333,7 @@ func TestLibraryGone_AnyReadOfTheSelectedLibraryFiresTheAction(t *testing.T) {
 func TestLibraryGone_ACommandKeepsItsOwnError(t *testing.T) {
 	url, api := newServer(t)
 	f := mount(t, url, api, uiutil.ActionLibraryGone)
-	releaseNow(t, f)
+	saveNow(t, f)
 	gone := api.ID()
 	if _, err := api.DeleteLibrary(context.Background(), gone); err != nil {
 		t.Fatal(err)

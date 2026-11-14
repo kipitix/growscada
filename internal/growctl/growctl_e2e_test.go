@@ -1006,10 +1006,10 @@ func TestGetProjects_TableAndYAML(t *testing.T) {
 	}
 }
 
-// TestSaveReleaseDeploy_Project walks the closing workflow: apply edits the
-// Draft, save fixes a Commit, release publishes it, deploy makes it the
-// running Deployment (ADR 0021), and the lists report each step.
-func TestSaveReleaseDeploy_Project(t *testing.T) {
+// TestSaveDeploy_Project walks the closing workflow: apply edits the Draft,
+// save fixes a Commit, deploy makes it the running Deployment (ADR 0021,
+// task 85_4), and the lists report each step.
+func TestSaveDeploy_Project(t *testing.T) {
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
 	if _, err := runGrowctl(t, srv, twoTags, "apply"); err != nil {
 		t.Fatalf("apply: %v", err)
@@ -1027,27 +1027,16 @@ func TestSaveReleaseDeploy_Project(t *testing.T) {
 		t.Errorf("a save of an unchanged Draft must fail, stderr %q", stderr)
 	}
 	out, _, err = execGrowctl(t, srv, "", "commits", "Main")
-	if err != nil || !strings.Contains(out, "Before the demo") || !strings.Contains(out, "Grace") || !strings.Contains(out, "false") {
+	if err != nil || !strings.Contains(out, "Before the demo") || !strings.Contains(out, "Grace") {
 		t.Fatalf("commits after the save: %q, %v", out, err)
 	}
 
-	out, _, err = execGrowctl(t, srv, "", "release", "Main", "--commit", "1", "--note", "Ready", "--author", "Grace")
-	released, found := strings.CutPrefix(out, "project/Main released ")
-	if err != nil || !found {
-		t.Fatalf("release: %q, %v", out, err)
-	}
-	releaseNumber := strings.TrimSpace(released)
-	out, _, err = execGrowctl(t, srv, "", "releases", "Main")
-	if err != nil || !strings.Contains(out, "Ready") || !strings.Contains(out, "Grace") || !strings.Contains(out, "commit") {
-		t.Fatalf("releases: %q, %v", out, err)
-	}
-
-	out, _, err = execGrowctl(t, srv, "", "deploy", "Main", "--release", releaseNumber)
+	out, _, err = execGrowctl(t, srv, "", "deploy", "Main", "--commit", "1")
 	if err != nil || out != "project/Main deployed 1\n" {
 		t.Fatalf("deploy: %q, %v", out, err)
 	}
-	if _, stderr, err := execGrowctl(t, srv, "", "deploy", "Main", "--release", releaseNumber); err == nil {
-		t.Errorf("a deploy of the running Release must fail, stderr %q", stderr)
+	if _, stderr, err := execGrowctl(t, srv, "", "deploy", "Main", "--commit", "1"); err == nil {
+		t.Errorf("a deploy of the running saved state must fail, stderr %q", stderr)
 	}
 	running, err := apiclient.New(srv.URL, srv.Client()).Project(servertest.MainProject).Deployment(context.Background())
 	if err != nil || !running.Deployed || running.CommitNumber == nil || *running.CommitNumber != 1 {

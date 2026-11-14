@@ -168,10 +168,10 @@ func (p *Project) loadWidgetTypes(ctx app.Context) {
 		return
 	}
 	uiutil.LoadOfProject(p.compoCtx, &p.widgetTypesReloader, p.projectContent,
-		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.ReleasedWidgetTypeResponse, error) {
+		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.WidgetTypeCopyResponse, error) {
 			return pc.ImportedWidgetTypes(c)
 		},
-		func(ctx app.Context, list []apiv0.ReleasedWidgetTypeResponse) {
+		func(ctx app.Context, list []apiv0.WidgetTypeCopyResponse) {
 			p.widgetTypes = list
 		}, p.loadWidgetTypes)
 }

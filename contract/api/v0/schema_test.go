@@ -19,7 +19,7 @@ func TestSchemaIsCommitted(t *testing.T) {
 			WidgetTypeResponse{}, GetWidgetTypesResponse{}, GetImportedWidgetTypesResponse{},
 			CreateWidgetTypeRequest{}, CreateWidgetTypeResponse{}, UpdateWidgetTypeRequest{}, UpdateWidgetTypeResponse{},
 			LibraryResponse{}, GetLibrariesResponse{}, CreateLibraryRequest{}, CreateLibraryResponse{}, UpdateLibraryRequest{}, UpdateLibraryResponse{},
-			DraftStateResponse{}, CreateReleaseRequest{}, UpdateLibraryReleaseNoteRequest{}, LibraryReleaseResponse{}, GetLibraryReleasesResponse{},
+			DraftStateResponse{}, DiscardLibraryResponse{}, LoadCommitResponse{},
 			LibraryOrderResponse{}, SetLibraryOrderRequest{},
 			LibraryImportResponse{}, GetLibraryImportsResponse{}, PutLibraryImportRequest{}, ImportImpactResponse{},
 			AffectedWidgetResponse{}, BrokenBindingResponse{},
@@ -35,7 +35,7 @@ func TestSchemaIsCommitted(t *testing.T) {
 			JournalResponse{}, OperationStateResponse{},
 			DraftChangesResponse{}, DraftChangeCommandRequest{},
 			CommitResponse{}, GetCommitsResponse{}, CreateCommitRequest{}, RenameCommitRequest{},
-			ReleaseResponse{}, GetReleasesResponse{}, CreateProjectReleaseRequest{}, UpdateReleaseNoteRequest{},
+			CommitLabelsResponse{},
 			Event{}, Problem{},
 		},
 	})

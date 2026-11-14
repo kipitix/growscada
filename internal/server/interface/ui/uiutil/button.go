@@ -17,7 +17,7 @@ const (
 	// ButtonSmall is an action of a dialog or of a table's filter row: it
 	// shares the row's width.
 	ButtonSmall ButtonLayout = "small"
-	// ButtonRow is an action of a row of a list, e.g. a Release's Deploy or
+	// ButtonRow is an action of a row of a list, e.g. a saved state's Deploy or
 	// a Commit's download.
 	ButtonRow ButtonLayout = "row"
 )

@@ -6,8 +6,8 @@ import (
 )
 
 // LibraryEvent - base interface for the events a Library records about
-// itself, and for LibraryReleasedEvent: events of the server's stream, like
-// those of Projects (no Project's content). The events of a WidgetType and
+// itself: events of the server's stream, like those of Projects (no Project's
+// content). The events of a WidgetType and
 // of a Library Import name a Library too but are no LibraryEvent: libraryEvent
 // tells them apart.
 type LibraryEvent interface {
@@ -58,44 +58,4 @@ func NewLibraryUpdatedEvent(anID id.ID[Library], opts ...event.EventOption) Libr
 
 func NewLibraryDeletedEvent(anID id.ID[Library], opts ...event.EventOption) LibraryDeletedEvent {
 	return &libraryDeletedEventImpl{newLibraryEvent(event.EventTypeLibraryDeleted, anID, opts...)}
-}
-
-// LibraryReleasedEvent is recorded by CreateRelease: a new Library Release
-// of the Library, numbered Release.
-type LibraryReleasedEvent interface {
-	LibraryEvent
-	Release() ReleaseNumber
-}
-
-// LibraryReleaseNoteUpdatedEvent is recorded by LibraryRelease.WithNote: the
-// note of Release number changed; its content never does (task 72_5).
-type LibraryReleaseNoteUpdatedEvent interface {
-	LibraryEvent
-	Release() ReleaseNumber
-}
-
-type libraryReleasedEventImpl struct {
-	libraryEventImpl
-	release ReleaseNumber
-}
-
-type libraryReleaseNoteUpdatedEventImpl struct {
-	libraryEventImpl
-	release ReleaseNumber
-}
-
-func NewLibraryReleasedEvent(anID id.ID[Library], aRelease ReleaseNumber, opts ...event.EventOption) LibraryReleasedEvent {
-	return &libraryReleasedEventImpl{newLibraryEvent(event.EventTypeLibraryReleased, anID, opts...), aRelease}
-}
-
-func NewLibraryReleaseNoteUpdatedEvent(anID id.ID[Library], aRelease ReleaseNumber, opts ...event.EventOption) LibraryReleaseNoteUpdatedEvent {
-	return &libraryReleaseNoteUpdatedEventImpl{
-		libraryEventImpl: newLibraryEvent(event.EventTypeLibraryReleaseNoteUpdated, anID, opts...),
-		release:          aRelease,
-	}
-}
-
-func (e libraryReleasedEventImpl) Release() ReleaseNumber { return e.release }
-func (e libraryReleaseNoteUpdatedEventImpl) Release() ReleaseNumber {
-	return e.release
 }

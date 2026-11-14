@@ -38,7 +38,7 @@ type Repository interface {
 	// CheckVersion locks the Draft's row and checks it is still at expected: a
 	// stale Version is a ConflictError. It is the check a multi-step act over
 	// the Draft makes after it read the Draft and before it acts on it (ADR
-	// 0022). A Deploy takes a Release and reads no Draft, so the pattern has no
+	// 0022). A Deploy takes a Commit and reads no Draft, so the pattern has no
 	// caller since task 72_4; ADR 0022 keeps it for the next act that needs it.
 	CheckVersion(ctx context.Context, scope Scope, expected version.Version[Draft]) error
 
@@ -60,7 +60,7 @@ type Repository interface {
 	Purge(ctx context.Context, scope Scope) (Draft, error)
 
 	// ClearStack drops every DraftChange of the Draft and resets its stack
-	// position: what a successful Deploy or Release leaves behind (ADR 0017).
+	// position: what a successful Release of before task 85_7 left behind.
 	ClearStack(ctx context.Context, scope Scope) error
 
 	// Stack returns the state of the Draft's DraftChange stack without a

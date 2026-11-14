@@ -330,7 +330,7 @@ func importedFile(t *testing.T, projectID, libraryID uuid.UUID) (projectv0.Proje
 	if err != nil {
 		t.Fatalf("port name: %v", err)
 	}
-	released, err := library.NewReleasedWidgetType(
+	released, err := library.NewWidgetTypeCopy(
 		id.NewID(id.IDWithUUID[library.WidgetType](typeID)),
 		id.NewID(id.IDWithUUID[library.Library](libraryID)),
 		name, html, script, library.ScriptLanguageJavaScript, library.DefaultSize(),
@@ -349,7 +349,7 @@ func importedFile(t *testing.T, projectID, libraryID uuid.UUID) (projectv0.Proje
 	}
 	commit, err := draft.NewCommit(draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](libraryID))),
 		id.NewID[draft.Commit](), 1, title, author, time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC),
-		version.Committed[draft.Draft](), draft.NewLibraryCommitContent([]library.ReleasedWidgetType{released}))
+		version.Committed[draft.Draft](), draft.NewLibraryCommitContent([]library.WidgetTypeCopy{released}))
 	if err != nil {
 		t.Fatalf("commit: %v", err)
 	}

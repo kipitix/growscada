@@ -9,9 +9,9 @@ import (
 
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
+	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/project"
-	"github.com/kipitix/growscada/internal/server/domain/release"
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
@@ -41,13 +41,11 @@ type CommitService interface {
 }
 
 type commitServiceImpl struct {
-	content         ProjectContent
-	libraries       LibraryContent
-	builder         ProjectFileBuilder
-	widgetTypes     library.WidgetTypeRepositories
-	releases        release.Repository
-	libraryReleases library.LibraryReleaseRepository
-	labels          LabelService
+	content     ProjectContent
+	libraries   LibraryContent
+	builder     ProjectFileBuilder
+	widgetTypes library.WidgetTypeRepositories
+	labels      LabelService
 }
 
 var _ CommitService = (*commitServiceImpl)(nil)
@@ -55,15 +53,12 @@ var _ CommitService = (*commitServiceImpl)(nil)
 // NewCommitService returns the service of the Commits of the Projects aContent
 // serves and of the Libraries aLibraries serves, assembling a Project's
 // snapshot with aBuilder, reading a Library's Draft through someWidgetTypes,
-// marking a Commit a Release published with someReleases and
-// someLibraryReleases, and reading the labels of a saved state through
-// someLabels, the service that serves them (task 85_3; ADR 0025).
+// and reading the labels of a saved state through someLabels, the service that
+// serves them (task 85_3; ADR 0025).
 func NewCommitService(aContent ProjectContent, aLibraries LibraryContent, aBuilder ProjectFileBuilder,
-	someWidgetTypes library.WidgetTypeRepositories, someReleases release.Repository,
-	someLibraryReleases library.LibraryReleaseRepository, someLabels LabelService) CommitService {
+	someWidgetTypes library.WidgetTypeRepositories, someLabels LabelService) CommitService {
 	return &commitServiceImpl{content: aContent, libraries: aLibraries, builder: aBuilder,
-		widgetTypes: someWidgetTypes, releases: someReleases, libraryReleases: someLibraryReleases,
-		labels: someLabels}
+		widgetTypes: someWidgetTypes, labels: someLabels}
 }
 
 func (s commitServiceImpl) Save(ctx context.Context, scope draft.Scope, rawVersion int, rawTitle, rawAuthor string) (appdto.Commit, error) {
@@ -143,9 +138,9 @@ func (s commitServiceImpl) libraryContent(ctx context.Context, scope draft.Scope
 	if err != nil {
 		return draft.CommitContent{}, fmt.Errorf("cannot read the draft of %s: %w", scope, err)
 	}
-	copies := make([]library.ReleasedWidgetType, len(types))
+	copies := make([]library.WidgetTypeCopy, len(types))
 	for i, wt := range types {
-		copies[i] = library.ReleasedFrom(wt)
+		copies[i] = library.CopyOf(wt)
 	}
 	return draft.NewLibraryCommitContent(copies), nil
 }
@@ -157,9 +152,6 @@ func (s commitServiceImpl) List(ctx context.Context, scope draft.Scope, labelID 
 	}
 	dtos := appdto.NewCommitList(commits)
 	if err := s.attachLabels(ctx, scope, dtos); err != nil {
-		return nil, err
-	}
-	if err := s.markReleased(ctx, scope, dtos); err != nil {
 		return nil, err
 	}
 	return dtos, nil
@@ -175,17 +167,13 @@ func (s commitServiceImpl) Find(ctx context.Context, scope draft.Scope, rawNumbe
 		return appdto.Commit{}, err
 	}
 	dto := appdto.NewCommitWithContent(commit)
-	return s.releasedCommit(ctx, scope, dto)
+	return s.labelledCommit(ctx, scope, dto)
 }
 
-// releasedCommit returns dto with Released set when a Release published it and
-// the labels that mark it (task 85_3).
-func (s commitServiceImpl) releasedCommit(ctx context.Context, scope draft.Scope, dto appdto.Commit) (appdto.Commit, error) {
+// labelledCommit returns dto with the labels that mark it (task 85_3).
+func (s commitServiceImpl) labelledCommit(ctx context.Context, scope draft.Scope, dto appdto.Commit) (appdto.Commit, error) {
 	dtos := []appdto.Commit{dto}
 	if err := s.attachLabels(ctx, scope, dtos); err != nil {
-		return appdto.Commit{}, err
-	}
-	if err := s.markReleased(ctx, scope, dtos); err != nil {
 		return appdto.Commit{}, err
 	}
 	return dtos[0], nil
@@ -207,34 +195,6 @@ func (s commitServiceImpl) attachLabels(ctx context.Context, scope draft.Scope, 
 	return nil
 }
 
-// markReleased sets Released on the Commits a Release published: a Project's
-// through its Releases, a Library's through its Library Releases (task 72_5).
-func (s commitServiceImpl) markReleased(ctx context.Context, scope draft.Scope, dtos []appdto.Commit) error {
-	if len(dtos) == 0 {
-		return nil
-	}
-	var numbers []int
-	var err error
-	if scope.IsProject() {
-		numbers, err = s.releases.ReleasedCommits(ctx, scope)
-	} else {
-		numbers, err = s.libraryReleases.ReleasedCommits(ctx, scope.LibraryID())
-	}
-	if err != nil {
-		return fmt.Errorf("cannot read the releases of %s: %w", scope, err)
-	}
-	released := make(map[int]struct{}, len(numbers))
-	for _, number := range numbers {
-		released[number] = struct{}{}
-	}
-	for i := range dtos {
-		if _, ok := released[dtos[i].Number]; ok {
-			dtos[i].Released = true
-		}
-	}
-	return nil
-}
-
 func (s commitServiceImpl) Rename(ctx context.Context, scope draft.Scope, rawNumber int, rawTitle string) (appdto.Commit, error) {
 	number, err := commitNumber(rawNumber)
 	if err != nil {
@@ -248,9 +208,8 @@ func (s commitServiceImpl) Rename(ctx context.Context, scope draft.Scope, rawNum
 	if err != nil {
 		return appdto.Commit{}, err
 	}
-	// A title is metadata: the rename changes no Release, and a published
-	// Commit stays marked as one (task 72_3; ADR 0021).
-	return s.releasedCommit(ctx, scope, appdto.NewCommit(commit))
+	// A title is metadata: the rename changes no content and no label.
+	return s.labelledCommit(ctx, scope, appdto.NewCommit(commit))
 }
 
 func (s commitServiceImpl) ProjectFile(ctx context.Context, scope draft.Scope, rawNumber int) (ProjectFileDownload, error) {
@@ -287,4 +246,17 @@ func commitNumber(raw int) (int, error) {
 		return 0, invalidInput(fmt.Errorf("commit number must be positive, got %d", raw))
 	}
 	return raw, nil
+}
+
+// projectDownloadName returns the name of the live Project projectID, which
+// names a download.
+func projectDownloadName(ctx context.Context, content ProjectContent, projectID id.ID[project.Project]) (string, error) {
+	found, err := content.projects.FindByID(ctx, projectID)
+	if err != nil {
+		return "", fmt.Errorf("cannot read project %s: %w", projectID, err)
+	}
+	if found.OrganizationID() != content.organization {
+		return "", id.NotFound(project.ErrProjectNotFound, projectID)
+	}
+	return found.Name().String(), nil
 }

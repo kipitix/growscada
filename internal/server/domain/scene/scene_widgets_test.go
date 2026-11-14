@@ -28,7 +28,7 @@ var testLibrary = id.NewID[library.Library]()
 
 // makeWidgetType builds a WidgetType, as a Library Release holds it,
 // declaring the given ports.
-func makeWidgetType(t *testing.T, ports ...string) library.ReleasedWidgetType {
+func makeWidgetType(t *testing.T, ports ...string) library.WidgetTypeCopy {
 	t.Helper()
 	name, _ := library.NewWidgetTypeName("gauge")
 	html, _ := library.NewHtmlTemplate("<div></div>")
@@ -37,16 +37,16 @@ func makeWidgetType(t *testing.T, ports ...string) library.ReleasedWidgetType {
 	for i, p := range ports {
 		inputPorts[i] = library.NewInputPort(mustPortName(t, p), "", library.AnyTypeHint())
 	}
-	wt, err := library.NewReleasedWidgetType(id.NewID[library.WidgetType](), testLibrary, name, html, script,
+	wt, err := library.NewWidgetTypeCopy(id.NewID[library.WidgetType](), testLibrary, name, html, script,
 		library.ScriptLanguageJavaScript, library.DefaultSize(), inputPorts)
 	if err != nil {
-		t.Fatalf("NewReleasedWidgetType: %v", err)
+		t.Fatalf("NewWidgetTypeCopy: %v", err)
 	}
 	return wt
 }
 
 // makeWidgetOf builds a Widget of WidgetType wt binding the given ports.
-func makeWidgetOf(t *testing.T, wt library.ReleasedWidgetType, name string, ports ...string) Widget {
+func makeWidgetOf(t *testing.T, wt library.WidgetTypeCopy, name string, ports ...string) Widget {
 	t.Helper()
 	widgetName, _ := NewWidgetName(name)
 	bindings := make([]PortBinding, len(ports))
@@ -69,7 +69,7 @@ func tagTypesOf(someWidgets ...Widget) TagTypes {
 
 // makeTypedWidgetType builds a WidgetType declaring one port, "value", with
 // the given type hint ("" for any TagType).
-func makeTypedWidgetType(t *testing.T, hint string) library.ReleasedWidgetType {
+func makeTypedWidgetType(t *testing.T, hint string) library.WidgetTypeCopy {
 	t.Helper()
 	wt := makeWidgetType(t)
 	return withValueHint(t, wt, hint)
@@ -77,16 +77,16 @@ func makeTypedWidgetType(t *testing.T, hint string) library.ReleasedWidgetType {
 
 // withValueHint builds the WidgetType wt declaring one port, "value", with
 // the given type hint.
-func withValueHint(t *testing.T, wt library.ReleasedWidgetType, hint string) library.ReleasedWidgetType {
+func withValueHint(t *testing.T, wt library.WidgetTypeCopy, hint string) library.WidgetTypeCopy {
 	t.Helper()
 	typeHint, err := library.NewPortTypeHint(hint)
 	if err != nil {
 		t.Fatalf("NewPortTypeHint(%q): %v", hint, err)
 	}
-	typed, err := library.NewReleasedWidgetType(wt.ID(), wt.LibraryID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(),
+	typed, err := library.NewWidgetTypeCopy(wt.ID(), wt.LibraryID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(),
 		wt.DefaultSize(), []library.InputPort{library.NewInputPort(mustPortName(t, "value"), "", typeHint)})
 	if err != nil {
-		t.Fatalf("NewReleasedWidgetType: %v", err)
+		t.Fatalf("NewWidgetTypeCopy: %v", err)
 	}
 	return typed
 }
@@ -166,7 +166,7 @@ func TestSceneAddWidget_Rejected(t *testing.T) {
 
 	tests := map[string]struct {
 		widget Widget
-		wt     library.ReleasedWidgetType
+		wt     library.WidgetTypeCopy
 		want   error
 	}{
 		"widget ID taken":   {existing, wt, ErrWidgetAlreadyExists},
@@ -221,7 +221,7 @@ func TestSceneUpdateWidget_Rejected(t *testing.T) {
 
 	tests := map[string]struct {
 		widget Widget
-		wt     library.ReleasedWidgetType
+		wt     library.WidgetTypeCopy
 		want   error
 	}{
 		"unknown widget":    {makeWidgetOf(t, wt, "ghost"), wt, ErrWidgetNotFound},
@@ -243,7 +243,7 @@ func TestSceneUpdateWidget_Rejected(t *testing.T) {
 
 // bindValue returns a widget of WidgetType wt (as w1, if given) binding its
 // port "value" to tagID.
-func bindValue(t *testing.T, wt library.ReleasedWidgetType, tagID id.ID[tag.Tag], as ...Widget) Widget {
+func bindValue(t *testing.T, wt library.WidgetTypeCopy, tagID id.ID[tag.Tag], as ...Widget) Widget {
 	t.Helper()
 	widgetID := id.NewID[Widget]()
 	if len(as) > 0 {
@@ -294,7 +294,7 @@ func TestSceneWidgetChanges_CheckBoundTagTypes(t *testing.T) {
 }
 
 // mustReconcile is ReconcileWith failing the test on an error.
-func mustReconcile(t *testing.T, sc Scene, wt library.ReleasedWidgetType, tagTypes TagTypes) (Scene, bool) {
+func mustReconcile(t *testing.T, sc Scene, wt library.WidgetTypeCopy, tagTypes TagTypes) (Scene, bool) {
 	t.Helper()
 	reconciled, changed, err := sc.ReconcileWith(wt, tagTypes)
 	if err != nil {
@@ -425,13 +425,13 @@ func TestSceneReconcileWith_NothingUndeclared_ReportsNoChange(t *testing.T) {
 
 // makeWidgetTypeWithID builds the WidgetType anID as it looks after an
 // update that left it only the given ports.
-func makeWidgetTypeWithID(t *testing.T, anID id.ID[library.WidgetType], ports ...string) library.ReleasedWidgetType {
+func makeWidgetTypeWithID(t *testing.T, anID id.ID[library.WidgetType], ports ...string) library.WidgetTypeCopy {
 	t.Helper()
 	wt := makeWidgetType(t, ports...)
-	updated, err := library.NewReleasedWidgetType(anID, wt.LibraryID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(),
+	updated, err := library.NewWidgetTypeCopy(anID, wt.LibraryID(), wt.Name(), wt.HtmlTemplate(), wt.Script(), wt.ScriptLanguage(),
 		wt.DefaultSize(), wt.InputPorts())
 	if err != nil {
-		t.Fatalf("NewReleasedWidgetType: %v", err)
+		t.Fatalf("NewWidgetTypeCopy: %v", err)
 	}
 	return updated
 }

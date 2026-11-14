@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -32,7 +31,7 @@ func mustSaveLibrary(t *testing.T) library.Library {
 	return saved
 }
 
-// cleanWidgetTypes deletes the libraries, with their Drafts and releases.
+// cleanWidgetTypes deletes the libraries, with their Drafts and saved states.
 func cleanWidgetTypes(t *testing.T) {
 	t.Helper()
 	cleanLibraries(t)
@@ -51,51 +50,6 @@ func newWidgetTypeRepo(t *testing.T) libraryRepo {
 	return libraryRepo{repositories.NewWidgetTypeRepositoryPostgres(testDB, lib.ID()), lib.ID()}
 }
 
-// mustRelease saves the Draft of the library as a Commit, unless it is at the
-// last one, and publishes that Commit as the next Library Release (task 72_5).
-func mustRelease(t *testing.T, libraryID id.ID[library.Library]) library.LibraryRelease {
-	t.Helper()
-	ctx := context.Background()
-	lib, err := repositories.NewLibraryRepositoryPostgres(testDB).FindByID(ctx, libraryID)
-	if err != nil {
-		t.Fatalf("FindByID library: %v", err)
-	}
-	draftNow, err := repositories.NewWidgetTypeRepositoryPostgres(testDB, libraryID).FindAll(ctx)
-	if err != nil {
-		t.Fatalf("FindAll widget types: %v", err)
-	}
-	copies := make([]library.ReleasedWidgetType, len(draftNow))
-	for i, wt := range draftNow {
-		copies[i] = library.ReleasedFrom(wt)
-	}
-	commit, err := mustCommit(t, libraryID)
-	if err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-	releases := repositories.NewLibraryReleaseRepositoryPostgres(testDB)
-	latest, err := releases.FindLatest(ctx, libraryID)
-	if err != nil {
-		t.Fatalf("FindLatest: %v", err)
-	}
-	number := library.FirstRelease()
-	if latest != nil {
-		number = latest.Number().Next()
-	}
-	author, err := library.NewAuthor("Ada")
-	if err != nil {
-		t.Fatalf("NewAuthor: %v", err)
-	}
-	release, err := library.CreateRelease(lib, number, commit.Number(), "", author, time.Now(), copies)
-	if err != nil {
-		t.Fatalf("CreateRelease: %v", err)
-	}
-	saved, err := releases.Save(ctx, release)
-	if err != nil {
-		t.Fatalf("Save release: %v", err)
-	}
-	return saved
-}
-
 // mustCommit saves the Draft of the library as a Commit, or returns its last
 // one when the Draft has not changed since it.
 func mustCommit(t *testing.T, libraryID id.ID[library.Library]) (draft.Commit, error) {
@@ -105,9 +59,9 @@ func mustCommit(t *testing.T, libraryID id.ID[library.Library]) (draft.Commit, e
 	if err != nil {
 		return nil, err
 	}
-	copies := make([]library.ReleasedWidgetType, len(draftNow))
+	copies := make([]library.WidgetTypeCopy, len(draftNow))
 	for i, wt := range draftNow {
-		copies[i] = library.ReleasedFrom(wt)
+		copies[i] = library.CopyOf(wt)
 	}
 	title, err := draft.NewCommitTitle("Release")
 	if err != nil {
@@ -147,7 +101,7 @@ func mustImport(t *testing.T, projectID id.ID[project.Project], commit draft.Com
 }
 
 // copyOfCommit returns the copy of the WidgetType typeID the Commit holds.
-func copyOfCommit(t *testing.T, commit draft.Commit, typeID id.ID[library.WidgetType]) library.ReleasedWidgetType {
+func copyOfCommit(t *testing.T, commit draft.Commit, typeID id.ID[library.WidgetType]) library.WidgetTypeCopy {
 	t.Helper()
 	copies, ok := commit.Content().WidgetTypes()
 	if !ok {
@@ -159,7 +113,7 @@ func copyOfCommit(t *testing.T, commit draft.Commit, typeID id.ID[library.Widget
 		}
 	}
 	t.Fatalf("the commit lacks the widget type %s", typeID)
-	return library.ReleasedWidgetType{}
+	return library.WidgetTypeCopy{}
 }
 
 // mustSaveWidgetType stores a new WidgetType with the given ports in a new
@@ -172,7 +126,7 @@ func mustSaveWidgetType(t *testing.T, ports ...library.InputPort) id.ID[library.
 
 // mustImportWidgetType is mustSaveWidgetType in projectID, returning the type
 // as the imported saved state holds it.
-func mustImportWidgetType(t *testing.T, projectID id.ID[project.Project], ports ...library.InputPort) library.ReleasedWidgetType {
+func mustImportWidgetType(t *testing.T, projectID id.ID[project.Project], ports ...library.InputPort) library.WidgetTypeCopy {
 	t.Helper()
 	repo := newWidgetTypeRepo(t)
 	saved := mustStoreWidgetType(t, makeWidgetType(t, "type", ports, repo), repo)

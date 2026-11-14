@@ -91,7 +91,7 @@ func (h ProjectFileHandlers) PostProjectFile(w http.ResponseWriter, r *http.Requ
 
 // PostProjectFileDeploy handles POST /projects/{project_id}/projectfile/deploy:
 // it makes the document the Project's new Deployment without touching the Draft
-// (task 85_4). A file deployment states no saved state: it leaves no Release
+// (task 85_4). A file deployment states no saved state: it leaves none
 // behind. 201 with the Deployment; 400 with file_issues when it does not
 // validate. Every file deploy makes a new Deployment, so a document equal to
 // the running one is no refusal.
