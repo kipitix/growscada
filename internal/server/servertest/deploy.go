@@ -88,9 +88,9 @@ func saveDraft(ctx context.Context, drafts draft.Repository, scope draft.Scope, 
 	if err != nil {
 		return nil, err
 	}
-	version := version.Committed[draft.Draft]()
+	stated := version.Committed[draft.Draft]()
 	if ok {
-		version = current.Version()
+		stated = current.Version()
 	}
 	title, err := draft.NewCommitTitle("Deploy")
 	if err != nil {
@@ -100,7 +100,7 @@ func saveDraft(ctx context.Context, drafts draft.Repository, scope draft.Scope, 
 	if err != nil {
 		return nil, err
 	}
-	commit, err := drafts.SaveCommit(ctx, scope, version, title, author, content)
+	commit, err := drafts.SaveCommit(ctx, scope, stated, title, author, content)
 	if !errors.Is(err, draft.ErrNothingToSave) {
 		return commit, err
 	}

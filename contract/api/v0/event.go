@@ -46,7 +46,7 @@ type Event struct {
 	// the stream of a Project carries the event to that Project's readers.
 	Deployment int    `json:"deployment,omitempty"`
 	DeployedAt string `json:"deployed_at,omitempty"`
-	// commit_number follows the saved state a Deploy made running (task 85_4);
+	// CommitNumber follows the saved state a Deploy made running (task 85_4);
 	// it is absent for a Deployment from a file or one made before saved
 	// states were deployed.
 	CommitNumber *int `json:"commit_number,omitempty"`

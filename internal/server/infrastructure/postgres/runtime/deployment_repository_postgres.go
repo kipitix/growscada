@@ -264,12 +264,12 @@ func journalCause(cause runtimeapp.DeploymentCause) recordv0.DeploymentCause {
 
 func (r deploymentRepositoryPostgres) FindCurrent(ctx context.Context, projectID uuid.UUID) (runtimeapp.Deployment, bool, error) {
 	var (
-		number       int
-		deployedAt   time.Time
-		cause        string
+		number         int
+		deployedAt     time.Time
+		cause          string
 		rolledBackFrom sql.NullInt64
-		commitNumber sql.NullInt64
-		config       []byte
+		commitNumber   sql.NullInt64
+		config         []byte
 	)
 	err := r.db.QueryRowContext(ctx,
 		`SELECT number, deployed_at, cause, rolled_back_from, commit_number, config FROM runtime.deployments

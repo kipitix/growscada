@@ -86,10 +86,11 @@ func (p *Project) isCurrentDeployment(number int) bool {
 	return len(p.deployments) > 0 && p.deployments[0].Number == number
 }
 
-// loadDeploy (re)loads the Deployment the project runs: the Release it came
-// from is what the Release list marks as running. A failed read is not "not
-// deployed": deploymentFailed makes the mode say the running Release cannot be
-// checked rather than offer it for Deploy (task 72_4).
+// loadDeploy (re)loads the Deployment the project runs: the saved state it came
+// from is what tells the Release list which of its rows is running. A failed
+// read is not "not deployed": deploymentFailed makes the mode say the running
+// saved state cannot be checked rather than offer it for Deploy (task 72_4;
+// task 85_4).
 func (p *Project) loadDeploy(ctx app.Context) {
 	if p.content == nil {
 		p.deployment, p.deployed, p.deploymentLoaded, p.deploymentFailed = apiv0.DeploymentResponse{}, false, false, false
@@ -318,8 +319,8 @@ func (p *Project) panelButton(scope string, icon app.UI, title string, enabled b
 }
 
 // renderDeploymentsDialog is the list of the project's Deployments with the
-// summary of the selected one: newest first, what caused each, the Release it
-// came from and the running one marked (task 36, ADR 0014; task 72_4).
+// summary of the selected one: newest first, what caused each, the saved state
+// it came from and the running one marked (task 36, ADR 0014; task 85_4).
 func (p *Project) renderDeploymentsDialog() app.UI {
 	rows := []app.UI{}
 	switch {

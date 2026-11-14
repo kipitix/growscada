@@ -128,7 +128,7 @@ func TestReloadTargets_DraftChanged(t *testing.T) {
 	}
 	unchanged := []apiv0.Event{
 		{Type: apiv0.EventTagUpdated, Tag: &apiv0.TagResponse{}}, // a value, not a DraftChange
-		{Type: apiv0.EventDeploymentCreated},                     // a Deploy takes a Release (task 72_4)
+		{Type: apiv0.EventDeploymentCreated},                     // a Deploy takes a saved state (task 85_4)
 		{Type: apiv0.EventReleaseCreated},                        // a Release copies a Commit
 		{Type: apiv0.EventLibraryReleased},                       // a Library Release copies a Commit (task 72_5)
 		{Type: apiv0.EventDeviceCreated},                         // no Device list yet (task 66)

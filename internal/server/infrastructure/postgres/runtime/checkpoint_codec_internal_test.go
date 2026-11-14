@@ -27,7 +27,7 @@ func TestCheckpointCodec_RoundTrips(t *testing.T) {
 			Number:         3,
 			Cause:          recordv0.DeploymentCauseRollback,
 			RolledBackFrom: &rolledBackFrom,
-			CommitNumber:  &commitNumber,
+			CommitNumber:   &commitNumber,
 		},
 		TagStates: []recordv0.CheckpointTagState{
 			{TagID: tagID, Value: "42", Quality: "good", Seq: 40},

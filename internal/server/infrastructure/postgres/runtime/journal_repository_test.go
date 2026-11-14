@@ -264,11 +264,11 @@ func TestCreateDeployment_RecordsADeploymentEntry(t *testing.T) {
 		t.Fatalf("%d journal entries, want one per Deployment", len(entries))
 	}
 	for i, want := range []struct {
-		number  int
-		cause   recordv0.DeploymentCause
-		from    *int
-		commit  *int
-		at      time.Time
+		number int
+		cause  recordv0.DeploymentCause
+		from   *int
+		commit *int
+		at     time.Time
 	}{
 		{deployed.Number, recordv0.DeploymentCauseDeploy, nil, &firstCommit, at},
 		{fromFile.Number, recordv0.DeploymentCauseFile, nil, nil, at.Add(time.Minute)},
