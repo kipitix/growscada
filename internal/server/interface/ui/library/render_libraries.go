@@ -67,28 +67,11 @@ func (l *Library) renderBackButton() app.UI {
 			name = lib.Name
 		}
 	}
-	body := []app.UI{}
+	var back func(ctx app.Context, e app.Event)
 	if l.OnBack != nil {
-		body = append(body, uiutil.PanelButton(uiutil.IconBack(), true, "Back to the libraries",
-			func(app.Context, app.Event) { l.OnBack() }, app.EventScope("back")))
+		back = func(ctx app.Context, e app.Event) { l.OnBack() }
 	}
-	body = append(body, app.Span().
-		Attr("data-editor-name", "true").
-		Style("font-size", "13px").
-		Style("font-weight", "600").
-		Style("color", "var(--text)").
-		// A long name is cut, never allowed to push the panel's actions out.
-		Style("max-width", "260px").
-		Style("overflow", "hidden").
-		Style("text-overflow", "ellipsis").
-		Style("white-space", "nowrap").
-		Text(name))
-	return app.Div().
-		Attr("data-panel-back", "true").
-		Style("display", "flex").
-		Style("align-items", "center").
-		Style("gap", "6px").
-		Body(body...)
+	return uiutil.PanelBack("Back to the libraries", name, back)
 }
 
 // releaseStateOf is one library's Release state (task 72_7; ADR 0021): the

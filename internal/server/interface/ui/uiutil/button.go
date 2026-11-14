@@ -50,6 +50,34 @@ func IconButton(icon app.UI, kind string, enabled bool, title string, layout But
 		Style("padding", "0")
 }
 
+// PanelBack is the way back to a mode's selection page (task 84): the arrow,
+// whose title says where it goes, and the name of the entity shown beside it.
+// A nil handler draws the name alone — a mode nothing wired has no page to
+// return to.
+func PanelBack(title, name string, onBack func(ctx app.Context, e app.Event)) app.UI {
+	body := []app.UI{}
+	if onBack != nil {
+		body = append(body, PanelButton(IconBack(), true, title, onBack, app.EventScope("back")))
+	}
+	body = append(body, app.Span().
+		Attr("data-editor-name", "true").
+		Style("font-size", "13px").
+		Style("font-weight", "600").
+		Style("color", "var(--text)").
+		// A long name is cut, never allowed to push the panel's actions out.
+		Style("max-width", "260px").
+		Style("overflow", "hidden").
+		Style("text-overflow", "ellipsis").
+		Style("white-space", "nowrap").
+		Text(name))
+	return app.Div().
+		Attr("data-panel-back", "true").
+		Style("display", "flex").
+		Style("align-items", "center").
+		Style("gap", "6px").
+		Body(body...)
+}
+
 // BarDivider separates the groups of a mode's panel (task 84).
 func BarDivider() app.UI {
 	return app.Div().
