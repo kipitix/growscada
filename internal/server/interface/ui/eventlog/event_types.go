@@ -16,6 +16,7 @@ const (
 	categoryWidget     category = "Widget"
 	categoryWidgetType category = "WidgetType"
 	categoryLibrary    category = "Library"
+	categoryLabel      category = "Label"
 	categoryScene      category = "Scene"
 	categoryValue      category = "Value"
 	categoryClient     category = "Client"
@@ -29,6 +30,7 @@ var allCategories = []category{
 	categoryWidget,
 	categoryWidgetType,
 	categoryLibrary,
+	categoryLabel,
 	categoryScene,
 	categoryValue,
 	categoryClient,
@@ -44,6 +46,7 @@ func defaultFilters() map[category]bool {
 		categoryWidget:     true,
 		categoryWidgetType: true,
 		categoryLibrary:    true,
+		categoryLabel:      true,
 		categoryScene:      true,
 		categoryValue:      false,
 		categoryClient:     true,
@@ -136,6 +139,12 @@ var eventTypeInfoByType = map[string]eventTypeInfo{
 
 	apiv0.EventReleaseCreated:     {categoryProject, "Release %s published"},
 	apiv0.EventReleaseNoteUpdated: {categoryProject, "Release %s note updated"},
+
+	// The labels are the Organization's, never content of a project (task 85_2;
+	// ADR 0025).
+	apiv0.EventLabelCreated: {categoryLabel, "Label %s created"},
+	apiv0.EventLabelUpdated: {categoryLabel, "Label %s updated"},
+	apiv0.EventLabelDeleted: {categoryLabel, "Label %s deleted"},
 }
 
 // describe is the log text of an event of this type with the given id.

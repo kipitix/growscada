@@ -19,6 +19,9 @@ import (
 // none of these: it follows the Journal from a Player of its own (ADR 0020).
 type ReloadTargets struct {
 	Projects, Libraries, WidgetTypes, LibraryPins, Scenes, Widgets, Tags, Deploy, Commits, Releases bool
+	// Labels is the server's labels (task 85_2): a label change is the
+	// server's event, and the global Labels window rereads its list on it.
+	Labels bool
 	// Scene is the one Scene whose own state and Widgets are stale (a Widget
 	// of it changed, which bumps its version without a scene event); uuid.Nil
 	// if none. The list of Scenes is not: only scene events and a resync
@@ -43,12 +46,12 @@ func (t ReloadTargets) DraftChanged() bool {
 }
 
 // AllTargets is every list.
-var AllTargets = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Commits: true, Releases: true}
+var AllTargets = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Commits: true, Releases: true, Labels: true}
 
 // The lists of each stream: what its resync reloads, since the events it
 // published while disconnected are lost.
 var (
-	serverTargets  = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, Commits: true}
+	serverTargets  = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, Commits: true, Labels: true}
 	projectTargets = ReloadTargets{LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Commits: true, Releases: true}
 )
 
@@ -79,6 +82,10 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 		// nothing of the Draft is touched. Operation does not read this stream
 		// (ADR 0020).
 		return ReloadTargets{Deploy: true}
+	case apiv0.EventLabelCreated, apiv0.EventLabelUpdated, apiv0.EventLabelDeleted:
+		// A label is the Organization's, not a Draft's: the Labels window
+		// rereads its list; no mode's content changes (task 85_2; ADR 0025).
+		return ReloadTargets{Labels: true}
 	case apiv0.EventProjectCreated, apiv0.EventProjectUpdated, apiv0.EventProjectDeleted:
 		// A Project was made, renamed or removed: the mode rereads the list.
 		return ReloadTargets{Projects: true, Deploy: true}

@@ -35,7 +35,7 @@ func TestReloadTargetsFor(t *testing.T) {
 		{apiv0.Event{Type: apiv0.EventTagUpdated, Tag: &apiv0.TagResponse{ID: sceneID}}, ReloadTargets{}},
 		{apiv0.Event{Type: apiv0.EventTagUpdated}, ReloadTargets{Tags: true}},
 		{apiv0.Event{Type: apiv0.EventTagDeleted}, ReloadTargets{Tags: true}},
-		{apiv0.Event{Type: EventResync}, ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, Commits: true}},
+		{apiv0.Event{Type: EventResync}, ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, Commits: true, Labels: true}},
 		{apiv0.Event{Type: EventProjectResync}, ReloadTargets{LibraryPins: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Commits: true, Releases: true}},
 		{apiv0.Event{Type: apiv0.EventProjectCreated}, ReloadTargets{Projects: true, Deploy: true}},
 		{apiv0.Event{Type: apiv0.EventProjectUpdated}, ReloadTargets{Projects: true, Deploy: true}},
@@ -51,6 +51,9 @@ func TestReloadTargetsFor(t *testing.T) {
 		{apiv0.Event{Type: apiv0.EventCommitTitleUpdated}, ReloadTargets{Commits: true}},
 		{apiv0.Event{Type: apiv0.EventReleaseCreated}, ReloadTargets{Releases: true, Commits: true}},
 		{apiv0.Event{Type: apiv0.EventReleaseNoteUpdated}, ReloadTargets{Releases: true, Commits: true}},
+		{apiv0.Event{Type: apiv0.EventLabelCreated}, ReloadTargets{Labels: true}},
+		{apiv0.Event{Type: apiv0.EventLabelUpdated}, ReloadTargets{Labels: true}},
+		{apiv0.Event{Type: apiv0.EventLabelDeleted}, ReloadTargets{Labels: true}},
 		{apiv0.Event{Type: apiv0.EventClientConnected}, ReloadTargets{}},
 
 		{apiv0.Event{Type: apiv0.EventSystemReady}, ReloadTargets{}},

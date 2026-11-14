@@ -14,6 +14,7 @@ import (
 	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
 	"github.com/kipitix/growscada/internal/server/interface/ui/history"
+	"github.com/kipitix/growscada/internal/server/interface/ui/labels"
 	"github.com/kipitix/growscada/internal/server/interface/ui/library"
 	"github.com/kipitix/growscada/internal/server/interface/ui/operation"
 	"github.com/kipitix/growscada/internal/server/interface/ui/picker"
@@ -61,6 +62,10 @@ type Root struct {
 	// bar follows the event stream of the project of the mode shown (the
 	// last such mode while Library, which does not depend on one, is shown).
 	bar *eventlog.Bar
+	// labels is the one Labels window of the tab (task 85_2), opened from the
+	// header in every mode; labelsOpen is whether it is shown.
+	labels     *labels.Dialog
+	labelsOpen bool
 	// selected holds the entity each mode shows, once its switcher or
 	// selection page announced it: the Project of the modes with a project
 	// switcher, and the Project or Library of the Project and Library modes.
@@ -112,6 +117,7 @@ func NewRoot(anAPIServerURL string) *Root {
 	r.project.BackName = func() string { return r.entityName[ModeProject] }
 	r.operation = operation.NewOperation(r.client)
 	r.bar = eventlog.NewBar(anAPIServerURL)
+	r.labels = labels.New(r.client)
 	r.modes = []modeView{
 		{mode: ModeLibrary, ui: r.library, picker: picker.New(
 			picker.NewLibrarySource(r.client), picker.LibraryKey,
@@ -198,6 +204,21 @@ func (r *Root) newSelector(mode Mode) *projects.Switcher {
 	return projects.NewSelector(r.client, string(mode)+":projectID", func(id uuid.UUID) {
 		r.selectProject(mode, id)
 	})
+}
+
+// openLabels shows the global Labels window, rereading its list (task 85_2).
+func (r *Root) openLabels(ctx app.Context) {
+	r.labelsOpen = true
+	r.labels.Reload(ctx)
+	ctx.Update()
+}
+
+// closeLabels hides the Labels window; the dialog calls it through OnClose.
+func (r *Root) closeLabels() {
+	r.labelsOpen = false
+	if r.mounted {
+		r.compoCtx.Update()
+	}
 }
 
 // selectProject shows the project id (uuid.Nil: none) in mode, one of those
@@ -610,6 +631,7 @@ button {
 // ── Render ────────────────────────────────────────────────────────────────────
 
 func (r *Root) Render() app.UI {
+	r.labels.Open, r.labels.OnClose = r.labelsOpen, r.closeLabels
 	return app.Div().
 		Style("display", "flex").
 		Style("flex-direction", "column").
@@ -619,6 +641,7 @@ func (r *Root) Render() app.UI {
 		Style("color", "var(--text)").
 		Body(
 			&toast.Container{},
+			r.labels,
 			r.renderVersionBanner(),
 			app.Div().
 				Attr("role", "tablist").
@@ -633,6 +656,7 @@ func (r *Root) Render() app.UI {
 					r.tab("Operation", ModeOperation),
 					r.tab("History", ModeHistory),
 					app.Div().Style("flex", "1"),
+					r.renderLabelsButton(),
 					r.renderThemeToggle(),
 				),
 			app.Div().
@@ -786,6 +810,15 @@ func (r *Root) tab(label string, mode Mode) app.UI {
 	}
 	return tab.
 		Style("color", "var(--text-2)")
+}
+
+// renderLabelsButton opens the one Labels window of the tab (task 85_2); it
+// sits beside the theme toggle and is available in every mode.
+func (r *Root) renderLabelsButton() app.UI {
+	return uiutil.IconButton(uiutil.IconTag(), "", true, "Labels", uiutil.ButtonBar,
+		func(ctx app.Context, e app.Event) { r.openLabels(ctx) }).
+		Attr("data-labels-open", "true").
+		Style("margin", "0 10px")
 }
 
 func (r *Root) renderThemeToggle() app.UI {
