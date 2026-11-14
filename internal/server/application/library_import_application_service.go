@@ -97,24 +97,24 @@ func (s libraryImportServiceImpl) FindLibraryImports(ctx context.Context, rawPro
 // provenance reads the Commit an import names and the labels it carries: the
 // saved state a Project sees of what it imported (task 85_6). A Commit this
 // server cannot read — its Library is being removed — leaves both empty.
-func (s libraryImportServiceImpl) provenance(ctx context.Context, imported libraryimport.LibraryImport) (*draft.Commit, []appdto.Label, error) {
+func (s libraryImportServiceImpl) provenance(ctx context.Context, imported libraryimport.LibraryImport) (draft.Commit, []appdto.Label, error) {
 	commit, err := s.libraryCommit(ctx, imported.LibraryID(), imported.CommitNumber())
-	if err != nil && !errors.Is(err, draft.ErrCommitNotFound) && !errors.Is(err, library.ErrLibraryNotFound) {
-		return nil, nil, err
-	}
-	if commit == nil {
+	if err != nil {
+		if !errors.Is(err, draft.ErrCommitNotFound) && !errors.Is(err, library.ErrLibraryNotFound) {
+			return nil, nil, err
+		}
 		return nil, nil, nil
 	}
-	byNumber, err := s.labels.LabelsOf(ctx, draft.LibraryScope(imported.LibraryID()))
+	labels, err := s.labelsOf(ctx, imported.LibraryID(), imported.CommitNumber())
 	if err != nil {
-		return nil, nil, fmt.Errorf("cannot read the labels of library %s: %w", imported.LibraryID(), err)
+		return nil, nil, err
 	}
-	return commit, byNumber[imported.CommitNumber()], nil
+	return commit, labels, nil
 }
 
 // libraryCommit returns the saved state number of the Library, or nil for one
 // this server does not have.
-func (s libraryImportServiceImpl) libraryCommit(ctx context.Context, libraryID id.ID[library.Library], number int) (*draft.Commit, error) {
+func (s libraryImportServiceImpl) libraryCommit(ctx context.Context, libraryID id.ID[library.Library], number int) (draft.Commit, error) {
 	commit, err := s.content.Drafts().FindCommit(ctx, draft.LibraryScope(libraryID), number)
 	if err != nil {
 		if errors.Is(err, draft.ErrCommitNotFound) {
@@ -125,7 +125,7 @@ func (s libraryImportServiceImpl) libraryCommit(ctx context.Context, libraryID i
 		}
 		return nil, fmt.Errorf("cannot read saved state %d of library %s: %w", number, libraryID, err)
 	}
-	return &commit, nil
+	return commit, nil
 }
 
 func (s libraryImportServiceImpl) FindImportedWidgetTypes(ctx context.Context, rawProjectID uuid.UUID) ([]appdto.ReleasedWidgetType, error) {

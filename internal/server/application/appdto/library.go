@@ -125,12 +125,12 @@ type LibraryImport struct {
 // NewLibraryImport creates a LibraryImport DTO from the domain entity and, when
 // this server has it, the Commit it names: a Commit that cannot be read leaves
 // the provenance empty and the number as stored.
-func NewLibraryImport(i libraryimport.LibraryImport, version int, commit *draft.Commit, labels []Label) LibraryImport {
+func NewLibraryImport(i libraryimport.LibraryImport, version int, commit draft.Commit, labels []Label) LibraryImport {
 	dto := LibraryImport{LibraryID: i.LibraryID().UUID(), CommitNumber: i.CommitNumber(), Labels: labels, Version: version}
 	if commit != nil {
-		dto.Title = (*commit).Title().String()
-		dto.Author = (*commit).Author().String()
-		dto.SavedAt = (*commit).CreatedAt()
+		dto.Title = commit.Title().String()
+		dto.Author = commit.Author().String()
+		dto.SavedAt = commit.CreatedAt()
 	}
 	if dto.Labels == nil {
 		dto.Labels = []Label{}
