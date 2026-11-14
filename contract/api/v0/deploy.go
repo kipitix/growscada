@@ -51,16 +51,6 @@ type ListDeploymentsResponse struct {
 	Deployments []DeploymentSummaryResponse `json:"deployments"`
 }
 
-// MissingImportResponse names a saved state of a Library the running Deployment
-// uses but this server does not have: the Deployment was made from a file
-// elsewhere, or the Library was removed after it. A Revert drops the Widgets of
-// that saved state's WidgetTypes instead of restoring the import (task 71,
-// task 85_6).
-type MissingImportResponse struct {
-	LibraryID uuid.UUID `json:"library_id"`
-	Commit    int       `json:"commit"`
-}
-
 // DeployResponse is the answer of POST /projects/{id}/commits/{n}/deploy and
 // of a deploy of a project file: the Deployment the Deploy made (task 85_4).
 type DeployResponse struct {
