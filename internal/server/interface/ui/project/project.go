@@ -127,9 +127,13 @@ type Project struct {
 	historyScreen bool
 	history       *savedstates.Screen
 	// historyLabels are the labels of the Organization, the menu of every
-	// saved state of the history; historyLabelsReloader loads them when
-	// History opens and on a label event (task 85_3; ADR 0025).
+	// saved state of the history and the filter of the Deploy window;
+	// historyLabelsReloader loads them when History or the Deploy window opens
+	// and on a label event. historyLabelsLoaded is false until its first
+	// answer, so the window never reports an empty list it has not read
+	// (task 85_3, task 85_5; ADR 0025).
 	historyLabels         []apiv0.LabelResponse
+	historyLabelsLoaded   bool
 	historyLabelsReloader uiutil.Reloader
 
 	// OnBack and BackName are the panel's way back to the selection page and

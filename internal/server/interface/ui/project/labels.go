@@ -24,7 +24,7 @@ import (
 // named it back to All labels (task 85_5).
 func (p *Project) loadHistoryLabels(ctx app.Context) {
 	uiutil.Load(ctx, &p.historyLabelsReloader, p.client.Labels, func(ctx app.Context, list []apiv0.LabelResponse) {
-		p.historyLabels = list
+		p.historyLabels, p.historyLabelsLoaded = list, true
 		p.resetDeployLabelIfGone(ctx)
 		ctx.Update()
 	}, p.loadHistoryLabels)

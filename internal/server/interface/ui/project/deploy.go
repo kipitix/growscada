@@ -149,13 +149,14 @@ type deployListKey struct {
 }
 
 // loadDeployCommits (re)loads the saved states the window lists: every one, or
-// the ones the chosen label marks.
+// the ones the chosen label marks. The list is the Project's, so a 404 is the
+// Project's absence and goes to the switcher like the history's (task 85_5).
 func (p *Project) loadDeployCommits(ctx app.Context) {
 	if p.content == nil {
 		p.deployCommits, p.deployCommitsLoaded = nil, false
 		return
 	}
-	uiutil.LoadFor(ctx, &p.deployCommitsReloader,
+	uiutil.LoadForGone(ctx, &p.deployCommitsReloader,
 		func() deployListKey { return deployListKey{content: p.content, label: p.deployLabel} },
 		func(c context.Context, k deployListKey) ([]apiv0.CommitResponse, error) {
 			if k.content == nil {
@@ -168,6 +169,11 @@ func (p *Project) loadDeployCommits(ctx app.Context) {
 		},
 		func(ctx app.Context, _ deployListKey, commits []apiv0.CommitResponse) {
 			p.deployCommits, p.deployCommitsLoaded = commits, true
+		},
+		func(ctx app.Context, k deployListKey) {
+			if k.content != nil {
+				ctx.NewActionWithValue(uiutil.ActionProjectGone, k.content.ID())
+			}
 		}, p.loadDeployCommits)
 }
 
@@ -201,9 +207,12 @@ func (p *Project) resetDeployLabelIfGone(ctx app.Context) {
 
 // isRunningSavedState reports whether number is the saved state the running
 // Deployment came from. A Deployment from a file, or one made before saved
-// states were deployed, matches none (task 85_4).
+// states were deployed, matches none (task 85_4); neither does any saved state
+// while the Deployment cannot be read: the window says so rather than mark a
+// row from a stale answer (task 85_5).
 func (p *Project) isRunningSavedState(number int) bool {
-	return p.deployed && p.deployment.CommitNumber != nil && *p.deployment.CommitNumber == number
+	return !p.deploymentFailed && p.deployed && p.deployment.CommitNumber != nil &&
+		*p.deployment.CommitNumber == number
 }
 
 // deploySavedState makes saved state number the running Deployment, after the
@@ -353,9 +362,13 @@ func (p *Project) renderDeployDialog() app.UI {
 
 // renderDeployLabelFilter is the window's header: the label the list is
 // narrowed to. An Organization without labels has no filter, and says how to
-// make one.
+// make one; while the labels are on their way the header claims neither, so a
+// slow read never passes for an empty list (task 85_5).
 func (p *Project) renderDeployLabelFilter() app.UI {
-	if len(p.historyLabels) == 0 {
+	switch {
+	case !p.historyLabelsLoaded:
+		return app.Div()
+	case len(p.historyLabels) == 0:
 		return app.Div().
 			Attr("data-deploy-no-labels", "true").
 			Style("display", "flex").
@@ -556,8 +569,8 @@ func (p *Project) showLoadWarnings(ctx app.Context, warnings []apiv0.DiscardWarn
 	}})
 }
 
-// renderDeployBar is the project's panel: the Deployment it runs and its
-// Release, and the Deploy, Deployments and project file actions.
+// renderDeployBar is the project's panel: the Deployment it runs and the saved
+// state it came from, and the Deploy, Deployments and project file actions.
 func (p *Project) renderDeployBar() app.UI {
 	badge := "Not deployed"
 	switch {

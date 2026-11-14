@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,6 +14,7 @@ import (
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
 // uriLog is a transport that records the requests sent through it with their
@@ -226,6 +228,79 @@ func TestDeployWindow_NoLabelsHint(t *testing.T) {
 		if !strings.Contains(html, want) {
 			t.Errorf("the window does not hold %q: %s", want, html)
 		}
+	}
+}
+
+// TestDeployWindow_LabelsOnTheirWay: before the labels answer, the window shows
+// neither a filter nor the hint of an Organization without labels: a slow read
+// must not pass for an empty list (task 85_5).
+func TestDeployWindow_LabelsOnTheirWay(t *testing.T) {
+	f := startProject(t)
+	f.run()
+	f.p.historyLabels, f.p.historyLabelsLoaded = nil, false
+	f.p.deployDialog = true
+
+	html := app.HTMLString(f.p.Render())
+	for _, unwant := range []string{`data-deploy-filter`, `data-deploy-no-labels`} {
+		if strings.Contains(html, unwant) {
+			t.Errorf("the window shows %q before the labels are read: %s", unwant, html)
+		}
+	}
+}
+
+// TestDeployWindow_ProjectGone_TellsTheSwitcher: the saved states of a project
+// deleted elsewhere are its absence, not an error to show — the same way the
+// history's list reports it (task 85_5).
+func TestDeployWindow_ProjectGone_TellsTheSwitcher(t *testing.T) {
+	url, api := newServer(t)
+	created, err := api.CreateProject(context.Background(), apiv0.CreateProjectRequest{
+		Name: "Deploy gone " + uuid.NewString()[:8]})
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if _, err := api.DeleteProject(context.Background(), created.ID); err != nil {
+		t.Fatalf("delete project: %v", err)
+	}
+	f := mount(t, url, api)
+	f.run()
+	f.e.TakeToasts() // the loads of the project the mode mounted on
+	f.p.SetProject(created.ID)
+	var gone []uuid.UUID
+	f.p.compoCtx.Handle(uiutil.ActionProjectGone, func(_ app.Context, a app.Action) {
+		gone = append(gone, a.Value.(uuid.UUID))
+	})
+
+	f.p.loadDeployCommits(f.p.compoCtx)
+	f.run()
+
+	f.noToasts()
+	if !slices.Equal(gone, []uuid.UUID{created.ID}) {
+		t.Errorf("project gone: %v, want %s", gone, created.ID)
+	}
+}
+
+// TestDeployWindow_UnknownDeploymentMarksNoRow: a Deployment read that fails
+// after a successful one marks no row Running — the window says the running
+// saved state cannot be checked rather than mark one from a stale answer
+// (task 85_5).
+func TestDeployWindow_UnknownDeploymentMarksNoRow(t *testing.T) {
+	f := startProject(t)
+	f.run()
+	first := 1
+	f.p.deployed, f.p.deploymentLoaded = true, true
+	f.p.deployment = apiv0.DeploymentResponse{Number: 4, CommitNumber: &first}
+	f.p.deploymentFailed = true
+	f.p.deployCommits = []apiv0.CommitResponse{{Number: first, Title: "First"}}
+	f.p.deployCommitsLoaded = true
+	f.p.historyLabelsLoaded = true
+	f.p.deployDialog = true
+
+	html := app.HTMLString(f.p.Render())
+	if strings.Contains(html, `data-saved-state-running="1"`) {
+		t.Errorf("a stale answer still marks saved state 1 running: %s", html)
+	}
+	if !strings.Contains(html, `data-saved-state-deploy="1"`) {
+		t.Errorf("the window does not offer the unmarked saved state for Deploy: %s", html)
 	}
 }
 
