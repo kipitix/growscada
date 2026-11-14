@@ -145,6 +145,23 @@ var eventTypeInfoByType = map[string]eventTypeInfo{
 	apiv0.EventLabelCreated: {categoryLabel, "Label %s created"},
 	apiv0.EventLabelUpdated: {categoryLabel, "Label %s updated"},
 	apiv0.EventLabelDeleted: {categoryLabel, "Label %s deleted"},
+	// An assignment names the saved state's Project or Library in ID and the
+	// label in label, so it carries no id of its own to print (task 85_3).
+	apiv0.EventLabelAssigned:   {categoryLabel, "Saved state labeled"},
+	apiv0.EventLabelUnassigned: {categoryLabel, "Saved state unlabeled"},
+}
+
+// IsLabelEvent reports whether eventType is one of the labels' events — a
+// change of a label or of its assignments. They are the server's events, and
+// the history of either mode rereads its chips on them (task 85_2, task 85_3;
+// ADR 0025).
+func IsLabelEvent(eventType string) bool {
+	switch eventType {
+	case apiv0.EventLabelCreated, apiv0.EventLabelUpdated, apiv0.EventLabelDeleted,
+		apiv0.EventLabelAssigned, apiv0.EventLabelUnassigned:
+		return true
+	}
+	return false
 }
 
 // describe is the log text of an event of this type with the given id.

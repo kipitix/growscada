@@ -51,9 +51,13 @@ func TestReloadTargetsFor(t *testing.T) {
 		{apiv0.Event{Type: apiv0.EventCommitTitleUpdated}, ReloadTargets{Commits: true}},
 		{apiv0.Event{Type: apiv0.EventReleaseCreated}, ReloadTargets{Releases: true, Commits: true}},
 		{apiv0.Event{Type: apiv0.EventReleaseNoteUpdated}, ReloadTargets{Releases: true, Commits: true}},
-		{apiv0.Event{Type: apiv0.EventLabelCreated}, ReloadTargets{Labels: true}},
-		{apiv0.Event{Type: apiv0.EventLabelUpdated}, ReloadTargets{Labels: true}},
-		{apiv0.Event{Type: apiv0.EventLabelDeleted}, ReloadTargets{Labels: true}},
+		// A label change reaches the history's chips and the label's count, not
+		// a Draft (task 85_2, task 85_3).
+		{apiv0.Event{Type: apiv0.EventLabelCreated}, ReloadTargets{Labels: true, Commits: true}},
+		{apiv0.Event{Type: apiv0.EventLabelUpdated}, ReloadTargets{Labels: true, Commits: true}},
+		{apiv0.Event{Type: apiv0.EventLabelDeleted}, ReloadTargets{Labels: true, Commits: true}},
+		{apiv0.Event{Type: apiv0.EventLabelAssigned}, ReloadTargets{Labels: true, Commits: true}},
+		{apiv0.Event{Type: apiv0.EventLabelUnassigned}, ReloadTargets{Labels: true, Commits: true}},
 		{apiv0.Event{Type: apiv0.EventClientConnected}, ReloadTargets{}},
 
 		{apiv0.Event{Type: apiv0.EventSystemReady}, ReloadTargets{}},

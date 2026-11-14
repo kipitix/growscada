@@ -5,7 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
+
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
 
 // at is a moment in the browser's own zone, so the row's time is the one the
@@ -99,5 +102,74 @@ func TestScreen_BackIsTheWayToTheDraft(t *testing.T) {
 	html := app.HTMLString(s.Render())
 	if !strings.Contains(html, "Saved states") || !strings.Contains(html, `aria-label="Back to the Draft"`) {
 		t.Errorf("the screen's own header: %s", html)
+	}
+}
+
+// TestScreen_LabelsChipsAndMenu: a saved state shows a colored chip per label
+// and a "+ label" control that opens the menu of every label, the ones it
+// carries marked (task 85_3; ADR 0025).
+func TestScreen_LabelsChipsAndMenu(t *testing.T) {
+	marked := apiv0.LabelResponse{ID: uuid.New(), Name: "ready_for_deploy", Color: "#22c55e"}
+	other := apiv0.LabelResponse{ID: uuid.New(), Name: "ready_for_import"}
+	s := New()
+	s.Loaded = true
+	s.AllLabels = []apiv0.LabelResponse{marked, other}
+	s.Rows = []Row{{Number: 1, Title: "First save", Author: "Ada", SavedAt: at(12, 10),
+		Labels: []apiv0.LabelResponse{marked}}}
+
+	html := app.HTMLString(s.Render())
+	for _, want := range []string{
+		`data-label-chip="#22c55e"`,
+		`data-label-id="` + marked.ID.String() + `"`,
+		"ready_for_deploy",
+		`data-label-add="1"`,
+		">+ label<",
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("the labels of the row do not hold %q: %s", want, html)
+		}
+	}
+	if strings.Contains(html, "data-label-menu") {
+		t.Errorf("the menu is open before the control is clicked: %s", html)
+	}
+
+	s.labelMenu = 1
+	html = app.HTMLString(s.Render())
+	for _, want := range []string{
+		`data-label-menu="1"`,
+		`data-label-option="` + marked.ID.String() + `"`,
+		`data-label-checked`,
+		`data-label-option="` + other.ID.String() + `"`,
+		"ready_for_import",
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("the menu does not hold %q: %s", want, html)
+		}
+	}
+}
+
+// TestScreen_LabelMenuWithNoLabels: an Organization without labels says so in
+// the menu and offers the Labels window (task 85_3).
+func TestScreen_LabelMenuWithNoLabels(t *testing.T) {
+	s := New()
+	s.Loaded = true
+	s.Rows = []Row{{Number: 1, Title: "First save", SavedAt: at(12, 10)}}
+	s.labelMenu = 1
+	html := app.HTMLString(s.Render())
+	for _, want := range []string{`data-label-menu="1"`, "No labels yet", "Manage labels"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("the empty menu does not hold %q: %s", want, html)
+		}
+	}
+}
+
+// TestScreen_Reset: closing the screen drops the name being edited and the
+// open labels menu (task 84, task 85_3).
+func TestScreen_Reset(t *testing.T) {
+	s := New()
+	s.renaming, s.renameText, s.labelMenu = 2, "New name", 3
+	s.Reset()
+	if s.renaming != 0 || s.renameText != "" || s.labelMenu != 0 {
+		t.Errorf("the screen kept its own state: %d %q %d", s.renaming, s.renameText, s.labelMenu)
 	}
 }

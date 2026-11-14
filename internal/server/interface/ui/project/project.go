@@ -126,6 +126,11 @@ type Project struct {
 	// history is the screen that draws them, shared with the Library mode.
 	historyScreen bool
 	history       *savedstates.Screen
+	// historyLabels are the labels of the Organization, the menu of every
+	// saved state of the history; historyLabelsReloader loads them when
+	// History opens and on a label event (task 85_3; ADR 0025).
+	historyLabels         []apiv0.LabelResponse
+	historyLabelsReloader uiutil.Reloader
 
 	// OnBack and BackName are the panel's way back to the selection page and
 	// the project it shows (task 84). Root owns both — the page and the name
@@ -413,7 +418,7 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.undoing, p.redoing = false, false
 	p.commits, p.commitsLoaded = nil, false
 	p.saveDialog, p.savingCommit = false, false
-	p.history.ResetRename()
+	p.history.Reset()
 	p.draftUnsaved, p.draftStateLoaded = false, false
 	p.contentReplacements, p.appliedReplacements = 0, 0
 	p.releases, p.releasesLoaded = nil, false

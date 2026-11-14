@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
@@ -132,6 +133,7 @@ func (p *Project) openHistory(ctx app.Context) {
 	p.historyScreen = true
 	p.loadCommits(ctx)
 	p.loadReleases(ctx)
+	p.loadHistoryLabels(ctx)
 	ctx.Update()
 }
 
@@ -140,7 +142,7 @@ func (p *Project) openHistory(ctx app.Context) {
 func (p *Project) closeHistory() {
 	p.historyScreen = false
 	if p.history != nil {
-		p.history.ResetRename()
+		p.history.Reset()
 	}
 	if p.mounted {
 		p.compoCtx.Update()
@@ -355,6 +357,7 @@ func (p *Project) renderHistoryScreen() app.UI {
 	screen.Rows = p.historyRows()
 	screen.Loaded = p.commitsLoaded
 	screen.Loading = p.loadingSavedState != 0 || p.deploying
+	screen.AllLabels = p.historyLabels
 	screen.OnBack = func(ctx app.Context) { p.closeHistory() }
 	screen.OnLoad = func(ctx app.Context, number int) { p.loadSavedState(ctx, number) }
 	screen.OnRelease = func(ctx app.Context, number int) { p.releaseSavedState(ctx, number) }
@@ -362,11 +365,19 @@ func (p *Project) renderHistoryScreen() app.UI {
 		p.renameSavedState(ctx, number, title)
 	}
 	screen.OnNote = func(ctx app.Context, number int) { p.editSavedStateReleaseNote(ctx, number) }
+	screen.OnAssign = func(ctx app.Context, number int, labelID uuid.UUID) {
+		p.assignLabel(ctx, number, labelID)
+	}
+	screen.OnUnassign = func(ctx app.Context, number int, labelID uuid.UUID) {
+		p.unassignLabel(ctx, number, labelID)
+	}
+	screen.OnManageLabels = func(ctx app.Context) { p.manageLabels(ctx) }
 	return screen
 }
 
 // historyRows joins the history with the Releases that published it: a saved
-// state a Release published carries that Release's number and note (task 84).
+// state a Release published carries that Release's number and note, and each
+// carries the labels that mark it (task 84, task 85_3).
 func (p *Project) historyRows() []savedstates.Row {
 	rows := make([]savedstates.Row, len(p.commits))
 	for i, saved := range p.commits {
@@ -375,6 +386,7 @@ func (p *Project) historyRows() []savedstates.Row {
 			Title:    saved.Title,
 			Author:   saved.Author,
 			SavedAt:  saved.CreatedAt,
+			Labels:   saved.Labels,
 			Released: saved.Released,
 		}
 		for _, released := range p.releases {

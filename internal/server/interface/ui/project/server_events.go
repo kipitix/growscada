@@ -80,5 +80,10 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 		if targets.Releases {
 			p.loadReleases(ctx)
 		}
+		if eventlog.IsLabelEvent(ev.Type) {
+			// The chips of the history and the labels its menu offers follow a
+			// label of the Organization or one of its assignments (task 85_3).
+			p.loadHistoryLabels(ctx)
+		}
 	})
 }

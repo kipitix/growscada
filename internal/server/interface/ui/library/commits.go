@@ -137,6 +137,7 @@ func (l *Library) openHistory() {
 	}
 	l.historyScreen = true
 	l.loadCommits(l.compoCtx)
+	l.loadHistoryLabels(l.compoCtx)
 	l.compoCtx.Update()
 }
 
@@ -145,7 +146,7 @@ func (l *Library) openHistory() {
 func (l *Library) closeHistory() {
 	l.historyScreen = false
 	if l.history != nil {
-		l.history.ResetRename()
+		l.history.Reset()
 	}
 	if l.mounted {
 		l.compoCtx.Update()
@@ -379,6 +380,7 @@ func (l *Library) renderHistoryScreen() app.UI {
 	screen.Rows = l.historyRows()
 	screen.Loaded = l.commitsLoaded
 	screen.Loading = l.loadingSavedState != 0
+	screen.AllLabels = l.historyLabels
 	screen.OnBack = func(ctx app.Context) { l.closeHistory() }
 	screen.OnLoad = func(ctx app.Context, number int) { l.loadSavedState(number) }
 	screen.OnRelease = func(ctx app.Context, number int) { l.releaseSavedState(ctx, number) }
@@ -386,11 +388,19 @@ func (l *Library) renderHistoryScreen() app.UI {
 		l.renameSavedState(ctx, number, title)
 	}
 	screen.OnNote = func(ctx app.Context, number int) { l.editSavedStateReleaseNote(ctx, number) }
+	screen.OnAssign = func(ctx app.Context, number int, labelID uuid.UUID) {
+		l.assignLabel(ctx, number, labelID)
+	}
+	screen.OnUnassign = func(ctx app.Context, number int, labelID uuid.UUID) {
+		l.unassignLabel(ctx, number, labelID)
+	}
+	screen.OnManageLabels = func(ctx app.Context) { l.manageLabels(ctx) }
 	return screen
 }
 
 // historyRows joins the history with the Releases that published it: a saved
-// state a Release published carries that Release's number and note (task 84).
+// state a Release published carries that Release's number and note, and each
+// carries the labels that mark it (task 84, task 85_3).
 func (l *Library) historyRows() []savedstates.Row {
 	rows := make([]savedstates.Row, len(l.commits))
 	for i, saved := range l.commits {
@@ -399,6 +409,7 @@ func (l *Library) historyRows() []savedstates.Row {
 			Title:    saved.Title,
 			Author:   saved.Author,
 			SavedAt:  saved.CreatedAt,
+			Labels:   saved.Labels,
 			Released: saved.Released,
 		}
 		for _, released := range l.releases {

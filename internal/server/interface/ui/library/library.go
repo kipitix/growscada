@@ -41,6 +41,11 @@ type Library struct {
 	// history is the screen that lists the saved states, shared with the
 	// Project mode (savedstates.Screen).
 	history *savedstates.Screen
+	// historyLabels are the labels of the Organization, the menu of every
+	// saved state of the history; historyLabelsReloader loads them when
+	// History opens and on a label event (task 85_3; ADR 0025).
+	historyLabels         []apiv0.LabelResponse
+	historyLabelsReloader uiutil.Reloader
 	// draftVersions holds the Version of the selected library's Draft: every
 	// write of its content states it and every content DTO carries it
 	// (ADR 0016). One number serves the whole Draft, so it is also what says
@@ -290,7 +295,7 @@ func (l *Library) selectLibrary(ctx app.Context, id uuid.UUID) {
 	l.saveDialog, l.savingCommit = false, false
 	l.historyScreen, l.loadingSavedState = false, 0
 	l.contentReplacements, l.appliedReplacements = 0, 0
-	l.history.ResetRename()
+	l.history.Reset()
 	l.draftUnsaved, l.draftStateLoaded = false, false
 	l.releaseDialog, l.releasing, l.releaseCommit = false, false, 0
 	uiutil.StoreID(ctx, libraryIDKey, id)

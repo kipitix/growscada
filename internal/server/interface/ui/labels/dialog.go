@@ -68,6 +68,10 @@ type Dialog struct {
 	onKeyDown app.Func
 }
 
+// ActionOpen asks Root to show the Labels window. A mode fires it from the
+// history screen's "Manage labels", where a labels menu is empty (task 85_3).
+const ActionOpen = "labels.open"
+
 // New creates the window; Root holds it for the tab's lifetime.
 func New(client *apiclient.Client) *Dialog {
 	return &Dialog{client: client}
@@ -79,7 +83,7 @@ func (d *Dialog) OnMount(ctx app.Context) {
 	d.listenKeys()
 	ctx.Handle(eventlog.ActionServerEvent, func(ctx app.Context, a app.Action) {
 		ev, ok := a.Value.(apiv0.Event)
-		if !ok || !isLabelEvent(ev.Type) {
+		if !ok || !eventlog.IsLabelEvent(ev.Type) {
 			return
 		}
 		d.load(ctx)
@@ -100,16 +104,6 @@ func (d *Dialog) Reload(ctx app.Context) {
 	if d.mounted {
 		d.load(ctx)
 	}
-}
-
-// isLabelEvent reports whether an event of the server's stream is a change of
-// a label.
-func isLabelEvent(eventType string) bool {
-	switch eventType {
-	case apiv0.EventLabelCreated, apiv0.EventLabelUpdated, apiv0.EventLabelDeleted:
-		return true
-	}
-	return false
 }
 
 // load rereads the labels. A failure is a toast, as every error of the UI is.

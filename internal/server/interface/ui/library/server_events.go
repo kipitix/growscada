@@ -69,6 +69,15 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 			l.loadCommits(ctx)
 			l.loadLibraries(ctx)
 		}
+		if eventlog.IsLabelEvent(ev.Type) {
+			// The chips of the history and the labels its menu offers follow a
+			// label of the Organization or one of its assignments, whichever
+			// library's saved state it marks (task 85_3).
+			l.loadHistoryLabels(ctx)
+			if !mine {
+				l.loadCommits(ctx)
+			}
+		}
 	})
 }
 

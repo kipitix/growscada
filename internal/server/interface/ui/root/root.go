@@ -171,6 +171,11 @@ func (r *Root) OnMount(ctx app.Context) {
 			r.entityGone(ModeLibrary, id)
 		}
 	})
+	// A mode's history screen opens the Labels window through this action: the
+	// window is the tab's one, and Root owns whether it is shown (task 85_3).
+	ctx.Handle(labels.ActionOpen, func(ctx app.Context, _ app.Action) {
+		r.openLabels(ctx)
+	})
 
 	injectToastCSS()
 

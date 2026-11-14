@@ -82,10 +82,12 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 		// nothing of the Draft is touched. Operation does not read this stream
 		// (ADR 0020).
 		return ReloadTargets{Deploy: true}
-	case apiv0.EventLabelCreated, apiv0.EventLabelUpdated, apiv0.EventLabelDeleted:
-		// A label is the Organization's, not a Draft's: the Labels window
-		// rereads its list; no mode's content changes (task 85_2; ADR 0025).
-		return ReloadTargets{Labels: true}
+	case apiv0.EventLabelCreated, apiv0.EventLabelUpdated, apiv0.EventLabelDeleted,
+		apiv0.EventLabelAssigned, apiv0.EventLabelUnassigned:
+		// A label or one of its assignments changed: the Labels window rereads
+		// its list and the history its chips and the label's count. No mode's
+		// content changes (task 85_2, task 85_3; ADR 0025).
+		return ReloadTargets{Labels: true, Commits: true}
 	case apiv0.EventProjectCreated, apiv0.EventProjectUpdated, apiv0.EventProjectDeleted:
 		// A Project was made, renamed or removed: the mode rereads the list.
 		return ReloadTargets{Projects: true, Deploy: true}
