@@ -17,7 +17,7 @@ import (
 func TestCheckpointCodec_RoundTrips(t *testing.T) {
 	at := time.Date(2026, 11, 11, 9, 15, 0, 0, time.UTC)
 	projectID, tagID := uuid.New(), uuid.New()
-	rolledBackFrom, releaseNumber := 2, 5
+	rolledBackFrom, commitNumber := 2, 5
 	checkpoint := recordv0.Checkpoint{
 		Header:    recordv0.Header{SchemaVersion: recordv0.SchemaVersion()},
 		Seq:       42,
@@ -27,7 +27,7 @@ func TestCheckpointCodec_RoundTrips(t *testing.T) {
 			Number:         3,
 			Cause:          recordv0.DeploymentCauseRollback,
 			RolledBackFrom: &rolledBackFrom,
-			ReleaseNumber:  &releaseNumber,
+			CommitNumber:  &commitNumber,
 		},
 		TagStates: []recordv0.CheckpointTagState{
 			{TagID: tagID, Value: "42", Quality: "good", Seq: 40},

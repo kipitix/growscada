@@ -41,6 +41,7 @@ type testServices struct {
 	states       runtimeapp.TagStateService
 	deployments  runtimeapp.DeploymentService
 	discard      application.DiscardService
+	deploy       application.DeployService
 	projectFiles application.ProjectFileService
 	libraries    application.LibraryService
 	widgetTypes  application.WidgetTypeService
@@ -95,6 +96,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		states:       states,
 		deployments:  deployments,
 		discard:      application.NewDiscardService(content, runtimeNode, libraries, releases),
+		deploy:       application.NewDeployService(content, runtimeNode),
 		projectFiles: application.NewProjectFileService(content, application.NewProjectFileBuilder(content), runtimeNode, libraries, releases),
 		draft:        application.NewDraftService(content),
 		draftChanges: application.NewDraftChangesService(content, libraryContent),
@@ -109,7 +111,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		journal:      journal,
 		operation:    runtimeapp.NewOperationStateService(journal, deployments, states, runtimepg.NewCheckpointRepositoryPostgres(db)),
 		commits:      application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, projectReleases, releases, labelService),
-		releases:     application.NewReleaseService(content, projectReleases, runtimeNode, libraries, releases),
+		releases:     application.NewReleaseService(content, projectReleases, runtimeNode, application.NewDeployService(content, runtimeNode)),
 		settings:     application.NewSettingsService(repositories.NewUserSettingsRepositoryPostgres(db), settings.SingleUser(), orgID),
 		labels:       labelService,
 	}
@@ -122,7 +124,7 @@ func (s testServices) services() restapi.Services {
 		Libraries: s.libraries, WidgetTypes: s.widgetTypes, LibraryPins: s.pins, Scenes: s.scenes,
 		Devices: s.devices, Environments: s.environments,
 		Draft: s.draft, DraftChanges: s.draftChanges,
-		Discard: s.discard, ProjectFiles: s.projectFiles, Deployments: s.deployments,
+		Discard: s.discard, Deploy: s.deploy, ProjectFiles: s.projectFiles, Deployments: s.deployments,
 		DeviceConfig: s.deviceConfig, DeviceTokens: s.deviceTokens,
 		Journal: s.journal, Operation: s.operation, Commits: s.commits, Releases: s.releases,
 		Settings: s.settings, Labels: s.labels,

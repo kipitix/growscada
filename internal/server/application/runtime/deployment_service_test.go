@@ -19,7 +19,7 @@ type fakeDeployments struct {
 	created        []uuid.UUID
 	documents      []projectv0.ProjectFile
 	causes         []runtimeapp.DeploymentCause
-	releases       []*int
+	commits        []*int
 	times          []time.Time
 	createErr      error
 	current        runtimeapp.Deployment
@@ -36,16 +36,16 @@ type fakeDeployments struct {
 	namedErr       error
 }
 
-func (r *fakeDeployments) CreateDeployment(_ context.Context, projectID uuid.UUID, file projectv0.ProjectFile, cause runtimeapp.DeploymentCause, releaseNumber *int, now time.Time) (runtimeapp.Deployment, error) {
+func (r *fakeDeployments) CreateDeployment(_ context.Context, projectID uuid.UUID, file projectv0.ProjectFile, cause runtimeapp.DeploymentCause, commitNumber *int, now time.Time) (runtimeapp.Deployment, error) {
 	if r.createErr != nil {
 		return runtimeapp.Deployment{}, r.createErr
 	}
 	r.created = append(r.created, projectID)
 	r.documents = append(r.documents, file)
 	r.causes = append(r.causes, cause)
-	r.releases = append(r.releases, releaseNumber)
+	r.commits = append(r.commits, commitNumber)
 	r.times = append(r.times, now)
-	return runtimeapp.Deployment{Number: len(r.created), DeployedAt: now, Cause: cause, ReleaseNumber: releaseNumber, Content: file}, nil
+	return runtimeapp.Deployment{Number: len(r.created), DeployedAt: now, Cause: cause, CommitNumber: commitNumber, Content: file}, nil
 }
 
 func (r *fakeDeployments) FindCurrent(context.Context, uuid.UUID) (runtimeapp.Deployment, bool, error) {
@@ -95,14 +95,14 @@ func TestDeploymentService_Deploy_NumbersAndPublishesAfterTheRepositoryCommits(t
 	first := runtimeapp.Deployment{Content: projectv0.ProjectFile{
 		Header: projectv0.Header{SchemaVersion: projectv0.SchemaVersion(), ProjectID: projectID},
 	}}
-	one, err := service.DeployRelease(ctx, projectID, 1, first.Content)
+	one, err := service.DeployCommit(ctx, projectID, 1, first.Content)
 	if err != nil {
 		t.Fatalf("Deploy 1: %v", err)
 	}
 	if one.Number != 1 {
 		t.Errorf("first deployment number %d, want 1", one.Number)
 	}
-	two, err := service.DeployRelease(ctx, projectID, 2, first.Content)
+	two, err := service.DeployCommit(ctx, projectID, 2, first.Content)
 	if err != nil {
 		t.Fatalf("Deploy 2: %v", err)
 	}
@@ -118,8 +118,11 @@ func TestDeploymentService_Deploy_NumbersAndPublishesAfterTheRepositoryCommits(t
 	if len(repo.times) != 2 || repo.times[0].IsZero() || repo.times[1].IsZero() {
 		t.Errorf("deploy times %v", repo.times)
 	}
-	if len(repo.releases) != 2 || repo.releases[0] == nil || *repo.releases[0] != 1 || repo.releases[1] == nil || *repo.releases[1] != 2 {
-		t.Errorf("deploy releases %v, want 1 then 2", repo.releases)
+	if len(repo.commits) != 2 || repo.commits[0] == nil || *repo.commits[0] != 1 || repo.commits[1] == nil || *repo.commits[1] != 2 {
+		t.Errorf("deploy saved states %v, want 1 then 2", repo.commits)
+	}
+	if one.CommitNumber == nil || *one.CommitNumber != 1 {
+		t.Errorf("the first deployment names saved state %v, want 1", one.CommitNumber)
 	}
 
 	if len(published) != 2 {
@@ -161,8 +164,8 @@ func TestDeploymentService_DeployFile_StoresTheCauseFileAndPublishes(t *testing.
 	if deployment.Cause != runtimeapp.DeploymentCauseFile {
 		t.Errorf("cause %q, want file", deployment.Cause)
 	}
-	if deployment.ReleaseNumber != nil {
-		t.Errorf("a file deployment states release %v, want none", *deployment.ReleaseNumber)
+	if deployment.CommitNumber != nil {
+		t.Errorf("a file deployment states saved state %v, want none", *deployment.CommitNumber)
 	}
 	if len(repo.causes) != 1 || repo.causes[0] != runtimeapp.DeploymentCauseFile {
 		t.Errorf("repository causes %v, want one file", repo.causes)
@@ -193,7 +196,7 @@ func TestDeploymentService_Deploy_OfAForeignDocument_IsAnError(t *testing.T) {
 	service := runtimeapp.NewDeploymentService(repo, recordingPublish(&published))
 	file := projectv0.ProjectFile{Header: projectv0.Header{ProjectID: uuid.New()}}
 
-	if _, err := service.DeployRelease(context.Background(), uuid.New(), 1, file); !errors.Is(err, runtimeapp.ErrInvalidInput) {
+	if _, err := service.DeployCommit(context.Background(), uuid.New(), 1, file); !errors.Is(err, runtimeapp.ErrInvalidInput) {
 		t.Fatalf("a document of another project: %v, want ErrInvalidInput", err)
 	}
 	if len(repo.created) != 0 {
@@ -211,11 +214,26 @@ func TestDeploymentService_Deploy_OfAFailedCommit_PublishesNothing(t *testing.T)
 	projectID := uuid.New()
 	file := projectv0.ProjectFile{Header: projectv0.Header{ProjectID: projectID}}
 
-	if _, err := service.DeployRelease(context.Background(), projectID, 1, file); err == nil {
+	if _, err := service.DeployCommit(context.Background(), projectID, 1, file); err == nil {
 		t.Fatal("a failed deploy returned no error")
 	}
 	if len(published) != 0 {
 		t.Errorf("a failed deploy published %d events", len(published))
+	}
+}
+
+func TestDeploymentService_Deploy_OfANonPositiveSavedState_IsInvalidInput(t *testing.T) {
+	repo := &fakeDeployments{}
+	var published []event.Event
+	service := runtimeapp.NewDeploymentService(repo, recordingPublish(&published))
+	projectID := uuid.New()
+	file := projectv0.ProjectFile{Header: projectv0.Header{ProjectID: projectID}}
+
+	if _, err := service.DeployCommit(context.Background(), projectID, 0, file); !errors.Is(err, runtimeapp.ErrInvalidInput) {
+		t.Fatalf("saved state 0: %v, want ErrInvalidInput", err)
+	}
+	if len(repo.created) != 0 || len(published) != 0 {
+		t.Error("an invalid saved state reached the repository or published")
 	}
 }
 

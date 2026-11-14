@@ -9,28 +9,23 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
 
-// saveReleaseDeploy fixes the Draft as a Commit, publishes it and makes it the
-// running Deployment: the order a Deploy takes since task 72_4.
-func saveReleaseDeploy(t *testing.T, router testRouter, version, commitNumber int) apiv0.DeployResponse {
+// saveCommitDeploy fixes the Draft as a saved state and makes it the running
+// Deployment: the order a Deploy takes since task 85_4.
+func saveCommitDeploy(t *testing.T, router testRouter, version, commitNumber int) apiv0.DeployResponse {
 	t.Helper()
 	rec := serve(router, http.MethodPost, mainPath+"/commits",
 		apiv0.CreateCommitRequest{Version: version, Title: "Save", Author: "Ada"})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("POST commit: %d %s", rec.Code, rec.Body)
 	}
-	rec = serve(router, http.MethodPost, mainPath+"/releases",
-		apiv0.CreateProjectReleaseRequest{Commit: commitNumber, Author: "Ada"})
+	rec = serve(router, http.MethodPost, mainPath+"/commits/"+strconv.Itoa(commitNumber)+"/deploy", nil)
 	if rec.Code != http.StatusCreated {
-		t.Fatalf("POST release: %d %s", rec.Code, rec.Body)
-	}
-	rec = serve(router, http.MethodPost, mainPath+"/releases/"+strconv.Itoa(commitNumber)+"/deploy", nil)
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("POST release deploy: %d %s", rec.Code, rec.Body)
+		t.Fatalf("POST commit deploy: %d %s", rec.Code, rec.Body)
 	}
 	return decodeBody[apiv0.DeployResponse](t, rec)
 }
 
-func TestDeployRelease_DeploymentAndTagStates(t *testing.T) {
+func TestDeployCommit_DeploymentAndTagStates(t *testing.T) {
 	cleanProjectsRest(t)
 	services := newServices()
 	router := services.router()
@@ -50,7 +45,7 @@ func TestDeployRelease_DeploymentAndTagStates(t *testing.T) {
 	createdTag := decodeBody[apiv0.CreateTagResponse](t, rec)
 	version = services.draftVersion(t)
 
-	deployed := saveReleaseDeploy(t, router, version, 1)
+	deployed := saveCommitDeploy(t, router, version, 1)
 	if deployed.Number != 1 || deployed.DeployedAt == "" {
 		t.Errorf("the first Deploy: %+v", deployed)
 	}
@@ -63,8 +58,8 @@ func TestDeployRelease_DeploymentAndTagStates(t *testing.T) {
 	if deployment.Number != 1 || deployment.DeployedAt == "" || deployment.Content.ProjectID != mainProject {
 		t.Errorf("GET deployment: %+v", deployment)
 	}
-	if deployment.ReleaseNumber == nil || *deployment.ReleaseNumber != 1 {
-		t.Errorf("the Deployment names release %v, want 1", deployment.ReleaseNumber)
+	if deployment.CommitNumber == nil || *deployment.CommitNumber != 1 {
+		t.Errorf("the Deployment names saved state %v, want 1", deployment.CommitNumber)
 	}
 	if len(deployment.Content.Tags) == 0 {
 		t.Errorf("the Deployment holds no Tag definitions: %+v", deployment.Content)
@@ -82,8 +77,22 @@ func TestDeployRelease_DeploymentAndTagStates(t *testing.T) {
 		t.Errorf("the initial state of the new Tag: %+v, %v", state, ok)
 	}
 
+	if rec := serve(router, http.MethodPost, mainPath+"/commits/1/deploy", nil); rec.Code != http.StatusConflict {
+		t.Errorf("a second Deploy of the same saved state: %d, want 409", rec.Code)
+	}
+	if rec := serve(router, http.MethodPost, mainPath+"/commits/9/deploy", nil); rec.Code != http.StatusNotFound {
+		t.Errorf("a Deploy of a missing saved state: %d, want 404", rec.Code)
+	}
+	if rec := serve(router, http.MethodPost, mainPath+"/commits/abc/deploy", nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("a Deploy of a saved state number that is not a number: %d, want 400", rec.Code)
+	}
+	// The Release route of before task 85_5 deploys the same saved state: the
+	// running one is refused, and a missing Release is 404.
+	if rec := serve(router, http.MethodPost, mainPath+"/releases", apiv0.CreateProjectReleaseRequest{Commit: 1, Author: "Ada"}); rec.Code != http.StatusCreated {
+		t.Fatalf("POST release: %d %s", rec.Code, rec.Body)
+	}
 	if rec := serve(router, http.MethodPost, mainPath+"/releases/1/deploy", nil); rec.Code != http.StatusConflict {
-		t.Errorf("a second Deploy of the same Release: %d, want 409", rec.Code)
+		t.Errorf("a Deploy of the running saved state through its Release: %d, want 409", rec.Code)
 	}
 	if rec := serve(router, http.MethodPost, mainPath+"/releases/9/deploy", nil); rec.Code != http.StatusNotFound {
 		t.Errorf("a Deploy of a missing Release: %d, want 404", rec.Code)
@@ -124,7 +133,7 @@ func TestDeployments_ListDetailRollback(t *testing.T) {
 		t.Fatalf("POST tag: %d %s", rec.Code, rec.Body)
 	}
 	first := decodeBody[apiv0.CreateTagResponse](t, rec)
-	saveReleaseDeploy(t, router, services.draftVersion(t), 1)
+	saveCommitDeploy(t, router, services.draftVersion(t), 1)
 
 	rec = serve(router, http.MethodGet, mainPath+"/deployments", nil)
 	list := decodeBody[apiv0.ListDeploymentsResponse](t, rec)
@@ -134,8 +143,8 @@ func TestDeployments_ListDetailRollback(t *testing.T) {
 	if list.Deployments[0].RolledBackFrom != nil {
 		t.Errorf("a Deploy names a Deployment it copied: %v", list.Deployments[0].RolledBackFrom)
 	}
-	if list.Deployments[0].ReleaseNumber == nil || *list.Deployments[0].ReleaseNumber != 1 {
-		t.Errorf("the Deployment names release %v, want 1", list.Deployments[0].ReleaseNumber)
+	if list.Deployments[0].CommitNumber == nil || *list.Deployments[0].CommitNumber != 1 {
+		t.Errorf("the Deployment names saved state %v, want 1", list.Deployments[0].CommitNumber)
 	}
 
 	if rec := serve(router, http.MethodGet, mainPath+"/deployments/abc", nil); rec.Code != http.StatusBadRequest {
@@ -147,7 +156,7 @@ func TestDeployments_ListDetailRollback(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("POST the second tag: %d %s", rec.Code, rec.Body)
 	}
-	saveReleaseDeploy(t, router, services.draftVersion(t), 2)
+	saveCommitDeploy(t, router, services.draftVersion(t), 2)
 
 	rec = serve(router, http.MethodGet, mainPath+"/deployments/1", nil)
 	if rec.Code != http.StatusOK {
@@ -180,8 +189,8 @@ func TestDeployments_ListDetailRollback(t *testing.T) {
 	if rolled.RolledBackFrom == nil || *rolled.RolledBackFrom != 1 {
 		t.Errorf("the rollback names %v, want deployment 1", rolled.RolledBackFrom)
 	}
-	if rolled.ReleaseNumber == nil || *rolled.ReleaseNumber != 1 {
-		t.Errorf("the rollback names release %v, want 1", rolled.ReleaseNumber)
+	if rolled.CommitNumber == nil || *rolled.CommitNumber != 1 {
+		t.Errorf("the rollback names saved state %v, want 1", rolled.CommitNumber)
 	}
 
 	rec = serve(router, http.MethodGet, mainPath+"/deployment", nil)
@@ -206,7 +215,7 @@ func TestDeployments_OfADeletedProject_Are404(t *testing.T) {
 	cleanProjectsRest(t)
 	services := newServices()
 	router := services.router()
-	saveReleaseDeploy(t, router, services.draftVersion(t), 1)
+	saveCommitDeploy(t, router, services.draftVersion(t), 1)
 	if _, err := testDB().ExecContext(context.Background(),
 		"UPDATE projects SET deleted_at = now() WHERE id = '"+mainProject.String()+"'"); err != nil {
 		t.Fatalf("mark the project deleted: %v", err)
@@ -240,7 +249,7 @@ func TestDiscardAndRevert(t *testing.T) {
 	if rec := serve(router, http.MethodPost, mainPath+"/revert-to-deployed", nil); rec.Code != http.StatusConflict {
 		t.Fatalf("POST revert without a Deployment: %d, want 409", rec.Code)
 	}
-	saveReleaseDeploy(t, router, services.draftVersion(t), 1)
+	saveCommitDeploy(t, router, services.draftVersion(t), 1)
 
 	rec := serve(router, http.MethodPost, mainPath+"/discard", nil)
 	if rec.Code != http.StatusOK {

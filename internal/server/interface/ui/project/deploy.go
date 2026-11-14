@@ -14,11 +14,12 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
-// The Project mode's deployment state (task 35, part 5; task 72_4): the
-// Deployment the project runs and the Release it came from, the Deployments
+// The Project mode's deployment state (task 35, part 5; task 85_4): the
+// Deployment the project runs and the saved state it came from, the Deployments
 // history, Discard to the last Commit and Revert to the running Deployment. A
-// Deploy takes a Release, so the header's Deploy button opens the Release list
-// (releases.go); the Deployment itself is Operation's.
+// Deploy makes a saved state, so the header's Deploy button still opens the
+// Release list (releases.go) until task 85_5; the Deployment itself is
+// Operation's.
 
 // loadDeployments (re)loads the Deployments the dialog lists, newest first.
 func (p *Project) loadDeployments(ctx app.Context) {
@@ -210,12 +211,12 @@ func (p *Project) showLoadWarnings(ctx app.Context, warnings []apiv0.DiscardWarn
 func (p *Project) renderDeployBar() app.UI {
 	badge := "Not deployed"
 	switch {
-	case p.deployed && p.deployment.ReleaseNumber != nil:
-		// The Release is what people choose and name; the Deployment number
-		// stays in the Deployments history and the detail (task 72_6).
-		badge = fmt.Sprintf("Release %d · running", *p.deployment.ReleaseNumber)
+	case p.deployed && p.deployment.CommitNumber != nil:
+		// The saved state is what people choose and name; the Deployment
+		// number stays in the Deployments history and the detail (task 85_4).
+		badge = fmt.Sprintf("Saved state #%d · running", *p.deployment.CommitNumber)
 	case p.deployed:
-		badge = fmt.Sprintf("Deployment %d · not a Release", p.deployment.Number)
+		badge = fmt.Sprintf("Deployment %d · no saved state", p.deployment.Number)
 	case p.deploymentFailed:
 		// The read failed: the mode does not claim the project is not
 		// deployed (task 72_4).
@@ -374,18 +375,18 @@ func (p *Project) renderDeploymentsDialog() app.UI {
 }
 
 // renderDeploymentRow is one Deployment of the list: its number, when it was
-// deployed, why and from which Release; the running one is marked.
+// deployed, why and from which saved state; the running one is marked.
 func (p *Project) renderDeploymentRow(deployment apiv0.DeploymentSummaryResponse) app.UI {
 	body := []app.UI{
 		app.Span().Text(fmt.Sprintf("#%d · %s · %s",
 			deployment.Number, formatDeployedAt(deployment.DeployedAt), deploymentCauseText(deployment.Cause, deployment.RolledBackFrom))),
 	}
-	if deployment.ReleaseNumber != nil {
+	if deployment.CommitNumber != nil {
 		body = append(body, app.Span().
 			Style("margin-left", "8px").
 			Style("font-size", "11px").
 			Style("color", "var(--text-muted)").
-			Text(fmt.Sprintf("Release %d", *deployment.ReleaseNumber)))
+			Text(fmt.Sprintf("Saved state #%d", *deployment.CommitNumber)))
 	}
 	if p.isCurrentDeployment(deployment.Number) {
 		body = append(body, app.Span().

@@ -44,7 +44,7 @@ func NewDeploymentRepositoryPostgres(aDb *sql.DB) runtimeapp.DeploymentRepositor
 // derived copies are brought into line with the document by diff — never by
 // dropping them all first, which would take the Tag states along the cascade
 // and lose the values (task 35, Q5).
-func (r deploymentRepositoryPostgres) CreateDeployment(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile, cause runtimeapp.DeploymentCause, releaseNumber *int, now time.Time) (runtimeapp.Deployment, error) {
+func (r deploymentRepositoryPostgres) CreateDeployment(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile, cause runtimeapp.DeploymentCause, commitNumber *int, now time.Time) (runtimeapp.Deployment, error) {
 	if file.ProjectID != projectID {
 		return runtimeapp.Deployment{}, fmt.Errorf("cannot create deployment of project %s from a document of project %s", projectID, file.ProjectID)
 	}
@@ -61,23 +61,23 @@ func (r deploymentRepositoryPostgres) CreateDeployment(ctx context.Context, proj
 	if err := prepareDeploymentTx(ctx, tx, projectID); err != nil {
 		return runtimeapp.Deployment{}, err
 	}
-	if releaseNumber != nil {
-		// A Release deployed twice would add a Deployment that changes
+	if commitNumber != nil {
+		// A saved state deployed twice would add a Deployment that changes
 		// nothing. The check shares the advisory lock with the numbering, so
-		// two concurrent Deploys of one Release make one Deployment.
+		// two concurrent Deploys of one saved state make one Deployment.
 		var running sql.NullInt64
 		err := tx.QueryRowContext(ctx,
-			`SELECT release_number FROM runtime.deployments WHERE project_id = $1 ORDER BY number DESC LIMIT 1`,
+			`SELECT commit_number FROM runtime.deployments WHERE project_id = $1 ORDER BY number DESC LIMIT 1`,
 			projectID,
 		).Scan(&running)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return runtimeapp.Deployment{}, fmt.Errorf("cannot read the running deployment of project %s: %w", projectID, err)
 		}
-		if err == nil && running.Valid && int(running.Int64) == *releaseNumber {
-			return runtimeapp.Deployment{}, fmt.Errorf("%w: release %d of project %s is the deployment it runs", runtimeapp.ErrNothingToDeploy, *releaseNumber, projectID)
+		if err == nil && running.Valid && int(running.Int64) == *commitNumber {
+			return runtimeapp.Deployment{}, fmt.Errorf("%w: saved state %d of project %s is the deployment it runs", runtimeapp.ErrNothingToDeploy, *commitNumber, projectID)
 		}
 	}
-	number, seq, deploymentRef, err := insertDeployment(ctx, tx, projectID, config, cause, releaseNumber, nil, now)
+	number, seq, deploymentRef, err := insertDeployment(ctx, tx, projectID, config, cause, commitNumber, nil, now)
 	if err != nil {
 		return runtimeapp.Deployment{}, err
 	}
@@ -95,11 +95,11 @@ func (r deploymentRepositoryPostgres) CreateDeployment(ctx context.Context, proj
 		return runtimeapp.Deployment{}, fmt.Errorf("cannot commit deployment %d of project %s: %w", number, projectID, err)
 	}
 	return runtimeapp.Deployment{
-		Number:        number,
-		DeployedAt:    now.UTC(),
-		Cause:         cause,
-		ReleaseNumber: releaseNumber,
-		Content:       file,
+		Number:       number,
+		DeployedAt:   now.UTC(),
+		Cause:        cause,
+		CommitNumber: commitNumber,
+		Content:      file,
 	}, nil
 }
 
@@ -131,11 +131,11 @@ func (r deploymentRepositoryPostgres) Rollback(ctx context.Context, projectID uu
 		return runtimeapp.Deployment{}, fmt.Errorf("cannot read the running deployment of project %s: %w", projectID, err)
 	}
 	var targetConfig []byte
-	var targetReleaseNumber sql.NullInt64
+	var targetCommitNumber sql.NullInt64
 	err = tx.QueryRowContext(ctx,
-		`SELECT config, release_number FROM runtime.deployments WHERE project_id = $1 AND number = $2`,
+		`SELECT config, commit_number FROM runtime.deployments WHERE project_id = $1 AND number = $2`,
 		projectID, n,
-	).Scan(&targetConfig, &targetReleaseNumber)
+	).Scan(&targetConfig, &targetCommitNumber)
 	if errors.Is(err, sql.ErrNoRows) {
 		return runtimeapp.Deployment{}, fmt.Errorf("%w: deployment %d of project %s", runtimeapp.ErrDeploymentNotFound, n, projectID)
 	}
@@ -158,8 +158,8 @@ func (r deploymentRepositoryPostgres) Rollback(ctx context.Context, projectID uu
 		return runtimeapp.Deployment{}, fmt.Errorf("cannot decode deployment %d of project %s: %w", n, projectID, err)
 	}
 	rolledBackFrom := n
-	releaseNumber := nullableInt(targetReleaseNumber)
-	number, seq, deploymentRef, err := insertDeployment(ctx, tx, projectID, targetConfig, runtimeapp.DeploymentCauseRollback, releaseNumber, &rolledBackFrom, now)
+	commitNumber := nullableInt(targetCommitNumber)
+	number, seq, deploymentRef, err := insertDeployment(ctx, tx, projectID, targetConfig, runtimeapp.DeploymentCauseRollback, commitNumber, &rolledBackFrom, now)
 	if err != nil {
 		return runtimeapp.Deployment{}, err
 	}
@@ -181,7 +181,7 @@ func (r deploymentRepositoryPostgres) Rollback(ctx context.Context, projectID uu
 		DeployedAt:     now.UTC(),
 		Cause:          runtimeapp.DeploymentCauseRollback,
 		RolledBackFrom: &rolledBackFrom,
-		ReleaseNumber:  releaseNumber,
+		CommitNumber:   commitNumber,
 		Content:        file,
 	}, nil
 }
@@ -226,7 +226,7 @@ func prepareDeploymentTx(ctx context.Context, tx *sql.Tx, projectID uuid.UUID) e
 // Deployment reference the entry carries, which the Checkpoint reuses so the
 // two never disagree (task 44).
 func insertDeployment(ctx context.Context, tx *sql.Tx, projectID uuid.UUID, config []byte,
-	cause runtimeapp.DeploymentCause, releaseNumber *int, rolledBackFrom *int, now time.Time) (int, int64, *recordv0.Deployment, error) {
+	cause runtimeapp.DeploymentCause, commitNumber *int, rolledBackFrom *int, now time.Time) (int, int64, *recordv0.Deployment, error) {
 	var number int
 	if err := tx.QueryRowContext(ctx,
 		`SELECT COALESCE(MAX(number), 0) + 1 FROM runtime.deployments WHERE project_id = $1`,
@@ -235,13 +235,13 @@ func insertDeployment(ctx context.Context, tx *sql.Tx, projectID uuid.UUID, conf
 		return 0, 0, nil, fmt.Errorf("cannot number the deployment of project %s: %w", projectID, err)
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO runtime.deployments (project_id, number, deployed_at, cause, rolled_back_from, release_number, config)
+		`INSERT INTO runtime.deployments (project_id, number, deployed_at, cause, rolled_back_from, commit_number, config)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		projectID, number, now, string(cause), rolledBackFrom, releaseNumber, config,
+		projectID, number, now, string(cause), rolledBackFrom, commitNumber, config,
 	); err != nil {
 		return 0, 0, nil, fmt.Errorf("cannot insert deployment %d of project %s: %w", number, projectID, err)
 	}
-	entry := newDeploymentEntry(projectID, now, number, journalCause(cause), releaseNumber, rolledBackFrom)
+	entry := newDeploymentEntry(projectID, now, number, journalCause(cause), commitNumber, rolledBackFrom)
 	seq, err := appendJournalEntry(ctx, tx, entry)
 	if err != nil {
 		return 0, 0, nil, fmt.Errorf("cannot record deployment %d of project %s: %w", number, projectID, err)
@@ -264,27 +264,27 @@ func journalCause(cause runtimeapp.DeploymentCause) recordv0.DeploymentCause {
 
 func (r deploymentRepositoryPostgres) FindCurrent(ctx context.Context, projectID uuid.UUID) (runtimeapp.Deployment, bool, error) {
 	var (
-		number         int
-		deployedAt     time.Time
-		cause          string
+		number       int
+		deployedAt   time.Time
+		cause        string
 		rolledBackFrom sql.NullInt64
-		releaseNumber  sql.NullInt64
-		config         []byte
+		commitNumber sql.NullInt64
+		config       []byte
 	)
 	err := r.db.QueryRowContext(ctx,
-		`SELECT number, deployed_at, cause, rolled_back_from, release_number, config FROM runtime.deployments
+		`SELECT number, deployed_at, cause, rolled_back_from, commit_number, config FROM runtime.deployments
 		 WHERE project_id = $1
 		 ORDER BY number DESC
 		 LIMIT 1`,
 		projectID,
-	).Scan(&number, &deployedAt, &cause, &rolledBackFrom, &releaseNumber, &config)
+	).Scan(&number, &deployedAt, &cause, &rolledBackFrom, &commitNumber, &config)
 	if errors.Is(err, sql.ErrNoRows) {
 		return runtimeapp.Deployment{}, false, nil
 	}
 	if err != nil {
 		return runtimeapp.Deployment{}, false, fmt.Errorf("cannot read the deployment of project %s: %w", projectID, err)
 	}
-	deployment, err := newDeployment(number, deployedAt, cause, rolledBackFrom, releaseNumber, config)
+	deployment, err := newDeployment(number, deployedAt, cause, rolledBackFrom, commitNumber, config)
 	if err != nil {
 		return runtimeapp.Deployment{}, false, fmt.Errorf("deployment %d of project %s: %w", number, projectID, err)
 	}
@@ -296,7 +296,7 @@ func (r deploymentRepositoryPostgres) FindAll(ctx context.Context, projectID uui
 		return nil, err
 	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT number, deployed_at, cause, rolled_back_from, release_number FROM runtime.deployments
+		`SELECT number, deployed_at, cause, rolled_back_from, commit_number FROM runtime.deployments
 		 WHERE project_id = $1
 		 ORDER BY number DESC`,
 		projectID,
@@ -312,9 +312,9 @@ func (r deploymentRepositoryPostgres) FindAll(ctx context.Context, projectID uui
 			deployedAt     time.Time
 			cause          string
 			rolledBackFrom sql.NullInt64
-			releaseNumber  sql.NullInt64
+			commitNumber   sql.NullInt64
 		)
-		if err := rows.Scan(&number, &deployedAt, &cause, &rolledBackFrom, &releaseNumber); err != nil {
+		if err := rows.Scan(&number, &deployedAt, &cause, &rolledBackFrom, &commitNumber); err != nil {
 			return nil, fmt.Errorf("cannot scan a deployment of project %s: %w", projectID, err)
 		}
 		summaries = append(summaries, runtimeapp.DeploymentSummary{
@@ -322,7 +322,7 @@ func (r deploymentRepositoryPostgres) FindAll(ctx context.Context, projectID uui
 			DeployedAt:     deployedAt.UTC(),
 			Cause:          runtimeapp.DeploymentCause(cause),
 			RolledBackFrom: nullableInt(rolledBackFrom),
-			ReleaseNumber:  nullableInt(releaseNumber),
+			CommitNumber:   nullableInt(commitNumber),
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -372,21 +372,21 @@ func (r deploymentRepositoryPostgres) FindByNumber(ctx context.Context, projectI
 		deployedAt     time.Time
 		cause          string
 		rolledBackFrom sql.NullInt64
-		releaseNumber  sql.NullInt64
+		commitNumber   sql.NullInt64
 		config         []byte
 	)
 	err := r.db.QueryRowContext(ctx,
-		`SELECT deployed_at, cause, rolled_back_from, release_number, config FROM runtime.deployments
+		`SELECT deployed_at, cause, rolled_back_from, commit_number, config FROM runtime.deployments
 		 WHERE project_id = $1 AND number = $2`,
 		projectID, n,
-	).Scan(&deployedAt, &cause, &rolledBackFrom, &releaseNumber, &config)
+	).Scan(&deployedAt, &cause, &rolledBackFrom, &commitNumber, &config)
 	if errors.Is(err, sql.ErrNoRows) {
 		return runtimeapp.Deployment{}, fmt.Errorf("%w: deployment %d of project %s", runtimeapp.ErrDeploymentNotFound, n, projectID)
 	}
 	if err != nil {
 		return runtimeapp.Deployment{}, fmt.Errorf("cannot read deployment %d of project %s: %w", n, projectID, err)
 	}
-	deployment, err := newDeployment(n, deployedAt, cause, rolledBackFrom, releaseNumber, config)
+	deployment, err := newDeployment(n, deployedAt, cause, rolledBackFrom, commitNumber, config)
 	if err != nil {
 		return runtimeapp.Deployment{}, fmt.Errorf("deployment %d of project %s: %w", n, projectID, err)
 	}
@@ -394,7 +394,7 @@ func (r deploymentRepositoryPostgres) FindByNumber(ctx context.Context, projectI
 }
 
 // newDeployment assembles a Deployment read from the store.
-func newDeployment(number int, deployedAt time.Time, cause string, rolledBackFrom, releaseNumber sql.NullInt64, config []byte) (runtimeapp.Deployment, error) {
+func newDeployment(number int, deployedAt time.Time, cause string, rolledBackFrom, commitNumber sql.NullInt64, config []byte) (runtimeapp.Deployment, error) {
 	var file projectv0.ProjectFile
 	if err := json.Unmarshal(config, &file); err != nil {
 		return runtimeapp.Deployment{}, fmt.Errorf("cannot decode the document: %w", err)
@@ -404,7 +404,7 @@ func newDeployment(number int, deployedAt time.Time, cause string, rolledBackFro
 		DeployedAt:     deployedAt.UTC(),
 		Cause:          runtimeapp.DeploymentCause(cause),
 		RolledBackFrom: nullableInt(rolledBackFrom),
-		ReleaseNumber:  nullableInt(releaseNumber),
+		CommitNumber:   nullableInt(commitNumber),
 		Content:        file,
 	}, nil
 }

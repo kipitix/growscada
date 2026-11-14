@@ -4,7 +4,7 @@ info:
   seq: 172
 http:
   method: GET
-  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/releases/6
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/releases/2
   auth: inherit
 
 docs: |
@@ -19,7 +19,7 @@ runtime:
       operator: isDefined
     - expression: 'res.body.number'
       operator: eq
-      value: '6'
+      value: '2'
     - expression: 'res.body.content_counts.scenes'
       operator: gt
       value: '0'

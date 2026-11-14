@@ -46,10 +46,10 @@ type Event struct {
 	// the stream of a Project carries the event to that Project's readers.
 	Deployment int    `json:"deployment,omitempty"`
 	DeployedAt string `json:"deployed_at,omitempty"`
-	// ReleaseNumber is the Project Release a deployment_created deployed
-	// (task 72_4); absent for a Deployment from a file or one made before
-	// Releases existed.
-	ReleaseNumber *int `json:"release_number,omitempty"`
+	// commit_number follows the saved state a Deploy made running (task 85_4);
+	// it is absent for a Deployment from a file or one made before saved
+	// states were deployed.
+	CommitNumber *int `json:"commit_number,omitempty"`
 	// Commit is the number of the Commit a commit_created or
 	// commit_title_updated is about; ID is the Project's or the Library's.
 	Commit int `json:"commit,omitempty"`

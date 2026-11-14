@@ -229,12 +229,14 @@ func main() {
 	libraryContent := application.NewLibraryContent(libraryRepository, draftRepository, organizationID)
 	projectService := application.NewProjectService(projectRepository, draftRepository, organizationID)
 	tagService := application.NewTagService(projectContent, runtimeNode)
-	// Deploy, Discard and Revert (task 35, task 72_4): a Deploy hands a Release
-	// to the Runtime node, which stores it as a Deployment; the Engineering
-	// node keeps no copy of what it sent (ADR 0014). Discard falls back to the
-	// last Commit, Revert to the running Deployment.
+	// Deploy, Discard and Revert (task 35, task 85_4): a Deploy hands a saved
+	// state's ProjectFile to the Runtime node, which stores it as a Deployment;
+	// the Engineering node keeps no copy of what it sent (ADR 0014). Discard
+	// falls back to the last Commit, Revert to the running Deployment. The
+	// Release handlers keep deploying a Release until task 85_5.
 	projectFileBuilder := application.NewProjectFileBuilder(projectContent)
 	discardService := application.NewDiscardService(projectContent, runtimeNode, libraryRepository, releaseRepository)
+	deployService := application.NewDeployService(projectContent, runtimeNode)
 	projectFileService := application.NewProjectFileService(projectContent, projectFileBuilder, runtimeNode,
 		libraryRepository, releaseRepository)
 	draftChangesService := application.NewDraftChangesService(projectContent, libraryContent)
@@ -257,10 +259,10 @@ func main() {
 		Discard:      discardService,
 		ProjectFiles: projectFileService,
 		Commits:      application.NewCommitService(projectContent, libraryContent, projectFileBuilder, widgetTypeRepositories, projectReleaseRepository, releaseRepository, labelService),
-		Releases: application.NewReleaseService(projectContent, projectReleaseRepository, runtimeNode,
-			libraryRepository, releaseRepository),
+		Releases:     application.NewReleaseService(projectContent, projectReleaseRepository, runtimeNode, deployService),
 		Settings:     application.NewSettingsService(userSettingsRepository, settings.SingleUser(), organizationID),
 		Labels:       labelService,
+		Deploy:       deployService,
 		Deployments:  deploymentService,
 		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(sqlDB)),
 		DeviceTokens: deviceTokenService,

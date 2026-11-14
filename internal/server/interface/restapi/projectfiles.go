@@ -18,16 +18,15 @@ const maxProjectFileBytes = 64 << 20
 
 // ProjectFileHandlers serves the project files of a Project (task 39,
 // ADR 0018): its Draft and any Deployment as downloads, a file opened as the
-// Draft, and a file deployed as a Release and a Deployment (task 72_4).
+// Draft, and a file deployed as a Deployment of its own (task 85_4).
 type ProjectFileHandlers struct {
-	files    application.ProjectFileService
-	releases application.ReleaseService
+	files application.ProjectFileService
 }
 
 // NewProjectFileHandler creates the handler over the Engineering node's
-// project files and Releases.
-func NewProjectFileHandler(files application.ProjectFileService, releases application.ReleaseService) *ProjectFileHandlers {
-	return &ProjectFileHandlers{files: files, releases: releases}
+// project files.
+func NewProjectFileHandler(files application.ProjectFileService) *ProjectFileHandlers {
+	return &ProjectFileHandlers{files: files}
 }
 
 // GetDraftProjectFile handles GET /projects/{project_id}/projectfile: the
@@ -91,12 +90,11 @@ func (h ProjectFileHandlers) PostProjectFile(w http.ResponseWriter, r *http.Requ
 }
 
 // PostProjectFileDeploy handles POST /projects/{project_id}/projectfile/deploy:
-// it publishes the document as a Release with origin file and makes it the
-// Project's new Deployment without touching the Draft (task 72_4). ?author= and
-// ?title= are optional; the file and the plain title stand for them. 201 with
-// the Deployment; 400 with file_issues when it does not validate. Every file
-// deploy makes a new Release, so a document equal to the running one is no
-// refusal.
+// it makes the document the Project's new Deployment without touching the Draft
+// (task 85_4). A file deployment states no saved state: it leaves no Release
+// behind. 201 with the Deployment; 400 with file_issues when it does not
+// validate. Every file deploy makes a new Deployment, so a document equal to
+// the running one is no refusal.
 func (h ProjectFileHandlers) PostProjectFileDeploy(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := pathUUID(w, r, projectResource)
 	if !ok {
@@ -106,9 +104,7 @@ func (h ProjectFileHandlers) PostProjectFileDeploy(w http.ResponseWriter, r *htt
 	if !ok {
 		return
 	}
-	query := r.URL.Query()
-	_, deployment, err := h.releases.CreateFromFile(r.Context(), projectID, document,
-		query.Get("author"), query.Get("title"))
+	deployment, err := h.files.Deploy(r.Context(), projectID, document)
 	if err != nil {
 		sendError(w, r, err)
 		return

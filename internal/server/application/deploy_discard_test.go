@@ -61,24 +61,21 @@ func mustRelease(t *testing.T, projectID uuid.UUID, commitNumber int) appdto.Rel
 	return appdto.Release{}
 }
 
-// mustReleaseAndDeploy publishes Commit commitNumber and makes it the running
-// Deployment: the two steps a Deploy takes since task 72_4.
-func mustReleaseAndDeploy(t *testing.T, projectID uuid.UUID, commitNumber int) appdto.Deployment {
+// mustDeployCommit makes the saved state commitNumber the running Deployment.
+func mustDeployCommit(t *testing.T, projectID uuid.UUID, commitNumber int) appdto.Deployment {
 	t.Helper()
-	ctx := context.Background()
-	released := mustRelease(t, projectID, commitNumber)
-	deployment, err := newReleaseService().Deploy(ctx, projectID, released.Number, "Ada")
+	deployment, err := newDeployService().Deploy(context.Background(), projectID, commitNumber)
 	if err != nil {
-		t.Fatalf("Deploy release %d: %v", released.Number, err)
+		t.Fatalf("Deploy saved state %d: %v", commitNumber, err)
 	}
 	return deployment
 }
 
-// mustDeployTheDraft saves the Draft as a Commit and deploys its Release.
+// mustDeployTheDraft saves the Draft as a Commit and deploys it.
 func mustDeployTheDraft(t *testing.T, projectID uuid.UUID) appdto.Deployment {
 	t.Helper()
 	saved := mustSaveCommit(t, projectID, "Deploy")
-	return mustReleaseAndDeploy(t, projectID, saved.Number)
+	return mustDeployCommit(t, projectID, saved.Number)
 }
 
 // newDiscardService returns the Engineering node's DiscardService over the
@@ -123,20 +120,16 @@ func mustCreateTag(t *testing.T, name, tagType string) appdto.Tag {
 	return created
 }
 
-// --- Deploy Release ---
+// --- Deploy a saved state ---
 
-func TestDeployRelease_CreatesADeployment(t *testing.T) {
+func TestDeployCommit_CreatesADeployment(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	ctx := context.Background()
 	created := mustCreateTag(t, "speed", "integer")
 	saved := mustSaveCommit(t, mainProject, "First save")
-	released, err := newReleaseService().Create(ctx, mainProject, saved.Number, "", "Ada")
-	if err != nil {
-		t.Fatalf("Create release: %v", err)
-	}
 
-	deployment, err := newReleaseService().Deploy(ctx, mainProject, released.Number, "Ada")
+	deployment, err := newDeployService().Deploy(ctx, mainProject, saved.Number)
 	if err != nil {
 		t.Fatalf("Deploy: %v", err)
 	}
@@ -146,8 +139,8 @@ func TestDeployRelease_CreatesADeployment(t *testing.T) {
 	if deployment.Cause != "deploy" || deployment.RolledBackFrom != nil {
 		t.Errorf("the cause of the Deployment is %q from %v, want a deploy", deployment.Cause, deployment.RolledBackFrom)
 	}
-	if deployment.ReleaseNumber == nil || *deployment.ReleaseNumber != released.Number {
-		t.Errorf("the deployment names release %v, want %d", deployment.ReleaseNumber, released.Number)
+	if deployment.CommitNumber == nil || *deployment.CommitNumber != saved.Number {
+		t.Errorf("the deployment names saved state %v, want %d", deployment.CommitNumber, saved.Number)
 	}
 	current, ok, err := newRuntimeNode().FindCurrentDeployment(ctx, mainProject)
 	if err != nil || !ok || current.Number != deployment.Number {
@@ -161,33 +154,32 @@ func TestDeployRelease_CreatesADeployment(t *testing.T) {
 	}
 }
 
-func TestDeployRelease_Repeated_IsRefused(t *testing.T) {
+func TestDeployCommit_Repeated_IsRefused(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	ctx := context.Background()
 	mustCreateTag(t, "speed", "integer")
 	saved := mustSaveCommit(t, mainProject, "First save")
-	released, err := newReleaseService().Create(ctx, mainProject, saved.Number, "", "Ada")
-	if err != nil {
-		t.Fatalf("Create release: %v", err)
-	}
-	if _, err := newReleaseService().Deploy(ctx, mainProject, released.Number, "Ada"); err != nil {
+	if _, err := newDeployService().Deploy(ctx, mainProject, saved.Number); err != nil {
 		t.Fatalf("Deploy: %v", err)
 	}
-	if _, err := newReleaseService().Deploy(ctx, mainProject, released.Number, "Ada"); !errors.Is(err, application.ErrNothingToDeploy) {
-		t.Errorf("a second Deploy of the same Release: %v, want ErrNothingToDeploy", err)
+	if _, err := newDeployService().Deploy(ctx, mainProject, saved.Number); !errors.Is(err, application.ErrNothingToDeploy) {
+		t.Errorf("a second Deploy of the same saved state: %v, want ErrNothingToDeploy", err)
 	}
 }
 
-func TestDeployRelease_Missing_IsNotFound(t *testing.T) {
+func TestDeployCommit_Missing_IsNotFound(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
-	if _, err := newReleaseService().Deploy(context.Background(), mainProject, 9, "Ada"); !errors.Is(err, release.ErrReleaseNotFound) {
-		t.Errorf("Deploy of a missing release: %v, want ErrReleaseNotFound", err)
+	if _, err := newDeployService().Deploy(context.Background(), mainProject, 9); !errors.Is(err, draft.ErrCommitNotFound) {
+		t.Errorf("Deploy of a missing saved state: %v, want ErrCommitNotFound", err)
+	}
+	if _, err := newDeployService().Deploy(context.Background(), mainProject, 0); !errors.Is(err, application.ErrInvalidInput) {
+		t.Errorf("Deploy of saved state 0: %v, want invalid input", err)
 	}
 }
 
-func TestDeployRelease_AChangedCommit_IsANewDeployment(t *testing.T) {
+func TestDeployCommit_AChangedCommit_IsANewDeployment(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	ctx := context.Background()
@@ -198,8 +190,8 @@ func TestDeployRelease_AChangedCommit_IsANewDeployment(t *testing.T) {
 		t.Fatalf("CreateWidget: %v", err)
 	}
 	first := mustDeployTheDraft(t, mainProject)
-	if first.ReleaseNumber == nil {
-		t.Fatalf("the first deployment: %+v, want its release", first)
+	if first.CommitNumber == nil {
+		t.Fatalf("the first deployment: %+v, want its saved state", first)
 	}
 
 	changed := testCreateWidgetInput
@@ -208,21 +200,19 @@ func TestDeployRelease_AChangedCommit_IsANewDeployment(t *testing.T) {
 		t.Fatalf("UpdateWidget: %v", err)
 	}
 	second := mustDeployTheDraft(t, mainProject)
-	if second.Number != first.Number+1 || second.ReleaseNumber == nil || *second.ReleaseNumber <= *first.ReleaseNumber {
-		t.Errorf("the second deployment: %+v, want the next Deployment of a later Release", second)
+	if second.Number != first.Number+1 || second.CommitNumber == nil || *second.CommitNumber <= *first.CommitNumber {
+		t.Errorf("the second deployment: %+v, want the next Deployment of a later saved state", second)
 	}
 }
 
-// TestCreateReleaseFromFile_DeploysTheFile: a file deployment publishes the
-// document as a Release with origin file and makes it the running Deployment
-// (task 72_4).
-func TestCreateReleaseFromFile_DeploysTheFile(t *testing.T) {
+// TestProjectFileService_Deploy_LeavesNoRelease: a file deployment is a
+// Deployment with no saved state, and it publishes no Release (task 85_4).
+func TestProjectFileService_Deploy_LeavesNoRelease(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	ctx := context.Background()
 	mustCreateTag(t, "speed", "integer")
-	content := contentOver(newScopes())
-	file, err := application.NewProjectFileBuilder(content).Build(ctx, mainProject)
+	file, err := application.NewProjectFileBuilder(contentOver(newScopes())).Build(ctx, mainProject)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -230,19 +220,88 @@ func TestCreateReleaseFromFile_DeploysTheFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
-	released, deployment, err := newReleaseService().CreateFromFile(ctx, mainProject, document, "", "")
+	deployment, err := newProjectFileService().Deploy(ctx, mainProject, document)
+	if err != nil {
+		t.Fatalf("Deploy: %v", err)
+	}
+	if deployment.Number < 1 || deployment.Cause != "file" || deployment.CommitNumber != nil {
+		t.Errorf("the deployment of the file: %+v, want a file Deployment with no saved state", deployment)
+	}
+	current, ok, err := newRuntimeNode().FindCurrentDeployment(ctx, mainProject)
+	if err != nil || !ok || current.CommitNumber != nil || current.Number != deployment.Number {
+		t.Errorf("the running deployment: %+v, %v, %v", current, ok, err)
+	}
+	releases, err := newReleaseService().List(ctx, mainProject)
+	if err != nil || len(releases) != 0 {
+		t.Errorf("the file deployment left Releases: %+v, %v, want none", releases, err)
+	}
+}
+
+// TestReleaseService_Deploy_DeploysTheSavedState: the Release route of before
+// task 85_5 deploys the saved state the Release published, so the refusal of a
+// running one is the same.
+func TestReleaseService_Deploy_DeploysTheSavedState(t *testing.T) {
+	cleanDevices(t)
+	cleanScenes(t)
+	ctx := context.Background()
+	mustCreateTag(t, "speed", "integer")
+	saved := mustSaveCommit(t, mainProject, "First save")
+	released := mustRelease(t, mainProject, saved.Number)
+
+	deployment, err := newReleaseService().Deploy(ctx, mainProject, released.Number, "Ada")
+	if err != nil {
+		t.Fatalf("Deploy: %v", err)
+	}
+	if deployment.CommitNumber == nil || *deployment.CommitNumber != saved.Number || deployment.Cause != "deploy" {
+		t.Errorf("the deployment of the Release: %+v, want saved state %d", deployment, saved.Number)
+	}
+	if _, err := newReleaseService().Deploy(ctx, mainProject, released.Number, "Ada"); !errors.Is(err, application.ErrNothingToDeploy) {
+		t.Errorf("a second Deploy of the Release: %v, want ErrNothingToDeploy", err)
+	}
+	if _, err := newReleaseService().Deploy(ctx, mainProject, 9, "Ada"); !errors.Is(err, release.ErrReleaseNotFound) {
+		t.Errorf("Deploy of a missing Release: %v, want ErrReleaseNotFound", err)
+	}
+}
+
+// TestReleaseService_Deploy_OfAFileRelease_StatesNoSavedState: a Release made
+// from a file before task 85_4 keeps deploying its content, and a second Deploy
+// of it is no refusal (the file is not compared).
+func TestReleaseService_Deploy_OfAFileRelease_StatesNoSavedState(t *testing.T) {
+	cleanDevices(t)
+	cleanScenes(t)
+	ctx := context.Background()
+	mustCreateTag(t, "speed", "integer")
+	file, err := application.NewProjectFileBuilder(contentOver(newScopes())).Build(ctx, mainProject)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	title, err := draft.NewCommitTitle("File")
+	if err != nil {
+		t.Fatalf("NewCommitTitle: %v", err)
+	}
+	note, err := release.NewNote("")
+	if err != nil {
+		t.Fatalf("NewNote: %v", err)
+	}
+	author, err := draft.NewAuthor("file")
+	if err != nil {
+		t.Fatalf("NewAuthor: %v", err)
+	}
+	scope := draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](mainProject)))
+	released, err := repositories.NewProjectReleaseRepositoryPostgres(testDB).CreateFromFile(ctx, scope, title, note, author,
+		draft.NewProjectCommitContent(file))
 	if err != nil {
 		t.Fatalf("CreateFromFile: %v", err)
 	}
-	if released.Origin != "file" || released.CommitNumber != 0 || released.Title != "File" || released.Author != "file" {
-		t.Errorf("the release of the file: %+v", released)
+	deployment, err := newReleaseService().Deploy(ctx, mainProject, released.Number().Int(), "Ada")
+	if err != nil {
+		t.Fatalf("Deploy: %v", err)
 	}
-	if deployment.Number < 1 || deployment.ReleaseNumber == nil || *deployment.ReleaseNumber != released.Number {
-		t.Errorf("the deployment of the file: %+v, want a Deployment of release %d", deployment, released.Number)
+	if deployment.CommitNumber != nil || deployment.Cause != "file" {
+		t.Errorf("the deployment of the file Release: %+v, want a file Deployment with no saved state", deployment)
 	}
-	current, ok, err := newRuntimeNode().FindCurrentDeployment(ctx, mainProject)
-	if err != nil || !ok || current.ReleaseNumber == nil || *current.ReleaseNumber != released.Number {
-		t.Errorf("the running deployment: %+v, %v, %v", current, ok, err)
+	if _, err := newReleaseService().Deploy(ctx, mainProject, released.Number().Int(), "Ada"); err != nil {
+		t.Errorf("a second Deploy of the same file: %v, want a new Deployment", err)
 	}
 }
 

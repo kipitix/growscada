@@ -2,7 +2,6 @@ package application_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -179,26 +178,32 @@ func newRuntime() (runtimeapp.TagStateService, application.RuntimeNode) {
 	return states, inprocess.NewRuntimeNode(states, tokens, deployments)
 }
 
-// deployProject publishes the Draft of the project as a Release and deploys it,
-// as the server does since task 72_4: a test that writes a Tag value deploys
+// deployProject saves the Draft of the project as a saved state and deploys it,
+// as the server does since task 85_4: a test that writes a Tag value deploys
 // first, or the Tag has no state to write.
 func deployProject(t *testing.T, projectID uuid.UUID) {
 	t.Helper()
-	content := contentOver(newScopes())
-	file, err := application.NewProjectFileBuilder(content).Build(context.Background(), projectID)
-	if err != nil {
-		t.Fatalf("build project %s: %v", projectID, err)
-	}
-	document, err := json.Marshal(file)
-	if err != nil {
-		t.Fatalf("encode project %s: %v", projectID, err)
-	}
-	service := application.NewReleaseService(content, repositories.NewProjectReleaseRepositoryPostgres(testDB),
-		newRuntimeNode(), repositories.NewLibraryRepositoryPostgres(testDB),
-		repositories.NewLibraryReleaseRepositoryPostgres(testDB))
-	if _, _, err := service.CreateFromFile(context.Background(), projectID, document, "test", "Deploy"); err != nil {
+	saved := mustSaveCommit(t, projectID, "Deploy")
+	if _, err := newDeployService().Deploy(context.Background(), projectID, saved.Number); err != nil {
+		if errors.Is(err, application.ErrNothingToDeploy) {
+			return
+		}
 		t.Fatalf("deploy project %s: %v", projectID, err)
 	}
+}
+
+// newDeployService returns the Engineering node's DeployService over the test
+// database.
+func newDeployService() application.DeployService {
+	return application.NewDeployService(contentOver(newScopes()), newRuntimeNode())
+}
+
+// newProjectFileService returns the Engineering node's ProjectFileService over
+// the test database.
+func newProjectFileService() application.ProjectFileService {
+	content := contentOver(newScopes())
+	return application.NewProjectFileService(content, application.NewProjectFileBuilder(content), newRuntimeNode(),
+		repositories.NewLibraryRepositoryPostgres(testDB), repositories.NewLibraryReleaseRepositoryPostgres(testDB))
 }
 
 // newServiceWithStates returns the tag service and the Runtime node's service

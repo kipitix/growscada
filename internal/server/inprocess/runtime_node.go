@@ -57,11 +57,11 @@ func (n runtimeNode) FindTagStates(ctx context.Context, projectID uuid.UUID, tag
 	return states, nil
 }
 
-func (n runtimeNode) DeployRelease(ctx context.Context, projectID uuid.UUID, releaseNumber int, file projectv0.ProjectFile) (appdto.Deployment, error) {
+func (n runtimeNode) DeployCommit(ctx context.Context, projectID uuid.UUID, commitNumber int, file projectv0.ProjectFile) (appdto.Deployment, error) {
 	if n.deployments == nil {
 		return appdto.Deployment{}, fmt.Errorf("runtime node serves no deployments")
 	}
-	deployment, err := n.deployments.DeployRelease(ctx, projectID, releaseNumber, file)
+	deployment, err := n.deployments.DeployCommit(ctx, projectID, commitNumber, file)
 	if errors.Is(err, runtimeapp.ErrNothingToDeploy) {
 		// The Engineering node's sentinel is the port's own: it imports no
 		// Runtime node package (ADR 0011).
@@ -122,7 +122,7 @@ func toAppdtoDeployment(deployment runtimeapp.Deployment) appdto.Deployment {
 		DeployedAt:     deployment.DeployedAt,
 		Cause:          string(deployment.Cause),
 		RolledBackFrom: deployment.RolledBackFrom,
-		ReleaseNumber:  deployment.ReleaseNumber,
+		CommitNumber:   deployment.CommitNumber,
 		Content:        deployment.Content,
 	}
 }

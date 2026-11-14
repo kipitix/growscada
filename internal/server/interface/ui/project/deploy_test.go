@@ -13,8 +13,8 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
 
-// deployDraft saves the Draft as a Commit, publishes it and deploys the
-// Release: a Deploy takes a Release since task 72_4.
+// deployDraft saves the Draft as a Commit and deploys it: a Deploy takes a
+// saved state since task 85_4.
 func deployDraft(t *testing.T, api *testAPI) apiv0.DeployResponse {
 	t.Helper()
 	ctx := context.Background()
@@ -26,21 +26,16 @@ func deployDraft(t *testing.T, api *testAPI) apiv0.DeployResponse {
 	if err != nil {
 		t.Fatalf("save commit: %v", err)
 	}
-	released, err := api.CreateRelease(ctx, apiv0.CreateProjectReleaseRequest{Commit: commit.Number, Author: "Ada"})
+	deployed, err := api.DeployCommit(ctx, commit.Number)
 	if err != nil {
-		t.Fatalf("release: %v", err)
-	}
-	deployed, err := api.DeployRelease(ctx, released.Number)
-	if err != nil {
-		t.Fatalf("deploy release: %v", err)
+		t.Fatalf("deploy saved state: %v", err)
 	}
 	return deployed
 }
 
-// TestDeployBar_ShowsTheDeploymentAndItsRelease: the bar starts at "Not
-// deployed", and after a Deploy it names the Deployment and the Release it
-// came from.
-func TestDeployBar_ShowsTheDeploymentAndItsRelease(t *testing.T) {
+// TestDeployBar_ShowsTheDeploymentAndItsSavedState: the bar starts at "Not
+// deployed", and after a Deploy it names the saved state it runs.
+func TestDeployBar_ShowsTheDeploymentAndItsSavedState(t *testing.T) {
 	f := startProject(t)
 
 	if !f.p.deploymentLoaded || f.p.deployed {
@@ -54,11 +49,11 @@ func TestDeployBar_ShowsTheDeploymentAndItsRelease(t *testing.T) {
 	f.p.loadDeploy(f.p.compoCtx)
 	f.run()
 	f.noToasts()
-	if !f.p.deployed || f.p.deployment.Number != 1 || f.p.deployment.ReleaseNumber == nil || *f.p.deployment.ReleaseNumber != 1 {
+	if !f.p.deployed || f.p.deployment.Number != 1 || f.p.deployment.CommitNumber == nil || *f.p.deployment.CommitNumber != 1 {
 		t.Fatalf("after Deploy: deployed %v, %+v", f.p.deployed, f.p.deployment)
 	}
-	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, "Release 1 · running") {
-		t.Errorf("the bar does not show Release 1 running: %s", html)
+	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, "Saved state #1 · running") {
+		t.Errorf("the bar does not show saved state 1 running: %s", html)
 	}
 }
 
@@ -67,7 +62,11 @@ func TestDeployBar_ShowsTheDeploymentAndItsRelease(t *testing.T) {
 func TestReleasesDialog_DeploysAReleaseAndMovesTheMark(t *testing.T) {
 	f := startProject(t)
 	deployDraft(t, f.api)
-	// A second Commit and Release, not deployed yet.
+	// The running saved state is published as Release 1, so the list has a
+	// running row; a second Commit and Release are not deployed yet.
+	if _, err := f.api.CreateRelease(context.Background(), apiv0.CreateProjectReleaseRequest{Commit: 1, Author: "Ada"}); err != nil {
+		t.Fatalf("release the running saved state: %v", err)
+	}
 	createScene(t, f.api, "Second")
 	state, err := f.api.DraftState(context.Background())
 	if err != nil {
@@ -98,8 +97,8 @@ func TestReleasesDialog_DeploysAReleaseAndMovesTheMark(t *testing.T) {
 	if got := f.oneToast(); !strings.Contains(got.Title, "Release 2 deployed") {
 		t.Errorf("the Deploy showed %+v, want its confirmation", got)
 	}
-	if f.p.deployment.ReleaseNumber == nil || *f.p.deployment.ReleaseNumber != 2 {
-		t.Fatalf("the running Release after the Deploy: %+v", f.p.deployment)
+	if f.p.deployment.CommitNumber == nil || *f.p.deployment.CommitNumber != 2 {
+		t.Fatalf("the running saved state after the Deploy: %+v", f.p.deployment)
 	}
 	html = app.HTMLString(f.p.Render())
 	if !strings.Contains(html, `data-release-running="2"`) || strings.Contains(html, `data-release-running="1"`) {
@@ -107,10 +106,10 @@ func TestReleasesDialog_DeploysAReleaseAndMovesTheMark(t *testing.T) {
 	}
 }
 
-// TestReleasesDialog_DeploymentWithoutRelease: a Deployment from a file, or one
-// made before Releases existed, is shown as "not a Release" and a Release is
-// offered (task 72_4).
-func TestReleasesDialog_DeploymentWithoutRelease(t *testing.T) {
+// TestReleasesDialog_DeploymentWithoutSavedState: a Deployment from a file, or
+// one made before saved states were deployed, is shown as one with no saved
+// state and a Release is offered (task 85_4).
+func TestReleasesDialog_DeploymentWithoutSavedState(t *testing.T) {
 	f := startProject(t)
 	f.p.deployed = true
 	f.p.deploymentLoaded = true
@@ -120,11 +119,11 @@ func TestReleasesDialog_DeploymentWithoutRelease(t *testing.T) {
 	f.p.deployDialog = true
 
 	html := app.HTMLString(f.p.Render())
-	if !strings.Contains(html, "Running Deployment 4 (not a Release)") {
-		t.Errorf("the list does not say the Deployment is not a Release: %s", html)
+	if !strings.Contains(html, "Running Deployment 4 (no saved state)") {
+		t.Errorf("the list does not say the Deployment has no saved state: %s", html)
 	}
-	if !strings.Contains(html, "Deployment 4 · not a Release") {
-		t.Errorf("the bar does not say the running Deployment is not a Release: %s", html)
+	if !strings.Contains(html, "Deployment 4 · no saved state") {
+		t.Errorf("the bar does not say the running Deployment has no saved state: %s", html)
 	}
 	if !strings.Contains(html, `data-release-deploy="1"`) {
 		t.Errorf("the list does not offer the Release for Deploy: %s", html)
@@ -136,6 +135,9 @@ func TestReleasesDialog_DeploymentWithoutRelease(t *testing.T) {
 func TestDeployRelease_ServerRefusalIsAToast(t *testing.T) {
 	f := startProject(t)
 	deployDraft(t, f.api)
+	if _, err := f.api.CreateRelease(context.Background(), apiv0.CreateProjectReleaseRequest{Commit: 1, Author: "Ada"}); err != nil {
+		t.Fatalf("release the running saved state: %v", err)
+	}
 	f.p.loadDeploy(f.p.compoCtx)
 	f.p.loadReleases(f.p.compoCtx)
 	f.run()
@@ -329,6 +331,9 @@ func (failDeploymentRead) RoundTrip(r *http.Request) (*http.Response, error) {
 func TestReleasesDialog_UnknownDeployment(t *testing.T) {
 	url, api := newServer(t)
 	deployDraft(t, api)
+	if _, err := api.CreateRelease(context.Background(), apiv0.CreateProjectReleaseRequest{Commit: 1, Author: "Ada"}); err != nil {
+		t.Fatalf("release the running saved state: %v", err)
+	}
 	f := mountWith(t, url, api, &http.Client{Transport: failDeploymentRead{}})
 	f.run()
 	f.e.TakeToasts() // the failed read of the Deployment is the toast of its load

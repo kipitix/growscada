@@ -9,9 +9,9 @@ http:
   auth: inherit
 
 docs: |
-  The Deployment the project runs: its number, its deployment time and the
-  ProjectFile it holds. Operation reads this document and nothing of the
-  Draft; `404` means the project was never deployed.
+  The Deployment the project runs: its number, the saved state it came from, its
+  deployment time and the ProjectFile it holds. Operation reads this document
+  and nothing of the Draft; `404` means the project was never deployed.
 
 runtime:
   assertions:
@@ -21,6 +21,9 @@ runtime:
     - expression: 'res.headers["growscada-schema-version"]'
       operator: isDefined
     - expression: 'res.body.number'
+      operator: eq
+      value: '1'
+    - expression: 'res.body.commit_number'
       operator: eq
       value: '1'
     - expression: 'res.body.content.project_id'

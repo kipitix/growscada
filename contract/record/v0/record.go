@@ -14,7 +14,7 @@ import (
 // SchemaVersion is the version of the operational record format this package
 // describes.
 // A function rather than a variable, so no importer can change it.
-func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 5} }
+func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 6} }
 
 // Header is the root of every record document: the SchemaVersion the rest of
 // the document follows. A reader checks it before anything else.
@@ -113,14 +113,14 @@ type TagState struct {
 
 // Deployment is the payload of a deployment entry: the Deployment that appeared.
 // The document itself is not part of the record — it is immutable in the
-// Runtime node's store, and the number addresses it (ADR 0014). ReleaseNumber
-// is the Project Release the Deployment made (task 72_4); absent for a
-// Deployment from a file or one made before Releases existed.
+// Runtime node's store, and the number addresses it (ADR 0014). CommitNumber is
+// the saved state the Deployment made running (task 85_4); absent for a
+// Deployment from a file or one made before saved states were deployed.
 type Deployment struct {
 	Number         int             `json:"number"`
 	Cause          DeploymentCause `json:"cause"`
 	RolledBackFrom *int            `json:"rolled_back_from,omitempty"`
-	ReleaseNumber  *int            `json:"release_number,omitempty"`
+	CommitNumber   *int            `json:"commit_number,omitempty"`
 }
 
 // Checkpoint is an immutable snapshot of a Project's operational state at a
@@ -156,7 +156,7 @@ type CheckpointTagState struct {
 // forever (ADR 0004, ADR 0019).
 type DeploymentCause string
 
-// The Deployment causes: a Deploy made it from a Project Release, a Rollback
+// The Deployment causes: a Deploy made it from a saved state, a Rollback
 // copied an earlier one, or a project file was deployed as it is (ADR 0014,
 // ADR 0018, task 72_4).
 const (

@@ -134,7 +134,7 @@ func newAPIEvent(e event.Event) apiv0.Event {
 		ev.ID = e.ProjectID().String()
 		ev.Deployment = e.Number()
 		ev.DeployedAt = deployedAt(e.DeployedAt())
-		ev.ReleaseNumber = e.ReleaseNumber()
+		ev.CommitNumber = e.CommitNumber()
 	case scene.SceneEvent:
 		ev.ID = e.SceneID().String()
 	case project.ProjectEvent:

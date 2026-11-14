@@ -177,8 +177,8 @@ func TestProjectFiles_OpenRefusals(t *testing.T) {
 	}
 }
 
-// TestProjectFiles_DeployFromFileAndRevert: a file is published as a Release
-// with origin file and deployed, the Draft is untouched, and a Revert of a
+// TestProjectFiles_DeployFromFileAndRevert: a file is deployed with no saved
+// state, the Draft is untouched, and a Revert of a
 // Deployment that names a Library Release this server does not have drops that
 // pin with the Widgets of its WidgetTypes and names it in warnings, so the
 // Draft stays writable (ADR 0018, task 71; task 72_4).
@@ -227,14 +227,14 @@ func TestProjectFiles_DeployFromFileAndRevert(t *testing.T) {
 
 	rec = serve(router, http.MethodGet, mainPath+"/deployments", nil)
 	list := decodeBody[apiv0.ListDeploymentsResponse](t, rec)
-	if len(list.Deployments) != 1 || list.Deployments[0].Cause != apiv0.DeploymentCauseDeploy ||
-		list.Deployments[0].ReleaseNumber == nil || *list.Deployments[0].ReleaseNumber != 1 {
+	if len(list.Deployments) != 1 || list.Deployments[0].Cause != apiv0.DeploymentCauseFile ||
+		list.Deployments[0].CommitNumber != nil {
 		t.Errorf("the history after a file deploy: %+v", list.Deployments)
 	}
 	rec = serve(router, http.MethodGet, mainPath+"/releases", nil)
 	releases := decodeBody[apiv0.GetReleasesResponse](t, rec)
-	if len(releases.Releases) != 1 || releases.Releases[0].Origin != apiv0.ReleaseOriginFile || releases.Releases[0].Title != "File" {
-		t.Errorf("the releases after a file deploy: %+v", releases.Releases)
+	if len(releases.Releases) != 0 {
+		t.Errorf("the file deploy left releases: %+v, want none", releases.Releases)
 	}
 
 	// A Revert restores what runs as far as this server can: the foreign pin

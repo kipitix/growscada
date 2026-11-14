@@ -32,6 +32,9 @@ runtime:
     - expression: 'res.body.deployments[0].cause'
       operator: eq
       value: '"deploy"'
+    - expression: 'res.body.deployments[0].commit_number'
+      operator: eq
+      value: '1'
 
 settings:
   encodeUrl: true

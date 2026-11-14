@@ -25,6 +25,15 @@ const CommitLoadPath = "/load"
 // Project or Library into its Draft.
 func CommitLoadPathOf(number int) string { return CommitPathOf(number) + CommitLoadPath }
 
+// CommitDeployPath is the command, under CommitPathOf, that makes the saved
+// state the Project's running Deployment (task 85_4): the Deployment is the
+// Commit's ProjectFile, and the Draft is not read.
+const CommitDeployPath = "/deploy"
+
+// CommitDeployPathOf is the path of the command that deploys the saved state
+// number of a Project.
+func CommitDeployPathOf(number int) string { return CommitPathOf(number) + CommitDeployPath }
+
 // CommitLabelsPath is the path, under CommitPathOf, of the labels a saved state
 // carries (task 85_3; ADR 0025): PUT places one label on the saved state and
 // DELETE takes it away, each idempotent and each stating no Draft Version.

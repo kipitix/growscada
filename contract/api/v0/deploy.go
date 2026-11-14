@@ -18,31 +18,31 @@ const (
 )
 
 // DeploymentResponse is the Deployment a Project runs: its number, when it was
-// deployed, why it exists, the Release it came from and the ProjectFile it
-// holds (task 35, task 72_4). GET /projects/{id}/deployment answers 404 until
+// deployed, why it exists, the saved state it came from and the ProjectFile it
+// holds (task 35, task 85_4). GET /projects/{id}/deployment answers 404 until
 // the Project's first Deploy. RolledBackFrom names the Deployment a Rollback
-// copied and is absent for a Deploy. ReleaseNumber is the Project Release the
-// Deployment made (nil for a Deployment from a file, or one made before task
-// 72_4). Nothing of the Draft is part of it: Operation reads this document
-// alone.
+// copied and is absent for a Deploy. CommitNumber is the saved state the
+// Deployment came from (nil for a Deployment from a file, or one made before
+// saved states were deployed). Nothing of the Draft is part of it: Operation
+// reads this document alone.
 type DeploymentResponse struct {
 	Number         int                   `json:"number"`
 	DeployedAt     string                `json:"deployed_at"`
 	Cause          DeploymentCause       `json:"cause"`
 	RolledBackFrom *int                  `json:"rolled_back_from,omitempty"`
-	ReleaseNumber  *int                  `json:"release_number,omitempty"`
+	CommitNumber   *int                  `json:"commit_number,omitempty"`
 	Content        projectv0.ProjectFile `json:"content"`
 }
 
 // DeploymentSummaryResponse names a Deployment without carrying its document: the
-// number, the time it was deployed, why it exists and the Release it came from
-// (task 72_4).
+// number, the time it was deployed, why it exists and the saved state it came
+// from (task 85_4).
 type DeploymentSummaryResponse struct {
 	Number         int             `json:"number"`
 	DeployedAt     string          `json:"deployed_at"`
 	Cause          DeploymentCause `json:"cause"`
 	RolledBackFrom *int            `json:"rolled_back_from,omitempty"`
-	ReleaseNumber  *int            `json:"release_number,omitempty"`
+	CommitNumber   *int            `json:"commit_number,omitempty"`
 }
 
 // ListDeploymentsResponse is the Project's Deployments, newest first (task 36). A
@@ -60,8 +60,8 @@ type MissingReleaseResponse struct {
 	Release   int       `json:"release"`
 }
 
-// DeployResponse is the answer of POST /projects/{id}/releases/{n}/deploy and
-// of a deploy of a project file: the Deployment the Deploy made.
+// DeployResponse is the answer of POST /projects/{id}/commits/{n}/deploy and
+// of a deploy of a project file: the Deployment the Deploy made (task 85_4).
 type DeployResponse struct {
 	Number     int    `json:"number"`
 	DeployedAt string `json:"deployed_at"`

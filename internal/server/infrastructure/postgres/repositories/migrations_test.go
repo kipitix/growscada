@@ -936,3 +936,166 @@ func TestMigrationLabels_SeedsTwoOrdinaryLabels(t *testing.T) {
 		t.Errorf("the seed labels: %v, want ready_for_deploy and ready_for_import", names)
 	}
 }
+
+// TestMigrationDeploymentCommitNumber_ReadsTheSavedStatesBack: a Deployment
+// names the saved state it deployed, not the Release that published it (task
+// 85_4). The backfill reads the commit-backed Release of each Deployment, the
+// Journal entries and the Checkpoints are rewritten to the record's 0.6 and the
+// Release column goes; the Down puts the Release numbers back.
+func TestMigrationDeploymentCommitNumber_ReadsTheSavedStatesBack(t *testing.T) {
+	ctx := context.Background()
+	db, dir := migrationDB(t)
+	const main = "b0000000-0000-4000-8000-000000000001"
+	if err := goose.UpToContext(ctx, db, dir, rolesBaseline); err != nil {
+		t.Fatalf("migrate public: %v", err)
+	}
+	engineering, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS(filepath.Join(dir, "..", "engineering")),
+		goose.WithTableName("engineering.goose_db_version"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engineering.UpTo(ctx, 20261109000001); err != nil {
+		t.Fatalf("migrate engineering to the project releases: %v", err)
+	}
+	deployments, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS(filepath.Join(dir, "..", "runtime")),
+		goose.WithTableName("runtime.goose_db_version"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := deployments.UpTo(ctx, 20261111000000); err != nil {
+		t.Fatalf("migrate runtime to the checkpoints: %v", err)
+	}
+	mustExec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := db.ExecContext(ctx, query, args...); err != nil {
+			t.Fatalf("%s: %v", query, err)
+		}
+	}
+	mustExec(`INSERT INTO projects (id, organization_id, name)
+	          SELECT $1, id, 'Main' FROM organizations
+	          ON CONFLICT (id) DO NOTHING`, main)
+	// Release 1 published Commit 7; Release 2 came from a file and names none.
+	mustExec(`INSERT INTO engineering.project_releases
+	          (id, project_id, number, commit_number, commit_title, note, author, created_at, origin, content)
+	          VALUES ($1, $2, 1, 7, 'Ready', NULL, 'Ada', now(), 'commit', '{}'),
+	                 ($3, $2, 2, NULL, NULL, NULL, 'file', now(), 'file', '{}')`, uuid.New(), main, uuid.New())
+	// Deployment 1 deployed Release 1; Deployment 2 deployed the file Release 2;
+	// Deployment 3 is a Rollback that copied Deployment 2.
+	mustExec(`INSERT INTO runtime.deployments (project_id, number, deployed_at, cause, rolled_back_from, release_number, config)
+	          VALUES ($1, 1, now(), 'deploy', NULL, 1, '{}'),
+	                 ($1, 2, now(), 'deploy', NULL, 2, '{}'),
+	                 ($1, 3, now(), 'rollback', 2, 2, '{}')`, main)
+	mustExec(`INSERT INTO runtime.journal (project_id, ts, type, payload, schema_version)
+	          VALUES ($1, now(), 'tag_state', '{"tag_id":"11111111-1111-1111-1111-111111111111","value":"1","quality":"good"}', '0.5'),
+	                 ($1, now(), 'deployment', '{"number":1,"cause":"deploy","release_number":1}', '0.5'),
+	                 ($1, now(), 'deployment', '{"number":2,"cause":"deploy","release_number":2}', '0.5'),
+	                 ($1, now(), 'deployment', '{"number":3,"cause":"rollback","rolled_back_from":2,"release_number":2}', '0.5')`, main)
+	mustExec(`INSERT INTO runtime.checkpoints (project_id, seq, taken_at, schema_version, payload)
+	          VALUES ($1, 3, now(), '0.5', '{"deployment":{"number":1,"cause":"deploy","release_number":1},"tag_states":[]}'),
+	                 ($1, 4, now(), '0.5', '{"deployment":{"number":2,"cause":"deploy","release_number":2},"tag_states":[]}')`, main)
+
+	if _, err := deployments.UpTo(ctx, 20261114000002); err != nil {
+		t.Fatalf("migrate the saved state of a Deployment: %v", err)
+	}
+
+	for number, want := range map[int]sql.NullInt64{1: {Int64: 7, Valid: true}, 2: {}, 3: {}} {
+		var got sql.NullInt64
+		if err := db.QueryRowContext(ctx,
+			`SELECT commit_number FROM runtime.deployments WHERE project_id = $1 AND number = $2`, main, number,
+		).Scan(&got); err != nil {
+			t.Fatalf("read the deployment %d: %v", number, err)
+		}
+		if got.Valid != want.Valid || (got.Valid && got.Int64 != want.Int64) {
+			t.Errorf("deployment %d names saved state %v, want %v", number, got, want)
+		}
+	}
+	var columns int
+	if err := db.QueryRowContext(ctx,
+		`SELECT count(*) FROM information_schema.columns
+		 WHERE table_schema = 'runtime' AND table_name = 'deployments' AND column_name = 'release_number'`,
+	).Scan(&columns); err != nil || columns != 0 {
+		t.Errorf("the Release column is left: %d, %v", columns, err)
+	}
+	var journalCommit, journalSchema string
+	var journalRelease sql.NullString
+	if err := db.QueryRowContext(ctx,
+		`SELECT payload ->> 'commit_number', schema_version, payload ->> 'release_number'
+		 FROM runtime.journal WHERE project_id = $1 AND payload ->> 'number' = '1'`, main,
+	).Scan(&journalCommit, &journalSchema, &journalRelease); err != nil {
+		t.Fatalf("read the journal entry: %v", err)
+	}
+	if journalCommit != "7" || journalSchema != "0.6" || journalRelease.Valid {
+		t.Errorf("the journal entry: saved state %q, schema %q, release %v; want 7, 0.6 and none",
+			journalCommit, journalSchema, journalRelease)
+	}
+	var fileRelease sql.NullString
+	if err := db.QueryRowContext(ctx,
+		`SELECT payload ->> 'release_number' FROM runtime.journal
+		 WHERE project_id = $1 AND payload ->> 'number' = '2'`, main,
+	).Scan(&fileRelease); err != nil || fileRelease.Valid {
+		t.Errorf("the file deployment's entry keeps a Release: %v, %v", fileRelease, err)
+	}
+	var tagSchema string
+	if err := db.QueryRowContext(ctx,
+		`SELECT schema_version FROM runtime.journal WHERE project_id = $1 AND type = 'tag_state'`, main,
+	).Scan(&tagSchema); err != nil || tagSchema != "0.5" {
+		t.Errorf("a tag_state entry changed its schema: %q, %v", tagSchema, err)
+	}
+	var checkpointCommit, checkpointSchema string
+	var checkpointRelease sql.NullString
+	if err := db.QueryRowContext(ctx,
+		`SELECT payload -> 'deployment' ->> 'commit_number', schema_version, payload -> 'deployment' ->> 'release_number'
+		 FROM runtime.checkpoints WHERE project_id = $1 AND seq = 3`, main,
+	).Scan(&checkpointCommit, &checkpointSchema, &checkpointRelease); err != nil {
+		t.Fatalf("read the checkpoint: %v", err)
+	}
+	if checkpointCommit != "7" || checkpointSchema != "0.6" || checkpointRelease.Valid {
+		t.Errorf("the checkpoint: saved state %q, schema %q, release %v; want 7, 0.6 and none",
+			checkpointCommit, checkpointSchema, checkpointRelease)
+	}
+	var fileCheckpointCommit sql.NullString
+	if err := db.QueryRowContext(ctx,
+		`SELECT payload -> 'deployment' ->> 'commit_number'
+		 FROM runtime.checkpoints WHERE project_id = $1 AND seq = 4`, main,
+	).Scan(&fileCheckpointCommit); err != nil || fileCheckpointCommit.Valid {
+		t.Errorf("the file checkpoint names saved state %v: %v", fileCheckpointCommit, err)
+	}
+
+	// Down: the Release numbers come back from the Releases, and the payloads
+	// are the record's 0.5 again.
+	if _, err := deployments.DownTo(ctx, 20261111000000); err != nil {
+		t.Fatalf("migrate the saved state of a Deployment down: %v", err)
+	}
+	// A file Deployment named a Release made from a file, and a file Release
+	// names no Commit: the down restores the commit-backed ones alone (the
+	// file Deploy of task 85_4 leaves no Release to name).
+	for number, want := range map[int]sql.NullInt64{1: {Int64: 1, Valid: true}, 2: {}, 3: {}} {
+		var got sql.NullInt64
+		if err := db.QueryRowContext(ctx,
+			`SELECT release_number FROM runtime.deployments WHERE project_id = $1 AND number = $2`, main, number,
+		).Scan(&got); err != nil {
+			t.Fatalf("read deployment %d after the down: %v", number, err)
+		}
+		if got.Valid != want.Valid || (got.Valid && got.Int64 != want.Int64) {
+			t.Errorf("deployment %d names release %v after the down, want %v", number, got, want)
+		}
+	}
+	if err := db.QueryRowContext(ctx,
+		`SELECT payload ->> 'release_number', schema_version
+		 FROM runtime.journal WHERE project_id = $1 AND payload ->> 'number' = '1'`, main,
+	).Scan(&journalRelease, &journalSchema); err != nil {
+		t.Fatalf("read the journal entry after the down: %v", err)
+	}
+	if !journalRelease.Valid || journalRelease.String != "1" || journalSchema != "0.5" {
+		t.Errorf("the journal entry after the down: release %v, schema %q, want 1 and 0.5", journalRelease, journalSchema)
+	}
+	if err := db.QueryRowContext(ctx,
+		`SELECT payload -> 'deployment' ->> 'release_number', schema_version
+		 FROM runtime.checkpoints WHERE project_id = $1 AND seq = 3`, main,
+	).Scan(&checkpointRelease, &checkpointSchema); err != nil {
+		t.Fatalf("read the checkpoint after the down: %v", err)
+	}
+	if !checkpointRelease.Valid || checkpointRelease.String != "1" || checkpointSchema != "0.5" {
+		t.Errorf("the checkpoint after the down: release %v, schema %q, want 1 and 0.5", checkpointRelease, checkpointSchema)
+	}
+}

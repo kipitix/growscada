@@ -10,21 +10,23 @@ import (
 )
 
 // DeployHandlers handles the deployment of a Project: the Deployment it runs,
-// the snapshot of its Tag states, Discard and Revert (task 35, part 5; task
-// 72_4). The Deployment and the Tag states are the Runtime node's; Discard and
-// Revert are the Engineering node's. A Deploy of a Release is served by the
-// Release handlers, and the old Deploy of the Draft answers 410.
+// the snapshot of its Tag states, a Deploy of a saved state, Discard and Revert
+// (task 35, part 5; task 85_4). The Deployment and the Tag states are the
+// Runtime node's; a Deploy of a saved state, Discard and Revert are the
+// Engineering node's. A Deploy of a Release is served by the Release handlers
+// until task 85_5, and the old Deploy of the Draft answers 410.
 type DeployHandlers struct {
 	discard     application.DiscardService
+	deploys     application.DeployService
 	deployments runtimeapp.DeploymentService
 	states      runtimeapp.TagStateService
 }
 
 // NewDeployHandler creates the handler over the Engineering node's Discard and
-// Revert services and the Runtime node's Deployments and Tag states.
-func NewDeployHandler(discard application.DiscardService,
+// Deploy services and the Runtime node's Deployments and Tag states.
+func NewDeployHandler(discard application.DiscardService, deploys application.DeployService,
 	deployments runtimeapp.DeploymentService, states runtimeapp.TagStateService) *DeployHandlers {
-	return &DeployHandlers{discard: discard, deployments: deployments, states: states}
+	return &DeployHandlers{discard: discard, deploys: deploys, deployments: deployments, states: states}
 }
 
 // currentDeployment returns the Deployment the Project runs, answering 404 itself
@@ -136,12 +138,35 @@ func (h DeployHandlers) PostCommitLoad(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusOK, newLoadCommitResponse(loaded))
 }
 
+// PostCommitDeploy handles POST /projects/{project_id}/commits/{commit_number}/deploy:
+// it makes the saved state the Project's running Deployment, its content taken
+// from the Commit alone (task 85_4). 201 with the new Deployment; 404 for the
+// Project or a Commit number it does not have; 409 nothing_to_deploy when that
+// saved state is the running one. No Draft Version is stated: a Commit is
+// immutable.
+func (h DeployHandlers) PostCommitDeploy(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := pathUUID(w, r, projectResource)
+	if !ok {
+		return
+	}
+	number, ok := pathInt(w, r, commitResource)
+	if !ok {
+		return
+	}
+	deployed, err := h.deploys.Deploy(r.Context(), projectID, number)
+	if err != nil {
+		sendError(w, r, err)
+		return
+	}
+	sendJSONResponse(w, http.StatusCreated, newDeployResponse(deployed))
+}
+
 // deployDraftRemoved answers POST /projects/{project_id}/deploy: a Deploy took
-// the Draft before task 72_4 and takes a Release now. The route stays, answering
-// 410, so an old tab or tool learns the order instead of getting a bare 404;
-// it is removed when the API reaches 1.0.
+// the Draft before task 72_4 and takes a saved state now. The route stays,
+// answering 410, so an old tab or tool learns the order instead of getting a
+// bare 404; it is removed when the API reaches 1.0.
 func deployDraftRemoved(w http.ResponseWriter, r *http.Request) {
 	sendProblem(w, NewGone(
-		"A Deploy takes a Release: Save → Release → Deploy (POST "+"/projects/{project_id}/releases/{release_number}/deploy)",
+		"A Deploy takes a saved state: Save → Deploy (POST "+"/projects/{project_id}/commits/{commit_number}/deploy)",
 		r.URL.Path))
 }

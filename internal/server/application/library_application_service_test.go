@@ -139,20 +139,20 @@ func TestLibraryService_DeleteRefusedWhileARunningDeploymentNamesIt(t *testing.T
 
 	// A new Deployment without the pin leaves the library in history alone: a
 	// Commit or an old Deployment does not keep it. A Project Release of that
-	// Commit copies the pins but does not keep it either.
+	// Commit copies the pins but does not keep it either. The Deploy saved the
+	// Draft it deployed, so its Commit is the history's newest one.
 	deployProject(t, mainProject)
-	saved, err := newCommitService().Save(ctx,
-		draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](mainProject))),
-		draftVersionOf(t, mainProject), "With the library", "Ada")
-	if err != nil {
-		t.Fatalf("Save: %v", err)
+	scope := draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](mainProject)))
+	commits, err := newCommitService().List(ctx, scope, uuid.Nil)
+	if err != nil || len(commits) == 0 {
+		t.Fatalf("List commits: %+v, %v", commits, err)
 	}
 	// The test needs a Project Release of this Commit; a release left by
 	// another test of the same Project names another Commit.
 	if _, err := testDB.ExecContext(ctx, "DELETE FROM engineering.project_releases WHERE project_id = $1", mainProject); err != nil {
 		t.Fatalf("clean releases: %v", err)
 	}
-	if _, err := newReleaseService().Create(ctx, mainProject, saved.Number, "", "Ada"); err != nil {
+	if _, err := newReleaseService().Create(ctx, mainProject, commits[0].Number, "", "Ada"); err != nil {
 		t.Fatalf("Create release: %v", err)
 	}
 	if _, err := r.libSvc.DeleteLibraryByID(ctx, libraryID); err != nil {

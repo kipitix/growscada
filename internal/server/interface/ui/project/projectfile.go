@@ -155,7 +155,6 @@ func (p *Project) doDeployProjectFile(ctx app.Context, pending *pendingProjectFi
 		p.projectFileBusy = false
 		p.closeProjectFileDialog()
 		p.loadDeploy(ctx)
-		p.loadReleases(ctx) // the file became a Release (task 72_4)
 		if p.deploymentsDialog {
 			p.loadDeployments(ctx)
 		}
@@ -336,8 +335,8 @@ func (p *Project) currentDeploymentText() string {
 	}
 	text := fmt.Sprintf("Current deployment: %d, deployed %s.",
 		p.deployment.Number, formatDeployedAt(p.deployment.DeployedAt))
-	if p.deployment.ReleaseNumber != nil {
-		text += fmt.Sprintf(" It carries Release %d.", *p.deployment.ReleaseNumber)
+	if p.deployment.CommitNumber != nil {
+		text += fmt.Sprintf(" It runs saved state %d.", *p.deployment.CommitNumber)
 	}
 	return text
 }

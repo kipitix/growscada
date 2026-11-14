@@ -685,7 +685,7 @@ func newDeploymentResponse(deployment runtimeapp.Deployment) apiv0.DeploymentRes
 		DeployedAt:     deployedAt(deployment.DeployedAt),
 		Cause:          apiv0.DeploymentCause(deployment.Cause),
 		RolledBackFrom: deployment.RolledBackFrom,
-		ReleaseNumber:  deployment.ReleaseNumber,
+		CommitNumber:   deployment.CommitNumber,
 		Content:        deployment.Content,
 	}
 }
@@ -704,7 +704,7 @@ func newDeploymentSummary(summary runtimeapp.DeploymentSummary) apiv0.Deployment
 		DeployedAt:     deployedAt(summary.DeployedAt),
 		Cause:          apiv0.DeploymentCause(summary.Cause),
 		RolledBackFrom: summary.RolledBackFrom,
-		ReleaseNumber:  summary.ReleaseNumber,
+		CommitNumber:   summary.CommitNumber,
 	}
 }
 

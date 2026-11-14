@@ -62,6 +62,7 @@ var requestBodies = map[string]any{
 	"POST " + projectPrefix + apiv0.CommitPath:                                                                                            apiv0.CreateCommitRequest{},
 	"PATCH " + projectPrefix + apiv0.CommitPath + "/" + commitResource.wildcard():                                                         apiv0.RenameCommitRequest{},
 	"POST " + projectPrefix + apiv0.CommitPath + "/" + commitResource.wildcard() + apiv0.CommitLoadPath:                                   nil,
+	"POST " + projectPrefix + apiv0.CommitPath + "/" + commitResource.wildcard() + apiv0.CommitDeployPath:                                 nil,
 	"POST " + projectPrefix + apiv0.ReleasePath:                                                                                           apiv0.CreateProjectReleaseRequest{},
 	"POST " + projectPrefix + apiv0.ReleasePath + "/" + projectReleaseResource.wildcard() + "/deploy":                                     nil,
 	"PATCH " + projectPrefix + apiv0.ReleasePath + "/" + projectReleaseResource.wildcard():                                                apiv0.UpdateReleaseNoteRequest{},

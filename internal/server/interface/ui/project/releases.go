@@ -44,11 +44,19 @@ func (p *Project) openDeployDialog(ctx app.Context) {
 	ctx.Update()
 }
 
-// isRunningRelease reports whether the Release number is the one the running
-// Deployment came from. A Deployment from a file, or one made before Releases
-// existed, matches no Release (task 72_4).
+// isRunningRelease reports whether the Release number published the saved state
+// the running Deployment came from. A Deployment from a file, or one made
+// before saved states were deployed, matches no Release (task 85_4).
 func (p *Project) isRunningRelease(number int) bool {
-	return p.deployed && p.deployment.ReleaseNumber != nil && *p.deployment.ReleaseNumber == number
+	if !p.deployed || p.deployment.CommitNumber == nil {
+		return false
+	}
+	for _, released := range p.releases {
+		if released.Number == number {
+			return released.CommitNumber == *p.deployment.CommitNumber
+		}
+	}
+	return false
 }
 
 // deployRelease makes Release number the running Deployment, after the
@@ -274,12 +282,12 @@ func (p *Project) renderDeployDialog() app.UI {
 			Style("margin", "0 0 6px").
 			Style("color", "var(--toast-warn-title)").
 			Text("The running Release cannot be checked: the Deployment of the project cannot be read."))
-	case p.deployed && p.deployment.ReleaseNumber == nil:
+	case p.deployed && p.deployment.CommitNumber == nil:
 		rows = append(rows, app.P().
 			Attr("data-release-running-deployment", "true").
 			Style("margin", "0 0 6px").
 			Style("color", "var(--toast-warn-title)").
-			Text(fmt.Sprintf("Running Deployment %d (not a Release): choose a Release to deploy.",
+			Text(fmt.Sprintf("Running Deployment %d (no saved state): choose a Release to deploy.",
 				p.deployment.Number)))
 	}
 	switch {

@@ -20,8 +20,7 @@ import (
 // database.
 func newReleaseService() application.ReleaseService {
 	return application.NewReleaseService(contentOver(newScopes()), repositories.NewProjectReleaseRepositoryPostgres(testDB),
-		newRuntimeNode(), repositories.NewLibraryRepositoryPostgres(testDB),
-		repositories.NewLibraryReleaseRepositoryPostgres(testDB))
+		newRuntimeNode(), newDeployService())
 }
 
 // TestReleaseService_CreateListFindNoteAndFile: a Commit is published once,
@@ -137,8 +136,7 @@ func TestReleaseService_ListNeedsNoRuntime(t *testing.T) {
 	}
 
 	service := application.NewReleaseService(contentOver(newScopes()),
-		repositories.NewProjectReleaseRepositoryPostgres(testDB), nil,
-		repositories.NewLibraryRepositoryPostgres(testDB), repositories.NewLibraryReleaseRepositoryPostgres(testDB))
+		repositories.NewProjectReleaseRepositoryPostgres(testDB), nil, newDeployService())
 	list, err := service.List(ctx, projectID)
 	if err != nil || len(list) != 1 || list[0].Number != 1 {
 		t.Errorf("List without a Runtime node: %+v, %v", list, err)

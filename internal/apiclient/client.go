@@ -1027,10 +1027,10 @@ func (l *LibraryClient) commitLabel(ctx context.Context, method string, number i
 type DeploymentState struct {
 	Deployment apiv0.DeploymentResponse
 	Deployed   bool
-	// ReleaseNumber is the Project Release the running Deployment made; nil
-	// for a Deployment from a file or one made before Releases existed
-	// (task 72_4).
-	ReleaseNumber *int
+	// CommitNumber is the saved state the running Deployment came from; nil
+	// for a Deployment from a file or one made before saved states were
+	// deployed (task 85_4).
+	CommitNumber *int
 }
 
 // Deployment returns the Deployment the project runs. Deployed is false when the
@@ -1042,7 +1042,7 @@ func (p *ProjectClient) Deployment(ctx context.Context) (DeploymentState, error)
 	if errors.Is(err, ErrNotFound) {
 		return DeploymentState{}, nil
 	}
-	return DeploymentState{Deployment: resp, Deployed: err == nil, ReleaseNumber: resp.ReleaseNumber}, err
+	return DeploymentState{Deployment: resp, Deployed: err == nil, CommitNumber: resp.CommitNumber}, err
 }
 
 // TagStates returns the states of the Tags of the running Deployment, by Tag ID:
@@ -1092,9 +1092,19 @@ func (p *ProjectClient) Journal(ctx context.Context, from int64, limit int) ([]r
 	return resp.Entries, err
 }
 
+// DeployCommit makes saved state number the Project's running Deployment (task
+// 85_4). The error matches ErrConflict if that saved state runs already and
+// ErrNotFound for a Commit the Project does not have.
+func (p *ProjectClient) DeployCommit(ctx context.Context, number int) (apiv0.DeployResponse, error) {
+	var resp apiv0.DeployResponse
+	err := p.do(ctx, http.MethodPost, apiv0.CommitDeployPathOf(number), nil, http.StatusCreated, &resp)
+	return resp, err
+}
+
 // DeployRelease makes Release number the Project's running Deployment (task
-// 72_4). The error matches ErrConflict if that Release runs already and
-// ErrNotFound for a Release the Project does not have.
+// 72_4, kept until task 85_5 moves the UI to DeployCommit). The error matches
+// ErrConflict if that Release runs already and ErrNotFound for a Release the
+// Project does not have.
 func (p *ProjectClient) DeployRelease(ctx context.Context, number int) (apiv0.DeployResponse, error) {
 	var resp apiv0.DeployResponse
 	err := p.do(ctx, http.MethodPost, apiv0.ReleaseDeployPathOf(number), nil, http.StatusCreated, &resp)

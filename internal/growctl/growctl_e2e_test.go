@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -1051,9 +1050,8 @@ func TestSaveReleaseDeploy_Project(t *testing.T) {
 		t.Errorf("a deploy of the running Release must fail, stderr %q", stderr)
 	}
 	running, err := apiclient.New(srv.URL, srv.Client()).Project(servertest.MainProject).Deployment(context.Background())
-	number, _ := strconv.Atoi(releaseNumber)
-	if err != nil || !running.Deployed || running.ReleaseNumber == nil || *running.ReleaseNumber != number {
-		t.Errorf("the running Deployment must have Release %d: %+v, %v", number, running, err)
+	if err != nil || !running.Deployed || running.CommitNumber == nil || *running.CommitNumber != 1 {
+		t.Errorf("the running Deployment must be saved state 1: %+v, %v", running, err)
 	}
 }
 

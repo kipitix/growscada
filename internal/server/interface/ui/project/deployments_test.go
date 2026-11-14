@@ -51,7 +51,7 @@ func TestDeploymentsDialog_ListsTheDeploymentsAndMarksTheRunningOne(t *testing.T
 	f.run()
 	f.noToasts()
 	html := app.HTMLString(f.p.Render())
-	for _, want := range []string{`data-deployment-row="1"`, `data-deployment-row="2"`, "Deployed", `data-deployment-current`, "Release 2"} {
+	for _, want := range []string{`data-deployment-row="1"`, `data-deployment-row="2"`, "Deployed", `data-deployment-current`, "Saved state #2"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("the list does not show %s: %s", want, html)
 		}
@@ -105,7 +105,8 @@ func TestDeploymentCreatedEventReloadsTheReleaseList(t *testing.T) {
 	if _, err := api.SaveCommit(context.Background(), apiv0.CreateCommitRequest{Version: state.Version, Title: "Second", Author: "Ada"}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	if _, err := api.CreateRelease(context.Background(), apiv0.CreateProjectReleaseRequest{Commit: 2, Author: "Ada"}); err != nil {
+	released, err := api.CreateRelease(context.Background(), apiv0.CreateProjectReleaseRequest{Commit: 2, Author: "Ada"})
+	if err != nil {
 		t.Fatalf("release: %v", err)
 	}
 	f := mount(t, url, api)
@@ -114,7 +115,7 @@ func TestDeploymentCreatedEventReloadsTheReleaseList(t *testing.T) {
 	f.p.loadDeploy(f.p.compoCtx)
 	f.run()
 
-	if _, err := api.DeployRelease(context.Background(), 2); err != nil {
+	if _, err := api.DeployRelease(context.Background(), released.Number); err != nil {
 		t.Fatalf("deploy release: %v", err)
 	}
 	f.event(apiv0.Event{Type: apiv0.EventDeploymentCreated})
@@ -122,7 +123,7 @@ func TestDeploymentCreatedEventReloadsTheReleaseList(t *testing.T) {
 	f.noToasts()
 
 	html := app.HTMLString(f.p.Render())
-	if !strings.Contains(html, `data-release-running="2"`) {
+	if !strings.Contains(html, `data-release-running="1"`) {
 		t.Errorf("the release list did not follow the Deployment: %s", html)
 	}
 }

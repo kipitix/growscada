@@ -212,16 +212,16 @@ func currentDeploymentRef(ctx context.Context, tx *sql.Tx, projectID uuid.UUID) 
 		number         int
 		cause          string
 		rolledBackFrom sql.NullInt64
-		releaseNumber  sql.NullInt64
+		commitNumber   sql.NullInt64
 	)
 	err := tx.QueryRowContext(ctx,
-		`SELECT number, cause, rolled_back_from, release_number
+		`SELECT number, cause, rolled_back_from, commit_number
 		 FROM runtime.deployments
 		 WHERE project_id = $1
 		 ORDER BY number DESC
 		 LIMIT 1`,
 		projectID,
-	).Scan(&number, &cause, &rolledBackFrom, &releaseNumber)
+	).Scan(&number, &cause, &rolledBackFrom, &commitNumber)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -232,6 +232,6 @@ func currentDeploymentRef(ctx context.Context, tx *sql.Tx, projectID uuid.UUID) 
 		Number:         number,
 		Cause:          recordv0.DeploymentCause(cause),
 		RolledBackFrom: nullableInt(rolledBackFrom),
-		ReleaseNumber:  nullableInt(releaseNumber),
+		CommitNumber:   nullableInt(commitNumber),
 	}, nil
 }

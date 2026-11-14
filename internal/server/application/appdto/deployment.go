@@ -17,6 +17,6 @@ type Deployment struct {
 	DeployedAt     time.Time
 	Cause          string
 	RolledBackFrom *int
-	ReleaseNumber  *int
+	CommitNumber   *int
 	Content        projectv0.ProjectFile
 }

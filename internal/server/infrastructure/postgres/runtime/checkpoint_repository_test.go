@@ -116,10 +116,10 @@ func TestCreateDeployment_WritesACheckpointAtTheDeploymentEntry(t *testing.T) {
 	ctx := context.Background()
 	tagID := uuid.New()
 	file := documentOf(projectID, withTags(projectv0.TagDefinition{ID: tagID, Name: "speed", Type: "integer"}))
-	releaseNumber := 5
+	commitNumber := 5
 	at := time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)
 
-	deployment, err := repo.CreateDeployment(ctx, projectID.UUID(), file, runtimeapp.DeploymentCauseDeploy, &releaseNumber, at)
+	deployment, err := repo.CreateDeployment(ctx, projectID.UUID(), file, runtimeapp.DeploymentCauseDeploy, &commitNumber, at)
 	if err != nil {
 		t.Fatalf("CreateDeployment: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestCreateDeployment_WritesACheckpointAtTheDeploymentEntry(t *testing.T) {
 	payload := payloadOf(t, checkpoint)
 	if payload.Deployment == nil || payload.Deployment.Number != deployment.Number ||
 		payload.Deployment.Cause != recordv0.DeploymentCauseDeploy ||
-		payload.Deployment.ReleaseNumber == nil || *payload.Deployment.ReleaseNumber != releaseNumber ||
+		payload.Deployment.CommitNumber == nil || *payload.Deployment.CommitNumber != commitNumber ||
 		payload.Deployment.RolledBackFrom != nil {
 		t.Errorf("deployment payload %+v", payload.Deployment)
 	}
@@ -160,7 +160,7 @@ func TestCreateDeployment_WritesACheckpointAtTheDeploymentEntry(t *testing.T) {
 }
 
 // TestCreateDeployment_FileWritesACheckpoint: a Deploy of a project file is a
-// Deployment too, with cause file and no Release (ADR 0018, task 44).
+// Deployment too, with cause file and no saved state (ADR 0018, task 44).
 func TestCreateDeployment_FileWritesACheckpoint(t *testing.T) {
 	projectID, _ := newProject(t)
 	repo := runtimepg.NewDeploymentRepositoryPostgres(postgres.DB(t))
@@ -180,7 +180,7 @@ func TestCreateDeployment_FileWritesACheckpoint(t *testing.T) {
 	}
 	payload := payloadOf(t, checkpoints[0])
 	if payload.Deployment == nil || payload.Deployment.Number != deployment.Number ||
-		payload.Deployment.Cause != recordv0.DeploymentCauseFile || payload.Deployment.ReleaseNumber != nil {
+		payload.Deployment.Cause != recordv0.DeploymentCauseFile || payload.Deployment.CommitNumber != nil {
 		t.Errorf("deployment payload %+v", payload.Deployment)
 	}
 	if payload.TagStates == nil || len(payload.TagStates) != 0 {
@@ -189,7 +189,7 @@ func TestCreateDeployment_FileWritesACheckpoint(t *testing.T) {
 }
 
 // TestRollback_WritesACheckpoint: a Rollback names the new Deployment, the one
-// it copied and the Release of that one, at its own entry's position (task 44).
+// it copied and the saved state of that one, at its own entry's position (task 44).
 func TestRollback_WritesACheckpoint(t *testing.T) {
 	projectID, _ := newProject(t)
 	repo := runtimepg.NewDeploymentRepositoryPostgres(postgres.DB(t))
@@ -200,12 +200,12 @@ func TestRollback_WritesACheckpoint(t *testing.T) {
 		projectv0.TagDefinition{ID: tagID, Name: "speed", Type: "integer"},
 		projectv0.TagDefinition{ID: uuid.New(), Name: "temp", Type: "integer"},
 	))
-	firstRelease := 7
-	if _, err := repo.CreateDeployment(ctx, projectID.UUID(), first, runtimeapp.DeploymentCauseDeploy, &firstRelease, time.Now()); err != nil {
+	firstCommit := 7
+	if _, err := repo.CreateDeployment(ctx, projectID.UUID(), first, runtimeapp.DeploymentCauseDeploy, &firstCommit, time.Now()); err != nil {
 		t.Fatalf("first deploy: %v", err)
 	}
-	secondRelease := 8
-	if _, err := repo.CreateDeployment(ctx, projectID.UUID(), second, runtimeapp.DeploymentCauseDeploy, &secondRelease, time.Now()); err != nil {
+	secondCommit := 8
+	if _, err := repo.CreateDeployment(ctx, projectID.UUID(), second, runtimeapp.DeploymentCauseDeploy, &secondCommit, time.Now()); err != nil {
 		t.Fatalf("second deploy: %v", err)
 	}
 
@@ -223,7 +223,7 @@ func TestRollback_WritesACheckpoint(t *testing.T) {
 	if payload.Deployment == nil || payload.Deployment.Number != rolledBack.Number ||
 		payload.Deployment.Cause != recordv0.DeploymentCauseRollback ||
 		payload.Deployment.RolledBackFrom == nil || *payload.Deployment.RolledBackFrom != 1 ||
-		payload.Deployment.ReleaseNumber == nil || *payload.Deployment.ReleaseNumber != firstRelease {
+		payload.Deployment.CommitNumber == nil || *payload.Deployment.CommitNumber != firstCommit {
 		t.Errorf("deployment payload %+v", payload.Deployment)
 	}
 	// The rolled-back document names one Tag, and its state is the one the

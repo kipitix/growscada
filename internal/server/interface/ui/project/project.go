@@ -51,14 +51,14 @@ type Project struct {
 	tags        tagstate.Tags
 	// deployment is the Deployment the project runs and deployed says whether
 	// it has one; deploymentLoaded is false until the first answer, and
-	// deploymentFailed tells a failed read (the running Release is then
-	// unknown, not "not deployed"). The running Release is
-	// deployment.ReleaseNumber (task 72_4).
+	// deploymentFailed tells a failed read (the running saved state is then
+	// unknown, not "not deployed"). The saved state it runs is
+	// deployment.CommitNumber (task 85_4).
 	deployment       apiv0.DeploymentResponse
 	deployed         bool
 	deploymentLoaded bool
 	deploymentFailed bool
-	// deploying marks a Deploy of a Release in flight; loadingSavedState is
+	// deploying marks a Deploy in flight; loadingSavedState is
 	// the number of the saved state being loaded into the Draft (0: none,
 	// task 84).
 	deploying         bool

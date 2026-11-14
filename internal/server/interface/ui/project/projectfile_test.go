@@ -138,8 +138,8 @@ func TestProjectFileDialog_FileIssuesAreAList(t *testing.T) {
 }
 
 // TestProjectFileDialog_DeployFromFileReloadsTheDeployment: a deployed file
-// becomes a Release and the Deployment the Project runs, and the Draft stays
-// as it was.
+// becomes the Deployment the Project runs with no saved state, and the Draft
+// stays as it was.
 func TestProjectFileDialog_DeployFromFileReloadsThePreview(t *testing.T) {
 	f := startProject(t)
 	if _, err := f.api.CreateTag(context.Background(), apiv0.CreateTagRequest{Name: "speed", Type: "integer"}); err != nil {
@@ -160,15 +160,15 @@ func TestProjectFileDialog_DeployFromFileReloadsThePreview(t *testing.T) {
 	if f.p.projectFileDialog {
 		t.Error("the dialog stayed open after the file was deployed")
 	}
-	if !f.p.deployed || f.p.deployment.Number != 1 || f.p.deployment.ReleaseNumber == nil || *f.p.deployment.ReleaseNumber != 1 {
+	if !f.p.deployed || f.p.deployment.Number != 1 || f.p.deployment.CommitNumber != nil {
 		t.Fatalf("the bar after a file deploy: deployed %v, %+v (dialog %v, pending %+v, toasts %+v)",
 			f.p.deployed, f.p.deployment, f.p.projectFileDialog, f.p.pendingProjectFile, f.e.TakeToasts())
 	}
 }
 
 // TestDeploymentsDialog_MarksAFileDeploymentAndOffersDownloads: a file deploy
-// leaves a Release and is shown as a Deploy of it, and each row offers its own
-// download.
+// leaves no saved state and is shown as a Deploy of a file, and each row offers
+// its own download.
 func TestDeploymentsDialog_MarksAFileDeploymentAndOffersDownloads(t *testing.T) {
 	url, api := newServer(t)
 	file := projectv0.ProjectFile{Header: projectv0.Header{
@@ -183,8 +183,8 @@ func TestDeploymentsDialog_MarksAFileDeploymentAndOffersDownloads(t *testing.T) 
 	f.noToasts()
 
 	html := app.HTMLString(f.p.Render())
-	if !strings.Contains(html, "Release 1") {
-		t.Errorf("the list does not name the Release of the file: %s", html)
+	if !strings.Contains(html, "Deployed from file") {
+		t.Errorf("the list does not say the Deployment came from a file: %s", html)
 	}
 	if !strings.Contains(html, `data-deployment-download="1"`) {
 		t.Errorf("the row offers no download: %s", html)

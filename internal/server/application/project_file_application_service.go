@@ -42,6 +42,12 @@ type ProjectFileService interface {
 	// canonical document is the Draft already, and one matching
 	// ErrInvalidProjectFile when the document does not validate.
 	Open(ctx context.Context, projectID uuid.UUID, version int, document []byte) (appdto.DraftState, error)
+	// Deploy validates document as a project file (ADR 0018) and makes it the
+	// Project's new Deployment without touching the Draft, stating no saved
+	// state: a file deployment leaves no Release behind (task 85_4). Returns
+	// an error matching ErrInvalidProjectFile when the document does not
+	// validate, and project.ErrProjectNotFound if the Project is not live.
+	Deploy(ctx context.Context, projectID uuid.UUID, document []byte) (appdto.Deployment, error)
 }
 
 type projectFileServiceImpl struct {
@@ -140,6 +146,23 @@ func (s projectFileServiceImpl) Open(ctx context.Context, rawProjectID uuid.UUID
 		return appdto.DraftState{}, fmt.Errorf("cannot open the project file of %s: %w", projectID, err)
 	}
 	return appdto.DraftState{Version: result.Version().Number(), HasUnsavedChanges: result.HasUnsavedChanges()}, nil
+}
+
+func (s projectFileServiceImpl) Deploy(ctx context.Context, rawProjectID uuid.UUID, document []byte) (appdto.Deployment, error) {
+	projectID, _, err := s.content.open(ctx, rawProjectID)
+	if err != nil {
+		return appdto.Deployment{}, err
+	}
+	validator := projectFileValidator{libraries: s.libraries, releases: s.releases}
+	validated, err := validator.validate(ctx, projectID, document, false)
+	if err != nil {
+		return appdto.Deployment{}, err
+	}
+	deployed, err := s.runtime.DeployFile(ctx, projectID.UUID(), validated.file)
+	if err != nil {
+		return appdto.Deployment{}, fmt.Errorf("cannot deploy the project file of %s: %w", projectID, err)
+	}
+	return deployed, nil
 }
 
 // lockLocalPins rechecks the local Releases inside the Draft's transaction:

@@ -15,8 +15,8 @@ http:
   auth: inherit
 
 docs: |
-  Every file deploy publishes a Release (task 72_4), so the same document is a
-  new Deployment even though its content did not change.
+  Every file deploy makes a new Deployment (task 85_4), so the same document is
+  one even though its content did not change.
 
 runtime:
   assertions:

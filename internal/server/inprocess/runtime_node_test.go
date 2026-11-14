@@ -139,15 +139,15 @@ type recordingDeployments struct {
 
 	projectID  uuid.UUID
 	file       projectv0.ProjectFile
-	release    int
+	commit     int
 	deployment runtimeapp.Deployment
 	current    runtimeapp.Deployment
 	hasCurrent bool
 	err        error
 }
 
-func (r *recordingDeployments) DeployRelease(_ context.Context, projectID uuid.UUID, releaseNumber int, file projectv0.ProjectFile) (runtimeapp.Deployment, error) {
-	r.projectID, r.file, r.release = projectID, file, releaseNumber
+func (r *recordingDeployments) DeployCommit(_ context.Context, projectID uuid.UUID, commitNumber int, file projectv0.ProjectFile) (runtimeapp.Deployment, error) {
+	r.projectID, r.file, r.commit = projectID, file, commitNumber
 	return r.deployment, r.err
 }
 
@@ -155,19 +155,19 @@ func (r *recordingDeployments) FindCurrent(context.Context, uuid.UUID) (runtimea
 	return r.current, r.hasCurrent, r.err
 }
 
-// TestRuntimeNode_DeployRelease_HandsOverTheReleaseAndConvertsTheDeployment:
+// TestRuntimeNode_DeployCommit_HandsOverTheSavedStateAndConvertsTheDeployment:
 // the Engineering node's DTO of a Deployment is the Runtime node's.
-func TestRuntimeNode_DeployRelease_HandsOverTheReleaseAndConvertsTheDeployment(t *testing.T) {
+func TestRuntimeNode_DeployCommit_HandsOverTheSavedStateAndConvertsTheDeployment(t *testing.T) {
 	projectID := uuid.New()
 	at := time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
 	file := projectv0.ProjectFile{Header: projectv0.Header{ProjectID: projectID}}
 	deployments := &recordingDeployments{deployment: runtimeapp.Deployment{Number: 3, DeployedAt: at, Content: file}}
 
-	got, err := inprocess.NewRuntimeNode(&recordingStates{}, nil, deployments).DeployRelease(context.Background(), projectID, 4, file)
+	got, err := inprocess.NewRuntimeNode(&recordingStates{}, nil, deployments).DeployCommit(context.Background(), projectID, 4, file)
 	if err != nil {
-		t.Fatalf("DeployRelease: %v", err)
+		t.Fatalf("DeployCommit: %v", err)
 	}
-	if deployments.projectID != projectID || deployments.release != 4 || !reflect.DeepEqual(deployments.file, file) {
+	if deployments.projectID != projectID || deployments.commit != 4 || !reflect.DeepEqual(deployments.file, file) {
 		t.Errorf("deployed %v of %v, want %v of %v", deployments.file, deployments.projectID, file, projectID)
 	}
 	want := appdto.Deployment{Number: 3, DeployedAt: at, Content: file}
@@ -202,8 +202,8 @@ func TestRuntimeNode_FindCurrentDeployment_ConvertsTheDeploymentAndItsPresence(t
 // without the Deployment service has nothing to deploy to.
 func TestRuntimeNode_WithoutDeployments_RefusesToDeploy(t *testing.T) {
 	node := inprocess.NewRuntimeNode(&recordingStates{}, nil, nil)
-	if _, err := node.DeployRelease(context.Background(), uuid.New(), 1, projectv0.ProjectFile{}); err == nil {
-		t.Error("DeployRelease without a Deployment service returned no error")
+	if _, err := node.DeployCommit(context.Background(), uuid.New(), 1, projectv0.ProjectFile{}); err == nil {
+		t.Error("DeployCommit without a Deployment service returned no error")
 	}
 	if _, _, err := node.FindCurrentDeployment(context.Background(), uuid.New()); err == nil {
 		t.Error("FindCurrentDeployment without a Deployment service returned no error")

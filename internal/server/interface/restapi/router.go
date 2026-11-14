@@ -102,6 +102,7 @@ type Services struct {
 	// Labels are the named marks on saved states of the Organization
 	// (task 85_2; ADR 0025): metadata, never content.
 	Labels       application.LabelService
+	Deploy       application.DeployService
 	Deployments  runtimeapp.DeploymentService
 	DeviceConfig runtimeapp.DeviceConfigService
 	DeviceTokens runtimeapp.DeviceTokenService
@@ -127,11 +128,11 @@ func NewRouter(services Services, eventBus eventbus.EventBus, maxSSEClients int)
 		deviceTokensHandlers: NewDeviceTokensHandler(services.DeviceTokens, services.Devices),
 		deviceConfigHandlers: NewDeviceConfigHandler(services.DeviceConfig, services.DeviceTokens),
 		deviceWhoAmIHandlers: NewDeviceIdentityHandler(services.DeviceTokens),
-		deployHandlers:       NewDeployHandler(services.Discard, services.Deployments, services.TagStates),
+		deployHandlers:       NewDeployHandler(services.Discard, services.Deploy, services.Deployments, services.TagStates),
 		draftHandlers:        NewDraftHandler(services.Draft),
 		draftChangesHandlers: NewDraftChangesHandler(services.DraftChanges),
 		deploymentsHandlers:  NewDeploymentHandler(services.Deployments),
-		projectFileHandlers:  NewProjectFileHandler(services.ProjectFiles, services.Releases),
+		projectFileHandlers:  NewProjectFileHandler(services.ProjectFiles),
 		commitHandlers:       NewCommitHandler(services.Commits, services.Labels),
 		releaseHandlers:      NewReleaseHandler(services.Releases),
 		settingsHandlers:     NewSettingsHandler(services.Settings),
@@ -278,6 +279,7 @@ func (r *APIRouter) routes() []route {
 		{"GET " + pp + apiv0.CommitPath + "/" + commitResource.wildcard(), commits.GetCommitByNumber},
 		{"PATCH " + pp + apiv0.CommitPath + "/" + commitResource.wildcard(), commits.PatchCommit},
 		{"POST " + pp + apiv0.CommitPath + "/" + commitResource.wildcard() + apiv0.CommitLoadPath, deploy.PostCommitLoad},
+		{"POST " + pp + apiv0.CommitPath + "/" + commitResource.wildcard() + apiv0.CommitDeployPath, deploy.PostCommitDeploy},
 		{"GET " + pp + apiv0.CommitPath + "/" + commitResource.wildcard() + "/projectfile", commits.GetCommitProjectFile},
 		{"PUT " + pp + apiv0.CommitPath + "/" + commitResource.wildcard() + apiv0.CommitLabelsPath + "/" + labelResource.wildcard(), commits.PutCommitLabel},
 		{"DELETE " + pp + apiv0.CommitPath + "/" + commitResource.wildcard() + apiv0.CommitLabelsPath + "/" + labelResource.wildcard(), commits.DeleteCommitLabel},
