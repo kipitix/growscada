@@ -26,6 +26,8 @@ var requestBodies = map[string]any{
 	"POST " + apiv0.PathPrefix + "/libraries":                                                                            apiv0.CreateLibraryRequest{},
 	"PUT " + apiv0.PathPrefix + apiv0.LibraryOrderPath:                                                                   apiv0.SetLibraryOrderRequest{},
 	"PUT " + apiv0.PathPrefix + apiv0.ProjectOrderPath:                                                                   apiv0.SetProjectOrderRequest{},
+	"POST " + apiv0.PathPrefix + apiv0.LabelPath:                                                                         apiv0.CreateLabelRequest{},
+	"PATCH " + apiv0.PathPrefix + apiv0.LabelPath + "/" + labelResource.wildcard():                                       apiv0.UpdateLabelRequest{},
 	"PUT " + libraryPrefix:                                                                                               apiv0.UpdateLibraryRequest{},
 	"POST " + libraryPrefix + "/releases":                                                                                apiv0.CreateReleaseRequest{},
 	"PATCH " + libraryPrefix + "/releases/" + releaseResource.wildcard():                                                 apiv0.UpdateLibraryReleaseNoteRequest{},

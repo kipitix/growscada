@@ -8,6 +8,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/event"
+	"github.com/kipitix/growscada/internal/server/domain/label"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -65,6 +66,9 @@ var apiEventTypes = map[event.EventType]string{
 	event.EventTypeReleaseCreated:            apiv0.EventReleaseCreated,
 	event.EventTypeReleaseNoteUpdated:        apiv0.EventReleaseNoteUpdated,
 	event.EventTypeLibraryReleaseNoteUpdated: apiv0.EventLibraryReleaseNoteUpdated,
+	event.EventTypeLabelCreated:              apiv0.EventLabelCreated,
+	event.EventTypeLabelUpdated:              apiv0.EventLabelUpdated,
+	event.EventTypeLabelDeleted:              apiv0.EventLabelDeleted,
 }
 
 // newAPIEvent translates a domain (or delivery) event into the event stream's
@@ -133,6 +137,8 @@ func newAPIEvent(e event.Event) apiv0.Event {
 		ev.ID = e.SceneID().String()
 	case project.ProjectEvent:
 		ev.ID = e.ProjectID().String()
+	case label.LabelEvent:
+		ev.ID = e.LabelID().String()
 	case eventbus.ClientEvent:
 		ev.ID = e.ClientID().String()
 	}

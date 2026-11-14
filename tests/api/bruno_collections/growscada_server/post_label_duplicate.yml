@@ -1,0 +1,39 @@
+info:
+  name: post label with a taken name
+  type: http
+  seq: 2012
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/labels
+  body:
+    type: json
+    data: |-
+      {
+        "name": "bruno LABEL"
+      }
+  auth: inherit
+
+docs: |
+  A name is unique in the Organization ignoring case, so `bruno LABEL` is the
+  label `Bruno label` and the request is 409 (task 85_2; ADR 0025).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '409'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: '"application/problem+json"'
+    - expression: 'res.body.title'
+      operator: eq
+      value: '"Conflict: Label"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

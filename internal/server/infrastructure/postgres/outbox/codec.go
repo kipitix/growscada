@@ -17,6 +17,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/label"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -130,6 +131,8 @@ func Encode(e event.Event) ([]byte, error) {
 		p.ID = ev.SceneID().UUID()
 	case project.ProjectEvent:
 		p.ID = ev.ProjectID().UUID()
+	case label.LabelEvent:
+		p.ID = ev.LabelID().UUID()
 	default:
 		return nil, fmt.Errorf("cannot encode event %s: not a domain event", e.Type())
 	}
@@ -221,6 +224,16 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 		return project.NewProjectUpdatedEvent(projectOfEvent, ts), nil
 	case event.EventTypeProjectDeleted:
 		return project.NewProjectDeletedEvent(projectOfEvent, ts), nil
+	case event.EventTypeLabelCreated, event.EventTypeLabelUpdated, event.EventTypeLabelDeleted:
+		labelOfEvent := id.NewID(id.IDWithUUID[label.Label](p.ID))
+		switch eventType {
+		case event.EventTypeLabelCreated:
+			return label.NewLabelCreatedEvent(labelOfEvent, ts), nil
+		case event.EventTypeLabelUpdated:
+			return label.NewLabelUpdatedEvent(labelOfEvent, ts), nil
+		default:
+			return label.NewLabelDeletedEvent(labelOfEvent, ts), nil
+		}
 	}
 
 	// Events of a Project's content: the Project is stored beside them.

@@ -101,6 +101,10 @@ const (
 	EventReleaseNoteUpdated = "release_note_updated"
 
 	EventLibraryReleaseNoteUpdated = "library_release_note_updated"
+
+	EventLabelCreated = "label_created"
+	EventLabelUpdated = "label_updated"
+	EventLabelDeleted = "label_deleted"
 )
 
 // EventTypes returns every type of Event of this version of the contract.
@@ -122,5 +126,6 @@ func EventTypes() []string {
 		EventCommitCreated, EventCommitTitleUpdated,
 		EventReleaseCreated, EventReleaseNoteUpdated,
 		EventLibraryReleaseNoteUpdated,
+		EventLabelCreated, EventLabelUpdated, EventLabelDeleted,
 	}
 }

@@ -121,6 +121,9 @@ func main() {
 	// view of the content, stored apart from it. Until authentication exists
 	// every request acts as settings.SingleUser.
 	userSettingsRepository := repositories.NewUserSettingsRepositoryPostgres(sqlDB)
+	// The labels of the Organization (task 85_2; ADR 0025): metadata on saved
+	// states, not content, written in one transaction of their own.
+	labelRepository := repositories.NewLabelRepositoryPostgres(sqlDB, notifyDispatcher)
 	// The one Organization the server runs with until Users exist
 	organizationID, err := repositories.FindSoleOrganization(context.Background(), sqlDB)
 	if err != nil {
@@ -254,6 +257,7 @@ func main() {
 		Releases: application.NewReleaseService(projectContent, projectReleaseRepository, runtimeNode,
 			libraryRepository, releaseRepository),
 		Settings:     application.NewSettingsService(userSettingsRepository, settings.SingleUser(), organizationID),
+		Labels:       application.NewLabelService(labelRepository, organizationID),
 		Deployments:  deploymentService,
 		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(sqlDB)),
 		DeviceTokens: deviceTokenService,

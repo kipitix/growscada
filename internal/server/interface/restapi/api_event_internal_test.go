@@ -12,6 +12,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/label"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -56,6 +57,7 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 	sceneID := id.NewID[scene.Scene]()
 	widgetTypeID := id.NewID[library.WidgetType]()
 	libraryID := id.NewID[library.Library]()
+	labelID := id.NewID[label.Label]()
 	clientID := id.NewID[client.Client]()
 	projectID := id.NewID[project.Project]()
 	deviceID := id.NewID[device.Device]()
@@ -160,6 +162,12 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 			apiv0.Event{Type: "release_note_updated", ID: libraryID.String(), Release: 2}},
 		event.EventTypeLibraryReleaseNoteUpdated: {library.NewLibraryReleaseNoteUpdatedEvent(libraryID, libraryReleaseNumber(t, 3), ts),
 			apiv0.Event{Type: "library_release_note_updated", ID: libraryID.String(), Release: 3}},
+		event.EventTypeLabelCreated: {label.NewLabelCreatedEvent(labelID, ts),
+			apiv0.Event{Type: "label_created", ID: labelID.String()}},
+		event.EventTypeLabelUpdated: {label.NewLabelUpdatedEvent(labelID, ts),
+			apiv0.Event{Type: "label_updated", ID: labelID.String()}},
+		event.EventTypeLabelDeleted: {label.NewLabelDeletedEvent(labelID, ts),
+			apiv0.Event{Type: "label_deleted", ID: labelID.String()}},
 	}
 
 	for _, et := range event.AllEventTypes() {

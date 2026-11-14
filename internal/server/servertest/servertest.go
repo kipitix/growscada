@@ -221,7 +221,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 		"DELETE FROM engineering.widgets; "+
 		"DELETE FROM engineering.scenes; DELETE FROM engineering.library_pins; DELETE FROM engineering.libraries; "+
 		"DELETE FROM outbox; DELETE FROM policy_jobs; "+
-		"DELETE FROM user_settings; "+
+		"DELETE FROM user_settings; DELETE FROM engineering.labels; "+
 		"DELETE FROM projects WHERE id <> '"+MainProject.String()+"'; "+
 		// A test that deleted Main may have left its row removed by the
 		// cleanup policy, not only marked.
@@ -287,6 +287,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 		Commits:      application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, projectReleases, releases),
 		Releases:     application.NewReleaseService(content, projectReleases, runtimeNode, libraries, releases),
 		Settings:     application.NewSettingsService(repositories.NewUserSettingsRepositoryPostgres(db), settings.SingleUser(), orgID),
+		Labels:       application.NewLabelService(repositories.NewLabelRepositoryPostgres(db, onCommit), orgID),
 		Deployments:  deployments,
 		DeviceConfig: runtimeapp.NewDeviceConfigService(runtimepg.NewDeviceConfigRepositoryPostgres(db)),
 		DeviceTokens: deviceTokens,

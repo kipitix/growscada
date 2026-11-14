@@ -8,6 +8,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/label"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -45,6 +46,7 @@ func sampleEvents(t *testing.T) []event.Event {
 	libraryID := id.NewID[library.Library]()
 	deviceID := id.NewID[device.Device]()
 	environmentID := id.NewID[device.Environment]()
+	labelID := id.NewID[label.Label]()
 	libraryRelease, _ := library.NewReleaseNumber(3)
 	projectReleaseNumber, _ := release.NewNumber(4)
 	return []event.Event{
@@ -84,6 +86,9 @@ func sampleEvents(t *testing.T) []event.Event {
 		release.NewReleaseNoteUpdatedEvent(draft.LibraryScope(libraryID), projectReleaseNumber, ts),
 		device.NewEnvironmentDeviceUpdatedEvent(environmentID, deviceID, projectID, ts),
 		device.NewEnvironmentDeviceDeletedEvent(environmentID, deviceID, projectID, ts),
+		label.NewLabelCreatedEvent(labelID, ts),
+		label.NewLabelUpdatedEvent(labelID, ts),
+		label.NewLabelDeletedEvent(labelID, ts),
 	}
 }
 
@@ -198,6 +203,10 @@ func assertSameSubject(t *testing.T, original, decoded event.Event) {
 	case scene.SceneEvent:
 		if got := decoded.(scene.SceneEvent); got.SceneID() != want.SceneID() {
 			t.Errorf("scene ID %s, want %s", got.SceneID(), want.SceneID())
+		}
+	case label.LabelEvent:
+		if got, ok := decoded.(label.LabelEvent); !ok || got.LabelID() != want.LabelID() {
+			t.Errorf("decoded %T, want an event of label %s", decoded, want.LabelID())
 		}
 	default:
 		t.Fatalf("unexpected event %T", original)

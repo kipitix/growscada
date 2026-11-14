@@ -1,0 +1,43 @@
+info:
+  name: patch label
+  type: http
+  seq: 2013
+
+http:
+  method: PATCH
+  url: http://{{API_SERVER}}/api/v0/labels/{{LABEL_ID}}
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Bruno label renamed",
+        "color": "#3b82f6"
+      }
+  auth: inherit
+
+docs: |
+  Renames and recolors a label in one request (task 85_2; ADR 0025). An absent
+  field keeps its value; a color of "" clears it. No Draft Version is stated.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.id'
+      operator: eq
+      value: '"{{LABEL_ID}}"'
+    - expression: 'res.body.name'
+      operator: eq
+      value: '"Bruno label renamed"'
+    - expression: 'res.body.color'
+      operator: eq
+      value: '"#3b82f6"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

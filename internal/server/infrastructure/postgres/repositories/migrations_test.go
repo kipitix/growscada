@@ -903,3 +903,36 @@ func TestMigrationDeployments_RenamesTheRevisionStore(t *testing.T) {
 		t.Errorf("the journal entry after the down is of type %q, want revision", entryType)
 	}
 }
+
+// TestMigrationLabels_SeedsTwoOrdinaryLabels: a migrated database carries the
+// two starter labels of the one Organization, with no color (task 85_2;
+// ADR 0025). They are ordinary rows, not built-in behavior.
+func TestMigrationLabels_SeedsTwoOrdinaryLabels(t *testing.T) {
+	ctx := context.Background()
+	db, _ := migrationDB(t)
+	if err := migrations.Up(ctx, db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	rows, err := db.QueryContext(ctx,
+		`SELECT l.name, l.color FROM engineering.labels l
+		 JOIN organizations o ON o.id = l.organization_id ORDER BY name`)
+	if err != nil {
+		t.Fatalf("read the seed labels: %v", err)
+	}
+	defer rows.Close()
+	var names []string
+	for rows.Next() {
+		var name string
+		var color sql.NullString
+		if err := rows.Scan(&name, &color); err != nil {
+			t.Fatalf("scan the seed label: %v", err)
+		}
+		if color.Valid {
+			t.Errorf("the seed label %q has color %q, want none", name, color.String)
+		}
+		names = append(names, name)
+	}
+	if strings.Join(names, ",") != "ready_for_deploy,ready_for_import" {
+		t.Errorf("the seed labels: %v, want ready_for_deploy and ready_for_import", names)
+	}
+}

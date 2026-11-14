@@ -16,6 +16,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/devicetoken"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/label"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -61,6 +62,8 @@ var (
 	// The per-user settings of the server are named by no path at all: the
 	// person they belong to never is (task 81).
 	userSettingsResource = resource{name: "UserSettings"}
+	// A Label is named by its ID (task 85_2).
+	labelResource = resource{name: "Label", pathParam: "label_id"}
 )
 
 // wildcard is the router pattern segment that carries the resource's ID.
@@ -155,6 +158,8 @@ var errorMappings = []errorMapping{
 		"Device already has a token; revoke or rotate it"},
 	{settings.ErrSettingsConflict, http.StatusConflict, userSettingsResource,
 		"Settings were changed concurrently; reload them and retry"},
+	{label.ErrLabelNotFound, http.StatusNotFound, labelResource, ""},
+	{label.ErrLabelNameTaken, http.StatusConflict, labelResource, "Label name is already taken"},
 }
 
 // sendError responds to an error from the application layer. Invalid input is

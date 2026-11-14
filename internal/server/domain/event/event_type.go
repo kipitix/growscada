@@ -64,6 +64,10 @@ var (
 	EventTypeReleaseNoteUpdated = EventType{eventType: 40}
 
 	EventTypeLibraryReleaseNoteUpdated = EventType{eventType: 41}
+
+	EventTypeLabelCreated = EventType{eventType: 42}
+	EventTypeLabelUpdated = EventType{eventType: 43}
+	EventTypeLabelDeleted = EventType{eventType: 44}
 )
 
 // eventTypeNames is the single source of truth for known event types:
@@ -113,6 +117,9 @@ var eventTypeNames = []struct {
 	{EventTypeReleaseCreated, "release_created"},
 	{EventTypeReleaseNoteUpdated, "release_note_updated"},
 	{EventTypeLibraryReleaseNoteUpdated, "library_release_note_updated"},
+	{EventTypeLabelCreated, "label_created"},
+	{EventTypeLabelUpdated, "label_updated"},
+	{EventTypeLabelDeleted, "label_deleted"},
 }
 
 // AllEventTypes returns every known EventType.

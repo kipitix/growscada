@@ -57,6 +57,7 @@ type testServices struct {
 	commits      application.CommitService
 	releases     application.ReleaseService
 	settings     application.SettingsService
+	labels       application.LabelService
 }
 
 // newServices returns the services over the test database; the Runtime
@@ -108,6 +109,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		commits:      application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, projectReleases, releases),
 		releases:     application.NewReleaseService(content, projectReleases, runtimeNode, libraries, releases),
 		settings:     application.NewSettingsService(repositories.NewUserSettingsRepositoryPostgres(db), settings.SingleUser(), orgID),
+		labels:       application.NewLabelService(repositories.NewLabelRepositoryPostgres(db, opts...), orgID),
 	}
 }
 
@@ -121,7 +123,7 @@ func (s testServices) services() restapi.Services {
 		Discard: s.discard, ProjectFiles: s.projectFiles, Deployments: s.deployments,
 		DeviceConfig: s.deviceConfig, DeviceTokens: s.deviceTokens,
 		Journal: s.journal, Operation: s.operation, Commits: s.commits, Releases: s.releases,
-		Settings: s.settings,
+		Settings: s.settings, Labels: s.labels,
 	}
 }
 

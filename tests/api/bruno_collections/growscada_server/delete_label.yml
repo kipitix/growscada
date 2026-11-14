@@ -1,0 +1,27 @@
+info:
+  name: delete label
+  type: http
+  seq: 2014
+
+http:
+  method: DELETE
+  url: http://{{API_SERVER}}/api/v0/labels/{{LABEL_ID}}
+  auth: inherit
+
+docs: |
+  Deletes a label with its assignments (task 85_2; task 85_3). No Draft Version
+  is stated: a label is metadata, not content.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '204'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -789,3 +789,23 @@ func newLibraryOrderResponse(order appdto.Order) apiv0.LibraryOrderResponse {
 func newProjectOrderResponse(order appdto.Order) apiv0.ProjectOrderResponse {
 	return apiv0.ProjectOrderResponse{Version: order.Version, ProjectIDs: order.IDs}
 }
+
+// newLabelResponse maps a Label to its contract body (task 85_2; ADR 0025).
+func newLabelResponse(l appdto.Label) apiv0.LabelResponse {
+	return apiv0.LabelResponse{
+		ID:            l.ID,
+		Name:          l.Name,
+		Color:         l.Color,
+		AssignedCount: l.AssignedCount,
+		CreatedAt:     l.CreatedAt,
+	}
+}
+
+// newGetLabelsResponse maps the labels, ordered by name ignoring case.
+func newGetLabelsResponse(labels []appdto.Label) apiv0.GetLabelsResponse {
+	items := make([]apiv0.LabelResponse, len(labels))
+	for i, l := range labels {
+		items[i] = newLabelResponse(l)
+	}
+	return apiv0.GetLabelsResponse{Labels: items}
+}

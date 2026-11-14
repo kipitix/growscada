@@ -89,3 +89,7 @@ variables:
     value: '2'
   - name: CLEANUP_LIBRARY_COMMIT
     value: '1'
+  # The label the labels flow creates (task 85_2): post_label sets it from its
+  # response; the value here is what the static check substitutes.
+  - name: LABEL_ID
+    value: f1000000-0000-4000-8000-0000000000aa

@@ -1,0 +1,50 @@
+info:
+  name: post label
+  type: http
+  seq: 2011
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/labels
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Bruno label",
+        "color": "#22c55e"
+      }
+  auth: inherit
+
+docs: |
+  Creates a label with a name and an optional #RRGGBB color (task 85_2;
+  ADR 0025). A name is unique in the Organization without regard to case.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.id'
+      operator: isString
+    - expression: 'res.body.name'
+      operator: eq
+      value: '"Bruno label"'
+    - expression: 'res.body.color'
+      operator: eq
+      value: '"#22c55e"'
+    - expression: 'res.body.assigned_count'
+      operator: eq
+      value: '0'
+
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("LABEL_ID", res.body.id)
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -23,6 +23,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/devicetoken"
 	"github.com/kipitix/growscada/internal/server/domain/draft"
 	"github.com/kipitix/growscada/internal/server/domain/id"
+	"github.com/kipitix/growscada/internal/server/domain/label"
 	"github.com/kipitix/growscada/internal/server/domain/library"
 	"github.com/kipitix/growscada/internal/server/domain/librarypin"
 	"github.com/kipitix/growscada/internal/server/domain/project"
@@ -366,6 +367,10 @@ var domainSentinels = map[string]error{
 	"release.ErrReleaseNotFound":          release.ErrReleaseNotFound,
 	"release.ErrCommitAlreadyReleased":    release.ErrCommitAlreadyReleased,
 	"settings.ErrSettingsConflict":        settings.ErrSettingsConflict,
+	"label.ErrLabelNotFound":              label.ErrLabelNotFound,
+	"label.ErrLabelNameTaken":             label.ErrLabelNameTaken,
+	"label.ErrInvalidLabelName":           label.ErrInvalidLabelName,
+	"label.ErrInvalidLabelColor":          label.ErrInvalidLabelColor,
 }
 
 // unmappedSentinels are the domain sentinels errorMappings leaves out on
@@ -385,6 +390,8 @@ var unmappedSentinels = map[string]string{
 	"tag.ErrSupplierOfAnotherProject":   "500: the Tag API names no supplier yet (task 68); the repository refuses a Device of another Project as the last line",
 	"devicetoken.ErrNotADeviceToken":    "401: the REST layer refuses a bearer without the Device Token prefix before any lookup",
 	"draft.ErrDraftNotFound":            "500: only the repository creates a draft's row, and its Project or Library exists",
+	"label.ErrInvalidLabelName":         "400: the service marks it invalid input",
+	"label.ErrInvalidLabelColor":        "400: the service marks it invalid input",
 }
 
 // TestDomainSentinels_AreListed reads the domain sources, so a new sentinel

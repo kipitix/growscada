@@ -34,6 +34,7 @@ type APIRouter struct {
 	commitHandlers       *CommitHandlers
 	releaseHandlers      *ReleaseHandlers
 	settingsHandlers     *SettingsHandlers
+	labelHandlers        *LabelHandlers
 	eventsHandlers       *EventsHandlers
 	journalHandlers      *JournalHandlers
 	operationHandlers    *OperationHandlers
@@ -97,7 +98,10 @@ type Services struct {
 	Releases     application.ReleaseService
 	// Settings are the per-user settings of the server (task 81): one
 	// person's view of its content, never its content (ADR 0024).
-	Settings     application.SettingsService
+	Settings application.SettingsService
+	// Labels are the named marks on saved states of the Organization
+	// (task 85_2; ADR 0025): metadata, never content.
+	Labels       application.LabelService
 	Deployments  runtimeapp.DeploymentService
 	DeviceConfig runtimeapp.DeviceConfigService
 	DeviceTokens runtimeapp.DeviceTokenService
@@ -131,6 +135,7 @@ func NewRouter(services Services, eventBus eventbus.EventBus, maxSSEClients int)
 		commitHandlers:       NewCommitHandler(services.Commits),
 		releaseHandlers:      NewReleaseHandler(services.Releases),
 		settingsHandlers:     NewSettingsHandler(services.Settings),
+		labelHandlers:        NewLabelHandler(services.Labels),
 		eventsHandlers:       NewEventsHandler(eventBus, projectService, maxSSEClients, WithDeviceTokens(services.DeviceTokens)),
 		journalHandlers:      NewJournalHandler(services.Journal, eventBus),
 		operationHandlers:    NewOperationHandler(services.Operation),
@@ -164,6 +169,7 @@ func (r *APIRouter) routes() []route {
 	commits := r.commitHandlers
 	releases := r.releaseHandlers
 	settings := r.settingsHandlers
+	labels := r.labelHandlers
 	return []route{
 		{"GET " + p + "/projects", projects.GetProjects},
 		{"GET " + pp, projects.GetProjectsByID},
@@ -178,6 +184,13 @@ func (r *APIRouter) routes() []route {
 		{"PUT " + p + apiv0.LibraryOrderPath, settings.PutLibraryOrder},
 		{"GET " + p + apiv0.ProjectOrderPath, settings.GetProjectOrder},
 		{"PUT " + p + apiv0.ProjectOrderPath, settings.PutProjectOrder},
+
+		// The labels of the Organization (task 85_2; ADR 0025): metadata on
+		// saved states, never content of a Draft.
+		{"GET " + p + apiv0.LabelPath, labels.GetLabels},
+		{"POST " + p + apiv0.LabelPath, labels.PostLabels},
+		{"PATCH " + p + apiv0.LabelPath + "/" + labelResource.wildcard(), labels.PatchLabelsByID},
+		{"DELETE " + p + apiv0.LabelPath + "/" + labelResource.wildcard(), labels.DeleteLabelsByID},
 
 		{"GET " + pp + "/tags", tags.GetTags},
 		{"GET " + pp + "/tags/" + tagResource.wildcard(), tags.GetTagsByID},
