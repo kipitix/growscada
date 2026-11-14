@@ -29,7 +29,7 @@ runtime:
     - expression: 'res.body.warnings[0].library_id'
       operator: eq
       value: '"d0000000-0000-4000-8000-0000000000ff"'
-    - expression: 'res.body.warnings[0].release'
+    - expression: 'res.body.warnings[0].commit'
       operator: eq
       value: '1'
     - expression: 'res.body.warnings[0].dropped_widgets'

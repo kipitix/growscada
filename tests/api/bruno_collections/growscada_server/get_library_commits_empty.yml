@@ -1,5 +1,5 @@
 info:
-  name: get the library commits before the first save
+  name: get the library commits of the seeded saved state
   type: http
   seq: 165
 http:
@@ -8,7 +8,8 @@ http:
   auth: inherit
 
 docs: |
-  A Library never saved has no Commits: the list is empty (task 72_2;
+  The seed saves each Library once (task 85_6): the Library's list holds that
+  one saved state, and the Draft is at its Clean Version (task 72_2;
   ADR 0021).
 
 runtime:
@@ -22,7 +23,10 @@ runtime:
       operator: isArray
     - expression: 'res.body.commits.length'
       operator: eq
-      value: '0'
+      value: '1'
+    - expression: 'res.body.commits[0].number'
+      operator: eq
+      value: '1'
 
 settings:
   encodeUrl: true

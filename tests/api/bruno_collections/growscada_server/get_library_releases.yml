@@ -26,7 +26,10 @@ runtime:
       value: '1'
     - expression: 'res.body.releases[0].origin'
       operator: eq
-      value: '"legacy"'
+      value: '"commit"'
+    - expression: 'res.body.releases[0].commit_number'
+      operator: eq
+      value: '1'
 
 settings:
   encodeUrl: true

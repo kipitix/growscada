@@ -18,8 +18,8 @@ http:
 
 docs: |
   A Library Release is made from a Commit (task 72_5; ADR 0021): the Draft is
-  saved first, and the Release below publishes this Commit. The Commit number
-  carries to the Release.
+  saved first, and the Release below publishes this Commit. The seed's Library
+  is already at saved state 1, so the Draft's change becomes saved state 2.
 
 runtime:
   scripts:
@@ -34,7 +34,7 @@ runtime:
       operator: isDefined
     - expression: 'res.body.number'
       operator: eq
-      value: '1'
+      value: '2'
 
 settings:
   encodeUrl: true

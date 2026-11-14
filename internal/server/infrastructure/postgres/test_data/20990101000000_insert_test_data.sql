@@ -139,6 +139,11 @@ INSERT INTO engineering.commits (id, draft_id, number, title, author, created_at
     FROM engineering.drafts d WHERE d.library_id IS NOT NULL;
 UPDATE engineering.drafts SET last_commit_number = 1, last_commit_draft_version = 1, clean_version = 1
     WHERE library_id IS NOT NULL;
+-- The seed defines the state of every Draft explicitly: a Project's content is
+-- what the seed wrote and has never been saved (unsaved changes), a Library's
+-- is exactly its saved state (clean). A migration that bumped a Draft of an
+-- upgraded database says nothing of a fresh one.
+UPDATE engineering.drafts SET version = 1, clean_version = 0, stack_position = 0 WHERE project_id IS NOT NULL;
 
 -- The Library Releases: release 1 of each Library is its saved state 1
 INSERT INTO engineering.library_releases (library_id, number, note, commit_number, author, origin) VALUES

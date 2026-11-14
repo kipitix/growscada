@@ -1,5 +1,5 @@
 info:
-  name: save the library draft as a commit
+  name: save the library draft without changes
   type: http
   seq: 166
 http:
@@ -16,23 +16,23 @@ http:
   auth: inherit
 
 docs: |
-  A Save fixes the whole Draft as an immutable Commit: number 1 of the
-  library's Draft, holding the copies of its WidgetTypes (task 72_2;
-  ADR 0021).
+  The seeded Library sits at its saved state 1 (task 85_6): a Save finds the
+  Draft at its Clean Version and refuses it with `409 nothing_to_save`, because
+  there is nothing the last saved state does not hold (task 74; ADR 0021).
 
 runtime:
   assertions:
     - expression: 'res.status'
       operator: eq
-      value: '201'
+      value: '409'
     - expression: 'res.headers["growscada-schema-version"]'
       operator: isDefined
-    - expression: 'res.body.number'
+    - expression: 'res.headers["content-type"]'
       operator: eq
-      value: '1'
-    - expression: 'res.body.content_counts.widget_types'
-      operator: gt
-      value: '0'
+      value: '"application/problem+json"'
+    - expression: 'res.body.status'
+      operator: eq
+      value: '409'
 
 settings:
   encodeUrl: true

@@ -32,10 +32,10 @@ runtime:
       value: '1'
     - expression: 'res.body.latest_commit'
       operator: eq
-      value: '0'
+      value: '1'
     - expression: 'res.body.has_unsaved_changes'
       operator: eq
-      value: 'true'
+      value: 'false'
     - expression: 'res.body.has_unpublished_changes'
       operator: eq
       value: 'false'
