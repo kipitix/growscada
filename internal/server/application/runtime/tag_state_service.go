@@ -21,7 +21,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/domain/tagstate"
-	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 // ErrInvalidInput matches (errors.Is) an error caused by the caller's input
@@ -39,16 +38,6 @@ func (e invalidInputError) Is(target error) bool { return target == ErrInvalidIn
 
 func invalidInput(err error) error {
 	return invalidInputError{err: err}
-}
-
-// TagDefinition is the copy of a Tag definition the Runtime node is given.
-// DeviceID is the supplier's ID, zero when people write the Tag.
-type TagDefinition struct {
-	ID       uuid.UUID
-	Name     string
-	Type     string
-	DeviceID uuid.UUID
-	Version  int
 }
 
 // TagState is a Tag's state with its definition's copy. Seq 0: written by no
@@ -91,11 +80,6 @@ type TagStateService interface {
 	// FindTagStates returns the states of the Tags with the given IDs; a Tag
 	// without a state is left out.
 	FindTagStates(ctx context.Context, projectID uuid.UUID, tagIDs []uuid.UUID) ([]TagState, error)
-	// UpsertTagDefinitions gives the Runtime node the definitions of Tags: a
-	// Tag without a state gets its initial one (its TagType's zero value,
-	// Quality bad), a Tag with one keeps it. Idempotent. A state stored
-	// of another Project or TagType is an error.
-	UpsertTagDefinitions(ctx context.Context, projectID uuid.UUID, defs []TagDefinition) error
 	// RemoveTagStates removes the states of the Tags; one without a state is
 	// skipped.
 	RemoveTagStates(ctx context.Context, projectID uuid.UUID, tagIDs []uuid.UUID) error
@@ -195,22 +179,6 @@ func (s tagStateServiceImpl) FindTagStates(ctx context.Context, rawProjectID uui
 	return states, nil
 }
 
-func (s tagStateServiceImpl) UpsertTagDefinitions(ctx context.Context, rawProjectID uuid.UUID, rawDefs []TagDefinition) error {
-	projectID := projectIDOf(rawProjectID)
-	defs := make([]tagstate.Definition, len(rawDefs))
-	for i, raw := range rawDefs {
-		def, err := newDefinition(projectID, raw)
-		if err != nil {
-			return fmt.Errorf("cannot upsert tag definition %s: %w", raw.ID, invalidInput(err))
-		}
-		defs[i] = def
-	}
-	if err := s.states.UpsertDefinitions(ctx, projectID, defs); err != nil {
-		return fmt.Errorf("cannot upsert tag definitions: %w", err)
-	}
-	return nil
-}
-
 func (s tagStateServiceImpl) RemoveTagStates(ctx context.Context, rawProjectID uuid.UUID, rawTagIDs []uuid.UUID) error {
 	tagIDs := make([]id.ID[tag.Tag], len(rawTagIDs))
 	for i, raw := range rawTagIDs {
@@ -229,31 +197,8 @@ func (s tagStateServiceImpl) RemoveProjectTagStates(ctx context.Context, rawProj
 	return nil
 }
 
-func newDefinition(projectID id.ID[project.Project], raw TagDefinition) (tagstate.Definition, error) {
-	name, err := tag.NewTagName(raw.Name)
-	if err != nil {
-		return tagstate.Definition{}, err
-	}
-	tagType, err := tag.NewTagType(raw.Type)
-	if err != nil {
-		return tagstate.Definition{}, err
-	}
-	ver, err := version.New(version.WithNumber[tag.Tag](raw.Version))
-	if err != nil {
-		return tagstate.Definition{}, err
-	}
-	return tagstate.Definition{
-		TagID:     tagIDOf(raw.ID),
-		ProjectID: projectID,
-		Name:      name,
-		Type:      tagType,
-		Supplier:  supplierOf(raw.DeviceID),
-		Version:   ver,
-	}, nil
-}
-
-// supplierOf is the Supplier of the writer or of the definition: the zero
-// Device UUID names no Device.
+// supplierOf is the Supplier of the writer: the zero Device UUID names no
+// Device.
 func supplierOf(rawDeviceID uuid.UUID) tag.Supplier {
 	if rawDeviceID == uuid.Nil {
 		return tag.NoSupplier()

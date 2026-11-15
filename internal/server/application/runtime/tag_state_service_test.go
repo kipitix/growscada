@@ -11,12 +11,14 @@ import (
 	"github.com/google/uuid"
 
 	runtimeapp "github.com/kipitix/growscada/internal/server/application/runtime"
+	"github.com/kipitix/growscada/internal/server/domain/device"
 	"github.com/kipitix/growscada/internal/server/domain/event"
 	"github.com/kipitix/growscada/internal/server/domain/id"
 	"github.com/kipitix/growscada/internal/server/domain/organization"
 	"github.com/kipitix/growscada/internal/server/domain/project"
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 	"github.com/kipitix/growscada/internal/server/domain/tagstate"
+	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
 // memoryStates is a tagstate.Repository in memory, of the live projects in
@@ -127,6 +129,7 @@ func (m *memoryStates) DeleteAllOfProject(_ context.Context, p id.ID[project.Pro
 
 type fixture struct {
 	svc       runtimeapp.TagStateService
+	states    *memoryStates
 	project   uuid.UUID
 	published []event.Event
 }
@@ -135,17 +138,56 @@ func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	org := id.NewID[organization.Organization]()
 	p := id.NewID[project.Project]()
-	f := &fixture{project: p.UUID()}
-	f.svc = runtimeapp.NewTagStateService(newMemoryStates(org, p), org, func(e event.Event) { f.published = append(f.published, e) })
+	states := newMemoryStates(org, p)
+	f := &fixture{project: p.UUID(), states: states}
+	f.svc = runtimeapp.NewTagStateService(states, org, func(e event.Event) { f.published = append(f.published, e) })
 	return f
+}
+
+// storeDefinition puts the definition of a Tag and its initial state into the
+// repository, as a Deploy does; the Engineering node has no call that defines
+// a Tag after it (ADR 0011).
+func storeDefinition(t *testing.T, states *memoryStates, rawProjectID, rawTagID uuid.UUID, name, tagType string, deviceID uuid.UUID) {
+	t.Helper()
+	nameVO, err := tag.NewTagName(name)
+	if err != nil {
+		t.Fatalf("TagName(%q): %v", name, err)
+	}
+	typeVO, err := tag.NewTagType(tagType)
+	if err != nil {
+		t.Fatalf("TagType(%q): %v", tagType, err)
+	}
+	ver, err := version.New(version.WithNumber[tag.Tag](1))
+	if err != nil {
+		t.Fatalf("Version: %v", err)
+	}
+	supplier := tag.NoSupplier()
+	if deviceID != uuid.Nil {
+		supplier = tag.SuppliedByDevice(id.NewID(id.IDWithUUID[device.Device](deviceID)))
+	}
+	p := id.NewID(id.IDWithUUID[project.Project](rawProjectID))
+	def := tagstate.Definition{
+		TagID:     id.NewID(id.IDWithUUID[tag.Tag](rawTagID)),
+		ProjectID: p,
+		Name:      nameVO,
+		Type:      typeVO,
+		Supplier:  supplier,
+		Version:   ver,
+	}
+	if err := states.UpsertDefinitions(context.Background(), p, []tagstate.Definition{def}); err != nil {
+		t.Fatalf("store the definition of %s: %v", name, err)
+	}
+}
+
+func (f *fixture) defineTag(t *testing.T, tagID uuid.UUID, name, tagType string, deviceID uuid.UUID) {
+	t.Helper()
+	storeDefinition(t, f.states, f.project, tagID, name, tagType, deviceID)
 }
 
 func (f *fixture) define(t *testing.T, name, tagType string) uuid.UUID {
 	t.Helper()
 	tagID := uuid.New()
-	if err := f.svc.UpsertTagDefinitions(context.Background(), f.project, []runtimeapp.TagDefinition{{ID: tagID, Name: name, Type: tagType, Version: 1}}); err != nil {
-		t.Fatalf("UpsertTagDefinitions: %v", err)
-	}
+	f.defineTag(t, tagID, name, tagType, uuid.Nil)
 	return tagID
 }
 
@@ -201,12 +243,11 @@ func (c cancellableStates) Write(ctx context.Context, s tagstate.TagState, write
 func TestSetTagValue_CallerGone_StillStoresAndPublishes(t *testing.T) {
 	org := id.NewID[organization.Organization]()
 	p := id.NewID[project.Project]()
+	states := newMemoryStates(org, p)
 	var published []event.Event
-	svc := runtimeapp.NewTagStateService(cancellableStates{newMemoryStates(org, p)}, org, func(e event.Event) { published = append(published, e) })
+	svc := runtimeapp.NewTagStateService(cancellableStates{states}, org, func(e event.Event) { published = append(published, e) })
 	speed := uuid.New()
-	if err := svc.UpsertTagDefinitions(context.Background(), p.UUID(), []runtimeapp.TagDefinition{{ID: speed, Name: "speed", Type: "integer", Version: 1}}); err != nil {
-		t.Fatalf("UpsertTagDefinitions: %v", err)
-	}
+	storeDefinition(t, states, p.UUID(), speed, "speed", "integer", uuid.Nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -261,14 +302,6 @@ func TestSetTagValue_TellsAMissingProjectFromAMissingTag(t *testing.T) {
 	}
 }
 
-func TestUpsertTagDefinitions_InvalidDefinition_IsInvalidInput(t *testing.T) {
-	f := newFixture(t)
-	err := f.svc.UpsertTagDefinitions(context.Background(), f.project, []runtimeapp.TagDefinition{{ID: uuid.New(), Name: "x", Type: "float", Version: 1}})
-	if !errors.Is(err, runtimeapp.ErrInvalidInput) {
-		t.Errorf("a definition of an unknown type: %v, want ErrInvalidInput", err)
-	}
-}
-
 func TestFindTagStates_InTheOrderAsked_WithoutTheMissing(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
@@ -312,11 +345,7 @@ func TestSetTagValue_OnlyTheSupplierWrites(t *testing.T) {
 	ctx := context.Background()
 	supplier := uuid.New()
 	speed := uuid.New()
-	if err := f.svc.UpsertTagDefinitions(ctx, f.project, []runtimeapp.TagDefinition{
-		{ID: speed, Name: "speed", Type: "integer", DeviceID: supplier, Version: 1},
-	}); err != nil {
-		t.Fatalf("UpsertTagDefinitions: %v", err)
-	}
+	f.defineTag(t, speed, "speed", "integer", supplier)
 
 	if _, err := f.svc.SetTagValue(ctx, f.project, runtimeapp.SetTagValueInput{TagID: speed, Value: "1", Quality: "good", DeviceID: uuid.New()}); !errors.Is(err, tag.ErrTagNotSuppliedByDevice) {
 		t.Errorf("another device: %v, want ErrTagNotSuppliedByDevice", err)

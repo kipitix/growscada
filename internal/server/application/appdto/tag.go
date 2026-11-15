@@ -35,17 +35,6 @@ type CreateTagInput struct {
 	Version int
 }
 
-// TagDefinition is a Tag definition as the Runtime node is given it
-// (RuntimeNode). DeviceID is the supplier's ID, zero when people write the
-// Tag.
-type TagDefinition struct {
-	ID       uuid.UUID
-	Name     string
-	Type     string
-	DeviceID uuid.UUID
-	Version  int
-}
-
 // TagState is a Tag's state as the Runtime node holds it (RuntimeNode).
 type TagState struct {
 	ID        uuid.UUID
@@ -53,17 +42,6 @@ type TagState struct {
 	Quality   string
 	Seq       int64
 	WrittenAt *time.Time
-}
-
-// NewTagDefinition returns the definition of aTag for the Runtime node.
-func NewTagDefinition(aTag tag.Tag, version int) TagDefinition {
-	return TagDefinition{
-		ID:       aTag.ID().UUID(),
-		Name:     aTag.Name().String(),
-		Type:     aTag.Type().String(),
-		DeviceID: aTag.Supplier().DeviceID().UUID(),
-		Version:  version,
-	}
 }
 
 // InitialTagState returns the state of aTag before a supplier writes one

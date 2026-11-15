@@ -56,10 +56,7 @@ func (p projectCleanupPolicy) JobKey(e event.Event) (string, bool) {
 
 // Run removes the Project of the job key, if it is marked deleted, with its
 // content. The Project stays until its content is gone: Run returns an error
-// and the job is run again. So it does when a Tag state is upserted after the
-// states were removed (a creation's call, a bridge job running late): the
-// row's removal fails while the state holds it, and the next run removes the
-// state.
+// and the job is run again.
 func (p projectCleanupPolicy) Run(ctx context.Context, key string) error {
 	projectID, rest, err := cutProjectKey(key)
 	if err != nil {
