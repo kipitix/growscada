@@ -1,5 +1,16 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.101] - 2026-11-15
+
+### Changed
+
+- **Проза в коде говорит «saved state», как `GLOSSARY.md`** (задача 87)
+  - комментарии, doc-комментарии и help-строки `internal/**`, `cmd/**` и `contract/**` называют снимок, который фиксирует Save, сохранённым состоянием: «reset to its last saved state», «the number of the saved state», «cannot read the saved state %d»; идентификаторы остаются — `draft.Commit`, `CommitService`, `/commits`, `commit_number`, события `commit_*` и таблицы `commits`/`commit_labels` переименует задача 88, и `go doc` по-прежнему начинает комментарий с имени объявления
+  - пользовательские строки: growctl печатает `project/Main saved state 1`, `commits` без состояний — `has no saved states.`, help `save`/`deploy`/`commits`/`label`/`discard` говорит saved state; 409 `nothing_to_discard` — «the project has no saved state», «Library has no saved state: there is nothing to discard»; `String()` сущностей — `Saved state: 1 "…" by …` и `library saved state 1 of …`. Три теста, сверяющие точный текст, обновлены
+  - «commit» в смысле транзакции БД или git (`after commit`, `racing commits`) не тронут; проза переписана по 80 колонкам, как в остальных файлах
+  - Поведение, маршруты, контракты, схемы, миграции и Bruno не менялись
+  - Проверки: `make build`, `make test`, `make bruno_test`; ручной обход PWA — редакторы Project и Library, History, окна Save, Deploy и Import
+
 ## [0.0.100] - 2026-11-15
 
 Сводная запись цепочки 85_1–85_8: метки вместо релизов, деплой сохранённого
