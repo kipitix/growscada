@@ -11,6 +11,7 @@ import (
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
 	"github.com/kipitix/growscada/internal/server/interface/ui/picker"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
@@ -226,11 +227,13 @@ func TestNavigation_NamesTheModeAndTheEntity(t *testing.T) {
 func TestMenu_ListsEntitiesOfTheExpandedModeOnly(t *testing.T) {
 	r := NewRoot("http://127.0.0.1:0")
 	r.menuOpen, r.menuExpanded = true, ModeLibrary
+	zulu, alpha := uuid.New(), uuid.New()
 	r.menuLibraries.items = []picker.Item{
-		{ID: uuid.New(), Name: "Zulu"},
-		{ID: uuid.New(), Name: "Alpha"},
+		{ID: zulu, Name: "Zulu", State: picker.StateSaved, StateKind: "saved"},
+		{ID: alpha, Name: "Alpha", State: picker.StateUnsavedChanges, StateKind: "unsaved"},
 	}
 	r.menuLibraries.loaded = true
+	r.selected[ModeLibrary] = alpha
 
 	html := app.HTMLString(r.renderMenuPanel())
 	for _, want := range []string{`id="gs-main-menu"`, `data-menu-mode="library"`, `data-menu-mode="project"`,
@@ -243,9 +246,29 @@ func TestMenu_ListsEntitiesOfTheExpandedModeOnly(t *testing.T) {
 	if strings.Contains(html, `data-menu-choose="project"`) {
 		t.Error("the folded project mode lists its page")
 	}
-	// The entities come in the order the person placed, then by name.
+	// The entities come in the order the person placed, then by name, and
+	// each row is a choice with the badge of its state; the one shown is
+	// checked.
 	if i, j := strings.Index(html, "Alpha"), strings.Index(html, "Zulu"); i < 0 || j < 0 || i > j {
 		t.Errorf("the libraries are out of order: %s", html)
+	}
+	for _, want := range []string{`role="menuitemradio"`, picker.StateUnsavedChanges, picker.StateSaved} {
+		if !strings.Contains(html, want) {
+			t.Errorf("the panel lacks %s: %s", want, html)
+		}
+	}
+	// The row of the entity shown is the checked one. The test engine writes a
+	// "true" attribute without its value, as HTML does for a boolean one.
+	idx := strings.Index(html, `data-menu-entity="`+alpha.String()+`"`)
+	if idx < 0 {
+		t.Fatalf("the panel lacks the row of Alpha: %s", html)
+	}
+	row := html[idx:]
+	if end := strings.Index(row, ">"); end >= 0 {
+		row = row[:end]
+	}
+	if strings.Contains(row, `aria-checked="false"`) {
+		t.Errorf("the row shown is not checked: %s", row)
 	}
 
 	// Read and empty: the hint says the server has none, not that it is
@@ -455,5 +478,61 @@ func TestMenu_ChoosingTheShownEntityAgainReloadsNothing(t *testing.T) {
 	}
 	if s.selected[ModeLibrary] != other {
 		t.Errorf("the mode shows %v, want %v", s.selected[ModeLibrary], other)
+	}
+}
+
+// TestMenu_ReadsTheListsWhenItOpensAndFollowsTheirEvents: the panel is filled
+// from the server when it opens — not from what a mode happened to load — and
+// a library or project event rereads the lists while it stays open (task 89).
+func TestMenu_ReadsTheListsWhenItOpensAndFollowsTheirEvents(t *testing.T) {
+	var extra atomic.Bool
+	one, two := uuid.New(), uuid.New()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case apiv0.PathPrefix + "/projects":
+			list := `{"projects":[{"id":"` + one.String() + `","name":"One","version":1}]}`
+			if extra.Load() {
+				list = `{"projects":[{"id":"` + one.String() + `","name":"One","version":1},` +
+					`{"id":"` + two.String() + `","name":"Two","version":1}]}`
+			}
+			w.Write([]byte(list))
+		case apiv0.PathPrefix + "/libraries":
+			w.Write([]byte(`{"libraries":[]}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(`{}`))
+		}
+	}))
+	defer srv.Close()
+
+	s := menuSession(t, srv.URL, nil)
+	s.compoCtx.Dispatch(func(ctx app.Context) { s.openMenu(ctx) })
+	s.settle()
+	if got := len(s.menuProjects.items); got != 1 {
+		t.Fatalf("opened with %d projects, want 1", got)
+	}
+	if !s.menuProjects.loaded || !s.menuLibraries.loaded {
+		t.Errorf("loaded: projects %t, libraries %t; want both", s.menuProjects.loaded, s.menuLibraries.loaded)
+	}
+
+	extra.Store(true)
+	s.compoCtx.Dispatch(func(ctx app.Context) {
+		ctx.NewActionWithValue(eventlog.ActionServerEvent, apiv0.Event{Type: apiv0.EventProjectCreated, ID: two.String()})
+	})
+	s.settle()
+	if got := len(s.menuProjects.items); got != 2 {
+		t.Errorf("after project_created the menu lists %d projects, want 2", got)
+	}
+
+	// Closed, the menu reads nothing.
+	extra.Store(false)
+	s.compoCtx.Dispatch(func(ctx app.Context) {
+		s.closeMenu()
+		ctx.NewActionWithValue(eventlog.ActionServerEvent, apiv0.Event{Type: apiv0.EventProjectUpdated, ID: one.String()})
+	})
+	s.settle()
+	if got := len(s.menuProjects.items); got != 2 {
+		t.Errorf("a closed menu reread its lists: %d projects", got)
 	}
 }
