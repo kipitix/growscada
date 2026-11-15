@@ -37,8 +37,11 @@ func (l *Library) createItem(ctx app.Context) {
 		return draft.CreateWidgetType(c, req)
 	}, func(ctx app.Context, created apiv0.CreateWidgetTypeResponse) {
 		// The new type is the request as the server stored it: listed and
-		// editable at once, before the list is reread.
+		// editable at once, before the list is reread. Its ID is known to
+		// exist from now, so a list requested before it keeps it and its
+		// selection (task 61).
 		l.observeDraftVersion(mark, created.Version)
+		l.draftVersions.Touch(created.ID)
 		l.widgetTypes = append(l.widgetTypes, apiv0.WidgetTypeResponse{
 			ID:             created.ID,
 			LibraryID:      draft.ID(),

@@ -175,14 +175,29 @@ func (l *Library) loadUnsavedChanges(ctx app.Context) {
 // first list after a replacement (a load of a saved state) is the truth, so the
 // editor is filled from it rather than merged, and a text typed but never
 // applied does not survive the load (task 84).
+//
+// A list older than the known state does not delete a WidgetType known to
+// exist after it was requested (uiutil.Versions.KnownAfter): one created
+// meanwhile is kept at the end, with its selection (task 61).
 func (l *Library) setWidgetTypes(ctx app.Context, mark uiutil.Mark, replacements uint64, items []apiv0.WidgetTypeResponse) {
 	old, known := l.findItem(l.selectedID)
+	// The first list requested after the whole Draft was replaced is the truth:
+	// the editor takes it as it is, unsaved typing and all (task 84).
+	replaced := replacements == l.contentReplacements && replacements > l.appliedReplacements
+	if replaced {
+		l.appliedReplacements = replacements
+	}
+	fresh := len(items) > 0 && l.draftVersions.Advance(mark, l.libraryID, items[0].Version)
 	for _, it := range items {
 		// Every DTO of the Draft carries its one Version (ADR 0016): the
 		// writes state it under the Library, not under a WidgetType.
 		l.observeDraftVersion(mark, it.Version)
 	}
-	l.widgetTypes = items
+	if fresh || replaced {
+		l.widgetTypes = items
+	} else {
+		l.widgetTypes = l.mergedWithKnownWidgetTypes(mark, items)
+	}
 	if len(items) == 0 {
 		// No WidgetType carries the Draft's Version, so the list states none:
 		// read it, or the next write would state the one before the change
@@ -193,13 +208,10 @@ func (l *Library) setWidgetTypes(ctx app.Context, mark uiutil.Mark, replacements
 		return
 	}
 	current, exists := l.findItem(l.selectedID)
-	// The first list requested after the whole Draft was replaced is the truth:
-	// the editor takes it as it is, unsaved typing and all (task 84).
-	replaced := replacements == l.contentReplacements && replacements > l.appliedReplacements
-	if replaced {
-		l.appliedReplacements = replacements
-	}
 	switch {
+	case !exists && l.draftVersions.KnownAfter(mark, l.selectedID):
+		// The WidgetType was created after the list was requested: it stays
+		// selected and its editor keeps the text typed into it (task 61).
 	case !exists:
 		l.clearSelection()
 		uiutil.StoreID(ctx, selectedIDKey, uuid.Nil)
@@ -208,4 +220,30 @@ func (l *Library) setWidgetTypes(ctx app.Context, mark uiutil.Mark, replacements
 	default:
 		l.mergeSelected(old, current)
 	}
+}
+
+// mergedWithKnownWidgetTypes returns the WidgetTypes a list requested at mark
+// holds: the IDs it names, each as the local copy when there is one (a
+// WidgetType written since states the newer name), and the IDs it misses that
+// are known to exist after the list was requested, at the end.
+func (l *Library) mergedWithKnownWidgetTypes(mark uiutil.Mark, items []apiv0.WidgetTypeResponse) []apiv0.WidgetTypeResponse {
+	merged := make([]apiv0.WidgetTypeResponse, len(items))
+	listed := make(map[uuid.UUID]struct{}, len(items))
+	for i, it := range items {
+		if cur, ok := l.findItem(it.ID); ok {
+			it = cur
+		}
+		merged[i] = it
+		listed[it.ID] = struct{}{}
+	}
+	for _, it := range l.widgetTypes {
+		if _, ok := listed[it.ID]; ok {
+			continue
+		}
+		if !l.draftVersions.KnownAfter(mark, it.ID) {
+			continue
+		}
+		merged = append(merged, it)
+	}
+	return merged
 }

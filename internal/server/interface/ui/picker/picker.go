@@ -121,6 +121,10 @@ type Picker struct {
 	items    []Item
 	loaded   bool
 	reloader uiutil.Reloader
+	// versions holds the Version of each entity the page knows: a list older
+	// than the known state does not roll a name back, and an entity known to
+	// exist after a list was requested is not deleted by it (task 61).
+	versions uiutil.Versions
 
 	// order is the arrangement the person stored (task 81), the IDs the list
 	// puts first; orderSeq drops a response of a read a newer one overtook.
@@ -280,12 +284,45 @@ func (p *Picker) find(id uuid.UUID) (Item, bool) {
 // with them: a client reload or a resync is its own, and an entity deleted
 // elsewhere leaves nothing to show.
 func (p *Picker) load(ctx app.Context) {
+	mark := p.versions.Mark()
 	uiutil.Load(p.compoCtx, &p.reloader, p.source.List, func(ctx app.Context, items []Item) {
-		p.items, p.loaded = items, true
-		p.reconcile(ctx)
+		p.applyList(ctx, mark, items)
 		p.loadOrder(ctx)
 		ctx.Update()
 	}, p.load)
+}
+
+// applyList takes the list a request sent at mark returned. It is older than
+// the page's own writes may be: each entity keeps the copy this page has when
+// the response states no newer Version, and an entity the response misses
+// stays when it is known to exist after the request — one created meanwhile —
+// so a rename is not rolled back and a creation is not undone (task 61).
+func (p *Picker) applyList(ctx app.Context, mark uiutil.Mark, items []Item) {
+	merged := make([]Item, len(items))
+	listed := make(map[uuid.UUID]struct{}, len(items))
+	for i, item := range items {
+		fresh := p.versions.Advance(mark, item.ID, item.Version)
+		if cur, ok := p.find(item.ID); ok && !fresh {
+			// The name, the description and the Version are the page's own
+			// writes, older in the response; the state of the Draft is not
+			// versioned and follows the server.
+			cur.State, cur.StateKind = item.State, item.StateKind
+			item = cur
+		}
+		merged[i] = item
+		listed[item.ID] = struct{}{}
+	}
+	for _, item := range p.items {
+		if _, ok := listed[item.ID]; ok {
+			continue
+		}
+		if !p.versions.KnownAfter(mark, item.ID) {
+			continue
+		}
+		merged = append(merged, item)
+	}
+	p.items, p.loaded = merged, true
+	p.reconcile(ctx, mark)
 }
 
 // loadOrder rereads the arrangement of the entities, when the source has one
@@ -324,13 +361,18 @@ func (p *Picker) applyOrder(ctx app.Context, seq int, order Order) {
 }
 
 // reconcile announces the selection the reloaded list holds: the same entity
-// under a new name, or none when it is gone (root shows the page then).
-func (p *Picker) reconcile(ctx app.Context) {
+// under a new name, or none when it is gone (root shows the page then). An
+// entity the list misses but that was created after the request stays
+// selected: the next list shows it (task 61).
+func (p *Picker) reconcile(ctx app.Context, mark uiutil.Mark) {
 	if p.selected == uuid.Nil {
 		return
 	}
 	item, ok := p.find(p.selected)
 	if !ok {
+		if p.versions.KnownAfter(mark, p.selected) {
+			return
+		}
 		p.selectNone(ctx)
 		return
 	}
@@ -486,9 +528,24 @@ func (p *Picker) commitEdit(ctx app.Context) {
 			return
 		}
 		p.field, p.value, p.editError = fieldNone, "", ""
+		p.edited(ctx, edited, name, description)
 		p.load(ctx)
 		ctx.Update()
 	})
+}
+
+// edited records a write that landed on the entity id: the list and the
+// selection show the name and the description at once, and the entity is
+// known to exist from now, so a list requested before the write keeps it
+// (task 61).
+func (p *Picker) edited(ctx app.Context, id uuid.UUID, name, description string) {
+	p.versions.Touch(id)
+	i := uiutil.IdxByID(p.items, id, itemID)
+	if i < 0 {
+		return
+	}
+	p.items[i].Name, p.items[i].Description = name, description
+	p.report(ctx, p.items[i])
 }
 
 // startCreate puts a new entity at the top of the list and opens the details
@@ -538,6 +595,7 @@ func (p *Picker) commitCreate(ctx app.Context) {
 			return
 		}
 		p.creating, p.createName, p.createError = false, "", ""
+		p.versions.Touch(id)
 		p.load(ctx)
 		p.open(ctx, id)
 	})
