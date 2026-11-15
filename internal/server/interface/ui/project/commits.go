@@ -131,7 +131,7 @@ func prompt(message, value string) (string, bool) {
 
 // openHistory shows the saved states of the project, read afresh (task 84): a
 // screen of its own, in place of the content. The rows carry the saved states
-// and their labels alone: the mode has no Release (task 85_5, task 85_7).
+// and their labels alone (task 85_5, task 85_7).
 func (p *Project) openHistory(ctx app.Context) {
 	p.historyScreen = true
 	p.loadCommits(ctx)
@@ -320,8 +320,8 @@ func saveConfirmLabel(saving bool) string {
 
 // renderHistoryScreen is the history of the project's saved states (task 84):
 // the screen both modes share, fed with this project's history and its labels.
-// The history screen draws no Release and offers no Make Release: a Release is
-// gone from the model (task 85_5, task 85_7).
+// The screen draws saved states alone: a Deploy takes one of them, and makes
+// nothing else (task 85_5, task 85_7).
 func (p *Project) renderHistoryScreen() app.UI {
 	screen := p.history
 	screen.Rows = p.historyRows()
@@ -344,8 +344,8 @@ func (p *Project) renderHistoryScreen() app.UI {
 }
 
 // historyRows is the history as the screen draws it: each saved state with the
-// labels that mark it (task 84, task 85_3). No Release is joined: a Deploy takes
-// the saved state itself (task 85_5).
+// labels that mark it (task 84, task 85_3). A Deploy takes the saved state
+// itself (task 85_5).
 func (p *Project) historyRows() []savedstates.Row {
 	rows := make([]savedstates.Row, len(p.commits))
 	for i, saved := range p.commits {

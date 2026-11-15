@@ -66,15 +66,15 @@ func (c CommitContent) WidgetTypes() ([]library.WidgetTypeCopy, bool) {
 
 // commitContentDocument is the stored form of a CommitContent.
 type commitContentDocument struct {
-	Format      int                          `json:"format"`
-	Kind        string                       `json:"kind"`
-	ProjectFile *projectv0.ProjectFile       `json:"project_file,omitempty"`
-	WidgetTypes []releasedWidgetTypeDocument `json:"widget_types,omitempty"`
+	Format      int                      `json:"format"`
+	Kind        string                   `json:"kind"`
+	ProjectFile *projectv0.ProjectFile   `json:"project_file,omitempty"`
+	WidgetTypes []widgetTypeCopyDocument `json:"widget_types,omitempty"`
 }
 
-// releasedWidgetTypeDocument is the stored form of a WidgetTypeCopy; the
-// field names repeat the release tables.
-type releasedWidgetTypeDocument struct {
+// widgetTypeCopyDocument is the stored form of a WidgetTypeCopy: the field
+// names are the stored form of a saved state.
+type widgetTypeCopyDocument struct {
 	ID             uuid.UUID           `json:"id"`
 	LibraryID      uuid.UUID           `json:"library_id"`
 	Name           string              `json:"name"`
@@ -103,7 +103,7 @@ func (c CommitContent) MarshalJSON() ([]byte, error) {
 		doc.ProjectFile = c.projectFile
 	case c.widgetTypes != nil:
 		doc.Kind = "library"
-		doc.WidgetTypes = make([]releasedWidgetTypeDocument, len(c.widgetTypes))
+		doc.WidgetTypes = make([]widgetTypeCopyDocument, len(c.widgetTypes))
 		for i, wt := range c.widgetTypes {
 			ports := wt.InputPorts()
 			rows := make([]inputPortDocument, len(ports))
@@ -112,7 +112,7 @@ func (c CommitContent) MarshalJSON() ([]byte, error) {
 					Name: p.Name().String(), Description: p.Description(), TypeHint: p.TypeHint().String(),
 				}
 			}
-			doc.WidgetTypes[i] = releasedWidgetTypeDocument{
+			doc.WidgetTypes[i] = widgetTypeCopyDocument{
 				ID:             wt.ID().UUID(),
 				LibraryID:      wt.LibraryID().UUID(),
 				Name:           wt.Name().String(),

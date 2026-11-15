@@ -94,9 +94,9 @@ func CreateWidgetType(
 // RecreateWidgetType creates anew, not yet saved, the WidgetType a saved state
 // holds, under its ID and in its Library, and records a WidgetTypeCreatedEvent:
 // a Discard bringing back a WidgetType removed from the Draft since the save.
-func RecreateWidgetType(released WidgetTypeCopy) (WidgetType, error) {
-	return CreateWidgetType(released.ID(), released.LibraryID(), released.Name(), released.HtmlTemplate(),
-		released.Script(), released.ScriptLanguage(), released.DefaultSize(), released.InputPorts())
+func RecreateWidgetType(copy WidgetTypeCopy) (WidgetType, error) {
+	return CreateWidgetType(copy.ID(), copy.LibraryID(), copy.Name(), copy.HtmlTemplate(),
+		copy.Script(), copy.ScriptLanguage(), copy.DefaultSize(), copy.InputPorts())
 }
 
 // ReconstituteWidgetType rebuilds a WidgetType as stored; it records no

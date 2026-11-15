@@ -11,9 +11,9 @@ import (
 )
 
 // DeployService is the Engineering node's service of a Deploy (task 85_4): it
-// makes a saved state of a Project its running Deployment. A Release takes no
-// part in it, and neither does a Draft Version: a saved state is immutable and
-// a Deploy changes no Draft (ADR 0021). The document is the saved state's
+// makes a saved state of a Project its running Deployment. A Deploy takes a
+// saved state, not the Draft, and no Draft Version: a saved state is immutable
+// and a Deploy changes no Draft (ADR 0021). The document is the saved state's
 // ProjectFile; the Runtime node stores it and assigns the number and the time.
 type DeployService interface {
 	// Deploy makes the saved state numbered commitNumber of the live Project

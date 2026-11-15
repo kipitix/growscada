@@ -74,7 +74,7 @@ type libraryImpl struct {
 var _ Library = (*libraryImpl)(nil)
 
 // CreateLibrary creates a new, not yet saved library of the Organization
-// anOrganizationID, with an empty Draft and no release, and records a
+// anOrganizationID, with an empty Draft, and records a
 // LibraryCreatedEvent.
 func CreateLibrary(anID id.ID[Library], anOrganizationID id.ID[organization.Organization], aName LibraryName, aDescription description.Description) Library {
 	return &libraryImpl{

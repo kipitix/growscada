@@ -643,7 +643,7 @@ func (s *Session) DeleteWidgetType(ctx context.Context, typeID id.ID[library.Wid
 // WidgetType the Draft holds goes, with its events, and every copy is
 // recreated under its ID, with its events. The stack and the DraftChanges go
 // with the caller's transaction, not here.
-func (s *Session) ReplaceWidgetTypes(ctx context.Context, released []library.WidgetTypeCopy) error {
+func (s *Session) ReplaceWidgetTypes(ctx context.Context, copies []library.WidgetTypeCopy) error {
 	stored, err := s.loader.WidgetTypes(ctx)
 	if err != nil {
 		return err
@@ -652,7 +652,7 @@ func (s *Session) ReplaceWidgetTypes(ctx context.Context, released []library.Wid
 		s.recordBefore(SnapshotOfWidgetType(wt))
 		s.recordEvents(wt.Delete().PendingEvents()...)
 	}
-	for _, copy := range released {
+	for _, copy := range copies {
 		wt, err := library.RecreateWidgetType(copy)
 		if err != nil {
 			return err

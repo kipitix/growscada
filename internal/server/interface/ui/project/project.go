@@ -162,8 +162,8 @@ type Project struct {
 	// deployDialog is true while the window is shown; deployCommits is the
 	// saved states it lists, newest first — all of them, or the ones the
 	// label deployLabel marks (uuid.Nil: all labels) — and deployCommitsLoaded
-	// is false until its first answer. The window knows no Release: a Deploy
-	// makes a saved state the running Deployment (task 85_4).
+	// is false until its first answer. A Deploy makes a saved state the running
+	// Deployment (task 85_4).
 	deployDialog          bool
 	deployCommits         []apiv0.CommitResponse
 	deployCommitsLoaded   bool

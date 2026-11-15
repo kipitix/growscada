@@ -231,8 +231,8 @@ func libraryVersion(raw int) (version.Version[library.Library], error) {
 
 // DeleteLibraryByID marks a library deleted, while no live Project imports it
 // and no running Deployment names a saved state of it, and returns it as it was
-// read, with its releases: from then on it does not exist for the API. Its
-// Draft and releases are removed later, by the policy of
+// read, with its saved states: from then on it does not exist for the API. Its
+// Draft and saved states are removed later, by the policy of
 // NewLibraryCleanupPolicy. Old saved states do not refuse it: their documents
 // carry the WidgetType copies they need (task 71). It expects no Version
 // (retryOnRace).

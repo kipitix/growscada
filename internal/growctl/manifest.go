@@ -355,8 +355,8 @@ func validateProject(doc manifestv0.ProjectDocument) (ProjectManifest, error) {
 var librariesSince = contract.SchemaVersion{Major: 0, Minor: 4}
 
 // libraryImportsSince is the manifest version that renamed a Project's
-// libraryPins to libraryImports: a saved state of the Library, not a Release
-// (task 85_6, task 85_7).
+// libraryPins to libraryImports: a saved state of the Library (task 85_6,
+// task 85_7).
 var libraryImportsSince = contract.SchemaVersion{Major: 0, Minor: 5}
 
 func validateLibrary(doc manifestv0.LibraryDocument) (LibraryManifest, error) {

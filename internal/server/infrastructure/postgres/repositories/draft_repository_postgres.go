@@ -152,9 +152,10 @@ func (r draftRepositoryPostgres) Replace(ctx context.Context, scope draft.Scope,
 		if err := change(session); err != nil {
 			return nil, err
 		}
-		// A Library's Discard puts the released names back, and a name may be
-		// another WidgetType's at the moment: the Draft's rows go first, so
-		// the released ones are inserted with their final names.
+		// A Library's Discard puts back the WidgetTypes of its saved state, and a
+		// name may be another WidgetType's at the moment: the Draft's rows go
+		// first, so the ones of the saved state are inserted with their final
+		// names.
 		if scope.IsLibrary() {
 			if _, err := tx.ExecContext(ctx,
 				`DELETE FROM engineering.widget_types WHERE library_id = $1`, scope.LibraryID().UUID()); err != nil {
