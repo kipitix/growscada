@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
@@ -187,6 +188,36 @@ func TestWidgetsList_AtTheKnownVersion_TakesTheServersCopy(t *testing.T) {
 	}
 }
 
+// A created Widget is on the canvas at once, before its own list is read: a
+// list requested before it — still in flight — then keeps it and the selection
+// (task 61).
+func TestCreateWidget_ShowsTheWidgetBeforeItsListArrives(t *testing.T) {
+	url, api := newServer(t)
+	sceneID := createScene(t, api, "Main")
+	typeID := createWidgetType(t, api, "Lamp")
+	broken := &failOnceRead{
+		inner:  http.DefaultTransport,
+		suffix: "/scenes/" + sceneID.String() + "/widgets",
+	}
+	f := mountWith(t, url, api, &http.Client{Transport: broken})
+	f.run()
+
+	broken.arm()
+	f.p.createWidget(f.p.compoCtx, typeID, 10, 20)
+	f.run()
+
+	if got := f.oneToast(); got.Status != http.StatusInternalServerError {
+		t.Errorf("toast %+v: want the failed list", got)
+	}
+	selected := f.p.primaryWidgetID()
+	if selected == uuid.Nil {
+		t.Fatal("the new Widget is not selected")
+	}
+	if _, ok := f.p.findWidget(selected); !ok {
+		t.Errorf("widgets %+v: the new Widget %v is not on the canvas", f.p.widgets, selected)
+	}
+}
+
 // rendersText reports whether one of the layers shows text.
 func rendersText(layers []app.UI, text string) bool {
 	for _, layer := range layers {
@@ -197,9 +228,10 @@ func rendersText(layers []app.UI, text string) bool {
 	return false
 }
 
-// failOnceScene breaks the first GET of a Scene, as a server hiccup does: the
-// Scene stays stale and is reread by the next load (task 61).
-type failOnceScene struct {
+// failOnceRead breaks the first GET of a path suffix, as a server hiccup
+// does: the list (or the Scene) stays as it was and is read again by the next
+// load (task 61).
+type failOnceRead struct {
 	inner  http.RoundTripper
 	suffix string
 
@@ -208,13 +240,13 @@ type failOnceScene struct {
 	used  bool
 }
 
-func (f *failOnceScene) arm() {
+func (f *failOnceRead) arm() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.armed, f.used = true, false
 }
 
-func (f *failOnceScene) RoundTrip(r *http.Request) (*http.Response, error) {
+func (f *failOnceRead) RoundTrip(r *http.Request) (*http.Response, error) {
 	f.mu.Lock()
 	fail := f.armed && !f.used && r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, f.suffix)
 	if fail {
@@ -237,7 +269,7 @@ func (f *failOnceScene) RoundTrip(r *http.Request) (*http.Response, error) {
 func TestLoadStaleScenes_AfterAFailedRead_IsRereadByTheNextLoad(t *testing.T) {
 	url, api := newServer(t)
 	sceneID := createScene(t, api, "Main")
-	broken := &failOnceScene{
+	broken := &failOnceRead{
 		inner:  http.DefaultTransport,
 		suffix: "/scenes/" + sceneID.String(),
 	}

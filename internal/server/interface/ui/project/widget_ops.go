@@ -50,9 +50,13 @@ func (p *Project) createWidget(ctx app.Context, typeID uuid.UUID, x, y float64) 
 	}, func(ctx app.Context, created apiv0.CreateWidgetResponse) {
 		p.observeDraftVersion(mark, created.Version)
 		// The new Widget exists from now: a list requested before it keeps
-		// it and the selection (task 61).
+		// it and the selection (task 61). It is on the canvas at once, as a
+		// created Scene is in its list.
 		p.draftVersions.Touch(created.ID)
 		w.ID = created.ID
+		if p.selectedSceneID == sceneID {
+			p.widgets = append(p.widgets, w)
+		}
 		p.selectedWidgetIDs = []uuid.UUID{created.ID}
 		uiutil.StoreID(ctx, p.selectionKey(widgetIDKey), created.ID)
 		p.syncEditingFields(w)
